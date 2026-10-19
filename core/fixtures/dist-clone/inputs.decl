@@ -1,0 +1,9 @@
+# dist-clone drives reconcile/dist-clone.sh against throwaway upstreams and consumers built under mktemp,
+# pins two SKILL.md sentences it implements (DCP), and for DC8 runs emit-report.sh --verify over the
+# layer-adjudication-tier seed world with dist = the clone. Mutants are lone copies of dist-clone.sh,
+# which resolves no sibling.
+!core/skills/ai-dlc-update/reconcile/dist-clone.sh
+!core/skills/ai-dlc-update/SKILL.md
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/layer-adjudication-tier/seed.sh
+core/fixtures/lib/

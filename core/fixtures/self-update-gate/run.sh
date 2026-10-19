@@ -4104,6 +4104,87 @@ ss_assert "quote-r2-diff-failed" "$(qr_fail "$GATE")" "und=1 defer=0 ok=0 fired=
 qw_mut_pairs "quote-mut-r2rc" qr_fail "und=0 defer=0 ok=1 fired=1" \
   "with the listing's status unread a failed diff reads as no rulebook change and the gate says OK" \
   'core/team-roles/ 2>/dev/null)" || R2_RC=$?' 'core/team-roles/ 2>/dev/null)"'
+
+# --- THE GATE READS THEIRS' FIXTURES AND HOOK, NOT THE DIST CHECKOUT'S (BL-693) -----------------
+# The coupling scan globbed `$DIST/core/fixtures/*/` and the fallback hook was
+# `$DIST/core/git-hooks/pre-push`: both read whatever branch the dist had CHECKED OUT. The
+# discriminating world is a dist whose checkout is on `main` while `theirs` is a release branch that
+# ADDS a rulebook-coupled fixture and changes the step it reads: the old gate saw no fixture and said
+# OK, and step 2 would push a slice that fixture turns red. A BARE clone of the same dist has no
+# working tree at all, so the old glob saw zero directories (OK) and the old hook read was ABSENT
+# (UNDECIDED, on a hook theirs carries).
+BT="$QW/bt"; mkdir -p "$BT/dist/core/rules" "$BT/dist/core/skills/ai-dlc/steps" "$BT/dist/core/git-hooks" \
+  "$BT/cons/.githooks" "$BT/cons/.claude/skills/ai-dlc/steps"
+qw_git "$BT/dist" init -q
+qw_git "$BT/dist" symbolic-ref HEAD refs/heads/main
+printf '1.0.0\n' > "$BT/dist/VERSION"; printf 'bt machinery\n' > "$BT/dist/core/rules/bt.md"
+printf '# step at base\n' > "$BT/dist/core/skills/ai-dlc/steps/bt.md"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$BT/dist/core/git-hooks/pre-push"
+qw_git "$BT/dist" add -A >/dev/null 2>&1; qw_git "$BT/dist" commit -qm base >/dev/null 2>&1
+git -C "$BT/dist" rev-parse HEAD > "$BT/B"
+qw_git "$BT/dist" checkout -qb rel >/dev/null 2>&1
+printf '1.1.0\n' > "$BT/dist/VERSION"; printf '# step at theirs\n' > "$BT/dist/core/skills/ai-dlc/steps/bt.md"
+mkdir -p "$BT/dist/core/fixtures/bt-coupled"
+printf '#!/usr/bin/env bash\ncat "$D_ROOT/core/skills/ai-dlc/steps/bt.md"\n' > "$BT/dist/core/fixtures/bt-coupled/run.sh"
+qw_git "$BT/dist" add -A >/dev/null 2>&1; qw_git "$BT/dist" commit -qm theirs >/dev/null 2>&1
+git -C "$BT/dist" rev-parse HEAD > "$BT/T"
+qw_git "$BT/dist" checkout -q main >/dev/null 2>&1
+git clone -q --bare "$BT/dist" "$BT/bare" >/dev/null 2>&1
+printf '#!/usr/bin/env bash\nexit 0\n' > "$BT/cons/.githooks/pre-push"; chmod +x "$BT/cons/.githooks/pre-push"
+printf '# step at base\n' > "$BT/cons/.claude/skills/ai-dlc/steps/bt.md"
+# The hook world: no consumer hook, rulebook already at theirs, so the only open question is the hook.
+cp -R "$BT/cons" "$BT/hcons"; rm -rf "$BT/hcons/.githooks"
+printf '# step at theirs\n' > "$BT/hcons/.claude/skills/ai-dlc/steps/bt.md"
+# bt_scan <gate> <dist:checkout|bare> -> "r2=<n> und=<n> ok=<n>" for the rulebook-coupled world
+bt_scan() {
+  local d="$BT/dist" o
+  [ "$2" = bare ] && d="$BT/bare"
+  o="$(bash "$1" "$d" "$(cat "$BT/B")" "$(cat "$BT/T")" "$BT/cons" 2>/dev/null)"
+  printf 'r2=%s und=%s ok=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "rulebook-coupled-fixtures"' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED"' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)"
+}
+bt_checkout() { bt_scan "$1" checkout; }
+bt_bare() { bt_scan "$1" bare; }
+# bt_hook <gate> -> "und=<n> ok=<n> rec=<same|other>" for a bare dist and a consumer with no hook;
+# `rec` compares the record's distribution-side digest with theirs' hook blob id.
+bt_hook() {
+  local o r
+  rm -rf "$BT/hcons/_bmad-output"
+  o="$(bash "$1" "$BT/bare" "$(cat "$BT/B")" "$(cat "$BT/T")" "$BT/hcons" 2>/dev/null)"
+  r="$(cat "$BT"/hcons/_bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/null | awk -F'\t' '$1 == "# input: -" {print $2; exit}')"
+  printf 'und=%s ok=%s rec=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED"' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)" \
+    "$([ -n "$r" ] && [ "$r" = "$(git -C "$BT/bare" rev-parse "$(cat "$BT/T"):core/git-hooks/pre-push")" ] && echo same || echo other)"
+}
+ss_assert "theirs-fx-checkout" "$(bt_checkout "$GATE")" "r2=1 und=0 ok=0" \
+  "a dist checked out on main while theirs adds a rulebook-coupled fixture still DEFERs: the scan reads theirs' tree"
+ss_assert "theirs-fx-bare" "$(bt_bare "$GATE")" "r2=1 und=0 ok=0" \
+  "a BARE dist, which has no working tree, yields the same DEFER"
+ss_assert "theirs-hook-bare" "$(bt_hook "$GATE")" "und=0 ok=1 rec=same" \
+  "with no consumer hook and a bare dist the fallback hook resolves from theirs, and the record carries theirs' blob id"
+# THE CONTROL THAT SAYS THE CHECKOUT CELL DISCRIMINATES: the same world with the consumer's copy
+# already at theirs is not about to change, so the arm must NOT defer.
+printf '# step at theirs\n' > "$BT/cons/.claude/skills/ai-dlc/steps/bt.md"
+ss_assert "theirs-fx-control" "$(bt_checkout "$GATE")" "r2=0 und=0 ok=1" \
+  "with the consumer's rulebook already at theirs nothing is about to change, so no rulebook DEFER"
+printf '# step at base\n' > "$BT/cons/.claude/skills/ai-dlc/steps/bt.md"
+# MUTANTS: each restores the working-tree read. Reading the checked-out HEAD instead of theirs
+# is what the glob did; reading `$DIST/core/git-hooks/pre-push` is what the hook fallback did.
+qw_mut_pairs "theirs-mut-fx-co" bt_checkout "r2=0 und=0 ok=1" \
+  "listing the dist's checked-out HEAD sees no coupled fixture and the gate says OK" \
+  'ls-tree --name-only "$THEIRS" -- core/fixtures' 'ls-tree --name-only HEAD -- core/fixtures' \
+  'ls-tree -d --name-only "${THEIRS}:core/fixtures/"' 'ls-tree -d --name-only "HEAD:core/fixtures/"'
+qw_mut_pairs "theirs-mut-fx-bare" bt_bare "r2=0 und=0 ok=1" \
+  "in a bare dist HEAD is main, which carries no fixture, and the gate says OK" \
+  'ls-tree --name-only "$THEIRS" -- core/fixtures' 'ls-tree --name-only HEAD -- core/fixtures' \
+  'ls-tree -d --name-only "${THEIRS}:core/fixtures/"' 'ls-tree -d --name-only "HEAD:core/fixtures/"'
+qw_mut_pairs "theirs-mut-hook" bt_hook "und=1 ok=0 rec=other" \
+  "the working-tree hook path is ABSENT in a bare dist and the gate goes UNDECIDED on a hook theirs carries" \
+  'git -C "$DIST" show "${THEIRS}:core/git-hooks/pre-push" > "$HOOK" 2>/dev/null || rm -f "$HOOK"' \
+  'HOOK="$DIST/core/git-hooks/pre-push"'
 rm -rf "$QW"
 
 fi

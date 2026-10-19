@@ -116,6 +116,10 @@ rlp_refuse() { # rlp_refuse <what> <status>
 # first extraction that failed. git's own status is NOT read: an unresolvable ref has always read
 # as a release that deleted nothing, and that NOTE says in words that no layer file was opened.
 #
+# `--text --no-ext-diff --no-textconv` ARE LOAD-BEARING: a `-diff` attribute (info/attributes,
+# global or system) prints "Binary files differ" with no `-` lines, and GIT_EXTERNAL_DIFF or a
+# textconv driver replaces the patch text. Each emptied this list and the row with it, measured.
+#
 # `set -f` IS LOAD-BEARING. The rulebook entries are git PATHSPECS (`steps/*.md`), and an
 # unquoted expansion in `for` is subject to shell pathname expansion first — so when the
 # caller's cwd happens to contain matching files, bash replaces each pathspec with real
@@ -126,7 +130,7 @@ removed_raw() {
   local glob rc=0 st
   set -f
   for glob in $GLOBS; do
-    git -C "$DIST" diff "$BASE" "$THEIRS" -- "$glob" 2>/dev/null \
+    git -C "$DIST" diff --text --no-ext-diff --no-textconv "$BASE" "$THEIRS" -- "$glob" 2>/dev/null \
       | LC_ALL=C sed -n -e '/^---/d' -e 's/^-//p'
     st="${PIPESTATUS[1]}"
     [ "$st" -eq 0 ] || [ "$rc" -ne 0 ] || rc="$st"

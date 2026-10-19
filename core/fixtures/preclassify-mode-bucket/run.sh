@@ -755,7 +755,60 @@ $U_ARM" '    elif [ "$ours_h" = "$base_h" ]; then bucket="ALREADY-AT-THEIRS"'
     # a conjunct that demands +x whatever theirs records: the 100644 direction inverts
     u_mut demands-exec U3U4 "$U_AAT" '    elif [ "$ours_h" = "$base_h" ] && [ -x "$CONS/$cons" ]; then bucket="ALREADY-AT-THEIRS"'
     # the listing C-quoted again
-    u_mut quotepath U5 '    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail' '    git -C "$DIST" ls-files "$glob" || pc_fail'
+    u_mut quotepath U5 '    git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail' '    git -C "$DIST" ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail'
+  fi
+
+  # --- BL-685 D1: the untangle listing reads THEIRS' TREE, not the dist INDEX ------------------
+  # A BARE dist has no index, so a plain `ls-files "$glob"` listed nothing and --untangle emitted
+  # ZERO rows -- byte-identical to "nothing to untangle". U7 runs the same world with the dist
+  # replaced by a bare clone and demands the rows the checkout yields. Gated like U1-U6: a consumer
+  # whose installed preclassify.sh predates the fix SKIPs, the distribution runs and must go red.
+  U7_FIX='ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail'
+  U7_RUN=1
+  if ! grep -qF "$U7_FIX" "$RECON/preclassify.sh"; then
+    if [ "$U_DIST" = 0 ]; then
+      printf '  SKIP  BL-685 arm U7 -- the installed preclassify.sh predates the --untangle theirs-tree listing; it lands with the pull that carries this fixture\n'
+      U7_RUN=0
+    else
+      printf '  --    (BL-685: this preclassify.sh lists the dist index; in the distribution U7 runs anyway and must go red)\n'
+    fi
+  fi
+  if [ "$U7_RUN" = 1 ]; then
+    UB="$WORK/u-bare"
+    git clone -q --bare "$UD" "$UB" >/dev/null 2>&1 || broken "bare clone of the untangle dist"
+    # SEED CONTROL: the bare clone's index really is empty, else U7 cannot express the defect.
+    [ -z "$(git -C "$UB" ls-files 2>/dev/null)" ] || broken "a plain ls-files in the bare untangle clone listed paths, so U7 cannot express BL-685 D1"
+    u7_n() { # u7_n <recon> -> how many rows --untangle emits against the bare dist
+      local n
+      n="$(bash "$1/preclassify.sh" "$UB" "$UH" "$UH" "$UC" --untangle 2>/dev/null | grep -c .)" || n=0
+      printf '%s\n' "$n"
+    }
+    u7_co="$(bash "$RECON/preclassify.sh" "$UD" "$UH" "$UH" "$UC" --untangle 2>/dev/null | grep -c .)" || u7_co=0
+    u7_bare="$(u7_n "$RECON")"
+    if [ "$u7_co" -gt 0 ] && [ "$u7_bare" = "$u7_co" ]; then
+      ok "BL-685 U7: with a BARE dist --untangle lists its rows from theirs' tree ($u7_bare, as from the checkout)"
+    else
+      bad "BL-685 U7: a bare dist listed $u7_bare untangle row(s) against $u7_co from the checkout -- the listing reads the dist index, not theirs' tree"
+    fi
+    # MUTANT: the pre-fix listing. Scored only over a green subject.
+    if [ "$u7_co" -gt 0 ] && [ "$u7_bare" = "$u7_co" ]; then
+      _d="$WORK/u-mut-index"; rm -rf "$_d"; cp -R "$RECON" "$_d" || broken "cp -R for the U7 mutant"
+      if python3 - "$RECON/preclassify.sh" "$_d/preclassify.sh" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+f = 'ls-files --with-tree="$THEIRS" -- "$glob" || pc_fail'
+s = open(src, encoding="utf-8").read()
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, 'ls-files "$glob" || pc_fail'))
+PY
+      then
+        u7_m="$(u7_n "$_d")"
+        if [ "$u7_m" = 0 ]; then ok "MUTANT (BL-685 index-listing) killed: the plain ls-files lists 0 untangle rows against a bare dist"
+        else bad "MUTANT SURVIVED [BL-685 index-listing]: the plain ls-files listed $u7_m rows against a bare dist"; fi
+      else
+        bad "FIXTURE STALE [BL-685 mutant index-listing]: its anchor did not match exactly once"
+      fi
+    fi
   fi
 fi
 

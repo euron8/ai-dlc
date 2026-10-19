@@ -422,7 +422,7 @@ release_containing() {
   # branch it advanced, and it leaves no `<commit>:VERSION` read in this file at all -- which is
   # the token the filing anchors on, because reading VERSION AT a commit is the defect itself.
   if ! git -C "$DIST" rev-parse -q --verify "${_c}^" >/dev/null 2>&1 \
-     || ! git -C "$DIST" diff --quiet "${_c}^" "$_c" -- VERSION 2>/dev/null; then
+     || ! git -C "$DIST" diff --quiet --no-textconv "${_c}^" "$_c" -- VERSION 2>/dev/null; then
     _rc="$_c"
   else
     _rc="$(git -C "$DIST" log --reverse --format=%H "${_c}..${THEIRS}" -- VERSION 2>/dev/null)"
@@ -435,7 +435,9 @@ release_containing() {
 
 absorbed_at() {
   local _c _v
-  _c="$(git -C "$DIST" log -S"$2" --reverse --format=%H "${BASE}..${THEIRS}" -- "$1" 2>/dev/null | head -1)"
+  # `--text --no-textconv`: the pickaxe searches the TEXTCONV output when a driver is set (measured: a
+  # string present in the raw blobs found no commit), and binary-attributed files only with --text.
+  _c="$(git -C "$DIST" log --text --no-textconv -S"$2" --reverse --format=%H "${BASE}..${THEIRS}" -- "$1" 2>/dev/null | head -1)"
   [ -n "$_c" ] || { printf '%s' "$TV"; return; }
   _v="$(release_containing "$_c")"
   [ -n "$_v" ] && printf '%s' "$_v" || printf '%s' "$TV"
@@ -1070,7 +1072,7 @@ named_sibling() {
     _ps=()
     while IFS= read -r _pq; do _ps[${#_ps[@]}]="$_pq"; done < "$LR_STAGE/nsb-pathset"
     [ "${#_ps[@]}" -gt 0 ] || return 0
-    git -C "$DIST" -c core.quotePath=false --literal-pathspecs diff-tree --stdin -m -r -p -U0 --no-renames --root --no-color --no-ext-diff --no-textconv -- "${_ps[@]}" \
+    git -C "$DIST" -c core.quotePath=false --literal-pathspecs diff-tree --stdin -m -r -p -U0 --no-renames --root --no-color --no-ext-diff --no-textconv --text -- "${_ps[@]}" \
       < "$LR_STAGE/nsb-span" > "$LR_STAGE/nsb-diff" 2>/dev/null || return 0
     # Per parent block: bx = an X substring is on a changed line of it, by = a Y substring whose
     # receipt resolves to the SAME path is. A unit is one parent of one commit (diff-tree prints
