@@ -3462,7 +3462,7 @@ pcv_k2near() {
 # would fail its control. V32 adds its link after the control and removes it before its near miss.
 # Each arm is undone before the next.
 pcv_k2world() {
-  local p ids="PC-V35 PC-V36" stp=".claude/skills/ai-dlc/steps/demo.md" ent
+  local p ids="PC-V35 PC-V36" stp=".claude/skills/ai-dlc/steps/demo.md" ent k32_nmhit=0
   [ "$PCV_R6" -eq 1 ] && ids="PC-V32 $ids"
   pcv_lat k2 || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   ent="$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
@@ -3499,6 +3499,7 @@ pcv_k2world() {
           rm -f "$L_C/$stp"; cp "$PS_D/k32-file.keep" "$L_C/$stp"; git -C "$L_C" add -- "$stp" >/dev/null 2>&1
           rm -f "$L_C/local/demo.md"; rmdir "$L_C/local" 2>/dev/null; pcv_kback
           pcv_k2near PC-V32 k32 "a tracked symlink (alone: a fresh exit-0 render, record untouched, R2 named) whose ignored target is then edited" "steps/demo.md a regular file again"
+          pcv_is_hit k32.nm "$L_REC" && k32_nmhit=1
         fi
       fi
     fi
@@ -3507,8 +3508,10 @@ pcv_k2world() {
   fi
 
   # V35 (F5): the EMPTY directory a bound fixture names is removed; git lists neither state. Near
-  # miss: an empty directory outside every read root (tmp/scratch).
-  if pcv_kctl PC-V35; then
+  # miss: an empty directory outside every read root (tmp/scratch). V32's near miss, when it HIT, is
+  # this arm's control: the same restored tree and record (the undo after it moves nothing, and a hit
+  # writes no record), so the record is kept as pcv_kctl keeps it and pcv_kctl runs only otherwise.
+  if { [ "$k32_nmhit" -eq 1 ] && cp "$L_REC" "$PS_D/krec.keep"; } || pcv_kctl PC-V35; then
     rmdir "$L_C/tests/fixtures/myfx"
     if pcv_k2miss PC-V35 k35 "removing the EMPTY tests/fixtures/myfx a bound extension names"; then
       mkdir -p "$L_C/tests/fixtures/myfx"; pcv_kback
@@ -3739,9 +3742,17 @@ pcv_b2world() {
   return 0
 }
 
-# pcv_suite <emit> <dir> -- every PC-V arm against that engine; one verdict line per id in <dir>/verdicts.
+# pcv_suite <emit> <dir> [scope] -- the PC-V arms against that engine; one verdict line per id in
+# <dir>/verdicts. With no scope every arm runs (the shipping control). With a scope, a group of arms
+# runs only when pcv_in names one of its ids, and the main world through V2 always runs: it is V0's
+# harness check and V1/V14's record-then-hit, the path every mutant edits.
+pcv_in() { # pcv_in <id>... -- 0 when the suite has no scope, or its scope names one of the ids
+  local i; [ -z "$PS_S" ] && return 0
+  for i in "$@"; do case " $PS_S " in *" $i "*) return 0 ;; esac; done
+  return 1
+}
 pcv_suite() {
-  PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""
+  PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""; PS_S="${3:-}"
   mkdir -p "$PS_SHIM" && : > "$PS_D/verdicts" || return 1
   { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
     && chmod +x "$PS_SHIM/bash" || { pcv_x PC-V0 "FIXTURE BROKEN: could not write the PATH shim"; return 1; }
@@ -3810,6 +3821,7 @@ pcv_suite() {
   else pcv_x PC-V2 "an edit outside the region did not hit ($(pcv_why))"; fi
 
   # ---- V3 / V9: an edit INSIDE the region misses, exits 1, and writes no record ----
+  if pcv_in PC-V3 PC-V9; then
   cp "$PC_R" "$PS_D/report.keep"; cp "$PC_REC" "$PS_D/rec.keep" 2>/dev/null
   awk -v p='^HARD-UNREGISTERED-CORE-DRIFT' '$0 ~ p && !d { d=1; next } { print }' "$PS_D/report.keep" > "$PS_D/report.v3"
   if cmp -s "$PS_D/report.keep" "$PS_D/report.v3" || [ ! -f "$PS_D/rec.keep" ]; then
@@ -3824,7 +3836,10 @@ pcv_suite() {
     else pcv_x PC-V9 "the exit-1 verify rewrote or removed the record"; fi
     cat "$PS_D/report.keep" > "$PC_R"; pcv_back
   fi
+  fi # end pcv_in PC-V3 PC-V9
 
+  # ---- V4..V31 but V10, with V40/V41: one group, because each arm opens on the state the arm before it left ----
+  if pcv_in PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V26 PC-V40 PC-V41 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; then
   # ---- V4 / V11 / V12 / V13: consumer changes the region does not see, each a miss at exit 0 ----
   if ! pcv_ctl v4; then pcv_noctl PC-V4; else
     printf 'v4 changed\n' > "$PC_C/notes/pc-v4.txt"; pcm v4
@@ -3880,7 +3895,9 @@ pcv_suite() {
   fi
 
   # ---- V7: an engine one byte apart ----
-  if ! pcv_ctl v7; then pcv_noctl PC-V7; else
+  # No pcv_ctl here: v7c below, a byte-identical engine copy run on the same tree and record, is the
+  # HIT the miss is read against, and the arm requires it. The record is kept for pcv_back as pcv_ctl did.
+  if ! cp "$PC_REC" "$PS_D/rec.keep" 2>/dev/null; then pcv_x PC-V7 "control: no record exists before the engine change, so the identical copy cannot hit and a miss after it would prove nothing"; else
     if ! cp -R "$(dirname "$PS_E")" "$PS_D/eng7"; then pcv_x PC-V7 "FIXTURE BROKEN: could not copy the engine"
     else
       PCV_ENG="$PS_D/eng7/emit-report.sh"; pcm v7c; v7c="$(pcv_why)"; v7c_hit=0
@@ -3937,8 +3954,9 @@ pcv_suite() {
   # A link inside the engine directory is skipped by the engine field's `find -type f`, so without R3
   # the linked copy computes the plain copy's key and HITS. The refusal must instead render fresh,
   # exit as the opt-out does, leave the record byte-identical and name R3.
+  # No pcv_ctl here either: v40c, the plain engine copy on the same tree and record, is the HIT.
   if [ "$PCV_R6" -eq 1 ]; then
-    if ! pcv_ctl v40; then pcv_noctl PC-V40; else
+    if ! cp "$PC_REC" "$PS_D/rec.keep" 2>/dev/null; then pcv_x PC-V40 "control: no record exists before the engine symlink, so the plain copy cannot hit and a refusal after it would prove nothing"; else
       if ! cp -R "$(dirname "$PS_E")" "$PS_D/eng40"; then pcv_x PC-V40 "FIXTURE BROKEN: could not copy the engine"
       else
         PCV_ENG="$PS_D/eng40/emit-report.sh"; pcm v40c; v40c="$(pcv_why)"; v40c_hit=0
@@ -4052,17 +4070,19 @@ pcv_suite() {
 
   # ---- V27..V31: inputs the key REFUSES or keys after a fourth review, in ONE shared world ----
   pcv_kworld
+  fi # end pcv_in V4..V31 but V10, with V40/V41
 
   # ---- V32..V36: a fifth review's key gaps, two worlds of their own ----
-  pcv_k2world
-  pcv_k3world
-  pcv_k4world
-  pcv_k5world
+  # Each world is seeded fresh by its own pcv_lat, so each is its own group.
+  if pcv_in PC-V32 PC-V35 PC-V36; then pcv_k2world; fi
+  if pcv_in PC-V33; then pcv_k3world; fi
+  if pcv_in PC-V34; then pcv_k4world; fi
+  if pcv_in PC-V37; then pcv_k5world; fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
   if [ "$PCV_R6" -eq 1 ]; then
-    pcv_r6world
-    pcv_b2world
+    if pcv_in PC-V38 PC-V39; then pcv_r6world; fi
+    if pcv_in PC-V42; then pcv_b2world; fi
   fi
 
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
@@ -4070,7 +4090,8 @@ pcv_suite() {
   # register lives in _bmad-output/ai-dlc-update/, the directory the report lives in, so a key that
   # excluded the whole directory would hit here. After the exit-3 run the record must be unchanged
   # and a second run must reach exit 3 again: a record written on exit 3 would turn it into a hit.
-  if ! command -v jq >/dev/null 2>&1; then pcv_x PC-V10 "jq is not on PATH; layer-drift.sh cannot read the register, so no resolution can be seeded"
+  if ! pcv_in PC-V10; then :
+  elif ! command -v jq >/dev/null 2>&1; then pcv_x PC-V10 "jq is not on PATH; layer-drift.sh cannot read the register, so no resolution can be seeded"
   elif ! pcv_lat v10; then
     pcv_x PC-V10 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"
   else
@@ -4117,10 +4138,12 @@ pcv_suite() {
   return 0
 }
 
-# pcv_failset <verdicts> -- every id that has no single ok line (a FAIL, or no verdict at all).
+# pcv_failset <verdicts> [scope] -- every id that has no single ok line (a FAIL, or no verdict at all),
+# in PCV_IDS order. With a scope, only the ids it names are read; with none, every id is.
 pcv_failset() {
   local id o f out=""
   for id in $PCV_IDS; do
+    if [ -n "${2:-}" ]; then case " $2 " in *" $id "*) ;; *) continue ;; esac; fi
     o="$(grep -c "^ok $id " "$1")" || o=0
     f="$(grep -c "^FAIL $id " "$1")" || f=0
     { [ "$o" -eq 1 ] && [ "$f" -eq 0 ]; } || out="$out $id"
@@ -4152,6 +4175,40 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built a
   ! cmp -s "$EMIT" "$d/eng/emit-report.sh"
 }
 pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V10" ;; M-exit3) echo "PC-V9 PC-V10" ;; esac; }
+# THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
+# to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
+# which made this phase the suite pole (BL-699). Each mutant now runs the always-on prefix PC-V0 PC-V1
+# PC-V14 PC-V2 and the arm groups holding its declared kill set, nothing else. The prefix is not
+# decoration: V0 is the harness check below, and V1/V14 must PASS on the mutant, which is what proves
+# the mutated record-then-hit path still works, so a mutant that broke the cache outright reads as
+# entangled instead of scoring an unearned kill. Inside the groups the arm the mutant must NOT kill is
+# the same-run control: V9 on M-region, V3 on M-exit3. WHAT THIS GIVES UP: an arm outside a mutant's
+# groups can no longer show up in its kill set, so a change that would entangle such an arm (the
+# V17..V20 ordering hazard noted in pcv_latarm) is not caught by the scoring; no declared kill is lost.
+# The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, k5, r6 and b2 worlds) hold no
+# declared kill, so no mutant runs them; the shipping suite still runs every one.
+pcv_scope() {
+  case "$1" in
+    M-region)  echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9" ;;
+    M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10" ;;
+    M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
+  esac
+}
+# A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
+# a declared kill id left out of the scope, or named in it while no pcv_in group runs it, would read as
+# "fails exactly [...]" with the arm never run. pcv_offscope prints the declared kill ids pcv_scope
+# omits (the launch refuses the mutant on any); pcv_noverdict prints the scoped ids the mutant's run
+# left no ok/FAIL line for (the scoring refuses on any).
+pcv_offscope() {
+  local id out=""
+  for id in $(pcv_want "$1"); do case " $(pcv_scope "$1") " in *" $id "*) ;; *) out="$out $id" ;; esac; done
+  printf '%s\n' "${out# }"
+}
+pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
+  local id out=""
+  for id in $2; do grep -qE "^(ok|FAIL) $id " "$1" 2>/dev/null || out="$out $id"; done
+  printf '%s\n' "${out# }"
+}
 PCV_MUTS="M-region M-direxcl M-exit3"
 
 if ! grep -qF "$PCV_HITP" "$EMIT"; then
@@ -4161,9 +4218,13 @@ else
   ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &
   PCV_BUILT=""
   for _m in $PCV_MUTS; do
-    if pcv_mk "$_m"; then
+    if [ -z "$(pcv_scope "$_m")" ]; then
+      bad "MUTANT NOT SCOPED [BL-679 $_m]: pcv_scope names no arms for it, so it would run none and score nothing"
+    elif [ -n "$(pcv_offscope "$_m")" ]; then
+      bad "FIXTURE BROKEN [BL-679 $_m]: its declared kill set names [$(pcv_offscope "$_m")], which pcv_scope does not run, so that kill would be read off an arm that never ran"
+    elif pcv_mk "$_m"; then
       PCV_BUILT="$PCV_BUILT $_m"
-      ( pcv_suite "$PCV_ROOT/$_m/eng/emit-report.sh" "$PCV_ROOT/$_m" ) > "$PCV_ROOT/$_m.log" 2>&1 &
+      ( pcv_suite "$PCV_ROOT/$_m/eng/emit-report.sh" "$PCV_ROOT/$_m" "$(pcv_scope "$_m")" ) > "$PCV_ROOT/$_m.log" 2>&1 &
     else
       bad "MUTANT NOT BUILT [BL-679 $_m]: its anchor occurs $(cat "$PCV_ROOT/$_m/anchor-count" 2>/dev/null || echo '?') time(s) in emit-report.sh (want 1), or the edit changed nothing -- re-anchor it on the engine's line"
     fi
@@ -4186,7 +4247,7 @@ else
   # mutant is scored, and each is reported as UNSCORED naming the control's failing ids.
   PCV_CTLFAIL="$(pcv_failset "$PCV_ROOT/ship/verdicts")"
   for _m in $PCV_BUILT; do
-    _got="$(pcv_failset "$PCV_ROOT/$_m/verdicts")"; _want="$(pcv_want "$_m")"
+    _got="$(pcv_failset "$PCV_ROOT/$_m/verdicts" "$(pcv_scope "$_m")")"; _want="$(pcv_want "$_m")"
     if [ -n "$PCV_CTLFAIL" ]; then
       bad "MUTANT UNSCORED [BL-679 $_m]: the unmutated control did not pass [$PCV_CTLFAIL], so a kill set read against it would credit the control's failures as kills"
       continue
@@ -4194,7 +4255,12 @@ else
     case " $_got " in
       *" PC-V0 "*) bad "MUTANT HARNESS BROKEN [BL-679 $_m]: the copy failed the seed sanity arm, so its score is a copy that did not run" ;;
       *)
-        if [ "$_got" = "$_want" ]; then ok "mutant BL-679 $_m fails exactly [$_want]"
+        _nv="$(pcv_noverdict "$PCV_ROOT/$_m/verdicts" "$(pcv_scope "$_m")")"
+        if [ -n "$_nv" ]; then
+          bad "FIXTURE BROKEN [BL-679 $_m]: scoped arms [$_nv] left no verdict, so no pcv_in group ran them and a kill there would be unearned"
+          continue
+        fi
+        if [ "$_got" = "$_want" ]; then ok "mutant BL-679 $_m fails exactly [$_want] within its scope"
         elif [ -z "$_got" ]; then bad "MUTANT SURVIVED [BL-679 $_m]: every arm passed with the edit in place, so [$_want] cannot see it"
         else bad "MUTANT [BL-679 $_m] failed [$_got], expected exactly [$_want] -- the arms are entangled or one is vacuous"; fi ;;
     esac

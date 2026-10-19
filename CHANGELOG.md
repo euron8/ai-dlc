@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.883.0] - 2026-10-19
+
+Batch 236, BL-699 release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-699, which stays
+open: the reconcile-emit-report pcache phase does far less total work, but its critical path barely moves, so the
+phase may still be the suite pole. Closes no `PC-` id. Net for this release: 0 closed, 0 filed.
+
+### The pcache mutant suites run only their kill-set arms (BL-699)
+
+- Each BL-679 mutant suite (M-region, M-direxcl, M-exit3) now runs only the arm groups its declared kill set needs,
+  through `pcv_in` and `pcv_scope`; the ship suite still runs every arm. A mutant's verdict reads "fails exactly
+  [...] within its scope".
+- **A kill must be earned inside its scope, and the fixture refuses one that is not.** `pcv_offscope` refuses a
+  mutant whose declared kill set names an arm its scope does not run, before the mutant is built.
+  `pcv_noverdict` refuses a mutant whose scoped arm left no verdict line, before its kill set is compared, because
+  `pcv_failset` counts a missing verdict as failed. Both were fired once through the real fixture on a scratch
+  copy: a kill id seeded outside M-region's scope, and a scoped verdict suppressed inside M-exit3's run.
+- Three hit-control renders that another render on the same world and state already established are removed
+  (V7's and V40's, which their identical-engine-copy hits subsume, and V35's when V32's near miss already hit).
+  The 38 arm verdict lines are unchanged.
+
+### Limits
+- Counted, not timed, on scratch copies instrumented at the three helpers that render or seed. Per suite,
+  verify renders / approve renders / seeds: before, each of the four suites 149 / 15 / 16; now ship 146 / 15 / 16,
+  M-region 4 / 0 / 0, M-direxcl 7 / 1 / 1, M-exit3 8 / 1 / 1. Totals: verify 596 to 165, approve 60 to 17,
+  seeds 64 to 18. Under a loaded pool that total is what competes for the box.
+- **The critical path barely moves.** The four suites run concurrently (one `wait` joins them), so the phase is
+  bounded by the ship suite, which is 146 / 15 / 16. Within one ship-suite run, verify renders take 86.4% of its
+  wall, approve renders 7.9% and seeds 1.2%. A solo timing differential could not resolve the change against its
+  own rep spread and is not claimed.
+- Whether the phase is still the suite pole is read from the landing gate's loaded line. BL-699 stays open; its
+  next lever, owed and unproven, is whether the nine `pcv_latarm` arms can share one record per world.
+
+
 ## [0.882.0] - 2026-10-19
 
 Batch 236 hotfix (BL-711, owner ai-dlc-c0, lead ai-dlc-37). This release ships alone, ahead of BL-676. It closes BL-711,
