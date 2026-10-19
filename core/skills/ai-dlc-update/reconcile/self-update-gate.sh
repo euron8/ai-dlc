@@ -210,17 +210,21 @@ if [ "${1:-}" = "--safe-stop" ]; then
   gate_load_preclassify "$(dirname "$SELF_SRC")/preclassify.sh"
   for ss_c in $ss_cands; do
     [ "$ss_c" = "$SS_THEIRS" ] && continue          # the full pull is what the caller already asked
-    ss_out="$(bash "$SELF_SRC" "$SS_DIST" "$SS_BASE" "$ss_c" "$SS_CONSUMER" 2>/dev/null)"
-    case "$ss_out" in
-      *SELF-UPDATE-DEFER*|*SELF-UPDATE-UNDECIDED*) continue ;;
-    esac
+    # THE KEEP TEST RUNS FIRST because it is a diff and a set, where the nested verdict is a whole
+    # classify: a candidate that lands no machinery is dropped before it costs one. `--no-renames`,
+    # because a machinery file renamed OUT of the set otherwise lists only its destination, and the
+    # slice that removes it from the engine reads as touching no machinery at all.
     command -v machinery_paths >/dev/null 2>&1 || continue
     ss_mrc=0
     ss_mset="$(DIST="$SS_DIST"; BASE="$SS_BASE"; THEIRS="$ss_c"; machinery_paths)" || ss_mrc=$?
     [ "$ss_mrc" -eq 0 ] && [ -n "$ss_mset" ] || continue
-    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
+    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --no-renames --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
     [ -n "$ss_diff" ] || continue
     grep -qxF -f <(printf '%s\n' "$ss_mset") <<<"$ss_diff" || continue   # the slice lands machinery
+    ss_out="$(bash "$SELF_SRC" "$SS_DIST" "$SS_BASE" "$ss_c" "$SS_CONSUMER" 2>/dev/null)"
+    case "$ss_out" in
+      *SELF-UPDATE-DEFER*|*SELF-UPDATE-UNDECIDED*) continue ;;
+    esac
     ss_best="$ss_c"
   done
   [ -n "$ss_best" ] || exit 1
@@ -836,7 +840,7 @@ advise_safe_stop() {
       emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
     fi
   else
-    emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} self-updates cleanly, so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
+    emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} both self-updates cleanly and lands machinery (or its machinery set could not be resolved), so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
   fi
 }
 

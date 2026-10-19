@@ -132,13 +132,19 @@ mkdir -p "$SS/cons/.githooks"
 printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
 git -C "$SS/dist" init -q
 printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
-# ONE MACHINERY PATH, NEVER TOUCHED AGAIN, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C
-# now resolves its population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
+# A MACHINERY PATH AT BASE, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C resolves its
+# population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
 # SELF-UPDATE-UNDECIDED when that set comes back EMPTY -- correctly, since a membership test over
 # an empty set rejects every path and its silence is byte-identical to a clean pull. A dist tree
 # holding only VERSION and a rulebook file resolves to nothing, so without this file every arm
-# below runs against an UNDECIDED verdict it never asked for. Unchanged across all five commits,
-# so it enters no base..theirs diff and produces no bucket and no CARRY row of its own.
+# below runs against an UNDECIDED verdict it never asked for.
+#
+# NO CARRY ROW CAN BE BUILT IN THIS WORLD, and every arm reading the carry state relies on that.
+# ss.md is never touched again, so it enters no base..theirs diff. The machinery r1 and r3 DO
+# change (ss-r1.md, ss-r3.md, so the walk has something to keep) is ADDED upstream and absent on
+# the consumer, which preclassify buckets UPSTREAM-ONLY-ADD -- a pure apply carrying no
+# `->CLASSIFY` marker. A CARRY row needs consumer state on a path the range changes, and this
+# consumer holds no copy of any machinery path at all.
 printf 'ss machinery\n' > "$SS/dist/core/rules/ss.md"
 git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
 SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
@@ -791,7 +797,7 @@ NM_KEEP='    command -v machinery_paths >/dev/null 2>&1 || continue
     ss_mrc=0
     ss_mset="$(DIST="$SS_DIST"; BASE="$SS_BASE"; THEIRS="$ss_c"; machinery_paths)" || ss_mrc=$?
     [ "$ss_mrc" -eq 0 ] && [ -n "$ss_mset" ] || continue
-    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
+    ss_diff="$(git -C "$SS_DIST" -c core.quotePath=false diff --no-renames --name-only "${SS_BASE}..${ss_c}" 2>/dev/null)" || continue
     [ -n "$ss_diff" ] || continue
     grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || continue   # the slice lands machinery
 '
