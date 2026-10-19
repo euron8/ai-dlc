@@ -350,7 +350,9 @@ Owed: a reconcile that runs the derivation differential writes the record even w
 
 Related: BL-652 (the UNMEASURED lines), BL-587.
 
-verify: manual
+verify: sh bash core/fixtures/owed-derivations/receipt-bl668.sh
+
+Built (batch 236): `derivation-differential.sh --record-owed` now creates the record (empty file, the form `check-owed-derivations.sh` reads as "present with 0 OWED rows") on every run that passes its refusals, and SKILL.md tells the reconcile to pass `--record-owed` whenever it runs the worklist row's command. No per-run invocation exists: `apply.sh` emits the differential only as a WORKLIST row when a range-changed path is named, and the script refuses on zero derivations, so a pull with no hits never reaches the writer.
 
 ## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
 

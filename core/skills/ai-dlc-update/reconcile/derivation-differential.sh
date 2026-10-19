@@ -455,6 +455,13 @@ say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a la
 # refuses: the sprint can roll between the join and this write, and recording or dropping a row on a
 # scope that moved is the guess the ruling forbids. A classifier that is absent or refuses (exit 2: the
 # current sprint could not be resolved) refuses the run for the same reason.
+# THE RECORD EXISTS AFTER ANY --record-owed RUN THAT PASSED THE REFUSALS ABOVE, rows or not: an absent record
+# means no reconcile ever measured this tree, a present one with 0 OWED rows means measured and nothing owed
+# (check-owed-derivations.sh prints a different UNMEASURED line for each). Creating it appends no row.
+if [ "$OWED_SET" -eq 1 ]; then
+  mkdir -p "$(dirname "$OWED_FILE")" 2>/dev/null && : >> "$OWED_FILE" 2>/dev/null \
+    || refuse record "could not create the owed-derivations record $OWED_FILE, so a measured-clean run would read as never measured."
+fi
 if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
   _scope_tool="$CONSUMER/scripts/ai-dlc/check-owed-derivations.sh"
   [ -f "$_scope_tool" ] \
