@@ -582,7 +582,23 @@ fi
 # declaration skips the whole check" as the contract, and key 3 reads the same vocabulary.
 HANDOFF_TRANSCRIPT_OK=0
 [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && HANDOFF_TRANSCRIPT_OK=1
+# Set only where Check 0 ARMED and so reached a decision; the fail-closed check after Check 0
+# reads it and never overrides a Stop this guard actually examined.
+HANDOFF_DECIDED=0
+# STEP 4's DRIVER SIGNAL ENTERS AND ARMS THE GUARD WHEN THERE IS NO TRANSCRIPT (BL-700). It is the
+# one handoff signal that is not a key of ai_dlc_handoff_pending, so a transcript-less Stop whose
+# only evidence was the touch reached no decision and was ALLOWED on an unpublished branch. Read
+# with the DRIVER arm's own freshness rule: a signal OLDER than the snapshot belongs to an earlier
+# handoff. Bounded by the pause flag, which step 5 raises and the resume path takes down. Arming
+# here costs a COMPLETED handoff nothing: every disk and git arm is satisfied and the Stop allows.
+# With a readable transcript the transcript decides, so this stays 0 there.
+HANDOFF_DRIVER_ENTRY=0
+if [ "$HANDOFF_TRANSCRIPT_OK" != "1" ] && [ -f "$PAUSE_FLAG" ] && [ -f "${LOG_DIR}/.driver/handoff" ] \
+   && ! { [ -f "$SNAPSHOT_FILE" ] && [ "$SNAPSHOT_FILE" -nt "${LOG_DIR}/.driver/handoff" ]; }; then
+  HANDOFF_DRIVER_ENTRY=1
+fi
 if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$HANDOFF_ON_DISK" = "1" ] \
+     || [ "$HANDOFF_DRIVER_ENTRY" = "1" ] \
      || [ -f "${LOG_DIR}/.handoff-guard-armed" ]; }; then
   # ONE LINE, BECAUSE THE DECLARED PATTERNS ANCHOR ON `^` AND `$` AND grep ANCHORS PER LINE.
   # A multi-line message with a middle line reading `handoff` (or, since the final-sentence
@@ -592,14 +608,22 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$
   # seeing the same text shape as the on-disk reader, not a new rule.
   LAST_USER=""
   LAST_ASST=""
+  #
+  # READ LINE-WISE, NEVER SLURPED (BL-700). `jq -s` parses the whole file as one stream, so a
+  # last line truncated mid-write -- the harness appends records while this hook runs -- or one
+  # non-JSON line anywhere fails the WHOLE read and both readers came back empty: a requested
+  # handoff then read as "no request" and the Stop was allowed with no HANDOFF_GUARD row. `-R`
+  # with `fromjson?` drops only the damaged line, the idiom push_bg_read and
+  # ai-dlc-dispatch-guard.sh already use. On a well-formed transcript the output is unchanged.
+  # A pretty-printed record spanning several lines is dropped too; the harness writes one per line.
   if [ "$HANDOFF_TRANSCRIPT_OK" = "1" ]; then
-  LAST_USER=$({ jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo ""; } | tr '\n' ' ')
+  LAST_USER=$({ jq -Rrn '[inputs|fromjson?|objects|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo ""; } | tr '\n' ' ')
   # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
   # line-anchored, and a streaming split of one text block into chunks can land a
   # boundary mid-line — join(" ") then corrupts a `----` marker into `-- --` and the
   # lead's own well-formed block false-blocks. join("") rejoins contiguous text so
   # marker lines survive. LAST_USER keeps join(" ") (substring regex, spacing-tolerant).
-  LAST_ASST=$(jq -rs '[.[]|select(.message.role=="assistant")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join("")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
+  LAST_ASST=$(jq -Rrn '[inputs|fromjson?|objects|select(.message.role=="assistant")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join("")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
   fi
 
   # Match REQUEST-shaped phrasings only — "handoff"/"hand off" as a VERB, a terse
@@ -628,9 +652,10 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$
     fi
   fi
 
-  if [ "$HANDOFF_ON_DISK" = "1" ] || [ "$HANDOFF_STICKY" = "1" ] \
+  if [ "$HANDOFF_ON_DISK" = "1" ] || [ "$HANDOFF_STICKY" = "1" ] || [ "$HANDOFF_DRIVER_ENTRY" = "1" ] \
      || { grep -qiE "$HANDOFF_INTENT_RE" <<<"$LAST_USER" \
           && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$LAST_USER"; }; then
+    HANDOFF_DECIDED=1
     [ -n "$SESSION_ID" ] && printf '%s\n' "$SESSION_ID" > "$HANDOFF_ARMED_FILE"
 
     RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
@@ -1011,6 +1036,7 @@ EOF
       # lead that was told plainly and skipped the steps.
       [ "$HANDOFF_ON_DISK" = "1" ] && H_WHY="${H_WHY} [pending handoff seen on disk via ${AI_DLC_HANDOFF_KEY:-unknown}, not the transcript]"
       [ "$HANDOFF_ON_DISK" != "1" ] && [ "$HANDOFF_STICKY" = "1" ] && H_WHY="${H_WHY} [armed by an earlier Stop of this session, no key holds now]"
+      [ "$HANDOFF_ON_DISK" != "1" ] && [ "$HANDOFF_STICKY" != "1" ] && [ "$HANDOFF_DRIVER_ENTRY" = "1" ] && H_WHY="${H_WHY} [armed by step 4's driver signal with no transcript]"
       # Only the DRIVER text below says "the resume prompt is well-formed" -- it is dispatched after
       # the resume arm -- and with no transcript that clause was not checked; the record says so.
       [ "$HANDOFF_TRANSCRIPT_OK" != "1" ] && H_WHY="${H_WHY} [no transcript: the resume block and the dispatch set were not read]"
@@ -1214,6 +1240,99 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       if [ "$HANDOFF_TRANSCRIPT_OK" = "1" ]; then
       : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true
       fi
+    fi
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# Check 0f: with NO jq, the handoff guard FAILS CLOSED (BL-700)
+# -----------------------------------------------------------------------------
+# Check 0 needs jq for everything: the session id, the transcript path and the handoff vocabulary
+# are all read with it, so with no jq HANDOFF_VOCAB_OK is 0 and Check 0 is skipped outright. A
+# requested handoff on an unpublished branch was then ALLOWED with no HANDOFF_GUARD row. This
+# check blocks that Stop with one constant block, at most EFF_MAX times per session. With jq and
+# no transcript, Check 0 itself is entered by the driver signal (HANDOFF_DRIVER_ENTRY) and decides
+# from disk and git, so that case never reaches here.
+#
+# THE ARMING PREDICATE, from every writer and clearer of the signals involved:
+#  - the pause flag is up. steps/handoff.md step 5 raises it and the resume path takes it down,
+#    so every signal below is bounded by it;
+#  - the handoff vocabulary resolved (PAUSE_ROUTING_SCHEMA), so an install that lost it skips
+#    this check exactly as handoff-resume-guard assertion 0 pins for Check 0;
+#  - and one of: a key of ai_dlc_handoff_pending (keys 1 and 2 need no jq: the entry marker,
+#    which ai-dlc-handoff-entry.sh writes and step 5 removes, and the snapshot HANDOFF POINT
+#    record not yet stamped complete); this session in .handoff-guard-armed, which Check 0
+#    writes when it arms and removes on completion or backoff; or `.driver/handoff`, which the
+#    lead touches at step 4 and only the session driver removes, read with the DRIVER arm's
+#    own freshness rule -- a signal OLDER than the snapshot belongs to an earlier handoff.
+# AND IT NEVER OVERRIDES A READ: with a working jq it never fires.
+#
+# THE FALSE-POSITIVE SET: a paused Stop on a no-jq box after a handoff that DID complete -- the
+# driver signal stays newer than the snapshot until the next snapshot write, and a key-2 record is
+# never stamped without jq. The bound below makes that a cost and not a wedge. A NEW session on
+# such a box gets EFF_MAX fresh blocks; install.sh refuses to install without jq, so this is a box
+# that lost jq after install.
+#
+# BOUNDED PER SESSION. The run counts through stall_run and the same EFF_MAX, keyed on the session
+# id, recovered here with sed, so the run continues at any spacing instead of resetting on every
+# 30 s gap. An input carrying no session id falls back to the 30 s time test, bounded in the end by
+# the harness block cap. Past EFF_MAX the count is kept, so every later Stop of this session passes
+# through; BACKOFF is written once, at the release, and the Stop FALLS THROUGH to the checks below,
+# so Check 1 still logs and allows it. A live wait-beat lease defers it, as it defers Check 0.
+#
+# THE BLOCK IS A CONSTANT. Every other block in this hook is built with jq -n; none can be here,
+# so the reason is one literal printed whole, with nothing escaped at run time.
+#
+# A jq THAT CANNOT RUN IS NO jq. A PATH entry named jq that exits non-zero (handoff-resume-guard
+# case F seeds one) leaves every jq read above empty exactly as an absent one does, so it is probed
+# here, once, and only on a paused Stop Check 0 did not decide.
+FC_ARM=""
+if [ "$HANDOFF_DECIDED" != "1" ] && [ -f "$PAUSE_FLAG" ] && [ -n "$PAUSE_ROUTING_SCHEMA" ] \
+   && { ! command -v jq >/dev/null 2>&1 || ! jq -n true >/dev/null 2>&1; }; then
+  if [ -z "$SESSION_ID" ]; then
+    SESSION_ID="$(sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p' <<<"$INPUT" | head -n 1)"
+  fi
+  if [ "$HANDOFF_ON_DISK" = "1" ]; then
+    FC_ARM="pending handoff key ${AI_DLC_HANDOFF_KEY:-unknown}"
+  elif [ -n "$SESSION_ID" ] && [ -f "${LOG_DIR}/.handoff-guard-armed" ] \
+       && [ "$(head -n 1 "${LOG_DIR}/.handoff-guard-armed" 2>/dev/null)" = "$SESSION_ID" ]; then
+    FC_ARM="armed by an earlier Stop of this session"
+  elif [ -f "${LOG_DIR}/.driver/handoff" ] \
+       && ! { [ -f "$SNAPSHOT_FILE" ] && [ "$SNAPSHOT_FILE" -nt "${LOG_DIR}/.driver/handoff" ]; }; then
+    FC_ARM="step 4 driver signal newer than the snapshot"
+  fi
+fi
+if [ -n "$FC_ARM" ]; then
+  if beat_lease_live; then
+    {
+      echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Wait-beat lease live until epoch ${BEAT_DEADLINE} (now ${NOW}); fail-closed guard deferred, not cleared"
+      echo "- Unreadable: jq is not on PATH; ${FC_ARM}"
+      echo ""
+    } >> "$LOG_FILE"
+  else
+    stall_run "$HANDOFF_STATE"
+    stall_run_write "$HANDOFF_STATE"
+    if [ "$RUN_CNT" -le "$EFF_MAX" ]; then
+      {
+        echo "## ${TIMESTAMP} -- HANDOFF_GUARD_FAIL_CLOSED (${RUN_CNT}/${EFF_MAX})"
+        echo "- Session: ${SESSION_ID}"
+        echo "- A handoff is pending (${FC_ARM}) and the guard can read nothing: jq is not on PATH"
+        echo "- Tool call since previous block: ${RUN_TOOL}"
+        echo ""
+      } >> "$LOG_FILE"
+      printf '%s\n' '{"decision":"block","reason":"HANDOFF GUARD (fail-closed): a handoff is pending on disk, but jq is not on PATH, so this guard cannot read the transcript and cannot check any step of the handoff. Complete steps 3 to 5 of steps/handoff.md now: finalize the snapshot and run git push -u origin HEAD in the foreground (step 3), emit the delimited /ai-dlc resume block and run mkdir -p _bmad-output/.driver and touch _bmad-output/.driver/handoff (step 4), then touch _bmad-output/pipeline-paused.flag and rm -f _bmad-output/.handoff-in-progress (step 5), and end the turn again. If all of that is already done, end the turn again: this guard releases after a bounded number of blocks. Install jq so the guard can verify the handoff. Do not resume pipeline work.","suppressOutput":true}'
+      exit 0
+    fi
+    if [ "$RUN_CNT" -eq $((EFF_MAX + 1)) ]; then
+      {
+        echo "## ${TIMESTAMP} -- BACKOFF"
+        echo "- Session: ${SESSION_ID}"
+        echo "- Fail-closed handoff guard: $(stall_run_why)"
+        echo "- Releasing; the guard could not read the handoff (jq is not on PATH)."
+        echo ""
+      } >> "$LOG_FILE"
     fi
   fi
 fi
