@@ -19,6 +19,59 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.880.0] - 2026-10-19
+
+Batch 236, BL-685 round-6 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,
+which stays open: adversary round 6 on 0.878.0's recorded-PASS key found five BLOCKERs and two DEFECTs. The
+BLOCKERs are closed by a refusal partition rather than more key fields, and the DEFECTs are stated as limits. The
+cache stays off by default. Closes no `PC-` id. Net for this release: 0 closed, 0 filed.
+
+### The recorded-PASS cache refuses whole input classes it cannot key (BL-685, adversary round 6)
+
+Round 5 found three BLOCKERs and round 6 found five, each a new edge of a key that grows one field per finding.
+This release stops growing the key. `emit-report.sh --verify` now REFUSES the cache (a miss: it renders fresh,
+exits as the fresh render does, and leaves the record untouched) whenever its input set holds something the key
+cannot see, and it names the cause on stderr when the cache is armed:
+
+- **R1, a non-bare dist.** A dist work tree's checkout and `.gitattributes` are inputs no field keys. Real pulls
+  use `dist-clone.sh`'s bare clone and are unaffected.
+- **R2, a symlink anywhere in the consumer's input set:** a tracked symlink, a read root or a parent of one that
+  is a symlink, or any symlink under a read root. This closes the symlinked read root (BLOCKER, the directory
+  form of round 5's F1, now probed) and the exec bit of a tracked link's target (BLOCKER).
+- **R3, an engine directory that contains a symlink** (BLOCKER: the engine field's `find -type f` skipped it).
+- **R4, a live ledger `sh` receipt that names a `.git/` path** (BLOCKER: the engine tests that path's existence
+  and the key prunes `.git`). The paths are taken with `ledger-reverify.sh`'s own receipt grammar, through a new
+  `--receipt-tokens` mode, so there is one grammar.
+- **B2 (BLOCKER), fixed at the detector:** `preclassify.sh` and `layer-drift.sh` hashed consumer files with
+  `git -C "$DIST" hash-object` and no `--no-filters`, so a non-bare dist's work-tree attributes rewrote consumer
+  bytes before the hash. Both sites now pass `--no-filters`.
+- Every refusal, old and new, now prints `emit-report: recorded PASS refused, re-rendering: <cause>` when the
+  cache is armed. Before this, `er_key`'s stderr was discarded and every refusal was silent.
+- Removed: the tracked-symlink (`120000`) arm of the consumer-index field, which R2 makes unreachable.
+- **Limits, not fixed:** a file changed and restored during the render is invisible to the before-and-after key
+  (D1), and a report written at a detector input is excluded from the key (D2). Both are stated in the engine's
+  header and on BL-685.
+- `reconcile-emit-report`: the cache worlds now pass a bare mirror of the seeded dist. PC-V32 is rewritten to
+  assert the tracked-symlink refusal, with a regular file as its near miss. New arms PC-V38 (R1), PC-V39 (R2,
+  four shapes), PC-V40 (R3), PC-V41 (R4) and PC-V42 (the `--no-filters` detector arm, with the pre-fix spelling
+  as its discriminating control).
+
+### Limits
+- Probed against the engine, both directions: on 0.879.0 the six round-6 seeds each record and then hit a
+  stale PASS while a fresh render exits 1. On this engine each refuses with its named cause, no record is
+  written, and the cached run exits as the fresh one does. The same world with no seed records and hits on
+  both engines.
+- Plain-install hit rate: a consumer built by `scripts/install.sh` into an empty repo (with `_bmad/` seeded,
+  which install.sh requires), against a bare dist, records on its first `--verify` and HITS on its second, so
+  the partition does not refuse an ordinary install. One tree; the population is that install shape only.
+- The release is verified through `hermetic-run.sh` into the shared verdict store, over every fixture whose
+  `inputs.decl` names a changed file or a directory holding one, plus the release-file and anchor units, with
+  PC-V0, PC-V32, PC-V38..PC-V42 and the three BL-679 mutants read by name.
+- Not measured: the cost of the R4 subprocess on each `--verify`, which runs `ledger-reverify.sh`'s preamble.
+- The cache default stays OFF. Turning it on needs adversary round 7, read-only on this engine, to return no
+  BLOCKER, and then a lead ruling.
+
+
 ## [0.879.0] - 2026-10-19
 
 Batch 236 (HOOKWAKE, owner ai-dlc-cb, lead ai-dlc-37). This release ships the hook half of BL-538: an opt-in
