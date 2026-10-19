@@ -502,6 +502,8 @@ ra_answer() { # ra_answer <consumer> <question> <answer> -> 0 when one more AskU
     '{tool_name:"AskUserQuestion",session_id:"fx-ra",tool_use_id:"fx-ra-tu",tool_response:{answers:{($q):$a}}}' \
     > "$1/ra-payload.json" || return 1
   CLAUDE_PROJECT_DIR="$1" bash "$ANSWER_HOOK" < "$1/ra-payload.json" >/dev/null 2>&1
+  # stderr, not stdout: callers capture stdout; hermetic-run merges both into the log it greps.
+  [ -f "$ANSWER_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-answer-capture.sh" >&2
   n1="$(grep -c '^## .* -- AskUserQuestion$' "$h" 2>/dev/null)" || n1=0
   [ "$n1" -gt "$n0" ]
 }
