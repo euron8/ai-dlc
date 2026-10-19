@@ -1377,7 +1377,7 @@ p_sum_excl_drift() {
   run_merge "$sd/merge-adversarial-shards.sh" "$d"
   [ "$RC" -eq 2 ] && has "$MO" "series exclusion line"
 }
-# THE ORACLE, kept out of P_ALL so the battery never runs the validator per mutant: each series is
+# THE ORACLE: each series is
 # merged, its merged pass's verdict reset to NOT_MET in a scratch copy (the unstamped twin), and
 # validate-adversarial-convergence.sh --series run over it. Arm C must fire on the twin iff the merge
 # stamped. One `-pass<N>` predecessor and one zero-padded `-p02` exercise the series grammar the merge
@@ -1406,5 +1406,4 @@ p_sum_divergent_oracle() {
   sd_oracle "$m" 3 stories-adversarial-p1.md:1 stories-adversarial-p2.md:NONE && [ "$OR_ST" = 1 ]
 }
 
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete stem_series stem_control stem_near stem_files tuid_main tuid_norow tuid_nometa tuid_selfdiff tuid_role tuid_twowriters tuid_oneagent tuid_nospawn tuid_session tuid_pre tuid_basename tuid_probemeta tuid_tworoles rerun_join rerun_other rerun_same rerun_role xdir probe_disagree probe_absent rerun_residual hdr draft dry dry_barrier tree tuid_call rerun_bind fence_prose fence_unclosed fence_tilde fence_four fence_sameset fence_nested fence_nested_set hdr_comment sum_divergent"
 
