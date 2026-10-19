@@ -136,11 +136,11 @@ printf '(version 3)\n(allow default)\n(allow file-read* (subpath "%s") (with rep
 # ONLY A WINDOW WITH ZERO DROP NOTICES IS JUDGED, AND A LOSSY ONE IS RETRIED, NOT SCORED. A dropped
 # report makes every count below a floor, so a lossy window can neither pass nor fail an arm. One
 # attempt refused as BROKEN on any notice, and on a loaded box that is most attempts: measured at
-# load 41-42, 2 of 3 single attempts dropped 1-2 notices. Ten attempts, a pause between them so a
-# load spike can pass; all ten lossy is still BROKEN. The attempt count is printed on every run.
+# load 41-42, 2 of 3 single attempts dropped 1-2 notices. MAXATT attempts, a pause between them so a
+# load spike can pass; all MAXATT lossy is still BROKEN. The attempt count is printed on every run.
 sentinel() { local i=0; while [ "$i" -lt 50 ]; do sandbox-exec -f "$R/end.sb" /bin/cat "$R/end/t/$1" >/dev/null 2>&1 </dev/null; grep -qF "file-read-data $R/end/t/$1" "$WORK/raw" && return 0; sleep 0.2; i=$((i + 1)); done; return 1; }
-ATT=0; NDS=""
-while [ "$ATT" -lt 10 ]; do
+MAXATT=30; ATT=0; NDS=""
+while [ "$ATT" -lt "$MAXATT" ]; do
   ATT=$((ATT + 1))
   [ "$ATT" -eq 1 ] || sleep 2
   /usr/bin/log stream --style compact --predicate "eventMessage CONTAINS \"$R/\"" > "$WORK/raw" 2>&1 &
@@ -158,8 +158,8 @@ while [ "$ATT" -lt 10 ]; do
   [ "$nd" = 0 ] && break
   NDS="$NDS $nd"
 done
-[ "$nd" = 0 ] || broken "the stream dropped reports in all $ATT attempts (notices per attempt:$NDS); the counts below would be floors"
-printf '  note  stream window judged on attempt %s of 10 (drop notices in the lossy attempts before it:%s)\n' "$ATT" "${NDS:- none}"
+[ "$nd" = 0 ] || broken "the stream dropped reports in all $ATT of $MAXATT attempts (notices per attempt:$NDS); the counts below would be floors"
+printf '  note  stream window judged on attempt %s of %s (drop notices in the lossy attempts before it:%s)\n' "$ATT" "$MAXATT" "${NDS:- none}"
 
 # cnt <variant> <emitter> <op ERE> <suffix ERE>
 cnt() { local n; n="$(grep -cE "($3) $R/$1/$2/t$4( |\$)" "$WORK/raw")" || n=0; printf '%s' "$n"; }
