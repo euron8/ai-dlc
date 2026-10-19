@@ -808,8 +808,8 @@ fi
 # one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
 # (`.pr/<unit>.w`) must be gone within POOL_STALL polls, and so must every pid the stub recorded: a
 # watcher whose only exit was a refusal outlived its worker with ppid 1.
-st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir>] -> prints "<watcher-left> <unit-left>" or BROKEN
-  local h="$1" R="$WORK/orph.$2" SB="${3:-}" WK WP n p ul=0
+st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> prints "<watcher-left> <unit-left>" or BROKEN
+  local h="$1" R="$WORK/orph.$2" SB="${3:-}" AL="${4:-}" WK WP n p ul=0
   mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr"
   awk '/xargs -P "\$FIXTURE_JOBS" -I\{\} bash -c /{f=1;next} /^  . _ \{\} < "\$out\/.order"$/{f=0} f' "$h" > "$R/body.sh"
   awk '/^POOL_WALK=/{f=1} f{print} f && /^}.$/{exit}' "$h" > "$R/walk.sh"
@@ -828,10 +828,10 @@ st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir>] -> prints "
   kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
   n=0; while kill -0 "$WP" 2>/dev/null && [ "$n" -lt "$ST" ]; do n=$((n + 1)); sleep 1; done
   local wl=0; if kill -0 "$WP" 2>/dev/null; then wl=1; kill -KILL -- "-$WP" 2>/dev/null; fi
-  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so block on the CONDITION (every
-  # recorded pid gone) for at most 50 polls before counting; a real survivor (the st-g mutant's child) outlasts
-  # the bound and still reads as one.
-  n=0; while [ "$n" -lt 50 ]; do
+  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so an arm asserting all gone blocks
+  # on the CONDITION (every recorded pid gone) for at most 50 polls before counting. An arm asserting a SURVIVOR
+  # (the `alive` argument: st-e, st-g) skips the poll and counts once, since the condition it waits for never comes.
+  n=0; while [ "$AL" != alive ] && [ "$n" -lt 50 ]; do
     ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && ul=$((ul + 1)); done < "$R/pids"
     [ "$ul" -eq 0 ] && break
     n=$((n + 1)); sleep 0.1
@@ -849,7 +849,7 @@ case "$o" in
 esac
 # st-e: the watcher's worker-liveness check removed, so it outlives the worker.
 if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :'; then
-  o="$(st_orphan "$MUT" st-e)"
+  o="$(st_orphan "$MUT" st-e "" alive)"
   case "$o" in
     "1 "*) ok "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it" ;;
     *) bad "st-e the watcher did not outlive its worker with the liveness check removed ($o)" ;;
@@ -873,7 +873,7 @@ esac
 # st-g: the empty-self guard kills the recorded pid alone, so the unit's child survives the worker's death.
 if mutx st-g '[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
   : > "$SP/refused"
-  o="$(st_orphan "$MUT" st-g "$SP")"
+  o="$(st_orphan "$MUT" st-g "$SP" alive)"
   case "$o" in
     "0 "[1-9]*) ok "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it" ;;
     *) bad "st-g the unit's child did not survive with the empty-self guard's group kill removed ($o)" ;;

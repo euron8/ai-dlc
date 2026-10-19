@@ -29,7 +29,7 @@ Batch 236 (c0's POOLHOOKS). The fixture pool's two hooks now kill a unit's whole
 - The guard is `[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }` at the top of `pool_kill`, in `.githooks/pre-push:2210` and `core/git-hooks/pre-push:2109`.
 - Scratch probe: a unit leading its own group with a child in it. The old guard left the child alive and the new guard killed it, 5 of 5 in each hook.
 - `consumer-suite-pool` gains an `eself` arm: a stub `ps` that fails on `-p` makes `self` empty, and the arm proves the stub fired. Its `st-g` mutant restores the old guard and expects the child alive. EXPECTED_ASSERTIONS goes from 48 to 50.
-- The arm's survivor count blocks on the condition, polling until every recorded pid is gone for at most 50 polls of 0.1s, then counts and kills what remains. A process SIGKILLed a moment earlier can still answer `kill -0` before it is reaped, so the instant count could read a false survivor in the `fix` and `eself` arms.
+- The `fix` and `eself` arms poll, at most 50 polls of 0.1s, until every recorded pid is gone, then count and kill what remains, because a just-SIGKILLed process can still answer `kill -0` before it is reaped and the instant count could read a false survivor. The `st-e` and `st-g` mutant arms assert a survivor, so they check once with no poll.
 - I66 (`scripts/validate-enforcement-map.sh`) still finds the two pool blocks byte-equal.
 
 ### BL-690: the pool root is removed on interrupt
