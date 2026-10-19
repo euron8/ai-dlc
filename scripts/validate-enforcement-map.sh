@@ -7200,25 +7200,60 @@ else
   # The exempt set is DECLARED, not written here -- see copy_scan_exempt's own description
   # for the measured false-positive set that produced it.
   i91_exempt="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("copy_scan_exempt") or []))' "$i91_schema" 2>/dev/null)"
-  i91_copies=""
-  while IFS= read -r pfx; do
-    [ -n "$pfx" ] || continue
-    # HERE-STRING, not a pipe into grep -q. I54 caught the pipe form on this very line:
-    # under pipefail the pipeline reports the WRITER's status, so a match answers non-zero
-    # once the value clears the pipe buffer, and the exemption would silently stop applying.
-    grep -qxF -- "$pfx" <<<"$i91_exempt" && continue
-    hits="$(grep -rlF -- "$pfx" core/ scripts/ 2>/dev/null \
-            | grep -v '^core/schemas/harness-origin.json$' \
-            | grep -v '^core/scripts/validate-steering-budget.sh$' \
-            | grep -v '^scripts/validate-enforcement-map.sh$' \
-            | grep -v '^core/fixtures/' | tr '\n' ' ')"
-    [ -n "$hits" ] && i91_copies="$i91_copies
-  $pfx -> $hits"
-  done <<EOF
-$i91_declared
-EOF
-  [ -n "$i91_copies" ] && err "I91: shipped file(s) restate a harness-origin prefix outside the declaration:$i91_copies
+  # ONE `grep -rloF` pass would lose attribution, so this is `grep -roF` (path:literal per hit) over
+  # core/ and scripts/ for every non-exempt declared prefix PLUS the two handback literals declared
+  # under `handback`. It replaces a per-prefix loop that cost about six forks per prefix. This arm
+  # binds LITERALS only; it does not bind the hand-back grammar. Exempt prefixes are matched by shell
+  # `case` (no fork). The four file exclusions are unchanged, folded into one grep -vE.
+  i91_hb="$(python3 -c 'import json,sys; h=json.load(open(sys.argv[1])).get("handback") or {}; print(h.get("frame","")); print(h.get("agent_message_from",""))' "$i91_schema" 2>/dev/null)"
+  { IFS= read -r i91_hb_frame; IFS= read -r i91_hb_from; } <<<"$i91_hb"
+  i91_pats="$i91_declared"
+  # i91_scan <root>: root is "" for the live tree, "<tmp>/" for the self-probe tree.
+  i91_scan() {
+    local root="$1" pfx
+    set --
+    while IFS= read -r pfx; do
+      [ -n "$pfx" ] || continue
+      case "
+$i91_exempt
+" in *"
+$pfx
+"*) continue ;; esac
+      set -- "$@" -e "$pfx"
+    done <<EOF2
+$i91_pats
+$i91_hb_frame
+$i91_hb_from
+EOF2
+    grep -roF "$@" "${root}core/" "${root}scripts/" 2>/dev/null \
+      | grep -vE "^${root}(core/schemas/harness-origin\.json|core/scripts/validate-steering-budget\.sh|scripts/validate-enforcement-map\.sh|core/fixtures/)" \
+      | LC_ALL=C sort -u
+  }
+  if [ -z "$i91_hb_frame" ] || [ -z "$i91_hb_from" ] || [ "$i91_hb_frame" = "$i91_hb_from" ]; then
+    err "I91: $i91_schema carries no usable handback.frame / handback.agent_message_from. The copy-scan would silently drop the two hand-back literals, so this fails closed rather than scanning fewer patterns than declared."
+  else
+    # SELF-PROBE, BEFORE the corpus, in both directions: a seeded offender carrying each scanned
+    # literal must be reported; near-misses (a literal one character short, a different attribute,
+    # an exempt prefix, an excluded fixture path) must stay quiet.
+    i91_pt="$(mktemp -d "${TMPDIR:-/tmp}/i91-XXXXXX")"
+    mkdir -p "$i91_pt/core/hooks" "$i91_pt/core/fixtures/x" "$i91_pt/scripts"
+    printf '%s\n' "x $i91_hb_frame y" > "$i91_pt/core/hooks/off-frame.sh"
+    printf '%s\n' "x $i91_hb_from y" > "$i91_pt/core/hooks/off-from.sh"
+    printf '%s\n' "x ${i91_hb_frame%?} y" "x <agent-msg from=\"" "x <command-name>" > "$i91_pt/core/hooks/near.sh"
+    printf '%s\n' "$i91_hb_frame" > "$i91_pt/core/fixtures/x/fx.sh"
+    i91_pout="$(i91_scan "$i91_pt/")"
+    case "$i91_pout" in *"core/hooks/off-frame.sh:"*) i91_p1=1 ;; *) i91_p1=0 ;; esac
+    case "$i91_pout" in *"core/hooks/off-from.sh:"*) i91_p2=1 ;; *) i91_p2=0 ;; esac
+    case "$i91_pout" in *"near.sh"*|*"fixtures/"*) i91_p3=1 ;; *) i91_p3=0 ;; esac
+    if [ "$i91_p1" -ne 1 ] || [ "$i91_p2" -ne 1 ] || [ "$i91_p3" -ne 0 ]; then
+      err "I91 self-probe failed (frame offender reported=$i91_p1, from offender reported=$i91_p2, near-miss or fixture reported=$i91_p3; want 1 1 0). The copy-scan cannot be trusted, so it did not run on the corpus."
+    else
+      i91_copies="$(i91_scan "" | sed -e 's/^/  /')"
+      [ -n "$i91_copies" ] && err "I91: shipped file(s) restate a harness-origin literal outside the declaration (path:literal):
+$i91_copies
 Resolve it from core/schemas/harness-origin.json instead. A second copy in a second language is the drift v0.265.0 exists to end, and the file that carried the last one warned about it in prose that nothing enforced."
+    fi
+  fi
 fi
 
 # --- I94: the pause branch text and the handoff-intent PATTERNS are ONE declaration ---

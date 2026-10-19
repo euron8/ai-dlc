@@ -13,6 +13,15 @@
       "items": { "type": "string", "minLength": 1 },
       "description": "Anchored prefixes. A prompt whose text starts with any of these was raised by the harness. Measured on the reference consumer at v0.264.0: over its captured request history the set matched 4 of 6 entries and zero operator asks, and over its continuation log it accounted for 4 of 5 USER_PAUSE events."
     },
+    "handback": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The two literals of a subagent hand-back that I91's copy-scan searches for, in the same single pass as the prefixes. I91 binds these LITERALS only, not a grammar. They are not prompt-origin prefixes, so readers of `prefixes` are unaffected.",
+      "properties": {
+        "frame": { "type": "string", "minLength": 1, "description": "The hand-back frame line." },
+        "agent_message_from": { "type": "string", "minLength": 1, "description": "The agent-message prefix followed by ` from=\"`." }
+      }
+    },
     "copy_scan_exempt": {
       "type": "array",
       "items": { "type": "string" },
@@ -34,5 +43,9 @@
   ],
   "copy_scan_exempt": [
     "<command-"
-  ]
+  ],
+  "handback": {
+    "frame": "[Subagent hand-back]",
+    "agent_message_from": "<agent-message from=\""
+  }
 }

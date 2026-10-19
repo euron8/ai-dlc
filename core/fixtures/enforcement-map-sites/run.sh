@@ -2709,10 +2709,11 @@ for f in core/schemas/harness-origin.json core/scripts/validate-steering-budget.
          scripts/validate-enforcement-map.sh core/fixtures/enforcement-map-sites/zz-i91-nearmiss.txt; do
   grep -qF -- "$i91_pfx" "$ROOT/$f" || { i91_nm_ok=0; bad "FIXTURE BROKEN: exempt file $f does not carry $i91_pfx, so the I91 near-miss would be acquitted for having nothing to report"; }
 done
-want='-> .*core/scripts/zz-i91-cwd-offender\.sh'
+# I91 emits one indented `path:literal` line per copy (one grep -roF pass over core/ and scripts/).
+want='^  core/scripts/zz-i91-cwd-offender\.sh:<task-notification$'
 cwd_control "$want"
 if [ "$i91_nm_ok" = 1 ]; then
-  i91_hits="$(grep -E -- ' -> ' "$CW_DIR/s.out")"
+  i91_hits="$(grep -E -- '^  [^[:space:]]+:' "$CW_DIR/s.out")"
   if [ -z "$i91_hits" ]; then
     bad "I91 near-miss: the scratch-cwd run printed no copy-hit line at all, so the exemption has nothing to be read against"
   elif grep -qE 'core/schemas/harness-origin\.json|core/scripts/validate-steering-budget\.sh|scripts/validate-enforcement-map\.sh|core/fixtures/' <<<"$i91_hits"; then

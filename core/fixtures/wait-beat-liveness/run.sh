@@ -52,6 +52,9 @@ echo "HERMETIC-CONSUMED core/scripts/merge-adversarial-shards.sh"
 GRAMMAR="$(dirname "$SUBJ")/validate-adversarial-convergence.sh"
 [ -f "$GRAMMAR" ] || { echo "FIXTURE ERROR: validate-adversarial-convergence.sh is not beside $SUBJ" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
+# Section 26 sources the start-time helper the subject sources, from beside the subject.
+[ -f "$(dirname "$SUBJ")/wfd-start-of.sh" ] || { echo "FIXTURE ERROR: wfd-start-of.sh is not beside $SUBJ" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -2368,16 +2371,20 @@ nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both 
   [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
 }
 # PERL IS OPTIONAL (BL-686). S22b, M49 and M50 need the fallback to read what `ps` reads, and need
-# de_DE.UTF-8 to move an unpinned `ps`. Probed ONCE, through the SUBJECT's own shell_start_of; on a
-# miss the three print SKIP by name -- never `broken`, never a false kill. FB_OK caches the answer.
+# de_DE.UTF-8 to move an unpinned `ps`. Probed ONCE, through the SUBJECT's own INLINE wfd_start_of
+# (the fallback under `if ! declare -F`) -- the copy every mutant runs, because mutant() writes the
+# mutant alone into $TMPROOT/mutants with no wfd-start-of.sh beside it. S22b and S22c drive $SUBJ
+# in place, beside its helper, so they exercise the helper's copy; S26a holds the two ranges
+# byte-identical. On a miss the three print SKIP by name -- never `broken`, never a false kill.
+# FB_OK caches the answer.
 FB_OK=""
 fb_probe() {
   [ -n "$FB_OK" ] && return 0
   nops_stubs
-  fb_f_="$(sed -n '/^shell_start_of() {/,/^}/p' "$SUBJ")"
-  [ -n "$fb_f_" ] || broken "could not extract shell_start_of from $SUBJ"
-  fb_real_="$(eval "$fb_f_"; shell_start_of $$)"
-  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; shell_start_of $$)"
+  fb_f_="$(sed -n '/^wfd_start_of() {/,/^}/p' "$SUBJ")"
+  [ -n "$fb_f_" ] || broken "could not extract the inline wfd_start_of from $SUBJ"
+  fb_real_="$(eval "$fb_f_"; wfd_start_of $$)"
+  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; wfd_start_of $$)"
   fb_de_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$ 2>/dev/null)"; fb_c_="$(LC_ALL=C ps -o lstart= -p $$ 2>/dev/null)"
   FB_OK=1; FB_WHY=""
   [ -n "$fb_real_" ] && [ "$fb_stub_" = "$fb_real_" ] || { FB_OK=0; FB_WHY="with ps stubbed the perl fallback read '$fb_stub_', not '$fb_real_' -- no usable perl here (it is optional)"; }
@@ -2757,6 +2764,137 @@ M52_part_complete_ignored() {
   scall "$MUT" "$W" --complete --since "$CBEAT_SINCE" 04.md
   if has "DELIVERED 04.md"; then ok "MUTANT part-complete-ignored: an ignored --complete DELIVERS the unmarked part -- section 25 catches it"
   else bad "MUTANT part-complete-ignored: section 25 survives --complete being ignored (or the mutant never ran): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 26. THE ARGV RECORD: WRITTEN AT ARM TIME, REMOVED ON EXIT, SPARED BY A BOUND CHANGE.
+#     A sleeping beat writes `.wait-beats/.beat-argv-<pid>` so the hookwake hook can name the
+#     armed beat and re-run its --status. 26a drives a REAL beat (with the shipped wfd-start-of.sh
+#     beside it) and reads the record it wrote: start equals wfd_start_of of the beat's pid and is
+#     non-empty, session_id and the decoded argv are the ones passed, task_id is read from a
+#     `/tasks/<id>.output` stdout and is empty for any other stdout, every setting the subject
+#     reads is a key, and the record is gone once the beat exits. 26b seeds a live and a dead
+#     record under a stale bound: the sweep must spare the live one while deleting a plain file
+#     beside it (the control that the sweep ran), and the exiting holder prunes the dead one.
+#     M53 restores the sweep's deletion of the record.
+# ===========================================================================
+ARGV_HELPER="$(dirname "$SUBJ")/wfd-start-of.sh"
+argv_dir() {  # -> a fresh dir holding the subject, its helper and its siblings
+  ad_="$(mktemp -d "$TMPROOT/argv.XXXXXX")" || broken "mktemp failed"
+  cp "$1" "$ad_/wait-for-deliverable.sh" || broken "cannot copy the subject"
+  cp "$ARGV_HELPER" "$MERGE" "$GRAMMAR" "$ad_/" || broken "cannot copy wfd-start-of.sh and the siblings beside the subject"
+  printf '%s' "$ad_"
+}
+argv_rec_of() { for ar_ in "$1"/_bmad-output/.wait-beats/.beat-argv-*; do [ -f "$ar_" ] && { printf '%s' "$ar_"; return 0; }; done; return 1; }
+argv_rec_present() { argv_rec_of "$1" >/dev/null; }
+argv_val() { sed -n "/^$2=/{s/^$2=//;p;q;}" "$1" 2>/dev/null; }   # $1 = record, $2 = key
+argv_rec_gone() { ! argv_rec_present "$1"; }
+ARGV_SID="sess-wbl-argv-26"
+argv_world() {  # $1 = subject dir, $2 = stdout file -> W, AW_REC (a copy), AW_PID, AW_START, AW_GONE, AW_SINCE
+  W="$(mk_work)"; AW_REC="$TMPROOT/argv-rec.$RANDOM"; AW_PID=""; AW_START=""; AW_GONE=""
+  AW_SINCE=$(( $(date +%s) - 5 ))
+  ( cd "$W" && env CLAUDE_CODE_SESSION_ID="$ARGV_SID" AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" bash "$1/wait-for-deliverable.sh" --since "$AW_SINCE" a.md ) > "$2" 2>&1 &
+  aw_bg_=$!
+  until_ok 300 argv_rec_present "$W" || { kill "$aw_bg_" 2>/dev/null; wait "$aw_bg_" 2>/dev/null; return 1; }
+  aw_f_="$(argv_rec_of "$W")"; AW_PID="${aw_f_##*/.beat-argv-}"
+  cp "$aw_f_" "$AW_REC" || broken "argv: cannot copy the record"
+  AW_START="$(wfd_start_of "$AW_PID")"
+  printf 'a\n' > "$W/a.md"
+  until_ok 300 pid_gone "$AW_PID" || broken "argv: the beat never exited after its target landed"
+  wait "$aw_bg_" 2>/dev/null
+  argv_rec_gone "$W" && AW_GONE=1
+  return 0
+}
+S26a_argv_record_written() {
+  [ -f "$ARGV_HELPER" ] || broken "wfd-start-of.sh is not beside $SUBJ"
+  # shellcheck disable=SC1090
+  . "$ARGV_HELPER"; declare -F wfd_start_of >/dev/null || broken "wfd-start-of.sh does not define wfd_start_of"
+  # THE WHOLE RANGE, not the first line: the definition is multi-line (ps, then the perl fallback,
+  # then the normalisation), so a body-only drift between the two copies must fail here.
+  sa_h_="$(sed -n '/^wfd_start_of() {/,/^}/p' "$ARGV_HELPER")"
+  sa_s_="$(sed -n '/^wfd_start_of() {/,/^}/p' "$SUBJ")"
+  if [ -n "$sa_s_" ] && [ "$sa_h_" = "$sa_s_" ] && [ "$(printf '%s\n' "$sa_s_" | tail -n 1)" = "}" ]; then
+    ok "argv: the subject's fallback wfd_start_of is byte-identical to wfd-start-of.sh's, whole range"
+  else bad "argv: the subject's fallback wfd_start_of differs from wfd-start-of.sh's (or is absent), so a lone copy and the hook read start times differently"; fi
+  AD="$(argv_dir "$SUBJ")"
+  mkdir -p "$TMPROOT/proj/sess/tasks" || broken "cannot create a tasks dir"
+  argv_world "$AD" "$TMPROOT/proj/sess/tasks/bwbl25tk.output" || { bad "argv: an armed beat wrote no .beat-argv-<pid> record"; return; }
+  if [ -n "$AW_START" ] && [ "$(argv_val "$AW_REC" start)" = "$AW_START" ]; then
+    ok "argv: the record's start equals wfd_start_of of the beat's pid ($AW_START)"
+  else bad "argv: record start '$(argv_val "$AW_REC" start)' vs wfd_start_of $AW_PID '$AW_START' -- empty or different"; fi
+  if [ "$(argv_val "$AW_REC" pid)" = "$AW_PID" ] && [ "$(argv_val "$AW_REC" session_id)" = "$ARGV_SID" ]; then
+    ok "argv: the record carries the beat's pid and the session id it ran under"
+  else bad "argv: record pid/session_id are '$(argv_val "$AW_REC" pid)'/'$(argv_val "$AW_REC" session_id)', want $AW_PID/$ARGV_SID"; fi
+  printf '%s' "$(argv_val "$AW_REC" argv)" | base64 -d > "$TMPROOT/argv.got" 2>/dev/null
+  printf '%s\0' --since "$AW_SINCE" a.md > "$TMPROOT/argv.want"
+  if [ -s "$TMPROOT/argv.want" ] && cmp -s "$TMPROOT/argv.got" "$TMPROOT/argv.want"; then
+    ok "argv: the record's argv decodes to the NUL-separated argv the beat was given"
+  else bad "argv: the record's argv does not decode to '--since $AW_SINCE a.md'"; fi
+  if { command -v lsof >/dev/null 2>&1 || [ -d /proc/self/fd ]; }; then
+    if [ "$(argv_val "$AW_REC" script)" = "$AD/wait-for-deliverable.sh" ] && [ "$(argv_val "$AW_REC" task_id)" = bwbl25tk ]; then
+      ok "argv: the record names the absolute script and the task id of a /tasks/<id>.output stdout"
+    else bad "argv: script='$(argv_val "$AW_REC" script)' task_id='$(argv_val "$AW_REC" task_id)', want $AD/wait-for-deliverable.sh and bwbl25tk"; fi
+  else
+    printf '  SKIP  %s: no lsof and no /proc, wfd cannot read the beat'"'"'s fd 1\n' "S26a task_id"
+    if [ "$(argv_val "$AW_REC" script)" = "$AD/wait-for-deliverable.sh" ]; then ok "argv: the record names the absolute script"
+    else bad "argv: script='$(argv_val "$AW_REC" script)', want $AD/wait-for-deliverable.sh"; fi
+  fi
+  # THE SETTINGS, DERIVED: every AI_DLC_* a non-comment line of the subject reads, the record's
+  # own list line excluded (it would make the derivation read itself).
+  as_want_="$(grep -v '^[[:blank:]]*#' "$SUBJ" | grep -v '^ARGV_SETTINGS=' | grep -o 'AI_DLC_[A-Z0-9_]*' | sort -u)"
+  case "$as_want_" in *AI_DLC_STATE_DIR*) : ;; *) broken "argv: the derived settings set lacks AI_DLC_STATE_DIR, so the derivation is not reading the subject" ;; esac
+  as_miss_=""
+  for k_ in $as_want_ CLAUDE_PROJECT_DIR; do grep -q "^${k_}=" "$AW_REC" || as_miss_="$as_miss_ $k_"; done
+  if [ -z "$as_miss_" ] && [ "$(argv_val "$AW_REC" AI_DLC_WAIT_POLL_SECS)" = 1 ]; then
+    ok "argv: the record carries every setting the subject reads ($(printf '%s\n' "$as_want_" | grep -c .) AI_DLC_* + CLAUDE_PROJECT_DIR), with its value"
+  else bad "argv: the record lacks setting(s):${as_miss_:- none, but AI_DLC_WAIT_POLL_SECS is not 1}"; fi
+  if [ "$AW_GONE" = 1 ]; then ok "argv: the record is removed when the beat exits"
+  else bad "argv: the beat exited and its .beat-argv-$AW_PID record is still on disk"; fi
+  rm -rf "$W"
+  # NEAR-MISS: a stdout that is not a /tasks/<id>.output file carries no task id.
+  mkdir -p "$TMPROOT/proj/notasks" || broken "cannot create a dir"
+  argv_world "$AD" "$TMPROOT/proj/notasks/bwbl25tk.output" || { bad "argv: the near-miss beat wrote no record"; return; }
+  if grep -q '^task_id=$' "$AW_REC"; then ok "argv: a stdout outside a tasks/ dir records an EMPTY task id"
+  else bad "argv: a stdout outside a tasks/ dir recorded task_id '$(argv_val "$AW_REC" task_id)'"; fi
+  rm -rf "$W"
+}
+argv_sweep_world() {  # $1 = subject -> W, SW_LIVE, SW_DEAD, SW_JUNK (1 = still on disk)
+  W="$(mk_work)"; CD="$W/_bmad-output/.wait-beats"; mkdir -p "$CD" || broken "cannot create $CD"
+  sleep 60 & sw_live_=$!
+  ( : ) & sw_dead_=$!; wait "$sw_dead_" 2>/dev/null
+  kill -0 "$sw_dead_" 2>/dev/null && broken "argv-sweep: the dead seed pid $sw_dead_ is alive"
+  printf 'pid=%s\n' "$sw_live_" > "$CD/.beat-argv-$sw_live_"
+  printf 'pid=%s\n' "$sw_dead_" > "$CD/.beat-argv-$sw_dead_"
+  printf 'x' > "$CD/.junk-not-a-record"
+  printf '99' > "$CD/.bound"
+  printf 'd\n' > "$W/deliv.md"
+  beat "$1" "$W" 3600 "$TMPROOT/does-not-exist"
+  SW_LIVE=0; SW_DEAD=0; SW_JUNK=0
+  [ -f "$CD/.beat-argv-$sw_live_" ] && SW_LIVE=1
+  [ -f "$CD/.beat-argv-$sw_dead_" ] && SW_DEAD=1
+  [ -f "$CD/.junk-not-a-record" ] && SW_JUNK=1
+  kill "$sw_live_" 2>/dev/null; wait "$sw_live_" 2>/dev/null
+}
+S26b_argv_record_survives_bound() {
+  argv_sweep_world "$SUBJ"
+  if [ "$SW_JUNK" = 0 ] && [ "$(cat "$W/_bmad-output/.wait-beats/.bound" 2>/dev/null)" = 6 ]; then
+    ok "argv-sweep: CONTROL -- the stale bound was rewritten and a plain file beside the records was swept"
+  else bad "argv-sweep: CONTROL FAILED -- the bound sweep did not run (junk=$SW_JUNK), so the survival below proves nothing: $OUT"; fi
+  if [ "$SW_LIVE" = 1 ]; then ok "argv-sweep: a live beat's .beat-argv-<pid> record survives a bound change"
+  else bad "argv-sweep: the bound change deleted a live beat's argv record"; fi
+  if [ "$SW_DEAD" = 0 ]; then ok "argv-sweep: the exiting holder prunes a record whose pid is dead"
+  else bad "argv-sweep: a record naming a dead pid survived the holder's exit"; fi
+  rm -rf "$W"
+}
+M53_argv_record_swept() {
+  mutant argv-record-swept -e "s@ ! -name '.lease-\\*' ! -name '.beat-argv-\\*' -exec@ ! -name '.lease-*' -exec@" || return
+  argv_sweep_world "$MUT"
+  if [ "$SW_JUNK" = 0 ] && [ "$SW_LIVE" = 0 ]; then
+    ok "MUTANT argv-record-swept: with the sweep's exemption removed a bound change deletes the live record -- section 26b catches it"
+  else bad "MUTANT argv-record-swept: section 26b survives the sweep deleting argv records (live=$SW_LIVE junk=$SW_JUNK)"; fi
   rm -rf "$W"
 }
 

@@ -19,6 +19,70 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.879.0] - 2026-10-19
+
+Batch 236 (HOOKWAKE, owner ai-dlc-cb, lead ai-dlc-37). This release ships the hook half of BL-538: an opt-in
+UserPromptSubmit hook that blocks a subagent's hand-back while the lead's own wait beat for that agent is outstanding
+and will wake the lead anyway. BL-538 stays PARTIAL. The entry has two subjects, the hook and a re-taken wake count on
+a consumer lead session, and the measurement is still open. Closes no backlog entry and no `PC-` id. Files BL-701. Net
+for this release: 0 closed, 1 filed.
+
+### Consumer effect
+
+- New hook `core/hooks/ai-dlc-hookwake.sh`, registered in `templates/settings.json.template` under UserPromptSubmit
+  beside `ai-dlc-pause.sh`. It is OFF by default: it does nothing unless `AI_DLC_HOOKWAKE=1` is in its environment,
+  and the template sets no env, so turning it on is the consumer's own edit. When on, it blocks a harness hand-back
+  only when every join holds: the agent's role is blockable, the lead transcript holds exactly one outstanding beat,
+  exactly one live argv record matches that beat's task id, the agent is in the record's `--dispatch` set, the beat's
+  own `--status` reports every path DELIVERED, and the dispatch guard reports no live rejected-spawn hold. It fails
+  open, letting the prompt through with exit 0 and empty stdout, on every missing file, tool or helper and on every
+  unrecognised shape, as its header says. On the beat's own wake, which is never blocked, it adds context naming each
+  blocked agent's deliverable and `.subagent-final/<agent_id>.txt`.
+- `wait-for-deliverable.sh` writes a `.wait-beats/.beat-argv-<pid>` record at arm time, holding the session id, pid,
+  start time, script, cwd, harness task id, its settings and the base64 argv. `lease_release` removes it, the
+  bound-change sweep spares it, and the heir scan prunes one whose pid is dead. Any failure writes no record and the
+  beat runs as before.
+- New script `core/scripts/wfd-start-of.sh`, installed as `scripts/ai-dlc/wfd-start-of.sh`, is the one definition of
+  a process start time. `wait-for-deliverable.sh` and the hook both source it, and `wait-for-deliverable.sh` carries
+  an inline fallback copy for a lone copy of itself. BL-686's `LC_ALL=C ps -o lstart=` with the darwin perl fallback
+  is carried into both copies, and `wait-beat-liveness` holds the two definitions byte-identical.
+- `core/schemas/pipeline-state-paths.json` gains the transient `.hookwake-blocks.jsonl`, one line per block. Each
+  consumer's pull raises one `transient-ignore` worklist row until the managed `.gitignore` block is re-rendered.
+- `ai-dlc-dispatch-guard.sh` answers `--hold-status [<description>] [--transcript <path>]`: exit 0 no hold, 1 a hold is
+  live, 2 cannot tell. It shares one hold computation with the PreToolUse path, which is unchanged.
+- `core/schemas/harness-origin.json` carries `handback.frame` and `handback.agent_message_from`, the two literals of a
+  hand-back. I91's copy-scan now also searches for them, in one pass with the prefixes, and runs a self-probe first.
+- `_gate-procedures.md` says a missing completion report is not non-delivery: read the deliverable and
+  `.subagent-final/<agent_id>.txt` before re-dispatching. `process-rule-pins` pins that sentence.
+- New shipping fixture `core/fixtures/hookwake`, with `inputs.decl` and `tools.decl`, declared in `core-manifest.md`,
+  `fixture-manifest.md` and `scripts/uninstall.sh`, and bound by a new `hookwake` row in `enforcement-map.yaml`.
+  `dispatch-model-guard` gains `--hold-status` cells, and `wait-beat-liveness` gains section 26 for the argv record.
+
+### Build evidence
+
+- The `hookwake-mutants` battery was removed by ruling. Two findings from it are recorded here instead. M07: the mutant
+  removing the hook's agent check survived, because A9a's second agent had no dispatch record, so an earlier status
+  refusal let the wake through. Every world now seeds a real sibling dispatch for that agent, and an A9a control
+  asserts that `--status` on A9a's argv exits 0 with `STATUS -- 1 delivered, 0 not.` rather than refusing with 64. A7a:
+  it went red under an unrelated mutant, because its dead pid was a short-lived sleep the OS could reuse. Its dead pid
+  is now one above the platform pid ceiling (`/proc/sys/kernel/pid_max`, else macOS's 99999), checked dead by `kill -0`
+  and `ps` before use.
+- A forced no-ps differential, a function-level probe with no fixture: with `ps` stubbed to print nothing, both shipped
+  `wfd_start_of` copies still read the start time through perl, and E's original ps-only definition reads empty. With
+  `ps` working, all three read it.
+- The tip adversary's two DEFECTs are fixed. The enforcement-map row named `core/fixtures/hookwake`, which the
+  existence check never reads; it now names `tests/fixtures/hookwake`, and `paths` is added to its emitted fields.
+  BL-701's receipt could be closed by the stopgap the entry rejects; it now also runs `readset_pool_trace_prep` from a
+  linked worktree, against a main-checkout control. Under backlog-reverify it scored A=1, B (stopgap only)=1, C
+  (mechanism only)=1, D (both)=0 and E (harness broken)=9.
+- The NOTE fix: `hookwake` and `wait-beat-liveness` declare `lsof` under the tools they run, and `hookwake` declares
+  no `pkill`, which nothing in it calls.
+- Known limits:
+  - A TZ difference between the hook and the beat makes the hook PASS, which is the fail-safe direction.
+  - Several fail-open paths have no fixture arm.
+  - The A15 arm exercises only the fallback provenance wrap.
+  - `.hookwake-blocks.jsonl` is not pruned.
+
 ## [0.878.0] - 2026-10-19
 
 Batch 236, BL-685 key-fix release (owned and gated by ai-dlc-69 [9599d6], formerly ai-dlc-77 [e29316]; lead ai-dlc-37). Advances BL-685, which
