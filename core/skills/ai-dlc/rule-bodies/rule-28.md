@@ -57,7 +57,7 @@ WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
 axis, the lead dispatches one agent per part, plus one cross-part agent
 per cross group where the axis says parts interact, in the waves described below, and
-joins each wave in one bounded-join beat (Rule 29). The axes:
+joins them with bounded-join beats (Rule 29). The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`), or a
   story's changed-file set as `partition-review-diff.sh --map` prints it:
@@ -157,18 +157,36 @@ change; a lead that assembles the file by hand has not joined.
 most `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` subagents at once in a
 session and rejects every spawn past that with `Concurrent subagent
 limit reached. You can run <N> subagents at once. Do not retry.`; that
-rejection text carries the live value, so read the cap from it and
-never from a number written here. A rejected spawn launches nothing and
-writes nothing. Every fan-out in ai-dlc therefore goes out in waves: a
-wave is at most the cap minus the agents already running in this
-session, its spawns go out together as parallel `Agent` calls, and each
-wave is joined with
-one bounded-join beat (Rule 29) before the next wave spawns. Until a
-rejection has shown the cap, the first wave is the whole set; its
-rejections are the probe. A slot frees when an agent EXITS, not when its
-deliverable lands, so a wave sized from deliveries can over-dispatch
-slightly; the rejected-spawn rule below absorbs that. Every per-role
-site that fans out cites this paragraph and does not restate it.
+rejection text carries the live value. A rejected spawn launches nothing
+and writes nothing. The lead takes the cap in this order: (1) the
+readable value, when the lead can read one -- a Bash `printenv
+CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, or the "You can run <N> subagents"
+text of a rejection this session already holds; (2) otherwise the
+rejection probe: while the cap is unknown, the first wave is the whole
+ROUND -- every seat's every part and every cross group -- so the
+wave-size floor is every undispatched member, and the first rejection
+that wave draws carries the cap; (3) never an assumed or remembered
+number, and never a number written here. Every fan-out in ai-dlc
+therefore goes out in waves: a wave's spawns go out together as parallel
+`Agent` calls, and a wave is never smaller than the lesser of the members
+still undispatched and the cap (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`,
+taken as above) minus the agents already running in this session. A seat
+is not a wave: a round split by seat, or by any grouping the cap did not
+force, leaves slots idle while each group waits on its slowest member.
+Among the waves of ONE fan-out, no wave waits on an earlier wave's join.
+The serial cases under "What stays serial" -- a true data dependency, a
+review pass and the repair that follows it, an ordered authoring chain --
+are not waves of one fan-out: each step there is its own dispatch, joined
+before the next is sent. A slot frees when an agent EXITS, not when its
+deliverable lands, and each exit while round members remain undispatched
+releases the next members, up to the free slots. Each refill arms its
+own beat over only the paths that refill launched, with the round's
+`--since <epoch>` and `--dispatch` per agent -- one beat per refill, never
+one beat per agent; never `--reset` the live beat, which would restart
+every other path's clock. A
+wave sized from deliveries can over-dispatch slightly; the rejected-spawn
+rule below absorbs that. Every per-role site that fans out cites this
+paragraph and does not restate it.
 
 **The round's epoch is written down before wave 1.** Before the first
 wave spawns, the lead records the round's start as an epoch in the
@@ -204,8 +222,9 @@ message that dispatched the wave. Never pass a rejected spawn's
 deliverable path to `wait-for-deliverable.sh`: nothing is writing it, so
 the join would exhaust its whole beat sequence and then spend the Rule 20
 one-re-dispatch budget on an agent that never ran. Arm only the paths of
-launched agents, and arm one beat over every outstanding path from all
-waves, never one beat per wave. A slot frees when an agent exits, and
+launched agents: one beat over every outstanding path at once, plus one
+beat per refill over only the paths that refill launched, never one beat
+per agent. A slot frees when an agent exits, and
 not before. Hold the rejected set, and re-dispatch exactly that set only
 after an agent of this session has exited since the rejection -- never in
 the next message. Two records show it: an agent task-notification, which
@@ -237,11 +256,13 @@ path you passed to your still-running `wait-for-deliverable.sh` beat,
 the beat reports that path: post no status line for the agent, restate
 none of its findings or counts, re-check nothing, read nothing, and end
 the turn. Inside a `--complete` join the round is reported once, from
-the merge, never per seat. Two notifications are not covered. One whose
+the merge, never per seat. Three notifications are not covered. One whose
 status is failed: that agent is dead and its deliverable will never
-arrive, so it is handled now. And the first exit since a spawn was
+arrive, so it is handled now. The first exit since a spawn was
 rejected while that rejected set is held: it releases the set, which is
-re-dispatched on it as above.
+re-dispatched on it as above. And an exit while round members remain
+undispatched: it releases the next undispatched members, up to the free
+slots, dispatched on it as the Waves paragraph says.
 
 **The serial remediator's join is armed on the record it appends to.**
 Arm it as `_gate-procedures.md` "Adversarial repair dispatch" gives its
@@ -257,7 +278,9 @@ delivered every expected path that is non-empty and written since the
 round's epoch -- which is what a beat armed with `--since <epoch>`
 reports as `DELIVERED`, and a previous sprint's file at the same path is
 older than the epoch -- and names expected minus delivered. That missing
-set, with the held rejected set, is what the next wave carries. A count
+set is re-dispatched after the join, under the Rule 20 re-dispatch
+budget. The held rejected set is not part of it: it goes out on the first
+exit since its rejection, as above, never held for the join. A count
 of files in a directory is not a join. When you state a record's time
 against a dispatch yourself, take it from
 `scripts/ai-dlc/file-mtime.sh <path>`, which prints the epoch and a UTC
@@ -297,7 +320,7 @@ fan-out wider than the harness's concurrent-subagent cap launching only
 its first cap's worth while the lead joins the rest as if they had run,
 which proceeds on a partial round. False-positive cost: one fixed
 per-agent load cost per extra part, up to six cross-part agents, one join
-program run, and one extra beat per wave past the first -- paid in spawn
+program run, and one extra beat per refill past the first wave -- paid in spawn
 overhead, recovered in wall clock. Removal condition: retire the split
 once the harness parallelises a single agent's independent sub-scopes
 itself, or once the join programs report that parts routinely arrive no

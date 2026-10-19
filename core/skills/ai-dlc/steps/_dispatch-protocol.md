@@ -139,10 +139,11 @@ live the Stop hook (`ai-dlc-continue.sh` Check 2b) allows the turn to
 end — a yielded lead is reachable *immediately*, better than mid-beat,
 not worse.
 
-**Each wave is joined in ONE beat** (Rule 28, "Split dispatch", says how
-large a wave may be). Pass every
+**Each beat names every outstanding path at once** (Rule 28, "Split
+dispatch", says how large a wave may be). Pass every outstanding
 teammate's deliverable to a single invocation — they poll inside the
-same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
+same beat. A refill launched while that beat runs gets its own beat over
+only its new paths, never a `--reset` of the live one. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
 call: two beats is two budgets and the call overruns.
 
 The script bounds the sequence for you (`max_wait_beats`, default 6, giving a

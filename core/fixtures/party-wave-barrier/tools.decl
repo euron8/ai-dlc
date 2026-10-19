@@ -1,0 +1,16 @@
+# The tools run.sh and the detector invoke, keyed on their binaries.
+awk
+basename
+bash
+cat
+cmp
+cp
+dirname
+grep
+head
+jq
+mkdir
+mktemp
+mv
+rm
+sed

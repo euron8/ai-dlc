@@ -406,15 +406,21 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    A subject that meets none of these cases keeps one agent per seat, as an unsharded round.
    The round goes out in waves (Rule 28, "Split dispatch"): seats x parts routinely exceeds
    the harness's concurrent-subagent cap, and a spawn past the cap is rejected, not queued.
-   The cross agents go out in the same waves as the parts, not after them.
+   Rule 28's Waves paragraph sizes them; a seat is never a wave.
+   The cross agents go out in the same waves as the parts, not after them, and the
+   cross members are dispatched first in wave 1, ahead of the per-ordinal members: they are
+   the round's longest seats, and the harness usually admits a message's earlier calls first,
+   though not always.
    The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`
    for every seat on the step's seat list (never from directory entries) and every ordinal the
    `--map` prints, plus `<step>-<seat>-cross-<g>.md` per seat for every group `<g>` that
    `--cross-groups <K>` prints — and takes as delivered only the paths
    a beat armed with `--complete --since <round epoch>` reports as `DELIVERED` (Rule 28 owns the epoch and
    where it is recorded), never a count of files in the directory. It names
-   expected minus delivered as the MISSING (seat, ordinal) and (seat, cross group) members, and the next wave carries
-   exactly those plus any spawn the harness rejected. `/bmad-party-mode` internals are not
+   expected minus delivered as the MISSING (seat, ordinal) and (seat, cross group) members, which
+   are re-dispatched after the join under the Rule 20 re-dispatch budget. A spawn the harness
+   rejected is not MISSING: it is re-dispatched on the first agent exit since the rejection
+   (Rule 28, "A rejected spawn"), never held for the join. `/bmad-party-mode` internals are not
    ai-dlc's, so this file-level join is the only check available.
    **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
    owns why.**

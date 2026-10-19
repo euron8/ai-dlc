@@ -1,0 +1,5 @@
+# party-wave-barrier seeds every transcript it replays under mktemp, through the detector's own --seed
+# shapes; the detector under test is REQUIRED and printed where run.sh resolves it. lib/ is the sourced
+# preamble.
+!scripts/audit-party-wave-barrier.sh
+core/fixtures/lib/

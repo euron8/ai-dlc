@@ -20,6 +20,49 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
 
+## [0.857.0] - 2026-10-18
+
+Batch 236 (WAVES, BL-695). A party round's waves are sized from the harness cap and refilled on each exit, a seat is
+no longer a wave, and a new read-only detector replays transcripts for a delivered exit the lead left unrefilled while
+slots were free. Files BL-695, which stays open until a consumer round is measured. Closes no `PC-` id. Net for this
+release: 0 closed, 1 filed.
+
+### Rule 28 sizes waves from the cap and refills on exit (BL-695)
+
+`rule-28.md` now takes the cap from `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` when the lead can read it, else from the
+rejection probe, never from a remembered number. Until a rejection has shown the cap, the first wave is the whole
+round. A wave is sized at no less than min(remaining, cap - running), and a seat is not a wave. Each exit refills its
+slot, with one beat per refill over only that refill's paths, never `--reset`. An exit while round members remain
+undispatched is a third uncovered notification. MISSING members are re-dispatched after the join, and the rejected set
+on the first exit. The barrier wording ("before the next wave spawns", the rejected set folded into "the next wave",
+"wave is joined") is removed from `rule-28.md`, `_gate-procedures.md` and `_dispatch-protocol.md`, and
+`_gate-procedures.md` splits MISSING from rejected and dispatches cross members first, worded as a tendency.
+
+The measured motivation is graph s319 (lead sessions c61a91eb and a0701ce0). The lead split the stories round into
+four per-seat waves of 25 agents against a probable cap of 42, never hit it ("Concurrent subagent limit reached"
+appears 0 times in either transcript), and so about 17 slots sat idle in every wave. From each wave's last seat to the
+next dispatch: Dev to Architect 35.6 min after the last per-story seat and 15.6 min after the last cross seat, and
+Architect to TEA 11.8 min and 14 s. The TEA seat ended the round on a 29.1 min pole. The cross pole across the two
+in-session transitions is 31.6 min, separate from 15.6 min of beat cadence and 429 overhead. Nothing in a later wave
+reads a seat file, so the barrier bought nothing.
+
+### `scripts/audit-party-wave-barrier.sh` flags an exit left unrefilled with slots free (BL-695)
+
+The new detector is read only. It replays Claude Code transcripts and judges each delivered exit of a round member: a
+FINDING is an exit whose response turn dispatches nothing for the round while RUNNING < CAP and round members are
+still undispatched. It reads dispatch records by their fields, never assistant text, and reads the cap from a harness
+rejection or a whole `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` tool_result. With no readable cap it prints a loud
+UNKNOWN-CAP, which is never a finding. Before any corpus it replays nineteen seeded transcripts and refuses with exit
+2 on any wrong answer. A new `.dist-only` fixture, `party-wave-barrier`, holds it.
+
+Over 187 graph transcripts with no `--cap` it reads 43 rounds, 170 batches, 13 FINDINGs and 7 UNKNOWN-CAP. 11 of the
+findings are TRUE. 2 are FALSE, 22e0f5c2 b30 and ea675b67 b32, both inside a Rule 29 pause that the replay cannot see.
+s319's own transcript records no cap and reads UNKNOWN-CAP; with `--cap 42` it fires twice, at running 24 and idle 18.
+The remaining blind spots are listed in BL-695: a legitimately set lower ceiling, pause and question windows, an
+enqueue with no delivery, RUNNING undercounting on out-of-order records, a re-run round under the same name, a round's
+last stretch, and a transcript with no readable cap. The real close is the consumer's next stories round showing
+seats refilling during the cross pole.
+
 ## [0.855.0] - 2026-10-18
 
 Batch 236 (c0's CONSUMERPUSH). A new shipping fixture no longer changes the reconcile engine's directory: the per-fixture
