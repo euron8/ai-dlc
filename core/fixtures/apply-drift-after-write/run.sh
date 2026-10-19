@@ -158,8 +158,16 @@ fi
 # re-resolved, so this arm cannot end up reading a different copy than the driver does.
 LAYER_DRIFT="$(dirname "$APPLY")/layer-drift.sh"
 REG_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
+# `digest<TAB>entry`: a verdict clears only with `read` evidence, and its entry_line is a line of
+# THAT entry -- each seeded entry's last line is its body sentence. The core_line is a line THEIRS
+# added to alpha.md, which every one of these entries hooks (LC-E4 reads the range diff).
 EXT_DIGS="$(bash "$LAYER_DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null \
-            | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | grep -x '[0-9a-f]\{40\}' || true)"
+            | awk -F'\t' '$1=="ADJUDICABLE"{print $4 "\t" $2}' | grep '^[0-9a-f]\{40\}	' || true)"
+ext_read() { # $1 consumer-relative entry -> the `"read":{...}` member for a record on it
+  jq -cn --arg e "$(grep -v '^[[:space:]]*$' "$CONSUMER/$1" | tail -1)" \
+    '{entry_line:$e, core_line:"A dispatched teammate delivers by file, never by chat reply."}' \
+    | sed 's/^/"read":/'
+}
 N_DIGS=$(printf '%s' "$EXT_DIGS" | grep -c . || true)
 if ! command -v jq >/dev/null 2>&1; then
   ok "SKIP adjudicated-extension arms: jq is not on PATH, so the register cannot be read"
@@ -169,10 +177,10 @@ else
   ok "PRECONDITION: $N_DIGS adjudicable subject digest(s) to record against"
   mkdir -p "$REG_DIR"
   : > "$REG_DIR/layer-adjudication-register.jsonl"
-  while IFS= read -r d; do
+  while IFS="$(printf '\t')" read -r d e; do
     [ -n "$d" ] || continue
-    printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture"}\n' \
-      "$d" >> "$REG_DIR/layer-adjudication-register.jsonl"
+    printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture",%s}\n' \
+      "$d" "$(ext_read "$e")" >> "$REG_DIR/layer-adjudication-register.jsonl"
   done <<EOF
 $EXT_DIGS
 EOF
@@ -213,10 +221,10 @@ EOF
     # adjudicable digest recorded under <verdict>. The register is removed after each run.
     v2d_run() {
       : > "$REG_DIR/layer-adjudication-register.jsonl"
-      while IFS= read -r d; do
+      while IFS="$(printf '\t')" read -r d e; do
         [ -n "$d" ] || continue
-        printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture"}\n' \
-          "$d" "$2" >> "$REG_DIR/layer-adjudication-register.jsonl"
+        printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture",%s}\n' \
+          "$d" "$2" "$(ext_read "$e")" >> "$REG_DIR/layer-adjudication-register.jsonl"
       done <<EOF
 $EXT_DIGS
 EOF

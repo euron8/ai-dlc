@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.877.0] - 2026-10-19
+
+**On graph's next pull this release raises blocking rows, by the operator's ruling ("Ship as is").** A recorded layer verdict now clears its row only if the record carries `read` evidence: one line copied verbatim from the entry's body and one from the core text the row names for its clause. Graph's register holds 1011 records and none carries `read`, so every current verdict stops clearing. Measured on a scratch copy of graph, fixed engine against the base engine 9ad0e21c: over e91b4d86..b503b232, 21 of 21 current verdicts stop clearing, and the pull gains 15 blocking `HARD-LAYER-ADJUDICATION-MISSING` (LC-A1) rows plus 8 `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) warning rows; over b503b232..9ad0e21c, 8 of 8 stop clearing, with 0 blocking rows and 8 warning rows. That is 15 blocking and 16 warning rows across the two ranges. **The remedy is the one each row prints:** "Append a NEW line to `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` with clause <clause>, subject_digest <digest>, your verdict and reason. The record must also carry `read`: {"entry_line": <a line copied verbatim from this entry's body>, "core_line": <the core text the row names>}, each at least 20 characters after trimming, at least 10 of them letters or digits, and not a heading." Re-read each entry once against the core change; recorded with `read`, the verdict clears thereafter.
+
+Batch 236, cluster BL-620 (owner ai-dlc-48, lead ai-dlc-c8). Closes BL-620. Closes no `PC-` id. Files none. Net for this release: 1 closed, 0 filed.
+
+### A layer verdict clears its LC-A1 row only with read evidence (BL-620)
+
+Machinery-only: `reconcile/layer-drift.sh`, the register schema and the `ai-dlc-update` SKILL.md register instructions. A register record clears a keyed row only when its `read.entry_line` is a line of the entry's body (never its heading) and its `read.core_line` is a line of the core text that clause names: the LC-E4 and LC-E6 range diff, the LC-E14 extended span at base or at theirs, the LC-O15 shadowed section at base or at theirs, and the LC-E19 matched section at theirs. Each line is trimmed and must be at least 20 characters, with at least 10 letters or digits. A record whose evidence fails is reported as such, naming the half that failed, rather than as a missing verdict. The listing and the gate agree: a subject keyed by two clauses lists as clearing only when both clear. An unreadable core text keeps the record from clearing. Contradictions, the spent note and `audit-layer-debt` are unfiltered.
+
+Two existing fixtures relied on a verdict clearing without read evidence and are updated. `reconcile-emit-report`'s PC-V10 and PC-V31 now seed their resolving register row with `read` lines derived from the world's own entry body and range diff, and a guard reports FIXTURE BROKEN if that row still leaves the HARD row standing. `procsub-staged-refusal-boot`'s healthy differential against the pre-fix engine now removes the read-evidence instruction this release adds to the HARD row, and only that span, after checking that it sits on every HARD row and nowhere else. On scratch copies the filter still fails both ways: with one unrelated word of the HARD message changed it reports `outputs DIFFER`, and with the instruction reworded it reports that the carve-out cannot be scoped.
+
+Limits: the check accepts a script that quotes a qualifying line without judging the entry, and it accepts a sound quote attached to a wrong verdict. It establishes that the cited lines exist on the named sides, not that the verdict is right.
+
 ## [0.876.0] - 2026-10-19
 
 Batch 236 (HANDOFF). The architect, analyst and ux prompts write into their deliverable what they previously returned
