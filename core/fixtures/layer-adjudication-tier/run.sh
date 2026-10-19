@@ -1987,6 +1987,86 @@ fi
 rm -rf "$ROOT/reconcile-mutant-control" "$ROOT/reconcile-mutant-mv1" "$ROOT/reconcile-mutant-mv2" "$P13W"
 rm -f "$REG"
 
+# --- Part 14: an ANCHOR-ONLY extends: reaches the LC-E14 core text (BL-711) -----------------
+#
+# THE DEFECT. adj_core_text read shadow_parts' `<file>\t<anchor>` lines with `IFS=<tab> read
+# _fl _an`. A tab is IFS WHITESPACE, so the EMPTY file field of an anchor-only part -- `'#Anchor'`,
+# the spelling E11 prescribes -- collapsed: the anchor landed in _fl, _an came back empty, the part
+# was skipped, the core text was EMPTY, and no core_line could ever clear the row. Measured on a
+# consumer: four LC-E14 rows that no record could clear, blocking the pull.
+#
+# THE CONTROL IS THE SAME ENTRY SPELLED `steps/demo.md#Gamma review`, which the old read split
+# correctly. One world holds both, so a harness that cleared nothing or everything shows up as the
+# pair agreeing. The mutant puts the old read back; the anchor-only arm must block and the control
+# must still clear, or the arm is not measuring the read.
+#
+# The LC-O15 twin (anchor-only `shadows:`) is NOT seeded: an override whose first part names no
+# file is OVERRIDE-ANCHOR-UNRESOLVED before any supersession row fires, so no record reaches that
+# arm's core text on either reading.
+echo
+echo "Part 14 — an anchor-only extends: part reaches the LC-E14 core text"
+P14CONS="$ROOT/consumer-bl711"
+rm -rf "$P14CONS"
+cp -R "$CONS" "$P14CONS"
+P14REG="$P14CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+rm -f "$P14REG"
+P14A=".claude/skills/ai-dlc/extensions/anchor-only.md"
+P14B=".claude/skills/ai-dlc/extensions/file-anchor.md"
+P14_EL="The consumer qualifier line appended inside the Gamma review section."
+P14_CL="Gamma's body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."
+p14_entry() { # $1 extends value, $2 heading -> an anchor-grain qualifier on steps/demo.md, shaped as Part 10's
+  printf -- "---\nkind: qualifier\nhooks: steps/demo.md\nextends: '%s'\nposition: append\nreason: seeded entry whose declared span moves, so its clause is LC-E14\n---\n\n%s\n\n%s\n" "$1" "$2" "$P14_EL"
+}
+p14_entry '#Gamma review' '### 903. [ext:anchor-only] Consumer entry at anchor grain.' > "$P14CONS/$P14A"
+p14_entry 'steps/demo.md#Gamma review' '### 904. [ext:file-anchor] Consumer entry at anchor grain.' > "$P14CONS/$P14B"
+git -C "$P14CONS" add -A >/dev/null 2>&1
+git -C "$P14CONS" commit -qm "seed the BL-711 pair" >/dev/null 2>&1
+p14_run() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$P14CONS" 2>/dev/null; }
+p14_dig() { # $1 entry -> its blocking row's digest, from an EMPTY register
+  rm -f "$P14REG"
+  p14_run | awk -F'\t' -v e="$1" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e' \
+    | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1
+}
+p14_records() { # one LC-E14 record per entry, each quoting a line of its body and of core's Gamma span
+  jq -cn --arg d "$P14AD" --arg e "$P14A" --arg el "$P14_EL" --arg cl "$P14_CL" '{clause:"LC-E14",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:$el,core_line:$cl}}'
+  jq -cn --arg d "$P14BD" --arg e "$P14B" --arg el "$P14_EL" --arg cl "$P14_CL" '{clause:"LC-E14",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:$el,core_line:$cl}}'
+}
+# p14_vec <drift> -> "<A blocks> <B blocks>" with the records written; 0 = the row clears
+p14_vec() {
+  local out
+  p14_records > "$P14REG"
+  out="$(p14_run "${1:-}")"
+  printf '%s %s' \
+    "$(printf '%s\n' "$out" | awk -F'\t' -v e="$P14A" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {c++} END {print c+0}')" \
+    "$(printf '%s\n' "$out" | awk -F'\t' -v e="$P14B" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {c++} END {print c+0}')"
+}
+p14_detail() { p14_records > "$P14REG"; p14_run "${1:-}" | awk -F'\t' -v e="$P14A" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {print $4; exit}'; }
+P14AD="$(p14_dig "$P14A")"; P14BD="$(p14_dig "$P14B")"
+p14_rows="$(p14_run | awk -F'\t' -v a="$P14A" -v b="$P14B" '$1=="EXTENSION-ANCHOR-DRIFT" && ($2==a || $2==b) {c++} END {print c+0}')"
+p14_gamma="$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/steps/demo.md" 2>/dev/null | awk '/^## Gamma review$/ {g=1; next} /^## / {g=0} g')"
+if [ "$p14_rows" -ne 2 ] || [ ${#P14AD} -ne 40 ] || [ ${#P14BD} -ne 40 ] || [ "$P14AD" = "$P14BD" ] \
+   || ! grep -qxF -- "$P14_CL" <<<"$p14_gamma" || ! grep -qxF -- "$P14_EL" "$P14CONS/$P14A"; then
+  bad "Part 14 precondition failed: anchor-grain rows=$p14_rows (want 2), digests '$P14AD' / '$P14BD' (want two distinct), or the quoted core line is not in Gamma review at THEIRS — the arms below would measure the seed"
+else
+  ok "Part 14 precondition: both spellings fire EXTENSION-ANCHOR-DRIFT with distinct digests, and the quoted core line IS in core's Gamma review span at THEIRS"
+  case "$(p14_vec)" in
+    "0 0") ok "B1: an anchor-only extends: '#Gamma review' record quoting a line of that span CLEARS, and the 'steps/demo.md#Gamma review' control clears beside it" ;;
+    *) bad "B1: records quoting a line of the declared span scored '$(p14_vec)' (anchor-only, control), want '0 0'. A '1 0' is BL-711: the anchor-only part never reached the core text: $(p14_detail | cut -c1-140)" ;;
+  esac
+  P14_MUT="$(p13_mut bl711 $'      _x="$(unquote "$(fm "$f" extends)")"\n      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3\n      while IFS= read -r _pl; do\n        _fl="${_pl%%"$TAB"*}"; _an="${_pl#*"$TAB"}"\n' $'      _x="$(unquote "$(fm "$f" extends)")"\n      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3\n      while IFS="$TAB" read -r _fl _an; do\n')"
+  if [ -z "$P14_MUT" ]; then
+    bad "FIXTURE ERROR: the BL-711 mutant's anchor is not exactly once in layer-drift.sh, so the old read cannot be restored and B1 is unproven"
+  else
+    p14_m="$(p14_vec "$P14_MUT")"
+    case "$p14_m:$(p14_detail "$P14_MUT")" in
+      "1 0:"*"[read.core_line not in the LC-E14 core text]"*)
+        ok "MB1 (the 0.877 IFS=<tab> read restored) KILLED: the anchor-only row blocks naming the LC-E14 core half, and the file#anchor control still clears" ;;
+      *) bad "MB1 (the 0.877 IFS=<tab> read restored) scored '$p14_m', want '1 0' with the anchor-only row naming the LC-E14 core half — B1 cannot tell the old read from the fix" ;;
+    esac
+  fi
+fi
+rm -rf "$ROOT/reconcile-mutant-bl711" "$P14CONS"
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"
