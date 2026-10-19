@@ -1209,6 +1209,28 @@ else
   bad "CAP MUTANT notailgate DID NOT APPLY (sed failed, matched nothing, or did not parse)"
 fi
 
+# 14h. `--hold-status [<description>] --transcript <path>` answers from the SAME computation the
+# PreToolUse arm uses (dg_hold_compute): 0 no hold, 1 a hold is live, 2 cannot tell. Cells differ from
+# the live-hold cell in ONE input each: b.jsonl (a launch released it), a missing transcript, a
+# different description. The PreToolUse path is re-asserted beside them: 14a still denies.
+hs() { bash "$HOOK" --hold-status "$@" >/dev/null 2>&1; echo $?; }
+[ "$(hs --transcript "$CAPDIR/a.jsonl")" = 1 ] && ok "14h hold-status, a live hold, any description -> exit 1" \
+  || bad "14h hold-status on a seeded live hold did not exit 1"
+[ "$(hs "Party seat 7" --transcript "$CAPDIR/a.jsonl")" = 1 ] && ok "14h hold-status, a live hold for the description -> exit 1" \
+  || bad "14h hold-status on a seeded live hold for its description did not exit 1"
+[ "$(hs "Party seat 9" --transcript "$CAPDIR/a.jsonl")" = 0 ] && ok "14h hold-status, a hold for a different description -> exit 0" \
+  || bad "14h hold-status for a description with no hold did not exit 0"
+[ "$(hs --transcript "$CAPDIR/b.jsonl")" = 0 ] && ok "14h hold-status, no hold (a launch released it) -> exit 0" \
+  || bad "14h hold-status with no live hold did not exit 0"
+[ "$(hs --transcript "$CAPDIR/c.jsonl")" = 0 ] && ok "14h hold-status, no hold (an agent exited) -> exit 0" \
+  || bad "14h hold-status after an agent exit did not exit 0"
+[ "$(hs --transcript "$CAPDIR/no-such-transcript.jsonl")" = 2 ] && ok "14h hold-status, an unreadable transcript -> exit 2" \
+  || bad "14h hold-status on an unreadable transcript did not exit 2"
+[ "$(hs)" = 2 ] && ok "14h hold-status, no transcript given -> exit 2" || bad "14h hold-status with no transcript did not exit 2"
+[ "$(AI_DLC_HOLD_TRANSCRIPT="$CAPDIR/a.jsonl" hs)" = 1 ] && ok "14h hold-status takes the transcript from AI_DLC_HOLD_TRANSCRIPT" \
+  || bad "14h hold-status did not read AI_DLC_HOLD_TRANSCRIPT"
+expect_deny "$(capout "$CAPDIR/a.jsonl" "Party seat 7")" "14h PreToolUse path after the refactor: a held re-send"
+
 # --- 15. DENY ARM 2: A GATE-ADJUDICATOR DISPATCHED OVER A WAIVER CHECK 22 WILL REJECT ---------
 # FALSE-POSITIVE SET, measured by driving this guard over the reference consumer's live pending.md
 # and pending-archive.md (each alone and concatenated) with its real ledger, probe rows and

@@ -217,6 +217,103 @@
 
 set -u
 
+DG_CAP_TEXT='Concurrent subagent limit reached'
+# dg_hold_compute <transcript> <description> <any 0|1> <strict 0|1> -- the ONE hold computation, shared by
+# the PreToolUse arm below and the `--hold-status` mode. Prints "held" or nothing. Return 2 only when
+# <strict> is 1 and the answer cannot be told (unreadable transcript, no temp file, failed tail or jq);
+# with strict 0 it always returns 0 and every failure is "no hold" (fail open). <any> 1 holds on ANY
+# rejected Agent/Task call whatever its description.
+dg_hold_compute() {
+  local _dg_transcript="$1" _dg_desc="$2" _dg_any="$3" _dg_strict="$4" _dg_rc=0 _dg_out="" _dg_tail
+  if [ ! -r "$_dg_transcript" ]; then
+    [ "$_dg_strict" = 1 ] && return 2
+    return 0
+  fi
+  _dg_tail="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-cap-tail.XXXXXX" 2>/dev/null || true)"
+  if [ -n "$_dg_tail" ]; then
+    # A FAILED TAIL WRITE FAILS OPEN: no hold. A short write can keep the rejection and lose the
+    # release that followed it, which would invent a hold -- the one thing this window must not do.
+    if tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$_dg_transcript" > "$_dg_tail" 2>/dev/null \
+       && grep -qF -- "$DG_CAP_TEXT" "$_dg_tail" 2>/dev/null; then
+      _dg_out="$(jq -Rrn --arg d "$_dg_desc" --argjson any "$_dg_any" --arg cap "$DG_CAP_TEXT" '
+        def txt: if type == "string" then .
+                 elif type == "array" then map(if type == "object" then (.text // "") else "" end) | join("\n")
+                 else "" end;
+        # An AGENT notification, keyed on record FIELDS as ai-dlc-advisor-gate.sh keys on
+        # origin.kind (the text opening is a harness-origin prefix I91 forbids restating), and
+        # on text summarising an Agent -- a Background command or Monitor notification is no
+        # agent exiting. THREE carriers, and the first is the one that matters: the harness
+        # writes a `queue-operation` ENQUEUE the moment the agent exits, and the user record
+        # and the queued_command attachment only when the notification is delivered to the
+        # model, which can be after the lead has already re-sent. Measured on the nine
+        # rejecting sessions: keyed on the two delivered carriers alone, 3 of 6 holds were
+        # spawns the harness then LAUNCHED; with the enqueue, 3 holds and 0 launched.
+        def agentnote: ((.type == "queue-operation" and .operation? == "enqueue")
+                        or .origin.kind? == "task-notification"
+                        or .attachment.origin.kind? == "task-notification")
+          and ([.content?, .message.content?, .attachment.prompt?]
+               | any(type == "string" and contains("<summary>Agent \"")));
+        # SAME-BATCH RESULTS DO NOT RELEASE. Claude Code writes each tool_use of one assistant
+        # message as its OWN record, all carrying that message`s `message.id` (measured on the nine
+        # rejecting sessions: 183 message ids shared by more than one Agent record, 1 record holding
+        # two Agent blocks). A sibling the cap ADMITTED in the same batch as the rejection is a slot
+        # that was already free when the batch was judged, not one that freed afterwards, so a
+        # launch answering a tool_use of the held rejection`s own message is ignored. A missing id
+        # ("") never matches, so a record without one still releases.
+        reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
+          ({ids: {}, mid: {}, held: false, hmid: ""};
+           ($r.message | if type == "object" then .content else null end) as $c
+           | if $r.type == "assistant" and ($c | type) == "array" then
+               ($r.message.id // "" | tostring) as $m
+               | reduce ($c[] | select(type == "object" and .type == "tool_use"
+                                     and (.name == "Agent" or .name == "Task"))) as $u
+                 (.; .ids[($u.id // "")] = (if $any == 1 then $d else ($u.input.description // "") end) | .mid[($u.id // "")] = $m)
+             elif $r.type == "user" and ($c | type) == "array" then
+               reduce ($c[] | select(type == "object" and .type == "tool_result")) as $t (.;
+                 if (.ids | has($t.tool_use_id // "")) then
+                   if $t.is_error == true and (($t.content | txt) | contains($cap)) then
+                     (if .ids[$t.tool_use_id] == $d then .held = true | .hmid = .mid[$t.tool_use_id] else . end)
+                   # ANY OTHER ERROR RESULT RELEASES NOTHING: a hook refusal (this guard`s own deny
+                   # among them) or a malformed call launched no agent, so no slot moved.
+                   elif $t.is_error == true then .
+                   elif .held and .hmid != "" and .mid[$t.tool_use_id] == .hmid then .
+                   else .held = false end
+                 else . end)
+             else . end
+           | if ($r | agentnote) then .held = false else . end)
+        | if .held then "held" else "" end' "$_dg_tail" 2>/dev/null)" || _dg_rc=2
+    else
+      # --hold-status only: a tail that FAILED is "cannot tell"; a tail that worked and held no cap text is "no hold".
+      if [ "$_dg_strict" = 1 ]; then tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$_dg_transcript" >/dev/null 2>&1 || _dg_rc=2; fi
+    fi
+    rm -f "$_dg_tail"
+  fi
+  [ "$_dg_strict" = 1 ] && [ "$_dg_rc" -ne 0 ] && return "$_dg_rc"
+  [ -n "$_dg_out" ] && printf '%s\n' "$_dg_out"
+  return 0
+}
+
+# --hold-status [<description>] [--transcript <path>]: is a rejected-spawn hold live? Exit 0 none, 1 a
+# hold is live (for <description> if given, else any), 2 cannot tell. The transcript is `--transcript
+# <path>`, else $AI_DLC_HOLD_TRANSCRIPT. Branches BEFORE stdin is read and before the gates, so the
+# PreToolUse path below is untouched.
+if [ "${1:-}" = "--hold-status" ]; then
+  shift
+  _hs_desc=""; _hs_tr="${AI_DLC_HOLD_TRANSCRIPT:-}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --transcript) [ $# -ge 2 ] || exit 2; _hs_tr="$2"; shift 2 ;;
+      *) _hs_desc="$1"; shift ;;
+    esac
+  done
+  [ -n "$_hs_tr" ] || exit 2
+  _hs_any=0; [ -n "$_hs_desc" ] || _hs_any=1
+  _hs_out="$(dg_hold_compute "$_hs_tr" "$_hs_desc" "$_hs_any" 1)"; _hs_rc=$?
+  [ "$_hs_rc" -eq 0 ] || exit 2
+  [ "$_hs_out" = held ] && exit 1
+  exit 0
+fi
+
 INPUT="$(cat)"
 
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
@@ -764,62 +861,7 @@ DG_DESC="$(printf '%s' "$INPUT" | jq -r '.tool_input.description // empty' 2>/de
 DG_CAP_TEXT='Concurrent subagent limit reached'
 DG_HELD=""
 if [ -z "$DG_AGENT_ID" ] && [ -n "$DG_DESC" ] && [ -n "$DG_TRANSCRIPT" ] && [ -r "$DG_TRANSCRIPT" ]; then
-  _dg_tail="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-cap-tail.XXXXXX" 2>/dev/null || true)"
-  if [ -n "$_dg_tail" ]; then
-    # A FAILED TAIL WRITE FAILS OPEN: no hold. A short write can keep the rejection and lose the
-    # release that followed it, which would invent a hold -- the one thing this window must not do.
-    if tail -c "${AI_DLC_CAP_TAIL_BYTES:-1048576}" "$DG_TRANSCRIPT" > "$_dg_tail" 2>/dev/null \
-       && grep -qF -- "$DG_CAP_TEXT" "$_dg_tail" 2>/dev/null; then
-      DG_HELD="$(jq -Rrn --arg d "$DG_DESC" --arg cap "$DG_CAP_TEXT" '
-        def txt: if type == "string" then .
-                 elif type == "array" then map(if type == "object" then (.text // "") else "" end) | join("\n")
-                 else "" end;
-        # An AGENT notification, keyed on record FIELDS as ai-dlc-advisor-gate.sh keys on
-        # origin.kind (the text opening is a harness-origin prefix I91 forbids restating), and
-        # on text summarising an Agent -- a Background command or Monitor notification is no
-        # agent exiting. THREE carriers, and the first is the one that matters: the harness
-        # writes a `queue-operation` ENQUEUE the moment the agent exits, and the user record
-        # and the queued_command attachment only when the notification is delivered to the
-        # model, which can be after the lead has already re-sent. Measured on the nine
-        # rejecting sessions: keyed on the two delivered carriers alone, 3 of 6 holds were
-        # spawns the harness then LAUNCHED; with the enqueue, 3 holds and 0 launched.
-        def agentnote: ((.type == "queue-operation" and .operation? == "enqueue")
-                        or .origin.kind? == "task-notification"
-                        or .attachment.origin.kind? == "task-notification")
-          and ([.content?, .message.content?, .attachment.prompt?]
-               | any(type == "string" and contains("<summary>Agent \"")));
-        # SAME-BATCH RESULTS DO NOT RELEASE. Claude Code writes each tool_use of one assistant
-        # message as its OWN record, all carrying that message`s `message.id` (measured on the nine
-        # rejecting sessions: 183 message ids shared by more than one Agent record, 1 record holding
-        # two Agent blocks). A sibling the cap ADMITTED in the same batch as the rejection is a slot
-        # that was already free when the batch was judged, not one that freed afterwards, so a
-        # launch answering a tool_use of the held rejection`s own message is ignored. A missing id
-        # ("") never matches, so a record without one still releases.
-        reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
-          ({ids: {}, mid: {}, held: false, hmid: ""};
-           ($r.message | if type == "object" then .content else null end) as $c
-           | if $r.type == "assistant" and ($c | type) == "array" then
-               ($r.message.id // "" | tostring) as $m
-               | reduce ($c[] | select(type == "object" and .type == "tool_use"
-                                     and (.name == "Agent" or .name == "Task"))) as $u
-                 (.; .ids[($u.id // "")] = ($u.input.description // "") | .mid[($u.id // "")] = $m)
-             elif $r.type == "user" and ($c | type) == "array" then
-               reduce ($c[] | select(type == "object" and .type == "tool_result")) as $t (.;
-                 if (.ids | has($t.tool_use_id // "")) then
-                   if $t.is_error == true and (($t.content | txt) | contains($cap)) then
-                     (if .ids[$t.tool_use_id] == $d then .held = true | .hmid = .mid[$t.tool_use_id] else . end)
-                   # ANY OTHER ERROR RESULT RELEASES NOTHING: a hook refusal (this guard`s own deny
-                   # among them) or a malformed call launched no agent, so no slot moved.
-                   elif $t.is_error == true then .
-                   elif .held and .hmid != "" and .mid[$t.tool_use_id] == .hmid then .
-                   else .held = false end
-                 else . end)
-             else . end
-           | if ($r | agentnote) then .held = false else . end)
-        | if .held then "held" else "" end' "$_dg_tail" 2>/dev/null || true)"
-    fi
-    rm -f "$_dg_tail"
-  fi
+  DG_HELD="$(dg_hold_compute "$DG_TRANSCRIPT" "$DG_DESC" 0 0)"
 fi
 if [ "$DG_HELD" = held ]; then
   dg_deny "AI/DLC dispatch guard: refused a re-send. An \`Agent\` call with description \"${DG_DESC}\" was rejected by the concurrency cap (\"Concurrent subagent limit reached ... Do not retry\"), and no agent of this session has exited since: this transcript holds no agent task-notification and no non-error Agent/Task result after that rejection, so no slot has freed. Rule 28: \"Hold the rejected set, and re-dispatch exactly that set only after an agent of this session has exited since the rejection -- never in the next message.\" Arm one bounded-join beat over the launched agents' paths and re-dispatch this spawn after the next agent task-notification."

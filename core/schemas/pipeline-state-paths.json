@@ -180,6 +180,13 @@
       "reason": "One file per agent_id, <agent_id>.txt, holding that teammate's SubagentStop last_assistant_message capped at 65536 bytes and renamed into place. Kept out of subagent-context.jsonl, which is committed and read whole. Transient because a final message is that run's return, can carry anything the teammate read, and must never be committed."
     },
     {
+      "name": ".hookwake-blocks.jsonl",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-hookwake.sh",
+      "ignore": "_bmad-output/.hookwake-blocks.jsonl",
+      "reason": "One JSON line per prompt the hookwake hook blocked -- ts, channel, agent_id, beat_task_id, record_pid, paths. Read back by the same hook to name each blocked agent's deliverable path and .subagent-final/<agent_id>.txt on the next unblocked wake. Per-session scratch; a tracked copy would carry another run's blocks into a fresh checkout."
+    },
+    {
       "name": ".wait-beats",
       "transient": true,
       "producer": "core/scripts/wait-for-deliverable.sh",

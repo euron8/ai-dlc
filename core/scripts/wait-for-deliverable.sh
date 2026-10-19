@@ -425,6 +425,10 @@ MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
 SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"
 case "$SETTLE" in ''|*[!0-9]*) SETTLE=180 ;; esac
 
+# THE ARGV AS INVOKED, kept before anything shifts it: the beat's argv record (THE ARGV RECORD,
+# below the lease) stores it, and every parse below consumes "$@".
+WFD_ARGV=("$@")
+
 QUIET=0
 RESET=0
 TARGETS=""
@@ -843,6 +847,29 @@ sidecar_put() {  # $1 = file, $2 = content
 # every live beat's registration in the one directory the marker's holder scans -- writing the
 # marker in two places instead would hand it to no heir.
 # ---------------------------------------------------------------------------
+# A PROCESS'S START TIME, ONE DEFINITION FOR THIS SCRIPT AND THE HOOKWAKE HOOK. The sibling
+# wfd-start-of.sh owns it (installed beside this script as scripts/ai-dlc/wfd-start-of.sh); the
+# definition under `if` is the fallback for a lone copy with no sibling -- every mutant
+# core/fixtures/wait-beat-liveness builds is one -- and that fixture holds its whole
+# `^wfd_start_of() {` .. `^}` range byte-identical to the helper's. Defined HERE, above the lease,
+# because the argv record written at arm time stores this value.
+#
+# THE START TIME HAS A SECOND SOURCE (BL-686). `/bin/ps` is setuid root and `sandbox-exec` refuses
+# to exec it, so under a sandboxed harness every marker was one field and every beat fell back to
+# the clock test the identity check replaced. When `ps` prints nothing, the stock perl reads the
+# same kernel field (kinfo_proc p_starttime, via sysctl KERN_PROC_PID) and prints it with
+# localtime -- `ps -o lstart=` word for word under LC_ALL=C in the same zone, which is why `ps` is
+# pinned to LC_ALL=C in both copies: a marker written by one source must read equal through the other.
+# macOS only ($^O); elsewhere, or for a dead pid, it prints nothing and the clock test decides.
+[ -f "${WD_SCRIPT_DIR}/wfd-start-of.sh" ] && . "${WD_SCRIPT_DIR}/wfd-start-of.sh" 2>/dev/null
+if ! declare -F wfd_start_of >/dev/null 2>&1; then
+wfd_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty when it cannot be read
+  ss_="$(LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null)" || ss_=""
+  [ -n "$ss_" ] || ss_="$(perl -e 'exit 1 unless $^O eq "darwin" && $ARGV[0] =~ /^[1-9][0-9]*$/; my $m = pack("i4", 1, 14, 1, $ARGV[0]); my $b = "\0" x 1024; my $l = pack("Q", 1024); syscall(202, $m, 4, $b, $l, 0, 0) == 0 or exit 1; my ($s) = unpack("q", $b); exit 1 unless unpack("Q", $l) > 0 && $s > 0; print scalar localtime $s' "$1" 2>/dev/null)" || ss_=""
+  printf '%s' "$ss_" | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
+}
+fi
+
 LEASE_HOME="${WD_ROOT}/_bmad-output"
 LEASE_DIR="${LEASE_HOME}/.wait-beats"
 [ "$STATUS" -eq 1 ] || mkdir -p "$LEASE_DIR" 2>/dev/null || true
@@ -887,15 +914,75 @@ lease_release() {
       if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
       rm -f "$lr_f_" 2>/dev/null
     done
+    for lr_f_ in "$LEASE_DIR"/.beat-argv-*; do   # an argv record whose beat is dead names no beat
+      [ -f "$lr_f_" ] || continue
+      lr_p_="${lr_f_##*/.beat-argv-}"
+      case "$lr_p_" in ''|*[!0-9]*) continue ;; esac
+      kill -0 "$lr_p_" 2>/dev/null || rm -f "$lr_f_" 2>/dev/null
+    done
     if [ -n "$lr_heir_" ]; then lease_put "${lr_heir_%% *}" "${lr_heir_#* }"
     else rm -f "$BEAT_MARKER" 2>/dev/null; fi
   fi
-  rm -f "$LEASE_SELF" "$LEASE_TMP" 2>/dev/null || true
+  rm -f "$LEASE_SELF" "$LEASE_TMP" "$ARGV_REC" "$ARGV_TMP" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# THE ARGV RECORD. `.wait-beats/.beat-argv-<pid>`, written once at arm time beside the lease and
+# removed by lease_release, so core/hooks/ai-dlc-hookwake.sh can tell WHICH beat is armed and
+# re-run its `--status` exactly. One `key=value` per line: session_id, pid, start (wfd_start_of),
+# script (absolute), cwd (physical), task_id (the harness task id read from fd 1 of this process,
+# then of its parent: a path ending `/tasks/<id>.output`, else empty), each setting below, then
+# `argv=` and the NUL-separated argv as one line of base64 -- a key=value file cannot carry a NUL.
+# THE SETTINGS are every AI_DLC_* this script reads (non-comment `AI_DLC_` reads; the
+# wait-beat-liveness arm derives that set from this file and fails when this list differs), plus
+# CLAUDE_PROJECT_DIR, the root fallback. Empty when unset: every read here is `${X:-default}`.
+# NOT `.lease-*`: the heir scan reads every `.lease-*` as a registration. The bound-change sweep
+# spares `.beat-argv-*`, and the heir scan above prunes a record whose pid is dead.
+# FAIL-OPEN AND SILENT: any failure writes no record and the beat runs exactly as before; a value
+# carrying a newline writes no record, because it cannot be one line.
+# ---------------------------------------------------------------------------
+ARGV_REC="${LEASE_DIR}/.beat-argv-$$"
+ARGV_TMP="${LEASE_DIR}/.argv-tmp.$$"
+ARGV_SETTINGS="AI_DLC_MAX_WAIT_BEATS AI_DLC_PROJECT_ROOT AI_DLC_STATE_DIR AI_DLC_TEAMMATE_DIR AI_DLC_TEAMMATE_IDLE_SECS AI_DLC_WAIT_BEAT_SECS AI_DLC_WAIT_MARGIN_SECS AI_DLC_WAIT_POLL_SECS AI_DLC_WAIT_SETTLE_SECS CLAUDE_PROJECT_DIR"
+argv_task_id() {  # $1 = pid -> the harness task id its fd 1 is open on, or nothing
+  if [ -r "/proc/$1/fd/1" ] || [ -L "/proc/$1/fd/1" ]; then at_n_="$(readlink "/proc/$1/fd/1" 2>/dev/null)"
+  elif command -v lsof >/dev/null 2>&1; then at_n_="$(lsof -w -a -p "$1" -d 1 -Fn 2>/dev/null | sed -n '/^n/{s/^n//;p;q;}')"
+  else return 0; fi
+  at_d_="${at_n_%/*}"; at_b_="${at_n_##*/}"
+  [ "${at_d_##*/}" = "tasks" ] || return 0
+  case "$at_b_" in *.output) at_b_="${at_b_%.output}" ;; *) return 0 ;; esac
+  case "$at_b_" in ''|*[!A-Za-z0-9_-]*) return 0 ;; esac
+  printf '%s' "$at_b_"
+}
+argv_record_put() {
+  command -v base64 >/dev/null 2>&1 || return 0
+  ar_nl_='
+'
+  ar_tid_="$(argv_task_id "$$")"
+  [ -n "$ar_tid_" ] || ar_tid_="$(argv_task_id "$PPID")"
+  ar_argv_="$(printf '%s\0' ${WFD_ARGV[@]+"${WFD_ARGV[@]}"} | base64 | tr -d '\n')"
+  [ -n "$ar_argv_" ] || return 0
+  ar_body_="session_id=${CLAUDE_CODE_SESSION_ID:-}
+pid=$$
+start=$(wfd_start_of "$$")
+script=${WD_SCRIPT_DIR}/${BASH_SOURCE[0]##*/}
+cwd=${WD_CWD_P}
+task_id=${ar_tid_}"
+  for ar_k_ in $ARGV_SETTINGS; do
+    ar_v_="${!ar_k_:-}"
+    case "$ar_v_" in *"$ar_nl_"*) return 0 ;; esac
+    ar_body_="${ar_body_}${ar_nl_}${ar_k_}=${ar_v_}"
+  done
+  case "${CLAUDE_CODE_SESSION_ID:-}${WD_SCRIPT_DIR}${WD_CWD_P}" in *"$ar_nl_"*) return 0 ;; esac
+  { printf '%s\nargv=%s\n' "$ar_body_" "$ar_argv_" > "$ARGV_TMP" && mv -f "$ARGV_TMP" "$ARGV_REC"; } 2>/dev/null \
+    || rm -f "$ARGV_TMP" 2>/dev/null
+  return 0
 }
 # --status writes nothing (header: "--status"), so it neither takes the lease nor arms the trap.
 if [ "$STATUS" -eq 0 ]; then
 trap 'lease_release' EXIT
 beat_alive
+argv_record_put
 fi
 
 # ---------------------------------------------------------------------------
@@ -1560,11 +1647,12 @@ fi
 # wipe the counters once whenever it changes. Self-heals for this retune and any
 # future one; the `.since` sidecars go with them, which is correct, because a
 # re-armed join must re-capture its epoch anyway. The `.lease-<pid>` registrations
-# are kept: they belong to beats asleep right now, not to the bound.
+# and the `.beat-argv-<pid>` records are kept: they belong to beats asleep right now,
+# not to the bound.
 BOUND_FILE="${COUNTER_DIR}/.bound"
 PREV_BOUND="$(cat "$BOUND_FILE" 2>/dev/null || echo '')"
 if [ "$PREV_BOUND" != "$MAX_BEATS" ]; then
-  find "$COUNTER_DIR" -mindepth 1 -maxdepth 1 ! -name '.lease-*' -exec rm -rf {} + 2>/dev/null || true
+  find "$COUNTER_DIR" -mindepth 1 -maxdepth 1 ! -name '.lease-*' ! -name '.beat-argv-*' -exec rm -rf {} + 2>/dev/null || true
   mkdir -p "$COUNTER_DIR" 2>/dev/null || true
   sidecar_put "$BOUND_FILE" "$MAX_BEATS"
 fi
@@ -1588,24 +1676,13 @@ fi
 # below): its age no longer decides anything, and pruning it would let a chained call delayed
 # past the prune age sleep a second quantum. Identity is the pid in the name plus the start time
 # stored in the marker; a recycled pid has a different start time and is pruned on age as before.
-# THE START TIME HAS A SECOND SOURCE (BL-686). `/bin/ps` is setuid root and `sandbox-exec` refuses
-# to exec it, so under a sandboxed harness every marker was one field and every beat fell back to
-# the clock test the identity check replaced. When `ps` prints nothing, the stock perl reads the
-# same kernel field (kinfo_proc p_starttime, via sysctl KERN_PROC_PID) and prints it with
-# localtime -- `ps -o lstart=` word for word under LC_ALL=C in the same zone, which is why `ps` is
-# pinned to LC_ALL=C here: a marker written by one source must read equal through the other.
-# macOS only ($^O); elsewhere, or for a dead pid, it prints nothing and the clock test decides.
-shell_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty when it cannot be read
-  ss_="$(LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null)" || ss_=""
-  [ -n "$ss_" ] || ss_="$(perl -e 'exit 1 unless $^O eq "darwin" && $ARGV[0] =~ /^[1-9][0-9]*$/; my $m = pack("i4", 1, 14, 1, $ARGV[0]); my $b = "\0" x 1024; my $l = pack("Q", 1024); syscall(202, $m, 4, $b, $l, 0, 0) == 0 or exit 1; my ($s) = unpack("q", $b); exit 1 unless unpack("Q", $l) > 0 && $s > 0; print scalar localtime $s' "$1" 2>/dev/null)" || ss_=""
-  printf '%s' "$ss_" | tr -s ' \t' ' ' | sed 's/^ //; s/ $//'
-}
+# The start time is wfd_start_of, defined above the lease (A PROCESS'S START TIME).
 SH_PRUNE_SECS=$(( ( (BUDGET / 60) + 1 ) * 60 ))
 for sh_f_ in "$COUNTER_DIR"/.shell-*; do
   [ -f "$sh_f_" ] || continue
   sh_r_="$(cat "$sh_f_" 2>/dev/null || echo '')"
   case "$sh_r_" in
-    *' '*) [ "${sh_r_#* }" = "$(shell_start_of "${sh_f_##*/.shell-}")" ] && continue ;;
+    *' '*) [ "${sh_r_#* }" = "$(wfd_start_of "${sh_f_##*/.shell-}")" ] && continue ;;
   esac
   [ $(( $(date +%s) - $(mtime_of "$sh_f_") )) -gt "$SH_PRUNE_SECS" ] && rm -f "$sh_f_" 2>/dev/null
 done
@@ -1636,7 +1713,7 @@ done
 # parent pids), so "same shell" is "same Bash call" there. A harness that ran every call in ONE
 # persistent shell would make every beat after the first read as chained; none does today.
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
-SHELL_START="$(shell_start_of "$PPID")"
+SHELL_START="$(wfd_start_of "$PPID")"
 # NEITHER SOURCE COULD READ IT (BL-686): `ps` refused or empty, and no perl. Said once per beat, on
 # stderr, because the guard below then decides by the clock alone and a reader must know that.
 [ -n "$SHELL_START" ] || printf 'NOTE: start time of shell %s unreadable (ps refused or printed nothing, and no perl fallback) -- the chained-beat guard decides by the clock alone this beat\n' "$PPID" >&2

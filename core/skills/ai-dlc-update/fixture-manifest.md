@@ -128,6 +128,7 @@ core_manifest:
   - core/fixtures/handoff-record-carries-return/**
   - core/fixtures/handoff-resume-guard/**
   - core/fixtures/hook-registration-join/**
+  - core/fixtures/hookwake/**
   - core/fixtures/implementation-join-yield/**
   - core/fixtures/escalation-delivery/**
   - core/fixtures/extract-push-flag-decision/**

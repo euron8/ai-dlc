@@ -138,6 +138,8 @@ live wait over a teammate that has not delivered.
   waiting beat or an exhausted one: read the file before deciding, never re-dispatch over it
   unread — that discards the seat's findings.
 
+**A missing completion report is not non-delivery.** When a teammate's completion report is missing from your context, which happens when the opt-in wake hook suppressed its hand-back, read the deliverable and `_bmad-output/.subagent-final/<agent_id>.txt` before treating it as non-delivery or re-dispatching.
+
 **A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
 nonzero exit from a backgrounded command is reported to you as `status: failed` —
 which would announce a failure every couple of minutes on every healthy join, and
