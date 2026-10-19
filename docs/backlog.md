@@ -579,3 +579,11 @@ Owed, in order: first, a ship-set-filter probe seed (a shipping walk-up fixture 
 Built (batch 236): the ship-set filter is now `i33d_ship_hits <fixtures-root>` in `scripts/validate-enforcement-map.sh`. It takes the fixture directory by parameter expansion (`${f#"$root"/}`, `${f%%/*}`) with no `dirname` fork, and checks `.dist-only` before `i33d_scan`. The corpus loop and a new probe call that one function: a mini tree with a shipping `ship-a/sub/x.sh` walk-up (must be reported) and a `.dist-only` `dist-b/sub/x.sh` with the same walk (must not). The receipt mutates a copy so the filter skips every candidate and requires I106 to name the ship-set filter probe. The by-arm fork count is left to the owner.
 
 verify: sh bash core/fixtures/enforcement-map-derivations/receipt-bl696.sh
+
+## BL-706 — no reconcile step runs the derivation differential on every pull, so a consumer whose pulls never hit a derivation never gets an owed-derivations record
+
+**NOTE.** Filed by ai-dlc-77 [ab5b1f] from the BL-668 build (batch 236), lead ai-dlc-c8 ruled it a separate cost question with no owner this batch. BL-668 made `reconcile/derivation-differential.sh --record-owed` create the record on every run, so an absent record now means "no reconcile has ever measured this tree". But `reconcile/apply.sh` (~:1346, ~:1495) emits the differential only as a `WORKLIST artifact-derivations` row, and only when a recorded `derived` command names a core path the range changed; the differential refuses on zero derivations, and nothing runs it unconditionally. So a consumer whose pulls never touch a derivation keeps printing `check-owed-derivations.sh`'s absent line. That line is correct (the tree was genuinely never measured), so this is a cost question, not a defect. A per-pull "no changed path, so nothing owed" record was considered and declined (c8): a derivation can read files its command line never names, so that record would be written from intent, not from a measurement.
+
+Owed: decide whether every pull runs the differential (two validator passes per pull) so the record always exists, measuring that cost on a reference consumer before deciding. No owner this batch.
+
+verify: manual
