@@ -64,11 +64,58 @@ if refused_clean "3.md $TOKEN" "$d3" && has "$MO" "the top-level session, which 
   ok "CS-M3: a session Write then printf >>: REFUSED naming the top-level session as the sealed writer"
 else bad "CS-M3: Write then printf >> was not refused (rc=$RC): $(head -3 "$MO")"; fi
 # CS-M3b, its ALLOW twin one property apart: the same session seal, no append -> MERGED, byte-identical.
+# The shard's own adversary Edit lands after the session's Write (same bytes), because a shard whose
+# LAST tool write was the session's is refused on the actor (CS-S1); this twin is about the bytes.
 d3b="$(clean_world)"; seal_hook "$(world_root "$d3b")" Write "$d3b/3.md" ""
+hr_ids "$d3b/3.md"; seal_hook "$(world_root "$d3b")" Edit "$d3b/3.md" "$HR_AGENT"
 run_merge "$MERGE" "$d3b"
 if [ "$RC" -eq 0 ] && cmp -s "$o0" "$(out_of "$d3b")" && grep -q '"actor":"session"' "$(ledger_of "$d3b")" 2>/dev/null; then
-  ok "CS-M3b: the same session seal on an untouched shard: MERGED, byte-identical"
+  ok "CS-M3b: the same session seal on an untouched shard, its adversary's Edit last: MERGED, byte-identical"
 else bad "CS-M3b: a session-sealed untouched shard did not merge identically (rc=$RC): $(head -3 "$MO")"; fi
+
+# ---- BL-669: a shard whose LAST TOOL write was the top-level session's is refused. Every seal row from
+# the real recorder; the program row of case (c) from the library's own --record, as --mark appends it.
+SS_TOKEN="was last written by the top-level session"
+ss_edit() { # <shard file> <agent id or ""> -- an Edit that moves the bytes, sealed by the real recorder
+  perl -0pi -e 's/Nothing further\./Nothing further, amended./' "$1"
+  grep -q 'Nothing further, amended' "$1" || return 1
+  seal_hook "$(world_root "$(dirname "$1")")" Edit "$1" "$2"
+}
+p_seal_session() { # (a) adversary Write, session Edit -> REFUSED naming the session and --rerun; (b) the same
+                   # adversary's Edit -> MERGED; (c) adversary Write, session Edit, then a program row -> still
+                   # REFUSED (the program row is skipped); (d) session Edit, then the adversary's later Write -> MERGED.
+                   # SS_CASE names the first case that did not hold.
+  local m="$1" d st
+  SS_CASE=a; d="$(clean_world)"; seal_all "$d"; ss_edit "$d/2.md" "" || return 1; run_merge "$m" "$d"
+  refused_clean "2.md $SS_TOKEN" "$d" && has "$MO" "(Edit at " && has "$MO" "merge with --rerun 2.md@" || return 1
+  SS_CASE=b; d="$(clean_world)"; seal_all "$d"; hr_ids "$d/2.md"; ss_edit "$d/2.md" "$HR_AGENT" || return 1; run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  SS_CASE=c; d="$(clean_world)"; seal_all "$d"; st="$(hr_state "$d/2.md")"; ss_edit "$d/2.md" "" || return 1
+  bash "$SEAL" --record "$st" program:wait-for-deliverable "$d/2.md" || return 1
+  grep -qF '"actor":"program:wait-for-deliverable"' "$(ledger_of "$d")" || return 1
+  run_merge "$m" "$d"
+  refused_clean "2.md $SS_TOKEN" "$d" || return 1
+  SS_CASE=d; d="$(clean_world)"; seal_all "$d"; ss_edit "$d/2.md" "" || return 1
+  hr_ids "$d/2.md"; seal_hook "$(world_root "$d")" Write "$d/2.md" "$HR_AGENT"; run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  SS_CASE=""
+}
+if p_seal_session "$MERGE"; then
+  ok "CS-S1: adversary Write then session Edit (bytes re-sealed) -> REFUSED naming the session and --rerun; the adversary's own Edit -> MERGED; a program row after the session Edit -> still REFUSED; the adversary's later Write -> MERGED"
+else bad "CS-S1: case ($SS_CASE) did not hold (rc=$RC): $(head -3 "$MO")"; fi
+# CS-L1: --last-tool-row itself. Agent Write, session Edit, program row -> the session's Edit row; a file
+# with only a program row and an unsealed shard path -> nothing.
+dl="$(clean_world)"; stl="$(hr_state "$dl/1.md")"; seal_all "$dl"; ss_edit "$dl/1.md" ""
+bash "$SEAL" --record "$stl" program:wait-for-deliverable "$dl/1.md" "$dl/3.md"
+printf '%s\n%s\n' "$dl/1.md" "$dl/3.md" | bash "$SEAL" --last-tool-row "$stl" - > "$WORK/ltr.out" 2>&1; cl=$?
+rm -f "$WORK/ltr.ok"; hr_ids "$dl/3.md"
+l1="$(awk -F "$(printf '\037')" -v f="$dl/1.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/ltr.out")"
+l3="$(awk -F "$(printf '\037')" -v f="$dl/3.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/ltr.out")"
+dn="$(mktemp -d "$WORK/ltrn.XXXXXX")/_bmad-output"; mkdir -p "$dn/planning-artifacts/s1/shards/stories-p1"; printf 'x\n' > "$dn/planning-artifacts/s1/shards/stories-p1/1.md"
+bash "$SEAL" --last-tool-row "$dn" "$dn/planning-artifacts/s1/shards/stories-p1/1.md" > "$WORK/ltrn.out" 2>&1; cn=$?
+if [ "$cl" = 0 ] && [ "$l1" = "session||Edit" ] && [ "$l3" = "agent|$HR_AGENT|Write" ] && [ "$cn" = 0 ] && [ ! -s "$WORK/ltrn.out" ]; then
+  ok "CS-L1: --last-tool-row reads the session's Edit behind a later program row, the agent's Write for a shard whose program row came last, and nothing where no seal row exists"
+else bad "CS-L1: --last-tool-row rc=$cl, 1.md [$l1] (want session||Edit), 3.md [$l3] (want agent|$HR_AGENT|Write), unsealed rc=$cn [$(head -1 "$WORK/ltrn.out")]"; fi
 
 # CS-M4: an Edit rewrite re-seals -> MERGED. The shard's bytes move after the Write seal, then the
 # Edit's PostToolUse seals the new bytes; the newest row must be the Edit's.

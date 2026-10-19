@@ -82,6 +82,13 @@
 #   THE CONTENT SEAL. A shard whose bytes differ from its newest `kind: "content-seal"` row (taken
 #   by ai-dlc-content-seal.sh after every Write or Edit) is REFUSED, naming that row's writer and the
 #   remedy; a shard with no seal row is not compared. content-seal.sh owns the set and the check.
+#   A shard whose LAST TOOL seal row (actor `agent` or `session`, in file order; program rows such as
+#   `--mark`'s skipped; `content-seal.sh --last-tool-row`, one call over all shards) is the top-level
+#   session's is REFUSED in the same phase, naming its tool and ts and the remedy: re-dispatch the
+#   adversary and merge with `--rerun <shard>.md@<ISO>`. A later agent row clears it. A shard with no
+#   tool row is not judged. An agent-teams teammate writes with no `agent_id` and so reads as `session`
+#   here; such a shard is already refused at the write-ledger join, whose rows need an agent_id, so this
+#   adds no new refusal for it.
 #   LIMITS. A shard written with Bash (a redirect, `sed -i`, a script's open) leaves no row and is
 #   refused: write shards with Write or Edit. A shard AMENDED with Bash after a Write is refused by
 #   the seal. A row is an ATTEMPT recorded at PreToolUse, not proof
@@ -886,6 +893,16 @@ if [ -f "$SEAL" ]; then
     1) while IFS= read -r _sl; do [ -n "$_sl" ] && collect "$_sl"; done < "$T/seal" ;;
     *) refuse "the content-seal check over $REC_WRITES did not run (exit $SEAL_RC): $(head -1 "$T/seal.err")" ;;
   esac
+  phase_barrier
+  # THE LAST TOOL WRITE (BL-669): a shard whose last agent/session seal row is the top-level session's
+  # carries the lead's bytes, re-sealed. Program rows are skipped by content-seal.sh, so a --mark after
+  # the session's Edit cannot hide it. One call over every shard, as --check.
+  _us="$(printf '\037')"
+  cut -f2 "$T/shards" | bash "$SEAL" --last-tool-row "$REC_STATE" - > "$T/ltr" 2> "$T/ltr.err" \
+    || refuse "the content-seal last-tool-row read over $REC_WRITES did not run: $(head -1 "$T/ltr.err")"
+  while IFS="$_us" read -r _lf _la _laid _lt _lts; do
+    [ "$_la" = session ] && collect "$_lf was last written by the top-level session (${_lt:-tool} at ${_lts:-<no ts>}), which carries no agent_id; only an adversary writes an adversary shard, so the lead's bytes would merge as the adversary's -- re-dispatch the adversary for $(basename "$_lf") and merge with --rerun $(basename "$_lf")@<the re-dispatch's ISO start>"
+  done < "$T/ltr"
   phase_barrier
 elif [ -f "$REC_WRITES" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$REC_WRITES"; then
   refuse "$REC_WRITES carries content-seal rows but $SEAL is absent, so no shard's bytes can be compared with its seal; reinstall ai-dlc"

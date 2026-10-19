@@ -550,7 +550,7 @@ Owed: a shard whose newest seal row is `actor: "session"` refuses at merge, as a
 
 Judge the LAST NON-PROGRAM tool row, never the newest row. Once `wait-for-deliverable.sh --mark` seals a shard as `program:wait-for-deliverable`, its newest seal row is that program row. A lead Edit followed by the seat's `--mark` would then hide the session row behind it, and a newest-row test would pass it.
 
-verify: manual
+verify: sh set -uo pipefail; o="$(bash core/fixtures/content-seal/merge-arms.sh 2>&1)"; grep -q '^  ok    CS-S1:' <<< "$o" && grep -q '^  ok    CS-L1:' <<< "$o"
 
 ## BL-670 — the shard merge never stamps DIVERGENT_HARD_BLOCK from the summed prior-scope count, so a sharded divergence reaches the validator unstamped
 

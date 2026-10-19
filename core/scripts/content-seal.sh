@@ -80,6 +80,12 @@
 #        Exit 2: the ledger does not parse, jq is absent, or the state dir does not exist.
 #   content-seal.sh --row <state-dir> <file>...           one line per file, in argument order: the
 #        newest seal row for it (JSON), or `null`. Same root filter as --check.
+#   content-seal.sh --last-tool-row <state-dir> <file>... | -   one line per SEALED file carrying a
+#        TOOL seal row (actor `agent` or `session`): the LAST such row in file order, as
+#        `file US actor US agent_id US tool US ts` (US = 0x1f), `file` as given; nothing for a file
+#        with none. Program rows are skipped, so a `--mark` row cannot hide the tool write before it.
+#        Same root filter as --check. The shard merge calls it once over all shards and refuses a
+#        shard whose last tool write was the top-level session's.
 #   content-seal.sh --record <state-dir> program:<name> <file>...   append a program row per file.
 #        A file outside the state dir is skipped; a state dir with no planning-artifacts/ records
 #        nothing (it is not a pipeline state dir) and exits 0.
@@ -260,6 +266,33 @@ seal_first_tool_ts() { # <state dir> -> the earliest ts of a tool seal row in th
     || { echo "content-seal: the write ledger $_SL does not parse as JSON lines" >&2; return 2; }
 }
 
+seal_last_tool_row() { # <state dir> <file>... -> per sealed file with a tool row: path US actor US agent_id US tool US ts
+  local st="$1" f tab us row
+  shift
+  _seal_state "$st" || return 2
+  _seal_has_rows || return 0
+  command -v jq >/dev/null 2>&1 || { echo "content-seal: jq is not on PATH" >&2; return 2; }
+  # The LAST tool row per path in file order: program rows (`--record`, `--mark`) are skipped, so a
+  # program row appended after a session Edit cannot hide it. Same root filter as --check.
+  tab="$(jq -rn --arg r "$_SR" '
+    reduce (inputs | select(type == "object") | select(.kind == "content-seal")
+            | select((.path | type) == "string") | select(.actor == "agent" or .actor == "session")
+            | select((.root // "") == "" or .root == $r)) as $x ({}; .[$x.path] = $x)
+    | .[] | [.path, (.actor // ""), (.agent_id // ""), (.tool // ""), (.ts // "")]
+    | map(tostring) | join("\u001f")' "$_SL")" \
+    || { echo "content-seal: the write ledger $_SL does not parse as JSON lines" >&2; return 2; }
+  [ -n "$tab" ] || return 0
+  us="$(printf '\037')"
+  for f in "$@"; do
+    [ -n "$f" ] || continue
+    _seal_rel "$f" || continue
+    seal_sealed "$_REL" || continue
+    row="$(printf '%s\n' "$tab" | awk -F "$us" -v p="${_SN}/${_REL}" '$1 == p { print; exit }')"
+    [ -n "$row" ] && printf '%s%s%s\n' "$f" "$us" "${row#*"$us"}"
+  done
+  return 0
+}
+
 seal_record() { # <state dir> program:<name> <file>...
   local st="$1" actor="$2" f sha
   shift 2
@@ -295,7 +328,7 @@ seal_record_expect() { # <state dir> program:<name> <sha256> <file> -> 0 row app
 seal_main() {
   local mode="${1:-}" st
   case "$mode" in
-    --check|--row)
+    --check|--row|--last-tool-row)
       [ "$#" -ge 3 ] || { echo "usage: $0 $mode <state-dir> <file>... | -" >&2; return 2; }
       st="$2"; shift 2
       if [ "$#" -eq 1 ] && [ "$1" = "-" ]; then
@@ -303,7 +336,11 @@ seal_main() {
         while IFS= read -r _l; do [ -n "$_l" ] && set -- "$@" "$_l"; done
         [ "$#" -gt 0 ] || return 0
       fi
-      if [ "$mode" = "--check" ]; then seal_check "$st" "$@"; else seal_row "$st" "$@"; fi ;;
+      case "$mode" in
+        --check) seal_check "$st" "$@" ;;
+        --row) seal_row "$st" "$@" ;;
+        *) seal_last_tool_row "$st" "$@" ;;
+      esac ;;
     --record)
       [ "$#" -ge 4 ] || { echo "usage: $0 --record <state-dir> program:<name> <file>..." >&2; return 2; }
       st="$2"; shift
@@ -315,7 +352,7 @@ seal_main() {
       [ "$#" -eq 2 ] || { echo "usage: $0 --first-tool-ts <state-dir>" >&2; return 2; }
       seal_first_tool_ts "$2" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --agent-ere" >&2
+    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --agent-ere" >&2
        return 2 ;;
   esac
 }
