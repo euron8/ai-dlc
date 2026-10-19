@@ -361,27 +361,6 @@ OPEN OPERATOR QUESTION: restrict the sandbox PATH to the declared tools, (i), or
 
 verify: manual
 
-## BL-677 — on the empty-self path `pool_kill` kills only the recorded pid, so children in a unit's process group survive the worker's kill on the worker-death and abort paths
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the hook-delta adversary. It is a leak, not a hang: it leaves orphaned processes after a kill, and it blocks nothing. DEFECT rather than NOTE because a kill that leaves the killed unit's children running is wrong behaviour with a concrete owed fix, not an observation.
-
-Mechanism. `pool_kill` opens with `[ -n "$2" ] || { kill -KILL "$1"; return 0; }` (`.githooks/pre-push:2154`, `core/git-hooks/pre-push:2053`), added this release so that an empty self-pgid walk cannot stop the calling shell. With `$2` (`self`) empty it signals only the recorded pid `$1` and returns. `self` is empty when `ps -o pgid= -p "$$"` fails (`.githooks/pre-push:2177`, `core/git-hooks/pre-push:2076`). The callers:
-- The watcher's worker-death line, `if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi` (`.githooks/pre-push:2185`, `core/git-hooks/pre-push:2084`). Nothing follows it, so the unit's group is never signalled.
-- The watcher's refusal path (`.githooks/pre-push:2194-2195`, `core/git-hooks/pre-push:2093-2094`), where `pool_kill` is followed by `kill -KILL -- "-$pid" 2>/dev/null`.
-- `pool_kill_saved` (`.githooks/pre-push:2163-2167`, `core/git-hooks/pre-push:2062-2066`), called from `pool_abort` (`.githooks/pre-push:2170`, `core/git-hooks/pre-push:2069`) and from the worker after a late refusal (`.githooks/pre-push:2206`, `core/git-hooks/pre-push:2105`). `pool_abort` kills `-$wpid` (the watcher's group) and then reaches `pool_kill_saved`, with no `-$pid` group kill.
-
-On the refusal path the `kill -KILL -- "-$pid"` after `pool_kill` still reaps the unit's group. On the worker-death and abort paths nothing does, so the unit's group children survive.
-
-Why it is not a hang. The unit's children write to the unit's pool log (`TMPDIR="$wr" "$@" > "$lg" 2>&1 < /dev/null &`, `.githooks/pre-push:2180`, `core/git-hooks/pre-push:2079`), not to the hook's stdout, and the worker blocks on `wait "$pid"` (`.githooks/pre-push:2202`, `core/git-hooks/pre-push:2101`), which returns on the unit's own exit, not on EOF of any pipe. So the survivors cannot hold the push open.
-
-Prior state. Before this release a failing `ps` killed nothing at all, so this is a remaining gap, not a regression.
-
-Evidence, measured by the hook-delta adversary (cited, not re-run here): a unit leading its own group with a child in it, then `pool_kill "$U" ""`, gave `unit alive=no child alive=yes`; after the group kill of the refusal path, `child alive=no`.
-
-Owed: add `kill -KILL -- "-$1"` to the guard in both hooks (safe for a non-leader pid: ESRCH, nothing signalled), plus a consumer-suite-pool arm proving the group dies on the worker-death path with `self` empty (a stub `ps` that fails on `-p`), and that arm's mutant: the guard without the group kill must leave the child alive.
-
-verify: manual
-
 ## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
 
 **NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
@@ -470,19 +449,13 @@ The stderr half is closed in this release. Before BL-666's fix, the failed write
 Owed: a stage that cannot be written must not leave the gate denying forever. Either the gate stands down (clears what it can and exits 0) when the stage write fails, as the arming precondition does for an unreadable file, or the arming precondition also requires a writable `_bmad-output`. Probe: arm a recovery, `chmod 555 _bmad-output`, make a full snapshot Read, then a step Read; the step Read is not denied with FIRST. Control: the same sequence with `_bmad-output` writable advances to `step`. If the probe runs as a user that ignores permissions, a write test detects it and the receipt exits 9.
 
 verify: sh command -v jq >/dev/null || exit 9; [ -f core/hooks/ai-dlc-recover.sh ] && [ -f core/hooks/ai-dlc-recover-gate.sh ] || exit 9; p=$(mktemp -d) || exit 9; mkdir -p "$p/_bmad-output" "$p/.claude/skills/ai-dlc"; printf '# S\n\n## Pipeline Position\ncurrent_step_file: `a.md`\n' >"$p/_bmad-output/pipeline-snapshot.md"; echo x >"$p/a.md"; echo d >"$p/.claude/skills/ai-dlc/postcompact-digest.md"; echo x >"$p/z.md"; printf '{"source":"compact","session_id":"S"}' | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover.sh >/dev/null 2>&1; grep -q '^step_file_resolved=1' "$p/_bmad-output/.recover-fired" 2>/dev/null || exit 9; g(){ printf '{"tool_name":"Read","session_id":"S","tool_input":{"file_path":"%s"}}' "$1" | CLAUDE_PROJECT_DIR="$p" bash core/hooks/ai-dlc-recover-gate.sh 2>/dev/null; }; g "$p/z.md" | grep -q "FIRST tool call" || exit 9; chmod 555 "$p/_bmad-output" || exit 9; if ( : >"$p/_bmad-output/.w" ) 2>/dev/null; then rm -f "$p/_bmad-output/.w"; chmod 755 "$p/_bmad-output"; exit 9; fi; v=0; g "$p/_bmad-output/pipeline-snapshot.md" | grep -q deny && v=9; [ "$v" = 0 ] && g "$p/a.md" | grep -q "FIRST tool call" && v=1; chmod 755 "$p/_bmad-output"; exit "$v"
-## BL-690 — the pre-push fixture pool installs no EXIT, INT or TERM trap, so an interrupted hook leaks its pool root `/tmp/fx.*`
-
-**NOTE.** The pool function sets `out="$(mktemp -d /tmp/fx.XXXXXX ...)"` (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`) and removes it only by straight-line `rm -rf "$out"` (`.githooks/pre-push:2044`, `:2080`, `:2088`, `:2446`; `core/git-hooks/pre-push:1952`, `:1984`, `:1992`, `:2320`). The hook says so itself: "There is no trap in this hook" (`.githooks/pre-push:2383`; `core/git-hooks/pre-push:2259` carries the same sentence). An interrupted hook (SIGINT, SIGTERM, SIGHUP, or a `set -u` abort) therefore leaks its pool root. The leak predates this release; the root moved from `/var/folders` to `/tmp` in this release, so it now lands in shared `/tmp`. Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8, found by the READSET tip adversary on the per-unit TMPDIR change.
-
-Owed: the pool function installs a trap naming EXIT (or INT and TERM) whose body removes `"$out"`, in both hooks, which I66 holds to one program.
-
-verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/rm -rf "\$out"/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'trap .*\$out.*\(EXIT\|INT\|TERM\)')" -gt 0 ] || exit 1; done
-
 ## BL-691 — a nested pool makes its pool root outside the OUTER unit's watched TMPDIR, so the outer watcher does not see the nested pool's scratch writes
 
 **NOTE.** A fixture that drives the real hook's pool makes a nested pool: `core/fixtures/prepush-pool-depth/run.sh` calls `run_fixtures` at depth 1 (`:79`, `:120`), and `core/fixtures/readset-skip/run.sh` sources the extracted FIXTURE_POOL block (`:287`, `:361`). `core/fixtures/self-update-fixture-log/run.sh` drives the hook through `h_enter` (`:2090`) and names PREPUSH_POOL_DEPTH (`:2063`); whether it reaches `run_fixtures` was not established. The nested pool chooses its root at the `out=` line (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`), which is `/tmp/fx.XXXXXX` and not under the caller's TMPDIR. The outer pool watches a per-unit TMPDIR (`TMPDIR="$wr" "$@"`, `.githooks/pre-push:2206`; the watched-root limit is commented at `:467-:469`). The nested pool's scratch writes land outside that root, so the outer watcher sees only the nested hook's log output. Whether the outer progress check still holds for those three fixtures is UNRUN.
 
 Owed: when `PREPUSH_POOL_DEPTH` is above 0, the pool root is made under the caller's TMPDIR.
+
+Measured against that owed fix: under hermetic-run the caller's TMPDIR is already nested (`core/scripts/hermetic-run.sh:141` makes `$HR_WORK` under the unit's TMPDIR and `:544` gives the sandbox `TMPDIR="$HR_WORK/tmp"`), so the owed root would make the nested unit TMPDIR `/private/tmp/fx.XXXXXX/.t.XXXXX/hermetic-run.XXXXXX/tmp/fx.XXXXXX/.t.XXXXX`, 90 encoded (74 characters plus 2 per each of 8 `/`) against the 85 that `core/fixtures/procsub-staged-refusal-boot/run.sh:945` allows, and 62 without hermetic-run (`/private/tmp/fx.XXXXXX/.t.XXXXX/fx.XXXXXX/.t.XXXXX`: 50 characters plus 2 per each of 6 `/`) against the 58 bound the hook states at `.githooks/pre-push:2039` and `core/git-hooks/pre-push:1947`; the fix design (shorter names, a changed limit, or the outer watcher following the nested root) is deferred.
 
 verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/mkdir -p .*\$out/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'PREPUSH_POOL_DEPTH\|POOL_DEPTH_IN')" -gt 0 ] && [ "$(printf '%s\n' "$b" | grep -c 'TMPDIR')" -gt 0 ] || exit 1; done
 

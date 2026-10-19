@@ -2028,7 +2028,7 @@ apply_readset_skip() {
 }
 
 run_fixtures() {
-  local rc=0 rf_hard=0 d b out n_expected n_actual n_ordered verdict fx_root fx_s fx_err
+  local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
     printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
     return 1
@@ -2059,12 +2059,21 @@ run_fixtures() {
       printf 'pre-push: fixture pool: /tmp/fx.XXXXXX failed (%s); FELL BACK to %s, where a unit TMPDIR is %s encoded characters -- units with a path-length limit may then fail; point TMPDIR at a short writable directory\n' "$(printf '%s' "$fx_err" | tr '\n' ' ')" "$out" "$(( ${#out} + 2 * ${#fx_s} + 11 ))" >&2
     fi
   fi
+  # THE POOL ROOT IS REMOVED ON AN INTERRUPT OR AN ABORT TOO (BL-690). The EXIT trap's body carries the
+  # path BAKED IN, %q-quoted, never `$out`: measured on bash 3.2, an EXIT trap fired by `exit` or by a
+  # `set -u` abort inside this function runs after its locals are gone and reads `$out` unset, so a
+  # body naming the variable removes nothing. INT, TERM and HUP exit 130, 143 and 129, which runs the
+  # EXIT trap and keeps the hook non-zero. The parent shell sets no other trap (the trace's and the
+  # worker's are in their own subshells), so nothing is chained; each straight-line removal of the root
+  # below clears all four right after it, so the trap never outlives this function.
+  printf -v out_q '%q' "$out"
+  trap "rm -rf -- $out_q" EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
   # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
   # gets its safety from the same dot.
-  mkdir -p "$out/.dur" "$out/.log" "$out/.pr" || { rm -rf "$out"; return 1; }
+  mkdir -p "$out/.dur" "$out/.log" "$out/.pr" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
   # TRUNCATE THE THIS-RUN RECORD HERE, at the first line that can only run because the pool is
   # entering. Every exit below this point -- the empty-suite guard, a red unit, a worker that
   # died -- then leaves an EMPTY file, and a reader that finds one knows no complete measurement
@@ -2100,7 +2109,7 @@ run_fixtures() {
     SUITE_SKIPPED=1
     # A seed that skips every fixture still publishes its records, so it lands once.
     readset_keys_write "$out"
-    rm -rf "$out"
+    rm -rf "$out"; trap - EXIT INT TERM HUP
     return 0
   fi
 
@@ -2108,7 +2117,7 @@ run_fixtures() {
   case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
   if [ "$n_expected" -eq 0 ]; then
     printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'
-    rm -rf "$out"; return 1
+    rm -rf "$out"; trap - EXIT INT TERM HUP; return 1
   fi
 
   # DISPATCH LONGEST-FIRST, FROM WHAT THE LAST RUN ACTUALLY COST.
@@ -2198,7 +2207,7 @@ run_fixtures() {
     pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
     pool_kill() {
       local w ws wsig wlp wlg p
-      [ -n "$2" ] || { kill -KILL "$1"; return 0; }
+      [ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }
       w="$(pool_walk "$1" "$2" "$4" "$3")"
       IFS="|" read -r ws wsig wlp wlg <<< "$w"
       for p in $wlp; do kill -STOP "$p"; done
@@ -2403,8 +2412,8 @@ run_fixtures() {
 
   # PUBLISH THE RED UNITS' CAPTURED OUTPUT BEFORE THE TEMP DIR GOES. Placed here, beside the
   # durations publish, for the same reason that one is here: it is the last point at which
-  # "$out" still exists. There is no trap in this hook -- the `rm -rf` below is straight-line
-  # -- so anything not copied out on this line is gone.
+  # "$out" still exists. The trap installed beside its `mktemp` removes it on an interrupt and the
+  # straight-line `rm -rf` below removes it otherwise, so anything not copied out on this line is gone.
   #
   # THE VERDICT FILE IS THE SELECTOR, NOT `rc`. Walking the list and re-reading each verdict
   # picks up BOTH failure shapes: a unit that ran and failed, and a unit that produced no
@@ -2466,7 +2475,7 @@ run_fixtures() {
   # pool exits 1, because a FAIL is a verdict and a refusal is the absence of one.
   POOL_REFUSED_ONLY=0
   if [ -f "$out/.refused" ] && [ "$rf_hard" = 0 ]; then POOL_REFUSED_ONLY=1; fi
-  rm -rf "$out"
+  rm -rf "$out"; trap - EXIT INT TERM HUP
   return $rc
 }
 # FIXTURE_POOL_END
