@@ -34,8 +34,10 @@ When a step file says "run sub-step snapshot update", execute:
    dispatched since the last update (`agent name | role | deliverable
    path | dispatched-at | status`, `status: in-flight`) — the deliverable
    path is COPIED FROM THE BRIEF, which Rule 20 requires to name it, never
-   invented here to fill the cell. When a deliverable is consumed, set that
-   row's `status` to `delivered-reachable` if the teammate is still alive and
+   invented here to fill the cell, and `dispatched-at` is the output of
+   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>` (the
+   timestamp of the dispatch's spawn-ledger row), never a clock reading.
+   When a deliverable is consumed, set that row's `status` to `delivered-reachable` if the teammate is still alive and
    you may message it again, and **DELETE** the row outright once you will not.
    The one exception is a teammate STOPPED before it delivered: `steps/handoff.md`
    step 1 sets its `status` to `stopped` and KEEPS the row, because a successor

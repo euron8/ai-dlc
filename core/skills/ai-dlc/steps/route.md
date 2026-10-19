@@ -733,7 +733,8 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   - Locked Decisions (empty)
   - In-Flight Teammates (empty table, header row only:
     `agent | role | deliverable | dispatched-at | status`; rows are added
-    at dispatch as `in-flight`, become `delivered-reachable` at join if the
+    at dispatch as `in-flight`, `dispatched-at` filled from
+    `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>`, never a clock, become `delivered-reachable` at join if the
     teammate may still be messaged, and are deleted — never struck — once
     it will not be. The one exception is a HANDOFF: `steps/handoff.md`
     step 1 rewrites each stopped teammate's row to `stopped` and keeps it,

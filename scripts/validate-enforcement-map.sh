@@ -4989,6 +4989,19 @@ i33d_scan() { # i33d_scan <file> -> offending non-comment line(s), if any
   grep -nE "$i33d_pat" "$1" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#'
 }
 
+i33d_ship_hits() { # i33d_ship_hits <fixtures-root> -> each SHIPPING walk-up file, one per line
+  # The fixture dir is the first path component under the root, by parameter expansion only
+  # (no dirname fork per step), and .dist-only is checked BEFORE i33d_scan runs.
+  local _root="$1" _sf _fd _r
+  for _sf in $(grep -rlE "$i33d_pat" "$_root" --include='*.sh' 2>/dev/null | sort); do
+    _fd="${_sf#"$_root"/}"
+    _fd="$_root/${_fd%%/*}"
+    [ -f "$_fd/.dist-only" ] && continue
+    _r="$(i33d_scan "$_sf")"
+    if [ -n "$_r" ]; then echo "$_sf"; fi
+  done
+}
+
 i33d_probe="$(mktemp -d 2>/dev/null)"
 if [ -n "$i33d_probe" ] && [ -d "$i33d_probe" ]; then
   printf '_d="$HERE"\nwhile [ "$_d" != "/" ]; do\n  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi\n  _d="$(dirname "$_d")"\ndone\n' > "$i33d_probe/bad1.sh"
@@ -4997,10 +5010,21 @@ if [ -n "$i33d_probe" ] && [ -d "$i33d_probe" ]; then
   i33d_p1="$(i33d_scan "$i33d_probe/bad1.sh" | grep -c . || true)"
   i33d_p2="$(i33d_scan "$i33d_probe/bad2.sh" | grep -c . || true)"
   i33d_pn="$(i33d_scan "$i33d_probe/ok.sh"   | grep -c . || true)"
+  # SHIP-SET FILTER, both directions, through the SAME function the corpus loop calls: a shipping
+  # fixture's nested walk-up file must be reported, a .dist-only fixture's identical file must not.
+  mkdir -p "$i33d_probe/fx/ship-a/sub" "$i33d_probe/fx/dist-b/sub"
+  printf '_d="$HERE"\nwhile [ "$_d" != "/" ]; do\n  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi\n  _d="${_d%%/*}"\ndone\n' > "$i33d_probe/fx/ship-a/sub/x.sh"
+  cp "$i33d_probe/fx/ship-a/sub/x.sh" "$i33d_probe/fx/dist-b/sub/x.sh"
+  printf 'probe: not shipped\n' > "$i33d_probe/fx/dist-b/.dist-only"
+  i33d_fo="$(i33d_ship_hits "$i33d_probe/fx")"
+  i33d_fa="$(printf '%s\n' "$i33d_fo" | grep -c '/ship-a/sub/x\.sh$' || true)"
+  i33d_fb="$(printf '%s\n' "$i33d_fo" | grep -c '/dist-b/' || true)"
   rm -rf "$i33d_probe"
   [ "$i33d_p1" -eq 0 ] && err "I106's positive probe (the if/break walk) was NOT reported. That is the spelling v0.491.0 shipped, so a clean corpus result would mean nothing."
   [ "$i33d_p2" -eq 0 ] && err "I106's negated-test probe (the while ! -f walk) was NOT reported, so the grammar covers only one of the two spellings in the corpus."
   [ "$i33d_pn" -ne 0 ] && err "I106's negative probe WAS reported: a three-up self-rooted resolver, with the walk quoted only in a comment, was flagged. That is the remedy this invariant prescribes, and flagging it would make the check unsatisfiable."
+  [ "$i33d_fa" -eq 0 ] && err "I106's ship-set filter probe (a SHIPPING fixture with a nested walk-up file) was NOT reported, so the filter can skip a shipping fixture and a clean corpus result would mean nothing."
+  [ "$i33d_fb" -ne 0 ] && err "I106's ship-set filter probe WAS reported for a .dist-only fixture carrying the same walk-up file. That fixture never reaches a consumer and walking for VERSION is its correct resolver, so flagging it would make the check unsatisfiable."
 else
   err "I106 could not create its probe directory, so neither direction of its scanner was proven this run."
 fi
@@ -5009,12 +5033,8 @@ i33d_hits=""
 i33d_ship_n=0
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
   # CANDIDATES first, one recursive grep; the ship-set filter is paid only on matched files.
-  for _sf in $(grep -rlE "$i33d_pat" "$REPO_ROOT/core/fixtures" --include='*.sh' 2>/dev/null | sort); do
-    _fd="$(dirname "$_sf")"
-    while [ "$_fd" != "$REPO_ROOT/core/fixtures" ] && [ "$(dirname "$_fd")" != "$REPO_ROOT/core/fixtures" ]; do _fd="$(dirname "$_fd")"; done
-    [ -f "$_fd/.dist-only" ] && continue
-    _r="$(i33d_scan "$_sf")"
-    [ -n "$_r" ] && i33d_hits="$i33d_hits ${_sf#$REPO_ROOT/}"
+  for _sf in $(i33d_ship_hits "$REPO_ROOT/core/fixtures"); do
+    i33d_hits="$i33d_hits ${_sf#$REPO_ROOT/}"
   done
   i33d_ship_n="$(ls -d "$REPO_ROOT"/core/fixtures/*/ 2>/dev/null | while IFS= read -r _d; do [ -f "$_d.dist-only" ] || echo x; done | grep -c x || true)"
 fi

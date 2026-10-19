@@ -36441,3 +36441,31 @@ Owed: a Stop whose transcript cannot be parsed or read, or that runs with no `jq
 verify: sh bash core/fixtures/handoff-completion-assertion/receipt-bl700.sh
 
 
+## BL-668 — no shipped program creates the owed-derivations record, so "absent" is every clean consumer's normal state and BL-652's UNMEASURED line prints at every resume
+
+**NOTE.** Raised by the batch-236 contract adversary, filed by ai-dlc-77 [ab5b1f]. `core/scripts/check-owed-derivations.sh` reads `_bmad-output/ai-dlc-update/owed-derivations.tsv`. Its only writer, `reconcile/derivation-differential.sh --record-owed`, APPENDS NEWLY-FAILING rows and creates the file only when it has a row to write. `core/skills/ai-dlc-update/SKILL.md:1797` describes the record in prose. So a consumer whose reconciles never left a derivation broken has no record at all. Once BL-652 ships, "absent" prints `UNMEASURED` on every resume (`steps/route.md:250`) and every planning gate (Check 37), and the line stops meaning anything because it is always there.
+
+Owed: a reconcile that runs the derivation differential writes the record even when it has nothing to record (a header-only or empty file), so "absent" means "no reconcile has ever measured this tree" and "present with 0 OWED rows" means "measured, nothing owed". Probe: a reconcile with zero NEWLY-FAILING rows leaves a record behind, and `check-owed-derivations.sh` then prints the empty-record line, not the absent one. Control: a tree never reconciled still prints the absent line.
+
+Related: BL-652 (the UNMEASURED lines), BL-587.
+
+**LANDED (v0.874.0, verified d1269d974ddfad8f00075497cee6cca7660f7fdd).** derivation-differential.sh --record-owed creates the record empty on every run that passes its refusals, so an absent record means never measured, and receipt-bl668 drives the shipping writer and reader.
+
+verify: sh bash core/fixtures/owed-derivations/receipt-bl668.sh
+
+Built (batch 236): `derivation-differential.sh --record-owed` now creates the record (empty file, the form `check-owed-derivations.sh` reads as "present with 0 OWED rows") on every run that passes its refusals, and SKILL.md tells the reconcile to pass `--record-owed` whenever it runs the worklist row's command. No per-run invocation exists: `apply.sh` emits the differential only as a WORKLIST row when a range-changed path is named, and the script refuses on zero derivations, so a pull with no hits never reaches the writer.
+
+## BL-696 — I106's ship-set filter loop has no probe, and forks two `dirname`s per candidate before it checks `.dist-only`
+
+**DEFECT.** The loop at `scripts/validate-enforcement-map.sh:4942-4948` (the `for _sf in $(grep -rlE "$i33d_pat" ...)` loop that walks each candidate up to its fixture directory, then `continue`s on `[ -f "$_fd/.dist-only" ]`) is exercised by none of I106's three probes (`:4924-4933` drive only `i33d_scan`). A wrong walk could silently skip a shipping fixture, or admit a `.dist-only` one, and still pass: a check that cannot fire.
+
+Cost: the loop forks `dirname` twice per candidate before it checks `.dist-only`. There were 15 candidates at c295c4a0, about 30 forks per run of the pole validator, and every new walk-up fixture adds 2 (BL-643's `pregate-self-check` added the +2 behind BL-608's A3b going red on the batch 236 VALIDATORS tip).
+
+Owed, in order: first, a ship-set-filter probe seed (a shipping walk-up fixture must be reported, a `.dist-only` one must not, in both directions). Second, the `.dist-only`-first reorder with builtin `${f%/*}` in place of `dirname`, verified by that probe and a by-arm fork count. Filed by batch 236 VALIDATORS.
+
+Built (batch 236): the ship-set filter is now `i33d_ship_hits <fixtures-root>` in `scripts/validate-enforcement-map.sh`. It takes the fixture directory by parameter expansion (`${f#"$root"/}`, `${f%%/*}`) with no `dirname` fork, and checks `.dist-only` before `i33d_scan`. The corpus loop and a new probe call that one function: a mini tree with a shipping `ship-a/sub/x.sh` walk-up (must be reported) and a `.dist-only` `dist-b/sub/x.sh` with the same walk (must not). The receipt mutates a copy so the filter skips every candidate and requires I106 to name the ship-set filter probe. The by-arm fork count is left to the owner.
+
+**LANDED (v0.874.0, verified d1269d974ddfad8f00075497cee6cca7660f7fdd).** I106's ship-set filter is one function shared by a new two-direction probe and the corpus, checks .dist-only before scanning with no dirname fork, and receipt-bl696 kills a skip-shipping mutant and an admit-.dist-only mutant, each by its own err text.
+
+verify: sh bash core/fixtures/enforcement-map-derivations/receipt-bl696.sh
+

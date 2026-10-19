@@ -179,7 +179,9 @@ Why no arm. Any tolerance is a number chosen after seeing the corpus, and checks
 
 Open: the row-side defect (stamp the row from the ledger `ts`). Recommendation, not filed: if the In-Flight row recorded the dispatch's `tool_use_id`, a binary late arm (the stamp differs from its own ledger `ts`) would need no tolerance.
 
-verify: manual
+**Built (batch 236): the row-side half is closed; the entry stays PARTIAL.** `core/scripts/wait-for-deliverable.sh --dispatch-ts <agentId|toolu_id>` prints the `ts` of that dispatch's spawn-ledger row verbatim and writes nothing (it takes the `--status` no-write path: no state dir, no lease). It resolves the id through the same `dispatch_epoch_of` the `--dispatch` beat uses, so there is one resolver, and an id with no single ledger row is refused (exit 64) with that function's text. `_gate-procedures.md` step 3 and `route.md`'s In-Flight table text tell the lead to fill `dispatched-at` from it, never from a clock. A row stamped from it equals the ledger `ts`, so `--since <dispatched-at>` passes the `--dispatch` guard's `SINCE > DISPATCH_EPOCH` check on equality. Receipt: a two-row ledger with the subject not first, plus an agentId meta.json. The agentId and toolu_ paths both print 05:00:03Z, which is not the 57 s late 05:01:00Z. The other row prints its own `ts`, and a missing row is refused by name. Run against the shipping script: exit 0. Run against b75ea5439's script: exit 1, through the receipt's own `FAIL: no stamp printed` arm, because that script refuses the flag (`unknown arg`). Not built: no arm judges an existing row. The row still carries no join key, which is the recommendation above.
+
+verify: sh bash core/fixtures/wait-beat-liveness/receipt-bl605.sh
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
@@ -312,16 +314,6 @@ The contract is `core/skills/ai-dlc-update/SKILL.md:1986`: "Read the entry again
 The verdicts look right this time. The filer searched for 9 retired-rule phrases across every extension and found none (control token 0). The defect is that nothing would have caught a wrong verdict. A register row is entry, core file, sha and verdict, with no field tying the verdict to a read of the entry, and the open backlog does not cover this (0 matches for `HARD-LAYER-ADJUDICATION-MISSING`). The clearing path is derived, traced by the filer on graph's installed 0.803.0 copies and re-checked at origin/main. `core/skills/ai-dlc-update/reconcile/layer-drift.sh:766-768` reads "every row whose status is such a clause's code must have a verdict recorded in the consumer's register under the subject digest it fired on, or the pull blocks". The key is (clause, `subject_digest`) plus a verdict, and nothing else is consulted. `core/schemas/layer-adjudication-register.json` requires `clause`, `entry`, `subject_digest`, `verdict`, `recorded_utc` and `reason`, and its optional fields are `supersedes`, `owed`, `closes_owed` and `withdraws`. No field carries read evidence. `reason` is free text, and these nine rows satisfy it with the grep sentence. So a schema-valid row whose digest is copied from `--list-adjudications` clears LC-A1, whatever its `reason` says.
 
 Owed: put the evidence in the row, for example a required `read:` field naming the entry's sha or line span compared against the core hunks. Or have the re-read emit a per-entry diff excerpt that the operator question must quote. Receipt: a row with a verdict and no read evidence keeps LC-A1 HARD, and a row with valid read evidence clears it (control).
-
-verify: manual
-
-## BL-668 — no shipped program creates the owed-derivations record, so "absent" is every clean consumer's normal state and BL-652's UNMEASURED line prints at every resume
-
-**NOTE.** Raised by the batch-236 contract adversary, filed by ai-dlc-77 [ab5b1f]. `core/scripts/check-owed-derivations.sh` reads `_bmad-output/ai-dlc-update/owed-derivations.tsv`. Its only writer, `reconcile/derivation-differential.sh --record-owed`, APPENDS NEWLY-FAILING rows and creates the file only when it has a row to write. `core/skills/ai-dlc-update/SKILL.md:1797` describes the record in prose. So a consumer whose reconciles never left a derivation broken has no record at all. Once BL-652 ships, "absent" prints `UNMEASURED` on every resume (`steps/route.md:250`) and every planning gate (Check 37), and the line stops meaning anything because it is always there.
-
-Owed: a reconcile that runs the derivation differential writes the record even when it has nothing to record (a header-only or empty file), so "absent" means "no reconcile has ever measured this tree" and "present with 0 OWED rows" means "measured, nothing owed". Probe: a reconcile with zero NEWLY-FAILING rows leaves a record behind, and `check-owed-derivations.sh` then prints the empty-record line, not the absent one. Control: a tree never reconciled still prints the absent line.
-
-Related: BL-652 (the UNMEASURED lines), BL-587.
 
 verify: manual
 
@@ -534,12 +526,10 @@ verify: sh D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodi
 
 verify: manual
 
-## BL-696 — I106's ship-set filter loop has no probe, and forks two `dirname`s per candidate before it checks `.dist-only`
+## BL-706 — no reconcile step runs the derivation differential on every pull, so a consumer whose pulls never hit a derivation never gets an owed-derivations record
 
-**DEFECT.** The loop at `scripts/validate-enforcement-map.sh:4942-4948` (the `for _sf in $(grep -rlE "$i33d_pat" ...)` loop that walks each candidate up to its fixture directory, then `continue`s on `[ -f "$_fd/.dist-only" ]`) is exercised by none of I106's three probes (`:4924-4933` drive only `i33d_scan`). A wrong walk could silently skip a shipping fixture, or admit a `.dist-only` one, and still pass: a check that cannot fire.
+**NOTE.** Filed by ai-dlc-77 [ab5b1f] from the BL-668 build (batch 236), lead ai-dlc-c8 ruled it a separate cost question with no owner this batch. BL-668 made `reconcile/derivation-differential.sh --record-owed` create the record on every run, so an absent record now means "no reconcile has ever measured this tree". But `reconcile/apply.sh` (~:1346, ~:1495) emits the differential only as a `WORKLIST artifact-derivations` row, and only when a recorded `derived` command names a core path the range changed; the differential refuses on zero derivations, and nothing runs it unconditionally. So a consumer whose pulls never touch a derivation keeps printing `check-owed-derivations.sh`'s absent line. That line is correct (the tree was genuinely never measured), so this is a cost question, not a defect. A per-pull "no changed path, so nothing owed" record was considered and declined (c8): a derivation can read files its command line never names, so that record would be written from intent, not from a measurement.
 
-Cost: the loop forks `dirname` twice per candidate before it checks `.dist-only`. There were 15 candidates at c295c4a0, about 30 forks per run of the pole validator, and every new walk-up fixture adds 2 (BL-643's `pregate-self-check` added the +2 behind BL-608's A3b going red on the batch 236 VALIDATORS tip).
-
-Owed, in order: first, a ship-set-filter probe seed (a shipping walk-up fixture must be reported, a `.dist-only` one must not, in both directions). Second, the `.dist-only`-first reorder with builtin `${f%/*}` in place of `dirname`, verified by that probe and a by-arm fork count. Filed by batch 236 VALIDATORS.
+Owed: decide whether every pull runs the differential (two validator passes per pull) so the record always exists, measuring that cost on a reference consumer before deciding. No owner this batch.
 
 verify: manual
