@@ -3087,7 +3087,7 @@ fi # end rer_phase wg
 if rer_phase pcache; then
 PCV_HITP='emit-report: accepted a recorded PASS ('
 PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V26 PC-V10"
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V32 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10"
 # THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
 # reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
 # such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
@@ -3415,6 +3415,173 @@ pcv_kworld() {
   return 0
 }
 
+# ---- V32..V36: a fifth review's inputs the key could not see, each with a near miss that must HIT ----
+# Every arm: a HIT control, the hole, a cached run that must MISS with the opt-out render's non-zero
+# exit, the hole undone, the record put back (under M-exit3 the missing run records the hole's key,
+# and a near miss read against that record would miss for a reason that is not its own), then the
+# near miss, which must HIT the restored record.
+# pcv_k2miss <id> <tag> <description> -- 0 when the cached run is a fresh render with the opt-out's
+# non-zero exit; otherwise the arm's FAIL verdict, and non-zero.
+pcv_k2miss() {
+  pcv_kstep "$2"
+  if [ "$K_NC" -eq 0 ]; then
+    pcv_x "$1" "FIXTURE BROKEN: the opt-out render after $3 still exits 0, so the change is not one the render sees"; return 1
+  elif pcv_is_miss "$K_NC"; then return 0; fi
+  pcv_x "$1" "$3 did not force a fresh render: [$(pcv_why)], opt-out exits $K_NC -- a recorded PASS answered for a tree it never rendered"
+  return 1
+}
+# pcv_k2near <id> <tag> <hole> <near miss> -- the near miss HITS: the arm's ok verdict, or its FAIL.
+pcv_k2near() {
+  pcv_run "$2.nm" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if pcv_is_hit "$2.nm" "$L_REC"; then
+    pcv_v "$1" "$3 MISSES with the opt-out render's exit $K_NC, and the near miss ($4) HITS"
+  else
+    pcv_x "$1" "near miss ($4) did not HIT: [$(pcv_why)] -- the fix over-refuses"
+  fi
+}
+# One world for V32 (F1), V35 (F5) and V36 (F6), all seeded before the one record: a tracked symlink
+# steps/demo.md -> local/demo.md with local/ IGNORED, and an extension bound to `fixtures: myfx` with
+# an EMPTY tests/fixtures/myfx. Each arm is undone before the next.
+pcv_k2world() {
+  local p ids="PC-V32 PC-V35 PC-V36" stp=".claude/skills/ai-dlc/steps/demo.md" ent
+  pcv_lat k2 || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  ent="$L_C/.claude/skills/ai-dlc/extensions/adjudicable.md"
+  mkdir -p "$L_C/local" "$L_C/tests/fixtures/myfx" \
+    && mv "$L_C/$stp" "$L_C/local/demo.md" && ln -s ../../../../local/demo.md "$L_C/$stp" \
+    && printf 'local/\n' >> "$L_C/.gitignore" \
+    && awk 'NR==2{print "fixtures: myfx"} {print}' "$ent" > "$PS_D/k2-ent" && cp "$PS_D/k2-ent" "$ent" \
+    && { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm k2seed; } >/dev/null 2>&1 \
+    || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: could not seed the link and the fixture binding"; done; return 0; }
+  pcv_lat_approve k2 || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: the shared world rendered no region"; done; return 0; }
+  pcv_run k2.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    for p in $ids; do pcv_x "$p" "control: the shared world's first --verify did not render and record ($(pcv_why))"; done; return 0
+  fi
+
+  # V32 (F1): the IGNORED target of a tracked symlink is edited; git sees nothing, the detectors read
+  # the target. Near miss: the same link, its target restored byte for byte.
+  if pcv_kctl PC-V32; then
+    cp "$L_C/local/demo.md" "$PS_D/k32-target.keep"
+    printf '\n## Local rule\n\nconsumer-only text\n' >> "$L_C/local/demo.md"
+    if pcv_k2miss PC-V32 k32 "an edit to the IGNORED in-tree target of a tracked symlink"; then
+      cp "$PS_D/k32-target.keep" "$L_C/local/demo.md"; pcv_kback
+      pcv_k2near PC-V32 k32 "an edit to the IGNORED in-tree target of a tracked symlink" "the link to its unchanged ignored target"
+    fi
+    cp "$PS_D/k32-target.keep" "$L_C/local/demo.md"; pcv_kback
+  fi
+
+  # V35 (F5): the EMPTY directory a bound fixture names is removed; git lists neither state. Near
+  # miss: an empty directory outside every read root (tmp/scratch).
+  if pcv_kctl PC-V35; then
+    rmdir "$L_C/tests/fixtures/myfx"
+    if pcv_k2miss PC-V35 k35 "removing the EMPTY tests/fixtures/myfx a bound extension names"; then
+      mkdir -p "$L_C/tests/fixtures/myfx"; pcv_kback
+      mkdir -p "$L_C/tmp/scratch"
+      pcv_k2near PC-V35 k35 "removing the EMPTY tests/fixtures/myfx a bound extension names" "an empty tmp/scratch outside every read root"
+      rmdir "$L_C/tmp/scratch" "$L_C/tmp"
+    fi
+    mkdir -p "$L_C/tests/fixtures/myfx"; pcv_kback
+  fi
+
+  # V36 (F6): a non-repository directory named `.git` under overrides/. A refusal arm: the empty
+  # directory ALONE must record nothing, then an override beneath it must miss. The near miss is the
+  # consumer's own top-level `.git`, present in every HIT control above and in the one after the undo.
+  if pcv_kctl PC-V36; then
+    mkdir -p "$L_C/.claude/skills/ai-dlc/overrides/.git"
+    if pcv_krefuse PC-V36 k36 "a non-repository overrides/.git directory"; then
+      printf -- '---\nshadows: steps/demo.md#gamma\n---\n\n## Gamma\n\nlocal\n' > "$L_C/.claude/skills/ai-dlc/overrides/.git/o.md"
+      if pcv_k2miss PC-V36 k36 "an override under a non-repository overrides/.git"; then
+        mv "$L_C/.claude/skills/ai-dlc/overrides/.git" "$PS_D/k36-dotgit-aside"; pcv_kback
+        pcv_k2near PC-V36 k36 "an empty overrides/.git recorded nothing, and an override under it" "only the top-level .git, after the undo"
+      fi
+    fi
+    [ -d "$L_C/.claude/skills/ai-dlc/overrides/.git" ] && mv "$L_C/.claude/skills/ai-dlc/overrides/.git" "$PS_D/k36-dotgit-aside2"
+    pcv_kback
+  fi
+  return 0
+}
+# V33 (F2), its own world: `* text=auto` committed. A CRLF save of the installed steps/demo.md, once
+# staged, is the same LF blob, so index and status are clean while the detectors cmp the CRLF bytes.
+# Near miss: the LF file staged again after the record, the common consumer state. Staged by path,
+# never `add -A`, which would stage the report file too.
+pcv_k3world() {
+  local stp=".claude/skills/ai-dlc/steps/demo.md"
+  pcv_lat k3 || { pcv_x PC-V33 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  printf '* text=auto\n' >> "$L_C/.gitattributes" \
+    && { git -C "$L_C" add .gitattributes && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm k3seed; } >/dev/null 2>&1 \
+    || { pcv_x PC-V33 "FIXTURE BROKEN: could not commit * text=auto"; return 0; }
+  pcv_lat_approve k3 || { pcv_x PC-V33 "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  pcv_run k3.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    pcv_x PC-V33 "control: the world's first --verify did not render and record ($(pcv_why))"; return 0
+  fi
+  pcv_kctl PC-V33 || return 0
+  cp "$L_C/$stp" "$PS_D/k33-lf.keep"
+  awk '{ printf "%s\r\n", $0 }' "$PS_D/k33-lf.keep" > "$L_C/$stp"
+  git -C "$L_C" add -- "$stp" >/dev/null 2>&1
+  if pcv_k2miss PC-V33 k33 "a CRLF save of steps/demo.md, staged under * text=auto (index and status clean)"; then
+    cp "$PS_D/k33-lf.keep" "$L_C/$stp"; git -C "$L_C" add -- "$stp" >/dev/null 2>&1; pcv_kback
+    pcv_k2near PC-V33 k33 "a CRLF save of steps/demo.md, staged under * text=auto (index and status clean)" "the LF file staged again under * text=auto"
+  fi
+  return 0
+}
+# V37 (F3), its own world: the consumer sets core.checkStat=minimal and core.trustctime=false before the
+# record, then rewrites steps/demo.md in place at the same size and puts its mtime back. Plain status
+# trusts the stat entry; the key's forced options do not. Near miss: the same config, no file touched,
+# which is the HIT control itself.
+pcv_k5world() {
+  local stp=".claude/skills/ai-dlc/steps/demo.md"
+  pcv_lat k5 || { pcv_x PC-V37 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  git -C "$L_C" config core.checkStat minimal && git -C "$L_C" config core.trustctime false \
+    || { pcv_x PC-V37 "FIXTURE BROKEN: could not set core.checkStat and core.trustctime"; return 0; }
+  pcv_lat_approve k5 || { pcv_x PC-V37 "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  pcv_run k5.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    pcv_x PC-V37 "control: the world's first --verify did not render and record ($(pcv_why))"; return 0
+  fi
+  pcv_kctl PC-V37 || return 0
+  touch -r "$L_C/$stp" "$PS_D/k37-stamp"
+  sed 's/Alpha/Alphx/' "$L_C/$stp" > "$PS_D/k37-edit"
+  if cmp -s "$PS_D/k37-edit" "$L_C/$stp" || [ "$(wc -c < "$PS_D/k37-edit")" -ne "$(wc -c < "$L_C/$stp")" ]; then
+    pcv_x PC-V37 "FIXTURE BROKEN: the in-place rewrite changed nothing, or changed the size"; return 0
+  fi
+  cat "$PS_D/k37-edit" > "$L_C/$stp" && touch -r "$PS_D/k37-stamp" "$L_C/$stp"
+  if pcv_k2miss PC-V37 k37 "a same-size, mtime-kept rewrite of steps/demo.md under core.checkStat=minimal and core.trustctime=false"; then
+    pcv_v PC-V37 "a same-size, mtime-kept rewrite under core.checkStat=minimal and core.trustctime=false MISSES with the opt-out render's exit $K_NC, and the near miss (the same config, no file touched) HIT as the control"
+  fi
+  return 0
+}
+# V34 (F4), its own world: two dist commits move core/git-hooks/pre-push, which map_consumer sends to
+# .githooks/, and the consumer IGNORES .githooks/ and build/. The ignored hook is edited after the
+# record. Near miss: an ignored build/x, under no read root.
+pcv_k4world() {
+  pcv_lat k4 || { pcv_x PC-V34 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  mkdir -p "$L_D/core/git-hooks" "$L_C/.githooks" \
+    && printf '#!/bin/sh\necho v1\n' > "$L_D/core/git-hooks/pre-push" \
+    && { git -C "$L_D" add -A && git -C "$L_D" -c user.email=f@f -c user.name=fixture commit -qm hookv1; } >/dev/null 2>&1 \
+    && printf '#!/bin/sh\necho v2\n' > "$L_D/core/git-hooks/pre-push" \
+    && { git -C "$L_D" add -A && git -C "$L_D" -c user.email=f@f -c user.name=fixture commit -qm hookv2; } >/dev/null 2>&1 \
+    && L_B="$(git -C "$L_D" rev-parse HEAD~1)" && L_T="$(git -C "$L_D" rev-parse HEAD)" \
+    && printf '#!/bin/sh\necho v1\n' > "$L_C/.githooks/pre-push" \
+    && printf '.githooks/\nbuild/\n' >> "$L_C/.gitignore" \
+    && { git -C "$L_C" add .gitignore && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm k4seed; } >/dev/null 2>&1 \
+    || { pcv_x PC-V34 "FIXTURE BROKEN: could not seed the hook commits and the ignored .githooks/"; return 0; }
+  pcv_lat_approve k4 || { pcv_x PC-V34 "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  pcv_run k4.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    pcv_x PC-V34 "control: the world's first --verify did not render and record ($(pcv_why))"; return 0
+  fi
+  pcv_kctl PC-V34 || return 0
+  cp "$L_C/.githooks/pre-push" "$PS_D/k34-hook.keep"
+  printf '#!/bin/sh\necho v1\necho local guard\n' > "$L_C/.githooks/pre-push"
+  if pcv_k2miss PC-V34 k34 "an edit to an IGNORED .githooks/pre-push, a map_consumer destination"; then
+    cp "$PS_D/k34-hook.keep" "$L_C/.githooks/pre-push"; pcv_kback
+    mkdir -p "$L_C/build" && printf 'artifact\n' > "$L_C/build/x"
+    pcv_k2near PC-V34 k34 "an edit to an IGNORED .githooks/pre-push, a map_consumer destination" "an ignored build/x under no read root"
+  fi
+  return 0
+}
+
 # pcv_suite <emit> <dir> -- every PC-V arm against that engine; one verdict line per id in <dir>/verdicts.
 pcv_suite() {
   PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""
@@ -3658,6 +3825,12 @@ pcv_suite() {
 
   # ---- V27..V31: inputs the key REFUSES or keys after a fourth review, in ONE shared world ----
   pcv_kworld
+
+  # ---- V32..V36: a fifth review's key gaps, two worlds of their own ----
+  pcv_k2world
+  pcv_k3world
+  pcv_k4world
+  pcv_k5world
 
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
   # The world is layer-adjudication-tier's seed (its own git top level, one adjudicable row). The

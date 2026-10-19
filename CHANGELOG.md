@@ -19,6 +19,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.878.0] - 2026-10-19
+
+Batch 236, BL-685 key-fix release (owned and gated by ai-dlc-69 [9599d6], formerly ai-dlc-77 [e29316]; lead ai-dlc-37). Advances BL-685, which
+stays open: an adversary round on 0.859.0's hardened recorded-PASS key found six gaps, and all six are fixed here.
+The cache stays off by default. Closes no `PC-` id. Net for this release: 0 closed, 0 filed.
+
+### The recorded-PASS key covers six more render inputs (BL-685, adversary round 5)
+
+Each finding was probed on the 0.859.0 engine, where a cached `--verify` accepted a stale PASS that a fresh
+render refused. Each fix is probed both ways: the gap now misses, and a named near miss still hits.
+
+- **F1 (BLOCKER).** A tracked symlink to an IGNORED in-tree file passed the inside-root check while no field
+  hashed its target, so an edit made through the link hit. The resolved file's raw bytes are now hashed, in
+  consindex's symlink arm and in the listed-path hash. A link to a directory is refused. Near miss: a link to a
+  tracked file still misses on an edit and hits when nothing changed.
+- **F2 (BLOCKER).** Under `* text=auto` a CRLF save re-staged as the same LF blob, so index and status read clean
+  while the detectors compare raw bytes. When `core.autocrlf`, `core.eol` or a text, eol, filter or ident
+  attribute can normalise content, consindex now keys every tracked file's raw bytes. Nothing is refused. Near
+  miss: an LF file staged under `text=auto` keeps its key.
+- **F3 (DEFECT).** Under `core.checkStat=minimal` with `core.trustctime=false`, a same-size rewrite that kept the
+  file's mtime left status clean; 0.859.0 hit while a fresh render exited 1 with a HARD row. The key's git calls
+  now force `core.trustctime=true` and `core.checkStat=default`. Filed as hardening, retiered to DEFECT once the
+  probe showed the stale hit.
+- **F4 (DEFECT).** The ignored-file section's roots were hand-written and omitted `.githooks`, so an ignored hook
+  edit hit. The roots now come from `preclassify.sh`'s `map_consumer`. Near miss: an ignored file under an
+  unmapped directory keeps the key.
+- **F5 (DEFECT).** An empty directory is invisible to git while the detectors test `[ -d ]`, so removing an empty
+  bound fixture directory hit. The key now lists every empty directory under the read roots. Near miss: an empty
+  directory outside every root keeps the key.
+- **F6 (BLOCKER).** A non-repository directory named `.git` below the consumer root is skipped by every git
+  listing while `layer-drift.sh`'s `find` reads beneath it, so a stale PASS hid a
+  HARD-OVERRIDE-BASE-UNRESOLVABLE row. The key now refuses any `.git` path component below the root, as a miss
+  that leaves the record untouched. Near miss: the repository's own top-level `.git` does not refuse.
+- `reconcile-emit-report` arms PC-V32..PC-V37 hold the six. PC-V29 (a nested repository) keeps its verdict, a
+  refusal miss, but now reaches it through F6's `.git` check, before the listed-path hash's refusal: same
+  verdict, different path.
+
+### Limits
+- Measured on the release branch, through `hermetic-run.sh` into the shared verdict store: 85 declared units
+  PASS, the set derived from every `inputs.decl` naming a changed file or a directory holding one, plus the
+  release-file and anchor units. `reconcile-emit-report` shard a PASS, 104 assertions: PC-V29 and PC-V32..PC-V37
+  each read `ok` by name, 38 PC-V ids ok, and M-region, M-direxcl and M-exit3 fail exactly [PC-V3], [PC-V10] and
+  [PC-V9 PC-V10]. These arms ran under BL-620's read-evidence rule.
+- Not covered: F1's directory form, a symlinked read root. Its probe did not discriminate on the 0.859.0 engine,
+  so the gap is neither shown nor claimed closed. A directory-target link is refused, which is the advisable
+  hardening, not a measured fix.
+- The cache default stays OFF. Turning it on needs adversary round 6, a full join on this engine, to return no
+  BLOCKER, and then a lead ruling.
+
+
 ## [0.877.0] - 2026-10-19
 
 **On graph's next pull this release raises blocking rows, by the operator's ruling ("Ship as is").** A recorded layer verdict now clears its row only if the record carries `read` evidence: one line copied verbatim from the entry's body and one from the core text the row names for its clause. Graph's register holds 1011 records and none carries `read`, so every current verdict stops clearing. Measured on a scratch copy of graph, fixed engine against the base engine 9ad0e21c: over e91b4d86..b503b232, 21 of 21 current verdicts stop clearing, and the pull gains 15 blocking `HARD-LAYER-ADJUDICATION-MISSING` (LC-A1) rows plus 8 `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) warning rows; over b503b232..9ad0e21c, 8 of 8 stop clearing, with 0 blocking rows and 8 warning rows. That is 15 blocking and 16 warning rows across the two ranges. **The remedy is the one each row prints:** "Append a NEW line to `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` with clause <clause>, subject_digest <digest>, your verdict and reason. The record must also carry `read`: {"entry_line": <a line copied verbatim from this entry's body>, "core_line": <the core text the row names>}, each at least 20 characters after trimming, at least 10 of them letters or digits, and not a heading." Re-read each entry once against the core change; recorded with `read`, the verdict clears thereafter.

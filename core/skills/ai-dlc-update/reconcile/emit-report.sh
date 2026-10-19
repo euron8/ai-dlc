@@ -91,13 +91,18 @@
 #                and of the global attributes file `git var GIT_ATTR_GLOBAL` names, and the
 #                auto-abbrev length of theirs -- every rendered `%h` comes from <dist>;
 #   consroot     `pwd -P` of <consumer> and <consumer> as typed: the region prints both forms;
-#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness);
+#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness), the RAW bytes of
+#                each tracked symlink's in-tree target, and, when a `text`/`eol`/`filter`/`ident`
+#                attribute, `core.autocrlf` or `core.eol` can normalise content, the RAW bytes of
+#                every tracked file;
 #   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
 #                untracked path, EXCLUDING ONLY the report file itself (never its directory: the
 #                adjudication register and the push-candidate ledger live beside it and are inputs);
 #   consignored  name, bytes and exec bit of every IGNORED file under the engine's read roots:
 #                `.claude/` (not `.claude/worktrees/`), `_bmad-output/`, every `corpus-root:` in
-#                predicate-sites.md, and the other consumer paths the detectors name;
+#                predicate-sites.md, the other consumer paths the detectors name, and every
+#                destination preclassify.sh's map_consumer writes; then every EMPTY directory under
+#                those roots, which no git listing names;
 #   consobjects  <consumer>'s `for-each-ref`, its EFFECTIVE `config --list`, and the same four
 #                git-dir and attributes files as distrefs;
 #   consresolve  each override `base_sha` and the stamp's `commit:` / `skill_commit:`, resolved as a
@@ -119,8 +124,10 @@
 #     before the record and both sides match;
 #   - a NESTED REPOSITORY, untracked (`dir/` in the listing) or tracked (a gitlink): git lists none of
 #     its files;
-#   - a tracked or listed SYMLINK whose chain does not end at an existing path inside <consumer>: the
-#     key hashes the link, the detectors read the target;
+#   - a tracked or listed SYMLINK whose chain does not end at an existing path inside <consumer>, or
+#     ends at a DIRECTORY: the key hashes the link, the detectors read the target;
+#   - a path component named `.git` anywhere below the consumer root (other than its own top-level
+#     `.git` and `.claude/worktrees`): git lists nothing beneath it, repository or not;
 #   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
 #
@@ -1028,9 +1035,11 @@ fi
 # empty `:(exclude)`: that excludes the WHOLE tree and reads as an empty one.
 # `core.fileMode=true` because the render reads the exec bit (the consumer's validator runs only if
 # `-x`; preclassify tests `-x`), and a consumer set to `false` would hide a chmod from status.
+# `core.trustctime=true` and `core.checkStat=default` for the same reason: a consumer that relaxes
+# either lets status trust a stat entry that a same-size rewrite left looking current.
 er_cgit() {
-  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"
-  else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
+  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"
+  else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi
 }
 # er_link_inside <abs-path> -- 0 when the symlink chain at <abs-path> ends at an existing path whose
 # directory resolves INSIDE the consumer root. The key hashes a link's own blob, while the detectors
@@ -1038,6 +1047,7 @@ er_cgit() {
 # outside file, cached 0 where a fresh render gave 3) or a dangling or looping chain is a MISS.
 er_link_inside() {
   local p="$1" t d n=0
+  _er_lt=""
   while [ -L "$p" ]; do
     n=$((n + 1)); [ "$n" -le 40 ] || return 1
     t="$(readlink "$p")" || return 1
@@ -1045,8 +1055,18 @@ er_link_inside() {
   done
   [ -e "$p" ] || return 1
   d="$(cd "$(dirname "$p")" 2>/dev/null && pwd -P)" || return 1
-  case "$d/" in "$_er_root"/*) return 0 ;; esac
+  case "$d/" in "$_er_root"/*) _er_lt="$p"; return 0 ;; esac
   return 1
+}
+# er_link_target <abs-link> -- a symlink whose chain stays inside the root (er_link_inside), then the
+# RAW bytes of the file it ends at. The link's own blob is not what the detectors read: a tracked
+# link to an IGNORED in-tree file outside every consignored root left the target unkeyed (measured:
+# cached 0 where a fresh render gave 1). A target that is a DIRECTORY is a MISS: git lists the link
+# alone, and the detectors walk the files beneath it.
+er_link_target() {
+  er_link_inside "$1" || return 1
+  [ -n "$_er_lt" ] && [ ! -d "$_er_lt" ] && [ -f "$_er_lt" ] || return 1
+  git hash-object --no-filters -- "$_er_lt" || return 1
 }
 # er_hash_list <NUL-listfile> -- for each listed consumer path that exists: its exec bit and name,
 # NUL-terminated, then the content hashes in the same order. An entry ending `/` is a NESTED
@@ -1063,7 +1083,7 @@ er_hash_list() {
   : > "$_er_tmp/key.nl" || return 1
   while IFS= read -r -d '' p; do
     case "$p" in */) return 1 ;; esac
-    if [ -L "$CONSUMER/$p" ]; then er_link_inside "$_er_root/$p" || return 1; fi
+    if [ -L "$CONSUMER/$p" ]; then printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" || return 1; fi
     { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
     if [ -x "$CONSUMER/$p" ]; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
     case "$p" in
@@ -1146,9 +1166,37 @@ er_kf_consindex() {
   while IFS= read -r -d '' e; do
     case "$e" in
       160000\ *) return 1 ;;
-      120000\ *) er_link_inside "$_er_root/${e#*"$_er_tab"}" || return 1 ;;
+      120000\ *) er_link_target "$_er_root/${e#*"$_er_tab"}" || return 1 ;;
     esac
   done < "$_er_tmp/key.idx"
+  # Under a NORMALISING attribute or config, `git add` of a CRLF save stores the same LF blob, so the
+  # index and status read clean while the detectors `cmp` the raw CRLF bytes (measured: cached 0
+  # where a fresh render gave 1). Then every tracked file's RAW bytes are keyed, never refused:
+  # `* text=auto` is the common consumer state.
+  if er_normalises; then
+    echo "raw"
+    er_cgit ls-files -z > "$_er_tmp/key.raw" || return 1
+    er_hash_list "$_er_tmp/key.raw" || return 1
+  fi
+}
+# er_normalises -- 0 when git may rewrite a tracked file's bytes between the work tree and the index:
+# `core.autocrlf` other than false, `core.eol` set, or any `text`, `eol`, `filter` or `ident`
+# attribute that applies to a tracked path (`check-attr`, so `.gitattributes`, `info/attributes` and
+# the global and system files all count). Any failure, or a listing a newline in a name could
+# misalign, answers 0: keying more is the safe direction.
+er_normalises() {
+  local v nl
+  v="$(git -C "$CONSUMER" config --get core.autocrlf 2>/dev/null)" || v=""
+  case "$v" in ""|false) ;; *) return 0 ;; esac
+  git -C "$CONSUMER" config --get core.eol >/dev/null 2>&1 && return 0
+  git -C "$CONSUMER" ls-files -z > "$_er_tmp/key.trk" 2>/dev/null || return 0
+  [ -s "$_er_tmp/key.trk" ] || return 1
+  git -C "$CONSUMER" check-attr -z --stdin text eol filter ident < "$_er_tmp/key.trk" > "$_er_tmp/key.ca" 2>/dev/null \
+    || return 0
+  nl="$(LC_ALL=C tr -cd '\n' < "$_er_tmp/key.ca" | wc -c)" || return 0
+  [ "$nl" -eq 0 ] || return 0
+  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.ca" > "$_er_tmp/key.ca-lines" || return 0
+  awk 'NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { f = 1 } END { exit !f }' "$_er_tmp/key.ca-lines"
 }
 # The status names every modified and untracked path; their BYTES are hashed after it. An untracked
 # entry ending in `/` is a nested repository, which er_hash_list refuses as a miss.
@@ -1163,10 +1211,34 @@ er_kf_conswork() {
 # four generated files template-sites.md names, the alternate known-skills location) plus every
 # `corpus-root:` in predicate-sites.md, re-validated with predicate-differential.sh's own refusals:
 # one this cannot use is a MISS, never a narrower key.
+#
+# The roots a pull WRITES are derived from preclassify.sh's own map_consumer, evaluated on one path
+# per `core/<dir>/*` case, so a destination added there is a root here without an edit: the
+# hand-written list omitted `.githooks` (measured: an ignored .githooks/pre-push edit cached 0 where a
+# fresh render moved a bucket). The non-mapped roots stay listed by hand.
+er_mapped_roots() {
+  local fn
+  fn="$(awk '/^map_consumer\(\) *\{/ { f = 1 } f { print } f && /^}/ { exit }' "$SELF/preclassify.sh")" || return 1
+  [ -n "$fn" ] || return 1
+  (
+    eval "$fn" || exit 1
+    printf '%s\n' "$fn" | sed -n 's/^[[:space:]]*\(core\/[^*)[:space:]]*\)\*).*/\1/p' > "$_er_tmp/key.mpat" || exit 1
+    n=0
+    while IFS= read -r p; do
+      d="$(map_consumer "${p}x")" || exit 1
+      case "$d" in *x) d="${d%x}" ;; *) exit 1 ;; esac
+      d="${d%/}"
+      case "$d" in ""|/*|core|core/*) exit 1 ;; esac
+      printf '%s\n' "$d"; n=$((n + 1))
+    done < "$_er_tmp/key.mpat"
+    [ "$n" -ge 2 ] || exit 1
+  )
+}
 er_kf_consignored() {
   local r
   printf '%s\n' .claude _bmad-output scripts/ai-dlc scripts/ai-dlc-local .github/workflows tests \
     skills/ai-dlc/extensions CLAUDE.md QUICKSTART.md docs/coding-conventions.md > "$_er_tmp/key.roots" || return 1
+  er_mapped_roots >> "$_er_tmp/key.roots" || return 1
   sed -n 's/^corpus-root:[[:space:]]*//p' "$SELF/predicate-sites.md" > "$_er_tmp/key.croots" || return 1
   while IFS= read -r r; do
     r="${r%"${r##*[![:space:]]}"}"
@@ -1187,6 +1259,16 @@ er_kf_consignored() {
   LC_ALL=C sort -z -u "$_er_tmp/key.ign" > "$_er_tmp/key.ign-sorted" || return 1
   # er_hash_list emits each name with its exec bit before the bytes: a chmod alone moves this field.
   er_hash_list "$_er_tmp/key.ign-sorted" || return 1
+  # EMPTY DIRECTORIES under the roots: git lists none, and detectors decide on `[ -d ]` alone
+  # (measured: removing an empty tests/fixtures/<name> cached 0 where a fresh render added a row).
+  echo "empty-dirs"
+  : > "$_er_tmp/key.edirs" || return 1
+  while IFS= read -r r; do
+    [ -d "$CONSUMER/$r" ] || continue
+    find "$_er_root/$r" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d -empty -print0 \
+      >> "$_er_tmp/key.edirs" || return 1
+  done < "$_er_tmp/key.roots"
+  LC_ALL=C sort -z -u "$_er_tmp/key.edirs" || return 1
 }
 # The consumer's refs, then its EFFECTIVE config (local, global through $HOME, system): config moves
 # what git prints, and an override's `log -1 --format=%s` runs here.
@@ -1303,6 +1385,13 @@ er_key() {
   _er_unread="$(find "$_er_root" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
     || return 1
   [ -z "$_er_unread" ] || return 1
+  # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS. Every git listing skips it, repository or
+  # not, while a detector's `find` reads beneath it (measured: a non-repo overrides/.git/o.md cached 0
+  # where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE). The consumer's own top-level `.git`
+  # and `.claude/worktrees` are pruned, as above.
+  _er_dotgit="$(find "$_er_root" \( -path "$_er_root/.git" -o -path "$_er_root/.claude/worktrees" \) -prune \
+    -o -name .git -print 2>/dev/null)" || return 1
+  [ -z "$_er_dotgit" ] || return 1
   # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
   # one) and `skip-worktree` (`S`, or `s` with both) make status and `ls-files -m` skip a modified
   # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
