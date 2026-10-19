@@ -108,6 +108,7 @@ core_manifest:
   - core/fixtures/escalation-citation/**
   - core/fixtures/extension-check-adoption/**
   - core/fixtures/escalation-status-vocabulary/**
+  - core/fixtures/enforcement-map-yaml-plain/**
   - core/fixtures/process-rule-pins/**
   - core/fixtures/gate-adjudication/**
   - core/fixtures/gate-adjudication-rotate/**

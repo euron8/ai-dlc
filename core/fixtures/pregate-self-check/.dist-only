@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/pregate-self-check.sh, a distribution-only builder tool: it runs the
+distribution's own .githooks/pre-push prefix and reads scripts/validate-*.sh, none of which a consumer
+has. On a consumer the fixture would find no subject and could only report that it measured nothing.

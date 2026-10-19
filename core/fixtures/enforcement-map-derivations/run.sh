@@ -759,6 +759,30 @@ A17_i84_reader_never_substitutes() {
   fi
 }
 
+# A reader whose slot survives only in a COMMENT is REPORTED. The line that names the placeholder
+# key is replaced by a comment spelling the slot, so the file still contains `{sprint}` and no
+# code line does -- the shape a whole-file grep acquits.
+A17b_i84_slot_only_in_a_comment_is_reported() {
+  t="$(fresh)"
+  if edit "$t/core/scripts/validate-mandatory-rules.sh" \
+       '/stories_dir_sprint_placeholder/ { print "# composes s{sprint} from the template"; next } { print }'; then
+    assert_fires "I84 a reader that names the slot only in a COMMENT is REPORTED" \
+                 "never name its sprint slot"
+  fi
+}
+
+# The mutant of A17b: i84_names_slot reverted to the whole-file `grep -qF` it replaced. The
+# validator's own probe must then report the comment-only seed as scored-as-naming, so the
+# revert dies on a message only the reverted predicate can produce.
+A17c_i84_whole_file_slot_grep_mutant_is_reported() {
+  t="$(fresh)"
+  if edit "$t/scripts/validate-enforcement-map.sh" \
+       '/^  awk -v s="\$i84_slot" / { print "  grep -qF \"$i84_slot\" \"$1\" 2>/dev/null"; next } { print }'; then
+    assert_fires "I84 mutant: i84_names_slot reverted to a whole-file grep is REPORTED by the slot probe" \
+                 "appears ONLY in a comment"
+  fi
+}
+
 # The declaration going missing from its home is REPORTED, rather than leaving every reader
 # resolving an empty template — which composes the repo root, not nothing.
 A18_i84_declaration_missing() {

@@ -126,20 +126,20 @@ checks:
       - core/scripts/validate-suppression-lifetime.sh
     call_sites:
       - site: gate-validation.md Check 2
-        posture: FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
+        posture: "FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
           when no escalations file exists or it holds nothing — IS a pass, because no escalation
           exists to be unresolved; an unreadable or non-regular `pending.md` is a REFUSAL, exit 2
-          with `REFUSED:` on stderr, never a pass)
+          with `REFUSED:` on stderr, never a pass)"
         why: Check 2's own predicate is three branches with no else, so an entry
           on a token outside the published set is neither blocked, surfaced nor
           recorded — no verdict is computed for it and the gate reports PASS.
           The script guards the vocabulary the LLM adjudication branches on; the
           adjudication itself stays llm.
       - site: gate-validation.md Check 2 (suppression lifetime)
-        posture: FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
+        posture: "FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
           with entries_scanned=0 when no escalations file exists or it holds nothing — IS a pass,
           because no escalation exists to be unresolved; an unreadable or non-regular
-          `pending.md` is a REFUSAL, exit 2 with `REFUSED:` on stderr, never a pass)
+          `pending.md` is a REFUSAL, exit 2 with `REFUSED:` on stderr, never a pass)"
         why: RESOLVED and OVERRIDDEN close a QUESTION and name no check, so an
           operator's one-time permission to proceed past a failing check has no
           target and no expiry. Measured on the reference consumer, a hard_block
@@ -162,10 +162,10 @@ checks:
       - core/scripts/validate-escalation-resolution.sh
     call_sites:
       - site: gate-validation.md Check 2a
-        posture: FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
+        posture: "FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
           when no escalations file exists or it holds nothing — IS a pass, because no escalation
           exists to be unresolved; an unreadable or non-regular `pending.md` is a REFUSAL, exit 2
-          with `REFUSED:` on stderr, never a pass)
+          with `REFUSED:` on stderr, never a pass)"
         why: a HARD_BLOCK is operator-gated, so marking it RESOLVED asserts an
           operator adjudication; without a cited, transcript-verified operator
           message that is a lead-authored fabrication (the S290 failure)
@@ -225,7 +225,7 @@ checks:
           FAILS independently of the script on a story whose status moved BACKWARD
           from the value the previous gate-log entry recorded, or which that entry
           recorded and the sprint no longer lists
-        why: the check's own text said "compare status values programmatically"
+        why: "the check's own text said \"compare status values programmatically\"
           and core shipped no program, so the comparison was performed by hand
           at every gate. The three consumer-authored versions of it each went
           vacuously green at least once — a story-id glob that matched none of
@@ -241,7 +241,7 @@ checks:
           the `story_status:` field Check 12 writes into each gate-log entry, read
           back at the NEXT gate. Check 12 is numbered after Check 5, so the comparand
           is necessarily the previous gate's entry, and a sprint's first gate records
-          the absence as evidence rather than failing.
+          the absence as evidence rather than failing."
     ci_workflow: ~
 
   - id: "6"
@@ -437,14 +437,14 @@ checks:
       - core/scripts/validate-escalation-resolution.sh
     call_sites:
       - site: gate-validation.md Check 22 (spawn rows)
-        posture: FAILS the gate on exit 1 and on exit 2; exit 3 says nothing was
+        posture: "FAILS the gate on exit 1 and on exit 2; exit 3 says nothing was
           compared -- either PRE-LEDGER or every in-sprint row outside Rule 19 scope
           -- and hands the verdict back to the gate log's spawn table. Rows outside
           that scope are counted, and any of them NAMED after a declared role is
           reported as a NOTE for the adjudicator rather than failed. Rows the
           dispatch guard did not write are counted separately and never judged:
           the ledger is append-only, so the single-writer premise below is a
-          convention, and an absent field on a foreign row is not an observation
+          convention, and an absent field on a foreign row is not an observation"
         why: the check published three field comparisons per ledger row -- model_bound
           against aiDlcRoles.<role>.model, role_contract_cited true, role_file_readable
           not false -- and the row carried no enforcer, so a teammate performed all
@@ -748,9 +748,9 @@ checks:
       - core/scripts/validate-request-coverage.sh
     call_sites:
       - site: gate-validation.md Check 33
-        posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL;
+        posture: "FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL;
           exit 0 with `NOT-APPLICABLE: EXAMINED NOTHING` is not a pass, nothing was
-          verified — the ask named no identifier)
+          verified — the ask named no identifier)"
         why: >-
           every byte-level guarantee in the pipeline terminates at product-brief.md
           — Check 3b anchors stories to it, Check 30 joins capabilities through it —
@@ -1374,9 +1374,9 @@ non_catalog_units:
           declares nothing cannot bind anything; closing that needs new setup
           placeholders (the v0.63.0 unregistered-drift surface) and is deferred
       - id: effort-applied
-        asserts: for every guard ledger row with `definition_bound: true`, the
+        asserts: "for every guard ledger row with `definition_bound: true`, the
           matching subagent-probe row's transcript `effort` equals
-          `aiDlcRoles.<role>.effort`
+          `aiDlcRoles.<role>.effort`"
         protects: against BL-240's measured gap — a configured effort that is
           recorded but never reaches the API call. Adjudicated at gate-validation
           Check 22's effort arm (`core/scripts/validate-spawn-ledger.sh`), not here;

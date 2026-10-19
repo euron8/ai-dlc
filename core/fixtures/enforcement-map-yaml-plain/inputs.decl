@@ -1,0 +1,2 @@
+# The one file under test; everything else is seeded under mktemp by the fixture itself.
+!core/skills/ai-dlc/enforcement-map.yaml
