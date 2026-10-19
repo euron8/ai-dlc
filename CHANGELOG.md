@@ -19,6 +19,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.874.0] - 2026-10-19
+
+Batch 236 (VALIDATORS-2). BL-696 and BL-668 close. BL-605's row-side half closes, and the entry stays PARTIAL. BL-706 is
+filed as a NOTE with no owner. Net for this release: 2 closed, 1 filed.
+
+### I106's ship-set filter has a probe, and checks .dist-only first (BL-696)
+
+The ship-set filter is now one function, `i33d_ship_hits <fixtures-root>` in `scripts/validate-enforcement-map.sh`, and
+both the probe and the corpus loop call it, so the probe exercises the code the corpus runs. It takes the fixture
+directory by parameter expansion (`${_sf#"$_root"/}`, `${_fd%%/*}`) in place of a `dirname` fork per step, and checks
+`.dist-only` before `i33d_scan` runs.
+
+The probe runs both directions on a mini tree: a shipping `ship-a/sub/x.sh` walk-up file must be reported, and the
+identical file under a `.dist-only` fixture `dist-b` must not. Each direction has its own err text.
+
+The receipt is `core/fixtures/enforcement-map-derivations/receipt-bl696.sh`. It drives the shipping validator on a control
+and two mutants, and each mutant is killed by its own err text. Mutant S replaces the `.dist-only` test with a bare
+`continue`, so a shipping fixture is skipped and the NOT-reported err fires. Mutant D deletes the test, so a `.dist-only`
+fixture is admitted and the WAS-reported err fires.
+
+Fork count, measured by the owner with `scripts/fork-profile.sh --section by-arm`, one reading per tree, in clean detached
+worktrees: main b75ea5439 TOTAL 3413 against 7908f570d TOTAL 3395. I106 goes 41 -> 23, and no other arm moved.
+
+### An --record-owed run always leaves a record (BL-668)
+
+`reconcile/derivation-differential.sh` now creates the owed-derivations record, empty, on every `--record-owed` run that
+passes its refusals, and refuses the run if the record cannot be created. So "absent" now means "never measured", and a
+present record with 0 OWED rows means measured with nothing owed. `core/skills/ai-dlc-update/SKILL.md` says so and tells the
+reconcile to pass `--record-owed` whenever it runs the worklist row's command, not only when a row is left.
+
+The receipt is `core/fixtures/owed-derivations/receipt-bl668.sh`.
+
+No reconcile step runs the differential on every pull: `apply.sh` emits it only as a WORKLIST row. Lead ai-dlc-c8 ruled that
+a separate cost question, and declined a per-pull "nothing owed" record because a derivation can read files its command
+line never names. That question is filed as BL-706, a NOTE with no owner.
+
+### An In-Flight row's dispatched-at comes from the spawn ledger (BL-605, row side)
+
+`wait-for-deliverable.sh --dispatch-ts <agentId|toolu_id>` prints the dispatch's spawn-ledger `ts` through the one existing
+resolver (`dispatch_epoch_of`, the one `--dispatch` uses) and writes nothing. It takes the `--status` no-write path, and an
+id that resolves to no single ledger row is refused with exit 64.
+
+`steps/_gate-procedures.md` step 3, `steps/route.md` and `steps/gate-validation.md` all say to fill `dispatched-at` from
+it, never a clock.
+
+The receipt is `core/fixtures/wait-beat-liveness/receipt-bl605.sh`. It resolves the same stamp by agentId and by `toolu_`
+id, and shows it differs from a row hand-stamped 57 s late (05:01:00Z against the ledger's 05:00:03Z).
+
+BL-605 stays PARTIAL, because no arm judges a row that already exists.
+
 ## [0.870.0] - 2026-10-19
 
 Batch 236 (BL-700). The handoff guard in `core/hooks/ai-dlc-continue.sh` no longer allows a requested handoff silently

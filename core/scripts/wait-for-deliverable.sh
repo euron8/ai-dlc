@@ -199,6 +199,11 @@
 #                                   [--shard-header convergence|elicitation]
 #   scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
 #   scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <file> <pass>
+#   scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId|toolu_id>
+#
+#   --dispatch-ts      never a beat: prints the ISO-8601 UTC `ts` of that dispatch's spawn-ledger
+#                      row, resolved exactly as --dispatch resolves it, and writes nothing. It is
+#                      the In-Flight row's `dispatched-at`. No single ledger row: exit 64.
 #
 #   --mark             the SEAT's closing call, never a beat: appends its sealed marker
 #                      `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`.
@@ -425,6 +430,7 @@ RESET=0
 TARGETS=""
 SINCE=""
 DISPATCH=""
+DISPATCH_TS_ONLY=""
 PROGRESS_PATHS=""
 COMPLETE=0
 STATUS=0
@@ -652,6 +658,10 @@ while [ $# -gt 0 ]; do
       shift
       [ $# -gt 0 ] && [ -n "$1" ] || { echo "FAIL: --dispatch needs the agentId the Agent result returned." >&2; exit 64; }
       DISPATCH="${DISPATCH}${DISPATCH:+ }$1"; shift ;;
+    --dispatch-ts)
+      shift
+      [ $# -gt 0 ] && [ -n "$1" ] || { echo "FAIL: --dispatch-ts needs the agentId the Agent result returned." >&2; exit 64; }
+      DISPATCH_TS_ONLY="${DISPATCH_TS_ONLY}${DISPATCH_TS_ONLY:+ }$1"; STATUS=1; shift ;;
     --progress-path)
       shift
       [ $# -gt 0 ] || { echo "FAIL: --progress-path needs a path." >&2; exit 64; }
@@ -670,6 +680,22 @@ while [ $# -gt 0 ]; do
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
 done
+
+# --dispatch-ts: THE IN-FLIGHT ROW'S `dispatched-at`, read from the dispatch's own spawn-ledger row
+# (BL-605). A lead that stamps the cell from a clock stamps it AFTER the dispatch -- measured 57 s
+# late on the reference consumer -- and every reader of the row inherits that. This mode resolves
+# the id through the SAME dispatch_epoch_of the --dispatch beat uses, prints the row's `ts`
+# verbatim, and exits 0; any id that resolves to no single ledger row is refused (64) with
+# dispatch_refuse's text. It sets STATUS=1, so it takes every --status no-write path: no state
+# dir, no lease, no trap. One id per call, nothing else on the line: a stamp has one answer.
+if [ -n "$DISPATCH_TS_ONLY" ]; then
+  case "$DISPATCH_TS_ONLY" in *' '*)
+    echo "FAIL: --dispatch-ts takes exactly one id (got '$DISPATCH_TS_ONLY'); one row, one stamp." >&2; exit 64 ;; esac
+  if [ -n "$TARGETS$DISPATCH$SINCE$PROGRESS_PATHS" ] || [ "$RESET$COMPLETE$SEAT_FLAG" != 000 ] || [ -n "$SHARD_AXIS" ]; then
+    echo "FAIL: --dispatch-ts prints one dispatch's ledger ts and is not a beat; pass it alone." >&2; exit 64
+  fi
+  DISPATCH="$DISPATCH_TS_ONLY"; TARGETS="-"
+fi
 
 if [ -z "$TARGETS" ]; then
   echo "FAIL: pass at least one deliverable path." >&2
@@ -1346,6 +1372,7 @@ if [ -n "$DISPATCH" ]; then
     exit 64
   fi
   [ -n "$SINCE" ] || SINCE="$DISPATCH_EPOCH"
+  if [ -n "$DISPATCH_TS_ONLY" ]; then printf '%s\n' "$DISPATCH_TS"; exit 0; fi
 elif [ -n "$SINCE" ]; then
   echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
 fi
