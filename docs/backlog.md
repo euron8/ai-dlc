@@ -718,3 +718,59 @@ Precondition, which binds the design: a consumer pull can deliver the emitters w
 Owed, the design for its owner to choose: detect at use time, where the emitter writes, whether the installed readers accept `@`, and emit `=` otherwise. The design question is what that detection keys on, so that it holds across every delivery path. Receipt: a fixture where the emitter, given a tree whose installed reader accepts `@`, writes `@`, and given a tree whose reader is the pre-BL-718 one, writes `=`. The teachers switch only once that holds.
 
 verify: manual
+
+## BL-720 — the `--complete` beat prints DELIVERED on a valid seal before the writer's SubagentStop probe row lands, so the merge run on that answer refuses the shard and its remedy offers a re-dispatch
+
+**NOTE.** Relayed by ai-dlc-5d from graph; guard re-derived by lead ai-dlc-37 on origin/main; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236).
+
+`core/scripts/wait-for-deliverable.sh --complete` decides delivery from the file alone: a last line `seat-complete: … sha=<hex>` whose digest matches the content above it is DELIVERED at once, with no window and at any age (the header at `:341`-`:349`). The beat reads no probe ledger: `subagent-probe` occurs 0 times in it, against 2 in `merge-adversarial-shards.sh`.
+
+The merge holds a credited writer to a second record. `core/scripts/merge-adversarial-shards.sh:1072`-`:1082` corroborates each writer's meta file against the probe ledger, which `ai-dlc-subagent-probe.sh` fills at SubagentStop. At `:1080`, a credited writer with no row is refused: "an adversary that has not stopped has not delivered -- if it has stopped, the probe hook recorded nothing for it: re-dispatch the shard and merge with --rerun".
+
+A seat writes its seal as its last action and stops after that, so there is a window in which the beat says DELIVERED and the merge says not delivered. Graph hit it once, a window of about 2 s at 02:08:56, as relayed by ai-dlc-5d and not re-measured by this filing. In that window the merge's remedy points the lead at a re-dispatch of a shard that is complete and about to be corroborated, and the wait that clears it is never named.
+
+Owed: the beat and the merge agree on what delivered means for a credited writer, or the merge's refusal at `:1080` names the wait as well as the re-dispatch. The fix is the owner's to choose.
+
+verify: manual
+
+## BL-721 — a remediator whose work has no deliverable file (an inline story-changelog append) gives the bounded join no path to wait on, so a beat armed on a never-written marker can only reach its cap, and the bare Re-dispatch remedy then fires against a finished or live writer
+
+**NOTE.** Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37 on origin/main 8df9b8ae6 and by this filing; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Related: BL-717 (the same remedy class on a different subject) and BL-720.
+
+0.887.0's LIVE DISPATCH extension is gated on `--complete-repair`: `core/scripts/wait-for-deliverable.sh:1592` is `[ "$COMPLETE_REPAIR" -eq 1 ] || return 1` inside `dispatch_live()`, and `:686` is the only line that sets it. So a plain `--dispatch <id> <path>` beat on a path that never appears still prints the bare remedy at its cap, even on 0.887.0. BL-717's fix does not cover this subject.
+
+The pipeline gives such a writer no file to join on. The consumer's installed `_gate-procedures.md:586-588` keeps a story file's changelog INLINE in the story, while `_dispatch-protocol.md:110-118` tells the lead to JOIN on "the deliverable file".
+
+Consumer evidence, relayed by ai-dlc-5d and not re-measured by this filing: in graph's S319, remediator aa460db9 was dispatched at 09:48Z to append inline changelogs to 19 stories. The lead armed `--dispatch aa460db9 .../stories-changelog-done.marker` on a marker it noted the writer "will never write", so that beat can only reach NON-DELIVERY.
+
+Second consumer run, relayed by ai-dlc-5d and not re-measured: graph run 2026-10-20: marker beat br8xhg1gl killed (exit 144, cause undetermined) before its cap; the remediator completed and was not re-dispatched, so the cap path was not exercised.
+
+Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ci` before this entry was added): "no deliverable" 0, "deliverable file" 0 and "liveness hold" 0, in both docs/backlog.md and docs/backlog.archive.md; "BL-721" 0 in both. Control: "wait-for-deliverable" 8 live (5d's 7, plus BL-720's) and 82 in the archive.
+
+Direction, for the owner: either a dispatch-scoped join that needs no path and waits on the dispatch's own SubagentStop row, or a remedy that names the liveness check whenever `--dispatch` resolves. The fix is the owner's to choose.
+
+verify: manual
+
+## BL-723 — §5 step 2's test-strategy review moves from the find-≥10 generic one-shot to the native adversarial cycle with the standard exit ladder
+
+**DEFECT (operator-directed; HIGH, operator-ranked; graph s319 BLOCKED on this).** Filed by ai-dlc-5d at 06:08 EDT on the operator's direction, measured read-only on graph's installed copy; re-tiered from NOTE by the operator: "I don't want just a NOTE, I want it changed. It should use the same exit condition criteria that we use on other checks, right?" Id allocated by lead ai-dlc-37; written into the batch-236 docs close by peer session ai-dlc-c0. Related: BL-695 (the stories PARTY round per-seat barrier): the operator ranked this entry HIGH ("This finding would help explain why test strategy is such a huge time suck. That makes it a high priority BL item, IMO."), and one owner builds both, because together they cover the test-strategy wall clock.
+
+`core/skills/ai-dlc/steps/stories-test-strategy.md:646` (§5 "Test Strategy", step 2) runs `/bmad-review-adversarial-general` over the test strategy as a one-shot. At `:650`-`:654` it holds that "the skill's "find ≥10, HALT on zero" contract costs nothing and buys a cynical sweep", and it says "Do NOT convert this to the native review".
+
+Why, measured by ai-dlc-5d on graph and not re-measured by this filing:
+- Finding counts: s307 10 (exactly the floor), s310 19 (mostly prose precision: stale citations, restated counts, non-verbatim quotes), s315 6, s316 15.
+- Value, where a finding is a strategy-vs-AC defect. s316's "3-UNIT-001 has no status-read timeout case" was repaired and shipped as case k in `test-s316-3-smoke-deselect.sh` (merged 4598c4530). s315's finding 1 (R-04 had no offline test) was repaired into the strategy as case (g) but never shipped: `test_s315_4_base_binding.py` has 0 `def test_g` against a control of 5 `def test_a`. Of the 2 findings traced, 1 reached shipped code; about 48 are untraced.
+- Cost, graph s319 (relayed by 5d, not re-measured): s319 §5: one-shot a9a20e44 ran 09:57:28Z–10:11:52Z, 14m24s with 74 tools, delivering test-strategy-review.md. §5 from 09:53:40Z to graph commit e3fb1b442 (10:12:13Z) took 18m33s with the repair, the step-3 bind and gate[story] never run. The operator then halted s319 until BL-723 lands ("It's not worth it in wasted time and tokens to let it finish"). Load 5.39 outside any gate; dollars were not measured.
+
+Owed, the change: step 2 runs the native cycle, the **Adversarial review dispatch** and the **Adversarial repair dispatch** (`_gate-procedures.md`), with verdict envelopes, and exits on the standard ladder in `core/team-roles/adversary.md:429`-`:442` (0 CRITICAL and at most three derived MAJORs). The review's focus is correctness: every AC maps to a case, every case has a command that runs it at its level, and the execution order obeys deploy-validate (s315 finding 2). Prose precision is out of scope. The round itself stays, because `test-strategy.md` is derived after the stories converge, so no other round has seen it.
+
+Must handle:
+- (a) remove the "Do NOT convert this to the native review" sentence at `stories-test-strategy.md:652`-`:654`, with the one-shot rationale around it at `:650`-`:652`;
+- (b) give the series its own prefix (for example `s<N>/test-strategy-adversarial-p`), its own `Seam D` label and its own terminal stamp, and make Check 24 or `gate-validation.md` recognise it. Today the series glob keys on `stories-adversarial-p` (`core/scripts/validate-adversarial-convergence.sh:2952`; `gate-validation.md:1431`), and the current text at `:654`-`:656` keeps the one-shot's output off that prefix because a verdict-less pass swept into the series fails rung A. The build reads Check 24's prefix glob before it chooses a prefix;
+- (c) the step-3 lettered-case bind (`stories-test-strategy.md:657`) runs after the cycle's `EXIT_CONDITION_MET`, per the freeze point at `_gate-procedures.md:835`-`:838`. The lettered-case count match is already mechanical in step 3, so the review leaves it out.
+
+Open question, not filed separately: how `validate-handoff-evidence.sh --strategy` let s315's "Gap, stated plainly … case (g) has no test" row through.
+
+Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ciF` before this entry was added): "cynical sweep" 0, "find ≥10" 0 and "BL-723" 0, in both docs/backlog.md and docs/backlog.archive.md. Control: "test-strategy" 3 live and 40 in the archive.
+
+verify: manual

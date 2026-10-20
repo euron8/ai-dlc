@@ -18803,3 +18803,28 @@ Batch 231's block below is history: this block replaces its delivery gap. Starte
 - **Net for the batch**: closed 1 entry (BL-527), filed 1 (BL-527): net 0 entries, because the backlog opened empty and
   nothing else existed to close; 1 candidate closed upstream. Backlog 0 live, 526 archived.
 
+**BATCH 233 SHIPPED NO RELEASE. GRAPH PULLED 0.789.0 (#1226) AND ITS LIVE LEDGER IS EMPTY: LIVE 0, DELIVERY GAP 0.
+THE BACKLOG IS STILL DECLARED EMPTY. THE PULL RUNBOOK IS DISCHARGED, AND THE §2 NARROWING PLAN IS WRITTEN FOR GRAPH.**
+Batch 232's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-b8's one-liner at
+`origin/main` `7e8d62d7` (`VERSION` 0.789.0); graph-ab was live and was never messaged.
+- **Opening sweep** (at `7e8d62d7`, graph `main` `fa2444635`, installed 0.788.0): live 1 (PC-S319), unfiled 0,
+  worklist 0, DISCHARGED 1, invisible 0, TERMINAL 241, archive 364, 2 qualifying refs (both 0.786.0 reconcile branches,
+  their adds archived), every control passing. Nothing was buildable, so no release was cut.
+- **graph delivery**: graph ran the 0.788.0 -> 0.789.0 pull itself (#1226, `b3f2fe199`), matching the rehearsal per its
+  own reconcile log, and closed PC-S319 as `CLOSED AS REJECTED — BY DESIGN` through the refusal channel. The runbook
+  `docs/plans/graph-pull-0788-to-0789.md` is retitled spent with its `## Discharge` filled from graph's history; graph
+  cannot write it, because it sits outside the consumer.
+- **Close sweep** (at `e74eb478`, graph `main` `b3f2fe199`, installed = shipped = 0.789.0): live 0, unfiled 0,
+  worklist 0, DISCHARGED 0, invisible 0, TERMINAL 242, archive 365, ledger md5 `fce2ab88…`. Qualifying refs read
+  153, because main's live set is empty and any ref carrying an archived id now "adds" one; the union minus archives is
+  still 0. **The derive block's `live_main` presence control read 0 on this correct derivation**, so it is re-keyed on
+  `grep -c '^## '` over main's ledger file (19), with the id count kept beside it.
+- **§2 narrowing**: at graph's request, on the operator's ruling that it runs between sprints,
+  `docs/plans/graph-implementation-push-s2-narrow.md` (#1146) moves the graph-local residue of `implementation-push.md`
+  §2 into `implementation-domain.md` (`push_candidate: false`) and deletes the block whole, so the next drain reads 4
+  `PUSH-REFUSED` and 0 candidates. Graph executed it as #1227 (`d82236cee`). Graph's report says every figure
+  matched the rehearsal; the digests, the drain and `validate-layer-entries` were re-derived here. The plan is
+  discharged.
+- **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
+  archived.
+
