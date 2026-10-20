@@ -122,8 +122,9 @@
 # `$CONSUMER/_bmad-output/ai-dlc-update/self-update-gate-<ts>.md`: a header carrying the FULL
 # resolved shas of base and theirs, then every emitted row byte-identical to stdout, then the
 # digest of every consumer file the verdict READ, then a `# verdict:` trailer derived from those
-# rows. `self-update-fixtures.sh` READS that record and refuses to run a fixture without a
-# matching OK — the requirement lives there and is not restated here.
+# rows. `self-update-fixtures.sh`, the gate-record checker `self-update-push.sh` runs before the
+# hook, READS that record and refuses the push without a matching OK — the requirement lives there
+# and is not restated here.
 #
 # ONE EMIT PATH WRITES BOTH SINKS. `emit()` renders the row once and sends that one string to
 # stdout and to the record buffer; a second printf spelling the row again is a second grammar
@@ -239,7 +240,7 @@ CONSUMER="${4:?}"
 
 # ---- THE VERDICT RECORD ------------------------------------------------------------------
 # `$CONSUMER/_bmad-output/ai-dlc-update/self-update-gate-<ts>.md`, same `TS` grammar and same
-# directory as `self-update-fixtures.sh`'s own log, and `.md` for the same measured reason: a
+# directory as `self-update-push.sh`'s refusal record, and `.md` for the same measured reason: a
 # reference consumer's `.gitignore` carries `*.log` and `*.txt`, so either of those would
 # produce an artifact that exists on disk and vanishes from every `git status` afterwards.
 #
@@ -333,7 +334,8 @@ gate_input_dist() {
   return 0
 }
 
-# The FULL sha, because `self-update-fixtures.sh` resolves its own BASE/THEIRS the same way and
+# The FULL sha, because the gate-record checker `self-update-fixtures.sh` (run inside the push)
+# resolves its own BASE/THEIRS the same way and
 # compares RESOLVED to RESOLVED — a record carrying the caller's argument strings would let a
 # short sha and its long form read as two different ranges. `unresolved` is a fixed token rather
 # than the ref echoed back: a field that sometimes holds a sha and sometimes holds the caller's
@@ -635,8 +637,8 @@ gate_argv_scan() {
 # second site of the `if [ -z … ]` arm C uses. That walk spawns one nested classify per release
 # candidate in the range, and each would otherwise write a record of its own naming a ref the
 # operator never asked about — after which the NEWEST record in the directory answers with a
-# candidate's verdict rather than the pull's, which is the one read `self-update-fixtures.sh`
-# makes. A function, so the guard and the open have anchors nothing else in this file shares.
+# candidate's verdict rather than the pull's, which is the one read the gate-record checker
+# `self-update-fixtures.sh` makes inside the push. A function, so the guard and the open have anchors nothing else in this file shares.
 gate_record_open() {
   [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
   _rec_p="$GATE_REC_DIR/self-update-gate-$(date -u +%Y%m%dT%H%M%SZ).md"
@@ -656,7 +658,8 @@ gate_record_open() {
       echo "# generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "# base $BASE -> theirs $THEIRS"
       echo "# consumer: $CONSUMER   dist: $DIST"
-      # THE JOIN KEYS. `self-update-fixtures.sh` reads these by PREFIX, first match wins, so no
+      # THE JOIN KEYS. The push's gate-record checker `self-update-fixtures.sh` reads these by
+      # PREFIX, first match wins, so no
       # other line in this file may open with one of them. Deliberately not a tally: this comment
       # said "exactly these three prefixes" and the runner already read four — a count in prose
       # beside a generic reader is a figure with nothing binding it, and `# skill-commit:` was
@@ -704,8 +707,8 @@ gate_record_open() {
     printf 'record: %s\n' "$GATE_REC_FINAL" >&2
   else
     # AN UNRECORDED AUTONOMOUS WRITE IS THE DEFECT, so a record that cannot be written is a
-    # verdict this gate must not return OK on. `self-update-fixtures.sh` refuses without a
-    # matching OK record and its doctrine for a join that could not run is exit 2; this row is
+    # verdict this gate must not return OK on. `self-update-fixtures.sh` refuses the push without
+    # a matching OK record and its doctrine for a join that could not run is exit 2; this row is
     # the classifier-side half of the same answer.
     emit SELF-UPDATE-UNDECIDED "$GATE_REC_DIR" "the verdict could not be RECORDED: neither the directory nor $_rec_p could be created, so this run would decide an autonomous push whose decision leaves no artifact. That is the state the record exists to end, so the verdict is not OK. Fix the permissions on the consumer's _bmad-output tree and re-run."
   fi
@@ -985,7 +988,7 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   # and two resolutions drifting apart is silent in both directions: a narrower copy leaves
   # a false CARRY row standing, a wider one suppresses beyond the reason it was given. So the
   # derivation has ONE owner, and it is the script this arm already runs. Loaded the way
-  # `self-update-fixtures.sh` already loads `map_consumer()` out of the same file -- an `eval`
+  # the gate-record checker `self-update-fixtures.sh` loads `map_consumer()` out of the same file -- an `eval`
   # of the function's own text, rather than a second copy of it. All the reasoning that used to
   # sit here -- why the manifest and not a list, why `set -f`, why `ls-files --with-tree` and
   # not `ls-tree`, why BOTH refs -- travelled with the code and is in `machinery_paths()`.
@@ -1334,7 +1337,7 @@ fi
 # `, : = # ! @ % + ~` so a name followed by a list separator or an assignment is not JOINED to
 # what follows: a hook naming `real.sh,stale.sh` under the prefix read as one token and dropped
 # `real.sh` from INVOKED, which is the same false OK. ASCII only: a multibyte character in a bracket class is
-# its bytes under the C locale (S10). self-update-fixtures.sh's `gr_invoked` carries this class
+# its bytes under the C locale (S10). The gate-record checker self-update-fixtures.sh's `gr_invoked` carries this class
 # byte for byte.
 INVOKED="$(grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/,:=#!@%+~]+\.sh' "$HOOK" | sed 's|.*/||' | sort -u)"
 
@@ -1645,8 +1648,8 @@ while IFS= read -r name; do
     # A MENTION-ONLY PRE-WRITTEN SCRIPT NEVER REACHES THIS ARM, and the runner disagrees with the
     # gate about it on purpose. With a stamp whose `skill_commit` does not carry its bytes (or no
     # stamp), the gate reports it OK "not gating" above and `self-update-fixtures.sh` ARM 3 refuses
-    # the same record as PRE-WRITTEN. That population is hand-copied bytes or a post-write re-run,
-    # and the cost is a DEFER after the branch is cut rather than before. The acquittal holds only
+    # the same record as PRE-WRITTEN inside the push. That population is hand-copied bytes or a
+    # post-write re-run, and the cost is a DEFER after the commit rather than before the branch. The acquittal holds only
     # when ALL of:
     #
     #   A1  the stamp's `skill_commit` peels to a commit SK, read through `gate_rec_skill_commit`
@@ -1670,7 +1673,8 @@ while IFS= read -r name; do
     # stamp rewritten with the write LOST leaves the copy at base, so the arm's own `cur == theirs`
     # is false and the ordinary differential runs; nothing here is reached.
     #
-    # THE MIRROR SITE IS `self-update-fixtures.sh`'s pre-written arm, which acquits on the RECORDED
+    # THE MIRROR SITE IS the push's gate-record checker `self-update-fixtures.sh`'s pre-written
+    # arm, which acquits on the RECORDED
     # `# skill-commit:` this gate wrote, with no shared helper on purpose -- the two sites answer
     # different questions and their conjunct sets differ. The runner refuses an ancestry key
     # because a refusal THERE is permanent for that record and a side-branch commit can hold

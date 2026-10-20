@@ -2201,7 +2201,7 @@ run_fixtures() {
   # `.dur` line, so it records no cost; readset_keys_write and readset_live_trace take only `ok`.
   readset_pool_trace_prep "$out"
   PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
-  POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" \
+  POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" AI_DLC_FX_TOTAL="$n_expected" \
     xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"; tp=""; wx=""; pr="$AI_DLC_FX_OUT/.pr/$b"
     pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
@@ -2297,6 +2297,8 @@ run_fixtures() {
       ( rm -rf "$tr" ) </dev/null >/dev/null 2>&1 &
     fi
     [ -f "$pr.refused" ] || printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
+    printf "%s\n" "$b" >> "$AI_DLC_FX_OUT/.done"
+    printf "   done %s/%s  %s %s\n" "$(grep -c . "$AI_DLC_FX_OUT/.done" 2>/dev/null)" "$AI_DLC_FX_TOTAL" "$(cat "$AI_DLC_FX_OUT/$b" 2>/dev/null)" "$b"
   ' _ {} < "$out/.order"
   readset_pool_trace_merge "$out"
 

@@ -381,7 +381,9 @@ printf '#!/usr/bin/env bash\nsleep 0.9\nexit 0\n' > "$T/tests/fixtures/aaa/run.s
 printf '#!/usr/bin/env bash\nexit 0\n'            > "$T/tests/fixtures/mmm/run.sh"
 printf '#!/usr/bin/env bash\nexit 0\n'            > "$T/tests/fixtures/zzz/run.sh"
 rc="$(drive "$T" "$WORK/order.out")"
-seen_order="$(grep -oE '(aaa|mmm|zzz)$' "$WORK/order.out" | tr '\n' ' ')"
+# The `   done k/N  verdict unit` progress line also ends with the unit name but prints in
+# COMPLETION order, so it is excluded on purpose: this arm reads the report rows only.
+seen_order="$(grep -v '^   done ' "$WORK/order.out" | grep -oE '(aaa|mmm|zzz)$' | tr '\n' ' ')"
 if [ "$rc" = 0 ] && [ "$seen_order" = "aaa mmm zzz " ]; then
   ok "verdicts render in list order even though 'aaa' finished last"
 else

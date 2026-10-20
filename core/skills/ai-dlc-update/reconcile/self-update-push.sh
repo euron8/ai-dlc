@@ -18,13 +18,25 @@
 # this script runs the hook itself, as git would, and pushes with `--no-verify` ONLY after that one
 # run exited 0. `--no-verify` here is not a bypass: the hook it skips is the one that already ran.
 #
-# Usage:  self-update-push.sh <consumer-root> <remote> <branch> <out>
+# Usage:  self-update-push.sh <consumer-root> <remote> <branch> <out> <dist> <base> <theirs>
 #   <branch>  the self-update branch, which must be the CHECKED-OUT branch (exit 2 otherwise).
 #   <out>     consumer-relative or absolute path of a NEW, untracked file, by convention
-#             `_bmad-output/ai-dlc-update/self-update-push-<ts>.md`. Written ONLY on HOOK-REFUSED,
-#             and only AFTER the hook ran: an untracked file on disk while the hook runs is a
-#             changed path in no fixture's read-set, which defeats a hook's read-set skip. This
-#             script never writes a tracked path.
+#             `_bmad-output/ai-dlc-update/self-update-push-<ts>.md`. Written ONLY on a refusal —
+#             GATE-RECORD-REFUSED before the hook, or HOOK-REFUSED after it — and never while the
+#             hook runs: an untracked file on disk while the hook runs is a changed path in no
+#             fixture's read-set, which defeats a hook's read-set skip. This script never writes a
+#             tracked path.
+#   <dist> <base> <theirs>  the distribution clone and the range step 2 classified, exactly as
+#             passed to `self-update-gate.sh`. They are handed to the GATE-RECORD CHECKER.
+#
+# THE GATE RECORD IS CHECKED HERE, BEFORE THE HOOK AND BEFORE ANY PUSH. `self-update-fixtures.sh`
+# (beside this file; the name is historical) refuses unless the gate recorded `# verdict: OK` for
+# this range on the tree this cycle wrote over, and unless the committed slice wrote no `.dist-only`
+# fixture directory and none without its `run.sh`. Its exit 2 is a refusal here: no hook runs,
+# nothing is pushed, one stdout line `GATE-RECORD-REFUSED <first finding>`, and <out> carries the
+# checker's `GATE-RECORD:` lines as `# probe:` lines. The check is never skipped: there is no
+# argument count that omits it, and a checker that is absent or not executable by bash is the
+# same refusal.
 #
 # Exit:   0  pushed. The hook ran once and exited 0 (or git runs no hook here), then the push
 #            succeeded. That holds when the push url already holds the local sha too: the hook
@@ -35,7 +47,8 @@
 #            <branch> not checked out or not a commit, <out> already present or tracked, or the
 #            scratch area could not be staged — in all of these nothing ran. Also exit 2 AFTER
 #            the hook when the hook moved <branch>. Nothing was pushed in any exit-2 case. A
-#            `self-update-push: REFUSED —` line on stderr.
+#            `self-update-push: REFUSED —` line on stderr. ALSO exit 2, before the hook, on
+#            GATE-RECORD-REFUSED (above): the one exit-2 case that writes <out>.
 #         3  HOOK-REFUSED. The hook ran once and exited non-zero; NOTHING was pushed. One stdout
 #            line `HOOK-REFUSED <rc> <phases>`, and <out> carries `# probe:` lines: the hook,
 #            its exit and the ref line it was fed, then the last 60 lines of its output.
@@ -88,10 +101,13 @@ refuse() {
   exit 2
 }
 
-[ "$#" -eq 4 ] || refuse "usage: self-update-push.sh <consumer-root> <remote> <branch> <out>"
-CONSUMER="$1"; REMOTE="$2"; BRANCH="$3"; OUT="$4"
+[ "$#" -eq 7 ] || refuse "usage: self-update-push.sh <consumer-root> <remote> <branch> <out> <dist> <base> <theirs>"
+CONSUMER="$1"; REMOTE="$2"; BRANCH="$3"; OUT="$4"; DIST="$5"; BASE="$6"; THEIRS="$7"
 [ -n "$CONSUMER" ] && [ -n "$REMOTE" ] && [ -n "$BRANCH" ] && [ -n "$OUT" ] \
+  && [ -n "$DIST" ] && [ -n "$BASE" ] && [ -n "$THEIRS" ] \
   || refuse "every argument must be non-empty"
+SU_SELF="$(cd "$(dirname "$0")" && pwd)" || refuse "this script's own directory could not be resolved"
+CHECKER="$SU_SELF/self-update-fixtures.sh"
 [ -d "$CONSUMER" ] || refuse "consumer root $CONSUMER is not a directory"
 git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   || refuse "consumer root $CONSUMER is not a git work tree; there is nothing to push"
@@ -126,6 +142,35 @@ if git -C "$ROOT" ls-files --error-unmatch -- "$OUT_ABS" >/dev/null 2>&1; then
 fi
 
 ZERO=0000000000000000000000000000000000000000
+
+# THE GATE-RECORD CHECK, before the hook is even resolved, so the no-hook path cannot skip it. Its
+# stdout carries the `GATE-RECORD:` lines and its stderr the remedy; it writes nothing into the
+# consumer, so nothing is on disk here that the hook's read-set skip could trip on.
+if [ -f "$CHECKER" ]; then
+  SU_CK_OUT="$(bash "$CHECKER" "$DIST" "$BASE" "$THEIRS" "$ROOT")"
+  SU_CK_RC=$?
+else
+  SU_CK_OUT="GATE-RECORD: CHECKER-ABSENT — $CHECKER does not exist, so the gate record cannot be checked."
+  SU_CK_RC=2
+fi
+if [ "$SU_CK_RC" -ne 0 ]; then
+  su_ck_first="$(printf '%s\n' "$SU_CK_OUT" | awk '!f && /^(GATE-RECORD|COVERAGE|STAGING): / { f = 1; gsub(/\t/, " "); print }')" || su_ck_first=""
+  [ -n "$su_ck_first" ] || su_ck_first="the checker exited $SU_CK_RC with no finding line"
+  su_w=0
+  mkdir -p "$(dirname "$OUT_ABS")" 2>/dev/null || su_w=1
+  if [ "$su_w" -eq 0 ]; then
+    {
+      printf '# ai-dlc-update step-2 self-update — push wrapper record (GATE-RECORD-REFUSED; no hook ran, nothing was pushed)\n'
+      printf '# probe: %s exit %s, range %s -> %s, dist %s\n' "$CHECKER" "$SU_CK_RC" "$BASE" "$THEIRS" "$DIST"
+      printf '%s\n' "$SU_CK_OUT" | tail -n 60 | tr '\t' ' ' | sed 's/^/# probe: /'
+    } > "$OUT_ABS" 2>/dev/null || su_w=1
+  fi
+  [ "$su_w" -eq 0 ] || printf 'self-update-push: the record %s could not be written; the checker output follows.\n' "$OUT" >&2
+  printf '%s\n' "$SU_CK_OUT" >&2
+  printf 'GATE-RECORD-REFUSED %s\n' "$su_ck_first"
+  exit 2
+fi
+printf '%s\n' "$SU_CK_OUT" >&2
 
 # pinned_push — the ONE push this script makes: LOCAL_SHA to refs/heads/<b> on <remote>, no tags,
 # no configured refspec, no hook (it already ran, or git would run none). git's own output goes to
@@ -184,9 +229,16 @@ else
 fi
 
 printf 'self-update-push: running the pre-push hook git would run (%s), once; this is the consumer'\''s own gate and can take minutes\n' "$HOOK" >&2
-( trap '' PIPE; cd "$ROOT" && exec "$HOOK" "$REMOTE" "$URL" < "$TMP/refline" ) > "$TMP/hook.out" 2>&1
-HOOK_RC=$?
-cat "$TMP/hook.out" >&2
+# STREAMED LIVE (BL-710): the hook's output reaches stderr AS IT IS WRITTEN, through `tee`, and is
+# kept in `$TMP/hook.out` for the refusal path below. The hook's OWN exit is written by the
+# subshell into `$TMP/hook.rc`, because a pipeline's status is its last stage's (`tee`'s) and that
+# is not the hook's answer. No `exec`: the subshell must outlive the hook to record its exit. The
+# subshell ignores SIGPIPE before starting the hook, so the hook inherits the disposition `git push`
+# gives it, exactly as before; a reader that goes away costs the hook an EPIPE, never a 141.
+( trap '' PIPE; cd "$ROOT" || { echo 2 > "$TMP/hook.rc"; exit 0; }
+  "$HOOK" "$REMOTE" "$URL" < "$TMP/refline"; echo "$?" > "$TMP/hook.rc" ) 2>&1 | tee "$TMP/hook.out" >&2
+HOOK_RC="$(cat "$TMP/hook.rc" 2>/dev/null)" || HOOK_RC=""
+case "$HOOK_RC" in ''|*[!0-9]*) refuse "the hook's exit status was not recorded, so whether it refused cannot be told. Nothing was pushed." ;; esac
 
 if [ "$HOOK_RC" -ne 0 ]; then
   # WHICH PHASES REFUSED, from the shipped hook's own output grammar — a `── <phase>` header

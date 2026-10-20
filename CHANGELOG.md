@@ -19,6 +19,66 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.886.0] - 2026-10-19
+
+Batch 236, the BL-713 release (owned and gated by ai-dlc-c0; lead ai-dlc-37). It ships alone because it edits both
+pre-push hooks. It closes BL-713, the self-update's pre-commit covering-fixture run, and BL-710, the missing running
+progress in a consumer's long runs, and files BL-714, BL-715 and BL-716. Net for this release: 2 closed, 3 filed.
+
+### The self-update's pre-commit covering run is removed (BL-713)
+
+- **The order is GATE, WRITE, COMMIT, PUSH.** `SKILL.md` step 2 no longer runs a covering-fixture run before the
+  commit. The push wrapper runs the gate-record checker and then the consumer's pre-push hook once, and that hook is
+  the cycle's only fixture run. The approval artifact is the gate record alone.
+- **The checker keeps its old path.** `self-update-fixtures.sh` is gutted in place into the gate-record checker,
+  because a self-update leg writes upstream paths with `git show` and never deletes a consumer file, so a new path
+  would strand the old one. It keeps the staging guard, the ref resolution, the wrong-repo guard and the gate-record
+  arm with its NOT-REQUIRED tolerance. The fixture loop, the completeness joins and the log are gone.
+- **A refusal happens before any hook runs.** The checker takes exactly `<dist> <base> <theirs> <consumer>` and refuses
+  any argument beyond those four. Its refusal is `GATE-RECORD-REFUSED`, exit 2: no hook runs and nothing is pushed.
+- **A new slice check refuses two shapes.** Over the paths a self-update commit touched under the fixture root, it
+  refuses a commit that writes a `.dist-only` fixture directory (DIST-ONLY) and a commit that writes a fixture
+  directory without `run.sh` (NO-DRIVER). Both sides of the comparison use `pwd -P`.
+- **A red push leaves an unpushed local commit, which is recoverable.** This replaces the uncommitted-red paragraph
+  with a RED-PUSH paragraph; GATE-RECORD-REFUSED takes the HOOK-REFUSED restore sequence.
+
+### The push wrapper streams the hook live and the pool prints done/total (BL-710)
+
+- **The hook's output reaches stderr as it is written.** `self-update-push.sh` runs the hook through `tee`, so
+  `hook.out` still feeds the FAIL-header scan and the 60-line record. `HOOK_RC` is read from a recorded exit
+  (`hook.rc`), not from `tee`, and an unrecorded exit is a refusal before any push.
+- **Both pre-push hooks print `   done k/N  <verdict> <unit>` for each pool unit.** The edit is byte-identical in
+  `.githooks/pre-push` and `core/git-hooks/pre-push`, and `validate-enforcement-map.sh`'s I66 arm exits 0. The I66 test
+  is that byte-identical edit rather than a before and after comparison, because the hooks' raw FIXTURE_POOL spans
+  already differed before this release.
+
+### Fixtures
+
+- **self-update-fixture-log** keeps G1-G23, J1-J14 and W1/W2. W3-W6 are rewritten. Parts 0-22, Q, H1-H7, HD1, HS and
+  HR are removed.
+- **The new arms** are BH, D9 and D12. BH: the gutted checker given a fixture name runs 0 fixtures and exits 2;
+  control: the 4cc63f567 runner on the same seed runs 1. D9 and D12 assert the two slice refusals.
+- **self-update-gate's** push-wrapper worlds seed a distribution the NOT-REQUIRED tolerance accepts.
+- **`tee` is declared** in self-update-gate-c's `tools.decl`.
+- **layer-title-join's** read-set row was re-traced with the sandbox tracer: the same 50 paths, only the digest moved.
+- **consumer-suite-pool's** list-order arm now excludes the `done k/N` progress lines, which print in completion order
+  and also end with the unit name; it reads the report rows only.
+
+### Duty 10 verified on a throwaway consumer
+
+Run through the real shipped hook and the new push wrapper. The first push records a pass. The second push, after
+moving the declared subject, ran the unit (`fx: changed data/subject.txt`). The third push, with nothing moved,
+skipped it (`0 of 1 fixture(s) run`). The hook's verdict-store skip re-runs a unit whose declared input moved, so
+removing the pre-commit run loses no coverage there. The real hook printed `done 1/1  ok fx`.
+
+### Filed
+
+- **BL-714**: every EXTENSION-TITLE-MATCHES-CORE (LC-E19) row is re-emitted as a WORKLIST item on every pull with no
+  register lookup.
+- **BL-715**: the remediator shard join classifies a part's `siblings:` field only at the join, so a remediator
+  cannot check its own part before returning.
+- **BL-716**: after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator.
+
 ## [0.885.0] - 2026-10-19
 
 Batch 236, BL-685 round-7 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,
