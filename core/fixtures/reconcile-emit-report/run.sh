@@ -3068,7 +3068,8 @@ fi # end rer_phase wg
 #
 # HIT vs FRESH is decided by the pinned prefix `emit-report: accepted a recorded PASS (` AND by a PATH
 # shim: a `bash` first on PATH counts every detector the render launches (the key computation launches
-# none through PATH: its one subprocess, ledger-reverify.sh --receipt-tokens for R4, runs as "$BASH"),
+# none through PATH: its one subprocess, ledger-reverify.sh --receipt-tokens for the receipts field,
+# runs as "$BASH"),
 # into a file named by PCV_COUNT -- never an AI_DLC_* name, which the runner scrubs, and never a
 # file under the engine directory, which the engine key hashes. A hit is the exact two-line stdout,
 # exit 0 and ZERO launches; a miss is NO hit line, the fresh render's exit code, and at least one.
@@ -3096,9 +3097,34 @@ PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
 PCV_R6=0
 if grep -qF "$PCV_R6MARK" "$EMIT"; then
   PCV_R6=1
-  PCV_IDS="$PCV_IDS PC-V32 PC-V38 PC-V39 PC-V40 PC-V41 PC-V42"
+  PCV_IDS="$PCV_IDS PC-V32 PC-V38 PC-V39 PC-V40 PC-V42"
 else
-  printf '  SKIP  PC-V32 PC-V38..PC-V42: %s carries no named recorded-PASS refusal, so the round-6 partition cannot be checked against it\n' "$EMIT"
+  printf '  SKIP  PC-V32 PC-V38..PC-V40 PC-V42: %s carries no named recorded-PASS refusal, so the round-6 partition cannot be checked against it\n' "$EMIT"
+fi
+# THE ROUND-7 ARMS (the receipts field that replaced R4, V41 rewritten to assert it; the dist's linked
+# worktrees; the named directory refusal) need an engine that prints the directory refusal's cause.
+# V46 (an escaping `fixtures:` value) needs layer-drift.sh's own escape row as well, read from the
+# engine directory beside emit-report.sh. An engine without either prints SKIP and no ok line.
+PCV_R7MARK='a listed path is a directory (a nested work tree or an unignored worktree): '
+PCV_R7LDMARK='which escapes tests/fixtures/ (a .. component or a leading /)'
+PCV_TAB="$(printf '\t')"
+PCV_R7FMARK='a receipt subject outside every read root is not a regular file or a directory'
+PCV_R7=0; PCV_R7LD=0; PCV_R7F=0
+if [ "$PCV_R6" -eq 1 ] && grep -qF "$PCV_R7MARK" "$EMIT"; then
+  PCV_R7=1
+  PCV_IDS="$PCV_IDS PC-V41 PC-V43 PC-V44 PC-V45 PC-V47"
+  if grep -qF "$PCV_R7FMARK" "$EMIT"; then
+    PCV_R7F=1; PCV_IDS="$PCV_IDS PC-V48"
+  else
+    printf '  SKIP  PC-V48: %s keys no receipt subject content, so the content arm cannot be checked against it\n' "$EMIT"
+  fi
+  if grep -qF "$PCV_R7LDMARK" "$(dirname "$EMIT")/layer-drift.sh"; then
+    PCV_R7LD=1; PCV_IDS="$PCV_IDS PC-V46"
+  else
+    printf '  SKIP  PC-V46: %s carries no escape refusal for a fixtures: value, so the round-7 B4 arm cannot be checked against it\n' "$(dirname "$EMIT")/layer-drift.sh"
+  fi
+else
+  printf '  SKIP  PC-V41 PC-V43..PC-V48: %s carries no named directory refusal, so the round-7 partition cannot be checked against it\n' "$EMIT"
 fi
 # THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
 # reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
@@ -3742,6 +3768,314 @@ pcv_b2world() {
   return 0
 }
 
+# ---- V43 (round 7, B1): the receipts field's normaliser, extracted from the engine and run alone ----
+# The field's material reaches only a sha256, so "two spellings make one row" cannot be read off a
+# record (the ledger bytes differ anyway, through conswork). er_receipt_rows is self-contained, so it
+# is extracted the way er_mapped_roots extracts map_consumer and run on a scratch root holding
+# .git/x and a docs/ directory. Directions: (a) docs/../.git/x and .git/x give the SAME row and an
+# innocent docs/x a different one; (b) a token climbing above the root keeps its `../`; (c) with
+# docs/ REMOVED, docs/../.git/x reads absent while .git/x stays present -- the bit is the OS's answer
+# to the engine's own spelling, never derived from the lexical label.
+pcv_r7norm() {
+  local r="$PS_D/r7n" fn rows a b c d e
+  fn="$(awk '/^er_receipt_rows\(\) *\{/ { f = 1 } f { print } f && /^}/ { exit }' "$PS_E")"
+  if [ -z "$fn" ]; then pcv_x PC-V43 "FIXTURE BROKEN: er_receipt_rows could not be extracted from $PS_E"; return 0; fi
+  mkdir -p "$r/root/.git" "$r/root/docs" && : > "$r/root/.git/x" \
+    && printf '%s\n' 'docs/../.git/x' '.git/x' 'docs/x' 'docs/../../up' > "$r/tok" \
+    || { pcv_x PC-V43 "FIXTURE BROKEN: could not build the scratch root"; return 0; }
+  rows="$( eval "$fn" && er_receipt_rows "$r/tok" "$r/root" )" || rows=""
+  a="$(sed -n 1p <<< "$rows")"; b="$(sed -n 2p <<< "$rows")"; c="$(sed -n 3p <<< "$rows")"; d="$(sed -n 4p <<< "$rows")"
+  rmdir "$r/root/docs"
+  e="$( eval "$fn" && er_receipt_rows "$r/tok" "$r/root" )" || e=""
+  if [ "$a" = ".git/x${PCV_TAB}present" ] && [ "$a" = "$b" ] && [ "$c" = "docs/x${PCV_TAB}absent" ] \
+     && [ "$d" = "../up${PCV_TAB}absent" ] \
+     && [ "$(sed -n 1p <<< "$e")" = ".git/x${PCV_TAB}absent" ] && [ "$(sed -n 2p <<< "$e")" = ".git/x${PCV_TAB}present" ]; then
+    pcv_v PC-V43 "the receipts field gives docs/../.git/x and .git/x one row (.git/x present) and docs/x another, keeps a climbing token's ../, and with docs/ removed reads docs/../.git/x absent as the OS does while .git/x stays present"
+  else
+    pcv_x PC-V43 "receipt rows: with docs/ [$(tr '\t\n' ': ' <<< "$rows")], without docs/ [$(tr '\t\n' ': ' <<< "$e")] (want .git/x:present twice, docs/x:absent, ../up:absent; then .git/x:absent and .git/x:present)"
+  fi
+  return 0
+}
+
+# ---- V44..V47: the round-7 partition in the MAIN world, each arm re-approved and recorded alone ----
+# pcv_r7rec <tag> -- re-render the region into the report, run once (exit 0, a record exists) and
+# again (a HIT); keeps the record as <tag>.rec. Non-zero when either step fails.
+pcv_r7rec() {
+  "$PCV_BASH" "$PS_E" "$PC_D" "$BASE" "$PC_C" "$THEIRS" > "$PS_D/region-$1.md" 2>/dev/null
+  { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region-$1.md"; } > "$PC_R"
+  grep -q 'reconcile-mechanical' "$PS_D/region-$1.md" || return 1
+  pcm "$1.r"; pcv_is_miss 0 && [ -f "$PC_REC" ] || return 1
+  pcm "$1.c"; pcv_is_hit "$1.c" "$PC_REC" || return 1
+  cp "$PC_REC" "$PS_D/$1.rec"
+}
+# pcv_r7miss <tag> -- the cached run, then the opt-out on the same tree. 0 when the opt-out exits
+# non-zero and the cached run is a fresh render with that exit. Sets R7_WHY.
+pcv_r7miss() {
+  local rc hit n nc
+  pcm "$1"; rc="$PRC"; hit="$PHIT"; n="$PN"; R7_WHY="$(pcv_why)"
+  pcm "$1.n" nocache; nc="$PRC"; PRC="$rc"; PHIT="$hit"; PN="$n"
+  R7_WHY="$R7_WHY, opt-out $nc"
+  [ "$nc" -ne 0 ] && pcv_is_miss "$nc"
+}
+pcv_r7world() {
+  local ex="$PC_C/.git/info/exclude" lg="$PC_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+  local fails why s ext="$PC_C/.claude/skills/ai-dlc/extensions" wtl
+  mkdir -p "$PC_C/.git/info" && touch "$ex" && cp "$ex" "$PS_D/r7-exclude.keep" \
+    && cp "$lg" "$PS_D/r7-ledger.keep" && cp "$PC_R" "$PS_D/r7-report.keep" && cp "$PC_REC" "$PS_D/r7-rec.keep" \
+    || { for s in PC-V44 PC-V45 PC-V46 PC-V47; do pcv_x "$s" "FIXTURE BROKEN: could not keep the main world's exclude, ledger, report and record"; done; return 0; }
+
+  # V44 (B2): one live receipt names three subjects no other field reads -- an untracked EMPTY
+  # directory (docs/r7-empty), an IGNORED file outside every read root (docs/r7-ign.local), and a path
+  # under an IGNORED .claude/worktrees/ (every field prunes it). All present at the record; each
+  # removed in turn MISSES with the opt-out's exit, and put back HITS the same record.
+  if pcv_in PC-V44; then
+    fails=""; why=""
+    printf '/docs/r7-ign.local\n/.claude/worktrees/\n' >> "$ex"
+    mkdir -p "$PC_C/docs/r7-empty" "$PC_C/.claude/worktrees/r7wt" && : > "$PC_C/docs/r7-ign.local" && : > "$PC_C/.claude/worktrees/r7wt/f"
+    { cat "$PS_D/r7-ledger.keep"; printf '\n## PC-FIXTURE-R7-SUBJECTS — a receipt naming three unkeyed subjects\n\nverify: sh exit 1; : docs/r7-empty docs/r7-ign.local .claude/worktrees/r7wt\n'; } > "$lg"
+    if ! git -C "$PC_C" check-ignore -q docs/r7-ign.local || ! git -C "$PC_C" check-ignore -q .claude/worktrees/r7wt/f; then
+      pcv_x PC-V44 "FIXTURE BROKEN: docs/r7-ign.local or .claude/worktrees/r7wt/f is not ignored, so another field keys it"
+    elif ! pcv_r7rec v44; then
+      pcv_x PC-V44 "control: the world with all three subjects present did not record and then HIT ($(pcv_why))"
+    else
+      for s in emptydir ignored worktree; do
+        case "$s" in
+          emptydir) rmdir "$PC_C/docs/r7-empty" ;;
+          ignored)  rm -f "$PC_C/docs/r7-ign.local" ;;
+          worktree) rm -f "$PC_C/.claude/worktrees/r7wt/f"; rmdir "$PC_C/.claude/worktrees/r7wt" ;;
+        esac
+        pcv_r7miss "v44$s" || { fails="$fails $s"; why="$why $s[$R7_WHY]"; }
+        case "$s" in
+          emptydir) mkdir -p "$PC_C/docs/r7-empty" ;;
+          ignored)  : > "$PC_C/docs/r7-ign.local" ;;
+          worktree) mkdir -p "$PC_C/.claude/worktrees/r7wt" && : > "$PC_C/.claude/worktrees/r7wt/f" ;;
+        esac
+        cp "$PS_D/v44.rec" "$PC_REC"
+        pcm "v44${s}h"; pcv_is_hit "v44${s}h" "$PC_REC" || { fails="$fails $s:back"; why="$why $s:back[$(pcv_why)]"; }
+      done
+      if [ -z "$fails" ]; then
+        pcv_v PC-V44 "a receipt subject that is an empty directory, an ignored file outside the read roots, or a path under an ignored .claude/worktrees/ MISSES when removed (fresh render, the opt-out's exit), and put back HITS"
+      else
+        pcv_x PC-V44 "receipt subjects failed [${fails# }]${why} (want a miss with the opt-out's non-zero exit, then a hit once restored)"
+      fi
+    fi
+    rm -f "$PC_C/docs/r7-ign.local" "$PC_C/.claude/worktrees/r7wt/f"; rmdir "$PC_C/docs/r7-empty" "$PC_C/.claude/worktrees/r7wt" "$PC_C/.claude/worktrees" 2>/dev/null
+    cat "$PS_D/r7-ledger.keep" > "$lg"; cp "$PS_D/r7-exclude.keep" "$ex"
+  fi
+
+  # V45 (B3): a LINKED WORKTREE of the bare dist, detached at an unreferenced commit. X adds
+  # core/fixtures/r7zz on top of theirs and Y removes it; both are made by commit-tree BEFORE the
+  # record (the object count moves the keyed abbrev length). The consumer carries tests/fixtures/r7zz.
+  # With the worktree at Y, retired-fixtures.sh's `log --all` finds the fixture's history and renders
+  # RETIRED-FIXTURE-ORPHAN; no ref and not the main HEAD moved. Near miss: the worktree removed and
+  # pruned, the same tree, HITS.
+  if pcv_in PC-V45; then
+    local ix="$PS_D/r7-idx" bl tr x y
+    mkdir -p "$PC_C/tests/fixtures/r7zz" && printf 'echo zz\n' > "$PC_C/tests/fixtures/r7zz/run.sh"
+    x=""; y=""
+    if GIT_INDEX_FILE="$ix" git -C "$PC_D" read-tree "$THEIRS" >/dev/null 2>&1 \
+       && bl="$(printf 'echo zz\n' | git -C "$PC_D" hash-object -w --stdin)" \
+       && GIT_INDEX_FILE="$ix" git -C "$PC_D" update-index --add --cacheinfo 100644 "$bl" core/fixtures/r7zz/run.sh >/dev/null 2>&1 \
+       && tr="$(GIT_INDEX_FILE="$ix" git -C "$PC_D" write-tree)" \
+       && x="$(git -C "$PC_D" -c user.email=f@f -c user.name=fixture commit-tree "$tr" -p "$THEIRS" -m r7zz-added)" \
+       && y="$(git -C "$PC_D" -c user.email=f@f -c user.name=fixture commit-tree "${THEIRS}^{tree}" -p "$x" -m r7zz-removed)"; then :; fi
+    git -C "$PC_D" for-each-ref > "$PS_D/r7-refs0" 2>&1
+    if [ -z "$y" ]; then
+      pcv_x PC-V45 "FIXTURE BROKEN: could not build the unreferenced commits that add and remove core/fixtures/r7zz"
+    elif ! pcv_r7rec v45; then
+      pcv_x PC-V45 "control: the world with the unreferenced commits and no worktree did not record and then HIT ($(pcv_why))"
+    elif ! git -C "$PC_D" worktree add -q --detach "$PS_D/r7-dwt" "$y" >/dev/null 2>&1; then
+      pcv_x PC-V45 "FIXTURE BROKEN: git worktree add on the bare dist failed"
+    else
+      git -C "$PC_D" for-each-ref > "$PS_D/r7-refs1" 2>&1
+      wtl="$(git -C "$PC_D" worktree list --porcelain 2>/dev/null)" || wtl=""
+      if ! cmp -s "$PS_D/r7-refs0" "$PS_D/r7-refs1" || ! grep -qF "HEAD $y" <<< "$wtl"; then
+        pcv_x PC-V45 "FIXTURE BROKEN: the worktree moved a ref, or git worktree list does not show its HEAD at Y"
+      elif ! pcv_r7miss v45; then
+        pcv_x PC-V45 "a linked dist worktree detached at an unreferenced commit did not force a fresh render: [$R7_WHY] -- a recorded PASS answered for a history it never keyed"
+      else
+        git -C "$PC_D" worktree remove --force "$PS_D/r7-dwt" >/dev/null 2>&1; git -C "$PC_D" worktree prune >/dev/null 2>&1
+        cp "$PS_D/v45.rec" "$PC_REC"
+        pcm v45h
+        if pcv_is_hit v45h "$PC_REC"; then
+          pcv_v PC-V45 "a linked worktree of the bare dist at an unreferenced commit MISSES (fresh render, the opt-out's exit), and the same tree with the worktree removed HITS"
+        else
+          pcv_x PC-V45 "near miss (the worktree removed and pruned) did not HIT: [$(pcv_why)]"
+        fi
+      fi
+    fi
+    git -C "$PC_D" worktree remove --force "$PS_D/r7-dwt" >/dev/null 2>&1; git -C "$PC_D" worktree prune >/dev/null 2>&1
+    rm -f "$PC_C/tests/fixtures/r7zz/run.sh"; rmdir "$PC_C/tests/fixtures/r7zz" 2>/dev/null
+  fi
+
+  # V46 (B4): an extension's `fixtures: ../../docs/r7fx` escapes tests/fixtures/. layer-drift.sh, the
+  # one reader of the value, now renders EXTENSION-FIXTURE-UNBOUND naming the escape and never tests
+  # the path, so the render cannot depend on it: recorded, it HITS, and after creating docs/r7fx the
+  # cached run still HITS while the opt-out render exits 0 (the read is gone; the pre-fix reader would
+  # exit 1 here). Near miss: `fixtures: r7fx` inside tests/fixtures/, its EMPTY directory present, records
+  # and HITS, and removing that directory MISSES with the opt-out's exit.
+  # WHY A ROW AND NOT A REFUSAL: layer-drift's only refusal form, `layer-drift: REFUSED` with exit 1,
+  # makes apply.sh withhold the re-stamp, so a typo in `fixtures:` would block the whole pull.
+  # Removing the read beats refusing around it: the render no longer depends on the escaping path,
+  # so the key needs nothing for it.
+  if [ "$PCV_R7LD" -eq 1 ] && pcv_in PC-V46; then
+    local e46="$ext/r7fx.md" nc46
+    # tests/fixtures/ MUST EXIST for this arm to discriminate: without it the pre-fix reader's
+    # `[ -d tests/fixtures/../../docs/r7fx ]` cannot resolve in the OS, both readers render UNBOUND,
+    # and creating docs/r7fx moves nothing (adv7's p4a, against p5a which seeded tests/fixtures/keep).
+    mkdir -p "$PC_C/tests/fixtures"
+    mkdir -p "$ext" && printf -- '---\nhooks: templates/classes.md\nfixtures: ../../docs/r7fx\n---\n\nbody\n' > "$e46"
+    if ! pcv_r7rec v46; then
+      pcv_x PC-V46 "control: the world with an escaping fixtures: value did not record and then HIT ($(pcv_why))"
+    elif ! grep -q '^EXTENSION-FIXTURE-UNBOUND' "$PS_D/region-v46.md"; then
+      pcv_x PC-V46 "the approval carries no EXTENSION-FIXTURE-UNBOUND row for the escaping value"
+    else
+      mkdir -p "$PC_C/docs/r7fx"
+      pcm v46t; v46t="$(pcv_why)"; v46t_ok=0; pcv_is_hit v46t "$PC_REC" && v46t_ok=1
+      pcm v46t.n nocache; nc46="$PRC"
+      rmdir "$PC_C/docs/r7fx"
+      if [ "$v46t_ok" -ne 1 ] || [ "$nc46" -ne 0 ]; then
+        pcv_x PC-V46 "creating docs/r7fx under an escaping fixtures: value: cached [$v46t], opt-out $nc46 (want a HIT and an opt-out exit 0: the escaping path must not be read)"
+      else
+        mkdir -p "$PC_C/tests/fixtures/r7fx"
+        printf -- '---\nhooks: templates/classes.md\nfixtures: r7fx\n---\n\nbody\n' > "$e46"
+        if ! pcv_r7rec v46n; then
+          pcv_x PC-V46 "near miss (fixtures: r7fx inside, its directory present) did not record and then HIT ($(pcv_why))"
+        else
+          rmdir "$PC_C/tests/fixtures/r7fx"
+          if pcv_r7miss v46m; then
+            pcv_v PC-V46 "an escaping fixtures: ../../docs/r7fx renders UNBOUND without a read (creating docs/r7fx HITS, opt-out exit 0), and fixtures: r7fx inside records, HITS, and MISSES with the opt-out's exit when its directory goes"
+          else
+            pcv_x PC-V46 "near miss: removing the EMPTY tests/fixtures/r7fx a bound extension names did not force a fresh render: [$R7_WHY]"
+          fi
+        fi
+      fi
+    fi
+    rm -f "$e46"; rmdir "$PC_C/tests/fixtures/r7fx" "$PC_C/docs/r7fx" 2>/dev/null
+  fi
+
+  # V47 (D3): a NON-IGNORED .claude/worktrees/agent-r7/ holding its own `.git`. conswork's
+  # `ls-files -o` lists it with a trailing `/`, and er_hash_list now refuses it by name: a fresh render
+  # whose exit equals the opt-out's, the record byte-identical, stderr naming the cause. Near miss: the
+  # same directory IGNORED through info/exclude (which no field keys) HITS the record taken before it.
+  # That HIT needs consignored's prefix filter: `ls-files -o -i -- .claude` lists the ignored nested
+  # repo as `.claude/worktrees/agent-r7/` despite its `:(exclude)` pathspec, and without the filter
+  # er_hash_list refused it there, on every run. With it, the entry is dropped before hashing, conswork
+  # no longer lists it (ignored), and every find guard prunes the path, so no field sees it.
+  if pcv_in PC-V47; then
+    local nl47 c47
+    if ! pcv_r7rec v47; then
+      pcv_x PC-V47 "control: the world before the worktree directory did not record and then HIT ($(pcv_why))"
+    else
+      mkdir -p "$PC_C/.claude/worktrees/agent-r7" && git init -q "$PC_C/.claude/worktrees/agent-r7" >/dev/null 2>&1 \
+        && : > "$PC_C/.claude/worktrees/agent-r7/f"
+      nl47="$(git -C "$PC_C" ls-files -o --exclude-standard -- .claude/worktrees 2>/dev/null)" || nl47=""
+      if ! grep -qxF '.claude/worktrees/agent-r7/' <<< "$nl47"; then
+        pcv_x PC-V47 "FIXTURE BROKEN: ls-files -o does not list .claude/worktrees/agent-r7/ with a trailing /, so the refusal cannot be reached"
+      else
+        pcm v47; v47="$(pcv_why)"; c47="$PRC"; v47_hit="$PHIT"; v47_n="$PN"
+        v47_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/v47.rec" && v47_rec=unchanged
+        pcm v47.n nocache; v47_nc="$PRC"; PRC="$c47"; PHIT="$v47_hit"; PN="$v47_n"
+        if ! { pcv_is_miss "$v47_nc" && [ "$v47_rec" = unchanged ] && grep -qF "${PCV_R6MARK}${PCV_R7MARK}.claude/worktrees/agent-r7/" "$PS_D/v47.err"; }; then
+          pcv_x PC-V47 "a non-ignored .claude/worktrees/agent-r7/: [$v47], opt-out $v47_nc, record $v47_rec (want a fresh render with the opt-out's exit, record untouched, stderr naming the directory refusal)"
+        else
+          cp "$PS_D/v47.rec" "$PC_REC"
+          printf '/.claude/worktrees/\n' >> "$ex"
+          pcm v47h
+          if ! pcv_is_hit v47h "$PC_REC"; then
+            pcv_x PC-V47 "near miss (the same directory ignored through info/exclude) did not HIT: [$(pcv_why)]"
+          else
+            # THE PREFIX IS ANCHORED: consignored drops `.claude/worktrees/` and nothing that merely
+            # shares its letters. Two IGNORED near misses, `.claude/worktreesX/f` and
+            # `.claude/notworktrees/f`, are seeded beside the still-ignored agent-r7 and recorded; editing
+            # either must be a fresh render whose exit equals the opt-out's (a key that dropped it would
+            # HIT), and putting it back HITS. The render does not read either file, so its exit may be 0.
+            local s47 f47 n47 r47 v47k=""
+            printf '/.claude/worktreesX/\n/.claude/notworktrees/\n' >> "$ex"
+            mkdir -p "$PC_C/.claude/worktreesX" "$PC_C/.claude/notworktrees"
+            printf 'one\n' > "$PC_C/.claude/worktreesX/f"; printf 'one\n' > "$PC_C/.claude/notworktrees/f"
+            if ! git -C "$PC_C" check-ignore -q .claude/worktreesX/f || ! git -C "$PC_C" check-ignore -q .claude/notworktrees/f; then
+              v47k=" FIXTURE BROKEN: a near-miss file is not ignored"
+            elif ! pcv_r7rec v47k; then
+              v47k=" control: the world with the ignored worktree and both near misses did not record and then HIT ($(pcv_why))"
+            else
+              for s47 in worktreesX notworktrees; do
+                f47="$PC_C/.claude/$s47/f"
+                printf 'two\n' > "$f47"
+                pcm "v47$s47"; r47="$(pcv_why)"; c47="$PRC"; v47_hit="$PHIT"; v47_n="$PN"
+                pcm "v47$s47.n" nocache; n47="$PRC"; PRC="$c47"; PHIT="$v47_hit"; PN="$v47_n"
+                pcv_is_miss "$n47" || v47k="$v47k $s47[$r47, opt-out $n47]"
+                printf 'one\n' > "$f47"; cp "$PS_D/v47k.rec" "$PC_REC"
+                pcm "v47${s47}h"; pcv_is_hit "v47${s47}h" "$PC_REC" || v47k="$v47k $s47:back[$(pcv_why)]"
+              done
+            fi
+            rm -f "$PC_C/.claude/worktreesX/f" "$PC_C/.claude/notworktrees/f"
+            rmdir "$PC_C/.claude/worktreesX" "$PC_C/.claude/notworktrees" 2>/dev/null
+            if [ -z "$v47k" ]; then
+              pcv_v PC-V47 "a non-ignored .claude/worktrees/agent-r7/ MISSES by a named refusal (fresh render, exit $v47_nc as the opt-out, record untouched), the same directory ignored HITS, and ignored .claude/worktreesX/f and .claude/notworktrees/f stay keyed (each edit MISSES with the opt-out's exit, put back HITS)"
+            else
+              pcv_x PC-V47 "the .claude/worktrees/ prefix is not anchored:${v47k} (want each near-miss edit to be a fresh render with the opt-out's exit, then a hit)"
+            fi
+          fi
+        fi
+      fi
+    fi
+    [ -d "$PC_C/.claude/worktrees/agent-r7" ] && mv "$PC_C/.claude/worktrees/agent-r7" "$PS_D/v47-agent-r7-aside"
+    rmdir "$PC_C/.claude/worktrees" 2>/dev/null
+    cp "$PS_D/r7-exclude.keep" "$ex"
+  fi
+  cat "$PS_D/r7-ledger.keep" > "$lg"; cat "$PS_D/r7-report.keep" > "$PC_R"; cp "$PS_D/r7-rec.keep" "$PC_REC"
+  return 0
+}
+
+# ---- V48: a receipt subject OUTSIDE every read root that is a regular file has its BYTES keyed ----
+# A receipt that READS a .git/ file (`grep -q keep .git/r7-v48.txt`) moves with its content, which a
+# presence bit cannot see. Directions: the receipt records and HITS; touching only the file's mtime
+# still HITS; changing its BYTES MISSES with the opt-out's non-zero exit (the receipt's exit flips).
+# Refusal: a FIFO at a subject path refuses by name with the record byte-identical. That receipt only
+# tests the FIFO (`test -p`), never reads it, so neither the render nor the opt-out can block on it.
+pcv_r7content() {
+  local lg="$PC_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md" sf="$PC_C/.git/r7-v48.txt" ff="$PC_C/.git/r7-v48.fifo"
+  local why="" nc
+  if [ -e "$sf" ] || [ -e "$ff" ]; then pcv_x PC-V48 "FIXTURE BROKEN: a .git/r7-v48 subject already exists"; return 0; fi
+  cp "$lg" "$PS_D/v48-ledger.keep" && cp "$PC_R" "$PS_D/v48-report.keep" && cp "$PC_REC" "$PS_D/v48-rec.keep" \
+    || { pcv_x PC-V48 "FIXTURE BROKEN: could not keep the main world's ledger, report and record"; return 0; }
+  printf 'keep\n' > "$sf"
+  { cat "$PS_D/v48-ledger.keep"; printf '\n## PC-FIXTURE-R7-CONTENT — a receipt that reads a .git/ file\n\nverify: sh grep -q keep .git/r7-v48.txt\n'; } > "$lg"
+  if ! pcv_r7rec v48; then
+    pcv_x PC-V48 "control: a receipt reading an existing .git/r7-v48.txt did not record and then HIT ($(pcv_why))"
+  else
+    touch -t 200001010000 "$sf"
+    pcm v48t; v48t="$(pcv_why)"; v48t_ok=0; pcv_is_hit v48t "$PC_REC" && v48t_ok=1
+    printf 'gone\n' > "$sf"
+    if [ "$v48t_ok" -ne 1 ]; then
+      pcv_x PC-V48 "an mtime-only touch of .git/r7-v48.txt did not HIT: [$v48t] -- the field keys something other than the bytes"
+    elif ! pcv_r7miss v48m; then
+      pcv_x PC-V48 "changing the BYTES of the .git/r7-v48.txt a receipt reads did not force a fresh render: [$R7_WHY] -- a recorded PASS answered for content it never keyed"
+    else
+      rm -f "$sf"
+      { cat "$PS_D/v48-ledger.keep"; printf '\n## PC-FIXTURE-R7-FIFO — a receipt naming a FIFO\n\nverify: sh test -p .git/r7-v48.fifo\n'; } > "$lg"
+      if ! pcv_r7rec v48f; then
+        pcv_x PC-V48 "control: the FIFO receipt with no FIFO present did not record and then HIT ($(pcv_why))"
+      elif ! mkfifo "$ff" 2>/dev/null; then
+        pcv_x PC-V48 "FIXTURE BROKEN: mkfifo failed, so the refusal direction cannot be built"
+      else
+        pcm v48r; why="$(pcv_why)"; v48_rc="$PRC"; v48_hit="$PHIT"; v48_n="$PN"
+        v48_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/v48f.rec" && v48_rec=unchanged
+        pcm v48r.n nocache; nc="$PRC"; PRC="$v48_rc"; PHIT="$v48_hit"; PN="$v48_n"
+        if pcv_is_miss "$nc" && [ "$v48_rec" = unchanged ] && grep -qF "${PCV_R6MARK}${PCV_R7FMARK}" "$PS_D/v48r.err"; then
+          pcv_v PC-V48 "a receipt reading a .git/ file outside every read root records and HITS, an mtime-only touch HITS, a byte change MISSES with the opt-out's exit, and a FIFO subject refuses by name (fresh render, exit $nc as the opt-out, record untouched)"
+        else
+          pcv_x PC-V48 "FIFO subject: [$why], opt-out $nc, record $v48_rec (want a fresh render with the opt-out's exit, record untouched, stderr naming the not-a-regular-file refusal)"
+        fi
+      fi
+    fi
+  fi
+  rm -f "$sf" "$ff"
+  cat "$PS_D/v48-ledger.keep" > "$lg"; cat "$PS_D/v48-report.keep" > "$PC_R"; cp "$PS_D/v48-rec.keep" "$PC_REC"
+  return 0
+}
+
 # pcv_suite <emit> <dir> [scope] -- the PC-V arms against that engine; one verdict line per id in
 # <dir>/verdicts. With no scope every arm runs (the shipping control). With a scope, a group of arms
 # runs only when pcv_in names one of its ids, and the main world through V2 always runs: it is V0's
@@ -3979,13 +4313,18 @@ pcv_suite() {
     fi
   fi
 
-  # ---- V41 (R4): a live sh receipt naming a .git/ path refuses; one naming a non-.git path HITS ----
-  # Each receipt is RE-APPROVED (the region re-rendered into the report) so the condition alone
-  # renders exit 0: the refusal is then a fresh exit-0 render whose record stays byte-identical, where
-  # an engine without R4 would re-record. The near miss records on its first run and HITS its second.
-  if [ "$PCV_R6" -eq 1 ]; then
+  # ---- V41 (rewritten for round 7): a live sh receipt naming a .git/ path is KEYED, not refused ----
+  # Round 6 refused any receipt naming a `.git/` path (R4); round 7 keys every receipt subject's
+  # presence in the receipts field instead. The receipt is RE-APPROVED (the region re-rendered into
+  # the report) with .git/hooks/pre-push ABSENT, so the condition alone renders exit 0: it must now
+  # RECORD (record rewritten, no refusal named) and then HIT. Creating the hook then moves the row the
+  # render prints, and the cached run must MISS with the opt-out's non-zero exit -- the case round 6
+  # refused and round 5 accepted stale. Near miss kept: a receipt naming docs/r6-nearmiss.md records
+  # and then HITS.
+  if [ "$PCV_R7" -eq 1 ]; then
     if ! pcv_ctl v41; then pcv_noctl PC-V41; else
       v41_lg="$PC_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+      v41_hk="$PC_C/.git/hooks/pre-push"
       cp "$v41_lg" "$PS_D/ledger41.keep"; cp "$PC_R" "$PS_D/report41.keep"
       pcv_r41() { # <path the receipt names> -- append the entry and re-approve
         { cat "$PS_D/ledger41.keep"; printf '\n## PC-FIXTURE-R6-RECEIPT — a receipt naming %s\n\nverify: sh false # %s\n' "$1" "$1"; } > "$v41_lg"
@@ -3993,24 +4332,34 @@ pcv_suite() {
         { echo "# Reconcile report (fixture)"; echo; cat "$PS_D/region41.md"; } > "$PC_R"
         grep -q 'reconcile-mechanical' "$PS_D/region41.md"
       }
-      if ! pcv_r41 .git/hooks/pre-push; then pcv_x PC-V41 "FIXTURE BROKEN: the re-approval with the .git receipt rendered no region"
+      if [ -e "$v41_hk" ]; then pcv_x PC-V41 "FIXTURE BROKEN: .git/hooks/pre-push already exists, so its creation is not one property"
+      elif ! pcv_r41 .git/hooks/pre-push; then pcv_x PC-V41 "FIXTURE BROKEN: the re-approval with the .git receipt rendered no region"
       else
-        pcm v41; v41="$(pcv_why)"; v41_rc="$PRC" v41_hit="$PHIT" v41_n="$PN"
-        pcm v41.n nocache; v41_nc="$PRC"; PRC="$v41_rc"; PHIT="$v41_hit"; PN="$v41_n"
-        v41_rec=REWRITTEN; cmp -s "$PC_REC" "$PS_D/rec.keep" && v41_rec=unchanged
-        if ! { pcv_is_miss 0 && [ "$v41_nc" -eq 0 ] && [ "$v41_rec" = unchanged ] && grep -qF "${PCV_R6MARK}R4" "$PS_D/v41.err"; }; then
-          pcv_x PC-V41 "a re-approved receipt naming .git/hooks/pre-push: [$v41], opt-out $v41_nc, record $v41_rec (want a fresh exit-0 render naming R4 that leaves the record untouched)"
+        pcm v41; v41="$(pcv_why)"; v41a_ok=0
+        pcv_is_miss 0 && ! cmp -s "$PC_REC" "$PS_D/rec.keep" && ! grep -qF "$PCV_R6MARK" "$PS_D/v41.err" && v41a_ok=1
+        pcm v41h1; v41h1="$(pcv_why)"; v41h1_ok=0; pcv_is_hit v41h1 "$PC_REC" && v41h1_ok=1
+        mkdir -p "$(dirname "$v41_hk")"; printf '#!/bin/sh\nexit 0\n' > "$v41_hk"
+        pcm v41m; v41m="$(pcv_why)"; v41_rc="$PRC"; v41_hit="$PHIT"; v41_n="$PN"
+        pcm v41m.n nocache; v41_nc="$PRC"; PRC="$v41_rc"; PHIT="$v41_hit"; PN="$v41_n"
+        rm -f "$v41_hk"
+        if [ "$v41a_ok" -ne 1 ] || [ "$v41h1_ok" -ne 1 ]; then
+          pcv_x PC-V41 "a re-approved receipt naming an absent .git/hooks/pre-push: first [$v41], second [$v41h1] (want a fresh exit-0 render that records with no refusal named, then a hit)"
+        elif [ "$v41_nc" -eq 0 ]; then
+          pcv_x PC-V41 "FIXTURE BROKEN: the opt-out render after creating .git/hooks/pre-push still exits 0, so the receipt subject is not one the render sees"
+        elif ! pcv_is_miss "$v41_nc"; then
+          pcv_x PC-V41 "creating the .git/hooks/pre-push a receipt names did not force a fresh render: [$v41m], opt-out exits $v41_nc -- a recorded PASS answered for a subject it never keyed"
         elif ! pcv_r41 docs/r6-nearmiss.md; then pcv_x PC-V41 "FIXTURE BROKEN: the re-approval with the near-miss receipt rendered no region"
         else
           pcm v41b; v41b="$(pcv_why)"; v41b_ok=0; pcv_is_miss 0 && ! cmp -s "$PC_REC" "$PS_D/rec.keep" && v41b_ok=1
           pcm v41h
           if [ "$v41b_ok" -eq 1 ] && pcv_is_hit v41h "$PC_REC"; then
-            pcv_v PC-V41 "a re-approved receipt naming .git/hooks/pre-push MISSES by refusal (fresh exit-0 render, record untouched, R4 named), and one naming docs/r6-nearmiss.md records and then HITS"
+            pcv_v PC-V41 "a re-approved receipt naming an absent .git/hooks/pre-push records and HITS (keyed, not refused), creating the hook MISSES with the opt-out's exit $v41_nc, and one naming docs/r6-nearmiss.md records and then HITS"
           else
             pcv_x PC-V41 "near miss (a receipt naming docs/r6-nearmiss.md): first [$v41b], second [$(pcv_why)] (want a fresh exit-0 render that records, then a hit)"
           fi
         fi
       fi
+      rm -f "$v41_hk"
       cat "$PS_D/ledger41.keep" > "$v41_lg"; cat "$PS_D/report41.keep" > "$PC_R"; pcv_back
     fi
   fi
@@ -4083,6 +4432,12 @@ pcv_suite() {
   if [ "$PCV_R6" -eq 1 ]; then
     if pcv_in PC-V38 PC-V39; then pcv_r6world; fi
     if pcv_in PC-V42; then pcv_b2world; fi
+  fi
+  # ---- V43..V47: the round-7 partition, in the MAIN world after the round-6 arms ----
+  if [ "$PCV_R7" -eq 1 ]; then
+    if pcv_in PC-V43; then pcv_r7norm; fi
+    if pcv_in PC-V44 PC-V45 PC-V46 PC-V47; then pcv_r7world; fi
+    if [ "$PCV_R7F" -eq 1 ] && pcv_in PC-V48; then pcv_r7content; fi
   fi
 
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
@@ -4161,8 +4516,8 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built a
   local d="$PCV_ROOT/$1" a t m n
   case "$1" in
     M-region)  m=replace
-               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do'
-               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env; do' ;;
+               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env receipts region; do'
+               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env receipts; do' ;;
     M-direxcl) m=replace; a='    _er_ex="$_er_rel"'; t='    _er_ex="${_er_rel%/*}"' ;;
     M-exit3)   m=before;  a='[ "$cause" = BLOCKERS-RESOLVED ] && exit 3'; t='er_cache_record' ;;
     *) return 1 ;;
@@ -4185,8 +4540,8 @@ pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V10" ;; 
 # the same-run control: V9 on M-region, V3 on M-exit3. WHAT THIS GIVES UP: an arm outside a mutant's
 # groups can no longer show up in its kill set, so a change that would entangle such an arm (the
 # V17..V20 ordering hazard noted in pcv_latarm) is not caught by the scoring; no declared kill is lost.
-# The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, k5, r6 and b2 worlds) hold no
-# declared kill, so no mutant runs them; the shipping suite still runs every one.
+# The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, k5, r6, b2 and r7 worlds) hold
+# no declared kill, so no mutant runs them; the shipping suite still runs every one.
 pcv_scope() {
   case "$1" in
     M-region)  echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9" ;;
@@ -4212,7 +4567,7 @@ pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
 PCV_MUTS="M-region M-direxcl M-exit3"
 
 if ! grep -qF "$PCV_HITP" "$EMIT"; then
-  printf '  SKIP  PC-V0..PC-V42: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
+  printf '  SKIP  PC-V0..PC-V48: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
 else
   mkdir -p "$PCV_ROOT/ship"
   ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &

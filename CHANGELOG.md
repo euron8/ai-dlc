@@ -19,6 +19,64 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.885.0] - 2026-10-19
+
+Batch 236, BL-685 round-7 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,
+which stays open: adversary round 7 on 0.880.0's refusal partition found four BLOCKERs and one DEFECT. All five
+are fixed here, along with an older defect the round-7 probe exposed. The recorded-PASS cache stays off by default. Closes no `PC-` id. Net for this release: 0 closed,
+0 filed.
+
+### The recorded-PASS key reads receipt subjects, dist worktrees, and an escaping fixture binding (BL-685, round 7)
+
+Round 7 found no way past R1, R2 or R3. Two BLOCKERs came from R4 being a prefix test over a path the engine
+resolves, and two from inputs no earlier round enumerated.
+
+- **R4's prefix refusal is retired and replaced by a key field (B1, B2).** A receipt token such as
+  `docs/../.git/x` passed `ledger-reverify.sh`'s `docs/` prefix, so R4 never fired, while the engine's existence
+  test resolved it into the git directory. Under the other four prefixes, a path outside every read root was not
+  keyed at all, so removing a receipt's subject could leave a stale close accepted. The new `receipts` field keys
+  every receipt-token subject: a lexically normalised label, and a present or absent bit taken from the same
+  `[ -e ]` test `ledger-reverify.sh` runs on the raw token. A regular file outside every read root also has its
+  bytes hashed, through the key's existing hasher. A subject outside the roots that is a symlink, is not a regular
+  file or directory, or cannot be read refuses the cache by name. Nothing falls back to presence alone.
+- **A linked worktree of the dist is keyed (B3).** `retired-fixtures.sh` runs `git log --all`, which walks every
+  worktree's HEAD; the dist field now includes `git worktree list --porcelain`.
+- **An escaping `fixtures:` value is no longer read (B4).** A value with a `..` component or a leading `/` now
+  renders an `EXTENSION-FIXTURE-UNBOUND` row naming the escape, and the path is never tested. A refusal was not
+  used: `layer-drift.sh`'s only refusal form makes `apply.sh` withhold the re-stamp, which would block a whole pull
+  on a typo.
+- **A silent cache miss now names its cause (D3).** A directory listed among the consumer's untracked paths, such
+  as an unignored agent worktree under `.claude/worktrees/`, refused without a word on every `--verify`. It now
+  refuses by name.
+- **A pre-existing defect is fixed: the cache could never hit on a tree carrying ignored agent worktrees.** The
+  ignored-files field excluded `.claude/worktrees` with a `git ls-files` exclude pathspec, and git still lists a
+  nested repository there as one directory entry under every exclude form tried (git 2.54.0). That entry then
+  refused the key, so on any consumer or checkout holding ignored agent worktrees, this batch's own working state,
+  the recorded PASS never formed. Entries under `.claude/worktrees/` are now dropped from that list by an anchored
+  path-prefix match before hashing; an unignored worktree there still refuses by name.
+- `reconcile-emit-report`: PC-V41 is rewritten from asserting R4's refusal to asserting that a `.git/` subject is
+  keyed; new arms PC-V43 (normalised subjects), PC-V44 (subjects outside the read roots), PC-V45 (dist worktree),
+  PC-V46 (escaping binding), PC-V47 (named directory refusal) and PC-V48 (subject content, and a FIFO refusal).
+  None is in any mutant's scope. The fixture's `tools.decl` declares `mkfifo`, which PC-V48's FIFO direction calls
+  and which the hermetic runner would otherwise not find.
+
+### Limits
+- Probed against two engines. On 0.880.0 (`ff4eb8329`), the engine round 7 attacked, six seeds record and then
+  hit a stale PASS while a fresh render exits 1: an untracked empty directory, a `docs/../` token, a path under
+  `.claude/worktrees`, a dist worktree, an ignored receipt subject, and an escaping `fixtures:` value. A `.git/`
+  subject is refused by R4 there, and an ignored agent worktree is a silent miss with no record. On this engine the
+  first five each miss with the cached exit equal to the fresh one. The sixth hits by design: the escaping
+  `fixtures:` value is no longer read, so removing its directory changes nothing and a fresh render exits 0. A
+  `.git/` subject is keyed (touching only its mtime hits, changing its bytes misses); an unignored agent worktree
+  refuses by name, and an ignored one records and hits. A world with no seed records and hits on both engines,
+  and a plain install hits on its second `--verify`.
+- Verified through `hermetic-run.sh` into the shared verdict store over every fixture whose `inputs.decl` names a
+  changed file or a directory holding one, with PC-V41 and PC-V43..PC-V48 read by name.
+- Owed, not in this release: `.claude/worktrees/` among the install's transient ignores (it touches `install.sh`),
+  and an R2 probe against a hardlink, firmlink or bind mount (unrun in round 7), which goes to round 8.
+- The cache default stays OFF until adversary round 8 returns no BLOCKER and the lead rules.
+
+
 ## [0.884.0] - 2026-10-19
 
 **A consumer fixture that declares inputs (`inputs.decl`) must declare every tool it forks in its `tools.decl`, because the runner now finds only declared tools.** Measured at graph's origin/main d82236cee: graph has 0 such consumer-owned fixtures, because all 160 of its declared fixtures are shipped fixtures this release replaces.
