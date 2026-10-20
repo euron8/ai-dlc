@@ -40,3 +40,4 @@ uniq
 wc
 xargs
 yes
+tee

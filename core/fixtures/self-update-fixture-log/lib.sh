@@ -41,19 +41,11 @@ RUNNER="$(pick "${SUFL_RUNNER_ARG:-}" "$SUFL_DIR/../../../core/skills/ai-dlc-upd
 [ -n "$RUNNER" ] || { echo "FIXTURE ERROR: cannot locate self-update-fixtures.sh" >&2; exit 2; }
 RECONCILE="$(cd "$(dirname "$RUNNER")" && pwd)"
 
-CONS="$(bash "$SUFL_DIR/seed.sh")"; sufl_tmp "$CONS"
-CONS2="$(bash "$SUFL_DIR/seed.sh")"; sufl_tmp "$CONS2"
 DIST="$(mktemp -d)"; sufl_tmp "$DIST"
-WREPO="$(mktemp -d)"; sufl_tmp "$WREPO"
-LOGDIR="$CONS/_bmad-output/ai-dlc-update"
-LOGDIR2="$CONS2/_bmad-output/ai-dlc-update"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-
-newest_log()  { ls -t "$LOGDIR"/self-update-fixtures-*.md 2>/dev/null | head -1; }
-newest_log2() { ls -t "$LOGDIR2"/self-update-fixtures-*.md 2>/dev/null | head -1; }
 
 # --- The GATE RECORD, and the FALSE-POSITIVE SET this fixture had to be narrowed against ----
 # The runner now refuses to run any fixture without a recorded `# verdict: OK` from
@@ -162,70 +154,6 @@ seed_record() { # $1=log dir $2=dist $3=base-ref $4=theirs-ref [$5=verdict] [$6=
     echo "# verdict: ${5:-OK}"
     echo "# rows: 1"; } > "$sr_f"
   printf '%s' "$sr_f"
-}
-
-# Every range any part below drives, recorded OK once, up front. Seeding per-part would make
-# each part's verdict depend on a seeding step written beside it, and a part whose seed silently
-# failed would report the runner refusing for the reason the part was testing.
-#
-# THE SUFFIXES ARE DISTINCT AND THAT IS LOAD-BEARING, NOT TIDY. All four land inside one
-# wall-clock second, so a shared suffix makes them ONE FILE: each write clobbers the last, three
-# ranges lose their record, and every part driving them exits 2 on a missing approval. Measured —
-# it took twenty-six parts red at once, all of them reading as regressions in the arm under test.
-seed_ranges() { # $1=log dir
-  seed_record "$1" "$DIST" "$D_THEIRS" "$D_QUIET"  OK 010 >/dev/null || return 1
-  seed_record "$1" "$DIST" "$D_QUIET"  "$D_SHIP"   OK 011 >/dev/null || return 1
-  seed_record "$1" "$DIST" "$D_BASE"   theirs-tag  OK 012 >/dev/null || return 1
-  seed_record "$1" "$DIST" "$D_THEIRS" "$D_BASE"   OK 013 >/dev/null || return 1
-}
-
-# The refusal list, read back as a SET rather than as N greps. The name class is a NEGATION --
-# anything but whitespace and `/` -- because an ASCII enumeration could not spell a directory named
-# `café` and read its row as absent; `/` stays out so a path-shaped row is still not a bare name.
-# An equality against the whole
-# list is what carries the exemptions: a `.dist-only` directory that stopped being exempt
-# appears here, and no absence-shaped assertion has to be written for it separately.
-cov_set() {
-  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
-  sed -n '/^COVERAGE: the diff changes/,/^$/p' "$1" \
-    | sed -n 's/^  \([^[:space:]/][^[:space:]/]*\)$/\1/p' | sort | tr '\n' ','
-}
-
-# The OVER-completeness refusal list, read the same way and for the same reason. Its rows carry
-# a reason after the directory name, so the name is taken up to the first space; the em dash is
-# deliberately not in the pattern, because a multibyte character in a bracket class is three
-# separate bytes to a BSD `sed` and the match would depend on the locale the suite happens to
-# run under. Set equality here is what carries the ACQUITTALS: a legitimate directory that
-# started being refused shows up as an extra member, with no absence-shaped assertion written
-# for it separately.
-uns_set() {
-  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
-  sed -n '/^COVERAGE: the named set contains/,/^$/p' "$1" \
-    | sed -n 's/^  \([^[:space:]/][^[:space:]/]*\) .*$/\1/p' | sort | tr '\n' ','
-}
-
-# THE SAME LIST READ WITHOUT A CHARACTER CLASS, and it exists because `uns_set` above CANNOT
-# SPELL THE SUBJECT OF A SLASH ROW. Its capture is `[^[:space:]/]` followed by a space, so a
-# row opening `core/fixtures/ — ...` matches nothing at all and the reader returns EMPTY —
-# byte-identical to a run that refused nothing. Measured on this branch: a path-shape refusal
-# scored `uns_set` empty while the row was present and correct. The subject an empty-name
-# argument must keep is exactly such a row, so the arm that asserts it needs a reader whose
-# grammar can spell it: the first whitespace-delimited token, whatever characters it carries.
-# A row that LOST its subject opens with the em dash instead, so the two states stay distinct.
-# `LC_ALL=C` because the order is compared as a string and a locale-sensitive sort would make
-# the same set read differently on another machine.
-uns_subj() {
-  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
-  sed -n '/^COVERAGE: the named set contains/,/^$/p' "$1" \
-    | sed -n 's/^  \([^ ][^ ]*\) .*$/\1/p' | LC_ALL=C sort | tr '\n' ','
-}
-
-# The per-fixture section names, IN ARGUMENT ORDER and deliberately not sorted. What two runs
-# of the same set in two argument SPELLINGS must agree on is the sequence the loop actually
-# walked, and a sort would hide a normalisation that reordered the positionals.
-sec_set() {
-  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
-  sed -n 's/^===== FIXTURE \(.*\) =====$/\1/p' "$1" | tr '\n' ','
 }
 
 # --- The throwaway DISTRIBUTION repo ------------------------------------------------------
@@ -398,59 +326,6 @@ dput "core/fixtures/touched-shippable/run.sh" 'after quiet'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m ship >/dev/null 2>&1
 D_SHIP="$(G rev-parse HEAD 2>/dev/null)"
 
-# --- The DIST WORKTREE, made to DISAGREE with `theirs` in both directions -------------------
-# LAST, and uncommitted, because nothing below runs `G add`. Every probe in the runner reads at
-# a REF; an implementation reading `$DIST/core/fixtures/<d>/...` off disk answers for whatever
-# the checkout happens to hold, which is a different tree from the one being delivered. On a
-# seed where disk and theirs AGREE the two implementations are indistinguishable, so the wrong
-# one passes. These four writes split them for BOTH probes in BOTH directions, and they are
-# confined to four directories no other part names — the disk-reading mutant must fail Part 17
-# and nothing else, or the arm that owns the read is not identifiable.
-rm -f "$DIST/core/fixtures/theirs-only-distonly/.dist-only"
-mkdir -p "$DIST/core/fixtures/theirs-only-nodriver"
-printf '%s\n' 'on disk, committed nowhere' > "$DIST/core/fixtures/theirs-only-nodriver/run.sh"
-printf '%s\n' 'on disk, committed nowhere' > "$DIST/core/fixtures/disk-only-distonly/.dist-only"
-rm -f "$DIST/core/fixtures/disk-missing-driver/run.sh"
-
-# --- A repo that is a git checkout but NOT the distribution --------------------------------
-# The state is reachable from THIS fixture's own resolver: `pick` above takes the runner from
-# three layouts, two of them consumer layouts, and walking up four levels from a consumer
-# `.claude/skills/.../reconcile` lands on the consumer root — a git repo whose `theirs` has no
-# `core/fixtures` tree, so the diff comes back empty and the join passes having seen nothing.
-#
-# THE SEED IS SHAPED TO SAY WHICH READ IS WRONG, not merely that something is. `core/fixtures`
-# is COMMITTED AT BASE and deleted at theirs, and then written back to the WORKTREE
-# uncommitted — so a guard keyed on the base ref, or on what is on disk, would pass here and
-# only a read at THEIRS refuses. That is also why the exemptions have to be committed at the
-# theirs commit rather than left on disk in the distribution seed above.
-W()     { git -C "$WREPO" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
-                          -c commit.gpgsign=false "$@"; }
-wput()  { mkdir -p "$(dirname "$WREPO/$1")" && printf '%s\n' "$2" > "$WREPO/$1"; }
-
-git -c init.templateDir= init -q -b main "$WREPO" >/dev/null 2>&1 \
-  || git -c init.templateDir= init -q "$WREPO" >/dev/null 2>&1
-wput "core/fixtures/touched-shippable/run.sh" 'present at base only'
-wput "tests/fixtures/green-one/run.sh" 'a consumer-layout fixture'
-W add -A >/dev/null 2>&1; W commit -q --no-verify -m base >/dev/null 2>&1
-W_BASE="$(W rev-parse HEAD 2>/dev/null)"
-
-rm -rf "$WREPO/core"
-wput "tests/fixtures/green-one/run.sh" 'a consumer-layout fixture, changed'
-W add -A >/dev/null 2>&1; W commit -q --no-verify -m theirs >/dev/null 2>&1
-W_THEIRS="$(W rev-parse HEAD 2>/dev/null)"
-wput "core/fixtures/touched-shippable/run.sh" 'back on disk, committed nowhere'
-
-# --- The FP-set repair, applied ONCE for every range every part below drives ----------------
-# Both consumer trees, because parts 1 to 6 run against `$CONS` and 7 onward against `$CONS2`.
-# `W_THEIRS -> W_BASE` is Part 13b's swapped range and Mutant 5's, the two runs against the
-# wrong-repo checkout that are supposed to REACH the loop.
-seed_ranges "$LOGDIR"  || bad "FIXTURE ERROR: could not seed the gate records for \$CONS"
-seed_ranges "$LOGDIR2" || bad "FIXTURE ERROR: could not seed the gate records for \$CONS2"
-seed_record "$LOGDIR2" "$WREPO" "$W_THEIRS" "$W_BASE"   OK 020 >/dev/null \
-  || bad "FIXTURE ERROR: could not seed the wrong-repo swapped-range gate record"
-seed_record "$LOGDIR2" "$WREPO" "$W_BASE"   "$W_THEIRS" OK 021 >/dev/null \
-  || bad "FIXTURE ERROR: could not seed the wrong-repo forward-range gate record"
-
 # --- The G-parts' consumer tree and its helpers -------------------------------------------
 GCONS="$(bash "$SUFL_DIR/seed.sh")"; sufl_tmp "$GCONS"
 GLOG="$GCONS/_bmad-output/ai-dlc-update"
@@ -494,77 +369,6 @@ gin_write_slice() {
 # The digest no content has: Parts G18 and G19, and Mutants G10 and G11.
 GZERO=0000000000000000000000000000000000000000
 
-# --- BUILDER: Part 20's blob-filtered clone, and the 030 record for its range ----------------
-# Called where Part 20 runs. The arm's comments, which say why the seed is shaped this way, stay
-# with the arm in run.sh. `filt_ok` is the discrimination condition both the arm and Mutant 15
-# read before scoring anything over this clone.
-build_filt_world() {
-  f_base=""; f_missing=0; f_cat=""; f_rev=""; f_ctl=""
-FILT_ROOT="$(mktemp -d)"; sufl_tmp "$FILT_ROOT"
-FILT_SRC="$FILT_ROOT/src"
-FILT_SRV="$FILT_ROOT/src.git"
-FILT="$FILT_ROOT/filtered-dist"
-(
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
-  git -c init.templateDir= init -q -b main "$FILT_SRC" >/dev/null 2>&1 \
-    || git -c init.templateDir= init -q "$FILT_SRC" >/dev/null 2>&1
-  # Assert the probe repo is its own before the first write — `GIT_DIR` outranks `git -C`, and a
-  # stray one has committed into the real repository from a fixture before. Compared against the
-  # SYMLINK-RESOLVED path: `mktemp -d` hands back `/var/folders/...` on this platform while
-  # `--absolute-git-dir` answers `/private/var/folders/...`, so a literal compare fails on a
-  # correct repo and silently skips the whole arm — which is how this one first read as
-  # "could not build a clone".
-  [ "$(git -C "$FILT_SRC" rev-parse --absolute-git-dir 2>/dev/null)" \
-    = "$(cd "$FILT_SRC" && pwd -P)/.git" ] || exit 1
-  FG() { git -C "$FILT_SRC" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
-                            -c commit.gpgsign=false "$@"; }
-  for f in keeper mover; do
-    mkdir -p "$FILT_SRC/core/fixtures/$f"
-    printf 'unique-base-%s-aaaaaaaaaaaaaaaaaaaaaaaa\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
-  done
-  mkdir -p "$FILT_SRC/core/scripts"
-  printf 'unique-base-machinery-bbbbbbbbbbbbbbbb\n' > "$FILT_SRC/core/scripts/machinery.sh"
-  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m base >/dev/null 2>&1
-  for f in keeper mover; do
-    printf 'unique-theirs-%s-cccccccccccccccccccccccc\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
-  done
-  printf 'unique-theirs-machinery-dddddddddddddddd\n' > "$FILT_SRC/core/scripts/machinery.sh"
-  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m theirs >/dev/null 2>&1
-  FG tag filt-theirs >/dev/null 2>&1
-  # A FOURTH commit that moves the fixtures AGAIN, and it is what makes the arm discriminate.
-  # A `blob:none` clone still holds every blob its CHECKOUT needs, so if `filt-theirs` were the
-  # tip its fixture blobs would be present and `cat-file -e` would answer correctly — the arm
-  # would pass against its own mutant. Measured: the first version of this seed did exactly
-  # that. With HEAD moved past it, the blobs at `filt-theirs` are genuinely filtered out.
-  for f in keeper mover; do
-    printf 'unique-final-%s-ffffffffffffffffffffffff\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
-  done
-  printf 'unique-final-machinery-eeeeeeeeeeeeeeee\n' > "$FILT_SRC/core/scripts/machinery.sh"
-  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m final >/dev/null 2>&1
-  git clone --quiet --bare "$FILT_SRC" "$FILT_SRV" >/dev/null 2>&1
-  git -C "$FILT_SRV" config uploadpack.allowFilter true
-  git clone --quiet --no-local --filter=blob:none "file://$FILT_SRV" "$FILT" >/dev/null 2>&1
-) >/dev/null 2>&1
-if [ -d "$FILT/.git" ]; then
-  # The promisor is moved away, which is what makes the clone genuinely OFFLINE. Without this
-  # every probe lazily refetches, the two spellings agree, and the null reads as a pass.
-  mv "$FILT_SRV" "${FILT_SRV}.gone" 2>/dev/null
-  f_base="$(git -C "$FILT" rev-parse -q --verify filt-theirs^ 2>/dev/null)"
-  f_missing="$(git -C "$FILT" rev-list --objects --all --missing=print 2>/dev/null | grep -c '^?')"
-  f_cat="$(git -C "$FILT" cat-file -e "${f_base}:core/fixtures/keeper/run.sh" 2>/dev/null && echo present || echo ABSENT)"
-  f_rev="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/keeper/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
-  f_ctl="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/zzz-no-such/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
-  # The filtered clone is a FIFTH range, in a repo built inside this block, so `seed_ranges`
-  # above could not have covered it: the runner refuses any range with no recorded OK, and every
-  # run below would exit 2 on that before reaching a probe.
-  seed_record "$LOGDIR2" "$FILT" "${f_base:-HEAD}" filt-theirs OK 030 >/dev/null 2>&1
-  fi
-}
-filt_ok() {
-  [ -n "$f_base" ] && [ "$f_missing" -ne 0 ] && [ "$f_cat" = ABSENT ] \
-    && [ "$f_rev" = present ] && [ "$f_ctl" = ABSENT ]
-}
-
 # --- BUILDER: Part G21's three-commit distribution (also Mutant G11's) -----------------------
 IG(){ git -C "$I_D" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
                     -c commit.gpgsign=false "$@"; }
@@ -589,149 +393,6 @@ I_BB="$(IG rev-parse -q --verify "${I_B}:core/scripts/gate-changed.sh" 2>/dev/nu
 I_TB="$(IG rev-parse -q --verify "${I_T}:core/scripts/gate-changed.sh" 2>/dev/null)"
 }
 
-# --- BUILDER: Part 21's world, and the readers its arms and mutants share ---------------------
-P21_DISC_WANT="tree:rp=1,ce=1 blob:rp=0,ce=1 ctl:rp=0,ce=0"
-p21_obj() { # p21_obj <spec> -> move that loose object aside; 0 when it is gone
-  local s; s="$(git -C "$P21D" rev-parse -q --verify "$1" 2>/dev/null)" || return 1
-  [ -n "$s" ] && mv "$P21D/.git/objects/${s%"${s#??}"}/${s#??}" "$P21/gone-$s" 2>/dev/null
-}
-p21_rp() { git -C "$P21D" rev-parse -q --verify "p21-theirs:core/fixtures/$1" >/dev/null 2>&1 && echo 0 || echo 1; }
-p21_ce() { git -C "$P21D" cat-file -e "p21-theirs:core/fixtures/$1" >/dev/null 2>&1 && echo 0 || echo 1; }
-p21_newest() { ls -t "$P21LOG"/self-update-fixtures-*.md 2>/dev/null | head -1; }
-# p21_over <runner> -> "rc=<n> why=<unconfirmed|deleted|other> keeper=<refused|kept>"
-p21_over() {
-  local rc=0 l w=other k=kept
-  rm -f "$P21LOG"/self-update-fixtures-*.md
-  bash "$1" "$P21D" p21-base p21-theirs "$P21C" treeless keeper >/dev/null 2>&1 || rc=$?
-  l="$(p21_newest)"
-  if grep -q '^  treeless — its .dist-only marker at .* could not be confirmed present or absent' "${l:-/dev/null}"; then w=unconfirmed
-  elif grep -q '^  treeless — no run.sh at .*upstream deleted the driver' "${l:-/dev/null}"; then w=deleted; fi
-  grep -q '^  keeper ' "${l:-/dev/null}" && k=refused
-  printf 'rc=%s why=%s keeper=%s\n' "$rc" "$w" "$k"
-}
-# p21_diff <runner> -> "rc=<n> tag=<unconfirmed|uncovered|none> subject=<blobless|->"
-p21_diff() {
-  local rc=0 l t=none s=-
-  rm -f "$P21LOG"/self-update-fixtures-*.md
-  bash "$1" "$P21D" p21-base p21-theirs "$P21C" keeper >/dev/null 2>&1 || rc=$?
-  l="$(p21_newest)"
-  if grep -q '^COVERAGE: UNCONFIRMED' "${l:-/dev/null}"; then
-    t=unconfirmed
-    # A whole-line membership `case`, not `| grep -q`, which I54b refuses under pipefail.
-    p21_sec="$(sed -n '/^COVERAGE: UNCONFIRMED/,/^$/p' "$l")"
-    case "
-$p21_sec
-" in *"
-  blobless
-"*) s=blobless ;; esac
-  elif grep -q '^COVERAGE: the diff changes' "${l:-/dev/null}"; then t=uncovered; fi
-  printf 'rc=%s tag=%s subject=%s\n' "$rc" "$t" "$s"
-}
-build_p21_world() {
-P21="$(mktemp -d)"; sufl_tmp "$P21"
-P21D="$P21/dist"
-P21C="$(bash "$SUFL_DIR/seed.sh")"; sufl_tmp "$P21C"
-P21LOG="$P21C/_bmad-output/ai-dlc-update"
-(
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
-  git -c init.templateDir= init -q "$P21D" || exit 1
-  PG() { git -C "$P21D" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
-                        -c commit.gpgsign=false "$@"; }
-  for f in keeper treeless blobless; do
-    mkdir -p "$P21D/core/fixtures/$f"
-    printf 'p21 unique base %s\n' "$f" > "$P21D/core/fixtures/$f/run.sh"
-  done
-  PG add -A && PG commit -q --no-verify -m base && PG tag p21-base || exit 1
-  printf 'p21 unique theirs blobless\n' > "$P21D/core/fixtures/blobless/run.sh"
-  printf 'p21 unique marker: a mutation battery, never shipped\n' > "$P21D/core/fixtures/blobless/.dist-only"
-  PG add -A && PG commit -q --no-verify -m theirs && PG tag p21-theirs || exit 1
-) >/dev/null 2>&1
-seed_record "$P21LOG" "$P21D" p21-base p21-theirs OK 021 >/dev/null 2>&1
-p21_obj 'p21-theirs:core/fixtures/treeless'
-p21_obj 'p21-theirs:core/fixtures/blobless/.dist-only'
-P21_DISC="tree:rp=$(p21_rp treeless/.dist-only),ce=$(p21_ce treeless) blob:rp=$(p21_rp blobless/.dist-only),ce=$(p21_ce blobless/.dist-only) ctl:rp=$(p21_rp keeper/run.sh),ce=$(p21_ce keeper)"
-}
-
-# --- BUILDER: Part 22's mktemp stub, into <dir>, and its driver -------------------------------
-p22_stub() { # <dir> -> P22S=<dir>, holding a `mktemp` that hands the runner a read-only staging dir
-P22S="$1"; mkdir -p "$P22S"
-P22_REAL_MKTEMP="$(command -v mktemp)"
-printf '#!/bin/sh\ncase "$*" in\n  *su-stage.XXXXXX*) d="$(%s "$@")" || exit $?; chmod 555 "$d"; echo fired >> %s/fired; printf "%%s\\n" "$d" ;;\n  *) exec %s "$@" ;;\nesac\n' \
-  "$P22_REAL_MKTEMP" "$P22S" "$P22_REAL_MKTEMP" > "$P22S/mktemp"
-chmod +x "$P22S/mktemp"
-}
-# p22 <runner> <stubbed:yes|no> -> "rc=<n> staging=<refused|none> fired=<n>"
-p22() {
-  local rc=0 l s=none
-  rm -f "$LOGDIR2"/self-update-fixtures-*.md "$P22S/fired"
-  if [ "$2" = yes ]; then
-    PATH="$P22S:$PATH" bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" green-one >/dev/null 2>&1 || rc=$?
-  else
-    bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" green-one >/dev/null 2>&1 || rc=$?
-  fi
-  l="$(newest_log2)"
-  grep -q '^STAGING: REFUSED — the gate-record candidate list could not be staged' "${l:-/dev/null}" && s=refused
-  printf 'rc=%s staging=%s fired=%s\n' "$rc" "$s" "$(grep -c . "$P22S/fired" 2>/dev/null || echo 0)"
-}
-
-# --- BUILDER: Part Q's non-ASCII distribution, the consumer half, and its driver -------------
-QDG() { git -C "$QD" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
-build_q_world() {
-QD="$(mktemp -d)"; sufl_tmp "$QD"; QU="$(printf 'caf\303\251')"
-git -c init.templateDir= init -q "$QD" >/dev/null 2>&1
-for f in green-one plain-touched "$QU"; do
-  mkdir -p "$QD/core/fixtures/$f"; printf 'at base\n' > "$QD/core/fixtures/$f/run.sh"
-done
-QDG add -A >/dev/null 2>&1; QDG commit -q --no-verify -m base >/dev/null 2>&1
-QD_B="$(QDG rev-parse HEAD 2>/dev/null)"
-printf 'at theirs\n' > "$QD/core/fixtures/plain-touched/run.sh"
-printf 'at theirs\n' > "$QD/core/fixtures/$QU/run.sh"
-QDG add -A >/dev/null 2>&1; QDG commit -q --no-verify -m theirs >/dev/null 2>&1
-QD_T="$(QDG rev-parse HEAD 2>/dev/null)"
-}
-q_consumer() { # the 040 record and the two consumer-side copies, into $LOGDIR2 and $CONS2
-seed_record "$LOGDIR2" "$QD" "$QD_B" "$QD_T" OK 040 >/dev/null \
-  || bad "FIXTURE ERROR: could not seed the non-ASCII range's gate record"
-# The consumer-side copies the named runs execute; removed again below so no later part sees them.
-for f in plain-touched "$QU"; do
-  mkdir -p "$CONS2/tests/fixtures/$f"
-  printf '#!/usr/bin/env bash\necho "%s: every assertion held"\n' "$f" > "$CONS2/tests/fixtures/$f/run.sh"
-done
-}
-# q_run <runner> <locale:utf8|c> <named...> -> "rc=<n> cov=<set> sec=<sections>"
-q_run() {
-  local r="$1" loc="$2" rc=0 L; shift 2
-  rm -f "$LOGDIR2"/self-update-fixtures-*.md
-  if [ "$loc" = c ]; then
-    env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C bash "$r" "$QD" "$QD_B" "$QD_T" "$CONS2" "$@" >/dev/null 2>&1 || rc=$?
-  else
-    LC_ALL=en_US.UTF-8 bash "$r" "$QD" "$QD_B" "$QD_T" "$CONS2" "$@" >/dev/null 2>&1 || rc=$?
-  fi
-  L="$(newest_log2)"
-  printf 'rc=%s cov=%s sec=%s\n' "$rc" \
-    "$({ [ -n "$L" ] && sed -n '/^COVERAGE: the diff changes/,/^$/p' "$L" | sed -n 's/^  \([^ ][^ ]*\)$/\1/p' | LC_ALL=C sort | tr '\n' ','; } 2>/dev/null)" \
-    "$(sec_set "$L")"
-}
-
-# --- BUILDER: the HERMETIC-DISPATCH world (arms H1-H7, HD1) ----------------------------------
-# The runner restates the consumer hook's dispatch rule: a fixture carrying `inputs.decl` runs
-# through `scripts/ai-dlc/hermetic-run.sh --root <consumer> <name>` when the consumer's hook carries
-# the dispatch, and FAILS when the runner is absent. These consumers are their OWN git repositories,
-# seeded with the REAL shipped hook, hermetic-run.sh and core-paths.sh, all committed BEFORE the gate
-# record is seeded, because `seed_record` derives its `# input:` rows from that hook and the files it
-# names: a record seeded first would carry rows for a tree that then moved, and every run would be
-# refused INPUT-MOVED for a reason no arm here is about.
-#
-# THREE CONSUMERS, ONE PROPERTY APART EACH:
-#   HC1 dispatching hook, runner present  -- H1-H3, H5-H7
-#   HC2 dispatching hook, runner ABSENT    -- H4 (the hook FAILS; never a plain fallback)
-#   HC3 a hook that keeps the READSET_TOOLS_BEGIN sentinel and every `inputs.decl` comment and
-#       lacks only the dispatch line       -- HD1 (plain, green, and the log says why)
-# The shipped files are resolved from this fixture's own location, in both layouts.
-H_HOOK_SRC="$(pick "$SUFL_DIR/../../../core/git-hooks/pre-push" "$SUFL_DIR/../../../.githooks/pre-push")"
-H_HR_SRC="$(pick "$SUFL_DIR/../../../core/scripts/hermetic-run.sh" "$SUFL_DIR/../../../scripts/ai-dlc/hermetic-run.sh")"
-H_CP_SRC="$(pick "$SUFL_DIR/../../../core/scripts/core-paths.sh" "$SUFL_DIR/../../../scripts/ai-dlc/core-paths.sh")"
-H_DISPATCH_LINE='    if [ -f "$d/inputs.decl" ]; then'
 SUFL_NL='
 '
 # aw_replace_once <src> <dst> <old> <new> -> <dst> is <src> with the ONE occurrence of <old> replaced;
@@ -754,142 +415,39 @@ aw_replace_once() {
       printf "%s%s%s", substr(s, 1, i - 1), n, substr(s, i + length(o))
     }' "$1" > "$2"
 }
-# h_skip_why <hook> -> empty when the hook carries the hermetic dispatch, else the reason the H arms
-# cannot be built against it. A consumer whose INSTALLED hook predates the dispatch resolves that hook
-# here (consumer layout), and its HC3 near-miss has no dispatch line to remove: building the world
-# would report FIXTURE BROKEN and block that consumer's push on a state the pull itself creates.
-h_skip_why() {
-  local n_t n_d
-  [ -n "${1:-}" ] && [ -f "$1" ] || { printf 'no pre-push hook resolves from this fixture in either layout'; return 0; }
-  n_t="$(grep -cx '# READSET_TOOLS_BEGIN' "$1")" || n_t=0
-  n_d="$(grep -cxF "$H_DISPATCH_LINE" "$1")" || n_d=0
-  [ "$n_t" -gt 0 ] && [ "$n_d" -eq 1 ] && return 0
-  printf 'the resolved hook %s predates the hermetic dispatch (READSET_TOOLS_BEGIN lines: %s, dispatch lines: %s)' "$1" "$n_t" "$n_d"
+
+# --- ck: the checker, driven with its four arguments, its stdout kept as the arm's log ----------
+# The checker writes nothing into the consumer (the push wrapper runs it right before the hook, and
+# a file appearing there would trip the hook's read-set skip), so the log an arm reads is the
+# checker's own stdout, captured here. Fixture names an arm passes after the fourth argument are
+# NOT forwarded: the checker refuses them, which is arm BH's subject and no other arm's.
+CKD="$(mktemp -d)"; sufl_tmp "$CKD"
+CK_N=0; CK_LAST=""
+ck() { # ck <dist> <base> <theirs> <consumer> [ignored...] -> the checker's exit; its stdout echoed
+  local rc=0
+  CK_N=$((CK_N + 1)); CK_LAST="$CKD/ck-$CK_N.out"
+  bash "$RUNNER" "$1" "$2" "$3" "$4" > "$CK_LAST" || rc=$?
+  cat "$CK_LAST"
+  return "$rc"
 }
-HDG() { git -C "$HD" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
-H_FXS="h-clean h-absent h-unconsumed h-undecl"
-h_consumer() { # <dir> <hook: dispatch|predates> <runner: yes|no>
-  local c="$1" f
-  mkdir -p "$c/tests/fixtures" "$c/.githooks" "$c/scripts/ai-dlc" "$c/.claude" "$c/data" "$c/docs" "$c/_bmad-output/ai-dlc-update"
-  if [ "$2" = dispatch ]; then
-    cp "$H_HOOK_SRC" "$c/.githooks/pre-push" || return 1
-  else
-    # The near-miss hook: the dispatch line replaced, nothing else touched. Whole-line: the
-    # anchor carries the newline on both sides.
-    aw_replace_once "$H_HOOK_SRC" "$c/.githooks/pre-push" "$SUFL_NL$H_DISPATCH_LINE$SUFL_NL" "$SUFL_NL    if false; then$SUFL_NL" || return 1
-  fi
-  if [ "$3" = yes ]; then cp "$H_HR_SRC" "$c/scripts/ai-dlc/hermetic-run.sh" || return 1; fi
-  cp "$H_CP_SRC" "$c/scripts/ai-dlc/core-paths.sh" || return 1
-  chmod +x "$c/.githooks/pre-push" "$c/scripts/ai-dlc"/*.sh
-  printf 'h input\n' > "$c/data/h-input.txt"
-  printf 'outside every declaration\n' > "$c/data/outside.txt"
-  printf 'tracked doc\n' > "$c/docs/slice.md"
-  for f in $H_FXS; do mkdir -p "$c/tests/fixtures/$f"; done
-  # h-clean: one REQUIRED input, consumed, the depth it was started at, and the one tool it forks (cat): the hermetic runner launches a declared fixture with only its declared tools on PATH.
-  printf '!data/h-input.txt\n' > "$c/tests/fixtures/h-clean/inputs.decl"
-  printf 'cat\n' > "$c/tests/fixtures/h-clean/tools.decl"
-  printf '#!/usr/bin/env bash\ncat data/h-input.txt >/dev/null || exit 1\necho "HERMETIC-CONSUMED data/h-input.txt"\necho "h-depth=${PREPUSH_POOL_DEPTH:-unset}"\nexit 0\n' > "$c/tests/fixtures/h-clean/run.sh"
-  # h-absent: declares a file the consumer does not hold; its run.sh passes when run plain.
-  printf 'data/never-there.txt\n' > "$c/tests/fixtures/h-absent/inputs.decl"
-  printf '#!/usr/bin/env bash\necho "h-absent: run plain, passes"\nexit 0\n' > "$c/tests/fixtures/h-absent/run.sh"
-  # h-unconsumed: a REQUIRED input present and never consumed -- the hermetic runner's exit 1.
-  printf '!data/h-input.txt\n' > "$c/tests/fixtures/h-unconsumed/inputs.decl"
-  printf '#!/usr/bin/env bash\necho "h-unconsumed: passes, consumes nothing"\nexit 0\n' > "$c/tests/fixtures/h-unconsumed/run.sh"
-  # h-undecl: no declaration, and it reads a file no declaration names.
-  printf '#!/usr/bin/env bash\ncat data/outside.txt >/dev/null || exit 1\necho "h-depth=${PREPUSH_POOL_DEPTH:-unset}"\nexit 0\n' > "$c/tests/fixtures/h-undecl/run.sh"
-  chmod +x "$c/tests/fixtures"/*/run.sh
+newest_glog() { printf '%s' "$CK_LAST"; }
+
+# --- BUILDER: a consumer that is its OWN git repository, with a self-update commit on top -------
+# For D9 and D12. The base commit holds an unrelated file; the second commit writes what the
+# caller names under tests/fixtures/, as step 2's self-update commit would. No gate record exists,
+# and `$D_BASE`'s gate records nothing, so the gate-record arm takes NOT-REQUIRED and the slice
+# check is the only thing that can refuse.
+sc_consumer() { # sc_consumer <dir> <relpath>... -> 0 when built; each relpath written with "exit 0"
+  local c="$1" p; shift
   (
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
     git -c init.templateDir= init -q "$c" || exit 1
     [ "$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)" = "$(cd "$c" && pwd -P)/.git" ] || exit 1
-    git -C "$c" add -A -- .githooks scripts tests data docs || exit 1
-    git -C "$c" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false \
-      commit -q --no-verify -m seed || exit 1
-  ) >/dev/null 2>&1 || return 1
-  seed_record "$c/_bmad-output/ai-dlc-update" "$HD" "$HD_B" "$HD_T" OK 050 >/dev/null
+    printf 'base\n' > "$c/README"
+    git -C "$c" add README || exit 1
+    git -C "$c" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false commit -q --no-verify -m base || exit 1
+    for p in "$@"; do mkdir -p "$c/$(dirname "$p")" && printf 'exit 0\n' > "$c/$p" || exit 1; done
+    git -C "$c" add -- tests || exit 1
+    git -C "$c" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false commit -q --no-verify -m self-update || exit 1
+  ) >/dev/null 2>&1
 }
-build_h_world() {
-  H_OK=0
-  { [ -n "$H_HOOK_SRC" ] && [ -n "$H_HR_SRC" ] && [ -n "$H_CP_SRC" ]; } || return 1
-  HD="$(mktemp -d)"; sufl_tmp "$HD"
-  (
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-    git -c init.templateDir= init -q "$HD" || exit 1
-    for f in $H_FXS; do mkdir -p "$HD/core/fixtures/$f"; printf 'exit 0\n' > "$HD/core/fixtures/$f/run.sh"; done
-    mkdir -p "$HD/core/scripts"; printf 'base\n' > "$HD/core/scripts/h-other.sh"
-    HDG add -A && HDG commit -q --no-verify -m base || exit 1
-    printf 'theirs\n' > "$HD/core/scripts/h-other.sh"
-    HDG add -A && HDG commit -q --no-verify -m theirs || exit 1
-  ) >/dev/null 2>&1 || return 1
-  HD_B="$(HDG rev-parse HEAD~1 2>/dev/null)"; HD_T="$(HDG rev-parse HEAD 2>/dev/null)"
-  HC1="$(mktemp -d)"; sufl_tmp "$HC1"; h_consumer "$HC1" dispatch yes || return 1
-  HC2="$(mktemp -d)"; sufl_tmp "$HC2"; h_consumer "$HC2" dispatch no || return 1
-  HC3="$(mktemp -d)"; sufl_tmp "$HC3"; h_consumer "$HC3" predates yes || return 1
-  H_OK=1
-}
-# h_enter <hook> -> sets H_ENTER to `SKIP <why>`, `BROKEN` or `BUILT`. MAIN SHELL: on BUILT the world's
-# variables (HC1, HC2, HC3, HD, ...) must survive, so this is never called inside `$( )` except by the
-# probe that only wants the verdict.
-h_enter() {
-  H_SKIP="$(h_skip_why "$1")"
-  if [ -n "$H_SKIP" ]; then H_ENTER="SKIP $H_SKIP"; return 0; fi
-  H_HOOK_SRC="$1"
-  if build_h_world && [ "$H_OK" = 1 ]; then H_ENTER=BUILT; else H_ENTER=BROKEN; fi
-}
-# h_run <runner> <consumer> <fixture...> -> sets H_RC, H_LOG (newest log), H_OUT (stdout file).
-# PREPUSH_POOL_DEPTH=7 is the sentinel the depth arm reads back as 8.
-h_run() {
-  local r="$1" c="$2"; shift 2
-  # Stdout goes OUTSIDE the consumer, so the restore arm's porcelain sees only what the cycle wrote.
-  [ -n "${HOUTD:-}" ] || { HOUTD="$(mktemp -d)"; sufl_tmp "$HOUTD"; }
-  H_OUT="$HOUTD/$(basename "$c").stdout"
-  rm -f "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md "$H_OUT"
-  H_RC=0
-  # A FRESH VERDICT STORE PER RUN. hermetic-run.sh may record each pass in a shared store at
-  # `${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}`; the runner under test inherits whatever
-  # this sets, by design. Left unset, these runs would write the operator's real store, and a pass one
-  # run recorded could answer the next run's dispatch, so a cell would read a cached verdict rather
-  # than the behaviour it asserts. Harmless where the runner keeps no store.
-  H_VS="$(mktemp -d "$HOUTD/vstore.XXXXXX")" || { H_RC=99; return 0; }
-  AI_DLC_VERDICT_STORE="$H_VS" PREPUSH_POOL_DEPTH=7 bash "$r" "$HD" "$HD_B" "$HD_T" "$c" "$@" > "$H_OUT" 2>/dev/null || H_RC=$?
-  H_LOG="$(ls -t "$c/_bmad-output/ai-dlc-update"/self-update-fixtures-*.md 2>/dev/null | head -1)"
-}
-# h_section <log> <fixture> -> the lines of that fixture's section, joined on one line
-h_section() { sed -n "/^===== FIXTURE $2 =====\$/,/^----- rc=/p" "${1:-/dev/null}" 2>/dev/null | tr '\n' ' '; }
-H_TOKEN='# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7'
-# hsig <runner> -> nine cells, each 1 when the run shows the restated hook behaviour:
-#   H1 declared-absent red (exit 2 from the runner)   H2 clean declared green via the runner
-#   H3 never-consumed red (exit 1 from the runner)    H4 runner absent: red with the not-found line
-#   H5 undeclared green, plain                         H6 depth 8 on both branches from a sentinel 7
-#   H7 a red (runner exit 1) prints the token on stdout
-#   H7t a GREEN run prints no token                    H7r an exit-2 REFUSAL prints no token
-#   HD1 a hook predating the dispatch runs a declared fixture plain and green, and says why
-# Each cell reads its OWN run, so a mutant of one clause moves one cell: H7 reads the never-consumed
-# run (exit 1 from the runner, which every mutant of the rc test leaves red), H7t the HD1 run.
-hsig() {
-  local r="$1" h1=0 h2=0 h3=0 h4=0 h5=0 h6=0 h7=0 h7t=0 h7r=0 hd1=0 s1 s2
-  h_run "$r" "$HC1" h-clean h-undecl
-  s1="$(h_section "$H_LOG" h-clean)"; s2="$(h_section "$H_LOG" h-undecl)"
-  case "$s1" in *"DISPATCH: hermetic"*"hermetic-run: h-clean: rc=0 sandbox_files="*"----- rc=0 -----"*) h2=1 ;; esac
-  case "$s2" in *"DISPATCH: plain"*"----- rc=0 -----"*) grep -q '^   ok    h-undecl$' "$H_OUT" && h5=1 ;; esac
-  case "$s1" in *"h-depth=8"*) case "$s2" in *"h-depth=8"*) h6=1 ;; esac ;; esac
-  h_run "$r" "$HC1" h-absent
-  s1="$(h_section "$H_LOG" h-absent)"
-  case "$s1" in *"declared file absent: data/never-there.txt"*"----- rc=2 -----"*) [ "$H_RC" -eq 1 ] && grep -q '^   FAIL  h-absent$' "$H_OUT" && h1=1 ;; esac
-  h_run "$r" "$HC1" h-unconsumed
-  s1="$(h_section "$H_LOG" h-unconsumed)"
-  case "$s1" in *"required_missing=1"*"----- rc=1 -----"*) [ "$H_RC" -eq 1 ] && h3=1 ;; esac
-  if [ "$H_RC" -eq 1 ] && grep -qxF "$H_TOKEN" "$H_OUT"; then h7=1; fi
-  h_run "$r" "$HC2" h-clean
-  s1="$(h_section "$H_LOG" h-clean)"
-  case "$s1" in *"hermetic-run.sh not found at scripts/ai-dlc/hermetic-run.sh; h-clean declares inputs.decl"*) [ "$H_RC" -eq 1 ] && h4=1 ;; esac
-  h_run "$r" "$HC3" h-absent
-  s1="$(h_section "$H_LOG" h-absent)"
-  case "$s1" in *"DISPATCH: plain"*"predates the hermetic dispatch"*"h-absent: run plain, passes"*"----- rc=0 -----"*) [ "$H_RC" -eq 0 ] && hd1=1 ;; esac
-  if [ "$H_RC" -eq 0 ] && grep -q '^   ok    h-absent$' "$H_OUT" && ! grep -qF "$H_TOKEN" "$H_OUT"; then h7t=1; fi
-  # h-nope is in neither tree: the over-completeness arm refuses the run, exit 2, before any fixture.
-  h_run "$r" "$HC1" h-clean h-nope
-  if [ "$H_RC" -eq 2 ] && grep -q '^  h-nope — no run.sh at ' "${H_LOG:-/dev/null}" && ! grep -qF "$H_TOKEN" "$H_OUT"; then h7r=1; fi
-  printf '%s-%s-%s-%s-%s-%s-%s-%s-%s-%s' "$h1" "$h2" "$h3" "$h4" "$h5" "$h6" "$h7" "$h7t" "$h7r" "$hd1"
-}
-HSIG_OK="1-1-1-1-1-1-1-1-1-1"

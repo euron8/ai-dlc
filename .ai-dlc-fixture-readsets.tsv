@@ -748,7 +748,7 @@ story-fields-derive	core/skills/ai-dlc/steps/implementation.md
 # digest gate-resume 8ad739b4d940e644ee79f7d262ff99519025d7f970d7c503bd8d1d2c45913e33
 # digest gate-verdict-grep-shape 529e98601a18b3e6ef8de593ac7ecdc2813f7b7746164fa18d3045ff85a00025
 # digest hook-registration-join eaaf886f8bd31bacece916de88656bf08f6e9ba8a32382903656287fe5bf4c86
-# digest layer-title-join eb45614162c3908b51c22abe72dde061c8cbe34f78c17b2bd6d4c001cd1b11f3
+# digest layer-title-join 439cb757f433b52852edf00cc1d4d6dc2c63621761a3878e7bb6edc0bc7c2ef7
 # digest prepush-ssh-keepalive cdbfac795323a19ab3ec6551436b2a1f0f6976c7bece5b18658be870988e126d
 # digest requirements-step d0daabce71d166100caddd6211ea30961442658792504e0ec46765dcd5340be0
 # digest resume-whole-read 8f3f54ee0e057daee29672a775ed050809647da0722d7e1e2c875e42b9d55a13

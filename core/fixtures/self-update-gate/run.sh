@@ -3431,6 +3431,21 @@ pu_world() {
   fi
   printf '%s\n' "$d"
 }
+# THE GATE-RECORD CHECK RUNS BEFORE THE HOOK, so every world needs a range the checker accepts. ONE
+# throwaway distribution serves them all, built on the checker's delivery-pull tolerance: its base
+# carries a `self-update-gate.sh` with no record-writing site, its theirs a `core/fixtures` tree, and
+# a world holds no `self-update-gate-*.md`, so the checker answers NOT-REQUIRED and the hook runs.
+# A1 seeds a real OK record for the same range instead (its own comment says why).
+PU_DIST="$PU_D/dist"
+mkdir -p "$PU_DIST/core/skills/ai-dlc-update/reconcile" "$PU_DIST/core/fixtures/pu-fx" \
+  && git -c init.defaultBranch=main init -q "$PU_DIST" \
+  && printf '#!/usr/bin/env bash\n# a gate that records nothing\necho SELF-UPDATE-OK\n' > "$PU_DIST/core/skills/ai-dlc-update/reconcile/self-update-gate.sh" \
+  && printf 'exit 0\n' > "$PU_DIST/core/fixtures/pu-fx/run.sh" \
+  && git -C "$PU_DIST" add -A && git -C "$PU_DIST" commit -q -m base \
+  && printf 'exit 0 # theirs\n' > "$PU_DIST/core/fixtures/pu-fx/run.sh" \
+  && git -C "$PU_DIST" add -A && git -C "$PU_DIST" commit -q -m theirs \
+  || { printf 'FIXTURE ERROR: the pu distribution did not build\n' >&2; exit 1; }
+PU_DB="$(git -C "$PU_DIST" rev-parse HEAD~1)"; PU_DT="$(git -C "$PU_DIST" rev-parse HEAD)"
 # pu_run <wrapper> <world> [prefix-cmd...] -> exit status; stdout/stderr kept in the world. Driven
 # from `/`, so the wrapper cannot lean on its caller's cwd. A fresh <out> path each call.
 # pu_run is called inside `$( )`, so a counter it bumps is lost; the <out> name it chose is written
@@ -3439,7 +3454,7 @@ pu_run() {
   local w="$1" d="$2" o; shift 2
   o="_bmad-output/ai-dlc-update/self-update-push-$(grep -c . "$d/count" 2>/dev/null)-$$-$RANDOM.md"
   printf '%s\n' "$o" > "$d/outname"
-  ( cd / && "$@" bash "$w" "$d/W" origin su "$o" ) > "$d/stdout" 2> "$d/stderr"
+  ( cd / && "$@" bash "$w" "$d/W" origin su "$o" "$PU_DIST" "$PU_DB" "$PU_DT" ) > "$d/stdout" 2> "$d/stderr"
   printf '%s' "$?"
 }
 pu_out() { printf '%s\n' "$1/W/$(cat "$1/outname" 2>/dev/null)"; }
@@ -3465,6 +3480,9 @@ pu_kill() { # pu_kill <label> <mutant> <got> <want> <why>
 pu_mut() { # pu_mut <name> <awk-program> -> a mutated copy of the wrapper
   mkdir -p "$PU_D/m-$1"
   awk "$2" "$PU_SRC" > "$PU_D/m-$1/self-update-push.sh" 2>/dev/null
+  # The checker the wrapper runs, and the two files it reads, beside the copy as they sit beside
+  # the shipped wrapper; without them every mutant refuses CHECKER-ABSENT before its subject runs.
+  for _pf in self-update-fixtures.sh lib.sh preclassify.sh; do cp "$(dirname "$PU_SRC")/$_pf" "$PU_D/m-$1/$_pf" 2>/dev/null; done
   printf '%s\n' "$PU_D/m-$1/self-update-push.sh"
 }
 
@@ -3686,36 +3704,39 @@ pu_kill "pu-mut-moved" "$PU_M" "$(pu_sc_x4 "$PU_M" moved)" "rc=0 n=1 su=present"
   "without the check the wrapper pushes after a hook that moved the branch"
 
 # A1. THE HOOK-REFUSED DISCARD SEQUENCE, END TO END, as SKILL.md step 2 spells it. The
-#     self-update branch commits the slice, the gate record and the fixture log; the wrapper
-#     refuses; then: checkout the original branch, `git show` both records back, the name-only
-#     check against the written set, `branch -D`. Afterwards HEAD is the original branch, the
-#     self-update branch is gone, and all three records are on disk and uncommitted.
+#     self-update branch commits the slice and the gate record; the wrapper's gate-record check
+#     accepts that record and the hook refuses; then: checkout the original branch, `git show` the
+#     record back, the name-only check against the written set, `branch -D`. Afterwards HEAD is the
+#     original branch, the self-update branch is gone, and both records are on disk and uncommitted.
+#     The gate record is a REAL one for the pu range rather than the NOT-REQUIRED path the other
+#     worlds take, because a committed record of any shape is what this world restores: a record the
+#     checker could not match would be refused before the hook, and the HOOK-REFUSED path never run.
 PU_A="$(pu_world a1)"; : > "$PU_A/refuse-all"
 PU_A_GATE=_bmad-output/ai-dlc-update/self-update-gate-20990101T000000Z.md
-PU_A_LOG=_bmad-output/ai-dlc-update/self-update-fixtures-20990101T000000Z.md
 PU_A_SLICE=scripts/ai-dlc/slice.sh
 mkdir -p "$PU_A/W/_bmad-output/ai-dlc-update" "$PU_A/W/scripts/ai-dlc"
-printf '# gate record\n# verdict: OK\n' > "$PU_A/W/$PU_A_GATE"
-printf '# fixture log\n' > "$PU_A/W/$PU_A_LOG"
+printf '# gate record\n# base-sha: %s\n# theirs-sha: %s\n# input: -\tABSENT\tcore/git-hooks/pre-push\n\n# verdict: OK\n' \
+  "$PU_DB" "$PU_DT" > "$PU_A/W/$PU_A_GATE"
 printf '#!/bin/sh\nexit 0\n' > "$PU_A/W/$PU_A_SLICE"
 # The ORIGINAL branch is the commit the self-update branch was cut from, as in step 2.
 git -C "$PU_A/W" branch -q orig
-git -C "$PU_A/W" add -- "$PU_A_GATE" "$PU_A_LOG" "$PU_A_SLICE" && git -C "$PU_A/W" commit -q -m self-update
-pu_a_gate_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_GATE")"; pu_a_log_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_LOG")"
-# A record the branch does NOT hold: a fixture log written after the commit, as step 2's sentence
-# order allows. The restore must leave it byte-identical; a bare `git show ... > <path>` truncates it
-# before git fails, which is the defect this world exists for.
-PU_A_UNC=_bmad-output/ai-dlc-update/self-update-fixtures-20990101T000001Z.md
-printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC"
+git -C "$PU_A/W" add -- "$PU_A_GATE" "$PU_A_SLICE" && git -C "$PU_A/W" commit -q -m self-update
+pu_a_gate_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_GATE")"
+# A record the branch does NOT hold: a gate record written after the commit. The restore must leave
+# it byte-identical; a bare `git show ... > <path>` truncates it before git fails, which is the
+# defect this world exists for. Its name sorts BELOW the committed one, so the checker's newest-by-
+# name pick still reads the committed record.
+PU_A_UNC=_bmad-output/ai-dlc-update/self-update-gate-19990101T000001Z.md
+printf '# gate record, written after the commit\n' > "$PU_A/W/$PU_A_UNC"
 pu_a_unc_blob="$(git -C "$PU_A/W" hash-object "$PU_A_UNC")"
 pu_a_rc="$(pu_run "$PU_SRC" "$PU_A")"
 PU_A_PUSHREC="$(cat "$PU_A/outname")"
 # THE RESTORE, AS SKILL.md SPELLS IT: through a temporary file, moved into place only on success.
 pu_a_restore() { git -C "$PU_A/W" show "su:$1" > "$PU_A/W/$1.restore" 2>/dev/null && mv "$PU_A/W/$1.restore" "$PU_A/W/$1"; rm -f "$PU_A/W/$1.restore"; return 0; }
 git -C "$PU_A/W" checkout -q orig \
-  && pu_a_restore "$PU_A_GATE" && pu_a_restore "$PU_A_LOG" && pu_a_restore "$PU_A_UNC"
+  && pu_a_restore "$PU_A_GATE" && pu_a_restore "$PU_A_UNC"
 pu_a_names="$(git -C "$PU_A/W" diff --name-only orig su | grep -c .)" || pu_a_names=0
-pu_a_extra="$(git -C "$PU_A/W" diff --name-only orig su | grep -vxF -e "$PU_A_GATE" -e "$PU_A_LOG" -e "$PU_A_SLICE" | grep -c .)" || pu_a_extra=0
+pu_a_extra="$(git -C "$PU_A/W" diff --name-only orig su | grep -vxF -e "$PU_A_GATE" -e "$PU_A_SLICE" | grep -c .)" || pu_a_extra=0
 [ "$pu_a_extra" -eq 0 ] && git -C "$PU_A/W" branch -q -D su
 pu_a_file() { # pu_a_file <path> -> untracked | tracked | missing
   if [ ! -f "$PU_A/W/$1" ]; then printf missing
@@ -3723,11 +3744,11 @@ pu_a_file() { # pu_a_file <path> -> untracked | tracked | missing
   else printf untracked; fi
 }
 ss_assert "pu-a1-discard" \
-  "rc=$pu_a_rc|names=$pu_a_names|extra=$pu_a_extra|head=$(git -C "$PU_A/W" symbolic-ref -q HEAD)|su=$(git -C "$PU_A/W" rev-parse -q --verify refs/heads/su >/dev/null && echo present || echo gone)|R1=$(pu_landed "$PU_A" R1)|gate=$(pu_a_file "$PU_A_GATE"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_GATE")" = "$pu_a_gate_blob" ] && echo same || echo changed)|log=$(pu_a_file "$PU_A_LOG"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_LOG")" = "$pu_a_log_blob" ] && echo same || echo changed)|push=$(pu_a_file "$PU_A_PUSHREC"),$(grep -c '^# probe: ' "$PU_A/W/$PU_A_PUSHREC" 2>/dev/null)|slice=$(pu_a_file "$PU_A_SLICE")|unc=$(pu_a_file "$PU_A_UNC"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_UNC")" = "$pu_a_unc_blob" ] && echo same || echo changed)|tmp=$(find "$PU_A/W/_bmad-output" -name '*.restore' | grep -c .)" \
-  "rc=3|names=3|extra=0|head=refs/heads/orig|su=gone|R1=absent|gate=untracked,same|log=untracked,same|push=untracked,6|slice=missing|unc=untracked,same|tmp=0" \
-  "after HOOK-REFUSED and the step-2 discard: HEAD is the original branch, the self-update branch is gone, nothing was pushed, the gate record and fixture log are restored byte-for-byte and the push record carries its '# probe:' lines -- all three uncommitted -- the slice left with the branch, and a record the branch never held is left byte-for-byte with no temporary file behind"
+  "rc=$pu_a_rc|names=$pu_a_names|extra=$pu_a_extra|head=$(git -C "$PU_A/W" symbolic-ref -q HEAD)|su=$(git -C "$PU_A/W" rev-parse -q --verify refs/heads/su >/dev/null && echo present || echo gone)|R1=$(pu_landed "$PU_A" R1)|gate=$(pu_a_file "$PU_A_GATE"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_GATE")" = "$pu_a_gate_blob" ] && echo same || echo changed)|push=$(pu_a_file "$PU_A_PUSHREC"),$(grep -c '^# probe: ' "$PU_A/W/$PU_A_PUSHREC" 2>/dev/null)|slice=$(pu_a_file "$PU_A_SLICE")|unc=$(pu_a_file "$PU_A_UNC"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_UNC")" = "$pu_a_unc_blob" ] && echo same || echo changed)|tmp=$(find "$PU_A/W/_bmad-output" -name '*.restore' | grep -c .)" \
+  "rc=3|names=2|extra=0|head=refs/heads/orig|su=gone|R1=absent|gate=untracked,same|push=untracked,6|slice=missing|unc=untracked,same|tmp=0" \
+  "after the gate-record check accepted the committed record, HOOK-REFUSED and the step-2 discard: HEAD is the original branch, the self-update branch is gone, nothing was pushed, the gate record is restored byte-for-byte and the push record carries its '# probe:' lines -- both uncommitted -- the slice left with the branch, and a record the branch never held is left byte-for-byte with no temporary file behind"
 # CONTROL, ONE PROPERTY APART: the bare redirect the restore replaced empties that same record.
-printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC.ctl"
+printf '# gate record, written after the commit\n' > "$PU_A/W/$PU_A_UNC.ctl"
 git -C "$PU_A/W" show "orig:$PU_A_UNC.ctl" > "$PU_A/W/$PU_A_UNC.ctl" 2>/dev/null
 ss_assert "pu-a1-restore-control" "bytes=$(wc -c < "$PU_A/W/$PU_A_UNC.ctl" | tr -d ' ')" "bytes=0" \
   "control: a bare redirect of git show straight onto a record the branch does not hold truncates it -- the hazard the temporary-file restore exists for is live here"

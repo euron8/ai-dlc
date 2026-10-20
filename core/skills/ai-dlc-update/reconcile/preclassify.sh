@@ -379,7 +379,7 @@ self_update_hash() { # <core-rel-path> -> blob sha at the consumer's own skill_c
 #
 # ONE DERIVATION, OWNED BY THE LOWEST SCRIPT. `self-update-gate.sh` needs the same set for its
 # CARRY arm's population and used to resolve it inline; it now `eval`s this function, the way
-# `self-update-fixtures.sh` already `eval`s `map_consumer()` out of this file. Two resolutions
+# the gate-record checker `self-update-fixtures.sh` already `eval`s `map_consumer()` out of this file. Two resolutions
 # of one manifest is two things to drift, and drift here is silent in both directions: a
 # narrower copy leaves the false obligation standing, a wider one suppresses beyond its reason.
 #
@@ -611,7 +611,8 @@ fi
 # ref where a fixture was not yet (or no longer) `.dist-only` bucketed it as a pure apply.
 # `apply.sh --finish` counts pure-apply rows as unapplied work, so that misreading withheld the
 # stamp over a correctly applied tree whose dist-only fixture was, correctly, never written.
-# `self-update-fixtures.sh` already reads the marker at theirs for the same reason.
+# The push's gate-record checker `self-update-fixtures.sh` reads the marker at theirs, through
+# the same `memo_has_path`, when it refuses a self-update commit that wrote a dist-only directory.
 dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
   case "$1" in
     core/fixtures/*)

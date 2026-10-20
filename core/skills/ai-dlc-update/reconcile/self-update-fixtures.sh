@@ -1,71 +1,50 @@
 #!/usr/bin/env bash
-# reconcile-region: exempt — step 2s fixture harness. It runs a covering suite and persists a log; its output is a build result, not a pull finding.
-# self-update-fixtures.sh — run step 2's derived covering fixtures AND persist their
-# output, so a red self-update leaves evidence behind instead of a discarded branch.
+# reconcile-region: exempt — step 2's gate-record checker. It refuses a push its gate did not authorise; its output is a refusal or an OK line, not a pull finding.
+# self-update-fixtures.sh — the GATE-RECORD CHECKER step 2's push runs before the consumer's
+# pre-push hook. It answers one question: does a recorded `# verdict: OK` from
+# `self-update-gate.sh` exist for THIS range, taken on the tree this cycle wrote over, and not
+# taken after the write? It RUNS NO FIXTURE. The consumer's pre-push hook, run once by
+# `self-update-push.sh` right after this check, is the self-update's only fixture run.
 #
-# WHY THIS EXISTS. Step 2's cycle cuts a branch, writes the machinery slice, runs the
-# derived fixtures, and ON RED discards the branch and restores the tree — writing
-# nothing. `reconcile-log-<ts>.md` is step-7 only; `reconcile-report.md` is not written
-# until step 5, by which time the tree state the fixtures ran against is gone. So the
-# one cycle in this skill that runs a TEST SUITE was the only one that persisted no
-# record of it: the failing output survived in the operating agent's context and
-# nowhere else, and no command in the report reproduced the state that produced it.
+# WHY THE NAME DID NOT CHANGE. This file used to run step 2's derived covering fixtures serially
+# BEFORE the commit, and then the push ran the same fixtures again in the hook's pool: measured on
+# the reference consumer, 41 minutes of serial running per leg ahead of a push that re-dispatched
+# them. That run is gone (BL-713). The path stays because a self-update leg cannot delete a
+# consumer file: step 2 writes each path from `theirs` with `git show`, with no deletion pass, so a
+# new path would leave the old runner on every consumer while nothing calls it. Keeping the path
+# overwrites it in place.
 #
-# MEASURED ON THE REFERENCE CONSUMER, TWICE. On the `0.249.0 -> 0.262.0` run the
-# evidence had to be recovered afterwards by re-staging the discarded slice on a second
-# throwaway branch. On `0.249.0 -> 0.263.0` the operator captured it by hand from inside
-# the cycle — which is not something the skill instructs, and is therefore not something
-# the next operator will do. Both runs turned on ONE fixture's output; without it the
-# only available conclusion was "the self-update failed".
-#
-# SO THE FIX IS A CARRIER, NOT A SENTENCE. Step 2 previously said "report the fixture
-# name and its output", and that instruction was obeyed by an agent that then discarded
-# the tree. A prose duty with no artifact behind it is the class this repo keeps
-# re-learning: prefer a mechanism the step INVOKES over a rule it must remember.
-#
-# Usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...
-#   dist-repo      path to the distribution git checkout. READ AS A REPO, not decoration:
-#                  the coverage join below derives its side from `base..theirs` in it.
+# Usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#   dist-repo      path to the distribution git checkout, read as a REPO: both refs are peeled in it
 #   base-sha       the `commit` field from the consumer's .ai-dlc-version stamp
 #   theirs-ref     target upstream ref
-#   consumer-root  the consumer project root (contains .claude/)
-#   fixture...     the derived covering fixture DIRECTORY NAMES, as step 2 derived them
+#   consumer-root  the consumer project root (contains .claude/ and _bmad-output/)
+# Any further argument is REFUSED, exit 2: the old interface named fixtures here, and a caller
+# still passing them expects a fixture run this file no longer makes. It refuses rather than
+# ignoring them, so that expectation cannot pass silently.
 #
-# Step 2 derives that set in TWO terms and this file treats them differently.
-#
-# The FIRST term — fixtures whose `*.sh` name a machinery path the diff moved — is passed
-# IN rather than re-derived here. It is grepped from the fixtures themselves, and a second
-# derivation of it in this file would be two derivations to keep in agreement — the exact
-# drift `lib.sh` exists to end for the section resolver.
-#
-# The SECOND term — the fixtures the diff ITSELF touches — is derived HERE, and joined
-# against the named set rather than added to it. That is not the duplication the paragraph
-# above refuses: one side comes from `base..theirs`, the other is what step 2 passed, and a
-# disagreement is the finding. It exists because the first term cannot see a fixture the
-# pull REPAIRS: such a fixture's only change is its own driver, so it names no moved
-# machinery path and falls outside the grep by construction — while the consumer's pre-push
-# runs the WHOLE suite, so the unrepaired copy stays red and blocks the very push this
-# cycle is making. Measured over 69 release-to-release ranges of the distribution: 16 carry
-# at least one SHIPPING fixture in exactly that state.
-#
-# Output: a per-fixture verdict line on stdout, then the log path.
-# Exit:   0 all green · 1 at least one red · 2 the harness could not run
-#         (no fixtures named, fixture root underivable, log unwritable, the `base..theirs`
-#         range unresolvable, NO RECORDED `# verdict: OK` from self-update-gate.sh for this
-#         range, the named set omitting a fixture the diff changes, or the
-#         named set CONTAINING a fixture no consumer can run). A run
-#         that could not happen must NOT exit 0: "no failures" and "no assertions" are the
-#         same byte to the caller, and this whole file exists because that difference
-#         was invisible once already. An INCOMPLETE set is the same class — a slice missing
-#         the fixture that guards it reports green over the gap — and so is an OVER-complete
-#         one, whose surplus dir is written into the consumer as a fixture core never ships.
+# Output: on stdout, `GATE-RECORD: OK <record>` or `GATE-RECORD: NOT-REQUIRED …` on success, or the
+#         `GATE-RECORD:` refusal lines; the remedy on stderr. It WRITES NOTHING into the consumer:
+#         the push wrapper runs it immediately before the hook, and an untracked file on disk while
+#         the hook runs is a changed path in no fixture's read-set. The wrapper records a refusal.
+# Exit:   0 a matching OK record (or the delivery-pull NOT-REQUIRED tolerance) · 2 a refusal: bad
+#         arguments, the range unresolvable, a `$DIST` that is not the distribution, a staging
+#         write that failed, or no acceptable gate record. A check that could not run must not
+#         exit 0: "nothing refused" and "nothing checked" are the same byte to the caller.
 set -u
 
-DIST="${1:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
-BASE="${2:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
-THEIRS="${3:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
-CONSUMER="${4:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
-shift 4
+SU_USAGE="usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>"
+if [ "$#" -ne 4 ]; then
+  echo "self-update-fixtures: REFUSED — $SU_USAGE (got $# argument(s))." >&2
+  if [ "$#" -gt 4 ]; then
+    echo "  This file is the gate-record checker and runs NO fixture; fixture names are refused," >&2
+    echo "  not run. The consumer's pre-push hook, run once by self-update-push.sh, is the fixture run." >&2
+  fi
+  exit 2
+fi
+DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
+{ [ -n "$DIST" ] && [ -n "$BASE" ] && [ -n "$THEIRS" ] && [ -n "$CONSUMER" ]; } || {
+  echo "self-update-fixtures: REFUSED — every argument must be non-empty. $SU_USAGE" >&2; exit 2; }
 
 # Absolutized for the same reason layer-drift.sh absolutizes it: readers here run with a
 # changed working directory, and a relative root would resolve against whichever one is
@@ -73,28 +52,23 @@ shift 4
 CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || {
   echo "self-update-fixtures: consumer-root not a directory: ${4}" >&2; exit 2; }
 
-if [ $# -eq 0 ]; then
-  echo "self-update-fixtures: no fixtures named — refusing to report a green run over an empty set." >&2
-  echo "  pass the derived covering fixture directory names as arguments." >&2
-  exit 2
-fi
-
 SELF="$(cd "$(dirname "$0")" && pwd)"
+OUT_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
 
 # lib.sh IS SOURCED FOR `memo_has_path`, the one `.dist-only` oracle `preclassify.sh` already
-# uses (see the over-completeness arm below). Sourcing it also builds lib.sh's memo directory and
+# uses (see the slice check at the end). Sourcing it also builds lib.sh's memo directory and
 # arms its cleanup on EXIT; this file's own EXIT trap below goes through lib.sh's `trap` shadow,
-# which composes the two rather than letting the later one replace the earlier. A runner that
+# which composes the two rather than letting the later one replace the earlier. A checker that
 # cannot source it has no oracle, and the arm reading `.dist-only` would then fail on every name
-# with 127 — so it refuses here, before anything is run, rather than inside that arm.
+# with 127 — so it refuses here, before anything is read, rather than inside that arm.
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || {
-  echo "self-update-fixtures: cannot source $SELF/lib.sh, so the .dist-only probe has no oracle. Nothing was run." >&2
+  echo "self-update-fixtures: cannot source $SELF/lib.sh, so the .dist-only probe has no oracle. Nothing was checked." >&2
   exit 2; }
-# lib.sh EXPORTS its memo directory so a child reconcile script borrows it. The children of THIS
-# runner are the consumer's fixtures, which the consumer's pre-push runs with no such variable,
-# so the export is withdrawn: a fixture must not run here in an environment its gate never gives
-# it. The memo stays usable in this shell, which holds it in unexported variables.
+# lib.sh EXPORTS its memo directory so a child reconcile script borrows it. This checker is run by
+# the push wrapper immediately before the consumer's pre-push hook, which must run in the
+# environment a real push gives it, so the export is withdrawn. The memo stays usable in this
+# shell, which holds it in unexported variables.
 unset AI_DLC_RECONCILE_MEMO
 
 # The consumer's fixture root, DERIVED from the mapper rather than written here — the
@@ -112,48 +86,28 @@ fx_rel="$(map_consumer "core/fixtures/__probe__/run.sh")"
 FX_ROOT="${fx_rel%/__probe__/run.sh}"
 if [ "$FX_ROOT" = "$fx_rel" ] || [ -z "$FX_ROOT" ]; then
   echo "self-update-fixtures: map_consumer() did not map a core fixture path to a consumer one," >&2
-  echo "  so the consumer's fixture root could not be derived. Nothing was run." >&2
+  echo "  so the consumer's fixture root could not be derived. Nothing was checked." >&2
   exit 2
 fi
-
-TS="$(date -u +%Y%m%dT%H%M%SZ)"
-OUT_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
-# `.md`, DELIBERATELY. A reference consumer's .gitignore carries `*.log` and `*.txt`, so
-# either extension would produce an artifact that exists on disk and vanishes from every
-# `git status` the operator reads afterwards.
-LOG="$OUT_DIR/self-update-fixtures-${TS}.md"
-mkdir -p "$OUT_DIR" 2>/dev/null || { echo "self-update-fixtures: cannot create $OUT_DIR" >&2; exit 2; }
-: > "$LOG" 2>/dev/null || { echo "self-update-fixtures: cannot write $LOG" >&2; exit 2; }
-
-{
-  echo "# ai-dlc-update step-2 self-update — derived fixture run"
-  echo "# generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# base $BASE -> theirs $THEIRS"
-  echo "# consumer: $CONSUMER   dist: $DIST"
-  echo "# fixture root: $FX_ROOT   fixtures named: $#"
-  echo "# The tree this ran against is the machinery slice, and step 2 DISCARDS it on red."
-  echo "# Nothing below is reproducible from the tree once that has happened."
-  echo ""
-} >> "$LOG"
 
 # --- NO HERE-STRING AND NO HEREDOC IN THIS FILE, AND THIS IS WHY -------------------------
 # bash 3.2 stages every `<<<` and every `<<EOF` body to a temp file of its own, and when that
 # write fails (`ulimit -f`, a full or read-only TMPDIR) it prints `cannot create temp file for
 # here document` and runs the command on EMPTY stdin at the command's own exit status. A loop
 # then runs zero times and a `grep -q` answers "absent" — and every loop here reads its empty
-# input as the clean answer: no gate record, no required input missing, no uncovered fixture.
+# input as the clean answer: no gate record, no required input missing, no bad slice directory.
 # `layer-drift.sh` carries the same partition (BL-359), and this file takes its two shapes:
 #   * a whole-line MEMBERSHIP test is `su_has_line` — a `case`, no file and no fork, so it
 #     cannot fail at all;
 #   * a LOOP reads a file `su_stage` wrote into this run's own `$SU_T`, and the write's status
-#     is read. The FIRST failed write ends the run with exit 2, before anything is run: a run
-#     whose join could not read its input is a run that could not happen.
+#     is read. The FIRST failed write ends the run with exit 2: a check whose join could not
+#     read its input is a check that could not happen.
 # `su_stage` writes exactly the bytes the heredoc fed (`printf '%s\n'`), so a healthy run is
 # byte-identical to the heredoc spelling.
 SU_T="$(mktemp -d "${TMPDIR:-/tmp}/su-stage.XXXXXX" 2>/dev/null)" || SU_T=""
 if [ -z "$SU_T" ] || [ ! -d "$SU_T" ]; then
-  echo "self-update-fixtures: could not create a staging directory under ${TMPDIR:-/tmp}. Nothing was run." >&2
-  { echo "STAGING: REFUSED — no staging directory could be created under ${TMPDIR:-/tmp}. Nothing was run."; } >> "$LOG"
+  echo "self-update-fixtures: could not create a staging directory under ${TMPDIR:-/tmp}. Nothing was checked." >&2
+  echo "STAGING: REFUSED — no staging directory could be created under ${TMPDIR:-/tmp}. Nothing was checked."
   exit 2
 fi
 trap 'rm -rf "$SU_T"' EXIT
@@ -167,106 +121,37 @@ su_stage() { # su_stage <file-name> <value> <what> -- MAIN SHELL ONLY; exit 2 wh
   local _rc=0
   printf '%s\n' "$2" > "$SU_T/$1" || _rc=$?
   [ "$_rc" -eq 0 ] && return 0
-  echo "self-update-fixtures: REFUSED — $3 could not be staged (exit $_rc), so the join reading it would read an EMPTY input as a clean one. Nothing was run." >&2
-  { echo "STAGING: REFUSED — $3 could not be staged (exit $_rc). Nothing was run."; } >> "$LOG" 2>/dev/null
+  echo "self-update-fixtures: REFUSED — $3 could not be staged (exit $_rc), so the join reading it would read an EMPTY input as a clean one. Nothing was checked." >&2
+  echo "STAGING: REFUSED — $3 could not be staged (exit $_rc). Nothing was checked."
   exit 2
 }
 
-# --- THE ARGUMENT IS A BARE NAME, AND THE STEP THAT DERIVES IT SPELLS A PATH -------------
-# Step 2's fixture term is derived as `core/fixtures/<dir>/` — that is the form the reader is
-# told to grep for, and it is the form the reference consumer passed. Every one of those
-# arguments was refused below as an unparsable NAME, on a set that was otherwise correct. So
-# the path form is normalised to the bare name here, and the refusal keeps every input it had.
-#
-# THE MATCH IS A CHARACTER CLASS, NEVER A `case core/fixtures/*)` GLOB, and the difference is
-# the whole PC-S310 refusal. `*` matches a space and a newline, so a glob would collapse a
-# fifteen-name joined list to its last name and run ONE fixture green — the acquitting
-# direction of the very defect the shape probe below exists to catch. What may be stripped is
-# the `core/fixtures/` or `tests/fixtures/` prefix and at most one trailing slash, and only
-# when what remains is a single name: non-empty, no slash, no whitespace. A second slash, an
-# empty name, and every other slash form fall through untouched and are refused below.
-#
-# THE REWRITE IS A ROTATION, NEVER `set -- $list`. Word-splitting the positionals is exactly
-# what the joined-list refusal detects the absence of, so re-introducing it here would delete
-# that arm from inside the fix. `set -f` does not save it — the split is IFS, not glob. Each
-# argument is shifted off the front and pushed back on the end, $# unchanged.
-#
-# SITED HERE, ABOVE THE COVERAGE JOIN, because the join's membership test reads `$*` and the
-# fixture loop reads `$name` as a path component. A normalisation below either one convicts a
-# COMPLETE path-form set as incomplete, or reports MISS on every fixture it was handed.
-#
-# THE `NORMALISED:` ROWS GO ABOVE ANY `COVERAGE:` BLOCK, because the readers of this log window
-# from a `COVERAGE:` line to the next blank one; a row landing inside that window is read as a
-# refused directory.
-_norm_n=$#
-_norm_i=0
-while [ "$_norm_i" -lt "$_norm_n" ]; do
-  _na="$1"; shift
-  _nb="$_na"
-  _nc=""
-  case "$_na" in
-    core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
-    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
-  esac
-  # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
-  # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
-  # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
-  # spelling, so a correct path-form set was convicted as unparsable. `.` and `..` carry no
-  # slash and name no directory, so they are refused as non-names too.
-  case "$_nc" in
-    ""|.|..|*/*|*[[:space:]]*) ;;
-    *) _nb="$_nc" ;;
-  esac
-  if [ "$_nb" != "$_na" ]; then
-    printf 'NORMALISED: %s -> %s\n' "$_na" "$_nb" >> "$LOG"
-  fi
-  set -- "$@" "$_nb"
-  _norm_i=$((_norm_i + 1))
-done
-
-# --- The COVERAGE join: every fixture the DIFF changes must be in the named set ----------
-# One side derived here from `base..theirs`, the other passed in by step 2. Run BEFORE the
-# fixtures, because an incomplete set that runs green is the state this arm exists to refuse
-# and running it first would only produce a plausible green above the finding.
-#
-# THE TERM IS JOINED AGAINST THE NAMED SET, NEVER ADDED TO IT, and the reason is that this
-# file cannot write a fixture into the consumer — only step 2's slice can, and nothing here
-# copies into `$CONSUMER`. So ADDING a diff-touched dir to the run set would execute the
-# consumer's STALE copy: red with no remedy, because nothing here can reach step 2 to tell it
-# what to carry, or green over a repair that was never delivered — which is the
-# "no failures and no assertions are the same byte" collapse this whole file exists to refuse.
-#
-# Both refs are resolved first. An unresolvable range means the join did not run, and a join
-# that did not run reads exactly like one that found nothing — so it is exit 2, never a
-# silent skip. In the real cycle `$DIST` is the checkout the slice was computed from and
-# both refs are the ones that computed it, so this arm is unreachable on correct input.
+# --- THE RANGE MUST RESOLVE IN `$DIST` ---------------------------------------------------------
+# Both refs are resolved first. An unresolvable range means no record can be identified for it,
+# and the gate-record arm below would then report a MISSING APPROVAL where the real finding is an
+# unreadable argument — so it is its own exit 2, never a silent skip.
 for r in "$BASE" "$THEIRS"; do
   git -C "$DIST" rev-parse --verify --quiet "${r}^{commit}" >/dev/null 2>&1 && continue
-  echo "self-update-fixtures: cannot resolve '${r}' in $DIST, so the diff-side coverage join" >&2
-  echo "  could not run. A coverage check that did not run reads exactly like one that passed." >&2
-  { echo "COVERAGE: UNRESOLVABLE — '${r}' does not name a commit in $DIST. Nothing was run."; } >> "$LOG"
+  echo "self-update-fixtures: cannot resolve '${r}' in $DIST, so the gate record for this range" >&2
+  echo "  cannot be identified. A check that did not run reads exactly like one that passed." >&2
+  echo "COVERAGE: UNRESOLVABLE — '${r}' does not name a commit in $DIST. Nothing was checked."
   exit 2
 done
 
-# AND `$DIST` MUST BE THE DISTRIBUTION, not merely a git repo. A checkout with no
-# `core/fixtures/` at `theirs` returns an EMPTY diff, `uncovered` stays empty, and the join
-# reports nothing having observed nothing — a pass that is indistinguishable from a complete
-# set. That state is reachable, not theoretical: a caller resolving `$DIST` by walking up from
-# a CONSUMER-layout copy of this script lands on the consumer root, which is a git repo whose
-# `theirs` carries no `core/fixtures` tree.
+# AND `$DIST` MUST BE THE DISTRIBUTION, not merely a git repo. A caller resolving `$DIST` by
+# walking up from a CONSUMER-layout copy of this script lands on the consumer root, a git repo
+# whose `theirs` carries no `core/fixtures` tree; the tolerance arm and the slice check below
+# read the gate and the fixture markers out of `$DIST`, and a wrong repo answers both as absent.
 #
 # IT IS THE PAIR THAT CLOSES THIS, NOT THIS ARM ALONE. This one asks whether the repo has the
 # right SHAPE; the ref resolution above asks whether it has the right HISTORY, `$BASE` being
-# the consumer's own stamp sha. Either alone admits a wrong repo that satisfies it. Do NOT
-# also require the diff-side set to be NON-EMPTY: a pull touching no fixture at all is an
-# ordinary pull, and failing it would be a check firing on correct data.
-# `cat-file -e` IS CORRECT HERE AND WRONG BELOW, WHICH IS WHY THE ASYMMETRY IS STATED. This
-# probe resolves a TREE, and `--filter=blob:none` does not filter trees — measured present on a
-# blob-filtered clone with its promisor unreachable. The blob probes below cannot use it.
+# the consumer's own stamp sha. Either alone admits a wrong repo that satisfies it.
+# `cat-file -e` IS CORRECT HERE: this probe resolves a TREE, and `--filter=blob:none` does not
+# filter trees — measured present on a blob-filtered clone with its promisor unreachable.
 if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then
   echo "self-update-fixtures: '${THEIRS}' in $DIST has no core/fixtures tree, so \$DIST is not" >&2
-  echo "  the distribution and the coverage join would pass over an empty set. Nothing was run." >&2
-  { echo "COVERAGE: WRONG-REPO — '${THEIRS}:core/fixtures' does not resolve in $DIST."; } >> "$LOG"
+  echo "  the distribution. Nothing was checked." >&2
+  echo "COVERAGE: WRONG-REPO — '${THEIRS}:core/fixtures' does not resolve in $DIST."
   exit 2
 fi
 
@@ -277,11 +162,13 @@ fi
 # narration in a PR body. An autonomous write whose approval exists only as prose has no
 # artifact, and the merged PR carries no evidence of the check that permitted it.
 #
-# SO THE DUTY IS SITED HERE, on the program step 2 must call before it may push. This runner
-# already stands between the slice and the push; the gate does not, because a classifier
-# printing TSV cannot refuse anything. Requiring the RECORD here is what makes the gate's
-# verdict load-bearing rather than advisory, and it needs no new call site: a cycle that
-# skipped the gate entirely now cannot run a single fixture.
+# SO THE DUTY IS SITED HERE, on the program step 2's push runs before the hook. The push wrapper
+# stands between the commit and the push; the gate does not, because a classifier printing TSV
+# cannot refuse anything. Requiring the RECORD here is what makes the gate's verdict load-bearing
+# rather than advisory: `self-update-push.sh` calls this file and refuses the push on its exit 2,
+# so a cycle that skipped the gate entirely cannot push. (This file used to be the pre-commit
+# fixture runner, and the record check rode on it; that run is gone, and the check moved with
+# the call into the push. The `runner` below is this checker.)
 #
 # THE COMPARISON IS ON RESOLVED SHAS, NEVER ON THE ARGUMENT STRINGS. The gate and this runner
 # are invoked by the same step with the same `theirs-ref`, but that ref is commonly a TAG or a
@@ -297,7 +184,7 @@ fi
 # gating script against the incoming one, so its answer is a function of the consumer tree as
 # well as of `base..theirs`. Measured on the same command over one range: 2 DEFER rows before
 # step 2 wrote the slice, 4 OK rows after it, and 2 DEFER again once the write was reverted. So
-# an OK recorded before the write does not attest the state the fixtures are about to run in —
+# an OK recorded before the write does not attest the state the push is about to carry —
 # a cycle could run the gate, write anything at all, and cite the earlier verdict.
 #
 # The record therefore carries one
@@ -308,7 +195,8 @@ fi
 # byte as a comparison that passed.
 #
 # BUT "THE INPUTS MUST NOT HAVE MOVED" IS THE WRONG RULE, AND IT REFUSED EVERY LEGITIMATE
-# SELF-UPDATE. Step 2's real order is gate, then WRITE THE SLICE, then this runner: the record's
+# SELF-UPDATE. Step 2's real order is gate, then WRITE THE SLICE, then commit, then this checker
+# inside the push: the record's
 # digests are taken before the write and re-read after it, so the files the slice legitimately
 # replaced are exactly the ones that differ. Measured on the gate's own seed, driving both
 # shipping programs in that order: 4 of 9 recorded inputs moved, and every one of them moved to
@@ -345,8 +233,8 @@ fi
 # SITED AFTER THE REF RESOLUTION AND THE WRONG-REPO GUARD, and that is load-bearing. This arm
 # peels both refs, so against an unresolvable one it finds no matching record and would report a
 # MISSING APPROVAL where the real finding is an unreadable range — pointing the operator at the
-# gate when what is broken is the argument they passed. It is sited ABOVE the two slice-shaped
-# arms below for the mirror reason: those report a defect in the SLICE, and printing one for a
+# gate when what is broken is the argument they passed. It is sited ABOVE the slice check at
+# the end for the mirror reason: that reports a defect in the SLICE, and printing one for a
 # cycle that was never authorised sends the reader to fix the wrong thing entirely.
 GATE_REC=""
 GATE_REC_WHY=""
@@ -753,8 +641,8 @@ $gr_p"
     #
     # A fix to a bootstrapping step can never be delivered by that step: on the pull that
     # DELIVERS this requirement the OLD gate runs and records nothing, the slice installs this
-    # runner, and a hard refusal would then block the very self-update carrying the fixed gate —
-    # with step 2 requiring green before the push, that pull can never land. Measured on the
+    # checker, and a hard refusal would then block the very self-update carrying the fixed gate —
+    # with the push refused on this exit, that pull can never land. Measured on the
     # reference consumer: 69 of 87 self-update commits wrote some `reconcile/` file and 3 wrote
     # this runner, against a control of 0 of 87 for an impossible path.
     #
@@ -805,7 +693,7 @@ $gr_p"
       # the reference consumer today, whose two stamp fields are equal.
       GATE_REC_WHY="no gate record exists in $OUT_DIR, and the gate at ${BASE} DOES record its verdict (${gr_tok_base} emission site(s)), so this is not a consumer whose installed gate predates recording — the records were deleted or the gate was never run"
     else
-      { echo "GATE-RECORD: NOT-REQUIRED — no gate record exists and the gate at ${BASE} carries no record-writing site (${gr_tok_base}; the gate at ${THEIRS} carries ${gr_tok_theirs}, so the probe can still see one), meaning the installed gate could not have recorded. This is the pull that delivers recording, and the requirement binds from the next run on."; } >> "$LOG"
+      echo "GATE-RECORD: NOT-REQUIRED — no gate record exists and the gate at ${BASE} carries no record-writing site (${gr_tok_base}; the gate at ${THEIRS} carries ${gr_tok_theirs}, so the probe can still see one), meaning the installed gate could not have recorded. This is the pull that delivers recording, and the requirement binds from the next run on."
       echo "self-update-fixtures: NOT-REQUIRED — the gate at ${BASE} carries no record-writing site," >&2
       echo "  so the gate this consumer installed could not have recorded a verdict. This is the pull" >&2
       echo "  that delivers recording; the requirement binds from the next run on." >&2
@@ -823,7 +711,7 @@ if [ -n "$GATE_REC_WHY" ]; then
   # ONE TAG PER FINDING CLASS, because the four refusals have four different remedies and an
   # operator who has to infer which one applied from a paragraph goes back to a tree that is
   # already gone. `MISSING` is emitted only where no record was identified at all.
-  { echo "GATE-RECORD: refusing to run — ${GATE_REC_WHY}."
+  { echo "GATE-RECORD: refusing the push — ${GATE_REC_WHY}."
     if [ -z "${GATE_REC:-}" ]; then
       echo "GATE-RECORD: MISSING — no record identified for this range."
     fi
@@ -839,12 +727,11 @@ if [ -n "$GATE_REC_WHY" ]; then
       printf '%s\n' "${gr_moved#
 }" | sed 's/^  /GATE-RECORD: INPUT-MOVED /'
     fi
-    echo "GATE-RECORD: base ${gr_base} theirs ${gr_theirs}"
-    echo ""; } >> "$LOG"
+    echo "GATE-RECORD: base ${gr_base} theirs ${gr_theirs}"; }
   echo "self-update-fixtures: ${GATE_REC_WHY}." >&2
   echo "  Step 2 pushes and auto-merges with no operator gate, so the gate's recorded OK is the" >&2
-  echo "  only artifact of the decision that permitted the write. Running the fixtures without it" >&2
-  echo "  would produce a green suite for a cycle nothing authorised." >&2
+  echo "  only artifact of the decision that permitted the write. Pushing without it would land" >&2
+  echo "  a cycle nothing authorised." >&2
   if [ -n "${gr_moved:-}" ]; then
     echo "  Its verdict is a DIFFERENTIAL against the consumer's own copies, so it does not carry" >&2
     echo "  across a change to them. Re-run the gate on the tree AS IT NOW STANDS:" >&2
@@ -852,386 +739,78 @@ if [ -n "$GATE_REC_WHY" ]; then
     echo "  Run the gate first:" >&2
   fi
   echo "    bash ${SELF}/self-update-gate.sh ${DIST} ${BASE} ${THEIRS} ${CONSUMER}" >&2
-  echo "  then re-run this command. Commit the gate record beside this log." >&2
-  echo "  log: $LOG" >&2
+  echo "  and take the red-push disposition (step 2): nothing was pushed, and the commit is local." >&2
   exit 2
 fi
 
-# The record path joins the log's `#` prologue rather than the block written at the top,
-# because the arms between the two both EXIT — so on every run that reaches the fixture loop
-# this line is contiguous with the header, and on every run that does not there is a
-# GATE-RECORD or COVERAGE line saying why instead.
-{ echo "# gate record: $GATE_REC (verdict OK)"; } >> "$LOG"
-
-# --- The OVER-completeness arm: every NAMED dir must be one a consumer can RUN -----------
-# The join below refuses a set that is MISSING a diff-touched dir. This one refuses a set
-# that CONTAINS a dir the consumer can never hold, and the two exclusions are the same two,
-# read at the same ref, for the same reason: `.dist-only` at theirs is never shipped, and no
-# `run.sh` at theirs means upstream deleted the driver.
+# --- THE COMMITTED SLICE'S FIXTURE DIRECTORIES: two write-step losses the old runner caught -----
+# The serial runner this file replaced caught two defects in the slice as a side effect of being
+# handed the fixture set: a `.dist-only` directory written into the consumer (its over-completeness
+# arm, PC-S307: `backlog-size-ceiling` written into a consumer's `tests/fixtures/` as a
+# RETIRED-FIXTURE-ORPHAN), and a directory written without its driver (its MISS row). Neither is a
+# push-hook question: the hook runs the consumer's whole suite, so it never names a `.dist-only`
+# directory as wrong, and a directory with no `run.sh` is not a fixture its glob dispatches at all.
+# So both are asked HERE, over the self-update commit itself — the paths HEAD's commit touched
+# under the consumer's fixture root — after the commit and before the push. A refusal leaves a
+# local commit nothing pushed, which is the recoverable state step 2's red-push paragraph handles.
 #
-# THE EXCLUSIONS WERE STATED FOR ONE HALF OF THE JOIN AND READ AS BELONGING ONLY TO IT.
-# Filed by the reference consumer as
-# PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED after
-# a hand derivation of step 2's term B yielded `backlog-size-ceiling`, which carries
-# `.dist-only` at theirs. It was written into the consumer's `tests/fixtures/` — a
-# RETIRED-FIXTURE-ORPHAN, the class `retired-fixtures.sh` exists to report — and removed by
-# hand before the commit. Nothing in the tooling would have said so: `preclassify.sh` buckets
-# that same path `DIST-ONLY-SKIP` in the same pull, so the fact was already derived and simply
-# never reached the one place that could act on it.
+# THE POPULATION IS THE COMMIT, NEVER THE WHOLE FIXTURE ROOT. A consumer's own fixtures, and a
+# directory a previous cycle delivered, are not this cycle's write; asking about them would refuse a
+# consumer for a state this cycle did not create. A HEAD with no parent has nothing to compare, and
+# a consumer whose HEAD is not a commit is outside this question; both are left to the hook. So is
+# a consumer that is not the TOP of its own work tree: `git -C` walks up, and a consumer directory
+# inside some other repository would otherwise be judged by that repository's last commit.
 #
-# THE MISS ARM BELOW IS NOT THIS CHECK, and that is why this one is needed. A named dir with
-# no `run.sh` AT THE CONSUMER reports MISS and goes red — but only when the slice FAILED to
-# write it. In the filed episode the slice DID write it, so the run was green and the orphan
-# survived. One asks whether the slice delivered what was named; this asks whether what was
-# named should ever have been named.
-#
-# SITED AFTER THE REF RESOLUTION AND THE WRONG-REPO GUARD, and that is load-bearing rather
-# than tidy. Both probes below resolve a path AT THEIRS: against an unresolvable ref or a
-# repo with no `core/fixtures` tree, every one of them fails and this arm convicts the whole
-# named set — a check whose failure mode is to indict correct input. The two guards above
-# turn that state into its own exit first.
-#
-# A NAME THAT RESOLVES TO NO TREE IS AN UNPARSABLE ARGUMENT, NOT A DELETED DRIVER, AND THE
-# ARM CONVICTED IT AS ONE. Every probe here resolves `${d}` as a path COMPONENT, so a `$d` that
-# is not a directory name at all fails them identically to a genuine retirement — and the
-# verdict printed asserts a fact about the DISTRIBUTION ("upstream deleted the driver") that is
-# false, names a cause the operator cannot act on, and prescribes dropping the entry from the
-# slice, which the diff-side join then correctly refuses as an omission. Following the printed
-# remedy walks into the opposite refusal.
-#
-# MEASURED, and the trigger is this shell rather than a typo: under zsh an unquoted `$FIX`
-# holding a newline-joined list does not word-split, so fifteen names arrived as ONE argument
-# and were reported as one row whose subject was the whole list — fifteen drivers declared
-# deleted, every one of them present. Filed by the reference consumer as
-# PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE.
-#
-# THE DISCRIMINATOR IS THE ARGUMENT'S SHAPE, NOT THE CONTAINING TREE, AND THE FIRST CUT OF
-# THIS FIX GOT THAT WRONG IN THE DIRECTION THAT DESTROYS THE ARM. A tree probe looks like the
-# answer and is not: a genuine retirement removes the whole DIRECTORY, so it resolves to no
-# tree — exactly as an unparsable argument does. Measured against `origin/main`, both in the
-# same invocation with a resolving control: a retired-shaped name and the joined fifteen-name
-# argument BOTH fail the tree probe, while `self-update-gate` resolves. Ordering a tree probe
-# first therefore relabels every real retirement "not a fixture directory", and
-# `self-update-fixture-log` caught it — Part 15 went red where `origin/main` is green.
-#
-# What actually separates the two is that a fixture NAME cannot contain a space or a `/`.
-# The joined-list case is one argument holding fifteen space-separated names; a retirement is
-# a well-formed name whose tree is gone. So the probe is on the SHAPE of `$d`, it is sited
-# before the tree lookups because it needs none, and the deleted-driver verdict keeps every
-# input it had before this change.
-#
-# THE PATH FORM REACHES THIS ARM NO LONGER, AND IT USED TO BE THE COMMON CASE. Step 2 spells
-# its fixture term `core/fixtures/<dir>/`, so an operator following the step passes exactly
-# what this probe was built to refuse: the reference consumer's committed log carries
-# twenty-four refusal rows, every one of them a `core/fixtures/<name>` argument naming a real
-# shippable fixture. Both halves were right on their own terms and the pair wedged the cycle
-# — which is why the repair is a NORMALISATION above the coverage join rather than a widened
-# predicate here. The two accepted prefixes are stripped there; everything that arrives here
-# with a slash is a form no reading of the step produces.
-#
-# THE ROW NAMES WHICH SHAPE IT SAW, because the remedy forks: whitespace sends the reader to
-# the caller's quoting, a slash sends them to the argument itself, and the earlier single
-# sentence sent both to the zsh remedy. A reader of a path-form row who follows a
-# word-splitting instruction learns nothing and changes nothing.
-#
-# `rev-parse -q --verify`, NOT `cat-file -e`, FOR THE `run.sh` PROBES (the two `.dist-only` probes
-# below use `memo_has_path` instead), AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
-# `cat-file -e <rev>:<path>` requires the BLOB OBJECT to be present locally. On a
-# `--filter=blob:none` clone whose promisor is unreachable it answers ABSENT for a path that
-# exists, so every named dir reads as "no run.sh at theirs" and the arm convicts a correct set.
-# `rev-parse -q --verify` resolves through the TREE and needs no blob. Measured on a real
-# blob-filtered clone (5115 missing objects) with the promisor moved away, at a historical ref:
-# `core/fixtures/self-update-gate/run.sh` reads ABSENT under `cat-file -e` and present under
-# `rev-parse`, while a nonexistent path reads ABSENT under both — so the two disagree exactly
-# where it matters and agree on the control. The guards above cannot catch it: the containing
-# TREE is not filtered and resolves fine, which is why this needed its own repair rather than a
-# third guard.
-#
-# THE `.dist-only` PROBE IS `memo_has_path`, NOT `rev-parse`, AND THE SPLIT IS DELIBERATE.
-# `rev-parse -q --verify` answers 1 for an absent marker AND for a `core/fixtures/<d>/` subtree
-# that could not be read, so an unreadable tree read as "not dist-only" — the oracle
-# `preclassify.sh`'s `dist_only()` retired in 0.681.0. `memo_has_path` (lib.sh) answers 0 present,
-# 128 CONFIRMED absent, and 125 when git said no and the absence could not be confirmed; anything
-# but 0 and 128 is a refusal here, as it is there. On the blob-filtered clone above a present
-# marker whose BLOB is filtered out is `cat-file -e` 1, which `memo_has_path` turns into 125 — a
-# REFUSAL naming the directory, never a wrong verdict, and the same answer `preclassify.sh` gives
-# on that tree. The `run.sh` probe keeps `rev-parse`: a deleted driver is a whole missing
-# DIRECTORY, which no tree-unreadable state can be confused with in the direction that acquits.
-unshippable=""
-for d in "$@"; do
-  _do_rc=0
-  memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only" || _do_rc=$?
-  if [ "$_do_rc" -ne 0 ] && [ "$_do_rc" -ne 128 ]; then
-    unshippable="$unshippable
-  $d — its .dist-only marker at ${THEIRS} could not be confirmed present or absent (exit $_do_rc): a tree on that path could not be read, so whether a consumer can hold it is unknown"
-  elif [ "$_do_rc" -eq 0 ]; then
-    unshippable="$unshippable
-  $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
-  elif [ "$d" != "$(printf '%s' "$d" | tr -d '[:space:]/')" ] || [ -z "$d" ]; then
-    # THE ROW SAYS WHICH SHAPE WAS SEEN, because the two causes take opposite remedies and one
-    # sentence cannot serve both. A joined list is fixed by word-splitting the caller's variable;
-    # a path that is not one of the two accepted prefixes is fixed by passing the name. Sending a
-    # reader of the second to the zsh remedy costs them the whole diagnosis.
-    #
-    # THE SUBJECT IS THE ORIGINAL ARGUMENT, and it is here because it can be empty. `core/fixtures/`
-    # carries the accepted prefix and NO name, so nothing is stripped from it — a row whose subject
-    # were the stripped remainder would open with a space, and the readers of this log key on a
-    # row's first token.
-    case "$d" in
-      "")
-        _nwhy="it is empty" ;;
-      *[[:space:]]*)
-        _nwhy="it carries whitespace — several names in ONE argument rather than one name" ;;
-      core/fixtures/*|tests/fixtures/*)
-        _nwhy="it carries the fixture path prefix but does not name exactly one directory under it" ;;
-      *)
-        _nwhy="it carries a slash and is neither core/fixtures/<name> nor tests/fixtures/<name>" ;;
-    esac
-    unshippable="$unshippable
-  $d — not a fixture NAME: $_nwhy, so it is an unparsable argument rather than a deleted driver"
-  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then
-    unshippable="$unshippable
-  $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"
-  fi
-done
-
-if [ -n "$unshippable" ]; then
-  { echo "COVERAGE: the named set contains fixture(s) no consumer can run:"
-    printf '%s\n' "${unshippable#
-}"
-    echo ""; } >> "$LOG"
-  echo "self-update-fixtures: the named set contains fixtures no consumer can run:" >&2
-  printf '%s\n' "$unshippable" >&2
-  echo "  Step 2 derives the covering set by hand and the exclusions are stated for the" >&2
-  echo "  diff-side term. Writing one of these into the consumer creates a fixture core" >&2
-  echo "  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
-  echo "  A 'not a fixture NAME' row is the EXCEPTION to that remedy: no such fixture was" >&2
-  echo "  ever named, so dropping it drops nothing and the diff-side join then refuses the" >&2
-  echo "  omission. Fix the ARGUMENT instead, and the row names WHICH of two causes it is." >&2
-  echo "  THE PATH FORM: 'core/fixtures/<name>' and 'tests/fixtures/<name>', with or without" >&2
-  echo "  a trailing slash, are ACCEPTED — they are normalised to the bare name above, and" >&2
-  echo "  every such rewrite is logged. A path row therefore means something else: a deeper" >&2
-  echo "  path, a prefix that is neither of those two, or no name after the prefix at all." >&2
-  echo "  Pass the fixture DIRECTORY NAME. THE JOINED LIST: under zsh an unquoted \$FIX holding a" >&2
-  echo "  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
-  echo "  log: $LOG" >&2
-  exit 2
+# `.dist-only` is read AT THEIRS through `memo_has_path` (lib.sh), the oracle `preclassify.sh`'s
+# `dist_only()` uses for its DIST-ONLY-SKIP bucket: 0 present, 128 CONFIRMED absent, anything else
+# a refusal naming the directory. `run.sh` is read in the COMMITTED tree, so a driver that was
+# written and not staged reads as missing — which is what the push would carry.
+su_fx_dirs=""
+# BOTH SIDES PHYSICAL (`pwd -P`). `--show-toplevel` answers with symlinks resolved, `cd && pwd`
+# without, and under a `/var` -> `/private/var` link the two never compare equal, which would skip
+# this whole check on a consumer that is its own top.
+su_top="$(cd "$CONSUMER" && git rev-parse --show-toplevel 2>/dev/null)" || su_top=""
+[ -n "$su_top" ] && su_top="$(cd "$su_top" && pwd -P)"
+su_cons_p="$(cd "$CONSUMER" && pwd -P)" || su_cons_p=""
+if [ -n "$su_top" ] && [ "$su_top" = "$su_cons_p" ] \
+   && git -C "$CONSUMER" rev-parse -q --verify 'HEAD^{commit}' >/dev/null 2>&1 \
+   && git -C "$CONSUMER" rev-parse -q --verify 'HEAD^^{commit}' >/dev/null 2>&1; then
+  su_fx_raw="$(git -C "$CONSUMER" -c core.quotePath=false diff --name-only 'HEAD^' HEAD -- "$FX_ROOT/" 2>/dev/null)" || {
+    echo "GATE-RECORD: SLICE-UNREADABLE — git diff HEAD^ HEAD -- $FX_ROOT/ failed in $CONSUMER."
+    echo "self-update-fixtures: the self-update commit's fixture paths could not be listed, so the slice check could not run." >&2
+    exit 2; }
+  su_stage fx-raw "$su_fx_raw" "the self-update commit's fixture paths"
+  su_fx_dirs="$(sed -n -E "s#^${FX_ROOT}/([^/]+)/.*#\\1#p" "$SU_T/fx-raw" | sort -u)"
 fi
-
-# The diff is taken into a variable, not straight into the loop, so its STATUS is readable:
-# inside a `$( )` fed to a heredoc it would be lost to a subshell, and a diff that failed
-# would arrive as an empty set — the coverage join reporting nothing to cover, which is the
-# exact silent pass the ref resolution above refuses.
-cov_raw="$(git -C "$DIST" -c core.quotePath=false diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)" || {
-  echo "self-update-fixtures: git diff ${BASE}..${THEIRS} failed in $DIST, so the diff-side" >&2
-  echo "  coverage join could not run. Nothing was run." >&2
-  { echo "COVERAGE: UNRESOLVABLE — git diff ${BASE}..${THEIRS} failed in $DIST."; } >> "$LOG"
-  exit 2
-}
-
-# Exemptions, and each one is a state where the slice is RIGHT to omit the directory:
-#   `.dist-only` at theirs — never shipped, so it cannot exist on a consumer to run;
-#   no `run.sh` at theirs  — deleted upstream, so there is nothing to write.
-# Both are read AT THEIRS. Reading them from the distribution checkout instead answers for
-# whatever is on disk, which is a different tree from the one being delivered.
-#
-# The directory set is derived by `sed -n …p`, which prints ONLY the paths that carry a
-# directory component under `core/fixtures/`: a path directly under it does not match, and a
-# substitution without `-n`/`p` would pass it through UNCHANGED as a bogus directory name, which
-# the deleted-upstream exemption would then swallow and report as nothing at all. The `sed` and
-# the `sort` are separate staged steps, each with its status read — this file runs without
-# `pipefail`, so a one-pipeline stage would report the `sort`'s status alone.
-#
-# THE SET IS STAGED, NOT FED BY A HEREDOC whose body was `$(…)`: that substitution's status was
-# lost, and a heredoc whose temp file could not be written ran this loop ZERO times — `uncovered`
-# empty, the join reporting a complete set having compared nothing (see `su_stage`).
-su_stage cov-raw "$cov_raw" "the base..theirs fixture diff"
-_cov_rc=0
-sed -n -E 's#^core/fixtures/([^/]+)/.*#\1#p' "$SU_T/cov-raw" > "$SU_T/cov-dirs" || _cov_rc=$?
-[ "$_cov_rc" -eq 0 ] && { sort -u "$SU_T/cov-dirs" > "$SU_T/cov-set" || _cov_rc=$?; }
-if [ "$_cov_rc" -ne 0 ]; then
-  echo "self-update-fixtures: the diff-touched fixture set could not be derived (exit $_cov_rc), so the" >&2
-  echo "  diff-side coverage join could not run. Nothing was run." >&2
-  { echo "COVERAGE: UNRESOLVABLE — the diff-touched fixture set could not be derived (exit $_cov_rc)."; } >> "$LOG"
-  exit 2
-fi
-uncovered=""
-cov_refused=""
+su_slice_bad=""
+su_stage fx-dirs "$su_fx_dirs" "the self-update commit's fixture directories"
 while IFS= read -r d; do
   [ -n "$d" ] || continue
-  # `memo_has_path` for the marker, for the reason spelled out at the over-arm above — and HERE
-  # an unconfirmed answer is SILENT rather than loud unless it is refused. `rev-parse`'s 1 for an
-  # unreadable subtree took `&& continue`'s other branch and read as "not dist-only", and on a
-  # blob-filtered clone the old `cat-file -e` spelling failed both probes, so every diff-touched
-  # dir took `|| continue` and `uncovered` stayed empty: the join reported nothing having
-  # compared nothing. Measured on the same clone, range 0.443.0 -> 0.446.0 with an empty named
-  # set: a full clone exits 2 naming `predicate-reclassification`, the filtered one exited 0 with
-  # "1 green, 0 red". A 125 is collected and refused below, never skipped.
+  # A directory the commit REMOVED is not one it wrote: only a directory HEAD still holds is asked.
+  git -C "$CONSUMER" cat-file -e "HEAD:${FX_ROOT}/${d}" 2>/dev/null || continue
   _do_rc=0
   memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only" || _do_rc=$?
-  case "$_do_rc" in
-    0)   continue ;;
-    128) ;;
-    *)   cov_refused="$cov_refused $d"; continue ;;
-  esac
-  git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1 || continue
-  case " $* " in *" ${d} "*) continue ;; esac
-  uncovered="$uncovered $d"
-done < "$SU_T/cov-set"
-
-if [ -n "$cov_refused" ]; then
-  { echo "COVERAGE: UNCONFIRMED — the .dist-only marker of these diff-touched fixtures could not be confirmed present or absent at ${THEIRS}:"
-    for d in $cov_refused; do echo "  $d"; done
-    echo ""; } >> "$LOG"
-  echo "self-update-fixtures: whether these diff-touched fixtures ship could not be decided:${cov_refused}" >&2
-  echo "  A tree on the path of each one's .dist-only marker at ${THEIRS} could not be read, so the" >&2
-  echo "  coverage join cannot say whether the slice must carry it. Repair the distribution clone" >&2
-  echo "  (a missing object, or an offline promisor) and re-run. Nothing was run." >&2
-  echo "  log: $LOG" >&2
+  if [ "$_do_rc" -eq 0 ]; then
+    su_slice_bad="$su_slice_bad
+  $d — DIST-ONLY: carries .dist-only at ${THEIRS}, so core never ships it; the self-update commit wrote it into $FX_ROOT/ as a RETIRED-FIXTURE-ORPHAN"
+  elif [ "$_do_rc" -ne 128 ]; then
+    su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: its .dist-only marker at ${THEIRS} could not be confirmed present or absent (exit $_do_rc)"
+  elif ! git -C "$CONSUMER" cat-file -e "HEAD:${FX_ROOT}/${d}/run.sh" 2>/dev/null; then
+    su_slice_bad="$su_slice_bad
+  $d — NO-DRIVER: the self-update commit holds $FX_ROOT/$d/ with no run.sh, so the directory was written without its driver"
+  fi
+done < "$SU_T/fx-dirs"
+if [ -n "$su_slice_bad" ]; then
+  printf '%s\n' "${su_slice_bad#
+}" | sed 's/^  /GATE-RECORD: SLICE /'
+  echo "self-update-fixtures: the self-update commit wrote fixture director(ies) no consumer can run:${su_slice_bad}" >&2
+  echo "  Step 2 writes the covering fixtures each directory WHOLE, and subtracts every path preclassify.sh" >&2
+  echo "  buckets DIST-ONLY-SKIP. Nothing was pushed; the commit is local. Take the red-push disposition." >&2
   exit 2
 fi
 
-if [ -n "$uncovered" ]; then
-  { echo "COVERAGE: the diff changes these shippable fixtures and the named set omits them:"
-    for d in $uncovered; do echo "  $d"; done
-    echo ""; } >> "$LOG"
-  echo "self-update-fixtures: the slice omits fixtures this diff CHANGES:${uncovered}" >&2
-  echo "  Step 2's first fixture term greps the fixtures for machinery paths the diff moved." >&2
-  echo "  A fixture the pull REPAIRS names none of them, so that term cannot see it — and the" >&2
-  echo "  consumer's pre-push runs the whole suite, so its unrepaired copy blocks the push this" >&2
-  echo "  cycle is making. Add the diff-touched fixtures to the slice and re-run." >&2
-  echo "  log: $LOG" >&2
-  exit 2
+if [ -n "$GATE_REC" ]; then
+  echo "GATE-RECORD: OK $GATE_REC"
 fi
-
-n_run=0; n_ok=0; n_fail=0; n_missing=0; reds=""
-# --- THE DISPATCH RULE IS THE CONSUMER HOOK'S, RESTATED ------------------------------------
-# The consumer's pre-push runs a fixture that carries `inputs.decl` through
-# `scripts/ai-dlc/hermetic-run.sh --root <root> <name>`, which hands it a sandbox holding only its
-# declared inputs, refuses a declared file that is absent, and fails a `!` REQUIRED input the fixture
-# never consumed. It FAILS such a fixture when the runner is not installed, and never falls back to a
-# plain run. This runner used to run every fixture plain, so a self-update could report green on a
-# set the push then refused: measured on the reference consumer's 0.760 step 2, 90 fixtures green
-# here and 6 refused by the push it was making.
-#
-# NO SOURCEABLE JOIN EXISTS, SO THIS IS A RESTATEMENT. The rule lives inside the hook's
-# FIXTURE_POOL `bash -c` body, which I66 binds byte-for-byte across both pre-push hooks; nothing
-# here can source it. The arms of `self-update-fixture-log` (H1-H7, HD1) pin each clause of the
-# restatement, and its battery holds a mutant per clause. Lifting the rule into a shared span both
-# hooks and this file read is a hook change and a separate release.
-#
-# THE RULE APPLIES ONLY WHERE THE CONSUMER'S OWN HOOK CARRIES IT. Dispatch is keyed on the hook as
-# it stands on disk now (after the slice was written, so a hook the slice delivers counts): the
-# `# READSET_TOOLS_BEGIN` sentinel AND the dispatch line itself, each a WHOLE line. The bare word
-# `inputs.decl` is not the key, because the hook's comments carry it on a hook that predates the
-# dispatch. A hook without the dispatch runs a declared fixture plain on push, so this run does too,
-# and the log says why.
-#
-# `PREPUSH_POOL_DEPTH` is exported one deeper than this process was started at, as the hook exports
-# it to its pool, so a fixture that runs a hook of its own sees the depth it sees on push. The git
-# variables the hook unsets before dispatch are unset here too, after the last read of `$DIST`.
-SU_HOOK_REL="$(map_consumer core/git-hooks/pre-push)"
-SU_HR_REL="$(map_consumer core/scripts/hermetic-run.sh)"
-SU_HOOK_DISPATCHES=0
-SU_HOOK_WHY=""
-if [ ! -f "$CONSUMER/$SU_HOOK_REL" ]; then
-  SU_HOOK_WHY="the consumer has no $SU_HOOK_REL, so no push of it dispatches a declared fixture to the hermetic runner"
-else
-  _hd_t="$(grep -cx '# READSET_TOOLS_BEGIN' "$CONSUMER/$SU_HOOK_REL" 2>/dev/null)" || _hd_t=0
-  _hd_d="$(grep -cxE '[[:space:]]*if \[ -f "\$d/inputs\.decl" \]; then' "$CONSUMER/$SU_HOOK_REL" 2>/dev/null)" || _hd_d=0
-  if [ "$_hd_t" -gt 0 ] && [ "$_hd_d" -gt 0 ]; then
-    SU_HOOK_DISPATCHES=1
-  else
-    SU_HOOK_WHY="the consumer's $SU_HOOK_REL predates the hermetic dispatch (READSET_TOOLS_BEGIN lines: $_hd_t, inputs.decl dispatch lines: $_hd_d), so its push runs this fixture plain"
-  fi
-fi
-_su_pd="${PREPUSH_POOL_DEPTH:-0}"
-case "$_su_pd" in ''|*[!0-9]*|??????*) _su_pd=2 ;; esac
-export PREPUSH_POOL_DEPTH="$(( 10#$_su_pd + 1 ))"
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-{ echo "# dispatch: hook $SU_HOOK_REL dispatches declared fixtures: $SU_HOOK_DISPATCHES   runner: $SU_HR_REL   PREPUSH_POOL_DEPTH=${PREPUSH_POOL_DEPTH:-}"
-  echo ""; } >> "$LOG"
-for name in "$@"; do
-  dir="$CONSUMER/$FX_ROOT/$name"
-  {
-    echo "===== FIXTURE $name ====="
-  } >> "$LOG"
-  if [ ! -f "$dir/run.sh" ]; then
-    # A named fixture with no driver is NOT a pass. It means the slice did not write what
-    # the derivation said it would, which is a finding about the cycle rather than about
-    # the fixture.
-    n_missing=$((n_missing + 1)); reds="$reds $name"
-    echo "self-update-fixtures: MISSING $FX_ROOT/$name/run.sh" >&2
-    { echo "MISSING: $FX_ROOT/$name/run.sh — the slice did not write this fixture's driver."
-      echo "----- rc=missing -----"; echo ""; } >> "$LOG"
-    printf '   MISS  %s\n' "$name"
-    continue
-  fi
-  # cwd is the CONSUMER ROOT, because that is where both pre-push hooks run a fixture
-  # from (`bash "$d/run.sh"` with the repo root current). A fixture whose verdict depends
-  # on the caller's directory has been shipped before — see v0.263.0 — so the runner that
-  # decides a self-update must stand exactly where the gate that decides a push stands.
-  if [ -f "$dir/inputs.decl" ]; then
-    if [ "$SU_HOOK_DISPATCHES" = 1 ]; then
-      su_mode=hermetic
-    else
-      su_mode=plain; su_why="$SU_HOOK_WHY"
-    fi
-  else
-    su_mode=plain; su_why="undeclared: no inputs.decl, so the push runs it plain"
-  fi
-  if [ "$su_mode" = hermetic ] && [ ! -f "$CONSUMER/$SU_HR_REL" ]; then
-    # The hook FAILS here and never runs the fixture plain; so does this run. Counted as run and red,
-    # so the completeness assertion below still balances.
-    { echo "DISPATCH: hermetic — $name declares inputs.decl"
-      printf 'hermetic-run.sh not found at %s; %s declares inputs.decl and cannot run without it\n' "$SU_HR_REL" "$name"
-      echo "----- rc=runner-absent -----"; echo ""; } >> "$LOG"
-    n_run=$((n_run + 1)); n_fail=$((n_fail + 1)); reds="$reds $name"; printf '   FAIL  %s\n' "$name"
-    continue
-  fi
-  if [ "$su_mode" = hermetic ]; then
-    { echo "DISPATCH: hermetic — $name declares inputs.decl and the consumer hook dispatches it"; } >> "$LOG"
-    ( cd "$CONSUMER" && bash "$SU_HR_REL" --root "$CONSUMER" "$name" ) >> "$LOG" 2>&1
-  else
-    { echo "DISPATCH: plain — $su_why"; } >> "$LOG"
-    ( cd "$CONSUMER" && bash "$FX_ROOT/$name/run.sh" ) >> "$LOG" 2>&1
-  fi
-  rc=$?
-  { echo "----- rc=$rc -----"; echo ""; } >> "$LOG"
-  n_run=$((n_run + 1))
-  if [ "$rc" -eq 0 ]; then
-    n_ok=$((n_ok + 1)); printf '   ok    %s\n' "$name"
-  else
-    n_fail=$((n_fail + 1)); reds="$reds $name"; printf '   FAIL  %s\n' "$name"
-  fi
-done
-
-{
-  echo "# summary: $n_ok green, $n_fail red, $n_missing missing, of $# named"
-  [ -n "$reds" ] && echo "# red:${reds}"
-} >> "$LOG"
-
-echo ""
-echo "self-update fixtures: $n_ok green, $n_fail red, $n_missing missing, of $# named"
-echo "log: $LOG"
-
-# The completeness assertion, and it is not decoration: a loop that silently skipped a
-# fixture would otherwise report every fixture it DID run as green and exit 0.
-if [ $((n_run + n_missing)) -ne $# ]; then
-  echo "self-update-fixtures: ran $n_run + $n_missing missing, but $# were named — the loop did not reach every fixture." >&2
-  exit 2
-fi
-
-# THE DISPOSITION TOKEN, AND WHY A PROGRAM PRINTS A RULE. A red here takes the HOOK-REFUSED
-# disposition verbatim: discard the branch, restore the records, carry the slice, the gate record and
-# this log to the step-7 gated apply; steps 3-5 run, and step 6 does not refuse `apply`. SKILL.md step 2
-# says so, but on the pull that DELIVERS that sentence the operating agent is still reading the
-# installed, older SKILL.md, and this file (written by the slice before it runs) is the only carrier
-# of the new rule. Printed on STDOUT, and only on this exit-1 path: an exit 2 above is a refusal of
-# the run, not a red suite, and keeps its own remedy.
-if [ "$n_fail" -ne 0 ] || [ "$n_missing" -ne 0 ]; then
-  SU_TOKEN='# disposition: SELF-UPDATE-DEFER — carry slice + gate record + this log to step 7'
-  echo "$SU_TOKEN"; echo "$SU_TOKEN" >> "$LOG"
-fi
-
-[ "$n_fail" -eq 0 ] && [ "$n_missing" -eq 0 ]
+exit 0
