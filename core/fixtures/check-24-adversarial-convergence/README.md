@@ -252,6 +252,26 @@ The mutant restores the old `tr -cd '0-9a-fA-F'` read at all three sites. That r
 hex letters of the stem names onto the shas, so the reordered case flips to F4 "never saw" while
 the partial case still fails on F5, and the unmutated copy is the control.
 
+## Unit `tstrat` — the test-strategy series, bound from Check 24's text to the program (BL-723)
+
+`stories-test-strategy.md` §5 step 2 converges `test-strategy.md` through the native review/repair
+cycle, and Check 24 runs that series. The unit joins the two documents through the shipping validator
+rather than through a typed copy of the prefix:
+
+| Cell | What it runs | Must |
+|---|---|---|
+| `ts-bind` | the prefix EXTRACTED from Check 24's section (`### 24.` to `### 25.`), `s<N>` resolved to a seeded sprint, over a terminal MET pass (0C, 3 derived MAJOR) and a verdict-less one | exit 0, then exit 1 with `FAIL (A -- VOCABULARY)`; an empty extraction FAILs naming the token |
+| `ts-absent` | the §5 span (`### 5.` to `### 6.`) | no `bmad-review-adversarial-general`; control: `bug-investigation.md` names it, and a zero control is BROKEN |
+| `ts-names` | the §5 span | names `test-strategy-adversarial-p`, `Adversarial review dispatch`, `Adversarial repair dispatch`, and step 3's precondition (``does not stamp `verdict: EXIT_CONDITION_MET` ``) |
+| `ts-arm-l-silent` | the MET run's output | no elicitation line — a characterization, not a kill |
+
+The section extractor self-probes first, on a hit inside the section and on the same grammar one
+section either side. Three committed mutants, each a copy guarded by `cmp -s`, move exactly their own
+cell against an unmutated `ok ok ok` control: the one-shot restored into §5 step 2 (`ok FAIL ok`),
+every test-strategy prefix stripped from `gate-validation.md` (`FAIL ok ok`), and step 3's
+precondition paragraph deleted from §5 (`ok ok FAIL`; the copy must carry zero precondition stamps
+against one in the original).
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is

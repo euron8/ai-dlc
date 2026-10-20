@@ -80,7 +80,7 @@ findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whos
 exit criteria are a bounded severity residue has no fixed point under it, and the
 skill forbids the very severity fields Check 24 adjudicates. The counts the gate
 reads had no source of truth. bmad remains correct, and still runs, for the
-ONE-SHOT reviews (`bug-investigation`, `sprint-review`, the test-strategy sweep),
+ONE-SHOT reviews (`bug-investigation`, `sprint-review`),
 where nothing loops and no verdict is counted.
 
 **(iv) Gate-check adjudication (`gate-adjudicator`, native — no provenance block).** At

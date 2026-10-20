@@ -1,4 +1,4 @@
-# check-24-adversarial-convergence and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape.
+# check-24-adversarial-convergence and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share one declaration shape, except the parent's adds the step files read only by unit tstrat, which runs in shard a.
 # The validator under test: every case drives it. REQUIRED, printed where the validator is resolved.
 !core/scripts/validate-adversarial-convergence.sh
 # Its siblings, copied into the mutant and world trees, and driven by the K2 and K3 arms.

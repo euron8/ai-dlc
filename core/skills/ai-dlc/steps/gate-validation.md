@@ -2095,7 +2095,7 @@ dispatch; I11 asserts all three sets are the same set.
 
 **Self-skips** on any gate whose step ran no convergence cycle — including gates
 whose step ran only a ONE-SHOT adversarial review (`bug-investigation`,
-`sprint-review`, the test-strategy sweep in `stories-test-strategy` §5). A
+`sprint-review`). A
 one-shot stamps no verdict and this check has nothing to read; do not drag its
 artifact into the series.
 
@@ -2104,7 +2104,12 @@ artifact into the series.
 --transcript-dir <the directory that transcript sits in>`;
 exit 0 required. At the requirements gate the series prefix is
 `_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p`, named literally, whatever its
-terminal pass's `artifact:` holds. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
+terminal pass's `artifact:` holds. At the `stories-test-strategy` gate Check 24 runs over BOTH
+the stories series and the test-strategy series, the latter named literally as
+`_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p`. The test-strategy series is
+owed at every intensity, with no skip: a `--series` matching nothing means `stories-test-strategy`
+§5 step 2 has not run, and the remedy is to run it from pass 1. A retired one-shot's residue never
+satisfies it, and no PENDING or pre-migration acquittal applies. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
 resolution record's `operator_authorization` against ground truth; the gate **fails closed**
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
