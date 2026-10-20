@@ -768,8 +768,13 @@ else bad "last-marker" "the last non-blank line is '$G_LAST', not the marker"; f
 # CONSERVATION, BYTE-EXACT ON BOTH SIDES: the preamble is a prefix of the new ledger, the entry is
 # the tail of the archive, and the ledger grew by exactly k = 2 lines (a blank and the marker).
 G_L="$(wc -l < "$LG" | tr -d ' ')"
+G_T1="$(tail -n $(( G_O - G_P )) "$WORK/g/backlog.archive.md")"; G_T2="$(tail -n $(( G_O - G_P )) "$LG.orig")"
+if [ -z "$G_T1" ] || [ -z "$G_T2" ]; then
+  echo "backlog-ledger: FIXTURE BROKEN: the last-conserves tail substitutions are empty (tail absent?), so the equality below would pass vacuously." >&2
+  exit 2
+fi
 if [ "$G_L" -eq $(( G_P + 2 )) ] && [ "$(head -n "$G_P" "$LG")" = "$(head -n "$G_P" "$LG.orig")" ] \
-   && [ "$(tail -n $(( G_O - G_P )) "$WORK/g/backlog.archive.md")" = "$(tail -n $(( G_O - G_P )) "$LG.orig")" ]; then
+   && [ "$G_T1" = "$G_T2" ]; then
   ok "last-conserves" "preamble ($G_P lines) kept as a prefix, the entry ($(( G_O - G_P )) lines) is the archive's tail, ledger = preamble + 2"
 else
   bad "last-conserves" "conservation broken: ledger $G_L lines, want $(( G_P + 2 )); or a prefix/tail differs"

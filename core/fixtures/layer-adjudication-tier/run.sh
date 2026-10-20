@@ -567,6 +567,47 @@ else
         ok "Part 3c control 6: a record whose clause is the EMPTY STRING is not quoted on a row whose clause is unresolvable — the guard refuses the lookup rather than letting empty match empty" ;;
     esac
 
+    # (d6) THE LISTING'S CLAUSE COLUMN IS EMPTY HERE AND MUST NOT SHIFT THE STATUS INTO IT. The
+    # stripped contract leaves adj_clause_of empty for this row, so the accumulated row is
+    # entry<TAB>target<TAB>digest<TAB><empty><TAB>status. A tab is IFS whitespace, so an
+    # `IFS=<tab> read` collapses the empty clause and lands the STATUS in the clause variable: the
+    # printed sixth column then reads the status where it must read (unmapped). The healthy
+    # listing over the unstripped contract is the control that the column otherwise carries an id.
+    noc_col6() { bash "${1:-$DRIFT}" --list-adjudications "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+                 | awk -F'\t' -v e="$TMENTRY" '$1=="ADJUDICABLE" && $2==e {print $6; exit}'; }
+    case "$(noc_col6)" in
+      "(unmapped)") ok "Part 3c control 7: a listing row whose clause is unresolvable prints (unmapped) in column 6 -- the empty clause field did not swallow the status" ;;
+      "") bad "Part 3c control 7: the listing produced no row for the entry, so the empty-clause read is not exercised" ;;
+      *) bad "Part 3c control 7: the unresolvable-clause listing row reads '$(noc_col6)' in column 6, want (unmapped) -- the status shifted into the clause field" ;;
+    esac
+    case "$(bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="ADJUDICABLE" && $2==e {print $6; exit}')" in
+      LC-E19) ok "Part 3c control 7 CONTROL: the same entry over the unstripped contract lists its clause LC-E19, so (unmapped) above is the stripped contract" ;;
+      *) bad "Part 3c control 7 CONTROL: the unstripped listing does not carry LC-E19 for the entry, so the arm above cannot discriminate" ;;
+    esac
+    # MUTANT: restore the IFS read of the five-field row (the parameter-expansion split goes with it).
+    NCDIR="$ROOT/reconcile-mutant-clausecol"
+    rm -rf "$NCDIR"; mkdir -p "$NCDIR"
+    cp "$(dirname "$DRIFT")"/* "$NCDIR"/ 2>/dev/null
+    python3 - "$DRIFT" "$NCDIR/layer-drift.sh" <<'NCPY' 2>/dev/null
+import sys
+s=open(sys.argv[1]).read()
+a=s.index('  while IFS= read -r _row; do')
+b=s.index('    [ -n "$_e" ] || continue', a)
+mid=s[a:b]
+mid=mid[:mid.index('    _e="${_row')]
+mid=mid.replace('  while IFS= read -r _row; do','  while IFS="$TAB" read -r _e _t _d _c _s; do')
+open(sys.argv[2],"w").write(s[:a]+mid+s[b:])
+NCPY
+    if [ ! -s "$NCDIR/layer-drift.sh" ] || cmp -s "$DRIFT" "$NCDIR/layer-drift.sh" || ! grep -qF 'read -r _e _t _d _c _s' "$NCDIR/layer-drift.sh"; then
+      bad "FIXTURE ERROR: the clause-column IFS mutation did not apply, so control 7 is unproven"
+    else
+      case "$(noc_col6 "$NCDIR/layer-drift.sh")" in
+        "(unmapped)") bad "Part 3c MUTANT (clause column): with the IFS read restored the row still prints (unmapped), so control 7 cannot see the collapse" ;;
+        "") bad "Part 3c MUTANT (clause column): the mutant emitted no row, so it broke the harness rather than the read" ;;
+        *) ok "Part 3c MUTANT (clause column): with the IFS read restored the status lands in the clause column, so control 7 is load-bearing" ;;
+      esac
+    fi
+
     # MUTANT — delete the empty-clause guard, against control 6's world. Control 5's world cannot
     # kill it and that is the finding above, not a fixture defect: the jq conjunct covers control
     # 5 on its own. This is also the arm that separates `adj_clause_of` from `adj_clause_cell` at

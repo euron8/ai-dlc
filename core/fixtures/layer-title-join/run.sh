@@ -511,6 +511,72 @@ else
   else
     bad "CONTROL: an unrelated verdict changed the count to $C_ROWS; the lookup is not keying on the digest"
   fi
+
+  # 6e. THE SAME SUPPRESSION AT THE APPLY LEVEL (BL-714). apply.sh reads only layer-drift's
+  #     output, so 6b-6d prove the lookup at the classifier and nothing proved the WORKLIST row
+  #     the consumer actually sees. Control: another entry's row survives the same verdict.
+  #     Mutant: the lookup's `continue` dropped in a scratch COPY of the reconcile directory.
+  APPLY="$(dirname "$DRIFT")/apply.sh"
+  if [ ! -f "$APPLY" ]; then
+    bad "FIXTURE BROKEN: apply.sh is not beside layer-drift.sh, so the apply-level arm has no subject"
+  else
+    : > "$REG"
+    DIG3="$(rerun | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
+    ap_n=0
+    ap_rows() { # <apply.sh> <entry-regex> -> count of WORKLIST extension-title-match rows
+      # A FRESH DIRECTORY PER CALL: this runs inside $( ), so a counter would not survive it, and
+      # `cp -R` into an existing directory nests the tree and leaves the stale register behind.
+      local c; c="$(mktemp -d "$ROOT/ap.XXXXXX")" || return 2
+      cp -R "$CONS/." "$c/" || return 2
+      mkdir -p "$c/.claude" && printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$c/.claude/.ai-dlc-version"
+      bash "$1" "$DIST" "$BASE" "$c" "$THEIRS" > "$c.out" 2>/dev/null
+      awk -F'\t' -v e="$2" '$1=="WORKLIST" && $2=="extension-title-match" && $3 ~ e' "$c.out" | grep -c . || true
+    }
+    verdict() { # <digest>
+      printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments",%s}\n' "$1" "$READ_MATCH" > "$REG"
+    }
+    if [ -z "$DIG3" ]; then
+      bad "FIXTURE BROKEN: no keyed title-match row to record the apply-level verdict against"
+    else
+      : > "$REG"
+      E0="$(ap_rows "$APPLY" 'MATCH\.md$')"; F0="$(ap_rows "$APPLY" 'FRESH\.md$')"
+      if [ "$E0" -eq 1 ] && [ "$F0" -ge 1 ]; then
+        ok "apply-level PRECONDITION: with an empty register apply.sh emits the WORKLIST row for MATCH ($E0) and for the control FRESH ($F0)"
+      else
+        bad "apply-level PRECONDITION: empty register gave MATCH=$E0 FRESH=$F0 WORKLIST extension-title-match row(s), expected 1 and >=1"
+      fi
+      verdict "$DIG3"
+      E1="$(ap_rows "$APPLY" 'MATCH\.md$')"; F1="$(ap_rows "$APPLY" 'FRESH\.md$')"
+      if [ "$E1" -eq 0 ] && [ "$F1" -eq "$F0" ]; then
+        ok "apply-level: a TITLE-clause verdict removes the WORKLIST extension-title-match row for MATCH (1 -> 0) and leaves the undisposed control FRESH ($F1)"
+      else
+        bad "apply-level: with MATCH's verdict recorded apply.sh emitted MATCH=$E1 FRESH=$F1 row(s), expected 0 and $F0"
+      fi
+      verdict "0000000000000000000000000000000000000000"
+      E2="$(ap_rows "$APPLY" 'MATCH\.md$')"
+      if [ "$E2" -eq 1 ]; then
+        ok "apply-level CONTROL: a verdict whose digest does not match (a spent verdict) re-emits the row"
+      else
+        bad "apply-level CONTROL: a mismatched-digest verdict left $E2 row(s), expected 1"
+      fi
+      # MUTANT: drop the lookup's `continue` in a copy of the whole reconcile directory.
+      verdict "$DIG3"
+      MUTD="$ROOT/mut-reconcile"; mkdir -p "$MUTD" && cp "$(dirname "$DRIFT")"/* "$MUTD/"
+      awk '/adj_lookup "\$tm_digest" EXTENSION-TITLE-MATCHES-CORE/{f=1} f&&/^[[:space:]]*continue[[:space:]]*$/{f=0; print "        :"; next} {print}' "$DRIFT" > "$MUTD/layer-drift.sh.new"
+      if cmp -s "$DRIFT" "$MUTD/layer-drift.sh.new"; then
+        bad "apply-level MUTANT lookup-continue-dropped: the awk matched nothing, so the arm above is unproven"
+      else
+        mv -f "$MUTD/layer-drift.sh.new" "$MUTD/layer-drift.sh"
+        EM="$(ap_rows "$MUTD/apply.sh" 'MATCH\.md$')"
+        EC="$(ap_rows "$MUTD/apply.sh" 'FRESH\.md$')"
+        if [ "$EM" -eq 1 ] && [ "$EC" -ge 1 ]; then
+          ok "apply-level MUTANT lookup-continue-dropped brings MATCH's row back ($EM) with the register unchanged — the suppression arm is falsifiable"
+        else
+          bad "apply-level MUTANT lookup-continue-dropped gave MATCH=$EM FRESH=$EC; the arm would pass without the lookup"
+        fi
+      fi
+    fi
+  fi
 fi
 
 

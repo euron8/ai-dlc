@@ -127,7 +127,7 @@ printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Wri
 
 # ONE PROPERTY APART. `routed` is `bypass` plus a single line: the `file_path` a Read emits.
 # Anything else that differs between them would give arm 1 a second explanation.
-cp "$TR_BYPASS" "$TR_ROUTED"
+cp "$TR_BYPASS" "$TR_ROUTED" || { echo "route-read-required: FIXTURE BROKEN: cp of the bypass transcript failed, so the routed transcript was never made" >&2; exit 2; }
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' >> "$TR_ROUTED"
 
 printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\\n<command-name>/ai-dlc-update</command-name>\\n<command-args></command-args>"}}\n' > "$TR_UPDATER"

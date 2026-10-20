@@ -1844,7 +1844,8 @@ fi
 # detector would skip these cells everywhere. The precondition is computed apart from the detector
 # -- perl on PATH (probed, never run) and a Darwin kernel -- and a SKIP under it is a FAIL by name.
 lt_arm
-if command -v perl >/dev/null 2>&1 && [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+_uname_s="$(uname -s 2>/dev/null)" || broken "anti-SKIP: uname -s failed, so the Darwin gate would read 'not Darwin' and print ok vacuously"
+if command -v perl >/dev/null 2>&1 && [ "$_uname_s" = Darwin ]; then
   [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail world, nofallback and readerself's psfail cell run (BL-686)" \
     || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail world, BL-686 MUTANT nofallback and BL-463 MUTANT readerself's psfail cell were SKIPPED -- the fallback detector is broken"
 else

@@ -860,6 +860,20 @@ for fk in sorted(artifacts.keys()):
     sha_total = len(info["shas"])
     sha_status = f"{sha_hits}/{sha_total}"
 
+    # Rule 8 carve-out: the test-strategy review is a convergence series (Check 24), not a
+    # fixed >=3-cycle party-mode + adversarial-review sequence. Its commits carry no party-mode
+    # subject, the AR_RE label does not match the series name, and a series may converge in
+    # fewer than min_cycles rounds, so ALL THREE arms below (the floor, party-mode, AR) would
+    # misread it. Keyed on the normalized artifact key, never on a version. The section is
+    # recorded in exempt_current so the non-vacuity accounting still sees it removed.
+    if label == 'test-strategy':
+        disp = f"Sprint {sprint_n} {label}"
+        if is_current(sprint_n):
+            exempt_current.append(f"{disp} [Rule 8 carve-out]")
+        print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | "
+              f"EXEMPT (Rule 8 carve-out: convergence series, Check 24)")
+        continue
+
     # Retro-branch awareness: planning artifacts from the retro's own sprint were
     # squash-merged to trunk and are not directly visible on the retro branch.
     # Skip them as SQUASHED rather than failing.

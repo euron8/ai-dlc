@@ -2114,7 +2114,11 @@ mkmut() { # mkmut <name> <target-basename> <sed-arg>... -> sets MUT_DIR
     return 1
   fi
   sed "$@" "$HOOKS_DIR/$tgt" > "$d/$tgt"
-  if cmp -s "$HOOKS_DIR/$tgt" "$d/$tgt"; then
+  _crc=0; cmp -s "$HOOKS_DIR/$tgt" "$d/$tgt" || _crc=$?
+  if [ "$_crc" -gt 1 ]; then
+    broken "cmp exited $_crc on mutation '$name' ($tgt) -- cmp absent or unreadable input, so the matched-nothing guard cannot fire"
+  fi
+  if [ "$_crc" -eq 0 ]; then
     bad "FIXTURE STALE: mutation '$name' matched nothing in $tgt — the subject was reworded, so this battery is editing a file it does not understand"
     return 1
   fi

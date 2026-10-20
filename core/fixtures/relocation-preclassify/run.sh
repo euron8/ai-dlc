@@ -238,9 +238,12 @@ if [ "$G_RUN" = 1 ]; then
   _gh="$(grep -cxF "$_ga" "$RECON/preclassify.sh")" || _gh=0
   _gc="$(grep -cxF 'ZZ-NO-SUCH-PRECLASSIFY-LINE-ZZ' "$RECON/preclassify.sh")" || _gc=0
   G_A="$_ga" awk '$0 == ENVIRON["G_A"] { next } { print }' "$RECON/preclassify.sh" > "$GM/preclassify.sh"
+  _grc=0; cmp -s "$RECON/preclassify.sh" "$GM/preclassify.sh" || _grc=$?
   if [ "$_gh" -ne 1 ] || [ "$_gc" -ne 0 ]; then
     bad "FIXTURE STALE [G mutant]: the row-emitter anchor matches $_gh lines of preclassify.sh (want 1; impossible-anchor control $_gc, want 0). Re-anchor on the same observable"
-  elif cmp -s "$RECON/preclassify.sh" "$GM/preclassify.sh" || ! bash -n "$GM/preclassify.sh"; then
+  elif [ "$_grc" -gt 1 ]; then
+    bad "FIXTURE BROKEN [G mutant]: cmp exited $_grc (cmp absent or unreadable input), so the mutation-applied guard cannot be read"
+  elif [ "$_grc" -eq 0 ] || ! bash -n "$GM/preclassify.sh"; then
     bad "FIXTURE STALE [G mutant]: the mutation did not apply or does not parse"
   else
     gm="$(g_score "$GM" mutant)"

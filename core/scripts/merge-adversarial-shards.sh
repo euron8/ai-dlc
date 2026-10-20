@@ -57,9 +57,9 @@
 #   supersedes is held to the second half only; see RE-DISPATCH). Measured on the reference
 #   consumer: 44 of 44 shard writers resolved through a meta file had a probe row carrying the same id,
 #   and 0 of the 732 agents with a row on an adversary shard lacked a probe row. The probe row
-#   lands after the agent's last write (p50 7s, p99 52s, max 150s on that corpus), inside the 180s
-#   settle `wait-for-deliverable.sh --complete` holds before the merge; the 2 merges that ran ahead of
-#   it predate the settle window. The hook has silent no-row paths (unreadable transcript, peak 0, no
+#   lands after the agent's last write (p50 7s, p99 52s, max 150s on that corpus). A `sha=` seal is
+#   DELIVERED with no window (wait-for-deliverable.sh), so the merge can run ahead of the row; the
+#   refusal then names the wait. The hook has silent no-row paths (unreadable transcript, peak 0, no
 #   jq), so an absent row on a CREDITED writer is refused, never trusted: merge once the adversary
 #   has stopped, and if it has stopped with no row, re-dispatch the shard and merge with --rerun,
 #   which makes the row-less writer a superseded one (RE-DISPATCH, below).
@@ -1077,7 +1077,7 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
         # held to agreement only: a row it has must carry the meta id, and with none the meta alone
         # resolves its role, which the role loop below still requires to be adversary.
         if (i <= n || (a in probe)) {
-        if (!(a in probe)) no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " has no row for that agent; an adversary that has not stopped has not delivered -- if it has stopped, the probe hook recorded nothing for it: re-dispatch the shard and merge with --rerun " b "@<the re-dispatch dispatched-at>")
+        if (!(a in probe)) no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " has no row for that agent; an adversary that has not stopped has not delivered -- if it has stopped, the probe hook recorded nothing for it: re-run the merge once the SubagentStop row for that agent lands, seconds after its seal; if the row stays absent, re-dispatch the shard and merge with --rerun " b "@<the re-dispatch dispatched-at>")
         if (pall[a] != "\t" id) { pl = pall[a]; gsub(/\t/, " ", pl); no(sf " was written by agent " a ", whose meta file names dispatch " id " but " lp " records" pl " for that agent; the meta file was rewritten after the agent stopped") }
         }
       } else if (a in probe) id = probe[a]

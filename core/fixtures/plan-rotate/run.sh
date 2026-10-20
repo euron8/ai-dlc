@@ -688,8 +688,11 @@ else
   ok "pointer" "one pointer line, repo-relative, and not a path:line citation"
 fi
 
-# THE POINTER IS REFRESHED, NOT APPENDED, AND THE RANGE IT NAMES MOVES. A second rotation must
-# leave ONE pointer carrying the CURRENT range and must not stack a second archive header. Its
+# THE POINTER IS ONE LINE THAT ACCUMULATES. A second rotation must leave ONE pointer -- never a
+# stacked second pointer line, never a second archive header -- and that one line must carry
+# EVERY range: the first rotation's, then this run's, appended in run order. The line CHANGING is
+# not enough: a pointer rebuilt from this run's ranges alone changes too, and erases the first
+# range, which `pointer-accumulate` below is the only arm able to see. Its
 # own root, and a TWO-STEP ceiling: at `CEIL_ONE_SPAN` only the section run goes, so the plan is
 # still over `CEIL` afterwards and a second rotation has the retrospective run left to take.
 # Driving both steps at the same ceiling would leave nothing to move and the arm would pass on a
@@ -727,6 +730,26 @@ elif [ "$HDR_N2" -ne 1 ]; then
   bad "pointer-refresh" "a second rotation wrote $HDR_N2 archive headers into one archive file"
 else
   ok "pointer-refresh" "a second rotation appends to the one archive, refreshes the single pointer, and its range moves"
+fi
+
+# THE FIRST RANGE SURVIVES THE SECOND ROTATION, AS THE LEADING TOKEN. Both range lists are cut
+# out of the two pointer lines the arm above captured; the first list must be a single token (a
+# probe whose first step wrote two would make "first range" ambiguous), the second must carry at
+# least two, and its FIRST token must be the first rotation's range -- run order, not a sort.
+# Control in the same arm: the first pointer's list is non-empty, so an extraction that matched
+# nothing cannot read as a missing range.
+R_1="$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' <<<"$PTR_1")"
+R_2="$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' <<<"$PTR_2")"
+R2_FIRST="${R_2%%,*}"
+R2_N="$(tr ',' '\n' <<<"$R_2" | LC_ALL=C grep -c '[0-9]')" || R2_N=0
+if [ -z "$R_1" ] || [ "${R_1#*,}" != "$R_1" ]; then
+  broken "the first rotation's pointer did not carry exactly one range token, so the accumulate arm cannot name the first range: $PTR_1"
+elif [ "$R2_N" -lt 2 ]; then
+  bad "pointer-accumulate" "after a second rotation the pointer carries $R2_N range(s) ($R_2); the first rotation's $R_1 was erased"
+elif [ "$R2_FIRST" != "$R_1" ]; then
+  bad "pointer-accumulate" "the pointer's first range is '$R2_FIRST', not the first rotation's '$R_1' -- ranges must append in run order: $R_2"
+else
+  ok "pointer-accumulate" "the second rotation's pointer opens on the first rotation's range $R_1 and carries $R2_N range(s): $R_2"
 fi
 
 # =============================================================================================

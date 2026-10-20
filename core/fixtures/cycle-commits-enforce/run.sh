@@ -350,6 +350,49 @@ else
   fi
 fi
 
+# --- 13. Rule 8 carve-out: a `Test Strategy` section with AR-only commits is EXEMPT --
+# 0.890.0 moved the test-strategy review to a convergence series with no party round. The
+# carve-out keys on the normalized `test-strategy` artifact key, not on a version, and
+# continues past the floor, party-mode and AR arms. The Sprint 900 retro section is the
+# measured control (so the run is not NOTHING MEASURED), and its PASS shows the log parsed.
+git checkout -q ai-dlc/retro/sprint-900
+git checkout -q -b feature/ts-carveout 2>/dev/null || git checkout -q feature/ts-carveout
+commit_cycle "Sprint 900 test-strategy: adversarial-review pass 1"
+commit_cycle "Sprint 900 test-strategy: adversarial-review pass 2"
+commit_cycle "Sprint 900 test-strategy: adversarial-review pass 3"
+write_log 3
+{
+  printf '\n## Sprint 900 — Test Strategy\n\n'
+  printf '| # | Cycle | Notes | SHA |\n'
+  printf '|---|-------|-------|-----|\n'
+  printf '| 1 | adversarial-review pass 1 | note | TBD |\n'
+  printf '| 2 | adversarial-review pass 2 | note | TBD |\n'
+  printf '| 3 | adversarial-review pass 3 | note | TBD |\n'
+} >> "$WORK/$LOG"
+bash "$VALIDATOR" feature/ts-carveout >"$WORK/ts.txt" 2>&1
+rc=$?
+if [ "$rc" = "0" ] && grep -q 'EXEMPT (Rule 8 carve-out: convergence series, Check 24)' "$WORK/ts.txt" \
+   && grep -q 'Sprint 900 retro .*PASS' "$WORK/ts.txt" && ! grep -q 'FAIL (' "$WORK/ts.txt"; then
+  ok "a Test Strategy section with AR-only commits reads EXEMPT, not FAIL (Rule 8 carve-out)"
+else
+  bad "the Test Strategy section was not exempted (rc=$rc)"; sed 's/^/        /' "$WORK/ts.txt"
+fi
+
+# --- 14. MUTATION: remove the carve-out and the same section FAILs --------------
+MUT4="$WORK/mutant-carveout.sh"
+sed "s/if label == 'test-strategy':/if False:/" "$VALIDATOR" > "$MUT4" || exit 2
+if cmp -s "$VALIDATOR" "$MUT4"; then
+  bad "MUTATION: the carve-out predicate was rewritten — assertion 13 is unproven until this sed is updated"
+else
+  bash "$MUT4" feature/ts-carveout >"$WORK/mut4.txt" 2>&1
+  if [ "$?" = "1" ] && grep -q 'test-strategy .*FAIL (missing cycle type: party-mode)' "$WORK/mut4.txt"; then
+    ok "MUTATION: without the carve-out the Test Strategy section FAILs (assertion 13 is real)"
+  else
+    bad "MUTATION: the Test Strategy section did not FAIL without the carve-out — assertion 13 is vacuous"
+    sed 's/^/        /' "$WORK/mut4.txt"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "cycle-commits-enforce: PASS"
