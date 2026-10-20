@@ -18,3 +18,5 @@ sort
 xargs
 comm
 cut
+mkdir
+tail

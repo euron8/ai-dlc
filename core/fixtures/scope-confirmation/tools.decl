@@ -13,6 +13,7 @@ git
 grep
 head
 jq
+locale
 mkdir
 mktemp
 python3

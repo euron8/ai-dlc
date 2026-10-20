@@ -12,6 +12,7 @@ grep
 head
 mkdir
 mktemp
+mv
 rm
 sed
 sort

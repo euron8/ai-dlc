@@ -1,14 +1,22 @@
 # Tools run.sh, seed.sh, lib.sh and the advisor gate invoke, keyed on their binaries.
+awk
 bash
 cat
 cp
+date
 dirname
 env
 git
 grep
+head
 jq
 mkdir
 mktemp
+mv
+od
 sed
+sleep
+sort
+tail
 tee
 tr

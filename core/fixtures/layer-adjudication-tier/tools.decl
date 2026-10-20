@@ -3,6 +3,7 @@ awk
 bash
 cat
 chmod
+cksum
 cmp
 comm
 cp
@@ -20,6 +21,7 @@ mv
 python3
 rm
 sed
+sh
 sort
 tail
 tr

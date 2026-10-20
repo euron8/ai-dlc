@@ -24,3 +24,6 @@ cp
 chmod
 env
 git
+ls
+ln
+sleep

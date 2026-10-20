@@ -9,6 +9,7 @@ diff
 dirname
 git
 grep
+head
 mkdir
 mktemp
 mv

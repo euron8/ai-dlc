@@ -250,6 +250,10 @@ RUN="$SUBJ/hermetic-run.sh"; RUN_ORIG="$RUN"
 [ -z "$HOOK_SRC" ] || { sub_copy "$HOOK_SRC" "$SUBJ/pre-push"; HOOK_SRC="$SUBJ/pre-push"; }
 [ -z "$SCK_SRC" ] || { sub_copy "$SCK_SRC" "$SUBJ/suite-content-key.sh"; SCK_SRC="$SUBJ/suite-content-key.sh"; }
 # mk_probe <dir> <stub function> <inputs.decl text> [tools.decl text]
+# Every probe's tools.decl carries PROBE_TOOLS, the externals the stubs fork, and then arg 4's lines: the
+# sandbox PATH is the declared farm alone, so an undeclared cat is `command not found`, and a SILENT arm whose
+# stub fails for that reason would pass on the missing tool rather than on what it asserts.
+PROBE_TOOLS=$'cat\nenv\nfind\nmktemp\nsort'
 mk_probe() {
   local p="$1" stub="$2" decl="$3" tools="${4:-}"
   mkdir -p "$p/data" "$p/lib" "$p/decoy" "$p/d" "$p/docs" "$p/$FXR/probe" || exit 2
@@ -265,7 +269,7 @@ mk_probe() {
   printf 'secret\n' > "$p/decoy/secret.txt"
   { printf '#!/usr/bin/env bash\nset -u\n'; "$stub"; } > "$p/$FXR/probe/run.sh"
   printf '%s\n' "$decl" > "$p/$FXR/probe/inputs.decl"
-  [ -z "$tools" ] || printf '%s\n' "$tools" > "$p/$FXR/probe/tools.decl"
+  { printf '%s\n' "$PROBE_TOOLS"; [ -z "$tools" ] || printf '%s\n' "$tools"; } > "$p/$FXR/probe/tools.decl"
   ( cd "$p" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm probe ) >/dev/null 2>&1 \
     || { echo "FIXTURE ERROR: could not build probe repo $p" >&2; exit 2; }
 }
@@ -685,7 +689,9 @@ arm_K() {
   hook_dump "$P1" "$P1/.githooks/pre-push" "$WK/K1.o"
   hook_dump "$PB" "$PB/.githooks/pre-push" "$WK/K2.o"
   eq "hook: ?b207tool writes no .dunres row" "$(grep -c . "$WK/K1.o/.dunres")" 0
-  eq "hook: ?b207tool writes no .dtools row" "$(grep -c . "$WK/K1.o/.dtools")" 0
+  # Every probe declares PROBE_TOOLS, so .dtools is never empty: the row is judged by name, the baseline's cat
+  # row the control that the file was written.
+  no "hook: ?b207tool writes no .dtools row" "$(cat "$WK/K1.o/.dtools" 2>/dev/null)" "b207tool" "/cat"
   no "hook: ?b207tool adds no .tools row" "$(cat "$WK/K1.o/.tools" 2>/dev/null)" "b207tool" "/"
   yes "control, hook: a bare awk line writes a .dtools row" "$(cat "$WK/K2.o/.dtools" 2>/dev/null)" "/awk"
   # Duplicate lines: the same resolved path twice is ONE tool (exit 0, rows unchanged; control: one line).
@@ -699,7 +705,7 @@ arm_K() {
   eq "duplicated 'awk' line: exactly one awk row" "$(grep -c '/awk' <<<"$r0")" 1
   hook_dump "$PD1" "$PD1/.githooks/pre-push" "$WK/K4.o"
   eq "duplicated 'awk' line: the hook writes no .dunres row" "$(grep -c . "$WK/K4.o/.dunres")" 0
-  eq "duplicated 'awk' line: the hook writes one .dtools row" "$(grep -c . "$WK/K4.o/.dtools")" 1
+  eq "duplicated 'awk' line: the hook writes one .dtools awk row" "$(grep -c '/awk$' "$WK/K4.o/.dtools")" 1
   mk_probe "$PD2" stub_k 'data/a.txt' $'?b207tool\n?b207tool'
   edit_hook "$PD2" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
   OUT="$(PATH="$sb:$PATH" bash "$RUN" --root "$PD2" probe 2>&1)"; RC=$?
@@ -1022,7 +1028,7 @@ EOF
 # `alpha` (the pin) and whose working tree and HEAD hold `beta`. Sets PIN.
 mk_git_probe() {
   local p="$1"
-  mk_probe "$p" stub_named 'data/a.txt'
+  mk_probe "$p" stub_named 'data/a.txt' 'git'
   PIN="$(cd "$p" && git rev-parse HEAD)"
   printf 'beta\n' > "$p/data/a.txt"
   { printf '#!/usr/bin/env bash\nset -u\n'; stub_git | sed "s/@@PIN@@/$PIN/g"; } > "$p/$FXR/probe/run.sh"
@@ -1315,9 +1321,9 @@ run_hook_mutant() {
 # The copy marks its own directory (.decl-mutant), which makes it NESTED (no M battery, no cwd pass, no DC) and
 # limits it to arms A and L.
 # NOT COVERED, and why (a removal mutant of these lines cannot fail):
-#   every tools.decl line: hermetic-run.sh puts READSET_TOOL_DIRS (the fixed system dirs) ahead of the declared
-#     farm on the sandbox PATH, and every tool this fixture declares lives in one of those dirs or in git's
-#     exec-path, so it stays reachable undeclared. tools.decl keys the tools; it does not restrict them.
+#   every tools.decl line: removing one is not a DC mutant here, because DC mutates inputs.decl only. The
+#     sandbox PATH is the declared farm alone, so an undeclared tool is `command not found` in the sandbox:
+#     tools.decl keys the tools AND restricts them, and a missing line fails the arm whose run.sh forks it.
 #   core/git-hooks/pre-push: the distribution reads .githooks/pre-push first and never opens this file; on a
 #     consumer both hook lines map to .githooks/pre-push, so either one alone covers it. DC4 is therefore
 #     distribution-only.

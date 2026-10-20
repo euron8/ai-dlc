@@ -1,4 +1,5 @@
 bash
+cat
 dirname
 mktemp
 python3

@@ -26,6 +26,7 @@ rm
 sed
 sort
 tail
+tar
 tr
 uniq
 wc

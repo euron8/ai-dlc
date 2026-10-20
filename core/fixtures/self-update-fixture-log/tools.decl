@@ -30,3 +30,5 @@ paste
 shasum
 find
 xargs
+tar
+comm

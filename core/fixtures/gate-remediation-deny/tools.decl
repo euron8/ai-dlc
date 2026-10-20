@@ -21,6 +21,7 @@ mktemp
 mv
 python3
 rm
+rmdir
 sed
 sleep
 sort
@@ -28,3 +29,4 @@ stat
 touch
 tr
 wc
+tail

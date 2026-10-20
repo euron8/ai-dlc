@@ -23,6 +23,7 @@ mv
 paste
 python3
 rm
+rmdir
 sed
 sort
 tail

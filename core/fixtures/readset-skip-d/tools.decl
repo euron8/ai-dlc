@@ -26,6 +26,7 @@ md5
 mkdir
 mktemp
 mv
+perl
 pgrep
 pkill
 ps
@@ -44,6 +45,7 @@ tail
 tar
 touch
 tr
+uname
 uniq
 wc
 xargs

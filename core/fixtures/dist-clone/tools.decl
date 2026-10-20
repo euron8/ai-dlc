@@ -3,6 +3,7 @@ basename
 bash
 cat
 chmod
+cksum
 cmp
 comm
 cp

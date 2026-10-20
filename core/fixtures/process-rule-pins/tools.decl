@@ -4,8 +4,10 @@ basename
 bash
 cat
 cmp
+cp
 cut
 dirname
+find
 grep
 head
 id

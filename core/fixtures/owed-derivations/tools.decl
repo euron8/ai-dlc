@@ -21,3 +21,8 @@ sed
 sort
 tr
 wc
+mv
+paste
+cmp
+diff
+xargs

@@ -3,11 +3,13 @@ basename
 bash
 cat
 chmod
+cksum
 cmp
 column
 comm
 cp
 cut
+date
 diff
 dirname
 env
@@ -15,10 +17,13 @@ find
 git
 grep
 head
+iconv
 kill
+ls
 mkdir
 mktemp
 mv
+paste
 perl
 ps
 python3
@@ -29,6 +34,7 @@ sleep
 sort
 split
 tail
+tar
 time
 tr
 uniq

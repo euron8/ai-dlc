@@ -4,10 +4,13 @@ bash
 cat
 chmod
 cmp
+comm
 cp
+cut
 date
 dirname
 grep
+head
 id
 mkdir
 mktemp

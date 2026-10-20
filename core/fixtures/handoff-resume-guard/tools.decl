@@ -1,12 +1,16 @@
 # Tools run.sh, seed.sh and the continue hook invoke, keyed on their binaries.
 awk
 basename
+bash
 cat
+chmod
 cmp
+comm
 cp
 date
 dirname
 env
+git
 grep
 head
 jq
@@ -15,5 +19,8 @@ mkdir
 mktemp
 rm
 sed
+sort
 tail
 touch
+tr
+wc

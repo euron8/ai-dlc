@@ -4,6 +4,8 @@ awk
 basename
 bash
 cat
+cmp
+comm
 cp
 cut
 date
@@ -13,6 +15,7 @@ git
 grep
 head
 jq
+ln
 ls
 mkdir
 mktemp

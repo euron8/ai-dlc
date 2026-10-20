@@ -3,6 +3,7 @@ basename
 bash
 cat
 chmod
+cksum
 cmp
 comm
 cp
@@ -15,6 +16,7 @@ find
 git
 grep
 head
+iconv
 jq
 ln
 ls
@@ -22,11 +24,13 @@ mkdir
 mktemp
 mv
 rm
+rmdir
 sed
 sha256sum
 shasum
 sort
 tail
+touch
 tr
 uniq
 wc

@@ -17,5 +17,6 @@ rm
 sandbox-exec
 sed
 sleep
+sort
 tr
 wc

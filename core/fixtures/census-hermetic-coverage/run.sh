@@ -158,18 +158,18 @@ o="$(b223tool 2>/dev/null)" && echo "ok farm-tool $o"
 echo "ok stderr-line" >&2
 echo "ok root-path $AI_DLC_PROJECT_ROOT/data/a.txt"
 t="$(mktemp)" && echo "ok scratch-path $t"
-exit 0' 'b223tool'
+exit 0' $'b223tool\ncat\nmktemp'
 fx "$WA" s-skip 'data/a.txt' 'cat data/a.txt >/dev/null && echo "ok declared input read"
 if [ -f extra/b.txt ]; then echo "ok extra input checked"; else echo "SKIP extra/b.txt absent"; fi
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 && echo "ok inside a repository"
 echo "ok tail line"
 echo "ok second tail line"
-exit 0'
+exit 0' $'cat\ngit'
 fx "$WA" s-digit 'data/a.txt' 'n="$(ls core/fixtures | wc -l | tr -d " ")"
 echo "ok fixtures=$n"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 && echo "ok inside a repository"
 echo "ok tail line"
-exit 0' '' 'seed'
+exit 0' $'ls\nwc\ntr\ngit' 'seed'
 fx "$WA" s-silent 'data/a.txt' 'echo "checked the data"
 exit 0'
 fx "$WA" s-low 'data/a.txt' 'echo "ok one"
@@ -179,7 +179,7 @@ exit 0'
 fx "$WA" s-flaky 'data/a.txt' "c=\"$COUNTER\"; n=0; [ -f \"\$c\" ] && n=\"\$(cat \"\$c\")\"; n=\$((n + 1)); echo \"\$n\" > \"\$c\"
 echo \"ok a\"; echo \"ok b\"; echo \"ok c\"
 [ \"\$n\" = 2 ] && echo \"ok only on the second invocation\"
-exit 0"
+exit 0" cat
 # The hermetic sandbox holds no .git for a fixture with no git.decl and the plain root does, so `[ -e .git ]`
 # is a per-side value that is STABLE across reps; the counter outside both roots is a value that MOVES.
 fx "$WA" s-bothfail 'data/a.txt' 'echo "ok a"; echo "ok b"; echo "ok c"
@@ -193,17 +193,17 @@ vol() { # <counter file>: a shell line setting $h to a 7-hex sha that moves on e
 fx "$WA" s-volatile 'data/a.txt' "$(vol "$WORK/vol.count")
 echo \"ok at \$h the tree is consistent\"
 echo \"ok b\"; echo \"ok c\"
-exit 0"
+exit 0" cat
 fx "$WA" s-mixed 'data/a.txt' "$(vol "$WORK/mixed.count")
 [ -e .git ] && k=13 || k=12
 echo \"ok at \$h counted \$k of \$k\"
 echo \"ok b\"; echo \"ok c\"
-exit 0"
+exit 0" cat
 fx "$WA" s-repeat 'data/a.txt' "$(vol "$WORK/repeat.count")
 [ -e .git ] && k=1 || k=2
 echo \"ok n=\$k\"; echo \"ok n=9\$n\"
 echo \"ok b\"; echo \"ok c\"
-exit 0"
+exit 0" cat
 # cnt: a shell line bumping a per-fixture counter outside both roots into $n. Each of a fixture's pairs runs
 # hermetic then plain in one worker, so a fixture's three hermetic runs see n0+1, n0+3, n0+5 and its plain
 # runs n0+2, n0+4, n0+6; (n/2)%2 therefore alternates across reps on each side, whatever n0 is.
@@ -212,19 +212,19 @@ fx "$WA" s-flicker 'data/a.txt' "$(cnt "$WORK/flicker.count")
 [ -e .git ] && k=13 || k=\$((11 + (n / 2) % 2))
 echo \"ok \$k mutants killed\"
 echo \"ok b\"; echo \"ok c\"
-exit 0"
+exit 0" cat
 fx "$WA" s-overlap 'data/a.txt' "$(cnt "$WORK/overlap.count")
 [ -e .git ] && k=\$((3335 + 2 * ((n / 2) % 2))) || k=3336
 echo \"ok \$k forks counted\"
 echo \"ok b\"; echo \"ok c\"
-exit 0"
+exit 0" cat
 fx "$WA" s-pathlen 'data/a.txt' 'echo "ok tmpdir-len ${#TMPDIR}"
 echo "ok home-len ${#HOME}"
 echo "ok tail line"
 exit 0'
 fx "$WA" s-marker 'data/a.txt' 'b="${TMPDIR%%/chc.*}"; [ "$b" != "$TMPDIR" ] && mkdir -p "$b/.claude"
 echo "ok a"; echo "ok b"; echo "ok c"
-exit 0'
+exit 0' mkdir
 # s-killed kills its parent only when that parent is a census worker (`--pair` in its argv), and only on the
 # plain side; a pid it cannot confirm is left alone, and the incomplete-run arm then fails presence-shaped.
 fx "$WA" s-killed 'data/a.txt' 'echo "ok a"; echo "ok b"; echo "ok c"

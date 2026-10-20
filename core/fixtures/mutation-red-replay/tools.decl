@@ -14,3 +14,6 @@ chmod
 find
 tail
 python3
+env
+git
+locale

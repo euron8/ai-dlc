@@ -15,6 +15,7 @@ mktemp
 mv
 python3
 rm
+rmdir
 sed
 seq
 shasum

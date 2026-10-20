@@ -16,3 +16,4 @@ rm
 sed
 tail
 touch
+cp

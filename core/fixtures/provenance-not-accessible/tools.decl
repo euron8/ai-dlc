@@ -4,6 +4,7 @@ cmp
 dirname
 env
 grep
+mkdir
 mktemp
 python3
 rm

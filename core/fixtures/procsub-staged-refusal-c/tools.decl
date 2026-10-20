@@ -32,3 +32,9 @@ wc
 id
 python3
 stat
+cksum
+fold
+iconv
+locale
+paste
+xargs

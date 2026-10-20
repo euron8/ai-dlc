@@ -18,3 +18,4 @@ sort
 tr
 uniq
 bash
+cksum
