@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.890.0] - 2026-10-20
+
+Batch 237, BL-723 release (operator-directed, HIGH; graph s319 is blocked on it). It closes BL-723 and files nothing. Closes no `PC-` id. Net for this release: 1 closed, 0 filed.
+
+### §5 step 2's test-strategy review runs the native adversarial cycle with the standard exit ladder instead of the find-at-least-10 one-shot (BL-723)
+
+The test-strategy review in `stories-test-strategy.md` §5 step 2 was a one-shot `/bmad-review-adversarial-general` sweep. It returned no verdict and had no loop. It carried a find-ten floor and mostly produced prose-precision findings. Step 2 now runs the Adversarial review and Adversarial repair dispatches over `test-strategy.md` as the series `s<N>/test-strategy-adversarial-p<M>.md`. The review is focused on correctness: every AC maps to a case, every case has a command at its level, and the execution order obeys deploy-validate. It exits at 0 CRITICAL and at most three derived MAJOR.
+
+- `core/skills/ai-dlc/steps/stories-test-strategy.md` §5: step 2 is the cycle. Each pass carries "Validation cycle" item 3's per-pass duties (snapshot update, auto-handoff evaluation at `Seam D`, a hard block or stall routed to divergence resolution). It carries a Rule 8 carve-out (the convergence review alone; §4's party round and elicitation cover the stories it derives from) and a Rule 26(c) block. Repair is confined to `test-strategy.md`, and story changes go through the amendment procedure. The retired one-shot's output is never stamped into the series. Step 3's lettered-case bind now refuses until the series' highest pass stamps `EXIT_CONDITION_MET`.
+- `core/skills/ai-dlc/SKILL.md` Rule 8: one sentence names `test-strategy.md` as the one exception to the per-artifact minimum and cites §5 step 2.
+- `core/skills/ai-dlc/steps/gate-validation.md` Check 24: at the stories-test-strategy gate it also runs over the test-strategy series, named literally, and the series is owed at every intensity. A series that matches nothing means step 2 has not run, and the remedy is pass 1. The self-skip list no longer includes the test-strategy sweep.
+- `core/skills/ai-dlc/rule-bodies/rule-20.md`, `core/team-roles/adversary.md`, `core/schemas/provenance-block.json` and `templates/QUICKSTART.md.template`: the one-shot lists drop the test-strategy review. `adversary.md`'s convergence list gains it.
+- `core/fixtures/check-24-adversarial-convergence/` (`run.sh`, `README.md`, `inputs.decl`): the new unit `tstrat` extracts the prefix from Check 24's own section and runs the shipping validator on it. It uses a seeded MET series and a verdict-less control, and asserts that §5 never names the bmad skill (`bug-investigation.md` is the control), and that §5 names both dispatches and step 3's MET precondition. It carries three mutants: the one-shot restored, the gate prefix dropped, and step 3's precondition deleted. `tstrat` runs in shard a only; line 1 of all four `inputs.decl` files (the parent and shards b, c, d) now says the parent's declaration adds the two step files only `tstrat` reads.
+- BL-723's `verify:` line changes from `manual` to a `sh` receipt over the same properties; it removes its temp directory on exit.
+
+**Graph.** Graph's s319 resume reaches this only through graph's next pull, which graph runs and this repo does not. Graph's installed engine is 0.883.0 on its sprint branch and 0.789.0 at its main.
+
+Graph's `pipeline-snapshot.md` NEXT steps (the remediator repair, the step-3 bind and the §6 commit) were written for the pre-BL-723 pipeline. They must not be followed verbatim.
+
+**Graph's delivered one-shot.** The decision for `_bmad-output/planning-artifacts/s319/test-strategy-review.md` (graph ae1fafcf8) is option (ii). It is not stamped into the new series. The series starts at pass 1 over the current `test-strategy.md`, because the one-shot carries no verdict envelope and was not correctness-scoped. Step 3 now refuses to bind until the series' highest pass is `EXIT_CONDITION_MET`. That is what stops a resume from following the stale NEXT.
+
+**Consumers mid-sprint.** A consumer whose sprint ran §5 under the one-shot fails Check 24 at its story gate with "matched nothing" until §5 step 2 runs from pass 1.
+
 ## [0.889.0] - 2026-10-20
 
 Batch 236, BL-685 round-8 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,

@@ -78,7 +78,7 @@
       "THIS IS NOT THE RETIRED-PIN RELATION, and conflating them would be the bug.",
       "validate-provenance-block.sh separately diagnoses a pin on bmad-review-adversarial-general",
       "where a CONVERGENCE review ran. That skill is not retired — it is live and correct for the",
-      "one-shot sweeps in bug-investigation, sprint-review, and stories-test-strategy §5. Only the",
+      "one-shot sweeps in bug-investigation and sprint-review. Only the",
       "PIN is wrong, and only in that one position, so it is a diagnostic and not an alias."
     ],
     "bmad-validate-prd": "bmad-prd"

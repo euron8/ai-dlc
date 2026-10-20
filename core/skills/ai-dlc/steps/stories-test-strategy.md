@@ -643,18 +643,66 @@ adversarial review on the derived strategy.
    this gate, not dormant.** It could only carry a real verdict from a trace run
    taken AFTER implementation, when tests exist; the pipeline takes no such run
    today. Do not synthesise `gate-decision.json` to arm it.
-2. `/bmad-review-adversarial-general` — review test strategy.
-   Repair its findings through the **Adversarial repair dispatch** sub-routine
-   (`_gate-procedures.md`), which sets the remediator count and any file or section
-   sharding (Rule 28, "Split dispatch"); the lead owns the disposition, not the edit.
-   **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
-   verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
-   HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert
-   this to the native review; the native review exists for cycles that must reach
-   zero. Write its findings under a path that does NOT share the stories series'
-   `s<N>/stories-adversarial-p` prefix — Check 24 globs that prefix, and a
-   verdict-less one-shot swept into the series fails rung A.
-3. **Bind every strategy case to a story row.** For each test id the
+2. **Converge the test strategy.** Review and repair `test-strategy.md` until the
+   series exits on the standard ladder in `team-roles/adversary.md` — 0 CRITICAL
+   and at most three derived MAJOR — with every pass writing its verdict envelope.
+   - **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ai-dlc-native,
+     no Skill. The strategy is one document, so each pass is sharded by section, or is one
+     adversary when `partition-document.sh --map` reports it SERIAL (Rule 28, "Split
+     dispatch": sections axis, serial exception 4); that procedure's "Shard a single
+     document" owns the split. A sharded pass joins with
+     `merge-adversarial-shards.sh --document s<N>/test-strategy.md`.
+   - **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — section shards
+     joined per its "Shard by section", or one remediator when the map reports the document
+     SERIAL (exception 4). The lead owns the disposition, not the edit. **The repair edits
+     `test-strategy.md` ONLY.** A finding that needs a story to change goes through
+     `_gate-procedures.md`'s amendment procedure, per §4: §4 already stamped story
+     provenance, and a remediator's edit to a story breaks it.
+   - **adversarial focus — correctness only:** every acceptance criterion maps to a case;
+     every case has a command that runs it at its level; the execution order obeys
+     deploy-validate. Prose precision — stale citations, restated counts, non-verbatim
+     quotes — is out of scope. The lettered-case count match is out of scope too, because
+     step 3 makes it mechanically.
+   - **`Seam D` label:** `stories-test-strategy test-strategy adversarial pass <N>`.
+   - **Per-pass duties:** every pass carries `_gate-procedures.md`, "Validation cycle" item 3's
+     per-pass duties with that label: the snapshot update after the pass, the auto-handoff
+     evaluation at `Seam D`, and `DIVERGENT_HARD_BLOCK` or STALL routed to "Divergence resolution
+     dispatch". The party round and elicitation do not run here.
+   - The series is `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p<M>.md`,
+     so in this step `<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths
+     is `test-strategy`, never `test-strategy-adversarial` and never `stories`: the review
+     shard dir is `s<N>/shards/test-strategy-p<M>/` and the repair record
+     `s<N>/test-strategy-repair-p<M>.md`. The terminating pass stamps
+     `verdict: EXIT_CONDITION_MET`. **Gate Check 24 reads it** with
+     `--series _bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p`.
+   - **Retired one-shot residue is not a pass.** Any residue of the retired one-shot
+     test-strategy review, whatever path it sits under, is not a pass of this series and is
+     never stamped into it: it carries no verdict envelope and was not scoped to
+     correctness. The series starts at pass 1 over the current `test-strategy.md`.
+
+   **The Rule 8 minimum for `test-strategy.md` is this convergence review alone.** It runs
+   at every `validation_intensity`. §4's party round and elicitation, over the same seats,
+   already cover the stories this document is derived from, so no party round and no
+   elicitation run here.
+
+   **Minimum mechanism (Rule 26(c)).** Failure caught: `test-strategy.md` is derived after
+   the stories converge, so no other round has seen it, and a one-shot sweep that stops at
+   its finding count left strategy-vs-AC defects — an acceptance criterion with no case, a
+   case with no test that runs it — repaired into the strategy and never shipped, or never
+   repaired at all. False-positive cost: one adversary per section shard and one remediator
+   per repaired shard, per pass, until the ladder exits. Removal condition: measured sprints
+   in which this series carries no unique MAJOR or CRITICAL strategy-vs-AC catch that
+   survives to the shipped tests.
+3. **Precondition — the step-2 series has exited.** If no
+   `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p*.md` exists, or the
+   highest-numbered pass does not stamp `verdict: EXIT_CONDITION_MET`, this step does not
+   run: return to step 2. `EXIT_CONDITION_MET` is the freeze point (`_gate-procedures.md`,
+   "Divergence resolution dispatch"), so the bind reads the strategy the series notarized. A
+   gate repair to `test-strategy.md` after MET writes its repair record with the
+   `artifact:`, `artifact_sha_before:` and `artifact_sha_after:` triple, or Check 24 arm J2
+   fails.
+
+   **Bind every strategy case to a story row.** For each test id the
    repaired strategy assigns to a story, write its rows into that story's
    `## Strategy Test IDs` table (Pre-Flight Checklist item (c)): the id, and
    one row per lettered case the strategy row lists, `Kind` and

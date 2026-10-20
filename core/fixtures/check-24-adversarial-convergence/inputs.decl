@@ -1,4 +1,4 @@
-# check-24-adversarial-convergence and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape.
+# check-24-adversarial-convergence and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share one declaration shape, except the parent's adds the step files read only by unit tstrat, which runs in shard a.
 # The validator under test: every case drives it. REQUIRED, printed where the validator is resolved.
 !core/scripts/validate-adversarial-convergence.sh
 # Its siblings, copied into the mutant and world trees, and driven by the K2 and K3 arms.
@@ -10,6 +10,9 @@ core/scripts/merge-adversarial-shards.sh
 core/hooks/ai-dlc-acknowledge.sh
 core/team-roles/remediator.md
 core/skills/ai-dlc/steps/gate-validation.md
+# Read by the tstrat unit (BL-723): §5's span and its series prefix, and the absence arm's same-invocation control.
+core/skills/ai-dlc/steps/stories-test-strategy.md
+core/skills/ai-dlc/steps/bug-investigation.md
 core/fixtures/lib/
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/check-24-adversarial-convergence-b/run.sh

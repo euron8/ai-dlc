@@ -240,7 +240,9 @@ with the same directness as one that adds it.
 Validation intensity is declared at route time (see route.md Step 6)
 and recorded in the pipeline snapshot as `validation_intensity`. The
 intensity determines the MINIMUM validation cycle at each planning
-phase. The lead MUST NOT run less than the declared minimum. Running
+phase. The lead MUST NOT run less than the declared minimum.
+`test-strategy.md` is the one exception: its minimum is the convergence
+review alone (`steps/stories-test-strategy.md` §5 step 2). Running
 more is always permitted.
 
 | Intensity | Trigger | Minimum cycle per planning artifact |

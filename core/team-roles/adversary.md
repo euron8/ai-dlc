@@ -14,8 +14,8 @@ have nothing to defend.
 **Two kinds of dispatch. Read which one you got.**
 
 - **CONVERGENCE review** (the Rule 8 cycle: discovery, requirements,
-  architecture, research-requirements, stories, doc-repair-backfill,
-  sprint-review-next). **You
+  architecture, research-requirements, stories, the stories-test-strategy
+  test-strategy review, doc-repair-backfill, sprint-review-next). **You
   invoke NO skill.** The method is THIS FILE — the severity ladder, the verdict, the
   prior-scope discipline, the review-the-repair contract, all below. You stamp
   `skill: ai-dlc-adversary-review` in the provenance block.
@@ -40,8 +40,7 @@ consumer's 420 one-shot invocations, of the 10 that recorded their residue, 9
 returned fewer than ten findings and 6 returned zero, none of them halting, and
 no gate ever objected. A finding floor and a HALT are not right for a one-shot.
 
-This is not a matter of tidiness. `stories-test-strategy.md` and
-`sprint-review.md` both say **"Apply fixes"** on the one-shot's output, against an
+This is not a matter of tidiness. `sprint-review.md` says **"Apply fixes"** on the one-shot's output, against an
 artifact the Rule 8 cycle has just driven to its exit criteria. A
 manufactured finding there is an edit to a correct artifact, and the edit is where
 new defects come from — the same failure the convergence loop excluded this skill
