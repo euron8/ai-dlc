@@ -1537,6 +1537,8 @@ was run the way the hook runs it — exit 0 read directly, 15 of 15 phases PASS,
 0 FAIL, `subagent-probe` read BY NAME against an impossible-name control of 0 in the same
 invocation — and the merged tree is byte-identical to the gated one.
 
+BL-084 was also used by the v0.389.0 container-set entry, now BL-722.
+
 **THREE INDEPENDENT HANDS WERE PUT ON SCOPE, FIXTURE AND RECEIPT, AND TWO FOUND DEFECTS IN WORK
 ALREADY COMMITTED.** The fixture's one arm covering "teammate transcript missing" was reading the
 PREVIOUS fire's file, because `fire()` skipped the copy when a seed was absent but never removed
@@ -1624,7 +1626,9 @@ the teammate path correctly but falls BACK to the lead when it is absent **1**, 
 subject **9**.
 
 verify: sh H=core/hooks/ai-dlc-subagent-probe.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad-output" "$D/lead/subagents" || { rm -rf "$D"; exit 9; }; : > "$D/_bmad-output/pipeline-snapshot.md"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:00Z","message":{"model":"lead","usage":{"input_tokens":999999}}}' > "$D/lead.jsonl"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:10Z","message":{"model":"mate","usage":{"input_tokens":123}}}' > "$D/lead/subagents/agent-mate1.jsonl"; O="$D/_bmad-output/subagent-context.jsonl"; printf '{"transcript_path":"%s","agent_id":"mate1"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; p=$(jq -r '.peak_tokens' "$O" 2>/dev/null | tail -1); n1=$(wc -l < "$O" 2>/dev/null | tr -d ' '); printf '{"transcript_path":"%s","agent_id":"no-such-teammate"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; n2=$(wc -l < "$O" 2>/dev/null | tr -d ' '); rm -rf "$D"; [ "${n1:-0}" = 1 ] && [ "${p:-}" = 123 ] && [ "${n2:-0}" = 1 ]
-## BL-084 — two unshared encodings of the container set, currently agreeing
+## BL-722 — two unshared encodings of the container set
+
+Formerly BL-084; re-id'd in the batch-236 docs close because the id collided with the v0.380.0 entry.
 
 **LANDED (v0.389.0, verified 9b939ff7).** The trigger fired as filed: the indentation fix
 touched both folds, so the spine fold was routed through `CONTAINER` first. The receipt
@@ -36568,6 +36572,8 @@ Owed: stream the hook's output live while still keeping `$TMP/hook.out` for the 
 
 Cost: visibility only; no wall clock is saved.
 
+**HAND-REVIEW (batch 236 docs close, ai-dlc-c0).** Reviewed against held evidence: a scratch consumer self-update push drove the hook live (`self-update-push: running the pre-push hook git would run ..., once`), printed the per-pool-unit line `done 1/1  ok fx`, ended `pre-push: all gates green.`, and the ref landed (`* [new branch] ... -> su`); two further runs show the same `done 1/1` line. The LANDED sha 1e9de15b4 resolves. Evidence path: the session scratchpad `hands/bl713/d10.6rX91i/` (one.out, two.out, three.out), held until this docs close.
+
 verify: manual
 
 ## BL-713 — the self-update's pre-commit covering-fixture run duplicates the push gate at serial cost, so it goes: the commit happens and the push hook is the gate
@@ -36626,6 +36632,8 @@ Second subject: a PRESENT record is reported absent. In `core/scripts/wait-for-d
 Owed, rewritten to the approved direction (owner: ai-dlc-c0). Under `--complete-repair`, when `--dispatch` resolves to exactly one agent and one target, that agent's own transcript (joined by toolUseId) taking a turn within one beat counts as work through the existing grant path. When grants are spent, or a fresh arm finds the cap already spent, while that dispatch is still live, the cap prints a liveness-check block instead of the bare "Re-dispatch the teammate ONCE" remedy. The sensor header's "changes no decision" paragraph at `:1285` is rewritten to state the split: the session-wide minimum still decides nothing, and the dispatch-scoped transcript does. Under `--complete`, a present file not modified since the join gets its own named line and not the "absent after" wording. The build has two bands for this dispatch's own transcript. A LIVE turn, younger than one beat (BUDGET), grants one more beat through the existing grant path, and the PROGRESS line names the agent's transcript. A RECENT turn, older than BUDGET but younger than IDLE_SECS, gives no grant; at the cap the LIVE DISPATCH block replaces the bare "Re-dispatch the teammate ONCE" remedy, and the beat still exits 1, so the wait stays bounded. The reason is that a remediator inside one long tool call is still a writer on its record, and the collision is judged on consequence. At IDLE_SECS or older the remedy is today's. Under `--complete`, the bare remedy now prints only when a target is truly absent, so a cap whose targets are only UNFINISHED, UNSETTLED or UNCHANGED no longer prints it.
 
 Receipts, probes in both directions: a live dispatch at the cap, at grants spent, and on a fresh arm after the cap prints no "Re-dispatch the"; a dead one still does; a live transcript with no `--dispatch` still does; a present pre-join record prints the new line, while a truly missing file still prints "absent after". A fixture arm in `core/fixtures/wait-beat-liveness` covers live, dead and the no-dispatch control. A RECENT turn at the cap prints the LIVE DISPATCH block with no grant and no "Re-dispatch the", while a turn older than IDLE_SECS still prints it.
+
+**HAND-REVIEW (batch 236 docs close, ai-dlc-c0).** Reviewed against held evidence: the pre-run's wait-beat-liveness went red on S27c only because the arm counted with `wc`, which its tools.decl did not declare (hermetic PATH, BL-676); recounted with awk in b9de7de10, the re-run read 258 ok and rc 0. A scratch-copy probe drove the new and old wait-for-deliverable.sh side by side, and a byte-identity differential showed only the two `--complete` shapes the change moves by design. The release landed as 369cf904c and verified by content: the diff against its -rel squash 0243d79a7 is rc 0, against f36ede45d rc 1. The LANDED sha b9de7de10 resolves (origin b236-bl717-dev).
 
 verify: manual
 

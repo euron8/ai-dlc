@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 184..214. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 195..219. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,6 +67,59 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 236 SHIPPED THIRTY-EIGHT RELEASES OR MORE, `v0.823.0` THROUGH `v0.888.0` (`8df9b8ae6`, #1228) ON THIS TREE,
+AND `v0.889.0` (ai-dlc-69, BL-685 round 8) IS ITS OPERATOR-RULED LAST RELEASE. ITS GATE LOG IS TRACKED AT
+`docs/analysis/b236-release-train.md`.**
+Batch 235's block below is history: this block replaces its delivery gap. Started at `origin/main` `cc3c113f`
+(`VERSION` 0.822.0); the lead and gate scheduler was ai-dlc-c8, then ai-dlc-37. No `graph-*` session was messaged.
+- **Resume for batch 237, in order.**
+  1. **BL-723 (operator-directed, build first; HIGH, operator-ranked; graph s319 BLOCKED on this), clustered with
+     BL-695**: one owner builds both, because together they cover the test-strategy wall clock. BL-723 moves §5
+     step 2's test-strategy review to the native adversarial cycle with the standard exit ladder; BL-695 removes
+     the party round's per-seat barrier. Precondition: the build reads Check 24's prefix glob
+     (`core/scripts/validate-adversarial-convergence.sh:2952`) before choosing the series prefix. Operator ruling:
+     BL-723 and BL-695 are batch 237's first build, and `v0.889.0` stays batch 236's last release.
+     Graph s319 resume transition (operator-directed, relayed by ai-dlc-5d): `test-strategy-review.md` (of record at
+     graph `ae1fafcf8`, graph's handoff HEAD, which folds in the reviewer's edit made after `e3fb1b442`) delivered 14
+     findings, 7 MAJOR and 7 MINOR. Of those, F-2 to F-5 are real strategy defects; F-1 was already fixed.
+     Graph's `pipeline-snapshot.md:49` NEXT steps (remediator repair, then the 53-case step-3 bind, then the §6
+     commit, then §7 and gate[story]) are written for the pre-BL-723 pipeline, and the successor must not follow them
+     verbatim. The BL-723 owner decides, and writes the decision into the build, whether the successor (i) stamps the
+     delivered one-shot into the new series as pass 1 or (ii) discards it and starts the native series at pass 1.
+     Recommend (ii) unless a clean stamp exists: the one-shot has no verdict envelope and was not correctness-scoped,
+     and under the native ladder its 7 MAJORs would read NOT_MET (5d's reading; no verdict was made).
+  2. **BL-719** (`docs/backlog.md`, the emitter and teacher flip to `@`). Design not started; the operator stopped
+     it at the batch boundary. Survey, read-only, unbuilt: the emitters are `core/scripts/merge-adversarial-shards.sh:701`
+     and `:1328` (printed at `:1464` and `:1469`) and `core/scripts/join-remediator-shards.sh:2330` and `:2339`. Both
+     scripts already evaluate functions out of their sibling validator (`merge-adversarial-shards.sh:1184` and
+     `:1413`, `join-remediator-shards.sh:1704`), so a use-time key on the installed reader exists in-tree: the
+     sibling `validate-adversarial-convergence.sh`'s `sha_key` token class (`:486`, under `PAIR_SEP='[=@]'` at
+     `:485`) accepts `@` iff it carries `[=@]` — 0 at `369cf904c`, 1 at `8df9b8ae6`. That key covers the validator
+     only, NOT `partition-subject.sh` or `core/schemas/provenance-block.json`. The teachers carry `<stem>=<sha>` at
+     `core/skills/ai-dlc/steps/_gate-procedures.md:395`, `:537`, `:716`, `:725`, `:817`, `:859`, `:1057` and
+     `:1089`. Its precondition binds the design: a carried reader can stay old indefinitely.
+  3. **BL-685 round 9**: the `cr_run` residual first (round 8's note: a program run through `cr_run` reads files
+     the read log cannot see), with the recorded-PASS cache still OFF.
+  4. **BL-720 and BL-721** builds (both NOTE; filed this close).
+  5. **BL-714, BL-715, BL-716, BL-707, BL-708, BL-709 and BL-712.**
+  6. **BL-699**: the owed pcv_latarm reading (from 69).
+  7. **A sandbox read-set re-trace of `story-evidence-scaffold` is owed**: it is STALE and has run at every gate of
+     this batch.
+  8. **Graph-watch duties for graph's next resume** (ai-dlc-5d closes at graph's handoff). The watcher reads each one
+     off its backlog entry: BL-713, no covering run between gate and commit at 0.886.0 or later; BL-717, no
+     re-dispatch remedy on a live `--complete-repair` dispatch and no "absent" for a present record at 0.887.0 or
+     later; BL-718, `artifact_sha` fingerprints at 0 once BL-719 ships; BL-721, the marker beat at its cap; BL-676,
+     no shipped-fixture "command not found" at 0.884.0 or later; BL-715 and BL-716, S319's join and remediator
+     figures. graph's next pull is to carry BL-723.
+- **Backlog.** The next free id is **BL-724**; BL-723 is filed in this close. BL-722 is the archived v0.389.0
+  container-set entry, re-id'd from BL-084 in this close because the id collided with the v0.380.0 entry; both
+  entries carry a note naming the other, and the archive now holds 0 duplicate ids.
+- **Correction.** Commit `fd8dedd07` (the BL-717 filing) says "Rides 0.888.0" in its body. That is wrong: it
+  reached main inside `v0.887.0` (`369cf904c`). The commit history is left as it is.
+- **Held until this close is verified.** The -dev refs `b236-bl676-dev`, `b236-bl676-dev2`, `b236-bl711-dev`,
+  `b236-bl713-dev`, `b236-bl717-dev`, `b236-bl718-dev` and `b236-bl720-dev` (ai-dlc-c0), and the HAND-REVIEW
+  evidence that BL-710 and BL-717 now cite.
+
 **BATCH 235 SHIPPED THIRTY-ONE RELEASES, `v0.792.0` (`27467671`) THROUGH `v0.822.0` (`edcae8aa`, #1187), ONE
 BRANCH PER RELEASE ACROSS PEER SESSIONS, EVERY GATE SERIAL ON ONE BOX. ITS GATE LOG IS TRACKED AT
 `docs/analysis/b235-release-train.md`.**
@@ -83,10 +136,8 @@ session was ever messaged.
 - **Shape.** The operator ruled small releases fanned out to sessions: each branch had an owner session that took
   it end to end, and the lead granted every fixture run, sweep and gate as a serial slot. The pre-suite run and the
   dress rehearsal used at every gate are now action 4.
-- **Backlog.** Live 33 -> 50 headings. Archive 530 -> 600 headings (`grep -cE '^## BL-[0-9]+'`), which is 529 -> 599
-  distinct ids: `BL-084` carries two archived headings, a bare `## BL-084` and a titled one, and did before this
-  batch, so the two counts differ by exactly one. 87 filed, 70 closed (45 of them filed this batch), so the net is
-  +17: the batch filed faster than it closed. Still live and filed before the batch: BL-530, 537, 538, 541, 553,
+- **Backlog.** Live 33 -> 50 headings. Archive 530 -> 600 headings (`grep -cE '^## BL-[0-9]+'`). 87 filed, 70 closed (45
+  of them filed this batch), so the net is +17: the batch filed faster than it closed. Still live and filed before the batch: BL-530, 537, 538, 541, 553,
   556, 557, 565. The highest id on `main` is BL-659; **the next free id is BL-662**, because BL-660 and BL-661 are
   c9's held intake-28 below. 54 live `verify:` lines.
 - **Anchors.** Every batch-235 LANDED or PARTIAL clause names its release's squash on `origin/main` (85 re-anchored
@@ -155,31 +206,6 @@ Batch 233's block below is history: this block replaces its delivery gap. Starte
   commit.
 - **Net for the batch**: closed 4 entries and 4 candidates; filed 37 (32 operator-instructed peer filings, BL-532..
   BL-535, BL-558; BL-536 is held). Backlog 33 live, 530 archived.
-
-**BATCH 233 SHIPPED NO RELEASE. GRAPH PULLED 0.789.0 (#1226) AND ITS LIVE LEDGER IS EMPTY: LIVE 0, DELIVERY GAP 0.
-THE BACKLOG IS STILL DECLARED EMPTY. THE PULL RUNBOOK IS DISCHARGED, AND THE §2 NARROWING PLAN IS WRITTEN FOR GRAPH.**
-Batch 232's block below is history: this block replaces its delivery gap. Started by peer ai-dlc-b8's one-liner at
-`origin/main` `7e8d62d7` (`VERSION` 0.789.0); graph-ab was live and was never messaged.
-- **Opening sweep** (at `7e8d62d7`, graph `main` `fa2444635`, installed 0.788.0): live 1 (PC-S319), unfiled 0,
-  worklist 0, DISCHARGED 1, invisible 0, TERMINAL 241, archive 364, 2 qualifying refs (both 0.786.0 reconcile branches,
-  their adds archived), every control passing. Nothing was buildable, so no release was cut.
-- **graph delivery**: graph ran the 0.788.0 -> 0.789.0 pull itself (#1226, `b3f2fe199`), matching the rehearsal per its
-  own reconcile log, and closed PC-S319 as `CLOSED AS REJECTED — BY DESIGN` through the refusal channel. The runbook
-  `docs/plans/graph-pull-0788-to-0789.md` is retitled spent with its `## Discharge` filled from graph's history; graph
-  cannot write it, because it sits outside the consumer.
-- **Close sweep** (at `e74eb478`, graph `main` `b3f2fe199`, installed = shipped = 0.789.0): live 0, unfiled 0,
-  worklist 0, DISCHARGED 0, invisible 0, TERMINAL 242, archive 365, ledger md5 `fce2ab88…`. Qualifying refs read
-  153, because main's live set is empty and any ref carrying an archived id now "adds" one; the union minus archives is
-  still 0. **The derive block's `live_main` presence control read 0 on this correct derivation**, so it is re-keyed on
-  `grep -c '^## '` over main's ledger file (19), with the id count kept beside it.
-- **§2 narrowing**: at graph's request, on the operator's ruling that it runs between sprints,
-  `docs/plans/graph-implementation-push-s2-narrow.md` (#1146) moves the graph-local residue of `implementation-push.md`
-  §2 into `implementation-domain.md` (`push_candidate: false`) and deletes the block whole, so the next drain reads 4
-  `PUSH-REFUSED` and 0 candidates. Graph executed it as #1227 (`d82236cee`). Graph's report says every figure
-  matched the rehearsal; the digests, the drain and `validate-layer-entries` were re-derived here. The plan is
-  discharged.
-- **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
-  archived.
 
 ### Derive the state; do not trust the numbers below
 
