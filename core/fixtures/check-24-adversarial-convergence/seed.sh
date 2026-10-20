@@ -524,15 +524,18 @@ pass "$TARGET/divergent-laundered-revert/s1-adversarial-p3.md" 3 0 0 2 EXIT_COND
 # revert of a sharded hard block could not clear it.
 #   reordered   before/after list the SAME pairs as p2/p1, stories in reverse order  -> PASS
 #   partial     after reverts story 1 only; story 2 lands on a sha no pass notarized -> FAIL (F5)
+#   atform      reordered, but both passes write `<stem>@<sha>` and the record writes `=`: the
+#               two separators key alike, so F4 and F5 join across forms                  -> PASS
 _s1a=$(printf 'a%.0s' $(seq 64)); _s2a=$(printf 'b%.0s' $(seq 64))
 _s1b=$(printf 'c%.0s' $(seq 64)); _s2b=$(printf 'd%.0s' $(seq 64)); _s2z=$(printf 'e%.0s' $(seq 64))
-for _c in reordered partial; do
+for _c in reordered partial atform; do
   mkdir -p "$TARGET/sharded-revert-$_c"
-  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 "story-1-a=$_s1a story-2-b=$_s2a"
-  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 "story-1-a=$_s1b story-2-b=$_s2b"
+  _p='='; [ "$_c" = atform ] && _p='@'
+  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 "story-1-a$_p$_s1a story-2-b$_p$_s2a"
+  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 "story-1-a$_p$_s1b story-2-b$_p$_s2b"
   # partial lists `before` in ORDINAL order, so it reaches F5 under either reader and the
   # tr -cd mutant stays attributable to the reordered case alone.
-  if [ "$_c" = reordered ]; then
+  if [ "$_c" = reordered ] || [ "$_c" = atform ]; then
     _before="story-2-b=$_s2b story-1-a=$_s1b"; _after="story-2-b=$_s2a story-1-a=$_s1a"
   else
     _before="story-1-a=$_s1b story-2-b=$_s2b"; _after="story-1-a=$_s1a story-2-b=$_s2z"
@@ -542,7 +545,7 @@ for _c in reordered partial; do
     '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
   pass "$TARGET/sharded-revert-$_c/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 "$_after" s1-resolution-p2.md
 done
-unset _c _before _after _s1a _s2a _s1b _s2b _s2z
+unset _c _p _before _after _s1a _s2a _s1b _s2b _s2z
 
 # --- restart-cycle: D4, THE DEAD CYCLE'S TAIL -----------------------------------
 # Rule 8's own remedy for a moving artifact is "freeze scope, shrink the sprint, RESTART" --

@@ -39,12 +39,19 @@
     "close": "SKILL_INVOCATION_PROVENANCE_END -->",
     "marker": "SKILL_INVOCATION_PROVENANCE v1"
   },
+  "$patterns_comment": [
+    "artifact_sha: a pair is `<stem>=<sha>` or `<stem>@<sha>`, and one list may mix them. `@` exists",
+    "because a keyword-bearing stem before `=` is the shape gitleaks generic-api-key matches in a",
+    "consumer. validate-adversarial-convergence.sh keys both forms as the `=` form, so records written",
+    "before and after compare equal. Emitters and teachers stay on `=` until a later release: readers",
+    "move first, because a consumer pull can carry this schema apart from the scripts that write lists."
+  ],
   "patterns": {
     "iso8601_utc": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$",
     "tool_use_id": "^toolu_[A-Za-z0-9_-]{6,}$",
     "transcript_citation": "^[^\\s@]+@[a-f0-9]{7,40}$",
     "sha256": "^[a-f0-9]{64}$",
-    "artifact_sha": "^([a-f0-9]{64}|[^\\s=]+=[a-f0-9]{64}( [^\\s=]+=[a-f0-9]{64})+)$",
+    "artifact_sha": "^([a-f0-9]{64}|[^\\s=@]+[=@][a-f0-9]{64}( [^\\s=@]+[=@][a-f0-9]{64})+)$",
     "integer": "^\\d+$"
   },
   "known_skills": [

@@ -649,6 +649,16 @@ p_subj_b3() { # sums, recomputes, artifact = manifest, four stems, ids = ordinal
   have="$(sed -n 's/^shard_tool_use_ids://p' "$o" | tr ' ' '\n' | awk -F= 'NF == 2 { k = $1; if (k ~ /^[0-9]+$/) k += 0; print k }' | sort | tr '\n' ' ')"
   [ "$want" = "$have" ]
 }
+p_subj_at() { # every shard notarizes `<stem>@<sha>`: the merge reads it and still EMITS the `=` list
+  local m="$1" d o sl k
+  d="$(new_subj_world)" || return 1; o="$(subj_out_of "$d")"
+  sl="$(subj_shas "$d" | sed 's/=/@/g')"
+  case "$sl" in *=*) return 1 ;; esac
+  for k in $(cut -f1 "$(subj_root "$d")/subject.map"); do sshard "$d" "$k" 1 "$k" "$sl"; done
+  for k in $(subj_xkeys "$d"); do sshard "$d" "$k" 0 "1, 2" "$sl"; done
+  run_subj_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $(subj_shas "$d")" ]
+}
 p_subj_miss_cross() { # the LAST cross group absent (a merge requiring only cross-1 would accept it)
   local d x; d="$(subj_b3_world)" || return 1; x="$(subj_xkeys "$d" | tail -1)"
   [ "$x" != cross ] || return 1

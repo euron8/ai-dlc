@@ -122,6 +122,8 @@ else
 fi
 p_subj_b3 "$MERGE" && ok "U1: subject shards each stamped MET with 1 MAJOR merge NOT_MET; artifact: = the manifest; artifact_sha: the four stems at disk bytes; ids = map ordinals + cross" \
   || bad "U1: the subject merge did not sum, recompute and notarize the manifest (rc=$RC): $(cat "$MO")"
+p_subj_at "$MERGE" && ok "U1b: subject shards notarizing <stem>@<sha> merge; the merged artifact_sha is the <stem>=<sha> list at disk bytes" \
+  || bad "U1b: the merge did not read @-form shards into an =-form line (rc=$RC): $(cat "$MO")"
 p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set missing its LAST cross group -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
 p_subj_xcite "$MERGE" && ok "U3: a part shard citing another file's ordinal -> REFUSED by the partition, nothing written" || bad "U3: (rc=$RC) $(cat "$MO")"
 p_subj_sha "$MERGE" && ok "U4: one stem notarized at other bytes (the rest right) -> REFUSED naming that stem, nothing written" || bad "U4: (rc=$RC) $(cat "$MO")"

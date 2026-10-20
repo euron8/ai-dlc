@@ -233,7 +233,15 @@ p_x8() { # a NESTED state dir (out/bmad): map and split --expect-sha work, and .
   [ "$RC" -eq 0 ] && [ "$(awk -F'\t' '$1 == "manifest" { print $2 }' "$d/.subject")" = "out/bmad/planning-artifacts/s9/requirements-subject.md" ] \
     && grep -q '^file: prd out/bmad/planning-artifacts/prd.md$' "$mf"
 }
-P_ALL="s1 s2 s3 s4 s5 s6 s7 s8 x1 x2 x3 x4 x5 x6 x7 x8"
+p_x9() { # the `@` separator: an all-`@` list splits, and a list mixing `@` and `=` splits (x2's forms)
+  local w d; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
+  run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w" | sed 's/=/@/g')"
+  { [ "$RC" -eq 0 ] && [ -f "$d/.subject" ]; } || return 1
+  w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
+  run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w" | sed 's/=/@/')"
+  [ "$RC" -eq 0 ] && [ -f "$d/.subject" ]
+}
+P_ALL="s1 s2 s3 s4 s5 s6 s7 s8 x1 x2 x3 x4 x5 x6 x7 x8 x9"
 
 echo "subject-partition:"
 p_s1 "$PS" && ok "S1: brief, SPEC, architecture-impact each one part; >= 3 PRD parts, one holding the line edited in an EARLIER section; manifest written" \
@@ -255,6 +263,7 @@ p_x5 "$PS" && ok "X5: --expect-sha missing a stem -> REFUSED" || bad "X5: $(head
 p_x6 "$PS" && ok "X6: --expect-sha token without '=' and token naming no subject stem -> REFUSED" || bad "X6: $(head -3 "$OUT")"
 p_x7 "$PS" && ok "X7: a split that does not reproduce its map rows -> REFUSED and the undo leaves no section (an identical wrapper without the fault splits)" || bad "X7: $(head -3 "$OUT")"
 p_x8 "$PS" && ok "X8: nested AI_DLC_STATE_DIR=out/bmad -> map and split --expect-sha work; manifest and .subject spell out/bmad/..." || bad "X8: $(head -3 "$OUT")"
+p_x9 "$PS" && ok "X9: --expect-sha in the <stem>@<sha> form, and mixed with <stem>=<sha> -> SPLIT" || bad "X9: $(head -3 "$OUT")"
 if bash "$HERE/receipt.sh" "$TREE" > "$OUT" 2>&1; then ok "R: receipt.sh exits 0 on $TREE"
 else bad "R: receipt.sh did not pass on $TREE: $(cat "$OUT")"; fi
 
@@ -295,7 +304,7 @@ else bad "SX-pre: FIXTURE BROKEN -- the sandbox lacks partition-document.sh"; fi
 mutant "SX1 the first SPEC match taken" "s3" \
   '[ "$nspec" -eq 1 ] || refuse' \
   'sed -i.b 1q "$T/specs"; [ "$nspec" -ge 1 ] || refuse'
-mutant "SX2 architecture-impact omitted from the subject" "s1 s2 x2 x3 x8" \
+mutant "SX2 architecture-impact omitted from the subject" "s1 s2 x2 x3 x8 x9" \
   "    printf 'architecture-impact %s\\n' \"\$PA/s\$SPRINT/architecture-impact.md\"; } > \"\$T/files\"" \
   '    :; } > "$T/files"'
 mutant "SX3 unchanged files emitted" "s2 s6" \

@@ -476,17 +476,24 @@ at_key() { local f="${1:19}"; f="${f#.}"; f="${f%Z}"; f="${f}000000000"; AT_KEY=
 # resolved by a genuine revert. Sets SHA_KEY. Forks only for a list, to sort it.
 # The list is word-split UNQUOTED on purpose, so globbing is off for the split: a stem carrying
 # `*` or `?` would otherwise expand against the working directory. Restored on every return.
+# THE PAIR SEPARATOR IS `=` OR `@`, and the key is built in the `=` form, so a record written in
+# either form compares equal to the same bytes written in the other. `@` exists because a
+# keyword-bearing stem before `=` is the shape gitleaks generic-api-key matches in a consumer.
+# READERS FIRST: emitters and teachers stay on `=` until a later release, because a consumer pull
+# can carry this validator or the schema apart from the scripts and roles that write the lists.
+# `[=@]` is the one separator class; PAIR_SEP carries it to every awk split below.
+PAIR_SEP='[=@]'
 sha_key() {
   local v="$1" t glob_off=0
   case "$-" in *f*) glob_off=1 ;; esac
   set -f
   case "$v" in
-    *=*)
+    *[=@]*)
       SHA_KEY=""
       for t in $v; do
-        case "$t" in [!=]*=[0-9a-fA-F]*) ;; *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')"; [ "$glob_off" = 1 ] || set +f; return 0 ;; esac
+        case "$t" in [!=@]*[=@][0-9a-fA-F]*) ;; *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')"; [ "$glob_off" = 1 ] || set +f; return 0 ;; esac
       done
-      SHA_KEY="$(printf '%s\n' $v | tr 'A-F' 'a-f' | LC_ALL=C sort | tr '\n' ' ')"
+      SHA_KEY="$(printf '%s\n' $v | tr 'A-F@' 'a-f=' | LC_ALL=C sort | tr '\n' ' ')"
       SHA_KEY="${SHA_KEY% }" ;;
     *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')" ;;
   esac
@@ -2523,7 +2530,7 @@ EOF
   k3_mf="$k3_dir/requirements-subject.md"
   k3_art="$(block_field "$LAST_FILE" 'artifact')"; k3_art="${k3_art%%[[:space:]]*}"
   # Lowercase the VALUES only: a stem name (`SPEC`) carries letters in A-F too.
-  k3_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk '{ for (i = 1; i <= NF; i++) { n = index($i, "=")
+  k3_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk -v sep="$PAIR_SEP" '{ for (i = 1; i <= NF; i++) { n = match($i, sep)
     if (n) $i = substr($i, 1, n) tolower(substr($i, n + 1)); else $i = tolower($i) } print }')"
   k3_ids="$(block_field "$LAST_FILE" 'shard_tool_use_ids')"
   k2_resolve_file "$LAST_FILE" "$k3_art"; k3_file="$K2_FILE"
@@ -2553,7 +2560,7 @@ EOF
       while read -r k3_k k3_st k3_rel; do
         [ "$k3_k" = "file:" ] || continue
         k3_nstem=$((k3_nstem + 1))
-        k3_n="$(printf '%s\n' $k3_sha | awk -F= -v s="$k3_st" '$1 == s { print $2; exit }')"
+        k3_n="$(printf '%s\n' $k3_sha | awk -F "$PAIR_SEP" -v s="$k3_st" '$1 == s { print $2; exit }')"
         [ -f "$k3_root/$k3_rel" ] && [ -n "$k3_n" ] && [ "$(k2_sha "$k3_root/$k3_rel")" = "$k3_n" ] || k3_moved="$k3_moved $k3_st"
       done < "$k3_mf"
     fi
@@ -2857,7 +2864,7 @@ l_cover() {
     l_insprint "$l_ca" "$l_csfx" || continue
     set -f
     for l_ct in $(block_field "$l_cf" artifact_sha); do
-      case "$l_ct" in ?*=*) l_cn="$l_cn${l_ct%%=*} " ;; esac
+      case "$l_ct" in ?*[=@]*) l_cn="$l_cn${l_ct%%[=@]*} " ;; esac
     done
     [ "$l_cglob" = 1 ] || set +f
   done
@@ -3050,6 +3057,8 @@ EOF
     && cp "$AC_T/l-probe/i/sh/02.md" "$AC_T/l-probe/q/sh/02.md" \
     && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: out/area/s19/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/p/sh/cross.md" \
     && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: story-1-3-x=%s story-2-1-x=%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/j/sh/cross.md" \
+    && mkdir -p "$AC_T/l-probe/ja/sh" \
+    && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: story-1-3-x@%s story-2-1-x@%s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" "$l_pz" > "$AC_T/l-probe/ja/sh/cross.md" \
     && printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact: s9/stories/\nartifact_sha: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$l_pz" > "$AC_T/l-probe/n/sh/01.md" \
     && : > "$AC_T/l-probe/i/st/story-1-3-x.md" && : > "$AC_T/l-probe/i/st/story-2-1-x.md" \
     && : > "$AC_T/l-probe/j/st/story-1-3-x.md" && : > "$AC_T/l-probe/j/st/story-2-1-x.md" \
@@ -3058,6 +3067,7 @@ EOF
     echo "validate-adversarial-convergence.sh: arm L self-probe could not stage; no verdict" >&2; exit 2; }
   l_cover "$AC_T/l-probe/i/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, ordinal forms: '$L_NONAMES/$L_UNCOV' want '/']"
   l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/j/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, cross form: '$L_NONAMES/$L_UNCOV' want '/']"
+  l_cover "$AC_T/l-probe/ja/sh" "$AC_T/l-probe/j/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/" ] || lp_bad="$lp_bad [cover, cross form with @ pairs: '$L_NONAMES/$L_UNCOV' want '/']"
   l_cover "$AC_T/l-probe/j/sh" "$AC_T/l-probe/k/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-y" ] || lp_bad="$lp_bad [cover, one-char rename: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-y']"
   l_cover "$AC_T/l-probe/n/sh" "$AC_T/l-probe/n/st" 9; [ "$L_NONAMES/$L_UNCOV" = "1/" ] || lp_bad="$lp_bad [cover, no names: '$L_NONAMES/$L_UNCOV' want '1/']"
   l_cover "$AC_T/l-probe/o/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint ordinal: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
@@ -3669,11 +3679,11 @@ j2_walk() {
 # opening at each `artifact:` label (same emphasis tolerance and line anchor as repair_value), the
 # sha values kept WHOLE so a list survives. No apostrophe may appear in the awk text below.
 repair_entries() {  # $1 file
-  awk '
+  awk -v sep="$PAIR_SEP" '
     function val(  v) { v = substr($0, RSTART + RLENGTH); sub(/^[*_`]+[[:space:]]+/, "", v)
       gsub(/[`*]/, "", v); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+$/, "", v); return v }
     function low(v,  n, i, t, o) { n = split(v, t, /[[:space:]]+/); o = ""
-      for (i = 1; i <= n; i++) { if (t[i] == "") continue; e = index(t[i], "=")
+      for (i = 1; i <= n; i++) { if (t[i] == "") continue; e = match(t[i], sep)
         t[i] = e ? substr(t[i], 1, e) tolower(substr(t[i], e + 1)) : tolower(t[i]); o = o (o == "" ? "" : " ") t[i] }
       return o }
     function flush() { if (a != "") printf "%s\t%s\t%s\n", a, b, f; a = ""; b = ""; f = "" }
@@ -3682,12 +3692,13 @@ repair_entries() {  # $1 file
     match($0, /^[[:space:]-]*[*_`]?[*_`]?artifact_sha_after[*_`]?[*_`]?:/) { if (a != "" && f == "") f = low(val()); next }
     END { flush() }' "$1"
 }
-# One stem's sha out of a `<stem>=<sha>` list, fork-free. Prints nothing when the stem is absent;
-# `SPEC` never matches `SPE=`, because the token must open with the whole stem and its `=`.
+# One stem's sha out of a `<stem>=<sha>` (or `<stem>@<sha>`) list, fork-free. Prints nothing when
+# the stem is absent; `SPEC` never matches `SPE=`, because the token must open with the whole stem
+# and its separator.
 j2s_tok() {  # $1 stem  $2 list -> sha (lowercased by the caller)
   local t
   for t in $2; do
-    case "$t" in "$1="*) printf '%s' "${t#*=}"; return 0 ;; esac
+    case "$t" in "$1"[=@]*) printf '%s' "${t#"$1"?}"; return 0 ;; esac
   done
   return 0
 }
@@ -3799,14 +3810,14 @@ EOF
       fi
     fi
   elif [ -n "$j2_file" ] && [ "${j2_file##*/}" = "requirements-subject.md" ]; then
-    case "$j2_sha" in *=*) j2s_go=1 ;; *) j2s_go=0 ;; esac
+    case "$j2_sha" in *[=@]*) j2s_go=1 ;; *) j2s_go=0 ;; esac
     j2s_dir="$(cd "$(dirname "$LAST_FILE")" 2>/dev/null && pwd -P)"
     case "${j2s_dir##*/}" in s[0-9]*) ;; *) j2s_go=0 ;; esac
     j2s_mf="$j2s_dir/requirements-subject.md"
     [ "$(cd "$(dirname "$j2_file")" 2>/dev/null && pwd -P)/${j2_file##*/}" = "$j2s_mf" ] || j2s_go=0
     if [ "$j2s_go" -eq 1 ]; then
       # Values lowercased, stem names untouched (`SPEC` carries A-F letters), as K3 reads them.
-      j2s_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk '{ for (i = 1; i <= NF; i++) { n = index($i, "=")
+      j2s_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk -v sep="$PAIR_SEP" '{ for (i = 1; i <= NF; i++) { n = match($i, sep)
         if (n) $i = substr($i, 1, n) tolower(substr($i, n + 1)); else $i = tolower($i) } print }')"
       j2s_first="$(awk '/^file: / { print $3; exit }' "$j2s_mf")"; j2s_root=""; j2s_w="$j2s_dir"
       while [ -n "$j2s_w" ] && [ "$j2s_w" != "/" ]; do
@@ -3835,10 +3846,15 @@ EOF
           > "$AC_T/j2s-rec.md" && printf 'SPEC\tx\tx\tr0\nSPEC\tx\ty\tr1\nSPEC\tx\ty\tr2\nprd\tx\tz\tr3\n' > "$AC_T/j2s-rows" || {
           echo "validate-adversarial-convergence.sh: arm J2 subject self-probe could not stage; no verdict" >&2; exit 2; }
         j2sp1="$(repair_entries "$AC_T/j2s-rec.md" | awk -F'\t' 'NR == 2 || NR == 3 { print $1 "|" $2 "|" $3 } END { print NR }' | tr '\n' ' ')"
-        j2sp2="$(j2s_tok SPEC "SPE=aa SPEC=bb") $(j2s_tok SPE "SPEC=bb")"
+        j2sp2="$(j2s_tok SPEC "SPE=aa SPEC=bb") $(j2s_tok SPE "SPEC=bb") $(j2s_tok SPEC "SPE@aa SPEC@cc") $(j2s_tok SPE "SPEC@cc")"
         j2sp3="$(j2s_links SPEC "$AC_T/j2s-rows" | tr '\t\n' ': ')"
-        if [ "$j2sp1" != "s/SPEC.md|cc|dd m.md|SPEC=ee prd=ff| 3 " ] || [ "$j2sp2" != "bb " ] || [ "$j2sp3" != "x:y:r1 " ]; then
-          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe failed (entries '$j2sp1', token '$j2sp2', links '$j2sp3'); no verdict" >&2
+        # The `@` separator, read alongside `=`: the value is lowercased, the stem is not.
+        printf -- '- artifact: m.md\n- artifact_sha_before: SPEC@EE prd=FF\n' > "$AC_T/j2s-rec-at.md" || {
+          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe could not stage; no verdict" >&2; exit 2; }
+        j2sp4="$(repair_entries "$AC_T/j2s-rec-at.md" | awk -F'\t' '{ print $2 }')"
+        if [ "$j2sp1" != "s/SPEC.md|cc|dd m.md|SPEC=ee prd=ff| 3 " ] || [ "$j2sp2" != "bb  cc " ] || [ "$j2sp3" != "x:y:r1 " ] \
+           || [ "$j2sp4" != "SPEC@ee prd=ff" ]; then
+          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe failed (entries '$j2sp1', token '$j2sp2', links '$j2sp3', @ entries '$j2sp4'); no verdict" >&2
           exit 2
         fi
         # THE LINK ROWS: every repair record in the pass directory -- `*repair*.md`, so the

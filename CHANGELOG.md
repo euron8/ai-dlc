@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.888.0] - 2026-10-20
+
+Batch 236, the BL-718 readers-first release. Every reader of the `artifact_sha` pair grammar now accepts
+`<stem>@<sha>` as well as `<stem>=<sha>`. It files BL-719. BL-718 stays open. Net for this release: 0 closed, 1 filed.
+
+### Every artifact_sha pair reader accepts `<stem>@<sha>` (BL-718, readers first)
+
+A `<stem>=<64hex>` pair whose story slug carries a gitleaks keyword trips generic-api-key in a consumer, measured at
+gitleaks 8.22.1 and 8.30.1. The form `<stem>@<sha>` gives 0 findings at both versions.
+
+The readers changed are `validate-adversarial-convergence.sh` (`sha_key`, K3, L, `repair_entries` and J2S, under one
+`PAIR_SEP`), the shard parser in `merge-adversarial-shards.sh`, `partition-subject.sh --expect-sha`, and the pattern in
+`core/schemas/provenance-block.json`. `sha_key` canonicalises to the `=` form, so an old record and a new one compare
+equal, and a malformed value still keys to a smear that equals nothing.
+
+The emitters and teachers stay on `=` in this release, because a consumer pull can carry readers apart from emitters.
+The flip is BL-719, whose precondition is that it never emits `@` into a tree whose readers cannot parse it.
+
+The schema pattern deliberately narrows: a stem may no longer contain `@`. Measured 0 such stems in 673 sampled graph
+hash pairs and 0 in the fixture seeds.
+
+Fixture arms added: check-24-adversarial-convergence `sharded-revert-atform` and `k3-atform`, subject-partition X9
+(x9 joins SX2's kill set), and adversarial-shard-merge U1b.
+
+T1, quoted consumer content, is out of scope by operator ruling: it is graph's decision, and ai-dlc writes no consumer
+scanner config.
+
+BL-718 stays open. It closes when BL-719's emitter flip lands.
+
 ## [0.887.0] - 2026-10-20
 
 Batch 236, the BL-717 release (owned and gated by ai-dlc-c0; lead ai-dlc-37). It closes BL-717, a live serial
