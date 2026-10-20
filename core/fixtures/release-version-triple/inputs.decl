@@ -6,3 +6,4 @@ core/fixtures/lib/
 !scripts/validate-release-version.sh
 # The consumer engine whose citation regex arm F is bound to, byte for byte (assertions 20 and 21).
 !core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

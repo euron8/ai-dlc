@@ -160,10 +160,14 @@
 #         (`CLOSE_AWK`), or a receipt's path tokens could not be split (`lr_refuse`), and rows
 #         printed before it are partial. `emit-report.sh` renders any non-zero as DETECTOR-REFUSED.
 set -uo pipefail
+# GLOBBING OFF: every consumer path is read through consumer-read.sh, and an unquoted expansion
+# (a receipt's token list, say) must never resolve names against the caller's cwd.
+set -f
 
 # ledger_entry_shape() — THE entry-boundary rule, from lib.sh. See that file for why it is not
 # copied here: rotate's copy of this block drifted within one release.
 SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "ledger-reverify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-reverify: cannot source $SELF/lib.sh" >&2; exit 1; }
 
@@ -263,13 +267,22 @@ THEIRS="${4:?}"
 # A `cd` that fails leaves `$CONSUMER` VERBATIM rather than empty: an empty consumer root would
 # silently re-point every path at the process cwd, and the arm below reports the bad root by
 # name instead.
-_abs_consumer="$(cd "$CONSUMER" 2>/dev/null && pwd)"
+_abs_consumer="$(cr_run "$CONSUMER" pwd 2>/dev/null)"
 [ -n "$_abs_consumer" ] && CONSUMER="$_abs_consumer"
 
 # ONE HOME for the conventional in-tree ledger path: it is both the default subject and the
 # fallback the reachability exclusion derives from when arg 5 points somewhere else.
 LEDGER_DEFAULT="$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
 LEDGER="${5:-$LEDGER_DEFAULT}"
+# THE LEDGER IS READ THROUGH consumer-read.sh AS A (root, relative path) PAIR. Under the consumer
+# root it is relative to it; an arg-5 path elsewhere is read from `/` (absolute) or the cwd
+# (relative), which consumer-read.sh logs as a root that is not the consumer's, so a recorded PASS
+# refuses rather than keying a read it cannot re-take.
+case "$LEDGER" in
+  "$CONSUMER"/*) LEDGER_R="$CONSUMER"; LEDGER_P="${LEDGER#"$CONSUMER"/}" ;;
+  /*)            LEDGER_R=/; LEDGER_P="${LEDGER#/}" ;;
+  *)             LEDGER_R="$(pwd)"; LEDGER_P="$LEDGER" ;;
+esac
 
 # RSFX names WHICH receipt produced this row, and is empty for the single-receipt case so output
 # is byte-identical to before for every entry carrying one. Appended here rather than at each call
@@ -321,10 +334,17 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"; }
 # stderr would be correct and unread: `emit-report.sh` discards this tool's stderr, and its row
 # filter is a denylist (`$1!="STILL-LIVE"`), so a status added here reaches the operator's report
 # with no change there.
-if [ ! -d "$CONSUMER" ]; then
+if ! cr_test "$CONSUMER" -d .; then
   emit INPUT-UNRESOLVED "$CONSUMER" "unresolved: the consumer root is not a directory, so no ledger can be found under it and every 'verify: sh' receipt would resolve its paths against the wrong tree. This tool takes <dist> <base> CONSUMER <theirs> — consumer THIRD, theirs FOURTH — which is the opposite of every sibling in reconcile/. Check the argument order, then re-run. Nothing was re-verified; a zero row count here is not a clean corpus."
 fi
-if [ ! -f "$LEDGER" ]; then
+# A ledger path consumer-read.sh REFUSES (rc 2: a `..` component in arg 5) is INPUT-UNRESOLVED,
+# whichever path it is -- never the silent no-ledger exit.
+_lr_lt=0; cr_test "$LEDGER_R" -f "$LEDGER_P" || _lr_lt=$?
+if [ "$_lr_lt" -eq 2 ]; then
+  emit INPUT-UNRESOLVED "$LEDGER" "unresolved: the ledger path is not a plain path (it carries a '..' component), so it was not read. Nothing was re-verified. Name the ledger by a path without '..', then re-run."
+  exit 0
+fi
+if [ "$_lr_lt" -ne 0 ]; then
   if [ "$LEDGER" != "$LEDGER_DEFAULT" ]; then
     emit INPUT-UNRESOLVED "$LEDGER" "unresolved: the ledger path given as argument 5 is not a readable file. Nothing was re-verified. Correct the path, or omit argument 5 to use the conventional in-tree ledger, then re-run."
   fi
@@ -1417,8 +1437,14 @@ receipt_absent_subjects() {
       *) continue ;;
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
-    # A second argument (`--receipt-tokens` mode) keeps every candidate, present or not.
-    { [ -n "${2:-}" ] || [ ! -e "$CONSUMER/$p" ]; } && case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
+    # A second argument (`--receipt-tokens` mode, and the logging pass before a receipt runs) keeps
+    # every candidate, present or not. EVERY token is tested through consumer-read.sh either way, so
+    # the recorded-PASS log carries each subject. A token consumer-read.sh REFUSES (rc 2: a `..`
+    # component) is KEPT as a candidate, the conservative reading: in the gone-check it turns a close
+    # into NEEDS-REVIEW (its existence could not be read through the consumer root, which is never
+    # "it exists"), and it can never create a close, since a kept subject only withholds one.
+    _lr_e=0; cr_test "$CONSUMER" -e "$p" 2>/dev/null || _lr_e=$?
+    { [ -n "${2:-}" ] || [ "$_lr_e" -ne 0 ]; } && case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
   done < "$LR_STAGE/absent-tokens"
   printf '%s' "$out"
   return 0
@@ -1613,8 +1639,11 @@ sh_base_rc() { # <sh_prog> -> the receipt's status with $THEIRS REBOUND to $BASE
   # `</dev/null` IS PART OF THAT EXPORT LIST'S TWIN, NOT AN ADDITION TO IT: the evaluation site
   # carries the same redirect, for the reason recorded there -- this is called from inside the
   # entry loop, and without it a receipt that reads stdin eats every entry after its own.
+  # PREFIX ASSIGNMENTS, NEVER `env`: bash exports a temporary assignment before a FUNCTION call to
+  # every command that function runs, and `env` is a binary the hermetic tool farm does not carry
+  # (measured: every receipt exited 127 under it).
   DIST="$DIST" BASE="$BASE" THEIRS="$BASE" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
-    bash -c "$1" </dev/null >/dev/null 2>&1
+    cr_run "$CONSUMER" bash -c "$1" </dev/null >/dev/null 2>&1
 }
 sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, emits nothing
   # SBC_CLOSE_AT_BASE IS THIS CALL'S OWN ANSWER, for the CLOSE-CANDIDATE detail the caller emits
@@ -1999,9 +2028,9 @@ SELF_BASE="${0##*/}"
 ledger_top_dir() { # <path> -> its top-level dir relative to the consumer root, or "" if outside
   local _p="$1" _root _abs
   [ -n "$_p" ] || return 0
-  _root="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  _root="$(cr_git "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || return 0
   [ -n "$_root" ] || return 0
-  _root="$(cd "$_root" 2>/dev/null && pwd -P)" || return 0
+  _root="$(cr_run "$_root" pwd -P 2>/dev/null)" || return 0
   case "$_p" in /*) _abs="$_p" ;; *) _abs="$CONSUMER/$_p" ;; esac
   _abs="$(cd "$(dirname "$_abs")" 2>/dev/null && pwd -P)/$(basename "$_abs")" || return 0
   case "$_abs" in
@@ -2037,8 +2066,8 @@ CONSUMER_SCANNABLE=""   # "" not asked | 0 scannable | 1 not
 consumer_scannable() {
   if [ -z "$CONSUMER_SCANNABLE" ]; then
     CONSUMER_SCANNABLE=1
-    if git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-       && [ -n "$(git -C "$CONSUMER" -c core.quotePath=false ls-files 2>/dev/null | head -1)" ]; then
+    if cr_git "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+       && [ -n "$(cr_git "$CONSUMER" -c core.quotePath=false ls-files 2>/dev/null | head -1)" ]; then
       CONSUMER_SCANNABLE=0
     fi
   fi
@@ -2145,10 +2174,10 @@ consumer_reachable() {
     # nothing of its to exclude — passing the empty pathspec would exclude everything and turn
     # this scan into a machine for false "absent" verdicts.
     if [ -n "$LEDGER_TOP" ]; then
-      git -C "$CONSUMER" grep -qF -e "$_one" -- \
+      cr_git "$CONSUMER" grep -qF -e "$_one" -- \
         ":(exclude)$LEDGER_TOP" ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
     else
-      git -C "$CONSUMER" grep -qF -e "$_one" -- \
+      cr_git "$CONSUMER" grep -qF -e "$_one" -- \
         ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
     fi
     case "$?" in
@@ -2384,7 +2413,14 @@ lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per recei
   END { flush() }
 ' "$1"
 }
-ENTRIES="$(lr_entries "$LEDGER")"
+# THE LEDGER IS PARSED IN PLACE, AND ITS BYTES ARE LOGGED THROUGH consumer-read.sh. The `-f` test at
+# the top of the run logged the ledger's blob, and the recorded-PASS key re-takes that entry after the
+# render, so a ledger edited mid-run never records. It is NOT copied into the staging directory
+# first: a whole-ledger copy is the largest write this run makes, and under a file-size limit it
+# failed BEFORE the entries staging below, replacing that write's named refusal with a generic one.
+lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger could not be read"
+LR_LEDGER_COPY="$LEDGER"
+ENTRIES="$(lr_entries "$LR_LEDGER_COPY")"
 
 # A HERESTRING, NOT A PIPE, AND THE REASON IS THE TALLY BELOW. `awk … | while read` runs the
 # loop body in a SUBSHELL, so a counter incremented inside it is discarded at the closing
@@ -2480,6 +2516,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     if [ "$verb_norm" = sh ] && [ -n "$rest" ]; then
       _tok="$(receipt_absent_subjects "$rest" all)" \
         || lr_refuse "the path tokens of $label's sh receipt could not be split"
+      # WORD-SPLIT ONLY: globbing is off (`set -f` above), so a token carrying `*` stays literal.
       for _t in $_tok; do printf 'SUBJECT\t%s\n' "$_t"; done
     fi
     continue
@@ -2830,7 +2867,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # world: a two-line `sh` receipt read CLOSE-CANDIDATE beside a one-line control.
       #
       # So the text is PARSED before it is EVALUATED. THE STRING PARSED IS THE STRING RUN: the
-      # same `cd … && { …; }` wrapper, byte for byte, so a receipt the wrapper itself would
+      # same `{ …; }` wrapper (run at the consumer root by cr_run), byte for byte, so a receipt the wrapper itself would
       # break is caught here rather than scored. A parse failure is a finding about the
       # RECEIPT -- NEEDS-REVIEW under `unresolved:`, the cause SKILL.md step 8 already lists for
       # a malformed `verify:` line -- never a verdict on the entry.
@@ -2852,8 +2889,22 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # reference consumer's live ledger (38) and this repo's backlog (72) and archive (124)
       # parses under this wrapper; controls: a receipt cut inside a double quote, a trailing
       # backslash and an open heredoc each exit 2.
-      sh_prog="cd \"$CONSUMER\" && { $rest
+      # THE `cd` IS NO LONGER IN THE STRING: the receipt runs through `cr_run "$CONSUMER"`, which
+      # sets the cwd itself, and a failed `cd` there is a non-zero exit routed through the same
+      # guards below -- never an evaluation at the caller's cwd.
+      sh_prog="{ $rest
 }"
+      # EVERY SUBJECT THE RECEIPT NAMES IS TESTED THROUGH consumer-read.sh BEFORE THE RECEIPT RUNS,
+      # present or not, so the recorded-PASS log carries each one. The answer is discarded here; a
+      # failed split is NOT refused here: the verdict sites below make their own named refusals
+      # (receipt_absent_subjects / receipt_named_subjects returned N), and a refusal here would
+      # pre-empt them with an anonymous one. A split that failed here logged nothing, and only when
+      # the cache is armed does that matter: then it writes a `!` entry, which refuses the record.
+      if [ -n "${CR_LOG:-}" ]; then
+        lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the paths $label's sh receipt names could not be logged"
+        receipt_absent_subjects "$rest" all >/dev/null \
+          || printf '!\treceipt-split\t-\n' >> "$CR_LOG"
+      fi
       if ! bash -n -c "$sh_prog" >/dev/null 2>&1; then
         emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
         continue
@@ -2896,8 +2947,9 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # CLOSE-CANDIDATE vanished, and RECEIPTS-UNDECIDED fell from "2 of 2" to "1 of 1" -- a
       # smaller ledger reading as a clean one. The base control in `sh_base_rc` is the same
       # shape and carries the same redirect.
+      # Prefix assignments, never `env` -- see sh_base_rc.
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
-        bash -c "$sh_prog" </dev/null >/dev/null 2>&1
+        cr_run "$CONSUMER" bash -c "$sh_prog" </dev/null >/dev/null 2>&1
       sh_rc=$?
       case "$sh_rc" in
         0)
@@ -3318,7 +3370,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   # unterminated fence in the LAST entry -- the shape a rotation split leaves behind -- would
   # otherwise read as clean. The label is the entry that opened it.
   END { flush(); if (__lef_in && label != "") printf "%s\t%s\t%s\t%s\n", label, "none", "(end of file)", "unterminated" }
-' "$LEDGER" 2>/dev/null \
+' "$LR_LEDGER_COPY" 2>/dev/null \
 | while IFS="$(printf '\t')" read -r sw_label sw_cap sw_prev sw_sig; do
     [ -n "${sw_label:-}" ] || continue
     if [ "$sw_cap" = CAPTURED ]; then
@@ -3459,7 +3511,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"'
     }
   }
   END { flush() }
-' "$LEDGER" 2>/dev/null \
+' "$LR_LEDGER_COPY" 2>/dev/null \
 | while IFS="$(printf '\t')" read -r ml_label ml_nr ml_verb; do
     [ -n "${ml_label:-}" ] || continue
     RSFX=""

@@ -34,6 +34,13 @@
 #        2 = usage error, or the extension walk did not run, or an anchor set could not be
 #            staged for reading (a refusal, no verdict)
 set -uo pipefail
+# GLOBBING IS OFF FOR THE WHOLE FILE: no line here relies on pathname expansion, and an unquoted
+# expansion that did would resolve against the caller's cwd, never the consumer.
+set -f
+
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+. "$SELF/consumer-read.sh" || { echo "relabel-extension-checks: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 CONSUMER=""
 APPLY=""
@@ -52,8 +59,10 @@ done
 [ -n "$CONSUMER" ] || { echo "usage: relabel-extension-checks.sh <consumer-root> [--apply] [--dist <repo> --theirs <ref>]" >&2; exit 2; }
 
 SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
-EXT_DIR="$SKILL_DIR/extensions"
-[ -d "$EXT_DIR" ] || { echo "relabel: no extensions/ under $SKILL_DIR"; exit 0; }
+# The consumer-relative spellings every read below takes; SKILL_DIR names the tree in messages only.
+SKILL_REL=".claude/skills/ai-dlc"
+EXT_REL="$SKILL_REL/extensions"
+cr_test "$CONSUMER" -d "$EXT_REL" || { echo "relabel: no extensions/ under $SKILL_DIR"; exit 0; }
 
 # core headings -> bare anchor ids, one per line. Reads a stream on stdin.
 #
@@ -102,15 +111,21 @@ RX_T="$(mktemp -d "${TMPDIR:-/tmp}/relabel-extension-checks.XXXXXX")" || {
   echo "relabel: could not create a staging directory; no verdict" >&2; exit 2; }
 trap 'rm -rf "$RX_T"' EXIT
 ext_walk_rc=0
-find "$EXT_DIR" -name '*.md' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?
+# cr_walk lists root-relative names (`.claude/skills/ai-dlc/extensions/…`), the spelling every row
+# below prints; each extension's bytes are read through cr_read into one staged copy.
+cr_walk "$CONSUMER" "$EXT_REL" -name '*.md' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?
 if [ "$ext_walk_rc" -ne 0 ]; then
-  echo "relabel: the walk of $EXT_DIR did not run (exit $ext_walk_rc); no verdict" >&2
+  echo "relabel: the walk of $SKILL_DIR/extensions did not run (exit $ext_walk_rc); no verdict" >&2
   exit 2
 fi
 
 while IFS= read -r ext; do
   [ -n "$ext" ] || continue
-  kind="$(fm "$ext" kind)"
+  # A LISTED EXTENSION THAT CANNOT BE READ IS A REFUSAL, never an extension with no frontmatter.
+  _rx_rc=0
+  cr_read "$CONSUMER" "$ext" > "$RX_T/ext-body" || _rx_rc=$?
+  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the extension ${ext} could not be read (exit $_rx_rc); no verdict" >&2; exit 2; }
+  kind="$(fm "$RX_T/ext-body" kind)"
   # step-domain extensions collide on core step numbers exactly as check extensions
   # collide on core check numbers -- and every collision this tool was built to fix
   # turned out to live in a step-domain file, where the old `= check` filter never
@@ -118,14 +133,30 @@ while IFS= read -r ext; do
   # layer-drift.sh reported them correctly. Widen to the kinds that carry numbered
   # headings, not to everything: a `role` entry has no anchor namespace to collide in.
   case "$kind" in check|step-domain) ;; *) continue ;; esac
-  id="$(fm "$ext" id)"
-  hooks="$(fm "$ext" hooks)"
+  id="$(fm "$RX_T/ext-body" id)"
+  hooks="$(fm "$RX_T/ext-body" hooks)"
   [ -n "$id" ] && [ -n "$hooks" ] || continue
 
   # Numbers core defines in the file this extension hooks — the UNION of the installed core
   # (present today) and, when given, theirs (what the pull will add). The union is what makes a
   # pull-introduced collision visible during the dry-run instead of only after the write.
-  core_file="$SKILL_DIR/$hooks"
+  #
+  # THE INSTALLED SIDE IS READ THROUGH consumer-read.sh, AND A `hooks:` VALUE IT REFUSES REFUSES THE
+  # RUN. A value carrying a `..` component resolved OUTSIDE the skill tree -- a read no key field
+  # covered, so a recorded PASS survived an edit there. cr_test returns 2 for it, and 2 is never
+  # "the core file is absent": that would drop the installed anchor set and report fewer collisions.
+  core_rel="$SKILL_REL/$hooks"
+  _rx_rc=0
+  cr_test "$CONSUMER" -f "$core_rel" || _rx_rc=$?
+  if [ "$_rx_rc" -eq 2 ]; then
+    echo "relabel: REFUSED — ${ext}'s hooks: value '${hooks}' does not name a path inside the consumer tree (a '..' component, or a leading '/' or '-'), so its installed anchor set cannot be read; no verdict" >&2
+    exit 2
+  fi
+  # THE CORE FILE IS READ STRAIGHT INTO THE TWO STREAMS BELOW, NEVER STAGED. A staged copy is one
+  # more write the size of the whole core file, ahead of the check pass: under a file-size limit it
+  # refused before the pass that labels the extension ever ran (measured: an oversize rule set
+  # refused on the copy, `the core file ... could not be read`, where the pre-helper engine labelled
+  # the check and then refused on the rule-number set). The read is logged by the cr_test above.
   theirs_blob=""
   if [ -n "$DIST" ] && [ -n "$THEIRS" ]; then
     tp="core/skills/ai-dlc/${hooks}"
@@ -135,13 +166,13 @@ while IFS= read -r ext; do
   fi
 
   nums_installed=""
-  [ -f "$core_file" ] && nums_installed="$(core_num_stream < "$core_file")"
+  [ "$_rx_rc" -eq 0 ] && nums_installed="$(cr_read "$CONSUMER" "$core_rel" | core_num_stream)"
   nums_theirs=""
   [ -n "$theirs_blob" ] && nums_theirs="$(printf '%s\n' "$theirs_blob" | core_num_stream)"
   core_nums="$(printf '%s\n%s\n' "$nums_installed" "$nums_theirs" | grep -E '.' | sort -u)"
 
   rules_installed=""
-  [ -f "$core_file" ] && rules_installed="$(core_rule_stream < "$core_file")"
+  [ "$_rx_rc" -eq 0 ] && rules_installed="$(cr_read "$CONSUMER" "$core_rel" | core_rule_stream)"
   rules_theirs=""
   [ -n "$theirs_blob" ] && rules_theirs="$(printf '%s\n' "$theirs_blob" | core_rule_stream)"
   core_rules="$(printf '%s\n%s\n' "$rules_installed" "$rules_theirs" | grep -E '.' | sort -u)"
@@ -162,9 +193,9 @@ while IFS= read -r ext; do
   # extension whose sets were not both read. `printf '%s\n'` writes the bytes the here-string fed.
   _rx_rc=0
   printf '%s\n' "$core_nums" > "$RX_T/core-nums" || _rx_rc=$?
-  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core check-anchor set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
+  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core check-anchor set for ${ext} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
   printf '%s\n' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?
-  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
+  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
 
   while IFS= read -r n; do
     [ -n "$n" ] || continue
@@ -172,7 +203,7 @@ while IFS= read -r ext; do
     # separator class matches ANCHOR_RE, so `### 24. T`, `### Check 24. T` and
     # `## Check AP — T` all resolve; requiring a literal `. ` skipped the last two.
     anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*(\.|—)[[:space:]]*"
-    hd="$(grep -nE "$anchor_at" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
+    hd="$(grep -nE "$anchor_at" "$RX_T/ext-body" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
     [ -n "$hd" ] || continue
 
     lineno="${hd%%:*}"
@@ -200,12 +231,17 @@ while IFS= read -r ext; do
     new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
-    printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
+    printf '%s:%s\n  -  %s\n  +  %s\n' "$ext" "$lineno" "$text" "$new"
 
     if [ "$APPLY" = "--apply" ]; then
+      # The rewrite is made from the staged body and written back to the consumer; the stage takes
+      # the rewritten bytes too, so the next anchor reads what is now on disk.
       tmp="$(mktemp)"
-      awk -v ln="$lineno" -v repl="$new" 'NR==ln { print repl; next } { print }' "$ext" > "$tmp"
-      mv "$tmp" "$ext"
+      awk -v ln="$lineno" -v repl="$new" 'NR==ln { print repl; next } { print }' "$RX_T/ext-body" > "$tmp"
+      # The stage takes the rewritten bytes by awk (already forked here), never by `cp`, which a
+      # fixture farm need not declare.
+      awk '{ print }' "$tmp" > "$RX_T/ext-body"
+      mv "$tmp" "$CONSUMER/$ext"
       applied=$((applied+1))
     fi
   done < "$RX_T/core-nums"
@@ -219,7 +255,7 @@ while IFS= read -r ext; do
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     rule_at="^#{2,4}[[:space:]]+Rule[[:space:]]+${n}[[:space:]]*"
-    hd="$(grep -nE "${rule_at}(--|—|:)" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
+    hd="$(grep -nE "${rule_at}(--|—|:)" "$RX_T/ext-body" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
     [ -n "$hd" ] || continue
 
     lineno="${hd%%:*}"
@@ -231,12 +267,15 @@ while IFS= read -r ext; do
     new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
-    printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
+    printf '%s:%s\n  -  %s\n  +  %s\n' "$ext" "$lineno" "$text" "$new"
 
     if [ "$APPLY" = "--apply" ]; then
+      # The rewrite is made from the staged body and written back to the consumer; the stage takes
+      # the rewritten bytes too, so the next anchor reads what is now on disk.
       tmp="$(mktemp)"
-      awk -v ln="$lineno" -v repl="$new" 'NR==ln { print repl; next } { print }' "$ext" > "$tmp"
-      mv "$tmp" "$ext"
+      awk -v ln="$lineno" -v repl="$new" 'NR==ln { print repl; next } { print }' "$RX_T/ext-body" > "$tmp"
+      awk '{ print }' "$tmp" > "$RX_T/ext-body"
+      mv "$tmp" "$CONSUMER/$ext"
       applied=$((applied+1))
     fi
   done < "$RX_T/core-rules"

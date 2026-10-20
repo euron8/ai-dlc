@@ -4,3 +4,4 @@
 core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

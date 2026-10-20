@@ -277,7 +277,7 @@ SED
 
 # M2 — the layer side matches substrings instead of whole words.
 cat > "$MUTD/m2.sed" <<'SED'
-s#^      n = split(.*#      n = 0; for (t in r) if (index($0, t) > 0) { n++; w[n] = t }#
+s#^          n = split(line, w, .*#          n = 0; for (t in r) if (index(line, t) > 0) { n++; w[n] = t }#
 SED
 
 # M3 — retirement read per rulebook FILE: a token missing from the file it was in reads as
@@ -301,7 +301,7 @@ SED
 # M6 — `set -f` dropped from collect, so the rulebook PATHSPECS are glob-expanded against
 # the caller's cwd.
 cat > "$MUTD/m6.sed" <<'SED'
-/^  local ref="$1" f$/{n;s#^  set -f$#  : mutant-nofilter#;}
+s#^  local _cs _ps$#  local _cs _ps; set +f; : mutant-nofilter#
 SED
 
 # M7 — the program witness removed: every plain word the rulebook dropped is retired.
@@ -519,6 +519,9 @@ if cmp -s "$MREN" "$SCRIPT"; then
   bad "FIXTURE BROKEN — the rename-map mutation matched nothing, so the arm above has no mutant"
 else
   cp "$(dirname "$SCRIPT")/setup-sites.md" "$WORK/" 2>/dev/null; cp "$MREN" "$WORK/retired-layer-token.sh"
+  # The mutant SOURCES consumer-read.sh (and lib.sh) from beside itself; without them it dies at the
+  # source line, prints nothing, and the arm below reads 0 rows as "the arm cannot fail".
+  cp "$(dirname "$SCRIPT")/consumer-read.sh" "$(dirname "$SCRIPT")/lib.sh" "$WORK/"
   m_out="$(bash "$WORK/retired-layer-token.sh" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>/dev/null)"
   m_rows="$(printf '%s\n' "$m_out" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$')" || m_rows=0
   if [ "$m_rows" -ge 1 ]; then

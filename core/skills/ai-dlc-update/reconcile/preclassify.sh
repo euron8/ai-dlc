@@ -44,6 +44,10 @@
 #   UPSTREAM-DELETED-NOOP                 consumer already lacks it -> noop
 #   UPSTREAM-DELETED+consumer-modified->CLASSIFY   consumer changed it -> semantic classify (treat as conflict)
 set -u
+# GLOBBING IS OFF FOR THE WHOLE RUN. No word list here relies on pathname expansion, and an
+# unquoted expansion that met a consumer-authored `*` would resolve against the cwd, a read no key
+# can see. Every consumer path is read through consumer-read.sh below.
+set -f
 DIST="${1:?dist-repo}"; BASE="${2:?base-sha}"; THEIRS="${3:?theirs-ref}"; CONS="${4:?consumer-root}"
 MODE="${5:-}"
 
@@ -53,6 +57,7 @@ MODE="${5:-}"
 # them accepts, so the run refuses through pc_fail() naming the call rather than classifying
 # every path MISSING.
 SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "preclassify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
 
 # --- A GIT THAT FAILED IS NOT A GIT THAT ANSWERED ---------------------------------------------
@@ -96,6 +101,15 @@ pc_refuse() { # <what did not run> -> one stderr line, then the WHOLE run exits 
   kill -USR1 "$PC_TOP" 2>/dev/null
   exit 2
 }
+# pc_ctest <op> <consumer-rel> -- cr_test on the consumer root. consumer-read.sh's 2 (a path with a
+# `..` component or a leading `/`) is a path this run may not resolve, never an absence, so it
+# refuses the run rather than reading as "not there".
+pc_ctest() {
+  local _rc=0
+  cr_test "$CONS" "$1" "$2" || _rc=$?
+  [ "$_rc" -ne 2 ] || pc_refuse "the consumer path '$2' is not one the reader may resolve (a '..' component or a leading '/')"
+  return "$_rc"
+}
 
 # Resolve DIST and CONS to absolute paths up front. file_hash() feeds
 # "$CONS/<path>" to `git -C "$DIST" hash-object` — a RELATIVE consumer root
@@ -103,7 +117,7 @@ pc_refuse() { # <what did not run> -> one stderr line, then the WHOLE run exits 
 # every existing consumer file hashes as MISSING and reads as consumer-deleted.
 # Absolute paths make the hash independent of the -C working dir.
 DIST="$(cd "$DIST" 2>/dev/null && pwd)" || { echo "preclassify: dist-repo not a directory: ${1}" >&2; exit 2; }
-CONS="$(cd "$CONS" 2>/dev/null && pwd)" || { echo "preclassify: consumer-root not a directory: ${4}" >&2; exit 2; }
+CONS="$(cr_run "$CONS" pwd 2>/dev/null)" || { echo "preclassify: consumer-root not a directory: ${4}" >&2; exit 2; }
 
 # --- EVERY LOOP BELOW READS A STAGED FILE, NEVER A `< <( )` ---------------------------------
 # A process substitution's exit status is discarded, so a producer that failed fed its loop an
@@ -171,7 +185,7 @@ map_consumer() { # core/... -> consumer-relative path
 # dormant on a real consumer.)
 opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
   case "$1" in
-    .github/workflows/*) [ ! -d "$CONS/.github/workflows" ] ;;
+    .github/workflows/*) ! pc_ctest -d .github/workflows ;;
     *)                   return 1 ;;
   esac
 }
@@ -280,12 +294,13 @@ pc_fail_listing() {
   pc_fail "ls-files $1 exited $2"
 }
 file_hash() {
-  local f="$CONS/$1" _h
-  [ -f "$f" ] || { echo MISSING; return 0; }
-  # `--no-filters`: a non-bare dist's work-tree `.gitattributes` would otherwise normalise the
-  # consumer's bytes before hashing (a CRLF file under `* text` hashed as its LF form).
-  _h="$(git -C "$DIST" hash-object --no-filters "$f" 2>/dev/null)" || pc_fail "hash-object $f exited $?"
-  [ -n "$_h" ] || pc_fail "hash-object $f exited 0 with no hash"
+  local _h
+  pc_ctest -f "$1" || { echo MISSING; return 0; }
+  # `--no-filters`: a work-tree `.gitattributes` would otherwise normalise the consumer's bytes
+  # before hashing (a CRLF file under `* text` hashed as its LF form). cr_hash runs it without
+  # `-C "$DIST"`; with `--no-filters` no repository's attributes apply, so the hash is the same.
+  _h="$(cr_hash "$CONS" "$1" 2>/dev/null)" || pc_fail "hash-object $CONS/$1 exited $?"
+  [ -n "$_h" ] || pc_fail "hash-object $CONS/$1 exited 0 with no hash"
   printf '%s\n' "$_h"
 }
 
@@ -326,9 +341,8 @@ file_hash() {
 # distribution cannot resolve, which would compare against nothing and never match — reading
 # exactly like a tree that never split.
 SELF_UPDATE_REF=""
-_pc_stamp="$CONS/.claude/.ai-dlc-version"
-if [ -f "$_pc_stamp" ]; then
-  SELF_UPDATE_REF="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_pc_stamp" | head -1)"
+if pc_ctest -f .claude/.ai-dlc-version; then
+  SELF_UPDATE_REF="$(cr_read "$CONS" .claude/.ai-dlc-version | sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)"
   [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
   # 0 resolves and 1 does not; anything else is a git that did not answer, and reading it as
   # "does not resolve" would silently drop the skill_commit arms. Checked in its own block so the
@@ -409,31 +423,38 @@ self_update_hash() { # <core-rel-path> -> blob sha at the consumer's own skill_c
 # manifest read, both listings and the final sort are each status-checked, and any failure is 4 --
 # the code no other status here uses. A MISSING `setup-sites.md` is 4 as well: it ships beside
 # this file in both layouts and nothing installs one without the other, so its absence is a broken
-# install, not a pre-migration state. `set -f` is restored BEFORE the return, so a failure leaves
-# the caller's globbing as it found it. An EMPTY set from a readable manifest is an answer and
+# install, not a pre-migration state. The split runs in a subshell-bodied helper under its own
+# `set -f`, so the caller's globbing is left as it found it. An EMPTY set from a readable manifest is an answer and
 # returns 0, under `pipefail` too. SELF-CONTAINED: no helper or variable of this script is named,
 # because three other scripts and three fixtures `eval` this body where none of them exist.
 machinery_paths() { # -> one core-relative machinery path per line, resolved at BASE and THEIRS; 4 = a producer failed
   _mm="$(dirname "$0")/setup-sites.md"
   [ -f "$_mm" ] || return 4
   _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")" || return 4
-  _mout=""; _mgnorm=""; _mb=""; _mt=""; _mrc=0
-  case "$-" in *f*) _mf=1 ;; *) _mf=0 ;; esac
+  # THE SPLIT RUNS IN `_mp_lists`, A FUNCTION WHOSE BODY IS A SUBSHELL, so its `set -f` cannot
+  # leak into the caller and nothing has to restore it (a save-and-`set +f` restore is what the
+  # consumer-reads validator refuses). Its lines keep the pre-0.888 spelling: `set -f` alone at
+  # two-space indent and each `ls-files` on its own line, which self-update-gate's armc mutants
+  # anchor on (one deletes `set -f`, one deletes the `--with-tree="$BASE"` line). It is called by
+  # a ONE-LINE `$( )`: bash 3.2 ends a multi-line one early at a case pattern or a comment carrying
+  # a paren, and an eval'd copy then runs a fragment (measured: `_mg: unbound variable` under
+  # unregistered-drift.sh's `set -u`, exit 1, no rows).
+  # `core.quotePath=false`: the CLASSIFY rows carry raw paths, and arm C and `carried_bucket`
+  # join them against this set with `grep -xF`; a C-quoted set matches no non-ASCII row.
+  _mp_lists() (
+  _mgnorm=""; _mrc=0
   set -f
   for _mg in $_mgs; do
     case "$_mg" in core/scripts/ai-dlc/*) _mg="core/scripts/${_mg#core/scripts/ai-dlc/}" ;; esac
     _mgnorm="$_mgnorm $_mg"
   done
-  if [ -n "$_mgnorm" ]; then
-    # `core.quotePath=false`: the CLASSIFY rows carry raw paths, and arm C and `carried_bucket`
-    # join them against this set with `grep -xF` -- a C-quoted set matches no non-ASCII row.
-    _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)" || _mrc=4
-    _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)" || _mrc=4
-    _mout="$_mb
-$_mt"
-  fi
-  [ "$_mf" = 1 ] || set +f
-  [ "$_mrc" -eq 0 ] || return 4
+  [ -n "$_mgnorm" ] || exit 0
+  _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)" || _mrc=4
+  _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)" || _mrc=4
+  printf '%s\n%s\n' "$_mb" "$_mt"
+  exit "$_mrc"
+  )
+  _mout="$(_mp_lists)" || return 4
   printf '%s\n' "$_mout" | awk 'length' | sort -u || return 4
   return 0
 }
@@ -505,8 +526,8 @@ mode_at_theirs() { # <core-rel-path> <consumer-rel-path> -> 0 if the consumer co
   # is here so the line a later reader extends already lists the raw path.
   entry="$(git -C "$DIST" -c core.quotePath=false ls-tree "$THEIRS" -- "$1" 2>/dev/null)" || pc_fail "ls-tree $THEIRS -- $1 exited $?"
   case "${entry%% *}" in
-    100755) [ -x "$CONS/$2" ] ;;
-    100644) [ ! -x "$CONS/$2" ] ;;
+    100755) pc_ctest -x "$2" ;;
+    100644) ! pc_ctest -x "$2" ;;
     *) return 0 ;;
   esac
 }
@@ -545,7 +566,7 @@ if [ "$MODE" = "--templates" ]; then
     [ -z "$tmpl" ] && continue
     base_h="$(blob_hash "$BASE" "$tmpl")"
     theirs_h="$(blob_hash "$THEIRS" "$tmpl")"
-    ours_present=MISSING; [ -f "$CONS/$cons" ] && ours_present=PRESENT
+    ours_present=MISSING; pc_ctest -f "$cons" && ours_present=PRESENT
 
     if   [ "$ours_present" = MISSING ];   then bucket="CONSUMER-MISSING-NOOP"      # not a generated consumer -> skip
     elif [ "$base_h" = "$theirs_h" ];     then bucket="TEMPLATE-UNCHANGED-NOOP"    # upstream boilerplate identical -> nothing to sync
@@ -761,7 +782,7 @@ while IFS=$'\t' read -r status path; do
   # per-file bucket list, which is a listing, not work.
   case "$path" in
     core/scripts/*)
-      if [ "$(file_hash "$cons")" = MISSING ] && [ -f "$CONS/scripts/${path#core/scripts/}" ]; then
+      if [ "$(file_hash "$cons")" = MISSING ] && pc_ctest -f "scripts/${path#core/scripts/}"; then
         printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "PRE-RELOCATION-NOOP"
         continue
       fi ;;
@@ -890,15 +911,16 @@ done < "$PC_STAGE/changed-rows"
 for _pc_reloc in '.claude/fixtures|fixtures' '.claude/ci-templates|ci-templates' '.claude/git-hooks|git-hooks'; do
   old_prefix="${_pc_reloc%%|*}"; core_dir="${_pc_reloc#*|}"
   [ -n "$old_prefix" ] || continue
-  [ -d "$CONS/$old_prefix" ] || continue
+  pc_ctest -d "$old_prefix" || continue
 
-  find "$CONS/$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \
+  # Root-relative names (`<old_prefix>/...`); sorted alone, they keep the order the absolute walk had.
+  cr_walk "$CONS" "$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \
     || pc_refuse "the orphan walk of $CONS/$old_prefix did not complete (find exited $?), so an orphan there would read as absent"
   sort "$PC_STAGE/orphan-walk" > "$PC_STAGE/orphan-sorted" \
     || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    rest="${f#"$CONS/$old_prefix/"}"
+    rest="${f#"$old_prefix/"}"
     cons_rel="$old_prefix/$rest"
     core_path="core/$core_dir/$rest"
     new_path="$(map_consumer "$core_path")"

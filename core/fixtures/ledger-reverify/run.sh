@@ -1074,9 +1074,9 @@ MUTL="$(dirname "$DIST")/mut-bail"
 rm -rf "$MUTL"; mkdir -p "$MUTL"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTL/" 2>/dev/null
 awk '
-  /^if \[ ! -d "\$CONSUMER" \]; then$/ { skip=1 }
+  /^if ! cr_test "\$CONSUMER" -d \.; then$/ { skip=1 }
   skip && /^fi$/ && !done_d { done_d=1; skip=0; next }
-  /^if \[ ! -f "\$LEDGER" \]; then$/ { skipl=1; print "[ -f \"$LEDGER\" ] || exit 0"; next }
+  /^if \[ "\$_lr_lt" -ne 0 \]; then$/ { skipl=1; print "[ \"$_lr_lt\" -eq 0 ] || exit 0"; next }
   skipl && /^fi$/ { skipl=0; next }
   skip || skipl { next }
   { print }
@@ -1634,12 +1634,12 @@ done
 # THE MUTANTS REMOVE ONE REDIRECT EACH and are scored on BOTH ledgers: the owning ledger must lose
 # its later entries while the reader's own row survives (the engine ran), and the OTHER ledger must
 # stay whole (the mutant is a mutation of that one site).
-si_mut_line_eval='        bash -c "$sh_prog" </dev/null >/dev/null 2>&1'
-si_mut_line_base='    bash -c "$1" </dev/null >/dev/null 2>&1'
+si_mut_line_eval='        cr_run "$CONSUMER" bash -c "$sh_prog" </dev/null >/dev/null 2>&1'
+si_mut_line_base='    cr_run "$CONSUMER" bash -c "$1" </dev/null >/dev/null 2>&1'
 for si in eval base; do
   case "$si" in
-    eval) old="$si_mut_line_eval"; new='        bash -c "$sh_prog" >/dev/null 2>&1'; own="$SI_EVAL_LED"; other="$SI_BASE_LED" ;;
-    *)    old="$si_mut_line_base"; new='    bash -c "$1" >/dev/null 2>&1';       own="$SI_BASE_LED"; other="$SI_EVAL_LED" ;;
+    eval) old="$si_mut_line_eval"; new='        cr_run "$CONSUMER" bash -c "$sh_prog" >/dev/null 2>&1'; own="$SI_EVAL_LED"; other="$SI_BASE_LED" ;;
+    *)    old="$si_mut_line_base"; new='    cr_run "$CONSUMER" bash -c "$1" >/dev/null 2>&1';       own="$SI_BASE_LED"; other="$SI_EVAL_LED" ;;
   esac
   ASSERTIONS=$((ASSERTIONS + 1))
   n="$(SBC_A="$old" awk '$0 == ENVIRON["SBC_A"] {c++} END{print c+0}' "$CLOSER")" || n=0
@@ -4683,8 +4683,8 @@ tl_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
 # line this fixture never reads and score a kill it did not earn.
 ASSERTIONS=$((ASSERTIONS + 1))
 tl_g="$(grep -c '^ *if ! bash -n -c "\$sh_prog" >/dev/null 2>&1; then$' "$CLOSER")" || tl_g=0
-tl_p="$(grep -c '^ *sh_prog="cd \\"\$CONSUMER\\" && { \$rest$' "$CLOSER")" || tl_p=0
-tl_r="$(grep -c '^ *bash -c "\$sh_prog" </dev/null >/dev/null 2>&1$' "$CLOSER")" || tl_r=0
+tl_p="$(grep -c '^ *sh_prog="{ \$rest$' "$CLOSER")" || tl_p=0
+tl_r="$(grep -c '^ *cr_run "\$CONSUMER" bash -c "\$sh_prog" </dev/null >/dev/null 2>&1$' "$CLOSER")" || tl_r=0
 if [ "$tl_g" -eq 1 ] && [ "$tl_p" -eq 1 ] && [ "$tl_r" -eq 1 ]; then
   printf '  ok    %-22s the parse guard, the wrapper assignment and the run line are each unique in the closer\n' "sh-parse-anchors"
 else
@@ -4703,7 +4703,7 @@ tl_kill mutation-sh-no-parse \
 #    The trailing-comment receipt then passes the guard, the wrapper is rebuilt on one line with
 #    `; }` glued to the comment, and the entry regresses to CLOSE-CANDIDATE through exit 2.
 tl_kill mutation-sh-parse-bare \
-  "$(tl_mutant sh-parse-bare '/^ *if ! bash -n -c "\$sh_prog" >\/dev\/null 2>&1; then$/ { sub(/"\$sh_prog"/, "\"$rest\"") } /^ *sh_prog="cd \\"\$CONSUMER\\" && { \$rest$/ { print "      sh_prog=\"cd \\\"$CONSUMER\\\" && { $rest; }\""; skip = 1; next } skip == 1 { skip = 0; if ($0 == "}\"") next } { print }')" \
+  "$(tl_mutant sh-parse-bare '/^ *if ! bash -n -c "\$sh_prog" >\/dev\/null 2>&1; then$/ { sub(/"\$sh_prog"/, "\"$rest\"") } /^ *sh_prog="{ \$rest$/ { print "      sh_prog=\"{ $rest; }\""; skip = 1; next } skip == 1 { skip = 0; if ($0 == "}\"") next } { print }')" \
   '$2 ~ /PC-FIXTURE-SH-TRAILING-COMMENT/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
   '$2 ~ /PC-FIXTURE-SH-TWO-LINE/ && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {f=1} END{exit !f}' \
   "parsing the bare receipt instead of the wrapped program lets the comment break the one-line wrapper and the entry CLOSES — the guard must parse the string that runs" \

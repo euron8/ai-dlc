@@ -114,7 +114,7 @@ run_warn() { run_warn_2 "$1" /dev/null; }
 # unmutated twin of itself. One directory per mutant, so the mutants cannot see each other.
 new_sandbox() { # new_sandbox <name>  -> path on stdout
   local d="$WORK/sbx-$1"
-  mkdir -p "$d" && cp "$SRC_DIR/lib.sh" "$SRC_DIR/ledger-reverify.sh" "$d/" || return 1
+  mkdir -p "$d" && cp "$SRC_DIR/lib.sh" "$SRC_DIR/ledger-reverify.sh" "$SRC_DIR/consumer-read.sh" "$d/" || return 1
   printf '%s\n' "$d"
 }
 
@@ -227,13 +227,13 @@ CHG2="$(python3 - "$SCRIPT" "$MUT2" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
 s = open(src, encoding="utf-8").read()
-s2 = s.replace('find "$LOCAL_DIR" -type f', 'find "$LOCAL_DIR" -maxdepth 1 -type f')
+s2 = s.replace('cr_walk "$LOCAL_R" "$LOCAL_P" -type f', 'cr_walk "$LOCAL_R" "$LOCAL_P" -maxdepth 1 -type f', 1)
 open(dst, "w", encoding="utf-8").write(s2)
 print("CHANGED" if s2 != s else "UNCHANGED")
 PY
 )"
 if [ "$CHG2" != "CHANGED" ]; then
-  bad "MUTATION 2 matched nothing — the home walk is no longer a bare find over LOCAL_DIR"
+  bad "MUTATION 2 matched nothing — the home walk is no longer a cr_walk over LOCAL_DIR's root and path"
 else
   MOUT2="$(run_warn "$MUT2")"
   if row "$MOUT2" "local/lib/validate-sub.sh"; then

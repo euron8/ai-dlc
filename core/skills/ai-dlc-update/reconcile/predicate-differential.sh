@@ -52,6 +52,10 @@
 #       self-update-gate.sh. (layer-drift.sh shares the classifier posture but NOT the exit:
 #       it exits 2 when a row could not be written.)
 set -uo pipefail
+# Globbing off for the whole run. The member list, the ls-files output and `$inv` are SPLIT on
+# whitespace and never pathname-expanded: a member is a git pathspec matched by `ls-files`, and an
+# `invoke:` word is an argument handed to the predicate, which resolves it itself.
+set -f
 
 DIST="${1:?usage: predicate-differential.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>}"
 BASE="${2:?}"
@@ -59,6 +63,9 @@ THEIRS="${3:?}"
 CONSUMER="${4:?}"
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
+
+SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "predicate-differential: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 SELF_SRC="$0"
 MANIFEST="$(dirname "$SELF_SRC")/predicate-sites.md"
@@ -70,6 +77,19 @@ fi
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/predicate-differential-XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+
+# pd_records <out> -- the site's corpus, `find <consumer>/<corpus-root> -type f -name <corpus>`,
+# sorted, ABSOLUTE, in <out>; the root-relative names in <out>.rel. Walked through cr_walk, so the
+# listing is logged. Returns 2 when consumer-read.sh refuses the root; a failed find (an absent
+# root) is otherwise ignored, exactly as the `find … 2>/dev/null | sort` it replaces ignored it.
+pd_records() {
+  local _rc=0 _r
+  cr_walk "$CONSUMER" "$P_ROOT" -type f -name "$P_CORPUS" > "$1.walk" 2>/dev/null || _rc=$?
+  [ "$_rc" -ne 2 ] || return 2
+  sort "$1.walk" > "$1.rel"
+  while IFS= read -r _r; do printf '%s/%s\n' "$CONSUMER" "$_r"; done < "$1.walk" | sort > "$1"
+  return 0
+}
 
 # The manifest's site blocks. Field-per-line, one block per predicate; a block is complete when
 # `verdict:` closes it. `verdict:` is REQUIRED and a site missing it is refused rather than
@@ -119,9 +139,11 @@ if [ -n "${AI_DLC_KNOWN_SKILLS_EXT+x}" ]; then
   PD_EXT="$AI_DLC_KNOWN_SKILLS_EXT"
 else
   PD_EXT=""
-  for cand in "$CONSUMER/.claude/skills/ai-dlc/extensions/known-skills.json" \
-              "$CONSUMER/skills/ai-dlc/extensions/known-skills.json"; do
-    [ -f "$cand" ] && { PD_EXT="$cand"; break; }
+  # Tested root-relative through consumer-read.sh; PD_EXT keeps the ABSOLUTE path it always held,
+  # because it is handed to a foreign program as a path.
+  for cand in .claude/skills/ai-dlc/extensions/known-skills.json \
+              skills/ai-dlc/extensions/known-skills.json; do
+    cr_test "$CONSUMER" -f "$cand" && { PD_EXT="$CONSUMER/$cand"; break; }
   done
 fi
 
@@ -157,18 +179,16 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
   for side in base theirs; do
     [ "$side" = base ] && ref="$BASE" || ref="$THEIRS"
     rm -rf "$TMP/root-$side"; mkdir -p "$TMP/root-$side"
-    set -f
+    # Both lists are split under the run's `set -f`: a member is a git pathspec `ls-files` matches,
+    # and the listing is dist paths, so neither is ever pathname-expanded by the shell.
     for member in $P_READS; do
-      set +f
       # quotePath=false: a non-ASCII member is otherwise listed C-quoted, `git show` is handed a
       # path that names nothing, and the side reads as unmaterializable.
       for f in $(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$ref" -- "$member" 2>/dev/null); do
         mkdir -p "$TMP/root-$side/$(dirname "$f")"
         git -C "$DIST" show "${ref}:${f}" > "$TMP/root-$side/$f" 2>/dev/null || side_missing=1
       done
-      set -f
     done
-    set +f
     [ -f "$TMP/root-$side/$P_ENTRY" ] || { [ "$side" = base ] && side_absent_at_base=1 || side_missing=1; }
   done
 
@@ -201,7 +221,20 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
   # THE ROOT IS THE SITE'S `corpus-root:`, consumer-relative. A predicate whose stored subject
   # lives outside `_bmad-output/` -- `docs/escalations/pending.md` -- was otherwise unreachable,
   # and its site reported UNDECIDABLE on every consumer that had the file.
-  find "$CONSUMER/$P_ROOT" -type f -name "$P_CORPUS" 2>/dev/null | sort > "$TMP/records"
+  #
+  # WALKED THROUGH consumer-read.sh, root-relative, then made absolute again so `$TMP/records`, its
+  # order and its byte count are what the absolute `find` produced. A walk refused as a path the
+  # reader may not resolve (2) is UNDECIDABLE, never an empty corpus.
+  _pdw=0; pd_records "$TMP/records" || _pdw=$?
+  if [ "$_pdw" -eq 2 ]; then
+    emit PREDICATE-UNDECIDABLE "$p_name" "the corpus root [${P_ROOT}] is not a path the consumer reader may resolve (a '..' component, a leading '/' or a leading '-'), so no corpus was walked. ${p_pop}; nothing compared."
+    continue
+  fi
+  # The predicates read every record themselves, through cr_run where nothing is logged, so each
+  # walked record's bytes are logged here when a log is armed.
+  if [ -n "${CR_LOG:-}" ]; then
+    while IFS= read -r _pdr; do cr_test "$CONSUMER" -f "$_pdr" >/dev/null 2>&1; done < "$TMP/records.rel"
+  fi
   fp_before="$(wc -c < "$TMP/records" | tr -d ' ')"
 
   if [ ! -s "$TMP/records" ]; then
@@ -225,8 +258,20 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     # point there too -- so a schema-only change compares one schema with itself and reads
     # STABLE. A walk-up marker alone does not fix that: an inherited AI_DLC_PROJECT_ROOT wins
     # over the walk. Consumer data the probe root cannot hold is passed by path (PD_EXT above).
-    ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-base/$P_ENTRY"   $inv ) > "$TMP/out-base" 2>&1
-    ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-theirs/$P_ENTRY" $inv ) > "$TMP/out-theirs" 2>&1
+    # The predicate runs AT the consumer root (cr_run), as the `( cd … )` it replaces did. `$inv`
+    # is split into words under the run's `set -f` and never pathname-expanded: an argument such
+    # as `--root .` or a gate-metrics path is the predicate's to resolve. Every word that could
+    # name a consumer path is logged first, when a log is armed, so its bytes are keyed.
+    if [ -n "${CR_LOG:-}" ]; then
+      for _pdw_word in $inv; do
+        case "$_pdw_word" in -*|/*|*..*) continue ;; esac
+        cr_test "$CONSUMER" -e "$_pdw_word" >/dev/null 2>&1
+      done
+    fi
+    # PREFIX ASSIGNMENTS, NEVER `env`: bash exports them to cr_run's command, and an `env` binary is
+    # a fork of a tool the hermetic farm does not declare (it exited 127 in ledger-reverify).
+    AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-base/$P_ENTRY"   $inv > "$TMP/out-base" 2>&1
+    AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-theirs/$P_ENTRY" $inv > "$TMP/out-theirs" 2>&1
     a_base="$(sed -nE "$P_VERDICT" "$TMP/out-base" | sort -u | tr '\n' ',')"
     a_theirs="$(sed -nE "$P_VERDICT" "$TMP/out-theirs" | sort -u | tr '\n' ',')"
     if [ -n "$a_base" ] || [ -n "$a_theirs" ]; then
@@ -237,7 +282,11 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     printf '%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" >> "$TMP/pairs"
   done < "$TMP/series"
 
-  find "$CONSUMER/$P_ROOT" -type f -name "$P_CORPUS" 2>/dev/null | sort > "$TMP/records2"
+  _pdw=0; pd_records "$TMP/records2" || _pdw=$?
+  if [ "$_pdw" -eq 2 ]; then
+    emit PREDICATE-UNDECIDABLE "$p_name" "the corpus root [${P_ROOT}] is not a path the consumer reader may resolve (a '..' component, a leading '/' or a leading '-'), so the corpus could not be re-walked. ${p_pop}; nothing compared."
+    continue
+  fi
   fp_after="$(wc -c < "$TMP/records2" | tr -d ' ')"
   # THE COUNTS EVERY COMPARED ROW CARRIES. `compared` is the series yielding a verdict token on
   # at least one side. Of the rest, a site declaring `pass:` splits them: `passed` printed the

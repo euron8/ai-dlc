@@ -181,6 +181,16 @@
 #                                    declared `extends:` span did not
 
 set -uo pipefail
+# GLOBBING OFF FOR THE WHOLE RUN. An unquoted expansion here word-splits on purpose (a `fixtures:`
+# list, the manifest's rulebook globs) and must never be pathname-expanded against the caller's
+# cwd, which no recorded-PASS key field holds: `fixtures: x*` once tested whatever the cwd matched.
+set -f
+
+# EVERY CONSUMER READ GOES THROUGH consumer-read.sh (its header owns the contract), so the
+# recorded-PASS key can re-take exactly what this run read. Sourced before the first consumer path
+# is resolved, which is the argument parse below.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "layer-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # MODES
 #   layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
@@ -254,7 +264,7 @@ else
   # reintroduce it, and in preclassify.sh's donor form rather than a new one -- it has
   # absolutized both roots this way since it was written. The `codes` mode above leaves
   # CONSUMER empty by design and must not be absolutized into the current directory.
-  CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }
+  CONSUMER="$(cr_run "$CONSUMER" pwd 2>/dev/null)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }
 fi
 
 # EVERY REF THIS RUN READS MUST RESOLVE TO A COMMIT, OR THE RUN DOES NOT START. Before this, an
@@ -298,7 +308,9 @@ THEIRS_SHA="$(ld_resolve_ref theirs "$THEIRS")" || exit 1
 BASE_SHA=""
 if [ "$MODE" != codes ]; then BASE_SHA="$(ld_resolve_ref base "$BASE")" || exit 1; fi
 
-SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
+# CONSUMER-RELATIVE, every one: they are read only through consumer-read.sh's cr_* functions,
+# which take the root and a root-relative path. The walks below emit root-relative entry names.
+SKILL_DIR=".claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 OVR_DIR="$SKILL_DIR/overrides"
 
@@ -319,7 +331,7 @@ ADJ_LIST_FILE=""
 # section_of()/norm() — shared with register-drift.sh and readopt-override.sh.
 # Three copies of the section resolver drifted apart twice (v0.52.0, v0.54.2);
 # see lib.sh for the history and why this one is sourced rather than inlined.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# SELF is set in the preamble, before consumer-read.sh is sourced.
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "layer-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
 
@@ -562,7 +574,19 @@ fm() { # fm <file> <key>
   ' "$1"
 }
 
-layer_files() { [ -d "$1" ] || return 0; find "$1" -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort; }
+# layer_files <consumer-relative dir> -- the layer entries under it, ROOT-RELATIVE, through cr_walk so
+# the listing itself is logged and an added or removed entry moves the recorded-PASS key. Each name
+# is read through cr_read by the loop that consumes it. The argument is a fixed literal, so cr_test's
+# refusal (2) cannot arise here.
+# THE WALK IS STAGED TO A FILE, NEVER PIPED FROM THE FUNCTION: a shell function in a pipeline stage
+# runs in a forked bash, and that fork's exit flushes whatever row an earlier failed write left in
+# this shell's stdout buffer into the walk (measured under XFSZ: junk "entries" built from a leaked
+# DS row, iterated with the loop's break removed). `find | sort`, the old spelling, exec'd both.
+layer_files() {
+  cr_test "$CONSUMER" -d "$1" || return 0
+  cr_walk "$CONSUMER" "$1" -type f -name '*.md' ! -name 'README.md' > "$LD_T/layer-walk" 2>/dev/null || return $?
+  sort "$LD_T/layer-walk"
+}
 
 # An entry's body — everything after the closing frontmatter `---`.
 #
@@ -637,7 +661,6 @@ unclaimed_body_sections() { # unclaimed_body_sections <entry-file> <shadow_parts
 # not five transcriptions"). Matching whole heading text found ZERO of the two real
 # instances; matching the backticked span found both with no false positives.
 ticks_of() { grep -o '`[^`]\{3,60\}`' | tr 'A-Z' 'a-z' | sort -u; }
-rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 
 # memo_show/memo_has_path (lib.sh) — a SHARED filesystem cache, keyed on <ref>:<path>, that
 # survives across the separate reconcile/*.sh PROCESSES one emit-report.sh render forks.
@@ -786,7 +809,9 @@ supersessions_of() {
 # THE DIGEST IS COMPUTED HERE AND NOWHERE ELSE, and it is PRINTED in the blocking row. The
 # operator copies a value; nobody re-derives one. A digest an operator can compute two ways is
 # a digest that will be computed two ways.
-ADJ_REGISTER="$CONSUMER/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+# CONSUMER-RELATIVE: tested with cr_test and read with cr_read, never opened by path. The messages'
+# `${ADJ_REGISTER#"$CONSUMER"/}` prefix strip is a no-op on it and prints the same relative path.
+ADJ_REGISTER="_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
 ADJ_SCHEMA_REL="core/schemas/layer-adjudication-register.json"
 ADJ_CONTRACT_REL="core/skills/ai-dlc/layer-contract.yaml"
 
@@ -940,7 +965,9 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
   local ef tb dg cl
   cl="$(adj_clause_of "${3:-}")"
   # `--no-filters`: the dist's work-tree attributes must not rewrite the consumer's bytes.
-  ef="$(git -C "$DIST" hash-object --no-filters "$CONSUMER/$1" 2>/dev/null)"
+  # Through cr_hash (the same `--no-filters` blob id, no repository's attributes involved). A refused
+  # path (2) leaves ef empty, which is the unkeyable branch below, never a match.
+  ef="$(cr_hash "$CONSUMER" "$1" 2>/dev/null)"
   # NOT memo_rev_parse: that helper is `-q --verify`, and this call site is bare
   # `rev-parse <ref>:<path>` deliberately unconverted (CLAUDE.md's own note: bare rev-parse on
   # a missing path ECHOES ITS ARGUMENT and exits 128, `-q --verify` prints nothing — a different
@@ -1064,7 +1091,11 @@ adj_show() { # $1 ref, $2 dist path, $3 destination -> 0 read (or absent at that
 }
 adj_core_text() { # $1 status, $2 entry (consumer-relative), $3 core-relative target -> text on stdout; 3 = unreadable
   local cpath f _x _b _pl _fl _an _d _ut _ct
-  cpath="$(dist_path "$3")"; f="$CONSUMER/$2"
+  # The entry is STAGED through cr_read and every reader below reads the stage. An unreadable entry
+  # stages empty, as the direct read did; a REFUSED path (2) is unread core text, never an empty one.
+  cpath="$(dist_path "$3")"; f="$LD_T/adj-core-entry"
+  : > "$f" || return 3
+  cr_read "$CONSUMER" "$2" > "$f" || { [ "$?" -ne 2 ] || return 3; }
   case "$1" in
     # LC-E4 / LC-E6, range-keyed: an added or removed line of the range diff, marker stripped. The
     # options are pinned so a consumer's diff config cannot move which lines count. Staged, so the
@@ -1167,12 +1198,17 @@ adj_read_ask() { # $1 status, $2 core-relative target
 # times; the key is a cksum of the pair, and a failed derivation is not cached.
 adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-relative target
   local v has el cl st hay_e="" hay_c="" ck
+  # The register is staged through cr_read and jq reads the stage. A read that FAILED selects no
+  # record, which is what the direct `jq … <file>` read gave on an unreadable file: its status went
+  # to the empty `adj-recs` test below and nowhere else. The stage is never written as an empty
+  # file standing in for the read: the failure returns here, on the same no-record path.
+  cr_read "$CONSUMER" "$ADJ_REGISTER" > "$LD_T/adj-reg" 2>/dev/null || return 0
   jq -r --arg d "$1" 'select(.subject_digest == $d)
       | [ (.verdict // "" | tostring),
           (if (.read | type) == "object" then "1" else "0" end),
           (if (.read | type) == "object" then (.read.entry_line // "" | tostring) else "" end),
           (if (.read | type) == "object" then (.read.core_line // "" | tostring) else "" end) ]
-      | map("x" + gsub("[\t\r\n]"; " ")) | join("\t")' "$ADJ_REGISTER" > "$LD_T/adj-recs" 2>/dev/null
+      | map("x" + gsub("[\t\r\n]"; " ")) | join("\t")' "$LD_T/adj-reg" > "$LD_T/adj-recs" 2>/dev/null
   [ -s "$LD_T/adj-recs" ] || return 0
   while IFS="$TAB" read -r v has el cl; do
     v="${v#x}"; has="${has#x}"; el="$(adj_trim "${el#x}")"; cl="$(adj_trim "${cl#x}")"
@@ -1180,7 +1216,8 @@ adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-re
       st=no-read
     else
       if [ -z "$hay_e" ]; then
-        if body_of "$CONSUMER/$3" > "$LD_T/adj-entry-body" \
+        if cr_read "$CONSUMER" "$3" > "$LD_T/adj-entry-raw" 2>/dev/null \
+           && body_of "$LD_T/adj-entry-raw" > "$LD_T/adj-entry-body" \
            && adj_stage_trimmed "$LD_T/adj-entry-body" "$LD_T/adj-hay-entry"; then hay_e=ok; else hay_e=bad; fi
       fi
       if [ "$hay_e" != ok ] || ! adj_qualifies "$el" || ! adj_line_in "$el" "$LD_T/adj-hay-entry"; then
@@ -1208,7 +1245,7 @@ adj_records() { # $1 digest, $2 status, $3 entry (consumer-relative), $4 core-re
 }
 
 adj_verdict() { # $1 digest, $2 status, $3 entry, $4 target -> the verdict of every record that CLEARS
-  [ -f "$ADJ_REGISTER" ] || return 1
+  cr_test "$CONSUMER" -f "$ADJ_REGISTER" || return 1
   command -v jq >/dev/null 2>&1 || return 2
   adj_records "$@" > "$LD_T/adj-vsel" || return 1
   awk -F'\t' '$2 == "clears" { print $1 }' "$LD_T/adj-vsel"
@@ -1222,7 +1259,7 @@ adj_verdict() { # $1 digest, $2 status, $3 entry, $4 target -> the verdict of ev
 adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
   local _v _st _fv="" _fs=""
   ADJ_READ_WHY=""; ADJ_READ_HALF=""
-  [ -f "$ADJ_REGISTER" ] || return 1
+  cr_test "$CONSUMER" -f "$ADJ_REGISTER" || return 1
   command -v jq >/dev/null 2>&1 || return 2
   adj_records "$@" > "$LD_T/adj-sel" || return 1
   while IFS="$TAB" read -r _v _st; do
@@ -1297,15 +1334,16 @@ adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
 # spending a verdict they have not spent.
 adj_spent_note() { # $1 entry (consumer-relative), $2 the CURRENT digest, $3 the clause id -> prints a note, or nothing
   local prior
-  [ -f "$ADJ_REGISTER" ] || return 0
+  cr_test "$CONSUMER" -f "$ADJ_REGISTER" || return 0
   command -v jq >/dev/null 2>&1 || return 0
   [ -n "${3:-}" ] || return 0
-  git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1 || return 0
-  git -C "$CONSUMER" diff --quiet --no-textconv -- "$1" 2>/dev/null && return 0
+  cr_git "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  cr_git "$CONSUMER" diff --quiet --no-textconv -- "$1" 2>/dev/null && return 0
+  cr_read "$CONSUMER" "$ADJ_REGISTER" > "$LD_T/adj-reg-note" 2>/dev/null || return 0
   prior="$(jq -r --arg e "$1" --arg d "$2" --arg c "$3" \
     'select(.entry == $e and .subject_digest != $d and .clause == $c)
      | "\(.verdict) (recorded \(.recorded_utc) under \(.subject_digest[0:12]))"' \
-    "$ADJ_REGISTER" 2>/dev/null | tail -1)"
+    "$LD_T/adj-reg-note" 2>/dev/null | tail -1)"
   [ -n "$prior" ] || return 0
   printf ' A verdict for this ENTRY under THIS CLAUSE is already recorded under a DIFFERENT subject digest [%s], and this entry has UNCOMMITTED edits — so this is a SPENT verdict rather than an unanswered one: the entry or its hooked core file moved after you recorded. Make every edit this pull prescribes FIRST, then read the digest, then record; recording before an edit to the same entry spends the record you just wrote. Re-record under the digest above.' "$prior"
 }
@@ -1447,11 +1485,14 @@ emit_raw() {
 adj_register_contradictions() {
   [ "$ld_emit_failed" -eq 0 ] || return 0
   adj_active || return 0
-  [ -f "$ADJ_REGISTER" ] || return 0
+  cr_test "$CONSUMER" -f "$ADJ_REGISTER" || return 0
   command -v jq >/dev/null 2>&1 || return 0
   local _rc=0 _n=0
+  # Staged through cr_read. A read that FAILED returns before the awk writer: the direct jq read
+  # of an unreadable file printed nothing, its status was not the writer's, and no row came of it.
+  cr_read "$CONSUMER" "$ADJ_REGISTER" > "$LD_T/adj-reg-contra" 2>/dev/null || return 0
   jq -r '[(.clause // ""), (.entry // ""), (.subject_digest // ""), (.verdict // ""), (.supersedes // ""), (.reason // "")] | @tsv' \
-    "$ADJ_REGISTER" 2>/dev/null \
+    "$LD_T/adj-reg-contra" 2>/dev/null \
   | awk -F'\t' -v OFS='\t' -v ldn="$LD_T/contradiction-rows" '
       { key = $1 "\x01" $2 "\x01" $3 }
       seen[key] && prev[key] != $4 && ($5 == "" || $6 == "") {
@@ -1879,7 +1920,15 @@ while IFS= read -r f; do
   # its `$( )` captures against a leaked stdout buffer, and emit nothing anyway.
   [ "$ld_emit_failed" -eq 0 ] || break
   [ -n "$f" ] || continue
-  entry="$(rel "$f")"
+  # The walk names the entry ROOT-RELATIVE; its bytes are STAGED once through cr_read, and every
+  # reader below reads the stage as `$f`. An unreadable entry stages empty, as a direct read of it
+  # yielded nothing; the walk's names never carry `..`, so cr_read's refusal cannot arise here.
+  entry="$f"; f="$LD_T/entry-ovr"
+  # The status is READ, never folded into success: a failure on a READABLE entry is the stage's write
+  # failing, which refuses; on an unreadable entry the stage holds what the direct read yielded
+  # (the redirect has already emptied it), exactly as `fm` reading the entry itself saw it.
+  _st_rc=0; cr_read "$CONSUMER" "$entry" > "$f" 2>/dev/null; _st_rc=$?
+  if [ "$_st_rc" -ne 0 ] && cr_test "$CONSUMER" -r "$entry"; then ld_refuse_staging "staging the override ${entry}" "$_st_rc"; fi
   shadows="$(fm "$f" shadows)"; base_sha="$(fm "$f" base_sha)"
   tgt="$(printf '%s' "${shadows%%#*}" | tr -d ' ' | sed 's/,.*//')"
   [ -n "$tgt" ] || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "?" "no shadows: target"; continue; }
@@ -1890,8 +1939,8 @@ while IFS= read -r f; do
     emit HARD-OVERRIDE-BASE-UNRESOLVABLE "$entry" "$tgt" "no base_sha in frontmatter"; continue
   fi
   if ! git -C "$DIST" rev-parse -q --verify "${base_sha}^{commit}" >/dev/null 2>&1; then
-    if git -C "$CONSUMER" rev-parse -q --verify "${base_sha}^{commit}" >/dev/null 2>&1; then
-      subj="$(git -C "$CONSUMER" log -1 --format='%s' "$base_sha" 2>/dev/null | cut -c1-40)"
+    if cr_git "$CONSUMER" rev-parse -q --verify "${base_sha}^{commit}" >/dev/null 2>&1; then
+      subj="$(cr_git "$CONSUMER" log -1 --format='%s' "$base_sha" 2>/dev/null | cut -c1-40)"
       emit HARD-OVERRIDE-BASE-CONSUMER-SHA "$entry" "$tgt" "base_sha $base_sha is a CONSUMER commit (${subj}); must be a distribution sha"
     else
       emit HARD-OVERRIDE-BASE-UNRESOLVABLE "$entry" "$tgt" "base_sha $base_sha resolves in neither repo"
@@ -2358,7 +2407,10 @@ layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?
 while IFS= read -r f; do
   [ "$ld_emit_failed" -eq 0 ] || break   # as in the overrides loop
   [ -n "$f" ] || continue
-  entry="$(rel "$f")"
+  # Staged through cr_read as in the overrides loop; `$f` below is the stage, `$entry` the name.
+  entry="$f"; f="$LD_T/entry-ext"
+  _st_rc=0; cr_read "$CONSUMER" "$entry" > "$f" 2>/dev/null; _st_rc=$?
+  if [ "$_st_rc" -ne 0 ] && cr_test "$CONSUMER" -r "$entry"; then ld_refuse_staging "staging the extension ${entry}" "$_st_rc"; fi
   hooks="$(fm "$f" hooks | awk '{print $1}')"
   [ -n "$hooks" ] || { emit EXTENSION-HOOK-MISSING "$entry" "?" "no hooks: frontmatter"; continue; }
   cp="$(dist_path "$hooks")"
@@ -2378,6 +2430,8 @@ while IFS= read -r f; do
   # escaping value binds nothing whether or not the path exists: it renders as UNBOUND, naming the
   # escape, and the filesystem is not consulted. This is the ONE reader of the value; the key relies
   # on it and keeps no copy of the rule.
+  # THE LIST IS WORD-SPLIT, NEVER GLOBBED: `set -f` (preamble) keeps `fixtures: x*` a literal word.
+  # Unglobbed, a value expanded against the caller's cwd tested a directory list no key field held.
   for fx in $(fm "$f" fixtures | tr ',' ' '); do
     [ -n "$fx" ] || continue
     case "$fx" in
@@ -2387,8 +2441,16 @@ while IFS= read -r f; do
         continue ;;
     esac
     case "$fx" in tests/fixtures/*) ;; *) fx="tests/fixtures/$fx" ;; esac
-    [ -d "$CONSUMER/$fx" ] || emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
-      "declares fixtures: $fx, which is not a directory in this consumer. H1 derives its coverage set from these bindings, so a dangling one reads exactly like coverage."
+    # cr_test answers 2 for a path it refuses; the case above already sends every such value to the
+    # escape row, so a 2 here is that same row, never a "not a directory".
+    _fx_rc=0; cr_test "$CONSUMER" -d "$fx" 2>/dev/null || _fx_rc=$?
+    if [ "$_fx_rc" -eq 2 ]; then
+      emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
+        "declares fixtures: $fx, which escapes tests/fixtures/ (a .. component or a leading /), so it binds no fixture and is not tested on disk. Name the fixture directory under tests/fixtures/."
+    elif [ "$_fx_rc" -ne 0 ]; then
+      emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
+        "declares fixtures: $fx, which is not a directory in this consumer. H1 derives its coverage set from these bindings, so a dangling one reads exactly like coverage."
+    fi
   done
 
   # Catalog reconciliation between this extension and the core file it hooks.

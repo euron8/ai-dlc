@@ -114,24 +114,23 @@
 #                value; the bytes (or `absent`) of the system attributes file `git var
 #                GIT_ATTR_SYSTEM` names; `git --version` and `--exec-path`; and the resolved path and
 #                binary `cksum` of awk, sed and sort;
-#   receipts     every path a live ledger `verify: sh` receipt names, by ledger-reverify.sh's own
-#                token extraction (`--receipt-tokens`), one row per token: its LEXICAL form (`.` and
-#                `..` resolved as text against the consumer root; a token that climbs above the root
-#                keeps its leading `../`) and `present` or `absent` by `[ -e ]` of the token AS
-#                ledger-reverify.sh spells it, the one test its absent-subject check makes. The label
-#                is text; the bit is the OS's own answer to the engine's own read, so no second path
-#                resolver decides anything and a symlink or a missing component on the way moves the
-#                bit exactly as it moves the engine's test. A `.git/` subject, an empty directory, an
-#                ignored file and a path under `.claude/worktrees/` are keyed here, read by no other
-#                field. A subject OUTSIDE every read root (er_read_roots; a token spelled with `.`
-#                or `..`, or under `.claude/worktrees/`, always counts as outside) that is a regular
-#                file also has its BYTES keyed, through er_hash_list, because a receipt can read its
-#                content; one inside a root is keyed by that root's own fields. An outside subject
-#                that is a symlink, a FIFO, socket or device, or an unreadable file is REFUSED;
-#                a directory or an absent one keeps the bit alone;
 #   region       the report region's hash after the dist-path normalisation below, which must equal
 #                the region of the render that passed -- an edit OUTSIDE the region still hits, one
-#                byte inside it misses.
+#                byte inside it misses;
+#   reads        THE CONSUMER-PATH AUTHORITY. Every closure script reads the consumer only through
+#                consumer-read.sh (cr_test, cr_read, cr_hash, cr_walk, cr_git, cr_run), which logs
+#                each access as the path the detector ASKED FOR plus the OS's answer now: presence
+#                and kind, exec and read bits and raw blob for a file, a hash over the whole typed
+#                listing for a walk. The record stores the render's log; a lookup re-takes every
+#                entry (cr_retake) and misses on any difference. So a path a detector resolved on
+#                its own -- a `hooks:` or `fixtures:` value, a bare `scripts/` path, a receipt
+#                subject, a case variant of a directory -- is keyed exactly as it was read, with no
+#                hand-listed root deciding. ledger-reverify.sh logs every `sh` receipt's subject
+#                tokens through cr_test before the receipt runs. consignored and its roots remain as
+#                a BELT for the programs run through cr_run (predicate validators, the consumer's own
+#                hook-registration validator, `sh` receipts), whose own reads no log can see.
+# The `!` entries consumer-read.sh writes, a symlink on any logged path or under any walk, and a path
+# read twice with two answers are REFUSED (er_log_entries).
 # REFUSED, a miss for both the hit and the record, because no field could see the input:
 #   - a directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read
 #     and search: git lists nothing beneath it;
@@ -155,16 +154,12 @@
 #   - a LISTED PATH THAT IS A DIRECTORY (an entry ending `/` in a git listing): a nested work tree
 #     or a non-ignored worktree under `.claude/worktrees/`, whose files git lists nowhere. Named
 #     `a listed path is a directory (a nested work tree or an unignored worktree): <path>`;
-#   - a live receipt subject OUTSIDE every read root that is a symlink, is neither a regular file
-#     nor a directory (a FIFO, socket or device), or is an unreadable regular file: its bytes cannot
-#     be keyed, and presence alone would let a receipt that reads it hit after its content changed;
-#   - the receipts field's token derivation failing (ledger-reverify.sh --receipt-tokens exits
-#     non-zero). Round 6's R4, a refusal of any receipt naming a `.git/` path, is GONE: the receipts
-#     field keys that subject's presence instead, whatever prefix spells it.
-# NOT REFUSED AND NOT KEYED, BECAUSE NOTHING READS IT: an extension's `fixtures:` value carrying a
-# `..` component or a leading `/`. layer-drift.sh, its one reader, emits EXTENSION-FIXTURE-UNBOUND
-# naming the escape and does not test the path, so the render does not depend on anything outside
-# the read roots.
+#   - N1 a SYMLINK AT `.claude/worktrees` itself, which consignored and the find guards prune;
+#   - any consumer path a detector asked for with a `..` component or a leading `/` (consumer-read.sh
+#     refuses the read itself and logs `!`), a read through any root other than the consumer's, a
+#     symlink on any logged path or under any logged walk (R2, now over the read log), and a path
+#     whose two reads during one render disagreed. The receipts field and its lexical label are
+#     GONE: a receipt subject is an ordinary logged read, so `docs/a/../d` is refused, not collapsed.
 # Every refusal names its cause on stderr when the cache is armed (`recorded PASS refused,
 # re-rendering: <cause>`), leaves the record untouched, and renders exactly as an unarmed run.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
@@ -178,8 +173,9 @@
 # THE LIMITS, STATED RATHER THAN HIDDEN. (1) The record is a CACHE, NOT AN ATTESTATION: anyone who
 # can write the git-dir can forge one, and `AI_DLC_VERIFY_NO_CACHE=1` (any non-empty value) forces a
 # fresh render for an operator who wants the detectors' own word. (2) `predicate-differential.sh`
-# runs validators with the consumer as cwd, so their read set is OPEN: an IGNORED file outside the
-# roots above that one of them reads is not keyed, and its change can leave a stale PASS accepted.
+# runs validators with the consumer as cwd (cr_run), so their read set is OPEN: the corpus records
+# and the paths in their `invoke:` arguments are logged, but an IGNORED file outside the consignored
+# roots that one of them opens on its own is not keyed, and its change can leave a stale PASS.
 # The same holds for the consumer's ledger `sh` receipts, which run with $DIST exported and can read
 # the dist's reflog or any other git state outside the key; `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
 # More widely, a ledger `verify: sh` receipt (ledger-reverify.sh runs it as `bash -c` at the consumer
@@ -208,6 +204,9 @@
 # work-tree fields as the report, so an edit to it outside the region still hits while the
 # detectors read the edited file. The report belongs at its own path; the opt-out re-renders.
 set -uo pipefail
+# NO PATHNAME EXPANSION ANYWHERE IN THE CLOSURE: an unquoted expansion that globbed against the cwd
+# read consumer (or caller) paths no key entry named. consumer-read.sh carries the reasoning.
+set -f
 
 MODE=print
 REPORT=""
@@ -222,6 +221,9 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# Every consumer path this file reads goes through consumer-read.sh's door, which logs it for the
+# recorded-PASS key below.
+. "$SELF/consumer-read.sh" || { echo "emit-report: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # The shared library is deliberately NOT dot-sourced here: this file calls none of its
 # functions directly, only sets up the shared cache directory below and hands it to the
 # sub-detector PROCESSES it execs, several of which load that library themselves. Loading
@@ -354,9 +356,8 @@ render() {
   # band has now fixed twice in other places, so a disagreement SAYS SO in the artifact the operator
   # approves from. An absent or unreadable stamp renders nothing rather than inventing a finding:
   # a consumer that has never been reconciled has no recorded base to disagree with.
-  _rendered_stamp="$CONSUMER/.claude/.ai-dlc-version"
-  if [ -f "$_rendered_stamp" ]; then
-    _rendered_base="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_rendered_stamp" | head -1)"
+  if cr_test "$CONSUMER" -f .claude/.ai-dlc-version; then
+    _rendered_base="$(cr_read "$CONSUMER" .claude/.ai-dlc-version | sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)"
     _stamp_moved=0
     if [ -n "$_rendered_base" ] && ! [ "$BASE" = "$_rendered_base" ]; then
       _stamp_obj="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}^{commit}" 2>/dev/null)" || _stamp_obj=""
@@ -504,7 +505,17 @@ render() {
     printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
     | while IFS="$(printf '\t')" read -r cp cons; do
         [ -n "${cp:-}" ] || continue
-        local_ours="$CONSUMER/$cons"
+        # OURS IS DIFFED IN PLACE: `$local_ours` is the consumer's own path, handed out by cr_path,
+        # which logs the read with its content hash, writes nothing and forks nothing. Each property
+        # has a reader: the orientation's refusal shims key on the second operand ENDING in the
+        # consumer path; the A7 race harness shadows `diff` with a shell function and binds
+        # `local_ours`, so the call is a plain `er_pdiff` reached from this shell; and BL-360's
+        # calibration (c) needs no write ahead of the site. A staged copy failed under a file-size
+        # limit before the sample could (a 602-line OURS refused at the copy, its OURS/THEIRS lines
+        # gone), and a link forked `ln` and `mkdir`, tools most fixtures' farms do not declare. A
+        # `cons` path is map_consumer's answer and carries no `..`; a refused (2) path is a refusal
+        # row, never "OURS absent".
+        local_ours="$(cr_path "$CONSUMER" "$cons")"; o_rc=$?
         echo
         echo "  $cp"
         # `diff THEIRS OURS`: '<' lines are THEIRS, '>' lines are OURS. Stated because getting
@@ -545,7 +556,9 @@ render() {
           echo "DETECTOR-REFUSED  orientation read of ${cp} at ${THEIRS} failed (ls-tree exited ${t_ls_rc}, show exited ${t_rc}), so THEIRS is NOT absent and this file's sample is NOT a finding of 'none'."
         elif [ -z "$t" ]; then
           echo "    THEIRS absent at ${THEIRS} — nothing upstream to compare"
-        elif [ ! -f "$local_ours" ]; then
+        elif [ "$o_rc" != 0 ] && [ "$o_rc" != 1 ]; then
+          echo "DETECTOR-REFUSED  orientation read of OURS at ${cons} failed (${o_rc}), so OURS is NOT absent and this file's sample is NOT a finding of 'none'."
+        elif [ "$o_rc" = 1 ]; then
           echo "    OURS absent at ${cons} — nothing consumer-side to compare"
         else
           echo "    OURS   $cons ($(wc -l < "$local_ours" | tr -d ' ') lines)"
@@ -621,7 +634,11 @@ render() {
           # The escape hatch, printed for EVERY file so a truncated sample is never the only
           # thing available. Same argument order as above: theirs on the left, ours on the
           # right, so '<' stays THEIRS and '>' stays OURS in the operator's own terminal too.
-          echo "      full: diff <(git -C $DIST show ${THEIRS}:${cp}) $CONSUMER/$cons   # '<' THEIRS, '>' OURS"
+          # Text, not a read: the operator's own reproduction command. The format and its operands
+          # sit on two lines so the closure's read-site scanner does not read `diff` beside the
+          # consumer root as a diff of it.
+          printf "      full: diff <(git -C %s show %s:%s) %s/%s   # '<' THEIRS, '>' OURS\n" \
+            "$DIST" "$THEIRS" "$cp" "$CONSUMER" "$cons"
 
           # ---- RETIRED CONTRACT TOKENS -----------------------------------------
           # The one class of merge defect the sample above CANNOT surface: upstream
@@ -766,8 +783,12 @@ render() {
       awk '{ i = index($0, "bash /"); if (i) { r = substr($0, i + 5); s = index(r, " "); w = s ? substr(r, 1, s - 1) : r
                n = length(ENVIRON["HRB"]); if (length(w) > n && substr(w, length(w) - n) == "/" ENVIRON["HRB"]) $0 = substr($0, 1, i + 4) ENVIRON["HRI"] (s ? substr(r, s) : "") }
              print }')" && [ -n "$hrs" ] && hro="$hrs"
-  elif [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
-    hro="$(bash "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" --root "$CONSUMER" 2>&1)"
+  elif cr_test "$CONSUMER" -x scripts/ai-dlc/validate-hook-registration.sh; then
+    # The consumer's OWN copy runs: its bytes are logged by the test above, its reads by nothing
+    # (`x`, the same open read set as cr_run's).
+    # Run by its root-relative name from the root: `cd scripts/ai-dlc && pwd` inside it resolves to
+    # the same logical directory the absolute spelling did, so the printed self path is unchanged.
+    hro="$(cr_run "$CONSUMER" bash scripts/ai-dlc/validate-hook-registration.sh --root "$CONSUMER" 2>&1)"
   else
     hro="  validator absent at ${THEIRS}:core/scripts/validate-hook-registration.sh and on the consumer — NOT CHECKED (this is not a pass)"
   fi
@@ -1059,12 +1080,12 @@ got="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED
 # --- THE RECORDED PASS (the header's "A RECORDED PASS" block owns the key and its limits) ---------
 # Every helper returns non-zero on any failure, and every caller reads that as a MISS.
 _er_root=""; _er_gd=""; _er_rel=""; _er_ex=""; _er_rec=""; _er_key0=""
-if [ -n "$_er_tmp" ] && _er_root="$(cd "$CONSUMER" 2>/dev/null && pwd -P)" && [ -n "$_er_root" ]; then
-  _er_top="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || _er_top=""
+if [ -n "$_er_tmp" ] && _er_root="$(cr_run "$CONSUMER" pwd -P 2>/dev/null)" && [ -n "$_er_root" ]; then
+  _er_top="$(cr_git "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || _er_top=""
   # The TOP LEVEL only: a consumer that is a subdirectory of some other repository (a fixture world
   # under a checkout) would key on part of a tree and record into a git-dir that is not its own.
-  if [ -n "$_er_top" ] && [ "$(cd "$_er_top" 2>/dev/null && pwd -P)" = "$_er_root" ]; then
-    _er_gd="$(git -C "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _er_gd=""
+  if [ -n "$_er_top" ] && [ "$(cr_run "$_er_top" pwd -P 2>/dev/null)" = "$_er_root" ]; then
+    _er_gd="$(cr_git "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _er_gd=""
   fi
   if [ -n "$_er_gd" ] && [ -d "$_er_gd" ]; then
     _er_rec="$_er_gd/ai-dlc-verify-pass"
@@ -1082,8 +1103,8 @@ fi
 # `core.trustctime=true` and `core.checkStat=default` for the same reason: a consumer that relaxes
 # either lets status trust a stat entry that a same-size rewrite left looking current.
 er_cgit() {
-  if [ -n "$_er_ex" ]; then git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"
-  else git -C "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi
+  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"
+  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi
 }
 # er_link_inside <abs-path> -- 0 when the symlink chain at <abs-path> ends at an existing path whose
 # directory resolves INSIDE the consumer root. The key hashes a link's own blob, while the detectors
@@ -1129,9 +1150,9 @@ er_hash_list() {
   : > "$_er_tmp/key.nl" || return 1
   while IFS= read -r -d '' p; do
     case "$p" in */) er_refuse "a listed path is a directory (a nested work tree or an unignored worktree): $p"; return 1 ;; esac
-    if [ -L "$CONSUMER/$p" ]; then printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" || return 1; fi
-    { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
-    if [ -x "$CONSUMER/$p" ]; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
+    if cr_test "$CONSUMER" -L "$p"; then printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" || return 1; fi
+    { cr_test "$CONSUMER" -e "$p" || cr_test "$CONSUMER" -L "$p"; } || continue
+    if cr_test "$CONSUMER" -x "$p"; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
     case "$p" in
       *"$_er_nl"*) printf '%s\0' "$p" >> "$_er_tmp/key.nl" || return 1 ;;
       *)           printf '%s\n' "$p" >> "$_er_tmp/key.exist" || return 1 ;;
@@ -1139,7 +1160,7 @@ er_hash_list() {
   done < "$1"
   er_hash_paths "$_er_root" "$_er_tmp/key.exist" || return 1
   while IFS= read -r -d '' p; do
-    h="$(git hash-object --no-filters -- "$_er_root/$p")" || return 1
+    h="$(cr_hash "$_er_root" "$p")" || return 1
     printf '%s\n' "$h"
   done < "$_er_tmp/key.nl"
 }
@@ -1213,7 +1234,7 @@ er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
 # is a MISS. A tracked SYMLINK (120000) never reaches here: er_key's R2 refuses it first.
 er_kf_consindex() {
   local e
-  git -C "$CONSUMER" ls-files -s -z > "$_er_tmp/key.idx" || return 1
+  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.idx" || return 1
   cat "$_er_tmp/key.idx" || return 1
   while IFS= read -r -d '' e; do
     case "$e" in
@@ -1237,12 +1258,12 @@ er_kf_consindex() {
 # misalign, answers 0: keying more is the safe direction.
 er_normalises() {
   local v nl
-  v="$(git -C "$CONSUMER" config --get core.autocrlf 2>/dev/null)" || v=""
+  v="$(cr_git "$CONSUMER" config --get core.autocrlf 2>/dev/null)" || v=""
   case "$v" in ""|false) ;; *) return 0 ;; esac
-  git -C "$CONSUMER" config --get core.eol >/dev/null 2>&1 && return 0
-  git -C "$CONSUMER" ls-files -z > "$_er_tmp/key.trk" 2>/dev/null || return 0
+  cr_git "$CONSUMER" config --get core.eol >/dev/null 2>&1 && return 0
+  cr_git "$CONSUMER" ls-files -z > "$_er_tmp/key.trk" 2>/dev/null || return 0
   [ -s "$_er_tmp/key.trk" ] || return 1
-  git -C "$CONSUMER" check-attr -z --stdin text eol filter ident < "$_er_tmp/key.trk" > "$_er_tmp/key.ca" 2>/dev/null \
+  cr_git "$CONSUMER" check-attr -z --stdin text eol filter ident < "$_er_tmp/key.trk" > "$_er_tmp/key.ca" 2>/dev/null \
     || return 0
   nl="$(LC_ALL=C tr -cd '\n' < "$_er_tmp/key.ca" | wc -c)" || return 0
   [ "$nl" -eq 0 ] || return 0
@@ -1299,16 +1320,28 @@ er_read_roots() {
     printf '%s\n' "$r" || return 1
   done < "$_er_tmp/key.croots"
 }
+# er_is_worktrees_dir <rel> -- 0 when <rel>'s first two components name the SAME directory as
+# `.claude/worktrees` (one inode, by `-ef`), whatever their case; a case variant that is a different
+# directory, or a consumer with no worktrees directory, answers 1 and stays keyed.
+er_is_worktrees_dir() {
+  local two rest
+  case "$1" in */*/*) ;; *) return 1 ;; esac
+  # Parameter expansion only: this runs once per ignored entry, so no fork.
+  rest="${1#*/}"; two="${1%%/*}/${rest%%/*}"
+  cr_test "$_er_root" -d .claude/worktrees || return 1
+  cr_test "$_er_root" -d "$two" || return 1
+  [ "$_er_root/$two" -ef "$_er_root/.claude/worktrees" ]
+}
 er_kf_consignored() {
   local r
   er_read_roots > "$_er_tmp/key.roots" || return 1
   : > "$_er_tmp/key.ign" || return 1
   while IFS= read -r r; do
     if [ -n "$_er_ex" ]; then
-      git -C "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
+      cr_git "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
         ':(exclude).claude/worktrees' ":(exclude,literal)$_er_ex" >> "$_er_tmp/key.ign" || return 1
     else
-      git -C "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
+      cr_git "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
         ':(exclude).claude/worktrees' >> "$_er_tmp/key.ign" || return 1
     fi
   done < "$_er_tmp/key.roots"
@@ -1325,9 +1358,14 @@ er_kf_consignored() {
   # The pathspec stays: it still prunes the plain files git does list one by one. An UNIGNORED
   # worktree is untouched by this: conswork's `ls-files -o` lists it, and er_hash_list refuses it
   # by name there.
+  # B4: the prune is NOT keyed on the spelling `.claude/worktrees/` alone. On a case-insensitive volume
+  # `.claude/WORKTREES/x` names the same directory, and git lists it under whatever spelling the entry
+  # carries on disk, so a case variant is dropped only when it IS the worktrees directory (same inode
+  # pair as `.claude/worktrees`); one that is a different directory stays keyed.
   : > "$_er_tmp/key.ign-pruned" || return 1
   while IFS= read -r -d '' r; do
     case "$r" in .claude/worktrees/*) continue ;; esac
+    if er_is_worktrees_dir "$r"; then continue; fi
     printf '%s\0' "$r" >> "$_er_tmp/key.ign-pruned" || return 1
   done < "$_er_tmp/key.ign"
   # Roots can nest, so one file can be listed twice; NUL-separated sort, and a failure is a miss.
@@ -1339,8 +1377,8 @@ er_kf_consignored() {
   echo "empty-dirs"
   : > "$_er_tmp/key.edirs" || return 1
   while IFS= read -r r; do
-    [ -d "$CONSUMER/$r" ] || continue
-    find "$_er_root/$r" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d -empty -print0 \
+    cr_test "$CONSUMER" -d "$r" || continue
+    cr_walk "$_er_root" "$r" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d -empty -print0 \
       >> "$_er_tmp/key.edirs" || return 1
   done < "$_er_tmp/key.roots"
   LC_ALL=C sort -z -u "$_er_tmp/key.edirs" || return 1
@@ -1348,9 +1386,9 @@ er_kf_consignored() {
 # The consumer's refs, then its EFFECTIVE config (local, global through $HOME, system): config moves
 # what git prints, and an override's `log -1 --format=%s` runs here.
 er_kf_consobjects() {
-  git -C "$CONSUMER" for-each-ref || return 1
+  cr_git "$CONSUMER" for-each-ref || return 1
   echo "config"
-  git -C "$CONSUMER" config --list || return 1
+  cr_git "$CONSUMER" config --list || return 1
   er_repo_files "$CONSUMER" || return 1
 }
 # er_file_or_absent <label> <path> -- the label, then the path's content hash or `absent`.
@@ -1365,14 +1403,15 @@ er_file_or_absent() {
 # repo's config resolves it (`core.attributesFile`, else XDG, else $HOME), asked of git itself.
 er_repo_files() {
   local cd g
-  cd="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir)" || return 1
+  # cr_git for both repos: logging is off inside er_key, so a dist root logs nothing.
+  cd="$(cr_git "$1" rev-parse --path-format=absolute --git-common-dir)" || return 1
   er_file_or_absent info/attributes "$cd/info/attributes" || return 1
   er_file_or_absent info/grafts "$cd/info/grafts" || return 1
   er_file_or_absent alternates "$cd/objects/info/alternates" || return 1
   # git before 2.42 has no `git var GIT_ATTR_GLOBAL`: its documented order is used instead.
-  g="$(git -C "$1" var GIT_ATTR_GLOBAL 2>/dev/null)" || g=""
+  g="$(cr_git "$1" var GIT_ATTR_GLOBAL 2>/dev/null)" || g=""
   if [ -z "$g" ]; then
-    g="$(git -C "$1" config --path core.attributesFile 2>/dev/null)" || g=""
+    g="$(cr_git "$1" config --path core.attributesFile 2>/dev/null)" || g=""
     [ -n "$g" ] || g="${XDG_CONFIG_HOME:-${HOME:-}/.config}/git/attributes"
   fi
   er_file_or_absent global-attributes "$g" || return 1
@@ -1384,15 +1423,15 @@ er_repo_files() {
 er_kf_consresolve() {
   local f v
   : > "$_er_tmp/key.rv" || return 1
-  if [ -f "$CONSUMER/.claude/.ai-dlc-version" ]; then
-    sed -n 's/^\(skill_\)\{0,1\}commit:[[:space:]]*\([^[:space:]]*\).*/\2/p' "$CONSUMER/.claude/.ai-dlc-version" \
+  if cr_test "$CONSUMER" -f .claude/.ai-dlc-version; then
+    cr_read "$CONSUMER" .claude/.ai-dlc-version | sed -n 's/^\(skill_\)\{0,1\}commit:[[:space:]]*\([^[:space:]]*\).*/\2/p' \
       >> "$_er_tmp/key.rv" || return 1
   fi
-  if [ -d "$CONSUMER/.claude/skills/ai-dlc/overrides" ]; then
-    find "$CONSUMER/.claude/skills/ai-dlc/overrides" -type f -name '*.md' > "$_er_tmp/key.ovr" || return 1
+  if cr_test "$CONSUMER" -d .claude/skills/ai-dlc/overrides; then
+    cr_walk "$CONSUMER" .claude/skills/ai-dlc/overrides -type f -name '*.md' > "$_er_tmp/key.ovr" || return 1
     while IFS= read -r f; do
-      awk 'NR==1 && $0=="---" { inf=1; next } inf && $0=="---" { exit }
-           inf && index($0, "base_sha:")==1 { sub("^base_sha:[[:space:]]*", ""); print; exit }' "$f" \
+      cr_read "$CONSUMER" "$f" | awk 'NR==1 && $0=="---" { inf=1; next } inf && $0=="---" { exit }
+           inf && index($0, "base_sha:")==1 { sub("^base_sha:[[:space:]]*", ""); print; exit }' \
         >> "$_er_tmp/key.rv" || return 1
     done < "$_er_tmp/key.ovr"
   fi
@@ -1401,7 +1440,7 @@ er_kf_consresolve() {
     [ -n "$v" ] || continue
     printf '%s\0' "$v"
     git -C "$DIST" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
-    git -C "$CONSUMER" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
+    cr_git "$CONSUMER" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
   done < "$_er_tmp/key.rv-sorted"
 }
 er_kf_env() {
@@ -1444,94 +1483,6 @@ er_kf_env() {
     if [ -f "$_tp" ]; then cksum < "$_tp" || return 1; else echo "not-a-file"; fi
   done
 }
-# er_receipt_rows <token-file> <root> -- one row per token line: `<lexical form>TAB<present|absent>`.
-# SELF-CONTAINED (no $_er_tmp, no global) so a fixture can extract and run it alone.
-# The LABEL is the token with `.` and `..` components resolved as TEXT against <root>; a token that
-# climbs above it keeps one leading `../` per level climbed, so it can never read as an in-tree path.
-# THE BIT IS NOT DERIVED FROM THE LABEL. It is `[ -e "<root>/<token>" ]` on the token exactly as
-# ledger-reverify.sh spells its own test, so the OS walks the same components in the same order: a
-# missing `docs/` before `..`, or a symlinked component, moves the bit exactly as it moves the
-# engine's answer. A lexical `present` would be a second path resolver, and it disagrees with the OS
-# precisely there (`docs/../.git/x` with no `docs/` is absent to the OS and present to the text).
-# Tokens carry only `[A-Za-z0-9_./$-]` (ledger-reverify.sh's split), so no tab or newline can
-# misalign a row.
-er_receipt_rows() {
-  local t n
-  awk '{ k = split($0, a, "/"); d = 0; up = 0
-         for (i = 1; i <= k; i++) {
-           if (a[i] == "" || a[i] == ".") continue
-           if (a[i] == "..") { if (d > 0) d--; else up++; continue }
-           s[++d] = a[i]
-         }
-         o = ""; for (i = 1; i <= up; i++) o = o "../"
-         for (i = 1; i <= d; i++) o = o (i > 1 ? "/" : "") s[i]
-         if (o == "") o = "."
-         printf "%s\t%s\n", o, $0 }' "$1" > "$1.lex" || return 1
-  while IFS="$(printf '\t')" read -r n t; do
-    [ -n "$t" ] || continue
-    if [ -e "$2/$t" ]; then printf '%s\tpresent\n' "$n"; else printf '%s\tabsent\n' "$n"; fi
-  done < "$1.lex"
-}
-# The receipts field: every SUBJECT row er_key staged from ledger-reverify.sh --receipt-tokens, one
-# row each, sorted and unique so two spellings of one subject are one row; then the CONTENT of every
-# subject outside the read roots that is a regular file.
-#
-# PRESENCE IS NOT ENOUGH FOR A FILE NO OTHER FIELD READS. A receipt runs arbitrary shell, so one that
-# READS a subject (`grep -q x .git/config`) moves with its bytes, not only with its existence: keyed
-# by presence alone it recorded and then HIT after the bytes changed. So a subject whose path lies
-# OUTSIDE every read root and is a regular file has its bytes keyed through er_hash_list, the hasher
-# consindex and consignored already use (exec bit and name, then `git hash-object --no-filters`).
-# A directory or an absent subject keeps the present/absent bit alone.
-#
-# A SUBJECT INSIDE A READ ROOT NEEDS NO HASH: its bytes are already keyed by that root's own fields --
-# consindex (tracked), conswork (modified and untracked, the whole tree) and consignored (ignored,
-# under exactly these roots, er_read_roots, the set R2 also walks). "Inside" is decided on the RAW
-# token, textually: no empty, `.` or `..` component, and equal to a root or below one. A token
-# spelled with `..` is never inside, whatever it resolves to, so a symlink on the way cannot carry a
-# lexically-inside spelling out of the tree unhashed; and `.claude/worktrees/` is never inside either,
-# because no content field keys it (consignored drops it by name over its NUL list, the find-based
-# guards prune it, and conswork lists only an UNIGNORED worktree there, which er_hash_list refuses). Treating a subject as OUTSIDE is the safe direction: it only adds
-# bytes to the key.
-#
-# WHAT CANNOT BE HASHED SAFELY IS REFUSED BY NAME, never keyed by presence: a subject outside the
-# roots that exists and is a symlink (er_hash_list would follow it), is not a regular file or
-# directory (a FIFO would block the read, a device has no stable bytes), or is a regular file the
-# user cannot read.
-er_kf_receipts() {
-  local t r inside
-  LC_ALL=C awk -F'\t' '$1 == "SUBJECT" { print $2 }' "$_er_tmp/key.r4" > "$_er_tmp/key.rsub" || return 1
-  er_receipt_rows "$_er_tmp/key.rsub" "$_er_root" > "$_er_tmp/key.rrows" || return 1
-  LC_ALL=C sort -u "$_er_tmp/key.rrows" || return 1
-  er_read_roots > "$_er_tmp/key.rroots" || return 1
-  [ -s "$_er_tmp/key.rroots" ] || return 1
-  : > "$_er_tmp/key.rhash" || return 1
-  LC_ALL=C sort -u "$_er_tmp/key.rsub" > "$_er_tmp/key.rsub-sorted" || return 1
-  while IFS= read -r t; do
-    [ -n "$t" ] || continue
-    inside=0
-    case "/$t/" in
-      *//*|*/./*|*/../*|/.claude/worktrees/*) ;;
-      *) while IFS= read -r r; do
-           case "$t" in "$r"|"$r"/*) inside=1; break ;; esac
-         done < "$_er_tmp/key.rroots" ;;
-    esac
-    [ "$inside" -eq 0 ] || continue
-    if [ -L "$_er_root/$t" ]; then
-      er_refuse "a receipt subject outside every read root is a symlink, whose target the key would have to follow: $t"; return 1
-    fi
-    [ -e "$_er_root/$t" ] || continue
-    [ -d "$_er_root/$t" ] && continue
-    if [ ! -f "$_er_root/$t" ]; then
-      er_refuse "a receipt subject outside every read root is not a regular file or a directory (a FIFO, socket or device has no bytes the key can hash): $t"; return 1
-    fi
-    if [ ! -r "$_er_root/$t" ]; then
-      er_refuse "a receipt subject outside every read root cannot be read, so its bytes cannot be keyed: $t"; return 1
-    fi
-    printf '%s\0' "$t" >> "$_er_tmp/key.rhash" || return 1
-  done < "$_er_tmp/key.rsub-sorted"
-  echo "content"
-  er_hash_list "$_er_tmp/key.rhash" || return 1
-}
 # The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
 # records only when the render equalled this region byte for byte, so the recorded value IS the
 # passing render's.
@@ -1542,7 +1493,8 @@ er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1;
 # er_key -- prints the key: sha256 over the `name=value` lines, one per field, each value the sha256 of that
 # field's material. Non-zero, and nothing usable, when any field could not be computed.
 er_key() {
-  local f v r p rest
+  # The key's OWN consumer reads are never logged: they are fields, and the log is the render's.
+  local f v r p rest CR_LOG=""
   [ -n "$_er_rec" ] || return 1
   : > "$_er_tmp/key.refused" || return 1
   # R1 A NON-BARE DIST IS A MISS. Its work tree carries a `.gitattributes` and a checkout no field
@@ -1564,14 +1516,14 @@ er_key() {
   # chmod 000 hides its whole subtree from every field above while the detectors render it as
   # absent (measured: cached 0, fresh 1). Any such directory refuses both the hit and the record.
   # The prune list (.git, .claude/worktrees) is the set the key does not read.
-  _er_unread="$(find "$_er_root" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
+  _er_unread="$(cr_walk "$_er_root" . \( -name .git -o -path "$_er_root/./.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
     || return 1
   [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }
   # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS. Every git listing skips it, repository or
   # not, while a detector's `find` reads beneath it (measured: a non-repo overrides/.git/o.md cached 0
   # where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE). The consumer's own top-level `.git`
   # and `.claude/worktrees` are pruned, as above.
-  _er_dotgit="$(find "$_er_root" \( -path "$_er_root/.git" -o -path "$_er_root/.claude/worktrees" \) -prune \
+  _er_dotgit="$(cr_walk "$_er_root" . \( -path "$_er_root/./.git" -o -path "$_er_root/./.claude/worktrees" \) -prune \
     -o -name .git -print 2>/dev/null)" || return 1
   [ -z "$_er_dotgit" ] || { er_refuse "a path component named .git lies below the consumer root, which every git listing skips"; return 1; }
   # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
@@ -1579,12 +1531,12 @@ er_key() {
   # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
   # sets the first flag on every file git adds. Keying the flags cannot help: they are set before the
   # record, so both sides would match. Refused instead, read from the NUL-separated listing.
-  git -C "$CONSUMER" ls-files -v -z > "$_er_tmp/key.tags" || return 1
+  cr_git "$CONSUMER" ls-files -v -z > "$_er_tmp/key.tags" || return 1
   # Staged to a file before the grep: `grep -q` at the end of a pipe under pipefail can report the
   # writer's EPIPE, which would read a flagged index as clean.
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.tags" | LC_ALL=C cut -c1 > "$_er_tmp/key.tag1" || return 1
   LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && { er_refuse "an assume-unchanged or skip-worktree flag hides work-tree edits from status"; return 1; }
-  case "$(git -C "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1 ;; esac
+  case "$(cr_git "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1 ;; esac
   # AN INHERITED MEMO IS A MISS: a reconcile memo directory handed in by a caller holds answers no
   # field here can see, and a stale one feeds the render.
   [ -z "$_er_memo_in" ] || { er_refuse "an inherited AI_DLC_RECONCILE_MEMO holds answers another process cached"; return 1; }
@@ -1595,54 +1547,99 @@ er_key() {
   # (measured: scripts -> an outside dir, an edit there cached 0 where a fresh render gave 1); and
   # any link UNDER a root, tracked, untracked or ignored, is a read the key follows nowhere. The
   # roots are er_read_roots, the set consignored lists.
-  git -C "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
+  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.r2idx" > "$_er_tmp/key.r2lines" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
   if LC_ALL=C grep -q '^120000 ' "$_er_tmp/key.r2lines"; then
     er_refuse "R2 the consumer tracks a symlink (mode 120000), whose target the key does not follow"; return 1
   fi
   er_read_roots > "$_er_tmp/key.r2roots" || { er_refuse "R2 the read roots could not be derived"; return 1; }
   while IFS= read -r r; do
-    p="$_er_root"; rest="$r"
+    p=""; rest="$r"
     while [ -n "$rest" ]; do
-      p="$p/${rest%%/*}"
+      p="${p:+$p/}${rest%%/*}"
       case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
-      if [ -L "$p" ]; then er_refuse "R2 the read root '$r' is reached through a symlink (${p#"$_er_root"/})"; return 1; fi
-      [ -e "$p" ] || break
+      if cr_test "$_er_root" -L "$p"; then er_refuse "R2 the read root '$r' is reached through a symlink ($p)"; return 1; fi
+      cr_test "$_er_root" -e "$p" || break
     done
-    [ -d "$_er_root/$r" ] || continue
-    find "$_er_root/$r" -path "$_er_root/.claude/worktrees" -prune -o -type l -print > "$_er_tmp/key.r2links" 2>/dev/null \
+    cr_test "$_er_root" -d "$r" || continue
+    cr_walk "$_er_root" "$r" -path "$_er_root/.claude/worktrees" -prune -o -type l -print > "$_er_tmp/key.r2links" 2>/dev/null \
       || { er_refuse "R2 the read root '$r' could not be searched for symlinks"; return 1; }
     if [ -s "$_er_tmp/key.r2links" ]; then
       er_refuse "R2 a symlink lies under the read root '$r' ($(sed -n 1p "$_er_tmp/key.r2links"))"; return 1
     fi
   done < "$_er_tmp/key.r2roots"
-  # THE RECEIPT SUBJECTS, for the receipts field. ledger-reverify.sh tests whether each path an `sh`
-  # receipt names exists (`[ -e "$CONSUMER/$p" ]`), and several of those paths are read by no other
-  # field: a `.git/` path under any spelling (`docs/../.git/x` passed round 6's `.git/` prefix
-  # refusal), an empty directory, an ignored file outside every read root, a path under
-  # `.claude/worktrees/` (measured: each removed after the record cached 0 where a fresh render gave
-  # 1). Round 6 REFUSED the `.git/` prefix; this KEYS every subject instead, so no spelling escapes.
-  # The token set is ledger-reverify.sh's OWN extraction, run in its `--receipt-tokens` mode, so
-  # there is no second grammar here. `"$BASH"`, not `bash`: the key launches no detector through PATH.
-  "$BASH" "$SELF/ledger-reverify.sh" --receipt-tokens "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$_er_tmp/key.r4" 2>/dev/null \
-    || { er_refuse "the ledger's receipt tokens could not be derived (ledger-reverify.sh --receipt-tokens failed)"; return 1; }
+  # N1 A SYMLINK AT `.claude/worktrees` IS A MISS. consignored drops every ignored entry under that
+  # prefix by name and the find-based guards prune it by path, so a link there would carry whatever
+  # it points at past every field; a worktree directory is never a link.
+  if cr_test "$_er_root" -L .claude/worktrees; then
+    er_refuse "R2 .claude/worktrees is a symlink, which every pruned listing would follow nowhere"; return 1
+  fi
   : > "$_er_tmp/key.block" || return 1
-  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env receipts region; do
+  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
     "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
     v="$(er_sha256 "$_er_tmp/key.f.$f")" || return 1
     printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
   done
   er_sha256 "$_er_tmp/key.block"
 }
-# er_cache_record -- called ONLY on the exit-0 path, after the render. Writes only when the key taken
-# AFTER the render equals the one taken before it. Silent on every failure.
+# THE READ LOG IS THE KEY'S CONSUMER-PATH AUTHORITY. Every closure script reads the consumer through
+# consumer-read.sh, which appends `<kind> TAB <rel> TAB <value>` to $CR_LOG for each test, read, hash,
+# walk and git command (its header defines the values). The render runs with CR_LOG exported, so the
+# log names exactly the consumer paths THIS render resolved -- whatever spelling a detector built,
+# whatever root it walked -- and the record stores those entries. A lookup re-takes every stored
+# entry through the OS (cr_retake) and misses on any difference. The hand-listed read roots are no
+# longer what decides which consumer paths are keyed; they survive only as consignored's belt below.
+#
+# er_log_entries <log> -- the log's entries, sorted and unique, on stdout; non-zero (a refusal named
+# through er_refuse) when the log holds an entry the key cannot re-take: `!` (a refused `..` or
+# absolute path, a root other than the consumer, a name with a tab or newline), any `L` value (a
+# symlink on a logged path or under a walk, R2's subject now that the read set is the log), or one
+# path logged with two different values (it moved during the render).
+er_log_entries() {
+  [ -f "$1" ] || { er_refuse "the consumer read log was not written"; return 1; }
+  LC_ALL=C sort -u "$1" > "$_er_tmp/key.log-sorted" || return 1
+  if LC_ALL=C grep -q '^!' "$_er_tmp/key.log-sorted"; then
+    er_refuse "a detector asked for a consumer path the read log cannot re-take ($(LC_ALL=C grep -m1 '^!' "$_er_tmp/key.log-sorted" | tr '\t' ' '))"; return 1
+  fi
+  if LC_ALL=C awk -F'\t' '$3 ~ /^L / { exit 0 } END { exit 1 }' "$_er_tmp/key.log-sorted"; then
+    er_refuse "R2 a symlink lies on a consumer path a detector read ($(LC_ALL=C awk -F'\t' '$3 ~ /^L / { print $2; exit }' "$_er_tmp/key.log-sorted"))"; return 1
+  fi
+  if ! LC_ALL=C awk -F'\t' '{ k = $1 FS $2; if (k in v && v[k] != $3) exit 1; v[k] = $3 }' "$_er_tmp/key.log-sorted"; then
+    er_refuse "a consumer path read twice during the render gave two different answers"; return 1
+  fi
+  cat "$_er_tmp/key.log-sorted"
+}
+# er_log_retake <entries-file> -- 0 when every entry re-takes to the same value now. Logging OFF: a
+# re-take must not append to the log it is checking.
+er_log_retake() {
+  ( CR_LOG=""; cr_retake "$_er_root" "$1" ) > "$_er_tmp/key.retake" 2>/dev/null || return 1
+  # Compared in this shell with builtins, never by `cmp`: a fixture farm need not declare it, and a
+  # fork here would turn a missing tool into a miss nobody could name. Line logs, compared line by line.
+  local _a _b _ra _rb
+  exec 8< "$1" 9< "$_er_tmp/key.retake" || return 1
+  while :; do
+    IFS= read -r _a <&8; _ra=$?
+    IFS= read -r _b <&9; _rb=$?
+    [ "$_ra" -eq "$_rb" ] && [ "$_a" = "$_b" ] || { exec 8<&- 9<&-; return 1; }
+    [ "$_ra" -eq 0 ] || break
+  done
+  exec 8<&- 9<&-
+  return 0
+}
+# er_cache_record -- called ONLY on the exit-0 path, after the render. Writes only when the fixed key
+# taken AFTER the render equals the one taken before it AND every logged read re-takes to the value it
+# had when the detector made it. The record carries the fixed key and the log's entries. Silent on
+# every failure.
 er_cache_record() {
   local k1 t
   [ -n "$_er_key0" ] || return 0
+  [ -n "${CR_LOG:-}" ] || return 0
   k1="$(er_key)" || return 0
   [ "$k1" = "$_er_key0" ] || return 0
+  er_log_entries "$CR_LOG" > "$_er_tmp/key.log-entries" 2>/dev/null || return 0
+  er_log_retake "$_er_tmp/key.log-entries" || return 0
   t="$(mktemp "$_er_gd/ai-dlc-verify-pass.XXXXXX" 2>/dev/null)" || return 0
-  if printf 'ai-dlc-verify-pass 1\nkey %s\n' "$k1" > "$t" 2>/dev/null; then
+  if { printf 'ai-dlc-verify-pass 2\nkey %s\n' "$k1" && sed 's/^/read	/' "$_er_tmp/key.log-entries"; } > "$t" 2>/dev/null; then
     mv -f "$t" "$_er_rec" 2>/dev/null || rm -f "$t"
   else
     rm -f "$t"
@@ -1659,13 +1656,26 @@ fi
 if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] \
    && [ -f "$_er_rec" ]; then
   _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"
-  if [ -n "$_er_rk" ] && [ "$_er_rk" = "$_er_key0" ]; then
+  # A version-1 record (no read log) is a MISS: its first line no longer matches. The stored reads
+  # are re-taken only after the fixed key matched; a record carrying no read at all is a miss too,
+  # because every render reads the consumer.
+  if [ -n "$_er_rk" ] && [ "$_er_rk" = "$_er_key0" ] \
+     && [ "$(sed -n 1p "$_er_rec" 2>/dev/null)" = "ai-dlc-verify-pass 2" ] \
+     && sed -n 's/^read	//p' "$_er_rec" > "$_er_tmp/key.rec-reads" 2>/dev/null \
+     && [ -s "$_er_tmp/key.rec-reads" ] \
+     && er_log_retake "$_er_tmp/key.rec-reads"; then
     echo "emit-report: the report's mechanical region is present, current, and complete."
     echo "emit-report: accepted a recorded PASS (${_er_rec}); nothing was re-rendered. Set AI_DLC_VERIFY_NO_CACHE=1 to re-render."
     exit 0
   fi
 fi
 
+# THE RENDER LOGS ITS CONSUMER READS whenever a record could be written from it, and only then: the
+# log costs one hash per read. Exported, so every detector process the render runs appends to it.
+if [ -n "$_er_key0" ]; then
+  CR_LOG="$_er_tmp/reads.log"; CR_ROOT="$_er_root"
+  if : > "$CR_LOG"; then export CR_LOG CR_ROOT; else CR_LOG=""; fi
+fi
 want="$(render | norm_dist)"
 if [ -z "$got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2

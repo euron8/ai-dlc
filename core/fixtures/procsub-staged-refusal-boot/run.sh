@@ -1559,14 +1559,14 @@ if sg lrpe; then
     || mutreport M-L3
   # The walk and its sort are four lines (two commands, each with its `|| pc_refuse` continuation);
   # all four go, and the reader line gets the base substitution back, in one copy.
-  d="$(START='  find "$CONS/$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
+  d="$(START='  cr_walk "$CONS" "$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
        END='    || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"' NFI=1 NEW='' \
-       OLD='  done < "$PC_STAGE/orphan-sorted"' NEW2='  done < <(find "$CONS/$old_prefix" -type f 2>/dev/null | sort)' \
+       OLD='  done < "$PC_STAGE/orphan-sorted"' NEW2='  done < <(cr_walk "$CONS" "$old_prefix" -type f 2>/dev/null | sort)' \
        mut M-P1 preclassify.sh '!inb && $0==ENVIRON["START"] {inb=1; next}
              inb { if ($0==ENVIRON["END"]) inb=0; next }
              $0==ENVIRON["OLD"] {print ENVIRON["NEW2"]; next} {print}' \
-         '  done < <(find "$CONS/$old_prefix" -type f 2>/dev/null | sort)' 'orphan-walk' \
-         '  find "$CONS/$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
+         '  done < <(cr_walk "$CONS" "$old_prefix" -type f 2>/dev/null | sort)' 'orphan-walk' \
+         '  cr_walk "$CONS" "$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \' \
          '    || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"' \
          '  done < "$PC_STAGE/orphan-sorted"')" \
     && score M-P1 P1 "$d" \

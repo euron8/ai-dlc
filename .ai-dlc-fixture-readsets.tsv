@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 38    entries: 706
+# fixtures mapped: 38    entries: 705
 architecture-fast-track	core
 architecture-fast-track	core/fixtures
 architecture-fast-track	core/fixtures/architecture-fast-track
@@ -481,6 +481,7 @@ layer-title-join	core/skills/ai-dlc-update/reconcile
 layer-title-join	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/apply.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/classify-block.md
+layer-title-join	core/skills/ai-dlc-update/reconcile/consumer-read.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/dist-clone.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/emit-report.sh
@@ -512,9 +513,6 @@ layer-title-join	core/skills/ai-dlc-update/reconcile/setup-sites.md
 layer-title-join	core/skills/ai-dlc-update/reconcile/template-sites.md
 layer-title-join	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 layer-title-join	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
-layer-title-join	nowhere
-layer-title-join	steps
-layer-title-join	team-roles
 notify-hook-channel	.gitignore
 notify-hook-channel	core
 notify-hook-channel	core/fixtures
@@ -609,6 +607,7 @@ self-update-join-gate	core/fixtures/self-update-join-gate/seed.sh
 self-update-join-gate	core/skills
 self-update-join-gate	core/skills/ai-dlc-update
 self-update-join-gate	core/skills/ai-dlc-update/reconcile
+self-update-join-gate	core/skills/ai-dlc-update/reconcile/consumer-read.sh
 self-update-join-gate	core/skills/ai-dlc-update/reconcile/lib.sh
 self-update-join-gate	core/skills/ai-dlc-update/reconcile/preclassify.sh
 self-update-join-gate	core/skills/ai-dlc-update/reconcile/self-update-gate.sh
@@ -748,13 +747,13 @@ story-fields-derive	core/skills/ai-dlc/steps/implementation.md
 # digest gate-resume 8ad739b4d940e644ee79f7d262ff99519025d7f970d7c503bd8d1d2c45913e33
 # digest gate-verdict-grep-shape 529e98601a18b3e6ef8de593ac7ecdc2813f7b7746164fa18d3045ff85a00025
 # digest hook-registration-join eaaf886f8bd31bacece916de88656bf08f6e9ba8a32382903656287fe5bf4c86
-# digest layer-title-join 439cb757f433b52852edf00cc1d4d6dc2c63621761a3878e7bb6edc0bc7c2ef7
+# digest layer-title-join 0125bade8c69db3281b59ecce58189a89b2e200d1aafdf8e1e63924bb2e95ea7
 # digest prepush-ssh-keepalive cdbfac795323a19ab3ec6551436b2a1f0f6976c7bece5b18658be870988e126d
 # digest requirements-step d0daabce71d166100caddd6211ea30961442658792504e0ec46765dcd5340be0
 # digest resume-whole-read 8f3f54ee0e057daee29672a775ed050809647da0722d7e1e2c875e42b9d55a13
 # digest retro-compliance-workflow 6d82820d36017eccd938696707cbeff1230a5ecd003681d0b8b3a81e63114221
 # digest review-carry-over-clauses ad6b44cc575761b1cce2eaaad6a6450dcae618d39f280b43800f7fc2eb04f8ca
 # digest route-defect-classification a55e73c1efe5d211a230e4b04fb6f382a61501eaf825574e512f8c0b3408c78d
-# digest self-update-join-gate 5b6e85c36de04d0ce801b6626c434a18101ce5f50047e8b95363d23eeeebacbd
+# digest self-update-join-gate 1bd787e1232089e148b0a6a4642c5aef1e135917ac714b9c432ac379f2bec33c
 # digest story-evidence-scaffold ca7e5a101c01c11db4be2e6c1c3239084a781be3a5a200cf2ecfd20f1b4b4ff4
 # digest story-fields-derive 63ea79403651828e92cbacba363f66aa39a665045bc8392529cd58c18e371954

@@ -11,3 +11,4 @@ core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/scripts/sprint-status.sh
 !core/schemas/sprint-status.json
 core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

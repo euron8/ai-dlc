@@ -84,6 +84,8 @@ nk() { # negative: $2 must NOT appear
 mkrecon() { # $1 = manifest body (empty string = write no manifest at all)
   d="$ROOT/recon.$$.$RANDOM"; mkdir -p "$d"
   cp "$SUBJ" "$d/predicate-differential.sh"
+  # The detector SOURCES consumer-read.sh from beside itself; a copy without it exits 2 at that line.
+  cp "$(dirname "$SUBJ")/consumer-read.sh" "$d/consumer-read.sh"
   [ -n "$1" ] && printf '%s\n' "$1" > "$d/predicate-sites.md"
   printf '%s' "$d"
 }

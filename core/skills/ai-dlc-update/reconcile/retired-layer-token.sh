@@ -101,6 +101,10 @@
 #      DETECTOR-REFUSED for the section rather than `none`.
 
 set -u
+# GLOBBING IS OFF FOR THE WHOLE FILE. Every unquoted word list here (the rulebook and program
+# globs) is a git PATHSPEC set matched against a tree listing, never a cwd pattern; the
+# per-function `set -f`/`set +f` pairs that used to guard them are subsumed by this one.
+set -f
 # Every scan below is byte-wise. The layer corpus carries em-dashes and the rulebook
 # carries arrows; under a UTF-8 locale `awk` aborts mid-file on a multibyte conversion
 # failure and `tr -c` misclassifies bytes, and both read as a shorter corpus, not an error.
@@ -180,12 +184,10 @@ files_at() {
   else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref" 2>/dev/null)" || _ft=$?; fi
   [ "$_ft" -ne 125 ] || return 125
   [ "$_ft" -eq 0 ] || return 0
-  set -f
   for glob in "$@"; do
     printf '%s\n' "$tree" \
       | { grep -E "^$(printf '%s' "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')$" || true; }
   done
-  set +f
 }
 # show_at <ref> <path> -- the blob on stdout and the reader's own status: 0, git's non-zero for a
 # path it could not show, or the memo's 125. Every caller reads it.
@@ -201,16 +203,14 @@ show_at() {
 # `pipefail`, and a filter stage's "no match" is not a read failure.
 collect() {
   local ref="$1" f
-  set -f
   local _cs _ps
   # shellcheck disable=SC2046
-  files_at "$ref" $(rulebook_globs) | { set +f; while IFS= read -r f; do
+  files_at "$ref" $(rulebook_globs) | { while IFS= read -r f; do
     [ -n "$f" ] || continue
     show_at "$ref" "$f"
     _cs=$?; [ "$_cs" -ne 125 ] || exit 125
   done; } | toks
   _ps=("${PIPESTATUS[@]}")
-  set +f
   [ "${_ps[0]}" -ne 125 ] || return 125
   [ "${_ps[1]}" -ne 125 ] || return 125
   return "${_ps[${#_ps[@]}-1]}"
@@ -220,6 +220,12 @@ if [ -z "$(rulebook_globs)" ]; then
   echo "retired-layer-token: could not read the rulebook list from setup-sites.md — refusing to report clean, because an empty corpus and a clean corpus are the same output" >&2
   exit 2
 fi
+
+# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# SOURCED AFTER the rulebook-list refusal above, which reads only this script's own sibling
+# setup-sites.md: a copy standing alone keeps naming THAT cause rather than the missing helper.
+# Nothing above this line calls a cr_* function; the definitions above only name them.
+. "$SELF/consumer-read.sh" || { echo "retired-layer-token: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # rlt_read_refuse <what> <status> -- a corpus read that failed. 125 is named as the memo's.
 rlt_read_refuse() {
@@ -294,10 +300,8 @@ PLAIN="$(printf '%s\n' "$DROPPED" | { grep -vE '[-_]' || true; } | sed '/^$/d')"
 # was ever absent at theirs, so this is latent; it is closed because it is cheap.
 WITNESSED=""; opened=0
 if [ -n "$PLAIN" ]; then
-  set -f
   # shellcheck disable=SC2046
   _cs=0; PROGRAMS="$(files_at "$BASE" $(program_globs))" || _cs=$?
-  set +f
   [ "$_cs" -eq 0 ] || rlt_read_refuse "the program file list at base ($BASE)" "$_cs"
   # `core.quotePath=false`: under the default a renamed non-ASCII path arrives C-quoted, the
   # `$1==f` join below never matches the raw path `files_at` listed, and a renamed witness reads
@@ -370,40 +374,72 @@ if [ -z "$RETIRED" ]; then
   exit 0
 fi
 
-LAYERS="$CONSUMER/.claude/skills/ai-dlc"
+LAYERS_REL=".claude/skills/ai-dlc"
 NEEDLES="$RLT_T/needles"
 printf '%s\n' "$RETIRED" > "$NEEDLES" || rlt_refuse "staging the retired token set" "$?"
 
-# ONE PROCESS FOR THE WHOLE CORPUS. The needle file is read first (FNR==NR), then every
-# layer file; each line is split on the same non-token class the derivation used, so a
-# word inside `fooVACUOUS` or `x-VACUOUS` does not match, and `VACUOUS;` does. The path
-# is reported consumer-relative and the line number is the file's own. Paths travel
-# NUL-delimited so a layer file name carrying a space cannot split into two.
+# ONE AWK FOR THE WHOLE CORPUS, OVER STAGED COPIES. The needle file is read first (FNR==NR), then
+# every layer file; each line is split on the same non-token class the derivation used, so a
+# word inside `fooVACUOUS` or `x-VACUOUS` does not match, and `VACUOUS;` does. The path is
+# reported consumer-relative and the line number is the file's own. Paths travel NUL-delimited
+# so a layer file name carrying a space cannot split into two.
+#
+# EVERY LAYER FILE IS READ THROUGH consumer-read.sh, so emit-report.sh's recorded PASS keys its
+# bytes: the walk lists root-relative names through cr_walk, each file is copied by cr_read into
+# `layers/<n>` with its consumer-relative name recorded beside it in `layer-names`, and the awk
+# reads the copies and prints the recorded name. A listed file that cannot be read refuses (exit
+# 2); before this, `xargs awk` skipped one with a warning on a stderr the driver discards.
 layer_files() {
   local dir
   for dir in overrides extensions; do
-    [ -d "$LAYERS/$dir" ] || continue
-    find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) -print0 2>/dev/null
+    cr_test "$CONSUMER" -d "$LAYERS_REL/$dir" || continue
+    cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '*.md' -o -name '*.json' \) -print0 2>/dev/null
   done
 }
-scanned="$(layer_files | tr -dc '\0' | wc -c | tr -d ' ')"
+layer_files | sort -z > "$RLT_T/layer-walk" || rlt_refuse "the layer walk of $CONSUMER/$LAYERS_REL" "$?"
+scanned="$(tr -dc '\0' < "$RLT_T/layer-walk" | wc -c | tr -d ' ')"
 
 rows=""
 if [ "$scanned" -gt 0 ]; then
-  rows="$(layer_files | sort -z | xargs -0 awk -v pfx="$CONSUMER/" '
+  mkdir "$RLT_T/layers" || rlt_refuse "staging the layer files" "$?"
+  : > "$RLT_T/layer-names" || rlt_refuse "staging the layer file names" "$?"
+  _lf_n=0
+  while IFS= read -r -d '' _lf; do
+    _lf_n=$((_lf_n + 1))
+    _cs=0
+    cr_read "$CONSUMER" "$_lf" > "$RLT_T/layers/$_lf_n" || _cs=$?
+    [ "$_cs" -eq 0 ] || rlt_read_refuse "the layer file $_lf" "$_cs"
+    printf '%s\n' "$_lf" >> "$RLT_T/layer-names" || rlt_refuse "staging the layer file names" "$?"
+  done < "$RLT_T/layer-walk"
+  # The copies are read in walk order, the order the NUL-sorted names had, so the rows come out
+  # in the order they always did. ONE awk, no xargs: a split batch would have read the needle file
+  # in its first invocation only. A copy getline cannot open (-1) exits 3 -- never an empty file.
+  _cs=0
+  rows="$(awk -v names="$RLT_T/layer-names" -v dir="$RLT_T/layers" -v nf="$_lf_n" '
     FNR==NR { if ($0 != "") r[$0]=1; next }
-    {
-      n = split($0, w, /[^A-Za-z0-9_-]+/)
-      seen = ""
-      for (i = 1; i <= n; i++) {
-        if (w[i] in r && index(seen, "\t" w[i] "\t") == 0) {
-          seen = seen "\t" w[i] "\t"
-          rel = FILENAME
-          if (index(rel, pfx) == 1) rel = substr(rel, length(pfx) + 1)
-          printf "RETIRED-LAYER-TOKEN\t%s:%d\t%s\n", rel, FNR, w[i]
+    END {
+      k = 0
+      while ((s = (getline l < names)) > 0) nm[++k] = l
+      if (s < 0) exit 3
+      close(names)
+      for (fi = 1; fi <= nf; fi++) {
+        f = dir "/" fi; ln = 0
+        while ((s = (getline line < f)) > 0) {
+          ln++
+          n = split(line, w, /[^A-Za-z0-9_-]+/)
+          seen = ""
+          for (i = 1; i <= n; i++) {
+            if (w[i] in r && index(seen, "\t" w[i] "\t") == 0) {
+              seen = seen "\t" w[i] "\t"
+              printf "RETIRED-LAYER-TOKEN\t%s:%d\t%s\n", nm[fi], ln, w[i]
+            }
+          }
         }
+        if (s < 0) exit 3
+        close(f)
       }
-    }' "$NEEDLES")"
+    }' "$NEEDLES")" || _cs=$?
+  [ "$_cs" -eq 0 ] || rlt_refuse "the retired-token scan of the layer files" "$_cs"
 fi
 
 if [ -n "$rows" ]; then

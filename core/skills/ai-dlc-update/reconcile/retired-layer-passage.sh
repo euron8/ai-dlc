@@ -58,6 +58,9 @@
 #   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
 
 set -u
+# GLOBBING IS OFF FOR THE WHOLE FILE. The one list that was expanded unquoted (the rulebook
+# pathspecs in removed_raw) already ran under `set -f`; nothing here relies on pathname expansion.
+set -f
 # EVERY TEXT STAGE BELOW RUNS UNDER `LC_ALL=C`, byte-wise, as its sibling retired-layer-token.sh
 # does. Under a UTF-8 locale BSD `sed` exits 1 on one byte that is not valid UTF-8 -- a Latin-1 `é`
 # in a layer file -- so normalising that file failed and it read as carrying no retired line. Both
@@ -87,6 +90,11 @@ if [ -z "$GLOBS" ]; then
   echo "retired-layer-passage: could not read the rulebook list from setup-sites.md — refusing to report clean, because an empty corpus and a clean corpus are the same output" >&2
   exit 2
 fi
+
+# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# SOURCED AFTER the rulebook-list refusal above, which reads only this script's own sibling
+# setup-sites.md: a copy standing alone keeps naming THAT cause rather than the missing helper.
+. "$SELF/consumer-read.sh" || { echo "retired-layer-passage: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # Normalisation is `norm_lines` from lib.sh, which is its ONE home (I21). A private copy
 # here is the shape that shipped divergent resolvers before: two tools, two confident
@@ -128,14 +136,12 @@ rlp_refuse() { # rlp_refuse <what> <status>
 # refuse. Caught by the fixture, whose seeded repo does not share the caller's layout.
 removed_raw() {
   local glob rc=0 st
-  set -f
   for glob in $GLOBS; do
     git -C "$DIST" diff --text --no-ext-diff --no-textconv "$BASE" "$THEIRS" -- "$glob" 2>/dev/null \
       | LC_ALL=C sed -n -e '/^---/d' -e 's/^-//p'
     st="${PIPESTATUS[1]}"
     [ "$st" -eq 0 ] || [ "$rc" -ne 0 ] || rc="$st"
   done
-  set +f
   return "$rc"
 }
 _rlp_rc=0
@@ -165,6 +171,8 @@ if [ -z "$REMOVED" ]; then
 fi
 
 LAYERS="$CONSUMER/.claude/skills/ai-dlc"
+# The consumer-relative spelling every read below takes; LAYERS names the tree in messages only.
+LAYERS_REL=".claude/skills/ai-dlc"
 scanned=0
 rows=""
 
@@ -184,9 +192,10 @@ NEEDLES="$RLP_T/needles"
 printf '%s\n' "$REMOVED" > "$NEEDLES" || rlp_refuse "staging the retired line set" "$?"
 
 for dir in overrides extensions; do
-  [ -d "$LAYERS/$dir" ] || continue
+  cr_test "$CONSUMER" -d "$LAYERS_REL/$dir" || continue
   _rlp_rc=0
-  find "$LAYERS/$dir" -type f -name '*.md' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?
+  # Root-relative names (`.claude/skills/ai-dlc/<dir>/…`), the spelling every row prints.
+  cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f -name '*.md' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?
   [ "$_rlp_rc" -eq 0 ] || rlp_refuse "the layer walk of $LAYERS/$dir" "$_rlp_rc"
   sort "$RLP_T/walk-$dir" > "$RLP_T/walk-$dir.sorted" || rlp_refuse "sorting the layer walk of $LAYERS/$dir" "$?"
   while IFS= read -r f; do
@@ -194,15 +203,19 @@ for dir in overrides extensions; do
     scanned=$((scanned + 1))
     # norm_lines staged alone, then grep over it: grep's 1 is a file carrying no retired line.
     # norm_lines' status is its FIRST failed stage's (lib.sh), not its last stage's.
+    # The layer file is read through cr_read, staged alone with its status read, as before: an
+    # unreadable listed file refuses, never reads as a file carrying no retired line.
     _rlp_rc=0
-    norm_lines < "$f" > "$RLP_T/layer-norm" || _rlp_rc=$?
-    [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising ${f#"$CONSUMER"/}" "$_rlp_rc"
+    cr_read "$CONSUMER" "$f" > "$RLP_T/layer-raw" || _rlp_rc=$?
+    [ "$_rlp_rc" -eq 0 ] || rlp_refuse "reading $f" "$_rlp_rc"
+    norm_lines < "$RLP_T/layer-raw" > "$RLP_T/layer-norm" || _rlp_rc=$?
+    [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising $f" "$_rlp_rc"
     LC_ALL=C grep -nxF -f "$NEEDLES" "$RLP_T/layer-norm" > "$RLP_T/layer-hits" || _rlp_rc=$?
-    case "$_rlp_rc" in 0|1) ;; *) rlp_refuse "the retired-line match over ${f#"$CONSUMER"/}" "$_rlp_rc" ;; esac
+    case "$_rlp_rc" in 0|1) ;; *) rlp_refuse "the retired-line match over $f" "$_rlp_rc" ;; esac
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
       rows="$rows$(printf 'RETIRED-LAYER-PASSAGE\t%s:%s\t%s' \
-        "${f#"$CONSUMER"/}" "${hit%%:*}" "${hit#*:}")
+        "$f" "${hit%%:*}" "${hit#*:}")
 "
     done < "$RLP_T/layer-hits"
   done < "$RLP_T/walk-$dir.sorted"
