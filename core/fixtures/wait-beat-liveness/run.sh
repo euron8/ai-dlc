@@ -879,7 +879,8 @@ S13c_complete_marker_must_settle() {
   else bad "complete: the churned file did not deliver after its edits stopped: $OUT"; fi
 
   # A marked file that PREDATES the join (a previous sprint's file at a reused path) is not
-  # UNSETTLED: nothing changed. On exhaustion it is 'absent', the reading the arming NOTE gave.
+  # UNSETTLED: nothing changed. Nor is it 'absent' -- it is on disk -- so on exhaustion it is
+  # UNCHANGED (BL-717), and the bare Rule 20 re-dispatch remedy is not printed for it.
   W3="$(mk_work)"; CBEAT_SINCE=""
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W3/old.md"
   fx_backdate "$W3/old.md" 3600 || broken "cannot backdate old.md"
@@ -887,9 +888,10 @@ S13c_complete_marker_must_settle() {
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
   cb2; cb2
-  if has "NON-DELIVERY old.md -- absent after" && ! has "UNSETTLED old.md" && [ "$RC" -eq 1 ]; then
-    ok "complete: a marked file older than the join is 'absent' on exhaustion, never UNSETTLED"
-  else bad "complete: a pre-join marked file was reported UNSETTLED or not absent (rc=$RC): $OUT"; fi
+  if has "UNCHANGED old.md -- present (" && ! has "absent after" && ! has "UNSETTLED old.md" \
+     && ! has "Re-dispatch the" && [ "$RC" -eq 1 ]; then
+    ok "complete: a marked file older than the join is UNCHANGED on exhaustion, never 'absent' or UNSETTLED (rc 1)"
+  else bad "complete: a pre-join marked file was reported absent, UNSETTLED, or given the re-dispatch remedy (rc=$RC): $OUT"; fi
   rm -rf "$W" "$W3"
 }
 
@@ -2895,6 +2897,146 @@ M53_argv_record_swept() {
   if [ "$SW_JUNK" = 0 ] && [ "$SW_LIVE" = 0 ]; then
     ok "MUTANT argv-record-swept: with the sweep's exemption removed a bound change deletes the live record -- section 26b catches it"
   else bad "MUTANT argv-record-swept: section 26b survives the sweep deleting argv records (live=$SW_LIVE junk=$SW_JUNK)"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 27. --complete-repair: THE DISPATCH'S OWN TRANSCRIPT EXTENDS THE CAP AND GOVERNS THE REMEDY.
+#     A serial remediator appends to its record only at the end, so the record cannot grow and
+#     the wait had no evidence of work: a live remediator reached the cap and was told "Re-dispatch
+#     the teammate ONCE", two writers on one record (BL-717). Under --complete-repair with one
+#     target and one --dispatch that resolves to an agent, that agent's own transcript taking a
+#     turn within a quantum grants the counted extension, and at GRANTSPENT withholds the bare
+#     remedy; a turn older than a quantum but younger than IDLE_SECS grants nothing yet still
+#     withholds it. Each arm has its near-miss beside it: the same seed with the turn an hour old
+#     (dead) or past IDLE_SECS, with no --dispatch (the session-wide reading decides nothing), and
+#     with a stalled run.
+#     Counters are seeded exactly as beat <max> leaves them (`.bound`, `<key>`, `<key>.grants`),
+#     except 27b's fresh-arm arm, which reaches the cap by real beats, each its own subshell, so
+#     the chained-beat guard cannot skip a charge.
+#     The quantum is 30s (R27_BUDGET) for every arm that does not sleep, so pool load cannot push a
+#     turn seeded at "now" past it into RECENT; it is 4s only where a beat really runs (the granted
+#     first arm of 27a and the real-beat loop of 27b).
+# ===========================================================================
+R27_AG=a717beef; R27_TUI=toolu_wbl717
+r27_key() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+r27_world() {  # $1 = workdir -> ledger row, meta.json joining R27_AG to R27_TUI, td/
+  mkdir -p "$1/td" "$1/_bmad-output/.wait-beats" || broken "cannot create the section 27 world"
+  mk_ledger_row "$1" "$R27_TUI" $(( $(date +%s) - 300 ))
+  printf '{"agentType":"dev","toolUseId":"%s"}' "$R27_TUI" > "$1/td/agent-$R27_AG.meta.json" || broken "cannot write meta.json"
+}
+r27_transcript() {  # $1 = workdir, $2 = age of the last turn (s), $3 = trailing api-request lines
+  rt_ts_="$(fx_iso $(( $(date +%s) - $2 )))"; [ -n "$rt_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
+  rt_ts_="${rt_ts_%Z}"; rt_now_="$(fx_iso "$(date +%s)")"; rt_now_="${rt_now_%Z}"
+  { printf '{"isSidechain":true,"agentId":"%s","type":"user","message":{"role":"user"},"timestamp":"%s.100Z"}\n' "$R27_AG" "$rt_ts_"
+    printf '{"isSidechain":true,"agentId":"%s","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.300Z"}\n' "$R27_AG" "$rt_ts_"
+    rt_i_=0; while [ "$rt_i_" -lt "$3" ]; do
+      printf '{"type":"api-request","sessionId":"s","agentId":"%s","id":"r%s","timestamp":"%s.200Z"}\n' "$R27_AG" "$rt_i_" "$rt_now_"
+      rt_i_=$(( rt_i_ + 1 )); done
+  } > "$1/td/agent-$R27_AG.jsonl" || broken "cannot write the section 27 transcript"
+}
+r27_cap() {  # $1 = workdir, $2 = grants already spent ('' none) -- the counters beat 2 of 2 leaves
+  rc_d_="$1/_bmad-output/.wait-beats"; rc_k_="$(r27_key rec.md)"
+  printf '2' > "$rc_d_/.bound" && printf '2' > "$rc_d_/$rc_k_" || broken "cannot seed the beat counter"
+  [ -z "$2" ] || printf '%s' "$2" > "$rc_d_/$rc_k_.grants" || broken "cannot seed the grant counter"
+}
+r27_beat() {  # $1 = subject (in a sibling dir), $2 = workdir ; rest = argv
+  r7_s_="$1" r7_w_="$2"; shift 2
+  ( cd "$r7_w_" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS="${R27_BUDGET:-30}" AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=2 AI_DLC_TEAMMATE_IDLE_SECS="${R27_IDLE:-3600}" \
+      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" bash "$r7_s_" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+R27_REMEDY='Re-dispatch the'
+R27_LIVE="LIVE DISPATCH agent-$R27_AG"
+S27a_repair_dispatch_live_extends_cap() {
+  R27_S="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 0 0
+  R27_BUDGET=4 r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 0 ] && has "PROGRESS  rec.md -- work observed in agent-$R27_AG.jsonl, this dispatch's own transcript" \
+     && ! has "under the progress path" && ! has "$R27_REMEDY" && ! has "NON-DELIVERY"; then
+    ok "repair-live: at the cap, the dispatched agent's own fresh turn grants the counted extension, and PROGRESS names its transcript (rc 0, no re-dispatch)"
+  else bad "repair-live: a live --complete-repair dispatch at the cap was not granted, named the progress path, or was told to re-dispatch (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # THE RECENT BAND: a turn older than one quantum but younger than IDLE_SECS grants NOTHING, and
+  # still replaces the bare remedy with the liveness-check block; the wait ends (rc 1).
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 60 0
+  R27_IDLE=1200 r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "$R27_LIVE" && has "no grant" && ! has "$R27_REMEDY" && ! has "PROGRESS"; then
+    ok "repair-live: RECENT — a turn 60s old (quantum 30s, idle 1200s) gets no grant, and the liveness block replaces the re-dispatch (rc 1)"
+  else bad "repair-live: RECENT band granted, or printed the bare re-dispatch (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # NEAR-MISS: the same seed past IDLE_SECS is today's remedy.
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 1300 0
+  R27_IDLE=1200 r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "$R27_REMEDY" && ! has "$R27_LIVE" && ! has "PROGRESS"; then
+    ok "repair-live: NEAR-MISS — a turn past IDLE_SECS (1300s of 1200s) keeps the bare re-dispatch remedy (rc 1)"
+  else bad "repair-live: NEAR-MISS FAILED — a dispatch idle past IDLE_SECS lost its remedy or was granted (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # NEAR-MISS: the same seed with the turn an hour old is today's non-delivery, remedy and all.
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 3600 0
+  r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "NON-DELIVERY rec.md -- absent after" && has "$R27_REMEDY" && ! has "PROGRESS"; then
+    ok "repair-live: NEAR-MISS — the same dispatch with its last turn an hour old is NON-DELIVERY with the re-dispatch remedy (rc 1)"
+  else bad "repair-live: NEAR-MISS FAILED — a dead dispatch was granted, or lost its remedy (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # CONTROL: a live transcript with NO --dispatch is the session-wide reading, which decides nothing.
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 0 0
+  r27_beat "$R27_S" "$W" --complete-repair rec.md
+  if [ "$RC" -eq 1 ] && has "$R27_REMEDY" && has "$LIVE_LINE" && ! has "PROGRESS"; then
+    ok "repair-live: CONTROL — without --dispatch a live session reads LIVENESS only, and the remedy is today's (rc 1)"
+  else bad "repair-live: CONTROL FAILED — the session-wide reading granted or withheld the remedy (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # NEAR-MISS: a fresh turn followed by a stalled run is not live.
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 0 3
+  r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "$R27_REMEDY" && has "${STALL_LINE}agent-$R27_AG.jsonl" && ! has "PROGRESS"; then
+    ok "repair-live: NEAR-MISS — a dispatch ending in 3 unanswered api-requests is not granted (rc 1, STALLED)"
+  else bad "repair-live: NEAR-MISS FAILED — a stalled dispatch was granted (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+S27b_repair_dispatch_live_grantspent() {
+  R27_S="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" 2; r27_transcript "$W" 0 0
+  r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "$R27_LIVE" && has "agent-$R27_AG.jsonl" && has "two writers on one record" \
+     && ! has "$R27_REMEDY" && has "(Rule 29, Check C)"; then
+    ok "repair-live: GRANTSPENT with the dispatch still live ends the wait (rc 1) with the liveness-check block, never the bare re-dispatch"
+  else bad "repair-live: GRANTSPENT on a live dispatch printed the bare remedy or no liveness block (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # A FRESH ARM AFTER THE CAP (graph S319's seventh invocation): real beats to the cap, then new
+  # invocations with no --reset. Every one of them reads the spent counter; none may re-dispatch.
+  W="$(mk_work)"; r27_world "$W"; rb_n_=0; rb_bad_=""
+  while [ "$rb_n_" -lt 6 ]; do
+    r27_transcript "$W" 0 0
+    R27_BUDGET=4 r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+    rb_n_=$(( rb_n_ + 1 ))
+    has "$R27_REMEDY" && rb_bad_="${rb_bad_} beat$rb_n_"
+    [ "$RC" -eq 1 ] && break
+  done
+  if [ -z "$rb_bad_" ] && [ "$RC" -eq 1 ] && has "$R27_LIVE" && [ "$rb_n_" -eq 5 ]; then
+    ok "repair-live: armed fresh after the cap, a live dispatch takes both grants, then the liveness block at beat 5 — never 'Re-dispatch the'"
+  else bad "repair-live: a fresh arm after the cap re-dispatched (at:$rb_bad_) or ended at beat $rb_n_ not 5 (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+S27c_complete_present_is_unchanged() {
+  R27_S="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 3600 0
+  awk 'BEGIN { for (i = 1; i <= 40; i++) print "- record line " i }' > "$W/rec.md" || broken "cannot write rec.md"
+  fx_backdate "$W/rec.md" 3600 || broken "cannot backdate rec.md"
+  r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
+  if [ "$RC" -eq 1 ] && has "UNCHANGED rec.md -- present (40 lines), not modified since the join" \
+     && ! has "absent after" && ! has "$R27_REMEDY"; then
+    ok "repair-unchanged: a present record older than the join is UNCHANGED at the cap, never 'absent', and gets no re-dispatch remedy (rc 1)"
+  else bad "repair-unchanged: a present pre-join record was called absent or given the bare remedy (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+  # NEAR-MISS: the record truly missing is still 'absent', with the remedy.
+  W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 3600 0
+  r27_beat "$R27_S" "$W" --complete-repair rec.md
+  if [ "$RC" -eq 1 ] && has "NON-DELIVERY rec.md -- absent after" && has "$R27_REMEDY" && ! has "UNCHANGED"; then
+    ok "repair-unchanged: NEAR-MISS — a truly missing record is still 'absent' with the re-dispatch remedy"
+  else bad "repair-unchanged: NEAR-MISS FAILED — a missing record lost its 'absent' line or its remedy (rc=$RC): $OUT"; fi
   rm -rf "$W"
 }
 
