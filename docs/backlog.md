@@ -751,3 +751,15 @@ Direction, for the owner: either a dispatch-scoped join that needs no path and w
 
 verify: manual
 
+## BL-724 — `validate-cycle-commits.sh` still demands a party-mode commit for a `Test Strategy` section of a live `validation-cycle-log.md`, which 0.890.0's §5 test-strategy review no longer produces
+
+**NOTE.** Raised by BL-723's tip adversary (batch 237, owner ai-dlc-fc); measured and filed by lead ai-dlc-52; held out of 0.890.0 by the lead's ruling.
+
+`core/scripts/validate-cycle-commits.sh:633-634` keys a log section beginning `test strategy` or `test-strategy` to the `test-strategy` artifact, and its cycle-type coverage at `:924-933` FAILs any logged artifact with no party-mode commit (`FAIL (missing cycle type: party-mode)`). 0.890.0 (BL-723) moved §5 step 2's test-strategy review to the native adversarial cycle with no party round, so a consumer still logging a `Test Strategy` section in a LIVE `_bmad-output/validation-cycle-log.md` would fail there.
+
+Not reachable on the reference consumer today, measured at graph `ae1fafcf8`: `_bmad-output/validation-cycle-log.md` is absent (control: `_bmad-output/pipeline-snapshot.md` present at the same ref). Its only cycle log is `_bmad-output/implementation-artifacts/s302/validation-cycle-log-archive.md`, which is historical and carries 18 test-strategy lines.
+
+Direction, for the owner: exempt the test-strategy key from the party-mode arm when its section is post-0.890.0, or retire the key; first establish whether any installed consumer still writes a live log.
+
+verify: manual
+
