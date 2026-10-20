@@ -215,6 +215,14 @@ step "plan shape (docs/plans/ is resumable by a session that never saw this one)
 step "claude-rules joins (tracked paths, live globs, paths-only frontmatter, pointers)" \
   bash scripts/validate-claude-rules.sh
 
+# 1e2. The recorded-PASS cache in reconcile/emit-report.sh is only as sound as its key, and four
+#      adversary rounds kept finding a detector READING a consumer path the key never keyed. Every
+#      consumer read in the cache's derived read closure goes through consumer-read.sh's cr_* helpers,
+#      and every closure script runs with globbing off. Standalone, NOT an arm of
+#      validate-enforcement-map.sh, which sits on the suite pole.
+step "consumer reads (recorded-PASS closure reads only through consumer-read.sh; set -f)" \
+  bash scripts/validate-consumer-reads.sh
+
 # 1f. docs/backlog.md is a QUEUE and a queue has a depth. Nothing bounded it: A6's byte ceiling
 #     in validate-claude-rules.sh covers CLAUDE.md and .claude/rules/ only, and the two scripts
 #     that DO own this ledger cannot gate -- backlog-reverify.sh declares itself a classifier

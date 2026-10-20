@@ -72,6 +72,8 @@
 # what the caller actually knows, so the phase is what it states. Pre-apply behaviour is
 # byte-identical to before, which is why no existing call site changes.
 set -uo pipefail
+# Globbing off: no unquoted expansion in this file may be pathname-expanded against the cwd.
+set -f
 
 MODE=print
 REPORT=""
@@ -113,6 +115,9 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# Every consumer read goes through consumer-read.sh. This file reads none itself (it runs the two
+# detectors below), and sources it so any read added here has the one door to go through.
+. "$SELF/consumer-read.sh" || { echo "hard-blockers: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 UD="$SELF/unregistered-drift.sh"
 LD="$SELF/layer-drift.sh"
 

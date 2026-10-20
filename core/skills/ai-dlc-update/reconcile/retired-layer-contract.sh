@@ -119,6 +119,11 @@
 #      clean; emit-report.sh renders it as DETECTOR-REFUSED
 
 set -u
+# GLOBBING IS OFF FOR THE WHOLE FILE. The two unquoted word lists below (the rulebook globs and a
+# glob's tree hits) are PATHSPECS and tree paths, never cwd patterns, and used to run under a
+# per-function `set -f` that each early return had to undo. Nothing here relies on pathname
+# expansion.
+set -f
 
 DIST="${1:?usage: retired-layer-contract.sh <dist> <base> <theirs> <consumer>}"
 BASE="${2:?}"
@@ -129,6 +134,8 @@ CONSUMER="${4:?}"
 # restate. Derived from setup-sites.md's own `rulebook:` list rather than restated,
 # so a rulebook file added upstream is covered without editing this script.
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+. "$SELF/consumer-read.sh" || { echo "retired-layer-contract: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" 2>/dev/null || true
 SITES="$SELF/setup-sites.md"
@@ -217,14 +224,12 @@ rlc_glob_files() {   # rlc_glob_files <tree-file> <glob> <out> -- the tree lines
 # already derives, read for its membership rather than for its contents.
 rulebook_set() {   # rulebook_set <ref> <out>
   local ref="$1" glob out="" rc=0
-  set -f
-  rlc_tree "$ref" "$RLC_T/rbset-tree" || { rc=$?; set +f; return "$rc"; }
+  rlc_tree "$ref" "$RLC_T/rbset-tree" || { rc=$?; return "$rc"; }
   for glob in $(rulebook_globs); do
-    rlc_glob_files "$RLC_T/rbset-tree" "$glob" "$RLC_T/rbset-hits" || { rc=$?; set +f; return "$rc"; }
+    rlc_glob_files "$RLC_T/rbset-tree" "$glob" "$RLC_T/rbset-hits" || { rc=$?; return "$rc"; }
     out="$out$(cat "$RLC_T/rbset-hits")
 "
   done
-  set +f
   printf '%s\n' "$out" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the rulebook file set at $ref"; return "$rc"; }
 }
 
@@ -294,30 +299,28 @@ collect() {     # collect <ref> <out> -> every shape+token across the rulebook a
   # pathname expansion first, so when the caller's cwd contains matching files bash
   # substitutes real paths from the WRONG tree. A rulebook file that exists at the ref but
   # not in the caller's working tree is then silently skipped, and this detector reports a
-  # smaller corpus with the same clean line.
-  set -f
-  rlc_tree "$ref" "$RLC_T/collect-tree" || { rc=$?; set +f; return "$rc"; }
+  # smaller corpus with the same clean line. The file-level `set -f` in the preamble covers it.
+  rlc_tree "$ref" "$RLC_T/collect-tree" || { rc=$?; return "$rc"; }
   for glob in $(rulebook_globs); do
     # The glob is matched against the tree listing at <ref>, never against the cwd.
-    rlc_glob_files "$RLC_T/collect-tree" "$glob" "$RLC_T/collect-hits" || { rc=$?; set +f; return "$rc"; }
+    rlc_glob_files "$RLC_T/collect-tree" "$glob" "$RLC_T/collect-hits" || { rc=$?; return "$rc"; }
     for f in $(cat "$RLC_T/collect-hits"); do
       # Every f came from the listing at this ref, so it EXISTS there: any failed read is a
       # refusal, never an absent file. An empty blob still reads as empty and is skipped.
       rc=0
       if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$ref" "$f" > "$RLC_T/collect-body" || rc=$?
       else git -C "$DIST" show "${ref}:${f}" > "$RLC_T/collect-body" 2>/dev/null || rc=$?; fi
-      [ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"; set +f; return "$rc"; }
-      body="$(cat "$RLC_T/collect-body")" || { rc=$?; RLC_WHY="reading the staged body of $f at $ref"; set +f; return "$rc"; }
+      [ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"; return "$rc"; }
+      body="$(cat "$RLC_T/collect-body")" || { rc=$?; RLC_WHY="reading the staged body of $f at $ref"; return "$rc"; }
       [ -n "$body" ] || continue
       # The same status read the layer-file site below applies: 0 is a set, possibly empty.
-      _sh="$(shapes_of "$body")" || { rc=$?; RLC_WHY="the shape scan of $f at $ref"; set +f; return "$rc"; }
-      _tk="$(tokens_of "$body")" || { rc=$?; RLC_WHY="the token scan of $f at $ref"; set +f; return "$rc"; }
+      _sh="$(shapes_of "$body")" || { rc=$?; RLC_WHY="the shape scan of $f at $ref"; return "$rc"; }
+      _tk="$(tokens_of "$body")" || { rc=$?; RLC_WHY="the token scan of $f at $ref"; return "$rc"; }
       all="$all$_sh
 $_tk
 "
     done
   done
-  set +f
   printf '%s\n' "$all" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the shape set at $ref"; return "$rc"; }
 }
 
@@ -406,6 +409,8 @@ if [ -z "$RETIRED" ] && [ -z "$RETIRED_PATHS" ]; then
 fi
 
 LAYERS="$CONSUMER/.claude/skills/ai-dlc"
+# The consumer-relative spelling every read below takes; LAYERS names the tree in messages only.
+LAYERS_REL=".claude/skills/ai-dlc"
 scanned=0
 rows=""
 printf '%s\n' "$RETIRED" > "$RLC_T/retired-shapes" || rlc_refuse "staging the retired shape set" "$?"
@@ -429,11 +434,11 @@ while IFS= read -r _rp; do
   printf '%s\n' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || rlc_refuse "staging the spellings of $_rp" "$?"
 done < "$RLC_T/retired-paths"
 for dir in overrides extensions; do
-  [ -d "$LAYERS/$dir" ] || continue
+  cr_test "$CONSUMER" -d "$LAYERS_REL/$dir" || continue
   # The walk is staged ALONE (no pipefail here), then sorted: a failed find refuses rather than
-  # reading as a directory with no layer file.
+  # reading as a directory with no layer file. Root-relative names, the spelling every row prints.
   _rlc_rc=0
-  find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?
+  cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?
   [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the layer walk of $LAYERS/$dir" "$_rlc_rc"
   sort "$RLC_T/walk-$dir" > "$RLC_T/walk-$dir.sorted" || rlc_refuse "sorting the layer walk of $LAYERS/$dir" "$?"
   while IFS= read -r f; do
@@ -442,22 +447,22 @@ for dir in overrides extensions; do
     # A LISTED FILE THAT CANNOT BE READ IS A REFUSAL, NOT AN EMPTY FILE. This read `|| true`, so a
     # layer file the walk found and `cat` could not open was skipped as though it carried nothing.
     _rlc_rc=0
-    body="$(cat "$f")" || _rlc_rc=$?
-    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "reading the layer file ${f#"$CONSUMER"/}" "$_rlc_rc"
+    body="$(cr_read "$CONSUMER" "$f")" || _rlc_rc=$?
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "reading the layer file ${f}" "$_rlc_rc"
     [ -n "$body" ] || continue
     _rlc_rc=0
     _sh="$(shapes_of "$body")" || _rlc_rc=$?
-    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the shape scan of ${f#"$CONSUMER"/}" "$_rlc_rc"
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the shape scan of ${f}" "$_rlc_rc"
     _tk="$(tokens_of "$body")" || _rlc_rc=$?
-    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the token scan of ${f#"$CONSUMER"/}" "$_rlc_rc"
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the token scan of ${f}" "$_rlc_rc"
     mine="$(printf '%s\n%s\n' "$_sh" "$_tk" | sed '/^$/d' | sort -u)"
-    printf '%s\n' "$mine" > "$RLC_T/mine" || rlc_refuse "staging the shape set of ${f#"$CONSUMER"/}" "$?"
+    printf '%s\n' "$mine" > "$RLC_T/mine" || rlc_refuse "staging the shape set of ${f}" "$?"
     _rlc_rc=0
     comm -12 "$RLC_T/retired-shapes" "$RLC_T/mine" > "$RLC_T/mine-retired" || _rlc_rc=$?
-    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-shape intersection for ${f#"$CONSUMER"/}" "$_rlc_rc"
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-shape intersection for ${f}" "$_rlc_rc"
     while IFS= read -r shape; do
       [ -n "$shape" ] || continue
-      rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f#"$CONSUMER"/}" "$shape")
+      rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f}" "$shape")
 "
     done < "$RLC_T/mine-retired"
 
@@ -493,7 +498,7 @@ for dir in overrides extensions; do
         case "$body" in *"$_sp"*) _hit=yes; break ;; esac
       done < "$RLC_T/spellings-$_rlc_i"
       [ -n "$_hit" ] || continue
-      rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f#"$CONSUMER"/}" "path:$_rp")
+      rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f}" "path:$_rp")
 "
     done < "$RLC_T/retired-paths"
   done < "$RLC_T/walk-$dir.sorted"

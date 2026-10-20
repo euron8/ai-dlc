@@ -35,6 +35,9 @@
 #         able to tell "no forks are shadowed" from "this never ran", and those are the same empty
 #         output. This line read `0 ALWAYS` while three `exit 2` paths already existed.
 set -uo pipefail
+# GLOBBING OFF: every consumer path is read through consumer-read.sh, and an unquoted expansion
+# must never resolve names against the caller's cwd.
+set -f
 
 ROOT=""; LEDGER=""; LOCAL_DIR=""; CORE_DIR=""
 while [ $# -gt 0 ]; do
@@ -75,9 +78,32 @@ fi
 [ -n "$LOCAL_DIR" ] || LOCAL_DIR="${ROOT}/scripts/ai-dlc-local"
 [ -n "$CORE_DIR" ]  || CORE_DIR="${ROOT}/scripts/ai-dlc"
 
-# No ledger, or no local forks -> nothing this signal could fire on.
-[ -f "$LEDGER" ] || exit 0
-[ -d "$LOCAL_DIR" ] || exit 0
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "warn-shadowed-local-validators: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
+
+# EVERY INPUT IS A (root, root-relative path) PAIR, read through consumer-read.sh. The defaults sit
+# under ROOT; an override under ROOT is re-expressed relative to it, and one elsewhere is read from
+# `/` (an absolute override) or the cwd (a relative one), which consumer-read.sh logs as a root that
+# is not the consumer's -- a recorded PASS then refuses rather than keying a read it cannot re-take.
+ws_split() { # ws_split <path> -> sets WS_R (root) and WS_P (relative path)
+  case "$1" in
+    "$ROOT"/*) WS_R="$ROOT"; WS_P="${1#"$ROOT"/}" ;;
+    /*)        WS_R=/; WS_P="${1#/}" ;;
+    *)         WS_R="$(pwd)"; WS_P="$1" ;;
+  esac
+}
+ws_split "$LEDGER";    LEDGER_R="$WS_R"; LEDGER_P="$WS_P"
+ws_split "$LOCAL_DIR"; LOCAL_R="$WS_R";  LOCAL_P="$WS_P"
+ws_split "$CORE_DIR";  CORE_R="$WS_R";   CORE_P="$WS_P"
+
+# No ledger, or no local forks -> nothing this signal could fire on. A path consumer-read.sh
+# refuses (rc 2: a `..` component) is no verdict, never "absent".
+_ws_t=0; cr_test "$LEDGER_R" -f "$LEDGER_P" || _ws_t=$?
+[ "$_ws_t" -ne 2 ] || { echo "warn-shadowed-local-validators: REFUSED — the ledger path $LEDGER could not be read through consumer-read.sh; no verdict" >&2; exit 2; }
+[ "$_ws_t" -eq 0 ] || exit 0
+_ws_t=0; cr_test "$LOCAL_R" -d "$LOCAL_P" || _ws_t=$?
+[ "$_ws_t" -ne 2 ] || { echo "warn-shadowed-local-validators: REFUSED — the local-dir path $LOCAL_DIR could not be read through consumer-read.sh; no verdict" >&2; exit 2; }
+[ "$_ws_t" -eq 0 ] || exit 0
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
@@ -96,7 +122,6 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 # zero comes from the fork-exists and core-exists filters downstream, not from the predicate:
 # 48 `.sh`-naming lines sit inside entries the old rule called closed. Latent and reachable.
 # shellcheck source=lib.sh
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF/lib.sh" || { echo "warn-shadowed-local-validators: cannot source $SELF/lib.sh" >&2; exit 2; }
 
 # COMPUTED ONCE AND GUARDED, BECAUSE A REFUSAL MUST NOT BE SURVIVABLE. `ledger_close_awk` refuses
@@ -129,7 +154,7 @@ LEA="$(ledger_entry_awk)" || { echo "warn-shadowed-local-validators: REFUSED —
 # THE CLOSED-BASENAME SET'S STATUS IS READ, and `pipefail` (set above) makes any stage's failure
 # the pipeline's. A dead awk used to read as "no closed entry names a .sh", which is `exit 0`.
 _ws_rc=0
-closed_basenames="$(awk "${LEA}${CLOSE_AWK}"'
+closed_basenames="$(cr_read "$LEDGER_R" "$LEDGER_P" | awk "${LEA}${CLOSE_AWK}"'
   function flush(){ if (closed && names != "") printf "%s", names; closed=0; names="" }
   ledger_entry_shape($0) != "" { flush() }
   # TWO SCOPES, THE WAY reverify HAS THEM. A body line closes only on the ANCHORED rule; an ENTRY
@@ -145,7 +170,7 @@ closed_basenames="$(awk "${LEA}${CLOSE_AWK}"'
     }
   }
   END { flush() }
-' "$LEDGER" | awk 'NF' | sort -u)" || _ws_rc=$?
+' | awk 'NF' | sort -u)" || _ws_rc=$?
 [ "$_ws_rc" -eq 0 ] || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan of $LEDGER did not run (exit $_ws_rc); no verdict" >&2; exit 2; }
 
 [ -n "$closed_basenames" ] || exit 0
@@ -169,7 +194,9 @@ printf '%s\n' "$closed_basenames" > "$WS_T/closed" || _ws_rc=$?
 while IFS= read -r base; do
   [ -n "$base" ] || continue
   # It must shadow a real core validator, or this is some unrelated `.sh` token from prose.
-  [ -f "${CORE_DIR}/${base}" ] || continue
+  _ws_t=0; cr_test "$CORE_R" -f "${CORE_P}/${base}" || _ws_t=$?
+  [ "$_ws_t" -ne 2 ] || { echo "warn-shadowed-local-validators: REFUSED — ${CORE_DIR}/${base} could not be read through consumer-read.sh; no verdict" >&2; exit 2; }
+  [ "$_ws_t" -eq 0 ] || continue
 
   # THE WHOLE HOME, not its top level. The home's internal layout is the CONSUMER's —
   # core declares the directory and makes no claim about what is inside it. A flat
@@ -183,11 +210,14 @@ while IFS= read -r base; do
   # The walk keeps the `2>/dev/null` and `sort` it always had; `pipefail` makes a find that DIED
   # this pipeline's failure, where the heredoc body used to swallow it as "no fork found".
   _ws_rc=0
-  find "$LOCAL_DIR" -type f -name "$base" 2>/dev/null | sort > "$WS_T/forks" || _ws_rc=$?
+  # cr_walk prints names relative to LOCAL_R; the row prints them as the old absolute walk did once
+  # ROOT was stripped: root-relative under ROOT, absolute under `/`, as given under the cwd.
+  cr_walk "$LOCAL_R" "$LOCAL_P" -type f -name "$base" 2>/dev/null | sort > "$WS_T/forks" || _ws_rc=$?
   [ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the fork walk of $LOCAL_DIR for $base" "$_ws_rc"
   while IFS= read -r fork; do
     [ -n "$fork" ] || continue
-    emit RETIRE-CANDIDATE "${fork#"${ROOT}"/}" \
+    case "$LOCAL_R" in /) fork="/$fork" ;; esac
+    emit RETIRE-CANDIDATE "$fork" \
       "its push-candidate ledger entry is CLOSED (ADOPTED UPSTREAM) — the divergence is now in core/scripts/${base}. Re-evaluate: diff the fork against stock core. Retire it if core covers your case, or narrow it to the still-divergent remainder. This is a SIGNAL; confirm before deleting."
   done < "$WS_T/forks"
 done < "$WS_T/closed"

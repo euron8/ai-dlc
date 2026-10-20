@@ -8,3 +8,4 @@
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 +docs/backlog.md
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

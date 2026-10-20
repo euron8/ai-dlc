@@ -81,6 +81,8 @@ git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "
 DIST="$WORK/dist"
 mkdir -p "$DIST/core/skills/ai-dlc-update/reconcile"
 cp "$DETECT" "$DIST/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh"
+# The detector SOURCES consumer-read.sh from beside itself; without it every run exits 2.
+cp "$SRC_DIR/consumer-read.sh" "$DIST/core/skills/ai-dlc-update/reconcile/consumer-read.sh"
 echo "HERMETIC-CONSUMED $DETECT"
 # The mapper is delegated, not copied — so the fixture must supply the real one, and a
 # change to map_consumer() that broke fixture paths would fail here rather than silently.
@@ -262,7 +264,7 @@ fi
 # arm A emits nothing is arm A's own arm above, not this one.
 RD="$WORK/rfo-memo-dir"; mkdir -p "$RD"
 cp "$UNDER_TEST" "$RD/retired-fixtures.sh"; cp "$DIST/core/skills/ai-dlc-update/reconcile/preclassify.sh" "$RD/"
-cp "$SRC_DIR/lib.sh" "$RD/lib.sh"
+cp "$SRC_DIR/lib.sh" "$RD/lib.sh"; cp "$SRC_DIR/consumer-read.sh" "$RD/consumer-read.sh"
 RM="$(mktemp -d "$WORK/rfo-memo.XXXXXX")"
 AI_DLC_RECONCILE_MEMO="$RM" bash "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" > "$WORK/rm.ctl" 2>/dev/null
 rm_c="$(grep -c '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-distonly' "$WORK/rm.ctl")" || rm_c=0
@@ -366,7 +368,7 @@ expect_set remedy-unusable 1 'does not name a removable consumer path' \
 # history, so a guard this wide trades one blind spot for a larger one. This is the mutant
 # that proves the arm-A-survives assertion is not riding on M1.
 expect_set guard-too-wide 1 'arm A went silent with arm B' \
-  's@      \[ -d "${CONSUMER}/${cons_rel}" \] || continue@      [ -d "${CONSUMER}/${cons_rel}" ] || continue\
+  's@      \[ "$rf_t" -eq 0 \] || continue@      [ "$rf_t" -eq 0 ] || continue\
       [ "$(git -C "$DIST" rev-parse --is-shallow-repository 2>/dev/null)" = true ] \&\& continue@'
 
 if [ "$fails" -eq 0 ]; then

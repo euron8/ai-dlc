@@ -132,6 +132,10 @@
 #                                 same empty output as a tree with no drift, and the caller
 #                                 reads that as clean.
 set -uo pipefail
+# Globbing off for the whole run. The one unquoted word list, the `git log` sha list in
+# closest_ancestor_blob, holds 40-hex words that cannot glob; ls-files pathspecs and `case`
+# patterns are matched by git and by `case`, never by pathname expansion.
+set -f
 
 # `--bucket-rows` is parsed off the FRONT and the positional contract below is untouched, so
 # every existing caller and fixture keeps working unchanged. An unknown `--flag` is left in
@@ -157,6 +161,7 @@ THEIRS="${4:-}"
 # below falls back to a direct `git` call when the memo helpers are unavailable, so an
 # unsourceable lib.sh degrades this to its pre-cache behavior.
 SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "unregistered-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
 # git_show <ref> <path> -- this file's own spelling of the shared memo, so every existing
 # `git -C "$DIST" show "${ref}:${path}"` call site becomes a one-line substitution.
@@ -194,9 +199,8 @@ git_show() {
 # accident. Absent stamp, legacy single-line stamp, or `skill_commit` equal to `commit`: no ref,
 # and every verdict below is exactly what it was.
 SELF_UPDATE_REF=""
-_stamp="$CONSUMER/.claude/.ai-dlc-version"
-if [ -f "$_stamp" ]; then
-  SELF_UPDATE_REF="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_stamp" | head -1)"
+if cr_test "$CONSUMER" -f .claude/.ai-dlc-version; then
+  SELF_UPDATE_REF="$(cr_read "$CONSUMER" .claude/.ai-dlc-version | sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)"
   [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
   # A ref this distribution cannot resolve tells us nothing, and comparing against it would
   # silently never match -- which reads exactly like a tree with no self-update hop.
@@ -453,10 +457,10 @@ if ! command -v map_consumer >/dev/null 2>&1; then
     "could not load map_consumer() — nothing was scanned. Refusing to fall back to a private path table: it would map some subtrees, skip the rest, and print an empty result that reads as no drift."
   ud_finish
 fi
-consumer_path() { # <core-stripped rel> -> absolute consumer path
+consumer_path() { # <core-stripped rel> -> consumer-ROOT-RELATIVE path (consumer-read.sh reads it)
   local m; m="$(map_consumer "core/$1")"
   [ -n "$m" ] || return 1
-  printf '%s/%s' "$CONSUMER" "$m"
+  printf '%s' "$m"
 }
 
 # --- THE CARRIED-PATH SET -----------------------------------------------------------------
@@ -710,8 +714,16 @@ while IFS= read -r cp; do
       # (see `emit`), so nothing past it is scanned or reported.
       [ "$ud_emit_failed" -eq 0 ] || break
       rel="${cp#core/}"
-      cons="$(consumer_path "$rel")" || continue
-      [ -f "$cons" ] || continue
+      cons_rel="$(consumer_path "$rel")" || continue
+      # 2 from consumer-read.sh is a path it may not resolve: a refusal, never the "no copy" skip.
+      _cf=0; cr_test "$CONSUMER" -f "$cons_rel" || _cf=$?
+      [ "$_cf" -ne 2 ] || ud_read_refuse "the consumer path ${cons_rel} (a '..' component or a leading '/')" 2
+      [ "$_cf" -eq 0 ] || continue
+      # THE CONSUMER COPY IS STAGED ONCE PER ITERATION, through cr_read, its status read, and every
+      # reader below (cmp, diff, wc, the absorption and ancestor scans) reads the staged copy.
+      cons="$UD_DIFF_TMP/cons"
+      _cr=0; cr_read "$CONSUMER" "$cons_rel" > "$cons" || _cr=$?
+      [ "$_cr" -eq 0 ] || ud_read_refuse "the consumer copy ${cons_rel}" "$_cr"
 
       git -C "$DIST" cat-file -e "${BASE}:${cp}" 2>/dev/null || continue
 
@@ -820,7 +832,7 @@ while IFS= read -r cp; do
            && [ $(( hits * 100 / total )) -ge 10 ] \
            && { [ -z "$carried_b" ] || [ "${hits:-0}" -eq "${total:-0}" ]; }; then
           emit HARD-CORE-DRIFT-ABSORBED "$rel" \
-            "UPSTREAM ABSORBED THIS. ${hits} of ${total} lines this consumer added (absent from core at ${BASE}) are PRESENT in core at ${THEIRS}. The remedy is a REVERT, not an override — core now carries it. Confirm the upstream version covers your delta, then: git -C ${DIST} show ${THEIRS}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because a revert DELETES text and only you can confirm nothing was lost."
+            "UPSTREAM ABSORBED THIS. ${hits} of ${total} lines this consumer added (absent from core at ${BASE}) are PRESENT in core at ${THEIRS}. The remedy is a REVERT, not an override — core now carries it. Confirm the upstream version covers your delta, then: git -C ${DIST} show ${THEIRS}:${cp} > <consumer>/${cons_rel}. This still blocks because a revert DELETES text and only you can confirm nothing was lost."
           continue
         fi
       fi
@@ -844,7 +856,7 @@ while IFS= read -r cp; do
         a_sha="${anc%% *}"; anc="${anc#* }"; a_date="${anc%% *}"; anc="${anc#* }"
         a_n="${anc%% *}"; b_n="${anc#* }"
         emit HARD-CORE-BEHIND "$rel" \
-          "NOT A FORK — THIS COPY IS STALE. It differs from core@${BASE} by ${b_n} lines, but from ${a_sha} (${a_date}), an ancestor of your own base, by only ${a_n}. The gap is upstream's change since ${a_date}, which this file never took — a file excluded from apply freezes while the stamp advances. The remedy is TAKE THEIRS: git -C ${DIST} show ${THEIRS:-$BASE}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because the ${a_n}-line residual against ${a_sha} IS yours: read it first (git -C ${DIST} show ${a_sha}:${cp} | diff - <consumer>/${cons#$CONSUMER/}) and confirm nothing in it is still wanted."
+          "NOT A FORK — THIS COPY IS STALE. It differs from core@${BASE} by ${b_n} lines, but from ${a_sha} (${a_date}), an ancestor of your own base, by only ${a_n}. The gap is upstream's change since ${a_date}, which this file never took — a file excluded from apply freezes while the stamp advances. The remedy is TAKE THEIRS: git -C ${DIST} show ${THEIRS:-$BASE}:${cp} > <consumer>/${cons_rel}. This still blocks because the ${a_n}-line residual against ${a_sha} IS yours: read it first (git -C ${DIST} show ${a_sha}:${cp} | diff - <consumer>/${cons_rel}) and confirm nothing in it is still wanted."
         continue
       fi
 

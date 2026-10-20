@@ -9,3 +9,4 @@ scripts/backlog-reverify.sh
 docs/backlog.archive.md
 core/skills/ai-dlc/steps/gate-validation.md
 core/fixtures/gate-verdict-grep-shape/
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

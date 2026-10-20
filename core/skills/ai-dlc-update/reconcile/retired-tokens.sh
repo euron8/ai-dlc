@@ -78,6 +78,8 @@
 #      or preclassify.sh listed no rows at all, so no subject set exists to report on
 
 set -u
+# Globbing off for the whole run: no word list here relies on pathname expansion.
+set -f
 
 BUCKET_ROWS=""
 while [ "$#" -gt 0 ]; do
@@ -95,6 +97,7 @@ CONSUMER="${4:?}"
 ONLY="${5:-}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "retired-tokens: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # Live `$VAR/path` tokens on stdin, comments stripped, sorted unique.
 #
@@ -221,8 +224,11 @@ while IFS="$(printf '\t')" read -r cp cons; do
   [ -z "$ONLY" ] || [ "$ONLY" = "$cp" ] || continue
   listed=$((listed + 1))
 
-  ours="$CONSUMER/$cons"
-  [ -f "$ours" ] || continue
+  # 2 from consumer-read.sh is a path it may not resolve (`..`, a leading `/`): a refusal, never
+  # the "consumer lacks it" skip.
+  _rt_f=0; cr_test "$CONSUMER" -f "$cons" || _rt_f=$?
+  [ "$_rt_f" -ne 2 ] || rt_refuse "resolving the consumer path $cons" 2
+  [ "$_rt_f" -eq 0 ] || continue
 
   rt_blob "$BASE" "$cp" "$RT_T/blob-base" || continue
   rt_blob "$THEIRS" "$cp" "$RT_T/blob-theirs" || continue
@@ -251,7 +257,9 @@ while IFS="$(printf '\t')" read -r cp cons; do
   retiring=$((retiring + 1))
 
   printf '%s\n' "$retired" > "$RT_T/retired" || rt_refuse "staging the retired tokens of $cp" "$?"
-  rt_toks "$cons" "$RT_T/toks-ours" < "$ours" || rt_refuse "reading $cons" "$?"
+  # STAGED through cr_read, its status read, then fed as a file like the blobs above.
+  cr_read "$CONSUMER" "$cons" > "$RT_T/ours" || rt_refuse "reading $cons" "$?"
+  rt_toks "$cons" "$RT_T/toks-ours" < "$RT_T/ours" || rt_refuse "reading $cons" "$?"
   comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"
   while IFS= read -r tok; do
     [ -n "$tok" ] || continue

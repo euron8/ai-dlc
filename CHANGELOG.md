@@ -19,6 +19,91 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.889.0] - 2026-10-20
+
+Batch 236, BL-685 round-8 key-fix release (owned and gated by ai-dlc-69 [9599d6]; lead ai-dlc-37). Advances BL-685,
+which stays open: adversary round 8 on 0.885.0 found six BLOCKERs, every one a detector resolving a consumer path
+the key did not cover. This release closes that class at its source instead of patching the instances. The
+recorded-PASS cache stays off by default. Closes no `PC-` id. Net for this release: 0 closed, 0 filed.
+
+### Every consumer read in the recorded-PASS closure goes through one helper, and the key re-takes what it read (BL-685, round 8)
+
+Round 8 found the same defect five ways: an extension `hooks:` value escaping the tree (B1), a `fixtures:` value
+globbed against the engine's working directory (B2), the receipts label collapsing `docs/a/../d` and `docs/b/../d`
+into one row though the OS resolves them differently (B3), a `.claude/WORKTREES` spelling slipping past a
+case-sensitive prefix test (B4), and a relocation test under a bare `scripts/` no read root listed (B5). Keying
+receipt subjects in round 7 had patched two instances inside one detector; there was no single point every
+consumer-derived path passed through.
+
+- **`consumer-read.sh` is that point.** `cr_test`, `cr_read`, `cr_hash`, `cr_walk`, `cr_git` and `cr_run` take a
+  root and a root-relative path, refuse a `..` component, a leading `/` and (for a walk) a leading `-`, run with
+  globbing off, and append the path they RESOLVED, never a lexical label, to a read log. Every closure detector
+  (emit-report.sh and the thirteen scripts it runs, plus lib.sh) reads the consumer only through it, and
+  `cd "$CONSUMER"` is gone.
+- **The key re-takes the read log.** A record is format 2: the fixed key plus the render's sorted log. A lookup
+  re-takes every logged entry and misses on any difference; a record is written only when the key after the render
+  equals the key before it. The receipts field and its label are deleted. A refused path, a symlink on any logged
+  path (R2 widened), a symlink AT `.claude/worktrees` (N1) and a path read twice with two answers each refuse the
+  record by name. A `.claude/worktrees` case variant is dropped from the ignored-file list only when it is the same
+  directory (`-ef`).
+- **Every closure script sets `set -f` in its preamble.** No intentional pathname glob remained; the two real ones
+  became `cr_walk` and `cr_list`.
+- **`scripts/validate-consumer-reads.sh`, step 1e2 of the pre-push hook**, derives the closure from emit-report.sh's
+  own `$SELF/<x>.sh` invocations and fails on any operand rooted at a consumer root variable outside a `cr_*` body
+  (CR1), and on a closure script without the `set -f` preamble or with an unpaired `set +f` (CR2). Its self-probe runs
+  first: 18 CR1 and 5 CR2 offenders flagged and every near miss quiet, including a rooted read in the helper's own file outside a
+  `cr_*` function and a read in a new script reached only through the derived closure. Measured on 0.885.0's
+  closure: 109 CR1 and 31 CR2 rows, every CR1 row a real consumer read once three narrowings (a command name inside a
+  string, a rooted assignment value, an operand past a separator) were applied, each recorded in its header.
+- `reconcile-emit-report`: new arms PC-V49 (B1), PC-V50 (B2), PC-V51 (B3), PC-V52 (B4), PC-V53 (B5), PC-V54 (N1) and
+  PC-V55. Each B-arm goes STALE on the 0.886.0 engine, naming its B-id, and passes on this one; each also requires
+  its world to still reach the code, failing as "world no longer triggers" otherwise. PC-V55 seeds a tracked file in
+  the report's own directory read only through `cr_run`, the input that separates the git fields from the read log,
+  and now kills the M-direxcl mutant, which this engine had otherwise let survive. PC-V43, whose subject was the
+  deleted receipts label, is retired into PC-V51; PC-V48 now asserts the read log. The round-8 arms run behind the
+  fix's record-format marker: in the distribution a missing marker fails by name, and in an installed tree, where the
+  fixture can land a pull ahead of the engine, it prints one PENDING line. PC-V42 and the M-region mutant do the same.
+- `consumer-read.sh` is declared in the thirteen fixtures whose `inputs.decl` lists single reconcile scripts that
+  source it, and the two undeclared units whose traced sets name such a script are re-traced.
+
+### Fixes from the first release pre-run (BL-685, round 8)
+
+The first stamp of this content went red in its declared-reads pre-run, 34 units not passing. It was voided and
+never pushed. Four fix rounds followed, each re-run by name on the affected units.
+
+- **The helper forks only tools the hermetic farms declare.** A hermetic sandbox's PATH is its fixture's declared tool
+  farm, and several closure-running fixtures declare no `env`, `ln` or `cmp`. The engine now runs `sh` receipts and
+  validators without `env`. `cr_path` validates and logs a consumer path and hands it to a caller that must name the
+  file itself, such as the report's `diff`, so no symlink is staged. A compare that needed `cmp` is a builtin
+  comparison. `cr_list` lists immediate subdirectories with a logged glob and forks neither `find` nor `sort`.
+  `cr_walk` passes `find` the absolute path and strips the prefix, so a `-path` predicate matches the spelling
+  `find` really prints.
+- **Lost diagnostics are restored in the engine.** A refusal that the helper had re-worded now names its cause as
+  before, including a missing `consumer-read.sh` beside a copied detector. `consumer-read.sh` is tracked executable and
+  carries no region-exempt marker.
+- **Fixtures that copy single reconcile scripts copy `consumer-read.sh` beside them.** Every partial-tree builder was
+  re-derived (116 copy sites) and the one gap fixed. Mutants that pinned the pre-helper engine are re-pinned to this one.
+- **layer-adjudication-tier's Part 7 mutant is retired to the consumer-reads validator**, whose CR1 arm gains a
+  multi-line `( cd <consumer> …` class that catches the same edit at push time. Part 8 gets its own mutant directory.
+- `reconcile-emit-report-b`'s E5 asks `find` for the unreadable directory, and `procsub-staged-refusal-c`'s
+  here-string mutant gets an input that both its arms kill.
+
+### Limits
+- **The open part of the class is a program run through `cr_run`.** Its own reads cannot be logged, so the
+  hand-listed read roots and the ignored-file field stay in the key on every record as a belt. A `cr_run` program
+  reading a file outside every belt root, or a tracked file the index fields do not see, is the residual. Round 9
+  targets it first.
+- **A `..` in a `hooks:` value or a receipt token now means no cached record.** The render refuses that path and the
+  record is refused; this fails closed, and it is a behaviour change for a consumer that relied on such a value.
+- **The first armed `--verify` can write no record** when the engine directory changes during the render; that is
+  the before/after key comparison refusing, by design.
+- Out of the closure and not owed by this release: 164 consumer-path reads in the write path (apply, self-update,
+  post-write, settings-merge), which are not inputs to the recorded verdict.
+- Q3 of round 8: a hardlink and an unprivileged `hdiutil` mount each miss correctly; a firmlink and a bind mount cannot
+  be created unprivileged on macOS and are UNRUN.
+- The cache default stays OFF until an adversary round on this engine returns no BLOCKER and the lead rules.
+
+
 ## [0.888.0] - 2026-10-20
 
 Batch 236, the BL-718 readers-first release. Every reader of the `artifact_sha` pair grammar now accepts

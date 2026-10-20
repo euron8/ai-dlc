@@ -1481,11 +1481,11 @@ ac_kill_pre() { # ac_kill_pre <label> <sed-expr> <want-carry-set> <why>
   fi
 }
 
-ac_kill_pre "armc-mut-setf" 's@^  set -f$@  : set -f removed@' \
+ac_kill_pre "armc-mut-setf" 's@^  set -f$@  set +f@' \
   'core/git-hooks/pre-push,' \
   "without set -f the pathspecs expand against the CWD and the machinery set collapses to the entries carrying no glob character"
 
-ac_kill_pre "armc-mut-base" '/--with-tree="\$BASE"/d' \
+ac_kill_pre "armc-mut-base" 's@--with-tree="\$BASE"@--with-tree="$THEIRS"@' \
   'core/git-hooks/pre-push,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,' \
   "resolving the globs at THEIRS alone loses the path deleted upstream, where the consumer's copy is the only copy left"
 

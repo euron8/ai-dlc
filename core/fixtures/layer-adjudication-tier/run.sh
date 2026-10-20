@@ -743,42 +743,18 @@ else
   bad "consumer-root FORM changed the result: degraded messages abs=$abs_deg rel=$rel_deg, HARD- rows abs=$abs_hard rel=$rel_hard. The operator cannot record a verdict against a digest that was never computed"
 fi
 
-# MUTATION: remove the absolutization and require the relative form to degrade. Without it
-# the assertion above is satisfied by any build in which BOTH forms happen to work.
-# THE MUTANT IS BUILT INSIDE A COPY OF THE WHOLE reconcile/ DIRECTORY, not as a lone file.
-# `layer-drift.sh` sources `lib.sh` from its own directory, so a copy anywhere else dies at
-# the source line and emits NOTHING — and zero degraded messages from a script that never ran
-# reads exactly like a mutant that survived. That is this repo's lone-copy trap arriving from
-# the opposite direction, so the unmutated control below comes from the same copied directory.
-MUTDIR="$ROOT/reconcile-mutant"; mkdir -p "$MUTDIR"
-cp "$(dirname "$DRIFT")"/* "$MUTDIR"/ 2>/dev/null
-MUT="$MUTDIR/layer-drift.sh"
-CTL="$MUTDIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL" 2>/dev/null
-MUT_OLD='CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }'
-MUT_OLD="$MUT_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],"true",1))' \
-  "$DRIFT" "$MUT" 2>/dev/null
-ctl_abs="$(bash "$CTL" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^HARD-')"
-if [ ! -s "$MUT" ] || cmp -s "$DRIFT" "$MUT"; then
-  bad "FIXTURE ERROR: the absolutization mutation matched nothing — Part 7 proves nothing. Update MUT_OLD to match layer-drift.sh's real parse-time absolutization"
-elif [ "$ctl_abs" -ne "$abs_hard" ]; then
-  bad "FIXTURE ERROR: the UNMUTATED copy in $MUTDIR reports $ctl_abs HARD- rows against $abs_hard in place — the copied directory is not a working harness, so no verdict below is attributable"
-else
-  ok "CONTROL: an unmutated copy in the same directory still reports $ctl_abs HARD- row(s) — the mutant verdicts below are its edit, not the copy"
-  mut_rel="$( (cd "$CONS" && bash "$MUT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c 'could not be computed')"
-  mut_abs="$(bash "$MUT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c 'could not be computed')"
-  if [ "$mut_rel" -ge 1 ]; then
-    ok "MUTATION — without the absolutization the relative form degrades ($mut_rel message(s)): the parse-time fix is what Part 7 tests"
-  else
-    bad "MUTATION — the relative form still resolved without the absolutization, so Part 7's assertion is vacuous"
-  fi
-  # Pairing: the mutant must still be CORRECT under an absolute root. A mutant that degrades
-  # both ways would satisfy the assertion above while testing nothing about the root FORM.
-  if [ "$mut_abs" -eq "$abs_deg" ]; then
-    ok "MUTATION PAIRING — the same mutant is unaffected under an absolute root: it died of the FORM, not of the edit"
-  else
-    bad "MUTATION PAIRING — the mutant also degraded under an absolute root ($mut_abs vs $abs_deg), so its verdict cannot be attributed to the consumer-root form"
-  fi
-fi
+# THE PART 7 MUTANT IS RETIRED (round 8, the lead's ruling). It removed the parse-time absolutization
+# and required the relative form to degrade. That defect was `git -C "$DIST" hash-object
+# "$CONSUMER/$1"` resolving a relative consumer path inside the dist; layer-drift.sh no longer reads
+# any consumer path that way (every read goes through consumer-read.sh, resolved from the consumer
+# root), so with the absolutization gone the relative form keeps working and the mutant could not die.
+# Its property now has two holders:
+#   1. the arm above: a RELATIVE and an ABSOLUTE consumer root give the same digests and the same
+#      HARD- row count, which still fails if the relative form degrades for any reason;
+#   2. scripts/validate-consumer-reads.sh CR1, which fails the push on any consumer-path read in the
+#      reconcile closure that does not go through consumer-read.sh -- including a multi-line
+#      `( cd <x>` subshell whose body touches a consumer root, the shape that would resolve a
+#      relative consumer path against the wrong directory again.
 
 # --- Part 8: a DEGENERATE RANGE disarms every ADJUDICATED arm, and must say so --------------
 #
@@ -836,8 +812,8 @@ fi
 
 # MUTATION — compare the argument strings instead of the resolved ids. The sha-vs-ref arm must go
 # dark and the sha-vs-sha arm must not, or the mutant is testing something else.
-MUT8DIR="$MUTDIR-degenerate"
-rm -rf "$MUT8DIR"; mkdir -p "$MUT8DIR"
+# Its own scratch dir: Part 7's mutant (which made the old shared MUTDIR) is retired.
+MUT8DIR="$(mktemp -d "$ROOT/reconcile-mutant-degenerate.XXXXXX")" || { bad "FIXTURE ERROR: could not create Part 8's mutant directory"; exit 2; }
 cp "$(dirname "$DRIFT")"/*.sh "$MUT8DIR/" 2>/dev/null
 MUT8="$MUT8DIR/layer-drift.sh"
 sed 's@^  if \[ "\$BASE_SHA" = "\$THEIRS_SHA" \]; then@  if [ "$BASE" = "$THEIRS" ]; then@' "$DRIFT" > "$MUT8"

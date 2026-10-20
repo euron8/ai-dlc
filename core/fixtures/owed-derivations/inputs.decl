@@ -8,3 +8,4 @@ core/skills/ai-dlc-update/reconcile/apply.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/scripts/validate-artifact-derivations.sh
 core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/consumer-read.sh

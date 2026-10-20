@@ -299,6 +299,9 @@ fi
 # clean tree print the same empty output, and hard-blockers.sh reads both as 0 blockers.
 UD="$(dirname "$APPLY")/unregistered-drift.sh"
 LONE_UD="$WORK/lone/unregistered-drift.sh"; cp "$UD" "$LONE_UD"
+# LONE OF preclassify.sh ONLY (the map_consumer source this arm removes): the detector also SOURCES
+# consumer-read.sh, and a copy without it exits 2 at that line, before the arm's subject.
+cp "$(dirname "$UD")/consumer-read.sh" "$WORK/lone/consumer-read.sh"
 UD_OUT="$(bash "$LONE_UD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
 if grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$UD_OUT"; then
   ok "unregistered-drift.sh with no map_consumer to load emits a HARD row (an unrunnable scan never reads as clean)"

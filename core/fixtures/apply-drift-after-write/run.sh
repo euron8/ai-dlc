@@ -317,6 +317,8 @@ NOGUARD="$WORK/drift-noguard.sh"
 # missing manifest is a refusal (a broken install), not an empty set -- so a copy without it
 # exits 2 before any row and reads here as "the hazard did not reproduce".
 cp "$(dirname "$DRIFT")/preclassify.sh" "$(dirname "$DRIFT")/setup-sites.md" "$WORK/"
+# And what the scan SOURCES: consumer-read.sh (a missing one exits 2 at its source line) and lib.sh.
+cp "$(dirname "$DRIFT")/consumer-read.sh" "$(dirname "$DRIFT")/lib.sh" "$WORK/"
 # THE STRIP TAKES THE COMPARE-AND-CONTINUE BLOCK ONLY. The theirs blob is STAGED one block above
 # (`ud_theirs`), and absorption reads that staged copy, so the staging must survive the strip or
 # the ABSORBED row this assertion demands could never return. Keyed on the `if` that ends in a

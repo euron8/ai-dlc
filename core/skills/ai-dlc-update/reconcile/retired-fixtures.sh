@@ -40,6 +40,9 @@
 # Output: TSV — STATUS<TAB>consumer-path<TAB>DETAIL
 # Exit:   0 ALWAYS. A classifier, not a gate — the signal never blocks.
 set -uo pipefail
+# GLOBBING OFF: every consumer path is read through consumer-read.sh, and the one directory listing
+# below is a cr_walk, never a glob.
+set -f
 
 DIST="${1:?usage: retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>}"
 THEIRS="${2:?usage: retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>}"
@@ -52,6 +55,7 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 # private copy here would be a second home for the same list, and this repo has already
 # paid for that twice — `unregistered-drift.sh`'s own header records its copy going wrong.
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF/consumer-read.sh" || { echo "retired-fixtures: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" 2>/dev/null || true
 eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)"
@@ -72,7 +76,15 @@ if [ "$fx_root" = "$fx_rel" ] || [ -z "$fx_root" ]; then
     "map_consumer() did not map a core fixture path to a consumer fixture path, so the consumer's fixture root could not be derived and nothing was scanned. The mapper's core/fixtures/* arm has moved or been removed."
   exit 0
 fi
-[ -d "${CONSUMER}/${fx_root}" ] || exit 0   # a consumer with no fixtures cannot hold an orphan
+# A consumer with no fixtures cannot hold an orphan. A fixture root consumer-read.sh refuses (rc 2,
+# a `..` or absolute mapping) is the scan-unavailable row, never "no fixtures".
+rf_t=0; cr_test "$CONSUMER" -d "$fx_root" || rf_t=$?
+if [ "$rf_t" -eq 2 ]; then
+  emit HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "-" \
+    "the consumer fixture root map_consumer() derived (${fx_root}) is not a plain consumer-relative path, so it could not be read and nothing was scanned."
+  exit 0
+fi
+[ "$rf_t" -eq 0 ] || exit 0
 
 # --- ARM A: core still has it, marked `.dist-only` -----------------------------
 # Read from the tree at THEIRS, so a fixture retired IN THIS PULL is reported by this pull.
@@ -104,7 +116,13 @@ printf '%s\n' "$rf_tree" | grep '^core/fixtures/' \
       n="${marker#core/fixtures/}"; n="${n%/.dist-only}"
       [ -n "$n" ] || continue
       cons_rel="$(map_consumer "core/fixtures/${n}/run.sh")"; cons_rel="${cons_rel%/run.sh}"
-      [ -d "${CONSUMER}/${cons_rel}" ] || continue
+      rf_t=0; cr_test "$CONSUMER" -d "$cons_rel" || rf_t=$?
+      if [ "$rf_t" -eq 2 ]; then
+        emit HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "$cons_rel" \
+          "the consumer path map_consumer() derived for the .dist-only fixture ${n} is not a plain consumer-relative path, so whether you still carry it could not be read. This is not a finding of no orphan."
+        continue
+      fi
+      [ "$rf_t" -eq 0 ] || continue
       emit RETIRED-FIXTURE-ORPHAN "$cons_rel" \
         "core marked this fixture .dist-only, so neither install nor apply ships it any more — but your copy was installed before that and nothing has updated it since. It is frozen at whatever core last shipped and no longer matches the mechanism it tests. Core cannot remove it: the file is yours. Retire it: rm -rf <consumer>/${cons_rel}. If you have edited it into a fixture of your own, rename the directory so it stops shadowing a core name."
     done
@@ -134,9 +152,26 @@ if [ "$dist_shallow" = "true" ] || [ -z "$(git -C "$DIST" log --all --format=%H 
   emit RETIRED-FIXTURE-HISTORY-UNAVAILABLE "-" \
     "this distribution clone is shallow or carries no history for core/fixtures, so a fixture core DELETED cannot be told apart from one you wrote yourself, and arm B did not run. Arm A (fixtures core marked .dist-only) needs no history, is unaffected, and its result above stands. Re-run from a full clone to complete the scan."
 else
-  for d in "${CONSUMER}/${fx_root}"/*/; do
-    [ -d "$d" ] || continue
-    n="$(basename "$d")"
+  # THE IMMEDIATE SUBDIRECTORIES, LISTED BY cr_list: the `"$root"/*/` glob this arm always used, run
+  # inside consumer-read.sh so the listing is logged. NOT cr_walk: that forks `find` and `sort`, which
+  # this detector never needed, and under a tool farm declaring neither the walk failed and arm B
+  # went silent on a deleted fixture (measured on retired-fixture-orphan's unmutated control).
+  rf_walk="$(mktemp "${TMPDIR:-/tmp}/retired-fixtures.XXXXXX")" || rf_walk=""
+  rf_w=0
+  if [ -z "$rf_walk" ]; then rf_w=125
+  else
+    trap 'rm -f "$rf_walk"' EXIT
+    cr_list "$CONSUMER" "$fx_root" > "$rf_walk" 2>/dev/null || rf_w=$?
+  fi
+  if [ "$rf_w" -ne 0 ]; then
+    emit HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "-" \
+      "the walk of the consumer fixture root ${fx_root} did not complete (exit ${rf_w}), so arm B (fixtures core deleted outright) did not run. An unread listing prints the same empty result as a tree with no orphan, so this is reported instead of that silence."
+  fi
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    n="${d##*/}"
+    case "$n" in .*) continue ;; esac
+    cr_test "$CONSUMER" -d "$d" || continue
     # Still shipped, or dist-only? Arm A owns it either way. NOT `ls-tree … | grep -q`:
     # this file enables pipefail, so the reader's early exit would answer with the writer's
     # EPIPE on a large enough tree. I54b bans exactly that and v0.231.0 swept 22 of them.
@@ -149,7 +184,7 @@ else
     last="$(git -C "$DIST" log --all --format='%h (%ad)' --date=short -1 -- "core/fixtures/${n}" 2>/dev/null)"
     emit RETIRED-FIXTURE-ORPHAN "${fx_root}/${n}" \
       "core DELETED this fixture — it was last in core's tree at ${last} and is not at ${THEIRS} — but your copy is still here and nothing removed it. Core cannot: the file is yours. Retire it: rm -rf <consumer>/${fx_root}/${n}. If you have adopted it as a fixture of your own, rename the directory so it stops shadowing a core name."
-  done
+  done < "${rf_walk:-/dev/null}"
 fi
 
 exit 0   # classifier — the signal never blocks

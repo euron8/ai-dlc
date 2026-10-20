@@ -1066,7 +1066,12 @@ if [ "$FX_L" -gt 0 ]; then
   FXRT_T="$(git -C "$RTD" rev-parse HEAD)"
   git -C "$RTD" show "${FXRT_B}:core/scripts/z.sh" > "$FW/rt-payload"
   git -C "$RTD" show "${FXRT_B}:core/scripts/b.sh" > "$RTC/scripts/ai-dlc/b.sh"
-  { cat "$FW/rt-payload"; echo; echo 'uses $ROOT/old-b too'; } > "$RTC/scripts/ai-dlc/z.sh"
+  # THE CONSUMER COPY IS SMALL ON PURPOSE: two lines, both tokens the arm reads. The engine stages it
+  # (`cr_read … > "$RT_T/ours"`) AFTER the two blob feeds, so a copy as large as the blob refused
+  # there under the cap on BOTH the engine and a here-string mutant, and the mutant's false row never
+  # printed. Small, it lands whole, the feeds are the only site the cap can reach, and the calibration
+  # below asserts it fits.
+  printf 'x=$ROOT/old-z\nuses $ROOT/old-b too\n' > "$RTC/scripts/ai-dlc/z.sh"
   printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$FW/rt-rows"
 fi
 # --- retired-layer-contract, the path arm's OWN staging: ONE retired rulebook path whose name is 493
@@ -1587,7 +1592,7 @@ else
   fx_cal retired-layer-contract "$FX_N" "$RFC/.claude/skills/ai-dlc/extensions/e.md" 64
   fx_cal warn-shadowed-closed "$FX_N" "$FW/ws-payload" "$(fx_sz "$FW/ws6-payload")"
   fx_cal warn-shadowed-emitter 2 "$FW/ws6-payload" 16
-  fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L"
+  fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L" "$(fx_sz "$RTC/scripts/ai-dlc/z.sh")"
   # The spellings file is the payload; the retired-path set and the base tree listing (its superset)
   # must land whole, or the copy refuses before the site under test.
   fx_cal retired-layer-contract-spellings "$FX_RLS_N" "$FW/rls-payload" \
@@ -2271,16 +2276,16 @@ mutant CI-SUBSHELL scripts validate-ci-gates.sh arm_ci_healthy "arm_ci_surface" 
   'surface_hits="$(code_hits "${WORKFLOW_DIR}" "$gate")" || exit 2' \
   'surface_hits="$(code_hits "${WORKFLOW_DIR}" "$gate")" || surface_hits=0'
 mutant RX-WALK reconcile relabel-extension-checks.sh arm_rx_healthy "arm_rx_walk" \
-  'find "$EXT_DIR" -name '"'"'*.md'"'"' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?' ':' \
-  'done < "$RX_T/ext-walk"' 'done < <(find "$EXT_DIR" -name '"'"'*.md'"'"' -type f | sort)'
+  'cr_walk "$CONSUMER" "$EXT_REL" -name '"'"'*.md'"'"' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?' ':' \
+  'done < "$RX_T/ext-walk"' 'done < <(cr_walk "$CONSUMER" "$EXT_REL" -name '"'"'*.md'"'"' -type f | sort)'
 mutant RLP-WALK reconcile retired-layer-passage.sh arm_rlp_healthy "arm_rw_walk" \
-  'find "$LAYERS/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?' ':' \
+  'cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?' ':' \
   'sort "$RLP_T/walk-$dir" > "$RLP_T/walk-$dir.sorted" || rlp_refuse "sorting the layer walk of $LAYERS/$dir" "$?"' ':' \
-  'done < "$RLP_T/walk-$dir.sorted"' 'done < <(find "$LAYERS/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null | sort)'
+  'done < "$RLP_T/walk-$dir.sorted"' 'done < <(cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f -name '"'"'*.md'"'"' 2>/dev/null | sort)'
 mutant RLC-WALK reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rw_walk" \
-  'find "$LAYERS/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?' ':' \
+  'cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?' ':' \
   'sort "$RLC_T/walk-$dir" > "$RLC_T/walk-$dir.sorted" || rlc_refuse "sorting the layer walk of $LAYERS/$dir" "$?"' ':' \
-  'done < "$RLC_T/walk-$dir.sorted"' 'done < <(find "$LAYERS/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null | sort)'
+  'done < "$RLC_T/walk-$dir.sorted"' 'done < <(cr_walk "$CONSUMER" "$LAYERS_REL/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null | sort)'
 # The three below anchor on the rt_toks feeds as the here-string conversion left them: each reads
 # the blob rt_blob staged, and refuses on a failed read. The observable is unchanged.
 RT_FEED_B='rt_toks "${cp}@${BASE}" "$RT_T/toks-base" < "$RT_T/blob-base" || rt_refuse "reading the staged base blob of $cp" "$?"'
@@ -2291,8 +2296,8 @@ mutant RT-SUBTRACT reconcile retired-tokens.sh arm_rt_healthy "arm_rt_all arm_rt
 mutant RT-PIPE reconcile retired-tokens.sh arm_rt_healthy "arm_rt_base" \
   "$RT_FEED_B" 'printf '"'"'%s\n'"'"' "$b" | rt_toks "${cp}@${BASE}" "$RT_T/toks-base"'
 mutant RT-OURS reconcile retired-tokens.sh arm_rt_healthy "arm_rt_ours" \
-  $'  rt_toks "$cons" "$RT_T/toks-ours" < "$ours" || rt_refuse "reading $cons" "$?"\n  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"\n' '' \
-  '  done < "$RT_T/spoken"' $'  done < <(comm -12 <(printf \'%s\\n\' "$retired") <(toks < "$ours"))'
+  $'  rt_toks "$cons" "$RT_T/toks-ours" < "$RT_T/ours" || rt_refuse "reading $cons" "$?"\n  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"\n' '' \
+  '  done < "$RT_T/spoken"' $'  done < <(comm -12 <(printf \'%s\\n\' "$retired") <(toks < "$RT_T/ours"))'
 mutant RO-FROM reconcile readopt-override.sh arm_ro_healthy "arm_ro_sort arm_ro_git" \
   $'  section_lines "$1" "$3" "$4-from" > "$RO_T/$4-from-lines" || return 3\n' '' \
   '  done < "$RO_T/$4-from-lines"' '  done < <(section_lines "$1" "$3" "$4-from")'
@@ -2509,11 +2514,11 @@ if [ "$(id -u)" -eq 0 ]; then
   skip "mutant RLC-CAT: its killing cell needs a mode-000 file root can read (this is not a pass)"
 else
   mutant RLC-CAT reconcile retired-layer-contract.sh arm_fx_rlc_healthy "arm_rlc_unread_layer" \
-    'body="$(cat "$f")" || _rlc_rc=$?' 'body="$(cat "$f" 2>/dev/null || true)"'
+    'body="$(cr_read "$CONSUMER" "$f")" || _rlc_rc=$?' 'body="$(cr_read "$CONSUMER" "$f" 2>/dev/null || true)"'
 fi
 # relabel: the rule-set staging and its refusal moved AFTER the check pass, which may already have
 # moved the extension. The refusal line is unchanged, so only the extension's bytes can kill it.
-RX_STAGE_RULES=$'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }\n'
+RX_STAGE_RULES=$'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }\n'
 mutant RX-ORDER reconcile relabel-extension-checks.sh arm_fx_rx_healthy "arm_fx_rxo_apply" \
   "$RX_STAGE_RULES" '' \
   $'  done < "$RX_T/core-nums"\n' $'  done < "$RX_T/core-nums"\n'"$RX_STAGE_RULES"
