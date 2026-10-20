@@ -321,6 +321,14 @@ LC_ALL=C awk -v G="$GRADE" -v CEIL="$CEILING" -v LIVE="$LIVEF" -v MOVED="$MOVEDF
       a = cs[sp[q]]; b = ce[sp[q]]
     }
     if (a) out = out (out == "" ? "" : ", ") a ".." b
+    # THE POINTER ACCUMULATES. The ranges every earlier rotation recorded (OLDR, read off the
+    # existing pointer line below) come FIRST, in the order they were written, and the ranges of
+    # this run go after them -- run order, never sorted, because the line numbers of two runs index two
+    # different files and a numeric sort would interleave them into a history that never happened.
+    # Merged HERE, in the one function both the budget and the `ranges` meta row read, so the
+    # writer prints exactly the string the selection paid for; a merge in the writer alone makes
+    # the pointed file longer than its budget and the byte check refuses every second rotation.
+    if (OLDR != "") out = (out == "" ? OLDR : OLDR ", " out)
     return out
   }
   # The bytes the pointer adds to the live file under the CURRENT selection. Matches the writer:
@@ -520,6 +528,18 @@ LC_ALL=C awk -v G="$GRADE" -v CEIL="$CEILING" -v LIVE="$LIVEF" -v MOVED="$MOVEDF
     # the writer applies none: a budget that skipped a line the writer replaces would disagree
     # with the write by that line s bytes.
     for (n = 1; n <= NL; n++) if (line[n] ~ /^\*\*Archived sections live at/) { npl++; pln[npl] = n }
+    # The ranges the existing pointer line(s) already carry, PFX and SFX stripped by exact byte
+    # comparison against the one spelling of each. A pointer line of any other shape contributes
+    # nothing rather than a guessed substring: the writer still replaces it, as before.
+    OLDR = ""
+    for (q = 1; q <= npl; q++) {
+      s = line[pln[q]]
+      if (substr(s, 1, length(PFX)) != PFX) continue
+      if (length(s) < length(PFX) + length(SFX)) continue
+      if (substr(s, length(s) - length(SFX) + 1) != SFX) continue
+      s = substr(s, length(PFX) + 1, length(s) - length(PFX) - length(SFX))
+      if (s != "") OLDR = (OLDR == "" ? s : OLDR ", " s)
+    }
     rem = total
     for (k = 1; k <= nc; k++) { by = 0; for (n = cs[k]; n <= ce[k]; n++) by += blen[n]; cb[k] = by }
     nsel = 0
@@ -688,6 +708,10 @@ echo "  arm 1 conservation PASS: $LIVE_L + $MOVE_L = $ORIG_L lines, $LIVE_B + $M
 # exactly the class this is here for, and `-u` would erase it.
 ORIG_MD5="$(LC_ALL=C sort "$PLAN" | md5)"
 SPLIT_MD5="$(cat "$LIVEF" "$MOVEDF" | LC_ALL=C sort | md5)"
+if [ -z "$ORIG_MD5" ] || [ -z "$SPLIT_MD5" ]; then
+  echo "plan-rotate: REFUSING TO APPLY — arm 2 (multiset identity) could not compute a digest (md5 absent?); two empty digests would compare equal." >&2
+  exit 2
+fi
 if [ "$ORIG_MD5" != "$SPLIT_MD5" ]; then
   echo "plan-rotate: REFUSING TO APPLY — arm 2 (multiset identity) FAILED." >&2
   echo "  sorted original md5: $ORIG_MD5" >&2
@@ -1003,7 +1027,8 @@ cp "$WORK/pointed.md" "$PLAN"
 # ---------------------------------------------------------------------------------------------
 # THE POINTER (built above; the reasons for its shape stay here, beside the write). AN ARCHIVED RECORD THAT NOTHING POINTS AT IS THE BLINDNESS `BL-255` NAMES: the
 # evidence still exists and no reader can find it, which reads exactly like the evidence being
-# gone. Refreshed on every apply so a second rotation does not leave a stale range behind.
+# gone. Rewritten on every apply as ONE line that carries every earlier rotation's ranges followed
+# by this one's, so a second rotation neither stacks a second pointer nor erases the first range.
 #
 # A PLAIN PATH STRING, NEVER A `path:line` CITATION. `validate-plan-shape.sh:138` harvests
 # `path:line` tokens and errors when one does not resolve; a citation into an archive that a

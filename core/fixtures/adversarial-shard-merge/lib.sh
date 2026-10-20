@@ -1087,7 +1087,8 @@ p_probe_absent() { # D4: shard 2's writer has a meta file and NO probe row -- a 
   d="$(tw)"; HR_ROLE=remediator HR_NOPROBE=1 s2 "$d"; other_spawn "$d"; hr_ids "$d/2.md"; forge_meta "$d/2.md" "$HR_AGENT" "$REAL_OTHER"
   run_merge "$1" "$d"
   refused_clean "agent $HR_AGENT, whose meta file names dispatch $REAL_OTHER but" "$d" \
-    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered"
+    && has "$MO" "has no row for that agent; an adversary that has not stopped has not delivered" \
+    && has "$MO" "re-run the merge once the SubagentStop row for that agent lands" && has "$MO" "re-dispatch the shard"
 }
 
 # ------------------------------------------------ BL-544, BL-554, BL-548 (merge half)

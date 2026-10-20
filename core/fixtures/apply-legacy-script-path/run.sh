@@ -308,6 +308,14 @@ before="$(find "$CONSUMER/scripts" -type f 2>/dev/null | sort | while IFS= read 
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 OUT6="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
 after="$(find "$CONSUMER/scripts" -type f 2>/dev/null | sort | while IFS= read -r f; do printf '%s %s\n' "$(cksum < "$f")" "${f#"$CONSUMER"/}"; done)"
+# A missing cksum leaves BOTH snapshots as bare " path" lines, which compare equal: demand a
+# non-empty snapshot in which every line opens with two numbers.
+for _snap in "$before" "$after"; do
+  if [ -z "$_snap" ] || [ -n "$(printf '%s\n' "$_snap" | grep -vE '^[0-9]+ [0-9]+ ')" ]; then
+    echo "FIXTURE BROKEN apply-legacy-script-path: the cksum snapshot is empty or carries a line without a checksum (cksum absent?)." >&2
+    exit 2
+  fi
+done
 if [ "$before" = "$after" ]; then
   ok "a second run over a migrated tree changes nothing on disk"
 else

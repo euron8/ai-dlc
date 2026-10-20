@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.892.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a (taken over from ai-dlc-fc). It closes BL-678, BL-708, BL-712, BL-714, BL-720 and BL-724, closes no `PC-` id and files nothing. Net for this release: 6 closed, 0 filed. BL-712 changes the ai-dlc-update reconcile engine: a consumer runs the new reader from step 3 of the delivering pull.
+
+### BL-678 — the archive pointer accumulates every rotation's ranges
+
+`plan-rotate.sh` rebuilt the archive pointer from the current run's ranges alone, so each rotation erased the record of where earlier archived spans came from. The splitter now reads the ranges the existing pointer line already carries, with the pointer prefix and suffix stripped by exact comparison; a pointer of any other shape contributes nothing. `render_ranges()` appends this run's ranges after them, in run order and unsorted. `ptr_cost()` and the `ranges` meta row both go through `render_ranges()`, so the budget and the writer read one merged string and the pointed-file byte check still agrees with the selection. The `plan-rotate` fixture's header now states the accumulate contract, and a new pointer-accumulate arm asserts that after a second rotation the pointer carries at least two ranges and opens on the first rotation's range.
+
+### BL-708 — a missing tool is a refusal in seven arms, not a vacuous pass
+
+Seven arms reported ok with their tool absent, because stderr was discarded or two empty command substitutions compared equal. Each now fails in its own fixture's idiom: absent `cksum`, `tail` and `cp` are FIXTURE BROKEN exit 2 (`apply-legacy-script-path`, `backlog-ledger`, `route-read-required`); a `cmp` exit above 1 is kept apart from 0 and 1 (`relocation-preclassify`, `handoff-completion-assertion`); `plan-rotate.sh` refuses with exit 2 on an empty md5; a failing `uname -s` in `readset-skip` is FIXTURE BROKEN, and `perl` stays an optional SKIP. `validate-artifact-budget.sh` is left as SKIP-by-design when `jq` is absent, because that behaviour ships to consumers. `budget-summary-verdict` and `backlog-receipt-binding` were re-measured and already fail with `jq` (respectively `wc`) absent, so BL-708's body records that and owes them nothing.
+
+### BL-712 — an empty field in two tab-delimited reads no longer swallows the next column
+
+`layer-drift.sh` read two tab-separated rows with `IFS="$TAB" read`. A tab is IFS whitespace, so an empty middle field collapsed and the following column landed in the wrong variable. Both read sites now read the row whole and split it by parameter expansion.
+
+- **Supersession row.** An empty `since` field put the env key in `s_since`, which sent the row down the "ADOPTED ... nothing to configure" branch. A declaration with no `since_core_version` now yields `replaces_with=<env key>`. `layer-readopt-gate` gains a fourth declaration (`AI_DLC_WIDGET_NOSINCE`, no since) with the with-since declaration as control and a mutant that restores the IFS read.
+- **`--list-adjudications` listing.** An empty clause column landed the status in the sixth column instead of `(unmapped)`. `layer-adjudication-tier` gains a control in its unresolvable-clause world, with a mutant that restores the IFS read.
+
+BL-712's receipt builds a no-since world from `layer-readopt-gate/seed.sh`, runs `layer-drift.sh` over it and asserts `replaces_with=AI_DLC_WIDGET_NOSINCE`. The other same-shape reads in the file were checked and left alone, each with a producer guarantee that its middle field is non-empty.
+
+### BL-714 — premise expired: the title-match register lookup already exists
+
+The entry claimed `layer-drift.sh` did not consult the adjudication register for the `extension-title-match` row. It does, and has since v0.291.0 (`adj_lookup ... EXTENSION-TITLE-MATCHES-CORE`); `apply.sh` reads only `layer-drift.sh`'s output. No engine code changes. `layer-title-join` gains Part 6e, which drives `apply.sh` itself: with a verdict recorded it emits 0 `WORKLIST extension-title-match` rows for that entry and 1 for an undisposed control, a verdict with a mismatched digest re-emits the row, and a scratch copy with the lookup's `continue` dropped brings the row back. The entry body carries the correction: what the consumer saw is a register with 0 TITLE-clause rows, and a verdict digest covering the hooked core file, which any pull touching that file spends. Its receipt seeds a two-entry world and runs `apply.sh` directly, so the push's receipt step does not run a whole fixture twice.
+
+### BL-720 — the no-probe-row refusal names the wait before the re-dispatch
+
+A `sha=` seal is DELIVERED with no window, so `merge-adversarial-shards.sh` can run seconds ahead of the writer's SubagentStop row. The refusal now says to re-run the merge once that row lands, and keeps re-dispatch with `--rerun` as the remedy when the row stays absent. The stale header claim of a 180-second settle window is corrected. `adversarial-shard-merge` `p_probe_absent` gains a `has` on the wait phrase and on `re-dispatch`, and BL-720's receipt drives the same world.
+
+### BL-724 — the test-strategy artifact is exempt from all three cycle arms
+
+The test-strategy review is a convergence series that Check 24 reads, with no party round, a label the adversarial-review pattern does not match, and no fixed three-cycle floor. A Test Strategy section in a live `validation-cycle-log.md` therefore failed the cycle floor, the party-mode arm and the adversarial-review arm. `validate-cycle-commits.sh` now has a carve-out, keyed on the normalized `test-strategy` artifact key and not on a version, that continues past all three arms, prints `EXEMPT (Rule 8 carve-out: convergence series, Check 24)` and records the section in `exempt_current`. `cycle-commits-enforce` gains an EXEMPT arm over a seeded Test Strategy section with adversarial-review-only commits, and a mutant that removes the carve-out and sees the section FAIL.
+
+A consumer still running party-mode for test strategy stops having that section checked by `validate-cycle-commits.sh`; Check 24 owns the series.
+
 ## [0.891.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-fc. It closes BL-687 and BL-688, files nothing and closes no `PC-` id. Net for this release: 2 closed, 0 filed. This is a `core/hooks/` release: the change is in `core/hooks/ai-dlc-recover-gate.sh`, which consumers already run through the gate registered in the settings template, so there is no template or install change.

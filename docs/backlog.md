@@ -335,43 +335,6 @@ Owed: widen the root grammar, for example by deriving the roots from assignments
 
 verify: manual
 
-## BL-678 — plan-rotate.sh rebuilds the plan's archive pointer from the current run's ranges alone, so every earlier rotated range drops out of the plan
-
-**NOTE.** Filed by the TRAIN owner on the lead's instruction, and tiered NOTE by the lead's ruling. `scripts/plan-rotate.sh:205-206` spell the
-pointer as `PTR_PFX` + ranges + `PTR_SFX`, and `:937-942` build `POINTER` from `RANGES`, which is read from this
-run's `meta.tsv` only, then print it IN PLACE OF the existing `**Archived sections live at` line. Nothing reads the
-ranges the old pointer carried. So each rotation erases the record of every earlier one: the plan names only the
-last run's lines, and the earlier ranges survive only in git history.
-
-Measured with `git log -L3,3:docs/plans/graph-ledger-full-drain.md`: line 3's range was overwritten at each of the
-last seven rotating commits, `350..414` (11ae360d) -> `356..456` (8e5f1b2f) -> `354..387` (16f69a27) -> `315..384`
-(7e8d62d7) -> `305..381` (952b9319) -> `240..336` (23a69fc3) -> `215..254` (bd02a118), and every pointer before
-those was likewise a single run's text. The pointer CAN hold several ranges, but only from one run: 439c0058's reads
-`original lines 40..9767, 12781..14643, 10801..12068`. The archived records themselves survive. For example,
-`**BATCH 230 SHIPPED` sits at line 18638 of `docs/plans/archive/graph-ledger-full-drain.md`. Only the plan's account
-of where they came from is lost.
-
-The documented intent does not conflict with the owed fix. The fixture's header at
-`core/fixtures/plan-rotate/run.sh:691` ("THE POINTER IS REFRESHED, NOT APPENDED") gives its reason as: a second
-rotation "must leave ONE pointer" and "must not stack a second archive header". The intent is ONE pointer line, with
-no stacked second archive header. One line carrying EVERY range satisfies that intent, so the documented choice and
-the fix below can both hold. The consequence of today's behaviour is narrow: only the plan's own record of earlier
-ranges is lost. The archived records survive (`**BATCH 230 SHIPPED` is still in the archive, as above).
-
-Owed: accumulate ranges inside the one pointer line, appending this run's ranges to those the existing pointer
-already carries, and keep the splitter's pointer budget in step with the longer line. The `pointer-refresh` arm at
-`core/fixtures/plan-rotate/run.sh:724` checks only that the pointer CHANGED (`PTR_1` != `PTR_2`), so it cannot tell
-a replace from an append. The owed arm in `core/fixtures/plan-rotate` asserts that the first range survives a second
-rotation. The `run.sh:691` header's "CURRENT range" wording is updated with the fix. Probe: two rotations of one
-plan, the second after a new spent section is appended. Control: one rotation, whose pointer is the same either way.
-
-Receipt: it drives the rotator twice on a mktemp plan. The first rotation moves a 40-line spent section and records
-its range; a 20-line spent section is then appended and rotated. The receipt requires the final pointer to carry the
-first range as one of at least two range tokens. Today it exits 1. It exits 9 when either rotation is refused or
-moves nothing, or when the first range is missing or is not a single token.
-
-verify: sh S=scripts/plan-rotate.sh; [ -s "$S" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl678.XXXXXX") || exit 9; mkdir -p "$T/scripts" "$T/docs/plans" || exit 9; printf '0.0.0-receipt\n' > "$T/VERSION"; cp "$S" "$T/scripts/plan-rotate.sh" || exit 9; P="$T/docs/plans/p.md"; A="$T/docs/plans/archive/p.md"; awk 'BEGIN{print "# Probe plan";print "";print "## Start here";print "";print "1. `## Start here` -- live.";print "2. `## Next` -- live.";print "";print "## Next";print "";print "1. Do the thing.";print "";print "## SPENT A";print "";for(i=1;i<=40;i++)printf "SPENT-A-%02d padding padding padding padding padding padding padding.\n",i}' > "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-A-01' "$A" 2>/dev/null || exit 9; R1=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); [ -n "$R1" ] || exit 9; [ "${R1#*,}" = "$R1" ] || exit 9; awk 'BEGIN{print "";print "## SPENT B";print "";for(i=1;i<=20;i++)printf "SPENT-B-%02d padding padding padding padding padding padding padding.\n",i}' >> "$P"; bash "$T/scripts/plan-rotate.sh" "$P" --ceiling 1500 --apply >/dev/null 2>&1 || exit 9; grep -q 'SPENT-B-01' "$A" || exit 9; R=$(sed -n 's/.*original lines \(.*\)\. It is a RECORD.*/\1/p' "$P"); L=$(tr ', ' '\n\n' <<<"$R" | grep .); n=$(grep -c . <<<"$L"); grep -qxF "$R1" <<<"$L" && [ "$n" -ge 2 ]
-
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 
 **DEFECT, efficiency.** Found by ai-dlc-77 [e29316] in batch 236 while building BL-679.
@@ -537,42 +500,11 @@ Owed: stated, not built. Either anchor the teach on the status COLUMN context (t
 
 verify: sh V="${I110_V:-scripts/validate-enforcement-map.sh}"; f=$(sed -n '/^i110_tokens() {/,/^}/p' "$V"); [ -n "$f" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl697.XXXXXX") || exit 9; printf 'the same value as the In-Flight row and the join\n\nplain line\n\nplain line\n`ux` is a role name\n' > "$T/a.md"; printf 'In-Flight status\n`stopped` is a taught status\n' > "$T/b.md"; o=$(eval "$f"; i110_tokens "$T") || exit 9; grep -qxF stopped <<<"$o" || exit 9; grep -qxF ux <<<"$o" && exit 1; exit 0
 
-## BL-712 — the supersession reader splits a three-field TAB row with `IFS="$TAB" read`, so a declaration with no `since_core_version` and a `settings_env_key` would land the env key in the since variable
-
-**NOTE, latent.** Id allocated by lead ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), found while building BL-711.
-- **The read site.** `core/skills/ai-dlc-update/reconcile/layer-drift.sh:1986`: `while IFS="$TAB" read -r s_shadows s_since s_env; do`. The producer is `supersessions_of` (`layer-drift.sh:727`-`761`), which prints `shadows<TAB>since<TAB>settings_env_key` at `:733` and `:759`. It initialises `si=""` and `en=""` per declaration (`:734`) and does not default either, so an absent `since_core_version:` line is emitted as an empty middle field.
-- **The collapse.** The same IFS-whitespace collapse as BL-711: a tab is IFS whitespace, so `read` merges adjacent tabs. Measured by sourcing the real `supersessions_of` over a literal contract under a mktemp: a declaration with `since_core_version: "0.1.0"` and `settings_env_key: AI_DLC_KEY_A` read as `since=[0.1.0] env=[AI_DLC_KEY_A]` (control); one with `settings_env_key: AI_DLC_KEY_B` and no since read as `since=[AI_DLC_KEY_B] env=[]`. The empty-THIRD case (`S<TAB>V<TAB>`) does not collapse, because a trailing delimiter is stripped without moving a value. The empty-FIRST case (`<TAB>V<TAB>K`) collapses, but the producer only prints a row when `sh != ""` (`:733`, `:759`), so the first field is never empty.
-- **Latent or reachable: LATENT in the shipped contract, unguarded by any check.** All 6 `- shadows:` declarations under `override_supersessions:` in `core/skills/ai-dlc/layer-contract.yaml` carry `since_core_version:` (awk count over the block: shadows 6, since 6, env 4), and no script or schema validates the field: `since_core_version` appears in no `.sh` or `.json` outside `layer-drift.sh` and the contract's own comment (`layer-contract.yaml:301`). So a future declaration with an env key and no since is accepted and reaches `:1986` as the broken row above. Its effect would be the wrong branch at `:2084`/`:2091`, which test `s_env`: the row would read as an adoption needing no configuration, with the env key printed as the core version, instead of prescribing the settings change.
-- **Owed:** stated, not built. Read each row whole and split by parameter expansion, the split BL-711 used: `IFS= read -r line; a="${line%%"$TAB"*}"; rest="${line#*"$TAB"}"; b="${rest%%"$TAB"*}"; c="${rest#*"$TAB"}"`, applied to the three-field line at `:1986`. Seed a fixture arm with a declaration carrying `settings_env_key` and no `since_core_version`, beside the control carrying both.
-
-verify: manual
-
 ## BL-707 — prepush-pool-depth's `obs_d0_max` reads a 0.3s in-flight window by ls-counting a flight dir, so a load burst fails it with no hook defect
 
 **DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 POOLHOOKS), id allocated by lead ai-dlc-c8. `core/fixtures/prepush-pool-depth/run.sh:171` drives six depth-0 stubs that each `sleep 0.3` and records the peak of `ls "$PD_FLIGHT" | wc -l` (`:58-:59`, read by `maxflight` at `:83`) as `obs_d0_max`, wanting 6 (`:211`). Six workers are in flight together only if all six start inside one 0.3s window, so a loaded box fails the cell with no hook defect. Measured on 0.871.0's pre-run with 52 units launched at once: the `.githooks` half read 3 against 6, and because every mutant's moved-set includes that cell, one wrong reading surfaced as 11 FAILs; the `git-hooks` half of the same run passed the arm and all its mutants, and I66 holds the two pool blocks byte-identical. A second solo run on 0.871.0 at load 85 read 5 against 6, again in the `.githooks` half only. Three interleaved pairs at load 39-61, main `82b28696c` (which carries none of 0.871.0's change) launched beside 0.871.0: main went red in 1 of 3 (the `not-exported` mutant's run moved `obs_d0_max`, a `.githooks`-half cell, while its baseline read ok), and 0.871.0 was green in 3 of 3. The `git-hooks` half was clean in all six runs.
 
 Owed: the depth-0 width is asserted by a condition that does not depend on scheduling (each stub blocks until all six have entered, under a bounded wait, or the arm reads the dispatched width instead of an observed overlap), with a mutant showing the arm still catches a pool capped below 6.
-
-verify: manual
-
-## BL-708 — ten fixture arms still report ok with a required tool missing, because the call's stderr is discarded or two empty command substitutions compare equal, so PATH restriction cannot catch them
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 BL-676), id allocated by lead ai-dlc-37. BL-676's restricted-PATH sweep (each fixture run under the shipped `hermetic-run.sh` with its PATH cut to its `tools.decl` farm) turns a missing tool into a red unit only where the arm reads that tool's output. Measured under that runner at c2991da155cbc2441e22b55373bb841df5785b05, ten arms ran with the tool absent and still reported ok:
-
-- `apply-legacy-script-path`: `run.sh:307` and `:310` run `cksum` (command not found), so `before` and `after` are both empty and the comparison at `:311` of two empty strings cannot fail.
-- `backlog-ledger`: `run.sh:772` has both `tail` substitutions empty, so the last-conserves conjunct passes vacuously.
-- `relocation-preclassify`: `run.sh:243` runs `cmp` (command not found), so the FIXTURE STALE guard can no longer fire.
-- `route-read-required`: `run.sh:130` runs `cp` (command not found), the routed transcript is never made, and the arm still reports ok.
-- `handoff-completion-assertion`: `run.sh:2089` runs `if cmp -s "$HOOKS_DIR/$tgt" "$d/$tgt"`, the FIXTURE STALE "mutation matched nothing" guard; with `cmp` absent the test is false on every mutation, so the guard can never fire. Measured under the BL-676 runner (dcb0aeb8c on b236-bl676): 55 `run.sh: line 2089: cmp: command not found` lines and the run still reports PASS. This release declares `cmp` for that fixture; the arm itself is owed here.
-- `plan-rotate`: `scripts/plan-rotate.sh:689-690` pipes into `md5`. With md5 absent, both digests are empty and equal, so the multiset arm cannot fire, and mutant m3 survives (`did not trip the multiset arm alone (exit 0, arm1-pass=yes)`) under the BL-676 runner. This release declares `md5`; the arm fix is owed here.
-- `budget-summary-verdict`: `core/scripts/validate-artifact-budget.sh:1265` skips on `command -v jq`, so with jq absent the F9 back-dated-row check silently does not run. This release declares `jq`; the arm fix is owed here.
-- `backlog-receipt-binding`: `run.sh:1369` evaluates BL-040's receipt as `bash -c "$RJ_REC"` and reads only its exit; with `wc` absent the receipt's `[ "$(printf '%s\n' "$S" | wc -l)" -lt 200 ] || exit 2` sees `[ "" -lt 200 ]`, returns 2, and the scan at `run.sh:1339-1363` (`rj_scan`) scores every seed OWNED (`SCANNED 10 BLIND 0 OWNED 10`), so the receipt-blind arm cannot fire. This release declares `wc`; the arm fix is owed here.
-- `readset-skip` (all four shards): `run.sh:1847` gates the BL-686 psfail, nofallback and readerself-psfail arms on `command -v perl` and `uname -s` reading Darwin. With both undeclared, uname fails silently, the gate reads "not Darwin" and `:1851` prints ok, so the anti-SKIP assertion is vacuous. This release declares `perl` and `uname` in all four shards; the arm fix is owed here.
-- `hermetic-runner` B4-B6: they do not assert the stub's `rc=0 ` the way B2 does (`run.sh:336`), so on their own they cannot tell a missing `cat` from the near-miss sentinel they test. Not fixed here.
-
-Candidate mechanism, stated not proposed: a runner-side scan of a fixture's captured output for a `: command not found` line, failing the unit. Its false-positive set under today's PATH, measured read-only over the 223 shipped-runner logs of the BL-676 sweep at c2991da155cbc2441e22b55373bb841df5785b05 (both halves), where no tool is missing: 0 logs carry a `: command not found` line and 0 carry an `env: ... No such file or directory` line. Under that PATH the only line the scan could catch is a deliberate absence test, which prints it whatever the runner, so the zero says the scan would fail no fixture that passes today and nothing more. It is not the scan's false-positive set under the restricted runner BL-676 ships, which these logs cannot measure. The 223 restricted-runner logs of the same sweep carry the line in 66 logs, for scale only. Controls in the same invocation: an impossible token read 0 in both sets, and the positive control is `cksum: command not found` in the restricted `apply-legacy-script-path.log` (its `run.sh:307`). The looser pattern `not found` hits 3 shipped logs (`backlog-ledger`, `enforcement-map-sites-b`, `process-rule-pins`), all of them test-name prose on `ok` lines and none a shell diagnostic, so the scan must key on `: command not found` and not on the bare phrase. Two limits: the scan cannot see the ten instances above on their own run, because their tool is present under today's PATH and only the restricted run exposes it; and a fixture that intentionally probes a missing tool (for example `handoff-resume-guard`, which shadows `jq`) would need to keep its miss out of the captured output, which the shipped logs show none does today.
-
-Owed: the fix for those 10 arms, so that each arm fails when its tool is missing (capture and assert the tool's output is non-empty, or check the tool's exit status, instead of discarding stderr or comparing two possibly empty strings).
 
 verify: manual
 
@@ -585,20 +517,6 @@ Measured at origin/main c2991da155cbc2441e22b55373bb841df5785b05 and re-derived 
 Consequence: BL-676's runner change (dcb0aeb8c) gates on those 7 plus the fixtures whose tools.decl that release edits; every other declared fixture skips on its pre-change key, so the gate does not exercise the new runner on them. That release covers them by a direct pre-run of every declared fixture through the new runner (its acceptance (a)).
 
 Owed, with the choice left to whoever builds it: (B) put the runner's span into every declared fixture's key (a hook change inside the I66-bound span), or (C) carry a runner digest in each declared fixture's key record so a runner change moves every declared key. Cost measurement for either: the number of declared fixtures re-run per runner change, today 7 and under either remedy every declared fixture (223 `inputs.decl` files in the b236-bl676 tree).
-
-verify: manual
-
-## BL-714 — every EXTENSION-TITLE-MATCHES-CORE (LC-E19) row is re-emitted as a WORKLIST item on every pull with no register lookup, so a consumer's "keep as is" on a pre-existing heading never sticks and the same rows hold the stamp each time
-
-**NOTE.** Relayed by ai-dlc-5d from graph; site re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
-
-`core/skills/ai-dlc-update/reconcile/apply.sh:2014` runs `say WORKLIST extension-title-match "$ext" "$tdetail"` for every LC-E19 row the layer-drift output carries, with no register lookup; the hook-drift arm just above it does consult the register. The design comment at `:2006`-`:2009` defers "promotion to the register" to "a later release's decision once this set has been burned down" — but "keep as is" is a legitimate disposition for a PRE-EXISTING consumer heading, so nothing ever burns the set down, and the same rows hold the stamp on every pull.
-
-Evidence, relayed by ai-dlc-5d and not re-measured by this filing: graph re-disposed the same 8 LC-E19 rows on its 0.881 and 0.883 pulls, twice on 2026-10-19 (graph session transcript 48918adc, lines 2913 and 2917). Graph's 0.881 disposition lives only in its own prose; its register carries 0 TITLE-clause rows against 1029 LC-E lines.
-
-Dedupe, re-derived with `grep -c` at origin/main 2cb29a586 and on b236-bl676: "TITLE-MATCHES-CORE" in docs/backlog.archive.md 10 hits (the lead read them as all about the arm's construction, its WARN level and its title join, none about re-asking); in docs/backlog.md 0; control BL-583 in the archive 6.
-
-Owed, the choice left to the builder: promote LC-E19 to the register with a still-additive verdict, the way the hook-drift arm already reads it; or downgrade PRE-EXISTING rows to NOTE so they no longer hold the stamp. Either way, a fixture arm: a consumer whose register records a disposition for an LC-E19 row is not re-asked on the next pull, with an undisposed row as the control.
 
 verify: manual
 
@@ -694,20 +612,6 @@ Owed, the design for its owner to choose: detect at use time, where the emitter 
 
 verify: manual
 
-## BL-720 — the `--complete` beat prints DELIVERED on a valid seal before the writer's SubagentStop probe row lands, so the merge run on that answer refuses the shard and its remedy offers a re-dispatch
-
-**NOTE.** Relayed by ai-dlc-5d from graph; guard re-derived by lead ai-dlc-37 on origin/main; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236).
-
-`core/scripts/wait-for-deliverable.sh --complete` decides delivery from the file alone: a last line `seat-complete: … sha=<hex>` whose digest matches the content above it is DELIVERED at once, with no window and at any age (the header at `:341`-`:349`). The beat reads no probe ledger: `subagent-probe` occurs 0 times in it, against 2 in `merge-adversarial-shards.sh`.
-
-The merge holds a credited writer to a second record. `core/scripts/merge-adversarial-shards.sh:1072`-`:1082` corroborates each writer's meta file against the probe ledger, which `ai-dlc-subagent-probe.sh` fills at SubagentStop. At `:1080`, a credited writer with no row is refused: "an adversary that has not stopped has not delivered -- if it has stopped, the probe hook recorded nothing for it: re-dispatch the shard and merge with --rerun".
-
-A seat writes its seal as its last action and stops after that, so there is a window in which the beat says DELIVERED and the merge says not delivered. Graph hit it once, a window of about 2 s at 02:08:56, as relayed by ai-dlc-5d and not re-measured by this filing. In that window the merge's remedy points the lead at a re-dispatch of a shard that is complete and about to be corroborated, and the wait that clears it is never named.
-
-Owed: the beat and the merge agree on what delivered means for a credited writer, or the merge's refusal at `:1080` names the wait as well as the re-dispatch. The fix is the owner's to choose.
-
-verify: manual
-
 ## BL-721 — a remediator whose work has no deliverable file (an inline story-changelog append) gives the bounded join no path to wait on, so a beat armed on a never-written marker can only reach its cap, and the bare Re-dispatch remedy then fires against a finished or live writer
 
 **NOTE.** Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37 on origin/main 8df9b8ae6 and by this filing; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Related: BL-717 (the same remedy class on a different subject) and BL-720.
@@ -723,18 +627,6 @@ Second consumer run, relayed by ai-dlc-5d and not re-measured: graph run 2026-10
 Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ci` before this entry was added): "no deliverable" 0, "deliverable file" 0 and "liveness hold" 0, in both docs/backlog.md and docs/backlog.archive.md; "BL-721" 0 in both. Control: "wait-for-deliverable" 8 live (5d's 7, plus BL-720's) and 82 in the archive.
 
 Direction, for the owner: either a dispatch-scoped join that needs no path and waits on the dispatch's own SubagentStop row, or a remedy that names the liveness check whenever `--dispatch` resolves. The fix is the owner's to choose.
-
-verify: manual
-
-## BL-724 — `validate-cycle-commits.sh` still demands a party-mode commit for a `Test Strategy` section of a live `validation-cycle-log.md`, which 0.890.0's §5 test-strategy review no longer produces
-
-**NOTE.** Raised by BL-723's tip adversary (batch 237, owner ai-dlc-fc); measured and filed by lead ai-dlc-52; held out of 0.890.0 by the lead's ruling.
-
-`core/scripts/validate-cycle-commits.sh:633-634` keys a log section beginning `test strategy` or `test-strategy` to the `test-strategy` artifact, and its cycle-type coverage at `:924-933` FAILs any logged artifact with no party-mode commit (`FAIL (missing cycle type: party-mode)`). 0.890.0 (BL-723) moved §5 step 2's test-strategy review to the native adversarial cycle with no party round, so a consumer still logging a `Test Strategy` section in a LIVE `_bmad-output/validation-cycle-log.md` would fail there.
-
-Not reachable on the reference consumer today, measured at graph `ae1fafcf8`: `_bmad-output/validation-cycle-log.md` is absent (control: `_bmad-output/pipeline-snapshot.md` present at the same ref). Its only cycle log is `_bmad-output/implementation-artifacts/s302/validation-cycle-log-archive.md`, which is historical and carries 18 test-strategy lines.
-
-Direction, for the owner: exempt the test-strategy key from the party-mode arm when its section is post-0.890.0, or retire the key; first establish whether any installed consumer still writes a live log.
 
 verify: manual
 

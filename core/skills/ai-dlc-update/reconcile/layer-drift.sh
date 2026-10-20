@@ -2034,7 +2034,12 @@ while IFS= read -r f; do
   if have "$THEIRS" "$ADJ_CONTRACT_REL"; then _sp_v="$(supersessions_of "$THEIRS")" || _sp_rc=$?; fi
   [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the override_supersessions block of layer-contract.yaml at $THEIRS" "$_sp_rc"
   ld_stage "$LD_T/supersessions" "$_sp_v" "the override_supersessions block of layer-contract.yaml at $THEIRS"
-  while IFS="$TAB" read -r s_shadows s_since s_env; do
+  # Each row split by parameter expansion: the producer leaves `since` empty when a declaration
+  # carries no since_core_version, and a tab is IFS whitespace, so `IFS=<tab> read` would collapse
+  # the empty middle field and move the env key into s_since.
+  while IFS= read -r s_row; do
+    s_shadows="${s_row%%"$TAB"*}"; s_rest="${s_row#*"$TAB"}"
+    s_since="${s_rest%%"$TAB"*}"; s_env="${s_rest#*"$TAB"}"
     [ -n "$s_shadows" ] || continue
     _sp_rc=0; _sp_v="$(shadow_parts "$s_shadows")" || _sp_rc=$?
     [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the shadow parts of a supersession declaration" "$_sp_rc"
@@ -2886,8 +2891,15 @@ if [ "$MODE" = list ]; then
   # subject, so the listing answers exactly as the gate does. A record that exists and does not
   # clear prints `(recorded, not clearing: <which half failed>)` rather than `(none)`: the
   # operator opened the listing to find that record, and `(none)` would say it was never written.
-  while IFS="$TAB" read -r _e _t _d _c _s; do
+  # Each row split by parameter expansion: the clause column is empty whenever adj_clause_of finds
+  # no mapping, and a tab is IFS whitespace, so `IFS=<tab> read` would collapse the empty field and
+  # shift the status into the clause variable.
+  while IFS= read -r _row; do
     [ "$ld_emit_failed" -eq 0 ] || break
+    _e="${_row%%"$TAB"*}"; _rest="${_row#*"$TAB"}"
+    _t="${_rest%%"$TAB"*}"; _rest="${_rest#*"$TAB"}"
+    _d="${_rest%%"$TAB"*}"; _rest="${_rest#*"$TAB"}"
+    _c="${_rest%%"$TAB"*}"; _s="${_rest#*"$TAB"}"
     [ -n "$_e" ] || continue
     _n=$((_n + 1))
     if [ "$_d" = "-" ]; then

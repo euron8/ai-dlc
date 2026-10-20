@@ -1744,6 +1744,9 @@ override_supersessions:
       settings_env_keys:
         - AI_DLC_WIDGET_ALPHA
         - AI_DLC_WIDGET_BETA
+  - shadows: steps/widget.md#8. No-since section.
+    replaces_with:
+      settings_env_key: AI_DLC_WIDGET_NOSINCE
 absorbed_from:
   - path: core/skills/ai-dlc/extensions/README.md
 YML
@@ -1760,7 +1763,7 @@ YML
   # single-anchor SUP__match firing. Their own difference is one anchor: SUP__multictl bundles
   # two anchors core declares nothing about, so an arm that fires on it is matching "shadows more
   # than one thing", not "shadows something core superseded".
-  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section." "SUP__twokey:steps/widget.md#6. Two-key section." "SUP__multi:steps/widget.md#3. Widget schema., #4. Other section." "SUP__multictl:steps/widget.md#4. Other section., #7. Also undeclared."; do
+  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section." "SUP__twokey:steps/widget.md#6. Two-key section." "SUP__nosince:steps/widget.md#8. No-since section." "SUP__multi:steps/widget.md#3. Widget schema., #4. Other section." "SUP__multictl:steps/widget.md#4. Other section., #7. Also undeclared."; do
     nm="${pair%%:*}"; sh_v="${pair#*:}"
     cat > "$CONS/.claude/skills/ai-dlc/overrides/${nm}.md" <<EOF
 ---
@@ -1885,6 +1888,46 @@ EOF
     "") bad "the two-key supersession produced no detail at all" ;;
     *)  bad "the settings_env_keys: list did not render both keys in order: ${sup_twokey:0:80}" ;;
   esac
+
+  # A DECLARATION WITH NO since_core_version AND A settings_env_key. The producer prints the empty
+  # middle field, and a tab is IFS whitespace, so an `IFS=<tab> read` reader collapses it and lands
+  # the env key in the since variable: the row then reads as an adoption needing no configuration.
+  # The three declarations above all carry a since, so they are the control for this one.
+  sup_nosince="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosince\.md$/ {print $4}')"
+  case "$sup_nosince" in
+    "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*)
+      ok "  a declaration with a settings_env_key and NO since_core_version keeps the key in its own field" ;;
+    "") bad "the no-since supersession produced no detail at all" ;;
+    *"nothing to configure"*) bad "the no-since declaration read as an adoption needing no configuration -- its env key moved into the since field: ${sup_nosince:0:100}" ;;
+    *)  bad "the no-since declaration did not carry replaces_with=AI_DLC_WIDGET_NOSINCE: ${sup_nosince:0:100}" ;;
+  esac
+  case "$sup_detail" in
+    "replaces_with=AI_DLC_WIDGET_EXTRA ::"*) ok "  CONTROL: the declaration beside it that carries a since still keys on its own env key" ;;
+    *) bad "CONTROL: the with-since declaration lost its env key: ${sup_detail:0:80}" ;;
+  esac
+
+  # MUTANT: restore the IFS read of the three-field row. The two parameter-expansion assignments go
+  # with it, or they would overwrite what the read filled. cmp -s guards a sed that matched nothing.
+  NSMUT="$ROOT/nosincemut"; rm -rf "$NSMUT"; mkdir -p "$NSMUT"
+  cp "$(dirname "$DRIFT")"/*.sh "$NSMUT/" 2>/dev/null || true
+  sed -e 's@^  while IFS= read -r s_row; do$@  while IFS="$TAB" read -r s_shadows s_since s_env; do@' \
+      -e '/^    s_shadows="\${s_row%%/d' -e '/^    s_since="\${s_rest%%/d' "$DRIFT" > "$NSMUT/layer-drift.sh"
+  if cmp -s "$DRIFT" "$NSMUT/layer-drift.sh" || ! grep -qF 'read -r s_shadows s_since s_env' "$NSMUT/layer-drift.sh" || grep -qF 's_row' "$NSMUT/layer-drift.sh"; then
+    bad "the no-since MUTANT did not apply -- the supersession read has been respelled, so it proves nothing"
+  else
+    nsm_out="$(bash "$NSMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null)"
+    nsm_ctl="$(printf '%s\n' "$nsm_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__match\.md$/ {print $4}')"
+    nsm="$(printf '%s\n' "$nsm_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosince\.md$/ {print $4}')"
+    case "$nsm_ctl" in
+      "replaces_with=AI_DLC_WIDGET_EXTRA ::"*)
+        case "$nsm" in
+          "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*) bad "  MUTANT no-since: the IFS read still carried the env key -- the arm cannot see the collapse" ;;
+          "") bad "  MUTANT no-since: the mutant emitted no row for the declaration, so it broke the arm rather than the read" ;;
+          *) ok "  MUTANT: with the IFS read restored the no-since declaration loses its key, so the arm is load-bearing" ;;
+        esac ;;
+      *) bad "  MUTANT no-since: the with-since control did not survive the mutant, so its verdict is unreadable" ;;
+    esac
+  fi
 
   # THE LIST MUST NOT BLEED. Its items begin with a dash, exactly like the rows of the
   # block itself, so a loose item pattern would swallow the next `- shadows:` and attribute
