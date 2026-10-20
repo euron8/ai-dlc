@@ -779,6 +779,28 @@ sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, o
     "$SIBW_EDIT" "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
   run_join "$1" "$w"; SB_W="$w"
 }
+# CP1: --check-part runs the join's own entry contract over one part. The near-miss `siblings: checked`
+# part: the JOIN refuses it, and --check-part on the same file exits 2 printing that BADSIB line
+# byte-for-byte. The control: a well-formed ```text fence part (its CTL control resolved under the
+# world's root) exits 0, and the same part joins. A missing field names the re-check, not a re-dispatch.
+p_checkpart() {
+  local j="$1" w p bl
+  sibworld "$j" '- siblings: checked\n'; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  [ "$RC" -eq 2 ] || return 1
+  bl="$(grep -F "is none of its four forms" "$JO")" || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && [ "$(grep -F "is none of its four forms" "$JO")" = "$bl" ] || return 1
+  sibworld "$j" "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n"; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  [ "$RC" -eq 0 ] || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART:" || return 1
+  sibworld "$j" ''; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "carries no 'siblings:' field" && has "$JO" "run --check-part again" \
+    && ! has "$JO" "re-dispatch the shards" || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "takes no other flag"
+}
 SB_RN="\$ grep -rn -F 'loads eagerly' $REL/$S21"
 SB_CTL="\$ grep -c -F 'loads on demand' $REL/$S21"
 p_sibforms() { # five wrong spellings of the field -> each REFUSED as none of the four forms, nothing written

@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.893.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a. It closes BL-715, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. It changes the consumer rulebook file `core/team-roles/remediator.md`, so a consumer receives the new role text on the pull that delivers it.
+
+### BL-715 — a remediator can check its own part before it returns
+
+A near-miss `siblings:` spelling such as `siblings: checked` surfaced only at the join, as a BADSIB refusal that cost a re-dispatch round (4 of 19 parts in graph S319, as relayed in the entry and not re-measured here).
+
+- `join-remediator-shards.sh --check-part <part.md>` is an exclusive mode, modeled on `--agent-writes`: it takes no other flag and joins nothing. It runs `contract_probe`, then `contract_refusals 0 "$(contract_check 0 <part>)"`, which is the join's own classifier with no restatement of the four forms. It exits 2 on any refusal and 0 otherwise, printing one `CHECK-PART:` line. A BADSIB line it prints is the join's own text, byte for byte.
+- In this mode, a part with no `siblings:` field is told to add the field and run `--check-part` again, not to re-dispatch the shards, because the part is still being written. The join's own remedy is unchanged. `--check-part` with no argument now refuses instead of hanging on `shift 2`.
+- The pass line says what was not checked: `--check-part` covers the `siblings:` field, the set-aside and the disposition contract only, so exit 0 does not mean the join will accept the part.
+- `core/team-roles/remediator.md` gains one paragraph before "Close your part with `--mark`": check, fix every `REFUSED:` line, re-check until exit 0, then `--mark`. The `advisor:` and `derivations:` lines and each finding's `derivation:` field stay the remediator's own job.
+- `core/team-roles/pm-escalated.md` is unchanged. The PM appends to an already-joined record, which the join classifies in record mode through `--escalations`, so `--check-part` would judge it by the wrong rules.
+- `remediator-shard-join` gains CP1: the near-miss part is refused by the join and by `--check-part` with BADSIB lines that compare equal, a well-formed text-fence part exits 0 and joins, a part with no field gets the re-check remedy and never the re-dispatch remedy, and an extra flag is refused. CP2 is its mutant: a copy of the join whose `--check-part` skips `contract_check` must fail CP1. CP2 reports FIXTURE STALE if the mutation does not apply, and FIXTURE BROKEN with exit 2 if the copy or the edit fails, so a broken copy cannot read as a kill.
+
 ## [0.892.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a (taken over from ai-dlc-fc). It closes BL-678, BL-708, BL-712, BL-714, BL-720 and BL-724, closes no `PC-` id and files nothing. Net for this release: 6 closed, 0 filed. BL-712 changes the ai-dlc-update reconcile engine: a consumer runs the new reader from step 3 of the delivering pull.
