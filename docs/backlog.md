@@ -520,20 +520,6 @@ Owed, with the choice left to whoever builds it: (B) put the runner's span into 
 
 verify: manual
 
-## BL-715 — the remediator shard join classifies a part's `siblings:` field only at the join, so a remediator cannot check its own part before returning and a format slip costs a full re-dispatch round
-
-**NOTE.** Relayed by ai-dlc-5d from graph S319; site re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
-
-`core/scripts/join-remediator-shards.sh` classifies a `repaired` entry's `siblings:` field as BADSIB only inside the join: the classifier's row is documented at `:886`, emitted at `:918`, and refused at `:1153`. Its modes are the join itself, `--rerun <part>.md@<ISO>` (`:30`), `--sources` and `--escalations` (`:34`, `:256`); none of them checks one part on its own. The contract is stated in `core/team-roles/remediator.md` (`:42`, `:62`-`:63`), and a remediator has no way to run the join's own classifier against its part before it returns.
-
-Evidence, relayed by ai-dlc-5d and not re-measured by this filing: in graph S319 at 20:20 EDT on 2026-10-19, parts 2, 6, 14 and 15 of 19 were refused (13 REFUSED lines, graph session transcript a367e62c, line 522); record-only re-runs followed and the join succeeded at 20:24 (line 624). That is 4 extra agent runs and about 3.5 minutes, with the contract stated and 21% of parts still missing it.
-
-Dedupe, re-derived with `grep -c` at origin/main 2cb29a586: "BADSIB" 0 in docs/backlog.archive.md and 0 in docs/backlog.md; "join-remediator-shards" 37 in the archive, none about a per-part check; control BL-583 6.
-
-Owed, the mechanism left to the builder: a per-part check mode on `join-remediator-shards.sh`, or the remediator role running the join's own field classifier on its part before it returns. It must be the join's code, not a restatement of the four accepted forms. A fixture arm: a part whose `siblings:` field is a near-miss spelling is refused by the per-part check with the same BADSIB detail the join gives, with a well-formed part as the control.
-
-verify: manual
-
 ## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
 
 **DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.

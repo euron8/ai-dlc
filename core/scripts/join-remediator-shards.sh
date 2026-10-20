@@ -40,6 +40,15 @@
 #       read from the ledger and never inferred from `git status`. An agent with no rows, or a
 #       missing ledger, prints the trailer alone and exits 0; a malformed id exits 2.
 #
+#   join-remediator-shards.sh --check-part <part.md>
+#       An EXCLUSIVE mode, like --agent-writes: it takes no other flag and joins nothing. It runs
+#       the join's own entry contract (contract_probe, contract_check and contract_refusals, parts
+#       mode) over ONE part, so a remediator checks its part before `--mark` with the classifier the
+#       join will apply. Each finding is the join's own REFUSED line (a BADSIB is byte-identical);
+#       the missing-field remedy names the field and this re-check, never a re-dispatch. Exit 0
+#       with one `CHECK-PART:` line when the contract holds, 2 otherwise. No ledger, seal or seat
+#       file is read: disjointness and citations are the join's alone.
+#
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
 #         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
 #         NOT `shards/<artifact>-p<M>/`: that directory holds the ADVERSARY shards for the review
@@ -305,8 +314,10 @@ die() { echo "REFUSED: $*" >&2; exit 2; }
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
 SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
+PARTMODE=0; CHKPART=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --check-part) [ $# -ge 2 ] || die "--check-part needs <part.md>"; CHKPART="$2"; PARTMODE=1; shift 2 ;;
     --rerun) [ $# -ge 2 ] || die "--rerun needs <part>.md@<ISO>"
              RERUN="${RERUN}${2}
 "; shift 2 ;;
@@ -331,14 +342,20 @@ done
 # A party repair: its entries must each name the seat finding they apply.
 PARTY=0
 if [ "$AGENTMODE" = 1 ]; then
-  [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
+  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
     || die "--agent-writes prints one agent's ledger writes and takes only --since <ISO>"
   case "$AGENT_ID" in ''|*[!A-Za-z0-9_-]*) die "--agent-writes needs an agent id of letters, digits, _ and - (got '${AGENT_ID}')" ;; esac
   case "$SINCE" in ''|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
   command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
 fi
+if [ "$PARTMODE" = 1 ]; then
+  [ "$DOCMODE$SUBJMODE$SRCMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
+    || die "--check-part checks one part file and takes no other flag"
+  [ -n "$CHKPART" ] && [ -f "$CHKPART" ] || die "--check-part needs an existing part file (got '${CHKPART}')"
+  SPRINT=0
+fi
 if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
-  [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
+  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
     || die "--sources and --escalations check one record and take only --sprint <N>"
   [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
   [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
@@ -383,7 +400,7 @@ case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPR
 case "$ARTIFACT" in *-party) PARTY=1 ;; esac
 # Set before the mode split: the record modes read it too (an operator-ruling cite is an ISO stamp).
 ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
-if [ "$SRCMODE" != 0 ]; then
+if [ "$SRCMODE" != 0 ] || [ "$PARTMODE" = 1 ]; then
   :
 else
 [ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
@@ -1126,7 +1143,9 @@ contract_refusals() {
   ESC_SUP=""; CHAIN_LINES=""
   # A parts-mode refusal of a missing field is, for a round whose parts predate the install, the
   # pre-rule shape: the remedy is the re-dispatch, never a hand-added field.
-  [ "$srcm" = 0 ] && remedy="; parts written before the install: re-dispatch the shards"
+  # --check-part runs on a part its remediator is still writing, so the remedy there is the field.
+  if [ "$PARTMODE" = 1 ]; then remedy="; add the field to your part and run --check-part again"
+  elif [ "$srcm" = 0 ]; then remedy="; parts written before the install: re-dispatch the shards"; fi
   while IFS='	' read -r k r d l m q; do
     case "$k" in
       N) ne="$r"; nedt="$d"; nsib="$l"; npend="$m"; SERIAL_N="${q:-0}" ;;
@@ -1594,6 +1613,17 @@ src_kind() {  # <record> -> "PARTY", "PART" or "NONE" from its source: tokens, o
     }
     END { print (ns ? "PARTY" : (np ? "PART" : "NONE")) }' "$1"
 }
+# --check-part <part>: the join's own entry contract, parts mode, over ONE part before its remediator
+# returns -- the same probe, classifier and refusal text the join applies, so a BADSIB or NOSIB the join
+# would refuse is refused here first, while the remediator can still fix it. No ledger, seal or seat.
+if [ "$PARTMODE" = 1 ]; then
+  contract_probe
+  contract_refusals 0 "$(contract_check 0 "$CHKPART")"
+  printf '%s' "$GAP_LINES"
+  [ "$refuse_n" -eq 0 ] || exit 2
+  echo "CHECK-PART: ${CHKPART} -- the join's entry contract holds; the check fields (advisor:, derivations:, derivation:) and the disposition/edit repair fields were NOT checked"
+  exit 0
+fi
 if [ "$SRCMODE" = 1 ]; then
   [ -d "$SEAT_DIR" ] || die "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
   [ "$(src_kind "$SRC_REC")" = PART ] \

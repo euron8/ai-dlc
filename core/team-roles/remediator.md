@@ -75,6 +75,8 @@ source; do not infer either value from anywhere else.
    A subject shard writes no siblings fence either: every `repaired` entry with an edit carries
    `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`.
 
+   **Check your part before you mark it.** Run `scripts/ai-dlc/join-remediator-shards.sh --check-part <part path>`, fix every `REFUSED:` line it prints, and run it again until it exits 0; only then `--mark`. It checks only the `siblings:` field, the set-aside and the disposition contract; exit 0 does not mean the join will accept the part. The `advisor:` and `derivations:` lines and each finding's `derivation:` field stay your own job under "the two lines after each triple", and the join refuses a part that lacks them.
+
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
    is ONE Bash call on your part file:
    `scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,

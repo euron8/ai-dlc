@@ -36797,3 +36797,17 @@ Direction, for the owner: exempt the test-strategy key from the party-mode arm w
 
 verify: sh v="$PWD/core/scripts/validate-cycle-commits.sh"; d="$(mktemp -d)" || exit 1; ( cd "$d" || exit 1; git init -q -b main . && git config user.email f@e.x && git config user.name F && git config commit.gpgsign false && echo s >s && git add -A && git commit -qm init && git checkout -qb feature/x || exit 1; for i in 1 2 3; do echo "$i" >>w; git add -A; git commit -qm "Sprint 900 test-strategy: adversarial-review pass $i"; done; mkdir _bmad-output; printf "## Sprint 900 -- Test Strategy\n\n| # | Cycle | Notes | SHA |\n|---|---|---|---|\n| 1 | a | n | TBD |\n| 2 | a | n | TBD |\n| 3 | a | n | TBD |\n" >_bmad-output/validation-cycle-log.md; o="$(bash "$v" feature/x 2>&1)"; grep -qF "EXEMPT (Rule 8 carve-out: convergence series, Check 24)" <<<"$o" )
 
+## BL-715 — the remediator shard join classifies a part's `siblings:` field only at the join, so a remediator cannot check its own part before returning and a format slip costs a full re-dispatch round
+
+**LANDED (v0.893.0, verified d80edf0e5).** **NOTE.** Relayed by ai-dlc-5d from graph S319; site re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
+
+`core/scripts/join-remediator-shards.sh` classifies a `repaired` entry's `siblings:` field as BADSIB only inside the join: the classifier's row is documented at `:886`, emitted at `:918`, and refused at `:1153`. Its modes are the join itself, `--rerun <part>.md@<ISO>` (`:30`), `--sources` and `--escalations` (`:34`, `:256`); none of them checks one part on its own. The contract is stated in `core/team-roles/remediator.md` (`:42`, `:62`-`:63`), and a remediator has no way to run the join's own classifier against its part before it returns.
+
+Evidence, relayed by ai-dlc-5d and not re-measured by this filing: in graph S319 at 20:20 EDT on 2026-10-19, parts 2, 6, 14 and 15 of 19 were refused (13 REFUSED lines, graph session transcript a367e62c, line 522); record-only re-runs followed and the join succeeded at 20:24 (line 624). That is 4 extra agent runs and about 3.5 minutes, with the contract stated and 21% of parts still missing it.
+
+Dedupe, re-derived with `grep -c` at origin/main 2cb29a586: "BADSIB" 0 in docs/backlog.archive.md and 0 in docs/backlog.md; "join-remediator-shards" 37 in the archive, none about a per-part check; control BL-583 6.
+
+Owed, the mechanism left to the builder: a per-part check mode on `join-remediator-shards.sh`, or the remediator role running the join's own field classifier on its part before it returns. It must be the join's code, not a restatement of the four accepted forms. A fixture arm: a part whose `siblings:` field is a near-miss spelling is refused by the per-part check with the same BADSIB detail the join gives, with a well-formed part as the control.
+
+verify: sh d="$(mktemp -d)" || exit 1; j=core/scripts/join-remediator-shards.sh; printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: s1/a.md:3\n- siblings: checked\n' > "$d/b.md"; printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: s1/a.md:3\n- siblings: n/a (insertion)\n' > "$d/g.md"; o="$(AI_DLC_PROJECT_ROOT="$d" bash "$j" --check-part "$d/b.md" 2>&1)"; [ $? -eq 2 ] || exit 1; n="$(grep -c -F "REFUSED: b.md: the F-1 — MAJOR entry is repaired with an edit and its 'siblings:' field is none of its four forms" <<<"$o")" || n=0; [ "$n" -eq 1 ] || exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$j" --check-part "$d/g.md" >/dev/null 2>&1
+

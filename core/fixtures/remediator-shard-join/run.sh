@@ -350,6 +350,25 @@ p_nested "$JOIN" && ok "NW1: a nested writer (its probe row and a spawn row nami
 p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
   || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
 
+p_checkpart "$JOIN" && ok "CP1: --check-part on the near-miss 'siblings: checked' part -> rc 2 with the join's own BADSIB line byte-for-byte; a well-formed text-fence part -> rc 0 and it joins; no field -> the re-check remedy, never a re-dispatch; an extra flag -> REFUSED" \
+  || bad "CP1: --check-part did not reproduce the join's classifier (rc=$RC): $(cat "$JO")"
+
+# CP2: --check-part with contract_check removed from a copy of the join (the mode then exits 0 without
+# classifying the part) -- CP1 must die. The copy sits beside its sibling scripts, which the join
+# resolves from its own directory.
+CPM="$(mktemp -d "$WORK/cp2.XXXXXX")" || exit 2
+cp "$(dirname "$JOIN")"/*.sh "$CPM/" \
+  || { echo "FIXTURE BROKEN: CP2 could not copy the join's sibling scripts into $CPM; a join run without them fails p_checkpart for that reason alone, which would read as a kill" >&2; exit 2; }
+sed 's/^  contract_refusals 0 "\$(contract_check 0 "\$CHKPART")"$/  contract_refusals 0 ""/' "$JOIN" > "$CPM/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: CP2 could not write the mutated join into $CPM" >&2; exit 2; }
+if cmp -s "$JOIN" "$CPM/join-remediator-shards.sh"; then
+  bad "CP2: FIXTURE STALE -- the --check-part mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif p_checkpart "$CPM/join-remediator-shards.sh"; then
+  bad "CP2: SURVIVED -- CP1 holds against a --check-part that never runs contract_check"
+else
+  ok "CP2 --check-part with contract_check skipped: KILLED by [CP1]"
+fi
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""
