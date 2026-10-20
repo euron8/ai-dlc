@@ -1281,16 +1281,18 @@ for key in $ORDINALS $CROSS_KEYS; do
     # subject manifest. Order-free: the list is compared stem by stem.
     sha="$(field "$P" artifact_sha)"
     [ -n "$sha" ] || { collect "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"; continue; }
+    # A pair is `<stem>=<sha>` or `<stem>@<sha>` (validate-adversarial-convergence.sh's PAIR_SEP:
+    # readers accept both, this merge still EMITS `=`), so an `@` shard merges to an `=` line.
     nt=0
     for tok in $sha; do
       nt=$((nt + 1))
-      st="${tok%%=*}"; sv="$(printf '%s' "${tok#*=}" | tr 'A-F' 'a-f')"
-      case "$tok" in *=*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha>"; continue 2; } ;; esac
+      st="${tok%%[=@]*}"; sv="$(printf '%s' "${tok#*[=@]}" | tr 'A-F' 'a-f')"
+      case "$tok" in ?*[=@]*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha> or <stem>@<sha>"; continue 2; } ;; esac
       want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
       [ -n "$want" ] || { collect "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; continue 2; }
       [ "$sv" = "$want" ] || { collect "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; continue 2; }
     done
-    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed 's/=.*//' | sort -u | grep -c .)" -eq 4 ] \
+    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed 's/[=@].*//' | sort -u | grep -c .)" -eq 4 ] \
       || { collect "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; continue; }
     art="$(field "$P" artifact)"
     [ -n "$art" ] || { collect "$sf declares no artifact; a subject shard names the subject manifest"; continue; }

@@ -418,6 +418,7 @@ expect sharded-revert-reordered 0 "a genuine revert of a sharded hard block, sto
 expect sharded-revert-partial 1 "story 2 lands on a sha no pass notarized -- FAIL (F5)" s1-adversarial-p
 expect_says sharded-revert-partial s1-adversarial-p "F5-sharded-partial" "matches no" "earlier pass in this series"
 expect_state sharded-revert-partial s1-adversarial-p DIVERGENT 3 "a partial revert of a sharded pass is not a release -- deny"
+expect sharded-revert-atform 0 "passes notarize <stem>@<sha>, the record <stem>=<sha>: one key, the revert joins -- RESOLVED, no false F4" s1-adversarial-p
 
 # MUTANT: restore the `tr -cd` read at all three sites (every layer of the fix). The reordered
 # case must flip to F4 "never saw"; the partial case must still fail on F5, so the mutant is
@@ -2416,10 +2417,11 @@ k3_xkeys() { # <scripts dir> <K> -> the cross shard keys the partitioner names f
   [ "$g" -ge 1 ] || return 1
   if [ "$g" -eq 1 ]; then echo cross; else seq 1 "$g" | sed 's/^/cross-/'; fi
 }
-k3_subject_pass() { # <world> <scripts dir> -> s9/requirements-adversarial-p1.md by merge --subject
+k3_subject_pass() { # <world> <scripts dir> [at] -> s9/requirements-adversarial-p1.md by merge --subject
   local w="$1" d="$1/$K3PA/s9/shards/requirements-p1" m=0 o sl x
   AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
   mkdir -p "$d"; sl="$(k3_stems "$w")"
+  [ "${3:-}" = at ] && sl="$(printf '%s' "$sl" | sed 's/=/@/g')"
   for o in $(cut -f1 "$w/subject.map"); do m=$((m + 1)); k3_shard "$d" "$o" "$o" "$m" "$K3PA/s9/requirements-subject.md" "$sl"; done
   x="$(k3_xkeys "$2" "$(grep -c . "$w/subject.map")")" || return 1
   for o in $x; do m=$((m + 1)); k3_shard "$d" "$o" "1, 2" "$((40 + m))" "$K3PA/s9/requirements-subject.md" "$sl"; done
@@ -2489,6 +2491,12 @@ K3_POST=2026-01-01T00:00:00Z; K3_LATE=2026-12-01T00:00:00Z
 K3_BUILT=1
 w="$(k3_world k3-subject "$K3_POST")" && k3_subject_pass "$w" "$K3S" || K3_BUILT=0
 w="$(k3_world k3-document "$K3_POST")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
+# k3-atform: k3-subject with `@`-form shards. The merge must emit the `=` list (readers first), and
+# the terminal pass is then rewritten to `@` so K3's own pair split reads the new form.
+w="$(k3_world k3-atform "$K3_POST")" && k3_subject_pass "$w" "$K3S" at \
+  && grep -q '^artifact_sha: product-brief=' "$w/$K3PA/s9/requirements-adversarial-p1.md" \
+  && sed -i.b '/^artifact_sha:/s/=/@/g' "$w/$K3PA/s9/requirements-adversarial-p1.md" && rm -f "$w/$K3PA/s9/"*.b \
+  && grep -q '^artifact_sha: product-brief@' "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
 w="$(k3_world k3-wrongset "$K3_POST")" && k3_subject_pass "$w" "$K3S" \
   && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
   && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
@@ -2629,6 +2637,7 @@ if [ "$K3_BUILT" -ne 1 ]; then
 else
   K3_DOC_FAIL="FAIL (K3 -- SUBJECT): requirements-adversarial-p1.md: it reviews"
   k3_cell k3-subject  "$VALIDATOR" "$K3W/k3-subject"  0 - "K3 -- SUBJECT"
+  k3_cell k3-atform   "$VALIDATOR" "$K3W/k3-atform"   0 - "K3 -- SUBJECT"
   k3_cell k3-document "$VALIDATOR" "$K3W/k3-document" 1 "$K3_DOC_FAIL" -
   k3_cell k3-wrongset "$VALIDATOR" "$K3W/k3-wrongset" 1 "is not the subject map's ordinals plus cross" -
   k3_cell k3-serial   "$VALIDATOR" "$K3W/k3-serial"   0 - "K2 -- SECTIONS"

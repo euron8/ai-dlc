@@ -266,13 +266,14 @@ case "$EXPECT" in @*) [ -f "${EXPECT#@}" ] || refuse "--expect-sha file ${EXPECT
 : > "$T/shas"
 while read -r st rel; do printf '%s\t%s\n' "$st" "$(sha_of "$ROOT/$rel")" >> "$T/shas"; done < "$T/files"
 if [ -n "$EXPECT" ]; then
+  # A pair is `<stem>=<sha>` or `<stem>@<sha>`: readers accept both separators, emitters still write `=`.
   for tok in $EXPECT; do
-    case "$tok" in *=*) ;; *) refuse "--expect-sha token '$tok' is not <stem>=<sha>" ;; esac
-    case " $STEMS " in *" ${tok%%=*} "*) ;; *) refuse "--expect-sha names stem '${tok%%=*}', not one of: $STEMS" ;; esac
+    case "$tok" in ?*[=@]*) ;; *) refuse "--expect-sha token '$tok' is not <stem>=<sha> or <stem>@<sha>" ;; esac
+    case " $STEMS " in *" ${tok%%[=@]*} "*) ;; *) refuse "--expect-sha names stem '${tok%%[=@]*}', not one of: $STEMS" ;; esac
   done
   for st in $STEMS; do
     want=""; n=0
-    for tok in $EXPECT; do [ "${tok%%=*}" = "$st" ] && { want="${tok#*=}"; n=$((n + 1)); }; done
+    for tok in $EXPECT; do [ "${tok%%[=@]*}" = "$st" ] && { want="${tok#*[=@]}"; n=$((n + 1)); }; done
     [ "$n" -eq 1 ] || refuse "--expect-sha names stem $st $n time(s); it names every subject stem once"
     have="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/shas")"
     [ "$(printf '%s' "$want" | tr 'A-F' 'a-f')" = "$have" ] \
