@@ -83,11 +83,12 @@ work.
 `HOLDS-WIDER` — every one reproduces as a defect while its filing misstates the cause, the
 consequence, or the scope. Derived from the final disposition, not from the first pass: of the **76**
 live entries, 36 are mechanism-wrong-or-wider, 15 are plain `HOLDS`, 16 are `NOT-UPSTREAM` and 9 are
-withdrawn closes. The three post-pin entries then went **3 for 3** in the same direction. The last
-cycle measured three of four; the base rate is now established, not anecdotal.
+withdrawn closes. The first three post-pin entries then went **3 for 3** in the same direction (the fourth, filed later,
+is a close and is not counted in that ratio). The last cycle measured three of four; the base rate is
+now established, not anecdotal.
 
 **Adjudicate the mechanism, never the claim, and never trust the filing's prescribed fix.** Both
-halves of that are measured. Of the three post-pin filings, **two prescribe a fix that provably does
+halves of that are measured. Of the first three post-pin filings, **two prescribe a fix that provably does
 not work** — one was transcribed literally and still returns the corrupt value, the other proposes a
 channel that does not exist — and a third of the way through, every one of them turned out to be
 guarded by a fixture that is absent or seeded from what its reader already accepts.
@@ -274,20 +275,34 @@ a `full_text_source:` full-text claim, and `:20-26` records that a `requires_con
 pointer would fail honest cite-by-reference, which is a non-empty false-positive set. The operator
 ruled retirement; the brief carries the reason, and no upstream work follows.
 
-## Three entries filed after the pin — adjudicated
+## Four entries filed after the pin — adjudicated
 
-graph filed three more entries and one retraction while this program ran. They are kept apart from
+graph filed four more entries and one retraction while this program ran. They are kept apart from
 the 115 deliberately: their line numbers are offsets into the LIVE ledger, not the pin, so folding
 them in would hand the reader citations that resolve to the wrong entry and would restate a verified,
-closed count. All three are **LIVE**; none is a close, so none needed a refutation pass.
+closed count. Three are **LIVE**; the fourth (live line 437) is already fixed at v0.886.0 and is a
+close, adjudicated below the table.
 
 <!-- BEGIN GENERATED: postpin-table -->
 | live line | entry | verdict | receipt |
 |---|---|---|---|
+| 437 | `PC-S319-SELF-UPDATE-FIXTURES-RUNS-THE-COVERING-SET-SERIALLY-THEN-PRE-PUSH-RERUNS-IT-IN-PARALLEL` | **ALREADY-FIXED-v0.886.0** | `MIS-ANCHORED` |
 | 4357 | `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` | **HOLDS-MECHANISM-WRONG** | **none — invisible to the closer** |
 | 4392 | `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` | **HOLDS-WIDER** | **none — invisible to the closer** |
 | 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | **HOLDS-WIDER** | `manual` |
 <!-- END GENERATED: postpin-table -->
+
+**`PC-S319-SELF-UPDATE-FIXTURES-RUNS-THE-COVERING-SET-SERIALLY-THEN-PRE-PUSH-RERUNS-IT-IN-PARALLEL` —
+`ALREADY-FIXED-v0.886.0`, receipt `MIS-ANCHORED`.** Ledger line 437 is on graph ref `ae1fafcf8`
+(carry-over branch `ai-dlc/carry-over/offramp-config-and-rewards`, committed in `7a35abff0`), not on
+graph main. The serial loop at `2cb29a586:core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:1154`
+and `:1194`, and its pre-commit mandate at SKILL.md:549, are gone at `f36ede45d` (v0.886.0, BL-713),
+which is the entry's own fix (b). The receipt `theirs_lacks … "FIXTURE_POOL_BEGIN"` is mis-anchored:
+the token is absent at every ref and present only in hook code and backlog prose, never in the receipt's file, so reverify reads
+STILL-LIVE forever, and after this release graph's reconcile prints NAMED-UPSTREAM-OFF-SUBJECT plus
+STILL-LIVE. The replacement receipt `verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"`
+was measured CLOSE-CANDIDATE at theirs=3234cf8ca. The swap is graph's write, routed through the
+operator.
 
 The `## RETRACTED` banner at live line 4480 is graph withdrawing its own `--brief` filing as a lead
 invocation error, having re-read the check body that already prescribed the invocation it had worked
@@ -395,7 +410,7 @@ So the remediation is to NORMALIZE the line — strip `**` and backticks — bef
 `NAME[[:space:]]*:[[:space:]]*VALUE`, which is position-independent and needs no `\|`. Enumerating
 wrapper alternatives around the name is what fails.
 
-## All three post-pin entries are guarded by a fixture that is absent or blind
+## The three LIVE post-pin entries are guarded by a fixture that is absent or blind
 
 The pattern is uniform and it is the class this repo already has a name for.
 
