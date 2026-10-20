@@ -39,7 +39,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
+# The chmod comes first: the BL-688 arms make a 555 directory under $WORK, and an interrupt
+# between their chmod 555 and chmod 755 would otherwise leave `rm -rf` unable to empty it.
+trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -2312,21 +2314,24 @@ fi
     case "$_rl" in (*"mv -f \"${_rt}\" \"\$PROGRESS\""*) ;; (*) echo "FAIL:the temp '${_rt}' is never renamed onto \$PROGRESS on the stage-write line"; return ;; esac
     echo PASS
   }
-  rp_r_clear() { # a new recovery clears the previous stage and its temps; a step Read then gets FIRST
+  # The probe Read is the decoy, not the step file: a full step Read with no stage is ALLOWED
+  # since BL-687, so it no longer tells a cleared stage (FIRST) from a stale one (SECOND); the
+  # decoy is denied at either stage and still does.
+  rp_r_clear() { # a new recovery clears the previous stage and its temps; a decoy Read then gets FIRST
     _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
     : > "$_rq/$pg.4242"
     arm_marker "$1/$RC_RH" "$_rq"
     [ -e "$_rq/$mk" ] || { echo 'FAIL:SEED — the new recovery wrote no marker'; return; }
     [ -e "$_rq/$pg" ] && { echo "FAIL:a new recovery left the previous stage '$(cat "$_rq/$pg" 2>/dev/null)' on disk"; return; }
     [ -e "$_rq/$pg.4242" ] && { echo 'FAIL:a new recovery left a stage temp file on disk'; return; }
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
-    [ "$_rv" = first ] || { echo "FAIL:a first-call step Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:a decoy Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
     echo PASS
   }
-  rp_r_ctl() { # control: on a fresh recovery the same step Read gets FIRST
+  rp_r_ctl() { # control: on a fresh recovery the same decoy Read gets FIRST
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
-    [ "$_rv" = first ] || { echo "FAIL:a first-call step Read on a fresh recovery answered '${_rv}'"; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:a decoy Read on a fresh recovery answered '${_rv}'"; return; }
     echo PASS
   }
   rc_label() {
@@ -2340,8 +2345,8 @@ fi
       s_killed)  echo "BL-666: a stage write killed by ulimit -f 0 leaves the stage reading snapshot" ;;
       s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
       s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
-      r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call step Read gets the FIRST deny" ;;
-      r_ctl)     echo "BL-684 control: on a fresh recovery the same step Read gets the FIRST deny" ;;
+      r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call decoy Read gets the FIRST deny" ;;
+      r_ctl)     echo "BL-684 control: on a fresh recovery the same decoy Read gets the FIRST deny" ;;
     esac
   }
   rc_arms() { for _ra in $1; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_label "$_ra")"; else bad "$(rc_label "$_ra") — ${_rr#FAIL:}"; fi; done; }
@@ -2463,6 +2468,173 @@ END { if (inb) flush() }
     if [ -n "$_rd" ] && R="$RC_CLRRE" awk '$0 ~ ENVIRON["R"] { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
        && ! grep -qE -- "$RC_CLRRE" "$_rd/$RC_RH"; then :; else _rd=""; fi
     rc_score "M-684: the new recovery's stage clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_clear"
+  fi
+
+  # --- BL-688: an unwritable state directory stands the gate down ---------------
+  # Every way out of a recovery is a write under _bmad-output, so with the directory unwritable
+  # the snapshot Read advanced nothing and every later call was denied FIRST (wedge 1); made
+  # unwritable after the stage reached `step`, every call was denied SECOND (wedge 2). Each 555
+  # predicate is straight-line -- chmod 555, collect every decision, chmod 755, then judge -- so
+  # no return path can leave the directory unwritable; the EXIT trap is the backstop.
+  # Detection key: RC_WKEY, the per-call writability test in the gate.
+  RC_WKEY='[ -w "$STATE_DIR" ]'
+  RC_WLINE='[ -w "$STATE_DIR" ] || exit 0'
+  _rk="$(grep -cF -- "$RC_WKEY" "$GATE")" || _rk=0
+  _rpp="$(mktemp -d "$WORK/perm.XXXXXX")"; chmod 555 "$_rpp"
+  if ( : > "$_rpp/w" ) 2>/dev/null; then _rpw=1; else _rpw=0; fi
+  chmod 755 "$_rpp"
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-688 unwritable-state arms" "the gate carries no per-call writability test (key '${RC_WKEY}', found 0); this fixture ships one pull ahead of its subject"
+  elif [ "$_rpw" = 1 ]; then
+    skip "BL-688 unwritable-state arms" "a write into a 555 directory succeeded, so this run ignores permissions and no unwritable state can be built"
+  else
+    rp_w_snap() { # wedge 1: unwritable before the snapshot Read; the Edit after it is not denied, nothing moved
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      chmod 555 "$_rq/_bmad-output"
+      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
+      chmod 755 "$_rq/_bmad-output"
+      [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read under an unwritable _bmad-output answered '${_rs}'"; return; }
+      [ "$_rv" = allow ] || { echo "FAIL:an Edit after the snapshot Read under an unwritable _bmad-output answered '${_rv}'"; return; }
+      _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the stand-down moved state: ${_rm}"; return; }
+      echo PASS
+    }
+    rp_w_step() { # wedge 2: unwritable after the stage reached step; the step Read and the Edit after it are not denied
+      _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+      chmod 555 "$_rq/_bmad-output"
+      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
+      chmod 755 "$_rq/_bmad-output"
+      [ "$_rs" = allow ] || { echo "FAIL:the full step Read under an unwritable _bmad-output answered '${_rs}'"; return; }
+      [ "$_rv" = allow ] || { echo "FAIL:an Edit after the step Read under an unwritable _bmad-output answered '${_rv}'"; return; }
+      _rm="$(rc_post "$_rq" step)"; [ -z "$_rm" ] || { echo "FAIL:the stand-down moved state: ${_rm}"; return; }
+      echo PASS
+    }
+    rp_w_ctl() { # control: writable, the same snapshot Read advances to step and the Edit gets SECOND
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
+      [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read answered '${_rs}'"; return; }
+      [ "$_rv" = second ] || { echo "FAIL:an Edit after the snapshot Read answered '${_rv}', not the SECOND deny"; return; }
+      _rm="$(rc_post "$_rq" step)"; [ -z "$_rm" ] || { echo "FAIL:the writable sequence did not stop at step: ${_rm}"; return; }
+      echo PASS
+    }
+    rc_wlabel() {
+      case "$1" in
+        w_snap) echo "BL-688 wedge 1: with _bmad-output unwritable, the snapshot Read is allowed and the Edit after it is NOT denied; marker kept, no stage written, nothing satisfied" ;;
+        w_step) echo "BL-688 wedge 2: with _bmad-output made unwritable at stage step, the step Read and the Edit after it are NOT denied; marker kept, stage still step, nothing satisfied" ;;
+        w_ctl)  echo "BL-688 control: writable, the same snapshot Read advances to step and the Edit gets the SECOND deny" ;;
+      esac
+    }
+    RC_P688="w_snap w_step w_ctl"
+    for _ra in $RC_P688; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_wlabel "$_ra")"; else bad "$(rc_wlabel "$_ra") — ${_rr#FAIL:}"; fi; done
+    rc_control "$RC_P688" "BL-688 unwritable stand-down"
+    # The three mutants each remove the per-call test; A and B put back the two shapes the
+    # contract first proposed, which cannot close either wedge.
+    rc_w() { # rc_w <gate replacement line> -> a whole-directory copy with the writability line replaced, or empty
+      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
+      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$RC_WLINE" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
+      printf '%s\n' "$_rd"
+    }
+    rc_score "M-688-drop: the per-call writability test removed" "$(rc_w ':')" "$RG" "$RC_P688" "w_snap w_step"
+    # Shape A: the failed stage write clears the marker instead (a removal cannot act in a 555 dir).
+    _rd="$(rc_w ':')"
+    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
+    if [ -n "$_rd" ] && race_edit "$_rd/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" \
+         "${_rsw%%|| rm -f*}|| rm -f \"\$MARKER\" \"\$PROGRESS\" \"\${PROGRESS}.\$\$\" 2>/dev/null || true" \
+       && mv "$_rd/$RG.m" "$_rd/$RG" && [ "$(grep -cF 'rm -f "$MARKER" "$PROGRESS" "${PROGRESS}.$$"' "$_rd/$RG")" = 1 ]; then :; else _rd=""; fi
+    rc_score "M-688-A: the failed stage write clears the marker in place of the per-call test" "$_rd" "$RG" "$RC_P688" "w_snap w_step"
+    # Shape B: the producer arms only when _bmad-output is writable (cannot see a chmod made later).
+    _rd="$(rc_w ':')"
+    _rrl="  printf 'step_file_resolved=%s\\n' \"\$STEP_FILE_RESOLVED\""
+    if [ -n "$_rd" ] && race_edit "$RC_REAL/$RC_RH" "$_rd/$RC_RH" "$RACE_BEFORE" "$_rrl" '  [ -w "$STATE_DIR" ] || STEP_FILE_RESOLVED=0' \
+       && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RC_RH")" = 1 ] && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RG")" = 0 ]; then :; else _rd=""; fi
+    rc_score "M-688-B: the producer arms only when writable, in place of the per-call test" "$_rd" "$RG" "$RC_P688" "w_snap w_step"
+  fi
+
+  # --- BL-687: a full step Read before the stage write is allowed, advancing nothing -------
+  # A parallel step Read whose hook ran before the snapshot call's stage write was denied FIRST.
+  # The allow must not open a step Read alone as a way to satisfy the recovery, a bounded step
+  # Read, any other Read, or a compelled handoff.md Read (which would arm the handoff marker).
+  # Detection key: RC_FLINE, the full-step-Read allow line in the snapshot arm.
+  RC_FLINE='    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ] && is_full_read; then'
+  RC_FEXIT='        *) exit 0 ;;'
+  RC_FHAND='        */steps/handoff.md|steps/handoff.md) : ;;'
+  _rk="$(grep -cxF -- "$RC_FLINE" "$GATE")" || _rk=0
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-687 full-step-Read allow arms" "the gate carries no full step Read allow in its snapshot arm (key '${RC_FLINE# *}', found 0); this fixture ships one pull ahead of its subject"
+  else
+    rp_f_allow() { # a full step Read with the marker present and no stage is allowed, and nothing moves
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      [ "$_rv" = allow ] || { echo "FAIL:a full step Read with no stage file answered '${_rv}'"; return; }
+      _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the full step Read with no stage file moved state: ${_rm}"; return; }
+      echo PASS
+    }
+    rp_f_seq() { # the sequential snapshot Read then step Read still satisfies the recovery
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      [ "$_rs" = allow ] && [ "$_rv" = allow ] || { echo "FAIL:snapshot then step Read answered '${_rs}' then '${_rv}'"; return; }
+      { [ ! -e "$_rq/$mk" ] && [ -e "$_rq/_bmad-output/.recover-satisfied" ]; } || { echo 'FAIL:snapshot then step Read did not remove the marker and write .recover-satisfied'; return; }
+      echo PASS
+    }
+    rp_f_bound() { # control: a BOUNDED step Read (limit=1) with no stage is still denied FIRST
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/architecture.md" 1 -)")"
+      [ "$_rv" = first ] || { echo "FAIL:a limit=1 step Read with no stage file answered '${_rv}'"; return; }
+      echo PASS
+    }
+    rp_f_decoy() { # control: any other Read with no stage is still denied FIRST
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+      [ "$_rv" = first ] || { echo "FAIL:a decoy Read with no stage file answered '${_rv}'"; return; }
+      echo PASS
+    }
+    rp_f_hand() { # carve-out: a recovery whose step file is steps/handoff.md keeps the FIRST deny on it
+      _rq="$(newproj handoff.md consumer)"
+      arm_marker "$1/$RC_RH" "$_rq"
+      _rsf="$(marker_step "$_rq")"
+      case "$_rsf" in */steps/handoff.md|steps/handoff.md) ;; *) echo "FAIL:SEED — the recovery recorded step_file '${_rsf}', not a steps/handoff.md"; return ;; esac
+      { [ -e "$_rq/$mk" ] && [ ! -e "$_rq/$pg" ]; } || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$_rsf")")"
+      [ "$_rv" = first ] || { echo "FAIL:a full handoff.md step Read with no stage file answered '${_rv}', not the FIRST deny"; return; }
+      echo PASS
+    }
+    rc_flabel() {
+      case "$1" in
+        f_allow) echo "BL-687: a full step Read with the marker present and no stage file is ALLOWED; marker kept, no stage written, no .recover-satisfied, no .recover-advisor-owed" ;;
+        f_seq)   echo "BL-687: a sequential snapshot Read then step Read still satisfies the recovery (marker removed, .recover-satisfied written)" ;;
+        f_bound) echo "BL-687 control: a bounded step Read (limit=1) with no stage file is still denied FIRST" ;;
+        f_decoy) echo "BL-687 control: a decoy Read with no stage file is still denied FIRST" ;;
+        f_hand)  echo "BL-687 carve-out: a full Read of a steps/handoff.md step file with no stage file is still denied FIRST" ;;
+      esac
+    }
+    RC_P687="f_allow f_seq f_bound f_decoy f_hand"
+    for _ra in $RC_P687; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_flabel "$_ra")"; else bad "$(rc_flabel "$_ra") — ${_rr#FAIL:}"; fi; done
+    rc_control "$RC_P687" "BL-687 full step Read allow"
+    rc_f() { # rc_f <awk program> <anchor> <line> [W] -> a whole-directory copy with the gate edited, or empty
+      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
+      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$1" "$2" "$3" "${4:-}" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
+      printf '%s\n' "$_rd"
+    }
+    _rfd="$(grep -F -- '    deny "AI/DLC post-compact recovery: your FIRST tool call must be' "$RC_REAL/$RG" | head -1)"
+    rc_score "M-687-nofull: the allow without is_full_read" \
+      "$(rc_f "$RACE_REPL" "$RC_FLINE" "" "${RC_FLINE/ && is_full_read/}")" "$RG" "$RC_P687" "f_bound"
+    rc_score "M-687-adv: the allow also writes the stage" \
+      "$(rc_f "$RACE_REPL" "$RC_FEXIT" "" "        *) printf 'step\\n' >\"\$PROGRESS\"; exit 0 ;;")" "$RG" "$RC_P687" "f_allow"
+    rc_score "M-687-sat: the allow also clears the marker" \
+      "$(rc_f "$RACE_REPL" "$RC_FEXIT" "" '        *) rm -f "$MARKER"; exit 0 ;;')" "$RG" "$RC_P687" "f_allow"
+    rc_score "M-687-widen: any Read allowed with no stage file" \
+      "$(rc_f "$RACE_BEFORE" "$_rfd" '    if [ "$TOOL" = "Read" ]; then exit 0; fi')" "$RG" "$RC_P687" "f_bound f_decoy f_hand"
+    rc_score "M-687-nohand: the handoff.md carve-out removed" \
+      "$(rc_f "$RACE_REPL" "$RC_FHAND" "" '        */steps/handoff.md|steps/handoff.md) exit 0 ;;')" "$RG" "$RC_P687" "f_hand"
+    # drop: the whole block, from its if line through its own four-space fi, removed
+    _rd="$(race_dir)"
+    if [ -n "$_rd" ] && A="$RC_FLINE" awk 'd && $0 == "    fi" { d = 0; next } d { next } $0 == ENVIRON["A"] { d = 1; next } { print }' "$RC_REAL/$RG" > "$_rd/$RG" \
+       && [ "$(grep -cxF -- "$RC_FLINE" "$_rd/$RG")" = 0 ] && [ "$(grep -cxF -- "$RC_FHAND" "$_rd/$RG")" = 0 ] \
+       && [ "$(grep -c '^    fi$' "$RC_REAL/$RG")" = "$(( $(grep -c '^    fi$' "$_rd/$RG") + 1 ))" ]; then :; else _rd=""; fi
+    rc_score "M-687-drop: the full step Read allow removed" "$_rd" "$RG" "$RC_P687" "f_allow"
   fi
 
 fi  # race subject present
