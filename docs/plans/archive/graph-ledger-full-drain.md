@@ -18872,3 +18872,99 @@ Batch 233's block below is history: this block replaces its delivery gap. Starte
 - **Net for the batch**: closed 4 entries and 4 candidates; filed 37 (32 operator-instructed peer filings, BL-532..
   BL-535, BL-558; BL-536 is held). Backlog 33 live, 530 archived.
 
+**BATCH 235 SHIPPED THIRTY-ONE RELEASES, `v0.792.0` (`27467671`) THROUGH `v0.822.0` (`edcae8aa`, #1187), ONE
+BRANCH PER RELEASE ACROSS PEER SESSIONS, EVERY GATE SERIAL ON ONE BOX. ITS GATE LOG IS TRACKED AT
+`docs/analysis/b235-release-train.md`.**
+Batch 234's block below is history: this block replaces its delivery gap. Started by ai-dlc-b8 at `952b9319`; the
+lead and gate scheduler was ai-dlc-9c, then ai-dlc-71 after every session was restarted mid-batch. No `graph-*`
+session was ever messaged.
+- **Close sweep** (at `origin/main` `23a69fc3`; graph `main` `d82236cee`, checked-out branch
+  `ai-dlc/carry-over/offramp-config-and-rewards` `47f53212b`): live 1, unfiled 0, worklist 1, DISCHARGED 0 after the
+  overlap correction (1 raw), invisible 0, TERMINAL 246, archive 369; 165 qualifying refs, union minus archives 1;
+  uncommitted working-tree ledger delta 0. Ledger md5 `fce2ab88…`. Every control passed. The one live candidate is
+  `PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`, SHIPPED here: its oldest `VERSION`-touching commit
+  naming it is `2ca609f1`, `v0.813.0` (BL-536). It stays in-flight on the worklist because live BL-530 (PARTIAL, the
+  Bash in-place-write deny still OPEN) also cites it, and it stays live upstream until graph pulls past 0.813.0.
+- **Shape.** The operator ruled small releases fanned out to sessions: each branch had an owner session that took
+  it end to end, and the lead granted every fixture run, sweep and gate as a serial slot. The pre-suite run and the
+  dress rehearsal used at every gate are now action 4.
+- **Backlog.** Live 33 -> 50 headings. Archive 530 -> 600 headings (`grep -cE '^## BL-[0-9]+'`). 87 filed, 70 closed (45
+  of them filed this batch), so the net is +17: the batch filed faster than it closed. Still live and filed before the batch: BL-530, 537, 538, 541, 553,
+  556, 557, 565. The highest id on `main` is BL-659; **the next free id is BL-662**, because BL-660 and BL-661 are
+  c9's held intake-28 below. 54 live `verify:` lines.
+- **Anchors.** Every batch-235 LANDED or PARTIAL clause names its release's squash on `origin/main` (85 re-anchored
+  at close). 68 clauses older than this batch still name off-main branch commits and were left alone.
+- **Operator rulings, batch 235**, beyond those already in `.claude/rules/operator-rulings.md`: BL-587 item 3 is
+  withdrawn; BL-630's R1 fails open at net expiry; f7's Check 37 finding is a separate DEFECT (BL-652), not a
+  back-fill of BL-587; the release-train log is tracked in the repo, not kept in a session scratchpad.
+- **Held, not deleted.** Ten local `bl585-*` tags. BL-585's archived table cites four of their red targets
+  (`c833cde7`, `7ce8c6f9`, `8915fa18`, `825eafe7`), none of which is reachable from `origin/main`, so the tags are
+  the only thing keeping that evidence alive. Their deletion is the operator's decision and has not been made.
+  Also held: ai-dlc-c9's LOCAL branch `b235-intake-28`, not on origin, two filings made after this close was cut:
+  BL-660 (NOTE: the merge opens a code fence on any line beginning with three backticks) and BL-661 (DEFECT:
+  `wait-for-deliverable.sh` leaves `set -f` on for every `--dispatch` beat, so the teammate glob never expands and
+  every beat reports LIVENESS unavailable). They ride batch 236; its lead names the carrier and asks ai-dlc-c9 for
+  the range.
+- **Unexplained.** BL-655: the load series roughly doubled two units under the pool. One CPU-seconds pair at n=1
+  reads 1.014 and 0.988, so the doubling is not reproduced as work. The suite pole at 0.822.0 is
+  `adversarial-shard-merge-mutants` at 1681 s loaded.
+- **graph delivery.** Action 7: BANK IT. graph `main` reads installed 0.789.0; its checked-out sprint branch reads
+  0.818.0. The engines the range changes (`ledger-reverify.sh`, `validate-layer-entries.sh`) gave identical
+  findings, installed against shipped, with `cmp -s` showing the copies differ. Bootstrapping files are in the
+  range. No runbook.
+- **Net for the batch**: 70 entries closed and 87 filed. Closes no `PC-` id that was not already cited in its
+  release message.
+
+**BATCH 236 SHIPPED THIRTY-EIGHT RELEASES OR MORE, `v0.823.0` THROUGH `v0.888.0` (`8df9b8ae6`, #1228) ON THIS TREE,
+AND `v0.889.0` (ai-dlc-69, BL-685 round 8) IS ITS OPERATOR-RULED LAST RELEASE. ITS GATE LOG IS TRACKED AT
+`docs/analysis/b236-release-train.md`.**
+Batch 235's block below is history: this block replaces its delivery gap. Started at `origin/main` `cc3c113f`
+(`VERSION` 0.822.0); the lead and gate scheduler was ai-dlc-c8, then ai-dlc-37. No `graph-*` session was messaged.
+- **Resume for batch 237, in order.**
+  1. **BL-723 (operator-directed, build first; HIGH, operator-ranked; graph s319 BLOCKED on this), clustered with
+     BL-695**: one owner builds both, because together they cover the test-strategy wall clock. BL-723 moves §5
+     step 2's test-strategy review to the native adversarial cycle with the standard exit ladder; BL-695 removes
+     the party round's per-seat barrier. Precondition: the build reads Check 24's prefix glob
+     (`core/scripts/validate-adversarial-convergence.sh:2952`) before choosing the series prefix. Operator ruling:
+     BL-723 and BL-695 are batch 237's first build, and `v0.889.0` stays batch 236's last release.
+     Graph s319 resume transition (operator-directed, relayed by ai-dlc-5d): `test-strategy-review.md` (of record at
+     graph `ae1fafcf8`, graph's handoff HEAD, which folds in the reviewer's edit made after `e3fb1b442`) delivered 14
+     findings, 7 MAJOR and 7 MINOR. Of those, F-2 to F-5 are real strategy defects; F-1 was already fixed.
+     Graph's `pipeline-snapshot.md:49` NEXT steps (remediator repair, then the 53-case step-3 bind, then the §6
+     commit, then §7 and gate[story]) are written for the pre-BL-723 pipeline, and the successor must not follow them
+     verbatim. The BL-723 owner decides, and writes the decision into the build, whether the successor (i) stamps the
+     delivered one-shot into the new series as pass 1 or (ii) discards it and starts the native series at pass 1.
+     Recommend (ii) unless a clean stamp exists: the one-shot has no verdict envelope and was not correctness-scoped,
+     and under the native ladder its 7 MAJORs would read NOT_MET (5d's reading; no verdict was made).
+  2. **BL-719** (`docs/backlog.md`, the emitter and teacher flip to `@`). Design not started; the operator stopped
+     it at the batch boundary. Survey, read-only, unbuilt: the emitters are `core/scripts/merge-adversarial-shards.sh:701`
+     and `:1328` (printed at `:1464` and `:1469`) and `core/scripts/join-remediator-shards.sh:2330` and `:2339`. Both
+     scripts already evaluate functions out of their sibling validator (`merge-adversarial-shards.sh:1184` and
+     `:1413`, `join-remediator-shards.sh:1704`), so a use-time key on the installed reader exists in-tree: the
+     sibling `validate-adversarial-convergence.sh`'s `sha_key` token class (`:486`, under `PAIR_SEP='[=@]'` at
+     `:485`) accepts `@` iff it carries `[=@]` — 0 at `369cf904c`, 1 at `8df9b8ae6`. That key covers the validator
+     only, NOT `partition-subject.sh` or `core/schemas/provenance-block.json`. The teachers carry `<stem>=<sha>` at
+     `core/skills/ai-dlc/steps/_gate-procedures.md:395`, `:537`, `:716`, `:725`, `:817`, `:859`, `:1057` and
+     `:1089`. Its precondition binds the design: a carried reader can stay old indefinitely.
+  3. **BL-685 round 9**: the `cr_run` residual first (round 8's note: a program run through `cr_run` reads files
+     the read log cannot see), with the recorded-PASS cache still OFF.
+  4. **BL-720 and BL-721** builds (both NOTE; filed this close).
+  5. **BL-714, BL-715, BL-716, BL-707, BL-708, BL-709 and BL-712.**
+  6. **BL-699**: the owed pcv_latarm reading (from 69).
+  7. **A sandbox read-set re-trace of `story-evidence-scaffold` is owed**: it is STALE and has run at every gate of
+     this batch.
+  8. **Graph-watch duties for graph's next resume** (ai-dlc-5d closes at graph's handoff). The watcher reads each one
+     off its backlog entry: BL-713, no covering run between gate and commit at 0.886.0 or later; BL-717, no
+     re-dispatch remedy on a live `--complete-repair` dispatch and no "absent" for a present record at 0.887.0 or
+     later; BL-718, `artifact_sha` fingerprints at 0 once BL-719 ships; BL-721, the marker beat at its cap; BL-676,
+     no shipped-fixture "command not found" at 0.884.0 or later; BL-715 and BL-716, S319's join and remediator
+     figures. graph's next pull is to carry BL-723.
+- **Backlog.** The next free id is **BL-724**; BL-723 is filed in this close. BL-722 is the archived v0.389.0
+  container-set entry, re-id'd from BL-084 in this close because the id collided with the v0.380.0 entry; both
+  entries carry a note naming the other, and the archive now holds 0 duplicate ids.
+- **Correction.** Commit `fd8dedd07` (the BL-717 filing) says "Rides 0.888.0" in its body. That is wrong: it
+  reached main inside `v0.887.0` (`369cf904c`). The commit history is left as it is.
+- **Held until this close is verified.** The -dev refs `b236-bl676-dev`, `b236-bl676-dev2`, `b236-bl711-dev`,
+  `b236-bl713-dev`, `b236-bl717-dev`, `b236-bl718-dev` and `b236-bl720-dev` (ai-dlc-c0), and the HAND-REVIEW
+  evidence that BL-710 and BL-717 now cite.
+
