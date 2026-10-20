@@ -331,6 +331,15 @@ if [ ! -r "$SNAP_ABS" ] || [ ! -r "$STEP_ABS" ]; then
   rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
   exit 0
 fi
+# AN UNWRITABLE STATE DIRECTORY STANDS THE GATE DOWN FOR THIS CALL (BL-688). Every way out of a
+# recovery is a write under `$STATE_DIR` -- the snapshot Read advances the stage, the step Read
+# removes the marker -- so with the directory unwritable the snapshot Read was allowed, advanced
+# nothing, and every later call was denied FIRST forever; a directory made unwritable after the
+# stage reached `step` wedged the same way at SECOND. Neither clearing the marker nor arming only
+# when writable closes it: a removal cannot act in that directory, and an arming-time test cannot
+# see a chmod made later. So the test is per call, deletes nothing, and the gate re-arms by itself
+# the moment the directory is writable again.
+[ -w "$STATE_DIR" ] || exit 0
 
 TOOL="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
 FPATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
@@ -422,6 +431,21 @@ that call is available to you now."
        && { [ "$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
             || [ "$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]; }; then
       exit 0
+    fi
+    # A FULL STEP READ IS ALLOWED WITHOUT ADVANCING OR SATISFYING (BL-687). A lead that issues the
+    # snapshot and step Reads in parallel can have this call's hook run before the snapshot call's
+    # stage write, and it was denied FIRST although the snapshot Read was succeeding beside it.
+    # It writes nothing -- no stage, no marker removal, no `.recover-satisfied`, no
+    # `.recover-advisor-owed` -- so a step Read alone never satisfies the recovery: only a step
+    # Read made once the stage is `step` does. A bounded step Read still falls through to the deny.
+    # EXCEPT handoff.md: `ai-dlc-handoff-entry.sh` arms `.handoff-in-progress` on a Read of it that
+    # no breadcrumb marks as compelled, and this allow writes none, so that Read stays denied.
+    # Matched at that hook's own grain, the basename under its steps/ parent.
+    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ] && is_full_read; then
+      case "$STEP_REL" in
+        */steps/handoff.md|steps/handoff.md) : ;;
+        *) exit 0 ;;
+      esac
     fi
     deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state." \
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that

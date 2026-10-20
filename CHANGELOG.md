@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.891.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-fc. It closes BL-687 and BL-688, files nothing and closes no `PC-` id. Net for this release: 2 closed, 0 filed. This is a `core/hooks/` release: the change is in `core/hooks/ai-dlc-recover-gate.sh`, which consumers already run through the gate registered in the settings template, so there is no template or install change.
+
+### BL-688 — an unwritable `_bmad-output` stands the recover gate down per call instead of wedging it
+
+Every way out of a post-compact recovery is a write under `_bmad-output`: the snapshot Read advances the stage and the step Read removes the marker. With that directory unwritable, the snapshot Read was allowed but advanced nothing, and every later call was denied with the FIRST-call text forever. A directory made unwritable after the stage reached `step` wedged the same way at SECOND; the entry did not name that second wedge.
+
+The gate now runs a per-call `[ -w "$STATE_DIR" ] || exit 0` beside the readability block. It deletes nothing, and the gate re-arms by itself once the directory is writable again. The two shapes the entry proposed were measured not to work: clearing the marker cannot act in a 555 directory, and arming only when writable cannot see a chmod made after arming.
+
+`postcompact-rulebook-recovery` gains three ship-ahead-keyed arms: snapshot-then-Edit under 555, step-then-Edit under 555 at stage `step`, and a writable control that advances to `step` and is then denied SECOND. Each 555 predicate restores 755 before it judges, and the EXIT trap now restores write permission before it removes the work tree. Three mutants (drop, clear the marker, arm only when writable) are each killed by exactly `{w_snap w_step}`. BL-688's receipt keys on an Edit carrying neither FIRST nor SECOND after the snapshot and step Reads under 555, plus the wedge-2 seed.
+
+### BL-687 — a full step Read that lands before the snapshot call's stage write is allowed and writes nothing
+
+A lead that issues the snapshot Read and the step Read in parallel can have the step call's hook run before the snapshot call's stage write. That call found no stage, defaulted to `snapshot`, and was denied with the FIRST-call text even though the snapshot Read was succeeding in the same message.
+
+In the gate's `snapshot)` arm, a full Read of the step file is now allowed before the first deny. It writes no stage, removes no marker, and writes neither `.recover-satisfied` nor `.recover-advisor-owed`, so a step Read alone never satisfies the recovery. A bounded step Read still falls through to the deny. A step file at `steps/handoff.md` keeps the deny, because this allow writes no breadcrumb and `ai-dlc-handoff-entry.sh` would otherwise arm `.handoff-in-progress` from a Read the recovery compelled.
+
+In `postcompact-rulebook-recovery`, `rp_r_clear` and `rp_r_ctl` now probe with the decoy Read, because a full step Read with no stage no longer separates a cleared stage from a stale one; M-684 is still killed by exactly `{r_clear}`. New ship-ahead-keyed arms cover the allow (nothing moves), the sequential snapshot-then-step satisfaction, the bounded and decoy controls, and the `handoff.md` carve-out. Six mutants (nofull, adv, sat, widen, nohand, drop) are each killed by exactly their own set. `handoff-completion-assertion` gains arm e8g, which drives the entry hook only when the gate allowed a first-call `handoff.md` Read and asserts that key 1 is not armed; mutant m-e8g, which removes the carve-out, is killed by it. BL-687's receipt checks the bounded-step-Read deny, and its liveness line exits 1.
+
+### Finding: an ENOSPC stage-write failure still holds the gate at `snapshot`
+
+The writability test sees a directory that is not writable. It does not see a writable directory where the write itself fails, such as a full disk. Then the snapshot Read is allowed, the stage write fails, and the gate stays at `snapshot` and keeps denying later calls with FIRST. This release does not fix that case; it is filed as its own entry at the batch close.
+
 ## [0.890.1] - 2026-10-20
 
 Batch 238, lead ai-dlc-fc. It closes 1 `PC-` id, closes no BL entry and files nothing. Net for this release: 1 closed, 0 filed. No product code changes.

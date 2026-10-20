@@ -1919,6 +1919,34 @@ else
   bad "(e8-pre) could not build the in-flight-but-unsatisfied window (marker present? stage='$_E8_STAGE'), so (e8) would assert against a state that is not the one it names"
 fi
 
+# --- (e8g) THE GATE DOES NOT LET A FIRST-CALL handoff.md READ REACH THE ENTRY HOOK ----------
+# (e8) drives the entry hook whatever the gate decided. This arm drives it ONLY when the gate
+# ALLOWED, which is the sequence a consumer actually runs. The gate's snapshot stage allows a full
+# step Read without advancing (BL-687), and that allow writes no breadcrumb -- so a handoff.md step
+# Read let through there would reach the entry hook unmarked as compelled and arm key 1 from a Read
+# the recovery mandated. The gate keeps that one Read denied; a gate that let it through fails here.
+e8g_run() { # e8g_run <projdir> [hooksdir] -> pre:<why> | <deny|allow> <marker|no-marker>
+  local proj="$1" hd="${2:-$HOOKS_DIR}" st dec g=deny
+  reset_state "$proj"; rclean "$proj"
+  cp "$SNAP_PLAIN" "$proj/_bmad-output/pipeline-snapshot.md"
+  touch "$proj/_bmad-output/pipeline-paused.flag"
+  mkmarker "$proj" "$hd"
+  rdrive "$proj" "$SESS_A" "$hd" >/dev/null   # a recovery fires toward handoff.md; mandate 1 is NOT satisfied
+  st="$(sed -n 's/^step_file=//p' "$proj/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  case "$st" in */steps/handoff.md|steps/handoff.md) ;; *) printf 'pre:step_file=%s' "${st:-<nothing>}"; return ;; esac
+  [ -f "$proj/_bmad-output/.recover-gate-progress" ] && { printf 'pre:a stage file is already present'; return; }
+  rm -f "$proj/_bmad-output/.handoff-in-progress"
+  dec="$(gdrive "$proj" Read "$proj/$st" "$hd")"
+  if ! gdenied "$dec"; then g=allow; edrive "$proj" Read "$proj/$st" "$hd" >/dev/null; fi
+  if marker_at "$proj"; then printf '%s marker' "$g"; else printf '%s no-marker' "$g"; fi
+}
+_E8G="$(e8g_run "$P_REC")"
+case "$_E8G" in
+  pre:*) bad "(e8g-pre) not a first-call recovery toward handoff.md (${_E8G#pre:}), so (e8g) would measure nothing" ;;
+  *' no-marker') ok "(e8g) driven gate-then-entry only when the gate allows, a first-call handoff.md Read during a recovery does not arm key 1 (gate: ${_E8G% *})" ;;
+  *) bad "(e8g) the gate ALLOWED a full Read of handoff.md before the snapshot Read, and the entry hook then armed key 1 from a Read the recovery compelled — the snapshot stage's step-Read allow writes no breadcrumb, so it must not cover handoff.md" ;;
+esac
+
 # --- (e9) FAIL OPEN: a breadcrumb with no step_file key ----------------------------------
 # Every unreadable or ambiguous input falls through and arms. The two errors are not
 # symmetric: a marker written wrongly is a Stop guard the lead clears with `rm`, a marker
@@ -2984,6 +3012,21 @@ if mkmut m30-breadcrumb-not-consumed "$ENTF" \
   seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$_M30" >/dev/null   # the mandated Read
   mseq m30 "$_M30" "$P_REC" "$P_REC/$STEP_HANDOFF" no-marker \
     "assertion (e10): the breadcrumb survives its own read, so an immediate voluntary re-open is taken for the mandated call and the lead's real initiation is silently unmarked"
+fi
+
+# M-E8G — THE GATE'S handoff.md CARVE-OUT IS REMOVED, so its snapshot-stage step-Read allow (BL-687)
+#       lets a first-call handoff.md Read through with no breadcrumb. Killed by (e8g). Keyed on the
+#       carve-out line being present: a gate that predates the allow has nothing to mutate, and this
+#       fixture ships one pull ahead of it.
+if grep -qxF '        */steps/handoff.md|steps/handoff.md) : ;;' "$HOOKS_DIR/$GATEF" 2>/dev/null \
+   && mkmut m-e8g-gate-handoff-carve-out-removed "$GATEF" \
+     -e 's@^        \*/steps/handoff\.md|steps/handoff\.md) : ;;$@        */steps/handoff.md|steps/handoff.md) exit 0 ;;@'; then
+  _ME8G="$(e8g_run "$P_REC" "$MUT_DIR")"
+  if [ "$_ME8G" = "allow marker" ]; then
+    ok "  mutant [m-e8g] KILLED by assertion (e8g): with the carve-out gone the gate allows a first-call handoff.md Read and the entry hook arms key 1 from it"
+  else
+    bad "MUTANT SURVIVED [m-e8g]: expected 'allow marker', got '${_ME8G}' — (e8g) does not depend on the gate's handoff.md carve-out"
+  fi
 fi
 
 
