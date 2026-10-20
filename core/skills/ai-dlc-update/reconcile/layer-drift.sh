@@ -117,6 +117,8 @@
 #                                    a dangling one makes H1 report coverage it does not have
 #                                    — the same shape as the hand-typed enumeration H1 deleted.
 #                                    Level-triggered: a state of the tree, not an event.
+#                                    A value with a `..` component or a leading `/` is this
+#                                    row too, naming the escape, and is never tested on disk.
 #   EXTENSION-RETIRE-CANDIDATE       theirs' core file NEWLY defines a section this
 #                                    extension also defines, matched by TITLE (at the
 #                                    same number or a different one) -> upstream
@@ -2368,8 +2370,22 @@ while IFS= read -r f; do
   # H1 reporting coverage it does not have — the exact failure H1's own enumeration was
   # deleted to end, reintroduced one layer out. LEVEL-TRIGGERED, like ORPHANED-RELOCATED: it
   # is a state of the consumer tree, so a pull that changes nothing here must still report it.
+  #
+  # A VALUE THAT ESCAPES tests/fixtures/ IS REFUSED, NOT TESTED: a `..` component or a leading `/`.
+  # `tests/fixtures/../../docs/x` would test a directory outside every path emit-report.sh's
+  # recorded-PASS key reads, so its removal moved this row with the key unmoved (measured: cached 0
+  # where a fresh render gave 1). H1 binds a fixture by its directory under tests/fixtures/, so an
+  # escaping value binds nothing whether or not the path exists: it renders as UNBOUND, naming the
+  # escape, and the filesystem is not consulted. This is the ONE reader of the value; the key relies
+  # on it and keeps no copy of the rule.
   for fx in $(fm "$f" fixtures | tr ',' ' '); do
     [ -n "$fx" ] || continue
+    case "$fx" in
+      /*|..|../*|*/..|*/../*)
+        emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
+          "declares fixtures: $fx, which escapes tests/fixtures/ (a .. component or a leading /), so it binds no fixture and is not tested on disk. Name the fixture directory under tests/fixtures/."
+        continue ;;
+    esac
     case "$fx" in tests/fixtures/*) ;; *) fx="tests/fixtures/$fx" ;; esac
     [ -d "$CONSUMER/$fx" ] || emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
       "declares fixtures: $fx, which is not a directory in this consumer. H1 derives its coverage set from these bindings, so a dangling one reads exactly like coverage."

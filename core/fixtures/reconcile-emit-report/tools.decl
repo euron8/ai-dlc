@@ -21,6 +21,7 @@ jq
 ln
 ls
 mkdir
+mkfifo
 mktemp
 mv
 rm

@@ -85,7 +85,8 @@
 #                mtime), so a record from any other engine is refused in both directions;
 #   base/theirs  each one AS TYPED (the region prints it so), then its commit object AND its `:core`
 #                tree resolved in <dist> (a symbolic `origin/main` moves under one spelling);
-#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, whether it
+#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, every
+#                linked worktree and its HEAD (`worktree list --porcelain`), whether it
 #                is shallow, its EFFECTIVE `config --list` (global and system through $HOME), the
 #                bytes (or `absent`) of its `info/attributes`, `info/grafts`, `objects/info/alternates`
 #                and of the global attributes file `git var GIT_ATTR_GLOBAL` names, and the
@@ -113,6 +114,21 @@
 #                value; the bytes (or `absent`) of the system attributes file `git var
 #                GIT_ATTR_SYSTEM` names; `git --version` and `--exec-path`; and the resolved path and
 #                binary `cksum` of awk, sed and sort;
+#   receipts     every path a live ledger `verify: sh` receipt names, by ledger-reverify.sh's own
+#                token extraction (`--receipt-tokens`), one row per token: its LEXICAL form (`.` and
+#                `..` resolved as text against the consumer root; a token that climbs above the root
+#                keeps its leading `../`) and `present` or `absent` by `[ -e ]` of the token AS
+#                ledger-reverify.sh spells it, the one test its absent-subject check makes. The label
+#                is text; the bit is the OS's own answer to the engine's own read, so no second path
+#                resolver decides anything and a symlink or a missing component on the way moves the
+#                bit exactly as it moves the engine's test. A `.git/` subject, an empty directory, an
+#                ignored file and a path under `.claude/worktrees/` are keyed here, read by no other
+#                field. A subject OUTSIDE every read root (er_read_roots; a token spelled with `.`
+#                or `..`, or under `.claude/worktrees/`, always counts as outside) that is a regular
+#                file also has its BYTES keyed, through er_hash_list, because a receipt can read its
+#                content; one inside a root is keyed by that root's own fields. An outside subject
+#                that is a symlink, a FIFO, socket or device, or an unreadable file is REFUSED;
+#                a directory or an absent one keeps the bit alone;
 #   region       the report region's hash after the dist-path normalisation below, which must equal
 #                the region of the render that passed -- an edit OUTSIDE the region still hits, one
 #                byte inside it misses.
@@ -136,9 +152,19 @@
 #     component from the consumer root; or any symlink, tracked, untracked or ignored, under one;
 #   - R3 a SYMLINK INSIDE THIS ENGINE DIRECTORY: the engine field lists regular files only. No walk
 #     above it: every engine read goes through the same logical `$SELF` the field hashes;
-#   - R4 a live ledger `verify: sh` receipt naming a `.git/` path, by ledger-reverify.sh's own
-#     token extraction (`--receipt-tokens`): its absent-subject test reads the git-dir, the key
-#     prunes it.
+#   - a LISTED PATH THAT IS A DIRECTORY (an entry ending `/` in a git listing): a nested work tree
+#     or a non-ignored worktree under `.claude/worktrees/`, whose files git lists nowhere. Named
+#     `a listed path is a directory (a nested work tree or an unignored worktree): <path>`;
+#   - a live receipt subject OUTSIDE every read root that is a symlink, is neither a regular file
+#     nor a directory (a FIFO, socket or device), or is an unreadable regular file: its bytes cannot
+#     be keyed, and presence alone would let a receipt that reads it hit after its content changed;
+#   - the receipts field's token derivation failing (ledger-reverify.sh --receipt-tokens exits
+#     non-zero). Round 6's R4, a refusal of any receipt naming a `.git/` path, is GONE: the receipts
+#     field keys that subject's presence instead, whatever prefix spells it.
+# NOT REFUSED AND NOT KEYED, BECAUSE NOTHING READS IT: an extension's `fixtures:` value carrying a
+# `..` component or a leading `/`. layer-drift.sh, its one reader, emits EXTENSION-FIXTURE-UNBOUND
+# naming the escape and does not test the path, so the render does not depend on anything outside
+# the read roots.
 # Every refusal names its cause on stderr when the cache is armed (`recorded PASS refused,
 # re-rendering: <cause>`), leaves the record untouched, and renders exactly as an unarmed run.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
@@ -1090,7 +1116,9 @@ er_link_target() {
 # NUL-terminated, then the content hashes in the same order. An entry ending `/` is a NESTED
 # REPOSITORY, whose contents git lists nowhere, so it is a MISS (measured: an edit inside one read
 # cached 0 where a fresh render gave 1); so is a listed symlink resolving outside the consumer root
-# (er_link_inside). THE LIST IS NUL-SEPARATED
+# (er_link_inside). The directory case is a NAMED refusal (er_refuse): it was a silent miss on every
+# --verify, measured on a non-ignored `.claude/worktrees/agent-x/` holding its own `.git`, which
+# conswork's `ls-files -o` lists with the trailing `/`. THE LIST IS NUL-SEPARATED
 # because git C-quotes a name carrying `"`, `\`, a tab or a newline in line output, the quoted form
 # names no file, and the old `[ -e ] || continue` dropped its bytes from the key without a sound
 # (measured: a cached 0 where a fresh render gave 3). A name carrying a newline cannot go through
@@ -1100,7 +1128,7 @@ er_hash_list() {
   : > "$_er_tmp/key.exist" || return 1
   : > "$_er_tmp/key.nl" || return 1
   while IFS= read -r -d '' p; do
-    case "$p" in */) return 1 ;; esac
+    case "$p" in */) er_refuse "a listed path is a directory (a nested work tree or an unignored worktree): $p"; return 1 ;; esac
     if [ -L "$CONSUMER/$p" ]; then printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" || return 1; fi
     { [ -e "$CONSUMER/$p" ] || [ -L "$CONSUMER/$p" ]; } || continue
     if [ -x "$CONSUMER/$p" ]; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
@@ -1139,7 +1167,7 @@ er_sha256() {
   [ "${#h}" -eq 64 ] || return 1
   printf '%s\n' "$h"
 }
-# THE ELEVEN FIELD READERS, one per key field, each writing that field's raw material to stdout and
+# THE FIELD READERS, one per key field, each writing that field's raw material to stdout and
 # returning non-zero on any failure. The order below is the pinned order; er_key hashes each.
 er_kf_engine() {
   ( cd "$SELF" && find . -type f | LC_ALL=C sort ) > "$_er_tmp/key.engine-list" || return 1
@@ -1161,6 +1189,13 @@ er_kf_distrefs() {
   # HEAD is not a ref for-each-ref lists, and retired-fixtures.sh's `git log --all` walks it: a
   # detached HEAD on unreferenced commits moved the region with every listed ref unchanged.
   git -C "$DIST" rev-parse HEAD || return 1
+  # `log --all` walks every LINKED WORKTREE's HEAD as well, and none of them is a ref: a worktree
+  # detached at an unreferenced commit moved retired-fixtures.sh's rows with every ref and the main
+  # HEAD unchanged. `worktree list --porcelain` is git's own enumeration of that set, each HEAD
+  # already resolved (a symbolic one too), so this keys what `--all` reads. Its `locked` and
+  # `prunable` annotations move the field as well, which is the safe direction (a miss).
+  echo "worktrees"
+  git -C "$DIST" worktree list --porcelain || return 1
   git -C "$DIST" rev-parse --is-shallow-repository || return 1
   # The EFFECTIVE config (local, global through $HOME, system) and the auto-abbrev length: every
   # `%h` the region renders comes from <dist> (ledger-reverify.sh, retired-fixtures.sh), and its
@@ -1215,7 +1250,7 @@ er_normalises() {
   awk 'NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { f = 1 } END { exit !f }' "$_er_tmp/key.ca-lines"
 }
 # The status names every modified and untracked path; their BYTES are hashed after it. An untracked
-# entry ending in `/` is a nested repository, which er_hash_list refuses as a miss.
+# entry ending in `/` is a nested repository, which er_hash_list refuses by name.
 er_kf_conswork() {
   er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
   er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1
@@ -1277,8 +1312,26 @@ er_kf_consignored() {
         ':(exclude).claude/worktrees' >> "$_er_tmp/key.ign" || return 1
     fi
   done < "$_er_tmp/key.roots"
+  # THE `:(exclude).claude/worktrees` PATHSPEC ABOVE DOES NOT PRUNE A NESTED REPOSITORY. Measured on
+  # git 2.54.0: an IGNORED linked worktree at `.claude/worktrees/agent-x/` (check-ignore confirms it)
+  # is listed by `ls-files -o -i -- .claude` as ONE directory entry, `.claude/worktrees/agent-x/`, and
+  # every exclude form tried leaves it in -- `:(exclude).claude/worktrees`, with a trailing `/`, with
+  # `/*`, `:(exclude,glob).claude/worktrees/**`, and the entry's own path. er_hash_list then refused
+  # it as a listed directory on every --verify, in the common case (ai-dlc's own tree carries dozens).
+  # So every entry under `.claude/worktrees/` is dropped here, over the NUL records, before hashing.
+  # The match is an ANCHORED PATH PREFIX, `.claude/worktrees/` with its trailing slash, never a
+  # substring: `.claude/worktreesX/f` and `.claude/notworktrees/f` stay keyed. This list is the IGNORED
+  # one only; conswork's untracked listing is not filtered, so D3's subject still refuses there.
+  # The pathspec stays: it still prunes the plain files git does list one by one. An UNIGNORED
+  # worktree is untouched by this: conswork's `ls-files -o` lists it, and er_hash_list refuses it
+  # by name there.
+  : > "$_er_tmp/key.ign-pruned" || return 1
+  while IFS= read -r -d '' r; do
+    case "$r" in .claude/worktrees/*) continue ;; esac
+    printf '%s\0' "$r" >> "$_er_tmp/key.ign-pruned" || return 1
+  done < "$_er_tmp/key.ign"
   # Roots can nest, so one file can be listed twice; NUL-separated sort, and a failure is a miss.
-  LC_ALL=C sort -z -u "$_er_tmp/key.ign" > "$_er_tmp/key.ign-sorted" || return 1
+  LC_ALL=C sort -z -u "$_er_tmp/key.ign-pruned" > "$_er_tmp/key.ign-sorted" || return 1
   # er_hash_list emits each name with its exec bit before the bytes: a chmod alone moves this field.
   er_hash_list "$_er_tmp/key.ign-sorted" || return 1
   # EMPTY DIRECTORIES under the roots: git lists none, and detectors decide on `[ -d ]` alone
@@ -1391,6 +1444,94 @@ er_kf_env() {
     if [ -f "$_tp" ]; then cksum < "$_tp" || return 1; else echo "not-a-file"; fi
   done
 }
+# er_receipt_rows <token-file> <root> -- one row per token line: `<lexical form>TAB<present|absent>`.
+# SELF-CONTAINED (no $_er_tmp, no global) so a fixture can extract and run it alone.
+# The LABEL is the token with `.` and `..` components resolved as TEXT against <root>; a token that
+# climbs above it keeps one leading `../` per level climbed, so it can never read as an in-tree path.
+# THE BIT IS NOT DERIVED FROM THE LABEL. It is `[ -e "<root>/<token>" ]` on the token exactly as
+# ledger-reverify.sh spells its own test, so the OS walks the same components in the same order: a
+# missing `docs/` before `..`, or a symlinked component, moves the bit exactly as it moves the
+# engine's answer. A lexical `present` would be a second path resolver, and it disagrees with the OS
+# precisely there (`docs/../.git/x` with no `docs/` is absent to the OS and present to the text).
+# Tokens carry only `[A-Za-z0-9_./$-]` (ledger-reverify.sh's split), so no tab or newline can
+# misalign a row.
+er_receipt_rows() {
+  local t n
+  awk '{ k = split($0, a, "/"); d = 0; up = 0
+         for (i = 1; i <= k; i++) {
+           if (a[i] == "" || a[i] == ".") continue
+           if (a[i] == "..") { if (d > 0) d--; else up++; continue }
+           s[++d] = a[i]
+         }
+         o = ""; for (i = 1; i <= up; i++) o = o "../"
+         for (i = 1; i <= d; i++) o = o (i > 1 ? "/" : "") s[i]
+         if (o == "") o = "."
+         printf "%s\t%s\n", o, $0 }' "$1" > "$1.lex" || return 1
+  while IFS="$(printf '\t')" read -r n t; do
+    [ -n "$t" ] || continue
+    if [ -e "$2/$t" ]; then printf '%s\tpresent\n' "$n"; else printf '%s\tabsent\n' "$n"; fi
+  done < "$1.lex"
+}
+# The receipts field: every SUBJECT row er_key staged from ledger-reverify.sh --receipt-tokens, one
+# row each, sorted and unique so two spellings of one subject are one row; then the CONTENT of every
+# subject outside the read roots that is a regular file.
+#
+# PRESENCE IS NOT ENOUGH FOR A FILE NO OTHER FIELD READS. A receipt runs arbitrary shell, so one that
+# READS a subject (`grep -q x .git/config`) moves with its bytes, not only with its existence: keyed
+# by presence alone it recorded and then HIT after the bytes changed. So a subject whose path lies
+# OUTSIDE every read root and is a regular file has its bytes keyed through er_hash_list, the hasher
+# consindex and consignored already use (exec bit and name, then `git hash-object --no-filters`).
+# A directory or an absent subject keeps the present/absent bit alone.
+#
+# A SUBJECT INSIDE A READ ROOT NEEDS NO HASH: its bytes are already keyed by that root's own fields --
+# consindex (tracked), conswork (modified and untracked, the whole tree) and consignored (ignored,
+# under exactly these roots, er_read_roots, the set R2 also walks). "Inside" is decided on the RAW
+# token, textually: no empty, `.` or `..` component, and equal to a root or below one. A token
+# spelled with `..` is never inside, whatever it resolves to, so a symlink on the way cannot carry a
+# lexically-inside spelling out of the tree unhashed; and `.claude/worktrees/` is never inside either,
+# because no content field keys it (consignored drops it by name over its NUL list, the find-based
+# guards prune it, and conswork lists only an UNIGNORED worktree there, which er_hash_list refuses). Treating a subject as OUTSIDE is the safe direction: it only adds
+# bytes to the key.
+#
+# WHAT CANNOT BE HASHED SAFELY IS REFUSED BY NAME, never keyed by presence: a subject outside the
+# roots that exists and is a symlink (er_hash_list would follow it), is not a regular file or
+# directory (a FIFO would block the read, a device has no stable bytes), or is a regular file the
+# user cannot read.
+er_kf_receipts() {
+  local t r inside
+  LC_ALL=C awk -F'\t' '$1 == "SUBJECT" { print $2 }' "$_er_tmp/key.r4" > "$_er_tmp/key.rsub" || return 1
+  er_receipt_rows "$_er_tmp/key.rsub" "$_er_root" > "$_er_tmp/key.rrows" || return 1
+  LC_ALL=C sort -u "$_er_tmp/key.rrows" || return 1
+  er_read_roots > "$_er_tmp/key.rroots" || return 1
+  [ -s "$_er_tmp/key.rroots" ] || return 1
+  : > "$_er_tmp/key.rhash" || return 1
+  LC_ALL=C sort -u "$_er_tmp/key.rsub" > "$_er_tmp/key.rsub-sorted" || return 1
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    inside=0
+    case "/$t/" in
+      *//*|*/./*|*/../*|/.claude/worktrees/*) ;;
+      *) while IFS= read -r r; do
+           case "$t" in "$r"|"$r"/*) inside=1; break ;; esac
+         done < "$_er_tmp/key.rroots" ;;
+    esac
+    [ "$inside" -eq 0 ] || continue
+    if [ -L "$_er_root/$t" ]; then
+      er_refuse "a receipt subject outside every read root is a symlink, whose target the key would have to follow: $t"; return 1
+    fi
+    [ -e "$_er_root/$t" ] || continue
+    [ -d "$_er_root/$t" ] && continue
+    if [ ! -f "$_er_root/$t" ]; then
+      er_refuse "a receipt subject outside every read root is not a regular file or a directory (a FIFO, socket or device has no bytes the key can hash): $t"; return 1
+    fi
+    if [ ! -r "$_er_root/$t" ]; then
+      er_refuse "a receipt subject outside every read root cannot be read, so its bytes cannot be keyed: $t"; return 1
+    fi
+    printf '%s\0' "$t" >> "$_er_tmp/key.rhash" || return 1
+  done < "$_er_tmp/key.rsub-sorted"
+  echo "content"
+  er_hash_list "$_er_tmp/key.rhash" || return 1
+}
 # The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
 # records only when the render equalled this region byte for byte, so the recorded value IS the
 # passing render's.
@@ -1398,7 +1539,7 @@ er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
 # er_refuse <cause> -- names why er_key refused, in a file the caller prints. er_key runs inside a
 # command substitution with stderr discarded, so the cause travels through $_er_tmp.
 er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1; }
-# er_key -- prints the key: sha256 over the eleven `name=value` lines, each value the sha256 of that
+# er_key -- prints the key: sha256 over the `name=value` lines, one per field, each value the sha256 of that
 # field's material. Non-zero, and nothing usable, when any field could not be computed.
 er_key() {
   local f v r p rest
@@ -1475,19 +1616,18 @@ er_key() {
       er_refuse "R2 a symlink lies under the read root '$r' ($(sed -n 1p "$_er_tmp/key.r2links"))"; return 1
     fi
   done < "$_er_tmp/key.r2roots"
-  # R4 A LIVE RECEIPT NAMING A `.git/` PATH IS A MISS. ledger-reverify.sh tests whether an `sh`
-  # receipt's named paths exist, `.git/` included, and the key prunes the git-dir (measured: a
-  # receipt naming .git/hooks/pre-push, the hook removed after the record, cached 0 where a fresh
-  # render gave 1). The token set is ledger-reverify.sh's OWN extraction, run in its
-  # `--receipt-tokens` mode, so there is no second grammar here. `"$BASH"`, not `bash`: the key
-  # launches no detector through PATH.
+  # THE RECEIPT SUBJECTS, for the receipts field. ledger-reverify.sh tests whether each path an `sh`
+  # receipt names exists (`[ -e "$CONSUMER/$p" ]`), and several of those paths are read by no other
+  # field: a `.git/` path under any spelling (`docs/../.git/x` passed round 6's `.git/` prefix
+  # refusal), an empty directory, an ignored file outside every read root, a path under
+  # `.claude/worktrees/` (measured: each removed after the record cached 0 where a fresh render gave
+  # 1). Round 6 REFUSED the `.git/` prefix; this KEYS every subject instead, so no spelling escapes.
+  # The token set is ledger-reverify.sh's OWN extraction, run in its `--receipt-tokens` mode, so
+  # there is no second grammar here. `"$BASH"`, not `bash`: the key launches no detector through PATH.
   "$BASH" "$SELF/ledger-reverify.sh" --receipt-tokens "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$_er_tmp/key.r4" 2>/dev/null \
-    || { er_refuse "R4 the ledger's receipt tokens could not be derived (ledger-reverify.sh --receipt-tokens failed)"; return 1; }
-  if LC_ALL=C awk -F'\t' '$1 == "SUBJECT" && index($2, ".git/") == 1 { f = 1 } END { exit !f }' "$_er_tmp/key.r4"; then
-    er_refuse "R4 a live ledger sh receipt names a .git/ path, which the key does not read"; return 1
-  fi
+    || { er_refuse "the ledger's receipt tokens could not be derived (ledger-reverify.sh --receipt-tokens failed)"; return 1; }
   : > "$_er_tmp/key.block" || return 1
-  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
+  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env receipts region; do
     "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
     v="$(er_sha256 "$_er_tmp/key.f.$f")" || return 1
     printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
