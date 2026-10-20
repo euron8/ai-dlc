@@ -19,6 +19,58 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.887.0] - 2026-10-20
+
+Batch 236, the BL-717 release (owned and gated by ai-dlc-c0; lead ai-dlc-37). It closes BL-717, a live serial
+remediator under `--complete-repair` being told to re-dispatch at its beat cap, and the present record reported
+absent. It files BL-718. Net for this release: 1 closed, 1 filed.
+
+### A live --complete-repair dispatch is never told to re-dispatch (BL-717)
+
+- **The dispatched agent's own transcript decides the cap.** Under `--complete-repair`, when `--dispatch` resolves to
+  exactly one agent and one target, that agent's transcript, joined to the dispatch by toolUseId, decides two things at
+  the cap.
+- **A LIVE turn grants.** A turn younger than one beat grants through the existing grant path, and the PROGRESS line
+  names `agent-<id>.jsonl`.
+- **A RECENT turn gives no grant but changes the remedy.** A turn older than one beat and younger than IDLE_SECS grants
+  nothing, and the LIVE DISPATCH block replaces the bare "Re-dispatch the teammate ONCE" remedy. The beat still exits 1,
+  so the wait stays bounded.
+- **The same holds when grants are spent and on a fresh arm after the cap.** The failing path in graph S319 was a seventh
+  invocation 19s after beat 6.
+- **Today's remedy is kept in four cases.** A turn at IDLE_SECS or older, a STALLED transcript, no `--dispatch`, and an
+  unresolved scope all keep it.
+- **The header's rationale now states the split.** The session-wide minimum still decides nothing, and the
+  dispatch-scoped transcript is evidence of the same kind as `--progress-path`. The header's "changes no decision"
+  wording is updated to say so.
+
+### A present record is never called absent under --complete (BL-717)
+
+- **A non-empty file not modified since the join prints UNCHANGED.** The line reads
+  `UNCHANGED <t> -- present (<n> lines), not modified since the join`, in place of "absent after N beats".
+- **Behaviour change:** under `--complete`, the bare re-dispatch remedy now prints only when a target is truly absent.
+  A cap whose targets are only UNFINISHED, UNSETTLED or UNCHANGED no longer prints it, because a re-dispatch over a
+  written file discards its findings.
+
+### The hermetic PATH caught an undeclared tool before release
+
+- **The first UNCHANGED line forked `wc -l`.** That tool is absent from the driving fixtures' `tools.decl`, so under
+  BL-676's declared-tool PATH the count printed empty and the error was discarded.
+- **This is the class BL-676 was built to catch.** The hermetic PATH caught it on this release's own pre-run. The line
+  now counts with awk, and an audit of every command word the build adds found no other undeclared tool.
+
+### Fixtures
+
+- **wait-beat-liveness section 27** covers LIVE, RECENT, idle, dead, stalled, the no-dispatch control, grants spent, a
+  fresh arm after the cap by real beats, UNCHANGED and a missing record.
+- **The non-sleeping arms run on a 30s quantum**, so pool load cannot push a "now" turn into RECENT. The two arms that
+  sleep keep 4s.
+- **S13c now asserts UNCHANGED.**
+
+### Filed
+
+- **BL-718 (NOTE).** The adversarial shard header `artifact_sha: <stem>=<sha>` trips gitleaks generic-api-key in a
+  consumer, so its lead hand-appends fingerprints each sprint.
+
 ## [0.886.0] - 2026-10-19
 
 Batch 236, the BL-713 release (owned and gated by ai-dlc-c0; lead ai-dlc-37). It ships alone because it edits both

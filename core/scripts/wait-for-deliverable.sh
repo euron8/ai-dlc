@@ -154,12 +154,15 @@
 #     It needs no flag, and it is the same KIND of evidence --progress-path already
 #     uses: an mtime DELTA, never a state.
 #
-#     WHAT IT CAN AND CANNOT ANSWER. It cannot say which teammate owed which
-#     deliverable -- nothing on disk joins a teammate name to a path, and this script
-#     does not guess one, for the same reason it will not guess a progress path. What
-#     it can say is a SESSION-scoped fact: whether ANY teammate has taken a turn
+#     WHAT IT CAN AND CANNOT ANSWER. Without --dispatch it cannot say which teammate
+#     owed which deliverable -- nothing on disk joins a teammate name to a path, and this
+#     script does not guess one, for the same reason it will not guess a progress path.
+#     What it can say is a SESSION-scoped fact: whether ANY teammate has taken a turn
 #     recently. That is exactly the fact the operator's question surfaced in S306,
-#     where the answer was "no -- both went idle an hour ago".
+#     where the answer was "no -- both went idle an hour ago". WITH --dispatch the join
+#     is made by the record the dispatch wrote, not guessed: the spawn ledger's
+#     tool_use_id names the `agent-<id>.meta.json` whose toolUseId matches, so the
+#     sensor reads that agent's own transcript and no other.
 #
 #     THE ERROR DIRECTION IS DELIBERATE. The age is the MINIMUM across every teammate
 #     in the session, so one live teammate suppresses the idle report for the whole
@@ -167,13 +170,38 @@
 #     under-reports idleness and never over-reports it; under-reporting leaves today's
 #     behaviour exactly as it was.
 #
-#     IT CHANGES NO DECISION THIS SCRIPT MAKES -- not the exit code, not the beat
-#     counter, not a progress grant. It is a status line, and here the status line IS
-#     the outcome: this file's contract is that stdout carries the verdict (see WHY
-#     WAITING IS NOT NONZERO), and S306 was a lead acting on output that could not
-#     distinguish two states. Wiring an mtime heuristic into the exit code would be
-#     re-dispatching live teammates on a guess, which is the failure the whole file
-#     exists to prevent.
+#     THE SESSION-WIDE READING CHANGES NO DECISION THIS SCRIPT MAKES -- not the exit
+#     code, not the beat counter, not a progress grant. It cannot attribute work to a
+#     deliverable: one live teammate anywhere in the session answers for all of them.
+#     It is a status line, and here the status line IS the outcome: this file's contract
+#     is that stdout carries the verdict (see WHY WAITING IS NOT NONZERO), and S306 was a
+#     lead acting on output that could not distinguish two states. Wiring a session-wide
+#     mtime heuristic into the exit code would be re-dispatching live teammates on a
+#     guess, which is the failure the whole file exists to prevent.
+#
+#     A TRANSCRIPT SCOPED TO THE DISPATCH IS A DIFFERENT KIND OF EVIDENCE, AND IT DOES
+#     DECIDE, IN ONE PLACE. The agentId that --dispatch joins to the dispatch's toolUseId
+#     names THIS teammate's own transcript, so a turn in it is this teammate's own work:
+#     the same kind of evidence as --progress-path, a delta in a file the teammate
+#     writes. It extends a wait only under --complete-repair, with ONE target and ONE
+#     resolved agent (dispatch_live), because that mode refuses --progress-path and its
+#     record is appended only at the end -- the target cannot grow, so the wait has no
+#     growth signal of its own, and without this a live serial remediator reached the cap
+#     and was handed "Re-dispatch the teammate ONCE": two writers on one record. The
+#     extension goes through the existing counted grant, so the wait still ends.
+#
+#     TWO BANDS, ONE FOR EACH DECISION. A turn younger than one quantum (BUDGET) is LIVE:
+#     it grants. A turn older than that but younger than IDLE_SECS is RECENT: it grants
+#     NOTHING, but at the cap it still replaces the bare re-dispatch with "read its last
+#     turns, then --reset or STOP it before any re-dispatch", and the beat still exits 1.
+#     The reason for the second band: a remediator inside one long tool call takes no turn
+#     for longer than a quantum and is STILL A WRITER on its record, and a re-dispatch then
+#     puts two writers on one record. That collision is judged on its consequence, not on
+#     how rarely a live teammate goes that quiet. At IDLE_SECS or older the remedy is the
+#     bare re-dispatch, as before -- silence that long is the measured mark of a teammate
+#     that finished or wrote elsewhere.
+#     A dispatch that did not resolve to an agent, several dispatches, several targets or
+#     any other mode keep the session-wide reading, and decide nothing.
 #
 #     THE THRESHOLD IS MEASURED, NOT PICKED. Over 1,337 real teammate transcripts from
 #     this pipeline and the reference consumer's -- 57,050 consecutive appends -- a
@@ -211,7 +239,11 @@
 #   --complete         DELIVERED also needs a last line `seat-complete: ` whose sha= matches
 #                      (a marker with no sha= must instead have settled).
 #   --complete-repair  the same, keyed on `repair-complete: serial ` -- the serial
-#                      remediator's terminal line on a joined repair record.
+#                      remediator's terminal line on a joined repair record. With ONE
+#                      target and ONE --dispatch that resolves to an agent, that agent's
+#                      own transcript taking a turn within a quantum extends the beat cap
+#                      through the counted grants, and a turn within IDLE_SECS withholds
+#                      the bare re-dispatch remedy at the cap (header: "TWO BANDS").
 #   --status           print DELIVERED / UNFINISHED / UNSETTLED / WAITING per path
 #                      and return at once: no sleep, no beat charged, no file written.
 #   --shard-header <axis>  with --complete only: a marked adversarial shard DELIVERS only
@@ -227,7 +259,9 @@
 #                     `DELIVERED <path>` / `WAITING <path>`, then the BEAT COMPLETE
 #                     summary line. Consume ONLY the delivered paths.
 #                     `PROGRESS <path>` means an exhausted sequence was extended
-#                     because work was observed -- do NOT re-dispatch, beat again.
+#                     because work was observed (under --progress-path, in a --complete
+#                     target's own writes, or under --complete-repair in the one
+#                     dispatched agent's own transcript) -- do NOT re-dispatch, beat again.
 #                     `TEAMMATE IDLE, DELIVERABLE ABSENT` means no teammate in this
 #                     session has taken a turn for a long time while the join is
 #                     still out: the likely cause is a DIVERGED delivery, not a slow
@@ -269,7 +303,8 @@
 # validate-steering-budget.sh alone.
 #
 # The wall-clock ceiling is quantum x max_wait_beats = 60 minutes, or twice that
-# when --progress-path is supplied and every grant is spent. The previous 20
+# when a progress signal (--progress-path, a --complete target's own writes, or a
+# --complete-repair dispatch's own transcript) holds and every grant is spent. The previous 20
 # minutes was too short for what teammates actually take: S297 declared
 # `adversary-p1-rr` non-delivered at the ceiling and re-dispatched a live
 # teammate, and S298 ran a legitimate 62-minute dispatch -- which exceeds the
@@ -345,7 +380,11 @@ set -u
 #   line when the sequence is spent (still exit 1: a decision is owed). The lead reads
 #   that file before deciding; re-dispatching over it discards the seat's findings. A
 #   present file that does carry its marker but never settled is reported UNSETTLED on
-#   exhaustion, for the same reason: it is not absent either.
+#   exhaustion, for the same reason: it is not absent either. A present, non-empty file last
+#   written BEFORE the join armed is reported on exhaustion as
+#     UNCHANGED <path> -- present (<n> lines), not modified since the join
+#   -- a serial remediator's record mid-pass, appended only at the end, is exactly that file.
+#   The bare Rule 20 re-dispatch remedy prints only when some exhausted target is truly absent.
 #
 # Without --complete every line this script prints is byte-identical to before.
 #
@@ -1282,9 +1321,10 @@ progressed_since() {  # $1 = mark file; 0 iff a tracked file is newer than it
 }
 
 # ---------------------------------------------------------------------------
-# THE TEAMMATE LIVENESS SENSOR. Why this signal exists, why it changes no decision,
-# which direction it errs in and where its threshold came from are all in the header
-# ("SLOW AND NEVER LOOK THE SAME"). This is only the implementation.
+# THE TEAMMATE LIVENESS SENSOR. Why this signal exists, why its session-wide reading
+# changes no decision while a dispatch-scoped one may extend a --complete-repair wait
+# (dispatch_live), which direction it errs in and where its threshold came from are all
+# in the header ("SLOW AND NEVER LOOK THE SAME"). This is only the implementation.
 #
 # IT HAS THREE ANSWERS, NOT TWO, AND COLLAPSING TWO OF THEM IS THE WHOLE HAZARD.
 # "unavailable" and "quiet for zero seconds" are different facts: the first says the
@@ -1317,7 +1357,8 @@ fi
 # episodes), and it is a multiple of BUDGET so that a retune of the quantum moves it too.
 # WHEN HIT: say_liveness prints TEAMMATE IDLE, DELIVERABLE ABSENT. That is a report; it
 # changes no exit code, no beat count and no grant, so hitting it cannot deny, consume or
-# re-dispatch anything. LOAD: the outcome (one extra line) does not depend on load, but the
+# re-dispatch anything. (The one reading that does decide is dispatch_live's, keyed on
+# BUDGET and on a single dispatched agent's own transcript -- not on this threshold.) LOAD: the outcome (one extra line) does not depend on load, but the
 # measurement does -- a loaded box stretches a live teammate's single tool call, so the
 # false-IDLE rate measured on an unloaded corpus is a floor under load. The line is advice
 # to read the path before beating again, which is harmless when wrong.
@@ -1523,6 +1564,53 @@ teammate_quiet_for() {  # prints seconds since the most recent teammate turn in 
   done
   [ -n "$tq_best_" ] || return 1
   printf '%s%s' "$tq_best_" "${tq_stall_:+ STALLED$tq_stall_}"
+}
+
+# THE DISPATCH-SCOPED READING, AND THE ONE PLACE LIVENESS DECIDES ANYTHING (header: "IT CHANGES
+# NO DECISION", which states the split). Scope: --complete-repair, ONE target and ONE resolved
+# agent -- DP_AGENTS_ is already empty when any dispatch failed to resolve, which is the
+# session-wide case and decides nothing -- whose own `agent-<id>.jsonl` exists and does not end
+# in a stalled run. Inside that scope THREE answers, by the age of that transcript's newest turn:
+#   0  LIVE    younger than one quantum (BUDGET)        -- grants, and replaces the remedy
+#   2  RECENT  BUDGET or older, younger than IDLE_SECS  -- NO grant, but replaces the remedy
+#   1  neither (older, stalled, or out of scope)        -- today's behaviour, byte for byte
+# The age is read exactly as teammate_quiet_for reads it (transcript_turn, the epoch, the mtime
+# fallback, the skew clamp); this is not a second parser. Sets DL_AGENT and DL_AGE for the lines
+# that name it.
+#
+# TWO BANDS, BECAUSE THE TWO DECISIONS FAIL IN OPPOSITE DIRECTIONS. A grant extends the wait, so
+# it asks the strict question -- did the teammate take a turn inside the beat that just ran? --
+# and stays counted, so it can never make the wait unbounded. The remedy is a different decision:
+# a remediator inside one long tool call takes no turn for longer than a quantum (13 of 57,050
+# live appends, see "THE THRESHOLD IS MEASURED") and is STILL A WRITER on its record, so a bare
+# re-dispatch then starts a second one. That collision is judged on consequence, not frequency:
+# up to IDLE_SECS -- the measured point where silence starts to mean "finished elsewhere" -- the
+# cap prints the liveness-check block instead, and still exits 1, so the wait stays bounded.
+DL_AGENT=""; DL_AGE=""
+dispatch_live() {
+  DL_AGENT=""; DL_AGE=""
+  [ "$COMPLETE_REPAIR" -eq 1 ] || return 1
+  dl_a_="${DP_AGENTS_:-}"
+  case "$dl_a_" in ''|*' '*) return 1 ;; esac
+  case "$TARGETS" in *'|'*) return 1 ;; esac
+  [ -n "$TEAMMATE_DIR" ] || return 1
+  dl_f_="$TEAMMATE_DIR/agent-${dl_a_}.jsonl"
+  [ -f "$dl_f_" ] || return 1
+  dl_r_="$(transcript_turn "$dl_f_")"
+  dl_t_="${dl_r_%% *}"; dl_k_="${dl_r_##* }"
+  case "$dl_k_" in ''|*[!0-9]*) dl_k_=0 ;; esac
+  [ "$dl_k_" -lt "$STALL_K" ] || return 1
+  dl_m_=""; [ "$dl_t_" = "-" ] || dl_m_="$(to_epoch "${dl_t_}Z")" || dl_m_=""
+  [ -n "$dl_m_" ] || dl_m_="$(mtime_of "$dl_f_")"
+  [ "$dl_m_" -gt 0 ] || return 1
+  dl_g_=$(( $(date +%s) - dl_m_ ))
+  [ "$dl_g_" -lt 0 ] && dl_g_=0
+  # LIVE is decided first and on BUDGET alone, so an IDLE_SECS retuned below BUDGET can only
+  # narrow the RECENT band, never take away a grant.
+  if [ "$dl_g_" -lt "$BUDGET" ]; then DL_AGENT="$dl_a_"; DL_AGE="$dl_g_"; return 0; fi
+  [ "$dl_g_" -lt "$IDLE_SECS" ] || return 1
+  DL_AGENT="$dl_a_"; DL_AGE="$dl_g_"
+  return 2
 }
 
 # ONE function, called from all THREE places a beat can end -- the exhaustion path,
@@ -1740,6 +1828,11 @@ EXHAUSTED=""
 PREEXISTING=""
 GRANTED=""
 GRANTSPENT=""
+# dispatch_live's verdict, taken once in the exhaustion arm (the only place it decides anything)
+# and read again by the final print, so an awk over a long transcript runs at most once per beat:
+# 0 none, 1 LIVE, 2 RECENT. DL_GRANT is 1 when the transcript alone bought this beat's grant.
+DISPATCH_LIVE=0
+DL_GRANT=0
 OLDIFS="$IFS"; IFS='|'
 for t in $TARGETS; do
   # A blank target is a malformed wait -- an empty In-Flight Teammates row cell,
@@ -1835,6 +1928,19 @@ for t in $TARGETS; do
     # the wait but can never remove its end.
     g=0; [ -f "$gr" ] && g="$(cat "$gr" 2>/dev/null || echo 0)"
     case "$g" in ''|*[!0-9]*) g=0 ;; esac
+    # --complete-repair: the record is appended only at the end, so the target cannot grow and
+    # its own mark never grants. The dispatched agent's own transcript is that wait's evidence of
+    # work (dispatch_live), read here and nowhere else. A pure read, so a chained sibling and a
+    # fresh arm after the cap get the same answer as a sleeping beat.
+    # LIVE (0) grants and replaces the remedy; RECENT (2) only replaces the remedy (dispatch_live).
+    # DL_GRANT marks a grant the transcript alone bought, so its PROGRESS line names the transcript.
+    if [ "$COMPLETE_REPAIR" -eq 1 ]; then
+      dispatch_live; dl_v_=$?
+      case "$dl_v_" in
+        0) DISPATCH_LIVE=1; [ "$PROGRESSED" -eq 1 ] || DL_GRANT=1; PROGRESSED=1 ;;
+        2) DISPATCH_LIVE=2 ;;
+      esac
+    fi
 
     if [ "$PROGRESSED" -eq 1 ] && [ "$g" -lt "$MAX_BEATS" ]; then
       g=$(( g + 1 ))
@@ -1869,13 +1975,21 @@ IFS="$OLDIFS"
 # an exhausted sequence, and --quiet must not be able to hide it.
 if [ -n "$GRANTED" ]; then
   IFS='|'; for e in $GRANTED; do
-    echo "PROGRESS  ${e#* } -- work observed under the progress path; sequence"
+    if [ "$DL_GRANT" -eq 1 ]; then
+      echo "PROGRESS  ${e#* } -- work observed in agent-${DL_AGENT}.jsonl, this dispatch's own transcript; sequence"
+    else
+      echo "PROGRESS  ${e#* } -- work observed under the progress path; sequence"
+    fi
     echo "  extended by one beat (grant ${e%% *}). The teammate is demonstrably"
     echo "  working, so this is NOT Rule 20 non-delivery. Do NOT re-dispatch; beat again."
   done; IFS="$OLDIFS"
 fi
 
 if [ -n "$EXHAUSTED" ]; then
+  # Which kinds this exhaustion holds. The bare Rule 20 remedy belongs to a target that is truly
+  # ABSENT (or to a wait without --complete, where every exhausted target reads absent): under
+  # --complete a present file is a seat's or remediator's work, and the paragraphs below say read it.
+  EX_ABSENT=0; EX_UNCHANGED=0
   IFS='|'; for t in $EXHAUSTED; do
     IFS="$OLDIFS"
     # Under --complete a PRESENT file is never called absent: re-dispatching over a seat's
@@ -1892,7 +2006,18 @@ if [ -n "$EXHAUSTED" ]; then
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"
+    elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -lt "$(join_of "$t")" ]; then
+      # Present, non-empty, and last written BEFORE the join armed. The mtime test is stated, not
+      # inferred from the branches above: a post-join file that reached here is a defect in those
+      # branches, and it must keep reading 'absent' so the arm that guards them can see it. A
+      # serial remediator appends to its record only at the end, so a record mid-pass is exactly
+      # this file. It is not absent, and calling it absent printed a re-dispatch over a teammate
+      # still running.
+      EX_UNCHANGED=1
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      echo "UNCHANGED $t -- present ($(awk 'END { print NR }' "$t" 2>/dev/null) lines), not modified since the join"
     else
+      EX_ABSENT=1
       echo "NON-DELIVERY $t -- absent after $MAX_BEATS beats."
     fi
     IFS='|'
@@ -1901,8 +2026,13 @@ if [ -n "$EXHAUSTED" ]; then
     echo "  UNFINISHED or UNSETTLED is NOT absence: the seat wrote a file. Read it before you"
     echo "  decide -- its findings are real whether or not it closed them, and a re-dispatch"
     echo "  over it discards them. Only a path reported 'absent' is Rule 20 non-delivery."
+    if [ "$EX_UNCHANGED" -eq 1 ]; then
+      echo "  UNCHANGED is NOT absence either: the file is on disk and was not written during this"
+      echo "  join. A record appended only at the end looks exactly like this while its writer is"
+      echo "  still working. Read it and the teammate's own last turns before you decide."
+    fi
   fi
-  if [ -n "$GRANTSPENT" ]; then
+  if [ -n "$GRANTSPENT" ] && [ "$DISPATCH_LIVE" -eq 0 ]; then
     IFS='|'; for t in $GRANTSPENT; do
       echo "  NOTE: $t still shows work under the progress path, but all $MAX_BEATS"
       echo "  progress grants are spent. The bound is deliberate -- a teammate that"
@@ -1911,8 +2041,26 @@ if [ -n "$EXHAUSTED" ]; then
       echo "  worktree and judged it genuinely close."
     done; IFS="$OLDIFS"
   fi
-  echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
-  echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
+  if [ "$DISPATCH_LIVE" -ne 0 ]; then
+    # THIS dispatch's own transcript is LIVE with the grants spent, or RECENT (no turn this beat,
+    # so no grant, but younger than IDLE_SECS -- one long tool call looks exactly like this): a
+    # bare re-dispatch would start a second writer on the record the first may still be writing.
+    # echo, not say, for the reason the PROGRESS line gives: --quiet must not hide what not to do.
+    echo "  LIVE DISPATCH agent-${DL_AGENT} -- its own transcript took a turn ${DL_AGE}s ago:"
+    echo "    ${TEAMMATE_DIR}/agent-${DL_AGENT}.jsonl"
+    if [ "$DISPATCH_LIVE" -eq 1 ]; then
+      echo "  That teammate is still writing, and all $MAX_BEATS grants are spent. A re-dispatch now"
+    else
+      echo "  No turn inside the last beat, so no grant; but a teammate inside one long tool call is"
+      echo "  silent exactly like this and is still a writer on its record. A re-dispatch now"
+    fi
+    echo "  would put two writers on one record. Read that teammate's last turns, then either"
+    echo "  re-run with --reset and beat again, or STOP that teammate first and only then"
+    echo "  re-dispatch it ONCE (then re-run with --reset); if it fails again, HARD_BLOCK."
+  elif [ "$COMPLETE" -eq 0 ] || [ "$EX_ABSENT" -eq 1 ]; then
+    echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
+    echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
+  fi
   echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
   if [ -z "$PROGRESS_PATHS" ] && [ "$COMPLETE" -eq 0 ]; then
     echo "  Before you re-dispatch: an exhausted clock is not evidence of death. If the"

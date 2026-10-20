@@ -648,3 +648,19 @@ Dedupe, re-derived with `grep -c` at origin/main: "SERIAL-REQUIRED" 3 in docs/ba
 Owed, the mechanism left to the builder: partition the SERIAL-REQUIRED items by the parts they touch, so disjoint sets run as parallel serial lanes and each lane keeps the serial guarantee within its own set. A fixture arm (or receipt): a seeded join whose two disjoint item sets dispatch to two lanes, while an overlapping pair stays in one lane.
 
 verify: manual
+
+## BL-718 — the adversarial shard header line `artifact_sha: <stem>=<sha> …` trips gitleaks generic-api-key in a consumer on every cross shard, so the lead hand-appends fingerprints to `.gitleaksignore` each sprint
+
+**NOTE.** Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236).
+
+`core/scripts/merge-adversarial-shards.sh:1462-1467` emits `printf 'artifact_sha:%s\n'` for the subject and files lists, and `printf 'artifact_sha: %s\n'` for a document. The grammar is stated at `:188`: "every shard notarizes `artifact_sha:` as `<stem>=<sha>`". A `<key>: <name>=<64-hex>` line is the shape a generic-api-key rule matches. The distribution ships no gitleaks config: `git ls-files | grep -ci gitleaks` is 0, against a control of 28 for `backlog`.
+
+Evidence, relayed by ai-dlc-5d from graph at 91d0e2f65 and not re-measured by this filing: S319's first commit was refused at 00:27:16 EDT with 12 leaks, and the lead added 6 fingerprints, at a cost of about 1 minute and roughly 10 calls. graph's `.gitleaksignore` holds 3 for s315, 15 for s316, 23 for s318 and 6 for s319, which is 47 of its 71 generic-api-key lines. graph owns the gitleaks hook.
+
+Dedupe, re-derived with `grep -c` at f36ede45d: "gitleaks" 0 in docs/backlog.md and 1 in docs/backlog.archive.md, where the one hit is inside BL-443 (a `_bmad-output/` fixture-keying entry) and is unrelated; "artifact_sha" 0 live and 20 in the archive; "BL-718" 0 live and 0 in the archive; control BL-716 1 live.
+
+Reach of a format change: `artifact_sha` appears in 30 files under `core/`. The 13 that are not fixtures are `core/hooks/ai-dlc-acknowledge.sh`, `core/hooks/ai-dlc-continue.sh`, `core/schemas/provenance-block.json`, `core/scripts/join-remediator-shards.sh`, `core/scripts/merge-adversarial-shards.sh`, `core/scripts/stamp-story-provenance.sh`, `core/scripts/validate-adversarial-convergence.sh`, `core/skills/ai-dlc/enforcement-map.yaml`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/steps/stories-test-strategy.md`, `core/team-roles/adversary.md` and `core/team-roles/remediator.md`. A change to the emitted form must move those readers together with it.
+
+Owed, for the owner to choose: preferably, change the emitted form so that generic-api-key does not match it. It is the distribution's own grammar and needs no consumer config, but the readers above move with it, and a consumer's in-flight records written in the old form must still be read. The alternative is to install a path allowlist, which is consumer config the distribution writes; that crosses the consumer boundary and needs its own justification. Receipt: the new emitted line does not match gitleaks' generic-api-key rule (UNRUN here, because the distribution has no gitleaks), and the existing reader fixtures accept it.
+
+verify: manual
