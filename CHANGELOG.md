@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.890.1] - 2026-10-20
+
+Batch 238, lead ai-dlc-fc. It closes 1 `PC-` id, closes no BL entry and files nothing. Net for this release: 1 closed, 0 filed. No product code changes.
+
+### `PC-S319-SELF-UPDATE-FIXTURES-RUNS-THE-COVERING-SET-SERIALLY-THEN-PRE-PUSH-RERUNS-IT-IN-PARALLEL` — ALREADY-FIXED (v0.886.0)
+
+Graph's ledger candidate (committed `7a35abff0` on its carry-over branch) records that `self-update-fixtures.sh` ran the covering set serially and the pre-push hook then re-ran it in parallel. That serial loop (`self-update-fixtures.sh:1154` and `:1194` at `2cb29a586`) and its pre-commit mandate (`SKILL.md:549`) are gone: `f36ede45d` (v0.886.0, BL-713) shipped the entry's own fix (b). This release adjudicates the candidate.
+
+The ledger receipt `theirs_lacks core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "FIXTURE_POOL_BEGIN"` is mis-anchored on the entry's fix (a). The token is absent from that file at every ref and present only in hook code and backlog prose, so graph's reconcile prints `NAMED-UPSTREAM-OFF-SUBJECT` followed by `STILL-LIVE`, and keeps doing so until the receipt is replaced. The replacement receipt for graph to adopt is:
+
+```
+verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"
+```
+
+Measured against theirs=`3234cf8ca`, it reads `CLOSE-CANDIDATE`; the token is present at both stamps graph has installed (`7e8d62d7`, `2cb29a586`) and absent at `f36ede45d`. It carries no embedded quote because the backslash-escaped form is refused at `ledger-reverify.sh:2681`. Graph reaches this release only through its own pull and its own receipt swap, both of which are the operator's; this repo writes nothing to graph.
+
+### The plan's derive grammar reads a backticked bullet id and an underscore in the id class
+
+`lids()` in `docs/plans/graph-ledger-full-drain.md` now matches `ledger_entry_id()` in `reconcile/lib.sh`. Its bullet arm admits an optional backtick before the id, and the id class in both arms gains `_`, so `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` no longer truncates to `…-GIT`. The heading arm is unchanged, because no ledger or archive carries a backticked heading. A new `lids_ctl` compares `lids` against the shipping `ledger_entry_awk` extraction on main's archive and on every per-ref ledger and archive the loop reads, and stops on a difference; with the old grammar substituted it fires on the carry-over ref's live ledger (the backtick) and on main's archive (the underscore).
+
+The old grammar hid the live candidate above and the archived `PC-S319-ADJ-CORE-TEXT-DROPS-FILELESS-EXTENDS-ANCHOR-UNDER-IFS-TAB-READ`, so six qualifying refs dropped out and `CONVERGENCE-ADVERSARY` read live off a stale ref. Measured on the same corpus:
+
+| quantity | before | after |
+|---|---|---|
+| qualifying refs | 165 | 171 |
+| live candidate | `CONVERGENCE-ADVERSARY` | `SELF-UPDATE-FIXTURES` |
+| unfiled | 0 | 1 |
+| DISCHARGED | 1 | 0 |
+| TERMINAL | 246 | 248 |
+| archive ids | 369 | 372 |
+
+### The adjudication register gains its fourth post-pin row
+
+`docs/reviews/graph-ledger-adjudication-data/post-pin-verdicts.tsv` gains the candidate above as `ALREADY-FIXED-v0.886.0`, receipt `MIS-ANCHORED`. The register tables are re-rendered, the sentences that counted three post-pin entries and no close are rewritten, and a paragraph under the table names ref `ae1fafcf8` (graph's carry-over branch, not its main), the refused receipt and the replacement.
+
 ## [0.890.0] - 2026-10-20
 
 Batch 237, BL-723 release (operator-directed, HIGH; graph s319 is blocked on it). It closes BL-723 and files nothing. Closes no `PC-` id. Net for this release: 1 closed, 0 filed.

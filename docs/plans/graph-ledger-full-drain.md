@@ -321,11 +321,25 @@ D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
 #      FALSE MEMBER that joins against nothing and reports as no absence at all.
 #   3. THE HEADING ARM IS `^#{2,6}`, NOT `^##` -- see the FIFTH FORM below. A `### PC-` entry
 #      nested under another entry's heading was invisible for three consecutive batches.
+# Also measured: a backticked bullet id (`- **`PC-...`**`, which lib.sh's ledger_entry_id admits) hid the live
+# candidate and one archived id, and `[A-Z0-9.-]` truncated PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX.
 # The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
 # PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY.
-lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
-           grep -hE '^-? ?\*\*PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*(PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
+lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9_.-]*).*/\1/'
+           grep -hE '^-? ?\*\*`?PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*`?(PC-[A-Z0-9][A-Z0-9_.-]*).*/\1/'
          } | sort -u; }
+# SAME-INVOCATION CONTROL: lids must equal the shipping grammar (lib.sh ledger_entry_awk) on the same file.
+lids_ctl() { local rc; ( . /Users/n8/git/ai-dlc/core/skills/ai-dlc-update/reconcile/lib.sh \
+    || { echo "lids_ctl: cannot source reconcile/lib.sh"; exit 9; }
+  LA="$(ledger_entry_awk)"
+  [ -n "$LA" ] || { echo "lids_ctl: no ledger_entry_awk"; exit 9; }
+  LC_ALL=C awk "$LA"'{ sh = ledger_entry_shape($0); if (sh == "") next; line = $0
+    if (sh == "heading") sub(/^#{2,6}[ \t]+/, "", line); else sub(/^(- )?\*\*/, "", line)
+    id = ledger_entry_id(line); if (id == "") next; sub(/^`/, "", id); if (id ~ /^PC-/) print id }' "$1" | sort -u \
+    | cmp -s - <(lids "$1") || exit 1 ); rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$rc" -eq 1 ] && echo "STOP: lids() differs from the shipping ledger grammar on $1"
+  return "$rc"; }
 # READ THE LEDGER AT THE CONSUMER'S SPRINT TIP, NOT FROM ITS WORKING TREE, AND NOT FROM `main`.
 # Measured at batch 85, which got this wrong TWICE IN ONE SESSION and in opposite directions.
 # That consumer branches per sprint and merges back at the retro, so a candidate filed AFTER the
@@ -388,8 +402,10 @@ lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).
 QUAL=0
 : > /tmp/union_live_raw.txt; : > /tmp/union_arch_raw.txt
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
+lids_ctl /tmp/mainled.md
 lids /tmp/mainled.md >> /tmp/union_live_raw.txt
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/mainarch.md
+lids_ctl /tmp/mainarch.md
 lids /tmp/mainarch.md >> /tmp/union_arch_raw.txt
 # REMOTE BRANCHES TOO, MEASURED AT BATCH 174. The consumer moved a filing OFF its carry-over branch
 # onto its own pushed branch (`origin/ai-dlc-update/pc-s315-derive-readsets-whole-tree-copy`) and
@@ -400,6 +416,7 @@ for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' r
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
   git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
   git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
+  lids_ctl /tmp/cand.md
   lids /tmp/cand.md > /tmp/cand.txt; lids /tmp/mainled.md > /tmp/mainled.txt
   # A QUALIFYING REF IS MISSING NOTHING MAIN HAS *THAT IT HAS NOT CLOSED*, and the second half of
   # that sentence was absent until batch 113, where it cost the batch its headline. The bare subset
@@ -418,6 +435,7 @@ for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' r
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" 2>/dev/null \
     && git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/cand_arch.md \
     || : > /tmp/cand_arch.md
+  lids_ctl /tmp/cand_arch.md
   lids /tmp/cand_arch.md > /tmp/cand_arch.txt
   # ids main has that the ref lacks, MINUS the ones the ref has archived == unexplained losses
   comm -23 /tmp/mainled.txt /tmp/cand.txt | comm -23 - /tmp/cand_arch.txt > /tmp/lost.txt
