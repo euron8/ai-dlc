@@ -309,32 +309,6 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 
 verify: manual
 
-## BL-674 — I55 arm 3's reach scan recognises four root variables, so a fixture that reads an excluded path through any other root variable is never checked
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-606 receipt hand. Tiered DEFECT rather than NOTE because the gap was reproduced in both directions on a probe tree and the arm stays green over a real instance, so a fixture's input can change without the suite re-running.
-
-`scripts/validate-enforcement-map.sh:6619` fixes the grammar as `i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'`, and `i55_reach_scan` (`:6620`) builds both its `grep -rHnoE` pattern (`:6623`) and its awk `pat` (`:6637`) from it. A read written `"$X/docs/..."` through any other variable matches neither, so arm 3 never sees the line. The arm's control (`:6688`) uses the same four names, so it cannot notice either. The arm's self-probe (`:6657-6690`) seeds only `$ROOT`.
-
-Instance: `core/fixtures/gate-repair-record-mutants/run.sh` binds `ROOT_DIR` at `:24` (`ROOT_DIR="$DIR"`, walked up at `:26` until it holds `VERSION`) and reads through it at `:25`, `[ ! -f "$ROOT_DIR/VERSION" ]`, and at `:28`-`:32`. `VERSION` is a content-key-excluded top, and `ROOT_DIR` is not among the four recognised names, so arm 3 (whose reach scan globs only `core/fixtures/*/*.sh`, `scripts/validate-enforcement-map.sh:6623`) cannot see the `:25` read. The original instance, `scripts/receipt-bl606-pool-stall.sh` reading `"$D9_ROOT/docs"`, moved out of the arm's population at d10a4893, so `D9_ROOT` now reads 0 in the population and is no longer a usable control.
-
-Measured (probe copy of `:6619-6656` at `d3f8d151`, `bash /private/tmp/claude-501/-Users-n8-git-ai-dlc/44823695-8b1f-4a1e-8168-15f96d480726/scratchpad/hands/bl674/probe.sh`, mktemp tree, two fixtures `cat "$ROOT/docs/x"` and `cat "$D9_ROOT/docs/x"`, excluded entry `docs`):
-
-```
-rootvar/run.sh:1:$ROOT/docs/         <- reported (the control, same invocation)
-(d9var/run.sh                        <- absent under the shipped grammar)
-widened roots + D9_ROOT:  d9var/run.sh:1:$D9_ROOT/docs/  and  rootvar/run.sh:1:$ROOT/docs/
-```
-
-So the ROOT read is reported, the D9_ROOT read of the identical path is not (that probe predates the move at d10a4893, and its claim about the grammar stands unchanged), and adding the one name makes it appear. This is the control plus the instance in one run. It shows the grammar is the cause; it does not show that the real `receipt.sh` reads are unkeyed.
-
-Real tree at tip dc919cc8 (`hands/bl674/realtree.sh`): the 4 excluded entries are CHANGELOG.md, VERSION, docs and CLAUDE.md; the scan reports 0 hits naming the receipt, and the seeded `$ROOT` control returns 1. The real-tree instance is now the `ROOT_DIR` read of `VERSION` at `core/fixtures/gate-repair-record-mutants/run.sh:25`, which the shipped grammar does not report while a widened grammar would.
-
-Population (`hands/bl674/population.sh`, one grep over `core/fixtures/*/*.sh` for `$X_ROOT.../`, minus the four recognised names), run at tip dc919cc8: 36 distinct non-recognised root variables, read through in 38 files. The four largest by reads are TMPROOT (82 reads, 3 files), MUTROOT (27, 3), BLROOT (26, 1) and ROOT_DIR (23, 4). Control: the four recognised names carry 2109 reads. Population control for the repointed instance: `ROOT_DIR` is in the list at 23 reads over 4 files. The old `D9_ROOT` control reads 0 (receipt.sh moved). This is a grep floor, not a parse: it sees only `*ROOT*` names written as `$NAME/` or `${NAME}/`, so a differently named variable or an indirect read is outside it.
-
-Owed: widen the root grammar, for example by deriving the roots from assignments of the form `X_ROOT=` or `*ROOT=` in each scanned file rather than hand-listing four. The false-positive set must be measured before it ships (CLAUDE.md), and the I55 self-probe must gain a non-standard-root case in both directions: a `$D9_ROOT/docs/x` read reported, and a near-miss (a `*ROOT` variable that does not point at the distribution root, or a `+`-declared literal path through it) acquitted. The control at `:6688` should count the widened grammar too.
-
-verify: manual
-
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 
 **DEFECT, efficiency.** Found by ai-dlc-77 [e29316] in batch 236 while building BL-679.
@@ -489,22 +463,6 @@ verify: sh o="$(mktemp -d)" || exit 9; trap 'rm -rf "$o"' EXIT; s="$o/span.sh"; 
 **NOTE.** Filed by ai-dlc-77 [ab5b1f] from the BL-668 build (batch 236), lead ai-dlc-c8 ruled it a separate cost question with no owner this batch. BL-668 made `reconcile/derivation-differential.sh --record-owed` create the record on every run, so an absent record now means "no reconcile has ever measured this tree". But `reconcile/apply.sh` (~:1346, ~:1495) emits the differential only as a `WORKLIST artifact-derivations` row, and only when a recorded `derived` command names a core path the range changed; the differential refuses on zero derivations, and nothing runs it unconditionally. So a consumer whose pulls never touch a derivation keeps printing `check-owed-derivations.sh`'s absent line. That line is correct (the tree was genuinely never measured), so this is a cost question, not a defect. A per-pull "no changed path, so nothing owed" record was considered and declined (c8): a derivation can read files its command line never names, so that record would be written from intent, not from a measurement.
 
 Owed: decide whether every pull runs the differential (two validator passes per pull) so the record always exists, measuring that cost on a reference consumer before deciding. No owner this batch.
-
-verify: manual
-
-## BL-697 — I110 reads any backticked lowercase token within six lines after a line containing `In-Flight` as a taught In-Flight status, so prose that teaches no status fails the pregate
-
-**NOTE.** `i110_tokens` (`scripts/validate-enforcement-map.sh`, header of I110 near `:11269`, function near `:11345`) greps every line containing `In-Flight` with `-A6` and collects each backticked lowercase token in that window as a TAUGHT status. The window keys on a mention of the word, not on the status column, so a sentence that merely names the row opens a six-line window in which any backticked token is read as a status. Measured at 0.876.0: `core/skills/ai-dlc/steps/ui-direction.md:28` was reworded to "An absent artifact at the path in the brief (the same value as the In-Flight row and the join) is", a backticked `ux` sat within six lines below it, and I110 reported `ux` as taught-but-unwhitelisted. That failed the pregate and, downstream, validator-fork-budget, whose traced run exited 1. The release worked around it by rewording the sentence; the grammar still fires for the next author who mentions the row near any backticked token.
-
-Owed: stated, not built. Either anchor the teach on the status COLUMN context (the table schema or a `status` mention) rather than on any `In-Flight` mention, or exclude role and agent names derived from the role vocabulary. Before either ships, measure the false-positive set: every token the current grammar collects over `core/skills/ai-dlc` and `core/hooks`, split into real statuses and non-statuses, and show the chosen anchor keeps the first group and drops the second.
-
-verify: sh V="${I110_V:-scripts/validate-enforcement-map.sh}"; f=$(sed -n '/^i110_tokens() {/,/^}/p' "$V"); [ -n "$f" ] || exit 9; T=$(mktemp -d "${TMPDIR:-/tmp}/bl697.XXXXXX") || exit 9; printf 'the same value as the In-Flight row and the join\n\nplain line\n\nplain line\n`ux` is a role name\n' > "$T/a.md"; printf 'In-Flight status\n`stopped` is a taught status\n' > "$T/b.md"; o=$(eval "$f"; i110_tokens "$T") || exit 9; grep -qxF stopped <<<"$o" || exit 9; grep -qxF ux <<<"$o" && exit 1; exit 0
-
-## BL-707 — prepush-pool-depth's `obs_d0_max` reads a 0.3s in-flight window by ls-counting a flight dir, so a load burst fails it with no hook defect
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 POOLHOOKS), id allocated by lead ai-dlc-c8. `core/fixtures/prepush-pool-depth/run.sh:171` drives six depth-0 stubs that each `sleep 0.3` and records the peak of `ls "$PD_FLIGHT" | wc -l` (`:58-:59`, read by `maxflight` at `:83`) as `obs_d0_max`, wanting 6 (`:211`). Six workers are in flight together only if all six start inside one 0.3s window, so a loaded box fails the cell with no hook defect. Measured on 0.871.0's pre-run with 52 units launched at once: the `.githooks` half read 3 against 6, and because every mutant's moved-set includes that cell, one wrong reading surfaced as 11 FAILs; the `git-hooks` half of the same run passed the arm and all its mutants, and I66 holds the two pool blocks byte-identical. A second solo run on 0.871.0 at load 85 read 5 against 6, again in the `.githooks` half only. Three interleaved pairs at load 39-61, main `82b28696c` (which carries none of 0.871.0's change) launched beside 0.871.0: main went red in 1 of 3 (the `not-exported` mutant's run moved `obs_d0_max`, a `.githooks`-half cell, while its baseline read ok), and 0.871.0 was green in 3 of 3. The `git-hooks` half was clean in all six runs.
-
-Owed: the depth-0 width is asserted by a condition that does not depend on scheduling (each stub blocks until all six have entered, under a bounded wait, or the arm reads the dispatched width instead of an observed overlap), with a mutant showing the arm still catches a pool capped below 6.
 
 verify: manual
 

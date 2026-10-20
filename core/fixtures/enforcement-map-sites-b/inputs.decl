@@ -7,6 +7,7 @@ scripts/
 templates/
 # reason: core/ is copied whole by the parent's seed this shard execs -- cp -RX "$DIST/core", core/fixtures/enforcement-map-sites/seed.sh:38.
 core/
-VERSION
+# +VERSION: VERSION is a content-key-EXCLUDED top, and the parent run.sh:3054 this shard execs copies it into the decoy root, so it is keyed per fixture (I55 arm 3).
++VERSION
 core/fixtures/enforcement-map-sites/run.sh
 core/fixtures/enforcement-map-sites/seed.sh

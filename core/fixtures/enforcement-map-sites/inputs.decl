@@ -7,4 +7,5 @@ scripts/
 templates/
 # reason: core/ is copied whole -- cp -RX "$DIST/core", core/fixtures/enforcement-map-sites/seed.sh:38; the enforcement-map validator then walks the copy by content.
 core/
-VERSION
+# +VERSION: VERSION is a content-key-EXCLUDED top, and run.sh:3054 copies it into the decoy root, so it is keyed per fixture (I55 arm 3).
++VERSION

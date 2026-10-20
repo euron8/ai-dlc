@@ -6716,12 +6716,63 @@ else
     # hits are held per entry INDEX and printed in END, entry by entry, so the output is the
     # concatenation the per-entry calls produced, a duplicated entry included. Cost: one grep and one
     # awk per call, where the corpus used to pay one of each per excluded entry.
+    #
+    # WHICH VARIABLES ARE THE DISTRIBUTION ROOT IS DERIVED PER FILE, FROM THE SHAPE OF WHAT IS
+    # ASSIGNED TO THEM, NOT FROM THEIR NAMES. The grammar used to be the four names in i55_roots,
+    # so a read through any other name (`$ROOT_DIR/VERSION`, `$OWN/docs`) was never seen and the arm
+    # stayed green over a real instance (BL-674). Those four are now a FLOOR, still read in every
+    # file because most fixtures bind them through a helper this scan cannot follow. On top of the
+    # floor a file roots any name it assigns (1) `$(cd "$HERE/../../.." ...)` or
+    # `$(cd "$(dirname "$0")/../../.." ...)`, a climb to the distribution root; (2) a VERSION
+    # walk-up target, `[ ! -f "$X/VERSION" ]; do X=`; (3) an alias of a floor name, `X="$ROOT"`.
+    # A literal `$HERE/../../../<entry>` climb is a reach with no variable at all and is read too.
+    # The same one grep selects those assignment lines beside the reach lines, and the awk buffers a
+    # file, derives its roots from every line of it, then judges its reaches, so a root assigned
+    # below its first read still counts and no second pass exists.
+    # HOW THE FALSE-POSITIVE SET REACHED ZERO. The first candidate keyed on the NAME (`*ROOT=`) and
+    # measured 3 false positives over core/fixtures/*/*.sh, among them backlog-ledger reading
+    # `$MROOT/...` (a seeded tree, not the distribution), and 2 false zeros (names not ending in
+    # ROOT). Keyed on the assignment SHAPE it measured 5 hits and 0 false positives: three
+    # `$ROOT/docs/` reads in backlog-real-ledger (acquitted by its `+docs/backlog.md`),
+    # schema-install-fallback's `$ROOT_DIR/VERSION` walk-up and enforcement-map-sites' climb
+    # `$HERE/../../../VERSION`, the last two disposed of by `+VERSION` in their inputs.decl. A
+    # mktemp root (`TMPROOT="$(mktemp -d)"`) is acquitted because nothing roots it.
+    # WHAT THIS CANNOT SPELL: a climb from any base other than $HERE or `dirname $0`, a walk-up not
+    # written as one `! -f ... ]; do X=` line (`if [ -f "$d/VERSION" ]` inside a loop body), an
+    # alias of a DERIVED name, a root bound in a sourced file, and a read reached through `exec` of a
+    # sibling fixture's run.sh.
     i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
     i55_reach_scan() { # <tree root> <excluded entries, space-separated> -> unacquitted `<abs file>:<line>:<match>` hits, grouped by entry in argument order
-      local alt
+      local alt id='[A-Za-z_][A-Za-z0-9_]*' s e
+      local -a lits
       [ -n "$2" ] || return 0
       alt="${2//./\\.}"; alt="${alt// /|}"   # parameter expansion, not a split loop: no glob, no fork
-      grep -rHnE '\$\{?'"$i55_roots"'\}?/('"$alt"')([/"'"'"' ]|$)' "$1"/core/fixtures/*/*.sh 2>/dev/null \
+      # THE LITERAL PREFILTER. Three of the five regexes open on an unanchored identifier, so run
+      # over every line of the corpus they cost more than the rest of the arm; a fixed-string grep
+      # first passes only the lines that CAN match, and the regex stage below decides them with
+      # its prefix-free `-E` (no -H/-n), so the `file:ln:` prefix passes through as before. Each
+      # literal is one its pattern cannot match without, read off the pattern text:
+      #   `/<entry>`, one per entry of $2 -- the reach pattern spells `}?/(` then the entry with
+      #     only `.` escaped, so the slash and the entry's bytes appear verbatim;
+      #   `/../../..` -- the HERE reach and both climbs spell `/\.\./\.\./\.\.` after their base;
+      #   `ROOT"` and `ROOT}"` -- the alias pattern ends `(REPO_ROOT|ROOT|D_ROOT|C_ROOT)\}?"`,
+      #     and every alternative ends in ROOT;
+      #   `/VERSION" ]; do ` -- the walk-up spells `}?/VERSION" \]; do ` before its target.
+      # The list is a superset per pattern, so the prefilter drops only lines no regex matches.
+      # A prefilter that matches nothing hands the regex an empty stream, the same empty stream
+      # the one-stage grep wrote, so the awk answers the empty corpus and the hitless one alike.
+      lits=(-e '/../../..' -e 'ROOT"' -e 'ROOT}"' -e '/VERSION" ]; do ')
+      s="$2 "
+      while [ -n "$s" ]; do
+        e="${s%% *}"; s="${s#* }"
+        [ -z "$e" ] || lits=("${lits[@]}" -e "/$e")
+      done
+      grep -rHnF "${lits[@]}" "$1"/core/fixtures/*/*.sh 2>/dev/null \
+        | grep -E -e '\$\{?'"$id"'\}?/('"$alt"')([/"'"'"' ]|$)' \
+                  -e '\$\{?HERE\}?/\.\./\.\./\.\./('"$alt"')([/"'"'"' ]|$)' \
+                  -e "$id"'="?\$\(cd "?(\$\{?HERE\}?|\$\(dirname "\$0"\))/\.\./\.\./\.\.' \
+                  -e "$id"'="?\$\{?'"$i55_roots"'\}?"' \
+                  -e '! -f "\$\{?'"$id"'\}?/VERSION" \]; do '"$id"'=' \
         | awk -v el="$2" -v rootre="$i55_roots" '
           function plusset(dir,   f, l, c, x) {
             if (dir in PD) return; PD[dir] = 1; f = dir "/inputs.decl"
@@ -6729,10 +6780,27 @@ else
               if (substr(l, 1, 1) == "+") { x = 1; l = substr(l, 2) }
               if (x && substr(l, 1, 1) != "!") PLUS[dir SUBSEP l] = 1 }
             close(f) }
-          BEGIN { ne = split(el, E, " "); pat = "\\$\\{?" rootre "\\}?/" }
-          { line = $0; t = index(line, ":"); file = substr(line, 1, t - 1); rest = substr(line, t + 1)
-            t = index(rest, ":"); ln = substr(rest, 1, t - 1) + 0; src = substr(rest, t + 1)
-            dir = file; sub(/\/[^\/]*$/, "", dir); plusset(dir)
+          function roots(s, re, walk,   m) {
+            while (match(s, re)) { m = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+              if (walk) sub(/.*do /, "", m); else sub(/^[^A-Za-z_]+/, "", m)
+              sub(/=.*/, "", m); if (m != "HERE") RT[m] = 1 } }
+          function flush(   j, n, inner) {
+            if (cf == "") return
+            inner = substr(rootre, 2, length(rootre) - 2); for (n in RT) inner = inner "|" n
+            pat = "(\\$\\{?(" inner ")\\}?|\\$\\{?HERE\\}?/\\.\\./\\.\\./\\.\\.)/"
+            file = cf; dir = file; sub(/\/[^\/]*$/, "", dir); plusset(dir)
+            for (j = 1; j <= nb; j++) judge(BUF[j], BL[j])
+            nb = 0; split("", RT); split("", BUF); split("", BL) }
+          BEGIN { ne = split(el, E, " ")
+            CLIMB = "(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\"?\\$\\(cd \"?(\\$\\{?HERE\\}?|\\$\\(dirname \"\\$0\"\\))/\\.\\./\\.\\./\\.\\."
+            ALIAS = "(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\"?\\$\\{?" rootre "\\}?\""
+            WALK = "! -f \"\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?/VERSION\" ]; do [A-Za-z_][A-Za-z0-9_]*=" }
+          { line = $0; t = index(line, ":"); f = substr(line, 1, t - 1); rest = substr(line, t + 1)
+            t = index(rest, ":"); src = substr(rest, t + 1)
+            if (f != cf) { flush(); cf = f }
+            roots(src, CLIMB, 0); roots(src, ALIAS, 0); roots(src, WALK, 1)
+            nb++; BUF[nb] = src; BL[nb] = substr(rest, 1, t - 1) + 0 }
+          function judge(src, ln,   i, e, ok, all, s, hits, m, nx, p, r, b) {
             for (i = 1; i <= ne; i++) { e = E[i]
             ok = 0; all = 0; s = src; hits = ""
             while (match(s, pat)) {
@@ -6753,9 +6821,9 @@ else
               if (b != "" && b != " " && b != "\t" && b != ";" && b != ")" && b != "<" && b != ">" && b != "|" && b != "&") continue
               if ((dir SUBSEP p) in PLUS) ok++ }
             if (!(all > 0 && ok == all)) OUT[i] = OUT[i] hits } }
-          END { for (i = 1; i <= ne; i++) printf "%s", OUT[i] }'
+          END { flush(); for (i = 1; i <= ne; i++) printf "%s", OUT[i] }'
     }
-    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Ten fixtures, each one
+    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Fifteen fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
     # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
     # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged;
@@ -6763,6 +6831,10 @@ else
     # variable after a dot `backlog.md.$x`, each with `+docs/backlog.md` declared -> flagged, because the
     # name runs past the literal and is not the declared file. (j) the declared path closed by a quote
     # and a redirect -> acquitted, the near-miss that keeps the boundary rule from flagging everything.
+    # THE DERIVED ROOTS, none of them a floor name and none declared: (k) `OWN` assigned a climb to
+    # the distribution root, (l) `RD` the target of a VERSION walk-up, (m) a literal
+    # `$HERE/../../../docs` climb, (o) `R` assigned a climb from `dirname "$0"` -> each flagged; (n) `TMPROOT="$(mktemp -d)"` reading the same path
+    # -> acquitted, because a scratch root is not the distribution and nothing derives it.
     i55_pd="$(mktemp -d 2>/dev/null)"
     if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
       err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
@@ -6770,7 +6842,13 @@ else
       mkdir -p "$i55_pd"/core/fixtures/a "$i55_pd"/core/fixtures/b "$i55_pd"/core/fixtures/c \
                "$i55_pd"/core/fixtures/d "$i55_pd"/core/fixtures/e "$i55_pd"/core/fixtures/f \
                "$i55_pd"/core/fixtures/g "$i55_pd"/core/fixtures/h "$i55_pd"/core/fixtures/i \
-               "$i55_pd"/core/fixtures/j
+               "$i55_pd"/core/fixtures/j "$i55_pd"/core/fixtures/k "$i55_pd"/core/fixtures/l \
+               "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o
+      printf 'OWN="$(cd "$HERE/../../.." && pwd)"\ncat "$OWN/docs/x"\n' > "$i55_pd/core/fixtures/k/run.sh"
+      printf 'RD="$HERE"\nwhile [ "$RD" != "/" ] && [ ! -f "$RD/VERSION" ]; do RD="$(dirname "$RD")"; done\ncat "$RD/docs/x"\n' > "$i55_pd/core/fixtures/l/run.sh"
+      printf 'cat "$HERE/../../../docs/x"\n' > "$i55_pd/core/fixtures/m/run.sh"
+      printf 'TMPROOT="$(mktemp -d)"; cat "$TMPROOT/docs/x"\n' > "$i55_pd/core/fixtures/n/run.sh"
+      printf 'R="$(cd "$(dirname "$0")/../../.." && pwd)"; cat "$R/docs/x"\n' > "$i55_pd/core/fixtures/o/run.sh"
       for i55_c in g h i j; do printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/$i55_c/inputs.decl"; done
       printf 'L="$ROOT/docs/backlog.md$sfx"\n'      > "$i55_pd/core/fixtures/g/run.sh"
       printf 'cat "$ROOT/docs/backlog.md"*\n'       > "$i55_pd/core/fixtures/h/run.sh"
@@ -6786,7 +6864,7 @@ else
       printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
       printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md" "$ROOT/zz/y"\n' > "$i55_pd/core/fixtures/f/run.sh"
       # FAST PATH WITH BUILTINS, EXACT PATH ON ANY DOUBT. The expected answer is the name set
-      # {b..i}; each hit line is cut to its fixture name with parameter expansion and the set is
+      # {b..i, k, l, m}; each hit line is cut to its fixture name with parameter expansion and the set is
       # checked without a fork. Any other outcome -- a missing name, an extra one, an empty one --
       # recomputes the string with the original sed|sort -u|tr, so a failing message is the same
       # bytes it always was. Only the passing run is cheaper.
@@ -6796,15 +6874,15 @@ else
       i55_pset=" "; i55_pok=1
       while IFS= read -r i55_l; do
         i55_c="${i55_l#"$i55_pd"/core/fixtures/}"; i55_c="${i55_c%%/*}"
-        case "$i55_c" in b|c|d|e|f|g|h|i) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
+        case "$i55_c" in b|c|d|e|f|g|h|i|k|l|m|o) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
       done <<<"$i55_praw"
-      for i55_c in b c d e f g h i; do
+      for i55_c in b c d e f g h i k l m o; do
         case "$i55_pset" in *" $i55_c "*) ;; *) i55_pok=0 ;; esac
       done
       if [ -z "$i55_praw" ]; then
         i55_pr=""
       elif [ "$i55_pok" = 1 ]; then
-        i55_pr="b c d e f g h i "
+        i55_pr="b c d e f g h i k l m o "
       else
         i55_pr="$(printf '%s\n' "$i55_praw" | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
       fi
@@ -6817,9 +6895,11 @@ else
       i55_pw="${i55_pd}/core/fixtures/f/run.sh:1:\$ROOT/${i55_pe%% *}/${i55_nl}${i55_praw}"
       rm -rf "$i55_pd"
       [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
-      [ "$i55_pr" = "b c d e f g h i " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i '. Fixtures a and j (a + declared, literal reach ending at a boundary) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, and the corpus scan below would be read through it."
+      [ "$i55_pr" = "b c d e f g h i k l m o " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o '. Fixtures a and j (a + declared, literal reach ending at a boundary) and n (a mktemp root nothing derives) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a VERSION walk-up or a literal climb, and the corpus scan below would be read through it."
     fi
-    i55_ctl="$(grep -rhoE '\$\{?'"$i55_roots"'\}?/core([/"]|$)' "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | grep -c .)"
+    # THE CONTROL COUNTS THROUGH THE SAME FUNCTION, so it reads the per-file derived roots the scan
+    # reads: `core` is an included top no fixture declares with `+`, so every reach of it is printed.
+    i55_ctl="$(i55_reach_scan "$REPO_ROOT" core | grep -c .)" || i55_ctl=0
     if [ "${i55_ctl:-0}" -lt 10 ]; then
       err "I55 arm 3's control found only ${i55_ctl:-0} reference(s) to an INCLUDED path under the same grammar it uses to report an absence. It is about to report that no fixture names an excluded path at the distribution root; over a corpus this grammar cannot read, that zero is a broken matcher and not a finding. Fails closed."
     else
@@ -11452,27 +11532,44 @@ fi
 # snapshot the enforcer rejects. Either alone acquits the case that motivated this.
 #
 # THE GRAMMAR AND ITS FALSE-POSITIVE SET, MEASURED. A reader "teaches" a member when a backticked
-# lowercase-hyphen token appears within six lines of a line naming `In-Flight`, in a `.md` file
-# under core/skills/ai-dlc or a `.sh` file under core/hooks. Two exclusions, both DERIVED:
+# lowercase-hyphen token appears within six lines of a GOOD In-Flight anchor (below), in a `.md`
+# file under core/skills/ai-dlc or a `.sh` file under core/hooks. Two exclusions, both DERIVED:
 #   1. the owner set itself, which is what the comparison is about;
 #   2. the table's own COLUMN names, read out of the one code span in the window that carries
 #      pipes -- `agent | role | deliverable | dispatched-at | status`. Without this the false
 #      positive set is 2 (`status`, `dispatched-at`), so the narrowing is load-bearing rather
 #      than decorative.
-# Measured over the live corpus with today's set: FP 0 out of 5 backticked tokens in a 183-line
-# window. Measured with `stopped` removed from the whitelist to reconstruct the BL-147 era: the
-# arm reports `stopped` as taught-but-unenforced. The two sides were asserted to differ before
+# Measured over the live corpus with today's set and the anchor below: the token set is
+# `delivered-reachable dispatched-at in-flight status stopped`, FP 0. Measured with `stopped`
+# removed from the whitelist to reconstruct the BL-147 era: the arm reports `stopped` as taught-but-unenforced. The two sides were asserted to differ before
 # the null was read, because a scan that reports nothing on every input reads exactly like one
 # whose corpus is clean.
 #
-# WHY THE WINDOW IS SIX LINES AND THE ANCHOR IS `In-Flight` RATHER THAN THE FULL SECTION NAME.
-# Both were measured against the alternative. Anchoring on the literal `In-Flight Teammates`
-# structurally excludes implementation.md's Rule 26(c) paragraph, whose `delivered-reachable`
-# sits eight lines below a heading that wraps the phrase across two lines -- five reader files
-# instead of six, and the missing one is silently missing. Widening the corpus to every filetype
-# under core/skills/ai-dlc adds one false positive (`inflight-row-shape`, a fixture NAME cited in
-# layer-contract.yaml); adding core/scripts adds two more from the owner's own shell (`case`,
-# `continue`). Six lines, two subtrees, two filetypes: FP 0, all six reader files covered.
+# THE ANCHOR (BL-697). A window opens only at a GOOD anchor: an `In-Flight` line that carries
+# `In-Flight[`*]*[[:blank:]]+Teammates` or `[Ss]tatus`, or a line ENDING in `In-Flight` whose
+# next line begins `Teammates` (a heading wrapped across two lines). A bare mention of the row
+# opens nothing. The window is the DISTANCE, 0..6 lines, from the last good anchor in the same
+# file, never an on/off flag: a flag lets a bare mention two lines into a good window close it
+# and drop the status taught below it. The anchor used to be any line containing `In-Flight`,
+# and at 0.876.0 that read the role name `ux`, within six lines under "the same value as the
+# In-Flight row and the join" in ui-direction.md, as a taught status and failed the pregate.
+# HOW THE FALSE-POSITIVE SET REACHED ZERO WITHOUT LOSING A READER, each measured over the corpus
+# as (file, token) pairs against the old anchor:
+#   A1 anchor line must say status -- keeps 4 of the 8 reader files; recover.sh, SKILL.md,
+#      gate-validation.md and route.md lose every owner token, because their windows open on
+#      `In-Flight Teammates` headings that never say the word.
+#   A2 token line must say status -- loses `stopped` and `in-flight` in route.md, `stopped` in
+#      gate-validation.md, and `delivered-reachable` in continue.sh, implementation.md and route.md.
+#   A3 the grep group must say status somewhere -- loses `delivered-reachable` in continue.sh
+#      and in implementation.md.
+#   A4 `In-Flight Teammates` or status on ONE line -- loses implementation.md Rule 26(c), whose
+#      `delivered-reachable` sits under a heading that wraps the phrase across two lines.
+#   A6 (this one) keeps all 8 reader files and every status pair, and drops only `agent` in
+#      ai-dlc-continue.sh, which is a column name, not a status.
+# Widening the corpus to every filetype under core/skills/ai-dlc adds one false positive
+# (`inflight-row-shape`, a fixture NAME cited in layer-contract.yaml); adding core/scripts adds
+# two more from the owner's own shell (`case`, `continue`). Six lines, two subtrees, two
+# filetypes, the anchor above: FP 0, all 8 reader files covered.
 #
 # BACKSLASHES ARE STRIPPED BEFORE THE TOKEN SCAN, and that is not cosmetic. ai-dlc-recover.sh
 # writes its guidance inside a DOUBLE-QUOTED heredoc, so every code span in it is spelled
@@ -11496,13 +11593,29 @@ i110_route="$REPO_ROOT/core/skills/ai-dlc/steps/route.md"
 # level up from the one it binds. `-A6` and the `In-Flight` anchor are inside the function for
 # the same reason: a probe scanned with a different window proves nothing about the corpus scan.
 i110_tokens() { # i110_tokens <dir> [<dir>...] -> one backticked token per line, sorted, unique
-  grep -rh -A6 --include='*.md' --include='*.sh' -F 'In-Flight' "$@" 2>/dev/null | awk '
+  grep -rHn -A6 --include='*.md' --include='*.sh' -F 'In-Flight' "$@" 2>/dev/null | awk '
+    # Each line is FILE:N:text (a match) or FILE-N-text (context); the group separator and
+    # anything else that does not parse closes every window. g is the line number of the last
+    # GOOD anchor in this file and pend a line ending in In-Flight awaiting a Teammates line.
+    # A token is read only while N - g is 0..6: a DISTANCE, so a bare In-Flight mention
+    # inside a good window neither opens nor closes anything.
     {
-      gsub(/\\/, "")                       # ai-dlc-recover.sh writes \`token\` in a heredoc
-      while (match($0, /`[a-z][a-z0-9-]*`/)) {
-        t = substr($0, RSTART + 1, RLENGTH - 2)
+      if (!match($0, /\.(md|sh)[-:][0-9]+[-:]/)) { g = -99; pend = -99; next }
+      f = substr($0, 1, RSTART + 2)
+      if (f != lf) { lf = f; g = -99; pend = -99 }
+      ln = substr($0, RSTART + 4, RLENGTH - 5) + 0
+      l = substr($0, RSTART + RLENGTH)
+      gsub(/\\/, "", l)                    # ai-dlc-recover.sh writes \`token\` in a heredoc
+      if (ln == pend + 1 && l ~ /^[[:blank:]*`]*Teammates/) g = pend
+      if (l ~ /In-Flight/) {
+        if (l ~ /In-Flight[`*]*[[:blank:]]+Teammates|[Ss]tatus/) g = ln
+        else if (l ~ /In-Flight[[:blank:]]*$/) pend = ln
+      }
+      if (ln - g < 0 || ln - g > 6) next
+      while (match(l, /`[a-z][a-z0-9-]*`/)) {
+        t = substr(l, RSTART + 1, RLENGTH - 2)
         if (!(t in seen)) { seen[t] = 1; n++; out[n] = t }
-        $0 = substr($0, RSTART + RLENGTH)
+        l = substr(l, RSTART + RLENGTH)
       }
     }
     END {
@@ -11578,20 +11691,47 @@ EOF
       printf '%s\n' \
         'A row in **In-Flight Teammates** may read' '' '`idle-reusable` when parked.' '' \
         'x' 'x' 'x' 'x' 'x' 'x' 'x' \
-        'The In-Flight row schema names a' '' '`dispatched-at` column.' \
+        'The In-Flight Teammates row schema names a' '' '`dispatched-at` column.' \
         > "$i110_probe/probe.md"
       printf '%s\n' \
         'echo "## In-Flight Teammates' '' 'Status \`escaped-only\` -> SKIP the row."' \
         > "$i110_probe/probe.sh"
+      # THE ANCHOR SEEDS (BL-697). A sentence that merely names the row opens no window: `ux`
+      # is the role name that failed the 0.876.0 pregate, and `zz-near` is a token no role
+      # vocabulary carries, so a fix that excluded role names instead of anchoring the window
+      # still reads it. The wrapped heading is the shape implementation.md Rule 26(c) carries,
+      # and an anchor that demands `In-Flight Teammates` on ONE line drops it.
+      printf '%s\n' \
+        'the same value as the In-Flight row and the join' '' 'plain line' \
+        '`ux` is a role name' '`zz-near` is no column' \
+        > "$i110_probe/near.md"
+      printf '%s\n' \
+        'the dispatch-time **In-Flight' 'Teammates** row, held as `wrapped-taught`' \
+        > "$i110_probe/wrap.md"
+      # THE RESET SEED is what makes the window a DISTANCE: a bare mention two lines into a
+      # good window must not close it. An on/off flag drops `reset-kept` here and nowhere else.
+      printf '%s\n' \
+        '## In-Flight Teammates' 'x' 'see the In-Flight row and the join' 'x' '`reset-kept` row' \
+        > "$i110_probe/reset.md"
       i110_pt="$(i110_tokens "$i110_probe")"
-      i110_pp=0; i110_pn=0; i110_pn_excluded=0; i110_pe=0
+      i110_pp=0; i110_pn=0; i110_pn_excluded=0; i110_pe=0; i110_pw=0; i110_pa=''
       in_lines 'idle-reusable' "$i110_pt"   && i110_pp=1
       in_lines 'escaped-only'  "$i110_pt"   && i110_pe=1
+      in_lines 'wrapped-taught' "$i110_pt"  && i110_pw=1
+      in_lines 'reset-kept'    "$i110_pt"   || i110_pa="$i110_pa reset-kept(missing)"
+      in_lines 'ux'            "$i110_pt"   && i110_pa="$i110_pa ux"
+      in_lines 'zz-near'       "$i110_pt"   && i110_pa="$i110_pa zz-near"
       in_lines 'dispatched-at' "$i110_pt"   && i110_pn=1
       in_lines 'dispatched-at' "$i110_cols" && i110_pn_excluded=1
       rm -rf "$i110_probe"
       if [ "$i110_pp" -eq 0 ]; then
         err "I110's positive probe was NOT seen: a seeded \`idle-reusable\` two lines under an In-Flight line went unread by the same grammar the corpus arm runs. That is the exact token the FIRST drift of this set used, so a clean verdict below is a scan that cannot spell its own subject."
+      fi
+      if [ "$i110_pw" -eq 0 ]; then
+        err "I110's WRAPPED-heading probe was NOT seen: a seeded \`wrapped-taught\` under a heading that breaks \`In-Flight\` / \`Teammates\` across two lines went unread. implementation.md Rule 26(c) teaches \`delivered-reachable\` under exactly that shape, so the corpus scan below is blind to one reader file and its clean result would not say so."
+      fi
+      if [ -n "$i110_pa" ]; then
+        err "I110's ANCHOR probe is wrong:$i110_pa. A bare mention of the In-Flight row, with no \`Teammates\` and no status, must neither OPEN a token window (\`ux\`, \`zz-near\` -- the BL-697 shape that failed the 0.876.0 pregate on a role name) nor CLOSE one it sits inside (\`reset-kept\`, four lines under a good anchor, missing means the window became an on/off flag). The window is the distance from the last In-Flight line naming Teammates or a status."
       fi
       if [ "$i110_pe" -eq 0 ]; then
         err "I110's ESCAPED probe was NOT seen: a token written \\\`escaped-only\\\` -- the spelling both hooks use, because their guidance sits inside double-quoted heredocs -- was invisible to the token grammar. The corpus verdict below would then be taken over a set missing whatever those two files teach and no step file repeats, and it would read exactly like agreement."

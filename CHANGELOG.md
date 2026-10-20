@@ -19,6 +19,66 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.894.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a, cluster 238-r3. It closes BL-674, BL-697 and BL-707, closes no `PC-` id and files nothing. Net for this release: 3 closed, 0 filed. All three changes are in `scripts/validate-enforcement-map.sh` and core fixtures; none changes a consumer-facing script or rulebook.
+
+### BL-674 — I55's reach scan derives the distribution-root names from the shape of each assignment
+
+I55 arm 3's reach scan recognised four hand-listed root variables, so a fixture reading an excluded path through any other root variable was never checked. The scan now also derives, per scanned file, every variable assigned a climb to the distribution root (`$(cd "$HERE/../../.." ...)` or the `dirname "$0"` form), a `VERSION` walk-up target, or an alias of a root, and it reads a literal `$HERE/../../../<entry>` as a root read. The derivation runs inside the existing one recursive grep and one awk, with no new fork and no per-file loop. The four names stay as the floor the arm's own probe fixtures assign.
+
+A `*ROOT=` name grammar was measured first and rejected: 3 false positives (scratch roots such as `MROOT`) and 2 false zeros. The shape grammar measured 5 reaches and 0 false positives. Its two live findings are disposed in the same change by declaring `VERSION` with `+` in `schema-install-fallback` and `enforcement-map-sites`, and in the `enforcement-map-sites` b and c shards, which exec the parent's `run.sh`. I55's self-probe gains fixture o, a climb from `dirname "$0"` into a variable root.
+
+The five-pattern scan cost CPU, so a fixed-string prefilter now precedes it: a `grep -rHnF` stage passes only lines carrying a string some pattern cannot match without (`/<entry>`, `/../../..`, `ROOT"`, `ROOT}"`, `/VERSION" ]; do `), and the unchanged five-pattern `grep -E` decides them. The literal list is built by parameter expansion, with no fork. Output is byte-identical to the unfiltered scan on the live corpus (`core` 533 lines, the corpus call 0) and on an empty corpus, a hitless corpus and an empty entry list. A seeded tree of six single-pattern offenders flags all six and three near-misses stay quiet on both sides; a one-line-dropped copy DIFFERS. The regex now sees 2,816 and 1,637 of 211,197 lines.
+
+### BL-697 — I110 opens its token window only at a status anchor
+
+`i110_tokens` read every backticked lowercase token within six lines after any `In-Flight` mention, so a role name below a prose mention entered the vocabulary. The window now opens only at a line carrying `In-Flight Teammates` or a status word, or a line ending `In-Flight` whose next line begins `Teammates`, and a token is read only within six lines of the last such anchor. An on/off flag was measured to drop a real token when a bare mention sits inside a good window, so the window is a distance.
+
+Measured over `core/skills/ai-dlc` and `core/hooks`: the token set loses only `agent`, a column name, and all 8 reader files are kept. The self-probe gains a role near-miss, a non-role near-miss, a heading wrapped across two lines, and a reset seed.
+
+### BL-707 — prepush-pool-depth counts the depth-0 width at a barrier
+
+`obs_d0_max` read the peak of an `ls` over a flight dir while six stubs each slept 0.3s, so six were seen together only when all six started inside one window. A loaded box read 3 and 5 against 6 with no hook defect, and because every mutant's moved set carries that cell, one wrong reading surfaced as eleven FAILs.
+
+The depth-0 drive now runs the stubs through a driver-side barrier. Each stub creates its flight file and holds until the driver writes a release file, the flight dir is gone, or its own cap. A poller counts the flight dir until six are in flight, records the count and only then releases, so a slow box only delays it, and a pool narrower than six reads at most 5. The baseline names the barrier: "N of 6 entered within <ceiling>s". The depth-1 drives keep the sleep path. Neither pre-push hook changes.
+
+- **Ceiling knob.** `PD_BARRIER_CEIL` is the barrier ceiling, digits only with no leading zero (default 30), exported on `drive`'s export line. Each stub's cap is the knob plus 10.
+- **Mutant.** `pool-capped-5` caps the depth-0 `xargs` pool at `min(FIXTURE_JOBS,5)` with a 3s ceiling passed through `mutant()`'s optional fourth argument, and is killed by exactly `obs_d0_max`. The baseline and every other mutant keep 30.
+- **Receipt.** BL-707's `verify:` line drives a seeded scratch copy that drops every `^  mutant ` invocation and copies only `.githooks/pre-push`, so it runs one pass with no mutant battery. Its seed delays one stub 10s, once, on the depth-0 width drive. It asserts 0 mutant invocations remain and exits only 0, 1 or 9, with every refusal 9; a `trap` removes its `mktemp` dir, so a red or 9 receipt leaves no diagnostics.
+- Scored under `set -uo pipefail`, each row a fresh scratch tree: the tip 0; the pre-barrier fixture 1; sleep overlaps of 2s, 4s and 9s each 1; a pool capped at 5, 1; a stub-side barrier spelling 0; each refusal 9. A sleep overlap of 11s scores 0. That is the stated residual: a sleep overlap at least as long as the seed is the one non-fix the receipt cannot tell apart, and it is a 30-fold widening of the 0.3s window a reviewer would see.
+
+### Suite cost
+
+`validate-enforcement-map.sh` runs inside the suite pole, so its cost was measured as a CPU-seconds differential: base `3234cf8ca` against the tip, one clean detached worktree at one path, order B T T B, CPU = user+sys. The added cost is I55's reach scan alone. BL-674's grep went from 1 pattern to 5, three of them led by an unanchored character class, over 13.17 MB / 211,197 lines, twice per run because the I55 control now calls it. BL-697 adds 0 forks and 0 passes.
+
+Run 1, against `717e0d856` (before the prefilter):
+
+| Side | Rep 1 | Rep 2 |
+|------|-------|-------|
+| Base | 27.67 | 27.29 |
+| Tip  | 28.86 | 28.80 |
+
++1.35 CPU-s (+4.9%), all in user time.
+
+Run 2, against `c37afbb76` (with the prefilter), at load 7-9:
+
+| Side | Rep 1 | Rep 2 |
+|------|-------|-------|
+| Base | 27.29 | 29.86 |
+| Tip  | 28.34 | 29.72 |
+
+Unresolvable: the base spread (2.57s) exceeds the effect it was taken to resolve.
+
+Run 3, against the shipped tree `b62ebc721`, at load 4.3-5.7:
+
+| Side | Rep 1 | Rep 2 |
+|------|-------|-------|
+| Base | 27.36 | 27.58 |
+| Tip  | 27.93 | 28.26 |
+
+Resolved (base spread 0.22, tip spread 0.33, gap 0.35): +0.63 CPU-s (+2.3%), +0.55 of it user time. The prefilter recovered about half of run 1's cost; what remains is the second full scan and the awk work on the lines that match.
+
 ## [0.893.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a. It closes BL-715, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. It changes the consumer rulebook file `core/team-roles/remediator.md`, so a consumer receives the new role text on the pull that delivers it.
