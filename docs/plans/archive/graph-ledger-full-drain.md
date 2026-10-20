@@ -18828,3 +18828,47 @@ Batch 232's block below is history: this block replaces its delivery gap. Starte
 - **Net for the batch**: closed 0 entries, filed 0; 1 candidate closed upstream by graph's pull. Backlog 0 live, 526
   archived.
 
+**BATCH 234 SHIPPED `v0.790.0` (`8cf9d116`, #1149) AND `v0.791.0` (`d71b0a50`, #1150): FOUR OF GRAPH'S FIVE SPRINT-319
+CANDIDATES DISCHARGED HERE, TWO OF THEM CLOSED UPSTREAM BY GRAPH'S 0.790.0 PULL; THE OTHER TWO AWAIT ITS PULL OF
+0.791.0. THE FIFTH (BL-536) IS BUILT AND HELD, WITH A BLOCKER, AND HANDED TO ai-dlc-b8, WHICH IS
+ALREADY RUNNING BATCH 235.**
+Batch 233's block below is history: this block replaces its delivery gap. Started by the operator's one-liner at
+`origin/main` `bfb5589e` (`VERSION` 0.789.0). graph-09 and graph-47 were live and were never messaged.
+- **Opening sweep**: every committed ref read live 0, unfiled 0, worklist 0, every control passing. The batch's scope
+  was invisible to it: graph held the filings UNCOMMITTED in its working-tree ledger, found by a consumer-history hand
+  diffing that file. The derive block now carries a command for that (under the union block), with a control.
+- **`v0.790.0`**: BL-532 (`join-remediator-shards.sh --rerun <part>.md@<ISO>`, one-part re-run joins; part-record
+  authorship enforced) and BL-533 (both write ledgers record `tool_use_id`, `transcript_path`, `agent_transcript`;
+  the join reads an alias only on four clauses). `remediator-shard-join-mutants` sharded four ways. Closes
+  `PC-S319-JOIN-REFUSES-A-SINGLE-SECTION-RERUN-IN-DOCUMENT-MODE` and
+  `PC-S319-LEDGER-ATTRIBUTES-AN-EDIT-TO-AN-AGENT-ID-WITH-NO-TRANSCRIPT`. Its gate failed four times before green: a
+  real `procsub-staged-refusal` spelling-arm hit (respelled), a load-driven pole on `enforcement-map-sites`, and twice
+  the regime pole on `story-evidence-scaffold` (173-177s solo on base and tip alike against a 2-3s history). The
+  operator chose to drop that unit's 8 pool-12 rows; BL-558 records it as unexplained.
+- **`v0.791.0`**: BL-534 (routing cites copied with their `SHA256:` label resolve; both validators strip one literal
+  label) and BL-535 (`carry-over-evaluation.md` states the `coe` stem; the merge refuses a `-adversarial` shard dir).
+  Closes `PC-S319-ROUTING-RECORD-CITE-PREFIX-REJECTED-BY-SCOPE-VALIDATOR` and
+  `PC-S319-COE-ADVERSARIAL-SHARD-DIR-STEM-NEVER-STATED`. Gate green on the first push.
+- **HELD, NOT SHIPPED: BL-536** (`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`, the merge derives
+  each shard's dispatch id from harness records; `adversarial-shard-merge-mutants` sharded five ways). Built on
+  local branch `b234-r2`; two fix rounds after its tip adversary: hand B `adb7af6a` (hook guards
+  `subagent-context.jsonl` against a lead Write/Edit, which forged the join; BL-534 receipt cells) and hand A (merge
+  `--rerun <shard>.md@<ISO>` for a re-dispatched adversary, which the merge otherwise refuses with no remedy; receipt
+  arms for basename keying, probe-over-meta and multi-role ids). Owes one tip adversary on its final tip and a gate.
+  The final branch and sha go to ai-dlc-b8 by message; b8 ships or re-cuts it as 0.792.0 or later.
+- **Operator rulings, batch 234**: drop `story-evidence-scaffold`'s pool-12 rows (taken); start the next batch now in
+  a fresh session, running alongside this one (ai-dlc-b8 accepted); ship the two ready fixes and hold the third. The
+  operator also ruled that this batch pulling in the three S319 candidates graph filed after 0.790.0 was built was
+  the error that tripled its length. The standing rule it broke is the batch-183 ruling: a filing that lands after a
+  batch's releases are built is a resume-block fact for the next session.
+- **Peer filings**: ai-dlc-a6 and ai-dlc-68 filed BL-528..BL-531 and BL-537..BL-565 (with addenda) on the operator's
+  instruction from graph's s319 lead-session review, all `verify: manual`. BL-566 onward go to ai-dlc-b8.
+- **graph delivery**: graph pulled 0.790.0 itself (#1228). Installed 0.790.0 against `VERSION` 0.791.0, one release
+  behind, no bootstrapping file in the range. Action 7: graph's live routing record is bare hex and its shard dir is
+  `coe-p1`, so installed and shipped engines agree on today's inputs: BANK IT. No runbook.
+- **Untraced**: a linked-worktree push re-runs 8 fixtures every time (their read-set rows need the main checkout),
+  plus the new JX and adversarial-shard-merge-mutants shard dirs; trace them from the main checkout detached at the
+  commit.
+- **Net for the batch**: closed 4 entries and 4 candidates; filed 37 (32 operator-instructed peer filings, BL-532..
+  BL-535, BL-558; BL-536 is held). Backlog 33 live, 530 archived.
+
