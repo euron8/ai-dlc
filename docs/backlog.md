@@ -548,6 +548,8 @@ Dedupe, re-derived with `grep -c` at origin/main: "SERIAL-REQUIRED" 3 in docs/ba
 
 Owed, the mechanism left to the builder: partition the SERIAL-REQUIRED items by the parts they touch, so disjoint sets run as parallel serial lanes and each lane keeps the serial guarantee within its own set. A fixture arm (or receipt): a seeded join whose two disjoint item sets dispatch to two lanes, while an overlapping pair stays in one lane.
 
+Measured input for the partition, graph-watch, batch 238. These figures come from the graph watcher's scratch run of `core/scripts/serial-remediation-worklist.sh` over s319's stories party repair, relayed by the batch-238 lead; this filing did not re-measure them. The run's SUMMARY read `files 19 replaced 115 hits 135 moved-cites 1`, over 19 parts and 148 SERIAL-REQUIRED entries. Taking the parts each item touches as edges, the lane components are: edit only, 19; edit ∪ MOVED-CITE, 18; edit ∪ HIT, 1. One boilerplate line merges every lane: the sprint-title `architecture_refs` line that every story carries (`story-2-1:8-10`, hunk `6.md#F-9`), which HITs line 9 of 18 other stories. On this corpus, a partition on HIT edges therefore yields one lane, the status quo, unless a HIT on a line common to all parts is excluded from the edge set. The builder must decide whether such a common-line HIT can be excluded safely, or must be routed as a single fan-in item.
+
 verify: manual
 
 ## BL-718 — the adversarial shard header line `artifact_sha: <stem>=<sha> …` trips gitleaks generic-api-key in a consumer on every cross shard, so the lead hand-appends fingerprints to `.gitleaksignore` each sprint; the goal is that a consumer's lead never hand-appends fingerprints for records ai-dlc's pipeline writes
@@ -629,4 +631,125 @@ Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ci` before t
 Direction, for the owner: either a dispatch-scoped join that needs no path and waits on the dispatch's own SubagentStop row, or a remedy that names the liveness check whenever `--dispatch` resolves. The fix is the owner's to choose.
 
 verify: manual
+
+## BL-725 — the recover gate's per-call `[ -w "$STATE_DIR" ]` stand-down passes on a writable directory whose stage write fails (a full disk), so the snapshot Read is allowed, the stage stays `snapshot`, and every later call is denied FIRST
+
+**DEFECT.** The filing is promised by 0.891.0's CHANGELOG ("Finding: an ENOSPC stage-write failure still holds the gate at `snapshot`", `CHANGELOG.md:42-44`). It came out of the BL-688 work and was relayed by graph-watch, batch 238; the batch-238 filing hand measured and filed it.
+
+`core/hooks/ai-dlc-recover-gate.sh:342` stands the gate down only when `$STATE_DIR` is not writable. The snapshot arm's stage write at `:417` is `{ printf 'step\n' >"${PROGRESS}.$$" && mv -f ...; } 2>/dev/null || rm -f ... || true`, followed by `exit 0`. A write that FAILS in a writable directory (ENOSPC, a quota, EFBIG) is therefore swallowed and the Read is allowed. `:389` then finds no progress file and defaults `STAGE` to `snapshot`, and `:450` denies the next call with the FIRST-call text. That text's remedy is the snapshot Read, which is allowed again and again advances nothing. The bounded escape covers only the advisor stage, so the lead is wedged.
+
+Measured on a seeded tree with the write forced to fail by `ulimit -f 0`, with SIGXFSZ ignored so that the write returns an error the way ENOSPC does: the following Grep is denied "your FIRST tool call". The identical seed without the limit is not denied. No directory-mode test can see a failed write, so BL-688's shape cannot be extended to cover it.
+
+Owed: when the stage write fails, the gate stands down for the call AND for the recovery (unlinking the marker needs no free space). Alternatively, it records that the snapshot Read happened by a means that does not depend on that write succeeding. The fix is the owner's to choose.
+
+verify: sh H=core/hooks/ai-dlc-recover-gate.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null || exit 9; T="$(mktemp -d)"; mkdir -p "$T/_bmad-output" "$T/steps"; printf "s\n" > "$T/_bmad-output/pipeline-snapshot.md"; printf "x\n" > "$T/steps/x.md"; printf "step_file_resolved=1\nsnapshot_path=_bmad-output/pipeline-snapshot.md\nstep_file=steps/x.md\n" > "$T/_bmad-output/.recover-fired"; RS="{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/_bmad-output/pipeline-snapshot.md\"}}"; GL="{\"tool_name\":\"Grep\",\"tool_input\":{\"pattern\":\"a\"}}"; c0="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; grep -q "FIRST tool call" <<<"$c0" || exit 9; CLAUDE_PROJECT_DIR="$T" bash -c "trap \"\" XFSZ; ulimit -f 0; bash \"$H\"" <<<"$RS" >/dev/null 2>&1; [ -f "$T/_bmad-output/.recover-fired" ] || exit 0; c1="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; ! grep -q "FIRST tool call" <<<"$c1"
+
+## BL-726 — `merge-adversarial-shards.sh` copies a mis-stamped shard's `invoked_at` into the merged pass, so Check 24's chronology arm fails on a merge the merge accepted, and the lead hand-edits the provenance record
+
+**DEFECT.** Raised from graph `_bmad-output/planning-artifacts/s319/test-strategy-adversarial-p2.md` and graph commit `ded7e6a18` by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+`core/scripts/merge-adversarial-shards.sh:338` makes the merged `invoked_at` the EARLIEST shard's, and `:1237` takes that minimum by `at_key`. The only check on a shard's own `invoked_at` is its ISO shape (`:465-466`). Two records that could bound it go unused for this purpose. The dispatch's spawn-ledger `ts` is read only to bind `--rerun` starts within `BACKDATE_TOL_S` (`:1124-1155`, BL-598). The shard file's mtime is read only to print `shard_wall` (`:1314-1316`).
+
+Graph s319 test-strategy pass 2 recorded `shard_wall: … 5=2026-10-20T19:40:00Z/2026-10-20T21:23:19Z …` at p2.md:617, a claimed start 1h43m before the shard's own write. The same line records `cross-1=2026-10-20T21:40:00Z/2026-10-20T21:23:50Z`, a claimed start 16 minutes after its mtime. The merge accepted both and wrote `invoked_at: 2026-10-20T19:40:00Z`, which predates pass 1. At 21:52:05Z Check 24 refused: "FAIL (G -- CHRONOLOGY): …test-strategy-adversarial-p2.md claims to follow …-p1.md, but it was written FIRST". This refusal was relayed by the batch-238 lead.
+
+Graph's lead hand-corrected the merged line to `2026-10-20T21:20:30Z` in `ded7e6a18`. `shards/test-strategy-p2/5.md` still carries `19:40:00Z`, so a fresh merge of that shard directory writes the bad value again. An in-place re-merge refuses instead, because an existing output that differs exits 2 (`:345-346`). Either way, the pass file's provenance is a lead edit.
+
+Owed, the owner's to choose: refuse a shard whose `invoked_at` is earlier than its credited dispatch's spawn-ledger `ts` by more than `BACKDATE_TOL_S`, or later than its own write, naming the shard and both times. Or derive the merged `invoked_at` from the dispatch records rather than from the shards' self-reports.
+
+verify: sh L=core/fixtures/adversarial-shard-merge/lib.sh; [ -f "$L" ] || exit 9; NAME=bl-r1; . "$L" >/dev/null || exit 9; export HR_SPAWN_TS=2026-08-24T15:00:00Z; c="$(b3_world)" || exit 9; run_merge "$MERGE" "$c"; [ "$RC" -eq 0 ] && grep -qx 'invoked_at: 2026-08-24T15:01:19Z' "$(out_of "$c")" || exit 9; d="$(b3_world)" || exit 9; shard "$d" 1 2 EXIT_CONDITION_MET 1 "" "2026-08-24T13:00:00Z"; run_merge "$MERGE" "$d"; [ "$RC" -eq 2 ] && exit 0; [ "$RC" -eq 0 ] || exit 9; grep -qx 'invoked_at: 2026-08-24T13:00:00Z' "$(out_of "$d")" && exit 1; exit 0
+
+## BL-727 — `ai-dlc-derivation-capture.sh` refuses a record's re-derivation, because writing the same `$ ` command again re-arms the earlier stale fence and the hook's masked copy sits outside `s<N>/`, where supersession never fires
+
+**DEFECT.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the PC CANDIDATES bullet) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+0.803.0 (BL-588) lets a later byte-identical `$ ` command in a review or repair record supersede an earlier one (`core/scripts/validate-artifact-derivations.sh:63-83`). The validator's own header records the write-time gap at `:84-86`: "NOT COVERED: `ai-dlc-derivation-capture.sh` validates a masked copy under a `mktemp -d` parent, never under `s<digits>/`, so supersession never fires there". No entry tracks it.
+
+The gap is wider than an old fence false-alarming. `core/hooks/ai-dlc-derivation-capture.sh:413-416` marks a pair as touched when any payload line equals one of its lines. Re-deriving a stale figure means writing the same command again, so the earlier stale pair is touched too. The masked copy is validated under a `mktemp -d` parent (`:506-507`), where supersession cannot fire, so the hook exits 2 with `FAIL (STALE)` on the earlier line.
+
+Measured in a scratch record `s1/stories-repair-p1.md`: the validator printed `SUPERSEDED: …:4 by …` and exited 0. The hook, on an Edit appending the correct re-derivation, exited 2 with `FAIL (STALE): …:4 … recorded: beta`. Control: the same edit with a non-stale earlier fence exited 0. Graph's s319 lead reported false alarms on record lines that the full validator reports as superseded; that report is relayed and was not re-measured here.
+
+Owed: the hook judges a record's touched pairs with the validator's supersession, for example by placing the masked copy at the record's own `s<N>/<basename>` relative path or by passing the record's identity through. A write that adds a stale block must still be refused, and the receipt exits 3 if it is not.
+
+verify: sh set -uo pipefail; H=core/hooks/ai-dlc-derivation-capture.sh; V=core/scripts/validate-artifact-derivations.sh; [ -f "$H" ] && [ -f "$V" ] && command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; mkdir -p "$w/p/scripts/ai-dlc" "$w/p/_bmad-output/planning-artifacts/s1" "$w/p/.claude" || exit 9; cp "$V" "$w/p/scripts/ai-dlc/" || exit 9; F="$w/p/_bmad-output/planning-artifacts/s1/stories-repair-p1.md"; printf '# r\n\n```derived\n$ echo alpha\nbeta\n```\n\nlater\n\n```derived\n$ echo alpha\nalpha\n```\n' > "$F"; o=$(cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" bash scripts/ai-dlc/validate-artifact-derivations.sh "$F" 2>&1) || exit 9; case "$o" in *SUPERSEDED:*) ;; *) exit 9 ;; esac; P=$(jq -nc --arg f "$F" '{tool_name:"Edit",tool_input:{file_path:$f,old_string:"later\n",new_string:"later\n\n```derived\n$ echo alpha\nalpha\n```\n"}}'); printf '%s' "$P" | CLAUDE_PROJECT_DIR="$w/p" bash "$H" >/dev/null 2>&1; rc=$?; G="$w/p/_bmad-output/planning-artifacts/s1/stories-repair-p2.md"; printf '# r\n\nnew\n\n```derived\n$ echo gamma\ndelta\n```\n' > "$G"; Q=$(jq -nc --arg f "$G" '{tool_name:"Edit",tool_input:{file_path:$f,old_string:"new\n",new_string:"new\n\n```derived\n$ echo gamma\ndelta\n```\n"}}'); printf '%s' "$Q" | CLAUDE_PROJECT_DIR="$w/p" bash "$H" >/dev/null 2>&1; [ $? = 2 ] || exit 3; [ "$rc" = 0 ] && exit 0; [ "$rc" = 2 ] && exit 1; exit 9
+
+## BL-728 — the derivation allowlist refuses a backtick inside single quotes and any `git -C <dir> <read-only-sub>`, so an adversary's correct fenced command is refused at write time and rewritten
+
+**NOTE.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the PC CANDIDATES bullet) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+`core/scripts/validate-artifact-derivations.sh:158-162` refuses any command containing a backtick before its quote-aware split runs. So `grep -c -F 'a`b' d.txt`, which bash runs with no substitution, fails `FAIL (ALLOWLIST)`. `:237-238` reads the git subcommand as word 2, so `git -C sub rev-parse …` fails as `'git -C' is not a read-only git subcommand`. The capture hook surfaces both refusals at write time. Measured in a scratch repo: both commands were refused, against `git rev-parse --is-inside-work-tree` passing in the same run.
+
+Direction, for the owner: test the backtick under the existing quote scan, so it is refused only unquoted or inside double quotes, and skip `-C <dir>` before reading the subcommand, deciding whether `<dir>` must stay inside the root. The receipt exits 1 at the backtick arm and 2 at the `git -C` arm. If the owner rules that `git -C` stays refused, drop the receipt's `g.md` arm.
+
+verify: sh set -uo pipefail; V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] && command -v git >/dev/null || exit 9; R=$PWD; w=$(mktemp -d) || exit 9; mkdir -p "$w/p/.claude" "$w/p/sub" || exit 9; git -C "$w/p" init -q . || exit 9; printf 'a`b\n' > "$w/p/d.txt"; printf '# x\n\n```derived\n$ git rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/c.md"; printf '# x\n\n```derived\n$ grep -c -F '"'"'a`b'"'"' d.txt\n1\n```\n' > "$w/p/q.md"; printf '# x\n\n```derived\n$ git -C sub rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/g.md"; v() { ( cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" bash "$R/$V" "$1" >/dev/null 2>&1 ); }; v c.md || exit 9; v q.md || exit 1; v g.md || exit 2; exit 0
+
+## BL-729 — `stamp-story-provenance.sh --series` refuses the `<stem>-adversarial-p` prefix that Check 24 takes, though its header says it resolves the series "the ONE way Check 24 already does"
+
+**NOTE.** Raised from graph's s319 story-provenance stamping (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. It is tiered NOTE because the refusal is loud and costs one retry. The cost is that the error points the wrong way.
+
+`core/scripts/stamp-story-provenance.sh:77-78` says `--series <prefix>` names the terminal pass "the ONE way Check 24 already does (--series <path-prefix>)". Check 24 is driven with a prefix ending in `-adversarial-p` (`core/fixtures/check-24-adversarial-convergence/run.sh:195`, `core/fixtures/adversarial-shard-merge/lib.sh:548`). The resolver's glob at `:83`, `"${SERIES}"*p[0-9]*.md`, needs a `p` AFTER the prefix, so that prefix matches nothing. The script exits 1 with `matched no <prefix>...p<N>.md pass file`, a message that suggests the `p` form is the right one. Only `<stem>-adversarial-` resolves.
+
+Measured on a three-pass mktemp series: `…/s-adversarial-p` matches none, while the control `…/s-adversarial-` reaches p3. The step files that teach the call (`gate-validation.md:1430-1431`, `stories-test-strategy.md:579-580`) say only "the path-prefix of … the stories-adversarial pass series".
+
+Owed: accept both prefixes (add the glob `"${SERIES}"[0-9]*.md`), or state the exact form in the usage line, the error and both step files.
+
+verify: sh S=core/scripts/stamp-story-provenance.sh; [ -f "$S" ] || exit 9; T="$(mktemp -d)" || exit 9; for n in 1 2 3; do printf 'x\n' > "$T/s-adversarial-p$n.md"; done; printf 's\n' > "$T/st.md"; [ "$(ls "$T" | grep -c '^s-adversarial-p[0-9]*\.md$')" = 3 ] || exit 9; o="$(bash "$S" --series "$T/s-adversarial-p" --check "$T/st.md" 2>&1 </dev/null)"; case "$o" in *s-adversarial-p3.md*) exit 0 ;; *"matched no"*) exit 1 ;; *) exit 9 ;; esac
+
+## BL-730 — the recover gate's touchpoint-R stage enforces on a race-chosen subset of a parallel dispatch: each call of a many-call message waits for its OWN line, the early calls' nets expire uncounted, and only the tail is refused
+
+**DEFECT.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the stories-p2 history line: "shards 18 and 19 were REFUSED by the touchpoint-R hook") by graph-watch, batch 238; measured on graph transcript `a367e62c` and filed by the batch-238 filing hand.
+
+`core/hooks/ai-dlc-recover-gate.sh:224-236` denies only once the incoming call's own `tool_use` line is on disk. At the 10 s net it stands down without counting, under BL-630's fail-open ruling (`CHANGELOG.md:2462-2467`).
+
+Transcript `a367e62c` shows the race. At line 4515 a `compact_boundary` fires, and at line 4550 the lead Reads the post-compaction digest, with no advisor call afterwards. Lines 4612-4681 then hold one message, `msg_011CgCyKHw8znw1wSZJHk9TR`, with all 19 "Pass 2 adversary shard NN" Agent calls. The hooks ran serially about 7 s apart. Calls 1-17 each hit the net and were dispatched: 17 safety-net stand-down lines, 4615-4679. Calls 18 and 19 were SEEN and refused, at lines 4687 and 4689 ("1 of 3").
+
+Touchpoint R was owed, and it held 2 of 19 calls. This is BL-545's incident shape, many seats dispatched before the R advisor call, now escaping through a parallel batch. The lead also had to notice the partial dispatch and re-dispatch shards 18 and 19.
+
+Direction, for the owner: judge a call as SEEN once any later sibling of the same `message.id` is on disk, since content streams in order, or carry one decision across all of a message's calls. Either way, fail-open on an unreadable transcript stays as ruled.
+
+verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net. A behavioural receipt would pay that net on every scoring and would fix a mechanism the owner has not chosen.
+
+## BL-731 — the cross-agent brief teaches `partition-document.sh --cross-owner <K> <its cited ordinals>` without the comma-joined form, and the script reads `2, 7` as a non-integer ordinal
+
+**NOTE.** Raised from graph s319 cross-shard agents' calls (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+`core/scripts/partition-document.sh:19` and `:381` take the cited ordinals as ONE comma-joined argument (`<ordinal,ordinal,...>`), and the usage error states that form. The text a cross agent is briefed from does not: `core/skills/ai-dlc/steps/_gate-procedures.md:384-385` reads `--cross-owner <K>` / `<its cited ordinals>`, and `core/skills/ai-dlc/rule-bodies/rule-28.md:119-120` reads `<K> <ordinals>`.
+
+Measured:
+- `--cross-owner 8 2,7` prints `3`.
+- `8 2 7` exits 64 with the usage line, which is actionable.
+- `8 "2, 7"` exits 64 with `cited ordinal " 7" is not an integer in 1..8`, which names the space and not the format.
+
+Owed: the brief and rule-28 spell out `<ordinal,ordinal,...>`, or the script trims blanks around each comma-separated ordinal. Either fix closes the receipt.
+
+verify: sh P=core/scripts/partition-document.sh; G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$P" ] && [ -f "$G" ] || exit 9; [ "$(bash "$P" --cross-owner 8 2,7 2>/dev/null </dev/null)" = 3 ] || exit 9; [ "$(bash "$P" --cross-owner 8 "2, 7" 2>/dev/null </dev/null)" = 3 ] && exit 0; j="$(tr '\n' ' ' < "$G" | tr -s ' ')"; case "$j" in *"--cross-owner <K> <ordinal,ordinal"*|*"--cross-owner <K> <its cited ordinals, comma-joined"*) exit 0 ;; esac; exit 1
+
+## BL-732 — `audit-party-wave-barrier.sh` keys a round member on the first `party-mode/` path a prompt names, so a party-REPAIR remediator fan-out that cites seat files reads as the party round `s<N>/stories`
+
+**NOTE.** Raised from graph transcript `a367e62c` (s319) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. Related: BL-695, which built the detector.
+
+`scripts/audit-party-wave-barrier.sh:35-40` defines a MEMBER as any Agent/Task call whose `input.prompt` names a path `party-mode/<dir>/<file>.md`, and takes the first such path as its identity. `:224` scans the prompt for that path, and `rkey` at `:254-258` strips the seat and ordinal. The detector reads neither `subagent_type` nor whether the path is the agent's WRITE target.
+
+In graph's `a367e62c`, the 19 Agent calls that name a party-mode path are all `subagent_type: remediator`, described "Party repair shard 01" to "19". Each writes `_bmad-output/planning-artifacts/s319/shards/stories-party-repair-p1/<N>.md` and cites `party-mode/s319/stories-sm-<N>.md` as its INPUT ("Your findings: every finding in ..."). `--trace` over that transcript prints 19 `round=s319/stories DELIVERED` lines and `STAT rounds=1 batches=1`, so the detector judges a repair fan-out as a party round's waves. Control: the same jq over the same transcript counts 19 remediator calls and 0 seat-typed member calls.
+
+The consequence is a false finding, or a false acquittal, attributed to a party round. The detector is a distribution-only audit and gates nothing.
+
+Owed: a member is a call whose party-mode path is the file it writes, or whose role is a party seat, not any call whose prompt cites such a path. The key is the owner's to choose. The receipt's seed, rewritten as a seat, still counts a round, so the receipt does not close merely because the detector stopped seeing rounds.
+
+verify: sh D=scripts/audit-party-wave-barrier.sh; [ -f "$D" ] || exit 9; T="$(mktemp -d)"; J="$T/t.jsonl"; for i in 1 2; do printf "%s\n" "{\"type\":\"assistant\",\"timestamp\":\"2026-01-01T10:00:0${i}.000Z\",\"message\":{\"id\":\"m$i\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tu$i\",\"name\":\"Agent\",\"input\":{\"subagent_type\":\"remediator\",\"description\":\"Party repair shard 0$i\",\"prompt\":\"part path: _bmad-output/planning-artifacts/s900/shards/stories-party-repair-p1/$i.md\\nYour findings: every finding in _bmad-output/party-mode/s900/stories-sm-0$i.md\",\"run_in_background\":true}}]}}" "{\"type\":\"user\",\"timestamp\":\"2026-01-01T10:00:0${i}.500Z\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"tu$i\",\"type\":\"tool_result\",\"content\":[{\"type\":\"text\",\"text\":\"Async agent launched successfully.\\nagentId: ag$i\"}]}]},\"toolUseResult\":{\"isAsync\":true,\"status\":\"async_launched\",\"agentId\":\"ag$i\"}}" >> "$J"; done; S="$(bash "$D" --trace "$J" 2>&1)"; grep -q "self-probe: ok" <<<"$S" || exit 9; grep -q "STAT rounds=" <<<"$S" || exit 9; ! grep -q "STAT rounds=[1-9]" <<<"$S"
+
+## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
+
+**DEFECT.** Raised from graph's s319 gate[story] refusal at 2026-10-20T22:44:38Z and the re-run `_bmad-output/planning-artifacts/s319/shards/stories-elicitation/` (graph `765de28f0` and its worktree) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+Graph's operator ruled story 2.3 split into 2.3a and 2.3b after s319's stories elicitation had run complete at K=19: 19 ordinal shards plus cross-1 to cross-6, committed at `765de28f0`, with `08.md` carrying `invoked_at: 2026-10-20T02:25:46Z`. Check 24 arm L then refused gate[story]: "FAIL (L -- ELICITATION): s319's stories elicitation over 20 stories is not the sharded shape: (b) ordinals missing: 20.md; shards record K=19, fewer than the 20 stories/ holds. … Re-run the elicitation in that shape before this gate." The lead re-ran the whole K=20 elicitation with 26 adversaries. All 26 files in the live `shards/stories-elicitation/` carry an `invoked_at` after 22:44:38Z, against the 25 committed files. One story changed, and 26 adversaries ran.
+
+The arm is right by its own contract, and that contract is the defect. `core/scripts/validate-adversarial-convergence.sh:3133-3141` derives the owed set at gate time from today's `stories/`: the `merge-adversarial-shards.sh --map` ordinals plus the `partition-document.sh --cross-groups <K>` keys. `l_judge` (`:2882-2948`) compares shard file NAMES against that set.
+
+The recorded-K narrowing (`l_kuse`, `:2844`; header `:2766-2772`) honours only a LARGER recorded K, the shrink direction. A grow is judged against today's K and FAILs by design, because honouring a smaller K would acquit a `shard: 1/1` single voice. The remedy at `:3267-3273` names only a full re-run. No step prose offers anything else: `_gate-procedures.md`'s validation-cycle item 2 (`:454-490`) and its amendment procedure (`:852-868`, arm J2 only) have no path that elicits just the delta.
+
+An elicitation of only the new stories cannot pass today either, because ordinals are positional. Graph's live `stories/`, staged as arm L stages it, maps 08 to `story-2-3a-…` and 09 to `story-2-3b-…`. The committed K=19 shards record 08 as `story-2-3-net-pnl-conditional-fix-…` and 09 as `story-3-1-…`. Every shard after the split point is renumbered, and `--cross-groups 20` differs from `--cross-groups 19` in groups 3, 5 and 6.
+
+Owed, the design for its owner to choose: a delta path for a post-elicitation split or addition. It elicits the stories that no shard covers by name (arm L's own `l_cover` already reads shard subjects by name, `:2854-2877`) plus the cross groups whose membership changed, and it judges coverage by subject NAME rather than by ordinal position. It must keep refusing a single voice over many stories and a shrink-with-replacement (`:2783-2789`). The remedy text then names the delta, not a full re-run.
+
+verify: manual — a discriminating `sh` receipt needs the fix's interface first: where a delta shard lives, what it is named, and how its coverage is recorded. Under today's arm L a seeded tree FAILs every delta shape, so a receipt built on a guessed shape closes only under that guess. A receipt keyed on the remedy text could be closed by prose alone. The real-corpus receipt is the next post-elicitation split on a consumer, or a fixture world written alongside the fix.
 
