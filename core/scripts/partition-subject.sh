@@ -68,6 +68,9 @@ sha_of() {
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
 STEMS="product-brief SPEC prd architecture-impact"
+# The `<stem><sep><sha>` separator class --expect-sha reads; merge-adversarial-shards.sh --pair-sep
+# keys on this exact line before it emits `@`.
+PAIR_SEP='[=@]'
 PS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PD="$PS_SCRIPT_DIR/partition-document.sh"
 T=""
@@ -266,14 +269,14 @@ case "$EXPECT" in @*) [ -f "${EXPECT#@}" ] || refuse "--expect-sha file ${EXPECT
 : > "$T/shas"
 while read -r st rel; do printf '%s\t%s\n' "$st" "$(sha_of "$ROOT/$rel")" >> "$T/shas"; done < "$T/files"
 if [ -n "$EXPECT" ]; then
-  # A pair is `<stem>=<sha>` or `<stem>@<sha>`: readers accept both separators, emitters still write `=`.
+  # A pair is `<stem>=<sha>` or `<stem>@<sha>`: PAIR_SEP, unquoted in each pattern so it is a class.
   for tok in $EXPECT; do
-    case "$tok" in ?*[=@]*) ;; *) refuse "--expect-sha token '$tok' is not <stem>=<sha> or <stem>@<sha>" ;; esac
-    case " $STEMS " in *" ${tok%%[=@]*} "*) ;; *) refuse "--expect-sha names stem '${tok%%[=@]*}', not one of: $STEMS" ;; esac
+    case "$tok" in ?*$PAIR_SEP*) ;; *) refuse "--expect-sha token '$tok' is not <stem>=<sha> or <stem>@<sha>" ;; esac
+    case " $STEMS " in *" ${tok%%$PAIR_SEP*} "*) ;; *) refuse "--expect-sha names stem '${tok%%$PAIR_SEP*}', not one of: $STEMS" ;; esac
   done
   for st in $STEMS; do
     want=""; n=0
-    for tok in $EXPECT; do [ "${tok%%[=@]*}" = "$st" ] && { want="${tok#*[=@]}"; n=$((n + 1)); }; done
+    for tok in $EXPECT; do [ "${tok%%$PAIR_SEP*}" = "$st" ] && { want="${tok#*$PAIR_SEP}"; n=$((n + 1)); }; done
     [ "$n" -eq 1 ] || refuse "--expect-sha names stem $st $n time(s); it names every subject stem once"
     have="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/shas")"
     [ "$(printf '%s' "$want" | tr 'A-F' 'a-f')" = "$have" ] \

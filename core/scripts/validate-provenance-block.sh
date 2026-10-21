@@ -71,7 +71,12 @@ REQUIRE_SKILL=""
 ALLOW_MISSING=0
 STRAY_PATHS=()
 
-if [[ "${1:-}" == "--strays" ]]; then
+if [[ "${1:-}" == "--accepts-at-pair" ]]; then
+    # Exit 0 when the schema THIS validator resolves (the chain below, unchanged) accepts a
+    # `<stem>@<sha>` artifact_sha list, else 1. merge-adversarial-shards.sh --pair-sep keys on it.
+    [[ $# -eq 1 ]] || { echo "ERROR: --accepts-at-pair takes no other argument" >&2; exit 2; }
+    MODE="accepts-at-pair"
+elif [[ "${1:-}" == "--strays" ]]; then
     MODE="strays"
     shift
     while [[ $# -gt 0 ]]; do
@@ -177,6 +182,14 @@ if [ -z "$SCHEMA" ]; then
     # that silently degrades to a stale schema reads exactly like a check that passed.
     echo "FAIL: schemas/provenance-block.json not found. The schema is the source of truth;" >&2
     echo "      this validator has no built-in copy and will not guess. Reinstall ai-dlc." >&2
+    exit 1
+fi
+
+if [ "$MODE" = "accepts-at-pair" ]; then
+    python3 -c 'import json,re,sys
+p = json.load(open(sys.argv[1]))["patterns"]["artifact_sha"]
+h = "0" * 64
+sys.exit(0 if re.match(p, "a@" + h + " b@" + h) else 1)' "$SCHEMA" 2>/dev/null && exit 0
     exit 1
 fi
 

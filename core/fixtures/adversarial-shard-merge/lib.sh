@@ -604,9 +604,9 @@ new_subj_world() { # -> prints the shard dir s9/shards/requirements-p1 of a fres
 }
 subj_root() { printf '%s' "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$1")")")")")"; }
 subj_out_of() { printf '%s' "$(dirname "$(dirname "$1")")/requirements-adversarial-p1.md"; }
-subj_shas() { # <shard dir> -> the four-stem list as on disk
+subj_shas() { # <shard dir> -> the four-stem list as on disk, in the `@` form a current tree's merge emits
   local w; w="$(subj_root "$1")"
-  printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(sha_of "$w/$SUBJ_PA/product-brief.md")" \
+  printf 'product-brief@%s SPEC@%s prd@%s architecture-impact@%s' "$(sha_of "$w/$SUBJ_PA/product-brief.md")" \
     "$(sha_of "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(sha_of "$w/$SUBJ_PA/prd.md")" "$(sha_of "$w/$SUBJ_PA/s9/architecture-impact.md")"
 }
 # sshard <dir> <key> <n-major> <cite> [sha-list] [skill] [verdict|-] [artifact]
@@ -649,11 +649,11 @@ p_subj_b3() { # sums, recomputes, artifact = manifest, four stems, ids = ordinal
   have="$(sed -n 's/^shard_tool_use_ids://p' "$o" | tr ' ' '\n' | awk -F= 'NF == 2 { k = $1; if (k ~ /^[0-9]+$/) k += 0; print k }' | sort | tr '\n' ' ')"
   [ "$want" = "$have" ]
 }
-p_subj_at() { # every shard notarizes `<stem>@<sha>`: the merge reads it and still EMITS the `=` list
+p_subj_at() { # every shard notarizes the OLD `<stem>=<sha>` form: the merge reads it and EMITS the `@` list
   local m="$1" d o sl k
   d="$(new_subj_world)" || return 1; o="$(subj_out_of "$d")"
-  sl="$(subj_shas "$d" | sed 's/=/@/g')"
-  case "$sl" in *=*) return 1 ;; esac
+  sl="$(subj_shas "$d" | sed 's/@/=/g')"
+  case "$sl" in *@*) return 1 ;; esac
   for k in $(cut -f1 "$(subj_root "$d")/subject.map"); do sshard "$d" "$k" 1 "$k" "$sl"; done
   for k in $(subj_xkeys "$d"); do sshard "$d" "$k" 0 "1, 2" "$sl"; done
   run_subj_merge "$m" "$d"
@@ -671,14 +671,16 @@ p_subj_xcite() { # a part shard citing ANOTHER file's ordinal (cross-file citati
 }
 p_subj_sha() { # one stem's sha is not the disk bytes (the prd moved), every other stem right
   local d sl; d="$(subj_b3_world)" || return 1
-  sl="$(subj_shas "$d" | sed "s/prd=[0-9a-f]*/prd=$(sha_of "$SEED_DIR/seed.doc-serial-epics.md")/")"
+  sl="$(subj_shas "$d" | sed "s/prd@[0-9a-f]*/prd@$(sha_of "$SEED_DIR/seed.doc-serial-epics.md")/")"
+  case "$sl" in *"prd@$(sha_of "$SEED_DIR/seed.doc-serial-epics.md")"*) ;; *) return 1 ;; esac
   sshard "$d" 2 1 2 "$sl"
   run_subj_merge "$1" "$d"
   subj_refused_clean "notarizes prd=" "$d"
 }
 p_subj_stems() { # a shard notarizing three of the four stems
   local d sl; d="$(subj_b3_world)" || return 1
-  sl="$(subj_shas "$d" | sed 's/ architecture-impact=[0-9a-f]*//')"
+  sl="$(subj_shas "$d" | sed 's/ architecture-impact@[0-9a-f]*//')"
+  case "$sl" in *architecture-impact*) return 1 ;; esac
   sshard "$d" 2 1 2 "$sl"
   run_subj_merge "$1" "$d"
   subj_refused_clean "notarizes each of the four stems once" "$d"

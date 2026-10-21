@@ -5,6 +5,8 @@
 # reads. The behavioural arms only: the mutation battery that once proved each of them can fail
 # has been retired; the predicates and worlds live in `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
 # consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
+# The hard-coded `@` expectations go red in a consumer whose pair readers were carried at their pre-`@`
+# version; read such a red as "a reader is carried", not as a merge or join regression.
 #
 # WHY A FIXTURE OF ITS OWN. No existing fixture owns this script: check-24-adversarial-convergence
 # owns the convergence validator the merge's OUTPUT feeds, and it seeds pass files directly, so it
@@ -122,8 +124,8 @@ else
 fi
 p_subj_b3 "$MERGE" && ok "U1: subject shards each stamped MET with 1 MAJOR merge NOT_MET; artifact: = the manifest; artifact_sha: the four stems at disk bytes; ids = map ordinals + cross" \
   || bad "U1: the subject merge did not sum, recompute and notarize the manifest (rc=$RC): $(cat "$MO")"
-p_subj_at "$MERGE" && ok "U1b: subject shards notarizing <stem>@<sha> merge; the merged artifact_sha is the <stem>=<sha> list at disk bytes" \
-  || bad "U1b: the merge did not read @-form shards into an =-form line (rc=$RC): $(cat "$MO")"
+p_subj_at "$MERGE" && ok "U1b: subject shards notarizing the old <stem>=<sha> form merge; the merged artifact_sha is the <stem>@<sha> list at disk bytes" \
+  || bad "U1b: the merge did not read =-form shards into an @-form line (rc=$RC): $(cat "$MO")"
 p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set missing its LAST cross group -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
 p_subj_xcite "$MERGE" && ok "U3: a part shard citing another file's ordinal -> REFUSED by the partition, nothing written" || bad "U3: (rc=$RC) $(cat "$MO")"
 p_subj_sha "$MERGE" && ok "U4: one stem notarized at other bytes (the rest right) -> REFUSED naming that stem, nothing written" || bad "U4: (rc=$RC) $(cat "$MO")"
@@ -402,7 +404,7 @@ refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d" \
   || bad "R6: a heading without a severity word was not refused on its count (rc=$RC): $(cat "$MO")"
 
 # P1: the merged pass is a provenance block the READER accepts. Its artifact_sha is the files-mode
-# list `<stem>=<sha> ...`, which the schema's single-sha pattern refused, so every sharded pass
+# list `<stem>@<sha> ...` (the `@` a current tree's merge emits; `=` before it), which the schema's single-sha pattern refused, so every sharded pass
 # failed validate-provenance-block.sh while the convergence validator passed it. The two
 # near-misses keep the widening honest: a list of ONE (a merge always has two or more stories)
 # and a list carrying a short sha are both refused, and a bare sha is the control that still passes.
@@ -420,11 +422,15 @@ else
     one="$WORK/pb-one.md"; short="$WORK/pb-short.md"; bare="$WORK/pb-bare.md"
     first="$(printf '%s' "${sha_line#artifact_sha: }" | cut -d' ' -f1)"
     sed "s/^artifact_sha:.*/artifact_sha: $first/" "$o" > "$one"
-    sed -E 's/^(artifact_sha: [^ ]+=)[a-f0-9]{64}/\1abc123/' "$o" > "$short"
-    sed "s/^artifact_sha:.*/artifact_sha: ${first#*=}/" "$o" > "$bare"
+    sed -E 's/^(artifact_sha: [^ ]+@)[a-f0-9]{64}/\1abc123/' "$o" > "$short"
+    sed "s/^artifact_sha:.*/artifact_sha: ${first#*@}/" "$o" > "$bare"
+    # The merge in this tree emits `@`; a list that is not, or a near-miss sed that matched
+    # nothing, would score the one-pair and short-sha refusals for the wrong reason.
+    case "$first" in *@*) ;; *) bad "P1: FIXTURE BROKEN -- the B3 merge emitted '$first', not a <stem>@<sha> pair" ;; esac
+    cmp -s "$o" "$short" && bad "P1: FIXTURE BROKEN -- the short-sha near-miss did not apply to the @ list"
     pb "$o"; r_m=$?; pb "$one"; r_1=$?; pb "$short"; r_s=$?; pb "$bare"; r_b=$?
     if [ "$r_m" -eq 0 ] && [ "$r_1" -ne 0 ] && [ "$r_s" -ne 0 ] && [ "$r_b" -eq 0 ]; then
-      ok "P1: the merged pass ($n_pairs <stem>=<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes"
+      ok "P1: the merged pass ($n_pairs <stem>@<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes"
     else
       bad "P1: provenance reader on the merged forms gave merged=$r_m one-pair=$r_1 short-sha=$r_s bare=$r_b (want 0 non-0 non-0 0)"
     fi
@@ -463,6 +469,222 @@ PY
         fi
       fi
     fi
+  fi
+fi
+
+# ---- K: the separator the merge EMITS (--pair-sep). `@` only when every reader installed beside
+# the merge accepts it: (a) validate-adversarial-convergence.sh and (b) partition-subject.sh each
+# carry one `PAIR_SEP='[=@]'` line, and (c) validate-provenance-block.sh --accepts-at-pair exits 0
+# on the schema ITS chain resolves. Each world is a tree laid out by hand in one layout -- `inst`
+# (scripts/ai-dlc/ + .claude/schemas/, as install.sh lays a consumer out) or `core` (core/scripts/
+# + core/schemas/) -- and every run sets AI_DLC_PROJECT_ROOT to the world (hermetic-run exports one).
+# The three old readers are DERIVED from the current files at run time, never vendored: a pinned
+# copy of core's own scripts under core/fixtures/ is a second corpus for the content-keyed arms.
+# The key reads exactly three things, so each derivation removes exactly that one: the old VAC and
+# the old partition-subject are the current files with their one `PAIR_SEP='[=@]'` line deleted;
+# the old schema is the current one with the artifact_sha pattern's `[=@]` turned to `=` and
+# `[^\s=@]` to `[^\s=]` (the pattern at 8df9b8ae6~1). Each derivation must differ from its source
+# by `cmp -s`, and the schema's must make validate-provenance-block.sh --accepts-at-pair exit 1;
+# otherwise K0 is FIXTURE BROKEN. Expectations are HARD-CODED, never read from --pair-sep: a
+# merge that always printed `@` passes K1 and fails every K2 world, so the old worlds are what
+# discriminates the key from a constant.
+KSCH=""
+_d="$SRCDIR"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
+    [ -f "$_c" ] && { KSCH="$_c"; break 2; }
+  done
+  _d="$(dirname "$_d")"
+done
+k_broken=""
+for _f in "$KSCH" "$CONV" "$SRCDIR/partition-subject.sh" "$SRCDIR/validate-provenance-block.sh"; do
+  [ -n "$_f" ] && [ -s "$_f" ] || k_broken="$k_broken ${_f:-<schema not found above $SRCDIR>}"
+done
+KOLD="$(mktemp -d "$WORK/kold.XXXXXX")" || exit 2
+K_OLD_VAC="$KOLD/validate-adversarial-convergence.sh"; K_OLD_PS="$KOLD/partition-subject.sh"; K_OLD_SCH="$KOLD/provenance-block.json"
+# Each derivation checks its anchor BEFORE it edits: an anchor not found exactly as expected is
+# FIXTURE STALE, an edit leaving the file byte-identical is FIXTURE BROKEN; either names the anchor,
+# no world is scored, and neither is ever a pass or a kill.
+k_stale=""; K_A1=""; K_A0=""
+k_drop_sep() { # <src> <out> <name> -- the source with its one PAIR_SEP='[=@]' line deleted
+  local n0
+  n0="$(grep -cxF "PAIR_SEP='[=@]'" "$1")" || n0=0
+  [ "$n0" = 1 ] || { k_stale="$k_stale $3(anchor ^PAIR_SEP='[=@]'\$ found $n0 times, want 1)"; return 0; }
+  grep -vxF "PAIR_SEP='[=@]'" "$1" > "$2"
+  cmp -s "$1" "$2" && k_broken="$k_broken $3(deleting ^PAIR_SEP='[=@]'\$ left the file byte-identical)"
+  return 0
+}
+k_old_schema() { # <src> <out> -- the artifact_sha pattern back to the `=`-only form; must make --accepts-at-pair exit 1
+  local rc r a1 a0
+  python3 - "$1" "$2" <<'PY'
+import sys
+src, out = sys.argv[1], sys.argv[2]
+lines = open(src, encoding="utf-8").read().split("\n")
+hits = [i for i, l in enumerate(lines) if l.lstrip().startswith('"artifact_sha": "^')]
+if len(hits) != 1: sys.exit(3)
+l = lines[hits[0]]
+if l.count("[=@]") != 2 or l.count("[^\\\\s=@]") != 2: sys.exit(3)
+lines[hits[0]] = l.replace("[=@]", "=").replace("[^\\\\s=@]", "[^\\\\s=]")
+open(out, "w", encoding="utf-8").write("\n".join(lines))
+PY
+  rc=$?
+  [ "$rc" = 3 ] && { k_stale="$k_stale old-schema(anchor: one \"artifact_sha\": \"^ pattern line carrying [=@] twice and [^\\\\s=@] twice, not found)"; return 0; }
+  [ "$rc" = 0 ] || { k_broken="$k_broken old-schema(derivation exited $rc)"; return 0; }
+  cmp -s "$1" "$2" && { k_broken="$k_broken old-schema(the [=@] / [^\\\\s=@] edit left the file byte-identical)"; return 0; }
+  # The derivation must BITE: the current validator exits 1 over it, and 0 over its source.
+  r="$(mktemp -d "$WORK/ksch.XXXXXX")" && mkdir -p "$r/core/schemas" && cp "$2" "$r/core/schemas/provenance-block.json" \
+    || { k_broken="$k_broken old-schema(probe root did not build)"; return 0; }
+  AI_DLC_PROJECT_ROOT="$r" bash "$SRCDIR/validate-provenance-block.sh" --accepts-at-pair >/dev/null 2>&1; a1=$?
+  cp "$1" "$r/core/schemas/provenance-block.json"
+  AI_DLC_PROJECT_ROOT="$r" bash "$SRCDIR/validate-provenance-block.sh" --accepts-at-pair >/dev/null 2>&1; a0=$?
+  [ "$a1" = 1 ] && [ "$a0" = 0 ] || k_broken="$k_broken old-schema(--accepts-at-pair exited $a1 on the derivation and $a0 on its source, want 1 and 0)"
+  K_A1="$a1"; K_A0="$a0"
+  return 0
+}
+if [ -z "$k_broken" ]; then
+  k_drop_sep "$CONV" "$K_OLD_VAC" old-VAC
+  k_drop_sep "$SRCDIR/partition-subject.sh" "$K_OLD_PS" old-partition-subject
+  k_old_schema "$KSCH" "$K_OLD_SCH"
+fi
+# k_world <layout inst|core> <swap none|vac|ps|sch> <merge file> -> prints the world root
+k_world() {
+  local w s c
+  w="$(mktemp -d "$WORK/kw-$1-$2.XXXXXX")" || return 1
+  if [ "$1" = inst ]; then s="$w/scripts/ai-dlc"; c="$w/.claude/schemas"
+  else s="$w/core/scripts"; c="$w/core/schemas"; mkdir -p "$w/core/skills/ai-dlc" || return 1; fi
+  mkdir -p "$s" "$c" || return 1
+  cp "$3" "$s/merge-adversarial-shards.sh" && cp "$CONV" "$s/" && cp "$SRCDIR/partition-subject.sh" "$s/" \
+    && cp "$SRCDIR/validate-provenance-block.sh" "$s/" && cp "$SRCDIR/partition-document.sh" "$s/" \
+    && cp "$KSCH" "$c/provenance-block.json" || return 1
+  case "$2" in
+    vac) cp "$K_OLD_VAC" "$s/validate-adversarial-convergence.sh" ;;
+    ps)  cp "$K_OLD_PS" "$s/partition-subject.sh" ;;
+    sch) cp "$K_OLD_SCH" "$c/provenance-block.json" ;;
+  esac || return 1
+  printf '%s' "$w"
+}
+k_dir() { [ "$1" = inst ] && printf 'scripts/ai-dlc' || printf 'core/scripts'; } # <layout>
+# k_ps <world> <layout> [override root] -> the answer, as `@`, `=`, or `BAD(<rc>,<bytes>)`
+k_ps() {
+  local o="$WORK/kps.out" r n
+  AI_DLC_PROJECT_ROOT="${3:-$1}" bash "$1/$(k_dir "$2")/merge-adversarial-shards.sh" --pair-sep > "$o" 2>/dev/null; r=$?
+  n="$(wc -c < "$o" | tr -d ' ')"
+  if [ "$r" -eq 0 ] && [ "$n" = 1 ] && { [ "$(cat "$o")" = "@" ] || [ "$(cat "$o")" = "=" ]; }; then cat "$o"
+  else printf 'BAD(%s,%s)' "$r" "$n"; fi
+}
+# k_differs <world> <layout> <swap> -- the swapped reader really is not the current one (cmp)
+k_differs() {
+  case "$3" in
+    vac) ! cmp -s "$CONV" "$1/$(k_dir "$2")/validate-adversarial-convergence.sh" ;;
+    ps)  ! cmp -s "$SRCDIR/partition-subject.sh" "$1/$(k_dir "$2")/partition-subject.sh" ;;
+    sch) if [ "$2" = inst ]; then ! cmp -s "$KSCH" "$1/.claude/schemas/provenance-block.json"
+         else ! cmp -s "$KSCH" "$1/core/schemas/provenance-block.json"; fi ;;
+  esac
+}
+# Mutants of the key, each a COPY of the merge with one conjunct's line deleted, keyed on the
+# conjunct's own token: the token counts 1 in the merge and 0 in the mutant, and the copy differs.
+k_mut() { # <out> <token>
+  local n0 n1
+  n0="$(grep -cF -- "$2" "$MERGE")" || n0=0
+  sed "/$(printf '%s' "$2" | sed 's/[][\/.*$^]/\\&/g')/d" "$MERGE" > "$1" || return 1
+  n1="$(grep -cF -- "$2" "$1")" || n1=0
+  [ "$n0" = 1 ] && [ "$n1" = 0 ] && ! cmp -s "$MERGE" "$1"
+}
+KMB="$WORK/merge.mut-b.sh"; KMC="$WORK/merge.mut-c.sh"
+k_mut "$KMB" '"$d/partition-subject.sh" 2>/dev/null' || k_broken="$k_broken mutant-b(did-not-apply)"
+k_mut "$KMC" '--accepts-at-pair >/dev/null' || k_broken="$k_broken mutant-c(did-not-apply)"
+# The EMITTER mutant for KE: the run's separator keyed on the VAC sibling alone, while pair_sep() and
+# --pair-sep stay three-keyed -- so every K1/K2/KM arm, which reads --pair-sep, passes it.
+KM593="$WORK/merge.mut-593.sh"
+K593_LINE="$(cat <<'EOF'
+PAIR_OUT='='; grep -qxF "PAIR_SEP='[=@]'" "$(dirname "$0")/validate-adversarial-convergence.sh" && PAIR_OUT=@
+EOF
+)"
+k593_n0="$(grep -c "^PAIR_OUT='='; " "$MERGE")" || k593_n0=0
+sed "s|^PAIR_OUT='='; .*|$(printf '%s' "$K593_LINE" | sed 's/[&|\\]/\\&/g')|" "$MERGE" > "$KM593" || k_broken="$k_broken mutant-593(sed failed)"
+k593_n1="$(grep -cxF -- "$K593_LINE" "$KM593")" || k593_n1=0
+[ "$k593_n0" = 1 ] && [ "$k593_n1" = 1 ] || k_broken="$k_broken mutant-593(anchor ^PAIR_OUT='='; found $k593_n0 times, mutant line $k593_n1 times; want 1 and 1)"
+cmp -s "$MERGE" "$KM593" && k_broken="$k_broken mutant-593(byte-identical to the merge)"
+if [ -n "$k_stale" ] || [ -n "$k_broken" ]; then
+  [ -z "$k_stale" ] || bad "K0: FIXTURE STALE -- anchor not found:$k_stale; re-anchor the derivation, no K arm was asserted"
+  [ -z "$k_broken" ] || bad "K0: FIXTURE BROKEN -- missing or unbuildable:$k_broken; no K arm was asserted"
+else
+  ok "K0: three old readers derived from the current files -- VAC and partition-subject each with its one PAIR_SEP='[=@]' line deleted (differ by cmp), the schema's artifact_sha pattern turned back to '='; validate-provenance-block.sh --accepts-at-pair exits $K_A1 on the derived schema and $K_A0 on its source"
+  for L in inst core; do
+    # K1: current readers -> `@`.
+    w="$(k_world "$L" none "$MERGE")" && a="$(k_ps "$w" "$L")" || a="BUILD"
+    [ "$a" = "@" ] && ok "K1-$L: $L layout, every reader current -> --pair-sep prints exactly one byte '@', exit 0" \
+      || bad "K1-$L: $L layout with current readers gave '$a' (want @)"
+    # K2: ONE old reader, derived from the current file (K0) -> `=`, each world first proven to differ from the current one.
+    for S in vac ps sch; do
+      w="$(k_world "$L" "$S" "$MERGE")" || { bad "K2$S-$L: FIXTURE BROKEN -- world did not build"; continue; }
+      if ! k_differs "$w" "$L" "$S"; then bad "K2$S-$L: FIXTURE BROKEN -- the old-$S world is byte-identical to the current one"; continue; fi
+      a="$(k_ps "$w" "$L")"
+      [ "$a" = "=" ] && ok "K2$S-$L: $L layout, the old $S reader (derived from the current file, differs by cmp) -> --pair-sep prints '='" \
+        || bad "K2$S-$L: $L layout with the old $S reader gave '$a' (want =)"
+    done
+    # KM: each mutant prints `@` in exactly its own old world, and the same as the fix everywhere else.
+    for MU in b c; do
+      [ "$MU" = b ] && { mf="$KMB"; own=ps; } || { mf="$KMC"; own=sch; }
+      row=""
+      for S in none vac ps sch; do
+        w="$(k_world "$L" "$S" "$mf")" && row="$row $S=$(k_ps "$w" "$L")" || row="$row $S=BUILD"
+      done
+      if [ "$own" = ps ]; then want=" none=@ vac== ps=@ sch=="; else want=" none=@ vac== ps== sch=@"; fi
+      [ "$row" = "$want" ] && ok "KM$MU-$L: mutant drop-($MU) prints '@' in the old-$own world only (killed by K2$own-$L, no other arm moves):$row" \
+        || bad "KM$MU-$L: mutant drop-($MU) gave$row (want$want)"
+    done
+  done
+  # K3: an override root carrying the OLD schema in core/schemas, the install carrying the new ->
+  # the validator's chain takes the override's first, so `=`. Its twin, an override root with NO
+  # schema, falls through to the install's and prints `@`: the override is what moved the answer.
+  w="$(k_world inst none "$MERGE")"; ov="$(mktemp -d "$WORK/kov.XXXXXX")"; ov0="$(mktemp -d "$WORK/kov0.XXXXXX")"
+  mkdir -p "$ov/core/schemas" && cp "$K_OLD_SCH" "$ov/core/schemas/provenance-block.json"
+  a="$(k_ps "$w" inst "$ov")"; a0="$(k_ps "$w" inst "$ov0")"
+  [ "$a" = "=" ] && [ "$a0" = "@" ] && ok "K3: AI_DLC_PROJECT_ROOT with the old schema in core/schemas over a current install -> '='; the same override with no schema -> '@'" \
+    || bad "K3: override with the old schema gave '$a' (want =), override with none gave '$a0' (want @)"
+  # KE: the EMITTER, end to end. K1-K3 read --pair-sep; this drives the merge itself (subject mode)
+  # once per world and reads the separator of every pair in the artifact_sha list it wrote. One
+  # subject world serves every drive: each output is moved aside, so the next drive writes afresh.
+  # Expectations are hard-coded: `@` with every reader current, `=` in each old-reader world.
+  KE_SD="$(new_subj_world)" && {
+    for k in $(cut -f1 "$(subj_root "$KE_SD")/subject.map"); do sshard "$KE_SD" "$k" 0 "$k"; done
+    for k in $(subj_xkeys "$KE_SD"); do sshard "$KE_SD" "$k" 0 "1, 2"; done; }
+  # k_drive <world> <merge in that world> -> `@` or `=` when every pair carries that one separator, else BAD(...)
+  k_drive() {
+    local o lst tok s seps="" n=0 r
+    AI_DLC_PROJECT_ROOT="$1" bash "$2" --subject 9 "$KE_SD" > "$WORK/ke.out" 2>&1; r=$?
+    o="$(subj_out_of "$KE_SD")"
+    { [ "$r" -eq 0 ] && [ -f "$o" ]; } || { printf 'BAD(rc=%s:%s)' "$r" "$(head -1 "$WORK/ke.out")"; return 0; }
+    lst="$(sed -n 's/^artifact_sha://p' "$o" | head -1)"
+    mv "$o" "$(mktemp "$WORK/ke-out.XXXXXX")" || { printf 'BAD(mv)'; return 0; }
+    for tok in $lst; do
+      n=$((n + 1)); case "$tok" in *@*) s=@ ;; *=*) s='=' ;; *) s='?' ;; esac
+      case "$seps" in *"$s"*) ;; *) seps="$seps$s" ;; esac
+    done
+    if [ "$n" -ge 2 ] && [ "${#seps}" = 1 ]; then printf '%s' "$seps"; else printf 'BAD(pairs=%s,seps=%s)' "$n" "$seps"; fi
+  }
+  ke_n="$(ls "$KE_SD" 2>/dev/null | grep -c '^cross.*\.md$')" || ke_n=0
+  if [ -z "$KE_SD" ] || [ "$ke_n" -lt 1 ]; then
+    bad "KE: FIXTURE BROKEN -- the subject world for the end-to-end drives did not build"
+  else
+    for L in inst core; do
+      row=""
+      for S in none vac ps sch; do
+        w="$(k_world "$L" "$S" "$MERGE")" && row="$row $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || row="$row $S=BUILD"
+      done
+      want=" none=@ vac== ps== sch=="
+      [ "$row" = "$want" ] && ok "KE-$L: $L layout, the merge itself (subject mode) writes every artifact_sha pair with '@' when every reader is current and '=' in each old-reader world:$row" \
+        || bad "KE-$L: the merge's emitted separators were$row (want$want)"
+      # KEM: the line-593 mutant (separator keyed on the VAC sibling alone) emits `@` in the
+      # old partition-subject and old schema worlds, so KE-$L kills it there.
+      mrow=""
+      for S in ps sch; do
+        w="$(k_world "$L" "$S" "$KM593")" && mrow="$mrow $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || mrow="$mrow $S=BUILD"
+      done
+      [ "$mrow" = " ps=@ sch=@" ] && ok "KEM-$L: the line-593 mutant emits '@' in the old partition-subject and old schema worlds (killed by KE-$L, which wants '=' there):$mrow" \
+        || bad "KEM-$L: the line-593 mutant gave$mrow (want ps=@ sch=@); KE-$L does not kill it"
+    done
   fi
 fi
 echo

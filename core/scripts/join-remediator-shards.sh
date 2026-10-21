@@ -2357,7 +2357,10 @@ fi
 ASM_LINE=""
 SUBJ_BEFORE=""; SUBJ_AFTER=""
 if [ "$SUBJMODE" = 1 ]; then
-  SUBJ_BEFORE="$(awk -F'\t' '$1 == "sha" { printf " %s=%s", $2, $3 }' "$SUBJ_REC")"
+  # The pair separator: `@` only when the sibling merge's --pair-sep exits 0 printing exactly `@`
+  # (an old merge prints REFUSED and exits 2); anything else is `=`. Asked once.
+  if JR_PS="$(bash "${JR_SCRIPT_DIR}/merge-adversarial-shards.sh" --pair-sep 2>/dev/null)" && [ "$JR_PS" = "@" ]; then JR_SEP='@'; else JR_SEP='='; fi
+  SUBJ_BEFORE="$(awk -F'\t' -v sep="$JR_SEP" '$1 == "sha" { printf " %s%s%s", $2, sep, $3 }' "$SUBJ_REC")"
   ASM_LINE="$(bash "$PSUBJ" --assemble "$SHARD_DIR" 2>&1)" || {
     printf '%s\n' "$ASM_LINE" >&2
     die "the sections of the sprint ${SPRINT} subject did not assemble; no repair record was written"
@@ -2366,7 +2369,7 @@ if [ "$SUBJMODE" = 1 ]; then
     _rel="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && $1 == "file:" && $2 == s { print $3 }' s="$_st" "${JR_ROOT}/${_srm}")"
     if command -v shasum >/dev/null 2>&1; then _h="$(shasum -a 256 "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"
     else _h="$(sha256sum "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"; fi
-    SUBJ_AFTER="${SUBJ_AFTER} ${_st}=${_h}"
+    SUBJ_AFTER="${SUBJ_AFTER} ${_st}${JR_SEP}${_h}"
   done
 elif [ "$DOCMODE" = 1 ]; then
   # The document's sha before is the one the split recorded (the bytes the shards were cut from);

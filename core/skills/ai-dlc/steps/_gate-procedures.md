@@ -395,7 +395,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    records it in the subject manifest, and every later sub-pass passes the manifest's sha. The
    seats edit nothing, as above, and the party repair below applies their findings. Before wave 1 the lead writes the sha256 of every subject file, one `<stem>=<sha>`
    line each, to `_bmad-output/planning-artifacts/s<N>/shards/requirements-party-repair/anchor`
-   — the bytes the seats review, and the split anchor of the party repair.
+   — the bytes the seats review, and the split anchor of the party repair. Write the separator as
+   `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`,
+   otherwise `=`; both are accepted.
    **Party repair (requirements subject case).** After the round's join, the lead dispatches
    the seats' findings to remediators exactly as "Adversarial repair dispatch" below shards the
    requirements subject, with `--pass party`, the shard dir
@@ -500,7 +502,7 @@ tool_use_id: <NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skil
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 artifact: <path of the artifact you reviewed> # what this pass reviewed.
-artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem>=<sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem>=<sha>` per story; a subject-axis shard, cross included, carries one `<stem>=<sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem>=<sha>` entries.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem><sep><sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem><sep><sha>` per story; a subject-axis shard, cross included, carries one `<stem><sep><sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. Write `<sep>` as `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`; both are accepted. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem><sep><sha>` entries.
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
@@ -538,6 +540,9 @@ SKILL_INVOCATION_PROVENANCE_END -->
    `<stem>=<sha>` token for each of the four subject stems, each equal to that file's sha256 on
    disk, and one `sections:` line citing map ordinals on every finding (a part shard only its own,
    a cross shard two or more, any of them). The merge refuses a shard missing any of them.
+   Write each token's separator as `@` only if
+   `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`;
+   both are accepted.
    **A subject that maps to one part** (`partition-subject.sh --map` exits 3) is never merged:
    `merge-adversarial-shards.sh --subject` refuses it, and `--elicitation` has no single-adversary
    form. ONE adversary, briefed `shard: none (serial-document)` (Rule 28 exception 4), runs
@@ -714,7 +719,9 @@ subject manifest, never re-derived. The map prints
 `<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part. A subject that maps to one
 part gets ONE adversary whose brief carries `shard: none (serial-document)` (Rule 28 exception
 4); it writes `requirements-adversarial-p<M>.md` itself, with `artifact:` = the subject manifest
-and `artifact_sha:` as one `<stem>=<sha>` entry per subject file. Otherwise dispatch, in waves (Rule 28, "Split dispatch"), one `adversary` per part plus one
+and `artifact_sha:` as one `<stem>=<sha>` entry per subject file (write the separator as `@`
+only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise
+`=`; both are accepted). Otherwise dispatch, in waves (Rule 28, "Split dispatch"), one `adversary` per part plus one
 cross-part shard per cross group. Each part shard gets its ordinal, its file, its line range and heading, the
 line `shard: <ordinal>/<K> <file-stem> <heading>`, and the output path `<that dir>/<ordinal>.md`;
 it reads its line range of the REAL file, read-only. Each cross-part shard gets
@@ -723,7 +730,9 @@ to read — across files as well as within one — with its group's pairs as its
 and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one
 `sections:` line citing map ordinals (a part shard only its own, a cross shard two or more, any of them).
 Every shard notarizes `artifact:` = the subject manifest and `artifact_sha:` as one
-`<stem>=<sha>` entry per subject file, as the files are on disk. Beat-join every shard path with
+`<stem>=<sha>` entry per subject file, as the files are on disk. Write the separator as `@` only
+if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`;
+both are accepted. Beat-join every shard path with
 `--complete --shard-header convergence`, then run `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> <that dir>`.
 It re-derives the ordinal set from `partition-subject.sh --map` and the groups from `--cross-groups`, refuses (exit 2, `REFUSED:`,
 nothing written) unless every ordinal and every cross group delivered exactly once, every
@@ -819,6 +828,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    file, every stem on both sides. `artifact_bytes_before` / `artifact_bytes_after` are the sums
    over the subject files, so `CUT_SCOPE` compares summed bytes. `REVERT_REPAIR` matches per
    stem: every stem's after sha equals that stem's sha in one earlier pass's `artifact_sha`.
+   Write the separator as `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep`
+   prints exactly `@`, otherwise `=`; both are accepted.
 
    **THE CYCLE GETS ONE SANCTIONED RESOLUTION; A SECOND MUST BE ANCHORED.** Arms C, D and E
    each STOP the cycle and all three take this same exit, so a cycle stopped and released
@@ -857,7 +868,9 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
       the pass directory, with `artifact:`, `artifact_sha_before:` and `artifact_sha_after:`.
       Each repair's before is the previous repair's after, from the notarized sha to the disk sha.
       For the requirements subject the repair is sharded as "Adversarial repair dispatch" shards
-      that subject, and each side is the per-stem `<stem>=<sha>` list, chained per stem.
+      that subject, and each side is the per-stem `<stem>=<sha>` list, chained per stem. Write
+      the separator as `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep`
+      prints exactly `@`, otherwise `=`; both are accepted.
    2. A scope change — a later step rewording a capability: append a `(decision)` entry to the
       spec's `.memlog.md` and re-render `SPEC.md` through `bmad-spec`; update the `prd.md`
       sprint-block FR in the same dispatch.
@@ -1056,7 +1069,9 @@ in this order:
 1. **Split.** `scripts/ai-dlc/partition-subject.sh --split <N>
    _bmad-output/planning-artifacts/s<N>/shards/requirements-repair-p<M>/ --base <base sha>
    --expect-sha "<stem>=<sha> ..."`, naming every subject stem once with the sha the pass being
-   repaired reviewed (or `--expect-sha @<file>` holding that list). It delegates per file and
+   repaired reviewed (or `--expect-sha @<file>` holding that list). Write the separator as `@`
+   only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise
+   `=`; both are accepted. It delegates per file and
    writes one section file per part of a file mapped into sections, under
    `<that dir>/<stem>/sections/`; it
    refuses when any subject file is not the bytes that pass reviewed. A WHOLE-FILE part — the
@@ -1088,7 +1103,8 @@ in this order:
    split (a whole-file part is not reassembled), and
    writes the one record `_bmad-output/planning-artifacts/s<N>/requirements-repair-p<M>.md`,
    whose `artifact:` is the subject manifest and whose sha lines are per-stem `<stem>=<sha>`
-   lists.
+   lists. The join writes `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep`
+   prints exactly `@`, otherwise `=`; both are accepted.
 4. **Cross-part and out-of-scope.** The serial remediator then edits the ASSEMBLED files in
    place and APPENDS its entries to the joined record, opening them with its own `- artifact:`
    (the subject manifest) and per-stem `- artifact_sha_before:` / `- artifact_sha_after:` lists,

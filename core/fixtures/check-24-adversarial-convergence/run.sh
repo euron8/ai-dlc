@@ -2491,11 +2491,9 @@ K3_POST=2026-01-01T00:00:00Z; K3_LATE=2026-12-01T00:00:00Z
 K3_BUILT=1
 w="$(k3_world k3-subject "$K3_POST")" && k3_subject_pass "$w" "$K3S" || K3_BUILT=0
 w="$(k3_world k3-document "$K3_POST")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
-# k3-atform: k3-subject with `@`-form shards. The merge must emit the `=` list (readers first), and
-# the terminal pass is then rewritten to `@` so K3's own pair split reads the new form.
+# k3-atform: k3-subject with `@`-form shards. The merge in this tree emits the `@` list, so K3's own
+# pair split reads the new form straight off the merge's output.
 w="$(k3_world k3-atform "$K3_POST")" && k3_subject_pass "$w" "$K3S" at \
-  && grep -q '^artifact_sha: product-brief=' "$w/$K3PA/s9/requirements-adversarial-p1.md" \
-  && sed -i.b '/^artifact_sha:/s/=/@/g' "$w/$K3PA/s9/requirements-adversarial-p1.md" && rm -f "$w/$K3PA/s9/"*.b \
   && grep -q '^artifact_sha: product-brief@' "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
 w="$(k3_world k3-wrongset "$K3_POST")" && k3_subject_pass "$w" "$K3S" \
   && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
@@ -2603,8 +2601,8 @@ j2s_rec() {
     done
     printf -- '- disposition: repaired\n- edit: the subject\n- derivation: the seeded repair, shasum -a 256 each file\n'; } > "$f"
 }
-j2s_sub() { # <list> <stem> <sha> -> the list with that stem's sha replaced
-  local t o=""; for t in $1; do case "$t" in "$2="*) t="$2=$3" ;; esac; o="$o${o:+ }$t"; done; printf '%s' "$o"
+j2s_sub() { # <list> <stem> <sha> -> the list with that stem's sha replaced, in the pair's own separator
+  local t o=""; for t in $1; do case "$t" in "$2="*) t="$2=$3" ;; "$2@"*) t="$2@$3" ;; esac; o="$o${o:+ }$t"; done; printf '%s' "$o"
 }
 J2S_FAKE="$(printf '%064d' 7)"
 w="$(j2s_world j2s-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || k3w_bad j2s-nochain

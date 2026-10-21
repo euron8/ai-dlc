@@ -118,7 +118,7 @@ series stamped `EXIT_CONDITION_MET` is on the record only through these two shas
 arm J2 chains them from the notarized sha to the bytes on disk. Take both with
 `shasum -a 256 <file>`. As the SERIAL remediator after a join, append your entries to the
 joined record opening with your own triple (for the requirements subject, the manifest and
-per-stem lists), its before equal to the join's after.
+per-stem lists in the separator the join wrote), its before equal to the join's after.
 
 ```
 - artifact: <the repaired file, project-relative>

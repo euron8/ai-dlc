@@ -7,6 +7,12 @@
 core/scripts/validate-adversarial-convergence.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
+# Subject mode writes its pair separator from the sibling merge's --pair-sep, whose key reads the
+# convergence validator and partition-subject above, and validate-provenance-block.sh with the schema
+# its chain resolves. SJ1o drives a copy of the join beside the vendored pre-@ merge in this directory.
+core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json
 core/scripts/validate-artifact-derivations.sh
 # The record-mode seal check runs whenever the library sits beside the join; without it here the
 # sandbox takes the absent-sibling path and the --sources/--escalations arms never reach the shipped one.
