@@ -60,15 +60,20 @@
 # text out of a markdown file from becoming an arbitrary command. This hook decides
 # only WHICH pairs to submit; it never decides whether one passes.
 #
-# IT BLOCKS ONLY ON A MISMATCH IT CAN NAME. Every other path exits 0 and prints
-# nothing: no jq, not a Write/Edit, not markdown, no fence in the file, no validator
-# installed (a consumer that has not pulled it yet), an unusable temp dir, or the
-# validator itself failing to start. A capture hook that can fail a tool call for an
+# IT BLOCKS ONLY ON A MISMATCH IT CAN NAME. Every other path exits 0, and every one
+# of them but the supersession refusal below prints nothing: no jq, not a Write/Edit,
+# not markdown, no fence in the file, no validator installed (a consumer that has not
+# pulled it yet), an unusable temp dir, or the validator itself failing to start. The
+# validator refusing the supersession input also exits 0, and says so on stdout (see
+# OUTPUT), because a fail-open the model never hears of reads exactly like a pass. A capture hook that can fail a tool call for an
 # infrastructure reason makes the pipeline's ability to write a file depend on the
 # hook's ability to run, and that is not a trade this check is worth.
 #
 # OUTPUT
-# - stdout: nothing, ever.
+# - stdout: nothing, except one path -- exit 0 with a PostToolUse `additionalContext` JSON
+#   object, when the validator refused the supersession input (a `REFUSED:
+#   AI_DLC_DERIV_SUPERSEDE_FROM=` line). It names the refusal, says the edit was NOT checked,
+#   and names the gate as the backstop. stderr is empty on that path.
 # - stderr + exit 2: the validator's own FAIL text, with the mask path rewritten to
 #   the real file, when a pair this edit wrote does not reproduce, is refused by the
 #   read-only allowlist, or opens a fence it never closes. The headline is class-neutral
@@ -507,8 +512,12 @@ if command -v git >/dev/null 2>&1; then
   _dr="$(deriv_file_root)" && [ -n "$_dr" ] && DERIV_ROOT="$_dr"
 fi
 
+# THE REAL FILE RIDES ALONG. The mask blanks the later copy that supersedes a touched earlier pair
+# in a review or repair record, and sits under a `mktemp -d` parent where `is_record` never holds,
+# so the validator reads supersession from $FILE itself -- its header says how, and why the two
+# must join line for line.
 OUT=$( ( cd "$DERIV_ROOT" 2>/dev/null && AI_DLC_PROJECT_ROOT="$DERIV_ROOT" \
-         bash "$VALIDATOR" "$MASK" ) 2>&1 )
+         AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR" "$MASK" ) 2>&1 )
 RC=$?
 
 # 0 reproduces and 1 is a verdict about the text. 2 has TWO meanings, and the exit status
@@ -520,11 +529,36 @@ RC=$?
 #   - anything else at 2 is the validator refusing to START -- bad usage, a root it cannot
 #     resolve, a target that is not there. That is an infrastructure state, not an author's
 #     mistake, and it stays exit 0 for the reason in the header.
+#   - a `^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=` line is the validator refusing the supersession
+#     input: either its join guard (the mask did not carry the real file's commands at the same
+#     lines) or its pre-check (not exactly one file argument, or an unreadable real file). Both
+#     are a disagreement between this hook and the validator that no author can repair, so it is
+#     infrastructure and exits 0 like a refusal to start -- matched BEFORE the generic REFUSED
+#     arm, which would otherwise show it under the "did not run to completion" headline. The
+#     sentence is neutral between the two and quotes the validator's own line, which names which.
+#     It is NOT silent: a silent fail-open reads exactly like a pass, so one line names the
+#     refusal, says this edit was not checked, and names the gate as the backstop. It goes out
+#     as PostToolUse additionalContext JSON on stdout, NOT stderr: on exit 0 a PostToolUse
+#     hook's stderr does not reach the model, so a stderr line here would be the silent
+#     fail-open it exists to prevent.
 # Any other status (a validator that crashed) is infrastructure too.
 UNRUN_SEEN=0
 case "$RC" in
   1) ;;
-  2) grep -qE '^(UNRUN|REFUSED):' <<<"$OUT" || exit 0
+  2) if _jg="$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=' <<<"$OUT")"; then
+       _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+       if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+       else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+       _JG_MSG="AI/DLC derivation capture: the write-time check could not run -- the validator refused the supersession input ($_jg); this edit was NOT checked, and the gate re-runs the file."
+       jq -n --arg context "$(ai_dlc_provenance_wrap ai-dlc-derivation-capture PostToolUse "$_JG_MSG")" '{
+         hookSpecificOutput: {
+           hookEventName: "PostToolUse",
+           additionalContext: $context
+         }
+       }' 2>/dev/null || true
+       exit 0
+     fi
+     grep -qE '^(UNRUN|REFUSED):' <<<"$OUT" || exit 0
      UNRUN_SEEN=1 ;;
   *) exit 0 ;;
 esac

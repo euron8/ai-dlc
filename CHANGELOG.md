@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.905.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13, cluster derivations. It closes BL-727, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-derivation-capture.sh` and `core/scripts/validate-artifact-derivations.sh`. No role or step text changes.
+
+### BL-727 — the derivation capture hook judges a review or repair record's supersession at write time exactly as the gate does
+
+The capture hook validates a masked copy under a `mktemp -d` parent, so the record test never held there and the mask blanked the later copy that supersedes a touched earlier pair. Re-deriving a stale figure in a review or repair record was therefore refused at write time while the gate passed it.
+
+- `validate-artifact-derivations.sh` takes a new input, `AI_DLC_DERIV_SUPERSEDE_FROM`. When it is set, the supersession pre-pass reads the record's parent and basename, and every later copy, from that real file's own block walk. When it is unset, behaviour is byte-identical.
+- A join guard requires every command event of the argument to appear at the same line and with the same bytes in the real file. A mismatch, an unreadable file, or anything other than one file argument is refused with exit 2 and `REFUSED`, and no verdict is produced.
+- `ai-dlc-derivation-capture.sh` passes the real file as `AI_DLC_DERIV_SUPERSEDE_FROM`. A join-guard `REFUSED` is drift between the hook and the validator that no author can repair, so the hook exits 0 as infrastructure and tells the model so through `additionalContext`. The fail-open is reported to the model, never silent, and the gate still re-runs the file.
+- `derivation-capture` gains arms A54 to A61, one per row of the BL-727 contract: four re-derivations in a review or repair record that the gate passes (exit 0, silent), and four writes the gate fails (exit 2, `FAIL (STALE)` at the cited line, gate return code 1). The four failing writes are a stale block with no later copy, a stale later copy, a live document, and a record-named file outside `s<N>/`. A62 and A63 hold the validator's join guard directly: a non-joining `AI_DLC_DERIV_SUPERSEDE_FROM` is refused at exit 2 with no verdict, and a self-join supersedes. A64 asserts the fail-open notice arrives as PostToolUse `additionalContext` on stdout, with stderr empty. A65 and A66 hold the validator's pre-check (two file arguments, a missing `AI_DLC_DERIV_SUPERSEDE_FROM` file: exit 2, `REFUSED`, no verdict), and A67 is its near-miss (the same two arguments with the variable unset run the normal walk).
+- Mutants M1 to M6 run as copies in their own projects, guarded by `cmp -s`, behind an unmutated control with positive conjuncts. They are: the hook dropping the environment variable (rows 1 to 4 go red), the record test read off the mask's path, the join guard removed, the hook's join-guard arm removed, that arm made silent on both stdout and stderr, and the validator's pre-check removed.
+- Fixture repair carried here: `artifact-derivations`' `q-rawscan` mutant is re-anchored, because the validator's pre-pass now reads `"$sev" "$TMP_EV"` as its first input and the mutant's second expression no longer matched, so the half-applied mutant scored as applied and was killed by the wrong arm set. `mut_copy` now refuses a mutant if any one of its sed expressions changes nothing, proved by `mc-noop` and `mc-noop-first` with `mc-control` near-misses.
+- BL-727's receipt, scored under `set -uo pipefail`: the fix 0, the base hook and validator 1, the mirror-only design 1, forced supersession 4, and a Write spelling under `s12/*-adversarial-p3.md` 0.
+
+### Cost
+
+One additional full pass over the real file, only on a hook call whose edit carries a derived fence; no extra validator process. Processes per such call 37 -> 41 (+2 awk, +1 mktemp, +1 mv) on a seeded two-command record; a call without a fence is unchanged at 11. The BL-727 row-1 edit itself (base 58, tip 41) is not comparable: base takes the STALE refusal path and the tip the supersession path, so it is not a saving.
+
 ## [0.904.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13, cluster review-roles. It closes BL-738, BL-741, BL-742, BL-746 and BL-747, closes no `PC-` id and files BL-750. Net for this release: 5 closed, 1 filed = 4. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`. Rulebook text that lands with the reconcile PR: `core/team-roles/qa.md`, `code-reviewer.md`, `adversary.md`, `architect.md`, `dev.md`, `pm.md`, `remediator.md` and `tea.md`, plus `core/skills/ai-dlc/steps/_gate-procedures.md` and `architecture.md`.

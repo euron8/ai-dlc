@@ -623,6 +623,9 @@ mut_copy() { # $1 dest  $2..  sed expressions -> 0 mutated, 1 DID NOT APPLY
   local e
   for e in "$@"; do
     "${SED:-sed}" "$e" "$dest" > "$dest.new" 2>/dev/null || { rm -f "$dest.new"; return 1; }
+    # EVERY expression must change the file: a half-applied mutant still differs from the
+    # validator as a whole, so only a per-expression comparison can see one that matched nothing.
+    if cmp -s "$dest" "$dest.new"; then rm -f "$dest.new"; return 1; fi
     mv "$dest.new" "$dest"
   done
   if cmp -s "$VALIDATOR" "$dest"; then return 1; fi
@@ -1459,7 +1462,27 @@ q_mutant q-firstwins "q-laterstale q-sup" 's|c = substr(r, i + 3); last\[c\] = l
 q_mutant q-quiet "q-laterstale q-sup" '/printf .SUPERSEDED: %s:%s by /d'
 q_mutant q-rawscan "q-text" \
   's|c = substr(r, i + 3); last\[c\] = ln }; next }|} if (match($0, /[$] /)) last[substr($0, RSTART + 2)] = FNR; next }|' \
-  's|"\$TMP_EV" "\$TMP_EV" > "\$TMP_EV.sup"|"$f" "$TMP_EV" > "$TMP_EV.sup"|'
+  's|"\$sev" "\$TMP_EV" > "\$TMP_EV.sup"|"$sf" "$TMP_EV" > "$TMP_EV.sup"|'
+
+# mut_copy's per-expression refusal, proved able to fire. A real expression beside one that
+# matches nothing still changes the file as a whole, which is all the helper once compared, so
+# the half-applied mutant must now be REFUSED. Its twin applies the same real expression alone
+# and then beside a second real one, so a helper that refuses everything cannot pass.
+RE_REAL='s|^  if \[ -n "\$sup" \]; then$|  if false; then|'
+RE_REAL2='/printf .SUPERSEDED: %s:%s by /d'
+RE_NOOP='s|ZZ_NO_SUCH_TOKEN_ZZ|x|'
+if mut_copy "$Q/mc-real-$VBASE" "$RE_REAL"; then
+  ok "mc-control         one real expression applies"
+else bad "mc-control one real expression did NOT apply -- the refusal arm below proves nothing"; fi
+if mut_copy "$Q/mc-two-$VBASE" "$RE_REAL" "$RE_REAL2"; then
+  ok "mc-control-two     two real expressions both apply"
+else bad "mc-control-two two real expressions did NOT apply -- the helper refuses everything"; fi
+if mut_copy "$Q/mc-noop-$VBASE" "$RE_REAL" "$RE_NOOP"; then
+  bad "mc-noop SCORED -- a real expression beside one that matches nothing was accepted as applied"
+else ok "mc-noop REFUSED      DID NOT APPLY: a real expression plus a no-op expression is not a mutation"; fi
+if mut_copy "$Q/mc-noop-first-$VBASE" "$RE_NOOP" "$RE_REAL"; then
+  bad "mc-noop-first SCORED -- a no-op expression BEFORE a real one was accepted as applied"
+else ok "mc-noop-first REFUSED DID NOT APPLY: the order of the no-op expression does not matter"; fi
 
 echo
 if [ "$fails" -gt 0 ]; then
