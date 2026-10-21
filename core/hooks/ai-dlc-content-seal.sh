@@ -30,6 +30,12 @@
 #  - MultiEdit is in the matcher and was not exercised: the measured harness offered no MultiEdit tool.
 #  - A seal attests the channel of the LAST write, not who should have made it: any Write or Edit,
 #    by any actor, re-seals the file.
+#  - REVIEW SHARDS (`docs/reviews/s<N>/shards/<idx>-code-review-|-qa-validation-<sha12>[-p<M>]/*.md`)
+#    sit outside the state dir, usually in a linked worktree. Their row is written into THIS
+#    session's LOG_DIR ledger; the reader (`content-seal.sh --review-shard`) finds the ledger through
+#    the shard's git common dir. The two name the same file only when CLAUDE_PROJECT_DIR is the main
+#    checkout (the common dir's parent) and AI_DLC_STATE_DIR is spelled the same in both. When they
+#    differ the reader finds no row and REFUSES -- the conservative direction, never an acquittal.
 #  - A sealed-set file that has never had a Write or Edit carries no row and is never compared,
 #    except a gate part, which `--merge` refuses when this tree's ledger holds a tool seal row older
 #    than the part's nonce. A failed append here is silent, so it reads the same as a Bash-written
@@ -81,10 +87,27 @@ IFS="$US" read -r TOOL_NAME FP AGENT_ID SESSION_ID TOOL_USE_ID TRANSCRIPT <<< "$
 case "$TOOL_NAME" in Write|Edit|MultiEdit) ;; *) exit 0 ;; esac
 [ -n "$FP" ] || exit 0
 
+case "$FP" in /*) HASH_PATH="$FP" ;; *) HASH_PATH="${PROJECT_DIR}/${FP}" ;; esac
+if command -v seal_review_locate >/dev/null 2>&1; then
+  # REVIEW SHARDS (content-seal.sh header). A path naming `docs/reviews/s<N>/shards/` is never
+  # placed by seal_norm: it lives in whatever tree the seat wrote it (the frozen dev worktree), and
+  # its row goes into THIS session's LOG_DIR ledger, project-root-relative, with that tree's root.
+  case "$FP" in
+    */docs/reviews/s[0-9]*/shards/*/*.md|docs/reviews/s[0-9]*/shards/*/*.md)
+      [ -f "$HASH_PATH" ] || exit 0
+      seal_review_locate "$HASH_PATH" || exit 0
+      seal_sealed_review "$_RV_REL" || exit 0
+      if [ -n "$AGENT_ID" ]; then ACTOR=agent; else ACTOR=session; fi
+      mkdir -p "${LOG_DIR}/planning-artifacts" 2>/dev/null || exit 0
+      seal_review_record_row "${LOG_DIR}/planning-artifacts/.artifact-writes.jsonl" "$HASH_PATH" "$ACTOR" \
+        "$AGENT_ID" "$SESSION_ID" "$TOOL_NAME" "$TOOL_USE_ID" "$TRANSCRIPT" 2>/dev/null
+      exit 0 ;;
+  esac
+fi
+
 seal_norm "$FP" "$STATE_DIR_NAME" "$LOG_DIR" || exit 0
 seal_sealed "${SEAL_REL#*/}" || exit 0
 
-case "$FP" in /*) HASH_PATH="$FP" ;; *) HASH_PATH="${PROJECT_DIR}/${FP}" ;; esac
 [ -f "$HASH_PATH" ] || exit 0
 SHA="$(seal_sha "$HASH_PATH")"
 [ -n "$SHA" ] || exit 0

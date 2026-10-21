@@ -245,7 +245,9 @@
 #                      the In-Flight row's `dispatched-at`. No single ledger row: exit 64.
 #
 #   --mark             the SEAT's closing call, never a beat: appends its sealed marker
-#                      `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`.
+#                      `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`; on a
+#                      review shard `seat-complete: <step> <seat> <shard> key=<k> sha=<hex> findings=<n>`
+#                      (header: "--mark", term 4).
 #   --mark-repair      the same for a repair record: `repair-complete: serial <pass> sha=<hex>`.
 #   --complete         DELIVERED also needs a last line `seat-complete: ` whose sha= matches
 #                      (a marker with no sha= must instead have settled).
@@ -590,6 +592,7 @@ seal_of() {
 # than stacks, and drops trailing blank lines. It writes the body to a sibling temp file, takes
 # that file's content_hash, appends
 #   seat-complete: <step> <seat> <shard>... sha=<hex> findings=<n>
+#   seat-complete: <step> <seat> <shard> key=<k> sha=<hex> findings=<n>     (a review shard, term 4)
 #   repair-complete: serial <pass> sha=<hex>
 # (`sha=` BEFORE `findings=`: both merges anchor `findings=[0-9]+[ \t]*$` at end of line), and
 # moves it over the file only once the beat's own has_marker and seal_of read it as sealed. A
@@ -609,6 +612,24 @@ seal_of() {
 #   3. Its program row records the sha of the bytes THIS CALL WROTE (`--record-expect`), never
 #      whatever is on disk after the move, and none at all when those bytes are already gone. A
 #      write landing after the move then differs from the row, and every reader refuses it.
+#   4. A REVIEW SHARD -- a file in `<idx>-code-review-<sha12>[-p<M>]/` or
+#      `<idx>-qa-validation-<sha12>[-p<M>]/` (under `docs/reviews/s<N>/shards/`, outside any state
+#      dir) -- is held further. `<shard>` is the file's KEY, its name without `.md` (`03`, `cross`,
+#      `cross-2`), compared ordinal-normalised; a field carrying `key=` or `sha=` is refused, and
+#      exactly <step> <seat> <shard> findings=<n> is taken. Before anything is written it runs the
+#      sibling `merge-review-shards.sh <dir> --gate code-review|qa --check-shard <file> --findings <n>`
+#      (the merge's own per-shard code) and `content-seal.sh --review-shard <file>`, which REQUIRES a
+#      seal row (a seat's Write leaves one through the recorder; a shard with none was not written by
+#      its seat, or the recorder is not registered), refuses bytes that differ from it, and refuses a
+#      shard last written by the top-level session. Either refusing is exit 64 with its text, nothing
+#      written; a seal reader exit 4 (`SEAL-UNAVAILABLE`: jq absent, the file not in a git worktree,
+#      a ledger that does not parse) is also exit 64, relaying that text with an environment remedy. The snapshot must still equal the file after
+#      both run. The marker then carries
+#      `key=<k>` (between <shard> and sha=; findings= stays last), and the program row is recorded with
+#      --record-expect into the ledger content-seal.sh locates from the shard's common dir. The
+#      remedy for every refusal on bytes is re-dispatching the reviewer. The sentinel comment
+#      MARK-KEY-WRITER (with its version, once, in the block below) marks this writer for
+#      merge-review-shards.sh's legacy test.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 case "${1:-}" in
@@ -634,14 +655,79 @@ case "${1:-}" in
       MARK_TOKEN="repair-complete: serial "; MK_F="$1"; MK_TAIL=""
     fi
     MK_SEAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/content-seal.sh"
+    # REVIEW SHARDS (header: "--mark", term 4). A file in `<idx>-code-review-<sha12>[-p<M>]/` or
+    # `<idx>-qa-validation-<sha12>[-p<M>]/` is keyed, checked and sealed here before anything is written.
+    # MARK-KEY-WRITER v1
+    MK_REVIEW=""; MK_GATE=""
+    MK_PDIR="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd)"
+    if [ "$MK_MODE" = "--mark" ]; then
+      mk_bd_="${MK_PDIR##*/}"
+      case "$mk_bd_" in *-p[0-9]*) mk_bs_="${mk_bd_%-p*}"; case "${mk_bd_##*-p}" in *[!0-9]*) mk_bs_="$mk_bd_" ;; esac ;; *) mk_bs_="$mk_bd_" ;; esac
+      case "$mk_bs_" in
+        *-code-review-????????????) MK_GATE=code-review ;;
+        *-qa-validation-????????????) MK_GATE=qa ;;
+      esac
+      if [ -n "$MK_GATE" ]; then case "${mk_bs_##*-}" in *[!0-9a-f]*) MK_GATE="" ;; esac; fi
+      [ -n "$MK_GATE" ] && MK_REVIEW=1
+    fi
+    if [ -n "$MK_REVIEW" ]; then
+      MK_RESTORE="re-dispatch the reviewer for that shard, which rewrites it with Write and marks it again; never amend a review shard through Bash or a lead Write/Edit."
+      # The key is the file's own name: `<ordinal>.md` as spelled, `cross.md`, `cross-<g>.md` (g de-zeroed).
+      mk_b_="$(basename "$MK_FILE")"
+      case "$mk_b_" in
+        cross.md) MK_KEY=cross ;;
+        cross-*.md) mk_g_="${mk_b_#cross-}"; mk_g_="${mk_g_%.md}"
+          case "$mk_g_" in ""|*[!0-9]*|??????????*) mark_refuse "'$MK_FILE' is not a review shard name (<ordinal>.md, cross.md or cross-<g>.md)." ;; esac
+          MK_KEY="cross-$((10#$mk_g_))" ;;
+        *.md) MK_KEY="${mk_b_%.md}"
+          case "$MK_KEY" in ""|*[!0-9]*|??????????*) mark_refuse "'$MK_FILE' is not a review shard name (<ordinal>.md, cross.md or cross-<g>.md)." ;; esac ;;
+        *) mark_refuse "'$MK_FILE' is not a review shard name (<ordinal>.md, cross.md or cross-<g>.md)." ;;
+      esac
+      case " $MK_F " in *key=*|*sha=*) mark_refuse "a marker field carries key= or sha=; --mark writes both itself (key=$MK_KEY from the file name). Pass <step> <seat> $MK_KEY findings=<n>." ;; esac
+      set -f; set -- $MK_F; set +f
+      [ $# -eq 3 ] || mark_refuse "a review shard's marker takes exactly <step> <seat> <shard> findings=<n> (got '$MK_F'); <shard> is the file's key, $MK_KEY."
+      mk_s_="$3"
+      # Ordinal-normalised: `3`, `03` and `003` are one key; `cross-02` is `cross-2`.
+      case "$MK_KEY" in
+        cross) [ "$mk_s_" = cross ] || mk_s_="!" ;;
+        cross-*) case "$mk_s_" in cross-*) mk_g_="${mk_s_#cross-}"; case "$mk_g_" in ""|*[!0-9]*|??????????*) mk_s_="!" ;; *) [ "$((10#$mk_g_))" = "${MK_KEY#cross-}" ] || mk_s_="!" ;; esac ;; *) mk_s_="!" ;; esac ;;
+        *) case "$mk_s_" in ""|*[!0-9]*|??????????*) mk_s_="!" ;; *) [ "$((10#$mk_s_))" = "$((10#$MK_KEY))" ] || mk_s_="!" ;; esac ;;
+      esac
+      [ "$mk_s_" != "!" ] || mark_refuse "the <shard> field '$3' is not this file's key, $MK_KEY (the shard's own file name without .md); mark it as <step> <seat> $MK_KEY findings=<n>."
+      MK_F="$MK_F key=$MK_KEY"
+      MK_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-review-shards.sh"
+      [ -f "$MK_MERGE" ] || mark_refuse "a review shard is checked by merge-review-shards.sh --check-shard, which is not beside this script ($MK_MERGE); reinstall ai-dlc."
+      [ -f "$MK_SEAL" ] || mark_refuse "a review shard is sealed by content-seal.sh, which is not beside this script ($MK_SEAL); reinstall ai-dlc."
+      MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
+      cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+      MK_OUT="$(bash "$MK_MERGE" "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" 2>&1)" \
+        || { rm -f "$MK_SRC"; mark_refuse "merge-review-shards.sh --check-shard refused the shard; fix every line below, then mark again:
+$MK_OUT
+"; }
+      MK_OUT="$(bash "$MK_SEAL" --review-shard "$MK_FILE" 2>&1)"; MK_SRC_RC=$?
+      # Exit 4 is the ENVIRONMENT (SEAL-UNAVAILABLE: jq, git placement, the ledger): relayed as is,
+      # since re-dispatching the reviewer cannot repair it.
+      [ "$MK_SRC_RC" -ne 4 ] \
+        || { rm -f "$MK_SRC"; mark_refuse "$MK_OUT; repair the environment, then mark again."; }
+      [ "$MK_SRC_RC" -eq 0 ] \
+        || { rm -f "$MK_SRC"; mark_refuse "$MK_OUT; $MK_RESTORE"; }
+      cmp -s "$MK_SRC" "$MK_FILE" \
+        || { rm -f "$MK_SRC"; mark_refuse "'$MK_FILE' changed while it was being checked; mark it again once nothing else writes it."; }
+      MK_STATE="$( . "$MK_SEAL" && seal_review_locate "$MK_FILE" && printf '%s' "$_RV_STATE" )" && [ -n "$MK_STATE" ] \
+        || { rm -f "$MK_SRC"; mark_refuse "the ledger for '$MK_FILE' cannot be located."; }
+      MK_ROWED=1
+    fi
     # The state dir AS SPELLED (logical `pwd`, never -P): content-seal.sh names a row by the state
     # dir's own name, which the recorder takes from AI_DLC_STATE_DIR, so a symlinked `_bmad-output`
     # resolved to its target would name no row and the file would never be re-sealed. The FIRST
     # `/planning-artifacts/` is the state dir's; a later one is a directory inside the sprint.
     MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd)/$(basename "$MK_FILE")"
+    if [ -n "$MK_REVIEW" ]; then :; else
     MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
     case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%%/planning-artifacts/*}" ;; esac
-    if [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
+    fi
+    if [ -n "$MK_REVIEW" ]; then :
+    elif [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
       MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)" \

@@ -24,7 +24,9 @@
 #                                                  `<artifact>-repair-p<M>.md`, `requirements-party-repair.md`,
 #                                                  `requirements-elicitation-repair.md`, `gate-<type>-repair-p<M>.md`
 #   gate-adjudication/<nonce>.part-<i>of<N>.jsonl  gate-adjudicator part files
-# Paths are relative to the state dir. `*` in a `case` pattern crosses `/`, so a file in any
+# Paths are relative to the state dir, EXCEPT the review shards (`seal_sealed_review`, the second
+# declaration, header "REVIEW SHARDS" below), whose paths are relative to the project root of the
+# worktree holding them. `*` in a `case` pattern crosses `/`, so a file in any
 # subdirectory under `shards/` is sealed, section copies included, and a `-repair` file anywhere under
 # `s<N>/` is too. That breadth is safe because every reader compares ONLY THE FILES IT READS: a seal row
 # on a file no program consults is a record and nothing else, so a wider seal moves no verdict.
@@ -97,7 +99,41 @@
 #   content-seal.sh --first-tool-ts <state-dir>           the earliest `ts` of a TOOL seal row (actor
 #        `agent` or `session`) in this tree's ledger, same root filter as --check, or nothing when
 #        there is none. When the recorder first ran here; program rows do not count.
+#   content-seal.sh --review-shard <shard file> [--legacy]   one line, then exit (header: "REVIEW SHARDS"):
+#        0 `SEAL-OK`; 1 `SEAL-REFUSED: <reason>` naming the remedy (re-dispatch the reviewer for that
+#        shard); 3 `SEAL-NONE` (with --legacy only: no row for the file); 2 a usage error or a file
+#        that is not a review shard; 4 `SEAL-UNAVAILABLE: <reason>` -- the ENVIRONMENT cannot read the
+#        seal (jq is not on PATH, git cannot place the file in a worktree, or the ledger does not
+#        parse), a fault the lead repairs and re-dispatching a reviewer cannot. Never 0 or 3 then.
 #   content-seal.sh --agent-ere                           print AGENT_ID_ERE.
+#
+# REVIEW SHARDS. `docs/reviews/s<N>/shards/<idx>-code-review-<sha12>[-p<M>]/<f>.md` and the
+# `-qa-validation-` equivalent are written by a reviewer seat in the frozen dev WORKTREE, outside any
+# state dir, and `merge-review-shards.sh` joins them. Their rows differ from the rows above in three
+# fields: `path` is project-root-relative (`docs/reviews/...`), `root` is the shard's PHYSICAL worktree
+# root (`git rev-parse --show-toplevel`, `pwd -P`), and `body_sha` -- carried on these rows only -- is
+# the sha256 of the body wait-for-deliverable.sh's `seal_body` extracts: `seal_review_body <f> 1`, or
+# `<f> 0` when the file's last non-blank line is a `seat-complete: ` marker (the marker dropped), so a
+# seat that Edits a shard it already marked and re-marks it through the old Bash --mark still matches.
+# The recorder writes them into its own LOG_DIR ledger, whatever tree holds the shard. A reader finds
+# that ledger from ANY tree as
+#   <parent of `git rev-parse --path-format=absolute --git-common-dir`>/${AI_DLC_STATE_DIR:-_bmad-output}/planning-artifacts/.artifact-writes.jsonl
+# (an absolute AI_DLC_STATE_DIR is used as is), i.e. the MAIN checkout's state dir; never
+# `<worktree>/_bmad-output`, which in a worktree is a tracked, stale copy. A git without
+# `--path-format` (before 2.31) gets the plain `--git-common-dir`, asked from the worktree root and
+# resolved against it when relative. LIMITS: a bare repository or a submodule has no main checkout
+# beside its common dir, and the reader then finds no row and refuses; the recorder and the reader name
+# the same ledger only when the recorder's own session project directory is the main checkout -- otherwise, again, a refusal.
+# Review rows are matched on `root` EXACTLY (no empty-root leniency), and no existing reader sees them:
+# `--check`, `--row` and `--last-tool-row` key on a state-dir-relative path no review row carries,
+# and `--first-tool-ts` skips any row with `body_sha`.
+#   --review-shard compares the NEWEST row for the file. Non-legacy: the whole-file sha256 must equal
+# the row's, and a file with NO row is refused (a key= marker requires a row, so a mis-pointed ledger
+# refuses rather than acquits). --legacy (a marker without key=, written before this engine): the
+# whole-file sha256, OR the row's body_sha against the file's body with its last line -- which must be a
+# `seat-complete: ` marker -- dropped (the old --mark's Bash append after the seat's Write); no row is
+# SEAL-NONE. Both modes then refuse when the LAST TOOL row's actor is `session` (the
+# merge-adversarial-shards.sh rule): a review shard is the reviewer's own.
 #
 # "NEWEST" IS FILE ORDER. The ledger is append-only and `ts` has one-second resolution, so the last
 # matching line is the newest write. Rows whose `root` is another tree (a worktree's or a clone's write
@@ -128,6 +164,16 @@ seal_sealed() { # $1 path relative to the state dir -> 0 when it is in the seale
   return 1
 }
 
+# The REVIEW-SHARD set (header: "REVIEW SHARDS"), the second declaration. Its paths are relative to
+# the PROJECT ROOT of the worktree holding the shard, never to a state dir, and no reader of the
+# first declaration ever sees one.
+seal_sealed_review() { # $1 path relative to its worktree root -> 0 when it is a review shard
+  case "$1" in
+    docs/reviews/s[0-9]*/shards/*-code-review-*/*.md|docs/reviews/s[0-9]*/shards/*-qa-validation-*/*.md) return 0 ;;
+  esac
+  return 1
+}
+
 seal_sha() { # $1 file -> its sha256, or nothing
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
   else sha256sum "$1" 2>/dev/null | cut -d' ' -f1; fi
@@ -150,12 +196,131 @@ seal_norm() {
   return 0
 }
 
-# seal_append <ledger> <path> <root> <actor> <agent_id> <session> <tool> <tool_use_id> <transcript> <sha>
+# seal_append <ledger> <path> <root> <actor> <agent_id> <session> <tool> <tool_use_id> <transcript> <sha> [<body_sha>]
+# <body_sha> is passed for a review-shard row only; every other row is written without the key, byte
+# for byte as before it existed.
 seal_append() {
   jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg path "$2" --arg root "$3" --arg actor "$4" \
          --arg aid "$5" --arg sid "$6" --arg tool "$7" --arg tuid "$8" --arg tp "$9" --arg sha "${10}" \
+         --arg bs "${11:-}" \
     '{v: 1, kind: "content-seal", ts: $ts, path: $path, actor: $actor, agent_id: $aid, session: $sid,
-      tool: $tool, tool_use_id: $tuid, transcript_path: $tp, root: $root, sha256: $sha}' >> "$1"
+      tool: $tool, tool_use_id: $tuid, transcript_path: $tp, root: $root, sha256: $sha}
+     + (if $bs == "" then {} else {body_sha: $bs} end)' >> "$1"
+}
+
+# ---------------------------------------------------------------- review shards (header: "REVIEW SHARDS")
+# The body a seat-complete marker binds, as wait-for-deliverable.sh's `seal_body` extracts it: every
+# line above the LAST NON-BLANK line, or with $2 = 1 that line too. The awk program is BYTE-IDENTICAL
+# to `seal_body` in wait-for-deliverable.sh; the two must hash the same bytes.
+seal_review_body() {  # $1 = path, $2 = 1 to keep the last non-blank line -> bytes on stdout
+  awk -v k="${2:-0}" 'NF { L = NR } { a[NR] = $0 } END { if (k == 1) L++; for (i = 1; i < L; i++) print a[i] }' "$1" 2>/dev/null
+}
+seal_body_sha() { # $1 file, $2 keep flag -> sha256 of seal_review_body, or nothing
+  if command -v shasum >/dev/null 2>&1; then seal_review_body "$1" "$2" | shasum -a 256 2>/dev/null | cut -d' ' -f1
+  else seal_review_body "$1" "$2" | sha256sum 2>/dev/null | cut -d' ' -f1; fi
+}
+
+# seal_review_locate <file> -> sets _RV_FP (physical file), _RV_TOP (physical worktree root), _RV_REL
+# (project-root-relative path), _RV_STATE (the MAIN checkout's state dir) and _RV_LEDGER; rc 1 with
+# _RV_ERR set when git cannot place the file. git runs with GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR unset,
+# so an inherited environment cannot repoint it at another repository.
+seal_review_locate() {
+  local d top common
+  _RV_FP=""; _RV_TOP=""; _RV_REL=""; _RV_STATE=""; _RV_LEDGER=""; _RV_ERR=""
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || { _RV_ERR="its directory does not exist"; return 1; }
+  _RV_FP="${d}/$(basename "$1")"
+  top="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "$d" rev-parse --show-toplevel 2>/dev/null )" \
+    && [ -n "$top" ] || { _RV_ERR="git cannot name the worktree holding it"; return 1; }
+  _RV_TOP="$(cd "$top" 2>/dev/null && pwd -P)" || { _RV_ERR="its worktree root $top does not resolve"; return 1; }
+  case "$_RV_FP" in "$_RV_TOP"/*) _RV_REL="${_RV_FP#"$_RV_TOP"/}" ;; *) _RV_ERR="it is not under its worktree root $_RV_TOP"; return 1 ;; esac
+  # `--path-format=absolute` (git 2.31+) first. An older git prints the option back or fails, and the
+  # plain form's answer is relative to the directory git ran in, so it is asked from the root and a
+  # relative answer is resolved against the root.
+  common="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "$_RV_TOP" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+  case "$common" in
+    /*) ;;
+    *) common="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "$_RV_TOP" rev-parse --git-common-dir 2>/dev/null )" \
+         || { _RV_ERR="git cannot name its common git dir"; return 1; }
+       case "$common" in /*) ;; ?*) common="${_RV_TOP}/${common}" ;; *) _RV_ERR="git named no common git dir"; return 1 ;; esac ;;
+  esac
+  common="$(cd "$common" 2>/dev/null && pwd -P)" || { _RV_ERR="its common git dir does not resolve"; return 1; }
+  case "${AI_DLC_STATE_DIR:-_bmad-output}" in
+    /*) _RV_STATE="${AI_DLC_STATE_DIR}" ;;
+    *)  _RV_STATE="${common%/*}/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
+  esac
+  _RV_LEDGER="${_RV_STATE}/planning-artifacts/.artifact-writes.jsonl"
+  return 0
+}
+
+# seal_review_record_row <ledger> <file> <actor> <agent_id> <session> <tool> <tool_use_id> <transcript> [<want sha>]
+# -> append a review-shard row for <file> (already located), sha256 and body_sha taken from disk now;
+# rc 1 and no row when the bytes move between the two hashes, or are not <want sha>.
+seal_review_record_row() {
+  local sha bsha keep=1
+  sha="$(seal_sha "$_RV_FP")"; [ -n "$sha" ] || return 1
+  # body_sha is the body WITHOUT a trailing seat-complete line, so a seat that Edits a shard it already
+  # marked (then re-marks through the old Bash --mark) keeps a body the legacy reader can match.
+  case "$(awk 'NF { l = $0 } END { print l }' "$_RV_FP" 2>/dev/null)" in 'seat-complete: '*) keep=0 ;; esac
+  bsha="$(seal_body_sha "$_RV_FP" "$keep")"; [ -n "$bsha" ] || return 1
+  # Both hashes must describe ONE set of bytes: a write landing between them records nothing.
+  [ "$(seal_sha "$_RV_FP")" = "$sha" ] || return 1
+  [ -z "${9:-}" ] || [ "$sha" = "$9" ] || return 1
+  seal_append "$1" "$_RV_REL" "$_RV_TOP" "$3" "$4" "$5" "$6" "$7" "$8" "$sha" "$bsha"
+}
+
+# seal_review_shard <file> [--legacy] -> one line; 0 SEAL-OK / 1 SEAL-REFUSED / 3 SEAL-NONE / 2 usage /
+# 4 SEAL-UNAVAILABLE (the environment: jq, git placement, an unparseable ledger)
+seal_review_shard() {
+  local f="$1" legacy="${2:-}" tab us has want bwant actor aid tool ts tactor taid ttool tts have hb last rm
+  local nr='re-dispatch the reviewer for that shard, which writes it with Write and marks it with wait-for-deliverable.sh --mark; never amend a review shard through Bash or a lead Write/Edit'
+  [ -f "$f" ] || { echo "SEAL-REFUSED: $f is not a file; $nr"; return 1; }
+  local ne='the environment cannot read the seal, which re-dispatching the reviewer does not repair: fix it in the lead checkout, then merge or mark again'
+  if ! seal_review_locate "$f"; then echo "SEAL-UNAVAILABLE: $f cannot be placed in a git worktree ($_RV_ERR), so its content-seal row cannot be found; $ne"; return 4; fi
+  seal_sealed_review "$_RV_REL" || { echo "content-seal: --review-shard: $f is $_RV_REL relative to its worktree root, not docs/reviews/s<N>/shards/<idx>-code-review-<sha12>[-p<M>]/<f>.md or the qa-validation equivalent" >&2; return 2; }
+  command -v jq >/dev/null 2>&1 || { echo "SEAL-UNAVAILABLE: $f: jq is not on PATH, so the seal rows in $_RV_LEDGER cannot be read; $ne"; return 4; }
+  tab=""
+  if [ -f "$_RV_LEDGER" ]; then
+    tab="$(jq -rn --arg p "$_RV_REL" --arg r "$_RV_TOP" '
+      reduce (inputs | select(type == "object") | select(.kind == "content-seal") | select(.path == $p)
+              | select(.root == $r)) as $x ({n: null, t: null};
+        .n = $x | if ($x.actor == "agent" or $x.actor == "session") then .t = $x else . end)
+      | [(if .n == null then "N" else "Y" end), (.n.sha256 // ""), (.n.body_sha // ""), (.n.actor // ""),
+         (.n.agent_id // ""), (.n.tool // ""), (.n.ts // ""), (.t.actor // ""), (.t.agent_id // ""),
+         (.t.tool // ""), (.t.ts // "")] | map(tostring) | join("\u001f")' "$_RV_LEDGER")" \
+      || { echo "SEAL-UNAVAILABLE: $f: the write ledger $_RV_LEDGER does not parse as JSON lines; $ne"; return 4; }
+  fi
+  us="$(printf '\037')"
+  has=N
+  [ -n "$tab" ] && IFS="$us" read -r has want bwant actor aid tool ts tactor taid ttool tts <<< "$tab"
+  if [ "$has" != Y ]; then
+    if [ "$legacy" = --legacy ]; then
+      echo "SEAL-NONE: $f carries no content-seal row in $_RV_LEDGER (legacy marker: accepted without a seal comparison)"
+      return 3
+    fi
+    echo "SEAL-REFUSED: $f carries no content-seal row in $_RV_LEDGER (path $_RV_REL, root $_RV_TOP). Either the shard was not written with Write or Edit by its seat: re-dispatch the reviewer for that shard. Or the content-seal recorder is not registered, or produced no row: check .claude/settings.json for ai-dlc-content-seal.sh under PostToolUse Write|Edit|MultiEdit, then re-dispatch the reviewer"
+    return 1
+  fi
+  have="$(seal_sha "$_RV_FP")"
+  rm=0
+  if [ -n "$have" ] && [ "$have" = "$want" ]; then rm=1
+  elif [ "$legacy" = --legacy ] && [ -n "$bwant" ]; then
+    # The old --mark appended its marker through Bash after the seat's Write: the body above that
+    # marker is what the Write sealed. Only a seat-complete line may be dropped, never another line.
+    last="$(awk 'NF { l = $0 } END { print l }' "$_RV_FP" 2>/dev/null)"
+    case "$last" in
+      'seat-complete: '*) hb="$(seal_body_sha "$_RV_FP" 0)"; [ -n "$hb" ] && [ "$hb" = "$bwant" ] && rm=1 ;;
+    esac
+  fi
+  if [ "$rm" != 1 ]; then
+    echo "SEAL-REFUSED: $f changed after its last sealed write: the content seal $(_seal_writer "$actor" "$aid" "$tool") wrote at ${ts:-<no ts>} records sha256 ${want:-<none>} and the file is ${have:-<unreadable>} on disk, so its bytes came through a channel that records no seal (a Bash redirect, sed -i, perl -pi, a python3 open, git checkout); $(_seal_remedy "$actor" "$_RV_REL")"
+    return 1
+  fi
+  if [ "$tactor" = session ]; then
+    echo "SEAL-REFUSED: $f was last written by $(_seal_writer "$tactor" "$taid" "$ttool") at ${tts:-<no ts>}, not by its reviewer; a lead Write or Edit re-seals the bytes but a review shard is the reviewer's own; $(_seal_remedy "$tactor" "$_RV_REL")"
+    return 1
+  fi
+  echo "SEAL-OK: $f matches its newest content-seal row ($(_seal_writer "$actor" "$aid" "$tool") at ${ts:-<no ts>})"
+  return 0
 }
 
 # ---------------------------------------------------------------- the readers' side (program mode)
@@ -194,7 +359,14 @@ _seal_writer() { # actor agent_id tool -> words naming the writer
        else printf 'the top-level session, which carries no agent_id (%s)' "${3:-tool}"; fi ;;
   esac
 }
-_seal_remedy() { # actor, path relative to the state dir -> the remedy sentence
+_seal_remedy() { # actor, path relative to the state dir (or, for a review shard, to its worktree root) -> the remedy sentence
+  case "$2" in
+    docs/reviews/s[0-9]*/shards/*/*.md)
+      # A review shard is the reviewer's alone: a lead Edit re-seals the bytes but leaves a shard last
+      # written by the top-level session, which --review-shard refuses, and --mark never seals Bash bytes.
+      printf 're-dispatch the reviewer for that shard, which rewrites it with Write and marks it with wait-for-deliverable.sh --mark (a lead Write or Edit re-seals the bytes but leaves a shard last written by the top-level session, which is refused), and never amend a review shard through Bash'
+      return ;;
+  esac
   case "$2" in
     planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) ;;
     planning-artifacts/s[0-9]*/shards/*/*.md)
@@ -273,6 +445,7 @@ seal_first_tool_ts() { # <state dir> -> the earliest ts of a tool seal row in th
   jq -rn --arg r "$_SR" '
     [inputs | select(type == "object") | select(.kind == "content-seal")
      | select(.actor == "agent" or .actor == "session")
+     | select(has("body_sha") | not)
      | select((.root // "") == "" or .root == $r)
      | select((.ts | type) == "string") | .ts] | min // empty' "$_SL" \
     || { echo "content-seal: the write ledger $_SL does not parse as JSON lines" >&2; return 2; }
@@ -328,7 +501,21 @@ seal_record_expect() { # <state dir> program:<name> <sha256> <file> -> 0 row app
   _seal_state "$st" || return 2
   [ -d "${_SP}/planning-artifacts" ] || return 0
   command -v jq >/dev/null 2>&1 || { echo "content-seal: jq is not on PATH" >&2; return 2; }
-  _seal_rel "$f" || return 0
+  if ! _seal_rel "$f"; then
+    # A review shard lives outside the state dir (header: "REVIEW SHARDS"); its row goes to the
+    # ledger the shard's own git common dir names, which must be this state dir's.
+    seal_review_locate "$f" && seal_sealed_review "$_RV_REL" || return 0
+    [ "$(cd "$_RV_STATE" 2>/dev/null && pwd -P)" = "$_SP" ] || {
+      echo "content-seal: $f is a review shard whose ledger is $_RV_LEDGER, not under $st; no row was recorded" >&2; return 2; }
+    have="$(seal_sha "$_RV_FP")"
+    if [ "$have" != "$want" ]; then
+      echo "content-seal: $f is $have on disk, not the $want $actor wrote; no row was recorded" >&2
+      return 1
+    fi
+    seal_review_record_row "$_SL" "$f" "$actor" "" "" "" "" "" "$want" || {
+      echo "content-seal: $f changed while its row was being taken; no row was recorded" >&2; return 1; }
+    return 0
+  fi
   have="$(seal_sha "$_FP")"
   if [ "$have" != "$want" ]; then
     echo "content-seal: $f is $have on disk, not the $want $actor wrote; no row was recorded" >&2
@@ -363,8 +550,12 @@ seal_main() {
     --first-tool-ts)
       [ "$#" -eq 2 ] || { echo "usage: $0 --first-tool-ts <state-dir>" >&2; return 2; }
       seal_first_tool_ts "$2" ;;
+    --review-shard)
+      { [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = --legacy ]; }; } \
+        || { echo "usage: $0 --review-shard <shard file> [--legacy]" >&2; return 2; }
+      seal_review_shard "$2" "${3:-}" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --agent-ere" >&2
+    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --agent-ere" >&2
        return 2 ;;
   esac
 }

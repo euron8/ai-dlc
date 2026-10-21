@@ -2,9 +2,12 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # review-shard-merge/run.sh -- partition-review-diff.sh and merge-review-shards.sh, the part set
 # and the JOIN of a sharded gate-1 code review and of a sharded gate-2 QA validation (--gate qa;
-# arms Q1-Q16, S7-S10). The behavioural arms only: the mutation battery that once proved each of them
-# can fail has been retired; the predicates live in `lib.sh` beside this file. The battery mutates copies of core's own scripts, which a
-# consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
+# arms Q1-Q16, S7-S10), and (BL-737) the seat's shard pre-check, the owner tails, the marker key, the
+# content seal on review shards and the legacy rule (arms CS1-FT1). The mutation battery that once
+# proved the older arms can fail has been retired; the predicates live in `lib.sh` beside this file.
+# The BL-737 arms carry five in-process mutants (M1-M5 below), each run in a copy of the resolved
+# script directory and only in the DISTRIBUTION layout: a consumer cannot edit core's scripts, so it
+# keeps every correctness arm and loses only that proof.
 #
 # WHAT IS AT STAKE. Check 1 in gate-validation.md reads ONE verdict line from ONE review file. A
 # sharded review is N part reviewers plus one cross reviewer per cross group, and the merge writes that file. Its
@@ -39,9 +42,14 @@
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="review-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
+# I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 . "$HERE/lib.sh"
 echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
+echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-content-seal.sh"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
@@ -201,6 +209,81 @@ arm cr_ho_runtwice "G4: --gate code-review, one hand-over replayed twice by cros
                    "G4: a hand-over replayed twice was merged"
 arm cr_hc_missing "G5: --gate code-review, a part shard with no 'handovers:' line -> REFUSED, nothing at --out" \
                   "G5: a gate-1 part shard without its declared hand-over count was merged"
+
+# ------------------------------------------------------------------------------------ BL-737
+# Each predicate sets WHY to what it saw. A predicate that never ran leaves no `ok` line, so every arm
+# here is presence-shaped: the receipt counts these labels' `ok` lines, never the exit alone.
+arm2() { # <predicate> <label-ok> <label-bad>
+  WHY=""
+  if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3:${WHY:- (no reason recorded)}"; fi
+}
+arm2 cs "CS1: --check-shard prints the full merge's REFUSED line byte-for-byte, the physical path through a symlinked alias, for $CS_N single-defect worlds (every per-shard class under both gates, the marker count, key= and <shard>, and the content seal; qa includes graph's '## Deferred live check (not scored here)' part heading); a clean shard answers SHARD-OK" \
+         "CS1: --check-shard's verdict is not the merge's own"
+arm2 copies "CP1: has_marker, content_hash, seal_body and seal_of in merge-review-shards.sh, and content-seal.sh's seal_review_body body, are byte-identical to wait-for-deliverable.sh's, extracted by name, and a one-byte drift in either copy is seen" \
+             "CP1: the merge's copy of the seal reader is not wait-for-deliverable.sh's"
+arm2 owner "OT1: every refusal family's owner tail names the shard whose file must change -- per-shard, missing, unfinished, duplicate key (both files), hand-over join (part and cross-1), hand-over twice, replay twice, Check-1 multi-match, bad name and set-level (lead); the owner duplicate names the NON-owner, and --check-shard reads the owner only once it is sealed" \
+           "OT1: an owner tail names the wrong shard"
+arm2 key "KY1: a set every seat wrote and --mark closed merges with each marker keyed by its own file name; a marker key= naming another shard, and a <shard> field naming another, each REFUSED [owner: 2]" \
+         "KY1: the marker key check accepts a key that is not the file's, or refuses the right one"
+arm2 mark "MK1: --mark on a review shard refuses a <shard> that is not the file key, a caller key= and a caller sha= word, and findings=3 over 1 finding -- each exit 64, the file byte-unchanged -- and the same call with the right fields marks it 'key=2'" \
+          "MK1: --mark marked a review shard it should have refused, or refused the right call"
+arm2 seal_rewrite "SE1: a qa part shard its seat wrote and marked reads SEAL-OK; rewritten by an in-place sed rewrite and re-marked, --mark refuses (64) with the re-dispatch remedy, the file unchanged" \
+                  "SE1: a Bash-rewritten review shard was re-marked"
+arm2 session "SE2: a seat-sealed set merges; after a top-level-session Edit row on shard 2 the merge REFUSES it [owner: 2]; after an agent Edit row it merges again" \
+             "SE2: a shard last written by the session was merged, or the agent's re-write refused"
+arm2 legacy "LG1: legacy markers over an old engine merge with the exact 'LEGACY: ... reviewed sha <full sha> predates the key= engine' line per shard (a Write then the old Bash append accepted on body_sha); the same Write then a sed rewrite, the sentinel engine at the frozen sha, and an engine in neither layout each REFUSED" \
+            "LG1: the legacy rule acquitted what it should refuse, or refused a legitimate legacy shard"
+arm2 layouts "LY1: from a linked worktree the seal reader names the MAIN checkout's ledger in a distribution-layout and a consumer-layout tree (never the worktree's own decoy); the recorder fired there writes MAIN's ledger, both readers read SEAL-OK, and a set sealed there merges" \
+             "LY1: the review-shard ledger is not the main checkout's from a linked worktree"
+arm2 first_ts "FT1: a review-shard row written before a gate part does not move --first-tool-ts; the same row without body_sha does" \
+              "FT1: a review-shard row moved --first-tool-ts, or the control did not"
+arm2 env "EV1: on a PATH built from tools.decl without jq, a seat-sealed set is REFUSED 'SEAL-UNAVAILABLE' [owner: lead] with no re-dispatch, and --mark exits 64 relaying it with the environment remedy, the file unchanged; the same set with jq added back merges" \
+         "EV1: an environment that cannot read the seal was charged to a reviewer, or the jq control did not merge"
+arm2 unmarked "UM1: adv-strip.sh's input -- every seat-complete line stripped, one verdict rewritten by sed -- over a sentinel-engine frozen sha with no seal rows is REFUSED 'carries no content-seal row'; the same steps over the old engine merge" \
+              "UM1: an unmarked set over the key= engine merged without a seal row, or the old-engine control was refused"
+
+# ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
+# Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
+# siblings beside themselves), one exact substring replaced -- refused unless it occurs exactly once,
+# reported DID NOT APPLY otherwise -- and driven through the one predicate that owns it. A kill must
+# carry its own reason token in WHY, so a mutant that died for another cause is not scored a kill.
+if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" = "$SRCDIR" ]; then
+  mutate() { # <copy dir> <file> <old> <new> -> 0 applied once
+    local f="$1/$2" n
+    n="$(OLD="$3" awk 'BEGIN { o = ENVIRON["OLD"] } { s = $0; while ((i = index(s, o)) > 0) { n++; s = substr(s, i + length(o)) } } END { print n + 0 }' "$f")"
+    [ "$n" = 1 ] || return 1
+    OLD="$3" NEW="$4" awk 'BEGIN { o = ENVIRON["OLD"]; w = ENVIRON["NEW"] }
+      { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' "$f" > "$f.mut" \
+      && ! cmp -s "$f" "$f.mut" && cat "$f.mut" > "$f" && rm -f "$f.mut"
+  }
+  mut_run() { # <id> <file> <old> <new> <predicate> <reason token> <label>
+    local id="$1" md="$WORK/mut-$1"
+    [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || { bad "$id: FIXTURE ERROR -- the script directory was not copied fresh"; return; }
+    [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
+      || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
+    mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+    WHY=""
+    if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
+    elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then ok "$id: killed -- $7 ($5:${WHY})"
+    else bad "$id: died for another reason than '$6' -- $7 ($5:${WHY})"; fi
+  }
+  CS_ONLY=partcite mut_run M1 merge-review-shards.sh '[ $# -eq 1 ] && [ "$1" = "$key" ]' \
+    '{ [ -n "$CHECK" ] || { [ $# -eq 1 ] && [ "$1" = "$key" ]; }; }' cs "csc_partcite{" \
+    "the part-cite refusal dropped in --check-shard only"
+  mut_run M2 merge-review-shards.sh '|| refuse "$sf:$line ($key) cites$distinct, a finding owned by' \
+    '|| refuse_to "$ownk" "$sf:$line ($key) cites$distinct, a finding owned by' owner "dup-merge{" \
+    "the owner-duplicate refusal names the owner"
+  mut_run M3 wait-for-deliverable.sh '[ "$mk_s_" != "!" ] || mark_refuse' 'true || mark_refuse' mark "shard-3{" \
+    "--mark skips the <shard> key check"
+  mut_run M4 wait-for-deliverable.sh '*-qa-validation-????????????) MK_GATE=qa ;;' '*-qa-validation-NOMATCH) MK_GATE=qa ;;' \
+    seal_rewrite "review-shard branch" "--mark's review-shard (seal) branch does not match a qa-validation path"
+  mut_run M5 merge-review-shards.sh 'present) refuse "' 'present) : "' legacy "sentinel{" \
+    "a legacy marker is accepted when the frozen sha's engine carries the sentinel"
+  mut_run M6 merge-review-shards.sh '[ "$ENGINE" != present ] || SEAL_MODE=""' ':' unmarked "unmarked-sentinel{" \
+    "the unmarked shard's engine reading is dropped, so it keeps the legacy seal"
+else
+  echo "  (BL-737 mutants M1-M6 not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
+fi
 
 # THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two
 # programs directly, so a release that built them and never rewired the step file passes all of

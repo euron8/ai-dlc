@@ -1,5 +1,8 @@
 !core/scripts/partition-review-diff.sh
 !core/scripts/merge-review-shards.sh
+!core/scripts/content-seal.sh
+!core/scripts/wait-for-deliverable.sh
+!core/hooks/ai-dlc-content-seal.sh
 core/scripts/partition-document.sh
 core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/artifact-path-grammar.md

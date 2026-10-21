@@ -44,7 +44,16 @@ SRCDIR="$(cd "$(dirname "$MERGE")" && pwd)"
 [ "$(cd "$(dirname "$PART")" && pwd)" = "$SRCDIR" ] || { echo "FIXTURE ERROR: the partition is not beside the merge" >&2; exit 2; }
 [ -f "$SRCDIR/artifact-path-config.sh" ] || { echo "FIXTURE ERROR: artifact-path-config.sh is not beside the partition; it reads the scan roots there" >&2; exit 2; }
 [ -f "$SRCDIR/partition-document.sh" ] || { echo "FIXTURE ERROR: partition-document.sh is not beside the merge; it reads the cross groups there" >&2; exit 2; }
-echo "$NAME: resolved subjects = $PART , $MERGE"
+# BL-737: the seal reader and the seal writer the merge and --mark resolve beside themselves, and the
+# recorder hook that writes the rows they read (distribution core/hooks, consumer .claude/hooks).
+SEAL_SRC="$SRCDIR/content-seal.sh"; WFD_SRC="$SRCDIR/wait-for-deliverable.sh"
+HOOK="$(find_up core/hooks/ai-dlc-content-seal.sh .claude/hooks/ai-dlc-content-seal.sh)" || HOOK=""
+for _p in SEAL_SRC WFD_SRC HOOK; do
+  eval "_x=\${$_p}"
+  [ -n "$_x" ] && [ -f "$_x" ] || { echo "FIXTURE ERROR: $_p ($_x) not found beside the merge or above $LIB_DIR; nothing was asserted" >&2; exit 2; }
+done
+command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is not on PATH; content-seal.sh reads its ledger with it" >&2; exit 2; }
+echo "$NAME: resolved subjects = $PART , $MERGE , $SEAL_SRC , $WFD_SRC , $HOOK"
 
 # THE KEY, derived from the partition's dereference site. Absent, the SERIAL and env arms below
 # would assert about a name the program no longer reads.
@@ -87,15 +96,25 @@ lines() { # <file> <n> <tag> -> n distinct lines
   local i=0; mkdir -p "$(dirname "$1")"
   : > "$1"; while [ "$i" -lt "$2" ]; do i=$((i + 1)); printf '%s line %d\n' "$3" "$i" >> "$1"; done
 }
-new_repo() { # <dir> -> base commit holding the artifact-path grammar
+# THE ENGINE AT THE FROZEN SHA (the merge's LEGACY rule reads it from the manifest's worktree). It
+# sits in the BASE commit, never the frozen one: a file in the base..sha diff would move every map.
+# `old` is the subject's own wait-for-deliverable.sh with its one sentinel line removed (the engine
+# that predates key=), in the consumer layout; `new` is the subject itself, in the distribution layout.
+OLD_ENGINE="$WORK/old-engine.sh"
+grep -vF '# MARK-KEY-WRITER v1' "$WFD_SRC" > "$OLD_ENGINE"
+new_repo() { # <dir> [old|new] -> base commit holding the artifact-path grammar, and the engine named
   mkdir -p "$1/core/skills/ai-dlc" || return 1
   G init -q "$1" || return 1
   cp "$GRAMMAR" "$1/core/skills/ai-dlc/artifact-path-grammar.md"
   printf 'seed\n' > "$1/README"
+  case "${2:-}" in
+    old) mkdir -p "$1/scripts/ai-dlc" && cp "$OLD_ENGINE" "$1/scripts/ai-dlc/wait-for-deliverable.sh" || return 1 ;;
+    new) mkdir -p "$1/core/scripts" && cp "$WFD_SRC" "$1/core/scripts/wait-for-deliverable.sh" || return 1 ;;
+  esac
   G -C "$1" add -A && G -C "$1" commit -q -m base || return 1
 }
 REPO_A="$WORK/repo-a"; REPO_B="$WORK/repo-b"
-new_repo "$REPO_A" && new_repo "$REPO_B" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+new_repo "$REPO_A" && new_repo "$REPO_B" old || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
 # A: every reviewable file under app/, one pipeline artifact under a scan root.
 for f in app/api/a.py app/api/b.py app/web/c.js app/web/d.js app/core/e.py app/core/f.py; do
   lines "$REPO_A/$f" 10 "$f"
@@ -157,7 +176,7 @@ D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 # E / F: eight and two top directories of identical weight, merged with --max-parts 8 and 2, so
 # the map has K=8 (six cross groups, the largest G) and K=2 (one cross group, `cross.md`).
 REPO_E="$WORK/repo-e"; REPO_F="$WORK/repo-f"
-new_repo "$REPO_E" && new_repo "$REPO_F" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+new_repo "$REPO_E" old && new_repo "$REPO_F" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
 for _i in 1 2 3 4 5 6 7 8; do lines "$REPO_E/e$_i/a.txt" 5 "e$_i-a"; lines "$REPO_E/e$_i/b.txt" 5 "e$_i-b"; done
 # Six files, off the --min-files 4 boundary, so the `<`/`<=` mutant is owned by P2b alone.
 for _i in 1 2; do for _f in a b c; do lines "$REPO_F/f$_i/$_f.txt" 5 "f$_i-$_f"; done; done
@@ -168,6 +187,45 @@ for r in "$REPO_E" "$REPO_F"; do
 done
 E_BASE="$(G -C "$REPO_E" rev-parse HEAD~1)"; E_SHA="$(G -C "$REPO_E" rev-parse HEAD)"
 F_BASE="$(G -C "$REPO_F" rev-parse HEAD~1)"; F_SHA="$(G -C "$REPO_F" rev-parse HEAD)"
+# S / N: B's six files, so the map is B's (K=3), over a base whose engine is the key= engine itself
+# (S, the sentinel present, distribution layout) or absent in both layouts (N).
+REPO_S="$WORK/repo-s"; REPO_N="$WORK/repo-n"
+new_repo "$REPO_S" new && new_repo "$REPO_N" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+for r in "$REPO_S" "$REPO_N"; do
+  for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$r/$f" 5 "$f"; done
+  G -C "$r" add -A && G -C "$r" commit -q -m frozen
+  [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository" >&2; exit 2; }
+done
+S_BASE="$(G -C "$REPO_S" rev-parse HEAD~1)"; S_SHA="$(G -C "$REPO_S" rev-parse HEAD)"
+N_BASE="$(G -C "$REPO_N" rev-parse HEAD~1)"; N_SHA="$(G -C "$REPO_N" rev-parse HEAD)"
+
+# THE REVIEW TREE (BL-737). content-seal.sh --review-shard places a shard with `git rev-parse
+# --show-toplevel` and refuses one that is not at docs/reviews/s<N>/shards/<idx>-code-review-<sha12>/
+# (or -qa-validation-), so every merge world lives in MAIN, a git repository, at that path, one
+# `s1.XXXXXX` per world. MAIN is in the CONSUMER layout because the recorder hook sources
+# ${CLAUDE_PROJECT_DIR}/scripts/ai-dlc/content-seal.sh; its ledger is MAIN's own state dir. LW is a
+# linked worktree of MAIN, whose shards' rows go to MAIN's ledger, never to LW/_bmad-output.
+MAIN="$WORK/main"; LW="$WORK/lw"
+mkdir -p "$MAIN/scripts/ai-dlc" && G init -q "$MAIN" && cp "$SEAL_SRC" "$MAIN/scripts/ai-dlc/content-seal.sh" \
+  && printf 'main\n' > "$MAIN/README" && G -C "$MAIN" add README scripts && G -C "$MAIN" commit -q -m main \
+  && [ -d "$MAIN/.git" ] && G -C "$MAIN" worktree add -q --detach "$LW" HEAD 2>/dev/null \
+  && mkdir -p "$MAIN/docs/reviews" "$LW/docs/reviews" \
+  || { echo "FIXTURE ERROR: the review tree $MAIN (and its linked worktree) could not be built" >&2; exit 2; }
+LEDGER="$MAIN/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+# DMAIN: the same shape in the DISTRIBUTION layout (core/scripts/), with its own linked worktree DLW.
+DMAIN="$WORK/dmain"; DLW="$WORK/dlw"
+mkdir -p "$DMAIN/core/scripts" && G init -q "$DMAIN" && cp "$SEAL_SRC" "$DMAIN/core/scripts/content-seal.sh" \
+  && printf 'dmain\n' > "$DMAIN/README" && G -C "$DMAIN" add README core && G -C "$DMAIN" commit -q -m dmain \
+  && [ -d "$DMAIN/.git" ] && G -C "$DMAIN" worktree add -q --detach "$DLW" HEAD 2>/dev/null \
+  || { echo "FIXTURE ERROR: the distribution-layout tree $DMAIN could not be built" >&2; exit 2; }
+# A symlinked ALIAS of MAIN's docs/: --check-shard is driven through it, so a refusal naming the
+# physical path proves the target was resolved the way the merge's staging resolves it.
+ALIAS="$WORK/alias-docs"
+ln -s "$MAIN/docs" "$ALIAS" || { echo "FIXTURE ERROR: cannot create the alias $ALIAS" >&2; exit 2; }
+wdir() { # -> a fresh <tree>/docs/reviews/s1.XXXXXX/shards, the tree $WROOT (default MAIN)
+  local w; w="$(mktemp -d "${WROOT:-$MAIN}/docs/reviews/s1.XXXXXX")" || return 1
+  mkdir "$w/shards" && printf '%s' "$w/shards"
+}
 
 # --------------------------------------------------------------------------------- worlds
 # A merge world: its own directory, the shard dir `1-code-review-<sha12>/` inside it holding the
@@ -190,7 +248,7 @@ tpl_put() { # <key> <world dir>: fill mode only, and never over a published temp
 # new_world <script-dir> [repo] -> prints the shard dir
 new_world() { # <script-dir> [repo] [dir-suffix] [pass-marker, e.g. -p2]
   local sd="$1" repo="${2:-$REPO_B}" sfx="${3:-code-review}" pm="${4:-}" w d tk=""
-  w="$(mktemp -d "$WORK/w.XXXXXX")" || return 1
+  w="$(wdir)" || return 1
   d="$w/1-$sfx-$B_SHA12$pm"
   [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
   if tpl_has "$tk"; then
@@ -261,7 +319,7 @@ world4() { # <script-dir> <v1> <v2> <v3> <vcross> -> shard dir with the three pa
 # kworld <script-dir> <repo> <base> <sha> <max-parts> <dir-suffix> <verdict> [code-review|qa]
 kworld() {
   local sd="$1" repo="$2" base="$3" sha="$4" mp="$5" sfx="$6" v="$7" gate="${8:-code-review}" w d k tk=""
-  w="$(mktemp -d "$WORK/k.XXXXXX")" || return 1
+  w="$(wdir)" || return 1
   d="$w/1-$sfx-$(printf '%s' "$sha" | cut -c1-12)"
   [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx")"
   if tpl_has "$tk"; then
@@ -285,8 +343,8 @@ kworld() {
 # CONCURRENTLY rebinds these by name (bind_scratch <own dir>) and shares nothing else that is
 # written. A fifth fixed path added to a predicate must be added here, or two concurrent scorers
 # write it at once.
-bind_scratch() { # <dir> -> MO, PO, PE, RERUN_KEEP under <dir>
-  MO="$1/merge.out"; PO="$1/part.out"; PE="$1/part.err"; RERUN_KEEP="$1/rerun.keep"
+bind_scratch() { # <dir> -> MO, PO, PE, RERUN_KEEP, CO, MKO under <dir>
+  MO="$1/merge.out"; PO="$1/part.out"; PE="$1/part.err"; RERUN_KEEP="$1/rerun.keep"; CO="$1/check.out"; MKO="$1/mark.out"
 }
 bind_scratch "$WORK"
 run_merge() { # <script-dir> <shard-dir> -> RC, $MO
@@ -366,7 +424,7 @@ p_prec() { # flag and key both set, disagreeing across DFLT files: the FLAG wins
 }
 p_dmerge() { # a merge world partitioned with the threshold UNSET, merged end to end
   local sd="$1" w d o k n mn
-  w="$(mktemp -d "$WORK/dm.XXXXXX")" || return 1
+  w="$(wdir)" || return 1
   d="$w/1-code-review-$D_SHA12"
   bash "$sd/partition-review-diff.sh" --map "$REPO_D" "$D_BASE" "$D_SHA" --shard-dir "$d" \
     > "$w/map" 2> "$w/map.err" < /dev/null || return 1
@@ -382,7 +440,7 @@ p_dmerge() { # a merge world partitioned with the threshold UNSET, merged end to
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
   # A second world with the flag AND the key set, disagreeing: the manifest records the FLAG's
   # number, the threshold actually applied, because that is what the merge hands back.
-  w="$(mktemp -d "$WORK/dmf.XXXXXX")" || return 1
+  w="$(wdir)" || return 1
   d="$w/1-code-review-$D_SHA12"
   env "$KEY=4" bash "$sd/partition-review-diff.sh" --map "$REPO_D" "$D_BASE" "$D_SHA" \
     --min-files "$((DFLT + 1))" --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
@@ -1150,10 +1208,474 @@ p_cr_hc_missing() { # G5: a code-review part shard without its declared count ->
 C_ALL="cr_ho_ok cr_ho_block cr_ho_unm cr_ho_runtwice cr_hc_missing"
 Q_ALL="q_worst q_table q_title q_fenced q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_nodef q_rank q_pm q_suffix q_gate q_vset q_secvar q_ho_ok q_ho_unm q_ho_orph q_ho_force q_ho_cross q_ho_prun q_ho_fenced q_ho_shape q_ho_multi q_ho_twoline q_ho_dup q_ho_deco q_ho_nocolon q_ho_prose q_ho_acid q_hc_dash q_hc_hidden q_hc_zero q_hc_missing q_hc_two q_hc_nonint q_hc_cross q_hc_none q_ho_widen"
 
+# ===================================================================== BL-737: the shard pre-check,
+# owner tails, the marker key, the content seal on review shards, and the legacy rule. Every predicate
+# below sets WHY to what it saw when it fails; each takes the SCRIPT DIRECTORY so a mutant copy drives it.
+#
+# THE ROWS ARE THE RECORDER'S. fire() hands the SHIPPED PostToolUse hook a payload exactly as the harness
+# would -- `agent_id` present for a dispatched seat, absent for the top-level session -- with
+# CLAUDE_PROJECT_DIR the main checkout, and fails unless the hook APPENDED a row: a silent hook must never
+# let a "no row" refusal pass for the wrong reason.
+fire() { # <file> <agent|session> [tool] [project root] -> 0 when the recorder appended a row
+  local f="$1" who="$2" tool="${3:-Write}" root="${4:-$MAIN}" l n0 n1 pl
+  l="$root/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  n0="$(grep -c . "$l" 2>/dev/null)" || n0=0
+  pl="$(jq -nc --arg t "$tool" --arg fp "$f" --arg who "$who" \
+    '{tool_name: $t, tool_input: {file_path: $fp}, session_id: "fixture-session", tool_use_id: "toolu_fixture",
+      transcript_path: "/dev/null"} + (if $who == "agent" then {agent_id: "a0123456789abcdef", agent_type: "code-reviewer"} else {} end)')" \
+    || return 1
+  CLAUDE_PROJECT_DIR="$root" bash "$HOOK" <<<"$pl" > /dev/null 2>&1
+  n1="$(grep -c . "$l" 2>/dev/null)" || n1=0
+  [ "$n1" -gt "$n0" ]
+}
+# The pre-key= --mark's marker, typed the way the old engine wrote it: `sha=` the body's hash (so
+# seal_of reads it sealed), `findings=` the shard's '#### ' count unless given. <n> is `-` for that count.
+lmark() { # <file> <n|-> <field words...>
+  local f="$1" n="$2" h; shift 2
+  h="$(shasum -a 256 < "$f" | cut -d' ' -f1)"
+  [ "$n" != - ] || { n="$(grep -c '^#### ' "$f")" || n=0; }
+  printf 'seat-complete: implementation code-reviewer %s sha=%s findings=%s\n' "$*" "$h" "$n" >> "$f"
+}
+lmark_all() { local f; for f in "$1"/*.md; do lmark "$f" - "$(basename "$f" .md)"; done; }
+mark_args() { # <script-dir> <args to --mark...> -> MRC, $MKO
+  local sd="$1"; shift
+  AI_DLC_PROJECT_ROOT="$PROJ" bash "$sd/wait-for-deliverable.sh" --mark "$@" > "$MKO" 2>&1 < /dev/null; MRC=$?
+}
+seal_mark() { # <script-dir> <file> <seat>: the seat's own close, `<shard>` the file's key
+  local k n; k="$(basename "$2" .md)"; n="$(grep -c '^#### ' "$2")" || n=0
+  mark_args "$1" "$2" implementation "$3" "$k" "findings=$n"
+}
+# seal_world <script-dir> <code-review|qa> -> a shard dir whose every shard its seat wrote (one recorder
+# row each) and closed with the real --mark. Run under WROOT to build it in another tree.
+seal_world() {
+  local sd="$1" g="$2" d f seat=code-reviewer
+  if [ "$g" = qa ]; then d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1; seat=qa
+  else d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1; fi
+  for f in "$d"/*.md; do
+    fire "$f" agent || { echo "the recorder wrote no row for $f" > "$MKO"; return 1; }
+    seal_mark "$sd" "$f" "$seat"; [ "$MRC" -eq 0 ] || return 1
+  done
+  printf '%s' "$d"
+}
+alias_of() { printf '%s' "$ALIAS${1#"$MAIN/docs"}"; }
+reline() { grep '^REFUSED:' "$1"; }
+nref() { local n; n="$(grep -c '^REFUSED:' "$1")" || n=0; printf '%s' "$n"; }
+owner_in() { # <output file> <want>: exactly one REFUSED line, ending in [owner: <want>]
+  local l; [ "$(nref "$1")" = 1 ] || return 1; l="$(reline "$1")"
+  case "$l" in *" [owner: $2]") return 0 ;; esac; return 1
+}
+run_check() { # <script-dir> <shard-dir> <gate> <target> [--findings n] -> CRC, $CO; driven through the alias
+  local sd="$1" d="$2" g="$3" t="$4"; shift 4
+  AI_DLC_PROJECT_ROOT="$PROJ" bash "$sd/merge-review-shards.sh" "$(alias_of "$d")" --gate "$g" \
+    --check-shard "$(alias_of "$t")" "$@" > "$CO" 2>&1 < /dev/null; CRC=$?
+}
+cs_reset() { rm -f "$1"/*.md "$1/notes.txt"; cp "$2"/*.md "$1"/; }
+
+# ---- CS1: --check-shard IS the merge's per-shard code. One defect per world, in a shard that is not
+# the first read; the full merge and --check-shard each print exactly one REFUSED line, and they are
+# byte-equal. The check is driven through ALIAS, so the shared line naming the PHYSICAL path is the
+# resolution's proof. Each csc_* seeds one class into $CSD and names its target in CS_T.
+csc_two_sha() { CS_T=2; shard "$CSD" 2 APPROVED 2 "" "reviewed-sha: $B_BASE"; }
+csc_sha_rev() { CS_T=2; shard "$CSD" 2 APPROVED 2 "$B_BASE"; }
+csc_bad_verdict() { CS_T=2; shard "$CSD" 2 PASS 2; }
+csc_nofind() { CS_T=2; raw_shard "$CSD" 2 '## Summary' 'Nothing to report.'; }
+csc_stray() { CS_T=2; raw_shard "$CSD" 2 '## Findings' '' '### Critical (must fix before merge)' '' '- **C-1** an issue' '  parts: 2'; }
+csc_partcite() { CS_T=2; shard "$CSD" 2 APPROVED 3; }
+csc_crossone() { CS_T=cross-2; shard "$CSD" cross-2 APPROVED 2; }
+csc_noparts() { CS_T=2; raw_shard "$CSD" 2 '## Findings' '' '### Critical (must fix before merge)' '' \
+  '#### F-2-1 cited' 'parts: 2' '' '#### F-2-2 uncited' '' 'Body.'; }
+csc_outrange() { CS_T=cross-2; shard "$CSD" cross-2 APPROVED "1, 9"; }
+csc_hc_missing() { CS_T=2; crs "$CSD" 2 APPROVED 2 OMIT; }
+csc_hc_nonint() { CS_T=2; crs "$CSD" 2 APPROVED 2 x; }
+csc_hc_mismatch() { CS_T=2; crs "$CSD" 2 APPROVED 2 1; }
+csc_hc_cross() { CS_T=cross-2; shard "$CSD" cross-2 APPROVED "1, 3" "handovers: 0"; }
+csc_malformed() { CS_T=2; crs "$CSD" 2 APPROVED 2 0 "$(printf '#### F-2-H AC7 cannot reach GREEN\nparts: 2\n**handover:** AC7\n\nBody.')"; }
+csc_ho_cross() { CS_T=cross-1; crs "$CSD" cross-1 APPROVED "1, 2" - "$(printf '#### F-c-H AC8 cannot be replayed\nparts: 1, 3\nhandover: AC8\n\nBody.')"; }
+csc_ho_multi() { CS_T=2; crs "$CSD" 2 APPROVED 2 1 "$(printf '#### F-2-H AC7 and AC8\nparts: 2\nhandover: AC7 AC8\n\nBody.')"; }
+csc_hr_part() { CS_T=3; crs "$CSD" 3 APPROVED 3 0 "$(printf '#### F-3-H ran AC7\nparts: 3\nhandover-run: 3 AC7 RED\n\nBody.')"; }
+csc_hr_cross2() { CS_T=cross-2; crs "$CSD" cross-2 APPROVED "1, 3" - "$(crrun 2 '2 AC7 RED')"; }
+# The marker classes: every other shard carries a legacy marker the old engine at B's frozen sha
+# accepts, so the full merge prints LEGACY lines before it reaches the target; only REFUSED lines compare.
+csc_mk_count() { CS_T=2; lmark_all "$CSD"; shard "$CSD" 2 APPROVED 2; lmark "$CSD/2.md" 3 2; }
+csc_mk_key() { CS_T=2; lmark_all "$CSD"; shard "$CSD" 2 APPROVED 2; lmark "$CSD/2.md" - 2 key=3; }
+csc_mk_field() { CS_T=2; lmark_all "$CSD"; shard "$CSD" 2 APPROVED 2; lmark "$CSD/2.md" - 1/3 key=2; }
+csc_mk_twokey() { CS_T=2; lmark_all "$CSD"; shard "$CSD" 2 APPROVED 2; lmark "$CSD/2.md" - 2 key=2 key=2; }
+# The content seal: a seat's Write (a recorder row), then a Bash rewrite.
+csc_seal() { fire "$CSD/2.md" agent || return 1
+  sed -i.bak -e 's/^## Summary$/## Overview/' "$CSD/2.md" && rm -f "$CSD/2.md.bak" && grep -q '^## Overview$' "$CSD/2.md" || return 1
+  CS_T=2; CS_TOK="changed after its last sealed write"; }
+# --gate qa. The second instance's own seed: a part seat's `## Deferred live check (not scored here)`.
+csq_part_ac() { CS_T=2; qshard "$CSD" 2 PASS 2 "$(printf '## Acceptance Criteria\n\n| AC | Verdict |\n|---|---|\n| AC1 | PASS |')"; }
+csq_graph_deferred() { CS_T=2; CS_TOK="(part shard 2) carries a '## Deferred ACs' section"
+  qshard "$CSD" 2 PASS 2 "$(printf '## Deferred live check (not scored here)\n\nThe live check runs at deploy.')"; }
+csq_cross_noac() { CS_T=cross-1; awk '/^## Acceptance Criteria$/ { print "## Per-AC results"; next } { print }' "$CSD/cross-1.md" > "$CSD/x.tmp" \
+  && mv "$CSD/x.tmp" "$CSD/cross-1.md"; }
+csq_cross_twodef() { CS_T=cross-1; qshard "$CSD" cross-1 PASS "1, 2" "$(printf '\n## Deferred ACs\n\n- AC5: deferred')"; }
+csq_cross2_ac() { CS_T=cross-2; qshard "$CSD" cross-2 PASS "1, 3" "$(printf '## Acceptance Criteria\n\n| AC | Verdict |\n|---|---|\n| AC9 | PASS |')"; }
+csq_rank() { CS_T=2; qshard "$CSD" 2 APPROVED 2; }
+CS_CR="two_sha sha_rev bad_verdict nofind stray partcite crossone noparts outrange hc_missing hc_nonint hc_mismatch hc_cross malformed ho_cross ho_multi hr_part hr_cross2 mk_count mk_key mk_field mk_twokey seal"
+CS_QA="part_ac graph_deferred cross_noac cross_twodef cross2_ac rank"
+CS_N="$(printf '%s\n' $CS_CR $CS_QA | grep -c .)"
+cs_same() { # <script-dir> <shard-dir> <gate> <target>
+  local sd="$1" d="$2" g="$3" t="$4" o
+  if [ "$g" = qa ]; then o="$(qout "$d")"; else o="$(out_of "$d")"; fi
+  run_mg "$sd" "$d" "$g" "$o"
+  run_check "$sd" "$d" "$g" "$t"
+  CS_LAST="merge rc=$RC [$(reline "$MO")] check rc=$CRC [$(reline "$CO")]"
+  [ "$RC" -eq 2 ] && [ "$CRC" -eq 2 ] && [ "$(nref "$MO")" = 1 ] && [ "$(nref "$CO")" = 1 ] \
+    && [ "$(reline "$MO")" = "$(reline "$CO")" ] && ! has "$CO" "SHARD-OK:" && [ ! -e "$o" ] && has "$CO" "$t" \
+    && { [ -z "$CS_TOK" ] || has "$CO" "$CS_TOK"; }
+}
+cs_run() { # <script-dir> <gate> <seeder> <clean copy>
+  # A seeder's exit is not its verdict (the shard writers end in a conditional printf); CS_T is: every
+  # seeder names its target only once its seed is written, and the seal seeder only once it applied.
+  CS_T=""; CS_TOK=""
+  "$3"
+  if [ -n "$CS_T" ] && [ -f "$CSD/$CS_T.md" ]; then
+    cs_same "$1" "$CSD" "$2" "$CSD/$CS_T.md" || WHY="$WHY ${3}{$CS_LAST}"
+  else WHY="$WHY ${3}{the seed did not apply}"; fi
+  cs_reset "$CSD" "$4"
+}
+cs_sel() { [ -z "${CS_ONLY:-}" ] || [ "$1" = "$CS_ONLY" ]; }
+p_cs() {
+  local sd="$1" c n any=0
+  WHY=""
+  CSD="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the code-review world was not built"; return 1; }
+  c="$(dirname "$CSD")/clean"; mkdir "$c" && cp "$CSD"/*.md "$c"/ || return 1
+  run_check "$sd" "$CSD" code-review "$CSD/1.md"
+  [ "$CRC" -eq 0 ] && [ "$(cat "$CO")" = "SHARD-OK: $CSD/1.md findings=1" ] \
+    || { WHY="control: a clean shard answered rc=$CRC [$(head -1 "$CO")]"; return 1; }
+  for n in $CS_CR; do cs_sel "$n" || continue; any=1; cs_run "$sd" code-review "csc_$n" "$c"; done
+  for n in $CS_QA; do cs_sel "$n" || continue; any=1
+    if [ -z "${CS_QD:-}" ]; then
+      CSD="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
+      CS_QD=1; c="$(dirname "$CSD")/clean"; mkdir "$c" && cp "$CSD"/*.md "$c"/ || return 1
+    fi
+    cs_run "$sd" qa "csq_$n" "$c"
+  done
+  CS_QD=""
+  [ "$any" = 1 ] && [ -z "$WHY" ]
+}
+
+# ---- CP1: the seal reader the merge copies (it cannot source wait-for-deliverable.sh, which executes on
+# load) is byte-identical to wait-for-deliverable.sh's, each function extracted by NAME from both.
+fn_body() { awk -v n="$2" 'index($0, n "() {") == 1 { p = 1 } p { print } p && /^}$/ { exit }' "$1"; }
+p_copies() {
+  local m="$1/merge-review-shards.sh" w="$1/wait-for-deliverable.sh" fn a nl drift="$WORK/drift-merge.sh"
+  WHY=""
+  for fn in has_marker content_hash seal_body seal_of; do
+    a="$(fn_body "$m" "$fn")"; nl="$(printf '%s\n' "$a" | grep -c .)" || nl=0
+    [ "$nl" -ge 3 ] && [ "$a" = "$(fn_body "$w" "$fn")" ] || WHY="$WHY $fn($nl lines, differs)"
+  done
+  [ "$(grep -cxF 'MARK_TOKEN="seat-complete: "' "$m")" = 1 ] && [ "$(grep -cxF 'MARK_TOKEN="seat-complete: "' "$w")" = 1 ] \
+    || WHY="$WHY MARK_TOKEN"
+  # The control: one byte drifted inside the merge's seal_body is seen by the same extraction.
+  sed -e 's/k == 1/k == 2/' "$m" > "$drift"
+  if cmp -s "$m" "$drift"; then WHY="$WHY control(the drift did not apply)"
+  elif [ "$(fn_body "$drift" seal_body)" = "$(fn_body "$w" seal_body)" ]; then WHY="$WHY control(a one-byte drift was not seen)"; fi
+  # content-seal.sh's seal_review_body hashes the bytes --mark's seal_body binds: its BODY (the lines
+  # after the name line, so the two names may differ) is byte-identical, with the same one-byte control.
+  local c="$1/content-seal.sh" cdrift="$WORK/drift-seal.sh" cb
+  cb="$(fn_body "$c" seal_review_body | sed 1d)"; nl="$(printf '%s\n' "$cb" | grep -c .)" || nl=0
+  [ "$nl" -ge 2 ] && [ "$cb" = "$(fn_body "$w" seal_body | sed 1d)" ] || WHY="$WHY seal_review_body($nl lines, differs from seal_body)"
+  sed -e 's/k == 1/k == 2/' "$c" > "$cdrift"
+  if cmp -s "$c" "$cdrift"; then WHY="$WHY control-seal(the drift did not apply)"
+  elif [ "$(fn_body "$cdrift" seal_review_body | sed 1d)" = "$(fn_body "$w" seal_body | sed 1d)" ]; then WHY="$WHY control-seal(a one-byte drift was not seen)"; fi
+  [ -z "$WHY" ]
+}
+
+# ---- OT1: the owner tail of every refusal family names the shard whose FILE must change.
+own_case() { owner_in "${3:-$MO}" "$2" || WHY="$WHY $1{want [owner: $2], got $(reline "${3:-$MO}")}"; }
+p_owner() {
+  local sd="$1" d c o SHARD_SHA
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  shard "$d" 2 APPROVED 3; run_merge "$sd" "$d"; own_case per-shard 2; cs_reset "$d" "$c"
+  rm -f "$d/2.md"; run_merge "$sd" "$d"; own_case missing 2; cs_reset "$d" "$c"
+  lmark_all "$d"; shard "$d" 2 APPROVED 2; run_merge "$sd" "$d"; own_case unfinished 2; cs_reset "$d" "$c"
+  cp "$d/1.md" "$d/01.md"; run_merge "$sd" "$d"; own_case dup-key "01.md 1.md"; cs_reset "$d" "$c"
+  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$sd" "$d"; own_case handover-unrun "2 cross-1"; cs_reset "$d" "$c"
+  crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case run-orphan "2 cross-1"; cs_reset "$d" "$c"
+  crs "$d" 2 APPROVED 2 2 "$(printf '%s\n\n%s' "$(crho 2 AC7)" "$(crho 2 AC7 | sed 's/F-2-H/F-2-H2/')")"
+  crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case handover-twice 2; cs_reset "$d" "$c"
+  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
+  crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
+  run_merge "$sd" "$d"; own_case run-twice cross-1; cs_reset "$d" "$c"
+  shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$sd" "$d"; own_case check1-multi 2; cs_reset "$d" "$c"
+  printf 'x\n' > "$d/notes.txt"; run_merge "$sd" "$d"; own_case bad-name lead; cs_reset "$d" "$c"
+  o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; own_case set-level lead
+  # The owner duplicate, K=8: cross-3 and its owner cross-1 report the identical set -> the NON-owner.
+  # Under --check-shard the owner is read only once it is finished and sealed: unmarked, cross-3 passes.
+  SHARD_SHA="$E_SHA"
+  d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
+  xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
+  run_merge "$sd" "$d"; own_case dup-merge cross-3
+  run_check "$sd" "$d" code-review "$d/cross-3.md"
+  [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
+  lmark "$d/cross-1.md" - cross-1 key=cross-1
+  run_check "$sd" "$d" code-review "$d/cross-3.md"; own_case dup-check-owner-sealed cross-3 "$CO"
+  [ -z "$WHY" ]
+}
+
+# ---- KY1: the marker's key=. A set every seat wrote and --mark closed merges, each marker keyed by its
+# own file name; the same set with one marker's key= (then its <shard> field) naming another key refuses.
+p_key() {
+  local sd="$1" d f k o
+  WHY=""
+  d="$(seal_world "$sd" code-review)" || { WHY="the sealed world was not built: $(head -2 "$MKO")"; return 1; }
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || { WHY="the seat-sealed set did not merge: $(head -2 "$MO")"; return 1; }
+  for f in "$d"/*.md; do k="$(basename "$f" .md)"
+    grep -qE "^seat-complete: implementation code-reviewer $k key=$k sha=[0-9a-f]{64} findings=1\$" "$f" \
+      || { WHY="$f does not end in a marker keyed $k: $(tail -1 "$f")"; return 1; }
+  done
+  rm -f "$o"
+  awk '{ sub(/ 2 key=2 sha=/, " 2 key=3 sha=") } { print }' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md"
+  run_merge "$sd" "$d"
+  refused_clean "carries key=3, not this shard's key 2" "$d" && owner_in "$MO" 2 || WHY="$WHY key=3{$(head -1 "$MO")}"
+  awk '{ sub(/ code-reviewer 2 key=3 /, " code-reviewer 1/3 key=2 ") } { print }' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md"
+  run_merge "$sd" "$d"
+  refused_clean "names shard '1/3', not this shard's key 2" "$d" && owner_in "$MO" 2 || WHY="$WHY field-1/3{$(head -1 "$MO")}"
+  [ -z "$WHY" ]
+}
+
+# ---- MK1: --mark on a review shard refuses a <shard> that is not the file's key, a caller key= or
+# sha= word, and a findings count the merge's check refuses -- each exit 64, the file byte-unchanged --
+# and the ALLOW twin, same file, same row, marks it keyed by its own name.
+mark_refused() { [ "$MRC" -eq 64 ] && has "$MKO" "$1" && has "$MKO" "Nothing was written." && cmp -s "$2" "$3"; }
+p_mark() {
+  local sd="$1" d f s
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
+  f="$d/2.md"; s="$(dirname "$d")/2.snap"
+  fire "$f" agent || { WHY="the recorder wrote no row for $f"; return 1; }
+  cp "$f" "$s" || return 1
+  mark_args "$sd" "$f" implementation code-reviewer 3 findings=1
+  mark_refused "the <shard> field '3' is not this file's key, 2" "$s" "$f" || WHY="$WHY shard-3{rc=$MRC $(head -1 "$MKO")}"
+  mark_args "$sd" "$f" implementation code-reviewer 2 key=2 findings=1
+  mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-key{rc=$MRC $(head -1 "$MKO")}"
+  mark_args "$sd" "$f" implementation code-reviewer 2 sha=0123abcd findings=1
+  mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-sha{rc=$MRC $(head -1 "$MKO")}"
+  mark_args "$sd" "$f" implementation code-reviewer 2 findings=3
+  mark_refused "findings=3' but its ## Findings section heads 1 finding(s)" "$s" "$f" || WHY="$WHY findings-3{rc=$MRC $(head -3 "$MKO")}"
+  mark_args "$sd" "$f" implementation code-reviewer 2 findings=1
+  [ "$MRC" -eq 0 ] && grep -qE '^seat-complete: implementation code-reviewer 2 key=2 sha=[0-9a-f]{64} findings=1$' "$f" \
+    || WHY="$WHY allow{rc=$MRC $(head -2 "$MKO")}"
+  [ -z "$WHY" ]
+}
+
+# ---- SE1: the second instance's lead path. A part shard its seat wrote and marked reads SEAL-OK (the
+# control); rewritten through Bash (`sed -i` on a heading) and re-marked, --mark refuses (64), naming
+# the re-dispatch remedy, with the file byte-unchanged.
+p_seal_rewrite() {
+  local sd="$1" d f s
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  f="$d/2.md"; s="$(dirname "$d")/2.snap"
+  fire "$f" agent || { WHY="the recorder wrote no row for $f"; return 1; }
+  mark_args "$sd" "$f" implementation qa 2 findings=1
+  [ "$MRC" -eq 0 ] || { WHY="the seat's own --mark failed: $(head -2 "$MKO")"; return 1; }
+  grep -qE '^seat-complete: implementation qa 2 key=2 sha=' "$f" \
+    || { WHY="the seat's --mark did not take the review-shard branch (its marker carries no key=): $(tail -1 "$f")"; return 1; }
+  bash "$sd/content-seal.sh" --review-shard "$f" > "$CO" 2>&1 < /dev/null; CRC=$?
+  [ "$CRC" -eq 0 ] && has "$CO" "SEAL-OK:" || { WHY="control: the seat's own seal did not read SEAL-OK (rc=$CRC $(head -1 "$CO"))"; return 1; }
+  sed -i.bak -e 's/^## Summary$/## Overview/' "$f" && rm -f "$f.bak" && grep -q '^## Overview$' "$f" \
+    || { WHY="the in-place sed rewrite did not apply"; return 1; }
+  cp "$f" "$s" || return 1
+  mark_args "$sd" "$f" implementation qa 2 findings=1
+  mark_refused "SEAL-REFUSED:" "$s" "$f" && has "$MKO" "re-dispatch the reviewer for that shard" \
+    || { WHY="the Bash-rewritten shard was re-marked: rc=$MRC $(head -2 "$MKO")"; return 1; }
+}
+
+# ---- SE2: a shard whose last TOOL row is the top-level session's (a lead Edit) is refused at the merge.
+# The control is the same set before that row; the ALLOW twin, one property apart, is an agent Edit after it.
+p_session() {
+  local sd="$1" d o
+  WHY=""
+  d="$(seal_world "$sd" code-review)" || { WHY="the sealed world was not built: $(head -2 "$MKO")"; return 1; }
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || { WHY="control: the seat-sealed set did not merge: $(head -2 "$MO")"; return 1; }
+  rm -f "$o"
+  fire "$d/2.md" session Edit || { WHY="the recorder wrote no session row"; return 1; }
+  run_merge "$sd" "$d"
+  refused_clean "was last written by the top-level session" "$d" && owner_in "$MO" 2 || { WHY="a session-last shard: $(head -1 "$MO")"; return 1; }
+  fire "$d/2.md" agent Edit || { WHY="the recorder wrote no agent row"; return 1; }
+  run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || { WHY="allow: an agent Edit after the session's did not merge: $(head -1 "$MO")"; return 1; }
+}
+
+# ---- LG1: the legacy rule. Over B's frozen sha (the engine without the sentinel), a set of legacy
+# markers merges and prints the exact LEGACY line naming the full sha -- one shard a seat's Write then the
+# old Bash append, which body_sha accepts. The same Write then a sed rewrite is refused. The sentinel
+# engine at the frozen sha refuses, and an engine in neither layout refuses.
+p_legacy() {
+  local sd="$1" d n SHARD_SHA
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
+  fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
+  lmark_all "$d"; run_merge "$sd" "$d"
+  n="$(grep -c '^LEGACY: ' "$MO")" || n=0
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n" = 6 ] \
+    && grep -qxF "LEGACY: $d/1.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
+    && grep -qxF "LEGACY: $d/2.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
+    || { WHY="old engine: rc=$RC, $n LEGACY line(s): $(grep -v '^LEGACY: ' "$MO" | head -1)"; return 1; }
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
+  sed -i.bak -e 's/^## Summary$/## Overview/' "$d/2.md" && rm -f "$d/2.md.bak" || return 1
+  lmark_all "$d"; run_merge "$sd" "$d"
+  refused_clean "changed after its last sealed write" "$d" && owner_in "$MO" 2 || WHY="$WHY rewrite{$(head -1 "$MO")}"
+  SHARD_SHA="$S_SHA"
+  d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review APPROVED)" || { WHY="$WHY the sentinel world was not built"; return 1; }
+  lmark_all "$d"; run_merge "$sd" "$d"
+  refused_clean "the frozen sha $S_SHA's core/scripts/wait-for-deliverable.sh is the key= engine" "$d" || WHY="$WHY sentinel{$(head -1 "$MO")}"
+  SHARD_SHA="$N_SHA"
+  d="$(kworld "$sd" "$REPO_N" "$N_BASE" "$N_SHA" 3 code-review APPROVED)" || { WHY="$WHY the engine-absent world was not built"; return 1; }
+  lmark_all "$d"; run_merge "$sd" "$d"
+  refused_clean "cannot be read at the frozen sha $N_SHA" "$d" || WHY="$WHY absent{$(head -1 "$MO")}"
+  [ -z "$WHY" ]
+}
+
+# ---- LY1: from a LINKED worktree the ledger is the MAIN checkout's, in both layouts: the reader in a
+# consumer-layout tree (scripts/ai-dlc/) and in a distribution-layout tree (core/scripts/) each name
+# <main>/_bmad-output/... for a shard in its linked worktree, never the worktree's own stale copy
+# (seeded as a decoy holding a matching row). The recorder fired from the linked worktree writes into
+# MAIN's ledger, both readers then read SEAL-OK, and a set sealed there merges.
+lay_one() { # <main> <linked worktree> <reader>
+  local d f rel
+  mkdir -p "$2/docs/reviews" && d="$(mktemp -d "$2/docs/reviews/s9.XXXXXX")/shards/1-code-review-$B_SHA12" && mkdir -p "$d" || return 1
+  f="$d/1.md"; printf '# shard\n\nreviewed-sha: %s\n' "$B_SHA" > "$f"; rel="${f#"$2"/}"
+  mkdir -p "$2/_bmad-output/planning-artifacts" || return 1
+  jq -nc --arg p "$rel" --arg r "$2" --arg s "$(shasum -a 256 < "$f" | cut -d' ' -f1)" \
+    '{v: 1, kind: "content-seal", ts: "2000-01-01T00:00:00Z", path: $p, actor: "agent", agent_id: "a0123456789abcdef", root: $r, sha256: $s}' \
+    >> "$2/_bmad-output/planning-artifacts/.artifact-writes.jsonl" || return 1
+  bash "$3" --review-shard "$f" > "$CO" 2>&1 < /dev/null; CRC=$?
+  LAY_F="$f"
+  [ "$CRC" -eq 1 ] && has "$CO" "carries no content-seal row in $1/_bmad-output/planning-artifacts/.artifact-writes.jsonl" \
+    && ! has "$CO" "$2/_bmad-output"
+}
+p_layouts() {
+  local sd="$1" f n d o rd
+  WHY=""
+  lay_one "$DMAIN" "$DLW" "$DMAIN/core/scripts/content-seal.sh" || WHY="$WHY dist{rc=$CRC $(head -1 "$CO")}"
+  lay_one "$MAIN" "$LW" "$MAIN/scripts/ai-dlc/content-seal.sh" || WHY="$WHY consumer{rc=$CRC $(head -1 "$CO")}"
+  f="$LAY_F"
+  fire "$f" agent || { WHY="$WHY the recorder wrote no row into $LEDGER for $f"; return 1; }
+  n="$(jq -c --arg p "${f#"$LW"/}" --arg r "$LW" 'select(.path == $p and .root == $r and has("body_sha"))' "$LEDGER" | grep -c .)" || n=0
+  [ "$n" = 1 ] || WHY="$WHY ledger-row{$n rows for the linked worktree's shard in $LEDGER}"
+  [ "$(grep -c . "$LW/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" = 1 ] || WHY="$WHY the recorder wrote into the linked worktree's own state dir"
+  for rd in "$MAIN/scripts/ai-dlc/content-seal.sh" "$DMAIN/core/scripts/content-seal.sh"; do
+    bash "$rd" --review-shard "$f" > "$CO" 2>&1 < /dev/null; CRC=$?
+    [ "$CRC" -eq 0 ] && has "$CO" "SEAL-OK:" || WHY="$WHY read-from-$rd{rc=$CRC $(head -1 "$CO")}"
+  done
+  d="$(WROOT="$LW" seal_world "$sd" code-review)" || { WHY="$WHY the linked-worktree set was not sealed: $(head -2 "$MKO")"; return 1; }
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || WHY="$WHY lw-merge{$(head -1 "$MO")}"
+  [ -z "$WHY" ]
+}
+
+# ---- FT1: a review-shard row written BEFORE a gate part does not move --first-tool-ts (rows carrying
+# body_sha are skipped); the control is the same ledger with that row's body_sha deleted, which does.
+# Its own tree, so the gate part's row and the review row share one root.
+p_first_ts() {
+  local sd="$1" ft f p l t1 t2 r
+  WHY=""
+  ft="$(mktemp -d "$WORK/ft.XXXXXX")" || return 1
+  mkdir -p "$ft/scripts/ai-dlc" && G init -q "$ft" && cp "$SEAL_SRC" "$ft/scripts/ai-dlc/content-seal.sh" && [ -d "$ft/.git" ] \
+    || { WHY="FIXTURE ERROR: the tree $ft was not built"; return 1; }
+  f="$ft/docs/reviews/s1/shards/1-code-review-$B_SHA12/1.md"; mkdir -p "$(dirname "$f")" && printf '# shard\n' > "$f"
+  fire "$f" agent Write "$ft" || { WHY="the recorder wrote no review row"; return 1; }
+  # The recorder stamps ts with date -u at one-second resolution, so the review row's ts is pinned to a
+  # fixed earlier stamp (jq, selected by body_sha) rather than slept past: the real hook still wrote both rows.
+  jq -c 'if has("body_sha") then .ts = "2000-01-01T00:00:00Z" else . end' "$ft/_bmad-output/planning-artifacts/.artifact-writes.jsonl" > "$ft/ts.tmp" \
+    && mv "$ft/ts.tmp" "$ft/_bmad-output/planning-artifacts/.artifact-writes.jsonl" || { WHY="the review row ts was not pinned"; return 1; }
+  p="$ft/_bmad-output/gate-adjudication/g1.part-1.jsonl"; mkdir -p "$(dirname "$p")" && printf '{}\n' > "$p"
+  fire "$p" agent Write "$ft" || { WHY="the recorder wrote no gate-part row"; return 1; }
+  l="$ft/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  t1="$(jq -r 'select(has("body_sha")) | .ts' "$l")"; t2="$(jq -r 'select(has("body_sha") | not) | .ts' "$l")"
+  [ -n "$t1" ] && [ -n "$t2" ] && [ "$t1" \< "$t2" ] || { WHY="FIXTURE BROKEN: the review row ($t1) is not strictly before the part row ($t2)"; return 1; }
+  r="$(bash "$sd/content-seal.sh" --first-tool-ts "$ft/_bmad-output" 2>&1)"
+  [ "$r" = "$t2" ] || WHY="$WHY review-row-moved-it{$r, want $t2}"
+  jq -c 'del(.body_sha)' "$l" > "$l.tmp" && mv "$l.tmp" "$l" || return 1
+  r="$(bash "$sd/content-seal.sh" --first-tool-ts "$ft/_bmad-output" 2>&1)"
+  [ "$r" = "$t1" ] || WHY="$WHY control{without body_sha the row read $r, want $t1}"
+  [ -z "$WHY" ]
+}
+
+# ---- EV1: an ENVIRONMENT that cannot read the seal is the lead's, never a reviewer's. A seat-sealed set
+# merged on a PATH built from this fixture's own tools.decl WITHOUT jq is REFUSED [owner: lead], naming
+# SEAL-UNAVAILABLE and no re-dispatch; --mark on a fresh shard under it exits 64 relaying the same text.
+# The control is the SAME set on the same PATH with jq added back, which merges -- so the built PATH lacks
+# jq and nothing else the merge needs.
+p_env() {
+  local sd="$1" d o nb jb t f s
+  WHY=""
+  nb="$WORK/nojq-bin"; jb="$WORK/jq-bin"
+  if [ ! -d "$nb" ]; then
+    mkdir -p "$nb" "$jb" || return 1
+    while IFS= read -r t; do
+      case "$t" in ""|"#"*|jq) continue ;; esac
+      f="$(command -v "$t")" && [ -x "$f" ] && ln -s "$f" "$nb/$t" || { WHY="FIXTURE ERROR: $t from tools.decl is not on PATH"; return 1; }
+    done < "$LIB_DIR/tools.decl"
+    ln -s "$(command -v jq)" "$jb/jq" || return 1
+  fi
+  # Resolved in a FRESH process: this shell's command hash table keeps /opt/homebrew/bin/jq from earlier arms
+  # and answers `command -v jq` from it whatever PATH says.
+  [ ! -e "$nb/jq" ] && env -i PATH="$nb" "$nb/bash" -c 'command -v git > /dev/null 2>&1 && ! command -v jq > /dev/null 2>&1' \
+    || { WHY="FIXTURE BROKEN: the jq-less PATH $nb still resolves jq, or lacks git"; return 1; }
+  d="$(seal_world "$sd" code-review)" || { WHY="the sealed world was not built: $(head -2 "$MKO")"; return 1; }
+  o="$(out_of "$d")"
+  PATH="$nb" AI_DLC_PROJECT_ROOT="$PROJ" "$nb/bash" "$sd/merge-review-shards.sh" "$d" --gate code-review --out "$o" \
+    > "$MO" 2>&1 < /dev/null; RC=$?
+  refused_clean "SEAL-UNAVAILABLE:" "$d" && has "$MO" "jq is not on PATH" && owner_in "$MO" lead \
+    && ! has "$MO" "re-dispatch the reviewer" || WHY="$WHY nojq-merge{rc=$RC $(head -1 "$MO")}"
+  PATH="$nb:$jb" AI_DLC_PROJECT_ROOT="$PROJ" "$nb/bash" "$sd/merge-review-shards.sh" "$d" --gate code-review --out "$o" \
+    > "$MO" 2>&1 < /dev/null; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || WHY="$WHY control-with-jq{rc=$RC $(head -1 "$MO")}"
+  # --mark: a seat-written shard, its row recorded with jq present, marked on the jq-less PATH.
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="$WHY the mark world was not built"; return 1; }
+  f="$d/2.md"; s="$(dirname "$d")/2.snap"
+  fire "$f" agent || { WHY="$WHY the recorder wrote no row for $f"; return 1; }
+  cp "$f" "$s" || return 1
+  PATH="$nb" AI_DLC_PROJECT_ROOT="$PROJ" "$nb/bash" "$sd/wait-for-deliverable.sh" --mark "$f" implementation code-reviewer 2 findings=1 \
+    > "$MKO" 2>&1 < /dev/null; MRC=$?
+  mark_refused "SEAL-UNAVAILABLE:" "$s" "$f" && has "$MKO" "repair the environment, then mark again." \
+    || WHY="$WHY nojq-mark{rc=$MRC $(head -2 "$MKO")}"
+  [ -z "$WHY" ]
+}
+
+# ---- UM1: an UNMARKED set over the key= engine takes the NON-legacy seal. Seeded exactly as the tip
+# adversary's D2 repro (adv-strip.sh): a set of shards (here closed with markers), every `seat-complete:`
+# line stripped with `awk '!/^seat-complete: /'`, one shard's verdict rewritten with sed, then merged over
+# a frozen sha whose engine carries the sentinel and a ledger with no rows for them -> REFUSED, no seal
+# row. The control is the same steps over B's frozen sha (the old engine), which merges with no LEGACY
+# line (no marker is left to be legacy).
+um_strip() { # <shard dir>: the repro's steps -- strip every marker, rewrite shard 2's verdict
+  local f
+  for f in "$1"/*.md; do awk '!/^seat-complete: /' "$f" > "$f.t" && mv "$f.t" "$f" || return 1; done
+  sed -e 's/^shard-verdict: .*/shard-verdict: APPROVED/' "$1/2.md" > "$1/2.t" && mv "$1/2.t" "$1/2.md" || return 1
+  grep -q '^shard-verdict: APPROVED$' "$1/2.md" && [ "$(cat "$1"/*.md | grep -c '^seat-complete: ')" = 0 ]
+}
+p_unmarked() {
+  local sd="$1" d SHARD_SHA
+  WHY=""
+  SHARD_SHA="$S_SHA"
+  d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review NEEDS_REWORK)" || { WHY="the sentinel world was not built"; return 1; }
+  lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply"; return 1; }
+  run_merge "$sd" "$d"
+  refused_clean "carries no content-seal row" "$d" || WHY="$WHY unmarked-sentinel{rc=$RC $(head -1 "$MO")}"
+  SHARD_SHA="$B_SHA"
+  d="$(world4 "$sd" NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK)" || { WHY="$WHY the old-engine world was not built"; return 1; }
+  lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply (control)"; return 1; }
+  run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || WHY="$WHY control-old-engine{rc=$RC $(head -1 "$MO")}"
+  [ -z "$WHY" ]
+}
+
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.
-seed_controls() { # W0, W1, W2
-local A_NAMES A_REV na nn n1
+seed_controls() { # W0, W1, W2, W3, W4
+local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf
 A_NAMES="$(G -C "$REPO_A" diff --name-only "$A_BASE..$A_SHA")"
 A_REV="$(grep -v '^docs/reviews/' <<<"$A_NAMES")"
 na="$(grep -c . <<<"$A_REV")" || na=0
@@ -1175,5 +1697,34 @@ if printf '| AC | Verdict | Evidence |\n| AC2 | NEEDS_REWORK | replay |\n' > "$W
   ok "W2: Check 1's derived pattern matches 0 pipe-led per-AC table rows and 1 bold 'Verdict:' label, so Q2's single match is the merge's own"
 else
   bad "W2: FIXTURE BROKEN -- Check 1's pattern [$PAT] counts a pipe-led AC row, or misses a bold label; Q2 cannot discriminate"
+fi
+# W3: the engines at the frozen shas. The subject carries the sentinel once, the derived old engine
+# none; B's frozen sha holds the old one (consumer layout), S's the subject (distribution layout), N's
+# neither -- and N's commit IS readable (its README), so "absent" is not "unreadable".
+c1="$(grep -c '# MARK-KEY-WRITER v1' "$WFD_SRC")" || c1=0
+c0="$(grep -c '# MARK-KEY-WRITER v1' "$OLD_ENGINE")" || c0=0
+nb="$(G -C "$REPO_B" show "${B_SHA}:scripts/ai-dlc/wait-for-deliverable.sh" 2>/dev/null | grep -c '# MARK-KEY-WRITER v1')" || nb=0
+ns="$(G -C "$REPO_S" show "${S_SHA}:core/scripts/wait-for-deliverable.sh" 2>/dev/null | grep -c '# MARK-KEY-WRITER v1')" || ns=0
+if [ "$c1" = 1 ] && [ "$c0" = 0 ] && ! cmp -s "$WFD_SRC" "$OLD_ENGINE" && [ "$nb" = 0 ] && [ "$ns" = 1 ] \
+   && G -C "$REPO_B" cat-file -e "${B_SHA}:scripts/ai-dlc/wait-for-deliverable.sh" 2>/dev/null \
+   && ! G -C "$REPO_N" cat-file -e "${N_SHA}:scripts/ai-dlc/wait-for-deliverable.sh" 2>/dev/null \
+   && ! G -C "$REPO_N" cat-file -e "${N_SHA}:core/scripts/wait-for-deliverable.sh" 2>/dev/null \
+   && G -C "$REPO_N" cat-file -e "${N_SHA}:README" 2>/dev/null; then
+  ok "W3: the subject's --mark carries the sentinel once and the derived old engine none; B's frozen sha holds the old engine, S's the sentinel engine, N's neither (N's README read as the control)"
+else
+  bad "W3: FIXTURE BROKEN -- the engine blobs cannot express the legacy rule (subject $c1, old $c0, at B $nb, at S $ns)"
+fi
+# W4: the recorder writes. MAIN's sourced copy is the subject's bytes; a fire on a review-shard path
+# appends one row carrying path, physical root and body_sha; a fire on a path outside the sealed sets
+# appends none (the control that the count can stay put).
+pf="$MAIN/docs/reviews/s0.probe/shards/1-code-review-$B_SHA12/1.md"; mkdir -p "$(dirname "$pf")" && printf '# probe\n' > "$pf"
+nr0="$(grep -c . "$LEDGER" 2>/dev/null)" || nr0=0
+printf 'x\n' > "$MAIN/notes.md"; fire "$MAIN/notes.md" agent; nr1="$(grep -c . "$LEDGER" 2>/dev/null)" || nr1=0
+if cmp -s "$SEAL_SRC" "$MAIN/scripts/ai-dlc/content-seal.sh" && cmp -s "$SEAL_SRC" "$DMAIN/core/scripts/content-seal.sh" \
+   && [ "$nr1" = "$nr0" ] && fire "$pf" agent \
+   && [ "$(jq -c --arg r "$MAIN" 'select(.path == "docs/reviews/s0.probe/shards/1-code-review-'"$B_SHA12"'/1.md" and .root == $r and has("body_sha"))' "$LEDGER" | grep -c .)" = 1 ]; then
+  ok "W4: the recorder hook, fired with a seat's payload, appends one review-shard row (path, physical root, body_sha) to the main checkout's ledger, and none for a path outside the sealed sets"
+else
+  bad "W4: FIXTURE BROKEN -- the recorder hook did not write the review-shard row the seal arms read (rows $nr0 -> $nr1 on a non-shard path)"
 fi
 }

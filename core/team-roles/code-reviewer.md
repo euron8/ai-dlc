@@ -202,16 +202,18 @@ than `RED` raises the merged verdict to at least `NEEDS_REWORK`. Every other
 cross shard executes nothing. Write to the shard path your brief names
 (`<ordinal>.md`, `cross-<g>.md`, or `cross.md` for one group), never to the
 review file above. Write your header first and append each finding as you
-verify it. When you have finished, and only then, close the shard with ONE Bash
-call: `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> implementation
-code-reviewer <shard> findings=<n>`, <n> being the number of `#### ` findings in
-your file. It appends `seat-complete: implementation code-reviewer <shard>
-sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after it
+verify it. When you have finished, check your shard before you mark it. Run both scripts from `<lead engine>`, the lead checkout's `scripts/ai-dlc` path your brief carries, never from your worktree:
+`<lead engine>/merge-review-shards.sh <shard dir> --gate <gate> --check-shard
+<shard file>`. Fix every REFUSED line and repeat until it prints SHARD-OK. Then,
+and only then, close the shard with ONE Bash call:
+`<lead engine>/wait-for-deliverable.sh --mark <shard path> implementation
+code-reviewer <shard> findings=<n>`, <shard> being the shard's own key (the
+file basename without `.md`: `03`, `cross-2`, `cross`) and <n> the number of
+`#### ` findings in your file. `--mark` runs the same check and refuses a shard
+that fails it. It appends `seat-complete: implementation code-reviewer <shard>
+key=<k> sha=<hex> findings=<n>`, whose `sha=` binds every line above it: an edit after it
 reads unfinished until you run the same call again. Never type the line by hand
-or with your header; the merge refuses a shard whose count disagrees. If the call fails with
-`unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit, the bare line
-`seat-complete: implementation code-reviewer <shard> findings=<n>` instead, which the join
-accepts once the file has stopped changing. Your shard replaces the template's
+or with your header; the merge refuses a shard whose count disagrees. Your shard replaces the template's
 `## Verdict` heading and value with one column-0 line
 `shard-verdict: <VALUE>` (`APPROVED`, `NEEDS_REWORK` or `BLOCKED`), carries one
 column-0 `reviewed-sha: <full frozen sha>`, and writes no line Check 1's grep
