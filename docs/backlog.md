@@ -607,3 +607,116 @@ Owed (mechanism left to the builder):
 
 verify: manual
 
+## BL-735 — the recover hook's worst real gate-in-flight emission sits 24 bytes under the 10000 cliff, so any line added to its emitted text silently drops the sidecar note for a compacted lead
+
+**NOTE.** Measured by ai-dlc-e3 (batch 238) while 238-d-721's dress was failing; re-derived by the batch-238 docs hand with one direct fire of the hook in the WC world, not the fixture. Related: BL-457, which moved the cliff onto the emitted string.
+
+`core/hooks/ai-dlc-recover.sh:63` sets `CONTEXT_LIMIT` to 10000, and `:629-632` drop the sidecar note ("Mechanical state captured immediately before this compaction") whenever the wrapped bare directive would reach that limit. `core/fixtures/gate-resume/run.sh`'s BL-457 arm WC (`:637-640`) seeds the worst real gate-in-flight case: a 31-char `implementation-<UTC>` nonce opened through the real `gate-checkpoint.sh`, a sidecar, and an unresolvable step file. It asserts only that the emitted length is under 10000.
+
+Measured, the WC world built as `_mkc457` builds it and fired once:
+- at 39fb06be9 (0.894.0) the hook emits 9980 characters, with the sidecar note present: 20 bytes of headroom;
+- at 599da0aef (0.895.0), which trimmed the hook by 4 bytes, it emits 9976: 24 bytes of headroom.
+
+The arm's own cliff sweep places the drop between nonce padding n=120 (under) and n=132 (over), per ai-dlc-e3. So a change that adds about two dozen bytes to the hook's emitted text drops the note in the worst real case. `degraded` stays `no`, WC stays green while the emission is under 10000, and nothing announces that a compacted lead has lost its one pointer to the pre-compaction branch and gate-log tail.
+
+Owed (mechanism left to the builder), one of:
+- raise the headroom by restructuring what the hook emits, so the worst real case sits well clear of the cliff;
+- make a growth past a stated margin fail loudly at author time, for example a WC bound tighter than the cliff, instead of the note dropping silently at run time.
+
+verify: manual — the two owed fixes close on different observables: a restructure moves the emitted length, while an author-time margin leaves it where it is and adds a refusal. An `sh` receipt keyed on either one would refuse the other, and a receipt keyed on the length alone could be closed by a cosmetic trim that leaves the hazard intact.
+
+## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
+
+**DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
+
+The operator ruled that a story split counts as a SCOPE CHANGE for the test strategy. The amendment procedure does not treat it as one. `core/skills/ai-dlc/steps/_gate-procedures.md:853-869` gives two ways to amend a notarized artifact after MET:
+- item 1 (`:856-860`) is "a residue or gate repair on unchanged scope". It needs only a chain of structured repair records, each with `artifact_sha_before:` and `artifact_sha_after:`, from the notarized sha to the disk sha;
+- items 2-4 (`:861-869`) handle a scope change with one `REOPEN_AFTER_MET` record plus ONE verify pass. Item 2 defines a scope change as "a later step rewording a capability".
+
+Check 24 arm J2 enforces that split. `core/scripts/validate-adversarial-convergence.sh:3569-3574` PASSes on a complete chain of repair links. `:3582-3584` reserve the re-open for a scope change, but the arm itself never decides which case it is looking at.
+
+A story split changes the set of story ids the strategy maps tests to. It is not "rewording a capability", so the repair path is open to it, and J2 accepts the chain with no adversarial pass over the strategy's current bytes.
+
+Measured on graph s319 (as relayed by graph-watch; graph not re-read for this filing):
+- `test-strategy-repair-p3` (`faa99bbc` -> `15443bd`) carried the 2.3 -> 2.3a/2.3b split;
+- `test-strategy-repair-p4` made the strategy 52 lettered cases and 132 rows;
+- the test-strategy series PASSed after both, and no adversary reviewed either.
+
+Owed:
+- (a) the strategy-subject amendment rule treats a change in the mapped story-id set as a scope change (`REOPEN_AFTER_MET` plus ONE verify pass). That change is detected mechanically from the id set, not by judgement, and J2's acceptance of a repair chain is the arm that changes;
+- (b) the verify pass covers only the changed rows where the machinery allows that, and is one full pass where it does not;
+- (c) designed TOGETHER with BL-733, so a split costs work in proportion to what it changed;
+- a fixture with three worlds:
+  - a split strategy with only a repair chain is REFUSED by J2;
+  - the same split with `REOPEN_AFTER_MET` and a verify pass is accepted;
+  - an in-scope repair (same id set) is still accepted by its chain.
+
+verify: manual — the id-set detector and where the re-open is recorded are the builder's design, so an `sh` receipt built before them would close only under a guessed interface. A discriminating receipt can be written alongside the fix.
+
+
+## BL-737 — a refused code-review shard merge has no prescribed correction path, so the lead rewrites and re-seals reviewers' shards to force it through
+
+**DEFECT.** Seen by graph-watch (ai-dlc-1b) in graph's s319, story 3.1, gate-1 code review (worktree `graph-s319-story-3-1`, shard dir `docs/reviews/s319/shards/3-1-code-review-479b733638cc`, committed at `fc2674950`). An adjudication hand verified every cite at origin/main `e2273444b`; graph's installed `merge-review-shards.sh`, `code-reviewer.md` and `implementation.md` are byte-identical to origin/main (`cmp` exit 0). Operator ruling, verbatim: "why wouldn't it be filed? The lead should not be editing those to force the merge. They should have been done correctly in the first place. And if they were wrong, there should have been a prescribed path to correct them."
+
+What happened:
+- `merge-review-shards.sh` refused the shard set three times: twice on a duplicate cross-owner finding ("cross-2.md:18 (cross-2) cites 3 4, a finding owned by cross-6 (partition-document.sh --cross-owner), whose shard carries the identical set", emitted at `:583-584`), and once on the marker count ("cross-6.md ends in 'seat-complete: ... findings=7' but its ## Findings section heads 6 finding(s)", emitted at `:473-475`).
+- Per graph-watch, from graph transcript `218aa1b8` at 01:50:36Z and 01:50:46Z, the lead then ran python heredocs that moved a finding from `cross-2.md` to `cross-6.md` and deleted both shards' `seat-complete:` lines, and re-marked both with `wait-for-deliverable.sh --mark`. No reviewer seat was re-dispatched. The merge then passed: "MERGED: … verdict=NEEDS_REWORK parts=4 findings=36".
+- As committed, all ten shards' `sha=` seals match their bodies, so the hand-rewritten shards read as sealed reviewer output. The merge counts `#### ` headings inside `## Findings` (`:419-421`; its header says so at `:90-91`), and the ten marker counts sum to the merged 36. The refusal-time state is not in history (the shard dir has one commit).
+- All six cross markers read `cross/6`: the `<shard>` field is `<seat>/<total>`, the same for every cross seat, while `implementation.md:346` briefs `shard: cross/<K> g<g>/<G> <ordinals>` (K=4 here). That field has no reader today.
+
+Second instance, at the QA gate, about 20 minutes later (story 1.1, worktree `graph-s319-story-1-1`, committed at `7948cabd2`; transcript `218aa1b8`). At 02:11:50Z, `merge-review-shards.sh …/1-1-qa-validation-19a2b3d0fc72 --gate qa` refused: "4.md (part shard 4) carries a '## Deferred ACs' section; only the cross shard writes the deferred-AC discharge predicates". At 02:12:11Z the lead ran `sed -i '' -e 's/^## Deferred live check (not scored here)/## Live check owned by the cross shard (not scored here)/' -e '/^seat-complete:/d' 4.md`, re-marked with `--mark … 4/4 findings=0`, and the merge passed (`findings=12`). No seat was re-dispatched. The guard is `merge-review-shards.sh:418`, `lc ~ /^###?[ \t]+deferred/`, a deliberate PREFIX match on any `## `/`### ` heading beginning "deferred" (header `:81-83`). So the part seat's "## Deferred live check" heading tripped a guard meant for "## Deferred ACs", and a heading rename defeated it. The part seat was never told the prefix is reserved.
+
+The gaps:
+
+1. **No prescribed path after a refused merge.** `core/skills/ai-dlc/steps/implementation.md:368-375` states that the merge refuses a count that disagrees and "a missing, duplicate or mis-cited shard", and never says who corrects a refused shard or how. Control, same file: `:304` ("Exit 1 refuses the handoff: send the dev its `REFUSED` lines") and `:388-390` do prescribe one. The refusal texts at `merge-review-shards.sh:475` and `:584` name no remedy. The adversarial path does, at `core/scripts/wait-for-deliverable.sh:657`: "re-dispatch the adversary for that shard … (a lead Edit re-seals the bytes but leaves a shard last written by the top-level session, which the merge refuses)".
+2. **A lead's re-seal is indistinguishable from the seat's.** `--mark`'s argument loop (`wait-for-deliverable.sh:620-630`) checks only non-empty fields, no CR/LF, a field count of at least 4 and a trailing `findings=<digits>`, and writes `<step> <seat> <shard>` verbatim into the marker (`:672`). Nothing compares `<shard>` with the file or recounts `findings=` against the body. Under `docs/reviews/`, `MK_STATE` is empty (`:643`), so the content-seal last-writer check (`:644-665`) is skipped: a shard rewritten through Bash is re-sealed without refusal, where on the adversarial path, under `planning-artifacts/`, it is refused.
+3. **A code-review seat has no pre-return check.** `core/team-roles/code-reviewer.md:205-211` tells the seat to count its own `#### ` findings and close with `--mark`, and warns that "the merge refuses a shard whose count disagrees", but names no check the seat can run before returning. `code-reviewer.md` and `implementation.md` each contain `check-part` 0 times and `check-header` 0 times (controls: `seat-complete` 2 in each; `merge-review-shards` 1 and 5). `merge-review-shards.sh` has no single-shard mode (flag loop `:175-183`: `--gate`, `--out`, `-h`). The adversarial analogue exists: `wait-for-deliverable.sh --complete --shard-header` (`:438-455`) runs `merge-adversarial-shards.sh --check-header` before a shard counts as delivered. Gate 2 (`--gate qa`) uses the same merge and has the same gap.
+4. **The merge never reads the marker's seat.** `merge-review-shards.sh:390-391` tests only the `^seat-complete: ` prefix and extracts `findings=`; identity comes from the filename (`:346-363`).
+
+Owed, in the operator's direction (mechanism is the builder's):
+- **(a) Seats produce merge-clean shards.** A per-shard pre-check that runs the merge's own code on one shard (the BL-715 `--check-part` shape, e.g. `merge-review-shards.sh --check-shard <shard> --gate code-review|qa`), never a restated grammar, named in `code-reviewer.md` before the `--mark` step and in `qa.md` likewise. It covers what one shard can show: `reviewed-sha:`, `shard-verdict:`, `## Findings`, `parts:` grammar, hand-over lines, and the count against `findings=`. The cross-owner duplicate (`:581-584`) needs the owning shard, so either the check reads its siblings or that refusal goes to (b).
+- **(b) A prescribed correction path after a refused merge.** `implementation.md` (beside `:368-375`) and the remedy text at `merge-review-shards.sh:475` and `:584` route each refused shard back to its OWNING seat by re-dispatching it with the `REFUSED:` line; a cross-owner duplicate goes to the non-owning seat that must drop it. The lead never rewrites, moves findings between, or re-seals a reviewer's shard. `wait-for-deliverable.sh:657` is the precedent.
+- **(c) Make the lead's re-seal refusable.** Extend the last-writer content-seal check (the `MK_STATE` branch, `:643-665`) to review shards, so a shard last written by the top-level session is refused at `--mark` or at the merge, as the adversarial path already does.
+- **(d) Key the marker on the shard.** Define the marker's `<shard>` field as the shard's own key (`cross-2`, `03`) in the role, the step file and the merge together; then the merge refuses a marker naming another key, and `--mark` refuses a `<shard>` that does not match the file it seals.
+- **Fixture arms** in the review-shard-merge fixture: the pre-check prints the merge's own refusal line for a count mismatch and stays quiet on a clean shard; a review shard rewritten after the seat's write is refused (control: the seat's own seal passes); a marker naming another key is refused (control: the right key passes); `--mark` with a mismatched `<shard>` is refused. A mutant per new arm.
+
+Related: BL-715 (archive), the remediator `--check-part`, which is the shape for (a). BL-734 (live), the same family on the record-mode path. BL-575 (archive), an earlier case of a lead editing agent-written gate inputs to force a merge.
+
+verify: manual — (c) and (d) depend on interfaces the fix defines, so a receipt written now would key on a guess. The receipt is the fixture arm, written with the fix.
+
+## BL-739 — `validate-mutation-red.sh` prints its test command with argv quoting dropped, so a multi-word `-k` expression is echoed, and committed as gate-1 evidence, as a command that does not run
+
+**DEFECT.** Seen by graph-watch (ai-dlc-1b) in batch 238, read-only on graph; the lead verified the line at origin/main `e1739275b`.
+
+- `core/scripts/validate-mutation-red.sh:460` is `printf '  test:       %s\n' "${TEST_CMD[*]}"`, which joins argv with spaces.
+- On graph s319 story 3.1, the captures `s319-3-1-mutation-red-ac8-generation-compare`, `-ac9-nonarray` and `-ac9-redirect` read, unquoted, `-k ac8_invalidate_during_blocked or overlapping_refresh`, `-k non_array_body or malformed_json` and `-k 302 or redirect or session_call`. The dev subagent transcripts (`ace13458` at 03:04:46Z, `a702f89c` at 03:38:24Z) show the dev invoked them quoted.
+- The script prints no `$ ` command line, so the dev retypes line 1 of the capture from the echo.
+- Single-token captures (`-k ac10_parsed_fixture -p`) are unaffected; that is the control.
+- Graph's installed copy is byte-identical to origin/main.
+- Cost: QA part 3 sealed NEEDS_REWORK on exactly these 3 captures, repeating an earlier gate-1 Important finding.
+
+Owed:
+- Print TEST_CMD with `printf '%q '` so it round-trips through a shell.
+- The script emits the runnable `$ ` line itself.
+- `dev.md` (~:237, the "Run it as `scripts/ai-dlc/validate-mutation-red.sh ...`" paragraph) tells the dev to commit the printed lines rather than retype them.
+- A fixture arm round-trips a multi-word `-k` through `bash -c` with a single-token control.
+
+verify: manual
+
+## BL-740 — the review-shard merge has no rule tying a shard's verdict to its finding count, so a seat sealed NEEDS_REWORK with findings=0 passes --check-shard and the merge and has no correction path
+
+**DEFECT.** Seen by graph-watch (ai-dlc-1b) and BL-737's owner e3-new, batch 238.
+
+- On graph s319 story 3.1, seat cross-1 (`adadb1e7`) sealed `NEEDS_REWORK` with findings=0. The marker-count check passes (0 = 0), and so do --check-shard and the merge.
+- At `bdc50a101` (BL-737's branch), `grep -c -i -E 'NEEDS_REWORK.*(findings|nf)|(findings|nf).*NEEDS_REWORK|no finding' core/scripts/merge-review-shards.sh` gives 0; the control, the marker-count rule, gives 1. Re-derived at `e1739275b` against `core/scripts/merge-review-shards.sh` with the same grep: 0, and the control (`heads [0-9]|ends in 'seat-complete`) gives 1.
+- BL-737's prescribed correction path (`implementation.md` gate 1 and gate 2: re-dispatch the seat the REFUSED line's `[owner: <key>]` names) triggers only on a REFUSED merge line, which this shard never produces. `wait-for-deliverable.sh` prescribes "re-dispatch the adversary for that shard" for planning-artifacts adversary shards only.
+- Graph's successor was left three ad-hoc remedies, one of them folding cross-1's AC4 finding into cross-4.
+
+Owed:
+- A per-shard rule in the merge's per-shard function: NEEDS_REWORK or BLOCKED requires at least one Critical/Important finding, and APPROVED or PASS forbids a Critical one. --check-shard and --mark inherit it, so the existing `[owner:]` re-dispatch path covers the case.
+- The false-positive set over committed review shards is measured before it ships.
+- Builds on BL-737's `merge-review-shards.sh`.
+
+Related: BL-737, BL-715, BL-734.
+
+verify: manual
