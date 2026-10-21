@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.908.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13, cluster derivations. It closes BL-728, closes no `PC-` id and files BL-756. Net for this release: 1 closed, 1 filed = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-derivations.sh`. No role or step text changes.
+
+### The derivation allowlist admitted options that run a program before this release
+
+Before this release `validate-artifact-derivations.sh` allowed a derivation by its COMMAND name and refused only the options it knew to be dangerous, so any option of an allowed command that was not on that short deny list ran. Some options make an otherwise read-only tool write a file or start another program, so a derivation the checker called read-only could execute code when the gate or the capture hook re-ran it. This release reverses the rule: each allowed command carries an exact list of the options it may use, and every other option is refused.
+
+### BL-728 — a backtick inside single quotes and one `git -C <dir>` inside the repository are admitted, and every allowed command admits only its listed options
+
+The allowlist refused any command containing a backtick before its quote scan ran, so `grep -c -F 'a`b' d.txt`, which bash runs with no substitution, was refused; and it read git's subcommand as the second word, so `git -C sub rev-parse` was refused too. Fixing those exposed the deny-list shape above, which this release replaces.
+
+- The backtick is tested inside the quote scan: refused unquoted or inside double quotes, where bash substitutes it, and admitted inside single quotes.
+- `git` may carry exactly one leading `-C <dir>`. The directory must be a plain relative path, must resolve to the repository root or below it, and must report the same git common directory as the root, so a nested, foreign or bare repository is refused. The probe and every allowed git command run with `safe.bareRepository=explicit`.
+- Each allowed command has an option table, `cmd|sub|token|arity|note`, with arity from both man pages. The walker reads the argv bash itself builds for each pipeline segment (`eval "set -- <segment>"` in a subshell), so quoting, brace and glob expansion cannot hide an option from it. Matching is exact, never by prefix. Short options are read letter by letter. A value is taken by arity: none, required, optional (attached only) or a `-NUM` row.
+- A `$` that bash would expand is refused in the quote scan; a literal `$`, such as a regex end-anchor inside double quotes, is admitted. Because the walker's own eval runs under `set -u`, an unset name is also refused there, which mutant `m-m7` proves; the eval's `set +u` bracket is retired.
+- A word after a standalone `--` is an operand on the commands whose own parser ends options there, each cited from its man page or getopt(3) (`OPT_ENDOPTS`); every other command still refuses a dash word after `--`. sed and uniq stop reading options at their first operand, as the BSD tools do, so a dash word after it is refused, and sed's script is that operand whenever it precedes any `-e`.
+- A hand-written NEVER set lists the options that write a file or run a program. It grants nothing, and at startup any NEVER token that is also a table row stops the validator with exit 2. The check is exact-match only: a row that is a proper prefix of a NEVER token is judged per row at review against both man pages. The measured population is five rows, each a real option that git resolves by exact name first: `--text` on git log, show, diff and grep against `--textconv`, and `--filter` on git cat-file against `--filters`.
+- `--explain-cmd` prints the argv and each word's classification without running anything. `fp-sweep.sh` drives it, so the corpus counts and the checker share one grammar, and its controls use harmless unlisted options.
+- `artifact-derivations` gains section S: an accepted and a refused arm per command, exact match, clusters, arity, `--`, the `$` classes, the first-operand rule, and mutants for each, plus a walker-versus-bash argv differential that first proves its two sides can differ. The re-pointed `k-m1`, `k-m2`, `q-rawscan` and `m-m7` each fail for the reason their names state.
+- Fixture repair carried here: `artifact-derivations` declares `ln` in its `tools.decl`, because section R builds a real symlink and the hermetic runner's PATH holds only declared tools. `derivation-capture`'s A24 and A25 re-seed their unrunnable derivation from `$[1/0]`, which the allowlist now refuses before anything runs, to `awk 'END{exit 137}' VERSION`, which it admits and whose 137 the run marker reads as UNRUN; the arms still assert the hook's UNRUN handling.
+- BL-728's receipt asserts the refusal TEXT for an unlisted option on two commands and for a quoted spelling. Scored under `set -uo pipefail`: the fix 0, a validator refusing only `sort --debug` 1, the fix widened by one row 1, the base 1, and a second spelling 0.
+
+### Measured against the reference consumer
+
+The `--all` population of the reference consumer's committed tree (187a9d009, 11418 markdown files) was run through the base and the new validator, and the ALLOWLIST refusals were compared by file and line. Inside ```derived fences: 7 refusals are gone, each a backtick inside single quotes, and 1 is new, a command line carrying prose after the command, which the base failed as STALE. Three options the corpus uses inside derived fences were added: `shasum -a` (192 uses), `grep -f` (6) and `grep -P` (1, GNU-only; BSD grep refuses it at run time). No derivation inside a derived fence uses a NEVER-set option, so its measured cost to the validator is 0; ten records outside derived fences use one. The `--all` sweep at the table's first full build counted 971 of its 1116 rows used by no derivation in that corpus; they are kept, flagged, not removed. The per-call cost of reading argv through bash was not measured: this batch ran no timing.
+
+### BL-756 filed
+
+`AWK_AT_RE` requires a `(`, so gawk's two file-loading directives pass the awk program check. They are inert on the BWK awk macOS ships and live on gawk. Filed with `verify: manual`, because its discriminating input waits on an operator ruling.
+
 ## [0.907.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13, cluster recover-gate. It closes BL-725 and BL-730, closes no `PC-` id and files BL-752. Net for this release: 2 closed, 1 filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-recover-gate.sh` and `core/hooks/ai-dlc-recover.sh`. `core/schemas/pipeline-state-paths.json` ignores `_bmad-output/.recover-advisor-owed*`, so a temp file left by a killed owed-file write is not an untracked file in a consumer tree. No role or step text changes.
