@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.900.0] - 2026-10-21
+
+Batch 238, lead ai-dlc-1a. It closes BL-739, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-mutation-red.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/dev.md`.
+
+### BL-739 — the mutation-red replay capture opens with a command that runs, and its `test:` line keeps its quoting
+
+`validate-mutation-red.sh` printed its test command as `"${TEST_CMD[*]}"`, which drops argv quoting, so `-k "a or b"` came out as `-k a or b`, which does not run. Graph's s319 story 3.1 captures show the cost: each one opens with a hand-written `$ ` line that is byte-equal to that broken `test:` line, while the dev's own transcripts show the command was run quoted. The dev copied the script's rendering rather than retyping it.
+
+- The script saves its original argv before it parses any flag, and prints the capture's first stdout line as `$ ` followed by `$0` exactly as the caller typed it and that original argv, each word rendered with `printf %q`. The line is built from the original argv, never from the parsed target, line, replacement and test command, because a line rebuilt from those drops `--syntax-check '<cmd>'` and `--` and replays a different command while looking right.
+- The `test:` line is rendered with `printf %q` too.
+- A refusal before the restore prints no `$ ` line, and neither does the HARD exit 3 that leaves the tree mutated, so no committed capture can describe a mutated tree.
+- `dev.md` now says the script's stdout is the capture: redirect it to the capture file and commit that file, without hand-written `$ ` or `head:` lines.
+- `mutation-red-replay` gains `arm_argv_roundtrip`. It parses the `$ ` line and the `test:` line back through `bash -c "set -- <line>"`, never executing them, and compares each to the argv by value, across:
+  - a multi-word `-k`;
+  - a replacement holding a single quote;
+  - a single-token control that the old rendering also passes;
+  - an UNPROVEN exit 1, whose first line is the `$ ` line;
+  - a red-baseline refusal (exit 2) and a HARD refusal (exit 3), each with no `$ ` line. Each run seeds its own HARD world inside the fixture's own temporary directory.
+- Mutants 15 to 19 are each killed on an exact reason:
+  - 15, the `test:` line joined with spaces;
+  - 16, no `$ ` line;
+  - 17, the `$ ` line rebuilt from the parsed values;
+  - 18, the printf hoisted above the refusals;
+  - 19, the printf placed after the baseline run, above the restore verification.
+- BL-739's receipt, `core/fixtures/mutation-red-replay/receipt-bl739.sh`, scored under `set -uo pipefail` against copies of the real script: the fix 0, the old rendering 1, no `$ ` line 1, the rebuilt line 1, a second correct spelling 0, the hoisted printf 1, the late printf 1.
+
+### Consumer
+
+A capture written before this release stays valid: `validate-handoff-evidence.sh` accepts a hand-written `$ ` line or the bare `mutation-red replay` header in the first 25 lines. A new capture opens with the script's own `$ ` line.
+
+### Limits
+
+- Nothing enforces dev.md's "do not write your own `$ ` or `head:` lines". `validate-handoff-evidence.sh` accepts any `$ ` line among the first 25 and reads the first `head:`, so a hand-typed line placed above the script's output is the one read. Filed as BL-748.
+- `printf %q` on bash 3.2 writes backslash escapes for spaces, quotes, `;`, `$(…)`, backticks and globs, `$'…'` only for control characters, and `''` for an empty word. It leaves a word-leading `~` unescaped, so a replay tilde-expands `~`, `~root` or `~/x` (measured; `a~root` and a nonexistent user round-trip). Reserved as BL-749, filed by the lead at close. The rendering is bash-only, and bash 5 is unmeasured.
+- The `$ ` line names the paths the dev typed, so it replays from the dev's own working directory, which `cwd:` records; it is not replayable from anywhere. Invoked as `bash <script>`, the line omits the leading `bash` and still runs, because the script is executable here and `install.sh` makes it executable in a consumer.
+- The receipt exits 9 when the script under test exits with the wrong code. `backlog-reverify.sh` routes that to NEEDS-REVIEW and `backlog-rotate.sh` refuses it, so such a regression reads as unscorable rather than as a failure; it never reads as a close.
+
 ## [0.899.0] - 2026-10-21
 
 Batch 238, lead ai-dlc-1a. It closes BL-737, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`, `core/scripts/content-seal.sh`, `core/scripts/wait-for-deliverable.sh` and `core/hooks/ai-dlc-content-seal.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/skills/ai-dlc/steps/implementation.md`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/team-roles/code-reviewer.md` and `core/team-roles/qa.md`.

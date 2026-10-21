@@ -134,6 +134,11 @@
 # only for the capture header's `head:` line, which says so when there is no work tree
 # (or no git at all).
 #
+# The capture opens with a runnable `$ ` line rendered with printf %q from the original
+# argv, flags included. %q may emit bash's $'...' quoting, so a bash reader can replay
+# that line and plain POSIX sh may not. The `test:` line is %q-quoted the same way. A
+# refusal before the restore prints no header and no `$ ` line.
+#
 # bash 3.2+.
 
 set -uo pipefail
@@ -164,6 +169,10 @@ exit: 0 proven · 1 unproven · 2 unevaluable (nothing was mutated, a pytest bas
       line (-qq, -p no:terminal) the check prints `skip-check: not applied` and stands down.
 EOF
 }
+
+# The argv exactly as given, before the flag loop consumes it: the capture's first line is
+# rendered from THIS, never rebuilt from the parsed values, which drop --syntax-check and --.
+ORIG_ARGV=("$@")
 
 # Flags are LEADING only, so a test command's own flags are never read as ours.
 SYNTAX_CHECK=""
@@ -447,6 +456,10 @@ if ! cmp -s "$BACKUP" "$TARGET"; then
   exit 3
 fi
 
+# The capture's first line replays this run: %q of the ORIGINAL argv. The usage check
+# above guarantees at least four arguments here; the +-guard keeps an empty array from
+# aborting under set -u on bash 3.2 should that ever change.
+printf '$'; printf ' %q' "$0" ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"}; printf '\n'
 printf 'mutation-red replay\n'
 # head and cwd make a committed capture checkable against the commit it claims to grade
 # (validate-handoff-evidence.sh reads `head:`). Outside a git work tree the line still
@@ -457,7 +470,7 @@ printf '  cwd:        %s\n' "$PWD"
 printf '  target:     %s:%s\n' "$TARGET" "$LINE"
 printf '  was:        %s\n' "$CURRENT"
 printf '  mutated to: %s\n' "$REPL"
-printf '  test:       %s\n' "${TEST_CMD[*]}"
+printf '  test:      '; printf ' %q' "${TEST_CMD[@]}"; printf '\n'
 printf '  baseline:   GREEN (exit 0)\n'
 [ -z "$PARSE_NOTE" ] || printf '  %s\n' "$PARSE_NOTE"
 [ -z "$SC_NOTE" ] || printf '  %s\n' "$SC_NOTE"

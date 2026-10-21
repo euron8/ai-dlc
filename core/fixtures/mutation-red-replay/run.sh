@@ -407,10 +407,10 @@ mkmut() {
     return 1
   fi
 }
-# insert_after <anchor> <line>: print <line> after the one line starting with <anchor>;
-# exits 1 unless the anchor matched exactly once.
+# insert_after <anchor> <line> [<source>]: print <line> after the one line starting with
+# <anchor> in <source> (default the validator); exits 1 unless the anchor matched exactly once.
 insert_after() {
-  A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "$VALIDATOR"
+  A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
 }
 
 # M4: syntax-check refusal exits 2 BEFORE the restore. The EXIT trap still restores the
@@ -747,6 +747,153 @@ if [ "$HAVE_PYTEST" -eq 1 ]; then
 else
   skip "pytest not importable by python3 — skip-check mutants sk1-sk3 and sk5-sk8 did NOT run"
 fi
+
+# =============================================================================
+# THE CAPTURE THAT DOES NOT REPLAY. The capture is committed as gate-1 evidence, and a reader
+# re-runs what it says. Its first stdout line is a `$ ` line rendered with %q from the
+# ORIGINAL argv, and its `test:` line renders the test argv the same way. A line joined with
+# spaces reads correctly for single-token arguments and silently re-splits a multi-word one
+# (`-k 'a or b'`); a line rebuilt from the parsed values drops `--syntax-check` and `--`.
+# Each line is handed to `set --` in a child bash and compared, word for word, against the
+# argv the arm passed. It is parsed, never run as a command.
+# =============================================================================
+# rt_split <rendered words> -> each word a bash reader gets back, \037-terminated.
+rt_split() { bash -c "set -- $1; printf '%s\037' \"\$@\"" 2>/dev/null; }
+rt_join()  { printf '%s\037' "$@"; }
+# rt_case <want-rc> <validator> <args...> -> sets $rt_why to the failed conjuncts (empty =
+# round-trips). RT_TEST holds the test argv inside <args...>. The run must exit <want-rc>
+# exactly, and the `$ ` line must equal the validator path as invoked plus every arg, flags
+# and `--` included; stdout only, so stderr cannot be line one.
+rt_case() {
+  local want="$1" v="$2" o first tl rc; shift 2
+  rt_why=""
+  o="$(bash "$v" "$@" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq "$want" ] || rt_why="$rt_why rc=$rc"
+  first=""; IFS= read -r first <<<"$o"
+  case "$first" in
+    '$ '*) [ "$(rt_split "${first#\$ }")" = "$(rt_join "$v" "$@")" ] || rt_why="$rt_why dollar-argv" ;;
+    *)     rt_why="$rt_why no-dollar-line" ;;
+  esac
+  tl="$(sed -n 's/^  test://p' <<<"$o")"
+  if [ -z "$tl" ]; then rt_why="$rt_why no-test-line"
+  else [ "$(rt_split "$tl")" = "$(rt_join "${RT_TEST[@]}")" ] || rt_why="$rt_why test-argv"; fi
+  rt_why="${rt_why# }"
+  [ -z "$rt_why" ]
+}
+# rt_refusal <want-rc> <validator> <args...> -> sets $rt_why: a pre-restore refusal exits
+# <want-rc> exactly (2 before any mutation, 3 for HARD) and prints NOTHING on stdout, so no
+# `$ ` line. The two stdout tokens are exclusive, so a refusal that prints a `$ ` line is
+# read on that conjunct alone.
+rt_refusal() {
+  local want="$1" v="$2" o rc; shift 2
+  rt_why=""
+  o="$(bash "$v" "$@" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq "$want" ] || rt_why="$rt_why rc=$rc"
+  if grep -q '^\$ ' <<<"$o"; then rt_why="$rt_why dollar-on-refusal"
+  elif [ -n "$o" ]; then rt_why="$rt_why stdout-not-empty"; fi
+  rt_why="${rt_why# }"
+  [ -z "$rt_why" ]
+}
+RT_QUOTE_REPL="x='it'\"'\"'s'"   # a replacement holding single and double quotes; kills disc.sh
+# hardworld -> echoes a FRESH mktemp dir under $WORK holding Assertion 7's HARD world, seeded
+# the way seed.sh seeds it: hard/sut.sh (a copy of the target), a run count at 0, and a test
+# that removes hard/ on its SECOND run, so the restore has nowhere to write. The world destroys
+# itself, so every drive needs its own. tmp/ is the validator's TMPDIR for the drive, so its
+# backup, logs and mutant land inside this dir too and an aborted run leaves nothing outside it.
+hardworld() {
+  local d
+  d="$(mktemp -d "$WORK/hw.XXXXXX")" || return 1
+  mkdir -p "$d/hard" "$d/tmp" && cp "$SUT" "$d/hard/sut.sh" && printf '0\n' > "$d/count" || return 1
+  cat > "$d/test.sh" <<HW || return 1
+#!/usr/bin/env bash
+n=\$(cat "$d/count")
+n=\$((n + 1))
+printf '%s\n' "\$n" > "$d/count"
+[ "\$n" -ge 2 ] && rm -rf "$d/hard"
+exit 0
+HW
+  printf '%s\n' "$d"
+}
+# arm_argv_roundtrip <validator>: case A (flags, `--`, a multi-word -k), case Q (a quoted
+# replacement), the single-token control (`-k one`), case R (a RED baseline, refused before
+# any mutation: exit 2 and an empty stdout), case H (HARD, the tree left mutated: exit 3 and
+# an empty stdout), and case U (the coverage-only degenerate, UNPROVEN: exit 1, and line 1 is
+# a `$ ` line that replays). The control is part of the arm: it must round-trip under a
+# `test:` line joined with spaces too, which is what proves the test-argv conjunct
+# discriminates only on a multi-word argument (mutant 15 reads it). U also runs the `test:`
+# conjuncts; its test argv is single-token, so mutant 15 leaves it clean.
+# R is the red-baseline world, not the no-op one, because its refusal sits later in the flow:
+# a `$ ` printf moved anywhere above the baseline run prints on it (mutant 18 reads it). H is
+# the LATEST pre-restore refusal, the restore verification itself, so a `$ ` printf placed
+# anywhere above it prints on it, including after the baseline run (mutant 19 reads it).
+arm_argv_roundtrip() {
+  local a q c r h u hw
+  RT_TEST=(bash "$WORK/disc.sh" -k 'a or b' one)
+  rt_case 0 "$1" --syntax-check 'bash -n' -- "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; a="$rt_why"
+  RT_TEST=(bash "$WORK/disc.sh")
+  rt_case 0 "$1" "$SUT" 2 "$RT_QUOTE_REPL" "${RT_TEST[@]}"; q="$rt_why"
+  RT_TEST=(bash "$WORK/disc.sh" -k one)
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; c="$rt_why"
+  rt_refusal 2 "$1" "$SUT" 2 "$MUTATED" bash "$WORK/red.sh"; r="$rt_why"
+  hw="$(hardworld)" || hw=""
+  if [ -n "$hw" ] && [ -f "$hw/hard/sut.sh" ] && [ -f "$hw/test.sh" ]; then
+    h="$(export TMPDIR="$hw/tmp"; rt_refusal 3 "$1" "$hw/hard/sut.sh" 2 "$MUTATED" bash "$hw/test.sh"; printf '%s' "$rt_why")"
+  else h="no-hard-world"; fi
+  RT_TEST=(bash "$WORK/nondisc.sh")
+  rt_case 1 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; u="$rt_why"
+  why="A:[$a] Q:[$q] control:[$c] R:[$r] H:[$h] U:[$u]"
+  [ -z "$a" ] && [ -z "$q" ] && [ -z "$c" ] && [ -z "$r" ] && [ -z "$h" ] && [ -z "$u" ]
+}
+arm_argv_roundtrip "$VALIDATOR" \
+  && ok "arm_argv_roundtrip: the \`\$ \` line and the \`test:\` line replay, through bash, to the exact argv (flags, --, a multi-word -k, a quoted replacement, the single-token control, and an UNPROVEN exit 1), a RED-baseline refusal exits 2 and a HARD refusal exits 3, each with no \`\$ \` line" \
+  || bad "arm_argv_roundtrip: the capture does not replay to its own argv, or a refusal printed one ($why) — a committed capture is a command that does not run"
+arm_argv_roundtrip "$MUT/control.sh" \
+  && ok "CONTROL: arm_argv_roundtrip holds on an unmutated copy in \$MUT, \`\$ \` naming the copy's path as invoked" \
+  || bad "FIXTURE BROKEN — arm_argv_roundtrip fails on an unmutated copy ($why); mutants 15-19 below would be false kills"
+
+# --- MUTANTS 15-19 of the capture lines --------------------------------------------------
+# replace_line <exact line> <new line> [<source>]: replace the one line equal to <exact line>
+# in <source> (default the validator; an empty <new line> deletes it); exits 1 unless it
+# matched exactly once.
+replace_line() {
+  A="$1" L="$2" awk 'BEGIN { n = 0 } $0 == ENVIRON["A"] { n++; if (ENVIRON["L"] != "") print ENVIRON["L"]; next } { print } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
+}
+RT_DOLLAR_LINE="printf '\$'; printf ' %q' \"\$0\" \${ORIG_ARGV[@]+\"\${ORIG_ARGV[@]}\"}; printf '\\n'"
+RT_TEST_LINE="printf '  test:      '; printf ' %q' \"\${TEST_CMD[@]}\"; printf '\\n'"
+# rt_mutant <name> <producer-rc> <expected why> <label>: the copy must fail arm_argv_roundtrip
+# with exactly <expected why>, so each kill is read on the conjunct that names it.
+rt_mutant() {
+  mkmut "$1" "$2" || { echo "mutation-red-replay: FIXTURE BROKEN — mutant $1 could not be built" >&2; exit 2; }
+  if ! arm_argv_roundtrip "$MUT/$1.sh"; then
+    if [ "$why" = "$3" ]; then ok "MUTANT ${1#m}: $4 is killed by arm_argv_roundtrip on $3"
+    else bad "MUTANT ${1#m} ($4) failed arm_argv_roundtrip as $why, not $3 — the kill is entangled or misattributed"; fi
+  else bad "MUTANT ${1#m} ($4) survived arm_argv_roundtrip"; fi
+}
+# M15 (M-a): the `test:` line joined with spaces, as before the fix. Case A's multi-word -k
+# re-splits; case Q and the single-token control still round-trip.
+replace_line "$RT_TEST_LINE" "printf '  test:       %s\\n' \"\${TEST_CMD[*]}\"" > "$MUT/m15.sh"; prc=$?
+rt_mutant m15 "$prc" "A:[test-argv] Q:[] control:[] R:[] H:[] U:[]" "a \`test:\` line joined with spaces"
+# M16 (M-b): no `$ ` line at all. A refusal still prints nothing; U's line 1 is the banner.
+replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m16.sh"; prc=$?
+rt_mutant m16 "$prc" "A:[no-dollar-line] Q:[no-dollar-line] control:[no-dollar-line] R:[] H:[] U:[no-dollar-line]" "a capture with no \`\$ \` line"
+# M17 (M-c): the `$ ` line rebuilt from the parsed values. Case A loses --syntax-check and
+# --; case Q, the control and U carry no flags, so they still round-trip.
+replace_line "$RT_DOLLAR_LINE" "printf '\$'; printf ' %q' \"\$0\" \"\$TARGET\" \"\$LINE\" \"\$REPL\" \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m17.sh"; prc=$?
+rt_mutant m17 "$prc" "A:[dollar-argv] Q:[] control:[] R:[] H:[] U:[]" "a \`\$ \` line rebuilt from the parsed values"
+# M18: the `$ ` printf hoisted to just after `ORIG_ARGV=("$@")`. It still prints first and
+# from the same argv, so A, Q, the control and U all round-trip; only the two refusals, which
+# now print a `$ ` line, kill it. Delete first, then insert into the copy: inserting first
+# would leave two lines for replace_line to match.
+replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m18-del.sh"; prc=$?
+[ "$prc" -ne 0 ] || { insert_after 'ORIG_ARGV=("$@")' "$RT_DOLLAR_LINE" "$MUT/m18-del.sh" > "$MUT/m18.sh"; prc=$?; }
+rt_mutant m18 "$prc" "A:[] Q:[] control:[] R:[dollar-on-refusal] H:[dollar-on-refusal] U:[]" "the \`\$ \` printf hoisted above the refusals"
+# M19: the `$ ` printf moved to just after the restore's `cp`, before the verification that
+# exits 3. It sits below the baseline run, so R refuses before reaching it, and nothing reaches
+# stdout between there and its own line, so A, Q, the control and U all round-trip; only the
+# HARD refusal, which now prints a `$ ` line, kills it. Delete first, then insert.
+replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m19-del.sh"; prc=$?
+[ "$prc" -ne 0 ] || { insert_after 'cp "$BACKUP" "$TARGET" 2>/dev/null' "$RT_DOLLAR_LINE" "$MUT/m19-del.sh" > "$MUT/m19.sh"; prc=$?; }
+rt_mutant m19 "$prc" "A:[] Q:[] control:[] R:[] H:[dollar-on-refusal] U:[]" "the \`\$ \` printf placed after the baseline run, above the restore verification"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
