@@ -697,3 +697,28 @@ Owed, the design for its owner to choose: a delta path for a post-elicitation sp
 
 verify: manual — a discriminating `sh` receipt needs the fix's interface first: where a delta shard lives, what it is named, and how its coverage is recorded. Under today's arm L a seeded tree FAILs every delta shape, so a receipt built on a guessed shape closes only under that guess. A receipt keyed on the remedy text could be closed by prose alone. The real-corpus receipt is the next post-elicitation split on a consumer, or a fixture world written alongside the fix.
 
+## BL-734 — a closing entry appended to an already-joined remediator record has no pre-check, so a `siblings:` slip surfaces only when `--escalations` refuses the whole record
+
+**DEFECT.** Seen by graph-watch (ai-dlc-1b) on graph at 23:38:15Z under installed 0.891.0, relayed by lead ai-dlc-1a; diagnosed on the distribution from the code, without a run, by the 238-s-715 owner (ai-dlc-e3). The residual of BL-715, whose `--check-part` (0.893.0) covers shard parts only. Tiered DEFECT because the same refusal class has cost graph a round on each of two paths: on 2026-10-19, 13 SHARD PARTS refused at the join (BL-715's own evidence, fixed by 0.893.0's `--check-part`); and on 2026-10-20, 2 entries through `--escalations` in record mode (this entry, unfixed). One measured round is this entry's own.
+
+Graph's `--escalations` run refused 2 entries, quoted: "the 08.md F-3 closing (MAJOR) entry is repaired with an edit and its 'siblings:' field is none of its four forms" (the same for 20.md F-2 closing (MINOR)) — the BADSIB class of BL-715's 13 shard-part refusals on 2026-10-19, here from a record-mode writer.
+
+- `core/scripts/join-remediator-shards.sh --escalations <record>` is SRCMODE=2 (`:326`): it judges a whole joined RECORD, and its BADSIB refusal is the shared one at `:1172`.
+- The refused entries are `repaired` entries carrying `- closes:`, APPENDED to that record after the join. Two roles write them:
+  - the serial remediator after a join (`core/team-roles/remediator.md:203-225`);
+  - the PM folding an operator answer (`core/team-roles/pm-escalated.md:98-108`, "APPEND to that joined repair record").
+- Neither role is told to check its appended entry before handing back, so the first check is the lead's `--escalations` run. A refusal there exits before the record's escalations are reported and costs a round.
+- BL-715 does not reach this: `--check-part` (`:1616-1621`) runs `contract_check 0` in PARTS mode over one shard part, and its role paragraph sits in remediator.md's shard section, before "Close your part with --mark". pm-escalated.md was left unchanged on purpose, because the parts-mode classifier is the wrong judge for a record.
+
+Writer and shape, confirmed by graph-watch on graph `7abfe3b9e` (read-only):
+- The refused entries are the SERIAL remediator's. `### 08.md F-3 closing (MAJOR)` sits at line 930 of `s319/stories-elicitation-repair-p1.md`, under `# Serial remediation (cross-file; shard: none, serial-document), pass 1, K=20` (line 898), after `# Repair part 20/20` (line 864). "F-3 closing" counts 0 in the shard parts and 1 in the record. So no part file exists for `--check-part` to read, by construction.
+- As committed, that entry carries `- siblings:` followed by a blank line and then a fenced block of grep commands. A plausible reading of "none of its four forms" is that the classifier does not join a value placed after a blank line. Not established: whether the record was edited between the 23:38:15Z refusal and the commit. The builder confirms this shape by running the join's own classifier on that entry in a scratch copy, before choosing the fix. If the classifier itself rejects a legitimate fenced value, that is a second defect, to be fixed in the classifier, not the writer.
+
+Owed (mechanism left to the builder):
+- a RECORD-mode pre-check the writer runs on the record it appended to, before it returns — `--escalations <record>` itself, or a record-mode sibling of `--check-part`. It must be the join's code, never a restatement of the four forms;
+- one instruction at each writer site: remediator.md's serial-remediator section, and pm-escalated.md's append paragraph;
+- a fixture arm in `remediator-shard-join`: a joined record with an appended near-miss closing entry (`- siblings: checked`) is refused by the pre-check with the same BADSIB line `--escalations` prints, and a well-formed closing entry passes;
+- a mutant that skips the classifier.
+
+verify: manual
+
