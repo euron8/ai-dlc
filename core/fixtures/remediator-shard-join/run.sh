@@ -5,6 +5,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # behavioural arms only: the JX mutation battery that once proved each of them can fail
 # has been retired; the predicates live in `lib.sh` beside this file. The battery mutates copies of core's own join, which a consumer
 # cannot edit, so the consumer keeps every correctness arm and loses only that proof.
+# The hard-coded `@` expectations go red in a consumer whose pair readers were carried at their pre-`@`
+# version; read such a red as "a reader is carried", not as a merge or join regression.
 #
 # WHY A FIXTURE OF ITS OWN. No existing fixture owns this script. gate-remediation-deny owns the
 # remediation-guard HOOK and its deny paths; check-24-adversarial-convergence owns arm H, which
@@ -170,8 +172,42 @@ if [ -n "$SJW" ]; then
 else
   bad "SJ0: FIXTURE BROKEN -- the subject world did not build"
 fi
-p_sjoin "$JOIN" && ok "SJ1: --subject, one writer per part -> JOINED; prd assembled, SPEC edited in place, the unchanged brief untouched; per-stem before/after lists, artifact: the manifest" \
+p_sjoin "$JOIN" && ok "SJ1: --subject, one writer per part -> JOINED; prd assembled, SPEC edited in place, the unchanged brief untouched; per-stem <stem>@<sha> before/after lists, artifact: the manifest" \
   || bad "SJ1: the subject join (rc=$RC): $(cat "$JO")"
+# SJ1o: the join asks the SIBLING merge's --pair-sep and writes `@` only on exit 0 with exactly `@`.
+# A copy of the join's scripts dir with an OLD merge beside it must write `=`. The old merge is a
+# stub this fixture writes, never a vendored copy of core's own script: it does what a merge before
+# --pair-sep does with that flag (measured), printing REFUSED on stdout and exiting 2. The
+# unmodified copy, driven the same way, writes `@`: the merge sibling is what moved the record.
+SJO_OLD="$WORK/sjo-old-merge.sh"
+printf '%s\n' '#!/bin/bash' "printf 'REFUSED: shard directory --pair-sep does not exist\\n'" 'exit 2' > "$SJO_OLD"
+sjo_cur="$(mktemp -d "$WORK/sjo-cur.XXXXXX")/scripts"; sjo_old="$(mktemp -d "$WORK/sjo-old.XXXXXX")/scripts"
+# The merge's key (c) asks validate-provenance-block.sh, which finds the schema at ../schemas beside
+# its own dir when the world carries none, so each copy carries the schema there. It is found by
+# walking up from the join for either layout's schema dir, never by counting `..`.
+SJO_SCH=""
+_d="$SRCDIR"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
+    [ -f "$_c" ] && { SJO_SCH="$_c"; break 2; }
+  done
+  _d="$(dirname "$_d")"
+done
+if [ ! -s "$SJO_OLD" ] || [ ! -f "$SRCDIR/merge-adversarial-shards.sh" ] || [ -z "$SJO_SCH" ]; then
+  bad "SJ1o: FIXTURE BROKEN -- $SJO_OLD, $SRCDIR/merge-adversarial-shards.sh or provenance-block.json above $SRCDIR is absent; nothing was asserted"
+elif ! { cp -Rp "$SRCDIR" "$sjo_cur" && cp -Rp "$SRCDIR" "$sjo_old" && cp "$SJO_OLD" "$sjo_old/merge-adversarial-shards.sh" \
+         && mkdir "$sjo_cur/../schemas" "$sjo_old/../schemas" \
+         && cp "$SJO_SCH" "$sjo_cur/../schemas/" && cp "$SJO_SCH" "$sjo_old/../schemas/"; }; then
+  bad "SJ1o: FIXTURE BROKEN -- the scripts-dir copies did not build"
+elif cmp -s "$sjo_cur/merge-adversarial-shards.sh" "$sjo_old/merge-adversarial-shards.sh"; then
+  bad "SJ1o: FIXTURE BROKEN -- the old merge is byte-identical to the current one"
+else
+  p_sjoin "$sjo_old/join-remediator-shards.sh" "=" && r_o=0 || r_o=1; o_rc=$RC
+  p_sjoin "$sjo_cur/join-remediator-shards.sh" "@" && r_c=0 || r_c=1
+  [ "$r_o" -eq 0 ] && [ "$r_c" -eq 0 ] \
+    && ok "SJ1o: the join beside an old merge sibling (REFUSED on --pair-sep) writes <stem>=<sha> before/after lists; the same copy with the current merge writes <stem>@<sha>" \
+    || bad "SJ1o: old-merge join matched '=' -> $r_o (rc=$o_rc), current-merge copy matched '@' -> $r_c (want 0 0): $(cat "$JO")"
+fi
 p_sjspec2 "$JOIN" && ok "SJ2: the whole-file SPEC part written by two agents -> REFUSED 'more than one agent', no record" || bad "SJ2: (rc=$RC) $(cat "$JO")"
 p_sjoos "$JOIN" && ok "SJ3: prd.md written IN PLACE while its sections were out (out-of-scope text) -> REFUSED naming the file, no record" || bad "SJ3: (rc=$RC) $(cat "$JO")"
 p_sjnopart "$JOIN" && ok "SJ4: the unchanged brief (no part) written in the window -> REFUSED, no record" || bad "SJ4: (rc=$RC) $(cat "$JO")"

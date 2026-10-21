@@ -2129,7 +2129,7 @@ PENDING. When the install history cannot date it, the line reads `PENDING (L -- 
 unknown -- <reason>` (no git, shallow clone, undated, stamp absent) with today's cause beside it,
 never FAIL. Only when the shard files' `shard: <i>/<K>` lines record a LARGER K than `stories/`
 holds today, AND every story file `stories/` holds today is named among the elicited subjects (an
-ordinal shard's `artifact:` file, a cross shard's `artifact_sha:` `<name>=` entries, each counted
+ordinal shard's `artifact:` file, a cross shard's `artifact_sha:` `<name>=` or `<name>@` entries, each counted
 only under this sprint's `s<N>/stories/` and never by another sprint's same-named file), is the shard
 directory judged against the recorded K; a current story no shard names FAILs, named. Complete for
 the recorded K reads `PENDING

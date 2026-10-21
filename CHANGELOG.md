@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.897.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a, cluster 238-d-719. It closes BL-719 and BL-718, closes no `PC-` id and files nothing. Net for this release: 2 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-adversarial-shards.sh`, `core/scripts/join-remediator-shards.sh`, `core/scripts/validate-provenance-block.sh` and `core/scripts/partition-subject.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/adversary.md`, `core/team-roles/remediator.md`, `core/skills/ai-dlc/steps/_gate-procedures.md` and `core/skills/ai-dlc/steps/gate-validation.md`.
+
+**A consumer whose pair readers were carried at their old version receives `=` from the merge, by design.** The shipped fixtures' `@` expectations read red in such a consumer, and that red means "a reader is carried", not a regression in the merge or the join; both fixture headers say so.
+
+### BL-719 — the `artifact_sha` pair emitters and teachers write `<stem>@<sha>` only into a tree whose installed readers accept it
+
+A `<stem>=<64hex>` pair whose story slug carries a gitleaks keyword trips generic-api-key in a consumer, while `<stem>@<sha>` gives 0 findings. Every reader has accepted both separators since 0.888.0, but a consumer pull can deliver the emitters without the readers, so the emitter decides at use time.
+
+- `merge-adversarial-shards.sh` gains an exclusive `--pair-sep` mode. It prints exactly one character and exits 0, and it prints `@` only when all three hold: the sibling `validate-adversarial-convergence.sh` declares `PAIR_SEP='[=@]'` exactly once, `partition-subject.sh` declares it exactly once, and `validate-provenance-block.sh --accepts-at-pair` matches an `@` pair. Otherwise, including when an input is absent or unreadable, it prints `=`.
+- `validate-provenance-block.sh` gains `--accepts-at-pair`. It runs its own root and schema resolution unchanged and exits 0 only when the resolved schema's `artifact_sha` pattern matches an `@` pair, so the key reads the schema the validator would read, in the core layout, the installed layout and under an `AI_DLC_PROJECT_ROOT` override. An older validator handed the flag exits non-zero, which reads as `=`.
+- `partition-subject.sh` declares `PAIR_SEP='[=@]'` and reads the `--expect-sha` separator from it; the merge's own pair parser does the same from its own declaration.
+- The merge computes the separator once per run, and not at all in map or document mode, which emit no pair. It writes it at both emitters, the subject-mode list and the files-mode list. The join asks the sibling merge once in subject mode and writes `@` in `artifact_sha_before` and `artifact_sha_after` only on exit 0 with stdout exactly `@`, because an old merge prints `REFUSED` on stdout and exits 2.
+- The teachers say the same rule: write `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`; both are accepted. The `artifact_sha` doc in `provenance-block.json` carries it, the generated regions in `adversary.md` and `_gate-procedures.md` are re-rendered from it, and `sync-taught-schema.sh --check` exits 0. The hand-written sites in `_gate-procedures.md` and `adversary.md` say it in one sentence each, `gate-validation.md` names both `<name>=` and `<name>@` entries, and `remediator.md`'s serial triple carries the per-stem lists in the separator the join wrote.
+- `adversarial-shard-merge` gains arm K. Current-world expectations hard-code `@` and are never derived from `--pair-sep`. The old-reader worlds are derived from the current files at run time, never vendored: the validator and `partition-subject.sh` each with their one `PAIR_SEP` line deleted, and the schema with its pattern narrowed back to `=`. Each anchor is checked before the edit (FIXTURE STALE when missing) and each result must differ by `cmp -s` (FIXTURE BROKEN when byte-identical), and the derived schema must make `--accepts-at-pair` exit 1 against its source's 0; K0 prints that proof on a passing run. Every world is laid out in the installed and the core layout under its own `AI_DLC_PROJECT_ROOT`.
+  - K1/K2/K3 ask `--pair-sep` in each world, including an override root carrying the old schema over a current install.
+  - KE drives the merge itself in all four worlds and both layouts and reads every emitted pair: `none=@ vac== ps== sch==`.
+  - Mutants KMb and KMc drop the second and third reader from the key and each moves only its own world. KEM keys the emitter on the validator alone and is killed by KE in the old partition-subject and old schema worlds.
+- The other fixtures move with the emitters. `adversarial-shard-merge` rewrites U1b as a mixed-form arm (`=` shards in, `@` out) and moves its golden and P1/PM1. `check-24-adversarial-convergence` reads `product-brief@` straight off the merge and `j2s_sub` keeps each pair's own separator. `remediator-shard-join` takes the separator in `p_sjoin`. Shard inputs built with `=` are unchanged. The four `check-24` shards and `remediator-shard-join` declare `validate-provenance-block.sh` and the schema; `remediator-shard-join` also declares the merge and `python3`.
+- BL-719's receipt, `receipt-bl719.sh`, scores fix 0, `--pair-sep` hard-coded to `@` 1, drop-(b) 1, drop-(c) 1 and the core layout spelling 0. Every refusal exits 9.
+
+### BL-718 — the adversarial shard header line `artifact_sha: <stem>=<sha> …` trips gitleaks generic-api-key in a consumer; the emitters now write `@` into a tree whose readers accept it
+
+BL-718's readers-first half shipped in 0.888.0. This release is its emitter half, which BL-719 delivers.
+
+- The merge's two emitters and the join's two emitters write the separator `--pair-sep` returns, so a consumer's lead no longer hand-appends fingerprints to `.gitleaksignore` for records the pipeline writes, once that consumer's readers have landed.
+- `remediator-shard-join` gains SJ1o: a copy of the join's scripts directory with an old merge beside it writes `=` before and after lists, and the same copy with the current merge writes `@`. The old merge is a stub that prints `REFUSED: shard directory --pair-sep does not exist` and exits 2, which is the old merge's measured behaviour.
+- BL-718's receipt, `receipt-bl718.sh`, drives the merge in files and subject mode and the join in subject mode, in a current tree (`@` from all three) and in a tree carrying the old schema (`=` from all three). It scores fix 0, base emitters 1, join converted but not the merge 1, merge converted but not the join 1, and a merge whose emitter keys on the validator alone 1.
+- Residual: T1, quoted consumer content, is out of scope by operator ruling and stays graph's decision.
+
+### Suite cost
+
+`adversarial-shard-merge` gains twelve subject-mode merge drives (KE and KEM, four worlds by two layouts plus the mutant). Its last recorded loaded cost is 233s; the hand's solo run of the new fixture took 245s, which is a solo figure and is not compared with the loaded one. Among the fixture directories that exist on `main`, the recorded pole is `reconcile-emit-report` at 753s and this fixture is fourth; the `adversarial-shard-merge-mutants` rows still in the durations record name directories no longer in the tree. The dress records the new loaded figure. The cut that is available if the figure matters is running KEM in the installed layout only.
+
 ## [0.896.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a. It closes BL-709, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. It changes `core/git-hooks/pre-push`, the consumer's installed pre-push hook, which a consumer runs from step 3 of the delivering pull, byte-identically with this repo's `.githooks/pre-push` (I66).

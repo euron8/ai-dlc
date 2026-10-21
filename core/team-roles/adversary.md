@@ -162,7 +162,9 @@ for your findings, and (d) a shared context block. You MUST:
    dispatch": subject axis). Your read scope, your `sections:` citations, your `artifact:` and your per-stem
    `artifact_sha` are exactly those `steps/_gate-procedures.md`, "Adversarial review dispatch",
    prescribes in its paragraph **Shard the requirements subject**; follow that paragraph, not
-   the section-shard paragraph above. As an
+   the section-shard paragraph above. In each per-stem pair, write the separator as `@` only if
+   `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`;
+   both are accepted. As an
    elicitation shard there, you run `/bmad-advanced-elicitation`, edit nothing, and stamp no
    `verdict:` ("Validation cycle" item 2); your `artifact:`, per-stem `artifact_sha:` and
    `sections:` lines are those of that same paragraph, which the elicitation merge refuses
@@ -393,7 +395,7 @@ tool_use_id: <NOT_ACCESSIBLE as a shard; unsharded, the toolu_... id of the Skil
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 artifact: <path of the artifact you reviewed> # what this pass reviewed.
-artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem>=<sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem>=<sha>` per story; a subject-axis shard, cross included, carries one `<stem>=<sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem>=<sha>` entries.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. What a shard notarizes depends on its axis: a per-story shard on the files axis carries its one story's sha; a cross-story shard carries one `<stem><sep><sha>` per story it read; the merged files-axis pass, which the merge writes, carries one `<stem><sep><sha>` per story; a subject-axis shard, cross included, carries one `<stem><sep><sha>` per subject stem; and a sections-axis shard, cross included, carries the whole document's sha. Write `<sep>` as `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep` prints exactly `@`, otherwise `=`; both are accepted. The `artifact_sha` pattern accepts exactly those two shapes: one sha256, or two or more space-separated `<stem><sep><sha>` entries.
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.

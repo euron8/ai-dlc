@@ -362,6 +362,8 @@
 #   refusal exits, as it always did.
 set -u
 export LC_ALL=C
+# The separator class this merge's own pair parser READS (validate-adversarial-convergence.sh's).
+PAIR_SEP='[=@]'
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 # collect: a refusal inside a phase that --dry-run walks to its end. Without --dry-run it IS refuse,
@@ -541,8 +543,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 set -- ${_rest[@]+"${_rest[@]}"}
+# The separator a pair is EMITTED with: `@` only when every reader installed beside this script
+# accepts it, else `=`. Any absent or unreadable reader answers `=`. Siblings are found from $0,
+# never from $VALIDATOR, so the answer is the installed tree's own.
+pair_sep() {
+  local d
+  d="$(cd "$(dirname "$0")" && pwd)" || { printf '='; return 0; }
+  [ "$(grep -cxF "PAIR_SEP='[=@]'" "$d/validate-adversarial-convergence.sh" 2>/dev/null)" = 1 ] || { printf '='; return 0; }
+  [ "$(grep -cxF "PAIR_SEP='[=@]'" "$d/partition-subject.sh" 2>/dev/null)" = 1 ] || { printf '='; return 0; }
+  bash "$d/validate-provenance-block.sh" --accepts-at-pair >/dev/null 2>&1 || { printf '='; return 0; }
+  printf '@'
+}
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
+  --pair-sep)
+    [ $# -eq 1 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "REFUSED: --pair-sep takes no other argument"; exit 2; }
+    pair_sep; exit 0 ;;
   --check-header)
     # One shard, one header; exits here, before any sibling, VALIDATOR, subject or base is read.
     [ $# -eq 4 ] && [ "$3" = "--axis" ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-header <shard-file> --axis convergence|elicitation"; exit 2; }
@@ -573,6 +589,8 @@ case "${1:-}" in
     DOCUMENT="$(cd "$(dirname "$DOCUMENT")" && pwd -P)/$(basename "$DOCUMENT")" || refuse "--document's directory is not enterable" ;;
 esac
 [ $# -eq 1 ] || refuse "$USAGE"
+# Computed once per run; every emitted `<stem><sep><sha>` pair below uses it.
+PAIR_OUT='='; [ "$MAP_ONLY" -eq 1 ] || [ -n "$DOCUMENT" ] || PAIR_OUT="$(pair_sep)"
 # The CITATION AXIS: the one line name a finding cites its unit by. A line of the OTHER axis is
 # refused explicitly (below), never merely ignored -- ignored, a `stories:` line in a document
 # shard is invisible, and the finding is then judged on whatever `sections:` line sits beside it.
@@ -698,7 +716,7 @@ while read -r _k _st _rel; do
   printf '%s\t%s\n' "$_st" "$_s" >> "$T/stems" || refuse "cannot stage the subject shas"
 done < "$T/mfiles"
 [ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list four subject files"
-SUBJ_SHA_LIST="$(awk -F'\t' '{ printf " %s=%s", $1, $2 }' "$T/stems")"
+SUBJ_SHA_LIST="$(awk -F'\t' -v sep="$PAIR_OUT" '{ printf " %s%s%s", $1, sep, $2 }' "$T/stems")"
 elif [ -n "$DOCUMENT" ]; then
 # ---- the ordinal map, derived from the partition of the document -------------------------
 # partition-document.sh is the ONLY speller of the section grammar; its --map is read here and
@@ -1281,18 +1299,18 @@ for key in $ORDINALS $CROSS_KEYS; do
     # subject manifest. Order-free: the list is compared stem by stem.
     sha="$(field "$P" artifact_sha)"
     [ -n "$sha" ] || { collect "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"; continue; }
-    # A pair is `<stem>=<sha>` or `<stem>@<sha>` (validate-adversarial-convergence.sh's PAIR_SEP:
-    # readers accept both, this merge still EMITS `=`), so an `@` shard merges to an `=` line.
+    # A pair is `<stem>=<sha>` or `<stem>@<sha>` (PAIR_SEP: readers accept both; this merge emits
+    # the separator --pair-sep prints). PAIR_SEP is unquoted in each pattern, so it is a class.
     nt=0
     for tok in $sha; do
       nt=$((nt + 1))
-      st="${tok%%[=@]*}"; sv="$(printf '%s' "${tok#*[=@]}" | tr 'A-F' 'a-f')"
-      case "$tok" in ?*[=@]*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha> or <stem>@<sha>"; continue 2; } ;; esac
+      st="${tok%%$PAIR_SEP*}"; sv="$(printf '%s' "${tok#*$PAIR_SEP}" | tr 'A-F' 'a-f')"
+      case "$tok" in ?*$PAIR_SEP*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha> or <stem>@<sha>"; continue 2; } ;; esac
       want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
       [ -n "$want" ] || { collect "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; continue 2; }
       [ "$sv" = "$want" ] || { collect "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; continue 2; }
     done
-    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed 's/[=@].*//' | sort -u | grep -c .)" -eq 4 ] \
+    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed "s/$PAIR_SEP.*//" | sort -u | grep -c .)" -eq 4 ] \
       || { collect "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; continue; }
     art="$(field "$P" artifact)"
     [ -n "$art" ] || { collect "$sf declares no artifact; a subject shard names the subject manifest"; continue; }
@@ -1325,7 +1343,7 @@ for key in $ORDINALS $CROSS_KEYS; do
     sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
     disk="$(sha_of "$STORIES_DIR/$sb")" || { collect "story file $STORIES_DIR/$sb is unreadable"; continue; }
     [ "$sha" = "$disk" ] || { collect "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"; continue; }
-    SHA_LIST="$SHA_LIST ${sb%.md}=$sha"
+    SHA_LIST="$SHA_LIST ${sb%.md}${PAIR_OUT}$sha"
   fi
 
   # --- the partition ---

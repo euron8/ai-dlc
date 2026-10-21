@@ -6,6 +6,10 @@ core/scripts/validate-steering-budget.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 core/scripts/merge-adversarial-shards.sh
+# The merge answers --pair-sep from validate-provenance-block.sh and the schema its chain resolves;
+# without them here the K3 worlds emit `=` and the `@` build grep reads a broken world.
+core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json
 # Read by the live-series, H-BIND and bind arms (extracted and compared, not run).
 core/hooks/ai-dlc-acknowledge.sh
 core/team-roles/remediator.md

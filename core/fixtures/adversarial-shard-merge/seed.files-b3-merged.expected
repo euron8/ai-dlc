@@ -120,7 +120,7 @@ shard_tool_use_ids: 1=toolu_01AdvDispatch01835579184 2=toolu_01AdvDispatch030617
 mode: subagent
 lead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md
 artifact: _bmad-output/planning-artifacts/s1/stories
-artifact_sha: 192-ff-A-token-decimal-resolution=200e48919182dc509c49202658487a9ae0cd8cbd74ce7d7670ef98551921d6d3 bug-192-il-accuracy=4aa754b7b07ddea2d48b6fa7f13fe8fcdb080e5dd1c55c5537646bde03ad708f story-1-rebalancer-il-accuracy=907bc9c3a69c34d31f27cf1fc1eb47761e389a5851c6a886eb06c9acf79af0ba
+artifact_sha: 192-ff-A-token-decimal-resolution@200e48919182dc509c49202658487a9ae0cd8cbd74ce7d7670ef98551921d6d3 bug-192-il-accuracy@4aa754b7b07ddea2d48b6fa7f13fe8fcdb080e5dd1c55c5537646bde03ad708f story-1-rebalancer-il-accuracy@907bc9c3a69c34d31f27cf1fc1eb47761e389a5851c6a886eb06c9acf79af0ba
 findings_critical: 0
 findings_critical_prior_scope: 0
 findings_major: 6

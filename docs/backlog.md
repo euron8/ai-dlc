@@ -484,68 +484,6 @@ Measured input for the partition, graph-watch, batch 238. These figures come fro
 
 verify: manual
 
-## BL-718 — the adversarial shard header line `artifact_sha: <stem>=<sha> …` trips gitleaks generic-api-key in a consumer on every cross shard, so the lead hand-appends fingerprints to `.gitleaksignore` each sprint; the goal is that a consumer's lead never hand-appends fingerprints for records ai-dlc's pipeline writes
-
-**DEFECT.** (widened by lead ai-dlc-37 after a second graph trip) Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236).
-
-`core/scripts/merge-adversarial-shards.sh:1462-1467` emits `printf 'artifact_sha:%s\n'` for the subject and files lists, and `printf 'artifact_sha: %s\n'` for a document. The grammar is stated at `:188`: "every shard notarizes `artifact_sha:` as `<stem>=<sha>`". A `<key>: <name>=<64-hex>` line is the shape a generic-api-key rule matches. The distribution ships no gitleaks config: `git ls-files | grep -ci gitleaks` is 0, against a control of 28 for `backlog`.
-
-Evidence, relayed by ai-dlc-5d from graph at 91d0e2f65 and not re-measured by this filing: S319's first commit was refused at 00:27:16 EDT with 12 leaks, and the lead added 6 fingerprints, at a cost of about 1 minute and roughly 10 calls. graph's `.gitleaksignore` holds 3 for s315, 15 for s316, 23 for s318 and 6 for s319, which is 47 of its 71 generic-api-key lines. graph owns the gitleaks hook.
-
-Goal, ruled by lead ai-dlc-37: a consumer's lead never hand-appends fingerprints for records the ai-dlc pipeline writes. The goal is not narrowed to the `artifact_sha` line.
-
-Measured cause (gitleaks 8.22.1, graph's pinned version, release binary checksum-verified, and 8.30.1; graph's own .gitleaks.toml; scratch copies read through git show only): the rule is generic-api-key. It matches a keyword (key, token, api, auth, secret and similar) within 20 characters before an operator, followed by a 10-150 character value with entropy 3.5, and 64 hex characters score about 3.9. The `artifact_sha:` text itself never trips the rule. There are two trigger classes.
-- **T2, ai-dlc grammar:** a `<stem>=<64hex>` pair whose story slug carries a keyword. For example `story-1-2-skipped-swap-row-keys-and-ui-label=<sha>` fires, while the control `row-kays` does not. The form `<stem>@<sha>` gives 0 findings at both versions.
-- **T1, quoted consumer content:** for example `settlement_token=t207._WETH_ADDR`, copied verbatim from consumer code into a remediator fence or a finding's prose. `token=t207._WETH_ADDR` fires, while the controls `tokem=`, a space instead of `=`, and a short value do not. No ai-dlc grammar change reaches it.
-
-Second trip, graph HEAD e10931f04 (relayed by ai-dlc-5d via the lead, measured by this filing): it added 13 fingerprints. Its 65 changed files give 20 findings on 13 lines, all generic-api-key and identical at both versions; the relayed count was 8. Seven of the 13 lines are T2 `artifact_sha:` headers: `shards/stories-p1/cross-{1..6}.md:10` and `stories-adversarial-p1.md:1574`, with two findings each. Six are T1: `shards/stories-repair-p1/3.md:16` and its joined copy `stories-repair-p1.md:667` (remediator fence); `shards/stories-p1/03.md:31` and `stories-adversarial-p1.md:144` (finding prose); `shards/stories-p1/03.md:49` and `stories-adversarial-p1.md:162` (finding fence). All paths are under `_bmad-output/planning-artifacts/s319/`.
-
-Path classes in graph's .gitleaksignore at HEAD (85 entries): 59 are pipeline records.
-- `shards/stories-p<M>/cross[-k].md` 29
-- `stories-adversarial-p<M>.md` 11, written by merge-adversarial-shards.sh
-- `shards/stories-elicitation/cross-k.md` 6
-- `stories-repair-p<M>.md` 4, written by join-remediator-shards.sh
-- `shards/stories-p<M>/<n>.md` 2
-- `shards/stories-repair-p<M>/<n>.md` 2
-- `stories-resolution-p<M>.md` 2, written by the lead
-- `stories-elicitation.md` 2
-- party-repair `anchor` 1, written by the lead
-
-The other 21 are graph's own files and out of scope: server/*.py, scripts/tests, docs, docker-compose.yml, config, .agents/skills/bmad-testarch and .gitleaksignore itself.
-
-Facts about the remedies, measured:
-- The fingerprints that are today's practice are already broken by line drift: `s316/stories-adversarial-p1.md` fires at :2204 while its fingerprint names :2199, and one blank line at the top of stories-repair-p1.md moves :667 to :668, unsuppressed.
-- `[[allowlists]]`, and `[[allowlists]] targetRules=`, are SILENT NO-OPs at 8.22.1 and work only at 8.30.1. `[allowlist]` and the rule-level `[rules.allowlist]` work at both.
-- A global path allowlist over the pipeline classes hides every real secret quoted into those records, under every rule including graph's custom alchemy rules.
-- A rule-level allowlist on generic-api-key alone hides only generic-shaped secrets, and the custom rules still fire.
-- An inline `gitleaks:allow` suppresses only the marked line, at both versions, in a fence or in prose. But T1 lines are model-written, so no script can mark them reliably.
-- graph's own .gitleaks.toml states "AC4 invariant: NO `_bmad-output/` path is added to any allowlist". So any option that reaches T1 is a consumer-side decision.
-
-Dedupe, re-derived with `grep -c` at f36ede45d: "gitleaks" 0 in docs/backlog.md and 1 in docs/backlog.archive.md, where the one hit is inside BL-443 (a `_bmad-output/` fixture-keying entry) and is unrelated; "artifact_sha" 0 live and 20 in the archive; "BL-718" 0 live and 0 in the archive; control BL-716 1 live.
-
-Reach of a format change: `artifact_sha` appears in 30 files under `core/`. The 13 that are not fixtures are `core/hooks/ai-dlc-acknowledge.sh`, `core/hooks/ai-dlc-continue.sh`, `core/schemas/provenance-block.json`, `core/scripts/join-remediator-shards.sh`, `core/scripts/merge-adversarial-shards.sh`, `core/scripts/stamp-story-provenance.sh`, `core/scripts/validate-adversarial-convergence.sh`, `core/skills/ai-dlc/enforcement-map.yaml`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/steps/stories-test-strategy.md`, `core/team-roles/adversary.md` and `core/team-roles/remediator.md`. A change to the emitted form must move those readers together with it.
-
-Owed:
-- T2 is owed in two releases. The readers-first release (0.888.0) makes every reader accept `@` as well as `=`. BL-719 then flips the emitters and teachers.
-- T1 is out of scope by operator ruling, relayed by lead ai-dlc-37: it is graph's decision. graph's AC4 forbids allowlisting `_bmad-output/`, so the quoted-consumer-content lines are graph's to decide, and ai-dlc writes no consumer scanner config.
-- The entry closes when BL-719's emitter flip lands, which removes the T2 hash-line part.
-
-**Progress (0.888.0; entry stays OPEN).** The readers-first half shipped: every reader of the `artifact_sha` pair grammar accepts `<stem>@<sha>` as well as `<stem>=<sha>`. The emitters and teachers still write `=`, so a consumer's scanner still trips. The entry closes with BL-719's emitter flip.
-
-verify: manual
-
-## BL-719 — switch the artifact_sha pair emitters and teachers from `=` to `@`, so a keyword-bearing stem no longer trips gitleaks generic-api-key in a consumer
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236) on ruling of lead ai-dlc-37; id allocated by ai-dlc-37. The second half of BL-718, which is the parent.
-
-BL-718 found that the trigger is a `<stem>=<64hex>` pair whose story slug carries a gitleaks keyword (key, token, api, auth, secret and similar) within 20 characters before the `=`. The rule matched at both gitleaks 8.22.1 (graph's pinned version) and 8.30.1. The form `<stem>@<sha>` gives 0 findings at both versions, because `@` is outside the rule's `[ \t\w.-]` run and is not an operator in either version. BL-718's release made every reader accept both separators: `validate-adversarial-convergence.sh` (sha_key, K3, L and J2S), the shard parser in `merge-adversarial-shards.sh`, `partition-subject.sh --expect-sha`, and the `provenance-block.json` pattern. The emitters and teachers were deliberately left on `=`, so a consumer's scanner still trips until this entry ships. The emitters to switch are `core/scripts/merge-adversarial-shards.sh` (the subject and files lists, built at :701 and :1326 and printed at :1462 and :1467) and `core/scripts/join-remediator-shards.sh` (the `artifact_sha_before` and `artifact_sha_after` lists at :2330, :2339 and :2377-2378). The teachers are `core/team-roles/adversary.md`, `core/team-roles/remediator.md` and `core/skills/ai-dlc/steps/_gate-procedures.md` (the `<stem>=<sha>` instructions, including the party-repair anchor at :395-397 and `--expect-sha` at :1057-1058), plus the schema's template placeholder text.
-
-Precondition, which binds the design: a consumer pull can deliver the emitters without the readers. A machinery path whose consumer copy diverges is CARRIED per file (`core/skills/ai-dlc-update/SKILL.md:405-419`; `self-update-gate.sh` emits one SELF-UPDATE-CARRY row per path) and lands only through an operator WORKLIST semantic-merge. Rulebook files (team-roles and steps) are operator-gated at step 8 with per-block keep-ours. A consumer whose validate-adversarial-convergence.sh, `partition-subject.sh` or provenance schema is carried can therefore stay on the old reader indefinitely. An old validator reading an `@` list falls to sha_key's hex-smear branch and fires a false REOPEN on the J join. The flip must therefore not emit `@` into a tree whose readers cannot parse it.
-
-Owed, the design for its owner to choose: detect at use time, where the emitter writes, whether the installed readers accept `@`, and emit `=` otherwise. The design question is what that detection keys on, so that it holds across every delivery path. Receipt: a fixture where the emitter, given a tree whose installed reader accepts `@`, writes `@`, and given a tree whose reader is the pre-BL-718 one, writes `=`. The teachers switch only once that holds.
-
-verify: manual
-
 ## BL-725 — the recover gate's per-call `[ -w "$STATE_DIR" ]` stand-down passes on a writable directory whose stage write fails (a full disk), so the snapshot Read is allowed, the stage stays `snapshot`, and every later call is denied FIRST
 
 **DEFECT.** The filing is promised by 0.891.0's CHANGELOG ("Finding: an ENOSPC stage-write failure still holds the gate at `snapshot`", `CHANGELOG.md:42-44`). It came out of the BL-688 work and was relayed by graph-watch, batch 238; the batch-238 filing hand measured and filed it.

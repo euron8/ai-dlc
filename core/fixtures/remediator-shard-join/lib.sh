@@ -411,14 +411,15 @@ run_sjoin() { # <join> <world> [pass] [extra args]
 }
 sj_refused() { [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(sj_out "$1")" ]; }
 p_sjoin() { # every part by one writer -> JOINED, prd assembled, SPEC written in place, per-stem sha lists
-  local w k n; w="$(subj_world)" || return 1
+  # <join> [separator, default `@`: the pair separator a join in a current tree writes]
+  local w k n s="${2:-@}"; w="$(subj_world)" || return 1
   k="$(sj_part_rows "$w" | grep -c .)"
   sj_all "$w"; run_sjoin "$1" "$w"
   n="$(grep -c 'Repaired by the part' "$w/$SJPA/prd.md")" || n=0
   [ "$RC" -eq 0 ] && has "$JO" "($k parts, $k writers)" && [ -f "$(sj_out "$w")" ] && [ "$n" -ge 2 ] \
     && has "$w/$SPECREL" "Repaired by the part" && has "$(sj_out "$w")" "- artifact: $SJPA/s9/requirements-subject.md" \
-    && grep -qE '^- artifact_sha_before: product-brief=[0-9a-f]{64} SPEC=[0-9a-f]{64} prd=[0-9a-f]{64} architecture-impact=[0-9a-f]{64}$' "$(sj_out "$w")" \
-    && grep -qE '^- artifact_sha_after: product-brief=[0-9a-f]{64} SPEC=[0-9a-f]{64} prd=[0-9a-f]{64} architecture-impact=[0-9a-f]{64}$' "$(sj_out "$w")" \
+    && grep -qE "^- artifact_sha_before: product-brief${s}[0-9a-f]{64} SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64} architecture-impact${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
+    && grep -qE "^- artifact_sha_after: product-brief${s}[0-9a-f]{64} SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64} architecture-impact${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
     && ! grep -q "Repaired by" "$w/$SJPA/product-brief.md"
 }
 p_sjspec2() { # the WHOLE-FILE SPEC part written by two agents -> REFUSED; nothing assembled
