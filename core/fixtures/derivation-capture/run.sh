@@ -770,6 +770,327 @@ else
   bad "the section copy reached via a link into sections/ exited $RC (expected 2 'reads the section copy') — a doomed pair is accepted under another spelling"
 fi
 
+# --- A54-A61: A RECORD'S RE-DERIVATION IS JUDGED WITH THE GATE'S SUPERSESSION (BL-727) ----------
+# The mask sits under a `mktemp -d` parent, where `is_record` never holds, and it blanks every pair
+# the write did not touch -- including the LATER copy that supersedes a touched earlier one. So the
+# hook passes the real file as AI_DLC_DERIV_SUPERSEDE_FROM and the validator reads the record test
+# and the later copies from it. Eight rows, each in its own file so no row's payload touches
+# another's pairs: A54-A57 are re-derivations the gate passes (exit 0, silent), A58-A61 are writes
+# the gate fails (exit 2, FAIL (STALE) at the cited line). Every row also runs the GATE -- the real
+# validator, env unset, on the real file -- so a silent arm proves its file really holds a
+# superseded stale pair (SUPERSEDED, rc 0), and a refusing arm proves the gate agrees (rc 1).
+SUP_PA="_bmad-output/planning-artifacts"
+sup_path() { # <row> -> the row's file, relative to the project
+  case "$1" in
+    7) printf '%s/s1/sup7-live.md' "$SUP_PA" ;;
+    8) printf '%s/sup8-repair-p1.md' "$SUP_PA" ;;
+    *) printf '%s/s1/sup%s-repair-p1.md' "$SUP_PA" "$1" ;;
+  esac
+}
+sup_body() { # <row> -> the file as it stands after the write
+  case "$1" in
+    1|4|7|8) printf '# r\n\n```derived\n$ echo alpha\nbeta\n```\n\nlater\n\n```derived\n$ echo alpha\nalpha\n```\n' ;;
+    2) printf '# r\n\n```derived\n$ echo alpha\nbeta2\n```\n\nlater\n\n```derived\n$ echo alpha\nalpha\n```\n' ;;
+    3) printf '# r\n\n```derived\n$ echo one\n1\n```\n\nlater\n\n```derived\n$ echo one\none\n```\n\n```derived\n$ echo 1\n1\n```\n' ;;
+    5) printf '# r\n\n```derived\n$ echo gamma\ndelta\n```\n' ;;
+    6) printf '# r\n\n```derived\n$ echo alpha\nalpha\n```\n\nlater\n\n```derived\n$ echo alpha\nbeta\n```\n' ;;
+  esac
+}
+sup_payload() { # <row> -> the text the write carried
+  case "$1" in
+    1|7|8) printf 'later\n\n```derived\n$ echo alpha\nalpha\n```' ;;
+    2) printf 'beta2' ;;
+    3) printf '```derived\n$ echo 1\n1\n```' ;;
+    4|6) printf '```derived\n$ echo alpha\nbeta\n```' ;;
+    5) printf '```derived\n$ echo gamma\ndelta\n```' ;;
+  esac
+}
+sup_line() { # <row> -> the line the hook must cite as stale, 0 for a silent row
+  case "$1" in 1|2|3|4) echo 0 ;; 6) echo 11 ;; *) echo 4 ;; esac
+}
+sup_fire() { # <project dir> <row> -> write the row's file, fire that project's hook with its Edit
+  mkdir -p "$(dirname "$1/$(sup_path "$2")")"
+  sup_body "$2" > "$1/$(sup_path "$2")"
+  printf '%s' "$(edit_json "$1/$(sup_path "$2")" "$(sup_payload "$2")")" \
+    | CLAUDE_PROJECT_DIR="$1" bash "$1/.claude/hooks/ai-dlc-derivation-capture.sh" >"$OUT" 2>"$ERR"
+  RC=$?
+}
+sup_ok() { # <row> -> 0 when the last fire is that row's verdict
+  if [ "$(sup_line "$1")" = 0 ]; then
+    [ "$RC" = 0 ] && [ ! -s "$ERR" ]
+  else
+    [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" \
+      && grep -qF "FAIL (STALE): $(sup_path "$1"):$(sup_line "$1") records an output" "$ERR"
+  fi
+}
+sup_stale_at4() { # <row> -> 0 when the last fire refused the row's EARLIER pair, line 4
+  [ "$RC" = 2 ] && grep -qF "FAIL (STALE): $(sup_path "$1"):4 records an output" "$ERR"
+}
+sup_seeded() { # <project dir> <row> -> 0 when every non-empty payload line is a line of the file
+  local l
+  while IFS= read -r l; do
+    [ -z "$l" ] && continue
+    grep -qxF -- "$l" "$1/$(sup_path "$2")" || return 1
+  done <<<"$(sup_payload "$2")"
+}
+sup_gate() { # <project dir> <row> -> GRC and $WORK/sup-gate.txt: the validator, env unset, on the real file
+  ( cd "$1" && env -u AI_DLC_DERIV_SUPERSEDE_FROM AI_DLC_PROJECT_ROOT="$1" \
+      bash "$1/scripts/ai-dlc/validate-artifact-derivations.sh" "$1/$(sup_path "$2")" ) > "$WORK/sup-gate.txt" 2>&1
+  GRC=$?
+}
+SUP_WHAT_1="record, earlier stale \$ echo alpha/beta, Edit appends the correct copy"
+SUP_WHAT_2="record, Edit rewrites only the superseded earlier pair's output to beta2"
+SUP_WHAT_3="record, earlier superseded pair records 1, Edit adds an unrelated correct \$ echo 1/1"
+SUP_WHAT_4="record, a stale copy inserted ABOVE a correct later identical command"
+SUP_WHAT_5="record, a stale block with no later copy"
+SUP_WHAT_6="record, a STALE later copy appended after a correct earlier one"
+SUP_WHAT_7="LIVE document s1/sup7-live.md, earlier stale copy, Edit appends the correct copy"
+SUP_WHAT_8="record-named file OUTSIDE s<N>/, earlier stale copy, Edit appends the correct copy"
+for _r in 1 2 3 4 5 6 7 8; do
+  sup_fire "$CONSUMER" "$_r"
+  eval "_w=\$SUP_WHAT_$_r"
+  sup_gate "$CONSUMER" "$_r"
+  if [ "$(sup_line "$_r")" = 0 ]; then
+    if sup_ok "$_r" && sup_seeded "$CONSUMER" "$_r" && [ "$GRC" = 0 ] && grep -q '^SUPERSEDED: ' "$WORK/sup-gate.txt"; then
+      ok "A5$((_r + 3)): $_w -> exit 0, silent (the gate: rc 0, SUPERSEDED)"
+    else
+      bad "A5$((_r + 3)): $_w exited $RC (expected 0, silent; gate rc $GRC, expected 0 with SUPERSEDED): $(head -3 "$ERR")"
+    fi
+  else
+    if sup_ok "$_r" && sup_seeded "$CONSUMER" "$_r" && [ "$GRC" = 1 ]; then
+      ok "A$((_r + 53)): $_w -> exit 2, FAIL (STALE) at :$(sup_line "$_r") (the gate: rc 1)"
+    else
+      bad "A$((_r + 53)): $_w exited $RC (expected 2, FAIL (STALE) at :$(sup_line "$_r"); gate rc $GRC, expected 1): $(head -3 "$ERR")"
+    fi
+  fi
+done
+
+# --- A62-A63: THE JOIN GUARD, at the validator directly ------------------------------------------
+# A62: AI_DLC_DERIV_SUPERSEDE_FROM naming a file that does not carry the argument's commands at the
+# same lines is a REFUSAL (exit 2), never a verdict. The argument is row 1's file, whose earlier pair
+# is stale, so a validator without the guard reads the other file's one command, skips the pre-pass
+# and answers FAIL (STALE) at rc 1 -- which is why the arm requires the REFUSED text and no FAIL.
+JR_TXT="$WORK/sup-join-refusal.txt"
+( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_DERIV_SUPERSEDE_FROM="$CONSUMER/$(sup_path 5)" \
+    bash "$VALIDATOR" "$CONSUMER/$(sup_path 1)" ) > "$JR_TXT" 2>&1
+JR_RC=$?
+if [ "$JR_RC" = 2 ] && grep -q '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=.* does not carry the commands of ' "$JR_TXT" \
+   && ! grep -q 'FAIL (STALE)' "$JR_TXT"; then
+  ok "A62: SUPERSEDE_FROM naming a file that does not join the argument -> REFUSED, exit 2, no verdict"
+else
+  bad "A62: a non-joining SUPERSEDE_FROM exited $JR_RC (expected 2 with the join REFUSED line and no FAIL): $(head -2 "$JR_TXT")"
+fi
+# A63: the near-miss -- SUPERSEDE_FROM naming the argument itself joins, and supersession fires.
+( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_DERIV_SUPERSEDE_FROM="$CONSUMER/$(sup_path 1)" \
+    bash "$VALIDATOR" "$CONSUMER/$(sup_path 1)" ) > "$WORK/sup-selfjoin.txt" 2>&1
+_sj=$?
+if [ "$_sj" = 0 ] && grep -q '^SUPERSEDED: ' "$WORK/sup-selfjoin.txt" && ! grep -q '^REFUSED' "$WORK/sup-selfjoin.txt"; then
+  ok "A63: SUPERSEDE_FROM naming the argument itself -> exit 0, SUPERSEDED"
+else
+  bad "A63: a self-joining SUPERSEDE_FROM exited $_sj (expected 0 with SUPERSEDED): $(head -2 "$WORK/sup-selfjoin.txt")"
+fi
+
+# --- A65-A67: THE SUPERSEDE_FROM PRE-CHECK, at the validator directly ----------------------------
+# SUPERSEDE_FROM names the ONE real file a single masked argument stands for, so two arguments, or a
+# real file that is not there, is refused BEFORE any walk, with its own text. Without the pre-check
+# the join guard refuses these too, but under the "does not carry the commands" text and after a
+# walk -- so the arms key on the pre-check's own sentence, and M6 scores that difference.
+SUP_PRE='^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=.* needs exactly one file argument and a readable file to read supersession from; no verdict\.$'
+# A65: env set + two file arguments -> rc 2, the pre-check text, no verdict.
+( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_DERIV_SUPERSEDE_FROM="$CONSUMER/$(sup_path 1)" \
+    bash "$VALIDATOR" "$CONSUMER/$(sup_path 1)" "$CONSUMER/$(sup_path 5)" ) > "$WORK/sup-pre-two.txt" 2>&1
+_p2=$?
+if [ "$_p2" = 2 ] && grep -q "$SUP_PRE" "$WORK/sup-pre-two.txt" && ! grep -q 'FAIL' "$WORK/sup-pre-two.txt"; then
+  ok "A65: SUPERSEDE_FROM with two file arguments -> REFUSED by the pre-check, exit 2, no verdict"
+else
+  bad "A65: SUPERSEDE_FROM with two file arguments exited $_p2 (expected 2 with the pre-check REFUSED line and no FAIL): $(head -2 "$WORK/sup-pre-two.txt")"
+fi
+# A66: env set to a real file that is not there -> rc 2, the pre-check text, no verdict.
+( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_DERIV_SUPERSEDE_FROM="$CONSUMER/$SUP_PA/s1/sup-absent.md" \
+    bash "$VALIDATOR" "$CONSUMER/$(sup_path 1)" ) > "$WORK/sup-pre-missing.txt" 2>&1
+_pm=$?
+if [ ! -e "$CONSUMER/$SUP_PA/s1/sup-absent.md" ] && [ "$_pm" = 2 ] && grep -q "$SUP_PRE" "$WORK/sup-pre-missing.txt" \
+   && ! grep -q 'FAIL' "$WORK/sup-pre-missing.txt"; then
+  ok "A66: SUPERSEDE_FROM naming a missing file -> REFUSED by the pre-check, exit 2, no verdict"
+else
+  bad "A66: SUPERSEDE_FROM naming a missing file exited $_pm (expected 2 with the pre-check REFUSED line and no FAIL): $(head -2 "$WORK/sup-pre-missing.txt")"
+fi
+# A67: the near-miss -- env UNSET, the same two arguments: the normal walk runs and answers. Row 5's
+# pair is stale and row 1's earlier pair is superseded, so the walk's own verdict is rc 1.
+( cd "$CONSUMER" && env -u AI_DLC_DERIV_SUPERSEDE_FROM AI_DLC_PROJECT_ROOT="$CONSUMER" \
+    bash "$VALIDATOR" "$CONSUMER/$(sup_path 1)" "$CONSUMER/$(sup_path 5)" ) > "$WORK/sup-pre-unset.txt" 2>&1
+_pu=$?
+if [ "$_pu" = 1 ] && grep -qF "FAIL (STALE): $CONSUMER/$(sup_path 5):4 records an output" "$WORK/sup-pre-unset.txt" \
+   && grep -q '^SUPERSEDED: ' "$WORK/sup-pre-unset.txt" && ! grep -q '^REFUSED' "$WORK/sup-pre-unset.txt"; then
+  ok "A67: env unset, the same two arguments -> the normal walk (rc 1, SUPERSEDED and FAIL (STALE)), no REFUSED"
+else
+  bad "A67: env unset with two arguments exited $_pu (expected 1 with SUPERSEDED, FAIL (STALE) at :4 and no REFUSED): $(head -2 "$WORK/sup-pre-unset.txt")"
+fi
+
+# --- A64: the hook's join-guard arm is a fail-open, and it SAYS so -------------------------------
+# A join REFUSED is hook/validator drift no author can repair, so the hook exits 0 -- but a silent
+# fail-open reads exactly like a pass, so the hook names the refusal and the gate backstop. On exit
+# 0 a PostToolUse hook's stderr never reaches the model, so the line goes out as additionalContext
+# JSON on stdout, and stderr stays empty. The LAST line of additionalContext is compared, so a world
+# carrying the provenance library (which prepends its marker line) still matches.
+# The validator's REAL refusal (A62's capture) is replayed by a stub: the hook builds its mask from
+# the file it names, so the real join cannot be broken through it.
+sup_replay() { # <captured text> <status> <dest> -> a stub validator replaying them
+  { printf '#!/bin/sh\ncat <<'"'"'REFUSAL'"'"' >&2\n'; cat "$1"; printf 'REFUSAL\nexit %s\n' "$2"; } > "$3"
+}
+sup_jg_ok() { # -> 0 when the last fire is the join-guard verdict: exit 0, stderr empty, the JSON on stdout
+  local ev ctx
+  [ "$RC" = 0 ] && [ ! -s "$ERR" ] || return 1
+  ev="$(jq -r '.hookSpecificOutput.hookEventName // empty' "$OUT" 2>/dev/null)" || return 1
+  [ "$ev" = PostToolUse ] || return 1
+  ctx="$(jq -r '.hookSpecificOutput.additionalContext // empty' "$OUT" 2>/dev/null)" || return 1
+  grep -q "^AI/DLC derivation capture: the write-time check could not run -- the validator refused the supersession input (REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=.* does not carry the commands of .*); this edit was NOT checked, and the gate re-runs the file\.\$" <<<"$(tail -n 1 <<<"$ctx")"
+}
+cp "$VALIDATOR" "$WORK/validator.bak"
+sup_replay "$JR_TXT" "$JR_RC" "$VALIDATOR"
+sup_fire "$CONSUMER" 1
+cp "$WORK/validator.bak" "$VALIDATOR"
+if [ "$JR_RC" = 2 ] && sup_jg_ok && ! grep -q 'did not run to' "$ERR"; then
+  ok "A64: a join-guard REFUSED from the validator -> exit 0, stderr empty, PostToolUse additionalContext on stdout naming the refusal and the gate"
+else
+  bad "A64: a replayed join REFUSED (capture rc $JR_RC) gave hook rc $RC with stdout: $(head -c 300 "$OUT") stderr: $(head -2 "$ERR") -- expected exit 0, empty stderr and the 'could not run' additionalContext"
+fi
+
+# --- M1-M6: MUTANTS OF THE BL-727 FIX, each a COPY in its own project, guarded by cmp -s ----------
+# Each project carries the seeded hook and validator, one of them mutated. The unmutated project is
+# the control: rows 1 and 5 hold there, and the join line appears, so a project whose hook or
+# validator cannot run fails the control rather than scoring every mutant as a kill.
+sup_world() { # <name> <hook> <validator> -> SUPW, a project carrying exactly those two
+  SUPW="$WORK/sup-world-$1"
+  mkdir -p "$SUPW/.claude/hooks" "$SUPW/scripts/ai-dlc" "$SUPW/$SUP_PA/s1" \
+    && printf '0.0.0\n' > "$SUPW/VERSION" \
+    && cp "$2" "$SUPW/.claude/hooks/ai-dlc-derivation-capture.sh" \
+    && cp "$3" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+}
+sup_mut() { # <src> <dst> <old> <new> -> 0 when <old> is on exactly one line of <src> and the copy differs
+  local n
+  n="$(grep -cF -- "$3" "$1")" || n=0
+  [ "$n" = 1 ] || { printf '  DID NOT APPLY: %s lines of %s carry the anchor\n' "$n" "$1"; return 1; }
+  O="$3" N="$4" awk 'BEGIN { o = ENVIRON["O"]; n = ENVIRON["N"] }
+    { i = index($0, o); if (i) $0 = substr($0, 1, i - 1) n substr($0, i + length(o)); print }' "$1" > "$2" || return 1
+  ! cmp -s "$1" "$2"
+}
+MH="$WORK/sup-mut-hook.sh"; MV="$WORK/sup-mut-validator.sh"
+
+# CONTROL: the unmutated pair in a project of its own.
+if sup_world ctl "$HOOK" "$VALIDATOR" && cmp -s "$HOOK" "$SUPW/.claude/hooks/ai-dlc-derivation-capture.sh"; then
+  sup_fire "$SUPW" 1; _c1=$RC; sup_ok 1; _o1=$?
+  sup_fire "$SUPW" 5; _c5=$RC; sup_ok 5; _o5=$?
+  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+  sup_fire "$SUPW" 1; sup_jg_ok; _oj=$?
+  if [ "$_o1" = 0 ] && [ "$_o5" = 0 ] && [ "$_oj" = 0 ]; then
+    ok "mutant control: the unmutated copies give row 1 exit 0, row 5 FAIL (STALE) at :4, and the join line"
+  else
+    bad "FIXTURE BROKEN: the unmutated copies gave row 1 rc $_c1, row 5 rc $_c5, join line $_oj -- every mutant verdict below is void"
+  fi
+else
+  bad "FIXTURE BROKEN: the mutant control project could not be built"
+fi
+
+# M1: the hook drops AI_DLC_DERIV_SUPERSEDE_FROM -- the defect as filed. Rows 1-4 go red, each on
+# the EARLIER pair the mask can no longer see superseded. Row 4 is scored too: A57 is silent-shaped
+# and would pass against a hook that emits nothing, so it needs a mutant that reddens it.
+if sup_mut "$HOOK" "$MH" 'AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR"' 'bash "$VALIDATOR"' \
+   && sup_world m1 "$MH" "$VALIDATOR"; then
+  _k=""
+  for _r in 1 2 3 4; do sup_fire "$SUPW" "$_r"; sup_ok "$_r" || { sup_stale_at4 "$_r" && _k="$_k$_r"; }; done
+  [ "$_k" = 1234 ] && ok "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
+    || bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
+else
+  bad "M1 DID NOT APPLY: the hook's validator call no longer carries AI_DLC_DERIV_SUPERSEDE_FROM=\"\$FILE\""
+fi
+
+# M2: the validator keeps the ARGUMENT's parent and basename for is_record (the mask's mktemp dir),
+# while the later copies still come from the real file. Row 1 goes red: no record, no supersession.
+if sup_mut "$VALIDATOR" "$MV.1" 'd="${sf%/*}"; [ "$d" = "$sf" ] && d="."' 'd="${f%/*}"; [ "$d" = "$f" ] && d="."' \
+   && sup_mut "$MV.1" "$MV" '-v bn="${sf##*/}"' '-v bn="${f##*/}"' \
+   && sup_world m2 "$HOOK" "$MV"; then
+  sup_fire "$SUPW" 1
+  if ! sup_ok 1 && sup_stale_at4 1; then ok "M2 killed: is_record read off the mask's path refuses row 1 at :4"
+  else bad "M2 survived: is_record keyed on the argument's path gave row 1 rc $RC -- A54 does not need the real file's identity"; fi
+else
+  bad "M2 DID NOT APPLY: the supersession pre-pass no longer takes par/bn from \$sf"
+fi
+
+# M3: the validator's join guard matches nothing. A62's call then reads the other file's one command,
+# skips the pre-pass and answers FAIL (STALE) at rc 1 -- a verdict built on a file it never joined.
+if sup_mut "$VALIDATOR" "$MV" 'substr($0, 1, 2) == "C " && !($0 in have)' 'substr($0, 1, 2) == "C " && 0' \
+   && sup_world m3 "$HOOK" "$MV"; then
+  sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
+  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 5)" \
+      bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m3.txt" 2>&1
+  _m3=$?
+  if [ "$_m3" = 1 ] && ! grep -q '^REFUSED' "$WORK/sup-m3.txt" && grep -q 'FAIL (STALE): .*:4 records an output' "$WORK/sup-m3.txt"; then
+    ok "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
+  else
+    bad "M3 survived: without the join guard the non-joining call gave rc $_m3: $(head -2 "$WORK/sup-m3.txt")"
+  fi
+else
+  bad "M3 DID NOT APPLY: the join guard's awk test is not on one line of the validator"
+fi
+
+# M4: the hook's join-guard arm matches nothing. The REFUSED line then falls to the generic arm and
+# the write is refused under the "did not run to completion" headline -- an author blocked by drift.
+if sup_mut "$HOOK" "$MH" "if _jg=\"\$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=' <<<\"\$OUT\")\"; then" 'if false; then' \
+   && sup_world m4 "$MH" "$VALIDATOR"; then
+  sup_body 1 > "$SUPW/$(sup_path 1)"
+  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+  sup_fire "$SUPW" 1
+  if ! sup_jg_ok && [ "$RC" = 2 ] && grep -q 'did not run to' "$ERR"; then
+    ok "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
+  else
+    bad "M4 survived: without the join-guard arm the hook gave rc $RC: $(head -2 "$ERR")"
+  fi
+else
+  bad "M4 DID NOT APPLY: the hook's join-guard test is not on one line"
+fi
+
+# M5: the join-guard arm still exits 0 but emits nothing -- the silent fail-open A64 exists to refuse.
+# `:` swallows the jq call's arguments, so the arm emits neither the JSON nor anything on stderr.
+if sup_mut "$HOOK" "$MH" 'jq -n --arg context' ': --arg context' \
+   && sup_world m5 "$MH" "$VALIDATOR"; then
+  sup_body 1 > "$SUPW/$(sup_path 1)"
+  sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+  sup_fire "$SUPW" 1
+  if ! sup_jg_ok && [ "$RC" = 0 ] && [ ! -s "$OUT" ] && [ ! -s "$ERR" ]; then
+    ok "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
+  else
+    bad "M5 survived: the silenced join-guard arm gave rc $RC with $(wc -c < "$OUT") stdout and $(wc -c < "$ERR") stderr bytes"
+  fi
+else
+  bad "M5 DID NOT APPLY: the hook's additionalContext jq call is not on one line"
+fi
+
+# M6: the validator's SUPERSEDE_FROM pre-check matches nothing. A65's and A66's inputs then reach
+# the walk, and the join guard refuses them under ITS text -- a refusal for the wrong reason, after
+# reading a file the pre-check exists to keep it from reading. Scored as the presence of that text.
+if sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SUP_FROM" ] || [ ! -f "$SUP_FROM" ]; then' 'if false; then' \
+   && sup_world m6 "$HOOK" "$MV"; then
+  sup_body 1 > "$SUPW/$(sup_path 1)"; sup_body 5 > "$SUPW/$(sup_path 5)"
+  _MV6="$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
+  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$(sup_path 1)" \
+      bash "$_MV6" "$SUPW/$(sup_path 1)" "$SUPW/$(sup_path 5)" ) > "$WORK/sup-m6-two.txt" 2>&1
+  _m6a=$?
+  ( cd "$SUPW" && AI_DLC_PROJECT_ROOT="$SUPW" AI_DLC_DERIV_SUPERSEDE_FROM="$SUPW/$SUP_PA/s1/sup-absent.md" \
+      bash "$_MV6" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m6-missing.txt" 2>&1
+  _m6b=$?
+  _k6=""
+  ! grep -q "$SUP_PRE" "$WORK/sup-m6-two.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-two.txt" && _k6="${_k6}a"
+  ! grep -q "$SUP_PRE" "$WORK/sup-m6-missing.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-missing.txt" && _k6="${_k6}b"
+  if [ "$_k6" = ab ]; then
+    ok "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
+  else
+    bad "M6 survived: without the pre-check only inputs '$_k6' of ab lost the pre-check text for the join guard's (rc $_m6a, $_m6b): $(head -2 "$WORK/sup-m6-two.txt")"
+  fi
+else
+  bad "M6 DID NOT APPLY: the validator's SUPERSEDE_FROM pre-check test is not on one line"
+fi
+
 # --- A14: the artifact is not modified by the hook ----------------------------
 # The rejected design overwrote the recorded output with the captured one. It must
 # stay rejected: a wrong COMMAND would then be silently paired with its own real

@@ -81,9 +81,14 @@
 # the block grammar reads as a COMMAND counts as a later copy; the same text in a `text` fence,
 # in prose, or as a recorded output line indented deeper than its fence never does. `--list`
 # still lists every command.
-# NOT COVERED: `ai-dlc-derivation-capture.sh` validates a masked copy under a `mktemp -d`
-# parent, never under `s<digits>/`, so supersession never fires there -- a Write that re-carries
-# an earlier stale fence is still blocked by the hook.
+# AT WRITE TIME THE REAL FILE DECIDES. `ai-dlc-derivation-capture.sh` validates a masked copy
+# under a `mktemp -d` parent, which blanks every pair the write did not touch -- including the
+# later copy that supersedes a touched earlier one. So the hook passes the real file as
+# AI_DLC_DERIV_SUPERSEDE_FROM, and the pre-pass takes `is_record`'s parent and basename, and every
+# later copy, from THAT file: the same record test and the same later copies the gate reads. The
+# argument's own commands must sit at the same lines of that file, or the run is REFUSED (exit 2)
+# -- a mask that does not join the file it claims to be is no basis for skipping anything.
+# check_file carries the join; the hook says how it surfaces a refusal.
 #
 # Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage, a
 # derivation that did not run to completion or whose output could not be COMPARED (an
@@ -145,6 +150,16 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 [ "$#" -ge 1 ] || { echo "$USAGE" >&2; exit 2; }
+# AI_DLC_DERIV_SUPERSEDE_FROM names the ONE real file a single masked argument stands for (the
+# header's write-time rule). With two arguments, or a directory, which argument it stands for is
+# not stated, so it is refused rather than applied to all of them.
+SUP_FROM="${AI_DLC_DERIV_SUPERSEDE_FROM:-}"
+if [ -n "$SUP_FROM" ]; then
+  if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SUP_FROM" ] || [ ! -f "$SUP_FROM" ]; then
+    printf 'REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=%s needs exactly one file argument and a readable file to read supersession from; no verdict.\n' "$SUP_FROM" >&2
+    exit 2
+  fi
+fi
 
 fails=0; checked=0; blocks=0; files_seen=0; unrun=0
 
@@ -553,8 +568,8 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
 }
 
 TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
-TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"; TMP_EV="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep" "$TMP_EV" "$TMP_EV.sup"' EXIT
+TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"; TMP_EV="$(mktemp)"; TMP_SF="$(mktemp)"
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep" "$TMP_EV" "$TMP_EV.sup" "$TMP_SF"' EXIT
 
 # THE RECORD GRAMMAR, ONCE. The directory walk skips a record and check_file lets a record's
 # later copy supersede an earlier one; both call this one awk function, so the two cannot
@@ -669,27 +684,41 @@ walk_blocks() { # $1 artifact path -> events on stdout; sets NCMD to the number 
 }
 
 check_file() { # $1 artifact path
-  local f="$1" ev kind rest ln text cmd="" cmdline=0 csup="" d
+  local f="$1" ev kind rest ln text cmd="" cmdline=0 csup="" d sf="$1" sev="$TMP_EV"
   files_seen=$((files_seen + 1))
   : > "$TMP_EXP"
   walk_blocks "$f" > "$TMP_EV"
+  # UNDER AI_DLC_DERIV_SUPERSEDE_FROM the record identity and the later copies come from the real
+  # file (the header's write-time rule). walk_blocks resets NCMD, so the gate below counts the
+  # REAL file: a mask whose later copy was blanked carries one command and would skip the pass.
+  # THE JOIN GUARD: every command event of the argument must be a command event of the real file,
+  # same line, same bytes -- awk exits 3 on the first one that is not. The first input is told
+  # apart by FILENAME, not FNR == NR, which an EMPTY first input turns true for the second.
+  if [ -n "$SUP_FROM" ]; then
+    sf="$SUP_FROM"; sev="$TMP_SF"
+    walk_blocks "$sf" > "$TMP_SF"
+    LC_ALL=C awk 'FILENAME == ARGV[1] { if (substr($0, 1, 2) == "C ") have[$0] = 1; next }
+      substr($0, 1, 2) == "C " && !($0 in have) { bad = 1; exit 3 }
+      END { if (bad) exit 3 }' "$TMP_SF" "$TMP_EV" \
+      || { printf 'REFUSED: AI_DLC_DERIV_SUPERSEDE_FROM=%s does not carry the commands of %s at the same lines, so which of them a later copy supersedes is unknown; no verdict.\n' "$sf" "$f" >&2; exit 2; }
+  fi
   # THE SUPERSESSION PRE-PASS (the header's rule). Only a file with two commands can hold a
   # repeat, so a one-command file costs no fork; `is_record` decides inside the awk, so a live
   # document passes through unchanged. A record's command whose LAST copy is a later line is
   # rewritten `C <line> <that later line> <command>`, and run_pair skips it.
   if [ "$NCMD" -ge 2 ]; then
-    d="${f%/*}"; [ "$d" = "$f" ] && d="."
+    d="${sf%/*}"; [ "$d" = "$sf" ] && d="."
     case "$d" in .|'') d="$PWD" ;; esac
     # LC_ALL=C: the key is the command's BYTES, and a record carrying a byte its locale cannot
     # decode must not abort the pre-pass.
-    LC_ALL=C awk -v par="${d##*/}" -v bn="${f##*/}" "$REC_AWK"'
+    LC_ALL=C awk -v par="${d##*/}" -v bn="${sf##*/}" "$REC_AWK"'
       BEGIN { rec = is_record(par, bn) }
       FNR == NR { if (substr($0, 1, 2) == "C ") { r = substr($0, 3); i = index(r, " "); ln = substr(r, 1, i - 1); c = substr(r, i + 3); last[c] = ln }; next }
       rec && substr($0, 1, 2) == "C " {
         r = substr($0, 3); i = index(r, " "); ln = substr(r, 1, i - 1); c = substr(r, i + 3)
         if (last[c] != ln) { print "C " ln " " last[c] " " c; next }
       }
-      { print }' "$TMP_EV" "$TMP_EV" > "$TMP_EV.sup" && mv "$TMP_EV.sup" "$TMP_EV" \
+      { print }' "$sev" "$TMP_EV" > "$TMP_EV.sup" && mv "$TMP_EV.sup" "$TMP_EV" \
       || { printf 'REFUSED: could not read which commands in %s are re-derived later, so its derivations were never run; no verdict. Re-run once the fault is gone.\n' "$f" >&2; exit 2; }
   fi
   while IFS= read -r ev; do
