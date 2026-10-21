@@ -625,3 +625,31 @@ Owed (mechanism left to the builder), one of:
 
 verify: manual — the two owed fixes close on different observables: a restructure moves the emitted length, while an author-time margin leaves it where it is and adds a refusal. An `sh` receipt keyed on either one would refuse the other, and a receipt keyed on the length alone could be closed by a cosmetic trim that leaves the hazard intact.
 
+## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
+
+**DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
+
+The operator ruled that a story split counts as a SCOPE CHANGE for the test strategy. The amendment procedure does not treat it as one. `core/skills/ai-dlc/steps/_gate-procedures.md:853-869` gives two ways to amend a notarized artifact after MET:
+- item 1 (`:856-860`) is "a residue or gate repair on unchanged scope". It needs only a chain of structured repair records, each with `artifact_sha_before:` and `artifact_sha_after:`, from the notarized sha to the disk sha;
+- items 2-4 (`:861-869`) handle a scope change with one `REOPEN_AFTER_MET` record plus ONE verify pass. Item 2 defines a scope change as "a later step rewording a capability".
+
+Check 24 arm J2 enforces that split. `core/scripts/validate-adversarial-convergence.sh:3569-3574` PASSes on a complete chain of repair links. `:3582-3584` reserve the re-open for a scope change, but the arm itself never decides which case it is looking at.
+
+A story split changes the set of story ids the strategy maps tests to. It is not "rewording a capability", so the repair path is open to it, and J2 accepts the chain with no adversarial pass over the strategy's current bytes.
+
+Measured on graph s319 (as relayed by graph-watch; graph not re-read for this filing):
+- `test-strategy-repair-p3` (`faa99bbc` -> `15443bd`) carried the 2.3 -> 2.3a/2.3b split;
+- `test-strategy-repair-p4` made the strategy 52 lettered cases and 132 rows;
+- the test-strategy series PASSed after both, and no adversary reviewed either.
+
+Owed:
+- (a) the strategy-subject amendment rule treats a change in the mapped story-id set as a scope change (`REOPEN_AFTER_MET` plus ONE verify pass). That change is detected mechanically from the id set, not by judgement, and J2's acceptance of a repair chain is the arm that changes;
+- (b) the verify pass covers only the changed rows where the machinery allows that, and is one full pass where it does not;
+- (c) designed TOGETHER with BL-733, so a split costs work in proportion to what it changed;
+- a fixture with three worlds:
+  - a split strategy with only a repair chain is REFUSED by J2;
+  - the same split with `REOPEN_AFTER_MET` and a verify pass is accepted;
+  - an in-scope repair (same id set) is still accepted by its chain.
+
+verify: manual — the id-set detector and where the re-open is recorded are the builder's design, so an `sh` receipt built before them would close only under a guessed interface. A discriminating receipt can be written alongside the fix.
+
