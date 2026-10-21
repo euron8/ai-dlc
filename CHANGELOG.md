@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.895.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a. It closes BL-721, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/wait-for-deliverable.sh` and `core/hooks/ai-dlc-recover.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/skills/ai-dlc/rule-bodies/rule-29.md`, `core/skills/ai-dlc/steps/_dispatch-protocol.md` and `core/skills/ai-dlc/steps/_gate-procedures.md`.
+
+### BL-721 — a plain resolved `--dispatch` beat at its cap gets the answer its own transcript supports, not the bare "Re-dispatch the teammate ONCE"
+
+A remediator whose work has no deliverable file (an inline story-changelog append) gives the join a path that never appears, so a beat armed on it can only reach its cap, and the bare re-dispatch remedy then fired against a live or finished writer. 0.887.0's LIVE DISPATCH answer was gated on `--complete-repair` and did not reach a plain `--dispatch <id> <path>` beat.
+
+- `dispatch_live()` no longer returns early outside `--complete-repair`. When the `--dispatch` resolves to one agent with one target, the cap prints what that agent's transcript supports, with no grant and exit 1:
+  - LIVE (a turn within one quantum) prints the LIVE DISPATCH block, which says the transcript buys no grant outside `--complete-repair`.
+  - RECENT (older than a quantum, younger than IDLE_SECS) prints the LIVE DISPATCH block with its no-turn-this-beat wording.
+  - STOPPED (IDLE_SECS or older, with the path absent) prints a STOPPED DISPATCH line naming the transcript: a writer with no deliverable file finishes without writing one, so read its last message before any re-dispatch.
+- Only the grant stays `--complete-repair`'s. An unresolved dispatch, several dispatches, several targets, and a beat with no `--dispatch` keep the bare remedy, as does a stale transcript whose path is present.
+- The grants-spent NOTE ("all N progress grants are spent … Decide: re-dispatch") is suppressed beside a LIVE or RECENT block, whose reading it contradicts, and still prints beside STOPPED, because a stopped transcript says nothing about the progress path's writes.
+- This SUPERSEDES archived BL-717's "At IDLE_SECS or older the remedy is today's": a resolved dispatch whose path is absent now prints STOPPED at the cap, with or without `--complete-repair`.
+- The header, USAGE and EXIT CODES of `wait-for-deliverable.sh` name the new remedy, and the four lead-facing exit-1 lines (rule 29, the dispatch protocol, the gate procedures and the recover hook) say to read the agent's transcript first when the beat prints LIVE DISPATCH or STOPPED DISPATCH.
+- The recover hook's In-Flight Teammates paragraph was tightened so that adding the LIVE/STOPPED DISPATCH pointer leaves its emitted text 4 bytes shorter than before, and the worst gate-in-flight resume keeps its sidecar note (9976 bytes, against 9980 before). The recover hook's worst real gate-in-flight resume (`gate-resume` BL-457 arm WC) already emitted 9980 bytes against its 10000 bound before this release, with the sweep's cliff between nonce lengths n=120 and n=132, so the next line added to that hook's resume text silently drops the sidecar note for a compacted lead.
+- `wait-beat-liveness` gains section S27d: a plain `--dispatch` at its cap (`AI_DLC_MAX_WAIT_BEATS=1`) in both id spellings, the agentId and the `toolu_` id. A fresh transcript gives LIVE DISPATCH and never "Re-dispatch the", a stale one gives STOPPED, and the near-miss with no `--dispatch` keeps the bare remedy. Section S27a's two past-IDLE_SECS near-misses now assert STOPPED. Mutant M54 restores the gate and brings the bare remedy back; mutant M55 widens the transcript read to beats with no `--dispatch` and the near-miss loses the bare remedy.
+- BL-721's receipt, `receipt-bl721.sh`, exits 0 on the fix in both spellings and in each alone, 1 against each of the M54 and M55 subjects, and 9 on an unknown spelling.
+
 ## [0.894.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a, cluster 238-r3. It closes BL-674, BL-697 and BL-707, closes no `PC-` id and files nothing. Net for this release: 3 closed, 0 filed. All three changes are in `scripts/validate-enforcement-map.sh` and core fixtures; none changes a consumer-facing script or rulebook.
