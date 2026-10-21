@@ -81,7 +81,9 @@ and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path cita
   - `v0.898.0` `e1739275b` #1246 BL-605; `v0.899.0` `af1536de3` #1248 BL-737;
   - `v0.900.0` `836c0962d` #1251 BL-739; `v0.901.0` `5b21170f8` #1252 BL-740.
   Every batch-236 and batch-238 LANDED line in the archive is anchored on its squash (this close re-anchored five
-  batch-236 lines that still cited `-dev` shas), and every batch-236 and batch-238 `-dev` ref is deleted.
+  batch-236 lines that still cited `-dev` shas). Every batch-238 `-dev` ref is deleted. **21 `b236-*-dev` refs are KEPT**:
+  30 shas cited in the archive resolve only through them (batch-236 LANDED and prose citations that never reached
+  `main`). Re-anchor or cite-correct those first; deleting a ref with a live citation breaks the citation.
 - **Operator rulings this batch.** BL-736: a story split counts as a scope change for the test strategy ("I'll go
   with your recommendation"). BL-737: a refused merge is corrected by the OWNING seat on a prescribed path, never by a
   lead rewrite ("The lead should not be editing those to force the merge."). Graph-watch interval: 10 minutes.
