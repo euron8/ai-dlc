@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.903.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13. It closes BL-729, BL-731 and BL-732, closes no `PC-` id and files nothing. Net for this release: 3 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/stamp-story-provenance.sh` and `core/scripts/partition-document.sh`. Role and rule text: `core/team-roles/adversary.md`, `core/skills/ai-dlc/rule-bodies/rule-28.md` and `core/skills/ai-dlc/steps/_gate-procedures.md`. `scripts/audit-party-wave-barrier.sh` is this repo's own and ships to no consumer.
+
+### BL-729 — `stamp-story-provenance.sh --series` resolves every prefix spelling the way Check 24 does
+
+`--series` used one glob that needed a `p` after the prefix, so `<stem>-adversarial-p`, the prefix Check 24 is driven with, matched nothing. It also had no exclusion, so a `-resolution-p<N>` or `-repair-p<N>` file could outrank the real terminal pass.
+
+- The resolver takes one glob over the prefix plus Check 24's own exclusion (`validate-adversarial-convergence.sh`), and the highest trailing `p<N>` wins. `<stem>-adversarial`, `<stem>-adversarial-` and `<stem>-adversarial-p` all resolve. The header, error and usage line state the accepted forms.
+- The `story-provenance` fixture gains a BL-729 arm over a ten-pass series with repair and resolution decoys, and three `cmp`-guarded copy mutants: glob reverted, exclusion removed, last-in-glob-order wins.
+- BL-729's receipt checks all three spellings against that series, with the subject hard-coded.
+
+### BL-731 — `partition-document.sh --cross-owner` trims blanks around each ordinal, and three briefs spell `<ordinal,ordinal,...>`
+
+The cross-agent brief taught `--cross-owner <K> <its cited ordinals>` without the comma-joined form, and the script read `2, 7` as a non-integer ordinal.
+
+- `cross_of` strips leading and trailing blanks (space, tab) from each comma-separated element before the integer test. `2, 7` gives the same owner as `2,7`. `2 7,9` is still refused, naming the element.
+- `core/team-roles/adversary.md`, `rule-28.md` and `_gate-procedures.md` spell the argument `<ordinal,ordinal,...>`.
+- The `document-partition` fixture gains the blank, tab and refusal cells inside `p_cross_owner`, plus mutant MX27, which removes the trim.
+- BL-731's receipt binds both halves: the script's acceptance and refusal, and all three docs.
+
+### BL-732 — `audit-party-wave-barrier.sh` keys a round member on its party seat, not on any cited path
+
+The detector made any Agent or Task call a round member if its prompt named a `party-mode/` path. A party-repair remediator fan-out that cites seat files as input therefore read as the party round `s<N>/stories`.
+
+- A call is a member only when its `subagent_type` equals the seat segment of one of its cited party-mode paths, and that seat is a rule-20 role-manifest persona (`pm architect dev qa tea ux sm cis`). A remediator, adversary, code-reviewer or general-purpose call that reads seat files is not a member.
+- The self-probe derives each seat's type from its file, reshapes case r as a seat, and gains case t (20 cases).
+- The fixture gains the BL-732 arm (six seeds: remediator, seat twin, adversary, `Deliverable:` seat prompt, general-purpose, cross seat) and mutants MK (key reverted to any cited path, any type) and MX (first cited path's seat only).
+- The header's corpus figures were re-measured under the new key over graph's 185 transcripts: 40 rounds, 164 batches, 13 FINDINGS, 4 UNKNOWN-CAP. The base key gives 44/171/13/7. FINDINGS are unchanged: the same 13 fire under both keys.
+
 ## [0.902.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13. It closes BL-745, BL-749, BL-743, BL-748 and BL-735, closes no `PC-` id and files nothing. Net for this release: 5 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-budget.sh`, `core/scripts/validate-mutation-red.sh`, `core/scripts/validate-gate-adjudication.sh`, `core/scripts/validate-handoff-evidence.sh` and `core/hooks/ai-dlc-recover.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/gate-adjudicator.md`, `core/skills/ai-dlc/steps/gate-validation.md` and `core/skills/ai-dlc/steps/implementation.md`.

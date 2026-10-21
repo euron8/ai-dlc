@@ -75,26 +75,34 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --series <prefix> resolves the TERMINAL pass itself — the highest p<N> in the series — so the
-# gate names "the terminal pass" the ONE way Check 24 already does (--series <path-prefix>), and
-# neither the gate nor the lead re-derives "which pass is last." Highest p-number wins; a series
-# with a gap or a dead-cycle tail is Check 24's problem, not this writer's.
+# gate names "the terminal pass" the way Check 24 does (--series <path-prefix>, validate-
+# adversarial-convergence.sh): ONE glob `"<prefix>"*`, minus the repair and resolution files that
+# Check 24 excludes by name (`*-resolution-p*`, `*-repair-p*`, `*-repair-*`), so a repair pass
+# `<stem>-adversarial-p2-repair-p7.md` or a `<stem>-adversarial-resolution-p9.md` never outranks
+# the real terminal pass. N is the trailing p<N> of the file name; Check 24 orders by the last
+# (pass|p)<N> token, and this writer reads only `p<N>.md` files. Highest p-number wins; a series
+# with a gap or a dead-cycle tail is Check 24's problem, not this writer's. Every spelling of the
+# prefix resolves: `<stem>-adversarial`, `<stem>-adversarial-` and `<stem>-adversarial-p`.
 if [[ -n "$SERIES" && -z "$TERMINAL" ]]; then
     best_n=-1
-    for f in "${SERIES}"*p[0-9]*.md; do
-        [[ -e "$f" ]] || continue
+    for f in "${SERIES}"*.md; do
+        [[ -f "$f" ]] || continue
+        case "$(basename "$f")" in
+            *-resolution-p*|*-repair-p*|*-repair-*) continue ;;
+        esac
         n="$(printf '%s' "$f" | sed -nE 's/.*p([0-9]+)\.md$/\1/p')"
         [[ -n "$n" ]] || continue
         if (( n > best_n )); then best_n="$n"; TERMINAL="$f"; fi
     done
     if [[ -z "$TERMINAL" ]]; then
-        echo "ERROR: --series '$SERIES' matched no <prefix>...p<N>.md pass file." >&2
+        echo "ERROR: --series '$SERIES' matched no <prefix>*p<N>.md pass file (prefix forms: <stem>-adversarial, <stem>-adversarial-, <stem>-adversarial-p; repair and resolution files are excluded)." >&2
         exit 1
     fi
 fi
 
 if [[ "$PRINT_SCHEMA" != "yes" ]]; then
     if [[ -z "$TERMINAL" || ${#STORIES[@]} -eq 0 ]]; then
-        echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--profile <name>] [--check] <story-file>... | --print-schema" >&2
+        echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>, e.g. <stem>-adversarial[-[p]]) [--profile <name>] [--check] <story-file>... | --print-schema" >&2
         exit 2
     fi
     [[ -f "$TERMINAL" ]] || { echo "ERROR: terminal pass file not found: $TERMINAL" >&2; exit 1; }

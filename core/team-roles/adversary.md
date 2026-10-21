@@ -143,7 +143,7 @@ for your findings, and (d) a shared context block. You MUST:
    but a shard always ends in its `seat-complete:` line, so it chunks at the result path and
    needs no draft.
    **As a cross shard**, before you record a finding, run
-   `scripts/ai-dlc/partition-document.sh --cross-owner <K> <the ordinals the finding cites>`. When
+   `scripts/ai-dlc/partition-document.sh --cross-owner <K> <ordinal,ordinal,...>` (the ordinals the finding cites, comma-joined). When
    the group it prints is not your own, record the finding only if the owner's focus pairs would
    not surface it; otherwise name it under `## Cross-references`, which is not a finding.
 

@@ -37133,3 +37133,44 @@ Owed: escape a word-leading `~` in the rendering, and add a fixture case to muta
 - Consumer captures: a replay line taken after this release carries `\~` where a tilde word appeared, and replays to the exact argv. Captures already committed are unchanged.
 
 verify: sh bash core/fixtures/mutation-red-replay/receipt-bl749.sh core/scripts/validate-mutation-red.sh
+## BL-729 — `stamp-story-provenance.sh --series` refuses the `<stem>-adversarial-p` prefix that Check 24 takes, though its header says it resolves the series "the ONE way Check 24 already does"
+
+**LANDED (v0.903.0, verified 3715dc84a).** **NOTE.** Raised from graph's s319 story-provenance stamping (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. It is tiered NOTE because the refusal is loud and costs one retry. The cost is that the error points the wrong way.
+
+`core/scripts/stamp-story-provenance.sh:77-78` says `--series <prefix>` names the terminal pass "the ONE way Check 24 already does (--series <path-prefix>)". Check 24 is driven with a prefix ending in `-adversarial-p` (`core/fixtures/check-24-adversarial-convergence/run.sh:195`, `core/fixtures/adversarial-shard-merge/lib.sh:548`). The resolver's glob at `:83`, `"${SERIES}"*p[0-9]*.md`, needs a `p` AFTER the prefix, so that prefix matches nothing. The script exits 1 with `matched no <prefix>...p<N>.md pass file`, a message that suggests the `p` form is the right one. Only `<stem>-adversarial-` resolves.
+
+Measured on a three-pass mktemp series: `…/s-adversarial-p` matches none, while the control `…/s-adversarial-` reaches p3. The step files that teach the call (`gate-validation.md:1430-1431`, `stories-test-strategy.md:579-580`) say only "the path-prefix of … the stories-adversarial pass series".
+
+Owed: accept both prefixes (add the glob `"${SERIES}"[0-9]*.md`), or state the exact form in the usage line, the error and both step files.
+
+verify: sh R="$PWD"; S="$R/core/scripts/stamp-story-provenance.sh"; E="$R/core/fixtures/story-provenance/seed.sh"; [ -f "$S" ] && [ -f "$E" ] || exit 9; eval "$(sed -n '/^mk_pass()/,/^}/p' "$E")"; T="$(mktemp -d)" || exit 9; for n in 1 2 3 4 5 6 7 8 9; do mk_pass "$T/s-adversarial-p$n.md" EXIT_CONDITION_NOT_MET toolu_RECEIPTaaaaaaaa; done; mk_pass "$T/s-adversarial-p10.md" EXIT_CONDITION_MET toolu_RECEIPTdddddddd; mk_pass "$T/s-adversarial-p2-repair-p7.md" EXIT_CONDITION_MET toolu_RECEIPTbbbbbbbb; mk_pass "$T/s-adversarial-resolution-p11.md" EXIT_CONDITION_MET toolu_RECEIPTcccccccc; printf '# S\n' > "$T/st.md"; cd "$T" || exit 9; export AI_DLC_PROJECT_ROOT="$T"; bash "$S" --terminal s-adversarial-p10.md st.md >/dev/null 2>&1 || exit 9; grep -q 'tool_use_id: toolu_RECEIPTdddddddd' st.md || exit 9; for p in s-adversarial s-adversarial- s-adversarial-p; do bash "$S" --series "$p" --check st.md >/dev/null 2>&1 </dev/null || exit 1; done; exit 0
+
+## BL-731 — the cross-agent brief teaches `partition-document.sh --cross-owner <K> <its cited ordinals>` without the comma-joined form, and the script reads `2, 7` as a non-integer ordinal
+
+**LANDED (v0.903.0, verified 7d6fcd908).** **NOTE.** Raised from graph s319 cross-shard agents' calls (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+
+`core/scripts/partition-document.sh:19` and `:381` take the cited ordinals as ONE comma-joined argument (`<ordinal,ordinal,...>`), and the usage error states that form. The text a cross agent is briefed from does not: `core/skills/ai-dlc/steps/_gate-procedures.md:384-385` reads `--cross-owner <K>` / `<its cited ordinals>`, and `core/skills/ai-dlc/rule-bodies/rule-28.md:119-120` reads `<K> <ordinals>`.
+
+Measured:
+- `--cross-owner 8 2,7` prints `3`.
+- `8 2 7` exits 64 with the usage line, which is actionable.
+- `8 "2, 7"` exits 64 with `cited ordinal " 7" is not an integer in 1..8`, which names the space and not the format.
+
+Owed: the brief and rule-28 spell out `<ordinal,ordinal,...>`, or the script trims blanks around each comma-separated ordinal. Either fix closes the receipt.
+
+verify: sh P=core/scripts/partition-document.sh; [ -f "$P" ] || exit 9; [ "$(bash "$P" --cross-owner 8 2,7 2>/dev/null </dev/null)" = 3 ] || exit 9; [ "$(bash "$P" --cross-owner 8 "2, 7" 2>/dev/null </dev/null)" = 3 ] || exit 1; [ "$(bash "$P" --cross-owner 8 " 2 ,7" 2>/dev/null </dev/null)" = 3 ] || exit 1; t="$(printf '7,\t2')"; [ "$(bash "$P" --cross-owner 8 "$t" 2>/dev/null </dev/null)" = 3 ] || exit 1; e="$(bash "$P" --cross-owner 30 "2 7,9" 2>&1 >/dev/null </dev/null)"; r=$?; [ "$r" = 64 ] || exit 1; case "$e" in *'"2 7"'*) ;; *) exit 1 ;; esac; for F in core/skills/ai-dlc/steps/_gate-procedures.md core/skills/ai-dlc/rule-bodies/rule-28.md core/team-roles/adversary.md; do [ -f "$F" ] || exit 9; j="$(tr '\n' ' ' < "$F" | tr -s ' ')"; case "$j" in *"--cross-owner <K> <ordinal,ordinal,...>"*) ;; *) exit 1 ;; esac; done; exit 0
+
+## BL-732 — `audit-party-wave-barrier.sh` keys a round member on the first `party-mode/` path a prompt names, so a party-REPAIR remediator fan-out that cites seat files reads as the party round `s<N>/stories`
+
+**LANDED (v0.903.0, verified f13f613b0).** **NOTE.** Raised from graph transcript `a367e62c` (s319) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. Related: BL-695, which built the detector.
+
+`scripts/audit-party-wave-barrier.sh:35-40` defines a MEMBER as any Agent/Task call whose `input.prompt` names a path `party-mode/<dir>/<file>.md`, and takes the first such path as its identity. `:224` scans the prompt for that path, and `rkey` at `:254-258` strips the seat and ordinal. The detector reads neither `subagent_type` nor whether the path is the agent's WRITE target.
+
+In graph's `a367e62c`, the 19 Agent calls that name a party-mode path are all `subagent_type: remediator`, described "Party repair shard 01" to "19". Each writes `_bmad-output/planning-artifacts/s319/shards/stories-party-repair-p1/<N>.md` and cites `party-mode/s319/stories-sm-<N>.md` as its INPUT ("Your findings: every finding in ..."). `--trace` over that transcript prints 19 `round=s319/stories DELIVERED` lines and `STAT rounds=1 batches=1`, so the detector judges a repair fan-out as a party round's waves. Control: the same jq over the same transcript counts 19 remediator calls and 0 seat-typed member calls.
+
+The consequence is a false finding, or a false acquittal, attributed to a party round. The detector is a distribution-only audit and gates nothing.
+
+Owed: a member is a call whose party-mode path is the file it writes, or whose role is a party seat, not any call whose prompt cites such a path. The key is the owner's to choose. The receipt's seed, rewritten as a seat, still counts a round, so the receipt does not close merely because the detector stopped seeing rounds.
+
+verify: sh D=scripts/audit-party-wave-barrier.sh; [ -f "$D" ] || exit 9; T="$(mktemp -d)"; s(){ for i in 1 2; do printf "%s\n" "{\"type\":\"assistant\",\"timestamp\":\"2026-01-01T10:00:0${i}.000Z\",\"message\":{\"id\":\"m$i\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tu$i\",\"name\":\"Agent\",\"input\":{\"subagent_type\":\"$2\",\"description\":\"call 0$i\",\"prompt\":\"${3}_bmad-output/party-mode/s900/stories-$4-0$i.md${5:-}\",\"run_in_background\":true}}]}}" "{\"type\":\"user\",\"timestamp\":\"2026-01-01T10:00:0${i}.500Z\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"tu$i\",\"type\":\"tool_result\",\"content\":[{\"type\":\"text\",\"text\":\"Async agent launched successfully.\\nagentId: ag$i\"}]}]},\"toolUseResult\":{\"isAsync\":true,\"status\":\"async_launched\",\"agentId\":\"ag$i\"}}" >> "$T/$1.jsonl"; done; }; r(){ S="$(bash "$D" --trace "$T/$1.jsonl" 2>&1)"; grep -q "self-probe: ok" <<<"$S" || echo X; sed -n "s/.* STAT rounds=\([0-9]*\) .*/\1/p" <<<"$S"; }; s rem remediator "part path: _bmad-output/planning-artifacts/s900/shards/stories-party-repair-p1/x.md Your findings: every finding in " sm; s adv adversary "Your findings: every finding in " sm; s gp general-purpose "Summarise every finding in " sm; s seat sm "part path: _bmad-output/planning-artifacts/s900/shards/stories-party-repair-p1/x.md Your findings: every finding in " sm; [ "$(r rem)" = 0 ] && [ "$(r adv)" = 0 ] && [ "$(r gp)" = 0 ] && [ "$(r seat)" -ge 1 ]
+

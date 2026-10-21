@@ -352,6 +352,7 @@ cross_of() { # <K> [<ordinal list>] -> the group table (no list) or the owning g
     }
     m = split(O, C, ","); s1 = 0; s2 = 0
     for (i = 1; i <= m; i++) {
+      gsub(/^[ \t]+|[ \t]+$/, "", C[i])
       if (C[i] !~ /^[0-9]+$/ || C[i] + 0 < 1 || C[i] + 0 > K) {
         print "partition-document: USAGE — cited ordinal \"" C[i] "\" is not an integer in 1.." K > "/dev/stderr"; exit 64
       }

@@ -117,7 +117,7 @@ a finding resting on three or more parts that no group holds, and a
 cross agent's wall clock tracks the tokens it writes, not the bytes it
 reads. A cross finding is OWNED by the lowest group whose row holds its
 two smallest cited ordinals, as `partition-document.sh --cross-owner
-<K> <ordinals>` prints. The join accepts a finding reported outside its
+<K> <ordinal,ordinal,...>` prints. The join accepts a finding reported outside its
 owner, and refuses it only when the owner's shard carries the identical
 cited set. Every part and cross agent writes its file early
 and ends it with one `seat-complete: ... sha=<hex> findings=<n>` line,

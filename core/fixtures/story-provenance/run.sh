@@ -854,5 +854,87 @@ case "$WR_MUT" in
     fi ;;
 esac
 
+# --- BL-729: --series resolves every spelling of the prefix to the highest REAL pass.
+# Check 24 takes `<stem>-adversarial-p` and excludes repair/resolution files by name; the writer
+# resolves the same way. The series holds p1-p3 plus a repair pass (p7) and a resolution pass (p9)
+# that outrank p3 numerically, so only a resolver that excludes them reaches p3. p3 is proved by a
+# real --check exit 0: the story is stamped from p3 by --terminal, and a writer that resolves any
+# other pass derives a different block and exits 1.
+B729="$(mktemp -d "$ROOT/b729.XXXXXX")"
+eval "$(sed -n '/^mk_pass()/,/^}/p' "$DIR/seed.sh")"
+for i in 1 2 3 4 5 6 7 8 9; do mk_pass "$B729/s-adversarial-p$i.md" EXIT_CONDITION_NOT_MET "$REAL_TID"; done
+mk_pass "$B729/s-adversarial-p10.md" EXIT_CONDITION_MET "toolu_FIXTUREdddddddd"
+mk_pass "$B729/s-adversarial-p2-repair-p7.md" EXIT_CONDITION_MET "toolu_FIXTUREbbbbbbbb"
+mk_pass "$B729/s-adversarial-resolution-p11.md" EXIT_CONDITION_MET "toolu_FIXTUREcccccccc"
+printf '# Story b729\n' > "$B729/story.md"
+( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" bash "$WRITER" --terminal s-adversarial-p10.md story.md >/dev/null 2>&1 )
+# vector for writer $1: one digit per spelling (<stem>-adversarial, -adversarial-, -adversarial-p);
+# 0 = --check exit 0 (p3 resolved), 1 = anything else
+b729_vector() { local v="" pre
+  for pre in s-adversarial s-adversarial- s-adversarial-p; do
+    if ( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" bash "$1" --series "$pre" --check story.md >/dev/null 2>&1 ); then v="${v}0"; else v="${v}1"; fi
+  done
+  printf '%s\n' "$v"
+}
+cp "$WRITER" "$MUTX/scripts/b729-ctl.sh"
+B729_CTL="$(b729_vector "$MUTX/scripts/b729-ctl.sh")"
+ASSERTIONS=$((ASSERTIONS + 1))
+# Positive conjunct: the seeded story really carries p10 tool_use_id (every other pass carries another), and all three spellings pass.
+if [ "$B729_CTL" = 000 ] && grep -qF "tool_use_id: toolu_FIXTUREdddddddd" "$B729/story.md"; then
+  printf '  ok    %-46s\n' "BL-729: three prefix spellings resolve p10 (--check 0)"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s vector %s, want 000\n' "BL-729: three prefix spellings resolve p10" "$B729_CTL"
+fi
+# p10 sorts BETWEEN p1 and p2 in glob order and p9 sorts last of the real passes; the resolution decoy is p11, above p10, so a resolver that keeps the last
+# file in glob order resolves p9 and fails; only a numeric compare reaches p10.
+# Mutants: COPIES guarded by cmp. (a) glob reverted to `*p[0-9]*.md`: the bare-p spelling matches
+# nothing (001). (b) exclusion removed: the resolution decoy p11 outranks p10 under the two short spellings (110).
+b729_mut() { # $1 name  $2 python program
+  local out="$MUTX/scripts/$1.sh"
+  if ! python3 -c "$2" "$WRITER" "$out" 2>"$MUTX/$1.err"; then echo "DID NOT APPLY: $(head -1 "$MUTX/$1.err")"; return 1; fi
+  if cmp -s "$WRITER" "$out"; then echo "DID NOT APPLY: identical to the writer"; return 1; fi
+  printf '%s\n' "$out"
+}
+B729_GLOB='
+import sys
+src = open(sys.argv[1]).read()
+a = "for f in \x22${SERIES}\x22*.md; do"
+if src.count(a) != 1: sys.exit("anchor: series glob %d" % src.count(a))
+open(sys.argv[2], "w").write(src.replace(a, "for f in \x22${SERIES}\x22*p[0-9]*.md; do"))
+'
+B729_EXCL='
+import sys
+src = open(sys.argv[1]).read()
+a = "            *-resolution-p*|*-repair-p*|*-repair-*) continue ;;\n"
+if src.count(a) != 1: sys.exit("anchor: exclusion %d" % src.count(a))
+open(sys.argv[2], "w").write(src.replace(a, ""))
+'
+B729_LAST='
+import sys
+src = open(sys.argv[1]).read()
+a = "if (( n > best_n )); then best_n=\x22$n\x22; TERMINAL=\x22$f\x22; fi"
+if src.count(a) != 1: sys.exit("anchor: highest-N compare %d" % src.count(a))
+open(sys.argv[2], "w").write(src.replace(a, "best_n=\x22$n\x22; TERMINAL=\x22$f\x22"))
+'
+b729_score() { # $1 label  $2 name  $3 program  $4 want-vector
+  local mp got
+  ASSERTIONS=$((ASSERTIONS + 1))
+  mp="$(b729_mut "b729-$2" "$3")"
+  case "$mp" in
+    "DID NOT APPLY"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$1" "$mp" ;;
+    *)
+      if [ "$B729_CTL" != 000 ]; then
+        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s FIXTURE BROKEN: control vector %s\n' "$1" "$B729_CTL"
+      else
+        got="$(b729_vector "$mp")"
+        if [ "$got" = "$4" ]; then printf '  ok    %-46s\n' "$1 killed by the BL-729 arm"
+        else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s SURVIVED: vector %s, want %s\n' "$1" "$got" "$4"; fi
+      fi ;;
+  esac
+}
+b729_score "mutant B729-a (glob reverted)" glob "$B729_GLOB" 001
+b729_score "mutant B729-b (exclusion removed)" excl "$B729_EXCL" 110
+b729_score "mutant B729-c (last in glob order wins)" last "$B729_LAST" 111
+
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]

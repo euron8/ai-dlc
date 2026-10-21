@@ -32,8 +32,15 @@
 # GRAMMAR -- what the replay reads. It judges DISPATCH BEHAVIOUR ONLY: Agent/Task tool_use blocks and
 # their tool_results, exit and delivery records read by their FIELDS, turn boundaries and the cap. It
 # never reads an assistant text or thinking block. Text written ABOUT a dispatch is not the dispatch.
-#   MEMBER    an Agent or Task tool_use whose input.prompt names a path
-#             `party-mode/<dir>/<file>.md`; the FIRST such path is the member's identity.
+#   MEMBER    an Agent or Task tool_use whose input.prompt names a path `party-mode/<dir>/<file>.md`
+#             whose SEAT -- the last `-<seat>` segment ROUND strips -- equals input.subagent_type, where
+#             the seat is one of the rule-20 role-manifest personas (rule-20.md, "Role-manifest
+#             preamble"): pm architect dev qa tea ux sm cis. Every cited party-mode path is tried in
+#             prompt order and the FIRST whose seat matches is the member's identity, so a cross seat
+#             citing another seat's file first, or a seat citing a shared brief.md first, is still a
+#             member of its own seat. A call no cited path matches -- a remediator repairing seat
+#             findings, an adversary, code-reviewer or general-purpose agent reading them -- is not a
+#             member, answers no delivery, and is RUNNING like any other call (BL-732, case t).
 #   ROUND     <dir>/<step>, where <step> is <file> with `.md`, then a trailing `-<digits>`, then a
 #             trailing `-cross`, then the last `-<seat>` segment removed. So
 #             s319/stories-dev-01.md, s319/stories-architect-cross-5.md and s319/stories-tea-19.md are
@@ -87,7 +94,7 @@
 #             JSON object. Lines that do not parse are skipped. The parse reads only lines carrying
 #             one of the prefilter tokens below; a dropped Agent result reads as "running forever".
 #
-# SELF-PROBE. Before any corpus is read the script replays nineteen transcripts it seeds under
+# SELF-PROBE. Before any corpus is read the script replays twenty transcripts it seeds under
 # mktemp, with both exit carriers the harness writes (the enqueue, then the delivery) and no envelope
 # tag on any body. Each answers as stated or the run refuses with exit 2, naming the case:
 #   (a) cap 4 env line; Dev 01-02; Dev 01's delivery answered by a --status beat only; Dev 02's by
@@ -121,6 +128,10 @@
 #   (r) (a)-shaped barrier; a sidechain Agent call naming a round path follows Dev 01's delivery.
 #                                                           -> 1 FINDING (the sidechain answers nothing)
 #   (s) rejections carrying 5 then 3; the lower is the cap. -> 1 FINDING, running 2 cap 3 idle 1
+#   (t) (a)-shaped barrier; Dev 01's delivery is answered only by calls citing a round path that are
+#       not seats: a remediator, a code-reviewer and a general-purpose agent reading seat files, and an
+#       adversary writing stories-adversary-01.md (a seat segment outside the role-manifest map).
+#                                                           -> 1 FINDING, agents=7
 #
 # FALSE-POSITIVE SET AND HOW IT REACHED ITS FINAL STATE (measured on the graph transcript corpus,
 # ~/.claude/projects/-Users-n8-git-graph/*.jsonl, read only):
@@ -148,8 +159,12 @@
 #      followed one in the same turn read as unanswered (case q). It no longer ends a turn. An isMeta
 #      record (Stop-hook feedback) still does: exempting it too acquitted the TRUE 3dbc11fb b2, whose
 #      lead ended its turn at 09:40:18 on "the beat will report the rest" and dispatched at 09:51:35.
-#   FINAL STATE over 187 transcripts (WB5's 188 less bad91dc5, deleted since and holding 0 rounds),
-#   no --cap: 43 rounds, 170 batches, 13 FINDINGS, 7 UNKNOWN-CAP.
+#   FINAL STATE over the 185 transcripts in the directory at re-measure (BL-732), no --cap:
+#   40 rounds, 164 batches, 13 FINDINGS, 4 UNKNOWN-CAP. The pre-BL-732 key read 44 rounds, 171
+#   batches, 13 FINDINGS and 7 UNKNOWN-CAP over the same set (its original 187-transcript figure of
+#   43/170 plus a367e62c, written after it). The seat key dropped remediator and adversary fan-outs
+#   citing seat files: whole rounds in a367e62c, b65d934e, 4aa8adbd and f849d75f, and the second
+#   "batch" of 755e5287, 79ff7d55 and c67c233a, which were the three lost UNKNOWN-CAPs. No FINDING moved.
 #   TRUE (11): 09dc13f7 s318/stories b2 (61 min on one SM cross straggler, 24 of 42 free); 3dbc11fb
 #   s317/sprint-review b2, b3, b4 (per-seat waves joined, 12-16 free); 22e0f5c2 s316/sprint-review b31
 #   (exit 01:12:49, after "proceed" lifted the pause: the held cross set not re-sent on eleven exits
@@ -184,21 +199,22 @@
 #     (by up to 6), 16 of 23 in ea675b67 (up to 2) and 10 of 10 in 3dbc11fb (up to 16, all in one
 #     27-call message), and in 0 of 75 in 22e0f5c2 and 0 of 80 in 945b34a0. Measured mid-wave, which
 #     is not the input a delivery minutes later sees; an idle count of 1-3 is inside that error.
-#   - A party round RE-RUN under the same <dir>/<step> (79ff7d55 s317/stories) reads as a later batch
-#     of the first run. It reads UNKNOWN-CAP there; with a known cap it could be a false FINDING.
+#   - A party round RE-RUN under the same <dir>/<step> would read as a later batch of the first run,
+#     and with a known cap it could be a false FINDING. The one instance this header named (79ff7d55
+#     s317/stories) was a remediator fan-out, not a re-run, and the seat key no longer counts it.
 #   The motivating transcript a0701ce0 carries no readable cap (its only mentions of the variable are
 #   rule prose with a `<N>` placeholder), so it reads UNKNOWN-CAP without --cap and fires under an
 #   operator-supplied --cap 42, twice: s319/stories batches 2 and 3, 24 running, idle 18 each.
 set -uo pipefail
 
 ME="audit-party-wave-barrier"
-SEED_CASES="a b c d e f g h i j k l m n o p q r s"
+SEED_CASES="a b c d e f g h i j k l m n o p q r s t"
 usage() { echo "$ME: $1" >&2; echo "usage: $ME.sh [--cap N] [--trace] <transcript.jsonl>... | --seed <$(echo $SEED_CASES | tr ' ' '|')> <out.jsonl>..." >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "$ME: jq is required" >&2; exit 2; }
 
 # Events, one tab-separated line each, in transcript order:
 #   M <e> <ts> <msgid>                                  an assistant record (any content)
-#   A <e> <ts> <msgid> <tool_use id> <party path>        an Agent/Task call
+#   A <e> <ts> <msgid> <tool_use id> <subagent_type> <every party path, space-joined, prompt order>   an Agent/Task call
 #   V <e> <ts> <msgid> <tool_use id>                     a Bash call whose command names the cap variable
 #   R <e> <ts> - <tool_use id> err|ok <rejcap> <envline> <agentId> async|fg <bare integer>
 #   T <e> <ts>                                          a user record with string content: a turn starts
@@ -221,7 +237,8 @@ fromjson? // empty
        | select(type == "object" and .type == "tool_use")
        | if (.name == "Agent" or .name == "Task") then
            ["A", $e, $ts, $mid, (.id // ""),
-            ([(.input.prompt // "" | tostring) | scan("party-mode/[A-Za-z0-9_.-]+/[A-Za-z0-9_-]+\\.md")] | .[0] // "")]
+            (.input.subagent_type // ""),
+            ([(.input.prompt // "" | tostring) | scan("party-mode/[A-Za-z0-9_.-]+/[A-Za-z0-9_-]+\\.md")] | join(" "))]
          elif .name == "Bash" and ((.input.command // "") | tostring | test("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS")) then
            ["V", $e, $ts, $mid, (.id // "")]
          else empty end)
@@ -258,6 +275,21 @@ function rkey(p,   d, f) {
   if (f ~ /-/) sub(/-[^-]*$/, "", f)
   return d "/" f
 }
+# seatmember(p, t): 1 when subagent_type t is the seat of party path p -- the `-<seat>` segment rkey
+# strips last -- and that seat is a rule-20 role-manifest persona.
+function seatmember(p, t,   f) {
+  f = p; sub(/^.*\//, "", f)
+  sub(/\.md$/, "", f); sub(/-[0-9]+$/, "", f); sub(/-cross$/, "", f)
+  if (f !~ /-/) return 0
+  sub(/^.*-/, "", f)
+  return ((f in seats) && f == tolower(t))
+}
+# memberpath(list, t): the first space-separated party path in list whose seat is t, or "".
+function memberpath(list, t,   n, i, pl) {
+  n = split(list, pl, " ")
+  for (i = 1; i <= n; i++) if (seatmember(pl[i], t)) return pl[i]
+  return ""
+}
 function running(s,   i, id, n) {
   n = 0
   for (i = 1; i <= nag; i++) {
@@ -288,10 +320,12 @@ function close_seen(   i, k, r, v) {
   }
   gn = k
 }
-BEGIN { FS = "\t"; capsrc = "unknown"; nag = 0; gn = 0; nfind = 0; nunk = 0; nrounds = 0; nbatches = 0 }
+BEGIN { FS = "\t"; capsrc = "unknown"; nag = 0; gn = 0; nfind = 0; nunk = 0; nrounds = 0; nbatches = 0
+  nseat = split("pm architect dev qa tea ux sm cis", seatl, " "); for (i = 1; i <= nseat; i++) seats[seatl[i]] = 1 }
 NR == FNR {
   if ($1 == "A") { id = $5; if (!(id in isag)) { isag[id] = 1; nag++; agl[nag] = id; aseq[id] = FNR
-      if ($6 != "") { p = $6; sub(/.*party-mode\//, "party-mode/", p); amr[id] = rkey(p); bn = p; sub(/.*\//, "", bn); abn[id] = bn } } }
+      mp = memberpath($7, $6)
+      if (mp != "") { p = mp; sub(/.*party-mode\//, "party-mode/", p); amr[id] = rkey(p); bn = p; sub(/.*\//, "", bn); abn[id] = bn } } }
   else if ($1 == "V") envcmd[$5] = 1
   else if ($1 == "R" && ($5 in isag)) {
     id = $5
@@ -389,8 +423,12 @@ wave_replay() {
 # record with string content and origin.kind `task-notification`, when the lead is told. The body holds
 # the children only; the envelope tag is never written.
 _sj() { printf '%s\n' "$1" >> "$SEED_OUT"; }
-_ag() { # ts msg tuid seatfile desc
-  _sj '{"type":"assistant","timestamp":"'"$1"'","message":{"id":"'"$2"'","role":"assistant","content":[{"type":"tool_use","id":"'"$3"'","name":"Agent","input":{"subagent_type":"dev","description":"'"$5"'","prompt":"Your operating contract is `.claude/team-roles/dev.md`. Read it first.\n\nYou are a party-round SEAT. Read the shared brief and follow it exactly.\nWrite your findings file at: _bmad-output/party-mode/s900/'"$4"'\n","run_in_background":true}}]}}'
+_ag() { # ts msg tuid seatfile desc: a seat is spawned as its own role, the seat segment of its file
+  local seat="${4%.md}"; seat="${seat%-[0-9]*}"; seat="${seat%-cross}"; seat="${seat##*-}"
+  _sj '{"type":"assistant","timestamp":"'"$1"'","message":{"id":"'"$2"'","role":"assistant","content":[{"type":"tool_use","id":"'"$3"'","name":"Agent","input":{"subagent_type":"'"$seat"'","description":"'"$5"'","prompt":"Your operating contract is `.claude/team-roles/'"$seat"'.md`. Read it first.\n\nYou are a party-round SEAT. Read the shared brief and follow it exactly.\nWrite your findings file at: _bmad-output/party-mode/s900/'"$4"'\n","run_in_background":true}}]}}'
+}
+_cite() { # ts msg tuid subagent_type prompt: an Agent call that names a round path but is not a seat
+  _sj '{"type":"assistant","timestamp":"'"$1"'","message":{"id":"'"$2"'","role":"assistant","content":[{"type":"tool_use","id":"'"$3"'","name":"Agent","input":{"subagent_type":"'"$4"'","description":"'"$4"' '"$3"'","prompt":"'"$5"'","run_in_background":true}}]}}'
 }
 _launched() { # ts tuid agentid
   _sj '{"type":"user","timestamp":"'"$1"'","message":{"role":"user","content":[{"tool_use_id":"'"$2"'","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully.\nagentId: '"$3"' (internal ID - do not mention to user.)\nThe agent is working in the background."}]}]},"toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"'"$3"'"}}'
@@ -629,7 +667,7 @@ wave_seed() { # <case> <out>
       _envcap 2026-01-01T10:00:00.000Z 4
       _devs 2026-01-01T10:00:01.000Z 2
       _note 2026-01-01T10:05:00.000Z ad1 td1 "Dev seat story 01"
-      _sj '{"type":"assistant","isSidechain":true,"timestamp":"2026-01-01T10:05:01.000Z","message":{"id":"msg_sc","role":"assistant","content":[{"type":"tool_use","id":"tsc","name":"Agent","input":{"prompt":"read _bmad-output/party-mode/s900/stories-architect-09.md"}}]}}'
+      _sj '{"type":"assistant","isSidechain":true,"timestamp":"2026-01-01T10:05:01.000Z","message":{"id":"msg_sc","role":"assistant","content":[{"type":"tool_use","id":"tsc","name":"Agent","input":{"subagent_type":"architect","prompt":"Write your findings file at: _bmad-output/party-mode/s900/stories-architect-09.md"}}]}}'
       _status 2026-01-01T10:05:02.000Z msg_s1 ts1
       _note 2026-01-01T10:40:00.000Z ad2 td2 "Dev seat story 02"
       _archs 2026-01-01T10:40:01.000Z msg_3 1 1
@@ -639,6 +677,19 @@ wave_seed() { # <case> <out>
       _ag 2026-01-01T10:00:02.000Z msg_x1 tx1 stories-architect-01.md "Architect seat story 01"; _rejected 2026-01-01T10:00:03.000Z tx1 5
       _ag 2026-01-01T10:00:04.000Z msg_x2 tx2 stories-architect-02.md "Architect seat story 02"; _rejected 2026-01-01T10:00:05.000Z tx2 3
       _note 2026-01-01T10:05:00.000Z ad1 td1 "Dev seat story 01"; _status 2026-01-01T10:05:00.500Z msg_s1 ts1
+      _note 2026-01-01T10:40:00.000Z ad2 td2 "Dev seat story 02"
+      _archs 2026-01-01T10:40:01.000Z msg_3 1 1
+      ;;
+    t)
+      _envcap 2026-01-01T10:00:00.000Z 4
+      _devs 2026-01-01T10:00:01.000Z 2
+      _note 2026-01-01T10:05:00.000Z ad1 td1 "Dev seat story 01"
+      _cite 2026-01-01T10:05:01.000Z msg_t1 tt1 remediator 'part path: _bmad-output/s900/shards/party-repair-p1/1.md\nYour findings: every finding in _bmad-output/party-mode/s900/stories-dev-01.md'
+      _cite 2026-01-01T10:05:01.000Z msg_t1 tt2 code-reviewer 'Review the seat findings in _bmad-output/party-mode/s900/stories-dev-02.md'
+      _cite 2026-01-01T10:05:01.000Z msg_t1 tt3 adversary 'Write your findings file at: _bmad-output/party-mode/s900/stories-adversary-01.md'
+      _cite 2026-01-01T10:05:01.000Z msg_t1 tt4 general-purpose 'Summarise the seat findings in _bmad-output/party-mode/s900/stories-sm-01.md'
+      _launched 2026-01-01T10:05:02.000Z tt1 at1; _launched 2026-01-01T10:05:02.000Z tt2 at2; _launched 2026-01-01T10:05:02.000Z tt3 at3; _launched 2026-01-01T10:05:02.000Z tt4 at4
+      _status 2026-01-01T10:05:03.000Z msg_s1 ts1
       _note 2026-01-01T10:40:00.000Z ad2 td2 "Dev seat story 02"
       _archs 2026-01-01T10:40:01.000Z msg_3 1 1
       ;;
@@ -674,6 +725,7 @@ wave_selfprobe() {
       q) [ "$f" = 0 ] && [ "$u" = 0 ] && grep -q ' batches=3 ' <<<"$s" ;;
       r) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=1 cap=4 idle=3 ' <<<"$out" && grep -q ' agents=3 ' <<<"$s" ;;
       s) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=2 cap=3 idle=1 ' <<<"$out" && grep -q ' capsrc=rejection ' <<<"$s" ;;
+      t) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=1 cap=4 idle=3 ' <<<"$out" && grep -q ' agents=7 ' <<<"$s" ;;
     esac || { echo "$ME: self-probe FAILED: case $c (findings=$f unknown-cap=$u; $s)" >&2; failed=1; }
   done
   [ "$failed" = 0 ] || return 2
