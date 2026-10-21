@@ -18997,3 +18997,48 @@ Batch 236's block below is history: this block replaces its delivery gap. Starte
   run). Not a defect, nothing filed: expect one full run after each macOS update.
 - **Net for the batch**: 1 closed (BL-723), 1 filed (BL-724).
 
+**BATCH 238 HAND-OFF RECORD (history; the block above replaces it): TWO RELEASES HAD LANDED, SEVEN BRANCHES BUILT AND UNGATED. ITS LEAD STOPPED ON THE
+OPERATOR'S RULING AND THIS RECORD HANDED IT OVER.**
+Batch 237's block below is history. Lead was ai-dlc-fc, which had owned batch 237's release and so was SPENT;
+the operator asked "why did you accept the handoff when you partciipated in another batch already?" and ruled the
+handover. No `graph-*` session was messaged. Every contract and adversary FOLD is `docs/analysis/b238-contracts.md`;
+the close checklist is `docs/analysis/b238-close-list.md`. Its scratch-path citations are dead.
+- **Landed.** `v0.890.1` (`f4a5a0966`, #1233): `PC-S319-SELF-UPDATE-FIXTURES-RUNS-THE-COVERING-SET-SERIALLY-THEN-PRE-PUSH-RERUNS-IT-IN-PARALLEL`
+  ALREADY-FIXED in 0.886.0; the derive block's `lids()` reads a backticked bullet id under a `lids_ctl` control.
+  `v0.891.0` (`01de3123d`, #1234): BL-687, BL-688 (recover gate). Its CHANGELOG promises a filing: the recover gate's
+  ENOSPC stage-write wedge (writable dir, failing write) is UNFILED; file it at the close.
+- **Built, tip-adversaried and folded, ready to gate in this order** (each rebases onto `origin/main` at gate time; the
+  CHANGELOG goes above the newest heading; derive each VERSION free against an earlier-version control):
+  1. `238-s1` at `9d89a4cd2` (worktree `../ai-dlc-238-s1`, already rebased on `01de3123d`; `b238-s1-dev` is NOT on
+     origin, push it `--no-verify` before the gate): BL-678, 708, 712, 714, 720, 724.
+     Archive must move by six. Its dress runs fixtures (it touches `adversarial-shard-merge/lib.sh` and `readset-skip`).
+  2. `238-r3` at `717e0d856`: BL-674, BL-697, both in `scripts/validate-enforcement-map.sh` on the suite pole. OWED BEFORE
+     IT GATES: one CPU-seconds differential, base vs tip, clean worktrees at one path, 2 interleaved reps, with no fixture
+     run live. BL-707 rides here once folded (item 6).
+  3. `238-s-715` at `4c223690a`: BL-715, alone (rulebook file `core/team-roles/remediator.md`).
+  4. `238-d-721` at `f460240a5`: BL-721. Its release text says it supersedes archived BL-717's "past IDLE_SECS the remedy
+     is today's": a resolved dispatch with the path absent now prints STOPPED at the cap.
+  5. `238-h` at `86482c500`: BL-709, LAST, pushed from the MAIN checkout detached at its release commit. Its own push runs
+     every declared fixture once as a key migration (each declared key gains the runner row); say so in its text.
+  6. `238-s-707` at `b43bbf834`: BL-707, NOT ready. Its tip adversary owes four fixes: the receipt runs the whole fixture
+     in the push's receipts step (drop the `^  mutant ` lines and one hook in the seeded copy); its refusals exit 2 (use 9);
+     it leaks its mktemp (trap); and an in-fixture `pool-capped-5` mutant owning `obs_d0_max` with a ~3s ceiling knob.
+- **Unfinished build.** `238-d-719` (BL-719, closing BL-718): its builder was STOPPED mid-edit; the worktree holds
+  uncommitted edits to `merge-adversarial-shards.sh` and `join-remediator-shards.sh`. Untrusted: discard and rebuild from
+  the design — a `--pair-sep` mode printing `@` only when the sibling validator AND `partition-subject.sh` each declare
+  `PAIR_SEP='[=@]'` exactly once and the schema resolved by `validate-provenance-block.sh`'s own chain carries `[=@]`;
+  emitters (merge `:701`, `:1328`; join `:2330`, `:2339`) and teachers write what it prints.
+- **Not built, measured reasons.** BL-692: a first-wins approved-region record needs to know whether graph's HEAD moves
+  between step 5 and apply. BL-716: the lane key is connected components over edit, HIT and MOVED-CITE files; needs S319's
+  component count. BL-605: only the late arm remains, ruled out by lead c8 (its "no join key" premise is stale).
+  BL-538, 583, 584, 587, 616, 706: consumer measurement or gate log first. BL-553(b): not shippable as specified. BL-685,
+  BL-699: owners ai-dlc-69 and ai-dlc-77 absent. BL-695: graph's next stories round. BL-691: design deferred. BL-701:
+  direction 1 shipped in 0.881.0; its receipt's `n` half measures digest freshness the in-pool trace never writes.
+- **Close duties.** Re-anchor each batch-238 LANDED line to its squash and only then delete its `-dev` ref: BL-687 and
+  BL-688 cite `9595dc4ef` (`b238-r2-dev`) and land at `01de3123d`. This hand-off's rotation ran under the pre-BL-678
+rotator, so the pointer on line 3 names only its own range (BL-678 firing, not corruption; the archive is intact). Batch
+  237's figures were read with a grammar blind to backticked ids: true DISCHARGED 0, unfiled 1.
+- **For the operator to carry to graph**: replace the candidate's receipt with
+  `verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"`. Graph's
+  boundary at hand-off: porcelain 11, ledger md5 `a1b4741c`, HEAD `ae1fafcf8`.
+

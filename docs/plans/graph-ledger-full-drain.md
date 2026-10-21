@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,7 +67,54 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 238 IS CLOSED: TWELVE RELEASES, `v0.890.1` THROUGH `v0.901.0`. THE NEXT SESSION STARTS BATCH 239.**
+**BATCH 239 IS CLOSED: SEVEN RELEASES, `v0.902.0` THROUGH `v0.908.0`, AFTER ITS FIRST WORK, THE GRAPH PULL RUNBOOK. THE NEXT SESSION STARTS BATCH 240.**
+The batch-238 block below this one is history; this block replaces it. Lead was ai-dlc-13. Owners: ai-dlc-c1 (runbook),
+ai-dlc-18 (validators), ai-dlc-c5 (scripts-misc), ai-dlc-f8 (review-roles), ai-dlc-64 (derivations: BL-727 and BL-728),
+ai-dlc-ac (shard-merge), ai-dlc-a1 (recover-gate). Graph-watch was ai-dlc-3c, polling every 10 minutes. No `graph-*`
+session was messaged.
+- **First work, discharged.** `docs/plans/graph-pull-0891-to-0901.md` (#1257, `b0f9f69e7`) was written and rehearsed, and
+  graph's own session ran the pull: graph's carry-over branch is stamped 0.901.0 and its post-write gates passed 4/4. The
+  runbook is retitled DISCHARGED.
+- **Landed** (squash, PR, closes):
+  - `v0.902.0` `7ff130354` #1258 BL-735, 743, 745, 748, 749; `v0.903.0` `182e0d0e2` #1259 BL-729, 731, 732;
+  - `v0.904.0` `9af758b38` #1260 BL-738, 741, 742, 746, 747 (filed BL-750); `v0.905.0` `b60ba56e8` #1261 BL-727;
+  - `v0.906.0` `0577739b4` #1262 BL-726, 734; `v0.907.0` `2509a41cd` #1263 BL-725, 730 (filed BL-752);
+  - `v0.908.0` `25a31205d` #1264 BL-728 (filed BL-756).
+  Every batch-239 LANDED line in the archive is re-anchored on its squash, and every batch-239 `-dev` ref is deleted.
+  The 21 `b236-*-dev` refs named in the batch-238 block are untouched and still KEPT for the same reason.
+- **Operator rulings this batch.**
+  - "defer heavy processing until graph finishes it's pull": a gate hold, lifted when the pull finished.
+  - BL-728: "Benign-only fixture". Arms seed no option or directive that runs or loads a program; a third safeguard
+    stop would have dropped the entry. Under that ruling gawk's `@include`/`@load` gap is filed as BL-756, not built.
+  - BL-538: the idle-wake hook stays OFF by default, and its blocking predicate gets an adversary review first (BL-753).
+- **Owner rules gained three clauses** (action 0's owner-rules block, flow step 5): run `validate-enforcement-map.sh`
+  on the collected tip before ready; run every fixture that seeds input to a subject whose accepted language changed,
+  through `hermetic-run.sh`; and never end a turn holding the push turn with nothing running. Each one cost this
+  batch a failure: an owner idled about 2.5 h after a green pre-suite; a self-probe seed tripped I84 at the
+  pre-suite; and 0.908.0's first dress went red on two carriers a by-hand run had passed.
+- **Backlog.** Filed this batch: BL-750 through BL-757. Live at close: 25; archive 719. **The next free id is BL-758.**
+  BL-587's snapshot half is WITHDRAWN (superseded by route.md's owed-derivations check; the residue is BL-706's).
+  Open DEFECTs filed this batch: BL-753 (hookwake review), BL-755 (review-shard-merge 263 s to 491 s loaded after
+  0.904.0; structural receipt only), BL-756 (gawk directives; needs an operator ruling on its arm). NOTEs: BL-750,
+  751, 752, 754, 757.
+- **Correction to the batch-238 block**: BL-727, 728 and 731 did not have "`sh` receipts the rotator cannot score";
+  all three were rebuilt with scoring receipts and closed this batch.
+- **The derive block's receipt histogram reads 3 `CLOSE-CANDIDATE` at close: BL-584, BL-695, BL-699.** None is a close;
+  each was adjudicated PARTIAL at batch 238 (`docs/analysis/b238-close-list.md`). The incidental-close check by id
+  found no other exit-0 receipt.
+- **Measured costs** (loaded, from the hook's duration record): review-shard-merge 263 s to 491 s after 0.904.0 (BL-755);
+  adversarial-shard-merge 364 s to 390 s after 0.906.0. The pole is reconcile-emit-report at 753 s; read it off live
+  dirs only (BL-744).
+- **Graph at close**: installed 0.901.0 on the checked-out carry-over branch (main reads 0.789.0), shipped 0.908.0: SEVEN releases
+  behind, a WIDE range. Graph merged all eight s319 gate-3 stories locally (carry-over at `c855d0ef1`, unpushed; origin
+  `832368d49`); ledger md5 `ea1ad6f7`, no PC filings. Action 7: PENDING 0; bootstrapping files from 0.901.0: 0; mode-only
+  changes: 0. REQUIRED test: `validate-artifact-budget.sh` identical; `validate-artifact-derivations.sh` installed vs
+  0.908.0 on a `file://` clone (`cmp -s` differ) gives the same 5867 of 10283 failing and the same locations, with one
+  archive line reclassified ALLOWLIST to STALE (BL-728 now runs a backtick inside single quotes). **Not required: BANK
+  IT.** The null does not cover the shard-merge, gate-adjudication, handoff-evidence, mutation-red, partition and
+  provenance scripts or the four changed hooks, which need a live sprint's shards or fire on transients.
+
+**BATCH 238 CLOSE RECORD (history; the block above replaces it): BATCH 238 CLOSED: TWELVE RELEASES, `v0.890.1` THROUGH `v0.901.0`. BATCH 239 FOLLOWED IT.**
 The hand-off block below this one is history; this block replaces it. Leads were ai-dlc-fc (to 0.891.0, then
 handed over on the operator's ruling) and ai-dlc-1a. Graph-watch was ai-dlc-1b, polling every 10 minutes per the
 operator's ruling, until the operator stopped it: "stop the watcher, there is no active graph session and won't be
@@ -119,51 +166,6 @@ and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path cita
 - **Operator-side observation, not a repo entry**: the home advisor-gate hook denied a push three times this batch
   when the consult or the push shared a parallel tool block with another call; every push and merge sent alone
   passed. Send push and merge calls alone.
-
-**BATCH 238 HAND-OFF RECORD (history; the block above replaces it): TWO RELEASES HAD LANDED, SEVEN BRANCHES BUILT AND UNGATED. ITS LEAD STOPPED ON THE
-OPERATOR'S RULING AND THIS RECORD HANDED IT OVER.**
-Batch 237's block below is history. Lead was ai-dlc-fc, which had owned batch 237's release and so was SPENT;
-the operator asked "why did you accept the handoff when you partciipated in another batch already?" and ruled the
-handover. No `graph-*` session was messaged. Every contract and adversary FOLD is `docs/analysis/b238-contracts.md`;
-the close checklist is `docs/analysis/b238-close-list.md`. Its scratch-path citations are dead.
-- **Landed.** `v0.890.1` (`f4a5a0966`, #1233): `PC-S319-SELF-UPDATE-FIXTURES-RUNS-THE-COVERING-SET-SERIALLY-THEN-PRE-PUSH-RERUNS-IT-IN-PARALLEL`
-  ALREADY-FIXED in 0.886.0; the derive block's `lids()` reads a backticked bullet id under a `lids_ctl` control.
-  `v0.891.0` (`01de3123d`, #1234): BL-687, BL-688 (recover gate). Its CHANGELOG promises a filing: the recover gate's
-  ENOSPC stage-write wedge (writable dir, failing write) is UNFILED; file it at the close.
-- **Built, tip-adversaried and folded, ready to gate in this order** (each rebases onto `origin/main` at gate time; the
-  CHANGELOG goes above the newest heading; derive each VERSION free against an earlier-version control):
-  1. `238-s1` at `9d89a4cd2` (worktree `../ai-dlc-238-s1`, already rebased on `01de3123d`; `b238-s1-dev` is NOT on
-     origin, push it `--no-verify` before the gate): BL-678, 708, 712, 714, 720, 724.
-     Archive must move by six. Its dress runs fixtures (it touches `adversarial-shard-merge/lib.sh` and `readset-skip`).
-  2. `238-r3` at `717e0d856`: BL-674, BL-697, both in `scripts/validate-enforcement-map.sh` on the suite pole. OWED BEFORE
-     IT GATES: one CPU-seconds differential, base vs tip, clean worktrees at one path, 2 interleaved reps, with no fixture
-     run live. BL-707 rides here once folded (item 6).
-  3. `238-s-715` at `4c223690a`: BL-715, alone (rulebook file `core/team-roles/remediator.md`).
-  4. `238-d-721` at `f460240a5`: BL-721. Its release text says it supersedes archived BL-717's "past IDLE_SECS the remedy
-     is today's": a resolved dispatch with the path absent now prints STOPPED at the cap.
-  5. `238-h` at `86482c500`: BL-709, LAST, pushed from the MAIN checkout detached at its release commit. Its own push runs
-     every declared fixture once as a key migration (each declared key gains the runner row); say so in its text.
-  6. `238-s-707` at `b43bbf834`: BL-707, NOT ready. Its tip adversary owes four fixes: the receipt runs the whole fixture
-     in the push's receipts step (drop the `^  mutant ` lines and one hook in the seeded copy); its refusals exit 2 (use 9);
-     it leaks its mktemp (trap); and an in-fixture `pool-capped-5` mutant owning `obs_d0_max` with a ~3s ceiling knob.
-- **Unfinished build.** `238-d-719` (BL-719, closing BL-718): its builder was STOPPED mid-edit; the worktree holds
-  uncommitted edits to `merge-adversarial-shards.sh` and `join-remediator-shards.sh`. Untrusted: discard and rebuild from
-  the design — a `--pair-sep` mode printing `@` only when the sibling validator AND `partition-subject.sh` each declare
-  `PAIR_SEP='[=@]'` exactly once and the schema resolved by `validate-provenance-block.sh`'s own chain carries `[=@]`;
-  emitters (merge `:701`, `:1328`; join `:2330`, `:2339`) and teachers write what it prints.
-- **Not built, measured reasons.** BL-692: a first-wins approved-region record needs to know whether graph's HEAD moves
-  between step 5 and apply. BL-716: the lane key is connected components over edit, HIT and MOVED-CITE files; needs S319's
-  component count. BL-605: only the late arm remains, ruled out by lead c8 (its "no join key" premise is stale).
-  BL-538, 583, 584, 587, 616, 706: consumer measurement or gate log first. BL-553(b): not shippable as specified. BL-685,
-  BL-699: owners ai-dlc-69 and ai-dlc-77 absent. BL-695: graph's next stories round. BL-691: design deferred. BL-701:
-  direction 1 shipped in 0.881.0; its receipt's `n` half measures digest freshness the in-pool trace never writes.
-- **Close duties.** Re-anchor each batch-238 LANDED line to its squash and only then delete its `-dev` ref: BL-687 and
-  BL-688 cite `9595dc4ef` (`b238-r2-dev`) and land at `01de3123d`. This hand-off's rotation ran under the pre-BL-678
-rotator, so the pointer on line 3 names only its own range (BL-678 firing, not corruption; the archive is intact). Batch
-  237's figures were read with a grammar blind to backticked ids: true DISCHARGED 0, unfiled 1.
-- **For the operator to carry to graph**: replace the candidate's receipt with
-  `verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"`. Graph's
-  boundary at hand-off: porcelain 11, ledger md5 `a1b4741c`, HEAD `ae1fafcf8`.
 
 ### Derive the state; do not trust the numbers below
 
@@ -990,8 +992,13 @@ candidate's surviving half is upstream's to file and build, never a question for
       units. RELEASE TEXT IS PREPARED IN ADVANCE: before you tell <lead> you are ready to push,
       have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
       lines), so your gate starts the moment its turn comes.
-   5. Tell <lead> you are ready to push. <lead> replies with your VERSION and your push turn; one
-      push runs at a time. Never pick a version or a backlog id yourself.
+   5. Before you say ready, run `bash scripts/validate-enforcement-map.sh` on the collected tip, and
+      run every fixture that seeds input to a subject whose accepted language you changed, each
+      through `core/scripts/hermetic-run.sh`, never `bash run.sh` (a by-hand run sees tools the
+      sandbox's declared PATH does not). Then tell <lead> you are ready to push. <lead> replies with
+      your VERSION and your push turn; one push runs at a time. Never pick a version or a backlog id
+      yourself. While you hold the push turn, never end a turn with nothing running: continue, or
+      report the exact stopped state. <lead> checks the push turn about every 30 minutes.
    6. In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
       `**LANDED (v<version>, verified <sha>).**` line at the START of each closed entry's backlog

@@ -193,7 +193,7 @@ The question also rested on a false premise. The log's disposition says "these a
 
 Under the current-sprint scope ruling above, this instance is exactly the discriminating input. The three s319 rows must reach the lead, and the s303 and s308 rows must not. Receipt addition, as suggested by the filer: seed a closed-sprint row (s303) and a live-sprint row (s319) from one reconcile log, and assert that only the live one reaches the lead, whether or not the reconcile chose to edit.
 
-**PARTIAL (v0.808.0).** Delivered: items 1 (debt-row half) and 2. Withdrawn by operator ruling: item 3 (the 8 rows are prose in a reconcile log written before this release, never recorded, so no reader can pick them up; the receipt proves the shape on seeded rows). The 8 rows are live CURRENT/LIVING stale derivations in graph; the operator hands them to graph's own session to re-point, with the 3 s319 rows of the second instance. Open: item 1's snapshot half (D6: no writer can reach the working branch before the reconcile PR merges). Scoped by operator rulings: current sprint and living documents only; refused at the planning gate only.
+**PARTIAL (v0.808.0).** Delivered: items 1 (debt-row half) and 2. Withdrawn by operator ruling: item 3 (the 8 rows are prose in a reconcile log written before this release, never recorded, so no reader can pick them up; the receipt proves the shape on seeded rows). The 8 rows are live CURRENT/LIVING stale derivations in graph; the operator hands them to graph's own session to re-point, with the 3 s319 rows of the second instance. Open: item 1's snapshot half (D6: no writer can reach the working branch before the reconcile PR merges). **WITHDRAWN (batch 239, lead ai-dlc-13):** the snapshot half is superseded by `core/skills/ai-dlc/steps/route.md`'s owed-derivations check, which every resume runs (`scripts/ai-dlc/check-owed-derivations.sh`); the residue that a pull never runs the derivation differential is BL-706's. Scoped by operator rulings: current sprint and living documents only; refused at the planning gate only.
 
 **What the first instance cost (graph watch ai-dlc-f7, filed as BL-622 and folded here as the same claim; intake re-derived it read-only).** Of the 8 rows from the 0.793.0 log, one is `planning-artifacts/prd.md:1288-1289`, whose fence greps `scripts/ai-dlc/validate-artifact-budget.sh` for `"  ok  %-44s"` and records line 1676 (written in `dbc4c057e`). The line is 1676 at `8f313c3c0` and 1955 from `41d2dbf91` onward. The s319 lead found it about 14 hours after the pull, and only because two pass-2 adversary shards (parts 11 and 6) flagged it: transcript `0e9a936b`, first mention at 21:56:59Z, 17 mentions in all. It now sits in graph's live snapshot (`pipeline-snapshot.md:40`) as "STALE LIVE FENCE (owed to the pass-2 repair, NOT editable before the pass-2 merge because every shard notarized prd sha 15c46858 and the --subject merge refuses a moved sha)". The other 7 owed sites have no sprint-side record. So the missing channel cost an adversary dispatch to recover a grep result.
 
@@ -531,6 +531,18 @@ Owed:
 
 verify: manual
 
+## BL-751 — the layer-adjudication register accepts a record whose `recorded_utc` is later than the moment it was written
+
+**NOTE.** Source: graph watch ai-dlc-3c, batch 239, observed read-only during graph's 0.891.0 to 0.901.0 pull. Filed by lead ai-dlc-13.
+
+During leg B of the pull, graph's working-tree `layer-adjudication-register.jsonl` gained 20 records. 11 carried `recorded_utc 2026-10-21T12:19:33Z`. The other 9 (LC-E4 still-additive ×8, plus LC-E4 retire for `roles/dev-push.md`) carried a hand-typed `2026-10-21T12:40:00Z`. `date -u` read 12:23:59Z in the same invocation, so those 9 were stamped about 16 minutes in the future. Graph corrected the stamp to 12:23:26Z before pushing, so nothing wrong was committed.
+
+No reader refuses a future instant. `core/scripts/audit-layer-debt.sh` keys withdrawals on `(entry, recorded_utc)` (its header at `:550`), so a future stamp is a valid key that any later correct record will sort BEFORE.
+
+Owed: the register's validator refuses a `recorded_utc` later than its own run time, plus a small skew allowance, naming the row. The fixture seeds one future row and one row at the run instant as the near-miss.
+
+verify: manual — the defect is a property of a hand-typed consumer record and its validator site is not chosen; a receipt is owed with the fix.
+
 ## BL-752 — the advisor gate's push denial waits on the same per-call 10 s net that BL-730 found expiring silently across a many-call parallel message, so a push late in such a message that owes an advisor attempt passes unrefused
 
 **NOTE.** The exposure is real in mechanism and theoretical in practice, so it is not a DEFECT. Raised from the BL-730 measurement on graph transcript `a367e62c` by the batch-239 recover-gate cluster; the advisor-gate reading and the push census were done by the filing hand.
@@ -547,6 +559,49 @@ Owed: correct the `:631` comment (BL-752 now has two subjects, the net and the c
 
 verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net, and no knob shortens the default's fail-open branch: `ADVISOR_GATE_REREADS=0` or `1` select the stricter-only branch, which is a different program. A behavioural receipt would pay 10 s on every scoring and would fix a mechanism the owner has not chosen.
 
+## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
+
+**DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
+
+BL-538's batch-239 measurement found the shipped hook removes nothing on the reference consumer, because it is opt-in and default OFF (`core/hooks/ai-dlc-hookwake.sh` header, "OPT-IN, DEFAULT OFF"). graph's s319 leads `218aa1b8` (138 of 203 wakes idle) and `a367e62c` (97 of 150 idle) carry 0 hookwake rows, against a control of 35 in install session `48918adc`. The operator ruled that the default stays OFF and that the blocking predicate gets an adversary review first.
+
+The predicate a review must break, from the hook's header:
+- J1: exactly one outstanding beat in the lead transcript's bounded tail;
+- J2: exactly one live `.beat-argv-<pid>` record whose start time matches;
+- J1=J2: the task-id join;
+- J3: the agent id is in the record's `--dispatch` set, read from argv;
+- J4: `wait-for-deliverable.sh --status` exits 0 with every path DELIVERED.
+
+A false BLOCK suppresses a completion the lead needed, which costs far more than an idle wake. The review asks, per clause, what state satisfies it while the lead still needs the wake: a stale beat, a recycled pid, a dispatch set wider than the join, or a DELIVERED path the agent has not finished writing.
+
+Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
+
+verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
+
+## BL-754 — hermetic-run.sh prints "verdict recorded in the shared store" when the store it wrote is a throwaway one
+
+**NOTE.** Source: batch 239 owner runs. Filed by lead ai-dlc-13.
+
+`core/scripts/hermetic-run.sh:622` prints `hermetic-run: <fx>: verdict recorded in the shared store` after any successful store write. When `AI_DLC_VERDICT_STORE` points at a mktemp dir, which `.claude/rules/tool-hazards.md` requires for a test run, the same line prints, so a reader cannot tell a real store write from a throwaway one.
+
+Owed: print the store path, or say "shared" only when the store is the default resolved one.
+
+verify: manual — a one-line message change; the receipt is owed with the fix.
+
+## BL-755 — review-shard-merge's loaded cost went from 263 s to 491 s after 0.904.0's new arms and mutants
+
+**DEFECT (cost).** Source: batch 239, 0.904.0 (review-roles, owner ai-dlc-f8), measured loaded from the hook's duration record. Filed by lead ai-dlc-13 at close; the owner deferred both duties to the lead. The 0.904.0 CHANGELOG heading is not back-edited.
+
+0.904.0 added M12-M20, VB2M, VB2L, FR1-FR4, FRB, SR1 and SR2 to `core/fixtures/review-shard-merge`. Its loaded cost in `.git/ai-dlc-fixture-durations` rose from 263 s to 491 s (+87%). It is not the suite pole (reconcile-emit-report, 753 s loaded), so the push wall clock did not move, but the unit nearly doubled.
+
+Cut shape, either one:
+- each mutant re-runs only the cells of the arm that kills it (its read set), not the whole fixture;
+- or the M battery moves to its own sharded unit, as `adversarial-shard-merge` did.
+
+Owed: the cut, with a STRUCTURAL receipt (the number of whole-fixture invocations by the M battery is 0, and M12-M20 are still red), never a loaded-seconds threshold.
+
+verify: manual — the receipt is owed with the cut and must be structural; a seconds bound is ruled out.
+
 ## BL-756 — `AWK_AT_RE` in validate-artifact-derivations.sh requires a `(`, so gawk's two file-loading directives pass the awk program check
 
 **DEFECT.** Source: tip-728b, batch 239. Found by the BL-728 tip review; id allocated by the lead (ai-dlc-13).
@@ -556,3 +611,13 @@ verify: manual — the discriminating state is a stream race decided by the 10 s
 Owed: refuse an `@` directive word in an awk program regardless of a following `(`. Its arm needs an operator ruling first, because the operator's benign-only terms for this batch keep that vocabulary out of shipped fixtures.
 
 verify: manual — the discriminating input is gated on an operator ruling (benign-only terms, batch 239).
+
+## BL-757 — validate-artifact-derivations.sh says no allowlisted read-only tool exits 137 or 143 on its own, and `awk 'END{exit 137}'` does
+
+**NOTE.** Source: BL-728's dress fix, batch 239 (owner ai-dlc-64). Filed by lead ai-dlc-13.
+
+`core/scripts/validate-artifact-derivations.sh:2245` reads "Both are delivered from outside the process; no allowlisted read-only tool raises either on itself." `derivation-capture`'s A24 and A25 now seed `awk 'END{exit 137}' VERSION` as their unrunnable derivation, which exits 137 on its own, and the case arm at `:2277` scores it UNRUN. That fails closed (no verdict, never a false clean), but the comment is false and the fixture relies on the behaviour it denies. `:2251`'s corpus measurement ("none exited 137 or 143" over the reference consumer's derivations) stays true.
+
+Owed: correct `:2245` to say an allowlisted tool CAN exit 137 or 143 on its own, that this scores UNRUN, and that this fails closed.
+
+verify: lacks core/scripts/validate-artifact-derivations.sh "no allowlisted read-only tool raises either"
