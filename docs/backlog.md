@@ -595,49 +595,6 @@ Owed:
 verify: manual — the id-set detector and where the re-open is recorded are the builder's design, so an `sh` receipt built before them would close only under a guessed interface. A discriminating receipt can be written alongside the fix.
 
 
-## BL-738 — the bare-line `unknown arg: --mark` fallback lets any writer mint a `seat-complete:` marker with no `key=` and no seal row, and it survives in six role files after BL-737
-
-**DEFECT.** The residual of BL-737. Source: e3-new (BL-737 owner), batch 238.
-
-- The fallback tells a seat whose engine copy predates `--mark` to write its `seat-complete:` marker by hand.
-- A hand-written marker carries no `key=` and no seal row, so any writer can mint one.
-- The count of files carrying the fallback is 8 at `ddfa69f03` and 6 at `af1536de3` (0.899.0, which retired it in `code-reviewer.md` and `qa.md`), and 0 once this is fixed. Re-derived at origin/main `dec50e4a3`: `git grep -l "unknown arg: --mark" origin/main -- core/team-roles/` lists 6 files: `adversary.md`, `architect.md`, `dev.md`, `pm.md`, `remediator.md` and `tea.md`.
-
-Owed:
-- retire the fallback in all six files, or bound each by the same frozen-sha legacy rule BL-737 builds;
-- check whether each seat's merge path has a last-writer seal.
-
-verify: sh ! grep -q 'unknown arg: --mark' core/team-roles/*.md
-
-## BL-741 — qa.md tells a serial QA seat it may write both verdict forms and warns only about a different member, so a `## Verdict` heading followed by `Verdict: PASS` fails Check 1
-
-**DEFECT.** Source: graph-watch ai-dlc-1b, batch 238; the lead verified qa.md:383-392 at origin/main.
-
-- `core/team-roles/qa.md:390-392` offers two verdict forms: the one line `Verdict: PASS`, or a bare `## Verdict` heading with the member alone on the next non-blank line. Its only warning is that "a second verdict line carrying a different member fails Check 1". That implies a second line carrying the same member is safe.
-- On graph, the story 5.4 QA seat wrote both: `## Verdict`, a blank line, then `Verdict: PASS` (`df0d03031~1:docs/reviews/s319/5-4-qa-validation.md`).
-- Check 1 (`core/skills/ai-dlc/steps/gate-validation.md:233-236`) reads the next non-blank line after the heading by its run of capitals, and gets `V`. That is outside the verdict set, so gate 3 refused. A seat remediated the file at df0d03031.
-- The shard section (`qa.md:495-498`) already rules this shape out for shards, but not for a serial file.
-
-Owed:
-- state in qa.md that the two forms are EXCLUSIVE;
-- quote the failing union (heading, blank line, `Verdict: PASS`) as the example;
-- drop the word "different";
-- add a fixture or pin that asserts the sentence.
-
-verify: manual
-
-## BL-742 — a serial review or QA file has no pre-return verdict-shape check, so a malformed verdict is caught only at gate 3
-
-**NOTE.** Source: graph-watch ai-dlc-1b, batch 238.
-
-- Gate 3 failed Check 1 twice on a serial file's verdict shape. Each time it was the first catch, because a serial file has no merge in front of it.
-- The first was story 5.4 QA, whose role-text half is BL-741.
-- The second was the story 1.1 serial code review p4 (67ee23257). It wrote `## Result` then `APPROVED`, while `core/team-roles/code-reviewer.md:114` teaches `## Verdict` and `:148-151` forbid a renamed heading. This one is model drift, not role text. A remediator fixed it (e1491b01c), and the lead re-ran all four adjudicators under a fresh nonce.
-
-Owed: the seat runs Check 1's own grep on its file before returning. This is the serial-file analogue of BL-737(a).
-
-verify: manual
-
 ## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
 
 **NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
@@ -650,20 +607,15 @@ Owed: the recorder prunes rows whose dir is gone, or the pole reader filters the
 
 verify: manual
 
-## BL-746 — qa.md defines no severity containers, so a QA verdict cannot be tied to severity
+## BL-750 — wait-for-deliverable.sh accepts a bare seat-complete:/repair-complete: marker after the settle window, so any writer can mint one
 
-**NOTE.** Source: the BL-740 contract adversary via ai-dlc-e3 [9ab130], batch 238.
+**DEFECT.** Source: BL-738 owner, batch 239.
 
-- On graph HEAD, 71 of 100 tracked QA shards have no `### ` under `## Findings`, and 25 of those carry uncontained `####` findings. Code-review shards use containers in 179 of 180.
-- BL-740 therefore ships a count-only QA rule (NEEDS_REWORK requires at least 1 finding).
+- `wait-for-deliverable.sh --complete` and `--complete-repair` deliver a marker with no `sha=` once the file has stopped changing for the settle window (its header, "A MARKER WITH NO `sha=` KEEPS THE SETTLE PATH ... FAIL-OPEN NET FOR LEGACY MARKERS DURING THE PULL"). Any writer, including a Bash append, can therefore mint a completion marker, and the consumers do not consult the content-seal ledger (BL-738 seal audit).
+- BL-738 removed the role-text instruction to write such a line, so the role and step text no longer instructs it (whether a seat still writes one is unmeasured); the engine still accepts one.
 
-verify: manual
-
-## BL-747 — a review shard's per-AC FAIL row beside its verdict is not checked by the merge
-
-**NOTE.** Source: the BL-740 contract adversary via ai-dlc-e3 [9ab130], batch 238.
-
-- Seen on graph s319 3-1 qa p2 cross-1.
+Owed:
+- bound the bare-marker acceptance by a frozen-sha / engine-sentinel legacy rule, as BL-737 did in `merge-review-shards.sh` (`# MARK-KEY-WRITER v1`);
+- have the consumers (`--complete`, `--complete-repair`, `merge-adversarial-shards.sh`'s `ends_in_marker`) consult the content-seal ledger.
 
 verify: manual
-

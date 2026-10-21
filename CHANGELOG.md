@@ -19,6 +19,67 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.904.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13, cluster review-roles. It closes BL-738, BL-741, BL-742, BL-746 and BL-747, closes no `PC-` id and files BL-750. Net for this release: 5 closed, 1 filed = 4. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`. Rulebook text that lands with the reconcile PR: `core/team-roles/qa.md`, `code-reviewer.md`, `adversary.md`, `architect.md`, `dev.md`, `pm.md`, `remediator.md` and `tea.md`, plus `core/skills/ai-dlc/steps/_gate-procedures.md` and `architecture.md`.
+
+### BL-738 — the bare-line `--mark` fallback is retired in six role files
+
+The fallback told a seat whose engine copy predates `--mark` to write its `seat-complete:` marker by hand, and a hand-written marker carries no `key=` and no seal row. 0.899.0 retired it in `code-reviewer.md` and `qa.md`; six files still carried it.
+
+- `adversary.md`, `architect.md`, `dev.md`, `pm.md`, `remediator.md` and `tea.md` lose the fallback. Each worktree seat's shown command now runs from `<lead engine>`, the lead checkout's `scripts/ai-dlc` path the brief carries, never from the worktree, and each block says so where the placeholder appears. `adversary.md` keeps the relative path, because the adversary never runs in a worktree.
+- `steps/architecture.md` and `architect.md`'s chain section told the architect to write `seat-complete: architecture architect none findings=0` by hand. Both now close the record with `--mark`.
+- `_gate-procedures.md` now says the seat briefs, and the remediator's, carry the `<lead engine>` path; `architecture.md` says so for the architect. `_dispatch-protocol.md` is unchanged: the placeholder is defined in place, not added to the brief's path list.
+- A seal audit found which path consumes each seat's marker. Architect, dev, pm and tea findings files and the remediator serial record are consumed by `wait-for-deliverable.sh`, which delivers a bare marker after the settle window. The adversary shard is consumed by `merge-adversarial-shards.sh`, whose `ends_in_marker` accepts a bare marker.
+- Limit: this removes the role-text instruction only. It does not stop a writer from minting a bare marker by hand, because the engine still accepts one. That engine half is BL-750, filed below.
+- Fixture `process-rule-pins`: rows `arch-chain-marker-last`, `arch-role-chain-mark` and `rem-part-mark`; arm 4e (no role or step file tells a seat to hand-write a marker); arm 4f (every `<lead engine>` is scoped inside its own block, in either of two forms, with a probe and a mutant per form). `handoff-record-carries-return` expects the `--mark` marker.
+
+### BL-741 — qa.md states the two verdict forms are exclusive
+
+`qa.md` offered the one-line `Verdict: PASS` and the bare `## Verdict` heading with the member below it, and warned only that a second line carrying a different member fails Check 1. Graph's story 5.4 QA seat wrote the heading, a blank line and then `Verdict: PASS`; Check 1 read `V` and gate 3 refused.
+
+- `qa.md` now says the two forms are exclusive and quotes the failing union inline: a `## Verdict` heading followed by `Verdict: PASS` fails Check 1, because Check 1 reads the heading's next non-blank line.
+- The word "different" stays. Check 1 counts two matches reading the same value as one verdict (`gate-validation.md` Check 1), so dropping it would misstate the check.
+- `process-rule-pins` pins both sentences (`qa-verdict-exclusive`, `qa-verdict-union`).
+
+### BL-742 — a serial review or QA file is checked before return
+
+A serial file has no merge in front of it, so a malformed verdict was first caught at gate 3. That failed twice on graph: story 5.4 QA (the BL-741 union) and the story 1.1 serial code review, which wrote `## Result` then `APPROVED`.
+
+- `merge-review-shards.sh --check-serial <file> --gate qa|code-review` runs the merge's own Check 1 read-back over one serial file. The read is factored into `check1_read`, which the merge now calls too, so the two cannot drift. The serial check holds the file to gate 3's own count policy: at least one match, every match reading the same value, and that value in the gate's lifted `## Verdict` set. The merge keeps its exactly-one count on the assembled file.
+- Under `--gate qa` it also applies BL-747's FAIL-row rules to the file's own table and findings. It applies no severity backing, which binds shards only.
+- It prints `SERIAL-OK: <file> verdict=<v>`, or one `REFUSED: ... [owner: serial]` and exits 2.
+- `qa.md` (the `shard: 1/1` passage) and `code-reviewer.md` (the serial-review passage) tell the seat to run it from `<lead engine>` before returning and fix until SERIAL-OK.
+- Both graph incidents are refused: the story 5.4 union reads two different values, and the `## Result` file gives no match.
+- Fixture `review-shard-merge`: SR1 and SR2, mutants M18 (set membership skipped) and M19 (strict one-match count), receipt `receipt-bl742.sh`.
+
+### BL-746 — qa.md declares three severity containers, and the merge holds a QA verdict to them
+
+BL-740 shipped a count-only QA rule because `qa.md` defined no severity containers.
+
+- `qa.md` gains a `## Findings Template` section with `### Critical`, `### Important` and `### Suggestions`, matching `code-reviewer.md`'s first words.
+- `merge-review-shards.sh` lifts the containers for both gates with one function, `lift_containers`. When `qa.md` declares three, `NEEDS_REWORK` needs a `#### ` finding under Critical or Important and `PASS` carries none under Critical. A `NEEDS_REWORK` refusal names the one-edit remedy of moving a finding up.
+- In severity mode, under both gates, a `#### ` under `## Findings` with no `### ` container above it is refused as unclassed.
+- Delivery path: the engine arrives at pull step 3 and meets the consumer's OLD installed `qa.md`, which declares no container. With zero containers the QA rule stays count-only and stdout carries a `LEGACY:` line. Any other count, for example two, is refused.
+- Severity boundary, which closes the in-flight hazard: whether a QA shard is held to the severity rule is read off `qa.md` as installed at the manifest's frozen sha, a record the shard did not write. A round frozen over a container-less `qa.md` is held to count-only with a `LEGACY: <shard> held to the count-only QA rule ...` line, so a QA round dispatched under the old `qa.md` and merged after the reconcile merge is not refused. Unreadable never acquits: the severity rule applies. Measured on graph (read-only): the s319 3-1 p2 manifest's frozen `qa.md` has 0 containers, so graph's in-flight rounds merge after the pull.
+- Measured on graph HEAD `7a10a73ec`, read-only: 0 of 180 code-review shards and 25 of 100 QA shards would be refused as unclassed under severity mode. All 25 are historical s317 to s319 shards that predate the template, and the boundary holds such rounds to count-only.
+- Fixture `review-shard-merge`: VB2 now asserts the severity rule over the shipped `qa.md`; VB2M, VB2L (template removed, and a two-container `qa.md`) and FRB (the boundary, one world per side); mutants M12 to M14 and M20 (boundary dropped); receipt `receipt-bl746.sh`.
+
+### BL-747 — the QA merge refuses a per-AC FAIL row under a PASS verdict, and a FAIL row no finding names
+
+Seen on graph s319 3-1 QA cross-1: a per-AC FAIL row sat beside a verdict nothing checked it against.
+
+- At `--gate qa` only, `fail_rows` reads the first cross shard's `## Acceptance Criteria` table outside fences, picking the result column by its header (`Result` or `Verdict`), so a reordered table reads correctly. A FAIL in Expected or Got does not count.
+- A FAIL row under a merged verdict other than `NEEDS_REWORK` is refused `[owner: <first cross shard>]`, naming both exits: set `NEEDS_REWORK` backed by a finding, or correct the row with evidence.
+- A FAIL row whose AC id no `#### ` finding in any shard names as a whole token (`AC10` does not name `AC1`) is refused as an orphan. The remedy names where the finding may be filed under the owner rule.
+- The FAIL-row rules have no LEGACY boundary: they judge content, not format. Measured over graph's 12 QA sets (read-only), they fire once, on the motivating s319 3-1 p2 orphan.
+- `--check-shard` has no set to read and does not apply this; `--check-serial` applies it to a serial file.
+- Fixture `review-shard-merge`: FR1 to FR4 (FR4 seeds graph's s319 3-1 p2 set in two states), mutants M15 to M17, receipt `receipt-bl747.sh`.
+
+### Filed: BL-750 — `wait-for-deliverable.sh` accepts a bare marker after the settle window
+
+`--complete` and `--complete-repair` deliver a `seat-complete:` or `repair-complete:` marker with no `sha=` once the file has stopped changing, and `merge-adversarial-shards.sh`'s `ends_in_marker` accepts one too, so any writer can still mint a completion marker. BL-738 removed the role-text instruction only; BL-750 carries the engine half. It is open.
+
 ## [0.903.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13. It closes BL-729, BL-731 and BL-732, closes no `PC-` id and files nothing. Net for this release: 3 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/stamp-story-provenance.sh` and `core/scripts/partition-document.sh`. Role and rule text: `core/team-roles/adversary.md`, `core/skills/ai-dlc/rule-bodies/rule-28.md` and `core/skills/ai-dlc/steps/_gate-procedures.md`. `scripts/audit-party-wave-barrier.sh` is this repo's own and ships to no consumer.

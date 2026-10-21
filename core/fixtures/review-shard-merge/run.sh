@@ -248,8 +248,37 @@ arm2 unmarked "UM1: adv-strip.sh's input -- every seat-complete line stripped, o
 # byte-equal; every pass merges and answers SHARD-OK. Each cell writes its own WHY token.
 arm2 vb_cr "VB1: --gate code-review -- NEEDS_REWORK with the empty findings template REFUSED with the stem, NEEDS_REWORK with one Important merges, BLOCKED with one Critical merges, BLOCKED with only a Suggestion REFUSED, APPROVED with a Critical REFUSED, APPROVED with an Important merges; each refusal byte-equal under --check-shard" \
            "VB1: a code-review verdict was not held to its own findings"
-arm2 vb_qa "VB2: --gate qa -- NEEDS_REWORK with 0 findings REFUSED with the stem, byte-equal under --check-shard; NEEDS_REWORK with one uncontained finding merges; PASS over a '### Critical' heading merges" \
-           "VB2: a qa verdict was not held to its own findings"
+arm2 vb_qmode "VB2M: --gate qa over qa.md's three containers -- NEEDS_REWORK backed only by a Suggestions finding REFUSED, the severity mode alone (M12's one cell)" \
+              "VB2M: QA verdict backing stayed count-only over a three-container qa.md"
+arm2 vb_qa "VB2: --gate qa over qa.md's three containers -- NEEDS_REWORK with 0 findings, and with only a Suggestions finding (naming the move-it remedy), REFUSED; with an Important finding merges, no LEGACY line; PASS with a Critical REFUSED, with an Important merges; a finding under no container REFUSED as unclassed; each refusal byte-equal under --check-shard" \
+           "VB2: a qa verdict was not held to its own findings' severity"
+arm2 vb_qleg "VB2L: --gate qa over a qa.md declaring NO container (a consumer between pull step 3 and the reconcile merge) -- the LEGACY count-only line, an uncontained NEEDS_REWORK finding and a PASS over a Critical heading merge, an empty NEEDS_REWORK REFUSED with the count-only text; a qa.md declaring TWO containers REFUSED [owner: lead]; the code-review gate under that root still refuses an unclassed finding" \
+             "VB2L: the zero-container fallback is not count-only, or a two-container qa.md was read"
+arm2 fr_verdict "FR1: --gate qa, cross-1's per-AC table -- a PASS merge over an AC4 row reading FAIL, **FAIL**, 'FAIL (no RED)', and FAIL under a Result column moved to position 3, each REFUSED [owner: cross-1]; FAIL only in Expected/Got, and all-PASS rows, merge PASS; NEEDS_REWORK carried by part 2's finding naming AC4 merges" \
+                 "FR1: a QA merge read PASS over a per-AC FAIL row, or refused a row that does not fail"
+arm2 fr_orphan "FR2: a FAIL row under a NEEDS_REWORK merge whose AC no '#### ' finding names is REFUSED as an orphan (the table's own mention does not count), a finding naming only AC10 does not name AC1; a finding naming AC1 beside AC10 merges" \
+               "FR2: an orphan per-AC FAIL row merged, or the AC id matched as a substring"
+arm2 fr_graph "FR4: graph 811ad3d7d story 3.1 qa p2 as two states, frozen over a tree whose INSTALLED qa.md declares no container and judged by today's -- cross-1 PASS with an AC4 FAIL row and the NEEDS_REWORK cross shard carrying only its AC10 finding REFUSED as an orphan FAIL row [owner: cross-1] (not the FAIL-under-PASS rule); with its hand-added uncontained AC4 finding the set merges NEEDS_REWORK with the severity-boundary LEGACY line naming cross-2" \
+               "FR4: the graph AC4 orphan was not refused before its finding, or not accepted after it"
+arm2 fr_bound "FRB: the severity boundary is read off qa.md AS INSTALLED AT THE FROZEN SHA -- graph's post-F2 set frozen over a container-less installed qa.md merges NEEDS_REWORK with the LEGACY line; frozen over the three-container one REFUSED unclassed [owner: cross-2], no LEGACY line; frozen over a tree installing no qa.md (unreadable) REFUSED the same way" \
+               "FR4: the graph AC4 orphan was not refused before its finding, or not accepted after it"
+arm2 fr_remedy "FR3: the orphan remedy is satisfiable -- cross-1 filing the AC4 finding under cross-2's own parts set is the owner-duplicate refusal, under a set cross-1 owns it merges, and the owning cross-2 naming AC4 in its own finding merges" \
+               "FR3: the orphan FAIL row's remedy cannot be satisfied under the owner rule"
+arm2 serial "SR1: --check-serial, gate 3's Check 1 rule and no stricter -- '## Verdict / PASS', 'Verdict: NEEDS_REWORK', 'Verdict: PASS (all ACs)', '## Verdict / PASS.' and two matches both reading PASS answer SERIAL-OK; the heading-then-'Verdict: PASS' union and two different values, 'PASS-pending', APPROVED under --gate qa, a renamed '## Result' code review (0 matches), a PASS over a FAIL or FAILED row (the latter under '### Acceptance criteria'), and FAIL rows named only by 'AC-4.1' or a 'handover:' line each REFUSED [owner: serial]; code-review APPROVED and a backed NEEDS_REWORK FAIL row answer SERIAL-OK" \
+             "SR1: --check-serial accepted a malformed serial verdict, or refused a correct one"
+# SR2 (BL-742 role text): qa.md's and code-reviewer.md's serial passages each name the --check-serial
+# call; offenders with the step removed from either file are refused.
+grep -vF -- "$SR_ROLE_CMD <validation file> --gate qa" "$QA_MD" > "$WORK/sr-qa-nostep.md"
+grep -vF -- "$SR_ROLE_CMD <review file> --gate code-review" "$ROLE_MD" > "$WORK/sr-cr-nostep.md"
+if cmp -s "$QA_MD" "$WORK/sr-qa-nostep.md" || cmp -s "$ROLE_MD" "$WORK/sr-cr-nostep.md"; then
+  bad "SR2: FIXTURE STALE -- a serial-step offender's edit matched nothing, so the predicate would score the shipped text"
+elif ! p_serial_role "$QA_MD" "$ROLE_MD"; then
+  bad "SR2: qa.md or code-reviewer.md does not tell its serial seat to run --check-serial before returning"
+elif p_serial_role "$WORK/sr-qa-nostep.md" "$ROLE_MD" || p_serial_role "$QA_MD" "$WORK/sr-cr-nostep.md"; then
+  bad "SR2: FIXTURE BROKEN -- the serial-step predicate passed a role file with the step removed"
+else
+  ok "SR2: qa.md and code-reviewer.md each tell the serial seat to run merge-review-shards.sh --check-serial before returning; with the step removed from either, refused"
+fi
 arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Findings saying the gap is another group's) REFUSED byte-equal under --check-shard, naming the set 'shard-verdict: PASS' exit first, then the file-here exit, and [owner: cross-1]" \
            "VB3: the cross-1 refusal does not name both exits and its owner"
 arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
@@ -300,14 +329,14 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   if [ ! -e "$vb_ctl" ] && cp -R "$SRCDIR" "$vb_ctl" && [ -f "$vb_ctl/merge-review-shards.sh" ] && [ -f "$vb_ctl/wait-for-deliverable.sh" ] \
      && [ -f "$vb_ctl/content-seal.sh" ] && [ -f "$vb_ctl/partition-review-diff.sh" ] && cmp -s "$SRCDIR/merge-review-shards.sh" "$vb_ctl/merge-review-shards.sh"; then
     vb_cf=""
-    for _p in vb_cr vb_qa vb_r3 vb_mark; do WHY=""; "p_$_p" "$vb_ctl" || vb_cf="$vb_cf $_p:${WHY}"; done
-    if [ -z "$vb_cf" ]; then ok "VBCTL: CONTROL -- an unmutated copy of the script directory passes VB1-VB4"
-    else bad "VBCTL: FIXTURE ERROR -- the unmutated copy failed [${vb_cf# }], so no M7-M11 verdict is evidence"; fi
+    for _p in vb_cr vb_qa vb_qmode vb_qleg vb_r3 vb_mark fr_verdict fr_orphan serial; do WHY=""; "p_$_p" "$vb_ctl" || vb_cf="$vb_cf $_p:${WHY}"; done
+    if [ -z "$vb_cf" ]; then ok "VBCTL: CONTROL -- an unmutated copy of the script directory passes VB1-VB4, VB2L, FR1, FR2 and SR1"
+    else bad "VBCTL: FIXTURE ERROR -- the unmutated copy failed [${vb_cf# }], so no M7-M18 verdict is evidence"; fi
   else
     bad "VBCTL: FIXTURE ERROR -- the unmutated script directory was not copied fresh with its siblings"
   fi
-  mut_run M7 merge-review-shards.sh 'case "$GATE:$v" in' 'case "M7:$v" in' vb_qa "q-nr-empty{" \
-    "the verdict-backing rule removed"
+  mut_run M7 merge-review-shards.sh '      NEEDS_REWORK|BLOCKED)' '      M7)' vb_qa "q-nr-empty{" \
+    "the severity-mode verdict-backing rule removed"
   mut_run M8 merge-review-shards.sh '(cls(t, ENVIRON["PS_IMP_"]) ? "imp" : "")' '"imp"' vb_cr "cr-blocked-sug{" \
     "a Suggestions finding counted as Important"
   mut_run M9 merge-review-shards.sh '[ "$kc_" -eq 0 ] \' 'true \' vb_cr "cr-approved-crit{" \
@@ -317,9 +346,35 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # M11 keeps all three r3 phrases present and reverses only their ORDER (the file-here clause first),
   # so the single token that can fire is the order one.
   mut_run M11 merge-review-shards.sh \
-    "If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it; otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" \
-    "Either way, otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry); If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it" \
+    "If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it; otherwise file the finding that makes it \$v here, as a '#### ' heading under '### \$CRIT_NAME' or '### \$IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry), or move" \
+    "Either way, otherwise file the finding that makes it \$v here, as a '#### ' heading under '### \$CRIT_NAME' or '### \$IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry); If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it, or move" \
     vb_r3 "r3-owner-first-order{" "the owner-first clause moved after the file-here clause"
+  # BL-746. M12 reads qa.md as count-only whatever its template declares (code-review's rule only);
+  # M13 drops the zero-container fallback, so a consumer's installed qa.md is refused; M14 drops the
+  # unclassed-finding refusal. Each is owned by one cell.
+  mut_run M12 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if [ "$GATE" = qa ]; then' \
+    vb_qmode "q-mode-sug{" "QA stays count-only when qa.md declares the three containers"
+  mut_run M13 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if false; then' \
+    vb_qleg "q-leg-nr-one{" "the zero-container fallback dropped, so the old installed qa.md is refused"
+  mut_run M14 merge-review-shards.sh '[ "$ku_" = 0 ] \' 'true \' vb_qa "q-unclassed{" \
+    "a finding under no container accepted in severity mode"
+  # BL-747. M15 removes the FAIL-row gate from the merge; M16 reads the first column after AC instead
+  # of the one headed Result/Verdict; M17 matches the AC id as a substring.
+  mut_run M15 merge-review-shards.sh '  fail_gate "$(awk' '  : "$(awk' fr_verdict "fr-plain{" \
+    "the FAIL-row check removed from the merge"
+  mut_run M16 merge-review-shards.sh 'if (!ac) ac = 2' 'if (!ac) ac = 2; rc = ac + 1' fr_verdict "fr-reorder{" \
+    "the result column read by position instead of by its header"
+  mut_run M17 merge-review-shards.sh 'if (p !~ /[A-Za-z0-9.]/ && q !~ /[A-Za-z0-9.]/) return 1' 'return 1' fr_orphan "fr-ac10{" \
+    "the AC id matched as a substring, so AC10 names AC1"
+  # BL-742. M18 drops --check-serial's set-membership read.
+  mut_run M18 merge-review-shards.sh '    *" $C1V "*) ;;' '    *) ;;' serial "sr-q-set{" \
+    "--check-serial skips the set-membership read"
+  mut_run M19 merge-review-shards.sh '  [ "$C1D" = 1 ] \' '  [ "$C1N" = 1 ] \' serial "sr-q-twosame{" \
+    "--check-serial reverts to the merge's strict one-match count"
+  # M20 drops the severity boundary's LEGACY arm, so a set frozen over a container-less installed qa.md
+  # is judged by the current three-container rule.
+  mut_run M20 merge-review-shards.sh '    if [ "$QA_AT" = legacy ]; then sev_=0' '    if false; then sev_=0' fr_bound "frb-legacy{" \
+    "the severity boundary's LEGACY arm dropped"
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

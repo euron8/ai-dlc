@@ -53,10 +53,10 @@ the chain record
 writes that record FIRST, with its header; appends one line naming each file
 of the chain when it STARTS writing that file, and another when it finishes
 it; and only after the LAST file of the chain is written makes one final
-write, the line
-`seat-complete: architecture architect none findings=0`, after which it edits
-no file of the chain. It appends the `## Architect handoff` section BEFORE that
-line, so the `seat-complete:` line stays the last non-blank line and the final
+write, the ONE Bash call
+`<lead engine>/wait-for-deliverable.sh --mark <record> architecture architect none findings=0`, after which it edits
+no file of the chain. A chain dispatched worktree-isolated carries the absolute path of the LEAD checkout's `scripts/ai-dlc` (`<lead engine>`) in its brief; otherwise `scripts/ai-dlc` is the lead's engine. It appends the `## Architect handoff` section BEFORE that
+call, so the `seat-complete:` line `--mark` writes stays the last non-blank line and the final
 write. The record is appended to, never rewritten. Join it with
 `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`,
 `run_in_background: true`, `<agentId>` being the one its Agent result

@@ -666,7 +666,7 @@ QT_RANK="shard-verdict 'APPROVED' is not one of PASS NEEDS_REWORK"
 QA_SFX="qa-validation"
 qout() { printf '%s/1-%s%s.md' "$(dirname "$1")" "${2:-$QA_SFX}" "${3:-}"; } # <dir> [sfx] [pass marker]
 run_mg() { # <script-dir> <shard-dir> <gate> <out> [project-root] -> RC, $MO
-  AI_DLC_PROJECT_ROOT="${5:-$PROJ}" bash "$1/merge-review-shards.sh" "$2" --gate "$3" --out "$4" \
+  AI_DLC_PROJECT_ROOT="${5:-${VB_PROJ:-$PROJ}}" bash "$1/merge-review-shards.sh" "$2" --gate "$3" --out "$4" \
     > "$MO" 2>&1 < /dev/null; RC=$?
 }
 refused_at() { # <token> <out>
@@ -685,7 +685,7 @@ qshard() {
     case "$k" in cross*) ;; *) [ "$hc" = OMIT ] || printf 'handovers: %s\n' "$hc" ;; esac
     printf '\n'
     printf '## Summary\nShard %s validated its part. QCONSERVE-%s-91c2\n\n' "$k" "$k"
-    printf '## Findings\n\n#### Q-%s-1 a missing caller in shard %s\nparts: %s\n\nBody.\n\n' "$k" "$k" "$cite"
+    printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-%s-1 a missing caller in shard %s\nparts: %s\n\nBody.\n\n' "$k" "$k" "$cite"
     # The per-AC table and the deferred record: the FIRST cross shard's alone (the execution owner).
     if [ "$k" = cross ] || [ "$k" = cross-1 ]; then
       printf '## Acceptance Criteria\n\n| AC | Verdict | Evidence |\n|---|---|---|\n| AC1 | PASS | suite green |\n| AC2 | %s | replay |\n\n' "$v"
@@ -824,6 +824,46 @@ for _r in "$PROJ_QBAD" "$PROJ_CRBAD"; do
 done
 sed -e 's/^PASS | NEEDS_REWORK$/PASS | NEEDS_REWORK | BLOCKED/' "$PROJ/core/team-roles/qa.md" > "$PROJ_QBAD/core/team-roles/qa.md"
 sed -e 's/^APPROVED | NEEDS_REWORK | BLOCKED$/APPROVED | NEEDS_REWORK | BLOCKED | DEFERRED/' "$PROJ/core/team-roles/code-reviewer.md" > "$PROJ_CRBAD/core/team-roles/code-reviewer.md"
+# BL-746: two more qa.md roots, derived from the subject's own qa.md. QLEG is the qa.md a consumer runs
+# the engine against from pull step 3 until the reconcile merge: its `## Findings Template` section
+# (to the next `## ` heading outside a fence) removed, so the template declares NO container. Q2 keeps
+# the section and drops its Suggestions container, so it declares two. Each carries its own control:
+# QLEG must lose the section and keep the verdict set, Q2 must differ from the subject by one line.
+PROJ_QLEG="$WORK/proj-qleg"; PROJ_Q2="$WORK/proj-q2"
+for _r in "$PROJ_QLEG" "$PROJ_Q2"; do
+  mkdir -p "$_r/core/skills/ai-dlc/steps" "$_r/core/team-roles"
+  cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$_r/core/skills/ai-dlc/steps/"
+  cp "$PROJ/core/team-roles/code-reviewer.md" "$_r/core/team-roles/"
+done
+awk '/^```/ { f = !f } !f && /^## / { skip = ($0 ~ /^## Findings Template[ \t]*$/) } !skip' "$PROJ/core/team-roles/qa.md" > "$PROJ_QLEG/core/team-roles/qa.md"
+grep -v '^### Suggestions ' "$PROJ/core/team-roles/qa.md" > "$PROJ_Q2/core/team-roles/qa.md"
+_q_t="$(grep -c '^## Findings Template' "$PROJ/core/team-roles/qa.md")" || _q_t=0
+_q_l="$(grep -c '^### \(Critical\|Important\|Suggestions\) ' "$PROJ_QLEG/core/team-roles/qa.md")" || _q_l=0
+_q_v="$(grep -c '^PASS | NEEDS_REWORK$' "$PROJ_QLEG/core/team-roles/qa.md")" || _q_v=0
+_q_2=$(( $(wc -l < "$PROJ/core/team-roles/qa.md") - $(wc -l < "$PROJ_Q2/core/team-roles/qa.md") ))
+[ "$_q_t" = 1 ] && [ "$_q_l" = 0 ] && [ "$_q_v" = 1 ] && [ "$_q_2" = 1 ] \
+  || { echo "FIXTURE STALE: the qa.md roots cannot express the container states (template $_q_t, legacy containers $_q_l, legacy verdict line $_q_v, two-container diff $_q_2)" >&2; exit 2; }
+# THE SEVERITY BOUNDARY's two frozen trees (BL-746). B's six files over a base that INSTALLS qa.md at the
+# consumer path .claude/team-roles/qa.md -- QL the container-less one (PROJ_QLEG's, graph's installed
+# shape), QS the subject's own. The installed copy sits in the BASE commit, so the map is B's (K=3).
+# REPO_B itself installs no qa.md: the unreadable side.
+REPO_QL="$WORK/repo-ql"; REPO_QS="$WORK/repo-qs"
+for _r in "$REPO_QL" "$REPO_QS"; do
+  new_repo "$_r" old || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+  mkdir -p "$_r/.claude/team-roles"
+  if [ "$_r" = "$REPO_QL" ]; then cp "$PROJ_QLEG/core/team-roles/qa.md" "$_r/.claude/team-roles/qa.md"
+  else cp "$PROJ/core/team-roles/qa.md" "$_r/.claude/team-roles/qa.md"; fi
+  G -C "$_r" add -A && G -C "$_r" commit -q --amend -m base || { echo "FIXTURE ERROR: the installed qa.md was not committed" >&2; exit 2; }
+  for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$_r/$f" 5 "$f"; done
+  G -C "$_r" add -A && G -C "$_r" commit -q -m frozen || { echo "FIXTURE ERROR: git commit failed" >&2; exit 2; }
+done
+QL_BASE="$(G -C "$REPO_QL" rev-parse HEAD~1)"; QL_SHA="$(G -C "$REPO_QL" rev-parse HEAD)"
+QS_BASE="$(G -C "$REPO_QS" rev-parse HEAD~1)"; QS_SHA="$(G -C "$REPO_QS" rev-parse HEAD)"
+_ql="$(G -C "$REPO_QL" show "${QL_SHA}:.claude/team-roles/qa.md" | grep -c '^## Findings Template')" || _ql=0
+_qs="$(G -C "$REPO_QS" show "${QS_SHA}:.claude/team-roles/qa.md" | grep -c '^## Findings Template')" || _qs=0
+_qb=0; G -C "$REPO_B" cat-file -e "${B_SHA}:.claude/team-roles/qa.md" 2>/dev/null && _qb=1
+[ "$_ql" = 0 ] && [ "$_qs" = 1 ] && [ "$_qb" = 0 ] \
+  || { echo "FIXTURE STALE: the frozen trees cannot express the severity boundary (QL template $_ql, QS template $_qs, B carries qa.md $_qb)" >&2; exit 2; }
 p_q_vset() {
   local sd="$1" d o
   d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
@@ -849,7 +889,7 @@ qcross() { # <dir> <verdict> <text inserted inside cross-1.md's ## Findings> -- 
   {
     printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "$B_SHA" "$2"
     printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n'
-    printf '## Findings\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: 1, 2\n\nBody.\n\n%s\n\n' "$3"
+    printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: 1, 2\n\nBody.\n\n%s\n\n' "$3"
     printf '## Acceptance Criteria\n\n| AC | Verdict | Evidence |\n|---|---|---|\n| AC1 | PASS | suite green |\n\n## Deferred ACs\n\nNone.\n'
   } > "$1/cross-1.md"
 }
@@ -1281,7 +1321,7 @@ owner_in() { # <output file> <want>: exactly one REFUSED line, ending in [owner:
 }
 run_check() { # <script-dir> <shard-dir> <gate> <target> [--findings n] -> CRC, $CO; driven through the alias
   local sd="$1" d="$2" g="$3" t="$4"; shift 4
-  AI_DLC_PROJECT_ROOT="$PROJ" bash "$sd/merge-review-shards.sh" "$(alias_of "$d")" --gate "$g" \
+  AI_DLC_PROJECT_ROOT="${VB_PROJ:-$PROJ}" bash "$sd/merge-review-shards.sh" "$(alias_of "$d")" --gate "$g" \
     --check-shard "$(alias_of "$t")" "$@" > "$CO" 2>&1 < /dev/null; CRC=$?
 }
 cs_reset() { rm -f "$1"/*.md "$1/notes.txt"; cp "$2"/*.md "$1"/; }
@@ -1707,9 +1747,17 @@ VB_CR_NR="carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding under '##
 VB_CR_BL="carries 'shard-verdict: BLOCKED' but no '#### ' finding under '### Critical'"
 VB_CR_AP="carries 'shard-verdict: APPROVED' but 1 '#### ' finding(s) under '### Critical'; a Critical finding is not approvable"
 VB_Q_NR="carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding in its '## Findings'"
+# BL-746: the severity-mode tokens under --gate qa, the unclassed-finding refusal (both gates), the
+# legacy line, and the wrong-count refusal.
+VB_Q_SEV_NR="carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding under '### Critical' or '### Important'"
+VB_Q_PASS_CRIT="carries 'shard-verdict: PASS' but 1 '#### ' finding(s) under '### Critical'; a Critical finding is not approvable"
+VB_MOVE="or move the finding this shard already files under '### Suggestions' there"
+VB_UNC="finding under '## Findings' with no '### ' container above it"
+VB_LEG="declares no severity containers; QA verdict backing is count-only"
+VB_Q2="qa.md's ## Findings template declares 2 severity container(s)"
 # R3's three exact substrings: both satisfiable exits and the owner tail.
 VB_R3_LEAD="If the finding belongs to another shard, set 'shard-verdict: PASS'"
-VB_R3_FILE="otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings'"
+VB_R3_FILE="otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '### Critical' or '### Important'"
 VB_R3_SET="set 'shard-verdict: PASS' here and let that shard's verdict carry it"
 VB_R3_OWN="[owner: cross-1]"
 # The graph s319 story 3.1 cross-1 shard's own ## Findings body, verbatim: a qa NEEDS_REWORK whose gap
@@ -1779,16 +1827,59 @@ p_vb_cr() {
   vb_c "$d" 2 APPROVED 2 imp; vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"
   [ -z "$WHY" ]
 }
-# ---- VB2 (qa): NEEDS_REWORK needs any finding, in a container or none; PASS has no condition, a
-# '### Critical' heading included (qa.md defines no severity containers).
+# qf <container first word|none> -> one finding of shard 2, under that container (none: no `### `).
+qf() { if [ "$1" = none ]; then printf '#### Q-2-9 a gap\nparts: 2\n\nBody.'; else printf '### %s (seeded)\n\n#### Q-2-9 a gap\nparts: 2\n\nBody.' "$1"; fi; }
+# ---- VB2 (qa, BL-746): qa.md declares the three containers, so the SEVERITY rule is the code-review
+# rule: NEEDS_REWORK needs a Critical or Important finding, PASS carries no Critical, and a finding with
+# no container is refused as unclassed. Each refusal has its ALLOW twin one container apart. No LEGACY
+# line under the three-container qa.md.
 p_vb_qa() {
   local sd="$1" d c
   WHY=""
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(printf '#### Q-2-9 an uncontained gap\nparts: 2\n\nBody.')"; vb_pass "$sd" "$d" qa 2 q-nr-one; cs_reset "$d" "$c"
-  vb_q "$d" 2 PASS "$(printf '### Critical\n\n#### Q-2-9 a gap under a Critical heading\nparts: 2\n\nBody.')"; vb_pass "$sd" "$d" qa 2 q-pass-crit; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_SEV_NR" "$VB_STEM"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-nr-sug "$VB_Q_SEV_NR" "$VB_MOVE"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-nr-imp
+  ! has "$MO" "$VB_LEG" || WHY="$WHY q-sev-legacy-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"
+  vb_q "$d" 2 PASS "$(qf Critical)"; vb_refuse "$sd" "$d" qa 2 q-pass-crit "$VB_Q_PASS_CRIT"; cs_reset "$d" "$c"
+  vb_q "$d" 2 PASS "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-pass-imp; cs_reset "$d" "$c"
+  vb_q "$d" 2 PASS "$(qf none)"; vb_refuse "$sd" "$d" qa 2 q-unclassed "$VB_UNC"; cs_reset "$d" "$c"
+  [ -z "$WHY" ]
+}
+# ---- VB2M (qa, BL-746): the MODE alone, in one cell, so a mutant that keeps QA count-only under a
+# three-container qa.md moves exactly this assertion -- VB2's cells all move with the mode too, which is
+# why M12 is scored here and not there. NEEDS_REWORK backed only by a Suggestions finding is REFUSED.
+p_vb_qmode() {
+  local sd="$1" d
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-mode-sug "$VB_Q_SEV_NR" "$VB_MOVE"
+  [ -z "$WHY" ]
+}
+# ---- VB2L (qa, BL-746 delivery path): the qa.md a consumer has installed until the reconcile merge
+# declares NO container, and the rule stays count-only -- an uncontained NEEDS_REWORK finding merges,
+# and an empty NEEDS_REWORK is refused with the count-only text; stdout carries the LEGACY line. A
+# qa.md declaring TWO containers is REFUSED, never read as either mode. The code-review gate is not
+# affected by qa.md's state (a cr world under the legacy root still refuses an unclassed finding).
+p_vb_qleg() {
+  local sd="$1" d c o
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  VB_PROJ="$PROJ_QLEG"
+  vb_q "$d" 2 NEEDS_REWORK "$(qf none)"; vb_pass "$sd" "$d" qa 2 q-leg-nr-one
+  has "$MO" "LEGACY: $PROJ_QLEG/core/team-roles/qa.md $VB_LEG" || WHY="$WHY q-leg-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"
+  vb_q "$d" 2 PASS "$(qf Critical)"; vb_pass "$sd" "$d" qa 2 q-leg-pass-crit; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-leg-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"
+  VB_PROJ="$PROJ_Q2"
+  o="$(qout "$d")"; run_mg "$sd" "$d" qa "$o"
+  refused_at "$VB_Q2" "$o" && owner_in "$MO" lead || WHY="$WHY q-two-containers{rc=$RC $(reline "$MO")}"
+  VB_PROJ="$PROJ_QLEG"
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { VB_PROJ=""; WHY="$WHY the code-review world was not built"; return 1; }
+  raw_shard "$d" 2 '## Findings' '' '#### F-2-9 uncontained' 'parts: 2' '' 'Body.'
+  vb_refuse "$sd" "$d" code-review 2 cr-unclassed "$VB_UNC"
+  VB_PROJ=""
   [ -z "$WHY" ]
 }
 # ---- VB3 (R3): the graph cross-1 shape. A qa cross-1 at NEEDS_REWORK whose ## Findings says the gap is
@@ -1799,7 +1890,7 @@ p_vb_r3() {
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   [ -f "$d/cross-1.md" ] || { WHY="FIXTURE BROKEN: the qa world has no cross-1"; return 1; }
   vb_q "$d" cross-1 NEEDS_REWORK "$VB_R3_BODY"
-  vb_refuse "$sd" "$d" qa cross-1 r3-graph-cross1 "$VB_Q_NR" "$VB_STEM"
+  vb_refuse "$sd" "$d" qa cross-1 r3-graph-cross1 "$VB_Q_SEV_NR" "$VB_STEM"
   has "$MO" "$VB_R3_FILE" || WHY="$WHY r3-file-exit{$(reline "$MO")}"
   has "$MO" "$VB_R3_SET" || WHY="$WHY r3-set-pass-exit{$(reline "$MO")}"
   has "$MO" "$VB_R3_LEAD" || WHY="$WHY r3-owner-first{$(reline "$MO")}"
@@ -1828,6 +1919,224 @@ p_vb_mark() {
   [ "$MRC" -eq 0 ] && grep -qE '^seat-complete: implementation code-reviewer 2 key=2 sha=[0-9a-f]{64} findings=1$' "$f" \
     || WHY="$WHY mark-allow{rc=$MRC $(head -2 "$MKO")}"
   [ -z "$WHY" ]
+}
+
+# ---- FR1-FR3 (BL-747): the first cross shard's per-AC table against the merged verdict and every
+# shard's findings. The table is qa.md's own shape (`| AC | Result | Expected | Got |`) unless a case
+# names another header; the FAIL row is AC4, never the first row. fr_x1 rewrites cross-1 only.
+FR_TBL='| AC | Result | Expected | Got |'
+FR_VERD="reads FAIL but the QA verdict is PASS"
+FR_ORPH="reads FAIL but no '#### ' finding names"
+FR_DUP="a finding owned by cross-2"
+# fr_x1 <dir> <verdict> <extra findings text, may be empty> <header row> <AC4 row>
+fr_x1() {
+  local g1 f1 l1
+  g1="$(awk -F'\t' '$1 == 1 { print $2; exit }' "$1.groups")"; f1="${g1%%,*}"; l1="${g1##*,}"
+  {
+    printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "${SHARD_SHA:-$B_SHA}" "$2"
+    printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n'
+    printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: %s, %s\n\nBody.\n\n' "$f1" "$l1"
+    [ -z "$3" ] || printf '%s\n\n' "$3"
+    printf '## Acceptance Criteria\n\n%s\n|---|---|---|---|\n| AC1 | PASS | suite green | green |\n%s\n| AC5 | PASS | x | y |\n\n' "$4" "$5"
+    printf '## Deferred ACs\n\nNone.\n'
+  } > "$1/cross-1.md"
+}
+fr_find2() { printf '### Important (seeded)\n\n#### Q-2-9 %s\nparts: 2\n\n%s' "$1" "$2"; } # <heading> <body>
+fr_merged() { # <script-dir> <dir> <case> <want verdict>
+  local o; o="$(qout "$2")"; q_merge "$1" "$2"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=$4 " || WHY="$WHY $3{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+  rm -f "$o"
+}
+fr_refused() { # <script-dir> <dir> <case> <token>
+  local o; o="$(qout "$2")"; q_merge "$1" "$2"
+  refused_at "$4" "$o" && owner_in "$MO" cross-1 || WHY="$WHY $3{rc=$RC $(reline "$MO")}"
+  # A mutant that MERGES here writes --out; left on disk it makes the NEXT cell's merge refuse as
+  # "already exists and differs", so the mutant would move a second cell for a reason it does not own.
+  rm -f "$o"
+}
+# FR1: the verdict rule. PASS over a FAIL row is refused in three spellings and in a reordered table;
+# a FAIL only in Expected, and FAILED-free rows, merge; NEEDS_REWORK carried by another shard merges.
+p_fr_verdict() {
+  local sd="$1" d c
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-plain "$FR_VERD"; cs_reset "$d" "$c"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | **FAIL** | a RED | none |'; fr_refused "$sd" "$d" fr-bold "$FR_VERD"; cs_reset "$d" "$c"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| `AC4` (committed RED) | FAIL (no RED) | a RED | none |'; fr_refused "$sd" "$d" fr-paren "$FR_VERD"; cs_reset "$d" "$c"
+  fr_x1 "$d" PASS "" '| AC | Expected | Result | Got |' '| AC4 | green | FAIL | none |'; fr_refused "$sd" "$d" fr-reorder "$FR_VERD"; cs_reset "$d" "$c"
+  # The near-miss puts FAIL in Got, the column AFTER the named one, so a read-by-position mutant (M16,
+  # rc = ac + 1, which lands on Expected) moves only fr-reorder, never this cell.
+  fr_x1 "$d" PASS "" '| AC | Expected | Verdict | Got |' '| AC4 | green | PASS | FAIL then green |'; fr_merged "$sd" "$d" fr-expected-only PASS; cs_reset "$d" "$c"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | PASS | a RED | RED |'; fr_merged "$sd" "$d" fr-all-pass PASS; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'AC4 has no committed RED' 'Body.')"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-nr-elsewhere NEEDS_REWORK
+  [ -z "$WHY" ]
+}
+# FR2: the orphan rule. A FAIL row under a NEEDS_REWORK merge whose AC no finding names is refused --
+# the table's own mention of AC4 does not count -- and AC10 does not name AC1; the twins merge.
+p_fr_orphan() {
+  local sd="$1" d c
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap with no AC named' 'Body.')"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED for AC4 | none |'; fr_refused "$sd" "$d" fr-orphan "$FR_ORPH AC4"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC10 has no committed RED.')"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-ac10 "$FR_ORPH AC1"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC1 has no committed RED; AC10 is fine.')"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-ac1 NEEDS_REWORK
+  [ -z "$WHY" ]
+}
+# FR4: graph 811ad3d7d, story 3.1 qa p2 (read-only), as two states. There cross-1 carried `| AC4 | FAIL |`
+# under `shard-verdict: PASS`, and cross-4 (NEEDS_REWORK; F1 about AC10, its findings under NO `### `
+# container, `parts: 2, 3`) named no AC4; a hand-added `#### F2 — AC4 ...`, uncontained, same parts, let
+# the merge through. That set ran against the consumer's installed qa.md, which declared no container,
+# so the world runs under PROJ_QLEG. Here K=3, so the non-first cross shard is cross-2 standing in for
+# cross-4, citing its own group's pair. Each state asserts the refusal it is refused ON (its message),
+# and that it is not the other FAIL-row refusal.
+fr_g_cross() { # <dir> <first> <last> <with F2: 0|1>
+  {
+    printf '# QA Validation shard cross-2\n\nreviewed-sha: %s\nshard-verdict: NEEDS_REWORK\n\n' "${SHARD_SHA:-$B_SHA}"
+    printf '## Summary\nShard cross-2 validated its part. QCONSERVE-cross-2-91c2\n\n## Findings\n\n'
+    printf '#### F1 — AC10 two-pair and unpriced-token totals are driven from hand-built rows, not the real parser\n\nparts: %s, %s\n\nBody.\n\n' "$2" "$3"
+    [ "$4" = 0 ] || printf '#### F2 — AC4 has no committed mutation-RED reaching its discriminating fixture\n\nparts: %s, %s\n\nBody.\n\n' "$2" "$3"
+    printf '## Items checked, no finding\n\nNone.\n'
+  } > "$1/cross-2.md"
+}
+FR_BLEG="held to the count-only QA rule only because the frozen sha"
+# fr_g_world <script-dir> <repo> <base> <sha> <with F2: 0|1> -> the graph-shaped qa set frozen over
+# <repo>, every shard PASS but cross-1's AC4 FAIL row and cross-2's NEEDS_REWORK (graph's cross-4).
+fr_g_world() {
+  local sd="$1" d g2 f2 l2
+  SHARD_SHA="$4"
+  d="$(kworld "$sd" "$2" "$3" "$4" 3 qa-validation PASS qa)" || return 1
+  [ -f "$d/cross-2.md" ] && [ -f "$d.groups" ] || return 1
+  g2="$(awk -F'\t' '$1 == 2 { print $2; exit }' "$d.groups")"; f2="${g2%%,*}"; l2="${g2##*,}"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | Committed mutation-RED for each discriminating fixture in AC4. | No committed RED. |'
+  fr_g_cross "$d" "$f2" "$l2" "$5"
+  printf '%s' "$d"
+}
+# FR4: graph's two states, the set frozen over a tree whose INSTALLED qa.md declares no container
+# (graph's, measured at 50eb567df), judged by today's three-container qa.md.
+p_fr_graph() {
+  local sd="$1" d SHARD_SHA
+  WHY=""
+  d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 0)" || { WHY="the frozen-QL world was not built"; return 1; }
+  fr_refused "$sd" "$d" fr-graph-pre-f2 "$FR_ORPH AC4"
+  ! has "$MO" "$FR_VERD" || WHY="$WHY fr-graph-pre-f2-wrong-rule{$(reline "$MO")}"
+  d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="$WHY the frozen-QL post-F2 world was not built"; return 1; }
+  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK
+  has "$MO" "LEGACY: $d/cross-2.md $FR_BLEG $QL_SHA's .claude/team-roles/qa.md" || WHY="$WHY fr-graph-post-f2-legacy-line{$(head -2 "$MO" | tr '\n' ' ')}"
+  [ -z "$WHY" ]
+}
+# FRB: THE SEVERITY BOUNDARY, one cell per side. The post-F2 set (cross-2's findings uncontained):
+# frozen over the container-less installed qa.md -> merges NEEDS_REWORK with the LEGACY line; frozen
+# over the three-container one -> REFUSED unclassed [owner: cross-2], no LEGACY line; frozen over a tree
+# installing no qa.md (unreadable) -> REFUSED the same way, never acquitted.
+p_fr_bound() {
+  local sd="$1" d o SHARD_SHA
+  WHY=""
+  d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
+  fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+  has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
+  d="$(fr_g_world "$sd" "$REPO_QS" "$QS_BASE" "$QS_SHA" 1)" || { WHY="$WHY the frozen-QS world was not built"; return 1; }
+  o="$(qout "$d")"; q_merge "$sd" "$d"
+  refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-severity{rc=$RC $(reline "$MO")}"
+  rm -f "$o"
+  d="$(fr_g_world "$sd" "$REPO_B" "$B_BASE" "$B_SHA" 1)" || { WHY="$WHY the unreadable world was not built"; return 1; }
+  o="$(qout "$d")"; q_merge "$sd" "$d"
+  refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-unreadable{rc=$RC $(reline "$MO")}"
+  rm -f "$o"
+  [ -z "$WHY" ]
+}
+# FR3: the remedy is SATISFIABLE under the owner rule (graph s319 3-1 p2 cross-1: AC4 FAIL, the gap's
+# set owned by another cross group). cross-1 filing the AC4 finding under cross-2's own set is the
+# owner-duplicate refusal; filing it under a set cross-1 owns merges; so does the owning shard naming
+# AC4 in the finding it already carries.
+p_fr_remedy() {
+  local sd="$1" d c g2 f2 l2 g1 f1 l1
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  [ -f "$d/cross-2.md" ] || { WHY="FIXTURE BROKEN: the qa world has no cross-2"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  g1="$(awk -F'\t' '$1 == 1 { print $2; exit }' "$d.groups")"; f1="${g1%%,*}"; l1="${g1##*,}"
+  g2="$(awk -F'\t' '$1 == 2 { print $2; exit }' "$d.groups")"; f2="${g2%%,*}"; l2="${g2##*,}"
+  fr_x1 "$d" NEEDS_REWORK "$(printf '#### Q-cross-1-4 AC4 has no committed RED\nparts: %s, %s\n\nBody.' "$f2" "$l2")" "$FR_TBL" '| AC4 | FAIL | a RED | none |'
+  fr_refused "$sd" "$d" fr-dup-blocks "$FR_DUP"; cs_reset "$d" "$c"
+  fr_x1 "$d" NEEDS_REWORK "$(printf '#### Q-cross-1-4 AC4 has no committed RED\nparts: %s, %s\n\nBody.' "$f1" "$l1")" "$FR_TBL" '| AC4 | FAIL | a RED | none |'
+  fr_merged "$sd" "$d" fr-own-set NEEDS_REWORK; cs_reset "$d" "$c"
+  qshard "$d" cross-2 NEEDS_REWORK "$f2, $l2"
+  awk '/^#### Q-cross-2-1 / { print "#### Q-cross-2-1 AC4: a missing caller in shard cross-2"; next } { print }' "$d/cross-2.md" > "$d/x.tmp" && mv "$d/x.tmp" "$d/cross-2.md"
+  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'
+  fr_merged "$sd" "$d" fr-owner-names NEEDS_REWORK
+  [ -z "$WHY" ]
+}
+
+# ---- SR1 (BL-742): --check-serial runs the merge's own Check 1 read-back and set membership over ONE
+# serial file, and under --gate qa the FAIL ROWS rules. Each refusal has its ALLOW twin one line apart.
+SR_COUNT="time(s) reading 2 different values"
+SR_SET="which is not one of"
+SR_OWN="[owner: serial]"
+# sr_file <path> <verdict block, verbatim> [per-AC FAIL row] [findings body] [per-AC heading]
+sr_file() {
+  {
+    printf '# QA Validation: 1\n\n## Summary\nSerial.\n\n%s\n\n## Findings\n\n%s\n\n' "$2" "${4:-### Critical (must fix before PASS)
+
+None.}"
+    printf '%s\n\n| AC | Result | Expected | Got |\n|---|---|---|---|\n| AC1 | PASS | x | y |\n' "${5:-## Acceptance Criteria}"
+    [ -z "${3:-}" ] || printf '%s\n' "$3"
+  } > "$1"
+}
+sr_run() { # <script-dir> <file> <gate> -> SRC, $CO
+  AI_DLC_PROJECT_ROOT="$PROJ" bash "$1/merge-review-shards.sh" --check-serial "$2" --gate "$3" > "$CO" 2>&1 < /dev/null; SRC=$?
+}
+sr_ok() { # <script-dir> <file> <gate> <case> <verdict>
+  sr_run "$1" "$2" "$3"
+  [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK: $2 verdict=$5" || WHY="$WHY $4{rc=$SRC $(head -1 "$CO")}"
+}
+sr_no() { # <script-dir> <file> <gate> <case> <token>
+  sr_run "$1" "$2" "$3"
+  [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "$5" && has "$CO" "$SR_OWN" && ! has "$CO" "SERIAL-OK" \
+    || WHY="$WHY $4{rc=$SRC $(head -1 "$CO")}"
+}
+p_serial() {
+  local sd="$1" f="$WORK/serial-1-qa-validation.md" g="$WORK/serial-1-code-review.md"
+  WHY=""
+  sr_file "$f" "$(printf '## Verdict\nPASS')"; sr_ok "$sd" "$f" qa sr-q-heading PASS
+  sr_file "$f" 'Verdict: NEEDS_REWORK' '' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nBody.')"; sr_ok "$sd" "$f" qa sr-q-line NEEDS_REWORK
+  sr_file "$f" "$(printf '## Verdict\n\nVerdict: PASS')"; sr_no "$sd" "$f" qa sr-q-union "$SR_COUNT"
+  sr_file "$f" "$(printf '## Verdict\nAPPROVED')"; sr_no "$sd" "$f" qa sr-q-set "$SR_SET"
+  sr_file "$g" "$(printf '## Verdict\nAPPROVED')"; sr_ok "$sd" "$g" code-review sr-cr-approved APPROVED
+  sr_file "$g" "$(printf '## Result\nAPPROVED')"; sr_no "$sd" "$g" code-review sr-cr-renamed "matches Check 1's verdict pattern 0 time(s)"
+  sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAIL | a RED | none |'; sr_no "$sd" "$f" qa sr-q-fail "$FR_VERD"
+  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 AC4 has no committed RED\n\nBody.')"
+  sr_ok "$sd" "$f" qa sr-q-fail-backed NEEDS_REWORK
+  # D3: gate 3's own count and value rule, no stricter. A trailing parenthetical and a period read the
+  # member; two matches reading ONE value are one verdict; a hyphen suffix is the whole token.
+  sr_file "$f" 'Verdict: PASS (all ACs)'; sr_ok "$sd" "$f" qa sr-q-paren PASS
+  sr_file "$f" "$(printf '## Verdict\n\nPASS.')"; sr_ok "$sd" "$f" qa sr-q-period PASS
+  sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: PASS')"; sr_ok "$sd" "$f" qa sr-q-twosame PASS
+  sr_file "$f" 'Verdict: PASS-pending'; sr_no "$sd" "$f" qa sr-q-suffix "Check 1 reads 'PASS-pending'"
+  sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: NEEDS_REWORK')"; sr_no "$sd" "$f" qa sr-q-twodiff "$SR_COUNT"
+  # N2 and N3 through the serial file's own table (one fail_gate for the merge and the serial check):
+  # FAILED fires, under a `### Acceptance criteria` heading; AC-4.1 does not name AC-4; a `handover:`
+  # line does not name its AC.
+  sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAILED | a RED | none |' '' '### Acceptance criteria (per AC)'; sr_no "$sd" "$f" qa sr-q-failed "$FR_VERD"
+  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC-4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nAC-4.1 has no committed RED.')"
+  sr_no "$sd" "$f" qa sr-q-dotted "$FR_ORPH AC-4"
+  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\nparts: 1\nhandover: AC4\n\nBody.')"
+  sr_no "$sd" "$f" qa sr-q-hoonly "$FR_ORPH AC4"
+  [ -z "$WHY" ]
+}
+# Role text (BL-742): each serial seat is told to run --check-serial before returning. Keyed on the
+# command spelling in each role file's serial passage.
+SR_ROLE_CMD='merge-review-shards.sh --check-serial'
+p_serial_role() { # <qa.md> <code-reviewer.md>
+  local nq nc
+  nq="$(grep -cF -- "$SR_ROLE_CMD <validation file> --gate qa" "$1")" || nq=0
+  nc="$(grep -cF -- "$SR_ROLE_CMD <review file> --gate code-review" "$2")" || nc=0
+  [ "$nq" -ge 1 ] && [ "$nc" -ge 1 ]
 }
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
