@@ -607,3 +607,21 @@ Owed (mechanism left to the builder):
 
 verify: manual
 
+## BL-735 — the recover hook's worst real gate-in-flight emission sits 24 bytes under the 10000 cliff, so any line added to its emitted text silently drops the sidecar note for a compacted lead
+
+**NOTE.** Measured by ai-dlc-e3 (batch 238) while 238-d-721's dress was failing; re-derived by the batch-238 docs hand with one direct fire of the hook in the WC world, not the fixture. Related: BL-457, which moved the cliff onto the emitted string.
+
+`core/hooks/ai-dlc-recover.sh:63` sets `CONTEXT_LIMIT` to 10000, and `:629-632` drop the sidecar note ("Mechanical state captured immediately before this compaction") whenever the wrapped bare directive would reach that limit. `core/fixtures/gate-resume/run.sh`'s BL-457 arm WC (`:637-640`) seeds the worst real gate-in-flight case: a 31-char `implementation-<UTC>` nonce opened through the real `gate-checkpoint.sh`, a sidecar, and an unresolvable step file. It asserts only that the emitted length is under 10000.
+
+Measured, the WC world built as `_mkc457` builds it and fired once:
+- at 39fb06be9 (0.894.0) the hook emits 9980 characters, with the sidecar note present: 20 bytes of headroom;
+- at 599da0aef (0.895.0), which trimmed the hook by 4 bytes, it emits 9976: 24 bytes of headroom.
+
+The arm's own cliff sweep places the drop between nonce padding n=120 (under) and n=132 (over), per ai-dlc-e3. So a change that adds about two dozen bytes to the hook's emitted text drops the note in the worst real case. `degraded` stays `no`, WC stays green while the emission is under 10000, and nothing announces that a compacted lead has lost its one pointer to the pre-compaction branch and gate-log tail.
+
+Owed (mechanism left to the builder), one of:
+- raise the headroom by restructuring what the hook emits, so the worst real case sits well clear of the cliff;
+- make a growth past a stated margin fail loudly at author time, for example a WC bound tighter than the cliff, instead of the note dropping silently at run time.
+
+verify: manual — the two owed fixes close on different observables: a restructure moves the emitted length, while an author-time margin leaves it where it is and adds a refusal. An `sh` receipt keyed on either one would refuse the other, and a receipt keyed on the length alone could be closed by a cosmetic trim that leaves the hazard intact.
+
