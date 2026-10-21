@@ -5,3 +5,9 @@
 # The F8 arm drives that validator THROUGH verdict.sh, the wrapper Check 14, route Step 0a and
 # the between-gates sub-step all call, and builds one mutant of it.
 !core/scripts/verdict.sh
+# The LATE arms: the validator resolves each agent-cell candidate through the sibling
+# wait-for-deliverable.sh --dispatch-ts, which reads its id grammar from the convergence validator
+# and sources wfd-start-of.sh when present. The LATE mutants copy all three beside each mutant.
+!core/scripts/wait-for-deliverable.sh
+!core/scripts/validate-adversarial-convergence.sh
+core/scripts/wfd-start-of.sh

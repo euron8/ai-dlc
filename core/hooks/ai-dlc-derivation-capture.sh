@@ -141,10 +141,14 @@ case "$FILE" in
             (($t.edits // [])[] | added(.new_string // ""; .old_string // "")[])
           ] | map(select(. != "")) | join("\n")' <<<"$INPUT" > "$SNAP_PAY" 2>/dev/null
       SNAP_WHOLE=""; [ "$TOOL_NAME" = Write ] && SNAP_WHOLE="--whole-write"
-      SNAP_OUT="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$BUDGET_VALIDATOR" --stamps-only "$FILE" --payload "$SNAP_PAY" $SNAP_WHOLE 2>&1)"
+      # The session id rides along because the LATE arm resolves an agentId cell through this
+      # session's subagents dir, which wait-for-deliverable.sh finds from CLAUDE_CODE_SESSION_ID;
+      # a hook process is not handed that variable, but its payload carries `session_id`.
+      SNAP_OUT="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" CLAUDE_CODE_SESSION_ID="$(jq -r '.session_id // empty' <<<"$INPUT")" \
+        bash "$BUDGET_VALIDATOR" --stamps-only "$FILE" --payload "$SNAP_PAY" $SNAP_WHOLE 2>&1)"
       SNAP_RC=$?
       rm -f "$SNAP_PAY"
-      if [ "$SNAP_RC" = 1 ] && grep -qE '^(FUTURE|MALFORMED|BACKDATED) ' <<<"$SNAP_OUT"; then
+      if [ "$SNAP_RC" = 1 ] && grep -qE '^(FUTURE|MALFORMED|BACKDATED|LATE) ' <<<"$SNAP_OUT"; then
         printf '%s\n' "$SNAP_OUT" >&2
         exit 2
       fi

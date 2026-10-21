@@ -873,7 +873,7 @@ else
 fi
 # MW2 verdict.sh WITHOUT `BACKDATED`: F9 must lose the row while the headline survives.
 MW2="$MUT_BIN/mw2-verdict.sh"
-sed 's/|BACKDATED)/)/g' "$VW" > "$MW2" || { echo "FIXTURE ERROR: sed died building $MW2" >&2; exit 2; }
+sed 's/|BACKDATED|/|/g' "$VW" > "$MW2" || { echo "FIXTURE ERROR: sed died building $MW2" >&2; exit 2; }
 if cmp -s "$VW" "$MW2"; then echo "FIXTURE ERROR: mutant $MW2 matched nothing" >&2; exit 2; fi
 bdrive mw2 "$MW2"
 if grep -q 'earlier than its dispatch' "$WORK/runs/mw2.out" && ! bcheck mw2; then
@@ -881,6 +881,460 @@ if grep -q 'earlier than its dispatch' "$WORK/runs/mw2.out" && ! bcheck mw2; the
 else
   bad "MUTANT MW2 (verdict.sh drops BACKDATED) SURVIVED or did not run"
   sed 's/^/      /' "$WORK/runs/mw2.out" >&2
+fi
+
+# =====================================================================================
+# L. THE LATE ARM (check_late_dispatch): an in-flight dispatched-at that is not its OWN
+# dispatch's spawn-ledger ts. The validator resolves each candidate token of the agent cell
+# through the SIBLING wait-for-deliverable.sh --dispatch-ts, so those siblings must sit beside
+# it; their absence is a broken fixture, never a pass. Every world seeds the producer's shapes:
+# a compact ledger row as the dispatch guard writes it (an epoch row first, so the subject is not
+# the earliest), and a subagents-dir agent-<id>.meta.json carrying the dispatch's tool_use_id.
+# Now is pinned (NOW_PIN, 11:00:00Z), so no stamp below is FUTURE.
+# =====================================================================================
+unset CLAUDE_CODE_SESSION_ID
+VD="$(dirname "$V")"
+for _s in wait-for-deliverable.sh validate-adversarial-convergence.sh; do
+  [ -f "$VD/$_s" ] || { echo "FIXTURE ERROR: the LATE arms need $_s beside $V" >&2; exit 2; }
+done
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
+# THE FORK COUNTER. A `bash` shim first on PATH logs every `bash .../wait-for-deliverable.sh
+# --dispatch-ts <tok>` as `<AI_DLC_STATE_DIR>\t<tok>` and execs the real bash, so a change in the
+# arm's cost is an assertion, not a guess. The self-probe's calls carry its own state dir
+# (`.../probe-late/state`), which is how they are told apart from a world's.
+REALBASH="$(command -v bash)" || { echo "FIXTURE ERROR: no bash on PATH" >&2; exit 2; }
+SHIM="$WORK/shim"; FORKLOG="$WORK/forks.log"; mkdir -p "$SHIM" || exit 2
+{ printf '#!%s\n' "$REALBASH"
+  printf 'FORKLOG=%q\nREALBASH=%q\n' "$FORKLOG" "$REALBASH"
+  cat <<'SHIMEOF'
+case "${1:-}" in */wait-for-deliverable.sh)
+  [ "${2:-}" = --dispatch-ts ] && printf '%s\t%s\n' "${AI_DLC_STATE_DIR:-}" "${3:-}" >> "$FORKLOG" ;; esac
+exec "$REALBASH" "$@"
+SHIMEOF
+} > "$SHIM/bash" && chmod +x "$SHIM/bash" || { echo "FIXTURE ERROR: cannot write the bash shim" >&2; exit 2; }
+forks_world() { # forks_world <arm name> -> resolver calls made for that world's state dir
+  awk -F'\t' -v s="/$1/_bmad-output" 'substr($1, length($1) - length(s) + 1) == s { n++ } END { print n + 0 }' "$FORKLOG" 2>/dev/null || echo 0
+}
+forks_probe() { awk -F'\t' '$1 ~ /\/probe-late\/state$/ { n++ } END { print n + 0 }' "$FORKLOG" 2>/dev/null || echo 0; }
+
+LH='agent | role | deliverable | dispatched-at | status
+--- | --- | --- | --- | ---'
+late_world() { # late_world <name> <in-flight rows> -> sets LW; ledger + meta seeded beside it
+  LW="$(arm_dir "$1")"; seed_clean "$LW"
+  seed_stamped "$LW" '- nothing notable' "$LH
+$2"
+  printf '%s\n' \
+    '{"ts":"2026-10-14T09:58:41Z","name":"arch-epoch","role":"architect","tool_use_id":"toolu_01LateEpochRowAAAAAAAAA"}' \
+    '{"ts":"2026-10-14T10:00:03Z","name":"","role":"remediator","tool_use_id":"toolu_01LateSubjectBBBBBBBBB"}' \
+    '{"ts":"2026-10-14T10:27:46Z","name":"","role":"dev","tool_use_id":"toolu_01LateMinuteCCCCCCCCC"}' \
+    > "$LW/_bmad-output/spawn-ledger.jsonl"
+  mkdir -p "$LW/sub" || exit 2
+  printf '{"agentType":"remediator","toolUseId":"toolu_01LateSubjectBBBBBBBBB"}\n' > "$LW/sub/agent-a7ffc8dcd555207b8.meta.json"
+  printf '{"agentType":"dev","toolUseId":"toolu_01LateMinuteCCCCCCCCC"}\n' > "$LW/sub/agent-a1111111111111111.meta.json"
+}
+ldrive() { # ldrive <label> <validator> <world> [args...] -- the gate, teammate dir set, forks counted
+  _ll="$1"; _lv="$2"; _lw="$3"; shift 3
+  AI_DLC_TEAMMATE_DIR="$_lw/sub" PATH="$SHIM:$PATH" drive_now "$_ll" "$_lv" "$_lw" --only pipeline-snapshot.md "$@"
+}
+lout() { printf '%s' "$WORK/runs/$1.out"; }
+nlate() { _n="$(grep -c '^LATE ' "$(lout "$1")")" || _n=0; printf '%s' "$_n"; }
+haslate() { # haslate <label> <line> <id> <stamp> <ts> -> the exact LATE line is in the run
+  grep -qxF "LATE  _bmad-output/pipeline-snapshot.md line $2: $3 dispatched-at $4 is not its dispatch's ledger ts $5" "$(lout "$1")"
+}
+LATE_HEAD="FAIL: pipeline-snapshot.md carries an in-flight dispatched-at that is not its dispatch's ledger ts"
+DECO='remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8)'
+
+# --- L1. Offenders, one world, one row per shape, each named by its line (14-18) ---------------
+#   14 (a)  a bare agentId stamped 57 s after its dispatch
+#   15 (i1) the motivating decorated cell, the same 57 s, named by its one resolving id
+#   16 (c)  minute-only 10:30Z against 10:27:46Z
+#   17 (b') 1 s EARLY: inside BACKDATED's tolerance, so only LATE can see it
+#   18 (d)  the toolu_ spelling of 14's dispatch: the same ledger ts
+late_world late-off "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
+$DECO | remediator | r2 | 2026-10-14T10:01:00Z | in-flight
+a1111111111111111 | dev | d1 | 2026-10-14T10:30Z | in-flight
+a1111111111111111 | dev | d2 | 2026-10-14T10:27:45Z | in-flight
+toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:01:00Z | in-flight"
+L1W="$LW"
+ldrive late-off "$V" "$L1W"
+if [ "$(status_of late-off)" = 1 ] && grep -qF "$LATE_HEAD" "$(lout late-off)" && [ "$(nlate late-off)" = 5 ] \
+   && haslate late-off 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z; then
+  ok "L1a a bare agentId stamped 57 s late is LATE at the gate (rc 1), named with its ledger ts"
+else
+  bad "L1a late bare agentId: exit $(status_of late-off), $(nlate late-off) LATE line(s) (want 1 and 5)"
+  sed 's/^/      /' "$(lout late-off)" >&2
+fi
+haslate late-off 15 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
+  && ok "L1i1 the decorated motivating cell is LATE, and its line names the resolved id, not the cell" \
+  || bad "L1i1 the decorated cell '$DECO' was not LATE by its one resolving id"
+haslate late-off 16 a1111111111111111 2026-10-14T10:30Z 2026-10-14T10:27:46Z \
+  && ok "L1c a minute-only 10:30Z against a 10:27:46Z dispatch is LATE" \
+  || bad "L1c the minute-only stamp was not LATE"
+if haslate late-off 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z \
+   && ! grep -q '^BACKDATED ' "$(lout late-off)"; then
+  ok "L1b' a row 1 s EARLY is LATE while BACKDATED stays quiet (inside its tolerance)"
+else
+  bad "L1b' the 1 s early row: LATE missing, or BACKDATED fired: $(grep '^BACKDATED ' "$(lout late-off)" | head -1)"
+fi
+haslate late-off 18 toolu_01LateSubjectBBBBBBBBB 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
+  && ok "L1d a toolu_ cell resolves to the same ledger ts as its agentId" \
+  || bad "L1d the toolu_ cell did not resolve to 10:00:03Z"
+
+# --- L0 (b)/(i2). The same shapes stamped EQUAL to their ts: quiet, rc 0, nothing on the SKIP count.
+late_world late-eq "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight
+$DECO | remediator | r2 | 2026-10-14T10:00:03Z | in-flight
+toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
+ldrive late-eq "$V" "$LW"
+if [ "$(status_of late-eq)" = 0 ] && [ "$(nlate late-eq)" = 0 ] && grep -qxF "$PASS_LINE" "$(lout late-eq)" \
+   && ! grep -q 'not judged for LATE' "$(lout late-eq)"; then
+  ok "L0 bare, decorated and toolu_ rows stamped equal to their ts are quiet (rc 0, PASS, every row judged)"
+else
+  bad "L0 equal rows: exit $(status_of late-eq), $(nlate late-eq) LATE line(s), or a SKIP count (want 0, 0, none)"
+  sed 's/^/      /' "$(lout late-eq)" >&2
+fi
+
+# --- LE (e)/(i4)/(f). Three unresolvable in-flight rows (a bare name, an agentId with no meta.json,
+# a decorated cell whose only hex run is a commit sha), two LATE-stamped rows that are delivered
+# and stopped, and one judged equal row. k = 3, not 1, so a hardcoded count cannot pass.
+late_world late-skip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight
+afffffffffffffff0 | qa | q1 | 2026-10-14T10:00:03Z | in-flight
+fix (commit 1a2b3c4d) | qa | q2 | 2026-10-14T10:00:03Z | in-flight
+a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:09:00Z | delivered-reachable
+a7ffc8dcd555207b8 | remediator | r2 | 2026-10-14T10:09:00Z | stopped
+a7ffc8dcd555207b8 | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
+LEW="$LW"
+ldrive late-skip "$V" "$LEW"
+LSKIP='SKIP  _bmad-output/pipeline-snapshot.md: 3 in-flight row(s) not judged for LATE (agent cell does not resolve in this session)'
+if [ "$(status_of late-skip)" = 0 ] && grep -qxF "$LSKIP" "$(lout late-skip)" && [ "$(nlate late-skip)" = 0 ]; then
+  ok "LE three unresolvable rows (bare name, no meta.json, a commit sha) print the SKIP count 3; delivered and stopped rows are not judged"
+else
+  bad "LE skip world: exit $(status_of late-skip), $(nlate late-skip) LATE line(s); want rc 0, no LATE, and: $LSKIP"
+  sed 's/^/      /' "$(lout late-skip)" >&2
+fi
+
+# --- LA (i3). A cell holding TWO resolvable ids of two DIFFERENT dispatches, stamped equal to the
+# SECOND's ts: not judged, its own ambiguous SKIP line. A rule that took the first resolving id
+# would read it LATE. The two seeded ts are read back from the ledger by each id's tool_use_id and
+# asserted DIFFERENT by value, so this arm cannot decay into a same-dispatch pair (LS's shape).
+late_world late-amb "remediator (a7ffc8dcd555207b8 then a1111111111111111) | remediator | r1 | 2026-10-14T10:27:46Z | in-flight"
+LAW="$LW"
+la_ts() { sed -n "s/^{\"ts\":\"\([^\"]*\)\".*\"tool_use_id\":\"$1\"}\$/\1/p" "$LAW/_bmad-output/spawn-ledger.jsonl"; }
+LA_T1="$(la_ts toolu_01LateSubjectBBBBBBBBB)"; LA_T2="$(la_ts toolu_01LateMinuteCCCCCCCCC)"
+[ "$LA_T1" = 2026-10-14T10:00:03Z ] && [ "$LA_T2" = 2026-10-14T10:27:46Z ] && [ "$LA_T1" != "$LA_T2" ] \
+  || { echo "FIXTURE ERROR: LA's two ids must seed two DIFFERENT ts (got '$LA_T1' and '$LA_T2')" >&2; exit 2; }
+ldrive late-amb "$V" "$LAW"
+LAMB='SKIP  _bmad-output/pipeline-snapshot.md line 14: ambiguous agent cell (2 ids resolve to 2 distinct ts), not judged for LATE'
+if [ "$(status_of late-amb)" = 0 ] && grep -qxF "$LAMB" "$(lout late-amb)" && [ "$(nlate late-amb)" = 0 ]; then
+  ok "LA a cell with two ids of different dispatches ($LA_T1, $LA_T2) SKIPs as ambiguous (2 distinct ts), not judged"
+else
+  bad "LA ambiguous cell: exit $(status_of late-amb), $(nlate late-amb) LATE line(s); want rc 0, no LATE, and: $LAMB"
+  sed 's/^/      /' "$(lout late-amb)" >&2
+fi
+
+# --- LS. ONE dispatch, TWO spellings: an agentId beside its own toolu_ id resolves to one ts, so
+# the row IS judged. Stamped 57 s late it is LATE, named by the first resolving candidate (the
+# agentId); stamped equal (the control) it is quiet, with no ambiguous SKIP and no SKIP count.
+LSCELL='a7ffc8dcd555207b8 (toolu_01LateSubjectBBBBBBBBB)'
+late_world late-same "$LSCELL | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
+LSW="$LW"
+ldrive late-same "$V" "$LSW"
+if [ "$(status_of late-same)" = 1 ] && [ "$(nlate late-same)" = 1 ] \
+   && haslate late-same 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
+   && ! grep -q 'ambiguous agent cell' "$(lout late-same)"; then
+  ok "LS an agentId beside its own toolu_ id (one dispatch) stamped 57 s late is LATE (rc 1), named by the agentId"
+else
+  bad "LS same-dispatch pair: exit $(status_of late-same), $(nlate late-same) LATE line(s); want rc 1 and exactly the line 14 LATE naming a7ffc8dcd555207b8"
+  sed 's/^/      /' "$(lout late-same)" >&2
+fi
+late_world late-same-eq "$LSCELL | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"
+LSEW="$LW"
+ldrive late-same-eq "$V" "$LSEW"
+if [ "$(status_of late-same-eq)" = 0 ] && [ "$(nlate late-same-eq)" = 0 ] && ! grep -q 'not judged for LATE' "$(lout late-same-eq)"; then
+  ok "LS control: the same pair stamped equal to its ts is quiet (rc 0, judged, no SKIP)"
+else
+  bad "LS control: exit $(status_of late-same-eq), $(nlate late-same-eq) LATE line(s), or a SKIP (want 0, 0, none)"
+  sed 's/^/      /' "$(lout late-same-eq)" >&2
+fi
+
+# --- LH (h). THE REMEDY CLEARS. Two clock-stamped rows FAIL with 2 LATE lines (the control). Each
+# row's dispatched-at is then rewritten with EXACTLY the ts its LATE line printed, parsed from this
+# run's output and never from the seed. The re-run must read 0 LATE and pass the LATE verdict. A
+# printed remedy that does not clear is a wedge.
+late_clear() { # late_clear <label> <validator> -> LH_FIRST, LH_SECOND (LATE counts), LH_CHANGED
+  late_world "$1" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
+a1111111111111111 | dev | d1 | 2026-10-14T10:29:00Z | in-flight"
+  _hw="$LW"; _snap="$_hw/_bmad-output/pipeline-snapshot.md"
+  ldrive "$1-1" "$2" "$_hw"; LH_FIRST="$(nlate "$1-1")"
+  cp "$_snap" "$WORK/runs/$1.before" || exit 2
+  sed -n "s/^LATE  [^ ]* line \([0-9][0-9]*\): [^ ]* dispatched-at \([^ ]*\) is not its dispatch's ledger ts \([^ ]*\)\$/\1 \2 \3/p" \
+    "$(lout "$1-1")" > "$WORK/runs/$1.fix" || exit 2
+  while read -r _n _dc _ts; do
+    DC="$_dc" TS="$_ts" awk -v n="$_n" 'FNR == n { i = index($0, ENVIRON["DC"])
+        if (i) $0 = substr($0, 1, i - 1) ENVIRON["TS"] substr($0, i + length(ENVIRON["DC"])) } { print }' \
+      "$_snap" > "$_snap.new" && mv "$_snap.new" "$_snap" || exit 2
+  done < "$WORK/runs/$1.fix"
+  LH_CHANGED=1; cmp -s "$_snap" "$WORK/runs/$1.before" && LH_CHANGED=0
+  ldrive "$1-2" "$2" "$_hw"; LH_SECOND="$(nlate "$1-2")"
+}
+late_clear late-clear "$V"
+if [ "$LH_FIRST" = 2 ] && [ "$(status_of late-clear-1)" = 1 ] && [ "$LH_CHANGED" = 1 ] && [ "$LH_SECOND" = 0 ] \
+   && [ "$(status_of late-clear-2)" = 0 ] && ! grep -qF "$LATE_HEAD" "$(lout late-clear-2)"; then
+  ok "LH the printed remedy clears: 2 LATE (rc 1), each cell rewritten from its own LATE line, then 0 LATE (rc 0)"
+else
+  bad "LH remedy: first $LH_FIRST LATE rc $(status_of late-clear-1) (want 2, 1), rewrite changed=$LH_CHANGED, second $LH_SECOND LATE rc $(status_of late-clear-2) (want 0, 0)"
+  sed 's/^/      /' "$(lout late-clear-2)" >&2
+fi
+
+# --- LG (g). THROUGH verdict.sh: the LATE headline and its row reach the lead within the cap.
+late_world late-wrap "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
+LGW="$LW"
+gdrive() { # gdrive <label> <wrapper>
+  OUT="$WORK/runs/$1.out"
+  ( cd "$LGW" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$LGW/sub" \
+      bash "$2" validate-artifact-budget --root "$LGW" ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+gcheck() { # gcheck <label> -> 0 when the wrapper shows the LATE headline AND its row
+  _o="$WORK/runs/$1.out"
+  [ "$(status_of "$1")" = 1 ] || return 1
+  grep -qF "$LATE_HEAD" "$_o" || return 1
+  grep -q "LATE .*line 14: a7ffc8dcd555207b8 dispatched-at 2026-10-14T10:01:00Z is not its dispatch's ledger ts 2026-10-14T10:00:03Z" "$_o"
+}
+gdrive late-verdict "$VW"
+if gcheck late-verdict; then
+  ok "LG a LATE row is refused through verdict.sh, its headline and its row both shown"
+else
+  bad "LG LATE through verdict.sh: exit $(status_of late-verdict), headline or row missing"
+  sed 's/^/      /' "$WORK/runs/late-verdict.out" >&2
+fi
+MW3="$MUT_BIN/mw3-verdict.sh"
+[ "$(grep -c '|LATE)' "$VW")" = 2 ] || { echo "FIXTURE ERROR: verdict.sh no longer carries |LATE) in both alternations" >&2; exit 2; }
+sed 's/|LATE)/)/g' "$VW" > "$MW3" || { echo "FIXTURE ERROR: sed died building $MW3" >&2; exit 2; }
+if cmp -s "$VW" "$MW3"; then echo "FIXTURE ERROR: mutant $MW3 matched nothing" >&2; exit 2; fi
+gdrive mw3 "$MW3"
+if grep -qF "$LATE_HEAD" "$WORK/runs/mw3.out" && ! gcheck mw3; then
+  ok "MUTANT MW3 (verdict.sh drops LATE) killed by LG"
+else
+  bad "MUTANT MW3 (verdict.sh drops LATE) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw3.out" >&2
+fi
+
+# --- VS / VT. verdict.sh never hides a SKIP behind PASS, and says when its cap cut a match set.
+# verdict.sh prefixes each surfaced line with six spaces and its `grep -n` line number, so the
+# validator's own line is read back by stripping `^      <n>:`, never by an anchored token grep.
+vdrive() { # vdrive <label> <wrapper> <world> -- verdict.sh over the snapshot, now pinned
+  # --root is load-bearing: without it the validator walks up from the world to $WORK's own
+  # .claude marker and measures an empty tree, so every arm below reads a bare PASS.
+  OUT="$WORK/runs/$1.out"
+  ( cd "$3" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$3/sub" \
+      bash "$2" validate-artifact-budget --root "$3" --only pipeline-snapshot.md ) > "$OUT" 2>&1
+  printf '%s\t%s\t0\t0\n' "$1" "$?" >> "$LEDGER"
+}
+vline() { sed -n 's/^      [0-9][0-9]*://p' "$WORK/runs/$1.out" | grep -qxF "$2"; } # vline <label> <validator line>
+vshown() { _n="$(grep -cE '^      [0-9]+:' "$WORK/runs/$1.out")" || _n=0; printf '%s' "$_n"; }
+vmore() { grep -q '^      … [0-9-]* more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all$' "$WORK/runs/$1.out"; }
+vmut() { # vmut <out> <find> <replace> -- a verdict.sh copy; the find text sits on exactly one line
+  _c="$(F="$2" awk 'index($0, ENVIRON["F"]) { c++ } END { print c + 0 }' "$VW")" || _c=0
+  [ "$_c" = 1 ] || { echo "FIXTURE ERROR: verdict.sh mutation anchor on $_c line(s), want 1: $2" >&2; exit 2; }
+  F="$2" R="$3" awk '{ i = index($0, ENVIRON["F"]) } i { $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["F"])) } { print }' \
+    "$VW" > "$1" || { echo "FIXTURE ERROR: awk died building $1" >&2; exit 2; }
+  if cmp -s "$VW" "$1"; then echo "FIXTURE ERROR: verdict.sh mutation did not apply: $2" >&2; exit 2; fi
+}
+# The validator's match set, counted on the DIRECT run, for the expected notice count: the
+# rc!=0 alternation for a failing run, the rc=0 one for a passing run, as verdict.sh picks.
+vmatched() {
+  if [ "$(status_of "$1")" = 0 ]; then _re='^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER|FUTURE|BACKDATED|SKIP|LATE)'
+  else _re='^[[:space:]]*(FAIL|ERROR|OVER|WARN|warn|FUTURE|BACKDATED|SKIP|LATE)'; fi
+  _n="$(grep -cE "$_re" "$(lout "$1")")" || _n=0; printf '%s' "$_n"
+}
+
+# VS: rc 0 with one SKIP line (an in-flight row whose agent cell does not resolve, nothing else).
+late_world vskip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight"
+VSW="$LW"
+VSKIP='SKIP  _bmad-output/pipeline-snapshot.md: 1 in-flight row(s) not judged for LATE (agent cell does not resolve in this session)'
+ldrive vskip-direct "$V" "$VSW"
+[ "$(status_of vskip-direct)" = 0 ] && grep -qxF "$VSKIP" "$(lout vskip-direct)" \
+  || { echo "FIXTURE ERROR: the VS world does not exit 0 with its one SKIP line run directly" >&2; sed 's/^/      /' "$(lout vskip-direct)" >&2; exit 2; }
+vdrive vs "$VW" "$VSW"
+if [ "$(status_of vs)" = 0 ] && grep -qxF 'PASS  validate-artifact-budget.sh' "$WORK/runs/vs.out" && vline vs "$VSKIP" \
+   && ! vmore vs; then
+  ok "VS an rc-0 run carrying a SKIP line renders PASS through verdict.sh WITH the SKIP line, verbatim, and no notice"
+else
+  bad "VS SKIP through verdict.sh: exit $(status_of vs), PASS or the SKIP line missing, or a notice under the cap"
+  sed 's/^/      /' "$WORK/runs/vs.out" >&2
+fi
+MW4="$MUT_BIN/mw4-verdict.sh"
+vmut "$MW4" 'OVER|FUTURE|BACKDATED|SKIP|LATE)' 'OVER|FUTURE|BACKDATED|LATE)'
+vdrive mw4 "$MW4" "$VSW"
+if grep -qxF 'PASS  validate-artifact-budget.sh' "$WORK/runs/mw4.out" && vline mw4 "$PASS_LINE" && ! vline mw4 "$VSKIP"; then
+  ok "MUTANT MW4 (verdict.sh drops SKIP from the rc=0 set) killed by VS"
+else
+  bad "MUTANT MW4 (verdict.sh drops SKIP) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw4.out" >&2
+fi
+
+# VT-more: 8 LATE rows (AI_DLC_VERDICT_LINES is the default 6; the env scrub above unsets it).
+# The validator's match set is the headline plus the 8 rows, so verdict.sh shows 6 and names
+# the rest. Expected n is read off the DIRECT run, and its LATE count is asserted to be the seed.
+VT_SEED=8; VT_ROWS=""; _i=1
+while [ "$_i" -le "$VT_SEED" ]; do
+  VT_ROWS="${VT_ROWS}${VT_ROWS:+
+}a7ffc8dcd555207b8 | remediator | r$_i | 2026-10-14T10:0$_i:00Z | in-flight"; _i=$((_i + 1))
+done
+late_world vtmore "$VT_ROWS"
+VTW="$LW"
+ldrive vtmore-direct "$V" "$VTW"
+VT_N=$(( $(vmatched vtmore-direct) - 6 ))
+vdrive vtmore "$VW" "$VTW"
+if [ "$(nlate vtmore-direct)" = "$VT_SEED" ] && [ "$VT_N" -gt 0 ] && [ "$(status_of vtmore)" = 1 ] \
+   && [ "$(vshown vtmore)" = 6 ] \
+   && grep -qxF "      … $VT_N more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all" "$WORK/runs/vtmore.out"; then
+  ok "VT-more $VT_SEED LATE rows through verdict.sh: 6 lines shown and the notice names the $VT_N cut, counted off the direct run"
+else
+  bad "VT-more: direct LATE $(nlate vtmore-direct) (want $VT_SEED), n $VT_N, exit $(status_of vtmore) (want 1), shown $(vshown vtmore) (want 6), or the notice is missing or wrong"
+  sed 's/^/      /' "$WORK/runs/vtmore.out" >&2
+fi
+# VT-at-or-under: the same world shape with 5 LATE rows (headline + 5 = exactly the cap, rc 1),
+# and VS's rc-0 world, each counted on its direct run first: no notice in either branch.
+VT_ROWS="$(printf '%s\n' "$VT_ROWS" | sed -n '1,5p')"
+late_world vtunder "$VT_ROWS"
+VUW="$LW"
+ldrive vtunder-direct "$V" "$VUW"
+vdrive vtunder "$VW" "$VUW"
+if [ "$(vmatched vtunder-direct)" = 6 ] && [ "$(status_of vtunder)" = 1 ] && [ "$(vshown vtunder)" = 6 ] && ! vmore vtunder \
+   && [ "$(vmatched vskip-direct)" -le 6 ] && ! vmore vs; then
+  ok "VT-at-or-under a match set of exactly 6 (rc 1) and VS's rc-0 run ($(vmatched vskip-direct) matched) print no notice"
+else
+  bad "VT-at-or-under: matched $(vmatched vtunder-direct) (want 6), exit $(status_of vtunder), shown $(vshown vtunder), or a notice printed"
+  sed 's/^/      /' "$WORK/runs/vtunder.out" >&2
+fi
+MW5="$MUT_BIN/mw5-verdict.sh"
+vmut "$MW5" '[ "$_n" -le "$LINES" ] || printf' '[ "$_n" -le "$LINES" ] || true || printf'
+vdrive mw5 "$MW5" "$VTW"
+if [ "$(vshown mw5)" = 6 ] && ! vmore mw5; then
+  ok "MUTANT MW5 (truncation notice removed) killed by VT-more"
+else
+  bad "MUTANT MW5 (truncation notice removed) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw5.out" >&2
+fi
+MW6="$MUT_BIN/mw6-verdict.sh"
+vmut "$MW6" '[ "$_n" -le "$LINES" ] || printf' 'printf'
+vdrive mw6 "$MW6" "$VUW"
+if [ "$(vshown mw6)" = 6 ] && vmore mw6; then
+  ok "MUTANT MW6 (truncation notice printed unconditionally) killed by VT-at-or-under"
+else
+  bad "MUTANT MW6 (notice unconditional) SURVIVED or did not run"
+  sed 's/^/      /' "$WORK/runs/mw6.out" >&2
+fi
+
+# --- LC. COST, asserted. One --dispatch-ts fork per distinct candidate token of a judged row: the
+# motivating cell is 6 (remediator, serial, pass, 1, cross-part, a7ffc8dcd555207b8), a no-id cell
+# 4, a bare id 1. The gate path runs the self-probe (its forks are the control); --stamps-only runs
+# none, so a snapshot Edit pays only for the rows its payload carries.
+lcost() { # lcost <label> <row> -> LC_W (world forks), LC_P (probe forks) for one gate run
+  : > "$FORKLOG"; late_world "$1" "$2"; ldrive "$1" "$V" "$LW"
+  LC_W="$(forks_world "$1")"; LC_P="$(forks_probe)"
+}
+lcost cost-deco "$DECO | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_deco="$LC_W"; c_probe="$LC_P"
+lcost cost-noid "remediator (serial, pass 1) | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_noid="$LC_W"
+lcost cost-bare "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight"; c_bare="$LC_W"
+if [ "$c_deco" = 6 ] && [ "$c_noid" = 4 ] && [ "$c_bare" = 1 ] && [ "$c_probe" -ge 1 ]; then
+  ok "LC resolver forks per row: decorated 6, no-id 4, bare 1 (gate self-probe $c_probe, the control)"
+else
+  bad "LC resolver forks: decorated $c_deco (want 6), no-id $c_noid (want 4), bare $c_bare (want 1), probe $c_probe (want >= 1)"
+fi
+: > "$FORKLOG"
+SPAY="$WORK/runs/stamps.payload"
+printf '%s\n' 'a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight' > "$SPAY"
+AI_DLC_TEAMMATE_DIR="$LW/sub" PATH="$SHIM:$PATH" drive_now cost-stamps "$V" "$LW" \
+  --stamps-only "$LW/_bmad-output/pipeline-snapshot.md" --payload "$SPAY"
+s_w="$(forks_world cost-bare)"; s_p="$(forks_probe)"
+if [ "$(status_of cost-stamps)" = 0 ] && [ "$s_w" = 1 ] && [ "$s_p" = 0 ]; then
+  ok "LC --stamps-only makes 0 self-probe forks and 1 for the written bare-id row (rc 0)"
+else
+  bad "LC --stamps-only: exit $(status_of cost-stamps) (want 0), row forks $s_w (want 1), self-probe forks $s_p (want 0)"
+fi
+
+# --- LATE MUTANTS. Each is a copy of the validator in its own directory WITH the siblings it
+# resolves, so a mutant that finds no resolver cannot score a kill by silence. Every copy also
+# carries the probe-off layer (the LATE self-probe block never runs), because the self-probe would
+# otherwise refuse each mutant first and the kill would not be read off its own arm. ML0 is that
+# layer ALONE and must pass every arm a mutant is scored on: it proves the copies run and the
+# probe-off layer kills nothing by itself. A mutation edits the ONE line holding its anchor (count
+# checked) and is cmp-guarded; a failed copy or edit is FIXTURE ERROR (exit 2), never a kill.
+LMUT="$WORK/lmut"
+lmut() { # lmut <name> [<find> <replace>] -> LMV, a mutated copy beside its siblings
+  _md="$LMUT/$1"; mkdir -p "$_md" || { echo "FIXTURE ERROR: mkdir $_md" >&2; exit 2; }
+  cp "$VD/wait-for-deliverable.sh" "$VD/validate-adversarial-convergence.sh" "$_md/" \
+    || { echo "FIXTURE ERROR: cannot copy the LATE siblings into $_md" >&2; exit 2; }
+  if [ -f "$VD/wfd-start-of.sh" ]; then cp "$VD/wfd-start-of.sh" "$_md/" || { echo "FIXTURE ERROR: cp wfd-start-of.sh" >&2; exit 2; }; fi
+  LMV="$_md/validate-artifact-budget.sh"
+  lmsub "$V" "$LMV.0" 'if [ -z "$STAMPS_ONLY" ]; then' 'if false; then'
+  if [ $# -ge 3 ]; then lmsub "$LMV.0" "$LMV" "$2" "$3"; else cp "$LMV.0" "$LMV" || exit 2; fi
+  rm -f "$LMV.0"
+}
+lmsub() { # lmsub <in> <out> <find> <replace> -- the find text must sit on exactly one line
+  _c="$(F="$3" awk 'index($0, ENVIRON["F"]) { c++ } END { print c + 0 }' "$1")" || _c=0
+  [ "$_c" = 1 ] || { echo "FIXTURE ERROR: mutation anchor on $_c line(s), want 1: $3" >&2; exit 2; }
+  F="$3" R="$4" awk '{ i = index($0, ENVIRON["F"]) } i { $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["F"])) } { print }' \
+    "$1" > "$2" || { echo "FIXTURE ERROR: awk died building $2" >&2; exit 2; }
+  if cmp -s "$1" "$2"; then echo "FIXTURE ERROR: mutation did not apply: $3" >&2; exit 2; fi
+}
+# ML0 the probe-off layer alone: (b'), (e), (i3), LS and (h) all hold.
+lmut m0
+ldrive m0-off "$LMV" "$L1W"; ldrive m0-skip "$LMV" "$LEW"; ldrive m0-amb "$LMV" "$LAW"; ldrive m0-same "$LMV" "$LSW"
+late_clear m0-clear "$LMV"
+if haslate m0-off 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z && [ "$(nlate m0-off)" = 5 ] \
+   && grep -qxF "$LSKIP" "$(lout m0-skip)" && grep -qxF "$LAMB" "$(lout m0-amb)" \
+   && [ "$(nlate m0-same)" = 1 ] && haslate m0-same 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
+   && [ "$LH_FIRST" = 2 ] && [ "$LH_SECOND" = 0 ]; then
+  ok "ML0 control: the probe-off copy beside its siblings passes L1, LE, LA, LS and LH"
+else
+  bad "ML0 control: the probe-off copy failed an arm (L1 $(nlate m0-off)/5, LS $(nlate m0-same)/1, LH $LH_FIRST->$LH_SECOND) -- every LATE mutant verdict below is void"
+fi
+# ML1 the predicate becomes "later than": the 1 s early row (b') goes quiet; the late rows still fire.
+lmut m1 '[ "$dc" = "$ts" ] || printf "LATE  ' '[[ ! "$dc" > "$ts" ]] || printf "LATE  '
+ldrive m1 "$LMV" "$L1W"
+if haslate m1 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
+   && ! haslate m1 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z; then
+  ok "MUTANT ML1 (LATE means later-than) killed by L1b': the 1 s early row loses its LATE line"
+else
+  bad "MUTANT ML1 (LATE means later-than) SURVIVED or did not run"
+fi
+# ML2 unresolvable rows are quiet: no SKIP count line.
+lmut m2 '[ "$k" -eq 0 ] || printf '"'"'SKIP  %s: %d in-flight' '[ "$k" -eq 0 ] || true || printf '"'"'SKIP  %s: %d in-flight'
+ldrive m2 "$LMV" "$LEW"
+if [ "$(status_of m2)" = 0 ] && grep -qxF "$PASS_LINE" "$(lout m2)" && ! grep -qxF "$LSKIP" "$(lout m2)"; then
+  ok "MUTANT ML2 (unresolvable rows silent) killed by LE: the run passes with no SKIP count"
+else
+  bad "MUTANT ML2 (unresolvable rows silent) SURVIVED or did not run"
+fi
+# ML4 the LATE line prints the row's own stamp where the ledger ts belongs: the remedy cannot clear.
+lmut m4 '"$id" "$dc" "$ts"' '"$id" "$dc" "$dc"'
+late_clear m4-clear "$LMV"
+if [ "$LH_FIRST" = 2 ] && [ "$LH_SECOND" = 2 ]; then
+  ok "MUTANT ML4 (LATE names the stamp, not the ts) killed by LH: after the printed rewrite, still 2 LATE"
+else
+  bad "MUTANT ML4 (LATE names the stamp) SURVIVED or did not run: $LH_FIRST -> $LH_SECOND (want 2 -> 2)"
+fi
+# ML5 judge on the FIRST resolving candidate instead of one distinct ts: the ambiguous cell reads LATE.
+lmut m5 '{ id="$c"; ts="$t"; }' '{ id="$c"; ts="$t"; }; m=1; break'
+ldrive m5 "$LMV" "$LAW"
+if ! grep -qxF "$LAMB" "$(lout m5)" && haslate m5 14 a7ffc8dcd555207b8 2026-10-14T10:27:46Z 2026-10-14T10:00:03Z; then
+  ok "MUTANT ML5 (first resolving candidate) killed by LA: no ambiguous SKIP, the first id read LATE"
+else
+  bad "MUTANT ML5 (first resolving candidate) SURVIVED or did not run"
+fi
+# ML6 the old rule: count resolving IDS, not distinct ts. The same-dispatch pair reads ambiguous.
+lmut m6 'if [ "$m" -gt 1 ]; then' 'if [ "$n" -gt 1 ]; then'
+ldrive m6 "$LMV" "$LSW"
+if [ "$(nlate m6)" = 0 ] \
+   && grep -qxF 'SKIP  _bmad-output/pipeline-snapshot.md line 14: ambiguous agent cell (2 ids resolve to 1 distinct ts), not judged for LATE' "$(lout m6)"; then
+  ok "MUTANT ML6 (count resolving ids, not distinct ts) killed by LS: the one-dispatch pair SKIPs as ambiguous, no LATE"
+else
+  bad "MUTANT ML6 (count resolving ids) SURVIVED or did not run"
+  sed 's/^/      /' "$(lout m6)" >&2
 fi
 
 echo ""

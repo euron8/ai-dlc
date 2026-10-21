@@ -19,6 +19,76 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.898.0] - 2026-10-21
+
+Batch 238, lead ai-dlc-1a. It closes BL-605, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-budget.sh`, `core/scripts/verdict.sh` and `core/hooks/ai-dlc-derivation-capture.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/skills/ai-dlc/steps/gate-validation.md`.
+
+### BL-605 — an In-Flight Teammates row's `dispatched-at` must be its dispatch's spawn-ledger `ts`, verbatim, and the gate now fails a row whose cell is anything else
+
+The value is what `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>` prints. Before this release no arm judged an existing row, because the batch-236 ruling was that no LATE arm ships: any tolerance would be chosen after seeing the corpus. The join key now exists: agentId, then `agent-<id>.meta.json`, then its `toolUseId`, then the one ledger row.
+
+- `validate-artifact-budget.sh` gains `check_late_dispatch`. It covers in-flight rows only. Its candidates are the maximal `[A-Za-z0-9_@.-]` runs of the agent cell, and each is passed to the sibling `wait-for-deliverable.sh --dispatch-ts`. There is one resolver and nothing is restated; the validator contains 0 `toolUseId`.
+- A row is judged if and only if the resolving candidates yield exactly one distinct ts. Zero resolving candidates put the row on one counted line, `SKIP <rel>: <k> in-flight row(s) not judged for LATE`. Two or more distinct ts give `SKIP … ambiguous agent cell (N ids resolve to M distinct ts)`.
+- A judged row is LATE if and only if its cell is not byte-equal to that ts. The predicate is binary and has no tolerance. The line reads `LATE  <rel> line <n>: <id> dispatched-at <cell> is not its dispatch's ledger ts <ts>`.
+- LATE is a hard FAIL at the gate, like BACKDATED, and only a WARN under `--warn-only`. The remedy is to replace each LATE row's cell with the ts its line names, then re-run.
+- Only rows whose agent cell resolves in the gate's own session are judged. Rows written by other sessions are counted on the SKIP line. Delivered and stopped rows are never judged, and bare-name rows (no meta.json) always SKIP.
+- The self-probe runs on the gate scan only, never under `--stamps-only`.
+- `ai-dlc-derivation-capture.sh` now passes the payload's `session_id` and its grep includes LATE, so a LATE row fails the PostToolUse write (exit 2) in the session that wrote it.
+- There is no prefilter, because the agentId class is a file-existence test and a length prefilter would be a restated grammar. Resolver calls per row are pinned in fixture arm LC: a decorated cell such as `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8)` makes 6, `remediator (serial, pass 1)` makes 4 and a bare id makes 1. The gate self-probe makes 3, and `--stamps-only` makes 0 self-probe calls.
+- The BACKDATED write-time remedy and the FUTURE remedy, in the validator and in `gate-validation.md`, now say to stamp `dispatched-at` from `--dispatch-ts <id>` for an agentId, `toolu_` or `<name>@<team>` cell, and from that teammate's spawn-ledger row `ts` otherwise. They said `date -u` before, which this arm would then report. The Check 14 verdict list in `gate-validation.md` no longer states a count, and it gains remedy entries for BACKDATED, LATE and the other verdicts, each quoted from the verdict's own text.
+- `verdict.sh`, the wrapper every Check 14 call site reads through, now surfaces SKIP lines at rc 0. Before, a gate where the LATE arm judged nothing read a plain PASS. Among the validators `verdict.sh` runs, only `validate-artifact-budget.sh` emits SKIP, and every emitter is conditional.
+- `verdict.sh` shows at most `AI_DLC_VERDICT_LINES` (default 6) matching lines per validator. It now prints `… <n> more matching line(s); run scripts/ai-dlc/<validator> directly for all` when it truncates, counted from the filter's own match set, and prints no notice at or under the cap. Before, 11 of graph's 16 LATE rows would have been dropped silently.
+- `verdict.sh --all` does run `validate-artifact-budget.sh`, with no arguments, which covers the snapshot. An earlier reading of it as showing 0 LATE was a false zero, from a `^[[:space:]]*LATE` anchor against `verdict.sh`'s `grep -n`-prefixed lines.
+- `budget-summary-verdict` gains gate arms:
+  - L1a: a bare id 57 s late.
+  - L1i1: the decorated cell names `a7ffc8dcd555207b8`.
+  - L1c: minute-only `10:30Z` against `10:27:46Z`.
+  - L1b': a row 1 s early fires LATE while BACKDATED stays quiet.
+  - L1d: `toolu_` equals agentId.
+  - L0: an equal cell is quiet.
+  - LE: three unresolvable rows give SKIP count 3, and delivered and stopped rows are not judged.
+  - LA: two dispatches with different ts SKIP as ambiguous.
+  - LS: an agentId beside its own `toolu_` is judged.
+  - LH: applying the printed values clears the FAIL.
+  - LG: `verdict.sh` shows LATE.
+  - LC: the call counts above.
+  - VS: SKIP surfaces through `verdict.sh`.
+  - VT: the truncation notice, in both directions.
+- Mutants:
+  - ML1 (later-than) is killed by L1b'.
+  - ML2 (no SKIP) is killed by LE.
+  - ML4 (wrong printed value) is killed by LH.
+  - ML5 (first resolving candidate) is killed by LA.
+  - ML6 (count ids, not distinct ts) is killed by LS.
+  - MW3 (`verdict.sh` without LATE) is killed by LG.
+  - MW4 (`verdict.sh` without SKIP) is killed by VS.
+  - MW5 (no truncation notice) and MW6 (unconditional notice) are killed by VT.
+  - ML0 is the probe-off control.
+- `derivation-capture` gains S10-S13. A late bare id and a late decorated cell exit 2, a payload with no `session_id` is the silent control, and an equal row exits 0.
+- `wait-beat-liveness` section 28 now owns `--dispatch-ts`'s own contract, driven against the real resolver:
+  - agentId and `toolu_` print the subject row's ts verbatim, with the subject not first;
+  - the other row prints its own ts;
+  - every refusal exits 64 exactly, with empty stdout and its text (no row, no meta.json, no session id, empty or missing id, two ids, combined with a beat, no spawn ledger, an id outside the charset);
+  - a content-level no-write check compares per-file `cksum` before and after.
+  - Mutants M56 (drops the meta.json lookup), M57 (reads the first ledger row) and M58 (makes the multi-id guard never match, so two ids printed a guessed stamp) are killed by it.
+  - The row-side `core/fixtures/wait-beat-liveness/receipt-bl605.sh` is retired, and BL-605's verify line runs `core/fixtures/budget-summary-verdict/receipt-bl605.sh`.
+- The receipt, scored under `set -uo pipefail`, gives fix 0, later-than mutant 1, gate call removed 1 and `toolu_` spelling 0. A structural clause holds `grep -c toolUseId` at 0 with `wait-for-deliverable.sh` at 1 or more.
+
+### Consumer
+
+Graph's first gate after pulling this release, run in session 218aa1b8 or any later session that rewrites those rows, FAILS on 16 LATE In-Flight rows until each `dispatched-at` cell is replaced with the ledger ts its LATE line prints and the gate is re-run; run the validator directly to see all 16. A gate run outside the session that wrote the In-Flight rows prints one SKIP line per snapshot naming how many rows went unjudged, 16 on graph's current snapshot. Both figures were measured on a copy of graph's `_bmad-output` (graph HEAD a3528ced2, snapshot uncommitted) through an installed tree. Graph's lead ran `--dispatch-ts` in 3 of 358 Bash calls, which corrects an earlier "0 of 229". Every judged graph row in 565 snapshot revisions is clock-stamped and none is equal, so "equal is quiet" rests on the fixtures alone.
+
+### Limits
+
+- LATE compares the whole cell, so a correct stamp with trailing text such as `(ledger)` reads LATE, and the remedy clears it.
+- Rows whose `dispatched-at` carries no full stamp, a section header spelled `Dispatched-at` or `dispatched_at`, or a stray `|` inside a cell drop out uncounted; this parse is shared with BACKDATED.
+- The agent is always cell 1, never the column headed `agent`.
+- At the gate, the session-id and `$HOME/.claude/projects` route is untested; only derivation-capture S10 covers it, at write time.
+- No mutant covers the resolver's `AI_DLC_STATE_DIR`, which is harmless while the snapshot sits at the default.
+- The self-probe's own FAIL arms are never exercised, because ML0 switches it off.
+- Resolver calls have no cap; measured, each of 10 calls took under 1 s at load 1.86.
+- The no-write check in section 28 covers the seed world, not `$HOME` or `$TMPDIR`.
+
 ## [0.897.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a, cluster 238-d-719. It closes BL-719 and BL-718, closes no `PC-` id and files nothing. Net for this release: 2 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-adversarial-shards.sh`, `core/scripts/join-remediator-shards.sh`, `core/scripts/validate-provenance-block.sh` and `core/scripts/partition-subject.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/adversary.md`, `core/team-roles/remediator.md`, `core/skills/ai-dlc/steps/_gate-procedures.md` and `core/skills/ai-dlc/steps/gate-validation.md`.

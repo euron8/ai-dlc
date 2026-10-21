@@ -1211,7 +1211,10 @@ check_malformed_stamps() { # check_malformed_stamps <file> <rel>
 # dispatch at or before stamp+T and A the nearest after it. FIRE when A exists and is
 # nearer than B: the stamp sits before the dispatch it most plausibly records.
 #
-# A row stamped LATE (after its dispatch) stays quiet. MEASURED, not chosen. On the reference
+# A row stamped LATE (after its dispatch) stays quiet HERE; check_late_dispatch, below, judges it
+# against its own dispatch's ledger `ts`, keyed on the agent cell. This arm keeps its nearest-
+# dispatch rule for back-dating only, and the measurement that follows is why neither arm carries
+# a TOLERANCE: a role join has no per-row key, so any lateness bound is fitted. On the reference
 # consumer's 553 committed snapshot revisions, each judged by this loop against the HEAD
 # ledger truncated to rows whose `ts` is at or before that revision's commit time (the ledger
 # is committed 65 times against 553, so the ledger committed in the same revision is usually
@@ -1220,10 +1223,12 @@ check_malformed_stamps() { # check_malformed_stamps <file> <rel>
 # above 600 s are one burst: six retro seats dispatched 19:33-19:34Z and stamped 20:10Z/20:25Z
 # (2176-3017 s). The 71-591 s band is thirteen exact-name joins, and honest exact-name rows in
 # the same corpus read up to 57 s late with seconds in the stamp, so no line separates the
-# two. Any tolerance is therefore tuned to the corpus, and no LATE arm ships. A binary
+# two. Any tolerance is therefore tuned to the corpus, and no tolerance arm ships. A binary
 # predicate ("after its OWN dispatch") needs a per-row join key that the role rule lacks. The
 # ledger carries `tool_use_id` and the In-Flight row carries the agent id, which the ledger
-# never records (0 of 4 sampled agent ids; control: a known tool_use_id, 1). An exact-NAME
+# never records (0 of 4 sampled agent ids; control: a known tool_use_id, 1); that key is the
+# subagents-dir meta.json, which is why check_late_dispatch resolves through the sibling beat
+# script rather than through this ledger read. An exact-NAME
 # join is no binary substitute: restricted to names with exactly one ledger row, 36 in-flight
 # rows join, 19 sit more than 5 s after their own dispatch, and +7, +21, +28, +45 and +57 s
 # among them are ordinary stamping, so a "later than its own dispatch" arm fires on honest rows. The row that
@@ -1308,6 +1313,99 @@ check_backdated_dispatch() { # check_backdated_dispatch <file> <rel> <ledger>
         printf "BACKDATED  %s line %d: %s dispatched-at %s is %d s before its dispatch in the spawn ledger\n", ART, FNR, role, st, A - t
     }
   ' - "$1"
+}
+
+# -----------------------------------------------------------------------------
+# A LATE dispatched-at: an in-flight row whose stamp is not its OWN dispatch's ledger `ts`.
+# `_gate-procedures.md` passes the cell as the beat's `--since`, so a stamp after the dispatch
+# hides every write the teammate made in between, and the beat reads a delivered file WAITING.
+# Measured on the reference consumer: a remediator dispatched 05:00:03Z stamped 05:01:00Z.
+#
+# BINARY, NO TOLERANCE. The row's agent cell (cell 1, normalized exactly as
+# check_backdated_dispatch normalizes cells) is split into CANDIDATES, its maximal runs of
+# `[A-Za-z0-9_@.-]`, so a bare cell is one candidate and a decorated one such as
+# `remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8)` is six. Each distinct candidate is
+# passed to the SIBLING `wait-for-deliverable.sh --dispatch-ts <candidate>`, the one resolver the
+# `--dispatch` beat also uses: the resolver decides what an id is, and no id grammar is restated
+# here. The row is judged iff the resolving candidates print EXACTLY ONE DISTINCT ts, and it is
+# LATE iff its `dispatched-at` cell is not byte-equal to that ts. That is the value the lead was
+# told to stamp, so an honest row is equal by construction and any other value is a clock
+# reading. Two candidates naming ONE dispatch (an agentId beside its own toolu_ id) print the
+# same ts and are judged. The LATE line names the resolved id, not the whole cell; where several
+# candidates resolve to the one ts it names the FIRST resolving candidate, in cell order.
+#
+# SKIPPED, AND COUNTED. A row none of whose candidates resolves (every call non-zero, or nothing
+# printed) is not judged, and one `SKIP` line gives the count. A row whose agent cell names no id
+# the resolver accepts always lands there: an agentId with its `agent-<id>.meta.json` in this
+# session, a toolu_ id with one ledger row, or a `<name>@<team>` that exactly one ledger row
+# carries with a tool_use_id. A row whose resolving candidates print TWO OR MORE distinct ts is not judged either:
+# it gets its own `SKIP ... ambiguous agent cell (N ids resolve to M distinct ts)` line, because
+# which dispatch it records is not decidable from the cell. An agentId resolves only in the session that dispatched it (its subagents dir comes from
+# CLAUDE_CODE_SESSION_ID or AI_DLC_TEAMMATE_DIR, both inherited), so at another session's gate the
+# same row is SKIP, not LATE. No ledger, or no sibling `wait-for-deliverable.sh` /
+# `validate-adversarial-convergence.sh` beside this script (some fixtures copy this validator
+# alone): one SKIP line and nothing judged, never a refusal.
+#
+# COST: one `bash wait-for-deliverable.sh` fork per distinct candidate of each in-flight row with a
+# dated cell: 1 for a bare id, 6 for the decorated cell above, 4 for `remediator (serial, pass 1)`.
+# No prefilter narrows that: the resolver's agentId branch accepts any token with a meta.json, so
+# there is no declared agentId shape to filter on without restating it.
+LATE_SIBLINGS="$AI_DLC_SELF_DIR"
+check_late_dispatch() { # check_late_dispatch <file> <rel> <ledger-dir>
+  local sd rows k ln cands dc ts c t n m id seen tss
+  if [ ! -f "$LATE_SIBLINGS/wait-for-deliverable.sh" ] || [ ! -f "$LATE_SIBLINGS/validate-adversarial-convergence.sh" ]; then
+    printf 'SKIP  %s: no wait-for-deliverable.sh or validate-adversarial-convergence.sh beside this validator, dispatched-at not judged for LATE\n' "$2"; return 0
+  fi
+  sd="$(cd "$3" 2>/dev/null && pwd)" || sd=""
+  [ -n "$sd" ] && [ -s "$sd/spawn-ledger.jsonl" ] || {
+    printf 'SKIP  %s: no spawn ledger at %s/spawn-ledger.jsonl, dispatched-at not judged for LATE\n' "$2" "$3"; return 0; }
+  rows="$TMPROOT/late-rows"
+  LC_ALL=C awk '
+    /^## / { sec = $0; sub(/^##[[:space:]]*/, "", sec)
+             inf = (substr(sec, 1, 19) == "In-Flight Teammates"); dcol = scol = 0; next }
+    !inf || !/\|/ { next }
+    {
+      row = $0; sub(/^[[:space:]]*\|/, "", row); sub(/\|[[:space:]]*$/, "", row)
+      m = split(row, cell, "|")
+      for (i = 1; i <= m; i++) { c = cell[i]; gsub(/`/, "", c); gsub(/^[[:space:]]+|[[:space:]]+$/, "", c); cell[i] = c }
+      for (i = 1; i <= m; i++) if (cell[i] == "dispatched-at") {
+        dcol = i; scol = 0
+        for (j = 1; j <= m; j++) if (cell[j] == "status" || cell[j] == "state") scol = j
+        next
+      }
+      if (!dcol || !scol || dcol > m || scol > m) next
+      if (tolower(cell[scol]) !~ /^in-flight/) next
+      if (!match(cell[dcol], /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?Z/)) next
+      # THE ONE AGENT-CELL PARSE: the candidates are the maximal runs of [A-Za-z0-9_@.-].
+      ag = cell[1]; toks = ""
+      while (match(ag, /[A-Za-z0-9_@.-]+/)) {
+        toks = toks (toks == "" ? "" : " ") substr(ag, RSTART, RLENGTH); ag = substr(ag, RSTART + RLENGTH)
+      }
+      printf "%d\034%s\034%s\n", FNR, toks, cell[dcol]
+    }
+  ' "$1" > "$rows" || return 0
+  k=0
+  while IFS=$'\034' read -r ln cands dc; do
+    n=0; m=0; id=""; ts=""; seen=" "; tss=" "
+    # Candidates carry only [A-Za-z0-9_@.-], so the unquoted split cannot glob.
+    for c in $cands; do
+      case "$seen" in *" $c "*) continue ;; esac
+      seen="$seen$c "
+      t="$(AI_DLC_PROJECT_ROOT="$ROOT" AI_DLC_STATE_DIR="$sd" \
+        bash "$LATE_SIBLINGS/wait-for-deliverable.sh" --dispatch-ts "$c" </dev/null 2>/dev/null)" || t=""
+      [ -n "$t" ] || continue
+      n=$((n + 1)); [ -n "$id" ] || { id="$c"; ts="$t"; }
+      case "$tss" in *" $t "*) ;; *) tss="$tss$t "; m=$((m + 1)) ;; esac
+    done
+    if [ "$n" -eq 0 ]; then k=$((k + 1)); continue; fi
+    if [ "$m" -gt 1 ]; then
+      printf 'SKIP  %s line %d: ambiguous agent cell (%d ids resolve to %d distinct ts), not judged for LATE\n' "$2" "$ln" "$n" "$m"; continue
+    fi
+    [ "$dc" = "$ts" ] || printf "LATE  %s line %d: %s dispatched-at %s is not its dispatch's ledger ts %s\n" "$2" "$ln" "$id" "$dc" "$ts"
+  done < "$rows"
+  rm -f "$rows"
+  [ "$k" -eq 0 ] || printf 'SKIP  %s: %d in-flight row(s) not judged for LATE (agent cell does not resolve in this session)\n' "$2" "$k"
+  return 0
 }
 
 env_override() {
@@ -1631,6 +1729,7 @@ INFLIGHT_FILE="$TMPROOT/inflight"
 STATUS_FILE="$TMPROOT/inflight-status"
 FUTURE_FILE="$TMPROOT/future-stamp"
 BACKDATE_FILE="$TMPROOT/backdated"
+LATE_FILE="$TMPROOT/late"
 
 # THE CLOCK THE FUTURE-STAMP ARM COMPARES AGAINST. `date -u +%s` is the only portable
 # spelling; AI_DLC_SNAPSHOT_NOW_EPOCH replaces it so a fixture can pin "now" and a
@@ -1816,6 +1915,57 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+# THE LATE-DISPATCH SELF-PROBE, same posture: fatal, both directions, through the real sibling.
+#   OFFENDER   an in-flight agentId row stamped 57 s after its ledger ts (05:01:00Z for 05:00:03Z)
+#   NEAR-MISS  the same agent stamped equal to its ts; a delivered row stamped late (not judged)
+#   SKIP       a bare-name cell with no meta.json: counted, exactly 1, never LATE
+#   SKIP       siblings absent (an empty dir in their place): one SKIP line, no refusal
+# The meta.json key is spelled split below so that this file carries no reader of it: the
+# resolver is the sibling's, and the probe only seeds its input.
+# When the real siblings are absent (a fixture copied this validator alone) the positive
+# directions cannot run, and that is printed as a SKIP, never refused.
+# NOT UNDER --stamps-only. The probe proves the GATE can fire, and its resolver forks would
+# otherwise land on every snapshot Edit through the PostToolUse hook, the consumer's hot path.
+# The write-time call uses the same function the gate does, so the gate's probe covers it.
+if [ -z "$STAMPS_ONLY" ]; then
+LPROBE_D="$TMPROOT/probe-late"; mkdir -p "$LPROBE_D/state" "$LPROBE_D/subagents" "$LPROBE_D/nosib"
+LPROBE_OUT="$( LATE_SIBLINGS="$LPROBE_D/nosib"; check_late_dispatch /dev/null probe "$LPROBE_D/state" )"
+if [ "$(printf '%s\n' "$LPROBE_OUT" | grep -c '^SKIP .*no wait-for-deliverable.sh')" != 1 ] \
+   || [ "$(printf '%s\n' "$LPROBE_OUT" | grep -c .)" != 1 ]; then
+  echo "FAIL: the late-dispatch self-probe expected one SKIP line with its siblings absent, got:" >&2
+  printf '%s\n' "$LPROBE_OUT" | sed 's/^/    /' >&2
+  exit 1
+fi
+if [ -f "$LATE_SIBLINGS/wait-for-deliverable.sh" ] && [ -f "$LATE_SIBLINGS/validate-adversarial-convergence.sh" ]; then
+  printf '%s\n' '{"ts":"2026-01-01T04:59:00Z","name":"other","role":"pm","tool_use_id":"toolu_0PROBEOTHER"}' \
+    '{"ts":"2026-01-01T05:00:03Z","name":"remediator","role":"remediator","tool_use_id":"toolu_0PROBEREM"}' \
+    > "$LPROBE_D/state/spawn-ledger.jsonl"
+  printf '{"agentType":"remediator","%s":"toolu_0PROBEREM"}\n' "toolUse""Id" > "$LPROBE_D/subagents/agent-a0000000000000057.meta.json"
+  {
+    printf '## In-Flight Teammates\n'
+    printf '| agent | role | deliverable | dispatched-at | status |\n|---|---|---|---|---|\n'
+    printf '| a0000000000000057 | remediator | r1 | 2026-01-01T05:01:00Z | in-flight |\n'
+    printf '| `a0000000000000057` | remediator | r2 | 2026-01-01T05:00:03Z | in-flight |\n'
+    printf '| fold | pm | p1 | 2026-01-01T04:59:00Z | in-flight |\n'
+    printf '| a0000000000000057 | remediator | r3 | 2026-01-01T05:09:00Z | delivered |\n'
+  } > "$LPROBE_D/state/pipeline-snapshot.md"
+  LPROBE_OUT="$( export AI_DLC_TEAMMATE_DIR="$LPROBE_D/subagents"
+    check_late_dispatch "$LPROBE_D/state/pipeline-snapshot.md" probe "$LPROBE_D/state" )"
+  if [ "$(printf '%s\n' "$LPROBE_OUT" | grep -c '^LATE ')" != 1 ] \
+     || ! grep -q "^LATE  probe line 4: a0000000000000057 dispatched-at 2026-01-01T05:01:00Z is not its dispatch's ledger ts 2026-01-01T05:00:03Z\$" <<<"$LPROBE_OUT" \
+     || ! grep -q '^SKIP  probe: 1 in-flight row(s) not judged for LATE' <<<"$LPROBE_OUT"; then
+    echo "FAIL: the late-dispatch self-probe expected exactly the line 4 row LATE (05:01:00Z for" >&2
+    echo "  05:00:03Z) and a SKIP count of 1 (the bare-name row), got:" >&2
+    printf '%s\n' "$LPROBE_OUT" | sed 's/^/    /' >&2
+    echo "  A missing LATE means the arm cannot fire; an extra one means an equal or delivered row" >&2
+    echo "  is being judged; a missing or wrong count means an unresolved row reads as a pass." >&2
+    exit 1
+  fi
+else
+  echo "SKIP  self-probe: no wait-for-deliverable.sh or validate-adversarial-convergence.sh beside this validator; the LATE arm is not exercised" >&2
+fi
+fi
+
 PPROBE="$TMPROOT/probe-backlog.md"
 printf '### CO-S1-A WHOLE-READ-POOL closed\n**Status:** CLOSED\n### CO-S1-B unrelated\n**Status:** OPEN\n### CO-S1-C\n**Filed:** s1. **Status:** OPEN.\nthe WHOLE-READ-POOL is over\n' > "$PPROBE"
 PPROBE_HIT="$(pool_open_item "$PPROBE")"
@@ -1831,7 +1981,7 @@ fi
 # -----------------------------------------------------------------------------
 # THE WRITE-TIME MODE. `--stamps-only <snapshot> --payload <file>`: the derivation-capture
 # PostToolUse hook calls this on every Write|Edit|MultiEdit of pipeline-snapshot.md, so a
-# future stamp, a placeholder stamp or a back-dated dispatched-at is named at the write that
+# future stamp, a placeholder stamp or a back-dated or LATE dispatched-at is named at the write that
 # creates it, not at the next gate. Before this the arm ran only at Check 14 and Step 0a,
 # and a lead wrote three future stamps in four Edits with nothing said.
 #
@@ -1849,6 +1999,11 @@ fi
 # there -- RESIDUAL: a placeholder introduced by a whole-file Write is caught by nothing at
 # write time. FUTURE and BACKDATED still run on a Write: an old line they fire on is still a
 # live defect, where an old placeholder is only old text.
+#
+# LATE runs here too, on the masked rows. Its SKIP lines (no sibling, no ledger, the count of
+# unresolved agent cells) are filtered at write time BY DESIGN, exactly as BACKDATED's are: a
+# SKIP is not a finding, and exit 1 here must mean a line the writer has to fix. The gate prints
+# them.
 #
 # NOT the full validator: budget, schema and marker findings stay at the gate, where their
 # remedies apply. Exit 1 on a finding, 0 clean, 2 on bad usage -- the hook fails OPEN on 2.
@@ -1875,6 +2030,7 @@ if [ -n "$STAMPS_ONLY" ]; then
     check_future_stamps "$_mask" "$_rel" "$SNAP_NOW"
     [ "$WHOLE_WRITE" -eq 1 ] || check_malformed_stamps "$_mask" "$_rel"
     check_backdated_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")/spawn-ledger.jsonl" | grep -v '^SKIP '
+    check_late_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")" | grep -v '^SKIP '
   } > "$TMPROOT/stamps-out"
   [ -s "$TMPROOT/stamps-out" ] || exit 0
   echo "FAIL: this write to ${_rel} carries a stamp the snapshot must not hold:" >&2
@@ -1888,9 +2044,15 @@ if [ -n "$STAMPS_ONLY" ]; then
         MALFORMED  write the real stamp from the record that holds it (a transcript, a
                    ledger row, a commit). If none does, write an explicit approximation
                    with full digits and a leading `~` (`~2026-10-15T19:30Z`).
-        BACKDATED  stamp dispatched-at from the dispatch itself: the spawn-ledger row for
-                   this teammate (`ts`), or `date -u` taken right after the Agent call.
+        BACKDATED  stamp dispatched-at from the dispatch itself. When the agent cell is
+                   an agentId, a toolu_ id or a `<name>@<team>`, write what
+                   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>` prints;
+                   otherwise (a bare name, a role) write that teammate's spawn-ledger
+                   row `ts` -- the resolver refuses a name (exit 64).
                    Never subtract minutes to make an older deliverable count.
+        LATE       replace the row's dispatched-at cell with the ts its line names (what
+                   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agent>` prints).
+                   Never stamp dispatched-at from a clock.
 EOF
   exit 1
 fi
@@ -2022,6 +2184,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
       check_supersession_markers "$f" "$rel"
       check_future_stamps "$f" "$rel" "$SNAP_NOW" >> "$FUTURE_FILE"
       check_backdated_dispatch "$f" "$rel" "$(dirname "$f")/spawn-ledger.jsonl" >> "$BACKDATE_FILE"
+      check_late_dispatch "$f" "$rel" "$(dirname "$f")" >> "$LATE_FILE"
     fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
@@ -2093,9 +2256,9 @@ report_future_stamps() {
   SAW_FUTURE=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
-    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below to \`date -u\` in place (keep line order), then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\`; do this WITHOUT ASKING and before any trim or move."
+    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move."
   else
-    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below to \`date -u\` in place (keep line order), then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\`; do this WITHOUT ASKING and before any trim or move." >&2
+    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move." >&2
     RC=1
   fi
   cat "$FUTURE_FILE" >&2
@@ -2106,15 +2269,27 @@ report_future_stamps() {
       the snapshot -- a gate, a resume, a recovery -- orders by these stamps.
 
       Remedy, applied by the lead WITHOUT ASKING, BEFORE any trim or section move:
-        1. Rewrite each stamp named above to the current time from `date -u`
-           (e.g. `date -u +%Y-%m-%dT%H:%MZ`). Keep every line where it is; do not
+        1. Rewrite each stamp named above in place. A Recent Activity stamp is
+           rewritten to the current time from `date -u` (e.g.
+           `date -u +%Y-%m-%dT%H:%MZ`). An In-Flight dispatched-at cell is
+           rewritten to its dispatch's ledger ts: when the agent cell is an
+           agentId, a toolu_ id or a `<name>@<team>`, what
+           `scripts/ai-dlc/wait-for-deliverable.sh
+           --dispatch-ts <id>` prints, verbatim; otherwise (a bare name, a role)
+           that teammate's spawn-ledger row `ts`. A `date -u` there is not its
+           dispatch's ledger ts, and the next run reports the row LATE. Keep every line
+           where it is; do not
            re-order the section, and do not move the line to the history file --
            trimming a future stamp away hides it instead of correcting it.
         2. Add ONE Recent Activity line, stamped from `date -u`, that reads
            `CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old>` and
            names each old stamp as a bare `HH:MMZ` (e.g. `02:30Z, 02:45Z`). Lead
            the line with its own stamp: a line that does has only that stamp read,
-           and one that does not is read whole, old stamps included.
+           and one that does not is read whole, old stamps included. Write the
+           line exactly so even when some stamps were dispatched-at cells: `<n>`
+           counts every rewritten stamp, and "to date -u" is the line's fixed
+           form, not a claim that a dispatched-at cell took `date -u` -- it took
+           its ledger ts, as step 1 says.
         3. Re-run this check.
 
       Never take a stamp from memory or from another line -- `date -u` is the only
@@ -2144,6 +2319,27 @@ if grep -q '^BACKDATED ' "$BACKDATE_FILE" 2>/dev/null; then
   grep '^BACKDATED ' "$BACKDATE_FILE" >&2
 fi
 rm -f "$BACKDATE_FILE"
+
+# A SEVENTH VERDICT: an in-flight dispatched-at that is not its own dispatch's ledger `ts`
+# (check_late_dispatch). BACKDATED's posture exactly: hard unless --warn-only without --fail-on
+# the snapshot, and its SKIP lines (no sibling, no ledger, the unresolved-row count) are printed.
+# Each LATE row names the value to write, so the fix is a copy, never a re-derivation.
+SAW_LATE=0
+if [ "$QUIET" -eq 0 ] && grep -q '^SKIP ' "$LATE_FILE" 2>/dev/null; then
+  echo ""; grep '^SKIP ' "$LATE_FILE"
+fi
+if grep -q '^LATE ' "$LATE_FILE" 2>/dev/null; then
+  SAW_LATE=1
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
+    echo "WARN: pipeline-snapshot.md carries an in-flight dispatched-at that is not its dispatch's ledger ts -- replace each LATE row's dispatched-at cell below with the ts its line names (what scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agent> prints), then re-run; never stamp dispatched-at from a clock"
+  else
+    echo "FAIL: pipeline-snapshot.md carries an in-flight dispatched-at that is not its dispatch's ledger ts -- replace each LATE row's dispatched-at cell below with the ts its line names (what scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agent> prints), then re-run; never stamp dispatched-at from a clock" >&2
+    RC=1
+  fi
+  grep '^LATE ' "$LATE_FILE" >&2
+fi
+rm -f "$LATE_FILE"
 
 if [ -s "$BREACH_FILE" ]; then
   SAW_BREACH=1
@@ -2550,7 +2746,7 @@ if [ "$RC" -eq 0 ]; then
   say ""
   if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_MARKER" -eq 1 ] \
      || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ] || [ "$SAW_FUTURE" -eq 1 ] \
-     || [ "$SAW_BACKDATE" -eq 1 ]; then
+     || [ "$SAW_BACKDATE" -eq 1 ] || [ "$SAW_LATE" -eq 1 ]; then
     _what=""
     [ "$SAW_BREACH" -eq 1 ] && _what="${_what}, over-budget artifact(s)"
     [ "$SAW_SCHEMA" -eq 1 ] && _what="${_what}, off-schema section(s)"
@@ -2559,6 +2755,7 @@ if [ "$RC" -eq 0 ]; then
     [ "$SAW_STATUS" -eq 1 ] && _what="${_what}, unrecognised In-Flight status row(s)"
     [ "$SAW_FUTURE" -eq 1 ] && _what="${_what}, future-stamped snapshot entr(ies)"
     [ "$SAW_BACKDATE" -eq 1 ] && _what="${_what}, back-dated In-Flight dispatched-at row(s)"
+    [ "$SAW_LATE" -eq 1 ] && _what="${_what}, In-Flight dispatched-at row(s) not stamped from their ledger ts"
     _what="${_what#, }"
     say "WARN  this run reported ${_what} and is NOT a clean result."
     say "      Exit status is 0 because --warn-only was passed and no reported artifact was"
