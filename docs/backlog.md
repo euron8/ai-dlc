@@ -761,3 +761,14 @@ verify: manual
 Owed: a validate-handoff-evidence arm refusing a capture whose first `$ ` line is not immediately followed by `mutation-red replay`, with its false-positive set measured over committed captures before it ships.
 
 verify: manual
+
+## BL-749 — `validate-mutation-red.sh`'s `$ ` replay line does not round-trip a word-leading `~` argument whose user exists, because bash 3.2's `%q` leaves the tilde unescaped
+
+**NOTE.** Source: ai-dlc-e3 [9ab130], probe adv739-tilde.sh, batch 238; released as a stated limit in 0.900.0 (BL-739).
+
+- With bash 3.2.57, `printf %q` leaves `~`, `~root` and `~/x` unescaped, so replaying the `$ ` line through a shell tilde-expands them, to `/Users/n8`, `/var/root` and `/Users/n8/x` on the probe machine.
+- Controls: `a~root` round-trips; `~nosuchuserzzq` round-trips, because a user that does not exist is not expanded.
+
+Owed: escape a word-leading `~` in the rendering, and add a fixture case to mutation-red-replay's arm_argv_roundtrip with `~root` and a mid-word control.
+
+verify: manual
