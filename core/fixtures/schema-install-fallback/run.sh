@@ -81,8 +81,8 @@ for _v in $(env | sed -n 's/^\(CLAUDE_CODE_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "
 unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# Walk up for VERSION, never count hops. ROOT_DIR, not ROOT: this fixture reads no path the
-# suite's content key excludes, and VERSION is only the marker the walk stops at.
+# Walk up for VERSION, never count hops. ROOT_DIR, not ROOT: VERSION is read as the walk-up
+# marker, and it is keyed by `+VERSION` in inputs.decl.
 ROOT_DIR="$HERE"
 while [ "$ROOT_DIR" != "/" ] && [ ! -f "$ROOT_DIR/VERSION" ]; do ROOT_DIR="$(dirname "$ROOT_DIR")"; done
 INSTALL="$ROOT_DIR/scripts/install.sh"

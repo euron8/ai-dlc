@@ -24,6 +24,9 @@ set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset PREPUSH_POOL_DEPTH
+# PD_BARRIER_CEIL: the depth-0 barrier's ceiling in seconds, digits only with no leading zero, default 30. drive exports it so
+# the stubs derive their own cap from it (ceiling + 10); mutant() passes a smaller one to ONE mutant.
+case "${PD_BARRIER_CEIL:-}" in ''|*[!0-9]*|0*|????*) PD_BARRIER_CEIL=30 ;; esac
 
 asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
@@ -40,7 +43,7 @@ done
 [ -n "$HOOKS" ] || broken "no pre-push hook in either layout from $ROOT"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/prepush-pool-depth.XXXXXX")" || broken "mktemp failed"
-trap 'rm -rf "$WORK"' EXIT
+trap '[ -s "$WORK/barrier.pid" ] && kill "$(cat "$WORK/barrier.pid")" 2>/dev/null; rm -rf "$WORK"' EXIT
 
 # A probe world: a git repository whose fixture root holds stub fixtures.
 # Each stub records, to $PD_LOG, the marker it was handed (name-agnostic: any *POOL_DEPTH variable),
@@ -55,7 +58,16 @@ mkworld() { # mkworld <dir> <fxroot> <n>
 raw="$(env | sed -n 's/^[A-Za-z_]*POOL_DEPTH=//p' | sort -n | tail -1)"
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 scr="$(env | sed -n 's/^[A-Za-z_]*POOL_DEPTH=//p' | sort -n | tail -1)"
-: > "$PD_FLIGHT/$$"; sleep "${PD_SLEEP:-0}"
+: > "$PD_FLIGHT/$$"
+if [ -n "${PD_RELEASE:-}" ]; then
+  # THE BARRIER: hold until the driver releases, the flight dir is gone (the driver's WORK was
+  # removed), or this stub's own cap -- the driver's ceiling + 10, so a stub never drains before the
+  # driver has counted and never outlives the run.
+  s=$SECONDS; cap=$(( ${PD_BARRIER_CEIL:-30} + 10 ))
+  while [ ! -e "$PD_RELEASE" ] && [ -d "$PD_FLIGHT" ] && [ $((SECONDS - s)) -lt "$cap" ]; do sleep 0.1; done
+else
+  sleep "${PD_SLEEP:-0}"
+fi
 ls "$PD_FLIGHT" | wc -l | tr -d ' ' >> "$PD_LOG.flight"
 rm -f "$PD_FLIGHT/$$"
 printf 'raw=%s scrubbed=%s\n' "${raw:-_}" "${scr:-_}" >> "$PD_LOG"
@@ -68,18 +80,47 @@ FX
 # drive <block> <world> <depth|-> <jobs|-> -> prints "<rc>" and leaves output in $WORK/last.out
 # The block is sourced in a subshell standing in the world; AI_DLC_READSET_LIVE_TRACE=0 keeps the
 # launcher out, and the log files are fresh per drive.
+#
+# PD_BARRIER=1 drives the six stubs through a BARRIER instead of a sleep, so the depth-0 width is a
+# count that does not depend on scheduling. Each stub creates its flight file and then holds until
+# the driver writes $WORK/release (or the flight dir is gone, or its own cap of PD_BARRIER_CEIL + 10
+# seconds). A poller started beside run_fixtures counts the flight dir until all six are in flight,
+# with a PD_BARRIER_CEIL ceiling (default 30s; mutant pool-capped-5 alone passes 3s), writes
+# that count to $WORK/barrier.n and only then releases the stubs. A pool narrower than six can never
+# hold six at once, so it reads 5 or fewer and the ceiling ends it; a slow box only delays the
+# count. A sleep-overlap read (each stub sleeping 0.3s and ls-counting its peers) read 3 and 5
+# against 6 under load with no hook defect. The poller's pid is recorded in $WORK/barrier.pid for
+# the EXIT trap, which kills that pid alone; removing $WORK then releases any stub still holding.
 drive() {
   local blk="$1" t="$2" depth="$3" jobs="$4" rc
   rm -rf "$WORK/flight"; mkdir -p "$WORK/flight"; : > "$WORK/log"; : > "$WORK/log.flight"
+  rm -f "$WORK/release" "$WORK/barrier.n" "$WORK/barrier.pid"
   rc="$( cd "$t" && {
     [ "$depth" = - ] || export PREPUSH_POOL_DEPTH="$depth"
     [ "$jobs" = - ] || export AI_DLC_FIXTURE_JOBS="$jobs"
-    export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PD_LOG="$WORK/log" PD_FLIGHT="$WORK/flight" PD_SLEEP="${PD_SLEEP:-0}"
+    export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PD_LOG="$WORK/log" PD_FLIGHT="$WORK/flight" PD_SLEEP="${PD_SLEEP:-0}" PD_BARRIER_CEIL="$PD_BARRIER_CEIL"
     . "$blk" > "$WORK/load.out" 2>&1
-    run_fixtures > "$WORK/last.out" 2>&1; echo $?
+    bp=""
+    if [ -n "${PD_BARRIER:-}" ]; then
+      export PD_RELEASE="$WORK/release"
+      ( n=0; s=$SECONDS
+        while :; do
+          n="$(ls "$WORK/flight" | wc -l | tr -d ' ')"
+          [ "$n" -ge 6 ] && break
+          [ $((SECONDS - s)) -ge "$PD_BARRIER_CEIL" ] && break
+          sleep 0.1
+        done
+        printf '%s\n' "$n" > "$WORK/barrier.n"; : > "$WORK/release" ) > /dev/null 2>&1 &
+      bp=$!; printf '%s\n' "$bp" > "$WORK/barrier.pid"
+    fi
+    run_fixtures > "$WORK/last.out" 2>&1; r=$?
+    if [ -n "$bp" ]; then wait "$bp"; rm -f "$WORK/barrier.pid"; fi
+    echo "$r"
   } )"
   printf '%s' "$rc"
 }
+# barrier_count: the driver's count at release ("_" if the poller never wrote one)
+barrier_count() { local n; n="$(cat "$WORK/barrier.n" 2>/dev/null)"; printf '%s' "${n:-_}"; }
 maxflight() { sort -n "$WORK/log.flight" 2>/dev/null | tail -1; }
 
 # The nest block is the FIRST resolved hook's, and the chain is rebuilt per scored block because
@@ -168,7 +209,8 @@ for HOOK in $HOOKS; do
     # observed in flight at depth 1, jobs 12: the cap is real parallelism of two, not a number
     r="$(PD_SLEEP=0.3 drive "$b" "$W" 1 12)"; printf 'obs_d1_rc=%s\nobs_d1_max=%s\n' "$r" "$(maxflight)"
     r="$(PD_SLEEP=0.3 drive "$b" "$W" 1 1)"; printf 'obs_d1_j1_max=%s\n' "$(maxflight)"
-    r="$(PD_SLEEP=0.3 drive "$b" "$W" 0 12)"; printf 'obs_d0_max=%s\n' "$(maxflight)"
+    # depth 0, jobs 12: all six stubs in flight AT ONCE, counted at a barrier (drive's PD_BARRIER)
+    r="$(PD_BARRIER=1 drive "$b" "$W" 0 12)"; printf 'obs_d0_max=%s\n' "$(barrier_count)"
     # the marker a worker receives: parent + 1
     r="$(drive "$b" "$W" - -)"; printf 'raw_d0=%s\n' "$(sed -n 's/^raw=\([^ ]*\) .*/\1/p' "$WORK/log" | sort -u | tr '\n' ' ' | sed 's/ *$//')"
     r="$(drive "$b" "$W" 1 -)"; printf 'raw_d1=%s\n' "$(sed -n 's/^raw=\([^ ]*\) .*/\1/p' "$WORK/log" | sort -u | tr '\n' ' ' | sed 's/ *$//')"
@@ -231,6 +273,10 @@ nest_b_present=1"
   else
     bad "[$TAG] the probe emitted $(printf '%s\n' "$GOT" | grep -c .) cells, want $(printf '%s\n' "$WANT" | grep -c .) -- a harness that died reads as clean"
   fi
+  # the depth-0 barrier, named on its own: the baseline only (a mutant timing out is expected)
+  B0="$(printf '%s\n' "$GOT" | sed -n 's/^obs_d0_max=//p')"
+  if [ "$B0" = 6 ]; then ok "[$TAG] depth-0 barrier: 6 of 6 entered together"
+  else bad "[$TAG] depth-0 barrier: $B0 of 6 entered within ${PD_BARRIER_CEIL}s"; fi
   armcheck() { # armcheck <label> <key...>: every named cell equals its want
     local label="$1" k g w badk=""; shift
     for k in "$@"; do
@@ -261,13 +307,15 @@ nest_b_present=1"
   MUTN=0; MUTBAD=0
   # MUTANTS RUN AGAINST THE FIRST RESOLVED HOOK ONLY: I66 holds both blocks to one program, and every drive
   # costs a full run_fixtures setup, so repeating the battery on the twin only buys wall clock.
-  mutant() { # mutant <name> <expected-failing-keys, space separated> <sed-expr>
+  # An optional 4th argument is the barrier ceiling for that mutant's score alone, set inside the score's
+  # own subshell so every other mutant and the baseline keep PD_BARRIER_CEIL.
+  mutant() { # mutant <name> <expected-failing-keys, space separated> <sed-expr> [barrier-ceiling]
     [ "$HN" -eq 1 ] || return 0
-    local name="$1" want="$2" ex="$3" m="$WORK/mut$HN.$1.sh" got diffk k
+    local name="$1" want="$2" ex="$3" ceil="${4:-$PD_BARRIER_CEIL}" m="$WORK/mut$HN.$1.sh" got diffk k
     sed "$ex" "$BLK" > "$m"
     MUTN=$((MUTN+1))
     if cmp -s "$BLK" "$m"; then bad "[$TAG] MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
-    local save="$GOT"; GOT="$(score "$m")"
+    local save="$GOT"; GOT="$(PD_BARRIER_CEIL="$ceil"; score "$m")"
     diffk=""
     for k in $(printf '%s\n' "$WANT" | sed 's/=.*//'); do
       [ "$(printf '%s\n' "$GOT" | sed -n "s/^$k=//p")" = "$(printf '%s\n' "$WANT" | sed -n "s/^$k=//p")" ] || diffk="$diffk $k"
@@ -291,6 +339,8 @@ nest_b_present=1"
   mutant notice-at-load "notice_load" 's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; [ "$POOL_DEPTH_IN" -ge 1 ] \&\& printf "   nested: depth %s\\n" "$POOL_DEPTH_IN"/'
   mutant no-refusal     "refuse_rc refuse_line refuse_ran refuse_d5_rc nest_started nest_depths" 's/if \[ "\$POOL_DEPTH_IN" -ge 2 \]; then/if false; then/'
   mutant leaks          "leak" 's/^POOL_DEPTH_IN=\$((10#\$POOL_DEPTH_IN))$/&; export PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
+  # a depth-0 pool capped at 5 never holds six, so the barrier waits its whole ceiling: 3s, for this mutant only
+  mutant pool-capped-5  "obs_d0_max" 's/xargs -P "\$FIXTURE_JOBS" -I{}/xargs -P "$(( FIXTURE_JOBS < 5 ? FIXTURE_JOBS : 5 ))" -I{}/' 3
 done
 
 NR="$WORK/nest"; nest_build "$NR" "$NB"
