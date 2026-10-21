@@ -98,6 +98,10 @@ and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path cita
   (graph's next stories round); BL-691 (design deferred); BL-692 (needs graph HEAD-movement measurement); BL-716 (lane
   key is connected components; graph s319 measured edit 19 / edit+MOVED-CITE 18 / edit+HIT 1); BL-701 (receipt
   re-scope owed); BL-727, 728, 731 (`sh` receipts the rotator cannot score; re-scope in their build).
+- **The derive block's receipt histogram reads 4 `CLOSE-CANDIDATE` at close: BL-584, BL-695, BL-699, BL-701. NONE is a
+  close.** BL-584, 695 and 699 were adjudicated PARTIAL this batch (`docs/analysis/b238-close-list.md`, "Adjudications
+  this batch"): each receipt exits 0 on the shipped half while a named claim survives. BL-701's receipt measures digest
+  freshness the in-pool trace never writes (same file, "Close duties"). Re-scope each receipt before any close.
 - **Graph at close**: installed 0.891.0, shipped 0.901.0, no pull: TEN releases behind, a WIDE range. Bootstrapping
   files in `01de3123d..5b21170f8`: one, `core/skills/ai-dlc-update/reconcile/layer-drift.sh` (control `core/scripts/`: 11);
   mode-only changes under `core/`: 0 of 7 mode changes. The pull is REQUIRED by action 7's test: BL-740's sweep ran
