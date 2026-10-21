@@ -466,18 +466,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: manual
 
-## BL-709 — a hermetic-run.sh change re-keys only the declared fixtures whose inputs.decl names the runner, so a runner change gates on those and skips every other declared fixture on its old key
-
-**DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 BL-676), id allocated by lead ai-dlc-37. The verdict-store ident hashes the runner's `HR_SANDBOX_BEGIN`..`END` span (`readset_vs_ident`, `.githooks/pre-push:1483-1487`), so a pass recorded under an older runner is not reused from the store. But the per-fixture key decision (`.githooks/pre-push:1882-1892`) returns `skip` for a declared fixture whose recorded key rows are unchanged, before the store is consulted, and `readset_verdicts` only turns `run` into `skip` (`:1738`), never the reverse. The runner is in a declared fixture's key rows only when that fixture's inputs.decl names `core/scripts/hermetic-run.sh`.
-
-Measured at origin/main c2991da155cbc2441e22b55373bb841df5785b05 and re-derived in the b236-bl676 tree (dcb0aeb8c) with `grep -l 'core/scripts/hermetic-run.sh' core/fixtures/*/inputs.decl`: 7 declared fixtures name the runner (census-hermetic-coverage, hermetic-runner, readset-skip, readset-skip-b, readset-skip-c, readset-skip-d, self-update-fixture-log). Control in the same grep: 9 inputs.decl files name `.githooks/pre-push` on a non-comment line (13 files mention it once comment lines are counted), and an impossible token reads 0. The declared population is 223 `inputs.decl` files.
-
-Consequence: BL-676's runner change (dcb0aeb8c) gates on those 7 plus the fixtures whose tools.decl that release edits; every other declared fixture skips on its pre-change key, so the gate does not exercise the new runner on them. That release covers them by a direct pre-run of every declared fixture through the new runner (its acceptance (a)).
-
-Owed, with the choice left to whoever builds it: (B) put the runner's span into every declared fixture's key (a hook change inside the I66-bound span), or (C) carry a runner digest in each declared fixture's key record so a runner change moves every declared key. Cost measurement for either: the number of declared fixtures re-run per runner change, today 7 and under either remedy every declared fixture (223 `inputs.decl` files in the b236-bl676 tree).
-
-verify: manual
-
 ## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
 
 **DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.

@@ -1531,6 +1531,10 @@ readset_vs_input() { # <fx> <ident> <rows file>: the digest input
 #     (readset_listings' grammar: immediate entry names implied by the file list, never readdir), every file
 #     under the fixture's own directory, each T tool, and each P row (a `+` file). A declared path absent from
 #     <now> -- an excluded top, a git-ignored file -- has NO row on either side unless it is declared `+`.
+#     THE RUNNER ROW: every fixture is keyed on hermetic-run.sh (core/scripts/ here, scripts/ai-dlc/ in a consumer)
+#     whether or not its inputs.decl names it, with the runner's WHOLE-FILE manifest hash, because every declared
+#     fixture runs through it -- so a runner change moves every declared key and no fixture skips on a pass taken
+#     under the old runner. Only a runner path present in <now> is keyed, exactly as for any declared file.
 # READSET_KEYROWS_BEGIN
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix>
   local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" t k p rq dp name found seen="|"
@@ -1613,6 +1617,7 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
       for (f in FX) { n = split(TL[f], a, "\n"); for (j = 2; j <= n; j++) out(f, a[j], (a[j] in TH) ? TH[a[j]] : "-")
         n = split(PL[f], a, "\n"); for (j = 2; j <= n; j++) { t = index(a[j], "\t"); out(f, substr(a[j], 1, t - 1), substr(a[j], t + 1)) } } }
     { p = $1; v = $2
+      if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh") for (f in FX) out(f, p, v)
       if (p in FF) { n = split(FF[p], a, "\n"); for (j = 2; j <= n; j++) out(a[j], p, v) }
       if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1 && (substr(r, 1, i - 1) in FX)) out(substr(r, 1, i - 1), p, v) }
       q = p
@@ -1720,7 +1725,9 @@ readset_declared() { # <list> <out>
 # holds one entry per pass, NAMED for the sha256 of its body: `#format k1`, `#state ok`, then the digest input
 # (`#fixture`, `#runner`, `#universe` and the key rows). `#runner` is the sha of hermetic-run.sh and `#universe` the
 # sha of the READSET_UNIVERSE and READSET_TOOLS spans the runner sources, so a pass under an older runner is not
-# reused. hermetic-run.sh writes the same entry on a clean pass; it is the store's ONLY writer -- this hook reads the
+# reused. The key rows themselves carry the runner's whole-file hash for every declared fixture (the RUNNER ROW of
+# readset_decl_keys), so a runner change also moves the per-fixture key decision, not only the store lookup.
+# hermetic-run.sh writes the same entry on a clean pass; it is the store's ONLY writer -- this hook reads the
 # store and never writes it. A reader fails closed: no store, no entry, a malformed or truncated body, or a body that is not the
 # digest input just computed means the fixture runs. Only DECLARED fixtures are ever looked up.
 # PER PROJECT: `<base>/<root commit sha>`, the base being the env var or the default. The project is the repository's
