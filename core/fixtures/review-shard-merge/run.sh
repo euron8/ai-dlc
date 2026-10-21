@@ -5,6 +5,7 @@
 # arms Q1-Q16, S7-S10), and (BL-737) the seat's shard pre-check, the owner tails, the marker key, the
 # content seal on review shards and the legacy rule (arms CS1-FT1). The mutation battery that once
 # proved the older arms can fail has been retired; the predicates live in `lib.sh` beside this file.
+# BL-740's verdict-backing arms (VB1-VB4) carry M7-M10 and an unmutated CONTROL (VBCTL) the same way.
 # The BL-737 arms carry five in-process mutants (M1-M5 below), each run in a copy of the resolved
 # script directory and only in the DISTRIBUTION layout: a consumer cannot edit core's scripts, so it
 # keeps every correctness arm and loses only that proof.
@@ -242,6 +243,18 @@ arm2 env "EV1: on a PATH built from tools.decl without jq, a seat-sealed set is 
 arm2 unmarked "UM1: adv-strip.sh's input -- every seat-complete line stripped, one verdict rewritten by sed -- over a sentinel-engine frozen sha with no seal rows is REFUSED 'carries no content-seal row'; the same steps over the old engine merge" \
               "UM1: an unmarked set over the key= engine merged without a seal row, or the old-engine control was refused"
 
+# ------------------------------------------------------------------------------------ BL-740
+# VERDICT BACKING. Every refusal is driven through the merge AND --check-shard, the two REFUSED lines
+# byte-equal; every pass merges and answers SHARD-OK. Each cell writes its own WHY token.
+arm2 vb_cr "VB1: --gate code-review -- NEEDS_REWORK with the empty findings template REFUSED with the stem, NEEDS_REWORK with one Important merges, BLOCKED with one Critical merges, BLOCKED with only a Suggestion REFUSED, APPROVED with a Critical REFUSED, APPROVED with an Important merges; each refusal byte-equal under --check-shard" \
+           "VB1: a code-review verdict was not held to its own findings"
+arm2 vb_qa "VB2: --gate qa -- NEEDS_REWORK with 0 findings REFUSED with the stem, byte-equal under --check-shard; NEEDS_REWORK with one uncontained finding merges; PASS over a '### Critical' heading merges" \
+           "VB2: a qa verdict was not held to its own findings"
+arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Findings saying the gap is another group's) REFUSED byte-equal under --check-shard, naming the set 'shard-verdict: PASS' exit first, then the file-here exit, and [owner: cross-1]" \
+           "VB3: the cross-1 refusal does not name both exits and its owner"
+arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
+             "VB4: --mark marked an unbacked NEEDS_REWORK, or refused the backed one"
+
 # ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
 # Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
 # siblings beside themselves), one exact substring replaced -- refused unless it occurs exactly once,
@@ -281,8 +294,34 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     "a legacy marker is accepted when the frozen sha's engine carries the sentinel"
   mut_run M6 merge-review-shards.sh '[ "$ENGINE" != present ] || SEAL_MODE=""' ':' unmarked "unmarked-sentinel{" \
     "the unmarked shard's engine reading is dropped, so it keeps the legacy seal"
+  # BL-740. The CONTROL first: an unmutated copy built exactly as mut_run builds one must pass every
+  # VB predicate, so a copy that cannot run reads as FIXTURE ERROR, never as four kills.
+  vb_ctl="$WORK/mut-VBCTL"
+  if [ ! -e "$vb_ctl" ] && cp -R "$SRCDIR" "$vb_ctl" && [ -f "$vb_ctl/merge-review-shards.sh" ] && [ -f "$vb_ctl/wait-for-deliverable.sh" ] \
+     && [ -f "$vb_ctl/content-seal.sh" ] && [ -f "$vb_ctl/partition-review-diff.sh" ] && cmp -s "$SRCDIR/merge-review-shards.sh" "$vb_ctl/merge-review-shards.sh"; then
+    vb_cf=""
+    for _p in vb_cr vb_qa vb_r3 vb_mark; do WHY=""; "p_$_p" "$vb_ctl" || vb_cf="$vb_cf $_p:${WHY}"; done
+    if [ -z "$vb_cf" ]; then ok "VBCTL: CONTROL -- an unmutated copy of the script directory passes VB1-VB4"
+    else bad "VBCTL: FIXTURE ERROR -- the unmutated copy failed [${vb_cf# }], so no M7-M11 verdict is evidence"; fi
+  else
+    bad "VBCTL: FIXTURE ERROR -- the unmutated script directory was not copied fresh with its siblings"
+  fi
+  mut_run M7 merge-review-shards.sh 'case "$GATE:$v" in' 'case "M7:$v" in' vb_qa "q-nr-empty{" \
+    "the verdict-backing rule removed"
+  mut_run M8 merge-review-shards.sh '(cls(t, ENVIRON["PS_IMP_"]) ? "imp" : "")' '"imp"' vb_cr "cr-blocked-sug{" \
+    "a Suggestions finding counted as Important"
+  mut_run M9 merge-review-shards.sh '[ "$kc_" -eq 0 ] \' 'true \' vb_cr "cr-approved-crit{" \
+    "the APPROVED-forbids-Critical half dropped"
+  mut_run M10 merge-review-shards.sh 'CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"' 'CRIT_NAME="Critical"; IMP_NAME=""; SUG_NAME="Suggestions"' \
+    vb_cr "cr-nr-imp{" "the container lift replaced by a hard-coded list that omits Important"
+  # M11 keeps all three r3 phrases present and reverses only their ORDER (the file-here clause first),
+  # so the single token that can fire is the order one.
+  mut_run M11 merge-review-shards.sh \
+    "If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it; otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" \
+    "Either way, otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry); If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it" \
+    vb_r3 "r3-owner-first-order{" "the owner-first clause moved after the file-here clause"
 else
-  echo "  (BL-737 mutants M1-M6 not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
+  echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
 
 # THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two

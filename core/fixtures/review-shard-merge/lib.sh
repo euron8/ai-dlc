@@ -266,6 +266,11 @@ out_of() { printf '%s/1-code-review.md' "$(dirname "$1")"; }
 # shard <dir> <key> <verdict> <parts-cite> [reviewed-sha] [extra trailing text]
 # Shaped on code-reviewer.md's Review Document Template (Summary, Findings with the three
 # severity containers), with the shard lines in place of `## Verdict`.
+# THE ONE FINDING'S CONTAINER FOLLOWS THE VERDICT (BL-740, the merge's VERDICT BACKING): an APPROVED
+# shard carries no finding under Critical, so its finding sits under Important (which APPROVED
+# allows); NEEDS_REWORK, BLOCKED and any other verdict keep it under Critical, which backs them. The
+# headings and the finding are byte-identical to the pre-BL-740 seed; only the APPROVED placement moved.
+shard_find() { printf '#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$1" "$1" "$2"; }
 shard() {
   local d="$1" k="$2" v="$3" cite="$4" sha="${5:-${SHARD_SHA:-$B_SHA}}" extra="${6:-}"
   {
@@ -274,8 +279,10 @@ shard() {
     case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
     printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
     printf '## Findings\n\n### Critical (must fix before merge)\n\n'
-    printf '#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$k" "$k" "$cite"
-    printf '### Important (should fix, can be follow-up)\n\n### Suggestions (optional improvements)\n\n'
+    [ "$v" = APPROVED ] || shard_find "$k" "$cite"
+    printf '### Important (should fix, can be follow-up)\n\n'
+    [ "$v" != APPROVED ] || shard_find "$k" "$cite"
+    printf '### Suggestions (optional improvements)\n\n'
     printf '## Architecture Alignment\nNothing further.\n'
     [ -n "$extra" ] && printf '%s\n' "$extra"
   } > "$d/$k.md"
@@ -1041,8 +1048,12 @@ QT_X_DEF="(cross-3) carries a '## Deferred ACs' section; only cross-1, the execu
 QT_X_HORUN="(cross-2) carries a 'handover-run:' line; only cross-1, the execution owner"
 QT_X_SEAT="does not end in 'seat-complete: ' while another shard"
 QT_X_COUNT="findings=3' but its ## Findings section heads 1 finding(s)"
-xfinding() { # <shard-file> <heading-id> <cite>: a second finding, inside ## Findings, before ### Important
-  awk -v h="$2" -v c="$3" '/^### Important/ && !d { printf "#### %s an interaction\nparts: %s\n\nBody.\n\n", h, c; d = 1 } { print }' \
+# <shard-file> <heading-id> <cite>: a second finding, inside ## Findings, under ### Important (inserted
+# before ### Suggestions). Under Important, not Critical: every shard it is used on is APPROVED, and an
+# APPROVED shard carrying a Critical finding is refused by the merge's VERDICT BACKING (BL-740) at cross-1,
+# which the merge checks before cross-3 -- pre-empting the owner-duplicate refusal X5 and OT1 assert.
+xfinding() {
+  awk -v h="$2" -v c="$3" '/^### Suggestions/ && !d { printf "#### %s an interaction\nparts: %s\n\nBody.\n\n", h, c; d = 1 } { print }' \
     "$1" > "$1.x" && mv "$1.x" "$1" && grep -q "^#### $2 " "$1"
 }
 nparts() { awk -F'\t' '$1 == "part" { n++ } END { print n + 0 }' "$1/.manifest"; }
@@ -1161,8 +1172,12 @@ crs() {
     printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
     case "$hc" in OMIT|-) ;; *) printf 'handovers: %s\n' "$hc" ;; esac
     printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
-    printf '## Findings\n\n### Critical (must fix before merge)\n\n#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$k" "$k" "$cite"
-    printf '### Important (should fix, can be follow-up)\n\n%s\n\n### Suggestions (optional improvements)\n' "$body"
+    # The finding's container follows the verdict, as shard()'s does (BL-740).
+    printf '## Findings\n\n### Critical (must fix before merge)\n\n'
+    [ "$v" = APPROVED ] || shard_find "$k" "$cite"
+    printf '### Important (should fix, can be follow-up)\n\n'
+    [ "$v" != APPROVED ] || shard_find "$k" "$cite"
+    printf '%s\n\n### Suggestions (optional improvements)\n' "$body"
   } > "$d/$k.md"
 }
 crho() { printf '#### F-%s-H %s replay cannot reach a GREEN baseline in the part worktree\nparts: %s\nhandover: %s\n\nThe documented setup fails in a fresh worktree.' "$1" "$2" "$1" "$2"; }
@@ -1650,11 +1665,17 @@ p_env() {
 # a frozen sha whose engine carries the sentinel and a ledger with no rows for them -> REFUSED, no seal
 # row. The control is the same steps over B's frozen sha (the old engine), which merges with no LEGACY
 # line (no marker is left to be legacy).
+# THE REWRITE IS TO BLOCKED, NOT THE REPRO'S APPROVED (BL-740): the worlds are NEEDS_REWORK, so shard 2's
+# one finding sits under Critical, and an APPROVED shard over a Critical finding is now refused by the
+# merge's VERDICT BACKING -- a cause UM1 does not own, which would refuse the old-engine control. BLOCKED
+# over a Critical finding is backed, so the control still merges, and the sentinel half still refuses at
+# shard 1's seal before shard 2 is read. The property UM1 holds (no marker left, one verdict rewritten by
+# sed, no seal row) is unchanged.
 um_strip() { # <shard dir>: the repro's steps -- strip every marker, rewrite shard 2's verdict
   local f
   for f in "$1"/*.md; do awk '!/^seat-complete: /' "$f" > "$f.t" && mv "$f.t" "$f" || return 1; done
-  sed -e 's/^shard-verdict: .*/shard-verdict: APPROVED/' "$1/2.md" > "$1/2.t" && mv "$1/2.t" "$1/2.md" || return 1
-  grep -q '^shard-verdict: APPROVED$' "$1/2.md" && [ "$(cat "$1"/*.md | grep -c '^seat-complete: ')" = 0 ]
+  sed -e 's/^shard-verdict: .*/shard-verdict: BLOCKED/' "$1/2.md" > "$1/2.t" && mv "$1/2.t" "$1/2.md" || return 1
+  grep -q '^shard-verdict: BLOCKED$' "$1/2.md" && [ "$(cat "$1"/*.md | grep -c '^seat-complete: ')" = 0 ]
 }
 p_unmarked() {
   local sd="$1" d SHARD_SHA
@@ -1669,6 +1690,143 @@ p_unmarked() {
   lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply (control)"; return 1; }
   run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || WHY="$WHY control-old-engine{rc=$RC $(head -1 "$MO")}"
+  [ -z "$WHY" ]
+}
+
+# ===================================================================== BL-740: VERDICT BACKING.
+# A shard's verdict is backed by its OWN findings, read off the merge's --gate. Each case overwrites shard
+# 2 of a clean world (the first read is shard 1, so the refusal is the case's own), and is driven through
+# the full merge AND --check-shard: a refusal must be one REFUSED line, byte-equal between the two
+# (cs_same, CS1's comparison), carrying the case's own token; a pass must MERGE and answer SHARD-OK. Every
+# case writes its own WHY token, `<case>{...}`, so a mutant's kill is read on the cell it moved.
+# THE TOKENS are the merge's own message fragments. The code-review ones stop before the Important name
+# on purpose: a container lift that loses that name changes the text after it, and the cell that owns
+# that defect is cr-nr-imp, not the refusals beside it.
+VB_STEM="a shard's verdict is backed by its own findings"
+VB_CR_NR="carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding under '### Critical'"
+VB_CR_BL="carries 'shard-verdict: BLOCKED' but no '#### ' finding under '### Critical'"
+VB_CR_AP="carries 'shard-verdict: APPROVED' but 1 '#### ' finding(s) under '### Critical'; a Critical finding is not approvable"
+VB_Q_NR="carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding in its '## Findings'"
+# R3's three exact substrings: both satisfiable exits and the owner tail.
+VB_R3_LEAD="If the finding belongs to another shard, set 'shard-verdict: PASS'"
+VB_R3_FILE="otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings'"
+VB_R3_SET="set 'shard-verdict: PASS' here and let that shard's verdict carry it"
+VB_R3_OWN="[owner: cross-1]"
+# The graph s319 story 3.1 cross-1 shard's own ## Findings body, verbatim: a qa NEEDS_REWORK whose gap
+# it says is owned by another group's shard, and no '#### ' finding.
+VB_R3_BODY="(none filed by cross-1. The AC4 gap below is owned by cross group g4, parts 2 and 3, under the brief's group table; filing it here would be refused as a duplicate of that owner.)"
+# vb_c <dir> <key> <verdict> <cite> <crit|imp|sug|none>: code-reviewer.md's three containers, the one
+# finding (shard_find) under the named one; `none` is the empty findings template.
+vb_c() {
+  local d="$1" k="$2" v="$3" cite="$4" at="$5" c
+  {
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
+    printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n## Findings\n\n' "$k" "$k"
+    for c in crit imp sug; do
+      case "$c" in
+        crit) printf '### Critical (must fix before merge)\n\n' ;;
+        imp) printf '### Important (should fix, can be follow-up)\n\n' ;;
+        sug) printf '### Suggestions (optional improvements)\n\n' ;;
+      esac
+      [ "$c" != "$at" ] || shard_find "$k" "$cite"
+    done
+    printf '## Architecture Alignment\nNothing further.\n'
+  } > "$d/$k.md"
+}
+# vb_q <dir> <key> <verdict> <## Findings body, verbatim; empty for none>: a qa shard; the first cross
+# shard carries the per-AC table and the deferred record, as qshard's does.
+vb_q() {
+  local d="$1" k="$2" v="$3" body="$4"
+  {
+    printf '# QA Validation shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
+    printf '\n## Summary\nShard %s validated its part. QCONSERVE-%s-91c2\n\n## Findings\n\n' "$k" "$k"
+    [ -z "$body" ] || printf '%s\n\n' "$body"
+    if [ "$k" = cross ] || [ "$k" = cross-1 ]; then
+      printf '## Acceptance Criteria\n\n| AC | Verdict | Evidence |\n|---|---|---|\n| AC1 | PASS | suite green |\n| AC4 | %s | gap |\n\n' "$v"
+      printf '## Deferred ACs\n\nNone.\n'
+    fi
+  } > "$d/$k.md"
+}
+vb_refuse() { # <script-dir> <shard-dir> <gate> <target key> <case> <token> [second token]
+  CS_TOK="$6"
+  if cs_same "$1" "$2" "$3" "$2/$4.md" && { [ -z "${7:-}" ] || has "$CO" "$7"; }; then :
+  else WHY="$WHY $5{$CS_LAST}"; fi
+  CS_TOK=""
+}
+vb_pass() { # <script-dir> <shard-dir> <gate> <target key> <case>
+  local o
+  if [ "$3" = qa ]; then o="$(qout "$2")"; else o="$(out_of "$2")"; fi
+  run_mg "$1" "$2" "$3" "$o"
+  run_check "$1" "$2" "$3" "$2/$4.md"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $2/$4.md" \
+    || WHY="$WHY $5{merge rc=$RC [$(head -1 "$MO")] check rc=$CRC [$(head -1 "$CO")]}"
+  rm -f "$o"
+}
+# ---- VB1 (code-review): NEEDS_REWORK and BLOCKED need a Critical or Important finding; APPROVED carries
+# no Critical one. Each refusal has its ALLOW twin one container apart.
+p_vb_cr() {
+  local sd="$1" d c
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the code-review world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  vb_c "$d" 2 NEEDS_REWORK 2 none; vb_refuse "$sd" "$d" code-review 2 cr-nr-empty "$VB_CR_NR" "$VB_STEM"; cs_reset "$d" "$c"
+  vb_c "$d" 2 NEEDS_REWORK 2 imp; vb_pass "$sd" "$d" code-review 2 cr-nr-imp; cs_reset "$d" "$c"
+  vb_c "$d" 2 BLOCKED 2 crit; vb_pass "$sd" "$d" code-review 2 cr-blocked-crit; cs_reset "$d" "$c"
+  vb_c "$d" 2 BLOCKED 2 sug; vb_refuse "$sd" "$d" code-review 2 cr-blocked-sug "$VB_CR_BL" "$VB_STEM"; cs_reset "$d" "$c"
+  vb_c "$d" 2 APPROVED 2 crit; vb_refuse "$sd" "$d" code-review 2 cr-approved-crit "$VB_CR_AP"; cs_reset "$d" "$c"
+  vb_c "$d" 2 APPROVED 2 imp; vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"
+  [ -z "$WHY" ]
+}
+# ---- VB2 (qa): NEEDS_REWORK needs any finding, in a container or none; PASS has no condition, a
+# '### Critical' heading included (qa.md defines no severity containers).
+p_vb_qa() {
+  local sd="$1" d c
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(printf '#### Q-2-9 an uncontained gap\nparts: 2\n\nBody.')"; vb_pass "$sd" "$d" qa 2 q-nr-one; cs_reset "$d" "$c"
+  vb_q "$d" 2 PASS "$(printf '### Critical\n\n#### Q-2-9 a gap under a Critical heading\nparts: 2\n\nBody.')"; vb_pass "$sd" "$d" qa 2 q-pass-crit; cs_reset "$d" "$c"
+  [ -z "$WHY" ]
+}
+# ---- VB3 (R3): the graph cross-1 shape. A qa cross-1 at NEEDS_REWORK whose ## Findings says the gap is
+# another group's shard's: REFUSED, byte-equal under --check-shard, naming BOTH exits and its owner.
+p_vb_r3() {
+  local sd="$1" d
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  [ -f "$d/cross-1.md" ] || { WHY="FIXTURE BROKEN: the qa world has no cross-1"; return 1; }
+  vb_q "$d" cross-1 NEEDS_REWORK "$VB_R3_BODY"
+  vb_refuse "$sd" "$d" qa cross-1 r3-graph-cross1 "$VB_Q_NR" "$VB_STEM"
+  has "$MO" "$VB_R3_FILE" || WHY="$WHY r3-file-exit{$(reline "$MO")}"
+  has "$MO" "$VB_R3_SET" || WHY="$WHY r3-set-pass-exit{$(reline "$MO")}"
+  has "$MO" "$VB_R3_LEAD" || WHY="$WHY r3-owner-first{$(reline "$MO")}"
+  local mo_txt_
+  mo_txt_="$(reline "$MO")"
+  case "$mo_txt_" in *"$VB_R3_LEAD"*"$VB_R3_FILE"*) ;; *) WHY="$WHY r3-owner-first-order{${mo_txt_}}" ;; esac
+  has "$MO" "$VB_R3_OWN" && owner_in "$MO" cross-1 || WHY="$WHY r3-owner{$(reline "$MO")}"
+  [ -z "$WHY" ]
+}
+# ---- VB4 (--mark): findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the
+# file byte-unchanged; the ALLOW twin, same file, one Important finding filed and re-written by the seat,
+# marks it findings=1 keyed 2.
+p_vb_mark() {
+  local sd="$1" d f s
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the mark world was not built"; return 1; }
+  f="$d/2.md"; s="$(dirname "$d")/2.snap"
+  vb_c "$d" 2 NEEDS_REWORK 2 none
+  fire "$f" agent || { WHY="the recorder wrote no row for $f"; return 1; }
+  cp "$f" "$s" || return 1
+  mark_args "$sd" "$f" implementation code-reviewer 2 findings=0
+  mark_refused "$VB_CR_NR" "$s" "$f" && has "$MKO" "$VB_STEM" || WHY="$WHY mark-nr-empty{rc=$MRC $(head -3 "$MKO")}"
+  vb_c "$d" 2 NEEDS_REWORK 2 imp
+  fire "$f" agent || { WHY="$WHY the recorder wrote no row for the re-written $f"; return 1; }
+  mark_args "$sd" "$f" implementation code-reviewer 2 findings=1
+  [ "$MRC" -eq 0 ] && grep -qE '^seat-complete: implementation code-reviewer 2 key=2 sha=[0-9a-f]{64} findings=1$' "$f" \
+    || WHY="$WHY mark-allow{rc=$MRC $(head -2 "$MKO")}"
   [ -z "$WHY" ]
 }
 

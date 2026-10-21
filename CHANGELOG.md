@@ -19,6 +19,49 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.901.0] - 2026-10-21
+
+Batch 238, lead ai-dlc-1a. It closes BL-740, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`. No role text changes, so a seat learns the new rule from the refusal it gets.
+
+### BL-740 — a review shard's verdict must be backed by its own findings
+
+The merge's per-shard parser counted a shard's findings as a total and never read their severity, so nothing tied the verdict to them. Graph's s319 story 3.1 QA shard cross-1 sealed `NEEDS_REWORK` with no finding and would have merged once an unrelated refusal from another shard was out of the way. Its seat could not file the gap itself either: the finding's parts already belonged to cross-4, so the merge refused it as a duplicate of that owner, and no correction path opened.
+
+- `merge-review-shards.sh` gains VERDICT BACKING in `check_shard()`, after every grammar and owner check, so the merge, `--check-shard` and `--mark` all apply it. The gate is the merge's own `--gate`.
+  - At `--gate code-review`, `NEEDS_REWORK` or `BLOCKED` needs at least one `#### ` finding under the Critical or Important container, and `APPROVED` carries no finding under Critical. `APPROVED` with an Important finding stays allowed.
+  - At `--gate qa`, `NEEDS_REWORK` needs at least one `#### ` finding under `## Findings`, in any container or none. `PASS` has no condition.
+- The container names are read from `code-reviewer.md`'s own template, never retyped. The read takes the first word of each `### ` heading under that template's `## Findings`, must find exactly three, and refuses `[owner: lead]` otherwise. It resolves `.claude/team-roles/` in a consumer and `core/team-roles/` here; both give `Critical Important Suggestions`.
+- Each refusal ends `[owner: <key>]` and names two ways out, the owner's first: if the finding belongs to another shard, set the gate's better verdict here and let that shard carry it; otherwise file the finding here with a `parts:` set this shard may own. An `APPROVED` shard with a Critical finding is told to downgrade the finding with evidence, or set `NEEDS_REWORK`.
+- `review-shard-merge` reseeds every code-review world so each shard's finding sits under a container its verdict allows. No arm was deleted. UM1 now strips to `BLOCKED` and is still refused on its missing content-seal row, not by this rule.
+- New arms VB1 (six code-review cells), VB2 (three qa cells), VB3 (graph cross-1's own text, naming both exits in the owner-first order and `[owner: cross-1]`) and VB4 (`--mark` exits 64 relaying the stem). Each refusal is byte-equal between the merge and `--check-shard`. VBCTL runs them over an unmutated copy.
+- Mutants M7 to M11 are each killed on their own cell:
+  - M7, the rule removed;
+  - M8, a Suggestions finding counted as Important;
+  - M9, the APPROVED half dropped;
+  - M10, Important missing from the container list;
+  - M11, the two exits in the old order.
+- BL-740's receipt, `core/fixtures/review-shard-merge/receipt-bl740.sh`, scored under `set -uo pipefail`: the fix 0, the rule removed 1, Suggestions counted as Important 1, a second correct spelling 0.
+
+### Consumer
+
+Measured over every committed review shard in graph (280, plus three controls), copied into a scratch directory with graph left unchanged: 283 evaluated, 283 reached the rule, 0 refused by it.
+- 140 of those shards' story worktrees are gone, so they were mapped against a `git clone --no-hardlinks` of graph with each manifest's commit checked out.
+- 30 shards carry the `code-reviewer-escalated` role, which the merge never reads; they ran under `--gate code-review` from their directory name.
+- The positive control, s319 3.1 QA cross-1, is refused; both negative controls merge.
+- A separate read-only scan for shards the rule should have refused and did not found none.
+
+So no committed graph shard is refused at the first merge after the pull.
+
+### Limits
+
+- The QA half is count-only: `qa.md` defines no severity containers, so a QA verdict cannot be tied to severity (BL-746).
+- Graph holds no `BLOCKED` shard (121 code-review APPROVED, 59 NEEDS_REWORK, 96 qa PASS, 5 qa NEEDS_REWORK), so the BLOCKED half rests on the fixture alone.
+- The container match is a case-insensitive prefix on a word boundary, so `### Critical path notes` counts as Critical and `### Important-ish` as Important. Only an APPROVED shard under such a heading is affected, and graph has none.
+- A fourth `### ` heading in the reviewer template's Findings section would refuse every code-review merge and `--mark` `[owner: lead]`. The fixture copies the real template, so such a change turns it red at push.
+- A serial `1/1` review and a joined review file never pass through `check_shard()`, so the rule cannot see them.
+- `qa.md` still names SHARD GRAMMAR as the definition the merge applies; VERDICT BACKING is a separate section of the script's header.
+- `review-shard-merge` grows from 173 s to 232 s loaded (+34%), measured on this release's own pre-push run: the new arms and mutants M7 to M11 add about 86 merge runs. It is not the suite's pole; `reconcile-emit-report` (753 s) is the slowest live unit. The duration record's three `review-shard-merge-mutants` rows (582, 566 and 562 s) are left over from deleted fixture directories, which BL-744 owns.
+
 ## [0.900.0] - 2026-10-21
 
 Batch 238, lead ai-dlc-1a. It closes BL-739, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-mutation-red.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/dev.md`.
