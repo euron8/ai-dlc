@@ -237,7 +237,9 @@ Before starting any task, read these files in order:
           Run it as `scripts/ai-dlc/validate-mutation-red.sh <file> <line>
           '<mutated line>' <test-cmd...>`: it applies the mutation, runs the
           named test before and after, restores byte-identical and verifies
-          the restore, and prints the capture to commit. **0** proven, **1**
+          the restore, and its stdout IS the capture: redirect it to the
+          capture file and commit that file, and do not write your own `$ `
+          or `head:` lines above it. **0** proven, **1**
           unproven (the test stayed GREEN under a real mutation), **2**
           nothing was tested — nothing was mutated, or the mutation broke
           the file instead of the test (a `*.py` mutant that does not
@@ -333,7 +335,9 @@ project that replaces that section does not replace this one.
   full-collection run that is the run above. `head:` is `HEAD` of the
   repository the command ran in, not the working tree: when the run had
   uncommitted changes, write `head: <full sha> (+dirty)`. `validate-mutation-red.sh`
-  prints its own header (`mutation-red replay`, `head:`, `cwd:`); keep it.
+  prints its own header (`$ <command>`, `mutation-red replay`, `head:`, `cwd:`):
+  redirect its stdout to the capture file and commit that file as it is,
+  rather than retyping its command or adding your own `$ ` or `head:` lines.
   Every mutation-RED capture you cite is committed (`git add -f` when the
   directory is gitignored), and every capture is cited by its own path,
   never by a glob or `{a,b}` brace. The lead runs

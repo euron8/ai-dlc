@@ -37006,3 +37006,22 @@ Related: BL-715 (archive), the remediator `--check-part`, which is the shape for
 
 verify: sh o="$(bash core/fixtures/review-shard-merge/run.sh 2>&1)"; for a in W3 W4 CS1 CP1 OT1 KY1 MK1 SE1 SE2 LG1 LY1 FT1 EV1 UM1 M6; do grep -q "^  ok    $a: " <<<"$o" || exit 1; done
 
+## BL-739 — `validate-mutation-red.sh` prints its test command with argv quoting dropped, so a multi-word `-k` expression is echoed, and committed as gate-1 evidence, as a command that does not run
+
+**LANDED (v0.900.0, verified 4255e14c2).** **DEFECT.** Seen by graph-watch (ai-dlc-1b) in batch 238, read-only on graph; the lead verified the line at origin/main `e1739275b`.
+
+- `core/scripts/validate-mutation-red.sh:460` is `printf '  test:       %s\n' "${TEST_CMD[*]}"`, which joins argv with spaces.
+- On graph s319 story 3.1, the captures `s319-3-1-mutation-red-ac8-generation-compare`, `-ac9-nonarray` and `-ac9-redirect` read, unquoted, `-k ac8_invalidate_during_blocked or overlapping_refresh`, `-k non_array_body or malformed_json` and `-k 302 or redirect or session_call`. The dev subagent transcripts (`ace13458` at 03:04:46Z, `a702f89c` at 03:38:24Z) show the dev invoked them quoted.
+- The script prints no `$ ` command line, so the dev retypes line 1 of the capture from the echo.
+- Single-token captures (`-k ac10_parsed_fixture -p`) are unaffected; that is the control.
+- Graph's installed copy is byte-identical to origin/main.
+- Cost: QA part 3 sealed NEEDS_REWORK on exactly these 3 captures, repeating an earlier gate-1 Important finding.
+
+Owed:
+- Print TEST_CMD with `printf '%q '` so it round-trips through a shell.
+- The script emits the runnable `$ ` line itself.
+- `dev.md` (~:237, the "Run it as `scripts/ai-dlc/validate-mutation-red.sh ...`" paragraph) tells the dev to commit the printed lines rather than retype them.
+- A fixture arm round-trips a multi-word `-k` through `bash -c` with a single-token control.
+
+verify: sh bash core/fixtures/mutation-red-replay/receipt-bl739.sh core/scripts/validate-mutation-red.sh
+
