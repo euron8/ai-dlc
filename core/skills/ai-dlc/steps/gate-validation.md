@@ -1145,7 +1145,7 @@ was measured, and the two are indistinguishable afterwards. Measured in the
 reference consumer: 12 consecutive Check 14 rows reading `done after this entry | —`,
 across a sprint in which the snapshot went from 99% to 156% of budget.
 
-Exit 1 → **Check 14 FAILS**, on any of three independent verdicts:
+Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
 
 - **Over budget.** Trim the snapshot (the `Recent Activity` section holds the last
   ~10 entries and nothing more; superseded narrative and handoff appendices move to
@@ -1169,9 +1169,35 @@ Exit 1 → **Check 14 FAILS**, on any of three independent verdicts:
 - **A stamp later than the current UTC time.** The validator names each `Recent
   Activity` stamp or In-Flight `dispatched-at` cell more than 10 minutes ahead of
   `date -u`. Apply the remedy its first FAIL line prints, without asking and
-  before any trim: rewrite each to `date -u`, keep line order, and add the one
+  before any trim: rewrite each Recent Activity stamp to `date -u`, and rewrite each
+  In-Flight `dispatched-at` cell to its dispatch's ledger ts, never from a clock —
+  when the agent cell is an agentId, a toolu_ id or a `<name>@<team>`, what
+  `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>` prints; otherwise
+  that teammate's spawn-ledger row `ts`. Keep line order, and add the one
   `CLOCK CORRECTION` line it spells. Ranges, approximate (tilde) and
   placeholder stamps, and date-only stamps are not checked.
+- **A dispatched-at earlier than its dispatch (`BACKDATED`).** The validator names
+  each In-Flight row whose `dispatched-at` precedes its own spawn-ledger dispatch.
+  Re-stamp each named row from the dispatch itself: when the agent cell is an
+  agentId, a toolu_ id or a `<name>@<team>`, what `scripts/ai-dlc/wait-for-deliverable.sh
+  --dispatch-ts <id>` prints; otherwise that teammate's spawn-ledger row `ts`.
+  Never back-date a row to make an older deliverable count.
+- **A dispatched-at that is not its dispatch's ledger ts (`LATE`).** The validator
+  names each In-Flight row whose `dispatched-at` is not byte-equal to the ledger ts
+  of the dispatch its agent cell resolves to, and each `LATE` line names that ts.
+  Replace each `LATE` row's `dispatched-at` cell with the ts its line names, then
+  re-run. Never stamp `dispatched-at` from a clock.
+- **Superseded content marked in place.** The validator names each line that marks
+  content superseded (strikethrough, a bracketed SUPERSEDED annotation, or a bare
+  all-caps SUPERSEDED stamp). Move each marked line's superseded content verbatim to
+  `pipeline-snapshot-history.md` (write-only, Rule 25a) and delete it here.
+- **Struck-through In-Flight rows.** A row is deleted when the teammate will not be
+  messaged again, never struck. A teammate that has delivered but is still alive and
+  re-messageable gets `status: delivered-reachable` instead.
+- **An unrecognised In-Flight status.** The leading token of the status cell must be
+  `in-flight`, `delivered-reachable` or `stopped`. A teammate that delivered and will
+  not be messaged again has no token: delete its row. A teammate stopped at a handoff
+  keeps its row and takes `stopped`.
 
 Then re-run Check 14 and Check 15.
 

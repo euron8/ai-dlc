@@ -852,6 +852,49 @@ if [ -r "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh" ]; then
   fire "$(write_json "$SNAP")"
   if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: a whole-file Write of unchanged text -> exit 0"
   else bad "snapshot: an unchanged whole-file Write exited $RC: $(head -2 "$ERR")"; fi
+  # S10-S13 LATE AT WRITE TIME. An agentId resolves only through this session's subagents dir, which
+  # wait-for-deliverable.sh finds from CLAUDE_CODE_SESSION_ID under $HOME/.claude/projects. A hook is
+  # not handed that variable; its payload carries `session_id`. HOME is a scratch dir holding the one
+  # meta.json, CLAUDE_CODE_SESSION_ID and AI_DLC_TEAMMATE_DIR are unset, so the meta.json is
+  # reachable ONLY through the payload. The ledger row is the dispatch's, after an epoch row.
+  if [ -f "$CONSUMER/scripts/ai-dlc/wait-for-deliverable.sh" ] && [ -f "$CONSUMER/scripts/ai-dlc/validate-adversarial-convergence.sh" ]; then
+    LHOME="$WORK/home"; LSID="sess-605-capture"
+    mkdir -p "$LHOME/.claude/projects/p/$LSID/subagents" || exit 2
+    printf '{"agentType":"remediator","toolUseId":"toolu_01CaptureLateDDDDDDDD"}\n' \
+      > "$LHOME/.claude/projects/p/$LSID/subagents/agent-a7ffc8dcd555207b8.meta.json"
+    printf '%s\n' '{"ts":"2026-10-16T01:59:03Z","name":"","role":"remediator","tool_use_id":"toolu_01CaptureLateDDDDDDDD"}' \
+      >> "$CONSUMER/_bmad-output/spawn-ledger.jsonl"
+    lfire() { # <row> <session id or empty> -> append the row, fire its Edit with the payload's session_id
+      printf '%s\n' "$1" >> "$SNAP"; LLN="$(wc -l < "$SNAP" | tr -d ' ')"
+      printf '%s' "$(jq -nc --arg f "$SNAP" --arg s "$1" --arg sid "$2" \
+          '{tool_name:"Edit",tool_input:{file_path:$f,old_string:"IRRELEVANT",new_string:$s}} + (if $sid == "" then {} else {session_id:$sid} end)')" \
+        | env -u CLAUDE_CODE_SESSION_ID HOME="$LHOME" CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" >"$OUT" 2>"$ERR"
+      RC=$?
+      sed -i.bak '$d' "$SNAP" && rm -f "$SNAP.bak"
+    }
+    L_DECO='remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | r1 | 2026-10-16T01:59:30Z | in-flight'
+    l_late_line() { printf "LATE  pipeline-snapshot.md line %s: a7ffc8dcd555207b8 dispatched-at 2026-10-16T01:59:30Z is not its dispatch's ledger ts 2026-10-16T01:59:03Z" "$LLN"; }
+    # S10 a bare agentId stamped 27 s late, session id in the payload: exit 2 LATE with the ts to copy.
+    lfire 'a7ffc8dcd555207b8 | remediator | r1 | 2026-10-16T01:59:30Z | in-flight' "$LSID"
+    if [ "$RC" = 2 ] && grep -qxF "$(l_late_line)" "$ERR"; then ok "snapshot: a LATE dispatched-at written, session_id in the payload -> exit 2 LATE naming the ledger ts"
+    else bad "snapshot: a late row with session_id exited $RC (expected 2 and: $(l_late_line)): $(head -3 "$ERR")"; fi
+    # S11 the motivating decorated cell, the same payload shape: LATE by its one resolving id.
+    lfire "$L_DECO" "$LSID"
+    if [ "$RC" = 2 ] && grep -qxF "$(l_late_line)" "$ERR"; then ok "snapshot: the decorated motivating cell written late -> exit 2 LATE naming a7ffc8dcd555207b8"
+    else bad "snapshot: the decorated late row exited $RC (expected 2 and: $(l_late_line)): $(head -3 "$ERR")"; fi
+    # S12 CONTROL: the identical payload with no session_id. The meta.json is unreachable, the row is
+    # SKIP (filtered at write time), and the write is silent. S10 passing while this one fires would
+    # mean the meta.json was reached some other way.
+    lfire "$L_DECO" ""
+    if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: the same late row with no session_id -> exit 0 (unresolvable, so not judged)"
+    else bad "snapshot: the late row without session_id exited $RC (expected 0, silent): $(head -3 "$ERR")"; fi
+    # S13 the same cell stamped EQUAL to its ledger ts, with session_id: silent.
+    lfire 'remediator (serial, pass 1 cross-part, a7ffc8dcd555207b8) | remediator | r1 | 2026-10-16T01:59:03Z | in-flight' "$LSID"
+    if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then ok "snapshot: the decorated row stamped equal to its ledger ts, session_id in the payload -> exit 0"
+    else bad "snapshot: the equal row exited $RC (expected 0, silent): $(head -3 "$ERR")"; fi
+  else
+    ok "snapshot LATE arms SKIPPED: no wait-for-deliverable.sh beside the budget validator in this layout"
+  fi
   unset AI_DLC_SNAPSHOT_NOW_EPOCH
 else
   ok "snapshot carrier SKIPPED: no validate-artifact-budget.sh in this layout"

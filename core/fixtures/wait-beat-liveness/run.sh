@@ -3047,8 +3047,8 @@ S27c_complete_present_is_unchanged() {
 #      --complete-repair's (BL-721). A remediator whose work has no deliverable file (an inline
 #      changelog append) gives the join a path that never appears, so a beat armed on it can
 #      only reach its cap -- and the bare "Re-dispatch the teammate ONCE" then fired against a
-#      live or finished writer. Seeds in receipt-bl605.sh's shape: a two-row ledger with the
-#      subject NOT first, and a meta.json joining the agentId to the dispatch's toolu_ id.
+#      live or finished writer. Seeds: a two-row ledger with the subject NOT first, and a
+#      meta.json joining the agentId to the dispatch's toolu_ id.
 #      AI_DLC_MAX_WAIT_BEATS=1 with the counters seeded at the cap. Both id spellings are driven.
 #      The near-miss without --dispatch keeps the bare remedy; that is what the widened mutant
 #      breaks, and the gate-restored mutant breaks the LIVE and STOPPED arms.
@@ -3124,6 +3124,157 @@ M55_dispatch_live_widened() {
   if ! r27d_nodispatch_arm "$SD/wait-for-deliverable.sh" && has "$R27D_LIVE"; then
     ok "MUTANT dispatch-live-widened: reading a transcript with no --dispatch drops the bare remedy from a session-wide beat — section 27d's near-miss catches it"
   else bad "MUTANT dispatch-live-widened: section 27d survives the remedy being widened to beats without --dispatch (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 28. --dispatch-ts PRINTS THE DISPATCH'S OWN LEDGER ts, VERBATIM, AND REFUSES EVERY OTHER ANSWER
+#     (BL-605). The In-Flight row's `dispatched-at` was stamped from a clock after the dispatch --
+#     the motivating pair is dispatched 05:00:03Z, stamped 05:01:00Z -- so the mode reads the
+#     dispatch's spawn-ledger row through dispatch_epoch_of. Seeds: a two-row ledger with the
+#     subject NOT first (a one-row ledger makes its own row the answer to any lookup), and a
+#     meta.json joining the agentId to the subject's toolu_ id. Both id spellings must print the
+#     subject row's ts; the other row must print its OWN ts; an agentId with no meta.json, an
+#     agentId with no subagents dir at all, and an id with no ledger row each exit 64 with
+#     dispatch_refuse's text and print nothing on stdout. The mode takes the --status no-write
+#     path, so the tree is byte-for-byte the same file list after every call. stdout and stderr
+#     are captured apart: the stamp is the whole of stdout, and a refusal must not leak one there.
+#     The mutants: the meta.json lookup dropped (an agentId cannot resolve), and the ts read from
+#     the ledger's FIRST row rather than the subject's (killed only because the subject is not first),
+#     and the multi-id guard never matching (two ids that each resolve alone then print a stamp).
+# ===========================================================================
+R28_D="2026-10-16T05:00:03Z"; R28_LATE="2026-10-16T05:01:00Z"; R28_E="2026-10-16T04:58:41Z"
+R28_TUI=toolu_01Bl605SubjectDispatchAAAA; R28_TUI_E=toolu_01Bl605EpochRowBBBBBBBBB; R28_AG=a7ffc8dcd555207b8
+R28_NOROW=toolu_01Bl605NoSuchDispatchZZZ; R28_NOMETA=a0000000000000605
+r28_world() {  # -> W: the epoch row first, the subject second, and the agentId's meta.json
+  W="$(mk_work)"; mkdir -p "$W/sub" "$W/nostate" || broken "cannot create the section 28 world"
+  { printf '{"ts":"%s","tool_use_id":"%s","name":"","subagent_type":"architect"}\n' "$R28_E" "$R28_TUI_E"
+    printf '{"ts":"%s","tool_use_id":"%s","name":"","subagent_type":"remediator"}\n' "$R28_D" "$R28_TUI"
+  } > "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot write the section 28 ledger"
+  printf '{"agentType":"remediator","toolUseId":"%s"}\n' "$R28_TUI" > "$W/sub/agent-$R28_AG.meta.json" \
+    || broken "cannot write the section 28 meta.json"
+}
+r28_argv() {  # $1 = subject, $2 = teammate dir ('' = none, and no session id), rest = argv -> R28_OUT, R28_ERR, RC
+  r28_s_="$1"; r28_t_="$2"; shift 2
+  ( cd "$W" && if [ -n "$r28_t_" ]; then export AI_DLC_TEAMMATE_DIR="$r28_t_"; else unset AI_DLC_TEAMMATE_DIR; fi
+    if [ -n "${R28_STATE:-}" ]; then export AI_DLC_STATE_DIR="$R28_STATE"; fi
+    env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$PWD" bash "$r28_s_" "$@" ) \
+    > "$TMPROOT/r28.out" 2> "$TMPROOT/r28.err"
+  RC=$?
+  R28_OUT="$(cat "$TMPROOT/r28.out")"; R28_ERR="$(cat "$TMPROOT/r28.err")"
+  OUT="rc=$RC stdout=[$R28_OUT] stderr=[$R28_ERR]"
+}
+r28_ts() {  # $1 = subject, $2 = id, $3 = teammate dir ('' = none, and no session id) -> R28_OUT, R28_ERR, RC
+  r28_argv "$1" "$3" --dispatch-ts "$2"
+}
+r28_argshape_arm() {  # $1 = subject, $2 = the whole refusal line, rest = argv -> 0 when refused with exactly that line
+  r28_as_s_="$1"; r28_as_t_="$2"; shift 2
+  r28_argv "$r28_as_s_" "$W/sub" "$@"
+  [ "$RC" -eq 64 ] && [ -z "$R28_OUT" ] && [ "$R28_ERR" = "$r28_as_t_" ]
+}
+r28_snap() {  # -> stdout: every path under $W, then a cksum of every file's CONTENT
+  find "$W" | sort
+  find "$W" -type f -exec cksum {} \; | sort
+}
+r28_stamp_arm() {  # $1 = subject, $2 = id, $3 = expected ts -> 0 when that id prints exactly that ts
+  r28_ts "$1" "$2" "$W/sub"
+  [ "$RC" -eq 0 ] && [ "$R28_OUT" = "$3" ] && [ "$R28_OUT" != "$R28_LATE" ] && [ -z "$R28_ERR" ]
+}
+r28_refuse_arm() {  # $1 = subject, $2 = id, $3 = teammate dir, $4 = refusal text -> 0 when refused by name
+  r28_ts "$1" "$2" "$3"
+  [ "$RC" -eq 64 ] && [ -z "$R28_OUT" ] || return 1
+  case "$R28_ERR" in *"FAIL: --dispatch '$2': $4"*"No dispatch time is guessed."*) return 0 ;; esac
+  return 1
+}
+S28_dispatch_ts_contract() {
+  r28_world
+  r28_before_="$(r28_snap)"
+  if r28_stamp_arm "$SUBJ" "$R28_AG" "$R28_D"; then
+    ok "dispatch-ts: agentId $R28_AG resolves through its meta.json and prints the subject row's ts $R28_D verbatim (the second ledger row, not the late $R28_LATE)"
+  else bad "dispatch-ts: agentId $R28_AG did not print the subject row's ts $R28_D alone on stdout: $OUT"; fi
+  if r28_stamp_arm "$SUBJ" "$R28_TUI" "$R28_D"; then
+    ok "dispatch-ts: toolu_ id $R28_TUI prints the same ledger ts $R28_D verbatim (rc 0, nothing on stderr)"
+  else bad "dispatch-ts: toolu_ id $R28_TUI did not print $R28_D: $OUT"; fi
+  if r28_stamp_arm "$SUBJ" "$R28_TUI_E" "$R28_E"; then
+    ok "dispatch-ts: the OTHER ledger row's id prints its own ts $R28_E, so the lookup discriminates by row"
+  else bad "dispatch-ts: the other row $R28_TUI_E did not print its own ts $R28_E -- the lookup does not discriminate: $OUT"; fi
+  if r28_refuse_arm "$SUBJ" "$R28_NOROW" "$W/sub" "the ledger holds 0 row(s) for tool_use_id $R28_NOROW, not one"; then
+    ok "dispatch-ts: an id with no ledger row is refused by name (rc 64, dispatch_refuse's text, stdout empty)"
+  else bad "dispatch-ts: an id with no ledger row was not refused with rc 64, the 0-row text and an empty stdout: $OUT"; fi
+  if r28_refuse_arm "$SUBJ" "$R28_NOMETA" "$W/sub" "no agent-${R28_NOMETA}.meta.json in this session's subagents dir ($W/sub)"; then
+    ok "dispatch-ts: an agentId with no meta.json is refused by name (rc 64, stdout empty)"
+  else bad "dispatch-ts: an agentId with no meta.json was not refused with rc 64, its text and an empty stdout: $OUT"; fi
+  if r28_refuse_arm "$SUBJ" "$R28_AG" "" "no agent-${R28_AG}.meta.json in this session's subagents dir (unresolved: CLAUDE_CODE_SESSION_ID is unset)"; then
+    ok "dispatch-ts: with no session id and no subagents dir even a real agentId is refused by name (rc 64, stdout empty)"
+  else bad "dispatch-ts: an agentId with no session id was not refused with rc 64, the unresolved text and an empty stdout: $OUT"; fi
+  # The argument shapes refused before any lookup. Each refusal is the WHOLE of stderr, rc 64,
+  # stdout empty. The two ids are the subject row and the other row, and each prints its own ts
+  # alone (the stamp arms above are the control), so a guard that never matches prints a stamp.
+  r28_need_="FAIL: --dispatch-ts needs the agentId the Agent result returned."
+  if r28_argshape_arm "$SUBJ" "$r28_need_" --dispatch-ts "" \
+     && r28_argshape_arm "$SUBJ" "$r28_need_" --dispatch-ts; then
+    ok "dispatch-ts: an empty id and a missing id are each refused (rc 64, the needs-the-agentId line, stdout empty)"
+  else bad "dispatch-ts: an empty or missing --dispatch-ts id was not refused with rc 64, its line and an empty stdout: $OUT"; fi
+  if r28_argshape_arm "$SUBJ" "FAIL: --dispatch-ts takes exactly one id (got '$R28_TUI $R28_TUI_E'); one row, one stamp." \
+       --dispatch-ts "$R28_TUI" --dispatch-ts "$R28_TUI_E"; then
+    ok "dispatch-ts: two ids that each resolve alone are refused together (rc 64, exactly-one-id line, no stamp guessed)"
+  else bad "dispatch-ts: two --dispatch-ts ids were not refused with rc 64, the exactly-one-id line and an empty stdout: $OUT"; fi
+  r28_alone_="FAIL: --dispatch-ts prints one dispatch's ledger ts and is not a beat; pass it alone."
+  if r28_argshape_arm "$SUBJ" "$r28_alone_" --dispatch-ts "$R28_TUI" deliverable.md \
+     && r28_argshape_arm "$SUBJ" "$r28_alone_" --reset --dispatch-ts "$R28_TUI"; then
+    ok "dispatch-ts: combined with a target path or with --reset it is refused (rc 64, pass-it-alone line, stdout empty)"
+  else bad "dispatch-ts: --dispatch-ts beside a beat argument was not refused with rc 64, the pass-it-alone line and an empty stdout: $OUT"; fi
+  if R28_STATE=nostate r28_argshape_arm "$SUBJ" "FAIL: --dispatch '$R28_TUI': no spawn ledger at $W/nostate/spawn-ledger.jsonl
+  No dispatch time is guessed. Arm from the project root, where the dispatch guard writes it." --dispatch-ts "$R28_TUI"; then
+    ok "dispatch-ts: a state dir with no spawn-ledger.jsonl is refused by name (rc 64, no-spawn-ledger text, stdout empty)"
+  else bad "dispatch-ts: a state dir with no spawn ledger was not refused with rc 64, its text and an empty stdout: $OUT"; fi
+  if r28_argshape_arm "$SUBJ" "FAIL: --dispatch '$R28_TUI/x': not an agentId, a <name>@<team> or a dispatch id (prefixes: toolu_ call_)
+  No dispatch time is guessed. Pass the agentId the Agent result returned." --dispatch-ts "$R28_TUI/x"; then
+    ok "dispatch-ts: an id outside the accepted charset is refused by name (rc 64, not-an-agentId text, stdout empty)"
+  else bad "dispatch-ts: an id outside the charset was not refused with rc 64, its text and an empty stdout: $OUT"; fi
+  r28_after_="$(r28_snap)"
+  if [ -n "$r28_before_" ] && [ "$r28_before_" = "$r28_after_" ] && [ ! -e "$W/_bmad-output/.wait-beats" ] \
+     && [ ! -e "$W/_bmad-output/.beat-inflight" ]; then
+    ok "dispatch-ts: every call left the tree unchanged -- the same paths, every file's cksum the same, no .wait-beats, no .beat-inflight lease"
+  else bad "dispatch-ts: --dispatch-ts wrote into the tree: before=[$r28_before_] after=[$r28_after_]"; fi
+  rm -rf "$W"
+}
+M56_dispatch_ts_no_meta_lookup() {
+  mutant dispatch-ts-no-meta-lookup \
+    -e 's@^        && dp_m_="\$TEAMMATE_DIR/agent-\${dp_id_}.meta.json"$@        \&\& dp_m_=""@' || return
+  SD="$(sib_dir "$MUT")"; CD="$(sib_dir "$SUBJ")"
+  r28_world
+  if r28_stamp_arm "$CD/wait-for-deliverable.sh" "$R28_AG" "$R28_D"; then
+    ok "MUTANT dispatch-ts-no-meta-lookup: CONTROL — the unmutated sibling copy prints $R28_D for agentId $R28_AG"
+  else bad "MUTANT dispatch-ts-no-meta-lookup: CONTROL FAILED — the unmutated sibling copy did not print $R28_D: $OUT"; fi
+  if ! r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_AG" "$R28_D" && [ "$RC" -eq 64 ] \
+     && r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_TUI" "$R28_D"; then
+    ok "MUTANT dispatch-ts-no-meta-lookup: without the meta.json lookup agentId $R28_AG is refused (rc 64) while the toolu_ id still prints — section 28's agentId arm catches it"
+  else bad "MUTANT dispatch-ts-no-meta-lookup: section 28's agentId arm survives the meta.json lookup being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+M57_dispatch_ts_first_row() {
+  mutant dispatch-ts-first-row \
+    -e 's@^  dp_ts_="\$(printf .%s. "\$dp_rows_" | sed@  dp_ts_="$(sed -n 1p "$SPAWN_LEDGER" | sed@' || return
+  SD="$(sib_dir "$MUT")"
+  r28_world
+  if ! r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_AG" "$R28_D" && [ "$R28_OUT" = "$R28_E" ] \
+     && r28_stamp_arm "$SD/wait-for-deliverable.sh" "$R28_TUI_E" "$R28_E"; then
+    ok "MUTANT dispatch-ts-first-row: reading the ledger's first row prints $R28_E for the second-row subject — section 28's subject-not-first arm catches it"
+  else bad "MUTANT dispatch-ts-first-row: section 28 survives the ts being read from the first ledger row: $OUT"; fi
+  rm -rf "$W"
+}
+M58_dispatch_ts_multi_id() {
+  mutant dispatch-ts-multi-id \
+    -e "s@^  case \"\\\$DISPATCH_TS_ONLY\" in \\*' '\\*)\$@  case \"\$DISPATCH_TS_ONLY\" in *NEVERMATCH605*)@" || return
+  SD="$(sib_dir "$MUT")"
+  r28_world
+  r28_argv "$SD/wait-for-deliverable.sh" "$W/sub" --dispatch-ts "$R28_TUI" --dispatch-ts "$R28_TUI_E"
+  if [ "$RC" -eq 0 ] && [ -n "$R28_OUT" ] \
+     && ! r28_argshape_arm "$SD/wait-for-deliverable.sh" "FAIL: --dispatch-ts takes exactly one id (got '$R28_TUI $R28_TUI_E'); one row, one stamp." \
+          --dispatch-ts "$R28_TUI" --dispatch-ts "$R28_TUI_E"; then
+    ok "MUTANT dispatch-ts-multi-id: with the multi-id guard never matching, two ids print a guessed stamp [$R28_OUT] with rc 0 — section 28's two-id arm catches it"
+  else bad "MUTANT dispatch-ts-multi-id: section 28's two-id arm survives the multi-id guard never matching: $OUT"; fi
   rm -rf "$W"
 }
 

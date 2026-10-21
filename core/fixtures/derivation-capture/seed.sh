@@ -58,6 +58,10 @@ chmod +x "$CONSUMER/.claude/hooks/ai-dlc-derivation-capture.sh" \
 # The snapshot stamp carrier delegates to the REAL budget validator, from the same layout.
 SRC_BUDGET="$(dirname "$SRC_VALIDATOR")/validate-artifact-budget.sh"
 [ -r "$SRC_BUDGET" ] && cp "$SRC_BUDGET" "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh"
+# Its LATE arm resolves each agent-cell candidate through these siblings; absent, it judges nothing.
+for _sib in wait-for-deliverable.sh validate-adversarial-convergence.sh wfd-start-of.sh; do
+  [ -r "$(dirname "$SRC_VALIDATOR")/$_sib" ] && cp "$(dirname "$SRC_VALIDATOR")/$_sib" "$CONSUMER/scripts/ai-dlc/$_sib"
+done
 
 ART="$CONSUMER/_bmad-output/planning-artifacts/s1/stories-repair-p1.md"
 cat > "$ART" <<'ARTIFACT'

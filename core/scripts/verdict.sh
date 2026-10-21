@@ -27,6 +27,17 @@
 #         <the measurement lines, verbatim, up to AI_DLC_VERDICT_LINES>
 #   FAIL  <validator>
 #         <the failing lines, verbatim, up to AI_DLC_VERDICT_LINES>
+#         … <n> more matching line(s); run scripts/ai-dlc/<validator> directly for all
+#
+# Each surfaced line is the validator's own line behind six spaces AND its `grep -n` line
+# number: `      19:LATE  ...`. A reader that greps this output with a pattern anchored on
+# the token (`^[[:space:]]*LATE`) reads 0 against it; match after the `<n>:` prefix instead.
+#
+# THE TRUNCATION NOTICE. A filter that keeps fewer lines than it matched says so, with n =
+# matched - shown, both counted on the filter's OWN match set (one grep, captured whole, then
+# cut). Measured on graph: a LATE verdict showed 5 of its 16 rows and nothing said the list
+# was cut. No notice is printed when
+# everything matched was shown.
 #
 # A PASS LINE MUST CARRY EVIDENCE OF A RUN. It used to be `PASS  <validator>` and
 # nothing else -- content-free, and therefore derivable from the command alone.
@@ -66,6 +77,17 @@ if [ $# -lt 1 ]; then
   echo "FAIL: usage: $0 <validator> [args...]   (or --all)" >&2
   exit 64
 fi
+
+# ---------------------------------------------------------------------------
+# show_hits <match set> <validator name> -> the first LINES lines of the match set,
+# indented, and one notice line when the set holds more than that. The count is taken on
+# the same captured set that is cut, never by a second grep over anything.
+# ---------------------------------------------------------------------------
+show_hits() {
+  _n="$(printf '%s\n' "$1" | wc -l | tr -d ' ')"
+  printf '%s\n' "$1" | head -n "$LINES" | sed 's/^/      /'
+  [ "$_n" -le "$LINES" ] || printf '      … %d more matching line(s); run scripts/ai-dlc/%s directly for all\n' "$((_n - LINES))" "$2"
+}
 
 # ---------------------------------------------------------------------------
 # run_one <validator> [args...] -> prints one verdict line (+ failing lines),
@@ -128,17 +150,37 @@ run_one() {
     #
     # `BACKDATED` IS IN BOTH SETS FOR THE SAME REASON: its FAIL line says "re-stamp each row
     # below", and without the token the rows it names never reach the lead.
-    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER|FUTURE|BACKDATED)' "$out" 2>/dev/null | head -n "$LINES")"
-    [ -z "$ok_hits" ] || printf '%s\n' "$ok_hits" | sed 's/^/      /'
+    #
+    # `LATE` IS IN BOTH SETS FOR THE SAME REASON: each LATE row names the ts to copy into its
+    # dispatched-at cell, and without the token the value never reaches the lead.
+    #
+    # `SKIP` IS IN BOTH SETS, AND THIS IS THE SET IT MATTERS IN. A SKIP line says an arm judged
+    # nothing (validate-artifact-budget.sh: no spawn ledger, no jq, no resolver beside it, or
+    # in-flight rows whose agent cell does not resolve in this session), and the run still
+    # exits 0. Absent from the alternation, the lead saw `PASS` over an arm that never ran,
+    # which is a check that reads as passing when it did not run. Every emitter is conditional
+    # and only that validator prints the token, so every other caller's output is unchanged.
+    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER|FUTURE|BACKDATED|SKIP|LATE)' "$out" 2>/dev/null)"
+    [ -z "$ok_hits" ] || show_hits "$ok_hits" "$name"
   else
     echo "FAIL  ${name}  (rc=${rc})"
     # Surface the lines that carry the failure, not the whole transcript. If the
     # validator names no FAIL line, show the tail rather than nothing -- a
     # non-zero status with no explanation must never render as silence.
-    hits="$(grep -nE '^[[:space:]]*(FAIL|ERROR|OVER|WARN|warn|FUTURE|BACKDATED)' "$out" 2>/dev/null | head -n "$LINES")"
+    #
+    # `SKIP` is here too. A failing run can carry an arm that judged nothing beside the one
+    # that refused, and the lead fixing the refusal must also see what was never judged, or
+    # the re-run PASS hides it. The cost is a line of the cap, and the truncation notice
+    # makes that cost visible instead of letting a SKIP push a FAIL row out unannounced.
+    # validate-artifact-budget.sh prints its FUTURE verdict before any SKIP line, so the
+    # stamp remedy is never the line a SKIP pushes out.
+    hits="$(grep -nE '^[[:space:]]*(FAIL|ERROR|OVER|WARN|warn|FUTURE|BACKDATED|SKIP|LATE)' "$out" 2>/dev/null)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed 's/^/      /'
+      show_hits "$hits" "$name"
     else
+      # No notice here: the tail is the transcript's last lines, not a match set, so there is
+      # no "more matching" to count, and the lines above it are prose the filter found nothing
+      # in.
       tail -n "$LINES" "$out" 2>/dev/null | sed 's/^/      /'
     fi
   fi

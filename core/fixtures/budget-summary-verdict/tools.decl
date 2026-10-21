@@ -21,3 +21,6 @@ tail
 tee
 tr
 wc
+chmod
+stat
+mv
