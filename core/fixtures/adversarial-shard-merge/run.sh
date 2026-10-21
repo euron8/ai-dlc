@@ -391,6 +391,67 @@ else
     || bad "RM-B: weakened enum gave --check-header rc=$r_ch and merge rc=$RC: $(cat "$MO")"
 fi
 
+# ---- BL726: a shard's invoked_at sits between its dispatch's spawn-ledger ts and its last write row,
+# within BACKDATE_TOL_S, REFUSED only for a dispatch whose spawn row carries invoked_bound (LEGACY: WARN).
+bl726_clean "$MERGE"
+bl726_merged && grep -qx 'invoked_at: 2026-08-24T15:01:19Z' "$(out_of "$BL_D")" \
+  && ok "BL726a: the B3 world, spawn ts 15:00:00Z and every shard stamped after it -> MERGED, invoked_at 15:01:19Z" \
+  || bad "BL726a: (rc=$RC) $(cat "$MO")"
+bl726_early "$MERGE"
+bl726_refused "1.md claims invoked_at 2026-08-24T13:00:00Z" "7200 s before its dispatch" "recorded at 2026-08-24T15:00:00Z" "BACKDATE_TOL_S=60" "--rerun 1.md@" \
+  && ok "BL726b: shard 1 stamped 13:00:00Z, two hours before its bound dispatch -> REFUSED naming 1.md, both times, the tolerance and the --rerun remedy; nothing written" \
+  || bad "BL726b: (rc=$RC) $(cat "$MO")"
+bl726_late "$MERGE"
+bl726_refused "2.md claims invoked_at 2026-08-24T15:02:19Z" "s after its dispatch" "last wrote it at 2026-08-24T14:00:00Z" "--rerun 2.md@" \
+  && ok "BL726c: shard 2's only write row at 14:00:00Z, its stamp 15:02:19Z -> REFUSED naming 2.md and both times; nothing written" \
+  || bad "BL726c: (rc=$RC) $(cat "$MO")"
+bl726_near "$MERGE"
+bl726_merged && ok "BL726d: shard 1 stamped 59 s before its dispatch (inside BACKDATE_TOL_S) -> MERGED" || bad "BL726d: (rc=$RC) $(cat "$MO")"
+bl726_frac "$MERGE"
+bl726_merged && ok "BL726e: shard 1 stamped 14:59:30.750Z, fractional and inside the tolerance -> MERGED (the fraction is stripped before the epoch)" || bad "BL726e: (rc=$RC) $(cat "$MO")"
+HR_BOUND=0 bl726_early "$MERGE"
+bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md claims invoked_at 2026-08-24T13:00:00Z" && has "$MO.err" "recorded at 2026-08-24T15:00:00Z" && has "$MO.err" "LEGACY" \
+  && ok "BL726f: the 13:00:00Z shard under a dispatch with no invoked_bound key (an older guard's row) -> MERGED, stderr WARN naming 1.md, both times and LEGACY" \
+  || bad "BL726f: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
+HR_BOUND=0 bl726_late "$MERGE"
+bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "last wrote it at 2026-08-24T14:00:00Z" && has "$MO.err" "LEGACY" \
+  && ok "BL726g: the LATE shard under a dispatch with no invoked_bound key -> MERGED, stderr WARN naming the write time and LEGACY" \
+  || bad "BL726g: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
+bl726_lastrow "$MERGE"
+bl726_merged && ! has "$MO.err" "WARN: " \
+  && ok "BL726h: shard 2 written at 14:00:00Z and 15:30:00Z, stamped 15:02:19Z between them -> MERGED (bounded by its LAST write row, never its first)" \
+  || bad "BL726h: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
+bl726_nocal "$MERGE"
+bl726_refused "1.md invoked_at 2026-08-24T24:00:00Z is not a calendar time" "--rerun 1.md@" \
+  && ok "BL726i: shard 1 stamped 2026-08-24T24:00:00Z (the shape passes, the calendar does not) under a bound dispatch -> REFUSED naming 1.md and its stamp; nothing written" \
+  || bad "BL726i: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
+HR_BOUND=0 bl726_nocal "$MERGE"
+bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md invoked_at 2026-08-24T24:00:00Z is not a calendar time" && has "$MO.err" "LEGACY" \
+  && ok "BL726j: the same hour-24 stamp under a dispatch with no invoked_bound key -> MERGED, stderr WARN naming 1.md and LEGACY (fail-open)" \
+  || bad "BL726j: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
+for _bv in false '"true"'; do
+  HR_BOUND_V="$_bv" bl726_early "$MERGE"
+  bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md claims invoked_at 2026-08-24T13:00:00Z" && has "$MO.err" "LEGACY" \
+    && ok "BL726k: invoked_bound:$_bv on the spawn row (only the JSON boolean true binds) with the 13:00:00Z shard -> MERGED, LEGACY WARN" \
+    || bad "BL726k: invoked_bound:$_bv gave rc=$RC: $(cat "$MO") $(cat "$MO.err")"
+done
+# BM-1..BM-4: mutants of the bound, each a copy of the whole sibling set with one anchor applied once.
+bl726_mut() { # <label> <old> <new> <killing world fn> <kill predicate...>
+  local lab="$1" mm w; mm="$(mut_merge "$2" "$3")"; w="$4"; shift 4
+  if [ -z "$mm" ]; then bad "$lab: FIXTURE STALE -- its anchor is not in the merge exactly once; re-anchor it, never relax BL726"; return; fi
+  "$w" "$mm"
+  if "$@"; then bad "$lab: SURVIVED -- the mutated merge still satisfied the BL726 arm ($w rc=$RC): $(cat "$MO")"
+  else ok "$lab: killed by $w (rc=$RC)"; fi
+}
+bl726_b_holds() { bl726_refused "1.md claims invoked_at 2026-08-24T13:00:00Z"; }
+bl726_c_holds() { bl726_refused "2.md claims invoked_at 2026-08-24T15:02:19Z"; }
+bl726_f_holds() { bl726_merged && has "$MO.err" "LEGACY"; }
+bl726_early_legacy() { HR_BOUND=0 bl726_early "$1"; }
+bl726_mut "BM-1 (EARLY comparison deleted)" '| if ($s.e - $ae) > $tol then' '| if false then' bl726_early bl726_b_holds
+bl726_mut "BM-2 (LATE comparison deleted)" '| if ($ae - $w.e) > $tol then' '| if false then' bl726_late bl726_c_holds
+bl726_mut "BM-3 (LEGACY dropped: every dispatch refuses)" 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";' bl726_early_legacy bl726_f_holds
+bl726_mut "BM-4 (LATE reads the EARLIEST write row)" '| max_by(.e)) as $w' '| min_by(.e)) as $w' bl726_lastrow bl726_merged
+
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
 d="$(b3_world)"
@@ -555,6 +616,7 @@ k_world() {
   mkdir -p "$s" "$c" || return 1
   cp "$3" "$s/merge-adversarial-shards.sh" && cp "$CONV" "$s/" && cp "$SRCDIR/partition-subject.sh" "$s/" \
     && cp "$SRCDIR/validate-provenance-block.sh" "$s/" && cp "$SRCDIR/partition-document.sh" "$s/" \
+    && cp "$SRCDIR/validate-artifact-budget.sh" "$s/" \
     && cp "$KSCH" "$c/provenance-block.json" || return 1
   case "$2" in
     vac) cp "$K_OLD_VAC" "$s/validate-adversarial-convergence.sh" ;;

@@ -473,20 +473,6 @@ Owed: when the stage write fails, the gate stands down for the call AND for the 
 
 verify: sh H=core/hooks/ai-dlc-recover-gate.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null || exit 9; T="$(mktemp -d)"; mkdir -p "$T/_bmad-output" "$T/steps"; printf "s\n" > "$T/_bmad-output/pipeline-snapshot.md"; printf "x\n" > "$T/steps/x.md"; printf "step_file_resolved=1\nsnapshot_path=_bmad-output/pipeline-snapshot.md\nstep_file=steps/x.md\n" > "$T/_bmad-output/.recover-fired"; RS="{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/_bmad-output/pipeline-snapshot.md\"}}"; GL="{\"tool_name\":\"Grep\",\"tool_input\":{\"pattern\":\"a\"}}"; c0="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; grep -q "FIRST tool call" <<<"$c0" || exit 9; CLAUDE_PROJECT_DIR="$T" bash -c "trap \"\" XFSZ; ulimit -f 0; bash \"$H\"" <<<"$RS" >/dev/null 2>&1; [ -f "$T/_bmad-output/.recover-fired" ] || exit 0; c1="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; ! grep -q "FIRST tool call" <<<"$c1"
 
-## BL-726 — `merge-adversarial-shards.sh` copies a mis-stamped shard's `invoked_at` into the merged pass, so Check 24's chronology arm fails on a merge the merge accepted, and the lead hand-edits the provenance record
-
-**DEFECT.** Raised from graph `_bmad-output/planning-artifacts/s319/test-strategy-adversarial-p2.md` and graph commit `ded7e6a18` by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
-
-`core/scripts/merge-adversarial-shards.sh:338` makes the merged `invoked_at` the EARLIEST shard's, and `:1237` takes that minimum by `at_key`. The only check on a shard's own `invoked_at` is its ISO shape (`:465-466`). Two records that could bound it go unused for this purpose. The dispatch's spawn-ledger `ts` is read only to bind `--rerun` starts within `BACKDATE_TOL_S` (`:1124-1155`, BL-598). The shard file's mtime is read only to print `shard_wall` (`:1314-1316`).
-
-Graph s319 test-strategy pass 2 recorded `shard_wall: … 5=2026-10-20T19:40:00Z/2026-10-20T21:23:19Z …` at p2.md:617, a claimed start 1h43m before the shard's own write. The same line records `cross-1=2026-10-20T21:40:00Z/2026-10-20T21:23:50Z`, a claimed start 16 minutes after its mtime. The merge accepted both and wrote `invoked_at: 2026-10-20T19:40:00Z`, which predates pass 1. At 21:52:05Z Check 24 refused: "FAIL (G -- CHRONOLOGY): …test-strategy-adversarial-p2.md claims to follow …-p1.md, but it was written FIRST". This refusal was relayed by the batch-238 lead.
-
-Graph's lead hand-corrected the merged line to `2026-10-20T21:20:30Z` in `ded7e6a18`. `shards/test-strategy-p2/5.md` still carries `19:40:00Z`, so a fresh merge of that shard directory writes the bad value again. An in-place re-merge refuses instead, because an existing output that differs exits 2 (`:345-346`). Either way, the pass file's provenance is a lead edit.
-
-Owed, the owner's to choose: refuse a shard whose `invoked_at` is earlier than its credited dispatch's spawn-ledger `ts` by more than `BACKDATE_TOL_S`, or later than its own write, naming the shard and both times. Or derive the merged `invoked_at` from the dispatch records rather than from the shards' self-reports.
-
-verify: sh L=core/fixtures/adversarial-shard-merge/lib.sh; [ -f "$L" ] || exit 9; NAME=bl-r1; . "$L" >/dev/null || exit 9; export HR_SPAWN_TS=2026-08-24T15:00:00Z; c="$(b3_world)" || exit 9; run_merge "$MERGE" "$c"; [ "$RC" -eq 0 ] && grep -qx 'invoked_at: 2026-08-24T15:01:19Z' "$(out_of "$c")" || exit 9; d="$(b3_world)" || exit 9; shard "$d" 1 2 EXIT_CONDITION_MET 1 "" "2026-08-24T13:00:00Z"; run_merge "$MERGE" "$d"; [ "$RC" -eq 2 ] && exit 0; [ "$RC" -eq 0 ] || exit 9; grep -qx 'invoked_at: 2026-08-24T13:00:00Z' "$(out_of "$d")" && exit 1; exit 0
-
 ## BL-728 — the derivation allowlist refuses a backtick inside single quotes and any `git -C <dir> <read-only-sub>`, so an adversary's correct fenced command is refused at write time and rewritten
 
 **NOTE.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the PC CANDIDATES bullet) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
@@ -526,31 +512,6 @@ An elicitation of only the new stories cannot pass today either, because ordinal
 Owed, the design for its owner to choose: a delta path for a post-elicitation split or addition. It elicits the stories that no shard covers by name (arm L's own `l_cover` already reads shard subjects by name, `:2854-2877`) plus the cross groups whose membership changed, and it judges coverage by subject NAME rather than by ordinal position. It must keep refusing a single voice over many stories and a shrink-with-replacement (`:2783-2789`). The remedy text then names the delta, not a full re-run.
 
 verify: manual — a discriminating `sh` receipt needs the fix's interface first: where a delta shard lives, what it is named, and how its coverage is recorded. Under today's arm L a seeded tree FAILs every delta shape, so a receipt built on a guessed shape closes only under that guess. A receipt keyed on the remedy text could be closed by prose alone. The real-corpus receipt is the next post-elicitation split on a consumer, or a fixture world written alongside the fix.
-
-## BL-734 — a closing entry appended to an already-joined remediator record has no pre-check, so a `siblings:` slip surfaces only when `--escalations` refuses the whole record
-
-**DEFECT.** Seen by graph-watch (ai-dlc-1b) on graph at 23:38:15Z under installed 0.891.0, relayed by lead ai-dlc-1a; diagnosed on the distribution from the code, without a run, by the 238-s-715 owner (ai-dlc-e3). The residual of BL-715, whose `--check-part` (0.893.0) covers shard parts only. Tiered DEFECT because the same refusal class has cost graph a round on each of two paths: on 2026-10-19, 13 SHARD PARTS refused at the join (BL-715's own evidence, fixed by 0.893.0's `--check-part`); and on 2026-10-20, 2 entries through `--escalations` in record mode (this entry, unfixed). One measured round is this entry's own.
-
-Graph's `--escalations` run refused 2 entries, quoted: "the 08.md F-3 closing (MAJOR) entry is repaired with an edit and its 'siblings:' field is none of its four forms" (the same for 20.md F-2 closing (MINOR)) — the BADSIB class of BL-715's 13 shard-part refusals on 2026-10-19, here from a record-mode writer.
-
-- `core/scripts/join-remediator-shards.sh --escalations <record>` is SRCMODE=2 (`:326`): it judges a whole joined RECORD, and its BADSIB refusal is the shared one at `:1172`.
-- The refused entries are `repaired` entries carrying `- closes:`, APPENDED to that record after the join. Two roles write them:
-  - the serial remediator after a join (`core/team-roles/remediator.md:203-225`);
-  - the PM folding an operator answer (`core/team-roles/pm-escalated.md:98-108`, "APPEND to that joined repair record").
-- Neither role is told to check its appended entry before handing back, so the first check is the lead's `--escalations` run. A refusal there exits before the record's escalations are reported and costs a round.
-- BL-715 does not reach this: `--check-part` (`:1616-1621`) runs `contract_check 0` in PARTS mode over one shard part, and its role paragraph sits in remediator.md's shard section, before "Close your part with --mark". pm-escalated.md was left unchanged on purpose, because the parts-mode classifier is the wrong judge for a record.
-
-Writer and shape, confirmed by graph-watch on graph `7abfe3b9e` (read-only):
-- The refused entries are the SERIAL remediator's. `### 08.md F-3 closing (MAJOR)` sits at line 930 of `s319/stories-elicitation-repair-p1.md`, under `# Serial remediation (cross-file; shard: none, serial-document), pass 1, K=20` (line 898), after `# Repair part 20/20` (line 864). "F-3 closing" counts 0 in the shard parts and 1 in the record. So no part file exists for `--check-part` to read, by construction.
-- As committed, that entry carries `- siblings:` followed by a blank line and then a fenced block of grep commands. A plausible reading of "none of its four forms" is that the classifier does not join a value placed after a blank line. Not established: whether the record was edited between the 23:38:15Z refusal and the commit. The builder confirms this shape by running the join's own classifier on that entry in a scratch copy, before choosing the fix. If the classifier itself rejects a legitimate fenced value, that is a second defect, to be fixed in the classifier, not the writer.
-
-Owed (mechanism left to the builder):
-- a RECORD-mode pre-check the writer runs on the record it appended to, before it returns — `--escalations <record>` itself, or a record-mode sibling of `--check-part`. It must be the join's code, never a restatement of the four forms;
-- one instruction at each writer site: remediator.md's serial-remediator section, and pm-escalated.md's append paragraph;
-- a fixture arm in `remediator-shard-join`: a joined record with an appended near-miss closing entry (`- siblings: checked`) is refused by the pre-check with the same BADSIB line `--escalations` prints, and a well-formed closing entry passes;
-- a mutant that skips the classifier.
-
-verify: manual
 
 ## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
 

@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.906.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13, cluster shard-merge. It closes BL-726 and BL-734, closes no `PC-` id and files nothing. Net for this release: 2 closed, 0 filed = 2. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-adversarial-shards.sh`. The dispatch guard `core/hooks/ai-dlc-dispatch-guard.sh` arrives in the same pull. Rulebook text that lands with the reconcile PR: `core/team-roles/adversary.md`, `remediator.md` and `pm-escalated.md`.
+
+### BL-726 — a shard's `invoked_at` is bounded by its dispatch and its own last write
+
+The merge copied a mis-stamped shard's `invoked_at` into the merged pass, so Check 24's chronology arm refused a merge the merge had accepted, and the lead hand-edited the provenance record. Graph's s319 `test-strategy-adversarial-p2` wrote a start 1h43m before its own write.
+
+- `merge-adversarial-shards.sh` reads `BACKDATE_TOL_S` on every merge, not only under `--rerun`. After the per-shard loop it bounds every credited shard's `invoked_at` on both sides, in one jq pass.
+  - EARLY: a stamp more than the tolerance before the credited dispatch's earliest spawn-ledger `ts` is refused.
+  - LATE: a stamp more than the tolerance after the LAST write-ledger row the credited writers have on the shard is refused. The late bound reads the write ledger, not the shard file's mtime, because a checkout resets mtime.
+  - A calendar-invalid stamp, such as hour 24 or month 13, is refused by name under a bound dispatch and warned under LEGACY. It never fails the whole merge.
+- Each refusal names the shard, both times, the tolerance and the remedy: re-dispatch, then `--rerun <shard>.md@<dispatched-at>`.
+- `ai-dlc-dispatch-guard.sh` writes `"invoked_bound": true` on each spawn row at PreToolUse. No shard can write it, and only the JSON boolean `true` binds.
+
+Delivery order: a consumer gets the new merge (engine, step 3 of the pull) and the new dispatch-guard hook in the same pull. Spawn rows written before that pull carry no `invoked_bound` key, so the merge reads them LEGACY: it prints a stderr WARN and the set merges. That fails open, which is the safe direction.
+
+Graph figures: 0 of the 52 EARLY hits and 0 of the 16 LATE hits sit in a series graph will still merge. Of 51 shard dirs on disk, 6 are unmerged, and their files carry no `invoked_at`, so the bound cannot read them.
+
+`core/team-roles/adversary.md` tells the adversary to take `invoked_at` from `date -u` at its own start.
+
+Fixture arm BL726 in `adversarial-shard-merge` covers worlds a to k: clean, EARLY, LATE, a 59 s near-miss, a fractional stamp, both bounds with no `invoked_bound` key, a shard written before and after its stamp, hour 24 bound and LEGACY, and `invoked_bound` false and `"true"`. Four mutants (BM-1 to BM-4) are each killed. The check-24 shards, `subject-partition` and the copy lists in `adversarial-shard-merge` now carry `validate-artifact-budget.sh`, which owns the tolerance.
+
+Cost: one jq and two grep per merge, none per shard.
+
+### BL-734 — a closing entry appended to a joined remediator record is checked before the record is marked
+
+Graph's `--escalations` run refused two `repaired` closing entries with `- siblings:` values, because neither writer checked its appended entry before handing back.
+
+- `core/team-roles/remediator.md` tells the writer, after its last entry and the re-render and before `--mark-repair`, to run `join-remediator-shards.sh --escalations <record> --sprint <N>`, fix every entry on a `REFUSED:` line, and repeat until none is printed, then mark. A marked record is not edited again, because the lead's beat delivers a sha-matched record at once.
+- `core/team-roles/pm-escalated.md` runs the same check after its last appended entry. It does not run `--mark-repair`.
+- No engine code changed. The join's existing classifier is the judge.
+- The refuted half is recorded in BL-734: a `- siblings:` line followed by a blank line and a fenced block passes the classifier. Graph's refusal was the writer's `checked` slip, not a classifier defect.
+- Fixture arm EC39 in `remediator-shard-join` covers the BADSIB line, the blank-line-fence and direct-fence near-misses, the prose arm (placement before `--mark-repair` and after the re-render) with its self-probe on five broken copies, and a record-mode classifier mutant.
+
 ## [0.905.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13, cluster derivations. It closes BL-727, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-derivation-capture.sh` and `core/scripts/validate-artifact-derivations.sh`. No role or step text changes.

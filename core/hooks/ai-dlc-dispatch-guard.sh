@@ -1173,7 +1173,12 @@ jq -nc \
      parent_agent_id: $parent,
      # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
      # is always written, because its absence is how Check 22 recognises an older guard row.
-     shard: (if $shard == "" then null else $shard end)
+     shard: (if $shard == "" then null else $shard end),
+     # The LEGACY boundary of merge-adversarial-shards.sh: a shard whose invoked_at falls outside
+     # its dispatch and its last write is REFUSED only when its dispatch row carries this key, and
+     # WARNed otherwise, so a shard dispatched by an older guard merges. Written here, at PreToolUse,
+     # where no shard can write it. NO APOSTROPHE HERE either.
+     invoked_bound: true
    }
    # The lead text of an invented exception, written ONLY beside that value, so its presence
    # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.

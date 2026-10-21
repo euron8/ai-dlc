@@ -105,7 +105,10 @@ chain gets its own line: a restating entry and each part escalation it supersede
 `edit:` line: `- edit: n/a (operator answer folded)` when the answer changed no subject file;
 when it did, `- edit: <project-relative path>:<line(s)>` followed by one `- siblings:` line in a
 form `remediator.md` lists ("Re-check every sibling of the text you replaced"), or the join
-refuses the record before it reports any escalation.
+refuses the record before it reports any escalation. After the last entry is appended, run
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>`, fix every entry it
+names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line; never hand back a record
+it refuses.
 
 Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
 `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The

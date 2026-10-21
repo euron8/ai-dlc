@@ -49,8 +49,8 @@ CONV="$SRCDIR/validate-adversarial-convergence.sh"
 # THAT reason and the refusal arms would read as passing -- so its absence is an error, never a skip.
 PARTITION="$SRCDIR/partition-document.sh"
 [ -f "$PARTITION" ] || { echo "FIXTURE ERROR: $PARTITION is not beside the merge; section mode reads its --map" >&2; exit 2; }
-# --rerun reads BACKDATE_TOL_S from this sibling. Absent, every --rerun cell would refuse for THAT reason.
-[ -f "$SRCDIR/validate-artifact-budget.sh" ] || { echo "FIXTURE ERROR: $SRCDIR/validate-artifact-budget.sh is not beside the merge; --rerun reads its tolerance there" >&2; exit 2; }
+# Every merge reads BACKDATE_TOL_S from this sibling. Absent, every merge would refuse for THAT reason.
+[ -f "$SRCDIR/validate-artifact-budget.sh" ] || { echo "FIXTURE ERROR: $SRCDIR/validate-artifact-budget.sh is not beside the merge; every merge reads its tolerance there" >&2; exit 2; }
 for _s in seed.192-ff-A-token-decimal-resolution.md seed.bug-192-il-accuracy.md \
           seed.story-1-rebalancer-il-accuracy.md seed.finding-headings.txt \
           seed.doc-test-strategy.md seed.doc-serial-epics.md seed.files-b3-merged.expected; do
@@ -133,7 +133,11 @@ is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
 #   HR_SESSION=<s>  the payload's session_id (default fx-session, the transcript's own stem)
 #   SELF_ID=<v>   the shard's self-reported tool_use_id (default NOT_ACCESSIBLE; ABSENT omits the line)
 #   HR_IDFORM=call  the dispatch id in a local-model lead's shape, `call_` and 32 hex characters
-#   HR_SPAWN_TS=<iso>  the spawn row's `ts`, the dispatch's recorded time (default 2026-10-15T20:00:00Z)
+#   HR_SPAWN_TS=<iso>  the spawn row's `ts`, the dispatch's recorded time (default 2026-08-24T15:00:00Z,
+#                      at or before every default shard stamp, so the merge's invoked_at bound holds)
+#   HR_BOUND=0    the spawn row carries no `invoked_bound` key (an older guard's row: the merge's
+#                 invoked_at bound WARNs as LEGACY instead of refusing); by default it carries true
+#   HR_BOUND_V=<json>  the key's raw JSON value when present (default true; `false` and `"true"` are LEGACY)
 #   HR_FP_O=<path>  the payload's file_path, when the write is spelled from another tree or alias
 hr_ids() { # <shard file> -> HR_AGENT, HR_DID
   local c
@@ -156,8 +160,8 @@ harness_record() { # <shard file>
   [ -f "$st/pipeline-snapshot.md" ] || : > "$st/pipeline-snapshot.md"
   [ "${HR_NOMETA:-0}" = 1 ] || printf '{"agentType":"%s","description":"fixture shard writer","toolUseId":"%s","spawnDepth":1,"requestShape":"background"}\n' \
     "$role" "$HR_DID" > "${tp%.jsonl}/subagents/agent-$HR_AGENT.meta.json"
-  [ "${HR_NOSPAWN:-0}" = 1 ] || printf '{"v":1,"ts":"%s","sprint":1,"name":null,"role":"%s","model_pinned":"opus","tier_pinned":null,"model_requested":"opus","model_bound":"definition","effort_bound":null,"role_contract_cited":true,"contract_via":"definition","role_file_readable":true,"definition_bound":true,"definition_stale":false,"name_stripped":null,"tool_use_id":"%s","shard":null}\n' \
-    "${HR_SPAWN_TS:-2026-10-15T20:00:00Z}" "$role" "$HR_DID" >> "$st/spawn-ledger.jsonl"
+  [ "${HR_NOSPAWN:-0}" = 1 ] || printf '{"v":1,"ts":"%s","sprint":1,"name":null,"role":"%s","model_pinned":"opus","tier_pinned":null,"model_requested":"opus","model_bound":"definition","effort_bound":null,"role_contract_cited":true,"contract_via":"definition","role_file_readable":true,"definition_bound":true,"definition_stale":false,"name_stripped":null,"tool_use_id":"%s","shard":null%s}\n' \
+    "${HR_SPAWN_TS:-2026-08-24T15:00:00Z}" "$role" "$HR_DID" "$([ "${HR_BOUND:-1}" = 0 ] || printf ',"invoked_bound":%s' "${HR_BOUND_V:-true}")" >> "$st/spawn-ledger.jsonl"
   # The probe row ai-dlc-subagent-probe.sh writes when the writer STOPS, carrying the toolUseId it
   # read from the meta file -- so none without a meta file (the hook then records a null id).
   [ "${HR_NOPROBE:-0}" = 1 ] || { [ "${HR_NOMETA:-0}" = 1 ] && [ "${HR_PROBE:-0}" != 1 ]; } || printf '{"v":3,"ts":"2026-10-15T20:30:00Z","sprint":1,"agent_id":"%s","model":"opus","role":"%s","turns":9,"peak_tokens":1000,"compactions":0,"duration_s":60,"effort":null,"definition":null,"tool_use_id":"%s","transcript_version":null}\n' \
@@ -421,6 +425,8 @@ p_ceiling() { # the ceiling is READ from the sibling: a copy whose sibling says 
   cp "$(dirname "$m")/validate-steering-budget.sh" "$sd/" 2>/dev/null
   # Every mode reads its cross groups from this sibling, files mode included.
   cp "$(dirname "$m")/partition-document.sh" "$sd/" || return 1
+  # Every merge reads BACKDATE_TOL_S from this sibling (the invoked_at bound).
+  cp "$(dirname "$m")/validate-artifact-budget.sh" "$sd/" || return 1
   cmp -s "$(dirname "$m")/validate-adversarial-convergence.sh" "$sd/validate-adversarial-convergence.sh" && return 2
   d="$(b3_world)"; o="$(out_of "$d")"
   run_merge "$sd/merge-adversarial-shards.sh" "$d"
@@ -822,7 +828,7 @@ tw() { # -> a B3 shard dir with every shard but 2 written and recorded
   for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
   printf '%s' "$d"
 }
-s2() { shard "$1" 2 2 EXIT_CONDITION_MET 2; } # <shard dir> -- shard 2, under whatever knobs prefix the call
+s2() { shard "$1" 2 2 EXIT_CONDITION_MET 2 "" "${2:-}"; } # <shard dir> [invoked_at] -- shard 2, under whatever knobs prefix the call
 REAL_OTHER=toolu_01ZZZZZZZZZZZZZZZZZZZZZZ   # real-shaped (toolu_ + 24 base62) and no fixture's derived id
 FORGED=toolu_cross1_g1_dispatch             # a fabricated id the reference consumer merged; NOT real-shaped
 p_tuid_main() { # self ids NOT_ACCESSIBLE / unavailable / absent / forged all merge, ids = the derived ones
@@ -938,7 +944,8 @@ hr_at() {
     && mv "$led.tmp" "$led"
 }
 # The re-run start. A merging --rerun cell's NEW dispatch records this as its spawn-ledger time
-# (HR_SPAWN_TS), because the merge binds S to that time (BL-598).
+# (HR_SPAWN_TS), because the merge binds S to that time (BL-598), and its shard stamps this as its
+# invoked_at, because the merge bounds every shard's invoked_at by its dispatch time (BL-726).
 RR_S=2026-10-15T20:30:00Z
 p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re-dispatch, a NEW dispatch,
                  # wrote 2.md after it -> MERGED with --rerun, the rerun: line naming the superseded agent
@@ -949,7 +956,7 @@ p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re
   HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T19:59:00Z harness_record "$d/2.md.draft" || return 1
   HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
   HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
-  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
   hr_ids "$d/2.md"; o="$(out_of "$d")"
   bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$o" \
@@ -961,7 +968,7 @@ p_rerun_other() { # graph s318 requirements-p1/cross-2's shape: cross-1's OWN ad
   local d c1a c1d; d="$(tw)"; WORLD_SHARD="$d/2.md"
   hr_ids "$d/cross-1.md"; c1a="$HR_AGENT"; c1d="$HR_DID"
   HR_AGENT_O="$c1a" HR_DID_O="$c1d" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
-  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
   bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $c1a is a superseded writer of 2.md and also wrote" "$d" && has "$MO" "cross-1.md at"
 }
@@ -969,7 +976,7 @@ p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody e
                  # re-run is a NEW dispatch
   local d; d="$(tw)"; WORLD_SHARD="$d/2.md"
   hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
-  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
   hr_ids "$d/2.md"
   bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
@@ -986,7 +993,7 @@ p_rerun_role() { # D1: a REMEDIATOR among the writers --rerun supersedes -> REFU
     d="$(tw)"; WORLD_SHARD="$d/2.md"
     HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
     HR_NOPROBE=1 HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
-    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
     bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$role" = remediator ]; then
@@ -1023,7 +1030,7 @@ p_xdir() { # D2: shard 2's sole writer also wrote under ANOTHER shards/<x>-p<M>/
     d="$(tw)"; sh="$(dirname "$d")"; WORLD_SHARD="$d/2.md"; mkdir -p "$sh/stories-p2" || return 1
     HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
     [ "$o" = merge ] || { HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:01:00Z harness_record "$sh/stories-p2/1.md" || return 1; }
-    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
     bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$o" = refuse ]; then
@@ -1066,7 +1073,7 @@ p_rerun_residual() { # THE STATED KNOWN GAP (merge header RE-DISPATCH, "RESIDUAL
     HR_NOPROBE="$([ "$probe" = 1 ] && echo 0 || echo 1)" HR_ROLE=remediator HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 \
       hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
     forge_meta "$d/2.md" a000000000zremed "$REAL_OTHER"
-    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
     bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$probe" = 0 ]; then
@@ -1206,10 +1213,10 @@ p_rerun_bind() { # BL-598: the re-run start binds to the credited dispatch's rec
                  # re-run from 1999-01-01T00:00:00Z -> REFUSED past BACKDATE_TOL_S; 45 s after the
                  # recorded time -> MERGED, superseded: none (a tolerance, never exact equality)
   local d
-  d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d"
+  d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d" "$RR_S"
   bash "$1" --rerun "2.md@1999-01-01T00:00:00Z" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "past BACKDATE_TOL_S=60" "$d" && has "$MO" "never a typed time" || return 1
-  d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d"
+  d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d" "$RR_S"
   bash "$1" --rerun "2.md@2026-10-15T20:30:45Z" "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qx "rerun: 2.md since 2026-10-15T20:30:45Z; superseded: none" "$(out_of "$d")"
 }
@@ -1385,6 +1392,7 @@ p_sum_excl_drift() {
   sed 's/\*-repair-p\*|\*-repair-\*) continue/*-repair-*) continue/' "$(dirname "$m")/validate-adversarial-convergence.sh" > "$sd/validate-adversarial-convergence.sh"
   cp "$(dirname "$m")/validate-steering-budget.sh" "$sd/" 2>/dev/null
   cp "$(dirname "$m")/partition-document.sh" "$sd/" || return 1
+  cp "$(dirname "$m")/validate-artifact-budget.sh" "$sd/" || return 1
   cmp -s "$(dirname "$m")/validate-adversarial-convergence.sh" "$sd/validate-adversarial-convergence.sh" && return 2
   d="$(sd_world 2)" || return 1; sd_prev "$d" stories-adversarial-p1.md 1
   run_merge "$sd/merge-adversarial-shards.sh" "$d"
@@ -1418,5 +1426,32 @@ p_sum_divergent_oracle() {
   sd_oracle "$m" 2 stories-adversarial-p1.md:1/9 && [ "$OR_ST" = 1 ] || return 1
   sd_oracle "$m" 3 stories-adversarial-p1.md:1 stories-adversarial-p2.md:NONE && [ "$OR_ST" = 1 ]
 }
+
+# ------------------------------------------------ BL-726: invoked_at is bounded on both sides
+# Every world is the B3 world under the default spawn ts 2026-08-24T15:00:00Z with `invoked_bound`
+# on the spawn rows unless HR_BOUND=0 prefixes the call. bl726_<world> <merge> -> RC, $MO, $MO.err,
+# BL_D (the shard dir). The write-ledger rows of shard 2 are re-stamped with hr_at, so its LAST row
+# is the one the LATE arm compares; the fixture never touches an mtime.
+bl726_run() { bash "$1" "$BL_D" > "$MO" 2> "$MO.err"; RC=$?; }
+bl726_clean() { BL_D="$(b3_world)"; bl726_run "$1"; }
+bl726_early() { BL_D="$(b3_world)"; shard "$BL_D" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T13:00:00Z; bl726_run "$1"; }
+bl726_late() { BL_D="$(tw)"; WORLD_SHARD="$BL_D/2.md"; hr_at 2026-08-24T14:00:00Z s2 "$BL_D" || return 1; bl726_run "$1"; }
+bl726_near() { BL_D="$(b3_world)"; shard "$BL_D" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T14:59:01Z; bl726_run "$1"; }
+bl726_frac() { BL_D="$(b3_world)"; shard "$BL_D" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T14:59:30.750Z; bl726_run "$1"; }
+# Two write rows on shard 2, 14:00 and 15:30, its stamp 15:02:19Z between them: inside the LAST row,
+# 3739 s past the EARLIEST. An earliest-row bound refuses it; the last-row bound merges it.
+bl726_lastrow() {
+  BL_D="$(tw)"; WORLD_SHARD="$BL_D/2.md"
+  hr_at 2026-08-24T14:00:00Z s2 "$BL_D" && hr_at 2026-08-24T15:30:00Z harness_record "$BL_D/2.md" || return 1
+  bl726_run "$1"
+}
+# Hour 24: RE_ISO accepts the shape, fromdateiso8601 refuses the calendar time.
+bl726_nocal() { BL_D="$(b3_world)"; shard "$BL_D" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T24:00:00Z; bl726_run "$1"; }
+bl726_written() { [ -f "$(out_of "$BL_D")" ]; }
+bl726_refused() { # <token>... -> rc 2, every token in stdout, nothing written
+  local t; [ "$RC" -eq 2 ] && ! bl726_written || return 1
+  for t in "$@"; do has "$MO" "$t" || return 1; done
+}
+bl726_merged() { [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && bl726_written; }
 
 

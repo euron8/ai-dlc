@@ -383,6 +383,10 @@ parses one form and one form only. A ``` code fence is **not** a provenance bloc
 parses it, so every field in it goes unadjudicated and the gate reports your pass as clean
 *because it never read a word of it*. Copy the envelope, not just the fields.
 
+Take `invoked_at` from `date -u +%Y-%m-%dT%H:%M:%SZ` run at your own start, never from a brief or an
+earlier shard: the merge refuses a shard stamped before its own dispatch was recorded, or after its own
+last write.
+
 <!-- BEGIN GENERATED: provenance-block/adversary-pass — source: .claude/schemas/provenance-block.json; do not edit by hand -->
 ```
 <!-- SKILL_INVOCATION_PROVENANCE v1
