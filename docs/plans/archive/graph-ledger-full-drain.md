@@ -18968,3 +18968,32 @@ Batch 235's block below is history: this block replaces its delivery gap. Starte
   `b236-bl713-dev`, `b236-bl717-dev`, `b236-bl718-dev` and `b236-bl720-dev` (ai-dlc-c0), and the HAND-REVIEW
   evidence that BL-710 and BL-717 now cite.
 
+**BATCH 237 SHIPPED ONE RELEASE, `v0.890.0` (`d03dce80a`, #1231): BL-723, §5 STEP 2'S TEST-STRATEGY REVIEW ON THE
+NATIVE ADVERSARIAL CYCLE. THE OPERATOR RULED IT THE BATCH'S ONLY WORK.**
+Batch 236's block below is history: this block replaces its delivery gap. Started at `origin/main` `b99268ce5`
+(`VERSION` 0.889.0); lead ai-dlc-52, owner ai-dlc-fc. No `graph-*` session was messaged.
+- **Operator ruling, batch 237**: "the only work I want in this batch is the test strategy review backlog item". BL-695,
+  clustered with BL-723 by batch 236's resume list, was NOT built and stays live; so do BL-719, BL-685 round 9, BL-720,
+  BL-721, BL-714-716, BL-707-709, BL-712 and BL-699, and the owed `story-evidence-scaffold` re-trace. The operator also
+  paused the batch mid-build and resumed it; the pause cost nothing but wall clock.
+- **What 0.890.0 decided for graph's s319 resume**: option (ii). The delivered one-shot `test-strategy-review.md` is
+  discarded and the native series starts at pass 1, prefix `s<N>/test-strategy-adversarial-p`; step 3's bind refuses
+  unless the series' last pass is `EXIT_CONDITION_MET`, which is how a mid-§5 resume reaches (ii) without a migration.
+  SKILL.md Rule 8 cites the step's carve-out. graph is BLOCKED on this release and reaches it only by its next pull.
+- **Close sweep** (at `origin/main` `b99268ce5`, before the release): live 1, unfiled 0, worklist 0, DISCHARGED 1
+  (`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`, shipped 0.813.0), TERMINAL 246, archive 369;
+  165 qualifying refs; uncommitted ledger delta 0. Ledger md5 `a1b4741c…`. Every control passed.
+- **graph delivery**: installed 0.883.0 on its checked-out sprint branch (`ae1fafcf8`), 0.789.0 at its `main`; shipped
+  0.890.0. The range is step-file and skill-rule prose plus a fixture: no bootstrapping file. The pull is owed and,
+  because s319 is blocked on BL-723, required for that sprint to resume. It is the operator's to run. No runbook.
+- **Backlog.** 31 live at close (BL-723 archived, BL-724 filed). **The next free id is BL-725.** BL-724 (NOTE) is the
+  `validate-cycle-commits.sh` party-mode arm BL-723's tip adversary raised, measured unreachable on graph today.
+- **Anchors.** BL-723's LANDED line was written against the branch tip `11c9a73c8`, which is not on `origin/main`; this
+  close re-anchored it to the squash `d03dce80a`.
+- **Gate observation.** The 0.890.0 dress rehearsal ran 260 of 260 fixtures, none skipped,
+  every one as `tools changed`. By design (`.githooks/pre-push:1689`): the macOS 27.2 RC installed at 06:37 that
+  morning replaced `/bin/bash`, `/usr/bin/grep`, `/usr/bin/sed` and `/usr/bin/mktemp`, which every key hashes. The
+  diff alone would have selected about 71 (a hand's reimplementation; the 13 undeclared names match the shipped
+  run). Not a defect, nothing filed: expect one full run after each macOS update.
+- **Net for the batch**: 1 closed (BL-723), 1 filed (BL-724).
+

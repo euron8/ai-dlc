@@ -728,7 +728,7 @@ story-fields-derive	core/skills/ai-dlc/steps/implementation.md
 # digest check-17-bypass 5c8dffa011bfd53608c078eeb505d46e9726d29539e1d7bd70463dc028c6a47b
 # digest check-17-counts a1469466c5a1b07b676a0213c417247f737ae8d13411d7fd5cebbb28fb6225c2
 # digest check-1c-bypass c717d236a1186ee75c963b30a3d54c1f71918c052492ef57646b6347ab947cae
-# digest check-22-spawn-ledger b36292059e5321479ce387e29c5eea95c9e87d5db6fd7d56f2115038e166c507
+# digest check-22-spawn-ledger e4fe0ec7cf1daa9df59a8bd477200af7dfabbf7d1dc0bf6dc1c0ae252349be70
 # digest check-23-draft-stamps 9626c9b111d6dde08a93c418cb9774ebef249aede56d1e8da9843b57c5f37c99
 # digest check-31-ac-falsifiability 805b62bcfd6662e11a40d5fe610d202e748e545706ceb7002c08bd97a853c849
 # digest check-3b-locked-anchor 58f658d2982a14b57255e36f599cb1228daa130ca57f22ec39b9cfa68255e611
@@ -755,8 +755,8 @@ story-fields-derive	core/skills/ai-dlc/steps/implementation.md
 # digest requirements-step 0b3ad0150224988d80b5f599e68ab03b179beac637ecda6736eda61087f5d8b5
 # digest resume-whole-read 8f3f54ee0e057daee29672a775ed050809647da0722d7e1e2c875e42b9d55a13
 # digest retro-compliance-workflow 01d1f386a7ce52950c2d61f9e70071e4cb48d62931f3fe9732fa612b871c312e
-# digest review-carry-over-clauses ad6b44cc575761b1cce2eaaad6a6450dcae618d39f280b43800f7fc2eb04f8ca
+# digest review-carry-over-clauses edddd7381317dfec0750940920e0e5682094f9569a38e223b7ac24132ca138ef
 # digest route-defect-classification a55e73c1efe5d211a230e4b04fb6f382a61501eaf825574e512f8c0b3408c78d
 # digest self-update-join-gate e3e08fa4d5a783ed37c45715a3e2b8b6b4509272d0f68ead7c01d14f31efa385
-# digest story-evidence-scaffold 4f0f4284ae67b29b7c35ea1bd0ba3f3b333ffe7a091e37832f3492b0c2d340e7
+# digest story-evidence-scaffold d62d8adebe86e527fb5b0d3fb6f1870af82a6ee21a6448b7328853f5f6650e37
 # digest story-fields-derive 772c19dd0590944e074ee24c5e56875e3bd99afe92425f8622f309a38dcedf1f

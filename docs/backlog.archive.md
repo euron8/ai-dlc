@@ -36522,7 +36522,7 @@ verify: manual
 
 ## BL-711 — an LC-E14 row whose `extends:` is anchor-only can never clear, because adj_core_text reads the empty file field away and the core text comes back empty
 
-**LANDED (v0.882.0, verified 02ac0549e).** Closed: an anchor-only `extends:` part now reaches the adjudication core text, so its LC-E14 row clears with read evidence; the same split is applied at the LC-O15 arm and the supersession join's two loops.
+**LANDED (v0.882.0, verified 6dd97f4d5).** Closed: an anchor-only `extends:` part now reaches the adjudication core text, so its LC-E14 row clears with read evidence; the same split is applied at the LC-O15 arm and the supersession join's two loops.
 
 **DEFECT, a regression of BL-620 (0.877.0, 328336b22).** Relayed by ai-dlc-5d from graph, re-derived on the distribution by lead ai-dlc-37, built by peer session ai-dlc-c0 (batch 236).
 - **The mechanism** (layer-drift.sh line numbers are at 0.881.0, before the fix). `shadow_parts` (`core/skills/ai-dlc-update/reconcile/lib.sh:284`) emits `<file>\t<anchor>` per comma-part, and an EMPTY file field for a first part that names no file, such as `'#4a. Close-Out Sweep'`, the spelling E11 prescribes. `adj_core_text` in `reconcile/layer-drift.sh` read those lines with `while IFS="$TAB" read -r _fl _an` (`:1078`). A tab is IFS whitespace, so read collapsed the empty leading field: `_fl` took the anchor and `_an` came back empty. `[ -n "$_an" ] || continue` (`:1079`) then skipped the part, the LC-E14 core text was empty, and no `read.core_line` could clear the row. Measured with lib.sh sourced: `#X` read as `_fl=[X] _an=[]`, and the control `f.md#X` read as `_fl=[f.md] _an=[X]`.
@@ -36534,7 +36534,7 @@ verify: sh D=core/skills/ai-dlc-update/reconcile; [ -f "$D/lib.sh" ] && [ -f "$D
 
 ## BL-676 — the hermetic sandbox puts every system tool dir on PATH, so `tools.decl` restricts nothing and a fixture that forks an undeclared tool is neither refused nor re-keyed
 
-**LANDED (v0.884.0, verified 365c11821).** Closed: the hermetic sandbox PATH is now the declared tool farm only, so a fixture that forks an undeclared tool fails, and 107 tools.decl files declare the tools their fixtures fork.
+**LANDED (v0.884.0, verified 4cc63f567).** Closed: the hermetic sandbox PATH is now the declared tool farm only, so a fixture that forks an undeclared tool fails, and 107 tools.decl files declare the tools their fixtures fork.
 
 **DEFECT.** Filed by peer session ai-dlc-c0 (batch 236 READSET), id allocated by lead ai-dlc-c8; found by the BL-584 hand. This is the root of the defect class the batch's decl-tools fix (d5) addressed: that fix repairs one fixture's declaration, while the sandbox still cannot tell a complete declaration from an incomplete one.
 
@@ -36554,7 +36554,7 @@ verify: manual
 
 ## BL-710 — a consumer's long runs show no running progress: the self-update push buffers the hook's output until it exits, and neither the hook's fixture pool nor the self-update covering-fixture run prints a done/total line, so the operator gets no ETA
 
-**LANDED (v0.886.0, verified 1e9de15b4).** Closed: self-update-push.sh streams the hook live, and both pre-push hooks print a done/total line per pool unit.
+**LANDED (v0.886.0, verified f36ede45d).** Closed: self-update-push.sh streams the hook live, and both pre-push hooks print a done/total line per pool unit.
 
 **NOTE.** Filed by peer session ai-dlc-c0 (batch 236), id allocated by lead ai-dlc-37, from a finding by ai-dlc-5d watching graph, re-derived on the distribution by ai-dlc-37. `core/skills/ai-dlc-update/reconcile/self-update-push.sh:187` runs the hook as `( trap '' PIPE; cd "$ROOT" && exec "$HOOK" "$REMOTE" "$URL" < "$TMP/refline" ) > "$TMP/hook.out" 2>&1`, and `:189` only `cat`s that file to stderr after the hook has exited. The hook's per-unit ok/FAIL rows are written, but into the file, for the whole suite.
 
@@ -36578,7 +36578,7 @@ verify: manual
 
 ## BL-713 — the self-update's pre-commit covering-fixture run duplicates the push gate at serial cost, so it goes: the commit happens and the push hook is the gate
 
-**LANDED (v0.886.0, verified 1e9de15b4).** Closed: the self-update no longer runs a covering-fixture run before the commit, and the order is gate, write, commit, push, with self-update-fixtures.sh now the gate-record checker that self-update-push.sh runs before the consumer hook.
+**LANDED (v0.886.0, verified f36ede45d).** Closed: the self-update no longer runs a covering-fixture run before the commit, and the order is gate, write, commit, push, with self-update-fixtures.sh now the gate-record checker that self-update-push.sh runs before the consumer hook.
 
 **DEFECT (performance).** Raised by the operator directly. Id allocated by lead ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Builds as its own release, shipping NEXT after BL-676 and ahead of round 7, because the operator hits it on every self-update. Builds together with BL-710 (same file).
 
@@ -36615,7 +36615,7 @@ verify: sh S=core/skills/ai-dlc-update/SKILL.md; [ -f "$S" ] || exit 9; L=$(grep
 
 ## BL-717 — under `--complete-repair`, wait-for-deliverable.sh declares a live serial remediator non-delivered at its beat cap, and the printed remedy, "Re-dispatch the teammate ONCE", would run two writers on one record; and a present record not modified since the join is reported absent
 
-**LANDED (v0.887.0, verified b9de7de10).** Closed: under `--complete-repair` with `--dispatch` resolving to one agent and one target, that agent's own transcript grants through the existing grant path when its turn is inside one beat, and replaces the bare re-dispatch remedy with the LIVE DISPATCH block when its turn is inside IDLE_SECS, including at grants spent and on a fresh arm after the cap; under `--complete` a present record not modified since the join prints UNCHANGED, never "absent", and the bare remedy prints only for a truly absent target.
+**LANDED (v0.887.0, verified 369cf904c).** Closed: under `--complete-repair` with `--dispatch` resolving to one agent and one target, that agent's own transcript grants through the existing grant path when its turn is inside one beat, and replaces the bare re-dispatch remedy with the LIVE DISPATCH block when its turn is inside IDLE_SECS, including at grants spent and on a fresh arm after the cap; under `--complete` a present record not modified since the join prints UNCHANGED, never "absent", and the bare remedy prints only for a truly absent target.
 
 **DEFECT.** Relayed by ai-dlc-5d from graph S319; distribution facts re-derived by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236).
 
@@ -37008,7 +37008,7 @@ verify: sh o="$(bash core/fixtures/review-shard-merge/run.sh 2>&1)"; for a in W3
 
 ## BL-739 — `validate-mutation-red.sh` prints its test command with argv quoting dropped, so a multi-word `-k` expression is echoed, and committed as gate-1 evidence, as a command that does not run
 
-**LANDED (v0.900.0, verified 4255e14c2).** **DEFECT.** Seen by graph-watch (ai-dlc-1b) in batch 238, read-only on graph; the lead verified the line at origin/main `e1739275b`.
+**LANDED (v0.900.0, verified 836c0962d).** **DEFECT.** Seen by graph-watch (ai-dlc-1b) in batch 238, read-only on graph; the lead verified the line at origin/main `e1739275b`.
 
 - `core/scripts/validate-mutation-red.sh:460` is `printf '  test:       %s\n' "${TEST_CMD[*]}"`, which joins argv with spaces.
 - On graph s319 story 3.1, the captures `s319-3-1-mutation-red-ac8-generation-compare`, `-ac9-nonarray` and `-ac9-redirect` read, unquoted, `-k ac8_invalidate_during_blocked or overlapping_refresh`, `-k non_array_body or malformed_json` and `-k 302 or redirect or session_call`. The dev subagent transcripts (`ace13458` at 03:04:46Z, `a702f89c` at 03:38:24Z) show the dev invoked them quoted.
@@ -37027,7 +37027,7 @@ verify: sh bash core/fixtures/mutation-red-replay/receipt-bl739.sh core/scripts/
 
 ## BL-740 — the review-shard merge has no rule tying a shard's verdict to its finding count, so a seat sealed NEEDS_REWORK with findings=0 is accepted by the merge's per-shard code and has no correction path
 
-**LANDED (v0.901.0, verified b5dac431b).** **DEFECT.** Seen by graph-watch (ai-dlc-1b) and BL-737's owner e3-new, batch 238.
+**LANDED (v0.901.0, verified 5b21170f8).** **DEFECT.** Seen by graph-watch (ai-dlc-1b) and BL-737's owner e3-new, batch 238.
 
 - On graph s319 story 3.1, seat cross-1 (agent `adad7b1e7d9fa99c2`; the earlier id was a truncation) sealed `NEEDS_REWORK` with findings=0. The marker-count check passes (0 = 0), and `--mark` passed cross-1 at 04:36:06Z.
 - `--check-shard` is BL-737's, on main only from `af1536de3` (0.899.0), and was not on graph's installed engine. Graph's real merge at 04:36:19Z was REFUSED, by cross-6's shard first; the counterfactual merge with cross-6's refusal removed MERGES.

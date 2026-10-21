@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,8 +67,51 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 238 IS MID-FLIGHT: TWO RELEASES LANDED, SEVEN BRANCHES BUILT AND UNGATED. ITS LEAD STOPPED ON THE
-OPERATOR'S RULING AND THIS RECORD HANDS IT OVER. A FRESH SESSION CONTINUES BATCH 238; IT DOES NOT START 239.**
+**BATCH 238 IS CLOSED: TWELVE RELEASES, `v0.890.1` THROUGH `v0.901.0`. THE NEXT SESSION STARTS BATCH 239.**
+The hand-off block below this one is history; this block replaces it. Leads were ai-dlc-fc (to 0.891.0, then
+handed over on the operator's ruling) and ai-dlc-1a. Graph-watch was ai-dlc-1b, polling every 10 minutes per the
+operator's ruling, until the operator stopped it: "stop the watcher, there is no active graph session and won't be
+until BL-740 is ready to pull." No `graph-*` session was messaged. Contract folds are in `docs/analysis/b238-contracts.md`
+and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path citations in both are dead.
+- **Landed** (squash, PR, closes):
+  - `v0.890.1` `f4a5a0966` #1233 (a PC- candidate ALREADY-FIXED); `v0.891.0` `01de3123d` #1234 BL-687, 688;
+  - `v0.892.0` `0877fe65f` #1236 BL-678, 708, 712, 714, 720, 724; `v0.893.0` `b55dc53fa` #1238 BL-715;
+  - `v0.894.0` `39fb06be9` #1239 BL-674, 697, 707; `v0.895.0` `599da0aef` #1241 BL-721;
+  - `v0.896.0` `e2273444b` #1243 BL-709; `v0.897.0` `297642c21` #1244 BL-718, 719;
+  - `v0.898.0` `e1739275b` #1246 BL-605; `v0.899.0` `af1536de3` #1248 BL-737;
+  - `v0.900.0` `836c0962d` #1251 BL-739; `v0.901.0` `5b21170f8` #1252 BL-740.
+  Every batch-236 and batch-238 LANDED line in the archive is anchored on its squash (this close re-anchored five
+  batch-236 lines that still cited `-dev` shas), and every batch-236 and batch-238 `-dev` ref is deleted.
+- **Operator rulings this batch.** BL-736: a story split counts as a scope change for the test strategy ("I'll go
+  with your recommendation"). BL-737: a refused merge is corrected by the OWNING seat on a prescribed path, never by a
+  lead rewrite ("The lead should not be editing those to force the merge."). Graph-watch interval: 10 minutes.
+- **Read-set map** reconciled twice (`e272cad3c` at 0.897.0, 21 fixtures; `dec50e4a3` at 0.899.0, 14 fixtures incl.
+  derivation-capture); 0 stale at each.
+- **Backlog.** Filed this batch: BL-725..BL-749. Live at close: 36 (35 plus BL-749 filed at close); archive 700. **The next free id is BL-750.**
+  Open DEFECTs filed this batch with a ready fix shape: BL-738 (the bare-line `--mark` fallback in six role files;
+  its `sh` receipt fails until fixed), BL-741 (qa.md verdict forms), BL-748 (validate-handoff-evidence reads a
+  hand-typed `$ ` line ahead of the script's own), BL-736, BL-733, BL-734. NOTEs: BL-735, BL-742..747, BL-749.
+- **Not built, with reasons** (unchanged from the hand-off unless named): BL-538, 583, 584, 587, 616, 706 (consumer
+  measurement or gate log first); BL-553(b) (not shippable as specified); BL-685, 699 (owners absent); BL-695
+  (graph's next stories round); BL-691 (design deferred); BL-692 (needs graph HEAD-movement measurement); BL-716 (lane
+  key is connected components; graph s319 measured edit 19 / edit+MOVED-CITE 18 / edit+HIT 1); BL-701 (receipt
+  re-scope owed); BL-727, 728, 731 (`sh` receipts the rotator cannot score; re-scope in their build).
+- **Graph at close**: installed 0.891.0, shipped 0.901.0, no pull: TEN releases behind, a WIDE range. Bootstrapping
+  files in `01de3123d..5b21170f8`: one, `core/skills/ai-dlc-update/reconcile/layer-drift.sh` (control `core/scripts/`: 11);
+  mode-only changes under `core/`: 0 of 7 mode changes. A pull runbook is owed by action 7 and is not yet written. Its s319 session handed off at 04:37:14Z
+  (snapshot `c625bb0eb`). BL-740 is the release the operator named as the pull trigger; the pull is the operator's.
+  Graph conduct observed by the watcher: every refusal in s319's 3.1 QA rounds was routed to its owning seat by
+  SendMessage, with no lead write, which is BL-737's prescribed path working before it shipped.
+- **Measured costs.** `validate-enforcement-map.sh` +0.63 CPU-s (+2.3%) from BL-674 (0.894.0, stated in its text);
+  review-shard-merge 173 to 232 s (+34%; not the pole, which is reconcile-emit-report at 753 s) loaded after BL-740; mutation-red-replay 36 s loaded (no prior figure).
+- **Duration record carries dead rows** (BL-744): 58 of 318 rows in `.git/ai-dlc-fixture-durations` name deleted
+  fixture dirs, including the three `review-shard-merge-mutants` shards. Read the pole off LIVE dirs only.
+- **Operator-side observation, not a repo entry**: the home advisor-gate hook denied a push three times this batch
+  when the consult or the push shared a parallel tool block with another call; every push and merge sent alone
+  passed. Send push and merge calls alone.
+
+**BATCH 238 HAND-OFF RECORD (history; the block above replaces it): TWO RELEASES HAD LANDED, SEVEN BRANCHES BUILT AND UNGATED. ITS LEAD STOPPED ON THE
+OPERATOR'S RULING AND THIS RECORD HANDED IT OVER.**
 Batch 237's block below is history. Lead was ai-dlc-fc, which had owned batch 237's release and so was SPENT;
 the operator asked "why did you accept the handoff when you partciipated in another batch already?" and ruled the
 handover. No `graph-*` session was messaged. Every contract and adversary FOLD is `docs/analysis/b238-contracts.md`;
@@ -111,35 +154,6 @@ rotator, so the pointer on line 3 names only its own range (BL-678 firing, not c
 - **For the operator to carry to graph**: replace the candidate's receipt with
   `verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"`. Graph's
   boundary at hand-off: porcelain 11, ledger md5 `a1b4741c`, HEAD `ae1fafcf8`.
-
-**BATCH 237 SHIPPED ONE RELEASE, `v0.890.0` (`d03dce80a`, #1231): BL-723, §5 STEP 2'S TEST-STRATEGY REVIEW ON THE
-NATIVE ADVERSARIAL CYCLE. THE OPERATOR RULED IT THE BATCH'S ONLY WORK.**
-Batch 236's block below is history: this block replaces its delivery gap. Started at `origin/main` `b99268ce5`
-(`VERSION` 0.889.0); lead ai-dlc-52, owner ai-dlc-fc. No `graph-*` session was messaged.
-- **Operator ruling, batch 237**: "the only work I want in this batch is the test strategy review backlog item". BL-695,
-  clustered with BL-723 by batch 236's resume list, was NOT built and stays live; so do BL-719, BL-685 round 9, BL-720,
-  BL-721, BL-714-716, BL-707-709, BL-712 and BL-699, and the owed `story-evidence-scaffold` re-trace. The operator also
-  paused the batch mid-build and resumed it; the pause cost nothing but wall clock.
-- **What 0.890.0 decided for graph's s319 resume**: option (ii). The delivered one-shot `test-strategy-review.md` is
-  discarded and the native series starts at pass 1, prefix `s<N>/test-strategy-adversarial-p`; step 3's bind refuses
-  unless the series' last pass is `EXIT_CONDITION_MET`, which is how a mid-§5 resume reaches (ii) without a migration.
-  SKILL.md Rule 8 cites the step's carve-out. graph is BLOCKED on this release and reaches it only by its next pull.
-- **Close sweep** (at `origin/main` `b99268ce5`, before the release): live 1, unfiled 0, worklist 0, DISCHARGED 1
-  (`PC-S319-CONVERGENCE-ADVERSARY-CANNOT-KNOW-ITS-OWN-TOOL-USE-ID`, shipped 0.813.0), TERMINAL 246, archive 369;
-  165 qualifying refs; uncommitted ledger delta 0. Ledger md5 `a1b4741c…`. Every control passed.
-- **graph delivery**: installed 0.883.0 on its checked-out sprint branch (`ae1fafcf8`), 0.789.0 at its `main`; shipped
-  0.890.0. The range is step-file and skill-rule prose plus a fixture: no bootstrapping file. The pull is owed and,
-  because s319 is blocked on BL-723, required for that sprint to resume. It is the operator's to run. No runbook.
-- **Backlog.** 31 live at close (BL-723 archived, BL-724 filed). **The next free id is BL-725.** BL-724 (NOTE) is the
-  `validate-cycle-commits.sh` party-mode arm BL-723's tip adversary raised, measured unreachable on graph today.
-- **Anchors.** BL-723's LANDED line was written against the branch tip `11c9a73c8`, which is not on `origin/main`; this
-  close re-anchored it to the squash `d03dce80a`.
-- **Gate observation.** The 0.890.0 dress rehearsal ran 260 of 260 fixtures, none skipped,
-  every one as `tools changed`. By design (`.githooks/pre-push:1689`): the macOS 27.2 RC installed at 06:37 that
-  morning replaced `/bin/bash`, `/usr/bin/grep`, `/usr/bin/sed` and `/usr/bin/mktemp`, which every key hashes. The
-  diff alone would have selected about 71 (a hand's reimplementation; the 13 undeclared names match the shipped
-  run). Not a defect, nothing filed: expect one full run after each macOS update.
-- **Net for the batch**: 1 closed (BL-723), 1 filed (BL-724).
 
 ### Derive the state; do not trust the numbers below
 
