@@ -197,11 +197,22 @@
 #     The reason for the second band: a remediator inside one long tool call takes no turn
 #     for longer than a quantum and is STILL A WRITER on its record, and a re-dispatch then
 #     puts two writers on one record. That collision is judged on its consequence, not on
-#     how rarely a live teammate goes that quiet. At IDLE_SECS or older the remedy is the
-#     bare re-dispatch, as before -- silence that long is the measured mark of a teammate
+#     how rarely a live teammate goes that quiet. At IDLE_SECS or older there is no grant;
+#     with the path absent the cap prints STOPPED DISPATCH (read that transcript's last
+#     message before any re-dispatch), and only an unresolved, stalled or session-wide beat
+#     keeps the bare re-dispatch -- silence that long is the measured mark of a teammate
 #     that finished or wrote elsewhere.
-#     A dispatch that did not resolve to an agent, several dispatches, several targets or
-#     any other mode keep the session-wide reading, and decide nothing.
+#     THE GRANT IS --complete-repair's ALONE; THE REMEDY IS EVERY RESOLVED DISPATCH'S. A plain
+#     `--dispatch <id> <path>` beat whose dispatch resolves to ONE agent gets the same LIVE and
+#     RECENT answers at the cap (no grant, still exit 1), because a remediator whose work has no
+#     deliverable file -- an inline changelog append -- gives the join a path that never
+#     appears, and the bare remedy then fired against a live writer (BL-721). Past IDLE_SECS,
+#     with the path absent, the cap prints STOPPED in place of the bare remedy: that writer
+#     finishes WITHOUT writing the path, so absence plus silence is the shape of a finished
+#     teammate as much as a failed one, and its last message decides which.
+#     A dispatch that did not resolve to an agent, several dispatches, several targets, a
+#     stalled transcript, or no --dispatch at all keep the session-wide reading and the bare
+#     remedy, and decide nothing.
 #
 #     THE THRESHOLD IS MEASURED, NOT PICKED. Over 1,337 real teammate transcripts from
 #     this pipeline and the reference consumer's -- 57,050 consecutive appends -- a
@@ -251,7 +262,9 @@
 #                      passes; otherwise it is UNFINISHED with the merge's refusal text.
 #   --dispatch <id>    the dispatch this join waits on: the `agentId` (or `agent_id`) the
 #                      Agent result returned, or its toolu_ id. Its spawn-ledger `ts` is the
-#                      join's --since, and a --since LATER than it is refused.
+#                      join's --since, and a --since LATER than it is refused. At the cap a
+#                      beat printing LIVE DISPATCH or STOPPED DISPATCH means read that agent's
+#                      transcript before any re-dispatch.
 #   (Each is documented in full below the `set -u` line.)
 #
 # EXIT CODES
@@ -268,7 +281,9 @@
 #                     teammate. Check the path before beating again. It is a report,
 #                     not a verdict -- the exit code is unaffected.
 #   1  NON-DELIVERY   a path exhausted max_wait_beats. Rule 20 non-delivery:
-#                     re-dispatch ONCE (with --reset), then HARD_BLOCK.
+#                     re-dispatch ONCE (with --reset), then HARD_BLOCK -- unless the beat
+#                     printed LIVE DISPATCH or STOPPED DISPATCH, in which case read that
+#                     agent's transcript first, as the block says.
 #
 # WHY WAITING IS NOT NONZERO. A join that is still waiting is the ordinary case --
 # it is what nine of every ten beats report. The harness treats a nonzero exit from
@@ -1567,13 +1582,17 @@ teammate_quiet_for() {  # prints seconds since the most recent teammate turn in 
 }
 
 # THE DISPATCH-SCOPED READING, AND THE ONE PLACE LIVENESS DECIDES ANYTHING (header: "IT CHANGES
-# NO DECISION", which states the split). Scope: --complete-repair, ONE target and ONE resolved
-# agent -- DP_AGENTS_ is already empty when any dispatch failed to resolve, which is the
-# session-wide case and decides nothing -- whose own `agent-<id>.jsonl` exists and does not end
-# in a stalled run. Inside that scope THREE answers, by the age of that transcript's newest turn:
-#   0  LIVE    younger than one quantum (BUDGET)        -- grants, and replaces the remedy
-#   2  RECENT  BUDGET or older, younger than IDLE_SECS  -- NO grant, but replaces the remedy
-#   1  neither (older, stalled, or out of scope)        -- today's behaviour, byte for byte
+# NO DECISION", which states the split). Scope: ONE target and ONE resolved agent, in any mode
+# -- DP_AGENTS_ is already empty when any dispatch failed to resolve, or when there is no
+# --dispatch, which is the session-wide case and decides nothing -- whose own
+# `agent-<id>.jsonl` exists and does not end in a stalled run. Inside that scope THREE answers,
+# by the age of that transcript's newest turn:
+#   0  LIVE     younger than one quantum (BUDGET)        -- replaces the remedy; grants ONLY under
+#                                                            --complete-repair (the caller gates it)
+#   2  RECENT   BUDGET or older, younger than IDLE_SECS  -- NO grant, but replaces the remedy
+#   3  STOPPED  IDLE_SECS or older                       -- NO grant; with the path absent, the
+#                                                            STOPPED line replaces the remedy
+#   1  out of scope, or stalled                          -- the bare remedy, as before
 # The age is read exactly as teammate_quiet_for reads it (transcript_turn, the epoch, the mtime
 # fallback, the skew clamp); this is not a second parser. Sets DL_AGENT and DL_AGE for the lines
 # that name it.
@@ -1589,7 +1608,6 @@ teammate_quiet_for() {  # prints seconds since the most recent teammate turn in 
 DL_AGENT=""; DL_AGE=""
 dispatch_live() {
   DL_AGENT=""; DL_AGE=""
-  [ "$COMPLETE_REPAIR" -eq 1 ] || return 1
   dl_a_="${DP_AGENTS_:-}"
   case "$dl_a_" in ''|*' '*) return 1 ;; esac
   case "$TARGETS" in *'|'*) return 1 ;; esac
@@ -1607,9 +1625,9 @@ dispatch_live() {
   [ "$dl_g_" -lt 0 ] && dl_g_=0
   # LIVE is decided first and on BUDGET alone, so an IDLE_SECS retuned below BUDGET can only
   # narrow the RECENT band, never take away a grant.
-  if [ "$dl_g_" -lt "$BUDGET" ]; then DL_AGENT="$dl_a_"; DL_AGE="$dl_g_"; return 0; fi
-  [ "$dl_g_" -lt "$IDLE_SECS" ] || return 1
   DL_AGENT="$dl_a_"; DL_AGE="$dl_g_"
+  if [ "$dl_g_" -lt "$BUDGET" ]; then return 0; fi
+  [ "$dl_g_" -lt "$IDLE_SECS" ] || return 3
   return 2
 }
 
@@ -1830,7 +1848,7 @@ GRANTED=""
 GRANTSPENT=""
 # dispatch_live's verdict, taken once in the exhaustion arm (the only place it decides anything)
 # and read again by the final print, so an awk over a long transcript runs at most once per beat:
-# 0 none, 1 LIVE, 2 RECENT. DL_GRANT is 1 when the transcript alone bought this beat's grant.
+# 0 none, 1 LIVE, 2 RECENT, 3 STOPPED. DL_GRANT is 1 when the transcript alone bought this beat's grant.
 DISPATCH_LIVE=0
 DL_GRANT=0
 OLDIFS="$IFS"; IFS='|'
@@ -1932,15 +1950,17 @@ for t in $TARGETS; do
     # its own mark never grants. The dispatched agent's own transcript is that wait's evidence of
     # work (dispatch_live), read here and nowhere else. A pure read, so a chained sibling and a
     # fresh arm after the cap get the same answer as a sleeping beat.
-    # LIVE (0) grants and replaces the remedy; RECENT (2) only replaces the remedy (dispatch_live).
+    # LIVE (0) replaces the remedy, and grants only under --complete-repair; RECENT (2) and
+    # STOPPED (3) never grant (dispatch_live). Only the GRANT is gated on the mode: any resolved
+    # --dispatch gets the remedy its own transcript supports (BL-721).
     # DL_GRANT marks a grant the transcript alone bought, so its PROGRESS line names the transcript.
-    if [ "$COMPLETE_REPAIR" -eq 1 ]; then
-      dispatch_live; dl_v_=$?
-      case "$dl_v_" in
-        0) DISPATCH_LIVE=1; [ "$PROGRESSED" -eq 1 ] || DL_GRANT=1; PROGRESSED=1 ;;
-        2) DISPATCH_LIVE=2 ;;
-      esac
-    fi
+    dispatch_live; dl_v_=$?
+    case "$dl_v_" in
+      0) DISPATCH_LIVE=1
+         if [ "$COMPLETE_REPAIR" -eq 1 ]; then [ "$PROGRESSED" -eq 1 ] || DL_GRANT=1; PROGRESSED=1; fi ;;
+      2) DISPATCH_LIVE=2 ;;
+      3) DISPATCH_LIVE=3 ;;
+    esac
 
     if [ "$PROGRESSED" -eq 1 ] && [ "$g" -lt "$MAX_BEATS" ]; then
       g=$(( g + 1 ))
@@ -2032,7 +2052,9 @@ if [ -n "$EXHAUSTED" ]; then
       echo "  still working. Read it and the teammate's own last turns before you decide."
     fi
   fi
-  if [ -n "$GRANTSPENT" ] && [ "$DISPATCH_LIVE" -eq 0 ]; then
+  # The NOTE's "Decide: re-dispatch" contradicts the LIVE/RECENT block, so those two suppress it;
+  # STOPPED does not, because the transcript then says nothing about the progress path's writes.
+  if [ -n "$GRANTSPENT" ] && { [ "$DISPATCH_LIVE" -eq 0 ] || [ "$DISPATCH_LIVE" -eq 3 ]; }; then
     IFS='|'; for t in $GRANTSPENT; do
       echo "  NOTE: $t still shows work under the progress path, but all $MAX_BEATS"
       echo "  progress grants are spent. The bound is deliberate -- a teammate that"
@@ -2041,22 +2063,49 @@ if [ -n "$EXHAUSTED" ]; then
       echo "  worktree and judged it genuinely close."
     done; IFS="$OLDIFS"
   fi
-  if [ "$DISPATCH_LIVE" -ne 0 ]; then
-    # THIS dispatch's own transcript is LIVE with the grants spent, or RECENT (no turn this beat,
-    # so no grant, but younger than IDLE_SECS -- one long tool call looks exactly like this): a
-    # bare re-dispatch would start a second writer on the record the first may still be writing.
+  if [ "$DISPATCH_LIVE" -eq 1 ] || [ "$DISPATCH_LIVE" -eq 2 ]; then
+    # THIS dispatch's own transcript is LIVE with the grants spent (or, without --complete-repair,
+    # with no grant to give), or RECENT (no turn this beat, so no grant, but younger than
+    # IDLE_SECS -- one long tool call looks exactly like this): a bare re-dispatch would start a
+    # second writer on the record the first may still be writing.
     # echo, not say, for the reason the PROGRESS line gives: --quiet must not hide what not to do.
     echo "  LIVE DISPATCH agent-${DL_AGENT} -- its own transcript took a turn ${DL_AGE}s ago:"
     echo "    ${TEAMMATE_DIR}/agent-${DL_AGENT}.jsonl"
-    if [ "$DISPATCH_LIVE" -eq 1 ]; then
+    if [ "$DISPATCH_LIVE" -eq 1 ] && [ "$COMPLETE_REPAIR" -eq 1 ]; then
       echo "  That teammate is still writing, and all $MAX_BEATS grants are spent. A re-dispatch now"
+    elif [ "$DISPATCH_LIVE" -eq 1 ]; then
+      echo "  That teammate is still working, and a turn in its transcript buys no grant outside"
+      echo "  --complete-repair: a writer whose work has no file at the joined path (an inline"
+      echo "  changelog append) never makes it appear. A re-dispatch now"
     else
       echo "  No turn inside the last beat, so no grant; but a teammate inside one long tool call is"
       echo "  silent exactly like this and is still a writer on its record. A re-dispatch now"
     fi
-    echo "  would put two writers on one record. Read that teammate's last turns, then either"
+    if [ "$COMPLETE_REPAIR" -eq 1 ]; then
+      echo "  would put two writers on one record. Read that teammate's last turns, then either"
+    else
+      echo "  would put two writers on one piece of work. Read that teammate's last turns, then either"
+    fi
     echo "  re-run with --reset and beat again, or STOP that teammate first and only then"
     echo "  re-dispatch it ONCE (then re-run with --reset); if it fails again, HARD_BLOCK."
+  elif [ "$DISPATCH_LIVE" -eq 3 ] && [ "$EX_ABSENT" -eq 1 ]; then
+    # THIS dispatch's own transcript has been silent past IDLE_SECS and the path is absent. A
+    # writer with no deliverable file finishes without ever writing the joined path, so this is
+    # the shape of a teammate that FINISHED as much as of one that failed -- and only its last
+    # message tells them apart. A bare re-dispatch over a finished writer repeats its work.
+    echo "  STOPPED DISPATCH agent-${DL_AGENT} -- its own transcript last took a turn ${DL_AGE}s ago:"
+    echo "    ${TEAMMATE_DIR}/agent-${DL_AGENT}.jsonl"
+    if [ "$COMPLETE_REPAIR" -eq 1 ]; then
+      echo "  A finished teammate leaves a silent transcript, and the path may be absent because it"
+      echo "  wrote its work elsewhere, so an absent path and a silent transcript are what a FINISHED"
+      echo "  teammate looks like too. Read that transcript's"
+    else
+      echo "  A writer with no deliverable file finishes without writing one, so an absent path and a"
+      echo "  silent transcript are what a FINISHED teammate looks like too. Read that transcript's"
+    fi
+    echo "  last message before any re-dispatch: if it reports the work done, verify the work where"
+    echo "  it says it wrote it; only if it did not finish, re-dispatch ONCE (then re-run with"
+    echo "  --reset), and if it fails again, HARD_BLOCK."
   elif [ "$COMPLETE" -eq 0 ] || [ "$EX_ABSENT" -eq 1 ]; then
     echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
     echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."

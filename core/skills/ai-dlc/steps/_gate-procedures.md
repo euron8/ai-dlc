@@ -132,7 +132,8 @@ live wait over a teammate that has not delivered.
 - `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
   beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
 - `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat
-  reports `absent`. Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is
+  reports `absent`, unless the beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which
+  case read that agent's transcript first, as the block says. Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is
   not `seat-complete:`, or its `sha=` no longer matches) and `UNSETTLED <path>` (marked with no
   `sha=`, still changing) are NOT absent, on a
   waiting beat or an exhausted one: read the file before deciding, never re-dispatch over it

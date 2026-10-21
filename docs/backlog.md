@@ -558,24 +558,6 @@ Owed, the design for its owner to choose: detect at use time, where the emitter 
 
 verify: manual
 
-## BL-721 — a remediator whose work has no deliverable file (an inline story-changelog append) gives the bounded join no path to wait on, so a beat armed on a never-written marker can only reach its cap, and the bare Re-dispatch remedy then fires against a finished or live writer
-
-**NOTE.** Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37 on origin/main 8df9b8ae6 and by this filing; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Related: BL-717 (the same remedy class on a different subject) and BL-720.
-
-0.887.0's LIVE DISPATCH extension is gated on `--complete-repair`: `core/scripts/wait-for-deliverable.sh:1592` is `[ "$COMPLETE_REPAIR" -eq 1 ] || return 1` inside `dispatch_live()`, and `:686` is the only line that sets it. So a plain `--dispatch <id> <path>` beat on a path that never appears still prints the bare remedy at its cap, even on 0.887.0. BL-717's fix does not cover this subject.
-
-The pipeline gives such a writer no file to join on. The consumer's installed `_gate-procedures.md:586-588` keeps a story file's changelog INLINE in the story, while `_dispatch-protocol.md:110-118` tells the lead to JOIN on "the deliverable file".
-
-Consumer evidence, relayed by ai-dlc-5d and not re-measured by this filing: in graph's S319, remediator aa460db9 was dispatched at 09:48Z to append inline changelogs to 19 stories. The lead armed `--dispatch aa460db9 .../stories-changelog-done.marker` on a marker it noted the writer "will never write", so that beat can only reach NON-DELIVERY.
-
-Second consumer run, relayed by ai-dlc-5d and not re-measured: graph run 2026-10-20: marker beat br8xhg1gl killed (exit 144, cause undetermined) before its cap; the remediator completed and was not re-dispatched, so the cap path was not exercised.
-
-Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ci` before this entry was added): "no deliverable" 0, "deliverable file" 0 and "liveness hold" 0, in both docs/backlog.md and docs/backlog.archive.md; "BL-721" 0 in both. Control: "wait-for-deliverable" 8 live (5d's 7, plus BL-720's) and 82 in the archive.
-
-Direction, for the owner: either a dispatch-scoped join that needs no path and waits on the dispatch's own SubagentStop row, or a remedy that names the liveness check whenever `--dispatch` resolves. The fix is the owner's to choose.
-
-verify: manual
-
 ## BL-725 — the recover gate's per-call `[ -w "$STATE_DIR" ]` stand-down passes on a writable directory whose stage write fails (a full disk), so the snapshot Read is allowed, the stage stays `snapshot`, and every later call is denied FIRST
 
 **DEFECT.** The filing is promised by 0.891.0's CHANGELOG ("Finding: an ENOSPC stage-write failure still holds the gate at `snapshot`", `CHANGELOG.md:42-44`). It came out of the BL-688 work and was relayed by graph-watch, batch 238; the batch-238 filing hand measured and filed it.

@@ -107,7 +107,10 @@ on in beats:
               only on the operator's word, or when the next beat reports
               it STALLED again. Never re-dispatch on the same account.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
-              re-run with --reset), and if it fails again, HARD_BLOCK.
+              re-run with --reset), and if it fails again, HARD_BLOCK --
+              unless the beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`,
+              in which case read that agent's transcript first, as the
+              block says.
               Under --complete, a path reported `UNFINISHED` or `UNSETTLED`
               is NOT absent: the seat wrote a file. Read it before you decide;
               a re-dispatch over it discards its findings. Only `absent` is

@@ -36857,3 +36857,21 @@ The seed is what fails a sleep-overlap read of the depth-0 width: a sleep overla
 
 verify: sh t="$(mktemp -d "${TMPDIR:-/tmp}/bl707.XXXXXX")" || exit 9; trap 'rm -rf "$t"' EXIT; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; mkdir -p "$t/core/fixtures/lib" "$t/core/fixtures/prepush-pool-depth" "$t/.githooks" && cp core/fixtures/lib/preamble.sh "$t/core/fixtures/lib/" && cp .githooks/pre-push "$t/.githooks/pre-push" && awk -v m="$t/seeded" '/^  mutant / { next } /^raw="\$\(env \| sed -n/ { print "case \"$0\" in *fx1/*run.sh) [ \"${PREPUSH_POOL_DEPTH:-}\" = 1 ] && { [ -e \"" m "\" ] || { : > \"" m "\"; sleep 10; }; } ;; esac # BL707SEED" } { print }' core/fixtures/prepush-pool-depth/run.sh > "$t/core/fixtures/prepush-pool-depth/run.sh" && [ "$(grep -c BL707SEED "$t/core/fixtures/prepush-pool-depth/run.sh")" = 1 ] && [ "$(grep -cE '^ *([A-Z_]+=[^ ]+ )*mutant [a-z]' "$t/core/fixtures/prepush-pool-depth/run.sh")" = 0 ] && git -C "$t" init -q && [ -d "$t/.git" ] || exit 9; ( cd "$t" && bash core/fixtures/prepush-pool-depth/run.sh ) > "$t/out" 2>&1; r=$?; [ -e "$t/seeded" ] || exit 9; case "$r" in 0|1) exit "$r" ;; *) exit 9 ;; esac
 
+## BL-721 — a remediator whose work has no deliverable file (an inline story-changelog append) gives the bounded join no path to wait on, so a beat armed on a never-written marker can only reach its cap, and the bare Re-dispatch remedy then fires against a finished or live writer
+
+**LANDED (v0.895.0, verified 2149322d5).** **NOTE.** Relayed by ai-dlc-5d from graph; distribution facts re-derived by lead ai-dlc-37 on origin/main 8df9b8ae6 and by this filing; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236). Related: BL-717 (the same remedy class on a different subject) and BL-720.
+
+0.887.0's LIVE DISPATCH extension is gated on `--complete-repair`: `core/scripts/wait-for-deliverable.sh:1592` is `[ "$COMPLETE_REPAIR" -eq 1 ] || return 1` inside `dispatch_live()`, and `:686` is the only line that sets it. So a plain `--dispatch <id> <path>` beat on a path that never appears still prints the bare remedy at its cap, even on 0.887.0. BL-717's fix does not cover this subject.
+
+The pipeline gives such a writer no file to join on. The consumer's installed `_gate-procedures.md:586-588` keeps a story file's changelog INLINE in the story, while `_dispatch-protocol.md:110-118` tells the lead to JOIN on "the deliverable file".
+
+Consumer evidence, relayed by ai-dlc-5d and not re-measured by this filing: in graph's S319, remediator aa460db9 was dispatched at 09:48Z to append inline changelogs to 19 stories. The lead armed `--dispatch aa460db9 .../stories-changelog-done.marker` on a marker it noted the writer "will never write", so that beat can only reach NON-DELIVERY.
+
+Second consumer run, relayed by ai-dlc-5d and not re-measured: graph run 2026-10-20: marker beat br8xhg1gl killed (exit 144, cause undetermined) before its cap; the remediator completed and was not re-dispatched, so the cap path was not exercised.
+
+Dedupe (relayed by ai-dlc-5d, re-derived by this filing with `grep -ci` before this entry was added): "no deliverable" 0, "deliverable file" 0 and "liveness hold" 0, in both docs/backlog.md and docs/backlog.archive.md; "BL-721" 0 in both. Control: "wait-for-deliverable" 8 live (5d's 7, plus BL-720's) and 82 in the archive.
+
+Direction, for the owner: either a dispatch-scoped join that needs no path and waits on the dispatch's own SubagentStop row, or a remedy that names the liveness check whenever `--dispatch` resolves. The fix is the owner's to choose.
+
+verify: sh bash core/fixtures/wait-beat-liveness/receipt-bl721.sh
+

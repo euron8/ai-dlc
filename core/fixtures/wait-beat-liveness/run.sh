@@ -2950,6 +2950,7 @@ r27_beat() {  # $1 = subject (in a sibling dir), $2 = workdir ; rest = argv
 }
 R27_REMEDY='Re-dispatch the'
 R27_LIVE="LIVE DISPATCH agent-$R27_AG"
+R27_STOP="STOPPED DISPATCH agent-$R27_AG"
 S27a_repair_dispatch_live_extends_cap() {
   R27_S="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
   W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 0 0
@@ -2967,19 +2968,20 @@ S27a_repair_dispatch_live_extends_cap() {
     ok "repair-live: RECENT — a turn 60s old (quantum 30s, idle 1200s) gets no grant, and the liveness block replaces the re-dispatch (rc 1)"
   else bad "repair-live: RECENT band granted, or printed the bare re-dispatch (rc=$RC): $OUT"; fi
   rm -rf "$W"
-  # NEAR-MISS: the same seed past IDLE_SECS is today's remedy.
+  # NEAR-MISS: the same seed past IDLE_SECS gets no LIVE block and no grant; with the record
+  # absent it is STOPPED (BL-721): read the last message before any re-dispatch.
   W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 1300 0
   R27_IDLE=1200 r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
-  if [ "$RC" -eq 1 ] && has "$R27_REMEDY" && ! has "$R27_LIVE" && ! has "PROGRESS"; then
-    ok "repair-live: NEAR-MISS — a turn past IDLE_SECS (1300s of 1200s) keeps the bare re-dispatch remedy (rc 1)"
-  else bad "repair-live: NEAR-MISS FAILED — a dispatch idle past IDLE_SECS lost its remedy or was granted (rc=$RC): $OUT"; fi
+  if [ "$RC" -eq 1 ] && has "$R27_STOP" && ! has "$R27_REMEDY" && ! has "$R27_LIVE" && ! has "PROGRESS"; then
+    ok "repair-live: NEAR-MISS — a turn past IDLE_SECS (1300s of 1200s) gets no LIVE block and no grant; the absent record reads STOPPED (rc 1)"
+  else bad "repair-live: NEAR-MISS FAILED — a dispatch idle past IDLE_SECS was granted, read LIVE, or did not read STOPPED (rc=$RC): $OUT"; fi
   rm -rf "$W"
-  # NEAR-MISS: the same seed with the turn an hour old is today's non-delivery, remedy and all.
+  # NEAR-MISS: the same seed with the turn an hour old is NON-DELIVERY, STOPPED, never granted.
   W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 3600 0
   r27_beat "$R27_S" "$W" --complete-repair --dispatch "$R27_AG" rec.md
-  if [ "$RC" -eq 1 ] && has "NON-DELIVERY rec.md -- absent after" && has "$R27_REMEDY" && ! has "PROGRESS"; then
-    ok "repair-live: NEAR-MISS — the same dispatch with its last turn an hour old is NON-DELIVERY with the re-dispatch remedy (rc 1)"
-  else bad "repair-live: NEAR-MISS FAILED — a dead dispatch was granted, or lost its remedy (rc=$RC): $OUT"; fi
+  if [ "$RC" -eq 1 ] && has "NON-DELIVERY rec.md -- absent after" && has "$R27_STOP" && ! has "$R27_LIVE" && ! has "PROGRESS"; then
+    ok "repair-live: NEAR-MISS — the same dispatch with its last turn an hour old is NON-DELIVERY and STOPPED, never granted (rc 1)"
+  else bad "repair-live: NEAR-MISS FAILED — a dead dispatch was granted, read LIVE, or did not read STOPPED (rc=$RC): $OUT"; fi
   rm -rf "$W"
   # CONTROL: a live transcript with NO --dispatch is the session-wide reading, which decides nothing.
   W="$(mk_work)"; r27_world "$W"; r27_cap "$W" ""; r27_transcript "$W" 0 0
@@ -3037,6 +3039,91 @@ S27c_complete_present_is_unchanged() {
   if [ "$RC" -eq 1 ] && has "NON-DELIVERY rec.md -- absent after" && has "$R27_REMEDY" && ! has "UNCHANGED"; then
     ok "repair-unchanged: NEAR-MISS — a truly missing record is still 'absent' with the re-dispatch remedy"
   else bad "repair-unchanged: NEAR-MISS FAILED — a missing record lost its 'absent' line or its remedy (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+# ===========================================================================
+# 27d. A PLAIN --dispatch GETS THE REMEDY ITS OWN TRANSCRIPT SUPPORTS; ONLY THE GRANT IS
+#      --complete-repair's (BL-721). A remediator whose work has no deliverable file (an inline
+#      changelog append) gives the join a path that never appears, so a beat armed on it can
+#      only reach its cap -- and the bare "Re-dispatch the teammate ONCE" then fired against a
+#      live or finished writer. Seeds in receipt-bl605.sh's shape: a two-row ledger with the
+#      subject NOT first, and a meta.json joining the agentId to the dispatch's toolu_ id.
+#      AI_DLC_MAX_WAIT_BEATS=1 with the counters seeded at the cap. Both id spellings are driven.
+#      The near-miss without --dispatch keeps the bare remedy; that is what the widened mutant
+#      breaks, and the gate-restored mutant breaks the LIVE and STOPPED arms.
+# ===========================================================================
+R27D_AG=a721c8dcd555207b8; R27D_TUI=toolu_01Bl721SubjectDispatchAAAA; R27D_TUI_E=toolu_01Bl721EpochRowBBBBBBBBB
+r27d_world() {  # $1 = age of the transcript's last turn (s) -> W
+  W="$(mk_work)"; mkdir -p "$W/td" "$W/_bmad-output/.wait-beats" || broken "cannot create the section 27d world"
+  mk_ledger_row "$W" "$R27D_TUI_E" $(( $(date +%s) - 400 ))
+  mk_ledger_row "$W" "$R27D_TUI" $(( $(date +%s) - 300 ))
+  printf '{"agentType":"remediator","toolUseId":"%s"}\n' "$R27D_TUI" > "$W/td/agent-$R27D_AG.meta.json" || broken "cannot write meta.json"
+  rd_ts_="$(fx_iso $(( $(date +%s) - $1 )))"; [ -n "$rd_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
+  rd_ts_="${rd_ts_%Z}"
+  { printf '{"isSidechain":true,"agentId":"%s","type":"user","message":{"role":"user"},"timestamp":"%s.100Z"}\n' "$R27D_AG" "$rd_ts_"
+    printf '{"isSidechain":true,"agentId":"%s","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.300Z"}\n' "$R27D_AG" "$rd_ts_"
+  } > "$W/td/agent-$R27D_AG.jsonl" || broken "cannot write the section 27d transcript"
+  printf '1' > "$W/_bmad-output/.wait-beats/.bound" && printf '1' > "$W/_bmad-output/.wait-beats/$(r27_key never.marker)" \
+    || broken "cannot seed the beat counter"
+}
+r27d_beat() {  # $1 = subject (in a sibling dir); rest = argv -> OUT, RC
+  rd_s_="$1"; shift
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=30 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_IDLE_SECS=1200 \
+      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" bash "$rd_s_" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+R27D_LIVE="LIVE DISPATCH agent-$R27D_AG"
+R27D_STOP="STOPPED DISPATCH agent-$R27D_AG"
+r27d_live_arm() {  # $1 = subject, $2 = id -> 0 when the fresh arm holds
+  r27d_world 0; r27d_beat "$1" --dispatch "$2" never.marker
+  [ "$RC" -eq 1 ] && has "NON-DELIVERY never.marker -- absent after 1 beats" && has "$R27D_LIVE" \
+    && has "buys no grant outside" && ! has "$R27_REMEDY" && ! has "PROGRESS"
+}
+r27d_stop_arm() {  # $1 = subject, $2 = id -> 0 when the stale arm holds
+  r27d_world 3600; r27d_beat "$1" --dispatch "$2" never.marker
+  [ "$RC" -eq 1 ] && has "NON-DELIVERY never.marker -- absent after 1 beats" && has "$R27D_STOP" \
+    && has "agent-$R27D_AG.jsonl" && ! has "$R27D_LIVE" && ! has "$R27_REMEDY"
+}
+r27d_nodispatch_arm() {  # $1 = subject -> 0 when the near-miss keeps the bare remedy
+  r27d_world 0; r27d_beat "$1" never.marker
+  [ "$RC" -eq 1 ] && has "NON-DELIVERY never.marker -- absent after 1 beats" && has "$R27_REMEDY" \
+    && ! has "$R27D_LIVE" && ! has "$R27D_STOP"
+}
+S27d_plain_dispatch_remedy() {
+  R27D_S="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  for rd_id_ in "$R27D_AG" "$R27D_TUI"; do
+    if r27d_live_arm "$R27D_S" "$rd_id_"; then
+      ok "plain-dispatch: --dispatch $rd_id_ at its cap with a fresh transcript prints LIVE DISPATCH, no grant, never 'Re-dispatch the' (rc 1)"
+    else bad "plain-dispatch: --dispatch $rd_id_ with a fresh transcript printed the bare remedy, a grant, or no LIVE block (rc=$RC): $OUT"; fi
+    rm -rf "$W"
+    if r27d_stop_arm "$R27D_S" "$rd_id_"; then
+      ok "plain-dispatch: --dispatch $rd_id_ at its cap with the transcript past IDLE_SECS prints STOPPED naming it, never 'Re-dispatch the' (rc 1)"
+    else bad "plain-dispatch: --dispatch $rd_id_ past IDLE_SECS printed the bare remedy, a LIVE block, or no STOPPED line (rc=$RC): $OUT"; fi
+    rm -rf "$W"
+  done
+  if r27d_nodispatch_arm "$R27D_S"; then
+    ok "plain-dispatch: NEAR-MISS — the same fresh transcript with no --dispatch keeps the bare remedy and no dispatch block (rc 1)"
+  else bad "plain-dispatch: NEAR-MISS FAILED — without --dispatch the beat lost the bare remedy or printed a dispatch block (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+M54_dispatch_live_gate_restored() {
+  mutant dispatch-live-gate-restored -e 's@^  dl_a_="\${DP_AGENTS_:-}"$@  [ "$COMPLETE_REPAIR" -eq 1 ] || return 1\
+  dl_a_="${DP_AGENTS_:-}"@' || return
+  SD="$(sib_dir "$MUT")"
+  if ! r27d_live_arm "$SD/wait-for-deliverable.sh" "$R27D_AG" && has "$R27_REMEDY"; then
+    ok "MUTANT dispatch-live-gate-restored: with dispatch_live gated on --complete-repair again a plain --dispatch gets the bare remedy — section 27d catches it"
+  else bad "MUTANT dispatch-live-gate-restored: section 27d survives the gate being restored (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+M55_dispatch_live_widened() {
+  mutant dispatch-live-widened -e 's@^  dl_a_="\${DP_AGENTS_:-}"$@  dl_a_="${DP_AGENTS_:-}"; [ -n "$dl_a_" ] || for dl_x_ in "$TEAMMATE_DIR"/agent-*.jsonl; do dl_a_="${dl_x_##*/agent-}"; dl_a_="${dl_a_%.jsonl}"; done@' || return
+  SD="$(sib_dir "$MUT")"
+  if ! r27d_nodispatch_arm "$SD/wait-for-deliverable.sh" && has "$R27D_LIVE"; then
+    ok "MUTANT dispatch-live-widened: reading a transcript with no --dispatch drops the bare remedy from a session-wide beat — section 27d's near-miss catches it"
+  else bad "MUTANT dispatch-live-widened: section 27d survives the remedy being widened to beats without --dispatch (rc=$RC): $OUT"; fi
   rm -rf "$W"
 }
 

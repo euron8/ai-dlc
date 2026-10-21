@@ -130,7 +130,9 @@ harness re-invokes you with its result. Branch on the exit code THEN:
              `run_in_background: true`) over the still-pending paths and
              yield again. Do NOT foreground-poll, do NOT narrate-then-stop.
              A beat that is still waiting exits 0; that is not a failure.
-    exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK.
+    exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK — unless the
+             beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which case read
+             that agent's transcript first, as the block says.
 
 **The one hard invariant: never end your turn on an outstanding join
 without a live backgrounded beat armed.** The armed beat IS your own
