@@ -100,7 +100,11 @@ and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path cita
   re-scope owed); BL-727, 728, 731 (`sh` receipts the rotator cannot score; re-scope in their build).
 - **Graph at close**: installed 0.891.0, shipped 0.901.0, no pull: TEN releases behind, a WIDE range. Bootstrapping
   files in `01de3123d..5b21170f8`: one, `core/skills/ai-dlc-update/reconcile/layer-drift.sh` (control `core/scripts/`: 11);
-  mode-only changes under `core/`: 0 of 7 mode changes. A pull runbook is owed by action 7 and is not yet written. Its s319 session handed off at 04:37:14Z
+  mode-only changes under `core/`: 0 of 7 mode changes. The pull is REQUIRED by action 7's test: BL-740's sweep ran
+  the 0.901.0 `merge-review-shards.sh` over graph's 283 committed shards and it refuses one (s319 3.1 qa p2 cross-1)
+  that graph's installed engine accepts. **Operator ruling at this close: hand off now; the runbook
+  `graph-pull-0891-to-0901.md` (action 7's shape, rehearsed on a `file://` clone) is batch 239's FIRST work.** Writing
+  and rehearsing it is ai-dlc work; running the pull is the operator's. Its s319 session handed off at 04:37:14Z
   (snapshot `c625bb0eb`). BL-740 is the release the operator named as the pull trigger; the pull is the operator's.
   Graph conduct observed by the watcher: every refusal in s319's 3.1 QA rounds was routed to its owning seat by
   SendMessage, with no lead write, which is BL-737's prescribed path working before it shipped.
