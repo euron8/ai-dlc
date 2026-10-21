@@ -1,4 +1,9 @@
-# Pull the graph consumer from 0.892.0 to 0.901.0 (leg B of the 0.891.0 to 0.901.0 pull)
+# DISCHARGED — DO NOT EXECUTE — Pull the graph consumer from 0.892.0 to 0.901.0 (leg B of the 0.891.0 to 0.901.0 pull)
+
+**Discharged by graph's own run: leg A merged as `7a10a73ec` (#1255) and `910b167b1` (#1256); leg B merged as
+`832368d49`, "reconcile distribution 0.892.0 → 0.901.0" (#1257), stamp `version: 0.901.0`, `commit: bf0b3f0b` on
+graph's carry-over branch `ai-dlc/carry-over/offramp-config-and-rewards`.** No ledger entry closed. The BL-740 stacked
+refusal on s319 story 3.1's next qa merge is still expected; see `## Discharge`.
 
 `READ and FOLLOW docs/plans/graph-pull-0891-to-0901.md`. **A graph session reads this file at its ABSOLUTE path,
 `/Users/n8/git/ai-dlc/docs/plans/graph-pull-0891-to-0901.md`.** From a session rooted in the consumer, the relative
@@ -364,3 +369,67 @@ collections), 23 `^## ` lines (control). Archive: 16 `^### PC-`. The impossible 
 read 0 in both. `ledger-rotate.sh` dry: "0 closed entries — nothing to rotate (436 lines stay)", exit 0.
 
 ## Discharge
+
+Ran on graph on 2026-10-21, merging into graph's carry-over branch `ai-dlc/carry-over/offramp-config-and-rewards`:
+
+- `7a10a73ec`, "self-update 0.891.0 → 0.892.0 (#1255)", 2026-10-21T07:48:11-04:00.
+- `910b167b1`, "reconcile distribution 0.891.0 → 0.892.0 (#1256)", 07:56:41-04:00.
+- `832368d49`, "reconcile distribution 0.892.0 → 0.901.0 (#1257)", 09:15:19-04:00 (13:15:19Z).
+
+The stamp at `832368d49` reads `version: 0.901.0`, `commit: bf0b3f0b`, with `skill_version` and `skill_commit` the
+same. Recorded from graph's committed history, read only, by a distribution-side session. The runs' own accounts are
+graph's `_bmad-output/ai-dlc-update/reconcile-log-20261021T-leg1.md` (leg A) and
+`_bmad-output/ai-dlc-update/reconcile-log-20261021T124500Z.md` (leg B), read as committed at `832368d49`.
+
+- **Leg A**, per its log: `SELF-UPDATE-OK`; on re-invocation 13 `ALREADY-AT-THEIRS` and 2 `DIST-ONLY-SKIP`,
+  `0 HARD blockers.`; stamp `0.892.0 / 0877fe65`; `POST-WRITE-GATES PASS gates=4/4`; `ledger-reverify.sh` 7
+  `STILL-LIVE` and 1 `RECEIPTS-UNDECIDED`; `push-drain.sh` 4 `PUSH-REFUSED`. Its apply returned no WORKLIST or DECISION
+  rows.
+- **Leg B gate**, per its log: `SELF-UPDATE-DEFER` (`rulebook-coupled-fixtures`), and SAFE-STOP reported that no
+  intermediate release self-updates cleanly, so the slice was carried under `--carried-machinery-slice`, as action 4
+  expected. The log does not list the nine rulebook files.
+- **Leg B, the five items against `## Rehearsal`:**
+
+  | item | rehearsal (this file) | graph's leg-B log |
+  |---|---|---|
+  | (a) bug-class-sweep override readopt | 1 `HARD-OVERRIDE-DRIFT-SECTION` | readopt: `--merge` `1 merged, 0 unchanged, 0 conflicted`, then STAMPED `base_sha 0f7e0e0c -> bf0b3f0b (readopt)` |
+  | (b) extension re-read adjudications | 10 `HARD-LAYER-ADJUDICATION-MISSING` | 10 rows → 11 register records (9 `still-additive`, plus `roles/dev-push.md` retire on LC-E4 and LC-E19), then `0 HARD blockers.` |
+  | (c) `receipt-bl605.sh` deletion question | 1 `UPSTREAM-DELETED` | deleted, operator-approved; the `extensions/roles/dev-push.md` tombstone was also deleted, operator-approved (retire verdict) |
+  | (d) retired passage, `gate-validation-domain.md` line 266 | 1 `RETIRED-LAYER-PASSAGE` | re-pointed to core's wording at theirs, `adversary.md:398` |
+  | (e) retired passage, override line 152 | 1 `RETIRED-LAYER-PASSAGE`, carried by (a) | override line 152 now carries "its stdout IS the capture", carried by the readopt in (a). The log records no separate retired-passage scan |
+
+  The log records 11 HARD blockers before adjudication, which agrees with the rehearsal's 11 `HARD-*` paths.
+- **Leg B, real-run DIFFERENCES from `## Rehearsal`:**
+  - The rehearsal expected `BOTH-CHANGED->CLASSIFY` on `dev.md` and `qa.md`. The real apply manifest gave
+    `RESOLVED setup-site-merge` for both, so no hand CLASSIFY merge was recorded.
+  - The real leg B emitted `WORKLIST artifact-derivations`. The rehearsal's one WORKLIST was `agent-definitions`, and
+    it was in leg A; the real leg B log records no `agent-definitions` row.
+  - The union gate exited 3 (`BLOCKERS-RESOLVED`, unseen=1: the `UPSTREAM-DELETED-NOOP …receipt-bl605.sh` row). The
+    operator re-approved and the apply ran.
+  - The first register append quoted read lines as substrings, which the detector refuses. 9 records were re-appended
+    with whole-line `read` quotes and the same verdicts; the superseded rows stay in the append-only register.
+- **Leg B, the rest, per its log:**
+  - Apply manifest: 53 `RESOLVED pure-apply`, 2 `RESOLVED setup-site-merge`, 9 `NOTE extension-adjudicated`, 1
+    `NOTE blockers-resolved`, 1 `WORKLIST artifact-derivations`, 1 `DECISION restamp-withheld`.
+  - artifact-derivations: 2 NEWLY-FAILING rows, both `grep -n -F 'git add -f' .claude/team-roles/dev.md` recorded at
+    `dev.md:345`, now `dev.md:349`. On the operator's ruling they were left and recorded as 2 OWED rows in
+    `_bmad-output/ai-dlc-update/owed-derivations.tsv`. The 160 STALE-BOTH rows predate the pull.
+  - `POST-WRITE-GATES PASS gates=4/4 pass=4 fail=0 undecided=0 overridden=0`, hard-blockers `hard=0`.
+  - `validate-layer-entries.sh`: `entries=45 at_current=45 behind=0 errors=0 warnings=0`.
+  - `ledger-reverify.sh`: 7 `STILL-LIVE` and 1 `RECEIPTS-UNDECIDED`, no close candidates, nothing annotated or
+    rotated. **No ledger entry closed**, as action 7 expected. The log records no before/after `cut -f1,2 | sort`
+    row-set comparison and no `ledger-rotate.sh --apply` output, so done-when 3 is not evidenced by it.
+  - `push-drain.sh`: 4 `PUSH-REFUSED`, 0 candidates, nothing drained.
+  - Register timestamps: the 9 re-appended records carried a hand-typed `2026-10-21T12:40:00Z`, corrected to the real
+    write time `2026-10-21T12:23:26Z` before the push, on the operator's request. The post-write gates were re-run
+    and the reconcile commit amended before its first push.
+- **Graph's pre-push suite**, which this file did not rehearse: the log records only that the first push attempt was
+  stopped during pre-push before anything reached origin. The gate result and wall clock of the push that landed are
+  not recorded in either log and were not derived here.
+- **Done-when**: 1 holds per the leg-A log (stamp `0.892.0 / 0877fe65`); 2 holds from the stamp at `832368d49`. For 4, the log
+  records no `hard-blockers.sh --post-apply` run; its post-write gate's hard-blockers arm read
+  `hard=0 refused=0 degenerate=0`. 3 is not recorded, as stated above. 5 is this section.
+- **Still open, from the lead's watcher, not from either log:** the BL-740 stacked refusal (`## Hazards`) is still
+  EXPECTED on s319 story 3.1's next qa merge. It is graph's sprint work.
+- **Left open, per the leg-B log:** 5 OPEN layer-debt items (`audit-layer-debt.sh`, retro work);
+  `OWED-S319-DEV-DOMAIN-CAPTURE-RESTATES-CORE` stays open; and the 2 OWED derivations above.
