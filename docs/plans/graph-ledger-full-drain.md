@@ -863,6 +863,14 @@ candidate's surviving half is upstream's to file and build, never a question for
      asking for its current state and whether it is free to own a release. A session that finished
      an earlier release is a valid owner. A session that has not answered after one re-ask and one
      more timer counts as no session.
+   - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
+     the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
+     never edits, commits or pushes there; it never messages a `graph-*` session. It reports to the
+     lead by `SendMessage` as tiered FINDINGS (BLOCKER/DEFECT/NOTE) with a same-invocation control,
+     never as instructions about a consumer artifact. It reports at once on anything that bit the
+     consumer's sprint. It polls graph every 10 minutes, per the operator's ruling: "the watch
+     should be set to 10 minute intervals. current interval is far too aggressive." The lead files
+     what it finds; the watcher files nothing.
    - **Assign at once, after scoping.** When action 1's sweep and scoping are done, the lead assigns
      without asking: one cluster = one release per available owner, each sent its cluster and the
      owner-rules block below, verbatim, with `<lead>`, `<cluster>` and `<batch>` filled in. The
