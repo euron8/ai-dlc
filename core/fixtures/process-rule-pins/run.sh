@@ -391,6 +391,8 @@ arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture
 arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
 arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
 arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
+qa-verdict-exclusive|R|qa.md|## Verdict|## As a Shard|The two forms are EXCLUSIVE.|contains
+qa-verdict-union|R|qa.md|## Verdict|## As a Shard|A `## Verdict` heading followed by `Verdict: PASS` fails Check 1 in `gate-validation.md`, which reads the heading's next non-blank line and gets `Verdict:`, not a member.|contains
 qa-lrdiv-lead|R|qa.md|## Validation Checklist|## Communication|- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**|prefix
 qa-lrdiv-never-pass|R|qa.md|## Validation Checklist|## Communication|An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.|contains
 qa-lrdiv-empty|R|qa.md|## Validation Checklist|## Communication|A precondition under which the required action has nothing to act on (an empty balance, an empty set)|contains
@@ -436,7 +438,7 @@ gp-part-dispatch-one-doc|S|steps/_gate-procedures.md|## Adversarial repair dispa
 gp-part-dispatch-one-subj|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|1. **Split.** `scripts/ai-dlc/partition-subject.sh --split|para|<part path>...` (one `--dispatch` per agent the round joined)
 gp-stop-repair-part|S|steps/_gate-procedures.md|## Auto-handoff evaluation (referenced by step files)|## Context reminder threshold check|1. **Stop all in-flight teammates first.**|para|for seat, shard, cross and repair-part files
 ho-stop-repair-part|S|steps/handoff.md|Execute this 5-step procedure in order:|**Resume is snapshot-driven.**|1. **Stop all in-flight teammates first.**|para|for seat, shard, cross and repair-part files
-rem-part-mark|R|remediator.md|## Contract|## The evidence contract|**Close your part with `--mark`.**|para|scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>
+rem-part-mark|R|remediator.md|## Contract|## The evidence contract|**Close your part with `--mark`.**|para|<lead engine>/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>
 rem-render-before-mark|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator, or as the one unsharded remediator**|para|line BEFORE your `--mark-repair`, never after it
 gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
 gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
@@ -451,7 +453,8 @@ elic-header-strip|S|steps/_gate-procedures.md|## Validation cycle|## Where a cha
 adv-header-strip|R|adversary.md|## The verdict|## |**A shard copies the region above verbatim and then deletes each line's trailing ` #` comment**|para|(the space, the `#` and everything after it), because the merge reads every value literally.
 arch-lint-invoke|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|`bmad-architecture` ships `scripts/lint_spine.py`|para|lint_spine.py --workspace <the run folder holding ARCHITECTURE-SPINE.md> -o <lint json>
 arch-chain-join|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|Join it with `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> _bmad-output/planning-artifacts/s<N>/architecture-chain.md`
-arch-chain-marker-last|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|only after the LAST file of the chain is written makes one final write, the line `seat-complete: architecture architect none findings=0`
+arch-chain-marker-last|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|only after the LAST file of the chain is written makes one final write, the ONE Bash call `<lead engine>/wait-for-deliverable.sh --mark <record> architecture architect none findings=0`
+arch-role-chain-mark|R|architect.md|## As the architecture authoring chain|## |close the record with ONE Bash call, your final write, run from `<lead engine>` as defined in the section above:|contains
 arch-chain-rearm-growth|S|steps/architecture.md|### 2. Architecture Creation or Update|### 3.|**Sections 2 and 3 run as ONE dispatched `architect` chain**|para|The record is growing when it has a new start or finish line since the previous beat
 hand-architect-role|R|architect.md||## Escalation Protocol|## Architect handoff|contains
 hand-architect-step|S|steps/architecture.md||### 5.|## Architect handoff|contains
@@ -1221,6 +1224,93 @@ if [ "$sd_off" = 1 ] && [ "$sd_off2" = 1 ] && [ "$sd_near" = 0 ] && [ "$sd_nf" =
   else bad "MUTANT slot-target: SURVIVED (read $(slot_hits "$SD/gp-mut.md"))"; fi
 else
   bad "slot-target: FIXTURE BROKEN -- offenders $sd_off/$sd_off2 (want 1/1), near-miss $sd_near (want 0), near-miss file targets $sd_nf (want 2)"
+fi
+
+# --- 4e. BL-738: no role or step file tells a seat to hand-write a marker ------------------------
+# A hand-written `seat-complete:` / `repair-complete:` line carries no sha= and no seal row, so any writer
+# can mint one. carriers() counts lines that name the retired `unknown arg: --mark` fallback or spell a
+# marker with no sha=. FP set over core/team-roles + core/skills/ai-dlc/steps: 0 carriers after the edit,
+# and `bare line` is NOT keyed on (qa.md carries it in an unrelated sentence). Positive control: the same
+# files carry `sha=<hex>` descriptions, so a scan that read nothing cannot score 0.
+BM_RE='unknown arg: --mark|(seat|repair)-complete: [a-z<][^ ]* [a-z<][^ ]*( [^ ]*)? (findings=|none)|repair-complete: serial <pass>([^ ]| ?$| [^s])'
+carriers() { { grep -hE "$BM_RE" "$@" 2>/dev/null || true; } | { grep -vc 'sha=' || true; }; }
+BM="$WORK/bm"; mkdir -p "$BM" || exit 2
+printf 'If that call fails with `unknown arg: --mark`, append the line.\n' > "$BM/off1.md"
+printf 'append the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead\n' > "$BM/off2.md"
+printf 'append, with Edit, the bare line\n`repair-complete: serial <pass>` instead, which the join accepts\n' > "$BM/off3.md"
+printf 'It appends `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, whose `sha=` binds every line.\nappends `repair-complete: serial <pass> sha=<hex>`, the line only --complete-repair waits for\nthe bare line of a table\n' > "$BM/near.md"
+bm1="$(carriers "$BM/off1.md")"; bm2="$(carriers "$BM/off2.md")"; bm3="$(carriers "$BM/off3.md")"; bmn="$(carriers "$BM/near.md")"
+if [ "$bm1" = 1 ] && [ "$bm2" = 1 ] && [ "$bm3" = 1 ] && [ "$bmn" = 0 ]; then
+  bm_real="$(carriers "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md)"
+  bm_ctl="$(cat "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md | grep -c 'sha=<hex>')" || bm_ctl=0
+  if [ "$bm_real" = 0 ] && [ "$bm_ctl" -ge 1 ]; then
+    ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"
+  else
+    bad "bare-marker: $bm_real carrier(s) (want 0), $bm_ctl sha=<hex> control line(s) (want >= 1)"
+  fi
+  # MUTANT: re-insert the retired fallback sentence into a copy of dev.md; the scan must read it.
+  cp "$ROLES_DIR/dev.md" "$BM/dev-mut.md"
+  printf 'If that call fails with `unknown arg: --mark`, append the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead.\n' >> "$BM/dev-mut.md"
+  bm_mut="$(carriers "$BM/dev-mut.md")"
+  if cmp -s "$ROLES_DIR/dev.md" "$BM/dev-mut.md"; then bad "MUTANT bare-marker: DID NOT APPLY"
+  elif [ "$bm_mut" -ge 1 ]; then ok "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
+  else bad "MUTANT bare-marker: SURVIVED"; fi
+else
+  bad "bare-marker: FIXTURE BROKEN -- offenders $bm1/$bm2/$bm3 (want 1/1/1), near-miss $bmn (want 0)"
+fi
+
+# --- 4f. every `<lead engine>` is scoped inside its own paragraph or numbered item ---------------
+# A second absolute path in a prompt contradicts _dispatch-protocol.md rule 3 unless the text says when it applies,
+# so each occurrence needs, in its own block (lines between blanks), EITHER form 1: a worktree-isolation condition
+# (`worktree` with `lead's engine`), OR form 2: an in-place definition (`the lead checkout's `scripts/ai-dlc`` with
+# `carries`), the wording code-reviewer.md, qa.md and implementation.md already use. Occurrences are derived per file
+# at run time. FP set measured over the role and step files: 0 flagged on the tree once architect.md item 3 carried
+# its own sentence (it had pointed at "the section above", which the block-local rule correctly refused). The awk
+# program holds no apostrophe (the \047 escapes), since one would close the shell literal.
+le_scan() { # le_scan <file>... -> one `file:line form=1|2|NONE` per occurrence
+  awk '
+  function flush(   i, f1, f2, form) {
+    if (n_occ > 0) {
+      f1 = (para ~ /worktree/ && para ~ /lead\047?s engine/)
+      f2 = (para ~ /[Ll][Ee][Aa][Dd] checkout\047?s `scripts\/ai-dlc`/ && para ~ /carries/)
+      form = f1 ? "1" : (f2 ? "2" : "NONE")
+      for (i = 1; i <= n_occ; i++) print fname ":" occ[i] " form=" form
+    }
+    para = ""; n_occ = 0
+  }
+  FNR == 1 { flush(); fname = FILENAME }
+  /^[ \t]*$/ { flush(); next }
+  { para = para "\n" $0; if (index($0, "<lead engine>") > 0) { n_occ++; occ[n_occ] = FNR } }
+  END { flush() }' "$@"
+}
+LE="$WORK/le"; mkdir -p "$LE" || exit 2
+printf 'Run the call.\n   `<lead engine>/x.sh --mark`\n   `<lead engine>` is the path your brief carries when you run in a worktree; otherwise `scripts/ai-dlc` is the lead\047s engine.\n' > "$LE/f1.md"
+printf 'Run both from `<lead engine>`, the lead checkout\047s `scripts/ai-dlc` path your brief carries.\n' > "$LE/f2.md"
+printf 'Run the call from `<lead engine>` as defined in the section above.\n\nA later paragraph says the lead checkout\047s `scripts/ai-dlc` path your brief carries, and a worktree is the lead\047s engine.\n' > "$LE/bad.md"
+le1="$(le_scan "$LE/f1.md" | grep -c 'form=1')" || le1=0
+le2="$(le_scan "$LE/f2.md" | grep -c 'form=2')" || le2=0
+leb="$(le_scan "$LE/bad.md" | grep -c 'form=NONE')" || leb=0
+LE_FILES=( "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md )
+if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
+  le_out="$(le_scan "${LE_FILES[@]}")"
+  le_occ="$(grep -c 'form=' <<<"$le_out")" || le_occ=0
+  le_none="$(grep -c 'form=NONE' <<<"$le_out")" || le_none=0
+  if [ "${#LE_FILES[@]}" -gt 0 ] && [ "$le_occ" -ge 1 ] && [ "$le_none" = 0 ]; then
+    ok "lead-engine: all $le_occ occurrence(s) over ${#LE_FILES[@]} file(s) are scoped in their own block (probe: form 1 and form 2 read quiet, an unscoped occurrence flagged)"
+  else
+    bad "lead-engine: $le_none unscoped of $le_occ occurrence(s) over ${#LE_FILES[@]} file(s): $(grep 'form=NONE' <<<"$le_out" | tr '\n' ' ')"
+  fi
+  # MUTANT form 1: remove dev.md's worktree-condition sentence in a copy; form 2: remove qa.md's in-place definition.
+  awk '!/when you run in a worktree/' "$ROLES_DIR/dev.md" > "$LE/dev-mut.md"
+  awk '{ gsub(/the lead checkout.s `scripts\/ai-dlc` path your brief carries/, "the engine path"); print }' "$ROLES_DIR/qa.md" > "$LE/qa-mut.md"
+  if cmp -s "$ROLES_DIR/dev.md" "$LE/dev-mut.md"; then bad "MUTANT lead-engine form 1: DID NOT APPLY"
+  elif [ "$(le_scan "$LE/dev-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 1: dev.md without its worktree sentence is flagged"
+  else bad "MUTANT lead-engine form 1: SURVIVED"; fi
+  if cmp -s "$ROLES_DIR/qa.md" "$LE/qa-mut.md"; then bad "MUTANT lead-engine form 2: DID NOT APPLY"
+  elif [ "$(le_scan "$LE/qa-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 2: qa.md without its in-place definition is flagged"
+  else bad "MUTANT lead-engine form 2: SURVIVED"; fi
+else
+  bad "lead-engine: FIXTURE BROKEN -- probe form1=$le1 form2=$le2 unscoped=$leb (want 2/1/1)"
 fi
 
 # --- 5. the real corpus ---------------------------------------------------------

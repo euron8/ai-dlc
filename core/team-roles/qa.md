@@ -387,9 +387,38 @@ set and no other, so a value outside it is an unmet validation:
 
 PASS | NEEDS_REWORK
 
-Write the file's verdict as ONE line, `Verdict: PASS`, or as a bare `## Verdict` heading with
-the member alone on the next non-blank line. Per-AC PASS/FAIL rows belong in a table under
-their own heading; a second verdict line carrying a different member fails Check 1.
+Write the file's verdict in ONE of two forms, never both: the one line `Verdict: PASS`, or a bare
+`## Verdict` heading with the member alone on the next non-blank line. The two forms are EXCLUSIVE.
+A `## Verdict` heading followed by `Verdict: PASS` fails Check 1 in `gate-validation.md`, which reads the heading's next non-blank line and gets `Verdict:`, not a member.
+Per-AC PASS/FAIL rows belong in a table under their own heading; a second verdict line carrying a
+different member fails Check 1 as well.
+
+## Findings Template
+
+Every finding in a validation file, serial or shard, is a `#### ` heading under one of three
+containers in `## Findings`, never a bullet, its body below the heading. A container with
+nothing in it says `None.`
+
+```markdown
+## Findings
+
+### Critical (must fix before PASS)
+
+#### <finding title>
+
+### Important (should fix, can be follow-up)
+
+#### <finding title>
+
+### Suggestions (optional improvements)
+
+#### <finding title>
+```
+
+In a SHARD, `NEEDS_REWORK` needs at least one finding under `### Critical` or `### Important`,
+and `PASS` carries none under `### Critical`: the merge refuses the shard otherwise. The VERDICT
+BACKING section of `merge-review-shards.sh`'s header owns the rule; a serial file is not checked
+for it.
 
 ## As a Shard
 
@@ -480,12 +509,16 @@ under `## Deferred ACs`. A part shard carries neither section, and a part
 shard's `## ` or `### ` heading whose text begins with "Deferred" or
 "Acceptance criteria" is reserved for the first cross shard: title such content
 otherwise or write it as a `#### ` finding. The SHARD GRAMMAR in
-`merge-review-shards.sh`'s header owns the exact match.
+`merge-review-shards.sh`'s header owns the exact match. A row you write as FAIL
+is refused at the merge unless the merged verdict is `NEEDS_REWORK` and some
+shard's `#### ` finding names that AC; the FAIL ROWS section of the same header
+owns the rule.
 
 **The shard grammar.** Each shard carries one column-0
 `shard-verdict: <VALUE>` (`PASS` or `NEEDS_REWORK`) and one column-0
 `reviewed-sha: <full frozen sha>`. It also carries a `## Findings` section,
-even an empty one, and every finding in it is a `#### ` heading with exactly one
+even an empty one, and every finding in it is a `#### ` heading under one of the
+three containers of the Findings Template above, with exactly one
 `parts: <ordinal>[, <ordinal>...]` line: your own ordinal alone, or two or more
 if you are the cross shard. A part shard also carries, beside those two lines,
 exactly one column-0 `handovers: <n>` line counting its hand-overs however written, `0`
@@ -503,7 +536,13 @@ QA verdict as the worst shard verdict and writes the validation file. A part
 shard and the cross shard make no closing write; the closing writer makes those,
 after gate 3. Dispatched `shard: 1/1 <story-index>`, you are the whole
 validation: run every item above yourself, and write the validation file at the
-path above in the normal way.
+path above in the normal way. Before you return, run
+`<lead engine>/merge-review-shards.sh --check-serial <validation file> --gate qa`
+from the lead checkout's `scripts/ai-dlc` path your brief carries. It reads your
+verdict exactly as `gate-validation.md` Check 1 does (at least one verdict line, every
+one reading the same member of the `## Verdict` set) and applies the merge's per-AC
+FAIL-row rules to your table and findings. It does not check severity backing. Fix
+every REFUSED line and run it again until it prints SERIAL-OK.
 
 ## Escalation Protocol
 

@@ -106,7 +106,8 @@ para_hits() {
 # ===========================================================================
 # ARM (a): the order rule, judged by the real wait-for-deliverable.sh
 # ===========================================================================
-A_MARKER='seat-complete: architecture architect none findings=0'
+A_ARGS='architecture architect none findings=0'  # the exact tail the architect chain's --mark call carries (steps/architecture.md, architect.md)
+A_MARKER="seat-complete: $A_ARGS"
 A_NOTLAST='-- present, last non-blank line is not seat-complete:'
 A_NOBEAT="$WORK/no-teammate-dir"
 
@@ -162,10 +163,10 @@ arm_a() {
 
   # Sealed pair: --mark seals; then S1 lands before (ok) or after (bad) the marker.
   a_body "$W/sealed-before.md"; a_s1 "$W/sealed-before.md"
-  bash "$SUBJ" --mark "$W/sealed-before.md" architecture architect none findings=0 > "$W/mark.out" 2>&1 \
+  bash "$SUBJ" --mark "$W/sealed-before.md" $A_ARGS > "$W/mark.out" 2>&1 \
     || broken "--mark refused sealed-before.md: $(cat "$W/mark.out")"
   a_body "$W/sealed-after.md"
-  bash "$SUBJ" --mark "$W/sealed-after.md" architecture architect none findings=0 > "$W/mark.out" 2>&1 \
+  bash "$SUBJ" --mark "$W/sealed-after.md" $A_ARGS > "$W/mark.out" 2>&1 \
     || broken "--mark refused sealed-after.md: $(cat "$W/mark.out")"
   a_s1 "$W/sealed-after.md"
   a_status "$W" "$since" sealed-before.md sealed-after.md

@@ -79,7 +79,8 @@ source; do not infer either value from anywhere else.
 
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
    is ONE Bash call on your part file:
-   `scripts/ai-dlc/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
+   `<lead engine>/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
+   where `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine.
    `<step>` being your part directory's name up to `-repair` (`stories` for
    `s<N>/shards/stories-repair-p1/`, `requirements-party` for `s<N>/shards/requirements-party-repair/`),
    `<shard>` your part's ordinal (the part file's name without `.md`) and `<n>` the number of
@@ -225,14 +226,11 @@ and every part escalation it supersedes: an escalation with no `closes:` line of
 open however many of its links were closed.
 
 **As the serial remediator, or as the one unsharded remediator**, your LAST act is ONE Bash call
-closing what you wrote: `scripts/ai-dlc/wait-for-deliverable.sh --mark-repair <record> <pass>`,
+closing what you wrote: `<lead engine>/wait-for-deliverable.sh --mark-repair <record> <pass>`,
 `<pass>` being the pass your brief names. It appends `repair-complete: serial <pass> sha=<hex>`,
 whose `sha=` binds every line above it, so an edit after it reads unfinished until you run the
 same call again; never type the line by hand. This one call is the exception to "never a Bash
-redirect" above: your Edit and Write calls already recorded every entry. If that call fails with
-`unknown arg: --mark-repair`, the engine copy you ran predates `--mark`: append, with Edit, the bare line
-`repair-complete: serial <pass>` instead, which the join accepts once the record has stopped
-changing. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
+redirect" above: your Edit and Write calls already recorded every entry. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine. The unsharded remediator, whose brief reads `shard: none (serial-document)`, is the only
 pass over its record, so its record ends in that line exactly as the serial remediator's appended
 block does. The call writes it at column 0, as the
 record's last non-blank line, outside any fence and never as a list item (`- repair-complete:`

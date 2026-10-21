@@ -4,7 +4,8 @@
 # fixture's lib.sh (beside this file) in its own mktemp WORK, never in the tree the script sits in; each
 # case overwrites shard 2 of a clean world and runs the full merge.
 #   qa           NEEDS_REWORK with 0 findings      -> REFUSED with the stem
-#                NEEDS_REWORK with one finding     -> merges (control)
+#                NEEDS_REWORK with one Important   -> merges (control; qa.md declares the three
+#                                                     containers since BL-746, receipt-bl746.sh)
 #   code-review  APPROVED with one Critical        -> REFUSED 'a Critical finding is not approvable'
 #                APPROVED with one Important       -> merges (control)
 #                BLOCKED with only a Suggestion    -> REFUSED with the stem
@@ -46,8 +47,8 @@ trap 'rm -rf "$R"' EXIT
   }
   d="$(qworld "$SD" PASS PASS PASS PASS)" || exit 9
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || exit 9
-  vb_q "$d" 2 NEEDS_REWORK ""; one q-nr-empty refused qa "$d" "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(printf '#### Q-2-9 a gap\nparts: 2\n\nBody.')"; one q-nr-one merged qa "$d"
+  vb_q "$d" 2 NEEDS_REWORK ""; one q-nr-empty refused qa "$d" "$VB_Q_SEV_NR" "$VB_STEM"; cs_reset "$d" "$c"
+  vb_q "$d" 2 NEEDS_REWORK "$(qf Important)"; one q-nr-one merged qa "$d"
   d="$(world4 "$SD" APPROVED APPROVED APPROVED APPROVED)" || exit 9
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || exit 9
   vb_c "$d" 2 APPROVED 2 crit; one cr-approved-crit refused code-review "$d" "$VB_CR_AP"; cs_reset "$d" "$c"

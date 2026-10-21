@@ -159,6 +159,12 @@ by that heading, and `validate-carried-findings.sh` fails a prior whose
 Critical or Important finding is a bullet. The review also carries one
 column-0 `reviewed-sha: <full frozen sha>` line, resolved with `git rev-parse`
 in the frozen worktree: the next pass partitions its delta from that sha.
+Before you return, run
+`<lead engine>/merge-review-shards.sh --check-serial <review file> --gate code-review`
+from the lead checkout's `scripts/ai-dlc` path your brief carries. It reads your
+verdict exactly as `gate-validation.md` Check 1 does: at least one verdict line, every
+one reading the same value, and that value a member of the `## Verdict` set above. Fix
+every REFUSED line and run it again until it prints SERIAL-OK.
 
 **A re-review answers every carried finding.** On pass M >= 2 your brief
 carries the Critical and Important findings of pass M-1 assigned to you, each

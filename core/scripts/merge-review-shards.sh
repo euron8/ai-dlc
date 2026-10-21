@@ -91,18 +91,72 @@
 # VERDICT BACKING. A shard's verdict must be backed by its OWN findings, read off the merge's own
 #   --gate (never inferred from the path). It is a per-shard rule inside check_shard(), so the merge,
 #   --check-shard and `--mark` (through --check-shard --findings) all apply it:
-#     --gate code-review  NEEDS_REWORK or BLOCKED needs at least one `#### ` finding under the
-#                         Critical or Important container; APPROVED carries NO finding under
-#                         Critical (Important under APPROVED is allowed).
-#     --gate qa           NEEDS_REWORK needs at least one `#### ` finding under `## Findings`, in any
-#                         container or none; PASS has no condition. (qa.md defines no severity
-#                         containers, so the Critical half is not applied.)
-#   The container names are LIFTED from code-reviewer.md's `## Findings` template the way the verdict
-#   set is lifted -- the first word of each of its three `### ` headings, matched case-insensitively
-#   by prefix -- never retyped. A NEEDS_REWORK/BLOCKED refusal names both exits, owner first: set the
-#   gate's best verdict and let the owning shard carry the finding, otherwise file the finding here
-#   with a parts set this shard may own. An APPROVED-with-Critical refusal names both: downgrade the finding with evidence, or set
+#     THE SEVERITY BOUNDARY (qa). The judging rule is lifted from the CURRENT qa.md, but WHETHER a
+#       shard is held to it is read off a record the shard did not write: qa.md as installed at the
+#       manifest's frozen sha, read in the manifest's worktree (`git --no-replace-objects show
+#       <sha>:.claude/team-roles/qa.md`, then `core/team-roles/qa.md`), run through the same
+#       container lift. No container there: the shard is held to COUNT-ONLY, stdout carries
+#           LEGACY: <shard> held to the count-only QA rule only because the frozen sha <sha>'s <path> declares no severity containers
+#       and the merge goes on (exit 0 when nothing else refuses). Any container there, or that qa.md
+#       UNREADABLE (no commit, or the file in neither layout): the severity rule applies -- an
+#       unreadable record never acquits, as the key= rule's unreadable engine never does. The merge
+#       and --check-shard (and so --mark) re-derive the manifest and apply it; --check-serial reads
+#       no manifest and applies no severity rule.
+#     SEVERITY MODE (code-review always; qa when qa.md's template declares the three containers)
+#       NEEDS_REWORK, and under code-review BLOCKED, needs at least one `#### ` finding under the
+#       Critical or Important container; APPROVED or PASS carries NO finding under Critical
+#       (Important under it is allowed). A `#### ` under `## Findings` with no `### ` container
+#       above it in that section is REFUSED, under both gates, as unclassed.
+#     COUNT-ONLY MODE (qa, when qa.md's template declares NO container: the qa.md a consumer has
+#       installed until the reconcile merge delivers the template)
+#       NEEDS_REWORK needs at least one `#### ` finding under `## Findings`, in any container or
+#       none; PASS has no condition. stdout carries, once, before any other line,
+#           LEGACY: <qa.md path> declares no severity containers; QA verdict backing is count-only
+#   The container names are LIFTED, by ONE function for both gates, from the role file's `## Findings`
+#   template after its first `## Verdict` -- the first word of each `### ` heading, matched
+#   case-insensitively by prefix -- never retyped. code-reviewer.md must declare exactly three; qa.md
+#   exactly three or none; any other count is REFUSED. A NEEDS_REWORK/BLOCKED refusal names both
+#   exits, owner first: set the gate's best verdict and let the owning shard carry the finding,
+#   otherwise file the finding here with a parts set this shard may own; in severity mode it also
+#   names the one-edit remedy, moving a finding the shard already carries under Critical or Important.
+#   An APPROVED/PASS-with-Critical refusal names both: downgrade the finding with evidence, or set
 #   NEEDS_REWORK. Each takes `[owner: <key>]`, the shard's own.
+#
+# FAIL ROWS (--gate qa, set-level, in the merge; --check-shard has no set to read, and --check-serial
+#   applies them to its one file). The per-AC
+#   table is the first cross shard's Acceptance Criteria section (a `## ` or `### ` heading whose
+#   text begins with "Acceptance Criteria", case-insensitively -- the grammar the section count above
+#   uses -- to the next `## ` or `### ` heading), read outside fences. Its result column is
+#   the one whose header cell reads `Result` or `Verdict` (case-insensitive, trimmed, `*` stripped),
+#   its AC column the one headed `AC`, else the first; a table with no such result column is not
+#   read. A data row FAILS when its result cell, trimmed with `*` and backticks stripped, begins with
+#   `FAIL` or `FAILED` (case-insensitive) followed by a non-letter or nothing: `FAIL`, `**FAIL**`,
+#   `FAILED` and `FAIL (no RED)` do, a FAIL in any other column does not. The row's AC id is the
+#   leading token (`[A-Za-z0-9][A-Za-z0-9._-]*`) of its AC cell, `*` and backticks stripped.
+#   A finding NAMES the AC when the id appears with no letter, digit or `.` beside it (`AC-4.1` does
+#   not name `AC-4`), on any line of the finding but its `parts:`, `handover:` and `handover-run:`
+#   lines.
+#   For each FAIL row, two refusals, each `[owner: <the first cross shard>]` and each naming the
+#   correct-the-row exit beside its own:
+#     the merged verdict (after any forced NEEDS_REWORK) is not NEEDS_REWORK -> REFUSED: set
+#       NEEDS_REWORK with a backing finding naming the AC;
+#     no `#### ` finding of ANY shard names the AC id as a whole token, in its heading or its body
+#       (`AC1` is not named by `AC10`), outside fences -> REFUSED as an orphan FAIL row. Its remedy is
+#       satisfiable under the owner rule: the finding goes in the shard that owns its cause -- a part
+#       shard under its own ordinal, a cross shard under a set it owns, or the owning group's shard
+#       names the AC in the finding it already carries.
+#
+# CHECK-SERIAL. `merge-review-shards.sh --check-serial <file> --gate code-review|qa` runs, over ONE
+#   serial review or validation file, the merge's own Check 1 read-back (check1_read: the derived
+#   pattern, the value read the Check 1 way) under gate 3's count policy, no stricter: at least one
+#   match, every match reading the SAME value (two matches reading one value are one verdict), and
+#   that value a member of the gate's lifted verdict set. So `Verdict: PASS (all ACs)` and `PASS.`
+#   under `## Verdict` pass; `PASS-pending`, no match, and two different values are refused. Under
+#   --gate qa it then applies the FAIL ROWS rules to the file's own table, verdict and findings. It
+#   does NOT apply VERDICT BACKING (a per-shard rule). stdout `SERIAL-OK: <file> verdict=<v>`, exit
+#   0; else one `REFUSED: ... [owner: serial]` line, exit 2 -- the serial seat's own file, fixed and
+#   checked again. It reads no shard directory and no manifest. The MERGE keeps its stricter count:
+#   the assembled file carries exactly one match.
 #
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
@@ -140,7 +194,8 @@
 #   in a shard outside a fence: any heading whose text is or ends in `Verdict` or `Decision`
 #   (`## Verdict`, `### QA Decision`), a label `Verdict:` or `<Word> verdict: ...` (`QA verdict:
 #   PASS`), and the same in bold (`**Verdict:** PASS`). A pipe-led table row does not match, so
-#   QA's per-AC results are a table (`| AC | Verdict |`, one row per AC). The merge does not
+#   QA's per-AC results are a table (`| AC | Result | Expected | Got |`, qa.md's shape; a column
+#   headed `Verdict` is read the same way as `Result`), one row per AC. The merge does not
 #   police that per shard; it counts Check 1's matches over the ASSEMBLED file and refuses
 #   unless there is exactly one, which is the property that matters.
 #   --gate qa ONLY, counted outside fences, case-insensitively, on a `## ` or `### ` heading
@@ -228,10 +283,14 @@
 # EXIT
 #   0  merged (stdout `MERGED: ...`), or <review-file> already exists byte-identical (`UNCHANGED:`);
 #      under --check-shard, stdout `SHARD-OK: <path> findings=<n>`. Either may be preceded by
-#      `LEGACY: ...` lines (SEAT-COMPLETE).
+#      `LEGACY: ...` lines: one per legacy marker (SEAT-COMPLETE), and, under --gate qa over a qa.md
+#      declaring no severity container, one `LEGACY: <qa.md> declares no severity containers; QA
+#      verdict backing is count-only` line first (VERDICT BACKING).
 #   2  REFUSED (stdout `REFUSED: <reason> [owner: <key>...]`) -- nothing written at <review-file>.
 #      An existing <review-file> that differs is refused: a review the gate may already have read
 #      is never silently overwritten. --check-shard writes nothing in either case.
+#   --check-serial: 0 with stdout `SERIAL-OK: <file> verdict=<v>` (under --gate qa possibly preceded
+#      by the container-mode LEGACY line), 2 with one `REFUSED: ... [owner: serial]`; it writes nothing.
 #   REQUIRES jq on PATH and every shard inside a git worktree: the content seal reads its rows
 #   with jq from the ledger it locates through git. Without them each shard's seal is
 #   SEAL-UNAVAILABLE and the merge is REFUSED `[owner: lead]` -- an environment the lead repairs,
@@ -244,21 +303,27 @@ export LC_ALL=C
 OWNER="lead"
 refuse() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; exit 2; }
 refuse_to() { OWNER="$1"; shift; refuse "$@"; }
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>]"
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa"
 
-SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0
+SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
     --gate) [ "$#" -ge 2 ] || refuse "$USAGE"; GATE="$2"; shift 2 ;;
     --out) [ "$#" -ge 2 ] || refuse "$USAGE"; OUT="$2"; shift 2 ;;
+    --check-serial) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; SERIAL="$2"; shift 2 ;;
     --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
     --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
     --*) refuse "unknown flag $1; $USAGE" ;;
     *) [ -z "$SDIR" ] || refuse "unexpected argument $1; $USAGE"; SDIR="$1"; shift ;;
   esac
 done
-if [ -n "$CHECK" ]; then
+if [ -n "$SERIAL" ]; then
+  OWNER="serial"
+  [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
+    || refuse "--check-serial takes only --gate; $USAGE"
+  [ -f "$SERIAL" ] || refuse "$SERIAL is not a regular file; write the review file, then check it"
+elif [ -n "$CHECK" ]; then
   [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -z "$OUT" ] || refuse "--check-shard takes no --out; $USAGE"
   if [ "$CHECK_N_SET" = 1 ]; then
     case "$CHECK_N" in ""|*[!0-9]*|??????????*) refuse "--findings '$CHECK_N' is not a non-negative integer" ;; esac
@@ -277,6 +342,8 @@ case "$GATE" in
                RANKED="PASS NEEDS_REWORK"; WANT_VSET="NEEDS_REWORK PASS "; NWORD="two" ;;
   *) refuse "--gate '$GATE' is not code-review or qa" ;;
 esac
+if [ -n "$SERIAL" ]; then :
+else
 SDIR="${SDIR%/}"
 [ -d "$SDIR" ] || refuse "shard directory $SDIR does not exist"
 SDIR="$(cd "$SDIR" && pwd -P)" || refuse "shard directory is not enterable"
@@ -295,6 +362,7 @@ else
   CHECK="$CHECK_DIR/$(basename "$CHECK")"
   CHECK_IN=0; [ "$CHECK_DIR" = "$SDIR" ] && CHECK_IN=1
 fi
+fi # end the shard-directory resolution (skipped by --check-serial)
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/merge-review-shards.XXXXXX")" || refuse "mktemp failed"
 trap 'rm -rf "$T"' EXIT
@@ -351,19 +419,27 @@ VSET="$(awk '/^## Verdict$/ { on = 1; next }
     | LC_ALL=C sort -u | tr '\n' ' ')"
 [ "$VSET" = "$WANT_VSET" ] \
   || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
-# THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (code-reviewer.md's
+# THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (the role file's
 # `## Findings` block after its first `## Verdict`, to the next `## `), never retyped: the first word
 # of each `### ` heading, in order -- the first is the Critical class, the second the Important
-# class, the third the class an APPROVED shard downgrades to. Under --gate qa none is lifted (qa.md
-# defines no severity containers), so every container classes "other" and only the count is read.
-CRIT_NAME=""; IMP_NAME=""; SUG_NAME=""
-if [ "$GATE" = "code-review" ]; then
-  CNAMES="$(awk '/^## Verdict$/ { v = 1; next }
-                 v && /^## Findings[ \t]*$/ { on = 1; next }
-                 on && /^## / { exit }
-                 on && /^### / { s = $0; sub(/^###[ \t]+/, "", s); sub(/[^A-Za-z].*$/, "", s); print s }' "$ROLE_MD" \
-      | tr '\n' ' ')"
-  set -f; set -- $CNAMES; set +f
+# class, the third the class an APPROVED or PASS shard downgrades to. ONE lift for both gates.
+# code-reviewer.md declares three. qa.md declares three, or -- the qa.md a consumer runs this engine
+# against from pull step 3 until the reconcile merge -- none: then SEV is 0, every container classes
+# "other", and the QA rule is count-only (header: VERDICT BACKING).
+lift_containers() { # <role file> -> the first word of each `### ` heading in its ## Findings template
+  awk '/^## Verdict$/ { v = 1; next }
+       v && /^## Findings[ \t]*$/ { on = 1; next }
+       on && /^## / { exit }
+       on && /^### / { s = $0; sub(/^###[ \t]+/, "", s); sub(/[^A-Za-z].*$/, "", s); print s }' "$1" \
+    | tr '\n' ' '
+}
+CRIT_NAME=""; IMP_NAME=""; SUG_NAME=""; SEV=1
+CNAMES="$(lift_containers "$ROLE_MD")"
+set -f; set -- $CNAMES; set +f
+if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then
+  SEV=0
+  printf 'LEGACY: %s declares no severity containers; QA verdict backing is count-only\n' "$ROLE_MD"
+else
   [ "$#" -eq 3 ] && [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] \
     || refuse "$ROLE_NAME's ## Findings template declares $# severity container(s) ('${CNAMES% }'), not exactly three; the verdict-backing rule reads the first two as the Critical and Important classes"
   CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"
@@ -378,6 +454,128 @@ rank() {
     *) echo 0 ;;
   esac
 }
+# ---- THE CHECK 1 READ-BACK, ONE value reader for the merge and --check-serial; each caller applies its
+# own count policy (the merge: exactly one match; --check-serial: every match reads the same value,
+# gate-validation.md Check 1's "two matches reading the same value are one verdict").
+# check1_read <file> -> C1N, the count of Check 1's pattern matches (grep -ciE, the gate's own count);
+# C1V, the value the FIRST match reads; C1D, the number of DISTINCT values the matches read; C1L, those
+# values, blank-separated. The value is read Check 1's way: after the `:` on the matched line, else at
+# the next non-blank line; spaces and `*` skipped; the run of capitals and underscores there, when the
+# character after it is the end of the line, a space, `.`, `,`, `(`, `)` or `*`; otherwise the whole
+# whitespace-delimited token (so `PASS-pending` reads `PASS-pending`, outside every set).
+check1_read() {
+  C1N="$(grep -ciE -- "$PAT" "$1")" || C1N=0
+  C1V=""; C1D=0; C1L=""
+  [ "$C1N" -ge 1 ] || return 0
+  c1_out_="$(PAT_="$PAT" awk '
+    function val(s,   r, nx) {
+      sub(/^[ \t*]+/, "", s)
+      if (match(s, /^[A-Z_]+/)) { r = substr(s, 1, RLENGTH); nx = substr(s, RLENGTH + 1, 1)
+        if (nx == "" || index(" \t.,()*", nx) > 0) return r }
+      if (match(s, /^[^ \t]+/)) return substr(s, 1, RLENGTH)
+      return "" }
+    { L[NR] = $0 }
+    END {
+      p = tolower(ENVIRON["PAT_"])
+      for (i = 1; i <= NR; i++) {
+        if (tolower(L[i]) !~ p) continue
+        if (index(L[i], ":") > 0) s = substr(L[i], index(L[i], ":") + 1)
+        else { s = ""; for (j = i + 1; j <= NR; j++) if (L[j] ~ /[^ \t]/) { s = L[j]; break } }
+        v = val(s); if (v == "") v = "<none>"
+        if (first == "") first = v
+        if (!(v in seen)) { seen[v] = 1; nd++; lst = lst (lst == "" ? "" : " ") v }
+      }
+      printf "%d\t%s\t%s\n", nd + 0, first, lst }' "$1")" \
+    || refuse_to lead "reading the verdict value of $1 did not run (awk failed); repair the environment in the lead checkout and check again"
+  C1D="${c1_out_%%	*}"; c1_out_="${c1_out_#*	}"; C1V="${c1_out_%%	*}"; C1L="${c1_out_#*	}"
+  [ "$C1D" -ge 1 ] 2>/dev/null \
+    || refuse_to lead "reading the verdict value of $1 returned no value for $C1N match(es); the value reader is broken, not the file"
+}
+
+# ---- FAIL ROWS (header). fail_rows <file> -> "<line> <AC-id>" per data row of the file's
+# `## Acceptance Criteria` table(s), outside fences, whose result column reads FAIL; `-` for an AC
+# cell carrying no id. Each table's header row names its columns; a table with no `Result` or
+# `Verdict` column is not read.
+fail_rows() {
+  awk '
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+    f { next }
+    /^##?#?[ \t]/ { lc = tolower($0); sec = (lc ~ /^###?[ \t]+acceptance criteria/); hdr = 0; next }
+    !sec { next }
+    !/^[ \t]*\|/ { hdr = 0; next }
+    { n = split($0, c, "|")
+      if (!hdr) { hdr = 1; rc = 0; ac = 0
+        for (i = 2; i <= n; i++) { h = c[i]; gsub(/[*]/, "", h); gsub(/^[ \t]+|[ \t]+$/, "", h); h = tolower(h)
+          if (!rc && (h == "result" || h == "verdict")) rc = i
+          if (!ac && h == "ac") ac = i }
+        if (!ac) ac = 2
+        next }
+      if ($0 ~ /^[ \t]*\|[ \t:|-]*$/ || !rc || rc > n) next
+      v = c[rc]; gsub(/[*`]/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); v = tolower(v)
+      if (v !~ /^fail(ed)?([^a-z]|$)/) next
+      a = c[ac]; gsub(/[*`]/, "", a); sub(/^[ \t]+/, "", a)
+      if (match(a, /^[A-Za-z0-9][A-Za-z0-9._-]*/)) a = substr(a, 1, RLENGTH); else a = "-"
+      print NR, a }' "$1"
+}
+# ac_named <AC-id> <file> -> 0 when a `#### ` finding under the file's `## Findings`, outside fences,
+# names the id as a WHOLE token (no letter, digit or `.` on either side, so `AC-4.1` does not name
+# `AC-4`), in its heading or its body. Its `parts:`, `handover:` and `handover-run:` lines are the
+# merge's own grammar, not prose about the AC, and are not read.
+ac_named() {
+  AC_="$1" awk '
+    function tok(s, o,   i, p, q) {
+      while ((i = index(s, o)) > 0) {
+        p = (i > 1) ? substr(s, i - 1, 1) : ""; q = substr(s, i + length(o), 1)
+        if (p !~ /[A-Za-z0-9.]/ && q !~ /[A-Za-z0-9.]/) return 1
+        s = substr(s, i + 1) }
+      return 0 }
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+    f { next }
+    /^## / { inf = ($0 ~ /^## Findings[ \t]*$/); inx = 0; next }
+    /^#/ { inx = (inf && $0 ~ /^#### /) }
+    /^(parts|handover|handover-run):/ { next }
+    inx && tok($0, ENVIRON["AC_"]) { hit = 1; exit }
+    END { exit !hit }' "$2"
+}
+# fail_gate <table file> <owner> <list of files whose findings may name the AC>: the FAIL ROWS rules
+# over <table file>'s per-AC table, against the verdict in WORST. One function for the merge and
+# --check-serial.
+fail_gate() {
+  fg_x_="$1"; fg_o_="$2"; fg_l_="$3"
+  fail_rows "$fg_x_" > "$T/failrows" || refuse_to "$fg_o_" "reading the per-AC table of $fg_x_ did not run"
+  while read -r fg_n_ fg_a_; do
+    [ "$fg_a_" != "-" ] \
+      || refuse_to "$fg_o_" "$fg_x_:$fg_n_ is a per-AC row reading FAIL whose AC cell carries no AC id; begin the cell with the AC's id"
+    [ "$WORST" = NEEDS_REWORK ] \
+      || refuse_to "$fg_o_" "$fg_x_:$fg_n_ per-AC row $fg_a_ reads FAIL but the QA verdict is $WORST; a FAIL row is an unmet acceptance criterion. Either set NEEDS_REWORK in the file that owns the failure, backed by a '#### ' finding naming $fg_a_ under '### ${CRIT_NAME:-Critical}' or '### ${IMP_NAME:-Important}', or correct the row with the evidence that $fg_a_ passes"
+    fg_hit_=0
+    while IFS= read -r fg_f_; do ac_named "$fg_a_" "$fg_f_" && { fg_hit_=1; break; }; done < "$fg_l_"
+    [ "$fg_hit_" = 1 ] \
+      || refuse_to "$fg_o_" "$fg_x_:$fg_n_ per-AC row $fg_a_ reads FAIL but no '#### ' finding names $fg_a_; a FAIL row is backed by a finding. File one naming $fg_a_ where its cause is owned -- a part shard under its own ordinal, a cross shard under a 'parts:' set it owns (partition-document.sh --cross-owner), or name $fg_a_ in the finding the owning shard already carries -- or correct the row with the evidence that $fg_a_ passes"
+  done < "$T/failrows"
+}
+# ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
+# ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
+if [ -n "$SERIAL" ]; then
+  check1_read "$SERIAL"
+  [ "$C1N" -ge 1 ] \
+    || refuse "$SERIAL matches Check 1's verdict pattern 0 time(s); write the verdict as '## Verdict' with the value alone on the next non-blank line, or as one 'Verdict: <VALUE>' line"
+  [ "$C1D" = 1 ] \
+    || refuse "$SERIAL matches Check 1's verdict pattern $C1N time(s) reading $C1D different values ($C1L); matches reading one value are one verdict, different values fail Check 1. Write the verdict in one form, never both, and keep every other line off that pattern (per-AC results go in a pipe-led table)"
+  case " $RANKED " in
+    *" $C1V "*) ;;
+    *) refuse "Check 1 reads '$C1V' from $SERIAL, which is not one of $RANKED ($ROLE_NAME's ## Verdict set); write the value alone, a member of that set" ;;
+  esac
+  if [ "$GATE" = qa ]; then
+    WORST="$C1V"
+    printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
+    fail_gate "$SERIAL" serial "$T/serialfiles"
+  fi
+  printf 'SERIAL-OK: %s verdict=%s\n' "$SERIAL" "$C1V"
+  exit 0
+fi
 
 # ---- the manifest, and the re-derived part map ------------------------------------------
 MF="$SDIR/.manifest"
@@ -536,6 +734,27 @@ engine_at_sha() {
   done
   return 0
 }
+# ---- qa.md AT THE FROZEN SHA (the SEVERITY BOUNDARY, header: VERDICT BACKING) -------------------
+# Set-level, memoised. QA_AT is `legacy` when the frozen tree's installed qa.md (consumer layout
+# first, then the distribution's) lifts NO severity container -- the shards were briefed on a qa.md
+# that never asked for one; `severity` when it lifts any; `unreadable` when the commit or the file in
+# both layouts cannot be read. Only `legacy` acquits; `unreadable` never does, as the key= rule's
+# `unreadable` engine never acquits a marker. The rule that judges stays the CURRENT qa.md's.
+QA_AT=""; QA_AT_PATH=""
+qa_at_sha() {
+  [ -z "$QA_AT" ] || return 0
+  QA_AT="unreadable"
+  command -v git >/dev/null 2>&1 || return 0
+  git --no-replace-objects -C "$M_WT" rev-parse -q --verify "${M_SHA}^{commit}" > /dev/null 2>&1 < /dev/null || return 0
+  for qa_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+    git --no-replace-objects -C "$M_WT" cat-file -e "${M_SHA}:${qa_p_}" 2> /dev/null < /dev/null || continue
+    git --no-replace-objects -C "$M_WT" show "${M_SHA}:${qa_p_}" > "$T/qa-at" 2> /dev/null < /dev/null || return 0
+    QA_AT_PATH="$qa_p_"
+    if [ -z "$(lift_containers "$T/qa-at" | tr -d ' ')" ]; then QA_AT="legacy"; else QA_AT="severity"; fi
+    return 0
+  done
+  return 0
+}
 SEAL_SH="$SELF_DIR/content-seal.sh"
 
 # ---- the shard set ----------------------------------------------------------------------
@@ -597,6 +816,7 @@ fi # end the shard-set staging (skipped by --check-shard)
 #        N <handovers: count> <first value>   (HO, HR, H, HM, N and X's last two fields --
 #        handover: and handover-run: lines in that finding -- are read under both gates)
 #        K <findings under the Critical container> <findings under the Important container>
+#          <line of the first `#### ` under ## Findings with no `### ` above it there, 0 if none>
 #        (the container of a `#### ` is the last `### ` above it inside ## Findings, classed by a
 #        case-insensitive PREFIX match of its text against CRIT_NAME / IMP_NAME, lifted above; any
 #        other container, or none, is "other". C counts every finding whatever its container.)
@@ -613,10 +833,11 @@ parse_shard() {
     { lc = tolower($0) }
     lc ~ /^###?[ \t]+acceptance criteria/ { nac++ }
     lc ~ /^###?[ \t]+deferred/ { nda++ }
-    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); if (infind) hasfind = 1; cc = ""; next }
-    /^### / { flush(); t = lc; sub(/^###[ \t]+/, "", t)
+    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); if (infind) hasfind = 1; cc = ""; hasc = 0; next }
+    /^### / { flush(); t = lc; sub(/^###[ \t]+/, "", t); hasc = 1
               cc = cls(t, ENVIRON["PS_CRIT_"]) ? "crit" : (cls(t, ENVIRON["PS_IMP_"]) ? "imp" : ""); next }
     infind && /^#### / { flush(); fl = NR; fn = 0; fst = ""; fh = 0; fr = 0; nfind++
+                         if (!hasc && !unc) unc = NR
                          if (cc == "crit") ncrit++; else if (cc == "imp") nimp++; next }
     infind && fl > 0 && /^parts:/ { fn++; v = $0; sub(/^parts:[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next }
     infind && fl > 0 && /^handover:/ { fh++; v = $0; sub(/^handover:[ \t]*/, "", v); sub(/[ \t]+$/, "", v)
@@ -631,7 +852,7 @@ parse_shard() {
     END { flush(); printf "R %d %s\n", nr + 0, (rv == "" ? "-" : rv); printf "V %d %s\n", nv + 0, (vv == "" ? "-" : vv); printf "C %d\n", nfind + 0
           printf "F %d\n", hasfind + 0; printf "S %d\n", stray + 0; printf "H %d\n", hstray + 0; printf "HM %d\n", hbad + 0
           printf "N %d %s\n", nh + 0, (hv == "" ? "-" : hv)
-          printf "A %d\n", nac + 0; printf "D %d\n", nda + 0; printf "K %d %d\n", ncrit + 0, nimp + 0 }
+          printf "A %d\n", nac + 0; printf "D %d\n", nda + 0; printf "K %d %d %d\n", ncrit + 0, nimp + 0, unc + 0 }
   ' "$1"
 }
 RE_CITED='^[0-9]+(,[0-9]+)*$'
@@ -805,19 +1026,35 @@ check_shard() {
 
   # ---- THE VERDICT IS BACKED BY THE SHARD'S OWN FINDINGS (header: VERDICT BACKING). After every
   # grammar and owner refusal, so a finding the remedy tells the seat to file is one this shard may own.
-  read -r kc_ ki_ <<<"$(awk '$1 == "K" { print $2, $3 }' "$P")"
-  kc_="${kc_:-0}"; ki_="${ki_:-0}"; best_="${RANKED%% *}"
-  case "$GATE:$v" in
-    code-review:NEEDS_REWORK|code-review:BLOCKED)
-      [ "$((kc_ + ki_))" -ge 1 ] \
-        || refuse "$sf carries 'shard-verdict: $v' but no '#### ' finding under '### $CRIT_NAME' or '### $IMP_NAME' in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it $v here, as a '#### ' heading under '### $CRIT_NAME' or '### $IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" ;;
-    code-review:APPROVED)
-      [ "$kc_" -eq 0 ] \
-        || refuse "$sf carries 'shard-verdict: APPROVED' but $kc_ '#### ' finding(s) under '### $CRIT_NAME'; a Critical finding is not approvable. Either downgrade the finding to '### $IMP_NAME' or '### $SUG_NAME' with the evidence that it is not Critical, or set 'shard-verdict: NEEDS_REWORK'" ;;
-    qa:NEEDS_REWORK)
-      [ "${nf:-0}" -ge 1 ] \
-        || refuse "$sf carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" ;;
-  esac
+  read -r kc_ ki_ ku_ <<<"$(awk '$1 == "K" { print $2, $3, $4 }' "$P")"
+  kc_="${kc_:-0}"; ki_="${ki_:-0}"; ku_="${ku_:-0}"; best_="${RANKED%% *}"
+  # THE SEVERITY BOUNDARY: a qa shard of a set frozen over a qa.md that declared no container is
+  # held to the count-only rule, with a LEGACY line, whatever the current qa.md declares.
+  sev_="$SEV"
+  if [ "$SEV" = 1 ] && [ "$GATE" = qa ]; then
+    qa_at_sha
+    if [ "$QA_AT" = legacy ]; then sev_=0
+      printf 'LEGACY: %s held to the count-only QA rule only because the frozen sha %s'"'"'s %s declares no severity containers\n' "$sf" "$M_SHA" "$QA_AT_PATH"
+    fi
+  fi
+  if [ "$sev_" = 1 ]; then
+    [ "$ku_" = 0 ] \
+      || refuse "$sf:$ku_ is a '#### ' finding under '## Findings' with no '### ' container above it; every finding sits under '### $CRIT_NAME', '### $IMP_NAME' or '### $SUG_NAME', the $ROLE_NAME ## Findings template: put it under the container its severity names"
+    case "$v" in
+      NEEDS_REWORK|BLOCKED)
+        [ "$((kc_ + ki_))" -ge 1 ] \
+          || refuse "$sf carries 'shard-verdict: $v' but no '#### ' finding under '### $CRIT_NAME' or '### $IMP_NAME' in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it $v here, as a '#### ' heading under '### $CRIT_NAME' or '### $IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry), or move the finding this shard already files under '### $SUG_NAME' there" ;;
+      APPROVED|PASS)
+        [ "$kc_" -eq 0 ] \
+          || refuse "$sf carries 'shard-verdict: $v' but $kc_ '#### ' finding(s) under '### $CRIT_NAME'; a Critical finding is not approvable. Either downgrade the finding to '### $IMP_NAME' or '### $SUG_NAME' with the evidence that it is not Critical, or set 'shard-verdict: NEEDS_REWORK'" ;;
+    esac
+  else
+    case "$v" in
+      NEEDS_REWORK)
+        [ "${nf:-0}" -ge 1 ] \
+          || refuse "$sf carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" ;;
+    esac
+  fi
 
   # ---- THE MARKER'S KEY (d) and the LEGACY rule (header: SEAT-COMPLETE). Not applied when
   # --findings stands in for the marker: --mark drops the old marker and writes its own.
@@ -919,6 +1156,13 @@ done
   if [ -n "$FORCE" ] && [ "$WORST_R" -lt "$(rank NEEDS_REWORK)" ]; then WORST="NEEDS_REWORK"; WORST_R="$(rank NEEDS_REWORK)"; fi
 }
 
+# ---- FAIL ROWS (--gate qa, set-level; header): CROSS_FIRST's per-AC table against the merged verdict
+# and every shard's findings.
+if [ "$GATE" = qa ]; then
+  cut -f2 "$T/shards" > "$T/shardfiles" || refuse "cannot stage the shard list"
+  fail_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$T/shardfiles"
+fi
+
 {
   printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + G))"
   printf '## Summary\n\n'
@@ -946,7 +1190,7 @@ done
 # ---- conservation and the Check 1 read-back ---------------------------------------------
 n_out="$(parse_shard "$T/out" | awk '$1 == "C" { print $2 }')"
 [ "$n_out" = "$NFIND" ] || refuse "the merged review carries $n_out finding heading(s) where the shards carry $NFIND; a finding was lost or invented"
-n1="$(grep -ciE -- "$PAT" "$T/out")" || n1=0
+check1_read "$T/out"; n1="$C1N"
 # The owner of a multi-match: every shard whose body matches PAT outside a fence, else the lead.
 pat_owners() {
   po_=""
@@ -962,13 +1206,7 @@ pat_owners() {
   printf '%s' "${po_:-lead}"
 }
 [ "$n1" = "1" ] || refuse_to "$(pat_owners)" "the merged review matches Check 1's verdict pattern $n1 time(s), want exactly 1 (a shard body carrying a verdict line such as '## Verdict' is the usual cause; shards write 'shard-verdict:')"
-VAL="$(grep -inE -- "$PAT" "$T/out" | head -1)"
-VLINE="${VAL%%:*}"; VTXT="${VAL#*:}"
-case "$VTXT" in
-  *:*) READ="${VTXT#*:}" ;;
-  *) READ="$(awk -v s="$VLINE" 'NR > s && /[^ \t]/ { print; exit }' "$T/out")" ;;
-esac
-READ="$(printf '%s' "$READ" | sed -e 's/^[ \t*]*//' -e 's/[ \t*]*$//')"
+READ="$C1V"
 [ "$READ" = "$WORST" ] || refuse "Check 1 would read '$READ' from the merged review, not the recomputed $WORST"
 
 if [ -e "$OUT" ]; then

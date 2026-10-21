@@ -295,7 +295,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
    it to Write the file's header first, append each finding as soon as it is verified, and,
    when it has finished and only then, close it with ONE Bash call,
-   `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
+   `<lead engine>/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
    which appends `seat-complete: <step> <seat> <shard> key=<k> sha=<hex> findings=<n>` (`key=<k>` on a review shard only), where `<shard>`
    is the brief's `shard:` value (for a review shard, the shard's own key: the file basename
    without `.md`), `<n>` the number of findings in the file, and `sha=` the digest
@@ -303,7 +303,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `scripts/ai-dlc/merge-review-shards.sh <shard dir> --gate <gate> --check-shard <shard file>`
    until SHARD-OK; `--mark` runs the same check and refuses a shard that fails it. After a
    refused merge the lead re-dispatches the seat the REFUSED line's `[owner: <key>]` names with
-   that line verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand.
+   that line verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand. A seat dispatched worktree-isolated (a dev) carries `<lead engine>`, the absolute path of the LEAD checkout's `scripts/ai-dlc`, in its brief and runs `--mark` from it, never from its worktree; a seat that runs in the primary tree (the adversary never runs worktree-isolated) uses `scripts/ai-dlc` there, which is the lead's engine.
    Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
@@ -1158,8 +1158,8 @@ verifies against that record; so does the gate's re-run of the failed checks.
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair
 --dispatch <agentId> <repair_record_path>`. The serial remediator and the
 unsharded `shard: none (serial-document)` remediator both end their record with
-`wait-for-deliverable.sh --mark-repair <record> <pass>`, which appends `repair-complete: serial
-<pass> sha=<hex>`, the line only `--complete-repair` waits for. A part remediator closes its part
+`<lead engine>/wait-for-deliverable.sh --mark-repair <record> <pass>`, which appends `repair-complete: serial
+<pass> sha=<hex>`, the line only `--complete-repair` waits for. A remediator dispatched worktree-isolated carries `<lead engine>`, the LEAD checkout's `scripts/ai-dlc` path, in its brief and runs `--mark-repair` from it, never from its worktree; otherwise `scripts/ai-dlc` is the lead's engine. A part remediator closes its part
 with `--mark` instead, and each axis's join step above beat-joins those parts with `--complete`
 before the shard join runs; the joined record the shard join writes is written by that join,
 synchronously, and needs no beat until the serial remediator appends to it. A serial

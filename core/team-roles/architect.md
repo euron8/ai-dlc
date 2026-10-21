@@ -151,15 +151,13 @@ That file is the only thing you write in the round; you edit nothing else, the s
 2. Append each finding as soon as it is verified: a `##` heading whose first token is its id
    (`## F-1 (major) sections: 2`), with its one `sections:` line.
 3. When you have finished, and only then, close the file with ONE Bash call:
-   `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
+   `<lead engine>/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
    `<n>` being the findings in the file. It appends the line
    `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, whose `sha=` binds every line
    above it. Never write that line by hand, never with the header, never followed by more
    findings. Once it is marked, do not edit the file again; if you must, run the same `--mark`
    call again afterwards, or the lead's join reads the file as unfinished.
-   If that call fails with `unknown arg: --mark`, the engine copy you ran predates `--mark`: append, with Edit,
-   the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead, which the join
-   accepts once the file has stopped changing.
+   `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine.
 
 **Resolve a code path before you read or grep it.** The subject files cite the code paths they
 rest on; read those as cited. For any other path, list it first with `git ls-files <dir-or-glob>`
@@ -188,9 +186,11 @@ file. The record carries every item your return carries; the lead reads the reco
    - every operator-owned value you did not pick;
    - every change a notarized file would need.
    An item that holds nothing says `none`.
-3. Append the section BEFORE the `seat-complete:` line. That line stays the record's last
-   non-blank line and your final write; nothing follows it. A section appended after it makes the
-   lead's join read the record as UNFINISHED.
+3. Append the section, then close the record with ONE Bash call, your final write, run from `<lead engine>` as defined in the section above:
+   `<lead engine>/wait-for-deliverable.sh --mark <record> architecture architect none findings=0`. It appends
+   the `seat-complete:` line, which stays the record's last non-blank line; nothing follows it. A section
+   appended after it makes the lead's join read the record as UNFINISHED until you run the same call again.
+   `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree; otherwise `scripts/ai-dlc` is the lead's engine.
 4. Append; never `Write` over the record.
 
 Your completion message may carry the same items as well.
