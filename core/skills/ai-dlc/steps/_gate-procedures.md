@@ -296,9 +296,14 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    it to Write the file's header first, append each finding as soon as it is verified, and,
    when it has finished and only then, close it with ONE Bash call,
    `scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
-   which appends `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, where `<shard>`
-   is the brief's `shard:` value, `<n>` the number of findings in the file, and `sha=` the digest
-   of every line above the marker. The marker is never written with the header, nor by hand.
+   which appends `seat-complete: <step> <seat> <shard> key=<k> sha=<hex> findings=<n>` (`key=<k>` on a review shard only), where `<shard>`
+   is the brief's `shard:` value (for a review shard, the shard's own key: the file basename
+   without `.md`), `<n>` the number of findings in the file, and `sha=` the digest
+   of every line above the marker. A code-review or QA shard checks itself first with
+   `scripts/ai-dlc/merge-review-shards.sh <shard dir> --gate <gate> --check-shard <shard file>`
+   until SHARD-OK; `--mark` runs the same check and refuses a shard that fails it. After a
+   refused merge the lead re-dispatches the seat the REFUSED line's `[owner: <key>]` names with
+   that line verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand.
    Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its

@@ -360,14 +360,22 @@ the frozen worktree and the RED replays for any anchor in no part's files, then
 joins the part shard files as the first cross QA does below and runs every
 handed-over replay there, recorded as `handover-run:` lines; every other cross
 reviewer executes nothing.
+Every shard brief carries the absolute path of the LEAD checkout's `scripts/ai-dlc` (`<lead engine>`); the seat runs both scripts from it, never from its worktree.
 Every shard writes its header first, appends each finding as it is verified,
-and, once finished, closes it with ONE Bash call, never with its header:
-`scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> implementation code-reviewer <shard> findings=<n>`,
-<n> its `#### ` findings, which appends
-`seat-complete: implementation code-reviewer <shard> sha=<hex> findings=<n>`; the join beat is `wait-for-deliverable.sh --complete <path> [<path> ...]`,
-and the merge refuses a count that disagrees. Join in the frozen worktree with
-`merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
-passing the pass-specific name on a later pass (`-p2`, ...). The merge
+checks itself with `<lead engine>/merge-review-shards.sh <shard dir> --gate code-review --check-shard <shard file>`
+until SHARD-OK, and, once finished, closes it with ONE Bash call, never with its header:
+`<lead engine>/wait-for-deliverable.sh --mark <shard path> implementation code-reviewer <shard> findings=<n>`,
+<shard> the shard's own key (file basename without `.md`), <n> its `#### ` findings, which runs the same check and appends
+`seat-complete: implementation code-reviewer <shard> key=<k> sha=<hex> findings=<n>`; the join beat is `wait-for-deliverable.sh --complete <path> [<path> ...]`,
+and the merge refuses a count that disagrees. Join with the LEAD checkout's
+`scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
+run against the shard directory in the frozen worktree,
+passing the pass-specific name on a later pass (`-p2`, ...). After a refused
+merge, re-dispatch the seat the REFUSED line's `[owner: <key>]` names, handing
+it that line verbatim: that seat corrects its own shard, re-runs `--check-shard`
+and re-marks, then the lead re-merges. The lead never edits, moves findings
+between, or re-marks a reviewer's shard; an `[owner: lead]` refusal is corrected
+in the lead's own inputs, never in a shard body. The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
 duplicate or mis-cited shard, and on a hand-over not run exactly once, and
 writes the one review file Check 1 reads, verdict recomputed as the worst
@@ -453,10 +461,12 @@ delivers. The first cross QA
 worktree, runs every handed-over replay and writes the per-AC table and the
 `## Deferred ACs` section; every other cross QA executes nothing and reports
 interaction findings only, focused on its group's pairs. Every shard writes its
-header first, appends each finding as it is verified, and, once finished, closes
-it with ONE Bash call, never with its header: `scripts/ai-dlc/wait-for-deliverable.sh
---mark <shard path> implementation qa <shard> findings=<n>`, <n> its `#### ` findings,
-which appends `seat-complete: implementation qa <shard> sha=<hex> findings=<n>`; the join beat is
+header first, appends each finding as it is verified, checks itself with
+`<lead engine>/merge-review-shards.sh <shard dir> --gate qa --check-shard <shard file>` until
+SHARD-OK, and, once finished, closes it with ONE Bash call, never with its header (every shard brief carries the absolute path of the LEAD checkout's `scripts/ai-dlc` as `<lead engine>`; the seat runs both scripts from it, never from its worktree):
+`<lead engine>/wait-for-deliverable.sh --mark <shard path> implementation qa <shard> findings=<n>`,
+<shard> the shard's own key (file basename without `.md`), <n> its `#### ` findings,
+which runs the same check and appends `seat-complete: implementation qa <shard> key=<k> sha=<hex> findings=<n>`; the join beat is
 `wait-for-deliverable.sh --complete <path> [<path> ...]`, and the merge refuses a count that disagrees.
 Each shard gets the go-signal
 `gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
@@ -478,10 +488,15 @@ matching run, a replay in any other cross shard, and a replay that is not `RED` 
 checklist item, the Handoff Evidence Precondition, the one honest-green
 canonical run in the frozen worktree and the RED replays a part QA handed
 over, and writes the per-AC table and the
-`## Deferred ACs` section (`qa.md` "As a Shard"). Join in the frozen worktree
-with
-`merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md`,
-passing the pass-specific name on a later pass (`-p2`, ...). The merge
+`## Deferred ACs` section (`qa.md` "As a Shard"). Join with the LEAD checkout's
+`scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md`,
+run against the shard directory in the frozen worktree,
+passing the pass-specific name on a later pass (`-p2`, ...). After a refused
+merge, re-dispatch the seat the REFUSED line's `[owner: <key>]` names, handing
+it that line verbatim: that seat corrects its own shard, re-runs `--check-shard`
+and re-marks, then the lead re-merges. The lead never edits, moves findings
+between, or re-marks a reviewer's shard; an `[owner: lead]` refusal is corrected
+in the lead's own inputs, never in a shard body. The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
 duplicate or mis-cited shard, and writes the one validation file Check 1
 reads, verdict recomputed as the worst shard verdict. A QA shard does NOT make
