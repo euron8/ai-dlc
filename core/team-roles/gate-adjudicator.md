@@ -54,7 +54,21 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
    `adjudicator_agent_id` from the harness record of that Write, so the value you put in the
    field is not the one merged. Never write a `.json` there:
    `--series` walks that directory and refuses a non-verdict `.json`. The per-line fields are
-   the ones `validate-gate-adjudication.sh`'s SHARDING header names. You do not write the
+   the ones `validate-gate-adjudication.sh`'s SHARDING header names, exactly those seven and no
+   envelope field beside them; `adjudicator_agent_id` carries your own id, non-empty.
+
+   **Check the part BEFORE you return its path.** Run
+
+       scripts/ai-dlc/validate-gate-adjudication.sh --check-part <the part path you wrote>
+
+   Exit 0 (`PART-OK`) → return the path. Exit 2 (`REFUSED:`) → the line it names breaks the
+   merge's per-row contract; fix the part with Edit (never Bash) and run `--check-part` again,
+   until it exits 0. It runs the same per-row checks `--merge` runs, with the same refusal text,
+   and checks the per-row contract ONLY: the shard count, the indices, duplicate ids, the union,
+   gate_series_id/catalog agreement and the content seal need the other parts, so those
+   cross-part checks happen at merge.
+
+   You do not write the
    verdict and you do not run `--coverage`. The lead runs `--merge`, which writes the one v1
    verdict and refuses a missing slice or a duplicate id. If you are re-dispatched for the same
    `<i>/<N>` under the same nonce, that is the lead recovering a non-delivered part, not a

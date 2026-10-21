@@ -19,6 +19,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.902.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13. It closes BL-745, BL-749, BL-743, BL-748 and BL-735, closes no `PC-` id and files nothing. Net for this release: 5 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-budget.sh`, `core/scripts/validate-mutation-red.sh`, `core/scripts/validate-gate-adjudication.sh`, `core/scripts/validate-handoff-evidence.sh` and `core/hooks/ai-dlc-recover.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/team-roles/gate-adjudicator.md`, `core/skills/ai-dlc/steps/gate-validation.md` and `core/skills/ai-dlc/steps/implementation.md`.
+
+### BL-745 — the struck In-Flight row and unrecognised-status verdicts carry a labelled Remedy line
+
+`validate-artifact-budget.sh` explained both hard verdicts in a heredoc but named no remedy, so the BL-605 hand rebuilt their gate-validation.md entries near-verbatim from the heredoc text. The other verdicts in the file already end in a labelled `Remedy:` line.
+
+- The struck-through In-Flight row FAIL now ends `Remedy: DELETE …`, and the unrecognised-status FAIL now ends `Remedy: KEEP …`, matching the labelled form of the file's other verdicts. gate-validation.md's two bullets carry the same remedies.
+- `inflight-row-shape` asserts each label on its own verdict, from separate worlds, and asserts the other label is absent from it. BL-745's receipt checks the same four conditions keyed on the case-sensitive leading verbs, so a rewrap of the remedy text does not break it.
+
+### BL-749 — every bare tilde in a replay line is escaped
+
+On bash 3.2, `printf %q` leaves `~`, `~root` and `~/x` unescaped, so replaying a mutation-red `$ ` line through a shell tilde-expanded them. The entry was wider than filed: a `~` after `=` or `:` (`x=~root`, `FOO=a:~/b`) expands too, and so does `~+`, so a leading-only escape was not the fix. A blanket `${q//\~/\\~}` was wrong as well, because a word %q renders in `$'...'` form keeps `\~` as two bytes.
+
+- One helper, `replay_words`, is called by both the `$ ` line and the `test:` line. It backslashes every bare `~` outside `$'...'` and copies each `\X` pair %q emitted unchanged.
+- `mutation-red-replay` gains round-trip cases for `~root`, `~+`, `x=~root`, `FOO=a:~/b` and `$'~root\tz'`, with the mid-word control `a~root`, and mutants for an escape on the `$ ` line only, a leading-only escape, and an escape inside `$'...'`. BL-749's receipt is `receipt-bl749.sh`.
+- The branch that copies a `\~` pair a newer bash's %q already escaped has no subject on a bash 3.2-only box and is not tested here.
+- A replay line taken after this release carries `\~` where a tilde appeared and replays to the exact argv. Captures already committed are unchanged.
+
+### BL-743 — a gate-adjudication part is checked against the merge's key contract before it is returned
+
+An adjudicator on graph wrote 10 keys per row against the 7-key part contract, and `--merge` refused the part at the lead, who abandoned the nonce.
+
+- `validate-gate-adjudication.sh --check-part <part>` takes a fixed arity and calls the same per-row functions `--merge` calls (`part_name`, `part_lines`, `part_row`, with `PART_LINE_KEYS` defined once). It covers the filename shape, JSON object, exact key set, gate_nonce equal to the stem, non-empty envelope fields and the non_empty/enum item checks.
+- Its refusals carry `--merge`'s text under a `--check-part:` label and exit 2. A conforming part prints `PART-OK` and exits 0. Cross-part checks (count, indices, duplicates, union, series and catalog agreement, seal) stay merge-only.
+- `gate-adjudicator.md`'s shard branch now requires the check before the part's path is returned. `--merge` output is byte-identical to the previous release on 13 worlds.
+- Measured read-only over graph HEAD: 238 tracked parts, 233 `PART-OK`, 5 refused, all on the key set. They are the same 5 parts the old `--merge` validator already refuses, so no part that merged before is newly refused.
+
+### BL-748 — a hand-written `$ ` line above the script's own replay header is refused
+
+`validate-handoff-evidence.sh` accepted a capture if any of its first 25 lines matched `^\$ ` or `mutation-red replay$`, and took the first `head:` line, so a hand-typed `$ … -k a or b` plus a `head:` passed and was read first. `dev.md` has said not to write them since 0.900.0 and nothing enforced it.
+
+- New refusal `replay-preamble`, arm (j), on the in-range captures arm (a) reads. Within a capture's first 25 lines it refuses only when a `$ ` line sits above the first `mutation-red replay` line and that first `$ ` line is not the one right above the replay. A replay with no `$ ` above it is accepted, because the engine before 0.900.0 printed none.
+- For a replay capture, `head:` is the first one after the replay header, falling back to the first in the 25 lines when the block has none. Captures without the replay line are unchanged.
+- Graph's refused set is exactly 8: `s318-1-1-mutation-*` (x5) and `s319-1-1-mutation-red-*` (x3). The old validator refuses 0 of them. The arm cannot reach them on graph's next gate: the only story files citing any of the 8 are s318 story 1.1 and s319 story 1.1, both `status: done` at every ref, and the only shipped handoff-mode caller is implementation.md's pre-gate commit-presence check. The derivation is in the entry.
+- Graph's installed dev.md (0.892.0) still tells a dev to open a capture with `$ <command>` and `head:`, the shape this arm refuses. Every completed pull that delivers this arm also delivers the new dev.md, so the conflict exists only inside the delivering pull, from step 3 (engine live) until the reconcile PR merges (rulebook live). It opens only if a story hands off mid-pull. The update procedure does not pause the pipeline during apply: `core/skills/ai-dlc-update/SKILL.md` carries no sprint-state gate.
+- Fixture `story-evidence-scaffold` gains worlds `rpfirst`, `rps319`, `rpok` and `rphead`, and mutants `rp-any-dollar` and `rp-first-head`. Its unread `HCASES`, `SCASES` and `KCASES` lists are deleted.
+
+### BL-735 — the recover hook's worst gate-in-flight emission is held a stated margin under the cliff
+
+`core/hooks/ai-dlc-recover.sh` drops the sidecar note whenever the wrapped bare directive would reach `CONTEXT_LIMIT` (10000). The gate-resume arm WC's worst real case emitted 9976 with the note, 24 bytes of headroom, so any added line would silently drop the note for a compacted lead. The entry owed either a restructure or an author-time margin. Both are taken, because the margin alone could not be green at 9976.
+
+- The hook dropped three sentences that restated text the lead still receives; the hook comment above `build()` names each one and where its content lives. The worst gate-in-flight emission falls from 9976 to 9683, and the note now drops only after about 317 bytes of growth, up from 24.
+- WC now asserts the sidecar note is present AND `emitted -lt $((10000 - WC_MARGIN))` with `WC_MARGIN=200`. It asserts the note too, because the emission falls by about 225 bytes when the note drops, so a length bound alone never sees the drop.
+- The gate-resume cliff sweep cap grew from n<=192 to n<=336, so the hook fires about 261 times per run instead of about 119 (29 fires x 9 evals against 17 x 7). It grew because the trimmed hook first reaches 10000 at n=276, and the arms quantify over every sampled world in the band, so a defect confined between the crossings is killed only by the full band. A derived bracket was considered and refused for that reason. This cost growth is untimed.
+- Mutant (g) grows the emitted text by 200 bytes with the note kept, and only the margin kills it. Mutant (h) grows it by 329 bytes, which drops the note and lands at 9787, under both 10000 and 9800, so only the note assertion kills it; the old WC passed it. BL-735's receipt is `receipt-bl735.sh`.
+- `postcompact-rulebook-recovery`'s comment on the block's headroom now points at WC_MARGIN instead of the old figure.
+
+
 ## [0.901.0] - 2026-10-21
 
 Batch 238, lead ai-dlc-1a. It closes BL-740, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`. No role text changes, so a seat learns the new rule from the refusal it gets.

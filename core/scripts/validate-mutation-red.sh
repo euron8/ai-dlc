@@ -136,7 +136,9 @@
 #
 # The capture opens with a runnable `$ ` line rendered with printf %q from the original
 # argv, flags included. %q may emit bash's $'...' quoting, so a bash reader can replay
-# that line and plain POSIX sh may not. The `test:` line is %q-quoted the same way. A
+# that line and plain POSIX sh may not. The `test:` line is %q-quoted the same way. Both
+# lines backslash every bare `~` in a word not in $'...' form, because bash 3.2's %q leaves
+# it bare and a replaying shell would expand `~root`, `x=~root` or `FOO=a:~/b`. A
 # refusal before the restore prints no header and no `$ ` line.
 #
 # bash 3.2+.
@@ -168,6 +170,32 @@ exit: 0 proven · 1 unproven · 2 unevaluable (nothing was mutated, a pytest bas
       Under pytest an all-skipped run is read from pytest's summary line; with no summary
       line (-qq, -p no:terminal) the check prints `skip-check: not applied` and stands down.
 EOF
+}
+
+# replay_words <word>...: print ` <word>` per argument, %q-quoted, for the `$ ` and `test:`
+# lines. bash 3.2's %q leaves `~` bare, and a shell replaying the line tilde-expands it at
+# the word's start and after an `=` or `:` (`~root`, `x=~root`, `FOO=a:~/b`, `~+`), so every
+# bare `~` is backslashed. A word %q put in $'...' form is left alone: there `\~` is an
+# unknown escape kept as two bytes. The walk copies each `\X` pair %q emitted as it stands,
+# so a `~` some bash's %q already escaped is not escaped twice.
+replay_words() {
+  local w q out c i
+  for w in "$@"; do
+    printf -v q '%q' "$w"
+    case "$q" in
+      "\$'"*) ;;
+      *'~'*)
+        out=""; i=0
+        while [ "$i" -lt "${#q}" ]; do
+          c="${q:$i:1}"
+          if [ "$c" = '\' ]; then out="$out$c${q:$((i + 1)):1}"; i=$((i + 2)); continue; fi
+          [ "$c" = '~' ] && c='\~'
+          out="$out$c"; i=$((i + 1))
+        done
+        q="$out" ;;
+    esac
+    printf ' %s' "$q"
+  done
 }
 
 # The argv exactly as given, before the flag loop consumes it: the capture's first line is
@@ -459,7 +487,7 @@ fi
 # The capture's first line replays this run: %q of the ORIGINAL argv. The usage check
 # above guarantees at least four arguments here; the +-guard keeps an empty array from
 # aborting under set -u on bash 3.2 should that ever change.
-printf '$'; printf ' %q' "$0" ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"}; printf '\n'
+printf '$'; replay_words "$0" ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"}; printf '\n'
 printf 'mutation-red replay\n'
 # head and cwd make a committed capture checkable against the commit it claims to grade
 # (validate-handoff-evidence.sh reads `head:`). Outside a git work tree the line still
@@ -470,7 +498,7 @@ printf '  cwd:        %s\n' "$PWD"
 printf '  target:     %s:%s\n' "$TARGET" "$LINE"
 printf '  was:        %s\n' "$CURRENT"
 printf '  mutated to: %s\n' "$REPL"
-printf '  test:      '; printf ' %q' "${TEST_CMD[@]}"; printf '\n'
+printf '  test:      '; replay_words "${TEST_CMD[@]}"; printf '\n'
 printf '  baseline:   GREEN (exit 0)\n'
 [ -z "$PARSE_NOTE" ] || printf '  %s\n' "$PARSE_NOTE"
 [ -z "$SC_NOTE" ] || printf '  %s\n' "$SC_NOTE"

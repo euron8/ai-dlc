@@ -313,6 +313,37 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   range_mutant no-range-empty 'warn "range-empty' ': "range-empty' '0: 0:range-base:, n:' "base == frozen no longer warns"
   range_mutant no-range-base 'warn "range-base' ': "range-base' '0:range-empty:, 0: n:' "a non-ancestor base no longer warns"
 
+  # (j) replay-preamble and the replay block's head:. rp_vec reads the four (j) worlds and, from
+  # rphead, which head WARN each capture gets: rp-red-head's first `head:` (above the block) is the
+  # commit frozen only adds captures to, so a reader of THAT sha warns nothing, and the block's own
+  # `head:` is the base, which warns head-tree. rp-red-fallback's block carries no `head:`, so the
+  # one above it is read (head-tree), never head-missing.
+  rp_vec() { # <script>
+    local s="$1" o w="$WORK/world-rphead" hh hf
+    o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
+    hh="$(awk '$1=="WARN" && $3=="test-results/rp-red-head.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
+    hf="$(awk '$1=="WARN" && $3=="test-results/rp-red-fallback.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
+    printf '%s %s %s %s head=%s fallback=%s' "$(verdict "$s" "$WORK/world-rpfirst" h)" "$(verdict "$s" "$WORK/world-rps319" h)" \
+      "$(verdict "$s" "$WORK/world-rpok" h)" "$(verdict "$s" "$WORK/world-rphead" h)" "${hh%,}" "${hf%,}"
+  }
+  RPWANT='1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree'
+  got="$(rp_vec "$HECTL")"
+  if [ "$got" = "$RPWANT" ]; then ok "REPLAY-PREAMBLE: a hand '\$ ' above the script's own refuses (with and without a second '\$ '), a replay at line 1 and the script's '\$ ' right above the replay are accepted, and head: is read from the replay block, falling back to the first head: when the block has none"
+  else bad "REPLAY-PREAMBLE: want [$RPWANT] got [$got]"; fi
+  rp_mutant() { # <name> <from> <to> <want> <label>
+    local m got
+    if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: replay mutation '$1' matched nothing"; return; fi
+    got="$(rp_vec "$m")"
+    if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own cell only: $5"
+    elif [ "$got" = "$RPWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
+    else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
+  }
+  # ANY `$ ` right above the replay, not the FIRST: the last `$ ` before the replay is read.
+  rp_mutant rp-any-dollar '!fd && /^\$ /{fd=NR}' '/^\$ /{fd=NR}' \
+    '0::W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree' "a hand '\$ ' above the script's own '\$ ' line is accepted"
+  rp_mutant rp-first-head 'tail -n +"$rl" <<<"$hdr"' 'tail -n +1 <<<"$hdr"' \
+    '1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head= fallback=head-tree' "the first head: in the capture is read, not the replay block's"
+
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
   # synthesised: two trees whose sprint-status.sh is a wrapper that runs the real one, writes one

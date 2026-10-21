@@ -16,7 +16,7 @@
 # was meant. Each cost a full review pass to find. The checks below are the mechanical part
 # of that class; a reviewer still grades what the captures SAY.
 #
-# HANDOFF MODE — three refusals, one warning.
+# HANDOFF MODE — four refusals, one warning.
 #
 #   A CAPTURE is a path token the story cites that contains a `/`, does not contain `...`,
 #   and ends in `.txt`, `.log` or `.out`. Bare basenames and elided paths cannot be
@@ -44,8 +44,16 @@
 #       tracked at <frozen>. A glob whose every alternative matches a committed file names
 #       evidence the reviewer can read and is not refused. `{id}` in an API route or
 #       `{REPO_ROOT}/x.sh` is not a capture path and is not refused.
+#   (j) REPLAY-PREAMBLE. An in-range capture (a)'s range reads, whose first 25 lines carry
+#       `mutation-red replay`, with a `$ ` line above the first such line that is not the line
+#       right above it. validate-mutation-red.sh prints its `$ ` line immediately above its
+#       replay header, so an earlier `$ ` line is hand-written (dev.md: commit the capture as
+#       the script wrote it). A replay with no `$ ` line above it is accepted: the engine
+#       before the `$ ` line was added printed none. A capture without the replay line is not read by (j).
 #   WARN. A capture's `head:` sha is missing, does not resolve, or names a tree that
-#       differs from <frozen> outside the cited captures and the story file. Never a
+#       differs from <frozen> outside the cited captures and the story file. For a replay
+#       capture the sha is the first `head:` after the replay header, falling back to the
+#       first in the 25 lines when the block carries none. Never a
 #       refusal: a capture taken at the content head and committed in a records commit
 #       after it is the normal shape.
 #
@@ -125,8 +133,14 @@
 #       capture extension; and a glob whose every alternative matches a tracked file is
 #       acquitted (s318 2.3 `s318-2.3-*` and `s318-2.3-red-drop-*.txt`, s318 2.4
 #       `full-suite-fix-serial-seed{1,2,3}.txt`, all committed).
-#   Total: 10 refusals in 5 stories (s317 1.2, 2.1, 2.2; s318 2.3, 2.5), every one named
-#   above, every one a capture the reviewer could not read as evidence.
+#   (j) over every tracked reference-consumer capture carrying the replay line, all in range:
+#       8 refused, all hand-written
+#       `$ `+`head:` preambles (s318 1.1 x5, s319 1.1 x3), both stories done. Narrowing:
+#       "any `$ ` above the replay" would refuse the script's own output; "no `$ ` at
+#       all" would refuse every capture the script now writes, so only the FIRST `$ ` is keyed.
+#   Total of arms (a)-(c) only, the s317/s318 32-story run, NOT counting (j): 10 refusals in
+#   5 stories (s317 1.2, 2.1, 2.2; s318 2.3, 2.5), every one named in (a)-(c), every one a
+#   capture the reviewer could not read as evidence. (j) is a separate population.
 #   WARN: 48 (18 head-missing, 30 head-tree, 0 range) — the reason it is a warning. The
 #       30 head-tree lines are now computed: an earlier `awk -v caps=` aborted on BSD awk
 #       whenever the story cited 2+ captures (`newline in string`, 120 stderr lines across
@@ -319,7 +333,21 @@ if [ -n "$CAPS" ]; then
         refuse "no-command $cap: none of its first 25 lines is a command line ('\$ <command>', 'command: <command>', 'cmd=<command>', or validate-mutation-red.sh's own 'mutation-red replay' header; the capture header is '\$ <command>' then 'head: <sha>')"
         continue
       fi
-      h="$(grep -oE 'head:[[:space:]]*[0-9a-f]{7,40}' <<<"$hdr" | head -n 1 | sed -E 's/head:[[:space:]]*//')"
+      # (j) REPLAY-PREAMBLE. Lines are numbered within the first 25: rl is the first
+      # `mutation-red replay` line, fd the first `$ ` line. The script prints its own `$ ` line
+      # immediately above its replay line, so a `$ ` line above the replay that is not the one
+      # right above it is hand-written, and is refused. A replay with no `$ ` above it is the
+      # installed-engine shape that prints none, and is accepted.
+      rp="$(awk '!fd && /^\$ /{fd=NR} /^mutation-red replay$/{print NR, fd+0; exit}' <<<"$hdr")"
+      rl="${rp% *}"; fd="${rp#* }"
+      if [ -n "$rp" ] && [ "$fd" -gt 0 ] && [ "$fd" -ne $((rl - 1)) ]; then
+        refuse "replay-preamble $cap: line $fd is a '\$ ' line above line $((rl - 1)), the one validate-mutation-red.sh prints right above its 'mutation-red replay' header (line $rl); redirect the script's stdout to the capture and commit it as it is, with no '\$ ' or 'head:' lines of your own"
+        continue
+      fi
+      # head: is the replay block's own (the first after its header) when it has one.
+      h=""
+      [ -n "$rp" ] && h="$(tail -n +"$rl" <<<"$hdr" | grep -oE 'head:[[:space:]]*[0-9a-f]{7,40}' | head -n 1 | sed -E 's/head:[[:space:]]*//')"
+      [ -n "$h" ] || h="$(grep -oE 'head:[[:space:]]*[0-9a-f]{7,40}' <<<"$hdr" | head -n 1 | sed -E 's/head:[[:space:]]*//')"
       if [ -z "$h" ]; then
         warn "head-missing $cap: no 'head: <sha>' line in its first 25 lines"
       else

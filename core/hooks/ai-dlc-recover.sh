@@ -310,8 +310,8 @@ _MANDATE_WHY="Compaction cleared
 the harness's record of every file previously read, so nothing you read before
 this point is still loaded. Rule 21 makes this Read the FIRST call after any
 READ AND FOLLOW and it is not optional here either -- measured across 265 real
-compactions, the snapshot Read above lands 66% of the time and this one only 41%,
-which is the gap this sentence exists to close. Do NOT re-Read completed step
+compactions, the snapshot Read above lands 66% of the time and this one only 41%.
+Do NOT re-Read completed step
 files or already-produced planning artifacts; Rule 23(a) still applies."
 
 #
@@ -433,6 +433,19 @@ else
   GATE_RESUME=""
 fi
 
+# THE WORST GATE-IN-FLIGHT BLOCK IS HELD A STATED MARGIN UNDER THE CLIFF, NOT MERELY UNDER IT
+# (BL-735). The sidecar note is dropped below once the wrapped bare directive reaches
+# CONTEXT_LIMIT, and the emission then FALLS by the note's length -- so a length bound alone
+# never sees the drop. gate-resume's WC arm asserts the note present AND the emission under
+# 10000 - WC_MARGIN. Three sentences were cut to buy that margin, each a restatement of text
+# the lead still receives:
+#   - "which is the gap this sentence exists to close" -> the 66%/41% figure it follows;
+#   - "This is not a suggestion recovered from memory ..." -> the Rule 23 section's own
+#     "you no longer hold it" heading and its opening paragraph;
+#   - the parenthetical attributing the memory-aid caveat to context-mode's
+#     `session_continuity` block -> the caveat stands on this block's authority; the
+#     attribution is in the CHANGELOG.
+# Measured on gate-resume's WC world: 9976 emitted before the cut, with 24 bytes to the drop.
 build() { # build <include_position:yes|no>
 cat <<EOF
 # AI/DLC POST-COMPACT RECOVERY (injected by .claude/hooks/ai-dlc-recover.sh)
@@ -559,8 +572,7 @@ call, then move on:
 Treat whatever it returns as a memory aid, NOT a standing order. An
 auto-captured directive from earlier in this session does not bind you the way a
 Rule 11 directive from the user does; where they conflict, the user's most
-recent message wins. (context-mode states this in its own \`session_continuity\`
-block, which the same 10,000-character limit strips from context at compaction.)
+recent message wins.
 
 ## Rule 23 is why you compacted, and you no longer hold it
 
@@ -575,9 +587,7 @@ makes the next one likelier, and nothing in the loop reports itself.
 So for the rest of this session, before you Read a file: if you intend to
 analyse, summarise, count or extract from it, route it through \`ctx_execute_file\`
 or a subagent and keep only the answer. Read it directly only when you intend to
-Edit it, or when it is one of the verbatim-load files above. This is not a
-suggestion recovered from memory -- you cannot recover it, which is why it is
-written here.
+Edit it, or when it is one of the verbatim-load files above.
 
 ${SIDECAR_NOTE}
 $( [ "$1" = yes ] && [ -n "$POSITION" ] && printf '%s\n\n%s\n' "---

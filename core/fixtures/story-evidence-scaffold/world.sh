@@ -163,6 +163,22 @@ EOS
     untracked) gitw "$w" rm -q --cached "$STORY" || return 2
            mkdir -p "$w/.git/info" && printf '%s\n' "$STORY" >> "$w/.git/info/exclude" || return 2 ;;
     latin1strat) printf '| TS-1-06 | - | manual | caf\351 au lait |\n| TS-1-03 | - | test |  |\n' >> "$w/$STORY" ;;
+    # (j) worlds. The script's own header is `$ <argv>` then `mutation-red replay` then `head:`.
+    rpfirst) printf '$ pytest -k "a or b"\nhead: %s\n$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 y pytest\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$b" "$b" > "$w/test-results/rp-red-first.txt"
+           gitw "$w" add -f test-results/rp-red-first.txt || return 2
+           printf 'Mutation-RED capture: `test-results/rp-red-first.txt`.\n' >> "$w/$STORY" ;;
+    rps319) printf '$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 y pytest -k "a or b"\nhead: %s\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$b" "$b" > "$w/test-results/rp-red-s319.txt"
+           gitw "$w" add -f test-results/rp-red-s319.txt || return 2
+           printf 'Mutation-RED capture: `test-results/rp-red-s319.txt`.\n' >> "$w/$STORY" ;;
+    rpok)  printf 'mutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n$ pytest -q\n' "$b" > "$w/test-results/rp-red-line1.txt"
+           printf '$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 y pytest\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$b" > "$w/test-results/rp-red-script.txt"
+           gitw "$w" add -f test-results/rp-red-line1.txt test-results/rp-red-script.txt || return 2
+           printf 'Mutation-RED captures: `test-results/rp-red-line1.txt`, `test-results/rp-red-script.txt`.\n' >> "$w/$STORY" ;;
+    rphead) w0="$(gitw "$w" rev-parse HEAD)"
+           printf 'head: %s\n$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 y pytest\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$w0" "$b" > "$w/test-results/rp-red-head.txt"
+           printf 'head: %s\nmutation-red replay\n  mutated:    RED (exit 1)\n' "$b" > "$w/test-results/rp-red-fallback.txt"
+           gitw "$w" add -f test-results/rp-red-head.txt test-results/rp-red-fallback.txt || return 2
+           printf 'Mutation-RED captures: `test-results/rp-red-head.txt`, `test-results/rp-red-fallback.txt`.\n' >> "$w/$STORY" ;;
     *) return 2 ;;
   esac
   gitw "$w" add -A && gitw "$w" commit -qm "$v" --allow-empty || return 2
@@ -231,13 +247,14 @@ verdict() {
 # latin1strat (33): strategy mode over a row carrying one non-UTF-8 byte ABOVE an empty cell, driven
 # under a UTF-8 locale (the world's `.LC`), so BSD awk without LC_ALL=C aborts at that row and the
 # empty cell below it is never read.
-CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s'
-WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell,'
-# Every evidence-handoff case and every strategy case, for the near-miss mutants that move a
-# whole mode.
-HCASES='1 3 4 5 10'
-SCASES='2 6 7 8 9 11 12 13 23 24 33'
-KCASES='14 15 16 17 18 19 20 21 22 25 26 27 28 29 30 31 32'
+# Cases 34-37, the replay-preamble arm (j), appended for the same reason. rpfirst: a hand `$ ` and
+# `head:`, then the script's own `$ ` right above `mutation-red replay` -- refused, and the only world
+# separating "the FIRST `$ ` is right above the replay" from "SOME `$ ` is". rps319: graph s319's
+# shape, a hand `$ ` then `head:` then the replay (refused). rpok: the replay at line 1 with a `$ `
+# BELOW it, and the script's `$ ` right above the replay (both accepted). rphead: the head-read arm;
+# its two captures are read by name in run.sh, not through this vector.
+CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s rpfirst:h rps319:h rpok:h rphead:h'
+WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W'
 # The UTF-8 locale latin1strat is driven under: the first one in which THIS awk aborts on a
 # non-UTF-8 byte. Empty where none does (gawk, mawk, or no UTF-8 locale installed): the abort the
 # world is about cannot happen on this host, and its mutant below says so instead of scoring.

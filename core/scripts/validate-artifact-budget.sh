@@ -2597,6 +2597,10 @@ if [ -s "$INFLIGHT_FILE" ]; then
       `status: delivered-reachable`. That is what the column is for. Striking the
       row instead keeps every byte, keeps growing, and loses the one fact the
       section exists to carry -- who is actually outstanding.
+
+      Remedy: DELETE each struck row whose teammate will not be messaged again.
+      Give a delivered, still-reachable teammate `status: delivered-reachable`
+      instead of striking its row.
 EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
@@ -2637,6 +2641,9 @@ if [ -s "$STATUS_FILE" ]; then
       reconciles it, and Rule 28 bounds what a message to a reachable teammate
       may carry -- additive to its original brief, never a retraction and never
       a scope-distinct new task.
+
+      Remedy: KEEP the row and set the leading token of its status cell to
+      `in-flight`, `delivered-reachable` or `stopped`. Do not delete it.
 EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi

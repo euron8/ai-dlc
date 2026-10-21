@@ -302,7 +302,8 @@ process violation; surface at retro. Beside it, at the frozen SHA, run
 `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
 and `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>`.
 Exit 1 refuses the handoff: send the dev its `REFUSED` lines (a capture with
-no command line, a mutation-RED capture not committed, a glob cited as a
+no command line, `replay-preamble` for a `validate-mutation-red.sh` capture with
+a hand-written `$ ` line above the script's own, a mutation-RED capture not committed, a glob cited as a
 capture that matches no committed file, an empty or unresolvable Strategy
 Test IDs cell, `status-not-review` for a story whose status at the frozen SHA
 is not `review`, `status-yaml-mismatch` for a story whose status disagrees
