@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 38    entries: 705
+# fixtures mapped: 38    entries: 708
 architecture-fast-track	core
 architecture-fast-track	core/fixtures
 architecture-fast-track	core/fixtures/architecture-fast-track
@@ -286,8 +286,11 @@ derivation-capture	core/fixtures/derivation-capture/run.sh
 derivation-capture	core/fixtures/derivation-capture/seed.sh
 derivation-capture	core/hooks/ai-dlc-derivation-capture.sh
 derivation-capture	core/scripts/partition-document.sh
+derivation-capture	core/scripts/validate-adversarial-convergence.sh
 derivation-capture	core/scripts/validate-artifact-budget.sh
 derivation-capture	core/scripts/validate-artifact-derivations.sh
+derivation-capture	core/scripts/wait-for-deliverable.sh
+derivation-capture	core/scripts/wfd-start-of.sh
 dispatch-model-guard	core
 dispatch-model-guard	core/fixtures
 dispatch-model-guard	core/fixtures/dispatch-model-guard
@@ -720,12 +723,12 @@ story-fields-derive	core/skills/ai-dlc/layer-contract.yaml
 story-fields-derive	core/skills/ai-dlc/steps
 story-fields-derive	core/skills/ai-dlc/steps/gate-validation.md
 story-fields-derive	core/skills/ai-dlc/steps/implementation.md
-# digest architecture-fast-track b02bbf3d62a37729accb47e7dfb86db54025d0e6e414d9ed8651bf3ac3823db8
-# digest changelog-sprint-slot 4942762660b0710c6d87609dadda469dba05196a612aeaa1417763819d2ee5e7
+# digest architecture-fast-track 8e998e7540b05f1304d3d45a0c67ee6ab11cb3a50a34503b9c060892edc9caab
+# digest changelog-sprint-slot 543d87c93369a84c8df459c79a37d65006f94f9c762b8665ae1fce7fe6efcb85
 # digest check-17-bypass 5c8dffa011bfd53608c078eeb505d46e9726d29539e1d7bd70463dc028c6a47b
 # digest check-17-counts a1469466c5a1b07b676a0213c417247f737ae8d13411d7fd5cebbb28fb6225c2
 # digest check-1c-bypass c717d236a1186ee75c963b30a3d54c1f71918c052492ef57646b6347ab947cae
-# digest check-22-spawn-ledger 57dc10e5e170faeef697e21a03ed9113b004078bff77b89e58b71771020067bd
+# digest check-22-spawn-ledger b36292059e5321479ce387e29c5eea95c9e87d5db6fd7d56f2115038e166c507
 # digest check-23-draft-stamps 9626c9b111d6dde08a93c418cb9774ebef249aede56d1e8da9843b57c5f37c99
 # digest check-31-ac-falsifiability 805b62bcfd6662e11a40d5fe610d202e748e545706ceb7002c08bd97a853c849
 # digest check-3b-locked-anchor 58f658d2982a14b57255e36f599cb1228daa130ca57f22ec39b9cfa68255e611
@@ -734,26 +737,26 @@ story-fields-derive	core/skills/ai-dlc/steps/implementation.md
 # digest consolidation-residue 56e6804ff7dbe285570c3b406dd1b7b2440d2ab136d780f2191fa5764a747a6e
 # digest context-mode-protect 8e952581d82ee161cc425992812c82bca516ef59f3c35a7e1a63a2c986b5b010
 # digest context-provenance 851c43aa04b3f1175068389ab68d909525603761d7d4bf34718016a45d8ecd67
-# digest context-sensor fc38cacd798671dd3c5174831bd03a37524539e8625f0f058f12f6f138874fb9
+# digest context-sensor 5f9cfc1cecb7f6e7490d4ed17711ddd2a77059fe15239aaf912f1637f2cd6982
 # digest core-script-boundary 9cd37304786c43be396520ea10e0de4a3d043ac2f1cdcb724c1a3c13e74ba550
 # digest cycle-commits-enforce 3f084996eee0d19edd6203a148c886381aedafef8251f18295a439e57cbeea24
 # digest deploy-validate-smoke-classification 0ba5a25c21d37b73dbb880baf6349efed2f751a19939d36076b940b9747f8991
-# digest derivation-capture e825d0afc0b072d1eddae50a4292f865b1163bf86e7615372963fc889dc2066f
-# digest dispatch-model-guard cdb028f871e7d7bbe09f856f2c541157f6bac917d6a273e35a6ab572520cfa76
-# digest divergence-hard-block a64c7b4fefe24f04d93bbef4774b3370b0f0a844c83b0dadc8e3d3f69b21ad88
+# digest derivation-capture faab3ea1bf5768047b3f4d370d5a5d3b9dba65d8cab4e215c05004f2c8a6786b
+# digest dispatch-model-guard b7210ecd0e8dcdecf9520b3227d078ccc2e28f8521457e025c4a93f284766336
+# digest divergence-hard-block 6e2cc0da610c39bd86769f837cb1a790eda763722f62ace54952e783dac81c68
 # digest document-partition 4bcb8a2aa7fa9f0d175649dbe62b55943aebe794fcdd7b777c229c9cbb489779
 # digest early-exit-reader 7f0e29638aaac96eb5d872dd79c1ea747001afd0d832aa88905cae583348a386
-# digest extension-check-adoption 0eb4e5bd8d67ecb2d806535950ef46df58d7b22f90426b88a31369651f3bc9c1
-# digest gate-resume 270e06f9a433f4d8c11cd02e7fec7e80df277dbc44bd65b290963f39c1ff2fcb
-# digest gate-verdict-grep-shape 28a61d001d44bf7c00fff65529e7c0dde584f9ce043de6af5b3fb8d377710c07
-# digest hook-registration-join 1c09cde4bf0cefc7e3dcdbcda6aaa7141834d65e2b5819bd702d8229b820e6af
+# digest extension-check-adoption 14f3bac234f4777d52f0004c70e54ea0d83fbffde454c9481a8ae6c664bb7d7e
+# digest gate-resume 63218a75d71a4231bd82166094e630e02b8e826c77c5ce9337abc5a7dfe22508
+# digest gate-verdict-grep-shape edb9e798c99fcc3c204b133bfcf0c2f5fa65bdf52a56723241d3654c90f772c9
+# digest hook-registration-join 5d90f508d495390a52c8497969d057c7ae531cf7aa223b7e00eda817d20f2b9a
 # digest layer-title-join 09b0d1e392622002678387e3842e38a739756c111a4aad7cbdbdbfaab9309981
 # digest prepush-ssh-keepalive 99f792164e5fca8d6defb4f1a1133817f66324a1bb79be5dead43eb7b5d3445c
-# digest requirements-step b15aec17c5e656e59cbd746f14533dcc588c7498f30b0a63a404eff9445f84f1
+# digest requirements-step 0b3ad0150224988d80b5f599e68ab03b179beac637ecda6736eda61087f5d8b5
 # digest resume-whole-read 8f3f54ee0e057daee29672a775ed050809647da0722d7e1e2c875e42b9d55a13
 # digest retro-compliance-workflow 01d1f386a7ce52950c2d61f9e70071e4cb48d62931f3fe9732fa612b871c312e
 # digest review-carry-over-clauses ad6b44cc575761b1cce2eaaad6a6450dcae618d39f280b43800f7fc2eb04f8ca
 # digest route-defect-classification a55e73c1efe5d211a230e4b04fb6f382a61501eaf825574e512f8c0b3408c78d
 # digest self-update-join-gate e3e08fa4d5a783ed37c45715a3e2b8b6b4509272d0f68ead7c01d14f31efa385
-# digest story-evidence-scaffold e3fa442c4835c882c4827e01bf37f168a5b175ff1f533f98be0282af0de65c35
-# digest story-fields-derive 4ff9372db7da602e8d79089ff95616e9b784a3e88964b49d0fb0aaa997699d32
+# digest story-evidence-scaffold 4f0f4284ae67b29b7c35ea1bd0ba3f3b333ffe7a091e37832f3492b0c2d340e7
+# digest story-fields-derive 772c19dd0590944e074ee24c5e56875e3bd99afe92425f8622f309a38dcedf1f
