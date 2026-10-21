@@ -21,3 +21,4 @@ core/scripts/content-seal.sh
 core/scripts/wait-for-deliverable.sh
 core/team-roles/remediator.md
 core/fixtures/lib/
+core/team-roles/pm-escalated.md

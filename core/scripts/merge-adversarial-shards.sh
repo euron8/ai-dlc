@@ -144,6 +144,23 @@
 #   typed S binds to nothing (BL-598). Without --rerun nothing above runs and the output is the
 #   bytes it was.
 #
+# THE INVOKED_AT BOUND. A shard's self-reported invoked_at is the one value the merge copies into the
+#   pass that Check 24's arm G orders the series by, so it is bounded, in every mode, by two records
+#   the harness wrote and the shard did not. EARLY: no more than BACKDATE_TOL_S (validate-artifact-
+#   budget.sh, read on every merge) before the EARLIEST spawn-ledger `ts` of the dispatch the join
+#   credited, the PreToolUse instant ai-dlc-dispatch-guard.sh records before the adversary exists.
+#   LATE: no more than BACKDATE_TOL_S after the LAST write-ledger row the credited writers have on
+#   the shard, since an adversary starts before its last write. The last row and not the earliest:
+#   an adversary that writes a draft and stamps the start afterwards is honest, and an earliest-row
+#   bound refused 127 such shards in the reference consumer where the last-row bound refuses 16.
+#   The shard file's mtime is not read: a checkout resets it (412 of 586 reference-consumer shards
+#   share five checkout instants). Each refusal names the shard, both times, the tolerance and the
+#   remedy (re-dispatch, then --rerun). THE LEGACY BOUNDARY: a verdict REFUSES only when a spawn row
+#   of the credited dispatch carries `invoked_bound: true`, which the guard writes and a shard cannot;
+#   a dispatch an older guard recorded is printed as `WARN:` on stderr naming the shard and both
+#   times, and merges. With no spawn row, or no credited write row, that side is not judged (the
+#   dispatch-id refusals own a missing record).
+#
 # THE SERIES STEM IS NOT THE ARTIFACT. A shard dir whose <artifact> ends in `-adversarial`
 #   (`shards/coe-adversarial-p1/`) names the SERIAL file's stem, not the artifact, and was merged
 #   silently into `coe-adversarial-adversarial-p1.md`, a series no gate reads. It is REFUSED
@@ -335,7 +352,8 @@
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
 #   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's DERIVED
 #   id (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
-#   (`cross=<id>` when G=1), every id derived; invoked_at is the EARLIEST shard. The merged body opens with the
+#   (`cross=<id>` when G=1), every id derived; invoked_at is the EARLIEST shard, each shard's own
+#   value first bounded on both sides (THE INVOKED_AT BOUND, below). The merged body opens with the
 #   ordinal map (the `--map` output, fenced), then every shard body in ordinal order, the cross
 #   shards last in group order under one header per group, each with its own provenance block
 #   stripped, so the output carries exactly ONE provenance block.
@@ -355,8 +373,8 @@
 #     3. the dispatch ids from the harness records (--rerun staging included)  exit at once, one line
 #     4. the seat-complete set check                          exit at once, one line
 #     5. per shard: a structural refusal (provenance block, counts, verdict, invoked_at, dispatch id,
-#        skill, sha, artifact) skips the rest of THAT shard; finding-level refusals and the count
-#        checks are all collected
+#        skill, sha, artifact) skips the rest of THAT shard; finding-level refusals, the count
+#        checks and THE INVOKED_AT BOUND are all collected
 #     6. an existing output that differs                      exit at once, one line
 #   Exit 2 when any line was printed; 0 with `DRY-RUN: clean` otherwise. Without --dry-run the first
 #   refusal exits, as it always did.
@@ -1139,17 +1157,22 @@ if [ -s "$T/wagents" ] && [ -f "$REC_WRITES" ]; then
     refuse "agent ${_xa} wrote in ${REC_PREFIX} and also wrote ${_xp} at ${_xt}, under another shard dir; one dispatch delivers one shard of one pass, never shards for two merges"
   fi
 fi
+# ---- the tolerance, read on EVERY merge (BL-598, BL-726) -----------------------------------
+# One declaration, `BACKDATE_TOL_S` in validate-artifact-budget.sh, the BACKDATED arm's own
+# tolerance. It binds a --rerun start to its dispatch's recorded time (below) and bounds every
+# shard's invoked_at on both sides (THE INVOKED_AT BOUND, after the per-shard loop), so the sibling
+# is required on every merge, not only under --rerun. Read here, after the --map, --check-header and
+# --pair-sep exits, which never reach it.
+RR_TOL_FILE="$(dirname "$VALIDATOR")/validate-artifact-budget.sh"
+RR_TOL="$(grep -E '^BACKDATE_TOL_S=[0-9]+$' "$RR_TOL_FILE" 2>/dev/null)"
+[ "$(printf '%s\n' "$RR_TOL" | grep -c .)" = 1 ] \
+  || refuse "each shard's invoked_at is bounded by its recorded dispatch time and its own last write within BACKDATE_TOL_S, which is not declared exactly once as an integer in $RR_TOL_FILE"
+RR_TOL="${RR_TOL#*=}"
 # ---- the re-run start binds to a recorded dispatch time (BL-598) ---------------------------
 # S is the re-dispatch's dispatched-at, so it must sit within the BACKDATED tolerance of every
-# spawn-ledger row of the dispatch the join credited for that shard. The tolerance is read from its
-# one declaration, `BACKDATE_TOL_S` in validate-artifact-budget.sh, and only when --rerun is given.
+# spawn-ledger row of the dispatch the join credited for that shard.
 # A shard with no credited dispatch is left to its own per-shard refusal below.
 if [ -n "$RERUN" ]; then
-  RR_TOL_FILE="$(dirname "$VALIDATOR")/validate-artifact-budget.sh"
-  RR_TOL="$(grep -E '^BACKDATE_TOL_S=[0-9]+$' "$RR_TOL_FILE" 2>/dev/null)"
-  [ "$(printf '%s\n' "$RR_TOL" | grep -c .)" = 1 ] \
-    || refuse "--rerun binds each re-run start to a recorded dispatch time within BACKDATE_TOL_S, which is not declared exactly once as an integer in $RR_TOL_FILE"
-  RR_TOL="${RR_TOL#*=}"
   while IFS="$(printf '\t')" read -r _rp _rs; do
     [ -n "$_rp" ] || continue
     _rk="$(awk -F'\t' -v b="$_rp" '{ n = $2; sub(/.*\//, "", n) } n == b { print $1; exit }' "$T/shards")"
@@ -1242,7 +1265,7 @@ same_set() {
 S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0; WALL_LIST=""
 ANY_DIVERGENT=0; EARLIEST=""; EARLIEST_KEY=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
 SKILL=""; MODE=""; LEAD_ROLE=""; RESOLVES=""; RESOLVES_SET=0
-: > "$T/body" || refuse "cannot stage the merged body"
+: > "$T/body" && : > "$T/bnd" || refuse "cannot stage the merged body"
 
 for key in $ORDINALS $CROSS_KEYS; do
   case "$key" in cross|cross-*) is_x=1 ;; *) is_x=0 ;; esac
@@ -1265,6 +1288,8 @@ for key in $ORDINALS $CROSS_KEYS; do
   case " $ALL_IDS " in *" $tid "*) { collect "$sf repeats tool_use_id $tid of another shard; one dispatch delivered twice"; continue; } ;; esac
   ALL_IDS="$ALL_IDS $tid"
   ID_LIST="$ID_LIST $key=$tid"
+  # THE INVOKED_AT BOUND is staged here, once the dispatch is credited, and resolved after the loop.
+  printf '%s\t%s\t%s\t%s\n' "$key" "$sf" "$at" "$tid" >> "$T/bnd" || refuse "cannot stage the invoked_at bounds"
 
   # skill / mode / lead_role are batch-invariant: every shard ran the same evaluation.
   # Presence and value per shard are the header check's (hdr_role); agreement ACROSS shards is here.
@@ -1408,6 +1433,64 @@ for key in $ORDINALS $CROSS_KEYS; do
        /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
        !skip && !/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
+
+# ---- THE INVOKED_AT BOUND (BL-726): a shard's start sits between its dispatch and its last write ----
+# Every shard the loop credited, in every mode, resolved in ONE jq pass over both ledgers. EARLY: the
+# invoked_at is earlier than the credited dispatch's EARLIEST spawn-ledger ts by more than the
+# tolerance. LATE: it is later than the LAST write-ledger row the credited writers have on the shard
+# by more than the tolerance. Epoch seconds, a `.<fraction>` stripped first (fromdateiso8601 refuses
+# one). Each verdict REFUSES only when a spawn row of that dispatch carries `invoked_bound: true`,
+# which ai-dlc-dispatch-guard.sh writes at PreToolUse and a shard cannot; a dispatch recorded by an
+# older guard is LEGACY, printed as a WARN naming the shard and both times, and merges.
+_us_sl="$REC_SPAWNS"; [ -f "$_us_sl" ] || _us_sl=/dev/null
+_us_wl="$REC_WRITES"; [ -f "$_us_wl" ] || _us_wl=/dev/null
+if [ -s "$T/bnd" ]; then
+  jq -rn --rawfile bnd "$T/bnd" --rawfile wr "$T/wrows" --argjson tol "$RR_TOL" --arg p "$REC_PREFIX" \
+      --arg ls "$REC_SPAWNS" --arg lw "$REC_WRITES" --slurpfile sl "$_us_sl" --slurpfile wl "$_us_wl" '
+    def ep: if type == "string" then (sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) else null end;
+    def verdict($bound): if $bound then "REFUSE" else "WARN" end;
+    def remedy($b): " -- re-dispatch the adversary for " + $b + ", which stamps invoked_at from date -u at its own start, and merge with --rerun " + $b + "@<the re-dispatch dispatched-at>";
+    def legacy($bound): if $bound then "" else "; LEGACY: dispatch recorded with no invoked_bound key, by a guard older than this bound, so it merges unrefused" end;
+    ($wr | split("\n") | map(select(. != "") | split("\t"))) as $W
+    | $bnd | split("\n")[] | select(. != "") | split("\t") | . as [$k, $sf, $at, $tid]
+    | ($sf | sub(".*/"; "")) as $b
+    | ($at | ep) as $ae
+    | [ $sl[] | select(type == "object" and .tool_use_id == $tid) ] as $R
+    | ([ $R[] | select(.invoked_bound == true) ] | length > 0) as $bound
+    | [ $W[] | select(.[0] == $b and (.[3] // "") != "S") | .[1] ] as $CA
+    | [ $wl[] | select(type == "object" and .kind == "artifact-write" and (.path // "") == ($p + $b))
+        | select((.agent_id // "") as $a | any($CA[]; . == $a)) ] as $WR
+    | if $ae == null then
+        # A stamp RE_ISO accepts and the calendar does not (hour 24, month 13) bounds nothing.
+        verdict($bound) + "\t" + $sf + " invoked_at " + $at + " is not a calendar time, so it cannot be bounded by its dispatch " + $tid + remedy($b) + legacy($bound)
+      else
+      ( if ($R | length) == 0 then empty
+        elif any($R[]; (.ts | ep) == null) then
+          (if $bound then "REFUSE\t" + $sf + ": dispatch " + $tid + " carries a spawn-ledger ts that is not ISO 8601 (" + ([$R[] | .ts // "" | tostring] | join(" ")) + ") in " + $ls + "; its invoked_at cannot be bounded" else empty end)
+        else ([ $R[] | {t: .ts, e: (.ts | ep)} ] | min_by(.e)) as $s
+          | ($s.e - $ae) as $d
+          | if ($s.e - $ae) > $tol then
+              verdict($bound) + "\t" + $sf + " claims invoked_at " + $at + ", " + ($d | tostring) + " s before its dispatch " + $tid + " was recorded at " + $s.t + " in " + $ls + " (past BACKDATE_TOL_S=" + ($tol | tostring) + "); a shard is stamped when its adversary starts, never with a typed time or an earlier dispatch stamp" + remedy($b) + legacy($bound)
+            else empty end
+        end ),
+      ( if ($WR | length) == 0 then empty
+        elif any($WR[]; (.ts | ep) == null) then
+          (if $bound then "REFUSE\t" + $sf + ": a write-ledger row of dispatch " + $tid + " on it carries a ts that is not ISO 8601 in " + $lw + "; its invoked_at cannot be bounded" else empty end)
+        else ([ $WR[] | {t: .ts, e: (.ts | ep)} ] | max_by(.e)) as $w
+          | ($ae - $w.e) as $d
+          | if ($ae - $w.e) > $tol then
+              verdict($bound) + "\t" + $sf + " claims invoked_at " + $at + ", " + ($d | tostring) + " s after its dispatch " + $tid + " last wrote it at " + $w.t + " in " + $lw + " (past BACKDATE_TOL_S=" + ($tol | tostring) + "); a shard is stamped when its adversary starts, never after its own last write" + remedy($b) + legacy($bound)
+            else empty end
+        end )
+      end' > "$T/bres" 2> "$T/bres.err" \
+    || refuse "the invoked_at bound over $REC_SPAWNS and $REC_WRITES did not run: $(head -1 "$T/bres.err")"
+  while IFS="$(printf '\t')" read -r _bv _bm; do
+    case "$_bv" in
+      REFUSE) collect "$_bm" ;;
+      WARN) printf 'WARN: %s\n' "$_bm" >&2 ;;
+    esac
+  done < "$T/bres"
+fi
 
 phase_barrier
 if grep -q 'SKILL_INVOCATION_PROVENANCE' "$T/body"; then

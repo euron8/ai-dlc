@@ -7,5 +7,7 @@
 !core/scripts/partition-document.sh
 core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-adversarial-convergence.sh
+# The merge reads BACKDATE_TOL_S from this sibling on every run (its invoked_at bound).
+core/scripts/validate-artifact-budget.sh
 # The merge derives each shard dispatch id from the write ledger this hook appends; every shard the fixture writes drives it.
 core/hooks/ai-dlc-gate-remediation-guard.sh

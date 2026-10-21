@@ -2507,7 +2507,7 @@ w="$(k3_world k3-moved "$K3_POST")" && k3_document_pass "$w" "$K3S" && printf 'm
 # copy (what would run TODAY) is the real one. Control: the same world with the real copy tracked.
 K3_STUB="$K3W/stub-scripts"; K3_REAL="$K3W/real-scripts"; mkdir -p "$K3_STUB" "$K3_REAL"
 cp "$K3S"/validate-adversarial-convergence.sh "$K3S"/validate-steering-budget.sh "$K3S"/partition-document.sh \
-   "$K3S"/partition-subject.sh "$K3S"/merge-adversarial-shards.sh "$K3_REAL/" && cp "$K3_REAL"/*.sh "$K3_STUB/" \
+   "$K3S"/partition-subject.sh "$K3S"/merge-adversarial-shards.sh "$K3S"/validate-artifact-budget.sh "$K3_REAL/" && cp "$K3_REAL"/*.sh "$K3_STUB/" \
   && awk '{ gsub(/scope-ref/, "scope-XXX"); print }' "$K3_REAL/partition-document.sh" > "$K3_STUB/partition-document.sh" || K3_BUILT=0
 # The pin only matters where a MAP is asked -- a manifest pass -- so both worlds carry k3-wrongset's
 # pass: the real copy in force FAILs it (count right, set wrong), the stub in force is PENDING.

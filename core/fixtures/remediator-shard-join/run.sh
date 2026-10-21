@@ -482,6 +482,54 @@ p_gaploc "$JOIN" && ok "EC35:--escalations, a gap-fill edit's location is REPORT
 p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
   || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"
 
+# EC39 (BL-734): a closing entry appended to a joined record -- the BADSIB refusal line, its two accepted
+# near-misses, then the writer paragraphs of both role files, then the mutant that scores the first.
+RP="$(dirname "${ROLE:-/nonexistent/x}")/pm-escalated.md"
+if [ -z "${ROLE:-}" ] || [ ! -f "$RP" ]; then
+  bad "EC39: FIXTURE BROKEN -- remediator.md or pm-escalated.md not found beside the role directory"
+else
+  p_bl734 "$JOIN" && ok "EC39a: --escalations over a joined record with an appended closing entry -- 'siblings: checked' is REFUSED with the BADSIB line itself, rc 2; the field then a blank line then a fence, and a fence directly under it, both rc 0" \
+    || bad "EC39a: the appended closing entry's siblings: shapes were not judged as specified (rc=$RC): $(cat "$JO")"
+  p_bl734prose "$ROLE" "$RP" && ok "EC39b: each role file's writer paragraph carries join-remediator-shards.sh --escalations with --sprint, remediator.md before --mark-repair and after the SPEC re-render, and the 'no procedure runs' negation is gone" \
+    || bad "EC39b: a writer paragraph lacks the --escalations instruction (with --sprint), it precedes --mark-repair, or the old negation remains"
+  # self-probe of the prose arm, both directions, on copies: removed, moved to an unrelated section, placed AFTER the mark, negated
+  PD="$(mktemp -d "$WORK/ec39.XXXXXX")" || exit 2
+  sed 's/join-remediator-shards.sh --escalations <record> --sprint/join-remediator-shards.sh --sources <record> --sprint/' "$RP" > "$PD/pm.removed.md"
+  perl -0pe 's/run\n`scripts\/ai-dlc\/join-remediator-shards/never run `scripts\/ai-dlc\/join-remediator-shards/' "$RP" > "$PD/pm.negated.md"
+  { sed 's/join-remediator-shards.sh --escalations <record> --sprint/join-remediator-shards.sh --sources <record> --sprint/' "$ROLE"; printf '\n## Unrelated\n\nbefore `--mark-repair`, run `scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>`\n'; } > "$PD/rem.moved.md"
+  perl -0pe 's/before `--mark-repair`, run\n/after `--mark-repair`, run\n/' "$ROLE" > "$PD/rem.after.md"
+  perl -0pe 's/before `--mark-repair`, run\n/before `--mark-repair`, never run\n/' "$ROLE" > "$PD/rem.negated.md"
+  if cmp -s "$RP" "$PD/pm.removed.md" || cmp -s "$RP" "$PD/pm.negated.md" || cmp -s "$ROLE" "$PD/rem.moved.md" || cmp -s "$ROLE" "$PD/rem.after.md" || cmp -s "$ROLE" "$PD/rem.negated.md"; then
+    bad "EC39c: FIXTURE STALE -- a prose self-probe copy equals the real file; re-anchor it, never relax the assertion"
+  else
+    c1=ok; p_bl734prose "$ROLE" "$PD/pm.removed.md" && c1=alive
+    c2=ok; p_bl734prose "$PD/rem.moved.md" "$RP" && c2=alive
+    c3=ok; p_bl734prose "$PD/rem.after.md" "$RP" && c3=alive
+    c4=ok; p_bl734prose "$PD/rem.negated.md" "$RP" && c4=alive
+    c5=ok; p_bl734prose "$ROLE" "$PD/pm.negated.md" && c5=alive
+    if [ "$c1" = ok ] && [ "$c2" = ok ] && [ "$c3" = ok ] && [ "$c4" = ok ] && [ "$c5" = ok ]; then
+      ok "EC39c: the prose arm FAILS for the instruction removed from pm-escalated.md, moved to an unrelated section, placed after --mark-repair, and negated in either file"
+    else
+      bad "EC39c: the prose arm passed a broken role file (removed=$c1 moved=$c2 after=$c3 negated-rem=$c4 negated-pm=$c5)"
+    fi
+  fi
+  # EC39m: the record-mode call filters ^BADSIB out of contract_check 1 -> EC39a must die. Line 1172 stays (EC15/CP1 share it).
+  EM="$(mktemp -d "$WORK/ec39m.XXXXXX")" || exit 2
+  cp "$(dirname "$JOIN")"/*.sh "$EM/" \
+    || { echo "FIXTURE BROKEN: EC39m could not copy the join's sibling scripts into $EM" >&2; exit 2; }
+  sed 's/^  contract_refusals 1 "\$(contract_check 1 "\$1")"$/  contract_refusals 1 "$(contract_check 1 "$1" | grep -v "^BADSIB")"/' "$JOIN" > "$EM/join-remediator-shards.sh" \
+    || { echo "FIXTURE BROKEN: EC39m could not write the mutated join into $EM" >&2; exit 2; }
+  if cmp -s "$JOIN" "$EM/join-remediator-shards.sh"; then
+    bad "EC39m: FIXTURE STALE -- the record-mode mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+  elif [ ! -f "$EM/validate-adversarial-convergence.sh" ] || ! p_bl734 "$JOIN"; then
+    bad "EC39m: the unmutated control did not pass or the sibling set is absent in the copy"
+  elif p_bl734 "$EM/join-remediator-shards.sh"; then
+    bad "EC39m: SURVIVED -- EC39a holds against a record-mode call that never classifies siblings"
+  else
+    ok "EC39m the record-mode BADSIB classification skipped: KILLED by [EC39a]"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2

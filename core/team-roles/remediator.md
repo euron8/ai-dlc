@@ -245,8 +245,11 @@ entry to a spec's `.memlog.md`, re-render `SPEC.md` from it and append its
 `- (event) Render <pass>: re-derived from memlog through <last decision>` line BEFORE your
 `--mark-repair`, never after it: the lead's beat ends at that call, and no separate render agent
 is dispatched. The unsharded `shard: none (serial-document)` remediator is held to the same
-order by this sentence alone: no procedure runs `join-remediator-shards.sh --escalations` over
-its record, so nothing refuses its stale SPEC. A part or shard remediator writes no `repair-complete:` line and closes with
+order, and its record is judged by the same check. After your last entry and the re-render, and
+before `--mark-repair`, run
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>`, fix every entry it
+names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line, then mark;
+never hand back a record it refuses. A part or shard remediator writes no `repair-complete:` line and closes with
 `--mark` instead (item 1, **Close your part with `--mark`**). Its `seat-complete:` line ends
 nothing in the joined record: the lead's beat on that record keys on `repair-complete: serial`
 alone, and the join reads a `seat-complete:` line as neither a block terminator nor a sha

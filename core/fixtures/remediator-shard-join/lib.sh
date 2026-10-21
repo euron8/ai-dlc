@@ -1706,3 +1706,43 @@ p_derivsec() { # <hook> -- a part whose fence names the SECTION FILE: refused at
   gate_deriv "$w" "$SLOT" --all
   [ "$DV_RC" -eq 1 ] && has "$DV_OUT" "FAIL: 2 stale or unrunnable derivation(s) of 3 checked"
 }
+# ---- A CLOSING ENTRY APPENDED TO A JOINED RECORD (BL-734): the writer runs --escalations before handing back.
+# One joined record (a shard escalation, the serial triple) plus ONE appended serial `repaired` closing entry
+# carrying `- closes:`. The three siblings: shapes differ and nothing else: `checked` (refused), the field then a
+# blank line then a fence (the shape graph's record carried; accepted), a fence directly under it (accepted).
+BL734_F=_bmad-output/planning-artifacts/s305/stories/a.md
+BL734_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-3 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: s.md\n- advisor: called\n- derivations: replayed 1\n\n'
+BL734_PRE="### 08.md F-3 closing (MAJOR)\n- disposition: repaired\n- edit: ${BL734_F}:4\n- closes: 01.md F-3 — MAJOR\n"
+BL734_FENCE="\`\`\`text\n\$ grep -rn -F 'old' ${BL734_F}\n\$ grep -c -F 'new' ${BL734_F}\n1\n\`\`\`\n"
+BL734_REFUSED="REFUSED: stories-repair-p1.md: the 08.md F-3 closing (MAJOR) entry is repaired with an edit and its 'siblings:' field is none of its four forms; write '- siblings:' then a \`\`\`text fence holding the '\$ grep -rn -F' over your shard's own files and the control '\$ grep -c -F' with its count, or 'n/a (section shard; re-checked by the serial remediator after assembly)', 'n/a (insertion)' or 'n/a (deletion)' (team-roles/remediator.md, \"Re-check every sibling of the text you replaced\")"
+p_bl734() { # <join> -> (a) `- siblings: checked` rc 2 and the BADSIB REFUSED: line itself; (b) `- siblings:`, blank line,
+  # fence (the refuted shape) rc 0; (c) the fence directly under it rc 0; both accepted worlds print no REFUSED
+  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings: checked\n"
+  [ "$RC" -eq 2 ] && grep -qxF -- "$BL734_REFUSED" "$JO" || return 1
+  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings:\n\n${BL734_FENCE}"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
+  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings:\n${BL734_FENCE}"
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED"
+}
+bl734_para() { # <file> <key> -> the blank-line-delimited paragraph holding <key>, newlines folded to spaces
+  awk -v k="$2" 'BEGIN { RS = "" } index($0, k) { gsub(/\n/, " "); print; exit }' "$1" | tr -s ' '
+}
+p_bl734prose() { # <remediator.md> <pm-escalated.md> -> each writer paragraph carries the imperative `run `(scripts/ai-dlc/)?
+  # join-remediator-shards.sh --escalations ... --sprint`, not negated; in remediator.md it is introduced as
+  # "before `--mark-repair`, run" and sits after the SPEC re-render sentence; the old "no procedure runs" negation is gone
+  local rp pp neg='(never run|do not run|no procedure)[^.]*join-remediator-shards' pre
+  local re_pm='run `(scripts/ai-dlc/)?join-remediator-shards\.sh --escalations [^`]*--sprint'
+  local re_rem='before `--mark-repair`, run `(scripts/ai-dlc/)?join-remediator-shards\.sh --escalations [^`]*--sprint'
+  local re_render='re-render `SPEC\.md` from it'
+  rp="$(bl734_para "$1" "your LAST act is ONE Bash call")"; pp="$(bl734_para "$2" "APPEND to that joined repair record")"
+  [ -n "$rp" ] && [ -n "$pp" ] || return 1
+  [[ $pp =~ $re_pm ]] || return 1
+  [[ $pp =~ $neg ]] && return 1
+  [[ $rp =~ $re_rem ]] || return 1
+  pre="${rp%%"${BASH_REMATCH[0]}"*}"
+  [[ $rp =~ $neg ]] && return 1
+  [[ $rp =~ $re_render ]] || return 1
+  local a="${rp%%"${BASH_REMATCH[0]}"*}"
+  [ "${#a}" -lt "${#pre}" ] || return 1
+  ! grep -qF "no procedure runs" "$1"
+}
