@@ -388,7 +388,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner
    only when the owner's shard carries the identical cited set, and accepts any other. The cross
    agent's brief therefore tells it to run `scripts/ai-dlc/partition-document.sh --cross-owner <K>
-   <its cited ordinals>` before it records a cross finding, and, when the printed group is not its
+   <ordinal,ordinal,...>` (its cited ordinals, comma-joined) before it records a cross finding, and, when the printed group is not its
    own, to record the finding only if the owner's focus pairs would not surface it and otherwise
    to name it under `## Cross-references`, which is not a finding.
    **When the subject is the requirements subject** (`steps/requirements.md` section 5: the

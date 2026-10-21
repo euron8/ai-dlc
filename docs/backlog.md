@@ -511,18 +511,6 @@ Direction, for the owner: test the backtick under the existing quote scan, so it
 
 verify: sh set -uo pipefail; V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] && command -v git >/dev/null || exit 9; R=$PWD; w=$(mktemp -d) || exit 9; mkdir -p "$w/p/.claude" "$w/p/sub" || exit 9; git -C "$w/p" init -q . || exit 9; printf 'a`b\n' > "$w/p/d.txt"; printf '# x\n\n```derived\n$ git rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/c.md"; printf '# x\n\n```derived\n$ grep -c -F '"'"'a`b'"'"' d.txt\n1\n```\n' > "$w/p/q.md"; printf '# x\n\n```derived\n$ git -C sub rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/g.md"; v() { ( cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" bash "$R/$V" "$1" >/dev/null 2>&1 ); }; v c.md || exit 9; v q.md || exit 1; v g.md || exit 2; exit 0
 
-## BL-729 — `stamp-story-provenance.sh --series` refuses the `<stem>-adversarial-p` prefix that Check 24 takes, though its header says it resolves the series "the ONE way Check 24 already does"
-
-**NOTE.** Raised from graph's s319 story-provenance stamping (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. It is tiered NOTE because the refusal is loud and costs one retry. The cost is that the error points the wrong way.
-
-`core/scripts/stamp-story-provenance.sh:77-78` says `--series <prefix>` names the terminal pass "the ONE way Check 24 already does (--series <path-prefix>)". Check 24 is driven with a prefix ending in `-adversarial-p` (`core/fixtures/check-24-adversarial-convergence/run.sh:195`, `core/fixtures/adversarial-shard-merge/lib.sh:548`). The resolver's glob at `:83`, `"${SERIES}"*p[0-9]*.md`, needs a `p` AFTER the prefix, so that prefix matches nothing. The script exits 1 with `matched no <prefix>...p<N>.md pass file`, a message that suggests the `p` form is the right one. Only `<stem>-adversarial-` resolves.
-
-Measured on a three-pass mktemp series: `…/s-adversarial-p` matches none, while the control `…/s-adversarial-` reaches p3. The step files that teach the call (`gate-validation.md:1430-1431`, `stories-test-strategy.md:579-580`) say only "the path-prefix of … the stories-adversarial pass series".
-
-Owed: accept both prefixes (add the glob `"${SERIES}"[0-9]*.md`), or state the exact form in the usage line, the error and both step files.
-
-verify: sh S=core/scripts/stamp-story-provenance.sh; [ -f "$S" ] || exit 9; T="$(mktemp -d)" || exit 9; for n in 1 2 3; do printf 'x\n' > "$T/s-adversarial-p$n.md"; done; printf 's\n' > "$T/st.md"; [ "$(ls "$T" | grep -c '^s-adversarial-p[0-9]*\.md$')" = 3 ] || exit 9; o="$(bash "$S" --series "$T/s-adversarial-p" --check "$T/st.md" 2>&1 </dev/null)"; case "$o" in *s-adversarial-p3.md*) exit 0 ;; *"matched no"*) exit 1 ;; *) exit 9 ;; esac
-
 ## BL-730 — the recover gate's touchpoint-R stage enforces on a race-chosen subset of a parallel dispatch: each call of a many-call message waits for its OWN line, the early calls' nets expire uncounted, and only the tail is refused
 
 **DEFECT.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the stories-p2 history line: "shards 18 and 19 were REFUSED by the touchpoint-R hook") by graph-watch, batch 238; measured on graph transcript `a367e62c` and filed by the batch-238 filing hand.
@@ -536,35 +524,6 @@ Touchpoint R was owed, and it held 2 of 19 calls. This is BL-545's incident shap
 Direction, for the owner: judge a call as SEEN once any later sibling of the same `message.id` is on disk, since content streams in order, or carry one decision across all of a message's calls. Either way, fail-open on an unreadable transcript stays as ruled.
 
 verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net. A behavioural receipt would pay that net on every scoring and would fix a mechanism the owner has not chosen.
-
-## BL-731 — the cross-agent brief teaches `partition-document.sh --cross-owner <K> <its cited ordinals>` without the comma-joined form, and the script reads `2, 7` as a non-integer ordinal
-
-**NOTE.** Raised from graph s319 cross-shard agents' calls (`_bmad-output/pipeline-snapshot.md` at `ded7e6a18`, and the lead transcript) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
-
-`core/scripts/partition-document.sh:19` and `:381` take the cited ordinals as ONE comma-joined argument (`<ordinal,ordinal,...>`), and the usage error states that form. The text a cross agent is briefed from does not: `core/skills/ai-dlc/steps/_gate-procedures.md:384-385` reads `--cross-owner <K>` / `<its cited ordinals>`, and `core/skills/ai-dlc/rule-bodies/rule-28.md:119-120` reads `<K> <ordinals>`.
-
-Measured:
-- `--cross-owner 8 2,7` prints `3`.
-- `8 2 7` exits 64 with the usage line, which is actionable.
-- `8 "2, 7"` exits 64 with `cited ordinal " 7" is not an integer in 1..8`, which names the space and not the format.
-
-Owed: the brief and rule-28 spell out `<ordinal,ordinal,...>`, or the script trims blanks around each comma-separated ordinal. Either fix closes the receipt.
-
-verify: sh P=core/scripts/partition-document.sh; G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$P" ] && [ -f "$G" ] || exit 9; [ "$(bash "$P" --cross-owner 8 2,7 2>/dev/null </dev/null)" = 3 ] || exit 9; [ "$(bash "$P" --cross-owner 8 "2, 7" 2>/dev/null </dev/null)" = 3 ] && exit 0; j="$(tr '\n' ' ' < "$G" | tr -s ' ')"; case "$j" in *"--cross-owner <K> <ordinal,ordinal"*|*"--cross-owner <K> <its cited ordinals, comma-joined"*) exit 0 ;; esac; exit 1
-
-## BL-732 — `audit-party-wave-barrier.sh` keys a round member on the first `party-mode/` path a prompt names, so a party-REPAIR remediator fan-out that cites seat files reads as the party round `s<N>/stories`
-
-**NOTE.** Raised from graph transcript `a367e62c` (s319) by graph-watch, batch 238; measured and filed by the batch-238 filing hand. Related: BL-695, which built the detector.
-
-`scripts/audit-party-wave-barrier.sh:35-40` defines a MEMBER as any Agent/Task call whose `input.prompt` names a path `party-mode/<dir>/<file>.md`, and takes the first such path as its identity. `:224` scans the prompt for that path, and `rkey` at `:254-258` strips the seat and ordinal. The detector reads neither `subagent_type` nor whether the path is the agent's WRITE target.
-
-In graph's `a367e62c`, the 19 Agent calls that name a party-mode path are all `subagent_type: remediator`, described "Party repair shard 01" to "19". Each writes `_bmad-output/planning-artifacts/s319/shards/stories-party-repair-p1/<N>.md` and cites `party-mode/s319/stories-sm-<N>.md` as its INPUT ("Your findings: every finding in ..."). `--trace` over that transcript prints 19 `round=s319/stories DELIVERED` lines and `STAT rounds=1 batches=1`, so the detector judges a repair fan-out as a party round's waves. Control: the same jq over the same transcript counts 19 remediator calls and 0 seat-typed member calls.
-
-The consequence is a false finding, or a false acquittal, attributed to a party round. The detector is a distribution-only audit and gates nothing.
-
-Owed: a member is a call whose party-mode path is the file it writes, or whose role is a party seat, not any call whose prompt cites such a path. The key is the owner's to choose. The receipt's seed, rewritten as a seat, still counts a round, so the receipt does not close merely because the detector stopped seeing rounds.
-
-verify: sh D=scripts/audit-party-wave-barrier.sh; [ -f "$D" ] || exit 9; T="$(mktemp -d)"; J="$T/t.jsonl"; for i in 1 2; do printf "%s\n" "{\"type\":\"assistant\",\"timestamp\":\"2026-01-01T10:00:0${i}.000Z\",\"message\":{\"id\":\"m$i\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tu$i\",\"name\":\"Agent\",\"input\":{\"subagent_type\":\"remediator\",\"description\":\"Party repair shard 0$i\",\"prompt\":\"part path: _bmad-output/planning-artifacts/s900/shards/stories-party-repair-p1/$i.md\\nYour findings: every finding in _bmad-output/party-mode/s900/stories-sm-0$i.md\",\"run_in_background\":true}}]}}" "{\"type\":\"user\",\"timestamp\":\"2026-01-01T10:00:0${i}.500Z\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"tu$i\",\"type\":\"tool_result\",\"content\":[{\"type\":\"text\",\"text\":\"Async agent launched successfully.\\nagentId: ag$i\"}]}]},\"toolUseResult\":{\"isAsync\":true,\"status\":\"async_launched\",\"agentId\":\"ag$i\"}}" >> "$J"; done; S="$(bash "$D" --trace "$J" 2>&1)"; grep -q "self-probe: ok" <<<"$S" || exit 9; grep -q "STAT rounds=" <<<"$S" || exit 9; ! grep -q "STAT rounds=[1-9]" <<<"$S"
 
 ## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
 

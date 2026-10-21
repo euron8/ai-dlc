@@ -548,6 +548,19 @@ p_cross_owner() { # the lowest g holding the two smallest cited ordinals; under 
     o="$(bash "$1" --cross-owner 8 "$c" 2>/dev/null)"; rc=$?
     [ "$rc" -eq 64 ] && [ -z "$o" ] || return 1
   done
+  # Blanks around a comma-separated element are trimmed (BL-731): the same group as 2,7.
+  for c in "2, 7" " 2 ,7 " "7,	2"; do
+    o="$(bash "$1" --cross-owner 8 "$c" 2>/dev/null)"; rc=$?
+    [ "$rc" -eq 0 ] && [ "$o" = "$(bash "$1" --cross-owner 8 2,7 2>/dev/null)" ] && [ "$o" = 3 ] || return 1
+  done
+  # An empty element and an element with an interior blank are refused; the stderr names the
+  # element "2 7", which a whole-string strip (reading 27,9) would not.
+  for c in "2,,7" "2,x"; do
+    o="$(bash "$1" --cross-owner 8 "$c" 2>/dev/null)"; rc=$?
+    [ "$rc" -eq 64 ] && [ -z "$o" ] || return 1
+  done
+  o="$(bash "$1" --cross-owner 30 "2 7,9" 2>&1 >/dev/null)"; rc=$?
+  [ "$rc" -eq 64 ] && case "$o" in *'"2 7"'*) : ;; *) return 1 ;; esac
 }
 
 P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap cross_cover cross_refuse cross_owner"
@@ -713,6 +726,10 @@ mutant "MX26 the cross owner taken as the HIGHEST g" "cross_owner" \
   '    for (g = 1; g <= G; g++)
       if ((QA[g] == q1' '    for (g = G; g >= 1; g--)
       if ((QA[g] == q1'
+
+mutant "MX27 the per-element blank trim removed" "cross_owner" \
+  '      gsub(/^[ \t]+|[ \t]+$/, "", C[i])
+' ''
 
 echo
 if [ "$fails" -eq 0 ]; then echo "document-partition: PASS"; exit 0; fi

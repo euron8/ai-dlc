@@ -26,6 +26,12 @@
 #   (q') (q) with that record flagged isMeta (Stop-hook feedback)  -> rc 1: isMeta still ends a turn
 #   (r) a sidechain Agent call naming a round path after a delivery -> rc 1, one FINDING
 #   (s) two rejection caps, 5 then 3                               -> rc 1, the lower 3 wins, idle 1
+#   (t) a delivery answered only by non-seat calls citing round paths -> rc 1, one FINDING, 7 agents
+#   (BL-732) graph a367e62c's shape: 2 remediator calls citing party-mode/s900/stories-sm-0N.md as INPUT
+#       -> STAT rounds=0; its twin, one property apart (subagent_type sm), -> rounds=1; an adversary or
+#       general-purpose agent citing the same files -> rounds=0; graph's real seat prompt (`Deliverable:`,
+#       no write verb) -> rounds=1; an architect cross seat citing stories-dev-01.md before its own file
+#       -> rounds=1
 #   (c') (c) with an env line of 4 as well                         -> the rejection's 2 wins
 #   (b') (b) with a cap written only as assistant prose            -> the prose value is not read
 #   (a+b) a two-transcript list with the firing one SECOND -> rc 1, given=2 scanned=2
@@ -56,6 +62,10 @@
 #   MF  the isSidechain filter removed             -> probe r; -np (r) is quiet
 #   MD  error results dropped by the prefilter     -> probe o; -np (o) is quiet
 #   MC  a compaction summary ends a turn again     -> probe q; -np (q) fires
+#   MK  the member key reverted to "first cited path, any subagent_type" -> probe t; -np (t) is quiet,
+#       and the BL-732 remediator, adversary and general-purpose seeds read rounds=1
+#   MX  the member key is the FIRST cited path's seat only -> (BL-732 cross) reads rounds=0
+#       (MC is taken by the compaction-summary mutant above, so this one is MX)
 #
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
@@ -84,7 +94,7 @@ hasnt() { if grep -qF -- "$3" <<<"$2"; then bad "$1 (present: $3)"; else ok "$1"
 echo "party-wave-barrier:"
 
 # --- seeds ---------------------------------------------------------------------------------------
-CASES="a b c d e f g h i j k l m n o p q r s"
+CASES="a b c d e f g h i j k l m n o p q r s t"
 T="$WORK/t"; mkdir -p "$T" || exit 2
 for c in $CASES; do
   bash "$DET" --seed "$c" "$T/$c.jsonl" || { echo "FIXTURE ERROR: the detector could not write seed $c" >&2; exit 2; }
@@ -106,6 +116,24 @@ bash "$DET" --seed a "$T/a-env.jsonl" || exit 2
 head -n 2 "$T/a-env.jsonl" > "$T/cenv.jsonl" && cat "$T/c.jsonl" >> "$T/cenv.jsonl" || exit 2
 grep -qF 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4"' "$T/cenv.jsonl" || { echo "FIXTURE ERROR: seed (c') carries no env line of 4" >&2; exit 2; }
 : > "$T/empty.jsonl"
+# BL-732 seeds: two launched Agent calls, each naming party-mode/s900/stories-<seat>-0N.md.
+# bl732_seed <out> <subagent_type> <prompt before the path> <seat> [<text after the path>]
+bl732_seed() {
+  local i; : > "$1" || return 1
+  for i in 1 2; do
+    printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T10:00:0'"$i"'.000Z","message":{"id":"m'"$i"'","role":"assistant","content":[{"type":"tool_use","id":"tu'"$i"'","name":"Agent","input":{"subagent_type":"'"$2"'","description":"call 0'"$i"'","prompt":"'"$3"'_bmad-output/party-mode/s900/stories-'"$4"'-0'"$i"'.md'"${5:-}"'","run_in_background":true}}]}}' \
+      '{"type":"user","timestamp":"2026-01-01T10:00:0'"$i"'.500Z","message":{"role":"user","content":[{"tool_use_id":"tu'"$i"'","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully.\nagentId: ag'"$i"'"}]}]},"toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"ag'"$i"'"}}' >> "$1" || return 1
+  done
+}
+bl732_seed "$T/rem.jsonl" remediator 'part path: _bmad-output/planning-artifacts/s900/shards/stories-party-repair-p1/x.md\nYour findings: every finding in ' sm || exit 2
+sed 's|"subagent_type":"remediator"|"subagent_type":"sm"|' "$T/rem.jsonl" > "$T/remseat.jsonl"
+cmp -s "$T/rem.jsonl" "$T/remseat.jsonl" && { echo "FIXTURE ERROR: seed (BL-732 seat twin) did not apply" >&2; exit 2; }
+bl732_seed "$T/adv.jsonl" adversary 'Your findings: every finding in ' sm || exit 2
+bl732_seed "$T/deliv.jsonl" architect 'Deliverable: `' architect '`' || exit 2
+bl732_seed "$T/gp.jsonl" general-purpose 'Summarise every finding in ' sm || exit 2
+# A cross seat whose FIRST cited party-mode path is another seat's file: it is still its own seat.
+bl732_seed "$T/cross.jsonl" architect 'Read _bmad-output/party-mode/s900/stories-dev-01.md first.\nWrite your findings file at: ' architect-cross || exit 2
+grep -qF 'stories-dev-01.md first.' "$T/cross.jsonl" && grep -qF 'stories-architect-cross-02.md' "$T/cross.jsonl" || { echo "FIXTURE ERROR: seed (BL-732 cross) lost its shape" >&2; exit 2; }
 
 # R_OUT, R_ERR, R_RC: run <detector> <args...>
 run() { local d="$1"; shift; R_OUT="$(bash "$d" "$@" 2>"$WORK/err")"; R_RC=$?; R_ERR="$(cat "$WORK/err")"; }
@@ -114,7 +142,7 @@ nunk()  { local n; n="$(grep -c '^UNKNOWN-CAP ' <<<"$R_OUT")" || n=0; printf '%s
 rfu() { printf '%s/%s/%s' "$R_RC" "$(nfind)" "$(nunk)"; }
 
 # --- control: the unmutated detector -------------------------------------------------------------
-PROBE_OK='self-probe: ok (19 cases)'
+PROBE_OK='self-probe: ok (20 cases)'
 run "$DET" "$T/a.jsonl"
 if ! grep -qF "$PROBE_OK" <<<"$R_ERR"; then
   echo "FIXTURE BROKEN: the unmutated detector's self-probe did not pass; no verdict below would mean anything" >&2
@@ -213,6 +241,23 @@ run "$DET" --trace "$T/s.jsonl"
 eq  "s: two rejection caps fire" "$(rfu)" "1/1/0"
 has "s: the lower cap 3 is the one judged" "$R_OUT" "FINDING s.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:01.000Z running=2 cap=3 idle=1"
 has "s: both values are named" "$R_ERR" "cap=3 capsrc=rejection capvals=3 5"
+run "$DET" --trace "$T/t.jsonl"
+eq  "t: non-seat calls citing round paths answer nothing" "$(rfu)" "1/1/0"
+has "t: the finding is at Dev 01's unanswered delivery" "$R_OUT" "running=1 cap=4 idle=3 gap=2101s unrefilled=1"
+has "t: they are RUNNING, so the straggler's delivery reads 4 of 4" "$R_OUT" "DELIVERED exit=2026-01-01T10:40:00.000Z running=4 cap=4 REFILLED"
+has "t: all seven calls are parsed" "$R_ERR" "agents=7 cap=4"
+
+# BL-732: a member is a call whose subagent_type is the seat of its cited party-mode path. Every cell
+# below is presence-shaped (a STAT line with a stated count must APPEAR), and each rounds=0 cell has
+# its rounds=1 twin in the same run.
+# bl732_rounds <detector> <seed>: prints the STAT rounds count, or NONE when no STAT line was printed.
+bl732_rounds() { run "$1" --trace "$2"; sed -n 's/.* STAT rounds=\([0-9]*\) .*/\1/p' <<<"$R_ERR" | head -n 1 | grep . || echo NONE; }
+eq "BL-732: a remediator citing seat files as INPUT is no member (rounds=0)" "$(bl732_rounds "$DET" "$T/rem.jsonl")" 0
+eq "BL-732: its seat twin, subagent_type sm, is a round (rounds=1)" "$(bl732_rounds "$DET" "$T/remseat.jsonl")" 1
+eq "BL-732: an adversary citing seat files is no member (rounds=0)" "$(bl732_rounds "$DET" "$T/adv.jsonl")" 0
+eq "BL-732: graph's real seat prompt, Deliverable with no write verb, is a round (rounds=1)" "$(bl732_rounds "$DET" "$T/deliv.jsonl")" 1
+eq "BL-732: a general-purpose agent citing seat files is no member (rounds=0)" "$(bl732_rounds "$DET" "$T/gp.jsonl")" 0
+eq "BL-732: a cross seat citing another seat's file first is a round (rounds=1)" "$(bl732_rounds "$DET" "$T/cross.jsonl")" 1
 
 run "$DET" "$T/bprose.jsonl"
 eq  "b': a cap written only in assistant prose is not read (still quiet)" "$R_RC/$(nfind)" "0/0"
@@ -302,6 +347,24 @@ probe_killed MD o "0/0/0" "-" \
   1 '"is_error": ?true' 'Concurrent subagent limit'
 probe_killed MC q "1/1/0" "-" \
   1 '(if .isCompactSummary != true then ["T", $e, $ts] else empty end),' '["T", $e, $ts],'
+
+# MK: the member key reverted to the first cited path whatever the subagent_type (the BL-732 defect).
+MK_O='      mp = memberpath($7, $6)'; MK_N='      mp = $7; sub(/ .*/, "", mp)'
+probe_killed MK t "0/0/0" "-" 1 "$MK_O" "$MK_N"
+if P="$(mut MK-arm 1 "$MK_O" "$MK_N" 1 "$NP_O" "$NP_N")"; then
+  eq "MK (key reverted): the BL-732 remediator seed reads a round" "$(bl732_rounds "$P" "$T/rem.jsonl")" 1
+  eq "MK (key reverted): the adversary seed reads a round" "$(bl732_rounds "$P" "$T/adv.jsonl")" 1
+  eq "MK (key reverted): the general-purpose seed reads a round" "$(bl732_rounds "$P" "$T/gp.jsonl")" 1
+else bad "MK-arm: DID NOT APPLY"; fi
+
+# MX: the member key is the seat of the FIRST cited path only (the key before the cross-citation fold).
+# Every probe seat cites one path, so its self-probe passes and only the cross cell can kill it.
+if P="$(mut MX 1 "$MK_O" '      mp = $7; sub(/ .*/, "", mp); if (!seatmember(mp, $6)) mp = ""')"; then
+  run "$P" "$T/a.jsonl"
+  has "MX: the self-probe still passes" "$R_ERR" "$PROBE_OK"
+  eq "MX (first path's seat only): the cross seat citing stories-dev-01.md first reads no round" "$(bl732_rounds "$P" "$T/cross.jsonl")" 0
+  eq "MX control: the seat twin still reads a round" "$(bl732_rounds "$P" "$T/remseat.jsonl")" 1
+else bad "MX: DID NOT APPLY"; fi
 
 if P="$(mut M4 1 '[ "${#FILES[@]}" -gt 0 ] || usage "no transcript given"' '[ "${#FILES[@]}" -gt 0 ] || exit 0')"; then
   run "$P"
