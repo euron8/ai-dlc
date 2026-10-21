@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.896.0] - 2026-10-20
+
+Batch 238, lead ai-dlc-1a. It closes BL-709, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. It changes `core/git-hooks/pre-push`, the consumer's installed pre-push hook, which a consumer runs from step 3 of the delivering pull, byte-identically with this repo's `.githooks/pre-push` (I66).
+
+**This release's own push re-runs every declared fixture whose key did not already carry the runner.** Each such key gains the runner row, so no key recorded before it matches, and each runs once under the new key; later pushes skip as before. The nine that declare `core/scripts/` whole (adversarial-citation, escalation-citation, h2-attest-scripts-dir, procsub-staged-refusal and its b and c drivers, shipped-rule-version-floor, taught-schema, validator-path-resolution) already keyed on the runner through that directory, so the rule adds nothing to their keys. A consumer's first push after the pull that delivers it does the same.
+
+### BL-709 — a runner change re-keys every declared fixture, not only the seven that name the runner
+
+The verdict store already refused a pass taken under an older `hermetic-run.sh`, but the per-fixture key moved only for the declared fixtures whose `inputs.decl` named the runner, so a runner change gated on those and skipped every other declared fixture on its old key.
+
+- `readset_decl_keys` gains one awk rule: a `.now` path equal to `core/scripts/hermetic-run.sh` or `scripts/ai-dlc/hermetic-run.sh` emits a key row for every declared fixture, carrying the runner's whole-file manifest hash. A runner path absent from `.now` is not keyed, exactly as for any declared file. The comments over `readset_vs_input` and the verdict-store block say so in both hooks, and `hermetic-run.sh` itself is unchanged, because it sources this span from the hook.
+- The whole-file hash, not the `HR_SANDBOX` span, is deliberate: any runner byte moves the key before the store is consulted.
+- `readset-skip` gains the `rchg` cell in its stale-declared world: the undeclared runner moved by one byte reads `run:k:ok`. A new mutant in the fixture's shard d (`--group d`) deletes the rule from a copy of the hook and `rchg` alone flips to a skip. The `ident-drops-keyrows` want moves to `g=run/run/run/run/skip/skip`, and the `wholefile` ident mutant is retired, because the key now carries the whole-file hash and that mutant moves no cell.
+- BL-709's receipt sources the `READSET_KEYROWS` span of both hooks and exits 0 on the fix, 1 with the rule deleted, 1 with only the `core/scripts` literal, and 0 on the same rule spelled as an awk lookup array.
+
 ## [0.895.0] - 2026-10-20
 
 Batch 238, lead ai-dlc-1a. It closes BL-721, closes no `PC-` id and files nothing. Net for this release: 1 closed, 0 filed. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/wait-for-deliverable.sh` and `core/hooks/ai-dlc-recover.sh`. Rulebook text that lands when the delivering pull's reconcile PR merges: `core/skills/ai-dlc/rule-bodies/rule-29.md`, `core/skills/ai-dlc/steps/_dispatch-protocol.md` and `core/skills/ai-dlc/steps/_gate-procedures.md`.
