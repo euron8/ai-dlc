@@ -673,11 +673,12 @@ Owed:
 
 verify: manual
 
-## BL-740 — the review-shard merge has no rule tying a shard's verdict to its finding count, so a seat sealed NEEDS_REWORK with findings=0 passes --check-shard and the merge and has no correction path
+## BL-740 — the review-shard merge has no rule tying a shard's verdict to its finding count, so a seat sealed NEEDS_REWORK with findings=0 is accepted by the merge's per-shard code and has no correction path
 
 **DEFECT.** Seen by graph-watch (ai-dlc-1b) and BL-737's owner e3-new, batch 238.
 
-- On graph s319 story 3.1, seat cross-1 (`adadb1e7`) sealed `NEEDS_REWORK` with findings=0. The marker-count check passes (0 = 0), and so do --check-shard and the merge.
+- On graph s319 story 3.1, seat cross-1 (agent `adad7b1e7d9fa99c2`; the earlier id was a truncation) sealed `NEEDS_REWORK` with findings=0. The marker-count check passes (0 = 0), and `--mark` passed cross-1 at 04:36:06Z.
+- `--check-shard` is BL-737's, on main only from `af1536de3` (0.899.0), and was not on graph's installed engine. Graph's real merge at 04:36:19Z was REFUSED, by cross-6's shard first; the counterfactual merge with cross-6's refusal removed MERGES.
 - At `bdc50a101` (BL-737's branch), `grep -c -i -E 'NEEDS_REWORK.*(findings|nf)|(findings|nf).*NEEDS_REWORK|no finding' core/scripts/merge-review-shards.sh` gives 0; the control, the marker-count rule, gives 1. Re-derived at `e1739275b` against `core/scripts/merge-review-shards.sh` with the same grep: 0, and the control (`heads [0-9]|ends in 'seat-complete`) gives 1.
 - BL-737's prescribed correction path (`implementation.md` gate 1 and gate 2: re-dispatch the seat the REFUSED line's `[owner: <key>]` names) triggers only on a REFUSED merge line, which this shard never produces. `wait-for-deliverable.sh` prescribes "re-dispatch the adversary for that shard" for planning-artifacts adversary shards only.
 - Graph's successor was left three ad-hoc remedies, one of them folding cross-1's AC4 finding into cross-4.
@@ -685,8 +686,117 @@ verify: manual
 Owed:
 - A per-shard rule in the merge's per-shard function: NEEDS_REWORK or BLOCKED requires at least one Critical/Important finding, and APPROVED or PASS forbids a Critical one. --check-shard and --mark inherit it, so the existing `[owner:]` re-dispatch path covers the case.
 - The false-positive set over committed review shards is measured before it ships.
+- Ruled rule shape: code review NEEDS_REWORK or BLOCKED requires at least 1 Critical/Important finding and APPROVED forbids a Critical one; QA NEEDS_REWORK requires at least 1 finding anywhere (count-only, because qa.md defines no severity containers, see BL-746); the remedy text names both satisfiable exits.
 - Builds on BL-737's `merge-review-shards.sh`.
 
 Related: BL-737, BL-715, BL-734.
+
+verify: manual
+
+## BL-738 — the bare-line `unknown arg: --mark` fallback lets any writer mint a `seat-complete:` marker with no `key=` and no seal row, and it survives in six role files after BL-737
+
+**DEFECT.** The residual of BL-737. Source: e3-new (BL-737 owner), batch 238.
+
+- The fallback tells a seat whose engine copy predates `--mark` to write its `seat-complete:` marker by hand.
+- A hand-written marker carries no `key=` and no seal row, so any writer can mint one.
+- The count of files carrying the fallback is 8 at `ddfa69f03` and 6 at `af1536de3` (0.899.0, which retired it in `code-reviewer.md` and `qa.md`), and 0 once this is fixed. Re-derived at origin/main `dec50e4a3`: `git grep -l "unknown arg: --mark" origin/main -- core/team-roles/` lists 6 files: `adversary.md`, `architect.md`, `dev.md`, `pm.md`, `remediator.md` and `tea.md`.
+
+Owed:
+- retire the fallback in all six files, or bound each by the same frozen-sha legacy rule BL-737 builds;
+- check whether each seat's merge path has a last-writer seal.
+
+verify: sh ! grep -q 'unknown arg: --mark' core/team-roles/*.md
+
+## BL-741 — qa.md tells a serial QA seat it may write both verdict forms and warns only about a different member, so a `## Verdict` heading followed by `Verdict: PASS` fails Check 1
+
+**DEFECT.** Source: graph-watch ai-dlc-1b, batch 238; the lead verified qa.md:383-392 at origin/main.
+
+- `core/team-roles/qa.md:390-392` offers two verdict forms: the one line `Verdict: PASS`, or a bare `## Verdict` heading with the member alone on the next non-blank line. Its only warning is that "a second verdict line carrying a different member fails Check 1". That implies a second line carrying the same member is safe.
+- On graph, the story 5.4 QA seat wrote both: `## Verdict`, a blank line, then `Verdict: PASS` (`df0d03031~1:docs/reviews/s319/5-4-qa-validation.md`).
+- Check 1 (`core/skills/ai-dlc/steps/gate-validation.md:233-236`) reads the next non-blank line after the heading by its run of capitals, and gets `V`. That is outside the verdict set, so gate 3 refused. A seat remediated the file at df0d03031.
+- The shard section (`qa.md:495-498`) already rules this shape out for shards, but not for a serial file.
+
+Owed:
+- state in qa.md that the two forms are EXCLUSIVE;
+- quote the failing union (heading, blank line, `Verdict: PASS`) as the example;
+- drop the word "different";
+- add a fixture or pin that asserts the sentence.
+
+verify: manual
+
+## BL-742 — a serial review or QA file has no pre-return verdict-shape check, so a malformed verdict is caught only at gate 3
+
+**NOTE.** Source: graph-watch ai-dlc-1b, batch 238.
+
+- Gate 3 failed Check 1 twice on a serial file's verdict shape. Each time it was the first catch, because a serial file has no merge in front of it.
+- The first was story 5.4 QA, whose role-text half is BL-741.
+- The second was the story 1.1 serial code review p4 (67ee23257). It wrote `## Result` then `APPROVED`, while `core/team-roles/code-reviewer.md:114` teaches `## Verdict` and `:148-151` forbid a renamed heading. This one is model drift, not role text. A remediator fixed it (e1491b01c), and the lead re-ran all four adjudicators under a fresh nonce.
+
+Owed: the seat runs Check 1's own grep on its file before returning. This is the serial-file analogue of BL-737(a).
+
+verify: manual
+
+## BL-743 — a gate-adjudication part has no pre-return check against the merge's key contract
+
+**NOTE.** Family of BL-715, BL-734 and BL-737. Source: graph-watch ai-dlc-1b, batch 238.
+
+- On graph at 03:04:42Z, `validate-gate-adjudication.sh --merge implementation` refused `implementation-20261021T025855Z.part-4of4.jsonl:1`.
+- Adjudicator 4/4 wrote 10 keys per row, envelope fields included, against the 7-key part contract.
+- The lead abandoned the nonce rather than edit the part, which was correct conduct.
+
+Owed: the adjudicator checks its part against the merge's own key contract before returning.
+
+verify: manual
+
+## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
+
+**NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
+
+- The top rows of `.git/ai-dlc-fixture-durations` are `adversarial-shard-merge-mutants` shards at about 2200s.
+- That dir is absent from main. At ddfa69f03, `git ls-tree -d origin/main core/fixtures/ | grep -c adversarial-shard-merge-mutants` gives 0, and the control `adversarial-shard-merge` gives 1.
+- Anyone reading the pole off the top of the record gets a dead unit. The live pole, per ai-dlc-50, is reconcile-emit-report at about 753s loaded.
+
+Owed: the recorder prunes rows whose dir is gone, or the pole reader filters them.
+
+verify: manual
+
+## BL-745 — two hard verdicts in `validate-artifact-budget.sh` carry an explanatory heredoc but no labelled `Remedy:`
+
+**NOTE.** Source: BL-605 owner (ai-dlc-e3, ref 9ab130), batch 238.
+
+- The two blocks are the struck In-Flight rows (FAIL at `core/scripts/validate-artifact-budget.sh:2586`, heredoc `:2589-2600`) and the unknown status token (FAIL at `:2616`, heredoc `:2619-2640`).
+- The BL-605 hand built their gate-validation.md entries near-verbatim from each block's heredoc. A lead reading the FAIL gets an explanation but no named remedy.
+- The other verdicts in the file use a labelled `Remedy:` line, for example `:2467`, `:2524` and `:2565`.
+
+Owed: a labelled `Remedy:` line in each block, matching the other verdicts.
+
+verify: manual
+
+## BL-746 — qa.md defines no severity containers, so a QA verdict cannot be tied to severity
+
+**NOTE.** Source: the BL-740 contract adversary via ai-dlc-e3 [9ab130], batch 238.
+
+- On graph HEAD, 71 of 100 tracked QA shards have no `### ` under `## Findings`, and 25 of those carry uncontained `####` findings. Code-review shards use containers in 179 of 180.
+- BL-740 therefore ships a count-only QA rule (NEEDS_REWORK requires at least 1 finding).
+
+verify: manual
+
+## BL-747 — a review shard's per-AC FAIL row beside its verdict is not checked by the merge
+
+**NOTE.** Source: the BL-740 contract adversary via ai-dlc-e3 [9ab130], batch 238.
+
+- Seen on graph s319 3-1 qa p2 cross-1.
+
+verify: manual
+
+## BL-748 — `validate-handoff-evidence.sh` accepts a hand-typed `$ ` line ahead of the script's own, and reads the hand-written lines first
+
+**DEFECT.** Source: the BL-739 tip adversary via ai-dlc-e3 [9ab130], batch 238.
+
+- `core/scripts/validate-handoff-evidence.sh:318` accepts a capture if any of its first 25 lines matches `^\$ ` or `mutation-red replay$`, and `:322` takes the first `head:` line. Re-verified at origin/main `dec50e4a3`.
+- A dev who prepends a hand-typed `$ … -k a or b` plus a `head:` (the graph s319 3.1 pattern) passes, and the hand-written lines are read first.
+- `dev.md`, after BL-739 (0.900.0), says "do not write your own `$ `/head: lines", and nothing enforces it.
+
+Owed: a validate-handoff-evidence arm refusing a capture whose first `$ ` line is not immediately followed by `mutation-red replay`, with its false-positive set measured over committed captures before it ships.
 
 verify: manual
