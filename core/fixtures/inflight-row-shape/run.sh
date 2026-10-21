@@ -435,6 +435,66 @@ else
   bad "  the ordinary piped offender is NOT named either -- the check is not reading this table"
 fi
 
+# --- 4o. EACH FAIL CARRIES ITS OWN LABELLED `Remedy:` LINE --------------------
+# The two remedies are OPPOSITE (struck: DELETE the row; unknown status: KEEP it and
+# relabel), so each is read from its OWN world and never from one combined stderr --
+# a combined run would let either remedy satisfy either assertion. Every conjunct is
+# PRESENCE-shaped (the remedy must APPEAR), and each world also asserts the OTHER
+# verdict's remedy is absent, so a swap between the two heredocs is visible.
+STRUCK_REMEDY='Remedy: DELETE each struck row'
+STATUS_REMEDY='Remedy: KEEP the row'
+# remedy_arms <validator> <label-prefix>: drives both worlds and scores four conjuncts.
+remedy_arms() {
+  local v="$1" p="$2"
+  seed "$HEADER
+| ~~\`dev-s296-story-1\`~~ | \`dev-escalated\` | DELIVERED + CONSUMED | 2026-07-22 | — |"
+  run_validator "$v" >/dev/null
+  if grep -q 'struck-through row' "$WORK/out.txt" && grep -qF "$STRUCK_REMEDY" "$WORK/out.txt"; then
+    ok "${p}the struck-row FAIL carries its own Remedy line"
+  else
+    bad "${p}the struck-row FAIL carries no 'Remedy: DELETE each struck row' line"
+  fi
+  if grep -qF "$STATUS_REMEDY" "$WORK/out.txt"; then
+    bad "${p}the struck-only world printed the unknown-status remedy -- the lead keeps what it should delete"
+  else
+    ok "${p}the struck-only world does not print the unknown-status remedy"
+  fi
+  seed "$HEADER
+| \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | idle-reusable |"
+  run_validator "$v" >/dev/null
+  if grep -q 'unrecognised status' "$WORK/out.txt" && grep -qF "$STATUS_REMEDY" "$WORK/out.txt"; then
+    ok "${p}the unknown-status FAIL carries its own Remedy line"
+  else
+    bad "${p}the unknown-status FAIL carries no 'Remedy: KEEP the row' line"
+  fi
+  if grep -qF "$STRUCK_REMEDY" "$WORK/out.txt"; then
+    bad "${p}the unknown-status world printed the struck-row remedy -- the lead deletes what it should relabel"
+  else
+    ok "${p}the unknown-status world does not print the struck-row remedy"
+  fi
+}
+remedy_arms "$VALIDATOR" ""
+
+# 4o mutant: the two remedy lines swapped between the heredocs, built as a COPY.
+# The control is the unmutated run just above; cmp -s refuses a no-op sed.
+SWAPMUT="$WORK/mutant-remedy-swap.sh"
+sed -e 's/Remedy: DELETE each struck row whose/Remedy: @SWAP1@/' \
+    -e 's/Remedy: KEEP the row and set the leading/Remedy: DELETE each struck row whose/' \
+    -e 's/Remedy: @SWAP1@/Remedy: KEEP the row and set the leading/' "$VALIDATOR" > "$SWAPMUT" || exit 2
+if cmp -s "$VALIDATOR" "$SWAPMUT"; then
+  echo "FIXTURE ERROR: remedy-swap mutation matched nothing -- the Remedy lines were reworded" >&2
+  exit 2
+fi
+swap_before=$fails
+remedy_arms "$SWAPMUT" "MUTANT remedy-swap: " >"$WORK/swap.txt"
+swap_fails=$((fails - swap_before))
+fails=$swap_before
+if [ "$swap_fails" -ge 4 ]; then
+  ok "MUTATION: swapping the two Remedy lines between heredocs fails all four remedy conjuncts ($swap_fails)"
+else
+  bad "MUTATION: the remedy swap failed only $swap_fails of 4 conjuncts -- the remedy arms do not discriminate"
+fi
+
 # --- 5. THE MUTATION TEST — prove assertion 2's red came from the new code ------
 # Remove the In-Flight call from a COPY and re-run assertion 2's input. If it
 # still fails, something else was producing the red.

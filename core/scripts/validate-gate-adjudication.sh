@@ -16,6 +16,14 @@
 #          --coverage arms on it and returns their exit. Refuses (exit 2, `REFUSED:`, nothing
 #          written) unless the parts are exactly this nonce's 1..N, every line carries this
 #          nonce, no check_id appears twice, and the union equals --expected. See "SHARDING".
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --check-part <part>
+#        → THE SHARD'S SELF-CHECK, run on its part before returning the path. The per-row
+#          checks --merge makes that need no other part (filename shape, JSON object, exact key
+#          set, gate_nonce equal to the filename's stem, non-empty envelope fields, the schema's
+#          non_empty/enum item checks), by the SAME functions --merge calls, so a refusal is
+#          --merge's text under a `--check-part:` label; exit 2 `REFUSED:`, exit 0 `PART-OK`.
+#          Cross-part checks (shard count, indices, duplicates, union, series/catalog agreement,
+#          the content seal) stay merge-only. See "THE PER-PART CONTRACT".
 #   ./scripts/ai-dlc/validate-gate-adjudication.sh <gate_type> <verdict_path> \
 #        [--transcript PATH] [--transcript-dir DIR]
 #        → completeness adjudication of the verdict at <verdict_path>. The transcript
@@ -207,7 +215,7 @@
 #        a stalled check / a gate_series_id spanning two gate_types or a duplicated pass
 #   2  — usage error, or a derivation-layer failure (unknown adjudication value, absent verdict,
 #        unreadable --series path, unparseable verdict under --series), or a `REFUSED:` shard
-#        spec or merge
+#        spec, merge or part
 #
 # The lead runs the adjudicate form through verdict.sh so the exit code is not swallowed by a
 # pipe. Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — the map is regex-parsed).
@@ -250,6 +258,16 @@ case "${1:-}" in
         shift 3
         MERGE_PARTS=("$@")
         ;;
+    --check-part)
+        # FIXED ARITY: the part line's key set comes from the schema's `verdicts` item_fields,
+        # which do not vary by gate type, and the part's nonce is its own filename's stem.
+        MODE="check-part"
+        if [ "$#" -ne 2 ] || [ -z "${2:-}" ]; then
+            echo "usage: $0 --check-part <part>" >&2
+            exit 2
+        fi
+        MERGE_PARTS=("$2")
+        ;;
     --coverage)
         MODE="coverage"
         GATE_TYPE="${2:-}"
@@ -278,6 +296,7 @@ case "${1:-}" in
         echo "usage: $0 --expected <gate_type>   |   $0 <gate_type> <verdict_path>" >&2
         echo "       $0 --expected <gate_type> --shard <i>/<N>" >&2
         echo "       $0 --merge <gate_type> <verdict_path> <part>..." >&2
+        echo "       $0 --check-part <part>" >&2
         echo "       $0 --coverage <gate_type> <verdict_path>" >&2
         echo "       $0 --series <dir|verdict>..." >&2
         exit 2
@@ -1501,6 +1520,109 @@ def merge_seal(parts, vp):
     return out
 
 
+# --------------------------------------------- THE PER-PART CONTRACT (--merge, --check-part)
+# ONE SITE for the part line's key set and for every check on a part that needs no other part:
+# the filename shape, a readable file, each line a JSON object with EXACTLY these keys, a
+# gate_nonce equal to the part's nonce, non-empty envelope values, and the schema's non_empty /
+# enum item checks. --merge calls these per row, in its own order, so its refusals are the text
+# it always printed; --check-part calls the same functions on one part, so a shard self-checking
+# its part is checked against the merge's own contract rather than a copy of it (BL-743: a
+# shard wrote 10 keys per row, envelope fields included, and only the merge found out).
+if mode in ("merge", "check-part"):
+    PART_ITEM_FIELDS = next(f for f in S["fields"] if f["name"] == "verdicts")["item_fields"]
+    PART_ENV_KEYS = ("gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id")
+    PART_LINE_KEYS = set(PART_ENV_KEYS) | {f["name"] for f in PART_ITEM_FIELDS}
+PART_NAME_RE = re.compile(r"^(.*)\.part-([1-9][0-9]*)of([1-9][0-9]*)\.jsonl$")
+
+
+def part_name(p, label, nonce=None):
+    """(nonce, i, N) from a part's filename. With `nonce` given (--merge) the stem must be it;
+    without (--check-part) the stem must be a gate_nonce, and IS the nonce the lines carry."""
+    pm = PART_NAME_RE.match(os.path.basename(p))
+    if nonce is None:
+        if not pm or not re.match(PATTERNS["gate_nonce"], pm.group(1)):
+            refuse(f"{label}: part {p} is not named <gate_nonce>.part-<i>of<N>.jsonl.")
+    elif not pm or pm.group(1) != nonce:
+        refuse(f"{label}: part {p} is not named {nonce}.part-<i>of<N>.jsonl — a part "
+               f"carrying another nonce is another gate pass's work.")
+    return pm.group(1), int(pm.group(2)), int(pm.group(3))
+
+
+def part_lines(p, label):
+    """(line number, text) for every non-blank line of a part; refuses an unreadable one."""
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, ValueError) as exc:
+        refuse(f"{label}: part {p} cannot be read ({exc}).")
+    for n, raw in enumerate(lines, 1):
+        if raw.strip():
+            yield n, raw
+
+
+def part_row(p, n, raw, nonce, label, aid_derived, shared=None):
+    """One part line checked against the per-row contract; returns the row. `aid_derived`: the
+    merge derives this part's adjudicator_agent_id from its content seal, so the self-report need
+    only be a string. `shared` is the merge's accumulator for gate_series_id/catalog agreement
+    ACROSS lines and parts -- a cross-part check, so --check-part passes None and skips it."""
+    try:
+        row = json.loads(raw)
+    except ValueError as exc:
+        refuse(f"{label}: {p}:{n} is not a JSON object ({exc}).")
+    if not isinstance(row, dict):
+        refuse(f"{label}: {p}:{n} is not a JSON object.")
+    if set(row) != PART_LINE_KEYS:
+        refuse(f"{label}: {p}:{n} carries fields {sorted(row)}, not exactly "
+               f"{sorted(PART_LINE_KEYS)}.")
+    if row["gate_nonce"] != nonce:
+        refuse(f"{label}: {p}:{n} carries gate_nonce {row['gate_nonce']!r}, not this "
+               f"verdict's {nonce!r} — it is another gate pass's work.")
+    # A part whose id is DERIVED (seal_ids) carries a self-report that is never written, so
+    # an empty one is not a defect. A part with no seal row reaches here only from a gate
+    # older than the recorder, a ledger with no tool seal row, or a tree without
+    # content-seal.sh (merge_seal refused the rest), and keeps the requirement.
+    for k in PART_ENV_KEYS[1:]:
+        if k == "adjudicator_agent_id" and aid_derived:
+            if not isinstance(row[k], str):
+                refuse(f"{label}: {p}:{n} has a non-string {k}.")
+            continue
+        if not isinstance(row[k], str) or not row[k].strip():
+            refuse(f"{label}: {p}:{n} has a missing or empty {k}.")
+    if shared is not None:
+        for k in ("gate_series_id", "catalog"):
+            if shared.setdefault(k, row[k]) != row[k]:
+                refuse(f"{label}: {p}:{n} carries {k} {row[k]!r} where an earlier line "
+                       f"carries {shared[k]!r}; the parts are not one gate pass.")
+    for f in PART_ITEM_FIELDS:
+        val = row[f["name"]]
+        if f.get("non_empty") and (val is None or not str(val).strip()):
+            refuse(f"{label}: {p}:{n} has an empty {f['name']}.")
+        if "enum" in f and val not in f["enum"]:
+            refuse(f"{label}: {p}:{n} has {f['name']} {val!r}, not one of {f['enum']}.")
+    return row
+
+
+# --check-part <part>: THE SHARD'S SELF-CHECK. The per-row contract above on one part, before the
+# shard returns its path. It does NOT check what needs the other parts or the state tree -- the
+# shard count and indices, a duplicate check_id, the union against --expected, series/catalog
+# agreement, the content seal -- and so the merge can still refuse a part this passes.
+# adjudicator_agent_id is held non-empty, as the merge holds a part with no seal row: the shard
+# can always write its own id, and the merge replaces it with the derived one where a seal exists.
+if mode == "check-part":
+    cp_part = sys.argv[7]
+    cp_nonce, _, _ = part_name(cp_part, "--check-part")
+    cp_n = 0
+    for n, raw in part_lines(cp_part, "--check-part"):
+        part_row(cp_part, n, raw, cp_nonce, "--check-part", False)
+        cp_n += 1
+    if cp_n == 0:
+        refuse(f"--check-part: part {cp_part} carries no line; --expected --shard never "
+               f"derives an empty slice, so an empty part is a non-delivered one.")
+    print(f"VALIDATE-GATE-ADJUDICATION: PART-OK ({cp_part}, {cp_n} line(s)) -- the per-row "
+          f"contract only; the merge checks the parts against each other")
+    sys.exit(0)
+
+
 if mode == "merge":
     merge_parts = sys.argv[7:]
     vbase = os.path.basename(verdict_path)
@@ -1514,15 +1636,11 @@ if mode == "merge":
                f"never overwrites one.")
     if not os.path.isdir(os.path.dirname(os.path.abspath(verdict_path))):
         refuse(f"--merge: the directory of {verdict_path} does not exist.")
-    part_re = re.compile("^" + re.escape(mnonce) + r"\.part-([1-9][0-9]*)of([1-9][0-9]*)\.jsonl$")
     counts, indices = set(), []
     for p in merge_parts:
-        pm = part_re.match(os.path.basename(p))
-        if not pm:
-            refuse(f"--merge: part {p} is not named {mnonce}.part-<i>of<N>.jsonl — a part "
-                   f"carrying another nonce is another gate pass's work.")
-        indices.append(int(pm.group(1)))
-        counts.add(int(pm.group(2)))
+        _, pi, pcount = part_name(p, "--merge", mnonce)
+        indices.append(pi)
+        counts.add(pcount)
     if len(counts) != 1:
         refuse(f"--merge: parts disagree on the shard count: {sorted(counts)}.")
     pn = counts.pop()
@@ -1532,53 +1650,11 @@ if mode == "merge":
     if pn > len(E):
         refuse(f"--merge: {pn} part(s) over {len(E)} escalated check(s) for {gate_type}; "
                f"--expected --shard refuses that count, so no shard derived its worklist.")
-    item_fields = next(f for f in S["fields"] if f["name"] == "verdicts")["item_fields"]
-    env_keys = ("gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id")
-    line_keys = set(env_keys) | {f["name"] for f in item_fields}
     seal_ids = merge_seal(merge_parts, verdict_path)
     rows, agents, shared = [], [], {}
     for idx, p in sorted(zip(indices, merge_parts)):
-        try:
-            with open(p, "r", encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
-        except (OSError, ValueError) as exc:
-            refuse(f"--merge: part {p} cannot be read ({exc}).")
-        for n, raw in enumerate(lines, 1):
-            if not raw.strip():
-                continue
-            try:
-                row = json.loads(raw)
-            except ValueError as exc:
-                refuse(f"--merge: {p}:{n} is not a JSON object ({exc}).")
-            if not isinstance(row, dict):
-                refuse(f"--merge: {p}:{n} is not a JSON object.")
-            if set(row) != line_keys:
-                refuse(f"--merge: {p}:{n} carries fields {sorted(row)}, not exactly "
-                       f"{sorted(line_keys)}.")
-            if row["gate_nonce"] != mnonce:
-                refuse(f"--merge: {p}:{n} carries gate_nonce {row['gate_nonce']!r}, not this "
-                       f"verdict's {mnonce!r} — it is another gate pass's work.")
-            # A part whose id is DERIVED (seal_ids) carries a self-report that is never written, so
-            # an empty one is not a defect. A part with no seal row reaches here only from a gate
-            # older than the recorder, a ledger with no tool seal row, or a tree without
-            # content-seal.sh (merge_seal refused the rest), and keeps the requirement.
-            for k in env_keys[1:]:
-                if k == "adjudicator_agent_id" and p in seal_ids:
-                    if not isinstance(row[k], str):
-                        refuse(f"--merge: {p}:{n} has a non-string {k}.")
-                    continue
-                if not isinstance(row[k], str) or not row[k].strip():
-                    refuse(f"--merge: {p}:{n} has a missing or empty {k}.")
-            for k in ("gate_series_id", "catalog"):
-                if shared.setdefault(k, row[k]) != row[k]:
-                    refuse(f"--merge: {p}:{n} carries {k} {row[k]!r} where an earlier line "
-                           f"carries {shared[k]!r}; the parts are not one gate pass.")
-            for f in item_fields:
-                val = row[f["name"]]
-                if f.get("non_empty") and (val is None or not str(val).strip()):
-                    refuse(f"--merge: {p}:{n} has an empty {f['name']}.")
-                if "enum" in f and val not in f["enum"]:
-                    refuse(f"--merge: {p}:{n} has {f['name']} {val!r}, not one of {f['enum']}.")
+        for n, raw in part_lines(p, "--merge"):
+            row = part_row(p, n, raw, mnonce, "--merge", p in seal_ids, shared)
             # THE BL-536 RULE, for the adjudicator: the self-report is compared only when it is
             # REAL-SHAPED (AGENT_ID_ERE, owned by content-seal.sh) and then must equal the derived id;
             # any other value -- `gate-adjudicator`, a descriptive label, empty -- is ignored.
@@ -1592,7 +1668,7 @@ if mode == "merge":
             if aid not in agents:
                 agents.append(aid)
             rows.append((str(row["check_id"]), p,
-                         {f["name"]: row[f["name"]] for f in item_fields}))
+                         {f["name"]: row[f["name"]] for f in PART_ITEM_FIELDS}))
     seen_at = {}
     for cid, p, _ in rows:
         seen_at.setdefault(cid, []).append(p)

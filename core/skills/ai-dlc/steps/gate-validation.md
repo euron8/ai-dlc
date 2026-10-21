@@ -1194,10 +1194,14 @@ Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
 - **Struck-through In-Flight rows.** A row is deleted when the teammate will not be
   messaged again, never struck. A teammate that has delivered but is still alive and
   re-messageable gets `status: delivered-reachable` instead.
+  Remedy: DELETE each struck row whose teammate will not be messaged again; give a
+  delivered, still-reachable teammate `status: delivered-reachable`.
 - **An unrecognised In-Flight status.** The leading token of the status cell must be
   `in-flight`, `delivered-reachable` or `stopped`. A teammate that delivered and will
   not be messaged again has no token: delete its row. A teammate stopped at a handoff
   keeps its row and takes `stopped`.
+  Remedy: KEEP the row and set the leading token of its status cell to `in-flight`,
+  `delivered-reachable` or `stopped`. Do not delete it.
 
 Then re-run Check 14 and Check 15.
 

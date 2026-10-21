@@ -37045,3 +37045,91 @@ Related: BL-737, BL-715, BL-734.
 
 verify: sh bash core/fixtures/review-shard-merge/receipt-bl740.sh core/scripts/merge-review-shards.sh
 
+## BL-735 — the recover hook's worst real gate-in-flight emission sits 24 bytes under the 10000 cliff, so any line added to its emitted text silently drops the sidecar note for a compacted lead
+
+**LANDED (v0.902.0, verified a61efe38b).** **NOTE.** Measured by ai-dlc-e3 (batch 238) while 238-d-721's dress was failing; re-derived by the batch-238 docs hand with one direct fire of the hook in the WC world, not the fixture. Related: BL-457, which moved the cliff onto the emitted string.
+
+`core/hooks/ai-dlc-recover.sh:63` sets `CONTEXT_LIMIT` to 10000, and `:629-632` drop the sidecar note ("Mechanical state captured immediately before this compaction") whenever the wrapped bare directive would reach that limit. `core/fixtures/gate-resume/run.sh`'s BL-457 arm WC (`:637-640`) seeds the worst real gate-in-flight case: a 31-char `implementation-<UTC>` nonce opened through the real `gate-checkpoint.sh`, a sidecar, and an unresolvable step file. It asserts only that the emitted length is under 10000.
+
+Measured, the WC world built as `_mkc457` builds it and fired once:
+- at 39fb06be9 (0.894.0) the hook emits 9980 characters, with the sidecar note present: 20 bytes of headroom;
+- at 599da0aef (0.895.0), which trimmed the hook by 4 bytes, it emits 9976: 24 bytes of headroom.
+
+The arm's own cliff sweep places the drop between nonce padding n=120 (under) and n=132 (over), per ai-dlc-e3. So a change that adds about two dozen bytes to the hook's emitted text drops the note in the worst real case. `degraded` stays `no`, WC stays green while the emission is under 10000, and nothing announces that a compacted lead has lost its one pointer to the pre-compaction branch and gate-log tail.
+
+Owed (mechanism left to the builder), one of:
+- raise the headroom by restructuring what the hook emits, so the worst real case sits well clear of the cliff;
+- make a growth past a stated margin fail loudly at author time, for example a WC bound tighter than the cliff, instead of the note dropping silently at run time.
+
+Taken: BOTH options, because the margin alone could not be green. Re-measured at bf0b3f0bf, the WC world emits 9976 with the note, which is already inside any margin of 200 or more. So:
+- the margin: WC now asserts the sidecar note present (`$4` = 1 in `_fire457`'s field order) AND `emitted -lt $((10000 - WC_MARGIN))`, with `WC_MARGIN=200`. It asserts the note too because the emission FALLS by about 225 bytes when the note drops, so a length bound alone never sees the drop;
+- the restructure: three sentences in the hook's emitted text that restated text the lead still receives were cut (the hook comment above `build()` names each one and where its content still lives). The WC world now emits 9683 with the note. That is 117 under the margin bound, and the note now drops only after about 317 bytes of growth, up from 24.
+
+The arm's cliff sweep cap moved from n=192 to n=336, so S1 still reaches over-cliff worlds on the trimmed hook. Mutant (g) grows the emitted text by 200 bytes with the note kept, and only the margin kills it. Mutant (h) grows it by 329 bytes, which drops the note and lands at 9787. That is under both 10000 and 9800, so only the note assertion kills it, and the old WC passed it. FP set: WC is one seeded world, so there are no false positives to measure. For consumer captures, `.recover-fired` and the injected block are unchanged apart from the three cut sentences.
+
+verify: sh bash core/fixtures/gate-resume/receipt-bl735.sh core/hooks/ai-dlc-recover.sh core/fixtures/gate-resume/run.sh
+
+## BL-743 — a gate-adjudication part has no pre-return check against the merge's key contract
+
+**LANDED (v0.902.0, verified 846d9223a).** **NOTE.** Family of BL-715, BL-734 and BL-737. Source: graph-watch ai-dlc-1b, batch 238.
+
+- On graph at 03:04:42Z, `validate-gate-adjudication.sh --merge implementation` refused `implementation-20261021T025855Z.part-4of4.jsonl:1`.
+- Adjudicator 4/4 wrote 10 keys per row, envelope fields included, against the 7-key part contract.
+- The lead abandoned the nonce rather than edit the part, which was correct conduct.
+
+Owed: the adjudicator checks its part against the merge's own key contract before returning.
+
+- Mechanism: `validate-gate-adjudication.sh --check-part <part>`, fixed arity. It calls the same per-row functions `--merge` calls (`part_name`, `part_lines`, `part_row`; the key set is `PART_LINE_KEYS`, defined once). It covers the filename shape, JSON object, exact key set, gate_nonce equal to the stem, non-empty envelope fields, and the non_empty/enum item checks. Refusals carry `--merge`'s text under a `--check-part:` label, exit 2; a conforming part prints `PART-OK`, exit 0. Cross-part checks (count, indices, duplicates, union, series/catalog agreement, seal) stay merge-only. `gate-adjudicator.md`'s shard branch requires it before the path is returned.
+- `--merge` output is byte-identical to bf0b3f0bf on 13 worlds (conforming, 10-key, bad enum, empty evidence/catalog/agent id, foreign nonce, non-JSON, array line, series mismatch, duplicate, short union, misnamed part).
+- FP set, graph HEAD read-only: 238 tracked parts, 233 PART-OK, 5 refused, all on the key set. The 5 are `implementation-20261021T025855Z.part-4of4` (the incident), `20261014T010837Z` parts 1, 2 and 4 of 5, and `20261003T115646Z.part-2of4`. Two of them carry only 3 keys and three carry envelope extras. All 5 are parts `--merge` already refused.
+- Consumer captures: a part on disk is unchanged. A shard now finds a key-set or enum defect before it returns, not at the lead's merge.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; [ -f "$V" ] || exit 9; n="$(grep -cE '^[[:space:]]*PART_LINE_KEYS[[:space:]]*=' "$V")" || n=0; [ "$n" = 1 ] || exit 1; T="$(mktemp -d)" || exit 9; mkdir "$T/ga" || exit 9; N=implementation-20260715T140322Z; P="$T/ga/$N.part-1of1.jsonl"; export AI_DLC_ENFORCEMENT_MAP=core/skills/ai-dlc/enforcement-map.yaml AI_DLC_VERDICT_SCHEMA=core/schemas/gate-adjudication-verdict.json; ids="$(bash "$V" --expected implementation)" || exit 9; [ -n "$ids" ] || exit 9; mk() { for c in $ids; do printf '{"gate_nonce":"%s","gate_series_id":"%s","catalog":"core","adjudicator_agent_id":"a1","check_id":"%s","verdict":"PASS","evidence":"e"%s}\n' "$N" "$N" "$c" "$1"; done > "$P"; }; mk ""; bash "$V" --check-part "$P" >/dev/null 2>&1 || exit 1; mk ',"schema_id":"x","gate_type":"implementation","generated_at":"y"'; c="$(bash "$V" --check-part "$P" 2>&1)"; [ $? = 2 ] || exit 1; m="$(bash "$V" --merge implementation "$T/ga/$N.verdict.json" "$P" 2>&1)"; [ $? = 2 ] || exit 9; cb="$(grep '^REFUSED: ' <<<"$c" | sed 's/^REFUSED: --[a-z-]*: //')"; mb="$(grep '^REFUSED: ' <<<"$m" | sed 's/^REFUSED: --[a-z-]*: //')"; [ -n "$mb" ] && [ "$(grep -c 'carries fields' <<<"$mb")" -gt 0 ] || exit 9; [ "$cb" = "$mb" ] || exit 1; exit 0
+
+## BL-745 — two hard verdicts in `validate-artifact-budget.sh` carry an explanatory heredoc but no labelled `Remedy:`
+
+**LANDED (v0.902.0, verified 23a3fd342).** **NOTE.** Source: BL-605 owner (ai-dlc-e3, ref 9ab130), batch 238.
+
+- The two blocks are the struck In-Flight rows (FAIL at `core/scripts/validate-artifact-budget.sh:2586`, heredoc `:2589-2600`) and the unknown status token (FAIL at `:2616`, heredoc `:2619-2640`).
+- The BL-605 hand built their gate-validation.md entries near-verbatim from each block's heredoc. A lead reading the FAIL gets an explanation but no named remedy.
+- The other verdicts in the file use a labelled `Remedy:` line, for example `:2467`, `:2524` and `:2565`.
+
+Owed: a labelled `Remedy:` line in each block, matching the other verdicts.
+
+verify: sh V="${V:-core/scripts/validate-artifact-budget.sh}"; [ -f "$V" ] || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; mk() { printf '# S\n\n## Pipeline Position\n- v: x\n\n## Sprint Context\n- s: 1\n\n## Recent Activity\n1. r\n\n## Open Items\nnone\n\n## Locked Decisions\nnone\n\n## In-Flight Teammates\n| agent | role | deliverable | dispatched-at | status |\n|---|---|---|---|---|\n%s\n\n## Context Reminders\n- c: none\n' "$1" > "$d/_bmad-output/pipeline-snapshot.md"; }; mk '| ~~a-1~~ | dev | x.md | 2026-07-22 | — |'; s1="$(bash "$V" --root "$d" --only pipeline-snapshot.md 2>&1)"; mk '| b-1 | qa | y.md | 2026-07-22 | idle-reusable |'; s2="$(bash "$V" --root "$d" --only pipeline-snapshot.md 2>&1)"; grep -q 'struck-through row' <<<"$s1" && grep -q 'unrecognised status' <<<"$s2" && grep -qE '^ *Remedy: DELETE' <<<"$s1" && ! grep -qE '^ *Remedy: KEEP' <<<"$s1" && grep -qE '^ *Remedy: KEEP' <<<"$s2" && ! grep -qE '^ *Remedy: DELETE' <<<"$s2"
+
+## BL-748 — `validate-handoff-evidence.sh` accepts a hand-typed `$ ` line ahead of the script's own, and reads the hand-written lines first
+
+**LANDED (v0.902.0, verified 296b4184b).** **DEFECT.** Source: the BL-739 tip adversary via ai-dlc-e3 [9ab130], batch 238.
+
+- `core/scripts/validate-handoff-evidence.sh:318` accepts a capture if any of its first 25 lines matches `^\$ ` or `mutation-red replay$`, and `:322` takes the first `head:` line. Re-verified at origin/main `dec50e4a3`.
+- A dev who prepends a hand-typed `$ … -k a or b` plus a `head:` (the graph s319 3.1 pattern) passes, and the hand-written lines are read first.
+- `dev.md`, after BL-739 (0.900.0), says "do not write your own `$ `/head: lines", and nothing enforces it.
+
+Owed: a validate-handoff-evidence arm refusing a capture whose first `$ ` line is not immediately followed by `mutation-red replay`, with its false-positive set measured over committed captures before it ships.
+
+Mechanism (batch 239): refusal `replay-preamble`, arm (j), on the in-range captures arm (a) reads. Within a capture's first 25 lines it refuses only when a `$ ` line sits above the first `mutation-red replay` line AND that first `$ ` line is not the one right above the replay. A replay with no `$ ` above it is accepted, because the engine before 0.900.0 printed no `$ ` line (graph's installed copy at HEAD prints none: `printf '$'; printf ' %q'` count 0). For a replay capture, `head:` is the first one after the replay header, falling back to the first in the 25 lines when the block has none. Captures without the replay line are unchanged. Fixture: `story-evidence-scaffold` worlds `rpfirst`, `rps319`, `rpok` and `rphead`; mutants `rp-any-dollar` and `rp-first-head`.
+
+FP set, measured with the shipping validator over a scratch repo holding every tracked graph capture whose first 25 lines carry `mutation-red replay`, byte for byte, all cited and in range, against the bf0b3f0bf validator as the differential side (the two files asserted to differ). At graph b2fc5036f the new rule refuses 8, all `s318-1-1-mutation-*` (×5) and `s319-1-1-mutation-red-*` (×3), where the old validator refuses 0. This repo: 0 committed replay captures (control: 8 tracked files mention the phrase).
+
+Head-read change: it has no observable effect on graph today. The 8 refused captures stop before the head check, so no replay capture graph has committed reaches the new head read with a hand-written `head:` above its block. The only head WARNs that differ between the two runs are those 8 captures' head-unresolved lines, and no head-missing WARN is added.
+
+Whether a gate reaches the 8: the one shipped caller of handoff mode is `implementation.md`'s pre-gate commit-presence check, `validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`, run before gate 1 on the story being handed off. On a rework re-handoff, `<base>` is the previous gate's frozen sha. `sprint-review.md` and `stories-test-strategy.md` call only `--strategy`, which reads no capture. The arm reads a capture only when the named story cites it and it changed in `<base>..<frozen>`. Over all 219 graph refs, the only story files citing any of the 8 are s318 story 1.1 (59 refs) and s319 story 1.1 (8 refs); the control token `story-1-2` hit 219 of 219. Both are `status: done` at every ref, and s319 1.1 has gate-1 pass 4 APPROVED (67ee23257, 2026-10-20). No shipped call site hands off a `done` story again, so the pre-gate check never names either file. `inrange` can be true for 3 of the 8: on `dev/sprint-319/story-1-2`, `-2-3a` and `-4-1`, the three s319 captures fall inside merge-base(origin/main)..tip. What blocks the read is the citation condition, because those stories' files do not cite the captures. The arm cannot reach the 8 on graph's next gate, so no LEGACY path or world is built. The text graph would see if a rework of s319 1.1 re-cited one inside its range is `REFUSED replay-preamble test-results/s319-1-1-mutation-red-default.txt: line 1 is a '$ ' line above line 2, the one validate-mutation-red.sh prints right above its 'mutation-red replay' header (line 3); redirect the script's stdout to the capture and commit it as it is, with no '$ ' or 'head:' lines of your own`. Graph's installed dev.md (0.892.0, `.claude/team-roles/dev.md:339-344` at graph 910b167b1) still tells a dev to open a capture with `$ <command>` and `head:`, the shape this arm refuses; the forbidding text arrived in 0.900.0 (836c0962d). Every completed pull that delivers this arm also delivers that dev.md, so the conflict exists only INSIDE the delivering pull, from step 3 (engine live) until the reconcile PR merges (rulebook live). It opens only if a story hands off mid-pull. The update procedure does not pause the pipeline during apply: core/skills/ai-dlc-update/SKILL.md carries no sprint-state gate (`grep -nE 'dev/sprint-|sprint-status|current_sprint'` = 0, control `reconcile` = 141).
+
+verify: sh d="$(mktemp -d "${TMPDIR:-/tmp}/bl748.XXXXXX")" && g() { git -C "$d" -c user.name=x -c user.email=x@x.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; } && g init -q && mkdir -p "$d/t" && echo s > "$d/s.md" && g add -A && g commit -qm b && printf '$ pytest -k a\nhead: 0000000\n$ validate-mutation-red.sh x 1 y z\nmutation-red replay\n' > "$d/t/p.txt" && printf '$ validate-mutation-red.sh x 1 y z\nmutation-red replay\n' > "$d/t/q.txt" && printf 'mutation-red replay\n$ z\n' > "$d/t/r.txt" && printf 'Captures `t/p.txt` `t/q.txt` `t/r.txt`.\n' > "$d/s.md" && g add -A && g commit -qm w && o="$(bash core/scripts/validate-handoff-evidence.sh -C "$d" s.md HEAD~1 HEAD 2>/dev/null)"; [ "$(grep -c '^REFUSED replay-preamble t/p.txt:' <<<"$o")" = 1 ] && [ "$(grep -c '^REFUSED replay-preamble' <<<"$o")" = 1 ] && [ "$(grep -c '^REFUSED no-command' <<<"$o")" = 0 ]
+
+## BL-749 — `validate-mutation-red.sh`'s `$ ` replay line does not round-trip a word-leading `~` argument whose user exists, because bash 3.2's `%q` leaves the tilde unescaped
+
+**LANDED (v0.902.0, verified 11c0ea3d8).** **NOTE.** Source: ai-dlc-e3 [9ab130], probe adv739-tilde.sh, batch 238; released as a stated limit in 0.900.0 (BL-739).
+
+- With bash 3.2.57, `printf %q` leaves `~`, `~root` and `~/x` unescaped, so replaying the `$ ` line through a shell tilde-expands them, to `/Users/n8`, `/var/root` and `/Users/n8/x` on the probe machine.
+- Controls: `a~root` round-trips; `~nosuchuserzzq` round-trips, because a user that does not exist is not expanded.
+
+Owed: escape a word-leading `~` in the rendering, and add a fixture case to mutation-red-replay's arm_argv_roundtrip with `~root` and a mid-word control.
+
+- Wider than filed: a `~` after `=` or `:` expands too (`x=~root`, `FOO=a:~/b`), and so does `~+`, so a leading-only escape is not the fix. A blanket `${q//\~/\\~}` is wrong as well: a word %q renders in `$'...'` form (`$'~root\tz'`) keeps `\~` as two bytes.
+- Mechanism: one helper, `replay_words`, called by both the `$ ` line and the `test:` line. It backslashes every bare `~` in a %q word that is not in `$'...'` form, and copies each `\X` pair %q emitted unchanged, so a `~` that a newer bash's %q already escaped is not escaped twice. That last branch has no subject on a bash 3.2-only box and is unproven here.
+- FP set: none. Only words carrying a `~` render differently, and every changed rendering replays to the same argv.
+- Consumer captures: a replay line taken after this release carries `\~` where a tilde word appeared, and replays to the exact argv. Captures already committed are unchanged.
+
+verify: sh bash core/fixtures/mutation-red-replay/receipt-bl749.sh core/scripts/validate-mutation-red.sh

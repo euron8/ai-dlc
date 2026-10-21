@@ -1605,9 +1605,9 @@ a_session() {
   printf 'PASS\n'
 }
 
-# NO ARM ASSERTS THAT THE INJECTED BLOCK NAMES R, because it does not. The block has no room:
-# gate-resume's worst gate-in-flight world emits 9980 of 10000 without it, and a 47-character R
-# clause pushed that world over the cliff under its sidecar-drop mutant. R reaches the lead
+# NO ARM ASSERTS THAT THE INJECTED BLOCK NAMES R, because it does not. The block has no room
+# to spare for it: the headroom under the cliff in gate-resume's worst gate-in-flight world is
+# held by gate-resume's WC arm (WC_MARGIN), and an R clause would spend it. R reaches the lead
 # through SKILL.md's Rule 32 entry, which the digest the lead has just read carries verbatim,
 # and through the deny text, which names R and its remedy.
 #

@@ -1523,6 +1523,113 @@ if [ "$D4_OK" -eq 1 ]; then
   if cv_apply "$D4_MD/validate-gate-adjudication.sh" '    if twice:' '    if False:'; then
     d4_score "D4-MD (the duplicate-id refusal removed)" "$D4_MD/validate-gate-adjudication.sh" dup
   else bad "D4-MD: FIXTURE STALE -- the duplicate anchor is not in the validator exactly once"; fi
+
+  # --------------------------------------------------------------------------
+  # D5: `--check-part <part>` -- THE SHARD'S SELF-CHECK AGAINST THE MERGE'S OWN PER-ROW CONTRACT
+  # (BL-743). On graph a shard wrote 10 keys per row (envelope fields added to the 7-key line)
+  # and only the lead's --merge found out, so the nonce was abandoned. --check-part runs the
+  # SAME per-row functions --merge calls. Every world is built by d4_parts, so the --merge side
+  # sees the same no-ledger seal state the D4 worlds merge under, and the refusal BODY (the
+  # text after `REFUSED: --<mode>: `) is compared byte-for-byte between the two modes on the
+  # SAME file: a check-part with its own key list prints a different expected-keys list.
+  d5_check() { # <validator> <part> -> RC, $D4_OUT
+    AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+      bash "$1" --check-part "$2" > "$D4_OUT" 2>&1
+    RC=$?
+  }
+  d5_body() { # the first REFUSED line of $D4_OUT, mode label stripped
+    grep '^REFUSED: ' "$D4_OUT" | head -1 | sed 's/^REFUSED: --[a-z-]*: //'
+  }
+  d5_agree() { # <validator> <dir> <token>: --check-part on part 2 and --merge on all three
+    #           both refuse (exit 2), with one non-empty body carrying <token>
+    local v="$1" d="$2" cb mb
+    d5_check "$v" "$(P2 "$d")"; [ "$RC" -eq 2 ] || return 1
+    cb="$(d5_body)"
+    d4_merge "$v" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"; d4_refused "$d" "$3" || return 1
+    mb="$(d5_body)"
+    [ -n "$cb" ] && [ "$cb" = "$mb" ] && [ "$(grep -cF -- "$3" <<<"$cb")" -gt 0 ]
+  }
+  d4_p_cpok() { # a conforming 7-key part: PART-OK, exit 0
+    local d; d="$(d4_dir)"; d4_parts "$d"
+    d5_check "$1" "$(P2 "$d")"
+    [ "$RC" -eq 0 ] && grep -qF "PART-OK ($(P2 "$d")," "$D4_OUT"
+  }
+  d4_p_cp10() { # the graph incident: envelope fields added, 10 keys per row
+    local d; d="$(d4_dir)"; d4_parts "$d"
+    python3 -c '
+import json, sys
+p = sys.argv[1]
+rows = [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
+for r in rows:
+    r.update({"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": "implementation",
+              "generated_at": "2026-07-15T14:05:07Z"})
+open(p, "w", encoding="utf-8").write("".join(json.dumps(r) + "\n" for r in rows))
+' "$(P2 "$d")"
+    d5_agree "$1" "$d" "carries fields"
+  }
+  d4_p_cpenum() { # 7 keys, one verdict outside the schema enum
+    local d; d="$(d4_dir)"; d4_parts "$d"
+    sed '1s/"verdict": "PASS"/"verdict": "MAYBE"/' "$(P2 "$d")" > "$d/p2" && mv "$d/p2" "$(P2 "$d")"
+    d5_agree "$1" "$d" "has verdict 'MAYBE', not one of"
+  }
+  D5_PREDS="cpok cp10 cpenum"
+  d4_p_cpok "$VALIDATOR" && ok "D5-ok: a conforming 7-key part -> --check-part PART-OK, exit 0" \
+    || bad "D5-ok: a conforming part was not PART-OK (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_cp10 "$VALIDATOR" && ok "D5-10key: envelope fields added (10 keys per row, the graph incident) -> --check-part AND --merge both REFUSED 'carries fields', exit 2, one refusal body" \
+    || bad "D5-10key: a 10-key part was not refused by both modes with one body (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_cpenum "$VALIDATOR" && ok "D5-enum: a 7-key part with verdict MAYBE -> --check-part AND --merge both REFUSED 'not one of', exit 2, one refusal body" \
+    || bad "D5-enum: a bad-enum part was not refused by both modes with one body (rc=$RC): $(cat "$D4_OUT")"
+
+  # D5-M: --check-part reading a HAND-LISTED key set, one field short. Anchored inside the
+  # check-part branch, so --merge keeps the schema-derived set and every D4 predicate holds.
+  d5_score() { # <label> <validator> <expected dead>
+    local dead="" p
+    for p in $D4_PREDS $D5_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
+    dead="${dead# }"
+    if [ "$3" = "NONE" ]; then
+      [ -z "$dead" ] && ok "$1: all eight merge and check-part predicates hold on the unmutated sandbox copy" \
+        || bad "$1: the UNMUTATED copy failed [$dead] -- every D5 mutant verdict is about a broken harness"
+    elif [ "$dead" = "$3" ]; then ok "$1: KILLED by [$3] and nothing else"
+    elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D5 arm watches the line it edits"
+    else bad "$1 killed [$dead], expected exactly [$3]"; fi
+  }
+  d5_score "D5-M0 control (unmutated copy)" "$(cv_mutdir d5m0)/validate-gate-adjudication.sh" NONE
+  D5_MK="$(cv_mutdir d5mk)"
+  if cv_apply "$D5_MK/validate-gate-adjudication.sh" '    cp_nonce, _, _ = part_name(cp_part, "--check-part")' \
+       '    PART_LINE_KEYS = {"gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id", "check_id", "verdict"}
+    cp_nonce, _, _ = part_name(cp_part, "--check-part")'; then
+    d5_score "D5-MK (--check-part on a hand-listed key set missing evidence)" "$D5_MK/validate-gate-adjudication.sh" "cpok cp10 cpenum"
+  else bad "D5-MK: FIXTURE STALE -- the check-part anchor is not in the validator exactly once"; fi
+fi
+
+# D5-one-site: the part line's key set is ASSIGNED once in the validator, so --merge and
+# --check-part cannot each carry their own copy. A count of exactly 1, so an absent one fails too;
+# the D5-MK copy (a second, hand-listed assignment) must count 2, which proves the pin can fire.
+d5_sites() { local n; n="$(grep -cE '^[[:space:]]*PART_LINE_KEYS[[:space:]]*=' "$1")" || n=0; printf '%s' "$n"; }
+D5_SITES="$(d5_sites "$VALIDATOR")"
+D5_MSITES=0; [ "$D4_OK" -eq 1 ] && [ -f "${D5_MK:-}/validate-gate-adjudication.sh" ] && D5_MSITES="$(d5_sites "$D5_MK/validate-gate-adjudication.sh")"
+[ "$D5_SITES" -eq 1 ] && [ "$D5_MSITES" -eq 2 ] \
+  && ok "D5-one-site: PART_LINE_KEYS is assigned at exactly one site in the validator, and at two in the D5-MK copy (the pin can fire)" \
+  || bad "D5-one-site: PART_LINE_KEYS assigned $D5_SITES time(s) (expected 1), $D5_MSITES in the D5-MK copy (expected 2) -- the key set has a second copy or none, or the pin cannot see one"
+
+# D5-role: the shard branch of gate-adjudicator.md names `--check-part`, and says the check is
+# per-row only. Both layouts, first existing candidate; absent is BROKEN, never skipped.
+D5_ROLE=""
+for c in "$HERE/../../team-roles/gate-adjudicator.md" "$HERE/../../../.claude/team-roles/gate-adjudicator.md"; do
+  [ -f "$c" ] && { D5_ROLE="$c"; break; }
+done
+if [ -z "$D5_ROLE" ]; then
+  bad "D5-role: FIXTURE BROKEN -- gate-adjudicator.md not found in either layout from $HERE"
+else
+  D5_SHARD="$(awk '/\*\*As a shard\*\*/{f=1} f&&/^2\. /{exit} f' "$D5_ROLE")"
+  D5_N1="$(grep -cF -- 'validate-gate-adjudication.sh --check-part <the part path you wrote>' <<<"$D5_SHARD")" || D5_N1=0
+  D5_N2="$(grep -cF -- 'cross-part checks happen at merge' <<<"$D5_SHARD")" || D5_N2=0
+  D5_N0="$(grep -cF -- '--expected <gate_type> --shard' <<<"$D5_SHARD")" || D5_N0=0
+  if [ "$D5_N0" -gt 0 ] && [ "$D5_N1" -gt 0 ] && [ "$D5_N2" -gt 0 ]; then
+    ok "D5-role: gate-adjudicator.md's shard branch runs '--check-part' on the written part and says cross-part checks happen at merge"
+  else
+    bad "D5-role: shard branch control=$D5_N0 check-part=$D5_N1 per-row-only=$D5_N2 -- the shard is not told to check its part before returning it (or the branch was not found)"
+  fi
 fi
 
 # ============================================================================

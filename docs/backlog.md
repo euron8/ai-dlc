@@ -607,24 +607,6 @@ Owed (mechanism left to the builder):
 
 verify: manual
 
-## BL-735 — the recover hook's worst real gate-in-flight emission sits 24 bytes under the 10000 cliff, so any line added to its emitted text silently drops the sidecar note for a compacted lead
-
-**NOTE.** Measured by ai-dlc-e3 (batch 238) while 238-d-721's dress was failing; re-derived by the batch-238 docs hand with one direct fire of the hook in the WC world, not the fixture. Related: BL-457, which moved the cliff onto the emitted string.
-
-`core/hooks/ai-dlc-recover.sh:63` sets `CONTEXT_LIMIT` to 10000, and `:629-632` drop the sidecar note ("Mechanical state captured immediately before this compaction") whenever the wrapped bare directive would reach that limit. `core/fixtures/gate-resume/run.sh`'s BL-457 arm WC (`:637-640`) seeds the worst real gate-in-flight case: a 31-char `implementation-<UTC>` nonce opened through the real `gate-checkpoint.sh`, a sidecar, and an unresolvable step file. It asserts only that the emitted length is under 10000.
-
-Measured, the WC world built as `_mkc457` builds it and fired once:
-- at 39fb06be9 (0.894.0) the hook emits 9980 characters, with the sidecar note present: 20 bytes of headroom;
-- at 599da0aef (0.895.0), which trimmed the hook by 4 bytes, it emits 9976: 24 bytes of headroom.
-
-The arm's own cliff sweep places the drop between nonce padding n=120 (under) and n=132 (over), per ai-dlc-e3. So a change that adds about two dozen bytes to the hook's emitted text drops the note in the worst real case. `degraded` stays `no`, WC stays green while the emission is under 10000, and nothing announces that a compacted lead has lost its one pointer to the pre-compaction branch and gate-log tail.
-
-Owed (mechanism left to the builder), one of:
-- raise the headroom by restructuring what the hook emits, so the worst real case sits well clear of the cliff;
-- make a growth past a stated margin fail loudly at author time, for example a WC bound tighter than the cliff, instead of the note dropping silently at run time.
-
-verify: manual — the two owed fixes close on different observables: a restructure moves the emitted length, while an author-time margin leaves it where it is and adds a refusal. An `sh` receipt keyed on either one would refuse the other, and a receipt keyed on the length alone could be closed by a cosmetic trim that leaves the hazard intact.
-
 ## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
 
 **DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
@@ -697,18 +679,6 @@ Owed: the seat runs Check 1's own grep on its file before returning. This is the
 
 verify: manual
 
-## BL-743 — a gate-adjudication part has no pre-return check against the merge's key contract
-
-**NOTE.** Family of BL-715, BL-734 and BL-737. Source: graph-watch ai-dlc-1b, batch 238.
-
-- On graph at 03:04:42Z, `validate-gate-adjudication.sh --merge implementation` refused `implementation-20261021T025855Z.part-4of4.jsonl:1`.
-- Adjudicator 4/4 wrote 10 keys per row, envelope fields included, against the 7-key part contract.
-- The lead abandoned the nonce rather than edit the part, which was correct conduct.
-
-Owed: the adjudicator checks its part against the merge's own key contract before returning.
-
-verify: manual
-
 ## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
 
 **NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
@@ -718,18 +688,6 @@ verify: manual
 - Anyone reading the pole off the top of the record gets a dead unit. The live pole, per ai-dlc-50, is reconcile-emit-report at about 753s loaded.
 
 Owed: the recorder prunes rows whose dir is gone, or the pole reader filters them.
-
-verify: manual
-
-## BL-745 — two hard verdicts in `validate-artifact-budget.sh` carry an explanatory heredoc but no labelled `Remedy:`
-
-**NOTE.** Source: BL-605 owner (ai-dlc-e3, ref 9ab130), batch 238.
-
-- The two blocks are the struck In-Flight rows (FAIL at `core/scripts/validate-artifact-budget.sh:2586`, heredoc `:2589-2600`) and the unknown status token (FAIL at `:2616`, heredoc `:2619-2640`).
-- The BL-605 hand built their gate-validation.md entries near-verbatim from each block's heredoc. A lead reading the FAIL gets an explanation but no named remedy.
-- The other verdicts in the file use a labelled `Remedy:` line, for example `:2467`, `:2524` and `:2565`.
-
-Owed: a labelled `Remedy:` line in each block, matching the other verdicts.
 
 verify: manual
 
@@ -750,25 +708,3 @@ verify: manual
 
 verify: manual
 
-## BL-748 — `validate-handoff-evidence.sh` accepts a hand-typed `$ ` line ahead of the script's own, and reads the hand-written lines first
-
-**DEFECT.** Source: the BL-739 tip adversary via ai-dlc-e3 [9ab130], batch 238.
-
-- `core/scripts/validate-handoff-evidence.sh:318` accepts a capture if any of its first 25 lines matches `^\$ ` or `mutation-red replay$`, and `:322` takes the first `head:` line. Re-verified at origin/main `dec50e4a3`.
-- A dev who prepends a hand-typed `$ … -k a or b` plus a `head:` (the graph s319 3.1 pattern) passes, and the hand-written lines are read first.
-- `dev.md`, after BL-739 (0.900.0), says "do not write your own `$ `/head: lines", and nothing enforces it.
-
-Owed: a validate-handoff-evidence arm refusing a capture whose first `$ ` line is not immediately followed by `mutation-red replay`, with its false-positive set measured over committed captures before it ships.
-
-verify: manual
-
-## BL-749 — `validate-mutation-red.sh`'s `$ ` replay line does not round-trip a word-leading `~` argument whose user exists, because bash 3.2's `%q` leaves the tilde unescaped
-
-**NOTE.** Source: ai-dlc-e3 [9ab130], probe adv739-tilde.sh, batch 238; released as a stated limit in 0.900.0 (BL-739).
-
-- With bash 3.2.57, `printf %q` leaves `~`, `~root` and `~/x` unescaped, so replaying the `$ ` line through a shell tilde-expands them, to `/Users/n8`, `/var/root` and `/Users/n8/x` on the probe machine.
-- Controls: `a~root` round-trips; `~nosuchuserzzq` round-trips, because a user that does not exist is not expanded.
-
-Owed: escape a word-leading `~` in the rendering, and add a fixture case to mutation-red-replay's arm_argv_roundtrip with `~root` and a mid-word control.
-
-verify: manual

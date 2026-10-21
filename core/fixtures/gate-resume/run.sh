@@ -539,7 +539,8 @@ fi
 #   S3  worlds between the excerpt bound and the cliff record degraded=no -- stands down when
 #       S2's world says yes, because then S2 owns the case;
 #   WC  the worst real gate-in-flight case -- a 31-char `implementation-<UTC>` nonce, a
-#       sidecar, an unresolvable step file -- emits under 10000 (10255 before this fix);
+#       sidecar, an unresolvable step file -- emits under 10000 - WC_MARGIN (10255 before
+#       BL-457) AND still carries the sidecar note (BL-735, see WC_MARGIN below);
 #   RB  with AI_DLC_HOOK_EXCERPT_RESERVE=50 the fitted excerpt stays under LIMIT-50 EMITTED,
 #       and the emitted length is over LIMIT-500, which the default reserve cannot produce --
 #       the tell that the hook received the setting rather than a scrubbed default;
@@ -552,6 +553,14 @@ fi
 # `.gate-checkpoint/OPEN` -- its subject is the recover hook's byte budget, not `open`.
 # ============================================================================
 B457_V_ALL="S0=1 S1=1 S2=1 S3=1 WC=1 RB=1 NC=1"
+# WC_MARGIN (BL-735): the author-time headroom WC demands below the 10000 cliff. What it
+# protects is the sidecar note, the compacted lead's one pointer to the pre-compaction branch
+# and gate-log tail. ai-dlc-recover.sh:639-641 drops that note once ${#BARE} + WRAP_OVERHEAD
+# reaches CONTEXT_LIMIT, and the emission then FALLS by the note's ~225 bytes -- so a bound on
+# the length alone never sees the drop, and WC asserts the note itself as well. Measured on
+# this world by one direct fire: 9976 emitted with the note at bf0b3f0bf (24 bytes from the
+# drop), 9683 after BL-735 cut three restating sentences from the hook.
+WC_MARGIN=200
 if [ -n "$CKPT" ]; then
   _mkc457() { # _mkc457 <dir> <hookfile> <step:res|unres> <sidecar:yes|no> <nonce|""> <posbytes>
     mkdir -p "$1/_bmad-output" "$1/.claude/skills/ai-dlc/steps" "$1/.claude/hooks" "$1/scripts/ai-dlc"
@@ -599,8 +608,11 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
     # The wrap's own overhead, read off the library the hook sources: marker line + newline.
     local W=$(( ${#B457_WRAP_PROBE} ))
     # --- the sweep: unresolvable step file, sidecar, real nonce growing across the cliff ---
+    # THE CAP FOLLOWS THE HEADROOM. Each step adds 24 emitted bytes (the nonce is named twice);
+    # S1 needs worlds at/over 10000, which after the note drops start near n=276 on the shipped
+    # hook (9683 + 2n - 225 >= 10000), so 336 reaches the wrap band with five worlds in it.
     n=0
-    while [ "$n" -le 192 ]; do
+    while [ "$n" -le 336 ]; do
       nonce="implementation-20261006T120000Z$(printf '%*s' "$n" '' | tr ' ' x)"
       _mkc457 "$D/sw$n" "$H" unres yes "" 0
       mkdir -p "$D/sw$n/_bmad-output/.gate-checkpoint"
@@ -637,7 +649,8 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
     # --- WC ---
     _mkc457 "$D/wc" "$H" unres yes "implementation-20261006T120000Z" 0
     r="$(_fire457 "$D/wc")"; printf 'wc %s\n' "$r" >> "$log"; set -- $r
-    [ "$1" != none ] && [ "$6" = 1 ] && [ "$1" -lt 10000 ] || wc=0
+    # $4 is the sidecar-note flag in _fire457's field order (len injected degraded NOTE excerpt gate).
+    [ "$1" != none ] && [ "$6" = 1 ] && [ "$4" = 1 ] && [ "$1" -lt $((10000 - WC_MARGIN)) ] || wc=0
     # --- RB ---
     _mkc457 "$D/rb" "$H" res no "" 1200
     r="$(_fire457 "$D/rb" 50)"; printf 'rb %s\n' "$r" >> "$log"; set -- $r
@@ -661,7 +674,7 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
       S1=1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world" ;;
       S2=1) ok "BL-457 S2: a world under every bound records degraded=no" ;;
       S3=1) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound" ;;
-      WC=1) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) emits under 10000" ;;
+      WC=1) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) keeps the sidecar note and emits under $((10000 - WC_MARGIN)) (WC_MARGIN=${WC_MARGIN})" ;;
       RB=1) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED" ;;
       NC=1) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint" ;;
       *) bad "BL-457 arm ${_arm%=*} FAILED on the shipped hook (see the diagnostic below)" ;;
@@ -710,6 +723,19 @@ PY
       'if [ -n "$SIDECAR_NOTE" ] && [ $(( ${#BARE} + WRAP_OVERHEAD )) -ge "$CONTEXT_LIMIT" ]; then' 'if [ -n "$SIDECAR_NOTE" ] && [ "${#BARE}" -ge "$CONTEXT_LIMIT" ]; then'
     b457_score f NC "emits through a second wrap call, minting a second nonce" \
       'jq -n --arg ctx "$EMITTED"' 'jq -n --arg ctx "$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$CONTEXT")"'
+    # BL-735 (g)/(h): the emitted text grown by one prose line inside build()'s heredoc. The
+    # sizes are derived from the measured WC world (9683 with the note; the note drops at
+    # +317 and the emission then falls by ~225). (g) +200 keeps the note at ~9883: under the
+    # old `-lt 10000` bound, so only WC_MARGIN kills it. (h) +329 drops the note and lands at
+    # ~9787: under 10000 AND under 10000 - WC_MARGIN, so only the note assertion kills it --
+    # the old WC passed this mutant, which is the hazard BL-735 filed.
+    _b735_h='## Rule 23 is why you compacted, and you no longer hold it'
+    b457_score g WC "grows the emitted text by 200 bytes, the sidecar note kept, inside the cliff" \
+      "$_b735_h" "$_b735_h
+$(printf '%*s' 199 '' | tr ' ' g)"
+    b457_score h WC "grows the emitted text by 329 bytes, enough to drop the sidecar note, still under the margin" \
+      "$_b735_h" "$_b735_h
+$(printf '%*s' 328 '' | tr ' ' h)"
   else
     bad "BL-457 mutants not scored: the shipped hook's own vector [$B457_V] is not [$B457_V_ALL], so a mutant's vector would be read against a broken baseline"
   fi

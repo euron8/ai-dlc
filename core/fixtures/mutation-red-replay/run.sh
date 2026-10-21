@@ -826,8 +826,16 @@ HW
 # a `$ ` printf moved anywhere above the baseline run prints on it (mutant 18 reads it). H is
 # the LATEST pre-restore refusal, the restore verification itself, so a `$ ` printf placed
 # anywhere above it prints on it, including after the baseline run (mutant 19 reads it).
+# The tilde cases carry their words in the test argv, so both lines render them. bash 3.2's
+# %q leaves `~` bare and the child bash in rt_split would expand it. T: a word-leading `~root`
+# (root exists on every macOS and Linux box; a user that does not exist is not expanded and
+# would discriminate nothing), `~+`, and the mid-word `a~root` that never expands. X: a `~`
+# after `=` and after `:` (`x=~root`, `FOO=a:~/b`), which a leading-only escape misses
+# (mutant 21). D: `~root<TAB>z`, which %q puts in $'...' form, where `\~` is NOT an escape,
+# so an escape applied to every word breaks it (mutant 22). Mutant 20 reads T and X on the
+# `test:` line alone.
 arm_argv_roundtrip() {
-  local a q c r h u hw
+  local a q c r h u hw t x dq
   RT_TEST=(bash "$WORK/disc.sh" -k 'a or b' one)
   rt_case 0 "$1" --syntax-check 'bash -n' -- "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; a="$rt_why"
   RT_TEST=(bash "$WORK/disc.sh")
@@ -841,11 +849,18 @@ arm_argv_roundtrip() {
   else h="no-hard-world"; fi
   RT_TEST=(bash "$WORK/nondisc.sh")
   rt_case 1 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; u="$rt_why"
-  why="A:[$a] Q:[$q] control:[$c] R:[$r] H:[$h] U:[$u]"
-  [ -z "$a" ] && [ -z "$q" ] && [ -z "$c" ] && [ -z "$r" ] && [ -z "$h" ] && [ -z "$u" ]
+  RT_TEST=(bash "$WORK/disc.sh" '~root' 'a~root' '~+')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; t="$rt_why"
+  RT_TEST=(bash "$WORK/disc.sh" 'x=~root' 'FOO=a:~/b')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; x="$rt_why"
+  RT_TEST=(bash "$WORK/disc.sh" $'~root\tz')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; dq="$rt_why"
+  why="A:[$a] Q:[$q] control:[$c] R:[$r] H:[$h] U:[$u] T:[$t] X:[$x] D:[$dq]"
+  [ -z "$a" ] && [ -z "$q" ] && [ -z "$c" ] && [ -z "$r" ] && [ -z "$h" ] && [ -z "$u" ] \
+    && [ -z "$t" ] && [ -z "$x" ] && [ -z "$dq" ]
 }
 arm_argv_roundtrip "$VALIDATOR" \
-  && ok "arm_argv_roundtrip: the \`\$ \` line and the \`test:\` line replay, through bash, to the exact argv (flags, --, a multi-word -k, a quoted replacement, the single-token control, and an UNPROVEN exit 1), a RED-baseline refusal exits 2 and a HARD refusal exits 3, each with no \`\$ \` line" \
+  && ok "arm_argv_roundtrip: the \`\$ \` line and the \`test:\` line replay, through bash, to the exact argv (flags, --, a multi-word -k, a quoted replacement, the single-token control, an UNPROVEN exit 1, and the tilde words ~root, a~root, ~+, x=~root, FOO=a:~/b and a \$'...'-quoted ~root<TAB>z), a RED-baseline refusal exits 2 and a HARD refusal exits 3, each with no \`\$ \` line" \
   || bad "arm_argv_roundtrip: the capture does not replay to its own argv, or a refusal printed one ($why) — a committed capture is a command that does not run"
 arm_argv_roundtrip "$MUT/control.sh" \
   && ok "CONTROL: arm_argv_roundtrip holds on an unmutated copy in \$MUT, \`\$ \` naming the copy's path as invoked" \
@@ -858,8 +873,10 @@ arm_argv_roundtrip "$MUT/control.sh" \
 replace_line() {
   A="$1" L="$2" awk 'BEGIN { n = 0 } $0 == ENVIRON["A"] { n++; if (ENVIRON["L"] != "") print ENVIRON["L"]; next } { print } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
 }
-RT_DOLLAR_LINE="printf '\$'; printf ' %q' \"\$0\" \${ORIG_ARGV[@]+\"\${ORIG_ARGV[@]}\"}; printf '\\n'"
-RT_TEST_LINE="printf '  test:      '; printf ' %q' \"\${TEST_CMD[@]}\"; printf '\\n'"
+RT_DOLLAR_LINE="printf '\$'; replay_words \"\$0\" \${ORIG_ARGV[@]+\"\${ORIG_ARGV[@]}\"}; printf '\\n'"
+RT_TEST_LINE="printf '  test:      '; replay_words \"\${TEST_CMD[@]}\"; printf '\\n'"
+RT_TILDE_LINE="          [ \"\$c\" = '~' ] && c='\\~'"
+RT_DQ_LINE="      \"\\\$'\"*) ;;"
 # rt_mutant <name> <producer-rc> <expected why> <label>: the copy must fail arm_argv_roundtrip
 # with exactly <expected why>, so each kill is read on the conjunct that names it.
 rt_mutant() {
@@ -872,28 +889,42 @@ rt_mutant() {
 # M15 (M-a): the `test:` line joined with spaces, as before the fix. Case A's multi-word -k
 # re-splits; case Q and the single-token control still round-trip.
 replace_line "$RT_TEST_LINE" "printf '  test:       %s\\n' \"\${TEST_CMD[*]}\"" > "$MUT/m15.sh"; prc=$?
-rt_mutant m15 "$prc" "A:[test-argv] Q:[] control:[] R:[] H:[] U:[]" "a \`test:\` line joined with spaces"
+rt_mutant m15 "$prc" "A:[test-argv] Q:[] control:[] R:[] H:[] U:[] T:[test-argv] X:[test-argv] D:[test-argv]" "a \`test:\` line joined with spaces"
 # M16 (M-b): no `$ ` line at all. A refusal still prints nothing; U's line 1 is the banner.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m16.sh"; prc=$?
-rt_mutant m16 "$prc" "A:[no-dollar-line] Q:[no-dollar-line] control:[no-dollar-line] R:[] H:[] U:[no-dollar-line]" "a capture with no \`\$ \` line"
-# M17 (M-c): the `$ ` line rebuilt from the parsed values. Case A loses --syntax-check and
-# --; case Q, the control and U carry no flags, so they still round-trip.
-replace_line "$RT_DOLLAR_LINE" "printf '\$'; printf ' %q' \"\$0\" \"\$TARGET\" \"\$LINE\" \"\$REPL\" \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m17.sh"; prc=$?
-rt_mutant m17 "$prc" "A:[dollar-argv] Q:[] control:[] R:[] H:[] U:[]" "a \`\$ \` line rebuilt from the parsed values"
+rt_mutant m16 "$prc" "A:[no-dollar-line] Q:[no-dollar-line] control:[no-dollar-line] R:[] H:[] U:[no-dollar-line] T:[no-dollar-line] X:[no-dollar-line] D:[no-dollar-line]" "a capture with no \`\$ \` line"
+# M17 (M-c): the `$ ` line rebuilt from the parsed values, through the same replay_words, so
+# the tilde words still round-trip. Case A loses --syntax-check and --; every other case
+# carries no flags, so it still round-trips.
+replace_line "$RT_DOLLAR_LINE" "printf '\$'; replay_words \"\$0\" \"\$TARGET\" \"\$LINE\" \"\$REPL\" \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m17.sh"; prc=$?
+rt_mutant m17 "$prc" "A:[dollar-argv] Q:[] control:[] R:[] H:[] U:[] T:[] X:[] D:[]" "a \`\$ \` line rebuilt from the parsed values"
 # M18: the `$ ` printf hoisted to just after `ORIG_ARGV=("$@")`. It still prints first and
 # from the same argv, so A, Q, the control and U all round-trip; only the two refusals, which
 # now print a `$ ` line, kill it. Delete first, then insert into the copy: inserting first
 # would leave two lines for replace_line to match.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m18-del.sh"; prc=$?
 [ "$prc" -ne 0 ] || { insert_after 'ORIG_ARGV=("$@")' "$RT_DOLLAR_LINE" "$MUT/m18-del.sh" > "$MUT/m18.sh"; prc=$?; }
-rt_mutant m18 "$prc" "A:[] Q:[] control:[] R:[dollar-on-refusal] H:[dollar-on-refusal] U:[]" "the \`\$ \` printf hoisted above the refusals"
+rt_mutant m18 "$prc" "A:[] Q:[] control:[] R:[dollar-on-refusal] H:[dollar-on-refusal] U:[] T:[] X:[] D:[]" "the \`\$ \` printf hoisted above the refusals"
 # M19: the `$ ` printf moved to just after the restore's `cp`, before the verification that
 # exits 3. It sits below the baseline run, so R refuses before reaching it, and nothing reaches
 # stdout between there and its own line, so A, Q, the control and U all round-trip; only the
 # HARD refusal, which now prints a `$ ` line, kills it. Delete first, then insert.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m19-del.sh"; prc=$?
 [ "$prc" -ne 0 ] || { insert_after 'cp "$BACKUP" "$TARGET" 2>/dev/null' "$RT_DOLLAR_LINE" "$MUT/m19-del.sh" > "$MUT/m19.sh"; prc=$?; }
-rt_mutant m19 "$prc" "A:[] Q:[] control:[] R:[] H:[dollar-on-refusal] U:[]" "the \`\$ \` printf placed after the baseline run, above the restore verification"
+rt_mutant m19 "$prc" "A:[] Q:[] control:[] R:[] H:[dollar-on-refusal] U:[] T:[] X:[] D:[]" "the \`\$ \` printf placed after the baseline run, above the restore verification"
+# M20: the tilde escape applied to the `$ ` line only; the `test:` line back to bare %q. The
+# `$ ` line still round-trips everywhere, and T and X fail on the `test:` line alone; D's
+# word is in $'...' form, which needs no escape.
+replace_line "$RT_TEST_LINE" "printf '  test:      '; printf ' %q' \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m20.sh"; prc=$?
+rt_mutant m20 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[test-argv] X:[test-argv] D:[]" "the tilde escape applied to the \`\$ \` line and not the \`test:\` line"
+# M21: only a word-LEADING `~` escaped. T's words lead with their tilde and round-trip; X's
+# sit after `=` and `:` and expand, on both lines.
+replace_line "$RT_TILDE_LINE" "          [ \"\$c\" = '~' ] && [ \"\$i\" -eq 0 ] && c='\\~'" > "$MUT/m21.sh"; prc=$?
+rt_mutant m21 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[] X:[dollar-argv test-argv] D:[]" "only a word-leading \`~\` escaped"
+# M22: the escape applied to a \$'...' word too, so every `~` everywhere is backslashed. Inside
+# \$'...' the `\~` stays two bytes, so D's word gains a backslash, on both lines.
+replace_line "$RT_DQ_LINE" "      \"\\\$'\"*) q=\"\${q//\\~/\\\\~}\" ;;" > "$MUT/m22.sh"; prc=$?
+rt_mutant m22 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[] X:[] D:[dollar-argv test-argv]" "the tilde escape applied inside a \$'...' word"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
