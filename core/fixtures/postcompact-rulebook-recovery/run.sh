@@ -1555,10 +1555,32 @@ a_unavail() {
   printf 'PASS\n'
 }
 # A5. No grant line (a lead on a local model): never held.
+# The pre-wait grant line of the hook is a COST fast-path, not the verdict guard: with it deleted
+# the post-wait grant check stands the same call down after the wait. So this arm asserts that the
+# wait loop is never ENTERED, as a COUNT load cannot move. The hook's loop calls a bare `sleep`
+# (recover-gate line 269, no path), so a shim `sleep` first on PATH appends a line per call and
+# returns at once. No grant line, R owed, the call's own line NEVER lands, RECOVER_GATE_NET=8:
+# the real gate writes 0 lines; the mutant enters the loop and writes more. The CONTROL, same shim
+# and seed WITH a grant that stays on, must write >0 lines, which proves the shim is reached.
+a_nogrant_run() { # a_nogrant_run <gate> <project> <counter> -> decision on stdout
+  _sd="$(mktemp -d "$WORK/sleepshim.XXXXXX")"
+  printf '#!/bin/bash\necho x >> "%s"\nexit 0\n' "$3" > "$_sd/sleep"; chmod +x "$_sd/sleep"
+  : > "$3"
+  jq -n --arg tp "$2/t.jsonl" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:"toolu_nogrant_never",tool_input:{}}' \
+    | PATH="$_sd:$PATH" RECOVER_GATE_NET=8 CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+}
 a_nogrant() {
   _p="$(a_world "$1" boundary digest)"
-  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
-  allowed "$d" || { printf 'FAIL:a lead with no advisor grant was held on R\n'; return; }
+  _pc="$(a_world "$1" grant boundary digest)"
+  [ -e "$_pc/$OW" ] && [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
+  _ctl="$(a_nogrant_run "$1" "$_pc" "$_pc/sleeps")"
+  [ "$_ctl" = deny ] && { printf 'FAIL:CONTROL: an unseen call was denied at the net\n'; return; }
+  [ "$(wc -l < "$_pc/sleeps")" -gt 0 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the sleep shim was never reached with a grant on\n'; return; }
+  d="$(a_nogrant_run "$1" "$_p" "$_p/sleeps")"
+  [ "$d" = deny ] && { printf 'FAIL:a lead with no advisor grant was held on R\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:a lead with no advisor grant kept the owed file\n'; return; }
+  [ "$(wc -l < "$_p/sleeps")" -eq 0 ] || { printf 'FAIL:a lead with no advisor grant entered the wait loop (%s sleeps)\n' "$(wc -l < "$_p/sleeps" | tr -d ' ')"; return; }
   printf 'PASS\n'
 }
 # A6. A teammate is not the lead: its dispatch is untouched, and the lead's owed R survives it.
@@ -1678,7 +1700,7 @@ amut() { # amut <name> <awk program> -> mutant path
 # which silently skipped every arm from here to the end of the GATE block.
 AP_NOARM='index($0,"owed_put \"$(printf"){print "          :"; next} 1'
 amutant_arm "the stage never arms (the owed write removed)" \
-  "$(amut noarm "$AP_NOARM")" "deny before mate bound"
+  "$(amut noarm "$AP_NOARM")" "deny before nogrant mate bound"
 amutant_arm "the teammate stand-down removed at the stage" \
   "$(amut mate 'index($0,"[ -z \"$R_AID\" ] || exit 0"){next} 1')" "mate"
 amutant_arm "an advisor attempt anywhere satisfies R" \
@@ -1944,21 +1966,23 @@ fi
 fi  # whose-recovery arms present
 
 # A10. THE NET IS NOT A DENY (BL-630). R owed, and the incoming call's own `tool_use` line NEVER
-# lands (acall always appends it, so no predicate above can reach this branch): the 10s safety net
+# lands (acall always appends it, so no predicate above can reach this branch): the safety net
 # expires with R_SEEN=0, a transcript the stage cannot read. It must ALLOW, say why on stderr, and
 # not count a refusal -- `denies=` unchanged. The pre-BL-630 gate denied here, so a correct advisor
 # call whose line was merely late (load makes it later) was refused. Outside APREDS on purpose:
-# it pays the full 10s by construction, once for the gate and once for its mutant.
+# it pays the net by construction, once for the gate and once for its mutant, so it runs with
+# RECOVER_GATE_NET=2 (BL-730: the knob only shortens the 300s default) and greps a net-agnostic
+# stderr reason.
 a_net() {
   _p="$(a_world "$1" grant boundary digest)"
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
   _d0="$(sed -n 's/^denies=//p' "$_p/$OW")"
   _e="$_p/net.err"
   d="$(jq -n --arg tp "$_p/t.jsonl" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:"tin-never",tool_input:{}}' \
-    | CLAUDE_PROJECT_DIR="$_p" bash "$1" 2>"$_e" \
+    | RECOVER_GATE_NET=2 CLAUDE_PROJECT_DIR="$_p" bash "$1" 2>"$_e" \
     | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
   [ "$d" = deny ] && { printf 'FAIL:an unseen call was denied when the safety net expired\n'; return; }
-  grep -q 'did not land within the 10s safety net' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
+  grep -q 'did not land within the' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
   [ -e "$_p/$OW" ] || { printf 'FAIL:the stand-down removed the owed file, so R is forgotten for the next dispatch\n'; return; }
   [ "$(sed -n 's/^denies=//p' "$_p/$OW")" = "$_d0" ] || { printf 'FAIL:the stand-down counted a refusal\n'; return; }
   printf 'PASS\n'
@@ -1973,8 +1997,194 @@ if cmp -s "$GATE" "$MR_NET" || ! bash -n "$MR_NET" 2>/dev/null; then
 elif [ "$(a_net "$MR_NET")" = PASS ]; then
   bad "MUTANT KILLED NOTHING: a gate whose clock denies an unseen call still passes the net arm"
 else
-  ok "mutant: a gate whose 10s ceiling denies an unseen call fails the net arm"
+  ok "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
 fi
+
+# =============================================================================
+# ONE DECISION PER MESSAGE, AND A WAIT THAT OUTLASTS THE FLUSH (BL-730)
+#
+# Measured on graph transcript a367e62c: one message carried 19 Agent calls, the harness ran each
+# call's PreToolUse as its block finished streaming (~7s apart, overlapping), and the message's
+# lines reached disk together at message end. Calls 1-17 hit the old 10s net and were dispatched
+# uncounted; calls 18 and 19, each still pending at the flush around 05:57:24, were refused. The
+# gate now waits up to R_NET (300s) for the call's own line and counts one refusal per message.
+#
+# Four predicates with their own control and mutants. They run in the BACKGROUND, every predicate
+# of every gate at once, because `rflush` waits 16s by construction and `rflush_ctl` waits out two
+# short nets; serially the battery would pay that wall clock once per gate. Each child's pid is
+# recorded and `wait`ed, and each writes its verdict to a file named for the predicate.
+# =============================================================================
+
+# rcall <gate> <project> <tool_use_id> <net> [stderr file] -> deny | empty, for an Agent call
+rcall() {
+  jq -n --arg tp "$2/t.jsonl" --arg id "$3" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:$id,tool_input:{}}' \
+    | RECOVER_GATE_NET="$4" CLAUDE_PROJECT_DIR="$2" bash "$1" 2>"${5:-/dev/null}" \
+    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+}
+# mline <message id> <tool_use id...> -> ONE assistant line carrying those Agent tool_use blocks,
+# which is the shape a parallel dispatch is recorded in.
+mline() {
+  _m="$1"; shift; _c=""
+  for _u in "$@"; do _c="${_c:+$_c,}{\"type\":\"tool_use\",\"id\":\"$_u\",\"name\":\"Agent\",\"input\":{}}"; done
+  printf '{"type":"assistant","message":{"id":"%s","content":[%s]}}\n' "$_m" "$_c"
+}
+owv() { sed -n "s/^$2=//p" "$1/$OW" 2>/dev/null | head -1; } # owv <project> <key>
+
+# R1. Two calls of ONE message, both lines on disk: both refused, and the message counts once.
+a_rmsg() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  mline M1 toolu_rmsg_a toolu_rmsg_b >> "$_p/t.jsonl"
+  [ "$(rcall "$1" "$_p" toolu_rmsg_a 2)" = deny ] || { printf 'FAIL:the first call of message M1 was not refused\n'; return; }
+  [ "$(rcall "$1" "$_p" toolu_rmsg_b 2)" = deny ] || { printf 'FAIL:the second call of a refused message was let through\n'; return; }
+  [ "$(owv "$_p" denies)" = 1 ] || { printf 'FAIL:two calls of one message counted %s refusals, not 1\n' "$(owv "$_p" denies)"; return; }
+  [ "$(owv "$_p" denied_msg)" = M1 ] || { printf 'FAIL:the owed file does not record the refused message (denied_msg=%s)\n' "$(owv "$_p" denied_msg)"; return; }
+  printf 'PASS\n'
+}
+# R1c. CONTROL that the per-message rule is not a count frozen at 1: a call in M1, then a call in
+# M2, counts 1 then 2.
+a_rmsg_ctl() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  mline M1 toolu_rctl_a >> "$_p/t.jsonl"; mline M2 toolu_rctl_b >> "$_p/t.jsonl"
+  [ "$(rcall "$1" "$_p" toolu_rctl_a 2)" = deny ] || { printf 'FAIL:the call in M1 was not refused\n'; return; }
+  [ "$(owv "$_p" denies)" = 1 ] || { printf 'FAIL:one refused message counted %s\n' "$(owv "$_p" denies)"; return; }
+  [ "$(rcall "$1" "$_p" toolu_rctl_b 2)" = deny ] || { printf 'FAIL:the call in a second message M2 was not refused\n'; return; }
+  [ "$(owv "$_p" denies)" = 2 ] || { printf 'FAIL:a second message counted to %s, not 2\n' "$(owv "$_p" denies)"; return; }
+  printf 'PASS\n'
+}
+# R2. THE DISCRIMINATING WORLD: THE HOOK IS STILL PENDING WHEN ITS OWN MESSAGE'S LINE LANDS, AND IT
+# MUST DENY. This is a367e62c's calls 18 and 19, each refused by a hook still waiting at the flush
+# around 05:57:24, while calls 1-17 had already given up. The call's line is absent when the hook
+# starts; a background writer appends it at 16s, past the old 10s net and inside RECOVER_GATE_NET=30.
+# KEEP THE WRITER-VERSUS-NET10 WINDOW ABOVE THE POOL'S JITTER; do not shrink it again. The net10
+# mutant's loop ends at 10s and the writer lands at 16s. The 6s margin is chosen against an
+# UNMEASURED hook start-up and fork overhead under pool load, estimated at ~1s, which was the margin
+# when the writer sat at 11s. No jitter figure has been measured.
+# A gate that judges once at its start, or whose net is 10s, lets the call through uncounted.
+a_rflush() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  ( sleep 16; mline M-late toolu_rflush_late >> "$_p/t.jsonl" ) &
+  _wp=$!
+  _t0=$SECONDS
+  d="$(rcall "$1" "$_p" toolu_rflush_late 30)"
+  _el=$((SECONDS - _t0))
+  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
+  grep -qF toolu_rflush_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the late line never landed\n'; return; }
+  [ "$d" = deny ] || { printf 'FAIL:a call whose own line landed at 16s while its hook still waited was let through (the hook answered after %ss)\n' "$_el"; return; }
+  [ "$(owv "$_p" denies)" = 1 ] || { printf 'FAIL:the late-flush refusal counted %s, not 1\n' "$(owv "$_p" denies)"; return; }
+  printf 'PASS\n'
+}
+# R2c. CONTROL: the line never lands, RECOVER_GATE_NET=2. Silent, uncounted, file kept with a
+# stderr reason (A10's shape at the short knob); a SECOND expiry in the recovery deletes the file,
+# which is what bounds the stall at 2 x R_NET.
+a_rflush_ctl() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  _d0="$(owv "$_p" denies)"
+  [ "$(rcall "$1" "$_p" toolu_rfctl_never 2 "$_p/ctl.err")" = deny ] && { printf 'FAIL:an unseen call was denied at the net\n'; return; }
+  grep -q 'did not land within the' "$_p/ctl.err" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:the first expiry removed the owed file\n'; return; }
+  [ "$(owv "$_p" denies)" = "$_d0" ] || { printf 'FAIL:the expiry counted a refusal\n'; return; }
+  [ "$(rcall "$1" "$_p" toolu_rfctl_never2 2)" = deny ] && { printf 'FAIL:a second unseen call was denied at the net\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:a second expiry in the recovery kept the owed file, so the stall is unbounded\n'; return; }
+  printf 'PASS\n'
+}
+
+# R3. A GRANT WITHDRAWN DURING THE WAIT: the call's own line lands at about 3s together with an
+# `advisor_tool` attachment carrying available:false, toolChange:"remove". The hook must allow and
+# the owed file must be gone; a gate that tests the grant only before the wait denies.
+a_rwithdraw() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  ( sleep 3; mline M-wd toolu_rwd_late >> "$_p/t.jsonl"; printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"toolChange":"remove"}}\n' >> "$_p/t.jsonl" ) &
+  _wp=$!
+  d="$(rcall "$1" "$_p" toolu_rwd_late 30)"
+  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
+  grep -qF toolu_rwd_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the call line never landed\n'; return; }
+  [ "$d" = deny ] && { printf 'FAIL:a call whose grant was withdrawn during the wait was denied\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:the withdrawn grant left the owed file in place\n'; return; }
+  printf 'PASS\n'
+}
+
+R7PREDS="rmsg rmsg_ctl rflush rflush_ctl rwithdraw"
+r7_launch() { # r7_launch <gate> <outdir> -- every predicate in the background, pids recorded
+  a_tpl "$1"; mkdir -p "$2"; : > "$2/pids"
+  for _n in $R7PREDS; do
+    ( r="$("a_$_n" "$1")"; printf '%s\n' "$r" > "$2/$_n" ) &
+    printf '%s\n' "$!" >> "$2/pids"
+  done
+}
+r7_wait() { while read -r _wp; do wait "$_wp"; done < "$1/pids"; } # r7_wait <outdir>
+r7_flips() { # r7_flips <outdir> -> the predicates that did not PASS, space separated
+  for _n in $R7PREDS; do
+    r="$(cat "$1/$_n" 2>/dev/null)"
+    [ "${r%%:*}" = PASS ] || printf '%s ' "$_n"
+  done
+}
+r7mut() { # r7mut <name> <awk program> -> mutant path
+  awk "$2" "$GATE" > "$WORK/gate-730-$1.sh"; printf '%s\n' "$WORK/gate-730-$1.sh"
+}
+# M-730-net10: the default net back to 10s and the knob ignored. M-730-noreread: the wait loop
+# removed, so the verdict comes from the scan taken at the hook's start -- a gate that never reads
+# again, which is what a harness that writes the line only after the hook returns would see.
+# With no re-read the withdrawal is never seen, so M-730-noreread flips {rflush rwithdraw}: the
+# grant is refreshed only inside the loop it removes.
+# M-730-count: the denied_msg comparison removed, so every call counts.
+# Programs bound to variables first, as AP_NOARM is: bash 3.2 cannot scan a `$(` inside single
+# quotes inside "$( )".
+R7P_NET10='$0=="  R_NET=300"{print "  R_NET=10"; next} index($0,"R_NET=$((10#$RECOVER_GATE_NET))"){print "    *) : ;;"; next} 1'
+R7P_NORR='index($0,"  while [ \"$R_V\" = owed ] && [ \"${R_SEEN:-0}\" != 1 ]")==1{skip=1} skip{if($0=="  done")skip=0; next} 1'
+R7P_COUNT='index($0,"if [ \"${R_MID:--}\" != - ] && [ \"$R_MID\" = \"$R_DMSG\" ]; then"){print "  if false; then"; next} 1'
+R7_NET10="$(r7mut net10 "$R7P_NET10")"
+R7_NORR="$(r7mut noreread "$R7P_NORR")"
+R7P_GRANT='index($0,"[ \"${R_GRANT:-none}\" = on ] || { rm -f")==3{next} 1'
+R7_GRANT="$(r7mut grant "$R7P_GRANT")"
+R7_COUNT="$(r7mut count "$R7P_COUNT")"
+R7_CTRL="$WORK/gate-control-730.sh"; cp "$GATE" "$R7_CTRL"
+
+r7_launch "$GATE" "$WORK/r7-gate"
+r7_launch "$R7_CTRL" "$WORK/r7-ctrl"
+r7_launch "$R7_NET10" "$WORK/r7-net10"
+r7_launch "$R7_NORR" "$WORK/r7-noreread"
+r7_launch "$R7_COUNT" "$WORK/r7-count"
+r7_launch "$R7_GRANT" "$WORK/r7-grant"
+for _o in gate ctrl net10 noreread count grant; do r7_wait "$WORK/r7-$_o"; done
+
+for _n in $R7PREDS; do
+  r="$(cat "$WORK/r7-gate/$_n" 2>/dev/null)"
+  case "$_n" in
+    rmsg)       label="R (BL-730): two calls of one message are both refused and the message counts once (a_rmsg)" ;;
+    rmsg_ctl)   label="R (BL-730): CONTROL -- a second message counts again, 1 then 2 (a_rmsg_ctl)" ;;
+    rflush)     label="R (BL-730): a hook still pending when its own line lands at 16s DENIES, counted once (a_rflush)" ;;
+    rwithdraw)  label="R (BL-730): a grant withdrawn during the wait allows the call and removes the owed file (a_rwithdraw)" ;;
+    rflush_ctl) label="R (BL-730): CONTROL -- a line that never lands is silent and uncounted, and a second expiry stands the stage down (a_rflush_ctl)" ;;
+  esac
+  if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
+done
+r7cf="$(r7_flips "$WORK/r7-ctrl")"
+if [ -z "${r7cf// /}" ]; then
+  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"
+else
+  bad "CONTROL FAILED — an unmutated copy already flips {${r7cf}}, so every BL-730 mutant below is uninterpretable"
+fi
+r7mutant_arm() { # r7mutant_arm <label> <mutant> <outdir> <expected flip set, in R7PREDS order>
+  if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
+  if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
+  got="$(r7_flips "$3")"
+  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
+}
+if grep -qxF '  R_NET=10' "$R7_NET10" && ! grep -qF '10#$RECOVER_GATE_NET' "$R7_NET10"; then
+  r7mutant_arm "M-730-net10: the net back to 10s, the knob ignored" "$R7_NET10" "$WORK/r7-net10" "rflush"
+else bad "FIXTURE STALE: M-730-net10 did not replace both the default net and the knob"; fi
+if ! grep -qF 'while [ "$R_V" = owed ]' "$R7_NORR"; then
+  r7mutant_arm "M-730-noreread: the wait loop removed, judged once at the hook's start" "$R7_NORR" "$WORK/r7-noreread" "rflush rwithdraw"
+else bad "FIXTURE STALE: M-730-noreread did not remove the wait loop"; fi
+r7mutant_arm "M-730-count: the denied_msg comparison removed, every call counts" "$R7_COUNT" "$WORK/r7-count" "rmsg"
+r7mutant_arm "M-730-grant: the post-wait grant check removed" "$R7_GRANT" "$WORK/r7-grant" "rwithdraw"
 
 # =============================================================================
 # THE SAME-MESSAGE RACE AT THE READ STAGES (BL-658)
@@ -2328,6 +2538,15 @@ fi
     [ "$_rv" = first ] || { echo "FAIL:a decoy Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
     echo PASS
   }
+  rp_r_owed() { # a new recovery clears an owed-file temp left by a killed owed_put
+    _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
+    : > "$_rq/${pg%/*}/.recover-advisor-owed.4242"
+    [ -e "$_rq/${pg%/*}/.recover-advisor-owed.4242" ] || { echo 'FAIL:SEED — the owed temp was not seeded'; return; }
+    arm_marker "$1/$RC_RH" "$_rq"
+    [ -e "$_rq/$mk" ] || { echo 'FAIL:SEED — the new recovery wrote no marker'; return; }
+    [ -e "$_rq/${pg%/*}/.recover-advisor-owed.4242" ] && { echo 'FAIL:a new recovery left an owed-file temp on disk'; return; }
+    echo PASS
+  }
   rp_r_ctl() { # control: on a fresh recovery the same decoy Read gets FIRST
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
@@ -2346,6 +2565,7 @@ fi
       s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
       s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
       r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call decoy Read gets the FIRST deny" ;;
+      r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by a killed write" ;;
       r_ctl)     echo "BL-684 control: on a fresh recovery the same decoy Read gets the FIRST deny" ;;
     esac
   }
@@ -2459,7 +2679,7 @@ END { if (inb) flush() }
   if [ "$_rk" -lt 1 ]; then
     skip "BL-684 stale-stage-clear arms" "ai-dlc-recover.sh has no rm -f line naming .recover-gate-progress (key '${RC_CLRRE}', found 0); this fixture ships one pull ahead of its subject"
   else
-    RC_P684="r_clear r_ctl"
+    RC_P684="r_clear r_owed r_ctl"
     rc_arms "$RC_P684"
     rc_control "$RC_P684" "BL-684 stale-stage clear"
     # EVERY clearing line is neutralised, not the first: a clear spelled over two lines (the stage
@@ -2468,6 +2688,18 @@ END { if (inb) flush() }
     if [ -n "$_rd" ] && R="$RC_CLRRE" awk '$0 ~ ENVIRON["R"] { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
        && ! grep -qE -- "$RC_CLRRE" "$_rd/$RC_RH"; then :; else _rd=""; fi
     rc_score "M-684: the new recovery's stage clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_clear"
+    # BL-730: the owed-temp clear. RC_CLRRE keys on .recover-gate-progress, so it cannot match this
+    # line, and this mutant touches no stage line; each mutant therefore flips only its own predicate.
+    RC_OWEDKEY='rm -f "${STATE_DIR}"/.recover-advisor-owed.*'
+    _rn="$(grep -cF -- "$RC_OWEDKEY" "$RC_REAL/$RC_RH")" || _rn=0
+    if [ "$_rn" -lt 1 ]; then
+      skip "BL-730 owed-temp-clear mutant" "ai-dlc-recover.sh has no line '${RC_OWEDKEY}' (found 0)"
+    else
+      _rd="$(race_dir)"
+      if [ -n "$_rd" ] && K="$RC_OWEDKEY" awk 'index($0, ENVIRON["K"]) == 1 { print ":"; next } { print }' "$RC_REAL/$RC_RH" > "$_rd/$RC_RH" \
+         && [ "$(grep -cF -- "$RC_OWEDKEY" "$_rd/$RC_RH")" = 0 ]; then :; else _rd=""; fi
+      rc_score "M-730: the owed-temp clear removed" "$_rd" "$RC_RH" "$RC_P684" "r_owed"
+    fi
   fi
 
   # --- BL-688: an unwritable state directory stands the gate down ---------------
@@ -2550,6 +2782,61 @@ END { if (inb) flush() }
     if [ -n "$_rd" ] && race_edit "$RC_REAL/$RC_RH" "$_rd/$RC_RH" "$RACE_BEFORE" "$_rrl" '  [ -w "$STATE_DIR" ] || STEP_FILE_RESOLVED=0' \
        && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RC_RH")" = 1 ] && [ "$(grep -cF -- "$RC_WKEY" "$_rd/$RG")" = 0 ]; then :; else _rd=""; fi
     rc_score "M-688-B: the producer arms only when writable, in place of the per-call test" "$_rd" "$RG" "$RC_P688" "w_snap w_step"
+  fi
+
+  # --- BL-725: a failed stage write stands the recovery down -------------------
+  # A writable directory whose stage write FAILS (SIGXFSZ ignored so the write returns an error the
+  # way ENOSPC does) must clear the marker: the snapshot Read is allowed and the call after it is
+  # not denied. The control runs the same seed unlimited and keeps the marker (SECOND deny).
+  # Detection key: "$MARKER" on the RC_SWKEY line, the unlink in the failure branch.
+  _rk="$(grep -F -- "$RC_SWKEY" "$GATE" | grep -cF -- '"$MARKER"')" || _rk=0
+  if [ "$_rk" -lt 1 ]; then
+    skip "BL-725 failed-stage-write arms" "the stage-write line does not unlink the marker on failure (key '\"\$MARKER\"' on the RC_SWKEY line, found 0); this fixture ships one pull ahead of its subject"
+  else
+    rp_s_fail() { # stage one, write fails: Read allowed, marker gone, no temp left, the next Edit allowed
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
+      _rs="$( trap '' XFSZ; ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" 2>/dev/null )"
+      _rs="$(rc_dec "$_rs")"
+      [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read with a failing stage write answered '${_rs}'"; return; }
+      [ -e "$_rq/$pg" ] && { echo "FAIL:the stage write was expected to fail and left '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
+      [ -e "$_rq/$mk" ] && { echo 'FAIL:a failed stage write left the marker, so the recovery stays armed'; return; }
+      _rt="$(ls "$_rq/_bmad-output" 2>/dev/null | grep -c 'recover-gate-progress')" || _rt=0
+      [ "$_rt" = 0 ] || { echo "FAIL:a failed stage write left ${_rt} stage temp file(s) behind"; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
+      [ "$_rv" = allow ] || { echo "FAIL:an Edit after the failed stage write answered '${_rv}', not allow"; return; }
+      echo PASS
+    }
+    rp_s_fail_ctl() { # control: the same seed without the limit advances to step, keeps the marker, and the Edit gets SECOND
+      _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
+      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      [ "$_rs" = allow ] || { echo "FAIL:the unlimited full snapshot Read answered '${_rs}'"; return; }
+      [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] || { echo "FAIL:the unlimited stage write left '$(cat "$_rq/$pg" 2>/dev/null)', not step"; return; }
+      [ -e "$_rq/$mk" ] || { echo 'FAIL:a successful stage write cleared the marker'; return; }
+      _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
+      [ "$_rv" = second ] || { echo "FAIL:an Edit after the successful stage write answered '${_rv}', not the SECOND deny"; return; }
+      echo PASS
+    }
+    rc_l725() {
+      case "$1" in
+        s_fail)     echo "BL-725: a snapshot Read whose stage write fails is allowed, the marker is gone, no stage temp remains, and the Edit after it is NOT denied" ;;
+        s_fail_ctl) echo "BL-725 control: the same seed without the limit writes step, keeps the marker, and the Edit gets the SECOND deny" ;;
+      esac
+    }
+    RC_P725="s_fail s_fail_ctl"
+    for _ra in $RC_P725; do _rr="$("rp_$_ra" "$RC_REAL")"; if [ "$_rr" = PASS ]; then ok "$(rc_l725 "$_ra")"; else bad "$(rc_l725 "$_ra") — ${_rr#FAIL:}"; fi; done
+    rc_control "$RC_P725" "BL-725 failed stage write"
+    _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
+    _rmk=' "$MARKER"'
+    rc_s725() { # rc_s725 <replacement line> -> a whole-directory copy with the stage-write line replaced, or empty
+      _rd="$(race_dir)"; [ -n "$_rd" ] || return 0
+      race_edit "$RC_REAL/$RG" "$_rd/$RG.m" "$RACE_REPL" "$_rsw" "" "$1" && mv "$_rd/$RG.m" "$_rd/$RG" || return 0
+      printf '%s\n' "$_rd"
+    }
+    rc_score "M-725-pre: the failure branch back to the temp-only unlink" \
+      "$(rc_s725 "${_rsw//"$_rmk"/}")" "$RG" "$RC_P725" "s_fail"
+    rc_score "M-725-always: the marker also removed on a successful stage write" \
+      "$(rc_s725 "${_rsw}; rm -f \"\$MARKER\"")" "$RG" "$RC_P725" "s_fail_ctl"
   fi
 
   # --- BL-687: a full step Read before the stage write is allowed, advancing nothing -------

@@ -461,18 +461,6 @@ Measured input for the partition, graph-watch, batch 238. These figures come fro
 
 verify: manual
 
-## BL-725 — the recover gate's per-call `[ -w "$STATE_DIR" ]` stand-down passes on a writable directory whose stage write fails (a full disk), so the snapshot Read is allowed, the stage stays `snapshot`, and every later call is denied FIRST
-
-**DEFECT.** The filing is promised by 0.891.0's CHANGELOG ("Finding: an ENOSPC stage-write failure still holds the gate at `snapshot`", `CHANGELOG.md:42-44`). It came out of the BL-688 work and was relayed by graph-watch, batch 238; the batch-238 filing hand measured and filed it.
-
-`core/hooks/ai-dlc-recover-gate.sh:342` stands the gate down only when `$STATE_DIR` is not writable. The snapshot arm's stage write at `:417` is `{ printf 'step\n' >"${PROGRESS}.$$" && mv -f ...; } 2>/dev/null || rm -f ... || true`, followed by `exit 0`. A write that FAILS in a writable directory (ENOSPC, a quota, EFBIG) is therefore swallowed and the Read is allowed. `:389` then finds no progress file and defaults `STAGE` to `snapshot`, and `:450` denies the next call with the FIRST-call text. That text's remedy is the snapshot Read, which is allowed again and again advances nothing. The bounded escape covers only the advisor stage, so the lead is wedged.
-
-Measured on a seeded tree with the write forced to fail by `ulimit -f 0`, with SIGXFSZ ignored so that the write returns an error the way ENOSPC does: the following Grep is denied "your FIRST tool call". The identical seed without the limit is not denied. No directory-mode test can see a failed write, so BL-688's shape cannot be extended to cover it.
-
-Owed: when the stage write fails, the gate stands down for the call AND for the recovery (unlinking the marker needs no free space). Alternatively, it records that the snapshot Read happened by a means that does not depend on that write succeeding. The fix is the owner's to choose.
-
-verify: sh H=core/hooks/ai-dlc-recover-gate.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null || exit 9; T="$(mktemp -d)"; mkdir -p "$T/_bmad-output" "$T/steps"; printf "s\n" > "$T/_bmad-output/pipeline-snapshot.md"; printf "x\n" > "$T/steps/x.md"; printf "step_file_resolved=1\nsnapshot_path=_bmad-output/pipeline-snapshot.md\nstep_file=steps/x.md\n" > "$T/_bmad-output/.recover-fired"; RS="{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$T/_bmad-output/pipeline-snapshot.md\"}}"; GL="{\"tool_name\":\"Grep\",\"tool_input\":{\"pattern\":\"a\"}}"; c0="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; grep -q "FIRST tool call" <<<"$c0" || exit 9; CLAUDE_PROJECT_DIR="$T" bash -c "trap \"\" XFSZ; ulimit -f 0; bash \"$H\"" <<<"$RS" >/dev/null 2>&1; [ -f "$T/_bmad-output/.recover-fired" ] || exit 0; c1="$(CLAUDE_PROJECT_DIR="$T" bash "$H" <<<"$GL" 2>/dev/null)"; ! grep -q "FIRST tool call" <<<"$c1"
-
 ## BL-728 — the derivation allowlist refuses a backtick inside single quotes and any `git -C <dir> <read-only-sub>`, so an adversary's correct fenced command is refused at write time and rewritten
 
 **NOTE.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the PC CANDIDATES bullet) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
@@ -482,20 +470,6 @@ verify: sh H=core/hooks/ai-dlc-recover-gate.sh; [ -f "$H" ] || exit 9; command -
 Direction, for the owner: test the backtick under the existing quote scan, so it is refused only unquoted or inside double quotes, and skip `-C <dir>` before reading the subcommand, deciding whether `<dir>` must stay inside the root. The receipt exits 1 at the backtick arm and 2 at the `git -C` arm. If the owner rules that `git -C` stays refused, drop the receipt's `g.md` arm.
 
 verify: sh set -uo pipefail; V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] && command -v git >/dev/null || exit 9; R=$PWD; w=$(mktemp -d) || exit 9; mkdir -p "$w/p/.claude" "$w/p/sub" || exit 9; git -C "$w/p" init -q . || exit 9; printf 'a`b\n' > "$w/p/d.txt"; printf '# x\n\n```derived\n$ git rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/c.md"; printf '# x\n\n```derived\n$ grep -c -F '"'"'a`b'"'"' d.txt\n1\n```\n' > "$w/p/q.md"; printf '# x\n\n```derived\n$ git -C sub rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/g.md"; v() { ( cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" bash "$R/$V" "$1" >/dev/null 2>&1 ); }; v c.md || exit 9; v q.md || exit 1; v g.md || exit 2; exit 0
-
-## BL-730 — the recover gate's touchpoint-R stage enforces on a race-chosen subset of a parallel dispatch: each call of a many-call message waits for its OWN line, the early calls' nets expire uncounted, and only the tail is refused
-
-**DEFECT.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the stories-p2 history line: "shards 18 and 19 were REFUSED by the touchpoint-R hook") by graph-watch, batch 238; measured on graph transcript `a367e62c` and filed by the batch-238 filing hand.
-
-`core/hooks/ai-dlc-recover-gate.sh:224-236` denies only once the incoming call's own `tool_use` line is on disk. At the 10 s net it stands down without counting, under BL-630's fail-open ruling (`CHANGELOG.md:2462-2467`).
-
-Transcript `a367e62c` shows the race. At line 4515 a `compact_boundary` fires, and at line 4550 the lead Reads the post-compaction digest, with no advisor call afterwards. Lines 4612-4681 then hold one message, `msg_011CgCyKHw8znw1wSZJHk9TR`, with all 19 "Pass 2 adversary shard NN" Agent calls. The hooks ran serially about 7 s apart. Calls 1-17 each hit the net and were dispatched: 17 safety-net stand-down lines, 4615-4679. Calls 18 and 19 were SEEN and refused, at lines 4687 and 4689 ("1 of 3").
-
-Touchpoint R was owed, and it held 2 of 19 calls. This is BL-545's incident shape, many seats dispatched before the R advisor call, now escaping through a parallel batch. The lead also had to notice the partial dispatch and re-dispatch shards 18 and 19.
-
-Direction, for the owner: judge a call as SEEN once any later sibling of the same `message.id` is on disk, since content streams in order, or carry one decision across all of a message's calls. Either way, fail-open on an unreadable transcript stays as ruled.
-
-verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net. A behavioural receipt would pay that net on every scoring and would fix a mechanism the owner has not chosen.
 
 ## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
 
@@ -566,3 +540,19 @@ Owed:
 - have the consumers (`--complete`, `--complete-repair`, `merge-adversarial-shards.sh`'s `ends_in_marker`) consult the content-seal ledger.
 
 verify: manual
+
+## BL-752 — the advisor gate's push denial waits on the same per-call 10 s net that BL-730 found expiring silently across a many-call parallel message, so a push late in such a message that owes an advisor attempt passes unrefused
+
+**NOTE.** The exposure is real in mechanism and theoretical in practice, so it is not a DEFECT. Raised from the BL-730 measurement on graph transcript `a367e62c` by the batch-239 recover-gate cluster; the advisor-gate reading and the push census were done by the filing hand.
+
+`core/hooks/ai-dlc-advisor-gate.sh:637` sets `_cap=10; _net=1` for the default `ADVISOR_GATE_REREADS`, and `:640-646` re-scans every 0.25 s until `SEEN=1` or the cap. At `:646-649` the net's expiry with `SEEN` still 0 is SILENT (BL-630's fail-open ruling, header `:225-241` "THE RACE, AND THE RE-READ"). That is the shape `core/hooks/ai-dlc-recover-gate.sh` carried before BL-730. BL-730 measured the cause on `a367e62c` lines 4611-4690: the harness flushes a message's transcript lines around the END of streaming, not per call, so in the 19-Agent-call message `msg_011CgCyKHw8znw1wSZJHk9TR` (streamed about 7 s apart) calls 1-17 expired the net and only calls 18 and 19 saw their own lines.
+
+What the advisor gate gates is `Bash` `git push` (kind `push`, `:46`), plus merge, close, gate-log and verdict writes. A push is judged `owed` only when no advisor attempt precedes it in its own message and none sits in the last `ADVISOR_GATE_WINDOW` (10) assistant turns (`:250-256`, `:578-580`), and L3 exits earlier for a `_bmad-output/`-only push (`:615-616`). Only the residue can reach the net: a push in a message with no advisor call, after a window with none, that is not `_bmad-output/`-only, and whose own line has not landed. `ADVISOR_GATE_REREADS=0` or `1` cannot help in practice, since they judge the last scan at their bound and a flush that late has not arrived either. They are stricter-only, and the default is the only value that fails open.
+
+Plausibility, measured on graph's transcripts (`~/.claude/projects/-Users-n8-git-graph/*.jsonl`, 553 assistant messages carrying a Bash `git push`): 416 hold exactly 1 tool call, 134 hold 2, 15 hold 3, none more. A 10 s expiry needs preceding calls long enough to stream for seconds, as 19 Agent prompts did; a push is a one-line call and in this census it never follows more than 2 siblings. So the BL-730 mechanism has no observed instance here. It can occur only if a lead emits a push as the tail of a many-call message while owing an advisor attempt, and the gate then fails open silently, the BL-630 ruling's accepted cost.
+
+A second claim, a separate subject: `core/hooks/ai-dlc-advisor-gate.sh:631` reads `# harness's own 60s default is the next ceiling above it.`, and that figure is wrong. Per code.claude.com/docs/en/hooks.md a `command` hook defaults to 600 s, lowered to 30 s only for UserPromptSubmit, PreModelSwitch and PostModelSwitch and to 10 s for MessageDisplay. PreToolUse stays at 600 s, and on PreToolUse a timed-out hook does not block the call.
+
+Owed: correct the `:631` comment (BL-752 now has two subjects, the net and the comment, and closes only when both are resolved); and BL-730's sibling fix applied to this hook once that fix has landed and been judged: wait for the flush up to a longer net and count per `message.id`. Judging the incoming call SEEN once a later sibling of the same `message.id` is on disk is excluded, because it cannot fire: no sibling line lands before the call's own line, since they flush together, and on `a367e62c` calls 18 and 19 were denied by hooks still pending at the flush. The owner may instead rule the exposure acceptable and close this as won't-fix; the census above is the evidence for that choice.
+
+verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net, and no knob shortens the default's fail-open branch: `ADVISOR_GATE_REREADS=0` or `1` select the stricter-only branch, which is a different program. A behavioural receipt would pay 10 s on every scoring and would fix a mechanism the owner has not chosen.

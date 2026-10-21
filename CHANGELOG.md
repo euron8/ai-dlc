@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.907.0] - 2026-10-21
+
+Batch 239, lead ai-dlc-13, cluster recover-gate. It closes BL-725 and BL-730, closes no `PC-` id and files BL-752. Net for this release: 2 closed, 1 filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-recover-gate.sh` and `core/hooks/ai-dlc-recover.sh`. `core/schemas/pipeline-state-paths.json` ignores `_bmad-output/.recover-advisor-owed*`, so a temp file left by a killed owed-file write is not an untracked file in a consumer tree. No role or step text changes.
+
+### BL-725 — a failed snapshot-stage write stands the recovery down
+
+The per-call writability test cannot see a writable directory whose write fails (a full disk, a quota, a file-size limit). The Read was allowed, the stage stayed `snapshot`, and every later call was denied FIRST with a remedy that advanced nothing.
+
+- When the `step` write fails, the gate also unlinks the marker, which stands the recovery down and needs no free space. The advisor stage is left unarmed: fail-open, as BL-688 is.
+- Residual: a sticky-bit `_bmad-output` owned by another user passes the writability test but refuses the unlink.
+- Fixture `postcompact-rulebook-recovery` gains its own BL-725 block: `s_fail` (the write fails under `ulimit -f 0` with SIGXFSZ ignored; marker gone, no temp left, the next call allowed) and `s_fail_ctl`, with mutants M-725-pre and M-725-always.
+- BL-725's receipt asserts the write really failed, the marker is gone, and an unlimited control keeps the marker and reaches the SECOND stage.
+
+### BL-730 — touchpoint R waits for a message's flush and refuses once per message
+
+Measured on graph transcript `a367e62c`: one message held 19 Agent calls while touchpoint R was owed. Each call's PreToolUse ran as its block finished streaming, about 7 s apart, and the message's lines reached disk together at message end. Calls 1-17 hit the 10 s net and were dispatched uncounted. Calls 18 and 19 were refused by hooks still pending when the lines landed, which also shows the flush does not wait on the hooks. Judging a call seen once a later sibling is on disk cannot fire, because no sibling lands before the call's own line.
+
+- A deny waits for the call's own `tool_use` line, polled by a `grep -F` of its id, with the jq scan re-run only once the id is on disk. `R_NET` bounds the wait at 300 s, below the harness's 600 s PreToolUse default. `RECOVER_GATE_NET` (1..300) can only shorten it, which loosens the gate; it exists so fixtures do not pay the net.
+- A deny records the call's `message.id` as `denied_msg=`. After the wait the hook re-reads the owed file; a call of the message already refused is denied without counting again, and the bounded escape is checked there, so `R_MAX_DENIES` counts messages. A line with no message id counts every time.
+- An expiry with the line still absent stays silent and uncounted (BL-630) and is recorded as `expired=`; the second one in a recovery deletes the owed file, bounding the stall at 2 x `R_NET`. A call with no `tool_use_id` is let through at once.
+- After the wait the hook re-checks the grant: an advisor tool withdrawn mid-wait allows the call and deletes the owed file. The pre-wait grant check is now a cost fast-path.
+- `owed_put` writes a `.<pid>` temp and renames it; `ai-dlc-recover.sh` clears leftover temps.
+- Cost: in an owed message, dispatches start when its lines land, up to `R_NET` later. Limit: at about 7 s per block, 300 s covers about 43 calls.
+- Fixture arms: `a_rmsg`, `a_rmsg_ctl`, `a_rflush` (a hook pending when its own line lands at 16 s still denies; the 6 s margin over the 10 s mutant is set against an UNMEASURED ~1 s overhead estimate), `a_rflush_ctl`, `a_rwithdraw`, and `r_owed`. `a_nogrant` asserts a count (a `sleep` shim on `PATH`, 0 wait-loop ticks) and FAILs on an unarmed seed. A10 runs at `RECOVER_GATE_NET=2`.
+- Mutants: M-730-net10 {rflush}, M-730-noreread {rflush rwithdraw}, M-730-count {rmsg}, M-730-grant {rwithdraw}, M-730 owed-temp clear {r_owed}; AP_NOARM widened to include `nogrant`.
+- BL-730's receipt is an `sh` receipt in place of `verify: manual`: two calls of one message count once, a second message counts again.
+
+### Filed
+
+- BL-752 (NOTE), two subjects. `ai-dlc-advisor-gate.sh` shares the per-call 10 s net BL-730 found expiring; across graph's 553 push-bearing messages none held more than 3 tool calls, so there is no observed instance. Its comment at `:631` says the harness hook default is 60 s; a PreToolUse command hook defaults to 600 s.
+
 ## [0.906.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13, cluster shard-merge. It closes BL-726 and BL-734, closes no `PC-` id and files nothing. Net for this release: 2 closed, 0 filed = 2. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-adversarial-shards.sh`. The dispatch guard `core/hooks/ai-dlc-dispatch-guard.sh` arrives in the same pull. Rulebook text that lands with the reconcile PR: `core/team-roles/adversary.md`, `remediator.md` and `pm-escalated.md`.

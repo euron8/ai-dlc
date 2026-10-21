@@ -709,8 +709,10 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # which is the same guarantee `$MARKER` gets from being rewritten above.
 rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
 # The gate's advisor stage (touchpoint R) is per recovery for the same reason: a window left
-# open by a session that ended inside it must not hold the next recovery's calls.
+# open by a session that ended inside it must not hold the next recovery's calls. The `.<pid>`
+# leftovers are temp files from an owed-file write killed before its rename.
 rm -f "${STATE_DIR}/.recover-advisor-owed" 2>/dev/null || true
+rm -f "${STATE_DIR}"/.recover-advisor-owed.* 2>/dev/null || true
 # The gate's read stage is per recovery too (BL-684): a `step` left by a session that ended
 # between the two mandated Reads would start this recovery past the snapshot mandate. The
 # `.<pid>` leftovers are temp files from a stage write killed before its rename.

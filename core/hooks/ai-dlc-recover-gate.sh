@@ -87,8 +87,10 @@
 # after a live grant, so the wedge state has 0 recorded instances there -- which is a corpus
 # fact, not a guarantee (the advisor gate's header measured a remove line on a `--resume`
 # switch to a local model; a `/model` switch was not measured). So the stage refuses at most
-# R_MAX_DENIES (3) calls per recovery and then stands down; each deny says so and names the
-# `RECOVERY-SKIP: advisor -- <why>` disclosure for a lead that holds no advisor tool.
+# R_MAX_DENIES (3) MESSAGES per recovery and then stands down; each deny says so and names the
+# `RECOVERY-SKIP: advisor -- <why>` disclosure for a lead that holds no advisor tool. It counts
+# messages, not calls (BL-730, THE RACE below): every call of a refused message is refused, and
+# the message spends one of the three.
 #
 # REGISTRATION. The settings template registers this hook with matcher `*`, so every tool in
 # the deny set reaches it; no registration was added.
@@ -113,13 +115,41 @@
 # teammate from its lead -- which it could not be relied on to do: subagent transcript files record
 # the PARENT's sessionId, and what a teammate's PreToolUse stdin carries was never measured.
 #
-# THE RACE. The incoming call's own message is usually not on disk when PreToolUse fires
-# (measured in the advisor gate's header, THE RACE), so an advisor call in the same message
-# may not be visible yet. A DENY is therefore re-judged every 0.25s until the incoming call's
-# own `tool_use` line lands or a 10s safety net passes; an ALLOW is final at once. A deny needs
-# that line on disk: the net's expiry without it stands the stage down for that call, uncounted
-# (BL-630), so load cannot deny a correct same-message advisor call. The deny reason says to
-# call the advisor in a message of its own, which is the shape that never races.
+# THE RACE. The incoming call's own message is not on disk when PreToolUse fires, so an advisor
+# call in the same message may not be visible yet. MEASURED (BL-730, graph transcript a367e62c):
+# one message carried 19 Agent calls; the harness ran each call's PreToolUse as that block
+# finished streaming, about 7s apart and overlapping the earlier calls' hooks, while the message
+# still streamed; and the message's lines reached disk TOGETHER, at message end. Calls 1-17 each
+# hit the old 10s net and were dispatched uncounted; only calls 18 and 19, still waiting at the
+# flush around 05:57:24, were refused. So no sibling line lands before a call's own line -- they
+# flush together -- and the wait has to outlast the message, not a clock.
+#
+# So a DENY waits for the incoming call's own `tool_use` line, polled with a cheap `grep -F` of
+# its id (0.25s ticks for 2s, then 1s) and re-judged with the full scan only once the id is on
+# disk; an ALLOW is final at once. R_NET bounds the wait, default 300s: below the harness's 600s
+# default hook timeout, so the hook answers before the harness abandons it, and above graph's
+# 131s 19-call message. The net is a BOUND, not a ceiling whose expiry denies: expiry with the
+# line still absent stands the stage down for that call, uncounted (BL-630), and two expiries in
+# one recovery delete the owed file, which bounds the stall at 2 x R_NET. A call whose input
+# carries no `tool_use_id` can never be seen and is let through at once.
+#
+# ONE DECISION PER MESSAGE. The scan also reports the `message.id` of the incoming call's line,
+# and a deny records it as `denied_msg=`. After the wait the hook RE-READS the owed file: a call
+# whose message is the one already refused is denied without counting again, and the bounded
+# escape is checked there too, so it stands down only for a NEW message. The concurrent hooks of
+# one message wake on the same flush and write identical content, so their race is idempotent. A
+# line with no message id counts every time. COST: in an owed message the dispatches start when
+# the message's lines land, up to R_NET later, rather than as each block streams. A same-message
+# advisor call lands in the same flush and acquits as before. LIMIT: at ~7s per streamed block,
+# the 300s net covers a message of about 43 calls; past that the first calls expire, and after the
+# second expiry the stage stands down for the recovery. The deny reason says to call the advisor
+# in a message of its own, which is the shape that never races.
+#
+# THE KNOB. `RECOVER_GATE_NET=<n>`, an integer 1..300, can only SHORTEN the net; anything else is
+# 300. Shortening LOOSENS the stage -- more expiries, so more silent stand-downs -- which departs
+# from `ADVISOR_GATE_REREADS` in `ai-dlc-advisor-gate.sh`, whose knob may only make that gate
+# stricter. It is acceptable here because every expiry already fails open, so the knob adds no
+# deny path; it exists so fixtures do not pay the full net.
 #
 # It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
 # requires is not verifiable here -- that disclosure covers exactly the cases where this gate
@@ -146,13 +176,18 @@ digest_readable() {
   [ -r "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
     || [ -r "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]
 }
-# owed_put <session_id> <denies> -- the ONE writer of the owed file. A failed write warns on
-# stderr naming the hook and the file and never denies: an unwritten arm leaves the stage
-# disarmed (fail open), and an unwritten count leaves the next deny at the same count.
+# owed_put <session_id> <denies> [denied_msg] [expired] -- the ONE writer of the owed file.
+# It writes a sibling temp, `${OWED}.<pid>`, and renames it into place, so the concurrent hooks
+# of one message (header: THE RACE) never read a half-written file. A failed write removes the
+# temp, warns on stderr naming the hook and the file, and never denies: an unwritten arm leaves
+# the stage disarmed (fail open), and an unwritten count leaves the next deny at the same count.
 owed_put() {
-  printf 'session_id=%s\ndenies=%s\n' "$1" "$2" > "$OWED" 2>/dev/null \
-    || echo "WARN: ai-dlc-recover-gate: could not write $OWED" >&2
+  { printf 'session_id=%s\ndenies=%s\ndenied_msg=%s\nexpired=%s\n' "$1" "$2" "${3:-}" "${4:-0}" > "${OWED}.$$" \
+      && mv -f "${OWED}.$$" "$OWED"; } 2>/dev/null \
+    || { rm -f "${OWED}.$$" 2>/dev/null; echo "WARN: ai-dlc-recover-gate: could not write $OWED" >&2; }
 }
+# owed_get <key> -- one value from the owed file, empty if absent.
+owed_get() { sed -n "s/^$1=//p" "$OWED" 2>/dev/null | head -1; }
 
 # --- THE ADVISOR STAGE (header: THE ADVISOR STAGE) ---------------------------------------
 # Runs only once the read stages have disarmed (no marker) and left the owed file behind, so
@@ -170,22 +205,15 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
     rm -f "$OWED" 2>/dev/null || true
     exit 0
   fi
-  # THE BOUNDED ESCAPE (header: THE ADVISOR STAGE). After R_MAX_DENIES refusals the stage stands
-  # down for this recovery, whatever the transcript says.
-  R_DENIES="$(sed -n 's/^denies=//p' "$OWED" 2>/dev/null | head -1)"
-  case "$R_DENIES" in ''|*[!0-9]*) R_DENIES=0 ;; esac
-  if [ "$R_DENIES" -ge "$R_MAX_DENIES" ]; then
-    rm -f "$OWED" 2>/dev/null || true
-    exit 0
-  fi
   [ -n "$R_TP" ] && [ -r "$R_TP" ] || exit 0
   # One pass: grant (latest advisor_tool attachment), dig (line of the last digest Read after
   # the last compact_boundary, 0 if none), adv (line of the last advisor attempt), res (U when
-  # the latest advisor result is `unavailable`), seen (the incoming call's own line is on disk).
+  # the latest advisor result is `unavailable`), seen (the incoming call's own line is on disk),
+  # mid (that line's `message.id`; `-` when it carries none or is not on disk).
   r_scan() {
     jq -n -R -r --arg tuid "$R_TUID" '
       reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0};
+        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0, mid: "-"};
          if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
            .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
          elif ($l.type == "system" and $l.subtype == "compact_boundary") then .dig = 0
@@ -196,14 +224,15 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
                .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
              elif ($b.type == "tool_use" and $b.name == "Read"
                    and ((($b.input.file_path // "") | tostring) | test("(^|/)skills/ai-dlc/postcompact-digest\\.md$"))) then .dig = $n
-             elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1
+             elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then
+               .seen = 1 | .mid = ((($l.message.id? // "") | tostring | gsub("[[:space:]]"; "")) | if . == "" then "-" else . end)
              else . end)
          end)
-      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen)"' "$R_TP" 2>/dev/null
+      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen) \(.mid)"' "$R_TP" 2>/dev/null
   }
   # r_judge: sets R_V to allow | clear | owed from R_STATE.
   r_judge() {
-    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN <<<"$R_STATE"
+    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN R_MID <<<"$R_STATE"
     R_V=owed
     [ "${R_DIG:-0}" -gt 0 ] 2>/dev/null || R_V=allow
     if [ "$R_V" = owed ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
@@ -213,29 +242,75 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   R_STATE="$(r_scan)" || exit 0
   [ -n "$R_STATE" ] || exit 0
   r_judge
+  # THIS CHECK IS A PERFORMANCE FAST-PATH, NOT THE BEHAVIOURAL GUARD: a call with no grant is let
+  # through at once instead of after the wait. The post-wait grant check below decides the same
+  # verdict, and the fixture asserts the cost of this line directly (a_nogrant).
   if [ "${R_GRANT:-none}" != on ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
-  # THE DENY IS DECIDED BY R_SEEN, NEVER BY THE CLOCK (BL-630). The 10s is a safety net bounding
-  # the stall, not a ceiling whose expiry denies: under load fewer re-reads fit and the line being
-  # waited for lands later, so a timed deny refused a correct same-message advisor call. Expiry
-  # with the incoming call's own line still absent is a transcript this stage cannot read, and it
-  # stands down for that call -- no deny, no count (owed_put is not reached), the file kept, so the
-  # next dispatch is judged again. The advisor gate's header, THE RACE, carries the same rule.
-  # An input with no `tool_use_id` can never be seen, so on such a harness this stage never denies.
-  _rt0=$SECONDS
-  while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ $((SECONDS - _rt0)) -lt 10 ]; do
-    sleep 0.25
+  # THE DENY IS DECIDED BY R_SEEN, NEVER BY THE CLOCK (BL-630; header: THE RACE). R_NET bounds the
+  # stall and is not a ceiling whose expiry denies: the line being waited for lands when its whole
+  # message flushes, and a timed deny refused a correct same-message advisor call. Expiry with the
+  # incoming call's own line still absent is a transcript this stage cannot read, and it stands
+  # down for that call -- no deny, no count, the file kept, so the next dispatch is judged again --
+  # until the recovery's second expiry, which deletes the file. An input with no `tool_use_id` can
+  # never be seen, so it is let through at once rather than after the whole net.
+  if [ "$R_V" = owed ] && [ -z "$R_TUID" ]; then exit 0; fi
+  R_NET=300
+  case "${RECOVER_GATE_NET:-}" in
+    ''|*[!0-9]*) : ;;
+    *) if [ "$RECOVER_GATE_NET" -ge 1 ] 2>/dev/null && [ "$RECOVER_GATE_NET" -le 300 ] 2>/dev/null; then R_NET=$((10#$RECOVER_GATE_NET)); fi ;;
+  esac
+  # A tick is a `grep -F` of the call's id and forks no jq; the full scan re-runs only once the
+  # id is on disk, and the poll continues while that line is not yet parseable (seen still 0).
+  # The net is counted in slept quarter seconds (`_rq`), because SECONDS ticks on wall-clock second
+  # boundaries and alone can cut the wait up to a second short; SECONDS bounds only a box so loaded
+  # that the sleeps themselves overrun, at one second past the net.
+  _rt0=$SECONDS; _rq=0
+  while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ "$_rq" -lt $((R_NET * 4)) ] && [ $((SECONDS - _rt0)) -le "$R_NET" ]; do
+    if [ "$_rq" -lt 8 ]; then sleep 0.25; _rq=$((_rq + 1)); else sleep 1; _rq=$((_rq + 4)); fi
+    _rn="$(grep -cF -- "$R_TUID" "$R_TP" 2>/dev/null)" || _rn=0
+    [ "${_rn:-0}" -gt 0 ] 2>/dev/null || continue
     R_S2="$(r_scan)" || R_S2=""
     [ -n "$R_S2" ] && R_STATE="$R_S2"
     r_judge
   done
   if [ "$R_V" = clear ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
+  # A GRANT WITHDRAWN DURING THE WAIT: the loop refreshed R_GRANT through r_judge, so a remove-grant attachment that landed with the call's own line allows the call.
+  [ "${R_GRANT:-none}" = on ] || { rm -f "$OWED" 2>/dev/null || true; exit 0; }
   [ "$R_V" = owed ] || exit 0
+  # RE-READ AFTER THE WAIT. The other hooks of this call's message may have written the owed file
+  # while this one waited, or an advisor attempt or a new recovery removed it, so every decision
+  # below reads the file as it is NOW, never the values read before the wait.
+  [ -f "$OWED" ] || exit 0
+  R_DENIES="$(owed_get denies)"; case "$R_DENIES" in ''|*[!0-9]*) R_DENIES=0 ;; esac
+  R_EXP="$(owed_get expired)"; case "$R_EXP" in ''|*[!0-9]*) R_EXP=0 ;; esac
+  R_DMSG="$(owed_get denied_msg)"
   if [ "${R_SEEN:-0}" != 1 ]; then
-    echo "ai-dlc-recover-gate: the incoming call's own transcript line did not land within the 10s safety net ($R_TP); its message may still hold the advisor attempt, so touchpoint R is not enforced on this call" >&2
+    R_EXP=$((R_EXP + 1))
+    if [ "$R_EXP" -ge 2 ]; then
+      rm -f "$OWED" 2>/dev/null || true
+      echo "ai-dlc-recover-gate: the incoming call's own transcript line did not land within the ${R_NET}s safety net ($R_TP) for the second time in this recovery, so touchpoint R stands down for the rest of it" >&2
+      exit 0
+    fi
+    owed_put "$R_OSID" "$R_DENIES" "$R_DMSG" "$R_EXP"
+    echo "ai-dlc-recover-gate: the incoming call's own transcript line did not land within the ${R_NET}s safety net ($R_TP); its message may still hold the advisor attempt, so touchpoint R is not enforced on this call" >&2
     exit 0
   fi
-  owed_put "$R_OSID" "$((R_DENIES + 1))"
-  jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused ($((R_DENIES + 1)) of ${R_MAX_DENIES}). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refusals this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
+  # ONE COUNT PER MESSAGE (header: THE RACE). A call of the message already refused is refused at
+  # the same count. A new message meets THE BOUNDED ESCAPE (header: THE ADVISOR STAGE) here, after
+  # the wait, and is then counted. A line with no message id (`-`) counts every time and never
+  # writes denied_msg.
+  if [ "${R_MID:--}" != - ] && [ "$R_MID" = "$R_DMSG" ]; then
+    R_N="$R_DENIES"
+  else
+    if [ "$R_DENIES" -ge "$R_MAX_DENIES" ]; then
+      rm -f "$OWED" 2>/dev/null || true
+      exit 0
+    fi
+    R_N=$((R_DENIES + 1))
+    [ "${R_MID:--}" = - ] || R_DMSG="$R_MID"
+    owed_put "$R_OSID" "$R_N" "$R_DMSG" "$R_EXP"
+  fi
+  jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused (message ${R_N} of ${R_MAX_DENIES}; every call of a refused message is refused, and the message counts once). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refused messages this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
 fi
@@ -414,7 +489,14 @@ case "$STAGE" in
   snapshot)
     if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
       if is_full_read; then
-        { printf 'step\n' >"${PROGRESS}.$$" && mv -f "${PROGRESS}.$$" "$PROGRESS"; } 2>/dev/null || rm -f "${PROGRESS}.$$" 2>/dev/null || true
+        # A STAGE WRITE THAT FAILS STANDS THE RECOVERY DOWN (BL-725). The per-call
+        # writability test cannot see a writable directory whose write fails (a full disk, a quota,
+        # a file-size limit), so without this the Read is allowed, the stage stays snapshot, and every later
+        # call is denied FIRST with a remedy that advances nothing. Unlinking the marker is the
+        # stand-down, and it needs no free space. The advisor stage is left unarmed, which is
+        # fail-open exactly as BL-688 is. RESIDUAL: a sticky-bit _bmad-output owned by another user
+        # passes [ -w ] but refuses the unlink, so the marker survives there.
+        { printf 'step\n' >"${PROGRESS}.$$" && mv -f "${PROGRESS}.$$" "$PROGRESS"; } 2>/dev/null || rm -f "${PROGRESS}.$$" "$MARKER" 2>/dev/null || true
         exit 0
       fi
       deny "AI/DLC post-compact recovery: \`Read ${SNAP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
