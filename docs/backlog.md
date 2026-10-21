@@ -654,26 +654,6 @@ Owed:
 verify: manual — the id-set detector and where the re-open is recorded are the builder's design, so an `sh` receipt built before them would close only under a guessed interface. A discriminating receipt can be written alongside the fix.
 
 
-## BL-740 — the review-shard merge has no rule tying a shard's verdict to its finding count, so a seat sealed NEEDS_REWORK with findings=0 is accepted by the merge's per-shard code and has no correction path
-
-**DEFECT.** Seen by graph-watch (ai-dlc-1b) and BL-737's owner e3-new, batch 238.
-
-- On graph s319 story 3.1, seat cross-1 (agent `adad7b1e7d9fa99c2`; the earlier id was a truncation) sealed `NEEDS_REWORK` with findings=0. The marker-count check passes (0 = 0), and `--mark` passed cross-1 at 04:36:06Z.
-- `--check-shard` is BL-737's, on main only from `af1536de3` (0.899.0), and was not on graph's installed engine. Graph's real merge at 04:36:19Z was REFUSED, by cross-6's shard first; the counterfactual merge with cross-6's refusal removed MERGES.
-- At `bdc50a101` (BL-737's branch), `grep -c -i -E 'NEEDS_REWORK.*(findings|nf)|(findings|nf).*NEEDS_REWORK|no finding' core/scripts/merge-review-shards.sh` gives 0; the control, the marker-count rule, gives 1. Re-derived at `e1739275b` against `core/scripts/merge-review-shards.sh` with the same grep: 0, and the control (`heads [0-9]|ends in 'seat-complete`) gives 1.
-- BL-737's prescribed correction path (`implementation.md` gate 1 and gate 2: re-dispatch the seat the REFUSED line's `[owner: <key>]` names) triggers only on a REFUSED merge line, which this shard never produces. `wait-for-deliverable.sh` prescribes "re-dispatch the adversary for that shard" for planning-artifacts adversary shards only.
-- Graph's successor was left three ad-hoc remedies, one of them folding cross-1's AC4 finding into cross-4.
-
-Owed:
-- A per-shard rule in the merge's per-shard function: NEEDS_REWORK or BLOCKED requires at least one Critical/Important finding, and APPROVED or PASS forbids a Critical one. --check-shard and --mark inherit it, so the existing `[owner:]` re-dispatch path covers the case.
-- The false-positive set over committed review shards is measured before it ships.
-- Ruled rule shape: code review NEEDS_REWORK or BLOCKED requires at least 1 Critical/Important finding and APPROVED forbids a Critical one; QA NEEDS_REWORK requires at least 1 finding anywhere (count-only, because qa.md defines no severity containers, see BL-746); the remedy text names both satisfiable exits.
-- Builds on BL-737's `merge-review-shards.sh`.
-
-Related: BL-737, BL-715, BL-734.
-
-verify: manual
-
 ## BL-738 — the bare-line `unknown arg: --mark` fallback lets any writer mint a `seat-complete:` marker with no `key=` and no seal row, and it survives in six role files after BL-737
 
 **DEFECT.** The residual of BL-737. Source: e3-new (BL-737 owner), batch 238.

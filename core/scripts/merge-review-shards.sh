@@ -11,7 +11,7 @@
 #   cross-group read, so its ordinal range, CROSS_FIRST and part/cross role are the merge's. It
 #   skips the shard-set staging: the key comes from the target's basename alone, and a target
 #   outside <shard-dir> (`--mark`'s pre-write snapshot) is keyed the same way. It covers every
-#   per-shard rule in SHARD GRAMMAR, the marker's count, (d)'s key check and the LEGACY rule
+#   per-shard rule in SHARD GRAMMAR, VERDICT BACKING, the marker's count, (d)'s key check and the LEGACY rule
 #   (SEAT-COMPLETE), and the content seal for a target inside <shard-dir> checked without
 #   --findings (with --findings, the caller is --mark, which runs the seal itself). The owner-duplicate
 #   check reads the owner's sibling only when that sibling ends in a marker whose `sha=` reads
@@ -87,6 +87,22 @@
 #   from the merged body. The seal reader --check-shard uses (has_marker, content_hash, seal_body,
 #   seal_of) is a COPY of wait-for-deliverable.sh's, which executes on load and cannot be sourced;
 #   the copies are byte-identical to it today, and that duplication is owed a fixture byte-compare.
+#
+# VERDICT BACKING. A shard's verdict must be backed by its OWN findings, read off the merge's own
+#   --gate (never inferred from the path). It is a per-shard rule inside check_shard(), so the merge,
+#   --check-shard and `--mark` (through --check-shard --findings) all apply it:
+#     --gate code-review  NEEDS_REWORK or BLOCKED needs at least one `#### ` finding under the
+#                         Critical or Important container; APPROVED carries NO finding under
+#                         Critical (Important under APPROVED is allowed).
+#     --gate qa           NEEDS_REWORK needs at least one `#### ` finding under `## Findings`, in any
+#                         container or none; PASS has no condition. (qa.md defines no severity
+#                         containers, so the Critical half is not applied.)
+#   The container names are LIFTED from code-reviewer.md's `## Findings` template the way the verdict
+#   set is lifted -- the first word of each of its three `### ` headings, matched case-insensitively
+#   by prefix -- never retyped. A NEEDS_REWORK/BLOCKED refusal names both exits, owner first: set the
+#   gate's best verdict and let the owning shard carry the finding, otherwise file the finding here
+#   with a parts set this shard may own. An APPROVED-with-Critical refusal names both: downgrade the finding with evidence, or set
+#   NEEDS_REWORK. Each takes `[owner: <key>]`, the shard's own.
 #
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
@@ -335,6 +351,23 @@ VSET="$(awk '/^## Verdict$/ { on = 1; next }
     | LC_ALL=C sort -u | tr '\n' ' ')"
 [ "$VSET" = "$WANT_VSET" ] \
   || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
+# THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (code-reviewer.md's
+# `## Findings` block after its first `## Verdict`, to the next `## `), never retyped: the first word
+# of each `### ` heading, in order -- the first is the Critical class, the second the Important
+# class, the third the class an APPROVED shard downgrades to. Under --gate qa none is lifted (qa.md
+# defines no severity containers), so every container classes "other" and only the count is read.
+CRIT_NAME=""; IMP_NAME=""; SUG_NAME=""
+if [ "$GATE" = "code-review" ]; then
+  CNAMES="$(awk '/^## Verdict$/ { v = 1; next }
+                 v && /^## Findings[ \t]*$/ { on = 1; next }
+                 on && /^## / { exit }
+                 on && /^### / { s = $0; sub(/^###[ \t]+/, "", s); sub(/[^A-Za-z].*$/, "", s); print s }' "$ROLE_MD" \
+      | tr '\n' ' ')"
+  set -f; set -- $CNAMES; set +f
+  [ "$#" -eq 3 ] && [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] \
+    || refuse "$ROLE_NAME's ## Findings template declares $# severity container(s) ('${CNAMES% }'), not exactly three; the verdict-backing rule reads the first two as the Critical and Important classes"
+  CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"
+fi
 rank() {
   case "$GATE:$1" in
     code-review:APPROVED) echo 1 ;;
@@ -563,8 +596,13 @@ fi # end the shard-set staging (skipped by --check-shard)
 #        H <first stray handover:/handover-run: line>   HM <first malformed hand-over line>
 #        N <handovers: count> <first value>   (HO, HR, H, HM, N and X's last two fields --
 #        handover: and handover-run: lines in that finding -- are read under both gates)
+#        K <findings under the Critical container> <findings under the Important container>
+#        (the container of a `#### ` is the last `### ` above it inside ## Findings, classed by a
+#        case-insensitive PREFIX match of its text against CRIT_NAME / IMP_NAME, lifted above; any
+#        other container, or none, is "other". C counts every finding whatever its container.)
 parse_shard() {
-  awk '
+  PS_CRIT_="$CRIT_NAME" PS_IMP_="$IMP_NAME" awk '
+    function cls(t, n) { n = tolower(n); return (n != "" && index(t, n) == 1 && substr(t, length(n) + 1, 1) !~ /[a-z0-9]/) }
     function flush() { if (fl > 0) printf "X %d %d %s %d %d\n", fl, fn, (fst == "" ? "-" : fst), fh + 0, fr + 0; fl = 0 }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
@@ -575,9 +613,11 @@ parse_shard() {
     { lc = tolower($0) }
     lc ~ /^###?[ \t]+acceptance criteria/ { nac++ }
     lc ~ /^###?[ \t]+deferred/ { nda++ }
-    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); if (infind) hasfind = 1; next }
-    /^### / { flush(); next }
-    infind && /^#### / { flush(); fl = NR; fn = 0; fst = ""; fh = 0; fr = 0; nfind++; next }
+    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); if (infind) hasfind = 1; cc = ""; next }
+    /^### / { flush(); t = lc; sub(/^###[ \t]+/, "", t)
+              cc = cls(t, ENVIRON["PS_CRIT_"]) ? "crit" : (cls(t, ENVIRON["PS_IMP_"]) ? "imp" : ""); next }
+    infind && /^#### / { flush(); fl = NR; fn = 0; fst = ""; fh = 0; fr = 0; nfind++
+                         if (cc == "crit") ncrit++; else if (cc == "imp") nimp++; next }
     infind && fl > 0 && /^parts:/ { fn++; v = $0; sub(/^parts:[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next }
     infind && fl > 0 && /^handover:/ { fh++; v = $0; sub(/^handover:[ \t]*/, "", v); sub(/[ \t]+$/, "", v)
                                        printf "HO %d %d %s\n", NR, fl, (v == "" ? "-" : v); next }
@@ -591,7 +631,7 @@ parse_shard() {
     END { flush(); printf "R %d %s\n", nr + 0, (rv == "" ? "-" : rv); printf "V %d %s\n", nv + 0, (vv == "" ? "-" : vv); printf "C %d\n", nfind + 0
           printf "F %d\n", hasfind + 0; printf "S %d\n", stray + 0; printf "H %d\n", hstray + 0; printf "HM %d\n", hbad + 0
           printf "N %d %s\n", nh + 0, (hv == "" ? "-" : hv)
-          printf "A %d\n", nac + 0; printf "D %d\n", nda + 0 }
+          printf "A %d\n", nac + 0; printf "D %d\n", nda + 0; printf "K %d %d\n", ncrit + 0, nimp + 0 }
   ' "$1"
 }
 RE_CITED='^[0-9]+(,[0-9]+)*$'
@@ -762,6 +802,22 @@ check_shard() {
         || refuse "$sf:$line (shard $key) cites$distinct; a part shard reports only findings citing its own part alone"
     fi
   done < "$P"
+
+  # ---- THE VERDICT IS BACKED BY THE SHARD'S OWN FINDINGS (header: VERDICT BACKING). After every
+  # grammar and owner refusal, so a finding the remedy tells the seat to file is one this shard may own.
+  read -r kc_ ki_ <<<"$(awk '$1 == "K" { print $2, $3 }' "$P")"
+  kc_="${kc_:-0}"; ki_="${ki_:-0}"; best_="${RANKED%% *}"
+  case "$GATE:$v" in
+    code-review:NEEDS_REWORK|code-review:BLOCKED)
+      [ "$((kc_ + ki_))" -ge 1 ] \
+        || refuse "$sf carries 'shard-verdict: $v' but no '#### ' finding under '### $CRIT_NAME' or '### $IMP_NAME' in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it $v here, as a '#### ' heading under '### $CRIT_NAME' or '### $IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" ;;
+    code-review:APPROVED)
+      [ "$kc_" -eq 0 ] \
+        || refuse "$sf carries 'shard-verdict: APPROVED' but $kc_ '#### ' finding(s) under '### $CRIT_NAME'; a Critical finding is not approvable. Either downgrade the finding to '### $IMP_NAME' or '### $SUG_NAME' with the evidence that it is not Critical, or set 'shard-verdict: NEEDS_REWORK'" ;;
+    qa:NEEDS_REWORK)
+      [ "${nf:-0}" -ge 1 ] \
+        || refuse "$sf carries 'shard-verdict: NEEDS_REWORK' but no '#### ' finding in its '## Findings'; a shard's verdict is backed by its own findings. If the finding belongs to another shard, set 'shard-verdict: $best_' here and let that shard's verdict carry it; otherwise file the finding that makes it NEEDS_REWORK here, as a '#### ' heading under '## Findings' (any '### ' container, or none) with a 'parts:' set this shard may own (one the owning group's shard does not already carry)" ;;
+  esac
 
   # ---- THE MARKER'S KEY (d) and the LEGACY rule (header: SEAT-COMPLETE). Not applied when
   # --findings stands in for the marker: --mark drops the old marker and writes its own.
