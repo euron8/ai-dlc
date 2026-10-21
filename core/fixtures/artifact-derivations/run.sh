@@ -103,7 +103,11 @@ for pair in "python3 -c 'print(2)'|not on the read-only allowlist" \
             "find src -name x -exec ls {} +|writes a file or runs a command" \
             "sed -i.bak s/needle/x/ src/two-needles.txt|writes a file or runs a command" \
             "sort -o src/two-needles.txt src/two-needles.txt|writes a file or runs a command" \
-            "git diff --output=src/x HEAD|writes a file or runs a command"; do
+            "git diff --output=src/x HEAD|writes a file or runs a command" \
+            "echo \`touch canary\`|backtick outside single quotes, which bash runs as command substitution" \
+            "echo \"\`touch canary\`\"|backtick outside single quotes, which bash runs as command substitution" \
+            "echo 'a'\`touch canary\`'b'|backtick outside single quotes, which bash runs as command substitution"; do
+  rm -f "$WORK/canary"
   c="${pair%%|*}"; want="${pair##*|}"
   mkdir -p "$WORK/c-refuse"
   { printf '```derived\n$ %s\n2\n```\n' "$c"; } > "$WORK/c-refuse/story.md"
@@ -112,6 +116,10 @@ for pair in "python3 -c 'print(2)'|not on the read-only allowlist" \
     ok "c-refuse               exit=1  ($c)"
   else
     bad "c-refuse expected exit 1 naming '$want' for '$c', got $rc: $out"
+  fi
+  # The eval runs from the project root, so a backtick that executed leaves `$WORK/canary`.
+  if [ -e "$WORK/canary" ]; then
+    bad "c-refuse '$c' was refused AFTER it ran -- the canary exists"
   fi
 done
 
@@ -399,12 +407,12 @@ inplace_contained i-dot-suffix    "sed -i.bak 's/a/b/' data.txt"
 # a genuine write (to a file named `/p`) that only a command-position parser separates from
 # the read-only `/w/p`, and on this machine it fails on the unwritable path rather than on
 # the grammar.
-sed_refused() { # $1 command
+sed_refused() { # $1 command  [$2 expected refusal text, default the write/exec one]
   mkdir -p "$WORK/h3"
   printf 'a\nb\nc\n' > "$WORK/h3/data.txt"
   { printf '```derived\n$ %s\n0\n```\n' "$1"; } > "$WORK/h3/story.md"
   out="$(AI_DLC_PROJECT_ROOT="$WORK/h3" bash "$VALIDATOR" "$WORK/h3/story.md" 2>&1)"; rc=$?
-  if [ "$rc" -eq 1 ] && grep -q 'writes a file or runs a command' <<< "$out"; then
+  if [ "$rc" -eq 1 ] && grep -qF "${2:-writes a file or runs a command}" <<< "$out"; then
     ok "h3-verdict             exit=1  refused by verdict ($1)"
   else
     bad "h3-verdict expected exit 1 naming the write/exec refusal for '$1', got $rc: $out"
@@ -415,7 +423,9 @@ sed_refused "sed '1e touch canary' data.txt"
 sed_refused "sed 's/a/b/e' data.txt"
 sed_refused "sed -n '/alpha/w/p' data.txt"
 sed_refused "sed -n '/alpha/wp' data.txt"
-sed_refused "sed --expression='w canary' data.txt"
+# `--expression` is not on sed's option table, so the walker refuses it as unlisted before the
+# script grammar reads its value; the arm asserts THAT refusal, which still names the option.
+sed_refused "sed --expression='w canary' data.txt" "'sed --expression' is not an option this checker admits"
 sed_refused "sed -n '\$w canary' data.txt"
 sed_refused "sed -n '1,3w canary' data.txt"
 sed_refused "sed -n '2!w canary' data.txt"
@@ -633,10 +643,11 @@ mut_copy() { # $1 dest  $2..  sed expressions -> 0 mutated, 1 DID NOT APPLY
 }
 
 # M1 — the blanket deny. Every `sed` segment is refused, whatever its script. The mutation
-# REPLACES the predicate's guard line with one that always fires, so the predicate's body
-# becomes unreachable and its narrowness is gone.
+# REPLACES the script grammar's verdict with a constant, so every sed segment is refused with
+# the write/exec message and the grammar's narrowness is gone. It anchors on the verdict line,
+# which the file carries once; the `if [ "$first" = "sed" ]` guard now opens two blocks.
 M1="$WORK/k/m1-$VBASE"
-if mut_copy "$M1" 's|^    if \[ "\$first" = "sed" \]; then$|    if [ "$first" = "sed" ]; then printf "BADOPT:sed (blanket)\\n"; break; fi; if false; then|'; then
+if mut_copy "$M1" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why="blanket"|'; then
   ok "k-m1 applied          (cmp -s: the blanket-deny mutation changed the file)"
   # The must-ALLOW half must go RED, and name the allowlist refusal.
   mkdir -p "$WORK/k/m1w"
@@ -670,11 +681,10 @@ else
   bad "k-m1 DID NOT APPLY -- the blanket-deny mutation matched nothing, so no verdict was scored"
 fi
 
-# M2 — the predicate DELETED. The `if [ "$first" = "sed" ]` guard is made unreachable with
-# its body intact, which is the shape of "this fix was never written": the write must then
-# execute through the validator.
+# M2 — the predicate DELETED. The script grammar's verdict is forced empty, which is the shape
+# of "this fix was never written": the write must then execute through the validator.
 M2="$WORK/k/m2-$VBASE"
-if mut_copy "$M2" 's|^    if \[ "\$first" = "sed" \]; then$|    if false; then|'; then
+if mut_copy "$M2" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why=""|'; then
   ok "k-m2 applied          (cmp -s: the predicate-deleted mutation changed the file)"
   mkdir -p "$WORK/k/m2e"
   printf 'a\nb\nc\n' > "$WORK/k/m2e/data.txt"
@@ -914,43 +924,44 @@ else
   bad "m-m6 DID NOT APPLY -- the signal-arm mutation matched nothing, so no verdict was scored"
 fi
 
-# M-UNBOUND. A bare unbound `$VAR` in derivation text is admissible -- the allowlist refuses only
-# `${` and `$(` -- and the validator's own `set -u` used to reach the eval subshell, abort it
-# before the marker was written, and score an ordinary stale derivation UNRUN, exit 2. The capture
-# hook then read that 2 as infrastructure and hid every real STALE in the same write. The eval now
-# runs with `set -u` off, so the variable expands empty and the derivation gets a verdict:
-#   m-unbound-stale  recorded 9 where `grep -c "needle$FILE_ZZ_UNSET"` finds 2: STALE, exit 1
-#   m-unbound-true   the same command recording its true 2: exit 0, the near-miss
-#   m-arith          `$[1/0]` is a shell error that aborts the subshell outright, whatever `set -u`
-#                    says: it did not run, so it stays UNRUN, exit 2
-# M7 drops the `set +u` bracket and must bring m-unbound-stale back to UNRUN.
+# M-UNBOUND. The validator's own `set -u` used to reach the eval subshell, abort it on an unbound
+# `$VAR` before the marker was written, and score an ordinary stale derivation UNRUN, exit 2. The
+# capture hook then read that 2 as infrastructure and hid every real STALE in the same write. The
+# quote scan now refuses every `$` bash expands (section S carries one arm per class), so no name
+# reaches the eval at all, and each seed below is an ALLOWLIST refusal, exit 1, never UNRUN:
+#   m-unbound-stale  `grep -c "needle$FILE_ZZ_UNSET"` recording a wrong 9
+#   m-unbound-true   the same command recording its true 2 -- refused all the same
+#   m-arith          `$[1/0]`, arithmetic
+# M7 drops the name characters from the scan's class, so `$FILE_ZZ_UNSET` reaches the eval under
+# the validator's `set -u` again, and must bring m-unbound-stale back to UNRUN, exit 2.
+M_DOLLAR='it carries a $ that bash expands'
 [ -z "${FILE_ZZ_UNSET+x}" ] \
   && ok "m-unbound CONTROL      FILE_ZZ_UNSET is unset in this environment, so the seeds are about an unbound name" \
   || bad "m-unbound CONTROL FILE_ZZ_UNSET is set, so no unbound arm below is about an unbound variable"
 printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n9\n```\n' > "$WORK/m/unbound-stale.md"
 printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n2\n```\n' > "$WORK/m/unbound-true.md"
 printf '```derived\n$ grep -c "needle$[1/0]" src/two-needles.txt\n2\n```\n' > "$WORK/m/arith.md"
-mrun "$VALIDATOR" "$WORK/m/unbound-stale.md"
-[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'actual:   2' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
-  && ok "m-unbound-stale        exit=1  a bare unbound \$VAR expands empty and the stale record is STALE, not UNRUN" \
-  || bad "m-unbound-stale expected exit 1 STALE with actual 2 and no UNRUN, got $rc: $out"
-mrun "$VALIDATOR" "$WORK/m/unbound-true.md"
-[ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" \
-  && ok "m-unbound-true         exit=0  the same command recording its true output reproduces" \
-  || bad "m-unbound-true expected exit 0 OK: 1 derivation, got $rc: $out"
-mrun "$VALIDATOR" "$WORK/m/arith.md"
-[ "$rc" -eq 2 ] && grep -q '^UNRUN: .*arith.md:2 ' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
-  && ok "m-arith                exit=2  an arithmetic error aborts the subshell, so it is UNRUN" \
-  || bad "m-arith expected exit 2 with an UNRUN line naming arith.md:2, got $rc: $out"
+for mu in unbound-stale unbound-true arith; do
+  mrun "$VALIDATOR" "$WORK/m/$mu.md"
+  [ "$rc" -eq 1 ] && grep -q "^FAIL (ALLOWLIST): .*$mu.md:2 " <<< "$out" && grep -qF "$M_DOLLAR" <<< "$out" \
+    && ! grep -q 'UNRUN' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "m-$mu exit=1  an expanding \$ is an ALLOWLIST refusal, never UNRUN or STALE" \
+    || bad "m-$mu expected exit 1 FAIL (ALLOWLIST) naming the expanding-\$ refusal, got $rc: $out"
+done
 M7="$WORK/m/m7-$VBASE"
-if mut_copy "$M7" '/^  set +u$/d'; then
-  ok "m-m7 applied          (cmp -s: the set +u bracket-dropped mutation changed the file)"
+if mut_copy "$M7" 's|DX = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789|DX = "0123456789|'; then
+  ok "m-m7 applied          (cmp -s: the name-class-dropped mutation changed the file)"
+  # MEASURED: with the name class gone the unbound name now dies one step EARLIER than the run
+  # eval -- the walker's own `eval "set -- <segment>"` runs under the validator's `set -u` too, so
+  # the segment is refused as one bash could not split. The kill is that the expanding-$ refusal
+  # no longer fires; the derivation is still refused, by the second layer.
   mrun "$M7" "$WORK/m/unbound-stale.md"
-  [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*unbound-stale.md:2 ' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
-    && ok "m-m7 KILLED           with set -u reaching the eval an unbound \$VAR aborts the subshell and scores UNRUN" \
+  [ "$rc" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*unbound-stale.md:2 ' <<< "$out" \
+    && grep -qF 'bash could not split it into words' <<< "$out" && ! grep -qF "$M_DOLLAR" <<< "$out" \
+    && ok "m-m7 KILLED           with the name class dropped the expanding-\$ refusal is gone; the argv eval's set -u refuses it instead" \
     || bad "m-m7 SURVIVED or did not run (rc=$rc): $out"
 else
-  bad "m-m7 DID NOT APPLY -- the set +u bracket mutation matched nothing, so no verdict was scored"
+  bad "m-m7 DID NOT APPLY -- the name-class mutation matched nothing, so no verdict was scored"
 fi
 
 # --- N. A COMPARISON OR A WALK THAT COULD NOT RUN IS A REFUSAL, NEVER A VERDICT ------------------
@@ -1483,6 +1494,390 @@ else ok "mc-noop REFUSED      DID NOT APPLY: a real expression plus a no-op expr
 if mut_copy "$Q/mc-noop-first-$VBASE" "$RE_NOOP" "$RE_REAL"; then
   bad "mc-noop-first SCORED -- a no-op expression BEFORE a real one was accepted as applied"
 else ok "mc-noop-first REFUSED DID NOT APPLY: the order of the no-op expression does not matter"; fi
+
+# --- R. A BACKTICK IS JUDGED BY ITS QUOTE STATE, AND ONE `git -C` STAYS INSIDE THE REPOSITORY ----
+# A substring ban on the backtick refused `grep -c -F 'a`b' d.txt`, which bash runs with no
+# substitution, and reading git's subcommand as word 2 refused `git -C sub rev-parse ...`. Both
+# were correct derivations rewritten at write time. The fix moves the backtick into the quote
+# scan and skips ONE leading `-C <dir>` under three conditions: a plain relative path, inside the
+# physical root, and the root's own common dir.
+#
+# EVERY REFUSED ROW ASSERTS ITS MESSAGE, NOT ITS RC. With the backtick test deleted outright,
+# `echo 'a'`touch canary`'b'` runs, prints a line, and fails STALE with rc 1 -- the refusal's rc
+# exactly, after the canary was created. So each backtick row carries a message arm AND a canary
+# arm, and each repo row a canary where its world holds a `diff.external`.
+#
+# THE WORLD HOLDS ONE REPO OF EACH KIND THE COMMON-DIR CHECK MUST EXCLUDE, and both carry a
+# canary `diff.external`. The bare clone is driven with `diff HEAD~1 HEAD` because an argless
+# `diff` in a bare repo compares nothing and never calls the external, so it cannot fire. The
+# NESTED NON-BARE repo is the subject that proves the common-dir check by itself: the eval's own
+# safe.bareRepository=explicit still blocks the bare clone with the check removed, and it does
+# not block a non-bare repo.
+R="$WORK/r"; RP="$R/p"
+mkdir -p "$RP/.claude" "$RP/sub" "$R/o" "$R/x" "$R/src"
+( git -C "$RP" init -q . \
+  && git -C "$R/o" init -q . && git -C "$R/o" -c user.email=r@r -c user.name=r commit -q --allow-empty -m o \
+  && git -C "$R/x" init -q . && git -C "$R/x" -c user.email=r@r -c user.name=r commit -q --allow-empty -m x \
+  && ln -s "$R/o" "$RP/sub/sub" \
+  && mkdir -p "$RP/nested" && git -C "$RP/nested" init -q . \
+  && printf 'one\n' > "$RP/nested/f" && git -C "$RP/nested" add f \
+  && git -C "$RP/nested" -c user.email=r@r -c user.name=r commit -q -m 1 \
+  && printf 'two\n' > "$RP/nested/f" && git -C "$RP/nested" -c user.email=r@r -c user.name=r commit -q -am 2 \
+  && git -C "$RP/nested" config diff.external "$R/ext-nested.sh" \
+  && git -C "$R/src" init -q . && printf 'one\n' > "$R/src/f" && git -C "$R/src" add f \
+  && git -C "$R/src" -c user.email=r@r -c user.name=r commit -q -m 1 \
+  && printf 'two\n' > "$R/src/f" && git -C "$R/src" -c user.email=r@r -c user.name=r commit -q -am 2 \
+  && git clone -q --bare "$R/src" "$RP/evil" \
+  && git --git-dir="$RP/evil" config diff.external "$R/ext-bare.sh" ) >/dev/null 2>&1 \
+  || bad "r-world could not be built -- no R verdict below is readable"
+printf '#!/bin/sh\ntouch %s/canary-nested\n' "$R" > "$R/ext-nested.sh"
+printf '#!/bin/sh\ntouch %s/canary-bare\n' "$R" > "$R/ext-bare.sh"
+chmod +x "$R/ext-nested.sh" "$R/ext-bare.sh"
+printf 'a`b\n' > "$RP/d.txt"
+
+R_BT="it carries a backtick outside single quotes, which bash runs as command substitution"
+r_run() { # $1 validator  $2 label  $3 command  $4 recorded output -> out, rc
+  { printf '# r\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$RP/$2.md"
+  rm -f "$RP/canary" "$R/canary-nested" "$R/canary-bare"
+  out="$(cd "$RP" && AI_DLC_PROJECT_ROOT="$RP" bash "$1" "$2.md" 2>&1)"; rc=$?
+}
+r_arms() { # <validator> <quiet> -> R_FAILED
+  local V="$1" q="$2" failed=""
+  rarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+  racc() { # $1 label  $2 command  $3 recorded
+    r_run "$V" "$1" "$2" "$3"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
+    rarm "$1" $? "exit=0  runs and reproduces: $2"
+  }
+  rref() { # $1 label  $2 command  $3 expected message  $4 canary path or ""
+    r_run "$V" "$1" "$2" ""
+    [ "$rc" -eq 1 ] && grep -qF "$3" <<< "$out"
+    rarm "$1-msg" $? "exit=1  refused naming the reason: $2"
+    if [ -n "$4" ]; then
+      ! [ -e "$4" ]
+      rarm "$1-can" $? "the refused command never ran (no canary): $2"
+    fi
+  }
+  racc r-acc-sq    "grep -c -F 'a\`b' d.txt" 1
+  racc r-acc-dq    'grep -c "a\`b" d.txt' 1
+  racc r-acc-c     'git -C sub rev-parse --is-inside-work-tree' true
+  racc r-acc-cdot  'git -C ./sub rev-parse --is-inside-work-tree' true
+  rref r-bt-uq     'echo `touch canary`'           "$R_BT" "$RP/canary"
+  rref r-bt-dq     'echo "`touch canary`"'         "$R_BT" "$RP/canary"
+  rref r-bt-sqcat  "echo 'a'\`touch canary\`'b'"   "$R_BT" "$RP/canary"
+  rref r-abs       'git -C /tmp log'               "'git -C /tmp' is not a read-only git subcommand" ""
+  rref r-dotdot    'git -C ../x log'               "'git -C ../x' is not a read-only git subcommand" ""
+  rref r-chain     'git -C sub -C sub log'         "'git -C sub -C' is not a read-only git subcommand" ""
+  rref r-bare      'git -C evil diff HEAD~1 HEAD'  "'git -C evil' is not a read-only git subcommand" "$R/canary-bare"
+  rref r-nested    'git -C nested diff HEAD~1 HEAD' "'git -C nested' is not a read-only git subcommand" "$R/canary-nested"
+  rref r-dashc     'git -C sub -c core.pager=x log' "'git -c' is not a read-only git subcommand" ""
+  R_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+r_arms "$VALIDATOR" 0
+[ -z "$R_FAILED" ] \
+  && ok "r-control              the unmutated validator fails no R arm, so a mutant's failed set is its own" \
+  || bad "r-control the unmutated validator failed R arm(s): $R_FAILED -- no mutant verdict below is readable"
+
+# R's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+#   r-m1  the substring backtick ban restored         r-m2  the in-scan backtick test deleted
+#   r-m3  `-C` skipped with none of its checks        r-m4  the common-dir check removed
+#   r-m5  r-m4 plus the eval's safe.bareRepository export removed
+# r-dashc is killed by no mutant: `-c` lands in the subcommand slot in every copy. It is a
+# regression guard on the skip consuming exactly two words. r-chain's mutant changes only the
+# MESSAGE: with no chain check the second `-C` still fails the subcommand allowlist, so a chain
+# cannot escape under any of these copies, and the arm proves which refusal fired. The eval
+# export alone has no subject: with the common-dir check present no bare repo reaches the eval,
+# so it is mutated only together with that check (r-m5).
+r_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$R/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  r_arms "$M" 1
+  if [ -z "$R_FAILED" ]; then bad "$label SURVIVED -- no R arm failed against it"
+  elif [ "$R_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $R_FAILED"
+  else bad "$label killed by the WRONG arm set: failed [$R_FAILED], declared [$want]"; fi
+}
+r_mutant r-m1 "r-acc-dq r-acc-sq r-bt-dq-msg r-bt-sqcat-msg r-bt-uq-msg" \
+  "s/|\\*'<'\\*|/|*'<'*|*'\`'*|/"
+r_mutant r-m2 "r-bt-dq-can r-bt-dq-msg r-bt-sqcat-can r-bt-sqcat-msg r-bt-uq-can r-bt-uq-msg" \
+  '/if (ch == BT && sq == 0) exit 5/d'
+r_mutant r-m3 "r-abs-msg r-bare-msg r-chain-msg r-dotdot-msg r-nested-can r-nested-msg" \
+  's/^      if \[ "\$sub" = "-C" \]; then$/      if [ "$sub" = "-C" ]; then gdir="${3:-}"; sub="${4:-}"; fi; if false; then/'
+r_mutant r-m4 "r-bare-msg r-nested-can r-nested-msg" \
+  's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/'
+# r-m5's second edit anchors on the `export GIT_CONFIG_COUNT=1` line alone, so section O's
+# ` && export COLUMNS=80 && { eval ` anchor on the next line still matches exactly once.
+r_mutant r-m5 "r-bare-can r-bare-msg r-nested-can r-nested-msg" \
+  's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/' \
+  's/ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository \\$/ true \\/'
+n_om="$(grep -c ' && export COLUMNS=80 && { eval ' "$R/r-m5-$VBASE")" || n_om=0
+[ "$n_om" -eq 1 ] && ok "r-m5 anchor            section O's COLUMNS anchor still matches once in the r-m5 copy" \
+  || bad "r-m5 anchor: section O's COLUMNS anchor matched $n_om times in the r-m5 copy, not 1"
+
+# --- S. ONLY A LISTED OPTION IS ADMITTED, READ FROM THE ARGV BASH BUILDS ------------------------
+# Every allowed command carries an exact table of the options it may use (OPT_TABLE, rows
+# `cmd|sub|token|arity|note`), and the walker reads the NUL argv bash builds for the segment, so a
+# form not on its command's table is refused as "is not an option this checker admits". Each
+# command with a table gets a pair, one property apart: a LISTED option accepted, and an UNLISTED
+# option refused with the text naming it. Every refused example is HARMLESS -- an option that only
+# changes formatting or diagnostics, or a token no tool defines (`--zz-not-an-option`) -- so the
+# boundary is shown to be an allowlist and not a list of known-bad forms.
+#
+# The pairs go through ONE `--explain-cmd -` batch per validator copy (it reads the same argv and
+# prints the first refusal line), and two arms go through the REAL check path, so a mutant that
+# broke the gate but not the explain output cannot pass.
+#
+# The `$` arms (contract rev 3a): the scan refuses a `$` bash expands -- a name, a digit, a special
+# parameter, `$[`, and `$"` outside double quotes -- and `$'` as ANSI-C quoting; the end-anchor in
+# "^x$" is admitted. `${` and `$(` are absent from the scan's class, because the substring ban
+# refuses both first; s-dl-brace and s-dl-paren hold that ban to its message.
+S="$WORK/s"; mkdir -p "$S/.claude"
+printf 'x\ny\nx\n' > "$S/d.txt"
+printf 'x\n' > "$S/pats.txt"
+S_OPT="is not an option this checker admits"
+: > "$S/cases.tsv"; : > "$S/expect.tsv"
+scase() { # $1 label  $2 expected: OK, or a substring of the first refusal line  $3 command
+  printf '%s\t%s\n' "$1" "$3" >> "$S/cases.tsv"
+  printf '%s\t%s\n' "$1" "$2" >> "$S/expect.tsv"
+}
+spair() { # $1 label stem  $2 accepted command  $3 refused option (as the message names it)  $4 refused command
+  scase "$1-acc" OK "$2"
+  scase "$1-ref" "'$3' $S_OPT" "$4"
+}
+spair s-awk        "awk -F: '{print \$1}' d.txt"     "awk --zz-not-an-option"   "awk --zz-not-an-option '{print}' d.txt"
+spair s-basename   "basename -a d.txt"               "basename -z"              "basename -z d.txt"
+spair s-cat        "cat -n d.txt"                    "cat -A"                   "cat -A d.txt"
+spair s-comm       "comm -12 d.txt d.txt"            "comm --total"             "comm --total d.txt d.txt"
+spair s-cut        "cut -c1 d.txt"                   "cut --complement"         "cut --complement -c1 d.txt"
+spair s-difftool   "diff -q d.txt d.txt"            "diff --zz-not-an-option"  "diff --zz-not-an-option d.txt d.txt"
+spair s-echo       "echo -n x"                       "echo -e"                  "echo -e x"
+spair s-find       "find . -empty"                   "find -daystart"           "find . -daystart"
+spair s-git-catfile "git cat-file -t HEAD"           "git cat-file --zz-not-an-option" "git cat-file --zz-not-an-option HEAD"
+spair s-git-describe "git describe --tags"           "git describe --zz-not-an-option" "git describe --zz-not-an-option"
+spair s-git-diff   "git diff --stat"                 "git diff --color-moved"   "git diff --color-moved"
+spair s-git-grep   "git grep -c x"                   "git grep --line-buffered" "git grep --line-buffered x"
+spair s-git-log    "git log --oneline"               "git log --zz-not-an-option" "git log --zz-not-an-option"
+spair s-git-lsfiles "git ls-files -c"                "git ls-files --zz-not-an-option" "git ls-files --zz-not-an-option"
+spair s-git-revparse "git rev-parse --verify HEAD"   "git rev-parse --zz-not-an-option" "git rev-parse --zz-not-an-option HEAD"
+spair s-git-show   "git show --stat HEAD"            "git show --zz-not-an-option" "git show --zz-not-an-option HEAD"
+spair s-git-status "git status -s"                   "git status --zz-not-an-option" "git status --zz-not-an-option"
+spair s-grep       "grep -c x d.txt"                 "grep --zz-not-an-option"  "grep --zz-not-an-option x d.txt"
+spair s-head       "head -n 2 d.txt"                 "head --verbose"           "head --verbose d.txt"
+spair s-ls         "ls -1"                           "ls -G"                    "ls -G"
+spair s-nl         "nl -ba d.txt"                    "nl --number-width"        "nl --number-width=3 d.txt"
+spair s-rg         "rg -c x d.txt"                   "rg --debug"               "rg --debug x d.txt"
+spair s-sed        "sed -n p d.txt"                  "sed --debug"              "sed --debug -n p d.txt"
+spair s-sha256sum  "sha256sum -b d.txt"              "sha256sum --zero"         "sha256sum --zero d.txt"
+spair s-shasum     "shasum --tag d.txt"              "shasum --zz-not-an-option" "shasum --zz-not-an-option d.txt"
+spair s-sort       "sort -r d.txt"                   "sort --debug"             "sort --debug d.txt"
+spair s-tail       "tail -n 1 d.txt"                 "tail -z"                  "tail -z d.txt"
+spair s-test       "test -f d.txt"                   "test -t"                  "test -t 1"
+spair s-uniq       "uniq -c d.txt"                   "uniq --zero-terminated"   "uniq --zero-terminated d.txt"
+spair s-wc         "wc -l d.txt"                     "wc --libxo"               "wc --libxo d.txt"
+# ROWS TAKEN FROM THE REFERENCE CONSUMER'S CORPUS, one acceptance arm each.
+# shasum -a: _bmad-output/gate-adjudication/s303/story6-authoring.repair.md:86
+scase s-row-shasum-a OK                                "shasum -a 256 d.txt"
+# grep -f: _bmad-output/planning-artifacts/s312/gate-sprint-review-repair-p1.md:189
+scase s-row-grep-f OK                                  "grep -c -f pats.txt d.txt"
+# grep -P: _bmad-output/planning-artifacts/s311/consolidation-coverage-carry-over-backlog.md:102
+scase s-row-grep-P OK                                  "grep -c -P 'a' d.txt"
+# EXACT MATCH: a unique prefix of a listed long option is not that option.
+scase s-exact-acc OK                                   "sort --dictionary-order d.txt"
+scase s-exact-ref "'sort --dictionary' $S_OPT"         "sort --dictionary d.txt"
+# SHORT CLUSTER: every letter is looked up, not only the first.
+scase s-cluster-acc OK                                 "ls -1a"
+scase s-cluster-ref "'ls -G' $S_OPT"                   "ls -1G"
+# STANDALONE `--`: an operand after it is admitted; a dash word after it is not, on a command
+# that is not on the end-of-options list (sha256sum is not).
+scase s-endop-acc OK                                   "sort -- d.txt"
+scase s-endop-ref "'sha256sum -- --debug (a dash word after a standalone --)' $S_OPT" "sha256sum -- --debug d.txt"
+# END OF OPTIONS IS PER COMMAND (OPT_ENDOPTS). grep is listed, so a dash word after `--` is its
+# pattern operand; head is not listed, so the same word after `--` is still refused.
+scase s-eo-acc OK                                      "grep -n -- '--debug' d.txt"
+scase s-eo-ref "'head -- --debug (a dash word after a standalone --)' $S_OPT" "head -n 1 -- --debug d.txt"
+# VALUES: a required value as the next word is admitted; `=x` on a no-value option is not.
+scase s-value-acc OK                                   "cut -d : -f 1 d.txt"
+scase s-value-ref "'sort --reverse=x (it takes no value)' $S_OPT" "sort --reverse=x d.txt"
+# SED AND UNIQ STOP AT THEIR FIRST OPERAND (BSD getopt, no permutation): a dash word after it is
+# an operand to the tool, so the walker refuses it rather than read it as an option. The accepted
+# twins carry the same options before the operand.
+S_FIRSTOP="after its first operand (sed and uniq stop reading options at their first operand"
+scase s-sedfirst-acc OK                                "sed -e p f"
+scase s-sedfirst-ref "'sed -e $S_FIRSTOP"              "sed 'k' -e p f"
+scase s-uniqfirst-acc OK                               "uniq -c f"
+scase s-uniqfirst-ref "'uniq -c $S_FIRSTOP"            "uniq f -c"
+# OPTIONAL ARITY TAKES ONLY AN ATTACHED VALUE. The word after `--stat` is an unlisted option, so a
+# walker that let `optional` take the next word would swallow it unchecked; with a listed option
+# there the segment is accepted either way.
+scase s-optional-acc OK                                "git show --stat --oneline HEAD"
+scase s-optional-ref "'git show --zz-not-an-option' $S_OPT" "git show --stat --zz-not-an-option HEAD"
+# A VALUE-TAKING OPTION AT THE END OF ARGV has no value, so it is refused.
+scase s-pendend-acc OK                                 "head -n 1 d.txt"
+scase s-pendend-ref "'head -n (it takes a value and none follows)' $S_OPT" "head -n"
+# UNIQ TAKES ONE OPERAND: an option argument is not one, a second operand is.
+scase s-uniqtwo-acc OK                                 "uniq -f 1 d.txt"
+scase s-uniqtwo-ref "'uniq d2.txt, a second operand"   "uniq -c d.txt d2.txt"
+# `-<digits>` IS ACCEPTED ONLY WHERE THE COMMAND HAS A `-NUM` ROW: head has one, sort has none.
+scase s-num-acc OK                                     "head -2 d.txt"
+scase s-num-ref "'sort -2' $S_OPT"                     "sort -2 d.txt"
+# QUOTED AND BRACE-EXPANDED spellings of one unlisted option: bash builds `--debug` from both, and
+# the walker reads what bash builds, not the raw text.
+scase s-quoted "'sort --debug' $S_OPT"                 "sort '--debug' d.txt"
+scase s-brace  "'sort --debug' $S_OPT"                 "sort --{debug,} d.txt"
+# THE `$` CLASSES (M_DOLLAR is section M's refusal text).
+scase s-dl-end OK                                      'grep -c "^x$" d.txt'
+scase s-dl-name    "$M_DOLLAR"                         'grep -c "x$ZZ_NAME" d.txt'
+scase s-dl-digit   "$M_DOLLAR"                         'grep -c x$1 d.txt'
+scase s-dl-special "$M_DOLLAR"                         'grep -c x$? d.txt'
+scase s-dl-bracket "$M_DOLLAR"                         'grep -c x$[1] d.txt'
+scase s-dl-dq      "$M_DOLLAR"                         'grep -c $"x" d.txt'
+scase s-dl-ansi    "uses \$'...' ANSI-C quoting"       "grep -c \$'x' d.txt"
+scase s-dl-brace   'it can chain, redirect or substitute' 'grep -c ${ZZ_NAME} d.txt'
+scase s-dl-paren   'it can chain, redirect or substitute' 'grep -c $(echo x) d.txt'
+S_NCASES="$(grep -c . "$S/cases.tsv")" || S_NCASES=0
+
+# THE DIFFERENTIAL: the walker's argv (read back from --explain-cmd's ARGV line) against the NUL
+# argv bash itself prints for the same text, from the same directory.
+s_argv_bash() { ( c="$1"; cd "$S" && set -- && eval "set -- $c" && printf '%s\0' "$@" ); }
+s_argv_split() { ( c="$1"; set -f; set -- $c; printf '%s\0' "$@" ); }
+s_argv_walker() { # $1 validator  $2 command
+  local all line
+  all="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$1" --explain-cmd "$2" 2>/dev/null)"
+  line="$(grep -m1 "^-	ARGV	" <<< "$all")" || return 1
+  line="${line#*	ARGV	}"
+  ( eval "set -- $line" && printf '%s\0' "$@" )
+}
+S_DIFF_IN='grep -c "a b" d.txt'
+s_argv_bash "$S_DIFF_IN" > "$S/seed.bash"; s_argv_split "$S_DIFF_IN" > "$S/seed.split"
+if [ -s "$S/seed.bash" ] && [ -s "$S/seed.split" ] && ! cmp -s "$S/seed.bash" "$S/seed.split"; then
+  ok "s-diff-seed            the two argv sides DIFFER on a seeded input (bash's argv vs a whitespace split), so agreement below is a reading"
+else
+  bad "s-diff-seed the comparison cannot tell bash's argv from a whitespace split -- no s-diff verdict below is readable"
+fi
+
+s_run() { # $1 validator  $2 label  $3 command  $4 recorded -> out, rc
+  { printf '# s\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$S/$2.md"
+  out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$1" "$2.md" 2>&1)"; rc=$?
+}
+s_arms() { # <validator> <quiet> -> S_FAILED
+  local V="$1" q="$2" failed="" lbl exp line nv c
+  sarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3: ${4:-}"; fi; }
+  out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd - < "$S/cases.tsv" 2>&1)"; rc=$?
+  nv="$(grep -c '	VERDICT	' <<< "$out")" || nv=0
+  [ "$rc" -eq 0 ] && [ "$nv" -eq "$S_NCASES" ] && [ "$nv" -gt 0 ]
+  sarm s-batch $? "exit=0  --explain-cmd printed one VERDICT for each of the $S_NCASES cases" "rc=$rc verdicts=$nv"
+  while IFS=$'\t' read -r lbl exp; do
+    line="$(grep -m1 "^$lbl	VERDICT	" <<< "$out")" || line=""
+    if [ "$exp" = OK ]; then
+      [ "$line" = "$lbl	VERDICT	OK" ]
+      sarm "$lbl" $? "accepted: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)" "$line"
+    else
+      case "$line" in "$lbl	VERDICT	REFUSED	"*"$exp"*) true ;; *) false ;; esac
+      sarm "$lbl" $? "refused naming [$exp]: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)" "$line"
+    fi
+  done < "$S/expect.tsv"
+  # The real check path, one accepted and one refused.
+  s_run "$V" s-real-acc 'sort -r d.txt' "$(printf 'y\nx\nx')"
+  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
+  sarm s-real-acc $? "exit=0  a listed option runs and reproduces through the check path" "rc=$rc $out"
+  s_run "$V" s-real-ref 'sort --debug d.txt' x
+  [ "$rc" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*s-real-ref.md:4 ' <<< "$out" && grep -qF "'sort --debug' $S_OPT" <<< "$out"
+  sarm s-real-ref $? "exit=1  an unlisted option is an ALLOWLIST refusal naming it through the check path" "rc=$rc $out"
+  # The differential, on the real inputs: the walker's argv equals bash's for each.
+  for c in "sort '--debug' d.txt" "sort --{debug,} d.txt" "$S_DIFF_IN"; do
+    s_argv_bash "$c" > "$S/d.bash"
+    if s_argv_walker "$V" "$c" > "$S/d.walk" && [ -s "$S/d.walk" ] && cmp -s "$S/d.bash" "$S/d.walk"; then :; else
+      failed="$failed s-diff"; [ "$q" = 1 ] || bad "s-diff the walker's argv differs from bash's for: $c"; fi
+  done
+  case " $failed " in *" s-diff "*) ;; *) [ "$q" = 1 ] || ok "s-diff                 the walker's argv equals bash's printf '%s\\0' argv on quoted, brace and spaced inputs" ;; esac
+  S_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+s_arms "$VALIDATOR" 0
+[ -z "$S_FAILED" ] \
+  && ok "s-control              the unmutated validator fails no S arm, so a mutant's failed set is its own" \
+  || bad "s-control the unmutated validator failed S arm(s): $S_FAILED -- no mutant verdict below is readable"
+
+# S's mutants, each a copy guarded by mut_copy, each declared to fail EXACTLY its arm set.
+s_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$S/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  s_arms "$M" 1
+  if [ -z "$S_FAILED" ]; then bad "$label SURVIVED -- no S arm failed against it"
+  elif [ "$S_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $S_FAILED"
+  else bad "$label killed by the WRONG arm set: failed [$S_FAILED], declared [$want]"; fi
+}
+#   s-m-bracket  the `[` class dropped from the `$` scan
+s_mutant s-m-bracket "s-dl-bracket" \
+  's|0123456789@\*#?\$!-\[" }|0123456789@*#?$!-" }|'
+#   s-m-prefix   a token with no exact row resolved by the first row it is a PREFIX of. The
+#                fallback is line-scoped (awk per row): a case glob's `*` spans rows, and the
+#                first spelling of this mutant read `awk -F` as no-value off a later row.
+s_mutant s-m-prefix "s-exact-ref" \
+  's#^    \*) OPT_AR="" ;;$#    *) OPT_AR="$(awk -F"|" -v c="$1" -v s="$2" -v t="$3" "\\$1 == c \&\& \\$2 == s \&\& index(\\$3, t) == 1 { print \\$4; exit }" <<< "$OPT_TABLE")" ;;#'
+#   s-m-cluster  only the first letter of a short cluster looked up
+s_mutant s-m-cluster "s-cluster-ref" \
+  's/^      j=\$((j + 1))  # the next letter of the cluster$/      break  # the next letter of the cluster/'
+#   s-m-novalue  a no-value option allowed to take `=x`
+s_mutant s-m-novalue "s-value-ref" \
+  's/if \[ "\$nm" != "\$w" \]; then seg_refuse UNLISTED/if false; then seg_refuse UNLISTED/'
+#   s-m-wsplit   the walker fed a whitespace split of the segment text instead of bash's argv
+s_mutant s-m-wsplit "s-brace s-diff s-quoted" \
+  's/ && eval "set -- \$seg" && / \&\& set -f \&\& set -- $seg \&\& /'
+#   s-m-eo-global   endopts made global: every command reads a word after `--` as an operand
+s_mutant s-m-eo-global "s-endop-ref s-eo-ref" \
+  's/^  case "\$OPT_ENDOPTS" in .* esac$/  OPT_EO=1/'
+#   s-m-eo-blanket  the blanket refusal restored: no command reads a word after `--` as an operand
+s_mutant s-m-eo-blanket "s-eo-acc" \
+  's/^  case "\$OPT_ENDOPTS" in .* esac$/  OPT_EO=0/'
+#   s-m-rowdrop  one listed row removed from the table
+s_mutant s-m-rowdrop "s-wc-acc" \
+  '/^wc||-l|/d'
+#   s-m-rowadd   one unlisted harmless option added as a table row
+s_mutant s-m-rowadd "s-wc-ref" \
+  $'/^OPT_TABLE_END$/i\\\nwc||--libxo|none|mutant row\n'
+#   s-m-permute  sed and uniq read with permutation again: a dash word after the first operand is
+#                walked as an option
+s_mutant s-m-permute "s-sedfirst-ref s-uniqfirst-ref" \
+  's/^    if \[ "\$nops" -gt 0 \] && \[ "\$endop" -eq 0 \] && /    if false \&\& /'
+#   s-m-optnext  a long `optional` option takes the next word as its value, when one follows
+s_mutant s-m-optnext "s-optional-ref" \
+  's/^        optional) \[ "\$nm" = "\$w" \] || opt_take "\$nm" "\${w#\*=}" ;;$/        optional) if [ "$nm" != "$w" ]; then opt_take "$nm" "${w#*=}"; elif [ "$i" -lt "$n" ]; then pend="$nm"; fi ;;/'
+#   s-m-pendend  a value-taking option at the end of argv no longer refused
+s_mutant s-m-pendend "s-pendend-ref" \
+  's/^  if \[ -n "\$pend" \]; then$/  if false; then/'
+#   s-m-uniqtwo  uniq's second operand no longer refused
+s_mutant s-m-uniqtwo "s-uniqtwo-ref" \
+  's/^         if \[ "\$first" = "uniq" \] && \[ "\$nops" -gt 1 \]; then$/         if false; then/'
+#   s-m-numall   `-<digits>` accepted on every command, row or none
+s_mutant s-m-numall "s-num-ref" \
+  's/if \[ "\$OPT_AR" = num \]; then explain_word num/if true; then explain_word num/'
+
+# THE STARTUP INTERSECTION. A copy whose table admits a NEVER-set row must refuse to run at all.
+# The row is the FIRST row of OPT_NEVER, read out of the script, so no NEVER token is typed here.
+NV_ROW="$(awk 'f { print; exit } /^read -r -d .. OPT_NEVER <<.OPT_NEVER_END. [|][|] true$/ { f = 1 }' "$VALIDATOR")"
+IFS='|' read -r nv_c nv_s nv_t _ <<< "$NV_ROW"
+if [ -n "$NV_ROW" ] && [ -n "$nv_c" ] && [ -n "$nv_t" ]; then
+  ok "s-never-row            the first OPT_NEVER row was read out of the script"
+  MN="$S/s-m-never-$VBASE"
+  if mut_copy "$MN" $'/^OPT_TABLE_END$/i\\\n'"$nv_c|$nv_s|$nv_t|none|mutant row"$'\n'; then
+    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$MN" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
+    [ "$rc" -eq 2 ] && grep -qF "REFUSED: the option table admits a NEVER-set option ( $nv_c${nv_s:+ $nv_s} $nv_t; )" <<< "$out" \
+      && ! grep -q 'VERDICT' <<< "$out" \
+      && ok "s-m-never KILLED      a table row that is also a NEVER row stops the validator, exit 2, REFUSED named" \
+      || bad "s-m-never SURVIVED: expected exit 2 and the NEVER-set REFUSED line (rc=$rc): $out"
+    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$VALIDATOR" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
+    [ "$rc" -eq 0 ] && ! grep -q '^REFUSED: ' <<< "$out" && grep -q '	VERDICT	OK$' <<< "$out" \
+      && ok "s-m-never CONTROL     the unmutated validator runs the same invocation, exit 0, VERDICT OK" \
+      || bad "s-m-never CONTROL: the unmutated validator did not run the same invocation clean (rc=$rc): $out"
+  else
+    bad "s-m-never DID NOT APPLY -- the NEVER-row mutation matched nothing, so no verdict was scored"
+  fi
+else
+  bad "s-never-row could not read the first OPT_NEVER row out of the script -- the intersection arm is unscored"
+fi
 
 echo
 if [ "$fails" -gt 0 ]; then

@@ -461,16 +461,6 @@ Measured input for the partition, graph-watch, batch 238. These figures come fro
 
 verify: manual
 
-## BL-728 — the derivation allowlist refuses a backtick inside single quotes and any `git -C <dir> <read-only-sub>`, so an adversary's correct fenced command is refused at write time and rewritten
-
-**NOTE.** Raised from graph `_bmad-output/pipeline-snapshot.md` at `ded7e6a18` (the PC CANDIDATES bullet) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
-
-`core/scripts/validate-artifact-derivations.sh:158-162` refuses any command containing a backtick before its quote-aware split runs. So `grep -c -F 'a`b' d.txt`, which bash runs with no substitution, fails `FAIL (ALLOWLIST)`. `:237-238` reads the git subcommand as word 2, so `git -C sub rev-parse …` fails as `'git -C' is not a read-only git subcommand`. The capture hook surfaces both refusals at write time. Measured in a scratch repo: both commands were refused, against `git rev-parse --is-inside-work-tree` passing in the same run.
-
-Direction, for the owner: test the backtick under the existing quote scan, so it is refused only unquoted or inside double quotes, and skip `-C <dir>` before reading the subcommand, deciding whether `<dir>` must stay inside the root. The receipt exits 1 at the backtick arm and 2 at the `git -C` arm. If the owner rules that `git -C` stays refused, drop the receipt's `g.md` arm.
-
-verify: sh set -uo pipefail; V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] && command -v git >/dev/null || exit 9; R=$PWD; w=$(mktemp -d) || exit 9; mkdir -p "$w/p/.claude" "$w/p/sub" || exit 9; git -C "$w/p" init -q . || exit 9; printf 'a`b\n' > "$w/p/d.txt"; printf '# x\n\n```derived\n$ git rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/c.md"; printf '# x\n\n```derived\n$ grep -c -F '"'"'a`b'"'"' d.txt\n1\n```\n' > "$w/p/q.md"; printf '# x\n\n```derived\n$ git -C sub rev-parse --is-inside-work-tree\ntrue\n```\n' > "$w/p/g.md"; v() { ( cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" bash "$R/$V" "$1" >/dev/null 2>&1 ); }; v c.md || exit 9; v q.md || exit 1; v g.md || exit 2; exit 0
-
 ## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
 
 **DEFECT.** Raised from graph's s319 gate[story] refusal at 2026-10-20T22:44:38Z and the re-run `_bmad-output/planning-artifacts/s319/shards/stories-elicitation/` (graph `765de28f0` and its worktree) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
@@ -556,3 +546,13 @@ A second claim, a separate subject: `core/hooks/ai-dlc-advisor-gate.sh:631` read
 Owed: correct the `:631` comment (BL-752 now has two subjects, the net and the comment, and closes only when both are resolved); and BL-730's sibling fix applied to this hook once that fix has landed and been judged: wait for the flush up to a longer net and count per `message.id`. Judging the incoming call SEEN once a later sibling of the same `message.id` is on disk is excluded, because it cannot fire: no sibling line lands before the call's own line, since they flush together, and on `a367e62c` calls 18 and 19 were denied by hooks still pending at the flush. The owner may instead rule the exposure acceptable and close this as won't-fix; the census above is the evidence for that choice.
 
 verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net, and no knob shortens the default's fail-open branch: `ADVISOR_GATE_REREADS=0` or `1` select the stricter-only branch, which is a different program. A behavioural receipt would pay 10 s on every scoring and would fix a mechanism the owner has not chosen.
+
+## BL-756 — `AWK_AT_RE` in validate-artifact-derivations.sh requires a `(`, so gawk's two file-loading directives pass the awk program check
+
+**DEFECT.** Source: tip-728b, batch 239. Found by the BL-728 tip review; id allocated by the lead (ai-dlc-13).
+
+`AWK_AT_RE` (`@[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(`, `core/scripts/validate-artifact-derivations.sh:1678`) catches gawk's indirect call `@name(...)` but not gawk's `@include` and `@load` directives, which take a quoted file name and no parenthesis. They are inert on the BWK awk that macOS ships and live on gawk, which a consumer may run, the same argument the file makes for refusing sed's GNU-only `e` command (`:1846`).
+
+Owed: refuse an `@` directive word in an awk program regardless of a following `(`. Its arm needs an operator ruling first, because the operator's benign-only terms for this batch keep that vocabulary out of shipped fixtures.
+
+verify: manual — the discriminating input is gated on an operator ruling (benign-only terms, batch 239).

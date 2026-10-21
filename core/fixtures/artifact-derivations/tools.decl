@@ -16,6 +16,7 @@ find
 git
 grep
 head
+ln
 ls
 mkdir
 mktemp

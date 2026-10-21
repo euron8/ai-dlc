@@ -247,10 +247,13 @@ else
   bad "the stale-plus-unbound Write exited $RC without naming unbound-write.md:4 as stale — one block that aborts the eval is hiding a real STALE"
 fi
 
-# A24: a Write whose ONLY derivation is unrunnable -- an arithmetic error aborts the subshell
-# whatever `set -u` says. The validator says UNRUN and REFUSED at exit 2; that is a statement
-# about the text this edit wrote, so it reaches the author.
-printf '# s\n\n```derived\n$ grep -c "0$[1/0]" VERSION\n1\n```\n' > "$CAP_DIR/unrun-only.md"
+# A24: a Write whose ONLY derivation has no verdict -- `awk 'END{exit 137}' VERSION`. The
+# allowlist admits it (no `$`, read-only awk), and it does run to completion, but it exits 137,
+# which run_pair's marker cannot tell from a SIGKILL of the command, so the validator scores it
+# UNRUN and withholds the verdict. The old seed, `$[1/0]`, is refused at the allowlist now and
+# never reaches the UNRUN path. The validator says UNRUN and REFUSED at exit 2; that is a
+# statement about the text this edit wrote, so it reaches the author.
+printf '# s\n\n```derived\n$ awk '\''END{exit 137}'\'' VERSION\n1\n```\n' > "$CAP_DIR/unrun-only.md"
 fire "$(write_json "$CAP_DIR/unrun-only.md")"
 if [ "$RC" = 2 ] && grep -q '^UNRUN: _bmad-output/planning-artifacts/s1/unrun-only.md:4 ' "$ERR" && grep -q '^REFUSED: 1 derivation' "$ERR"; then
   ok "an UNRUN-only Write → exit 2, the UNRUN line shown at the real path"
@@ -261,7 +264,7 @@ fi
 # A25: an UNRUN block BESIDE a stale block. The validator withholds its verdict, but it still
 # prints the STALE it reached; the hook shows both, because a stale block this edit wrote is
 # the author's to fix whether or not a sibling ran.
-printf '# s\n\n```derived\n$ grep -c 0 VERSION\n9\n```\n\n```derived\n$ grep -c "0$[1/0]" VERSION\n1\n```\n' > "$CAP_DIR/unrun-beside-stale.md"
+printf '# s\n\n```derived\n$ grep -c 0 VERSION\n9\n```\n\n```derived\n$ awk '\''END{exit 137}'\'' VERSION\n1\n```\n' > "$CAP_DIR/unrun-beside-stale.md"
 fire "$(write_json "$CAP_DIR/unrun-beside-stale.md")"
 if [ "$RC" = 2 ] && grep -q 'unrun-beside-stale.md:4 records an output' "$ERR" && grep -q '^UNRUN: .*unrun-beside-stale.md:9 ' "$ERR"; then
   ok "an UNRUN block beside a stale block → exit 2, both the STALE and the UNRUN shown"
