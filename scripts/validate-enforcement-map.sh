@@ -5786,6 +5786,68 @@ for _fd in "$REPO_ROOT"/core/fixtures/*/; do
 done
 [ -n "${i74_mute// /}" ] && err "I74(d) \`.dist-only\` marker(s) with an EMPTY body:${i74_mute}. The marker excludes the fixture from every consumer; with no reason written in it, the next author cannot tell a considered exclusion from one copied by pattern-match. The criterion is in CLAUDE.md."
 
+# I74(e) -- every fixture directory with a `run.sh` is DECLARED or says why it cannot be. Exactly
+# one of `inputs.decl` (keyed on its declaration, run by hermetic-run.sh) and a `.undeclarable`
+# marker whose FIRST LINE is a non-empty reason; never both, never neither. An undeclared fixture
+# has no key but a traced read set, and the sandbox tracer drops reports under load, so a fixture
+# left in the trace population without a stated reason is one the next trace can silently lose.
+# The marker is a dedicated file for the same reason `.dist-only` is: README.md cannot carry it,
+# because many fixtures already have one for other purposes. LINE 1, NOT `-s`: a file whose first
+# line is blank is non-empty and states nothing where a reader looks first, and the probe seeds
+# that near-miss so a `[ -s ]` regression fails here.
+# NOT PACKAGED: install.sh copies a fixture's `*`, which matches no dotfile, so the marker never
+# reaches a consumer -- it is only read here, like `.dist-only`.
+# COST: builtins only per directory (`[ -f ]`, `read`, parameter expansion), the I74(d) shape;
+# the forks are the probe's mktemp/mkdir/rm and the two command substitutions.
+# STANDS DOWN when the tree has no core/fixtures (a scratch tree a fixture copied the validator
+# into), and FAILS CLOSED when core/fixtures exists and no run.sh directory was scanned.
+i74e_scan() { # <fixtures root> -> `SCANNED <n>`, then one `<name> <neither|both|empty-reason>` per offender
+  local d n l1 hd hu c=0
+  for d in "$1"/*/; do
+    [ -f "${d}run.sh" ] || continue
+    c=$((c + 1)); n="${d%/}"; n="${n##*/}"; hd=0; hu=0
+    [ -f "${d}inputs.decl" ] && hd=1
+    [ -f "${d}.undeclarable" ] && hu=1
+    if [ "$hd" = 1 ] && [ "$hu" = 1 ]; then printf '%s both\n' "$n"
+    elif [ "$hd" = 0 ] && [ "$hu" = 0 ]; then printf '%s neither\n' "$n"
+    elif [ "$hu" = 1 ]; then
+      l1=""; IFS= read -r l1 < "${d}.undeclarable" || true
+      [ -n "${l1//[[:space:]]/}" ] || printf '%s empty-reason\n' "$n"
+    fi
+  done
+  printf 'SCANNED %s\n' "$c"
+}
+i74e_pd="$(mktemp -d "${TMPDIR:-/tmp}/i74e-XXXXXX" 2>/dev/null)"
+if [ -n "$i74e_pd" ] && [ -d "$i74e_pd" ]; then
+  mkdir -p "$i74e_pd/f-neither" "$i74e_pd/f-both" "$i74e_pd/f-empty" "$i74e_pd/f-blank1" \
+    "$i74e_pd/q-decl" "$i74e_pd/q-undecl" "$i74e_pd/q-undecl-dist" "$i74e_pd/q-norun"
+  for _d in f-neither f-both f-empty f-blank1 q-decl q-undecl q-undecl-dist; do : > "$i74e_pd/$_d/run.sh"; done
+  printf 'core/x\n' > "$i74e_pd/f-both/inputs.decl"; printf 'a reason\n' > "$i74e_pd/f-both/.undeclarable"
+  : > "$i74e_pd/f-empty/.undeclarable"
+  printf '\nthe reason sits on line 2\n' > "$i74e_pd/f-blank1/.undeclarable"
+  printf 'core/x\n' > "$i74e_pd/q-decl/inputs.decl"
+  printf 'a reason with no trailing newline' > "$i74e_pd/q-undecl/.undeclarable"
+  printf 'a reason\n' > "$i74e_pd/q-undecl-dist/.undeclarable"; printf 'dist\n' > "$i74e_pd/q-undecl-dist/.dist-only"
+  : > "$i74e_pd/q-norun/.undeclarable"
+  i74e_got="$(i74e_scan "$i74e_pd")"
+  rm -rf "$i74e_pd"
+  i74e_want="f-blank1 empty-reason
+f-both both
+f-empty empty-reason
+f-neither neither
+SCANNED 7"
+  [ "$i74e_got" = "$i74e_want" ] || err "I74(e) self-probe FAILED: the scan over a seeded tree did not flag exactly f-neither, f-both, f-empty and f-blank1 and stay quiet on a declared dir, two valid markers and a dir with no run.sh, across 7 scanned. Got: $(echo $i74e_got). Its verdict on the corpus below would be unattributable."
+else
+  err "I74(e) could not create its probe directory, so neither direction of its scan was proven this run."
+fi
+if [ -d "$REPO_ROOT/core/fixtures" ]; then
+  i74e_out="$(i74e_scan "$REPO_ROOT/core/fixtures")"
+  i74e_n="${i74e_out##*SCANNED }"
+  i74e_bad="${i74e_out%SCANNED *}"
+  [ "${i74e_n:-0}" -gt 0 ] 2>/dev/null || err "I74(e) scanned ZERO run.sh directories under core/fixtures, so it could only report clean. An empty subject set has no offenders by construction; this is an instrument failure, not a pass."
+  [ -n "${i74e_bad//[[:space:]]/}" ] && err "I74(e) fixture director(ies) with a run.sh that are not exactly one of DECLARED (inputs.decl) or UNDECLARABLE (a .undeclarable whose first line is the reason): $(echo $i74e_bad). Declare the inputs and prove them with core/scripts/hermetic-run.sh, or, where no one declaration holds in both layouts, write .undeclarable with the reason on line 1."
+fi
+
 # --- I79: every rule below the re-attach cut declares what CARRIES it -------------
 # A compacted lead holds only the rules that survive the harness's skill re-attach cut.
 # Measured over 261 real re-attaches, the cut is deterministic and 13 of 30 rules survive

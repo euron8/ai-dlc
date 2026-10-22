@@ -1,0 +1,4 @@
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+!core/schemas/layer-adjudication-register.json
+core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/preamble.sh

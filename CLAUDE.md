@@ -69,7 +69,7 @@ pool's wall clock, and wrong.
 CARRYING TWO UNTIL THEY WERE CUT.** A total decays silently and reads exactly like a fresh one, and dating
 it is not available either — a date in resident rule prose is a tier-1 `audit-rule-files.sh`
 finding. **Derive the count, never quote one** —
-`find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l` — and read the CHANGELOG for when a
+`ls core/fixtures/*/run.sh | wc -l` — and read the CHANGELOG for when a
 figure was taken. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded

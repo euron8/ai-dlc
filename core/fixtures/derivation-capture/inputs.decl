@@ -1,0 +1,7 @@
+core/hooks/ai-dlc-derivation-capture.sh
+core/scripts/validate-artifact-derivations.sh
+!core/scripts/validate-artifact-budget.sh
+!core/scripts/partition-document.sh
+!core/scripts/wait-for-deliverable.sh
+!core/scripts/validate-adversarial-convergence.sh
+!core/scripts/wfd-start-of.sh

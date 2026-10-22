@@ -1,0 +1,6 @@
+core/fixtures/story-fields-derive/
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json
+core/skills/ai-dlc/layer-contract.yaml
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/implementation.md

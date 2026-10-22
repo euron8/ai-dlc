@@ -57,6 +57,7 @@ SENSOR="$(resolve ai-dlc-context-sensor.sh)" || SENSOR=""
 # it is absent, so every mutant hook directory below must carry it beside the sensor copy, or the
 # sensor-driven arms read as silent mutants rather than as the mutation under test.
 USAGE="$(resolve ai-dlc-usage-tokens.sh)" || USAGE=""
+[ -r "$(dirname "$SENSOR")/ai-dlc-window.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-window.sh"
 
 if [ -z "$LIB" ] || [ -z "$FLOOR" ] || [ -z "$SENSOR" ] || [ -z "$USAGE" ]; then
   echo "FIXTURE ERROR: could not locate the library or a driver hook from $HERE" >&2

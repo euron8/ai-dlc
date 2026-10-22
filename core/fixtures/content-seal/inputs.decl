@@ -22,6 +22,8 @@ core/schemas/provenance-block.json
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
 core/team-roles/remediator.md
+# BL-750: the CURRENT-state adversary role file the marker-admission arms (CS-A*) copy into their worlds.
+!core/team-roles/adversary.md
 core/hooks/ai-dlc-gate-remediation-guard.sh
 core/hooks/ai-dlc-derivation-capture.sh
 core/fixtures/adversarial-shard-merge/

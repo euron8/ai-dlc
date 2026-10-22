@@ -34,6 +34,7 @@ DRIFT="$(pick "${1:-}" "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.s
 # that cannot invoke the classifier at all produces no rows and would score green on the
 # negative arms. Exit 2, loudly.
 [ -n "$DRIFT" ] || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/layer-drift.sh"
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/layer-title-join.XXXXXX")"
 trap 'rm -rf "$ROOT"' EXIT
@@ -73,6 +74,7 @@ ADJ_SRC="$(pick "$HERE/../../schemas/layer-adjudication-register.json" \
                 "$HERE/../../../core/schemas/layer-adjudication-register.json" \
                 "$HERE/../../../.claude/schemas/layer-adjudication-register.json")"
 [ -n "$ADJ_SRC" ] || { echo "FIXTURE ERROR: layer-adjudication-register.json not found in either layout" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/schemas/layer-adjudication-register.json"
 cp "$ADJ_SRC" "$DIST/core/schemas/" || { echo "FIXTURE ERROR: cannot seed the adjudication schema" >&2; exit 2; }
 
 cat > "$DIST/core/skills/ai-dlc/core-manifest.md" <<'MD'

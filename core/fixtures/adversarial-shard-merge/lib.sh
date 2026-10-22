@@ -89,7 +89,18 @@ new_world() { # -> prints the shard dir of a fresh world
   done
   printf -- '- **disposition:** repaired\n- **edit:** `stories/bug-192-il-accuracy.md:3`\n- **derivation:** a remediator part, not an adversary shard\n' \
     > "$pa/s1/shards/stories-repair-p1/01.md"
+  legacy_roles "$w" || return 1
   printf '%s' "$pa/s1/shards/stories-p1"
+}
+# THE LEGACY WINDOW (BL-750; content-seal.sh header "THE MARKER ADMISSION"). Every arm here appends a
+# BARE `seat-complete:` line to shards in the sealed set, which the merge admits only while the world's
+# installed adversary role file still carries the pre-`--mark` fallback. Each world gets that file, with
+# the retired sentence process-rule-pins pins out of the shipped role files, so these arms keep reading
+# the header and count checks they were written for; content-seal/merge-arms.sh owns the admission arms.
+legacy_roles() { # <world root>
+  mkdir -p "$1/.claude/team-roles" || return 1
+  printf 'Close the shard with `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`.\nIf that call fails with `unknown arg: --mark`, append the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead.\n' \
+    > "$1/.claude/team-roles/adversary.md"
 }
 out_of() { printf '%s' "$(dirname "$(dirname "$(dirname "$1")")")/s1/stories-adversarial-p1.md"; }
 stories_of() { printf '%s' "$(dirname "$(dirname "$(dirname "$1")")")/s1/stories"; }

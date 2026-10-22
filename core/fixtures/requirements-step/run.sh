@@ -487,6 +487,9 @@ if [ ! -f "$REQMD" ]; then
   echo "SKIP requirements-step: subject not installed"
   exit 0
 fi
+for _hc in steps/route.md steps/requirements.md steps/carry-over-evaluation.md steps/gate-validation.md SKILL.md; do
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc/$_hc"
+done
 
 ROUTEMD="$STEPS/route.md"
 COEMD="$STEPS/carry-over-evaluation.md"
@@ -609,6 +612,7 @@ fi
 
 # --- (g) validate-draft-stamps.sh DRAFTS= ---
 if [ -n "$DRAFTSTAMPS" ] && [ -f "$DRAFTSTAMPS" ]; then
+  echo "HERMETIC-CONSUMED core/scripts/validate-draft-stamps.sh"
   DRAFTS_LINE="$(grep -E '^DRAFTS=' "$DRAFTSTAMPS" | head -1)"
   if grep -qF 'requirements-context' <<<"$DRAFTS_LINE"; then
     ok "(g) validate-draft-stamps.sh DRAFTS= contains requirements-context"

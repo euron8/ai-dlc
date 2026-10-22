@@ -190,6 +190,7 @@ check "  a line with no iterations keeps the top-level reading (150000)" "$(fiel
 # asserted present first.
 SENSOR_PATH="${HOOK#bash }"
 USAGELIB="$(dirname "$SENSOR_PATH")/ai-dlc-usage-tokens.sh"
+for _l in usage-tokens window context-provenance; do [ -r "$(dirname "$SENSOR_PATH")/ai-dlc-$_l.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-$_l.sh"; done
 MUTI="$WORK/mutant-iter-sum"; mkdir -p "$MUTI"
 cp "$(dirname "$SENSOR_PATH")/ai-dlc-window.sh" "$MUTI/ai-dlc-window.sh"
 cp "$SENSOR_PATH" "$MUTI/ai-dlc-context-sensor.sh"

@@ -41,6 +41,7 @@ echo "gate-resume:"
 # from two different working directories before trusting anything else below.
 # ============================================================================
 if [ -n "$SLICE" ]; then
+  echo "HERMETIC-CONSUMED core/scripts/gate-slice.sh"
   _cwd_a="$(cd "$ROOT" && bash "$SLICE" --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
   _cwd_b="$(cd "$HERE" && bash "$SLICE" --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
   if [ -n "$_cwd_a" ] && [ "$_cwd_a" = "$_cwd_b" ]; then
@@ -73,6 +74,7 @@ else
 fi
 
 if [ -n "$CKPT" ]; then
+  echo "HERMETIC-CONSUMED core/scripts/gate-checkpoint.sh"
   if bash "$CKPT" --self-probe >/dev/null 2>&1; then
     ok "gate-checkpoint.sh --self-probe exits 0 (its own nine-direction probe passed)"
   else
@@ -407,6 +409,7 @@ if [ -n "$CKPT" ]; then
     [ -f "$_c" ] && { _f2schema="$_c"; break; }
   done
   if [ -n "$_f2schema" ]; then
+    echo "HERMETIC-CONSUMED core/schemas/gate-adjudication-verdict.json"
     _f2want="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["patterns"]["gate_nonce"].replace("\\d","[0-9]"))' "$_f2schema" 2>/dev/null)"
     _f2have="$(f2_regex_of "$CKPT")"
     if [ -n "$_f2want" ] && [ -n "$_f2have" ] && [ "$_f2want" = "$_f2have" ]; then
@@ -432,6 +435,8 @@ fi
 # no-op provenance wrap, and arm G and the BL-457 arms measured an unwrapped hook. A missing
 # library is therefore FIXTURE BROKEN with the path named, never a quiet skip.
 _HOOKDIR="$(dirname "$HOOK")"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-recover.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/gate-validation.md"
 _cp_hook_libs() { # _cp_hook_libs <consumer-dir>
   for _lib in ai-dlc-handoff-pending.sh ai-dlc-context-provenance.sh; do
     if [ ! -f "$_HOOKDIR/$_lib" ] || ! cp "$_HOOKDIR/$_lib" "$1/.claude/hooks/"; then

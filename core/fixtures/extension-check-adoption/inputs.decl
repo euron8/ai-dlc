@@ -1,0 +1,5 @@
+core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
+core/scripts/validate-gate-manifest.sh
+!core/skills/ai-dlc/enforcement-map.yaml
+!core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/

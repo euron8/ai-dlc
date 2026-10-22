@@ -4,6 +4,11 @@
 !core/scripts/wait-for-deliverable.sh
 !core/hooks/ai-dlc-content-seal.sh
 core/scripts/partition-document.sh
+# BL-755: siblings wait-for-deliverable.sh resolves beside itself, so the derived mutant copy (run.sh
+# sib_set) holds them in the sandbox as it does in the tree; arm SIB requires each.
+core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/wfd-start-of.sh
 core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 core/skills/ai-dlc/steps/gate-validation.md

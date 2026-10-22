@@ -411,6 +411,7 @@ expect_untouched "$CONSUMER" "$(mkjson Agent nocfg)" \
   "role file with no aiDlcRoles entry — fail-open, binds nothing"
 
 # --- 14. FIXTURE STALENESS: the real core role files must still parse -------
+[ -r "$SRC_ROLES/gate-adjudicator.md" ] && echo "HERMETIC-CONSUMED core/team-roles/gate-adjudicator.md"
 REAL_PTR="$(grep -c 'aiDlcRoles\.' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null)"; REAL_PTR="${REAL_PTR:-0}"
 [ "$REAL_PTR" -gt 0 ] && ok "real core gate-adjudicator.md points at its aiDlcRoles entry" \
   || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md no longer names aiDlcRoles — the role file and the config have been decoupled without updating this fixture"

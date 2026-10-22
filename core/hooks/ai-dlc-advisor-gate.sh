@@ -22,8 +22,8 @@
 #     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
 #     result that is not `unavailable` re-arms the deny.
 #   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (THE RE-READ's
-#     `ADVISOR_GATE_REREADS` can only make it stricter, by judging before the incoming call's line
-#     lands; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
+#     `ADVISOR_GATE_REREADS` and `ADVISOR_GATE_NET` bound the wait for the incoming call's line and
+#     never acquit a call whose line is on disk; THE WINDOW's `ADVISOR_GATE_WINDOW` sizes
 #     the recency window and never turns the gate off). That is decided PER AGENT from that
 #     agent's own transcript: the harness writes an `attachment` line of type `advisor_tool`
 #     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
@@ -140,9 +140,14 @@
 #     (_gate-procedures.md "Validation cycle" item 1; adversary.md item 5) has every review shard
 #     Write its header FIRST, before verifying anything; measured on graph s319, 17 of 19 adversary
 #     shards were denied on exactly that write, and several then wrote nothing until finished, so
-#     their beats scored them ABSENT. A teammate Write to `/shards/<x>-p<N>/<f>.md` (not a repair
-#     shard) carrying no `###`-to-`######` heading (code-review and QA shards head findings with
-#     `#### `, merge-review-shards.sh), no `F-<n>` heading (party seats use `## F-1`), no
+#     their beats scored them ABSENT. A teammate Write to a review shard (not a repair shard) is
+#     header-only when it carries no finding heading. Two shard families, each with its own heading:
+#     an adversary shard (`/shards/<x>-p<N>/<f>.md`) heads findings `###` to `######`; a code-review
+#     or QA shard (`docs/reviews/.../shards/<x>(code-review|qa-validation)<y>/<f>.md`, the dirs the
+#     verdict kind covers, pass 1 carrying no `-p<N>`) heads them `####` to `######`
+#     (merge-review-shards.sh), and its template's empty `### Critical`/`### Important`/
+#     `### Suggestions` containers (qa.md and code-reviewer.md "Findings Template") are header, so
+#     `###` is not a finding there. Neither may carry an `F-<n>` heading (party seats use `## F-1`), no
 #     `seat-complete:` and no `<x>verdict:` line is allowed AND NEVER RECORDED -- recording it would
 #     make the write that adds the first finding a "re-write" and acquit it. A provenance block
 #     with counts and no verdict is header (the s319 shards' own first writes). Write only: an
@@ -187,8 +192,8 @@
 # `close`, Check 12 gate-log append, and a teammate's verdict/repair-record write. So one call
 # before a release's push also covers that release's merge, while the next push owes its own.
 # The kind rides on each recorded call in the same single pass; there is no new file, and no knob
-# bears on the kinds (the only knob, `ADVISOR_GATE_REREADS` under THE RE-READ, is stricter-only
-# and cannot acquit). ONE classifier decides the incoming call and every `tool_use` already recorded, so a
+# bears on the kinds (the re-read knobs, `ADVISOR_GATE_REREADS` and `ADVISOR_GATE_NET` under THE
+# RE-READ, bound only the wait and never acquit a call whose line is on disk). ONE classifier decides the incoming call and every `tool_use` already recorded, so a
 # command that merely MENTIONS a push (a grep, an echo) is not one in either place. Two recorded
 # calls are not counted:
 #   - a gated call that DID NOT SHIP. Operator ruling BL-486 (batch 208), which is later than
@@ -219,8 +224,8 @@
 #     incoming one; an attachment landing after the call (measured: a `hook_additional_context`
 #     line right after a `tool_use`) defeats that fallback, which is why it is only the fallback.
 #     With no `tool_use_id` the incoming line can never be SEEN, so at the default knob an owed
-#     call waits out THE RACE's 10s net and is SILENT (BL-630): the gate does not deny on a
-#     harness that sends no id. Measured above, the harness sends one.
+#     call is SILENT at once, without waiting out THE RACE's net (BL-630, BL-752): the gate does
+#     not deny on a harness that sends no id. Measured above, the harness sends one.
 #
 # THE RACE, AND THE RE-READ. The current assistant message is usually NOT on disk when
 # PreToolUse fires. Measured (`claude -p` 2.1.294, 13 runs): the incoming call's own `tool_use`
@@ -228,17 +233,21 @@
 # the Bash call in one response; after a 1s re-read every line of the message was present in 13
 # of 13, the advisor's `server_tool_use` included. Measured on graph: 6 of 7 pushes issued in
 # the same message as their advisor call were denied. So a verdict of DENY or WARN is not final
-# on the first read: the hook re-scans every 0.25s until the incoming call's own line lands or a
-# 10s safety net passes. An ALLOW is final at once and pays nothing.
+# on the first read: the hook re-polls until the incoming call's own line lands or a 300s safety
+# net passes. An ALLOW is final at once and pays nothing.
 # When the incoming call's own line is already on disk, every line of its message before it is
 # too, so nothing that could acquit is still in flight and the re-read stops. A re-read that
 # cannot be scanned keeps the verdict of the read that could. A DENY needs that line on disk
 # (BL-630): the net's expiry with the line still absent is SILENT, never a deny, so load cannot
 # turn a correct same-message advisor call into a deny. `ADVISOR_GATE_REREADS` (0 -> no re-read,
-# 1 -> a 2s bound, default -> the 10s net) can only make the gate stricter: `0` and `1` judge the
-# last scan at their bound and deny if owed, never acquitting; they exist so a fixture's deny cells
-# do not each pay the net. The deny reason says to call the advisor in a message of its own, which
-# is the shape that never races.
+# 1 -> a 2s bound, default -> the net) selects how the wait ends: `0` and `1` judge the last scan at
+# their bound and deny if owed, never acquitting; they exist so a fixture's deny cells do not each
+# pay the net. `ADVISOR_GATE_NET=<n>`, an integer 1..300, can only SHORTEN the default's net;
+# anything else is 300. Shortening LOOSENS the default -- more expiries, so more silent
+# stand-downs -- which `ADVISOR_GATE_REREADS` never does. It is acceptable because every expiry
+# already fails open, so the knob adds no deny path; it exists so fixtures do not pay the full net,
+# as `RECOVER_GATE_NET` does in `ai-dlc-recover-gate.sh`. The deny reason says to call the advisor
+# in a message of its own, which is the shape that never races.
 #
 # THE LOOSENINGS (operator ruling, batch 218: "the push hook must loosen its advisor requirement").
 # Filed by the consumer after graph's lead was denied a push whose own message carried the advisor
@@ -393,17 +402,24 @@ def matekind:
       then "verdict" else "" end
   else "" end;
 def kind($role): if $role == "lead" then leadkind else matekind end;
-# BL-567: a teammate HEADER-ONLY Write to a review shard (`/shards/<x>-p<N>/<f>.md`, not a repair
-# shard) -- no `### ` heading, no `F-<n>` heading, no `seat-complete:` and no `*verdict:` line --
-# is the early write the brief prescribes, and is `hdrw`. Each site maps it to "" on its own line:
+# BL-567: a teammate HEADER-ONLY Write to a review shard (not a repair shard) -- no finding
+# heading, no `F-<n>` heading, no `seat-complete:` and no `*verdict:` line -- is the early write
+# the brief prescribes, and is `hdrw`. The finding heading is per family (BL-752): a code-review or
+# QA shard, in any dir the verdict kind covers (pass 1 has no `-p<N>`), heads findings `#### `, and
+# its template carries empty `### ` containers, so only `####` to `######` is a finding there; an
+# adversary `-p<N>` shard heads them `### ` to `###### `. Each site maps it to "" on its own line:
 # the incoming call is allowed, and scan never records it, so the write adding the first finding
 # is still the gated action of this deliverable. A Write replaces the file, so its content IS the file.
 # No apostrophe anywhere in this literal: one would close it.
 def hdronly: .name == "Write"
-  and ((.input.file_path // "") | tostring | test("/shards/[^/]+-p[0-9]+/[^/]+\\.md$") and (test("/shards/[^/]*repair[^/]*/") | not))
-  and ((.input.content // "") | tostring
-       | (test("(^|\\n)#{3,6}[ \\t]") or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
-          or test("(^|\\n)[ \\t]*[A-Za-z_-]*verdict:")) | not);
+  and ((.input.file_path // "") | tostring | test("/shards/[^/]*repair[^/]*/") | not)
+  and (("/" + ((.input.file_path // "") | tostring)) as $p
+       | ($p | test("/docs/reviews/(.+/)?shards/[^/]*(qa-validation|code-review)[^/]*/[^/]+\\.md$")) as $rv
+       | ($rv or ($p | test("/shards/[^/]+-p[0-9]+/[^/]+\\.md$")))
+         and ((.input.content // "") | tostring
+              | (test(if $rv then "(^|\\n)#{4,6}[ \\t]" else "(^|\\n)#{3,6}[ \\t]" end)
+                 or test("(^|\\n)#{1,6}[ \\t]+F-[0-9]") or test("(^|\\n)[ \\t]*seat-complete:")
+                 or test("(^|\\n)[ \\t]*[A-Za-z_-]*verdict:")) | not));
 def kindx($role): if $role == "mate" and hdronly then "hdrw" else kind($role) end;
 # A background-task event the harness delivers as a user line is not a re-dispatch. Keyed on the
 # `origin.kind` field of the line, never on its text: the text openings are harness-origin prefixes,
@@ -615,9 +631,9 @@ judge
 # L3 is decided before the re-read, so a `_bmad-output/`-only push never waits on the poll.
 if [ "$V" != allow ] && [ "$KIND" = push ] && l3_exempt; then exit 0; fi
 # The re-read: an owed verdict (DENY or WARN) on a read that did not yet hold the incoming call's
-# own line is re-judged every 0.25s until that line lands (SEEN=1: nothing of its message is still
-# in flight) or a 10s safety net passes. A re-read that fails keeps the last good STATE. Measured on
-# graph (CC 2.1.295): 3 of 4 same-message pushes were denied under the old fixed 2 x 1s.
+# own line is re-judged until that line lands (SEEN=1: nothing of its message is still in flight)
+# or the safety net passes. A re-read that fails keeps the last good STATE. Measured on graph
+# (CC 2.1.295): 3 of 4 same-message pushes were denied under the old fixed 2 x 1s.
 # The net is wall clock, not a count: a scan's cost grows with the transcript and the load
 # (0.35s solo on a 4432-line graph prefix; graph's 815-line deny took 4.73s for 2 re-reads), so a
 # count would stall without bound under load.
@@ -627,17 +643,45 @@ if [ "$V" != allow ] && [ "$KIND" = push ] && l3_exempt; then exit 0; fi
 # call could be denied because time ran out. Now a deny needs SEEN=1: the transcript has advanced
 # past the incoming call and the advisor line is absent before it. The net only bounds the stall;
 # its expiry with SEEN still 0 is a state this hook cannot read and is SILENT with the reason on
-# stderr (PROTOCOL). Worst case is today's 10s; the settings template sets no hook timeout, so the
-# harness's own 60s default is the next ceiling above it.
-# THE KNOB STAYS STRICTER-ONLY, AND THAT IS WHY ONLY THE DEFAULT FAILS OPEN. `0` (no re-read) and
-# `1` (2s) judge the LAST scan at their bound and deny if owed, as before; a fail-open expiry there
-# would make a lower bound allow MORE. Per landing time of the incoming call's line: within 2s, both
-# judge the same scan; at 2-10s or never, `1` denies whenever the 2s scan is owed while the default
-# denies only an owed SEEN scan or stands down. So `1` denies a superset of what the default denies.
-case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0; _net=0 ;; 1) _cap=2; _net=0 ;; *) _cap=10; _net=1 ;; esac
-_t0=$SECONDS
-while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ $((SECONDS - _t0)) -lt "$_cap" ]; do
-  sleep 0.25
+# stderr (PROTOCOL).
+# THE NET IS 300s, PORTED FROM `ai-dlc-recover-gate.sh` (BL-730, BL-752). The harness flushes a
+# message's transcript lines around the END of its streaming, not per call: measured on graph
+# transcript a367e62c, in a 19-Agent-call message streamed about 7s apart, calls 1-17 expired the
+# old 10s net and only 18 and 19 saw their own lines. At ~7s per streamed block 300s covers a
+# message of about 43 calls. It stays under the harness ceiling: the settings template sets no
+# hook timeout, and a `command` hook on PreToolUse defaults to 600s (code.claude.com hooks docs;
+# 30s applies only to UserPromptSubmit, PreModelSwitch and PostModelSwitch), where a timed-out
+# PreToolUse hook does not block the call. `ADVISOR_GATE_NET` (an integer 1..300) can only shorten it.
+# AN INPUT WITH NO `tool_use_id` CAN NEVER BE SEEN, so at the default an owed call stands down at
+# once rather than after the whole net (recover-gate does the same). `0` and `1` keep their own
+# exit below: they judge the last scan, so a call with no id is still denied there.
+# `0` AND `1` NEVER FAIL OPEN. `0` (no re-read) and `1` (2s) judge the LAST scan at their bound and
+# deny if owed, as before; a fail-open expiry there would make a lower bound allow MORE. Per landing
+# time of the incoming call's line: within 2s, both judge the same scan; later or never, `1` denies
+# whenever the 2s scan is owed while the default denies only an owed SEEN scan or stands down. So
+# `1` denies a superset of what the default denies, at any `ADVISOR_GATE_NET`.
+_netcap=300
+case "${ADVISOR_GATE_NET:-}" in
+  ''|*[!0-9]*) : ;;
+  *) if [ "$ADVISOR_GATE_NET" -ge 1 ] 2>/dev/null && [ "$ADVISOR_GATE_NET" -le 300 ] 2>/dev/null; then _netcap=$((10#$ADVISOR_GATE_NET)); fi ;;
+esac
+case "${ADVISOR_GATE_REREADS:-2}" in 0) _cap=0; _net=0 ;; 1) _cap=2; _net=0 ;; *) _cap=$_netcap; _net=1 ;; esac
+if [ "$_net" = 1 ] && [ "$V" != allow ] && [ -z "$TUID" ]; then
+  say "the hook input carries no tool_use_id, so the incoming call's own transcript line can never be seen ($JUDGED); its message may still hold an advisor attempt, so the gate is silent"
+  exit 0
+fi
+# A tick is a `grep -F` of the call's id and forks no jq; the full scan re-runs only once the id is
+# on disk, and the poll continues while that line is not yet parseable (SEEN still 0). `0` and `1`
+# have no id to wait for and re-scan every tick. The net is counted in slept quarter seconds
+# (`_rq`), because SECONDS ticks on wall-clock second boundaries and alone can cut the wait up to a
+# second short; SECONDS bounds only a box so loaded that the sleeps themselves overrun.
+_t0=$SECONDS; _rq=0
+while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ "$_rq" -lt $((_cap * 4)) ] && [ $((SECONDS - _t0)) -le "$_cap" ]; do
+  if [ "$_rq" -lt 8 ]; then sleep 0.25; _rq=$((_rq + 1)); else sleep 1; _rq=$((_rq + 4)); fi
+  if [ "$_net" = 1 ]; then
+    _rn="$(grep -cF -- "$TUID" "$JUDGED" 2>/dev/null)" || _rn=0
+    [ "${_rn:-0}" -gt 0 ] 2>/dev/null || continue
+  fi
   STATE2="$(scan)" || STATE2="$STATE"
   STATE="$STATE2"
   judge

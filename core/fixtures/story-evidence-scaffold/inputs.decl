@@ -1,0 +1,12 @@
+core/fixtures/story-evidence-scaffold/
+core/scripts/
+!core/scripts/validate-handoff-evidence.sh
+!core/scripts/sprint-status.sh
+!core/schemas/sprint-status.json
+!core/skills/ai-dlc/steps/stories-test-strategy.md
+!core/skills/ai-dlc/steps/gate-validation.md
+!core/skills/ai-dlc/steps/implementation.md
+!core/skills/ai-dlc/steps/sprint-review.md
+!core/team-roles/dev.md
+!core/team-roles/qa.md
+!core/team-roles/code-reviewer.md

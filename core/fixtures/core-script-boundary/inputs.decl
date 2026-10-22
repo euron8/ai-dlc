@@ -1,0 +1,2 @@
+core/hooks/ai-dlc-core-guard.sh
+!core/hooks/ai-dlc-context-provenance.sh

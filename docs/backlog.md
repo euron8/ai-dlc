@@ -147,6 +147,12 @@ verify: manual
 
 **PARTIAL (v0.806.0, verified 581ca289) — owed (1) shipped for `fold-architect-ledger-join` only; owed (1) for `hermetic-runner` shipped in v0.832.0 (verified 67bdbb7a), and owed (3) is OPEN.** `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl` and runs under `hermetic-run.sh` (72 ok, `required_missing=0`); its 46 traced rows are removed. `hermetic-runner` reads its subject files from copies made once at startup. That cut its trace window about 6x (17691 lines to 2902, loaded) but did NOT stop the drops: one 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three `--local-map` reps dropped 1, 2 and 7, at load 27-43 (0 of 3 clean). The premise that the drops come from re-opening four tree files hundreds of times is REFUTED; the drop cause is undiagnosed. `hermetic-runner`'s 17 rows and digest are removed, so it runs on every push (fail-closed) until the drops are fixed. The earlier count of 27 held fixtures is 5: 27 have `#discards` at n≥3 in `.git/ai-dlc-fixture-readsets.local`, and only 5 are keyed on the current runner and deriver.
 
+**PARTIAL (batch 240) — owed (2) is met; owed (3) stays OPEN, so this entry carries no `**LANDED` line.** Of the 37 `core/fixtures/*/run.sh` directories that had no `inputs.decl`, 34 now carry `inputs.decl` and `tools.decl`, each proven by `core/scripts/hermetic-run.sh`. The other 3 carry a dedicated `.undeclarable` marker, whose first line states why no one declaration holds in both layouts: `hook-registration-join`, `retro-compliance-workflow` and `self-update-join-gate`. The last of those is also `.dist-only`. The marker replaces the README sentence that (2) named, because 10 of the 37 already had a README for other purposes. Invariant I74(e) in `scripts/validate-enforcement-map.sh` binds it: every `run.sh` directory carries exactly one of `inputs.decl` or a `.undeclarable` with a non-empty first line. The arm's self-probe runs under mktemp before the corpus and fires in both directions.
+
+Census, scored under `bash -c 'set -uo pipefail; …'`: 260 `run.sh` directories, 257 declared, 3 undeclarable, 0 offenders, exit 0. A second spelling (a `find -name run.sh` walk with `head -1`) also exits 0. Three seeded regressions each exit 1: a directory with neither file, an empty `.undeclarable`, and a directory with both. The receipt is `verify: manual`, because a census over the marker would read CLOSE-CANDIDATE while (3), the trace-stream drop cause, is still owed.
+
+**Absence-tolerant `!` lines, held by sentinel.** For each of the following, dropping the line from the declaration leaves `hermetic-run.sh` at rc 0, because the fixture tolerates the file's absence once it leaves the sandbox. The `!` sentinel is what binds each one while it is declared, and that is the shape the `!` grammar exists for, so none of them is a dead line: `context-mode-protect` `core/hooks/ai-dlc-context-provenance.sh`; `context-provenance` `core/hooks/ai-dlc-window.sh`; `context-sensor` `core/hooks/ai-dlc-context-provenance.sh`; `core-script-boundary` `core/hooks/ai-dlc-context-provenance.sh`; `cycle-commits-enforce` `core/fixtures/lib/preamble.sh` and `core/scripts/validate-mandatory-rules.sh`; and `derivation-capture` `core/scripts/partition-document.sh`, `core/scripts/validate-adversarial-convergence.sh`, `core/scripts/validate-artifact-budget.sh`, `core/scripts/wait-for-deliverable.sh` and `core/scripts/wfd-start-of.sh`.
+
 **DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:40 EDT: "what about the fixtures whose readsets cant be mapped? i do not believe you cant figure out a way to refactor those so they dont need to be run every time." Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]).
 
 Measured by the filer in the main checkout: 65 fixture directories have no row in `.ai-dlc-fixture-readsets.tsv`; 62 carry `inputs.decl`, so the hook counts them MAPPED (`.githooks/pre-push:866-871`) and keys them on the declaration; the other 3 (`lib`, `check-h1-recursion`, `check-manifest-bypass`) have no `run.sh` and are not units. `.git/ai-dlc-fixture-readsets.local` marks fixtures with `#discards` 3 or more when the live trace has thrown their result away three times and stopped retrying (`:954-956`, `:1304`). Intake re-derived: 86 `#discards` rows, 27 of them at 3 or more; `fold-architect-ledger-join` and `hermetic-runner` both have a `run.sh` and no `inputs.decl`. Per the filer those two are the only units that truly run on every push (173 s and 53 s recorded). Discard reasons across all rows, per the filer: 72 "the stream dropped reports", 9 "VERDICT: the sandboxed run's verdict lines differ", 2 "LOSS CANARY", 2 "TRIP".
@@ -162,7 +168,7 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **The completeness proof covers `inputs.decl` only (batch 236; root cause BL-676).** `tools.decl` KEYS tools but does not RESTRICT them. The sandbox PATH is `$HR_TOOL_DIRS:$HR_BIN` (`core/scripts/hermetic-run.sh:544`: `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`; header `:54-55`: "PATH pinned to the fixed tool dirs plus a symlink farm / of the declared tools (keyed and unkeyed)"), so every system tool dir is reachable whether declared or not. Removing a tool line therefore makes no fixture fail, and a removed tool line is invisible to any receipt or fixture. Of the 5 `inputs.decl` lines, 4 are mutated by `core/fixtures/hermetic-runner/run.sh` (DC1 `core/scripts/hermetic-run.sh`, DC2 `core/scripts/core-paths.sh`, DC3 `core/fixtures/lib/`, DC4 `.githooks/pre-push`), and two groups cannot be caught. All `tools.decl` lines cannot, because the sandbox never refuses an undeclared tool, so a dropped line changes nothing a fixture can observe. The fifth `inputs.decl` line, `core/git-hooks/pre-push`, cannot on the distribution, because the fixture never opens it there, although it is still part of the key. The result "one tool removed: 0" is therefore not coverage.
 
-verify: sh o="$(bash core/scripts/hermetic-run.sh --root . --key-only hermetic-runner 2>&1)" || exit 1; k="$(printf '%s\n' "$o" | cut -f1)"; nt="$(grep -cv -e '^[[:space:]]*#' -e '^[[:space:]]*$' core/fixtures/hermetic-runner/tools.decl)" || exit 1; nr="$(grep -c '^/' <<<"$k")" || nr=0; [ "$nt" -gt 0 ] && [ "$nr" = "$nt" ] || exit 1; for p in core/scripts/hermetic-run.sh core/scripts/core-paths.sh .githooks/pre-push core/git-hooks/pre-push core/fixtures/lib/ core/fixtures/lib/preamble.sh; do grep -qxF -- "$p" <<<"$k" || exit 1; done # known limit: a removed tool line is invisible (tools.decl keys, does not restrict; BL-676)
+verify: manual
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
@@ -393,48 +399,6 @@ verify: sh D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodi
 
 verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; c="$(grep -cE '^[[:space:]]*\( pcv_suite "\$EMIT" "\$PCV_ROOT/ship" \)' "$f")" || c=0; [ "$c" = 1 ] || exit 9; n="$(grep -cE '^[[:space:]]*\( pcv_suite "\$PCV_ROOT/\$_m/eng/emit-report\.sh" "\$PCV_ROOT/\$_m" "\$\(pcv_scope "\$_m"\)" \)' "$f")" || n=0; s="$(grep -cE '^[[:space:]]*_got="\$\(pcv_failset "\$PCV_ROOT/\$_m/verdicts" "\$\(pcv_scope "\$_m"\)"\)"' "$f")" || s=0; [ "$n" = 1 ] && [ "$s" = 1 ]
 
-## BL-701 — a stale undeclared fixture re-runs on every linked-worktree push, because the in-pool trace that would clear it is skipped there
-
-**DEFECT.** An undeclared fixture (no `inputs.decl`) is keyed on its committed rows in `.ai-dlc-fixture-readsets.tsv`. It skips on them only when its key record is clean, or when the committed `# digest <fx> <sha>` line matches this tree: `readset_committed_digests` (`.githooks/pre-push:827`-`:846`) writes `.cdig` as `match`, `differs` or `nodigest`, and only `match` clears a stale record (`:937`-`:945`). A stale fixture runs, and the hook names it under its reason (`:2001`-`:2009`). It then queues the fixture to be traced after a green run (`:2017`-`:2019`), which is what would clear it. The in-pool trace refuses a linked worktree, though: `readset_pool_trace_prep` sets `why` to "a linked worktree (the trace clones .git, which is a file there)" when `--git-dir` differs from `--git-common-dir` (`:1218`-`:1223`), and the fixtures run without a trace. Nothing then clears a stale fixture in a linked worktree, and every owner pushes from one. So a fixture that goes stale there stays stale and runs on every push until somebody traces it from the main checkout.
-
-**Measured at af9a7b085 (main, 0.876.0), in a fresh clone of the main checkout, and re-derived identical at 328336b22 (0.877.0).** The derivation sources the hook's own `READSET_UNIVERSE` span and calls `readset_manifest` and then `readset_committed_digests`, the way the hook does, with `READSET_LOCAL=/dev/null`. The digest is not reimplemented. The population is `/usr/bin/find core/fixtures -mindepth 1 -maxdepth 1 -type d`: 262 directories, 40 without `inputs.decl` and 222 with one. The undeclared fixtures fall out as follows.
-
-- **match, 0.**
-- **differs, 16:** architecture-fast-track, changelog-sprint-slot, check-22-spawn-ledger, context-provenance, context-sensor, derivation-capture, dispatch-model-guard, divergence-hard-block, extension-check-adoption, gate-resume, hook-registration-join, requirements-step, resume-whole-read, review-carry-over-clauses, self-update-join-gate, story-evidence-scaffold.
-- **nodigest, 21:** check-17-bypass, check-17-counts, check-1c-bypass, check-23-draft-stamps, check-31-ac-falsifiability, check-3b-locked-anchor, check5-anchor-base, ci-gates-resolution, consolidation-residue, context-mode-protect, core-script-boundary, cycle-commits-enforce, deploy-validate-smoke-classification, document-partition, early-exit-reader, gate-verdict-grep-shape, layer-title-join, prepush-ssh-keepalive, retro-compliance-workflow, route-defect-classification, story-fields-derive.
-- **unmapped (no committed rows), 3:** check-h1-recursion, check-manifest-bypass, lib.
-
-16 + 21 + 3 = 40. The 37 that are `differs` or `nodigest` all carry a `run.sh`, and the 3 `unmapped` carry none (see the second claim). Control, from the same invocation: none of the 222 declared fixtures has a `.cdig` row, which is correct, since the deriver drops declared-fixture rows at 0.832.0. The reproduction was checked against a revision where a match is expected. At 6c8ea1d9d (0.781.0) the same derivation rated check-22-spawn-ledger, context-sensor and dispatch-model-guard `match`, so the computation can produce a match, and the zero at HEAD is not a computation that can only say `differs`. Earlier readings: the counts were identical at 0b7a7a432 (0.834.0) and at 0e382fc50 (0.832.0), and 887bcba7a (0.835.0) gave 314/45/269 with 20/22/3. The drop to 40 is five deleted undeclared directories: story-evidence-scaffold-mutants, -b, -c, -d and context-provenance-mutants. 0e382fc50 wrote no digest line. It dropped declared-fixture rows, taking the map from 65 digest lines to 20. b37113afc (0.842.0) removed the four story-evidence-scaffold-mutants lines with their directories, and 7e4af67d6 (0.865.0, the last commit to touch the map) added three for the declared apply-restamp-worklist, -b and -c; it wrote none for an undeclared fixture. Every one of the 16 undeclared survivors is byte-identical at e67a2c0cf (0.826.0). Walking back through the map's history, those 16 lines were written in the commits from 525553598 through e67a2c0cf (none of them is present at c96ad3587, and 12 are at 525553598), and none of them has been rewritten since. So no commit has re-traced an undeclared fixture since 0.826.0, and the tree has moved under all 16 of them.
-
-A `differs` or `nodigest` rating is the population that cannot clear on its committed rows. It is not the set dispatched on a given push. A fixture actually re-runs when its local key record is `stale`, and those records live in the shared git dir. Measured by a peer pushing 0.834.0 from a linked worktree: 8 stale units ran on both dress runs, and every one of them was in that revision's 42 (two, story-evidence-scaffold-mutants and -d, have since been deleted). document-partition was listed under "committed rows carry no # digest line", and context-sensor, dispatch-model-guard, divergence-hard-block, gate-resume, hook-registration-join, story-evidence-scaffold-mutants and story-evidence-scaffold-mutants-d under "committed # digest no longer matches this tree".
-
-**Second claim, which is smaller: three undeclared directories have no committed rows at all.** check-h1-recursion, check-manifest-bypass and lib are `unmapped`. None of them carries a `run.sh`: check-h1-recursion and check-manifest-bypass hold `README.md` and `seed.sh`, and lib holds `README.md` and `preamble.sh`. The hook builds its dispatch list only from directories with a `run.sh` (`:2085`-`:2086`), so these three are never dispatched, never traced and never cost a push. The cost is in the census instead. Any count of "fixture directories" taken as `find -mindepth 1 -maxdepth 1 -type d` counts them as fixtures, and the earlier draft of this entry did exactly that when it called all 45 dispatched. What is owed is a population that the hook and every census share. Either the census keys on `run.sh`, or these directories move out of `core/fixtures/`. The receipt below keys on `run.sh`, as the hook does.
-
-Cost, by the recorded loaded cost in `.git/ai-dlc-fixture-durations` of the main checkout. A cost there is a LOADED cost, measured under the pool, and is not comparable with a solo run. 37 of the 40 carry a recorded row and 3 carry none. The top 5 undeclared fixtures:
-
-| fixture | loaded cost (s) |
-|---|---|
-| document-partition | 129 |
-| self-update-join-gate | 58 |
-| dispatch-model-guard | 50 |
-| gate-resume | 39 |
-| check-22-spawn-ledger | 38 |
-
-No raw total is quoted, because a total goes stale. Derive it from that file joined against the stale set.
-
-Owed: stated, not built. Take one of two directions.
-
-1. **Let the in-pool trace run in a linked worktree.** It cannot run there today because the trace clones `.git`, and in a linked worktree `.git` is a gitlink file naming `<common dir>/worktrees/<name>`, not a repository. The trace would have to clone from `git rev-parse --git-common-dir` and check out this worktree's HEAD and working-tree state.
-2. **Refresh the stale digests from the main checkout** by running the command the hook prints (`:2010`-`:2012`): `bash core/scripts/derive-fixture-readsets.sh --reconcile`. Then commit the map. Per `operator-rulings.md`, a read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox`, in the main checkout detached at the commit to trace, and the session that owes it runs it. This clears today's 37, but the next stale fixture in a linked worktree recurs, so on its own it is a stopgap, not the fix.
-
-Related: BL-635 (closed at 0.832.0), whose subject was the read-set rows of declared fixtures.
-
-**Known limit (worktrees/).** The in-pool trace copy of a linked worktree omits the common dir's `worktrees/`. This is deliberate: the `gitdir` files under it name the REAL worktrees, and a `git worktree repair` run in the copy would rewrite one of their gitlinks. So in the copy, `git worktree list` shows 1 line, and a branch checked out in another worktree can be checked out there. Measured: 0 of the 37 traced undeclared fixtures read `worktree list`, `main-worktree/` or "already used by worktree" (`grep -rlE` over each fixture directory), against a repo-wide control of 3 fixture files under `core/fixtures` that do. A traced fixture that starts reading `worktree list` would see 1 line.
-
-**Evidence (batch 236, PULLCOST 0.834.0).** PULLCOST's second dress pole was document-partition at 732 s loaded, against 347 s before. It is one of the 8 stale units that ran on both dress runs from a linked worktree. Its fixture directory is byte-unchanged between c7fc78b88 and 0b7a7a432 (`git diff --name-only` over it: 0 paths, against 12 over the whole range). That is the cost this entry names: an unchanged fixture paid in full, on a push that did not touch it, because nothing on that push could clear its stale record.
-
-verify: sh o="$(mktemp -d)" || exit 9; trap 'rm -rf "$o"' EXIT; s="$o/span.sh"; sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' .githooks/pre-push > "$s"; grep -q '^readset_committed_digests() ' "$s" || exit 9; READSET_MAP=.ai-dlc-fixture-readsets.tsv; READSET_LOCAL=/dev/null; . "$s" || exit 9; readset_manifest "$o"; [ -s "$o/.now" ] || exit 9; readset_committed_digests "$o"; [ -s "$o/.cdig" ] || exit 9; n=0; d=0; for p in core/fixtures/*/; do [ -f "${p}run.sh" ] || continue; f="${p%/}"; f="${f##*/}"; st="$(awk -F'\t' -v f="$f" '$1 == f { print $2 }' "$o/.cdig")"; if [ -f "${p}inputs.decl" ]; then d=$((d+1)); [ -z "$st" ] || exit 9; else [ "$st" = match ] || n=$((n+1)); fi; done; [ "$d" -gt 0 ] || exit 9; FXROOT=core/fixtures/; q="$o/prep.sh"; sed -n '/^readset_pool_trace_prep() /,/^}$/p' .githooks/pre-push > "$q"; grep -q 'PT_LIST=' "$q" || exit 9; . "$q" || exit 9; readset_deriver_path() { printf '%s\n' "$o/dv"; }; [ -x /usr/bin/log ] || exit 9; b="$o/bin"; mkdir "$b" || exit 9; for t in sandbox-exec python3; do printf '#!/bin/sh\nexit 0\n' > "$b/$t" && chmod +x "$b/$t" || exit 9; done; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_CONFIG_PARAMETERS; g="$o/g"; mkdir "$g" && git -C "$g" init -q && git -C "$g" -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.name=r -c user.email=r@r commit -q --allow-empty -m r && git -C "$g" -c core.hooksPath=/dev/null worktree add -q "$o/wt" >/dev/null 2>&1 || exit 9; pt() { ( cd "$1" || exit 9; mkdir -p "$o/x$2" && printf 'zzrcpt\n' > "$o/x$2/.trace" || exit 9; PATH="$b:$PATH"; readset_pool_trace_prep "$o/x$2" >/dev/null 2>&1; printf '%s' "$PT_LIST" ); }; [ "$(pt "$g" m)" = zzrcpt ] || exit 9; m=0; [ "$(pt "$o/wt" w)" = zzrcpt ] || m=1; [ "$n" -eq 0 ] && [ "$m" -eq 0 ] || exit 1; exit 0
-
 ## BL-706 — no reconcile step runs the derivation differential on every pull, so a consumer whose pulls never hit a derivation never gets an owed-derivations record
 
 **NOTE.** Filed by ai-dlc-77 [ab5b1f] from the BL-668 build (batch 236), lead ai-dlc-c8 ruled it a separate cost question with no owner this batch. BL-668 made `reconcile/derivation-differential.sh --record-owed` create the record on every run, so an absent record now means "no reconcile has ever measured this tree". But `reconcile/apply.sh` (~:1346, ~:1495) emits the differential only as a `WORKLIST artifact-derivations` row, and only when a recorded `derived` command names a core path the range changed; the differential refuses on zero derivations, and nothing runs it unconditionally. So a consumer whose pulls never touch a derivation keeps printing `check-owed-derivations.sh`'s absent line. That line is correct (the tree was genuinely never measured), so this is a cost question, not a defect. A per-pull "no changed path, so nothing owed" record was considered and declined (c8): a derivation can read files its command line never names, so that record would be written from intent, not from a measurement.
@@ -455,47 +419,6 @@ Owed: the recorder prunes rows whose dir is gone, or the pole reader filters the
 
 verify: manual
 
-## BL-750 — wait-for-deliverable.sh accepts a bare seat-complete:/repair-complete: marker after the settle window, so any writer can mint one
-
-**DEFECT.** Source: BL-738 owner, batch 239.
-
-- `wait-for-deliverable.sh --complete` and `--complete-repair` deliver a marker with no `sha=` once the file has stopped changing for the settle window (its header, "A MARKER WITH NO `sha=` KEEPS THE SETTLE PATH ... FAIL-OPEN NET FOR LEGACY MARKERS DURING THE PULL"). Any writer, including a Bash append, can therefore mint a completion marker, and the consumers do not consult the content-seal ledger (BL-738 seal audit).
-- BL-738 removed the role-text instruction to write such a line, so the role and step text no longer instructs it (whether a seat still writes one is unmeasured); the engine still accepts one.
-
-Owed:
-- bound the bare-marker acceptance by a frozen-sha / engine-sentinel legacy rule, as BL-737 did in `merge-review-shards.sh` (`# MARK-KEY-WRITER v1`);
-- have the consumers (`--complete`, `--complete-repair`, `merge-adversarial-shards.sh`'s `ends_in_marker`) consult the content-seal ledger.
-
-verify: manual
-
-## BL-751 — the layer-adjudication register accepts a record whose `recorded_utc` is later than the moment it was written
-
-**NOTE.** Source: graph watch ai-dlc-3c, batch 239, observed read-only during graph's 0.891.0 to 0.901.0 pull. Filed by lead ai-dlc-13.
-
-During leg B of the pull, graph's working-tree `layer-adjudication-register.jsonl` gained 20 records. 11 carried `recorded_utc 2026-10-21T12:19:33Z`. The other 9 (LC-E4 still-additive ×8, plus LC-E4 retire for `roles/dev-push.md`) carried a hand-typed `2026-10-21T12:40:00Z`. `date -u` read 12:23:59Z in the same invocation, so those 9 were stamped about 16 minutes in the future. Graph corrected the stamp to 12:23:26Z before pushing, so nothing wrong was committed.
-
-No reader refuses a future instant. `core/scripts/audit-layer-debt.sh` keys withdrawals on `(entry, recorded_utc)` (its header at `:550`), so a future stamp is a valid key that any later correct record will sort BEFORE.
-
-Owed: the register's validator refuses a `recorded_utc` later than its own run time, plus a small skew allowance, naming the row. The fixture seeds one future row and one row at the run instant as the near-miss.
-
-verify: manual — the defect is a property of a hand-typed consumer record and its validator site is not chosen; a receipt is owed with the fix.
-
-## BL-752 — the advisor gate's push denial waits on the same per-call 10 s net that BL-730 found expiring silently across a many-call parallel message, so a push late in such a message that owes an advisor attempt passes unrefused
-
-**NOTE.** The exposure is real in mechanism and theoretical in practice, so it is not a DEFECT. Raised from the BL-730 measurement on graph transcript `a367e62c` by the batch-239 recover-gate cluster; the advisor-gate reading and the push census were done by the filing hand.
-
-`core/hooks/ai-dlc-advisor-gate.sh:637` sets `_cap=10; _net=1` for the default `ADVISOR_GATE_REREADS`, and `:640-646` re-scans every 0.25 s until `SEEN=1` or the cap. At `:646-649` the net's expiry with `SEEN` still 0 is SILENT (BL-630's fail-open ruling, header `:225-241` "THE RACE, AND THE RE-READ"). That is the shape `core/hooks/ai-dlc-recover-gate.sh` carried before BL-730. BL-730 measured the cause on `a367e62c` lines 4611-4690: the harness flushes a message's transcript lines around the END of streaming, not per call, so in the 19-Agent-call message `msg_011CgCyKHw8znw1wSZJHk9TR` (streamed about 7 s apart) calls 1-17 expired the net and only calls 18 and 19 saw their own lines.
-
-What the advisor gate gates is `Bash` `git push` (kind `push`, `:46`), plus merge, close, gate-log and verdict writes. A push is judged `owed` only when no advisor attempt precedes it in its own message and none sits in the last `ADVISOR_GATE_WINDOW` (10) assistant turns (`:250-256`, `:578-580`), and L3 exits earlier for a `_bmad-output/`-only push (`:615-616`). Only the residue can reach the net: a push in a message with no advisor call, after a window with none, that is not `_bmad-output/`-only, and whose own line has not landed. `ADVISOR_GATE_REREADS=0` or `1` cannot help in practice, since they judge the last scan at their bound and a flush that late has not arrived either. They are stricter-only, and the default is the only value that fails open.
-
-Plausibility, measured on graph's transcripts (`~/.claude/projects/-Users-n8-git-graph/*.jsonl`, 553 assistant messages carrying a Bash `git push`): 416 hold exactly 1 tool call, 134 hold 2, 15 hold 3, none more. A 10 s expiry needs preceding calls long enough to stream for seconds, as 19 Agent prompts did; a push is a one-line call and in this census it never follows more than 2 siblings. So the BL-730 mechanism has no observed instance here. It can occur only if a lead emits a push as the tail of a many-call message while owing an advisor attempt, and the gate then fails open silently, the BL-630 ruling's accepted cost.
-
-A second claim, a separate subject: `core/hooks/ai-dlc-advisor-gate.sh:631` reads `# harness's own 60s default is the next ceiling above it.`, and that figure is wrong. Per code.claude.com/docs/en/hooks.md a `command` hook defaults to 600 s, lowered to 30 s only for UserPromptSubmit, PreModelSwitch and PostModelSwitch and to 10 s for MessageDisplay. PreToolUse stays at 600 s, and on PreToolUse a timed-out hook does not block the call.
-
-Owed: correct the `:631` comment (BL-752 now has two subjects, the net and the comment, and closes only when both are resolved); and BL-730's sibling fix applied to this hook once that fix has landed and been judged: wait for the flush up to a longer net and count per `message.id`. Judging the incoming call SEEN once a later sibling of the same `message.id` is on disk is excluded, because it cannot fire: no sibling line lands before the call's own line, since they flush together, and on `a367e62c` calls 18 and 19 were denied by hooks still pending at the flush. The owner may instead rule the exposure acceptable and close this as won't-fix; the census above is the evidence for that choice.
-
-verify: manual — the discriminating state is a stream race decided by the 10 s wall-clock net, and no knob shortens the default's fail-open branch: `ADVISOR_GATE_REREADS=0` or `1` select the stricter-only branch, which is a different program. A behavioural receipt would pay 10 s on every scoring and would fix a mechanism the owner has not chosen.
-
 ## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
 
 **DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
@@ -514,30 +437,6 @@ A false BLOCK suppresses a completion the lead needed, which costs far more than
 Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
 
 verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
-
-## BL-754 — hermetic-run.sh prints "verdict recorded in the shared store" when the store it wrote is a throwaway one
-
-**NOTE.** Source: batch 239 owner runs. Filed by lead ai-dlc-13.
-
-`core/scripts/hermetic-run.sh:622` prints `hermetic-run: <fx>: verdict recorded in the shared store` after any successful store write. When `AI_DLC_VERDICT_STORE` points at a mktemp dir, which `.claude/rules/tool-hazards.md` requires for a test run, the same line prints, so a reader cannot tell a real store write from a throwaway one.
-
-Owed: print the store path, or say "shared" only when the store is the default resolved one.
-
-verify: manual — a one-line message change; the receipt is owed with the fix.
-
-## BL-755 — review-shard-merge's loaded cost went from 263 s to 491 s after 0.904.0's new arms and mutants
-
-**DEFECT (cost).** Source: batch 239, 0.904.0 (review-roles, owner ai-dlc-f8), measured loaded from the hook's duration record. Filed by lead ai-dlc-13 at close; the owner deferred both duties to the lead. The 0.904.0 CHANGELOG heading is not back-edited.
-
-0.904.0 added M12-M20, VB2M, VB2L, FR1-FR4, FRB, SR1 and SR2 to `core/fixtures/review-shard-merge`. Its loaded cost in `.git/ai-dlc-fixture-durations` rose from 263 s to 491 s (+87%). It is not the suite pole (reconcile-emit-report, 753 s loaded), so the push wall clock did not move, but the unit nearly doubled.
-
-Cut shape, either one:
-- each mutant re-runs only the cells of the arm that kills it (its read set), not the whole fixture;
-- or the M battery moves to its own sharded unit, as `adversarial-shard-merge` did.
-
-Owed: the cut, with a STRUCTURAL receipt (the number of whole-fixture invocations by the M battery is 0, and M12-M20 are still red), never a loaded-seconds threshold.
-
-verify: manual — the receipt is owed with the cut and must be structural; a seconds bound is ruled out.
 
 ## BL-766 — gate-adjudicator.md never says a FAIL is complete only when the check's comparison surface is exhausted
 

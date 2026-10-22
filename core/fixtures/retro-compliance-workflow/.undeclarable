@@ -1,0 +1,1 @@
+Its subject core/ci-templates/validate-retro-compliance.yml is placed on a consumer only when .github/workflows exists (scripts/install.sh:511-517), and core-paths.sh --map refuses the ci-templates top by design (core-paths.sh:136-138), so no one declaration holds in both layouts. Not .dist-only: the workflow ships and uninstall.sh lists it.

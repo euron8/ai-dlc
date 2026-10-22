@@ -1,0 +1,9 @@
+bash
+cat
+cmp
+grep
+head
+tr
+wc
+mktemp
+rm

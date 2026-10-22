@@ -187,6 +187,7 @@ fi
 # fixture that could not fire must not print a false PASS or a false FIXTURE ERROR.
 REQSRC="$SKILLDIR/steps/requirements.md"
 if [ -f "$REQSRC" ]; then
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/requirements.md"
   MUT1B="$WORK/mutant-durable-requirements.md"
   sed -e 's|_bmad-output/planning-artifacts/s<N>/changelog-requirements.md|the PRD|' \
       -e 's|"Where a changelog is written"|the step loop|' \

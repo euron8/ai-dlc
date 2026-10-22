@@ -342,6 +342,8 @@ if [ -z "$emroot" ]; then
   # file has not been checked — saying so beats a green line that claims it was.
   printf '  SKIP  map->row join: no tree carrying BOTH enforcement-map.yaml and steps/gate-validation.md\n'
 else
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc/enforcement-map.yaml"
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/gate-validation.md"
   EM_MAP="$emroot/enforcement-map.yaml"
   EM_GV="$emroot/steps/gate-validation.md"
 

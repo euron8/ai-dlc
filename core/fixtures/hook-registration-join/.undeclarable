@@ -1,0 +1,1 @@
+Arm A11 reads templates/settings.json.template and core/hooks/ (distribution-only) behind an if-exists guard, and a declaration cannot express "optional": a "!" line makes the consumer layout exit 2 ("declared file absent: templates/settings.json.template"), while omitting it leaves that arm unkeyed.

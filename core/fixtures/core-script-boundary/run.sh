@@ -44,6 +44,7 @@ for cand in "$ROOT/core/hooks/ai-dlc-core-guard.sh" \
   [ -f "$cand" ] && GUARD="$cand" && break
 done
 [ -n "${GUARD:-}" ] || { echo "FIXTURE ERROR: ai-dlc-core-guard.sh not found" >&2; exit 2; }
+[ -r "$(dirname "$GUARD")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq not on PATH" >&2; exit 2; }
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
