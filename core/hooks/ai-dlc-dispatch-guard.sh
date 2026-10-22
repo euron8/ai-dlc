@@ -127,7 +127,8 @@
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only. The MODEL/DEFINITION path only ever ADDS or CORRECTS --
-#   it never denies. Two separate arms below DO deny, and only those two.
+#   it never denies. Three separate arms below DO deny, and only those three: the two
+#   deny arms here and THE SHARD DENY under THE SHARD LINE.
 #
 #   THE TWO DENY ARMS. Each emits `permissionDecision: "deny"` with a reason naming the
 #   remedy, and NEVER `updatedInput`: a denied call is not corrected, it is refused. Both
@@ -207,10 +208,16 @@
 #   by a guard older than this field, and `validate-spawn-ledger.sh` reads that absence as
 #   PENDING, not as an omission.
 #
-#   RECORD-THEN-ALLOW ONLY. Nothing here denies, corrects or annotates a dispatch on the shard
-#   line itself (the adjudicator-waiver arm reads RECORDED rows, never the brief): whether a scope is ONE part or several is a judgment about intent, and no act at
-#   dispatch separates the two. The line is a record Check 22 reads at the gate, where arm S3
-#   FAILS an `invalid-exception` row and arm S1 WARNs on a null one.
+#   THE SHARD DENY, AND RECORD-THEN-ALLOW FOR EVERYTHING ELSE. A brief whose line records
+#   `invalid-exception` on a SHARDABLE role (Check 22 arm S3's population: the validator's
+#   SHARD_ROLES plus every party seat) is DENIED before any ledger row is written, because that
+#   row could only fail at the gate, where arm S3 FAILS it; the reason quotes the raw text, names
+#   the four exceptions and says commentary goes after the closing parenthesis. Every other shard
+#   state is record-then-allow: a valid line, an omitted or unparseable one (null, on which arm S1
+#   only WARNs), and an invented line on a role S3 does not judge, recorded with its `shard_raw`.
+#   Nothing here corrects or annotates a shard line, and nothing judges whether a scope is ONE
+#   part or several: that is a judgment about intent, and no act at dispatch separates the two.
+#   The adjudicator-waiver arm reads RECORDED rows, never the brief.
 #
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
@@ -945,6 +952,27 @@ fi
 # COVERAGE, measured on the reference consumer's three Check-22 discards: clause 1 (names no
 # spawn) catches s317 230257Z; clause 2 (invalid-exception row not covered) catches s317
 # 124524Z and s318 011534Z, whose waivers named every spawn and cited no exception.
+#
+# THE SHARDABLE SET IS CHECK 22 ARM S3's POPULATION, NOT EVERY ROLE. S3 judges only SHARDABLE
+# rows: the roles in validate-spawn-ledger.sh's SHARD_ROLES plus every party seat, derived there by
+# `party_seats` from the role files' opening sentence. A row of another role recorded
+# `invalid-exception` fails nothing at the gate, so refusing a dispatch over it would block a pass
+# that would have succeeded -- measured on the reference consumer's S316, where 4 ledger rows carry
+# the value and the validator fails 3 (the fourth is `dev-escalated`). The fixed roles below are a
+# COPY of SHARD_ROLES, kept literal because a hook reading a missing validator fails open;
+# invariant I125 in validate-enforcement-map.sh binds the two byte-for-byte. The seats are derived
+# the same way the validator derives them. ONE function, called by arm 2 and by THE SHARD DENY, so
+# the two populations cannot drift apart. Sets `_dg_shardable`, framed by one space each side.
+dg_shardable_set() {
+  _dg_shardable=" adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa "
+  for _dg_rf in "$ROLES_DIR"/*.md; do
+    [ -f "$_dg_rf" ] || continue
+    if grep -q '^The lead spawns you as a party-mode persona' "$_dg_rf" 2>/dev/null; then
+      _dg_rb="${_dg_rf##*/}"
+      _dg_shardable="${_dg_shardable}${_dg_rb%.md} "
+    fi
+  done
+}
 DG_IMPL_GATE=false
 _dg_lp="$(printf '%s\n' "$PROMPT" | tr 'A-Z' 'a-z')"
 _dg_nre='(planning|story|implementation|sprint-review|retro)-[0-9]{8}t[0-9]{6}z'
@@ -954,23 +982,10 @@ _dg_gt="$(printf '%s' "$_dg_nl" | sed -E 's/-[0-9]{8}t[0-9]{6}z$//')"
 [ "$_dg_gt" = implementation ] && DG_IMPL_GATE=true
 if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN_SPRINT:-}" ] \
    && [ -r "$PROJECT_DIR/docs/escalations/pending.md" ] && [ -r "$SPAWN_LEDGER" ]; then
-  # THE INVALID-EXCEPTION POPULATION IS CHECK 22 ARM S3's, NOT EVERY ROW CARRYING THE VALUE. S3
-  # judges only SHARDABLE rows: the roles in validate-spawn-ledger.sh's SHARD_ROLES plus every
-  # party seat, derived there by `party_seats` from the role files' opening sentence. A row of
-  # another role recorded `invalid-exception` fails nothing at the gate, so refusing a dispatch
-  # over it would block a pass that would have succeeded -- measured on the reference consumer's
-  # S316, where 4 ledger rows carry the value and the validator fails 3 (the fourth is
-  # `dev-escalated`). The fixed roles below are a COPY of SHARD_ROLES, kept literal because a
-  # hook reading a missing validator fails open; invariant I125 in validate-enforcement-map.sh
-  # binds the two byte-for-byte. The seats are derived the same way the validator derives them.
-  _dg_shardable=" adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa "
-  for _dg_rf in "$ROLES_DIR"/*.md; do
-    [ -f "$_dg_rf" ] || continue
-    if grep -q '^The lead spawns you as a party-mode persona' "$_dg_rf" 2>/dev/null; then
-      _dg_rb="${_dg_rf##*/}"
-      _dg_shardable="${_dg_shardable}${_dg_rb%.md} "
-    fi
-  done
+  # BUILT UNCONDITIONALLY HERE. This arm judges RECORDED rows of other spawns, and the brief being
+  # dispatched carries a valid shard line, so a set built only for an invalid CURRENT line would be
+  # empty here and clause 2 would never fire.
+  dg_shardable_set
   _dg_keys="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-waiver-keys.XXXXXX" 2>/dev/null || true)"
   if [ -n "$_dg_keys" ]; then
     # A FAILED KEY WRITE FAILS OPEN. Each producer's status is recorded, because a brace group
@@ -1119,6 +1134,25 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
     fi
     [ -n "$_dg_msg" ] && dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because the gate would discard its pass. ${_dg_msg}"
   fi
+fi
+
+# THE SHARD DENY (see THE SHARD LINE in the CONTRACT header). A SHARDABLE role dispatched under an invented serial exception is
+# refused, because the row it would write is one Check 22 arm S3 FAILS at the gate: the spawn
+# would run, cost its tokens, and then cost a gate disposition too. Measured on the reference
+# consumer (S316-S319): every shardable `invalid-exception` row S3 fails was a lead `Agent` call,
+# none from a hook, skill, teammate or resume, so the deny refuses exactly the population S3 already
+# fails. NOT gated on DG_IMPL_GATE: that flag scopes arm 2, which judges an adjudicator dispatch;
+# this arm judges the dispatch of the shardable role itself, whatever gate is open. Every other
+# shard state -- a valid line, an omitted or unparseable one (null, which S1 only WARNs on), or an
+# invented line on a role S3 does not judge -- is recorded and allowed below. Placed BEFORE the
+# ledger append, so a refused dispatch writes no row; the raw text is quoted in the reason instead,
+# since `shard_raw` no longer reaches the ledger for it.
+if [ "${SPAWN_SHARD:-}" = invalid-exception ]; then
+  dg_shardable_set
+  case "$_dg_shardable" in
+    *" $ROLE "*)
+      dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief declares a serial exception that is not one of Rule 28's four: \"shard: ${SPAWN_SHARD_RAW}\". \`${ROLE}\` is a shardable role, so the spawn-ledger row this dispatch would write is one Check 22 arm S3 fails at the gate. 'shard: none (<1-4>)' names one of the four exceptions, by number or short name: 1 data-dependency, 2 pass-repair-pass, 3 authoring-chain, 4 serial-document. A single-voice or unsharded dispatch is 'shard: 1/1 <key>', which the grammar accepts (N may be 1). The serial remediator dispatched after join-remediator-shards.sh, appending to its joined record, carries 'shard: none (authoring-chain)'; any other remediator over several files is sharded instead. Only the first parenthesised group is read, so put any commentary AFTER the closing parenthesis, as in 'shard: none (authoring-chain) -- after the join'. A quoted 'shard:' line counts as a shard line, so fence any pasted output (\`\`\` or ~~~). Re-dispatch sharded, or with the exception that actually applies (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE)." ;;
+  esac
 fi
 
 mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true

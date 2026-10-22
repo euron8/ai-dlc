@@ -292,7 +292,8 @@ LOCAL time followed by a literal `Z`.
 one-at-a-time rule in `stories-test-strategy.md`; (2) a convergence
 sequence -- review pass, repair, next pass; sharding shortens a pass and
 never overlaps two; (3) an ordered authoring chain whose next step
-reads the previous one's output; (4) a single document that
+reads the previous one's output, which includes the serial remediator
+dispatched after a join, whose line is `shard: none (authoring-chain)`; (4) a single document that
 `partition-document.sh --map` reports SERIAL, or a subject that
 `partition-subject.sh --map` maps to one part. A per-role site cites
 this clause and names its axis and its join; it does not restate them.
@@ -308,9 +309,10 @@ or `shard: none (<exception 1-4>)`. A
 sections-axis part key is the part's heading from the map, as in
 `shard: 2/5 ## Functional Requirements`; a document the map reports
 SERIAL is `shard: none (serial-document)`. Only the first parenthesised
-group is read, so text may follow it on the line. A `none` naming anything
-other than (1)-(4) is recorded as an invalid exception and FAILS Check 22;
-omitting the line is a warning.
+group is read, so commentary goes after the closing parenthesis, never inside
+it. A `none` naming anything other than (1)-(4) on a shardable role is refused
+at dispatch; on any other role it is recorded as an invalid exception, which
+Check 22 does not judge. Omitting the line is a warning.
 
 **Minimum mechanism (Rule 26(c)) -- split dispatch.** Failure caught:
 the lead blocked on one agent reviewing, repairing or adjudicating a

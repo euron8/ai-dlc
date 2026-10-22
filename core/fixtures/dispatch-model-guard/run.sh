@@ -674,9 +674,16 @@ cc_mut prompt-only \
 # `ord` is in the scored vector so a mutant whose awk dies reads as every cell moving, never
 # as a clean kill of one. The last three are spellings no consumer brief carries today; each
 # laundered an invented exception to null before the fold and the unwrap existed.
+#
+# THESE WORLDS DRIVE `dev-escalated`, A NON-SHARDABLE ROLE, ON PURPOSE. On a shardable role the
+# guard now REFUSES an invented exception before any row is written (THE SHARD DENY), so a
+# remediator subject would leave the parse with no row to read and every parse mutant below with
+# no subject. `dev-escalated` is outside the guard's fixed shardable list and the seeded role
+# files carry no party-seat sentence, so the parse is still recorded here. The deny is asserted
+# by its own pair below (SHARD DENY), one property apart from these worlds.
 SHARD_EPOCH="$(mkjson Agent gate-adjudicator opus)"
-shard_payload() { # shard_payload <brief lines...> -> a remediator dispatch carrying them
-  local p; p="Your operating contract is \`.claude/team-roles/remediator.md\`. Read it first."
+shard_payload() { # shard_payload <brief lines...> -> a dev-escalated (non-shardable) dispatch carrying them
+  local p; p="Your operating contract is \`.claude/team-roles/dev-escalated.md\`. Read it first."
   for _l in "$@"; do p="$p"$'\n'"$_l"; done
   jq -nc --arg p "$p"$'\n'"Do the work." '{tool_name:"Agent",tool_input:{name:"rem-shard",prompt:$p}}'
 }
@@ -697,7 +704,7 @@ scell() {
   printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
   [ "$n" = 2 ] || { printf 'ROWS=%s' "${n:-0}"; return; }
-  tail -1 "$LEDGER" | jq -r 'if .role == "remediator" then "\(.shard | tostring)|\(.shard_raw | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
+  tail -1 "$LEDGER" | jq -r 'if .role == "dev-escalated" then "\(.shard | tostring)|\(.shard_raw | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
 }
 svec() {
   printf 'inv=%s;ac=%s;sd=%s;dash=%s;two=%s;ord=%s;upper=%s;wrap=%s;title=%s' \
@@ -724,7 +731,7 @@ for _c in "$SV_INV" "$SV_AC" "$SV_SD" "$SV_DASH" "$SV_TWO" "$SV_ORD" "$SV_UPPER"
   esac
 done
 
-# THE ROW SURVIVES A RAW TEXT CUT INSIDE A MULTIBYTE CHARACTER. `shard_raw` is the first 160
+# THE ROW SURVIVES A RAW TEXT CUT INSIDE A MULTIBYTE CHARACTER (non-shardable role, as above). `shard_raw` is the first 160
 # bytes, and a cut through a UTF-8 sequence must not fail the single jq that writes the WHOLE
 # row: losing the row would cost every other field for this one.
 _mb=""; for _i in $(seq 1 100); do _mb="${_mb}é"; done
@@ -787,6 +794,145 @@ sh_mut no-unwrap \
   '    v = line' \
   "$SV_INV;$SV_AC;$SV_SD;$SV_DASH;$SV_TWO;$SV_ORD;$SV_UPPER;wrap=null|null;$SV_TITLE" \
   "dropping the unwrap launders an emphasised invented exception to null — arm wrap alone catches it"
+
+# --- THE SHARD DENY: AN INVENTED EXCEPTION ON A SHARDABLE ROLE IS REFUSED, WITH NO ROW --------
+# The row a shardable role writes under `invalid-exception` is one Check 22 arm S3 FAILS, so the
+# guard refuses the dispatch before the ledger append. Scored as ONE vector of
+# `<decision>:<rows added after the epoch>:<row-2 shard>` cells; the decision is read literally
+# (`none` when the hook printed nothing), never normalised, so a crashed hook cannot pass for an
+# allowed one. The pair `rinv`/`ninv` is ONE property apart (the role): the same invented line is
+# denied with no row on `remediator` and recorded on `dev-escalated`. The other cells are
+# shardable-role spellings that must stay allowed with their row.
+dpayload() { # dpayload <role> [brief line] -> an Agent dispatch of <role> carrying the line
+  local p; p="Your operating contract is \`.claude/team-roles/$1.md\`. Read it first."
+  [ -n "${2-}" ] && p="$p"$'\n'"$2"
+  jq -nc --arg p "$p"$'\n'"Do the work." '{tool_name:"Agent",tool_input:{name:"shard-deny",prompt:$p}}'
+}
+DOUT=""; DCELL=""
+dcell() { # dcell <guard> <role> [brief line] -> prints "<decision>:<rows added>:<row-2 shard>"
+  # and sets DCELL to it and DOUT to the hook's stdout (call without $( ) to keep the two).
+  local n d s
+  rm -f "$LEDGER"
+  printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
+  DOUT="$(dpayload "$2" "${3-}" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$DOUT" 2>/dev/null)"
+  [ -n "$d" ] || d=none
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  if [ "$n" = 2 ]; then s="$(tail -1 "$LEDGER" | jq -r '.shard | tostring' 2>/dev/null)"; else s=-; fi
+  DCELL="$d:$((n - 1)):$s"
+  printf '%s' "$DCELL"
+}
+DINV='shard: none (serial cross-section remediator, after join)'
+# THE DENY READS THE SHARDABLE SET, NOT THE WORD `remediator`. Two more denied cells carry the
+# same invented line on shardable roles that are not the remediator: `qa` (a member of the fixed
+# list, with no role file in this consumer) and `seatx`, a party seat the set picks up only from
+# its role file's opening line. A deny keyed on the literal role `remediator` keeps rinv and
+# loses both of these, which mutant (iii) below scores.
+printf 'The lead spawns you as a party-mode persona. You speak as seatx.\n' > "$CONSUMER/.claude/team-roles/seatx.md"
+dvec() {
+  printf 'rinv=%s;qinv=%s;pinv=%s;ninv=%s;rac=%s;r3=%s;r11=%s;romit=%s;rsd=%s;rtitle=%s;rord=%s' \
+    "$(dcell "$1" remediator "$DINV")" "$(dcell "$1" qa "$DINV")" "$(dcell "$1" seatx "$DINV")" \
+    "$(dcell "$1" dev-escalated "$DINV")" \
+    "$(dcell "$1" remediator 'shard: none (authoring-chain)')" "$(dcell "$1" remediator 'shard: none (3)')" \
+    "$(dcell "$1" remediator 'shard: 1/1 x')" "$(dcell "$1" remediator)" \
+    "$(dcell "$1" remediator 'shard: none (serial-document). Files you may edit: docs/a.md')" \
+    "$(dcell "$1" remediator 'Shard: None (4)')" "$(dcell "$1" remediator 'shard: 3/7 x')"
+}
+DV_RINV='rinv=deny:0:-'
+DV_QPINV='qinv=deny:0:-;pinv=deny:0:-'
+DV_NINV='ninv=allow:1:invalid-exception'
+DV_REST='rac=allow:1:none (3);r3=allow:1:none (3);r11=allow:1:1/1 x;romit=allow:1:null;rsd=allow:1:none (4);rtitle=allow:1:none (4);rord=allow:1:3/7 x'
+DV_WANT="$DV_RINV;$DV_QPINV;$DV_NINV;$DV_REST"
+DV_TIP="$(dvec "$HOOK")"
+_old_ifs="$IFS"; IFS=';'
+for _c in $DV_WANT; do
+  case ";$DV_TIP;" in
+    *";$_c;"*) ok "SHARD DENY ${_c%%=*}: '${_c#*=}' (decision:rows added:shard)" ;;
+    *) bad "SHARD DENY ${_c%%=*}: expected '${_c#*=}', got vector '$DV_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+
+# The deny reason keeps the raw invented text, since no row carries `shard_raw` for it.
+dcell "$HOOK" remediator "$DINV" >/dev/null
+_drs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)"
+case "$_drs" in
+  *"$DINV"*) ok "SHARD DENY reason: quotes the raw line '$DINV'" ;;
+  *) bad "SHARD DENY reason does not quote '$DINV': '$(printf '%s' "$_drs" | cut -c1-200)'" ;;
+esac
+case "$_drs" in
+  *"shard: none (authoring-chain)"*) ok "  and names 'shard: none (authoring-chain)' for the serial remediator" ;;
+  *) bad "  the deny reason does not name 'shard: none (authoring-chain)'" ;;
+esac
+
+# A DENIED BRIEF RE-SENT WITH A VALID LINE IS ALLOWED, AND ONLY THE RE-SEND WRITES A ROW. The
+# ledger is NOT cleared between the two drives, so the deny must have left exactly the epoch.
+rm -f "$LEDGER"
+printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" >/dev/null 2>&1
+_rs1="$(dpayload remediator "$DINV" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+_rs1d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$_rs1" 2>/dev/null)"
+_rs1n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+_rs2="$(dpayload remediator 'shard: none (authoring-chain)' | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+_rs2d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$_rs2" 2>/dev/null)"
+_rs2n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+_rs2s="$(tail -1 "$LEDGER" 2>/dev/null | jq -r '.shard | tostring' 2>/dev/null)"
+[ "$_rs1d:$_rs1n:$_rs2d:$_rs2n:$_rs2s" = "deny:1:allow:2:none (3)" ] \
+  && ok "SHARD DENY re-send: denied with the epoch row only, then the corrected brief is allowed and records none (3)" \
+  || bad "SHARD DENY re-send: got '$_rs1d:$_rs1n:$_rs2d:$_rs2n:$_rs2s', expected 'deny:1:allow:2:none (3)'"
+
+# A RAW TEXT CUT INSIDE A MULTIBYTE CHARACTER ON THE DENY PATH: the reason carries the raw prefix,
+# and the hook's output must still be one valid JSON object, or the harness reads no decision.
+dcell "$HOOK" remediator "shard: none (x${_mb})" >/dev/null; _mbd="$DCELL"
+if [ "$_mbd" = "deny:0:-" ] && jq -e . >/dev/null 2>&1 <<<"$DOUT" \
+   && case "$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)" in *"shard: none (x"*) true ;; *) false ;; esac; then
+  ok "SHARD DENY multibyte: a 160-byte cut inside a UTF-8 character still emits a valid deny carrying the raw prefix"
+else
+  bad "SHARD DENY multibyte: cell '$_mbd', output '$(printf '%s' "$DOUT" | cut -c1-200)'"
+fi
+
+# MUTANTS on the deny, scored on the EXACT eleven-cell vector, so each moves only the cells it owns.
+DV_CTL_G="$(mk_hooks_copy deny-control)"
+if [ -n "$DV_CTL_G" ] && [ "$(dvec "$DV_CTL_G")" = "$DV_WANT" ]; then
+  ok "SHARD DENY MUTANT CONTROL: an unmutated hooks copy scores the full eleven-cell vector, the three denies and the near-miss row included (positive)"
+else
+  bad "SHARD DENY MUTANT CONTROL is dead: an unmutated copy scored '$(dvec "$DV_CTL_G")'"
+fi
+dv_mut() { # dv_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  local g n vec
+  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
+  if [ "$n" != 1 ]; then bad "SHARD DENY MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
+  g="$(mk_hooks_copy "$1")"
+  if [ -z "$g" ]; then bad "SHARD DENY MUTANT $1: could not build the hooks copy"; return; fi
+  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
+  if cmp -s "$HOOK" "$g"; then bad "SHARD DENY MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
+  if ! bash -n "$g" 2>/dev/null; then bad "SHARD DENY MUTANT $1 DID NOT APPLY as valid shell"; return; fi
+  vec="$(dvec "$g")"
+  [ "$vec" = "$4" ] && ok "SHARD DENY MUTANT $1 killed: $5" \
+    || bad "SHARD DENY MUTANT $1: vector '$vec', expected '$4' — $5 is not what the arms see"
+}
+# (i) the deny dropped: the invented line is recorded on every shardable role, as before this
+# release. Cells rinv, qinv and pinv move. qa and seatx have no aiDlcRoles entry here, so an
+# allowed dispatch of either prints nothing and reads `none`, with its row written.
+dv_mut deny-dropped \
+  'if [ "${SPAWN_SHARD:-}" = invalid-exception ]; then' \
+  'if false; then' \
+  "rinv=allow:1:invalid-exception;qinv=none:1:invalid-exception;pinv=none:1:invalid-exception;$DV_NINV;$DV_REST" \
+  "a guard with no shard deny records the invented line S3 fails — cells rinv, qinv and pinv catch it"
+# (ii) the shardable scoping dropped: every role is refused. Cell ninv alone moves.
+dv_mut scoping-dropped \
+  '    *" $ROLE "*)' \
+  '    *)' \
+  "$DV_RINV;$DV_QPINV;ninv=deny:0:-;$DV_REST" \
+  "an unscoped deny refuses a dev-escalated dispatch S3 does not judge — cell ninv alone catches it"
+# (iii) the shardable set replaced by the literal role `remediator`: the case subject becomes
+# ` remediator `, so `*" $ROLE "*` matches only ROLE=remediator. Cells qinv (fixed list) and pinv
+# (party seat) alone move; rinv stays denied, which is why rinv alone could not see this.
+dv_mut remediator-only \
+  '  case "$_dg_shardable" in' \
+  '  case " remediator " in' \
+  "$DV_RINV;qinv=none:1:invalid-exception;pinv=none:1:invalid-exception;$DV_NINV;$DV_REST" \
+  "a deny keyed on the word remediator records the invented line on qa and on a party seat — cells qinv and pinv alone catch it"
+rm -f "$CONSUMER/.claude/team-roles/seatx.md"
 
 # --- SPRINT STAMP: THE READER MUST NOT SPELL THE DECORATION -------------------
 # EVERY SEED HERE USED TO BE THE EMPHASISED BULLET, WHICH IS THE FORM THE READER
@@ -1354,6 +1500,15 @@ adj_kill anyexc 's/^        EXC = ".*"$/        EXC = "exception"/' \
   "a bare-word exception match accepts \"the four\" as a citation (15e')"
 adj_kill noshardable 's/^\(          (if .shard == "invalid-exception"\) and (\$sh | contains(" " + \$role + " "))$/\1/' \
   "$W7" deny "dropping the shardable-role filter refuses over a dev-escalated row Check 22 arm S3 does not judge (15g)"
+# The shardable set built LAZILY for arm 2, only when the CURRENT brief is invalid, as THE SHARD
+# DENY builds it. An adjudicator brief carries no invalid line, so the set is one blank and clause
+# 2 never fires. The replacement keeps `_dg_shardable` SET, so under `set -u` the copy runs rather
+# than aborting (which would also read as allow); 15a's deny on the same copy proves it ran.
+adj_kill lazyset '/clause 2 would never fire\.$/{n;s/^  dg_shardable_set$/  _dg_shardable=" "; case "${SPAWN_SHARD:-}" in invalid-exception) dg_shardable_set ;; esac/;}' \
+  "$W5" allow "a shardable set built only for an invalid current line leaves the waiver arm an empty set (15e)"
+[ "$(adj_mut "$WORK/guard-adj-lazyset.sh" "$W1")" = deny ] \
+  && ok "  and the lazyset copy still denies 15a, so it ran (clause 1 is untouched)" \
+  || bad "  the lazyset copy does not deny 15a -- it did not run, and its kill is unearned"
 
 # 15w. A FAILED KEY PRODUCER FAILS OPEN. 15a's world plus one ledger row whose tool_use_id is a
 # NUMBER: the guard's `"K\t" + .tool_use_id` cannot add a string and a number. It is the LAST row

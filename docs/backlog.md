@@ -609,3 +609,4 @@ verify: manual — the receipt is owed with the cut and must be structural; a se
 One sentence for `core/team-roles/gate-adjudicator.md:116-118` (the rule that every verdict is PASS or FAIL with evidence): a FAIL is complete only when the check's comparison surface is exhausted, not when one deviation settles it. It would cover every `adjudication: llm` check, where BL-765 covers Check 9 alone.
 
 verify: manual — the sentence is prose with no mechanical predicate.
+

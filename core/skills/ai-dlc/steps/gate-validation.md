@@ -1873,7 +1873,8 @@ code: a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract citation,
 an unreadable role file, an effort mismatch, and an **invalid serial
 exception** (arm S3: a shardable row whose `shard:` line named a Rule 28
 exception outside the four, recorded as `invalid-exception`; the script prints
-the brief's own text from `shard_raw`). S3 is decided before exit 3, so it
+the brief's own text from `shard_raw`; the dispatch guard refuses such a
+dispatch before writing a row, so S3 meets such a row only from a guard older than that deny). S3 is decided before exit 3, so it
 fails a sprint whose rows are all outside Rule 19 scope too. **Exit 2 FAILS** — a fumbled
 invocation, an unreadable settings.json or ledger, or
 no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either

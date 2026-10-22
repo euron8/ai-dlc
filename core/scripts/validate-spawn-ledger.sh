@@ -996,6 +996,11 @@ matches_pin() {
 # path, and a ledger copied out of its repo answers identically. Such rows are counted
 # PENDING and never warned. A row the guard did not write (no `v`) is not in the population.
 #
+# S3 AND THE DISPATCH DENY. The dispatch guard refuses an `invalid-exception` dispatch on a
+# shardable role before it writes a row, so S3 meets a shardable `invalid-exception` row only
+# from a guard older than that deny (an installed consumer running an older hook). A row an
+# invented line on a non-shardable role recorded is outside S3's population and never judged.
+#
 # FALSE-POSITIVE SET, and how it reached this size. Measured on the reference consumer ledger
 # as pulled: every guard-written row predates the field, so S1 is PENDING on all of them and
 # warns on none; S2 finds no `shard_tool_use_ids:` line and joins nothing. The narrowing is

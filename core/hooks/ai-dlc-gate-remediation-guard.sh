@@ -203,7 +203,7 @@
 # all 3216 graph metas, measured on 2026-10-16. It is read first only because the probe's expression reads
 # it first; nothing the harness emits exercises it.
 #
-# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1186`, the `del(.name)` in its role-bound rewrite.
+# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1267`, the `del(.name)` in its role-bound rewrite.
 # On a NAMED teammate the harness writes the spawn NAME into `agentType` --
 # `{"agentType":"remediator-serial-cross","name":...,"teamName":...}` -- and this arm then ALLOWS a
 # real remediator. The dispatch guard deletes `name` on every role-bound dispatch, so the meta
