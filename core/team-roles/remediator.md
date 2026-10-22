@@ -201,7 +201,8 @@ and the serial remediator's cross-file grep still covers what it deleted). Cites
 moved are re-checked by the serial remediator after the join, never inside a shard. The join
 refuses a `repaired` entry with an edit and no `siblings:` field.
 
-**As the serial remediator after a join**, your brief carries the join's `ESCALATED:` lines and
+**As the serial remediator after a join**, your brief carries `shard: none (authoring-chain)`
+(Rule 28 exception 3: you read the joined output the shards produced), the join's `ESCALATED:` lines and
 its `SERIAL-REQUIRED:` count. For every shard entry `repaired` with an edit, and every escalated
 sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
 a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories

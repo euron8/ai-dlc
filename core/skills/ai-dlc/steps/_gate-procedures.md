@@ -337,7 +337,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    sections is repaired as "Shard by section" does, split into that same shard dir with
    `--expect-sha` the sha256 the lead recorded for the document before wave 1, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`. The requirements subject case is
-   below. A finding citing two or more parts goes to the serial remediator after the join, and
+   below. A finding citing two or more parts goes to the serial remediator after the join, whose
+   brief carries `shard: none (authoring-chain)`, and
    the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
    over the record with its appended entries. The remediator brief also carries `revised-seats:`:
    after the round's join the lead runs `scripts/ai-dlc/wait-for-deliverable.sh --complete --status
@@ -410,7 +411,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    shas as the expected bytes. The joined record is
    `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md`, and the join resolves
    every entry's `source:` as above. A finding citing two or more parts goes to the serial
-   remediator after assembly, and `--sources` then checks the record with its appended entries.
+   remediator after assembly, whose brief carries `shard: none (authoring-chain)`, and `--sources` then checks the record with its appended entries.
    A subject that maps to one part is not sharded: no seats x parts round and no party shard dir.
    It is the unsharded round above: the party repair is ONE remediator that writes
    `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md` itself, and `--sources`
@@ -950,7 +951,8 @@ finding of the adversarial pass, or every FAILED check of the gate pass.
 their `edit:` targets name. A finding touching one file goes to that file's shard, and each
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
 serial remediator dispatched after the join, which is dispatched as "Every escalated entry
-reaches the serial remediator" says, not only for such a finding. A single-file artifact is sharded by section
+reaches the serial remediator" says, not only for such a finding, and its brief carries
+`shard: none (authoring-chain)` (Rule 28 exception 3). A single-file artifact is sharded by section
 (below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
@@ -978,7 +980,9 @@ every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entr
 real edit, each of which owes the cross-file sibling grep and moved-cite check below. In every
 mode (files, sections, subject), dispatch the serial remediator after the join whenever
 SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whether or not any finding cited two files or
-parts, and its brief carries every `ESCALATED:` line verbatim. In `--sources` mode the
+parts, and its brief carries every `ESCALATED:` line verbatim and the line
+`shard: none (authoring-chain)` (Rule 28 exception 3: it reads the joined record the shards
+produced; commentary goes after the closing parenthesis). In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
 that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there. An
 escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
@@ -1037,7 +1041,8 @@ document in place. Otherwise, in this order:
 2. **Parts.** Partition the findings by their `sections:` line. A finding citing one section goes
    to that section's shard; a finding citing two or more goes to ONE serial remediator after
    assembly (step 4), which is dispatched as "Every escalated entry reaches the serial
-   remediator" says, not only for such a finding. Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
+   remediator" says, not only for such a finding, and whose brief carries
+   `shard: none (authoring-chain)`. Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
    its section file, that part's first-line offset from the map (a finding's document line `L` is
    line `L - first + 1` of the section file), and the part path `<that dir>/<ordinal>.md`. A shard
    edits ONLY its section file, never the document, and every `edit:` line cites that section
@@ -1085,7 +1090,8 @@ in this order:
 2. **Parts.** Partition the findings by their `sections:` line. A finding citing one part goes
    to that part's shard; a finding citing two or more goes to ONE serial remediator after
    assembly, which is dispatched as "Every escalated entry reaches the serial remediator"
-   says, not only for such a finding. A section part's shard edits ONLY its section file, as "Shard by section" step 2
+   says, not only for such a finding, and whose brief carries `shard: none (authoring-chain)`.
+   A section part's shard edits ONLY its section file, as "Shard by section" step 2
    describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
    edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and
    re-renders `SPEC.md` through `bmad-spec` (the amendment procedure's item 2 path, "Divergence

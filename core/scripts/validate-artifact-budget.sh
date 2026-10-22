@@ -370,7 +370,7 @@ SPRINT_WHOLE_READ_SET="locked-requirements.md"
 #
 # The comment two paragraphs up already named `aiDlcModels` as the source of truth; the
 # code simply never read it. The resolution idiom below is the one
-# `core/hooks/ai-dlc-dispatch-guard.sh:203-205` already uses, deliberately, rather than
+# `core/hooks/ai-dlc-dispatch-guard.sh:453-455` already uses, deliberately, rather than
 # a second reading of the same config.
 #
 # UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. No settings.json, no
