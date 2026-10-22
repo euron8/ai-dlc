@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/preamble.sh"
 # cycle-commits-enforce — prove validate-cycle-commits.sh enforces the >=3-cycle
 # floor with matching log rows, that the enforcement is not vacuous (a guard
 # mutation flips a real FAIL to green), and that mandatory-rules Check 2 actually
@@ -123,6 +124,7 @@ fi
 # --- 4. Check 2 delegation ENGAGES when the log is present --------------------
 write_log 3
 if [ -f "$VMR" ]; then
+  echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
   VOUT="$(bash "$VMR" 900 2>/dev/null || true)"
   if grep -q 'CHECK 2: PASS' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 delegates to the validator and PASSes with a log present"
@@ -268,6 +270,7 @@ fi
 # verdict is consumed. Assert the wedge is real and visible, because choosing to wedge a
 # dormant-log consumer is the load-bearing half of that decision.
 if [ -f "$VMR" ]; then
+  echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
   # 2>&1, unlike the arms above: mandatory-rules prints its per-check verdict on stdout and
   # accumulates the DETAIL into FAILURE_MSGS, which it dumps to stderr at the end. Reading
   # only stdout would score a bare `CHECK 2: FAIL` as full disclosure.

@@ -1,0 +1,12 @@
+bash
+awk
+sed
+tr
+cmp
+grep
+mktemp
+rm
+dirname
+cut
+head
+cat

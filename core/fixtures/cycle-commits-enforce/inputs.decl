@@ -1,0 +1,4 @@
+core/scripts/validate-cycle-commits.sh
+!core/scripts/validate-mandatory-rules.sh
+core/scripts/validate-retro-evidence.sh
+!core/fixtures/lib/preamble.sh

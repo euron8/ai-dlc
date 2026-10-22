@@ -1,0 +1,8 @@
+!core/hooks/ai-dlc-recover.sh
+!core/skills/ai-dlc/steps/gate-validation.md
+!core/scripts/gate-slice.sh
+!core/scripts/gate-checkpoint.sh
+!core/schemas/gate-adjudication-verdict.json
+core/hooks/
+core/skills/ai-dlc/
+core/scripts/

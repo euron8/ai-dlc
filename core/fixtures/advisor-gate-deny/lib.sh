@@ -76,11 +76,13 @@
 #                `Everything up-to-date` (the cell the is_error test alone holds)
 #   REREAD       THE RACE: the advisor line and the incoming push are appended to the transcript
 #                APPEND_DELAY (3s, past the old fixed 2 x 1s) after the hook starts -> SILENT, with
-#                ADVISOR_GATE_REREADS unset (the 10s safety net); twins: the incoming push's line
+#                ADVISOR_GATE_REREADS unset (the 300s safety net); twins: the incoming push's line
 #                ALONE appended at 1s, knob unset -> DENY (rr-seen: decided by the transcript, not
-#                the clock), and nothing appended at 1 (2s bound) -> DENY (rr-none: the knob stays
-#                stricter-only). NET cell rr-never: nothing appended, knob unset -> SILENT with the
-#                reason on stderr once the net expires (BL-630). Every other cell runs with the knob
+#                the clock), and nothing appended at 1 (2s bound) -> DENY (rr-none: `1` never fails
+#                open). NET cell rr-never: nothing appended, knob unset, ADVISOR_GATE_NET=2 -> SILENT
+#                with the rendered 2s figure on stderr once the net expires (BL-630, BL-752). rr-noid:
+#                no tool_use_id, knob unset -> SILENT at once, inside 5s of a 20s net (BL-752; its
+#                twin is SELFLAST n-selflast-answered at knob 0 -> DENY). Every other cell runs with the knob
 #                0, so a deny cell pays no bound
 #   QUOTEDALT    a quoted alternation holding `git push -u origin HEAD --no-verify` (the graph row
 #                that was denied) and a heredoc body carrying one -> SILENT; twin: `echo 'a;b' &&
@@ -130,6 +132,9 @@
 #                `verdict:` line, a `shard-verdict:` header, plus `seat-complete:`, an Edit adding a
 #                finding, and a header-only Write to a REPAIR shard. A code-review shard: header-only
 #                -> SILENT, a `#### ` finding (its grammar) -> DENY; an adversary `#### F-1` -> DENY.
+#                PASS-1 code-review and QA shard dirs (no `-p<N>`, BL-752): the role template's
+#                empty `### ` severity containers -> SILENT (the near-miss); one `#### ` finding
+#                under them -> DENY.
 #                SEQUENCE cells on one path in
 #                one transcript: the header Write, then the Edit adding `### F-1` (or the Write
 #                adding `seat-complete:`) -> `SILENT>DENY`, exactly one deny and on step 2
@@ -527,8 +532,10 @@ ct MATEPATH DENY l-part "$(write_in "$P1/par.jsonl" "$PART" a1)"
 ct MATEPATH SILENT l-part-json "$(write_in "$P1/par.jsonl" "$PARTX" a1)"
 ct MATEPATH DENY k-cr "$(write_in "$P1/par.jsonl" "$REVCR" a1)"
 ct MATEPATH DENY k-qa "$(write_in "$P1/par.jsonl" "$REVQA" a1)"
-ct MATEPATH DENY k-sh-qa "$(write_in "$P1/par.jsonl" "$REVSHQ" a1)"
-ct MATEPATH DENY k-sh-cr "$(write_in "$P1/par.jsonl" "$REVSHC" a1)"
+# A pass-1 review shard dir carries no `-p<N>`, so a header-only Write there is HDRONLY (BL-752);
+# these two carry a `#### ` finding, so they hold the PATH, not the exemption.
+ct MATEPATH DENY k-sh-qa "$(write_in "$P1/par.jsonl" "$REVSHQ" a1 '#### AC-1 untested')"
+ct MATEPATH DENY k-sh-cr "$(write_in "$P1/par.jsonl" "$REVSHC" a1 '#### null deref')"
 ct MATEPATH SILENT k-summary "$(write_in "$P1/par.jsonl" "$REVX" a1)"
 ct MATEPATH SILENT k-sh-notes "$(write_in "$P1/par.jsonl" "$REVSHX" a1)"
 
@@ -582,32 +589,44 @@ ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -
 
 # REREAD (THE RACE). The judged transcript is rebuilt from rr.tmpl before each score; a
 # `$CELLS/<n>.app` file tells score() to do that, to run the hook with ADVISOR_GATE_REREADS set to
-# its fourth field (`-` = unset, the default 10s ceiling), and (for the appender cell) to append
+# its fourth field (`-` = unset, the default 300s net), and (for the appender cell) to append
 # rr.add APPEND_DELAY seconds after the hook starts. 3s: past the old fixed 2 x 1s re-read (graph's
 # advisor line landed >2s after PreToolUse), so a fixed-2s loop judges before the append and denies,
-# and well inside the 10s ceiling, where the poll sees it within 0.25s and stops (rr.add carries the
-# incoming call's own line). rr-none appends nothing and runs at 1 (2s bound): the stricter-only
-# knob still judges its last scan and DENIES, and it does not pay 10s on every score.
+# and well inside the net, where the poll sees it within a second and stops (rr.add carries the
+# incoming call's own line). rr-none appends nothing and runs at 1 (2s bound): that knob never
+# fails open, still judges its last scan and DENIES, and does not pay the net on every score.
 # THE DENY IS DECIDED BY THE TRANSCRIPT, NOT THE CLOCK (BL-630). rr-seen appends the incoming
 # call's own line ALONE at 1s with the knob unset: the transcript has advanced past the call with
 # no advisor line -> DENY, at ~1s, never waiting out the net. It is the only default-knob DENY cell,
 # so a default that always fails open dies on it. rr-never appends nothing with the knob unset:
-# the 10s net expires with the call's line absent -> SILENT, and stderr says why. Under the
-# pre-BL-630 hook that was a DENY: a time-only ceiling denied a call whose advisor line was merely
-# late, which load makes later. It costs the full 10s by construction -- no cheaper cell separates
+# the net, shortened by ADVISOR_GATE_NET, expires with the call's line absent -> SILENT, and stderr
+# names the shortened figure. Under the pre-BL-630 hook that was a DENY: a time-only ceiling denied
+# a call whose advisor line was merely late, which load makes later. It costs its whole net by construction -- no cheaper cell separates
 # the two builds, since they agree whenever the line lands inside the net -- so it is a NET cell
 # (`$CELLS/<n>.net`), scored only while NET_CELLS=1: on the shipped hook, and on the one mutant
 # that restores the time-only ceiling.
 APPEND_DELAY=3
+# BL-752: the default net is 300s, and rr-never runs it at ADVISOR_GATE_NET=$RR_NET, the knob that
+# can only shorten it. The cell asserts the figure the hook RENDERS, so a hook that ignores the knob
+# both pays 300s and names the wrong figure.
+RR_NET=2
 ct REREAD SILENT rr-late "$(bash_in "$P1/rr-late.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" - > "$CELLS/$nc.app"
 ct REREAD DENY rr-none "$(bash_in "$P1/rr-none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - 1 > "$CELLS/$nc.app"
 ct REREAD DENY rr-seen "$(bash_in "$P1/rr-seen.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-seen.jsonl" "$P1/rr.self" 1 - > "$CELLS/$nc.app"
-cell REREAD SILENT 'E:did not land within the 10s safety net' rr-never "$(bash_in "$P1/rr-never.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell REREAD SILENT "E:did not land within the ${RR_NET}s safety net" rr-never "$(bash_in "$P1/rr-never.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-never.jsonl" - - - > "$CELLS/$nc.app"
-: > "$CELLS/$nc.net"
+printf '%s\n' "$RR_NET" > "$CELLS/$nc.net"
+# BL-752: an input with no `tool_use_id` can never be SEEN, so at the default knob an owed call is
+# SILENT at once, with the reason on stderr, rather than after the whole net. rr-noid runs with the
+# net shortened to 20s, its `.fast` figure: a hook that waits for a line it cannot recognise pays
+# those 20s, which the score() 5s wall-clock bound on this cell refuses. SELFLAST
+# n-selflast-answered is its twin: the same missing id under the knob at 0 still DENIES.
+cell REREAD SILENT 'E:carries no tool_use_id' rr-noid "$(bash_in "$P1/rr-noid.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-noid.jsonl" - - - > "$CELLS/$nc.app"
+printf '%s\n' 20 > "$CELLS/$nc.fast"
 
 # THE WINDOW (operator ruling): an advisor attempt within the last 10 assistant turns clears the
 # call, however many pushes shipped since. A `$CELLS/<n>.win` file runs the cell with
@@ -795,6 +814,41 @@ ct HDRONLY DENY hdr-cr-h4 "$(write_in "$P1/par.jsonl" "$SHCR" a1 '# Code review 
 #### [MAJOR] null deref in foo
 files: a.py:10
 ')"
+# BL-752: pass 1 of a code-review or QA review carries no `-p<N>` (implementation.md
+# `--shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`), and the verdict kind
+# covers it. Its first Write is the role template: the three EMPTY `### ` severity containers
+# (code-reviewer.md and qa.md "Findings Template") -> SILENT, the near-miss, since `###` is header
+# in this family. One `#### ` finding under a container -> DENY, in both families.
+SHCR1="$SPRINT/docs/reviews/s3/shards/3-code-review-abcdef123456/2.md"
+SHQA1="$SPRINT/docs/reviews/s3/shards/3-qa-validation-abcdef123456/1.md"
+RVT='# Code review part 2
+
+## Findings
+
+### Critical (must fix before merge)
+
+None.
+
+### Important (should fix, can be follow-up)
+
+None.
+
+### Suggestions (optional improvements)
+
+None.
+'
+ct HDRONLY SILENT hdr-cr1-tmpl "$(write_in "$P1/par.jsonl" "$SHCR1" a1 "$RVT")"
+ct HDRONLY SILENT hdr-qa1-tmpl "$(write_in "$P1/par.jsonl" "$SHQA1" a1 "${RVT/Code review/QA validation}")"
+# Concatenated, not `${RVT/### .../...}`: a substitution pattern opening with `#` is anchored at
+# the start of the string, matches nothing here, and would leave the DENY cells header-only.
+ct HDRONLY DENY hdr-cr1-h4 "$(write_in "$P1/par.jsonl" "$SHCR1" a1 "$RVT
+#### null deref in foo
+files: a.py:10
+")"
+ct HDRONLY DENY hdr-qa1-h4 "$(write_in "$P1/par.jsonl" "$SHQA1" a1 "${RVT/Code review/QA validation}
+#### AC-2 untested
+files: t.py:4
+")"
 ct HDRONLY DENY hdr-h4 "$(write_in "$P1/par.jsonl" "$SHD/3.md" a1 "$HDR
 #### F-1 (MAJOR) the locked range cites a removed requirement
 ")"
@@ -852,7 +906,7 @@ score() {
   : > "$log"
   local tgt add dly rrk apid cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
-    # A NET cell pays the 10s safety net by construction; it is scored only while NET_CELLS=1.
+    # A NET cell pays its whole (shortened) safety net by construction; it is scored only while NET_CELLS=1.
     if [ -f "$CELLS/$n.net" ] && [ "${NET_CELLS:-0}" != 1 ]; then continue; fi
     cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"
     if [ -f "$CELLS/$n.app" ]; then
@@ -863,7 +917,21 @@ score() {
       fi
       if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
       if [ "${rrk:--}" = - ]; then
-        env -u ADVISOR_GATE_REREADS ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        # A NET or FAST cell carries its ADVISOR_GATE_NET figure in its .net or .fast file; every
+        # other default-knob cell runs at the shipped 300s net. A FAST cell must answer inside 5s.
+        local rnet="" ft0=$SECONDS
+        [ ! -f "$CELLS/$n.net" ] || rnet="$(cat "$CELLS/$n.net")"
+        [ ! -f "$CELLS/$n.fast" ] || rnet="$(cat "$CELLS/$n.fast")"
+        if [ -n "$rnet" ]; then
+          env -u ADVISOR_GATE_REREADS ADVISOR_GATE_NET="$rnet" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        else
+          env -u ADVISOR_GATE_REREADS -u ADVISOR_GATE_NET ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        fi
+        if [ -f "$CELLS/$n.fast" ] && [ $((SECONDS - ft0)) -gt 5 ]; then
+          printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac
+          [ -z "$apid" ] || wait "$apid"
+          continue
+        fi
       else
         ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       fi
@@ -910,6 +978,15 @@ score() {
       case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac
     fi
   done 3< "$MAN"
+  # BL-752 NETDEF: the cap the hook USES with ADVISOR_GATE_NET unset is read, not waited out. The knob
+  # block (first `_netcap=` line through its `esac`) runs in a scratch shell and must leave 300; rr-never
+  # runs at a shortened net, so it cannot see the default. Fails REREAD, as a wrong default is a net bug.
+  local nd_cap=""
+  awk '/^_netcap=/ { on = 1 } on { print } on && /^esac/ { exit }' "$h" > "$W/netdef.sh" 2>/dev/null
+  if [ -s "$W/netdef.sh" ]; then nd_cap="$(env -u ADVISOR_GATE_NET bash -c '. "$1"; printf "%s" "$_netcap"' _ "$W/netdef.sh" 2>/dev/null)"; fi
+  if [ "$nd_cap" != 300 ]; then
+    printf '%s\n' netdef >> "$log"; case " $failed " in *" REREAD "*) ;; *) failed="$failed REREAD" ;; esac
+  fi
   [ "$exitbad" -eq 0 ] || failed="$failed EXIT"
   printf '%s\n' "$failed" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'
 }

@@ -27,7 +27,7 @@ printf '  cells %s\n' "$nc"
 
 printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
-# NET_CELLS=1 for the shipped hook only: rr-never pays the 10s safety net once, here (lib.sh REREAD).
+# NET_CELLS=1 for the shipped hook only: rr-never pays its ADVISOR_GATE_NET-shortened safety net once, here (lib.sh REREAD).
 GOT="$(NET_CELLS=1 score "$HOOK" "$W/failed.shipped")"
 if [ -z "$GOT" ]; then
   ok "shipped hook passes every arm (PUSH REASON NOGRANT WITHDRAWN ORDER ERRCLEAR UNAV REARM MERGE CLOSE DELETE MENTION UPDATE UPDATEREF UPDATECUT WRAP STACK BASHC QUOTEDPAT QUOTEDALT PATHGIT BODY QUOTEDC QUOTEDENV GHREPO MCPNAME DETACHED MATE MATEABSENT MATEPUSH MATEPATH MATEREWRITE REDISPATCH DENIED ENVELOPE FAILED REREAD WINDOW BMADONLY SELF SELFLAST PERKIND TWRITE TWRITEREAD GATELOG NOVERIFY HDRONLY FAILOPEN EXIT)"
@@ -41,6 +41,17 @@ cp "$HOOK" "$MUT/hook-control.sh"
 CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 [ -z "$CTL" ] && ok "unmutated copy from the mutant directory passes every arm" \
               || bad "unmutated copy fails [$CTL] -- the harness, not the hook, is what fails"
+
+# BL-752 mutant: a second `_netcap=10` line after the default. rr-never runs at ADVISOR_GATE_NET=2 and
+# cannot see it; the NETDEF read of the unset-knob cap must, and must name only REREAD.
+awk '{ print } /^_netcap=300$/ { print "_netcap=10" }' "$HOOK" > "$MUT/hook-netcap10.sh"
+if cmp -s "$HOOK" "$MUT/hook-netcap10.sh"; then bad "mutant netcap10: DID NOT APPLY -- no _netcap=300 line to follow"
+else
+  MUTD="$(score "$MUT/hook-netcap10.sh" "$W/failed.netcap10")"
+  [ "$MUTD" = REREAD ] && grep -qx netdef "$W/failed.netcap10" \
+    && ok "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap" \
+    || bad "mutant netcap10: expected REREAD via netdef, got [$MUTD] cells [$(cells_of "$W/failed.netcap10")]"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "advisor-gate-deny: PASS"; exit 0; fi

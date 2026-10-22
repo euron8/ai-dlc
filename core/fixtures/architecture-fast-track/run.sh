@@ -343,6 +343,7 @@ if [ ! -f "$ARCHMD" ]; then
   exit 0
 fi
 
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/architecture.md"
 GVMD="$STEPS/gate-validation.md"
 REQMD="$STEPS/requirements.md"
 

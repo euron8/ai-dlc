@@ -619,7 +619,7 @@ hr_store_put() {
   [ "${#dig}" -eq 64 ] || return 0
   { printf '#format k1\n#state ok\n'; cat "$HR_WORK/vs.d"; } > "$store/.tmp.$$.$HR_FX" 2>/dev/null \
     && mv "$store/.tmp.$$.$HR_FX" "$store/$dig" 2>/dev/null \
-    && printf 'hermetic-run: %s: verdict recorded in the shared store\n' "$HR_FX" || rm -f "$store/.tmp.$$.$HR_FX" 2>/dev/null
+    && printf 'hermetic-run: %s: verdict recorded in %s\n' "$HR_FX" "$store" || rm -f "$store/.tmp.$$.$HR_FX" 2>/dev/null
   return 0
 }
 if [ "$hr_rc" -eq 0 ] && [ "$hr_missing" -eq 0 ]; then ( hr_store_put ) 2>/dev/null; exit 0; fi

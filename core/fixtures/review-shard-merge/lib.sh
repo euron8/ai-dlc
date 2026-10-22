@@ -1220,36 +1220,50 @@ p_x_dupall() {
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || { WHY="the clean copy was not made"; return 1; }
   o="$(out_of "$d")"
   # two duplicates in two seats: cross-2 cites 1, 2 (owned by cross-1) and cross-3 cites 1, 3 (owned by cross-2)
-  xfinding "$d/cross-2.md" F-dupA "1, 2" && xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="two: the seed did not apply"; return 1; }
-  run_merge "$sd" "$d"; xd_row two "rc=2 n=2 tails=cross-2 cross-3  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
-  rm -f "$o"; cs_reset "$d" "$c"
-  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="one: the seed did not apply"; return 1; }
-  run_merge "$sd" "$d"; xd_row one "rc=2 n=1 tails=cross-2  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
-  rm -f "$o"; cs_reset "$d" "$c"
+  if cell two; then
+    xfinding "$d/cross-2.md" F-dupA "1, 2" && xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="two: the seed did not apply"; return 1; }
+    run_merge "$sd" "$d"; xd_row two "rc=2 n=2 tails=cross-2 cross-3  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
+  if cell one; then
+    xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="one: the seed did not apply"; return 1; }
+    run_merge "$sd" "$d"; xd_row one "rc=2 n=1 tails=cross-2  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
   # near-miss: cross-1 cites its own set 1, 2 a second time -> merges
-  xfinding "$d/cross-1.md" F-ownB "1, 2" || { WHY="near: the seed did not apply"; return 1; }
-  run_merge "$sd" "$d"; xd_row near "rc=0 merged=y" "rc=$RC merged=$(has "$MO" "MERGED:" && echo y || echo n)"
-  rm -f "$o"; cs_reset "$d" "$c"
+  if cell near; then
+    xfinding "$d/cross-1.md" F-ownB "1, 2" || { WHY="near: the seed did not apply"; return 1; }
+    run_merge "$sd" "$d"; xd_row near "rc=0 merged=y" "rc=$RC merged=$(has "$MO" "MERGED:" && echo y || echo n)"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
   # --check-shard over the duplicating seat, its owner sealed: the exit code is what --mark seals on
-  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="check: the seed did not apply"; return 1; }
-  lmark "$d/cross-1.md" - cross-1 key=cross-1
-  run_check "$sd" "$d" code-review "$d/cross-2.md"
-  xd_row check "rc=2 n=1 ok=n" "rc=$CRC n=$(nref "$CO") ok=$(has "$CO" "SHARD-OK" && echo y || echo n)"
-  cs_reset "$d" "$c"
+  if cell check; then
+    xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="check: the seed did not apply"; return 1; }
+    lmark "$d/cross-1.md" - cross-1 key=cross-1
+    run_check "$sd" "$d" code-review "$d/cross-2.md"
+    xd_row check "rc=2 n=1 ok=n" "rc=$CRC n=$(nref "$CO") ok=$(has "$CO" "SHARD-OK" && echo y || echo n)"
+    cs_reset "$d" "$c"
+  fi
   # precedence (a): the duplicate in cross-2, then a per-shard structural refusal in cross-3
-  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="preca: the seed did not apply"; return 1; }
-  xd_zero_sha "$d/cross-3.md"
-  run_merge "$sd" "$d"; xd_row preca "rc=2 n=2 tails=cross-2 cross-3  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
-  rm -f "$o"; cs_reset "$d" "$c"
+  if cell preca; then
+    xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="preca: the seed did not apply"; return 1; }
+    xd_zero_sha "$d/cross-3.md"
+    run_merge "$sd" "$d"; xd_row preca "rc=2 n=2 tails=cross-2 cross-3  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
   # precedence (b): the structural refusal in cross-1, the duplicate after it in cross-3 -> the first alone
-  xd_zero_sha "$d/cross-1.md"
-  xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="precb: the seed did not apply"; return 1; }
-  run_merge "$sd" "$d"; xd_row precb "rc=2 n=1 tails=cross-1  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
-  rm -f "$o"; cs_reset "$d" "$c"
+  if cell precb; then
+    xd_zero_sha "$d/cross-1.md"
+    xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="precb: the seed did not apply"; return 1; }
+    run_merge "$sd" "$d"; xd_row precb "rc=2 n=1 tails=cross-1  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
   # one shard, two lines: cross-2's duplicate, then cross-2's own later verdict-backing refusal
-  xfinding "$d/cross-2.md" F-dupA "1, 2" && xcrit "$d/cross-2.md" || { WHY="same: the seed did not apply"; return 1; }
-  run_merge "$sd" "$d"; xd_row same "rc=2 n=2 tails=cross-2 cross-2  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
-  rm -f "$o"; cs_reset "$d" "$c"
+  if cell same; then
+    xfinding "$d/cross-2.md" F-dupA "1, 2" && xcrit "$d/cross-2.md" || { WHY="same: the seed did not apply"; return 1; }
+    run_merge "$sd" "$d"; xd_row same "rc=2 n=2 tails=cross-2 cross-2  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
+    rm -f "$o"; cs_reset "$d" "$c"
+  fi
   [ -z "$WHY" ]
 }
 X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat x_dupall"
@@ -1446,6 +1460,10 @@ cs_run() { # <script-dir> <gate> <seeder> <clean copy>
   cs_reset "$CSD" "$4"
 }
 cs_sel() { [ -z "${CS_ONLY:-}" ] || [ "$1" = "$CS_ONLY" ]; }
+# cell <name>: 0 when this cell runs (no CS_ONLY, or CS_ONLY names it), counting it in CS_RAN. Every
+# predicate a mutant drives gates each of its cells on it (BL-755), so a mutant runs the one cell its
+# kill token names and nothing else; run.sh's mut_run asserts exactly one cell ran.
+cell() { cs_sel "$1" || return 1; CS_RAN=$(( ${CS_RAN:-0} + 1 )); }
 p_cs() {
   local sd="$1" c n any=0
   WHY=""
@@ -1454,8 +1472,8 @@ p_cs() {
   run_check "$sd" "$CSD" code-review "$CSD/1.md"
   [ "$CRC" -eq 0 ] && [ "$(cat "$CO")" = "SHARD-OK: $CSD/1.md findings=1" ] \
     || { WHY="control: a clean shard answered rc=$CRC [$(head -1 "$CO")]"; return 1; }
-  for n in $CS_CR; do cs_sel "$n" || continue; any=1; cs_run "$sd" code-review "csc_$n" "$c"; done
-  for n in $CS_QA; do cs_sel "$n" || continue; any=1
+  for n in $CS_CR; do cell "$n" || continue; any=1; cs_run "$sd" code-review "csc_$n" "$c"; done
+  for n in $CS_QA; do cell "$n" || continue; any=1
     if [ -z "${CS_QD:-}" ]; then
       CSD="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
       CS_QD=1; c="$(dirname "$CSD")/clean"; mkdir "$c" && cp "$CSD"/*.md "$c"/ || return 1
@@ -1500,30 +1518,42 @@ p_owner() {
   WHY=""
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  shard "$d" 2 APPROVED 3; run_merge "$sd" "$d"; own_case per-shard 2; cs_reset "$d" "$c"
-  rm -f "$d/2.md"; run_merge "$sd" "$d"; own_case missing 2; cs_reset "$d" "$c"
-  lmark_all "$d"; shard "$d" 2 APPROVED 2; run_merge "$sd" "$d"; own_case unfinished 2; cs_reset "$d" "$c"
-  cp "$d/1.md" "$d/01.md"; run_merge "$sd" "$d"; own_case dup-key "01.md 1.md"; cs_reset "$d" "$c"
-  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$sd" "$d"; own_case handover-unrun "2 cross-1"; cs_reset "$d" "$c"
-  crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case run-orphan "2 cross-1"; cs_reset "$d" "$c"
-  crs "$d" 2 APPROVED 2 2 "$(printf '%s\n\n%s' "$(crho 2 AC7)" "$(crho 2 AC7 | sed 's/F-2-H/F-2-H2/')")"
-  crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case handover-twice 2; cs_reset "$d" "$c"
-  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
-  crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
-  run_merge "$sd" "$d"; own_case run-twice cross-1; cs_reset "$d" "$c"
-  shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$sd" "$d"; own_case check1-multi 2; cs_reset "$d" "$c"
-  printf 'x\n' > "$d/notes.txt"; run_merge "$sd" "$d"; own_case bad-name lead; cs_reset "$d" "$c"
-  o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; own_case set-level lead
+  if cell per-shard; then shard "$d" 2 APPROVED 3; run_merge "$sd" "$d"; own_case per-shard 2; cs_reset "$d" "$c"; fi
+  if cell missing; then rm -f "$d/2.md"; run_merge "$sd" "$d"; own_case missing 2; cs_reset "$d" "$c"; fi
+  if cell unfinished; then lmark_all "$d"; shard "$d" 2 APPROVED 2; run_merge "$sd" "$d"; own_case unfinished 2; cs_reset "$d" "$c"; fi
+  if cell dup-key; then cp "$d/1.md" "$d/01.md"; run_merge "$sd" "$d"; own_case dup-key "01.md 1.md"; cs_reset "$d" "$c"; fi
+  if cell handover-unrun; then crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$sd" "$d"; own_case handover-unrun "2 cross-1"; cs_reset "$d" "$c"; fi
+  if cell run-orphan; then crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case run-orphan "2 cross-1"; cs_reset "$d" "$c"; fi
+  if cell handover-twice; then
+    crs "$d" 2 APPROVED 2 2 "$(printf '%s\n\n%s' "$(crho 2 AC7)" "$(crho 2 AC7 | sed 's/F-2-H/F-2-H2/')")"
+    crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case handover-twice 2; cs_reset "$d" "$c"
+  fi
+  if cell run-twice; then
+    crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
+    crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
+    run_merge "$sd" "$d"; own_case run-twice cross-1; cs_reset "$d" "$c"
+  fi
+  if cell check1-multi; then shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$sd" "$d"; own_case check1-multi 2; cs_reset "$d" "$c"; fi
+  if cell bad-name; then printf 'x\n' > "$d/notes.txt"; run_merge "$sd" "$d"; own_case bad-name lead; cs_reset "$d" "$c"; fi
+  if cell set-level; then o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; own_case set-level lead; fi
   # The owner duplicate, K=8: cross-3 and its owner cross-1 report the identical set -> the NON-owner.
   # Under --check-shard the owner is read only once it is finished and sealed: unmarked, cross-3 passes.
-  SHARD_SHA="$E_SHA"
-  d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
-  xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
-  run_merge "$sd" "$d"; own_case dup-merge cross-3
-  run_check "$sd" "$d" code-review "$d/cross-3.md"
-  [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
-  lmark "$d/cross-1.md" - cross-1 key=cross-1
-  run_check "$sd" "$d" code-review "$d/cross-3.md"; own_case dup-check-owner-sealed cross-3 "$CO"
+  # The two --check-shard cells read the state the cell before them left, so selecting one runs its
+  # prerequisite steps without counting them as cells.
+  if cs_sel dup-merge || cs_sel dup-check-owner-unsealed || cs_sel dup-check-owner-sealed; then
+    SHARD_SHA="$E_SHA"
+    d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
+    xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
+    if cell dup-merge; then run_merge "$sd" "$d"; own_case dup-merge cross-3; fi
+    if cell dup-check-owner-unsealed; then
+      run_check "$sd" "$d" code-review "$d/cross-3.md"
+      [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
+    fi
+    if cell dup-check-owner-sealed; then
+      lmark "$d/cross-1.md" - cross-1 key=cross-1
+      run_check "$sd" "$d" code-review "$d/cross-3.md"; own_case dup-check-owner-sealed cross-3 "$CO"
+    fi
+  fi
   [ -z "$WHY" ]
 }
 
@@ -1560,17 +1590,17 @@ p_mark() {
   f="$d/2.md"; s="$(dirname "$d")/2.snap"
   fire "$f" agent || { WHY="the recorder wrote no row for $f"; return 1; }
   cp "$f" "$s" || return 1
-  mark_args "$sd" "$f" implementation code-reviewer 3 findings=1
-  mark_refused "the <shard> field '3' is not this file's key, 2" "$s" "$f" || WHY="$WHY shard-3{rc=$MRC $(head -1 "$MKO")}"
-  mark_args "$sd" "$f" implementation code-reviewer 2 key=2 findings=1
-  mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-key{rc=$MRC $(head -1 "$MKO")}"
-  mark_args "$sd" "$f" implementation code-reviewer 2 sha=0123abcd findings=1
-  mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-sha{rc=$MRC $(head -1 "$MKO")}"
-  mark_args "$sd" "$f" implementation code-reviewer 2 findings=3
-  mark_refused "findings=3' but its ## Findings section heads 1 finding(s)" "$s" "$f" || WHY="$WHY findings-3{rc=$MRC $(head -3 "$MKO")}"
-  mark_args "$sd" "$f" implementation code-reviewer 2 findings=1
-  [ "$MRC" -eq 0 ] && grep -qE '^seat-complete: implementation code-reviewer 2 key=2 sha=[0-9a-f]{64} findings=1$' "$f" \
-    || WHY="$WHY allow{rc=$MRC $(head -2 "$MKO")}"
+  if cell shard-3; then mark_args "$sd" "$f" implementation code-reviewer 3 findings=1
+    mark_refused "the <shard> field '3' is not this file's key, 2" "$s" "$f" || WHY="$WHY shard-3{rc=$MRC $(head -1 "$MKO")}"; fi
+  if cell caller-key; then mark_args "$sd" "$f" implementation code-reviewer 2 key=2 findings=1
+    mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-key{rc=$MRC $(head -1 "$MKO")}"; fi
+  if cell caller-sha; then mark_args "$sd" "$f" implementation code-reviewer 2 sha=0123abcd findings=1
+    mark_refused "carries key= or sha=" "$s" "$f" || WHY="$WHY caller-sha{rc=$MRC $(head -1 "$MKO")}"; fi
+  if cell findings-3; then mark_args "$sd" "$f" implementation code-reviewer 2 findings=3
+    mark_refused "findings=3' but its ## Findings section heads 1 finding(s)" "$s" "$f" || WHY="$WHY findings-3{rc=$MRC $(head -3 "$MKO")}"; fi
+  if cell allow; then mark_args "$sd" "$f" implementation code-reviewer 2 findings=1
+    [ "$MRC" -eq 0 ] && grep -qE '^seat-complete: implementation code-reviewer 2 key=2 sha=[0-9a-f]{64} findings=1$' "$f" \
+      || WHY="$WHY allow{rc=$MRC $(head -2 "$MKO")}"; fi
   [ -z "$WHY" ]
 }
 
@@ -1580,6 +1610,8 @@ p_mark() {
 p_seal_rewrite() {
   local sd="$1" d f s
   WHY=""
+  # One cell: every step below reads the state the step before it left.
+  cell seal-rewrite || return 0
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   f="$d/2.md"; s="$(dirname "$d")/2.snap"
   fire "$f" agent || { WHY="the recorder wrote no row for $f"; return 1; }
@@ -1621,27 +1653,35 @@ p_session() {
 p_legacy() {
   local sd="$1" d n SHARD_SHA
   WHY=""
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
-  fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
-  lmark_all "$d"; run_merge "$sd" "$d"
-  n="$(grep -c '^LEGACY: ' "$MO")" || n=0
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n" = 6 ] \
-    && grep -qxF "LEGACY: $d/1.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
-    && grep -qxF "LEGACY: $d/2.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
-    || { WHY="old engine: rc=$RC, $n LEGACY line(s): $(grep -v '^LEGACY: ' "$MO" | head -1)"; return 1; }
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
-  sed -i.bak -e 's/^## Summary$/## Overview/' "$d/2.md" && rm -f "$d/2.md.bak" || return 1
-  lmark_all "$d"; run_merge "$sd" "$d"
-  refused_clean "changed after its last sealed write" "$d" && owner_in "$MO" 2 || WHY="$WHY rewrite{$(head -1 "$MO")}"
-  SHARD_SHA="$S_SHA"
-  d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review APPROVED)" || { WHY="$WHY the sentinel world was not built"; return 1; }
-  lmark_all "$d"; run_merge "$sd" "$d"
-  refused_clean "the frozen sha $S_SHA's core/scripts/wait-for-deliverable.sh is the key= engine" "$d" || WHY="$WHY sentinel{$(head -1 "$MO")}"
-  SHARD_SHA="$N_SHA"
-  d="$(kworld "$sd" "$REPO_N" "$N_BASE" "$N_SHA" 3 code-review APPROVED)" || { WHY="$WHY the engine-absent world was not built"; return 1; }
-  lmark_all "$d"; run_merge "$sd" "$d"
-  refused_clean "cannot be read at the frozen sha $N_SHA" "$d" || WHY="$WHY absent{$(head -1 "$MO")}"
+  if cell old-engine; then
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
+    fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
+    lmark_all "$d"; run_merge "$sd" "$d"
+    n="$(grep -c '^LEGACY: ' "$MO")" || n=0
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n" = 6 ] \
+      && grep -qxF "LEGACY: $d/1.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
+      && grep -qxF "LEGACY: $d/2.md accepted without key= only because reviewed sha $B_SHA predates the key= engine" "$MO" \
+      || { WHY="old engine: rc=$RC, $n LEGACY line(s): $(grep -v '^LEGACY: ' "$MO" | head -1)"; return 1; }
+  fi
+  if cell rewrite; then
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+    fire "$d/2.md" agent || { WHY="the recorder wrote no row"; return 1; }
+    sed -i.bak -e 's/^## Summary$/## Overview/' "$d/2.md" && rm -f "$d/2.md.bak" || return 1
+    lmark_all "$d"; run_merge "$sd" "$d"
+    refused_clean "changed after its last sealed write" "$d" && owner_in "$MO" 2 || WHY="$WHY rewrite{$(head -1 "$MO")}"
+  fi
+  if cell sentinel; then
+    SHARD_SHA="$S_SHA"
+    d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review APPROVED)" || { WHY="$WHY the sentinel world was not built"; return 1; }
+    lmark_all "$d"; run_merge "$sd" "$d"
+    refused_clean "the frozen sha $S_SHA's core/scripts/wait-for-deliverable.sh is the key= engine" "$d" || WHY="$WHY sentinel{$(head -1 "$MO")}"
+  fi
+  if cell absent; then
+    SHARD_SHA="$N_SHA"
+    d="$(kworld "$sd" "$REPO_N" "$N_BASE" "$N_SHA" 3 code-review APPROVED)" || { WHY="$WHY the engine-absent world was not built"; return 1; }
+    lmark_all "$d"; run_merge "$sd" "$d"
+    refused_clean "cannot be read at the frozen sha $N_SHA" "$d" || WHY="$WHY absent{$(head -1 "$MO")}"
+  fi
   [ -z "$WHY" ]
 }
 
@@ -1774,16 +1814,20 @@ um_strip() { # <shard dir>: the repro's steps -- strip every marker, rewrite sha
 p_unmarked() {
   local sd="$1" d SHARD_SHA
   WHY=""
-  SHARD_SHA="$S_SHA"
-  d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review NEEDS_REWORK)" || { WHY="the sentinel world was not built"; return 1; }
-  lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply"; return 1; }
-  run_merge "$sd" "$d"
-  refused_clean "carries no content-seal row" "$d" || WHY="$WHY unmarked-sentinel{rc=$RC $(head -1 "$MO")}"
-  SHARD_SHA="$B_SHA"
-  d="$(world4 "$sd" NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK)" || { WHY="$WHY the old-engine world was not built"; return 1; }
-  lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply (control)"; return 1; }
-  run_merge "$sd" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || WHY="$WHY control-old-engine{rc=$RC $(head -1 "$MO")}"
+  if cell unmarked-sentinel; then
+    SHARD_SHA="$S_SHA"
+    d="$(kworld "$sd" "$REPO_S" "$S_BASE" "$S_SHA" 3 code-review NEEDS_REWORK)" || { WHY="the sentinel world was not built"; return 1; }
+    lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply"; return 1; }
+    run_merge "$sd" "$d"
+    refused_clean "carries no content-seal row" "$d" || WHY="$WHY unmarked-sentinel{rc=$RC $(head -1 "$MO")}"
+  fi
+  if cell control-old-engine; then
+    SHARD_SHA="$B_SHA"
+    d="$(world4 "$sd" NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK NEEDS_REWORK)" || { WHY="$WHY the old-engine world was not built"; return 1; }
+    lmark_all "$d"; um_strip "$d" || { WHY="FIXTURE BROKEN: the repro's strip and rewrite did not apply (control)"; return 1; }
+    run_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || WHY="$WHY control-old-engine{rc=$RC $(head -1 "$MO")}"
+  fi
   [ -z "$WHY" ]
 }
 
@@ -1873,12 +1917,12 @@ p_vb_cr() {
   WHY=""
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the code-review world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  vb_c "$d" 2 NEEDS_REWORK 2 none; vb_refuse "$sd" "$d" code-review 2 cr-nr-empty "$VB_CR_NR" "$VB_STEM"; cs_reset "$d" "$c"
-  vb_c "$d" 2 NEEDS_REWORK 2 imp; vb_pass "$sd" "$d" code-review 2 cr-nr-imp; cs_reset "$d" "$c"
-  vb_c "$d" 2 BLOCKED 2 crit; vb_pass "$sd" "$d" code-review 2 cr-blocked-crit; cs_reset "$d" "$c"
-  vb_c "$d" 2 BLOCKED 2 sug; vb_refuse "$sd" "$d" code-review 2 cr-blocked-sug "$VB_CR_BL" "$VB_STEM"; cs_reset "$d" "$c"
-  vb_c "$d" 2 APPROVED 2 crit; vb_refuse "$sd" "$d" code-review 2 cr-approved-crit "$VB_CR_AP"; cs_reset "$d" "$c"
-  vb_c "$d" 2 APPROVED 2 imp; vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"
+  if cell cr-nr-empty; then vb_c "$d" 2 NEEDS_REWORK 2 none; vb_refuse "$sd" "$d" code-review 2 cr-nr-empty "$VB_CR_NR" "$VB_STEM"; cs_reset "$d" "$c"; fi
+  if cell cr-nr-imp; then vb_c "$d" 2 NEEDS_REWORK 2 imp; vb_pass "$sd" "$d" code-review 2 cr-nr-imp; cs_reset "$d" "$c"; fi
+  if cell cr-blocked-crit; then vb_c "$d" 2 BLOCKED 2 crit; vb_pass "$sd" "$d" code-review 2 cr-blocked-crit; cs_reset "$d" "$c"; fi
+  if cell cr-blocked-sug; then vb_c "$d" 2 BLOCKED 2 sug; vb_refuse "$sd" "$d" code-review 2 cr-blocked-sug "$VB_CR_BL" "$VB_STEM"; cs_reset "$d" "$c"; fi
+  if cell cr-approved-crit; then vb_c "$d" 2 APPROVED 2 crit; vb_refuse "$sd" "$d" code-review 2 cr-approved-crit "$VB_CR_AP"; cs_reset "$d" "$c"; fi
+  if cell cr-approved-imp; then vb_c "$d" 2 APPROVED 2 imp; vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
 # qf <container first word|none> -> one finding of shard 2, under that container (none: no `### `).
@@ -1892,13 +1936,13 @@ p_vb_qa() {
   WHY=""
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_SEV_NR" "$VB_STEM"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-nr-sug "$VB_Q_SEV_NR" "$VB_MOVE"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-nr-imp
-  ! has "$MO" "$VB_LEG" || WHY="$WHY q-sev-legacy-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"
-  vb_q "$d" 2 PASS "$(qf Critical)"; vb_refuse "$sd" "$d" qa 2 q-pass-crit "$VB_Q_PASS_CRIT"; cs_reset "$d" "$c"
-  vb_q "$d" 2 PASS "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-pass-imp; cs_reset "$d" "$c"
-  vb_q "$d" 2 PASS "$(qf none)"; vb_refuse "$sd" "$d" qa 2 q-unclassed "$VB_UNC"; cs_reset "$d" "$c"
+  if cell q-nr-empty; then vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_SEV_NR" "$VB_STEM"; cs_reset "$d" "$c"; fi
+  if cell q-nr-sug; then vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-nr-sug "$VB_Q_SEV_NR" "$VB_MOVE"; cs_reset "$d" "$c"; fi
+  if cell q-nr-imp; then vb_q "$d" 2 NEEDS_REWORK "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-nr-imp
+    ! has "$MO" "$VB_LEG" || WHY="$WHY q-sev-legacy-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"; fi
+  if cell q-pass-crit; then vb_q "$d" 2 PASS "$(qf Critical)"; vb_refuse "$sd" "$d" qa 2 q-pass-crit "$VB_Q_PASS_CRIT"; cs_reset "$d" "$c"; fi
+  if cell q-pass-imp; then vb_q "$d" 2 PASS "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-pass-imp; cs_reset "$d" "$c"; fi
+  if cell q-unclassed; then vb_q "$d" 2 PASS "$(qf none)"; vb_refuse "$sd" "$d" qa 2 q-unclassed "$VB_UNC"; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
 # ---- VB2M (qa, BL-746): the MODE alone, in one cell, so a mutant that keeps QA count-only under a
@@ -1907,6 +1951,7 @@ p_vb_qa() {
 p_vb_qmode() {
   local sd="$1" d
   WHY=""
+  cell q-mode-sug || return 0
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-mode-sug "$VB_Q_SEV_NR" "$VB_MOVE"
   [ -z "$WHY" ]
@@ -1922,17 +1967,21 @@ p_vb_qleg() {
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
   VB_PROJ="$PROJ_QLEG"
-  vb_q "$d" 2 NEEDS_REWORK "$(qf none)"; vb_pass "$sd" "$d" qa 2 q-leg-nr-one
-  has "$MO" "LEGACY: $PROJ_QLEG/core/team-roles/qa.md $VB_LEG" || WHY="$WHY q-leg-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"
-  vb_q "$d" 2 PASS "$(qf Critical)"; vb_pass "$sd" "$d" qa 2 q-leg-pass-crit; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-leg-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"
-  VB_PROJ="$PROJ_Q2"
-  o="$(qout "$d")"; run_mg "$sd" "$d" qa "$o"
-  refused_at "$VB_Q2" "$o" && owner_in "$MO" lead || WHY="$WHY q-two-containers{rc=$RC $(reline "$MO")}"
-  VB_PROJ="$PROJ_QLEG"
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { VB_PROJ=""; WHY="$WHY the code-review world was not built"; return 1; }
-  raw_shard "$d" 2 '## Findings' '' '#### F-2-9 uncontained' 'parts: 2' '' 'Body.'
-  vb_refuse "$sd" "$d" code-review 2 cr-unclassed "$VB_UNC"
+  if cell q-leg-nr-one; then vb_q "$d" 2 NEEDS_REWORK "$(qf none)"; vb_pass "$sd" "$d" qa 2 q-leg-nr-one
+    has "$MO" "LEGACY: $PROJ_QLEG/core/team-roles/qa.md $VB_LEG" || WHY="$WHY q-leg-line{$(head -1 "$MO")}"; cs_reset "$d" "$c"; fi
+  if cell q-leg-pass-crit; then vb_q "$d" 2 PASS "$(qf Critical)"; vb_pass "$sd" "$d" qa 2 q-leg-pass-crit; cs_reset "$d" "$c"; fi
+  if cell q-leg-nr-empty; then vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-leg-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"; fi
+  if cell q-two-containers; then
+    VB_PROJ="$PROJ_Q2"
+    o="$(qout "$d")"; run_mg "$sd" "$d" qa "$o"
+    refused_at "$VB_Q2" "$o" && owner_in "$MO" lead || WHY="$WHY q-two-containers{rc=$RC $(reline "$MO")}"
+    VB_PROJ="$PROJ_QLEG"
+  fi
+  if cell cr-unclassed; then
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { VB_PROJ=""; WHY="$WHY the code-review world was not built"; return 1; }
+    raw_shard "$d" 2 '## Findings' '' '#### F-2-9 uncontained' 'parts: 2' '' 'Body.'
+    vb_refuse "$sd" "$d" code-review 2 cr-unclassed "$VB_UNC"
+  fi
   VB_PROJ=""
   [ -z "$WHY" ]
 }
@@ -1941,6 +1990,8 @@ p_vb_qleg() {
 p_vb_r3() {
   local sd="$1" d
   WHY=""
+  # One cell: every assertion below reads the one merge of the graph cross-1 shape.
+  cell r3-graph-cross1 || return 0
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   [ -f "$d/cross-1.md" ] || { WHY="FIXTURE BROKEN: the qa world has no cross-1"; return 1; }
   vb_q "$d" cross-1 NEEDS_REWORK "$VB_R3_BODY"
@@ -2015,16 +2066,16 @@ p_fr_verdict() {
   WHY=""
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-plain "$FR_VERD"; cs_reset "$d" "$c"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | **FAIL** | a RED | none |'; fr_refused "$sd" "$d" fr-bold "$FR_VERD"; cs_reset "$d" "$c"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| `AC4` (committed RED) | FAIL (no RED) | a RED | none |'; fr_refused "$sd" "$d" fr-paren "$FR_VERD"; cs_reset "$d" "$c"
-  fr_x1 "$d" PASS "" '| AC | Expected | Result | Got |' '| AC4 | green | FAIL | none |'; fr_refused "$sd" "$d" fr-reorder "$FR_VERD"; cs_reset "$d" "$c"
+  if cell fr-plain; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-plain "$FR_VERD"; cs_reset "$d" "$c"; fi
+  if cell fr-bold; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | **FAIL** | a RED | none |'; fr_refused "$sd" "$d" fr-bold "$FR_VERD"; cs_reset "$d" "$c"; fi
+  if cell fr-paren; then fr_x1 "$d" PASS "" "$FR_TBL" '| `AC4` (committed RED) | FAIL (no RED) | a RED | none |'; fr_refused "$sd" "$d" fr-paren "$FR_VERD"; cs_reset "$d" "$c"; fi
+  if cell fr-reorder; then fr_x1 "$d" PASS "" '| AC | Expected | Result | Got |' '| AC4 | green | FAIL | none |'; fr_refused "$sd" "$d" fr-reorder "$FR_VERD"; cs_reset "$d" "$c"; fi
   # The near-miss puts FAIL in Got, the column AFTER the named one, so a read-by-position mutant (M16,
   # rc = ac + 1, which lands on Expected) moves only fr-reorder, never this cell.
-  fr_x1 "$d" PASS "" '| AC | Expected | Verdict | Got |' '| AC4 | green | PASS | FAIL then green |'; fr_merged "$sd" "$d" fr-expected-only PASS; cs_reset "$d" "$c"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | PASS | a RED | RED |'; fr_merged "$sd" "$d" fr-all-pass PASS; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'AC4 has no committed RED' 'Body.')"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-nr-elsewhere NEEDS_REWORK
+  if cell fr-expected-only; then fr_x1 "$d" PASS "" '| AC | Expected | Verdict | Got |' '| AC4 | green | PASS | FAIL then green |'; fr_merged "$sd" "$d" fr-expected-only PASS; cs_reset "$d" "$c"; fi
+  if cell fr-all-pass; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | PASS | a RED | RED |'; fr_merged "$sd" "$d" fr-all-pass PASS; cs_reset "$d" "$c"; fi
+  if cell fr-nr-elsewhere; then vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'AC4 has no committed RED' 'Body.')"
+    fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-nr-elsewhere NEEDS_REWORK; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
 # FR2: the orphan rule. A FAIL row under a NEEDS_REWORK merge whose AC no finding names is refused --
@@ -2034,12 +2085,12 @@ p_fr_orphan() {
   WHY=""
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap with no AC named' 'Body.')"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED for AC4 | none |'; fr_refused "$sd" "$d" fr-orphan "$FR_ORPH AC4"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC10 has no committed RED.')"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-ac10 "$FR_ORPH AC1"; cs_reset "$d" "$c"
-  vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC1 has no committed RED; AC10 is fine.')"
-  fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-ac1 NEEDS_REWORK
+  if cell fr-orphan; then vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap with no AC named' 'Body.')"
+    fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED for AC4 | none |'; fr_refused "$sd" "$d" fr-orphan "$FR_ORPH AC4"; cs_reset "$d" "$c"; fi
+  if cell fr-ac10; then vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC10 has no committed RED.')"
+    fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-ac10 "$FR_ORPH AC1"; cs_reset "$d" "$c"; fi
+  if cell fr-ac1; then vb_q "$d" 2 NEEDS_REWORK "$(fr_find2 'a gap' 'AC1 has no committed RED; AC10 is fine.')"
+    fr_x1 "$d" PASS "" "$FR_TBL" '| AC1 | FAIL | a RED | none |'; fr_merged "$sd" "$d" fr-ac1 NEEDS_REWORK; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
 # FR4: graph 811ad3d7d, story 3.1 qa p2 (read-only), as two states. There cross-1 carried `| AC4 | FAIL |`
@@ -2091,17 +2142,23 @@ p_fr_graph() {
 p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
-  d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
-  fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
-  has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
-  d="$(fr_g_world "$sd" "$REPO_QS" "$QS_BASE" "$QS_SHA" 1)" || { WHY="$WHY the frozen-QS world was not built"; return 1; }
-  o="$(qout "$d")"; q_merge "$sd" "$d"
-  refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-severity{rc=$RC $(reline "$MO")}"
-  rm -f "$o"
-  d="$(fr_g_world "$sd" "$REPO_B" "$B_BASE" "$B_SHA" 1)" || { WHY="$WHY the unreadable world was not built"; return 1; }
-  o="$(qout "$d")"; q_merge "$sd" "$d"
-  refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-unreadable{rc=$RC $(reline "$MO")}"
-  rm -f "$o"
+  if cell frb-legacy; then
+    d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
+    fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+    has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
+  fi
+  if cell frb-severity; then
+    d="$(fr_g_world "$sd" "$REPO_QS" "$QS_BASE" "$QS_SHA" 1)" || { WHY="$WHY the frozen-QS world was not built"; return 1; }
+    o="$(qout "$d")"; q_merge "$sd" "$d"
+    refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-severity{rc=$RC $(reline "$MO")}"
+    rm -f "$o"
+  fi
+  if cell frb-unreadable; then
+    d="$(fr_g_world "$sd" "$REPO_B" "$B_BASE" "$B_SHA" 1)" || { WHY="$WHY the unreadable world was not built"; return 1; }
+    o="$(qout "$d")"; q_merge "$sd" "$d"
+    refused_at "$VB_UNC" "$o" && owner_in "$MO" cross-2 && ! has "$MO" "$FR_BLEG" || WHY="$WHY frb-unreadable{rc=$RC $(reline "$MO")}"
+    rm -f "$o"
+  fi
   [ -z "$WHY" ]
 }
 # FR3: the remedy is SATISFIABLE under the owner rule (graph s319 3-1 p2 cross-1: AC4 FAIL, the gap's
@@ -2157,30 +2214,36 @@ sr_no() { # <script-dir> <file> <gate> <case> <token>
 p_serial() {
   local sd="$1" f="$WORK/serial-1-qa-validation.md" g="$WORK/serial-1-code-review.md"
   WHY=""
-  sr_file "$f" "$(printf '## Verdict\nPASS')"; sr_ok "$sd" "$f" qa sr-q-heading PASS
-  sr_file "$f" 'Verdict: NEEDS_REWORK' '' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nBody.')"; sr_ok "$sd" "$f" qa sr-q-line NEEDS_REWORK
-  sr_file "$f" "$(printf '## Verdict\n\nVerdict: PASS')"; sr_no "$sd" "$f" qa sr-q-union "$SR_COUNT"
-  sr_file "$f" "$(printf '## Verdict\nAPPROVED')"; sr_no "$sd" "$f" qa sr-q-set "$SR_SET"
-  sr_file "$g" "$(printf '## Verdict\nAPPROVED')"; sr_ok "$sd" "$g" code-review sr-cr-approved APPROVED
-  sr_file "$g" "$(printf '## Result\nAPPROVED')"; sr_no "$sd" "$g" code-review sr-cr-renamed "matches Check 1's verdict pattern 0 time(s)"
-  sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAIL | a RED | none |'; sr_no "$sd" "$f" qa sr-q-fail "$FR_VERD"
-  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 AC4 has no committed RED\n\nBody.')"
-  sr_ok "$sd" "$f" qa sr-q-fail-backed NEEDS_REWORK
+  if cell sr-q-heading; then sr_file "$f" "$(printf '## Verdict\nPASS')"; sr_ok "$sd" "$f" qa sr-q-heading PASS; fi
+  if cell sr-q-line; then sr_file "$f" 'Verdict: NEEDS_REWORK' '' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nBody.')"; sr_ok "$sd" "$f" qa sr-q-line NEEDS_REWORK; fi
+  if cell sr-q-union; then sr_file "$f" "$(printf '## Verdict\n\nVerdict: PASS')"; sr_no "$sd" "$f" qa sr-q-union "$SR_COUNT"; fi
+  if cell sr-q-set; then sr_file "$f" "$(printf '## Verdict\nAPPROVED')"; sr_no "$sd" "$f" qa sr-q-set "$SR_SET"; fi
+  if cell sr-cr-approved; then sr_file "$g" "$(printf '## Verdict\nAPPROVED')"; sr_ok "$sd" "$g" code-review sr-cr-approved APPROVED; fi
+  if cell sr-cr-renamed; then sr_file "$g" "$(printf '## Result\nAPPROVED')"; sr_no "$sd" "$g" code-review sr-cr-renamed "matches Check 1's verdict pattern 0 time(s)"; fi
+  if cell sr-q-fail; then sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAIL | a RED | none |'; sr_no "$sd" "$f" qa sr-q-fail "$FR_VERD"; fi
+  if cell sr-q-fail-backed; then
+    sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 AC4 has no committed RED\n\nBody.')"
+    sr_ok "$sd" "$f" qa sr-q-fail-backed NEEDS_REWORK
+  fi
   # D3: gate 3's own count and value rule, no stricter. A trailing parenthetical and a period read the
   # member; two matches reading ONE value are one verdict; a hyphen suffix is the whole token.
-  sr_file "$f" 'Verdict: PASS (all ACs)'; sr_ok "$sd" "$f" qa sr-q-paren PASS
-  sr_file "$f" "$(printf '## Verdict\n\nPASS.')"; sr_ok "$sd" "$f" qa sr-q-period PASS
-  sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: PASS')"; sr_ok "$sd" "$f" qa sr-q-twosame PASS
-  sr_file "$f" 'Verdict: PASS-pending'; sr_no "$sd" "$f" qa sr-q-suffix "Check 1 reads 'PASS-pending'"
-  sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: NEEDS_REWORK')"; sr_no "$sd" "$f" qa sr-q-twodiff "$SR_COUNT"
+  if cell sr-q-paren; then sr_file "$f" 'Verdict: PASS (all ACs)'; sr_ok "$sd" "$f" qa sr-q-paren PASS; fi
+  if cell sr-q-period; then sr_file "$f" "$(printf '## Verdict\n\nPASS.')"; sr_ok "$sd" "$f" qa sr-q-period PASS; fi
+  if cell sr-q-twosame; then sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: PASS')"; sr_ok "$sd" "$f" qa sr-q-twosame PASS; fi
+  if cell sr-q-suffix; then sr_file "$f" 'Verdict: PASS-pending'; sr_no "$sd" "$f" qa sr-q-suffix "Check 1 reads 'PASS-pending'"; fi
+  if cell sr-q-twodiff; then sr_file "$f" "$(printf '**Verdict:** PASS\n\nQA verdict: NEEDS_REWORK')"; sr_no "$sd" "$f" qa sr-q-twodiff "$SR_COUNT"; fi
   # N2 and N3 through the serial file's own table (one fail_gate for the merge and the serial check):
   # FAILED fires, under a `### Acceptance criteria` heading; AC-4.1 does not name AC-4; a `handover:`
   # line does not name its AC.
-  sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAILED | a RED | none |' '' '### Acceptance criteria (per AC)'; sr_no "$sd" "$f" qa sr-q-failed "$FR_VERD"
-  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC-4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nAC-4.1 has no committed RED.')"
-  sr_no "$sd" "$f" qa sr-q-dotted "$FR_ORPH AC-4"
-  sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\nparts: 1\nhandover: AC4\n\nBody.')"
-  sr_no "$sd" "$f" qa sr-q-hoonly "$FR_ORPH AC4"
+  if cell sr-q-failed; then sr_file "$f" "$(printf '## Verdict\nPASS')" '| AC4 | FAILED | a RED | none |' '' '### Acceptance criteria (per AC)'; sr_no "$sd" "$f" qa sr-q-failed "$FR_VERD"; fi
+  if cell sr-q-dotted; then
+    sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC-4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\n\nAC-4.1 has no committed RED.')"
+    sr_no "$sd" "$f" qa sr-q-dotted "$FR_ORPH AC-4"
+  fi
+  if cell sr-q-hoonly; then
+    sr_file "$f" "$(printf '## Verdict\nNEEDS_REWORK')" '| AC4 | FAIL | a RED | none |' "$(printf '### Important (x)\n\n#### Q-1 a gap\nparts: 1\nhandover: AC4\n\nBody.')"
+    sr_no "$sd" "$f" qa sr-q-hoonly "$FR_ORPH AC4"
+  fi
   [ -z "$WHY" ]
 }
 # Role text (BL-742): each serial seat is told to run --check-serial before returning. Keyed on the

@@ -106,6 +106,35 @@
 #        seal (jq is not on PATH, git cannot place the file in a worktree, or the ledger does not
 #        parse), a fault the lead repairs and re-dispatching a reviewer cannot. Never 0 or 3 then.
 #   content-seal.sh --agent-ere                           print AGENT_ID_ERE.
+#   content-seal.sh --admit-marker <file>... | -          (header: "THE MARKER ADMISSION") exit 0: every
+#        file is admitted; 1: one line per refused file on stdout; 2: a usage error, or a seal comparison
+#        that could not run (jq absent, a ledger that does not parse).
+#
+# THE MARKER ADMISSION (BL-750). `wait-for-deliverable.sh --complete`/`--complete-repair` and the shard
+# merge's completion belt consume a file whose last non-blank line is a `seat-complete: ` or
+# `repair-complete: serial ` marker. A marker with no `sha=` is a line any writer can append, a Bash
+# `printf >>` included, so it is admitted ONLY inside the SEALED SET's legacy window, and only there:
+#   - A file OUTSIDE the sealed set (`seal_sealed`) is admitted as before, whatever its marker. Graph
+#     s319's `epics/part-<n>.md` end in a bare marker the lead's own brief writes; refusing them would
+#     wedge a resume, and no join program reads them through a seal.
+#   - A SEALED marker (`sha=<hex>`) must equal the sha256 of the body above it (wait-for-deliverable.sh's
+#     `seal_body`, hashed as `seal_body_sha <file> 0`), and the file must pass `--check` against its
+#     newest seal row.
+#   - A BARE marker is admitted only while the ROLE FILE its kind names is in the LEGACY state: the seat
+#     field (`seat-complete: <step> <seat> ...`, term 3) names `<seat>.md`; `repair-complete: serial`
+#     names `remediator.md`. The role file is read beside the state dir's own project root, at
+#     `<root>/.claude/team-roles/<seat>.md` then `<root>/core/team-roles/<seat>.md`. LEGACY means that
+#     file still tells a seat to fall back to a bare line (`unknown arg: --mark`, the token
+#     `process-rule-pins` pins out of the shipped role files), or carries no `wait-for-deliverable.sh
+#     --mark` (`--mark-repair` for a repair record) instruction at all. That is the pull's step-3 ->
+#     reconcile-merge window, where the engine is new and the installed role text is not; before 0.904.0
+#     every role file carried BOTH the `--mark` instruction and the fallback, so the fallback is the
+#     discriminator and the instruction's absence only covers role text older than `--mark` itself.
+#   - A role file that does not resolve, cannot be read, or a seat field that is not a role name, does
+#     NOT acquit: the file is refused. So is an absolute AI_DLC_STATE_DIR outside the project, whose
+#     parent holds no role file -- the fail-closed direction.
+# The admission keys on the file's path AS SPELLED (logical `pwd`), as `--mark` does, so the state dir is
+# the prefix before the path's FIRST `/planning-artifacts/`.
 #
 # REVIEW SHARDS. `docs/reviews/s<N>/shards/<idx>-code-review-<sha12>[-p<M>]/<f>.md` and the
 # `-qa-validation-` equivalent are written by a reviewer seat in the frozen dev WORKTREE, outside any
@@ -524,9 +553,70 @@ seal_record_expect() { # <state dir> program:<name> <sha256> <file> -> 0 row app
   seal_append "$_SL" "${_SN}/${_REL}" "$_SR" "$actor" "" "" "" "" "" "$want" || return 2
 }
 
+# seal_admit_marker <file>... (header: "THE MARKER ADMISSION") -> 0 every file admitted / 1 a line per
+# refused file on stdout / 2 a seal comparison that could not run
+seal_admit_marker() {
+  local f lp st rel l kind seat want have out crc rf root c needle rc=0
+  for f in "$@"; do
+    [ -n "$f" ] || continue
+    lp="$(cd "$(dirname "$f")" 2>/dev/null && pwd)" \
+      || { echo "$f: its directory does not exist, so no marker on it can be admitted"; rc=1; continue; }
+    lp="${lp}/$(basename "$f")"
+    case "$lp" in */planning-artifacts/*) ;; *) continue ;; esac
+    st="${lp%%/planning-artifacts/*}"; rel="planning-artifacts/${lp#"$st"/planning-artifacts/}"
+    seal_sealed "$rel" || continue
+    l="$(awk 'NF { l = $0 } END { print l }' "$f" 2>/dev/null)"
+    case "$l" in
+      "seat-complete: "*) kind=seat-complete; seat="$(printf '%s\n' "$l" | awk '{ print $3 }')"; needle='wait-for-deliverable.sh --mark ' ;;
+      "repair-complete: serial "*) kind=repair-complete; seat=remediator; needle='wait-for-deliverable.sh --mark-repair' ;;
+      *) continue ;;
+    esac
+    want="$(printf '%s\n' "$l" | awk '{ n = split($0, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] ~ /^sha=/) { y = 1; s = substr(w[i], 5) } } END { if (y) print "Y" s }')"
+    if [ -n "$want" ]; then
+      want="${want#Y}"; have="$(seal_body_sha "$f" 0)"
+      if [ -z "$want" ] || [ "$have" != "$want" ]; then
+        echo "$f ends in a $kind: marker whose sha=${want:-<empty>} is not the body above it (${have:-<unreadable>}): the file changed after it was marked; restore it, then re-mark with wait-for-deliverable.sh --mark"
+        rc=1; continue
+      fi
+      out="$(seal_check "$st" "$f")"; crc=$?
+      case "$crc" in
+        0) ;;
+        1) printf '%s\n' "$out"; rc=1 ;;
+        *) echo "$f: the content-seal comparison for its $kind: marker could not run (exit $crc), so it is not admitted"; return 2 ;;
+      esac
+      continue
+    fi
+    root="$(dirname "$st")"; rf=""
+    case "$seat" in
+      ''|-*|*[!a-z0-9-]*) ;;
+      *) for c in "$root/.claude/team-roles/$seat.md" "$root/core/team-roles/$seat.md"; do
+           if [ -f "$c" ]; then rf="$c"; break; fi
+         done ;;
+    esac
+    if [ -z "$rf" ] || [ ! -r "$rf" ]; then
+      echo "$f ends in a bare $kind: marker (no sha=) and no readable role file for seat '${seat}' resolves under $root (.claude/team-roles/ or core/team-roles/), so the legacy window for a bare marker cannot be shown open; re-mark it with wait-for-deliverable.sh --mark, which seals it"
+      rc=1; continue
+    fi
+    grep -qF -- 'unknown arg: --mark' "$rf" && continue
+    grep -qF -- "$needle" "$rf" || continue
+    echo "$f ends in a bare $kind: marker (no sha=), and $rf already instructs ${needle#wait-for-deliverable.sh }, so the legacy window is closed and any writer could have appended this line; re-mark it with wait-for-deliverable.sh ${needle#wait-for-deliverable.sh }, which seals it"
+    rc=1
+  done
+  return "$rc"
+}
+
 seal_main() {
   local mode="${1:-}" st
   case "$mode" in
+    --admit-marker)
+      [ "$#" -ge 2 ] || { echo "usage: $0 --admit-marker <file>... | -" >&2; return 2; }
+      shift
+      if [ "$#" -eq 1 ] && [ "$1" = "-" ]; then
+        set --
+        while IFS= read -r _l; do [ -n "$_l" ] && set -- "$@" "$_l"; done
+        [ "$#" -gt 0 ] || return 0
+      fi
+      seal_admit_marker "$@" ;;
     --check|--row|--last-tool-row)
       [ "$#" -ge 3 ] || { echo "usage: $0 $mode <state-dir> <file>... | -" >&2; return 2; }
       st="$2"; shift 2
@@ -555,7 +645,7 @@ seal_main() {
         || { echo "usage: $0 --review-shard <shard file> [--legacy]" >&2; return 2; }
       seal_review_shard "$2" "${3:-}" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --agent-ere" >&2
+    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --admit-marker <file>... | - | --agent-ere" >&2
        return 2 ;;
   esac
 }

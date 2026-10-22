@@ -1,0 +1,4 @@
+core/hooks/ai-dlc-context-sensor.sh
+!core/hooks/ai-dlc-usage-tokens.sh
+!core/hooks/ai-dlc-window.sh
+!core/hooks/ai-dlc-context-provenance.sh

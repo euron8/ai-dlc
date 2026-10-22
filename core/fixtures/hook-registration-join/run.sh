@@ -231,6 +231,7 @@ if [ -f "$ROOT/templates/settings.json.template" ] && [ -d "$ROOT/core/hooks" ];
   # a parse error at EOF, which is loud; the reason it is worth a comment is that the obvious
   # fix (rewrite the regex to avoid the quote) would work here and break again on the next
   # edit that reintroduces one.
+  echo "HERMETIC-CONSUMED templates/settings.json.template"
   python3 - "$ROOT" > "$T/a11.out" 2>&1 <<'PY'
 import glob, json, os, re, sys
 root = sys.argv[1]

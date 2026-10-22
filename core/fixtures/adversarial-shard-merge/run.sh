@@ -51,6 +51,8 @@ NAME="adversarial-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
 . "$HERE/lib.sh"
 echo "HERMETIC-CONSUMED $MERGE"
+# Every marked shard the arms merge is admitted by the merge's sibling content-seal.sh --admit-marker (BL-750).
+echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
@@ -354,7 +356,7 @@ chv "$d/1.md" "s/^## Findings$/## Findings\\
 mut_merge() { # <old> <new> -> prints the mutated merge's path; empty when the anchor is not there once
   local md s
   md="$(mktemp -d "$WORK/rm.XXXXXX")" || return 1
-  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh; do
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh content-seal.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
   done
   M_OLD="$1" M_NEW="$2" python3 - "$md/merge-adversarial-shards.sh" <<'PY' || return 0

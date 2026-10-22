@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.914.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R5a. It closes BL-750, BL-751, BL-752, BL-754, BL-755 and BL-701, advances BL-584 as a partial, closes no `PC-` id and files no backlog entry. Net for this release: 6 closed, 0 filed = 6. BL-584 is partial and counts as neither.
+
+### BL-750 — a bare completion marker is admitted only inside its legacy window
+
+`content-seal.sh` gains `--admit-marker`, which owns the rule, and `wait-for-deliverable.sh` (`--complete`, `--complete-repair`, `--status`) and the shard merge's completion belt in `merge-adversarial-shards.sh` all call it. Outside content-seal's sealed set a marker is admitted as before. Inside the set, a `sha=` marker must equal the digest of the body above it and pass `--check` against the file's newest seal row, and a bare marker is admitted only while the installed role file its kind names (`<seat>.md`, or `remediator.md` for `repair-complete:`) is legacy, meaning it still carries the `unknown arg: --mark` fallback or carries no `--mark` instruction at all. A missing or unreadable role file refuses. The merge used to refuse a Bash-appended bare marker only when the shard already carried a seal row; a bare marker with no row, or one appended and then sealed by an Edit, now refuses too.
+
+Measured on graph, the consumer this reaches. 364 bare markers sit inside the sealed set: s317 54, s318 192 and s319 118. All of them predate graph's `--mark` role-file install (b8d46687d), and no reachable resume path re-runs a join over a finished directory. With the new scripts, 101 markers that the installed scripts settle after 180 s stay UNFINISHED, and only under an armed beat; no beat is armed. 19 `requirements-elicitation` markers name the seat `elicitation`, which has no role file, so they refuse fail-closed.
+
+### BL-751 — audit-layer-debt reports a future recorded_utc as FUTURE=, and does not refuse it
+
+This release narrows what the entry owed. BL-751 said the validator refuses a layer-adjudication record whose `recorded_utc` is later than the moment it was written. The release only reports it: `audit-layer-debt.sh` counts every row whose `recorded_utc` parses in the schema form and lies more than 300 s past its own run, prints `FUTURE=<n>` beside `MALFORMED=` and names each row, and adds `future_recorded_utc` under `--json`. Both print only when non-empty and the run stays exit 0. Nothing is refused. That narrowing is the operator's to accept. Two layer-debt-ledger cells cover it: a row an hour ahead is `FUTURE=1` and named, and a row stamped at the run instant is not reported.
+
+### BL-752 — the advisor gate's net is recover-gate's 300 s loop, shortenable only
+
+The advisor gate's re-read net is now recover-gate's loop: 300 s, ticking on a `grep -F` of the call's id and re-scanning only once the id is on disk. At the default knob, an owed call with no `tool_use_id` stands down at once instead of waiting out the net, and knobs 0 and 1 are unchanged. `ADVISOR_GATE_NET=<n>` (1..300) can only shorten the net, and the knob statements that called the only knob stricter-only are rewritten. The false "60s default" comment now names the 600 s PreToolUse default. The BL-567 header-only exemption also covers the pass-1 code-review and QA shard directories, which carry no `-p<N>`; in that family it tests `####`, so the template's empty `###` severity containers count as header. New cells: `rr-noid` must answer inside 5 s, two pass-1 template near-misses are silent and their two `####` twins deny.
+
+### BL-754 — hermetic-run.sh names the verdict store it wrote
+
+The success line now prints `verdict recorded in <store>`, the resolved `<base>/<root commit>` directory, in place of the fixed "in the shared store", so a throwaway `AI_DLC_VERDICT_STORE` run and a real store write read differently. The entry gains a `verify: sh` receipt that drives a probe fixture through the real runner with a mktemp store.
+
+### BL-755 — review-shard-merge's mutants copy the derived sibling set and run one cell each
+
+Each mutant, and its control, now copies the sibling set derived from what the predicates call and what those scripts resolve beside themselves, iterated to a fixed point, instead of `cp -R` of all of `core/scripts`. Arm SIB asserts the set holds the `mut_run` siblings and is smaller than the directory. Every predicate a mutant drives gates its cells on `cell <name>` in `lib.sh`, every `mut_run` line names its cell with `CS_ONLY=`, and `mut_run` asserts exactly one cell ran (CS-UNSELECTED otherwise). VBCTL is per mutant. No timing run was taken; the receipt `receipt-bl755.sh` is structural.
+
+### BL-701 — the fixture count derives over run.sh dirs and the read-set map drops the declared fixtures
+
+`CLAUDE.md` now prescribes `ls core/fixtures/*/run.sh | wc -l`, the population the pre-push hook dispatches (260 on this tree, where the old `find` form gave 263 by counting `lib`, `check-h1-recursion` and `check-manifest-bypass`). The derived read-set map drops the declared fixtures' rows and the dead `notify-hook-channel` rows: 3 fixtures, 71 entries, 65 distinct paths, the three `.undeclarable` fixtures.
+
+### BL-584 (partial) — 34 fixtures declared and I74(e) binds the `.undeclarable` marker
+
+Partial: owed (2) is met and owed (3), the trace-stream drop cause, stays open, so the entry gets progress text and no LANDED line. 34 fixtures gain `inputs.decl`. `retro-compliance-workflow` carries `.undeclarable`, because its subject `core/ci-templates/validate-retro-compliance.yml` reaches a consumer only when `.github/workflows` exists. New arm I74(e) of `validate-enforcement-map.sh` requires every `core/fixtures/*/` directory with a `run.sh` to carry exactly one of `inputs.decl` or a `.undeclarable` marker whose first line is a non-empty reason; it has a self-probe, fails closed on zero scanned dirs, and moved the fork total by +3.
+
 ## [0.913.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R2. It closes BL-733, BL-736 and BL-716, closes no `PC-` id and files no backlog entry. Net for this release: 3 closed, 0 filed = 3. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/join-remediator-shards.sh` and `core/scripts/validate-adversarial-convergence.sh`. Role and step text changes: `core/team-roles/remediator.md`, `core/team-roles/pm-escalated.md`, `core/skills/ai-dlc/steps/_gate-procedures.md` and `core/skills/ai-dlc/steps/gate-validation.md`.

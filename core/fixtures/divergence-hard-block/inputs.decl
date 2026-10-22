@@ -1,0 +1,6 @@
+# subject files are resolved in the distribution layout; a consumer maps core/ paths
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json
+core/hooks/
+core/fixtures/lib/

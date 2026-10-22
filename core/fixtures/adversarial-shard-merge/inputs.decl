@@ -3,6 +3,8 @@
 # scripts are declared one by one, against a fresh sandbox read-set trace. validate-provenance-block.sh's optional
 # probes -- lib/meta-gate.sh and core/skills/ai-dlc/extensions/known-skills.json -- do not exist at tip and are not declared.
 !core/scripts/merge-adversarial-shards.sh
+# The merge hands every marked shard to this sibling's --admit-marker (BL-750); absent, every marked arm refuses.
+!core/scripts/content-seal.sh
 core/scripts/partition-document.sh
 core/scripts/partition-subject.sh
 core/scripts/validate-adversarial-convergence.sh

@@ -31,6 +31,7 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+[ -r "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

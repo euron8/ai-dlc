@@ -54,6 +54,10 @@ for v in STS GV DEV QA CR IMP SR HE SCHEMA SSH; do
   fi
 done
 
+for p in skills/ai-dlc/steps/stories-test-strategy.md skills/ai-dlc/steps/gate-validation.md team-roles/dev.md team-roles/qa.md team-roles/code-reviewer.md skills/ai-dlc/steps/implementation.md skills/ai-dlc/steps/sprint-review.md schemas/sprint-status.json scripts/validate-handoff-evidence.sh scripts/sprint-status.sh; do
+  echo "HERMETIC-CONSUMED core/$p"
+done
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 rc=0

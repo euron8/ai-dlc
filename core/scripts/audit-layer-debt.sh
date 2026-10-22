@@ -99,6 +99,29 @@ with open(path, encoding="utf-8") as fh:
         except Exception:
             malformed += 1
 
+# A FUTURE INSTANT IS COUNTED AND NAMED, NEVER REFUSED (BL-751). The withdrawal arm below keys on
+# (entry, recorded_utc), so a stamp later than the moment it was written is a valid key that every
+# later correct record on the same entry sorts BEFORE: an append-only correction can then never
+# withdraw it. Measured on the reference consumer during one pull: 9 of 20 new rows carried a
+# hand-typed instant about 16 minutes ahead of `date -u`. A row is FUTURE when its `recorded_utc`
+# parses in the schema form and lies more than SKEW seconds past this run; the allowance absorbs a
+# clock read a little before the row was appended. An unparseable instant is not FUTURE, since
+# this arm cannot place it. Report-only like the rest of this file, so it stays exit 0.
+import calendar, time
+SKEW = 300
+run_epoch = int(time.time())
+future = []
+for r in rows:
+    u = r.get("recorded_utc")
+    if not isinstance(u, str):
+        continue
+    try:
+        t = calendar.timegm(time.strptime(u, "%Y-%m-%dT%H:%M:%SZ"))
+    except Exception:
+        continue
+    if t > run_epoch + SKEW:
+        future.append((r.get("entry", "") or "", u))
+
 
 # ONE PREDICATE, ONE READER. `closes_owed` is now read by two arms — the debt join below and
 # the migration arm at the foot — and a restated coercion is how those two come to disagree
@@ -622,14 +645,26 @@ if as_json:
     if bad_withdrawals:
         doc["unresolved_withdrawals"] = [{"entry": e, "recorded_utc": u, "names": t, "why": y}
                                          for e, u, t, y in bad_withdrawals]
+    if future:
+        doc["future_recorded_utc"] = [{"entry": e, "recorded_utc": u} for e, u in future]
     print(json.dumps(doc, indent=1))
     raise SystemExit(0)
 
-print("LAYER DEBT  register=%s  rows=%d%s%s"
+print("LAYER DEBT  register=%s  rows=%d%s%s%s"
       % (path, len(rows), ("  MALFORMED=%d" % malformed) if malformed else "",
+         ("  FUTURE=%d" % len(future)) if future else "",
          ("  MISTYPED_CLOSES_OWED=%d (coerced to a list for this run; the schema says array — fix the row)"
           % mistyped) if mistyped else ""))
 print()
+# Printed only when non-empty, so a register with no future instant reads byte-identically.
+if future:
+    print("FUTURE recorded_utc (%d) — later than this run by more than %ds; a later correct record sorts before it:"
+          % (len(future), SKEW))
+    for e, u in future:
+        print("  %-44s %s" % (e.split("/")[-1][:44], u))
+    print()
+    print("  Append a corrected row stamped from `date -u`; the register is append-only.")
+    print()
 if open_items:
     print("OPEN (%d) — declared by a row, closed by none:" % len(open_items))
     for d in open_items:

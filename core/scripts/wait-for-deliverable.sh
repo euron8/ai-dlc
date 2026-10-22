@@ -378,6 +378,17 @@ set -u
 #   restarts it, and the file delivers only once `now - epoch > SETTLE` in whole seconds
 #   (so at least SETTLE real seconds). A file that loses its marker drops its sidecar.
 #
+#   THAT NET IS BOUNDED BY THE MARKER ADMISSION (BL-750; content-seal.sh header "THE MARKER
+#   ADMISSION", which owns the rule). For a target under `planning-artifacts/` the sibling
+#   `content-seal.sh --admit-marker` runs before the settle window: inside its sealed set a bare marker
+#   is admitted only while the installed role file its seat names still carries the pre-`--mark`
+#   fallback (or no `--mark` instruction), and a missing role file refuses; a sealed marker must also
+#   match its file's newest seal row. A refused marker is reported, on every beat, at exhaustion and by
+#   --status, as
+#     UNFINISHED <path> -- ends in seat-complete: but its marker is not admitted: <refusal text>
+#   and opens no settle record. Outside the sealed set (an `epics/part-<n>.md`, a party-mode record) and
+#   for any target not under `planning-artifacts/`, the settle path is unchanged.
+#
 #   THE WINDOW IS MEASURED, NOT THE POLL INTERVAL. That seat's harness transcript records
 #   one Write and seven Edits of its file, 18:10:59Z to 18:14:08Z, with gaps of 29.7, 1.7,
 #   1.6, 5.1, 146.6, 2.4 and 1.4 seconds. A window of one poll (10s) delivered it between
@@ -909,6 +920,9 @@ WD_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 # --shard-header's checker: the sibling beside this script (header: "--shard-header"), never a walk.
 SHARD_CHECK="${WD_SCRIPT_DIR}/merge-adversarial-shards.sh"
+# THE MARKER ADMISSION (BL-750; content-seal.sh header "THE MARKER ADMISSION"), the sibling beside
+# this script. Consulted only for a target under `planning-artifacts/`; see admit_refused.
+WD_SEAL="${WD_SCRIPT_DIR}/content-seal.sh"
 if [ -n "$SHARD_AXIS" ] && [ ! -f "$SHARD_CHECK" ]; then
   echo "FAIL: --shard-header needs merge-adversarial-shards.sh beside this script ($SHARD_CHECK)." >&2
   echo "  Without it no shard header can be checked, so every marked shard would be refused." >&2
@@ -1226,7 +1240,11 @@ is_delivered() {  # $1 = path, $2 = join epoch
   if [ -n "$SHARD_AXIS" ] && header_refused "$1"; then return 1; fi
   # THE SEAL DECIDES, WITH NO WINDOW (header: "--mark"). A sealed marker delivers now; a broken
   # one is UNFINISHED at any age until the seat re-marks. Only a legacy marker reaches SETTLE.
+  # THE MARKER ADMISSION (BL-750) runs on the sealed and the legacy marker, never the broken one,
+  # which keeps its own line: inside content-seal's sealed set a bare marker outside the legacy
+  # window, or a sealed one whose file differs from its seal row, is UNFINISHED and opens no settle record.
   seal_of "$1"; id_sv_=$?
+  if [ "$id_sv_" -eq 1 ] || admit_refused "$1"; then id_sv_=1; fi
   if [ "$id_sv_" -ne 2 ]; then
     rm -f "$id_st_" 2>/dev/null; settle_memo "$id_st_" ""
     return "$id_sv_"
@@ -1263,6 +1281,35 @@ header_refused() {  # $1 = path
   fi
   if [ -n "$hr_h_" ]; then eval "HCH_${hr_k_}=\$hr_h_; HCM_${hr_k_}=\$HC_MSG"; fi
   [ -n "$HC_MSG" ]
+}
+
+# THE MARKER ADMISSION (BL-750): 0 when content-seal.sh --admit-marker REFUSES $1's marker, with
+# AD_MSG set to its line; 1 when it admits it. Only a target under `planning-artifacts/` is asked,
+# because the sealed set lives there and nothing outside it is ever refused. A missing sibling, or any
+# exit but 0 and 1, refuses: a check that could not run never acquits. Memoised per process on the
+# content hash, as header_refused is.
+admit_refused() {  # $1 = path
+  ar_p_="$(cd "$(dirname "$1")" 2>/dev/null && pwd)/$(basename "$1")"
+  case "$ar_p_" in */planning-artifacts/*) ;; *) AD_MSG=""; return 1 ;; esac
+  ar_h_="$(content_hash "$1")"; ar_k_="$(key_of "$1")"
+  eval "ar_mh_=\${ADH_${ar_k_}:-}"
+  if [ -n "$ar_h_" ] && [ "$ar_mh_" = "$ar_h_" ]; then
+    eval "AD_MSG=\${ADM_${ar_k_}:-}"
+    [ -n "$AD_MSG" ]; return
+  fi
+  if [ ! -f "$WD_SEAL" ]; then
+    AD_MSG="no marker admission ran: content-seal.sh is missing beside this script ($WD_SEAL); reinstall ai-dlc"
+  else
+    ar_o_="$(bash "$WD_SEAL" --admit-marker "$1" 2>&1)"; ar_rc_=$?
+    ar_o_="$(printf '%s' "$ar_o_" | tr '\n' ' ')"; ar_o_="${ar_o_% }"
+    case "$ar_rc_" in
+      0) AD_MSG="" ;;
+      1) AD_MSG="${ar_o_:-the marker admission exited 1 and printed nothing}" ;;
+      *) AD_MSG="the marker admission could not run (exit $ar_rc_): ${ar_o_:-no output}" ;;
+    esac
+  fi
+  if [ -n "$ar_h_" ]; then eval "ADH_${ar_k_}=\$ar_h_; ADM_${ar_k_}=\$AD_MSG"; fi
+  [ -n "$AD_MSG" ]
 }
 
 # THE SETTLE RECORD IS MEMOISED PER PROCESS for the reason the join epoch is (join_of): a
@@ -1368,10 +1415,20 @@ is_seal_broken() {  # $1 = path, $2 = join epoch
 say_seal_broken() {  # $1 = path. The one emitter of this line, at every site.
   echo "UNFINISHED $1 -- its ${MARK_NAME} line carries sha= but the file changed after it was marked; re-mark with --mark"
 }
+# A REFUSED MARKER (BL-750): present, written since the join armed, marked, header passing, seal not
+# broken, and its marker refused by the admission.
+is_admit_refused() {  # $1 = path, $2 = join epoch; sets AD_MSG
+  [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && has_marker "$1" \
+    && ! { [ -n "$SHARD_AXIS" ] && header_refused "$1"; } && { seal_of "$1"; [ $? -ne 1 ]; } && admit_refused "$1"
+}
+say_admit_refused() {  # $1 = path; reads AD_MSG. The one emitter of this line, at every site.
+  echo "UNFINISHED $1 -- ends in ${MARK_NAME} but its marker is not admitted: $AD_MSG"
+}
 say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
   is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not ${MARK_NAME}"
   is_header_unfinished "$1" "$2" && say_header_unfinished "$1"
   is_seal_broken "$1" "$2" && say_seal_broken "$1"
+  is_admit_refused "$1" "$2" && say_admit_refused "$1"
   return 0
 }
 
@@ -1802,10 +1859,12 @@ if [ "$STATUS" -eq 1 ]; then
       S_V="UNFINISHED"; echo "UNFINISHED $t -- present, last non-blank line is not ${MARK_NAME}"
     elif [ -n "$SHARD_AXIS" ] && header_refused "$t"; then
       S_V="UNFINISHED"; say_header_unfinished "$t"
+    elif seal_of "$t"; [ "$SEAL_V" = "broken" ]; then
+      S_V="UNFINISHED"; say_seal_broken "$t"
+    elif admit_refused "$t"; then
+      S_V="UNFINISHED"; say_admit_refused "$t"
     elif seal_of "$t"; then
       S_V="DELIVERED"; echo "DELIVERED $t"
-    elif [ "$SEAL_V" = "broken" ]; then
-      S_V="UNFINISHED"; say_seal_broken "$t"
     else
       ss_rec="$(cat "${COUNTER_DIR}/$(key_of "$t").settle" 2>/dev/null || echo '')"
       ss_t="${ss_rec#* }"; case "$ss_t" in ''|*[!0-9]*) ss_t="" ;; esac
@@ -2114,6 +2173,9 @@ if [ -n "$EXHAUSTED" ]; then
     elif is_seal_broken "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       say_seal_broken "$t"
+    elif is_admit_refused "$t" "$(join_of "$t")"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      say_admit_refused "$t"
     elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in ${MARK_NAME}, but its content was still changing"

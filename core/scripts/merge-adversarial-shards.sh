@@ -82,6 +82,9 @@
 #   THE CONTENT SEAL. A shard whose bytes differ from its newest `kind: "content-seal"` row (taken
 #   by ai-dlc-content-seal.sh after every Write or Edit) is REFUSED, naming that row's writer and the
 #   remedy; a shard with no seal row is not compared. content-seal.sh owns the set and the check.
+#   THE MARKER ADMISSION (BL-750). A marked shard is also handed to `content-seal.sh --admit-marker`:
+#   a bare `seat-complete:` line (no `sha=`) merges only while the installed role file its seat names
+#   is in the legacy state, and a `sha=` marker must match the body above it. content-seal.sh owns it.
 #   A shard whose LAST TOOL seal row (actor `agent` or `session`, in file order; program rows such as
 #   `--mark`'s skipped; `content-seal.sh --last-tool-row`, one call over all shards) is the top-level
 #   session's is REFUSED in the same phase, naming its tool and ts and the remedy: re-dispatch the
@@ -1212,6 +1215,31 @@ done < "$T/shards"
 if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
   sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
   refuse "$sc_bad does not end in 'seat-complete: ' while another shard in $SHARD_DIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <adversary> <shard>')"
+fi
+# THE MARKER ADMISSION (BL-750; content-seal.sh header "THE MARKER ADMISSION" owns the rule): every
+# marked shard is handed to `content-seal.sh --admit-marker`, one call. A bare marker outside the
+# legacy window, or a sha= marker whose digest is not the body above it, is REFUSED with its line. The
+# sibling absent, or any exit but 0 and 1, refuses: an admission that could not run never acquits.
+if grep -q '^Y' "$T/sc"; then
+  [ -f "$SEAL" ] || refuse "a shard in $SHARD_DIR ends in 'seat-complete: ' and $SEAL is absent, so its marker cannot be admitted; reinstall ai-dlc"
+  # The path list is staged in files with every producer's status checked: a failed read must never hand
+  # the admission an empty or partial list, which it would answer with success.
+  awk -F'\t' '$1 == "Y" { print $2 }' "$T/sc" > "$T/admit-keys" || refuse "cannot list the marked shards of $SHARD_DIR for the marker admission"
+  : > "$T/admit-in" || refuse "cannot stage the marker admission input"
+  while IFS= read -r _sk; do
+    awk -F'\t' -v k="$_sk" '$1 == k { print $2; exit }' "$T/shards" >> "$T/admit-in" || refuse "cannot resolve the path of shard $_sk for the marker admission"
+  done < "$T/admit-keys"
+  # The count join: one resolved path per marked shard. A lookup that printed nothing for a key is not a failed
+  # command, so the producer checks above cannot see it, and the admission would judge a shorter list.
+  _nk="$(grep -c . "$T/admit-keys")" || _nk=0
+  _ni="$(grep -c . "$T/admit-in")" || _ni=0
+  [ "$_nk" = "$_ni" ] || refuse "the marker admission input holds $_ni path(s) for $_nk marked shard(s) in $SHARD_DIR; a shard's path was not resolved, so its marker was not admitted"
+  bash "$SEAL" --admit-marker - < "$T/admit-in" > "$T/admit" 2>&1; _arc=$?
+  case "$_arc" in
+    0) ;;
+    1) while IFS= read -r _al; do [ -n "$_al" ] && collect "$_al"; done < "$T/admit"; phase_barrier ;;
+    *) refuse "the marker admission over $SHARD_DIR did not run (exit $_arc): $(head -1 "$T/admit")" ;;
+  esac
 fi
 
 # ---- per-shard parse ----------------------------------------------------------------------

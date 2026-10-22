@@ -1,0 +1,4 @@
+core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json
+core/skills/ai-dlc/steps/retro.md
+core/fixtures/lib/

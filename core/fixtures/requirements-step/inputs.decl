@@ -1,0 +1,8 @@
+!core/skills/ai-dlc/steps/route.md
+!core/skills/ai-dlc/steps/requirements.md
+!core/skills/ai-dlc/steps/carry-over-evaluation.md
+!core/skills/ai-dlc/steps/gate-validation.md
+!core/skills/ai-dlc/SKILL.md
+!core/scripts/validate-draft-stamps.sh
+core/skills/ai-dlc/steps/
+core/fixtures/lib/preamble.sh

@@ -1,0 +1,10 @@
+bash
+sed
+head
+grep
+cat
+mkdir
+mktemp
+tail
+rm
+dirname

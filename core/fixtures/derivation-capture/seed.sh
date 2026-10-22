@@ -57,10 +57,10 @@ chmod +x "$CONSUMER/.claude/hooks/ai-dlc-derivation-capture.sh" \
          "$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 # The snapshot stamp carrier delegates to the REAL budget validator, from the same layout.
 SRC_BUDGET="$(dirname "$SRC_VALIDATOR")/validate-artifact-budget.sh"
-[ -r "$SRC_BUDGET" ] && cp "$SRC_BUDGET" "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh"
+[ -r "$SRC_BUDGET" ] && cp "$SRC_BUDGET" "$CONSUMER/scripts/ai-dlc/validate-artifact-budget.sh" && echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh" >&2
 # Its LATE arm resolves each agent-cell candidate through these siblings; absent, it judges nothing.
 for _sib in wait-for-deliverable.sh validate-adversarial-convergence.sh wfd-start-of.sh; do
-  [ -r "$(dirname "$SRC_VALIDATOR")/$_sib" ] && cp "$(dirname "$SRC_VALIDATOR")/$_sib" "$CONSUMER/scripts/ai-dlc/$_sib"
+  [ -r "$(dirname "$SRC_VALIDATOR")/$_sib" ] && cp "$(dirname "$SRC_VALIDATOR")/$_sib" "$CONSUMER/scripts/ai-dlc/$_sib" && echo "HERMETIC-CONSUMED core/scripts/$_sib" >&2
 done
 
 ART="$CONSUMER/_bmad-output/planning-artifacts/s1/stories-repair-p1.md"
@@ -188,7 +188,7 @@ done
 if [ -n "$SRC_PART" ]; then
   bash "$SRC_PART" --split "$SPLIT_DOC" "$REPDIR" >/dev/null 2>&1 \
     || { echo "FIXTURE ERROR: partition-document.sh --split refused the seeded document" >&2; exit 2; }
-  SPLIT_BY="partition-document.sh"
+  SPLIT_BY="partition-document.sh"; echo "HERMETIC-CONSUMED core/scripts/partition-document.sh" >&2
 else
   mkdir -p "$REPDIR/sections"
   sed -n '1,7p' "$SPLIT_DOC" > "$REPDIR/sections/1.md"

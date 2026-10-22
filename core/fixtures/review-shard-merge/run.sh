@@ -301,89 +301,138 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
       { i = index($0, o); if (i > 0) $0 = substr($0, 1, i - 1) w substr($0, i + length(o)); print }' "$f" > "$f.mut" \
       && ! cmp -s "$f" "$f.mut" && cat "$f.mut" > "$f" && rm -f "$f.mut"
   }
-  mut_run() { # <id> <file> <old> <new> <predicate> <reason token> <label>
+  # THE COPY IS THE DERIVED SIBLING SET (BL-755), never the whole script directory. Its roots are the
+  # scripts the predicates invoke through their script-dir argument (`$sd/`, `$1/`, `$md/`, `$vb_ctl/`
+  # joined to `<name>.sh` in lib.sh and this file). The closure adds every `<name>.sh` that a
+  # non-comment line of a member resolves beside itself, meaning a directory expression (`$VAR/`,
+  # `${VAR}/`, `)/`) joined to the name, until nothing is added. A sibling the closure misses cannot pass
+  # silently: every mutant first runs its selected cell over the UNMUTATED copy (the control, below).
+  sib_set() { # -> the derived set, one basename per line, sorted
+    local s t f new
+    s="$(grep -ohE '\$(sd|1|md|vb_ctl)/[A-Za-z0-9_-]+\.sh' "$LIB_DIR/lib.sh" "$LIB_DIR/run.sh" | sed 's|.*/||' | sort -u)"
+    while :; do
+      new="$s"
+      for f in $s; do
+        [ -f "$SRCDIR/$f" ] || continue
+        for t in $(grep -v '^[[:space:]]*#' "$SRCDIR/$f" | grep -oE '(\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\))/[A-Za-z0-9_-]+\.sh' | sed 's|.*/||' | sort -u); do
+          [ -f "$SRCDIR/$t" ] && new="$(printf '%s\n%s\n' "$new" "$t" | sort -u)"
+        done
+      done
+      [ "$new" = "$s" ] && break
+      s="$new"
+    done
+    for f in $s; do [ -f "$SRCDIR/$f" ] && printf '%s\n' "$f"; done
+  }
+  SIB_SET="$(sib_set)"
+  sib_copy() { # <fresh dir> -> 0 when it holds exactly SIB_SET, byte-identical to SRCDIR's
+    local f
+    [ ! -e "$1" ] && mkdir -p "$1" || return 1
+    for f in $SIB_SET; do cp "$SRCDIR/$f" "$1/$f" || return 1; done
+    [ "$(for f in "$1"/*; do [ -f "$f" ] && basename "$f"; done | sort)" = "$SIB_SET" ]
+  }
+  # The set must hold what every predicate drives and what the merge, --mark and the seal resolve. Its
+  # size against the directory is printed, never asserted: under hermetic-run the directory holds only
+  # declared inputs, so the two can be equal there; sib_copy asserts each copy IS the set, nothing more.
+  sib_n="$(printf '%s\n' "$SIB_SET" | grep -c .)" || sib_n=0
+  src_n=0; for f in "$SRCDIR"/*; do [ -f "$f" ] && src_n=$((src_n + 1)); done
+  sib_miss=""
+  for f in merge-review-shards.sh wait-for-deliverable.sh content-seal.sh partition-review-diff.sh partition-document.sh \
+           merge-adversarial-shards.sh validate-adversarial-convergence.sh wfd-start-of.sh artifact-path-config.sh; do
+    grep -qxF "$f" <<<"$SIB_SET" || sib_miss="$sib_miss $f"
+  done
+  if [ -z "$sib_miss" ] && [ "$sib_n" -ge 9 ]; then
+    ok "SIB: the mutant copy is the derived sibling set, $sib_n of the $src_n files in $SRCDIR, holding the four mut_run siblings and every script they resolve"
+  else bad "SIB: FIXTURE ERROR -- the derived sibling set ($sib_n of $src_n) lacks [${sib_miss# }]"; fi
+  # THE SELECTOR (BL-755). Every mut_run line names the one cell its mutant is scored on (CS_ONLY), and
+  # every predicate a mutant drives runs only that cell (lib.sh `cell`). CS_RAN counts the cells run. The
+  # control is each mutant's own cell over the UNMUTATED copy in vb_ctl, which must run exactly ONE cell
+  # and pass. A mutant run that runs no cell prints the sentinel `CS-UNSELECTED`, which the receipt counts.
+  vb_ctl="$WORK/mut-VBCTL"; VB_CTL_N=0; VB_CTL_OK=1
+  if sib_copy "$vb_ctl" && cmp -s "$SRCDIR/merge-review-shards.sh" "$vb_ctl/merge-review-shards.sh"; then :; else VB_CTL_OK=0; fi
+  mut_run() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
     local id="$1" md="$WORK/mut-$1"
-    [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || { bad "$id: FIXTURE ERROR -- the script directory was not copied fresh"; return; }
+    [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
+    [ "$VB_CTL_OK" = 1 ] || { bad "$id: FIXTURE ERROR -- the unmutated control copy $vb_ctl was not built from the derived set"; return; }
+    WHY=""; CS_RAN=0
+    if "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then VB_CTL_N=$((VB_CTL_N + 1))
+    else bad "$id: FIXTURE ERROR -- the unmutated copy failed cell '$CS_ONLY' of $5 (cells run: $CS_RAN):${WHY}"; return; fi
+    sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
     [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
       || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
     mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
-    WHY=""
+    WHY=""; CS_RAN=0
     if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
     elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then ok "$id: killed -- $7 ($5:${WHY})"
     else bad "$id: died for another reason than '$6' -- $7 ($5:${WHY})"; fi
+    [ "$CS_RAN" -le 1 ] || bad "$id: FIXTURE ERROR -- the mutant ran $CS_RAN cells of $5 under CS_ONLY=$CS_ONLY, not one"
+    [ "$CS_RAN" -ge 1 ] || echo "CS-UNSELECTED: $id ran no cell of $5 for CS_ONLY=$CS_ONLY"
   }
   CS_ONLY=partcite mut_run M1 merge-review-shards.sh '[ $# -eq 1 ] && [ "$1" = "$key" ]' \
     '{ [ -n "$CHECK" ] || { [ $# -eq 1 ] && [ "$1" = "$key" ]; }; }' cs "csc_partcite{" \
     "the part-cite refusal dropped in --check-shard only"
-  mut_run M2 merge-review-shards.sh '|| collect_dup "$sf:$line ($key) cites$distinct, a finding owned by' \
+  CS_ONLY=dup-merge mut_run M2 merge-review-shards.sh '|| collect_dup "$sf:$line ($key) cites$distinct, a finding owned by' \
     '|| refuse_to "$ownk" "$sf:$line ($key) cites$distinct, a finding owned by' owner "dup-merge{" \
     "the owner-duplicate refusal names the owner"
-  mut_run M3 wait-for-deliverable.sh '[ "$mk_s_" != "!" ] || mark_refuse' 'true || mark_refuse' mark "shard-3{" \
+  CS_ONLY=shard-3 mut_run M3 wait-for-deliverable.sh '[ "$mk_s_" != "!" ] || mark_refuse' 'true || mark_refuse' mark "shard-3{" \
     "--mark skips the <shard> key check"
-  mut_run M4 wait-for-deliverable.sh '*-qa-validation-????????????) MK_GATE=qa ;;' '*-qa-validation-NOMATCH) MK_GATE=qa ;;' \
+  CS_ONLY=seal-rewrite mut_run M4 wait-for-deliverable.sh '*-qa-validation-????????????) MK_GATE=qa ;;' '*-qa-validation-NOMATCH) MK_GATE=qa ;;' \
     seal_rewrite "review-shard branch" "--mark's review-shard (seal) branch does not match a qa-validation path"
-  mut_run M5 merge-review-shards.sh 'present) refuse "' 'present) : "' legacy "sentinel{" \
+  CS_ONLY=sentinel mut_run M5 merge-review-shards.sh 'present) refuse "' 'present) : "' legacy "sentinel{" \
     "a legacy marker is accepted when the frozen sha's engine carries the sentinel"
-  mut_run M6 merge-review-shards.sh '[ "$ENGINE" != present ] || SEAL_MODE=""' ':' unmarked "unmarked-sentinel{" \
+  CS_ONLY=unmarked-sentinel mut_run M6 merge-review-shards.sh '[ "$ENGINE" != present ] || SEAL_MODE=""' ':' unmarked "unmarked-sentinel{" \
     "the unmarked shard's engine reading is dropped, so it keeps the legacy seal"
-  # BL-740. The CONTROL first: an unmutated copy built exactly as mut_run builds one must pass every
-  # VB predicate, so a copy that cannot run reads as FIXTURE ERROR, never as four kills.
-  vb_ctl="$WORK/mut-VBCTL"
-  if [ ! -e "$vb_ctl" ] && cp -R "$SRCDIR" "$vb_ctl" && [ -f "$vb_ctl/merge-review-shards.sh" ] && [ -f "$vb_ctl/wait-for-deliverable.sh" ] \
-     && [ -f "$vb_ctl/content-seal.sh" ] && [ -f "$vb_ctl/partition-review-diff.sh" ] && cmp -s "$SRCDIR/merge-review-shards.sh" "$vb_ctl/merge-review-shards.sh"; then
-    vb_cf=""
-    for _p in vb_cr vb_qa vb_qmode vb_qleg vb_r3 vb_mark fr_verdict fr_orphan serial; do WHY=""; "p_$_p" "$vb_ctl" || vb_cf="$vb_cf $_p:${WHY}"; done
-    if [ -z "$vb_cf" ]; then ok "VBCTL: CONTROL -- an unmutated copy of the script directory passes VB1-VB4, VB2L, FR1, FR2 and SR1"
-    else bad "VBCTL: FIXTURE ERROR -- the unmutated copy failed [${vb_cf# }], so no M7-M18 verdict is evidence"; fi
-  else
-    bad "VBCTL: FIXTURE ERROR -- the unmutated script directory was not copied fresh with its siblings"
-  fi
-  mut_run M7 merge-review-shards.sh '      NEEDS_REWORK|BLOCKED)' '      M7)' vb_qa "q-nr-empty{" \
+  # BL-740. The CONTROL is now per mutant: mut_run runs each mutant's own selected cell over the
+  # unmutated copy in $vb_ctl (the same derived set every mutant copies) before it scores the mutant,
+  # and VBCTL, after M22, asserts that every mutant's control ran.
+  CS_ONLY=q-nr-empty mut_run M7 merge-review-shards.sh '      NEEDS_REWORK|BLOCKED)' '      M7)' vb_qa "q-nr-empty{" \
     "the severity-mode verdict-backing rule removed"
-  mut_run M8 merge-review-shards.sh '(cls(t, ENVIRON["PS_IMP_"]) ? "imp" : "")' '"imp"' vb_cr "cr-blocked-sug{" \
+  CS_ONLY=cr-blocked-sug mut_run M8 merge-review-shards.sh '(cls(t, ENVIRON["PS_IMP_"]) ? "imp" : "")' '"imp"' vb_cr "cr-blocked-sug{" \
     "a Suggestions finding counted as Important"
-  mut_run M9 merge-review-shards.sh '[ "$kc_" -eq 0 ] \' 'true \' vb_cr "cr-approved-crit{" \
+  CS_ONLY=cr-approved-crit mut_run M9 merge-review-shards.sh '[ "$kc_" -eq 0 ] \' 'true \' vb_cr "cr-approved-crit{" \
     "the APPROVED-forbids-Critical half dropped"
-  mut_run M10 merge-review-shards.sh 'CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"' 'CRIT_NAME="Critical"; IMP_NAME=""; SUG_NAME="Suggestions"' \
+  CS_ONLY=cr-nr-imp mut_run M10 merge-review-shards.sh 'CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"' 'CRIT_NAME="Critical"; IMP_NAME=""; SUG_NAME="Suggestions"' \
     vb_cr "cr-nr-imp{" "the container lift replaced by a hard-coded list that omits Important"
   # M11 keeps all three r3 phrases present and reverses only their ORDER (the file-here clause first),
   # so the single token that can fire is the order one.
-  mut_run M11 merge-review-shards.sh \
+  CS_ONLY=r3-graph-cross1 mut_run M11 merge-review-shards.sh \
     "If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it; otherwise file the finding that makes it \$v here, as a '#### ' heading under '### \$CRIT_NAME' or '### \$IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry), or move" \
     "Either way, otherwise file the finding that makes it \$v here, as a '#### ' heading under '### \$CRIT_NAME' or '### \$IMP_NAME' with a 'parts:' set this shard may own (one the owning group's shard does not already carry); If the finding belongs to another shard, set 'shard-verdict: \$best_' here and let that shard's verdict carry it, or move" \
     vb_r3 "r3-owner-first-order{" "the owner-first clause moved after the file-here clause"
   # BL-746. M12 reads qa.md as count-only whatever its template declares (code-review's rule only);
   # M13 drops the zero-container fallback, so a consumer's installed qa.md is refused; M14 drops the
   # unclassed-finding refusal. Each is owned by one cell.
-  mut_run M12 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if [ "$GATE" = qa ]; then' \
+  CS_ONLY=q-mode-sug mut_run M12 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if [ "$GATE" = qa ]; then' \
     vb_qmode "q-mode-sug{" "QA stays count-only when qa.md declares the three containers"
-  mut_run M13 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if false; then' \
+  CS_ONLY=q-leg-nr-one mut_run M13 merge-review-shards.sh 'if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then' 'if false; then' \
     vb_qleg "q-leg-nr-one{" "the zero-container fallback dropped, so the old installed qa.md is refused"
-  mut_run M14 merge-review-shards.sh '[ "$ku_" = 0 ] \' 'true \' vb_qa "q-unclassed{" \
+  CS_ONLY=q-unclassed mut_run M14 merge-review-shards.sh '[ "$ku_" = 0 ] \' 'true \' vb_qa "q-unclassed{" \
     "a finding under no container accepted in severity mode"
   # BL-747. M15 removes the FAIL-row gate from the merge; M16 reads the first column after AC instead
   # of the one headed Result/Verdict; M17 matches the AC id as a substring.
-  mut_run M15 merge-review-shards.sh '  fail_gate "$(awk' '  : "$(awk' fr_verdict "fr-plain{" \
+  CS_ONLY=fr-plain mut_run M15 merge-review-shards.sh '  fail_gate "$(awk' '  : "$(awk' fr_verdict "fr-plain{" \
     "the FAIL-row check removed from the merge"
-  mut_run M16 merge-review-shards.sh 'if (!ac) ac = 2' 'if (!ac) ac = 2; rc = ac + 1' fr_verdict "fr-reorder{" \
+  CS_ONLY=fr-reorder mut_run M16 merge-review-shards.sh 'if (!ac) ac = 2' 'if (!ac) ac = 2; rc = ac + 1' fr_verdict "fr-reorder{" \
     "the result column read by position instead of by its header"
-  mut_run M17 merge-review-shards.sh 'if (p !~ /[A-Za-z0-9.]/ && q !~ /[A-Za-z0-9.]/) return 1' 'return 1' fr_orphan "fr-ac10{" \
+  CS_ONLY=fr-ac10 mut_run M17 merge-review-shards.sh 'if (p !~ /[A-Za-z0-9.]/ && q !~ /[A-Za-z0-9.]/) return 1' 'return 1' fr_orphan "fr-ac10{" \
     "the AC id matched as a substring, so AC10 names AC1"
   # BL-742. M18 drops --check-serial's set-membership read.
-  mut_run M18 merge-review-shards.sh '    *" $C1V "*) ;;' '    *) ;;' serial "sr-q-set{" \
+  CS_ONLY=sr-q-set mut_run M18 merge-review-shards.sh '    *" $C1V "*) ;;' '    *) ;;' serial "sr-q-set{" \
     "--check-serial skips the set-membership read"
-  mut_run M19 merge-review-shards.sh '  [ "$C1D" = 1 ] \' '  [ "$C1N" = 1 ] \' serial "sr-q-twosame{" \
+  CS_ONLY=sr-q-twosame mut_run M19 merge-review-shards.sh '  [ "$C1D" = 1 ] \' '  [ "$C1N" = 1 ] \' serial "sr-q-twosame{" \
     "--check-serial reverts to the merge's strict one-match count"
   # M20 drops the severity boundary's LEGACY arm, so a set frozen over a container-less installed qa.md
   # is judged by the current three-container rule.
-  mut_run M20 merge-review-shards.sh '    if [ "$QA_AT" = legacy ]; then sev_=0' '    if false; then sev_=0' fr_bound "frb-legacy{" \
+  CS_ONLY=frb-legacy mut_run M20 merge-review-shards.sh '    if [ "$QA_AT" = legacy ]; then sev_=0' '    if false; then sev_=0' fr_bound "frb-legacy{" \
     "the severity boundary's LEGACY arm dropped"
   # BL-763. M21 collects every duplicate but prints only the first; M22 drops the --check-shard barrier
   # (the two-space-indented one), so --check-shard answers SHARD-OK over a duplicate and --mark seals it.
-  mut_run M21 merge-review-shards.sh 'collect_dup() { printf' 'collect_dup() { [ "$DUP_N" -gt 0 ] || printf' x_dupall "two{" \
+  CS_ONLY=two mut_run M21 merge-review-shards.sh 'collect_dup() { printf' 'collect_dup() { [ "$DUP_N" -gt 0 ] || printf' x_dupall "two{" \
     "only the first owner duplicate of a run printed"
-  mut_run M22 merge-review-shards.sh '  [ "$DUP_N" -eq 0 ] || exit 2' '  :' x_dupall "check{" \
+  CS_ONLY=check mut_run M22 merge-review-shards.sh '  [ "$DUP_N" -eq 0 ] || exit 2' '  :' x_dupall "check{" \
     "the --check-shard duplicate barrier dropped"
+  # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
+  if [ "$VB_CTL_N" = 22 ]; then ok "VBCTL: CONTROL -- each of M1-M22's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 22), the same copy every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 22 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
