@@ -311,9 +311,25 @@ GAP_LINES=""; GAP_N=0
 CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
+# lane_name <round-1 record basename> -> "<lane artifact>\t<pass>", the ONE derivation of a lane
+# round's name (BL-716): `<x>-repair-p<M>.md` -> `<x>-serial` and `<M>`; `<x>-repair.md` (the
+# subject's party and elicitation records) -> `<x>-serial` and `1`. The lane join run as
+# `--artifact <lane artifact> --pass <pass>` writes `<lane artifact>-repair-p<pass>.md`, which is the
+# sibling `--sources`/`--escalations` require after this record, and a `*-party-serial` name turns
+# the `source:` rule on. Parts mode prints it as `LANE-ARTIFACT:` so the lead copies it: inferred
+# from the subject's `requirements` it names another round's lane record. Exit 1 on a lane record
+# or a name of neither shape.
+lane_name() {
+  case "$1" in
+    *-serial-repair-p*.md) return 1 ;;
+    *-repair-p*.md) _ln_p="${1##*-repair-p}"; printf '%s-serial\t%s\n' "${1%-repair-p*}" "${_ln_p%.md}" ;;
+    *-repair.md) printf '%s-serial\t1\n' "${1%-repair.md}" ;;
+    *) return 1 ;;
+  esac
+}
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
-SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
+SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; SRC_MORE=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
 PARTMODE=0; CHKPART=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -322,8 +338,12 @@ while [ $# -gt 0 ]; do
              RERUN="${RERUN}${2}
 "; shift 2 ;;
     --agent-writes) AGENT_ID="${2:-}"; AGENTMODE=1; SRCMODE=2; shift 2 ;;
-    --sources) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;
-    --escalations) SRC_REC="${2:-}"; SRCMODE=2; shift 2 ;;
+    --sources|--escalations)
+      _m=1; [ "$1" = --escalations ] && _m=2
+      [ "$SRCMODE" = 0 ] || [ "$SRCMODE" = "$_m" ] || die "--sources and --escalations are two modes; pass one, once per record"
+      if [ -z "$SRC_REC" ]; then SRC_REC="${2:-}"; else SRC_MORE="${SRC_MORE}${2:-}
+"; fi
+      SRCMODE="$_m"; shift 2 ;;
     --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
     --base) SUBJ_BASE="${2:-}"; shift 2 ;;
     --sprint) SPRINT="${2:-}"; shift 2 ;;
@@ -360,6 +380,31 @@ if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
   [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
   [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
   [ "$SRCMODE" = 1 ] && PARTY=1
+  # A LANE ROUND'S RECORD IS READ WITH ITS ROUND-1 RECORD, AFTER IT (BL-716). Lane remediators close
+  # round-1 escalations in `<stem>-serial-repair-p<M>.md`, so a call over either record alone reads
+  # a closed escalation open, or never sees an open one. Closure is positional across the records
+  # given, so the round-1 record comes first; when its lane-round sibling is on disk it must follow.
+  _sb="${SRC_REC##*/}"; _sd="${SRC_REC%/*}"; [ "$_sd" = "$SRC_REC" ] && _sd="."
+  case "$_sb" in
+    *-serial-repair-p*.md) die "${SRC_REC} is a lane round's record; pass the round-1 record it repairs first, then this one" ;;
+  esac
+  _sib=""
+  if _ln="$(lane_name "$_sb")"; then _sib="${_ln%%	*}-repair-p${_ln##*	}.md"; fi
+  SRC_ALL="${SRC_REC}
+${SRC_MORE}"
+  while IFS= read -r _r; do
+    [ -n "$_r" ] || continue
+    [ -f "$_r" ] || die "--sources and --escalations need an existing record (got '${_r}')"
+  done <<SMEOF
+$SRC_MORE
+SMEOF
+  if [ -n "$_sib" ] && [ -f "${_sd}/${_sib}" ]; then
+    _hit=0
+    while IFS= read -r _r; do [ "${_r##*/}" = "$_sib" ] && _hit=1; done <<SMEOF
+$SRC_MORE
+SMEOF
+    [ "$_hit" = 1 ] || die "${_sd}/${_sib} is the lane round's record for ${SRC_REC}, and its entries close this record's escalations; pass it after this one"
+  fi
 fi
 [ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1
 if [ "$SUBJMODE" = 1 ]; then
@@ -397,7 +442,7 @@ SPRINT="${SPRINT#s}"
 # --escalations reads one record and no seat directory, so its --sprint is optional.
 [ "$SRCMODE" = 2 ] && [ -z "$SPRINT" ] && SPRINT=0
 case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
-case "$ARTIFACT" in *-party) PARTY=1 ;; esac
+case "$ARTIFACT" in *-party|*-party-serial) PARTY=1 ;; esac
 # Set before the mode split: the record modes read it too (an operator-ruling cite is an ISO stamp).
 ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
 if [ "$SRCMODE" != 0 ] || [ "$PARTMODE" = 1 ]; then
@@ -490,12 +535,17 @@ fi
 SEAL="${JR_SCRIPT_DIR}/content-seal.sh"
 if [ "$SRCMODE" != 0 ] && [ -d "$STATE" ]; then
   if [ -f "$SEAL" ]; then
-    _seal_out="$(bash "$SEAL" --check "$STATE" "$SRC_REC" 2>&1)"; _seal_rc=$?
-    case "$_seal_rc" in
-      0) ;;
-      1) die "$_seal_out" ;;
-      *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
-    esac
+    while IFS= read -r _r; do
+      [ -n "$_r" ] || continue
+      _seal_out="$(bash "$SEAL" --check "$STATE" "$_r" 2>&1)"; _seal_rc=$?
+      case "$_seal_rc" in
+        0) ;;
+        1) die "$_seal_out" ;;
+        *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
+      esac
+    done <<SLEOF
+$SRC_ALL
+SLEOF
   elif [ -f "$LEDGER" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$LEDGER"; then
     die "${LEDGER} carries content-seal rows but ${SEAL} is absent, so the record's bytes cannot be compared with its seal; reinstall ai-dlc"
   fi
@@ -760,6 +810,30 @@ src_probe() {
 #       cross-file sibling grep and moved-cite check, which no shard can run, so the procedure
 #       dispatches the serial remediator when it OR ESCALATED-COUNT is above 0, in every mode. Not
 #       printed in --sources mode: that record may be the serial remediator's own.
+#   (4b) SERIAL LANES (BL-716), PARTS MODE ONLY, printed after SERIAL-REQUIRED. One serial agent
+#       working every item of a 19-part round in sequence is the cost; the serial guarantee is only
+#       owed WITHIN a set of files that interact. So the join partitions the serial work into LANES:
+#       connected components over FILES, never parts. A node is a file a part's `edit:` lines cite
+#       (resolved as the coverage join resolves it), mapped to the file a serial remediator edits
+#       after the join: itself in files mode, the assembled document in document mode, the subject
+#       file in subject mode (a section copy to its file, `.memlog.md` to its SPEC). Edges: one part's
+#       files are one lane; a MOVED-CITE (a cite in one file into a line another file's edit moved)
+#       joins its two files. MOVED-CITE edges exist only where a worklist exists: document and
+#       subject mode run `serial-remediation-worklist.sh <dir> --record <record> --keep` beside this
+#       script after assembly, and files mode keeps no pre-repair copy, so it has none (the worklist
+#       exits 3 there). A worklist exit other than 0, or a missing worklist, joins EVERY file into one
+#       lane -- the status quo, never N lanes that might share an edge nobody measured -- and says so
+#       on `LANE-EDGES: UNASSESSED`. A HIT never joins lanes: the fragment's hits all in one lane are
+#       that lane's item, and hits in two or more lanes (s319's sprint-title `architecture_refs` line
+#       HITs 18 stories) are ONE fan-in item. An escalation whose `edit:` files are one lane's is that
+#       lane's; one naming files in two or more lanes, or a file no lane edits, or no file, goes to the
+#       fan-in (s319 stories party repair: 10 of 46 escalations name two or more files). The fan-in
+#       runs after every lane, so with two or more lanes it also owes one sweep over the assembled
+#       files -- a lane's edit can create a hit elsewhere. Lines: `LANE-ARTIFACT: <name> --pass <M>`
+#       (the lane round's `--artifact` and `--pass`, from lane_name), `LANE-EDGES:`, one `LANE: <n> files:
+#       ... parts: ...` per lane, `LANE-ITEM: <n> <item>`, `FANIN: <item>`, `LANE-COUNT:`,
+#       `FANIN-COUNT:`. Not printed in a record mode, nor for a lane round's own join (`--artifact
+#       <name>-serial`): its escalations are the fan-in's, and lanes of lanes would recurse.
 #   (6) THE DISPOSITION KEY AND ITS VOCABULARY (BL-542). Every check above keys on an entry's
 #       `disposition:` line, so an entry that spells the key otherwise escaped all of them: graph's
 #       s319 requirements-d-answers-fold.md renamed it `outcome:` on six entries and joined at exit
@@ -1541,15 +1615,19 @@ spec_render_probe() {
 }
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
 # shared by --sources and --escalations, so each line below exists once.
-record_tail() {
+record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order
+  local _r _sp=0
   contract_probe
-  contract_refusals 1 "$(contract_check 1 "$1")"
-  checks_refusals "$(checks_field 1 "$1")"
+  contract_refusals 1 "$(contract_check 1 "$@")"
+  for _r in "$@"; do
+    checks_refusals "$(checks_field 1 "$_r")"
+    grep -q -F "specs/s${SPRINT}/" "$_r" && _sp=1
+  done
   spec_render_probe
   # ONLY A RECORD THAT REPAIRED THE SPEC IS JUDGED. Without this, a stale SPEC refuses an architecture or
   # stories record, which repaired no SPEC, and its refusal hides that record's escalation list. The test is
   # the record citing the sprint's spec dir at all (its edit: lines name `.memlog.md` or `SPEC.md` there).
-  if grep -q -F "specs/s${SPRINT}/" "$1"; then
+  if [ "$_sp" = 1 ]; then
     spec_memlog_of_sprint
     spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
   else
@@ -1624,15 +1702,21 @@ if [ "$PARTMODE" = 1 ]; then
   echo "CHECK-PART: ${CHKPART} -- the join's entry contract holds; the check fields (advisor:, derivations:, derivation:) and the disposition/edit repair fields were NOT checked"
   exit 0
 fi
+if [ "$SRCMODE" != 0 ]; then
+  set --
+  while IFS= read -r _r; do [ -n "$_r" ] && set -- "$@" "$_r"; done <<SAEOF
+$SRC_ALL
+SAEOF
+fi
 if [ "$SRCMODE" = 1 ]; then
   [ -d "$SEAT_DIR" ] || die "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
   [ "$(src_kind "$SRC_REC")" = PART ] \
     && die "${SRC_REC} names only part tokens (<N>.md, cross-<N>.md) in its source: lines, so it is not a party repair; its escalations are read with --escalations ${SRC_REC} --sprint ${SPRINT}"
   src_probe
-  src_refusals "$(src_check "$SEAT_DIR" "$SRC_REC")"
-  seat_complete_check "$SEAT_DIR" "$SRC_REC"
+  src_refusals "$(src_check "$SEAT_DIR" "$@")"
+  seat_complete_check "$SEAT_DIR" "$@"
   [ "$SRC_E" -gt 0 ] || refuse "${SRC_REC} carries no entry with a 'disposition:' line; nothing is attributed"
-  record_tail "$SRC_REC"
+  record_tail "$@"
 fi
 # --escalations: the same contract and closure over a record with NO seat files -- an adversarial,
 # elicitation or gate repair after its serial pass appended -- where --sources refuses for want of a
@@ -1640,7 +1724,7 @@ fi
 if [ "$SRCMODE" = 2 ]; then
   n_disp="$(grep -c -E '^[[:space:]-]*[*_`]*disposition[*_`]*:' "$SRC_REC")" || n_disp=0
   [ "$n_disp" -gt 0 ] || die "${SRC_REC} carries no entry with a 'disposition:' line; no escalation can be read"
-  record_tail "$SRC_REC"
+  record_tail "$@"
 fi
 
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
@@ -1847,6 +1931,148 @@ resolve_cites() {
     { n = 0; for (i = 1; i <= np; i++) { p = P[i]
         if (p == $2 || (length(p) > length($2) && substr(p, length(p) - length($2)) == "/" $2)) { n++; h = p } }
       if (n == 1) print h }' | sort -u
+}
+
+# --- SERIAL LANES (BL-716; the header's arm 4b). Printed after SERIAL-REQUIRED on a written record.
+# esc_cites <part> -> "<part> <heading>\t<token>" for every token an ESCALATED entry's `edit:` names,
+# and "<part> <heading>\t-" for one naming none. The heading is contract_check's own `cur` spelling,
+# so the key equals the tail of its ESCALATED: line; a key that does not match routes to the fan-in.
+esc_cites() {
+  awk -v pt="${1##*/}" '
+    function trim(v) { gsub(/^[ \t`]+|[ \t`]+$/, "", v); return v }
+    function emit(   i) { if (disp ~ /^escalat/) { if (nt == 0) print pt " " cur "\t-"; for (i = 1; i <= nt; i++) print pt " " cur "\t" tk[i] }
+                          nt = 0; disp = "" }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^#+[ \t]/ { emit(); cur = $0; sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur); next }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
+    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
+      line = $0; sub(/^[^:]*:/, "", line)
+      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
+        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { emit() }' "$1"
+}
+lane_report() {
+  local _keys="" _wl="" _wrc=0 _p _k _t _e _ek _ec _la _lan _lap
+  # THE LANE ROUND'S NAME, derived from this round's record by lane_name, never from --artifact:
+  # the subject's records are `requirements-party-repair.md` and the like, under ARTIFACT=requirements.
+  if _la="$(lane_name "${OUT##*/}")"; then
+    _lan="${_la%%	*}"; _lap="${_la##*	}"
+    echo "LANE-ARTIFACT: ${_lan} --pass ${_lap}"
+  fi
+  # THE NODE MAP: every written file in the ledger's spelling -> the file a serial remediator edits.
+  if [ "$SUBJMODE" = 1 ]; then
+    _keys="$(awk -F'\t' '$1 == "part" { print ($7 != "-" ? $7 : $4) "\t" $4
+      if ($7 == "-" && $3 == "SPEC") { m = $4; sub(/SPEC\.md$/, ".memlog.md", m); print m "\t" $4 } }' "$SUBJ_REC" \
+      | awk -F'\t' -v p="${SREL}/" -v n="${STATE_NAME}/" '{ for (i = 1; i <= 2; i++) if (index($i, p) == 1) $i = n substr($i, length(p) + 1); print $1 "\t" $2 }' OFS='\t')"
+  elif [ "$DOCMODE" = 1 ]; then
+    _keys="$(printf '%s\n' "$ROWS" | awk -F'\t' -v d="$DOC_REL" 'NF >= 2 { print $1 "\t" d }')"
+  else
+    _keys="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $1 }')"
+  fi
+  # THE EDGES a worklist derives: document and subject mode only, over the assembled bytes, keeping
+  # the pre-repair copies for the lead's own run. Anything but exit 0 is one lane.
+  _wl="files mode keeps no pre-repair copy: no worklist, so no MOVED-CITE edge"
+  if [ "$DOCMODE$SUBJMODE" != 00 ]; then
+    if [ -f "${JR_SCRIPT_DIR}/serial-remediation-worklist.sh" ]; then
+      _wl="$(AI_DLC_PROJECT_ROOT="$JR_ROOT" bash "${JR_SCRIPT_DIR}/serial-remediation-worklist.sh" "$SHARD_DIR" --record "$OUT" --keep 2>&1)"; _wrc=$?
+    else
+      _wl="serial-remediation-worklist.sh is not beside this script"; _wrc=2
+    fi
+  fi
+  _e=""
+  while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    _ec="$(esc_cites "$_p")" || die "could not read the escalated entries of ${_p##*/} for the serial lanes"
+    while IFS='	' read -r _ek _t; do
+      [ -n "$_ek" ] || continue
+      if [ "$_t" != "-" ]; then
+        _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
+        [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
+      fi
+      _e="${_e}T	${_ek}	${_t}
+"
+    done <<LNEOF
+${_ec}
+LNEOF
+  done <<LPEOF
+$PARTS
+LPEOF
+  { printf '%s\n' "$_keys" | sed '/^$/d; s/^/K\t/'
+    printf '%s' "$CITES"
+    printf '%s' "$_e"
+    printf '%s' "$ESC_LINES" | sed -n 's/^ESCALATED: /S\t/p'
+    if [ "$DOCMODE$SUBJMODE" = 00 ]; then printf 'F\t%s\n' "$_wl"
+    elif [ "$_wrc" = 0 ]; then printf '%s\n' "$_wl" | sed 's/^/W\t/'
+    else printf 'U\texit %s: %s\n' "$_wrc" "$(printf '%s\n' "$_wl" | grep -m1 -E '^(UNASSESSABLE|ERROR)' || printf '%s\n' "$_wl" | head -1)"; fi
+  } | awk -F'\t' '
+    function fnd(x) { while (x in par) x = par[x]; return x }
+    function uni(a, b) { a = fnd(a); b = fnd(b); if (a != b) { if (a < b) par[b] = a; else par[a] = b } }
+    # A path names a node when it equals the node, or either ends in "/" + the other: the ledger and a
+    # root-relative spelling differ only by a leading state-dir prefix.
+    function keyof(p,   k, n, h) { n = 0; h = ""
+      for (k in isk) if (k == p || (length(k) > length(p) && substr(k, length(k) - length(p)) == "/" p) \
+                         || (length(p) > length(k) && substr(p, length(p) - length(k)) == "/" k)) { n++; h = (h == "" ? k : h SUBSEP k) }
+      return h }
+    function wkey(p,   i, n, a) { n = 0; for (i = 1; i <= nw; i++) { if (W[i] == p || (length(W[i]) > length(p) && substr(W[i], length(W[i]) - length(p)) == "/" p)) { n++; a = W[i] } }
+      return (n == 1) ? node[a] : "" }
+    function lanes_of(list,   n, a, i, s, l, out) { n = split(list, a, SUBSEP); out = ""; delete seenl
+      # Every list opens with SUBSEP, so a[1] is empty by construction; a later empty member is an
+      # entry that named no file, which no lane owns.
+      for (i = 2; i <= n; i++) { if (a[i] == "") { l = "out" } else { s = keyof(a[i]); l = (s == "" || index(s, SUBSEP)) ? "out" : lane[fnd(s)]; if (l == "") l = "out" }
+        if (!(l in seenl)) { seenl[l] = 1; out = out (out == "" ? "" : " ") l } }
+      return out }
+    function frag(   ls) { if (ft == "") return; if (fh != "") { ls = lanes_of(fh)
+        if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " HIT \"" ft "\" at " fhs "\n"
+        else fan = fan "FANIN: HIT \"" ft "\" at " fhs " (lanes " ls ")\n" }
+      ft = ""; fh = ""; fhs = "" }
+    $1 == "K" { node[$2] = $3; isk[$3] = 1; W[++nw] = $2; next }
+    $1 == "C" { k = wkey($3); if (k == "") next; if (!(($2, k) in pk)) { pk[$2, k] = 1; pks[$2] = pks[$2] SUBSEP k }
+                if ($2 in first) uni(first[$2], k); else first[$2] = k; next }
+    $1 == "T" { et[$2] = et[$2] SUBSEP ($3 == "-" ? "" : $3); next }
+    $1 == "S" { es[++ne] = $2; next }
+    $1 == "F" { edges = "files, by edit set (" $2 ")"; next }
+    $1 == "U" { unassessed = $2; next }
+    $1 == "W" { wl[++nwl] = $2; if ($2 ~ /^MOVED-CITE /) { split($2, m, " "); sub(/:[0-9]+$/, "", m[2]); sub(/:[0-9,-]+$/, "", m[3])
+                  mvf[nwl] = m[2]; mvt[nwl] = m[3] }; next }
+    END {
+      if (unassessed != "") { edges = "UNASSESSED -- the worklist did not run clean (" unassessed "); every file is ONE lane"
+        for (k in isk) { if (r == "") r = k; else uni(r, k) } }
+      else if (edges == "") { nmv = 0
+        for (i = 1; i <= nwl; i++) if (i in mvf) { ma = keyof(mvf[i]); mb = keyof(mvt[i])
+          if (ma != "" && mb != "" && !index(ma, SUBSEP)) { nb = split(mb, bb, SUBSEP); for (j = 1; j <= nb; j++) uni(ma, bb[j]); nmv++ } }
+        edges = "files, by edit set and " nmv " MOVED-CITE edge(s) from serial-remediation-worklist.sh" }
+      # Lanes, numbered in sorted node order; only nodes some part cites are lanes.
+      nk = 0; for (k in isk) ks[++nk] = k
+      for (i = 2; i <= nk; i++) { v = ks[i]; for (j = i - 1; j >= 1 && ks[j] > v; j--) ks[j + 1] = ks[j]; ks[j + 1] = v }
+      for (p in pks) { n = split(pks[p], a, SUBSEP); for (i = 2; i <= n; i++) cited[fnd(a[i])] = 1 }
+      nl = 0; for (i = 1; i <= nk; i++) { rt = fnd(ks[i]); if (!(rt in cited)) continue
+        if (!(rt in lane)) lane[rt] = ++nl; lf[lane[rt]] = lf[lane[rt]] " " ks[i] }
+      for (p in pks) { n = split(pks[p], a, SUBSEP); l = lane[fnd(a[2])]; lp[l] = lp[l] " " p }
+      # The worklist routed: a fragment by the lanes its hits land in, a moved cite by its file.
+      for (i = 1; i <= nwl; i++) { x = wl[i]
+        if (x ~ /^  text: /) { frag(); ft = substr(x, 9); continue }
+        if (x ~ /^    HIT /) { h = substr(x, 9); fhs = fhs (fhs == "" ? "" : ", ") h; sub(/:[0-9]+$/, "", h); fh = fh SUBSEP h; continue }
+        frag()
+        if (i in mvf) { ls = lanes_of(SUBSEP mvf[i] SUBSEP mvt[i])
+          if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " " x "\n"; else fan = fan "FANIN: " x " (lanes " ls ")\n" } }
+      frag()
+      # Escalations: one lane when every file it names is that lane`s; otherwise the fan-in.
+      for (i = 1; i <= ne; i++) { ls = (es[i] in et) ? lanes_of(et[es[i]]) : "out"
+        if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " ESCALATED: " es[i] "\n"; else fan = fan "FANIN: ESCALATED: " es[i] " (lanes " ls ")\n" }
+      if (nl >= 2) fan = fan "FANIN: sweep -- after every lane, grep -rn -F the text each lane replaced over the assembled files; a lane edit can leave a hit in another lane\n"
+      print "LANE-EDGES: " edges
+      for (l = 1; l <= nl; l++) { s = lp[l]; ns = split(s, sp, " "); for (i = 2; i <= ns; i++) { v = sp[i]; for (j = i - 1; j >= 1 && sp[j] > v; j--) sp[j + 1] = sp[j]; sp[j + 1] = v }
+        s = ""; for (i = 1; i <= ns; i++) s = s " " sp[i]
+        print "LANE: " l " files:" lf[l] " parts:" s; printf "%s", item[l] }
+      printf "%s", fan
+      print "LANE-COUNT: " nl
+      nf = gsub(/FANIN: /, "&", fan); print "FANIN-COUNT: " nf
+    }'
 }
 
 # --- THE DETAILED ROWS: every row (not unique per writer) with its ts and the hook's evidence keys.
@@ -2448,5 +2674,6 @@ printf '%s' "$ESC_LINES"
 echo "ESCALATED-COUNT: ${ESC_N}"
 printf '%s' "$GAP_LINES"
 echo "SERIAL-REQUIRED: ${SERIAL_N}"
+case "$ARTIFACT" in *-serial) ;; *) lane_report ;; esac
 [ -z "$SPEC_LINE" ] || printf '%s\n' "$SPEC_LINE"
 exit 0

@@ -96,7 +96,9 @@ the change as input.
 
 When your brief folds the operator's answers into a repair whose record the join reported
 `ESCALATED:` lines for, APPEND to that joined repair record, never a separate one: the join
-closes an escalation only by a `repaired` entry in the same record. Append one entry per answer,
+closes an escalation only by a `repaired` entry in the same record, or in the lanes'
+`<lane artifact>-repair-p<M>.md` read after it (copy LANE-ARTIFACT from the join, per `_gate-procedures.md`). When that lane record exists, append there and
+pass both records, round one's first, as `--escalations <round one's> --escalations <lane record>`. Append one entry per answer,
 each opening with its own `### <heading>` line, which ends the entry before it: an entry with no
 heading of its own is read as part of the one above it. Under the heading write
 `- disposition: repaired`, then one `- closes: <part> <heading>` line per escalation the answer
@@ -106,7 +108,8 @@ chain gets its own line: a restating entry and each part escalation it supersede
 when it did, `- edit: <project-relative path>:<line(s)>` followed by one `- siblings:` line in a
 form `remediator.md` lists ("Re-check every sibling of the text you replaced"), or the join
 refuses the record before it reports any escalation. After the last entry is appended, run
-`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>`, fix every entry it
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>` (with a lane record,
+`--escalations <round one's record> --escalations <lane record> --sprint <N>`, round one's first), fix every entry it
 names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line; never hand back a record
 it refuses.
 

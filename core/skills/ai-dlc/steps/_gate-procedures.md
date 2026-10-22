@@ -340,7 +340,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    below. A finding citing two or more parts goes to the serial remediator after the join, whose
    brief carries `shard: none (authoring-chain)`, and
    the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
-   over the record with its appended entries. The remediator brief also carries `revised-seats:`:
+   over the record with its appended entries, adding `--sources <its -serial-repair record>` after it
+   when the serial work ran in lanes. The remediator brief also carries `revised-seats:`:
    after the round's join the lead runs `scripts/ai-dlc/wait-for-deliverable.sh --complete --status
    --since <the round epoch> --dispatch <agentId>… <the seat paths>` (one `--dispatch` per agent the
    round joined) and copies the path of every `REVISED-AFTER-MARKER <n> <path> --` line it prints
@@ -498,6 +499,21 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    are repaired as "Shard by section" does, split into that same shard dir with `--expect-sha`
    the sha every elicitation shard notarized, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`.
+
+   **The delta clause — a story split or added after a correctly sharded stories elicitation.**
+   When `shards/stories-elicitation/` is complete for the K it was elicited at, and `stories/`
+   has since gained a story no ORDINAL shard in it names (a split, or an addition), elicit ONLY
+   the delta, never the whole round again. The owed stories are those whose file no ordinal
+   shard's `artifact:` names; a cross shard's `<name>=` entry never covers a story. The owed
+   cross groups are every group of today's `partition-document.sh --cross-groups <K>` that holds
+   the ordinal of an owed story (by `merge-adversarial-shards.sh --map`), never the groups whose
+   index list changed. Dispatch one `adversary` per owed story and one per owed group, each
+   briefed at today's K (`shard: <i>/<K>`), writing
+   `_bmad-output/planning-artifacts/s<N>/shards/stories-elicitation-delta-k<K>/<story-basename>.md`
+   and `cross-<g>.md` there (`cross.md` at one group), in the same shard-file shape as above. Write
+   no root `stories-elicitation-delta*.md` record. Check 24 arm L names the owed stories and groups
+   in its remedy. A base that is not complete for its own K, or that is one voice at
+   `shard: 1/1`, has nothing to top up: re-run the whole elicitation in the shape above.
 
 <!-- BEGIN GENERATED: provenance-block/elicitation — source: .claude/schemas/provenance-block.json; do not edit by hand -->
 ```
@@ -877,6 +893,11 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
       that subject, and each side is the per-stem `<stem>=<sha>` list, chained per stem. Write
       the separator as `@` only if `scripts/ai-dlc/merge-adversarial-shards.sh --pair-sep`
       prints exactly `@`, otherwise `=`; both are accepted.
+      A split or merge of story ids is NOT item 1. When `test-strategy.md` moves so that the set of
+      story ids its mapping rows name (the story column, `| ST<N>-… | <id> |`) differs between the
+      notarized bytes and the bytes on disk, it is a scope change for the test strategy: follow
+      items 3 and 4 (one `REOPEN_AFTER_MET` record plus ONE verify pass). Check 24 arm J2 refuses
+      a repair chain that changes that set.
    2. A scope change — a later step rewording a capability: append a `(decision)` entry to the
       spec's `.memlog.md` and re-render `SPEC.md` through `bmad-spec`; update the `prd.md`
       sprint-block FR in the same dispatch.
@@ -968,31 +989,64 @@ under the slot must be cited on its `edit:` lines. Writes under `s<N>/shards/` a
 themselves and are not counted. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
 nothing written) if any file was written by two agents, if a written file is cited by no part,
 if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
-repair record below. The serial cross-file remediator runs after that and APPENDS its entries
-to the joined record, opening them with its own `- artifact:` / `- artifact_sha_before:` /
-`- artifact_sha_after:` triple per file it edits, each before equal to the bytes the join left. The join never overwrites a record, so it is run before the serial
-remediator and never after it.
+repair record below. The serial work then runs in LANES and a FAN-IN, as "Every escalated entry
+reaches the serial remediator" below says: the lane remediators write PARTS that a second join
+joins into their own record, and only the one fan-in remediator APPENDS to a joined record,
+opening its entries with its own `- artifact:` / `- artifact_sha_before:` /
+`- artifact_sha_after:` triple per file it edits, each before equal to the bytes the joins left. No two
+agents ever append to one record. The join never overwrites a record, so it is run before the serial
+remediators and never after them.
 
 **Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
 its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
 every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entry, then
 `ESCALATED-COUNT: <n>`, then `SERIAL-REQUIRED: <n>`, the count of `repaired` entries with a
 real edit, each of which owes the cross-file sibling grep and moved-cite check below. In every
-mode (files, sections, subject), dispatch the serial remediator after the join whenever
+mode (files, sections, subject), dispatch the serial remediators after the join whenever
 SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whether or not any finding cited two files or
-parts, and its brief carries every `ESCALATED:` line verbatim and the line
-`shard: none (authoring-chain)` (Rule 28 exception 3: it reads the joined record the shards
-produced; commentary goes after the closing parenthesis). In `--sources` mode the
+parts. The join partitions that work into LANES of FILES and prints them after SERIAL-REQUIRED:
+`LANE-EDGES:`, one `LANE: <n> files: <file>... parts: <part>...` per lane with its
+`LANE-ITEM: <n> <item>` lines, one `FANIN: <item>` line per item no single lane owns, then
+`LANE-COUNT:` and `FANIN-COUNT:`. One part's files are one lane, and a `MOVED-CITE` the join's own
+`serial-remediation-worklist.sh --keep` run finds (sections and subject mode; files mode has no
+worklist) joins the two files it links. A `HIT` never joins lanes, and neither does an escalation:
+one standing in, or naming files of, two or more lanes, or naming no lane's file, is a `FANIN`
+item. `LANE-EDGES: UNASSESSED` means the worklist did not run clean and every file is one lane.
+The join also prints `LANE-ARTIFACT: <lane artifact> --pass <M>`, the lane round's name derived
+from round one's record name; copy LANE-ARTIFACT, never infer it from `--artifact` or `--subject`
+(the subject party round's is `requirements-party-serial --pass 1`, not `requirements-serial`,
+which names the subject pass-1 round's lane record). Below, `<lane artifact>` and `<M>` are that
+line's two values.
+Dispatch ONE serial remediator per lane, in parallel, each brief carrying its `LANE:` line, its
+`LANE-ITEM:` lines and every `ESCALATED:` line verbatim, and the line `shard: none (authoring-chain)`
+(Rule 28 exception 3: it reads the joined record the shards produced; commentary goes after the
+closing parenthesis), as a second PARTS-MODE round: lane `<n>`
+writes its part `s<N>/shards/<lane artifact>-repair-p<M>/lane-<n>.md` and edits only its lane's
+files; the part opens with its own
+`- artifact:` / `- artifact_sha_before:` / `- artifact_sha_after:` triple per file it edits, each
+before equal to the bytes round one's join left, so Check 24 arm J2 chains the lanes between the
+join and the fan-in. Beat-join the lanes with `--complete`
+and run the same join over them, files mode, `--artifact <lane artifact> --pass <M>
+--artifact-path <path>` (`<path>` the slot `_bmad-output/planning-artifacts/s<N>` after a files
+round, the state dir `_bmad-output` after a sections or subject round, whose assembled files lie
+outside the slot), so a file two lanes wrote, or one no lane cites, refuses exactly as in round
+one; it writes `s<N>/<lane artifact>-repair-p<M>.md` and prints no `LANE:` line. Then dispatch
+ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line and every `ESCALATED:` line the
+lane join printed, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
+is one lane with no fan-in. In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
-that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there. An
+that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there, and
+no `LANE:` or `FANIN:` line. An
 escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
 copied from its `ESCALATED:` line, never by a shared `source:` token; the join prints each closed
-one as `ESCALATED-CLOSED: <part> <entry>`. After the serial remediator appends to a record that
+one as `ESCALATED-CLOSED: <part> <entry>`. After the serial remediators finish on a record that
 has no party seat files (an adversarial, elicitation or gate repair), the lead runs
-`scripts/ai-dlc/join-remediator-shards.sh --escalations <the joined record> --sprint <N>`, which
-reads the `closes:` lines with no `party-mode/s<N>/` directory and prints every escalation still
-open; each open one is the lead's to adjudicate. A party record takes `--sources`, which does the
-same. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <the joined record> [--escalations <its -serial-repair record>] --sprint <N>`,
+round one's record FIRST, because a lane closes round one's escalations in its own record and
+closure is read in order; the join refuses a round-one record whose lane record is on disk and
+not passed after it. It reads the `closes:` lines with no `party-mode/s<N>/` directory and prints
+every escalation still open; each open one is the lead's to adjudicate. A party record takes
+`--sources` the same way, which does the same. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
@@ -1124,7 +1178,8 @@ in this order:
    never edits text outside its section file, so such a finding has no other owner.
    After the join and before that dispatch, the lead runs
    `scripts/ai-dlc/serial-remediation-worklist.sh <that dir> --record <the joined record>` ONCE
-   and puts its output in the serial remediator's brief. It lists the text each shard replaced
+   and puts its output in the serial remediator's brief. The join's own worklist run (the lane
+   edges) passes `--keep`, so this run is the lead's one consuming run, not a second one. It lists the text each shard replaced
    with every place that text still stands (`HIT`), and every cite into a repaired file whose
    line moved (`MOVED-CITE`); the remediator adjudicates those lines rather than deriving them.
    The run consumes the pre-repair copies it reads, so a later run exits 3 `UNASSESSABLE`
@@ -1219,7 +1274,10 @@ escalated sibling line, the serial remediator runs `grep -rn -F '<the text that 
 replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
 slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence. That is
 why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
-owes this grep. After a sections or subject join the lead's `serial-remediation-worklist.sh`
+owes this grep. A lane remediator runs it for its lane's entries and edits only its lane's
+files; a hit in another lane's file is the fan-in's `FANIN:` item, and the fan-in remediator, after
+every lane has joined, runs the grep once more over the assembled files for the text each lane
+replaced, because a lane's edit can leave a hit in another lane. After a sections or subject join the lead's `serial-remediation-worklist.sh`
 output (the subject-axis step 4 above) is the starting list for both the grep and the cites.
 
 Owed derivations are refused at gate-validation.md Check 37, not here.

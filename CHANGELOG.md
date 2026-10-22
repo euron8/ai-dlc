@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.913.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R2. It closes BL-733, BL-736 and BL-716, closes no `PC-` id and files no backlog entry. Net for this release: 3 closed, 0 filed = 3. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/join-remediator-shards.sh` and `core/scripts/validate-adversarial-convergence.sh`. Role and step text changes: `core/team-roles/remediator.md`, `core/team-roles/pm-escalated.md`, `core/skills/ai-dlc/steps/_gate-procedures.md` and `core/skills/ai-dlc/steps/gate-validation.md`.
+
+### BL-733 — Check 24 arm L judges a post-elicitation story split by name and owes only the delta
+
+A story split or added after a correctly sharded stories elicitation no longer owes a full re-elicitation. Arm L derives the delta by subject name: the stories no ordinal shard names, and every current cross group holding one of them. The delta is elicited into `s<N>/shards/stories-elicitation-delta-k<K>/` and that directory holding exactly the owed set passes. A base that is under-sharded, or one `shard: 1/1` voice, is never topped up and its remedy stays the full re-run. On graph s319's split the owed groups are {1,4,5}, where an index-list diff answered {3,5,6}.
+
+### BL-736 — Check 24 arm J2 refuses a story split carried into test-strategy.md as a repair
+
+When arm J2's single-file walk completes a repair chain over `test-strategy.md`, it now compares the chain's endpoints by the set of story ids in the story column of its table rows. A changed set fails and names the re-open (one `REOPEN_AFTER_MET` record plus one verify pass); an unreachable before-blob is pending, never a fail. The new era constant `J2T_RELEASE` (now `0.913.0`) keeps series that followed the old item 1 from failing retroactively. Item 1 of the amendment procedure now says a split or merge of story ids is not item 1.
+
+### BL-716 — serial remediation after a parallel repair runs in lanes of files, then one fan-in
+
+After a parts-mode join, one serial remediator used to work every `SERIAL-REQUIRED` item in sequence. The join now prints lanes (connected components over files, joined by moved cites) and fan-in items, and the lead dispatches one serial remediator per lane in parallel, then one for the fan-in. Lanes run as a second parts-mode round through the same join, so the double-write and uncited-file refusals still apply. The join prints `LANE-ARTIFACT:`, derived from round one's record name, which the lead copies rather than infers; `--escalations` and `--sources` take the lane record as a second record. Check 24 arm H names a lone lane record as a lane round's and its remedy asks for the missing round-one record. Each serial remediator brief still carries `shard: none (authoring-chain)`.
+
 ## [0.912.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R6a. It closes BL-770 and the consumer push candidate `PC-S319-VALIDATE-HANDOFF-EVIDENCE-REFUSES-AN-ABSOLUTE-STORY-PATH-AS-STORY-UNTRACKED`, and files BL-770. Net for this release: 1 closed entry plus 1 candidate closed, 1 filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-handoff-evidence.sh`.
