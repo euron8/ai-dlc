@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.912.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R6a. It closes BL-770 and the consumer push candidate `PC-S319-VALIDATE-HANDOFF-EVIDENCE-REFUSES-AN-ABSOLUTE-STORY-PATH-AS-STORY-UNTRACKED`, and files BL-770. Net for this release: 1 closed entry plus 1 candidate closed, 1 filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-handoff-evidence.sh`.
+
+### BL-770 — validate-handoff-evidence.sh resolves every story path to one toplevel-relative path, refuses one outside the repository, and no longer reads the working tree for an absolute story
+
+Before this release the validator used its story argument raw. `tracked()` ran `git cat-file -e "<ref>:<absolute path>"`, which never resolves, so an absolute story was never tracked at the ref and exited 1 `story-untracked`, in the main checkout, in a linked worktree, under the `/tmp` spelling of a `/private/tmp` repo, and from another worktree. The heading arm was skipped silently on the same path. Reproduced on 0.910.0 (`e434c2247`).
+
+It was worse than filed. `story_text` fell back to the disk copy, so in strategy mode an absolute path made the evidence arms read the working tree instead of the ref: an empty cell that existed only uncommitted gave rc 1 on the absolute path and 0 on the relative one, and an uncommitted fix to a committed bad cell would pass the same way.
+
+Now one `norm_story` applies to every story argument in both modes. It resolves the toplevel and the story's directory with `cd -P`/`pwd -P`, requires the directory to be the toplevel or under it, and returns the toplevel-relative path. Anything else exits 2 UNEVALUABLE: another worktree's absolute path, `stories/../../x.md`, and `<root>/lnk/../x.md` with `lnk` an untracked symlink out of the tree. 0.909.0's `..`/symlink escape therefore stays closed. The disk fallback reads only `<toplevel>/<relative path>`.
+
+The fold: `norm_story` keeps the link name, so an untracked story that is itself a symlink to a file outside the tree was still read from outside in strategy mode. `story_text`'s disk branch now follows such a link to its final target and holds that target's `pwd -P` directory to the same containment test, exiting 2 when it is outside. An in-tree symlink to an in-tree file stays readable, and a tracked symlink blob is untouched.
+
+Behaviour change: story paths are toplevel-relative, so `-C <repo>/stories s.md` now exits 2 UNEVALUABLE in both modes, because `s.md` names `<toplevel>/s.md`. At 0.910.0 handoff mode exited 1 `story-untracked` and strategy mode exited 0 after reading the file relative to the `-C` directory. Pass `-C <repo> stories/s.md` or an absolute path.
+
+`core/fixtures/story-evidence-scaffold` carries the ABSOLUTE STORY and STORY SYMLINK cells, a `raw-story` mutant reverting all three layers and a `no-story-symlink` mutant. The receipt scores the fix 0 and 0.910.0's validator 1.
+
 ## [0.911.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R4. It closes BL-767, closes no `PC-` id and files no backlog entry. Net for this release: 1 closed, 0 filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-dispatch-guard.sh`. Role text changes: `core/team-roles/remediator.md`, `core/skills/ai-dlc/rule-bodies/rule-28.md`, `core/skills/ai-dlc/steps/_gate-procedures.md` and `core/skills/ai-dlc/steps/gate-validation.md`. `core/scripts/validate-spawn-ledger.sh`, `core/scripts/validate-artifact-budget.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh` change in comments only.

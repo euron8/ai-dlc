@@ -352,6 +352,98 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     printf '  SKIP  no UTF-8 locale aborts this awk — rp-no-lcc did NOT run\n'
   fi
 
+  # ABSOLUTE STORY PATH (BL-770). norm_story turns every story argument into one toplevel-relative
+  # path in both modes. Cells, in order: handoff on the clean world with the story absolute and
+  # physical; the same through a symlinked alias of the world (a second spelling of one directory,
+  # which a textual `${STORY#$REPO/}` strip leaves absolute); a linked worktree of that world given
+  # its own absolute story path (0); the same worktree given the MAIN world's absolute path, which
+  # is outside its toplevel (2, where a textual strip reads it); a relative path climbing out of the
+  # tree; `<world>/lnk/../x.md` with `lnk` an untracked symlink out of the tree, whose PHYSICAL
+  # parent holds a readable x.md (0.909.0's escape: it must exit 2, never read that file); strategy
+  # mode, absolute, with an empty cell only in the WORKING TREE (the committed story is clean, so
+  # 0); strategy mode, absolute, with the empty cell committed (world-empty, 1). Before the fix the
+  # first two refused story-untracked, the two escapes ran, and the working-tree cell read 1.
+  ABSW="$WORK/world-absdirty"
+  if build_world "$ABSW" clean && mkdir -p "$WORK/abs-out" && ln -s "$WORK/abs-out" "$ABSW/lnk" \
+     && ln -s "$WORK/world-clean" "$WORK/alias-clean" && cp "$WORK/world-clean/$STORY" "$WORK/x.md" \
+     && printf '| TX | z | test |  |\n' >> "$ABSW/$STORY" \
+     && gitw "$WORK/world-clean" worktree add -q --detach "$WORK/wt-clean" "$(cat "$WORK/world-clean/.T")"; then
+    abs_vec() { # <script>
+      local s="$1" c="$WORK/world-clean" pc pe pw a o rc out=""
+      pc="$(cd -P "$c" && pwd -P)"; pe="$(cd -P "$WORK/world-empty" && pwd -P)"
+      pw="$(cd -P "$WORK/wt-clean" && pwd -P)"
+      # <repo> <story>: the main world physical and aliased, the linked worktree's own absolute path,
+      # and the main world's absolute path handed to the linked worktree (outside its toplevel).
+      for a in "$c|$pc/$STORY" "$c|$WORK/alias-clean/$STORY" "$WORK/wt-clean|$pw/$STORY" "$WORK/wt-clean|$pc/$STORY"; do
+        o="$(bash "$s" -C "${a%%|*}" "${a#*|}" "$(cat "$c/.B")" "$(cat "$c/.T")" 2>/dev/null)"; rc=$?
+        out="$out $rc:$(awk '/^REFUSED /{print $2}' <<<"$o" | tr '\n' ',')"
+      done
+      bash "$s" -C "$c" "stories/../../x.md" "$(cat "$c/.B")" "$(cat "$c/.T")" >/dev/null 2>&1; out="$out climb=$?"
+      bash "$s" -C "$ABSW" "$ABSW/lnk/../x.md" "$(cat "$ABSW/.B")" "$(cat "$ABSW/.T")" >/dev/null 2>&1; out="$out lnk=$?"
+      bash "$s" -C "$ABSW" --strategy "$(cat "$ABSW/.T")" "$(cd -P "$ABSW" && pwd -P)/$STORY" >/dev/null 2>&1; out="$out sdirty=$?"
+      bash "$s" -C "$WORK/world-empty" --strategy "$(cat "$WORK/world-empty/.T")" "$pe/$STORY" >/dev/null 2>&1; out="$out scommit=$?"
+      printf '%s' "${out# }"
+    }
+    ABSWANT='0: 0: 0: 2: climb=2 lnk=2 sdirty=0 scommit=1'
+    got="$(abs_vec "$HECTL")"
+    if [ "$got" = "$ABSWANT" ]; then ok "ABSOLUTE STORY: an absolute story path, physical or through a symlinked alias, reads as the relative one; a relative climb and a lnk/.. hop out of the tree exit 2 (UNEVALUABLE, no read); strategy mode reads the ref, not the working tree"
+    else bad "ABSOLUTE STORY: want [$ABSWANT] got [$got]"; fi
+    # Mutant: the raw path in both modes. Every layer is reverted: both norm_story calls go, and the
+    # disk fallback reads an absolute story as given and a relative one under -C, as 0.910.0 did.
+    m="$(dirname "$HECTL")/he-mut-raw-story.sh"
+    FROM1='STORY="$(norm_story "$1")" || exit 2' TO1='STORY="$1"' FROM2='s="$(norm_story "$s")" || exit 2' TO2=':' \
+      FROM3='[ -f "$TOP/$2" ] && { cat "$TOP/$2"; return 0; }' \
+      TO3='case "$2" in /*) [ -f "$2" ] && { cat "$2"; return 0; } ;; *) [ -f "$REPO/$2" ] && { cat "$REPO/$2"; return 0; } ;; esac' \
+      awk 'BEGIN{for (i=1; i<=3; i++) {f[i]=ENVIRON["FROM" i]; t[i]=ENVIRON["TO" i]}}
+        {for (i=1; i<=3; i++) if (p=index($0,f[i])) {$0=substr($0,1,p-1) t[i] substr($0,p+length(f[i])); n++}}
+        {print} END{exit (n==3) ? 0 : 1}' "$HE" > "$m"
+    if [ $? -ne 0 ] || cmp -s "$HE" "$m"; then bad "FIXTURE ERROR: mutation 'raw-story' did not apply at all three sites"
+    else
+      RAWWANT='1:story-untracked, 1:story-untracked, 1:story-untracked, 1:story-untracked, climb=1 lnk=1 sdirty=1 scommit=1'
+      got="$(abs_vec "$m")"
+      if [ "$got" = "$RAWWANT" ]; then ok "MUTATION 'raw-story' killed: the raw path refuses an absolute story as story-untracked, reads both escapes, and reads strategy mode's working tree"
+      elif [ "$got" = "$ABSWANT" ]; then bad "MUTATION 'raw-story' SURVIVED -- the story path used raw in both modes"
+      else bad "MUTATION 'raw-story' moved [$got], want [$RAWWANT]"; fi
+    fi
+    # STORY SYMLINK (BL-770). norm_story contains the story's DIRECTORY and keeps the link name, so
+    # an untracked story that is itself a symlink is held to the same containment by story_text.
+    # Cells, strategy mode at HEAD: an untracked symlink to a file OUTSIDE the tree whose bytes
+    # carry an empty cell (2, never read; the read would give 1); an untracked symlink to an
+    # in-tree clean copy (0, still readable); a TRACKED symlink blob to that same outside file (0:
+    # `git show` emits the link string, nothing outside is read). Mutant 'no-story-symlink' drops
+    # the -L check and moves the outside cell only, to 1 (the outside file was read).
+    if cp "$ABSW/$STORY" "$WORK/abs-out/evil.md" && cp "$WORK/world-clean/$STORY" "$ABSW/stories/clean-copy.md" \
+       && ln -s "$WORK/abs-out/evil.md" "$ABSW/stories/untrk.md" && ln -s clean-copy.md "$ABSW/stories/inlink.md" \
+       && ln -s "$WORK/abs-out/evil.md" "$ABSW/stories/tlink.md" && gitw "$ABSW" add stories/tlink.md \
+       && gitw "$ABSW" commit -qm tlink; then
+      sym_vec() { # <script>
+        local s="$1" pa out=""
+        pa="$(cd -P "$ABSW" && pwd -P)"
+        bash "$s" -C "$ABSW" --strategy HEAD stories/untrk.md >/dev/null 2>&1; out="$out out=$?"
+        bash "$s" -C "$ABSW" --strategy HEAD "$pa/stories/untrk.md" >/dev/null 2>&1; out="$out outabs=$?"
+        bash "$s" -C "$ABSW" --strategy HEAD stories/inlink.md >/dev/null 2>&1; out="$out in=$?"
+        bash "$s" -C "$ABSW" --strategy HEAD stories/tlink.md >/dev/null 2>&1; out="$out tracked=$?"
+        printf '%s' "${out# }"
+      }
+      SYMWANT='out=2 outabs=2 in=0 tracked=0'
+      got="$(sym_vec "$HECTL")"
+      if [ "$got" = "$SYMWANT" ]; then ok "STORY SYMLINK: an untracked story symlinked out of the tree exits 2 (relative and absolute), one symlinked to an in-tree file is read, and a tracked symlink blob reads as its link string"
+      else bad "STORY SYMLINK: want [$SYMWANT] got [$got]"; fi
+      if ! m="$(mkmut no-story-symlink he 'if [ -L "$TOP/$2" ]; then' 'if false; then')" || [ -z "$m" ]; then
+        bad "FIXTURE ERROR: mutation 'no-story-symlink' matched nothing"
+      else
+        got="$(sym_vec "$m")"
+        if [ "$got" = 'out=1 outabs=1 in=0 tracked=0' ]; then ok "MUTATION 'no-story-symlink' killed: without the -L check the outside file is read (empty-cell)"
+        elif [ "$got" = "$SYMWANT" ]; then bad "MUTATION 'no-story-symlink' SURVIVED -- an untracked story symlink out of the tree is read"
+        else bad "MUTATION 'no-story-symlink' moved [$got], want [out=1 outabs=1 in=0 tracked=0]"; fi
+      fi
+    else
+      bad "FIXTURE BROKEN: could not seed the story-symlink cells"
+    fi
+  else
+    bad "FIXTURE BROKEN: could not seed the absolute-story world"
+  fi
+
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
   # synthesised: two trees whose sprint-status.sh is a wrapper that runs the real one, writes one
