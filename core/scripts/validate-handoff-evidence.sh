@@ -6,9 +6,20 @@
 #   validate-handoff-evidence.sh [-C <repo>] <story-file> <base> <frozen>
 #   validate-handoff-evidence.sh [-C <repo>] --strategy <ref> <story-file>...
 #
-# <story-file> is repo-relative. It is read at <frozen> (or <ref>) when tracked there,
-# else from disk. Exit 0 clean (WARN lines allowed), 1 at least one REFUSED line,
-# 2 UNEVALUABLE (a ref that does not resolve, a story file that cannot be read).
+# <story-file> is relative to the repository's top level or absolute, in both modes. norm_story
+# turns every story argument into ONE toplevel-relative path before anything reads it: an
+# absolute path's directory and the toplevel are each resolved with `cd -P`/`pwd -P`, and the
+# directory must be the toplevel or under it (a `/tmp`-spelled path in a `/private/tmp` repo,
+# a linked worktree's own absolute path, and a symlinked directory inside the tree all resolve
+# to the same relative path). A relative path is resolved against the toplevel the same way.
+# A path that resolves outside the toplevel (`stories/../../x.md`, `<root>/lnk/../x.md` with
+# `lnk` a symlink out of the tree, another worktree's absolute path) is UNEVALUABLE, exit 2.
+# Without this an absolute story was never `tracked` at the ref: handoff mode refused it as
+# story-untracked and skipped the heading arm, and strategy mode read the WORKING TREE's
+# copy instead of the ref's. The normalised story is read at <frozen> (or <ref>) when tracked
+# there, else from disk. Exit 0 clean (WARN lines allowed), 1 at least one REFUSED line,
+# 2 UNEVALUABLE (a ref that does not resolve, a story file that cannot be read or that
+# resolves outside the repository).
 #
 # WHY. In the reference consumer's s317-s318, 22 of 33 implementation rework verdicts were
 # evidence or bookkeeping, not code: a capture with no command line, a RED capture left
@@ -176,12 +187,57 @@ resolve() { # <ref> -> full sha or empty
 tracked() { # <ref> <path>
   G cat-file -e "$1:$2" 2>/dev/null
 }
-story_text() { # <ref> <story> -> the story bytes on stdout; 1 if unreadable
+TOP="$(G rev-parse --show-toplevel 2>/dev/null)" && TOP="$(cd -P "$TOP" 2>/dev/null && pwd -P)" && [ -n "$TOP" ] \
+  || { echo "$ME: UNEVALUABLE — no working-tree top level for $REPO" >&2; exit 2; }
+story_text() { # <ref> <normalised story> -> the story bytes on stdout; 1 if unreadable, 2 if outside
   if tracked "$1" "$2"; then G show "$1:$2"; return 0; fi
-  local p="$2"
-  case "$p" in /*) ;; *) p="$REPO/$p" ;; esac
-  [ -f "$p" ] && { cat "$p"; return 0; }
+  # norm_story contained the DIRECTORY and kept the link name, so an untracked story that is itself
+  # a symlink is followed here, hop by hop, and its final target's physical directory is held to
+  # the same containment test. A tracked symlink never reaches this: `git show` emits the link string.
+  if [ -L "$TOP/$2" ]; then
+    local f="$TOP/$2" t d n=0
+    while [ -L "$f" ]; do
+      n=$((n + 1)); [ "$n" -le 40 ] || { echo "$ME: UNEVALUABLE — the story symlink does not resolve: $2" >&2; return 2; }
+      t="$(readlink "$f")" || { echo "$ME: UNEVALUABLE — the story symlink does not resolve: $2" >&2; return 2; }
+      case "$t" in /*) f="$t" ;; *) f="${f%/*}/$t" ;; esac
+    done
+    d="${f%/*}"
+    d="$(cd -P "${d:-/}" 2>/dev/null && pwd -P)" || { echo "$ME: UNEVALUABLE — the story symlink's target directory does not resolve: $2" >&2; return 2; }
+    case "$d" in
+      "$TOP"|"$TOP"/*) ;;
+      *) echo "$ME: UNEVALUABLE — the story is a symlink to a file outside the repository top level $TOP: $2 (directory $d)" >&2; return 2 ;;
+    esac
+  fi
+  [ -f "$TOP/$2" ] && { cat "$TOP/$2"; return 0; }
   return 1
+}
+# norm_story <story> -> the toplevel-relative path on stdout; exit status 2 (with the reason on
+# stderr) when it resolves outside the toplevel or cannot be resolved. Containment is decided on
+# `pwd -P` of BOTH sides, never on the spelling: a textual prefix strip passes a `/tmp` spelling
+# of a `/private/tmp` repo as outside and a `lnk/..` hop as inside.
+norm_story() {
+  local p="$1" dir base d
+  base="${p##*/}"
+  case "$base" in ""|.|..) echo "$ME: UNEVALUABLE — story path names no file: $p" >&2; return 2 ;; esac
+  case "$p" in */*) dir="${p%/*}" ;; *) dir="." ;; esac
+  case "$p" in
+    /*) [ -n "$dir" ] || dir=/ ;;
+    *) dir="$TOP/$dir" ;;
+  esac
+  if ! d="$(cd -P "$dir" 2>/dev/null && pwd -P)"; then
+    # A relative story whose directory is absent on disk is read at the ref only; it may not
+    # climb, because nothing on disk resolves the climb.
+    case "$p" in
+      /*) echo "$ME: UNEVALUABLE — the story's directory does not resolve: $p" >&2; return 2 ;;
+      ../*|*/../*|*/..|./*|*/./*) echo "$ME: UNEVALUABLE — the story's directory does not resolve: $p" >&2; return 2 ;;
+    esac
+    printf '%s\n' "$p"; return 0
+  fi
+  if [ "$d" = "$TOP" ]; then printf '%s\n' "$base"; return 0; fi
+  case "$d" in
+    "$TOP"/*) printf '%s/%s\n' "${d#"$TOP"/}" "$base" ;;
+    *) echo "$ME: UNEVALUABLE — the story resolves outside the repository top level $TOP: $p (directory $d)" >&2; return 2 ;;
+  esac
 }
 
 # The ONE heading grammar, shared by strategy mode and the heading-demoted arm. ev_level(line, h)
@@ -262,6 +318,7 @@ if [ "${1:-}" = "--strategy" ]; then
   [ -n "$REF" ] || { echo "$ME: UNEVALUABLE — ref does not resolve: $2" >&2; exit 2; }
   shift 2
   for s in "$@"; do
+    s="$(norm_story "$s")" || exit 2
     strategy_one "$REF" "$s" || exit 2
   done
   if [ "$refused" -eq 1 ]; then
@@ -274,7 +331,7 @@ fi
 
 # ------------------------------------------------------------------------- handoff
 [ $# -eq 3 ] || { echo "usage: $ME [-C <repo>] <story-file> <base> <frozen>" >&2; exit 2; }
-STORY="$1"
+STORY="$(norm_story "$1")" || exit 2
 BASE="$(resolve "$2")";   [ -n "$BASE" ]   || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
 FROZEN="$(resolve "$3")"; [ -n "$FROZEN" ] || { echo "$ME: UNEVALUABLE — frozen does not resolve: $3" >&2; exit 2; }
 TEXT="$(story_text "$FROZEN" "$STORY")" || { echo "$ME: UNEVALUABLE — cannot read $STORY at $FROZEN or on disk" >&2; exit 2; }
