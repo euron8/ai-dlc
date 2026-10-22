@@ -174,8 +174,8 @@ b_tx() { # <project> <line>... -> transcript path
   local p="$1" t; shift; t="$p/../session.jsonl"; : > "$t"
   for l in "$@"; do printf '%s\n' "$l" >> "$t"; done; printf '%s' "$t"; }
 b_paused() { [ -f "$1/_bmad-output/pipeline-paused.flag" ] && echo y || echo n; }
-b_world() { # <hook> -> "LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD" as y/n (y = correct)
-  local h="$1" p t lead skilltu other updater resume notrans unread
+b_world() { # <hook> -> "LEAD SKILLTU OTHER UPDATER RESUME NOTRANS NEWSESS LOSTDIR UNREADABLE" as y/n (y = correct)
+  local h="$1" p t lead skilltu other updater resume notrans newsess lostdir unreadable
   # LEAD: the lead typed /ai-dlc earlier; its later prose pauses.
   p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN" "$T_TYPED" "$T_PLAIN")"
   b_fire "$h" "$p" "sess-lead" "$t" "Stop and re-check the gate."
@@ -198,27 +198,46 @@ b_world() { # <hook> -> "LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD" as y/
   p="$(b_proj)"; t="$(b_tx "$p" "$T_TYPED" "$T_TYPED_UPD" "$T_PLAIN")"
   b_fire "$h" "$p" "sess-upd" "$t" "what version are we on now"
   [ "$(b_paused "$p")" = n ] && updater=y || updater=n
-  # RESUME: /clear then `/ai-dlc resume` in a NEW session -- its transcript holds no marker yet;
-  # the current prompt carries it and pauses (the lead's resume branch clears the flag).
-  p="$(b_proj)"; t="$(b_tx "$p")"
+  # RESUME: /clear then `/ai-dlc resume` in a NEW session -- its transcript is not written yet
+  # (an ABSENT file in an existing directory, the shape the harness produces); the current prompt
+  # carries the marker and pauses (the lead's resume branch clears the flag).
+  p="$(b_proj)"; t="$p/../absent-resume.jsonl"
   b_fire "$h" "$p" "sess-new" "$t" "/ai-dlc resume"
   [ "$(b_paused "$p")" = y ] && resume=y || resume=n
   # NOTRANS: no transcript_path at all -> the default branch pauses.
   p="$(b_proj)"
   b_fire "$h" "$p" "sess-x" "" "a steer with no transcript path"
   [ "$(b_paused "$p")" = y ] && notrans=y || notrans=n
-  # UNREAD: a transcript_path naming no file -> the default branch pauses.
+  # NEWSESS: a new session's FIRST prompt -- transcript_path names a file the harness has not
+  # written yet, in a directory that exists. No flag; PRESENCE of the PAUSE_SKIPPED row with the
+  # new Reason and of the captured prompt, so a silent skip fails the cell.
   p="$(b_proj)"
-  b_fire "$h" "$p" "sess-y" "$p/../does-not-exist.jsonl" "a steer whose transcript cannot be read"
-  [ "$(b_paused "$p")" = y ] && unread=y || unread=n
-  printf '%s %s %s %s %s %s %s\n' "$lead" "$skilltu" "$other" "$updater" "$resume" "$notrans" "$unread"
+  b_fire "$h" "$p" "sess-first" "$p/../absent-first.jsonl" "READ and FOLLOW docs/plans/x.md"
+  if [ "$(b_paused "$p")" = n ] \
+     && grep -q '^- Reason: operator prose typed in a new session whose transcript is not written yet' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && ! grep -q '^## .*-- USER_PAUSE' "$p/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && grep -q '^READ and FOLLOW docs/plans/x.md$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null \
+     && grep -q '^- Session: sess-first$' "$p/_bmad-output/operator-requests-history.md" 2>/dev/null; then
+    newsess=y; else newsess=n; fi
+  # LOSTDIR: the transcript's directory is absent too -> a lost signal, the default pauses.
+  p="$(b_proj)"
+  b_fire "$h" "$p" "sess-y" "$p/../nodir/x.jsonl" "a steer whose transcript directory is gone"
+  [ "$(b_paused "$p")" = y ] && lostdir=y || lostdir=n
+  # UNREADABLE: an existing file nobody can read (mode 000) -> pauses. Root reads mode 000, so the
+  # cell cannot be seeded there and reads y by stated skip.
+  p="$(b_proj)"; t="$(b_tx "$p" "$T_PLAIN")"; /bin/chmod 000 "$t"
+  if [ -r "$t" ]; then unreadable=y; else
+    b_fire "$h" "$p" "sess-z" "$t" "a steer whose transcript cannot be read"
+    [ "$(b_paused "$p")" = y ] && unreadable=y || unreadable=n
+  fi
+  printf '%s %s %s %s %s %s %s %s %s\n' "$lead" "$skilltu" "$other" "$updater" "$resume" "$notrans" "$newsess" "$lostdir" "$unreadable"
 }
-B_EXPECT="y y y y y y y"
+B_EXPECT="y y y y y y y y y"
 B_REAL="$(b_world "$HOOK")"
 if [ "$B_REAL" = "$B_EXPECT" ]; then
-  ok "session test: typed /ai-dlc pauses, Skill(ai-dlc) pauses, a non-ai-dlc session captures without pausing, the updater does not pause, /ai-dlc resume in a new session pauses, no or unreadable transcript pauses [$B_REAL]"
+  ok "session test: typed /ai-dlc pauses, Skill(ai-dlc) pauses, a non-ai-dlc session captures without pausing, the updater does not pause, /ai-dlc resume in a new session pauses, a new session's first prompt (transcript not written yet) captures without pausing, no transcript path / lost directory / unreadable file pauses [$B_REAL]"
 else
-  bad "SESSION TEST WRONG — cells LEAD SKILLTU OTHER UPDATER RESUME NOTRANS UNREAD read [$B_REAL], expected [$B_EXPECT]"
+  bad "SESSION TEST WRONG — cells LEAD SKILLTU OTHER UPDATER RESUME NOTRANS NEWSESS LOSTDIR UNREADABLE read [$B_REAL], expected [$B_EXPECT]"
 fi
 
 # --- Assertion 11: MUTANTS — each cell can fail ------------------------------
@@ -245,17 +264,19 @@ b_mut() {
   fi
 }
 # The skip never taken: every session pauses again -- the filed defect.
-b_mut noskip    "y y n n y y y" 's#^  none|ai-dlc-update)$#  NEVER-MATCHES)#'
+b_mut noskip    "y y n n y y y y y" 's#^  none|ai-dlc-update)$#  NEVER-MATCHES)#'
 # The updater counted as a lead.
-b_mut updlead   "y y y n y y y" 's#^  none|ai-dlc-update)$#  none)#'
+b_mut updlead   "y y y n y y y y y" 's#^  none|ai-dlc-update)$#  none)#'
 # The Skill tool_use alternative dropped: a lead activated through Skill(ai-dlc) stops pausing.
-b_mut notooluse "y n y y y y y" 's#|"name":"Skill","input":\\{"skill":"ai-dlc(-update)?"##'
+b_mut notooluse "y n y y y y y y y" 's#|"name":"Skill","input":\\{"skill":"ai-dlc(-update)?"##'
 # The typed marker un-anchored from the harness's user record: a MENTION makes a session a lead.
-b_mut bare      "y y n y y y y" 's#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
+b_mut bare      "y y n y y y y y y" 's#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
 # The current /ai-dlc prompt not consulted: a resume in a new session does not pause.
-b_mut nocurrent "y y y y n y y" 's#^  /ai-dlc|/ai-dlc\[\[:space:\]\]\*)  *SESSION_SKILL="ai-dlc" ;;$#  /ai-dlc-NEVER) SESSION_SKILL="ai-dlc" ;;#'
+b_mut nocurrent "y y y y n y y y y" 's#^  /ai-dlc|/ai-dlc\[\[:space:\]\]\*)  *SESSION_SKILL="ai-dlc" ;;$#  /ai-dlc-NEVER) SESSION_SKILL="ai-dlc" ;;#'
 # The default inverted: no readable transcript reads as "not a lead" and skips.
-b_mut nodefault "y y y y y n n" 's#^    SESSION_SKILL="unknown"$#    SESSION_SKILL="none"#'
+b_mut nodefault "y y y y y n y n n" 's#^    SESSION_SKILL="unknown"$#    SESSION_SKILL="none"#'
+# The new-session branch deleted: a brand-new session's first prompt pauses the lead again.
+b_mut nonewbranch "y y y y y y n y y" '/^  elif \[ -n "\$TRANSCRIPT" \] && \[ ! -e/,/SESSION_SKILL="new-session"/d'
 
 # --- Assertion 8: the THREE hooks seed the SAME legend -------------------------
 # WHY THIS LIVES HERE, AND WHY ASSERTION 6 IS NOT ENOUGH. Assertion 6 reads the log this

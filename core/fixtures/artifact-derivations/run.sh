@@ -1499,8 +1499,11 @@ else ok "mc-noop-first REFUSED DID NOT APPLY: the order of the no-op expression 
 # A substring ban on the backtick refused `grep -c -F 'a`b' d.txt`, which bash runs with no
 # substitution, and reading git's subcommand as word 2 refused `git -C sub rev-parse ...`. Both
 # were correct derivations rewritten at write time. The fix moves the backtick into the quote
-# scan and skips ONE leading `-C <dir>` under three conditions: a plain relative path, inside the
-# physical root, and the root's own common dir.
+# scan and skips ONE leading `-C <dir>` under three conditions: a plain path, inside the
+# physical root when RELATIVE, and the root's own common dir. An ABSOLUTE <dir> need not sit under
+# the root -- the capture hook roots fences at the edited file's linked worktree -- so for it the
+# common dir is the whole boundary, and its refusal names that reason: r-abs-wt/-link/-root are
+# admitted, r-abs (/tmp), r-abs-for (a foreign repo), r-abs-bare and r-abs-nest are refused.
 #
 # EVERY REFUSED ROW ASSERTS ITS MESSAGE, NOT ITS RC. With the backtick test deleted outright,
 # `echo 'a'`touch canary`'b'` runs, prints a line, and fails STALE with rc 1 -- the refusal's rc
@@ -1515,7 +1518,9 @@ else ok "mc-noop-first REFUSED DID NOT APPLY: the order of the no-op expression 
 # not block a non-bare repo.
 R="$WORK/r"; RP="$R/p"
 mkdir -p "$RP/.claude" "$RP/sub" "$R/o" "$R/x" "$R/src"
-( git -C "$RP" init -q . \
+( git -C "$RP" init -q . && git -C "$RP" -c user.email=r@r -c user.name=r commit -q --allow-empty -m p \
+  && git -C "$RP" worktree add -q "$R/wt" -b r-wt \
+  && ln -s "$R/wt" "$R/wtlink" \
   && git -C "$R/o" init -q . && git -C "$R/o" -c user.email=r@r -c user.name=r commit -q --allow-empty -m o \
   && git -C "$R/x" init -q . && git -C "$R/x" -c user.email=r@r -c user.name=r commit -q --allow-empty -m x \
   && ln -s "$R/o" "$RP/sub/sub" \
@@ -1528,17 +1533,22 @@ mkdir -p "$RP/.claude" "$RP/sub" "$R/o" "$R/x" "$R/src"
   && git -C "$R/src" -c user.email=r@r -c user.name=r commit -q -m 1 \
   && printf 'two\n' > "$R/src/f" && git -C "$R/src" -c user.email=r@r -c user.name=r commit -q -am 2 \
   && git clone -q --bare "$R/src" "$RP/evil" \
-  && git --git-dir="$RP/evil" config diff.external "$R/ext-bare.sh" ) >/dev/null 2>&1 \
+  && git --git-dir="$RP/evil" config diff.external "$R/ext-bare.sh" \
+  && mkdir -p "$R/f/sub" && git -C "$R/f" init -q . && printf 'one\n' > "$R/f/t" && printf 's\n' > "$R/f/sub/s" \
+  && git -C "$R/f" add -A && git -C "$R/f" -c user.email=r@r -c user.name=r commit -q -m f \
+  && printf 'two\n' > "$R/f/t" && git -C "$R/f" config diff.external "$R/ext-sym.sh" \
+  && ln -s "$R/f/sub" "$RP/lnk" ) >/dev/null 2>&1 \
   || bad "r-world could not be built -- no R verdict below is readable"
 printf '#!/bin/sh\ntouch %s/canary-nested\n' "$R" > "$R/ext-nested.sh"
 printf '#!/bin/sh\ntouch %s/canary-bare\n' "$R" > "$R/ext-bare.sh"
-chmod +x "$R/ext-nested.sh" "$R/ext-bare.sh"
+printf '#!/bin/sh\ntouch %s/canary-sym\n' "$R" > "$R/ext-sym.sh"
+chmod +x "$R/ext-nested.sh" "$R/ext-bare.sh" "$R/ext-sym.sh"
 printf 'a`b\n' > "$RP/d.txt"
 
 R_BT="it carries a backtick outside single quotes, which bash runs as command substitution"
 r_run() { # $1 validator  $2 label  $3 command  $4 recorded output -> out, rc
   { printf '# r\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$RP/$2.md"
-  rm -f "$RP/canary" "$R/canary-nested" "$R/canary-bare"
+  rm -f "$RP/canary" "$R/canary-nested" "$R/canary-bare" "$R/canary-sym"
   out="$(cd "$RP" && AI_DLC_PROJECT_ROOT="$RP" bash "$1" "$2.md" 2>&1)"; rc=$?
 }
 r_arms() { # <validator> <quiet> -> R_FAILED
@@ -1566,14 +1576,35 @@ r_arms() { # <validator> <quiet> -> R_FAILED
   rref r-bt-uq     'echo `touch canary`'           "$R_BT" "$RP/canary"
   rref r-bt-dq     'echo "`touch canary`"'         "$R_BT" "$RP/canary"
   rref r-bt-sqcat  "echo 'a'\`touch canary\`'b'"   "$R_BT" "$RP/canary"
-  rref r-abs       'git -C /tmp log'               "'git -C /tmp' is not a read-only git subcommand" ""
+  racc r-abs-wt    "git -C $R/wt rev-parse --is-inside-work-tree" true
+  racc r-abs-link  "git -C $R/wtlink rev-parse --is-inside-work-tree" true
+  racc r-abs-root  "git -C $RP rev-parse --is-inside-work-tree" true
+  rref r-abs       'git -C /tmp log'               "'git -C /tmp' names a directory that is not a worktree of this repository" ""
+  rref r-abs-for   "git -C $R/o log"               "'git -C $R/o' names a directory that is not a worktree of this repository" ""
+  rref r-abs-bare  "git -C $RP/evil diff HEAD~1 HEAD" "'git -C $RP/evil' names a directory that is not a worktree of this repository" "$R/canary-bare"
+  rref r-abs-nest  "git -C $RP/nested diff HEAD~1 HEAD" "'git -C $RP/nested' names a directory that is not a worktree of this repository" "$R/canary-nested"
   rref r-dotdot    'git -C ../x log'               "'git -C ../x' is not a read-only git subcommand" ""
-  rref r-chain     'git -C sub -C sub log'         "'git -C sub -C' is not a read-only git subcommand" ""
+  # `lnk` is an untracked symlink in the root to a FOREIGN repo's `sub`. A logical `cd lnk/..` lands
+  # in the root; `git -C lnk/..` chdirs physically and lands in the foreign repo, whose diff.external
+  # writes the canary. Both spellings must be refused before anything runs.
+  rref r-sym-rel   'git -C lnk/.. diff'            "'git -C lnk/..' is not a read-only git subcommand" "$R/canary-sym"
+  rref r-sym-abs   "git -C $RP/lnk/.. diff"        "'git -C $RP/lnk/..' names a directory that is not a worktree of this repository" "$R/canary-sym"
+  rref r-chain     'git -C sub -C sub log'        "'git -C sub -C' is not a read-only git subcommand" ""
   rref r-bare      'git -C evil diff HEAD~1 HEAD'  "'git -C evil' is not a read-only git subcommand" "$R/canary-bare"
   rref r-nested    'git -C nested diff HEAD~1 HEAD' "'git -C nested' is not a read-only git subcommand" "$R/canary-nested"
   rref r-dashc     'git -C sub -c core.pager=x log' "'git -c' is not a read-only git subcommand" ""
   R_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
 }
+# The absolute rows put $R into the fence text, so $R must sit inside the -C character class, or an
+# admit row goes red for the class rather than for the common-dir logic.
+case "$R" in
+  /*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-]*|[!/]*)
+    bad "r-world path $R is outside the -C character class -- the r-abs admit rows are unreadable" ;;
+  *) ok "r-world path            \$R is an absolute path inside the -C character class" ;;
+esac
+[ -f "$R/wt/.git" ] && [ -L "$R/wtlink" ] \
+  && ok "r-world worktree        \$R/wt is a LINKED worktree of the root (a .git FILE), reached also by a symlink" \
+  || bad "r-world worktree: \$R/wt is not a linked worktree or \$R/wtlink is not a symlink -- r-abs-wt/r-abs-link unreadable"
 r_arms "$VALIDATOR" 0
 [ -z "$R_FAILED" ] \
   && ok "r-control              the unmutated validator fails no R arm, so a mutant's failed set is its own" \
@@ -1602,15 +1633,46 @@ r_mutant r-m1 "r-acc-dq r-acc-sq r-bt-dq-msg r-bt-sqcat-msg r-bt-uq-msg" \
   "s/|\\*'<'\\*|/|*'<'*|*'\`'*|/"
 r_mutant r-m2 "r-bt-dq-can r-bt-dq-msg r-bt-sqcat-can r-bt-sqcat-msg r-bt-uq-can r-bt-uq-msg" \
   '/if (ch == BT && sq == 0) exit 5/d'
-r_mutant r-m3 "r-abs-msg r-bare-msg r-chain-msg r-dotdot-msg r-nested-can r-nested-msg" \
+r_mutant r-m3 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-chain-msg r-dotdot-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
   's/^      if \[ "\$sub" = "-C" \]; then$/      if [ "$sub" = "-C" ]; then gdir="${3:-}"; sub="${4:-}"; fi; if false; then/'
-r_mutant r-m4 "r-bare-msg r-nested-can r-nested-msg" \
+r_mutant r-m4 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
   's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/'
 # r-m5's second edit anchors on the `export GIT_CONFIG_COUNT=1` line alone, so section O's
 # ` && export COLUMNS=80 && { eval ` anchor on the next line still matches exactly once.
-r_mutant r-m5 "r-bare-can r-bare-msg r-nested-can r-nested-msg" \
+r_mutant r-m5 "r-abs-bare-can r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-can r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
   's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/' \
   's/ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository \\$/ true \\/'
+# r-m6  an absolute <dir> routed back into the relative-only class (the pre-fix grammar)
+# r-m7  the common-dir comparison dropped for an absolute <dir> only
+r_mutant r-m6 "r-abs-bare-msg r-abs-for-msg r-abs-link r-abs-msg r-abs-nest-msg r-abs-root r-abs-wt r-sym-abs-msg" \
+  's#^          /\*) \# ABSOLUTE: canonicalised directly#          /nomatch/*) \# ABSOLUTE: canonicalised directly#'
+r_mutant r-m7 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-sym-abs-can r-sym-abs-msg" \
+  's#^        if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then$#        if case "$gdir" in /*) false ;; *) [ -z "$gcom_root" ] || [ "$gcom_root" != "$gcom_dir" ] ;; esac; then#'
+# r-m8  the admission's `cd -P` reverted to a logical `cd` (all three sites)
+r_mutant r-m8 "r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
+  's#(cd -P "\$#(cd "$#g'
+n_m8="$(grep -c '(cd -P "\$' "$R/r-m8-$VBASE")" || n_m8=0
+n_m8v="$(grep -c '(cd -P "\$' "$VALIDATOR")" || n_m8v=0
+[ "$n_m8" -eq 0 ] && [ "$n_m8v" -eq 3 ] && ok "r-m8 anchor            all 3 admission cd -P sites reverted in the copy (3 in the validator)" \
+  || bad "r-m8 anchor: $n_m8 admission cd -P site(s) left in the copy, $n_m8v in the validator (want 0 and 3)"
+# THE AWK PROGRAM CHECK'S SELF-PROBE. The gawk directives it refuses load a program, so no fixture
+# seeds one (operator ruling, benign-only fixtures); the validator probes its own regexes at startup
+# instead. These mutants break the regex and assert the probe stops the run, on a benign derivation.
+#   a-m1  `load` dropped from AWK_DIR_RE            a-m2  AWK_DIR_RE's trailing boundary dropped
+A_PROBE="the awk program check failed its own self-probe"
+r_run "$VALIDATOR" a-ctl 'grep -c a d.txt' 1
+[ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out" \
+  && ok "a-control              the unmutated validator passes its self-probe and runs a benign derivation" \
+  || bad "a-control the unmutated validator did not run a benign derivation (rc=$rc): $out"
+a_mutant() { # $1 label  $2 sed expression
+  local M="$R/$1-$VBASE"
+  if ! mut_copy "$M" "$2"; then bad "$1 DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  r_run "$M" "$1" 'grep -c a d.txt' 1
+  if [ "$rc" -eq 2 ] && grep -qF "$A_PROBE" <<< "$out"; then ok "$1 KILLED        the self-probe stopped the run (exit 2, named)"
+  else bad "$1 SURVIVED -- rc=$rc, the self-probe did not stop the run: $out"; fi
+}
+a_mutant a-m1 "s/^AWK_DIR_RE='@(include|load|namespace)/AWK_DIR_RE='@(include|namespace)/"
+a_mutant a-m2 "s/^AWK_DIR_RE='@(include|load|namespace)(\\[^A-Za-z0-9_\\]|\\$)'\$/AWK_DIR_RE='@(include|load|namespace)'/"
 n_om="$(grep -c ' && export COLUMNS=80 && { eval ' "$R/r-m5-$VBASE")" || n_om=0
 [ "$n_om" -eq 1 ] && ok "r-m5 anchor            section O's COLUMNS anchor still matches once in the r-m5 copy" \
   || bad "r-m5 anchor: section O's COLUMNS anchor matched $n_om times in the r-m5 copy, not 1"

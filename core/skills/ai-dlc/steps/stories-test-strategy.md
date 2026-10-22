@@ -258,7 +258,7 @@ carry these four headings, added by the lead at authoring, each empty until
 the dev fills it:
 
 - `## Production Integrity Tests` — read by gate-validation Check 6.
-- `## Smoke Test Updates` — read by gate-validation Check 6's smoke clause
+- `## Smoke Test Updates` — read by gate-validation Check 11's smoke clause
   and by QA's Validation Checklist.
 - `## Rename Verification` — for a story that renames or RE-POINTS an
   identifier, constant or path. It carries `git grep -n <old name>` and

@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.909.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R1. It closes BL-758, BL-759, BL-760, BL-756 and BL-757, closes no `PC-` id, and files BL-758, BL-759 and BL-760. Net for this release: 5 closed, 3 filed = -2. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-pause.sh` and `core/scripts/validate-artifact-derivations.sh`. Role text changes: `core/team-roles/code-reviewer.md` and `core/skills/ai-dlc/steps/stories-test-strategy.md`.
+
+### BL-758 — a new session's first prompt no longer raises the lead's pause flag
+
+Before this release `ai-dlc-pause.sh` decided whether the typing session was an ai-dlc session from its transcript. When the transcript file did not yet exist it set the session skill to `unknown` and fell through to the line that touches the pause flag. Claude Code writes a session's transcript after the first `UserPromptSubmit`: across graph's 182 top-level transcripts, 175 were born 0.013 to 1.5 seconds after the first prompt. So nearly every new session's first prompt paused the live pipeline. On graph sprint 319, session 3bed403c's first prompt paused lead 888e1365, which then took 10 Rule 29 denials. This is the residue of archived BL-531, whose stored-lead-id alternative was built and rejected.
+
+Now a non-empty `transcript_path` whose file is absent inside a directory that exists logs `PAUSE_SKIPPED` with its own reason and does not pause. The prompt is still captured in `operator-requests-history.md`. `/ai-dlc` prompts, an empty path, an absent directory and an unreadable existing file still pause. The narrowing: a lead whose transcript file was moved or deleted while its directory exists now also skips. The harness writes absolute paths and does not rotate a live transcript, and a relative or slash-less path resolves its directory to `.` and skips. The legends in five hooks are updated. The `pause-hook-origin` fixture gains the cells NEWSESS, LOSTDIR and UNREADABLE and the mutant `nonewbranch`.
+
+### BL-759 — the missing or mismatched smoke test is Critical at gate 1, as QA's HARD GATE already treats it
+
+Before this release `code-reviewer.md` graded "Missing or Mismatched Smoke Test Updates" Important, while `qa.md`'s "Smoke test updates (HARD GATE)" rejects the same condition. An Important finding may ride an APPROVED verdict (`merge-review-shards.sh:107-108`), so gate 1 passed what gate 2 rejects. On graph sprint 319, story 4.4 was APPROVED at gate 1 at 10:35:25 EDT and sent to NEEDS_REWORK at gate 2 at 10:50:55 EDT, costing a 41m26s re-review.
+
+The heading is now Critical. The body cites `qa.md`'s clause instead of restating it, and says the smoke spec in the same commit is non-deferrable. A live or deployed-page acceptance criterion defers only under `qa.md`'s Deferred-AC discharge predicate (HARD GATE), because story 2.3b legitimately deferred only a deployed-page criterion. `stories-test-strategy.md` now says Check 11, not Check 6. Three `cr-smoke-*` pins are added. The receipt proves the text only (operator ruling, batch 147); no replay closes a prompt fix.
+
+### BL-760 — one `git -C <absolute dir>` inside the same repository is admitted, and a symlink escape in the relative form is closed
+
+BL-728 admitted one `git -C <dir>` but only for a relative `<dir>`. The absolute path of the edited file's own linked worktree, which the capture hook uses as its root, was refused. On graph sprint 319 that was 33 refusals in 10 seats, each recorded as unfenced prose instead of a derived fence.
+
+An absolute `<dir>` is now canonicalised with `pwd -P` and admitted when its `git rev-parse --git-common-dir`, read under `safe.bareRepository=explicit`, equals the root's. Any other absolute `<dir>` is refused as BADGITDIR. Relative paths keep BL-728's rules and a second `-C` is still refused. The common directory is compared, not "under the root", because a reviewer re-runs fences from the main checkout. The fixture mutants r-m6 and r-m7 kill the two regressions. A pruned story worktree's fence scores ALLOWLIST with a "rewrite it" remedy; it has no separate kind, by choice.
+
+The relative `lnk/..` symlink escape shipped in 0.908.0 (BL-728) and is closed here. The consumer runs it now: graph's `.claude/.ai-dlc-version` reads `version: 0.908.0`, and its `scripts/ai-dlc/validate-artifact-derivations.sh` is `cmp`-identical to 725e89df5's, so this release closes a live exposure in the consumer. What an attacker needs is an untracked symlink in the root, pointing into a repository whose config sets `diff.external`. An allowed `git -C <root>/<link>/.. diff` derivation then runs that program when the gate re-runs fences. Plain `cd` resolved `lnk/..` textually, which let such a symlink carry `git -C` into a foreign repository. The fix is `cd -P` at every site of the admission, killed by the mutant r-m8. The absolute admission widened the hole, and both forms are closed.
+
+### BL-756 — gawk's `@include`, `@load` and `@namespace` directives are refused in an awk program
+
+`AWK_AT_RE` requires a `(`, so these directives, which take a quoted name and no parenthesis, passed the program check. They are inert on the BWK awk macOS ships and live on gawk.
+
+`AWK_DIR_RE` now refuses them through the shared helper `awk_prog_refusal`, and a startup self-probe checks both the directive refusal and the existing `@name(` refusal against literal text, loading no program (operator's benign-only ruling, batch 239). `print "user@host"` and `@includes` stay admitted.
+
+### BL-757 — the derivation validator no longer says an allowlisted tool cannot exit 137 or 143 on its own
+
+Two comments and messages in `validate-artifact-derivations.sh` claimed no allowlisted read-only tool exits 137 or 143 on itself. `awk 'END{exit 137}'` does, and the case arm scores it UNRUN. Both are corrected: such a tool can exit 137 or 143 on its own, this is scored UNRUN, and it fails closed.
+
 ## [0.908.0] - 2026-10-21
 
 Batch 239, lead ai-dlc-13, cluster derivations. It closes BL-728, closes no `PC-` id and files BL-756. Net for this release: 1 closed, 1 filed = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-derivations.sh`. No role or step text changes.

@@ -484,21 +484,19 @@ integrity tests (per coding-conventions), classify as **Critical**.
 This is non-deferrable. The story cannot pass code review without these
 tests. Do not accept "will add in follow-up" or "carry-over item."
 
-### Missing or Mismatched Smoke Test Updates = Important
+### Missing or Mismatched Smoke Test Updates = Critical
 
 If a story introduces, modifies, or removes user-facing functionality
-and does not include corresponding smoke test updates, classify as
-**Important**. The story file must contain a "Smoke Test Updates"
-section listing which test files were added/modified/removed and what
-they cover. Stories that only change internal logic with no user-facing
-impact are exempt.
+and fails `qa.md` "Smoke test updates (HARD GATE)" (smoke tests
+missing, wrong type for the change, or insufficient), classify as
+**Critical**. That clause defines the predicate and QA rejects on it, so
+it is not restated here. Stories that only change internal logic with no
+user-facing impact are exempt.
 
-**Test type must match change type.** If a story adds UI components
-but the smoke test only checks an API endpoint (e.g., GET returns 200),
-classify as **Important** — the test does not verify what the story
-changed. UI changes require browser-level tests. If the project has
-an established browser test framework (e.g., Playwright), the review
-must verify the smoke test uses it.
+This is non-deferrable. The smoke spec, in the project's browser
+framework and in the same commit, cannot be deferred to a follow-up or
+to deploy-validate. A live or deployed-page AC is deferred only under
+`qa.md`'s "Deferred-AC discharge predicate (HARD GATE)".
 
 ### Stubs in Execution Path = Critical
 

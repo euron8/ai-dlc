@@ -897,8 +897,10 @@ Event types:
 - `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
   flag was created. The harness raises the event identically for a completed
   background task and for a human typing; this records the ones that were not
-  a human, so a pause that never happened is distinguishable from one the lead
-  already cleared
+  a human (or a human typing in a session that is not the lead: a non-ai-dlc
+  session, or a brand-new session whose transcript is not written yet), so a
+  pause that never happened is distinguishable from one the lead already
+  cleared
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
 - `PAUSE_QUESTION_IN_PROSE`: the pause flag was UP, the last line of the lead's
