@@ -179,11 +179,18 @@ EOS
            printf 'head: %s\nmutation-red replay\n  mutated:    RED (exit 1)\n' "$b" > "$w/test-results/rp-red-fallback.txt"
            gitw "$w" add -f test-results/rp-red-head.txt test-results/rp-red-fallback.txt || return 2
            printf 'Mutation-RED captures: `test-results/rp-red-head.txt`, `test-results/rp-red-fallback.txt`.\n' >> "$w/$STORY" ;;
+    # rpu8: the shape validate-mutation-red.sh wrote BEFORE its replay_words was scoped to LC_ALL=C:
+    # a non-UTF-8 byte on line 1, a hand-written `$ ` line above `mutation-red replay`. Driven under a
+    # UTF-8 locale (the world's `.LC`), an awk without LC_ALL=C aborts on line 1, `rp` is empty and the
+    # refusal stands down; with it the refusal fires.
+    rpu8)  printf '$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 caf\351 pytest\nhead: %s\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$b" "$b" > "$w/test-results/rp-red-u8.txt"
+           gitw "$w" add -f test-results/rp-red-u8.txt || return 2
+           printf 'Mutation-RED capture: `test-results/rp-red-u8.txt`.\n' >> "$w/$STORY" ;;
     *) return 2 ;;
   esac
   gitw "$w" add -A && gitw "$w" commit -qm "$v" --allow-empty || return 2
   printf '%s\n' "$b" > "$w/.B"; gitw "$w" rev-parse HEAD > "$w/.T"
-  [ "$v" = latin1strat ] && [ -n "$UTF8_LOCALE" ] && printf '%s\n' "$UTF8_LOCALE" > "$w/.LC"
+  { [ "$v" = latin1strat ] || [ "$v" = rpu8 ]; } && [ -n "$UTF8_LOCALE" ] && printf '%s\n' "$UTF8_LOCALE" > "$w/.LC"
   # After the commit: the working tree disagrees, the frozen sha agrees. Read at <frozen>, quiet.
   [ "$v" = dirtyyaml ] && ymlw "$w/$IMPLY_DIR/sprint-status.yaml" done
   # After the commit: the working tree is FIXED and the frozen sha is not. Read at <frozen>, refused.
@@ -209,7 +216,7 @@ verdict() {
   # inherited C locale) BSD awk never aborts, so a world about the abort must force one itself.
   [ -f "$w/.LC" ] && lc="$(cat "$w/.LC")"
   if [ "$m" = s ]; then o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" --strategy "$(cat "$w/.T")" "$STORY" 2>"$e")"; rc=$?
-  else o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
+  else o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
   k="$(awk '/^REFUSED /{print $2}' <<<"$o" | sort | tr '\n' ',')"
   case "$o" in *"WARN head-tree test-results/full.txt"*) k="$k:W" ;; esac
   case "$o" in *"SKIP STATUS ("*) k="$k:S" ;; esac
@@ -253,8 +260,8 @@ verdict() {
 # shape, a hand `$ ` then `head:` then the replay (refused). rpok: the replay at line 1 with a `$ `
 # BELOW it, and the script's `$ ` right above the replay (both accepted). rphead: the head-read arm;
 # its two captures are read by name in run.sh, not through this vector.
-CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s rpfirst:h rps319:h rpok:h rphead:h'
-WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W'
+CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s rpfirst:h rps319:h rpok:h rphead:h rpu8:h'
+WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W 1:replay-preamble,:W'
 # The UTF-8 locale latin1strat is driven under: the first one in which THIS awk aborts on a
 # non-UTF-8 byte. Empty where none does (gawk, mawk, or no UTF-8 locale installed): the abort the
 # world is about cannot happen on this host, and its mutant below says so instead of scoring.

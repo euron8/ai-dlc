@@ -748,6 +748,10 @@ visual surfaces.
 - Compare each new surface against the documented mockup (from
   ui-direction step or `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`,
   composed from `sprint_id` — not globbed).
+- Compare on every dimension the mockup specifies: copy, element structure,
+  attributes (including `role` and `aria-*`), class names, and layout. Record
+  every deviation found in this pass, not only the first. Read each mockup line
+  whole with Read; a truncated read (`cut`, `head -c`, a pipe) is not a comparison.
 - **Gate FAILS** if visual verification was not performed or drift was
   found and not fixed.
 - **Evidence:** Include in gate log:

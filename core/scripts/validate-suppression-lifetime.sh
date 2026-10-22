@@ -378,7 +378,7 @@ GATES_N="$(grep -c . <<<"${GATE_TS:-}" || true)"
 # FAIL LEGIBLE: the expiry message names the `ts` of the row it read and says whose record it is.
 #
 # THE JOIN IS (catalog, check), NEVER check ALONE. The record schema names `catalog` for
-# exactly this reason -- gate-validation.md:757 says it "is what makes a consumer's `check`
+# exactly this reason -- gate-validation.md:964 says it "is what makes a consumer's `check`
 # numbers un-conflatable with this catalog's" and "never attribute across catalogs by
 # number". Keying on the id alone answers a `[core]` suppression from whichever catalog
 # happened to write the newest row.

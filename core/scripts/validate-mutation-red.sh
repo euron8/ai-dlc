@@ -179,7 +179,7 @@ EOF
 # unknown escape kept as two bytes. The walk copies each `\X` pair %q emitted as it stands,
 # so a `~` some bash's %q already escaped is not escaped twice.
 replay_words() {
-  local w q out c i
+  local w q out c i LC_ALL=C
   for w in "$@"; do
     printf -v q '%q' "$w"
     case "$q" in

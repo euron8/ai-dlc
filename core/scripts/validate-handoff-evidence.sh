@@ -338,7 +338,7 @@ if [ -n "$CAPS" ]; then
       # immediately above its replay line, so a `$ ` line above the replay that is not the one
       # right above it is hand-written, and is refused. A replay with no `$ ` above it is the
       # installed-engine shape that prints none, and is accepted.
-      rp="$(awk '!fd && /^\$ /{fd=NR} /^mutation-red replay$/{print NR, fd+0; exit}' <<<"$hdr")"
+      rp="$(LC_ALL=C awk '!fd && /^\$ /{fd=NR} /^mutation-red replay$/{print NR, fd+0; exit}' <<<"$hdr")"
       rl="${rp% *}"; fd="${rp#* }"
       if [ -n "$rp" ] && [ "$fd" -gt 0 ] && [ "$fd" -ne $((rl - 1)) ]; then
         refuse "replay-preamble $cap: line $fd is a '\$ ' line above line $((rl - 1)), the one validate-mutation-red.sh prints right above its 'mutation-red replay' header (line $rl); redirect the script's stdout to the capture and commit it as it is, with no '\$ ' or 'head:' lines of your own"

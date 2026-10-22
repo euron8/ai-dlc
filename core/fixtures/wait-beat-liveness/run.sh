@@ -2150,6 +2150,81 @@ M39_dispatch_toolu_only() {
 }
 
 # ===========================================================================
+# 19c. THE --since-WITHOUT---dispatch WARN FIRES ON A BEAT THAT ARMS A TARGET, AND ONLY THEN.
+#      It once printed on every --since-only invocation, continuation beats and --status included,
+#      so a lead re-arming the same wave read the same advice dozens of times and learned to skip
+#      it. The emission sits in the sweep at FIRST=1 (the sidecar did not exist before this beat).
+#      Rows: the first arm warns; a continuation is silent; --reset warns; a wave adding a target
+#      warns once; a target delivered on its arming beat warns; --status is silent; a path
+#      delivered and then re-armed in a later round warns again (delivery removes the sidecar).
+# ===========================================================================
+S19C_WARN="WARN: wait-for-deliverable: --since without --dispatch"
+s19c_beat() {  # $1 = subject, $2 = workdir; rest = argv (the targets are named by the caller)
+  s19c_subj="$1" s19c_w="$2"; shift 2
+  ( cd "$s19c_w" && env -u CLAUDE_CODE_SESSION_ID \
+        AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
+        AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        AI_DLC_PROJECT_ROOT="$PWD" bash "$s19c_subj" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  s19c_n="$(grep -cF "$S19C_WARN" "$BEATOUT")" || s19c_n=0
+}
+s19c_world() {  # $1 = subject -> W19C_1..W19C_8 (WARN counts) and W19C_DEL (delivered on the arming beat)
+  s19c_w="$(mk_work)"; s19c_s="$(( $(date +%s) - 60 ))"
+  s19c_beat "$1" "$s19c_w" --since "$s19c_s" pend.md;                        W19C_1="$s19c_n"
+  s19c_beat "$1" "$s19c_w" --since "$s19c_s" pend.md;                        W19C_2="$s19c_n"
+  s19c_beat "$1" "$s19c_w" --reset --since "$s19c_s" pend.md;                W19C_3="$s19c_n"
+  s19c_beat "$1" "$s19c_w" --since "$s19c_s" pend.md pend2.md pend3.md;      W19C_4="$s19c_n"
+  s19c_beat "$1" "$s19c_w" --status --since "$s19c_s" pend.md pend2.md;      W19C_6="$s19c_n"
+  s19c_d="$(mk_work)"; printf 'x\n' > "$s19c_d/deliv.md"
+  s19c_beat "$1" "$s19c_d" --since "$s19c_s" deliv.md;                       W19C_5="$s19c_n"
+  case "$OUT" in *"DELIVERED deliv.md"*) W19C_DEL=1 ;; *) W19C_DEL=0 ;; esac
+  rm -f "$s19c_d/deliv.md"
+  s19c_beat "$1" "$s19c_d" --since "$s19c_s" deliv.md;                       W19C_7="$s19c_n"
+  # Row 8: an arming beat that passes --dispatch (the shape the step files prescribe) is silent.
+  s19c_e="$(mk_work)"; mk_ledger_row "$s19c_e" toolu_wbl764disp $(( s19c_s + 30 ))
+  s19c_beat "$(sib_dir "$1")/wait-for-deliverable.sh" "$s19c_e" --since "$s19c_s" --dispatch toolu_wbl764disp pend.md; W19C_8="$s19c_n"
+  W19C_8RC="$RC"; W19C_8OUT="$OUT"
+  rm -rf "$s19c_w" "$s19c_d" "$s19c_e"
+}
+S19c_since_warn_fires_on_arming_only() {
+  s19c_world "$SUBJ"
+  [ "$W19C_1" -eq 1 ] && ok "since-warn: the first arm warns once" || bad "since-warn: the first arm printed $W19C_1 WARN line(s), want 1"
+  [ "$W19C_2" -eq 0 ] && ok "since-warn: a continuation beat is silent" || bad "since-warn: a continuation beat printed $W19C_2 WARN line(s), want 0"
+  [ "$W19C_3" -eq 1 ] && ok "since-warn: --reset re-arms from a typed stamp and warns" || bad "since-warn: --reset printed $W19C_3 WARN line(s), want 1"
+  [ "$W19C_4" -eq 1 ] && ok "since-warn: a wave adding targets warns once" || bad "since-warn: a wave adding targets printed $W19C_4 WARN line(s), want 1"
+  [ "$W19C_DEL" -eq 1 ] || bad "since-warn: CONTROL FAILED — the target did not deliver on its arming beat: $OUT"
+  [ "$W19C_5" -eq 1 ] && ok "since-warn: a target delivered on its arming beat warns" || bad "since-warn: delivered-on-arming printed $W19C_5 WARN line(s), want 1"
+  [ "$W19C_6" -eq 0 ] && ok "since-warn: --status is silent" || bad "since-warn: --status printed $W19C_6 WARN line(s), want 0"
+  [ "$W19C_7" -eq 1 ] && ok "since-warn: a path delivered then re-armed in a later round warns again" || bad "since-warn: the re-armed path printed $W19C_7 WARN line(s), want 1"
+  case "$W19C_8OUT" in *"pend.md"*) : ;; *) bad "since-warn: CONTROL FAILED — the --dispatch arming beat did not run (rc=$W19C_8RC): $W19C_8OUT" ;; esac
+  [ "$W19C_8" -eq 0 ] && ok "since-warn: an arming beat that passes --dispatch is silent" || bad "since-warn: an arming beat with --dispatch printed $W19C_8 WARN line(s), want 0"
+}
+M59_since_warn_unconditional() {
+  mutant since-warn-unconditional \
+    -e 's@^SINCE_WARNED=0$@SINCE_WARNED=0; [ -n "$SINCE" ] \&\& [ -z "$DISPATCH" ] \&\& echo "WARN: wait-for-deliverable: --since without --dispatch (restored)" >\&2@' || return
+  s19c_world "$MUT"
+  if [ "$W19C_2" -ge 1 ] && [ "$W19C_6" -ge 1 ]; then
+    ok "MUTANT since-warn-unconditional: the warn on every --since-only invocation is caught — section 19c catches it"
+  else bad "MUTANT since-warn-unconditional: section 19c survives the emission being unconditional (continuation=$W19C_2 status=$W19C_6)"; fi
+}
+M60_since_warn_dropped() {
+  mutant since-warn-dropped \
+    -e 's@^    echo "WARN: wait-for-deliverable: --since without@    : "WARN: wait-for-deliverable: --since without@' || return
+  s19c_world "$MUT"
+  if [ "$W19C_1" -eq 0 ] && [ "$W19C_5" -eq 0 ] && [ "$W19C_7" -eq 0 ]; then
+    ok "MUTANT since-warn-dropped: the emission removed outright is caught — section 19c catches it"
+  else bad "MUTANT since-warn-dropped: section 19c survives the emission being dropped (first=$W19C_1 delivered=$W19C_5 rearm=$W19C_7)"; fi
+}
+M61_since_warn_ignores_dispatch() {
+  mutant since-warn-ignores-dispatch \
+    -e 's@ && \[ -z "\$DISPATCH" \] && \[ "\$SINCE_WARNED" -eq 0 \]@ \&\& [ "$SINCE_WARNED" -eq 0 ]@' || return
+  s19c_world "$MUT"
+  if [ "$W19C_8" -ge 1 ]; then
+    ok "MUTANT since-warn-ignores-dispatch: the warn on a --dispatch arming beat is caught — section 19c catches it"
+  else bad "MUTANT since-warn-ignores-dispatch: section 19c survives the -z DISPATCH conjunct being deleted (dispatch beat=$W19C_8)"; fi
+}
+
+# ===========================================================================
 # 20. THE LEASE IS HELD BEFORE ANY STEP THAT CAN BLOCK.
 #     The stop hook allows the lead's yield only while `.beat-inflight` is live. A beat that
 #     blocks before writing it reads to the hook as "no beat armed" while one is. Two blocking

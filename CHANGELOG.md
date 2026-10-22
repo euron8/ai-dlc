@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.910.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R3. It closes BL-761, BL-762, BL-763, BL-764 and BL-765, and closes three consumer push candidates graph filed at its commit 53e396169: `PC-S319-VALIDATE-MUTATION-RED-ECHOES-A-NON-UTF8-COMMAND-LINE-INTO-THE-CAPTURE` (BL-761, with BL-762 as its sibling), `PC-S319-MERGE-REVIEW-SHARDS-SURFACES-ONE-REFUSAL-PER-RUN` (BL-763) and `PC-S319-WAIT-FOR-DELIVERABLE-SINCE-WITHOUT-DISPATCH-WARNS-ON-EVERY-BEAT` (BL-764). It files BL-761 through BL-766. Net for this release: 5 entries and 3 candidates closed, 6 filed, and BL-766 stays open as a NOTE. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-mutation-red.sh`, `core/scripts/validate-handoff-evidence.sh`, `core/scripts/merge-review-shards.sh` and `core/scripts/wait-for-deliverable.sh`. Role text changes: `core/skills/ai-dlc/steps/gate-validation.md`, `implementation.md` and `_gate-procedures.md`.
+
+### BL-761 — the mutation-red capture's `$ ` and `test:` lines stay ASCII under a UTF-8 locale
+
+Before this release `printf -v q '%q' "$w"` in `replay_words()` of `validate-mutation-red.sh` ran in the caller's locale. Bash 3.2's `%q` under a UTF-8 locale prints a multibyte character's lead byte raw and octal-escapes its continuation bytes, so the `$ ` line and the `test:` line were not valid UTF-8. Correction to the filing: the capture replays byte-exact through bash, and only UTF-8 readers broke. `LC_ALL=C` is now a local of `replay_words`, restored on return; ASCII output is byte-identical. The prefix form on `printf` does not reach `%q` on bash 3.2. Fixture `mutation-red-replay` gains case E and mutant m23, and the eight mutant `why` literals gain `E:[]`.
+
+### BL-762 — a non-UTF-8 capture no longer stands the replay-preamble refusal down
+
+`validate-handoff-evidence.sh` ran its replay-preamble awk in the caller's locale, the only awk in that file without `LC_ALL=C`. On a non-UTF-8 capture under a UTF-8 locale it aborted, left `rp` empty, and the `[ -n "$rp" ]` guards skipped the refusal without a message. Captures committed before BL-761 are that shape, so BL-761 alone does not cure it. The awk now runs as `LC_ALL=C awk`. Fixture `story-evidence-scaffold` gains arm `rpu8` and mutant `rp-no-lcc`.
+
+### BL-763 — merge-review-shards.sh names every owner duplicate in one run
+
+Before this release the owner-duplicate refusal exited on the first duplicate, so a set carrying two cost one refused merge per duplicate. Correction to the filing: ONE merge was refused, not two; the lead found the second duplicate by hand and re-dispatched both seats in one wave, which cost one cycle and about 70 seconds. `collect_dup()` now prints the identical `REFUSED:` bytes and counts, and the run exits 2 at a barrier after the per-shard loop and at one after `check_shard` under `--check-shard`, before `SHARD-OK`. A single duplicate is unchanged and the exit is always 2. The step prose reads "every REFUSED line". Fixture `review-shard-merge` gains arm X10 and mutants M21 and M22.
+
+### BL-764 — the `--since` without `--dispatch` WARN prints once, on the beat that arms a target
+
+Correction to the filing: `--dispatch` already repeats, and the step files prescribe one per joined agent. The defect was the WARN, which printed on every `--since`-only invocation, continuation beats and `--status` included. It now prints in the sweep at `FIRST=1`, once per invocation. First arm, `--reset`, a wave adding a target, a delivery on the arming beat and a re-armed path warn; a continuation beat and `--status` are silent. On graph's lead transcript the fix removes about half the WARNs: 83 of 173 beats go silent and 67 resets still warn. Fixture `wait-beat-liveness` section 19c has EIGHT rows and mutants M59, M60 and M61; M61 deletes the `-z "$DISPATCH"` conjunct and the `--dispatch` arming row kills it. The generic beat line in `_gate-procedures.md` gains `--dispatch`.
+
+### BL-765 — gate-3 Check 9 names its comparison dimensions and requires a whole mockup read
+
+Check 9 said only "Compare each new surface against the documented mockup". A bullet now names copy, element structure, attributes including `role` and `aria-*`, class names and layout, requires every deviation to be recorded in the pass, and requires each mockup line to be read whole with Read. The receipt proves the text only (operator ruling, batch 147). Citations into `gate-validation.md` past the insert are re-anchored. BL-766 files the adjudicator-wide sentence and is not built.
+
 ## [0.909.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R1. It closes BL-758, BL-759, BL-760, BL-756 and BL-757, closes no `PC-` id, and files BL-758, BL-759 and BL-760. Net for this release: 5 closed, 3 filed = -2. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-pause.sh` and `core/scripts/validate-artifact-derivations.sh`. Role text changes: `core/team-roles/code-reviewer.md` and `core/skills/ai-dlc/steps/stories-test-strategy.md`.

@@ -283,6 +283,9 @@ arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Finding
            "VB3: the cross-1 refusal does not name both exits and its owner"
 arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
              "VB4: --mark marked an unbacked NEEDS_REWORK, or refused the backed one"
+# BL-763: every owner-duplicate refusal in one run, and --check-shard exits 2 on one (--mark keys on it).
+arm2 x_dupall "X10: K=3 -- duplicates in cross-2 and cross-3 print two REFUSED lines (tails cross-2, cross-3), one prints one, an owner's own repeat merges, --check-shard over a duplicate exits 2 with no SHARD-OK, a duplicate then a later per-shard refusal print both (the duplicate first), an earlier per-shard refusal stands alone, and one shard's duplicate then its own verdict-backing refusal print two lines naming it; nothing written" \
+              "X10: a merge did not name every owner duplicate in one run, or --check-shard passed a duplicate"
 
 # ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
 # Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
@@ -312,7 +315,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   CS_ONLY=partcite mut_run M1 merge-review-shards.sh '[ $# -eq 1 ] && [ "$1" = "$key" ]' \
     '{ [ -n "$CHECK" ] || { [ $# -eq 1 ] && [ "$1" = "$key" ]; }; }' cs "csc_partcite{" \
     "the part-cite refusal dropped in --check-shard only"
-  mut_run M2 merge-review-shards.sh '|| refuse "$sf:$line ($key) cites$distinct, a finding owned by' \
+  mut_run M2 merge-review-shards.sh '|| collect_dup "$sf:$line ($key) cites$distinct, a finding owned by' \
     '|| refuse_to "$ownk" "$sf:$line ($key) cites$distinct, a finding owned by' owner "dup-merge{" \
     "the owner-duplicate refusal names the owner"
   mut_run M3 wait-for-deliverable.sh '[ "$mk_s_" != "!" ] || mark_refuse' 'true || mark_refuse' mark "shard-3{" \
@@ -375,6 +378,12 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # is judged by the current three-container rule.
   mut_run M20 merge-review-shards.sh '    if [ "$QA_AT" = legacy ]; then sev_=0' '    if false; then sev_=0' fr_bound "frb-legacy{" \
     "the severity boundary's LEGACY arm dropped"
+  # BL-763. M21 collects every duplicate but prints only the first; M22 drops the --check-shard barrier
+  # (the two-space-indented one), so --check-shard answers SHARD-OK over a duplicate and --mark seals it.
+  mut_run M21 merge-review-shards.sh 'collect_dup() { printf' 'collect_dup() { [ "$DUP_N" -gt 0 ] || printf' x_dupall "two{" \
+    "only the first owner duplicate of a run printed"
+  mut_run M22 merge-review-shards.sh '  [ "$DUP_N" -eq 0 ] || exit 2' '  :' x_dupall "check{" \
+    "the --check-shard duplicate barrier dropped"
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

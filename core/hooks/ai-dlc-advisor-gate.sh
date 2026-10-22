@@ -57,13 +57,13 @@
 #     (the settings template matches the same regex, `mcp__.*__merge_pull_request`):
 #       steps/retro.md:1250 7a merge                         -- touchpoint I, :1239
 #   - `gate-checkpoint.sh ... close` (NOT `record`: G1, N records, G2, close is the sequence):
-#       steps/gate-validation.md:191                         -- touchpoint G2, :192
+#       steps/gate-validation.md:206                         -- touchpoint G2, :207
 #   - the Check 12 append to `gate-log.md`, keyed on the ENTRY, not the path: an Edit/MultiEdit
 #     that adds a `## Gate Log:` heading, a Write whose content holds more such headings than the
 #     file on disk, or a Bash `>`/`>>`/`tee` onto `gate-log.md` whose command carries one:
-#       steps/gate-validation.md:790 (heading grammar :805) -- touchpoint G1, :167
+#       steps/gate-validation.md:820 (heading grammar :838) -- touchpoint G1, :167
 #     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1288-1300)
-#     and the in-sprint rotation (gate-validation.md:900, which REMOVES entries) are not gated.
+#     and the in-sprint rotation (gate-validation.md:933, which REMOVES entries) are not gated.
 #   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file:
 #   the delivering pull runs its steps 1-2 on the old text and steps 3-8 on the new, after the
 #   step-2 re-invoke; hooks are live from step 2's working-tree write -- reasoned from the step-2

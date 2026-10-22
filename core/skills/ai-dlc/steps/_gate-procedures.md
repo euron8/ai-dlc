@@ -122,7 +122,7 @@ and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by 
 
 **The call.** One `Bash` call, `run_in_background: true`, every path in the wave:
 
-    scripts/ai-dlc/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
+    scripts/ai-dlc/wait-for-deliverable.sh [--since <epoch|ISO8601>] [--dispatch <agentId> ...] <path> [<path> ...]
 
 **`run_in_background: true` is part of the call, not a preference.** A foreground
 beat is a dead beat: its exit trap clears the in-flight marker before your turn
@@ -302,8 +302,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    of every line above the marker. A code-review or QA shard checks itself first with
    `scripts/ai-dlc/merge-review-shards.sh <shard dir> --gate <gate> --check-shard <shard file>`
    until SHARD-OK; `--mark` runs the same check and refuses a shard that fails it. After a
-   refused merge the lead re-dispatches the seat the REFUSED line's `[owner: <key>]` names with
-   that line verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand. A seat dispatched worktree-isolated (a dev) carries `<lead engine>`, the absolute path of the LEAD checkout's `scripts/ai-dlc`, in its brief and runs `--mark` from it, never from its worktree; a seat that runs in the primary tree (the adversary never runs worktree-isolated) uses `scripts/ai-dlc` there, which is the lead's engine.
+   refused merge the lead re-dispatches each seat that every REFUSED line's `[owner: <key>]` names with
+   every line naming it verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand. A seat dispatched worktree-isolated (a dev) carries `<lead engine>`, the absolute path of the LEAD checkout's `scripts/ai-dlc`, in its brief and runs `--mark` from it, never from its worktree; a seat that runs in the primary tree (the adversary never runs worktree-isolated) uses `scripts/ai-dlc` there, which is the lead's engine.
    Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
