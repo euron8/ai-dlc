@@ -443,69 +443,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: manual
 
-## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
-
-**DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
-
-`core/scripts/join-remediator-shards.sh:741` defines SERIAL-REQUIRED (parts mode only) as the count of `repaired` entries with a real edit, each owing the cross-file sibling grep and moved-cite check that no shard can run, and the procedure dispatches ONE serial remediator whenever that count or ESCALATED-COUNT is above 0. However many cross-part items there are, one agent works them all, in sequence.
-
-Evidence, relayed by ai-dlc-5d and not re-measured by this filing (load 2–28, so the wall clock is an observation, not a timing): graph S319 stories, 2026-10-19. The 19 parallel shards finished in about 8 minutes (20:10–20:17 EDT); the join reported SERIAL-REQUIRED 148; the one serial agent ran 62 minutes (20:24:49–21:26:53, 172 tool calls, 77 Edit), while the lead re-armed its wait beat 7 times and ran nothing else. That is 148 items in 62 minutes, about 0.42 minutes per item, as an observation; no per-item baseline exists to compare it against.
-
-Prior art, not a duplicate: archived **BL-543** (LANDED v0.815.0, verified a88f88d4) cut the serial remediator's DISCOVERY work — `core/scripts/serial-remediation-worklist.sh` now derives its replaced-text HITs and MOVED-CITEs from the splitters' pre-repair copies instead of the agent finding them by hand — on S319 rounds whose serial remediators took 42, 29 and 31 minutes. Those rounds recorded no SERIAL-REQUIRED counts (BL-543 records one round's 28 appends and 48 edits only), so they are not a baseline for tonight's figure and are not compared with it. BL-543 did not change the COUNT: every cross-part item still goes to the one agent, and that is what this filing owes.
-
-Dedupe, re-derived with `grep -c` at origin/main: "SERIAL-REQUIRED" 3 in docs/backlog.archive.md and 0 in docs/backlog.md; "serial remediator" 35 in the archive, the relevant one BL-543; control BL-583 6.
-
-Owed, the mechanism left to the builder: partition the SERIAL-REQUIRED items by the parts they touch, so disjoint sets run as parallel serial lanes and each lane keeps the serial guarantee within its own set. A fixture arm (or receipt): a seeded join whose two disjoint item sets dispatch to two lanes, while an overlapping pair stays in one lane.
-
-Measured input for the partition, graph-watch, batch 238. These figures come from the graph watcher's scratch run of `core/scripts/serial-remediation-worklist.sh` over s319's stories party repair, relayed by the batch-238 lead; this filing did not re-measure them. The run's SUMMARY read `files 19 replaced 115 hits 135 moved-cites 1`, over 19 parts and 148 SERIAL-REQUIRED entries. Taking the parts each item touches as edges, the lane components are: edit only, 19; edit ∪ MOVED-CITE, 18; edit ∪ HIT, 1. One boilerplate line merges every lane: the sprint-title `architecture_refs` line that every story carries (`story-2-1:8-10`, hunk `6.md#F-9`), which HITs line 9 of 18 other stories. On this corpus, a partition on HIT edges therefore yields one lane, the status quo, unless a HIT on a line common to all parts is excluded from the edge set. The builder must decide whether such a common-line HIT can be excluded safely, or must be routed as a single fan-in item.
-
-verify: manual
-
-## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
-
-**DEFECT.** Raised from graph's s319 gate[story] refusal at 2026-10-20T22:44:38Z and the re-run `_bmad-output/planning-artifacts/s319/shards/stories-elicitation/` (graph `765de28f0` and its worktree) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
-
-Graph's operator ruled story 2.3 split into 2.3a and 2.3b after s319's stories elicitation had run complete at K=19: 19 ordinal shards plus cross-1 to cross-6, committed at `765de28f0`, with `08.md` carrying `invoked_at: 2026-10-20T02:25:46Z`. Check 24 arm L then refused gate[story]: "FAIL (L -- ELICITATION): s319's stories elicitation over 20 stories is not the sharded shape: (b) ordinals missing: 20.md; shards record K=19, fewer than the 20 stories/ holds. … Re-run the elicitation in that shape before this gate." The lead re-ran the whole K=20 elicitation with 26 adversaries. All 26 files in the live `shards/stories-elicitation/` carry an `invoked_at` after 22:44:38Z, against the 25 committed files. One story changed, and 26 adversaries ran.
-
-The arm is right by its own contract, and that contract is the defect. `core/scripts/validate-adversarial-convergence.sh:3133-3141` derives the owed set at gate time from today's `stories/`: the `merge-adversarial-shards.sh --map` ordinals plus the `partition-document.sh --cross-groups <K>` keys. `l_judge` (`:2882-2948`) compares shard file NAMES against that set.
-
-The recorded-K narrowing (`l_kuse`, `:2844`; header `:2766-2772`) honours only a LARGER recorded K, the shrink direction. A grow is judged against today's K and FAILs by design, because honouring a smaller K would acquit a `shard: 1/1` single voice. The remedy at `:3267-3273` names only a full re-run. No step prose offers anything else: `_gate-procedures.md`'s validation-cycle item 2 (`:454-490`) and its amendment procedure (`:852-868`, arm J2 only) have no path that elicits just the delta.
-
-An elicitation of only the new stories cannot pass today either, because ordinals are positional. Graph's live `stories/`, staged as arm L stages it, maps 08 to `story-2-3a-…` and 09 to `story-2-3b-…`. The committed K=19 shards record 08 as `story-2-3-net-pnl-conditional-fix-…` and 09 as `story-3-1-…`. Every shard after the split point is renumbered, and `--cross-groups 20` differs from `--cross-groups 19` in groups 3, 5 and 6.
-
-Owed, the design for its owner to choose: a delta path for a post-elicitation split or addition. It elicits the stories that no shard covers by name (arm L's own `l_cover` already reads shard subjects by name, `:2854-2877`) plus the cross groups whose membership changed, and it judges coverage by subject NAME rather than by ordinal position. It must keep refusing a single voice over many stories and a shrink-with-replacement (`:2783-2789`). The remedy text then names the delta, not a full re-run.
-
-verify: manual — a discriminating `sh` receipt needs the fix's interface first: where a delta shard lives, what it is named, and how its coverage is recorded. Under today's arm L a seeded tree FAILs every delta shape, so a receipt built on a guessed shape closes only under that guess. A receipt keyed on the remedy text could be closed by prose alone. The real-corpus receipt is the next post-elicitation split on a consumer, or a fixture world written alongside the fix.
-
-## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
-
-**DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
-
-The operator ruled that a story split counts as a SCOPE CHANGE for the test strategy. The amendment procedure does not treat it as one. `core/skills/ai-dlc/steps/_gate-procedures.md:853-869` gives two ways to amend a notarized artifact after MET:
-- item 1 (`:856-860`) is "a residue or gate repair on unchanged scope". It needs only a chain of structured repair records, each with `artifact_sha_before:` and `artifact_sha_after:`, from the notarized sha to the disk sha;
-- items 2-4 (`:861-869`) handle a scope change with one `REOPEN_AFTER_MET` record plus ONE verify pass. Item 2 defines a scope change as "a later step rewording a capability".
-
-Check 24 arm J2 enforces that split. `core/scripts/validate-adversarial-convergence.sh:3569-3574` PASSes on a complete chain of repair links. `:3582-3584` reserve the re-open for a scope change, but the arm itself never decides which case it is looking at.
-
-A story split changes the set of story ids the strategy maps tests to. It is not "rewording a capability", so the repair path is open to it, and J2 accepts the chain with no adversarial pass over the strategy's current bytes.
-
-Measured on graph s319 (as relayed by graph-watch; graph not re-read for this filing):
-- `test-strategy-repair-p3` (`faa99bbc` -> `15443bd`) carried the 2.3 -> 2.3a/2.3b split;
-- `test-strategy-repair-p4` made the strategy 52 lettered cases and 132 rows;
-- the test-strategy series PASSed after both, and no adversary reviewed either.
-
-Owed:
-- (a) the strategy-subject amendment rule treats a change in the mapped story-id set as a scope change (`REOPEN_AFTER_MET` plus ONE verify pass). That change is detected mechanically from the id set, not by judgement, and J2's acceptance of a repair chain is the arm that changes;
-- (b) the verify pass covers only the changed rows where the machinery allows that, and is one full pass where it does not;
-- (c) designed TOGETHER with BL-733, so a split costs work in proportion to what it changed;
-- a fixture with three worlds:
-  - a split strategy with only a repair chain is REFUSED by J2;
-  - the same split with `REOPEN_AFTER_MET` and a verify pass is accepted;
-  - an in-scope repair (same id set) is still accepted by its chain.
-
-verify: manual — the id-set detector and where the re-open is recorded are the builder's design, so an `sh` receipt built before them would close only under a guessed interface. A discriminating receipt can be written alongside the fix.
-
-
 ## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
 
 **NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.

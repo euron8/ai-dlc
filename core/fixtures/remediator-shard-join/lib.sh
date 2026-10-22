@@ -1746,3 +1746,103 @@ p_bl734prose() { # <remediator.md> <pm-escalated.md> -> each writer paragraph ca
   [ "${#a}" -lt "${#pre}" ] || return 1
   ! grep -qF "no procedure runs" "$1"
 }
+
+# ---- SERIAL LANES (BL-716). The serial work after a join is partitioned into lanes keyed on FILES:
+# one part's files are one lane, and a MOVED-CITE (from the worklist, document and subject mode only)
+# joins the two files it links. HITs and escalations never join lanes; one landing in two or more lanes,
+# or naming no lane's file, is ONE FANIN item. Every world is built by the REAL splitters, the REAL hook
+# and the REAL worklist beside the join; the counts are read off the join's own lines.
+lane_n() { local n; n="$(grep -c "^$2" "$1")" || n=0; printf '%s' "$n"; }
+p_lanefiles() { # files mode, three disjoint story parts -> 3 lanes; each escalation names no file -> FANIN, plus the sweep
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && [ "$(lane_n "$JO" 'LANE: ')" = 3 ] \
+    && has "$JO" "LANE: 1 files: $REL/$S21 parts: 01.md" && has "$JO" "FANIN: ESCALATED: 02.md F-2 — MINOR (lanes out)" \
+    && has "$JO" "FANIN: sweep" && has "$JO" "FANIN-COUNT: 4" && has "$JO" "files mode keeps no pre-repair copy" \
+    && ! has "$JO" "UNASSESSED"
+}
+p_lanedoc() { # document mode, three section parts of ONE document -> ONE lane (they share the file), no sweep owed
+  local w; w="$(doc_world)" || return 1
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
+  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
+  run_docjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE: 1 files: $DOCREL parts: 1.md 2.md 3.md" \
+    && has "$JO" "from serial-remediation-worklist.sh" && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN-COUNT: 0"
+}
+# lane_subj <join> <cite 0|1> <hit 0|1> -> RC, $JO. The subject world: SPEC and architecture-impact whole-file parts,
+# prd in three section parts. cite=1: architecture-impact cites a prd line that part 4's edit moves (a MOVED-CITE).
+# hit=1: part 3 REPLACES a prd line whose text SPEC and architecture-impact also carry (a HIT in two lanes).
+lane_subj() {
+  local w ln f s3
+  w="$(subj_world)" || return 1
+  f="s9g line 3 of the section, carrying enough prose to weigh something real."
+  if [ "$2" = 1 ]; then
+    ln="$(grep -n '^s9r line 5 ' "$w/$SJPA/prd.md" | cut -d: -f1)"; [ -n "$ln" ] || return 1
+    printf -- '- FR-S9-1 see `%s/prd.md:%s`\n' "$SJPA" "$ln" >> "$w/$SJPA/s9/architecture-impact.md"
+  fi
+  if [ "$3" = 1 ]; then
+    s3="$(sj_part_rows "$w" | awk -F'\t' '$2 + 0 == 3 { print $7 }')"; [ -n "$s3" ] && grep -qxF "$f" "$w/$s3" || return 1
+    printf '%s\n' "$f" >> "$w/$SPECREL"; printf '%s\n' "$f" >> "$w/$SJPA/s9/architecture-impact.md"
+    awk -v f="$f" '$0 == f { print "The third goal line, rewritten by its part."; next } { print }' "$w/$s3" > "$w/s3.tmp" && mv "$w/s3.tmp" "$w/$s3" || return 1
+  fi
+  sj_all "$w"; run_sjoin "$1" "$w"
+}
+p_lanesubj() { # prd's sections share prd.md (one lane); a MOVED-CITE from architecture-impact joins it; SPEC its own -> 2 lanes
+  lane_subj "$1" 1 0 || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && has "$JO" "1 MOVED-CITE edge(s)" \
+    && has "$JO" "LANE: 1 files: $SJPA/prd.md $SJPA/s9/architecture-impact.md parts: 2.md 3.md 4.md 5.md" \
+    && has "$JO" "LANE: 2 files: $SPECREL parts: 1.md" && has "$JO" "LANE-ITEM: 1 MOVED-CITE $SJPA/s9/architecture-impact.md:" \
+    && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN: sweep"
+}
+p_lanesubjnear() { # p_lanesubj one property apart, no cite -> 3 lanes, architecture-impact its own
+  lane_subj "$1" 0 0 || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && has "$JO" "0 MOVED-CITE edge(s)" \
+    && has "$JO" "LANE: 1 files: $SJPA/prd.md parts: 2.md 3.md 4.md" && ! has "$JO" "UNASSESSED"
+}
+p_lanehit() { # a common-line HIT standing in two lanes' files -> still 3 lanes, ONE FANIN item for the fragment (s319's shape)
+  lane_subj "$1" 0 1 || return 1
+  local n; n="$(grep -c '^FANIN: HIT "s9g line 3 of the section' "$JO")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && [ "$n" = 1 ] && grep -qE '^FANIN: HIT .*\(lanes (2 3|3 2)\)$' "$JO" \
+    && ! has "$JO" "LANE-ITEM: 2 HIT" && ! has "$JO" "UNASSESSED"
+}
+p_laneround() { # the lane round's own join (--artifact stories-serial): lane parts under shards/stories-serial-repair-p1/
+  # -> JOINED into stories-serial-repair-p1.md, and NO LANE or FANIN line (lanes of lanes would recurse)
+  local w d; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$w/$REL/$S22" "$AG2"
+  sed "s/@STORY@/$S21/g" "$HERE/seed.block-sib.md" > "$d/lane-1.md"
+  sed "s/@STORY@/$S22/g" "$HERE/seed.block-sib.md" > "$d/lane-2.md"
+  run_join "$1" "$w" --artifact stories-serial
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && has "$JO" "SERIAL-REQUIRED: 2" \
+    && ! has "$JO" "LANE" && ! has "$JO" "FANIN"
+}
+p_lanerec() { # a lane round's record is read AFTER round 1: its closes: closes a round-1 escalation; round 1 alone with the
+  # lane record on disk -> REFUSED naming it; the lane record passed alone -> REFUSED
+  local w r1 r2 ok=""
+  w="$(mktemp -d "$WORK/lr.XXXXXX")" && mkdir -p "$w/.claude" || return 1
+  r1="$w/stories-repair-p1.md"; r2="$w/stories-serial-repair-p1.md"
+  printf '<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n' > "$r1"
+  printf '<!-- shard: lane-1.md -->\n### lane F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-1 — MAJOR\n' > "$r2"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED: 01.md F-2 — MAJOR" \
+    && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && ! has "$JO" "LANE" && ! has "$JO" "FANIN" && ok="${ok}a"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "stories-serial-repair-p1.md is the lane round's record" && ok="${ok}b"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r2" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "is a lane round's record" && ok="${ok}c"
+  # THE SUBJECT PARTY RECORD (BL-716): its lane record is requirements-party-serial-repair-p1.md, named
+  # from the record, never `requirements-serial-repair-p1.md` (the subject pass-1 round's, inferred from
+  # ARTIFACT=requirements). Alone with its real lane record on disk -> REFUSED naming it; with it -> closed.
+  r1="$w/requirements-party-repair.md"; r2="$w/requirements-party-serial-repair-p1.md"
+  printf '### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n' > "$r1"
+  printf '<!-- shard: lane-1.md -->\n### lane F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: requirements-party-repair.md F-1 — MAJOR\n' > "$r2"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 9 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "requirements-party-serial-repair-p1.md is the lane round's record" && ok="${ok}d"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 9 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: requirements-party-repair.md F-1 — MAJOR" && ok="${ok}e"
+  [ "$ok" = abcde ]
+}
+p_lanename() { # the subject party join prints the lane round's name derived from its record -> the party-serial artifact
+  sj_party "$1" "architecture-dev-1.md#F-1" || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-ARTIFACT: requirements-party-serial --pass 1" && ! has "$JO" "LANE-ARTIFACT: requirements-serial "
+}

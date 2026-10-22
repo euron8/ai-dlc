@@ -517,7 +517,7 @@ else
   EM="$(mktemp -d "$WORK/ec39m.XXXXXX")" || exit 2
   cp "$(dirname "$JOIN")"/*.sh "$EM/" \
     || { echo "FIXTURE BROKEN: EC39m could not copy the join's sibling scripts into $EM" >&2; exit 2; }
-  sed 's/^  contract_refusals 1 "\$(contract_check 1 "\$1")"$/  contract_refusals 1 "$(contract_check 1 "$1" | grep -v "^BADSIB")"/' "$JOIN" > "$EM/join-remediator-shards.sh" \
+  sed 's/^  contract_refusals 1 "\$(contract_check 1 "\$@")"$/  contract_refusals 1 "$(contract_check 1 "$@" | grep -v "^BADSIB")"/' "$JOIN" > "$EM/join-remediator-shards.sh" \
     || { echo "FIXTURE BROKEN: EC39m could not write the mutated join into $EM" >&2; exit 2; }
   if cmp -s "$JOIN" "$EM/join-remediator-shards.sh"; then
     bad "EC39m: FIXTURE STALE -- the record-mode mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
@@ -530,6 +530,84 @@ else
   fi
 fi
 
+# ---- serial lanes (BL-716): one serial remediator per lane of FILES, then one fan-in. LN3 is the world that
+# kills "one LANE per part": its three prd parts share prd.md, and a MOVED-CITE joins architecture-impact to it.
+[ -f "$SRCDIR/serial-remediation-worklist.sh" ] || { echo "FIXTURE BROKEN: serial-remediation-worklist.sh is not beside the join; the lane arms would read every edge UNASSESSED" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/serial-remediation-worklist.sh"
+p_lanefiles "$JOIN" && ok "LN1: files mode, three disjoint parts -> 3 lanes, each file-less escalation and the sweep to FANIN, no worklist edge" \
+  || bad "LN1: files-mode lanes answered wrongly (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_lanedoc "$JOIN" && ok "LN2: document mode, three section parts of one document -> ONE lane (a shared file), the worklist ran, FANIN-COUNT: 0" \
+  || bad "LN2: section parts of one document were not one lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_lanesubj "$JOIN" && ok "LN3: subject mode, prd's three sections one lane and a MOVED-CITE joining architecture-impact to it -> 2 lanes, the cite that lane's item" \
+  || bad "LN3: the shared-file or MOVED-CITE edge did not join lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_lanesubjnear "$JOIN" && ok "LN4: LN3 one property apart, no cite -> 3 lanes" \
+  || bad "LN4: lanes joined with no edge (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in two other lanes' files -> 3 lanes, ONE FANIN HIT item (a HIT never joins lanes)" \
+  || bad "LN5: a cross-lane HIT joined lanes or was not one fan-in item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
+  || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
+# LN3m: one LANE per part with no edge computation (each cited file keyed per part) must be KILLED by LN3. Built in a copy of
+# the join's whole directory, so the worklist sibling is present and the mutant cannot score by reading every edge UNASSESSED.
+EM3="$(mktemp -d "$WORK/ln3m.XXXXXX")" || exit 2
+cp "$(dirname "$JOIN")"/*.sh "$EM3/" || { echo "FIXTURE BROKEN: LN3m could not copy the join's sibling scripts into $EM3" >&2; exit 2; }
+sed 's/\$1 == "C" { k = wkey(\$3); if (k == "") next;/$1 == "C" { k = wkey($3); if (k == "") next; k = k "#" $2; isk[k] = 1;/' "$JOIN" > "$EM3/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: LN3m could not write the mutated join into $EM3" >&2; exit 2; }
+if cmp -s "$JOIN" "$EM3/join-remediator-shards.sh"; then
+  bad "LN3m: FIXTURE STALE -- the one-lane-per-part mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif [ ! -f "$EM3/serial-remediation-worklist.sh" ] || ! p_lanesubj "$JOIN"; then
+  bad "LN3m: the unmutated control did not pass or the worklist is absent in the copy"
+elif p_lanesubj "$EM3/join-remediator-shards.sh"; then
+  bad "LN3m: SURVIVED -- LN3 holds against a join that keys one lane per part and computes no edge"
+elif ! has "$JO" "LANE-COUNT: "; then
+  bad "LN3m: the mutant printed no LANE-COUNT line; it died rather than partitioned wrongly"
+else
+  ok "LN3m one LANE per part, no edge computation: KILLED by [LN3]"
+fi
+p_lanerec "$JOIN" && ok "LN6: --escalations reads the lane round's record after round 1 and closes by it; either record alone REFUSED; the subject party record owes requirements-party-serial-repair-p1.md; no LANE/FANIN line in a record mode" \
+  || bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat "$JO")"
+p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
+  || bad "LN8: the lane round's name was not derived from the record (rc=$RC): $(grep -E '^LANE-ARTIFACT' "$JO")"
+# LN6m: the lane name derived from the subject's artifact (`requirements-serial`, the name a lead inferring it
+# writes) instead of from the record must be KILLED by LN6's subject party case (and LN8).
+EM6="$(mktemp -d "$WORK/ln6m.XXXXXX")" || exit 2
+cp "$(dirname "$JOIN")"/*.sh "$EM6/" || { echo "FIXTURE BROKEN: LN6m could not copy the join's sibling scripts into $EM6" >&2; exit 2; }
+sed 's/    \*-repair\.md) printf .%s-serial\\t1\\n. "\${1%-repair\.md}" ;;/    *-repair.md) printf "%s-serial\\t1\\n" "${1%%-*}" ;;/' "$JOIN" > "$EM6/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: LN6m could not write the mutated join into $EM6" >&2; exit 2; }
+if cmp -s "$JOIN" "$EM6/join-remediator-shards.sh"; then
+  bad "LN6m: FIXTURE STALE -- the artifact-derived lane-name mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif ! bash -n "$EM6/join-remediator-shards.sh" 2>/dev/null || ! p_lanerec "$JOIN"; then
+  bad "LN6m: the mutant is not valid shell or the unmutated control did not pass"
+elif p_lanerec "$EM6/join-remediator-shards.sh"; then
+  bad "LN6m: SURVIVED -- LN6 holds against a join that names the subject party round's lane record requirements-serial-repair-p1.md"
+else
+  ok "LN6m lane name derived from the subject artifact, not the record: KILLED by [LN6]"
+fi
+
+
+# LN9: esc_cites is an awk over the part file and its status is captured before the heredoc that consumes it. An
+# esc_cites forced non-zero in the lanes path (a copy of the join whose esc_cites returns 1 after printing) must
+# REFUSE, exit 2, naming the part; the unforced join over the same world joins (the control).
+p_laneescrc() { # <join> -> RC, $JO of the lanes world run through <join>
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
+  run_join "$1" "$w"
+}
+EM9="$(mktemp -d "$WORK/ln9m.XXXXXX")" || exit 2
+cp "$(dirname "$JOIN")"/*.sh "$EM9/" || { echo "FIXTURE BROKEN: LN9 could not copy the join's sibling scripts into $EM9" >&2; exit 2; }
+sed "/^esc_cites() {/,/^}/ s/^    END { emit() }' \"\$1\"\$/    END { emit() }' \"\$1\"; return 1/" "$JOIN" > "$EM9/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: LN9 could not write the forced-failure join into $EM9" >&2; exit 2; }
+if cmp -s "$JOIN" "$EM9/join-remediator-shards.sh"; then
+  bad "LN9: FIXTURE STALE -- the forced esc_cites failure matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif [ ! -f "$EM9/serial-remediation-worklist.sh" ] || ! p_laneescrc "$JOIN" || [ "$RC" -ne 0 ] || ! has "$JO" "LANE-COUNT: 3"; then
+  bad "LN9: the unforced control did not join three lanes (rc=$RC) or the worklist is absent in the copy"
+else
+  p_laneescrc "$EM9/join-remediator-shards.sh"
+  if [ "$RC" -eq 2 ] && has "$JO" "REFUSED: could not read the escalated entries of 01.md for the serial lanes" && ! has "$JO" "LANE-COUNT"; then
+    ok "LN9: esc_cites failing in the lanes path -> REFUSED naming the part, exit 2, no lane report (the unforced join beside it joins 3 lanes)"
+  else
+    bad "LN9: a failing esc_cites was not refused (rc=$RC): $(head -3 "$JO")"
+  fi
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2

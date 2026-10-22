@@ -215,6 +215,47 @@ if [ ! -f "$K2_PD" ]; then
   echo "FIXTURE BROKEN: partition-document.sh is not beside $VALIDATOR -- arm K2 cannot be scored"
   exit 1
 fi
+# THE BACKLOG RECEIPTS AS ARMS (BL-733 in unit elic, BL-736 in unit j2h): each receipt builds its own
+# worlds and drives the validator it is handed, so the arm is the receipt against the shipped
+# validator, an UNMUTATED COPY (presence-shaped: it must print `fixed`), and each mutant, built in a
+# copy of the validator's whole directory so its siblings resolve. Worlds land under $ROOT.
+RCPT_SIBS="validate-steering-budget.sh partition-document.sh partition-subject.sh merge-adversarial-shards.sh validate-artifact-budget.sh validate-provenance-block.sh"
+rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1>
+  local out rc want_say="fixed ("
+  [ "$4" -eq 0 ] || want_say="NOT FIXED"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(TMPDIR="$ROOT" bash "$2" "$3" 2>&1)"; rc=$?
+  if [ "$rc" -eq "$4" ] && grep -qF -- "$want_say" <<<"$out"; then
+    printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1 | cut -c1-110)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s exit=%s want=%s (%s)\n' "$1" "$rc" "$4" "$want_say"
+    printf '%s\n' "$out" | sed 's/^/          | /'
+  fi
+}
+rcpt_mut() { # <label> <receipt> <want rc> [<old> <new>]... -- a mutant (or, with no pairs, the control) in a copy
+  local label="$1" rcpt="$2" want="$3" d s; shift 3
+  d="$(mktemp -d "$ROOT/rcpt-mut.XXXXXX")" || broken "cannot create a mutant dir under $ROOT"
+  for s in $RCPT_SIBS; do cp "$(dirname "$VALIDATOR")/$s" "$d/" 2>/dev/null; done
+  [ -f "$d/merge-adversarial-shards.sh" ] && [ -f "$d/partition-document.sh" ] || {
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s FIXTURE BROKEN -- the siblings are not beside the copy\n' "$label"; return; }
+  python3 - "$VALIDATOR" "$d/validate-adversarial-convergence.sh" "$@" <<'PY' || {
+import sys
+s = open(sys.argv[1], encoding="utf-8").read(); a = sys.argv[3:]
+for i in range(0, len(a), 2):
+    if s.count(a[i]) != 1: sys.exit(3)
+    s = s.replace(a[i], a[i + 1])
+open(sys.argv[2], "w", encoding="utf-8").write(s)
+PY
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s FIXTURE STALE -- an anchor is not in the validator exactly once\n' "$label"; return; }
+  if [ $# -gt 0 ] && { cmp -s "$VALIDATOR" "$d/validate-adversarial-convergence.sh" || ! bash -n "$d/validate-adversarial-convergence.sh" 2>/dev/null; }; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
+  fi
+  rcpt_cell "$label" "$rcpt" "$d/validate-adversarial-convergence.sh" "$want"
+}
 echo "check-24 adversarial-convergence fixture (shard $GROUP)"
 echo
 if sg core; then
@@ -2137,6 +2178,43 @@ j2_mutate j2-stamp-rebind "FAIL FAIL SILENT SILENT FAIL SILENT SILENT" \
   '          j2_stamp="$(K_RELEASE="$J2_RELEASE" k_stamp_parse < "$STAMP_LOG")"' \
   '          j2_stamp="$(k_stamp_parse < "$STAMP_LOG")"'
 
+# --- BL-736: a story split carried into test-strategy.md by a repair chain is a SCOPE change. The
+# receipt as an arm: graph s319's row shape, three worlds of the entry (unchanged ids silent; split
+# refused without a re-open; split with REOPEN_AFTER_MET + verify silent), a MERGE whose row ids keep
+# the split letters (whole-file sets equal), and the unreachable-blob and empty-extraction PENDINGs.
+# Mutants, each a plausible regression: a whole-file id scan (its self-probe conjunct dropped, or it
+# exits 2 and scores a kill it did not earn); an unreachable before blob read as unchanged; an empty
+# extraction judged as a set.
+echo "--- arm J2 story-id set (BL-736): receipt-bl736.sh against the validator, a control copy and three mutants"
+R736="$DIR/receipt-bl736.sh"
+[ -f "$R736" ] || broken "receipt-bl736.sh is not beside run.sh"
+rcpt_cell "J2T shipped validator"     "$R736" "$VALIDATOR" 0
+rcpt_mut  "J2T0 control (unmutated)"  "$R736" 0
+rcpt_mut  "J2T1 whole-file id scan"   "$R736" 1 \
+  $'  awk \'/^\\|[ \\t]*ST[0-9]+-[^|]*\\|[ \\t]*[0-9]+\\.[0-9]+[a-z]?[ \\t]*\\|/ {\n         v = $0; sub(/^\\|[^|]*\\|[ \\t]*/, "", v); sub(/[ \\t]*\\|.*$/, "", v); print v }\' "$1" | sort -u' \
+  $'  grep -oE \'[0-9]+\\.[0-9]+[a-z]?\' "$1" | sort -u' \
+  '        if [ "$j2tp" != "2.3a 2.3b " ]; then' '        if false; then'
+rcpt_mut  "J2T2 unreachable read unchanged" "$R736" 1 \
+  '          j2t_why="no committed version of ${j2_file##*/} hashes to the notarized ${j2_sha}, so its story-id set cannot be read"' '          :'
+rcpt_mut  "J2T3 empty extraction judged" "$R736" 1 \
+  '          if [ -z "$j2t_b" ] || [ -z "$j2t_a" ]; then' '          if false; then'
+# The era constant moved (J2SX7's shape): the worlds stay stamped at the SHIPPED J2T_RELEASE
+# (RCPT_STAMP_FROM), so lowered, the predecessor-stamped world FAILs; raised, split and merge read
+# not-owed and the legacy world loses its Legacy line. The receipt reads the line `J2T_RELEASE="x.y.z"`.
+J2T_REL="$(sed -n 's/^J2T_RELEASE="\([0-9.]*\)"$/\1/p' "$VALIDATOR")"
+IFS=. read -r j2t_ma j2t_mi j2t_pa <<EOF
+$J2T_REL
+EOF
+if [ -z "$J2T_REL" ] || ! [ "$j2t_mi" -ge 1 ] 2>/dev/null; then
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE STALE -- no J2T_RELEASE="x.y.z" line (minor >= 1) in the validator\n' "J2T4/J2T5"
+else
+  RCPT_STAMP_FROM="$VALIDATOR" rcpt_mut "J2T4 J2T_RELEASE lowered" "$R736" 1 \
+    "J2T_RELEASE=\"$J2T_REL\"" "J2T_RELEASE=\"${j2t_ma}.$((j2t_mi - 1)).${j2t_pa}\""
+  RCPT_STAMP_FROM="$VALIDATOR" rcpt_mut "J2T5 J2T_RELEASE raised" "$R736" 1 \
+    "J2T_RELEASE=\"$J2T_REL\"" "J2T_RELEASE=\"${j2t_ma}.$((j2t_mi + 1)).${j2t_pa}\""
+fi
+
 # J's door, scored on its own four cells in --cycle-state, the mode the hooks read.
 JD_CASES="reopen-recorded reopen-record-missing drift-spec-no-cap drift-spec-cap"
 JD_REAL="CONVERGED REOPENED REOPENED CONVERGED"
@@ -2231,6 +2309,9 @@ h_world none-post    "$H_REL"  2026-09-29T11:00:00Z ""                || H_OK=0
 # Not in the row: the consumer's commonest misname, this series' OWN record under its pass stem.
 # It fails like foreign-post and must hand the opposite remedy (rename it, not leave it).
 h_world misnamed-post "$H_REL" 2026-09-29T11:00:00Z prd-adversarial-repair-p1.md || H_OK=0
+# Nor this: a lane round's record (BL-716) with round one's absent. It fails like foreign-post, and its
+# remedy names the missing round-one record and never says rename.
+h_world lane-post "$H_REL" 2026-09-29T11:00:00Z prd-serial-repair-p1.md || H_OK=0
 # THE WORLDS ARE WHAT THEY CLAIM: the release was read, every world built, the predecessor
 # still satisfies K_RELEASE (so a stamp read that forgot to rebind WOULD date pred-stamp), and
 # the BASE glob would accept the foreign record -- or the FOREIGN cells test a name nobody uses.
@@ -2296,6 +2377,9 @@ expect_silent_h() {  # $1 world  $2 token that must be absent  $3 world where it
 }
 expect_silent_h misnamed-post "do not rename a record" foreign-post
 expect_silent_h foreign-post "rename it to the owed path" misnamed-post
+expect_says_h lane-post "H-lane-names-round-one" "The only structured record for pass 1 is prd-serial-repair-p1.md" \
+  "It is a lane round's record" "The missing record is round one's own, prd-repair-p1.md"
+expect_silent_h lane-post "rename it to the owed path" misnamed-post
 expect_says_h foreign-pre  "H-foreign-legacy" "is satisfied only by arch-repair-p1.md, not by" "prd-repair-p1.md" "Legacy series."
 expect_says_h pred-stamp   "H-foreign-not-owed" "at ${H_REL} or later -- not owed yet."
 h_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
@@ -3154,8 +3238,10 @@ if [ "$L_BUILT" -ne 1 ]; then
 else
   L_FL="FAIL (L -- ELICITATION)"
   l_cell l-pass    0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS -- shards/stories-elicitation/ holds exactly the owed set (10 stories, intensity full from"
-  l_cell l-voice   1 - "FAIL (L -- ELICITATION): s9's stories elicitation over 3 stories is not the sharded shape: (a) single voice" \
-    "after 0.782.0 was stamped (2026-10-05T00:00:00Z)" "Re-run the elicitation in that shape before this gate."
+  # No shard dir at all: nothing to top up, so the remedy is the FULL re-run and never the delta.
+  l_cell l-voice   1 "ONLY THE DELTA" "FAIL (L -- ELICITATION): s9's stories elicitation over 3 stories is not the sharded shape: (a) single voice" \
+    "after 0.782.0 was stamped (2026-10-05T00:00:00Z)" \
+    "No shard dir complete for its own K exists to top up with a delta," "so re-run the elicitation in that shape before this gate."
   l_cell l-legacy  1 "(d) wrong names" "$L_FL" \
     "(c) cross shards short: 0 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md); found instead: cross.md"
   l_cell l-absent  1 - "$L_FL" "(e) owed-absent" "(the series' first pass stories-adversarial-p1.md)"
@@ -3168,19 +3254,26 @@ else
   l_cell l-undated 0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- undated -- the elicitation's earliest invoked_at"
   l_cell l-nostamp 0 "$L_FL" "PENDING (L -- ELICITATION): era unknown -- stamp absent -- no directory above"
   l_cell l-moved   0 "$L_FL" "PENDING (L -- ELICITATION): stories-adversarial-p1.md: s9: stories/ changed since the elicitation: shards record K=5, stories/ holds 3;"
-  l_cell l-under   1 "stories/ changed since" "$L_FL" "(b) ordinals missing: 4.md 5.md; (c) cross shards short: 3 cross shard(s) where G=6 are owed" \
-    "judged against the K=5 the shard headers record (stories/ holds 3)"
+  # An under-sharded base is never topped up by a delta (BL-733): the full re-run is named.
+  l_cell l-under   1 "ONLY THE DELTA" "$L_FL" "(b) ordinals missing: 4.md 5.md; (c) cross shards short: 3 cross shard(s) where G=6 are owed" \
+    "judged against the K=5 the shard headers record (stories/ holds 3)" "No shard dir complete for its own K exists to top up"
   l_cell l-match   0 "stories/ changed since" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS"
   l_cell l-kdis    1 - "$L_FL" "(f) the shard: lines do not record one K in 1..999: 02.md=3 03.md=4"
   l_cell l-eqshort 1 "shards record K=" "$L_FL" \
     "not the sharded shape: (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md)."
-  l_cell l-grow    1 "stories/ changed since" "$L_FL" \
+  # BL-733: one voice at `shard: 1/1` is never a base a delta tops up -- the full re-run is named.
+  l_cell l-grow    1 "ONLY THE DELTA" "$L_FL" \
     "(b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed" \
-    "shards record K=1, fewer than the 3 stories/ holds"
-  l_cell l-grow2   1 "stories/ changed since" "$L_FL" "(b) ordinals missing: 3.md" \
-    "found instead: cross.md" "shards record K=2, fewer than the 3 stories/ holds"
+    "shards record K=1, fewer than the 3 stories/ holds" "No shard dir complete for its own K exists to top up"
+  # BL-733: a base complete for its K=2 whose ordinals name story-1 and story-2 owes only story-3 and
+  # the K=3 cross groups holding ordinal 3 (groups 2 and 3: `1,3` and `2,3`), never cross-1 (`1,2`).
+  l_cell l-grow2   1 "cross-1 cross-2" "$L_FL" "(b) ordinals missing: 3.md" \
+    "found instead: cross.md" "shards record K=2, fewer than the 3 stories/ holds" \
+    "ONLY THE DELTA is owed -- stories: story-3; cross: cross-2 cross-3 --" "s9/shards/stories-elicitation-delta-k3/<story-basename>.md"
+  # BL-733: the shrink WITH replacement still FAILs, and what it owes is the one story never elicited.
   l_cell l-replace 1 "stories/ changed since" "$L_FL" "(d) wrong names present: 05.md" \
-    "shards record K=5, but they never name the story file(s) stories/ holds: story-new"
+    "shards record K=5, but they never name the story file(s) stories/ holds: story-new" \
+    "ONLY THE DELTA is owed -- stories: story-new;"
   l_cell l-replace1 1 "stories/ changed since" "$L_FL" \
     "shards record K=5, but they never name the story file(s) stories/ holds: story-8"
   # `holds: story-new` is the WHOLE list: a reader that refused the relative s9 ordinal would print
@@ -3273,6 +3366,26 @@ PY
     '|| lp_bad="$lp_bad [cover, s19 ordinal suffix:' '|| : "$lp_bad [cover, s19 ordinal suffix:' \
     'then lp_bad="$lp_bad [l_insprint boundary' 'then : "$lp_bad [l_insprint boundary'
 fi
+
+# --- BL-733: THE DELTA, the receipt as an arm. Its worlds are the reference consumer's s319 split
+# (base complete at K=19, the 8th story split, K=20): owed by name {story-08a story-08b; cross-1
+# cross-4 cross-5}, where a diff of the index lists answers {3,5,6}. Two mutants, each a plausible
+# regression: owed groups taken from the index-list diff, and ordinal coverage read through l_cover,
+# whose cross `<name>=` entries then acquit a story no ordinal shard names.
+echo "--- arm L delta (BL-733): receipt-bl733.sh against the validator, a control copy and two mutants"
+R733="$DIR/receipt-bl733.sh"
+[ -f "$R733" ] || broken "receipt-bl733.sh is not beside run.sh"
+rcpt_cell "LD shipped validator"      "$R733" "$VALIDATOR" 0
+rcpt_mut  "LD0 control (unmutated)"   "$R733" 0
+rcpt_mut  "LD1 owed groups by index diff" "$R733" 1 \
+  '    END { for (i = 1; i <= r; i++) if (own[i]) printf "G %s\n", (r == 1 ? "cross" : "cross-" i) }'"'"' "$3" "$4")" \' \
+  '    END { }'"'"' "$3" "$4")" \' \
+  '  while read -r l_dt l_dv; do' \
+  '  for l_g in $(awk -F"\t" "FNR == NR { o[\$1] = \$2; next } o[\$1] != \$2 { print \$1 }" "$AC_T/l-dbgroups" "$4"); do L_DG="$L_DG cross-$l_g"; done
+  while read -r l_dt l_dv; do'
+rcpt_mut  "LD2 cross names acquit ordinals" "$R733" 1 \
+  $'  l_onames "$1" "$2"\n  # A base whose' \
+  $'  l_cover "$1" "$AC_T/no-such-stories" "$2"; L_ONAMES="$l_cn"\n  # A base whose'
 
 fi
 if sg pair; then

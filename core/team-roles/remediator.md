@@ -203,7 +203,13 @@ refuses a `repaired` entry with an edit and no `siblings:` field.
 
 **As the serial remediator after a join**, your brief carries `shard: none (authoring-chain)`
 (Rule 28 exception 3: you read the joined output the shards produced), the join's `ESCALATED:` lines and
-its `SERIAL-REQUIRED:` count. For every shard entry `repaired` with an edit, and every escalated
+its `SERIAL-REQUIRED:` count, and either ONE `LANE:` line with its `LANE-ITEM:` lines or the
+`FANIN:` lines. As a lane remediator you edit ONLY the files your `LANE:` line names, work only
+your lane's parts and items, and write your entries as the part your brief names
+(`shards/<lane artifact>-repair-p<M>/lane-<n>.md`, `<lane artifact>` as `_gate-procedures.md` defines it, closed with `--mark`), never an append to a
+record: a fix that needs a file outside your lane is escalated, and the fan-in owns it. As the
+fan-in remediator you work every `FANIN:` item after the lanes have joined, and append to the
+lanes' joined record. For every shard entry `repaired` with an edit, and every escalated
 sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
 a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
 _bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
@@ -248,7 +254,9 @@ entry to a spec's `.memlog.md`, re-render `SPEC.md` from it and append its
 is dispatched. The unsharded `shard: none (serial-document)` remediator is held to the same
 order, and its record is judged by the same check. After your last entry and the re-render, and
 before `--mark-repair`, run
-`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>`, fix every entry it
+`scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>` (as the fan-in, whose
+record is `<lane artifact>-repair-p<M>.md`: `--escalations <round one's record> --escalations
+<record>`, round one's first), fix every entry it
 names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line, then mark;
 never hand back a record it refuses. A part or shard remediator writes no `repair-complete:` line and closes with
 `--mark` instead (item 1, **Close your part with `--mark`**). Its `seat-complete:` line ends

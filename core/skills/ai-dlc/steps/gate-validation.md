@@ -2169,7 +2169,13 @@ only under this sprint's `s<N>/stories/` and never by another sprint's same-name
 directory judged against the recorded K; a current story no shard names FAILs, named. Complete for
 the recorded K reads `PENDING
 ... stories/ changed since the elicitation: shards record K=<x>, stories/ holds <y>`, and short for
-it FAILs. A recorded K equal to or smaller than today's is judged against today's `stories/` as
+it FAILs. A story split or added after a correctly sharded elicitation is judged by NAME through
+the delta clause of validation-cycle item 2: when `shards/stories-elicitation/` is complete for its
+own K, only the stories no ordinal shard names (a cross shard's `<name>=` entries never cover one)
+and the current cross groups holding one of them are owed, in
+`s<N>/shards/stories-elicitation-delta-k<K>/`. That dir holding exactly that set PASSes. Short or
+misnamed, it FAILs. Absent, the FAIL's remedy names the owed stories and groups. A base not complete
+for its own K, or one `shard: 1/1` voice, is never topped up, and its remedy is the full re-run. A recorded K equal to or smaller than today's is judged against today's `stories/` as
 usual, so a `shard: 1/1` single voice over several stories still FAILs. Shard lines recording two
 different values of K, or a K outside 1..999, FAIL. The arm's real-corpus receipt is OWED, not
 covered: no consumer sprint has yet been elicited under this shape, so its FAIL path is proven only

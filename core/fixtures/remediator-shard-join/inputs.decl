@@ -22,3 +22,5 @@ core/scripts/wait-for-deliverable.sh
 core/team-roles/remediator.md
 core/fixtures/lib/
 core/team-roles/pm-escalated.md
+# BL-716: the join runs the worklist beside itself after a document or subject assembly to derive MOVED-CITE lane edges.
+!core/scripts/serial-remediation-worklist.sh

@@ -2876,6 +2876,118 @@ l_cover() {
   done
 }
 
+# THE DELTA (BL-733). A story split or added after a correctly sharded elicitation owes only the
+# stories no ORDINAL shard names and the cross groups that hold one of them, elicited into a SIBLING
+# dir `s<N>/shards/stories-elicitation-delta-k<K>/` at today's K: `<story-basename>.md` per owed
+# story, `cross-<g>.md` (`cross.md` at one group) per owed group, each shard line at K. No root
+# record is written for it: `l_records` globs `stories-elicitation*.md`, so one would read as a voice.
+#   ORDINAL COVERAGE IS READ FROM ORDINAL SHARDS ONLY -- a non-cross file whose `artifact:` is ONE
+#   `.md` under this sprint's `s<N>/stories/`. A cross shard's `<name>=` entries never acquit an
+#   ordinal: a cross voice read every story without being any story's own adversary, and a
+#   `shard: 1/1` single voice over the dir would otherwise acquit every story it names.
+#   OWED GROUPS ARE KEYED ON NAMES, NEVER ON THE INDEX LIST: every group of today's
+#   `--cross-groups K` holding an ordinal whose story (by `--map`) no base ordinal names. A pair of
+#   two stories the base names was read by the base's own cross groups, which cover every pair at any
+#   K. Measured on the reference consumer's s319 split (2.3 -> 2.3a/2.3b at ordinals 08 and 09,
+#   K 19 -> 20): owed {1,4,5}; a diff of the two index lists answers {3,5,6}.
+#   THE BASE MUST BE COMPLETE FOR ITS OWN K -- its recorded K, or its ordinal-file count where no file
+#   records one -- judged by `l_judge`, so an under-sharded base is never topped up by a delta.
+# $1 shard dir, $2 sprint number -> L_ONAMES, the story names its ORDINAL shards name (space-led and
+# -trailed). Cross files are never read here.
+l_onames() {
+  L_ONAMES=" "; l_osfx="s$2/stories/"
+  for l_of in "$1"/*.md; do
+    [ -f "$l_of" ] || continue
+    case "${l_of##*/}" in cross.md|cross-*.md) continue ;; esac
+    l_oa="$(block_field "$l_of" artifact)"; l_oa="${l_oa%"${l_oa##*[![:space:]]}"}"
+    case "$l_oa" in
+      */) ;;
+      *.md) l_ob="${l_oa##*/}"; l_insprint "$l_oa" "$l_osfx$l_ob" && L_ONAMES="$L_ONAMES${l_ob%.md} " ;;
+    esac
+  done
+}
+# $1 base shard dir, $2 sprint number, $3 today's `--map` output, $4 today's `--cross-groups` output
+# -> L_DBAD (why the base is not a complete elicitation for its own K; empty when it is), L_DKB (that
+# K), L_DU (today's stories no base ordinal names) and L_DG (the owed cross keys), each space-led.
+l_delta_owed() {
+  L_DBAD=""; L_DU=""; L_DG=""; L_DKB=0
+  l_kparse "$1"
+  if [ -n "$L_KBAD" ]; then L_DBAD="$L_KBAD"; return 0; fi
+  L_DKB="$L_KREC"; l_dents=""
+  if [ -z "$L_DKB" ]; then
+    L_DKB=0
+    for l_df in "$1"/*.md; do
+      l_do="${l_df##*/}"; l_do="${l_do%.md}"
+      case "$l_do" in ""|*[!0-9]*) ;; *) [ -f "$l_df" ] && L_DKB=$((L_DKB + 1)) ;; esac
+    done
+  fi
+  for l_df in "$1"/*; do [ -e "$l_df" ] && l_dents="${l_dents}${l_df##*/}${l_NL}"; done
+  if [ "$L_DKB" -lt 1 ]; then L_DBAD="the base holds no ordinal shard"; return 0; fi
+  # A `shard: 1/1` base is complete for K=1 and is still one voice: it is topped up only by a delta
+  # owing EVERY story, because its dir-form names never acquit an ordinal (l_onames).
+  l_dw=""; l_di=0
+  while [ "$l_di" -lt "$L_DKB" ]; do l_di=$((l_di + 1)); l_dw="$l_dw${l_dw:+ }$l_di"; done
+  if [ "$L_DKB" -ge 2 ]; then
+    bash "$K2_PD" --cross-groups "$L_DKB" > "$AC_T/l-dbgroups" 2>/dev/null \
+      || { L_DBAD="partition-document.sh --cross-groups ${L_DKB} did not answer"; return 0; }
+    l_dw="$l_dw $(k3_xkeys "$AC_T/l-dbgroups")"
+  fi
+  l_judge full "$L_DKB" "$l_dw" 0 1 "$l_dents"
+  if [ "$L_V" != PASS ]; then L_DBAD="${L_WHY}, judged as a K=${L_DKB} elicitation"; return 0; fi
+  l_onames "$1" "$2"
+  # A base whose ordinal files name no story of this sprint -- the `shard: 1/1` voice over the dir,
+  # or shards naming another sprint -- elicited no story as its own adversary: nothing to top up.
+  if [ "$L_ONAMES" = " " ]; then
+    L_DBAD="no ordinal shard in it names one story file under s$2/stories/ (a single voice over the dir is not a base)"; return 0
+  fi
+  l_dr="$(awk -F'\t' -v named="$L_ONAMES" '
+    FNR == NR { if ($1 ~ /^[0-9]+$/) { n = $2; sub(/\.md$/, "", n)
+                  if (index(named, " " n " ") == 0) { u[$1 + 0] = 1; printf "U %s\n", n } }
+                next }
+    $1 ~ /^[0-9]+$/ { r++; m = split($2, ix, ","); for (i = 1; i <= m; i++) if ((ix[i] + 0) in u) own[r] = 1 }
+    END { for (i = 1; i <= r; i++) if (own[i]) printf "G %s\n", (r == 1 ? "cross" : "cross-" i) }' "$3" "$4")" \
+    || { L_DBAD="the delta could not be derived from --map and --cross-groups"; return 0; }
+  while read -r l_dt l_dv; do
+    case "$l_dt" in U) L_DU="$L_DU $l_dv" ;; G) L_DG="$L_DG $l_dv" ;; esac
+  done <<< "$l_dr"
+}
+# $1 delta dir, $2 sprint number, $3 today's K -> L_V (PASS | FAIL) and L_WHY, against L_DU / L_DG.
+# An owed story is covered only by `<story>.md` whose `artifact:` names that story under s<N>/stories/.
+l_delta_judge() {
+  l_dcov=" "; l_dhave=" "; l_dwrong=""; l_dmo=""; l_dmx=""; L_WHY=""
+  for l_df in "$1"/*; do
+    [ -e "$l_df" ] || continue
+    l_dn="${l_df##*/}"; l_dhave="$l_dhave$l_dn "
+    case "$l_dn" in
+      cross.md|cross-*.md)
+        case "$L_DG " in *" ${l_dn%.md} "*) ;; *) l_dwrong="$l_dwrong $l_dn" ;; esac ;;
+      *.md)
+        case "$L_DU " in
+          *" ${l_dn%.md} "*)
+            l_da="$(block_field "$l_df" artifact)"; l_da="${l_da%"${l_da##*[![:space:]]}"}"
+            if l_insprint "$l_da" "s$2/stories/$l_dn"; then l_dcov="$l_dcov${l_dn%.md} "
+            else l_dwrong="$l_dwrong $l_dn(artifact: ${l_da:-none})"; fi ;;
+          *) l_dwrong="$l_dwrong $l_dn" ;;
+        esac ;;
+      *) l_dwrong="$l_dwrong $l_dn" ;;
+    esac
+  done
+  for l_ds in $L_DU; do case "$l_dcov" in *" $l_ds "*) ;; *) l_dmo="$l_dmo $l_ds.md" ;; esac; done
+  for l_dx in $L_DG; do case "$l_dhave" in *" $l_dx.md "*) ;; *) l_dmx="$l_dmx $l_dx.md" ;; esac; done
+  [ -z "$l_dmo" ] || L_WHY="(b) delta ordinals missing:${l_dmo}"
+  [ -z "$l_dmx" ] || L_WHY="${L_WHY}${L_WHY:+; }(c) delta cross shards missing:${l_dmx}"
+  [ -z "$l_dwrong" ] || L_WHY="${L_WHY}${L_WHY:+; }(d) wrong names present in the delta:${l_dwrong}"
+  l_kparse "$1"
+  if [ -n "$L_KBAD" ]; then L_WHY="${L_WHY}${L_WHY:+; }${L_KBAD} (the delta)"
+  elif [ -n "$L_KREC" ] && [ "$L_KREC" != "$3" ]; then
+    L_WHY="${L_WHY}${L_WHY:+; }(f) the delta's shard: lines record K=${L_KREC}, not today's K=$3"
+  fi
+  if [ -n "$L_WHY" ]; then L_V=FAIL; else
+    L_V=PASS
+    L_WHY="shards/stories-elicitation/ is complete for its K=${L_DKB} and shards/stories-elicitation-delta-k$3/ holds exactly the delta owed (stories:${L_DU:- none}; cross:${L_DG:- none})"
+  fi
+}
+
 # $1 intensity  $2 K  $3 want set (space-separated, ordinals de-padded)  $4 record present 0/1
 # $5 shard dir present 0/1  $6 shard dir entries, one basename per line -> L_V (PASS | FAIL |
 # NOT-OWED | UNJUDGED) and L_WHY. Fork-free: the self-probe calls it on staged inputs, not a corpus.
@@ -3073,6 +3185,10 @@ EOF
   l_cover "$AC_T/l-probe/o/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint ordinal: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
   l_cover "$AC_T/l-probe/p/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, foreign-sprint cross: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
   l_cover "$AC_T/l-probe/q/sh" "$AC_T/l-probe/i/st" 9; [ "$L_NONAMES/$L_UNCOV" = "/ story-1-3-x" ] || lp_bad="$lp_bad [cover, s19 ordinal suffix: '$L_NONAMES/$L_UNCOV' want '/ story-1-3-x']"
+  # THE DELTA'S ORDINAL NAMES (BL-733): i's two ordinals name both stories; j's cross shard names
+  # both by `<name>=` and must name NONE, or a cross voice acquits an ordinal.
+  l_onames "$AC_T/l-probe/i/sh" 9; [ "$L_ONAMES" = " story-1-3-x story-2-1-x " ] || lp_bad="$lp_bad [delta ordinal names: '$L_ONAMES']"
+  l_onames "$AC_T/l-probe/j/sh" 9; [ "$L_ONAMES" = " " ] || lp_bad="$lp_bad [delta ordinal names read a cross shard: '$L_ONAMES']"
   if ! l_insprint "a/s9/stories/x.md" "s9/stories/x.md" || ! l_insprint "s9/stories/x.md" "s9/stories/x.md" \
      || l_insprint "a/s19/stories/x.md" "s9/stories/x.md" || l_insprint "s19/stories/x.md" "s9/stories/x.md" \
      || l_insprint "a/s8/stories/x.md" "s9/stories/x.md"; then lp_bad="$lp_bad [l_insprint boundary: /s9/ and leading s9/ only]"; fi
@@ -3178,13 +3294,39 @@ EOF
       fi
     fi
   fi
+  # THE DELTA (BL-733, see l_delta_owed): judged only where today's owed set was derived (full, K >= 2,
+  # a base dir). A delta dir present decides the verdict -- PASS only over a base complete for its own
+  # K and a delta holding exactly the owed names; absent, the owed delta is NAMED in the remedy, and
+  # the full re-run is named only where no base is complete for its own K. L_KREC/L_KBAD are restored:
+  # the recorded-K branch above owns them.
+  l_dd="$l_sd/shards/stories-elicitation-delta-k$l_k"; l_dmode=0; l_dhint=""
+  if [ -z "$l_pending" ] && [ "$l_int" = "full" ] && [ "$l_dir" -eq 1 ] && [ "$l_k" -ge 2 ] && [ -n "$l_want" ]; then
+    l_ksv="$L_KREC"; l_kbsv="$L_KBAD"
+    l_delta_owed "$l_xd" "$l_n" "$AC_T/l-map" "$AC_T/l-groups"
+    # A delta dir decides only where a delta is owed or the base cannot be topped up; with nothing
+    # owed over a complete base, the judgments above stand (the recorded-K PENDING among them).
+    if [ -d "$l_dd" ] && { [ -n "$L_DBAD" ] || [ -n "$L_DU" ]; }; then
+      l_dmode=1
+      if [ -n "$L_DBAD" ]; then
+        l_dv=FAIL; l_dwhy="(g) shards/stories-elicitation-delta-k${l_k}/ tops up a base that is not a complete elicitation: ${L_DBAD}"
+      else
+        l_delta_judge "$l_dd" "$l_n" "$l_k"; l_dv="$L_V"; l_dwhy="$L_WHY"
+      fi
+    elif [ -z "$L_DBAD" ] && [ -n "$L_DU" ]; then
+      l_dhint="stories:${L_DU}; cross:${L_DG:- none}"
+    fi
+    L_KREC="$l_ksv"; L_KBAD="$l_kbsv"
+  fi
+  if [ "$l_dmode" -eq 1 ]; then l_kmsg=""; l_kfail=""; fi
   if [ -n "$l_pending" ]; then
     echo "PENDING (L -- ELICITATION): ${l_term}: the stories elicitation of s${l_n} could not be judged: ${l_pending}."
   elif [ -n "$l_kmsg" ]; then
     echo "PENDING (L -- ELICITATION): ${l_term}: s${l_n}: ${l_kmsg};"
     echo "      shards/stories-elicitation/ holds exactly the set owed at K=${L_KREC}, so it is not judged against today's stories/."
   else
-    if [ -n "$l_kfail" ]; then
+    if [ "$l_dmode" -eq 1 ]; then
+      L_V="$l_dv"; L_WHY="$l_dwhy"
+    elif [ -n "$l_kfail" ]; then
       L_V="FAIL"; L_WHY="$l_kfail"
     else
       l_judge "$l_int" "$l_k" "$l_want" "$l_rec" "$l_dir" "$l_ents"
@@ -3263,6 +3405,17 @@ EOF
         elif [[ "$l_at" < "$l_stamp" ]]; then
           echo "PENDING (L -- ELICITATION): ${l_term}: s${l_n}: ${L_WHY};"
           echo "      the elicitation is dated ${l_at} (${l_at_from}), before ${L_RELEASE} was stamped (${l_stamp}). Judged by its era's rule: legal then."
+        elif [ -n "$l_dhint" ] || [ "$l_dmode" -eq 1 ]; then
+          # THE DELTA REMEDY (BL-733): the base is complete for its own K, so only the stories no
+          # ordinal shard names and the cross groups holding one of them are owed.
+          if [ -z "$l_dhint" ]; then l_dhint="stories:${L_DU:- none}; cross:${L_DG:- none}"; fi
+          err "L -- ELICITATION" "s${l_n}'s stories elicitation over ${l_k} stories is not the sharded shape: ${L_WHY}.
+      It is dated ${l_at} (${l_at_from}), after ${L_RELEASE} was stamped (${l_stamp}), so
+      _gate-procedures.md validation-cycle item 2 binds it. shards/stories-elicitation/ is complete
+      for the K it was elicited at, so ONLY THE DELTA is owed -- ${l_dhint} -- one adversary per
+      owed story writing s${l_n}/shards/stories-elicitation-delta-k${l_k}/<story-basename>.md and one
+      cross-story adversary per owed group writing cross-<g>.md there (cross.md at one group), each
+      briefed at shard: <i>/${l_k}. Elicit the delta (item 2, the delta clause) before this gate."
         else
           err "L -- ELICITATION" "s${l_n}'s stories elicitation over ${l_k} stories is not the sharded shape: ${L_WHY}.
       It is dated ${l_at} (${l_at_from}), after ${L_RELEASE} was stamped (${l_stamp}), so
@@ -3270,7 +3423,8 @@ EOF
       (scripts/ai-dlc/merge-adversarial-shards.sh --map) plus one cross-story adversary per group
       (scripts/ai-dlc/partition-document.sh --cross-groups <K>; cross.md only at K=2), each writing
       s${l_n}/shards/stories-elicitation/<ordinal>.md or cross-<g>.md; one story is ONE adversary at
-      shard: 1/1 writing 01.md. Re-run the elicitation in that shape before this gate."
+      shard: 1/1 writing 01.md. No shard dir complete for its own K exists to top up with a delta,
+      so re-run the elicitation in that shape before this gate."
         fi ;;
     esac
   fi
@@ -3500,6 +3654,9 @@ for ((h = 0; h + 1 < N; h++)); do
       # is most likely this series' own record misnamed; any other name is most likely another
       # repair's. The remedy differs, so the message says which -- and never asserts ownership.
       case "$(basename "$h_foreign")" in
+        # A lane round's record (BL-716) is written beside round one's by the lane join; it stands
+        # in for nothing and must never be renamed onto the owed path, whose record is what is missing.
+        "${H_STEM:-.}"-serial-repair-p*) h_fix="It is a lane round's record, which the lane join writes AFTER round one's: do not rename it. The missing record is round one's own, ${h_want:-<stem>-repair-p$M.md}, which the round-one join writes; write or re-join it there." ;;
         "${H_STEM:-.}"-*) h_fix="If it records THIS series' repair, rename it to the owed path; otherwise write this series' own record there." ;;
         *) h_fix="Its name does not carry this series' stem, so it is most likely another repair's -- another series, a party or elicitation round, or a gate repair. Write this series' own record at the owed path; do not rename a record that belongs to a different repair." ;;
       esac
@@ -3626,6 +3783,42 @@ done
 # is PENDING and none fails.
 J2_RELEASE="0.669.0"
 J2S_RELEASE="0.738.0"
+# A STORY SPLIT IS A SCOPE CHANGE FOR THE TEST STRATEGY (BL-736, operator ruling batch 238). When the
+# single-file walk above reaches the disk sha over a `test-strategy.md`, the chain's two ENDPOINTS --
+# the notarized bytes and the disk bytes -- are compared by the STORY-ID SET the strategy maps tests
+# to; intermediate links are never committed, so only the endpoints are read. A different set is a
+# scope change, which item 1's repair path does not carry: it needs ONE REOPEN_AFTER_MET record and
+# ONE verify pass, whose terminal sha is the disk sha (and then this arm never runs).
+#   THE SET is the STORY COLUMN of each mapping row, `| ST<N>-<...> | <id> |`, id DOTTED
+#   (`2.3`, `2.3a`) -- never a whole-file scan: the row ids keep `ST319-2.3-01` after a split, so a
+#   whole-file set reads a merge back to 2.3 as unchanged. Measured on the reference consumer's s319
+#   strategy: 19 ids at fb1161c0e, 21 at 765de28f0 (+2.3a +2.3b).
+#   THE NOTARIZED BYTES are recovered from git by CONTENT: the notarized sha is a sha256 and the
+#   repository may be sha1, so `--find-object` cannot resolve it; every committed version of the path
+#   (`git log --all`) is hashed until one matches. None matches, or either side maps no row: PENDING,
+#   named -- never FAIL (a pre-migration state must not wedge live work) and never "unchanged".
+#   THE ERA is J2T_RELEASE on the J2 ladder, keyed on the series' first pass, so a series that
+#   followed the old item 1 is PENDING, not retroactively failed.
+#   SCOPE: test-strategy.md only -- that is the ruling's subject; no other artifact is judged here.
+J2T_RELEASE="0.913.0"
+# $1 file -> the sorted story-id set of its mapping rows' story column, one per line.
+j2t_ids() {
+  awk '/^\|[ \t]*ST[0-9]+-[^|]*\|[ \t]*[0-9]+\.[0-9]+[a-z]?[ \t]*\|/ {
+         v = $0; sub(/^\|[^|]*\|[ \t]*/, "", v); sub(/[ \t]*\|.*$/, "", v); print v }' "$1" | sort -u
+}
+# $1 the strategy file, $2 the notarized sha256 -> J2T_BEFORE (a file holding those bytes) or empty.
+j2t_recover() {
+  local d b c
+  J2T_BEFORE=""
+  command -v git >/dev/null 2>&1 || return 0
+  d="$(dirname "$1")"; b="${1##*/}"
+  for c in $( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+                git -C "$d" log --all --format=%H -- "./$b" ) 2>/dev/null); do
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      git -C "$d" show "${c}:./$b" ) > "$AC_T/j2t-before" 2>/dev/null || continue
+    if [ "$(k2_sha "$AC_T/j2t-before")" = "$2" ]; then J2T_BEFORE="$AC_T/j2t-before"; return 0; fi
+  done
+}
 
 j2_in_subject() {  # $1 resolved file -> 0 when it is a sprint-scoped single artifact
   case "$1" in
@@ -3749,6 +3942,62 @@ if [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
         printf '%s\t%s\t%s\n' "$j2_b" "$j2_a" "${j2_rec##*/}" >> "$AC_T/j2-links"
       done
       j2_walk "$j2_sha" "$j2_disk" "$AC_T/j2-links"
+      if [ "$J2_END" = complete ] && [ "${j2_file##*/}" = "test-strategy.md" ]; then
+        # THE STORY-ID SET (BL-736, header at J2T_RELEASE). Self-probe first, both directions: the
+        # row id keeps `2.3` while the story column says `2.3a`, so only the column reader gets `2.3a`.
+        printf '| ST9-2.3-01 | 2.3a | AC1 | unit |\n| ST9-2.3-02 | 2.3b | AC2 | unit |\nStory 2.3 prose\n| id | story |\n' > "$AC_T/j2t-probe.md" || {
+          echo "validate-adversarial-convergence.sh: arm J2 story-id self-probe could not stage; no verdict" >&2; exit 2; }
+        j2tp="$(j2t_ids "$AC_T/j2t-probe.md" | tr '\n' ' ')"
+        if [ "$j2tp" != "2.3a 2.3b " ]; then
+          echo "validate-adversarial-convergence.sh: arm J2 story-id self-probe failed (got '$j2tp', want '2.3a 2.3b '); no verdict" >&2
+          exit 2
+        fi
+        j2t_term="${LAST_FILE##*/}"
+        j2t_recover "$j2_file" "$j2_sha"
+        j2t_why=""; j2t_diff=""
+        if [ -z "$J2T_BEFORE" ]; then
+          j2t_why="no committed version of ${j2_file##*/} hashes to the notarized ${j2_sha}, so its story-id set cannot be read"
+        else
+          j2t_b="$(j2t_ids "$J2T_BEFORE" | tr '\n' ' ')"; j2t_a="$(j2t_ids "$j2_file" | tr '\n' ' ')"
+          if [ -z "$j2t_b" ] || [ -z "$j2t_a" ]; then
+            j2t_why="the notarized or the disk strategy maps no '| ST<N>-... | <story id> |' row, so the story-id set is unjudged"
+          elif [ "$j2t_b" != "$j2t_a" ]; then
+            j2t_diff="$(printf '%s\n' $j2t_b | sort > "$AC_T/j2t-b"; printf '%s\n' $j2t_a | sort > "$AC_T/j2t-a"
+                        comm -23 "$AC_T/j2t-b" "$AC_T/j2t-a" | sed 's/^/-/' | tr '\n' ' '
+                        comm -13 "$AC_T/j2t-b" "$AC_T/j2t-a" | sed 's/^/+/' | tr '\n' ' ')"
+          fi
+        fi
+        if [ -n "$j2t_why" ]; then
+          echo "PENDING (J2 -- DRIFT): ${j2t_term}: a repair chain carries ${j2_file} from ${j2_sha} to ${j2_disk}, and ${j2t_why}."
+        elif [ -n "$j2t_diff" ]; then
+          j2t_root=""; j2t_w="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+          while [ -n "$j2t_w" ]; do
+            if [ -f "$j2t_w/.claude/.ai-dlc-version" ]; then j2t_root="$j2t_w"; break; fi
+            j2t_w="${j2t_w%/*}"
+          done
+          j2t_stamp=""
+          if [ -n "$j2t_root" ]; then stamp_log "$j2t_root"; j2t_stamp="$(K_RELEASE="$J2T_RELEASE" k_stamp_parse < "$STAMP_LOG")"; fi
+          j2t_at="${P_AT[0]:-}"; j2t_atok=0
+          case "$j2t_at" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) j2t_atok=1 ;; esac
+          j2t_what="the repair chain changes the story-id set the strategy maps tests to (${j2t_diff% }): a story split or merge is a SCOPE change, not a repair on unchanged scope"
+          if [ -z "$j2t_stamp" ]; then
+            echo "PENDING (J2 -- DRIFT): ${j2t_term}: ${j2t_what};"
+            echo "      no commit${j2t_root:+ in $j2t_root} stamps .claude/.ai-dlc-version at ${J2T_RELEASE} or later -- not owed yet."
+          elif [ "$j2t_atok" -eq 0 ]; then
+            echo "PENDING (J2 -- DRIFT): ${j2t_term}: ${j2t_what};"
+            echo "      the series' first pass has no ISO 8601 UTC invoked_at ('${j2t_at}') to date against ${j2t_stamp}."
+          elif [[ "$j2t_at" < "$j2t_stamp" ]]; then
+            echo "PENDING (J2 -- DRIFT): ${j2t_term}: ${j2t_what};"
+            echo "      the series opened (${j2t_at}) before ${J2T_RELEASE} was stamped (${j2t_stamp}). Legacy series."
+          else
+            err "J2 -- DRIFT" "${j2t_term} stamps EXIT_CONDITION_MET over ${j2_file} at ${j2_sha}, and a
+      repair chain carries it to ${j2_disk} -- but ${j2t_what}.
+      Amend it as a scope change (_gate-procedures.md, the amendment procedure, items 2-4): ONE
+      'resolution: REOPEN_AFTER_MET' record from ${j2_sha} to ${j2_disk}, operator-authorized,
+      and ONE verify pass in this series citing it, which becomes terminal over the bytes on disk."
+          fi
+        fi
+      fi
       if [ "$J2_END" != complete ]; then
         j2_term="${LAST_FILE##*/}"
         j2_first="$(basename "${P_FILE[0]}")"
