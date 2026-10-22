@@ -296,8 +296,10 @@ Event types:
 - `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
   flag was created. The harness raises the event identically for a completed
   background task and for a human typing; this records the ones that were not
-  a human, so a pause that never happened is distinguishable from one the lead
-  already cleared
+  a human (or a human typing in a session that is not the lead: a non-ai-dlc
+  session, or a brand-new session whose transcript is not written yet), so a
+  pause that never happened is distinguishable from one the lead already
+  cleared
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
 - `PAUSE_QUESTION_IN_PROSE`: the pause flag was UP, the last line of the lead's
@@ -401,9 +403,14 @@ fi
 # than anything the transcript holds, so a typed `/ai-dlc` or `/ai-dlc-update` decides by
 # itself, exactly as acknowledge.sh lets the current Skill payload override its scan.
 #
-# THE DEFAULT PAUSES, and that is the safe direction: no transcript_path, or a transcript that
-# cannot be read, keeps today's behaviour, so a lost signal never lets the lead's own operator
-# through unpaused. The request is already captured above in full whatever session typed it --
+# ONE ABSENT-FILE CASE SKIPS: a transcript_path naming a file that does not exist yet, in a
+# directory that does. The harness writes a new session's transcript AFTER its first
+# UserPromptSubmit, so that first prompt can carry no marker and is not a lead's steer
+# (a typed /ai-dlc is decided above, from the prompt itself). Logged with its own Reason.
+#
+# THE DEFAULT PAUSES, and that is the safe direction: no transcript_path, a transcript
+# directory that is absent, or a transcript that cannot be read, keeps today's behaviour, so a
+# lost signal never lets the lead's own operator through unpaused. The request is already captured above in full whatever session typed it --
 # Check 33 and user_request_cite depend on that record being complete; only the flag changes.
 # Logged as PAUSE_SKIPPED with its own Reason line, so no USER_PAUSE reader
 # (ai-dlc-handoff-pending.sh keys on that heading) sees it.
@@ -421,10 +428,24 @@ if [ -z "$SESSION_SKILL" ]; then
       *'/ai-dlc</command-name>'|*'"skill":"ai-dlc"')               SESSION_SKILL="ai-dlc" ;;
       *)                                                           SESSION_SKILL="none" ;;
     esac
+  elif [ -n "$TRANSCRIPT" ] && [ ! -e "$TRANSCRIPT" ] && [ -d "$(dirname "$TRANSCRIPT")" ]; then
+    SESSION_SKILL="new-session"
   else
     SESSION_SKILL="unknown"
   fi
 fi
+case "$SESSION_SKILL" in
+  new-session)
+    seed_log_header
+    {
+      echo "## ${TIMESTAMP} -- PAUSE_SKIPPED"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Reason: operator prose typed in a new session whose transcript is not written yet (the harness writes it after the first prompt, so no /ai-dlc marker can exist); captured in operator-requests-history.md, no pause"
+      echo "- Preview: ${PROMPT_PREVIEW}"
+      echo ""
+    } >> "$LOG_FILE"
+    exit 0 ;;
+esac
 case "$SESSION_SKILL" in
   none|ai-dlc-update)
     seed_log_header

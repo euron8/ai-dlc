@@ -1595,6 +1595,9 @@ refusal_text() { # $1 kind  $2 what -> REFUSED
       ($ALLOWED_CMDS)" ;;
     BADGIT) REFUSED="'git $2' is not a read-only git subcommand
       ($ALLOWED_GIT_SUB)" ;;
+    BADGITDIR) REFUSED="'git $2' names a directory that is not a worktree of this repository
+      -- an absolute -C directory is admitted only where git reports the root's own common
+      dir (a linked worktree of it, or the root itself), never a foreign or bare repository" ;;
     BADOPT) REFUSED="'$2' writes a file or runs a command
       -- the allowlist admits read-only PROGRAMS, not every option they carry, and this
       block is re-run automatically at write time" ;;
@@ -1674,8 +1677,47 @@ opt_take() { # $1 option token  $2 its value -- a sed `-e` value is a script the
 # before its parenthesis runs a shell; a gawk indirect call `@name(...)` can reach a function by a
 # name held in a variable, so a program carrying one is refused too. `-f` is in the NEVER set,
 # because a program in a file is a program this check cannot see.
+# gawk's `@include "f"`, `@load "lib"` and `@namespace "n"` take a quoted name and NO parenthesis,
+# so AWK_AT_RE never saw them; the first two load a source file or a shared library, inert on the
+# BWK awk macOS ships and live on gawk, which a consumer may run. They are ENUMERATED rather than
+# caught as any `@word`, because `print "user@host"` is a plain string; the trailing class (not
+# `\b`, which POSIX ERE lacks and arm S12 of validate-shell-portability.sh refuses) keeps
+# `@includes` a near-miss.
 AWK_SYS_RE='system[[:space:]]*\('
 AWK_AT_RE='@[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\('
+AWK_DIR_RE='@(include|load|namespace)([^A-Za-z0-9_]|$)'
+awk_prog_refusal() { # $1 an awk program -> AWK_WHY (empty = admitted)
+  AWK_WHY=""
+  if [[ "$1" =~ $AWK_SYS_RE ]]; then AWK_WHY="awk system()"
+  elif [[ "$1" =~ $AWK_AT_RE ]]; then AWK_WHY="awk @name() indirect call"
+  elif [[ "$1" =~ $AWK_DIR_RE ]]; then AWK_WHY="awk @include/@load/@namespace directive"
+  fi
+}
+# THE SELF-PROBE: the program check above is driven at startup over literal text, through the
+# helper seg_check calls, so a regex that stops matching stops every run (exit 2) instead of
+# admitting silently. It matches strings; nothing is loaded or run. Each row is
+# `<expected refusal or ->|<program>`; `-` is a near-miss that must be admitted.
+awk_probe_bad=""
+while IFS='|' read -r ap_want ap_prog; do
+  [ -n "$ap_want" ] || continue
+  awk_prog_refusal "$ap_prog"
+  [ "${AWK_WHY:--}" = "$ap_want" ] || awk_probe_bad="$awk_probe_bad [$ap_prog] read '${AWK_WHY:--}', want '$ap_want';"
+done <<'AWK_PROBE_END'
+awk @include/@load/@namespace directive|@include "f"
+awk @include/@load/@namespace directive|@load "f"
+awk @include/@load/@namespace directive|@namespace "n"
+awk @include/@load/@namespace directive|@include"f"
+awk @include/@load/@namespace directive|BEGIN{x=1} @load
+awk @name() indirect call|BEGIN{@f(1)}
+awk system()|BEGIN{system ("x")}
+-|{print "user@host"}
+-|@includes "f"
+-|{print $1}
+AWK_PROBE_END
+if [ -n "$awk_probe_bad" ]; then
+  printf 'REFUSED: the awk program check failed its own self-probe (%s ), so it would admit a program it exists to refuse; no verdict.\n' "$awk_probe_bad" >&2
+  exit 2
+fi
 
 seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_WHY)
   local seg="$1" w n=0 i=1 first="" sub="" gdir groot gres gcom_root gcom_dir pend="" endop=0 nops=0
@@ -1704,11 +1746,29 @@ seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_
     # EXACTLY ONE LEADING `-C <dir>` IS SKIPPED, AND ONLY TO A DIRECTORY OF THIS SAME
     # REPOSITORY. Reading the subcommand as word 2 refused `git -C sub rev-parse ...`,
     # a correct read-only derivation. The skip carries three conditions, all required:
-    #   (i)   <dir> is a plain relative path, `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` -- no
-    #         quote, glob, `~` or leading `/` or `-`;
-    #   (ii)  it canonicalises (`pwd -P`) to the physical root or below it;
+    #   (i)   <dir> is a plain path -- relative, `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$`, or
+    #         absolute, `^/[A-Za-z0-9_./-]*$` -- with no quote, glob, `~`, space or leading `-`;
+    #   (ii)  a RELATIVE <dir> canonicalises (`cd -P` of `$AI_DLC_ROOT/<dir>`, then `pwd -P`)
+    #         to the physical root or below it. An ABSOLUTE <dir> is canonicalised directly
+    #         (`cd -P` of <dir>, then `pwd -P`) and need NOT sit under
+    #         the root: the capture hook roots a derivation at the edited file's own LINKED
+    #         WORKTREE, so its fences spell that worktree's absolute path, and a reviewer
+    #         re-runs them from the main checkout, where that worktree is a sibling;
     #   (iii) git there reports the SAME common dir as the root, which excludes a nested
-    #         repo, a foreign repo and a bare one.
+    #         repo, a foreign repo, a submodule and a bare one. For an absolute <dir> this
+    #         is the whole boundary, and its refusal names the common dir (BADGITDIR). Both
+    #         values come from `--path-format=absolute`, which already prints the physical
+    #         path (measured: a logical `/tmp/x` and a symlink to a linked worktree both
+    #         printed `/private/tmp/.../.git`), so they are compared as printed.
+    # EVERY `cd` HERE IS `cd -P`, because the check must land where `git -C` lands. A plain
+    # `cd` is LOGICAL: it deletes `x/..` as text BEFORE following the symlink `x`, while
+    # `git -C` calls chdir(2), which follows `x` first and then takes `..` from its target.
+    # Measured: with an untracked `lnk -> <foreign repo>/sub` in the root, `cd lnk/..` landed
+    # in the root and `git -C lnk/.. diff` ran the foreign repo's `diff.external`, both as a
+    # relative and as an absolute <dir>. `pwd -P` afterwards cannot repair it: by then the
+    # shell already stands in the wrong directory.
+    # An absolute <dir> reproduces at ITS OWN worktree's HEAD and index, not the root's: a
+    # fence recorded in a story worktree is re-derived against that worktree while it exists.
     # Two measurements are why each is there. A SECOND `-C` resolves relative to the
     # first, so a chain walked out of the root through a committed symlink: one `-C` is
     # what was asked for, and the second is refused. And a committed BARE clone carries
@@ -1722,23 +1782,39 @@ seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_
       if [ "$sub" = "-C" ]; then
         gdir="${3:-}"; sub="${4:-}"; i=4
         [ "$sub" = "-C" ] && { SEG_KIND=BADGIT; SEG_WHY="-C $gdir -C"; return 1; }
+        groot="$(cd -P "$AI_DLC_ROOT" 2>/dev/null && pwd -P)" || groot=""
         case "$gdir" in
-          ''|[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.]*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-]*)
-            SEG_KIND=BADGIT; SEG_WHY="-C $gdir"; return 1 ;;
+          /*) # ABSOLUTE: canonicalised directly, and the common dir alone is the boundary.
+            case "$gdir" in
+              *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-]*)
+                SEG_KIND=BADGIT; SEG_WHY="-C $gdir"; return 1 ;;
+            esac
+            gres="$(cd -P "$gdir" 2>/dev/null && pwd -P)" || gres="" ;;
+          *)
+            case "$gdir" in
+              ''|[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.]*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-]*)
+                SEG_KIND=BADGIT; SEG_WHY="-C $gdir"; return 1 ;;
+            esac
+            gres="$(cd -P "$AI_DLC_ROOT/$gdir" 2>/dev/null && pwd -P)" || gres=""
+            case "$gres" in
+              "$groot"|"$groot"/*) [ -n "$groot" ] || gres="" ;;
+              *) gres="" ;;
+            esac ;;
         esac
-        groot="$(cd "$AI_DLC_ROOT" 2>/dev/null && pwd -P)" || groot=""
-        gres="$(cd "$AI_DLC_ROOT/$gdir" 2>/dev/null && pwd -P)" || gres=""
-        case "$gres" in
-          "$groot"|"$groot"/*) [ -n "$groot" ] || gres="" ;;
-          *) gres="" ;;
-        esac
-        [ -n "$gres" ] || { SEG_KIND=BADGIT; SEG_WHY="-C $gdir"; return 1; }
+        if [ -z "$gres" ]; then
+          case "$gdir" in /*) SEG_KIND=BADGITDIR ;; *) SEG_KIND=BADGIT ;; esac
+          SEG_WHY="-C $gdir"; return 1
+        fi
         gcom_root="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=explicit \
           git -C "$groot" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || gcom_root=""
         gcom_dir="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=explicit \
           git -C "$gres" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || gcom_dir=""
         if [ -z "$gcom_root" ] || [ "$gcom_root" != "$gcom_dir" ]; then
-          SEG_KIND=BADGIT; SEG_WHY="-C $gdir"; return 1
+          case "$gdir" in
+            /*) SEG_KIND=BADGITDIR ;;
+            *) SEG_KIND=BADGIT ;;
+          esac
+          SEG_WHY="-C $gdir"; return 1
         fi
       fi
     case "$sub" in ''|*[[:space:]]*) SEG_KIND=BADGIT; SEG_WHY="$sub"; return 1 ;; esac
@@ -1820,8 +1896,8 @@ seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_
     seg_refuse UNLISTED "$first${sub:+ $sub} $pend (it takes a value and none follows)" || return 1
   fi
   if [ "$first" = "awk" ] && [ "$PROG_SET" -eq 1 ]; then
-    if [[ "$PROG" =~ $AWK_SYS_RE ]]; then seg_refuse BADOPT "awk system()" || return 1; fi
-    if [[ "$PROG" =~ $AWK_AT_RE ]]; then seg_refuse BADOPT "awk @name() indirect call" || return 1; fi
+    awk_prog_refusal "$PROG"
+    if [ -n "$AWK_WHY" ]; then seg_refuse BADOPT "$AWK_WHY" || return 1; fi
   fi
   # AWK TAKES A PROGRAM AS ITS ARGUMENT, AND A BAR INSIDE THAT PROGRAM IS AN EXEC
   # VECTOR THIS CHECKER CANNOT TELL FROM AN ALTERNATION. `print ... | "cmd"` and
@@ -2242,8 +2318,9 @@ run_pair() { # $1 file  $2 line  $3 command  $4 the later line that supersedes i
   # refuses the unset name ("bash could not split it into words"), a second line of defence
   # that mutant m-m7 in core/fixtures/artifact-derivations/run.sh proves.
   #   - marker 137 or 143 (SIGKILL, SIGTERM): the COMMAND was killed and the subshell survived.
-  #     Both are delivered from outside the process; no allowlisted read-only tool raises either
-  #     on itself. Other signal statuses stay verdicts: SIGPIPE (141) is what a pipeline whose
+  #     A signal delivered from outside is the usual cause, but an allowlisted tool CAN exit 137 or 143 on its own:
+  #     awk's `exit`, as in `awk 'END{exit 137}' VERSION`, which derivation-capture seeds. That
+  #     is scored UNRUN too, and it fails closed: no verdict, never a false clean. Other signal statuses stay verdicts: SIGPIPE (141) is what a pipeline whose
   #     reader stops early produces naturally under the inherited `pipefail`, and a tool that
   #     crashes (SIGSEGV, SIGABRT) did run, and its output is a fact about it.
   #     FALSE-POSITIVE SET of that arm: 0. Every derivation in the reference consumer's
@@ -2277,7 +2354,7 @@ run_pair() { # $1 file  $2 line  $3 command  $4 the later line that supersedes i
     ''|*[!0-9]*|137|143)
       exec 3<&-
       printf 'UNRUN: %s:%s did not run to completion (%s), so it has no verdict:\n      $ %s\n' \
-        "$f" "$ln" "$( [ -n "$rc" ] && printf 'the command exited %s, a signal it cannot raise on itself' "$rc" || printf 'no exit status was recorded -- the subshell died before the command returned')" "$c" >&2
+        "$f" "$ln" "$( [ -n "$rc" ] && printf 'the command exited %s, the status of a kill signal, which a tool can also return on its own, so no verdict is read from it' "$rc" || printf 'no exit status was recorded -- the subshell died before the command returned')" "$c" >&2
       unrun=$((unrun + 1))
       return ;;
   esac

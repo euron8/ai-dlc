@@ -602,22 +602,3 @@ Owed: the cut, with a STRUCTURAL receipt (the number of whole-fixture invocation
 
 verify: manual — the receipt is owed with the cut and must be structural; a seconds bound is ruled out.
 
-## BL-756 — `AWK_AT_RE` in validate-artifact-derivations.sh requires a `(`, so gawk's two file-loading directives pass the awk program check
-
-**DEFECT.** Source: tip-728b, batch 239. Found by the BL-728 tip review; id allocated by the lead (ai-dlc-13).
-
-`AWK_AT_RE` (`@[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(`, `core/scripts/validate-artifact-derivations.sh:1678`) catches gawk's indirect call `@name(...)` but not gawk's `@include` and `@load` directives, which take a quoted file name and no parenthesis. They are inert on the BWK awk that macOS ships and live on gawk, which a consumer may run, the same argument the file makes for refusing sed's GNU-only `e` command (`:1846`).
-
-Owed: refuse an `@` directive word in an awk program regardless of a following `(`. Its arm needs an operator ruling first, because the operator's benign-only terms for this batch keep that vocabulary out of shipped fixtures.
-
-verify: manual — the discriminating input is gated on an operator ruling (benign-only terms, batch 239).
-
-## BL-757 — validate-artifact-derivations.sh says no allowlisted read-only tool exits 137 or 143 on its own, and `awk 'END{exit 137}'` does
-
-**NOTE.** Source: BL-728's dress fix, batch 239 (owner ai-dlc-64). Filed by lead ai-dlc-13.
-
-`core/scripts/validate-artifact-derivations.sh:2245` reads "Both are delivered from outside the process; no allowlisted read-only tool raises either on itself." `derivation-capture`'s A24 and A25 now seed `awk 'END{exit 137}' VERSION` as their unrunnable derivation, which exits 137 on its own, and the case arm at `:2277` scores it UNRUN. That fails closed (no verdict, never a false clean), but the comment is false and the fixture relies on the behaviour it denies. `:2251`'s corpus measurement ("none exited 137 or 143" over the reference consumer's derivations) stays true.
-
-Owed: correct `:2245` to say an allowlisted tool CAN exit 137 or 143 on its own, that this scores UNRUN, and that this fails closed.
-
-verify: lacks core/scripts/validate-artifact-derivations.sh "no allowlisted read-only tool raises either"
