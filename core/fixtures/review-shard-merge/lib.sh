@@ -1198,7 +1198,61 @@ p_x_seat() { # X9: seat-complete -- one shard without the marker beside shards w
   run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && ! has "$o" "seat-complete:"
 }
-X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat"
+# X10 (BL-763): every owner-duplicate refusal in one run. K=3 world (groups 1:(1,2) 2:(1,3) 3:(2,3), each
+# default cross shard citing its own group's set). Seven cases on one world, each reset from a clean copy;
+# each row that answers wrongly writes its own WHY token, so M21 (only the first duplicate printed) and
+# M22 (the --check-shard barrier dropped) are each scored on the one row they move.
+xcrit() { # <shard-file>: a '#### ' finding under '### Critical' citing the shard's own set -- refused under APPROVED
+  awk '/^### Critical/ && !d { print; printf "\n#### F-crit a critical interaction\nparts: 1, 3\n\nBody.\n"; d = 1; next } { print }' \
+    "$1" > "$1.x" && mv "$1.x" "$1" && grep -q '^#### F-crit ' "$1"
+}
+xd_tails() { grep '^REFUSED:' "$MO" | sed -n 's/.*\[owner: \([^]]*\)\]$/\1/p' | tr '\n' ' '; }
+xd_first() { local l; l="$(grep -m1 '^REFUSED:' "$MO")"; if grep -q 'identical set' <<<"$l"; then echo dup; else echo other; fi; }
+xd_w() { if [ -e "$1" ]; then echo y; else echo n; fi; }
+xd_row() { # <token> <want> <got>
+  [ "$2" = "$3" ] || WHY="$WHY $1{want '$2' got '$3'}"
+}
+xd_zero_sha() { sed 's/^reviewed-sha: .*/reviewed-sha: 0000000000000000000000000000000000000000/' "$1" > "$1.x" && mv "$1.x" "$1"; }
+p_x_dupall() {
+  local sd="$1" d c o SHARD_SHA="$B_SHA"
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the K=3 world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || { WHY="the clean copy was not made"; return 1; }
+  o="$(out_of "$d")"
+  # two duplicates in two seats: cross-2 cites 1, 2 (owned by cross-1) and cross-3 cites 1, 3 (owned by cross-2)
+  xfinding "$d/cross-2.md" F-dupA "1, 2" && xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="two: the seed did not apply"; return 1; }
+  run_merge "$sd" "$d"; xd_row two "rc=2 n=2 tails=cross-2 cross-3  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+  rm -f "$o"; cs_reset "$d" "$c"
+  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="one: the seed did not apply"; return 1; }
+  run_merge "$sd" "$d"; xd_row one "rc=2 n=1 tails=cross-2  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+  rm -f "$o"; cs_reset "$d" "$c"
+  # near-miss: cross-1 cites its own set 1, 2 a second time -> merges
+  xfinding "$d/cross-1.md" F-ownB "1, 2" || { WHY="near: the seed did not apply"; return 1; }
+  run_merge "$sd" "$d"; xd_row near "rc=0 merged=y" "rc=$RC merged=$(has "$MO" "MERGED:" && echo y || echo n)"
+  rm -f "$o"; cs_reset "$d" "$c"
+  # --check-shard over the duplicating seat, its owner sealed: the exit code is what --mark seals on
+  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="check: the seed did not apply"; return 1; }
+  lmark "$d/cross-1.md" - cross-1 key=cross-1
+  run_check "$sd" "$d" code-review "$d/cross-2.md"
+  xd_row check "rc=2 n=1 ok=n" "rc=$CRC n=$(nref "$CO") ok=$(has "$CO" "SHARD-OK" && echo y || echo n)"
+  cs_reset "$d" "$c"
+  # precedence (a): the duplicate in cross-2, then a per-shard structural refusal in cross-3
+  xfinding "$d/cross-2.md" F-dupA "1, 2" || { WHY="preca: the seed did not apply"; return 1; }
+  xd_zero_sha "$d/cross-3.md"
+  run_merge "$sd" "$d"; xd_row preca "rc=2 n=2 tails=cross-2 cross-3  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
+  rm -f "$o"; cs_reset "$d" "$c"
+  # precedence (b): the structural refusal in cross-1, the duplicate after it in cross-3 -> the first alone
+  xd_zero_sha "$d/cross-1.md"
+  xfinding "$d/cross-3.md" F-dupB "1, 3" || { WHY="precb: the seed did not apply"; return 1; }
+  run_merge "$sd" "$d"; xd_row precb "rc=2 n=1 tails=cross-1  written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) written=$(xd_w "$o")"
+  rm -f "$o"; cs_reset "$d" "$c"
+  # one shard, two lines: cross-2's duplicate, then cross-2's own later verdict-backing refusal
+  xfinding "$d/cross-2.md" F-dupA "1, 2" && xcrit "$d/cross-2.md" || { WHY="same: the seed did not apply"; return 1; }
+  run_merge "$sd" "$d"; xd_row same "rc=2 n=2 tails=cross-2 cross-2  first=dup written=n" "rc=$RC n=$(nref "$MO") tails=$(xd_tails) first=$(xd_first) written=$(xd_w "$o")"
+  rm -f "$o"; cs_reset "$d" "$c"
+  [ -z "$WHY" ]
+}
+X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat x_dupall"
 # ------------------------------------------------------- gate-1 hand-overs (--gate code-review)
 # A code-review part shard replays its own part's mutation-REDs and hands over only what its own
 # worktree cannot bring to GREEN; the execution owner (cross-1) runs the hand-overs. The grammar

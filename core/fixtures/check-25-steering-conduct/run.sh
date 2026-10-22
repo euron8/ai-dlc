@@ -229,7 +229,7 @@ else
 fi
 
 # --- count-carries-no-identity: what must NOT change -------------------------
-# --count is a bare integer BY CONTRACT (steps/gate-validation.md:1665 reads it
+# --count is a bare integer BY CONTRACT (steps/gate-validation.md:2295 reads it
 # directly). It is the one output path that must stay identity-free, so this arm
 # asserts the two corpora are INDISTINGUISHABLE here -- the inverse of every arm
 # above -- with the expected integer as its positive conjunct.

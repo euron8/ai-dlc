@@ -372,8 +372,8 @@ and the merge refuses a count that disagrees. Join with the LEAD checkout's
 `scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
 run against the shard directory in the frozen worktree,
 passing the pass-specific name on a later pass (`-p2`, ...). After a refused
-merge, re-dispatch the seat the REFUSED line's `[owner: <key>]` names, handing
-it that line verbatim: that seat corrects its own shard, re-runs `--check-shard`
+merge, re-dispatch each seat that every REFUSED line's `[owner: <key>]` names, in one wave,
+handing it every line naming it verbatim: it corrects its own shard, re-runs `--check-shard`
 and re-marks, then the lead re-merges. The lead never edits, moves findings
 between, or re-marks a reviewer's shard; an `[owner: lead]` refusal is corrected
 in the lead's own inputs, never in a shard body. The merge
@@ -493,8 +493,8 @@ over, and writes the per-AC table and the
 `scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md`,
 run against the shard directory in the frozen worktree,
 passing the pass-specific name on a later pass (`-p2`, ...). After a refused
-merge, re-dispatch the seat the REFUSED line's `[owner: <key>]` names, handing
-it that line verbatim: that seat corrects its own shard, re-runs `--check-shard`
+merge, re-dispatch each seat that every REFUSED line's `[owner: <key>]` names, in one wave,
+handing it every line naming it verbatim: it corrects its own shard, re-runs `--check-shard`
 and re-marks, then the lead re-merges. The lead never edits, moves findings
 between, or re-marks a reviewer's shard; an `[owner: lead]` refusal is corrected
 in the lead's own inputs, never in a shard body. The merge

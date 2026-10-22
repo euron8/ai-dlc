@@ -21,6 +21,9 @@
 #   and with (d) and the LEGACY rule not applied): the count `--mark` is about to write.
 #   Where the full merge's first refusal is a per-shard refusal of that shard, --check-shard's
 #   REFUSED line is byte-equal to it on the same input; a set-level refusal has no counterpart.
+#   Owner-duplicate refusals are COLLECTED (OWNER TAILS): --check-shard prints every one its target
+#   carries, then any later per-shard refusal of it, and exits 2 before SHARD-OK, so `--mark` (which
+#   keys on the exit) never seals a shard carrying a duplicate.
 #
 #   Per gate:                 code-review                      qa
 #     role file               code-reviewer.md                 qa.md
@@ -160,7 +163,13 @@
 #
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
-#   A per-shard refusal names that shard. The owner-duplicate refusal names the NON-owning shard.
+#   A per-shard refusal names that shard. The owner-duplicate refusal names the NON-owning shard,
+#   and it is the one refusal that does not stop the run: every duplicate in every shard is printed,
+#   each in the same `REFUSED: ... [owner: <key>]` form, the checks go on, and the run exits 2 after
+#   the per-shard loop. A later per-shard refusal still prints and exits at once, after the
+#   duplicates already printed; an earlier shard's per-shard refusal stops the run before any later
+#   duplicate is read. So one run can print several REFUSED lines, two of them naming one shard: the
+#   lead re-dispatches each named seat with EVERY REFUSED line that names it.
 #   A missing shard names its key; an unfinished shard in a marked set names it. A duplicate key
 #   names both filenames. The hand-over join names both the part and CROSS_FIRST. A Check 1
 #   multi-match names every shard whose body matches the pattern outside a fence, else `lead`.
@@ -286,7 +295,8 @@
 #      `LEGACY: ...` lines: one per legacy marker (SEAT-COMPLETE), and, under --gate qa over a qa.md
 #      declaring no severity container, one `LEGACY: <qa.md> declares no severity containers; QA
 #      verdict backing is count-only` line first (VERDICT BACKING).
-#   2  REFUSED (stdout `REFUSED: <reason> [owner: <key>...]`) -- nothing written at <review-file>.
+#   2  REFUSED (stdout one `REFUSED: <reason> [owner: <key>...]` line, or several when owner
+#      duplicates were collected: OWNER TAILS) -- nothing written at <review-file>.
 #      An existing <review-file> that differs is refused: a review the gate may already have read
 #      is never silently overwritten. --check-shard writes nothing in either case.
 #   --check-serial: 0 with stdout `SERIAL-OK: <file> verdict=<v>` (under --gate qa possibly preceded
@@ -303,6 +313,11 @@ export LC_ALL=C
 OWNER="lead"
 refuse() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; exit 2; }
 refuse_to() { OWNER="$1"; shift; refuse "$@"; }
+# collect_dup: the owner-duplicate refusal, printed in refuse's exact form but not exiting; every shard
+# is still checked, and the run exits 2 at the DUP barrier after the per-shard loop (and after the one
+# --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
+DUP_N=0
+collect_dup() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; DUP_N=$((DUP_N + 1)); }
 USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa"
 
 SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""
@@ -1016,7 +1031,7 @@ check_shard() {
           done
         fi
         [ -z "$osf" ] || ! same_set "$osf" parts "$distinct" \
-          || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the merged verdict and finding count depend on the cover"
+          || collect_dup "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the merged verdict and finding count depend on the cover"
       fi
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
@@ -1119,6 +1134,7 @@ if [ -n "$CHECK" ]; then
     scn="$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf")"
   fi
   check_shard
+  [ "$DUP_N" -eq 0 ] || exit 2
   printf 'SHARD-OK: %s findings=%s\n' "$sf" "${nf:-0}"
   exit 0
 fi
@@ -1135,6 +1151,8 @@ for key in $ORDINALS $CROSS_KEYS; do
   # The seat-complete marker is dropped: inside the merged file it would read as the merge's own.
   awk '!/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
+# THE DUP BARRIER: every owner-duplicate refusal was printed above; none reaches the set-level joins.
+[ "$DUP_N" -eq 0 ] || exit 2
 
 # ---- the hand-over join (both gates) -----------------------------------------------------
 # Every part hand-over is matched by EXACTLY ONE cross replay, and every replay by a hand-over.

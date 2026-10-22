@@ -323,10 +323,10 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
     hh="$(awk '$1=="WARN" && $3=="test-results/rp-red-head.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
     hf="$(awk '$1=="WARN" && $3=="test-results/rp-red-fallback.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
-    printf '%s %s %s %s head=%s fallback=%s' "$(verdict "$s" "$WORK/world-rpfirst" h)" "$(verdict "$s" "$WORK/world-rps319" h)" \
-      "$(verdict "$s" "$WORK/world-rpok" h)" "$(verdict "$s" "$WORK/world-rphead" h)" "${hh%,}" "${hf%,}"
+    printf '%s %s %s %s head=%s fallback=%s u8=%s' "$(verdict "$s" "$WORK/world-rpfirst" h)" "$(verdict "$s" "$WORK/world-rps319" h)" \
+      "$(verdict "$s" "$WORK/world-rpok" h)" "$(verdict "$s" "$WORK/world-rphead" h)" "${hh%,}" "${hf%,}" "$(verdict "$s" "$WORK/world-rpu8" h)"
   }
-  RPWANT='1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree'
+  RPWANT='1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree u8=1:replay-preamble,:W'
   got="$(rp_vec "$HECTL")"
   if [ "$got" = "$RPWANT" ]; then ok "REPLAY-PREAMBLE: a hand '\$ ' above the script's own refuses (with and without a second '\$ '), a replay at line 1 and the script's '\$ ' right above the replay are accepted, and head: is read from the replay block, falling back to the first head: when the block has none"
   else bad "REPLAY-PREAMBLE: want [$RPWANT] got [$got]"; fi
@@ -340,9 +340,17 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   }
   # ANY `$ ` right above the replay, not the FIRST: the last `$ ` before the replay is read.
   rp_mutant rp-any-dollar '!fd && /^\$ /{fd=NR}' '/^\$ /{fd=NR}' \
-    '0::W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree' "a hand '\$ ' above the script's own '\$ ' line is accepted"
+    '0::W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree u8=1:replay-preamble,:W' "a hand '\$ ' above the script's own '\$ ' line is accepted"
   rp_mutant rp-first-head 'tail -n +"$rl" <<<"$hdr"' 'tail -n +1 <<<"$hdr"' \
-    '1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head= fallback=head-tree' "the first head: in the capture is read, not the replay block's"
+    '1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head= fallback=head-tree u8=1:replay-preamble,:W' "the first head: in the capture is read, not the replay block's"
+  # U8: the pre-fix capture shape (rpu8) under a UTF-8 locale. Reverting `LC_ALL=C awk` makes the awk
+  # abort on the non-UTF-8 line, `rp` empty, and the refusal stand down (0 here instead of 1).
+  if [ -n "$UTF8_LOCALE" ]; then
+    rp_mutant rp-no-lcc 'rp="$(LC_ALL=C awk' 'rp="$(awk' \
+      '1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree u8=0::W:E' "the replay-preamble awk in the caller's locale (no LC_ALL=C): a non-UTF-8 capture stands the refusal down"
+  else
+    printf '  SKIP  no UTF-8 locale aborts this awk — rp-no-lcc did NOT run\n'
+  fi
 
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is

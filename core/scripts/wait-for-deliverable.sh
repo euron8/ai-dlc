@@ -1489,8 +1489,10 @@ case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
 # path is not one: the reference ledger records a path on 14 of 5153 rows, none current.
 # --dispatch REPEATS for a beat that joins several dispatches (a fan-out round): --since is
 # checked against the EARLIEST, and without --since the join starts there.
-# A --since without --dispatch still runs, with a WARN on stderr; refusing it would break
-# every caller written before the flag.
+# A --since without --dispatch still runs; refusing it would break every caller written before
+# the flag. It WARNs on stderr once per invocation, only on a beat that ARMS a target (the
+# first beat, --reset, a wave adding a target, a target delivered on its arming beat): a
+# continuation beat and --status stay silent.
 # ---------------------------------------------------------------------------
 SPAWN_LEDGER="${STATE_DIR}/spawn-ledger.jsonl"
 dispatch_refuse() {  # $1 = what failed, $2 = the remedy; uses $dp_id_
@@ -1602,9 +1604,8 @@ if [ -n "$DISPATCH" ]; then
   fi
   [ -n "$SINCE" ] || SINCE="$DISPATCH_EPOCH"
   if [ -n "$DISPATCH_TS_ONLY" ]; then printf '%s\n' "$DISPATCH_TS"; exit 0; fi
-elif [ -n "$SINCE" ]; then
-  echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
 fi
+SINCE_WARNED=0
 
 # ---------------------------------------------------------------------------
 # A TURN IS AN ASSISTANT OR USER (TOOL-RESULT) LINE, NOT A WRITE TO THE FILE. The harness also
@@ -1957,6 +1958,10 @@ for t in $TARGETS; do
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
   FIRST=0; [ -f "$s" ] || FIRST=1
+  if [ "$FIRST" -eq 1 ] && [ -n "$SINCE" ] && [ -z "$DISPATCH" ] && [ "$SINCE_WARNED" -eq 0 ]; then
+    SINCE_WARNED=1
+    echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
+  fi
   j="$(join_of "$t")"
   # join_of ran in a subshell; memoise its answer HERE so every later call in this process
   # returns it instead of re-reading a sidecar another beat may delete (see join_of).

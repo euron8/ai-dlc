@@ -44,7 +44,7 @@
 # is stronger than reading the disposition and rejecting it, because there is no
 # parser to get wrong and no new phrasing to argue with. Same register as
 # `ai-dlc-acknowledge.sh:345` ("Clearing the pause flag does NOT lift this") and
-# `gate-validation.md:1367-1370` (Rule 19: "`DECIDED_AUTONOMOUSLY` does NOT clear
+# `gate-validation.md:1962-1965` (Rule 19: "`DECIDED_AUTONOMOUSLY` does NOT clear
 # this, and that exclusion is the point: it is the lead dispositioning its own
 # violation").
 #

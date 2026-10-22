@@ -37472,3 +37472,61 @@ Fix: an absolute `<dir>` is canonicalised directly with `pwd -P` and admitted wh
 Symlink escape: plain `cd` resolved `lnk/..` textually, so an untracked symlink in the root could carry `git -C` into a foreign repository whose `diff.external` then ran. This was open for the relative form since BL-728 (0.908.0, installed in the graph consumer with a byte-identical validator), and the absolute admission widened it; both are closed by `cd -P` at every site of the admission, with mutant r-m8.
 
 verify: sh V=$PWD/core/scripts/validate-artifact-derivations.sh; d=$(mktemp -d) && d=$(cd "$d" && pwd -P) || exit 9; { git -C "$d" init -q p && git -C "$d/p" -c user.email=r@r -c user.name=r commit -q --allow-empty -m p && git -C "$d/p" worktree add -q "$d/wt" -b w && git -C "$d" init -q o && mkdir "$d/o/sub" && ln -s "$d/o/sub" "$d/p/lnk"; } >/dev/null 2>&1 || exit 9; f() { printf '```derived\n$ git -C %s rev-parse --is-inside-work-tree\ntrue\n```\n' "$1" > "$d/p/x.md"; o=$(cd "$d/p" && AI_DLC_PROJECT_ROOT="$d/p" bash "$V" x.md 2>&1); r=$?; }; f "$d/wt"; [ "$r" = 0 ] || exit 1; case "$o" in *"OK: 1 derivation(s)"*) ;; *) exit 1 ;; esac; for x in "$d/o" lnk/.. "$d/p/lnk/.."; do f "$x"; [ "$r" = 1 ] || exit 1; case "$o" in *"FAIL (ALLOWLIST)"*) ;; *) exit 1 ;; esac; done; exit 0
+## BL-761 — validate-mutation-red.sh's `replay_words` writes a non-UTF-8 `$ ` and `test:` line under a UTF-8 locale
+
+**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release.
+
+`printf -v q '%q' "$w"` at `core/scripts/validate-mutation-red.sh:184`, inside `replay_words()`, runs in the caller's locale. Bash 3.2's `%q` under a UTF-8 locale prints a multibyte character's lead byte raw and octal-escapes its continuation bytes, so the `$ ` line (and the `test:` line, same function) is not valid UTF-8. Measured by reproduction on the shipped script, and graph's committed capture `test-results/s319-4-4-evidence/mutation-red-ac5-409-swallowed.txt` (graph `406aad138`) carries the same sequence. The line still replays byte-exact through bash; the damage is to UTF-8 readers of the capture.
+
+Fix: `local w q out c i LC_ALL=C` at `:182`, scoped to `replay_words` and restored on return. ASCII output is byte-identical over 100 one-word cases and two full captures (`cmp`). The prefix form `LC_ALL=C printf -v q '%q' ...` does not work: a prefix assignment on a bash 3.2 builtin does not reach `%q`'s multibyte path. Fixture case E in `core/fixtures/mutation-red-replay` (benign-only) and mutant m23 revert the token.
+
+verify: sh la="$(locale -a)" || exit 9; if grep -qx 'en_US.UTF-8' <<<"$la"; then l=en_US.UTF-8; else l="$(grep -iE -m1 '\.utf-?8$' <<<"$la")" || exit 9; fi; d="$(mktemp -d)" || exit 9; printf 'x = 1\n' > "$d/t"; out="$(LC_ALL="$l" bash core/scripts/validate-mutation-red.sh "$d/t" 1 'x = 2 — y é' grep -q 'x = 1' "$d/t" 2>/dev/null)" || exit 1; l1="$(printf '%s\n' "$out" | head -n 1)"; case "$l1" in '$ '*) ;; *) exit 1 ;; esac; n="$(printf '%s\n' "$l1" | LC_ALL=C grep -c '[^ -~]')" || n=0; [ "$n" -eq 0 ] || exit 1; [ "$(bash -c "set -- ${l1#\$ }; printf '%s' \"\$4\"")" = 'x = 2 — y é' ] || exit 1
+
+## BL-762 — validate-handoff-evidence.sh's replay-preamble awk runs in the caller's locale, so a non-UTF-8 capture stands the refusal down silently
+
+**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release. Sibling of BL-761.
+
+`core/scripts/validate-handoff-evidence.sh:341` is the only awk in that file without `LC_ALL=C` (`:212`, `:290` and `:463` carry it). On a capture that is not valid UTF-8 under a UTF-8 locale it aborts `towc: multibyte conversion failure`, `rp` is empty, and the `[ -n "$rp" ]` guards at `:343` and `:349` stand the replay-preamble refusal down with no message. The population is captures committed before BL-761's fix, whose `$ ` line is non-UTF-8 on line 1; graph's committed capture stays that shape, so BL-761 alone does not cure it.
+
+Fix: `LC_ALL=C awk` at `:341`. Arm `rpu8` in `core/fixtures/story-evidence-scaffold` seeds the pre-fix capture shape (non-UTF-8 on line 1, a hand-written `$ ` line above `mutation-red replay`) under a UTF-8 locale and asserts the refusal fires; mutant `rp-no-lcc` reverts the token.
+
+verify: sh la="$(locale -a)" || exit 9; if grep -qx 'en_US.UTF-8' <<<"$la"; then l=en_US.UTF-8; else l="$(grep -iE -m1 '\.utf-?8$' <<<"$la")" || exit 9; fi; ln="$(grep -m1 'rp="\$(.*awk .!fd' core/scripts/validate-handoff-evidence.sh)" || exit 1; hdr="$(printf '$ x caf\351\nhead: a\nmutation-red replay\n')"; rp="$(export LC_ALL="$l"; eval "$ln" 2>/dev/null; printf '%s' "$rp")"; [ "$rp" = "3 1" ]
+
+## BL-763 — merge-review-shards.sh prints one owner-duplicate refusal per run, so a set carrying two costs one refused merge per duplicate
+
+**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319, consumer push candidate filed at graph commit 53e396169. Filed and closed in batch 240, release R3.
+
+The owner-duplicate refusal in `check_shard()` (`core/scripts/merge-review-shards.sh`, the `same_set` test under THE OWNER RULE) called `refuse`, which exits on the first duplicate. A set with duplicates in two seats therefore printed one `REFUSED:` line per merge. Correction to the filing, from graph lead transcript 888e1365: ONE merge was refused (15:13:49Z, one line, `cross-2.md:21`, exit 2). The lead found the second duplicate (`cross-6.md:18`) by hand, with `grep -n '^parts:'` and `--cross-owner`, re-dispatched both seats in one wave (15:16:11Z and 15:16:15Z), and the merge passed at 15:17:04Z. That cost one cycle plus about 70 s of the lead re-implementing the merge grammar by hand.
+
+Fix: `collect_dup()` prints the identical `REFUSED: ... [owner: <key>]` bytes and counts. Every shard is still checked, and two barriers exit 2: one after the per-shard loop (before the hand-over join), and one after `check_shard` under `--check-shard` (before `SHARD-OK`). The second barrier is load-bearing because `wait-for-deliverable.sh --mark` keys on the exit code alone. Precedence: a single duplicate is unchanged, the first line never changes, the exit is always 2, a later per-shard refusal still prints after the duplicates, and an earlier shard's per-shard refusal still stands alone. One shard can now print a duplicate line AND its own later per-shard refusal, so the step prose (`implementation.md` gates 1 and 2, `_gate-procedures.md`) reads "every REFUSED line". The part-cite and cross-one-part refusals are the same class and stay out: graph's transcripts show 0 merge refusals on either and 12 on the duplicate.
+
+Fixture `review-shard-merge`: arm X10 (`x_dupall`, seven cases on one K=3 world), mutants M21 (only the first duplicate printed) and M22 (the `--check-shard` barrier dropped).
+
+Receipt scored under `bash -c 'set -uo pipefail; ...'`: origin/main 1, the fix 0, r1 (only the first duplicate printed) 1, r2 (the merge barrier dropped) 1, r3 (the `--check-shard` barrier dropped) 1, and a second correct spelling (a flag and `if`/`then` barriers in place of the count) 0.
+
+verify: sh bash core/fixtures/review-shard-merge/receipt-bl763.sh core/scripts/merge-review-shards.sh
+
+## BL-764 — wait-for-deliverable.sh warns "--since without --dispatch" on every --since-only invocation, continuation beats and --status included
+
+**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319, filing commit 53e396169, batch 240.
+
+Premise correction: the filing says `--dispatch` cannot repeat. It already does (`core/scripts/wait-for-deliverable.sh`, header "--dispatch REPEATS"), the step files prescribe one per joined agent (`_gate-procedures.md` 959, 1048, 1098), and graph's lead passed 2-13 of them on more than 20 beats. The surviving defect is the WARN, which printed on every `--since`-only invocation (graph lead 888e1365: 190 WARN lines in 124 of 577 task outputs).
+
+Fixed: the emission moved from the argument-parse site into the sweep, at `FIRST=1` (the sidecar did not exist before this beat), once per invocation. First arm warns; a continuation beat is silent; `--reset` warns (it re-arms from a hand-typed stamp, the hazard the WARN names); a wave adding a target warns; a target delivered on its arming beat warns; `--status` is silent; a path delivered and re-armed in a later round warns again (delivery removes the sidecar). Measured on graph 888e1365: 83 of 173 since-only beats were non-reset repeats and go silent, 67 resets still warn, so the fix removes about half the WARNs, not all of them. The generic beat line in `_gate-procedures.md` now shows `--dispatch`. `route.md` and `implementation.md` are left alone: a prior-session In-Flight row resolves through the current session's teammate dir, so `--dispatch` would exit 64 there.
+
+Fixture `wait-beat-liveness` section 19c (eight rows) with mutants M59 (unconditional emission restored), M60 (emission dropped) and M61 (the `-z "$DISPATCH"` conjunct deleted; row 8 is an arming beat passing `--since` and `--dispatch`, which stays silent).
+
+verify: sh f=core/scripts/wait-for-deliverable.sh; m="echo \"WARN: wait-for-deliverable: --since without --dispatch"; n="$(grep -cF -- "$m" "$f")" || exit 1; [ "$n" = 1 ] || exit 1; c="$(grep -B3 -F -- "$m" "$f")" || exit 1; case "$c" in *-z\ \"\$DISPATCH\"*) ;; *) exit 1 ;; esac; case "$c" in *FIRST\"\ -eq\ 1*|*FIRST\"\ =\ 1*) exit 0 ;; *) exit 1 ;; esac
+
+## BL-765 — gate-3 Check 9 names no comparison dimensions, and a truncated mockup read passes as a comparison
+
+**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 story 4.4, gate-3 passes `implementation-20261022T160106Z` (copy drift only) and `implementation-20261022T161526Z` (role and class drift already present at pass 1), one extra pass of about 15 minutes. Filed by lead ai-dlc-3f, batch 240.
+
+`gate-validation.md` Check 9 (`adjudication: llm`, run by `gate-adjudicator`) said only "Compare each new surface against the documented mockup" and named no dimension. The pass-1 adjudicator read mockup lines through `cut -c1-400`; `ui-mockups.md:87` is 599 characters (`collect-fees-reason` at column 422) and `:89` is 707 (`role="status"` at column 617), so both markup claims were cut off before they were compared. Check 10 and Check 8 enumerate what they compare; Check 9 did not.
+
+Fixed: a bullet inside Check 9 naming every dimension (copy, element structure, attributes including `role` and `aria-*`, class names, layout), requiring every deviation to be recorded in the pass, and requiring each mockup line to be read whole with Read.
+
+The receipt proves TEXT only: that the step file carries the clause inside Check 9's section. No behavioural replay closes a prompt fix (operator ruling, batch 147). Scored under `bash -c 'set -uo pipefail; …'`: base 1, fix 0, clause placed under Check 10 1, a bare "report every drift" 1, a second correct spelling 0.
+
+verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; awk '/^### 9\. /{s=1;next} /^### 10\. /{s=0} s{t=t "\n" tolower($0)} END{exit !(t ~ /copy/ && t ~ /element structure/ && t ~ /role/ && t ~ /aria-/ && t ~ /class/ && t ~ /layout/ && t ~ /(every|each|all) deviation/ && t ~ /(whole|in full|entire)/ && t ~ /truncat/)}' "$f"
+
