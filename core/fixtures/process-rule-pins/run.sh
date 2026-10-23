@@ -438,6 +438,10 @@ r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the 
 r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|says so in its own text, with the reason,
 r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
 r11a-premise|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|shows the act did not occur is an authorization-premise invalidation
+sts-part-mark|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|<lead engine>/wait-for-deliverable.sh --mark <part path> stories-epic-<n> pm none findings=0
+sts-part-nohand|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|never a hand-appended `seat-complete:` line
+sts-part-remark|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|is marked again with the same `--mark` call before any `--complete` join reads it
+sts-part-complete|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|the lead's join beat passes `--complete`
 route-say-why|S|steps/route.md|### Step 6:|## FAILURE MODES|**Option labels carry no recommendation.**|para|Say in the question that its options carry no recommendation, and why.
 gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
 gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**

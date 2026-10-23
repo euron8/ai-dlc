@@ -340,6 +340,16 @@ author's discretion, not the skill's behaviour. Never build a check on that map:
 gate-validation Check 30 reads the capability citation off `prd.md`'s own FR
 entries, which ai-dlc authors and can therefore mandate.
 
+**Per-epic part agents close their part with `--mark`.** When the lead splits the
+epics (Rule 28 "Split dispatch"), one agent writes each epic into
+`{planning_artifacts}/s<N>/epics/part-<n>.md`, and each part agent's last act is
+`<lead engine>/wait-for-deliverable.sh --mark <part path> stories-epic-<n> pm none findings=0`,
+never a hand-appended `seat-complete:` line; the lead's join beat passes `--complete`
+(`_gate-procedures.md` "Validation cycle" item 1; `pm.md`'s close instruction). A part
+edited after its mark, by anyone, is marked again with the same `--mark` call before
+any `--complete` join reads it. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path
+your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without one, you run in the primary tree and `scripts/ai-dlc` is the lead's engine.
+
 - For **feature**: create stories for the new feature ONLY. Include
   migration/refactoring stories if architecture needs changes.
 - For **brownfield-a**: create stories for REMAINING work only. Do not
