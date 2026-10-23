@@ -1311,6 +1311,9 @@ er_hash_list() {
   : > "$_er_tmp/key.exist" || return 1
   : > "$_er_tmp/key.nl" || return 1
   while IFS= read -r -d '' p; do
+    # B5: a GITLINK is skipped (in-shell membership, no fork). `ls-files -m` lists one whose checkout
+    # differs from the staged commit, and hash-object would be handed a directory; status keys it.
+    case "$_er_glset" in *"$_er_nl$p$_er_nl"*) continue ;; esac
     case "$p" in */) er_refuse "a listed path is a directory (a nested work tree or an unignored worktree): $p"; return 1 ;; esac
     if cr_test "$CONSUMER" -L "$p"; then printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" || return 1; fi
     { cr_test "$CONSUMER" -e "$p" || cr_test "$CONSUMER" -L "$p"; } || continue
@@ -1328,6 +1331,9 @@ er_hash_list() {
 }
 _er_nl='
 '
+# The B5 gitlink set, newline-delimited with a leading and trailing newline (er_key fills it); and
+# the matching find prune operands.
+_er_glset="$_er_nl"; _er_glprune=()
 # er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
 # `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
 # so run from the engine directory inside a checkout it failed every file and the key never formed.
@@ -1392,17 +1398,12 @@ er_kf_distrefs() {
 }
 # Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
 er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
-# A tracked GITLINK (160000, a submodule: a nested repository whose files the index does not list)
-# is a MISS. A tracked SYMLINK (120000) never reaches here: er_key's R2 refuses it first.
+# A tracked GITLINK (160000, a submodule) is KEYED by its index line, which carries the staged
+# commit; its checkout is read by no detector (B5: er_key refuses one at, under or containing a read
+# root) and one that differs from the staged commit moves conswork's status line. A tracked SYMLINK
+# (120000) never reaches here: er_key's R2 refuses it first. The index is er_key's one read of it.
 er_kf_consindex() {
-  local e
-  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.idx" || return 1
-  cat "$_er_tmp/key.idx" || return 1
-  while IFS= read -r -d '' e; do
-    case "$e" in
-      160000\ *) return 1 ;;
-    esac
-  done < "$_er_tmp/key.idx"
+  cat "$_er_tmp/key.r2idx" || return 1
   # Under a NORMALISING attribute or config, `git add` of a CRLF save stores the same LF blob, so the
   # index and status read clean while the detectors `cmp` the raw CRLF bytes (measured: cached 0
   # where a fresh render gave 1). Then every tracked file's RAW bytes are keyed, never refused:
@@ -1739,7 +1740,7 @@ er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1;
 # field's material. Non-zero, and nothing usable, when any field could not be computed.
 er_key() {
   # The key's OWN consumer reads are never logged: they are fields, and the log is the render's.
-  local f v r p rest CR_LOG=""
+  local f v r p e rest CR_LOG=""
   [ -n "$_er_rec" ] || return 1
   : > "$_er_tmp/key.refused" || return 1
   # AN ABSENT `cksum` IS A NAMED MISS. The env field checksums the awk, sed and sort binaries with it,
@@ -1762,20 +1763,100 @@ er_key() {
     || { er_refuse "R3 the engine directory could not be searched for symlinks"; return 1; }
   [ ! -s "$_er_tmp/key.englinks" ] \
     || { er_refuse "R3 the engine directory contains a symlink ($(sed -n 1p "$_er_tmp/key.englinks")), whose target the engine field does not hash"; return 1; }
+  # THE INDEX AND THE READ ROOTS, each taken ONCE here and reused by every guard below and by R2.
+  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
+  er_read_roots > "$_er_tmp/key.r2roots" || { er_refuse "R2 the read roots could not be derived"; return 1; }
+  # B5 GITLINKS (mode 160000, a submodule). The index lists the gitlink and none of its files, so its
+  # checkout is read by no field; it is pruned from the find guards below (with every nested
+  # submodule under it), the staged commit is keyed by consindex's index line, and a checkout that
+  # differs from it is keyed by conswork's status line. Derived in this shell, no fork per entry.
+  # Each path becomes a find `-path` operand, so a glob character in it is refused by name: it would
+  # match, and prune, paths that are not the gitlink.
+  _er_glset="$_er_nl"; _er_glprune=()
+  while IFS= read -r -d '' e; do
+    case "$e" in 160000\ *) ;; *) continue ;; esac
+    p="${e#*	}"
+    case "$p" in
+      *'*'*|*'?'*|*'['*|*'\'*)
+        er_refuse "B5 a gitlink path carries a find glob character (*, ?, [ or a backslash), so it cannot be pruned by -path: $p"; return 1 ;;
+      *"$_er_nl"*)
+        er_refuse "B5 a gitlink path carries a newline, which the gitlink set cannot hold: $p"; return 1 ;;
+    esac
+    _er_glset="$_er_glset$p$_er_nl"
+    _er_glprune+=( -o -path "$_er_root/./$p" )
+  done < "$_er_tmp/key.r2idx"
+  # A GITLINK AT, UNDER OR CONTAINING A READ ROOT IS A MISS: the detectors read beneath the root and
+  # no field keys the submodule's files. Bash prefix compares, no fork.
+  if [ "$_er_glset" != "$_er_nl" ]; then
+    while IFS= read -r r; do
+      [ -n "$r" ] || continue
+      rest="${_er_glset#"$_er_nl"}"
+      while [ -n "$rest" ]; do
+        p="${rest%%"$_er_nl"*}"; rest="${rest#*"$_er_nl"}"
+        if [ "$p" = "$r" ]; then er_refuse "B5 the gitlink '$p' is the read root '$r', whose files no field keys"; return 1; fi
+        case "$p/" in "$r/"*) er_refuse "B5 the gitlink '$p' lies under the read root '$r', whose files no field keys"; return 1 ;; esac
+        case "$r/" in "$p/"*) er_refuse "B5 the gitlink '$p' contains the read root '$r', whose files no field keys"; return 1 ;; esac
+      done
+    done < "$_er_tmp/key.r2roots"
+  fi
+  # `submodule.recurse=true` makes a consumer `git grep` (ledger-reverify.sh) read INSIDE every
+  # submodule, whose files no field keys: a stale PASS. One read of the effective value per run.
+  case "$(cr_git "$CONSUMER" config --bool submodule.recurse 2>/dev/null)" in
+    true) er_refuse "B5 submodule.recurse=true makes a consumer git grep read inside submodules, whose files no field keys"; return 1 ;;
+  esac
   # AN UNREADABLE DIRECTORY IS A MISS. Git lists nothing under a directory it cannot open, so a
   # chmod 000 hides its whole subtree from every field above while the detectors render it as
   # absent (measured: cached 0, fresh 1). Any such directory refuses both the hit and the record.
-  # The prune list (.git, .claude/worktrees) is the set the key does not read.
-  _er_unread="$(cr_walk "$_er_root" . \( -name .git -o -path "$_er_root/./.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" \
-    || return 1
+  # The prune list (.git, .claude/worktrees, every gitlink) is the set the key does not read.
+  _er_unread="$(cr_walk "$_er_root" . \( -name .git -o -path "$_er_root/./.claude/worktrees" ${_er_glprune[@]+"${_er_glprune[@]}"} \) \
+    -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" || return 1
   [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }
-  # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS. Every git listing skips it, repository or
-  # not, while a detector's `find` reads beneath it (measured: a non-repo overrides/.git/o.md cached 0
-  # where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE). The consumer's own top-level `.git`
-  # and `.claude/worktrees` are pruned, as above.
-  _er_dotgit="$(cr_walk "$_er_root" . \( -path "$_er_root/./.git" -o -path "$_er_root/./.claude/worktrees" \) -prune \
-    -o -name .git -print 2>/dev/null)" || return 1
-  [ -z "$_er_dotgit" ] || { er_refuse "a path component named .git lies below the consumer root, which every git listing skips"; return 1; }
+  # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS unless B6 below accepts it. Every git
+  # listing skips it, repository or not, while a detector's `find` reads beneath it (measured: a
+  # non-repo overrides/.git/o.md cached 0 where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE;
+  # B6's outside-every-read-root condition is what still refuses that case, `overrides/` lying under
+  # the `.claude` root). The consumer's own top-level `.git`, `.claude/worktrees` and every gitlink are
+  # pruned, as above, and each `.git` found is pruned too, so find never descends into a nested
+  # repository's object store.
+  _er_dotgit="$(cr_walk "$_er_root" . \( -path "$_er_root/./.git" -o -path "$_er_root/./.claude/worktrees" ${_er_glprune[@]+"${_er_glprune[@]}"} \) \
+    -prune -o -name .git -prune -print 2>/dev/null)" || return 1
+  # B6 AN IGNORED NESTED REPOSITORY OUTSIDE EVERY READ ROOT IS ACCEPTED. A `.git` found above is
+  # acceptable only when its WORK-TREE DIRECTORY (the parent of the `.git`, never the `.git` path
+  # itself: with `.git` in .gitignore that path is ignored while its directory is not) is BOTH
+  # `git check-ignore`d in the consumer, decided PER PATH from one batched call's output set, AND not
+  # at, under or containing any read root (bash prefix compares, no fork). Either failing keeps the
+  # refusal, naming which.
+  # NO KEYED FACT IS ADDED for an accepted repository. The predicate is re-evaluated on every key take,
+  # lookup included, so a repo moved into a root refuses there; and UN-IGNORING one makes conswork's
+  # `ls-files -o` list `<dir>/`, which er_hash_list refuses by name. Accepted, it lies where no field
+  # and no detector reads.
+  if [ -n "$_er_dotgit" ]; then
+    : > "$_er_tmp/key.nested" || return 1
+    while IFS= read -r p; do
+      p="${p#./}"; p="${p%/.git}"
+      while IFS= read -r r; do
+        [ -n "$r" ] || continue
+        if [ "$p" = "$r" ]; then er_refuse "B6 the nested repository '$p' is the read root '$r', which every git listing skips"; return 1; fi
+        case "$p/" in "$r/"*) er_refuse "B6 the nested repository '$p' lies under the read root '$r', which every git listing skips"; return 1 ;; esac
+        case "$r/" in "$p/"*) er_refuse "B6 the nested repository '$p' contains the read root '$r', which every git listing skips"; return 1 ;; esac
+      done < "$_er_tmp/key.r2roots"
+      printf '%s/\0' "$p" >> "$_er_tmp/key.nested" || return 1
+    done <<< "$_er_dotgit"
+    # The exit code decides NOTHING about which path is ignored: `--stdin` exits 0 when ANY input
+    # matched and 1 when none did. Only a status other than those (128, an error) is read, as a named
+    # refusal, never as "none ignored" or "all ignored". That arm has no probe: no consumer state
+    # makes check-ignore fail on a readable repository without failing the earlier git reads first.
+    # Each input carries its trailing `/`, so a directory-only pattern (`dir/`) matches it.
+    cr_git "$CONSUMER" -c core.quotePath=false check-ignore -z --stdin < "$_er_tmp/key.nested" > "$_er_tmp/key.nested-ign" 2>/dev/null
+    case "$?" in 0|1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac
+    v="$_er_nl"
+    while IFS= read -r -d '' p; do v="$v$p$_er_nl"; done < "$_er_tmp/key.nested-ign"
+    while IFS= read -r -d '' p; do
+      case "$v" in *"$_er_nl$p$_er_nl"*) ;; *)
+        er_refuse "B6 the nested repository '${p%/}' is not ignored by the consumer, so its files are untracked input every git listing skips"; return 1 ;;
+      esac
+    done < "$_er_tmp/key.nested"
+  fi
   # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
   # one) and `skip-worktree` (`S`, or `s` with both) make status and `ls-files -m` skip a modified
   # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
@@ -1797,12 +1878,11 @@ er_key() {
   # (measured: scripts -> an outside dir, an edit there cached 0 where a fresh render gave 1); and
   # any link UNDER a root, tracked, untracked or ignored, is a read the key follows nowhere. The
   # roots are er_read_roots, the set consignored lists.
-  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
+  # key.r2idx and key.r2roots were taken once, above the B5 gitlink derivation.
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.r2idx" > "$_er_tmp/key.r2lines" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
   if LC_ALL=C grep -q '^120000 ' "$_er_tmp/key.r2lines"; then
     er_refuse "R2 the consumer tracks a symlink (mode 120000), whose target the key does not follow"; return 1
   fi
-  er_read_roots > "$_er_tmp/key.r2roots" || { er_refuse "R2 the read roots could not be derived"; return 1; }
   while IFS= read -r r; do
     p=""; rest="$r"
     while [ -n "$rest" ]; do
