@@ -502,3 +502,24 @@ verify: sh f="$(awk '/^# --- I10: fixture hermeticity/{s=1} s&&/^i10_unscrubbed\
 Owed: the Bash allowance gets its own contract, and a false-positive set measured over real Bash calls before any Bash-pattern deny is built.
 
 verify: manual — the fix needs its own contract and a measured false-positive set first, so no predicate over the tree exists to test yet.
+
+## BL-791 — a consumer-authored file inside a core-claimed fixture directory is not reported before a pull's whole-directory write, and one was lost
+
+**NOTE.** Source: batch 241, lead ai-dlc-58. Filed by the r4 owner; not built.
+
+Provenance: consumer ledger id PC-S319-CHECK-17-BYPASS-VARIANT-FIXTURES-ABSENT-SO-EIGHT-TESTS-FAIL-IN-EVERY-CHECKOUT. Its fix is the consumer's. This entry files the upstream half and does not close that id.
+
+Measured case (consumer facts, owner-measured read-only; this repo cannot reach that tree). Consumer commit 58e9cf2ce, `chore(ai-dlc-update): reconcile distribution 0.168.1 → 0.173.0 (#815)`, 2026-07-27, deleted `tests/fixtures/check-17-bypass/{control-pass.md, v1-missing-block.md … v9-retired-pin-story.md, v5-transcript.md}`. Those files had been added by the consumer's own commit 057308592. After the deletion, `tests/test_check_17_provenance.py` fails in every checkout.
+
+Mechanism, UNESTABLISHED. No distribution line deletes such a file, re-derived against this repo:
+- `core/skills/ai-dlc-update/reconcile/preclassify.sh:755` diffs only `core/` (`memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/`).
+- The orphan pass at `preclassify.sh:933-934` marks a file upstream never shipped `ORPHANED-UNKNOWN->CLASSIFY`, with the comment "Not ours to delete."
+- `apply.sh` has no non-comment `rm -r` outside its temp trap at `:656` (`grep -nE '\brm +-[a-zA-Z]*r'` returns that trap and one prose string at `:3365`, which is text and not a command).
+- `scripts/install.sh:668-669` is an additive `mkdir -p` plus `cp`.
+- Core never shipped any `check-17-bypass/*.md` other than `README.md`: the added-file history of `core/fixtures/check-17-bypass/control-pass.md` and of `v*.md` is 0 commits each (`git log --all --oneline --diff-filter=A -- <path>`), against controls of 1 for `run.sh` and 1 for `README.md`.
+
+The deletion is therefore attributed to the pulling session's own whole-directory write, which `core/skills/ai-dlc-update/SKILL.md:315` ("write each fixture directory WHOLE, its `run.sh` included") and `:549` ("each directory WHOLE or not at all") can prompt. Existing partial guard: `core/hooks/ai-dlc-core-guard.sh:189-197` denies a Write or Edit into `tests/fixtures/<core-name>/` and redirects the author to their own name, and `core/skills/ai-dlc/core-manifest.md:66-85` says the same. That guard prevents authoring there; it does not report an already-present file at pull time.
+
+Owed: a detector. A consumer file under a claimed `tests/fixtures/<dir>/` that core never shipped is reported before the pull's whole-directory write, in the style of ORPHANED-UNKNOWN. Not built.
+
+verify: manual — no detector exists yet, so no predicate over the tree can test it.
