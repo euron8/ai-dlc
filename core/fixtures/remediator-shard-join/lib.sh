@@ -1095,15 +1095,14 @@ p_partmark() {
 # ---- THE DERIVED PART MARKER (BL-796). --mark on a file at planning-artifacts/s<N>/shards/<D>/<b>.md, <D> ending
 # -repair-p<M> or -repair, replaces the caller's <step> <seat> <shard> with <D minus suffix> remediator <b>.
 # Cases, each reading the marker line the real --mark wrote: (a) the contract words on coe-repair-p1/2.md,
-# (b) the shifted call `coe 7 remediator 7` on coe-repair-p1/7.md, (c) the second correct spelling 05.md in
-# requirements-party-repair/ (no -p<M>), (d) the lane-1 name and the `1/8` brief shape, (e) control: a file in
+# (b) the shifted call `coe 7 remediator 7` on coe-repair-p1/7.md, (c) requirements-party-repair/05.md (no -p<M>) called with WRONG words, and 03.md called with the correct spelling kept, (d) the lane-1 name and the `1/8` brief shape, (e) control: a file in
 # a non-repair dir under shards/ keeps the caller's words. Takes the wait-for-deliverable.sh to drive.
 p_markderive() { # <wfd>
   local w sd f last
   w="$(mktemp -d "$WORK/md.XXXXXX")" || return 1
   sd="$w/_bmad-output/planning-artifacts/s9/shards"
   mkdir -p "$sd/coe-repair-p1" "$sd/requirements-party-repair" "$sd/coe-party-serial-repair-p1" "$sd/plain" || return 1
-  for f in coe-repair-p1/2 coe-repair-p1/7 requirements-party-repair/05 coe-party-serial-repair-p1/lane-1 coe-repair-p1/3 plain/4; do
+  for f in coe-repair-p1/2 coe-repair-p1/7 requirements-party-repair/05 requirements-party-repair/03 coe-party-serial-repair-p1/lane-1 coe-repair-p1/3 plain/4; do
     printf '# part\n\nbody\n' > "$sd/$f.md" || return 1
   done
   mk_last() { last="$(tail -n 1 "$1")"; }
@@ -1113,9 +1112,12 @@ p_markderive() { # <wfd>
   bash "$1" --mark "$sd/coe-repair-p1/7.md" coe 7 remediator 7 findings=1 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-repair-p1/7.md"
   case "$last" in "seat-complete: coe remediator 7 sha="*" findings=1") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/requirements-party-repair/05.md" requirements-party remediator 05 findings=0 > /dev/null 2>&1 || return 1
+  bash "$1" --mark "$sd/requirements-party-repair/05.md" requirements-party-elicitation x 9 findings=0 > /dev/null 2>&1 || return 1
   mk_last "$sd/requirements-party-repair/05.md"
   case "$last" in "seat-complete: requirements-party remediator 05 sha="*" findings=0") ;; *) return 1 ;; esac
+  bash "$1" --mark "$sd/requirements-party-repair/03.md" requirements-party remediator 03 findings=0 > /dev/null 2>&1 || return 1
+  mk_last "$sd/requirements-party-repair/03.md"
+  case "$last" in "seat-complete: requirements-party remediator 03 sha="*" findings=0") ;; *) return 1 ;; esac
   bash "$1" --mark "$sd/coe-party-serial-repair-p1/lane-1.md" coe-party-serial remediator lane-1 findings=2 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-party-serial-repair-p1/lane-1.md"
   case "$last" in "seat-complete: coe-party-serial remediator lane-1 sha="*" findings=2") ;; *) return 1 ;; esac

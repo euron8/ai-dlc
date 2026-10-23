@@ -81,8 +81,8 @@ source; do not infer either value from anywhere else.
    is ONE Bash call on your part file:
    `<lead engine>/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>`,
    where `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine.
-   Your brief carries that call; run it as written. `--mark` ignores `<step>` and `<shard>` and
-   derives both from your part's path, so you never compute or spell them. `<n>` is the number of
+   Your brief carries that call; run it as written. `--mark` ignores `<step>`, `<seat>` and `<shard>` and
+   derives all three from your part's path, so you never compute or spell them. `<n>` is the number of
    entries in your part. It appends `seat-complete: <step> remediator <shard> sha=<hex> findings=<n>`,
    with `<step>` your part directory's name without its `-repair[-p<M>]` suffix and `<shard>` your part file's name without `.md`,
    whose `sha=` binds every line above it; the lead's `--complete` beat takes your part as
