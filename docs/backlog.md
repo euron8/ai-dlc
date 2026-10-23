@@ -475,3 +475,4 @@ BL-587's s315 block count is 6 core-operand rows, of which the reader blocks 4. 
 Separately, `check-owed-derivations.sh` reads a 9th field `cyc` in its pass-2 loop that no producer ever sets to 1, so its `[ "$cyc" != 1 ]` tests are vacuous; it predates batch 241 and is left untouched.
 
 verify: manual — a decision on whether to build, not a tree state.
+

@@ -478,6 +478,35 @@ p_chkserial "$JOIN" && ok "EC33: --escalations over a joined record with two ser
 p_supchain "$JOIN" && ok "EC34: --escalations, a supersedes: chain counts once under its latest member, the superseded one on its own ESCALATED-SUPERSEDED line; a closes: leaving a member open is FLAGGED after the count; a link to a later escalation is REFUSED as dangling" || bad "EC34: the supersedes chain did not dedupe, flag or refuse as specified (rc=$RC): $(cat "$JO")"
 p_fencenest "$JOIN" && ok "EC36: the record readers close a four-backtick fence only on a run at least as long -- content after its inner three-backtick block is no entry, no check line, no source token and no heading" || bad "EC36: a record reader closed a four-backtick fence on its inner three-backtick line (rc=$RC): $(cat "$JO")"
 p_partmark "$JOIN" && ok "EC37: a part closed by the real --mark joins beside an unmarked one, its seat-complete: line kept in the record; a serial block appended after the LAST marked part is segmented at its own triple -- stating both check lines rc 0, stating neither REFUSED naming its repair-complete: serial line and never a seat-complete: line" || bad "EC37: a marked part broke the joined record or its serial block (rc=$RC): $(cat "$JO")"
+p_markderive "$SRCDIR/wait-for-deliverable.sh" && ok "EC40: --mark on a remediator part derives the words from the path -- coe-repair-p1/2.md written coe remediator 2, the shifted call coe 7 remediator 7 written coe remediator 7, requirements-party-repair/05.md called with wrong words written requirements-party remediator 05 and 03.md keeps its correct spelling, coe-party-serial-repair-p1/lane-1.md keeps lane-1, a 1/8 brief shard becomes the file name; a plain/ file keeps the caller's words" || bad "EC40: --mark did not derive the remediator part marker words (BL-796)"
+# EC40m: the derivation removed must be KILLED by EC40; the unmutated control passes first.
+EM40="$(mktemp -d "$WORK/ec40m.XXXXXX")" || exit 2
+cp "$SRCDIR"/*.sh "$EM40/" || { echo "FIXTURE BROKEN: EC40m could not copy the sibling scripts into $EM40" >&2; exit 2; }
+sed 's/^        if \[ -n "\$mk_rs_" \]; then MK_F=.*$/        :/' "$SRCDIR/wait-for-deliverable.sh" > "$EM40/wait-for-deliverable.sh" \
+  || { echo "FIXTURE BROKEN: EC40m could not write the mutated --mark into $EM40" >&2; exit 2; }
+if cmp -s "$SRCDIR/wait-for-deliverable.sh" "$EM40/wait-for-deliverable.sh"; then
+  bad "EC40m: FIXTURE STALE -- the derivation-removal mutation matched nothing in $SRCDIR/wait-for-deliverable.sh; re-anchor it, never relax the assertion"
+elif ! bash -n "$EM40/wait-for-deliverable.sh" 2>/dev/null || ! p_markderive "$SRCDIR/wait-for-deliverable.sh"; then
+  bad "EC40m: the mutant is not valid shell or the unmutated control did not pass"
+elif p_markderive "$EM40/wait-for-deliverable.sh"; then
+  bad "EC40m: SURVIVED -- EC40 holds against a --mark that writes the caller's words on a remediator part"
+else
+  ok "EC40m the part-marker derivation removed: KILLED by [EC40]"
+fi
+# EC40m2: the plain -repair branch removed must be KILLED by EC40 (its case (c) calls wrong words).
+EM40B="$(mktemp -d "$WORK/ec40m2.XXXXXX")" || exit 2
+cp "$SRCDIR"/*.sh "$EM40B/" || { echo "FIXTURE BROKEN: EC40m2 could not copy the sibling scripts into $EM40B" >&2; exit 2; }
+sed '/^          \*-repair) mk_rs_="\${mk_dn_%-repair}" ;;$/d' "$SRCDIR/wait-for-deliverable.sh" > "$EM40B/wait-for-deliverable.sh" \
+  || { echo "FIXTURE BROKEN: EC40m2 could not write the mutated --mark into $EM40B" >&2; exit 2; }
+if cmp -s "$SRCDIR/wait-for-deliverable.sh" "$EM40B/wait-for-deliverable.sh"; then
+  bad "EC40m2: FIXTURE STALE -- the -repair-branch deletion matched nothing in $SRCDIR/wait-for-deliverable.sh; re-anchor it, never relax the assertion"
+elif ! bash -n "$EM40B/wait-for-deliverable.sh" 2>/dev/null || ! p_markderive "$SRCDIR/wait-for-deliverable.sh"; then
+  bad "EC40m2: the mutant is not valid shell or the unmutated control did not pass"
+elif p_markderive "$EM40B/wait-for-deliverable.sh"; then
+  bad "EC40m2: SURVIVED -- EC40 holds against a --mark with no plain -repair branch"
+else
+  ok "EC40m2 the plain -repair branch removed: KILLED by [EC40]"
+fi
 p_gaploc "$JOIN" && ok "EC35:--escalations, a gap-fill edit's location is REPORTED after the count, rc 0 -- a section citing D-5 named, the adjacent section of the same file not, a dead section copy mapped through its manifest span, an unresolvable cite said so" || bad "EC35: the gap-fill location did not resolve as specified (rc=$RC): $(cat "$JO")"
 p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
   || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"

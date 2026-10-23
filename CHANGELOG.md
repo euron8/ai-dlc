@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.937.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, owner ai-dlc-62, release r12. It files and closes BL-796 (NOTE) and BL-797 (NOTE), and closes no `PC-` id. NET: entries closed 2 minus filed 2 = 0. Engine code a consumer runs from step 3 of the delivering pull: `scripts/ai-dlc/wait-for-deliverable.sh`. Rulebook a consumer receives at the reconcile merge: `steps/_gate-procedures.md` and `team-roles/remediator.md`. Fixture changes: `remediator-shard-join` (with a new `receipt-bl796.sh`), and the `inputs.decl` of backlog-ledger, backlog-receipt-binding, backlog-rotate-fence-guard, fixture-git-env-seam, hermetic-consumption, invariant-index, layer-contract-conformance, layer-contract-conformance-b, ledger-status-vocabulary, path-mapping-render, plan-rotate, pregate-self-check, settings-merge-unparseable-template, shell-portability, validator-arm-selection, validator-arm-selection-b, validator-fork-budget and vocabulary-index. Packaging: none. Known re-run cost, from the loaded durations in `.git/ai-dlc-fixture-durations`: a `CLAUDE.md` edit now re-runs validator-arm-selection (224s), ledger-status-vocabulary (214s), layer-contract-conformance (104s) and validator-fork-budget (53s). A `VERSION` bump re-runs backlog-ledger (10s).
+
+### BL-796 — `wait-for-deliverable.sh --mark` derives the step, seat and shard of a remediator part from its path instead of writing the caller's words
+
+On the consumer, s320's remediator part markers read `carry-over-evaluation remediator 2`, `coe 7 remediator 7` (shifted fields) and `coe-party remediator 1/8`. `core/team-roles/remediator.md` says the step is the part directory's name up to `-repair`, the seat is `remediator`, and the shard is the part file's name without `.md`. `--mark` checked only that a non-review marker had at least 4 fields. A read-only census found no reader of the step, seat or shard words of a sealed marker. `_gate-procedures.md` told briefs that `shard:` is `i/N`, so a refusal would have rejected 9 of the 21 s320 part markers that lead briefs produced.
+
+For a file at `planning-artifacts/s<N>/shards/<D>/<b>.md` with `<D>` ending in `-repair-p<M>` or `-repair`, `--mark` keeps its arity and `findings=` checks, then writes `seat-complete: <D without the suffix> remediator <b> sha=<hex> findings=<n>`. Every other path still writes the caller's words. `_gate-procedures.md` and `remediator.md` now say `--mark` derives all three words, so briefs and seats no longer spell them. The documented call still renders under the dispatch guard's `dg_mark_scan`.
+
+Arm EC40 in `remediator-shard-join` holds the derivation for both branches, with wrong caller words, and kills the mutants EC40m (derivation removed) and EC40m2 (plain `-repair` branch removed). `receipt-bl796.sh` scores 0 on the fix, 1 when the caller's words pass through, 1 when `-p<M>` is left unstripped, and 3 when the plain `-repair` branch is removed. Reported, not built: `MK_PHYS` resolves `lnk/..` textually, which predates r12. No reader consumes the words today.
+
+### BL-797 — a bare `inputs.decl` line under a content-key-excluded top keyed nothing; I55 arm 5 now refuses one unless it carries `+` or a resolved copy-only citation
+
+`scripts/suite-content-key.sh` excludes `.git CHANGELOG.md VERSION docs CLAUDE.md`, and a declared file under one of those tops is keyed only with a leading `+`. The census at c9dea46c2 found 33 bare lines over 257 declarations:
+
+- 9 lines whose file the fixture reads at run time now carry `+`, including `CLAUDE.md` for its four readers and `VERSION` for backlog-ledger.
+- 13 lines that nothing reads were deleted.
+- 11 `VERSION` lines that only an existence test needs are copy-only, each with a `# copy-only: <path>:<line>` citation of that test.
+
+I55 arm 5 in `scripts/validate-enforcement-map.sh` fails a bare line under an excluded top. It derives the excluded set from the `EXCLUDE` block. A copy-only citation is resolved rather than trusted: the cited line must hold a `-f`, `-e` or `-d` test naming the basename, and must not be a comment. The arm self-probes in both directions before the corpus, and its receipt fails without the arm.
+
+The arm binds only the CITED line. It does not prove that no content read happens elsewhere in the reader. backlog-ledger is the measured instance: its cited `-f` was real, while `backlog-reverify.sh` greps `VERSION`'s content. The `suite-content-key.sh` comments that denied any `CLAUDE.md` read are corrected.
+
+Measured:
+- Key probe: a bare line left the fixture key unmoved after a docs edit, and a `+` line moved it.
+- vem wall time: base 30.86/30.65/30.86s, tip 30.70/30.66/30.64s (interleaved, same path). Arm 5 adds 2 forks.
+- validator-fork-budget: 3376 of 3465.
+
 ## [0.936.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, owner ai-dlc-12, release r6. It closes BL-587, files BL-799 (NOTE), and closes no `PC-` id. NET: entries closed 1 minus filed 1 = 0. Engine code a consumer runs from step 3 of the delivering pull: `scripts/ai-dlc/check-owed-derivations.sh`. Rulebook a consumer receives at the reconcile merge: `steps/gate-validation.md` (Check 37), `steps/route.md`, `steps/retro.md`. Fixture changes: `owed-derivations`, with new `receipt-bl587.sh`. Packaging: none. Backlog: `docs/backlog.md`.

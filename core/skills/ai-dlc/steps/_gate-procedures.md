@@ -299,7 +299,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `<lead engine>/wait-for-deliverable.sh --mark <file> <step> <seat> <shard> findings=<n>`,
    which appends `seat-complete: <step> <seat> <shard> key=<k> sha=<hex> findings=<n>` (`key=<k>` on a review shard only), where `<shard>`
    is the brief's `shard:` value (for a review shard, the shard's own key: the file basename
-   without `.md`), `<n>` the number of findings in the file, and `sha=` the digest
+   without `.md`; for a repair part under `shards/<dir>-repair[-p<M>]/`, any words: `--mark` ignores `<step> <seat> <shard>` and writes `<dir>` without its `-repair[-p<M>]` suffix, `remediator` and the part's file name from the path), `<n>` the number of findings in the file, and `sha=` the digest
    of every line above the marker. A code-review or QA shard checks itself first with
    `scripts/ai-dlc/merge-review-shards.sh <shard dir> --gate <gate> --check-shard <shard file>`
    until SHARD-OK; `--mark` runs the same check and refuses a shard that fails it. After a

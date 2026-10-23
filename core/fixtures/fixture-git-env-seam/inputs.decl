@@ -6,4 +6,5 @@ core/fixtures/
 core/scripts/validate-audit-anchors.sh
 core/schemas/audit-anchors.json
 core/skills/ai-dlc-update/reconcile/
+# copy-only: scripts/validate-fixture-git-env.sh:41 the validator walks up for the marker; nothing reads its content
 VERSION

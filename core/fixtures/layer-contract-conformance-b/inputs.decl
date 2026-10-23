@@ -1,5 +1,8 @@
-# layer-contract-conformance-b is a shard driver: it execs the sibling layer-contract-conformance/run.sh --group b, so it shares the parent's declaration shape.
-# The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh; VERSION is the renderer's root marker.
+# layer-contract-conformance-b is a shard driver: it execs the sibling layer-contract-conformance/run.sh --group b, and declares the parent's paths but ONE:
+# the parent keys +CLAUDE.md. The parent's FULL control runs in every shard (layer-contract-conformance/run.sh:765),
+# so this shard's validator reads CLAUDE.md too; under a hermetic run the file is absent from this sandbox, so the
+# verdict does not depend on its content, and the parent's +CLAUDE.md re-runs the family when it changes.
+# The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh --arm-lines <src>, which needs no root marker.
 !scripts/validate-enforcement-map.sh
 scripts/
 # reason: core/ is walked by content -- the validator the parent run.sh runs (layer-contract-conformance/run.sh:750) finds every core/*.sh and derives core/*/, scripts/validate-enforcement-map.sh:2476 and :3327.
@@ -8,6 +11,3 @@ templates/
 .githooks/
 patterns/
 .claude/rules/
-docs/
-CLAUDE.md
-VERSION
