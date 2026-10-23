@@ -19042,3 +19042,103 @@ rotator, so the pointer on line 3 names only its own range (BL-678 firing, not c
   `verify: theirs_has core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh "DISPATCH: hermetic"`. Graph's
   boundary at hand-off: porcelain 11, ledger md5 `a1b4741c`, HEAD `ae1fafcf8`.
 
+**BATCH 239 CLOSE RECORD (history; the block above replaces it): BATCH 239 CLOSED: SEVEN RELEASES, `v0.902.0` THROUGH `v0.908.0`, AFTER ITS FIRST WORK, THE GRAPH PULL RUNBOOK. BATCH 240 FOLLOWED IT.**
+The batch-238 block below this one is history; this block replaces it. Lead was ai-dlc-13. Owners: ai-dlc-c1 (runbook),
+ai-dlc-18 (validators), ai-dlc-c5 (scripts-misc), ai-dlc-f8 (review-roles), ai-dlc-64 (derivations: BL-727 and BL-728),
+ai-dlc-ac (shard-merge), ai-dlc-a1 (recover-gate). Graph-watch was ai-dlc-3c, polling every 10 minutes. No `graph-*`
+session was messaged.
+- **First work, discharged.** `docs/plans/graph-pull-0891-to-0901.md` (#1257, `b0f9f69e7`) was written and rehearsed, and
+  graph's own session ran the pull: graph's carry-over branch is stamped 0.901.0 and its post-write gates passed 4/4. The
+  runbook is retitled DISCHARGED.
+- **Landed** (squash, PR, closes):
+  - `v0.902.0` `7ff130354` #1258 BL-735, 743, 745, 748, 749; `v0.903.0` `182e0d0e2` #1259 BL-729, 731, 732;
+  - `v0.904.0` `9af758b38` #1260 BL-738, 741, 742, 746, 747 (filed BL-750); `v0.905.0` `b60ba56e8` #1261 BL-727;
+  - `v0.906.0` `0577739b4` #1262 BL-726, 734; `v0.907.0` `2509a41cd` #1263 BL-725, 730 (filed BL-752);
+  - `v0.908.0` `25a31205d` #1264 BL-728 (filed BL-756).
+  Every batch-239 LANDED line in the archive is re-anchored on its squash, and every batch-239 `-dev` ref is deleted.
+  The 21 `b236-*-dev` refs named in the batch-238 block are untouched and still KEPT for the same reason.
+- **Operator rulings this batch.**
+  - "defer heavy processing until graph finishes it's pull": a gate hold, lifted when the pull finished.
+  - BL-728: "Benign-only fixture". Arms seed no option or directive that runs or loads a program; a third safeguard
+    stop would have dropped the entry. Under that ruling gawk's `@include`/`@load` gap is filed as BL-756, not built.
+  - BL-538: the idle-wake hook stays OFF by default, and its blocking predicate gets an adversary review first (BL-753).
+- **Owner rules gained three clauses** (action 0's owner-rules block, flow step 5): run `validate-enforcement-map.sh`
+  on the collected tip before ready; run every fixture that seeds input to a subject whose accepted language changed,
+  through `hermetic-run.sh`; and never end a turn holding the push turn with nothing running. Each one cost this
+  batch a failure: an owner idled about 2.5 h after a green pre-suite; a self-probe seed tripped I84 at the
+  pre-suite; and 0.908.0's first dress went red on two carriers a by-hand run had passed.
+- **Backlog.** Filed this batch: BL-750 through BL-757. Live at close: 25; archive 719. **The next free id is BL-758.**
+  BL-587's snapshot half is WITHDRAWN (superseded by route.md's owed-derivations check; the residue is BL-706's).
+  Open DEFECTs filed this batch: BL-753 (hookwake review), BL-755 (review-shard-merge 263 s to 491 s loaded after
+  0.904.0; structural receipt only), BL-756 (gawk directives; needs an operator ruling on its arm). NOTEs: BL-750,
+  751, 752, 754, 757.
+- **Correction to the batch-238 block**: BL-727, 728 and 731 did not have "`sh` receipts the rotator cannot score";
+  all three were rebuilt with scoring receipts and closed this batch.
+- **The derive block's receipt histogram reads 3 `CLOSE-CANDIDATE` at close: BL-584, BL-695, BL-699.** None is a close;
+  each was adjudicated PARTIAL at batch 238 (`docs/analysis/b238-close-list.md`). The incidental-close check by id
+  found no other exit-0 receipt.
+- **Measured costs** (loaded, from the hook's duration record): review-shard-merge 263 s to 491 s after 0.904.0 (BL-755);
+  adversarial-shard-merge 364 s to 390 s after 0.906.0. The pole is reconcile-emit-report at 753 s; read it off live
+  dirs only (BL-744).
+- **Graph at close**: installed 0.908.0 by the close (the 0.901.0 → 0.908.0 pull ran 2026-10-21 18:54 EDT, graph
+  commit `a3c391e11`), shipped 0.908.0. Before that pull it was installed 0.901.0, SEVEN releases behind, a WIDE range. Graph merged all eight s319 gate-3 stories locally (carry-over at `c855d0ef1`, unpushed; origin
+  `832368d49`); ledger md5 `ea1ad6f7`, no PC filings. Action 7: PENDING 0; bootstrapping files from 0.901.0: 0; mode-only
+  changes: 0. REQUIRED test: `validate-artifact-budget.sh` identical; `validate-artifact-derivations.sh` installed vs
+  0.908.0 on a `file://` clone (`cmp -s` differ) gives the same 5867 of 10283 failing and the same locations, with one
+  archive line reclassified ALLOWLIST to STALE (BL-728 now runs a backtick inside single quotes). **Not required: BANK
+  IT.** The null does not cover the shard-merge, gate-adjudication, handoff-evidence, mutation-red, partition and
+  provenance scripts or the four changed hooks, which need a live sprint's shards or fire on transients.
+
+**BATCH 238 CLOSE RECORD (history; the block above replaces it): BATCH 238 CLOSED: TWELVE RELEASES, `v0.890.1` THROUGH `v0.901.0`. BATCH 239 FOLLOWED IT.**
+The hand-off block below this one is history; this block replaces it. Leads were ai-dlc-fc (to 0.891.0, then
+handed over on the operator's ruling) and ai-dlc-1a. Graph-watch was ai-dlc-1b, polling every 10 minutes per the
+operator's ruling, until the operator stopped it: "stop the watcher, there is no active graph session and won't be
+until BL-740 is ready to pull." No `graph-*` session was messaged. Contract folds are in `docs/analysis/b238-contracts.md`
+and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path citations in both are dead.
+- **Landed** (squash, PR, closes):
+  - `v0.890.1` `f4a5a0966` #1233 (a PC- candidate ALREADY-FIXED); `v0.891.0` `01de3123d` #1234 BL-687, 688;
+  - `v0.892.0` `0877fe65f` #1236 BL-678, 708, 712, 714, 720, 724; `v0.893.0` `b55dc53fa` #1238 BL-715;
+  - `v0.894.0` `39fb06be9` #1239 BL-674, 697, 707; `v0.895.0` `599da0aef` #1241 BL-721;
+  - `v0.896.0` `e2273444b` #1243 BL-709; `v0.897.0` `297642c21` #1244 BL-718, 719;
+  - `v0.898.0` `e1739275b` #1246 BL-605; `v0.899.0` `af1536de3` #1248 BL-737;
+  - `v0.900.0` `836c0962d` #1251 BL-739; `v0.901.0` `5b21170f8` #1252 BL-740.
+  Every batch-236 and batch-238 LANDED line in the archive is anchored on its squash (this close re-anchored five
+  batch-236 lines that still cited `-dev` shas). Every batch-238 `-dev` ref is deleted. **21 `b236-*-dev` refs are KEPT**:
+  30 shas cited in the archive resolve only through them (batch-236 LANDED and prose citations that never reached
+  `main`). Re-anchor or cite-correct those first; deleting a ref with a live citation breaks the citation.
+- **Operator rulings this batch.** BL-736: a story split counts as a scope change for the test strategy ("I'll go
+  with your recommendation"). BL-737: a refused merge is corrected by the OWNING seat on a prescribed path, never by a
+  lead rewrite ("The lead should not be editing those to force the merge."). Graph-watch interval: 10 minutes.
+- **Read-set map** reconciled twice (`e272cad3c` at 0.897.0, 21 fixtures; `dec50e4a3` at 0.899.0, 14 fixtures incl.
+  derivation-capture); 0 stale at each.
+- **Backlog.** Filed this batch: BL-725..BL-749. Live at close: 36 (35 plus BL-749 filed at close); archive 700. **The next free id is BL-750.**
+  Open DEFECTs filed this batch with a ready fix shape: BL-738 (the bare-line `--mark` fallback in six role files;
+  its `sh` receipt fails until fixed), BL-741 (qa.md verdict forms), BL-748 (validate-handoff-evidence reads a
+  hand-typed `$ ` line ahead of the script's own), BL-736, BL-733, BL-734. NOTEs: BL-735, BL-742..747, BL-749.
+- **Not built, with reasons** (unchanged from the hand-off unless named): BL-538, 583, 584, 587, 616, 706 (consumer
+  measurement or gate log first); BL-553(b) (not shippable as specified); BL-685, 699 (owners absent); BL-695
+  (graph's next stories round); BL-691 (design deferred); BL-692 (needs graph HEAD-movement measurement); BL-716 (lane
+  key is connected components; graph s319 measured edit 19 / edit+MOVED-CITE 18 / edit+HIT 1); BL-701 (receipt
+  re-scope owed); BL-727, 728, 731 (`sh` receipts the rotator cannot score; re-scope in their build).
+- **The derive block's receipt histogram reads 4 `CLOSE-CANDIDATE` at close: BL-584, BL-695, BL-699, BL-701. NONE is a
+  close.** BL-584, 695 and 699 were adjudicated PARTIAL this batch (`docs/analysis/b238-close-list.md`, "Adjudications
+  this batch"): each receipt exits 0 on the shipped half while a named claim survives. BL-701's receipt measures digest
+  freshness the in-pool trace never writes (same file, "Close duties"). Re-scope each receipt before any close.
+- **Graph at close**: installed 0.891.0, shipped 0.901.0, no pull: TEN releases behind, a WIDE range. Bootstrapping
+  files in `01de3123d..5b21170f8`: one, `core/skills/ai-dlc-update/reconcile/layer-drift.sh` (control `core/scripts/`: 11);
+  mode-only changes under `core/`: 0 of 7 mode changes. The pull is REQUIRED by action 7's test: BL-740's sweep ran
+  the 0.901.0 `merge-review-shards.sh` over graph's 283 committed shards and it refuses one (s319 3.1 qa p2 cross-1)
+  that graph's installed engine accepts. **Operator ruling at this close: hand off now; the runbook
+  `graph-pull-0891-to-0901.md` (action 7's shape, rehearsed on a `file://` clone) is batch 239's FIRST work.** Writing
+  and rehearsing it is ai-dlc work; running the pull is the operator's. Its s319 session handed off at 04:37:14Z
+  (snapshot `c625bb0eb`). BL-740 is the release the operator named as the pull trigger; the pull is the operator's.
+  Graph conduct observed by the watcher: every refusal in s319's 3.1 QA rounds was routed to its owning seat by
+  SendMessage, with no lead write, which is BL-737's prescribed path working before it shipped.
+- **Measured costs.** `validate-enforcement-map.sh` +0.63 CPU-s (+2.3%) from BL-674 (0.894.0, stated in its text);
+  review-shard-merge 173 to 232 s (+34%; not the pole, which is reconcile-emit-report at 753 s) loaded after BL-740; mutation-red-replay 36 s loaded (no prior figure).
+- **Duration record carries dead rows** (BL-744): 58 of 318 rows in `.git/ai-dlc-fixture-durations` name deleted
+  fixture dirs, including the three `review-shard-merge-mutants` shards. Read the pole off LIVE dirs only.
+- **Operator-side observation, not a repo entry**: the home advisor-gate hook denied a push three times this batch
+  when the consult or the push shared a parallel tool block with another call; every push and merge sent alone
+  passed. Send push and merge calls alone.
+

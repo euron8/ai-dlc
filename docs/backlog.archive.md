@@ -37423,7 +37423,7 @@ verify: sh set -uo pipefail; V=core/scripts/validate-artifact-derivations.sh; [ 
 
 ## BL-756 — `AWK_AT_RE` in validate-artifact-derivations.sh requires a `(`, so gawk's two file-loading directives pass the awk program check
 
-**LANDED (v0.909.0, verified 96d2a688e).** Ruling received, batch 239: benign-only, so the arm is a startup self-probe inside the validator. **DEFECT.** Source: tip-728b, batch 239. Found by the BL-728 tip review; id allocated by the lead (ai-dlc-13).
+**LANDED (v0.909.0, verified 58db3d175).** Ruling received, batch 239: benign-only, so the arm is a startup self-probe inside the validator. **DEFECT.** Source: tip-728b, batch 239. Found by the BL-728 tip review; id allocated by the lead (ai-dlc-13).
 
 `AWK_AT_RE` (`@[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(`, `core/scripts/validate-artifact-derivations.sh:1678`) catches gawk's indirect call `@name(...)` but not gawk's `@include` and `@load` directives, which take a quoted file name and no parenthesis. They are inert on the BWK awk that macOS ships and live on gawk, which a consumer may run, the same argument the file makes for refusing sed's GNU-only `e` command (`:1846`).
 
@@ -37433,7 +37433,7 @@ verify: sh V=core/scripts/validate-artifact-derivations.sh; e() { AI_DLC_PROJECT
 
 ## BL-757 — validate-artifact-derivations.sh says no allowlisted read-only tool exits 137 or 143 on its own, and `awk 'END{exit 137}'` does
 
-**LANDED (v0.909.0, verified 96d2a688e).** **NOTE.** Source: BL-728's dress fix, batch 239 (owner ai-dlc-64). Filed by lead ai-dlc-13.
+**LANDED (v0.909.0, verified 58db3d175).** **NOTE.** Source: BL-728's dress fix, batch 239 (owner ai-dlc-64). Filed by lead ai-dlc-13.
 
 `core/scripts/validate-artifact-derivations.sh:2245` reads "Both are delivered from outside the process; no allowlisted read-only tool raises either on itself." `derivation-capture`'s A24 and A25 now seed `awk 'END{exit 137}' VERSION` as their unrunnable derivation, which exits 137 on its own, and the case arm at `:2277` scores it UNRUN. That fails closed (no verdict, never a false clean), but the comment is false and the fixture relies on the behaviour it denies. `:2251`'s corpus measurement ("none exited 137 or 143" over the reference consumer's derivations) stays true.
 
@@ -37443,7 +37443,7 @@ verify: sh V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] || exit 
 
 ## BL-758 — a new session's first prompt raises the lead's pause flag, because `ai-dlc-pause.sh` treats an absent transcript as an unknown session and pauses
 
-**LANDED (v0.909.0, verified 96d2a688e).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240. Residue of archived BL-531.
+**LANDED (v0.909.0, verified 58db3d175).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240. Residue of archived BL-531.
 
 `core/hooks/ai-dlc-pause.sh:410-439` decides from the typing session's transcript whether it is an ai-dlc session. When the file does not yet exist, `:424-425` sets `SESSION_SKILL="unknown"` and the hook falls through to `touch "$PAUSE_FLAG"` (`:445`). Claude Code writes a transcript after the first `UserPromptSubmit`: across graph's 182 top-level transcripts, 175 were born 0.013 to 1.5 seconds after the first prompt (median 0.11 s). Incident: graph session 3bed403c's first prompt at 2026-10-22T15:27:10.249Z (file born .375Z) paused lead 888e1365, which took 10 Rule 29 denials (`core/hooks/ai-dlc-acknowledge.sh:592`, `:861`) and had to ask the operator. The fixture's UNREAD cell seeded an absent file with an existing parent and asserted a pause, so it asserted the bug.
 
@@ -37453,7 +37453,7 @@ verify: sh H=${H:-core/hooks/ai-dlc-pause.sh}; [ -f "$H" ] || exit 9; command -v
 
 ## BL-759 — code-reviewer.md grades the missing smoke test Important while qa.md's HARD GATE rejects it, so gate 1 approves what gate 2 rejects
 
-**LANDED (v0.909.0, verified 96d2a688e).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240.
+**LANDED (v0.909.0, verified 58db3d175).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240.
 
 `core/team-roles/qa.md:305-316` "Smoke test updates (HARD GATE)" rejects a UI change without browser smoke tests in the project's framework. `core/team-roles/code-reviewer.md:487` graded "Missing or Mismatched Smoke Test Updates" Important and `:496-501` restated the predicate; `:123` defines Important as "should fix, can be follow-up", and `core/scripts/merge-review-shards.sh:107-108` lets an APPROVED verdict carry Important. Incident: graph s319 story 4.4, gate-1 APPROVED 10:35:25 EDT, gate-2 NEEDS_REWORK 10:50:55 EDT on that one clause, a 41m26s re-review. The same class appeared late in stories 2.3b and 3.3. `stories-test-strategy.md:261` also named Check 6 where smoke coverage is Check 11.
 
@@ -37463,7 +37463,7 @@ verify: sh q=core/team-roles/qa.md; c=core/team-roles/code-reviewer.md; grep -qF
 
 ## BL-760 — the one-`-C` admission requires a relative `<dir>`, so `git -C <absolute worktree path>` is refused in 33 derivations on graph, and the relative form let a symlink escape the root
 
-**LANDED (v0.909.0, verified 96d2a688e).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240. Follow-on to BL-728.
+**LANDED (v0.909.0, verified 58db3d175).** **DEFECT.** Source: graph-watch ai-dlc-a6, graph sprint 319, batch 240. Follow-on to BL-728.
 
 BL-728's admission (`core/scripts/validate-artifact-derivations.sh:1704-1743`) requires `<dir>` to be relative (`:1725-1728`). The capture hook (`core/hooks/ai-dlc-derivation-capture.sh:494-513`) uses the edited file's own linked worktree as its root, so `git -C /Users/n8/git/graph-s319-story-4-4 …` was refused. Graph s319: 33 refusals in 10 seats, every one an absolute graph-worktree target, recorded as unfenced prose instead.
 
@@ -37474,7 +37474,7 @@ Symlink escape: plain `cd` resolved `lnk/..` textually, so an untracked symlink 
 verify: sh V=$PWD/core/scripts/validate-artifact-derivations.sh; d=$(mktemp -d) && d=$(cd "$d" && pwd -P) || exit 9; { git -C "$d" init -q p && git -C "$d/p" -c user.email=r@r -c user.name=r commit -q --allow-empty -m p && git -C "$d/p" worktree add -q "$d/wt" -b w && git -C "$d" init -q o && mkdir "$d/o/sub" && ln -s "$d/o/sub" "$d/p/lnk"; } >/dev/null 2>&1 || exit 9; f() { printf '```derived\n$ git -C %s rev-parse --is-inside-work-tree\ntrue\n```\n' "$1" > "$d/p/x.md"; o=$(cd "$d/p" && AI_DLC_PROJECT_ROOT="$d/p" bash "$V" x.md 2>&1); r=$?; }; f "$d/wt"; [ "$r" = 0 ] || exit 1; case "$o" in *"OK: 1 derivation(s)"*) ;; *) exit 1 ;; esac; for x in "$d/o" lnk/.. "$d/p/lnk/.."; do f "$x"; [ "$r" = 1 ] || exit 1; case "$o" in *"FAIL (ALLOWLIST)"*) ;; *) exit 1 ;; esac; done; exit 0
 ## BL-761 — validate-mutation-red.sh's `replay_words` writes a non-UTF-8 `$ ` and `test:` line under a UTF-8 locale
 
-**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release.
+**LANDED (v0.910.0, verified e434c2247).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release.
 
 `printf -v q '%q' "$w"` at `core/scripts/validate-mutation-red.sh:184`, inside `replay_words()`, runs in the caller's locale. Bash 3.2's `%q` under a UTF-8 locale prints a multibyte character's lead byte raw and octal-escapes its continuation bytes, so the `$ ` line (and the `test:` line, same function) is not valid UTF-8. Measured by reproduction on the shipped script, and graph's committed capture `test-results/s319-4-4-evidence/mutation-red-ac5-409-swallowed.txt` (graph `406aad138`) carries the same sequence. The line still replays byte-exact through bash; the damage is to UTF-8 readers of the capture.
 
@@ -37484,7 +37484,7 @@ verify: sh la="$(locale -a)" || exit 9; if grep -qx 'en_US.UTF-8' <<<"$la"; then
 
 ## BL-762 — validate-handoff-evidence.sh's replay-preamble awk runs in the caller's locale, so a non-UTF-8 capture stands the refusal down silently
 
-**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release. Sibling of BL-761.
+**LANDED (v0.910.0, verified e434c2247).** **DEFECT.** Source: graph s319 (consumer push candidate filed at graph commit 53e396169), batch 240. Closed in the same release. Sibling of BL-761.
 
 `core/scripts/validate-handoff-evidence.sh:341` is the only awk in that file without `LC_ALL=C` (`:212`, `:290` and `:463` carry it). On a capture that is not valid UTF-8 under a UTF-8 locale it aborts `towc: multibyte conversion failure`, `rp` is empty, and the `[ -n "$rp" ]` guards at `:343` and `:349` stand the replay-preamble refusal down with no message. The population is captures committed before BL-761's fix, whose `$ ` line is non-UTF-8 on line 1; graph's committed capture stays that shape, so BL-761 alone does not cure it.
 
@@ -37494,7 +37494,7 @@ verify: sh la="$(locale -a)" || exit 9; if grep -qx 'en_US.UTF-8' <<<"$la"; then
 
 ## BL-763 — merge-review-shards.sh prints one owner-duplicate refusal per run, so a set carrying two costs one refused merge per duplicate
 
-**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319, consumer push candidate filed at graph commit 53e396169. Filed and closed in batch 240, release R3.
+**LANDED (v0.910.0, verified e434c2247).** **DEFECT.** Source: graph s319, consumer push candidate filed at graph commit 53e396169. Filed and closed in batch 240, release R3.
 
 The owner-duplicate refusal in `check_shard()` (`core/scripts/merge-review-shards.sh`, the `same_set` test under THE OWNER RULE) called `refuse`, which exits on the first duplicate. A set with duplicates in two seats therefore printed one `REFUSED:` line per merge. Correction to the filing, from graph lead transcript 888e1365: ONE merge was refused (15:13:49Z, one line, `cross-2.md:21`, exit 2). The lead found the second duplicate (`cross-6.md:18`) by hand, with `grep -n '^parts:'` and `--cross-owner`, re-dispatched both seats in one wave (15:16:11Z and 15:16:15Z), and the merge passed at 15:17:04Z. That cost one cycle plus about 70 s of the lead re-implementing the merge grammar by hand.
 
@@ -37508,7 +37508,7 @@ verify: sh bash core/fixtures/review-shard-merge/receipt-bl763.sh core/scripts/m
 
 ## BL-764 — wait-for-deliverable.sh warns "--since without --dispatch" on every --since-only invocation, continuation beats and --status included
 
-**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319, filing commit 53e396169, batch 240.
+**LANDED (v0.910.0, verified e434c2247).** **DEFECT.** Source: graph s319, filing commit 53e396169, batch 240.
 
 Premise correction: the filing says `--dispatch` cannot repeat. It already does (`core/scripts/wait-for-deliverable.sh`, header "--dispatch REPEATS"), the step files prescribe one per joined agent (`_gate-procedures.md` 959, 1048, 1098), and graph's lead passed 2-13 of them on more than 20 beats. The surviving defect is the WARN, which printed on every `--since`-only invocation (graph lead 888e1365: 190 WARN lines in 124 of 577 task outputs).
 
@@ -37520,7 +37520,7 @@ verify: sh f=core/scripts/wait-for-deliverable.sh; m="echo \"WARN: wait-for-deli
 
 ## BL-765 — gate-3 Check 9 names no comparison dimensions, and a truncated mockup read passes as a comparison
 
-**LANDED (v0.910.0, verified c419e42d8).** **DEFECT.** Source: graph s319 story 4.4, gate-3 passes `implementation-20261022T160106Z` (copy drift only) and `implementation-20261022T161526Z` (role and class drift already present at pass 1), one extra pass of about 15 minutes. Filed by lead ai-dlc-3f, batch 240.
+**LANDED (v0.910.0, verified e434c2247).** **DEFECT.** Source: graph s319 story 4.4, gate-3 passes `implementation-20261022T160106Z` (copy drift only) and `implementation-20261022T161526Z` (role and class drift already present at pass 1), one extra pass of about 15 minutes. Filed by lead ai-dlc-3f, batch 240.
 
 `gate-validation.md` Check 9 (`adjudication: llm`, run by `gate-adjudicator`) said only "Compare each new surface against the documented mockup" and named no dimension. The pass-1 adjudicator read mockup lines through `cut -c1-400`; `ui-mockups.md:87` is 599 characters (`collect-fees-reason` at column 422) and `:89` is 707 (`role="status"` at column 617), so both markup claims were cut off before they were compared. Check 10 and Check 8 enumerate what they compare; Check 9 did not.
 
@@ -37532,7 +37532,7 @@ verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9;
 
 ## BL-767 — the serial remediator dispatched after the join has no prescribed `shard:` line, so the lead invents one each time and Check 22 arm S3 fails the row at the gate
 
-**LANDED (v0.911.0, verified b648faa68).** **DEFECT.** Source: batch 240, graph sprints S316-S319, measured read-only by lead ai-dlc-3f.
+**LANDED (v0.911.0, verified ed5ba0e9e).** **DEFECT.** Source: batch 240, graph sprints S316-S319, measured read-only by lead ai-dlc-3f.
 
 The step files prescribe a serial remediator after the join (`core/skills/ai-dlc/steps/_gate-procedures.md` in files, sections and subject mode, and `core/team-roles/remediator.md`) and gave it no `shard:` line: 0 hits, against 9 prescribed `shard: none (serial-document)` lines for other dispatches. The text also treats it as distinct from the `serial-document` remediator, so exception (4) is ruled out for it. The lead therefore invented a line each time. The dispatch guard recorded an invented `none (...)` as `invalid-exception` and allowed it, and Check 22's arm S3 (`core/scripts/validate-spawn-ledger.sh`) then failed the row at the gate, where only an operator waiver clears it.
 
@@ -37543,7 +37543,7 @@ The fix has two halves. First, the serial remediator is Rule 28 exception (3), a
 verify: sh bash -c 'set -uo pipefail; W=$(bash core/fixtures/dispatch-model-guard/seed.sh) || exit 9; . "$W/env.sh" || exit 9; L="$CONSUMER/_bmad-output/spawn-ledger.jsonl"; n() { if [ -f "$L" ]; then wc -l < "$L" | tr -d " "; else echo 0; fi; }; go() { p=$(printf "Your operating contract is \140.claude/team-roles/%s.md\140. Read it first.\n%s\nDo the work." "$1" "$2"); b=$(n); o=$(jq -nc --arg p "$p" "{tool_name:\"Agent\",tool_input:{name:\"rem-shard\",prompt:\$p}}" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null); D=$(jq -r ".hookSpecificOutput.permissionDecision // \"none\"" <<<"$o"); A=$(( $(n) - b )); R=""; if [ "$A" -gt 0 ]; then R=$(tail -1 "$L"); fi; }; go remediator "shard: none (serial cross-section remediator, after join)"; [ "$D" = deny ] && [ "$A" = 0 ] || exit 1; go remediator "shard: none (authoring-chain)"; [ "$D" != deny ] && [ "$A" = 1 ] || exit 2; case "$R" in *invalid-exception*) exit 2;; esac; go dev-escalated "shard: none (serial cross-section remediator, after join)"; [ "$D" != deny ] && [ "$A" = 1 ] || exit 3; case "$R" in *invalid-exception*) :;; *) exit 3;; esac; go qa "shard: none (serial cross-section remediator, after join)"; [ "$D" = deny ] && [ "$A" = 0 ] || exit 5; k=$(awk -v RS= "{ g=\$0; gsub(/\n/, \" \", g); if (index(g, \"serial remediator dispatched after the join\") && index(g, \"shard: none (authoring-chain)\")) c++ } END { print c+0 }" core/skills/ai-dlc/steps/_gate-procedures.md); [ "$k" -ge 1 ] || exit 4'
 ## BL-770 — validate-handoff-evidence.sh refuses an absolute story path as story-untracked, and in strategy mode reads the working tree
 
-**LANDED (v0.912.0, verified 83d90dc05).** **DEFECT.** Source: graph s319, story 5.1, gate 2 pass 2 at `b7aade24ac03`. Consumer candidate `PC-S319-VALIDATE-HANDOFF-EVIDENCE-REFUSES-AN-ABSOLUTE-STORY-PATH-AS-STORY-UNTRACKED`, filed uncommitted in graph at about 14:52 EDT on 2026-10-22. Filed by lead ai-dlc-3f, batch 240.
+**LANDED (v0.912.0, verified 782fd93f9).** **DEFECT.** Source: graph s319, story 5.1, gate 2 pass 2 at `b7aade24ac03`. Consumer candidate `PC-S319-VALIDATE-HANDOFF-EVIDENCE-REFUSES-AN-ABSOLUTE-STORY-PATH-AS-STORY-UNTRACKED`, filed uncommitted in graph at about 14:52 EDT on 2026-10-22. Filed by lead ai-dlc-3f, batch 240.
 
 `core/scripts/validate-handoff-evidence.sh` used its story argument raw. `tracked()` ran `git cat-file -e "<ref>:<absolute path>"`, which never resolves, so an absolute story was never tracked at the ref. Reproduced on 0.910.0 (`e434c2247`): the relative path exits 0, and the absolute path exits 1 `story-untracked` in the main checkout, in a linked worktree, under the `/tmp` spelling of a `/private/tmp` repo, and from another worktree. The heading arm was skipped silently on the same path.
 
@@ -37562,7 +37562,7 @@ Receipt scored under `bash -c 'set -uo pipefail; …'`: the fix 0; a textual `${
 verify: sh S="$PWD/core/scripts/validate-handoff-evidence.sh"; [ -f "$S" ] && [ -f "$PWD/core/scripts/sprint-status.sh" ] || exit 9; W="$(mktemp -d)" || exit 9; g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=r -c user.email=r@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "${@:2}"; }; R="$W/repo"; mkdir -p "$R/stories" "$R/_bmad-output/implementation-artifacts" "$W/out" && g "$R" init -q || exit 9; printf -- '---\nstatus: review\n---\n# S\n\n## Production Integrity Tests\nx\n## Smoke Test Updates\nx\n## Rename Verification\nnot a rename\n## Strategy Test IDs\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n| T1 | a | manual | op |\n' > "$R/stories/s.md"; printf 'sprint: 1\nstatus: in_progress\nstories:\n  s:\n    status: review\n    file: stories/s.md\n' > "$R/_bmad-output/implementation-artifacts/sprint-status.yaml"; g "$R" add -A && g "$R" commit -qm base || exit 9; B="$(g "$R" rev-parse HEAD)"; echo x > "$R/x.txt"; g "$R" add -A && g "$R" commit -qm work || exit 9; T="$(g "$R" rev-parse HEAD)"; g "$R" worktree add -q --detach "$W/wt" "$T" || exit 9; P="$(cd -P "$R" && pwd -P)"; ln -s "$R" "$W/alias" && ln -s "$W/out" "$R/lnk" && cp "$R/stories/s.md" "$W/x.md" || exit 9; h() { local o r; o="$(bash "$S" -C "$1" "$2" "$B" "$T" 2>/dev/null)"; r=$?; if [ "$r" = 0 ]; then grep -qx 'validate-handoff-evidence: OK — stories/s.md at [0-9a-f]*' <<<"$o" && ! grep -q '^SKIP' <<<"$o" || r=0x; fi; echo "$r"; }; st() { bash "$S" -C "$1" --strategy "$2" "$3" >/dev/null 2>&1; echo $?; }; [ "$(h "$R" stories/s.md)" = 0 ] || exit 1; [ "$(h "$P" "$P/stories/s.md")" = 0 ] || exit 1; [ "$(h "$P" "$W/alias/stories/s.md")" = 0 ] || exit 1; [ "$(h "$W/wt" "$W/wt/stories/s.md")" = 0 ] || exit 1; [ "$(h "$W/wt" "$R/stories/s.md")" = 2 ] || exit 1; [ "$(h "$R" stories/../../x.md)" = 2 ] || exit 1; [ "$(h "$R" "$R/lnk/../x.md")" = 2 ] || exit 1; printf '| T2 | b | test |  |\n' >> "$W/wt/stories/s.md"; [ "$(st "$W/wt" "$T" "$W/wt/stories/s.md")" = 0 ] || exit 1; printf '| T2 | b | test |  |\n' >> "$R/stories/s.md"; g "$R" commit -qam bad || exit 9; [ "$(st "$R" HEAD "$R/stories/s.md")" = 1 ] || exit 1; cp "$R/stories/s.md" "$W/out/evil.md" && ln -s "$W/out/evil.md" "$R/stories/untrk.md" || exit 9; [ "$(st "$R" HEAD stories/untrk.md)" = 2 ] || exit 1; [ "$(st "$R" HEAD "$P/stories/untrk.md")" = 2 ] || exit 1; [ "$(h "$R/stories" s.md)" = 2 ] || exit 1
 ## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
 
-**LANDED (v0.913.0, verified 2e5b3705d).** **DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
+**LANDED (v0.913.0, verified 5b5388924).** **DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
 
 `core/scripts/join-remediator-shards.sh:741` defines SERIAL-REQUIRED (parts mode only) as the count of `repaired` entries with a real edit, each owing the cross-file sibling grep and moved-cite check that no shard can run, and the procedure dispatches ONE serial remediator whenever that count or ESCALATED-COUNT is above 0. However many cross-part items there are, one agent works them all, in sequence.
 
@@ -37582,7 +37582,7 @@ verify: sh bash core/fixtures/remediator-shard-join/receipt-bl716.sh
 
 ## BL-733 — Check 24 arm L owes a whole re-elicitation when a story is split after a correctly sharded stories elicitation, because the owed set is positional and no path elicits only the new or changed story
 
-**LANDED (v0.913.0, verified 2e5b3705d).** **DEFECT.** Raised from graph's s319 gate[story] refusal at 2026-10-20T22:44:38Z and the re-run `_bmad-output/planning-artifacts/s319/shards/stories-elicitation/` (graph `765de28f0` and its worktree) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
+**LANDED (v0.913.0, verified 5b5388924).** **DEFECT.** Raised from graph's s319 gate[story] refusal at 2026-10-20T22:44:38Z and the re-run `_bmad-output/planning-artifacts/s319/shards/stories-elicitation/` (graph `765de28f0` and its worktree) by graph-watch, batch 238; measured and filed by the batch-238 filing hand.
 
 Graph's operator ruled story 2.3 split into 2.3a and 2.3b after s319's stories elicitation had run complete at K=19: 19 ordinal shards plus cross-1 to cross-6, committed at `765de28f0`, with `08.md` carrying `invoked_at: 2026-10-20T02:25:46Z`. Check 24 arm L then refused gate[story]: "FAIL (L -- ELICITATION): s319's stories elicitation over 20 stories is not the sharded shape: (b) ordinals missing: 20.md; shards record K=19, fewer than the 20 stories/ holds. … Re-run the elicitation in that shape before this gate." The lead re-ran the whole K=20 elicitation with 26 adversaries. All 26 files in the live `shards/stories-elicitation/` carry an `invoked_at` after 22:44:38Z, against the 25 committed files. One story changed, and 26 adversaries ran.
 
@@ -37598,7 +37598,7 @@ verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl733.sh
 
 ## BL-736 — a story split carries the test strategy past Check 24 arm J2 as a repair on unchanged scope, so the strategy that maps tests to the new story ids gets no adversarial pass over its current bytes
 
-**LANDED (v0.913.0, verified 2e5b3705d).** **DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
+**LANDED (v0.913.0, verified 5b5388924).** **DEFECT.** Operator ruling 2026-10-20 on the lead's recommendation, quoted: "I'll go with your recommendation". Evidence from graph s319, raised by graph-watch (ai-dlc-1b) in batch 238 and relayed by lead ai-dlc-1a. Distribution sites re-derived on origin/main 809807a0e by the batch-238 docs hand. Related: BL-733, the elicitation half of the same split.
 
 The operator ruled that a story split counts as a SCOPE CHANGE for the test strategy. The amendment procedure does not treat it as one. `core/skills/ai-dlc/steps/_gate-procedures.md:853-869` gives two ways to amend a notarized artifact after MET:
 - item 1 (`:856-860`) is "a residue or gate repair on unchanged scope". It needs only a chain of structured repair records, each with `artifact_sha_before:` and `artifact_sha_after:`, from the notarized sha to the disk sha;
@@ -37629,7 +37629,7 @@ verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl736.sh
 
 ## BL-701 — a stale undeclared fixture re-runs on every linked-worktree push, because the in-pool trace that would clear it is skipped there
 
-**LANDED (v0.914.0, verified be29d8e72).** **Batch 240: claim 1 expired at 0.881.0, and claim 2 is closed by two changes.** `CLAUDE.md` now prescribes `ls core/fixtures/*/run.sh | wc -l`, the population the hook dispatches: 260 on this tree, where the old `find -type d` form reads 263. The committed map's 8 dead `notify-hook-channel` rows, and the rows of every fixture now declared, are dropped by `core/scripts/derive-fixture-readsets.sh` and never by hand. The command is `bash core/scripts/derive-fixture-readsets.sh --list "notify-hook-channel" --tracer sandbox`, run in the main checkout detached at the release commit. That fixture has no directory, so its run exits 127 and it is OMITTED (`:1857`). The merge at `:1536` then drops its old rows, and the declared fixtures' rows go with them. The deriver's own `READSET_MERGE` span, driven on this tree, takes the map from 38 keys, 708 rows and 37 digest lines to 3, 71 and 3. The 3 keys left are the `.undeclarable` fixtures. The same merge with no fixture root keeps 37 keys, which is the control.
+**LANDED (v0.914.0, verified 20338ced6).** **Batch 240: claim 1 expired at 0.881.0, and claim 2 is closed by two changes.** `CLAUDE.md` now prescribes `ls core/fixtures/*/run.sh | wc -l`, the population the hook dispatches: 260 on this tree, where the old `find -type d` form reads 263. The committed map's 8 dead `notify-hook-channel` rows, and the rows of every fixture now declared, are dropped by `core/scripts/derive-fixture-readsets.sh` and never by hand. The command is `bash core/scripts/derive-fixture-readsets.sh --list "notify-hook-channel" --tracer sandbox`, run in the main checkout detached at the release commit. That fixture has no directory, so its run exits 127 and it is OMITTED (`:1857`). The merge at `:1536` then drops its old rows, and the declared fixtures' rows go with them. The deriver's own `READSET_MERGE` span, driven on this tree, takes the map from 38 keys, 708 rows and 37 digest lines to 3, 71 and 3. The 3 keys left are the `.undeclarable` fixtures. The same merge with no fixture root keeps 37 keys, which is the control.
 
 The new receipt is the `m` half of the old one, which checks that the in-pool trace runs in a linked worktree, plus a census-population assertion. Every `run.sh` directory is declared or undeclarable, the CLAUDE.md count line names `run.sh` and not `-type d`, and every map key has a `run.sh` and no `inputs.decl`. Scored under `bash -c 'set -uo pipefail; …'`: the fix exits 0. A second correct spelling also exits 0 (a `find -name run.sh` count in CLAUDE.md, with the map rows reordered). Four regressions each exit 1: a re-added dead `notify-hook-channel` row, CLAUDE.md reverted, a declared fixture's row kept, and a `run.sh` directory with neither file. The branch before the map is re-derived exits 1.
 
@@ -37675,7 +37675,7 @@ verify: sh o="$(mktemp -d)" || exit 9; trap 'rm -rf "$o"' EXIT; t=0; d=0; u=0; f
 
 ## BL-750 — wait-for-deliverable.sh accepts a bare seat-complete:/repair-complete: marker after the settle window, so any writer can mint one
 
-**LANDED (v0.914.0, verified be29d8e72).** **DEFECT.** Source: BL-738 owner, batch 239.
+**LANDED (v0.914.0, verified 20338ced6).** **DEFECT.** Source: BL-738 owner, batch 239.
 
 - `wait-for-deliverable.sh --complete` and `--complete-repair` deliver a marker with no `sha=` once the file has stopped changing for the settle window (its header, "A MARKER WITH NO `sha=` KEEPS THE SETTLE PATH ... FAIL-OPEN NET FOR LEGACY MARKERS DURING THE PULL"). Any writer, including a Bash append, can therefore mint a completion marker, and the consumers do not consult the content-seal ledger (BL-738 seal audit).
 - BL-738 removed the role-text instruction to write such a line, so the role and step text no longer instructs it (whether a seat still writes one is unmeasured); the engine still accepts one.
@@ -37692,7 +37692,7 @@ verify: sh bash core/fixtures/content-seal/receipt-bl750.sh
 
 ## BL-751 — the layer-adjudication register accepts a record whose `recorded_utc` is later than the moment it was written
 
-**LANDED (v0.914.0, verified be29d8e72).** **NOTE.** Source: graph watch ai-dlc-3c, batch 239, observed read-only during graph's 0.891.0 to 0.901.0 pull. Filed by lead ai-dlc-13.
+**LANDED (v0.914.0, verified 20338ced6).** **NOTE.** Source: graph watch ai-dlc-3c, batch 239, observed read-only during graph's 0.891.0 to 0.901.0 pull. Filed by lead ai-dlc-13.
 
 During leg B of the pull, graph's working-tree `layer-adjudication-register.jsonl` gained 20 records. 11 carried `recorded_utc 2026-10-21T12:19:33Z`. The other 9 (LC-E4 still-additive ×8, plus LC-E4 retire for `roles/dev-push.md`) carried a hand-typed `2026-10-21T12:40:00Z`. `date -u` read 12:23:59Z in the same invocation, so those 9 were stamped about 16 minutes in the future. Graph corrected the stamp to 12:23:26Z before pushing, so nothing wrong was committed.
 
@@ -37708,7 +37708,7 @@ verify: sh T="$(mktemp -d "${TMPDIR:-/tmp}/bl751.XXXXXX")" || exit 9; n="$(date 
 
 ## BL-752 — the advisor gate's push denial waits on the same per-call 10 s net that BL-730 found expiring silently across a many-call parallel message, so a push late in such a message that owes an advisor attempt passes unrefused
 
-**LANDED (v0.914.0, verified be29d8e72).** **NOTE.** The exposure is real in mechanism and theoretical in practice, so it is not a DEFECT. Raised from the BL-730 measurement on graph transcript `a367e62c` by the batch-239 recover-gate cluster; the advisor-gate reading and the push census were done by the filing hand.
+**LANDED (v0.914.0, verified 20338ced6).** **NOTE.** The exposure is real in mechanism and theoretical in practice, so it is not a DEFECT. Raised from the BL-730 measurement on graph transcript `a367e62c` by the batch-239 recover-gate cluster; the advisor-gate reading and the push census were done by the filing hand.
 
 `core/hooks/ai-dlc-advisor-gate.sh:637` sets `_cap=10; _net=1` for the default `ADVISOR_GATE_REREADS`, and `:640-646` re-scans every 0.25 s until `SEEN=1` or the cap. At `:646-649` the net's expiry with `SEEN` still 0 is SILENT (BL-630's fail-open ruling, header `:225-241` "THE RACE, AND THE RE-READ"). That is the shape `core/hooks/ai-dlc-recover-gate.sh` carried before BL-730. BL-730 measured the cause on `a367e62c` lines 4611-4690: the harness flushes a message's transcript lines around the END of streaming, not per call, so in the 19-Agent-call message `msg_011CgCyKHw8znw1wSZJHk9TR` (streamed about 7 s apart) calls 1-17 expired the net and only calls 18 and 19 saw their own lines.
 
@@ -37741,7 +37741,7 @@ verify: sh bash core/fixtures/advisor-gate-deny/receipt-bl752.sh
 
 ## BL-754 — hermetic-run.sh prints "verdict recorded in the shared store" when the store it wrote is a throwaway one
 
-**LANDED (v0.914.0, verified be29d8e72).** **NOTE.** Source: batch 239 owner runs. Filed by lead ai-dlc-13.
+**LANDED (v0.914.0, verified 20338ced6).** **NOTE.** Source: batch 239 owner runs. Filed by lead ai-dlc-13.
 
 `core/scripts/hermetic-run.sh:622` prints `hermetic-run: <fx>: verdict recorded in the shared store` after any successful store write. When `AI_DLC_VERDICT_STORE` points at a mktemp dir, which `.claude/rules/tool-hazards.md` requires for a test run, the same line prints, so a reader cannot tell a real store write from a throwaway one.
 
@@ -37753,7 +37753,7 @@ verify: sh F="$(mktemp -d "${TMPDIR:-/tmp}/bl754f.XXXXXX")" && S="$(mktemp -d "$
 
 ## BL-755 — review-shard-merge's loaded cost went from 263 s to 491 s after 0.904.0's new arms and mutants
 
-**LANDED (v0.914.0, verified be29d8e72).** **DEFECT (cost).** Source: batch 239, 0.904.0 (review-roles, owner ai-dlc-f8), measured loaded from the hook's duration record. Filed by lead ai-dlc-13 at close; the owner deferred both duties to the lead. The 0.904.0 CHANGELOG heading is not back-edited.
+**LANDED (v0.914.0, verified 20338ced6).** **DEFECT (cost).** Source: batch 239, 0.904.0 (review-roles, owner ai-dlc-f8), measured loaded from the hook's duration record. Filed by lead ai-dlc-13 at close; the owner deferred both duties to the lead. The 0.904.0 CHANGELOG heading is not back-edited.
 
 0.904.0 added M12-M20, VB2M, VB2L, FR1-FR4, FRB, SR1 and SR2 to `core/fixtures/review-shard-merge`. Its loaded cost in `.git/ai-dlc-fixture-durations` rose from 263 s to 491 s (+87%). It is not the suite pole (reconcile-emit-report, 753 s loaded), so the push wall clock did not move, but the unit nearly doubled.
 
@@ -37772,7 +37772,7 @@ verify: sh bash core/fixtures/review-shard-merge/receipt-bl755.sh
 
 ## BL-768 — the full-collection and dependency-setup evidence lines are enforced by prose only
 
-**LANDED (v0.915.0, verified 5d6ed315a).** **DEFECT.** Source: graph s319 story 5.1 gate 2 (p1 NEEDS_REWORK on the two missing lines after gate 1 APPROVED `e4b66d23c` without them) and story 1.5 gate 2 (a dev record written as a `### Full-collection run and dependency setup` heading and prose). Diagnosis: batch 240 lead ai-dlc-3f, read-only on origin/main 58db3d175; contract adversary fold on e434c2247.
+**LANDED (v0.915.0, verified 1c2fefc62).** **DEFECT.** Source: graph s319 story 5.1 gate 2 (p1 NEEDS_REWORK on the two missing lines after gate 1 APPROVED `e4b66d23c` without them) and story 1.5 gate 2 (a dev record written as a `### Full-collection run and dependency setup` heading and prose). Diagnosis: batch 240 lead ai-dlc-3f, read-only on origin/main 58db3d175; contract adversary fold on e434c2247.
 
 Before: `qa.md` Handoff Evidence Precondition REJECTs on either line's absence and nothing mechanical read either. `validate-handoff-evidence.sh` named "full-collection" in one comment; `dev.md` gave the full-collection run no `none` form, so 5.1's remedy (`Full-collection run: none, no code ...`) was a form no rule admitted, and two seats accepted it.
 
@@ -37786,7 +37786,7 @@ verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl768.sh core/scri
 
 ## BL-769 — a QA PASS written with no canonical run is accepted
 
-**LANDED (v0.915.0, verified 5d6ed315a).** **DEFECT.** Source: graph s319 story 1.5 gate 2 (a PASS reading "Honest-green canonical run: Not executed. Exemption ...", an exemption no distribution text defined) and story 5.1 gate 2 p1 (the verdict written with QA's own run at ~44%). Diagnosis: batch 240 lead ai-dlc-3f; contract adversary fold on e434c2247.
+**LANDED (v0.915.0, verified 1c2fefc62).** **DEFECT.** Source: graph s319 story 1.5 gate 2 (a PASS reading "Honest-green canonical run: Not executed. Exemption ...", an exemption no distribution text defined) and story 5.1 gate 2 p1 (the verdict written with QA's own run at ~44%). Diagnosis: batch 240 lead ai-dlc-3f; contract adversary fold on e434c2247.
 
 Before: `qa.md`'s honest-green item (HARD GATE) asks for the invocation and counts, and nothing read them: `--check-serial` checked the Check 1 read-back and the FAIL rows, and the merge the same.
 
@@ -37797,7 +37797,7 @@ Measured, read-only on graph, every committed `qa-validation*.md` across its ref
 verify: sh bash core/fixtures/review-shard-merge/receipt-bl769.sh core/scripts/merge-review-shards.sh
 ## BL-771 — sprint-review.md §2's party fan-out cites the seats x parts axis but not the waves bound
 
-**LANDED (v0.916.0, verified 91bdf9a82).**
+**LANDED (v0.916.0, verified 8649dfce5).**
 
 **NOTE.** Source: batch 240, the graph watcher's read of `core/skills/ai-dlc/steps/sprint-review.md`. Filed and closed by the owner in the same release.
 
@@ -37811,7 +37811,7 @@ verify: sh f=core/skills/ai-dlc/steps/sprint-review.md; [ -f "$f" ] || exit 9; a
 
 ## BL-692 — a session that re-renders the reconcile report by hand gets `--verify` exit 0, and apply writes over finding rows the operator never approved, with no ask
 
-**LANDED (v0.917.0, verified afbd47be0).**
+**LANDED (v0.917.0, verified 94e05a71b).**
 
 **DEFECT.** Filed by ai-dlc-48 in BL-621's release, on lead ai-dlc-c8's ruling. BL-621 made `apply.sh` refuse when a resolved blocker leaves a finding row the approved region never showed, unless a recorded re-approval quotes the region's digest. That gate reads `emit-report.sh --verify`'s exit-3 path. A session that splices a freshly rendered region over `_bmad-output/ai-dlc-update/reconcile-report.md` before applying turns that exit 3 into exit 0, because the report then matches a fresh render. The union gate sees "match" and writes, so the operator is never asked. The fixed filename is overwritten each run, so apply cannot tell a hand re-render from a first apply. BL-621's SKILL.md step 7 no longer tells the session to re-render on the exit-3 path, so the path is now one the prose forbids rather than prescribes, but nothing mechanical closes it.
 
@@ -37843,7 +37843,7 @@ verify: sh bash core/fixtures/apply-restamp-worklist/receipt-rerender.sh
 
 ## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
 
-**LANDED (v0.918.0, verified c76235c6b).**
+**LANDED (v0.918.0, verified 527a0769e).**
 
 **NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
 
@@ -37861,7 +37861,7 @@ verify: sh for h in .githooks/pre-push core/git-hooks/pre-push; do b="$(sed -n '
 
 ## BL-779 — the production-validation checkpoint has no decisions block and no one-shape rule, so the operator is shown a list of open items and has to ask what each one wants of them
 
-**LANDED (v0.920.0, verified 04b8fa900).**
+**LANDED (v0.920.0, verified fe45cf787).**
 
 **DEFECT.** Source: graph's sprint-319 production-validation checkpoint, batch 240, as the operator answered it. Filed and closed by lead ai-dlc-3f in the same release.
 
@@ -37877,7 +37877,7 @@ verify: sh d=core/skills/ai-dlc/steps/deploy-validate.md; k=core/skills/ai-dlc/S
 
 ## BL-780 — a lead that has accepted the operator's word on an act asks about it again, 20 minutes later, without reading the record that would attest it
 
-**LANDED (v0.920.0, verified 04b8fa900).**
+**LANDED (v0.920.0, verified fe45cf787).**
 
 **NOTE.** Source: graph's sprint-319 lead transcript, batch 240. Filed and closed by lead ai-dlc-3f in the same release.
 
@@ -37889,7 +37889,7 @@ verify: sh k=core/skills/ai-dlc/SKILL.md; [ -f "$k" ] || exit 9; r12="$(awk '/^#
 
 ## BL-778 — SKILL.md Rule 32 touchpoint I owes an advisor consult per push, merge or deploy, while the operator's window ruling lives only in the hook
 
-**LANDED (v0.921.0, verified 9576a0045).**
+**LANDED (v0.921.0, verified ca340488c).**
 
 **DEFECT.** Raised by the operator in batch 240, filed on lead ai-dlc-3f's allocation.
 
@@ -37907,7 +37907,7 @@ verify: sh bash core/fixtures/process-rule-pins/receipt-bl778.sh
 
 ## BL-781 — teammates read protected paths through context-mode tools and `ai-dlc-protect.sh` denies the call
 
-**LANDED (v0.922.0, verified 910697f0f).**
+**LANDED (v0.922.0, verified 8267655d2).**
 
 **NOTE.** Source: graph s319, batch 240, filed by lead ai-dlc-3f and closed in release r11.
 
@@ -37921,7 +37921,7 @@ verify: sh T=$(mktemp -d) || exit 9; mkdir -p "$T/.claude" || exit 9; printf '{"
 
 ## BL-783 — Check B scores a write or dispatch the pause hook allows as a steamroll
 
-**LANDED (v0.922.0, verified 910697f0f).**
+**LANDED (v0.922.0, verified 8267655d2).**
 
 **DEFECT.** Source: graph s319 retro, batch 240. Filed by lead ai-dlc-3f. Built in release r11.
 
@@ -37944,7 +37944,7 @@ verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] || exit 9; co
 
 ## BL-772 — the stories step never says how a per-epic part agent closes its part, so a lead briefed a hand-appended bare `seat-complete:` line no seal binds
 
-**LANDED (v0.923.0, verified 4b1535681).**
+**LANDED (v0.923.0, verified 664262275).**
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f. Filed and closed by the r13 owner in the same release.
 
@@ -37956,7 +37956,7 @@ verify: sh s="$(awk '/^### 2\. Epics and Stories/{f=1;next} f&&/^### /{exit} f' 
 
 ## BL-774 — the smoke diagnosis never searches for a standing operator ruling on the failing test
 
-**LANDED (v0.923.0, verified 4b1535681).**
+**LANDED (v0.923.0, verified 664262275).**
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f. Filed and closed by the r13 owner in the same release.
 
@@ -37972,7 +37972,7 @@ verify: sh s="$(awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### 3b\./{exit} 
 
 ## BL-782 — vem I10 fires on a fixture that only reads a hook's text, and could not show it fires at all
 
-**LANDED (v0.923.0, verified 4b1535681).**
+**LANDED (v0.923.0, verified 664262275).**
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f. Filed and closed by the r13 owner in the same release.
 
@@ -37984,7 +37984,7 @@ verify: sh bash scripts/validate-enforcement-map.sh --arms I10 >/dev/null 2>&1 &
 
 ## BL-773 — a pause-flag clear chained into a compound Bash call is lost when the call is denied, and Check B counts it as a clear anyway
 
-**LANDED (v0.924.0, verified 4d89cdeab).**
+**LANDED (v0.924.0, verified 8336c4009).**
 
 Measured in graph s319 at 21:34Z: the lead resumed with `cd … && rm -f _bmad-output/pipeline-paused.flag; curl -4 -sf --max-time 5 http://127.0.0.1:8788/api/rebalancer/execution/active`. context-mode's PreToolUse curl redirect denied the call whole (`PreToolUse:Bash hook error: context-mode: curl/wget redirected…`), so the `rm` never ran and the flag stayed present through the deploy. A denied call runs none of its parts, and nothing told the lead the clear must be alone or verified.
 
@@ -38004,7 +38004,7 @@ verify: sh H=core/hooks/ai-dlc-acknowledge.sh; S=core/skills/ai-dlc/SKILL.md; V=
 
 ## BL-775 — a single non-shard dispatch had no completion contract, so a header-only write read DELIVERED, and a retyped --mark line with rows=<n> exited 64
 
-**LANDED (v0.924.0, verified 4d89cdeab).**
+**LANDED (v0.924.0, verified 8336c4009).**
 
 A single non-shard dispatch had no completion contract. A beat armed as `wait-for-deliverable.sh --dispatch <id> <path>`, with no `--complete`, read a header-only QA write as DELIVERED (graph s319, 22:17–22:32Z; three re-arms to recover). Separately, the QA subagent ran its brief's `--mark` line with `rows=34`, a line the lead had retyped from memory. The engine requires `findings=<n>` last, so the call exited 64 and wrote nothing. The fix targets the brief template, not the subagent.
 
@@ -38022,7 +38022,7 @@ verify: sh bash -c 'set -uo pipefail; h="$(awk '\''/^#+ Bounded-join beat/{f=1;n
 
 ## BL-776 — a worktree-isolated seat was told where its engine lives but not where its deliverable lives
 
-**LANDED (v0.924.0, verified 4d89cdeab).**
+**LANDED (v0.924.0, verified 8336c4009).**
 
 The fix-forward dev was briefed with a main-checkout deliverable path (graph s319, 00:02:52Z). The worktree-isolation guard refused its Write, and `--mark` then exited 64 with "is not a non-empty file; write the findings first, then mark". The cause was the briefed path, not the mark grammar, and the beat watching that path could never fire.
 

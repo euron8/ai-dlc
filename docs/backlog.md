@@ -100,6 +100,8 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 **Evidence (HOOKWAKE).** The hook half ships as a UserPromptSubmit hook, `core/hooks/ai-dlc-hookwake.sh`, that BLOCKS a subagent hand-back while that agent's wait beat is outstanding. It joins on the `.wait-beats/.beat-argv-<pid>` record `core/scripts/wait-for-deliverable.sh` writes at arm time, with the start time read through the shared `core/scripts/wfd-start-of.sh`, and `core/fixtures/hookwake` drives it in both layouts. That is a different shape from the "hook that injects that instruction" this entry names: it refuses the wake rather than telling the lead how to answer it. The measurement half, a re-taken wake count on a consumer lead session, is still OPEN, so the entry stays PARTIAL.
 
+**Progress (batch 240).** The flip half needs a redesign before it returns to the operator: `wait-for-deliverable.sh` records dispatch-to-path pairs at arm time, J4 becomes per-agent, C5 gets a guaranteed carrier, and the design is checked against a captured real UserPromptSubmit payload.
+
 verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
@@ -109,6 +111,8 @@ verify: manual
 **The 01:52:38Z account (graph lead transcript 62eadbbe, read-only).** Two beats are involved, and the earlier wording described them as one. At 01:52:28Z (jsonl lines 9934-9936) a background beat, task bfq5e0eg3, completed and its output read `DELIVERED` for the offramp-config-and-rewards SPEC.md (line 9945), 40 seconds before the render agent returned. At 01:52:38Z (line 9953) the lead armed `wait-for-deliverable.sh --reset --since <now> $S` with `S=.../scratchpad/never-written-sentinel-render`, a path nothing writes, described as "Arm a sleeping beat until the SPEC render agent returns" (task b2id0l4h8), and confirmed its marker was a future epoch at line 9956. The render agent's notification arrived at 01:53:08Z (line 9977), and the lead TaskStopped b2id0l4h8 at 01:53:12Z (line 9980). So the real SPEC.md beat delivered early and the sentinel beat was armed to cover the gap that early delivery left. The control token `never-written-sentinel-render` is present in the transcript (4 lines) and an impossible token returned 0. Whether bfq5e0eg3 delivered on a partial write is not settled by these lines.
 
 **Part (b), the target-containment refusal, is NOT shippable as specified (batch 236, measured by the wfd contract adversary over the reference consumer's lead transcripts, read-only).** 189 transcripts carry 2,869 beat calls over 5,866 targets. The legitimate targets outside the state dir include 803 teammate story-worktree deliverables, 75 background done files, 64 main-tree docs, 57 scratchpad and task outputs and 7 git refs, so "outside `_bmad-output/`" is not a defect signal. The In-Flight table is empty today and no transcript records it at arm time, so "outside every In-Flight row's deliverable" is unobservable. The seat beats that set a custom state dir (`implementation.md:447`, `qa.md:457`, `code-reviewer.md:196`) would fail it outright. At arm time a sentinel and a real done file are the same act; the difference is the lead's intent, which no check can see. Detecting a sentinel by its name is refuted: 2 of the 8 sentinel basenames lack `never-written`. The live claim is that a beat with neither `--dispatch` nor a dispatched agent's deliverable as its target still counts as a lease. Its false-positive set over the 2,869 calls is UNRUN. The only observable candidate is the dispatch join, and `wait-for-deliverable.sh` already WARNs on a `--since`-only beat (line 1345).
+
+**Progress (batch 240).** Part (b) is not buildable as specified: the spawn ledger has 14 of 6,317 rows with a deliverable field, and even a generous reconstruction still refuses about 190 legitimate `--since`-only beats, which is a floor.
 
 verify: manual
 
@@ -140,6 +144,8 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 **Phase 2, v0.842.0.** Every mutation battery is retired: 56 units in 24 batteries, removed because none has a catch on record. A census of every record on `origin/main` that names a battery found only drift reds (re-anchored mutants, re-declared kill sets, scorer timeouts, the battery's own bugs) and one red that was not the battery's: BL-181, a subject locale bug the shipping fixture `gate-remediation-deny` also caught. In the main checkout's loaded-cost record the 56 units were 30380 of 54724 fixture-seconds (56%), and the pole moves from `adversarial-shard-merge-mutants` at 2214 s to `document-partition` at 732 s. The CHANGELOG for 0.842.0 carries the per-battery table. Items (b) and (c) above described those batteries' controls and shards; they no longer exist. Open: the non-mutant poles (`document-partition`, `enforcement-map-sites`, `apply-restamp-worklist-c` and the rest of the top of the record) have not been judged on value, and no per-gate wall clock or dollar figure has been measured.
 
 **Evidence: the read-set fan-out of a runner change.** On a consumer's 0.830.0 to 0.834.0 reconcile push (graph transcript 5d4fbc59), the first push took about 98 minutes and ran 128 of 224 fixtures. 122 of them were woken because the pull changed runner and tooling files: `hermetic-run.sh`, `.githooks/pre-push`, `apply.sh` and `derive-fixture-readsets.sh`. The re-push took about 6 minutes and ran 42 of 224. Load was 77 to 85, so these are loaded figures. No dollar figure was measured. This is BL-583's subject, not BL-694's.
+
+**Progress (batch 240).** Re-scoped to the poles not covered by BL-699 or BL-755.
 
 verify: manual
 
@@ -208,6 +214,8 @@ That snapshot line also names a sub-case the channel has to handle. `core/skills
 **Check 37 passes graph's planning gate with the first instance's fence still failing (graph watch ai-dlc-f7; intake re-read it read-only on graph).** The s319 lead's [planning] gate, transcript `74de15ba` at 0.818.0, shows two things on 2026-10-17. At 14:10:12Z the validator printed "FAIL (STALE): _bmad-output/planning-artifacts/prd.md:1289 … recorded: 1676 … actual: 1955" (1 hit). At 14:15:56Z the lead wrote "Check 37 reads an owed-derivations record that doesn't exist" (1 hit; negative control 0). `_bmad-output/ai-dlc-update/owed-derivations.tsv` is absent in graph, while that directory holds 590 entries. Graph's installed `scripts/ai-dlc/check-owed-derivations.sh` says "absent is silent 0" at `:286-289`, and so does main's at `:291-293`. `steps/gate-validation.md:3300` says "an absent record is exit 0". The only writer is `derivation-differential.sh --record-owed`, which appends NEWLY-FAILING rows only (`:9`). prd.md:1289 broke at the 0.793.0 pull, before the record existed, so every later pull reads it as STALE-BOTH (`:49`), which is never recorded. Of graph's 256 reconcile logs, only `reconcile-log-20261016T0725Z.md` names it. The lead is carrying it by hand, as a MINOR finding into architecture.md.
 
 This is the consequence of the PARTIAL note's withdrawal of item 3: no reader picks up the 8 rows, and Check 37 is not the channel for them. f7 proposes either a one-time back-fill of the record from the reconcile logs' owed lists, or Check 37 also running `validate-artifact-derivations.sh` over the documents it scopes as LIVING. Both would re-open what the operator withdrew, so intake files them as a proposal for the lead to rule on, not as owed. f7's probe, if adopted: a LIVING-document fence broken before the record existed must DENY, and the same fence in a closed sprint stays silent.
+
+**Progress (batch 240).** The f7 survivor reopens the operator-withdrawn item 3, so it goes to the operator in plain words with a recommendation before any build.
 
 verify: manual
 
@@ -367,6 +375,8 @@ Owed: when `PREPUSH_POOL_DEPTH` is above 0, the pool root is made under the call
 
 Measured against that owed fix: under hermetic-run the caller's TMPDIR is already nested (`core/scripts/hermetic-run.sh:141` makes `$HR_WORK` under the unit's TMPDIR and `:544` gives the sandbox `TMPDIR="$HR_WORK/tmp"`), so the owed root would make the nested unit TMPDIR `/private/tmp/fx.XXXXXX/.t.XXXXX/hermetic-run.XXXXXX/tmp/fx.XXXXXX/.t.XXXXX`, 90 encoded (74 characters plus 2 per each of 8 `/`) against the 85 that `core/fixtures/procsub-staged-refusal-boot/run.sh:945` allows, and 62 without hermetic-run (`/private/tmp/fx.XXXXXX/.t.XXXXX/fx.XXXXXX/.t.XXXXX`: 50 characters plus 2 per each of 6 `/`) against the 58 bound the hook states at `.githooks/pre-push:2039` and `core/git-hooks/pre-push:1947`; the fix design (shorter names, a changed limit, or the outer watcher following the nested root) is deferred.
 
+**Progress (batch 240).** The NOTE stands: 0 stalls across 21 failure records and 2,680 transcripts, with the positive control present, and units run 13-175 s against a 600 s stall window. Any fix's receipt must force a nested unit past that window.
+
 verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/mkdir -p .*\$out/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'PREPUSH_POOL_DEPTH\|POOL_DEPTH_IN')" -gt 0 ] && [ "$(printf '%s\n' "$b" | grep -c 'TMPDIR')" -gt 0 ] || exit 1; done
 
 ## BL-695 — a sharded stories party round waits on its slowest seat at every wave, because the lead split the round by seat and joined each seat before dispatching the next
@@ -387,7 +397,9 @@ Receipt: the detector run as a transcript replay, plus the prose conjuncts. It e
 - Corpus census, from the detector header's FINAL STATE: 13 findings over 187 graph transcripts, 11 TRUE and 2 FALSE. The two FALSE are 22e0f5c2 b30 and ea675b67 b32, both inside a Rule 29 pause window, which the replay cannot see (residual 2).
 - The entry stays open until the consumer's next stories round is measured.
 
-verify: sh D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodies/rule-28.md; G=core/skills/ai-dlc/steps/_gate-procedures.md; P=core/skills/ai-dlc/steps/_dispatch-protocol.md; [ -f "$D" ] || exit 9; [ -f "$R" ] && [ -f "$G" ] && [ -f "$P" ] || exit 9; T="$(mktemp -d "${TMPDIR:-/tmp}/bl695.XXXXXX")" || exit 9; bash "$D" --seed a "$T/a.jsonl" --seed b "$T/b.jsonl" --seed c "$T/c.jsonl" --seed e "$T/e.jsonl" || exit 9; bash "$D" "$T/b.jsonl" >/dev/null 2>&1; rb=$?; bash "$D" "$T/c.jsonl" >/dev/null 2>&1; rc=$?; bash "$D" "$T/a.jsonl" >/dev/null 2>&1; ra=$?; bash "$D" "$T/e.jsonl" >/dev/null 2>&1; re=$?; [ "$rb" = 0 ] && [ "$rc" = 0 ] && [ "$ra" = 1 ] && [ "$re" = 1 ] || exit 1; r="$(tr '\n' ' ' < "$R" | tr -s ' ')"; g="$(tr '\n' ' ' < "$G" | tr -s ' ')"; p="$(tr '\n' ' ' < "$P" | tr -s ' ')"; n="$(grep -c 'A rejected spawn is undelivered' <<<"$r")" || n=0; [ "$n" -gt 0 ] || exit 9; n1="$(grep -c 'next wave carries' <<<"$r")" || n1=0; n2="$(grep -c 'the next wave carries' <<<"$g")" || n2=0; n3="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$r")" || n3=0; n4="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$g")" || n4=0; n5="$(grep -c 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS' <<<"$r")" || n5=0; n6="$(grep -ci 'a seat is not a wave' <<<"$r")" || n6=0; n7="$(grep -cE 'Each wave is joined in ONE beat|wave is joined' <<<"$p")" || n7=0; [ "$n1" = 0 ] && [ "$n2" = 0 ] && [ "$n3" = 0 ] && [ "$n4" = 0 ] && [ "$n7" = 0 ] && [ "$n5" -gt 0 ] && [ "$n6" -gt 0 ] || exit 1; exit 0
+**The shipped-half receipt (batch 240; quoted, not installed as `verify:`).** It exits 0 on origin/main at 0.924.0, because the prose half and the detector shipped, so as the closing line it read the entry as a CLOSE-CANDIDATE while the consumer half is still owed: `D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodies/rule-28.md; G=core/skills/ai-dlc/steps/_gate-procedures.md; P=core/skills/ai-dlc/steps/_dispatch-protocol.md; [ -f "$D" ] || exit 9; [ -f "$R" ] && [ -f "$G" ] && [ -f "$P" ] || exit 9; T="$(mktemp -d "${TMPDIR:-/tmp}/bl695.XXXXXX")" || exit 9; bash "$D" --seed a "$T/a.jsonl" --seed b "$T/b.jsonl" --seed c "$T/c.jsonl" --seed e "$T/e.jsonl" || exit 9; bash "$D" "$T/b.jsonl" >/dev/null 2>&1; rb=$?; bash "$D" "$T/c.jsonl" >/dev/null 2>&1; rc=$?; bash "$D" "$T/a.jsonl" >/dev/null 2>&1; ra=$?; bash "$D" "$T/e.jsonl" >/dev/null 2>&1; re=$?; [ "$rb" = 0 ] && [ "$rc" = 0 ] && [ "$ra" = 1 ] && [ "$re" = 1 ] || exit 1; r="$(tr '\n' ' ' < "$R" | tr -s ' ')"; g="$(tr '\n' ' ' < "$G" | tr -s ' ')"; p="$(tr '\n' ' ' < "$P" | tr -s ' ')"; n="$(grep -c 'A rejected spawn is undelivered' <<<"$r")" || n=0; [ "$n" -gt 0 ] || exit 9; n1="$(grep -c 'next wave carries' <<<"$r")" || n1=0; n2="$(grep -c 'the next wave carries' <<<"$g")" || n2=0; n3="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$r")" || n3=0; n4="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$g")" || n4=0; n5="$(grep -c 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS' <<<"$r")" || n5=0; n6="$(grep -ci 'a seat is not a wave' <<<"$r")" || n6=0; n7="$(grep -cE 'Each wave is joined in ONE beat|wave is joined' <<<"$p")" || n7=0; [ "$n1" = 0 ] && [ "$n2" = 0 ] && [ "$n3" = 0 ] && [ "$n4" = 0 ] && [ "$n7" = 0 ] && [ "$n5" -gt 0 ] && [ "$n6" -gt 0 ] || exit 1; exit 0`
+
+verify: manual — the owed half is a measurement of graph's next stories round showing seats refilling during the cross pole, which no tree state can answer.
 
 ## BL-699 — reconcile-emit-report's pcache phase costs over ten minutes and is the suite pole on every push that re-keys it
 
@@ -414,6 +426,8 @@ verify: manual
 
 Owed: decide whether every pull runs the differential (two validator passes per pull) so the record always exists, measuring that cost on a reference consumer before deciding. No owner this batch.
 
+**Progress (batch 240).** The cost differential is reachable (two validator passes over 919 derivations on a `file://` clone). It is banked under the NO TIMING RUNS ruling and runs only when a named fix needs the figure.
+
 verify: manual
 
 ## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
@@ -432,6 +446,8 @@ The predicate a review must break, from the hook's header:
 A false BLOCK suppresses a completion the lead needed, which costs far more than an idle wake. The review asks, per clause, what state satisfies it while the lead still needs the wake: a stale beat, a recycled pid, a dispatch set wider than the join, or a DELIVERED path the agent has not finished writing.
 
 Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
+
+**Progress (batch 240; the entry stays OPEN).** The adversary pass is done: 1 BLOCKER (J4 can block at most one wake per fan-out, a ceiling of about 27 of 1,562 idle wakes corpus-wide and about 0 in session 888e1365), five DEFECTs and a NOTE. The recommendation is to keep the hook OFF.
 
 verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
 
@@ -476,3 +492,13 @@ verify: manual — the fix needs its own contract; the allowance is not yet mode
 Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` glob and data form, measured to an empty false-positive set with `adversarial-shard-merge` acquitted and a seeded `lib.sh`-only unscrubbed invoker reported.
 
 verify: sh s="$(awk '/^# --- I10: fixture hermeticity/{f=1} f&&/^# --- I13:/{exit} f' scripts/validate-enforcement-map.sh | grep -Ev '^[[:space:]]*#|^[[:space:]]*err ')"; grep -qE 'grep[^|]*lib\.sh|/\*/lib\.sh|"/lib\.sh"' <<<"$s"
+
+## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
+
+**NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Not built.
+
+`core/hooks/ai-dlc-acknowledge.sh:871` tells the paused session "Read-only tools (Read, Grep, Glob, Bash) are still ALLOWED", and the gate admits Bash on that footing, so a deploy driven through Bash is not scored as pipeline-advancing while the pause flag is present. Graph s319: the 21:34 EDT 2026-10-22 deploy ran with the flag present. The flag was stale and the operator had authorised the deploy, so no harm followed.
+
+Owed: the Bash allowance gets its own contract, and a false-positive set measured over real Bash calls before any Bash-pattern deny is built.
+
+verify: manual — the fix needs its own contract and a measured false-positive set first, so no predicate over the tree exists to test yet.
