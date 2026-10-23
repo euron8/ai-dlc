@@ -538,3 +538,17 @@ The deletion is therefore attributed to the pulling session's own whole-director
 Owed: a detector. A consumer file under a claimed `tests/fixtures/<dir>/` that core never shipped is reported before the pull's whole-directory write, in the style of ORPHANED-UNKNOWN. Not built.
 
 verify: manual — no detector exists yet, so no predicate over the tree can test it.
+
+## BL-790 — a review shard does not record whether the advisor ran, so an unavailable advisor is stated in prose the merge cannot read
+
+**DEFECT.** Closes PC-S319-QA-ROLE-DOES-NOT-ASK-THE-VERDICT-TO-RECORD-ADVISOR-UNAVAILABLE. Batch 241, cluster r2.
+
+A code-review or QA shard carried no field saying whether the advisor was consulted, so a seat whose advisor was rate-limited said so in free prose, or not at all, and `merge-review-shards.sh` had nothing to check. The engine at 0.924.0 (origin/main 65d51577b) ignores a column-0 `advisor:` line under both gates and in `--check-serial`: `parse_shard` emits no tag for it and the merge copies it into the merged file verbatim. A consumer on that engine therefore accepts shards written in the new grammar.
+
+**Premise correction.** The ledger cited four party-mode `retro-*` seat files. Those seats never reach the merge, so they do not establish the defect there. The review-shard corpus does. Measured read-only on graph with `git grep -l '^shard-verdict:' -- 'docs/reviews/s319/*'`: 495 shard files, 165 qa-validation and 330 code-review. 57 code-review files mention the advisor at all. 7 qa and 32 code-review files state, in prose only, that the advisor was unavailable or rate-limited. The failure is measured under both gates, so `code-reviewer.md` is in scope beside `qa.md`.
+
+**Fix.** Every shard, part and cross, under both gates, and the `shard: 1/1` review file carry exactly one column-0 `advisor: called` or `advisor: unavailable` line. The merge checks it per shard, never on the merged file, which carries K+G of them. Two lines, a value outside the two, and an indented, bulleted (`- advisor: called`, the remediator's form, named as the near-miss) or decorated label are refused in every era. The label is matched in lower case only. Over graph's 495 shard files that grammar refuses 0, while a case-insensitive variant refuses 8 legacy prose lines such as `Advisor: I made one attempt ... It returned rate-limited`.
+
+The ABSENCE of the line is refused only when the gate's role file carries the sentinel `` column-0 `advisor:` `` as installed at the manifest's frozen sha, the sha the shards were written under. It is read with `git show`, consumer layout first, exactly as the severity boundary reads `qa.md`. Graph tracks both role files (`git -C /Users/n8/git/graph ls-files -- .claude/team-roles/qa.md .claude/team-roles/code-reviewer.md` lists 2, `.claude/team-roles/` lists 18, an impossible-directory control lists 0), so the frozen-sha read is the live path there. Without the sentinel the absence is accepted with one `LEGACY: advisor: line not checked: ...` line. A role file that is unreadable at the sha holds the line. A role file untracked at the sha falls back to the on-disk copy, as the canonical-run arm does. If that copy carries the sentinel, the absence is refused, and the message names the fallback and the remedy (commit `.claude/team-roles/`). `--check-serial` keys on the installed role file.
+
+verify: sh bash core/fixtures/review-shard-merge/receipt-bl790.sh core/scripts/merge-review-shards.sh

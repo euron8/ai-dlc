@@ -271,10 +271,14 @@ out_of() { printf '%s/1-code-review.md' "$(dirname "$1")"; }
 # allows); NEEDS_REWORK, BLOCKED and any other verdict keep it under Critical, which backs them. The
 # headings and the finding are byte-identical to the pre-BL-740 seed; only the APPROVED placement moved.
 shard_find() { printf '#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$1" "$1" "$2"; }
+# THE ADVISOR LINE (BL-790), written by every shard and serial emitter below beside shard-verdict:, as
+# qa.md and code-reviewer.md tell each writer to. SHARD_ADV overrides it for one world: set to the
+# text of the line, or to the empty string to write none.
+adv_l() { [ -z "${SHARD_ADV-advisor: called}" ] || printf '%s\n' "${SHARD_ADV-advisor: called}"; }
 shard() {
   local d="$1" k="$2" v="$3" cite="$4" sha="${5:-${SHARD_SHA:-$B_SHA}}" extra="${6:-}"
   {
-    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "$sha" "$v"
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "$sha" "$v"; adv_l
     # A part shard declares its hand-over count under both gates (code-reviewer.md "As a Shard").
     case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
     printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
@@ -552,7 +556,7 @@ part_refused() { # <token> <shard-dir>
 # A shard written by hand, for the bodies shard() cannot express.
 raw_shard() { # <dir> <key> <body...>: the two shard lines, then the body lines verbatim
   local d="$1" k="$2"; shift 2
-  { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\n' "$k" "$B_SHA"
+  { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\n' "$k" "$B_SHA"; adv_l
     case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
     printf '\n'; printf '%s\n' "$@"; } > "$d/$k.md"
 }
@@ -685,7 +689,7 @@ CANON_BLK="$(printf 'Canonical run: `python3 -m pytest -q` from the frozen workt
 qshard() {
   local d="$1" k="$2" v="$3" cite="$4" extra="${5:-}" hc="${6:-0}"
   {
-    printf '# QA Validation shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    printf '# QA Validation shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"; adv_l
     case "$k" in cross*) ;; *) [ "$hc" = OMIT ] || printf 'handovers: %s\n' "$hc" ;; esac
     printf '\n'
     printf '## Summary\nShard %s validated its part. QCONSERVE-%s-91c2\n\n' "$k" "$k"
@@ -892,7 +896,7 @@ QT_HO_STRAY="carries a 'handover:' or 'handover-run:' line outside a '#### ' fin
 HO_PART2="$(printf '### Important\n\n#### Q-2-H AC7 replay cannot reach a GREEN baseline in the part worktree\nparts: 2\nhandover: AC7\n\nThe documented setup fails in a fresh worktree.')"
 qcross() { # <dir> <verdict> <text inserted inside cross-1.md's ## Findings> -- the execution owner
   {
-    printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "$B_SHA" "$2"
+    printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$B_SHA" "$2"; adv_l; printf '\n'
     printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n%s\n\n' "$CANON_BLK"
     printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: 1, 2\n\nBody.\n\n%s\n\n' "$3"
     printf '## Acceptance Criteria\n\n| AC | Verdict | Evidence |\n|---|---|---|\n| AC1 | PASS | suite green |\n\n## Deferred ACs\n\nNone.\n'
@@ -1282,7 +1286,7 @@ X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat x_dupal
 crs() {
   local d="$1" k="$2" v="$3" cite="$4" hc="$5" body="${6:-}"
   {
-    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"; adv_l
     case "$hc" in OMIT|-) ;; *) printf 'handovers: %s\n' "$hc" ;; esac
     printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
     # The finding's container follows the verdict, as shard()'s does (BL-740).
@@ -1441,8 +1445,11 @@ csq_cross_noac() { CS_T=cross-1; awk '/^## Acceptance Criteria$/ { print "## Per
 csq_cross_twodef() { CS_T=cross-1; qshard "$CSD" cross-1 PASS "1, 2" "$(printf '\n## Deferred ACs\n\n- AC5: deferred')"; }
 csq_cross2_ac() { CS_T=cross-2; qshard "$CSD" cross-2 PASS "1, 3" "$(printf '## Acceptance Criteria\n\n| AC | Verdict |\n|---|---|\n| AC9 | PASS |')"; }
 csq_rank() { CS_T=2; qshard "$CSD" 2 APPROVED 2; }
-CS_CR="two_sha sha_rev bad_verdict nofind stray partcite crossone noparts outrange hc_missing hc_nonint hc_mismatch hc_cross malformed ho_cross ho_multi hr_part hr_cross2 mk_count mk_key mk_field mk_twokey seal"
-CS_QA="part_ac graph_deferred cross_noac cross_twodef cross2_ac rank"
+# BL-790: a shard with no advisor: line, over REPO_B (no role file at the frozen sha, so held).
+csc_adv_absent() { CS_T=2; CS_TOK="carries no column-0 'advisor:' line"; SHARD_ADV="" shard "$CSD" 2 APPROVED 2; }
+csq_adv_absent() { CS_T=2; CS_TOK="carries no column-0 'advisor:' line"; SHARD_ADV="" qshard "$CSD" 2 PASS 2; }
+CS_CR="two_sha sha_rev bad_verdict nofind stray partcite crossone noparts outrange hc_missing hc_nonint hc_mismatch hc_cross malformed ho_cross ho_multi hr_part hr_cross2 mk_count mk_key mk_field mk_twokey seal adv_absent"
+CS_QA="part_ac graph_deferred cross_noac cross_twodef cross2_ac rank adv_absent"
 CS_N="$(printf '%s\n' $CS_CR $CS_QA | grep -c .)"
 cs_same() { # <script-dir> <shard-dir> <gate> <target>
   local sd="$1" d="$2" g="$3" t="$4" o
@@ -1871,7 +1878,7 @@ VB_R3_BODY="(none filed by cross-1. The AC4 gap below is owned by cross group g4
 vb_c() {
   local d="$1" k="$2" v="$3" cite="$4" at="$5" c
   {
-    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"; adv_l
     case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
     printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n## Findings\n\n' "$k" "$k"
     for c in crit imp sug; do
@@ -1890,7 +1897,7 @@ vb_c() {
 vb_q() {
   local d="$1" k="$2" v="$3" body="$4"
   {
-    printf '# QA Validation shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    printf '# QA Validation shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"; adv_l
     case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
     printf '\n## Summary\nShard %s validated its part. QCONSERVE-%s-91c2\n\n## Findings\n\n' "$k" "$k"
     [ -z "$body" ] || printf '%s\n\n' "$body"
@@ -2043,7 +2050,7 @@ fr_x1() {
   local g1 f1 l1
   g1="$(awk -F'\t' '$1 == 1 { print $2; exit }' "$1.groups")"; f1="${g1%%,*}"; l1="${g1##*,}"
   {
-    printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "${SHARD_SHA:-$B_SHA}" "$2"
+    printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n' "${SHARD_SHA:-$B_SHA}" "$2"; adv_l; printf '\n'
     printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n%s\n\n' "$CANON_BLK"
     printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: %s, %s\n\nBody.\n\n' "$f1" "$l1"
     [ -z "$3" ] || printf '%s\n\n' "$3"
@@ -2107,7 +2114,7 @@ p_fr_orphan() {
 # and that it is not the other FAIL-row refusal.
 fr_g_cross() { # <dir> <first> <last> <with F2: 0|1>
   {
-    printf '# QA Validation shard cross-2\n\nreviewed-sha: %s\nshard-verdict: NEEDS_REWORK\n\n' "${SHARD_SHA:-$B_SHA}"
+    printf '# QA Validation shard cross-2\n\nreviewed-sha: %s\nshard-verdict: NEEDS_REWORK\n' "${SHARD_SHA:-$B_SHA}"; adv_l; printf '\n'
     printf '## Summary\nShard cross-2 validated its part. QCONSERVE-cross-2-91c2\n\n## Findings\n\n'
     printf '#### F1 — AC10 two-pair and unpriced-token totals are driven from hand-built rows, not the real parser\n\nparts: %s, %s\n\nBody.\n\n' "$2" "$3"
     [ "$4" = 0 ] || printf '#### F2 — AC4 has no committed mutation-RED reaching its discriminating fixture\n\nparts: %s, %s\n\nBody.\n\n' "$2" "$3"
@@ -2197,7 +2204,8 @@ SR_OWN="[owner: serial]"
 # sr_file <path> <verdict block, verbatim> [per-AC FAIL row] [findings body] [per-AC heading]
 sr_file() {
   {
-    printf '# QA Validation: 1\n\n## Summary\nSerial.\n\n%s\n\n%s\n\n## Findings\n\n%s\n\n' "${SR_CANON-$CANON_BLK}" "$2" "${4:-### Critical (must fix before PASS)
+    printf '# QA Validation: 1\n\n'; adv_l
+    printf '\n## Summary\nSerial.\n\n%s\n\n%s\n\n## Findings\n\n%s\n\n' "${SR_CANON-$CANON_BLK}" "$2" "${4:-### Critical (must fix before PASS)
 
 None.}"
     printf '%s\n\n| AC | Result | Expected | Got |\n|---|---|---|---|\n| AC1 | PASS | x | y |\n' "${5:-## Acceptance Criteria}"
@@ -2294,6 +2302,199 @@ mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" \
   && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$PROJ_CRS/core/team-roles/qa.md" || { echo "FIXTURE ERROR: the legacy serial root was not seeded" >&2; exit 2; }
 _crs0="$(grep -cF 'column-0 `Canonical run:`' "$PROJ_CRS/core/team-roles/qa.md")" || _crs0=0
 [ "$_crs0" = 0 ] || { echo "FIXTURE STALE: the legacy serial root still carries the label" >&2; exit 2; }
+# ---- AD (BL-790): THE ADVISOR LINE's era. The sentinel is read from the subject's own files; each
+# legacy role file is the subject's with every line carrying it removed, the sentinel-less world the
+# reference consumer runs from pull step 3 until the reconcile merge.
+AD_SENT='column-0 `advisor:`'
+AD_QS="$(grep -cF "$AD_SENT" "$QA_MD")" || AD_QS=0
+AD_CS="$(grep -cF "$AD_SENT" "$ROLE_MD")" || AD_CS=0
+[ "$AD_QS" -ge 1 ] && [ "$AD_CS" -ge 1 ] \
+  || { echo "FIXTURE STALE: qa.md ($AD_QS) or code-reviewer.md ($AD_CS) carries no '$AD_SENT' on one line; every advisor world would be LEGACY" >&2; exit 2; }
+AD_LEGQ="$WORK/ad-legacy-qa.md"; AD_LEGC="$WORK/ad-legacy-code-reviewer.md"
+grep -vF "$AD_SENT" "$QA_MD" > "$AD_LEGQ"; grep -vF "$AD_SENT" "$ROLE_MD" > "$AD_LEGC"
+# PROJ_ADL: a serial root whose two role files lack the advisor sentinel (and keep the canonical one, so
+# only the advisor era moves). PROJ_CRS lacks the canonical sentinel and keeps the advisor one.
+PROJ_ADL="$WORK/proj-adl"
+mkdir -p "$PROJ_ADL/core/skills/ai-dlc/steps" "$PROJ_ADL/core/team-roles" \
+  && cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$PROJ_ADL/core/skills/ai-dlc/steps/" \
+  && cp "$AD_LEGQ" "$PROJ_ADL/core/team-roles/qa.md" && cp "$AD_LEGC" "$PROJ_ADL/core/team-roles/code-reviewer.md" \
+  || { echo "FIXTURE ERROR: the advisor-legacy serial root was not seeded" >&2; exit 2; }
+_ad0="$(cat "$PROJ_ADL/core/team-roles/qa.md" "$PROJ_ADL/core/team-roles/code-reviewer.md" | grep -cF "$AD_SENT")" || _ad0=0
+_ad1="$(grep -cF 'column-0 `Canonical run:`' "$PROJ_ADL/core/team-roles/qa.md")" || _ad1=0
+[ "$_ad0" = 0 ] && [ "$_ad1" = 1 ] || { echo "FIXTURE STALE: the advisor-legacy root carries the sentinel ($_ad0) or lost the canonical one ($_ad1)" >&2; exit 2; }
+# The frozen trees, B's six files over a base that commits both role files at the consumer path:
+#   ADP  the sentinel at the frozen sha (the post-reconcile world)
+#   ADL  no sentinel at the frozen sha
+#   ADA  lead world (a): no sentinel at the frozen sha, the NEW role files written over them on disk after
+#        the freeze (the reconcile merged mid-sprint), shards written without the line
+#   ADB  lead world (b): the sentinel at the frozen sha, the OLD role files on disk
+#   ADU  the untracked world: no role file committed, the NEW ones on disk only
+#   ADUL the untracked world over OLD on-disk role files
+ad_repo() { # <dir> <committed: new|old|none> <on disk after freeze: new|old|same>
+  local r="$1" q c f
+  new_repo "$r" old || return 1
+  case "$2" in
+    new) q="$QA_MD"; c="$ROLE_MD" ;;
+    old) q="$AD_LEGQ"; c="$AD_LEGC" ;;
+    none) q=""; c="" ;;
+  esac
+  if [ -n "$q" ]; then
+    mkdir -p "$r/.claude/team-roles" && cp "$q" "$r/.claude/team-roles/qa.md" && cp "$c" "$r/.claude/team-roles/code-reviewer.md" \
+      && G -C "$r" add -A && G -C "$r" commit -q --amend -m base || return 1
+  fi
+  for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$r/$f" 5 "$f"; done
+  G -C "$r" add -A && G -C "$r" commit -q -m frozen || return 1
+  case "$3" in
+    new) mkdir -p "$r/.claude/team-roles" && cp "$QA_MD" "$r/.claude/team-roles/qa.md" && cp "$ROLE_MD" "$r/.claude/team-roles/code-reviewer.md" ;;
+    old) mkdir -p "$r/.claude/team-roles" && cp "$AD_LEGQ" "$r/.claude/team-roles/qa.md" && cp "$AD_LEGC" "$r/.claude/team-roles/code-reviewer.md" ;;
+  esac
+}
+REPO_ADP="$WORK/repo-adp"; REPO_ADL="$WORK/repo-adl"; REPO_ADA="$WORK/repo-ada"; REPO_ADB="$WORK/repo-adb"
+REPO_ADU="$WORK/repo-adu"; REPO_ADUL="$WORK/repo-adul"
+ad_repo "$REPO_ADP" new same && ad_repo "$REPO_ADL" old same && ad_repo "$REPO_ADA" old new \
+  && ad_repo "$REPO_ADB" new old && ad_repo "$REPO_ADU" none new && ad_repo "$REPO_ADUL" none old \
+  || { echo "FIXTURE ERROR: the advisor-era repositories were not seeded" >&2; exit 2; }
+# Each world's refs, and its own control: the committed copy's sentinel count and the on-disk copy's.
+ad_at() { # <repo> <role basename> -> "<count at HEAD, or u when untracked> <count on disk, or u>"
+  local a b
+  if G -C "$1" cat-file -e "HEAD:.claude/team-roles/$2" 2>/dev/null; then
+    a="$(G -C "$1" show "HEAD:.claude/team-roles/$2" | grep -cF "$AD_SENT")" || a=0; else a=u; fi
+  if [ -f "$1/.claude/team-roles/$2" ]; then b="$(grep -cF "$AD_SENT" "$1/.claude/team-roles/$2")" || b=0; else b=u; fi
+  printf '%s %s' "$a" "$(echo "$b" | sed 's/^[1-9][0-9]*$/1/')"
+}
+for _p in "ADP:1 1" "ADL:0 0" "ADA:0 1" "ADB:1 0" "ADU:u 1" "ADUL:u 0"; do
+  eval "_r=\$REPO_${_p%%:*}"
+  for _f in qa.md code-reviewer.md; do
+    _g="$(ad_at "$_r" "$_f" | sed 's/^[1-9][0-9]* /1 /')"
+    [ "$_g" = "${_p#*:}" ] || { echo "FIXTURE STALE: advisor world ${_p%%:*} $_f reads '$_g', want '${_p#*:}' (frozen sha, on disk)" >&2; exit 2; }
+  done
+done
+AD_ABS="carries no column-0 'advisor:' line"
+AD_TWO="carries 2 'advisor:' lines outside a fence"
+AD_VAL="'advisor: maybe' is not called or unavailable"
+AD_MAL="is a malformed advisor line"
+AD_NEAR="not the remediator's bulleted '- advisor: called'"
+AD_UNR="cannot be read at the frozen sha"
+AD_HELD="prescribes it"
+ad_leg() { printf 'LEGACY: advisor: line not checked: %s prescribes no %s label' "$1" "$AD_SENT"; } # <path as named>
+# ad_var <shard dir> <clean copy> <variant>: every shard back to the clean copy (each carries
+# `advisor: called`), then that line rewritten: ABSENT deletes it, TWO doubles it, anything else
+# replaces it with the variant's text verbatim (a CR rides in ENVIRON, never through awk -v).
+ad_var() {
+  local f
+  cs_reset "$1" "$2"
+  for f in "$1"/*.md; do
+    AD_V="$3" awk '$0 == "advisor: called" { v = ENVIRON["AD_V"]
+        if (v == "ABSENT") next; if (v == "TWO") { print; print; next }; print v; next } { print }' "$f" > "$f.x" \
+      && mv "$f.x" "$f" || return 1
+  done
+}
+# ad_world <script-dir> <gate> <repo tag> -> AD_D (shard dir), AD_C (its clean copy), AD_S (frozen sha),
+# AD_R (the repo); every shard carries `advisor: called`.
+ad_world() {
+  local sd="$1" g="$2" b SHARD_SHA sfx v
+  eval "AD_R=\$REPO_$3"
+  b="$(G -C "$AD_R" rev-parse HEAD~1)"; AD_S="$(G -C "$AD_R" rev-parse HEAD)"; SHARD_SHA="$AD_S"
+  if [ "$g" = qa ]; then sfx=qa-validation; v=PASS; else sfx=code-review; v=APPROVED; fi
+  AD_D="$(kworld "$sd" "$AD_R" "$b" "$AD_S" 3 "$sfx" "$v" "$g")" && [ -d "$AD_D" ] || return 1
+  AD_C="$(dirname "$AD_D")/clean"; mkdir "$AD_C" && cp "$AD_D"/*.md "$AD_C"/
+}
+ad_out() { if [ "$2" = qa ]; then qout "$1"; else out_of "$1"; fi; }
+ad_ok() { # <script-dir> <gate> <case> <variant> [LEGACY line, by value]: merges, the LEGACY line exactly when named
+  local o; o="$(ad_out "$AD_D" "$2")"
+  ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
+  run_mg "$1" "$AD_D" "$2" "$o"
+  if [ -n "${5:-}" ]; then
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$(grep -c '^LEGACY: advisor:' "$MO")" = 1 ] && grep -qxF -- "$5" "$MO" \
+      || WHY="$WHY $3{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+  else
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY: advisor:" || WHY="$WHY $3{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+  fi
+  rm -f "$o"
+}
+ad_no() { # <script-dir> <gate> <case> <variant> <token> [second token]: REFUSED [owner: 1], the first shard read
+  local o; o="$(ad_out "$AD_D" "$2")"
+  ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
+  run_mg "$1" "$AD_D" "$2" "$o"
+  refused_at "$5" "$o" && owner_in "$MO" 1 && { [ -z "${6:-}" ] || has "$MO" "$6"; } && ! has "$MO" "LEGACY: advisor:" \
+    || WHY="$WHY $3{rc=$RC $(reline "$MO")}"
+  rm -f "$o"
+}
+# AD1 (BL-790): THE ADVISOR LINE through the merge, one gate per call. Cells are named ad-<q|c>-<case>.
+p_adv_gate() { # <script-dir> <gate>
+  local sd="$1" g="$2" x CR; CR="$(printf '\r')"
+  if [ "$g" = qa ]; then x=q; else x=c; fi
+  WHY=""
+  if cs_sel "ad-$x-present-absent" || cs_sel "ad-$x-called" || cs_sel "ad-$x-unavailable" || cs_sel "ad-$x-cr" \
+     || cs_sel "ad-$x-maybe" || cs_sel "ad-$x-two" || cs_sel "ad-$x-bullet" || cs_sel "ad-$x-deco"; then
+    ad_world "$sd" "$g" ADP || { WHY="the sentinel world was not built"; return 1; }
+    if cell "ad-$x-present-absent"; then ad_no "$sd" "$g" "ad-$x-present-absent" ABSENT "$AD_ABS" "$AD_HELD"; fi
+    if cell "ad-$x-called"; then ad_ok "$sd" "$g" "ad-$x-called" 'advisor: called'; fi
+    if cell "ad-$x-unavailable"; then ad_ok "$sd" "$g" "ad-$x-unavailable" 'advisor: unavailable'; fi
+    if cell "ad-$x-cr"; then ad_ok "$sd" "$g" "ad-$x-cr" "advisor: unavailable  $CR"; fi
+    if cell "ad-$x-maybe"; then ad_no "$sd" "$g" "ad-$x-maybe" 'advisor: maybe' "$AD_VAL"; fi
+    if cell "ad-$x-two"; then ad_no "$sd" "$g" "ad-$x-two" TWO "$AD_TWO"; fi
+    if cell "ad-$x-bullet"; then ad_no "$sd" "$g" "ad-$x-bullet" '- advisor: called' "$AD_MAL" "$AD_NEAR"; fi
+    if cell "ad-$x-deco"; then ad_no "$sd" "$g" "ad-$x-deco" '**advisor:** called' "$AD_MAL"; fi
+  fi
+  # The era: the role file the shards were written under, read at the frozen sha.
+  if cell "ad-$x-legacy-absent"; then ad_world "$sd" "$g" ADL || { WHY="$WHY the legacy world was not built"; return 1; }
+    ad_ok "$sd" "$g" "ad-$x-legacy-absent" ABSENT "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"
+    ad_no "$sd" "$g" "ad-$x-legacy-absent" 'advisor: maybe' "$AD_VAL"; fi
+  if cell "ad-$x-unreadable-absent"; then ad_world "$sd" "$g" B || { WHY="$WHY the unreadable world was not built"; return 1; }
+    ad_no "$sd" "$g" "ad-$x-unreadable-absent" ABSENT "$AD_ABS" "$AD_UNR"; fi
+  # Lead world (a): frozen before the reconcile, the new role file on disk; world (b) the reverse.
+  if cell "ad-$x-world-a"; then ad_world "$sd" "$g" ADA || { WHY="$WHY world (a) was not built"; return 1; }
+    ad_ok "$sd" "$g" "ad-$x-world-a" ABSENT "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"; fi
+  if cell "ad-$x-world-b"; then ad_world "$sd" "$g" ADB || { WHY="$WHY world (b) was not built"; return 1; }
+    ad_no "$sd" "$g" "ad-$x-world-b" ABSENT "$AD_ABS" ".claude/team-roles/$(ad_role "$g") at $AD_S prescribes it"; fi
+  # Untracked at the frozen sha: the on-disk copy decides; with the sentinel the absence is REFUSED
+  # naming the fallback and its remedy, without it LEGACY naming the on-disk path.
+  if cell "ad-$x-untracked-new"; then ad_world "$sd" "$g" ADU || { WHY="$WHY the untracked world was not built"; return 1; }
+    ad_no "$sd" "$g" "ad-$x-untracked-new" ABSENT "$AD_ABS" \
+      "$(ad_role "$g") is untracked at $AD_S, read on disk at $AD_R/.claude/team-roles/$(ad_role "$g"), which prescribes it. The on-disk copy may postdate the shards: commit .claude/team-roles/ so the frozen sha decides, or write the line"; fi
+  if cell "ad-$x-untracked-old"; then ad_world "$sd" "$g" ADUL || { WHY="$WHY the untracked-old world was not built"; return 1; }
+    ad_ok "$sd" "$g" "ad-$x-untracked-old" ABSENT "$(ad_leg "$AD_R/.claude/team-roles/$(ad_role "$g") (on disk, untracked at $AD_S)")"; fi
+  [ -z "$WHY" ]
+}
+ad_role() { if [ "$1" = qa ]; then printf 'qa.md'; else printf 'code-reviewer.md'; fi; }
+p_adv_qa() { p_adv_gate "$1" qa; }
+p_adv_cr() { p_adv_gate "$1" code-review; }
+# AD2 (BL-790): --check-serial, both gates, keyed on the INSTALLED role file (PROJ: the sentinel;
+# PROJ_ADL: none). Every cell writes the whole file it reads.
+ad_srun() { # <script-dir> <file> <gate> <root> -> SRC, $CO
+  AI_DLC_PROJECT_ROOT="$4" bash "$1/merge-review-shards.sh" --check-serial "$2" --gate "$3" > "$CO" 2>&1 < /dev/null; SRC=$?
+}
+ad_sok() { # <script-dir> <file> <gate> <case> <line text, empty for none>
+  SHARD_ADV="$5" sr_file "$2" "$AD_VB"; ad_srun "$1" "$2" "$3" "$PROJ"
+  [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK: $2" && ! has "$CO" "LEGACY: advisor:" || WHY="$WHY $4{rc=$SRC $(head -1 "$CO")}"
+}
+ad_sno() { # <script-dir> <file> <gate> <case> <line text, empty for none> <token>
+  SHARD_ADV="$5" sr_file "$2" "$AD_VB"; ad_srun "$1" "$2" "$3" "$PROJ"
+  [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "$6" && has "$CO" "$SR_OWN" && ! has "$CO" "SERIAL-OK" \
+    || WHY="$WHY $4{rc=$SRC $(head -1 "$CO")}"
+}
+p_adv_serial() {
+  local sd="$1" g x f CR; CR="$(printf '\r')"
+  WHY=""
+  for g in qa code-review; do
+    if [ "$g" = qa ]; then x=q; AD_VB="$(printf '## Verdict\nPASS')"; f="$WORK/ads-1-qa-validation.md"
+    else x=c; AD_VB="$(printf '## Verdict\nAPPROVED')"; f="$WORK/ads-1-code-review.md"; fi
+    if cell "ad-s$x-absent"; then ad_sno "$sd" "$f" "$g" "ad-s$x-absent" '' "$AD_ABS"; fi
+    if cell "ad-s$x-called"; then ad_sok "$sd" "$f" "$g" "ad-s$x-called" 'advisor: called'; fi
+    if cell "ad-s$x-unavailable"; then ad_sok "$sd" "$f" "$g" "ad-s$x-unavailable" 'advisor: unavailable'; fi
+    if cell "ad-s$x-cr"; then ad_sok "$sd" "$f" "$g" "ad-s$x-cr" "advisor: unavailable $CR"; fi
+    if cell "ad-s$x-maybe"; then ad_sno "$sd" "$f" "$g" "ad-s$x-maybe" 'advisor: maybe' "$AD_VAL"; fi
+    if cell "ad-s$x-two"; then ad_sno "$sd" "$f" "$g" "ad-s$x-two" "$(printf 'advisor: called\nadvisor: called')" "$AD_TWO"; fi
+    if cell "ad-s$x-bullet"; then ad_sno "$sd" "$f" "$g" "ad-s$x-bullet" '- advisor: called' "$AD_NEAR"; fi
+    if cell "ad-s$x-legacy-absent"; then
+      SHARD_ADV='' sr_file "$f" "$AD_VB"; ad_srun "$sd" "$f" "$g" "$PROJ_ADL"
+      [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK: $f" && grep -qxF -- "$(ad_leg "$PROJ_ADL/core/team-roles/$(ad_role "$g")")" "$CO" \
+        || WHY="$WHY ad-s$x-legacy-absent{rc=$SRC $(head -2 "$CO" | tr '\n' ' ')}"
+    fi
+  done
+  [ -z "$WHY" ]
+}
 cr_run() { # <script-dir> <file> [extra args...] -> SRC, $CO (CR_ROOT overrides the project root)
   local sd="$1" f="$2"; shift 2
   AI_DLC_PROJECT_ROOT="${CR_ROOT:-$PROJ}" bash "$sd/merge-review-shards.sh" --check-serial "$f" --gate qa "$@" > "$CO" 2>&1 < /dev/null; SRC=$?

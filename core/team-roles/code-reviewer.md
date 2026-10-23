@@ -236,6 +236,10 @@ matches. Each finding is a `#### ` heading under its `### Critical`,
 `### Important` or `### Suggestions` container in `## Findings`, never a bullet,
 and carries exactly one `parts: <ordinal>[, <ordinal>...]` line citing ordinals
 from the map: your own ordinal alone, or two or more if you are the cross shard.
+Every shard, part or cross, also carries one
+column-0 `advisor:` line, `advisor: called` when an advisor call returned a
+result and `advisor: unavailable` when the tool was absent or every call errored
+or was rate-limited, as does a `shard: 1/1` review file.
 The SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of
 this. **Your verdict is advisory:** the merge recomputes the review verdict as
 the worst shard verdict and writes the review file. As a part shard or

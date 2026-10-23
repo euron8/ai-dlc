@@ -271,6 +271,13 @@ arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run --
            "CR1: --check-serial accepted a PASS with no canonical run, or refused a correct one"
 arm2 canon_merge "CR2: the qa merge -- four PASS shards carrying the run merge with no LEGACY line; the execution owner's run lines removed REFUSED [owner: cross-1]; the same with a NEEDS_REWORK part merges NEEDS_REWORK; frozen over an installed qa.md with no label, LEGACY and merges; qa.md untracked at the frozen sha and on disk without the label LEGACY, with it held; neither, held naming both paths; --range on the merge REFUSED" \
                  "CR2: the merge did not hold the execution owner's PASS to its canonical run, or held a legacy set"
+# BL-790: THE ADVISOR LINE, per shard under both gates and through --check-serial, its absence keyed on
+# the gate's role file AT THE FROZEN SHA (lead worlds a and b; the untracked fallback refuses).
+AD_ARM="the sentinel world: absent REFUSED [owner: 1] naming the role file that prescribes it, called, unavailable and 'unavailable' with trailing blanks and CR merge with no LEGACY line, maybe, two lines, '- advisor: called' (naming the remediator near-miss) and '**advisor:** called' REFUSED; a role file at the frozen sha without the sentinel accepts the absence with the LEGACY line by value and still refuses maybe; a role file unreadable at the sha REFUSED; world (a), frozen over the old role file with the new one on disk, LEGACY and merges; world (b), frozen over the new one with the old on disk, REFUSED; untracked at the sha with the new copy on disk REFUSED naming the on-disk fallback and the commit remedy, with the old copy on disk LEGACY naming it"
+arm2 adv_qa "AD1: --gate qa -- $AD_ARM" "AD1: the qa merge did not hold the advisor line to its era"
+arm2 adv_cr "AD2: --gate code-review -- $AD_ARM" "AD2: the code-review merge did not hold the advisor line to its era"
+arm2 adv_serial "AD3: --check-serial under both gates, over the installed role file carrying the sentinel -- absent, maybe, two lines and '- advisor: called' REFUSED [owner: serial], called, unavailable and a trailing CR SERIAL-OK; over a root whose role files lack it, absent SERIAL-OK with the LEGACY line by value" \
+                 "AD3: --check-serial did not hold the advisor line to the installed role file's era"
 # SR2 (BL-742 role text): qa.md's and code-reviewer.md's serial passages each name the --check-serial
 # call; offenders with the step removed from either file are refused.
 grep -vF -- "$SR_ROLE_CMD <validation file> --gate qa" "$QA_MD" > "$WORK/sr-qa-nostep.md"
@@ -484,9 +491,15 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # M40 the conventions' declared canonical command no longer read as a runner, so `tox -e all` is a no-run claim.
   CS_ONLY=cr-conv-runner mut_run M40 record-only-diff.sh '        rs_rn="$rs_rn|$(printf' '        : "$(printf' \
     canon "cr-conv-runner{" "a runner the conventions declare canonical read as a no-run claim"
+  # BL-790. M41 the advisor absence refusal deleted, so a sentinel-era shard with no line merges. M42 the
+  # era check deleted, so the absence is refused in the legacy world too.
+  CS_ONLY=ad-q-present-absent mut_run M41 merge-review-shards.sh "  else refuse \"\$1 carries no column-0 'advisor:' line" "  else : \"\$1 carries no column-0 'advisor:' line" \
+    adv_qa "ad-q-present-absent{" "the advisor absence refusal deleted"
+  CS_ONLY=ad-q-legacy-absent mut_run M42 merge-review-shards.sh '  if [ "$ADV_AT" = legacy ]; then' '  if false; then' \
+    adv_qa "ad-q-legacy-absent{" "the advisor era check deleted, so a legacy shard's absence is refused"
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 40 ]; then ok "VBCTL: CONTROL -- each of M1-M40's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 40), the same copy every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 40 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 42 ]; then ok "VBCTL: CONTROL -- each of M1-M42's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 42), the same copy every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 42 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
