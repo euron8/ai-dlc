@@ -102,6 +102,8 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 **Progress (batch 240).** The flip half needs a redesign before it returns to the operator: `wait-for-deliverable.sh` records dispatch-to-path pairs at arm time, J4 becomes per-agent, C5 gets a guaranteed carrier, and the design is checked against a captured real UserPromptSubmit payload.
 
+**Progress (batch 241; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** The hook half is retired by operator ruling 2026-10-23, and `core/hooks/ai-dlc-hookwake.sh` and its fixture are removed in this release. Retiring the hook does not touch this entry's subject, the full lead turn per notification that an armed beat already covers, so that defect and its per-wake re-measure on a consumer lead session are still owed. The "Evidence (HOOKWAKE)" and batch-240 paragraphs above describe a mechanism that no longer ships.
+
 verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
@@ -462,9 +464,9 @@ A false BLOCK suppresses a completion the lead needed, which costs far more than
 
 Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
 
-**Progress (batch 240; the entry stays OPEN).** The adversary pass is done: 1 BLOCKER (J4 can block at most one wake per fan-out, a ceiling of about 27 of 1,562 idle wakes corpus-wide and about 0 in session 888e1365), five DEFECTs and a NOTE. The recommendation is to keep the hook OFF.
+**Progress (batch 240; the entry stays OPEN).** The adversary pass is done: 1 BLOCKER (J4 can block at most one wake per fan-out, a ceiling of about 27 of 1,562 idle wakes corpus-wide and about 0 in session 888e1365), five DEFECTs and a NOTE. The recommendation is to keep the hook OFF. The operator ruled on 2026-10-23 to retire the hook ("Retire it"), on the batch-240 adversary's ceiling of about 27 helpful wakes in 1,562 idle ones, so the predicate under review no longer exists.
 
-verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
+verify: sh t=templates/settings.json.template; ! test -e core/hooks/ai-dlc-hookwake.sh && ! test -d core/fixtures/hookwake && c="$(jq -r '.. | .command? // empty' "$t")" && [ "$(printf '%s\n' "$c" | grep -c 'ai-dlc-pause\.sh')" = 1 ] && ! printf '%s\n' "$c" | grep -qi 'ai-dlc-hookwake'
 
 ## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
 
