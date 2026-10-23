@@ -116,9 +116,9 @@ verify: manual
 
 verify: manual
 
-## BL-583 — the push suite costs about 8 fixture-hours per full run, over 40% in mutant batteries, and no fixture has been judged on value
+## BL-583 — the push suite's non-mutant poles have not been judged on value, and no per-gate wall clock or dollar figure has been measured
 
-**DEFECT (efficiency).** Operator-raised, 2026-10-16 ~04:30 EDT: "gating a release is so expensive, like stupidly expensive to run the push suite". Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Assigned to ai-dlc-a6: phase 1 is a read-only census of where kill sets overlap, phase 2 is confirmation in the lead's slots after H-b. ai-dlc-bb's world-cache release already targets the `review-shard-merge-mutants` pole, so this entry does not count that saving twice.
+**NOTE (efficiency).** Re-tiered from DEFECT: Phase 2 (v0.842.0) retired every mutation battery, so the remaining owed work (judging the non-mutant poles, a per-gate wall clock and dollars) is measurement, not a defect. Operator-raised, 2026-10-16 ~04:30 EDT: "gating a release is so expensive, like stupidly expensive to run the push suite". Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]). Assigned to ai-dlc-a6: phase 1 is a read-only census of where kill sets overlap, phase 2 is confirmation in the lead's slots after H-b. ai-dlc-bb's world-cache release already targets the `review-shard-merge-mutants` pole, so this entry does not count that saving twice.
 
 Measured from `.git/ai-dlc-fixture-durations` in the main checkout, a LOADED-cost record that each push rewrites:
 - Filer, at 04:29 EDT (288 rows): sum 28783 s (~8.0 h; ~40 min per full run on a pool of 12); 41 mutant rows at 12398 s, 43%; 12 of the top 15 rows mutant batteries at 583-737 s, the three non-mutant rows `snapshot-archive-rotate` 717 s, `suite-pole-guard` 493 s and `readset-skip-d` 410 s (corrected from 13 after lead ai-dlc-9c re-derived it); 130 rows at 60 s or more, 71 at 120 s or more, 82 under 10 s.
@@ -139,15 +139,15 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 **Gate-log evidence (f7 measured, graph session `f78aa565`; transcript-only, not re-derived here).** The graph push of the reconcile commit took 17.6 minutes in pre-push with 139 of 224 fixtures selected. That is a real release-class push on a consumer tree and a first data point toward the per-gate wall clock this entry owes; it is a consumer's selected subset, not this repo's full-suite figure, and the two must not be compared.
 
-**Item (b), batch 236.** `gate-adjudication-mutants` (M0) and `readset-skip-digest-mutants` (unmutated and impossible-anchor controls) now run their controls in shard `a` only, bound by a J2 once-only arm with a two-direction self-probe, and a D14 arm every shard runs holds each shard's `inputs.decl`/`tools.decl` equal to `a`'s apart from the driver lines (also added to `fold-architect-ledger-join-mutants`). `advisor-gate-deny-mutants` keeps its per-shard control because its shards' declarations differ (`-d` adds `od` and `tee`; `-b`/`-e` declare sibling directories whole), and `ledger-reverify-shard-mutants` keeps its C-a and C-b controls because it is one unit whose kill list is 3 in `a` and 1 in `b`, so `b`'s control is the only one for its mutants. Item (b)'s receipt: `for f in gate-adjudication-mutants readset-skip-digest-mutants; do case $f in gate*) r='/^# M0 /,/^# m1 /' ;; *) r='/^NCTL=0$/,/^# J2: both/' ;; esac; t=$(mktemp) || exit 9; sed -n "${r}p" core/fixtures/$f/run.sh | sed '$d' > $t; [ -s $t ] || exit 9; S=$(grep -m1 '^SHARDS=' core/fixtures/$f/run.sh | cut -d'"' -f2); [ -n "$S" ] || exit 9; first=${S%% *}; for s in $S; do c=$(GROUP=$s C=0; score() { C=$((C+1)); }; dg_all() { C=$((C+1)); }; broken() { :; }; ok() { :; }; bad() { :; }; DG_WORLDS=; POOL=/dev/null; FX=x; HOOK=h; ROOT=r; . $t >/dev/null 2>&1; echo $C); w=0; [ "$s" = "$first" ] && w=1; [ "$c" = "$w" ] || { rm -f $t; exit 1; }; done; rm -f $t; done`. The entry stays open for the per-gate wall clock and dollars.
+**Item (b), batch 236.** `gate-adjudication-mutants` (M0) and `readset-skip-digest-mutants` (unmutated and impossible-anchor controls) now run their controls in shard `a` only, bound by a J2 once-only arm with a two-direction self-probe, and a D14 arm every shard runs holds each shard's `inputs.decl`/`tools.decl` equal to `a`'s apart from the driver lines (also added to `fold-architect-ledger-join-mutants`). `advisor-gate-deny-mutants` keeps its per-shard control because its shards' declarations differ (`-d` adds `od` and `tee`; `-b`/`-e` declare sibling directories whole), and `ledger-reverify-shard-mutants` keeps its C-a and C-b controls because it is one unit whose kill list is 3 in `a` and 1 in `b`, so `b`'s control is the only one for its mutants. Item (b)'s receipt (inert: its subject batteries `gate-adjudication-mutants` and `readset-skip-digest-mutants` were retired in v0.842.0, and run in a scratch copy it exits 9; it is kept as history and is not a live `verify:` line): `for f in gate-adjudication-mutants readset-skip-digest-mutants; do case $f in gate*) r='/^# M0 /,/^# m1 /' ;; *) r='/^NCTL=0$/,/^# J2: both/' ;; esac; t=$(mktemp) || exit 9; sed -n "${r}p" core/fixtures/$f/run.sh | sed '$d' > $t; [ -s $t ] || exit 9; S=$(grep -m1 '^SHARDS=' core/fixtures/$f/run.sh | cut -d'"' -f2); [ -n "$S" ] || exit 9; first=${S%% *}; for s in $S; do c=$(GROUP=$s C=0; score() { C=$((C+1)); }; dg_all() { C=$((C+1)); }; broken() { :; }; ok() { :; }; bad() { :; }; DG_WORLDS=; POOL=/dev/null; FX=x; HOOK=h; ROOT=r; . $t >/dev/null 2>&1; echo $C); w=0; [ "$s" = "$first" ] && w=1; [ "$c" = "$w" ] || { rm -f $t; exit 1; }; done; rm -f $t; done`. The entry stays open for the per-gate wall clock and dollars.
 
 **Phase 2, v0.842.0.** Every mutation battery is retired: 56 units in 24 batteries, removed because none has a catch on record. A census of every record on `origin/main` that names a battery found only drift reds (re-anchored mutants, re-declared kill sets, scorer timeouts, the battery's own bugs) and one red that was not the battery's: BL-181, a subject locale bug the shipping fixture `gate-remediation-deny` also caught. In the main checkout's loaded-cost record the 56 units were 30380 of 54724 fixture-seconds (56%), and the pole moves from `adversarial-shard-merge-mutants` at 2214 s to `document-partition` at 732 s. The CHANGELOG for 0.842.0 carries the per-battery table. Items (b) and (c) above described those batteries' controls and shards; they no longer exist. Open: the non-mutant poles (`document-partition`, `enforcement-map-sites`, `apply-restamp-worklist-c` and the rest of the top of the record) have not been judged on value, and no per-gate wall clock or dollar figure has been measured.
 
 **Evidence: the read-set fan-out of a runner change.** On a consumer's 0.830.0 to 0.834.0 reconcile push (graph transcript 5d4fbc59), the first push took about 98 minutes and ran 128 of 224 fixtures. 122 of them were woken because the pull changed runner and tooling files: `hermetic-run.sh`, `.githooks/pre-push`, `apply.sh` and `derive-fixture-readsets.sh`. The re-push took about 6 minutes and ran 42 of 224. Load was 77 to 85, so these are loaded figures. No dollar figure was measured. This is BL-583's subject, not BL-694's.
 
-**Progress (batch 240).** Re-scoped to the poles not covered by BL-699 or BL-755.
+**Progress (batch 240).** Re-scoped to the poles not covered by BL-699 or BL-755 (BL-755 is archived, in `docs/backlog.archive.md`).
 
-verify: manual
+verify: manual — the owed work is a judgment of the non-mutant poles and a per-gate wall clock and dollar figure from a real release push, so no predicate over the tree can test it; a live 0-mutants receipt would read CLOSE-CANDIDATE while that work is open.
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 
@@ -307,6 +307,21 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 - **One more field red, UNCLASSIFIED (dropped verdict or otherwise).** On R5's U56 build in batch 240, the `wait-beat-liveness` mutant `revised-postpoll-silent` read red once under load and green on rerun; the change under test did not touch `say_revised`. Figures: 1 red, 1 green rerun, base green once. Not re-measured at intake.
 - **Still owed.** The trigger of the dropped verdict; census item 8 (`readset-sandbox-root-clause` all-lossy rate at pool load); Owed item 3 (solo-against-pool receipt per fixed unit, with a load-free control); census items 5 and 6; and the remaining unread `readset-skip` polls listed above.
 - **Receipt for this progress (quoted, not installed as `verify:`).** `grep -c 'no verdict recorded' core/fixtures/readset-skip/run.sh` scores 0 at 5b5388924 and 1 at this release's tip. It shows that the diagnostic print exists, not that the drop is fixed.
+
+**Progress (batch 241; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** Read at origin/main `65d51577b`; not re-measured under load.
+- **Owed item (5) is discharged by BL-630.** `docs/backlog.archive.md` `## BL-630` carries `**LANDED (v0.820.0, verified 4e6670c1).**`.
+- **Owed item (6) was discharged by REMOVAL, not built.** 0.807.0 (`9f8e76914`) deleted the suite-pole guard: `scripts/validate-suite-pole.sh` is absent, and `.githooks/pre-push` now has `step "suite pole (this run's longest fixture; information, not a verdict)"` (`pre-push:2723` (`information, not a verdict`)). No CPU-second gate exists, so item 6 as worded will not be built.
+- **The unread `readset-skip` poll list in the batch-236 and batch-240 paragraphs is superseded.** `:981`, `:985`, `:1305`, `:1307`, `:1316`, `:1369`, `:1386`, `:1395`, `:1453-1458`, `:1680` and `:4104` no longer resolve to polls in `core/fixtures/readset-skip/run.sh` (they are `fi`, `esac`, comments and similar). The batch-236 `ck_mut` cite `4938-4959` is stale as well: the function is now at `run.sh:5047` (`ck_mut()`). The batch-240 cite still holds at `run.sh:5078` (`no verdict recorded`). Earlier paragraphs are left as written.
+- **Census of `readset-skip` by `grep -nE 'sleep [0-9.]+|while .*-lt|timeout|deadline' core/fixtures/readset-skip/run.sh`, widened by `grep -nE 'while :|AW_STALL|kill -0'`.** The cited sites fall into six dispositions. Result: no cited site judges a verdict on elapsed time.
+  - Poll-counted window, not judged on time: `run.sh:182` (`AW_STALL:-100`) with its tick `run.sh:183` (`${AW_SLEEP:-sleep} 0.1`), and the stub's own counted wait `run.sh:1076` (`AW_STALL:-100`) with `run.sh:1077` (`sleep 0.1`). The comment block above `aw_wait` states that nothing is judged on elapsed time.
+  - Floors that decide no verdict: `run.sh:1410` (`sleep 1.1`) and `run.sh:1892` (`-lt 2`), each commented as a floor and each backed by a same-drive control.
+  - Hang watchdog or safety net: `run.sh:1687` (`ct_drive "$POOL" t1 3 hang`) hands the subject a 3 s ceiling against a stub that never ends, and the wait on it is poll-counted (`aw_wait` at `run.sh:1535` (`ct_sig`)), so a slow box delays the verdict and does not change it. `run.sh:4535` (`-lt 300`) is a bounded wait of 30 s inside a seeded run.sh.
+  - Retry counts, not time: `run.sh:3434`, `run.sh:3539`, `run.sh:3550` and `run.sh:3575` (each `-lt 3`) retry a real-stream loss arm up to three times. Load changes whether the arm is exercised (SKIP) and never turns it FAIL on elapsed time.
+  - Stub text inside a seeded string: `run.sh:1481` (`while :; do sleep 1`) and `run.sh:1482` (`sleep 0.1`), both inside `LT_HANG`; `run.sh:3799` (`sleep 0.2`) in the log-stream stub; `run.sh:4278` (`exec sleep 30`).
+  - Not load-shaped (seeded stand-in processes, file-count seeds, repetition counts and probe text): `run.sh:137` (`sleep 600`), `run.sh:1475` (`sleep 600`), `run.sh:2172` (`sleep 600`), `run.sh:1590` (`sleep 30`), `run.sh:217` (`--timeout 1s`), `run.sh:746` (`-lt 210`), `run.sh:1594` (`-lt "$reps"`), `run.sh:5032` (`-lt "$CK_N"`), `run.sh:2300` (`sleep 1; rm -f`), `run.sh:2293` (`sleep 600 & s=$!`).
+  - The census disposes only the cited sites and is a floor: the first grep returns 37 hits (`grep -cE`, control `sleep 600` returns 4, an impossible token returns 0), 15 of them uncited, and the widened grep returns 36 hits of which 35 are uncited. Read by line, the 15 uncited first-grep hits are comment text (`run.sh:1468` (`exit timeout`), `run.sh:1518` (`sleep 1`)), a status-text match (`run.sh:1565` (`exit timeout`)), sed and grep over the `sleep 30` stub (`run.sh:1668` (`sleep 30`), `run.sh:1670` (`sleep 30`)), expected-signature strings (`run.sh:1686` (`timeou`), `run.sh:1688` (`3s ceiling`)), file-count seed loops (`run.sh:3417` (`-lt 1500`), `run.sh:3521` (`-lt 1500`), `run.sh:3522` (`-lt 100`)) and probe text (`run.sh:5389` (`python3 timeout`)); none judges a verdict on elapsed time. The widened grep's uncited hits (for example `aw_wait`'s `while :` and `kill -0`) were not read line by line, so the conclusion is stated for the cited sites and the 15 read ones only.
+  - The census covers `sleep`, `-lt` loops, `timeout` and `deadline` spellings. It cannot see a bound spelled through a variable such as `$cl` or `$ceil`.
+- **Still owed.** The trigger of the dropped verdict; census item 8 (`readset-sandbox-root-clause` all-lossy rate at pool load); Owed item 3 (solo-against-pool receipt per fixed unit, with a load-free control); the remaining census of time and numeric thresholds in assertions (BL-632).
 
 verify: manual
 
@@ -483,16 +498,6 @@ Owed: the four conditions need their own contract before a fix, and a validator 
 
 verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.
 
-## BL-786 — I10 reads only run.sh, so a fixture whose hook invoker lives in lib.sh is outside its population
-
-**NOTE.** Source: batch 240, lead ai-dlc-3f. Filed by the r13 owner; not built.
-
-`adversarial-shard-merge` runs a hook at `lib.sh:183` and scrubs at `lib.sh:10`, but I10 never reads `lib.sh`. Widening the unit to `run.sh` + `lib.sh` + `seed.sh` with I10's patterns verbatim was measured: population 55 to 58, offenders 0 to 2, `adversarial-shard-merge` acquitted. Both offenders are false positives: `check-15-bypass/seed.sh:558` is a comment naming the `hooks/ai-dlc-*.sh` glob, and `core-paths-audit-diff/seed.sh:54,95` are `- hooks/ai-dlc-*.sh` yaml seed data. Neither executes a hook, so the widening was not shipped.
-
-Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` glob and data form, measured to an empty false-positive set with `adversarial-shard-merge` acquitted and a seeded `lib.sh`-only unscrubbed invoker reported.
-
-verify: sh s="$(awk '/^# --- I10: fixture hermeticity/{f=1} f&&/^# --- I13:/{exit} f' scripts/validate-enforcement-map.sh | grep -Ev '^[[:space:]]*#|^[[:space:]]*err ')"; grep -qE 'grep[^|]*lib\.sh|/\*/lib\.sh|"/lib\.sh"' <<<"$s"
-
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Not built.
@@ -502,3 +507,24 @@ verify: sh s="$(awk '/^# --- I10: fixture hermeticity/{f=1} f&&/^# --- I13:/{exi
 Owed: the Bash allowance gets its own contract, and a false-positive set measured over real Bash calls before any Bash-pattern deny is built.
 
 verify: manual — the fix needs its own contract and a measured false-positive set first, so no predicate over the tree exists to test yet.
+
+## BL-791 — a consumer-authored file inside a core-claimed fixture directory is not reported before a pull's whole-directory write, and one was lost
+
+**NOTE.** Source: batch 241, lead ai-dlc-58. Filed by the r4 owner; not built.
+
+Provenance: consumer ledger id PC-S319-CHECK-17-BYPASS-VARIANT-FIXTURES-ABSENT-SO-EIGHT-TESTS-FAIL-IN-EVERY-CHECKOUT. Its fix is the consumer's. This entry files the upstream half and does not close that id.
+
+Measured case (consumer facts, owner-measured read-only; this repo cannot reach that tree). Consumer commit 58e9cf2ce, `chore(ai-dlc-update): reconcile distribution 0.168.1 → 0.173.0 (#815)`, 2026-07-27, deleted `tests/fixtures/check-17-bypass/{control-pass.md, v1-missing-block.md … v9-retired-pin-story.md, v5-transcript.md}`. Those files had been added by the consumer's own commit 057308592. After the deletion, `tests/test_check_17_provenance.py` fails in every checkout.
+
+Mechanism, UNESTABLISHED. No distribution line deletes such a file, re-derived against this repo:
+- `core/skills/ai-dlc-update/reconcile/preclassify.sh:755` diffs only `core/` (`memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/`).
+- The orphan pass at `preclassify.sh:933-934` marks a file upstream never shipped `ORPHANED-UNKNOWN->CLASSIFY`, with the comment "Not ours to delete."
+- `apply.sh` has no non-comment `rm -r` outside its temp trap at `:656` (`grep -nE '\brm +-[a-zA-Z]*r'` returns that trap and one prose string at `:3365`, which is text and not a command).
+- `scripts/install.sh:668-669` is an additive `mkdir -p` plus `cp`.
+- Core never shipped any `check-17-bypass/*.md` other than `README.md`: the added-file history of `core/fixtures/check-17-bypass/control-pass.md` and of `v*.md` is 0 commits each (`git log --all --oneline --diff-filter=A -- <path>`), against controls of 1 for `run.sh` and 1 for `README.md`.
+
+The deletion is therefore attributed to the pulling session's own whole-directory write, which `core/skills/ai-dlc-update/SKILL.md:315` ("write each fixture directory WHOLE, its `run.sh` included") and `:549` ("each directory WHOLE or not at all") can prompt. Existing partial guard: `core/hooks/ai-dlc-core-guard.sh:189-197` denies a Write or Edit into `tests/fixtures/<core-name>/` and redirects the author to their own name, and `core/skills/ai-dlc/core-manifest.md:66-85` says the same. That guard prevents authoring there; it does not report an already-present file at pull time.
+
+Owed: a detector. A consumer file under a claimed `tests/fixtures/<dir>/` that core never shipped is reported before the pull's whole-directory write, in the style of ORPHANED-UNKNOWN. Not built.
+
+verify: manual — no detector exists yet, so no predicate over the tree can test it.
