@@ -38142,3 +38142,15 @@ Owed: with the cache armed and no `cksum` on PATH, `--verify` still renders fres
 verify: sh bash core/fixtures/reconcile-emit-report/receipt-cksum-absent.sh
 
 
+## BL-794 — the protect hook's deny CONTEXT says the planning corpus is NOT protected, contradicting a consumer layer that protects it
+
+**LANDED (v0.930.0, verified ef8beb438).**
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, cluster r7 (finding F3).
+
+`core/hooks/ai-dlc-protect.sh` ended the CONTEXT of every non-fail-closed deny with "Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely." Core cannot know a consumer's layer. Measured case: graph's `.claude/skills/ai-dlc/extensions/protected-paths.json` protects docs/architecture.md (with docs/architecture-index.md, AGENTS.md, docs/adr/*.md and docs/operator-runbooks/*.md). The 13:53:54Z deny named docs/architecture.md in PROTECTED_HITS while its CONTEXT said architecture is "NOT protected".
+
+Fix: the sentence is deleted. REASON, the EXT_BAD variant and the header comment are unchanged. Arm 9c of `core/fixtures/context-mode-protect/run.sh` and its CONTEXT-RESTORED mutant hold it.
+
+verify: sh bash core/fixtures/context-mode-protect/receipt-bl794.sh core/hooks/ai-dlc-protect.sh
+

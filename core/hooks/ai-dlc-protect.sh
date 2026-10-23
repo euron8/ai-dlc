@@ -359,7 +359,7 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     CONTEXT="A broken layer file must never silently degrade to the core-only protected set — that would read as 'nothing matched' while the consumer's own verbatim-load paths went unguarded. Use the native Read tool meanwhile; calls carrying no path are unaffected."
   else
     REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read for verbatim content."
-    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."
+    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
   fi
 
   # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
