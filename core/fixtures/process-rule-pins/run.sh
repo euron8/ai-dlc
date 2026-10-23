@@ -124,6 +124,14 @@
 #     (pred-lit-pm); an ADR probe keyed on such a literal carries the same fence (architect.md
 #     evidence contract, pred-lit-arch). pred-lit-qa and pred-lit-pm are line-mode `contains` pins:
 #     keep each phrase on ONE line. The named mutant softens the REJECT to a note.
+#   - at `done` the closing writer copies each deferred AC's id AND its predicate text into the
+#     story file's `## Deferred ACs`, entries opening `- **<id>**`, `None.` for none, placed before
+#     `## Dev Agent Record` (code-reviewer.md Ownership; qa.md's discharge-predicate item), and
+#     deploy-validate.md §4b reads the predicate there, falls back to the QA verdict for a story
+#     with no section, reports a missing entry as a closing-writer defect, and checks every literal
+#     against the DEPLOYED sha, recording a correction as `old -> new` (def-copy-*). The cr and qa
+#     rows are line-mode `contains` pins inside lists para mode cannot split: keep each pinned
+#     phrase on ONE line. The named def-copy-cr-pred mutant is the ids-only rewrite.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -512,6 +520,20 @@ r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it re
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains
 pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains
 pred-lit-arch|R|architect.md|## The evidence contract|## A fold architecture dispatch|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
+def-copy-cr-section|R|code-reviewer.md|## Ownership|## Responsibilities|At `done` the closing writer also writes a `## Deferred ACs` section into the story file.|contains
+def-copy-cr-id|R|code-reviewer.md|## Ownership|## Responsibilities|Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,|contains
+def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains
+def-copy-cr-none|R|code-reviewer.md|## Ownership|## Responsibilities|A story with no deferred AC gets the section with body `None.`.|contains
+def-copy-cr-place|R|code-reviewer.md|## Ownership|## Responsibilities|The section sits directly BEFORE `## Dev Agent Record`;|contains
+def-copy-qa|R|qa.md|## Validation Checklist|## Communication|copies each id with its predicate text into the story file's `## Deferred ACs`,|contains
+def-copy-dv-read|S|steps/deploy-validate.md|### 4b.|### 5.|**Read each owed predicate from the story file.**|para|predicate from the story file's `## Deferred ACs` section
+def-copy-dv-absent|S|steps/deploy-validate.md|### 4b.|### 5.|**A story file with no `## Deferred ACs` section is a pre-migration story.**|para|Fall back to the QA verdict for its predicate and record the fallback under `deferred_ac_discharge`.
+def-copy-dv-missing|S|steps/deploy-validate.md|### 4b.|### 5.|**A missing entry is a closing-writer defect.**|para|an owed id has no entry opening with that exact id, or the body is `None.` beside a non-empty `deferred_acs`
+def-copy-dv-missing-run|S|steps/deploy-validate.md|### 4b.|### 5.|**A missing entry is a closing-writer defect.**|para|report it in the gate log as a closing-writer defect, then run the predicate from the QA verdict.
+def-copy-dv-sha|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|Check each literal the predicate names against the DEPLOYED sha
+def-copy-dv-refence|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|a pinned fence whose sha is not the deployed sha is re-run at the deployed sha first.
+def-copy-dv-oldnew|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|record the correction under `deferred_ac_discharge` as `old -> new`
+def-copy-dv-silent|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|Never a silent substitution.
 PINS
 }
 
@@ -975,6 +997,7 @@ impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pr
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`|is absent or `false` and|is absent and
 sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
+def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1000,7 +1023,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 5 ] || bad "named: $n_named named mutant(s) read, wanted 5"
+[ "$n_named" -eq 6 ] || bad "named: $n_named named mutant(s) read, wanted 6"
 
 # --- 4b. a join over seat or cross files passes --complete -----------------------
 # A seat or cross shard writes its file early and is finished only at its final `seat-complete:`
