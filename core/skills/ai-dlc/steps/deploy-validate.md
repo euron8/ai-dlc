@@ -396,9 +396,9 @@ If `is_ui_epic == true`:
   pass/fail counts) or why they could not run. When they could not run, the lead
   runs them against the redeployed instance before re-verifying, and records that
   run's invocation, counts and `.zip` trace path in the Deploy Status Report row
-  as the `playwright` evidence this section already names; pass `--trace on` to
-  `npx playwright test`, since a config with no `trace` setting records none by
-  default and the flag overrides it. A could-not-run record is not a pass.
+  as the `playwright` evidence this section already names. A could-not-run
+  record is not a pass. Pass `--trace on` to `npx playwright test`; a config with
+  no `trace` setting records none by default, and the flag overrides it.
   That run is part of the lead's re-verification, deploy-gate orchestration under Rule 28a as the redeploy is.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
