@@ -102,6 +102,8 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 **Progress (batch 240).** The flip half needs a redesign before it returns to the operator: `wait-for-deliverable.sh` records dispatch-to-path pairs at arm time, J4 becomes per-agent, C5 gets a guaranteed carrier, and the design is checked against a captured real UserPromptSubmit payload.
 
+**Progress (batch 241; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** The hook half is retired by operator ruling 2026-10-23, and `core/hooks/ai-dlc-hookwake.sh` and its fixture are removed in this release. Retiring the hook does not touch this entry's subject, the full lead turn per notification that an armed beat already covers, so that defect and its per-wake re-measure on a consumer lead session are still owed. The "Evidence (HOOKWAKE)" and batch-240 paragraphs above describe a mechanism that no longer ships.
+
 verify: manual
 
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
@@ -444,27 +446,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 **Progress (batch 240).** The cost differential is reachable (two validator passes over 919 derivations on a `file://` clone). It is banked under the NO TIMING RUNS ruling and runs only when a named fix needs the figure.
 
 verify: manual
-
-## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
-
-**DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
-
-BL-538's batch-239 measurement found the shipped hook removes nothing on the reference consumer, because it is opt-in and default OFF (`core/hooks/ai-dlc-hookwake.sh` header, "OPT-IN, DEFAULT OFF"). graph's s319 leads `218aa1b8` (138 of 203 wakes idle) and `a367e62c` (97 of 150 idle) carry 0 hookwake rows, against a control of 35 in install session `48918adc`. The operator ruled that the default stays OFF and that the blocking predicate gets an adversary review first.
-
-The predicate a review must break, from the hook's header:
-- J1: exactly one outstanding beat in the lead transcript's bounded tail;
-- J2: exactly one live `.beat-argv-<pid>` record whose start time matches;
-- J1=J2: the task-id join;
-- J3: the agent id is in the record's `--dispatch` set, read from argv;
-- J4: `wait-for-deliverable.sh --status` exits 0 with every path DELIVERED.
-
-A false BLOCK suppresses a completion the lead needed, which costs far more than an idle wake. The review asks, per clause, what state satisfies it while the lead still needs the wake: a stale beat, a recycled pid, a dispatch set wider than the join, or a DELIVERED path the agent has not finished writing.
-
-Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
-
-**Progress (batch 240; the entry stays OPEN).** The adversary pass is done: 1 BLOCKER (J4 can block at most one wake per fan-out, a ceiling of about 27 of 1,562 idle wakes corpus-wide and about 0 in session 888e1365), five DEFECTs and a NOTE. The recommendation is to keep the hook OFF.
-
-verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
 
 ## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
 

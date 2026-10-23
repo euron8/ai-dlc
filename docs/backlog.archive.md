@@ -38106,3 +38106,26 @@ A code-review or QA shard carried no field saying whether the advisor was consul
 The ABSENCE of the line is refused only when the gate's role file carries the sentinel `` column-0 `advisor:` `` as installed at the manifest's frozen sha, the sha the shards were written under. It is read with `git show`, consumer layout first, exactly as the severity boundary reads `qa.md`. Graph tracks both role files (`git -C /Users/n8/git/graph ls-files -- .claude/team-roles/qa.md .claude/team-roles/code-reviewer.md` lists 2, `.claude/team-roles/` lists 18, an impossible-directory control lists 0), so the frozen-sha read is the live path there. Without the sentinel the absence is accepted with one `LEGACY: advisor: line not checked: ...` line. A role file that is unreadable at the sha holds the line. A role file untracked at the sha falls back to the on-disk copy, as the canonical-run arm does. If that copy carries the sentinel, the absence is refused, and the message names the fallback and the remedy (commit `.claude/team-roles/`). `--check-serial` keys on the installed role file.
 
 verify: sh bash core/fixtures/review-shard-merge/receipt-bl790.sh core/scripts/merge-review-shards.sh
+## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
+
+**LANDED (v0.928.0, verified 766525548).**
+
+**DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
+
+BL-538's batch-239 measurement found the shipped hook removes nothing on the reference consumer, because it is opt-in and default OFF (`core/hooks/ai-dlc-hookwake.sh` header, "OPT-IN, DEFAULT OFF"). graph's s319 leads `218aa1b8` (138 of 203 wakes idle) and `a367e62c` (97 of 150 idle) carry 0 hookwake rows, against a control of 35 in install session `48918adc`. The operator ruled that the default stays OFF and that the blocking predicate gets an adversary review first.
+
+The predicate a review must break, from the hook's header:
+- J1: exactly one outstanding beat in the lead transcript's bounded tail;
+- J2: exactly one live `.beat-argv-<pid>` record whose start time matches;
+- J1=J2: the task-id join;
+- J3: the agent id is in the record's `--dispatch` set, read from argv;
+- J4: `wait-for-deliverable.sh --status` exits 0 with every path DELIVERED.
+
+A false BLOCK suppresses a completion the lead needed, which costs far more than an idle wake. The review asks, per clause, what state satisfies it while the lead still needs the wake: a stale beat, a recycled pid, a dispatch set wider than the join, or a DELIVERED path the agent has not finished writing.
+
+Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs and DEFECTs as fixes, each with an arm in `core/fixtures/hookwake`. Only then put flipping the default to the operator, with BL-538's idle-wake figures as the value.
+
+**Progress (batch 240; the entry stays OPEN).** The adversary pass is done: 1 BLOCKER (J4 can block at most one wake per fan-out, a ceiling of about 27 of 1,562 idle wakes corpus-wide and about 0 in session 888e1365), five DEFECTs and a NOTE. The recommendation is to keep the hook OFF. The operator ruled on 2026-10-23 to retire the hook ("Retire it"), on the batch-240 adversary's ceiling of about 27 helpful wakes in 1,562 idle ones, so the predicate under review no longer exists.
+
+verify: sh t=templates/settings.json.template; ! test -e core/hooks/ai-dlc-hookwake.sh && ! test -d core/fixtures/hookwake && c="$(jq -r '.. | .command? // empty' "$t")" && [ "$(printf '%s\n' "$c" | grep -c 'ai-dlc-pause\.sh')" = 1 ] && ! printf '%s\n' "$c" | grep -qi 'ai-dlc-hookwake'
+
