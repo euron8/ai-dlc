@@ -159,6 +159,10 @@ Fix: all four greps are keyed with `grep -F` on this run's full sentinel and `"$
 
 Proven by the `FOREIGN markers` arm and three `FOREIGN MUTANT` arms in `core/fixtures/readset-skip/run.sh` (stub stream, foreign sentinel and foreign end interleaved, the foreign end ahead of this run's own).
 
+--tracer fs_usage keeps the bare marker match; a concurrent same-name fs_usage trace can still cut a window; unmeasured here because fs_usage needs root and is operator-only
+
+The receipt below binds the sandbox-stream keys only and says nothing about fs_usage.
+
 verify: sh f=core/scripts/derive-fixture-readsets.sh; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENT_KEY|ENDMARK)" "\$raw"' "$f")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" "$f"
 
 The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
