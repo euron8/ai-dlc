@@ -519,7 +519,13 @@ else
       if grep -qi 'USER-CONFIRMED' <<<"$SPRINT_SECTION"; then
         VISUAL_OK=1
       fi
-      if grep -qi 'playwright' <<<"$SPRINT_SECTION"; then
+      # The automated row is written at `core/skills/ai-dlc/steps/deploy-validate.md` §4 as
+      # "`playwright` with the trace path", and that trace is Playwright's `.zip` file. So the
+      # token counts only on a line that also carries `.zip`: a bare mention of playwright, or a
+      # could-not-run row, is not evidence. Measured over graph's 111 committed sprint sections:
+      # 10 closed false PASSes become FAIL, 0 live sprints change, and every USER-CONFIRMED
+      # sprint still passes.
+      if awk 'tolower($0) ~ /playwright/ && tolower($0) ~ /\.zip/ {f=1} END{exit !f}' <<<"$SPRINT_SECTION"; then
         VISUAL_OK=1
       fi
 
@@ -527,7 +533,7 @@ else
         echo "  CHECK 5: PASS"
       else
         echo "  CHECK 5: FAIL"
-        fail "Check5_VISUAL_UI" "Sprint ${SPRINT_N} has web/** file changes but gate-log.md Sprint ${SPRINT_N} section contains neither 'USER-CONFIRMED' nor playwright trace evidence in Deploy Status Report"
+        fail "Check5_VISUAL_UI" "Sprint ${SPRINT_N} has web/** file changes but gate-log.md Sprint ${SPRINT_N} section contains neither 'USER-CONFIRMED' nor playwright trace evidence in Deploy Status Report (a could-not-run playwright row is not evidence)"
       fi
     fi
   fi
