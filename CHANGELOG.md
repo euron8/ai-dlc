@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.934.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r11. It closes BL-791 by measurement and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: none. Rulebook changes: none. Fixture changes: none. Packaging: none. Backlog: `docs/backlog.md` only.
+
+### BL-791 — the owed detector is not warranted: no engine step touched the consumer's fixture files, and the stated cause was false
+
+BL-791 owed a detector that reports a consumer file under a core-claimed `tests/fixtures/<dir>/` before a pull's whole-directory write. The contract adversary read the consumer's committed history read-only and found no such write. The 11 `check-17-bypass/*.md` files were removed by the pulling session's own explicit `git rm`, in the review round of the consumer's PR #815 (squashed as 58e9cf2ce; its committed reconcile log records the step-7 apply as "Deletions: none" and lists the files as orphans it kept, then "`git rm`'d the 11 orphans" in the review round). No engine step at 0.173.0 or since writes, deletes or classifies `tests/fixtures/` orphans: `preclassify.sh` diffs only `core/`, and its orphan pass walks only `.claude/fixtures`, `.claude/ci-templates` and `.claude/git-hooks`. Run on a `file://` clone at the pre-pull tree, both the 0.173.0 and today's preclassify emitted 0 ORPHANED rows for those files.
+
+The entry's earlier claims are corrected. `SKILL.md:315/:549` is step-2 self-update prose and was not the prompt. `ai-dlc-core-guard.sh` is scoped to Edit, Write and MultiEdit, so a Bash `git rm` is outside it. The cause the consumer's ledger id names is false: `tests/test_check_17_provenance.py` points at `scripts/validate-provenance-block.sh`, which the consumer's own #766 had moved five days before the pull, so the test already failed 8 of 8 before the deletion and restoring the files fixes 0 of 8. Seven of the 11 files came from consumer commit 057308592 and four (`v6`–`v9`) from consumer commit f747a8140; core never shipped any of them. The consumer-side fix is the consumer's, recorded as a finding.
+
+Receipt: it pins the orphan pass's single `for _pc_reloc in` line to its exact shape (single-quoted literal words, one line, nothing after `do`), requires `.claude/fixtures` on it and refuses `tests/` anywhere in it. Scored the way `backlog-reverify.sh` runs it: real tree 0; `tests/fixtures` added literally, through a variable, as a split quoted word and through a backslash continuation 1 each; the pass renamed 1; the `.claude/fixtures` control renamed 1; a comment elsewhere naming `tests/fixtures` 0; a second spelling in awk 0.
+
 ## [0.933.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r10. It closes BL-792 (filed in 0.926.0) and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-mandatory-rules.sh` (Check 5). Rulebook changes: `core/skills/ai-dlc/steps/deploy-validate.md` section 4. Fixture changes: `core/fixtures/check5-anchor-base` (`run.sh` with six cases, a bare-grep mutant and a control copy, and a new `receipt-bl792.sh`) and `core/fixtures/process-rule-pins` (one named mutant's match text). Packaging: none. Backlog: `docs/backlog.md`.
