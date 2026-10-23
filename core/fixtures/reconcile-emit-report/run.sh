@@ -3622,6 +3622,16 @@ if { grep -qF 'recorded PASS not recorded: ' "$EMIT" && grep -qF 'cr_run_reads' 
 else
   printf 'PENDING: PC-V55 PC-V59..PC-V62 not run, engine lacks the record-time refusal line or cr_run_reads\n'
 fi
+# THE B5/B6 ARMS (BL-685: V64..V75) need the engine that keys a gitlink and accepts an ignored nested
+# repository, read off its named refusals. An INSTALLED engine without both is a pre-migration state
+# (PENDING, not run); in the distribution they always run, so an engine without them FAILS them by name.
+PCV_R11=0
+if { grep -qF 'B5 submodule.recurse=true makes a consumer git grep' "$EMIT" && grep -qF 'B6 the nested repository ' "$EMIT"; } \
+   || ! pcv_installed "$EMIT"; then
+  PCV_R11=1; PCV_IDS="$PCV_IDS PC-V64 PC-V65 PC-V66 PC-V67 PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75"
+else
+  printf 'PENDING: PC-V64..PC-V75 not run, engine lacks the B5 gitlink or B6 nested-repository refusals\n'
+fi
 pcv_setup
 
 # ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
@@ -4247,6 +4257,7 @@ pcv_r9kworld() {
     || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: could not commit the validator into a THEIRS"; done; return 0; }
   L_T="$tn"
   ex="$L_C/.git/info/exclude"
+  # The stand-in spells the hook prefix through a %s argument to stay outside I10's hook-driving set.
   mkdir -p "$L_C/.git/info" "$L_C/$(dirname "$sm")" \
     && printf '/core/\n' >> "$ex" \
     && printf '#!/bin/bash\n# fixture stand-in: the ownership test is the line the validator extracts\n  ($c | test("/\\\\.claude/hooks/%s-[^/]+\\\\.sh")) or\n' ai-dlc > "$L_C/$sm" \
@@ -4455,6 +4466,224 @@ pcv_v63world() {
     pcv_v PC-V63 "a TRACKED file in the report's own directory, read only by a ledger sh receipt through a glob token, records and HITS, and a change to it MISSES with the opt-out's exit $nc"
   else
     pcv_x PC-V63 "a change to a TRACKED file in the report's directory, read only through a glob receipt token, did not force a fresh render: [$(pcv_why), opt-out $nc] -- the work-tree fields exclude more than the report file"
+  fi
+  return 0
+}
+
+# ---- V64..V75: B5 GITLINKS and B6 IGNORED NESTED REPOSITORIES (BL-685), the V56 shape ----
+# Three worlds, each a fresh pcv_lat. Every arm after a world's first record opens with a HIT control
+# (pcv_kctl) and undoes its own change before the next arm: a byte image of .git/config and
+# .git/info/exclude is put back, a seeded directory is MOVED out (never deleted), and the record is
+# put back (pcv_kback). A refusal arm asserts a fresh render with the opt-out's exit 0, the record
+# BYTE-IDENTICAL (cmp -s), and the named cause on stderr. A positive arm asserts a fresh exit-0 render
+# that writes a NEW record, then a HIT on it.
+#   World A (pcv_b5aworld): an initialised gitlink vendor/sub carrying a nested gitlink inner.
+#     V64  G-record (a): records and HITS.
+#     V67  G-checkout: a commit inside the submodule, NOT staged (status v2 moves, the index does not)
+#          records and HITS; ls-files -m lists the gitlink, which er_hash_list must skip.
+#     V66  G-miss: a different submodule commit staged and committed MISSES, then re-records and HITS.
+#          NO SINGLE-SITE MUTANT KILLS V66: three fields move at once (consindex's index line, the
+#          status v2 hI field, consobjects' HEAD), so dropping any one of them still misses.
+#   World B (pcv_b5bworld): V65 G-record (b), an UNINITIALISED gitlink (an empty directory), records
+#     and HITS. No .git is on disk, so it is M-gitlink-prune's same-run control.
+#   World C (pcv_b56world): no gitlink in the index at rest.
+#     V68  G-recurse: submodule.recurse=true refuses by name.
+#     V69  G-glob: a gitlink named `v*x` refuses by name (it cannot be a find -path operand).
+#     V71  B6-root (under): an ignored nested repository at .claude/nr refuses, naming the read root.
+#     V72  B6-root (contains): an ignored nested repository at scripts/, holding the root
+#          scripts/ai-dlc, refuses, naming the read root.
+#     V73  B6-unignored: a NON-repository x/.git/o.md in an unignored directory outside every root
+#          refuses with the not-ignored cause. A non-repository, so conswork lists no `x/` and its
+#          directory refusal cannot fire in its place.
+#     V74  B6-dotgit: `.git` in an untracked .gitignore, the parent nr/ unignored and outside every
+#          root (nr/.git/o.md, a non-repository): the PATH nr/.git is ignored and its directory is
+#          not, so the not-ignored refusal names nr.
+#     V75  B6-batch: one ignored repository (ign/) and one unignored non-repository (x/) in one batch:
+#          check-ignore exits 0 (one input matched) and the refusal still names x.
+#     V70  B6-pos, LAST: two ignored nested repositories outside every root, one with a `.git`
+#          directory and one with a gitfile; with the record moved aside, records, then HITS.
+# The settings for the ignore patterns go in .git/info/exclude, whose byte image every arm restores.
+pcv_b56g() { git -c user.email=f@f -c user.name=fixture "$@"; }
+pcv_b56repo() { # pcv_b56repo <dir> -- a repository with one commit; quiet
+  { mkdir -p "$1" && pcv_b56g -C "$1" init -q && printf 'x %s\n' "$1" > "$1/f.txt" \
+      && pcv_b56g -C "$1" add f.txt && pcv_b56g -C "$1" commit -qm i; } >/dev/null 2>&1
+}
+pcv_b56cause() { grep -F -- "$PCV_R6MARK" "$PS_D/$1.err" 2>/dev/null | sed -n 1p; }
+# pcv_b56rec <id> <tag> <what> -- a fresh exit-0 render that writes a record differing from
+# krec.keep, then a HIT on it. 0 on both; otherwise the arm's FAIL and 1.
+pcv_b56rec() {
+  pcv_run "$2" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ] && ! cmp -s "$L_REC" "$PS_D/krec.keep"; }; then
+    pcv_x "$1" "$3 did not render fresh and write a new record ($(pcv_why); $(pcv_b56cause "$2"))"; return 1
+  fi
+  pcv_run "$2.h" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  pcv_is_hit "$2.h" "$L_REC" && return 0
+  pcv_x "$1" "$3 recorded but did not HIT its record ($(pcv_why); $(pcv_b56cause "$2.h"))"; return 1
+}
+# pcv_b56refuse <id> <tag> <what> <cause> -- the condition in place: a fresh exit-0 render, the
+# opt-out's exit 0, the record byte-identical, and <cause> named after PCV_R6MARK. Puts the record back.
+pcv_b56refuse() {
+  local rec=REWRITTEN
+  pcv_kstep "$2"
+  cmp -s "$L_REC" "$PS_D/krec.keep" && rec=unchanged
+  if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = unchanged ] && grep -qF -- "${PCV_R6MARK}$4" "$PS_D/$2.err"; then
+    pcv_v "$1" "$3 renders fresh with the opt-out's exit 0, leaves the record byte-identical, and names the cause: $4"
+  else
+    pcv_x "$1" "$3: [$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause "$2")] (want a fresh exit-0 render, the record untouched, and the cause '$4' named)"
+  fi
+  pcv_kback
+}
+pcv_b5aworld() {
+  local s="vendor/sub" o m
+  PCV_ENVPRE=""
+  pcv_lat b5a || { for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  pcv_b56repo "$L_C/$s" && pcv_b56repo "$L_C/$s/inner" \
+    && { pcv_b56g -C "$L_C/$s" add inner && pcv_b56g -C "$L_C/$s" commit -qm inner \
+         && pcv_b56g -C "$L_C" add "$s" && pcv_b56g -C "$L_C" commit -qm b5a; } >/dev/null 2>&1
+  case "$(git -C "$L_C" ls-files -s -- "$s" 2>/dev/null)|$(git -C "$L_C/$s" ls-files -s -- inner 2>/dev/null)" in
+    160000\ *"|"160000\ *) ;;
+    *) for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: $s is not a gitlink carrying the nested gitlink inner"; done; return 0 ;;
+  esac
+  pcv_lat_approve b5a || { for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: the gitlink world rendered no region"; done; return 0; }
+  : > "$PS_D/krec.keep"
+  pcv_b56rec PC-V64 b5a "an initialised gitlink carrying a nested submodule" \
+    && pcv_v PC-V64 "an initialised gitlink carrying a nested submodule renders fresh with exit 0, records, and the next run HITS"
+  # V67 G-checkout. V67 and V66 are gated by pcv_in so that a mutant scoped to V64 alone does not pay
+  # for arms sequenced on a record that mutant prevents.
+  if pcv_in PC-V67 && pcv_kctl PC-V67; then
+    o="$(git -C "$L_C/$s" rev-parse HEAD)"
+    { printf 'moved\n' >> "$L_C/$s/f.txt" && pcv_b56g -C "$L_C/$s" commit -qam moved; } >/dev/null 2>&1
+    if [ "$(git -C "$L_C/$s" rev-parse HEAD)" = "$o" ] || ! git -C "$L_C" diff --cached --quiet \
+       || [ "$(git -C "$L_C" ls-files -s -- "$s" | cut -d' ' -f2)" != "$o" ]; then
+      pcv_x PC-V67 "FIXTURE BROKEN: the submodule's HEAD did not move, or the move was staged"
+    elif pcv_b56rec PC-V67 b5ack "a submodule checkout differing from its staged commit"; then
+      pcv_v PC-V67 "a submodule checkout differing from its staged commit (not staged) renders fresh with exit 0, records, and the next run HITS"
+    fi
+    git -C "$L_C/$s" reset -q --hard "$o" >/dev/null 2>&1; pcv_kback
+  fi
+  # V66 G-miss.
+  if pcv_in PC-V66 && pcv_kctl PC-V66; then
+    o="$(git -C "$L_C" ls-files -s -- "$s" | cut -d' ' -f2)"
+    { printf 'staged\n' >> "$L_C/$s/f.txt" && pcv_b56g -C "$L_C/$s" commit -qam staged \
+        && pcv_b56g -C "$L_C" add "$s" && pcv_b56g -C "$L_C" commit -qm b5a-staged; } >/dev/null 2>&1
+    if [ "$(git -C "$L_C" ls-files -s -- "$s" | cut -d' ' -f2)" = "$o" ]; then
+      pcv_x PC-V66 "FIXTURE BROKEN: the staged submodule commit did not change"
+    else
+      pcv_kstep b5am; local rec=unchanged
+      cmp -s "$L_REC" "$PS_D/krec.keep" || rec=RE-RECORDED
+      if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = RE-RECORDED ]; then
+        pcv_run b5am.h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+        if pcv_is_hit b5am.h "$L_REC"; then
+          pcv_v PC-V66 "a different submodule commit staged and committed MISSES (a fresh exit-0 render), re-records, and the next run HITS"
+        else
+          pcv_x PC-V66 "a different staged submodule commit missed and re-recorded, but the next run did not HIT ($(pcv_why))"
+        fi
+      else
+        pcv_x PC-V66 "a different submodule commit staged and committed: [$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause b5am)] (want a fresh exit-0 miss that re-records)"
+      fi
+    fi
+  fi
+  return 0
+}
+pcv_b5bworld() {
+  PCV_ENVPRE=""
+  pcv_lat b5b || { pcv_x PC-V65 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  mkdir -p "$L_C/vendor/u" \
+    && { pcv_b56g -C "$L_C" update-index --add --cacheinfo "160000,$L_T,vendor/u" && pcv_b56g -C "$L_C" commit -qm b5b; } >/dev/null 2>&1
+  case "$(git -C "$L_C" ls-files -s -- vendor/u 2>/dev/null)" in
+    160000\ *) ;;
+    *) pcv_x PC-V65 "FIXTURE BROKEN: vendor/u is not a gitlink"; return 0 ;;
+  esac
+  if [ -e "$L_C/vendor/u/.git" ]; then pcv_x PC-V65 "FIXTURE BROKEN: the uninitialised gitlink has a .git on disk"; return 0; fi
+  pcv_lat_approve b5b || { pcv_x PC-V65 "FIXTURE BROKEN: the gitlink world rendered no region"; return 0; }
+  : > "$PS_D/krec.keep"
+  pcv_b56rec PC-V65 b5b "an uninitialised gitlink (an empty directory)" \
+    && pcv_v PC-V65 "an uninitialised gitlink (an empty directory, no .git) renders fresh with exit 0, records, and the next run HITS"
+  return 0
+}
+pcv_b56world() {
+  local ids="PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75" m gd ex gone
+  PCV_ENVPRE=""
+  pcv_lat b56 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"; gone="$PS_D/b56-gone"
+  mkdir -p "$gd/info" "$gone" && { [ -f "$ex" ] || : > "$ex"; } && cp "$ex" "$PS_D/b56-excl.keep" && cp "$gd/config" "$PS_D/b56-config.keep" \
+    || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: could not keep the exclude and config byte images"; done; return 0; }
+  pcv_lat_approve b56 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: the world rendered no region"; done; return 0; }
+  pcv_run b56.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    for m in $ids; do pcv_x "$m" "control: the B5/B6 world did not record before any change ($(pcv_why); $(pcv_b56cause b56.r))"; done; return 0
+  fi
+  if pcv_in PC-V68 && pcv_kctl PC-V68; then
+    pcv_b56g -C "$L_C" config submodule.recurse true
+    pcv_b56refuse PC-V68 b56rc "an effective submodule.recurse=true" "B5 submodule.recurse=true makes a consumer git grep read inside submodules"
+    cat "$PS_D/b56-config.keep" > "$gd/config"
+  fi
+  if pcv_in PC-V69 && pcv_kctl PC-V69; then
+    if pcv_b56g -C "$L_C" update-index --add --cacheinfo "160000,$L_T,v*x" >/dev/null 2>&1; then
+      pcv_b56refuse PC-V69 b56gl "a gitlink named v*x" "B5 a gitlink path carries a find glob character (*, ?, [ or a backslash), so it cannot be pruned by -path: v*x"
+    else
+      pcv_x PC-V69 "FIXTURE BROKEN: could not stage the gitlink v*x"
+    fi
+    pcv_b56g -C "$L_C" update-index --force-remove -- 'v*x' >/dev/null 2>&1
+  fi
+  if pcv_in PC-V71 && pcv_kctl PC-V71; then
+    printf '.claude/nr/\n' >> "$ex"
+    if pcv_b56repo "$L_C/.claude/nr" && git -C "$L_C" check-ignore -q -- .claude/nr/; then
+      pcv_b56refuse PC-V71 b56cl "an ignored nested repository at .claude/nr" "B6 the nested repository '.claude/nr' lies under the read root '.claude'"
+    else
+      pcv_x PC-V71 "FIXTURE BROKEN: .claude/nr is not an ignored nested repository"
+    fi
+    mv "$L_C/.claude/nr" "$gone/v71-nr"; cat "$PS_D/b56-excl.keep" > "$ex"
+  fi
+  if pcv_in PC-V72 && pcv_kctl PC-V72; then
+    printf 'scripts/\n' >> "$ex"
+    if mkdir -p "$L_C/scripts/ai-dlc" && pcv_b56g -C "$L_C/scripts" init -q >/dev/null 2>&1 && git -C "$L_C" check-ignore -q -- scripts/; then
+      pcv_b56refuse PC-V72 b56sc "an ignored nested repository at scripts/ holding scripts/ai-dlc" "B6 the nested repository 'scripts' contains the read root 'scripts/ai-dlc'"
+    else
+      pcv_x PC-V72 "FIXTURE BROKEN: scripts/ is not an ignored nested repository holding scripts/ai-dlc"
+    fi
+    mv "$L_C/scripts" "$gone/v72-scripts"; cat "$PS_D/b56-excl.keep" > "$ex"
+  fi
+  if pcv_in PC-V73 && pcv_kctl PC-V73; then
+    if mkdir -p "$L_C/x/.git" && printf 'o\n' > "$L_C/x/.git/o.md" && ! git -C "$L_C" check-ignore -q -- x/; then
+      pcv_b56refuse PC-V73 b56ui "a non-repository x/.git/o.md in an unignored directory" "B6 the nested repository 'x' is not ignored by the consumer"
+    else
+      pcv_x PC-V73 "FIXTURE BROKEN: x/.git/o.md could not be seeded, or x/ is ignored"
+    fi
+    mv "$L_C/x" "$gone/v73-x"
+  fi
+  if pcv_in PC-V74 && pcv_kctl PC-V74; then
+    if printf '.git\n' > "$L_C/.gitignore" && mkdir -p "$L_C/nr/.git" && printf 'o\n' > "$L_C/nr/.git/o.md" \
+       && git -C "$L_C" check-ignore -q -- nr/.git && ! git -C "$L_C" check-ignore -q -- nr/; then
+      pcv_b56refuse PC-V74 b56dg "'.git' in .gitignore with the parent nr/ unignored" "B6 the nested repository 'nr' is not ignored by the consumer"
+    else
+      pcv_x PC-V74 "FIXTURE BROKEN: nr/.git is not ignored, or nr/ is"
+    fi
+    mv "$L_C/nr" "$gone/v74-nr"; mv "$L_C/.gitignore" "$gone/v74-gitignore"
+  fi
+  if pcv_in PC-V75 && pcv_kctl PC-V75; then
+    printf 'ign/\n' >> "$ex"
+    if pcv_b56repo "$L_C/ign" && mkdir -p "$L_C/x/.git" && printf 'o\n' > "$L_C/x/.git/o.md" \
+       && git -C "$L_C" check-ignore -q -- ign/ && ! git -C "$L_C" check-ignore -q -- x/; then
+      pcv_b56refuse PC-V75 b56bt "one ignored repository (ign) and one unignored non-repository (x) in one batch" "B6 the nested repository 'x' is not ignored by the consumer"
+    else
+      pcv_x PC-V75 "FIXTURE BROKEN: ign/ is not ignored, or x/ is"
+    fi
+    mv "$L_C/ign" "$gone/v75-ign"; mv "$L_C/x" "$gone/v75-x"; cat "$PS_D/b56-excl.keep" > "$ex"
+  fi
+  # V70 last: its accepted repositories stay, and they would change the check-ignore batch for any arm after.
+  if pcv_in PC-V70 && pcv_kctl PC-V70; then
+    printf 'graph-node-src/\nsub2/graph-node-src/\n' >> "$ex"
+    if pcv_b56repo "$L_C/graph-node-src" && mkdir -p "$L_C/sub2" \
+       && pcv_b56g init -q --separate-git-dir "$PS_D/b56-sepgd" "$L_C/sub2/graph-node-src" >/dev/null 2>&1 \
+       && [ -d "$L_C/graph-node-src/.git" ] && [ -f "$L_C/sub2/graph-node-src/.git" ] \
+       && git -C "$L_C" check-ignore -q -- graph-node-src/ && git -C "$L_C" check-ignore -q -- sub2/graph-node-src/; then
+      mv "$L_REC" "$PS_D/b56-v70.prev"; : > "$PS_D/krec.keep"
+      pcv_b56rec PC-V70 b56ps "two ignored nested repositories outside every read root (a .git directory and a gitfile)" \
+        && pcv_v PC-V70 "two ignored nested repositories outside every read root, one with a .git directory and one with a gitfile, render fresh with exit 0, record, and the next run HITS"
+    else
+      pcv_x PC-V70 "FIXTURE BROKEN: the two ignored nested repositories (a .git directory and a gitfile) could not be seeded"
+    fi
   fi
   return 0
 }
@@ -5502,6 +5731,12 @@ pcv_suite() {
     if pcv_in PC-V59 PC-V60 PC-V61 PC-V62; then pcv_r9kworld; fi
   fi
   if pcv_in PC-V63; then pcv_v63world; fi
+  # ---- V64..V75: B5 gitlinks and B6 ignored nested repositories (BL-685) ----
+  if [ "${PCV_R11:-0}" -eq 1 ]; then
+    if pcv_in PC-V64 PC-V66 PC-V67; then pcv_b5aworld; fi
+    if pcv_in PC-V65; then pcv_b5bworld; fi
+    if pcv_in PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75; then pcv_b56world; fi
+  fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
   if [ "$PCV_R6" -eq 1 ]; then
@@ -5614,6 +5849,25 @@ pcv_failset() {
 #   M-b3       consobjects' HEAD, symbolic-ref and shallow lines removed (every layer)       -> PC-V60
 #   M-b4       the derived env-name set emptied                                             -> PC-V61
 #   M-secret   CLAUDE_CODE_ added to the derived set as a prefix, so the token is keyed     -> PC-V62
+# BL-685 B5/B6's ten, each reverting one condition of the gitlink keying or the nested-repository
+# acceptance (V66 has none: three fields move at once, see its world's header):
+#   M-gitlink-refuse  consindex's `160000 *) return 1` restored, so a gitlink fails the key -> PC-V64 PC-V65
+#   M-gitlink-prune   the gitlink -path prune dropped, so the dotgit guard finds the
+#                     submodule's .git and refuses it as an unignored nested repository   -> PC-V64
+#   M-hashlist-skip   er_hash_list's gitlink skip dropped: a checkout differing from the staged
+#                     commit hands hash-object a directory                               -> PC-V67
+#   M-recurse         the submodule.recurse=true refusal dropped                         -> PC-V68
+#   M-glob            the glob-character refusal dropped                                 -> PC-V69
+#   M-b6-ignored      the not-ignored refusal dropped. V73, V74 and V75 each assert exactly that
+#                     cause, so all three are its subject, not an entanglement   -> PC-V73 PC-V74 PC-V75
+#   M-b6-under        the at-or-under direction dropped (BOTH lines: equal, and under)    -> PC-V71
+#   M-b6-contains     the contains direction dropped                                      -> PC-V72
+#   M-b6-dotgit-path  check-ignore handed `<p>/.git` instead of `<p>/`, which `.git` in .gitignore
+#                     matches while the directory is not ignored, so V74 does not refuse; V73
+#                     still refuses but names `x/.git`, the string the refusal prints, where it
+#                     must name the work-tree directory `x` (same predicate)        -> PC-V73 PC-V74
+#   M-b6-batch-rc     every nested repository accepted when the batch's check-ignore exits 0
+#                     (any input matched)                                                 -> PC-V75
 # pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
 # that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
 pcv_ed() {
@@ -5633,6 +5887,14 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local r9sha='      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then'
   local r9hex='        er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"'
   local b2l='    [ -z "${CR_LOG:-}" ] || printf '"'"'!\tconsumer-validator\t-\n'"'"' >> "$CR_LOG"'
+  local b5rc='    true) er_refuse "B5 submodule.recurse=true makes a consumer git grep read inside submodules, whose files no field keys"; return 1 ;;'
+  local b5gl='        er_refuse "B5 a gitlink path carries a find glob character (*, ?, [ or a backslash), so it cannot be pruned by -path: $p"; return 1 ;;'
+  local b6ig="        er_refuse \"B6 the nested repository '\${p%/}' is not ignored by the consumer, so its files are untracked input every git listing skips\"; return 1 ;;"
+  local b6eq="        if [ \"\$p\" = \"\$r\" ]; then er_refuse \"B6 the nested repository '\$p' is the read root '\$r', which every git listing skips\"; return 1; fi"
+  local b6un="        case \"\$p/\" in \"\$r/\"*) er_refuse \"B6 the nested repository '\$p' lies under the read root '\$r', which every git listing skips\"; return 1 ;; esac"
+  local b6co="        case \"\$r/\" in \"\$p/\"*) er_refuse \"B6 the nested repository '\$p' contains the read root '\$r', which every git listing skips\"; return 1 ;; esac"
+  local b6pf="      printf '%s/\\0' \"\$p\" >> \"\$_er_tmp/key.nested\" || return 1"
+  local b6rc='    case "$?" in 0|1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac'
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
     M-region)  pcv_ed "$d" replace \
@@ -5657,6 +5919,18 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
                  && pcv_ed "$d" replace '  er_file_or_absent shallow "$gd/shallow" || return 1' '  :' ;;
     M-b4)      pcv_ed "$d" replace '  er_env_names > "$_er_tmp/key.envnames" || return 1' '  : > "$_er_tmp/key.envnames" || return 1' ;;
     M-secret)  pcv_ed "$d" before '  compgen -e > "$_er_tmp/key.envexp" || return 1' '  echo CLAUDE_CODE_ >> "$_er_tmp/key.envtok" || return 1' ;;
+    M-gitlink-refuse) pcv_ed "$d" before '  cat "$_er_tmp/key.r2idx" || return 1' \
+                 '  while IFS= read -r -d '"''"' e; do case "$e" in 160000\ *) return 1 ;; esac; done < "$_er_tmp/key.r2idx"' ;;
+    M-gitlink-prune) pcv_ed "$d" replace '    _er_glprune+=( -o -path "$_er_root/./$p" )' '    :' ;;
+    M-hashlist-skip) pcv_ed "$d" replace '    case "$_er_glset" in *"$_er_nl$p$_er_nl"*) continue ;; esac' '    :' ;;
+    M-recurse) pcv_ed "$d" replace "$b5rc" '    true) ;;' ;;
+    M-glob)    pcv_ed "$d" replace "$b5gl" '        : ;;' ;;
+    M-b6-ignored) pcv_ed "$d" replace "$b6ig" '        : ;;' ;;
+    M-b6-under) pcv_ed "$d" replace "$b6eq" '        :' && pcv_ed "$d" replace "$b6un" '        :' ;;
+    M-b6-contains) pcv_ed "$d" replace "$b6co" '        :' ;;
+    M-b6-dotgit-path) pcv_ed "$d" replace "$b6pf" '      printf '"'"'%s/.git\0'"'"' "$p" >> "$_er_tmp/key.nested" || return 1' ;;
+    M-b6-batch-rc) pcv_ed "$d" replace "$b6rc" \
+                 '    case "$?" in 0) : > "$_er_tmp/key.nested" ;; 1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac' ;;
     *) return 1 ;;
   esac || return 1
   bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
@@ -5668,10 +5942,17 @@ pcv_want() {
     M-b1) echo "PC-V59" ;; M-b2) echo "PC-V55" ;; M-b3) echo "PC-V60" ;; M-b4) echo "PC-V61" ;; M-secret) echo "PC-V62" ;;
     M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57 PC-V58" ;; M-sha) echo "PC-V57 PC-V58" ;; M-unarmed) echo "PC-V56" ;;
     M-hex) echo "PC-V58" ;;
+    M-gitlink-refuse) echo "PC-V64 PC-V65" ;; M-gitlink-prune) echo "PC-V64" ;; M-hashlist-skip) echo "PC-V67" ;;
+    M-recurse) echo "PC-V68" ;; M-glob) echo "PC-V69" ;; M-b6-ignored) echo "PC-V73 PC-V74 PC-V75" ;;
+    M-b6-under) echo "PC-V71" ;; M-b6-contains) echo "PC-V72" ;; M-b6-dotgit-path) echo "PC-V73 PC-V74" ;; M-b6-batch-rc) echo "PC-V75" ;;
   esac
 }
+PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
-pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; *) echo BL-679 ;; esac; }
+pcv_bl() {
+  case " $PCV_B56MUTS " in *" $1 "*) echo BL-685; return 0 ;; esac
+  case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; *) echo BL-679 ;; esac
+}
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
 # to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
 # which made this phase the suite pole (BL-699). Each mutant now runs the always-on prefix PC-V0 PC-V1
@@ -5697,6 +5978,17 @@ pcv_scope() {
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
     # BL-777: all three tool arms run for each, so any a mutant must NOT kill is its same-run control.
     M-cksum|M-base|M-sha|M-unarmed|M-hex) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V56 PC-V57 PC-V58" ;;
+    # BL-685 B5/B6: each runs its subject and a same-run control from its own world. V66 and V67 stay out
+    # of the two gitlink-record mutants' scope: they are sequenced on world A's record, which those
+    # mutants prevent, so a red there is no evidence about either arm. V70, the positive B6 arm, is the
+    # control of every B6 mutant.
+    M-gitlink-refuse|M-gitlink-prune) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V64 PC-V65" ;;
+    M-hashlist-skip) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V64 PC-V66 PC-V67" ;;
+    M-recurse|M-glob) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V68 PC-V69" ;;
+    M-b6-ignored) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V73 PC-V74 PC-V75" ;;
+    M-b6-under|M-b6-contains) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V72" ;;
+    M-b6-dotgit-path) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V73 PC-V74" ;;
+    M-b6-batch-rc) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V73 PC-V75" ;;
   esac
 }
 # A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
@@ -5719,6 +6011,8 @@ PCV_MUTS="M-region M-direxcl M-exit3"
 [ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed M-hex"
 # BL-685's mutants score only where V55 and V59..V62 run (PCV_R10).
 [ "${PCV_R10:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-b1 M-b2 M-b3 M-b4 M-secret"
+# BL-685 B5/B6's mutants score only where V64..V75 run (PCV_R11).
+[ "${PCV_R11:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS $PCV_B56MUTS"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
