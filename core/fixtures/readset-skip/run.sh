@@ -42,7 +42,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal
 # the declared set exactly, so no unit can fall out of every shard, and every declared shard must have
 # a driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
-#   a  arms ign man merge ckm1   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g
+#   a  arms ign man merge ckm1 slot   pool selection worlds, the manifest, the deriver's merge and control, checksum-key mutants a-g, the trace-window slot (slot-world.sh)
 #   b  loc hr tk dg ckm2         local map and trace report, hash rows, tool keys, committed digests, checksum-key mutants h-i
 #   c  tracer rc                 trace tree, lossy window, --tracer both and its stub worlds, --reconcile
 #   d  ckw ckm3 vs               shared verdict store (vs), checksum-key worlds (fifteen, against each hook) and checksum-key mutants j-o
@@ -50,7 +50,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # three runs. Each mutant re-drives all fifteen worlds, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
 SHARDS="a b c d"
-UNITS_a="arms ign man merge ckm1"
+UNITS_a="arms ign man merge ckm1 slot"
 UNITS_b="loc hr tk dg ckm2"
 UNITS_c="tracer rc"
 UNITS_d="ckw ckm3 vs"
@@ -129,6 +129,9 @@ done
 echo "  hook: ${HOOK#"$ROOT"/}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip.XXXXXX")" || broken "mktemp failed"
+# A PRIVATE TRACE-WINDOW SLOT for every deriver copy this fixture drives (exported after the AI_DLC_ scrub
+# above), so none of its stub worlds waits on, or holds, the box's real per-uid slot.
+export AI_DLC_READSET_SLOT="$WORK/window-slot"
 # THE LOCK PID FOR THE START-TIME WORLDS (BL-463) is a process of its own, started here, never `$$`.
 # A lock naming `$$` shares its pid AND its start time with every judge the fixture forks, so a
 # reader or helper that reads the start of `$$` instead of the lock's pid reads the right answer for
@@ -3424,7 +3427,7 @@ MUT
     mkdir -p "$PRM" || broken "mkdir failed"
     cp -R "$PR/." "$PRM/" || broken "could not copy the probe repo for the width mutant"
     cp "$DERIVER" "$PR/core/scripts/derive-fixture-readsets.sh"
-    sed 's| env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
+    sed 's| env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
     ( cd "$PR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
       || broken "could not seed the loss probe repo"
     ( cd "$PRM" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
@@ -3949,10 +3952,10 @@ d/-p'
     sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
         -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
         -e 's|sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
-        -e 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
-    sed 's|( cd "$TREE" \&\& sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
+        -e 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
+    sed 's|( cd "$TREE" \&\& sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
       "$SB/deriver.sh" > "$SB/deriver.m4.sh"
-    sed 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
+    sed 's|sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
     for _wm in m2 m4 prefix; do
       BOTH_ARMS=$((BOTH_ARMS+1))
       if cmp -s "$SB/deriver.sh" "$SB/deriver.$_wm.sh"; then
@@ -6464,6 +6467,59 @@ if [ -n "$VS_RUN" ]; then
 fi
 fi
 
+if sg slot; then
+# ------------------------------------------------------------- the trace-window SLOT ----
+# BL-584: the deriver's `--local-map`/`--in-pool` windows take a per-uid slot so no two overlap. Driven
+# WHOLE by slot-world.sh, beside this file, in a stub-stream world with no real `log stream` and no clock:
+# every property is read off an ordering record the traced fixtures write or a line the deriver must
+# print. The same driver is BL-584's receipt. Seven scenarios (see its header), then one mutant per
+# property, each a cmp -s guarded copy that must fail EXACTLY its own scenarios:
+#   noacq    the acquire call deleted               -> order, nested, stalemark, foreign, stale and beat
+#   nostale  the stale break never fires             -> stale
+#   noreent  no marker is ever honoured              -> nested
+#   anymark  any marker naming this slot is honoured -> stalemark and foreign
+#   nobeat   the heartbeat line deleted              -> beat
+#   nogate   the slot taken without --local-map      -> plain
+# noacq moves `nested` too, and is right to: with no acquire there is no holder, so the nested deriver's
+# marker names nobody and the "nested" line never prints.
+SLOT_ARMS=0
+SLOT_W="$HERE/slot-world.sh"
+if [ -z "$DERIVER" ] || [ ! -f "$SLOT_W" ]; then
+  broken "the slot unit needs the deriver and $SLOT_W"
+fi
+SLOT_T="$WORK/slot"; mkdir -p "$SLOT_T" || broken "mkdir failed"
+slot_score() { # <deriver copy> -> "<rc>|<failed scenarios, sorted, space-joined>"
+  local o r
+  o="$(TMPDIR="$SLOT_T" bash "$SLOT_W" "$1" "$HOOK" 2>/dev/null)"; r=$?
+  printf '%s|%s' "$r" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z]*\):.*/\1/p' | sort | tr '\n' ' ' | sed 's/ $//')"
+  printf '%s\n' "$o" > "$SLOT_T/last.out"
+}
+SLOT_ARMS=$((SLOT_ARMS+1))
+S0="$(slot_score "$DERIVER")"
+if [ "$S0" = "0|" ] && [ "$(grep -c '^PASS ' "$SLOT_T/last.out")" = 7 ]; then
+  ok "SLOT: all seven slot-world scenarios PASS on the shipped deriver (order, nested, stalemark, foreign, stale, beat, plain)"
+else
+  bad "SLOT: the shipped deriver did not pass all seven slot-world scenarios: '$S0' — $(grep -m1 '^FAIL' "$SLOT_T/last.out" | sed 's/^.*-- A: /A: /' | cut -c1-400)"
+fi
+slot_mut() { # <name> <sed expr> <expected failed set>
+  local m="$SLOT_T/d.$1.sh" got
+  SLOT_ARMS=$((SLOT_ARMS+1))
+  sed "$2" "$DERIVER" > "$m"
+  if cmp -s "$DERIVER" "$m"; then bad "SLOT MUTANT $1 did not apply: the edit matched nothing in the deriver"; return; fi
+  got="$(slot_score "$m")"
+  case "$got" in
+    "1|$3") ok "SLOT MUTANT $1 is KILLED, failing exactly {$3}" ;;
+    *) bad "SLOT MUTANT $1: expected '1|$3', got '$got'" ;;
+  esac
+}
+slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat foreign nested order stale stalemark'
+slot_mut nostale 's/^    if readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/    if false; then/' 'stale'
+slot_mut noreent 's/^    \*:"\$RS_SLOT")$/    __never__)/' 'nested'
+slot_mut anymark 's/^      if \[ -n "\$hp" \] \&\& \[ "\$rp" = "\$hp" \] \&\& ! readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/      if [ -n "$hp" ]; then/' 'foreign stalemark'
+slot_mut nobeat  '/slot: heartbeat, still waiting/d' 'beat'
+slot_mut nogate  '/^  \[ -n "\$LOCAL_MAP" \] || return 0$/d' 'plain'
+fi
+
 # A NO-PROGRESS NET THAT FIRED ANYWHERE IS A REFUSAL, NOT A VERDICT: the run is FIXTURE BROKEN, exit 2.
 aw_gate
 
@@ -6472,7 +6528,7 @@ aw_gate
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
 BASE_ARMS=0; sg arms && BASE_ARMS=18
-EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} ))
+EXPECTED=$(( BASE_ARMS + ${IGN_ARMS:-0} + ${NEW_ARMS:-0} + ${MERGE_ARMS:-0} + ${CONTROL_ARMS:-0} + ${TRACE_ARMS:-0} + ${BOTH_ARMS:-0} + ${LT_ARMS:-0} + ${CK_ARMS:-0} + ${TK_ARMS:-0} + ${DG_ARMS:-0} + ${RC_ARMS:-0} + ${VS_ARMS:-0} + ${SLOT_ARMS:-0} ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
