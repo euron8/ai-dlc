@@ -868,7 +868,7 @@ Do this now, in order:
    (b) Question / correction / clarification -> answer it, leave the flag in place, and wait. The operator is steering.
    (c) Handoff request -> follow the Rule 2 handoff protocol; leave the flag in place.
 
-Read-only tools (Read, Grep, Glob, Bash) are still ALLOWED -- use them to investigate the operator's question, and to clear the flag when you resume. Only pipeline-advancing calls are blocked.
+Read, Grep and Glob are read-only and still ALLOWED -- use them to investigate the operator's question. Bash is also allowed, but it is NOT read-only; use it to investigate and to clear the flag when you resume. Only pipeline-advancing calls are blocked.
 
 ${EXPLORE_TEXT}
 
