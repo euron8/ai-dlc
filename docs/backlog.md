@@ -223,6 +223,8 @@ This is the consequence of the PARTIAL note's withdrawal of item 3: no reader pi
 
 **Measured on graph (batch 241).** The shipping reader at this release ran over read-only `git archive` extracts of graph at each planning-gate tree, using graph's own installed core manifest and each tree's own sprint id. The pre-fold reader ran as the control, and both printed byte-identical output on every tree. The OPEN counts per sprint are: s315 has 4, all of them `push-candidate-ledger.md` rows at lines 1234, 1277, 1361 and 1425, each a fence reading an ai-dlc script or step file; s317 has 0; s318 has 0; s319 has 0 before the 0.793.0 pull and 1 after that pull and at its planning gate (`prd.md:1289`); s320 has 1 (`prd.md:1289`). The block set the operator saw when ruling (`prd.md:1289` at s319 and s320, 0 at s317 and s318) is unchanged. The count for s315 is 4 and not 5 because the fifth row an earlier probe counted, `push-candidate-ledger.md:1551`, is a fence that RUNS a core script (`scripts/ai-dlc/validate-h2-attestation.sh ...`): the validator refuses it as off-allowlist and reports no operand, and the reader never asks about a command name, so that count was a probe artifact. Lead ruling: a fence that runs a core script fails ALLOWLIST and is fixed by a rewrite, not a re-point, so it is not the debt this check exists for. One shape is known and has 0 instances on graph: a grep PATTERN word spelled like a core directory, for example `grep -c scripts/ai-dlc/ server/x.py`, blocks, because the validator classes a grep pattern as an operand and, under the directory ruling, a word that prefixes a core-manifest glob counts as core. Graph carries 0 such fences, and the lead ruled to accept the case rather than narrow the grammar, so a later false positive of that shape is to be recognised as this one, not re-diagnosed.
 
+**Known false negatives (batch 241, lead ruling).** The living sweep stays SILENT on these stale core-operand spellings, each with 0 instances on graph at s315-s320. (1) `git -C '' <subcmd> <core path>`: an empty -C dir drops the segment. (2) `git --work-tree <dir> ...` and `git --work-tree=<dir> ...`, plus `git -c x=y ...` and `git --git-dir=...`: the validator refuses these before printing any WORD line. (3) `--file=<core path>`: the validator classes the word `unlisted`. (4) A command chained with `&&` or `;`, for example `git -C web ls-files x.sh && grep -c qqalpha scripts/ai-dlc/x.sh`: the validator gives an ALLOWLIST FAIL with no ARGV/WORD lines, so the reader never asks it. This holds for the pre-fold reader (381896f2b) and the current one alike. Filed as BL-799. `git -C=<dir>` is not a valid git form (git exits 129, "unknown option: -C=/tmp"), so it is not a gap.
+
 verify: sh bash core/fixtures/owed-derivations/receipt-bl587.sh
 
 ## BL-616 — fixture verdicts depend on box load: `validator-fork-budget` reads FIXTURE BROKEN under the gate's pool, and a red costs a full re-push
@@ -506,5 +508,17 @@ The nine `pcv_latarm` arms in phase pcvlat (`core/fixtures/reconcile-emit-report
 - V25: the unreadable-directory refusal
 
 Owed: a decision, on its own value, on whether engine-side mutants for these arms are worth their cost. Each mutant suite re-runs the phase.
+
+verify: manual — a decision on whether to build, not a tree state.
+
+## BL-799 — the derivation validator gives a refused `&&`/`;` chain an ALLOWLIST FAIL with no per-segment ARGV/WORD lines, so check-owed-derivations.sh's living sweep cannot judge a core operand inside one
+
+**NOTE.** Measured by batch 241 r6's tip adversary, in probe worlds, at 0 instances on graph s315-s320. Filed OPEN, not built.
+
+The shape is a command chained with `&&` or `;`, for example `git -C web ls-files x.sh && grep -c qqalpha scripts/ai-dlc/x.sh`. `core/scripts/validate-artifact-derivations.sh` (`--explain-cmd`) answers it with an ALLOWLIST FAIL and prints no per-segment ARGV/WORD lines, so `check-owed-derivations.sh`'s living sweep never asks it about the core operand inside the chain. The owner is the validator, not the reader; the pre-fold reader (381896f2b) and the current one behave alike.
+
+Owed: a fix would have the validator explain each segment of a refused chain, so the reader can ask its operands.
+
+Separately, `check-owed-derivations.sh` reads a 9th field `cyc` in its pass-2 loop that no producer ever sets to 1, so its `[ "$cyc" != 1 ]` tests are vacuous; it predates batch 241 and is left untouched.
 
 verify: manual — a decision on whether to build, not a tree state.
