@@ -935,6 +935,315 @@ dv_mut remediator-only \
   "a deny keyed on the word remediator records the invented line on qa and on a party seat — cells qinv and pinv alone catch it"
 rm -f "$CONSUMER/.claude/team-roles/seatx.md"
 
+# --- THE MARK LINE: A BRIEF WHOSE `--mark` THE ENGINE WILL REFUSE IS DENIED; A RENDERED ONE IS RECORDED ---
+# dg_mark_scan is the one predicate. Each cell is `<decision>:<rows written>:<mark field>`, the
+# decision read literally (`none` when the hook printed nothing), so a crashed hook cannot pass for
+# an allowed one; `-` when no row was written. Allowed cells read `allow` because the remediator
+# dispatch carries no model param and is corrected, which is the same on every cell.
+MCELL=""; MOUT=""
+mcell() { # mcell <guard> <brief line> -> sets MCELL and MOUT
+  local d n m
+  rm -f "$LEDGER"
+  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$MOUT" 2>/dev/null)"; [ -n "$d" ] || d=none
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  if [ "$n" = 1 ]; then m="$(jq -r '.mark | tostring' "$LEDGER" 2>/dev/null)"; else m=-; fi
+  MCELL="$d:$n:$m"
+}
+ML_ROWS='/p/scripts/ai-dlc/wait-for-deliverable.sh --mark /x/dv.md deploy-validate qa deferred-ac-predicates rows=34'
+ML_CHAIN='cd /x && /p/wait-for-deliverable.sh --mark /f.md s q k rows=3'
+ML_PH='Close it with `<lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>`.'
+ML_RED='/p/wait-for-deliverable.sh --mark /f.md deploy-validate ops a2 findings=<number of RED verdicts>'
+ML_PROSE='Then run /p/wait-for-deliverable.sh --mark /f.md deploy-validate qa k findings=0. Evidence blocks come first.'
+ML_S319='When done run /g/scripts/ai-dlc/wait-for-deliverable.sh --mark /g/_bmad-output/dv-s319.md deploy-validate qa deferred-ac-predicates rows=<n>. A trailer naming the model goes last.'
+ML_NONE='Write the result to /f.md and stop.'
+ML_GOOD='/g/scripts/ai-dlc/wait-for-deliverable.sh --mark /g/_bmad-output/dv.md deploy-validate qa deferred-ac-predicates findings=0'
+mvec() {
+  local o=""
+  mcell "$1" "$ML_ROWS";  o="rows=$MCELL"
+  mcell "$1" "$ML_CHAIN"; o="$o;chain=$MCELL"
+  mcell "$1" "$ML_PH";    o="$o;ph=$MCELL"
+  mcell "$1" "$ML_RED";   o="$o;red=$MCELL"
+  mcell "$1" "$ML_PROSE"; o="$o;prose=$MCELL"
+  mcell "$1" "$ML_S319";  o="$o;s319=$MCELL"
+  mcell "$1" "$ML_NONE";  o="$o;none=$MCELL"
+  mcell "$1" "$ML_GOOD";  o="$o;good=$MCELL"
+  printf '%s' "$o"
+}
+MV_WANT='rows=deny:0:-;chain=deny:0:-;ph=allow:1:rendered;red=allow:1:rendered;prose=allow:1:rendered;s319=deny:0:-;none=allow:1:null;good=allow:1:rendered'
+MV_TIP="$(mvec "$HOOK")"
+_old_ifs="$IFS"; IFS=';'
+for _c in $MV_WANT; do
+  case ";$MV_TIP;" in
+    *";$_c;"*) ok "MARK LINE ${_c%%=*}: '${_c#*=}' (decision:rows:mark)" ;;
+    *) bad "MARK LINE ${_c%%=*}: expected '${_c#*=}', got vector '$MV_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+# The deny text is the engine refusal plus the corrected line, rendered from the offending one.
+mcell "$HOOK" "$ML_ROWS"
+_mrs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$MOUT" 2>/dev/null)"
+case "$_mrs" in
+  *"the last field must be findings=<n> (got 'rows=34')"*"/p/scripts/ai-dlc/wait-for-deliverable.sh --mark /x/dv.md deploy-validate qa deferred-ac-predicates findings=<n>"*)
+    ok "MARK LINE reason: the engine refusal naming rows=34, then the rendered line to copy" ;;
+  *) bad "MARK LINE reason lacks the refusal or the rendered line: '$(printf '%s' "$_mrs" | cut -c1-300)'" ;;
+esac
+# MUTANTS, each scored on the EXACT vector and each killed by the cell named in its label.
+ml_mut() { # ml_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  local g n vec
+  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
+  if [ "$n" != 1 ]; then bad "MARK LINE MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
+  g="$(mk_hooks_copy "ml-$1")"
+  if [ -z "$g" ]; then bad "MARK LINE MUTANT $1: could not build the hooks copy"; return; fi
+  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
+  if cmp -s "$HOOK" "$g"; then bad "MARK LINE MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
+  if ! bash -n "$g" 2>/dev/null; then bad "MARK LINE MUTANT $1 DID NOT APPLY as valid shell"; return; fi
+  vec="$(mvec "$g")"
+  [ "$vec" = "$4" ] && ok "MARK LINE MUTANT $1 killed: $5" \
+    || bad "MARK LINE MUTANT $1: vector '$vec', expected '$4' -- $5 is not what the arms see"
+}
+_mlc="$(mk_hooks_copy ml-control)"
+[ -n "$_mlc" ] && [ "$(mvec "$_mlc")" = "$MV_WANT" ] \
+  && ok "MARK LINE MUTANT CONTROL: an unmutated hooks copy scores the full eight-cell vector" \
+  || bad "MARK LINE MUTANT CONTROL is dead: an unmutated copy scored '$(mvec "$_mlc")'"
+# (m1) the cut at a period before a capital dropped: only the backtick cut remains, and the s319
+# sentence after `rows=<n>.` supplies the last field, which carries no `=`.
+ml_mut backtick-only \
+  '      if (match(t, /\. [A-Z]/) && RSTART < c) c = RSTART; if (substr(t, length(t)) == "." && length(t) < c) c = length(t)' \
+  '      c = c' \
+  'rows=deny:0:-;chain=deny:0:-;ph=allow:1:rendered;red=allow:1:rendered;prose=allow:1:null;s319=allow:1:null;none=allow:1:null;good=allow:1:rendered' \
+  "a backtick-only cut lets the s319 brief through undenied -- cell s319 catches it (and, under the field rule, cell prose loses its field)"
+# (m2) a digits-strict parse: only findings=<digits> passes, so a placeholder is denied.
+ml_mut digits-strict \
+  '      if (last ~ /^[A-Za-z_]+=/ && substr(last, 1, 9) != "findings=") {' \
+  '      if (last ~ /^[A-Za-z_]+=/ && last !~ /^findings=[0-9]+$/) {' \
+  'rows=deny:0:-;chain=deny:0:-;ph=deny:0:-;red=allow:1:rendered;prose=allow:1:rendered;s319=deny:0:-;none=allow:1:null;good=allow:1:rendered' \
+  "a digits-strict parse refuses the findings=<n> template -- cell ph alone catches it"
+# (m3) the field written on every allowed dispatch, brief or no brief.
+ml_mut always-field \
+  'SPAWN_MARK=""' \
+  'SPAWN_MARK=rendered' \
+  'rows=deny:0:-;chain=deny:0:-;ph=allow:1:rendered;red=allow:1:rendered;prose=allow:1:rendered;s319=deny:0:-;none=allow:1:rendered;good=allow:1:rendered' \
+  "a field written whatever the brief says arms --complete on a dispatch with no --mark -- cell none alone catches it"
+
+# THE FIELD RULE: a trigger alone writes no field. `rendered` is written only for a line the engine's
+# arity and last-field check would ACCEPT -- five fields or more (the file plus four) with the last
+# starting `findings=`. Each of these lines triggers the scan and is not denied, and the engine
+# refuses every one (exit 64), so a field on any of them arms --complete on a marker that never
+# lands. Cell fgood is the well-formed control in the same vector.
+MF_NOFIND='/p/wait-for-deliverable.sh --mark /f.md s q k'
+MF_ZERO='/p/wait-for-deliverable.sh --mark /f.md s q k 0'
+MF_BARE='/p/wait-for-deliverable.sh --mark /f.md'
+MF_PROSE='Do NOT run wait-for-deliverable.sh --mark yourself; the lead does.'
+MF_SHORT='/p/wait-for-deliverable.sh --mark /f.md s findings=0'
+# The reference consumer's s319 ops brief: the engine reads the last field as `findings=0)`.
+MF_PAREN='all: /g/wait-for-deliverable.sh --mark /g/dv-4b-a1.md deploy-validate ops a1 findings=0 (the last field must be findings=<n>, use findings=<number of RED probes>). If anything looks unsafe, stop.'
+# One well-formed line beside one refused line: the field is owed to neither.
+MF_MIXED="$ML_GOOD
+$MF_NOFIND"
+mfvec() {
+  local o=""
+  mcell "$1" "$MF_NOFIND"; o="nofind=$MCELL"
+  mcell "$1" "$MF_ZERO";   o="$o;zero=$MCELL"
+  mcell "$1" "$MF_BARE";   o="$o;bare=$MCELL"
+  mcell "$1" "$MF_PROSE";  o="$o;fprose=$MCELL"
+  mcell "$1" "$MF_SHORT";  o="$o;short=$MCELL"
+  mcell "$1" "$MF_PAREN";  o="$o;paren=$MCELL"
+  mcell "$1" "$MF_MIXED";  o="$o;mixed=$MCELL"
+  mcell "$1" "$ML_GOOD";   o="$o;fgood=$MCELL"
+  printf '%s' "$o"
+}
+MF_WANT='nofind=allow:1:null;zero=allow:1:null;bare=allow:1:null;fprose=allow:1:null;short=allow:1:null;paren=allow:1:null;mixed=allow:1:null;fgood=allow:1:rendered'
+MF_TIP="$(mfvec "$HOOK")"
+_old_ifs="$IFS"; IFS=';'
+for _c in $MF_WANT; do
+  case ";$MF_TIP;" in
+    *";$_c;"*) ok "MARK FIELD ${_c%%=*}: '${_c#*=}' (decision:rows:mark)" ;;
+    *) bad "MARK FIELD ${_c%%=*}: expected '${_c#*=}', got vector '$MF_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+# (m4) the old END restored: any trigger writes the field. Scored on the exact field vector; the
+# findings-less cell nofind is the first to see it (every cell but fgood flips to rendered).
+_mf_a="    END { if (!den && good > 0 && good == trig) print \"rendered\" }'"
+_mf_r="    END { if (!den && trig > 0) print \"rendered\" }'"
+_mf_n="$(grep -cxF -- "$_mf_a" "$HOOK")" || _mf_n=0
+if [ "$_mf_n" != 1 ]; then bad "MARK FIELD MUTANT trig-field anchor matched $_mf_n lines in the guard, expected exactly 1"
+else
+  _mf_g="$(mk_hooks_copy "mf-trig")"
+  if [ -z "$_mf_g" ]; then bad "MARK FIELD MUTANT trig-field: could not build the hooks copy"
+  else
+    A="$_mf_a" R="$_mf_r" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_mf_g"
+    if cmp -s "$HOOK" "$_mf_g"; then bad "MARK FIELD MUTANT trig-field DID NOT APPLY (cmp -s)"
+    elif ! bash -n "$_mf_g" 2>/dev/null; then bad "MARK FIELD MUTANT trig-field DID NOT APPLY as valid shell"
+    else
+      _mf_v="$(mfvec "$_mf_g")"
+      [ "$_mf_v" = 'nofind=allow:1:rendered;zero=allow:1:rendered;bare=allow:1:rendered;fprose=allow:1:rendered;short=allow:1:rendered;paren=allow:1:rendered;mixed=allow:1:rendered;fgood=allow:1:rendered' ] \
+        && ok "MARK FIELD MUTANT trig-field killed: a field on any trigger arms --complete on a line the engine refuses -- cell nofind catches it" \
+        || bad "MARK FIELD MUTANT trig-field: vector '$_mf_v' -- cell nofind is not what the arms see"
+    fi
+  fi
+fi
+# (m5) any-good: one well-formed line suffices, so a brief carrying a refused line beside it still
+# writes the field. Only cell mixed sees it.
+_mf_r2="    END { if (!den && good > 0) print \"rendered\" }'"
+_mf_g2="$(mk_hooks_copy "mf-anygood")"
+if [ -z "$_mf_g2" ] || [ "$_mf_n" != 1 ]; then bad "MARK FIELD MUTANT any-good: could not build the hooks copy or the anchor is not unique"
+else
+  A="$_mf_a" R="$_mf_r2" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_mf_g2"
+  if cmp -s "$HOOK" "$_mf_g2"; then bad "MARK FIELD MUTANT any-good DID NOT APPLY (cmp -s)"
+  elif ! bash -n "$_mf_g2" 2>/dev/null; then bad "MARK FIELD MUTANT any-good DID NOT APPLY as valid shell"
+  else
+    _mf_v2="$(mfvec "$_mf_g2")"
+    [ "$_mf_v2" = 'nofind=allow:1:null;zero=allow:1:null;bare=allow:1:null;fprose=allow:1:null;short=allow:1:null;paren=allow:1:null;mixed=allow:1:rendered;fgood=allow:1:rendered' ] \
+      && ok "MARK FIELD MUTANT any-good killed: one well-formed line beside a refused one arms --complete on the refused file -- cell mixed alone catches it" \
+      || bad "MARK FIELD MUTANT any-good: vector '$_mf_v2' -- cell mixed is not what the arms see"
+  fi
+fi
+
+# THE SAME LINE: every invocation on a line is scanned, not only the first. A refused invocation
+# after a good one on the same line withholds the field (or denies, for a `name=` last field), and an
+# invocation ends where the token carrying the next engine name begins, so an unfenced refused one
+# does not borrow the next one's `findings=`. THE TRAILING DOT: a teammate copies `findings=0.` and
+# the engine refuses it, so a last field made `findings=...` only by cutting a trailing period is not
+# well formed; cell nodot is the same line without the period.
+SL_GOOD='/p/wait-for-deliverable.sh --mark /f.md s q k findings=0'
+SL_GB="Run \`$SL_GOOD\`, then \`/p/wait-for-deliverable.sh --mark /f2.md s findings=0\`."
+SL_BG="Run \`/p/wait-for-deliverable.sh --mark /f2.md s findings=0\`, then \`$SL_GOOD\`."
+SL_GG="Run \`$SL_GOOD\`, then \`/p/wait-for-deliverable.sh --mark /f2.md s q k2 findings=1\`."
+SL_DENY="Run \`$SL_GOOD\`, then \`/p/wait-for-deliverable.sh --mark /f2.md s q k rows=34\`."
+SL_NOSEP="/p/wait-for-deliverable.sh --mark /f2.md s q k rows=3; $SL_GOOD"
+SL_DOT="Then run $SL_GOOD."
+SL_NODOT="Then run $SL_GOOD"
+# THE BOUND KEYS ON AN INVOCATION, not on any token naming the engine: a field that merely CONTAINS
+# the engine name stays a field the engine reads. engtok-log and engtok-prose end in such a token,
+# which the engine takes as the last field and refuses; engtok-deny is a name= last field carrying
+# the name; engtok-path is a well-formed line whose FILE carries the name.
+SL_ETLOG="Run /p/wait-for-deliverable.sh --mark a.md s1 qa none findings=0 wait-for-deliverable.sh.log"
+SL_ETPROSE="Run /p/wait-for-deliverable.sh --mark a.md s1 qa none findings=0 (wait-for-deliverable.sh refuses any other last field)"
+SL_ETDENY="Run /p/wait-for-deliverable.sh --mark a.md s1 qa 1 x=wait-for-deliverable.sh"
+SL_ETPATH="Run /p/wait-for-deliverable.sh --mark /x/wait-for-deliverable.sh.md s1 qa none findings=0"
+slvec() {
+  local o=""
+  mcell "$1" "$SL_GB";    o="samelinegb=$MCELL"
+  mcell "$1" "$SL_BG";    o="$o;samelinebg=$MCELL"
+  mcell "$1" "$SL_GG";    o="$o;samelinegg=$MCELL"
+  mcell "$1" "$SL_DENY";  o="$o;sameline-deny=$MCELL"
+  mcell "$1" "$SL_NOSEP"; o="$o;nosep=$MCELL"
+  mcell "$1" "$SL_DOT";   o="$o;dot=$MCELL"
+  mcell "$1" "$SL_NODOT"; o="$o;nodot=$MCELL"
+  mcell "$1" "$SL_ETLOG";   o="$o;engtok-log=$MCELL"
+  mcell "$1" "$SL_ETPROSE"; o="$o;engtok-prose=$MCELL"
+  mcell "$1" "$SL_ETDENY";  o="$o;engtok-deny=$MCELL"
+  mcell "$1" "$SL_ETPATH";  o="$o;engtok-path=$MCELL"
+  printf '%s' "$o"
+}
+SL_WANT='samelinegb=allow:1:null;samelinebg=allow:1:null;samelinegg=allow:1:rendered;sameline-deny=deny:0:-;nosep=deny:0:-;dot=allow:1:null;nodot=allow:1:rendered;engtok-log=allow:1:null;engtok-prose=allow:1:null;engtok-deny=deny:0:-;engtok-path=allow:1:rendered'
+SL_TIP="$(slvec "$HOOK")"
+_old_ifs="$IFS"; IFS=';'
+for _c in $SL_WANT; do
+  case ";$SL_TIP;" in
+    *";$_c;"*) ok "MARK LINE ${_c%%=*}: '${_c#*=}' (decision:rows:mark)" ;;
+    *) bad "MARK LINE ${_c%%=*}: expected '${_c#*=}', got vector '$SL_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+# The deny on the SECOND invocation renders the correction from that invocation, not the first.
+mcell "$HOOK" "$SL_DENY"
+_sls="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$MOUT" 2>/dev/null)"
+case "$_sls" in
+  *"(got 'rows=34')"*"/p/wait-for-deliverable.sh --mark /f2.md s q k findings=<n>"*)
+    ok "MARK LINE sameline-deny reason: names rows=34 and renders the second invocation's line" ;;
+  *) bad "MARK LINE sameline-deny reason does not render the second invocation: '$(printf '%s' "$_sls" | cut -c1-300)'" ;;
+esac
+sl_mut() { # sl_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  local g n vec
+  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
+  if [ "$n" != 1 ]; then bad "SAME LINE MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
+  g="$(mk_hooks_copy "sl-$1")"
+  if [ -z "$g" ]; then bad "SAME LINE MUTANT $1: could not build the hooks copy"; return; fi
+  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
+  if cmp -s "$HOOK" "$g"; then bad "SAME LINE MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
+  if ! bash -n "$g" 2>/dev/null; then bad "SAME LINE MUTANT $1 DID NOT APPLY as valid shell"; return; fi
+  vec="$(slvec "$g")"
+  [ "$vec" = "$4" ] && ok "SAME LINE MUTANT $1 killed: $5" \
+    || bad "SAME LINE MUTANT $1: vector '$vec', expected '$4' -- $5 is not what the arms see"
+}
+# (m6) first-invocation-only: nothing is left to scan after one pass.
+sl_mut first-only \
+  '      s = t' \
+  '      s = ""' \
+  'samelinegb=allow:1:rendered;samelinebg=allow:1:null;samelinegg=allow:1:rendered;sameline-deny=allow:1:rendered;nosep=deny:0:-;dot=allow:1:null;nodot=allow:1:rendered;engtok-log=allow:1:null;engtok-prose=allow:1:null;engtok-deny=deny:0:-;engtok-path=allow:1:rendered' \
+  "scanning only the first invocation on a line arms --complete past a refused second one -- cells samelinegb and sameline-deny catch it"
+# (m7) no invocation bound: the refused first invocation borrows the second one's findings=0.
+sl_mut no-bound \
+  '      q = (match(t, /wait-for-deliverable\.sh[[:space:]]--mark[[:space:]]/) ? RSTART : 0); if (q > 0) { t = substr(t, 1, q - 1); sub(/[^[:space:]]*$/, "", t) }' \
+  '      q = 0' \
+  'samelinegb=allow:1:null;samelinebg=allow:1:null;samelinegg=allow:1:rendered;sameline-deny=deny:0:-;nosep=allow:1:rendered;dot=allow:1:null;nodot=allow:1:rendered;engtok-log=allow:1:null;engtok-prose=allow:1:null;engtok-deny=deny:0:-;engtok-path=allow:1:rendered' \
+  "an unbounded invocation reads the next one's findings= as its own last field -- cell nosep alone catches it"
+# (m8) the dot-cut field re-accepted.
+sl_mut dot-accept \
+  '      if (m >= 5 && h[m] ~ /^findings=([0-9]+|<x>)$/ && !dot) good++' \
+  '      if (m >= 5 && h[m] ~ /^findings=([0-9]+|<x>)$/) good++' \
+  'samelinegb=allow:1:null;samelinebg=allow:1:null;samelinegg=allow:1:rendered;sameline-deny=deny:0:-;nosep=deny:0:-;dot=allow:1:rendered;nodot=allow:1:rendered;engtok-log=allow:1:null;engtok-prose=allow:1:null;engtok-deny=deny:0:-;engtok-path=allow:1:rendered' \
+  "a field made findings= by cutting the trailing period arms --complete on a findings=0. the engine refuses -- cell dot alone catches it"
+# (m9) the bound keyed on ANY token containing the engine name: a trailing field that names the engine
+# is stripped, so the line before it reads as well formed, a name= field naming it is stripped and
+# the deny is lost, and a file path naming it empties the invocation.
+sl_mut index-bound \
+  '      q = (match(t, /wait-for-deliverable\.sh[[:space:]]--mark[[:space:]]/) ? RSTART : 0); if (q > 0) { t = substr(t, 1, q - 1); sub(/[^[:space:]]*$/, "", t) }' \
+  '      q = index(t, W); if (q > 0) { t = substr(t, 1, q - 1); sub(/[^[:space:]]*$/, "", t) }' \
+  'samelinegb=allow:1:null;samelinebg=allow:1:null;samelinegg=allow:1:rendered;sameline-deny=deny:0:-;nosep=deny:0:-;dot=allow:1:null;nodot=allow:1:rendered;engtok-log=allow:1:rendered;engtok-prose=allow:1:rendered;engtok-deny=allow:1:null;engtok-path=allow:1:null' \
+  "a bound on any token containing the engine name arms --complete on a line the engine refuses and loses a deny -- cells engtok-log, engtok-prose, engtok-deny and engtok-path catch it"
+
+# THE SCAN FAILS OPEN. A failed dg_mark_scan is neither a deny nor a field, so a broken scan reads
+# exactly like a clean brief; this cell is the only thing that can tell the two apart. FORCED by a
+# PATH shim for `awk` -- the hook resolves awk through PATH -- that exits 2 with no output ONLY for
+# the awk program carrying the mark-scan token and execs the real awk for every other program, so
+# the scan fails the way a broken awk would while the shard parse and frontmatter reads still run.
+# The brief is the rows=34 line a working scan denies, so `allow:1:null` can only mean the scan
+# failed and the dispatch went on. Cell fo-ctl is the same brief through the same PATH with the
+# shim absent: denied. The shim token is checked to be in the hook before the cell is trusted.
+ML_SHIM="$WORK/ml-awk-shim"; mkdir -p "$ML_SHIM"
+ML_AWK="$(command -v awk)"
+printf '#!/bin/sh\ncase "$*" in *wait-for-deliverable.sh*) exit 2 ;; esac\nexec %s "$@"\n' "$ML_AWK" > "$ML_SHIM/awk"
+chmod +x "$ML_SHIM/awk"
+# The shim must be the awk a PATH lookup finds, or the fail-open cell reads a working scan's deny.
+[ "$(PATH="$ML_SHIM:$PATH" bash -c 'command -v awk')" = "$ML_SHIM/awk" ] \
+  || bad "MARK LINE fail-open FIXTURE BROKEN: the awk shim is not what PATH resolves (not executable?), so the scan cannot be forced to fail"
+fo_cell() { # fo_cell <guard> <path-prefix> -> "<decision>:<rows>:<mark>"
+  local o d n m
+  rm -f "$LEDGER"
+  o="$(dpayload remediator "$ML_ROWS" | PATH="$2$PATH" CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  if [ "$n" = 1 ]; then m="$(jq -r 'if has("mark") then .mark else "NOKEY" end' "$LEDGER" 2>/dev/null)"; else m=-; fi
+  printf '%s:%s:%s' "$d" "$n" "$m"
+}
+_fo_tok="$(grep -c 'BEGIN { W = "wait-for-deliverable.sh"' "$HOOK")" || _fo_tok=0
+[ "$_fo_tok" = 1 ] || bad "MARK LINE fail-open FIXTURE BROKEN: the shim token is on $_fo_tok lines of the guard, expected 1, so the shim would not fail the scan"
+_fo_ctl="$(fo_cell "$HOOK" "")"
+[ "$_fo_ctl" = "deny:0:-" ] && ok "MARK LINE fo-ctl: the rows=34 brief with the scan intact is denied, no row ($_fo_ctl)" \
+  || bad "MARK LINE fo-ctl: expected 'deny:0:-', got '$_fo_ctl'"
+_fo_got="$(fo_cell "$HOOK" "$ML_SHIM:")"
+[ "$_fo_got" = "allow:1:NOKEY" ] && ok "MARK LINE fail-open: awk failing inside dg_mark_scan allows the rows=34 brief and writes its row with NO mark key ($_fo_got)" \
+  || bad "MARK LINE fail-open: expected 'allow:1:NOKEY', got '$_fo_got'"
+# (m4) fail-closed: a scan failure denies. Killed by cell fail-open alone; fo-ctl does not move.
+_fo_anchor='DG_MARK_OUT="$(printf '"'"'%s\n'"'"' "$PROMPT" | dg_mark_scan 2>/dev/null || true)"'
+_fo_n="$(grep -cxF -- "$_fo_anchor" "$HOOK")" || _fo_n=0
+if [ "$_fo_n" != 1 ]; then bad "MARK LINE MUTANT fail-closed anchor matched $_fo_n lines, expected 1"
+else
+  _fo_g="$(mk_hooks_copy ml-failclosed)"
+  A="$_fo_anchor" R='DG_MARK_OUT="$(printf '"'"'%s\n'"'"' "$PROMPT" | dg_mark_scan 2>/dev/null)" || dg_deny "AI/DLC dispatch guard: the --mark scan failed."' \
+    awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_fo_g"
+  if cmp -s "$HOOK" "$_fo_g" || ! bash -n "$_fo_g" 2>/dev/null; then bad "MARK LINE MUTANT fail-closed DID NOT APPLY"
+  else
+    _fo_m="$(fo_cell "$_fo_g" "$ML_SHIM:"):$(fo_cell "$_fo_g" "")"
+    [ "$_fo_m" = "deny:0:-:deny:0:-" ] && ok "MARK LINE MUTANT fail-closed killed: a failed scan denies the dispatch -- cell fail-open alone catches it (fo-ctl unchanged)" \
+      || bad "MARK LINE MUTANT fail-closed: got '$_fo_m', expected 'deny:0:-:deny:0:-'"
+  fi
+fi
+
 # --- SPRINT STAMP: THE READER MUST NOT SPELL THE DECORATION -------------------
 # EVERY SEED HERE USED TO BE THE EMPHASISED BULLET, WHICH IS THE FORM THE READER
 # ALREADY ACCEPTED. That is seeding from the reader's accept-set: it proved the

@@ -131,7 +131,7 @@ That file is the only thing you write in the round; you edit nothing else, the s
    above it. Never write that line by hand, never with the header, never followed by more
    findings. Once it is marked, do not edit the file again; if you must, run the same `--mark`
    call again afterwards, or the lead's join reads the file as unfinished.
-   `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine.
+   `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree. Without such a path in the brief you run in the primary tree, and `scripts/ai-dlc` is the lead's engine. A worktree brief also carries `<deliverable>`, your file's absolute path inside your OWN worktree and never under its `_bmad-output/planning-artifacts/`: write the file there and pass that path as `<file>`.
 
 **Resolve a code path before you read or grep it.** The subject files cite the code paths they
 rest on; read those as cited. For any other path, list it first with `git ls-files <dir-or-glob>`

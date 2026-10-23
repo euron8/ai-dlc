@@ -6,3 +6,5 @@
 !core/skills/ai-dlc/
 core/team-roles/
 !core/hooks/ai-dlc-advisor-gate.sh
+# The --mark arm runs the engine against a scratch file.
+!core/scripts/wait-for-deliverable.sh

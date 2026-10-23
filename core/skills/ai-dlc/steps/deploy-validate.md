@@ -24,7 +24,8 @@ Then run `scripts/ai-dlc/sprint-status.sh check-stories --require-done` and
 read its exit. `0` — every story is `done`; proceed. `1` — one or more
 findings, each printed; a `NOT DONE` finding on a `review` story is a story
 past gate 3 whose closing writer never ran, so do not deploy: dispatch its
-closing writer (`implementation.md` section 3, item 4) and re-run. A `NOT DONE`
+closing writer (`implementation.md` section 3, item 4; READ AND FOLLOW
+`_gate-procedures.md`, "Bounded-join beat" for its brief and join) and re-run. A `NOT DONE`
 finding on any other status: do not deploy; follow that finding's own text.
 `3` or `4` — read them as
 Check 5 of `gate-validation.md` does; neither is a pass. The flag keys on
@@ -270,14 +271,16 @@ the gate log.
    RESOLVED, falls back the same way. Nothing other than
    such a prior entry releases the checkpoint, and the smoke verdict
    stays FAILED either way.
-3. If code issue: dispatch `dev` to fix the code and its tests; the
-   lead then re-deploys and re-runs smoke tests. Only the code edit is
+3. If code issue: dispatch `dev` to fix the code and its tests (READ AND
+   FOLLOW `_gate-procedures.md`, "Bounded-join beat" for its brief and
+   join); the lead then re-deploys and re-runs smoke tests. Only the code edit is
    delegated. The lead's own work in this loop is the dispatch, the
    commit, the re-deploy and the smoke re-run, under Rule 28 (a)
    Orchestration; a lead that edits product code here is applying a
    fix inline, which Rule 28 makes a lead-conduct finding.
 4. If deployment issue: dispatch the `ops` teammate to fix the
-   deployment, re-deploy, and re-run smoke tests.
+   deployment (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
+   for its brief and join), re-deploy, and re-run smoke tests.
 5. Repeat until all smoke tests pass.
 6. When the loop is exhausted — every diagnosis run, both routes taken,
    the test still red — the smoke verdict stays FAILED and the loop stops
@@ -385,7 +388,8 @@ If `is_ui_epic == true`:
 - Verify every new/modified UI surface renders correctly with production data
 - Compare against documented mockups (from ui-direction step)
 - For any drift: dispatch a `dev` teammate (role-bound per Rule 19) to correct
-  the UI source; the lead then redeploys and re-verifies. Redeploy and
+  the UI source (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
+  for its brief and join); the lead then redeploys and re-verifies. Redeploy and
   re-verification are deploy-gate orchestration (Rule 28a) and stay on the lead.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
@@ -634,8 +638,9 @@ keeps its own recorded `HARD_BLOCK` disposition.
 After human validates:
 
 - If **human requests fixes:** dispatch `dev` for the fixes, `code-reviewer`
-  to re-review the changed files, and `qa` to re-validate affected stories;
-  the lead then redeploys, re-validates the deploy gate, and presents the
+  to re-review the changed files, and `qa` to re-validate affected stories
+  (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat" for each brief
+  and join); the lead then redeploys, re-validates the deploy gate, and presents the
   checkpoint again. Only the code edit is delegated — the redeploy and the
   checkpoint re-presentation stay on the lead.
 

@@ -677,6 +677,17 @@ const isDenied = (b) => {
   return DENY_MARK.test(raw);
 };
 
+// A call ANY PreToolUse hook refused ran none of its parts. A pause-flag clear folded into a
+// compound Bash call is lost when another hook denies the call for its OTHER part, and the
+// harness records that refusal with this prefix. A non-zero `Exit code` result is NOT one: the
+// command ran, and an `rm -f` before a failing command still cleared the flag.
+const HOOK_DENY_MARK = /^PreToolUse:\w+ hook error:/;
+const isHookDenied = (b) => {
+  if (!b || b.is_error !== true) return false;
+  const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content || "");
+  return DENY_MARK.test(raw) || HOOK_DENY_MARK.test(raw);
+};
+
 // A sprint that HANDED OFF does not run in one transcript: a fresh CLI invocation or a
 // /resume starts a new file. An AUTO-COMPACT does not, on Claude Code -- the compaction
 // boundary record sits mid-file, with conversation on both sides of it and one unchanging
@@ -914,7 +925,7 @@ for (const f of files) {
   // A server tool cannot be backgrounded, so it carries no run_in_background input.
   const isUse = (b) => /^(server_)?tool_use$/.test(b.type || "");
   const isRes = (b) => /^([a-z_]+_)?tool_result$/.test(b.type || "");
-  const use = {}, res = {}, denied = new Set();
+  const use = {}, res = {}, denied = new Set(), hookDenied = new Set();
   for (const r of recs) {
     const c = r.message?.content;
     if (!Array.isArray(c)) continue;
@@ -925,6 +936,7 @@ for (const f of files) {
       if (isRes(b)) {
         res[b.tool_use_id] = Date.parse(r.timestamp);
         if (isDenied(b)) denied.add(b.tool_use_id);   // the hook stopped this one
+        if (isHookDenied(b)) hookDenied.add(b.tool_use_id);   // some hook stopped this one
         // ---- Check D: TaskOutput handed an agent_id ------------------------
         if (use[b.tool_use_id]?.n === "TaskOutput") {
           const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content || "");
@@ -977,9 +989,10 @@ for (const f of files) {
       const cc = rr.message?.content;
       if (!Array.isArray(cc)) continue;
       const uses = cc.filter(b => b.type === "tool_use");
-      // The sanctioned resume: an explicit rm of the pause flag.
+      // The sanctioned resume: an explicit rm of the pause flag, in a call no hook DENIED.
+      // A denied call ran none of its parts, so its rm cleared nothing.
       const cleared = uses.some(b => b.name === "Bash" &&
-        /rm\b[^\n]*pipeline-paused\.flag/.test(b.input?.command || ""));
+        /rm\b[^\n]*pipeline-paused\.flag/.test(b.input?.command || "") && !hookDenied.has(b.id));
       // A DENIED advancing call is not a steamroll -- the lead tried and the hook
       // stopped it. Counting the attempt inverts the check's meaning: it reports
       // "executed straight through it" about a call that never executed.
@@ -1095,8 +1108,11 @@ if (steam.length) {
   console.error(`      received the steer and executed straight through it.`);
   for (const v of steam.slice(0, 8)) console.error(`        [${v.tool}] "${v.msg}"`);
   if (steam.length > 8) console.error(`        ... and ${steam.length - 8} more`);
-  console.error(`      Fix: answer the operator, then release the pause flag`);
-  console.error(`      (rm -f _bmad-output/pipeline-paused.flag) before advancing.`);
+  console.error(`      Fix: answer the operator, then release the pause flag before advancing:`);
+  console.error(`      run rm -f _bmad-output/pipeline-paused.flag as its own Bash call, with nothing`);
+  console.error(`      chained, then [ ! -e _bmad-output/pipeline-paused.flag ] as a separate call that`);
+  console.error(`      must exit 0. A denied call runs none of its parts, and a clear in a denied call`);
+  console.error(`      is not counted as a clear.`);
   console.error(`      These are calls that SUCCEEDED. Attempts the ai-dlc-acknowledge.sh hook`);
   console.error(`      denied are excluded -- a blocked attempt is the hook working, not a`);
   console.error(`      steamroll. So if these are recent, the hook did NOT stop them: check it`);

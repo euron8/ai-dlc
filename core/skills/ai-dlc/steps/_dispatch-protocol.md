@@ -35,8 +35,11 @@ follow the worktree-explicit dispatch protocol:
    dispatch time. The lead MUST NOT branch dev worktrees off `main`
    unless the sprint branch has not diverged from main.
 3. The Agent call MUST set `mode: "bypassPermissions"` and include
-   the worktree absolute path in the prompt. The worktree path is the
-   ONLY absolute path the prompt may carry (see 7). The brief carries
+   the worktree absolute path in the prompt. Every absolute path the
+   prompt carries is that worktree path or a path inside it (see 7),
+   apart from the lead checkout's `scripts/ai-dlc` path, which the brief
+   carries as `<lead engine>` when the teammate runs in a worktree and
+   must run the lead's engine. The brief carries
    two standing lines, in the dispatch template like 6:
    - Every git command the dev runs is
      `git -C <worktree absolute path> <cmd>`, or the dev `cd`s into the
@@ -69,8 +72,11 @@ follow the worktree-explicit dispatch protocol:
    cost: none — an isolated alternative (`--detach`) is provided.
    Removal condition: only if worktrees under one repository stop
    sharing a single stash stack (a git invariant today).
-7. A worktree-isolated teammate's deliverable path is ALWAYS relative
-   to its OWN worktree root, never to the primary tree. The lead MUST
+7. A worktree-isolated teammate's deliverable path is ALWAYS inside
+   its OWN worktree, never in the primary tree. Its brief names it as
+   `<deliverable>`, the ABSOLUTE path inside that worktree and never under
+   its `_bmad-output/planning-artifacts/`; the beat watches that same
+   absolute path (`_gate-procedures.md`, "Bounded-join beat"). The lead MUST
    NOT ask it to write outside that worktree, and MUST NOT name a
    primary-tree path for a file the teammate is to produce. Naming two
    roots for one file in one sentence — "write to `<worktree>/…/x.md`,
@@ -120,6 +126,12 @@ background — do not retype the loop:
 
     Bash(run_in_background: true):
       scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
+
+That is the bare beat. A teammate's markdown result file takes the brief's
+closing `--mark` line and the `--complete` beat whenever its dispatch's
+spawn-ledger row carries `"mark":"rendered"`, exactly as
+`_gate-procedures.md`, "Bounded-join beat" renders both; copy them from
+there, never retype them.
 
 Then END YOUR TURN. The beat sleeps off the foreground; when it exits the
 harness re-invokes you with its result. Branch on the exit code THEN:

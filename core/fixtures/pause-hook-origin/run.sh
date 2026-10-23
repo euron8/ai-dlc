@@ -518,6 +518,104 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
   fi
 fi
 
+# --- Assertion 10: the resume CLEAR is its own call, and its absence is VERIFIED --------------
+# A denied Bash call runs none of its parts. A pause-flag rm chained into a compound call that
+# another hook refused for its OTHER part never ran, the flag stayed, and nothing told the lead
+# to check. Two emitters prescribe the resume: this hook's REASON item 3(a), and SKILL.md's
+# INITIALIZATION. They are a shell string and a markdown rule, so they stay two emitters, and
+# this arm binds them: each must carry the separate `[ ! -e ... ]` verify and the own-call
+# clause, and the two spans must be byte-identical once the hook's escaped backticks are
+# unescaped and line wraps are collapsed.
+#
+# LAYOUT. In the distribution both files sit at one revision, so a disagreement is a FAIL. On
+# a consumer mid-pull the hook lands at step 3 and SKILL.md at the reconcile merge, so a
+# disagreement there is PENDING, never FAIL.
+#
+# The span runs from the backticked rm to the reason sentence, so both steps and the clause
+# between them are inside it. Whitespace runs collapse to one space, because SKILL.md wraps.
+resume_span() { # <hook|skill> <file> -> the normalised span on stdout, empty if absent
+  LC_ALL=C awk -v kind="$1" '
+    kind == "hook"  && /\(a\) Resume intent/ { txt = $0; done = 1 }
+    kind == "skill" && /^## INITIALIZATION$/ { inside = 1; next }
+    kind == "skill" && inside && /^[[:space:]]*$/ { if (txt != "") { inside = 0; done = 1 } ; next }
+    kind == "skill" && inside && !done { txt = txt " " $0 }
+    END {
+      gsub(/\\`/, "`", txt)
+      gsub(/[[:space:]]+/, " ", txt)
+      s = index(txt, "`rm -f _bmad-output/pipeline-paused.flag`")
+      if (s == 0) exit
+      rest = substr(txt, s)
+      endm = "A denied call runs none of its parts."
+      e = index(rest, endm)
+      if (e == 0) exit
+      print substr(rest, 1, e + length(endm) - 1)
+    }' "$2"
+}
+resume_verdict() { # <scratch-dir> <hook> <skill> -> verdict
+  local d="$1" h="$2" s="$3" k f
+  for k in hook skill; do
+    case "$k" in hook) f="$h" ;; *) f="$s" ;; esac
+    [ -f "$f" ] || { printf 'MISSING:%s\n' "$k"; return; }
+    resume_span "$k" "$f" > "$d/resume.$k"
+    [ -s "$d/resume.$k" ] || { printf 'NO-SPAN:%s\n' "$k"; return; }
+    grep -qF '`[ ! -e _bmad-output/pipeline-paused.flag ]`' "$d/resume.$k" || { printf 'NO-VERIFY:%s\n' "$k"; return; }
+    grep -qF 'as its own Bash call, with nothing chained before or after it' "$d/resume.$k" || { printf 'NO-OWNCALL:%s\n' "$k"; return; }
+  done
+  cmp -s "$d/resume.hook" "$d/resume.skill" && printf 'SAME\n' || printf 'DIFFER\n'
+}
+SKILL_DIST="$HERE/../../skills/ai-dlc/SKILL.md"
+SKILL_FILE="$(pick "$SKILL_DIST" "$HERE/../../../.claude/skills/ai-dlc/SKILL.md")"
+if [ -f "$SKILL_DIST" ] && [ -f "$HERE/../../hooks/ai-dlc-acknowledge.sh" ]; then R_LAYOUT=distribution; else R_LAYOUT=consumer; fi
+if [ -z "$ACK_HOOK" ] || [ -z "$SKILL_FILE" ]; then
+  bad "FIXTURE BROKEN — cannot locate ai-dlc-acknowledge.sh and SKILL.md in either layout"
+else
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc/SKILL.md"
+  RS="$WORK/resume"; mkdir -p "$RS"
+  printf '        resume sources (%s): %s | %s\n' "$R_LAYOUT" "$ACK_HOOK" "$SKILL_FILE"
+  V10="$(resume_verdict "$RS" "$ACK_HOOK" "$SKILL_FILE")"
+  if [ "$V10" = "SAME" ]; then
+    ok "the hook and SKILL.md prescribe one byte-identical two-step resume: the rm alone, then a separate [ ! -e ] verify"
+  elif [ "$R_LAYOUT" = "consumer" ]; then
+    printf '  PENDING  the hook and SKILL.md resume spans disagree (%s) on a consumer -- mid-pull, the hook lands before the rulebook merge\n' "$V10"
+  else
+    bad "THE RESUME CLEAR IS NOT BOUND ($V10): both emitters must carry the rm as its own call and the separate [ ! -e ] verify, byte-identically"
+  fi
+
+  # 10b. MUTANTS, on copies; each guarded by cmp -s. An unmutated control from the same
+  # directory reads SAME first, so a kill below is the edit and not a copy that cannot run.
+  if [ "$V10" = "SAME" ]; then
+    RM10="$WORK/resume-mutants"; mkdir -p "$RM10"
+    cp "$ACK_HOOK" "$RM10/ack.sh"; cp "$SKILL_FILE" "$RM10/SKILL.md"
+    VC10="$(resume_verdict "$RM10" "$RM10/ack.sh" "$RM10/SKILL.md")"
+    [ "$VC10" = "SAME" ] && ok "resume mutant control: unmutated copies under $RM10 read SAME" \
+      || bad "RESUME MUTANT HARNESS BROKEN — unmutated copies read $VC10"
+    # The verify dropped from the hook: the regression this arm exists for.
+    sed 's/then run \\`\[ ! -e _bmad-output\/pipeline-paused\.flag \]\\` as a separate call that must exit 0 before anything advances; on a non-zero exit, repeat the rm alone\. //' \
+      "$RM10/ack.sh" > "$RM10/ack.noverify.sh"
+    if cmp -s "$RM10/ack.sh" "$RM10/ack.noverify.sh"; then
+      bad "FIXTURE STALE: the drop-the-verify mutation matched nothing in the hook"
+    else
+      printf '        mutant 10b edits: %s\n' "$RM10/ack.noverify.sh"
+      VM10="$(resume_verdict "$RM10" "$RM10/ack.noverify.sh" "$RM10/SKILL.md")"
+      [ "$VM10" = "NO-VERIFY:hook" ] && ok "mutant 10b: the hook without its [ ! -e ] verify -> $VM10 (assertion 10 can fire)" \
+        || bad "MUTANT 10b DID NOT FAIL AS EXPECTED — the hook without its verify read $VM10"
+    fi
+    # Near-miss: verify and own-call clause both present, one word of the pair changed.
+    sed 's/on a non-zero exit, repeat the rm alone\. A denied call/on a non-zero exit, repeat the rm. A denied call/' \
+      "$RM10/ack.sh" > "$RM10/ack.reworded.sh"
+    if cmp -s "$RM10/ack.sh" "$RM10/ack.reworded.sh"; then
+      bad "FIXTURE STALE: the near-miss rewording matched nothing in the hook"
+    else
+      printf '        mutant 10c edits: %s\n' "$RM10/ack.reworded.sh"
+      VN10="$(resume_verdict "$RM10" "$RM10/ack.reworded.sh" "$RM10/SKILL.md")"
+      [ "$VN10" = "DIFFER" ] && ok "mutant 10c: verify present, pair reworded in the hook -> DIFFER (the byte-compare can fire)" \
+        || bad "MUTANT 10c DID NOT FAIL AS EXPECTED — a reworded pair with its verify read $VN10"
+    fi
+  else
+    printf '        resume battery: STOOD DOWN — assertion 10 already reported %s\n' "$V10"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "pause-hook-origin: PASS"; exit 0; fi
 echo "pause-hook-origin: $fails assertion(s) FAILED" >&2

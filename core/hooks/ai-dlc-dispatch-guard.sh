@@ -127,8 +127,9 @@
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only. The MODEL/DEFINITION path only ever ADDS or CORRECTS --
-#   it never denies. Three separate arms below DO deny, and only those three: the two
-#   deny arms here and THE SHARD DENY under THE SHARD LINE.
+#   it never denies. Four separate arms below DO deny, and only those four: the two
+#   deny arms here, THE SHARD DENY under THE SHARD LINE, and THE MARK LINE (a brief whose
+#   `wait-for-deliverable.sh --mark` line the engine would refuse; see `dg_mark_scan`).
 #
 #   THE TWO DENY ARMS. Each emits `permissionDecision: "deny"` with a reason naming the
 #   remedy, and NEVER `updatedInput`: a denied call is not corrected, it is refused. Both
@@ -1155,6 +1156,96 @@ if [ "${SPAWN_SHARD:-}" = invalid-exception ]; then
   esac
 fi
 
+# THE MARK LINE. A seat brief tells the teammate to close its deliverable with
+#   <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>
+# and the engine refuses any other last field ("the last field must be findings=<n>"), AFTER the
+# teammate has done the work, so the lead's `--complete` beat then waits on a marker that never
+# lands. Measured on the reference consumer: the dispatch prompts and the brief lines invoking
+# `--mark` were scanned, and this predicate denies only the s319 deploy-validate briefs ending
+# `rows=<n>`, which the QA teammate obeyed and the engine refused. ONE function, the only copy:
+# the deny below and the `mark` ledger field both read its output, and the receipt drives it.
+#
+# THE PREDICATE, per INVOCATION: `wait-for-deliverable.sh` followed by whitespace, `--mark`,
+# whitespace (so `--mark-repair` is not one). Every such invocation on a line is scanned, not only
+# the first, and an invocation's text ends where the token carrying the next INVOCATION (engine name
+# followed by `--mark`) begins, so a refused invocation anywhere on a line is seen, and a token that
+# merely names the engine (`wait-for-deliverable.sh.log`) stays a field the engine reads. The text after `--mark` is cut at the first
+# backtick, at a period followed by a space and an uppercase letter, or at a trailing period,
+# because a brief sentence continues after the invocation. The cut text is split on blanks; with
+# at least two fields (the file and one more), a LAST field shaped `name=...` that is not
+# `findings=...` is a line the engine will refuse, and the dispatch is denied. A placeholder
+# (`findings=<n>`, `findings=<number of RED verdicts>`) and prose (`... findings=0. Evidence`)
+# pass. THE FIELD RULE: a line is WELL FORMED only when the engine's own arity and last-field
+# check would ACCEPT it once its placeholders are filled -- at least five fields (the file plus
+# <step> <role> <shard> and the last), counted after each `<...>` placeholder is read as one
+# field, with the last EXACTLY `findings=<digits>` or `findings=<placeholder>`. So a template
+# (`findings=<n>`, `findings=<number of RED verdicts>`) is well formed, and none of these is: a
+# findings-less line, a bare `--mark <file>`, an arity-short `--mark <file> <step> findings=0`,
+# prose naming the command (`... --mark yourself; the lead does.`), or `findings=0 (the last
+# field must be ...)`, whose last field the engine reads as `findings=0)`. Nor is a line whose last
+# field became `findings=...` only because a trailing period was cut: a teammate copies the period
+# and the engine refuses `findings=0.`. `rendered` is printed only when EVERY triggering invocation
+# is well formed, because a lead arming `--complete` on a brief with one refused invocation waits
+# for a marker the engine never writes. Measured on the reference consumer's brief lines and
+# invocations (some lines carry two), each driven through the engine as written, trailing period
+# included, with its placeholders filled: the well-formed invocations seal (exit 0) and every
+# other one is refused (exit 64). KNOWN NON-COVERAGE: a line that is not well formed is not DENIED either
+# (the deny keys only on a `name=` last field that is not `findings=`); it only withholds the
+# field. Prints nothing when no field is owed and none is denied, `rendered` as above, else four
+# lines: `deny`, the offending field, the corrected line rendered from the offending one, and the
+# offending line (first 400 bytes).
+# FAIL-OPEN: an awk failure prints nothing, which is neither a deny nor a ledger field.
+dg_mark_scan() {
+  LC_ALL=C awk '
+    BEGIN { W = "wait-for-deliverable.sh"; trig = 0; good = 0; den = 0 }
+    den { next }
+    {
+      line = $0; s = line
+      # One pass per INVOCATION: s is the text not yet scanned. The body below keeps the
+      # indentation it had as a per-line rule, so its lines stay byte-identical.
+      while (!den) {
+      ps = s
+      i = index(s, W)
+      if (i == 0) break
+      rest = substr(s, i + length(W))
+      if (!match(rest, /[[:space:]]--mark[[:space:]]/)) break
+      trig++
+      t = substr(rest, RSTART + 7)
+      s = t
+      # An invocation ends where the token carrying the next engine name begins.
+      q = (match(t, /wait-for-deliverable\.sh[[:space:]]--mark[[:space:]]/) ? RSTART : 0); if (q > 0) { t = substr(t, 1, q - 1); sub(/[^[:space:]]*$/, "", t) }
+      L = length(t)
+      c = length(t) + 1
+      p = index(t, "`"); if (p > 0 && p < c) c = p
+      if (match(t, /\. [A-Z]/) && RSTART < c) c = RSTART; if (substr(t, length(t)) == "." && length(t) < c) c = length(t)
+      dot = (c == L && substr(t, L, 1) == ".")
+      t = substr(t, 1, c - 1)
+      sub(/^[[:space:]]+/, "", t); sub(/[[:space:]]+$/, "", t)
+      n = (t == "") ? 0 : split(t, f, /[[:space:]]+/)
+      if (n < 2) continue
+      last = f[n]
+      if (last ~ /^[A-Za-z_]+=/ && substr(last, 1, 9) != "findings=") {
+        den = 1
+        eng = substr(ps, 1, i - 1 + length(W)); sub(/^.*[[:space:]]/, "", eng); sub(/^[`"(]+/, "", eng)
+        r = eng " --mark"
+        for (k = 1; k < n; k++) r = r " " f[k]
+        print "deny"; print last; print r " findings=<n>"; print substr(line, 1, 400)
+      }
+      g = t; gsub(/<[^>]*>/, "<x>", g)
+      m = split(g, h, /[[:space:]]+/)
+      if (m >= 5 && h[m] ~ /^findings=([0-9]+|<x>)$/ && !dot) good++
+      }
+    }
+    END { if (!den && good > 0 && good == trig) print "rendered" }'
+}
+SPAWN_MARK=""
+DG_MARK_OUT="$(printf '%s\n' "$PROMPT" | dg_mark_scan 2>/dev/null || true)"
+case "$(printf '%s\n' "$DG_MARK_OUT" | sed -n 1p)" in
+  deny)
+    dg_deny "AI/DLC dispatch guard: refused a dispatch whose brief tells the teammate to run a \`--mark\` that wait-for-deliverable.sh will refuse after the work is done: the last field must be findings=<n> (got '$(printf '%s\n' "$DG_MARK_OUT" | sed -n 2p)'). The line: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 4p) -- Re-dispatch with the line rendered as: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 3p) -- the grammar is <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>, with <n> the number of findings in the file (0 when it carries none). Any other count goes in the deliverable, not on the marker line." ;;
+  rendered) SPAWN_MARK=rendered ;;
+esac
+
 mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
 jq -nc \
    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \
@@ -1172,6 +1263,7 @@ jq -nc \
    --arg shard "${SPAWN_SHARD:-}" \
    --arg shardraw "${SPAWN_SHARD_RAW:-}" \
    --arg parent "${DG_AGENT_ID:-}" \
+   --arg mark "${SPAWN_MARK:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -1216,7 +1308,12 @@ jq -nc \
    }
    # The lead text of an invented exception, written ONLY beside that value, so its presence
    # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.
-   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
+   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end
+   # `mark: "rendered"` ONLY when the brief carries a `--mark` line dg_mark_scan triggered on
+   # and did not deny: the lead arms a `--complete` beat only for a row that carries it, and a
+   # row without the KEY gets a bare beat. Derived from the brief bytes, never claimed by a hand.
+   # NO APOSTROPHE HERE either.
+   | if $mark != "" then . + {mark: $mark} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
 # A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
 # --- end SPAWN LEDGER ---------------------------------------------------------
 

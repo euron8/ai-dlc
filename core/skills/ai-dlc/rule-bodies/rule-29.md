@@ -91,7 +91,9 @@ file write (Rule 20, "File-write deliverable"), so the file IS the handle, waite
 on in beats:
 
 **Do not retype the loop. Call the script -- and pass the WHOLE WAVE to ONE call,
-`run_in_background: true`:**
+`run_in_background: true`:** This is the bare beat. A teammate's markdown result file takes
+the `--complete` beat when its dispatch's spawn-ledger row carries `"mark":"rendered"`, and its
+brief closes with the `--mark` line; `steps/_gate-procedures.md`, "Bounded-join beat" renders both.
 
     Bash(run_in_background: true):
       scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
@@ -147,7 +149,8 @@ It enforces both bounds so you do not have to hold them:
   not absent: read it first. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.
-- **An exhausted clock is not evidence of death.** Pass `--progress-path <the
+- **An exhausted clock is not evidence of death.** On a BARE beat only (the script
+  refuses `--progress-path` beside `--complete`), pass `--progress-path <the
   teammate's worktree>` and a beat that would declare non-delivery instead
   EXTENDS the sequence by one beat while files under that path keep changing,
   printing `PROGRESS`. Grants are capped at `max_wait_beats` too, so the wait
@@ -159,8 +162,8 @@ It enforces both bounds so you do not have to hold them:
 gags the operator (Check A); and (ii) a hand-typed wait with no sequence bound,
 which advances nothing forever (Check C). The script can commit neither -- the
 beat is clamped inside the quantum, and beats are counted in a sidecar so
-exhaustion declares Rule 20 non-delivery. `--progress-path` extends that
-sequence on observed work, and its grants are counted against the same bound, so
+exhaustion declares Rule 20 non-delivery. `--progress-path`, on a bare beat
+(never beside `--complete`), extends that sequence on observed work, and its grants are counted against the same bound, so
 the wait stays finite and this sentence stays true. False-positive cost: a
 deliverable landing in the same second the sequence exhausts is re-dispatched
 once; `--reset` re-arms it, and `--progress-path` removes most of the reason to
@@ -187,8 +190,11 @@ frontmatter `name:` is Explore under `.claude/agents/` or
 `$HOME/.claude/agents/`. Explore has no Agent,
 Edit, Write or NotebookEdit, so it adds nothing the lead's allowed Bash
 lacks; it is not read-only. `ops` stays denied: it writes a repair record. Read
-the message, respond in text, then classify: resume intent -> `rm -f
-_bmad-output/pipeline-paused.flag` and re-read the step file (Rule 22);
+the message, respond in text, then classify: resume intent -> run
+`rm -f _bmad-output/pipeline-paused.flag` as its own Bash call, with nothing
+chained before or after it, then run `[ ! -e _bmad-output/pipeline-paused.flag ]`
+as a separate call that must exit 0 before anything advances (a denied call
+runs none of its parts), and re-read the step file (Rule 22);
 question or correction -> answer it and leave the flag set; the operator is
 steering. Rule 3 does not override this. Rule 3 forbids stalling when no one
 is waiting on you. Here a human is.

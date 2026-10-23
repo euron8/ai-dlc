@@ -112,60 +112,61 @@ runs at the next gate.
 
 ## Bounded-join beat (referenced by step files)
 
-When a step file says "join the deliverable", execute this. It is Rule 29's
-bounded file-wait beat, and it is the ONLY sanctioned way to wait for a teammate.
+When a step file says "join the deliverable", execute this. It is Rule 29's bounded file-wait beat, and it is the ONLY sanctioned way to wait for a teammate.
 
-**The handle.** An `Agent` spawn returns an `agent_id`. `TaskOutput` joins a
-`task_id`, which only `TaskCreate` produces — **`TaskOutput` cannot join an `Agent`**,
-and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by file
-(Rule 20): **the deliverable file IS the handle.**
+**The handle.** An `Agent` spawn returns an `agent_id`. `TaskOutput` joins a `task_id`, which only `TaskCreate`
+produces — **`TaskOutput` cannot join an `Agent`**, and a `Skill` spawn returns no handle at all. Every ai-dlc
+teammate delivers by file (Rule 20): **the deliverable file IS the handle.**
 
 **The call.** One `Bash` call, `run_in_background: true`, every path in the wave:
 
     scripts/ai-dlc/wait-for-deliverable.sh [--since <epoch|ISO8601>] [--dispatch <agentId> ...] <path> [<path> ...]
 
 **`run_in_background: true` is part of the call, not a preference.** A foreground
-beat is a dead beat: its exit trap clears the in-flight marker before your turn
-ends, so the join you believe is armed is not, and the turn-end hook reports no
+beat is a dead beat: its exit trap clears the in-flight marker before your turn ends, so the join you believe is armed is not, and the turn-end hook reports no
 live wait over a teammate that has not delivered.
 
-- `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
-  beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
-- `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat
-  reports `absent`, unless the beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which
-  case read that agent's transcript first, as the block says. Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is
-  not `seat-complete:`, or its `sha=` no longer matches) and `UNSETTLED <path>` (marked with no
-  `sha=`, still changing) are NOT absent, on a
-  waiting beat or an exhausted one: read the file before deciding, never re-dispatch over it
-  unread — that discards the seat's findings.
+**A teammate's markdown result file is closed by `--mark` and joined `--complete`.** Every brief naming one as its
+deliverable ends with ONE line, rendered here and copied, never retyped:
+`<lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>`. `<lead engine>` is the
+lead checkout's `scripts/ai-dlc` path the brief carries for a worktree-isolated teammate, else `scripts/ai-dlc`. That
+brief also carries `<deliverable>`, the absolute path of the file inside the teammate's OWN worktree and never under
+its `_bmad-output/planning-artifacts/`; `<file>` is that path, and the beat watches it. `<shard>` is `none` for a
+non-shard dispatch. A non-review file passes `findings=0` with `<role>` its role (`dev`, `ops`, `qa`): only the shard
+merges check `findings=` against parsed findings, and `join-remediator-shards.sh` and `content-seal.sh` read term 3
+as a role. Out of scope: JSON and JSONL (the adjudicator's `.verdict.json`, `gate-adjudication/*.part-*.jsonl`),
+analyst artifacts, and repair records — the remediator's, which keep `--complete-repair`, and the ops repair record.
+
+**The join keys on the dispatch, not on the brief you meant to send.** Read the dispatch's spawn-ledger row by the
+Agent result's `agentId`: `jq -r --arg t "$(jq -r .toolUseId ~/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID"/subagents/agent-<agentId>.meta.json)" 'select(.tool_use_id == $t) | .mark // "bare"' "${AI_DLC_STATE_DIR:-_bmad-output}/spawn-ledger.jsonl"`
+(a named `<name>@<team>` teammate: select on `.name == "<name>"`). Any output but `rendered`, empty too, is `bare`. The
+guard writes `"mark":"rendered"` only when every `--mark` line in the brief is well-formed. `rendered`: one call,
+`scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> <path>`; `bare`: the plain call above. The row decides
+only a non-shard teammate's result file: seat, shard, cross and repair-part files keep `--complete` (`--complete-repair` where that is their form), as do epic part files, regardless of the row.
+
+- `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines, beat again over the `WAITING <path>`
+  ones. Exit 0 alone does not mean all landed. **Delivered means non-empty AND written since the join armed**, not
+  merely present: a path reused across sprints otherwise hands back the PREVIOUS sprint's file in under a second.
+- `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat reports `absent`, unless the beat
+  prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which case read that agent's transcript first, as the block says.
+  Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is not `seat-complete:`, or its `sha=` no longer
+  matches) and `UNSETTLED <path>` (marked with no `sha=`, still changing) are NOT absent, on a waiting beat or an
+  exhausted one: read the file before deciding, never re-dispatch over it unread — that discards the teammate's findings.
+- **A waiting beat exits 0 on purpose.** A nonzero exit from a backgrounded command reaches you as `status: failed`,
+  a false failure on every healthy join that buries the one exit code needing a decision. Nonzero means non-delivery
+  (1) or a refused call that armed nothing (64).
 
 **A missing completion report is not non-delivery.** When a teammate's completion report is missing from your context, which happens when the opt-in wake hook suppressed its hand-back, read the deliverable and `_bmad-output/.subagent-final/<agent_id>.txt` before treating it as non-delivery or re-dispatching.
 
-**A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
-nonzero exit from a backgrounded command is reported to you as `status: failed` —
-which would announce a failure every couple of minutes on every healthy join, and
-bury the one exit code that does need a decision. Nonzero means non-delivery (1) or a
-refused call that armed nothing (64).
-
-**Delivered means non-empty AND written since the join armed** — not merely present.
-A deliverable path reused across sprints otherwise reports the PREVIOUS sprint's file
-as delivered in under a second, and that is consumed as this sprint's input with
-nothing downstream to catch it.
-
-**`--since` is optional and only ever needed when the teammate may have delivered
-BEFORE you armed the join** — normally only when resuming a join after a compaction.
-Pass the `dispatched-at` value from the row (defined above), and with it `--dispatch <agentId>`, the `agentId` (or
-a named teammate's `agent_id`) the Agent result returned: the beat reads the dispatch's time from the spawn ledger
-and refuses a `--since` later than it, which a hand-stamped row can be. It can only move the
-threshold earlier; a stamp later than now is clamped, but a stamp after the dispatch is not: pass `--dispatch`.
-
-**Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call.
-
-**Never hand-roll the wait.** `until [ -s <path> ]; do sleep 15; done`,
-`while [ ! -s <path> ]; ...`, and any bare `sleep` on a deliverable are **Rule 29
-Check A violations**; gate Check 25 counts them. Do not poll a subagent's raw output
-file under `/private/tmp/.../tasks/<agent-id>` — the deliverable path in the
-snapshot's In-Flight Teammates row is the handle.
+**`--since` is optional and only ever needed when the teammate may have delivered BEFORE you armed the join** —
+normally when resuming a join after a compaction. Pass the row's `dispatched-at` value (defined above) with
+`--dispatch <agentId>`, the `agentId` (or a named teammate's `agent_id`) the Agent result returned: the beat reads the
+dispatch's time from the spawn ledger and refuses a `--since` later than it, which a hand-stamped row can be. It only
+moves the threshold earlier; a stamp later than now is clamped, a stamp after the dispatch is not: pass `--dispatch`.
+**Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call. **Never hand-roll the wait.**
+`until [ -s <path> ]; do sleep 15; done`, `while [ ! -s <path> ]; ...`, and any bare `sleep` on a deliverable are
+**Rule 29 Check A violations**; gate Check 25 counts them. Do not poll a subagent's raw output file under
+`/private/tmp/.../tasks/<agent-id>` — the deliverable path in the snapshot's In-Flight Teammates row is the handle.
 
 ## Gate-adjudication dispatch (referenced by the gate)
 
@@ -303,7 +304,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `scripts/ai-dlc/merge-review-shards.sh <shard dir> --gate <gate> --check-shard <shard file>`
    until SHARD-OK; `--mark` runs the same check and refuses a shard that fails it. After a
    refused merge the lead re-dispatches each seat that every REFUSED line's `[owner: <key>]` names with
-   every line naming it verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand. A seat dispatched worktree-isolated (a dev) carries `<lead engine>`, the absolute path of the LEAD checkout's `scripts/ai-dlc`, in its brief and runs `--mark` from it, never from its worktree; a seat that runs in the primary tree (the adversary never runs worktree-isolated) uses `scripts/ai-dlc` there, which is the lead's engine.
+   every line naming it verbatim, and never edits or re-marks a reviewer's shard. The marker is never written with the header, nor by hand. A seat dispatched worktree-isolated (a dev) carries `<lead engine>`, the absolute path of the LEAD checkout's `scripts/ai-dlc`, in its brief and runs `--mark` from it, never from its worktree, and its brief also carries `<deliverable>`, the seat file's absolute path inside its OWN worktree and never under its `_bmad-output/planning-artifacts/`, which is the `<file>` it marks and the path the beat watches; a seat that runs in the primary tree (the adversary never runs worktree-isolated) uses `scripts/ai-dlc` there, which is the lead's engine.
    Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
@@ -1448,7 +1449,9 @@ carry the no-human-present additions:
    a deliverable path: one call per kind of deliverable, each
    `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
    [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
-   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, and
+   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, epic part files and
+   for a teammate's markdown result file whose dispatch's spawn-ledger row carries
+   `"mark":"rendered"` (the scope "Bounded-join beat" states), and
    `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
    serial-remediator row. The flag is per call and a call mixing the two flags
    is refused (exit 64), so a mixed set is up to three calls and a set of one

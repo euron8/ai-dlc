@@ -2,6 +2,8 @@
 # pause is also driven), plus what the driven pause hook loads fail-open beside itself: the
 # provenance library and the pause-routing schema. A fail-open input is REQUIRED too, because
 # dropping it leaves the verdict unchanged; its sentinel in run.sh is presence-guarded.
+# SKILL.md is read by assertion 10, which binds its INITIALIZATION resume pair to the
+# acknowledge hook's.
 !core/hooks/ai-dlc-pause.sh
 !core/hooks/ai-dlc-continue.sh
 !core/hooks/ai-dlc-acknowledge.sh
@@ -9,3 +11,4 @@
 !core/hooks/ai-dlc-answer-capture.sh
 !core/hooks/ai-dlc-context-provenance.sh
 !core/schemas/pause-routing.json
+!core/skills/ai-dlc/SKILL.md
