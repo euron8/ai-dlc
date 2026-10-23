@@ -14,7 +14,8 @@
 #   subject:        armed, cksum absent  -> exit 0, the record untouched, and stderr carries the engine's
 #                   refusal prefix followed by at least one character. The WORDS of the cause are not
 #                   read, so any correct fix closes this.
-#   unarmed:        stdout, stderr and exit with and without cksum are byte-identical.
+#   unarmed:        stdout, stderr and exit with and without cksum are byte-identical, and the armed
+#                   cksum-less stdout is byte-identical to the unarmed cksum-less stdout.
 # Exit 0 = the defect is fixed. Exit 1 = the armed cksum-less run named no cause, broke the render or
 # touched the record, or the unarmed runs differ. Exit 2 = the world could not be built or the
 # control did not hold (the receipt cannot discriminate). Exit 9 = the subject cannot be found.
@@ -22,6 +23,7 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset EMIT_REPORT_VERIFY_CACHE
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 R="$(cd "$(dirname "$0")/../../.." && pwd)"
 REC="${1:-}"
 if [ -z "$REC" ]; then
@@ -70,7 +72,7 @@ printf '{\n  "rule": "original"\n}\n' > "$C/.claude/schemas/thing.json"
 printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"
 { git -C "$C" init -q && git -C "$C" add -A \
   && git -C "$C" -c user.email=r@r -c user.name=receipt commit -q -m consumer; } >/dev/null 2>&1 || exit 2
-[ -e "$C/_bmad-output/ai-dlc-update/layer-adjudication-register.md" ] && exit 2
+[ -e "$C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl" ] && exit 2
 RPT="$C/_bmad-output/ai-dlc-update/reconcile-report.md"
 RECORD="$(git -C "$C" rev-parse --absolute-git-dir)/ai-dlc-verify-pass" || exit 2
 { printf '# report\n\n'; "$BASH_BIN" "$REC/emit-report.sh" "$D" "$B" "$C" "$T" 2>/dev/null; } > "$RPT"
@@ -111,4 +113,7 @@ run u.ck "$WITHCK"; run u.nock "$NOCK"
 for _x in out err rc; do
   cmp -s "$W/u.ck.$_x" "$W/u.nock.$_x" || { echo "cksum receipt: the UNARMED run's $_x differs with cksum absent" >&2; exit 1; }
 done
+# the armed cksum-less render is the unarmed one: the refusal lives on stderr only
+cmp -s "$W/sub.out" "$W/u.nock.out" \
+  || { echo "cksum receipt: the armed cksum-less stdout differs from the unarmed one" >&2; exit 1; }
 echo "cksum receipt: PASS"
