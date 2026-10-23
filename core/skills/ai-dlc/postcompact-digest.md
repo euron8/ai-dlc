@@ -311,8 +311,14 @@ blocks, delays or fails a step. The touchpoints:
 - **P -- a validation-cycle teammate is slow.** On the beat whose `WAITING` line reports
   `beat 2/` for a validation-cycle deliverable, re-arm the next beat (`run_in_background:
   true`) FIRST, then call the advisor in the same turn. Once per pass, never once per beat.
-- **I -- before an irreversible step.** Before a push, a merge or a deploy. Call the advisor
-  in a message of its own, read its answer, then issue the push or merge.
+- **I -- before an irreversible step.** Before a push, a merge or a deploy, call the advisor
+  in a message of its own and read its answer, unless an advisor attempt already falls inside
+  the window of `ai-dlc-advisor-gate.sh` (`ADVISOR_GATE_WINDOW`, default 10, counted in
+  assistant messages with the current one as the first). One consult covers every push, merge
+  and deploy inside that window, the deploy included though the hook does not gate it, unless
+  its answer objected or left an objection open, or what ships changed since (a commit merged
+  that the consult did not see, a red smoke). With none inside the window a consult is owed, which is stricter than
+  the hook's per-kind test. Then issue the push, merge or deploy.
 
 ## INITIALIZATION
 Clear the pipeline pause flag before any other action. The

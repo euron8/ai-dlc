@@ -112,6 +112,11 @@
 #     lead is the bold opening of the paragraph under them. route.md Step 6's **Option labels carry
 #     no recommendation.** paragraph says in the question why its options carry none
 #     (route-say-why). All five are para rows; each token sits on ONE line of its subject.
+#   - SKILL.md Rule 32 touchpoint I cites the advisor gate's window, so one consult covers a run
+#     of pushes, merges and deploys inside it (r32-i-window, a line-mode `contains` pin: keep the
+#     phrase on ONE line, and not on the `- **I --` line itself, which opens the span). Section 4g
+#     binds the window size the item STATES to the hook's `ADVISOR_GATE_WINDOW` default, so the
+#     prose cannot drift from the hook it names.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -132,6 +137,9 @@
 # never from the cwd. The cwd arm at the end re-runs the corpus from a decoy tree and requires
 # a byte-identical verdict.
 set -uo pipefail
+# Section 4g reads the advisor gate hook's TEXT and never runs it; no AI_DLC_* is read here (the root
+# is walked up from this script), so the ambient set is scrubbed whole.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SELF="$HERE/$(basename "$0")"
@@ -489,6 +497,7 @@ hand-gaps-role|R|analyst.md||## Escalation|## Gaps|contains
 hand-gaps-rule24|S|rule-bodies/rule-24.md||**Excluded.**|## Gaps|contains
 hand-design-role|R|ux.md||## Escalation|## Design decisions|contains
 hand-design-step|S|steps/ui-direction.md||### 5.|## Design decisions|contains
+r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it returns.|the window of `ai-dlc-advisor-gate.sh` (`ADVISOR_GATE_WINDOW`|contains
 PINS
 }
 
@@ -1338,6 +1347,126 @@ if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
   else bad "MUTANT lead-engine form 2: SURVIVED"; fi
 else
   bad "lead-engine: FIXTURE BROKEN -- probe form1=$le1 form2=$le2 unscoped=$leb (want 2/1/1)"
+fi
+
+# --- 4g. the window size touchpoint I states is the hook's ADVISOR_GATE_WINDOW default ----------
+# Rule 32 touchpoint I states the advisor gate's window in the hook's own terms, because a deploy is
+# not hook-gated and a lead judges it from the prose alone. The stated number is bound here to the
+# hook's `WIN="${ADVISOR_GATE_WINDOW:-N}"` line (extracted as I79 extracts BUDGET), so changing either
+# side alone fails. The skill side is read from the I item only: its `- **I --` line to the next
+# `- **` line or blank line, HTML comments stripped, whitespace squeezed so a reflow between
+# `default` and the number still reads. win_skill prints the number, MULTI when the item states more
+# than one count, or nothing; win_hook prints the number or nothing; win_verdict prints MATCH, DRIFT,
+# AMBIGUOUS or ABSENT. The hook carries the default twice, in the `WIN="${ADVISOR_GATE_WINDOW:-N}"`
+# line and in the non-numeric fallback `case "$WIN" in ...) WIN=N ;; esac`; each is read on its own
+# line shape, exactly one line each, and two that disagree read HOOK-SPLIT. MATCH needs all three
+# equal. Presence-shaped: an absent hook, an absent item or an item that states no count is ABSENT,
+# never MATCH. FP set: the real pair reads MATCH 10. Mutants move the fallback alone, the hook's
+# two sites together, and the skill's count, each by one.
+win_skill() {
+  awk '
+  { line = $0
+    if (com) { c = index(line, "-->"); if (!c) next; line = substr(line, c + 3); com = 0 }
+    while ((c = index(line, "<!--")) > 0) {
+      r = substr(line, c + 4); d = index(r, "-->")
+      if (d) line = substr(line, 1, c - 1) substr(r, d + 3); else { line = substr(line, 1, c - 1); com = 1 }
+    }
+    if (!on) { if (index(line, "- **I --") == 1) { on = 1; span = line }; next }
+    if (line ~ /^[ \t]*$/ || index(line, "- **") == 1) exit
+    span = span " " line }
+  END { gsub(/[[:space:]]+/, " ", span); n = 0; rest = span
+        while (match(rest, /`ADVISOR_GATE_WINDOW`, default [0-9]+/)) {
+          s = substr(rest, RSTART, RLENGTH); sub(/.* /, "", s); n++; rest = substr(rest, RSTART + RLENGTH) }
+        if (n == 1) print s; else if (n > 1) print "MULTI" }' "$1"
+}
+win_hook() { # the default site, `WIN="${ADVISOR_GATE_WINDOW:-N}"`, exactly one line
+  local n
+  n="$(grep -c '^WIN="${ADVISOR_GATE_WINDOW:-[0-9]*}"$' "$1" 2>/dev/null)" || n=0
+  [ "$n" = 1 ] || return 0
+  sed -n 's/^WIN="${ADVISOR_GATE_WINDOW:-\([0-9]*\)}"$/\1/p' "$1"
+}
+win_fallback() { # the non-numeric fallback site, `case "$WIN" in ...) WIN=N ;; esac`, exactly one line
+  local n
+  n="$(grep -c '^case "\$WIN" in .*) WIN=[0-9][0-9]* ;; esac$' "$1" 2>/dev/null)" || n=0
+  [ "$n" = 1 ] || return 0
+  sed -n 's/^case "\$WIN" in .*) WIN=\([0-9][0-9]*\) ;; esac$/\1/p' "$1"
+}
+win_verdict() { # <skill file> <hook file>
+  local s h fb
+  s="$(win_skill "$1")"; h="$(win_hook "$2")"; fb="$(win_fallback "$2")"
+  if [ -n "$h" ] && [ "$h" != "$fb" ]; then printf 'HOOK-SPLIT default=%s fallback=%s\n' "$h" "${fb:-none}"
+  elif [ "$s" = "MULTI" ]; then printf 'AMBIGUOUS skill=more-than-one-count hook=%s\n' "${h:-none}"
+  elif [ -z "$s" ] || [ -z "$h" ]; then printf 'ABSENT skill=%s hook=%s\n' "${s:-none}" "${h:-none}"
+  elif [ "$s" = "$h" ]; then printf 'MATCH %s\n' "$s"
+  else printf 'DRIFT skill=%s hook=%s\n' "$s" "$h"; fi
+}
+WD="$WORK/win"; mkdir -p "$WD" || exit 2
+printf -- '- **I -- before.** Call it\n  inside the window (`ADVISOR_GATE_WINDOW`, default 7, in\n  messages).\n' > "$WD/s7.md"
+printf -- '- **I -- before.** Call it.\n\nThe window (`ADVISOR_GATE_WINDOW`, default 7) is elsewhere.\n<!-- - **I -- x** (`ADVISOR_GATE_WINDOW`, default 7) -->\n' > "$WD/sfar.md"
+printf '#!/bin/sh\nWIN="${ADVISOR_GATE_WINDOW:-7}"\ncase "$WIN" in %s|*[!0-9]*) WIN=7 ;; esac\n' "''" > "$WD/h7.sh"
+printf '#!/bin/sh\nWIN="${ADVISOR_GATE_WINDOW:-8}"\ncase "$WIN" in %s|*[!0-9]*) WIN=8 ;; esac\n' "''" > "$WD/h8.sh"
+printf '#!/bin/sh\nWIN="${ADVISOR_GATE_WINDOW:-7}"\ncase "$WIN" in %s|*[!0-9]*) WIN=9 ;; esac\n' "''" > "$WD/hsplit.sh"
+wv1="$(win_verdict "$WD/s7.md" "$WD/h7.sh")"; wv2="$(win_verdict "$WD/s7.md" "$WD/h8.sh")"
+printf -- '- **I -- before.** Call it inside the window (`ADVISOR_GATE_WINDOW`, default\n  7, in messages).\n' > "$WD/swrap.md"
+printf -- '- **I -- before.** Call it inside the window (`ADVISOR_GATE_WINDOW`, default 7), or\n  (`ADVISOR_GATE_WINDOW`, default 9) on a deploy.\n' > "$WD/stwo.md"
+wv3="$(win_verdict "$WD/sfar.md" "$WD/h7.sh")"; wv4="$(win_verdict "$WD/s7.md" "$WD/absent.sh")"
+wv5="$(win_verdict "$WD/swrap.md" "$WD/h7.sh")"; wv6="$(win_verdict "$WD/stwo.md" "$WD/h7.sh")"
+wv7="$(win_verdict "$WD/s7.md" "$WD/hsplit.sh")"
+if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "ABSENT skill=none hook=7" ] && [ "$wv4" = "ABSENT skill=7 hook=none" ] \
+   && [ "$wv5" = "MATCH 7" ] && [ "${wv6%% *}" = "AMBIGUOUS" ] && [ "$wv7" = "HOOK-SPLIT default=7 fallback=9" ]; then
+  case "$LAYOUT" in
+    dist) WGATE="$ROOT/core/hooks/ai-dlc-advisor-gate.sh" ;;
+    *)    WGATE="$ROOT/.claude/hooks/ai-dlc-advisor-gate.sh" ;;
+  esac
+  if [ -f "$WGATE" ]; then
+    echo "HERMETIC-CONSUMED core/hooks/ai-dlc-advisor-gate.sh"
+  fi
+  wv_real="$(win_verdict "$SKILL_DIR/SKILL.md" "$WGATE")"
+  case "$wv_real" in
+    MATCH*) ok "window-count: touchpoint I states the hook's ADVISOR_GATE_WINDOW default ($wv_real; probe: match, drift, an out-of-item count, an absent hook, a wrapped count, two counts and a split hook each read as built)" ;;
+    *)      bad "window-count: touchpoint I against ${WGATE#"$ROOT/"} reads $wv_real (want MATCH)" ;;
+  esac
+  # MUTANT, fallback only: the hook's non-numeric fallback moved one up in a copy, the default untouched.
+  wf="$(win_fallback "$WGATE")"; wfm=$(( ${wf:-0} + 1 ))
+  sed "s/^\(case \"\\\$WIN\" in .*) WIN=\)[0-9][0-9]*\( ;; esac\)\$/\1$wfm\2/" "$WGATE" > "$WD/gate-fb-mut.sh" 2>/dev/null
+  wv_fb="$(win_verdict "$SKILL_DIR/SKILL.md" "$WD/gate-fb-mut.sh")"
+  if [ ! -f "$WGATE" ] || [ -z "$wf" ] || cmp -s "$WGATE" "$WD/gate-fb-mut.sh"; then bad "MUTANT window-count fallback: DID NOT APPLY"
+  else
+    case "$wv_fb" in
+      HOOK-SPLIT*"fallback=$wfm") ok "MUTANT window-count fallback: a fallback of $wfm reads $wv_fb" ;;
+      *)                          bad "MUTANT window-count fallback: SURVIVED ($wv_fb)" ;;
+    esac
+  fi
+  # MUTANT: the hook's default AND fallback moved one up in a copy; the arm must read DRIFT where the real pair reads MATCH.
+  wh="$(win_hook "$WGATE")"; wm=$(( ${wh:-0} + 1 ))
+  sed -e "s/^WIN=\"\${ADVISOR_GATE_WINDOW:-[0-9]*}\"\$/WIN=\"\${ADVISOR_GATE_WINDOW:-$wm}\"/" \
+      -e "s/^\(case \"\\\$WIN\" in .*) WIN=\)[0-9][0-9]*\( ;; esac\)\$/\1$wm\2/" "$WGATE" > "$WD/gate-mut.sh" 2>/dev/null
+  wv_mut="$(win_verdict "$SKILL_DIR/SKILL.md" "$WD/gate-mut.sh")"
+  if [ ! -f "$WGATE" ] || [ -z "$wh" ] || cmp -s "$WGATE" "$WD/gate-mut.sh"; then bad "MUTANT window-count: DID NOT APPLY"
+  else
+    case "$wv_mut" in
+      DRIFT*"hook=$wm") ok "MUTANT window-count: a hook default of $wm reads $wv_mut" ;;
+      *)             bad "MUTANT window-count: SURVIVED ($wv_mut)" ;;
+    esac
+  fi
+  # MUTANT, skill side: the item's stated count moved one up in a copy of SKILL.md; the hook untouched.
+  ws="$(win_skill "$SKILL_DIR/SKILL.md")"
+  case "$ws" in ''|*[!0-9]*) ws="" ;; esac
+  wsm=$(( ${ws:-0} + 1 ))
+  WS_OLD="\`ADVISOR_GATE_WINDOW\`, default $ws" WS_NEW="\`ADVISOR_GATE_WINDOW\`, default $wsm" awk '
+    BEGIN { o = ENVIRON["WS_OLD"]; n = ENVIRON["WS_NEW"] }
+    { if (!done && (c = index($0, o)) > 0) { $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); done = 1 }; print }' \
+    "$SKILL_DIR/SKILL.md" > "$WD/skill-mut.md"
+  wv_smut="$(win_verdict "$WD/skill-mut.md" "$WGATE")"
+  if [ -z "$ws" ] || cmp -s "$SKILL_DIR/SKILL.md" "$WD/skill-mut.md"; then bad "MUTANT window-count skill side: DID NOT APPLY"
+  else
+    case "$wv_smut" in
+      DRIFT*"skill=$wsm "*) ok "MUTANT window-count skill side: a stated count of $wsm reads $wv_smut" ;;
+      *)                    bad "MUTANT window-count skill side: SURVIVED ($wv_smut)" ;;
+    esac
+  fi
+else
+  bad "window-count: FIXTURE BROKEN -- probe '$wv1' / '$wv2' / '$wv3' / '$wv4' / '$wv5' / '$wv6'"
 fi
 
 # --- 5. the real corpus ---------------------------------------------------------

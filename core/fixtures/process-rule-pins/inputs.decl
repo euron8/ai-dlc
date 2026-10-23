@@ -1,6 +1,8 @@
 # process-rule-pins scans the skill tree and the roles in place: the pinned step and rule-body files, adversary.md and remediator.md,
 # the flat skill files, steps/, rule-bodies/ and the roles for the retired-range count and the lead-address arm (never
 # extensions/, overrides/ or templates/), and layer-contract.yaml for the consumer-owned exclusions. The root is found by
-# the dist-layout marker pair core/skills/ai-dlc + core/team-roles.
+# the dist-layout marker pair core/skills/ai-dlc + core/team-roles. The advisor gate hook is read for its
+# ADVISOR_GATE_WINDOW default, which section 4g binds to the count SKILL.md Rule 32 touchpoint I states.
 !core/skills/ai-dlc/
 core/team-roles/
+!core/hooks/ai-dlc-advisor-gate.sh
