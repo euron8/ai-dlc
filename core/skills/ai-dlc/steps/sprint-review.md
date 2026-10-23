@@ -105,6 +105,7 @@ that reads every story and focuses on its group's pairs, every seat writing earl
 one final `seat-complete: ... sha=<hex> findings=<n>` line appended by `wait-for-deliverable.sh --mark`, and its join beat passing `--complete`. The lead's join counts the per-seat files against that map before
 dispositioning, and it counts only the files that item names. That item's seats x sections axis
 is for a single-document subject, not this one.
+The round goes out in waves bounded by the waves sentence of `_gate-procedures.md`, "Validation cycle" item 1, and Rule 28's Waves paragraph, never as one unbounded fan-out.
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?
 - Is the test coverage adequate across the sprint as a whole?

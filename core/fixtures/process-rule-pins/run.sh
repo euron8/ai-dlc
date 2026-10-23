@@ -15,7 +15,8 @@
 #     folded-defect routes (route.md, stories-test-strategy.md) reach §2c;
 #   - a party round's seats edit nothing and one repair writer applies their findings, every
 #     entry carrying `source: <seat-file>#<finding-id>` (_gate-procedures.md "Validation cycle",
-#     sprint-review.md §2, remediator.md). The `source:` resolution itself is mechanised in
+#     sprint-review.md §2, remediator.md). The srev-waves-cite row (a `para` pin; the paragraph opens with a backtick, not bold) pins
+#     that §2 cites the waves bound rather than leaving the fan-out unbounded; keep its phrase on ONE line. The `source:` resolution itself is mechanised in
 #     join-remediator-shards.sh and owned by remediator-shard-join; these rows pin the PROSE that
 #     tells the seats not to write, which no program can read off a seat's behaviour;
 #   - the capital-path / high-blast-radius criterion that escalates a review also escalates a
@@ -297,6 +298,7 @@ party-source|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelo
 party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|the seats still edit nothing, and ONE remediator
 party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
 srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
+srev-waves-cite|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|`/bmad-party-mode --mode subagent --non-interactive` — PM, Architect|para|bounded by the waves sentence of `_gate-procedures.md`, "Validation cycle" item 1, and Rule 28's Waves paragraph
 rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
 rem-sib-field|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|carries a `- siblings:` field
 rem-sib-own-files|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Never grep the sprint slot, `shards/` or any repair record

@@ -5064,7 +5064,21 @@ ck_mut() { # <world> <name> then triples <count> <from> <to>
     [ "$(cat "$CK_W/m.$name.$o.got")" = "$(ck_want "$o")" ] || moved="$moved $o"
   done
   if [ "$moved" = " $w" ]; then ok "CK MUTANT $name is KILLED by ($w) alone: $(cat "$CK_W/m.$name.$w.got")"
-  else bad "CK MUTANT $name moved worlds '${moved# }', not ($w) alone"; fi
+  else
+    bad "CK MUTANT $name moved worlds '${moved# }', not ($w) alone"
+    # EVERY MOVED WORLD'S VECTOR PAIR IS PRINTED (BL-616): a red read only as a set of world letters left
+    # no evidence of WHICH field moved, and the load-borne red this was added for could not be diagnosed.
+    # A DROPPED VERDICT is the one forced state that moves (f) under `notfail` and not under the unmutated
+    # block (a TERM to beta's pool worker in push 1), so each push's pool lines naming a unit with no
+    # verdict are printed beside the pair: the next red says whether the pool lost a verdict.
+    for o in $moved; do printf '          (%s) under %s: want %s\n          (%s) under %s: got  %s\n' \
+      "$o" "$name" "$(ck_want "$o")" "$o" "$name" "$(cat "$CK_W/m.$name.$o.got" 2>/dev/null)"
+      for _po in "$CK_W/m.$name.$o".o.*/out; do
+        [ -f "$_po" ] || continue
+        grep -E 'no verdict recorded|produced a verdict|REFUSED' "$_po" 2>/dev/null | sed "s|^|          ($o) push ${_po%/out}: |; s|$CK_W/m\.$name\.$o\.o\.||"
+      done
+    done
+  fi
 }
 # One mutant per world. Each anchor must be unique in the block; ck_mut refuses any other count.
 if sg ckm1; then

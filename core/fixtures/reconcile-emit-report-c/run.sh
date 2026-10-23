@@ -8,7 +8,8 @@
 #
 # THIS SHARD SHIPS. It carries NO `.dist-only` marker, because a shard's packaging is its
 # sibling's packaging and the sibling ships: it is named in scripts/uninstall.sh's removal loop,
-# in core-manifest.md and in setup-sites.md, and I74 joins those against the derived shippable set.
+# in core-manifest.md and in ai-dlc-update's fixture-manifest.md, and I74 joins those against the
+# derived shippable set.
 #
 # THE SIBLING'S VERDICT MUST NAME THIS SHARD, or this run is exit 2. A sibling that stopped
 # honouring `--group` would run shard 'a' here, print PASS for it, and leave this shard's phases
