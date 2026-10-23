@@ -186,7 +186,13 @@
 #     refuses the read itself and logs `!`), a read through any root other than the consumer's, a
 #     symlink on any logged path or under any logged walk (R2, now over the read log), and a path
 #     whose two reads during one render disagreed. The receipts field and its lexical label are
-#     GONE: a receipt subject is an ordinary logged read, so `docs/a/../d` is refused, not collapsed.
+#     GONE: a receipt subject is an ordinary logged read, so `docs/a/../d` is refused, not collapsed;
+#   - an ABSENT `cksum`, checked before any field: the env field checksums awk, sed and sort with it;
+#   - a FIELD THAT COULD NOT BE COMPUTED (`the <f> field could not be computed`), unless its own body
+#     named a cause first, and a field whose material could not be HASHED, named by the sha256 tool:
+#     absent (neither `shasum` nor `sha256sum`) or giving no 64-hex digest. The region field is
+#     exempt: it fails only when the report has no region. Not every miss is named: a failure in the
+#     guards' own listings before the field loop still misses silently.
 # Every refusal names its cause on stderr when the cache is armed (`recorded PASS refused,
 # re-rendering: <cause>`), leaves the record untouched, and renders exactly as an unarmed run.
 # On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
@@ -212,6 +218,8 @@
 # present is accepted after the tool is gone. Only git, awk, sed and sort are keyed by identity
 # (env field); jq, python3, shasum and every other tool the detectors call are keyed by nothing,
 # so a version change in one of them is not seen either. The opt-out re-renders in every case.
+# Two absences are the exception, because the key itself needs the tool: an absent `cksum` and an
+# absent sha256 tool (neither `shasum` nor `sha256sum`) are refused by name, never keyed.
 # (4) What a fourth review found unkeyed is now keyed or refused: index flags and core.ignoreStat,
 # nested repositories, out-of-tree symlinks and an inherited memo are REFUSED (above); the
 # repo-local, global and system attributes files, info/grafts, alternates, every GIT_* variable and
@@ -1618,6 +1626,11 @@ er_key() {
   local f v r p rest CR_LOG=""
   [ -n "$_er_rec" ] || return 1
   : > "$_er_tmp/key.refused" || return 1
+  # AN ABSENT `cksum` IS A NAMED MISS. The env field checksums the awk, sed and sort binaries with it,
+  # so without it no key exists; refused here, before any field work, so the cause names the tool
+  # rather than surfacing as a failed env field.
+  command -v cksum >/dev/null 2>&1 \
+    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }
   # R1 A NON-BARE DIST IS A MISS. Its work tree carries a `.gitattributes` and a checkout no field
   # keys, and a detector that hashes a consumer file through `git -C "$DIST"` reads that work
   # tree's attributes. The update skill's dist is the bare clone dist-clone.sh builds.
@@ -1697,8 +1710,22 @@ er_key() {
   fi
   : > "$_er_tmp/key.block" || return 1
   for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
-    "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null || return 1
-    v="$(er_sha256 "$_er_tmp/key.f.$f")" || return 1
+    # A FAILED FIELD IS A NAMED MISS, two sites with two causes. A cause the field's own body already
+    # wrote is kept, never overwritten. The region field is exempt and stays silent: it fails only
+    # when the report has no region, which is not a refusal of a recorded PASS.
+    if ! "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null; then
+      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"
+      return 1
+    fi
+    if ! v="$(er_sha256 "$_er_tmp/key.f.$f")"; then
+      [ -s "$_er_tmp/key.refused" ] && return 1
+      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
+        er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"
+      else
+        er_refuse "neither shasum nor sha256sum is on PATH, so no field can be hashed"
+      fi
+      return 1
+    fi
     printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
   done
   er_sha256 "$_er_tmp/key.block"
