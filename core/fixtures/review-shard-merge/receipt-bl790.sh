@@ -6,7 +6,10 @@
 #     no advisor: line                                  -> REFUSED [owner: 1]
 #     advisor: called / unavailable / unavailable + CR  -> MERGED, no LEGACY line
 #     advisor: maybe, two lines, '- advisor: called', '**advisor:** called' -> REFUSED
+#     a fenced 'advisor: maybe' above the bare line     -> MERGED (the fence skip)
+#     graph's prose 'Advisor: I made one attempt ...' beside the bare line -> MERGED (lower case only)
 #   no sentinel at the frozen sha, no line              -> MERGED with the LEGACY line by value
+#   no sentinel at the frozen sha, only that prose line -> MERGED with the LEGACY line by value
 #   the role file unreadable at the frozen sha, no line -> REFUSED
 #   world (a): no sentinel at the frozen sha, the new role file on disk -> LEGACY, MERGED
 #   world (b): the sentinel at the frozen sha, the old one on disk      -> REFUSED
@@ -30,17 +33,17 @@ trap 'rm -rf "$R"' EXIT
   . "$HERE/lib.sh" > /dev/null 2>&1 || exit 9
   # One predicate run per surface; each cell's name appears in WHY exactly when that cell failed. The
   # cells run are counted, so a predicate that stopped early cannot read as every cell passing.
-  for p in adv_qa:14 adv_cr:14 adv_serial:16; do
+  for p in adv_qa:17 adv_cr:17 adv_serial:18; do
     WHY=""; CS_RAN=0
     "p_${p%%:*}" "$SD"
     case "$WHY" in *"was not built"*) echo "BROKEN ${p%%:*} $WHY"; continue ;; esac
     [ "$CS_RAN" = "${p#*:}" ] || { echo "BROKEN ${p%%:*} ran $CS_RAN of ${p#*:} cells"; continue; }
-    for c in present-absent called unavailable cr maybe two bullet deco legacy-absent unreadable-absent world-a world-b untracked-new untracked-old; do
+    for c in present-absent called unavailable cr maybe two bullet deco fence prose legacy-absent legacy-prose unreadable-absent world-a world-b untracked-new untracked-old; do
       case "${p%%:*}" in adv_qa) n="ad-q-$c" ;; adv_cr) n="ad-c-$c" ;; *) continue ;; esac
       case "$WHY" in *" $n{"*) echo "$n fail" ;; *) echo "$n ok" ;; esac
     done
     if [ "${p%%:*}" = adv_serial ]; then
-      for x in q c; do for c in absent called unavailable cr maybe two bullet legacy-absent; do
+      for x in q c; do for c in absent called unavailable cr maybe two bullet fence legacy-absent; do
         n="ad-s$x-$c"; case "$WHY" in *" $n{"*) echo "$n fail" ;; *) echo "$n ok" ;; esac
       done; done
     fi
@@ -51,7 +54,7 @@ rc=$?
 [ "$rc" -eq 0 ] || { echo "REFUSED: the receipt did not run (rc=$rc): $(head -1 "$R/err")" >&2; exit 9; }
 if grep -q '^BROKEN' "$R/rows"; then echo "REFUSED: $(grep '^BROKEN' "$R/rows" | head -1)" >&2; exit 9; fi
 n="$(grep -c . "$R/rows")" || n=0
-[ "$n" = 44 ] || { echo "REFUSED: $n of 44 cases answered" >&2; exit 9; }
+[ "$n" = 52 ] || { echo "REFUSED: $n of 52 cases answered" >&2; exit 9; }
 fails=0
 while read -r case got; do
   [ "$got" = ok ] || { echo "FAIL $case"; fails=$((fails + 1)); }

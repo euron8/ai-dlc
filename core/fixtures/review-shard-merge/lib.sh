@@ -2377,6 +2377,11 @@ AD_NEAR="not the remediator's bulleted '- advisor: called'"
 AD_UNR="cannot be read at the frozen sha"
 AD_HELD="prescribes it"
 ad_leg() { printf 'LEGACY: advisor: line not checked: %s prescribes no %s label' "$1" "$AD_SENT"; } # <path as named>
+# D1/D2 seeds. AD_FENCE: a fenced block quoting a bad value above the bare line, which only the fence
+# skip keeps from counting. AD_PROSE: graph s319's own prose form (4-3-code-review.md, read-only), which
+# only the lower-case-only label keeps from reading as the line or as a malformed one.
+AD_FENCE="$(printf '```text\nadvisor: maybe\n```\nadvisor: called')"
+AD_PROSE='Advisor: I made one attempt before writing. It returned rate-limited.'
 # ad_var <shard dir> <clean copy> <variant>: every shard back to the clean copy (each carries
 # `advisor: called`), then that line rewritten: ABSENT deletes it, TWO doubles it, anything else
 # replaces it with the variant's text verbatim (a CR rides in ENVIRON, never through awk -v).
@@ -2426,7 +2431,8 @@ p_adv_gate() { # <script-dir> <gate>
   if [ "$g" = qa ]; then x=q; else x=c; fi
   WHY=""
   if cs_sel "ad-$x-present-absent" || cs_sel "ad-$x-called" || cs_sel "ad-$x-unavailable" || cs_sel "ad-$x-cr" \
-     || cs_sel "ad-$x-maybe" || cs_sel "ad-$x-two" || cs_sel "ad-$x-bullet" || cs_sel "ad-$x-deco"; then
+     || cs_sel "ad-$x-maybe" || cs_sel "ad-$x-two" || cs_sel "ad-$x-bullet" || cs_sel "ad-$x-deco" \
+     || cs_sel "ad-$x-fence" || cs_sel "ad-$x-prose"; then
     ad_world "$sd" "$g" ADP || { WHY="the sentinel world was not built"; return 1; }
     if cell "ad-$x-present-absent"; then ad_no "$sd" "$g" "ad-$x-present-absent" ABSENT "$AD_ABS" "$AD_HELD"; fi
     if cell "ad-$x-called"; then ad_ok "$sd" "$g" "ad-$x-called" 'advisor: called'; fi
@@ -2436,11 +2442,18 @@ p_adv_gate() { # <script-dir> <gate>
     if cell "ad-$x-two"; then ad_no "$sd" "$g" "ad-$x-two" TWO "$AD_TWO"; fi
     if cell "ad-$x-bullet"; then ad_no "$sd" "$g" "ad-$x-bullet" '- advisor: called' "$AD_MAL" "$AD_NEAR"; fi
     if cell "ad-$x-deco"; then ad_no "$sd" "$g" "ad-$x-deco" '**advisor:** called' "$AD_MAL"; fi
+    if cell "ad-$x-fence"; then ad_ok "$sd" "$g" "ad-$x-fence" "$AD_FENCE"; fi
+    if cell "ad-$x-prose"; then ad_ok "$sd" "$g" "ad-$x-prose" "$(printf '%s\nadvisor: called' "$AD_PROSE")"; fi
   fi
   # The era: the role file the shards were written under, read at the frozen sha.
-  if cell "ad-$x-legacy-absent"; then ad_world "$sd" "$g" ADL || { WHY="$WHY the legacy world was not built"; return 1; }
-    ad_ok "$sd" "$g" "ad-$x-legacy-absent" ABSENT "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"
-    ad_no "$sd" "$g" "ad-$x-legacy-absent" 'advisor: maybe' "$AD_VAL"; fi
+  if cs_sel "ad-$x-legacy-absent" || cs_sel "ad-$x-legacy-prose"; then
+    ad_world "$sd" "$g" ADL || { WHY="$WHY the legacy world was not built"; return 1; }
+    if cell "ad-$x-legacy-absent"; then
+      ad_ok "$sd" "$g" "ad-$x-legacy-absent" ABSENT "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"
+      ad_no "$sd" "$g" "ad-$x-legacy-absent" 'advisor: maybe' "$AD_VAL"; fi
+    if cell "ad-$x-legacy-prose"; then
+      ad_ok "$sd" "$g" "ad-$x-legacy-prose" "$AD_PROSE" "$(ad_leg ".claude/team-roles/$(ad_role "$g") at $AD_S")"; fi
+  fi
   if cell "ad-$x-unreadable-absent"; then ad_world "$sd" "$g" B || { WHY="$WHY the unreadable world was not built"; return 1; }
     ad_no "$sd" "$g" "ad-$x-unreadable-absent" ABSENT "$AD_ABS" "$AD_UNR"; fi
   # Lead world (a): frozen before the reconcile, the new role file on disk; world (b) the reverse.
@@ -2487,6 +2500,7 @@ p_adv_serial() {
     if cell "ad-s$x-maybe"; then ad_sno "$sd" "$f" "$g" "ad-s$x-maybe" 'advisor: maybe' "$AD_VAL"; fi
     if cell "ad-s$x-two"; then ad_sno "$sd" "$f" "$g" "ad-s$x-two" "$(printf 'advisor: called\nadvisor: called')" "$AD_TWO"; fi
     if cell "ad-s$x-bullet"; then ad_sno "$sd" "$f" "$g" "ad-s$x-bullet" '- advisor: called' "$AD_NEAR"; fi
+    if cell "ad-s$x-fence"; then ad_sok "$sd" "$f" "$g" "ad-s$x-fence" "$AD_FENCE"; fi
     if cell "ad-s$x-legacy-absent"; then
       SHARD_ADV='' sr_file "$f" "$AD_VB"; ad_srun "$sd" "$f" "$g" "$PROJ_ADL"
       [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK: $f" && grep -qxF -- "$(ad_leg "$PROJ_ADL/core/team-roles/$(ad_role "$g")")" "$CO" \
