@@ -38129,3 +38129,16 @@ Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs 
 
 verify: sh t=templates/settings.json.template; ! test -e core/hooks/ai-dlc-hookwake.sh && ! test -d core/fixtures/hookwake && c="$(jq -r '.. | .command? // empty' "$t")" && [ "$(printf '%s\n' "$c" | grep -c 'ai-dlc-pause\.sh')" = 1 ] && ! printf '%s\n' "$c" | grep -qi 'ai-dlc-hookwake'
 
+## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
+
+**LANDED (v0.929.0, verified 49ea5fe).**
+
+**NOTE.** Found while building BL-692's fixture (batch 240): the sandbox's `tools.decl` lacked `cksum`, and the cache never recorded. Not built, and a candidate for a later release, not BL-692's.
+
+`emit-report.sh`'s recorded-PASS cache builds its key with `cksum`. On a box with no `cksum` the key is empty and the cache silently never records, so it fails safe: every lookup is a miss and every `--verify` re-renders. That is a check that cannot fire, with no signal. Under BL-692's apply-mode rule a cached PASS is the only path that accepts without a re-render, so such a consumer pays a re-render every time and nothing says why.
+
+Owed: with the cache armed and no `cksum` on PATH, `--verify` still renders fresh and exits as an unarmed run would, leaves the record untouched, and names a cause on stderr through the engine's existing refusal line (`emit-report: recorded PASS refused, re-rendering: <cause>`). The wording of the cause is the fix's to choose. With `cksum` present and the cache armed, nothing is refused. Unarmed, stdout, stderr and exit are byte-identical whether `cksum` is present or not.
+
+verify: sh bash core/fixtures/reconcile-emit-report/receipt-cksum-absent.sh
+
+
