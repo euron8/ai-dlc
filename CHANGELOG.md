@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.935.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r9 (merge). It closes nothing, files nothing, touches BL-699 without closing it, and closes no `PC-` id. NET: entries closed 0 minus filed 0 = 0. It is not negative because this release closes no entry by design: it is work removal under BL-699, which stays open on (d). Engine code: none. Rulebook changes: none. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh`. Packaging: none. Backlog: `docs/backlog.md`.
+
+### BL-699 — the seven-arm merge is built; the entry stays OPEN
+
+V20, V17, V18, V23, V21, V22 and V25 now share one `pcv_latgrp` world in that order. Each opens with its own HIT control on the restored world (`pcv_gctl`), proves its own cached-against-opt-out MISS, and undoes its change. An arm whose control fails returns without changing or undoing anything, each id's single verdict is written only after its last step, and a closing HIT control after V25 is PC-V25's. V19 and V24 keep their own `pcv_latarm` worlds, and `pcv_latarm`'s cases for the seven are removed.
+
+A hand that did not build it scored 20 mutants, each a copy run as shard d through `hermetic-run.sh`, each failing exactly its expected set: removing an arm's undo kills every later arm through the closing control, removing a change trips that arm's own guard, and rewriting the record inside arm N turns exactly arm N+1's HIT control red, which proves the record's reader can fire.
+
+Render count on the pass path of phase pcvlat (approve / verify / seed): fix 3/31/3, base 9/36/9, a re-added per-arm approve 10/31/3, the closing control dropped 3/30/3, V17 and V20 swapped 3/31/3. Both regressions keep all nine verdicts ok, so the count is the receipt.
+
+The change to the pole's cost is unmeasured until the dress; (d), the before/after durations comparison, stays banked.
+
 ## [0.934.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r11. It closes BL-791 by measurement and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: none. Rulebook changes: none. Fixture changes: none. Packaging: none. Backlog: `docs/backlog.md` only.
