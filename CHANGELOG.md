@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.930.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r7. It files and closes BL-794, files BL-793 OPEN (a NOTE, `verify: manual`, a residual of BL-781), and closes no `PC-` id. NET: entries closed 1 minus filed 2 = -1. BL-793 is a consumer-watched residual, filed on purpose and not built. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-protect.sh` (deny text only; no re-render). Rulebook changes: none. Fixture changes: `core/fixtures/context-mode-protect` (`run.sh` arm 9c and its CONTEXT-RESTORED mutant, `tools.decl`, and a new `receipt-bl794.sh`). Packaging: none. Backlog: `docs/backlog.md`.
+
+### BL-794 — the protect hook's deny CONTEXT no longer says the planning corpus is NOT protected, which contradicted a consumer layer that protects it
+
+`ai-dlc-protect.sh` ended the CONTEXT of every non-fail-closed deny with "Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely." Core cannot know a consumer's layer. Graph's `.claude/skills/ai-dlc/extensions/protected-paths.json` protects `docs/architecture.md`, and its 13:53:54Z deny named that path in PROTECTED_HITS while its CONTEXT said architecture was NOT protected. The sentence is deleted. REASON, the EXT_BAD variant and the header comment are unchanged. Arm 9c of `context-mode-protect` and its CONTEXT-RESTORED mutant, which is byte-equal to the 0.928.0 hook and dies at the NOT protected conjunct, bind the fix, and `receipt-bl794.sh` scores it.
+
+### BL-793 — filed OPEN, not built
+
+The deny is per call, so one protected token refuses a whole mixed `ctx_batch_execute` batch. Two of seat aa5cb612's batches (4 and 7 commands, 1-2 protected tokens each) were denied, and the seat re-ran them through Bash. Naming native Grep in the deny was rejected because the seat's tool set has no Grep: 0 Grep tool_use calls across graph's last week of transcripts, against 1411 transcripts that carry Read. The measured harm is 0. A batch-granularity fix needs its own contract, so the entry stays open as a NOTE with `verify: manual`.
+
 ## [0.929.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r3. It closes BL-777, files nothing, and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/skills/ai-dlc-update/reconcile/emit-report.sh`. Rulebook changes: none. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh` and the new `core/fixtures/reconcile-emit-report/receipt-cksum-absent.sh`. Packaging: none. Backlog: `docs/backlog.md`.
