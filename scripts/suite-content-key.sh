@@ -80,7 +80,8 @@ die() { printf 'suite-content-key: %s\n' "$*" >&2; exit 1; }
 # also the ONLY reason CLAUDE.md was inside the key: it is in exactly one fixture's
 # trace-derived read-set, that fixture's read-set is 519 of 534 tracked paths, and
 # nothing in its chain reads the file as INPUT -- `validate-enforcement-map.sh`
-# names CLAUDE.md three times, all in comments and one operator-facing message.
+# reads CLAUDE.md at run time only as one root of the I108 and I121-I123 corpus walks
+# (a FIFO there hangs it).
 # (Control: `templates/CLAUDE.md.template`, a DIFFERENT file one basename away, is a
 # genuine input to nine fixtures and stays in the key.)
 #
