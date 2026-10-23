@@ -37841,3 +37841,21 @@ Receipt, scored by `receipt-rerender.sh` under `bash` with `set -uo pipefail`: t
 
 verify: sh bash core/fixtures/apply-restamp-worklist/receipt-rerender.sh
 
+## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
+
+**LANDED (v0.918.0, verified c76235c6b).**
+
+**NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
+
+- The top rows of `.git/ai-dlc-fixture-durations` are `adversarial-shard-merge-mutants` shards at about 2200s.
+- That dir is absent from main. At ddfa69f03, `git ls-tree -d origin/main core/fixtures/ | grep -c adversarial-shard-merge-mutants` gives 0, and the control `adversarial-shard-merge` gives 1.
+- Anyone reading the pole off the top of the record gets a dead unit. The live pole, per ai-dlc-50, is reconcile-emit-report at about 753s loaded.
+
+Owed: the recorder prunes rows whose dir is gone, or the pole reader filters them.
+
+The receipt EXECUTES each hook's own merge block, for both hooks and in both layouts (`FXROOT` `core/fixtures/` and `tests/fixtures/`, the directories created under it). The record is seeded with `live 5`, `kept 9`, `gone 7` and `dead 4`. `live` and `kept` have a `run.sh`, `dead` is a directory holding only `notes.txt`, and `gone` has no directory at all. This run timed `live` alone, at cost 3, so `kept` is live on disk but undispatched. The record must come out as exactly `kept 9` then `live 3`: a prune keyed on this run's dispatch list drops `kept`, a prune keyed on the directory keeps `dead`, and a literal `core/fixtures` or `tests/fixtures` key prunes every row in the other layout, so each of those fails it as surely as no prune does.
+
+Known property, no action owed: linked worktrees share one durations record, because `GITDIR` is `--git-common-dir`. A push from a branch that lacks a fixture main has drops that fixture's row until the next green run on a branch that has it, and in the meantime the fixture sorts as unknown cost, which is first.
+
+verify: sh for h in .githooks/pre-push core/git-hooks/pre-push; do b="$(sed -n '/^  cat "\$out"\/\.dur\/\* > /,/^  fi$/p' "$h")"; [ -n "$b" ] || exit 1; for L in core/fixtures/ tests/fixtures/; do t="$(mktemp -d)" || exit 1; mkdir -p "$t/${L}live" "$t/${L}kept" "$t/${L}dead" "$t/o/.dur" && : > "$t/${L}live/run.sh" && : > "$t/${L}kept/run.sh" && : > "$t/${L}dead/notes.txt" && printf 'live 5\nkept 9\ngone 7\ndead 4\n' > "$t/rec" && printf 'live 3\n' > "$t/o/.dur/live" || exit 1; ( cd "$t" && FXROOT="$L" out="$t/o" DURATIONS_RECORD="$t/rec" rc=0 && eval "$b" ) || exit 1; [ "$(cat "$t/rec")" = "$(printf 'kept 9\nlive 3')" ] || exit 1; done; done
+

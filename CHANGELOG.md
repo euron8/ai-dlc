@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.918.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R5b. It closes BL-744, closes no `PC-` id and files nothing. Net for this release: closed 1 (BL-744), filed 0; closed minus filed = 1. Engine code a consumer runs from step 3 of the delivering pull: none. Hook changes: `.githooks/pre-push` and `core/git-hooks/pre-push`, edited together because invariant I66 joins their fixture-pool blocks. Fixture changes: `core/fixtures/suite-dispatch-order` (distribution-only). Packaging: none.
+
+### BL-744 — the durations merge prunes rows whose fixture dir is gone
+
+The fixture-durations record (`.git/ai-dlc-fixture-durations`) kept a row for every fixture it had ever timed, so after a family of directories was retired the top of it named units that no longer exist. ai-dlc-50 measured 58 of the record's 318 rows naming deleted directories, the top six of them retired `adversarial-shard-merge-mutants` shards at about 2200s, while the live pole is `reconcile-emit-report` at about 753s loaded. Anyone reading the pole off the top of the record got a dead unit. The hook comment had called a ghost key harmless, and it was not, because this record is where the pole is read.
+
+The merge in `run_fixtures` now keeps a row only while `"${FXROOT}${name}/run.sh"` exists, which is the same test the dispatch list is built on. A skipped unit keeps its row because its directory is still on disk; a deleted directory, or one with no `run.sh`, loses its row. The test is keyed on `FXROOT` and not on a literal path, because the consumer hook's fixtures live under `tests/fixtures/` and a literal `core/fixtures/` there would prune every row, leave `.merged` empty and freeze the record. Both hooks change together under I66, and the "ghost key" comment in each now states the new behaviour.
+
+`core/fixtures/suite-dispatch-order` gains arm 4c, which seeds a deleted dir, a dir with no `run.sh` and a live unit the read-set skip did not dispatch, and asserts that only the live unit survives, at its seeded cost. Arm 4 and mutant M4 now narrow through the real read-set skip with the withheld unit's directory kept, since moving the directory away would model a skipped unit as a deleted one. Mutant M6 removes the prune and M7 keys it on a literal `core/fixtures/`.
+
+The closing receipt executes each hook's own merge block in both layouts (`FXROOT` `core/fixtures/` and `tests/fixtures/`). It seeds a live row, a skipped live row, a deleted dir's row and a run.sh-less dir's row, and requires exactly the skipped row and the live row at this run's cost. It fails a removed prune, both literal keys, a directory-keyed prune and a prune keyed on this run's dispatch list, and accepts a second correct spelling.
+
+Known property, no action owed: linked worktrees share one durations record, so a push from a branch that lacks a fixture drops that fixture's row until the next green run on a branch that has it.
+
 ## [0.917.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R8. It closes BL-692, closes no `PC-` id and files BL-777, a NOTE that the recorded-PASS cache silently never records on a box with no `cksum`. Net for this release: closed 1 (BL-692), filed 1 (BL-777); closed minus filed = 0. The live backlog count is unchanged. Engine code a consumer runs from step 3 of the delivering pull: `core/skills/ai-dlc-update/reconcile/emit-report.sh` and `core/skills/ai-dlc-update/reconcile/apply.sh`.

@@ -413,18 +413,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: manual
 
-## BL-744 — the fixture-durations record keeps rows for deleted fixture dirs, so the top of it names a dead unit
-
-**NOTE.** Measured by ai-dlc-50 in batch 238; the figures below are its, not re-read here.
-
-- The top rows of `.git/ai-dlc-fixture-durations` are `adversarial-shard-merge-mutants` shards at about 2200s.
-- That dir is absent from main. At ddfa69f03, `git ls-tree -d origin/main core/fixtures/ | grep -c adversarial-shard-merge-mutants` gives 0, and the control `adversarial-shard-merge` gives 1.
-- Anyone reading the pole off the top of the record gets a dead unit. The live pole, per ai-dlc-50, is reconcile-emit-report at about 753s loaded.
-
-Owed: the recorder prunes rows whose dir is gone, or the pole reader filters them.
-
-verify: manual
-
 ## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
 
 **DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
