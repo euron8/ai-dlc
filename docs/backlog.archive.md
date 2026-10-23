@@ -38268,3 +38268,33 @@ This is the consequence of the PARTIAL note's withdrawal of item 3: no reader pi
 
 verify: sh bash core/fixtures/owed-derivations/receipt-bl587.sh
 
+## BL-796 — `wait-for-deliverable.sh --mark` writes whatever step, seat and shard words a remediator part's caller passes
+
+**LANDED (v0.937.0, verified 28d6f2f1a).**
+
+**NOTE.** Source: batch 241, release r12. Closed by derivation in `--mark`, not by refusal.
+
+On the consumer, s320's remediator part markers read `carry-over-evaluation remediator 2`, `coe 7 remediator 7` (shifted fields) and `coe-party remediator 1/8`, where `core/team-roles/remediator.md` says the step is the part directory's name up to `-repair`, the seat is `remediator`, and the shard is the part file's name without `.md`. `--mark` checked only that a non-review marker had at least 4 fields. A read-only census found no reader of the step, seat or shard words of a sealed marker (`has_marker` reads the prefix, `seal_of` reads `sha=`, `content-seal.sh` uses `$3` only on a bare marker, `join-remediator-shards.sh` reads the step only for party-mode seat files), and `_gate-procedures.md` tells briefs `shard:` is `i/N`, so a refusal would reject markers that lead briefs produce.
+
+Fix: for a file at `planning-artifacts/s<N>/shards/<D>/<b>.md` with `<D>` ending `-repair-p<M>` or `-repair`, `--mark` keeps its arity and `findings=` checks and then writes `seat-complete: <D minus suffix> remediator <b> sha=<hex> findings=<n>`. Every other path writes the caller's words. Scored by EC40 and the mutant EC40m in `core/fixtures/remediator-shard-join`.
+
+Reported, not built (NOTE): MK_PHYS resolves the part's directory with a plain `cd`, which resolves `lnk/..` textually. This predates r12; MK_STATE already used it. For `shards/pl/../z-repair/6.md` with `pl` a symlink, the derived words are keyed on the decoy directory while the bytes land at the physical path. No reader consumes those words today.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl796.sh
+
+## BL-797 — a bare inputs.decl line under a content-key-excluded top keys nothing, so the file it names can change and no verdict that reads it re-runs
+
+**LANDED (v0.937.0, verified 28d6f2f1a).**
+
+**NOTE.** Source: batch 241, release r12. Closed by I55 arm 5 and the declaration dispositions below.
+
+`scripts/suite-content-key.sh` excludes `.git CHANGELOG.md VERSION docs CLAUDE.md`. A `core/fixtures/*/inputs.decl` line under one of those tops has no `.now` row in the hook, so it carries no per-fixture key value, and the outer key skips the whole top. Only a leading `+` keys it (`readset_decl_parse` in `.githooks/pre-push`). Census at c9dea46c2: 33 bare lines over 257 declarations. Dispositions, ruled by the lead:
+- 9 content reads now carry `+`: backlog-receipt-binding `docs/backlog.archive.md`, invariant-index `docs/invariant-index.md`, vocabulary-index `docs/invariant-index.md` and `docs/vocabulary-index.md`, `CLAUDE.md` in validator-arm-selection, layer-contract-conformance, ledger-status-vocabulary and validator-fork-budget, and backlog-ledger `VERSION`. backlog-ledger was first filed copy-only; its run.sh seeds `has VERSION "."` and `lacks VERSION "."` receipts that backlog-reverify.sh answers by grepping `$REPO_ROOT/VERSION`, and a differential confirms the read (`0.935.0` gives CLOSE-CANDIDATE, `nodot` gives STILL-LIVE).
+- 13 lines nothing reads were deleted: the three docs lines of validator-arm-selection; all four of validator-arm-selection-b; CLAUDE.md in layer-contract-conformance-b; VERSION in layer-contract-conformance(-b) and ledger-status-vocabulary; and the `docs/` directory line in both layer-contract-conformance decls. No arm those two drive reads docs/ content: vem has no non-comment read under docs/, against a control of 33 for templates/ under the same filter, and render-invariant-index is called there only as `--arm-lines <src>`, which resolves no root.
+- 11 `VERSION` lines are copy-only. Each now carries a `# copy-only: <path>:<line>` citation of the `-f` test that needs the file to exist.
+
+Guard: I55 arm 5 in `scripts/validate-enforcement-map.sh`, with a self-probe in both directions that runs before the corpus. A cited line whose first non-blank character is `#` is a comment and acquits nothing.
+
+Limit: arm 5 binds the CITED line only. It does not prove that the reader reads the file's content nowhere else, and backlog-ledger is the measured instance: its citation of backlog-reverify.sh:103 was a real `-f` test, and the same engine greps the content at :449. Other shapes the tip adversary found that the arm acquits, 0 of them in the corpus today: an echo-quoted `[ -f VERSION ]` string; `. ./VERSION`; a basename-only match (`docs/plans/VERSION` acquitted by a test on `$d/VERSION`); a cited in-tree symlink whose target is out of tree; and a `./docs/x.md` decl line, which evades the scan because its top is read as `.`. A citation naming a directory makes the awk abort, which surfaces as the misleading "control read 0" message rather than as a finding on that line. The new arm is numbered 5 because arm 4 is the existing `_RECORD` arm, which `core/fixtures/suite-dispatch-order/run.sh` cites by that number. The `scripts/suite-content-key.sh` comment saying that no fixture verdict depends on CLAUDE.md is corrected. Its sentence at :82-83, which said vem names CLAUDE.md only in comments, was also stale (vem reads it at run time in the roots of I108 and I121-I123) and is corrected.
+
+verify: sh d=$(mktemp -d) && tar -cf - scripts core .githooks | (cd "$d" && tar -xf -) && bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1 && printf 'docs/backlog.md\n' >> "$d/core/fixtures/backlog-receipt-binding/inputs.decl" && ! bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1

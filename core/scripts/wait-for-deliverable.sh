@@ -637,6 +637,16 @@ seal_of() {
 #      remedy for every refusal on bytes is re-dispatching the reviewer. The sentinel comment
 #      MARK-KEY-WRITER (with its version, once, in the block below) marks this writer for
 #      merge-review-shards.sh's legacy test.
+#   5. A REMEDIATOR PART -- a non-review file at `planning-artifacts/s<N>/shards/<D>/<b>.md` where <D>
+#      ends in `-repair-p<M>` or `-repair` -- keeps the arity and findings= checks above, then has its
+#      <step> <seat> <shard> REPLACED by derived words: step = <D> without that suffix (`coe-repair-p1`
+#      -> `coe`, `requirements-party-repair` -> `requirements-party`), seat = `remediator`, shard = <b>
+#      without `.md`, as spelled (`1`, `05`, `lane-1`). The marker is then
+#      `seat-complete: <step> remediator <b> sha=<hex> findings=<n>`. It derives rather than refuses
+#      because no reader consumes those three words of a sealed marker (has_marker reads the prefix,
+#      seal_of reads sha=) and a lead brief produces `shard: i/N`, which a refusal would reject. These
+#      directory names cannot overlap term 4: a review directory ends in 12 hex digits (optionally
+#      -p<M>), and `repair` is not 12 hex digits. Every other path writes the caller's words.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 case "${1:-}" in
@@ -729,6 +739,18 @@ $MK_OUT
     # resolved to its target would name no row and the file would never be re-sealed. The FIRST
     # `/planning-artifacts/` is the state dir's; a later one is a directory inside the sprint.
     MK_PHYS="$(cd "$(dirname "$MK_FILE")" 2>/dev/null && pwd)/$(basename "$MK_FILE")"
+    # REMEDIATOR PART (header: "--mark", term 5): the words are derived from the path, the caller's are dropped.
+    if [ "$MK_MODE" = "--mark" ] && [ -z "$MK_REVIEW" ]; then
+      mk_pd_="${MK_PHYS%/*}"; mk_dn_="${mk_pd_##*/}"; mk_gp_="${mk_pd_%/*}"; mk_pb_="${MK_PHYS##*/}"
+      case "$mk_gp_" in */planning-artifacts/s[0-9]*/shards) mk_rs_=""
+        case "$mk_dn_" in
+          *-repair-p[0-9]*) case "${mk_dn_##*-repair-p}" in *[!0-9]*) ;; *) mk_rs_="${mk_dn_%-repair-p*}" ;; esac ;;
+          *-repair) mk_rs_="${mk_dn_%-repair}" ;;
+        esac
+        case "$mk_pb_" in *.md) [ -n "${mk_pb_%.md}" ] || mk_rs_="" ;; *) mk_rs_="" ;; esac
+        if [ -n "$mk_rs_" ]; then MK_F="$mk_rs_ remediator ${mk_pb_%.md}"; fi ;;
+      esac
+    fi
     if [ -n "$MK_REVIEW" ]; then :; else
     MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
     case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%%/planning-artifacts/*}" ;; esac

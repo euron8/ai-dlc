@@ -6804,6 +6804,11 @@ fi
 # WHAT ARM 3 DOES NOT SEE, stated rather than implied: a fixture that hands the
 # distribution root to a shipped validator as a project argument, without naming
 # an excluded path itself. None exists today. The release says so too.
+#
+# Arm 5 reads the other side of the same hole: a fixture's DECLARATION. A bare
+# inputs.decl line under an excluded top keys nothing, so it must be `+`-keyed, or
+# carry a resolved `# copy-only:` citation of the existence test that needs it.
+# Its narrowing story sits beside the arm.
 i55_key_script="$REPO_ROOT/scripts/suite-content-key.sh"
 i55_hook="$REPO_ROOT/.githooks/pre-push"
 if [ ! -f "$i55_key_script" ]; then
@@ -6969,6 +6974,75 @@ else
             if (!(all > 0 && ok == all)) OUT[i] = OUT[i] hits } }
           END { flush(); for (i = 1; i <= ne; i++) printf "%s", OUT[i] }'
     }
+    # Arm 5: a fixture DECLARATION under an excluded top keys what it names, or says why it need not.
+    #
+    # Arm 3 reads what a fixture REACHES at the distribution root; this arm reads what a fixture
+    # DECLARES. A bare `inputs.decl` line whose top is in the EXCLUDE set keys nothing: the hook has
+    # no `.now` row for it, so the per-fixture key carries no value for that path, and the outer key
+    # skips the whole top. The line reads as a declared input and is not one -- edit the file and no
+    # verdict that reads it re-runs (BL-797: 33 such lines over 257 declarations, 9 of them content
+    # reads). A `+` keys it (see arm 3, and readset_decl_parse in .githooks/pre-push). The excluded
+    # set is $i55_excl, derived from the EXCLUDE block above and never retyped here.
+    #
+    # THE THIRD CLASS, AND HOW THE FALSE-POSITIVE SET REACHED ZERO. The first census split the 33 into
+    # content reads (`+` them) and lines nothing reads (delete them), and left 11 `VERSION` lines that
+    # are neither. Each fixture, or the script it copies, tests for VERSION with `-f` to find its root
+    # inside the sandbox, so the FILE must be copied while its CONTENT is never read. Keying it would
+    # re-run those 12 fixtures on every release bump for nothing; deleting it breaks the walk-up. So a
+    # line may be acquitted by a `# copy-only: <path>:<line> <text>` comment DIRECTLY above it, the
+    # `# <key>:` comment grammar scripts/validate-decl-reasons.sh reads for `# reason:` (that script is
+    # unchanged: it ignores every other comment). The citation is RESOLVED, not trusted: the cited
+    # line of the cited file, under the scanned tree, must hold a `-f`, `-e` or `-d` test naming the
+    # declared path's basename, must not read that file (`cat`, `<`, `grep`, `awk` and kin), and must
+    # not be a shell comment: a cited line whose first non-blank character is `#` tests nothing. A
+    # citation past the end of its file, or of a file that cannot be opened, is a finding -- awk
+    # getline returns -1 there, and a short count is how this tells it from a read. With that class
+    # admitted the corpus measured 0 findings, against a control of the bare `core/` lines the same
+    # pass counts.
+    # ONE awk PASS over every declaration, so the cost is one process however many fixtures exist.
+    # WHAT THIS CANNOT SEE: a `+` line whose fixture never reads the file (keyed for nothing, which
+    # costs re-runs, not coverage), and a copy-only citation whose test is true for a reason other
+    # than the marker it names.
+    i55_bare_scan() { # <tree root> <excluded tops, space-separated> <control top> -> `<decl>:<ln>: <line> -- <why>` per unacquitted line, then `CTL <bare control lines> <decls read>`
+      awk -v el="$2" -v ctl="$3" -v root="$1" '
+        function ccheck(c, base,   k, cf, cl, n, l, b, ext, rd) {
+          if (!match(c, /^[^ :]+:[0-9]+( |$)/)) return "the copy-only line is not <path>:<line> <text>"
+          k = substr(c, 1, RLENGTH); sub(/ $/, "", k)
+          cf = k; sub(/:[0-9]+$/, "", cf); cl = substr(k, length(cf) + 2) + 0
+          if (cf ~ /^\// || cf ~ /(^|\/)\.\.(\/|$)/) return "copy-only cites " k ", outside the tree"
+          n = 0; l = ""
+          while (n < cl && (getline l < (root "/" cf)) > 0) n++
+          close(root "/" cf)
+          if (cl == 0 || n != cl) return "copy-only cites " k ", which does not exist"
+          if (l ~ /^[[:blank:]]*#/) return "copy-only cites " k ", which is a comment and tests nothing"
+          b = base; gsub(/\./, "[.]", b)
+          ext = "(^|[^A-Za-z0-9_-])-[efd][[:blank:]]+\"?([^[:blank:]\"]*/)?" b "\"?([[:blank:];]|]|$)"
+          rd = "(^|[^A-Za-z0-9_])(cat|grep|awk|sed|head|tail|cut|wc|diff|cmp|source)[[:blank:]][^|;&]*" b "|<[[:blank:]]*\"?[^[:blank:]\"]*" b
+          if (l ~ rd) return "copy-only cites " k ", which reads the content of " base
+          if (l !~ ext) return "copy-only cites " k ", which holds no -f, -e or -d test naming " base
+          return "" }
+        BEGIN { n = split(el, E, " "); for (i = 1; i <= n; i++) X[E[i]] = 1 }
+        FNR == 1 { prev = ""; nd++ }
+        { l = $0; sub(/\r$/, "", l); p = prev; prev = l
+          if (l == "" || substr(l, 1, 1) == "#") next
+          s = l; plus = 0
+          while ((c = substr(s, 1, 1)) == "!" || c == "+") { if (c == "+") plus = 1; s = substr(s, 2) }
+          t = s; sub(/\/.*/, "", t)
+          if (plus || t == "") next
+          if (t == ctl) { nc++; next }
+          if (!(t in X)) next
+          base = s; sub(/\/+$/, "", base); sub(/.*\//, "", base)
+          if (substr(p, 1, 13) == "# copy-only: ") { why = ccheck(substr(p, 14), base); if (why == "") next }
+          else why = "a bare line under an excluded top keys nothing"
+          f = FILENAME; if (index(f, root "/") == 1) f = substr(f, length(root) + 2)
+          print f ":" FNR ": " l " -- " why }
+        END { print "CTL " nc + 0 " " nd + 0 }' "$1"/core/fixtures/*/inputs.decl 2>/dev/null
+    }
+    i55_tops=""
+    while IFS= read -r e; do [ -n "$e" ] && i55_tops="${i55_tops} $e"; done <<<"$i55_excl"
+    i55_tops="${i55_tops# }"
+    i55_bprobe=""; i55_nl='
+'
     # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Fifteen fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
     # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
@@ -6989,7 +7063,26 @@ else
                "$i55_pd"/core/fixtures/d "$i55_pd"/core/fixtures/e "$i55_pd"/core/fixtures/f \
                "$i55_pd"/core/fixtures/g "$i55_pd"/core/fixtures/h "$i55_pd"/core/fixtures/i \
                "$i55_pd"/core/fixtures/j "$i55_pd"/core/fixtures/k "$i55_pd"/core/fixtures/l \
-               "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o
+               "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o \
+               "$i55_pd"/a5/core/fixtures/p1 "$i55_pd"/a5/core/fixtures/p2 "$i55_pd"/a5/core/fixtures/p3 \
+               "$i55_pd"/a5/core/fixtures/p4 "$i55_pd"/a5/core/fixtures/p5 "$i55_pd"/a5/core/fixtures/p6 \
+               "$i55_pd"/a5/cite
+      # ARM 5 SELF-PROBE, BOTH DIRECTIONS, seeded in this same probe directory under its own root
+      # `a5/` so neither arm reads the other arm's seeds, and scanned BEFORE the corpus. (p1) a bare
+      # `docs/x.md` fires; (p2) `+docs/x.md` is quiet; (p3) a copy-only citing a real `-f` test of
+      # VERSION is quiet; (p4) a copy-only citing a line holding `cat VERSION` fires; (p5) a copy-only
+      # citing a line past the end of a real file fires, which is the getline -1 trap; (p6) a
+      # copy-only citing a COMMENT that spells `[ -f "$d/VERSION" ]` fires, the near-miss of p3.
+      printf 'docs/x.md\n'  > "$i55_pd/a5/core/fixtures/p1/inputs.decl"
+      printf '+docs/x.md\n' > "$i55_pd/a5/core/fixtures/p2/inputs.decl"
+      printf '# copy-only: cite/ok.sh:2 walks up for the marker\nVERSION\n' > "$i55_pd/a5/core/fixtures/p3/inputs.decl"
+      printf '# copy-only: cite/rd.sh:1 reads it\nVERSION\n'                > "$i55_pd/a5/core/fixtures/p4/inputs.decl"
+      printf '# copy-only: cite/ok.sh:9 past the end\nVERSION\n'           > "$i55_pd/a5/core/fixtures/p5/inputs.decl"
+      printf 'd="$HERE"\nif [ -f "$d/VERSION" ]; then R="$d"; fi\n' > "$i55_pd/a5/cite/ok.sh"
+      printf 'v="$(cat VERSION)"\n' > "$i55_pd/a5/cite/rd.sh"
+      printf '# copy-only: cite/cm.sh:1 a comment\nVERSION\n'              > "$i55_pd/a5/core/fixtures/p6/inputs.decl"
+      printf '  # [ -f "$d/VERSION" ] once found the root here\n' > "$i55_pd/a5/cite/cm.sh"
+      i55_bprobe="$(i55_bare_scan "$i55_pd/a5" "$i55_tops" core)"
       printf 'OWN="$(cd "$HERE/../../.." && pwd)"\ncat "$OWN/docs/x"\n' > "$i55_pd/core/fixtures/k/run.sh"
       printf 'RD="$HERE"\nwhile [ "$RD" != "/" ] && [ ! -f "$RD/VERSION" ]; do RD="$(dirname "$RD")"; done\ncat "$RD/docs/x"\n' > "$i55_pd/core/fixtures/l/run.sh"
       printf 'cat "$HERE/../../../docs/x"\n' > "$i55_pd/core/fixtures/m/run.sh"
@@ -7043,6 +7136,10 @@ else
       [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
       [ "$i55_pr" = "b c d e f g h i k l m o " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o '. Fixtures a and j (a + declared, literal reach ending at a boundary) and n (a mktemp root nothing derives) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a VERSION walk-up or a literal climb, and the corpus scan below would be read through it."
     fi
+    # ARM 5'S PROBE VERDICT. Exactly p1, p4, p5 and p6 flagged, each for its own reason, and a CTL
+    # line that read all six declarations; built from builtins so a pass costs no fork.
+    i55_bwant="core/fixtures/p1/inputs.decl:1: docs/x.md -- a bare line under an excluded top keys nothing${i55_nl}core/fixtures/p4/inputs.decl:2: VERSION -- copy-only cites cite/rd.sh:1, which reads the content of VERSION${i55_nl}core/fixtures/p5/inputs.decl:2: VERSION -- copy-only cites cite/ok.sh:9, which does not exist${i55_nl}core/fixtures/p6/inputs.decl:2: VERSION -- copy-only cites cite/cm.sh:1, which is a comment and tests nothing${i55_nl}CTL 0 6"
+    [ "$i55_bprobe" = "$i55_bwant" ] || err "I55 arm 5's self-probe did not discriminate: a bare docs/x.md (p1), a copy-only citing \`cat VERSION\` (p4), one citing a line past the end of its file (p5) and one citing a comment that spells the test (p6) must fire, and +docs/x.md (p2) and a copy-only citing a real \`[ -f .../VERSION ]\` test (p3) must stay quiet. Got:${i55_nl}${i55_bprobe:-<nothing: the probe tree was never built, or the scan printed nothing>}${i55_nl}The corpus scan below reads through this same function, so its zero would mean nothing."
     # THE CONTROL COUNTS THROUGH THE SAME FUNCTION, so it reads the per-file derived roots the scan
     # reads: `core` is an included top no fixture declares with `+`, so every reach of it is printed.
     i55_ctl="$(i55_reach_scan "$REPO_ROOT" core | grep -c .)" || i55_ctl=0
@@ -7067,6 +7164,19 @@ else
       fi
       [ -n "$i55_reach" ] && err "I55 fixture(s) reach a content-key-EXCLUDED path at the distribution root:${i55_reach}
 The pre-push hook skips the entire fixture suite when the key is unchanged, and the key does not hash those paths -- so a fixture reading one is a fixture whose input can change without the suite ever re-running. Either stop reading it, or delete its line from suite-content-key.sh's EXCLUDE block and re-take the mutation measurement recorded in that script's header."
+    fi
+
+    # Arm 5 over the corpus. THE CONTROL COUNTS THROUGH THE SAME PASS: bare `core/` lines, an included
+    # top dozens of declarations carry, read by the same line grammar that reports the absence.
+    i55_bout="$(i55_bare_scan "$REPO_ROOT" "$i55_tops" core)"
+    i55_bctl="${i55_bout##*CTL }"; i55_bnd="${i55_bctl#* }"; i55_bctl="${i55_bctl%% *}"
+    case "$i55_bout" in *CTL\ *) ;; *) i55_bctl=0; i55_bnd=0 ;; esac
+    if [ "${i55_bctl:-0}" -lt 10 ] || [ "${i55_bnd:-0}" -lt 10 ]; then
+      err "I55 arm 5's control read ${i55_bctl:-0} bare core/ line(s) across ${i55_bnd:-0} inputs.decl file(s). It is about to report that no declaration names an excluded top without keying it; over a corpus this pass did not read, that zero is a broken scan and not a finding. Fails closed."
+    else
+      i55_bfind="${i55_bout%CTL *}"
+      [ -n "$i55_bfind" ] && err "I55 fixture declaration(s) name a content-key-EXCLUDED path without keying it:${i55_nl}${i55_bfind%${i55_nl}}
+A bare inputs.decl line under an excluded top has no key row in the hook and no hash in the outer key, so the file can change and no verdict that reads it re-runs. Key it with a leading \`+\` if the fixture reads its content; delete the line if nothing reads it; if the fixture only needs the file to EXIST, put \`# copy-only: <path>:<line> <text>\` directly above it, citing the -f, -e or -d test that needs it."
     fi
 
     # Arm 4: EVERY cross-run record the hook keeps lives outside the working tree. A
