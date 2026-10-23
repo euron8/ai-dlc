@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Receipt for BL-685 round-9 BLOCKERs B1-B6 (batch 241 cluster r9). Run from inside the repo; not a fixture unit.
+# Receipt for BL-685 round-9 BLOCKERs B1-B7 and BL-800 (batch 241 cluster r9). Run from inside the repo; not a fixture unit.
 #
 # One mktemp world per BLOCKER. Each drives the given emit-report.sh ARMED (EMIT_REPORT_VERIFY_CACHE=1):
 # it records, changes that BLOCKER's input, and requires the armed --verify NOT to accept. The only
@@ -24,6 +24,10 @@
 #   B6  the same seed with an IGNORED nested repository graph-node-src/ outside every read root must
 #       RECORD, then hit; the change: an UNIGNORED nested non-repository x/.git/o.md outside the roots
 #       (record restored) must NOT accept.
+#   B7  a graph-shaped untracked, gitignored DIR link .claude/skills/sx -> ../../.agents/skills/sx (a tracked
+#       dir outside every read root) must RECORD, then hit; the change: the link retargeted to .agents/skills/sy.
+#   BL-800  .claude/skills/ai-dlc is itself an ignored link to .agents/aidlc; the change: a new extension
+#       file e2.md behind the link; the armed run must NOT accept.
 #   B5 and B6 read exit codes, record presence and cmp only (no wording but the accept line).
 # Exit 0 = every world fixed. 1 = a world accepted a stale PASS (named). 2 = a world or control failed
 # (named; the receipt cannot discriminate there). 9 = subject absent.
@@ -33,6 +37,20 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset EMIT_REPORT_VERIFY_CACHE HOOKREG_READS_OUT
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 export GIT_AUTHOR_DATE='2026-01-01T00:00:00Z' GIT_COMMITTER_DATE='2026-01-01T00:00:00Z'
+# A first argument that is not a directory is a WORLD NAME (B1..B7, BL-800): only that world runs, over the
+# repo's own engine unless <reconcile dir> <validator> follow. A third argument names a world too.
+SEL=""
+if [ -n "${1:-}" ] && [ ! -d "$1" ]; then
+  SEL="$1"; shift
+  _top="$(git rev-parse --show-toplevel 2>/dev/null)" || _top=""
+  set -- "${1:-$_top/core/skills/ai-dlc-update/reconcile}" "${2:-$_top/core/scripts/validate-hook-registration.sh}"
+else
+  SEL="${3:-}"
+fi
+case "$SEL" in
+  ""|B1|B2|B3|B4|B5|B6|B7|BL-800) ;;
+  *) echo "round9 receipt: unknown world '$SEL' (B1..B7, BL-800)" >&2; exit 2 ;;
+esac
 REC="${1:-}"; HRV="${2:-}"
 [ -n "$REC" ] && [ -f "$REC/emit-report.sh" ] && [ -f "$REC/consumer-read.sh" ] || { echo "round9 receipt: subject absent: reconcile dir '$REC'" >&2; exit 9; }
 [ -n "$HRV" ] && [ -f "$HRV" ] || { echo "round9 receipt: subject absent: validator '$HRV'" >&2; exit 9; }
@@ -237,12 +255,83 @@ world_b6() {
   echo "world B6: FIXED: the armed run did not accept (rc $RC)"; return 0
 }
 
+# --- B7 / BL-800: graph-shaped untracked, gitignored symlinks under the read root .claude/skills.
+# mkx <tag> <x2: 0|1> -- sets W D C B T RPT RECORD. x2=0: tracked .agents/skills/{sx,sy} outside every read
+# root and an ignored link .claude/skills/sx. x2=1: an ignored .claude/skills/ai-dlc link to .agents/aidlc.
+mkx() {
+  local DW
+  XENV=""; SENV=""
+  W="$(mktemp -d "$WR/$1.XXXX")" || return 2
+  DW="$W/dist-work"; D="$W/dist.git"; C="$W/consumer"
+  mkdir -p "$DW/core/schemas" "$DW/core/skills/ai-dlc/steps" "$C/.claude/schemas" "$C/.claude/skills" \
+    "$C/_bmad-output/ai-dlc-update" || return 2
+  printf '{\n  "rule": "original"\n}\n' > "$DW/core/schemas/thing.json"
+  printf '# Demo\n\n## One\n\nold\n' > "$DW/core/skills/ai-dlc/steps/demo.md"
+  { git -C "$DW" init -q && git -C "$DW" add -A && gc -C "$DW" commit -q -m base; } >/dev/null 2>&1 || return 2
+  B="$(git -C "$DW" rev-parse HEAD)" || return 2
+  printf '{\n  "rule": "original", "theirs": 1\n}\n' > "$DW/core/schemas/thing.json"
+  printf '# Demo\n\n## One\n\nnew\n' > "$DW/core/skills/ai-dlc/steps/demo.md"
+  { git -C "$DW" add -A && gc -C "$DW" commit -q -m theirs; } >/dev/null 2>&1 || return 2
+  T="$(git -C "$DW" rev-parse HEAD)" || return 2
+  git clone -q --mirror "$DW" "$D" >/dev/null 2>&1 || return 2
+  printf '{\n  "rule": "original"\n}\n' > "$C/.claude/schemas/thing.json"
+  printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"
+  if [ "$2" = 1 ]; then
+    mkdir -p "$C/.agents/aidlc/extensions" || return 2
+    printf -- '---\nkind: qualifier\nhooks: steps/demo.md\nreason: probe\n---\n\n## One\n\nBody.\n' > "$C/.agents/aidlc/extensions/e1.md"
+    ln -s ../../.agents/aidlc "$C/.claude/skills/ai-dlc" || return 2
+    printf '.claude/skills/ai-dlc\n.agents/\n' > "$C/.gitignore"
+  else
+    mkdir -p "$C/.agents/skills/sx" "$C/.agents/skills/sy" || return 2
+    echo "SKILL x" > "$C/.agents/skills/sx/SKILL.md"; echo "SKILL y" > "$C/.agents/skills/sy/SKILL.md"
+    ln -s ../../.agents/skills/sx "$C/.claude/skills/sx" || return 2
+    printf '.claude/skills/sx\n' > "$C/.gitignore"
+  fi
+  { git -C "$C" init -q && git -C "$C" add -A && gc -C "$C" commit -q -m consumer; } >/dev/null 2>&1 || return 2
+  if [ "$2" = 1 ]; then git -C "$C" check-ignore -q .claude/skills/ai-dlc || return 2
+  else git -C "$C" check-ignore -q .claude/skills/sx && [ -n "$(git -C "$C" ls-files .agents/skills/sx)" ] || return 2; fi
+  [ -z "$(git -C "$C" ls-files .claude/skills)" ] || return 2
+  RPT="$C/_bmad-output/ai-dlc-update/reconcile-report.md"
+  RECORD="$(git -C "$C" rev-parse --absolute-git-dir)/ai-dlc-verify-pass" || return 2
+  render
+}
+world_b7() {
+  mkx b7 0 || { echo "world B7: BROKEN: build"; return 2; }
+  record_hit B7 || return 2
+  rm "$C/.claude/skills/sx" && ln -s ../../.agents/skills/sy "$C/.claude/skills/sx" || { echo "world B7: BROKEN: retarget did not apply"; return 2; }
+  cp "$W/rec.keep" "$RECORD" || return 2
+  armed sub ""
+  if [ "$ACC" = 1 ]; then echo "world B7: DEFECT: the armed run accepted a recorded PASS after the untracked directory link was retargeted (rc $RC)"; return 1; fi
+  echo "world B7: FIXED: the armed run did not accept (rc $RC)"; return 0
+}
+world_bl800() {
+  mkx bl800 1 || { echo "world BL-800: BROKEN: build"; return 2; }
+  rm -f "$RECORD"
+  armed rec0 ""
+  [ "$RC" = 0 ] || { echo "world BL-800: BROKEN: the unchanged armed run exited $RC"; return 2; }
+  [ -s "$RECORD" ] && cp "$RECORD" "$W/rec.keep"
+  printf -- '---\nkind: qualifier\nhooks: steps/demo.md\nreason: probe two\n---\n\n## Two\n\nBody.\n' > "$C/.agents/aidlc/extensions/e2.md" || return 2
+  fresh sub.f ""
+  [ "$RC" != 0 ] || { echo "world BL-800: BROKEN: the new extension did not reach the region (fresh rc 0)"; return 2; }
+  [ -f "$W/rec.keep" ] && cp "$W/rec.keep" "$RECORD"
+  armed sub ""
+  if [ "$ACC" = 1 ]; then echo "world BL-800: DEFECT: the armed run accepted a recorded PASS after an extension file was added behind a linked .claude/skills/ai-dlc (rc $RC)"; return 1; fi
+  echo "world BL-800: FIXED: the armed run did not accept (rc $RC)"; return 0
+}
+
 worst=0
-for w in world_b1 world_b2 world_b3 world_b4 world_b5 world_b6; do
+ran=0
+for w in world_b1 world_b2 world_b3 world_b4 world_b5 world_b6 world_b7 world_bl800; do
+  if [ -n "$SEL" ]; then
+    _n="$(printf '%s' "${w#world_}" | tr 'a-z' 'A-Z')"; [ "$_n" = BL800 ] && _n=BL-800
+    [ "$_n" = "$SEL" ] || continue
+  fi
+  ran=$((ran + 1))
   "$w"; r=$?
   if [ "$r" = 2 ]; then worst=2
   elif [ "$r" = 1 ] && [ "$worst" != 2 ]; then worst=1
   elif [ "$r" != 0 ] && [ "$r" != 1 ]; then worst=2; fi
 done
+[ "$ran" -ge 1 ] || { echo "round9 receipt: no world ran for '$SEL'" >&2; worst=2; }
 echo "round9 receipt: exit $worst"
 exit "$worst"
