@@ -5564,6 +5564,12 @@ fi
 # hook by its sentinel lines, so a renamed or emptied KEYROWS sentinel in one hook leaves --key-only exiting 2 and
 # every sandbox run of that consumer with the verdict store OFF, and the comment-stripped compare above cannot see
 # it. rt_scan takes the span NAME first; the self-probe runs once per span, so each name is proven to discriminate.
+# THE READSET_LOCK SPAN IS THE THIRD, held the same way AND byte for byte across the two hooks. The read-set deriver
+# (core/scripts/derive-fixture-readsets.sh) sources the trace-window slot's pid-file writer and stale test out of
+# whichever hook it finds, so a consumer whose span differed would judge the slot by different rules from this repo,
+# and the comment-stripped FIXTURE_POOL compare never sees this span. The compare is WHOLE-SPAN, comments included,
+# because the span is sourced verbatim; it holds no fixture-root path, so no tests/fixtures mapping applies. Its own
+# self-probe (an identical pair stays quiet, a one-byte divergence flags) runs before the hooks are compared.
 rt_scan() { # <span name> <file>... -> one `<file>\t<reason>` line per file
   local rt_sn="$1"; shift
   awk -v B="# ${rt_sn}_BEGIN" -v E="# ${rt_sn}_END" '
@@ -5589,7 +5595,7 @@ else
   if [ -z "$rt_pd" ]; then
     err "I66 (tools span) could not create a scratch directory for its self-probe."
   else
-    for rt_sn in READSET_TOOLS READSET_KEYROWS; do
+    for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK; do
       printf 'x\n# %s_BEGIN\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/1ok"
       printf '# %s_BEGIN\nA=1\n# %s_END\nz\n' "$rt_sn" "$rt_sn" > "$rt_pd/2moved"
       printf 'x\n# %s_BEGINS\nA=1\n# %s_END\n' "$rt_sn" "$rt_sn" > "$rt_pd/3renamed"
@@ -5603,13 +5609,29 @@ else
           1:|2:) ;;                   # sound probes must be quiet (a moved span is still sound)
           3:bad|4:bad|5:bad) ;;       # offenders must be flagged
           [1-5]:*) rt_bad=1 ;;        # a quiet offender or a flagged near-miss: the check cannot discriminate
-          *) [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The hermetic runner extracts it by those exact sentinel lines and exits 2 on every declared fixture without it (READSET_KEYROWS: --key-only exits 2 and a sandbox run records nothing)." ;;
+          *) [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK." ;;
         esac
       done <<RT_EOF
 $rt_out
 RT_EOF
       { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (${rt_sn} span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
     done
+    # READSET_LOCK BYTE IDENTITY. Self-probe first: two identical spans must compare equal and two spans one byte
+    # apart must not, through the same extraction the corpus compare uses.
+    rl_span() { sed -n '/^# READSET_LOCK_BEGIN$/,/^# READSET_LOCK_END$/p' "$1"; }
+    printf 'x\n# READSET_LOCK_BEGIN\nA=1\n# READSET_LOCK_END\n' > "$rt_pd/l1"
+    printf '# READSET_LOCK_BEGIN\nA=1\n# READSET_LOCK_END\nz\n' > "$rt_pd/l2"
+    printf 'x\n# READSET_LOCK_BEGIN\nA=2\n# READSET_LOCK_END\n' > "$rt_pd/l3"
+    rl_a="$(rl_span "$rt_pd/l1")"; rl_b="$(rl_span "$rt_pd/l2")"; rl_c="$(rl_span "$rt_pd/l3")"
+    if [ -n "$rl_a" ] && [ "$rl_a" = "$rl_b" ] && [ "$rl_a" != "$rl_c" ]; then
+      rl_d="$(rl_span "$PP_DIST")"; rl_k="$(rl_span "$PP_CONS")"
+      if [ "$rl_d" != "$rl_k" ]; then
+        rl_diff="$(diff <(printf '%s\n' "$rl_d") <(printf '%s\n' "$rl_k") | sed -n '1,12p' | tr '\n' ' ')"
+        err "I66 the two pre-push hooks' READSET_LOCK spans have forked. Diff (distribution expected, consumer actual): ${rl_diff:-<none>}. core/scripts/derive-fixture-readsets.sh sources this span from whichever hook it finds, so a consumer would write and judge the trace-window slot by different rules, and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's READSET_LOCK span byte-identical to the distribution's."
+      fi
+    else
+      err "I66 (READSET_LOCK identity) self-probe failed: two identical spans compared unequal, two spans one byte apart compared equal, or the extraction read nothing, so the hook compare cannot discriminate."
+    fi
     rm -rf "$rt_pd"
   fi
   # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry the spans at all,
@@ -5621,6 +5643,13 @@ RT_EOF
       || err "I66 core/scripts/hermetic-run.sh no longer extracts the span with the literal sentinels '# READSET_TOOLS_BEGIN' / '# READSET_TOOLS_END', so it and the hooks disagree about where the tools span is."
     grep -qF "/^# READSET_KEYROWS_BEGIN\$/,/^# READSET_KEYROWS_END\$/p" "$RT_RUNNER" \
       || err "I66 core/scripts/hermetic-run.sh no longer extracts the span with the literal sentinels '# READSET_KEYROWS_BEGIN' / '# READSET_KEYROWS_END', so it and the hooks disagree about where the declared-fixture composer is."
+  fi
+  RL_DV="$REPO_ROOT/core/scripts/derive-fixture-readsets.sh"
+  if [ ! -f "$RL_DV" ]; then
+    err "I66 core/scripts/derive-fixture-readsets.sh is absent although the hooks carry the READSET_LOCK span it extracts, so the deriver's sentinel strings were not checked."
+  else
+    grep -qF "/^# READSET_LOCK_BEGIN\$/,/^# READSET_LOCK_END\$/p" "$RL_DV" \
+      || err "I66 core/scripts/derive-fixture-readsets.sh no longer extracts the span with the literal sentinels '# READSET_LOCK_BEGIN' / '# READSET_LOCK_END', so it and the hooks disagree about where the trace-window slot's lock helpers are."
   fi
 fi
 
