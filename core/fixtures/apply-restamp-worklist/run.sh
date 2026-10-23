@@ -132,12 +132,13 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); 
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
 # declared set exactly, and every declared shard must have a driver directory. The join proves it can
 # fire first, on a seeded duplicate and a seeded omission.
-#   a  mut hu     the mutants of the restamp guard, --finish and the union gate; the BL-103 unshipped-hook row
-#   b  bl t       BL-276 routing rows and their mutants; T1-T4 transient-ignore row
+#   a  mut hu arm the mutants of the restamp guard, --finish and the union gate; the BL-103 unshipped-hook row;
+#                 M1-M9 of the first-verified region
+#   b  bl t ar    BL-276 routing rows and their mutants; T1-T4 transient-ignore row; AR first-verified region
 #   c  cf u hr vf C1-C8 / F1-F3 / CWD, U1-U5, BL-292 hook-registration row, VF finish-verifies-tree
 SHARDS="a b c"
-UNITS_a="mut hu"
-UNITS_b="bl t"
+UNITS_a="mut hu arm"
+UNITS_b="bl t ar"
 UNITS_c="cf u hr vf"
 GROUP=a
 if [ "${1:-}" = "--group" ]; then
@@ -571,22 +572,43 @@ ra_drive() {
 #         and runs the real grep otherwise -- the count's filter fails, nothing else does.
 #   sha   shasum and sha256sum both exit 1, so --verify can compute no digest.
 RA_REAL_GREP="$(command -v grep)"
+#   none  a PATH that is EXACTLY a symlink farm of every tool on the current PATH except shasum and
+#         sha256sum (ar_notool below): no sha256 tool exists, which is UNAVAILABLE. The `sha` shim is
+#         the other state: a tool that EXISTS and fails, which is FAILED-shasum and never UNAVAILABLE.
 ra_shim() {
   mkdir -p "$1" || return 1
   case "$2" in
     grep) printf '#!/bin/bash\nfor a in "$@"; do case "$a" in *"0 HARD blockers"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$RA_REAL_GREP" > "$1/grep" ;;
-    sha)  printf '#!/bin/bash\nexit 1\n' > "$1/shasum"; printf '#!/bin/bash\nexit 1\n' > "$1/sha256sum"; chmod +x "$1/sha256sum" ;;
+    sha)  printf '#!/bin/bash\nexit 1\n' > "$1/shasum"; printf '#!/bin/bash\nexit 1\n' > "$1/sha256sum" ;;
+    none) ar_notool "$1"; return ;;
   esac
   chmod +x "$1"/*
 }
-# ra_drive_shim <tag> <grep|sha> -> "<ra_score cell>|<the re-approval line under the shim>"
+# ar_notool <dir> -> 0 when <dir> is a PATH carrying every tool the current PATH resolves except
+# shasum and sha256sum. `ln -s` without -f keeps the FIRST of two same-named tools, so the farm
+# resolves names in the order PATH does. Proved here, not assumed: git and awk resolve in it and
+# neither sha256 tool does.
+ar_notool() {
+  local d
+  mkdir -p "$1" || return 1
+  local IFS=:
+  for d in $PATH; do
+    [ -d "$d" ] && [ "$d" != "$1" ] && ln -s "$d"/* "$1"/ 2>/dev/null
+  done
+  rm -f "$1/shasum" "$1/sha256sum"
+  PATH="$1" command -v git >/dev/null 2>&1 && PATH="$1" command -v awk >/dev/null 2>&1 \
+    && ! PATH="$1" command -v shasum >/dev/null 2>&1 && ! PATH="$1" command -v sha256sum >/dev/null 2>&1
+}
+# ra_drive_shim <tag> <grep|sha|none> -> "<ra_score cell>|<the re-approval line under the shim>"
+# `none` REPLACES PATH with the farm; the others PREPEND the shim, so the real tool stays behind it.
 ra_drive_shim() {
-  local c="$WORK/ra-$1-$$-$RANDOM" s="$WORK/ra-shim-$1" out rc l
+  local c="$WORK/ra-$1-$$-$RANDOM" s="$WORK/ra-shim-$1" out rc l sp
   u5_build "$c" unseen || { echo "BROKEN"; return; }
   ra_shim "$s" "$2" || { echo "BROKEN"; return; }
-  l="$(PATH="$s:$PATH" bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
+  sp="$s:$PATH"; [ "$2" = none ] && sp="$s"
+  l="$(PATH="$sp" bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
   l="$(sed -n 's/^[[:space:]]*re-approval: //p' <<< "$l")"
-  out="$(PATH="$s:$PATH" bash "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
+  out="$(PATH="$sp" bash "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
   printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" \
     "$(grep -q 'UPSTREAM' "$c/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
     "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)" "$l"
@@ -1149,17 +1171,36 @@ else
     "$RA_STOP|digest="*" unseen=UNDECIDED label="*) ok "RA8 a failing unseen filter prints unseen=UNDECIDED and the apply refuses, the target file unwritten" ;;
     *) bad "RA8 a failing unseen filter scored [$RA8], want $RA_STOP with unseen=UNDECIDED — the count fails open and a region nobody re-approved is written" ;;
   esac
-  # RA9: no sha256 tool. digest=UNAVAILABLE with unseen>0 refuses naming the missing tool, and
+  # RA9a/RA9f: the two digest states, one property apart. RA9 used to PREPEND two `exit 1` stubs and
+  # call that "no sha256 tool"; both stubs are executable (ra_shim's closing chmod), so `shasum`
+  # resolved to a stub that EXISTS and fails -- which the engine now reports as FAILED-shasum, never
+  # UNAVAILABLE. RA9a builds a PATH with neither tool (UNAVAILABLE); RA9f keeps the failing stub.
+  # RA9a: no sha256 tool. digest=UNAVAILABLE with unseen>0 refuses naming the missing tool, and
   # prints no question that could never be answered.
-  RA9="$(ra_drive_shim a9 sha)"
+  RA9="$(ra_drive_shim a9 none)"
   case "$RA9" in
     "$RA_STOP|digest=UNAVAILABLE unseen=1 "*)
       if grep -qF 'no sha256 tool: install shasum' "$WORK/ra-a9.stderr" && ! grep -qF 'RE-APPROVAL OWED' "$WORK/ra-a9.stderr"; then
-        ok "RA9 with no sha256 tool the digest is UNAVAILABLE and the apply refuses naming shasum, printing no unanswerable question"
+        ok "RA9a with no sha256 tool on PATH the digest is UNAVAILABLE and the apply refuses naming shasum, printing no unanswerable question"
       else
-        bad "RA9 the refusal did not name the missing tool, or still printed a question quoting UNAVAILABLE"
+        bad "RA9a the refusal did not name the missing tool, or still printed a question quoting UNAVAILABLE"
       fi ;;
-    *) bad "RA9 with no sha256 tool scored [$RA9], want $RA_STOP with digest=UNAVAILABLE unseen=1" ;;
+    *) bad "RA9a with no sha256 tool scored [$RA9], want $RA_STOP with digest=UNAVAILABLE unseen=1" ;;
+  esac
+  # RA9f: shasum EXISTS (an executable stub first on PATH) and exits 1. The digest is FAILED-shasum,
+  # the apply refuses naming the failed tool, and the missing-tool remedy is NOT what it prints.
+  RA9F="$(ra_drive_shim a9f sha)"
+  case "$RA9F" in
+    "$RA_STOP|digest=FAILED-shasum unseen=1 "*)
+      if grep -qF 'could not digest the fresh region: shasum exists on this box' "$WORK/ra-a9f.stderr" \
+         && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$WORK/ra-a9f.stderr" \
+         && ! grep -qF 'no sha256 tool: install shasum' "$WORK/ra-a9f.stderr" \
+         && ! grep -qF 'RE-APPROVAL OWED' "$WORK/ra-a9f.stderr"; then
+        ok "RA9f with a shasum that exists and exits 1 the digest is FAILED-shasum and the apply refuses naming the failed tool, not the missing one"
+      else
+        bad "RA9f the refusal did not name the failed shasum, or read it as a missing tool, or printed a question"
+      fi ;;
+    *) bad "RA9f with a failing shasum scored [$RA9F], want $RA_STOP with digest=FAILED-shasum unseen=1" ;;
   esac
 fi
 
@@ -3499,6 +3540,714 @@ fi
 fi  # ---- end of VF_PRESENT
 fi  # ---- end of the VF block
 fi  # ---- end of unit vf
+
+# --- THE FIRST-VERIFIED REGION (units ar and arm) -----------------------------------------------
+# A session that splices a fresh emit-report.sh region over the approved report before apply turned
+# --verify's exit 3 into exit 0, and apply wrote with no ask. A plain --verify that exits 0 now
+# records the region it verified in <consumer --absolute-git-dir>/ai-dlc-approved-region, first-wins
+# per (base, theirs); apply.sh calls `emit-report.sh --for-apply --verify`, which compares the fresh
+# render against THAT region and prints one `approved-region: first=<digest|UNAVAILABLE|FAILED-<tool>|NONE>`
+# line apply.sh parses and strips. emit-report.sh's header owns the contract.
+#
+# EVERY WORLD `git init`s THE CONSUMER AS ITS OWN TOPLEVEL (the record needs a git-dir) except d2, the
+# one world that must have none, and records its own refs as `.B`/`.T`(/`.T2`) beside the consumer:
+# cell (j) is the one world whose theirs moves, and a helper reading a global would drive it with
+# the wrong ref. Every refusal is PRESENCE-shaped (`RE-APPROVAL OWED`, the cause line, the FULL
+# digest), and every accept asserts the target file's bytes AND a positive NOTE row.
+#
+# THE DIGEST AN ARM LOOKS FOR IS COMPUTED HERE from the report file's own region (ar_dg), never read
+# off apply's `re-approval:` line: asserting apply prints what apply printed is circular. Only cell
+# (f) builds its answer record from the question and option label apply PRINTS (R3), which is why M5
+# (one character of that printed label) is killed by (f) alone; (b), (g) and (i) compose the label
+# from the computed digest.
+#
+# A FLOW SETS AR_V, a space-separated list of tokens, one per conjunct, `X` held and `X!` broken, and
+# AR_W, its world. Flows run in THIS shell, never inside $( ), so neither is lost to a subshell. The
+# cells read the tokens of the shipped engine; each mutant re-drives the one flow that carries its
+# arm through a mutated whole-directory copy and must flip its own token while a positive sibling
+# token of the same flow holds (a mutant whose copy never ran holds nothing).
+AR_RPT="_bmad-output/ai-dlc-update/reconcile-report.md"
+# Copied from emit-report.sh's hand-edit refusal, never composed: cells n, n2 and n5 require it.
+AR_N_CAUSE="cause: UNDECIDED — the report's region was hand-edited after the first --verify"
+AR_SKIP=""
+if [ "$IS_DIST" = 0 ] && { ! grep -q '^ar_record() {' "$EMIT" || [ -n "$RA_SKIP" ]; }; then
+  AR_SKIP="the installed emit-report.sh predates the first-verified region record, or the answer-capture hook is absent; both land with the pull that carries this fixture"
+fi
+av()  { AR_V="$AR_V $1"; }
+avc() { if "$@"; then :; fi; }
+tk()  { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
+ar_B() { sed -n 1p "$1/.B"; }
+# ar_D <world> -> the dist this world reads: `.D` beside it when set (cell n5 needs a BARE dist, the
+# only kind the recorded-PASS cache keys), else the fixture's own. Same commits either way.
+ar_D() { if [ -s "$1/.D" ]; then sed -n 1p "$1/.D"; else printf '%s\n' "$DIST"; fi; }
+ar_T() { sed -n 1p "$1/.T"; }
+# ar_w <tag> <green|worklist> <theirs> [nogit] -> the world dir on stdout; the caller checks it is a dir
+ar_w() {
+  local w="$WORK/ar-$1-$$-$RANDOM"
+  mkdir -p "$w" || return 1
+  printf '%s\n' "$BASE" > "$w/.B"; printf '%s\n' "$3" > "$w/.T"
+  mk_consumer "$w/c" "$2" || return 1
+  mkdir -p "$w/c/_bmad-output/ai-dlc-update" || return 1
+  if [ "${4:-}" != nogit ]; then git -C "$w/c" init -q 2>/dev/null || return 1; fi
+  printf '%s\n' "$w"
+}
+ar_rec() { printf '%s\n' "$1/c/.git/ai-dlc-approved-region"; }
+# ar_render <world> [theirs] -- the SHIPPED renderer, as the session runs it; mutants are of the gate
+ar_render() {
+  local t="${2:-$(ar_T "$1")}"
+  { printf '# reconcile report (fixture)\n\n'
+    bash "$EMIT" "$(ar_D "$1")" "$(ar_B "$1")" "$1/c" "$t" 2>/dev/null
+  } > "$1/c/$AR_RPT"
+}
+ar_ver() { local t="${3:-$(ar_T "$2")}"; bash "$1/emit-report.sh" --verify "$2/c/$AR_RPT" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >"$2/v.out" 2>"$2/v.err"; }
+ar_fa()  { local t="${3:-$(ar_T "$2")}"; bash "$1/emit-report.sh" --for-apply --verify "$2/c/$AR_RPT" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >/dev/null 2>"$2/fa.err"; sed -n 's/^approved-region: first=//p' "$2/fa.err"; }
+ar_app() { local t="${3:-$(ar_T "$2")}"; bash "$1/apply.sh" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >"$2/a.out" 2>"$2/a.err"; }
+# ar_wrote <world> [theirs] -> 0 when the session driver holds theirs' bytes (the write happened)
+ar_wrote() {
+  local t="${2:-$(ar_T "$1")}"
+  git -C "$DIST" show "${t}:core/session-driver/ai-dlc-session-driver.sh" > "$1/drv.want" 2>/dev/null \
+    && cmp -s "$1/drv.want" "$1/c/$DRIVER_REL"
+}
+# ar_dg <world> [theirs] -> sha256 of the report's GENERATED region as norm_dist leaves it, computed
+# here; empty unless it is 64 hex.
+ar_dg() {
+  local t="${2:-$(ar_T "$1")}" d
+  awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$1/c/$AR_RPT" \
+    | sed -E "s|git -C .* show ${t}:|git -C <dist> show ${t}:|g" > "$1/region.txt"
+  d="$(printf '%s\n' "$(cat "$1/region.txt")" | shasum -a 256 | cut -d' ' -f1)"
+  case "$d" in *[!0-9a-f]*|'') d="" ;; esac
+  [ "${#d}" -eq 64 ] && printf '%s\n' "$d"
+}
+ar_lbl() { printf 'Re-approve %s, run apply\n' "$(printf '%s' "$1" | cut -c1-12)"; }
+ar_q()   { printf 'Re-approve the reconcile report? Region digest %s.\n' "$1"; }
+ar_note() { detail_of "$(cat "$1/a.out")" NOTE "$2"; }
+ar_owed() { # ar_owed <world> <cause> <digest> -> 0 when apply refused, left the tree unwritten, and said why
+  [ -s "$1/a.err" ] && ! ar_wrote "$1" && grep -qF 'apply: RE-APPROVAL OWED.' "$1/a.err" \
+    && grep -q "^  cause: $2 " "$1/a.err" && [ -n "$3" ] && grep -qF -- "$3" "$1/a.err"
+}
+# HERE-STRINGS, NOT PIPES, into a reader that stops at its first match (I54b): under pipefail the
+# writer's EPIPE would answer "not found" once its output after the match fills the pipe buffer. The
+# capture's own status is not what these read; grep's status is the function's, and an empty capture
+# fails grep, which is the not-found answer either way.
+ar_note_has() { # ar_note_has <world> <note-kind> <text> -> 0 when that NOTE row's detail carries <text>
+  local n
+  n="$(ar_note "$1" "$2")"
+  grep -qF -- "$3" <<< "$n"
+}
+ar_rec_hard() { # ar_rec_hard <record> -> 0 when the record's region (line 3 on) carries a HARD-* row
+  local g
+  g="$(sed -n '3,$p' "$1" 2>/dev/null)"
+  grep -q '^HARD-' <<< "$g"
+}
+ar_went() { # ar_went <world> <rc> <note-kind> <note-text> -> 0 when apply wrote, exited 0 and its NOTE says so
+  [ "$2" -eq 0 ] && ar_wrote "$1" && ar_note_has "$1" "$3" "$4"
+}
+
+# FLOW A -- approved WITH a HARD blocker, blocker resolved, one unseen row, hand RE-RENDER, plain
+# --verify 0, apply. Cells r1 (record written), r2 (first-wins), h3 (plain --verify bytes with and
+# without the record), a (the refusal), f1 (R3 on the BLOCKERS-RESOLVED path).
+# ar_flowA <rec-dir> <stop: r1|r2|a|f> [h]
+ar_flowA() {
+  local r="$1" w rc q l dg1 dg2 rec
+  AR_V=""; AR_W=""
+  w="$(ar_w A green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"; rec="$(ar_rec "$w")"
+  u5_seed_blocker "$w/c" || { AR_V=BROKEN; return; }
+  ar_render "$w"
+  grep -q '^HARD-' "$w/c/$AR_RPT" || { AR_V=BROKEN; return; }
+  cp "$w/c/$AR_RPT" "$w/r1.md"; dg1="$(ar_dg "$w")"; printf '%s\n' "$dg1" > "$w/dg1"
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && av V0 || av V0!
+  if [ "$(sed -n 1p "$rec" 2>/dev/null)" = "ai-dlc-approved-region 1" ] \
+     && [ "$(sed -n 2p "$rec" 2>/dev/null)" = "key $BASE $THEIRS" ] \
+     && ar_rec_hard "$rec"; then av R1; else av R1!; fi
+  [ "$2" = r1 ] && return
+  cp "$rec" "$w/rec1" 2>/dev/null
+  rm -rf "$w/c/.claude/skills/ai-dlc/overrides"; u5_seed_unseen "$w/c" || { av BROKEN; return; }
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 3 ] && av V3 || av V3!
+  if [ "${3:-}" = h ]; then
+    cp "$w/v.out" "$w/v3.out"; cp "$w/v.err" "$w/v3.err"
+    mv "$rec" "$w/rec.aside"
+    ar_ver "$r" "$w"; rc=$?
+    if [ "$rc" -eq 3 ] && cmp -s "$w/v.out" "$w/v3.out" && cmp -s "$w/v.err" "$w/v3.err" && [ -s "$w/v3.err" ] \
+       && [ ! -e "$rec" ]; then av H3; else av H3!; fi
+    mv "$w/rec.aside" "$rec"
+  fi
+  ar_render "$w"
+  cmp -s "$w/r1.md" "$w/c/$AR_RPT" && av RR! || av RR
+  cp "$w/c/$AR_RPT" "$w/r2.md"; dg2="$(ar_dg "$w")"; printf '%s\n' "$dg2" > "$w/dg2"
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && av V0b || av V0b!
+  if [ -n "$dg2" ] && [ "$dg1" != "$dg2" ] && cmp -s "$w/rec1" "$rec" && ar_rec_hard "$rec"; then av R2; else av R2!; fi
+  [ "$2" = r2 ] && return
+  ar_app "$r" "$w"; rc=$?
+  if [ "$rc" -ne 0 ] && ar_owed "$w" BLOCKERS-RESOLVED "$dg2" && ! grep -q '^approved-region:' "$w/a.err"; then av A; else av A!; fi
+  [ "$2" = a ] && return
+  q="$(sed -n 's/^  question: //p' "$w/a.err")"; l="$(sed -n 's/^  option label: //p' "$w/a.err")"
+  if [ -n "$q" ] && [ -n "$l" ] && ra_answer "$w/c" "$q" "$l"; then
+    ar_app "$r" "$w"; rc=$?
+    ar_went "$w" "$rc" blockers-resolved "were re-approved" && ar_note_has "$w" blockers-resolved "$dg2" \
+      && av F1 || av F1!
+  else
+    av F1!
+  fi
+}
+
+# FLOW F2 -- approved with NO blocker, one unseen row appears, hand re-render, plain --verify 0, apply:
+# RE-RENDERED-SINCE-APPROVAL (exit 3), then R3 from the printed question and label.
+ar_flowF2() {
+  local r="$1" w rc q l dg2
+  AR_V=""; AR_W=""
+  w="$(ar_w F green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"
+  grep -q '^HARD-' "$w/c/$AR_RPT" && { AR_V=BROKEN; return; }
+  ar_ver "$r" "$w"; rc=$?; [ "$rc" -eq 0 ] && av FV0 || av FV0!
+  u5_seed_unseen "$w/c" || { av BROKEN; return; }
+  ar_render "$w"; dg2="$(ar_dg "$w")"
+  ar_ver "$r" "$w"; rc=$?; [ "$rc" -eq 0 ] && av FV0b || av FV0b!
+  ar_app "$r" "$w"; rc=$?
+  [ "$rc" -ne 0 ] && ar_owed "$w" RE-RENDERED-SINCE-APPROVAL "$dg2" && av F2A || av F2A!
+  q="$(sed -n 's/^  question: //p' "$w/a.err")"; l="$(sed -n 's/^  option label: //p' "$w/a.err")"
+  if [ -n "$q" ] && [ -n "$l" ] && ra_answer "$w/c" "$q" "$l"; then
+    ar_app "$r" "$w"; rc=$?
+    ar_went "$w" "$rc" blockers-resolved "were re-approved" && ar_note_has "$w" blockers-resolved "$dg2" \
+      && av F2 || av F2!
+  else
+    av F2!
+  fi
+}
+
+# FLOW G -- the withheld-stamp reapply path: a WORKLIST consumer is verified and applied (written,
+# stamp withheld), the report re-rendered as reapply_remedy says, apply re-run: it ASKS, printing the
+# question; with a record of that question answered with the label it proceeds.
+# ar_flowG <rec-dir> <stop: g1|g2>
+ar_flowG() {
+  local r="$1" w rc q dg
+  AR_V=""; AR_W=""
+  w="$(ar_w G worklist "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"
+  ar_ver "$r" "$w"; rc=$?
+  ar_app "$r" "$w"
+  if [ "$rc" -eq 0 ] && ar_wrote "$w" && [ "$(stamp_ver "$w/c")" = 1.0.0 ] \
+     && has_row "$(cat "$w/a.out")" DECISION restamp-withheld; then av G0; else av G0!; fi
+  ar_render "$w"; dg="$(ar_dg "$w")"
+  ar_app "$r" "$w"; rc=$?
+  q="$(sed -n 's/^  question: //p' "$w/a.err")"
+  # The tree was already written by the first run, so ar_owed's unwritten conjunct does not apply:
+  # the refusal is read off its own lines.
+  if [ "$rc" -ne 0 ] && grep -qF 'apply: RE-APPROVAL OWED.' "$w/a.err" \
+     && grep -q '^  cause: RE-RENDERED-SINCE-APPROVAL ' "$w/a.err" && [ -n "$dg" ] && grep -qF -- "$dg" "$w/a.err" \
+     && [ -n "$q" ] && [ "$(grep -c '^  question: ' "$w/a.err")" = 1 ]; then av G1; else av G1!; fi
+  [ "$2" = g1 ] && return
+  if [ -n "$q" ] && ra_answer "$w/c" "$q" "$(ar_lbl "$dg")"; then
+    ar_app "$r" "$w"; rc=$?
+    [ "$rc" -eq 0 ] && ar_note_has "$w" blockers-resolved "were re-approved" && av G2 || av G2!
+  else
+    av G2!
+  fi
+}
+
+# FLOW I -- R1 approved, R2 = R1 with one row more, a record quoting R2's digest, apply. Compared
+# against the twin world AR_I0 (no re-render, written), whose tree is the CURRENT state.
+ar_flowI() {
+  local r="$1" w rc dg1 dg2 f n=0 bad=0
+  AR_V=""; AR_W=""
+  w="$(ar_w I green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r1.md"; dg1="$(ar_dg "$w")"
+  ar_ver "$r" "$w"
+  u5_seed_unseen "$w/c" || { av BROKEN; return; }
+  ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r2.md"; dg2="$(ar_dg "$w")"
+  ar_ver "$r" "$w"
+  if [ -z "$dg1" ] || [ -z "$dg2" ] || [ "$dg1" = "$dg2" ] || cmp -s "$w/r1.md" "$w/r2.md"; then av BROKEN; return; fi
+  ra_answer "$w/c" "$(ar_q "$dg2")" "$(ar_lbl "$dg2")" || { av BROKEN; return; }
+  rm -f "$w/c/ra-payload.json"
+  ar_app "$r" "$w"; rc=$?
+  ar_went "$w" "$rc" blockers-resolved "were re-approved" && av I0 || av I0!
+  # (1) the written tree, file by file, against the twin; the overrides the seed added and the
+  # report/answers under _bmad-output are not apply's writes and are excluded on both sides.
+  if [ -d "${AR_I0:-}/c" ]; then
+    while IFS= read -r f; do
+      n=$((n+1)); cmp -s "$AR_I0/c/$f" "$w/c/$f" || bad=$((bad+1))
+    done < <(cd "$AR_I0/c" && find . -type f ! -path './.git/*' ! -path './_bmad-output/*' ! -path './.claude/skills/ai-dlc/overrides/*' | sort)
+    [ "$n" -ge 4 ] && [ "$bad" -eq 0 ] && grep -qF 'UPSTREAM' "$w/c/$DRIVER_REL" && av I1 || av I1!
+  else
+    av I1!
+  fi
+  cmp -s "$w/r2.md" "$w/c/$AR_RPT" && av I2 || av I2!
+  # The NOTE also quotes the cause line, which names the FIRST region's digest as the first region --
+  # correctly. What must not name it is the re-approval clause, so that clause's digest is extracted.
+  local qd
+  qd="$(ar_note "$w" blockers-resolved | sed -n 's/.*holds an AskUserQuestion record quoting digest \([0-9a-f]*\) answered.*/\1/p')"
+  [ -n "$qd" ] && [ "$qd" = "$dg2" ] && [ "$qd" != "$dg1" ] && av I3 || av I3!
+}
+
+# ar_twin -- AR_I0, cell (i)'s twin: a current report, no re-render, verified and applied with the
+# SHIPPED engine. Built by whichever of units ar and arm runs first in this shard, because the two
+# units may be dealt to different shards and a twin built in the other one does not exist here.
+# Leaves AR_I0_H0 (rc of the record-writing verify, rc of the record-finding verify, yes|no record)
+# and AR_I0_RC (apply's rc) for unit ar's h0 and I0 arms.
+ar_twin() {
+  [ -d "${AR_I0:-}/c" ] && return 0
+  AR_I0="$(ar_w I0 green "$THEIRS")"; [ -d "$AR_I0" ] || { AR_I0=""; return 1; }
+  local a b r=no
+  ar_render "$AR_I0"
+  ar_ver "$REC" "$AR_I0"; a=$?; cp "$AR_I0/v.out" "$AR_I0/v0a.out"; cp "$AR_I0/v.err" "$AR_I0/v0a.err"
+  [ -s "$(ar_rec "$AR_I0")" ] && r=yes
+  ar_ver "$REC" "$AR_I0"; b=$?
+  AR_I0_H0="$a $b $r"
+  ar_app "$REC" "$AR_I0"; AR_I0_RC=$?
+}
+
+# FLOW J -- record R1 under (B,T); plain --verify under (B,T2) exits 0 and REPLACES it (key T2);
+# apply at T2 reads first= with T2's region and writes.
+ar_flowJ() {
+  local r="$1" w rc rec dgt2 fa
+  AR_V=""; AR_W=""
+  w="$(ar_w J green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"; rec="$(ar_rec "$w")"
+  printf '%s\n' "$OTHER" > "$w/.T2"
+  ar_render "$w"
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(sed -n 2p "$rec" 2>/dev/null)" = "key $BASE $THEIRS" ] && av J0 || av J0!
+  ar_render "$w" "$(sed -n 1p "$w/.T2")"; dgt2="$(ar_dg "$w" "$(sed -n 1p "$w/.T2")")"
+  ar_ver "$r" "$w" "$(sed -n 1p "$w/.T2")"; rc=$?
+  [ "$rc" -eq 0 ] && [ "$(sed -n 2p "$rec" 2>/dev/null)" = "key $BASE $(sed -n 1p "$w/.T2")" ] && av J1 || av J1!
+  fa="$(ar_fa "$r" "$w" "$(sed -n 1p "$w/.T2")")"
+  [ -n "$dgt2" ] && [ "$fa" = "$dgt2" ] && av J2 || av J2!
+  ar_app "$r" "$w" "$(sed -n 1p "$w/.T2")"; rc=$?
+  [ "$rc" -eq 0 ] && ar_wrote "$w" "$(sed -n 1p "$w/.T2")" && ! grep -qF 'RE-APPROVAL OWED' "$w/a.err" \
+    && ar_note_has "$w" report-verified 'matches what the detectors render' && av J3 || av J3!
+}
+
+# FLOW K -- the two digest states, one property apart. KF: a `shasum` that EXISTS (an executable stub
+# first on PATH) and exits 1. KA: a PATH with neither sha256 tool (ra_shim none).
+ar_flowK() {
+  local r="$1" w rc s="$WORK/ar-kstub-$$-$RANDOM" fa
+  AR_V=""; AR_W=""
+  mkdir -p "$s" && printf '#!/bin/bash\nexit 1\n' > "$s/shasum" && chmod +x "$s/shasum" || { AR_V=BROKEN; return; }
+  w="$(ar_w K green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"
+  PATH="$s:$PATH" ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && grep -qF 'present, current, and complete.' "$w/v.out" && [ ! -e "$(ar_rec "$w")" ] && av KV || av KV!
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av KV2 || av KV2!
+  fa="$(PATH="$s:$PATH" ar_fa "$r" "$w")"
+  [ "$fa" = FAILED-shasum ] && av KF1 || av KF1!
+  PATH="$s:$PATH" ar_app "$r" "$w"; rc=$?
+  if [ "$rc" -ne 0 ] && ! ar_wrote "$w" \
+     && grep -qF 'apply: the union gate could not digest the approved region: shasum exists on this box' "$w/a.err" \
+     && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! grep -qF 'install shasum' "$w/a.err"; then av KF2; else av KF2!; fi
+  # KA: no sha256 tool at all. The record is still written (the region is what the comparison uses),
+  # first=UNAVAILABLE, and a matching report writes.
+  s="$WORK/ar-knone-$$-$RANDOM"
+  ar_notool "$s" || { av BROKEN; return; }
+  w="$(ar_w KA green "$THEIRS")"; [ -d "$w" ] || { av BROKEN; return; }
+  ar_render "$w"
+  PATH="$s" ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av KA1 || av KA1!
+  fa="$(PATH="$s" ar_fa "$r" "$w")"
+  [ "$fa" = UNAVAILABLE ] && av KA2 || av KA2!
+  PATH="$s" ar_app "$r" "$w"; rc=$?
+  ar_went "$w" "$rc" report-verified 'matches what the detectors render' && av KA3 || av KA3!
+}
+
+# FLOW N -- the report HAND-EDITED after step 5's plain --verify, with no re-render: a row of the
+# region deleted and a bogus row added. Every other flow re-renders with the shipped renderer, so
+# none of them can see a region that no renderer produced. ar_flowN <rec-dir> <edit|plain>; `plain`
+# is the ALLOW twin one property apart: the same world, the report left as verified, which writes.
+# ar_hand_edit <world> -> 0 when the report's region lost its session-driver rows and gained one bogus
+# row, by awk, with no re-render; the edit is proved to have landed, not assumed.
+ar_hand_edit() {
+  local w="$1" n0 n1
+  cp "$w/c/$AR_RPT" "$w/before.md" || return 1
+  awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} /END GENERATED: reconcile-mechanical/{f=0}
+    f && index($0, "ai-dlc-session-driver.sh") {next} {print}
+    /BEGIN GENERATED: reconcile-mechanical/{print "HAND-EDITED ROW"}' "$w/before.md" > "$w/c/$AR_RPT" || return 1
+  n0="$(grep -c 'ai-dlc-session-driver.sh' "$w/before.md")" || n0=0
+  n1="$(grep -c 'ai-dlc-session-driver.sh' "$w/c/$AR_RPT")" || n1=0
+  ! cmp -s "$w/before.md" "$w/c/$AR_RPT" && grep -qxF 'HAND-EDITED ROW' "$w/c/$AR_RPT" && [ "$n0" -gt "$n1" ]
+}
+# ar_region_of <file> <theirs> -- a report's GENERATED region as norm_dist leaves it
+ar_region_of() {
+  awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$1" \
+    | sed -E "s|git -C .* show ${2}:|git -C <dist> show ${2}:|g"
+}
+ar_flowN() {
+  local r="$1" w rc
+  AR_V=""; AR_W=""
+  w="$(ar_w N green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av N0 || av N0!
+  if [ "$2" = edit ]; then
+    ar_hand_edit "$w" || { av BROKEN; return; }
+  else
+    # n4's premise, measured: the report's region, the record's region and a fresh render are one text.
+    ar_region_of "$w/c/$AR_RPT" "$(ar_T "$w")" > "$w/n4.report"
+    sed -n '3,$p' "$(ar_rec "$w")" > "$w/n4.record" 2>/dev/null
+    { printf '# x\n\n'; bash "$EMIT" "$(ar_D "$w")" "$(ar_B "$w")" "$w/c" "$(ar_T "$w")" 2>/dev/null; } > "$w/n4.fresh.md"
+    ar_region_of "$w/n4.fresh.md" "$(ar_T "$w")" > "$w/n4.fresh"
+    [ -s "$w/n4.report" ] && cmp -s "$w/n4.report" "$w/n4.record" && cmp -s "$w/n4.report" "$w/n4.fresh" && av N4S || av N4S!
+  fi
+  ar_app "$r" "$w"; rc=$?
+  ar_flowN_score "$w" "$rc" "$2"
+}
+# FLOW N5 -- (n)'s world reached through the recorded-PASS cache: EMIT_REPORT_VERIFY_CACHE=1, a bare
+# dist (R1 of the cache refuses any other), a recorded PASS proved present AND proved to hit before the
+# edit, then the hand edit and apply. The cache keys `got`, which apply mode sets to the record's region,
+# and excludes the report file, so only the report-equals-record condition keeps the edit off it.
+ar_flowN5() {
+  local r="$1" w rc
+  AR_V=""; AR_W=""
+  w="$(ar_w N5 green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  git clone -q --bare "$DIST" "$w/dist.git" 2>/dev/null && printf '%s\n' "$w/dist.git" > "$w/.D" || { AR_V=BROKEN; return; }
+  ar_render "$w"
+  EMIT_REPORT_VERIFY_CACHE=1 ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && [ -s "$w/c/.git/ai-dlc-verify-pass" ] && av N5R || av N5R!
+  EMIT_REPORT_VERIFY_CACHE=1 ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && grep -qF 'accepted a recorded PASS' "$w/v.out" && av N5C || av N5C!
+  ar_hand_edit "$w" || { av BROKEN; return; }
+  EMIT_REPORT_VERIFY_CACHE=1 ar_app "$r" "$w"; rc=$?
+  if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
+     && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then
+    av N5
+  else
+    av N5!
+  fi
+}
+# ar_flowN2 <rec-dir> <n2|n3>
+#   n2: record R1 WITH a HARD blocker, resolve it leaving NO unseen row, re-render to R2 with the
+#       shipped renderer, then hand-edit R2 to R2' (one row changed). UNSEEN=0 IS THE DISCRIMINATING
+#       SEED: without the edited-report comparison, record-vs-fresh reads BLOCKERS-RESOLVED unseen=0
+#       and PROCEEDS (RA0), so only that comparison can refuse it. An unseen>0 seed refuses either way
+#       and could not fail on the property this cell exists for. n2 is (n)'s case in a second shape.
+#   n3: record R1, an unseen row appears, and the fresh region is spliced in by awk so the report
+#       EQUALS the fresh render byte for byte: it keeps the re-render verdict.
+ar_flowN2() {
+  local r="$1" w rc
+  AR_V=""; AR_W=""
+  w="$(ar_w "$2" green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  [ "$2" = n2 ] && { u5_seed_blocker "$w/c" || { AR_V=BROKEN; return; }; }
+  ar_render "$w"
+  [ "$2" = n2 ] && { grep -q '^HARD-' "$w/c/$AR_RPT" || { AR_V=BROKEN; return; }; }
+  ar_ver "$r" "$w"; rc=$?
+  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av N0 || av N0!
+  if [ "$2" = n2 ]; then
+    rm -rf "$w/c/.claude/skills/ai-dlc/overrides"
+  else
+    u5_seed_unseen "$w/c" || { av BROKEN; return; }
+  fi
+  if [ "$2" = n3 ]; then
+    # Not emit-report.sh's file: the fresh region is spliced in by awk over a report holding R1.
+    { printf '# reconcile report (fixture)\n\n'
+      bash "$EMIT" "$DIST" "$(ar_B "$w")" "$w/c" "$(ar_T "$w")" 2>/dev/null
+    } > "$w/fresh.md"
+    awk 'NR==FNR {print; next}' "$w/fresh.md" "$w/c/$AR_RPT" > "$w/c/$AR_RPT.new" && mv "$w/c/$AR_RPT.new" "$w/c/$AR_RPT"
+    cmp -s "$w/fresh.md" "$w/c/$AR_RPT" || { av BROKEN; return; }
+  else
+    ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r2.md"
+    awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} /END GENERATED: reconcile-mechanical/{f=0}
+      f && !done && index($0, "ai-dlc-session-driver.sh") {sub(/ai-dlc-session-driver\.sh/, "ai-dlc-session-driver.sh EDITED"); done=1} {print}' \
+      "$w/r2.md" > "$w/c/$AR_RPT"
+    [ "$(cmp -l "$w/r2.md" "$w/c/$AR_RPT" 2>/dev/null | wc -l)" -gt 0 ] && grep -qF 'ai-dlc-session-driver.sh EDITED' "$w/c/$AR_RPT" \
+      || { av BROKEN; return; }
+  fi
+  ar_app "$r" "$w"; rc=$?
+  ar_flowN_score "$w" "$rc" "$2"
+}
+# ar_flowN_score <world> <rc> <edit|plain|n2|n3>
+ar_flowN_score() {
+  local w="$1" rc="$2"
+  case "$3" in
+    n3)
+      if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF 'apply: RE-APPROVAL OWED.' "$w/a.err" \
+         && grep -q '^  cause: RE-RENDERED-SINCE-APPROVAL ' "$w/a.err" && ! grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
+         && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then av N3; else av N3!; fi
+      return ;;
+    n2) # (n)'s case, second shape: the same cause, presence-shaped
+      if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
+         && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then av N2E; else av N2E!; fi
+      # N2P is the MEASUREMENT that unseen=0 is the discriminating seed: held only when the world
+      # PROCEEDED (exit 0, written, a blockers-resolved NOTE). It must read N2P! on the shipped engine
+      # and N2P under M10, or n2 is not a cell that only the edited-report comparison refuses.
+      [ "$rc" -eq 0 ] && ar_wrote "$w" && has_row "$(cat "$w/a.out")" NOTE blockers-resolved && av N2P || av N2P!
+      return ;;
+  esac
+  if [ "$3" = edit ]; then
+    if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
+       && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then
+      av N1
+    else
+      av N1!
+    fi
+  else
+    ar_went "$w" "$rc" report-verified 'matches what the detectors render' && av NT || av NT!
+  fi
+}
+
+# FLOW M -- the `approved-region:` line malformed (`first=not-a-digest`) or absent, from a harness
+# copy whose emit-report.sh is edited and whose apply.sh is taken from <apply-src-dir>. A current
+# report, no record: apply must refuse on the line before deciding anything.
+# ar_flowM <apply-src-dir> <bad|absent>
+ar_flowM() {
+  local h="$WORK/ar-mh-$2-$$-$RANDOM" w rc new
+  AR_V=""; AR_W=""
+  build_rec "$h" && cp "$1/apply.sh" "$h/apply.sh" || { AR_V=BROKEN; return; }
+  new='  :'; [ "$2" = bad ] && new='  echo "approved-region: first=not-a-digest" >&2'
+  if ! py_replace_once "$h/emit-report.sh" '  echo "approved-region: first=${_ar_first_dg}" >&2' "$new" 2>/dev/null \
+     || cmp -s "$REC/emit-report.sh" "$h/emit-report.sh"; then
+    AR_V="MH!"; return
+  fi
+  w="$(ar_w M green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
+  AR_W="$w"
+  ar_render "$w"
+  ar_app "$h" "$w"; rc=$?
+  local found='(found 1)'; [ "$2" = absent ] && found='(found 0)'
+  if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF 'did not print exactly one well-formed' "$w/a.err" \
+     && grep -qF -- "$found" "$w/a.err" && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err"; then
+    av "M-$2"
+  else
+    av "M-$2!"
+  fi
+}
+
+if sg ar; then
+if [ -n "$AR_SKIP" ]; then
+  printf '  SKIP  AR (first-verified region) -- %s\n' "$AR_SKIP"
+else
+  # AR-0 SELF-PROBE: the world helpers resolve their refs, the computed digest is 64 hex, and the
+  # no-tool PATH really carries neither sha256 tool while git and awk still resolve.
+  w0="$(ar_w P green "$THEIRS")"
+  if [ -d "$w0" ] && [ "$(ar_T "$w0")" = "$THEIRS" ] && ar_render "$w0" && [ -n "$(ar_dg "$w0")" ] \
+     && ar_notool "$WORK/ar-probe-notool-$$" && [ -d "$w0/c/.git" ]; then
+    ok "AR-0 setup: a world records its own refs, its consumer is its own git toplevel, a rendered region digests to 64 hex, and the no-tool PATH resolves git and awk but neither sha256 tool"
+  else
+    bad "AR-0 setup: the world helpers, the digest or the no-tool PATH did not build — every AR arm below reads a world that cannot express the case"
+  fi
+
+  # Twin for (i), and (h0): a current report, no re-render. Plain --verify's exit-0 output is exactly
+  # the one success line with an empty stderr on the run that WRITES the record and on the run that
+  # finds it; apply then writes.
+  if ar_twin; then
+    read -r h0a h0b h0rec <<< "$AR_I0_H0"
+    if [ "$h0a" -eq 0 ] && [ "$h0b" -eq 0 ] && [ "$h0rec" = yes ] \
+       && [ "$(cat "$AR_I0/v0a.out")" = "emit-report: the report's mechanical region is present, current, and complete." ] \
+       && [ ! -s "$AR_I0/v0a.err" ] && cmp -s "$AR_I0/v.out" "$AR_I0/v0a.out" && cmp -s "$AR_I0/v.err" "$AR_I0/v0a.err"; then
+      ok "AR-h0 plain --verify exit 0 prints exactly its one success line and an empty stderr both on the run that writes the record and on the run that finds it"
+    else
+      bad "AR-h0 plain --verify's exit-0 output moved when the record is written or present (rc $h0a/$h0b, record $h0rec) — step 5's output is no longer byte-identical"
+    fi
+    ar_went "$AR_I0" "$AR_I0_RC" report-verified 'matches what the detectors render' || bad "AR-I0 the twin world for (i) did not write (rc $AR_I0_RC) — cell (i)'s tree comparison has no current state to compare against"
+  else
+    bad "AR-I0 could not build the twin world for (i)"
+  fi
+
+  ar_flowA "$REC" a h; FA="$AR_V"; WA="$AR_W"
+  tk "$FA" R1 && ok "AR-r1 a plain --verify exiting 0 writes the record in the consumer's git-dir: version line, key <base> <theirs>, and the approved region with its HARD row" \
+              || bad "AR-r1 no well-formed record after the first plain --verify [$FA]"
+  tk "$FA" V3 && tk "$FA" H3 && ok "AR-h3 with the blocker resolved and no re-render plain --verify still exits 3, and its stdout and stderr are byte-identical with the record present and with it removed (and that run writes none)" \
+              || bad "AR-h3 the un-re-rendered control or plain --verify's exit-3 bytes moved with the record [$FA]"
+  tk "$FA" RR && tk "$FA" V0b && tk "$FA" R2 && ok "AR-r2 after the hand re-render plain --verify exits 0 and the record is byte-identical to the first one, still carrying the HARD row (first-wins)" \
+              || bad "AR-r2 the re-render's plain --verify did not exit 0, or REWROTE the record [$FA]"
+  tk "$FA" A && ok "AR-a a hand re-render with no answer record REFUSES: tree unwritten, RE-APPROVAL OWED, cause BLOCKERS-RESOLVED and the fresh region's full digest printed, the approved-region line stripped" \
+             || bad "AR-a the 0.881.0 shape: a hand re-render with no re-approval was not refused with RE-APPROVAL OWED, its cause and its digest [$FA]"
+  # (c) then (b) in the same world: a record quoting the FIRST region's digest, then one quoting the new.
+  if [ -n "$WA" ] && [ -s "$WA/dg1" ] && [ -s "$WA/dg2" ]; then
+    dg1="$(cat "$WA/dg1")"; dg2="$(cat "$WA/dg2")"
+    if ra_answer "$WA/c" "$(ar_q "$dg1")" "$(ar_lbl "$dg2")"; then
+      ar_app "$REC" "$WA"; rc=$?
+      [ "$rc" -ne 0 ] && ar_owed "$WA" BLOCKERS-RESOLVED "$dg2" \
+        && ok "AR-c a record quoting the FIRST region's digest, answered with the new label, refuses — RE-APPROVAL OWED, tree unwritten" \
+        || bad "AR-c a re-approval of the first region passed as a re-approval of the re-rendered one (rc $rc)"
+    else
+      bad "AR-c the answer-capture hook wrote no record"
+    fi
+    if ra_answer "$WA/c" "$(ar_q "$dg2")" "$(ar_lbl "$dg2")"; then
+      ar_app "$REC" "$WA"; rc=$?
+      ar_went "$WA" "$rc" blockers-resolved "were re-approved" && ar_note_has "$WA" blockers-resolved "$dg2" \
+        && ok "AR-b the re-render plus a hook-written record quoting the new digest with the exact label WRITES, its NOTE naming that digest" \
+        || bad "AR-b a correct re-approval of the re-rendered region did not let apply write (rc $rc)"
+    else
+      bad "AR-b the answer-capture hook wrote no record"
+    fi
+  else
+    bad "AR-b/c flow A built no world to continue [$FA]"
+  fi
+
+  ar_flowA "$REC" f; FF1="$AR_V"
+  tk "$FF1" A && tk "$FF1" F1 && ok "AR-f1 R3 on the BLOCKERS-RESOLVED path: a record built from exactly the question and option label apply PRINTED lets the re-run write" \
+                              || bad "AR-f1 apply's own printed question and label do not satisfy its own gate on the BLOCKERS-RESOLVED path [$FF1]"
+  ar_flowF2 "$REC"; FF2="$AR_V"
+  tk "$FF2" F2A && ok "AR-f2 the F3 path: a re-render after a blocker-free approval REFUSES as RE-RENDERED-SINCE-APPROVAL with RE-APPROVAL OWED and the full digest, tree unwritten" \
+                || bad "AR-f2 a re-render after a blocker-free approval was not refused as RE-RENDERED-SINCE-APPROVAL [$FF2]"
+  tk "$FF2" F2 && ok "AR-f2 R3 on the F3 path: the printed question and label, recorded by the hook, let the re-run write" \
+               || bad "AR-f2 apply's own printed question and label do not satisfy its own gate on the F3 path [$FF2]"
+  ar_flowG "$REC" g2; FG="$AR_V"
+  tk "$FG" G0 && tk "$FG" G1 && tk "$FG" G2 && ok "AR-g the withheld-stamp reapply path ASKS once, printing the question, and with that question recorded and the label answered it proceeds" \
+                                           || bad "AR-g the withheld-stamp reapply path is wedged or unasked [$FG]"
+  ar_flowI "$REC"; FI="$AR_V"
+  tk "$FI" I0 && tk "$FI" I1 && ok "AR-i1 a re-render cleared by a recorded re-approval writes a tree byte-identical, file by file, to the one the same world writes with no re-render" \
+              || bad "AR-i1 the re-approved re-render wrote a tree that is not the current state [$FI]"
+  tk "$FI" I2 && ok "AR-i2 the report still holds the re-rendered region R2 after apply — apply mode never wrote the first region back" \
+              || bad "AR-i2 the report no longer holds R2 after apply [$FI]"
+  tk "$FI" I3 && ok "AR-i3 the NOTE names R2's digest, not R1's" \
+              || bad "AR-i3 the NOTE does not name the re-approved region's digest, or names the first one [$FI]"
+  ar_flowJ "$REC"; FJ="$AR_V"
+  tk "$FJ" J0 && tk "$FJ" J1 && tk "$FJ" J2 && tk "$FJ" J3 && ok "AR-j a ref move starts a fresh record: plain --verify at T2 replaces the T record (key T2), apply mode reads first= as T2's region and apply at T2 writes" \
+                                                         || bad "AR-j a record from another theirs was reused or not replaced [$FJ]"
+  # (d) no record at all: d1 a git toplevel never verified, d2 not a git toplevel.
+  for kind in d1 d2; do
+    ng=""; [ "$kind" = d2 ] && ng=nogit
+    wd="$(ar_w "$kind" green "$THEIRS" $ng)"
+    if [ -d "$wd" ]; then
+      ar_render "$wd"; ar_app "$REC" "$wd"; rc=$?
+      if ar_went "$wd" "$rc" report-verified 'the re-render binding was not evaluated' \
+         && { [ "$kind" = d2 ] || [ ! -e "$(ar_rec "$wd")" ]; } && { [ "$kind" = d1 ] || [ ! -d "$wd/c/.git" ]; }; then
+        ok "AR-$kind no approved-region record ($([ "$kind" = d1 ] && echo 'a clean git-dir; apply mode wrote none either' || echo 'not a git toplevel')) WRITES, with the NOTE saying the re-render binding was not evaluated"
+      else
+        bad "AR-$kind a pull with no record did not write with the NONE note (rc $rc)"
+      fi
+    else
+      bad "AR-$kind could not build the world"
+    fi
+  done
+  ar_flowK "$REC"; FK="$AR_V"
+  tk "$FK" KV && tk "$FK" KV2 && ok "AR-k plain --verify under a shasum that exists and fails exits 0 with its success line and writes NO record; the same world with a working shasum writes one" \
+                              || bad "AR-k a failed digest was recorded, or a working one was not [$FK]"
+  tk "$FK" KF1 && tk "$FK" KF2 && ok "AR-k apply mode reads first=FAILED-shasum and apply REFUSES naming the failed tool, tree unwritten — never UNAVAILABLE, never proceeding" \
+                               || bad "AR-k a failing shasum did not refuse as FAILED-shasum [$FK]"
+  tk "$FK" KA1 && tk "$FK" KA2 && tk "$FK" KA3 && ok "AR-k twin: with NO sha256 tool the record is still written, apply mode reads first=UNAVAILABLE, and a matching report writes as the engine documents" \
+                                              || bad "AR-k twin: the no-tool state does not behave as documented [$FK]"
+  ar_flowM "$REC" bad; FMB="$AR_V"
+  ar_flowM "$REC" absent; FMA="$AR_V"
+  tk "$FMB" M-bad && ok "AR-m a malformed approved-region line (first=not-a-digest) REFUSES before anything is decided, tree unwritten — it is never read as NONE" \
+                  || bad "AR-m a malformed approved-region line did not refuse [$FMB]"
+  tk "$FMA" M-absent && ok "AR-m an absent approved-region line REFUSES (found 0), tree unwritten" \
+                     || bad "AR-m an absent approved-region line did not refuse [$FMA]"
+  # (n)-(n5): THE REPORT IS STILL COMPARED, FOR HAND EDITS. Every flow above re-renders with the
+  # shipped renderer, so none can see a region no renderer produced.
+  ar_flowN "$REC" edit; FN="$AR_V"
+  tk "$FN" N0 && tk "$FN" N1 && ok "AR-n a report hand-edited after the record was written (rows deleted, a bogus row added, no re-render) REFUSES with the edited-after-first-verify cause and NOTHING HAS BEEN WRITTEN, tree unwritten, no report-verified NOTE" \
+                             || bad "AR-n a hand-edited report was not refused as edited after the first --verify [$FN]"
+  ar_flowN "$REC" plain; FNT="$AR_V"
+  tk "$FNT" N4S && tk "$FNT" NT && ok "AR-n4 (also (n)'s ALLOW twin, one property apart): report, record and fresh render are one region, and apply writes with the report-verified NOTE" \
+                                || bad "AR-n4 the unedited world did not write cleanly, or its three regions differ [$FNT]"
+  ar_flowN2 "$REC" n2; FN2="$AR_V"
+  tk "$FN2" N2E && tk "$FN2" N2P! && ok "AR-n2 a hand edit made AFTER a legitimate re-render (unseen=0, so nothing but the edited-report comparison refuses it) REFUSES with the same cause, tree unwritten" \
+                                  || bad "AR-n2 an edit of a re-rendered report was not refused as edited [$FN2]"
+  ar_flowN2 "$REC" n3; FN3="$AR_V"
+  tk "$FN3" N3 && ok "AR-n3 a report spliced by awk to EQUAL the fresh render byte for byte keeps the re-render verdict: RE-RENDERED-SINCE-APPROVAL, RE-APPROVAL OWED, not acquitted as report-verified, not called edited" \
+               || bad "AR-n3 a byte-equal hand splice did not keep the re-render verdict [$FN3]"
+  ar_flowN5 "$REC"; FN5="$AR_V"
+  tk "$FN5" N5R && tk "$FN5" N5C && tk "$FN5" N5 && ok "AR-n5 with EMIT_REPORT_VERIFY_CACHE=1 and a recorded PASS proved to hit, the hand-edited report is kept off the cache and REFUSES with the same cause" \
+                                               || bad "AR-n5 the recorded-PASS cache let a hand-edited report through, or its premise did not build [$FN5]"
+fi
+fi  # ---- end of unit ar
+
+if sg arm; then
+# --- M1-M9: the first-verified region's mutants. Each is a whole reconcile-directory copy (apply.sh
+# shells to its siblings) made by an exact-once replace and `cmp -s`-guarded; a replace that matches
+# nothing or more than once is DID NOT APPLY. Each re-drives the ONE flow carrying its arm and must
+# flip its own token while a positive sibling token in that flow HOLDS — that sibling is what proves
+# the copy ran. Arms sharing a mutant's subject further down the same property are named, not re-read:
+# the record is the premise of every binding arm, so M1 also breaks (a)-(j), M2 also (a), M6 also
+# (f2), and M9 also RA9f (the same ar_digest computes the re-approval digest).
+ar_mut() { # ar_mut <dir> <file> <old> <new>
+  build_rec "$1" || return 1
+  py_replace_once "$1/$2" "$3" "$4" 2>/dev/null || return 1
+  ! cmp -s "$REC/$2" "$1/$2"
+}
+# ar_score <id> <tokens> <must-flip> <must-hold> <what>
+ar_score() {
+  if tk "$2" "$3!" && tk "$2" "$4"; then
+    ok "$1 ($5): $3 goes red while $4 holds [$2]"
+  else
+    bad "$1 ($5) SURVIVED or broke its control: want $3! with $4 held, got [$2]"
+  fi
+}
+if [ -n "$AR_SKIP" ]; then
+  printf '  SKIP  M1-M9 -- %s\n' "$AR_SKIP"
+else
+  if build_rec "$WORK/arm-ctl"; then
+    ar_flowA "$WORK/arm-ctl" r1
+    tk "$AR_V" V0 && tk "$AR_V" R1 && ok "CONTROL(AR) the unmutated copy exits 0 and WRITES the record, so a mutant copy that never ran cannot score a kill" \
+                                   || bad "CONTROL(AR) the unmutated copy did not write the record [$AR_V] — M1-M9 are unreadable"
+  else
+    bad "CONTROL(AR) could not copy the reconcile directory"
+  fi
+  if ar_mut "$WORK/arm1" emit-report.sh 'ar_record() {' 'ar_record() { return 0'; then
+    ar_flowA "$WORK/arm1" r1; ar_score M1 "$AR_V" R1 V0 "the record write disabled"
+  else bad "M1 DID NOT APPLY — \`ar_record() {\` is not in emit-report.sh exactly once"; fi
+  if ar_mut "$WORK/arm2" emit-report.sh '  ar_read && return 0' '  :'; then
+    ar_flowA "$WORK/arm2" r2; ar_score M2 "$AR_V" R2 R1 "first-wins made last-wins"
+  else bad "M2 DID NOT APPLY — \`  ar_read && return 0\` is not in emit-report.sh exactly once"; fi
+  # M3 and M7a anchor on the substitution as f4a56f21f spells it (it also sets _ar_sub). M3 reverts
+  # BOTH layers: `got` stays the report's region and _ar_sub stays 0.
+  if ar_mut "$WORK/arm3" emit-report.sh '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }' '    :'; then
+    ar_flowA "$WORK/arm3" a; ar_score M3 "$AR_V" A R2 "apply mode ignores the record"
+  else bad "M3 DID NOT APPLY — the record substitution is not in emit-report.sh exactly once"; fi
+  if ar_mut "$WORK/arm4" apply.sh "      *[!0-9a-f]*|'') _ar_ok=0 ;;" "      *[!0-9a-f]*|'') _ar_ok=1; _ar_first=NONE ;;"; then
+    ar_flowM "$WORK/arm4" bad; M4B="$AR_V"; ar_flowM "$WORK/arm4" absent; M4A="$AR_V"
+    ar_score M4 "$M4B $M4A" M-bad M-absent "a malformed approved-region line read as NONE"
+  else bad "M4 DID NOT APPLY — the malformed-line case is not in apply.sh exactly once"; fi
+  if ar_mut "$WORK/arm5" apply.sh '            echo "  option label: ${_ra_lb}"' '            echo "  option label: ${_ra_lb/R/r}"'; then
+    ar_flowA "$WORK/arm5" f; ar_score M5 "$AR_V" F1 A "one character of the PRINTED label changed"
+  else bad "M5 DID NOT APPLY — the printed option label is not in apply.sh exactly once"; fi
+  if ar_mut "$WORK/arm6" emit-report.sh '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 3' '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 1'; then
+    ar_flowG "$WORK/arm6" g1; ar_score M6 "$AR_V" G1 G0 "F3 classifies a re-render as exit 1"
+  else bad "M6 DID NOT APPLY — the RE-RENDERED-SINCE-APPROVAL exit is not in emit-report.sh exactly once"; fi
+  # M7a/M7b re-drive cell (i), whose I1 conjunct compares against the twin; build it here too.
+  ar_twin || bad "M7 could not build cell (i)'s twin world, so I1 cannot hold under either M7 mutant"
+  if ar_mut "$WORK/arm7a" emit-report.sh '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }' '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; printf '"'"'%s\n'"'"' "$_ar_first" > "$REPORT"; }'; then
+    ar_flowI "$WORK/arm7a"; ar_score M7a "$AR_V" I2 I1 "apply mode writes the first region back to the report"
+  else bad "M7a DID NOT APPLY — the record substitution is not in emit-report.sh exactly once"; fi
+  if ar_mut "$WORK/arm7b" apply.sh "quoting digest \${_ra_dg} answered '\${_ra_lb}'.\${_ar_note}\"" "quoting digest \${_ar_first} answered '\${_ra_lb}'.\${_ar_note}\""; then
+    ar_flowI "$WORK/arm7b"; ar_score M7b "$AR_V" I3 I2 "the NOTE names the first region's digest as the re-approved one"
+  else bad "M7b DID NOT APPLY — the re-approved NOTE is not in apply.sh exactly once"; fi
+  if ar_mut "$WORK/arm8" emit-report.sh '  [ "$(sed -n 2p "$_ar_rec" 2>/dev/null)" = "key $_ar_key" ] || return 1' '  :'; then
+    ar_flowJ "$WORK/arm8"; ar_score M8 "$AR_V" J1 J0 "the record's key ignored"
+  else bad "M8 DID NOT APPLY — the key comparison is not in emit-report.sh exactly once"; fi
+  if ar_mut "$WORK/arm9" emit-report.sh "  if [ \"\$rc\" -eq 0 ]; then printf '%s\\n' \"\$d\"; else printf 'FAILED-%s\\n' \"\$t\"; fi" "  if [ \"\$rc\" -eq 0 ]; then printf '%s\\n' \"\$d\"; else printf 'UNAVAILABLE\\n'; fi"; then
+    ar_flowK "$WORK/arm9"; ar_score M9 "$AR_V" KF2 KA3 "a failed tool conflated with no tool"
+    tk "$AR_V" KV! && tk "$AR_V" KF1! || bad "M9 the record write or the apply-mode state did not move with the conflation [$AR_V]"
+  else bad "M9 DID NOT APPLY — the FAILED-<tool> branch is not in emit-report.sh exactly once"; fi
+  # M10: the edited-report comparison deleted. ONE CASE IN THREE SHAPES: (n), n2 and n5 all go red,
+  # and that is the property, not an entanglement -- n2 is the case after a legitimate re-render (its
+  # unseen=0 seed is measured to PROCEED here, N2P), and n5 is the case reached through the cache, whose
+  # condition only routes to this comparison. n3 and n4 must hold: the splice keeps its re-render
+  # verdict and the unedited world still writes.
+  if ar_mut "$WORK/arm10" emit-report.sh 'if [ "$_ar_sub" = 1 ] && [ "$_ar_report_got" != "$got" ] && [ "$_ar_report_got" != "$want" ]; then' 'if false; then'; then
+    ar_flowN "$WORK/arm10" edit; M10N="$AR_V"
+    ar_flowN2 "$WORK/arm10" n2; M10N2="$AR_V"
+    ar_flowN2 "$WORK/arm10" n3; M10N3="$AR_V"
+    ar_flowN "$WORK/arm10" plain; M10N4="$AR_V"
+    ar_flowN5 "$WORK/arm10"; M10N5="$AR_V"
+    ar_score M10 "$M10N" N1 N0 "the edited-report comparison deleted: (n)"
+    tk "$M10N2" N2E! && tk "$M10N2" N2P && ok "M10 and n2 goes red the same way: its unseen=0 world PROCEEDS (exit 0, written, blockers-resolved NOTE) [$M10N2]" \
+                                       || bad "M10 n2 did not proceed under the deleted comparison [$M10N2] — n2 is not a cell only that comparison refuses"
+    tk "$M10N5" N5! && tk "$M10N5" N5C && ok "M10 and n5 goes red too, with its cache premise holding [$M10N5]" \
+                                       || bad "M10 n5 did not move, or its premise broke [$M10N5]"
+    tk "$M10N3" N3 && tk "$M10N4" NT && tk "$M10N4" N4S && ok "M10 and n3 and n4 HOLD — the splice keeps its re-render verdict and the unedited world writes" \
+                                                       || bad "M10 moved n3 or n4 [$M10N3 | $M10N4]"
+  else bad "M10 DID NOT APPLY — the edited-report comparison is not in emit-report.sh exactly once"; fi
+  # M11: the recorded-PASS cache accepted in apply mode whatever the report holds. n5 must go red with
+  # its premise (N5C, the cache hits) holding; (n), which never sets the cache, must hold.
+  if ar_mut "$WORK/arm11" emit-report.sh '   && [ -f "$_er_rec" ] && [ "$_ar_report_got" = "$got" ]; then' '   && [ -f "$_er_rec" ]; then'; then
+    ar_flowN5 "$WORK/arm11"; ar_score M11 "$AR_V" N5 N5C "the cache's report-equals-record condition removed: n5"
+    ar_flowN "$WORK/arm11" edit
+    tk "$AR_V" N1 && ok "M11 and (n) holds — without the cache set, the comparison still refuses [$AR_V]" \
+                  || bad "M11 also moved (n) [$AR_V]: the cache condition is not confined to the cache path"
+  else bad "M11 DID NOT APPLY — the cache's report-equals-record condition is not in emit-report.sh exactly once"; fi
+fi
+fi  # ---- end of unit arm
 
 echo "  [shard $GROUP of apply-restamp-worklist: $asserts assertions, $fails failed]"
 echo

@@ -220,12 +220,13 @@ err() { echo "apply: $*" >&2; exit 1; }
 # below), and the withheld row no longer offers it while one of these rows is outstanding. It
 # still does not REDO either step, which is why this remedy does not name it.
 #
-# THIS IS THE ONE PATH WHERE A RE-RENDER IS STILL THE REMEDY, and its re-approval is still prose.
-# Here the tree has been WRITTEN, so the approved report genuinely no longer describes it, and the
-# union gate's recorded-re-approval check (exit 3 below) cannot apply: --verify answers exit 1 on a
-# moved tree, not 3. So the remedy says to ASK the re-approval by AskUserQuestion, and says that
-# nothing records or checks it on this path.
-reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands; have the operator re-approve it, then re-run apply with the same four arguments. Ask that re-approval with AskUserQuestion and wait for the answer: on this path nothing records or checks it, because this run already wrote the tree the approved report describes, which is also why a bare re-run is refused by the union gate; and the finish mode does not redo this step -- it re-checks it and withholds the stamp while it is still undone."
+# THIS IS THE ONE PATH WHERE A RE-RENDER IS STILL THE REMEDY, and its re-approval is now RECORDED
+# AND CHECKED. Here the tree has been WRITTEN, so the approved report genuinely no longer describes
+# it. The union gate compares the fresh render against the region the FIRST --verify of this pull
+# recorded, so the re-rendered report reaches it as RE-RENDERED-SINCE-APPROVAL (exit 3) and the
+# re-approval is decided there from the answers history, exactly as for resolved blockers: re-run
+# apply, and it prints the question and option label to ask, or proceeds when nothing unseen renders.
+reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands, then re-run apply with the same four arguments; it prints the re-approval question and option label when one is owed. Ask exactly that question with AskUserQuestion, offering exactly that label, and wait for the answer; once the operator has answered, so that the record quotes that question and label, re-approve it, then re-run apply with the same four arguments. The finish mode does not redo this step -- it re-checks it and withholds the stamp while it is still undone."
 
 # ra_recorded <answers-history> <digest> <label> -> 0 when ONE record is a re-approval of THIS
 # region; the union gate's exit-3 branch below is its only caller. All three conjuncts sit in one
@@ -299,17 +300,50 @@ if [ "$FINISH" = 0 ]; then
     # stdout (emit-report.sh's header owns the key), and the NOTE row below must not claim the
     # detectors rendered when they did not. A file that could not be made reads as a fresh render.
     _ug_vo="$(mktemp "${TMPDIR:-/tmp}/apply-ug-verify.XXXXXX" 2>/dev/null)" || _ug_vo=""
-    _ug_verr="$(bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >"${_ug_vo:-/dev/null}")"
+    # `--for-apply`: the APPROVED side is the region the FIRST plain --verify of this pull recorded in
+    # the consumer's git-dir (step 5's), not whatever region the report file holds now, so a region
+    # spliced into the report after that verify is compared, not trusted. emit-report.sh's header owns
+    # the record's contract; this gate reads one line of it, `approved-region: first=<digest|NONE>`.
+    _ug_verr="$(bash "$SELF/emit-report.sh" --for-apply --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >"${_ug_vo:-/dev/null}")"
     _ug_rc=$?
+    # THE `approved-region:` LINE IS PARSED ANCHORED AND MUST APPEAR EXACTLY ONCE. Absent, doubled or
+    # malformed refuses before anything else is decided: it is never read as NONE, because NONE means
+    # "the binding was not evaluated" and a parse fault must not choose that on the operator's behalf.
+    _ar_n="$(printf '%s\n' "$_ug_verr" | grep -c '^approved-region: ')" || _ar_n=0
+    _ar_first="$(printf '%s\n' "$_ug_verr" | sed -n 's/^approved-region: first=//p')"
+    # UNAVAILABLE is well-formed: a record exists and NO sha256 tool exists. The comparison still used
+    # the record, and the re-approval branch below refuses an unseen>0 case it cannot bind, naming the
+    # install. FAILED-<tool> is well-formed too, and refused right here: a tool that exists and failed
+    # is a fault on this box, never a reason to proceed.
+    case "$_ar_first" in
+      NONE|UNAVAILABLE|FAILED-shasum|FAILED-sha256sum) _ar_ok=1 ;;
+      *[!0-9a-f]*|'') _ar_ok=0 ;;
+      *) if [ "${#_ar_first}" -eq 64 ]; then _ar_ok=1; else _ar_ok=0; fi ;;
+    esac
+    [ "$_ar_n" = 1 ] || _ar_ok=0
+    if [ "$_ar_ok" = 0 ]; then
+      [ -n "$_ug_vo" ] && rm -f "$_ug_vo"
+      printf '%s\n' "$_ug_verr" >&2
+      err "the union gate ran emit-report.sh --for-apply --verify beside this script and it did not print exactly one well-formed 'approved-region: first=<digest|UNAVAILABLE|FAILED-<tool>|NONE>' line (found ${_ar_n}), so which region the operator was shown cannot be decided. Re-run apply with the same four arguments once emit-report.sh beside this script is the one shipped with it. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
+    fi
+    case "$_ar_first" in FAILED-*)
+      [ -n "$_ug_vo" ] && rm -f "$_ug_vo"
+      err "the union gate could not digest the approved region: ${_ar_first#FAILED-} exists on this box but exited non-zero or printed no 64-hex sha256, so the region the operator approved has no identity this run can trust. Repair or remove ${_ar_first#FAILED-} (a working shasum or sha256sum is required), then re-run apply with the same four arguments. Do not re-render the report. NOTHING HAS BEEN WRITTEN." ;;
+    esac
+    _ar_note=""
+    [ "$_ar_first" = NONE ] && _ar_note=" No first-verify record for this pull; the re-render binding was not evaluated."
+    # The line is this gate's input, not the operator's diagnosis: it is dropped before stderr is
+    # forwarded, so a refusal reads as it did before the record existed.
+    _ug_verr="$(printf '%s\n' "$_ug_verr" | sed '/^approved-region: /d')"
     _ug_hit=0
     if [ -n "$_ug_vo" ]; then
       grep -q '^emit-report: accepted a recorded PASS (' "$_ug_vo" 2>/dev/null && _ug_hit=1
       rm -f "$_ug_vo"
     fi
     if [ "$_ug_rc" -eq 0 ] && [ "$_ug_hit" = 1 ]; then
-      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report (opt-in EMIT_REPORT_VERIFY_CACHE=1; the key and its known gaps are in emit-report.sh's header); nothing was re-rendered."
+      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report (opt-in EMIT_REPORT_VERIFY_CACHE=1; the key and its known gaps are in emit-report.sh's header); nothing was re-rendered.${_ar_note}"
     elif [ "$_ug_rc" -eq 0 ]; then
-      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
+      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS).${_ar_note}"
     else
       # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply
       # of THIS theirs has already written this tree: the approved report describes the tree
@@ -379,12 +413,31 @@ if [ "$FINISH" = 0 ]; then
       # hook hashes the answer, and every selection of one label hashes alike), and the question is
       # where the region is named.
       #
+      # A RE-RENDER NO LONGER ERASES THE APPROVED SIDE. The first plain --verify of this pull (step 5's,
+      # exit 0) records the region it verified in the consumer's git-dir, first-wins per (base, theirs)
+      # pair; this gate's --for-apply call compares the fresh render against THAT region, not against
+      # the report file. A re-render with nothing new reads exactly as the un-re-rendered report would;
+      # one whose refs are unchanged and which adds no HARD-* row or refusal but differs from the first
+      # region exits 3 with cause RE-RENDERED-SINCE-APPROVAL and the same re-approval: line, decided by
+      # the branch below. The withheld-stamp reapply path (reapply_remedy) arrives here that way.
+      # THE REPORT IS STILL COMPARED, FOR HAND EDITS: a report region that equals neither the record's
+      # nor the fresh render was edited after the first verify, and --verify exits 1 (cause UNDECIDED,
+      # "hand-edited after the first --verify"), which refuses below like any other exit 1.
+      #
       # LIMITS, stated rather than implied. The Question line is lead-authored and no hash covers it,
       # so a session that writes the answers history by Bash instead of asking is not caught here.
-      # A session that re-renders anyway is not caught either: the re-render makes --verify exit 0,
-      # and this gate then writes with no ask, exactly as on a first apply. After an apply has
-      # written the tree, --verify answers STAMP-MOVED (exit 1), not 3: the re-render that path
-      # needs still carries a re-approval that nothing records (reapply_remedy). And the history is
+      # L1 DELETION: a session that deletes the record from the git-dir before apply gets first=NONE,
+      # and this gate behaves as before the record existed (a re-render then makes --verify exit 0) --
+      # the same trust boundary as writing the answers history by Bash. NONE is not refused: its false
+      # positives are every pull already mid-flight when the record shipped and every DEFER pull.
+      # L2 STALE RECORD: a pull abandoned and restarted at the same (base, theirs) keeps the first
+      # record; over an unchanged tree it reads unseen=0 and proceeds, over a moved one it asks.
+      # L3 TWO DRY RUNS: two bare dry runs rendering different regions leave the record at the first
+      # while the operator last saw the second; apply then asks for re-approval, which is recoverable.
+      # L4 NO PRIOR BARE RUN: an apply with no earlier plain --verify anchors on a region rendered
+      # inside this invocation, which the operator never saw -- unchanged from before the record.
+      # After an apply has written the tree, --verify answers STAMP-MOVED (exit 1), not 3, when the
+      # stamp moved; while the stamp is withheld, the re-render is decided as above. And the history is
       # read at <consumer>/_bmad-output/ ONLY, while the hook writes under $CLAUDE_PROJECT_DIR: a
       # session run from another project (a scratch clone, the distribution) records its answer
       # there and this gate refuses. That is fail-closed, and it is chosen: reading a second,
@@ -409,17 +462,19 @@ if [ "$FINISH" = 0 ]; then
         _ra_un="${_ra#* unseen=}"; _ra_un="${_ra_un%% *}"
         _ra_lb="${_ra#* label=\"}"; _ra_lb="${_ra_lb%\"}"
         _ra_hist="$CONSUMER/_bmad-output/operator-answers-history.md"
-        _ra_q="Re-approve the reconcile report for this pull? Its blockers were resolved after approval, and the region now renders ${_ra_un} finding row(s) the approval did not show (the unseen: lines). Region digest ${_ra_dg}."
+        _ra_q="Re-approve the reconcile report for this pull? Its region changed after approval (blockers resolved, or re-rendered), and it now renders ${_ra_un} finding row(s) the approval did not show (the unseen: lines). Region digest ${_ra_dg}."
         case "$_ra_un" in ''|*[!0-9]*) _ra_ok=bad ;; *) _ra_ok=ok ;; esac
         case "$_ra" in digest=*" unseen="*" label=\""*\") ;; *) _ra_ok=bad ;; esac
         if [ "$_ra_ok" = bad ]; then
           err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and --verify exited 3 (${_ug_cause}) without a readable 're-approval:' line, so whether the approval saw every row that renders now cannot be decided. Re-run apply with the same four arguments once emit-report.sh beside this script prints that line. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
+        elif [ "${_ra_dg#FAILED-}" != "$_ra_dg" ]; then
+          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS); --verify exited 3 (${_ug_cause}) but could not digest the fresh region: ${_ra_dg#FAILED-} exists on this box and exited non-zero or printed no 64-hex sha256. A failed tool is never read as a missing one, so nothing is decided on this reading. Repair or remove ${_ra_dg#FAILED-} (a working shasum or sha256sum is required), then re-run apply with the same four arguments. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
         elif [ "$_ra_un" -ne 0 ] && [ "$_ra_dg" = UNAVAILABLE ]; then
           err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS); --verify exited 3 (${_ug_cause}) and the region now renders ${_ra_un} finding row(s) the approval did not show, but the digest could not be computed (no sha256 tool: install shasum), so there is no region identity a re-approval could quote. Install shasum (or sha256sum) and re-run apply with the same four arguments. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
         elif [ "$_ra_un" -eq 0 ]; then
-          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} No finding renders that the approval did not show (unseen=0), so the approval covers this region and no re-approval is asked."
+          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} No finding renders that the approval did not show (unseen=0), so the approval covers this region and no re-approval is asked.${_ar_note}"
         elif ra_recorded "$_ra_hist" "$_ra_dg" "$_ra_lb"; then
-          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} The ${_ra_un} unseen row(s) were re-approved: ${_ra_hist#"${CONSUMER}"/} holds an AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'."
+          say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} The ${_ra_un} unseen row(s) were re-approved: ${_ra_hist#"${CONSUMER}"/} holds an AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'.${_ar_note}"
         else
           {
             echo "apply: RE-APPROVAL OWED. Ask the operator with AskUserQuestion, exactly:"
@@ -430,7 +485,7 @@ if [ "$FINISH" = 0 ]; then
             echo "  unseen rows it covers:"
             printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*unseen: /    /p'
           } >&2
-          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and the only difference in the blocking list is HARD-* row(s) the approval listed that no longer render. ${_ug_cause} So no HARD-* row is hidden from the approval, but the region now renders ${_ra_un} finding row(s) the approval did not show, and ${_ra_hist#"${CONSUMER}"/} holds no AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'. Ask the question printed above with AskUserQuestion — a typed message is not that ask, and a re-approval of anything else is not this one — then re-run apply with the same four arguments. Do NOT re-render the report: that discards the approved region this check compares against. NOTHING HAS BEEN WRITTEN."
+          err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS), and the region the operator approved differs from it only in ways that hide no HARD-* row: blockers it listed that no longer render, or a re-render since that approval. ${_ug_cause} So no HARD-* row is hidden from the approval, but the region now renders ${_ra_un} finding row(s) the approval did not show, and ${_ra_hist#"${CONSUMER}"/} holds no AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'. Ask the question printed above with AskUserQuestion — a typed message is not that ask, and a re-approval of anything else is not this one — then re-run apply with the same four arguments. Re-rendering the report does not clear this: the gate compares against the region the first --verify of this pull recorded, not the report file. NOTHING HAS BEEN WRITTEN."
         fi
       else
         err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 7 lets apply write only after emit-report.sh --verify exits 0, and it does not. ${_ug_cause} Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited or a detector now renders a finding the approval never saw, or an earlier apply of this same range already moved this tree and its stamp is still withheld (a re-run after a withheld run). Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
