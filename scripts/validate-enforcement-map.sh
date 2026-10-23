@@ -7014,8 +7014,8 @@ else
           close(root "/" cf)
           if (cl == 0 || n != cl) return "copy-only cites " k ", which does not exist"
           b = base; gsub(/\./, "[.]", b)
-          ext = "(^|[^A-Za-z0-9_-])-[efd][ \t]+\"?([^ \t\"]*/)?" b "\"?([ \t;]|]|$)"
-          rd = "(^|[^A-Za-z0-9_])(cat|grep|awk|sed|head|tail|cut|wc|diff|cmp|source)[ \t][^|;&]*" b "|<[ \t]*\"?[^ \t\"]*" b
+          ext = "(^|[^A-Za-z0-9_-])-[efd][[:blank:]]+\"?([^[:blank:]\"]*/)?" b "\"?([[:blank:];]|]|$)"
+          rd = "(^|[^A-Za-z0-9_])(cat|grep|awk|sed|head|tail|cut|wc|diff|cmp|source)[[:blank:]][^|;&]*" b "|<[[:blank:]]*\"?[^[:blank:]\"]*" b
           if (l ~ rd) return "copy-only cites " k ", which reads the content of " base
           if (l !~ ext) return "copy-only cites " k ", which holds no -f, -e or -d test naming " base
           return "" }
