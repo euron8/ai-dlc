@@ -429,10 +429,20 @@ arm_idempotent() {
   return 0
 }
 
+# Arm 14: the rendered body carries the protected-path line, in a role that has a definition. Presence-shaped:
+# a subject that renders nothing has no body to carry it. Keyed on the whole line, -x -F.
+arm_body_carries_protected_read_line() {
+  local p="$1" subj="$2" f
+  render "$subj" "$p" >/dev/null || return 1
+  f="$p/.claude/agents/$WITH_EFFORT.md"
+  [ -f "$f" ] || return 1
+  grep -qxF -- 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.' "$f"
+}
+
 ARMS="renders_model_bearing_roles persona_with_model_is_defined marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
 invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
-three_states_are_distinct idempotent"
+three_states_are_distinct idempotent body_carries_protected_read_line"
 
 run_arms() { # <subject> -> "<name>:<0|1>" per arm, each on its own fresh project
   local subj="$1" name p rc
@@ -460,6 +470,7 @@ while IFS=: read -r name rc; do
     stale_projection_is_caught_and_cleared) msg="a generated definition for a role that left aiDlcRoles is reported and removed" ;;
     check_never_writes)                  msg="--check over a DRIFTED tree writes nothing" ;;
     three_states_are_distinct)           msg="NOT APPLICABLE(3), drifted(1) and current(0) are three distinct exit codes" ;;
+    body_carries_protected_read_line)    msg="the rendered body carries the line telling a teammate to read a protected path with native Read, never a context-mode tool" ;;
     idempotent)                          msg="four renders are byte-identical and leave no duplicate" ;;
     *)                                   msg="$name" ;;
   esac
@@ -644,6 +655,11 @@ mut accepts-any-omit-value \
 mut skips-persona-names \
   's/^  mkey="\$(jq -r --arg r "\$role" '"'"'.aiDlcRoles\[\$r\].model \/\/ empty'"'"' "\$SETTINGS" 2>\/dev\/null)"$/&; case "$role" in cis|sm|tea|ux) mkey="" ;; esac/' \
   persona_with_model_is_defined
+
+# M12: delete the protected-path printf, so a rendered body never tells a teammate that context-mode reads of a protected path are denied.
+mut drops-protected-read-line \
+  '/^  printf .A path `.claude\/hooks\/ai-dlc-protect.sh` protects/d' \
+  body_carries_protected_read_line
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

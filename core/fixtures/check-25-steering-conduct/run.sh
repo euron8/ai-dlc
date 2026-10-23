@@ -880,16 +880,78 @@ if [ -n "$MUTP" ]; then
     "T: the advisor seed reads 0 BYTE-IDENTICALLY to the shipping program -- the two layers cover each other there, and only srv-search separates them"
 fi
 
+# ===========================================================================
+# PAUSE-LEGAL CALLS ARE NOT STEAMROLLS (BL-783). Check B must not score a call the pause hook
+# (ai-dlc-acknowledge.sh) allows: a write matching one of its allow arms, or any advancing call
+# in an UPDATER session as the hook's I126 scan decides it. Every cell is an operator message
+# followed by ONE call; paths are ABSOLUTE, as the harness writes them. The typed-command records
+# are the producer's shape (graph transcripts, 2026-10-16). `pb-control` is the genuine steamroll
+# in a pipeline session, so a 0 elsewhere is not a check that cannot fire.
+#   pb-snapshot    Edit  .../_bmad-output/pipeline-snapshot.md                            0
+#   pb-resolution  Edit  .../_bmad-output/planning-artifacts/s292/prd-resolution-p2.md    0
+#   pb-archive     Edit  .../_bmad-output/pipeline-snapshot.archive.x.md                  1
+#   pb-control     Edit  .../_bmad-output/implementation-artifacts/x.md                   1
+#   pb-skillupd    Skill(ai-dlc-update)                                                   0
+#   pb-updater     typed /ai-dlc-update, then the control's Edit                          0
+#   pb-recency     typed /ai-dlc-update, then typed /ai-dlc, then the control's Edit      1
+#   pb-wait        Check C: 4 wait beats, a snapshot Edit, 3 beats (the Edit no reset)   1
+echo
+echo "  -- pause-legal calls (BL-783) --"
+PB="$AWORK/pb"; mkdir -p "$PB"
+pb_op='{"type":"user","timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"hold on, change the plan please"}}'
+pb_ai='{"type":"user","timestamp":"2026-07-04T09:00:00Z","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>"}}'
+pb_up='{"type":"user","timestamp":"2026-07-04T09:30:00Z","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>"}}'
+pb_edit() { printf '{"type":"assistant","timestamp":"2026-07-04T10:00:05Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"/Users/x/proj/_bmad-output/%s","old_string":"a","new_string":"b"}}]}}' "$1"; }
+pb_skill='{"type":"assistant","timestamp":"2026-07-04T10:00:05Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"ai-dlc-update","args":"abc apply"}}]}}'
+pb_seed() { local n="$1"; shift; printf '%s\n' "$@" > "$PB/$n.jsonl"; }
+pb_seed snapshot   "$pb_ai" "$pb_op" "$(pb_edit pipeline-snapshot.md)"
+pb_seed resolution "$pb_ai" "$pb_op" "$(pb_edit planning-artifacts/s292/prd-resolution-p2.md)"
+pb_seed archive    "$pb_ai" "$pb_op" "$(pb_edit pipeline-snapshot.archive.x.md)"
+pb_seed control    "$pb_ai" "$pb_op" "$(pb_edit implementation-artifacts/x.md)"
+pb_seed skillupd   "$pb_ai" "$pb_op" "$pb_skill"
+pb_seed updater    "$pb_up" "$pb_op" "$(pb_edit implementation-artifacts/x.md)"
+pb_seed recency    "$pb_up" "$pb_ai" "$pb_op" "$(pb_edit implementation-artifacts/x.md)"
+# Check C shares the narrowed path test: 4 wait beats, a snapshot Edit, 3 more beats, no operator
+# message. The Edit is pause-legal, so it no longer resets the run, and 7 beats pass the 6 ceiling.
+# Under PB1 and PB2 the Edit is advancing again, resets the run, and the cell reads 0.
+pb_beat() { printf '{"type":"assistant","timestamp":"2026-07-04T10:0%s:00Z","message":{"content":[{"type":"tool_use","id":"w%s","name":"Bash","input":{"command":"sleep 30; [ -f _bmad-output/x.md ] && echo ok"}}]}}' "$1" "$1"; }
+pb_seed wait "$pb_ai" "$(pb_beat 1)" "$(pb_beat 2)" "$(pb_beat 3)" "$(pb_beat 4)" "$(pb_edit pipeline-snapshot.md)" "$(pb_beat 5)" "$(pb_beat 6)" "$(pb_beat 7)"
+PB_CELLS="snapshot resolution archive control skillupd updater recency wait"
+# One string per program: the eight counts in PB_CELLS order, EMPTY for a copy that emitted nothing.
+pbv() { local v="$1" o="" c n; for c in $PB_CELLS; do n="$(acount "$v" "$PB/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
+PB_WANT=00110011
+w pb-shipped "$(pbv "$VALIDATOR")" "$PB_WANT" \
+  "snapshot 0, nested resolution 0, archive 1, control 1, Skill(ai-dlc-update) 0, updater Edit 0, recency 1, Check C wait run across a snapshot Edit 1"
+w pb-mutant-control "$(pbv "$MCTL")" "$PB_WANT" "control: an unmutated copy beside the mutants reads all eight cells as shipped"
+pbmut() { # pbmut <name> <sed> <want> <why>
+  mut "$1" "$2" || return 0
+  local got; got="$(pbv "$MUTP")"
+  if [ "$got" = "$3" ]; then kill_ "PB-$1" "$4 (cells $got)"
+  else bad_ "PB-$1" "got '$got', want '$3' -- $4"; fi
+}
+# MUTANT PB1 -- `*` converted to `[^/]*`: an ABSOLUTE path no longer matches `*/_bmad-output/...`.
+pbmut star-no-slash 's#\.join("\.\*") + "\$");$#.join("[^/]*") + "$");#' \
+  11110010 "with * unable to cross /, the absolute snapshot and nested resolution Edits are counted and the snapshot Edit resets the wait run"
+# MUTANT PB2 -- the snapshot glob dropped from the validator's list.
+pbmut snapshot-dropped '/^  "\*\/_bmad-output\/pipeline-snapshot.md|_bmad-output\/pipeline-snapshot.md",$/d' \
+  10110010 "without the snapshot member, the snapshot Edit is counted and resets the wait run"
+# MUTANT PB3 -- the updater-session rule removed.
+pbmut updater-rule-removed 's#^        .find(b => !denied.has(b.id) \&\& !inUpdaterSession(b, updBefore.get(rr)));$#        .find(b => !denied.has(b.id));#' \
+  00111111 "without the updater rule, Skill(ai-dlc-update) and the updater-session Edit are counted"
+# MUTANT PB4 -- the recency rule removed: the FIRST marker decides.
+pbmut first-marker-wins 's#^      if (v !== null) upd = v;$#      if (v !== null \&\& upd === null) upd = v;#' \
+  00110001 "with the first marker deciding, /ai-dlc-update then /ai-dlc stays an updater session"
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 21 ]; then
+if [ "$KILLS" -ge 25 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 2 server-tool arms + 20 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 2 server-tool arms + 2 pause-legal arms + 24 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

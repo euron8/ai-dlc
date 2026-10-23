@@ -19,6 +19,53 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.922.0] - 2026-10-23
+
+Batch 240, lead ai-dlc-3f, release R11. It closes BL-781 and BL-783 and files BL-781, BL-783 and BL-784. BL-784 is a NOTE left OPEN. It closes no `PC-` id. Net for this release: closed 2 (BL-781, BL-783), filed 3 (BL-781, BL-783, BL-784); closed minus filed = −1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-steering-budget.sh` and `core/scripts/render-agent-definitions.sh`, which `install.sh` derives from `core/scripts/*` and lands at `scripts/ai-dlc/`. Hook changes: none. Fixture changes: `core/fixtures/check-25-steering-conduct` and `core/fixtures/agent-definition-render`. Distribution-only: `scripts/validate-enforcement-map.sh` (I128) and its derived `docs/invariant-index.md`. Packaging: none.
+
+### BL-783 — Check B no longer scores a write or dispatch the pause hook allows as a steamroll
+
+`isPipelineArtifact` in `validate-steering-budget.sh` treated every `_bmad-output/` path except `_bmad-output/ai-dlc-update/` as pipeline output, and Check B scored any advancing call that followed an operator message before the pause flag was cleared. The pause hook decides differently. Before its generic `*/_bmad-output/*` arm, `ai-dlc-acknowledge.sh`'s Write arm allows four paths while paused: `ai-dlc-update/*`, `planning-artifacts/*-resolution-p*.md`, `pipeline-snapshot.md` and `pipeline-snapshot-history.md`. The validator modelled one of the four, and `pipeline-snapshot` appeared 0 times in it against 5 in the hook. The hook also allows every Agent/Task/Skill/TaskCreate and every `_bmad-output/` write in an UPDATER session. It decides that session from the last of four structural markers its I126 scan finds, and the current call's `skill` payload overrides the scan. The validator modelled none of that.
+
+On graph, `validate-steering-budget.sh --dir ~/.claude/projects/-Users-n8-git-graph --since 2026-10-15T18:49:36Z` reported FAIL (B): 5. Three rows were `pipeline-snapshot.md` Edits, in sessions 949015a6, a4f6d6bc and 888e1365. Two were `Skill(ai-dlc-update)` calls, each the operator's own typed `/ai-dlc-update`, in sessions 5d4fbc59 and 48da9c58. The hook allows all five while paused.
+
+The hook is not edited. The validator now carries the hook's four case patterns verbatim (`PAUSE_WRITE_ALLOW`) and converts each with bash-`case` semantics: `*` becomes `.*` and crosses `/`, every other byte is literal, and the match is anchored over the whole absolute path (`caseGlobRe`). It also carries the hook's marker ERE verbatim (`UPDATER_MARKER_ERE`) and replays it per raw transcript line, in order, so the last marker before a call decides. A `Skill` payload overrides the scan, and Check B skips any advancing call made in an updater session.
+
+New invariant I128 in `scripts/validate-enforcement-map.sh` binds the two copies so a third cannot drift in. It derives the hook's empty-bodied allow arms that precede the generic arm and byte-compares them with the validator's list in both directions, and it byte-compares the two EREs. It accepts three allow-arm spellings, each proven by a self-probe: a trailing `# comment`, `);;` with no space, and `;;` alone on the line after the pattern. It refuses, each with a named message:
+- a zero-member side;
+- a moved anchor;
+- any other line in the case region, including a `) : ;;` no-op body and a comment or blank line between a pattern and its `;;` (REFUSE-SHAPE);
+- an allow pattern carrying `?`, `[`, a quote or a backslash (REFUSE-PATTERN), because `caseGlobRe` converts only `*`.
+
+Its self-probe runs before the corpus, it declares `requires-arms: I126`, and its false-positive set on the live tree is 0.
+
+Check C shares the narrowed path test. An Edit of a path the pause hook allows while paused (the pipeline snapshot, its history file, a resolution record, or anything under `ai-dlc-update/`) no longer resets a Check C wait run either. That follows from the same premise, that the hook allows it. The updater-session rule applies to Check B only.
+
+Proof. `check-25-steering-conduct` gains eight pause-legal cells and four killed mutants: `*` changed to `[^/]*`, the snapshot glob dropped, the updater rule removed, and first marker wins. The receipt drives the validator on mktemp transcripts with `AI_DLC_PROJECT_ROOT` set. Snapshot, nested resolution record and `/ai-dlc-update` Skill after an operator message each count 0. `pipeline-snapshot.archive.x.md` counts 1. A non-exempt `implementation-artifacts/x.md` Edit counts 1 as the genuine-steamroll control. `/ai-dlc-update` followed by `/ai-dlc` returns the session to pipeline, so its Edit counts 1.
+
+Rehearsal on graph, read only, over the same `--since 2026-10-15T18:49:36Z`: Check B went from FAIL (B): 5 on origin/main to PASS on the branch. The branch still exits 1, on Check A's unchanged 5 rows. The control, a pipeline-session Edit of `implementation-artifacts/x.md` after an operator message, counts 1 under both validators, so 0 is not a check that cannot fire.
+
+Known gaps. All three are pre-existing or have no live case, and none is closed here:
+- The validator reads `input.file_path` only, so a NotebookEdit's `notebook_path` is never scored. The hook reads both.
+- The validator decides updater state per transcript record, so one assistant record carrying `[Skill(ai-dlc-update), Edit]` has its Edit counted. The current harness writes one tool_use block per record, so the case does not arise.
+- A hook allow arm using `?` or `[...]` would be taken literally, and I128 refuses such a pattern rather than comparing it.
+
+### BL-781 — a rendered agent body tells a teammate to read a protected path with the native Read tool
+
+Graph's subagents were denied by `ai-dlc-protect.sh:361` ("Use native Read for verbatim content") after reading protected paths with context-mode tools, mostly story files read by gate seats. None of the 18 files in `core/team-roles/*.md` names `context-mode` or `ctx_` (0; control: 13 name `Read`). Re-derived read only over `~/.claude/projects/-Users-n8-git-graph/*/subagents/agent-*.jsonl`, records at or after 2026-10-15T18:49:36Z, matching the deny string in tool_result blocks: 63 transcripts carry it, with 78 denials in total across 63 distinct agents. That is out of 1557 subagent transcripts active in the window (control: 60951 tool_use blocks parsed), which made 495 context-mode tool calls in 131 transcripts.
+
+The carrier is the common body in `render-agent-definitions.sh`, which every rendered `.claude/agents/<role>.md` carries. One `printf` line there says that a path `ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never a context-mode tool (`ctx_*`), because the hook denies those calls. It does not restate the list and is inert where context-mode is absent.
+
+Party-mode gap, not closed by this release: of the 63 denied transcripts, 9 began from a `party-brief.md` dispatch, which the renderer does not reach, so those agents do not receive the line.
+
+Proof. `agent-definition-render` gains arm `body_carries_protected_read_line`, which renders a role and requires the whole line in its definition with `grep -xF`. Mutant `drops-protected-read-line` deletes the printf and is killed. The receipt renders two roles into a mktemp project and requires every rendered definition to carry both `native Read` and `ctx_`.
+
+Consumer note. BL-781 changes the rendered agent body, so a consumer with rendered definitions gets an `agent-definitions` WORKLIST row from `apply.sh` on its next pull. That row is the intended re-render prompt.
+
+### BL-784 — Check B does not model the hook's lead-Explore allowance while paused (filed OPEN, a NOTE, not built)
+
+`ai-dlc-acknowledge.sh:740-755` lets a lead Explore dispatch through while paused when four conditions hold. `validate-steering-budget.sh` models none of it (`grep -c Explore` returns 0; control `grep -c "Check B"` returns 11), so Check B would score such a dispatch as a steamroll. On graph since 2026-10-15T18:49:36Z the case is latent: 168 sessions and 1600 Agent/Task blocks parsed, 0 lead Explore dispatches. The four conditions need their own contract before a fix, and the fix must bind to the hook's logic the way I128 does.
+
 ## [0.921.0] - 2026-10-23
 
 Batch 240, lead ai-dlc-3f, release R9. It files and closes BL-778 in the same release, closes no `PC-` id, and leaves the live backlog count unchanged. Net for this release: 1 closed, 1 filed = 0.

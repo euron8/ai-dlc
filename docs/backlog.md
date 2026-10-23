@@ -454,3 +454,15 @@ Owed: one stderr line, printed under the cache opt-in only so that plain `--veri
 
 verify: has core/skills/ai-dlc-update/reconcile/emit-report.sh "cannot key: cksum is absent"
 
+
+## BL-784 — Check B of `validate-steering-budget.sh` does not model the hook's lead-Explore allowance while paused, so it would score such a dispatch as a steamroll
+
+**NOTE.** Source: BL-783's contract adversary, batch 240, filed by lead ai-dlc-3f. Filed OPEN, not built; the same class as BL-783.
+
+`core/hooks/ai-dlc-acknowledge.sh:740-755` lets a LEAD (no agent id) Explore dispatch through while paused when four conditions hold: the call carries neither `name` nor `team_name`, its prompt is readable, its prompt cites no `team-roles/<role>.md`, and no agent definition named Explore shadows the built-in. `core/scripts/validate-steering-budget.sh` models none of it: `grep -c Explore core/scripts/validate-steering-budget.sh` returns 0 (control: `grep -c "Check B"` on the same file returns 11). Check B would therefore count such a dispatch after an operator message as a steamroll.
+
+Measured on graph, read-only, over main-session transcripts since 2026-10-15T18:49:36Z: 168 sessions, 1600 Agent/Task tool_use blocks parsed (control), 0 lead Explore dispatches, so 0 after an operator message (`grep -l '"subagent_type":"Explore"' ~/.claude/projects/-Users-n8-git-graph/*.jsonl | wc -l` returns 1 file, which the window parse did not count, so it predates the window or sits in a non-main record). The defect is latent in the corpus, reachable by any lead that dispatches Explore.
+
+Owed: the four conditions need their own contract before a fix, and a validator change must bind to the hook's logic the way BL-783 binds to the hook's updater-session predicate, never restate it.
+
+verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.

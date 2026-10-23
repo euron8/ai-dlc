@@ -8126,6 +8126,174 @@ else
   fi
 fi
 
+# --- I128: Check B's pause-write allow list and updater-marker ERE are the pause hook's, byte for byte ---
+# requires-arms: I126
+# WHY. validate-steering-budget.sh's Check B scores a steamroll: an operator message the lead
+# executed straight through. ai-dlc-acknowledge.sh is what decides that live, and the validator
+# must not score what the hook allows. Two hook facts are copied into the validator, because the
+# hook is not edited and the validator gains no new input file:
+#   ALLOW  the empty-bodied `<pattern>) ;;` arms of the hook's `case "$FP" in` (the Write|Edit arm
+#          of the pause gate) that precede its generic `*/_bmad-output/*|_bmad-output/*)` arm --
+#          the writes the hook allows while paused. Validator side: one `"<pattern>",` per line
+#          between its `>>> I128 PAUSE-WRITE ALLOW ARMS` and `<<< I128 PAUSE-WRITE ALLOW ARMS` lines.
+#   ERE    the hook's session-marker scan pattern, the single-quoted `grep -oE` argument on the
+#          line after its I126 opener. Validator side: the String.raw body on the line after its
+#          `>>> I128 UPDATER MARKER ERE` opener. I126 cannot carry it: its grammar requires a
+#          `LAST_SKILL=` line, which a JS copy is not.
+# A hook arm added, removed or edited without the validator moving, or the reverse, fails here.
+#
+# COMPARISON. ALLOW is a SET (order is not a property the validator reads; it tests every
+# member), compared both directions; ERE is one string, byte-compared. A ZERO-member side is
+# refused on either side, as is a missing opener, terminator or generic arm: an empty set equals
+# an empty set, and a moved anchor would otherwise read as agreement.
+#
+# ONE awk, ONE fork, probe and corpus together, in I126's shape: the probe units arrive as a
+# here-string split by `@@UNIT <group> <hook|val>` lines, the two real files follow as arguments,
+# and one `<group> <verdict>` line is printed per group. The probe runs FIRST: identical-but-
+# reordered sets with a comment line between arms must read SAME, a dropped validator member
+# ALLOW-DIFFER, a one-byte ERE drift ERE-DIFFER, a zero-member hook side EMPTY:hook and a
+# zero-member validator list between intact anchors EMPTY:val -- before the
+# shipped pair is read. Then the arm-SHAPE units, each run against the full list and against
+# the list missing that arm: `) ;;  # comment`, `);;` and the pattern and `;;` on two lines must
+# read SAME and ALLOW-DIFFER respectively; `) : ;;` and a pattern line whose `;;` follows a `#`
+# line must read REFUSE-SHAPE and a `?` pattern REFUSE-PATTERN both times.
+#
+# NARROWING, AND THE FP SET. Measured on the live tree: 0 findings, hook 4 arms, validator 4
+# members, ERE equal. (1) Hook arms are taken only AFTER `case "$FP" in` and only BEFORE the
+# generic arm, so the Agent|Task arm's empty-bodied lines and the arms after the generic one are
+# outside the population. (2) Inside that region the arm REFUSES rather than skips. Blank lines
+# and `#` lines are skipped; a trailing ` # comment` is cut; the accepted allow shapes are
+# `<pattern>) ;;`, `<pattern>);;` and `<pattern>)` followed IMMEDIATELY by a bare `;;` line. ANY
+# other line there is REFUSE-SHAPE, and so is a blank or `#` line between a `<pattern>)` line and
+# its `;;`: bash reads that as one empty arm, but it is a spelling no probe of the accept path
+# covers, so it is refused rather than accepted on reasoning. An earlier version counted only lines ending `) ;;` and silently skipped
+# the rest as "a body is a decision"; that read a trailing-comment arm, a `);;` arm and a
+# `) : ;;` arm as SAME, and `:` is a no-op -- bash ALLOWS that write. A no-op body is refused
+# here, not normalised: this arm does not parse case bodies, and a shape it cannot classify must
+# fail loudly. (3) An allow pattern carrying `?`, `[`, a quote or a backslash is REFUSE-PATTERN,
+# because Check B's caseGlobRe converts only `*`; the live allow region has 0 such patterns
+# against 43 non-comment hook lines carrying `?` or `[` elsewhere. (4) The ERE is cut between
+# fixed delimiters, never by regex, so the brace and backslashes inside it are bytes, not syntax.
+i128_hook=core/hooks/ai-dlc-acknowledge.sh
+i128_val=core/scripts/validate-steering-budget.sh
+I128_AWK='
+function start(g, r) {
+  if (!(g in seen)) { seen[g] = 1; order[++ng] = g }
+  cur = g; role = r; incase = 0; done = 0; inval = 0; wantere = 0; pend = ""
+  if (r == "hook") { hopen[g] = 0; hgen[g] = 0 } else { vopen[g] = 0; vclose[g] = 0 }
+}
+function arm(p) {
+  if (index(p, "?") || index(p, "[") || index(p, "\"") || index(p, q) || index(p, "\\")) { if (!(cur in hpat)) hpat[cur] = p }
+  if (!((cur, p) in hm)) { hm[cur, p] = 1; hn[cur]++ }
+}
+function shape(s) { if (!(cur in hshape)) hshape[cur] = s }
+NR == FNR && /^@@UNIT / { start($2, $3); next }
+NR != FNR && FNR == 1  { start("real", (FILENAME == hf) ? "hook" : "val") }
+role == "hook" && wantere {
+  wantere = 0; a = index($0, "grep -oE " q); b = index($0, q " \"$TRANSCRIPT\"")
+  if (a && b > a) here[cur] = substr($0, a + 10, b - a - 10)
+}
+role == "hook" && index($0, i126) { wantere = 1; next }
+role == "hook" && !done && index($0, "case \"$FP\" in") { incase = 1; next }
+role == "hook" && incase && !done {
+  l = $0; sub(/^[[:space:]]+/, "", l)
+  if (pend != "" && (l == "" || substr(l, 1, 1) == "#")) { shape(pend ") / " (l == "" ? "<blank>" : l)); pend = ""; next }
+  if (l == "" || substr(l, 1, 1) == "#") next
+  sub(/[[:space:]]+#.*$/, "", l); sub(/[[:space:]]+$/, "", l)
+  if (l == "*/_bmad-output/*|_bmad-output/*)") { done = 1; hgen[cur] = 1; if (pend != "") shape(pend ")"); next }
+  if (pend != "") { if (l == ";;") arm(pend); else shape(pend ") / " l); pend = ""; next }
+  if (l ~ /\)[[:space:]]*;;$/) { sub(/\)[[:space:]]*;;$/, "", l); arm(l); next }
+  if (l ~ /\)$/) { pend = substr(l, 1, length(l) - 1); next }
+  shape(l); next
+}
+role == "val" && wantere {
+  wantere = 0; a = index($0, "String.raw`"); b = index($0, "`;")
+  if (a && b > a) vere[cur] = substr($0, a + 11, b - a - 11)
+}
+role == "val" && index($0, vereo) { wantere = 1; next }
+role == "val" && index($0, vopenm) { inval = 1; vopen[cur]++; next }
+role == "val" && index($0, vclosem) { inval = 0; vclose[cur]++; next }
+role == "val" && inval {
+  l = $0; sub(/^[[:space:]]+/, "", l)
+  if (l ~ /^".*",[[:space:]]*$/) {
+    sub(/^"/, "", l); sub(/",[[:space:]]*$/, "", l)
+    if (!((cur, l) in vm)) { vm[cur, l] = 1; vn[cur]++ }
+  }
+}
+END {
+  for (k in hm) { split(k, p, SUBSEP); if (!((p[1], p[2]) in vm)) miss[p[1]] = miss[p[1]] " hook-only:" p[2] }
+  for (k in vm) { split(k, p, SUBSEP); if (!((p[1], p[2]) in hm)) miss[p[1]] = miss[p[1]] " val-only:" p[2] }
+  for (i = 1; i <= ng; i++) {
+    g = order[i]
+    if (!hgen[g]) v = "ANCHOR:hook-generic-arm"
+    else if (vopen[g] != 1 || vclose[g] != 1) v = "ANCHOR:val-opener-closer:" vopen[g] "/" vclose[g]
+    else if (g in hshape) v = "REFUSE-SHAPE:" hshape[g]
+    else if (g in hpat) v = "REFUSE-PATTERN:" hpat[g]
+    else if (hn[g] + 0 == 0) v = "EMPTY:hook"
+    else if (vn[g] + 0 == 0) v = "EMPTY:val"
+    else if (here[g] == "") v = "ERE-EMPTY:hook"
+    else if (vere[g] == "") v = "ERE-EMPTY:val"
+    else if (g in miss) v = "ALLOW-DIFFER:" miss[g]
+    else if (here[g] != vere[g]) v = "ERE-DIFFER"
+    else v = "SAME:" hn[g]
+    print g " " v
+  }
+}'
+i128_nl='
+'
+i128_q="'"
+i128_vo='// >>> I128 PAUSE-WRITE ALLOW ARMS: the hook'"'"'s case patterns, verbatim >>>'
+i128_vc='// <<< I128 PAUSE-WRITE ALLOW ARMS <<<'
+i128_veo='// >>> I128 UPDATER MARKER ERE:'
+i128_ere='"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'
+i128_hk="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}    case \"\$FP\" in${i128_nl}      */a/*|a/*) ;;${i128_nl}      # a comment between arms${i128_nl}      */b.md|b.md) ;;${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
+i128_hk0="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}    case \"\$FP\" in${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
+i128_vl="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vo}${i128_nl}const L = [${i128_nl}"
+i128_vsame="${i128_vl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
+i128_vdrop="${i128_vl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
+i128_vere="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere%\?\"}\"\`;${i128_nl}${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
+i128_v0="${i128_vl}];${i128_nl}${i128_vc}"
+i128_stream="@@UNIT same hook${i128_nl}${i128_hk}${i128_nl}@@UNIT same val${i128_nl}${i128_vsame}${i128_nl}@@UNIT drop hook${i128_nl}${i128_hk}${i128_nl}@@UNIT drop val${i128_nl}${i128_vdrop}${i128_nl}@@UNIT ere hook${i128_nl}${i128_hk}${i128_nl}@@UNIT ere val${i128_nl}${i128_vere}${i128_nl}@@UNIT empty hook${i128_nl}${i128_hk0}${i128_nl}@@UNIT empty val${i128_nl}${i128_vsame}${i128_nl}@@UNIT emptyv hook${i128_nl}${i128_hk}${i128_nl}@@UNIT emptyv val${i128_nl}${i128_v0}"
+# The shape units: the b arm respelled in each accepted form must read SAME against the full
+# list and ALLOW-DIFFER against the list missing it; a no-op body and a glob metacharacter REFUSE.
+i128_hpre="${i128_hk%%      \*/b.md|b.md) ;;*}"
+i128_hsuf="${i128_hk#*b.md|b.md) ;;}"
+for i128_f in "trail:      */b.md|b.md) ;;  # allowed" "nosp:      */b.md|b.md);;" "split:      */b.md|b.md)${i128_nl}      ;;" "noop:      */b.md|b.md) : ;;" "cmt:      */b.md|b.md)${i128_nl}      # between${i128_nl}      ;;" "glob:      */b?.md|b?.md) ;;"; do
+  i128_fh="${i128_hpre}${i128_f#*:}${i128_hsuf}"
+  i128_stream="${i128_stream}${i128_nl}@@UNIT ${i128_f%%:*}-eq hook${i128_nl}${i128_fh}${i128_nl}@@UNIT ${i128_f%%:*}-eq val${i128_nl}${i128_vsame}${i128_nl}@@UNIT ${i128_f%%:*}-dr hook${i128_nl}${i128_fh}${i128_nl}@@UNIT ${i128_f%%:*}-dr val${i128_nl}${i128_vdrop}"
+done
+if [ ! -f "$i128_hook" ] || [ ! -f "$i128_val" ]; then
+  err "I128 cannot find $i128_hook or $i128_val. With either side absent there is nothing to compare, which would read as agreement."
+else
+  i128_out="$(awk -v hf="$i128_hook" -v q="$i128_q" -v i126="$i126_open" -v vopenm="$i128_vo" -v vclosem="$i128_vc" -v vereo="$i128_veo" "$I128_AWK" - "$i128_hook" "$i128_val" <<<"$i128_stream" 2>/dev/null)"
+  i128_p_same=""; i128_p_drop=""; i128_p_ere=""; i128_p_empty=""; i128_p_emptyv=""; i128_v=""; i128_p_shape=""
+  while IFS=' ' read -r i128_g i128_r; do
+    case "$i128_g" in
+      same)  i128_p_same="$i128_r" ;;
+      drop)  i128_p_drop="$i128_r" ;;
+      ere)   i128_p_ere="$i128_r" ;;
+      empty) i128_p_empty="$i128_r" ;;
+      emptyv) i128_p_emptyv="$i128_r" ;;
+      real)  i128_v="$i128_r" ;;
+      *-eq|*-dr) i128_p_shape="${i128_p_shape} ${i128_g}=${i128_r%%:*}" ;;
+    esac
+  done <<<"$i128_out"
+  i128_shape_want=" trail-eq=SAME trail-dr=ALLOW-DIFFER nosp-eq=SAME nosp-dr=ALLOW-DIFFER split-eq=SAME split-dr=ALLOW-DIFFER noop-eq=REFUSE-SHAPE noop-dr=REFUSE-SHAPE cmt-eq=REFUSE-SHAPE cmt-dr=REFUSE-SHAPE glob-eq=REFUSE-PATTERN glob-dr=REFUSE-PATTERN"
+  if [ "$i128_p_same" != "SAME:2" ] || [ "${i128_p_drop%%:*}" != ALLOW-DIFFER ] || [ "$i128_p_ere" != ERE-DIFFER ] || [ "$i128_p_empty" != EMPTY:hook ] || [ "$i128_p_emptyv" != EMPTY:val ] || [ "$i128_p_shape" != "$i128_shape_want" ]; then
+    err "I128's own probe failed: a reordered equal pair with a comment between arms read '$i128_p_same' (want SAME:2), a dropped validator member '$i128_p_drop' (want ALLOW-DIFFER), a one-byte ERE drift '$i128_p_ere' (want ERE-DIFFER), a zero-arm hook '$i128_p_empty' (want EMPTY:hook), a zero-member validator list between intact anchors '$i128_p_emptyv' (want EMPTY:val); the arm-shape units read '${i128_p_shape# }' (want '${i128_shape_want# }'). The extractor cannot tell agreement from drift, so no verdict on the shipped pair means anything."
+  else
+    case "$i128_v" in
+      SAME:*) : ;;
+      ALLOW-DIFFER:*) err "I128 Check B's pause-write allow list in $i128_val has drifted from the empty-bodied arms before the generic _bmad-output arm of $i128_hook:${i128_v#ALLOW-DIFFER:}. Check B would score a write the hook allows while paused as a steamroll, or acquit one the hook denies. Copy the hook's case pattern verbatim into PAUSE_WRITE_ALLOW." ;;
+      ERE-DIFFER) err "I128 the updater-marker ERE in $i128_val (line after its '$i128_veo' opener) is not byte-identical to the grep -oE pattern on the line after $i128_hook's I126 opener. Check B would decide 'updater session' differently from the hook that allows its calls." ;;
+      REFUSE-SHAPE:*) err "I128 cannot classify a line in the case region of $i128_hook's pause-write arm, before its generic _bmad-output arm: '${i128_v#REFUSE-SHAPE:}'. This arm reads only an empty-bodied '<pattern>) ;;' arm (a trailing comment, ');;', or the pattern and ';;' on two ADJACENT lines); any other shape there, a comment or blank line between a pattern and its ';;' included,, a ': ;;' no-op body included, may be a write the hook allows that Check B cannot see, so it is refused rather than read as agreement. Respell it as '<pattern>) ;;'." ;;
+      REFUSE-PATTERN:*) err "I128 an allow arm of $i128_hook carries a quote, backslash, '?' or '[' ('${i128_v#REFUSE-PATTERN:}'). Check B converts only '*' to a regex and takes every other byte literally, so this pattern would compare equal here and match differently there. Spell the arm with literal bytes and '*' only." ;;
+      EMPTY:*|ERE-EMPTY:*|ANCHOR:*) err "I128 derived nothing comparable (${i128_v}): an anchor this arm keys on has moved or a side has zero members, and an empty side compares equal to an empty side." ;;
+      *) err "I128 unexpected verdict '$i128_v'." ;;
+    esac
+  fi
+fi
+
 # --- I82: core's own artifact-path prescriptions obey core's own grammar --------
 # artifact-path-grammar.md declares that the DIRECTORY is the only sprint slot: `s<N>/`, and no
 # basename may carry a sprint token. Core prescribed FIVE spellings across four positions before
