@@ -80,11 +80,14 @@ END="$(jq -r '.block_end' "$SCHEMA")"
 TRANSIENT="$(jq -r '.paths[] | select(.transient) | .ignore' "$SCHEMA")"
 DURABLE_NAMES="$(jq -r '.paths[] | select(.transient | not) | .name' "$SCHEMA")"
 ROOT_DIR="$(jq -r '.root' "$SCHEMA")"
+# BL-685: the declared OUT-OF-ROOT patterns, derived like TRANSIENT and kept SEPARATE from it so
+# arm 1 and arm 10 own different halves of the block and their mutants cannot entangle.
+OUT_OF_ROOT="$(jq -r '.out_of_root[]? | .pattern' "$SCHEMA")"
 
 # The seed must be able to express the defect. A declaration with nothing transient in it, or
 # with no durable half, makes several arms below vacuously true.
-if [ -z "$TRANSIENT" ] || [ -z "$DURABLE_NAMES" ] || [ -z "$BEGIN" ] || [ -z "$END" ]; then
-  echo "  FIXTURE BROKEN: the declaration yields transient=$(printf '%s' "$TRANSIENT" | grep -c .) durable=$(printf '%s' "$DURABLE_NAMES" | grep -c .) markers='${BEGIN:0:12}'/'${END:0:12}' — the arms below cannot discriminate" >&2
+if [ -z "$TRANSIENT" ] || [ -z "$DURABLE_NAMES" ] || [ -z "$OUT_OF_ROOT" ] || [ -z "$BEGIN" ] || [ -z "$END" ]; then
+  echo "  FIXTURE BROKEN: the declaration yields transient=$(printf '%s' "$TRANSIENT" | grep -c .) out_of_root=$(printf '%s' "$OUT_OF_ROOT" | grep -c .) durable=$(printf '%s' "$DURABLE_NAMES" | grep -c .) markers='${BEGIN:0:12}'/'${END:0:12}' — the arms below cannot discriminate" >&2
   exit 2
 fi
 
@@ -324,11 +327,28 @@ arm_install_fallback() {
   return 0
 }
 
+# Arm 10 (BL-685): every declared OUT-OF-ROOT pattern is rendered inside the markers. Presence-
+# shaped, and over a set disjoint from arm 1's, so a renderer that drops the out_of_root half
+# fails this arm alone. The pattern must sit BETWEEN the markers, never merely in the file.
+arm_renders_out_of_root() {
+  local w="$1" subj="$2" blk pat
+  render "$subj" "$w" >/dev/null || return 1
+  blk="$(block_of "$w/project/.gitignore")"
+  [ -n "$blk" ] || return 1
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    grep -qxF -- "$pat" <<<"$blk" || return 1
+  done <<EOF
+$OUT_OF_ROOT
+EOF
+  return 0
+}
+
 run_arms() { # <subject> -> prints "<name>:<0|1>" per arm, each on its own project
   local subj="$1" name w rc
   for name in renders_declared_set excludes_durable cut_is_bounded idempotent \
               check_discriminates fails_closed_on_empty_marker names_tracked_paths \
-              check_is_blind_to_tracked install_fallback; do
+              check_is_blind_to_tracked install_fallback renders_out_of_root; do
     w="$(fresh_project)" || { printf '%s:1\n' "$name"; continue; }
     "arm_$name" "$w" "$subj" >/dev/null 2>&1 && rc=0 || rc=1
     rm -rf "$w"
@@ -352,6 +372,7 @@ while IFS=: read -r name rc; do
     names_tracked_paths)   msg="an already-tracked transient path is named, not silently ignored" ;;
     check_is_blind_to_tracked) msg="--check reports the BLOCK only: it exits 0 over a tracked transient path, which the write path names" ;;
     install_fallback)      msg="consumer layout: --root naming a tree with no declaration falls back to the install's (exit 1 on the block, not 2), and a root with its own still wins" ;;
+    renders_out_of_root)   msg="every declared out-of-root pattern is rendered inside the markers ($(printf '%s\n' "$OUT_OF_ROOT" | grep -c .) path(s))" ;;
     *)                     msg="$name" ;;
   esac
   [ "$rc" -eq 0 ] && ok "$msg" || bad "$msg"
@@ -434,6 +455,9 @@ mutate check-reports-tracked \
 
 # M5 (BL-329): the install-root candidate empties, so the consumer layout has no fallback again.
 mutate no-install-fallback 's/^_install_root="\$(sti_walk_root "\$_self" || true)"$/_install_root=""/' install_fallback
+
+# M6 (BL-685): the out_of_root half is never read, so the block carries the in-root set only.
+mutate no-out-of-root 's/^OOR_PATTERNS="\$(jq .*$/OOR_PATTERNS=""/' renders_out_of_root
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

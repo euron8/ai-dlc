@@ -7660,6 +7660,39 @@ def ledger_findings(tag, root, entries):
     print('%s\tLEDGERS\t%d\t-' % (tag, n))
 
 
+def ignore_scope(decl):
+    """(f) SCOPE OF EVERY IGNORE PATTERN, BL-685. A transient entry of paths must render under
+    root, and the ONLY declared way to put an out-of-root rule into the block is the out_of_root
+    field. So an in-root ignore that escapes root is refused, and an out_of_root pattern that is
+    really under root is refused too (it belongs in paths, where the set-compare can see it).
+    Returns (name, message) pairs. One function, so the probes below drive the corpus code."""
+    root = decl.get('root') or ''
+    out = []
+    for e in (decl.get('paths') or []):
+        if not isinstance(e, dict) or e.get('transient') is not True:
+            continue
+        ig = (e.get('ignore') or '').strip()
+        if ig and not ig.startswith(root + '/'):
+            out.append(((e.get('name') or '<unnamed>').strip(),
+                        'ignore pattern %s is not under the declared root; an out-of-root '
+                        'pattern is declared in out_of_root' % ig))
+    oor = decl.get('out_of_root')
+    if oor is None:
+        return out
+    if not isinstance(oor, list) or not oor:
+        out.append(('out_of_root', 'is not a non-empty list'))
+        return out
+    for o in oor:
+        p = (o.get('pattern') or '').strip() if isinstance(o, dict) else ''
+        r = (o.get('reason') or '').strip() if isinstance(o, dict) else ''
+        if not p or not r:
+            out.append(('out_of_root', 'an entry needs a pattern and a reason'))
+        elif p == root or p.startswith(root + '/') or p.startswith('/' + root + '/'):
+            out.append(('out_of_root', 'pattern %s is under the declared root; declare it in '
+                        'paths, where the set-compare can see it' % p))
+    return out
+
+
 def constructs(path, name):
     try:
         raw = io.open(path, encoding='utf-8', errors='replace').read()
@@ -7709,9 +7742,6 @@ for i in range(0, len(args), 3):
         if e['transient']:
             if not ig:
                 print('%s\tFIELD\t%s\ttransient but declares no ignore pattern' % (tag, nm))
-            elif not ig.startswith((decl.get('root') or '') + '/'):
-                print('%s\tFIELD\t%s\tignore pattern %s is not under the declared root'
-                      % (tag, nm, ig))
         elif ig:
             print('%s\tFIELD\t%s\tdurable but declares an ignore pattern (%s)' % (tag, nm, ig))
         prod = (e.get('producer') or '').strip()
@@ -7725,6 +7755,23 @@ for i in range(0, len(args), 3):
                 print('%s\tPRODUCER\t%s\t%s does not construct it on a non-comment line'
                       % (tag, nm, prod))
 
+    for nm, msg in ignore_scope(decl):
+        print('%s\tFIELD\t%s\t%s' % (tag, nm, msg))
+    if tag == 'pos':
+        # The scope probe, offender direction: an in-root entry whose ignore ESCAPES root, and an
+        # out_of_root pattern that is really under root. Both must be refused.
+        esc = ignore_scope({'root': '_bmad-output', 'paths': [
+            {'name': 'x', 'transient': True, 'ignore': '.claude/worktrees/'}]})
+        inr = ignore_scope({'root': '_bmad-output', 'paths': [], 'out_of_root': [
+            {'pattern': '_bmad-output/x/', 'reason': 'r'}]})
+        print('%s\tOOR\t%d\t%d' % (tag, len(esc), len(inr)))
+    elif tag == 'neg':
+        # Near-miss: the SAME out-of-root pattern, declared in out_of_root, beside a well-scoped
+        # transient entry. Nothing may be refused.
+        ok = ignore_scope({'root': '_bmad-output', 'paths': [
+            {'name': 'x', 'transient': True, 'ignore': '_bmad-output/x/'}], 'out_of_root': [
+            {'pattern': '.claude/worktrees/', 'reason': 'r'}]})
+        print('%s\tOOR\t%d\t%d' % (tag, len(ok), len(ok)))
     if tag == 'live':
         ledger_findings(tag, root, decl.get('paths') or [])
     else:
@@ -7749,9 +7796,12 @@ PY
     i95_neg_fired=0
     i95_live_pop=0
     i95_led_pos=0; i95_led_neg=0; i95_led_n=""
+    i95_oor_pos=""; i95_oor_neg=""
     while IFS="$(printf '\t')" read -r _tag _kind _what _where; do
       [ -n "$_tag" ] || continue
       case "$_tag:$_kind" in
+        pos:OOR) i95_oor_pos="$_what:$_where" ;;
+        neg:OOR) i95_oor_neg="$_what:$_where" ;;
         pos:LEDGER) i95_led_pos=1 ;;
         neg:LEDGER) i95_led_neg=1 ;;
         live:LEDGERS) i95_led_n="$_what" ;;
@@ -7783,6 +7833,14 @@ EOF
     [ "$i95_neg_fired" -ne 0 ] && err "I95's NEGATIVE probe WAS reported: a path named only inside a COMMENT was treated as constructed. The grammar is not comment-blind, and every worked path example in core's prose is now in this arm's finding set."
     [ "$i95_led_pos" -eq 0 ] && err "I95(e)'s POSITIVE probe was NOT reported: a ledger named only in a producer's COMMENT passed as built, so a clean nested-ledger result means nothing. This fails closed."
     [ "$i95_led_neg" -ne 0 ] && err "I95(e)'s NEGATIVE probe WAS reported: a ledger its producer builds on a live line was flagged, so every declared ledger is now a finding."
+    # (f) BL-685, both directions: an in-root ignore escaping root AND an out_of_root pattern under
+    # root are each refused (pos reports 1:1), and the same out-of-root pattern declared in
+    # out_of_root beside a well-scoped entry is not (neg reports 0:0).
+    case "$i95_oor_pos" in
+      [1-9]*:[1-9]*) : ;;
+      *) err "I95(f)'s POSITIVE probe did not refuse both offenders (got '${i95_oor_pos:-nothing}', want both counts non-zero): an in-root ignore escaping root, or an out_of_root pattern under root, passed. Either one lets a pattern reach the consumer's .gitignore without the declaration that scopes it." ;;
+    esac
+    [ "$i95_oor_neg" = "0:0" ] || err "I95(f)'s NEGATIVE probe was refused (got '${i95_oor_neg:-nothing}', want 0:0): an out-of-root pattern declared in out_of_root is the sanctioned form, so every such declaration would now be a finding."
     if [ -z "$i95_led_n" ]; then
       err "I95(e) printed no nested-ledger count for the live tree, so the sub-arm did not run over $i95_schema."
     else

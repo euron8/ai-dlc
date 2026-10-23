@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.919.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R5c. It advances BL-685 as PARTIAL (part (a) built, part (b) owed), closes no entry, closes no `PC-` id and files nothing. Net for this release: closed 0, filed 0; closed minus filed = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/skills/ai-dlc-update/reconcile/apply.sh` (the `transient_ignore_row` tracked-path scan). Fixture changes: `core/fixtures/transient-ignore-block`. Distribution-only: `scripts/validate-enforcement-map.sh` (I95(f)). Packaging: none.
+
+### BL-685(a) — `.claude/worktrees/` is rendered into the transient-ignore block from a declared `out_of_root` field (PARTIAL; the entry stays open)
+
+`core/schemas/pipeline-state-paths.json` gains an optional top-level `out_of_root` field, `{pattern, reason}`, carrying `.claude/worktrees/`. `sync-transient-ignore.sh` renders it after the transient half, inside the same markers: one declared source, not a second hand-written block, so `--check` and uninstall need no change. `install.sh` renders it at install time. A pull does not write `.gitignore`, which is user-owned: `apply.sh`'s `--check` reports the block drifted and emits a `transient-ignore` WORKLIST row naming `bash scripts/ai-dlc/sync-transient-ignore.sh`, so that row is EXPECTED on a consumer's first pull after this release, and the line lands when it is run. I95(f) moves the root-scope check into `ignore_scope()` and refuses in both directions: a transient `paths[].ignore` that escapes root, and an `out_of_root` pattern under root (it belongs in `paths`); its self-probe runs both. `apply.sh`'s `transient_ignore_row` includes the field in its tracked-path scan. `transient-ignore-block` gains arm 10 (`renders_out_of_root`) and mutant M6 (`no-out-of-root`), and fails as BROKEN on an empty field. Side effect: on the first `--verify` after a consumer re-renders its block, `emit-report.sh`'s `conswork` and `consindex` listings change (`consignored` does not; it already prunes `.claude/worktrees/`), so a BL-679 recorded PASS a consumer already holds is invalidated once. Owed: BL-685(b), the round-9 `cr_run` adversary review, which must run before the recorded-PASS default is flipped on.
+
 ## [0.918.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R5b. It closes BL-744, closes no `PC-` id and files nothing. Net for this release: closed 1 (BL-744), filed 0; closed minus filed = 1. Engine code a consumer runs from step 3 of the delivering pull: none. Hook changes: `.githooks/pre-push` and `core/git-hooks/pre-push`, edited together because invariant I66 joins their fixture-pool blocks. Fixture changes: `core/fixtures/suite-dispatch-order` (distribution-only). Packaging: none.
