@@ -521,3 +521,20 @@ Fix: the sentence is deleted. REASON, the EXT_BAD variant and the header comment
 
 verify: sh bash core/fixtures/context-mode-protect/receipt-bl794.sh core/hooks/ai-dlc-protect.sh
 
+## BL-793 — the protect hook's deny is per call, so one protected token refuses a whole mixed ctx_batch_execute batch
+
+**NOTE.** Source: batch 241, lead ai-dlc-58, cluster r7. A residual of BL-781. Not built. The part already shipped is BL-794, which removed the CONTEXT sentence that contradicted a consumer layer.
+
+Measured read-only on graph. Remediator seat agent-aa5cb612, s320, transcript `~/.claude/projects/-Users-n8-git-graph/719a49a0-4d69-4cae-8cd2-732e622893b7/subagents/agent-aa5cb61243fcd2180.jsonl`:
+- Two ctx_batch_execute calls were denied, at 13:51:44Z (PROTECTED_HITS: docs/escalations/pending.md) and 13:53:54Z (the s319 story-3-2 file, .claude/team-roles/code-reviewer.md, docs/architecture.md, pending.md). Each was a mixed batch of 4 and 7 commands, of which only 1-2 touched a protected path.
+- The seat re-ran the same greps and seds through plain Bash, which the protect hook does not match: it is registered only on the context-mode MCP matcher. It then made one native Read of pending.md at 13:57:22Z.
+- The single-line picks (`sed -n 406p`, `sed -n 100p`, `sed -n 965p`) have a verbatim native equivalent in Read with offset/limit. The `grep -c`/`grep -n` on pending.md has none.
+- Native Grep was NOT offered: it is absent from the seat's tool list, absent from the deferred tools, and appears 0 times in the rendered prompt. The transcript carries 0 Grep tool_use calls against 15 Read calls. Across graph, 0 transcripts modified in the last 7 days carry a Grep tool_use, against 1411 that carry Read. Naming native Grep in the deny or in the rendered agent line would point at a tool that does not exist, so neither ships.
+- The Bash reads of protected files were byte-equal to native Read (pending.md:4858, code-reviewer.md:406, audit-anchors.md:61 as a prefix). Those were short one-line picks. That is not evidence that Bash is a verbatim channel, because the compressor hazard was measured on a long `cat -n`, per `.claude/rules/tool-hazards.md`.
+- Harm, measured: the denial dropped two requested reads, architecture.md:965 and story-3-2:100. Both were requested inside the denied 13:53:54Z batch (`sed -n 100p [^;]*story-3-2` matches 1 call, `sed -n 965p [^;]*architecture\.md` matches 1 call), and no tool read either line afterwards. Control: `sed -n 406p [^;]*code-reviewer` matches 2 calls, the denied batch and one later Bash call that ran. An impossible token matches 0. The seat's own text cites neither line, its last record is 14:15:49Z, and no s320 lane-1 output exists to cite them. Two reads were dropped and never re-sought, and no cite of them reached any output, so the measured harm is 0.
+- Rate: 45 denials across 23 agents in s319, against 2 in 1 agent in s320 so far. The 0.922.0 native-Read line is in 18 of 18 of graph's rendered agents.
+
+Owed, not built: the structural cause is that the deny is per call, so one protected token refuses a whole mixed batch. A fix is structural (for example, a deny naming which commands to split out) and needs its own contract.
+
+verify: manual — the batch-granularity fix needs its own contract; no predicate over the tree exists yet.
+
