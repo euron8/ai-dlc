@@ -16,6 +16,20 @@
 #
 # EVERY READER WORLD ASSERTS A VALUE: the exit status and the exact set of OPEN keys, never "some
 # output". A reader that printed nothing fails every presence-shaped arm below by construction.
+#
+# THE LIVING SWEEP (S1-S10). The reader also sweeps every LIVING `_bmad-output/**/*.md` carrying a derived
+# fence, with or without a record, and blocks only on a fence whose command has an ai-dlc CORE operand,
+# asked of core-paths.sh --is-core. So core-paths.sh sits beside the reader copy in $BIN, and every root
+# carries the core manifest at `.claude/skills/ai-dlc/core-manifest.md`, where core-paths.sh reads it.
+# S1 is the acquittal probe (one core and one consumer stale fence in ONE world, exactly one OPEN line);
+# S2 PAST is silent; S3 all-reproduce; S4a/S4b UNRUN core blocks, consumer silent; S5 no core-paths.sh is a
+# refusal; S6 push-candidate-ledger.md stays LIVING (lead ruling); S7 an OWED row's line prints once;
+# S8 deleted core operands block; S9 --scope-batch is unchanged by a stale LIVING fence; S10 --scope-batch
+# from apply.sh's copy shape (reader beside the REAL sprint-status.sh and its schema, no core-paths.sh).
+# Mutants M1-M7 each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and must fail
+# a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5 refusal
+# made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the dispatch.
+# receipt-bl587.sh drives the real reader over S1's seed.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -36,6 +50,19 @@ if [ -z "$READER" ] || [ -z "$DIFFER" ]; then
   exit 0
 fi
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate validate-artifact-derivations.sh" >&2; exit 2; }
+# The LIVING sweep asks core-paths.sh --is-core, a SIBLING of the reader, which reads the core manifest
+# from the root it is run in. Both are copied beside the reader and into each root, as the installer would.
+COREPATHS="$(pick "$HERE/../../scripts/core-paths.sh" \
+  "$HERE/../../../scripts/ai-dlc/core-paths.sh" "$HERE/../../../core/scripts/core-paths.sh")"
+MANIFEST="$(pick "$HERE/../../skills/ai-dlc/core-manifest.md" \
+  "$HERE/../../../.claude/skills/ai-dlc/core-manifest.md" "$HERE/../../../core/skills/ai-dlc/core-manifest.md")"
+[ -n "$COREPATHS" ] || { echo "FIXTURE ERROR: cannot locate core-paths.sh" >&2; exit 2; }
+[ -n "$MANIFEST" ] || { echo "FIXTURE ERROR: cannot locate core-manifest.md" >&2; exit 2; }
+SPRINTSTATUS="$(pick "$HERE/../../scripts/sprint-status.sh" \
+  "$HERE/../../../scripts/ai-dlc/sprint-status.sh" "$HERE/../../../core/scripts/sprint-status.sh")"
+SSSCHEMA="$(pick "$HERE/../../schemas/sprint-status.json" \
+  "$HERE/../../../.claude/schemas/sprint-status.json" "$HERE/../../../core/schemas/sprint-status.json")"
+[ -n "$SPRINTSTATUS" ] && [ -n "$SSSCHEMA" ] || { echo "FIXTURE ERROR: cannot locate sprint-status.sh or its schema" >&2; exit 2; }
 READER="$(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 DIFFER="$(cd "$(dirname "$DIFFER")" && pwd)/$(basename "$DIFFER")"
 
@@ -53,6 +80,7 @@ write_stub() { # <dir>
 }
 write_stub "$BIN"
 cp "$READER" "$BIN/check-owed-derivations.sh"
+cp "$COREPATHS" "$BIN/"
 
 echo "owed-derivations:"
 printf '  reader: %s\n' "$READER"
@@ -60,6 +88,10 @@ printf '  writer: %s\n' "$DIFFER"
 printf 'HERMETIC-CONSUMED core/scripts/check-owed-derivations.sh\n'
 printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
 printf 'HERMETIC-CONSUMED core/scripts/validate-artifact-derivations.sh\n'
+printf 'HERMETIC-CONSUMED core/scripts/core-paths.sh\n'
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc/core-manifest.md\n'
+printf 'HERMETIC-CONSUMED core/scripts/sprint-status.sh\n'
+printf 'HERMETIC-CONSUMED core/schemas/sprint-status.json\n'
 
 g() { local d="$1"; shift; git -C "$d" -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 fails=0
@@ -91,8 +123,9 @@ row() { printf 'OWED\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-5}" "${4:-1}" "b
 
 # ---- the reader's root: a toy tree plus the real validator -------------------------------------
 mkroot() { # <dir>
-  mkdir -p "$1/scripts/ai-dlc" "$1/.claude" "$1/_bmad-output/planning-artifacts/s1" "$1/_bmad-output/party-mode"
+  mkdir -p "$1/scripts/ai-dlc" "$1/.claude/skills/ai-dlc" "$1/_bmad-output/planning-artifacts/s1" "$1/_bmad-output/party-mode"
   cp "$VALIDATOR" "$1/scripts/ai-dlc/validate-artifact-derivations.sh"
+  cp "$MANIFEST" "$1/.claude/skills/ai-dlc/core-manifest.md"
   printf 'qqalpha\n' > "$1/t.txt"
   printf '1\n' > "$1/.sprint-id"
 }
@@ -507,6 +540,140 @@ rc_is "Rp10 control: A:N -> A:999 (a different key) fresh by content still close
 printf 'REPOINTED\t%s\n' "$K_RPO" > "$WORK/rp5.tsv"
 rd "$R" "$WORK/rp5.tsv"
 rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"
+
+# ---- S1-S10: THE LIVING SWEEP and its core-operand predicate (operator ruling (A)) ------------------
+# The reader sweeps every LIVING `_bmad-output/**/*.md` carrying a derived fence, whether or not a record
+# exists, and BLOCKS only on a FAIL/UNRUN whose command has an ai-dlc CORE operand (core-paths.sh --is-core).
+# Consumer-code drift is silent, and THAT SILENCE IS A PREDICATE: S1 puts a core-operand FAIL and a
+# consumer-operand FAIL in ONE world, so a reader that acquits everything and one that blocks everything
+# both fail it. Every arm asserts the exit AND the exact set of OPEN lines.
+# The roots are built ONCE and never edited, so the mutants M1-M7 below re-drive the same seeds against
+# a mutated copy of the reader. lw_all <reader> <mode>: mode `real` reports each arm; mode `mut` collects
+# the names of the arms that failed into LW_FAILED.
+LCMD='grep -n -F qqalpha scripts/ai-dlc/x.sh'      # a CORE operand (scripts/ai-dlc/ is manifest-owned)
+LCON='grep -n -F qqalpha server/x.py'              # a CONSUMER operand
+LUNC="awk 'END { exit 137 }' scripts/ai-dlc/x.sh"  # killed by a signal: UNRUN, on a core operand
+LUNS="awk 'END { exit 137 }' server/x.py"          # the same on a consumer operand
+lfence() { printf '```derived\n$ %s\n%s\n```\n' "$1" "$2"; }
+lroot() { # <dir>: mkroot plus a core file and a consumer file, each holding qqalpha on line 1
+  mkroot "$1"; mkdir -p "$1/server" "$1/_bmad-output/planning-artifacts/s0" "$1/_bmad-output/ai-dlc-update"
+  printf 'qqalpha\n' > "$1/scripts/ai-dlc/x.sh"; printf 'qqalpha\n' > "$1/server/x.py"
+}
+LPRD="_bmad-output/planning-artifacts/prd.md"
+LS1="$WORK/ls1"; lroot "$LS1"
+{ printf '# PRD\n\n'; lfence "$LCMD" '9:qqalpha'; printf '\n'; lfence "$LCON" '9:qqalpha'; } > "$LS1/$LPRD"
+K_LS1="$LPRD:$(line_of "$LS1/$LPRD" "\$ $LCMD")"; K_LS1C="$LPRD:$(line_of "$LS1/$LPRD" "\$ $LCON")"
+LS2="$WORK/ls2"; lroot "$LS2"; LPAST="_bmad-output/planning-artifacts/s0/past.md"
+{ printf '# Past\n\n'; lfence "$LCMD" '9:qqalpha'; } > "$LS2/$LPAST"
+LS3="$WORK/ls3"; lroot "$LS3"
+{ printf '# PRD\n\n'; lfence "$LCMD" '1:qqalpha'; printf '\n'; lfence "$LCON" '1:qqalpha'; } > "$LS3/$LPRD"
+LS4C="$WORK/ls4c"; lroot "$LS4C"; { printf '# PRD\n\n'; lfence "$LUNC" 1; } > "$LS4C/$LPRD"
+K_LS4C="$LPRD:$(line_of "$LS4C/$LPRD" '$ awk')"
+LS4S="$WORK/ls4s"; lroot "$LS4S"; { printf '# PRD\n\n'; lfence "$LUNS" 1; } > "$LS4S/$LPRD"
+LS6="$WORK/ls6"; lroot "$LS6"; LLEDGER="_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+{ printf '# Push-candidate ledger\n\n'; lfence "$LCMD" '9:qqalpha'; } > "$LS6/$LLEDGER"
+K_LS6="$LLEDGER:$(line_of "$LS6/$LLEDGER" "\$ $LCMD")"
+row "$K_LS1" "$LCMD" > "$WORK/ls7.tsv"
+LS8="$WORK/ls8"; lroot "$LS8"
+{ printf '# PRD\n\n'; lfence 'git show HEAD:scripts/ai-dlc/gone.sh' 5; printf '\n'
+  lfence 'grep -c qqalpha scripts/ai-dlc/deleted.sh' 1; printf '\n'; lfence 'grep -c qqalpha server/gone.py' 1; } > "$LS8/$LPRD"
+K_LS8A="$LPRD:$(line_of "$LS8/$LPRD" '$ git show')"; K_LS8B="$LPRD:$(line_of "$LS8/$LPRD" 'deleted.sh')"
+LIN="$LPRD
+$LPAST
+_bmad-output/planning-artifacts/s1/x.md
+$LLEDGER"
+for k in "$K_LS1" "$K_LS1C" "$K_LS4C" "$K_LS6" "$K_LS8A" "$K_LS8B"; do
+  case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
+done
+# CONTROLS, reader-independent: each seed is what its world claims, by the real validator.
+lv() { ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/validate-artifact-derivations.sh" "$1/$2" 2>&1 >/dev/null ); }
+rc_is "S1c control: the validator FAILS both the core and the consumer fence in the S1 world" 2 "$(lv "$LS1" "$LPRD" | grep -c '^FAIL (STALE): ')"
+rc_is "S2c control: the validator FAILS the past-sprint core fence" 1 "$(lv "$LS2" "$LPAST" | grep -c '^FAIL (STALE): ')"
+rc_is "S4c control: the validator prints an UNRUN line for each awk-137 fence (core, consumer)" 11 "$(lv "$LS4C" "$LPRD" | grep -c '^UNRUN: ')$(lv "$LS4S" "$LPRD" | grep -c '^UNRUN: ')"
+rc_is "S8c control: neither deleted core file exists, and the validator FAILS all three fences" 3 "$([ ! -e "$LS8/scripts/ai-dlc/gone.sh" ] && [ ! -e "$LS8/scripts/ai-dlc/deleted.sh" ] && lv "$LS8" "$LPRD" | grep -c '^FAIL (STALE): ')"
+
+open_lines() { awk -F'\t' '$1 == "OPEN"' <<<"$OUT"; }
+lopen() { printf 'OPEN\t%s\tLIVING-%s\t$ %s\t-\tliving-sweep' "$1" "$2" "$3"; }
+lw_rd() { # <bin> <root> <record>
+  local o="$WORK/lw.out" e="$WORK/lw.err"
+  ( cd / && AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" "$3" > "$o" 2> "$e" ); RC=$?
+  OUT="$(cat "$o")"; ERR="$(cat "$e")"
+}
+lw_batch() { # <bin> <root> -> BOUT BRC
+  BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
+}
+LW_MODE=real; LW_FAILED=""
+lw_arm() { # <id> <description> <0 holds | 1 does not>
+  if [ "$LW_MODE" = real ]; then
+    if [ "$3" = 0 ]; then ok "$1 $2"; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
+  elif [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
+}
+lw_all() { # <reader> <tag>
+  local b="$WORK/lw.$2/bin" b5="$WORK/lw.$2/bin5" lone="$WORK/lw.$2/lone" none="$WORK/lw.$2/no-record.tsv"
+  mkdir -p "$b" "$b5" "$lone/scripts" "$lone/schemas"
+  cp "$1" "$b/check-owed-derivations.sh"; cp "$COREPATHS" "$b/"; write_stub "$b"
+  cp "$1" "$b5/check-owed-derivations.sh"; write_stub "$b5"
+  # S10's caller shape (apply.sh's scope join): the reader ALONE beside the real sprint-status.sh and its
+  # schema, with no core-paths.sh and no validator.
+  cp "$1" "$lone/scripts/check-owed-derivations.sh"; cp "$SPRINTSTATUS" "$lone/scripts/sprint-status.sh"; cp "$SSSCHEMA" "$lone/schemas/sprint-status.json"
+  lw_rd "$b" "$LS1" "$none"
+  lw_arm S1 "acquittal probe: no record, one LIVING doc with a stale CORE fence and a stale CONSUMER fence -> exit 1 and exactly ONE OPEN line, the core one, LIVING-STALE living-sweep" \
+    "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS1" STALE "$LCMD")" ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS2" "$none"
+  lw_arm S2 "the same core fence in a PAST-sprint file (s0, current 1) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS3" "$none"
+  lw_arm S3 "every LIVING fence reproduces -> exit 0, no OPEN line, and the UNMEASURED line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS4C" "$none"
+  lw_arm S4a "a core-operand UNRUN in a LIVING doc -> exit 1, exactly one OPEN, LIVING-UNRUN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS4C" UNRUN "$LUNC")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS4S" "$none"
+  lw_arm S4b "a consumer-operand UNRUN in a LIVING doc -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b5" "$LS1" "$none"
+  lw_arm S5 "core-paths.sh absent beside the reader, S1's seed -> exit 2 with a REFUSED line and no OPEN line" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: no core-paths.sh beside' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6" "$none"
+  lw_arm S6 "push-candidate-ledger.md stays LIVING (lead ruling): its stale core fence -> exit 1, its OPEN line printed" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS1" "$WORK/ls7.tsv"
+  lw_arm S7 "collision: an OWED row on prd.md:K whose fence is stale prints ONCE, as STALE, never again as LIVING-STALE" \
+    "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tSTALE\t$ %s\tbase..theirs\treconcile-log-x' "$K_LS1" "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS8" "$none"
+  lw_arm S8 "deleted core operands block (git show HEAD:scripts/ai-dlc/gone.sh, plain scripts/ai-dlc/deleted.sh); a deleted consumer one does not" \
+    "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS8A" STALE 'git show HEAD:scripts/ai-dlc/gone.sh')
+$(lopen "$K_LS8B" STALE 'grep -c qqalpha scripts/ai-dlc/deleted.sh')" ]; } && echo 0 || echo 1)"
+  lw_batch "$b" "$LS1"; local s9a="$BOUT" s9r="$BRC"
+  lw_batch "$b" "$LS3"
+  lw_arm S9 "--scope-batch output and exit are byte-identical with (S1 root) and without (S3 root) a stale LIVING core fence" \
+    "$({ [ "$s9r" = 0 ] && [ "$BRC" = 0 ] && [ "$s9a" = "$BOUT" ] && [ "$(printf '%s\n' "$BOUT" | cut -f1 | tr '\n' ' ')" = "LIVING PAST CURRENT LIVING " ]; } && echo 0 || echo 1)"
+  local s10full="$s9a"
+  BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
+  lw_arm S10 "apply.sh's copy shape (reader + real sprint-status.sh + schema, NO core-paths.sh, no validator): --scope-batch over a root with a stale LIVING core fence -> exit 0, byte-identical to the full sibling set" \
+    "$({ [ ! -e "$lone/scripts/core-paths.sh" ] && [ "$BRC" = 0 ] && [ -n "$s10full" ] && [ "$BOUT" = "$s10full" ]; } && echo 0 || echo 1)"
+}
+lw_all "$BIN/check-owed-derivations.sh" real
+
+# ---- M1-M7: each mutant is a COPY of the reader, guarded by cmp -s; one that does not apply is BROKEN --
+# mut_line <src> <dst> <occurrence> <exact old line> <new text>: replaces that occurrence of the whole line.
+mut_line() {
+  O="$4" N="$5" awk -v occ="$3" 'BEGIN { o = ENVIRON["O"]; nw = ENVIRON["N"] } $0 == o && ++c == occ { print nw; next } { print }' "$1" > "$2" || return 1
+  ! cmp -s "$1" "$2"
+}
+LW_MODE=mut
+mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text>
+  local m="$WORK/mut.$1.sh" a miss=""
+  if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$3" "$4" "$5"; then
+    bad "$1 FIXTURE BROKEN: the mutation did not apply (anchor not found), so it is not scored"; return
+  fi
+  LW_FAILED=""; lw_all "$m" "$1"
+  for a in $2; do case " $LW_FAILED " in *" $a "*) ;; *) miss="$miss $a" ;; esac; done
+  if [ -z "$miss" ]; then ok "$1 killed: arm(s)$LW_FAILED failed (required: $2)"; else bad "$1 SURVIVED: arm(s)$miss did not fail (failed:${LW_FAILED:- none})"; fi
+}
+mut_case M1 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
+mut_case M2 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'
+mut_case M3 "S1 S6" 1 '  living_sweep' '  :'
+mut_case M4 "S2" 1 '    [ "$SCOPE_TOKEN" = LIVING ] || continue' '    [ "$SCOPE_TOKEN" = LIVING ] || [ "$SCOPE_TOKEN" = PAST ] || continue'
+mut_case M5 "S5" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/core-paths.sh" ] || return 0; [ -f "$SELF_DIR/core-paths.sh" ] \'
+mut_case M6 "S1" 1 '  sweep_and_exit 0' '  exit 0'
+mut_case M7 "S10" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
+if [ "${1:-}" = "--scope-batch" ]; then'
+LW_MODE=real
 
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
 DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q

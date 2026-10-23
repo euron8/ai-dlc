@@ -7,5 +7,11 @@
 core/skills/ai-dlc-update/reconcile/apply.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 !core/scripts/validate-artifact-derivations.sh
+# The LIVING sweep's core-operand predicate: core-paths.sh beside the reader, and the manifest it reads in each root.
+!core/scripts/core-paths.sh
+!core/skills/ai-dlc/core-manifest.md
+# S10 copies the reader the way apply.sh does, beside the REAL sprint-status.sh and its schema.
+!core/scripts/sprint-status.sh
+!core/schemas/sprint-status.json
 core/fixtures/lib/
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
