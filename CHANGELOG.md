@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.921.0] - 2026-10-23
+
+Batch 240, lead ai-dlc-3f, release R9. It files and closes BL-778 in the same release, closes no `PC-` id, and leaves the live backlog count unchanged. Net for this release: 1 closed, 1 filed = 0.
+
+### BL-778 — one advisor consult covers a sequence of pushes, merges and deploys inside the hook's window
+
+Rule 32 touchpoint I in `SKILL.md` owed a consult before every push, merge or deploy, while the operator's batch-218 ruling, THE WINDOW, lived only in `ai-dlc-advisor-gate.sh`. On graph that forced two redundant consults, about 2 min of foreground each, before an `ecs-deploy.sh ui` that the hook does not gate, 5 and 6 turns after a consult already taken for the merge. Touchpoint I now cites THE WINDOW by name, so one consult covers a sequence of those actions falling inside it, and a consult is still owed when none does. It keeps "in a message of its own". The postcompact digest is re-rendered from the new bytes, and a pin keyed on the window citation, with a mutant, holds the sentence.
+
 ## [0.920.0] - 2026-10-23
 
 Batch 240, lead ai-dlc-3f, release R10. It files and closes BL-779 and BL-780 and closes no `PC-` id. Net for this release: 2 closed, 2 filed = 0. Engine code a consumer runs from step 3 of the delivering pull: none. Rulebook changes: `core/skills/ai-dlc/SKILL.md`, its derived `core/skills/ai-dlc/postcompact-digest.md`, `core/skills/ai-dlc/steps/deploy-validate.md` and `core/skills/ai-dlc/steps/route.md`. Fixture changes: `core/fixtures/deploy-validate-smoke-classification` and `core/fixtures/process-rule-pins`. Graph's `overrides/` holds no deploy-validate or Rule 11/12 override, and its installed §5 is byte-identical to core's, so the reconcile PR applies these as plain rulebook text. Anchor resolution changes with the new `#### Operator decisions` headings inside Rule 12. An anchor wanting `Rule 11(a)` or `Operator decisions` now resolves to Rule 12's new subsection, where at the base it resolved to nothing. `Rule 11` and `Rule 12` still resolve to their whole rules. Graph holds no override or extension anchored on either, as measured on its tracked `overrides/` and SKILL extensions.

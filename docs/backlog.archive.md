@@ -37887,3 +37887,21 @@ Fix (this release's tip): the attested-act subsection under `SKILL.md` Rule 12, 
 
 verify: sh k=core/skills/ai-dlc/SKILL.md; [ -f "$k" ] || exit 9; r12="$(awk '/^### Rule 12 /{s=1;next} /^### Rule 13 /{s=0} s' "$k")"; f12="$(tr '\n' ' ' <<<"$r12" | tr -s ' ')"; grep -qF 'read the record that would attest it' <<<"$f12" && grep -qF 'ask again only when that record is absent' <<<"$f12" && grep -qF 'no later step puts it back to the operator' <<<"$f12"
 
+## BL-778 — SKILL.md Rule 32 touchpoint I owes an advisor consult per push, merge or deploy, while the operator's window ruling lives only in the hook
+
+**LANDED (v0.921.0, verified 9576a0045).**
+
+**DEFECT.** Raised by the operator in batch 240, filed on lead ai-dlc-3f's allocation.
+
+The operator: "it's a waste of an advisor call to force one within so few turns ... It had literally been called a handful of turns apart, what value does that provide?"
+
+Mechanism. `core/skills/ai-dlc/SKILL.md:1005-1006` (Rule 32 touchpoint I) reads "Before a push, a merge or a deploy. Call the advisor in a message of its own, read its answer, then issue the push or merge." That makes the consult owed per action. The batch-218 operator ruling THE WINDOW, under which an advisor attempt within the last 10 assistant turns clears the call and the advisor is not owed per push, lives only in `core/hooks/ai-dlc-advisor-gate.sh` (header at `:259`, `WIN="${ADVISOR_GATE_WINDOW:-10}"` at `:535`). `git grep -c ADVISOR_GATE_WINDOW` at origin/main counts 3 hits in the hook and none in SKILL.md.
+
+Measured by the lead on graph: one consult before merging PR #1260, then advisor attempts at assistant turns 2085 and 2086 (possibly one retried call, since 2085 carries no result in its own turn), then the deploy at 2087 (`ecs-deploy.sh ui`), with nothing new since the merge's consult. Advisor attempts at turns 2097 and 2098 follow the deploy as well. Each consult costs about 2 min of foreground time. The deploy is not hook-gated, so the prose, not the hook, forced the re-consult.
+
+Owed: touchpoint I is re-worded so that ONE consult covers a sequence of pushes, merges and deploys falling within the hook's window. It cites the hook's window by name (`ai-dlc-advisor-gate.sh`, THE WINDOW) rather than restating the turn count; if a count appears at all, a fixture arm binds it to the hook's `ADVISOR_GATE_WINDOW` default so the two cannot drift. It keeps "in a message of its own", and it keeps that a consult is owed when none falls inside the window. The deploy, which the hook does not gate, is covered by the same window rule as prose. The derived copy in `core/skills/ai-dlc/postcompact-digest.md` is re-rendered with `scripts/render-postcompact-digest.sh --write`, never hand-edited. The new sentence is pinned in one existing home, keyed on the window citation, with a mutant.
+
+I10's hook-scrub grep matched the fixture's READ of the advisor gate's text, not an invocation; the scrub satisfies it, and I10 itself is not narrowed here.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl778.sh
+
