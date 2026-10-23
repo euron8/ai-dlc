@@ -46,7 +46,10 @@ span() {
 }
 COPY='(cop(y|ies|ied)[^.]{0,80}predicate|predicate[^.]{0,60}cop(y|ies|ied))'
 has()  { grep -qF -- "$2" <<<"$1"; }
-hasE() { grep -qE -- "$2" <<<"$1"; }
+# A copy clause that negates the predicate (ids only) is no copy.
+hasE() { grep -qE -- "$2" <<<"$1" && ! grep -qE -- '(not|never|no) (its |the |that ac.s )?predicate|predicate is not copied' <<<"$1"; }
+# neg <span> <ERE>: 0 when the span carries a NEGATED form of a clause the checks above found.
+neg()  { grep -qE -- "$2" <<<"$1"; }
 rc=0
 fail() { echo "FAIL: $1"; rc=1; }
 
@@ -55,6 +58,7 @@ has "$c" 'story file' && has "$c" '`## deferred acs`' || fail "code-reviewer.md 
 hasE "$c" "$COPY" || fail "code-reviewer.md Ownership does not copy the predicate text into the entry"
 has "$c" '`- **<id>**`' || fail "code-reviewer.md Ownership does not open each entry with - **<id>**"
 has "$c" '`none.`' || fail "code-reviewer.md Ownership does not write None. for a story with no deferred AC"
+neg "$c" '(never|not|no) (write )?`none\.`|gets no section' && fail "code-reviewer.md Ownership negates the None. section"
 has "$c" '`## dev agent record`' || fail "code-reviewer.md Ownership does not place the section by ## Dev Agent Record"
 
 q="$(span "$QA" "$QLEAD" '- [ ]|## ')"
@@ -63,9 +67,11 @@ hasE "$q" "$COPY" || fail "qa.md discharge-predicate item does not say the predi
 
 d="$(span "$DV" '### 4b.' '### |## ')"
 has "$d" 'story file' && has "$d" '`## deferred acs`' || fail "deploy-validate.md 4b does not read the predicate from the story file's ## Deferred ACs"
+neg "$d" '(not|never) (from )?the story file' && fail "deploy-validate.md 4b negates the read from the story file"
 hasE "$d" '(fall ?back|fallback)[^.]{0,60}qa verdict|qa verdict[^.]{0,60}(fall ?back|fallback)' || fail "deploy-validate.md 4b has no QA-verdict fallback for a story with no section"
 hasE "$d" 'closing.writer defect' || fail "deploy-validate.md 4b does not name a missing entry a closing-writer defect"
 has "$d" 'deployed sha' || fail "deploy-validate.md 4b does not check literals against the deployed sha"
+neg "$d" 'never (against )?the deployed sha|not against the deployed sha' && fail "deploy-validate.md 4b negates the deployed-sha check"
 has "$d" '`old -> new`' || fail "deploy-validate.md 4b does not record a corrected literal as old -> new"
 has "$d" 'never a silent substitution' || fail "deploy-validate.md 4b does not forbid a silent substitution"
 

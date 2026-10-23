@@ -122,8 +122,9 @@
 #     sha is REJECT unless the predicate names its external source (qa.md Validation Checklist,
 #     pred-lit-qa); pm.md names the AC requiring the literal and leaves the fence owed at gate 2
 #     (pred-lit-pm); an ADR probe keyed on such a literal carries the same fence (architect.md
-#     evidence contract, pred-lit-arch). pred-lit-qa and pred-lit-pm are line-mode `contains` pins:
-#     keep each phrase on ONE line. The named mutant softens the REJECT to a note.
+#     evidence contract, pred-lit-arch). qa.md's sha-pinned `git grep` fence form is pinned by
+#     pred-lit-qa-fence. pred-lit-qa, pred-lit-qa-fence and pred-lit-pm are line-mode `contains`
+#     pins: keep each phrase on ONE line. The named mutant softens the REJECT to a note.
 #   - at `done` the closing writer copies each deferred AC's id AND its predicate text into the
 #     story file's `## Deferred ACs`, entries opening `- **<id>**`, `None.` for none, placed before
 #     `## Dev Agent Record` (code-reviewer.md Ownership; qa.md's discharge-predicate item), and
@@ -522,6 +523,7 @@ hand-design-role|R|ux.md||## Escalation|## Design decisions|contains
 hand-design-step|S|steps/ui-direction.md||### 5.|## Design decisions|contains
 r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it returns.|the window of `ai-dlc-advisor-gate.sh` (`ADVISOR_GATE_WINDOW`|contains
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains
+pred-lit-qa-fence|R|qa.md|## Validation Checklist|## Communication|`git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded|contains
 pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains
 pred-lit-arch|R|architect.md|## The evidence contract|## A fold architecture dispatch|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
 def-copy-cr-section|R|code-reviewer.md|## Ownership|## Responsibilities|At `done` the closing writer also writes a `## Deferred ACs` section into the story file.|contains
@@ -540,7 +542,7 @@ def-copy-dv-oldnew|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every liter
 def-copy-dv-silent|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|Never a silent substitution.
 ff-specs-brief|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|names the browser spec files covering the drifted surface
 ff-specs-record|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|records either their run (invocation, pass/fail counts) or why they could not run
-ff-specs-lead|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|the lead runs them against the redeployed instance before re-verifying
+ff-specs-lead|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying
 ff-specs-evidence|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|as the `playwright` evidence this section already names. A could-not-run record is not a pass.
 PINS
 }
@@ -1006,7 +1008,7 @@ impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**P
 sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
 def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
-ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation and counts in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
+ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation and counts in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line

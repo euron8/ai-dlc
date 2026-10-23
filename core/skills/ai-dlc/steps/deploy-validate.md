@@ -397,6 +397,7 @@ If `is_ui_epic == true`:
   runs them against the redeployed instance before re-verifying, and records that
   run's invocation and counts in the Deploy Status Report row as the `playwright`
   evidence this section already names. A could-not-run record is not a pass.
+  That run is part of the lead's re-verification, deploy-gate orchestration under Rule 28 (a) as the redeploy is.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
@@ -452,6 +453,7 @@ and an owed id has no entry opening with that exact id, or the body is `None.` b
 report it in the gate log as a closing-writer defect, then run the predicate from the QA verdict.
 
 **Check every literal against the deployed sha before running the predicate.**
+The deployed sha is the commit the production deploy was built from, as recorded in the Deploy Status Report.
 Check each literal the predicate names against the DEPLOYED sha; a pinned fence whose sha is not the deployed sha is re-run at the deployed sha first.
 A literal the deployed sha does not carry: correct the predicate against it
 and record the correction under `deferred_ac_discharge` as `old -> new`, or
@@ -460,7 +462,8 @@ re-defer the AC by item 2 above. Never a silent substitution.
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
 "verify after deploy" that no step ever re-checks, so the sprint closes
 with an unverified acceptance criterion. False-positive cost: one
-predicate run per deferred AC — the predicate the AC already named.
+predicate run per deferred AC — the predicate the AC already named — plus
+one `git grep` per literal that predicate names, run against the deployed sha.
 Removal condition: retire once deferred-AC predicates are collected and
 run automatically at deploy time.
 

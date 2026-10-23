@@ -42,7 +42,7 @@ source; do not infer either value from anywhere else.
   At `done` the closing writer also writes a `## Deferred ACs` section into the story file.
   Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,
   and carries that AC's predicate text copied from the verdict file the gate-2 check read
-  (the highest `-p<N>` QA verdict), and cites that verdict path.
+  (the latest-pass QA verdict (the highest `-p<N>`, or the unsuffixed file when there is only pass 1), which the closing writer reads), and cites that verdict path.
   A story with no deferred AC gets the section with body `None.`.
   The section sits directly BEFORE `## Dev Agent Record`;
   in a story with no Dev Agent Record it is the last `## ` section, above any provenance block.
@@ -69,9 +69,9 @@ source; do not infer either value from anywhere else.
 - Dispatched as the closing writer after gate 3 passes, the closing writer
   updates the story file `Status:` header and `sprint-status.yaml` to `done`,
   writes the story's `deferred_acs` beside `status: done` in both views, and
-  the story file's `## Deferred ACs` section (Ownership above), and
   makes the upstream close-out, all in the closing commit. As a gate-1 reviewer
-  you do NOT make these writes.
+  you do NOT make these writes. The closing writer also writes the story file's
+  `## Deferred ACs` section (Ownership above) in that commit.
 
 ## Constraints
 

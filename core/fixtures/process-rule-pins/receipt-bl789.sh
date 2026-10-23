@@ -31,7 +31,7 @@ rc=0
 need() { case "$sec" in *"$1"*) : ;; *) echo "FAIL: section 4 lacks: $2"; rc=1 ;; esac; }
 need "brief names the browser spec" "the dev brief names the browser spec files"
 need "why they could not run" "the dev records the run or why they could not run"
-need "the lead runs them against the redeployed" "the lead runs the specs against the redeployed instance"
+need "when they could not run, the lead runs them against the redeployed" "when they could not run, the lead runs the specs against the redeployed instance"
 need "could-not-run record is not a pass" "a could-not-run record is not a pass"
 need "\`playwright\` evidence" "that lead run is the playwright evidence"
 [ "$rc" -eq 0 ] && echo "PASS: a fix-forward owes its browser specs a lead run when the dev could not run them"

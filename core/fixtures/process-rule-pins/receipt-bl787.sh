@@ -6,9 +6,10 @@
 #     HTML comments stripped, whitespace collapsed, lowercased):
 #     (a) one sentence names a `derived` fence, a `git grep`, a sha, and scopes itself to a literal
 #         this repository writes -- so widening the rule to every literal fails;
-#     (b) one sentence carries REJECT for a literal written nowhere (or by no component) -- so a
-#         softened verdict fails; and
-#     (c) the item names the external-source escape.
+#     (b) one sentence says the literal written nowhere (or by no component) IS REJECT, and no
+#         negated form (`not a reject`) -- so a softened or negated verdict fails; and
+#     (c) the item names the enumerated external-source escape, `names its external source (a
+#         third-party api ...` -- so an escape widened to any source or to QA judgment fails.
 # 1 = any of the three is absent.
 # 9 = no verdict: qa.md absent, or its Deferred-AC item anchor absent.
 # Sentences are judged, never one exact phrase, so a correct rewording still passes.
@@ -36,8 +37,8 @@ sents="$(printf '%s\n' "$span" | awk '{ gsub(/\. /, ".\n"); print }')"
 rc=0
 fence="$(grep -F -- '`derived` fence' <<<"$sents" | grep -F 'git grep' | grep -F 'sha' | grep -E 'this repository writes|written by this repository|this repository produces')" || fence=""
 [ -n "$fence" ] || { echo "FAIL: no sentence requires a sha-pinned \`derived\` fence (git grep) for a literal this repository writes"; rc=1; }
-rej="$(grep -F 'reject' <<<"$sents" | grep -E 'nowhere|no component|no producer')" || rej=""
+rej="$(grep -E '(is|are) reject' <<<"$sents" | grep -vE '(not|never|no) (a )?reject' | grep -E 'nowhere|no component|no producer')" || rej=""
 [ -n "$rej" ] || { echo "FAIL: no sentence makes a literal written nowhere at the sha a REJECT"; rc=1; }
-case "$span" in *"external source"*) : ;; *) echo "FAIL: the item does not name the external-source escape"; rc=1 ;; esac
+case "$span" in *"names its external source (a third-party api"*) : ;; *) echo "FAIL: the item does not name the external-source escape"; rc=1 ;; esac
 [ "$rc" -eq 0 ] && echo "PASS: the Deferred-AC gate pins a predicate's literal to its producing line and REJECTs an unwritten one"
 exit "$rc"
