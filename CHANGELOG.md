@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.915.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R6b. It files and closes BL-768 and BL-769 in the same release, closes no `PC-` id, and leaves the live backlog count unchanged. Net for this release: 2 closed, 2 filed = 0.
+
+### BL-768 — the full-collection and dependency-setup handoff lines are enforced
+
+`qa.md` rejected a handoff with either line missing, but nothing mechanical read them. `record-only-diff.sh` now defines the record-only partition once: the story file, the two sprint-status yamls, `docs/reviews/**`, `test-results/**` and `docs/escalations/**`, with test-code suffixes under those directories excluded so a test file that lives in a record directory still counts as code. `validate-handoff-evidence.sh` handoff mode refuses a missing or unreasoned `Full-collection run:` line and a missing or unreasoned `Dependency setup:` line. A `none, <reason>` form is accepted on the full-collection line only when the base-to-frozen diff is record-only.
+
+The run grammar: a run names a runner or carries a count. A fenced block or a `- Invocation:` line is read as the value. A none form or a pointer is never a run, and a bold or plain label is never swallowed into the value. The `setup-shape` check holds the dependency-setup line to its own shape. `run-filter` refuses `-k`, a file or node argument, `-run`, `--ignore`, `--lf`, `-x --ff`, and anything after a bare `--`. A `-m` marker or a path is accepted when the consumer's `docs/coding-conventions.md` declares it, and so is a path containing the declared root. The check is held back by the LEGACY window: it applies only when the installed `dev.md` carries the label prescription.
+
+### BL-769 — a QA PASS waits for QA's own canonical run
+
+Under `--gate qa`, a PASS is refused unless the file carries a column-0 `Canonical run:` line with an unfiltered invocation and a `Canonical result:` line with counts. `Canonical run: none, <reason>` is accepted only when the whole story range is record-only. QA decides that exemption over the manifest's whole story range, using the manifest's base and sha, so the second pass is not judged on gate 2's partition alone. Both sides read the consumer's `docs/coding-conventions.md`, so the filter rule is the same for the dev's line and QA's line. `--check-serial` gains `--story` and `--range` and holds the seat's base to a gate-1 base's shape. The merge is LEGACY-gated on `qa.md` as installed at the frozen sha.
+
+Pull-time note: a consumer whose `overrides/` file shadows `qa.md#Validation Checklist` (graph's `overrides/team-roles__qa__bug-class-sweep.md` does) must adopt the two `Canonical run` lines into that override at the reconcile's `HARD-OVERRIDE-DRIFT-SECTION` adjudication. Until it does, the first PASS refuses once, and the refusal names that fix.
+
 ## [0.914.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R5a. It closes BL-750, BL-751, BL-752, BL-754, BL-755 and BL-701, advances BL-584 as a partial, closes no `PC-` id and files no backlog entry. Net for this release: 6 closed, 0 filed = 6. BL-584 is partial and counts as neither.

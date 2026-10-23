@@ -161,6 +161,48 @@
 #   checked again. It reads no shard directory and no manifest. The MERGE keeps its stricter count:
 #   the assembled file carries exactly one match.
 #
+# CANONICAL RUN (--gate qa only; the merge over CROSS_FIRST's file, the execution owner's, and
+#   --check-serial over its one file). Read only when the verdict (merged after any forced
+#   NEEDS_REWORK, or the serial file's) is PASS: a NEEDS_REWORK with no counts is a legitimate early
+#   REJECT (qa.md Handoff Evidence Precondition). Labels are record-only-diff.sh's LABEL grammar
+#   (column 0 or after one `- `/`* ` bullet, outside fences, the first one read):
+#       Canonical run: <invocation and working directory>
+#       Canonical result: <the run's summary line, with counts>
+#   REFUSED, [owner: <CROSS_FIRST>] in the merge and [owner: serial] in --check-serial: a PASS with no
+#   `Canonical run:` line; a run whose invocation narrows the collection (record-only-diff.sh
+#   RUN-FILTER: `-k` in every spelling, `--deselect`, `-t`, `-run`, `--ignore`, `--lf`, `-x --ff`, a
+#   file, node-id or test-file-suffix argument to any runner, an argument after `--`, and a `-m`
+#   marker or path argument the project's `docs/coding-conventions.md` does not declare canonical;
+#   with no conventions file `-m` is accepted and a path refused); no `Canonical result:` line; a
+#   result carrying no `<n> passed|failed|collected|error(s)` count, or reading `not finished`, `in
+#   progress` or `still running`. Counts on any other line (a RED replay, a part's targeted run) are
+#   not read.
+#   THE EXEMPTION. A `Canonical run:` value that is not a run (record-only-diff.sh RUN-SHAPE, given
+#   the conventions file so its declared canonical command counts as a runner) is a no-run claim, however it is spelled (`none,
+#   <reason>`, `N/A`, `TBD`, empty). It is accepted, with no result line, only when
+#   `record-only-diff.sh paths <story> <base> <frozen>` exits 0: the same record-only partition the
+#   dev's full-collection line is held to, decided over the WHOLE story on every pass. <story> is
+#   `--story <f>` (repo-relative). In the merge <base> <frozen> is the manifest's base and sha, read
+#   in the manifest's worktree; the gate-2 partition's base is gate 1's base on every pass, so that
+#   range is the whole story, and the merge refuses `--range`. In --check-serial the seat passes
+#   `--range <b> <f>` (no manifest exists), read in the serial file's own repository, and <b> is held
+#   to a gate-1 base's shape: an ancestor of <f>, at which the story is absent or carries no
+#   `Full-collection run:` line and is not `review` or `done` (record-only-diff.sh STORY-BASE). A
+#   claimed exemption with no --story or no range is REFUSED; a bare `none` is REFUSED.
+#   LEGACY. The merge holds a set to this rule only when qa.md AS INSTALLED at the manifest's frozen
+#   sha (`.claude/team-roles/qa.md`, then `core/team-roles/qa.md`, read in the manifest's worktree),
+#   or, when neither is TRACKED there, the on-disk copy in that worktree (the one QA read), carries
+#   the phrase in CANON_SENTINEL; installed without it, stdout carries
+#       LEGACY: canonical-run lines not checked: <path> prescribes no column-0 `Canonical run:` label
+#   and the rule is skipped. Neither tracked nor on disk is held to the rule, and each refusal names
+#   both paths tried. --check-serial reads no manifest and keys on the qa.md it already reads
+#   (ROLE_MD), the same way.
+#   OVERRIDES. A consumer `overrides/` entry shadowing qa.md's `Validation Checklist` (the section
+#   holding the sentinel) is not composed here: no existing program composes a role file with its
+#   overrides. After the pull the rule holds while QA reads the override's checklist, so the
+#   reconcile's HARD-OVERRIDE-DRIFT-SECTION adjudication adopts the two `Canonical run` lines into
+#   the override; until it does, the first PASS refuses with a message naming that fix.
+#
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
 #   A per-shard refusal names that shard. The owner-duplicate refusal names the NON-owning shard,
@@ -312,15 +354,16 @@ export LC_ALL=C
 # outside the per-shard function and that shard's key inside it; refuse_to names it explicitly.
 OWNER="lead"
 refuse() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; exit 2; }
-refuse_to() { OWNER="$1"; shift; refuse "$@"; }
+refuse_to() { OWNER="$1"; shift; refuse "$*${CG_NOTE:-}"; }
 # collect_dup: the owner-duplicate refusal, printed in refuse's exact form but not exiting; every shard
 # is still checked, and the run exits 2 at the DUP barrier after the per-shard loop (and after the one
 # --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
 DUP_N=0
 collect_dup() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; DUP_N=$((DUP_N + 1)); }
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa"
+CG_NOTE=""
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>]"
 
-SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""
+SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -329,6 +372,8 @@ while [ "$#" -gt 0 ]; do
     --check-serial) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; SERIAL="$2"; shift 2 ;;
     --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
     --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
+    --story) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; STORY_F="${2#./}"; shift 2 ;;
+    --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
     --*) refuse "unknown flag $1; $USAGE" ;;
     *) [ -z "$SDIR" ] || refuse "unexpected argument $1; $USAGE"; SDIR="$1"; shift ;;
   esac
@@ -336,10 +381,11 @@ done
 if [ -n "$SERIAL" ]; then
   OWNER="serial"
   [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
-    || refuse "--check-serial takes only --gate; $USAGE"
+    || refuse "--check-serial takes only --gate, --story and --range; $USAGE"
   [ -f "$SERIAL" ] || refuse "$SERIAL is not a regular file; write the review file, then check it"
 elif [ -n "$CHECK" ]; then
   [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -z "$OUT" ] || refuse "--check-shard takes no --out; $USAGE"
+  [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only by the qa merge and --check-serial; $USAGE"
   if [ "$CHECK_N_SET" = 1 ]; then
     case "$CHECK_N" in ""|*[!0-9]*|??????????*) refuse "--findings '$CHECK_N' is not a non-negative integer" ;; esac
     CHECK_N="$((10#$CHECK_N))"
@@ -357,6 +403,10 @@ case "$GATE" in
                RANKED="PASS NEEDS_REWORK"; WANT_VSET="NEEDS_REWORK PASS "; NWORD="two" ;;
   *) refuse "--gate '$GATE' is not code-review or qa" ;;
 esac
+[ "$GATE" = qa ] || [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only under --gate qa; $USAGE"
+# The merge decides the exemption over the manifest's base..sha, the whole story on every pass; a
+# caller-supplied range could only narrow it.
+[ -n "$SERIAL" ] || [ -z "$R_BASE" ] || refuse "--range is read only by --check-serial; the merge decides the record-only exemption over the manifest's base and sha (the whole story's range on every pass); $USAGE"
 if [ -n "$SERIAL" ]; then :
 else
 SDIR="${SDIR%/}"
@@ -571,6 +621,45 @@ fail_gate() {
       || refuse_to "$fg_o_" "$fg_x_:$fg_n_ per-AC row $fg_a_ reads FAIL but no '#### ' finding names $fg_a_; a FAIL row is backed by a finding. File one naming $fg_a_ where its cause is owned -- a part shard under its own ordinal, a cross shard under a 'parts:' set it owns (partition-document.sh --cross-owner), or name $fg_a_ in the finding the owning shard already carries -- or correct the row with the evidence that $fg_a_ passes"
   done < "$T/failrows"
 }
+# ---- CANONICAL RUN (header). canon_gate <file> <owner> <repo or empty> <base or empty> <frozen or empty>:
+# under a PASS in WORST, the file must carry QA's own canonical run and its summary with counts, or the
+# record-only exemption over <base>..<frozen>. The partition and both grammars are record-only-diff.sh's.
+CANON_SENTINEL='column-0 `Canonical run:`'
+RO="$AI_DLC_SELF_DIR/record-only-diff.sh"
+canon_gate() {
+  cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"
+  [ "$WORST" = PASS ] || return 0
+  [ -f "$RO" ] || refuse_to lead "record-only-diff.sh is not beside this script at $AI_DLC_SELF_DIR; the canonical-run check reads its grammar there"
+  cg_run_="$(bash "$RO" label 'Canonical run:' < "$cg_f_")" \
+    || refuse_to "$cg_o_" "$cg_f_ reads PASS and carries no 'Canonical run:' line; a PASS waits for QA's own canonical full-collection run: write 'Canonical run: <invocation and working directory>' and 'Canonical result: <its summary line with counts>' (or 'Canonical run: none, <reason>' when the story's diff is record-only). A consumer whose overrides/ entry shadows qa.md's Validation Checklist adopts these two lines into it (the reconcile's HARD-OVERRIDE-DRIFT-SECTION adjudication)"
+  # A value that is not a run (record-only-diff.sh RUN-SHAPE) is a no-run claim, however it is spelled.
+  if ! bash "$RO" run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then
+    bash "$RO" none-reason "$cg_run_" 2>/dev/null; cg_nr_=$?
+    [ "$cg_nr_" -ne 1 ] \
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"
+    [ -n "$STORY_F" ] && [ -n "$cg_b_" ] && [ -n "$cg_z_" ] \
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and no --story and --range were given to decide it; re-run with --story <story file> --range <base> <frozen>, or record the run"
+    if [ "$cg_o_" = serial ]; then
+      # The seat supplies its own range, so its base is held to a gate-1 base's shape (header).
+      git -C "$cg_r_" merge-base --is-ancestor "$cg_b_" "$cg_z_" 2> /dev/null < /dev/null \
+        || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not an ancestor of $cg_z_; pass the base gate 1 used"
+      cg_sb_="$(bash "$RO" story-base -C "$cg_r_" "$STORY_F" "$cg_b_" 2>&1)" \
+        || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not the story's gate-1 base ($cg_sb_); the exemption is decided over the WHOLE story, from the base gate 1 used, on every pass"
+    fi
+    cg_ro_="$(bash "$RO" paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' claims the record-only exemption, and $cg_b_..$cg_z_ is not record-only for $STORY_F (${cg_ro_}); run the canonical full collection and record it"
+    return 0
+  fi
+  cg_rf_="$(bash "$RO" run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \
+    || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' $cg_rf_; the canonical run is the full collection the project's conventions declare${cg_c_:+ ($cg_c_)}"
+  cg_res_="$(bash "$RO" label 'Canonical result:' < "$cg_f_")" \
+    || refuse_to "$cg_o_" "$cg_f_ reads PASS with no 'Canonical result:' line; a PASS waits for the canonical run's summary line: write 'Canonical result: <its counts>'"
+  grep -qiE 'not[[:space:]]+finished|in[[:space:]]+progress|still[[:space:]]+running' <<<"$cg_res_" \
+    && refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' says the run has not finished; a PASS waits for the run's summary line"
+  grep -qiE '[0-9]+[[:space:]]+(passed|failed|collected|errors?)([^A-Za-z]|$)' <<<"$cg_res_" \
+    || refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' carries no count; copy the run's summary line (e.g. '812 passed, 3 skipped')"
+  return 0
+}
 # ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
 # ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
 if [ -n "$SERIAL" ]; then
@@ -587,6 +676,14 @@ if [ -n "$SERIAL" ]; then
     WORST="$C1V"
     printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
     fail_gate "$SERIAL" serial "$T/serialfiles"
+    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then
+      sr_repo_="$(git -C "$(dirname "$SERIAL")" rev-parse --show-toplevel 2>/dev/null < /dev/null)" || sr_repo_=""
+      [ -z "$R_BASE" ] || [ -n "$sr_repo_" ] || refuse "--range was given and $SERIAL is not inside a git worktree to read it in"
+      sr_conv_=""; [ -z "$sr_repo_" ] || [ ! -r "$sr_repo_/docs/coding-conventions.md" ] || sr_conv_="$sr_repo_/docs/coding-conventions.md"
+      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"
+    else
+      printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$ROLE_MD" "$CANON_SENTINEL"
+    fi
   fi
   printf 'SERIAL-OK: %s verdict=%s\n' "$SERIAL" "$C1V"
   exit 0
@@ -1179,6 +1276,38 @@ done
 if [ "$GATE" = qa ]; then
   cut -f2 "$T/shards" > "$T/shardfiles" || refuse "cannot stage the shard list"
   fail_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$T/shardfiles"
+  # CANONICAL RUN (header), on the execution owner's file, held only when qa.md as installed at the
+  # frozen sha prescribes the label; unreadable is held.
+  cr_inst_=""; cr_held_=1
+  if git --no-replace-objects -C "$M_WT" rev-parse -q --verify "${M_SHA}^{commit}" > /dev/null 2>&1 < /dev/null; then
+    for cr_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+      git --no-replace-objects -C "$M_WT" cat-file -e "${M_SHA}:${cr_p_}" 2> /dev/null < /dev/null || continue
+      cr_inst_="$cr_p_ at $M_SHA"
+      git --no-replace-objects -C "$M_WT" show "${M_SHA}:${cr_p_}" 2> /dev/null < /dev/null | grep -qF -- "$CANON_SENTINEL" || cr_held_=0
+      break
+    done
+  fi
+  # Not tracked at the frozen sha (a consumer that does not commit .claude/team-roles/): QA read the
+  # ON-DISK installed copy in that worktree, so that copy decides.
+  if [ -z "$cr_inst_" ]; then
+    for cr_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+      [ -r "$M_WT/$cr_p_" ] || continue
+      cr_inst_="$M_WT/$cr_p_ (on disk, untracked at $M_SHA)"
+      grep -qF -- "$CANON_SENTINEL" "$M_WT/$cr_p_" || cr_held_=0
+      break
+    done
+  fi
+  # Neither readable: held (an unreadable role file never acquits), and every refusal names both paths tried.
+  [ -n "$cr_inst_" ] || CG_NOTE=" (held: qa.md is neither tracked at ${M_SHA}:.claude/team-roles/qa.md nor on disk at $M_WT/.claude/team-roles/qa.md, either layout)"
+  if [ "$cr_held_" = 0 ]; then
+    printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$cr_inst_" "$CANON_SENTINEL"
+  else
+    # The exemption is decided over the WHOLE story: the manifest's base is gate 1's base on every
+    # pass (implementation.md Gate-2 dispatch), and the merge takes no --range to narrow it.
+    cr_conv_=""; [ ! -r "$M_WT/docs/coding-conventions.md" ] || cr_conv_="$M_WT/docs/coding-conventions.md"
+    canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_"
+  fi
+  CG_NOTE=""
 fi
 
 {

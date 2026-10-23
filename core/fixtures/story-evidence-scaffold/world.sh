@@ -61,7 +61,10 @@ build_world() { # <dir> <variant>
   printf 'pytest\n' > "$w/tools/requirements.txt"
   # The base commit's story already carries a status, so a range cell whose frozen sha IS the
   # base reads a story the status arms can decide, and the cell stays about its range warning.
-  printf -- '---\nstatus: review\n---\n# Story 1\n' > "$w/$STORY"
+  # It carries both run-record lines too (a run and a reasoned none), so the reversed-range cell,
+  # whose frozen sha IS this commit, stays about its range warning. A pointer (`see the work
+  # commit`) is a no-run claim since the grammar was inverted, so the line carries a count.
+  printf -- '---\nstatus: review\n---\n# Story 1\n\nFull-collection run: `pytest -q` from the root, 1 passed.\nDependency setup: none, system pytest.\n' > "$w/$STORY"
   gitw "$w" add -A && gitw "$w" commit -qm base || return 2
   b="$(gitw "$w" rev-parse HEAD)"
   printf 'class TestA:\n    def test_new(self):\n        assert 1 == 1\n' > "$w/tests/test_x.py"
@@ -83,6 +86,7 @@ build_world() { # <dir> <variant>
 ## Dev Agent Record
 
 Full-collection run: `test-results/full.txt` (1 passed).
+Dependency setup: none, system pytest from the worktree root.
 Mutation self-check: PROVEN, capture `test-results/red-guard.txt`.
 Parallel run: `test-results/p4.txt`.
 A local re-run sits in `test-results/full-suite.txt` (gitignored, not committed).
@@ -113,6 +117,7 @@ not a rename
 EOS
   gitw "$w" add -A && gitw "$w" add -f test-results/full.txt test-results/red-guard.txt test-results/p4.txt \
     && gitw "$w" commit -qm work || return 2
+  wk="$(gitw "$w" rev-parse HEAD)"
   case "$v" in
     clean) ;;
     nocmd) printf '1 passed (xdist cmd=auto)\n' > "$w/test-results/nocmd.txt"
@@ -186,10 +191,87 @@ EOS
     rpu8)  printf '$ scripts/ai-dlc/validate-mutation-red.sh x.py 1 caf\351 pytest\nhead: %s\nmutation-red replay\n  head:       %s\n  mutated:    RED (exit 1)\n' "$b" "$b" > "$w/test-results/rp-red-u8.txt"
            gitw "$w" add -f test-results/rp-red-u8.txt || return 2
            printf 'Mutation-RED capture: `test-results/rp-red-u8.txt`.\n' >> "$w/$STORY" ;;
+    # (k)/(l) run-record worlds. The fc* worlds are RANGE-shaped on the work commit (.B below), so the
+    # base..frozen diff holds only what the variant commit changes. fcrec: `none, <reason>` over the
+    # story, BOTH sprint-status yamls, a docs/reviews file and a test-results capture -- accepted, and
+    # the only world where a partition of "the story alone" or a grep for one record class refuses.
+    # fccode: the same record diff plus one test file -- refused full-collection-none.
+    fcrec|fccode)
+           story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none, a record-only rework touching no code or test path"); print }' || return 2
+           ymlw "$w/$IMPLY_DIR/sprint-status.yaml" review; printf '# rework\n' >> "$w/$IMPLY_DIR/sprint-status.yaml"
+           printf '# rework\n' >> "$w/$PLANY_DIR/sprint-status.yaml"
+           mkdir -p "$w/docs/reviews/s1" && printf '# Code Review: 1\n' > "$w/docs/reviews/s1/1-code-review.md"
+           printf '$ pytest -q\nhead: %s\n1 passed\n' "$wk" > "$w/test-results/rework.txt"
+           gitw "$w" add -f test-results/rework.txt || return 2
+           [ "$v" = fccode ] && printf 'class TestA:\n    def test_new(self):\n        assert 2 == 2\n' > "$w/tests/test_x.py" ;;
+    # fcevil: fcrec's record diff plus a collectable test module under test-results/ and a conftest.py
+    # under docs/reviews/ -- refused full-collection-none: a code suffix inside a record dir is not a record.
+    fcevil)
+           story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none, a record-only rework touching no code or test path"); print }' || return 2
+           mkdir -p "$w/docs/reviews/s1" && printf 'import pytest\n' > "$w/docs/reviews/s1/conftest.py"
+           printf 'def test_evil():\n    assert False\n' > "$w/test-results/test_evil.py"
+           gitw "$w" add -f test-results/test_evil.py || return 2 ;;
+    # The inverted grammar: a value that is not a run (no backticked invocation, `$ ` line or count) is
+    # a no-run claim however spelled, held to the partition, over the work commit's code diff (.B stays
+    # the base). fcna: `N/A, <reason>`; fctbd: `TBD`; fcempty: an empty value whose next line is the
+    # Dependency setup: label -- each refused full-collection-none. fcnext: an empty value continued by
+    # the invocation on the next line -- accepted. dsna: a dependency setup `N/A` -- refused
+    # dependency-setup-none (only `none, <reason>` is accepted whatever the diff).
+    fcna)  story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: N/A, docs-only story"); print }' || return 2 ;;
+    fctbd) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: TBD"); print }' || return 2 ;;
+    fcempty) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run:"); print }' || return 2 ;;
+    fcnext) story_awk "$w" '{ if (sub(/^Full-collection run: .*$/, "Full-collection run:")) { print; print "`pytest -q` from the worktree root: 1 passed, 0 failed, 0 deselected"; next } print }' || return 2 ;;
+    dsna)  story_awk "$w" '{ sub(/^Dependency setup: .*$/, "Dependency setup: N/A"); print }' || return 2 ;;
+    # The label's continuation and the run/no-run order (BL-768 fold), each over the work commit's code
+    # diff. fcfence: an empty value whose run sits in the fenced block below it (graph's shape) --
+    # accepted. fcinvoc: an empty value continued by `- Invocation: <cmd>` -- accepted. fcbold: an empty
+    # value whose next line is a BOLD label carrying a runner -- refused full-collection-none, the bold
+    # line is not the value. fcnonebt: a none form whose reason holds a runner span -- refused, the none
+    # is read first. fcmake: a two-word span naming no runner -- refused. dsvenv: a dependency setup
+    # naming a venv interpreter and the packages it provides -- accepted.
+    fcfence) story_awk "$w" '{ if (sub(/^Full-collection run: .*$/, "Full-collection run:")) { print; print ""; print "```"; print "$ pytest -q"; print "1 passed, 0 failed"; print "```"; next } print }' || return 2 ;;
+    fcinvoc) story_awk "$w" '{ if (sub(/^Full-collection run: .*$/, "Full-collection run:")) { print; print "- Invocation: `pytest -q` from the worktree root."; print "- Terminal line: 1 passed."; next } print }' || return 2 ;;
+    fcbold) story_awk "$w" '{ if (sub(/^Full-collection run: .*$/, "Full-collection run:")) { print; print "**Dependency setup:** `python -m pip install pytest pytest-xdist`"; next } print }' || return 2 ;;
+    fcnonebt) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none, `pytest -q` is not needed for a docs-only story"); print }' || return 2 ;;
+    fcmake) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `make docs` from the worktree root"); print }' || return 2 ;;
+    dsvenv) story_awk "$w" '{ sub(/^Dependency setup: .*$/, "Dependency setup: the run uses the interpreter `/w/.venv-ci/bin/python3` (pytest 8.3.1 installed)"); print }' || return 2 ;;
+    # BL-768 follow-up: a runner the built-in list does not name (`tox -e all`) is accepted at the dev gate only
+    # when docs/coding-conventions.md at the toplevel declares it canonical, as the QA side already does.
+    # fcconv carries that file; fcconv-none is the same value without it. Driven by run.sh, not CASES.
+    fcconv|fcconv-none)
+           story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `tox -e all` from the worktree root"); print }' || return 2
+           if [ "$v" = fcconv ]; then
+             mkdir -p "$w/docs" || return 2
+             printf '# Conventions\n\nThe canonical full-collection run is `tox -e all`.\n' > "$w/docs/coding-conventions.md"
+           fi ;;
+    fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
+    fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
+    dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
+    dsbare) story_awk "$w" '{ sub(/^Dependency setup: .*$/, "Dependency setup: none."); print }' || return 2 ;;
+    # The LEGACY gate: dev.md installed at <frozen> without the label prescription, over a story with
+    # neither line -- not checked. devnew: the same story under a dev.md that carries it -- refused.
+    devold|devnew)
+           story_awk "$w" '/^(Full-collection run|Dependency setup): /{next} {print}' || return 2
+           mkdir -p "$w/.claude/team-roles" || return 2
+           if [ "$v" = devnew ]; then printf '# Dev\n\nOpen the record with a column-0 `Full-collection run:` line.\n' > "$w/.claude/team-roles/dev.md"
+           else printf '# Dev\n\nRecord the full-collection run.\n' > "$w/.claude/team-roles/dev.md"; fi ;;
+    # The same two LEGACY states with dev.md NOT tracked at <frozen> but installed on disk (a consumer
+    # that does not commit .claude/team-roles/): the on-disk copy decides. Written after the commit.
+    diskold|disknew)
+           story_awk "$w" '/^(Full-collection run|Dependency setup): /{next} {print}' || return 2 ;;
     *) return 2 ;;
   esac
   gitw "$w" add -A && gitw "$w" commit -qm "$v" --allow-empty || return 2
   printf '%s\n' "$b" > "$w/.B"; gitw "$w" rev-parse HEAD > "$w/.T"
+  # fcbare too: over the story-only work..frozen diff the bare none is refused for its missing reason
+  # alone, never for a code-touching range.
+  case "$v" in fcrec|fccode|fcbare|fcevil) printf '%s\n' "$wk" > "$w/.B" ;; esac
+  if [ "$v" = diskold ] || [ "$v" = disknew ]; then
+    mkdir -p "$w/.claude/team-roles" || return 2
+    if [ "$v" = disknew ]; then printf '# Dev\n\nOpen the record with a column-0 `Full-collection run:` line.\n' > "$w/.claude/team-roles/dev.md"
+    else printf '# Dev\n\nRecord the full-collection run.\n' > "$w/.claude/team-roles/dev.md"; fi
+    gitw "$w" ls-files --error-unmatch .claude/team-roles/dev.md > /dev/null 2>&1 && return 2
+  fi
   { [ "$v" = latin1strat ] || [ "$v" = rpu8 ]; } && [ -n "$UTF8_LOCALE" ] && printf '%s\n' "$UTF8_LOCALE" > "$w/.LC"
   # After the commit: the working tree disagrees, the frozen sha agrees. Read at <frozen>, quiet.
   [ "$v" = dirtyyaml ] && ymlw "$w/$IMPLY_DIR/sprint-status.yaml" done
@@ -260,8 +342,15 @@ verdict() {
 # shape, a hand `$ ` then `head:` then the replay (refused). rpok: the replay at line 1 with a `$ `
 # BELOW it, and the script's `$ ` right above the replay (both accepted). rphead: the head-read arm;
 # its two captures are read by name in run.sh, not through this vector.
-CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s rpfirst:h rps319:h rpok:h rphead:h rpu8:h'
-WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W 1:replay-preamble,:W'
+# Cases 55-60 (fcfence .. dsvenv), the label continuation and the run-shape order, appended last;
+# none of them cites full.txt over its range except dsvenv, which keeps it. Cases 47-54 (fcevil ..
+# disknew), the record-dir suffix exclusion, the inverted grammar and the
+# on-disk dev.md, appended for the same reason; none of them cites full.txt over its range.
+# Cases 39-46, the run-record arms (k)/(l), appended for the same reason. fcrec/fccode are read over
+# the work commit..frozen, so full.txt is out of range and carries no :W; fcbare, fcgone, devold and
+# devnew rewrite or drop the line that cites full.txt, so they carry none either.
+CASES='clean:h clean:s nocmd:h redun:h glob:h empty:s rename:s rebind:s movefile:s headeq:h second:s short:s shortnores:s noyaml:k dirtyyaml:k notreview:k yamlmis:k planlag:k demoted:k level1:k trail:k fence:k stratrail:s crlfstrat:s crlfdemoted:k latin1yaml:k latin1story:k dirtystory:k dirtyhead:k nostatus:k untracked:k mixfence:k latin1strat:s rpfirst:h rps319:h rpok:h rphead:h rpu8:h fcrec:h fccode:h fcbare:h fcgone:h dsgone:h dsbare:h devold:h devnew:h fcevil:h fcna:h fctbd:h fcempty:h fcnext:h dsna:h diskold:h disknew:h fcfence:h fcinvoc:h fcbold:h fcnonebt:h fcmake:h dsvenv:h'
+WANT='0::W 0: 1:no-command,:W 1:red-untracked,:W 1:glob-cited,:W 1:empty-cell, 1:node-missing, 0: 1:node-missing, 0: 1:node-missing, 1:short-row, 0: 0::W:S 0::W 1:status-not-review,:W 1:status-yaml-mismatch,:W 0::W 1:heading-demoted,:W 1:heading-demoted,:W 0::W 0::W 1:empty-cell, 1:empty-cell, 1:heading-demoted,:W 1:status-not-review,:W 0::W 1:status-not-review,:W 1:heading-demoted,:W 1:status-missing,:W 1:story-untracked,:W 1:heading-demoted,:W 1:empty-cell, 1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W 1:replay-preamble,:W 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W'
 # The UTF-8 locale latin1strat is driven under: the first one in which THIS awk aborts on a
 # non-UTF-8 byte. Empty where none does (gawk, mawk, or no UTF-8 locale installed): the abort the
 # world is about cannot happen on this host, and its mutant below says so instead of scoring.
