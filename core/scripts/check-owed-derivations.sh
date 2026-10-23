@@ -32,8 +32,7 @@
 #           a record with OWED rows none of which is OPEN exits 0 silently
 #         1 one or more OPEN rows, owed or living-sweep
 #         2 the record is unreadable or malformed, or the current sprint cannot be resolved, or the
-#           validator's `--list` of a file to be judged fails (except over a file whose own run gave no
-#           verdict, whose owed row then reads UNASSESSED), or the
+#           validator's `--list` of a file to be judged fails, or the
 #           LIVING sweep could not decide (the validator gave no verdict, or core-paths.sh or
 #           `--explain-cmd` is unavailable). A REFUSAL, distinct from an absent record: an absent
 #           record owes nothing, an unreadable one has not been shown to owe nothing.
@@ -378,8 +377,7 @@ locate_validator() {
 # (no fence at all). A copy the validator never runs has no verdict, so a raw scan read its silence
 # as "reproduces". `--list` runs ONCE per file and is cached; a `--list` that fails is a refusal.
 # list_of <rel>: sets LST to the cached `--list` output of <rel>. Called directly, never inside $( ),
-# so its refusal exits the reader. `list_of <rel> soft` returns 1 instead of refusing: pass 2 uses it
-# ONLY for a file whose own validator run already gave no verdict, whose row is UNASSESSED either way.
+# so its refusal exits the reader, unconditionally.
 LST=""; LST_N=0
 list_of() {
   local _j=1 _lrc
@@ -388,7 +386,6 @@ list_of() {
     if [ "$(cat "$TMP/lst.$_j.name")" = "$1" ]; then
       LST="$TMP/lst.$_j.out"
       [ "$(cat "$TMP/lst.$_j.rc")" = 0 ] && return 0
-      [ "${2:-}" = soft ] && return 1
       echo "REFUSED: validate-artifact-derivations.sh --list exited $(cat "$TMP/lst.$_j.rc") on $1, so which of its lines the validator reads as a derivation command is unknown." >&2; exit 2
     fi
     _j=$((_j + 1))
@@ -398,8 +395,32 @@ list_of() {
   ( cd "$ROOT" && AI_DLC_PROJECT_ROOT="$ROOT" bash "$VALIDATOR" --list "$ROOT/$1" > "$LST" 2> /dev/null ); _lrc=$?
   printf '%s\n' "$_lrc" > "$TMP/lst.$LST_N.rc"
   [ "$_lrc" -eq 0 ] && return 0
-  [ "${2:-}" = soft ] && return 1
   echo "REFUSED: validate-artifact-derivations.sh --list exited $_lrc on $1, so which of its lines the validator reads as a derivation command is unknown." >&2; exit 2
+}
+# collapse_dots <path>: sets CP to the path with each `seg/..` pair removed as a STRING (a relative path
+# only), and CSYM=1 when a segment a `..` removed is a symlink under $ROOT. git resolves `..` PHYSICALLY,
+# so past a symlinked segment the textual collapse can name the wrong file: such a word is asked as CORE
+# (the caller records it), an over-ask by design, so a symlinked segment before `..` blocks.
+CP=""; CSYM=0
+collapse_dots() {
+  local _in="$1" _out="" _seg _rest
+  CSYM=0
+  case "$_in" in /*|*..*) ;; *) CP="$_in"; return 0 ;; esac
+  case "$_in" in /*) CP="$_in"; return 0 ;; esac
+  _rest="$_in"
+  while [ -n "$_rest" ]; do
+    _seg="${_rest%%/*}"
+    if [ "$_seg" = "$_rest" ]; then _rest=""; else _rest="${_rest#*/}"; fi
+    case "$_seg" in
+      ..) if [ -n "$_out" ] && [ "${_out##*/}" != .. ]; then
+            [ -L "$ROOT/$_out" ] && CSYM=1
+            case "$_out" in */*) _out="${_out%/*}" ;; *) _out="" ;; esac
+          else _out="${_out:+$_out/}.."; fi ;;
+      ''|.) ;;
+      *) _out="${_out:+$_out/}$_seg" ;;
+    esac
+  done
+  CP="$_out"
 }
 # list_cmd_lines <list file> <rel> <command> -> every line number L the listing names with exactly
 # <command>. list_cmd_at <list file> <rel> <L> -> the command at L; exit 1 when L is no command.
@@ -564,8 +585,13 @@ living_sweep() {
   # relative one under the earlier), the subcommand is skipped, and every later non-option word is asked
   # with the directory prefixed. The directory ITSELF is never asked (lead ruling: it is where a command
   # runs, not what it reads). A `<rev>:<path>` word's path is resolved by git from the ROOT, so it is
-  # asked UNprefixed, and prefixed only when it starts `./` or `../` (git's cwd-relative spelling).
+  # asked UNprefixed, and prefixed only when it starts `./` or `../` (git's cwd-relative spelling). An index
+# stage prefix `:[0-3]:` or a bare leading `:` is stripped first, so `:0:./x.sh` is the path `./x.sh`. Each
+# joined word then has its `seg/..` pairs collapsed as a string (`web/../scripts/x.sh` is `scripts/x.sh`); a
+# symlinked segment before a `..` over-asks by design, the word is asked as core (see collapse_dots). A
+# second `-C` is joined onto the first, so `-C web -C ../scripts/ai-dlc` is the directory `scripts/ai-dlc`.
   awk -F'\t' '$2 == "ARGV" { print $1 "\t" $3 }' "$TMP/ls.explain" > "$TMP/ls.argv"
+  : > "$TMP/ls.force"
   while IFS="$(printf '\t')" read -r _id _q; do
     case "$_q" in git\ *) ;; *) continue ;; esac
     eval "set -- $_q" 2>/dev/null || continue
@@ -584,11 +610,13 @@ living_sweep() {
     for _w in "$@"; do
       case "$_w" in -*|'') continue ;; esac
       case "$_w" in
-        *:*) _p="${_w#*:}"
-             case "$_p" in ./*) _p="${_gd%/}/${_p#./}" ;; ../*) _p="${_gd%/}/$_p" ;; esac
-             printf '%s\t%q\n' "$_id" "$_p" >> "$TMP/ls.ops" ;;
-        *) printf '%s\t%q\n' "$_id" "${_gd%/}/$_w" >> "$TMP/ls.ops" ;;
+        *:*) case "$_w" in :[0-3]:*) _p="${_w#:?:}" ;; :*) _p="${_w#:}" ;; *) _p="${_w#*:}" ;; esac
+             case "$_p" in ./*) _p="${_gd%/}/${_p#./}" ;; ../*) _p="${_gd%/}/$_p" ;; esac ;;
+        *) _p="${_gd%/}/$_w" ;;
       esac
+      collapse_dots "$_p"
+      [ "$CSYM" = 0 ] || printf '%s\n' "$_id" >> "$TMP/ls.force"
+      printf '%s\t%q\n' "$_id" "$CP" >> "$TMP/ls.ops"
     done
   done < "$TMP/ls.argv"
   # A word with no `/` is skipped ONLY when every core glob carries a literal `/` outside a bracket class,
@@ -603,14 +631,15 @@ living_sweep() {
   # A DIRECTORY is core when `<word>/` is a literal prefix of a core glob (lead ruling A: the axis is
   # ownership, so `ls .claude/skills/ai-dlc/steps` reads ai-dlc files). Compared in-process, no fork.
   _globsnl="$NL$(cat "$TMP/ls.globs")$NL"
-  : > "$TMP/ls.core"
+  cat "$TMP/ls.force" > "$TMP/ls.core"
   while IFS="$(printf '\t')" read -r _id _q; do
     [ -n "$_q" ] || continue
     if grep -qxF -- "$_id" "$TMP/ls.core"; then continue; fi
     eval "_w=$_q" 2>/dev/null || continue
     # The word itself, a `<rev>:<path>` word's path, and the word as a directory; a root-absolute word
     # is made root-relative. String forms only: existence is never tested, because a pull DELETES core files.
-    for _t in "$_w" "${_w#*:}"; do
+    case "$_w" in :[0-3]:*) _rw="${_w#:?:}" ;; :*) _rw="${_w#:}" ;; *) _rw="${_w#*:}" ;; esac
+    for _t in "$_w" "$_rw"; do
       case "$_t" in -*|'') continue ;; esac
       _t="${_t#"$ROOT"/}"
       case "${_t%/}" in */*) ;; *) [ "$_slashless_ok" = 1 ] && continue ;; esac
@@ -779,26 +808,19 @@ while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
   reason=""
   # THE DERIVATION IS LOCATED BY CONTENT, NOT BY LINE NUMBER (see the header). A re-pointed row is judged
   # as the NEW derivation: its own file, its own command, the same checks.
-  found=""; nfound=0; unlisted=0
+  found=""; nfound=0
   if [ "$cyc" != 1 ] && [ -f "$ROOT/$rel" ]; then
-    # A file whose own run gave no verdict is UNASSESSED whatever its listing says, so a `--list` that
-    # also fails there unassesses the row; anywhere else a failed `--list` is a refusal.
-    j="$(idx_of "$rel")"; rc="$(cat "$TMP/f.$j.rc" 2>/dev/null)"
-    if [ "$rc" = 0 ] || [ "$rc" = 1 ]; then list_of "$rel"
-    elif ! list_of "$rel" soft; then unlisted=1; fi
-    if [ "$unlisted" = 0 ]; then
-      found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \
-        || { echo "REFUSED: could not scan $rel for the recorded command, so the row $key cannot be placed." >&2; exit 2; }
-      [ -n "$found" ] && nfound="$(printf '%s\n' "$found" | awk 'END { print NR + 0 }')"
-    fi
+    # A failed `--list` is a refusal whatever the file's own run gave (list_of exits 2).
+    list_of "$rel"
+    found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \
+      || { echo "REFUSED: could not scan $rel for the recorded command, so the row $key cannot be placed." >&2; exit 2; }
+    [ -n "$found" ] && nfound="$(printf '%s\n' "$found" | awk 'END { print NR + 0 }')"
   fi
   if [ "$nfound" -gt 1 ]; then
     if grep -qxF -- "$ln" <<<"$found"; then nfound=1; found="$ln"
     else echo "REFUSED: $rel carries $nfound derived-fence copies of the recorded command for $key and none is at the recorded line, so the row cannot be placed." >&2; exit 2; fi
   fi
-  if [ "$unlisted" = 1 ]; then
-    reason="UNASSESSED"
-  elif [ "$nfound" -eq 0 ]; then
+  if [ "$nfound" -eq 0 ]; then
     reason="MOVED"
   else
     ln="$found"
