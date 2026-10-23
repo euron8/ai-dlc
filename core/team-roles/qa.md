@@ -557,6 +557,11 @@ exactly one column-0 `handovers: <n>` line counting its hand-overs however writt
 when it handed nothing over; the cross shard carries none. The merge refuses a
 part shard whose count disagrees with the hand-overs it parsed, so a hand-over
 spelled any other way than the bare line is refused rather than dropped.
+Every shard, part or cross, also carries one
+column-0 `advisor:` line, `advisor: called` when an advisor call returned a
+result and `advisor: unavailable` when the tool was absent or every call errored
+or was rate-limited, as the SHARD GRAMMAR in `merge-review-shards.sh`'s header
+states.
 A shard writes NO line that Check 1's grep matches.
 That rules out a `## Verdict` or `## Decision` heading, a `Verdict:` label or a
 `<word> verdict:` label such as `QA verdict: PASS`, and a bold label such as
@@ -568,7 +573,8 @@ QA verdict as the worst shard verdict and writes the validation file. A part
 shard and the cross shard make no closing write; the closing writer makes those,
 after gate 3. Dispatched `shard: 1/1 <story-index>`, you are the whole
 validation: run every item above yourself, and write the validation file at the
-path above in the normal way. Before you return, run
+path above in the normal way, carrying the same one column-0 `advisor:` line a
+shard carries. Before you return, run
 `<lead engine>/merge-review-shards.sh --check-serial <validation file> --gate qa`
 from the lead checkout's `scripts/ai-dlc` path your brief carries, adding
 `--story <story file> --range <base> <go-signal sha>` (the base gate 1 used, on

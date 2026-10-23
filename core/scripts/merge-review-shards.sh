@@ -312,6 +312,27 @@
 #   hand-over no replay names, a replay no hand-over names, the same hand-over handed over twice and
 #   the same replay recorded twice are each REFUSED, so every handed-over replay is accounted for
 #   exactly once, counted, across the part shards and the execution owner.
+#   THE ADVISOR LINE, BOTH GATES. Every shard, part and cross, carries outside fences EXACTLY ONE
+#   column-0 line
+#       advisor: called | unavailable
+#   `called` when an advisor call returned a result; `unavailable` when the tool was absent, or every
+#   call errored or was rate-limited (remediator.md's meanings). It is checked PER SHARD, never on the
+#   merged file, which carries K+G of them. Under --check-serial the review file carries one.
+#   REFUSED in every era: two such lines; a value outside the two (trailing blanks and CR tolerated, as
+#   join-remediator-shards.sh tolerates them); and the label indented, bulleted (the remediator's own
+#   `- advisor: called` is the near-miss), decorated (`**advisor:**`) or numbered. The label is matched
+#   in lower case only, so a prose `Advisor: ...` sentence is neither the line nor a malformed one.
+#   THE ERA. A shard with NO such line is refused only when the gate's role file (qa.md under --gate qa,
+#   code-reviewer.md under --gate code-review) carries the sentinel ADVISOR_SENTINEL as the shards were
+#   briefed on it: read with `git show` at the manifest's frozen sha, consumer layout first, the way
+#   the SEVERITY BOUNDARY reads qa.md. The reference consumer (graph) tracks both role files, so the
+#   frozen-sha read is the live path there. A role file tracked at the sha without the sentinel prints
+#   one `LEGACY: advisor: line not checked: <path> prescribes no column-0 \`advisor:\` label` line and
+#   accepts the absence; a file unreadable at the sha holds it. A role file UNTRACKED at the sha falls
+#   back to the on-disk installed copy in the manifest's worktree, as the CANONICAL RUN arm does: without
+#   the sentinel, LEGACY; with it, the absence is REFUSED naming the fallback (`untracked at <sha>, read
+#   on disk`) and its remedy, commit `.claude/team-roles/`, because the on-disk copy may postdate the
+#   shards. --check-serial keys on the INSTALLED role file, as its canonical-run branch does.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -625,6 +646,9 @@ fail_gate() {
 # under a PASS in WORST, the file must carry QA's own canonical run and its summary with counts, or the
 # record-only exemption over <base>..<frozen>. The partition and both grammars are record-only-diff.sh's.
 CANON_SENTINEL='column-0 `Canonical run:`'
+# THE ADVISOR LINE's era sentinel (header: SHARD GRAMMAR, ADVISOR LINE), matched as CANON_SENTINEL is.
+ADVISOR_SENTINEL='column-0 `advisor:`'
+adv_has() { grep -qF -- "$ADVISOR_SENTINEL" "$1"; } # <role file> -> 0 when it prescribes the line
 RO="$AI_DLC_SELF_DIR/record-only-diff.sh"
 canon_gate() {
   cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"
@@ -660,6 +684,40 @@ canon_gate() {
     || refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' carries no count; copy the run's summary line (e.g. '812 passed, 3 skipped')"
   return 0
 }
+# ---- THE ADVISOR LINE (header: SHARD GRAMMAR). adv_gate <file>: one function for the per-shard check
+# and --check-serial. The caller sets ADV_AT (`legacy` acquits an absent line; any other value holds
+# it), ADV_AT_PATH (named in the LEGACY line) and ADV_WHY (appended to the absence refusal) first.
+# The label is matched CASE-SENSITIVELY: graph's s319 shards carry 8 prose lines opening `Advisor:` or
+# `- Advisor:` and 0 lowercase ones, so a case-insensitive malformed-line refusal would refuse a
+# legacy shard in every era (BL-790 body).
+ADV_LEG=""
+adv_gate() {
+  ad_o_="$(awk '
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+    f { next }
+    /^advisor:/ { n++; if (n == 1) { v = $0; sub(/^advisor:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); gsub(/[ \t]+/, "_", v); av = v }; next }
+    /^[ \t>*_`+-]*([0-9]+\.[ \t]*)?[ \t>*_`+-]*advisor[*_` \t]*:/ { if (!m) m = NR }
+    END { printf "%d %s %d\n", n + 0, (av == "" ? "-" : av), m + 0 }' "$1")" \
+    || refuse_to lead "reading the advisor line of $1 did not run (awk failed); repair the environment in the lead checkout and check again"
+  read -r ad_n_ ad_v_ ad_m_ <<<"$ad_o_"
+  [ "${ad_n_:-0}" -le 1 ] \
+    || refuse "$1 carries $ad_n_ 'advisor:' lines outside a fence; it carries exactly one column-0 'advisor: called' or 'advisor: unavailable'"
+  [ "${ad_m_:-0}" = 0 ] \
+    || refuse "$1:$ad_m_ is a malformed advisor line (indented, bulleted or decorated); write it bare at column 0 as 'advisor: called' or 'advisor: unavailable' -- not the remediator's bulleted '- advisor: called'"
+  if [ "${ad_n_:-0}" = 1 ]; then
+    case "$ad_v_" in
+      called|unavailable) ;;
+      *) refuse "$1 'advisor: ${ad_v_//_/ }' is not called or unavailable; 'called' when an advisor call returned a result, 'unavailable' when the tool was absent or every call errored or was rate-limited" ;;
+    esac
+    return 0
+  fi
+  if [ "$ADV_AT" = legacy ]; then
+    [ -n "$ADV_LEG" ] || printf 'LEGACY: advisor: line not checked: %s prescribes no %s label\n' "$ADV_AT_PATH" "$ADVISOR_SENTINEL"
+    ADV_LEG=1
+  else refuse "$1 carries no column-0 'advisor:' line${ADV_WHY}: write 'advisor: called' when an advisor call returned a result, 'advisor: unavailable' when the tool was absent or every call errored or was rate-limited"
+  fi
+}
 # ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
 # ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
 if [ -n "$SERIAL" ]; then
@@ -672,6 +730,10 @@ if [ -n "$SERIAL" ]; then
     *" $C1V "*) ;;
     *) refuse "Check 1 reads '$C1V' from $SERIAL, which is not one of $RANKED ($ROLE_NAME's ## Verdict set); write the value alone, a member of that set" ;;
   esac
+  # THE ADVISOR LINE, both gates, keyed on the INSTALLED role file (the seat runs this before it returns).
+  ADV_AT_PATH="$ROLE_MD"; ADV_WHY="; $ROLE_MD prescribes it"
+  if adv_has "$ROLE_MD"; then ADV_AT="present"; else ADV_AT="legacy"; fi
+  adv_gate "$SERIAL"
   if [ "$GATE" = qa ]; then
     WORST="$C1V"
     printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
@@ -867,6 +929,39 @@ qa_at_sha() {
   done
   return 0
 }
+# ---- THE GATE'S ROLE FILE AT THE FROZEN SHA (the ADVISOR LINE's era, header: SHARD GRAMMAR) --------
+# Set-level, memoised, one reader for both gates (ROLE_NAME). ADV_AT is `legacy` when the role file the
+# shards were written under carries no ADVISOR_SENTINEL, `present` when it carries it, `disk` when the
+# file is untracked at the frozen sha and the ON-DISK installed copy in the manifest's worktree carries
+# it, `unreadable` when neither the commit nor either layout on disk can be read. Only `legacy`
+# acquits an absent line. The on-disk read is the canonical-run arm's own fallback, taken only when the
+# file is tracked in neither layout at the sha; a copy found there decides, as there.
+ADV_AT=""; ADV_AT_PATH=""; ADV_WHY=""
+adv_at_sha() {
+  [ -z "$ADV_AT" ] || return 0
+  ADV_AT="unreadable"
+  ADV_WHY="; $ROLE_NAME cannot be read at the frozen sha $M_SHA in $M_WT (tracked, or on disk, in either layout), so the shard cannot be shown to predate the line"
+  command -v git >/dev/null 2>&1 || return 0
+  if git --no-replace-objects -C "$M_WT" rev-parse -q --verify "${M_SHA}^{commit}" > /dev/null 2>&1 < /dev/null; then
+    for ad_p_ in ".claude/team-roles/$ROLE_NAME" "core/team-roles/$ROLE_NAME"; do
+      git --no-replace-objects -C "$M_WT" cat-file -e "${M_SHA}:${ad_p_}" 2> /dev/null < /dev/null || continue
+      git --no-replace-objects -C "$M_WT" show "${M_SHA}:${ad_p_}" > "$T/adv-at" 2> /dev/null < /dev/null || return 0
+      ADV_AT_PATH="$ad_p_ at $M_SHA"
+      if adv_has "$T/adv-at"; then ADV_AT="present"; ADV_WHY="; $ADV_AT_PATH prescribes it"; else ADV_AT="legacy"; fi
+      return 0
+    done
+  fi
+  # Untracked at the frozen sha (a consumer that does not commit .claude/team-roles/): the on-disk copy.
+  for ad_p_ in ".claude/team-roles/$ROLE_NAME" "core/team-roles/$ROLE_NAME"; do
+    [ -r "$M_WT/$ad_p_" ] || continue
+    ADV_AT_PATH="$M_WT/$ad_p_ (on disk, untracked at $M_SHA)"
+    if adv_has "$M_WT/$ad_p_"; then ADV_AT="disk"
+      ADV_WHY="; $ROLE_NAME is untracked at $M_SHA, read on disk at $M_WT/$ad_p_, which prescribes it. The on-disk copy may postdate the shards: commit .claude/team-roles/ so the frozen sha decides, or write the line"
+    else ADV_AT="legacy"; fi
+    return 0
+  done
+  return 0
+}
 SEAL_SH="$SELF_DIR/content-seal.sh"
 
 # ---- the shard set ----------------------------------------------------------------------
@@ -1004,6 +1099,7 @@ check_shard() {
   [ "$r" -gt 0 ] || refuse "$sf shard-verdict '${v:-<none>}' is not one of $RANKED"
   if [ "$r" -gt "$WORST_R" ]; then WORST_R="$r"; WORST="$v"; fi
   printf '| %s | %s |\n' "$key" "$v" >> "$T/vtable" || refuse "cannot stage the verdict table"
+  adv_at_sha; adv_gate "$sf"
   nf="$(awk '$1 == "C" { print $2 }' "$P")"; NFIND=$((NFIND + ${nf:-0}))
   # The marker's count against the findings parsed here: a shard truncated after its marker, or
   # marked before its findings, disagrees. `scn` is set by the caller (the staged marker, or under

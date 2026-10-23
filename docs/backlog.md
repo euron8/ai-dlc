@@ -466,15 +466,6 @@ Owed: one adversary pass (opus, read-only) over J1-J4 and C5. Fold its BLOCKERs 
 
 verify: manual — the subject is a review, not a code state; it closes when the review's findings are folded or ruled.
 
-## BL-766 — gate-adjudicator.md never says a FAIL is complete only when the check's comparison surface is exhausted
-
-**NOTE.** Source: BL-765's diagnosis, batch 240. Filed by lead ai-dlc-3f. Not built.
-
-One sentence for `core/team-roles/gate-adjudicator.md:116-118` (the rule that every verdict is PASS or FAIL with evidence): a FAIL is complete only when the check's comparison surface is exhausted, not when one deviation settles it. It would cover every `adjudication: llm` check, where BL-765 covers Check 9 alone.
-
-verify: manual — the sentence is prose with no mechanical predicate.
-
-
 ## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
 
 **NOTE.** Found while building BL-692's fixture (batch 240): the sandbox's `tools.decl` lacked `cksum`, and the cache never recorded. Not built, and a candidate for a later release, not BL-692's.
@@ -538,3 +529,4 @@ The deletion is therefore attributed to the pulling session's own whole-director
 Owed: a detector. A consumer file under a claimed `tests/fixtures/<dir>/` that core never shipped is reported before the pull's whole-directory write, in the style of ORPHANED-UNKNOWN. Not built.
 
 verify: manual — no detector exists yet, so no predicate over the tree can test it.
+
