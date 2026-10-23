@@ -145,3 +145,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I125 | the shardable-role set is ONE set across Check 22's validator and the dispatch guard |
 | I126 | the ai-dlc session-marker scan is ONE line, in every hook that asks the question |
 | I127 | the pre-push stop-early opt-out is named in exactly two tracked files |
+| I128 | Check B's pause-write allow list and updater-marker ERE are the pause hook's, byte for byte |

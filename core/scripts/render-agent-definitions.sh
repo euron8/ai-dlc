@@ -186,6 +186,7 @@ render_one() {
   printf 'FIRST action before any other work.\n'
   printf 'Never create documentation or report files unless your brief names the path; return findings\n'
   printf 'as text. Do not re-delegate your assignment to another agent.\n'
+  printf 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.\n'
 }
 
 ROLES="$(jq -r '.aiDlcRoles | keys[]' "$SETTINGS" 2>/dev/null)"

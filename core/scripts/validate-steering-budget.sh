@@ -565,18 +565,75 @@ const commandArgsText = (r) => {
 const citableOperatorText = (r, askIds) =>
   genuineOperatorText(r) || askUserQuestionAnswers(r, askIds) || commandArgsText(r);
 
-// `_bmad-output/ai-dlc-update/**` is the UPDATER's own scratch space (reconcile
-// report, push-candidate ledger), not pipeline output. /ai-dlc-update is a
-// different skill from /ai-dlc: it does not advance a sprint, and it runs precisely
-// when the pipeline is NOT running. Writing its reconcile report while an operator
-// message is outstanding is not steamrolling a pipeline -- there is no pipeline.
-// Observed live: the updater's own report write was scored as a Rule 29 steamroll.
+// A WRITE THE PAUSE HOOK ALLOWS IS NOT A STEAMROLL. Check B asks "did the lead execute straight
+// through an operator message?", and core/hooks/ai-dlc-acknowledge.sh is what decides that live:
+// its Write|Edit|MultiEdit|NotebookEdit arm allows, while paused, the empty-bodied `) ;;` arms
+// that precede its generic `*/_bmad-output/*` arm -- the updater's scratch space, the resolution
+// record, the pipeline snapshot and its history file. The hook's comments beside each arm carry
+// the reason; this file does not restate them. Scoring one of those writes says the lead
+// steamrolled with a call the hook itself sanctions. Measured on the reference consumer over
+// --since 2026-10-15T18:49:36Z: 3 of Check B's 5 rows were `pipeline-snapshot.md` Edits.
+//
+// THE LIST IS THE HOOK'S CASE PATTERNS, VERBATIM, and vem I128 byte-compares it against the arms
+// it derives from the hook, in both directions -- so it cannot drift. Each is converted with
+// bash-`case` semantics: `|` separates alternatives, `*` matches any run INCLUDING `/`, every
+// other byte is literal, and the match is anchored over the whole path. That is why a nested
+// `planning-artifacts/s292/x-resolution-p2.md` is exempt and `pipeline-snapshot.archive.x.md`
+// is not (the history arm is literal on purpose; see the hook).
+// >>> I128 PAUSE-WRITE ALLOW ARMS: the hook's case patterns, verbatim >>>
+const PAUSE_WRITE_ALLOW = [
+  "*/_bmad-output/ai-dlc-update/*|_bmad-output/ai-dlc-update/*",
+  "*/_bmad-output/planning-artifacts/*-resolution-p*.md|_bmad-output/planning-artifacts/*-resolution-p*.md",
+  "*/_bmad-output/pipeline-snapshot.md|_bmad-output/pipeline-snapshot.md",
+  "*/_bmad-output/pipeline-snapshot-history.md|_bmad-output/pipeline-snapshot-history.md",
+];
+// <<< I128 PAUSE-WRITE ALLOW ARMS <<<
+const caseGlobRe = (alt) =>
+  new RegExp("^" + alt.split("*").map(s => s.replace(/[.+?^${}()|[\]\\\/]/g, "\\$&")).join(".*") + "$");
+const PAUSE_WRITE_ALLOW_RE = PAUSE_WRITE_ALLOW.flatMap(p => p.split("|")).map(caseGlobRe);
 const isPipelineArtifact = (fp) =>
-  /(^|\/)_bmad-output\//.test(fp) && !/(^|\/)_bmad-output\/ai-dlc-update\//.test(fp);
+  /(^|\/)_bmad-output\//.test(fp) && !PAUSE_WRITE_ALLOW_RE.some(re => re.test(fp));
 
 const isAdvancing = (b) => ADVANCING.has(b.name) ||
   (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(b.name) &&
    isPipelineArtifact(b.input?.file_path || ""));
+
+// AN UPDATER SESSION ADVANCES NOTHING, as the hook decides it. The hook scans the session's own
+// transcript with the ERE below and the LAST match decides (acknowledge.sh's I126 scan): a typed
+// `/ai-dlc-update` or `Skill(ai-dlc-update)` makes it an updater session, a typed `/ai-dlc` or
+// `Skill(ai-dlc)` makes it a pipeline session. The current call's own `skill` payload overrides
+// that. In an updater session the hook allows every Agent/Task/Skill/TaskCreate and every
+// `_bmad-output/` write, so none of them is a steamroll here either. Check B replays that PER
+// CALL, IN TRANSCRIPT ORDER: a record's markers apply from that record on, so `/ai-dlc-update`
+// followed by `/ai-dlc` is a pipeline session again. The ERE is the hook's, byte for byte, and
+// vem I128 binds it to the line after acknowledge.sh's I126 opener. It is a String.raw so the
+// source bytes ARE the value, and run as a JS RegExp over each RAW transcript line it means what
+// grep -E means (`\\n` is the JSON-escaped newline, `\{` a literal brace). Measured on the
+// reference consumer: the other 2 of Check B's 5 rows were `Skill(ai-dlc-update)` calls, each
+// the operator's own typed `/ai-dlc-update`.
+// >>> I128 UPDATER MARKER ERE: acknowledge.sh's I126 scan pattern, verbatim >>>
+const UPDATER_MARKER_ERE = String.raw`"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"`;
+// <<< I128 UPDATER MARKER ERE <<<
+const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");
+// The verdict of the LAST marker on one raw line, keyed as the hook's `case` keys it, by suffix:
+// 1 updater, 0 pipeline, null no marker. The hook greps every line, sidechain records included,
+// so this runs before the sidechain filter.
+const lineUpdaterVerdict = (l) => {
+  let v = null;
+  for (const m of l.matchAll(UPDATER_MARKER_RE)) {
+    const s = m[0];
+    if (s.endsWith("/ai-dlc-update</command-name>") || s.endsWith('"skill":"ai-dlc-update"')) v = 1;
+    else if (s.endsWith("/ai-dlc</command-name>") || s.endsWith('"skill":"ai-dlc"')) v = 0;
+  }
+  return v;
+};
+// The call's own payload (acknowledge.sh :219-222), else the verdict of every line BEFORE the
+// call's record -- what the hook's scan could see when the call arrived.
+const updBefore = new WeakMap();
+const inUpdaterSession = (b, upd) =>
+  b.name === "Skill" && b.input?.skill === "ai-dlc-update" ? true
+  : b.name === "Skill" && b.input?.skill === "ai-dlc" ? false
+  : upd === 1;
 
 // A wait BEAT is a foreground Bash call that sleeps AND file-tests a
 // _bmad-output/ path. All three clauses are load-bearing, and each was added
@@ -835,9 +892,15 @@ const NO_TASK = /No task found with ID:\s*([^<\n"]+)/;
 for (const f of files) {
   let recs;
   try {
-    recs = fs.readFileSync(f, "utf8").split("\n").filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean).filter(r => !r.isSidechain);
+    recs = [];
+    let upd = null;
+    for (const l of fs.readFileSync(f, "utf8").split("\n").filter(Boolean)) {
+      let r = null;
+      try { r = JSON.parse(l); } catch { r = null; }
+      if (r && typeof r === "object" && !r.isSidechain) { updBefore.set(r, upd); recs.push(r); }
+      const v = lineUpdaterVerdict(l);
+      if (v !== null) upd = v;
+    }
   } catch { continue; }
 
   // ---- Check A: foreground calls that exceed the budget -------------------
@@ -920,7 +983,9 @@ for (const f of files) {
       // A DENIED advancing call is not a steamroll -- the lead tried and the hook
       // stopped it. Counting the attempt inverts the check's meaning: it reports
       // "executed straight through it" about a call that never executed.
-      const adv = uses.filter(isAdvancing).find(b => !denied.has(b.id));
+      // AND A CALL THE HOOK ALLOWS BECAUSE THIS IS AN UPDATER SESSION is not one either.
+      const adv = uses.filter(isAdvancing)
+        .find(b => !denied.has(b.id) && !inUpdaterSession(b, updBefore.get(rr)));
       if (adv && !cleared) {
         steam.push({ f: path.basename(f), tool: adv.name, msg: txt.slice(0, 60).replace(/\n/g, " ") });
         break;
