@@ -3348,17 +3348,39 @@ result is written by the audit itself to a tracked record a script check reads.
 
 Run `scripts/ai-dlc/check-owed-derivations.sh` from the project root. **Any exit other than 0
 (1, 2, 126, 127 or anything else) DENIES the gate**: print every line it emitted and do not pass
-it. Exit 0 passes, and an absent record is exit 0. An absent record, or one with no OWED row, prints an `UNMEASURED:` line: it passes, and it means no reconcile has recorded what it owes, so the silence of a clean record is not being claimed. Print the line with the rest.
+it. Exit 0 passes. An absent record is exit 0 only when the LIVING sweep also finds nothing open:
+the record no longer decides the exit by itself, because the sweep runs whether or not a record
+exists. An absent record, or one with no OWED row, prints an `UNMEASURED:` line: the line itself passes, and it means no reconcile has recorded what it owes, so the silence of a clean record is not being claimed. Print the line with the rest.
 
 The deny text states, in this order:
-1. Exit 1 prints one `OPEN` line per derivation an earlier pull left broken, in the CURRENT sprint's
-   `s<N>/` or in a living document (`prd.md`). **Remedy: append
-   `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to
-   `_bmad-output/ai-dlc-update/owed-derivations.tsv`.** The reader re-derives the new derivation on
-   every read, so the append closes the row only if that derivation reproduces; a REPOINTED row that is
-   stale, unrunnable or aimed at a line that is not a derived-fence command stays OPEN.
+1. Exit 1 prints one `OPEN` line per open row. **The remedy branches on the 6th column.**
+   - **Any 6th column other than `living-sweep`** (a reconcile log name) is a derivation an earlier
+     pull left broken, in the CURRENT sprint's `s<N>/` or in a living document (`prd.md`). **Remedy:
+     append `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to
+     `_bmad-output/ai-dlc-update/owed-derivations.tsv`.** The reader re-derives the new derivation on
+     every read, so the append closes the row only if that derivation reproduces; a REPOINTED row that
+     is stale, unrunnable or aimed at a line that is not a derived-fence command stays OPEN.
+   - **A 6th column of `living-sweep`** is a fence in a LIVING document under `_bmad-output/` that
+     reads an ai-dlc core file and no longer reproduces. No record row exists for it and no reconcile
+     log names it, so its 5th column is `-`. Its reason is `LIVING-STALE`, `LIVING-ALLOWLIST`,
+     `LIVING-READS-STDIN` or `LIVING-UNRUN`: `LIVING-` plus the validator's FAIL kind, or UNRUN.
+     A GRAMMAR fail names a fence opener, which has no command and so no operand: it produces no row
+     and never blocks. **Remedy: re-run the row's command and rewrite the fence and the sentence it
+     supports IN PLACE.** No record write closes it, and a `REPOINTED` append does nothing for it.
+     When that living file is notarized by a met series in the same sprint, so it cannot be edited
+     mid-pass, follow `_gate-procedures.md` "Divergence resolution dispatch".
+     **One exception: `_bmad-output/ai-dlc-update/push-candidate-ledger.md`.** Its rows are
+     immutable, so its remedy is to file a SUPERSEDING row, the ledger's own append idiom, never to
+     rewrite the stale row. What closes the row is a later derived fence in the same ledger carrying
+     the SAME command, whose recorded output reproduces; a later row with a different command, or one
+     that is itself stale, closes nothing.
+     A LIVING fence whose operands are consumer code only is never shown: operator ruling (A),
+     "Block on ai-dlc files only".
 2. Exit 2 means the record is unreadable or malformed, or the current sprint could not be resolved: the
    rows are REFUSED and unassessed, never closed. Repair the record or the sprint envelope and re-run.
+   Exit 2 also means the LIVING sweep could not decide, because the validator gave no verdict for a
+   file, or `core-paths.sh` or `--explain-cmd` is unavailable: re-run once the fault is gone, or
+   reinstall ai-dlc.
 3. An `UNASSESSED` row has a file the validator exited 2 on. **An UNRUN derivation anywhere in the same
    file makes every owed row in it UNASSESSED; run or remove that derivation.**
 4. **Owed work recorded in a sprint that has since finished turns INFO and STOPS BLOCKING.** An
@@ -3372,9 +3394,13 @@ The deny text states, in this order:
 Fixture: `tests/fixtures/owed-derivations/`.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a derivation left broken at a pull being forgotten
-by the next session, because the only record of it was the model's recollection. False-positive cost:
-one validator run per file holding an owed row. Removal condition: retire when the update's own gate
-refuses a pull that leaves a NEWLY-FAILING derivation unrepaired.
+by the next session, because the only record of it was the model's recollection; and, by the LIVING
+sweep, a fence in a LIVING document that reads an ai-dlc core file and broke before any owed row
+existed, which no record can carry because the writer appends NEWLY-FAILING rows only. False-positive
+cost: one validator run per file holding an owed row, plus one validator run over the fenced LIVING
+files per planning gate. Removal condition: retire the owed-row half when the update's own gate
+refuses a pull that leaves a NEWLY-FAILING derivation unrepaired, and the LIVING sweep when that gate
+also refuses a pull that leaves any LIVING fence reading an ai-dlc core file failing.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

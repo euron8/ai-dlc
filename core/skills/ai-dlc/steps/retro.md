@@ -685,7 +685,10 @@ gate.
    `.claude/rules/upstream-routing.md`.** Run `scripts/ai-dlc/check-owed-derivations.sh` here too (its `INFO past-sprint` and `INFO history` lines are not carried: each is unrepaired debt that is no longer enforced, NOT closed; an `UNMEASURED:` line is not carried either, and it is not debt: it says no reconcile recorded anything owed, so there is nothing to carry), beside the
    `push-candidate-ledger.md` reads: every `OPEN` line it prints is carried to `carry-over-backlog.md` as ONE
    OPEN item per key naming its reconcile log (when an item for that key is already OPEN there, leave it; do not
-   add a second), never archived unread; exit 2 is surfaced, not skipped.
+   add a second), never archived unread; exit 2 is surfaced, not skipped. A row whose 6th column is
+   `living-sweep` has no reconcile log, which is what that cell means: its key is its file plus its
+   command, not its file:line, and its item names the file and the command instead of a log. "Already
+   OPEN for that key, leave it" applies on file plus command.
    Then **archive terminal entries
    (Rule 25(a)/(c)):** move every RESOLVED and OVERRIDDEN entry
    (cut-and-paste, verbatim) out of `pending.md` into

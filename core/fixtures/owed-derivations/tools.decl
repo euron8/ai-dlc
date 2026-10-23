@@ -26,3 +26,4 @@ paste
 cmp
 diff
 xargs
+python3
