@@ -5181,7 +5181,7 @@ pcv_failset() {
 #   M-direxcl  the work-tree exclusion widened from the report FILE to its DIRECTORY, which hides
 #              layer-adjudication-register.jsonl from the key                              -> PC-V10
 #   M-exit3    er_cache_record called before the mismatch tail, so exit 1 and exit 3 record -> PC-V9 PC-V10
-# BL-777's four, each against the key's own tools (V56 no cksum, V57 no sha256 tool):
+# BL-777's five, each against the key's own tools (V56 no cksum, V57 no sha256 tool):
 #   M-cksum    the `command -v cksum` refusal made a no-op: the env field then fails and the
 #              per-field fallback names a DIFFERENT cause                                  -> PC-V56
 #   M-base     BOTH layers reverted (true base): no cksum refusal, and the field loop's two
@@ -5191,6 +5191,9 @@ pcv_failset() {
 #              either of its two causes (absent tool V57, garbage digest V58) -> PC-V57 PC-V58
 #   M-unarmed  the stderr print guard loses its EMIT_REPORT_VERIFY_CACHE=1 conjunct, so the
 #              refusal prints unarmed and V56's unarmed-identity half sees it             -> PC-V56
+#   M-hex      ONLY the garbage-digest refusal made a no-op, cause 3 (no sha256 tool) left
+#              intact: a tool that answers garbage returns 1 unnamed, while V57's absent
+#              tool still names its cause                                                 -> PC-V58
 # pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
 # that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
 pcv_ed() {
@@ -5206,6 +5209,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local r9ck='    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }'
   local r9fld='      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"'
   local r9sha='      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then'
+  local r9hex='        er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"'
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
     M-region)  pcv_ed "$d" replace \
@@ -5217,6 +5221,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-base)    pcv_ed "$d" replace "$r9ck" '    || :' && pcv_ed "$d" replace "$r9fld" '      :' \
                  && pcv_ed "$d" before "$r9sha" '      return 1' ;;
     M-sha)     pcv_ed "$d" before "$r9sha" '      return 1' ;;
+    M-hex)     pcv_ed "$d" replace "$r9hex" '        :' ;;
     M-unarmed) pcv_ed "$d" replace '   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' \
                  '   && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' ;;
     *) return 1 ;;
@@ -5228,10 +5233,11 @@ pcv_want() {
   case "$1" in
     M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V55" ;; M-exit3) echo "PC-V9 PC-V10" ;;
     M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57 PC-V58" ;; M-sha) echo "PC-V57 PC-V58" ;; M-unarmed) echo "PC-V56" ;;
+    M-hex) echo "PC-V58" ;;
   esac
 }
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
-pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed) echo BL-777 ;; *) echo BL-679 ;; esac; }
+pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; *) echo BL-679 ;; esac; }
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
 # to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
 # which made this phase the suite pole (BL-699). Each mutant now runs the always-on prefix PC-V0 PC-V1
@@ -5252,7 +5258,7 @@ pcv_scope() {
     M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10 PC-V55" ;;
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
     # BL-777: both tool arms run for each, so the one a mutant must NOT kill is its same-run control.
-    M-cksum|M-base|M-sha|M-unarmed) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V56 PC-V57 PC-V58" ;;
+    M-cksum|M-base|M-sha|M-unarmed|M-hex) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V56 PC-V57 PC-V58" ;;
   esac
 }
 # A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
@@ -5272,7 +5278,7 @@ pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
 }
 PCV_MUTS="M-region M-direxcl M-exit3"
 # BL-777's mutants score only where V56/V57 run (PCV_R9); where they are PENDING no kill can be read.
-[ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed"
+[ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed M-hex"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
