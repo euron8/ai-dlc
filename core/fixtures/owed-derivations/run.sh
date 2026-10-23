@@ -48,8 +48,11 @@
 # directory prefix test removed, mA ls_accept_rc accepts every exit, mB the root-absolute strip and the
 # trailing-slash variant removed, M12 the raw-scan locator restored in the ledger supersession, M12b the
 # same in pass 2, M13 a `git -C` segment's WORD lines asked again, M14 a failing `--list` in pass 2 read
-# UNASSESSED over a file whose own run gave no verdict.
-# receipt-bl587.sh drives the real reader over S1's seed.
+# UNASSESSED over a file whose own run gave no verdict, M20 a reproducing LIVING fence opened, M21 LIVING
+# verdicts leaking into --scope-batch, M22 every validator exit refused.
+# A mutant runs only the LIVING worlds holding its required arms (lw_world); a null-mutant control runs once
+# per distinct required set and must SURVIVE.
+# receipt-bl587.sh drives the real reader over S1's seed; receipt-bl801.sh drives the world filter.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -751,21 +754,51 @@ rc_is "PUc control: the validator lists NO command in the PU file (its only copy
 v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate-artifact-derivations.sh "$LS13/$LPRD" "$LS13/_bmad-output/planning-artifacts/notes.md" > /dev/null 2> "$WORK/v13.err" ); echo $?)"
 rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
+# ---- lw-harness: begin (receipt-bl801.sh sources the lines between these two markers) ----------------
+# THE WORLD FILTER. Every LIVING-sweep world is one gated block, `if lw_world <name>; then <its reader
+# invocations> <its lw_arm lines>; lw_end; fi`. The REAL pass runs every world and records each arm's
+# world in LW_MAP as it is asserted, so the map is derived from the lw_arm calls themselves and never
+# hand-listed. In MUT mode a world runs only when one of its recorded arms is in LW_REQ, the mutant's
+# required set: mut_case asserts only the required arms, so a world holding none of them changes no
+# verdict. An lw_arm outside a gated block is FIXTURE BROKEN in either mode, because no filter could
+# ever select it. A world whose arms read state another invocation set runs as ONE unit (S9 and S10:
+# S10 compares against S9's batch output), so a required arm never reads a leftover global.
 open_lines() { awk -F'\t' '$1 == "OPEN"' <<<"$OUT"; }
 lopen() { printf 'OPEN\t%s\tLIVING-%s\t$ %s\t-\tliving-sweep' "$1" "$2" "$3"; }
 lw_rd() { # <bin> <root> <record>
   local o="$WORK/lw.out" e="$WORK/lw.err"
+  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   ( cd / && AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" "$3" > "$o" 2> "$e" ); RC=$?
   OUT="$(cat "$o")"; ERR="$(cat "$e")"
 }
 lw_batch() { # <bin> <root> -> BOUT BRC
+  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
 }
-LW_MODE=real; LW_FAILED=""
+# LW_MAP holds ` <world>:<arm> ` tokens from the real pass; LW_SEEN the arms a mut pass evaluated;
+# LW_NINV counts the mut-mode reader invocations, printed after the battery.
+LW_MODE=real; LW_FAILED=""; LW_CUR=""; LW_MAP=" "; LW_REQ=""; LW_SEEN=" "; LW_NINV=0
+lw_world() { # <world> -> 0 run it, 1 skip it
+  local a
+  LW_CUR=""
+  if [ "$LW_MODE" = real ]; then LW_CUR="$1"; return 0; fi
+  for a in $LW_REQ; do
+    case "$LW_MAP" in *" $1:$a "*) LW_CUR="$1"; return 0 ;; esac
+  done
+  return 1
+}
+lw_end() { LW_CUR=""; }
 lw_arm() { # <id> <description> <0 holds | 1 does not>
+  if [ -z "$LW_CUR" ]; then
+    bad "$1 FIXTURE BROKEN: lw_arm ran outside a gated world (if lw_world <name>; then ... lw_end; fi), so no mutant filter can select it"; return
+  fi
   if [ "$LW_MODE" = real ]; then
+    LW_MAP="$LW_MAP$LW_CUR:$1 "
     if [ "$3" = 0 ]; then ok "$1 $2"; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
-  elif [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
+  else
+    LW_SEEN="$LW_SEEN$1 "
+    if [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
+  fi
 }
 lw_all() { # <reader> <tag>
   local b="$WORK/lw.$2/bin" b5="$WORK/lw.$2/bin5" lone="$WORK/lw.$2/lone" none="$WORK/lw.$2/no-record.tsv"
@@ -775,49 +808,86 @@ lw_all() { # <reader> <tag>
   # S10's caller shape (apply.sh's scope join): the reader ALONE beside the real sprint-status.sh and its
   # schema, with no core-paths.sh and no validator.
   cp "$1" "$lone/scripts/check-owed-derivations.sh"; cp "$SPRINTSTATUS" "$lone/scripts/sprint-status.sh"; cp "$SSSCHEMA" "$lone/schemas/sprint-status.json"
+  if lw_world ls1; then
   lw_rd "$b" "$LS1" "$none"
   lw_arm S1 "acquittal probe: no record, one LIVING doc with a stale CORE fence and a stale CONSUMER fence -> exit 1 and exactly ONE OPEN line, the core one, LIVING-STALE living-sweep" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS1" STALE "$LCMD")" ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls2; then
   lw_rd "$b" "$LS2" "$none"
   lw_arm S2 "the same core fence in a PAST-sprint file (s0, current 1) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls3; then
   lw_rd "$b" "$LS3" "$none"
   lw_arm S3 "every LIVING fence reproduces -> exit 0, no OPEN line, and the UNMEASURED line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls4c; then
   lw_rd "$b" "$LS4C" "$none"
   lw_arm S4a "a core-operand UNRUN in a LIVING doc -> exit 1, exactly one OPEN, LIVING-UNRUN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS4C" UNRUN "$LUNC")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls4s; then
   lw_rd "$b" "$LS4S" "$none"
   lw_arm S4b "a consumer-operand UNRUN in a LIVING doc -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls1-nocorepaths; then
   lw_rd "$b5" "$LS1" "$none"
   lw_arm S5 "core-paths.sh absent beside the reader, S1's seed -> exit 2 with a REFUSED line and no OPEN line" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: no core-paths.sh beside' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6; then
   lw_rd "$b" "$LS6" "$none"
   lw_arm S6 "push-candidate-ledger.md stays LIVING (lead ruling): its stale core fence -> exit 1, its OPEN line printed" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls1-owed; then
   lw_rd "$b" "$LS1" "$WORK/ls7.tsv"
   lw_arm S7 "collision: an OWED row on prd.md:K whose fence is stale prints ONCE, as STALE, never again as LIVING-STALE" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tSTALE\t$ %s\tbase..theirs\treconcile-log-x' "$K_LS1" "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls8; then
   lw_rd "$b" "$LS8" "$none"
   lw_arm S8 "deleted core operands block (git show HEAD:scripts/ai-dlc/gone.sh, plain scripts/ai-dlc/deleted.sh); a deleted consumer one does not" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS8A" STALE 'git show HEAD:scripts/ai-dlc/gone.sh')
 $(lopen "$K_LS8B" STALE 'grep -c qqalpha scripts/ai-dlc/deleted.sh')" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6b; then
   lw_rd "$b" "$LS6B" "$none"
   lw_arm S6b "the ledger's stale core fence plus a LATER copy of the same command that reproduces (a superseding row) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6c; then
   lw_rd "$b" "$LS6C" "$none"
   lw_arm S6c "near-miss: the later ledger copy is stale too -> exit 1, BOTH lines OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6C1" STALE "$LCMD")
 $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6d; then
   lw_rd "$b" "$LS6D" "$none"
   lw_arm S6d "near-miss: the same stale-then-fresh pair in prd.md (not the ledger) -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6D" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6e; then
   lw_rd "$b" "$LS6E" "$none"
   lw_arm S6e "a later ledger copy in a derived fence that is never CLOSED acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6E" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6f; then
   lw_rd "$b" "$LS6F" "$none"
   lw_arm S6f "a later ledger copy that is an INDENTED OUTPUT line acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6F" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls6g; then
   lw_rd "$b" "$LS6G" "$none"
   lw_arm S6g "a later ledger copy behind a CRLF opener acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6G" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world lspu; then
   lw_rd "$b" "$LSPU" "$WORK/lspu.tsv"
   lw_arm PU "pass 2: an OWED row whose only same-command copy is in an unclosed fence is not located there -> exit 1, exactly one OPEN, MOVED" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tMOVED\t$ %s\tbase..theirs\treconcile-log-x' "$K_LSPU" "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world lslf; then
   lw_rd "$b" "$LSLF" "$none"
   lw_arm LF "the validator's --list fails over a LIVING file with a stale core fence -> exit 2 with the --list REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: validate-artifact-derivations.sh --list exited 3 on' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world lsb8c; then
   lw_rd "$b" "$LSB8C" "$WORK/lsb8c.tsv"
   lw_arm B8c "an OWED row whose file gets NO verdict and whose --list fails -> exit 2 with the --list REFUSED line naming the file, never UNASSESSED" \
     "$({ [ "$RC" = 2 ] && grep -qF "REFUSED: validate-artifact-derivations.sh --list exited 2 on $LPRD" <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls15; then
   lw_rd "$b" "$LS15" "$none"
   local o15="$OUT" r15="$RC"
   has15() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o15"; }
@@ -840,6 +910,8 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_arm CDD4 "git -C web show HEAD:../server/y.txt (collapses to a consumer path) stays silent" "$(! has15 "$K_DD4" && echo 0 || echo 1)"
   lw_arm CDD5 "git -C lnk show HEAD:../x.sh (lnk is a symlink into core; the segment before .. over-asks) blocks" "$({ [ "$r15" = 1 ] && has15 "$K_DD5"; } && echo 0 || echo 1)"
   lw_arm S15n "and the G/RP/SL/CD world opens EXACTLY the eleven blocking lines" "$([ "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$o15")" = 11 ] && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls11; then
   lw_rd "$b" "$LS11" "$none"
   local o11="$OUT" r11="$RC"
   has_open() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o11"; }
@@ -853,21 +925,32 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_arm S12d "find .claude/skills/ai-dlc -name a.md blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12D"; } && echo 0 || echo 1)"
   lw_arm S12e "git ls-files .claude/skills/ai-dlc/steps blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12E"; } && echo 0 || echo 1)"
   lw_arm S12n "near-miss, same world: consumer directories server/ and web/src stay silent" "$({ ! has_open "$K_12N1" && ! has_open "$K_12N2"; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls13; then
   lw_rd "$b" "$LS13" "$none"
   lw_arm S13 "the validator exits 2 with no UNRUN line (a candidate vanished) -> exit 2 with the no-verdict REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'with no verdict for every file it was given' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls13c; then
   lw_rd "$b" "$LS13C" "$none"
   lw_arm S13c "control: the same world with nothing removed -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world ls14; then
   lw_rd "$b" "$LS14" "$none"
   lw_arm S14 "a ROOT-ABSOLUTE core operand (\$ROOT/scripts/ai-dlc/x.sh) blocks" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS14" STALE "$C14")" ]; } && echo 0 || echo 1)"
+  lw_end; fi
+  if lw_world batch; then
   lw_batch "$b" "$LS1"; local s9a="$BOUT" s9r="$BRC"
   lw_batch "$b" "$LS3"
   lw_arm S9 "--scope-batch output and exit are byte-identical with (S1 root) and without (S3 root) a stale LIVING core fence" \
     "$({ [ "$s9r" = 0 ] && [ "$BRC" = 0 ] && [ "$s9a" = "$BOUT" ] && [ "$(printf '%s\n' "$BOUT" | cut -f1 | tr '\n' ' ')" = "LIVING PAST CURRENT LIVING " ]; } && echo 0 || echo 1)"
   local s10full="$s9a"
-  BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
+  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
+  BOUT="$( cd / &&printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
   lw_arm S10 "apply.sh's copy shape (reader + real sprint-status.sh + schema, NO core-paths.sh, no validator): --scope-batch over a root with a stale LIVING core fence -> exit 0, byte-identical to the full sibling set" \
     "$({ [ ! -e "$lone/scripts/core-paths.sh" ] && [ "$BRC" = 0 ] && [ -n "$s10full" ] && [ "$BOUT" = "$s10full" ]; } && echo 0 || echo 1)"
+  lw_end; fi
 }
+# ---- lw-harness: end ---------------------------------------------------------------------------------
 lw_all "$BIN/check-owed-derivations.sh" real
 
 # ---- M1-M7: each mutant is a COPY of the reader, guarded by cmp -s; one that does not apply is BROKEN --
@@ -877,8 +960,41 @@ mut_line() {
   ! cmp -s "$1" "$2"
 }
 LW_MODE=mut
+# req_ok <id> <required set>: a required set must be non-empty and every arm in it must be one the real
+# pass recorded in a world. A misspelled arm would otherwise select no world and read as SURVIVED.
+req_ok() {
+  local a
+  [ -n "$(printf '%s' "$2" | tr -d ' ')" ] || { bad "$1 FIXTURE BROKEN: the required set is empty, so nothing is scored"; return 1; }
+  for a in $2; do
+    case "$LW_MAP" in *":$a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a is in no recorded world (misspelled, or asserted outside lw_all)"; return 1 ;; esac
+  done
+}
+# req_seen <id> <required set>: every required arm was evaluated by this pass (its world ran).
+req_seen() {
+  local a
+  for a in $2; do
+    case "$LW_SEEN" in *" $a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a was not evaluated, so its world never ran"; return 1 ;; esac
+  done
+}
+# THE NULL-MUTANT CONTROL, once per DISTINCT required set: the reader plus a trailing comment line, so cmp
+# differs and behaviour does not. It must SURVIVE with every required arm evaluated: a required arm that
+# fails under it is failing on leftover state or on a split unit, never on the mutation.
+LW_NULLED="|"; LW_NINV_NULL=0
+null_ctl() { # <required set>
+  local n="$WORK/mut.null.sh" a hit="" k0="$LW_NINV"
+  case "$LW_NULLED" in *"|$1|"*) return 0 ;; esac
+  LW_NULLED="$LW_NULLED$1|"
+  { cat "$BIN/check-owed-derivations.sh"; printf '# null-mutant control: a comment, no behaviour\n'; } > "$n"
+  if cmp -s "$BIN/check-owed-derivations.sh" "$n"; then bad "NULL ($1) FIXTURE BROKEN: the null copy is byte-identical to the reader"; return; fi
+  LW_REQ="$1"; LW_FAILED=""; LW_SEEN=" "; lw_all "$n" null
+  LW_NINV_NULL=$((LW_NINV_NULL + LW_NINV - k0))
+  req_seen "NULL ($1)" "$1" || return
+  for a in $1; do case " $LW_FAILED " in *" $a "*) hit="$hit $a" ;; esac; done
+  if [ -z "$hit" ]; then ok "NULL ($1) SURVIVES: no required arm failed under an unmutated copy"; else bad "NULL ($1) required arm(s)$hit failed under an UNMUTATED copy (leftover state or a split world)"; fi
+}
 mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
   local m="$WORK/mut.$1.sh" a miss=""
+  req_ok "$1" "$2" || return
   if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$3" "$4" "$5"; then
     bad "$1 FIXTURE BROKEN: the mutation did not apply (anchor not found), so it is not scored"; return
   fi
@@ -888,20 +1004,22 @@ mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <n
     fi
     mv "$m.2" "$m"
   fi
-  LW_FAILED=""; lw_all "$m" "$1"
+  LW_REQ="$2"; LW_FAILED=""; LW_SEEN=" "; lw_all "$m" "$1"
+  req_seen "$1" "$2" || return
   for a in $2; do case " $LW_FAILED " in *" $a "*) ;; *) miss="$miss $a" ;; esac; done
   if [ -z "$miss" ]; then ok "$1 killed: arm(s)$LW_FAILED failed (required: $2)"; else bad "$1 SURVIVED: arm(s)$miss did not fail (failed:${LW_FAILED:- none})"; fi
+  null_ctl "$2"
 }
-mut_case M1 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
+mut_case M1 "S1 S4b S7 RP2 SL1 SL2 CD1 CDD4 S11n S12n" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
 mut_case M2 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'
 mut_case M3 "S1 S6" 1 '  living_sweep' '  :'
 mut_case M4 "S2" 1 '    [ "$SCOPE_TOKEN" = LIVING ] || continue' '    [ "$SCOPE_TOKEN" = LIVING ] || [ "$SCOPE_TOKEN" = PAST ] || continue'
 mut_case M5 "S5" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/core-paths.sh" ] || return 0; [ -f "$SELF_DIR/core-paths.sh" ] \'
-mut_case M6 "S1" 1 '  sweep_and_exit 0' '  exit 0'
+mut_case M6 "S1 S4a S8 S6c S6d LF GC" 1 '  sweep_and_exit 0' '  exit 0'
 mut_case M7 "S10" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
 if [ "${1:-}" = "--scope-batch" ]; then'
 mut_case M8 "S6b" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
-mut_case M9 "S11a S11b" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
+mut_case M9 "S11a S11b RP1 CD2" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
 # The anchors below carry single quotes, so they are read from quoted heredocs, byte for byte.
 WORDS_LINE="$(cat <<'EOF'
   awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
@@ -957,10 +1075,27 @@ EOF
 mut_case M17 "PP" 1 "$STICKY_OLD" "$STICKY_NEW"
 mut_case M18 "CDD1 CDD2 CDD3" 1 '      collapse_dots "$_p"' '      CP="$_p"; CSYM=0'
 mut_case M19 "CDD5" 1 '      [ "$CSYM" = 0 ] || printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.force"' '      :'
-mut_case M13 "G1 G2" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
+mut_case M13 "G1 G2 S15n" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
 mut_case M11 "S12a S12b S12c S12d S12e" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
 mut_case mA "S13" 1 '  local nref' '  return 0'
 mut_case mB "S14" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
+# M20: every command the validator LISTS in a kept file becomes a candidate, FAIL line or not, so a
+# reproducing core fence is opened.
+VERD_NEW="$(cat <<'EOF'
+  : > "$TMP/ls.verd"
+  _i=0; while IFS= read -r _c; do _i=$((_i + 1)); list_of "$_c"; awk -v i="$_i" 'match($0, /:[0-9]+  /) { print i "\t" substr($0, RSTART + 1, RLENGTH - 3) "\tSTALE" }' "$LST" >> "$TMP/ls.verd"; done < "$TMP/ls.rel"
+EOF
+)"
+mut_case M20 "S3" 1 '  : > "$TMP/ls.verd"' "$VERD_NEW"
+# M21: --scope-batch lets the LIVING documents' verdicts reach its stdout.
+BATCH_LEAK="$(cat <<'EOF'
+  find "$ROOT/_bmad-output" -name '*.md' -exec bash "$ROOT/scripts/ai-dlc/validate-artifact-derivations.sh" {} + 2>&1 >/dev/null | grep '^FAIL ('; exit 0
+EOF
+)"
+mut_case M21 "S9" 1 '  exit 0' "$BATCH_LEAK"
+# M22: the sweep refuses on EVERY validator exit, a verdict included (the always-refuse mirror of mA).
+mut_case M22 "S13c" 1 '    0|1) return 0 ;;' '    0|1) ;;'
+printf '  mutant-phase reader invocations: %s (mutants %s, null controls %s)\n' "$LW_NINV" "$((LW_NINV - LW_NINV_NULL))" "$LW_NINV_NULL"
 LW_MODE=real
 
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
