@@ -89,6 +89,8 @@ was messaged.
     been called a handful of turns apart, what value does that provide?"
   - BL-779 and BL-780, on the checkpoint: "1. Already done. 2. What am I supposed to do about it? 3. Ack. 4. How does
     this need my attention? 5. Not sure these are actual issues, thoughts? 6. Done."
+  - BL-751 stays report-only, operator ruling 2026-10-23: "Report only." (0.914.0 counts future `recorded_utc` rows as
+    `FUTURE=` without refusing them.)
 - **Lead rulings carried forward.**
   - BL-524 UNBADGED stands: an LR-, D-<n>, money or byte-pin question carries no recommendation and says why.
   - The lead never authors a terminal escalation status.
@@ -129,8 +131,9 @@ was messaged.
   pull is REQUIRED by action 7's differential: BL-783's rehearsal ran graph's installed `validate-steering-budget.sh`
   (FAIL (B): 5) and 0.922.0's (PASS) over the same `--since` on a `file://` clone, with the two binaries differing.
   Graph's s319 retro is paused at Step 5 awaiting the operator, with five S319 PCs filed uncommitted in its
-  working-tree ledger. **The pull runbook (action 7's shape, rehearsed on a `file://` clone) is batch 241's FIRST
-  work; the five PCs join batch 241's scope once committed. Running the pull is the operator's.**
+  working-tree ledger. **Operator ruling 2026-10-23: "I will update graph, no runbook needed." Batch 241 writes NO
+  pull runbook; the operator runs the 0.908.0 to 0.924.0 pull themself; the five S319 PCs join batch 241's scope once
+  committed.**
 
 ### Derive the state; do not trust the numbers below
 
