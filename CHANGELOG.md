@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.928.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r5. It closes BL-753, touches BL-538 without closing it, and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/wait-for-deliverable.sh`. Hook removal: `core/hooks/ai-dlc-hookwake.sh`. Rulebook changes: none. Fixture changes: `core/fixtures/hookwake` removed (its `run.sh`, `inputs.decl` and `tools.decl`), `core/fixtures/wait-beat-liveness` edited (`run.sh` and `tools.decl`). Template: `templates/settings.json.template`. Read-set map: `.ai-dlc-fixture-readsets.tsv`. Backlog: `docs/backlog.md`.
+
+### BL-753 — the hookwake UserPromptSubmit hook is retired, with the per-beat argv record that only it read
+
+The operator ruled on 2026-10-23, "Retire it". The batch-240 adversary put the hook's ceiling at about 27 helpful wakes in 1,562 idle ones.
+
+Removed: the hook, the `hookwake` fixture, the `templates/settings.json.template` entry (`ai-dlc-pause.sh` stays in the same `UserPromptSubmit` block), the `scripts/uninstall.sh` row (moved to the retired list), both manifest entries, the `enforcement-map.yaml` entry and the `pipeline-state-paths.json` row. Also removed from `wait-for-deliverable.sh`: the `.beat-argv-<pid>` record, meaning its writer, the `lsof` call, the prune loop and the sweep exclusion. `wait-beat-liveness` loses its argv arms; `S26_start_of_ranges_identical` is kept, and a mutant in either copy of the start-time function still reads BAD. `core/scripts/wfd-start-of.sh`'s header prose names its remaining reader. The read-set row for `hook-registration-join` was re-traced with the sandbox tracer, taking the map from 71 entries to 70.
+
+Fork count for one wfd arm, counted and not timed: `lsof` calls 2 to 0, prune-loop iterations 1 to 0.
+
+Receipt: it exits 1 on base and 0 on the tip. It exits 1 on each of these: the hook restored, the registration under another event key or spelling, an empty fixture directory, the pause registration removed, and the template unparseable.
+
+Observation, not built: `core/scripts/wfd-start-of.sh` now has a single reader, `wait-for-deliverable.sh`, which also carries an inline fallback copy.
+
+### BL-538 — batch 241 progress; the entry stays OPEN
+
+Its hook half is retired by the ruling above. The full lead turn per covered notification, and its per-wake re-measure, are still owed.
+
+### Consumer pull
+
+Measured on a scratch install of base: the tip's preclassify classes all four deleted paths UPSTREAM-DELETED. After settings-merge, `validate-hook-registration` exits 0 with 23 hooks present and 23 registered. Before the merge it exits 1 (DANGLING). A registered `UserPromptSubmit` command whose file is missing was measured NON-BLOCKING on CC 2.1.309 (headless): its sibling hook still fired.
+
+The four UPSTREAM-DELETED paths are ONE decision: `.claude/hooks/ai-dlc-hookwake.sh` and `tests/fixtures/hookwake/{run.sh,inputs.decl,tools.decl}`. Accept all of them. If the hook is deleted and the fixture kept, the fixture exits 2 and the consumer pre-push goes red. If the hook deletion is declined, `validate-hook-registration` exits 1 (UNREGISTERED) and `apply.sh`'s hook-unshipped WORKLIST row offers delete, rename or register-locally.
+
+Expect a `WORKLIST transient-ignore` row on the pull. The consumer's `.gitignore` line `_bmad-output/.hookwake-blocks.jsonl` is stale and is harmless. The remedy is `bash scripts/ai-dlc/sync-transient-ignore.sh`.
+
 ## [0.927.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r2. It files and closes BL-790, closes BL-766, and closes `PC-S319-QA-ROLE-DOES-NOT-ASK-THE-VERDICT-TO-RECORD-ADVISOR-UNAVAILABLE`. Net for this release: closed 2, filed 1; closed minus filed = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/merge-review-shards.sh`. Rulebook changes: `core/team-roles/code-reviewer.md`, `core/team-roles/qa.md` and `core/team-roles/gate-adjudicator.md`. Fixture changes: `core/fixtures/review-shard-merge` (a `receipt-bl790.sh` is added) and `core/fixtures/process-rule-pins`. Packaging: none. Backlog: `docs/backlog.md`.

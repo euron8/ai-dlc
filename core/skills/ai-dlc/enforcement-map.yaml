@@ -1450,27 +1450,3 @@ non_catalog_units:
     fixtures: [tests/fixtures/subagent-probe]
     ci_workflow: ~
 
-  - id: hookwake
-    title: Hookwake (batch 236) — blocks a harness-generated prompt that would wake the
-      lead while a bounded-join beat is outstanding for the dispatched agent
-    adjudication: script
-    hard_block: false
-    enforcer:
-      - core/hooks/ai-dlc-hookwake.sh
-    emits: .hookwake-blocks.jsonl   # transient: {ts,channel,agent_id,beat_task_id,record_pid,paths}
-    call_sites:
-      - site: ai-dlc-hookwake.sh (UserPromptSubmit)
-        posture: BLOCKS a harness-generated prompt (never a human one) only when every join holds; fails open on any doubt (unreadable payload, no task id, no record, lsof absent, hold-status 1 or 2); OFF by default, gated on AI_DLC_HOOKWAKE=1, which the template does not set
-        why: a teammate's hand-back wakes the lead mid-beat and spends a turn the beat
-          was already going to collect. The block is only safe when the wake is
-          provably redundant, so each join must hold and any uncertainty passes the
-          prompt through. Opt-in is the consumer's own env edit.
-    checks:
-      - id: fails-open
-        asserts: every undecidable input passes the prompt through with exit 0
-        protects: the lead's liveness
-      - id: off-by-default
-        asserts: without AI_DLC_HOOKWAKE=1 the hook drains stdin and exits 0 emitting nothing
-        protects: consumers who did not opt in
-    fixtures: [tests/fixtures/hookwake]
-    ci_workflow: ~
