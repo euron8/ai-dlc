@@ -1773,7 +1773,10 @@ for fx in $LIST; do
     fi
     # Under `both`, settled means BOTH captures carry the sentinel: a fixture started when only
     # one tracer was live would be compared against a set that missed its opening reads.
-    if grep -q 'readset-sentinel' "$raw" 2>/dev/null \
+    # Keyed on THIS run's sentinel path, not the bare marker name, here and at the flush and window-cut
+    # greps below: the stream predicate is the FXTAG alone, so a concurrent deriver tracing the same
+    # fixture name lands ITS marker reads in this stream, and a bare name cut the window at a peer's.
+    if grep -qF "$SENTINEL" "$raw" 2>/dev/null \
        && { [ "$TRACER" != both ] || grep -q 'readset-sentinel' "$raw.fsu" 2>/dev/null; }; then
       settled=1; break
     fi
@@ -1841,7 +1844,7 @@ for fx in $LIST; do
     flushed=0; i=0
     while [ "$i" -lt 100 ]; do
       sandboxed cat "$ENDMARK" >/dev/null 2>&1 </dev/null
-      if grep -q 'readset-end' "$raw" 2>/dev/null; then flushed=1; break; fi
+      if grep -qF "$ENDMARK" "$raw" 2>/dev/null; then flushed=1; break; fi
       sleep 0.2; i=$(( i + 1 ))
     done
     kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
@@ -1877,7 +1880,7 @@ for fx in $LIST; do
   # the open line did not already carry, and they are the ONLY lines fs_usage truncates --
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
-  last="$(grep -n 'readset-sentinel' "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
+  last="$(grep -nF "$SENTINEL" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
   lost=0
   if [ "$TRACER" = fs_usage ]; then
     tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
@@ -1886,7 +1889,7 @@ for fx in $LIST; do
       | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
   else
     # The window is strictly between the LAST start sentinel and the FIRST end sentinel.
-    endl="$(grep -n 'readset-end' "$raw" 2>/dev/null | head -1 | cut -d: -f1)"; : "${endl:=0}"
+    endl="$(grep -nF "$ENDMARK" "$raw" 2>/dev/null | head -1 | cut -d: -f1)"; : "${endl:=0}"
     if [ "$endl" -gt "$last" ]; then
       sed -n "$(( last + 1 )),$(( endl - 1 ))p" "$raw" > "$WORK/$fx.win"
     else

@@ -4354,6 +4354,64 @@ STUB
     lm_arm "LOCAL drop" "$L3" "0|0|no|1|*|*|yes|fxl OMITTED (the stream dropped reports*" "LOCAL: a DROP NOTICE in fxl's window discards the trace"
     lm_seed; L4="$(lm_run "$SL/deriver.sh" "$SL/lossy.list" same)"
     lm_arm "LOCAL canary" "$L4" "0|0|no|1|*|*|yes|fxl OMITTED (LOSS CANARY: 1 path(s)*" "LOCAL: the LOSS CANARY (a read the stream never reported) discards the trace"
+    # A FOREIGN DERIVER'S MARKERS IN THIS RUN'S STREAM (BL-798). The stream predicate is the FXTAG alone, so
+    # a concurrent deriver tracing the same fixture name lands its own marker reads (another MARKDIR) in this
+    # stream. The stub below interleaves them: a foreign sentinel and a foreign end between this run's two
+    # reads, and a foreign end on the first end-marker read with this run's own end only on the second. A
+    # window cut or a flush keyed on the bare marker name cuts at the foreign pair or flushes on the foreign
+    # end; keyed on this run's own paths, fxl maps both reads. No real `log stream`, no timing: the second
+    # end-marker read, not the clock, is what the flush must wait for.
+    SG="$WORK/fgstub"; mkdir -p "$SG" || broken "mkdir failed"
+    cat > "$SG/sandbox-exec" <<'STUB'
+#!/bin/bash
+tag=""
+[ "$1" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
+[ "$1" = -f ] && shift 2
+emit() { printf '%s\n' "$1" >> "$STUB_FEED"; [ -z "$tag" ] || printf 'FXTAG=%s;\n' "$tag" >> "$STUB_FEED"; }
+FM=/private/tmp/ai-dlc-foreign-deriver/m
+_c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
+if [ "${!_c}" = bash ]; then
+  n=0
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"
+    n=$((n+1))
+    if [ "$n" = 1 ]; then
+      emit "x Sandbox: cat(1) allow file-read-data $FM/.readset-sentinel"
+      emit "x Sandbox: cat(1) allow file-read-data $FM/.readset-end"
+    fi
+  done < "$STUB_SB"
+else
+  for a in "$@"; do case "$a" in
+    */.readset-end)
+      emit "x Sandbox: cat(1) allow file-read-data $FM/.readset-end"
+      k=0; [ -f "$FG_COUNT" ] && k="$(cat "$FG_COUNT")"
+      echo $((k+1)) > "$FG_COUNT"
+      [ "$k" -lt 1 ] || emit "x Sandbox: cat(1) allow file-read-data $a" ;;
+    /*) emit "x Sandbox: cat(1) allow file-read-data $a" ;;
+  esac; done
+fi
+exec "$@"
+STUB
+    chmod +x "$SG/sandbox-exec"
+    sed 's|last="$(grep -nF "$SENTINEL" "$raw"|last="$(grep -n readset-sentinel "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-start.sh"
+    sed 's|endl="$(grep -nF "$ENDMARK" "$raw"|endl="$(grep -n readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-end.sh"
+    sed 's|grep -qF "$ENDMARK" "$raw"|grep -q readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-flush.sh"
+    fg_run() { rm -f "$SG/endn"; lm_seed; lm_run "$1" "$SL/whole.list" same PATH="$SG:$SL:$PATH" FG_COUNT="$SG/endn"; }
+    FG0="$(fg_run "$SL/deriver.sh")"
+    lm_arm "FOREIGN markers" "$FG0" "0|2|yes|-|*" "LOCAL: a foreign deriver's sentinel and end lines (same FXTAG, another MARKDIR), the end ahead of this run's own, leave the window cut at THIS run's markers — fxl maps both reads"
+    for _fm in bare-start bare-end bare-flush; do
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$SL/deriver.sh" "$SG/deriver.$_fm.sh"; then
+        bad "FOREIGN MUTANT $_fm did not apply: the edit matched nothing in the deriver copy"
+        continue
+      fi
+      FGM="$(fg_run "$SG/deriver.$_fm.sh")"
+      case "$FGM" in
+        "0|0|no|1|"*) ok "FOREIGN MUTANT $_fm: keyed on the bare marker name the run is cut or flushed at the foreign marker and fxl is discarded — the arm above depends on the full path" ;;
+        *) bad "FOREIGN MUTANT $_fm: expected fxl discarded ('0|0|no|1|*'), got '$FGM' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
+      esac
+    done
     lm_seed; L5="$(lm_run "$SL/deriver.sh" "$SL/whole.list" diff)"
     lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"
     lm_seed; L6="$(lm_run "$SL/deriver.sh" "$SL/whole.list" none)"

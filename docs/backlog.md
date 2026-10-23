@@ -151,6 +151,18 @@ Scheduled in batch 235 for a later release (scope ruling: the boundary is the re
 
 verify: manual — the owed work is a judgment of the non-mutant poles and a per-gate wall clock and dollar figure from a real release push, so no predicate over the tree can test it; a live 0-mutants receipt would read CLOSE-CANDIDATE while that work is open.
 
+## BL-798 — the sandbox tracer's settle, flush and window-cut greps match a bare marker name, so a concurrent deriver's markers cut this run's window
+
+**DEFECT.** Under `--local-map` and `--in-pool` the stream predicate is `eventMessage CONTAINS "FXTAG=$fx;"`, the fixture name alone. A concurrent deriver tracing the same fixture name lands its own marker reads (a different `$MARKDIR`) in this run's stream. `derive-fixture-readsets.sh` located its window with `grep 'readset-sentinel'` (settle, and the last-start cut) and `grep 'readset-end'` (flush, and the first-end cut), all bare names, so a peer's marker read was taken for this run's. The contract adversary measured 12 of 12 concurrent same-name windows cut at the other deriver's marker, 6 at a foreign start and 6 at a foreign end. A foreign end truncates the window's tail, and a lost stat or negative lookup there is invisible to the loss canary (atime sees only reads of files that exist at the scan), so the short set maps.
+
+Fix: all four greps are keyed with `grep -F` on this run's full `"$SENTINEL"` and `"$ENDMARK"` paths, the shape the liveness probe already used. `$MARKDIR` is under `$TRACE_ROOT`, unique per run. `sandbox_paths` keeps only paths under `$TREE/`, and the markers are outside it, so a peer's marker paths cannot enter the set through the `grep -v '^\.readset-sentinel$'` line either.
+
+Proven by the `FOREIGN markers` arm and three `FOREIGN MUTANT` arms in `core/fixtures/readset-skip/run.sh` (stub stream, foreign sentinel and foreign end interleaved, the foreign end ahead of this run's own).
+
+verify: sh f=core/scripts/derive-fixture-readsets.sh; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENTINEL|ENDMARK)" "\$raw"' "$f")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" "$f"
+
+The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENTINEL"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
+
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 
 **PARTIAL (v0.806.0, verified 581ca289) — owed (1) shipped for `fold-architect-ledger-join` only; owed (1) for `hermetic-runner` shipped in v0.832.0 (verified 67bdbb7a), and owed (3) is OPEN.** `fold-architect-ledger-join` carries `inputs.decl` and `tools.decl` and runs under `hermetic-run.sh` (72 ok, `required_missing=0`); its 46 traced rows are removed. `hermetic-runner` reads its subject files from copies made once at startup. That cut its trace window about 6x (17691 lines to 2902, loaded) but did NOT stop the drops: one 6-fixture `--tracer sandbox` call dropped 3 reports in its window, and three `--local-map` reps dropped 1, 2 and 7, at load 27-43 (0 of 3 clean). The premise that the drops come from re-opening four tree files hundreds of times is REFUTED; the drop cause is undiagnosed. `hermetic-runner`'s 17 rows and digest are removed, so it runs on every push (fail-closed) until the drops are fixed. The earlier count of 27 held fixtures is 5: 27 have `#discards` at n≥3 in `.git/ai-dlc-fixture-readsets.local`, and only 5 are keyed on the current runner and deriver.
