@@ -453,9 +453,9 @@ verify: manual
 
 `emit-report.sh`'s recorded-PASS cache builds its key with `cksum`. On a box with no `cksum` the key is empty and the cache silently never records, so it fails safe: every lookup is a miss and every `--verify` re-renders. That is a check that cannot fire, with no signal. Under BL-692's apply-mode rule a cached PASS is the only path that accepts without a re-render, so such a consumer pays a re-render every time and nothing says why.
 
-Owed: one stderr line, printed under the cache opt-in only so that plain `--verify` stays byte-identical, reading `cannot key: cksum is absent` (the recorded-PASS cache cannot key because `cksum` is absent).
+Owed: with the cache armed and no `cksum` on PATH, `--verify` still renders fresh and exits as an unarmed run would, leaves the record untouched, and names a cause on stderr through the engine's existing refusal line (`emit-report: recorded PASS refused, re-rendering: <cause>`). The wording of the cause is the fix's to choose. With `cksum` present and the cache armed, nothing is refused. Unarmed, stdout, stderr and exit are byte-identical whether `cksum` is present or not.
 
-verify: has core/skills/ai-dlc-update/reconcile/emit-report.sh "cannot key: cksum is absent"
+verify: sh bash core/fixtures/reconcile-emit-report/receipt-cksum-absent.sh
 
 
 ## BL-784 — Check B of `validate-steering-budget.sh` does not model the hook's lead-Explore allowance while paused, so it would score such a dispatch as a steamroll
