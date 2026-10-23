@@ -123,8 +123,8 @@
 #     pred-lit-qa); pm.md names the AC requiring the literal and leaves the fence owed at gate 2
 #     (pred-lit-pm); an ADR probe keyed on such a literal carries the same fence (architect.md
 #     evidence contract, pred-lit-arch). qa.md's sha-pinned `git grep` fence form is pinned by
-#     pred-lit-qa-fence. pred-lit-qa, pred-lit-qa-fence and pred-lit-pm are line-mode `contains`
-#     pins: keep each phrase on ONE line. The named mutant softens the REJECT to a note.
+#     pred-lit-qa-fence; pm.md's gate-2 fence clause is pinned by pred-lit-pm-gate. pred-lit-qa,
+#     pred-lit-qa-fence, pred-lit-pm and pred-lit-pm-gate are line-mode `contains` pins: keep each phrase on ONE line. The named mutant softens the REJECT to a note.
 #   - at `done` the closing writer copies each deferred AC's id AND its predicate text into the
 #     story file's `## Deferred ACs`, entries opening `- **<id>**`, `None.` for none, placed before
 #     `## Dev Agent Record` (code-reviewer.md Ownership; qa.md's discharge-predicate item), and
@@ -525,6 +525,7 @@ r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it re
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains
 pred-lit-qa-fence|R|qa.md|## Validation Checklist|## Communication|`git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded|contains
 pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains
+pred-lit-pm-gate|R|pm.md|## Responsibilities|## The evidence contract|is owed at gate 2|contains
 pred-lit-arch|R|architect.md|## The evidence contract|## A fold architecture dispatch|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
 def-copy-cr-section|R|code-reviewer.md|## Ownership|## Responsibilities|At `done` the closing writer also writes a `## Deferred ACs` section into the story file.|contains
 def-copy-cr-id|R|code-reviewer.md|## Ownership|## Responsibilities|Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,|contains
