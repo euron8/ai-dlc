@@ -616,10 +616,12 @@ Compose the question from what you resolved, not from memory:
 - Anything in the ask you are deliberately NOT taking this sprint, named.
 
 **Option labels carry no recommendation.** Do not append `(Recommended)`, or
-any equivalent, to an option. The skill asks for that token in two other
+any equivalent, to an option. The skill asks for that token in three other
 places — a Rule 11(a) question whose options leave no operator-owned value in
-force, and the adversarial STOP's adjudication when no locked requirement is
-touched (`_gate-procedures.md` step 2(c)) — and this pause point is neither.
+force, a checkpoint's `### Decisions for You` item (`deploy-validate.md` §5),
+and the adversarial STOP's adjudication when no locked requirement is
+touched (`_gate-procedures.md` step 2(c)) — and this pause point is none of
+them. Say in the question that its options carry no recommendation, and why.
 On the corpus where it was measured here, the operator took the option
 carrying it in 3 of 5 turns. A lead that has already
 misresolved the scope will label the misreading `(Recommended)`, and the

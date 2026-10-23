@@ -452,6 +452,15 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 - [carried from an earlier checkpoint of this plan: one line per bullet it marked phased]
 - [no locked-requirements.md for this sprint: none recorded]
 
+### Decisions for You
+[One item per decision owed at this checkpoint, or "none":]
+- [The decision asked, one sentence; the escalation entry id it comes from, if any]
+  - [Option] (Recommended, unless unbadged under Rule 11(a)): [its effect and the value it leaves in force] — [the consequence of choosing it]
+  - [Option]: [its effect and the value it leaves in force] — [the consequence of choosing it]
+
+### For Your Information
+[One line per DECIDED_AUTONOMOUSLY entry, citing its id; then any other item that asks nothing of you, or omit those]
+
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
 before proceeding to Sprint 2."]
@@ -537,6 +546,38 @@ block is derived from the locked-requirements file and the escalation
 log, and presentation is refused mechanically while a non-delivered
 bullet has no matching disposition.
 
+**Decisions for the operator.** The checkpoint asks the operator for the
+validation in `### Next Steps`, which stays its closing ask, and for the
+items in `### Decisions for You`; it presents anything else it shows
+under `### For Your Information`. Every item you would put in front of the
+operator, whatever its source -- an escalation entry, a carry-over, a
+baseline test failure, an open issue -- goes under exactly one of those
+two blocks or is left out, and no other list of open items is presented;
+the `### Escalation Log` counts are not such a list. Each item under
+`### Decisions for You` takes the shape `SKILL.md` Rule 11(a) gives every
+decision put to the operator. Every open `DEFERRAL_REQUEST` and every
+open `HARD_BLOCK` -- one whose `**Status:**` is not terminal and that
+carries no recorded `**Operator authorization:**` -- is a decision, built
+from its entry's `Decision/Question`, `Options` and `Impact if skipped`
+fields and citing its id; a locked requirement's `HARD_BLOCK` is not,
+since it is resolved before the checkpoint is presented. Every
+`DECIDED_AUTONOMOUSLY` entry is one line under `### For Your
+Information` citing its id, never left out, so the operator can
+override it. An item that asks nothing of the operator -- a status, a
+fact already acted on -- goes under `### For Your Information` or is left
+out, never under `### Decisions for You`; with no decision owed that
+block reads `none`. These items belong to the prose checkpoint (Rule 3
+pause (b)) and are not each put by `AskUserQuestion`. An item the
+operator answers by reporting an act follows Rule 11(a)'s attested-act
+paragraph.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a checkpoint section
+listing open items in place of decisions, so the operator has to ask what
+each one wants of them and the validation costs a round trip.
+False-positive cost: one block per checkpoint, `none` when nothing is
+owed. Removal condition: none while the checkpoint asks the operator
+anything besides validation.
+
 ### 6. Wait for Human
 
 First, mark the pause so the Stop hook does not push you past this
@@ -544,10 +585,9 @@ checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
 
 **STOP.** Wait for the human to:
 1. Review the deployed production instance
-2. Review any `DECIDED_AUTONOMOUSLY` entries
-3. Approve or override autonomous decisions
-4. Approve any `DEFERRAL_REQUEST` entries (or reject and require implementation)
-5. Confirm validation or request fixes
+2. Answer each item under §5's `### Decisions for You`, open `HARD_BLOCK` and `DEFERRAL_REQUEST` entries included
+3. Override any `DECIDED_AUTONOMOUSLY` entry listed under §5's `### For Your Information`
+4. Confirm validation or request fixes
 
 A generic validation reply is not a disposition: each locked
 requirement that needs one under §5's locked-requirement coverage rule

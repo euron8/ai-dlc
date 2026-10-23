@@ -453,3 +453,4 @@ verify: manual — the sentence is prose with no mechanical predicate.
 Owed: one stderr line, printed under the cache opt-in only so that plain `--verify` stays byte-identical, reading `cannot key: cksum is absent` (the recorded-PASS cache cannot key because `cksum` is absent).
 
 verify: has core/skills/ai-dlc-update/reconcile/emit-report.sh "cannot key: cksum is absent"
+

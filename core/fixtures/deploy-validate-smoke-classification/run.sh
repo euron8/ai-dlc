@@ -11,8 +11,23 @@
 # `### Locked-Requirement Coverage` block -- one line per LOCKED_REQUIREMENTS bullet, delivered /
 # deferred / descoped, with the HARD_BLOCK id and disposition token (approved-deferral / do-now /
 # descope) -- and §5's prose withholds the checkpoint while a locked requirement lacks a recorded
-# disposition. No script reads `smoke_run_evidence` or the coverage block; the
-# executing lead reads this prose, so the prose is the mechanism and this fixture pins it.
+# disposition. After that block the template carries `### Decisions for You` (each item badged
+# `(Recommended` and stating the consequence of each option) and then `### For Your Information`,
+# both before `### Next Steps`; §5's **Decisions for the operator.** paragraph puts every item,
+# whatever its source, under exactly one of the two blocks, presents no other list, gives each
+# decision Rule 11(a)'s shape, keeps a no-ask item out of Decisions for You, keeps validation as the
+# closing ask and does not put each item by AskUserQuestion; §6 waits for an answer to each
+# Decisions item -- open HARD_BLOCK and DEFERRAL_REQUEST entries included, the whole of item 2 --
+# offers an override of each DECIDED_AUTONOMOUSLY entry under For Your Information, and no longer
+# carries the old "Approve or override autonomous decisions" item (an absence, so mutant
+# both-wait-lists re-adds it beside the new list). §5's rule also makes every open DEFERRAL_REQUEST
+# and HARD_BLOCK a decision built from its entry's fields, and every DECIDED_AUTONOMOUSLY entry one
+# For Your Information line citing its id, never left out; each sentence has its own delete mutant.
+# Arms DECISIONS-BLOCK (heading, order, badge, consequence), DECISIONS-FYI (stands
+# down while BLOCK's order fails), DECISIONS-RULE (§5 prose only, flattened, since the paragraph
+# wraps) and DECISIONS-WAIT (§6). No script reads `smoke_run_evidence`, the coverage block or the
+# decisions blocks; the executing lead reads this prose, so the prose is the mechanism and this
+# fixture pins it.
 #
 # §5 IS ISOLATED FENCE-AWARE: its template fence holds `### ` lines, so only a `### ` outside the
 # fence ends §5 (see sec5()). The block arms read the fence, the gating arm reads §5 prose only.
@@ -121,6 +136,29 @@ LOCKED_SPLIT='A bullet split across phases cites every story that carries a part
 LOCKED_WAIT='A generic validation reply is not a disposition: each locked requirement that needs one under §5'"'"'s locked-requirement coverage rule keeps its own recorded `HARD_BLOCK` disposition.'
 LOCKED_ROUTE='Proceed to retro, once every locked requirement that needs a disposition under §5'"'"'s locked-requirement coverage rule carries its recorded `HARD_BLOCK` disposition'
 sec6() { awk '/^### 6\. Wait for Human/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
+# §5's Decisions for You and For Your Information blocks, the any-source rule and §6's wait list.
+DEC_HEAD='### Decisions for You'
+FYI_HEAD='### For Your Information'
+# The lead is matched on a raw P line: flat() drops the bold markers.
+DEC_LEAD_RE='\*\*Decisions for the operator\.\*\*'
+# Matched against §5 P prose FLATTENED: the paragraph wraps these phrases across lines.
+# The last two are whole sentences: every open escalation entry IS a decision, built from its own
+# fields, and every DECIDED_AUTONOMOUSLY entry is one FYI line, never left out. flat() strips the
+# `**` inside `**Status:**` and `**Operator authorization:**` and leaves the backticks.
+DEC_PHRASES='stays its closing ask|whatever its source|no other list of open items is presented|takes the shape `SKILL.md` Rule 11(a) gives every decision|never under `### Decisions for You`|are not each put by `AskUserQuestion`|Every open `DEFERRAL_REQUEST` and every open `HARD_BLOCK` -- one whose `Status:` is not terminal and that carries no recorded `Operator authorization:` -- is a decision, built from its entry'"'"'s `Decision/Question`, `Options` and `Impact if skipped` fields and citing its id; a locked requirement'"'"'s `HARD_BLOCK` is not, since it is resolved before the checkpoint is presented.|Every `DECIDED_AUTONOMOUSLY` entry is one line under `### For Your Information` citing its id, never left out, so the operator can override it.'
+# The WHOLE of §6 item 2: its tail names the escalation entries the answer must cover.
+DEC_WAIT_ANSWER='Answer each item under §5'"'"'s `### Decisions for You`, open `HARD_BLOCK` and `DEFERRAL_REQUEST` entries included'
+# ABSENCE: the review-and-approve item §6's list replaced must not stand beside the new items.
+DEC_WAIT_OLD='Approve or override autonomous decisions'
+DEC_WAIT_OVERRIDE='Override any `DECIDED_AUTONOMOUSLY` entry listed under §5'"'"'s `### For Your Information`'
+fpos() { # <heading> ; stdin: sec5 output -> line number of that F heading, 0 when absent
+  awk -F'\t' -v h="$1" '$1=="F" && $2==h {print NR; found=1; exit} END{if (!found) print 0}'
+}
+decisions_block() { # stdin: sec5 output -> the Decisions for You block body, tags stripped
+  awk -F'\t' -v h="$DEC_HEAD" '$1=="F" && $2==h{on=1; next}
+              on && $1=="F" && ($2 ~ /^### / || $2 ~ /^```/){exit}
+              on{print $2}'
+}
 sec7() { awk '/^### 7\. Post-Validation Routing/{on=1; next} on && /^### /{exit} on{print}' "$1"; }
 
 # check <file> -> prints one line per failing arm; prints nothing when every arm holds.
@@ -191,12 +229,47 @@ check() {
   case "$fl" in *"$LOCKED_STORY"*) : ;; *) echo "LOCKED-STORY: §5 prose does not require the cited story to carry the bullet and be not done" ;; esac
   case "$(sec6 "$f" | flat)" in *"$LOCKED_WAIT"*) : ;; *) echo "LOCKED-WAIT: §6 does not cite §5's rule that a generic validation reply is no disposition" ;; esac
   case "$(sec7 "$f" | flat)" in *"$LOCKED_ROUTE"*) : ;; *) echo "LOCKED-ROUTE: §7 does not hold the route to retro on §5's recorded dispositions" ;; esac
+  # §5 DECISIONS FOR YOU / FOR YOUR INFORMATION. Four arms, one prefix each, so a mutant fires one:
+  # DECISIONS-BLOCK owns the Decisions heading, its order (after the Locked block when that block
+  # is there -- LOCKED owns its absence -- and before FYI and Next Steps) and its body's badge and
+  # consequence; DECISIONS-FYI stands down while BLOCK's order fails and otherwise owns the FYI
+  # heading before Next Steps; DECISIONS-RULE reads §5 PROSE only; DECISIONS-WAIT reads §6.
+  local ln dn fn nn db border=0
+  ln="$(fpos "$LOCKED_HEAD" <<<"$s5")"; dn="$(fpos "$DEC_HEAD" <<<"$s5")"
+  fn="$(fpos "$FYI_HEAD" <<<"$s5")";    nn="$(fpos '### Next Steps' <<<"$s5")"
+  if [ "$dn" -eq 0 ]; then
+    echo "DECISIONS-BLOCK: no '$DEC_HEAD' heading inside §5's fenced checkpoint template"
+  else
+    if [ "$ln" -gt 0 ] && [ "$dn" -lt "$ln" ]; then border=1; fi
+    if [ "$fn" -gt 0 ] && [ "$dn" -gt "$fn" ]; then border=1; fi
+    if [ "$nn" -gt 0 ] && [ "$dn" -gt "$nn" ]; then border=1; fi
+    [ "$border" -eq 0 ] || echo "DECISIONS-BLOCK: '$DEC_HEAD' is not after the Locked-Requirement Coverage block and before For Your Information and Next Steps"
+    db="$(decisions_block <<<"$s5")"
+    grep -qF -- '(Recommended' <<<"$db" || echo "DECISIONS-BLOCK: '(Recommended' absent from the Decisions for You block body"
+    grep -qF -- 'consequence' <<<"$db" || echo "DECISIONS-BLOCK: 'consequence' absent from the Decisions for You block body"
+  fi
+  if [ "$dn" -gt 0 ] && [ "$border" -eq 0 ]; then
+    if [ "$fn" -eq 0 ] || [ "$nn" -eq 0 ] || [ "$fn" -gt "$nn" ]; then
+      echo "DECISIONS-FYI: no '$FYI_HEAD' heading before '### Next Steps' in §5's fenced checkpoint template"
+    fi
+  fi
+  grep -qE "^P"$'\t'"$DEC_LEAD_RE" <<<"$s5" || echo "DECISIONS-RULE: no paragraph in §5 prose opens with **Decisions for the operator.**"
+  fl="$(grep "^P"$'\t' <<<"$s5" | cut -f2- | flat)"
+  local IFS='|' ph
+  for ph in $DEC_PHRASES; do
+    case "$fl" in *"$ph"*) : ;; *) echo "DECISIONS-RULE: '$ph' absent from §5 prose" ;; esac
+  done
+  unset IFS
+  fl="$(sec6 "$f" | flat)"
+  case "$fl" in *"$DEC_WAIT_ANSWER"*) : ;; *) echo "DECISIONS-WAIT: §6 does not wait for an answer to each item under §5's Decisions for You" ;; esac
+  case "$fl" in *"$DEC_WAIT_OVERRIDE"*) : ;; *) echo "DECISIONS-WAIT: §6 does not offer an override of each DECIDED_AUTONOMOUSLY entry under §5's For Your Information" ;; esac
+  case "$fl" in *"$DEC_WAIT_OLD"*) echo "DECISIONS-WAIT: §6 still carries the old '$DEC_WAIT_OLD' item beside the new wait list" ;; *) : ;; esac
 }
 
 # --- the subject -------------------------------------------------------------
 out="$(check "$STEP")"
 if [ -z "$out" ]; then
-  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split; §5's template carries the Locked-Requirement Coverage block with its status and disposition tokens and §5 prose withholds the checkpoint without a recorded disposition"
+  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split; §5's template carries the Locked-Requirement Coverage block with its status and disposition tokens and §5 prose withholds the checkpoint without a recorded disposition; §5's template carries Decisions for You (badged, with consequences) then For Your Information before Next Steps, §5 prose carries the any-source decisions rule and §6 waits on each decision and offers each override"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -224,6 +297,14 @@ if [ -n "$(sec5 "$CTL" | locked_block)" ] && grep -qF -- "$LOCKED_GATE" <<<"$(se
   ok "CONTROL5: §5 isolates past its template fence, the coverage block body is non-empty and the gating sentence sits in §5 prose"
 else
   bad "CONTROL5: §5 isolation stopped inside the template or the coverage block is empty -- the §5 mutant verdicts are uninterpretable"
+fi
+# POSITIVE CONJUNCT for the Decisions arms: the block body is non-empty, the rule's lead sits on a
+# §5 PROSE line, and §6 carries the answer item, so each arm below reads a baseline that is THERE.
+if [ -n "$(sec5 "$CTL" | decisions_block)" ] && grep -qE "^P"$'\t'"$DEC_LEAD_RE" <<<"$(sec5 "$CTL")" \
+   && grep -qF -- "$DEC_WAIT_ANSWER" <<<"$(sec6 "$CTL" | flat)"; then
+  ok "CONTROL-DECISIONS: the Decisions for You body is non-empty, the Decisions for the operator lead is §5 prose and §6 carries the answer item"
+else
+  bad "CONTROL-DECISIONS: the Decisions for You body is empty, the rule lead is not §5 prose, or §6 lacks the answer item -- the Decisions mutant verdicts are uninterpretable"
 fi
 
 mutant() { # <name> <awk-program> <expected-finding-prefix> <label>
@@ -315,14 +396,14 @@ mutant "no-leadscope" \
 # DELETE: the block goes, the Red-gate line (which carries the same disposition tokens) stays.
 # A token grep over §5's whole fence would still pass; the heading arm must not.
 mutant "del-locked-block" \
-  '/^### Locked-Requirement Coverage$/{s=1; next} s && /^### Next Steps$/{s=0} s{next} {print}' \
+  '/^### Locked-Requirement Coverage$/{s=1; next} s && /^### Decisions for You$/{s=0} s{next} {print}' \
   "LOCKED:" "deleting the Locked-Requirement Coverage block, Red-gate line kept, is caught"
 
 # MOVE: the block leaves §5's template verbatim and reappears at the END of §6 (just before §7's
 # heading, so §6's own sentence stays inside §6). A whole-file grep still finds the heading; the
 # fence-aware §5 isolation must not.
 mutant "move-locked-block" \
-  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{held=held $0 "\n"; next} /^### 7\. Post-Validation Routing$/{printf "%s", held; print; next} {print}' \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Decisions for You$/{s=0} s{held=held $0 "\n"; next} /^### 7\. Post-Validation Routing$/{printf "%s", held; print; next} {print}' \
   "LOCKED:" "moving the Locked-Requirement Coverage block out of §5 (into §6) is caught"
 
 # TOKENS: the block keeps its heading but loses its disposition tokens. The Red-gate line in the
@@ -427,6 +508,77 @@ mutant "del-locked-phased" \
 mutant "del-locked-none" \
   '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /none recorded\]$/{next} {print}' \
   "LOCKED:" "dropping the none-recorded value from the block body is caught"
+
+# --- §5 Decisions for You / For Your Information, the any-source rule, §6's wait list ------
+# DELETE: the template's Decisions block goes (heading up to For Your Information). The prose
+# still names `### Decisions for You`, so only the fence-keyed heading arm sees the loss.
+mutant "del-decisions-block" \
+  '/^### Decisions for You$/{s=1; next} s && /^### For Your Information$/{s=0} s{next} {print}' \
+  "DECISIONS-BLOCK:" "deleting the Decisions for You block from §5's template is caught"
+
+# MOVE: the block leaves its place verbatim and reappears after `### Next Steps`, still inside the
+# fence. Presence holds; only the order test sees it, and DECISIONS-FYI stands down.
+mutant "move-decisions-after-next" \
+  '/^### Decisions for You$/{s=1} s && /^### For Your Information$/{s=0} s{held=held $0 "\n"; next} /^\[If single sprint: "Sprint complete\. Retro will run next\."\]$/{print; printf "\n%s", held; next} {print}' \
+  "DECISIONS-BLOCK:" "moving the Decisions for You block after Next Steps is caught"
+
+# BADGE: `(Recommended` dropped from the block body only (the template is its one occurrence).
+mutant "decisions-no-badge" \
+  '/^### Decisions for You$/{s=1} s && /^### For Your Information$/{s=0} s{ gsub(/\(Recommended, unless unbadged under Rule 11\(a\)\)/, "(preferred)") } {print}' \
+  "DECISIONS-BLOCK:" "dropping the (Recommended badge from the Decisions for You block is caught"
+
+# FYI: the For Your Information heading deleted; its line folds into the Decisions block body.
+mutant "del-fyi-heading" \
+  '/^### For Your Information$/{next} {print}' \
+  "DECISIONS-FYI:" "deleting the For Your Information heading from §5's template is caught"
+
+# RULE: the whole **Decisions for the operator.** paragraph deleted from §5 prose.
+mutant "del-decisions-rule" \
+  '/^\*\*Decisions for the operator\.\*\*/{skip=1} skip && /^$/{skip=0; next} skip{next} {print}' \
+  "DECISIONS-RULE:" "deleting the Decisions for the operator paragraph from §5 is caught"
+
+# MOVE: the paragraph leaves §5 verbatim and reappears at the end of §6 (before §7's heading, so §6's
+# own wait list and generic-reply sentence stay in §6). A whole-file grep still finds it.
+mutant "move-decisions-rule" \
+  '/^\*\*Decisions for the operator\.\*\*/{skip=1} skip{held=held $0 "\n"; if ($0 ~ /^$/) skip=0; next} /^### 7\. Post-Validation Routing$/{printf "%s", held; print; next} {print}' \
+  "DECISIONS-RULE:" "moving the Decisions for the operator paragraph out of §5 (into §6) is caught"
+
+# NARROW: "whatever its source -- an escalation entry, a carry-over, a baseline test failure, an
+# open issue" narrowed to escalation entries alone, the defect the any-source clause closes.
+mutant "narrow-decisions-source" \
+  '/^operator, whatever its source -- an escalation entry, a carry-over, a$/{print "operator from an escalation entry"; getline; sub(/^baseline test failure, an open issue -- /, ""); print; next} {print}' \
+  "DECISIONS-RULE:" "narrowing the any-source clause to escalation entries is caught"
+
+# NEVER-UNDER: the clause keeping a no-ask item out of Decisions for You dropped.
+mutant "drop-decisions-never-under" \
+  '{ sub(/^out, never under `### Decisions for You`; with no decision owed that$/, "out; with no decision owed that"); print }' \
+  "DECISIONS-RULE:" "dropping the never-under-Decisions-for-You clause is caught"
+
+# WAIT: §6's list reverted to the items it replaced (review / approve-or-override / approve deferrals).
+mutant "revert-decisions-wait" \
+  '/^2\. Answer each item under /{print "2. Review any `DECIDED_AUTONOMOUSLY` entries"; print "3. Approve or override autonomous decisions"; print "4. Approve any `DEFERRAL_REQUEST` entries (or reject and require implementation)"; next} /^3\. Override any /{next} /^4\. Confirm validation or request fixes$/{print "5. Confirm validation or request fixes"; next} {print}' \
+  "DECISIONS-WAIT:" "reverting §6's wait list to the review-and-approve items is caught"
+
+# ESCALATION: the every-open-DEFERRAL_REQUEST-and-HARD_BLOCK-is-a-decision sentence deleted; the
+# Rule 11(a) sentence before it and the DECIDED_AUTONOMOUSLY sentence after it stay whole.
+mutant "del-decisions-escalation-sentence" \
+  '/^decision put to the operator\. Every open `DEFERRAL_REQUEST` and every$/{print "decision put to the operator."; skip=1; next} skip && /^since it is resolved before the checkpoint is presented\. Every$/{print "Every"; skip=0; next} skip{next} {print}' \
+  "DECISIONS-RULE:" "deleting the every-open-escalation-entry-is-a-decision sentence from §5 is caught"
+
+# DECIDED_AUTONOMOUSLY: the one-FYI-line-never-left-out sentence deleted; its neighbours stay whole.
+mutant "del-decisions-da-sentence" \
+  '/^since it is resolved before the checkpoint is presented\. Every$/{print "since it is resolved before the checkpoint is presented."; skip=1; next} skip && /^override it\. An item that asks nothing of the operator/{sub(/^override it\. /, ""); skip=0; print; next} skip{next} {print}' \
+  "DECISIONS-RULE:" "deleting the DECIDED_AUTONOMOUSLY-is-one-FYI-line sentence from §5 is caught"
+
+# TRIM: §6 item 2 cut to its prefix, the escalation-entries tail gone.
+mutant "trim-decisions-wait" \
+  '/^2\. Answer each item under /{ sub(/, open `HARD_BLOCK` and `DEFERRAL_REQUEST` entries included$/, "") } {print}' \
+  "DECISIONS-WAIT:" "cutting §6 item 2 to its prefix is caught"
+
+# BOTH: the old approve-or-override item re-added beside the new list, every new item kept.
+mutant "both-wait-lists" \
+  '/^2\. Answer each item under /{print; print "3. Approve or override autonomous decisions"; next} {print}' \
+  "DECISIONS-WAIT:" "the old approve-or-override item standing beside the new wait list is caught"
 
 # SECTION5: §5's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section5" \
