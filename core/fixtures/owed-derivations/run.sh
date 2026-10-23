@@ -30,13 +30,20 @@
 # pair outside the ledger does not; S11a-c `git -C` operands and a `-f` value block, S11n their consumer
 # twins stay silent; S12a-e core DIRECTORIES block (lead ruling A), S12n consumer directories stay silent;
 # S13 a validator exit 2 with no UNRUN line is a refusal (S13c its control); S14 a root-absolute core
-# operand blocks.
+# operand blocks. S6e-S6g a later ledger copy the validator never RUNS (unclosed fence, indented output
+# line, CRLF opener) acquits nothing; PU an OWED row whose only copy is in an unclosed fence reads MOVED;
+# LF a failing `--list` is a refusal.
+# One world with a blocking core control GC: G1/G2 `git -C web` consumer words stay silent; RP1
+# `git -C web show HEAD:scripts/ai-dlc/x.sh` blocks (a rev:path resolves from the root), RP2 `HEAD:./x.sh`
+# stays silent; SL1/SL2 `tests/` and `scripts/` stay silent (lead ruling Q1); CD1 the `-C` directory is
+# not asked (lead ruling Q2) and CD2 `git -C scripts/ai-dlc grep ... x.sh` still blocks; S15n exactly three OPEN.
 # Mutants M1-M11, mA and mB each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and
 # must fail a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5
 # refusal made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the
 # dispatch, M8 ledger supersession removed, M9 `-C` prefixing removed, M10 `-f` values not asked, M11 the
 # directory prefix test removed, mA ls_accept_rc accepts every exit, mB the root-absolute strip and the
-# trailing-slash variant removed.
+# trailing-slash variant removed, M12 the raw-scan locator restored in the ledger supersession, M12b the
+# same in pass 2, M13 a `git -C` segment's WORD lines asked again.
 # receipt-bl587.sh drives the real reader over S1's seed.
 set -uo pipefail
 
@@ -641,6 +648,53 @@ printf '#!/usr/bin/env bash\nexec bash "%s/scripts/ai-dlc/real-validator.sh" "$@
 LS14="$WORK/ls14"; lroot "$LS14"; C14="grep -c qqalpha $LS14/scripts/ai-dlc/x.sh"
 { printf '# PRD\n\n'; lfence "$C14" 9; } > "$LS14/$LPRD"
 K_LS14="$LPRD:$(line_of "$LS14/$LPRD" "\$ $C14")"
+# S6e-S6g: the ledger's stale core row plus a later copy of the same command that the VALIDATOR NEVER RUNS,
+# so it acquits nothing: S6e in a derived fence that is never closed, S6f as an output line indented
+# deeper than its fence, S6g behind a CRLF opener. A raw `$ ` scan reads each as a reproducing copy.
+LS6E="$WORK/ls6e"; lroot "$LS6E"
+{ printf '# Push-candidate ledger\n\n'; lfence "$LCMD" '9:qqalpha'; printf '\n```derived\n$ %s\n1:qqalpha\n' "$LCMD"; } > "$LS6E/$LLEDGER"
+LS6F="$WORK/ls6f"; lroot "$LS6F"
+{ printf '# Push-candidate ledger\n\n'; lfence "$LCMD" '9:qqalpha'; printf '\n```derived\n$ %s\n1\n    $ %s\n```\n' "$LCON" "$LCMD"; } > "$LS6F/$LLEDGER"
+LS6G="$WORK/ls6g"; lroot "$LS6G"
+{ printf '# Push-candidate ledger\n\n'; lfence "$LCMD" '9:qqalpha'; printf '\n```derived\r\n$ %s\n1:qqalpha\n```\n' "$LCMD"; } > "$LS6G/$LLEDGER"
+K_LS6E="$LLEDGER:$(line_of "$LS6E/$LLEDGER" "\$ $LCMD" 1)"; K_LS6F="$LLEDGER:$(line_of "$LS6F/$LLEDGER" "\$ $LCMD" 1)"
+K_LS6G="$LLEDGER:$(line_of "$LS6G/$LLEDGER" "\$ $LCMD" 1)"
+# PU: pass 2. An OWED row whose ONLY same-command copy is in a derived fence that is never closed: the
+# validator never runs it, so the row is not located there and reads MOVED (a raw scan located it, found
+# no verdict line, and CLOSED it).
+LSPU="$WORK/lspu"; lroot "$LSPU"
+printf '# PRD\n\n```derived\n$ %s\n9:qqalpha\n' "$LCMD" > "$LSPU/$LPRD"
+K_LSPU="$LPRD:$(line_of "$LSPU/$LPRD" "\$ $LCMD")"
+row "$K_LSPU" "$LCMD" > "$WORK/lspu.tsv"
+# G/RP/SL/CD: the `git -C` consumer words, `<rev>:<path>` under `-C`, single-component parents, and the
+# `-C` directory itself, in ONE git-backed world with a blocking core control (GC), every fence stale.
+# web/ holds a consumer copy of a core-looking tree, so a word asked UNprefixed reads core and blocks.
+LS15="$WORK/ls15"; lroot "$LS15"
+mkdir -p "$LS15/web/scripts/ai-dlc" "$LS15/web/tests/fixtures" "$LS15/tests/unit"
+printf 'qqalpha\n' > "$LS15/web/scripts/ai-dlc/x.sh"; printf 'qqalpha\n' > "$LS15/web/tests/fixtures/f.json"
+printf 'qqalpha\n' > "$LS15/web/x.sh"; printf 'qqalpha\n' > "$LS15/tests/unit/t.py"; printf 'qqalpha\n' > "$LS15/server/y.txt"
+CG1='git -C web ls-files tests/fixtures'
+CG2='git -C web grep -c qqalpha -- scripts/ai-dlc/x.sh'
+CRP1='git -C web show HEAD:scripts/ai-dlc/x.sh'
+CRP2='git -C web show HEAD:./x.sh'
+CSL1='ls tests/'
+CSL2='grep -rc qqalpha scripts/'
+CCD1='git -C scripts/ai-dlc show HEAD:server/y.txt'
+CCD2='git -C scripts/ai-dlc grep -c qqalpha x.sh'
+{ printf '# PRD\n\n'
+  for c in "$LCMD" "$CG1" "$CG2" "$CRP1" "$CRP2" "$CSL1" "$CSL2" "$CCD1" "$CCD2"; do lfence "$c" 999; printf '\n'; done
+} > "$LS15/$LPRD"
+g "$LS15" init -q; g "$LS15" add -A; g "$LS15" commit -qm seed
+k15() { printf '%s:%s' "$LPRD" "$(line_of "$LS15/$LPRD" "\$ $1")"; }
+K_GC="$(k15 "$LCMD")"; K_G1="$(k15 "$CG1")"; K_G2="$(k15 "$CG2")"; K_RP1="$(k15 "$CRP1")"; K_RP2="$(k15 "$CRP2")"
+K_SL1="$(k15 "$CSL1")"; K_SL2="$(k15 "$CSL2")"; K_CD1="$(k15 "$CCD1")"; K_CD2="$(k15 "$CCD2")"
+# LF: the validator's `--list` fails (exit 3) while its verdict run works, over S1's stale core fence.
+LSLF="$WORK/lslf"; lroot "$LSLF"; cp "$LS1/$LPRD" "$LSLF/$LPRD"
+mv "$LSLF/scripts/ai-dlc/validate-artifact-derivations.sh" "$LSLF/scripts/ai-dlc/real-validator.sh"
+printf '#!/usr/bin/env bash\n[ "${1:-}" = --list ] && exit 3\nexec bash "%s/scripts/ai-dlc/real-validator.sh" "$@"\n' "$LSLF" > "$LSLF/scripts/ai-dlc/validate-artifact-derivations.sh"
+for k in "$K_LS6E" "$K_LS6F" "$K_LS6G" "$K_LSPU" "$K_GC" "$K_G1" "$K_G2" "$K_RP1" "$K_RP2" "$K_SL1" "$K_SL2" "$K_CD1" "$K_CD2"; do
+  case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
+done
 for k in "$K_LS6C1" "$K_LS6C2" "$K_LS6D" "$K_11A" "$K_11B" "$K_11C" "$K_11N1" "$K_11N2" "$K_12A" "$K_12B" "$K_12C" "$K_12D" "$K_12E" "$K_12N1" "$K_12N2" "$K_LS14"; do
   case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
 done
@@ -659,6 +713,16 @@ rc_is "S4c control: the validator prints an UNRUN line for each awk-137 fence (c
 rc_is "S8c control: neither deleted core file exists, and the validator FAILS all three fences" 3 "$([ ! -e "$LS8/scripts/ai-dlc/gone.sh" ] && [ ! -e "$LS8/scripts/ai-dlc/deleted.sh" ] && lv "$LS8" "$LPRD" | grep -c '^FAIL (STALE): ')"
 rc_is "S6bc control: the validator FAILS only the first ledger fence in S6b (the later copy reproduces)" 1 "$(lv "$LS6B" "$LLEDGER" | grep -c '^FAIL (')"
 rc_is "S11c0 control: the validator gives a FAIL or UNRUN line for all twelve S11/S12 fences" 12 "$(lv "$LS11" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
+rc_is "S15c0 control: the validator gives a FAIL or UNRUN line for all nine G/RP/SL/CD fences" 9 "$(lv "$LS15" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
+s6ec=""
+for d in "$LS6E" "$LS6F" "$LS6G"; do
+  v6="$(lv "$d" "$LLEDGER")"; l6="$( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash scripts/ai-dlc/validate-artifact-derivations.sh --list "$d/$LLEDGER" 2>/dev/null )"
+  n6="$(grep -c "^FAIL (STALE): $d/$LLEDGER:${K_LS6E##*:} " <<<"$v6")" || n6=0
+  m6="$(grep -cF "  $LCMD" <<<"$l6")" || m6=0
+  s6ec="$s6ec$n6$m6 "
+done
+rc_is "S6ec control: in S6e-S6g the validator FAILS the first ledger fence and lists no later copy of its command" "11 11 11 " "$s6ec"
+rc_is "PUc control: the validator lists NO command in the PU file (its only copy is in an unclosed fence), and a raw scan sees one" "0 1 " "$( { ( cd "$LSPU" && AI_DLC_PROJECT_ROOT="$LSPU" bash scripts/ai-dlc/validate-artifact-derivations.sh --list "$LSPU/$LPRD" 2>/dev/null ) | grep -c '^  '; grep -cxF "\$ $LCMD" "$LSPU/$LPRD"; } | tr '\n' ' ')"
 v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate-artifact-derivations.sh "$LS13/$LPRD" "$LS13/_bmad-output/planning-artifacts/notes.md" > /dev/null 2> "$WORK/v13.err" ); echo $?)"
 rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
@@ -715,6 +779,30 @@ $(lopen "$K_LS8B" STALE 'grep -c qqalpha scripts/ai-dlc/deleted.sh')" ]; } && ec
 $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_rd "$b" "$LS6D" "$none"
   lw_arm S6d "near-miss: the same stale-then-fresh pair in prd.md (not the ledger) -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6D" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6E" "$none"
+  lw_arm S6e "a later ledger copy in a derived fence that is never CLOSED acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6E" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6F" "$none"
+  lw_arm S6f "a later ledger copy that is an INDENTED OUTPUT line acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6F" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6G" "$none"
+  lw_arm S6g "a later ledger copy behind a CRLF opener acquits nothing -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6G" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LSPU" "$WORK/lspu.tsv"
+  lw_arm PU "pass 2: an OWED row whose only same-command copy is in an unclosed fence is not located there -> exit 1, exactly one OPEN, MOVED" \
+    "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(printf 'OPEN\t%s\tMOVED\t$ %s\tbase..theirs\treconcile-log-x' "$K_LSPU" "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LSLF" "$none"
+  lw_arm LF "the validator's --list fails over a LIVING file with a stale core fence -> exit 2 with the --list REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'REFUSED: validate-artifact-derivations.sh --list exited 3 on' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS15" "$none"
+  local o15="$OUT" r15="$RC"
+  has15() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o15"; }
+  lw_arm GC "control, same world as G/RP/SL/CD: the plain core fence blocks" "$({ [ "$r15" = 1 ] && has15 "$K_GC"; } && echo 0 || echo 1)"
+  lw_arm G1 "git -C web ls-files tests/fixtures (web/'s tree, consumer) stays silent" "$(! has15 "$K_G1" && echo 0 || echo 1)"
+  lw_arm G2 "git -C web grep -c qqalpha -- scripts/ai-dlc/x.sh (web/'s copy, consumer) stays silent" "$(! has15 "$K_G2" && echo 0 || echo 1)"
+  lw_arm RP1 "git -C web show HEAD:scripts/ai-dlc/x.sh blocks (a rev:path resolves from the ROOT)" "$({ [ "$r15" = 1 ] && has15 "$K_RP1"; } && echo 0 || echo 1)"
+  lw_arm RP2 "git -C web show HEAD:./x.sh (cwd-relative, no core file under web/) stays silent" "$(! has15 "$K_RP2" && echo 0 || echo 1)"
+  lw_arm SL1 "ls tests/ (a single-component parent with a trailing slash) stays silent" "$(! has15 "$K_SL1" && echo 0 || echo 1)"
+  lw_arm SL2 "grep -rc qqalpha scripts/ (a single-component parent with a trailing slash) stays silent" "$(! has15 "$K_SL2" && echo 0 || echo 1)"
+  lw_arm CD1 "git -C scripts/ai-dlc show HEAD:server/y.txt (the -C directory is not asked; reads a consumer path) stays silent" "$(! has15 "$K_CD1" && echo 0 || echo 1)"
+  lw_arm CD2 "git -C scripts/ai-dlc grep -c qqalpha x.sh still blocks" "$({ [ "$r15" = 1 ] && has15 "$K_CD2"; } && echo 0 || echo 1)"
+  lw_arm S15n "and the G/RP/SL/CD world opens EXACTLY the three blocking lines" "$([ "$(awk -F'\t' '$1 == "OPEN" { n++ } END { print n + 0 }' <<<"$o15")" = 3 ] && echo 0 || echo 1)"
   lw_rd "$b" "$LS11" "$none"
   local o11="$OUT" r11="$RC"
   has_open() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o11"; }
@@ -777,8 +865,38 @@ mut_case M7 "S10" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/c
 if [ "${1:-}" = "--scope-batch" ]; then'
 mut_case M8 "S6b" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
 mut_case M9 "S11a S11b" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
-mut_case M10 "S11c" 1 '  awk -F'"'"'\t'"'"' '"'"'$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }'"'"' "$TMP/ls.explain" > "$TMP/ls.ops"' \
-  '  awk -F'"'"'\t'"'"' '"'"'$2 == "WORD" && $5 == "operand" { print $1 "\t" $7 }'"'"' "$TMP/ls.explain" > "$TMP/ls.ops"'
+# The anchors below carry single quotes, so they are read from quoted heredocs, byte for byte.
+WORDS_LINE="$(cat <<'EOF'
+  awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
+EOF
+)"
+WORDS_NOVAL="$(cat <<'EOF'
+  awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && $5 == "operand" { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
+EOF
+)"
+# M13: the pre-fold line, which asked a `git -C` segment's WORD lines unprefixed.
+WORDS_ALLGIT="$(cat <<'EOF'
+  awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
+EOF
+)"
+# M12/M12b: the pre-fold RAW-SCAN locator (a second fence grammar), restored at one caller each.
+RAWSCAN="$(cat <<'EOF'
+derived_cmd_lines() {
+  C="$2" awk 'BEGIN { st = 0; fc = sprintf("%c%c%c", 96, 96, 96); want = ENVIRON["C"] }
+    { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t) }
+    st == 0 && substr(t, 1, 3) == fc { st = (t == fc "derived") ? 2 : 1; next }
+    st != 0 && substr(t, 1, 3) == fc { st = 0; next }
+    st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' "$1"
+}
+LST=""; LST_N=0
+EOF
+)"
+LEDGER_CALL='  _all="$(list_cmd_lines "$LST" "$2" "$4")" \'
+PASS2_CALL='      found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \'
+mut_case M10 "S11c" 1 "$WORDS_LINE" "$WORDS_NOVAL"
+mut_case M12 "S6e S6f S6g" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$LEDGER_CALL" '  _all="$(derived_cmd_lines "$ROOT/$2" "$4")" \'
+mut_case M12b "PU" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$PASS2_CALL" '      found="$(derived_cmd_lines "$ROOT/$rel" "$tcmd")" \'
+mut_case M13 "G1 G2" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
 mut_case M11 "S12a S12b S12c S12d S12e" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
 mut_case mA "S13" 1 '  local nref' '  return 0'
 mut_case mB "S14" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
