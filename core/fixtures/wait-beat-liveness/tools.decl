@@ -28,7 +28,5 @@ pgrep
 chmod
 ln
 uname
-base64
-lsof
 sort
 perl
