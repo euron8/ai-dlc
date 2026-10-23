@@ -483,6 +483,16 @@ Owed: the four conditions need their own contract before a fix, and a validator 
 
 verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.
 
+## BL-788 — a deferred AC's discharge predicate lived only in the QA review file, so deploy-validate §4b ran a predicate no step checked against the deployed sha
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; a consumer filing from graph sprint 319 (the deferred-AC predicate that lives only in the QA review file).
+
+At `done` the closing writer copied only the deferred AC ids into `deferred_acs`; the predicate itself stayed in the QA verdict. Graph s319: predicate `PI-1.2-a` appears twice in `docs/reviews/s319/1-2-qa-validation-p2.md` and zero times in its story file, and at deploy-validate §4b it named a label the deployed bundle did not carry, with nothing telling the lead to check that literal against what was deployed.
+
+Built: `code-reviewer.md` Ownership (and the Responsibilities bullet and "As the Closing Writer" list, so the role's "exactly these writes" enumeration names it) has the closing writer write a `## Deferred ACs` section into the story file at `done` — each entry opening `- **<id>**` with the id written to `deferred_acs`, the predicate text copied from the highest `-p<N>` QA verdict and that verdict's path, `None.` for a story with none, placed before `## Dev Agent Record`. `qa.md`'s discharge-predicate item says the same. `deploy-validate.md` §4b reads the predicate from that section, falls back to the QA verdict for a pre-migration story with no section (recorded under `deferred_ac_discharge`), reports a missing entry or a `None.` beside a non-empty `deferred_acs` as a closing-writer defect, and checks each literal against the deployed sha, recording a correction as `old -> new` or re-deferring. Pinned by `process-rule-pins` rows `def-copy-*`, with a named ids-only mutant.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl788.sh
+
 ## BL-786 — I10 reads only run.sh, so a fixture whose hook invoker lives in lib.sh is outside its population
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f. Filed by the r13 owner; not built.

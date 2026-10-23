@@ -252,7 +252,9 @@ For each completed task, verify:
   each deferred AC's predicate in the validation verdict so a later step can
   mechanically confirm it; the closing writer — a `code-reviewer` the lead
   dispatches after gate 3 — copies those AC ids into the story's
-  `deferred_acs` in `sprint-status.yaml` at `done` (`code-reviewer.md` "As the
+  `deferred_acs` in `sprint-status.yaml` at `done`, and
+  copies each id with its predicate text into the story file's `## Deferred ACs`,
+  the section deploy-validate §4b reads each predicate from (`code-reviewer.md` "As the
   Closing Writer"),
   which is how `sprint-status.sh close` sees them still owed. Catches a deferred AC that no step is bound to
   re-check, so it silently never gets verified; false positive is an AC

@@ -433,6 +433,24 @@ on any other ground. `sprint-status.sh close` (retro Close-Out Sweep) exits
 3 and writes neither view while any story still carries an id, or carries
 the field in any shape other than one single-line `[..]` list.
 
+**Read each owed predicate from the story file.** The lead reads each owed
+AC's predicate from the story file's `## Deferred ACs` section, which the
+closing writer writes at `done` (`code-reviewer.md` Ownership): each entry
+opens with `- **<id>**` and cites the QA verdict it was copied from.
+
+**A story file with no `## Deferred ACs` section is a pre-migration story.**
+Fall back to the QA verdict for its predicate and record the fallback under `deferred_ac_discharge`.
+
+**A missing entry is a closing-writer defect.** When the section is present
+and an owed id has no entry opening with that exact id, or the body is `None.` beside a non-empty `deferred_acs`,
+report it in the gate log as a closing-writer defect, then run the predicate from the QA verdict.
+
+**Check every literal against the deployed sha before running the predicate.**
+Check each literal the predicate names against the DEPLOYED sha; a pinned fence whose sha is not the deployed sha is re-run at the deployed sha first.
+A literal the deployed sha does not carry: correct the predicate against it
+and record the correction under `deferred_ac_discharge` as `old -> new`, or
+re-defer the AC by item 2 above. Never a silent substitution.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
 "verify after deploy" that no step ever re-checks, so the sprint closes
 with an unverified acceptance criterion. False-positive cost: one
