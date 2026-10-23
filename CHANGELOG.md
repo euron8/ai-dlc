@@ -19,6 +19,57 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.939.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r9 (engine). It closes no entry, files none, and closes no `PC-` id. NET: entries closed 0 minus filed 0 = 0. It is not negative because this release fixes BL-685's round-9 BLOCKERs while the entry stays open by design, on `verify: manual`, the default flip and the A2b mutant; the default stays OFF. Engine code: `core/skills/ai-dlc-update/reconcile/emit-report.sh` and `consumer-read.sh`. Validators: `core/scripts/validate-hook-registration.sh`, `scripts/validate-consumer-reads.sh`. Fixture changes: `core/fixtures/reconcile-emit-report/` (`run.sh`, `inputs.decl`, `tools.decl`, `receipt-round9.sh`). Rulebook changes: none. Packaging: none. Backlog: `docs/backlog.md`.
+
+Bootstrapping: engine code ships here, and it is live from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine.
+
+### BL-685 — the round-9 BLOCKERs B1-B6 are fixed; the entry stays OPEN
+
+- B1: theirs' `validate-hook-registration.sh` ran unlogged. It now runs through `cr_run_reads` and records its own reads in-process (`HOOKREG_READS_OUT`, a sentinel, `python3 -I`). On a python3 without `sys.addaudithook`, the recorder writes no list, so the engine refuses rather than accepting a partial list.
+- B2: a consumer-copy validator writes `!` and refuses by name.
+- B3: the consumer's HEAD (unborn, detached or a symbolic ref) and the `shallow` file are keyed.
+- B4: a derived env-name set is keyed (ten names today, no `CLAUDE_CODE_*`). Limit: a text grep cannot see `${!name}` or `env | grep` readers.
+- B5: gitlinks are keyed by their staged index line, pruned from the dotgit find, skipped in `er_hash_list`, and refused by name for a glob-character name, a gitlink at, under or containing a read root, and `submodule.recurse=true`. A gitlink at, under or containing a read root refuses by name, and arm V76 with mutant M-b5-root holds that refusal.
+- B6: an ignored nested repository outside every read root is accepted; a non-ignored one, one inside a root or one containing a root refuses by name.
+- D1: `validate-consumer-reads.sh` flags a non-`$SELF`, non-`cr_` program handed a rooted argument.
+- An armed record-time cause line is written: `emit-report: recorded PASS not recorded: <cause>`.
+
+### Arms and mutants
+
+V55 (B2 refusal), V59 (B1 and mixed engines c), V60 (B3), V61 (B4), V62 (the secret arm: a `CLAUDE_CODE_MESSAGING_TOKEN` marker appears in no cache file, with a positive control), V63 (M-direxcl's new subject, so M-direxcl is kept, not retired), V64-V75 (B5/B6). V18/V19 moved onto a file whose exec bit `mode_at_theirs` tests. G-miss (V66) is killed by no single-site mutant, because three fields move at once, and its header says so.
+
+Mutant scores: 24 mutants, scored by an independent rescore after the tip-adversary fold, by a hand that built none of the work (one shard-a run through `hermetic-run.sh` with a fresh verdict store), which gave PASS 154/154 in shard a, exit 0, at tip 997fc4ee5 (restacked onto 0.937.0). All 24 PC-V mutants fail exactly their declared kill set: M-region [V3], M-direxcl [V63], M-exit3 [V9 V10], M-cksum [V56], M-base [V56 V57 V58], M-sha [V57 V58], M-unarmed [V56], M-hex [V58], M-b1 [V59], M-b2 [V55], M-b3 [V60], M-b4 [V61], M-secret [V62], M-gitlink-refuse [V64 V65], M-gitlink-prune [V64], M-b5-root [V76], M-hashlist-skip [V67], M-recurse [V68], M-glob [V69], M-b6-ignored [V73 V74 V75], M-b6-under [V71], M-b6-contains [V72], M-b6-dotgit-path [V73 V74], M-b6-batch-rc [V75]. None killed an arm outside its set, and none was NOT BUILT, UNSCORED or SURVIVED. M-b6-ignored's three arms each assert the one refusal it deletes; M-b6-dotgit-path kills V73 because under it the refusal names `x/.git` rather than the directory `x`.
+
+After the rescore, the 0.938.0 dress found one non-comment here-string the B5/B6 change had added to emit-report.sh (`done <<< "$_er_dotgit"`), which BL-360 forbids; it now reads a file staged through er_stage with a named refusal on a failed write, procsub-staged-refusal-boot-b passes (52 assertions), and the B5/B6 probe's worlds are byte-identical, so the rescore above stands for the mutants (their anchors all occur once on the fixed engine).
+
+### Receipt
+
+`core/fixtures/reconcile-emit-report/receipt-round9.sh` (100755, not installed as `verify:`) scores fix 0; base 2; B1, B2, B3 and B4 each reverted alone 1, red only in its own world; B6 reverted alone 2, red only in B6; B5 reverted 2, red in B5 and B6, because that revert is the pre-B5/B6 engine and also removes B6 (B5 was not reverted alone); second spelling 0. Limit: no receipt world has an unignored nested directory holding a real repository (V73-V75 seed `x/.git` directories that are NOT repositories, which takes the same refusal code path, and no fixture or receipt world holds an unignored nested real repository).
+
+### Rehearsal
+
+On a `file://` clone and APFS copies of the real consumer, graph:
+
+- Mixed engines (a): the old engine (graph's installed 0.928.0) with the new validator was byte-identical except two lines caused by the swapped THEIRS tree.
+- (c): the new engine with an old validator fails closed with `! reads-list` (variant clone).
+- (b) on graph's real layout: every armed run refuses by R2 (an ignored symlink, `.claude/skills/swap-integration`, under the `.claude` read root), and the B5 and B6 causes no longer fire. This is NOT a hit rate.
+- A variant clone without the gitlink: 3/3 hits.
+- With that link removed (a control, not graph): records and hits, and R2 is the last refusal on graph's layout.
+
+The derived env names were all unset in every run, so variation inside a real pull was held, not tested.
+
+### Known DEFECT: BL-800
+
+The read log's L refusal (`emit-report.sh`, `er_log_entries`' awk) never fires, because awk's END exit overrides the rule's exit. It is unreachable at main and in this release because R2 refuses first. That rests on the contract adversary's census and was not measured in every world; no claim is made that no consumer was ever exposed. It is fixed in the following release.
+
+### Still PARTIAL (named, not fixed)
+
+The `:371`/`:379` hardlink, firmlink and bind mount; untracked-not-ignored keyed by conswork per the code, not probed; limit (6); the receipt's clock and network; the rest of the key's fields, not re-reviewed in round 9; and two refusals that have no probe, the B6 check-ignore rc>=2 refusal and the gitlink-newline refusal.
+
+The change to the pole's cost is unmeasured until the dress. The new arms land in phase pcache, shard a.
+
 ## [0.938.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, owner ai-dlc-12, release r14. It files and closes BL-801 (DEFECT, efficiency) in the same release, and closes no `PC-` id. NET: entries closed 1 minus filed 1 = 0. Engine code a consumer runs from step 3 of the delivering pull: none. Rulebook a consumer receives at the reconcile merge: none. Fixture changes: `owed-derivations`, with a new `receipt-bl801.sh`. Packaging: none. Backlog: `docs/backlog.md`.
