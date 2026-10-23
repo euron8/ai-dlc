@@ -143,6 +143,41 @@ expect allow "$LAYERED" "$(jf _bmad-output/planning-artifacts/prd.md)" "layer fi
 expect deny "$LAYERED" "$(jb 'cat docs/architecture.md')" \
   "consumer path seen by the BATCH arm (derived alternation) → deny"
 
+# --- Assertion 9c: the deny's CONTEXT never calls a consumer-protected path unprotected ---
+# Core cannot know a consumer's layer. A CONTEXT sentence saying the planning corpus
+# (architecture.md among it) is NOT protected contradicted the same deny's own REASON on a
+# consumer whose layer protects docs/architecture.md. The arm is PRESENCE-shaped: a hook that
+# emits nothing fails the third conjunct. ctxarm <hook> -> 0 when all three hold.
+ctxarm() {
+  local o; o="$(printf '%s' "$(jb 'cat docs/architecture.md')" | CLAUDE_PROJECT_DIR="$LAYERED" bash "$1" 2>/dev/null)"
+  grep -q '"permissionDecision": *"deny"' <<<"$o" || return 1
+  ! grep -qF 'NOT protected' <<<"$o" || return 1
+  grep -qF 'Use the native Read tool' <<<"$o" || return 1
+}
+ctxarm "$HOOK" \
+  && ok "layered deny CONTEXT: deny, no 'NOT protected', names the native Read tool" \
+  || bad "layered deny CONTEXT: deny + no 'NOT protected' + 'Use the native Read tool' did not all hold"
+
+# Mutant CONTEXT-RESTORED: the whole hooks directory is copied (the hook sources a sibling),
+# with the 0.927.0 sentence restored. It must differ from the fix, pass the unmutated control,
+# and fail this arm alone.
+_MUT="$WORK/mut-ctx"; mkdir -p "$_MUT"
+cp -R "$(dirname "$HOOK")/." "$_MUT/" 2>/dev/null
+_OLD='story files."'
+_NEW='story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."'
+_SRC="$(cat "$HOOK"; printf x)"; _SRC="${_SRC%x}"
+printf '%s' "${_SRC/"$_OLD"/"$_NEW"}" > "$_MUT/ai-dlc-protect.sh"
+if cmp -s "$HOOK" "$_MUT/ai-dlc-protect.sh"; then
+  bad "mutant CONTEXT-RESTORED did not differ from the fix (DID NOT APPLY)"
+elif ! { cp "$HOOK" "$_MUT/ctl.sh" && ctxarm "$_MUT/ctl.sh"; }; then
+  bad "mutant CONTEXT-RESTORED harness broken: an unmutated copy in the same directory fails the 9c arm"
+elif ! ctxarm "$_MUT/ai-dlc-protect.sh" \
+     && [ "$(CLAUDE_PROJECT_DIR="$PLAIN" bash "$_MUT/ai-dlc-protect.sh" <<<"$(jf docs/architecture.md)" 2>/dev/null | grep -c permissionDecision)" = 0 ]; then
+  ok "mutant CONTEXT-RESTORED killed by the 9c arm, and its PLAIN allow of docs/architecture.md still holds"
+else
+  bad "mutant CONTEXT-RESTORED SURVIVED the 9c arm (or disturbed the PLAIN allow)"
+fi
+
 # --- Assertion 10: a MALFORMED layer file fails CLOSED ----------------------
 expect deny "$BROKEN" "$(jf _bmad-output/planning-artifacts/prd.md)" \
   "malformed layer file → deny even an unprotected path (fail closed)"

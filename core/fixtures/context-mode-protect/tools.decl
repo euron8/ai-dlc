@@ -1,6 +1,8 @@
 awk
 bash
 cat
+cmp
+cp
 date
 dirname
 env
