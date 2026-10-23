@@ -36,6 +36,19 @@
 #                cmd    cat grep file_hash find cmp ls head tail sed awk diff wc readlink stat shasum
 #                       md5 cp xargs hash-object jq sort cut uniq tr od strings in command position,
 #                       a rooted operand after it
+#                run    a PROGRAM the closure does not own, handed a consumer root as an argument: the
+#                       program reads the consumer itself and logs nothing (BL-685 D1; the shape of
+#                       emit-report.sh:821 `bash "$hrv" --root "$CONSUMER"`). Judged on continuation
+#                       lines JOINED, reported at the group's last line. A head is an interpreter
+#                       (bash sh python python3 perl node, leading -flags skipped to the program word)
+#                       or a variable expansion in command position (only assignments before it). A
+#                       rooted operand AFTER the program word fires it, `--root=$V` values included.
+#                       Acquitted: the program word is "$SELF/..."; a variable derived ONE level from
+#                       $SELF (`LD="$SELF/layer-drift.sh"`) or from the `$(cd "$(dirname "$0")" && pwd)`
+#                       idiom (scoped like CR1 derivation); the simple command begins with a cr_ word
+#                       (`cr_run_reads "$CONSUMER" <list> bash "$hrv" --root "$CONSUMER"`, cr_run). A
+#                       line another CR1 class already flagged is not reported twice (a report-shape
+#                       rule only: removed, it changes 0 rows on the f1136f614 closure).
 #   A cr_* CALL IS NOT A HEAD: `cr_test "$CONSUMER" -f x` and `cr_git "$CONSUMER" ...` match no
 #   class, because every head needs a word boundary before it and `_` is not one. That holds for
 #   either argument order of cr_test; the shipped order is root first.
@@ -75,6 +88,23 @@
 #   past its opening line (a one-line `( cd "$DIST" … )` is the cd class's), and the body must NAME a
 #   seeded or derived consumer variable as a rooted operand; a body that only uses the new cwd, or
 #   touches DIST alone, is quiet. Both directions are in the self-probe below.
+#   The run class (BL-685 D1), measured on the f1136f614 closure (16 files) by removing each
+#   narrowing alone in a scratch copy and reading the rows it exposes:
+#     no narrowing at all (every non-cr_ program word)  21 rows: 17 emit-report.sh `bash "$SELF/x"`
+#       sites (:1008 warn-shadowed-local-validators.sh among them), retired-tokens.sh:146, hard-blockers.sh
+#       :171/:181, unregistered-drift.sh:536, and :821.
+#     "$SELF/..." program word acquitted              4 rows: :821, hard-blockers.sh:171/:181 ("$LD"/"$UD",
+#       `="$SELF/..."` at :121-122), unregistered-drift.sh:536 (the join of :535-536).
+#     + one-level $SELF derivation acquitted          2 rows: :821, unregistered-drift.sh:536
+#       ("$PRECLASSIFY_SRC" from the dirname-of-$0 idiom at :481).
+#     + dirname-of-$0 idiom acquitted (shipped)       1 row: emit-report.sh:821, the true positive.
+#     the cr_ acquittal, removed alone                2 rows: :821 and :834 (`cr_run "$CONSUMER" ...`).
+#   A variable head counts only in command position: without that, `bash "$SELF/x.sh"` re-anchored on
+#   its own program word and read it as a second, unacquitted head (found by the one-level mutant
+#   scoring identical to the shipped grammar, then fixed). The false-positive set is EMPTY: the one
+#   row left is the defect this class exists for. The class cannot see a program word built two levels
+#   deep, a program run through `eval`, `env`, `xargs` or `exec`, or a root reaching the program
+#   through the environment or stdin rather than argv.
 #   CR2 on the same closure: 32 rows, 15 missing preambles (all 15 closure files) and 17 `set +f`
 #   unpaired under the rule. One of them, retired-layer-token.sh:207, sits in a pipe-stage subshell
 #   and restores nothing in the parent; it is flagged anyway, since the rule is scoped by function.
@@ -239,6 +269,72 @@ function head(s, hre, v, mode,   rest, off, e, aft, p, q, qo) {
   }
   return 0
 }
+# segcut(s, from): the text of s from position from up to the first UNQUOTED ; & | or a closing paren
+# that closes no paren opened after from -- the rest of one simple command.
+function segcut(s, from,   i, c, d) {
+  d = 0
+  for (i = from; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    if (c == "(" && !inq(s, i)) { d++; continue }
+    if (c == ")" && !inq(s, i)) { if (d == 0) break; d--; continue }
+    if ((c == ";" || c == "&" || c == "|") && d == 0 && !inq(s, i)) break
+  }
+  return substr(s, from, i - from)
+}
+# segpre(s, pos): the text of s before position pos back to the last UNQUOTED ; & | ( -- the words
+# that precede a head inside its own simple command.
+function segpre(s, pos,   i, c, st) {
+  st = 1
+  for (i = 1; i < pos; i++) {
+    c = substr(s, i, 1)
+    if ((c == ";" || c == "&" || c == "|" || c == "(") && !inq(s, i)) st = i + 1
+  }
+  return substr(s, st, pos - st)
+}
+# selfprog(w, sc): 1 when the program word w is the distribution itself: rooted at $SELF, or a variable
+# derived ONE level from $SELF or from the dirname-of-$0 idiom (selfv, filled below).
+function selfprog(w, sc,   vn) {
+  gsub(/"/, "", w)
+  if (w ~ /^[$][{]?SELF[}]?\//) return 1
+  if (w !~ /^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?$/) return 0
+  vn = w; gsub(/[${}]/, "", vn)
+  return (((sc, vn) in selfv) || (("", vn) in selfv))
+}
+# runcls(s, v, sc): 1 when s runs a program -- an interpreter head (bash sh python python3 perl node)
+# followed by its program word, or a variable expansion in command position -- whose program word is
+# not selfprog, whose simple command does not begin with a cr_ word, and whose arguments after the
+# program word carry a rooted v (an `--x=$V` value counts: it hands the program the root).
+function runcls(s, v, sc,   rest, off, e, b, aft, w, args, pre) {
+  rest = s; off = 0
+  while (match(rest, h_run)) {
+    b = off + RSTART; e = off + RSTART + RLENGTH - 1
+    off = e; rest = substr(s, e + 1)
+    if (inq(s, (substr(s, e, 1) == "$" && substr(s, e - 1, 1) == "\"") ? e - 1 : e)) continue
+    pre = segpre(s, b + 1)
+    if (pre ~ /(^|[[:space:]])cr_[A-Za-z0-9_]+([[:space:]]|$)/) continue
+    aft = segcut(s, e + 1)
+    if (substr(s, e, 1) == "$" || substr(s, e, 1) == "\"") {
+      # variable head: the program word is the expansion itself, and only in COMMAND POSITION -- the
+      # words before it in its simple command are assignments or nothing. Without this, the `^` of
+      # h_run re-anchors on the tail left after an interpreter head, and `bash "$SELF/x.sh"` reads
+      # its own program word as a second, variable head.
+      pre = segpre(s, (substr(s, e - 1, 1) == "\"") ? e - 1 : e)
+      gsub(/[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|[^[:space:]]*)/, "", pre)
+      if (pre !~ /^[[:space:]!{]*$/) continue
+      w = substr(s, e); match(w, /^"?[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?"?/); w = substr(w, 1, RLENGTH)
+      args = substr(aft, RLENGTH)
+    } else {
+      args = aft; w = ""
+      while (match(args, /^[[:space:]]*[^[:space:]]+/)) {
+        w = substr(args, RSTART, RLENGTH); args = substr(args, RSTART + RLENGTH); sub(/^[[:space:]]+/, "", w)
+        if (w !~ /^-/) break
+      }
+    }
+    if (w == "" || selfprog(w, sc)) continue
+    if (args ~ ("(^|[[:space:]=(<])\"?[$][{]?" v "([}/\"[:space:];)]|\\]|$)")) return 1
+  }
+  return 0
+}
 { raw[NR] = $0; L[NR] = ($0 ~ /^[[:space:]]*#/) ? "" : strip($0) }
 END {
   n = NR
@@ -361,9 +457,44 @@ END {
       }
     }
     if (hit != "") {
+      hitl[i] = 1
       who = ((sc, v) in taint) ? taint[sc, v] : taint["", v]
       ex = raw[i]; sub(/^[[:space:]]+/, "", ex)
       printf "%s\t%d\tCR1\t%s\t%s(%s)\t%s\n", fname, i, hit, v, who, substr(ex, 1, 110)
+    }
+  }
+  # ---- CR1 class run: a program that is neither $SELF-rooted nor cr_-routed, handed a consumer root ----
+  # Continuation lines are joined first; a group is judged once and reported at its LAST line (a
+  # trailing comment cannot follow a backslash, so that is where a probe tag can sit).
+  h_run = "((^|[;&|(!{]|[[:space:]]|[$][(])(bash|sh|python|python3|perl|node)[[:space:]]+|(^|[;&|(])[[:space:]]*\"?[$])"
+  for (i = 1; i <= n; i++) {
+    s = L[i]; if (s == "") continue
+    sc = (i in fn) ? fn[i] : ""
+    rest = s
+    while (match(rest, /(^|[[:space:];&|(])(local[[:space:]]+|export[[:space:]]+|readonly[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=/)) {
+      a = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      v = a; sub(/^[[:space:];&|(]/, "", v); sub(/^(local|export|readonly)[[:space:]]+/, "", v); sub(/=$/, "", v)
+      if (rest ~ /^"?[$][{]?SELF[}]?[\/"]/ || rest ~ /^"?[$]\(cd[[:space:]]+"?[$]\(dirname[[:space:]]+"?[$]\{?(0|BASH_SOURCE(\[0\])?)\}?"?\)"?[[:space:]]*&&[[:space:]]*pwd[^)]*\)/)
+        selfv[sc, v] = 1
+    }
+  }
+  for (i = 1; i <= n; i++) {
+    if (L[i] == "" || (i in contd)) continue
+    js = L[i]; j = i
+    while (js ~ /\\$/ && j < n && L[j + 1] != "") { js = substr(js, 1, length(js) - 1) " " L[j + 1]; j++; contd[j] = 1 }
+    if ((i in hitl) || index(js, "$") == 0) continue
+    sc = (i in fn) ? fn[i] : ""
+    if (crfile && sc ~ /^cr_/) continue
+    cand = vars[""] ((sc != "") ? vars[sc] : "")
+    nv = split(cand, V, " ")
+    for (k = 1; k <= nv; k++) {
+      v = V[k]; if (v == "") continue
+      if (runcls(js, v, sc)) {
+        who = ((sc, v) in taint) ? taint[sc, v] : taint["", v]
+        ex = raw[j]; sub(/^[[:space:]]+/, "", ex)
+        printf "%s\t%d\tCR1\trun\t%s(%s)\t%s\n", fname, j, v, who, substr(ex, 1, 110)
+        break
+      }
     }
   }
   print "SCANNED" > "/dev/stderr"
@@ -437,8 +568,21 @@ x="$(cat "$CONSUMER/f")" # @OFF a head inside a nested $( ) is a head
 top="$(cd "$CONSUMER" && pwd -P)" # @OFF
 bash "$CONSUMER/scripts/x.sh" # @OFF
 ( cd "$tmpd" # @OFF a multi-line subshell whose body names a consumer root
-  bash ./probe.sh "$CONSUMER"
+  bash ./probe.sh "$CONSUMER" # @OFF run: a non-$SELF program handed the root
 )
+hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)" # @OFF run: the emit-report.sh:821 shape
+python3 -I "$tmpd/v.py" \
+  --root "$CONSUMER" # @OFF run: the root on a continuation line
+"$prog" --root="$CONSUMER" # @OFF run: a variable program head, the root as an option value
+hro="$(cr_run_reads "$CONSUMER" "$tmpd/reads" bash "$hrv" --root "$CONSUMER" 2>&1)"
+cr_run_reads "$CONSUMER" "$tmpd/reads" \
+  bash "$hrv" --root "$CONSUMER"
+LD="$SELF/layer-drift.sh"
+rows_ld="$(bash "$LD" "$DIST" "$CONSUMER" 2>/dev/null)"
+PSRC="$(cd "$(dirname "$0")" && pwd)/preclassify.sh"
+bash "$PSRC" "$DIST" "$CONSUMER" > "$tmpd/pc" \
+  || : > "$tmpd/pc"
+bash "$hrv" --root "$DIST"
 ( cd "$DIST" && git log -1 )
 ( cd "$DIST"
   git log -1 "$x"
