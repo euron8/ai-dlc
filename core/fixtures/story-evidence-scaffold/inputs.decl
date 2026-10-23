@@ -10,3 +10,4 @@ core/scripts/
 !core/team-roles/dev.md
 !core/team-roles/qa.md
 !core/team-roles/code-reviewer.md
+!core/scripts/record-only-diff.sh

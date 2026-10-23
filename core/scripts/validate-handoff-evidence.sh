@@ -40,10 +40,12 @@
 #       output, an xdist banner) is not a header. dev.md `## QA Handoff Evidence`
 #       prescribes `$ <command>` first, then a line carrying `head: <sha>`. A capture outside
 #       the range is not this story's and is not read, so an UNTRACKED capture escapes (a)
-#       by construction — (b) owns the RED case and nothing owns the rest. On a rework
-#       re-handoff <base> is the previous gate's frozen sha; (b) and (c) read the whole story
-#       regardless. RANGE WARN: base == frozen (an empty range, so (a) reads nothing) or a
-#       base that is not an ancestor of frozen.
+#       by construction — (b) owns the RED case and nothing owns the rest. <base> is the gate-1
+#       partition manifest's `base` (the parent of the dev's first commit) on EVERY handoff,
+#       rework included (implementation.md), so on a rework (a) reads every capture the story's
+#       range touched, not only the rework's; (b) and (c) read the whole story regardless. RANGE
+#       WARN: base == frozen (an empty range, so (a) reads nothing) or a base that is not an
+#       ancestor of frozen.
 #   (b) RED-UNTRACKED. A capture cited AS a mutation-RED capture that is not tracked at
 #       <frozen>. A capture is cited as RED when the line citing it carries the word `RED`
 #       or `PROVEN` (upper case, the verdict words), or its basename carries `red`,
@@ -89,6 +91,37 @@
 #       deeper (`### Smoke Test Updates`) or only at level 1. Code fences are stripped. The
 #       heading grammar is one awk function shared with strategy mode: `## <heading>` followed by
 #       whitespace and any text (`## Rename Verification (dev)`) is that heading at level 2.
+#
+# HANDOFF MODE, RUN RECORD — two refusals and a LEGACY line, read from the story text the evidence
+# arms read. A LABEL is a line outside ``` / ~~~ fences that begins, at column 0 or after one `- `
+# or `* ` bullet, with the label text exactly; the rest of the line is its VALUE (it may be empty:
+# the invocation and counts may follow on the next lines, and grading them stays the reviewer's).
+# The first such line is read. `**Full-collection run:**`, `Full-collection run, working
+# directory ...` and a `### Full-collection run` heading are not the label, and refuse as missing.
+#   The grammar is INVERTED: a value is a RUN only in record-only-diff.sh's RUN-SHAPE (a none form or
+#   pointer word first is never one; then an invocation naming a runner, or a `<n> passed|failed`
+#   count; an empty value continues onto the next line or fenced block), and a dependency setup
+#   only in its SETUP-SHAPE; every other
+#   value is a NO-RUN CLAIM however it is spelled (`none, <reason>`, `N/A`, `TBD`, `skipped`,
+#   `deferred to QA`, `see dev report`, empty).
+#   (k) FULL-COLLECTION. No `Full-collection run:` label: refused `full-collection-missing`. A no-run
+#       claim is the record-only exemption: accepted only when `record-only-diff.sh paths <story>
+#       <base> <frozen>` exits 0, else refused `full-collection-none` printing the helper's
+#       changed-path count and first non-record path; a bare `none` is refused whatever the diff.
+#   (l) DEPENDENCY-SETUP. No `Dependency setup:` label: refused `dependency-setup-missing`. A bare
+#       `none`: refused `dependency-setup-none`. `none, <reason>` is accepted whatever the diff
+#       (dev.md allows it: "no setup needed" is a fact about the project); every other no-run claim
+#       is held to the partition as (k) is, refused `dependency-setup-none`.
+#   LEGACY. dev.md as installed at <frozen> (`.claude/team-roles/dev.md`, then
+#       `core/team-roles/dev.md`), or, when neither is TRACKED there, the on-disk copy in the
+#       worktree (the one the dev read), that does not carry the column-0 label prescription: one
+#       `LEGACY:` stdout line and neither arm runs — the engine lands at pull step 3, the role file
+#       at the reconcile merge, and a dev writing to the installed dev.md writes no label. dev.md
+#       neither tracked nor on disk is held to both arms, with one `HELD:` line naming both paths
+#       tried: an unreadable record never acquits.
+#   MEASURED, the reference consumer's 26 distinct review-status story blobs across its refs
+#   (s317-s319): the CHANGELOG's BL-768 entry carries the per-story verdicts and the narrowing.
+#
 #   Not checked, deliberately: a missing Dev Agent Record (implementation.md folds it into the
 #   story AFTER gate 1 approves, so its absence at gate 1 is the documented flow) and an empty
 #   evidence heading (operator ruling, batch 230).
@@ -336,7 +369,7 @@ BASE="$(resolve "$2")";   [ -n "$BASE" ]   || { echo "$ME: UNEVALUABLE — base 
 FROZEN="$(resolve "$3")"; [ -n "$FROZEN" ] || { echo "$ME: UNEVALUABLE — frozen does not resolve: $3" >&2; exit 2; }
 TEXT="$(story_text "$FROZEN" "$STORY")" || { echo "$ME: UNEVALUABLE — cannot read $STORY at $FROZEN or on disk" >&2; exit 2; }
 if [ "$BASE" = "$FROZEN" ]; then
-  warn "range-empty: base ${BASE:0:12} is the frozen sha, so arm (a) reads no capture (on a rework re-handoff, base is the previous gate's frozen sha)"
+  warn "range-empty: base ${BASE:0:12} is the frozen sha, so arm (a) reads no capture (base is the gate-1 manifest's base on every handoff, rework included)"
 elif ! G merge-base --is-ancestor "$BASE" "$FROZEN" 2>/dev/null; then
   warn "range-base: base ${BASE:0:12} is not an ancestor of ${FROZEN:0:12}, so arm (a) reads a diff, not this story's range"
 fi
@@ -462,6 +495,63 @@ if [ -n "$GLOBS" ]; then
     case "$last" in *[!*{},]*) case " $CAPDIRS " in *" $gd "*) hit=1 ;; esac ;; esac
     [ "$hit" -eq 1 ] && ! glob_resolves "$g" && refuse "glob-cited $g: a brace or glob token cited as a capture path, and some alternative matches no file tracked at ${FROZEN:0:12}; commit the captures and cite each by its own path"
   done <<<"$GLOBS"
+fi
+
+# ------------------------------------------------------------------------- run record
+# (k) FULL-COLLECTION and (l) DEPENDENCY-SETUP (header: HANDOFF MODE, RUN RECORD). The record-only
+# partition and the none-reason grammar are record-only-diff.sh's, beside this script; neither is
+# restated here.
+EV_SENTINEL='column-0 `Full-collection run:`'
+RO="$HE_SELF/record-only-diff.sh"
+[ -f "$RO" ] || { echo "$ME: UNEVALUABLE — record-only-diff.sh is not beside this script at $HE_SELF" >&2; exit 2; }
+ev_label() { # <label> -> the value of the first label line (record-only-diff.sh's label grammar); 1 when none
+  bash "$RO" label "$1" <<<"$TEXT"
+}
+ev_dev=""; ev_txt=""; ev_rd=0
+for ev_p in .claude/team-roles/dev.md core/team-roles/dev.md; do
+  if tracked "$FROZEN" "$ev_p"; then ev_dev="$ev_p at ${FROZEN:0:12}"; ev_txt="$(G show "$FROZEN:$ev_p" 2>/dev/null)"; ev_rd=1; break; fi
+done
+# Not tracked at <frozen> (a consumer that does not commit .claude/team-roles/): the dev read the
+# ON-DISK installed copy in this worktree, so that copy decides.
+if [ "$ev_rd" = 0 ]; then
+  for ev_p in .claude/team-roles/dev.md core/team-roles/dev.md; do
+    if [ -r "$TOP/$ev_p" ]; then ev_dev="$TOP/$ev_p (on disk, untracked at ${FROZEN:0:12})"; ev_txt="$(cat "$TOP/$ev_p")"; ev_rd=1; break; fi
+  done
+fi
+[ "$ev_rd" = 1 ] || printf 'HELD: full-collection and dependency-setup lines checked: dev.md is neither tracked at %s nor on disk at %s (either layout); an unreadable role file never acquits\n' "${FROZEN:0:12}:.claude/team-roles/dev.md" "$TOP/.claude/team-roles/dev.md"
+# ev_none <label> <value> <code>: a value that is not a run (record-only-diff.sh RUN-SHAPE) is a
+# no-run claim, however it is spelled, and is held to the record-only partition.
+ev_none() {
+  bash "$RO" none-reason "$2" 2>/dev/null
+  if [ $? -eq 1 ]; then
+    refuse "$3 $STORY: '$1 $2' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"; return
+  fi
+  ro_out="$(bash "$RO" paths -C "$REPO" "$STORY" "$BASE" "$FROZEN" 2>&1)" \
+    || refuse "$3 $STORY: '$1 ${2:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and range ${BASE:0:12}..${FROZEN:0:12} is not record-only (${ro_out}); run it and record the invocation and counts"
+}
+if [ "$ev_rd" = 1 ] && ! grep -qF -- "$EV_SENTINEL" <<<"$ev_txt"; then
+  printf 'LEGACY: full-collection and dependency-setup lines not checked: %s prescribes no %s label\n' "$ev_dev" "$EV_SENTINEL"
+else
+  # The project's conventions at the toplevel, as merge-review-shards.sh passes them to run-shape for QA's canonical run.
+  ev_conv=""; [ ! -r "$TOP/docs/coding-conventions.md" ] || ev_conv="$TOP/docs/coding-conventions.md"
+  fc="$(ev_label 'Full-collection run:')"; fc_rc=$?
+  if [ "$fc_rc" -ne 0 ]; then
+    refuse "full-collection-missing $STORY: no 'Full-collection run:' line at ${FROZEN:0:12}; write one at column 0 with the canonical run's invocation, working directory and counts, or 'Full-collection run: none, <reason>' when the story's diff is record-only"
+  elif ! bash "$RO" run-shape "$fc" ${ev_conv:+"$ev_conv"}; then
+    ev_none 'Full-collection run:' "$fc" full-collection-none
+  fi
+  ds="$(ev_label 'Dependency setup:')"; ds_rc=$?
+  if [ "$ds_rc" -ne 0 ]; then
+    refuse "dependency-setup-missing $STORY: no 'Dependency setup:' line at ${FROZEN:0:12}; write one at column 0 beside the full-collection run, the setup's invocation and working directory, or 'none, <reason>'"
+  elif ! bash "$RO" setup-shape "$ds"; then
+    # dev.md allows `none, <reason>` whatever the diff ("no setup needed" is a fact about the
+    # project, not about this story's paths); every OTHER no-run spelling is held to the partition.
+    bash "$RO" none-reason "$ds" 2>/dev/null; ds_nr=$?
+    case "$ds_nr" in
+      0) ;;
+      *) ev_none 'Dependency setup:' "$ds" dependency-setup-none ;;
+    esac
+  fi
 fi
 
 # ------------------------------------------------------------------------- bookkeeping

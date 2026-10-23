@@ -82,7 +82,10 @@ replaces that section does not replace this one. REJECT without validating
 further when any of these is absent:
 
 - the dev's full-collection run: exact invocation, working directory, and
-  collected / passed / failed / deselected / skipped / xfailed counts;
+  collected / passed / failed / deselected / skipped / xfailed counts, or
+  `Full-collection run: none, <reason>` ONLY when the story's diff is
+  record-only (every changed path is the story file, a sprint-status yaml, or
+  under `docs/reviews/`, `test-results/` or `docs/escalations/`);
 - the dev's dependency setup for that run, recorded beside it: the canonical
   dependency setup that makes it reproducible from a fresh detached worktree,
   as the exact invocation and its working directory, or `none` with the reason;
@@ -273,6 +276,22 @@ For each completed task, verify:
   narrower root; false positive is an environment-gated test
   legitimately skipped, e.g. no database available (record the skip reason);
   remove when CI enforces the canonical profile on every gate run.
+  **A PASS waits for that run's summary line.** Write it as a
+  column-0 `Canonical run:` line carrying the invocation and working directory, and a
+  `Canonical result: <the run's summary line, with counts>` line; a PASS
+  without both, with a `-k`, `--deselect` or `-t` invocation, a file or node-id
+  argument, a `-m` marker or path the project's coding conventions do not
+  declare canonical, or with a result that is not finished, is refused by
+  `merge-review-shards.sh`. The
+  one exemption is the record-only diff, the same predicate the dev's
+  full-collection line is held to: `Canonical run: none, <reason>` is
+  accepted only when every path the WHOLE story's diff changes, from the base
+  gate 1 used, on every pass, is the story file,
+  a sprint-status yaml, or under `docs/reviews/`, `test-results/` or
+  `docs/escalations/` and not a `*.py`, `*.sh`, `*.toml`, `*.cfg`,
+  `conftest.py` or `pytest.ini`. A line with no backticked invocation, `$ `
+  line or count is that claim, however it is worded. A NEEDS_REWORK written before the run finishes is
+  allowed.
 - [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
   If the story allows the suite to be non-green on failures it did not cause,
   the allowance MUST list the failing test IDs, and the run MUST fail exactly
@@ -538,10 +557,14 @@ after gate 3. Dispatched `shard: 1/1 <story-index>`, you are the whole
 validation: run every item above yourself, and write the validation file at the
 path above in the normal way. Before you return, run
 `<lead engine>/merge-review-shards.sh --check-serial <validation file> --gate qa`
-from the lead checkout's `scripts/ai-dlc` path your brief carries. It reads your
+from the lead checkout's `scripts/ai-dlc` path your brief carries, adding
+`--story <story file> --range <base> <go-signal sha>` (the base gate 1 used, on
+every pass; a later sha is refused) when your record claims the
+record-only exemption. It reads your
 verdict exactly as `gate-validation.md` Check 1 does (at least one verdict line, every
 one reading the same member of the `## Verdict` set) and applies the merge's per-AC
-FAIL-row rules to your table and findings. It does not check severity backing. Fix
+FAIL-row rules to your table and findings, and holds a PASS to the canonical-run
+lines above. It does not check severity backing. Fix
 every REFUSED line and run it again until it prints SERIAL-OK.
 
 ## Escalation Protocol

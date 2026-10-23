@@ -51,6 +51,7 @@ echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
 echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-content-seal.sh"
+echo "HERMETIC-CONSUMED core/scripts/record-only-diff.sh"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
@@ -266,6 +267,10 @@ arm2 fr_remedy "FR3: the orphan remedy is satisfiable -- cross-1 filing the AC4 
                "FR3: the orphan FAIL row's remedy cannot be satisfied under the owner rule"
 arm2 serial "SR1: --check-serial, gate 3's Check 1 rule and no stricter -- '## Verdict / PASS', 'Verdict: NEEDS_REWORK', 'Verdict: PASS (all ACs)', '## Verdict / PASS.' and two matches both reading PASS answer SERIAL-OK; the heading-then-'Verdict: PASS' union and two different values, 'PASS-pending', APPROVED under --gate qa, a renamed '## Result' code review (0 matches), a PASS over a FAIL or FAILED row (the latter under '### Acceptance criteria'), and FAIL rows named only by 'AC-4.1' or a 'handover:' line each REFUSED [owner: serial]; code-review APPROVED and a backed NEEDS_REWORK FAIL row answer SERIAL-OK" \
              "SR1: --check-serial accepted a malformed serial verdict, or refused a correct one"
+arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run -- the run line plus a counted result, a bulleted pair and a '-p no:cacheprovider' near-miss answer SERIAL-OK; no run line, counts only on a RED replay line, -k in four spellings, --deselect, a file and a node id, a path root and a marker the conventions do not declare, no result line, a NOT FINISHED result and a result with no count each REFUSED [owner: serial]; NEEDS_REWORK with no run SERIAL-OK; 'none, <reason>' over a record-only --range SERIAL-OK, over a range touching a test, a test module under test-results/, a seat-narrowed rework range, an empty range and a non-ancestor base, and with no range REFUSED; N/A, TBD and skipped held to the same partition; a bare none REFUSED; -m unit accepted with no conventions and declared, a declared path root accepted; a root whose qa.md lacks the sentinel prints LEGACY and accepts" \
+           "CR1: --check-serial accepted a PASS with no canonical run, or refused a correct one"
+arm2 canon_merge "CR2: the qa merge -- four PASS shards carrying the run merge with no LEGACY line; the execution owner's run lines removed REFUSED [owner: cross-1]; the same with a NEEDS_REWORK part merges NEEDS_REWORK; frozen over an installed qa.md with no label, LEGACY and merges; qa.md untracked at the frozen sha and on disk without the label LEGACY, with it held; neither, held naming both paths; --range on the merge REFUSED" \
+                 "CR2: the merge did not hold the execution owner's PASS to its canonical run, or held a legacy set"
 # SR2 (BL-742 role text): qa.md's and code-reviewer.md's serial passages each name the --check-serial
 # call; offenders with the step removed from either file are refused.
 grep -vF -- "$SR_ROLE_CMD <validation file> --gate qa" "$QA_MD" > "$WORK/sr-qa-nostep.md"
@@ -430,9 +435,58 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     "only the first owner duplicate of a run printed"
   CS_ONLY=check mut_run M22 merge-review-shards.sh '  [ "$DUP_N" -eq 0 ] || exit 2' '  :' x_dupall "check{" \
     "the --check-shard duplicate barrier dropped"
+  # BL-769. M23 the filter read dropped, so a -k PASS is accepted. M24 the record-only decision dropped,
+  # so a code-touching none is accepted. M25 the merge's LEGACY gate dropped, so a set frozen over an
+  # installed qa.md with no label is refused. M26 the PASS-only scope dropped, so an early NEEDS_REWORK
+  # with no run is refused. M27 the merge's call dropped, so a run-less PASS merges. M28 the serial
+  # gate-1-base check dropped, so a seat-narrowed rework range acquits. M29 the conventions file not
+  # handed to the serial check, so a declared path root refuses. M30 the no-run inversion reverted, so
+  # 'N/A' reads as a run. M31 the record-dir code-suffix exclusion dropped (record-only-diff.sh). M32 the
+  # serial LEGACY branch forced off. M33 the merge's on-disk qa.md read dropped.
+  CS_ONLY=cr-filter-k mut_run M23 merge-review-shards.sh '  cg_rf_="$(bash "$RO" run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \' '  cg_rf_="$(true)" \' \
+    canon "cr-filter-k{" "a filtered canonical run accepted"
+  CS_ONLY=cr-exempt-code mut_run M24 merge-review-shards.sh '    cg_ro_="$(bash "$RO" paths' '    cg_ro_="$(true' canon "cr-exempt-code{" \
+    "the record-only exemption accepted whatever the diff"
+  CS_ONLY=crm-legacy mut_run M25 merge-review-shards.sh '  if [ "$cr_held_" = 0 ]; then' '  if false; then' canon_merge "crm-legacy{" \
+    "the merge's installed-qa.md LEGACY gate dropped"
+  CS_ONLY=cr-nr-norun mut_run M26 merge-review-shards.sh '  [ "$WORST" = PASS ] || return 0' '  :' canon "cr-nr-norun{" \
+    "a NEEDS_REWORK with no canonical run refused"
+  CS_ONLY=crm-norun mut_run M27 merge-review-shards.sh '    canon_gate "$(awk' '    : "$(awk' canon_merge "crm-norun{" \
+    "the merge's canonical-run call removed"
+  CS_ONLY=cr-exempt-narrow mut_run M28 merge-review-shards.sh '      cg_sb_="$(bash "$RO" story-base' '      cg_sb_="$(true' canon "cr-exempt-narrow{" \
+    "the serial exemption decided over a seat-narrowed range"
+  CS_ONLY=cr-path-conv mut_run M29 merge-review-shards.sh '      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"' '      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" ""' \
+    canon "cr-path-conv{" "the consumer's declared canonical path refused"
+  CS_ONLY=cr-norun-na mut_run M30 merge-review-shards.sh '  if ! bash "$RO" run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then' '  if bash "$RO" none-reason "$cg_run_" 2>/dev/null; [ $? -ne 2 ]; then' \
+    canon "cr-norun-na{" "a no-run claim spelled other than none read as a run"
+  CS_ONLY=cr-exempt-evil mut_run M31 record-only-diff.sh '            *.py|*.sh|*.toml|*.cfg|conftest.py|pytest.ini) first="$p" ;;' '            NEVER-A-SUFFIX) first="$p" ;;' \
+    canon "cr-exempt-evil{" "a collectable module under a record directory classed record-only"
+  CS_ONLY=cr-serial-legacy mut_run M32 merge-review-shards.sh '    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then' '    if true; then' canon "cr-serial-legacy{" \
+    "the --check-serial LEGACY branch forced off"
+  CS_ONLY=crm-disk-legacy mut_run M33 merge-review-shards.sh '  if [ -z "$cr_inst_" ]; then' '  if false; then' canon_merge "crm-disk-legacy{" \
+    "the merge's on-disk qa.md read dropped"
+  # BL-769 fold, all in record-only-diff.sh's RUN-FILTER and RUN-SHAPE. M34 the test-file suffixes
+  # dropped, so a vitest file argument reads as a path. M35 go's -run dropped. M36 --lf dropped. M37
+  # the `--` hand-off dropped. M38 the superset clause dropped, so a root containing the declared one
+  # refuses. M39 the none no longer read before the run shape.
+  CS_ONLY=cr-filter-suffix mut_run M34 record-only-diff.sh '          *::*|*.py|*.test.*|*.spec.*|*_test.go)' '          *::*|*.py)' \
+    canon "cr-filter-suffix{" "a test-file argument to a non-pytest runner accepted as a path"
+  CS_ONLY=cr-filter-gorun mut_run M35 record-only-diff.sh '|--testNamePattern=*|-run|-run=*)' '|--testNamePattern=*)' \
+    canon "cr-filter-gorun{" "go test -run accepted"
+  CS_ONLY=cr-filter-lf mut_run M36 record-only-diff.sh '          --lf|--last-failed) printf' '          --NEVER-lf) printf' \
+    canon "cr-filter-lf{" "a last-failed re-run accepted"
+  CS_ONLY=cr-filter-dd mut_run M37 record-only-diff.sh '          [ "$w" = -- ] && dd=1' '          :' \
+    canon "cr-filter-dd{" "a path handed to the runner after -- accepted"
+  CS_ONLY=cr-path-super mut_run M38 record-only-diff.sh ' || substr($2, 1, length(v) + 1) == v "/")' ')' \
+    canon "cr-path-super{" "a path root containing the declared one refused"
+  CS_ONLY=cr-norun-nonebt mut_run M39 record-only-diff.sh '    bash "$0" none-reason "$2" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1' '    :' \
+    canon "cr-norun-nonebt{" "a none carrying a runner span read as a run"
+  # M40 the conventions' declared canonical command no longer read as a runner, so `tox -e all` is a no-run claim.
+  CS_ONLY=cr-conv-runner mut_run M40 record-only-diff.sh '        rs_rn="$rs_rn|$(printf' '        : "$(printf' \
+    canon "cr-conv-runner{" "a runner the conventions declare canonical read as a no-run claim"
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 22 ]; then ok "VBCTL: CONTROL -- each of M1-M22's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 22), the same copy every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 22 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 40 ]; then ok "VBCTL: CONTROL -- each of M1-M40's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 40), the same copy every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 40 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

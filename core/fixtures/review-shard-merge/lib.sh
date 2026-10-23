@@ -678,6 +678,10 @@ refused_at() { # <token> <out>
 # the declared `handovers: <n>` header line instead -- 0 unless the caller names the count its
 # extra text hands over. The count is written by each caller, never computed from the text here:
 # a helper that counted the text would be a second copy of the merge's parser.
+# CANON_BLK (BL-769): the execution owner's canonical run, as qa.md tells it to write one -- the
+# invocation line and the summary line with counts. Every first-cross QA shard and every serial QA
+# file carries it, so a PASS merges; the canonical-run cells below remove or rewrite it.
+CANON_BLK="$(printf 'Canonical run: `python3 -m pytest -q` from the frozen worktree root\nCanonical result: 812 passed, 3 skipped, 0 failed, 0 deselected')"
 qshard() {
   local d="$1" k="$2" v="$3" cite="$4" extra="${5:-}" hc="${6:-0}"
   {
@@ -685,6 +689,7 @@ qshard() {
     case "$k" in cross*) ;; *) [ "$hc" = OMIT ] || printf 'handovers: %s\n' "$hc" ;; esac
     printf '\n'
     printf '## Summary\nShard %s validated its part. QCONSERVE-%s-91c2\n\n' "$k" "$k"
+    { [ "$k" = cross ] || [ "$k" = cross-1 ]; } && printf '%s\n\n' "$CANON_BLK"
     printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-%s-1 a missing caller in shard %s\nparts: %s\n\nBody.\n\n' "$k" "$k" "$cite"
     # The per-AC table and the deferred record: the FIRST cross shard's alone (the execution owner).
     if [ "$k" = cross ] || [ "$k" = cross-1 ]; then
@@ -888,7 +893,7 @@ HO_PART2="$(printf '### Important\n\n#### Q-2-H AC7 replay cannot reach a GREEN 
 qcross() { # <dir> <verdict> <text inserted inside cross-1.md's ## Findings> -- the execution owner
   {
     printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "$B_SHA" "$2"
-    printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n'
+    printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n%s\n\n' "$CANON_BLK"
     printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: 1, 2\n\nBody.\n\n%s\n\n' "$3"
     printf '## Acceptance Criteria\n\n| AC | Verdict | Evidence |\n|---|---|---|\n| AC1 | PASS | suite green |\n\n## Deferred ACs\n\nNone.\n'
   } > "$1/cross-1.md"
@@ -2039,7 +2044,7 @@ fr_x1() {
   g1="$(awk -F'\t' '$1 == 1 { print $2; exit }' "$1.groups")"; f1="${g1%%,*}"; l1="${g1##*,}"
   {
     printf '# QA Validation shard cross-1\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "${SHARD_SHA:-$B_SHA}" "$2"
-    printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n'
+    printf '## Summary\nShard cross-1 validated its part. QCONSERVE-cross-1-91c2\n\n%s\n\n' "$CANON_BLK"
     printf '## Findings\n\n### Important (should fix, can be follow-up)\n\n#### Q-cross-1-1 a missing caller in shard cross-1\nparts: %s, %s\n\nBody.\n\n' "$f1" "$l1"
     [ -z "$3" ] || printf '%s\n\n' "$3"
     printf '## Acceptance Criteria\n\n%s\n|---|---|---|---|\n| AC1 | PASS | suite green | green |\n%s\n| AC5 | PASS | x | y |\n\n' "$4" "$5"
@@ -2192,7 +2197,7 @@ SR_OWN="[owner: serial]"
 # sr_file <path> <verdict block, verbatim> [per-AC FAIL row] [findings body] [per-AC heading]
 sr_file() {
   {
-    printf '# QA Validation: 1\n\n## Summary\nSerial.\n\n%s\n\n## Findings\n\n%s\n\n' "$2" "${4:-### Critical (must fix before PASS)
+    printf '# QA Validation: 1\n\n## Summary\nSerial.\n\n%s\n\n%s\n\n## Findings\n\n%s\n\n' "${SR_CANON-$CANON_BLK}" "$2" "${4:-### Critical (must fix before PASS)
 
 None.}"
     printf '%s\n\n| AC | Result | Expected | Got |\n|---|---|---|---|\n| AC1 | PASS | x | y |\n' "${5:-## Acceptance Criteria}"
@@ -2246,6 +2251,235 @@ p_serial() {
   fi
   [ -z "$WHY" ]
 }
+# ---- CR1 (BL-769): a QA PASS waits for its canonical run. Serial cells, each refusal with its ALLOW twin
+# one property apart. The record-only cells run --story/--range against CR_REPO, seeded below: a commit
+# touching only records (CR_REC) and one touching a test file (CR_CODE), each over CR_BASE.
+CR_NORUN="carries no 'Canonical run:' line"
+CR_FILT="selects tests by name"
+CR_FILE="names a file or test node"
+CR_MARK="selects by marker"
+CR_PATH="narrows the collection to the path"
+CR_DESEL="deselects tests"
+CR_GATE1="is not the story's gate-1 base"
+CR_NOANC="is not an ancestor of"
+CR_NORES="with no 'Canonical result:' line"
+CR_UNFIN="says the run has not finished"
+CR_NOCNT="carries no count"
+CR_NOTRO="is not record-only for"
+CR_NORNG="no --story and --range were given"
+CR_REPO="$WORK/repo-cr"; CR_STORY=stories/story-1.md
+mkdir -p "$CR_REPO/stories" "$CR_REPO/tests" "$CR_REPO/docs/reviews/s1" "$CR_REPO/test-results" \
+  && G init -q "$CR_REPO" && printf -- '---\nstatus: ready-for-dev\n---\n# Story 1\n' > "$CR_REPO/$CR_STORY" && printf 'def test_a(): pass\n' > "$CR_REPO/tests/test_a.py" \
+  && G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m base || { echo "FIXTURE ERROR: the canonical-run repo was not seeded" >&2; exit 2; }
+CR_BASE="$(G -C "$CR_REPO" rev-parse HEAD)"
+printf -- '---\nstatus: review\n---\n# Story 1\nFull-collection run: none, record-only\n' > "$CR_REPO/$CR_STORY"; printf '# r\n' > "$CR_REPO/docs/reviews/s1/1-qa-validation.md"; printf '$ x\n' > "$CR_REPO/test-results/h.txt"
+G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m rec || { echo "FIXTURE ERROR: commit failed" >&2; exit 2; }
+CR_REC="$(G -C "$CR_REPO" rev-parse HEAD)"
+printf 'def test_a(): assert 1\n' > "$CR_REPO/tests/test_a.py"
+G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m code || { echo "FIXTURE ERROR: commit failed" >&2; exit 2; }
+CR_CODE="$(G -C "$CR_REPO" rev-parse HEAD)"
+# CR_P2: the rework after a NEEDS_REWORK with no run touches only the story. CR_CODE..CR_P2 is
+# record-only; CR_BASE..CR_P2 is not. A seat passing the pass-1 frozen sha as base narrows the range.
+printf -- '---\nstatus: review\n---\n# Story 1\nFull-collection run: `pytest -q`: 1 passed\n' > "$CR_REPO/$CR_STORY"
+G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m rework || { echo "FIXTURE ERROR: commit failed" >&2; exit 2; }
+CR_P2="$(G -C "$CR_REPO" rev-parse HEAD)"
+# CR_EVIL: over CR_BASE, a record-only diff plus a collectable module under test-results/.
+G -C "$CR_REPO" checkout -q -b evil "$CR_REC" && printf 'def test_evil():\n    assert False\n' > "$CR_REPO/test-results/test_evil.py" \
+  && G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m evil && CR_EVIL="$(G -C "$CR_REPO" rev-parse HEAD)" \
+  && G -C "$CR_REPO" checkout -q - || { echo "FIXTURE ERROR: the evil branch was not seeded" >&2; exit 2; }
+# PROJ_CRS: a serial root whose qa.md predates the label (the LEGACY branch of --check-serial).
+PROJ_CRS="$WORK/proj-crs"
+mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" \
+  && cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$PROJ_CRS/core/skills/ai-dlc/steps/" \
+  && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$PROJ_CRS/core/team-roles/qa.md" || { echo "FIXTURE ERROR: the legacy serial root was not seeded" >&2; exit 2; }
+_crs0="$(grep -cF 'column-0 `Canonical run:`' "$PROJ_CRS/core/team-roles/qa.md")" || _crs0=0
+[ "$_crs0" = 0 ] || { echo "FIXTURE STALE: the legacy serial root still carries the label" >&2; exit 2; }
+cr_run() { # <script-dir> <file> [extra args...] -> SRC, $CO (CR_ROOT overrides the project root)
+  local sd="$1" f="$2"; shift 2
+  AI_DLC_PROJECT_ROOT="${CR_ROOT:-$PROJ}" bash "$sd/merge-review-shards.sh" --check-serial "$f" --gate qa "$@" > "$CO" 2>&1 < /dev/null; SRC=$?
+}
+cr_ok() { local sd="$1" f="$2" c="$3"; shift 3; cr_run "$sd" "$f" "$@"
+  [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK:" || WHY="$WHY $c{rc=$SRC $(head -1 "$CO")}"; }
+cr_no() { local sd="$1" f="$2" c="$3" t="$4"; shift 4; cr_run "$sd" "$f" "$@"
+  [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "$t" && has "$CO" "$SR_OWN" && ! has "$CO" "SERIAL-OK" \
+    || WHY="$WHY $c{rc=$SRC $(head -1 "$CO")}"; }
+p_canon() {
+  local sd="$1" f="$CR_REPO/docs/reviews/s1/cr-1-qa-validation.md" pv nv; pv="$(printf '## Verdict\nPASS')"
+  WHY=""
+  # Every cell is gated by `cell` (BL-755), so a mutant runs only the cell its kill token names. Each
+  # cell writes the whole file it reads, and the conventions-file cells write and remove their own copy.
+  cr_f() { SR_CANON="$(printf 'Canonical run: `%s` from the root\nCanonical result: 9 passed' "$1")" sr_file "$f" "$pv"; }
+  cr_conv() { printf -- '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`\n' > "$CR_REPO/docs/coding-conventions.md"; }
+  cr_noconv() { rm -f "$CR_REPO/docs/coding-conventions.md"; }
+  SR_NONE='Canonical run: none, the diff is record-only (story, reviews, test-results)'
+  if cell cr-ok; then SR_CANON="$CANON_BLK" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-ok; fi
+  if cell cr-norun; then SR_CANON='' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-norun "$CR_NORUN"; fi
+  # graph s319 5.1 p1's shape: the only counts are on a RED replay line, and the run line says nothing.
+  if cell cr-redonly; then SR_CANON="$(printf 'RED replay: 1 failed, 4 passed\nThe canonical run is still in progress.')" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-redonly "$CR_NORUN"; fi
+  # The filter grammar (record-only-diff.sh RUN-FILTER). With no docs/coding-conventions.md, -m is
+  # accepted and a path refused; cr_conv declares `pytest -m unit` and `pytest suite/tests`.
+  if cell cr-filter-k; then cr_noconv; cr_f 'pytest -k test_new'; cr_no "$sd" "$f" cr-filter-k "$CR_FILT"; fi
+  if cell cr-filter-kglued; then cr_noconv; cr_f 'pytest -ktest_new'; cr_no "$sd" "$f" cr-filter-kglued "$CR_FILT"; fi
+  if cell cr-filter-kquoted; then cr_noconv; cr_f 'pytest -k"test_new"'; cr_no "$sd" "$f" cr-filter-kquoted "$CR_FILT"; fi
+  if cell cr-filter-keyword; then cr_noconv; cr_f 'pytest --keyword=x'; cr_no "$sd" "$f" cr-filter-keyword "$CR_FILT"; fi
+  if cell cr-deselect; then cr_noconv; cr_f 'pytest --deselect tests/test_a.py::t'; cr_no "$sd" "$f" cr-deselect "$CR_DESEL"; fi
+  if cell cr-file; then cr_noconv; cr_f 'pytest tests/test_one.py'; cr_no "$sd" "$f" cr-file "$CR_FILE"; fi
+  if cell cr-node; then cr_noconv; cr_f 'pytest tests/test_one.py::test_a'; cr_no "$sd" "$f" cr-node "$CR_FILE"; fi
+  if cell cr-m-noconv; then cr_noconv; cr_f '.venv/bin/python -m pytest -m unit -q'; cr_ok "$sd" "$f" cr-m-noconv; fi
+  if cell cr-path-noconv; then cr_noconv; cr_f 'pytest suite/tests -n auto'; cr_no "$sd" "$f" cr-path-noconv "$CR_PATH"; fi
+  if cell cr-m-conv; then cr_conv; cr_f '.venv/bin/python -m pytest -m unit -q'; cr_ok "$sd" "$f" cr-m-conv; cr_noconv; fi
+  if cell cr-m-glued-conv; then cr_conv; cr_f '.venv/bin/python -m pytest -munit'; cr_ok "$sd" "$f" cr-m-glued-conv; cr_noconv; fi
+  if cell cr-m-other; then cr_conv; cr_f 'pytest -m "not slow"'; cr_no "$sd" "$f" cr-m-other "$CR_MARK"; cr_noconv; fi
+  if cell cr-path-conv; then cr_conv; cr_f 'cd /w && pytest suite/tests -n auto > out.txt 2>&1'; cr_ok "$sd" "$f" cr-path-conv; cr_noconv; fi
+  if cell cr-path-other; then cr_conv; cr_f 'pytest other/tests'; cr_no "$sd" "$f" cr-path-other "$CR_PATH"; cr_noconv; fi
+  # Narrowing to any runner (BL-769 fold): a test-file argument, go's -run, --lf, -x with --ff, and an
+  # argument after `--`; --ff alone runs everything. A path root CONTAINING the declared root is a
+  # superset of it, accepted; one inside it is narrowing.
+  if cell cr-filter-suffix; then cr_noconv; cr_f 'npx vitest run web/src/foo.test.jsx --root web'; cr_no "$sd" "$f" cr-filter-suffix "$CR_FILE"; fi
+  if cell cr-filter-gorun; then cr_noconv; cr_f 'go test ./pkg/one -run TestX'; cr_no "$sd" "$f" cr-filter-gorun "$CR_FILT"; fi
+  if cell cr-filter-lf; then cr_conv; cr_f 'pytest suite/tests -x --lf'; cr_no "$sd" "$f" cr-filter-lf "re-runs only the last failures"; cr_noconv; fi
+  if cell cr-filter-xff; then cr_conv; cr_f 'pytest suite/tests -x --ff'; cr_no "$sd" "$f" cr-filter-xff "stops at the first of the previous failures"; cr_noconv; fi
+  if cell cr-filter-ff; then cr_conv; cr_f 'pytest suite/tests --ff'; cr_ok "$sd" "$f" cr-filter-ff; cr_noconv; fi
+  if cell cr-filter-dd; then cr_noconv; cr_f 'npm test -- src/pages'; cr_no "$sd" "$f" cr-filter-dd "hands the runner a path after --"; fi
+  if cell cr-path-super; then cr_conv; cr_f 'python3 -m pytest -q suite -p no:cacheprovider -p no:randomly'; cr_ok "$sd" "$f" cr-path-super; cr_noconv; fi
+  # A runner the built-in list does not name is a run only when the conventions declare it canonical.
+  if cell cr-conv-runner; then printf -- '- canonical: `tox -e all` from the repository root\n' > "$CR_REPO/docs/coding-conventions.md"; cr_f 'tox -e all'; cr_ok "$sd" "$f" cr-conv-runner; cr_noconv; fi
+  if cell cr-conv-runner-none; then cr_noconv; cr_f 'tox -e all'; cr_no "$sd" "$f" cr-conv-runner-none "$CR_NORNG"; fi
+  if cell cr-path-sub; then cr_conv; cr_f 'pytest suite/tests/unit'; cr_no "$sd" "$f" cr-path-sub "$CR_PATH"; cr_noconv; fi
+  if cell cr-nearfilter; then SR_CANON="$(printf 'Canonical run: `pytest -p no:cacheprovider` from the root, see tests/foo-k.py\nCanonical result: 9 passed')" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-nearfilter; fi
+  if cell cr-nores; then SR_CANON='Canonical run: `pytest -q` from the root' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-nores "$CR_NORES"; fi
+  if cell cr-unfin; then SR_CANON="$(printf 'Canonical run: `pytest -q`\nCanonical result: NOT FINISHED at 44%%, 3801 passed so far')" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-unfin "$CR_UNFIN"; fi
+  if cell cr-nocnt; then SR_CANON="$(printf 'Canonical run: `pytest -q`\nCanonical result: green')" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-nocnt "$CR_NOCNT"; fi
+  if cell cr-bullet; then SR_CANON="$(printf -- '- Canonical run: `pytest -q` from the root\n- Canonical result: 12 failed, 8799 passed, 0 deselected')" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-bullet; fi
+  # NEEDS_REWORK with no run at all: an early REJECT is legitimate.
+  if cell cr-nr-norun; then SR_CANON='' sr_file "$f" 'Verdict: NEEDS_REWORK' '' "$(printf '### Important (x)\n\n#### Q-1 the handoff lacks the run\n\nBody.')"; cr_ok "$sd" "$f" cr-nr-norun; fi
+  # The exemption: record-only PASS accepted over CR_BASE..CR_REC, refused over CR_BASE..CR_CODE and with no range.
+  if cell cr-exempt-rec; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-exempt-rec --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"; fi
+  if cell cr-exempt-code; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-code "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"; fi
+  if cell cr-exempt-norange; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-norange "$CR_NORNG"; fi
+  # A collectable module under test-results/ is not a record.
+  if cell cr-exempt-evil; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-evil "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_EVIL"; fi
+  # The exemption's base is a gate-1 base. The pass-2 sequence (code at CR_CODE, a story-only rework at
+  # CR_P2) is refused over the seat's narrowed CR_CODE..CR_P2 (the story at CR_CODE is already
+  # `review`), and an empty CR_CODE..CR_CODE too; over the whole story the partition refuses it.
+  if cell cr-exempt-narrow; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-narrow "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_P2"; fi
+  if cell cr-exempt-empty; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-empty "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_CODE"; fi
+  if cell cr-exempt-whole; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-whole "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_P2"; fi
+  if cell cr-exempt-nonanc; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-nonanc "$CR_NOANC" --story "$CR_STORY" --range "$CR_CODE" "$CR_REC"; fi
+  if cell cr-bare; then SR_CANON='Canonical run: none' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bare "gives no reason" --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"; fi
+  # A no-run claim spelled other than none is held to the partition, accepted on a record range.
+  if cell cr-norun-na; then SR_CANON='Canonical run: N/A, docs-only story' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-norun-na "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"; fi
+  # The none is read before the run shape: a none whose reason names a runner span is a no-run claim.
+  if cell cr-norun-nonebt; then SR_CANON='Canonical run: none, `pytest -q` is not needed for a docs-only story' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-norun-nonebt "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"; fi
+  if cell cr-norun-other; then
+    for nv in 'TBD' 'skipped, no code of note'; do
+      SR_CANON="Canonical run: $nv" sr_file "$f" "$pv"
+      cr_no "$sd" "$f" "cr-norun-other[$nv]" "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"
+    done
+  fi
+  if cell cr-norun-rec; then
+    for nv in 'N/A, docs-only story' 'TBD' 'skipped, no code of note'; do
+      SR_CANON="Canonical run: $nv" sr_file "$f" "$pv"
+      cr_ok "$sd" "$f" "cr-norun-rec[$nv]" --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"
+    done
+  fi
+  # --check-serial against a root whose qa.md lacks the sentinel prints LEGACY and accepts.
+  if cell cr-serial-legacy; then
+    SR_CANON='' sr_file "$f" "$pv"
+    CR_ROOT="$PROJ_CRS" cr_run "$sd" "$f"
+    [ "$SRC" -eq 0 ] && has "$CO" "LEGACY: canonical-run lines not checked:" && has "$CO" "SERIAL-OK:" || WHY="$WHY cr-serial-legacy{rc=$SRC $(head -1 "$CO")}"
+  fi
+  rm -f "$f"
+  [ -z "$WHY" ]
+}
+# CR2: the merge holds the execution owner's file (cross-1) to the rule, and a frozen tree whose
+# INSTALLED qa.md carries no label is LEGACY. QS installs the subject's qa.md, QL a container-less copy
+# that also predates the label (it is derived from the subject, so the label is stripped explicitly).
+CR_LEG="LEGACY: canonical-run lines not checked:"
+p_canon_merge() {
+  local sd="$1" d o SHARD_SHA
+  WHY=""
+  crm_strip() { grep -v '^Canonical r' "$1/cross-1.md" > "$1/x.tmp" && mv "$1/x.tmp" "$1/cross-1.md"; }
+  if cell crm-ok; then
+    d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+    o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$CR_LEG" || WHY="$WHY crm-ok{rc=$RC $(head -1 "$MO")}"
+    rm -f "$o"
+  fi
+  if cell crm-norun; then
+    d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    refused_at "$CR_NORUN" "$o" && owner_in "$MO" cross-1 || WHY="$WHY crm-norun{rc=$RC $(reline "$MO")}"
+    rm -f "$o"
+  fi
+  if cell crm-nr-norun; then
+    d="$(qworld "$sd" PASS NEEDS_REWORK PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK" || WHY="$WHY crm-nr-norun{rc=$RC $(head -1 "$MO")}"
+    rm -f "$o"
+  fi
+  if cell crm-legacy; then
+    SHARD_SHA="$CRL_SHA"
+    d="$(kworld "$sd" "$REPO_CRL" "$CRL_BASE" "$CRL_SHA" 3 qa-validation PASS qa)" || { WHY="$WHY the legacy world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "$CR_LEG" && has "$MO" "MERGED:" || WHY="$WHY crm-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    rm -f "$o"
+  fi
+  # qa.md NOT tracked at the frozen sha, installed on disk in the manifest's worktree: the on-disk copy
+  # decides. Without the label: LEGACY and merges. With it: held, a run-less PASS refused. Neither: held,
+  # naming both paths. Each cell writes (or removes) the on-disk copy itself and removes it after.
+  if cell crm-disk-legacy; then
+    SHARD_SHA="$CRU_SHA"; cp "$CRU_OLD" "$REPO_CRU/.claude/team-roles/qa.md"
+    d="$(kworld "$sd" "$REPO_CRU" "$CRU_BASE" "$CRU_SHA" 3 qa-validation PASS qa)" || { WHY="$WHY the untracked world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "$CR_LEG" && has "$MO" "(on disk, untracked at" && has "$MO" "MERGED:" || WHY="$WHY crm-disk-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    rm -f "$o" "$REPO_CRU/.claude/team-roles/qa.md"
+  fi
+  if cell crm-disk-held; then
+    SHARD_SHA="$CRU_SHA"; cp "$QA_MD" "$REPO_CRU/.claude/team-roles/qa.md"
+    d="$(kworld "$sd" "$REPO_CRU" "$CRU_BASE" "$CRU_SHA" 3 qa-validation PASS qa)" || { WHY="$WHY the untracked world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    refused_at "$CR_NORUN" "$o" && ! has "$MO" "$CR_LEG" || WHY="$WHY crm-disk-held{rc=$RC $(reline "$MO")}"
+    rm -f "$o" "$REPO_CRU/.claude/team-roles/qa.md"
+  fi
+  if cell crm-neither; then
+    SHARD_SHA="$CRU_SHA"; rm -f "$REPO_CRU/.claude/team-roles/qa.md"
+    d="$(kworld "$sd" "$REPO_CRU" "$CRU_BASE" "$CRU_SHA" 3 qa-validation PASS qa)" || { WHY="$WHY the untracked world was not built"; return 1; }
+    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    refused_at "$CR_NORUN" "$o" && has "$MO" "nor on disk at $REPO_CRU/.claude/team-roles/qa.md" || WHY="$WHY crm-neither{rc=$RC $(reline "$MO")}"
+    rm -f "$o"
+  fi
+  # The merge takes no --range (it would only narrow the manifest's whole-story range).
+  if cell crm-range; then
+    d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
+    o="$(qout "$d")"
+    AI_DLC_PROJECT_ROOT="$PROJ" bash "$sd/merge-review-shards.sh" "$d" --gate qa --out "$o" --story x.md --range "$B_SHA" "$B_SHA" > "$MO" 2>&1 < /dev/null; RC=$?
+    refused_at "--range is read only by --check-serial" "$o" || WHY="$WHY crm-range{rc=$RC $(reline "$MO")}"
+    rm -f "$o"
+  fi
+  [ -z "$WHY" ]
+}
+# REPO_CRL: B's six files over a base installing a qa.md WITHOUT the canonical-run label (consumer layout).
+REPO_CRL="$WORK/repo-crl"
+new_repo "$REPO_CRL" old && mkdir -p "$REPO_CRL/.claude/team-roles" \
+  && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$REPO_CRL/.claude/team-roles/qa.md" \
+  && G -C "$REPO_CRL" add -A && G -C "$REPO_CRL" commit -q --amend -m base || { echo "FIXTURE ERROR: the legacy qa.md repo was not seeded" >&2; exit 2; }
+for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$REPO_CRL/$f" 5 "$f"; done
+G -C "$REPO_CRL" add -A && G -C "$REPO_CRL" commit -q -m frozen || { echo "FIXTURE ERROR: commit failed" >&2; exit 2; }
+CRL_BASE="$(G -C "$REPO_CRL" rev-parse HEAD~1)"; CRL_SHA="$(G -C "$REPO_CRL" rev-parse HEAD)"
+_crl="$(G -C "$REPO_CRL" show "${CRL_SHA}:.claude/team-roles/qa.md" | grep -cF 'column-0 `Canonical run:`')" || _crl=0
+_crs="$(grep -cF 'column-0 `Canonical run:`' "$QA_MD")" || _crs=0
+[ "$_crl" = 0 ] && [ "$_crs" -ge 1 ] \
+  || { echo "FIXTURE STALE: the legacy qa.md cannot express the canonical-run boundary (installed $_crl, subject $_crs)" >&2; exit 2; }
+# REPO_CRU: B's six files with NO qa.md tracked at either sha; the cells write the on-disk copy.
+REPO_CRU="$WORK/repo-cru"; CRU_OLD="$WORK/qa-nolabel.md"
+grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$CRU_OLD"
+new_repo "$REPO_CRU" old && mkdir -p "$REPO_CRU/.claude/team-roles" || { echo "FIXTURE ERROR: the untracked qa.md repo was not seeded" >&2; exit 2; }
+for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do lines "$REPO_CRU/$f" 5 "$f"; done
+G -C "$REPO_CRU" add -A && G -C "$REPO_CRU" commit -q -m frozen || { echo "FIXTURE ERROR: commit failed" >&2; exit 2; }
+CRU_BASE="$(G -C "$REPO_CRU" rev-parse HEAD~1)"; CRU_SHA="$(G -C "$REPO_CRU" rev-parse HEAD)"
+G -C "$REPO_CRU" cat-file -e "${CRU_SHA}:.claude/team-roles/qa.md" 2>/dev/null \
+  && { echo "FIXTURE STALE: qa.md is tracked in the untracked-qa.md repo" >&2; exit 2; }
 # Role text (BL-742): each serial seat is told to run --check-serial before returning. Keyed on the
 # command spelling in each role file's serial passage.
 SR_ROLE_CMD='merge-review-shards.sh --check-serial'

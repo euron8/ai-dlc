@@ -301,6 +301,8 @@ or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
 process violation; surface at retro. Beside it, at the frozen SHA, run
 `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
 and `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>`.
+`<base>` is the gate-1 partition manifest's `base`, the parent of the dev's
+first commit, on every handoff including a rework re-handoff.
 Exit 1 refuses the handoff: send the dev its `REFUSED` lines (a capture with
 no command line, `replay-preamble` for a `validate-mutation-red.sh` capture with
 a hand-written `$ ` line above the script's own, a mutation-RED capture not committed, a glob cited as a
@@ -309,8 +311,13 @@ Test IDs cell, `status-not-review` for a story whose status at the frozen SHA
 is not `review`, `status-yaml-mismatch` for a story whose status disagrees
 with its row in the implementation view of sprint-status.yaml, `status-missing`
 for a committed story with no status, `story-untracked` for a story file not
-committed at the frozen SHA, and `heading-demoted` for an evidence heading
-written only below or above `## `) and do not dispatch code review while either
+committed at the frozen SHA, `heading-demoted` for an evidence heading
+written only below or above `## `, `full-collection-missing` and
+`dependency-setup-missing` for a story with no column-0 `Full-collection run:`
+or `Dependency setup:` line, `full-collection-none` for a `none` whose
+`<base>..<frozen-sha>` diff is not record-only, printing the changed-path count
+and the first non-record path, and `dependency-setup-none` for a `none` with no
+reason) and do not dispatch code review while either
 exits 1. A `SKIP STATUS (<reason>)` line means a status check could not decide
 (no yaml, no row); it does not refuse, and the lead records it in the gate log.
 A SKIP whose reason names the story's or the yaml's own content goes back to the
@@ -318,9 +325,10 @@ dev; only a structural SKIP (the sibling script missing, no envelope yet)
 proceeds to dispatch. Only
 exit 1 blocks dispatch. `WARN` lines do not refuse; exit 2 means nothing was
 checked, is recorded verbatim in the story's gate log, and does NOT block
-dispatch. On a rework re-handoff, `<base>` is the previous gate's frozen SHA,
-so the no-command check reads only the captures the rework touched; the
-RED-commit and glob checks still read every capture the whole story cites.
+dispatch. On a rework re-handoff `<base>` stays the manifest's `base`, so the
+no-command check reads every capture the story's range touched and the
+record-only exemption is decided over the whole story's diff; the RED-commit
+and glob checks read every capture the whole story cites.
 
 **Gate-1 dispatch: the review partitions by changed-file group.** At the
 commit-presence check, with the frozen SHA recorded (the freeze below),
@@ -490,9 +498,12 @@ checklist item, the Handoff Evidence Precondition, the one honest-green
 canonical run in the frozen worktree and the RED replays a part QA handed
 over, and writes the per-AC table and the
 `## Deferred ACs` section (`qa.md` "As a Shard"). Join with the LEAD checkout's
-`scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md`,
+`scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md --story <story-file>`,
 run against the shard directory in the frozen worktree,
-passing the pass-specific name on a later pass (`-p2`, ...). After a refused
+passing the pass-specific name on a later pass (`-p2`, ...). The merge refuses a PASS whose
+first cross shard carries no `Canonical run:` and `Canonical result:` with counts,
+unless it claims the record-only exemption over the manifest's base and sha, the whole
+story's range on every pass; it takes no `--range`. After a refused
 merge, re-dispatch each seat that every REFUSED line's `[owner: <key>]` names, in one wave,
 handing it every line naming it verbatim: it corrects its own shard, re-runs `--check-shard`
 and re-marks, then the lead re-merges. The lead never edits, moves findings

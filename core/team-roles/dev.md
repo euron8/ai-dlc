@@ -308,12 +308,24 @@ project that replaces that section does not replace this one.
   passing is not this run: a baseline test elsewhere in the suite that your
   change breaks is found here or by QA, and QA finding it costs a rework
   cycle. A nonzero deselected count needs a named justification.
+  Open the record with a column-0 `Full-collection run:` line (one `- ` bullet
+  before it is allowed); the invocation and counts follow on that line or the
+  next. `Full-collection run: none, <reason>` is allowed ONLY when every path
+  the story's base..frozen diff changes is a record path: the story file, the
+  two sprint-status yamls, `docs/reviews/**`, `test-results/**` or
+  `docs/escalations/**`, and never a `*.py`, `*.sh`, `*.toml`, `*.cfg`,
+  `conftest.py` or `pytest.ini` under those. A diff touching any other path,
+  docs included, owes the run. `validate-handoff-evidence.sh` refuses the
+  handoff otherwise. It reads the line as a run only when it carries a
+  backticked invocation, a `$ ` line or a count; any other value (`N/A`, `TBD`,
+  `see dev report`, empty) is a no-run claim, held to the record-path rule.
 - **The dependency setup that run needs, recorded beside it.** A fresh
   detached worktree carries none of the project's gitignored dependencies, so
   record in the Dev Agent Record, beside the full-collection run, the canonical
   dependency setup that makes that run reproducible from a fresh detached
   worktree: the exact invocation and its working directory, or `none` with the
-  reason. A part QA runs this setup before replaying any mutation.
+  reason. A part QA runs this setup before replaying any mutation. Write it as
+  a column-0 `Dependency setup:` line, `none, <reason>` or the invocation.
 - **The four evidence sections filled**: `## Production Integrity Tests`,
   `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
   `## Strategy Test IDs`. The lead writes the empty headings at authoring

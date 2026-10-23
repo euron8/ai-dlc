@@ -57,6 +57,10 @@ done
 for p in skills/ai-dlc/steps/stories-test-strategy.md skills/ai-dlc/steps/gate-validation.md team-roles/dev.md team-roles/qa.md team-roles/code-reviewer.md skills/ai-dlc/steps/implementation.md skills/ai-dlc/steps/sprint-review.md schemas/sprint-status.json scripts/validate-handoff-evidence.sh scripts/sprint-status.sh; do
   echo "HERMETIC-CONSUMED core/$p"
 done
+# BL-768: the validator's run-record arms read record-only-diff.sh beside it (absent: exit 2, UNEVALUABLE),
+# and the run-record mutants copy and edit it, so it is a subject the fixture cannot pass without.
+if [ -f "$(dirname "$HE")/record-only-diff.sh" ]; then echo "HERMETIC-CONSUMED core/scripts/record-only-diff.sh"
+else echo "story-evidence-scaffold: FIXTURE BROKEN -- record-only-diff.sh is not beside $HE" >&2; exit 2; fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -88,6 +92,7 @@ SETUP_DEV='the canonical dependency setup that makes that run reproducible from 
 SETUP_QA='the canonical dependency setup that makes it reproducible from a fresh detached worktree, as the exact invocation and its working directory, or `none` with the reason'
 
 REBIND='re-binds every `## Strategy Test IDs` cell naming the old node, across all story files'
+EVS="$(sed -n "s/^EV_SENTINEL='\(.*\)'\$/\1/p" "$HE")"
 CAPHDR='opens with `$ <the exact command>` on its first line and a line carrying `head: <full sha>`'
 
 # check <sts> <gv> <dev> <qa> <cr> <imp> <sr> -> one line per failing arm; nothing when every
@@ -131,6 +136,10 @@ check() {
     || echo "DEV: rebind -- dev.md's handoff evidence does not re-bind every Strategy Test IDs cell a rename touches"
   { has "$fl" "$CAPHDR" && has "$fl" 'Every mutation-RED capture you cite is committed'; } \
     || echo "DEV: capture -- dev.md's handoff evidence prescribes no capture header or no committed RED capture"
+  # BL-768: the validator's LEGACY gate keys on this phrase in the INSTALLED dev.md, so a dev.md that
+  # loses it switches the run-record arms off on every consumer. The phrase is read off the validator.
+  { [ -n "$EVS" ] && has "$fl" "$EVS" && has "$fl" '`Full-collection run: none, <reason>` is allowed ONLY when every path'; } \
+    || echo "DEV: label -- dev.md's handoff evidence does not prescribe the column-0 run-record labels the validator keys on"
   b="$(awk '/^\*\*Pre-gate commit-presence check\.\*\*/{on=1} on && /^$/{exit} on{print}' "$imp")"
   fl="$(flat <<<"$b")"
   { has "$fl" 'validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>' \
@@ -256,6 +265,8 @@ mutant sts-no-rebind STS '{ gsub(/re-binds every `## Strategy Test IDs` cell nam
   "REBIND-STS:" "dropping the cross-story re-bind from Rename Verification is caught"
 mutant dev-no-rebind DEV '/^## QA Handoff Evidence$/{s=1} s && /^## Communication$/{s=0} s{ gsub(/re-binds every `## Strategy Test IDs` cell naming the old node,/, "updates the cell,") } {print}' \
   "DEV: rebind --" "dropping the re-bind from dev.md's handoff evidence is caught"
+mutant dev-no-label DEV '{ gsub(/a column-0 `Full-collection run:` line/, "a full-collection line"); print }' \
+  "DEV: label --" "dropping the column-0 label the validator's LEGACY gate keys on is caught"
 mutant dev-no-capture-header DEV '{ gsub(/opens with `\$ <the exact command>` on its first line/, "opens with the output"); print }' \
   "DEV: capture --" "dropping the capture header from dev.md's handoff evidence is caught"
 mutant imp-unwired IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^$/{s=0} s{ gsub(/validate-handoff-evidence\.sh -C <worktree> --strategy/, "validate-story.sh --strategy") } {print}' \
@@ -447,6 +458,101 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   else
     bad "FIXTURE BROKEN: could not seed the absolute-story world"
   fi
+  # (k)/(l) BL-768, the run-record arms. fc_vec reads the sixteen run-record worlds; each mutant is
+  # written into the control tree (so record-only-diff.sh is its sibling) and must move only its own
+  # cells. The partition and grammar mutants edit the HELPER copy, in a tree of their own.
+  FCWANT='0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W'
+  fc_vec() { # <script>
+    local s="$1" o="" v
+    for v in fcrec fccode fcbare fcgone dsgone dsbare devold devnew fcevil fcna fctbd fcempty fcnext dsna diskold disknew fcfence fcinvoc fcbold fcnonebt fcmake dsvenv; do o="$o $(verdict "$s" "$WORK/world-$v" h)"; done
+    printf '%s' "${o# }"
+  }
+  got="$(fc_vec "$HECTL")"
+  if [ "$got" = "$FCWANT" ]; then ok "RUN-RECORD: a reasoned none over a story+yamls+docs/reviews+test-results diff accepted, over a diff touching a test refused full-collection-none, a bare none refused, a missing line refused, a dependency-setup none with no reason refused, dev.md without the label prescription is LEGACY and with it refuses both missing lines; a .py under test-results/ and a conftest.py under docs/reviews/ make a record diff non-record; N/A, TBD and an empty value over a code diff each refused, an empty value continued by the invocation accepted, a dependency-setup N/A refused; dev.md untracked at <frozen> but on disk keys LEGACY both ways; an empty value over a fenced run and over `- Invocation:` accepted, over a bold label refused; a none carrying a runner span and a two-word span naming no runner refused; a venv interpreter with its packages accepted as a setup"
+  else bad "RUN-RECORD: want [$FCWANT] got [$got]"; fi
+  fc_mutant() { # <name> <he|ro> <from> <to> <want> <label>
+    local m got t
+    if [ "$2" = ro ]; then
+      t="$(mk_tree "$1")" || { bad "FIXTURE ERROR: run-record mutation '$1' could not build its tree"; return; }
+      FROM="$3" TO="$4" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' \
+        "$(dirname "$HE")/record-only-diff.sh" > "$(dirname "$t")/record-only-diff.sh.tmp"
+      if cmp -s "$(dirname "$HE")/record-only-diff.sh" "$(dirname "$t")/record-only-diff.sh.tmp"; then bad "FIXTURE ERROR: run-record mutation '$1' matched nothing"; return; fi
+      mv "$(dirname "$t")/record-only-diff.sh.tmp" "$(dirname "$t")/record-only-diff.sh"; m="$t"
+    elif ! m="$(mkmut "$1" he "$3" "$4")" || [ -z "$m" ]; then bad "FIXTURE ERROR: run-record mutation '$1' matched nothing"; return; fi
+    got="$(fc_vec "$m")"
+    if [ "$got" = "$5" ]; then ok "MUTATION '$1' killed, moving its own cells only: $6"
+    elif [ "$got" = "$FCWANT" ]; then bad "MUTATION '$1' SURVIVED -- $6"
+    else bad "MUTATION '$1' moved [$got], want [$5] -- the cells are entangled"; fi
+  }
+  # The partition's record directories dropped: the record world (docs/reviews, test-results) refuses.
+  fc_mutant ro-no-record-dirs ro '        docs/reviews/*|test-results/*|docs/escalations/*)' '        NEVER-A-RECORD-PATH)' \
+    '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "the record directories dropped from the record-only partition"
+  # The code-suffix exclusion inside the record directories dropped: fcevil's test module is a record.
+  fc_mutant ro-no-suffix ro '            *.py|*.sh|*.toml|*.cfg|conftest.py|pytest.ini) first="$p" ;;' '            NEVER-A-SUFFIX) first="$p" ;;' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "a collectable .py / conftest.py under a record directory classed record-only"
+  # The exemption check dropped: any reasoned none passes, so the code-touching none is accepted.
+  fc_mutant fc-no-diff he "    || refuse \"\$3 \$STORY: '\$1 \${2:-<empty>}' records no run" "    || : \"\$3 \$STORY: '\$1 \${2:-<empty>}' records no run" \
+    '0: 0: 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 0: 0: 0::W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 0: 0: 0::W' \
+    "a reasoned none accepted whatever the diff"
+  # The none grammar's reason requirement dropped: a bare `none` reads as reasoned.
+  fc_mutant ro-bare-none ro '        "$w") rest=""; exit 1 ;;' '        "$w") exit 0 ;;' \
+    '0: 1:full-collection-none, 0: 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "a none with no reason accepted"
+  fc_mutant ds-no-missing he '    refuse "dependency-setup-missing' '    : "dependency-setup-missing' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 0::W 1:dependency-setup-none,:W 0: 1:full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "a missing dependency-setup line accepted"
+  # The LEGACY gate dropped: dev.md at <frozen> is never read, so the old installed dev.md refuses.
+  fc_mutant fc-no-legacy he 'if [ "$ev_rd" = 1 ] && ! grep' 'if false && ! grep' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 1:dependency-setup-missing,full-collection-missing, 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 1:dependency-setup-missing,full-collection-missing, 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "the installed-dev.md LEGACY gate dropped"
+  # The on-disk fallback dropped: a dev.md untracked at <frozen> is unreadable, so diskold is held.
+  fc_mutant fc-no-disk he 'if [ "$ev_rd" = 0 ]; then' 'if false; then' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 1:dependency-setup-missing,full-collection-missing, 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "the on-disk dev.md is not read when none is tracked at <frozen>"
+  # The inversion reverted: only a none form is a no-run claim, so N/A, TBD and an empty value pass.
+  fc_mutant fc-no-invert he '  elif ! bash "$RO" run-shape "$fc" ${ev_conv:+"$ev_conv"}; then' '  elif bash "$RO" none-reason "$fc" 2>/dev/null; [ $? -ne 2 ]; then' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 0: 0: 0: 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 1:full-collection-none, 0: 0::W' \
+    "a no-run claim spelled other than none accepted over a code diff"
+  # The label's next-line continuation dropped: an empty value followed by the invocation refuses.
+  fc_mutant ro-no-continue ro '        cont = 1; next }' '        print v; done = 1; exit }' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' \
+    "an empty label value continued by the invocation on the next line refused"
+  # The fenced continuation dropped: an empty label over a fenced run reads as empty (fcfence refuses).
+  fc_mutant ro-no-fence ro '{ f = !f; if (cont && f && !post) inf = 1;' '{ f = !f; if (0) inf = 1;' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' "an empty label value over a fenced run refused"
+  # The bold label refusal dropped: a bold label line under an empty value is taken as the value.
+  fc_mutant ro-no-bold ro ' || t ~ /^\*\*[A-Za-z][A-Za-z0-9 _-]*(:\*\*|\*\*:)/ }' ' }' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0::W' "a bold label line taken as the continued value"
+  # The Invocation continuation dropped: `- Invocation: <cmd>` under an empty value reads as a new label.
+  fc_mutant ro-no-invocation ro '             else if (s ~ /^Invocation:[ \t]/)' '             else if (0)' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W' "an Invocation: line under an empty value read as a new label"
+  # The no-run reading not decided first: a none whose reason holds a runner span reads as a run.
+  fc_mutant ro-shape-none-last ro '    bash "$0" none-reason "$2" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1' '    :' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 0: 1:full-collection-none, 0::W' "a none form carrying a runner span read as a run"
+  # The runner requirement dropped: any backticked span is a run, so `make docs` acquits.
+  fc_mutant ro-shape-any-span ro '    grep -qE "(^|[[:space:]/\`])($rs_rn)([[:space:]\`]|\$)" <<<"$rs_sp" && exit 0' '    [ -n "$rs_sp" ] && exit 0' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0::W' "a backticked span naming no runner read as a run"
+  # The interpreter-path setup dropped: a venv interpreter with its packages reads as no setup.
+  fc_mutant ro-setup-no-venv ro "      grep -qE '/bin/python|venv' <<<\"\$rs_sp\" \\" '      false \' \
+    '0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:dependency-setup-none,:W' "a dependency setup naming a venv interpreter and its packages refused"
+
+  # BL-768: the dev gate passes the project's conventions file to run-shape as the QA side does.
+  # fcconv (tox -e all declared canonical) is accepted, fcconv-none (same value, no file) is refused,
+  # and a validator that drops the conventions argument refuses fcconv.
+  if build_world "$WORK/world-fcconv" fcconv && build_world "$WORK/world-fcconv-none" fcconv-none; then
+    cv_c="$(verdict "$HECTL" "$WORK/world-fcconv" h)"; cv_n="$(verdict "$HECTL" "$WORK/world-fcconv-none" h)"
+    if [ "$cv_c" = '0:' ] && [ "$cv_n" = '1:full-collection-none,' ]; then
+      ok "CONVENTIONS: a runner the conventions declare canonical (tox -e all) is accepted at the dev gate, and the same value with no conventions file is refused full-collection-none"
+    else bad "CONVENTIONS: want [0:] and [1:full-collection-none,] got [$cv_c] and [$cv_n]"; fi
+    if cv_m="$(mkmut fc-no-conv he 'run-shape "$fc" ${ev_conv:+"$ev_conv"}; then' 'run-shape "$fc"; then')" && [ -n "$cv_m" ]; then
+      cv_mv="$(verdict "$cv_m" "$WORK/world-fcconv" h)"
+      if [ "$cv_mv" = '1:full-collection-none,' ]; then ok "MUTATION 'fc-no-conv' killed: the dev gate dropping the conventions argument refuses fcconv"
+      elif [ "$cv_mv" = "$cv_c" ]; then bad "MUTATION 'fc-no-conv' SURVIVED -- the dev gate drops the conventions argument"
+      else bad "MUTATION 'fc-no-conv' moved [$cv_mv], want [1:full-collection-none,]"; fi
+    else bad "FIXTURE ERROR: mutation 'fc-no-conv' matched nothing"; fi
+  else bad "FIXTURE BROKEN: could not seed the conventions worlds"; fi
 
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
