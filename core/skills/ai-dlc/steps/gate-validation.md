@@ -3371,11 +3371,16 @@ The deny text states, in this order:
      mid-pass, follow `_gate-procedures.md` "Divergence resolution dispatch".
      **One exception: `_bmad-output/ai-dlc-update/push-candidate-ledger.md`.** Its rows are
      immutable, so its remedy is to file a SUPERSEDING row, the ledger's own append idiom, never to
-     rewrite the stale row.
+     rewrite the stale row. What closes the row is a later derived fence in the same ledger carrying
+     the SAME command, whose recorded output reproduces; a later row with a different command, or one
+     that is itself stale, closes nothing.
      A LIVING fence whose operands are consumer code only is never shown: operator ruling (A),
      "Block on ai-dlc files only".
 2. Exit 2 means the record is unreadable or malformed, or the current sprint could not be resolved: the
    rows are REFUSED and unassessed, never closed. Repair the record or the sprint envelope and re-run.
+   Exit 2 also means the LIVING sweep could not decide, because the validator gave no verdict for a
+   file, or `core-paths.sh` or `--explain-cmd` is unavailable: re-run once the fault is gone, or
+   reinstall ai-dlc.
 3. An `UNASSESSED` row has a file the validator exited 2 on. **An UNRUN derivation anywhere in the same
    file makes every owed row in it UNASSESSED; run or remove that derivation.**
 4. **Owed work recorded in a sprint that has since finished turns INFO and STOPS BLOCKING.** An

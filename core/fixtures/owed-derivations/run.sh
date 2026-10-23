@@ -26,9 +26,17 @@
 # refusal; S6 push-candidate-ledger.md stays LIVING (lead ruling); S7 an OWED row's line prints once;
 # S8 deleted core operands block; S9 --scope-batch is unchanged by a stale LIVING fence; S10 --scope-batch
 # from apply.sh's copy shape (reader beside the REAL sprint-status.sh and its schema, no core-paths.sh).
-# Mutants M1-M7 each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and must fail
-# a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5 refusal
-# made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the dispatch.
+# S6b a superseding ledger row closes the stale one, S6c a stale superseding row does not, S6d the same
+# pair outside the ledger does not; S11a-c `git -C` operands and a `-f` value block, S11n their consumer
+# twins stay silent; S12a-e core DIRECTORIES block (lead ruling A), S12n consumer directories stay silent;
+# S13 a validator exit 2 with no UNRUN line is a refusal (S13c its control); S14 a root-absolute core
+# operand blocks.
+# Mutants M1-M11, mA and mB each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and
+# must fail a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5
+# refusal made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the
+# dispatch, M8 ledger supersession removed, M9 `-C` prefixing removed, M10 `-f` values not asked, M11 the
+# directory prefix test removed, mA ls_accept_rc accepts every exit, mB the root-absolute strip and the
+# trailing-slash variant removed.
 # receipt-bl587.sh drives the real reader over S1's seed.
 set -uo pipefail
 
@@ -578,6 +586,64 @@ LS8="$WORK/ls8"; lroot "$LS8"
 { printf '# PRD\n\n'; lfence 'git show HEAD:scripts/ai-dlc/gone.sh' 5; printf '\n'
   lfence 'grep -c qqalpha scripts/ai-dlc/deleted.sh' 1; printf '\n'; lfence 'grep -c qqalpha server/gone.py' 1; } > "$LS8/$LPRD"
 K_LS8A="$LPRD:$(line_of "$LS8/$LPRD" '$ git show')"; K_LS8B="$LPRD:$(line_of "$LS8/$LPRD" 'deleted.sh')"
+# S6b-S6d: the ledger's SUPERSESSION. S6b: S6's stale core fence plus a LATER copy of the same command that
+# reproduces -> closed. S6c near-miss: the later copy is stale too -> both lines OPEN. S6d near-miss: the
+# same stale-then-fresh pair in prd.md, which is not the ledger -> the first line stays OPEN.
+LS6B="$WORK/ls6b"; lroot "$LS6B"
+{ printf '# Push-candidate ledger\n\n## row 1\n'; lfence "$LCMD" '9:qqalpha'; printf '\n## row 2 (supersedes row 1)\n'; lfence "$LCMD" '1:qqalpha'; } > "$LS6B/$LLEDGER"
+LS6C="$WORK/ls6c"; lroot "$LS6C"
+{ printf '# Push-candidate ledger\n\n## row 1\n'; lfence "$LCMD" '9:qqalpha'; printf '\n## row 2\n'; lfence "$LCMD" '8:qqalpha'; } > "$LS6C/$LLEDGER"
+K_LS6C1="$LLEDGER:$(line_of "$LS6C/$LLEDGER" "\$ $LCMD" 1)"; K_LS6C2="$LLEDGER:$(line_of "$LS6C/$LLEDGER" "\$ $LCMD" 2)"
+LS6D="$WORK/ls6d"; lroot "$LS6D"
+{ printf '# PRD\n\n'; lfence "$LCMD" '9:qqalpha'; printf '\nre-derived:\n\n'; lfence "$LCMD" '1:qqalpha'; } > "$LS6D/$LPRD"
+K_LS6D="$LPRD:$(line_of "$LS6D/$LPRD" "\$ $LCMD" 1)"
+# S11/S12: the asked-word set. One git-backed world (git operands need history), every fence stale.
+# S11a/S11b `git -C <dir>` operands, S11c a `-f` value, S12a-e core DIRECTORIES (lead ruling A), and the
+# consumer near-misses S11n/S12n in the SAME world: a `-C server` git segment, a consumer `-f` file and two
+# consumer directories, each of which must stay silent.
+LS11="$WORK/ls11"; lroot "$LS11"; mkdir -p "$LS11/.claude/skills/ai-dlc/steps" "$LS11/.claude/hooks" "$LS11/web/src"
+printf 'qqalpha\n' > "$LS11/.claude/skills/ai-dlc/steps/a.md"; printf 'qqalpha\n' > "$LS11/.claude/hooks/ai-dlc-x.sh"
+printf 'qqalpha\n' > "$LS11/web/src/a.js"
+C11A='git -C scripts/ai-dlc grep -c qqalpha x.sh'
+C11B='git -C .claude/skills/ai-dlc grep -c qqalpha steps/a.md'
+C11C='grep -c -f scripts/ai-dlc/x.sh server/x.py'
+C11N1='git -C server grep -c qqalpha x.py'
+C11N2='grep -c -f server/x.py web/src/a.js'
+C12A='ls .claude/skills/ai-dlc/steps'
+C12B='grep -rc qqalpha .claude/hooks'
+C12C='git log --format=%H -- .claude/hooks'
+C12D='find .claude/skills/ai-dlc -name a.md'
+C12E='git ls-files .claude/skills/ai-dlc/steps'
+C12N1='ls server/'
+C12N2='grep -rc qqalpha web/src'
+{ printf '# PRD\n\n'
+  for c in "$C11A" "$C11B" "$C11C" "$C11N1" "$C11N2" "$C12A" "$C12B" "$C12C" "$C12D" "$C12E" "$C12N1" "$C12N2"; do lfence "$c" 999; printf '\n'; done
+} > "$LS11/$LPRD"
+g "$LS11" init -q; g "$LS11" add -A; g "$LS11" commit -qm seed
+k11() { printf '%s:%s' "$LPRD" "$(line_of "$LS11/$LPRD" "\$ $1")"; }
+K_11A="$(k11 "$C11A")"; K_11B="$(k11 "$C11B")"; K_11C="$(k11 "$C11C")"; K_11N1="$(k11 "$C11N1")"; K_11N2="$(k11 "$C11N2")"
+K_12A="$(k11 "$C12A")"; K_12B="$(k11 "$C12B")"; K_12C="$(k11 "$C12C")"; K_12D="$(k11 "$C12D")"; K_12E="$(k11 "$C12E")"
+K_12N1="$(k11 "$C12N1")"; K_12N2="$(k11 "$C12N2")"
+# S13: the validator exits 2 with NO UNRUN line. A wrapper removes a second fenced (consumer-only,
+# reproducing) file, runs the real validator, then puts the file back, so the world is unchanged for the
+# next reader. The reader must refuse with its "no verdict" line. S13c control: the same world, nothing removed.
+LS13="$WORK/ls13"; lroot "$LS13"; LS13C="$WORK/ls13c"; lroot "$LS13C"
+for d in "$LS13" "$LS13C"; do
+  mv "$d/scripts/ai-dlc/validate-artifact-derivations.sh" "$d/scripts/ai-dlc/real-validator.sh"
+  { printf '# PRD\n\n'; lfence "$LCON" '1:qqalpha'; } > "$d/$LPRD"
+  { printf '# Notes\n\n'; lfence "$LCON" '1:qqalpha'; } > "$d/_bmad-output/planning-artifacts/notes.md"
+  cp "$d/_bmad-output/planning-artifacts/notes.md" "$d/notes.keep"
+done
+printf '#!/usr/bin/env bash\nrm -f "%s/_bmad-output/planning-artifacts/notes.md"\nbash "%s/scripts/ai-dlc/real-validator.sh" "$@"; r=$?\ncp "%s/notes.keep" "%s/_bmad-output/planning-artifacts/notes.md"\nexit $r\n' \
+  "$LS13" "$LS13" "$LS13" "$LS13" > "$LS13/scripts/ai-dlc/validate-artifact-derivations.sh"
+printf '#!/usr/bin/env bash\nexec bash "%s/scripts/ai-dlc/real-validator.sh" "$@"\n' "$LS13C" > "$LS13C/scripts/ai-dlc/validate-artifact-derivations.sh"
+# S14: a ROOT-ABSOLUTE core operand blocks.
+LS14="$WORK/ls14"; lroot "$LS14"; C14="grep -c qqalpha $LS14/scripts/ai-dlc/x.sh"
+{ printf '# PRD\n\n'; lfence "$C14" 9; } > "$LS14/$LPRD"
+K_LS14="$LPRD:$(line_of "$LS14/$LPRD" "\$ $C14")"
+for k in "$K_LS6C1" "$K_LS6C2" "$K_LS6D" "$K_11A" "$K_11B" "$K_11C" "$K_11N1" "$K_11N2" "$K_12A" "$K_12B" "$K_12C" "$K_12D" "$K_12E" "$K_12N1" "$K_12N2" "$K_LS14"; do
+  case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
+done
 LIN="$LPRD
 $LPAST
 _bmad-output/planning-artifacts/s1/x.md
@@ -591,6 +657,10 @@ rc_is "S1c control: the validator FAILS both the core and the consumer fence in 
 rc_is "S2c control: the validator FAILS the past-sprint core fence" 1 "$(lv "$LS2" "$LPAST" | grep -c '^FAIL (STALE): ')"
 rc_is "S4c control: the validator prints an UNRUN line for each awk-137 fence (core, consumer)" 11 "$(lv "$LS4C" "$LPRD" | grep -c '^UNRUN: ')$(lv "$LS4S" "$LPRD" | grep -c '^UNRUN: ')"
 rc_is "S8c control: neither deleted core file exists, and the validator FAILS all three fences" 3 "$([ ! -e "$LS8/scripts/ai-dlc/gone.sh" ] && [ ! -e "$LS8/scripts/ai-dlc/deleted.sh" ] && lv "$LS8" "$LPRD" | grep -c '^FAIL (STALE): ')"
+rc_is "S6bc control: the validator FAILS only the first ledger fence in S6b (the later copy reproduces)" 1 "$(lv "$LS6B" "$LLEDGER" | grep -c '^FAIL (')"
+rc_is "S11c0 control: the validator gives a FAIL or UNRUN line for all twelve S11/S12 fences" 12 "$(lv "$LS11" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
+v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate-artifact-derivations.sh "$LS13/$LPRD" "$LS13/_bmad-output/planning-artifacts/notes.md" > /dev/null 2> "$WORK/v13.err" ); echo $?)"
+rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
 open_lines() { awk -F'\t' '$1 == "OPEN"' <<<"$OUT"; }
 lopen() { printf 'OPEN\t%s\tLIVING-%s\t$ %s\t-\tliving-sweep' "$1" "$2" "$3"; }
@@ -638,6 +708,32 @@ lw_all() { # <reader> <tag>
   lw_arm S8 "deleted core operands block (git show HEAD:scripts/ai-dlc/gone.sh, plain scripts/ai-dlc/deleted.sh); a deleted consumer one does not" \
     "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS8A" STALE 'git show HEAD:scripts/ai-dlc/gone.sh')
 $(lopen "$K_LS8B" STALE 'grep -c qqalpha scripts/ai-dlc/deleted.sh')" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6B" "$none"
+  lw_arm S6b "the ledger's stale core fence plus a LATER copy of the same command that reproduces (a superseding row) -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ] && grep -qF 'UNMEASURED: no owed-derivations record' <<<"$OUT"; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6C" "$none"
+  lw_arm S6c "near-miss: the later ledger copy is stale too -> exit 1, BOTH lines OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6C1" STALE "$LCMD")
+$(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS6D" "$none"
+  lw_arm S6d "near-miss: the same stale-then-fresh pair in prd.md (not the ledger) -> exit 1, the first line OPEN" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS6D" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS11" "$none"
+  local o11="$OUT" r11="$RC"
+  has_open() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { f = 1 } END { exit f ? 0 : 1 }' <<<"$o11"; }
+  lw_arm S11a "git -C scripts/ai-dlc grep ... x.sh blocks (the -C directory is prefixed onto the operand)" "$({ [ "$r11" = 1 ] && has_open "$K_11A"; } && echo 0 || echo 1)"
+  lw_arm S11b "git -C .claude/skills/ai-dlc grep ... steps/a.md blocks" "$({ [ "$r11" = 1 ] && has_open "$K_11B"; } && echo 0 || echo 1)"
+  lw_arm S11c "grep -c -f scripts/ai-dlc/x.sh server/x.py blocks (the -f value is asked)" "$({ [ "$r11" = 1 ] && has_open "$K_11C"; } && echo 0 || echo 1)"
+  lw_arm S11n "near-miss, same world: git -C server and a consumer -f file stay silent" "$({ ! has_open "$K_11N1" && ! has_open "$K_11N2"; } && echo 0 || echo 1)"
+  lw_arm S12a "ls .claude/skills/ai-dlc/steps (a core DIRECTORY) blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12A"; } && echo 0 || echo 1)"
+  lw_arm S12b "grep -rc qqalpha .claude/hooks blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12B"; } && echo 0 || echo 1)"
+  lw_arm S12c "git log --format=%H -- .claude/hooks blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12C"; } && echo 0 || echo 1)"
+  lw_arm S12d "find .claude/skills/ai-dlc -name a.md blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12D"; } && echo 0 || echo 1)"
+  lw_arm S12e "git ls-files .claude/skills/ai-dlc/steps blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12E"; } && echo 0 || echo 1)"
+  lw_arm S12n "near-miss, same world: consumer directories server/ and web/src stay silent" "$({ ! has_open "$K_12N1" && ! has_open "$K_12N2"; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS13" "$none"
+  lw_arm S13 "the validator exits 2 with no UNRUN line (a candidate vanished) -> exit 2 with the no-verdict REFUSED line, no OPEN" "$({ [ "$RC" = 2 ] && grep -qF 'with no verdict for every file it was given' <<<"$ERR" && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS13C" "$none"
+  lw_arm S13c "control: the same world with nothing removed -> exit 0, no OPEN line" "$({ [ "$RC" = 0 ] && [ "$(open_count)" = 0 ]; } && echo 0 || echo 1)"
+  lw_rd "$b" "$LS14" "$none"
+  lw_arm S14 "a ROOT-ABSOLUTE core operand (\$ROOT/scripts/ai-dlc/x.sh) blocks" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS14" STALE "$C14")" ]; } && echo 0 || echo 1)"
   lw_batch "$b" "$LS1"; local s9a="$BOUT" s9r="$BRC"
   lw_batch "$b" "$LS3"
   lw_arm S9 "--scope-batch output and exit are byte-identical with (S1 root) and without (S3 root) a stale LIVING core fence" \
@@ -656,10 +752,16 @@ mut_line() {
   ! cmp -s "$1" "$2"
 }
 LW_MODE=mut
-mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text>
+mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
   local m="$WORK/mut.$1.sh" a miss=""
   if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$3" "$4" "$5"; then
     bad "$1 FIXTURE BROKEN: the mutation did not apply (anchor not found), so it is not scored"; return
+  fi
+  if [ "$#" -ge 8 ]; then
+    if ! mut_line "$m" "$m.2" "$6" "$7" "$8"; then
+      bad "$1 FIXTURE BROKEN: the second mutation did not apply (anchor not found), so it is not scored"; return
+    fi
+    mv "$m.2" "$m"
   fi
   LW_FAILED=""; lw_all "$m" "$1"
   for a in $2; do case " $LW_FAILED " in *" $a "*) ;; *) miss="$miss $a" ;; esac; done
@@ -673,6 +775,13 @@ mut_case M5 "S5" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/cor
 mut_case M6 "S1" 1 '  sweep_and_exit 0' '  exit 0'
 mut_case M7 "S10" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
 if [ "${1:-}" = "--scope-batch" ]; then'
+mut_case M8 "S6b" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
+mut_case M9 "S11a S11b" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
+mut_case M10 "S11c" 1 '  awk -F'"'"'\t'"'"' '"'"'$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }'"'"' "$TMP/ls.explain" > "$TMP/ls.ops"' \
+  '  awk -F'"'"'\t'"'"' '"'"'$2 == "WORD" && $5 == "operand" { print $1 "\t" $7 }'"'"' "$TMP/ls.explain" > "$TMP/ls.ops"'
+mut_case M11 "S12a S12b S12c S12d S12e" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
+mut_case mA "S13" 1 '  local nref' '  return 0'
+mut_case mB "S14" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
 LW_MODE=real
 
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------

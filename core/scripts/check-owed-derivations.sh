@@ -48,12 +48,26 @@
 #     every other exit-2 path abandons the files after the one it was on. FAIL and UNRUN lines are
 #     parsed whatever the exit.
 #   THE CORE-OPERAND PREDICATE, which decides the silent branch: a LIVING FAIL or UNRUN line is kept
-#     only when at least one operand of its command is ai-dlc core. Operands are the validator's own
-#     `--explain-cmd -` WORD lines of class `operand`; each word, the path part of a `<rev>:<path>` word,
-#     and either one with a trailing `/`, is asked of `core-paths.sh --is-core` (a SIBLING of this
-#     script, run with cwd at the root). Existence is never tested, because a pull DELETES core files.
-#     Consumer-code drift stays silent. A GRAMMAR fail names a fence opener, which has no command and so
-#     no operand, so it never blocks.
+#     only when at least one asked word of its command is ai-dlc core. The asked words are: the
+#     validator's own `--explain-cmd -` WORD lines of class `operand` (a grep PATTERN is one, since the
+#     grammar classes it so); the `val` word of `-f`/`--file`; and, for a `git` segment carrying `-C <dir>`
+#     (which the validator refuses, so it has no WORD line), the `-C` directory itself and every
+#     non-option word after the subcommand with that directory prefixed, read off the ARGV line. For each
+#     asked word, and the path part of a `<rev>:<path>` word, a root-absolute `$ROOT/` prefix is dropped;
+#     a word with no `/` is skipped when every core glob carries one; then the word is core when
+#     `<word>/` (its trailing `/` normalised) is a literal prefix of a `core-paths.sh --list` glob (a
+#     DIRECTORY that holds core files, lead ruling: the axis is ownership), or when `core-paths.sh
+#     --is-core` (a SIBLING of this script, run with cwd at the root) says the word, or the word with a
+#     trailing `/`, is core. So `.claude/skills/ai-dlc/steps`, `.claude/hooks`, `.claude/skills` and
+#     `tests/fixtures` are core and `server/` is not; a single-component parent (`scripts`, `.claude`)
+#     has no `/` and is skipped. A command NAME is never asked (an installed script run with only
+#     flags has no operand). Existence is never tested, because a pull DELETES core files. Consumer-code drift stays
+#     silent. A GRAMMAR fail names a fence opener, which has no command and so no operand, so it never
+#     blocks.
+#   THE LEDGER'S SUPERSESSION, for `_bmad-output/ai-dlc-update/push-candidate-ledger.md` ONLY (its rows are
+#     append-only): a FAIL or UNRUN at line K is dropped when a derived-fence copy of the same command sits
+#     at a later line L and the same run printed no FAIL or UNRUN for L. Every other LIVING file closes by
+#     rewriting the fence in place, and a later copy there acquits nothing.
 #   COLLISION: a sweep line that is the content-located line of a non-PAST, non-HISTORY OWED row, or
 #     the copy that SUPERSEDED it, is that row's to report and is not printed again.
 #
@@ -339,7 +353,36 @@ locate_validator() {
   [ -f "$VALIDATOR" ] || { echo "REFUSED: no validate-artifact-derivations.sh beside this script or under $ROOT/scripts/ai-dlc/, so no row can be re-run." >&2; exit 2; }
 }
 
+# derived_cmd_lines <file> <command> -> the line number of every `$ ` line that sits inside a derived
+# fence and whose text equals <command>. A command in any other fence (a text fence) is one the
+# validator never reads, so it has no verdict at all and is not a match. The command travels by
+# ENVIRON (awk -v strips a level of backslash escaping) and is compared with ==, never as a regex.
+# Defined ABOVE the sweep, because the sweep runs on the absent-record path before pass 2 is reached.
+derived_cmd_lines() {
+  C="$2" awk 'BEGIN { st = 0; fc = sprintf("%c%c%c", 96, 96, 96); want = ENVIRON["C"] }
+    { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t) }
+    st == 0 && substr(t, 1, 3) == fc { st = (t == fc "derived") ? 2 : 1; next }
+    st != 0 && substr(t, 1, 3) == fc { st = 0; next }
+    st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' "$1"
+}
+
 # ---- THE LIVING SWEEP (see the header) ------------------------------------------------------------
+# THE LEDGER'S SUPERSESSION. push-candidate-ledger.md is append-only, so a stale row there is closed by
+# a SUPERSEDING row, never by an edit. ledger_superseded <index> <rel> <K> <command>: 0 when the file
+# holds a derived-fence copy of <command> at a line L > K and the sweep's verdict stream carries no
+# FAIL or UNRUN line for (<rel>, L), so the later copy reproduced. This file ONLY: every other LIVING
+# document closes by rewriting the fence in place, and a later copy there acquits nothing.
+LEDGER_REL="_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+ledger_superseded() {
+  local _L _all
+  _all="$(derived_cmd_lines "$ROOT/$2" "$4")" \
+    || { echo "REFUSED: could not scan $2 for a superseding row, so its LIVING row cannot be judged." >&2; exit 2; }
+  for _L in $_all; do
+    [ "$_L" -gt "$3" ] || continue
+    awk -F'\t' -v i="$1" -v l="$_L" '$1 == i && $2 == l { f = 1 } END { exit f ? 1 : 0 }' "$TMP/ls.verd" && return 0
+  done
+  return 1
+}
 # ls_accept_rc <rc> <stderr file> <what>: refuses (exit 2) unless the run is a verdict. 0 and 1 are.
 # 2 is one only when the stream carries an UNRUN line AND its one REFUSED line is the end-of-run summary
 # (validate-artifact-derivations.sh's `REFUSED: <n> derivation(s) did not run to completion`): every
@@ -437,6 +480,7 @@ living_sweep() {
     _cmd="$(awk -v n="$_ln" 'NR == n { sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, ""); print; exit }' "$ROOT/$_c")"
     # A line with no `$ ` command (a GRAMMAR opener) has no operand, so it can never be core.
     case "$_cmd" in '$ '?*) _cmd="${_cmd#\$ }" ;; *) continue ;; esac
+    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi
     _cands=$((_cands + 1))
     printf '%s\t%s\n' "$_cands" "$_cmd" >> "$TMP/ls.cand"
     printf '%s\t%s:%s\t%s\n' "$_cands" "$_c" "$_ln" "$_kind" >> "$TMP/ls.meta"
@@ -452,7 +496,35 @@ living_sweep() {
   _i="$(awk -F'\t' '$2 == "VERDICT" { v[$1] = 1 } END { for (k in v) n++; print n + 0 }' "$TMP/ls.explain")"
   [ "$_i" = "$_cands" ] \
     || { echo "REFUSED: validate-artifact-derivations.sh --explain-cmd answered for $_i of $_cands LIVING derivation(s), so their operands are unknown." >&2; exit 2; }
-  awk -F'\t' '$2 == "WORD" && $5 == "operand" { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
+  # Operands, plus the value of `-f`/`--file` (a file the command READS, such as grep's pattern file).
+  awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
+  # A `git -C <dir>` segment reads its operands relative to <dir>. The validator refuses `-C`, so such a
+  # segment has an ARGV line and no WORD line: its words are read off the ARGV line here, each `-C` value
+  # is joined (a later relative one under the earlier), the subcommand is skipped, and every later
+  # non-option word is asked with the directory prefixed (and a `<rev>:<path>` word's path likewise).
+  awk -F'\t' '$2 == "ARGV" { print $1 "\t" $3 }' "$TMP/ls.explain" > "$TMP/ls.argv"
+  while IFS="$(printf '\t')" read -r _id _q; do
+    case "$_q" in git\ *) ;; *) continue ;; esac
+    eval "set -- $_q" 2>/dev/null || continue
+    shift; _gd=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -C) [ "$#" -ge 2 ] || break; case "$2" in /*) _gd="$2" ;; *) _gd="${_gd:+${_gd%/}/}$2" ;; esac; shift 2 ;;
+        -c) [ "$#" -ge 2 ] || break; shift 2 ;;
+        -*) shift ;;
+        *) break ;;
+      esac
+    done
+    [ -n "$_gd" ] || continue
+    printf '%s\t%q\n' "$_id" "$_gd" >> "$TMP/ls.ops"
+    [ "$#" -gt 0 ] || continue
+    shift
+    for _w in "$@"; do
+      case "$_w" in -*|'') continue ;; esac
+      printf '%s\t%q\n' "$_id" "${_gd%/}/$_w" >> "$TMP/ls.ops"
+      case "$_w" in *:*) printf '%s\t%q\n' "$_id" "${_gd%/}/${_w#*:}" >> "$TMP/ls.ops" ;; esac
+    done
+  done < "$TMP/ls.argv"
   # A word with no `/` is skipped ONLY when every core glob carries a literal `/` outside a bracket class,
   # which this run derives from `core-paths.sh --list` rather than assumes; one slash-free glob turns the
   # shortcut off. It removes the forks for pattern operands (`grep -c alpha f`), never a path's.
@@ -462,6 +534,9 @@ living_sweep() {
   [ -s "$TMP/ls.globs" ] \
     || { echo "REFUSED: core-paths.sh --list printed no core glob, so the ai-dlc core set is unknown." >&2; exit 2; }
   awk '{ g = $0; gsub(/\[[^]]*\]/, "", g); if (index(g, "/") == 0) bad = 1 } END { exit bad ? 1 : 0 }' "$TMP/ls.globs" && _slashless_ok=1
+  # A DIRECTORY is core when `<word>/` is a literal prefix of a core glob (lead ruling A: the axis is
+  # ownership, so `ls .claude/skills/ai-dlc/steps` reads ai-dlc files). Compared in-process, no fork.
+  _globsnl="$NL$(cat "$TMP/ls.globs")$NL"
   : > "$TMP/ls.core"
   while IFS="$(printf '\t')" read -r _id _q; do
     [ -n "$_q" ] || continue
@@ -473,6 +548,7 @@ living_sweep() {
       case "$_t" in -*|'') continue ;; esac
       _t="${_t#"$ROOT"/}"
       case "$_t" in */*) ;; *) [ "$_slashless_ok" = 1 ] && continue ;; esac
+      case "$_globsnl" in *"$NL${_t%/}/"*) printf '%s\n' "$_id" >> "$TMP/ls.core"; break ;; esac
       for _k in "$_t" "${_t%/}/"; do
         case "$_cache" in
           *"$NL1 $_k$NL"*) _hit=1 ;;
@@ -620,18 +696,6 @@ superseded_by() { # <stderr file> <abs:ln> -> the later line number, empty when 
   P="SUPERSEDED: $2 by ${2%:*}:" awk 'BEGIN { p = ENVIRON["P"] }
     index($0, p) == 1 { r = substr($0, length(p) + 1); if (r ~ /^[0-9]+$/) { print r; exit } }' "$1"
 }
-# derived_cmd_lines <file> <command> -> the line number of every `$ ` line that sits inside a derived
-# fence and whose text equals <command>. A command in any other fence (a text fence) is one the
-# validator never reads, so it has no verdict at all and is not a match. The command travels by
-# ENVIRON (awk -v strips a level of backslash escaping) and is compared with ==, never as a regex.
-derived_cmd_lines() {
-  C="$2" awk 'BEGIN { st = 0; fc = sprintf("%c%c%c", 96, 96, 96); want = ENVIRON["C"] }
-    { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t) }
-    st == 0 && substr(t, 1, 3) == fc { st = (t == fc "derived") ? 2 : 1; next }
-    st != 0 && substr(t, 1, 3) == fc { st = 0; next }
-    st == 2 && substr(t, 1, 2) == "$ " && substr(t, 3) == want { print NR }' "$1"
-}
-
 # ---- pass 2: judge ----------------------------------------------------------------------------
 nopen=0
 while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
