@@ -228,8 +228,6 @@ if os.environ.get("HOOKREG_READS_OUT", ""):
                 note("t", path)
                 return orig(path, *a, **k)
             setattr(os, name, w)
-        for _n in ("stat", "lstat", "access", "readlink"):
-            wrap(_n)
 
         def flush():
             live[0] = False
@@ -240,8 +238,13 @@ if os.environ.get("HOOKREG_READS_OUT", ""):
                         fh.write("%s\t%s\n" % (kind, rel))
             except Exception:
                 pass
-        atexit.register(flush)
+        # addaudithook FIRST: on a python3 without it (3.7 and older) it raises, and nothing
+        # after it runs, so no stat wrapper is live and no flush is registered. No list is
+        # written, and the engine records `!` rather than accepting a partial list.
         sys.addaudithook(hook)
+        for _n in ("stat", "lstat", "access", "readlink"):
+            wrap(_n)
+        atexit.register(flush)
     try:
         _hr_install(os.environ["HOOKREG_READS_OUT"], sys.argv[1])
     except Exception:

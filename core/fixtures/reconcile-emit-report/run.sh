@@ -3622,15 +3622,15 @@ if { grep -qF 'recorded PASS not recorded: ' "$EMIT" && grep -qF 'cr_run_reads' 
 else
   printf 'PENDING: PC-V55 PC-V59..PC-V62 not run, engine lacks the record-time refusal line or cr_run_reads\n'
 fi
-# THE B5/B6 ARMS (BL-685: V64..V75) need the engine that keys a gitlink and accepts an ignored nested
+# THE B5/B6 ARMS (BL-685: V64..V76) need the engine that keys a gitlink and accepts an ignored nested
 # repository, read off its named refusals. An INSTALLED engine without both is a pre-migration state
 # (PENDING, not run); in the distribution they always run, so an engine without them FAILS them by name.
 PCV_R11=0
 if { grep -qF 'B5 submodule.recurse=true makes a consumer git grep' "$EMIT" && grep -qF 'B6 the nested repository ' "$EMIT"; } \
    || ! pcv_installed "$EMIT"; then
-  PCV_R11=1; PCV_IDS="$PCV_IDS PC-V64 PC-V65 PC-V66 PC-V67 PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75"
+  PCV_R11=1; PCV_IDS="$PCV_IDS PC-V64 PC-V65 PC-V66 PC-V67 PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75 PC-V76"
 else
-  printf 'PENDING: PC-V64..PC-V75 not run, engine lacks the B5 gitlink or B6 nested-repository refusals\n'
+  printf 'PENDING: PC-V64..PC-V76 not run, engine lacks the B5 gitlink or B6 nested-repository refusals\n'
 fi
 pcv_setup
 
@@ -4470,7 +4470,7 @@ pcv_v63world() {
   return 0
 }
 
-# ---- V64..V75: B5 GITLINKS and B6 IGNORED NESTED REPOSITORIES (BL-685), the V56 shape ----
+# ---- V64..V76: B5 GITLINKS and B6 IGNORED NESTED REPOSITORIES (BL-685), the V56 shape ----
 # Three worlds, each a fresh pcv_lat. Every arm after a world's first record opens with a HIT control
 # (pcv_kctl) and undoes its own change before the next arm: a byte image of .git/config and
 # .git/info/exclude is put back, a seeded directory is MOVED out (never deleted), and the record is
@@ -4489,6 +4489,9 @@ pcv_v63world() {
 #   World C (pcv_b56world): no gitlink in the index at rest.
 #     V68  G-recurse: submodule.recurse=true refuses by name.
 #     V69  G-glob: a gitlink named `v*x` refuses by name (it cannot be a find -path operand).
+#     V76  G-root: a gitlink staged at .claude/sub (uninitialised, nothing on disk) lies under the
+#          read root .claude and refuses by name; no earlier guard reaches it, so the B5 root cause
+#          is the one named.
 #     V71  B6-root (under): an ignored nested repository at .claude/nr refuses, naming the read root.
 #     V72  B6-root (contains): an ignored nested repository at scripts/, holding the root
 #          scripts/ai-dlc, refuses, naming the read root.
@@ -4602,7 +4605,7 @@ pcv_b5bworld() {
   return 0
 }
 pcv_b56world() {
-  local ids="PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75" m gd ex gone
+  local ids="PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75 PC-V76" m gd ex gone
   PCV_ENVPRE=""
   pcv_lat b56 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"; gone="$PS_D/b56-gone"
@@ -4625,6 +4628,15 @@ pcv_b56world() {
       pcv_x PC-V69 "FIXTURE BROKEN: could not stage the gitlink v*x"
     fi
     pcv_b56g -C "$L_C" update-index --force-remove -- 'v*x' >/dev/null 2>&1
+  fi
+  if pcv_in PC-V76 && pcv_kctl PC-V76; then
+    if pcv_b56g -C "$L_C" update-index --add --cacheinfo "160000,$L_T,.claude/sub" >/dev/null 2>&1 \
+       && case "$(git -C "$L_C" ls-files -s -- .claude/sub 2>/dev/null)" in 160000\ *) true ;; *) false ;; esac; then
+      pcv_b56refuse PC-V76 b56gr "a gitlink staged at .claude/sub" "B5 the gitlink '.claude/sub' lies under the read root '.claude', whose files no field keys"
+    else
+      pcv_x PC-V76 "FIXTURE BROKEN: could not stage the gitlink .claude/sub"
+    fi
+    pcv_b56g -C "$L_C" update-index --force-remove -- .claude/sub >/dev/null 2>&1
   fi
   if pcv_in PC-V71 && pcv_kctl PC-V71; then
     printf '.claude/nr/\n' >> "$ex"
@@ -5731,11 +5743,11 @@ pcv_suite() {
     if pcv_in PC-V59 PC-V60 PC-V61 PC-V62; then pcv_r9kworld; fi
   fi
   if pcv_in PC-V63; then pcv_v63world; fi
-  # ---- V64..V75: B5 gitlinks and B6 ignored nested repositories (BL-685) ----
+  # ---- V64..V76: B5 gitlinks and B6 ignored nested repositories (BL-685) ----
   if [ "${PCV_R11:-0}" -eq 1 ]; then
     if pcv_in PC-V64 PC-V66 PC-V67; then pcv_b5aworld; fi
     if pcv_in PC-V65; then pcv_b5bworld; fi
-    if pcv_in PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75; then pcv_b56world; fi
+    if pcv_in PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75 PC-V76; then pcv_b56world; fi
   fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
@@ -5849,7 +5861,7 @@ pcv_failset() {
 #   M-b3       consobjects' HEAD, symbolic-ref and shallow lines removed (every layer)       -> PC-V60
 #   M-b4       the derived env-name set emptied                                             -> PC-V61
 #   M-secret   CLAUDE_CODE_ added to the derived set as a prefix, so the token is keyed     -> PC-V62
-# BL-685 B5/B6's ten, each reverting one condition of the gitlink keying or the nested-repository
+# BL-685 B5/B6's eleven, each reverting one condition of the gitlink keying or the nested-repository
 # acceptance (V66 has none: three fields move at once, see its world's header):
 #   M-gitlink-refuse  consindex's `160000 *) return 1` restored, so a gitlink fails the key -> PC-V64 PC-V65
 #   M-gitlink-prune   the gitlink -path prune dropped, so the dotgit guard finds the
@@ -5858,6 +5870,8 @@ pcv_failset() {
 #                     commit hands hash-object a directory                               -> PC-V67
 #   M-recurse         the submodule.recurse=true refusal dropped                         -> PC-V68
 #   M-glob            the glob-character refusal dropped                                 -> PC-V69
+#   M-b5-root         the gitlink at/under/containing-a-read-root refusal dropped (all three
+#                     lines, so no direction is left to name the cause)                  -> PC-V76
 #   M-b6-ignored      the not-ignored refusal dropped. V73, V74 and V75 each assert exactly that
 #                     cause, so all three are its subject, not an entanglement   -> PC-V73 PC-V74 PC-V75
 #   M-b6-under        the at-or-under direction dropped (BOTH lines: equal, and under)    -> PC-V71
@@ -5889,6 +5903,9 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local b2l='    [ -z "${CR_LOG:-}" ] || printf '"'"'!\tconsumer-validator\t-\n'"'"' >> "$CR_LOG"'
   local b5rc='    true) er_refuse "B5 submodule.recurse=true makes a consumer git grep read inside submodules, whose files no field keys"; return 1 ;;'
   local b5gl='        er_refuse "B5 a gitlink path carries a find glob character (*, ?, [ or a backslash), so it cannot be pruned by -path: $p"; return 1 ;;'
+  local b5eq="        if [ \"\$p\" = \"\$r\" ]; then er_refuse \"B5 the gitlink '\$p' is the read root '\$r', whose files no field keys\"; return 1; fi"
+  local b5un="        case \"\$p/\" in \"\$r/\"*) er_refuse \"B5 the gitlink '\$p' lies under the read root '\$r', whose files no field keys\"; return 1 ;; esac"
+  local b5co="        case \"\$r/\" in \"\$p/\"*) er_refuse \"B5 the gitlink '\$p' contains the read root '\$r', whose files no field keys\"; return 1 ;; esac"
   local b6ig="        er_refuse \"B6 the nested repository '\${p%/}' is not ignored by the consumer, so its files are untracked input every git listing skips\"; return 1 ;;"
   local b6eq="        if [ \"\$p\" = \"\$r\" ]; then er_refuse \"B6 the nested repository '\$p' is the read root '\$r', which every git listing skips\"; return 1; fi"
   local b6un="        case \"\$p/\" in \"\$r/\"*) er_refuse \"B6 the nested repository '\$p' lies under the read root '\$r', which every git listing skips\"; return 1 ;; esac"
@@ -5925,6 +5942,8 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-hashlist-skip) pcv_ed "$d" replace '    case "$_er_glset" in *"$_er_nl$p$_er_nl"*) continue ;; esac' '    :' ;;
     M-recurse) pcv_ed "$d" replace "$b5rc" '    true) ;;' ;;
     M-glob)    pcv_ed "$d" replace "$b5gl" '        : ;;' ;;
+    M-b5-root) pcv_ed "$d" replace "$b5eq" '        :' && pcv_ed "$d" replace "$b5un" '        :' \
+                 && pcv_ed "$d" replace "$b5co" '        :' ;;
     M-b6-ignored) pcv_ed "$d" replace "$b6ig" '        : ;;' ;;
     M-b6-under) pcv_ed "$d" replace "$b6eq" '        :' && pcv_ed "$d" replace "$b6un" '        :' ;;
     M-b6-contains) pcv_ed "$d" replace "$b6co" '        :' ;;
@@ -5943,11 +5962,11 @@ pcv_want() {
     M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57 PC-V58" ;; M-sha) echo "PC-V57 PC-V58" ;; M-unarmed) echo "PC-V56" ;;
     M-hex) echo "PC-V58" ;;
     M-gitlink-refuse) echo "PC-V64 PC-V65" ;; M-gitlink-prune) echo "PC-V64" ;; M-hashlist-skip) echo "PC-V67" ;;
-    M-recurse) echo "PC-V68" ;; M-glob) echo "PC-V69" ;; M-b6-ignored) echo "PC-V73 PC-V74 PC-V75" ;;
+    M-recurse) echo "PC-V68" ;; M-glob) echo "PC-V69" ;; M-b5-root) echo "PC-V76" ;; M-b6-ignored) echo "PC-V73 PC-V74 PC-V75" ;;
     M-b6-under) echo "PC-V71" ;; M-b6-contains) echo "PC-V72" ;; M-b6-dotgit-path) echo "PC-V73 PC-V74" ;; M-b6-batch-rc) echo "PC-V75" ;;
   esac
 }
-PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
+PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b5-root M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
 pcv_bl() {
   case " $PCV_B56MUTS " in *" $1 "*) echo BL-685; return 0 ;; esac
@@ -5985,6 +6004,8 @@ pcv_scope() {
     M-gitlink-refuse|M-gitlink-prune) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V64 PC-V65" ;;
     M-hashlist-skip) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V64 PC-V66 PC-V67" ;;
     M-recurse|M-glob) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V68 PC-V69" ;;
+    # M-b5-root: V68 and V69, the other two B5 refusals of world C, are its same-run controls.
+    M-b5-root) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V68 PC-V69 PC-V76" ;;
     M-b6-ignored) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V73 PC-V74 PC-V75" ;;
     M-b6-under|M-b6-contains) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V72" ;;
     M-b6-dotgit-path) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V73 PC-V74" ;;
@@ -6011,7 +6032,7 @@ PCV_MUTS="M-region M-direxcl M-exit3"
 [ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed M-hex"
 # BL-685's mutants score only where V55 and V59..V62 run (PCV_R10).
 [ "${PCV_R10:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-b1 M-b2 M-b3 M-b4 M-secret"
-# BL-685 B5/B6's mutants score only where V64..V75 run (PCV_R11).
+# BL-685 B5/B6's mutants score only where V64..V76 run (PCV_R11).
 [ "${PCV_R11:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS $PCV_B56MUTS"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
