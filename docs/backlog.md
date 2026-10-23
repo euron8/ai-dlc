@@ -447,17 +447,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: manual
 
-## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
-
-**NOTE.** Found while building BL-692's fixture (batch 240): the sandbox's `tools.decl` lacked `cksum`, and the cache never recorded. Not built, and a candidate for a later release, not BL-692's.
-
-`emit-report.sh`'s recorded-PASS cache builds its key with `cksum`. On a box with no `cksum` the key is empty and the cache silently never records, so it fails safe: every lookup is a miss and every `--verify` re-renders. That is a check that cannot fire, with no signal. Under BL-692's apply-mode rule a cached PASS is the only path that accepts without a re-render, so such a consumer pays a re-render every time and nothing says why.
-
-Owed: one stderr line, printed under the cache opt-in only so that plain `--verify` stays byte-identical, reading `cannot key: cksum is absent` (the recorded-PASS cache cannot key because `cksum` is absent).
-
-verify: has core/skills/ai-dlc-update/reconcile/emit-report.sh "cannot key: cksum is absent"
-
-
 ## BL-784 — Check B of `validate-steering-budget.sh` does not model the hook's lead-Explore allowance while paused, so it would score such a dispatch as a steamroll
 
 **NOTE.** Source: BL-783's contract adversary, batch 240, filed by lead ai-dlc-3f. Filed OPEN, not built; the same class as BL-783.
