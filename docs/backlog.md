@@ -366,16 +366,6 @@ Measured against that owed fix: under hermetic-run the caller's TMPDIR is alread
 
 verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do b=$(sed -n '/out="\$(mktemp/,/mkdir -p .*\$out/p' "$f" | grep -v '^[[:space:]]*#'); [ -n "$b" ] && [ "$(printf '%s\n' "$b" | grep -c 'PREPUSH_POOL_DEPTH\|POOL_DEPTH_IN')" -gt 0 ] && [ "$(printf '%s\n' "$b" | grep -c 'TMPDIR')" -gt 0 ] || exit 1; done
 
-## BL-692 — a session that re-renders the reconcile report by hand gets `--verify` exit 0, and apply writes over finding rows the operator never approved, with no ask
-
-**DEFECT.** Filed by ai-dlc-48 in BL-621's release, on lead ai-dlc-c8's ruling. BL-621 made `apply.sh` refuse when a resolved blocker leaves a finding row the approved region never showed, unless a recorded re-approval quotes the region's digest. That gate reads `emit-report.sh --verify`'s exit-3 path. A session that splices a freshly rendered region over `_bmad-output/ai-dlc-update/reconcile-report.md` before applying turns that exit 3 into exit 0, because the report then matches a fresh render. The union gate sees "match" and writes, so the operator is never asked. The fixed filename is overwritten each run, so apply cannot tell a hand re-render from a first apply. BL-621's SKILL.md step 7 no longer tells the session to re-render on the exit-3 path, so the path is now one the prose forbids rather than prescribes, but nothing mechanical closes it.
-
-Measured on BL-621's release tree: `core/fixtures/apply-restamp-worklist/receipt-rerender.sh` builds one mktemp world and drives the shipping `apply.sh` and `emit-report.sh`. The control, without the re-render, refuses with RE-APPROVAL OWED and leaves the tree unwritten. The subject, with the re-render and no record, exits 1: "apply WROTE on a hand re-render with no re-approval".
-
-Owed: a binding between the approval and the region apply writes from that a re-render cannot reproduce, for example a digest of the approved region recorded at the first apply's argument and compared at write time. Receipt: the receipt below exits 0.
-
-verify: sh bash core/fixtures/apply-restamp-worklist/receipt-rerender.sh
-
 ## BL-695 — a sharded stories party round waits on its slowest seat at every wave, because the lead split the round by seat and joined each seat before dispatching the next
 
 **DEFECT (efficiency).** f7 measured, graph s319 lead sessions c61a91eb and a0701ce0, 0.830.0; transcript-only, not re-derived here: (1) in the stories-test-strategy party round, per-story seats ran a median of 5.5-6.5 min and cross seats a median of 15.5-18.3 min, with one cross seat at 43.2 min; (2) f7 estimated the pole at 40-80 min per round — an estimate, not a measurement; (3) the TEA seat ran per-story n=19, median 2.0 min, max 6.6, and cross n=6, median 17.5 min, max 35.3, about 20-29 min of pole per wave. The batch 236 WAVES adversary read the same two transcripts, read only: "Concurrent subagent limit reached" appears 0 times in either (control: 9 other graph transcripts carry it); the round went out as four waves of 25 agents, one seat each (19 per-story + 6 cross), against a probable cap of 42, so about 17 slots sat idle in every wave. From each wave's last seat to the next dispatch: Dev to Architect 35.6 min after the last per-story seat and 15.6 min after the last cross seat (beat cadence plus a 429 episode); Architect to TEA 11.8 min and 14 s; TEA ended the round on a 29.1 min pole. The cross pole in each in-session transition is the gap between its last per-story seat and its last cross seat: (35.6 - 15.6) + (11.8 - 0.2) = 20.0 + 11.6 = 31.6 min across the two. The 15.6 min of beat cadence and 429 overhead after the Dev round's last cross seat is separate from that pole. SM to Dev is excluded: it was a session handoff.
@@ -463,3 +453,12 @@ One sentence for `core/team-roles/gate-adjudicator.md:116-118` (the rule that ev
 verify: manual — the sentence is prose with no mechanical predicate.
 
 
+## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
+
+**NOTE.** Found while building BL-692's fixture (batch 240): the sandbox's `tools.decl` lacked `cksum`, and the cache never recorded. Not built, and a candidate for a later release, not BL-692's.
+
+`emit-report.sh`'s recorded-PASS cache builds its key with `cksum`. On a box with no `cksum` the key is empty and the cache silently never records, so it fails safe: every lookup is a miss and every `--verify` re-renders. That is a check that cannot fire, with no signal. Under BL-692's apply-mode rule a cached PASS is the only path that accepts without a re-render, so such a consumer pays a re-render every time and nothing says why.
+
+Owed: one stderr line, printed under the cache opt-in only so that plain `--verify` stays byte-identical, reading `cannot key: cksum is absent` (the recorded-PASS cache cannot key because `cksum` is absent).
+
+verify: has core/skills/ai-dlc-update/reconcile/emit-report.sh "cannot key: cksum is absent"

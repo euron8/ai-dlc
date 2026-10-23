@@ -31,3 +31,5 @@ iconv
 paste
 rmdir
 xargs
+ln
+cksum

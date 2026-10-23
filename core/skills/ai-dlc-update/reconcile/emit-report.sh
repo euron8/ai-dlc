@@ -62,6 +62,33 @@
 #                mismatch, and it alone prints a `re-approval:` line (digest, unseen count, option
 #                label) that apply.sh decides from: unseen=0 proceeds, unseen>0 needs a recorded
 #                re-approval quoting the digest. Re-rendering the report is NOT the remedy.
+#   emit-report.sh --for-apply --verify <report.md> <dist> <base> <consumer> <theirs>   (apply.sh only)
+#            the same exits, plus 3 for cause RE-RENDERED-SINCE-APPROVAL (below), and exactly one
+#            stderr line `approved-region: first=<sha256|UNAVAILABLE|FAILED-<tool>|NONE>` on every exit
+#            past usage (UNAVAILABLE: a record exists and NO sha256 tool exists; FAILED-shasum or
+#            FAILED-sha256sum: that tool exists and exited non-zero or printed no 64-hex digest).
+#            The `re-approval:` digest takes the same three forms.
+#
+# THE APPROVED-REGION RECORD. A plain `--verify` that exits 0 (rendered, or a recorded PASS accepted)
+# writes `<consumer --absolute-git-dir>/ai-dlc-approved-region`: a version line, `key <base commit>
+# <theirs commit>` resolved in <dist>, then the report's region as `norm_dist` leaves it. FIRST-WINS: a
+# record with the same key is never rewritten; a different key replaces it. Written through mktemp
+# in the git-dir and mv, silently, so plain `--verify`'s stdout, stderr and exit are unchanged. A
+# consumer that is not a git top level gets none. Exit 1, 2 and 3, print mode and apply mode never
+# write it. It sits outside the work tree, so it moves neither the recorded-PASS key nor the region.
+# APPLY MODE (`--for-apply`, the union gate's call) never writes it and prints `approved-region:
+# first=<digest of the recorded region>`, or `first=NONE` when no readable record carries this key.
+# With a record, the RECORD's region is the approved side of every comparison in place of the
+# report's, so a region spliced into the report after step 5's verify cannot make the gate pass. When
+# the refs and stamp are unchanged and the fresh render differs from the record's region with no
+# HARD-* row and no DETECTOR-REFUSED line it lacks (and no HARD-* row resolved, which stays
+# BLOCKERS-RESOLVED), the cause is RE-RENDERED-SINCE-APPROVAL, exit 3, with a `re-approval:` line of the
+# same grammar: digest of the fresh region, unseen counted against the record's region. A new HARD-*
+# row is a blocker to resolve, never to re-approve, and stays exit 1. apply.sh's union-gate comment
+# carries the limits (deletion, stale record, two dry runs, no prior bare run).
+# THE REPORT IS STILL COMPARED, FOR HAND EDITS: in apply mode with a record, a report region equal to
+# neither the record's region nor the fresh render was edited after the first verify, and exits 1 with
+# cause UNDECIDED before any other comparison; with such a report the recorded PASS is not accepted.
 #
 # A RECORDED PASS CAN BE ACCEPTED INSTEAD OF A RE-RENDER, ON A KEY COVERING THE INPUTS LISTED BELOW.
 # It does NOT pin every render input: the inputs it cannot key are either REFUSED (a miss) or named
@@ -210,6 +237,14 @@ set -f
 
 MODE=print
 REPORT=""
+# `--for-apply` is apply.sh's option and nobody else's: it must come first and be followed by
+# `--verify`. The header's APPLY MODE block says what it changes.
+AR_APPLY=0
+if [ "${1:-}" = "--for-apply" ]; then
+  AR_APPLY=1
+  shift
+  [ "${1:-}" = "--verify" ] || { echo "usage: emit-report.sh --for-apply --verify <report.md> <dist> <base> <consumer> <theirs>" >&2; exit 2; }
+fi
 if [ "${1:-}" = "--verify" ]; then
   MODE=verify
   REPORT="${2:?usage: emit-report.sh --verify <report.md> <dist> <base> <consumer> <theirs>}"
@@ -1077,6 +1112,92 @@ fi
 norm_dist() { sed -E "s|git -C .* show ${THEIRS}:|git -C <dist> show ${THEIRS}:|g"; }
 got="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$REPORT" | norm_dist)"
 
+# --- THE FIRST-VERIFIED REGION (the header's "THE APPROVED-REGION RECORD" block owns the contract) ---
+# The REPORT's own region, kept before apply mode may replace `got` with the record's: a report with
+# no region at all still fails as it always did, whichever region the comparison then uses.
+_ar_report_got="$got"
+_ar_gd=""; _ar_rec=""; _ar_key=""; _ar_first=""; _ar_first_dg=NONE; _ar_sub=0
+# ar_digest -- sha256 of stdin, as 64 lowercase hex; UNAVAILABLE only when NO sha256 tool exists
+# (neither `shasum` nor `sha256sum` resolves by `command -v`); FAILED-<tool> when the first tool that
+# exists exited non-zero or printed anything but 64 hex. The two are never folded together: no tool is a
+# box the operator can fix by installing one, while a tool that exists and fails must never read as
+# "no tool" and so never reach a branch that proceeds on UNAVAILABLE. The first present tool decides,
+# with no fallback to the other, so a broken `shasum` is reported rather than masked. This one function
+# computes both the `approved-region:` digest and the `re-approval:` digest.
+ar_digest() {
+  local t d rc
+  if command -v shasum >/dev/null 2>&1; then t=shasum
+  elif command -v sha256sum >/dev/null 2>&1; then t=sha256sum
+  else cat >/dev/null; printf 'UNAVAILABLE\n'; return 0
+  fi
+  if [ "$t" = shasum ]; then d="$(shasum -a 256 2>/dev/null)"; rc=$?
+  else d="$(sha256sum 2>/dev/null)"; rc=$?
+  fi
+  d="${d%% *}"
+  case "$d" in *[!0-9a-f]*|'') rc=1 ;; esac
+  [ "${#d}" -eq 64 ] || rc=1
+  if [ "$rc" -eq 0 ]; then printf '%s\n' "$d"; else printf 'FAILED-%s\n' "$t"; fi
+}
+# The git-dir resolution is this record's OWN, with the same toplevel test as the recorded-PASS block
+# below and none of its state: it never depends on the staging dir, the cache's git-dir, or the opt-in.
+# `--absolute-git-dir`, never the common dir: linked worktrees share the common dir, and one tree's dry
+# run must not anchor another tree's apply.
+_ar_root="$(cr_run "$CONSUMER" pwd -P 2>/dev/null)" || _ar_root=""
+if [ -n "$_ar_root" ]; then
+  _ar_top="$(cr_git "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || _ar_top=""
+  if [ -n "$_ar_top" ] && [ "$(cr_run "$_ar_top" pwd -P 2>/dev/null)" = "$_ar_root" ]; then
+    _ar_gd="$(cr_git "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _ar_gd=""
+  fi
+fi
+if [ -n "$_ar_gd" ] && [ -d "$_ar_gd" ]; then
+  _ar_rec="$_ar_gd/ai-dlc-approved-region"
+  _ar_kb="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || _ar_kb=""
+  _ar_kt="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || _ar_kt=""
+  [ -n "$_ar_kb" ] && [ -n "$_ar_kt" ] && _ar_key="$_ar_kb $_ar_kt"
+fi
+# ar_read -- 0 and `_ar_first` set when the record exists, carries this version and THIS key, and holds
+# a non-empty region. Anything else is no record (NONE), never a partial one.
+ar_read() {
+  [ -n "$_ar_key" ] && [ -f "$_ar_rec" ] || return 1
+  [ "$(sed -n 1p "$_ar_rec" 2>/dev/null)" = "ai-dlc-approved-region 1" ] || return 1
+  [ "$(sed -n 2p "$_ar_rec" 2>/dev/null)" = "key $_ar_key" ] || return 1
+  _ar_first="$(sed -n '3,$p' "$_ar_rec" 2>/dev/null)" || return 1
+  [ -n "$_ar_first" ]
+}
+# ar_record -- PLAIN --verify only, on exit 0: FIRST-WINS for this key (a record with the same key is
+# never rewritten; another key replaces it), written through mktemp in the git-dir and mv. Silent in
+# every outcome: plain --verify's stdout and stderr are what they were before this record existed.
+ar_record() {
+  local t
+  [ "$AR_APPLY" = 0 ] && [ -n "$_ar_key" ] && [ -n "$got" ] || return 0
+  ar_read && return 0
+  # A region whose digest FAILED (a sha256 tool exists and broke) is not recorded: apply mode would
+  # then only be able to refuse on it. No tool at all (UNAVAILABLE) still records -- the region is
+  # what the comparison uses, and the digest is only how a re-approval names it.
+  case "$(printf '%s\n' "$got" | ar_digest)" in FAILED-*) return 0 ;; esac
+  t="$(mktemp "$_ar_gd/ai-dlc-approved-region.XXXXXX" 2>/dev/null)" || return 0
+  # Piped through `cat`, as er_stage's header prescribes: a short write then fails the pipeline with
+  # nothing on this process's stdout, and the temp file is removed rather than moved into place.
+  if printf 'ai-dlc-approved-region 1\nkey %s\n%s\n' "$_ar_key" "$got" | cat > "$t" 2>/dev/null; then
+    mv -f "$t" "$_ar_rec" 2>/dev/null || rm -f "$t"
+  else
+    rm -f "$t"
+  fi
+  return 0
+}
+# APPLY MODE: never writes the record; prints exactly one `approved-region:` line; with a record, the
+# record's region is the APPROVED side of every comparison below, so a region spliced into the report
+# after the first verify is not what is compared against.
+if [ "$AR_APPLY" = 1 ]; then
+  # A report with NO region keeps `got` empty, so it still fails as missing (and the recorded-PASS key,
+  # which needs a region, misses) rather than being verified on the record's region alone.
+  if ar_read; then
+    _ar_first_dg="$(printf '%s\n' "$_ar_first" | ar_digest)"
+    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }
+  fi
+  echo "approved-region: first=${_ar_first_dg}" >&2
+fi
+
 # --- THE RECORDED PASS (the header's "A RECORDED PASS" block owns the key and its limits) ---------
 # Every helper returns non-zero on any failure, and every caller reads that as a MISS.
 _er_root=""; _er_gd=""; _er_rel=""; _er_ex=""; _er_rec=""; _er_key0=""
@@ -1653,8 +1774,12 @@ if [ -z "$_er_key0" ] && [ -n "$_er_tmp" ] && [ -s "$_er_tmp/key.refused" ] \
    && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then
   echo "emit-report: recorded PASS refused, re-rendering: $(sed -n 1p "$_er_tmp/key.refused")" >&2
 fi
+# `_ar_report_got = got` is always true outside apply mode. In apply mode with a record, `got` is the
+# record's region and the key's region field reads it, while the report file itself is excluded from the
+# work-tree fields -- so a report hand-edited after the first verify would hit. It re-renders instead,
+# and the hand-edit check below decides.
 if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] \
-   && [ -f "$_er_rec" ]; then
+   && [ -f "$_er_rec" ] && [ "$_ar_report_got" = "$got" ]; then
   _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"
   # A version-1 record (no read log) is a MISS: its first line no longer matches. The stored reads
   # are re-taken only after the fixed key matched; a record carrying no read at all is a miss too,
@@ -1666,6 +1791,7 @@ if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_D
      && er_log_retake "$_er_tmp/key.rec-reads"; then
     echo "emit-report: the report's mechanical region is present, current, and complete."
     echo "emit-report: accepted a recorded PASS (${_er_rec}); nothing was re-rendered. Set AI_DLC_VERIFY_NO_CACHE=1 to re-render."
+    ar_record
     exit 0
   fi
 fi
@@ -1677,7 +1803,7 @@ if [ -n "$_er_key0" ]; then
   if : > "$CR_LOG"; then export CR_LOG CR_ROOT; else CR_LOG=""; fi
 fi
 want="$(render | norm_dist)"
-if [ -z "$got" ]; then
+if [ -z "$_ar_report_got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2
   echo "  (buckets, deletions, blocking-layer, drift, relabel) must be RENDERED by emit-report.sh," >&2
   echo "  not composed — or a finding can be silently dropped. Emit it and re-write the report." >&2
@@ -1721,8 +1847,19 @@ if [ "$_pc_rc" = 0 ]; then
   echo "  cause: PRECLASSIFY-REFUSED — ${_pc_cause}. Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve." >&2
   exit 1
 fi
+# THE REPORT IS STILL COMPARED, FOR HAND EDITS. In apply mode with a record, `got` is the record's region,
+# and nothing below reads the report's own region again. A report whose region equals NEITHER the record
+# (never re-rendered) NOR the fresh render (a hand re-render, decided below against the record) was
+# edited by hand after the first --verify: base refused that as STALE or HAND-EDITED, and so does this.
+# Both sides are already under norm_dist. Exit 1, never 3: a hand edit is not re-approvable.
+if [ "$_ar_sub" = 1 ] && [ "$_ar_report_got" != "$got" ] && [ "$_ar_report_got" != "$want" ]; then
+  echo "FAIL: the report's 'reconcile-mechanical' region was EDITED after the first --verify of this pull — it matches neither the region that --verify recorded (${_ar_rec}) nor what the detectors render now." >&2
+  echo "  cause: UNDECIDED — the report's region was hand-edited after the first --verify (first region ${_ar_first_dg}); it is neither that region nor a re-render, so what the operator approved cannot be decided from it. Restore the approved report, or re-run the dry run and have the operator approve the region it renders. NOTHING HAS BEEN WRITTEN." >&2
+  exit 1
+fi
 if [ "$want" = "$got" ]; then
   er_cache_record
+  ar_record
   echo "emit-report: the report's mechanical region is present, current, and complete."
   exit 0
 fi
@@ -1882,16 +2019,33 @@ elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]
   # A digest that cannot be computed prints UNAVAILABLE rather than an empty field, so a sandbox
   # with no sha256 tool still exits 3 with the same cause, and apply.sh refuses an unseen>0 case
   # it cannot bind rather than matching an empty string. Exit 0 and exit 1 print no such line.
-  _ra_dg="$(printf '%s\n' "$want" | { shasum -a 256 2>/dev/null || sha256sum 2>/dev/null; } | cut -d' ' -f1)" || _ra_dg=""
-  case "$_ra_dg" in *[!0-9a-f]*|'') _ra_dg=UNAVAILABLE ;; esac
-  [ "${#_ra_dg}" -eq 64 ] || _ra_dg=UNAVAILABLE
+  # ar_digest: UNAVAILABLE only when no sha256 tool exists, FAILED-<tool> when one exists and failed.
+  _ra_dg="$(printf '%s\n' "$want" | ar_digest)"
+  echo "  re-approval: digest=${_ra_dg} unseen=${other_new} label=\"Re-approve ${_ra_dg:0:12}, run apply\"" >&2
+elif [ "$AR_APPLY" = 1 ] && [ "$_ar_first_dg" != NONE ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
+  # RE-RENDERED-SINCE-APPROVAL, APPLY MODE ONLY. The APPROVED side here is the first-verified region
+  # (the record), the refs are unchanged, and the fresh render differs from it without one HARD-* row
+  # or DETECTOR-REFUSED line the first region lacks: a legitimate re-render (the withheld-stamp reapply
+  # path, or a re-render the operator is about to re-approve). It is decided exactly as
+  # BLOCKERS-RESOLVED is, from the same `re-approval:` line: unseen counts the fresh render's
+  # non-boilerplate rows the FIRST region lacks. A new HARD-* row is a blocker to resolve and never
+  # to re-approve, and a new refusal is a detector that did not run: both stay exit 1 below.
+  cause=RE-RENDERED-SINCE-APPROVAL
+  echo "  what the detectors render now, compared against the region the first --verify of this pull recorded (${_ar_rec}), not against the report file." >&2
+  echo "  cause: RE-RENDERED-SINCE-APPROVAL — the refs are unchanged and the fresh render differs from the region first verified for this pull, but carries no HARD-* row and no DETECTOR-REFUSED line that region lacks (first region ${_ar_first_dg}). The fresh render carries ${other_new} finding row(s) the first region did not show (listed below as unseen:, boilerplate excluded). apply.sh decides it from the re-approval: line below — with unseen=0 it proceeds; with unseen>0 it refuses until the operator's re-approval quoting that digest is on record." >&2
+  case "$other_new" in UNDECIDED|0) ;; *) sed 's/^/    unseen: /' "$_er_tmp/unseen.out" >&2 ;; esac
+  _ra_dg="$(printf '%s\n' "$want" | ar_digest)"
   echo "  re-approval: digest=${_ra_dg} unseen=${other_new} label=\"Re-approve ${_ra_dg:0:12}, run apply\"" >&2
 else
   cause=UNDECIDED
   er_hdr2
   echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
 fi
-echo "  Diff (want vs report):" >&2
+if [ "$AR_APPLY" = 1 ] && [ "$_ar_first_dg" != NONE ]; then
+  echo "  Diff (want vs first-verified region):" >&2
+else
+  echo "  Diff (want vs report):" >&2
+fi
 # Staged, not `<( )`, for the fd race the orientation diff states (3-8 in 2000 under 4 bash 3.2
 # workers). This diff is the operator's only view of WHAT differs, so a failed one says so
 # instead of printing an empty section under the heading above.
@@ -1903,4 +2057,5 @@ else
   echo "  (the want/report regions could not be staged for diff: the difference above is decided, but its lines are not shown)" >&2
 fi
 [ "$cause" = BLOCKERS-RESOLVED ] && exit 3
+[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 3
 exit 1

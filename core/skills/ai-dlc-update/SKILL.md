@@ -1512,6 +1512,10 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    a re-emit alone cannot pass. (Exit 3, `BLOCKERS-RESOLVED`, is a step-7 state
    and cannot arise at this step, where nothing has been resolved yet.) This check is not optional, and the operator can
    run the same `--verify` to trust any report without re-running the detectors by hand.
+   Its exit 0 also records the verified region at `<consumer git-dir>/ai-dlc-approved-region`
+   (first-wins for this base and theirs; `emit-report.sh`'s header owns the record). That record is
+   what `apply.sh` compares against in step 7, so run this `--verify` on the report you put in front
+   of the operator at the HARD STOP, and do not delete the record.
 
    Write
    `_bmad-output/ai-dlc-update/reconcile-report.md`: a header stating
@@ -1737,9 +1741,14 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    changes `core/`, or when that range cannot be read. Its refusal says nothing was written. Run
    `reconcile/preclassify.sh` with the same four arguments, fix what it reports, and re-run apply
    with the same arguments. So: resolve every blocker, then run `apply.sh` against the APPROVED
-   report, unchanged. Do NOT re-render the region into it: the report is one fixed file, a
-   re-render overwrites the region the operator approved, and `--verify` then exits 0 exactly as
-   on a first apply, so nothing can tell that a re-approval was owed. A resolved blocker always
+   report, unchanged. A re-render does not clear the gate: `apply.sh` runs
+   `emit-report.sh --for-apply --verify`, which compares the fresh render against the region step
+   5's `--verify` recorded at `<consumer git-dir>/ai-dlc-approved-region`, not against the report
+   file, and prints `approved-region: first=<digest|NONE>`. A re-rendered region that differs from
+   that record with no new `HARD-*` row exits **3** with `cause: RE-RENDERED-SINCE-APPROVAL` and the
+   same `re-approval:` line, decided exactly as below. `first=NONE` (no record for this pull: one
+   already mid-flight when the record shipped, or a `SELF-UPDATE-DEFER` pull) proceeds as before
+   and its NOTE says the re-render binding was not evaluated. A resolved blocker always
    re-renders on `--verify`, whether or not `EMIT_REPORT_VERIFY_CACHE=1` is set: resolving it
    changes the consumer tree, which moves the recorded-PASS key, and the recorded-PASS cache never
    serves exit 3 (`AI_DLC_VERIFY_NO_CACHE=1` forces a re-render in any case). On exit 3 `apply.sh` reads
@@ -1753,8 +1762,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    (a PR merge, say) is not this re-approval. `emit-report.sh --verify` is the label's one source,
    so copy it from the refusal; never compose it. The re-approval is not a formality: a resolution
    can leave rows the first approval never saw, and this question is the only place they get read.
-   The check has a limit: the question line is lead-authored, so a session that writes the
-   answers history by hand instead of asking is not caught.
+   The check has limits: the question line is lead-authored, so a session that writes the
+   answers history by hand instead of asking is not caught, and a session that deletes the
+   approved-region record gets `first=NONE` and the gate as it was before the record existed.
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
@@ -2415,13 +2425,13 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      **`restamp-withheld` has two forms, and one of them does NOT name `--finish`.** When an
      outstanding row's remedy is a step only a fresh ordinary run performs — the known_skills
      refile whose diff did not run, an exec-bit finding, a staging refusal after the writes — the
-     row says to re-render the report with `emit-report.sh`, have the operator re-approve it, and
-     re-run apply with the same four arguments, and that `--finish` is not the next step. Follow
-     that, asking the re-approval with AskUserQuestion and waiting for the answer: this is the one
-     path where a re-render is still the remedy, because this run already wrote the tree, and on
-     it nothing records or checks the re-approval. The finisher
-     re-checks those rows and withholds while they are undone, and a bare re-run is refused by the
-     union gate because this run already moved the tree the approved report describes.
+     row says to re-render the report with `emit-report.sh` and re-run apply with the same four
+     arguments, and that `--finish` is not the next step. This is the one path where a re-render
+     is still the remedy, because this run already wrote the tree. Re-run apply: it compares the
+     re-rendered region against the one step 5 recorded, and when a re-approval is owed it prints
+     the question and the option label. Ask exactly that question with AskUserQuestion, offering
+     exactly that label, wait for the answer, and re-run apply. The finisher re-checks those rows
+     and withholds while they are undone.
 
      *Why a second invocation rather than a smarter first one.* The rows are work YOU
      complete after this program has exited, so there is no moment during the first run

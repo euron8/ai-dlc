@@ -31,3 +31,5 @@ iconv
 paste
 tail
 xargs
+ln
+cksum
