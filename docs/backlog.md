@@ -219,7 +219,9 @@ This is the consequence of the PARTIAL note's withdrawal of item 3: no reader pi
 
 **Progress (batch 240).** The f7 survivor reopens the operator-withdrawn item 3, so it goes to the operator in plain words with a recommendation before any build.
 
-verify: manual
+**Build (batch 241).** The operator ruled on the f7 survivor by AskUserQuestion: "Build the check". The scope ruling is option (A), "Block on ai-dlc files only". `core/scripts/check-owed-derivations.sh` now also runs `validate-artifact-derivations.sh` once over the `_bmad-output/` documents it classifies LIVING, whether or not a record exists, and prints an `OPEN` row with 6th column `living-sweep` only for a failing fence with an ai-dlc core operand; consumer-code drift stays silent. Check 37, the route.md resume display and the retro.md carry name that row and its in-place remedy. Lead ruling: `_bmad-output/ai-dlc-update/push-candidate-ledger.md` stays LIVING, so its core-operand rows block, because "append-only" says a row is never re-pointed by its writer, not that its staleness is harmless; its remedy is a superseding row.
+
+verify: sh bash core/fixtures/owed-derivations/receipt-bl587.sh
 
 ## BL-616 — fixture verdicts depend on box load: `validator-fork-budget` reads FIXTURE BROKEN under the gate's pool, and a red costs a full re-push
 
