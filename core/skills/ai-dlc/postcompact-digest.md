@@ -109,6 +109,32 @@ Two observable requirements.
 Write escalations to `docs/escalations/pending.md`. Escalations have
 three tiers that determine whether work blocks or continues.
 
+#### Operator decisions: one shape (Rule 11(a))
+**Every decision put to the operator has one shape, wherever it is
+asked** -- an `AskUserQuestion`, a checkpoint's `### Decisions for You`
+item (`steps/deploy-validate.md` §5), a disposition at any step. It names
+the decision asked,
+gives every option with its effect and the consequence of choosing it,
+and marks exactly one option `(Recommended)`. A question that carries no
+badge -- an UNBADGED question (Rule 11(a)), or the sprint-scope confirmation
+(`steps/route.md` Step 6) --
+says so in its own text, with the reason,
+so the missing badge does not read as an omission.
+
+#### Operator decisions: an attested act is not raised again (Rule 11(a))
+**An act the operator has attested is not raised again.** When the
+operator says an act has happened -- a press, a deploy, a fired
+operation -- read the record that would attest it before asking
+anything further, and ask again only when that record is absent, naming
+the record you read and did not find. Once you have accepted the
+operator's word on an act,
+no later step puts it back to the operator:
+if you still want the record, read it yourself before any later
+question, and carry the act as attested. An escalation entry the act
+resolves still cites the operator's own message (`escalations.md`); the
+record replaces the re-ask, not the citation.
+A record read afterwards that shows the act did not occur is an authorization-premise invalidation (`escalations.md`), not a re-ask.
+
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` before acting under this rule; that file carries the full, binding text of this rule.
 

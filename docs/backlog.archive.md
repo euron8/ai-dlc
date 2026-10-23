@@ -37859,3 +37859,31 @@ Known property, no action owed: linked worktrees share one durations record, bec
 
 verify: sh for h in .githooks/pre-push core/git-hooks/pre-push; do b="$(sed -n '/^  cat "\$out"\/\.dur\/\* > /,/^  fi$/p' "$h")"; [ -n "$b" ] || exit 1; for L in core/fixtures/ tests/fixtures/; do t="$(mktemp -d)" || exit 1; mkdir -p "$t/${L}live" "$t/${L}kept" "$t/${L}dead" "$t/o/.dur" && : > "$t/${L}live/run.sh" && : > "$t/${L}kept/run.sh" && : > "$t/${L}dead/notes.txt" && printf 'live 5\nkept 9\ngone 7\ndead 4\n' > "$t/rec" && printf 'live 3\n' > "$t/o/.dur/live" || exit 1; ( cd "$t" && FXROOT="$L" out="$t/o" DURATIONS_RECORD="$t/rec" rc=0 && eval "$b" ) || exit 1; [ "$(cat "$t/rec")" = "$(printf 'kept 9\nlive 3')" ] || exit 1; done; done
 
+## BL-779 — the production-validation checkpoint has no decisions block and no one-shape rule, so the operator is shown a list of open items and has to ask what each one wants of them
+
+**LANDED (v0.920.0, verified 04b8fa900).**
+
+**DEFECT.** Source: graph's sprint-319 production-validation checkpoint, batch 240, as the operator answered it. Filed and closed by lead ai-dlc-3f in the same release.
+
+The operator's first checkpoint reply: "1. Already done. 2. What am I supposed to do about it? 3. Ack. 4. How does this need my attention? 5. Not sure these are actual issues, thoughts? 6. Done." And at 01:54:30Z: "2. If I don't need to do anything then why is is listed in the "Needs your attention" secion? … 4. Same response as #2".
+
+The `deploy-validate.md` §5 template had no decisions block and no rule for what a decision looks like. Counts on 8649dfce5: `needs your attention` in core/skills/ai-dlc = 0, `marked recommendation` in core = 0, control `Production Validation Checkpoint` = 28. Graph's six items included non-escalation items: 12 baseline pytest failures, a four-issue list, and a press already done. The 02:15:09Z retro question LR-S319-6 (approved-deferral / do-now / descope) carried no badge, which is BL-524's UNBADGED clause working. That evidence supports ONLY the new "says so in its own text" clause, never a missing badge.
+
+Fix (this release's tip): `deploy-validate.md` §5 gains a `### Decisions for You` and a `### For Your Information` block in the template and a "Decisions for the operator" paragraph; §6's wait list points at them; `SKILL.md` Rule 11(a) points to the one-shape rule, stated in full under Rule 12; `route.md` Step 6 says in the question that its options carry no recommendation, and why. The fixture `deploy-validate-smoke-classification` and the `process-rule-pins` rows carry it.
+
+The receipt reads all of §5, template fence included, so the rule paragraph moved into the template fence still passes it; the fixture's P-only arm is what catches that. The receipt reads Rule 12's span (`### Rule 12 ` to `### Rule 13 `) for the say-why clause, because the full text sits under Rule 12 and Rule 11(a) holds only the pointer.
+
+verify: sh d=core/skills/ai-dlc/steps/deploy-validate.md; k=core/skills/ai-dlc/SKILL.md; [ -f "$d" ] && [ -f "$k" ] || exit 9; s5="$(awk '/^### 5\. Production Validation Checkpoint/{s=1;next} /^### 6\. Wait for Human/{s=0} s' "$d")"; r12="$(awk '/^### Rule 12 /{s=1;next} /^### Rule 13 /{s=0} s' "$k")"; f5="$(tr '\n' ' ' <<<"$s5" | tr -s ' ')"; f12="$(tr '\n' ' ' <<<"$r12" | tr -s ' ')"; grep -q '^### Decisions for You$' <<<"$s5" && grep -qF 'whatever its source' <<<"$f5" && grep -qF 'never under' <<<"$f5" && grep -qF 'says so in its own text' <<<"$f12"
+
+## BL-780 — a lead that has accepted the operator's word on an act asks about it again, 20 minutes later, without reading the record that would attest it
+
+**LANDED (v0.920.0, verified 04b8fa900).**
+
+**NOTE.** Source: graph's sprint-319 lead transcript, batch 240. Filed and closed by lead ai-dlc-3f in the same release.
+
+The operator answered "Already done" on a press. Graph's lead replied "I'm not recording … on your word alone". The operator: "I literally just told you it ran, how else do you interpret my response?" At 01:54:42Z the lead conceded "I'll record it as operator-fired on your word", and at 02:15:09Z the retro question still listed story 5.1's Sweep→HODL press with "you told me the press is done, but I have not read its row". No execution_log row was read in the 20 minutes between.
+
+Fix (this release's tip): the attested-act subsection under `SKILL.md` Rule 12, pointed to from Rule 11(a), and carried by a `process-rule-pins` row.
+
+verify: sh k=core/skills/ai-dlc/SKILL.md; [ -f "$k" ] || exit 9; r12="$(awk '/^### Rule 12 /{s=1;next} /^### Rule 13 /{s=0} s' "$k")"; f12="$(tr '\n' ' ' <<<"$r12" | tr -s ' ')"; grep -qF 'read the record that would attest it' <<<"$f12" && grep -qF 'ask again only when that record is absent' <<<"$f12" && grep -qF 'no later step puts it back to the operator' <<<"$f12"
+

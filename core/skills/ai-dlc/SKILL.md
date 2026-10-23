@@ -360,6 +360,8 @@ evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
 artifact behind it.
 
+**One shape for every operator decision, and no re-ask of an attested act** -- stated in full under Rule 12's two `#### Operator decisions` subsections; apply both to every question you put to the operator.
+
 **(b) In-flight interpretation preamble.** The first line of the
 agent's response to ANY user message that arrives during or after an
 execution phase MUST be a one-sentence interpretation stating whether
@@ -419,6 +421,34 @@ disclose the change for explicit operator acknowledgement — mechanism in
 When a later event shows an outcome an earlier authorization relied on did
 not occur, the question returns to the operator — `escalations.md`
 "Authorization-premise invalidation disclosure".
+
+#### Operator decisions: one shape (Rule 11(a))
+
+**Every decision put to the operator has one shape, wherever it is
+asked** -- an `AskUserQuestion`, a checkpoint's `### Decisions for You`
+item (`steps/deploy-validate.md` §5), a disposition at any step. It names
+the decision asked,
+gives every option with its effect and the consequence of choosing it,
+and marks exactly one option `(Recommended)`. A question that carries no
+badge -- an UNBADGED question (Rule 11(a)), or the sprint-scope confirmation
+(`steps/route.md` Step 6) --
+says so in its own text, with the reason,
+so the missing badge does not read as an omission.
+
+#### Operator decisions: an attested act is not raised again (Rule 11(a))
+
+**An act the operator has attested is not raised again.** When the
+operator says an act has happened -- a press, a deploy, a fired
+operation -- read the record that would attest it before asking
+anything further, and ask again only when that record is absent, naming
+the record you read and did not find. Once you have accepted the
+operator's word on an act,
+no later step puts it back to the operator:
+if you still want the record, read it yourself before any later
+question, and carry the act as attested. An escalation entry the act
+resolves still cites the operator's own message (`escalations.md`); the
+record replaces the re-ask, not the citation.
+A record read afterwards that shows the act did not occur is an authorization-premise invalidation (`escalations.md`), not a re-ask.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 

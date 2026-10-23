@@ -102,6 +102,16 @@
 #     `--complete --`, so `--complete --since` and `--complete --dispatch` both pin and a plain
 #     beat or `--complete-repair` does not. The marker predicate is wait-beat-liveness's
 #     section 25; the stale-SPEC refusal is remediator-shard-join's SP11.
+#   - every decision put to the operator has one shape, and an act the operator attested is not
+#     raised again: Rule 11(a) carries a pointer to both (r11a-pointer), and Rule 12's two
+#     `#### Operator decisions` subsections state them in full -- each option with its effect and
+#     consequence (r11a-one-shape), a question carrying no badge says so in its own text with the
+#     reason (r11a-say-why), and no later step puts an attested act back to the operator
+#     (r11a-attested-act), and a record read afterwards showing the act did not occur is an
+#     authorization-premise invalidation rather than a re-ask (r11a-premise). Those subsection headings are their own paragraphs to para mode, so each
+#     lead is the bold opening of the paragraph under them. route.md Step 6's **Option labels carry
+#     no recommendation.** paragraph says in the question why its options carry none
+#     (route-say-why). All five are para rows; each token sits on ONE line of its subject.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -415,6 +425,12 @@ qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
 r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|INCLUDING the value it leaves in force
 r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
+r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|apply both to every question you put to the operator
+r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|gives every option with its effect and the consequence of choosing it
+r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|says so in its own text, with the reason,
+r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
+r11a-premise|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|shows the act did not occur is an authorization-premise invalidation
+route-say-why|S|steps/route.md|### Step 6:|## FAILURE MODES|**Option labels carry no recommendation.**|para|Say in the question that its options carry no recommendation, and why.
 gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
 gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**
 retro-gar-confirm|S|steps/retro.md|### 7. Merge and Next-Sprint Handoff|6. **Verify no-loss per file:**|**Confirm every hinted sprint against the sprint-close commits before adding `--apply`.**|para|is an `AskUserQuestion` to the operator naming the id
