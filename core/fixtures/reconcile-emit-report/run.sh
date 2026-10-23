@@ -3301,36 +3301,17 @@ pcv_v55world() {
 }
 # pcv_latarm <id> <tag> <description> -- seed, approve, record, HIT control, change, then a MISS whose exit
 # equals an opt-out render of the same tree and is non-zero (so the change is one the render sees).
+# Only V19 and V24 run here; the other seven arms share pcv_latgrp's world.
 pcv_latarm() {
-  local id="$1" t="$2" b2 rec ctl n0 ovr dang="" wt
+  local id="$1" t="$2" rec ctl n0
   PCV_ENVPRE=""
   pcv_lat "$t" || { pcv_x "$id" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
-  b2="$L_B"; ovr="$L_C/.claude/skills/ai-dlc/overrides"
   case "$t" in
-    # V21/V22: an override whose base_sha names a DANGLING commit, in the consumer or in the dist. A
-    # prune after the recording run removes the object and the row the render prints changes.
-    v21) dang="$(git -C "$L_C" -c user.email=f@f -c user.name=fixture commit-tree -m dangling "$(git -C "$L_C" write-tree)" 2>/dev/null)" ;;
-    v22) dang="$(git -C "$L_D" -c user.email=f@f -c user.name=fixture commit-tree -m dangling -p "$L_B" "${L_B}^{tree}" 2>/dev/null)" ;;
-    # V23: a fixture core DELETED on a side branch, which the render names by an ABBREVIATED sha, so
-    # core.abbrev changes the bytes of the RETIRED-FIXTURE-ORPHAN row and nothing else.
-    v23) wt="$PS_D/$t/wt"
-         { git -C "$L_D" worktree add -q --detach "$wt" "$L_B" \
-           && mkdir -p "$wt/core/fixtures/oldfx" && printf 'exit 0\n' > "$wt/core/fixtures/oldfx/run.sh" \
-           && git -C "$wt" add -A && git -C "$wt" -c user.email=f@f -c user.name=fixture commit -qm oldfx \
-           && git -C "$wt" branch -q hist && git -C "$L_D" worktree remove --force "$wt"; } >/dev/null 2>&1 \
-           || { pcv_x "$id" "FIXTURE BROKEN: could not build the deleted-fixture history in the dist"; return 0; }
-         mkdir -p "$L_C/tests/fixtures/oldfx"; printf 'exit 0\n' > "$L_C/tests/fixtures/oldfx/run.sh" ;;
     # V24: approved and recorded under a UTF-8 collation, verified under LC_ALL=C, where the render's
     # sorted lists come out in another order.
     v24) PCV_ENVPRE="-u LC_ALL LANG=en_US.UTF-8" ;;
-  esac
-  if [ "$t" = v21 ] || [ "$t" = v22 ]; then
-    [ -n "$dang" ] || { pcv_x "$id" "FIXTURE BROKEN: could not create the dangling commit"; return 0; }
-    mkdir -p "$ovr" && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$dang" > "$ovr/demo.md"
-  fi
-  case "$t" in
-    v17) printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT" ;;
-    v18|v19) mkdir -p "$L_C/scripts/ai-dlc"
+    # V19: the hook-registration shim at 644, committed under core.filemode=false below.
+    v19) mkdir -p "$L_C/scripts/ai-dlc"
          printf '#!/bin/bash\necho "HOOKREG-SHIM-RAN"\n' > "$L_C/$PCV_HOOKREG"; chmod 644 "$L_C/$PCV_HOOKREG" ;;
   esac
   if [ "$t" = v19 ]; then
@@ -3346,25 +3327,14 @@ pcv_latarm() {
     pcv_x "$id" "control: the unchanged world did not record [$rec] and then hit [$ctl], so a miss after the change would prove nothing"; return 0
   fi
   case "$t" in
-    v17) printf -- '---\nkind: check\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT" ;;
-    v18|v19) chmod 755 "$L_C/$PCV_HOOKREG" ;;
-    v20) b2="$(git -C "$L_D" rev-parse --short "$L_B" 2>/dev/null)"
-         [ -n "$b2" ] && [ "$b2" != "$L_B" ] || { pcv_x "$id" "FIXTURE BROKEN: no short spelling distinct from the full base sha"; return 0; } ;;
-    v21) git -C "$L_C" prune --expire=now >/dev/null 2>&1
-         ! git -C "$L_C" cat-file -e "$dang" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling consumer commit in place"; return 0; } ;;
-    v22) git -C "$L_D" prune --expire=now >/dev/null 2>&1
-         ! git -C "$L_D" cat-file -e "$dang" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling dist commit in place"; return 0; } ;;
-    v23) git -C "$L_D" config core.abbrev 20 ;;
+    v19) chmod 755 "$L_C/$PCV_HOOKREG" ;;
     v24) PCV_ENVPRE="LC_ALL=C" ;;
-    v25) chmod 000 "$L_C/.claude/skills/ai-dlc/extensions" ;;
   esac
   # The cached run goes FIRST: an opt-out run before it would, under M-exit3, record the changed tree
-  # and turn this arm's miss into a hit, putting V17..V20 into a kill set that is not theirs.
-  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"; local c_rc="$PRC" c_hit="$PHIT" c_n="$PN"
-  pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$b2" "$L_T" nocache; n0="$PRC"
+  # and turn this arm's miss into a hit, putting this arm into a kill set that is not its own.
+  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; local c_rc="$PRC" c_hit="$PHIT" c_n="$PN"
+  pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; n0="$PRC"
   PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
-  # V25's directory is put back at once, by its own path, or the EXIT trap's rm cannot descend into it.
-  [ "$t" = v25 ] && chmod 755 "$L_C/.claude/skills/ai-dlc/extensions"
   PCV_ENVPRE=""
   if [ "$n0" -eq 0 ]; then
     pcv_x "$id" "FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees and a hit would be correct"
@@ -3373,6 +3343,128 @@ pcv_latarm() {
   else
     pcv_x "$id" "$3 did not force a fresh render: [$(pcv_why)], opt-out render exits $n0 -- a recorded PASS answered for a tree it never rendered"
   fi
+  return 0
+}
+# ---- V20 V17 V18 V23 V21 V22 V25: ONE shared adjudication world, the arms in that order ----
+# One seed, one approve, one recording run for seven arms. Every pre-state is laid down before the
+# approve. Each arm: a HIT control on the restored world (pcv_gctl, so a failed undo shows as THIS
+# arm's control failing), the change, the cached run, the opt-out run, the undo, and only then its one
+# verdict. An arm whose control fails has written its FAIL and returns without changing or undoing
+# anything. The record is never copied back: no pass-path run exits 0, so nothing rewrites it, and the
+# next arm's control is its reader. A CLOSING control after V25 reads V25's undo, and V25's verdict is
+# written only after it. V19 (a commit of the whole tree) and V24 (a locale key field) cannot share
+# this world and keep their own pcv_latarm worlds.
+PCV_GRP_IDS="PC-V20 PC-V17 PC-V18 PC-V23 PC-V21 PC-V22 PC-V25"
+pcv_grpx() { local p; for p in $PCV_GRP_IDS; do pcv_x "$p" "$1"; done; }
+# pcv_gctl <id> -- pcv_kctl's shape (pcache's, which shard d does not define): the restored shared
+# world HITS the one record; non-zero, with the arm's FAIL, if not.
+pcv_gctl() {
+  pcv_run "$1.c" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  pcv_is_hit "$1.c" "$L_REC" && return 0
+  pcv_x "$1" "control: the shared world did not HIT before the change ($(pcv_why)), so a miss after it would prove nothing"
+  return 1
+}
+# pcv_g17 hooks|nohooks -- V17's extension, with its hooks: line (the pre-state and the undo) or without it.
+pcv_g17() {
+  if [ "$1" = hooks ]; then
+    printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT"
+  else
+    printf -- '---\nkind: check\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT"
+  fi
+}
+# pcv_garm <id> <tag> <description> -- one arm of the shared world.
+pcv_garm() {
+  local id="$1" t="$2" b2="$L_B" c_rc c_hit c_n nc undo="" s vk vt
+  pcv_gctl "$id" || return 0
+  case "$t" in
+    v20) b2="$(git -C "$L_D" rev-parse --short "$L_B" 2>/dev/null)"
+         [ -n "$b2" ] && [ "$b2" != "$L_B" ] || { pcv_x "$id" "FIXTURE BROKEN: no short spelling distinct from the full base sha"; return 0; } ;;
+    v17) pcv_g17 nohooks ;;
+    v18) chmod 755 "$L_C/$PCV_HOOKREG" ;;
+    v23) git -C "$L_D" config core.abbrev 20 >/dev/null 2>&1 ;;
+    v21) git -C "$L_C" prune --expire=now >/dev/null 2>&1
+         ! git -C "$L_C" cat-file -e "$G_DC" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling consumer commit in place"; return 0; } ;;
+    v22) git -C "$L_D" prune --expire=now >/dev/null 2>&1
+         ! git -C "$L_D" cat-file -e "$G_DD" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling dist commit in place"; return 0; } ;;
+    v25) chmod 000 "$L_C/.claude/skills/ai-dlc/extensions" ;;
+  esac
+  # The cached run goes FIRST, as in pcv_latarm: an opt-out run before it could record the changed tree.
+  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"; c_rc="$PRC"; c_hit="$PHIT"; c_n="$PN"
+  pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$b2" "$L_T" nocache; nc="$PRC"
+  PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
+  case "$t" in
+    v17) pcv_g17 hooks ;;
+    v18) chmod 644 "$L_C/$PCV_HOOKREG" ;;
+    v23) git -C "$L_D" config --unset core.abbrev >/dev/null 2>&1 ;;
+    v21) s="$(git -C "$L_C" hash-object -t commit -w "$PS_D/grp-dc.commit" 2>/dev/null)"
+         [ "$s" = "$G_DC" ] || undo="the saved bytes of the pruned consumer commit did not re-write to its sha" ;;
+    v22) s="$(git -C "$L_D" hash-object -t commit -w "$PS_D/grp-dd.commit" 2>/dev/null)"
+         [ "$s" = "$G_DD" ] || undo="the saved bytes of the pruned dist commit did not re-write to its sha" ;;
+    v25) chmod 755 "$L_C/.claude/skills/ai-dlc/extensions" ;;
+  esac
+  if [ -n "$undo" ]; then
+    vk=x; vt="FIXTURE BROKEN: the undo did not restore the world: $undo"
+  elif [ "$nc" -eq 0 ]; then
+    vk=x; vt="FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees and a hit would be correct"
+  elif pcv_is_miss "$nc"; then
+    vk=v; vt="$3 MISSES: no hit line, and the fresh render exits $nc exactly as the opt-out render of the same tree"
+  else
+    vk=x; vt="$3 did not force a fresh render: [$(pcv_why)], opt-out render exits $nc -- a recorded PASS answered for a tree it never rendered"
+  fi
+  if [ "$t" = v25 ]; then
+    pcv_run grp.close "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+    if ! pcv_is_hit grp.close "$L_REC" && [ "$vk" = v ]; then
+      vk=x; vt="closing control: the shared world restored after V25 did not HIT ($(pcv_why)), so V25's undo left the world changed"
+    fi
+  fi
+  if [ "$vk" = v ]; then pcv_v "$id" "$vt"; else pcv_x "$id" "$vt"; fi
+  return 0
+}
+# pcv_latgrp -- seed the shared world, lay down every pre-state, approve and record once, run the arms.
+pcv_latgrp() {
+  local ovr wt
+  PCV_ENVPRE=""; G_DC=""; G_DD=""
+  pcv_lat grp || { pcv_grpx "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build the shared world"; return 0; }
+  ovr="$L_C/.claude/skills/ai-dlc/overrides"
+  # V21/V22: an override whose base_sha names a DANGLING commit, in the consumer and in the dist. The
+  # commit bytes are saved through a FILE (a command substitution would strip the trailing newline),
+  # so each undo can re-write the pruned object under its own sha.
+  G_DC="$(git -C "$L_C" -c user.email=f@f -c user.name=fixture commit-tree -m dangling "$(git -C "$L_C" write-tree)" 2>/dev/null)"
+  G_DD="$(git -C "$L_D" -c user.email=f@f -c user.name=fixture commit-tree -m dangling -p "$L_B" "${L_B}^{tree}" 2>/dev/null)"
+  if [ -z "$G_DC" ] || [ -z "$G_DD" ] \
+     || ! git -C "$L_C" cat-file commit "$G_DC" > "$PS_D/grp-dc.commit" 2>/dev/null || [ ! -s "$PS_D/grp-dc.commit" ] \
+     || ! git -C "$L_D" cat-file commit "$G_DD" > "$PS_D/grp-dd.commit" 2>/dev/null || [ ! -s "$PS_D/grp-dd.commit" ]; then
+    pcv_grpx "FIXTURE BROKEN: could not create and save the two dangling commits"; return 0
+  fi
+  mkdir -p "$ovr" \
+    && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$G_DC" > "$ovr/demo-c.md" \
+    && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$G_DD" > "$ovr/demo-d.md" \
+    || { pcv_grpx "FIXTURE BROKEN: could not write the two overrides"; return 0; }
+  # V17: an UNTRACKED extension whose name carries a double quote. V18: an untracked hook-registration shim at 644.
+  pcv_g17 hooks
+  mkdir -p "$L_C/scripts/ai-dlc" && printf '#!/bin/bash\necho "HOOKREG-SHIM-RAN"\n' > "$L_C/$PCV_HOOKREG" && chmod 644 "$L_C/$PCV_HOOKREG" \
+    || { pcv_grpx "FIXTURE BROKEN: could not write the V17 extension or the V18 shim"; return 0; }
+  # V23: a fixture core DELETED on a side branch, which the render names by an ABBREVIATED sha.
+  wt="$PS_D/grp/wt"
+  { git -C "$L_D" worktree add -q --detach "$wt" "$L_B" \
+    && mkdir -p "$wt/core/fixtures/oldfx" && printf 'exit 0\n' > "$wt/core/fixtures/oldfx/run.sh" \
+    && git -C "$wt" add -A && git -C "$wt" -c user.email=f@f -c user.name=fixture commit -qm oldfx \
+    && git -C "$wt" branch -q hist && git -C "$L_D" worktree remove --force "$wt"; } >/dev/null 2>&1 \
+    || { pcv_grpx "FIXTURE BROKEN: could not build the deleted-fixture history in the dist"; return 0; }
+  mkdir -p "$L_C/tests/fixtures/oldfx" && printf 'exit 0\n' > "$L_C/tests/fixtures/oldfx/run.sh" \
+    || { pcv_grpx "FIXTURE BROKEN: could not write the consumer's copy of the deleted fixture"; return 0; }
+  pcv_lat_approve grp || { pcv_grpx "FIXTURE BROKEN: the shared world rendered no region"; return 0; }
+  pcv_run grp.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    pcv_grpx "control: the shared world's first --verify did not render and record ($(pcv_why))"; return 0
+  fi
+  pcv_garm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
+  pcv_garm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
+  pcv_garm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
+  pcv_garm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
+  pcv_garm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
+  pcv_garm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
+  pcv_garm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
   return 0
 }
 if rer_phase pcache; then
@@ -4867,7 +4959,7 @@ pcv_suite() {
   fi # end pcv_in PC-V3 PC-V9
 
   # ---- V4..V16 and V26..V31, with V40/V41: one group, because each arm opens on the state the arm before it left ----
-  # V17..V25 are not here: each seeds its own world (pcv_latarm), so they run in phase pcvlat, shard d.
+  # V17..V25 are not here: they seed their own adjudication worlds (seven share pcv_latgrp's, V19 and V24 each have a pcv_latarm world), so they run in phase pcvlat, shard d.
   if pcv_in PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V26 PC-V40 PC-V41 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; then
   # ---- V4 / V11 / V12 / V13: consumer changes the region does not see, each a miss at exit 0 ----
   if ! pcv_ctl v4; then pcv_noctl PC-V4; else
@@ -5360,15 +5452,20 @@ else
 fi
 fi # end rer_phase pcache
 
-# --- V17..V25: inputs the render reads that a key can miss, each in its own adjudication world ---
+# --- V17..V25: inputs the render reads that a key can miss, in three adjudication worlds ---
 # Phase pcvlat, shard d. Each world is layer-adjudication-tier's seed (a git top level whose render
-# carries an adjudicable extension), built FRESH by pcv_latarm's own pcv_lat, so no arm reads the main
-# world or the state another arm left: that is why they could leave pcache's ordered group. The
-# change is chosen so the FRESH render really differs: each arm asserts the cached run is a fresh
-# render with a NON-ZERO exit equal to an AI_DLC_VERIFY_NO_CACHE=1 run on the same tree, so an arm
-# whose change the render cannot see fails here rather than passing vacuously. They run against the
-# shipping engine only; no mutant's kill set names them. Verdicts are read by pcv_read_ids, the
-# same rule as pcache's, over exactly PCV_LAT_IDS, and a verdict for any other id is a FAIL.
+# carries an adjudicable extension), built FRESH by pcv_lat, so no arm reads pcache's main world.
+# SEVEN ARMS SHARE ONE WORLD (pcv_latgrp): V20, V17, V18, V23, V21, V22, V25, in that order, over one
+# approve and one record. Those seven DO read the state the arms before them left, so each opens with
+# a HIT control on the restored world and undoes its change before its verdict, a failed undo turns
+# the NEXT arm's control red, and a closing control after V25 reads V25's undo. V19 (it commits the
+# whole tree) and V24 (its record locale is a key field) keep their own pcv_latarm worlds and run after
+# the group, never between its arms, because pcv_lat overwrites the L_* globals. The change is chosen
+# so the FRESH render really differs: each arm asserts the cached run is a fresh render with a NON-ZERO
+# exit equal to an AI_DLC_VERIFY_NO_CACHE=1 run on the same tree, so an arm whose change the render
+# cannot see fails here rather than passing vacuously. They run against the shipping engine only; no
+# mutant's kill set names them. Verdicts are read by pcv_read_ids, the same rule as pcache's, over
+# exactly PCV_LAT_IDS, and a verdict for any other id is a FAIL.
 if rer_phase pcvlat; then
 pcv_setup
 PCV_LAT_IDS="PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25"
@@ -5376,15 +5473,9 @@ if pcv_cache_engine "PC-V17..PC-V25"; then
   PS_E="$EMIT"; PS_D="$PCV_ROOT/lat"; PS_SHIM="$PS_D/shim"; PCV_ENG=""
   if mkdir -p "$PS_D" && : > "$PS_D/verdicts" && pcv_shim; then
     (
-      pcv_latarm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
-      pcv_latarm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
+      pcv_latgrp
       pcv_latarm PC-V19 v19 "a TRACKED file's chmod under core.filemode=false, which git status cannot see,"
-      pcv_latarm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
-      pcv_latarm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
-      pcv_latarm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
-      pcv_latarm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
       pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
-      pcv_latarm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
     ) > "$PCV_ROOT/lat.log" 2>&1
     pcv_read_ids "$PS_D/verdicts" "$PCV_LAT_IDS" pcvlat
     if grep -q '^FAIL ' "$PS_D/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/lat.log" ]; then
