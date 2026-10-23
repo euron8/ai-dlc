@@ -163,9 +163,9 @@ Proven by the `FOREIGN markers` arm and three `FOREIGN MUTANT` arms in `core/fix
 
 The receipt below binds the sandbox-stream keys only and says nothing about fs_usage.
 
-verify: sh f=core/scripts/derive-fixture-readsets.sh; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENT_KEY|ENDMARK)" "\$raw"' "$f")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" "$f"
+verify: sh f=core/scripts/derive-fixture-readsets.sh; c="$(grep -vE '^[[:space:]]*#' "$f")"; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENT_KEY|ENDMARK)" "\$raw"' <<<"$c")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" <<<"$c"
 
-The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
+The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. Both counts are taken over the deriver's non-comment lines, so a comment spelling the keyed grep cannot stand in for a live one. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 
