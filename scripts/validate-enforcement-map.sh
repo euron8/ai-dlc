@@ -1456,14 +1456,46 @@ ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtu
 # Two greps over the whole set rather than two per fixture: `-l` lists the hook-driving
 # fixtures, `-L` lists those of them that do NOT scrub. Both preserve argument order, so the
 # reported set and its order are what the per-file loop produced.
-hook_fx="$(grep -lE 'hooks/ai-dlc|\$HOOK' "$REPO_ROOT"/core/fixtures/*/run.sh 2>/dev/null)"
-if [ -n "$hook_fx" ]; then
-  while IFS= read -r r; do
-    [ -n "$r" ] || continue
-    d="${r%/run.sh}"
-    err "fixture '${d##*/}' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
-  done < <(printf '%s\n' "$hook_fx" | tr '\n' '\0' | xargs -0 grep -LE 'unset "\$_v"|env -u AI_DLC' 2>/dev/null)
+#
+# SELF-PROBE, before the corpus, both ways and on exact equality, through the SAME function the
+# corpus scan calls: a seeded fixture naming core/hooks/ai-dlc-*.sh with no scrub AND a seeded
+# fixture naming only `$HOOK` with no scrub must be reported as exactly those two, in glob order
+# (dropping `|\$HOOK` from the population pattern loses the second), while a `$HOOK` fixture carrying the `unset "$_v"` loop, one carrying
+# `env -u AI_DLC_*`, and one naming no hook at all must not be. A scan that never reports and one
+# that reports everything both fail here. The population is deliberately NOT narrowed to hooks
+# run.sh visibly EXECUTES, although a fixture that only reads a hook's text satisfies this arm by
+# carrying the scrub idiom. Measured: a command-position grammar keeps 33 of the 55 hook-naming
+# fixtures and drops 22, of which about 13 do execute a hook by a route run.sh's text cannot spell
+# -- a hook passed to a function that runs it, one copied to .githooks/pre-push and run by
+# relative path, extracted hook spans sourced, a path resolved by a helper from a basename, an
+# invoker in lib.sh -- so the narrower grammar would exempt real hook drivers.
+i10_unscrubbed() {
+  local i10_fx
+  i10_fx="$(grep -lE 'hooks/ai-dlc|\$HOOK' "$1"/*/run.sh 2>/dev/null)"
+  [ -n "$i10_fx" ] || return 0
+  printf '%s\n' "$i10_fx" | tr '\n' '\0' | xargs -0 grep -LE 'unset "\$_v"|env -u AI_DLC' 2>/dev/null
+}
+i10_probe="$(mktemp -d 2>/dev/null)"
+if [ -n "$i10_probe" ] && [ -d "$i10_probe" ]; then
+  mkdir "$i10_probe/unscrubbed" "$i10_probe/varonly" "$i10_probe/unset-loop" "$i10_probe/env-u" "$i10_probe/hookless"
+  printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/unscrubbed/run.sh"
+  printf '%s\n' 'bash "$HOOK" </dev/null' > "$i10_probe/varonly/run.sh"
+  printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' 'bash "$HOOK"' > "$i10_probe/unset-loop/run.sh"
+  printf '%s\n' 'env -u AI_DLC_MODEL_ROW bash "$HOOK"' > "$i10_probe/env-u/run.sh"
+  printf '%s\n' 'echo "no hook here"' > "$i10_probe/hookless/run.sh"
+  i10_pgot="$(i10_unscrubbed "$i10_probe")"
+  i10_pwant="$i10_probe/unscrubbed/run.sh
+$i10_probe/varonly/run.sh"
+  rm -rf "$i10_probe"
+  [ "$i10_pgot" = "$i10_pwant" ] || err "I10 hermeticity self-probe failed: over a seeded tree it reported [${i10_pgot}], want exactly [${i10_pwant}] -- the unscrubbed path-naming fixture and the unscrubbed \$HOOK-only fixture, and nothing else. The scan cannot be shown to fire, so its silence over core/fixtures/ below means nothing."
+else
+  err "I10 could not create its probe directory, so neither direction of its hermeticity scan was proven this run."
 fi
+while IFS= read -r r; do
+  [ -n "$r" ] || continue
+  d="${r%/run.sh}"
+  err "fixture '${d##*/}' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
+done < <(i10_unscrubbed "$REPO_ROOT/core/fixtures")
 
 # --- I13: every shipped hook is REGISTERED. install.sh copies core/hooks/*.sh by GLOB, so a
 # new hook always reaches the consumer's .claude/hooks/ — but it only ever RUNS if

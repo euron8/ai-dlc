@@ -77,6 +77,9 @@ LEADSCOPE='a lead that edits product code here is applying a fix inline, which R
 sec3() { # <file> -> §3 body, heading line excluded
   awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### /{exit} on{print}' "$1"
 }
+item2() { # <file> -> §3 item 2 (the diagnosis item) only: its first line up to, not including, item 3
+  sec3 "$1" | awk '/^2\. Diagnose the failure/{on=1} on && /^3\. If code issue/{exit} on{print}'
+}
 flat() { # stdin -> one line, runs of whitespace collapsed, bold markers dropped
   tr '\n' ' ' | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g'
 }
@@ -184,6 +187,46 @@ check() {
   # inside §3 would satisfy a substring match while the item still routes namelessly.
   grep -qE "$DISPATCH" <<<"$body" || echo "DISPATCH: §3's code-issue loop item does not open with a mandatory dev dispatch"
   case "$fl" in *"$LEADSCOPE"*) : ;; *) echo "DISPATCH: §3 does not name a lead's inline product-code edit in the fix loop as a Rule 28 finding" ;; esac
+  # STANDING-RULING: item 2 must send the diagnosis to the escalation archive and the retro records
+  # for a recorded operator disposition on the failing test. Every STANDING-RULING arm reads ITEM 2
+  # ONLY (item2(), flattened: the item wraps), never the rest of §3, so the ruling cannot be satisfied
+  # from a later paragraph of §3. Each branch owns its own arm prefix, so a mutant fires one arm.
+  fl="$(item2 "$f" | flat)"
+  case "$fl" in *'docs/escalations/pending-archive.md'*) : ;; *) echo "STANDING-RULING: item 2 does not search the escalation archive for a standing ruling on the failing test" ;; esac
+  case "$fl" in *'docs/retro/s*/retro.md'*) : ;; *) echo "STANDING-RULING: item 2 does not search the retro records for a standing ruling on the failing test" ;; esac
+  # STANDING-RULING-ID: the id-match branch, the verbatim id the smoke output reports.
+  case "$fl" in *'names the failing test id verbatim, the id the smoke output reports'*) : ;; *) echo "STANDING-RULING-ID: item 2 does not release only on a prior entry naming the failing test id verbatim" ;; esac
+  # STANDING-RULING-AUTH: the prior entry must be terminal and carry its own Operator authorization line.
+  case "$fl" in *'has a terminal status and an `Operator authorization:` line'*) : ;; *) echo "STANDING-RULING-AUTH: item 2 does not require a terminal prior entry carrying an Operator authorization line" ;; esac
+  # STANDING-RULING-SEG / -WHOLE / -UNIQ / -SHARED / -SUBSTR: the final-segment branch and its bounds.
+  case "$fl" in *'names exactly the final `::` segment of that pytest node id'*) : ;; *) echo "STANDING-RULING-SEG: item 2 does not limit the bare-name branch to exactly the final :: segment of the node id" ;; esac
+  case "$fl" in *'as a whole token'*) : ;; *) echo "STANDING-RULING-WHOLE: item 2 does not require the final segment to match as a whole token" ;; esac
+  case "$fl" in *"is the final segment of exactly one failing id in this run's smoke output"*) : ;; *) echo "STANDING-RULING-UNIQ: item 2 does not require the segment to be the final segment of exactly one failing id" ;; esac
+  case "$fl" in *'Two failing ids that share a final segment do not match'*) : ;; *) echo "STANDING-RULING-SHARED: item 2 does not make two failing ids sharing a final segment a non-match" ;; esac
+  case "$fl" in *'a prior name that is only a prefix or substring of a longer token does not match'*) : ;; *) echo "STANDING-RULING-SUBSTR: item 2 does not make a prefix or substring of a longer token a non-match" ;; esac
+  # STANDING-RULING-RELEASE / -AUTHOR / -BOTHIDS: on a release the lead authors nothing terminal, cites the entry for information, quotes both ids.
+  case "$fl" in *'On a release the lead authors nothing terminal and files no item-6 entry'*) : ;; *) echo "STANDING-RULING-AUTHOR: item 2 does not say the lead authors nothing terminal and files no item-6 entry on a release" ;; esac
+  case "$fl" in *'it cites the prior entry under `### For Your Information` and in the gate log, by file:line, with that entry'"'"'s `Operator authorization:` line verbatim'*) : ;; *) echo "STANDING-RULING-RELEASE: item 2 does not cite the prior entry under For Your Information with its Operator authorization line verbatim" ;; esac
+  case "$fl" in *'quoting both the failing id as the smoke output reports it and the id as the prior entry names it'*) : ;; *) echo "STANDING-RULING-BOTHIDS: item 2 does not quote both the reported id and the id the prior entry names" ;; esac
+  # NOFILE: the old instruction to file item 6 already RESOLVED must not stand (the gate rejects a lead-authored RESOLVED entry).
+  case "$fl" in *'already RESOLVED'*) echo "STANDING-RULING-NOFILE: item 2 tells the lead to file an already RESOLVED entry, which the escalation gate rejects" ;; *) : ;; esac
+  # STANDING-RULING-FALLBACK and its three cells: each other disposition returns to item 6 with the prior ruling beside the Decision.
+  case "$fl" in *'Any other disposition falls back to item 6 unchanged, with the prior ruling shown beside the Decision'*) : ;; *) echo "STANDING-RULING-FALLBACK: item 2 does not fall back to item 6 with the prior ruling beside the Decision on a non-matching disposition" ;; esac
+  case "$fl" in *'an entry with no `Operator authorization:` line'*) : ;; *) echo "STANDING-RULING-FB-NOAUTH: item 2 does not fall back on an entry with no Operator authorization line" ;; esac
+  case "$fl" in *'a disposition found only in a retro doc'*) : ;; *) echo "STANDING-RULING-FB-RETRO: item 2 does not fall back on a disposition found only in a retro doc" ;; esac
+  case "$fl" in *'a different test id, the same test id failing a different assertion than the one the entry names, or an entry whose own words scope it to another sprint or condition'*) : ;; *) echo "STANDING-RULING-FB-ID: item 2 does not fall back on a different id, a different assertion or a scoped entry" ;; esac
+  # STANDING-RULING-NORELEASE: nothing but such a prior entry releases the checkpoint; the verdict stays FAILED.
+  case "$fl" in *'Nothing other than such a prior entry releases the checkpoint, and the smoke verdict stays FAILED either way'*) : ;; *) echo "STANDING-RULING-NORELEASE: item 2 does not state that only such a prior entry releases the checkpoint and the verdict stays FAILED" ;; esac
+  # STANDING-RULING-PRIOR / -FILES: the release source is a PRIOR entry, in one of the two escalation files.
+  case "$fl" in *'a prior escalation entry, from any sprint'*) : ;; *) echo "STANDING-RULING-PRIOR: item 2 does not make the release source a prior escalation entry from any sprint" ;; esac
+  case "$fl" in *'in one of the two escalation files'*) : ;; *) echo "STANDING-RULING-FILES: item 2 does not limit the release source to one of the two escalation files" ;; esac
+  # STANDING-RULING-TERMINAL / -FB-STATUS: terminal is the Status FIELD, not prose; a non-terminal field falls back.
+  case "$fl" in *'Terminal means the entry'"'"'s `Status:` field carries one of the terminal statuses `escalations.md` lists, not a status word in prose elsewhere in the entry'*) : ;; *) echo "STANDING-RULING-TERMINAL: item 2 does not define terminal as the entry's Status field in escalations.md's vocabulary" ;; esac
+  case "$fl" in *'An entry whose `Status:` field is not terminal, even if prose later in it says RESOLVED, falls back the same way'*) : ;; *) echo "STANDING-RULING-FB-STATUS: item 2 does not fall back on an entry whose Status field is not terminal despite prose saying RESOLVED" ;; esac
+  # STANDING-RULING-PERID: each failing id is matched on its own; unmatched ids go to item 6.
+  case "$fl" in *'Each failing id is matched on its own: a release covers only the id it matched, and every unmatched failing id goes to item 6 as written'*) : ;; *) echo "STANDING-RULING-PERID: item 2 does not match each failing id on its own and send every unmatched id to item 6" ;; esac
+  # STANDING-RULING-QUAL: a qualified prior name must equal the reported id verbatim.
+  case "$fl" in *'The final-segment branch applies only when the prior entry'"'"'s name carries no `::`; a qualified prior name'*'must equal the reported id verbatim, else the fallback below applies'*) : ;; *) echo "STANDING-RULING-QUAL: item 2 does not require a qualified prior name to equal the reported id verbatim" ;; esac
   # VISUAL: §4 must tell the writer to record the tokens Check 5 of validate-mandatory-rules.sh
   # reads in the gate-log section. Keyed on §4, so a mention elsewhere does not satisfy it.
   fl="$(sec4 "$f" | flat)"
@@ -391,6 +434,130 @@ mutant "comment-dispatch" \
 mutant "no-leadscope" \
   '{ gsub(/a lead that edits product code here is applying a$/, "a lead may edit product code here when applying a"); print }' \
   "DISPATCH:" "dropping the inline-edit-is-a-finding sentence from §3 is caught"
+
+# STANDING-RULING: one mutant per token or branch, each dropping only its own text from item 2.
+mutant "no-ruling-archive" \
+  '{ gsub(/`docs\/escalations\/pending-archive\.md` and /, ""); print }' \
+  "STANDING-RULING:" "dropping the escalation archive from the standing-ruling search is caught"
+
+mutant "no-ruling-retro" \
+  '{ gsub(/ and `docs\/retro\/s\*\/retro\.md`/, ""); print }' \
+  "STANDING-RULING:" "dropping the retro records from the standing-ruling search is caught"
+
+# Each mutant below edits ONE source line of item 2, on a word that only one phrase pins, so it fires
+# one arm. The item wraps, so a phrase is broken by editing the line that carries its distinctive words.
+
+# DROP the id-match condition: the entry would no longer have to name the failing test id.
+mutant "no-ruling-id-match" \
+  '{ gsub(/and names the failing test id$/, "and names a failing test"); print }' \
+  "STANDING-RULING-ID:" "dropping the names-the-failing-test-id-verbatim condition is caught"
+
+# DROP the authorization requirement: a terminal entry with no Operator authorization line would release.
+mutant "no-ruling-auth" \
+  '{ gsub(/has a terminal status and an `Operator authorization:`$/, "has a terminal status and a note"); print }' \
+  "STANDING-RULING-AUTH:" "dropping the Operator authorization requirement is caught"
+
+# DROP the final-segment branch's anchor on the final :: segment.
+mutant "no-ruling-segment" \
+  '{ gsub(/^   final `::` segment of that pytest node id as a whole token, where$/, "   node id as a whole token, where"); print }' \
+  "STANDING-RULING-SEG:" "dropping the exactly-the-final-:: -segment condition is caught"
+
+# WHOLE token turned into substring matching.
+mutant "no-ruling-whole-token" \
+  '{ gsub(/as a whole token, where$/, "as a substring, where"); print }' \
+  "STANDING-RULING-WHOLE:" "turning whole-token matching into substring matching is caught"
+
+# DROP the uniqueness condition: a segment shared by several failing ids would release.
+mutant "no-ruling-uniq" \
+  '{ gsub(/that segment is the final segment of exactly one failing id in this$/, "that segment is a final segment of a failing id in this"); print }' \
+  "STANDING-RULING-UNIQ:" "dropping the exactly-one-failing-id uniqueness condition is caught"
+
+# DROP the shared-segment fallback sentence.
+mutant "no-ruling-shared" \
+  '{ gsub(/Two failing ids that share a final segment do not$/, "Two failing ids that share a final segment are fine"); print }' \
+  "STANDING-RULING-SHARED:" "dropping the two-ids-sharing-a-final-segment non-match is caught"
+
+# DROP the prefix-or-substring non-match.
+mutant "no-ruling-substr" \
+  '{ gsub(/ or substring of a longer$/, " of a longer"); print }' \
+  "STANDING-RULING-SUBSTR:" "dropping the prefix-or-substring non-match is caught"
+
+# DROP the nothing-terminal-authored sentence.
+mutant "no-ruling-author" \
+  '{ gsub(/the lead authors nothing terminal$/, "the lead records the terminal status"); print }' \
+  "STANDING-RULING-AUTHOR:" "dropping the lead-authors-nothing-terminal sentence is caught"
+
+# DROP the For Your Information citation with the authorization line verbatim.
+mutant "no-ruling-release-cite" \
+  '{ gsub(/ and in the gate log, by file:line, with$/, " and nowhere else, by file:line, with"); print }' \
+  "STANDING-RULING-RELEASE:" "dropping the FYI citation with the authorization line verbatim is caught"
+
+# DROP the quote-both-ids requirement.
+mutant "no-ruling-bothids" \
+  '{ gsub(/, quoting both$/, ", quoting"); print }' \
+  "STANDING-RULING-BOTHIDS:" "dropping the quote-both-ids join is caught"
+
+# RE-INTRODUCE the lead-authored RESOLVED filing the gate rejects: the phrase is ADDED to item 2.
+mutant "readd-ruling-file-resolved" \
+  '/^2\. Diagnose the failure/{i=1} /^3\. If code issue/{i=0} i && /stays FAILED either way\.$/{print; print "   On a match, file item 6'"'"'s `HARD_BLOCK` already RESOLVED."; next} {print}' \
+  "STANDING-RULING-NOFILE:" "adding back the file-item-6-already-RESOLVED instruction is caught"
+
+# DROP the fallback: a non-matching disposition would no longer return to item 6.
+mutant "no-ruling-fallback" \
+  '{ gsub(/Any other disposition falls back to item 6/, "Any other disposition is cited"); print }' \
+  "STANDING-RULING-FALLBACK:" "dropping the fall-back-to-item-6 branch is caught"
+
+# DROP each fallback cell on its own.
+mutant "no-ruling-fb-noauth" \
+  '{ gsub(/Decision: an entry with no$/, "Decision: a case with no"); print }' \
+  "STANDING-RULING-FB-NOAUTH:" "dropping the no-authorization-line fallback cell is caught"
+
+mutant "no-ruling-fb-retro" \
+  '{ gsub(/found only in a retro$/, "found in a retro"); print }' \
+  "STANDING-RULING-FB-RETRO:" "dropping the retro-doc-only fallback cell is caught"
+
+mutant "no-ruling-fb-id" \
+  '{ gsub(/the same test id failing a different$/, "the same test id passing a different"); print }' \
+  "STANDING-RULING-FB-ID:" "dropping the id-mismatch / different-assertion / scoped-entry fallback cell is caught"
+
+# DROP the no-release sentence.
+mutant "no-ruling-norelease" \
+  '{ gsub(/Nothing other than$/, "Anything other than"); print }' \
+  "STANDING-RULING-NORELEASE:" "dropping the nothing-else-releases sentence is caught"
+
+# PIN the release source: "prior" and "in one of the two escalation files".
+mutant "no-ruling-prior" \
+  '{ gsub(/is a prior$/, "is an"); print }' \
+  "STANDING-RULING-PRIOR:" "dropping the prior-escalation-entry release source is caught"
+
+mutant "no-ruling-files" \
+  '{ gsub(/ in one of the two escalation$/, " in an escalation"); print }' \
+  "STANDING-RULING-FILES:" "dropping in-one-of-the-two-escalation-files is caught"
+
+# PIN terminal = the Status FIELD, and the non-terminal-field fallback cell.
+mutant "no-ruling-terminal-field" \
+  '{ gsub(/^   entry'"'"'s `\*\*Status:\*\*` field carries one of the terminal statuses$/, "   entry'"'"'s text carries one of the terminal statuses"); print }' \
+  "STANDING-RULING-TERMINAL:" "defining terminal by any status word rather than the Status field is caught"
+
+mutant "no-ruling-fb-status" \
+  '{ gsub(/`\*\*Status:\*\*` field is not terminal, even if prose later in it says$/, "`**Status:**` field is terminal, even if prose later in it says"); print }' \
+  "STANDING-RULING-FB-STATUS:" "dropping the non-terminal-Status-field fallback cell is caught"
+
+# PIN per-id matching and the qualified-name clause.
+mutant "no-ruling-perid" \
+  '{ gsub(/covers only the id it matched/, "covers the whole run"); print }' \
+  "STANDING-RULING-PERID:" "letting a release cover unmatched failing ids is caught"
+
+mutant "no-ruling-qual" \
+  '{ gsub(/ name carries no `::`; a qualified prior name$/, " name is anything; a prior name"); print }' \
+  "STANDING-RULING-QUAL:" "dropping the qualified-prior-name verbatim clause is caught"
+
+# MOVE: the whole ruling leaves item 2 and reappears verbatim at the end of §3, after the Minimum
+# mechanism paragraph and before §3b's heading, still INSIDE §3. A §3-wide read still finds it; the
+# item-2 span reader must not. Every STANDING-RULING arm fires, so the expected prefix is their stem.
+mutant "move-ruling" \
+  '/^### 3\. Smoke Tests/{s=1} s && /^### 3b/{s=0; printf "%s\n", held; print; next} s && /^   Before routing, search `docs\/escalations\/pending\.md`,$/{h=1} s && h{held=held $0 "\n"; if ($0 ~ /stays FAILED either way\.$/) h=0; next} {print}' \
+  "STANDING-RULING" "moving the standing-ruling instruction out of item 2 (to the end of §3, past the Minimum mechanism paragraph) is caught"
 
 # --- §5 Locked-Requirement Coverage --------------------------------------------
 # DELETE: the block goes, the Red-gate line (which carries the same disposition tokens) stays.

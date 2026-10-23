@@ -234,6 +234,42 @@ the gate log.
 **Smoke tests MUST pass.** If any smoke test fails:
 1. Do NOT proceed to the Production Validation Checkpoint.
 2. Diagnose the failure — is it a deployment issue or a code issue?
+   Before routing, search `docs/escalations/pending.md`,
+   `docs/escalations/pending-archive.md` and `docs/retro/s*/retro.md`
+   for the failing test's id (`steps/retro.md` owns the retro path and
+   the archive move, `escalations.md` "Terminal-entry archival" the
+   escalation archive). The only thing that releases item 6 is a prior
+   escalation entry, from any sprint, in one of the two escalation
+   files, that has a terminal status and an `Operator authorization:`
+   line (`escalations.md` owns both) and names the failing test id
+   verbatim, the id the smoke output reports; or names exactly the
+   final `::` segment of that pytest node id as a whole token, where
+   that segment is the final segment of exactly one failing id in this
+   run's smoke output. Two failing ids that share a final segment do not
+   match, and a prior name that is only a prefix or substring of a longer
+   token does not match. The final-segment branch applies only when the
+   prior entry's name carries no `::`; a qualified prior name
+   (`Class::test_x`, `path.py::test_x`) must equal the reported id
+   verbatim, else the fallback below applies. Each failing id is matched
+   on its own: a release covers only the id it matched, and every
+   unmatched failing id goes to item 6 as written. Terminal means the
+   entry's `**Status:**` field carries one of the terminal statuses
+   `escalations.md` lists, not a status word in prose elsewhere in the
+   entry. On a release the lead authors nothing terminal
+   and files no item-6 entry: it cites the prior entry under
+   `### For Your Information` and in the gate log, by file:line, with
+   that entry's `Operator authorization:` line verbatim, quoting both
+   the failing id as the smoke output reports it and the id as the prior
+   entry names it. Any other disposition falls back to item 6 unchanged,
+   with the prior ruling shown beside the Decision: an entry with no
+   `Operator authorization:` line, a disposition found only in a retro
+   doc, a different test id, the same test id failing a different
+   assertion than the one the entry names, or an entry whose own words
+   scope it to another sprint or condition. An entry whose
+   `**Status:**` field is not terminal, even if prose later in it says
+   RESOLVED, falls back the same way. Nothing other than
+   such a prior entry releases the checkpoint, and the smoke verdict
+   stays FAILED either way.
 3. If code issue: dispatch `dev` to fix the code and its tests; the
    lead then re-deploys and re-runs smoke tests. Only the code edit is
    delegated. The lead's own work in this loop is the dispatch, the
@@ -459,7 +495,7 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
   - [Option]: [its effect and the value it leaves in force] — [the consequence of choosing it]
 
 ### For Your Information
-[One line per DECIDED_AUTONOMOUSLY entry, citing its id; then any other item that asks nothing of you, or omit those]
+[One line per DECIDED_AUTONOMOUSLY entry, citing its id; one line per standing-ruling release §3 item 2 cites, never omitted; then any other item that asks nothing of you, or omit those other items]
 
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
@@ -586,7 +622,7 @@ checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
 **STOP.** Wait for the human to:
 1. Review the deployed production instance
 2. Answer each item under §5's `### Decisions for You`, open `HARD_BLOCK` and `DEFERRAL_REQUEST` entries included
-3. Override any `DECIDED_AUTONOMOUSLY` entry listed under §5's `### For Your Information`
+3. Override any `DECIDED_AUTONOMOUSLY` entry listed under §5's `### For Your Information`, or a standing-ruling release cited there
 4. Confirm validation or request fixes
 
 A generic validation reply is not a disposition: each locked

@@ -466,3 +466,13 @@ Measured on graph, read-only, over main-session transcripts since 2026-10-15T18:
 Owed: the four conditions need their own contract before a fix, and a validator change must bind to the hook's logic the way BL-783 binds to the hook's updater-session predicate, never restate it.
 
 verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.
+
+## BL-786 — I10 reads only run.sh, so a fixture whose hook invoker lives in lib.sh is outside its population
+
+**NOTE.** Source: batch 240, lead ai-dlc-3f. Filed by the r13 owner; not built.
+
+`adversarial-shard-merge` runs a hook at `lib.sh:183` and scrubs at `lib.sh:10`, but I10 never reads `lib.sh`. Widening the unit to `run.sh` + `lib.sh` + `seed.sh` with I10's patterns verbatim was measured: population 55 to 58, offenders 0 to 2, `adversarial-shard-merge` acquitted. Both offenders are false positives: `check-15-bypass/seed.sh:558` is a comment naming the `hooks/ai-dlc-*.sh` glob, and `core-paths-audit-diff/seed.sh:54,95` are `- hooks/ai-dlc-*.sh` yaml seed data. Neither executes a hook, so the widening was not shipped.
+
+Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` glob and data form, measured to an empty false-positive set with `adversarial-shard-merge` acquitted and a seeded `lib.sh`-only unscrubbed invoker reported.
+
+verify: sh s="$(awk '/^# --- I10: fixture hermeticity/{f=1} f&&/^# --- I13:/{exit} f' scripts/validate-enforcement-map.sh | grep -Ev '^[[:space:]]*#|^[[:space:]]*err ')"; grep -qE 'grep[^|]*lib\.sh|/\*/lib\.sh|"/lib\.sh"' <<<"$s"
