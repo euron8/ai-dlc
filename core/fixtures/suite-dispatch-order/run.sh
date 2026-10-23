@@ -94,6 +94,41 @@ drive() {                      # drive <tree> <outfile>  -> rc
   ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
+# THE READ-SET SKIP ON, for the arms whose subject is a unit the skip did not dispatch while its
+# directory stayed on disk. The verdict store is a sibling of the tree, never `$HOME/.cache`.
+drive_skip() {                 # drive_skip <tree> <outfile>  -> rc
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+}
+
+# A committed read-set map giving aaa, mmm and zzz one source file each, so changing src/mmm.txt
+# and src/zzz.txt re-runs those two and the skip withholds aaa -- the real narrowing path.
+seed_mapped() {                # seed_mapped <tree>
+  local t="$1" n
+  mkdir -p "$t/src" || return 1
+  for n in aaa mmm zzz; do
+    printf 'v1\n' > "$t/src/$n.txt" || return 1
+    printf '%s\tsrc/%s.txt\n' "$n" "$n" >> "$t/.ai-dlc-fixture-readsets.tsv" || return 1
+  done
+  git -C "$t" add -A >/dev/null 2>&1 && git -C "$t" commit -qm seed >/dev/null 2>&1
+}
+
+# Narrow by the skip: record keys on a green run, install the seeded record, change mmm's and
+# zzz's sources, and run again. Refuses unless exactly mmm and zzz were dispatched.
+narrow_by_skip() {             # narrow_by_skip <tree> <label> <seed record>  -> rc of the narrowed run, or "broken:<why>"
+  local t="$1" l="$2" s="$3" r nd
+  r="$(drive_skip "$t" "$WORK/$l.keys.out")"
+  [ "$r" = 0 ] || { echo "broken:key-recording run rc=$r"; return 0; }
+  cp "$s" "$t/.git/ai-dlc-fixture-durations" || { echo "broken:could not install the seeded record"; return 0; }
+  printf 'v2\n' > "$t/src/mmm.txt"; printf 'v2\n' > "$t/src/zzz.txt"
+  : > "$SDO_TRACE"
+  r="$(drive_skip "$t" "$WORK/$l.out")"
+  nd="$(grep -c . "$SDO_TRACE")" || nd=0
+  if [ "$nd" != 2 ] || grep -qx aaa "$SDO_TRACE"; then
+    echo "broken:the skip dispatched $nd unit(s) ($(tr '\n' ' ' < "$SDO_TRACE")), not mmm and zzz alone"; return 0
+  fi
+  echo "$r"
+}
+
 # ONE AT A TIME, which is what makes dispatch order observable at all. Above width 1 the
 # workers overlap and the trace records a race; at width 1 execution order IS dispatch
 # order, so the trace reads the schedule directly rather than inferring it from a wall
@@ -239,27 +274,28 @@ fi
 # every unit the skip had decided not to run. Those units then re-entered the next run
 # at the unknown-cost slot, which sorts FIRST, putting the real poles LAST.
 #
-# NARROWED BY TAKING A FIXTURE AWAY rather than by seeding the skip's own state. The
-# code path is identical — a unit that is not dispatched writes no `.dur` file, and
-# nothing downstream can tell why — and this way the arm does not depend on the read-set
-# machinery, which needs a map and a verified-state record that a seeded tree does not
-# have. The unit withheld is the CHEAPEST one deliberately: losing the cost of the
-# cheapest unit is what flips the dispatch order, because an unknown cost sorts first.
+# NARROWED BY THE READ-SET SKIP ITSELF, WITH AAA'S DIRECTORY KEPT ON DISK. It used to be
+# narrowed by MOVING aaa's directory away, which modelled a skipped unit as a deleted one.
+# Since the merge prunes every row whose "${FXROOT}${name}/run.sh" is gone (BL-744), that
+# shape is the prune's subject, not this arm's -- the two would now disagree about aaa,
+# and arm 4c below owns the deleted case. Here a committed map gives each unit one source
+# file and only mmm's and zzz's change, so the skip withholds aaa while its run.sh exists.
+# `narrow_by_skip` refuses unless exactly mmm and zzz were dispatched. The unit withheld is
+# the CHEAPEST one deliberately: losing the cost of the cheapest unit is what flips the
+# dispatch order, because an unknown cost sorts first.
 #
 # AAA'S PRESERVED COST IS SEEDED AT 1 AND IS NEVER MEASURED HERE, because aaa is withheld
-# from the only run that dispatches anything. mmm and zzz sleep 2, and `$SECONDS` is
+# from the run whose record is read. mmm and zzz sleep 2, and `$SECONDS` is
 # integer elapsed, so neither can record less than 2 and pool contention only raises it.
 # `aaa < mmm, zzz` therefore holds BY CONSTRUCTION rather than by luck. The old form
 # asserted the whole triple `zzz mmm aaa` against three MEASURED costs and let the
 # scheduler decide the verdict — `BL-008`, and the same defect as arm 1's.
 T="$WORK/merge"; seed "$T" "$HOOK" || broken "seed failed"
-export SDO_TRACE="$T/trace"
+export SDO_TRACE="$WORK/merge.trace"
 mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 2; mkfx_trace "$T" zzz 2
-cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
-
-mv "$T/tests/fixtures/aaa" "$WORK/aaa.withheld" || broken "could not withhold a fixture"
-: > "$SDO_TRACE"
-rc="$(drive "$T" "$WORK/merge2.out")"
+seed_mapped "$T" || broken "could not seed the read-set map for arm 4"
+rc="$(narrow_by_skip "$T" merge2 "$SEEDREC")"
+case "$rc" in broken:*) broken "arm 4 ${rc#broken:}" ;; esac
 [ "$rc" = 0 ] || broken "the narrowed run did not pass (rc=$rc)"
 n1="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
 case "$n1" in ''|*[!0-9]*) n1=0 ;; esac
@@ -281,7 +317,6 @@ fi
 # them lands first would reintroduce the defect inside its own fix. aaa cannot tie with
 # either: its 1 is seeded and never measured, and `sleep 2` under integer-elapsed
 # `$SECONDS` cannot record below 2.
-mv "$WORK/aaa.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the withheld fixture"
 : > "$SDO_TRACE"
 rc="$(drive1 "$T" "$WORK/merge3.out")"
 mg_order="$(tr '\n' ' ' < "$SDO_TRACE")"
@@ -290,6 +325,36 @@ if [ "$rc" = 0 ] && [ "$mg_last" = aaa ]; then
   ok "after the narrowed run the unit whose cost was PRESERVED sorts last on its value (order '$mg_order') — the preserved cost is the one being sorted on"
 else
   bad "the run after a narrowed one dispatched '$mg_order', ending on '$mg_last' rather than aaa — a cost lost to a narrowed run comes back as UNKNOWN, which sorts first and puts the poles last"
+fi
+unset SDO_TRACE
+
+# ------------- 4c. a row whose fixture DIRECTORY IS GONE is pruned by the merge ------
+# BL-744. The record kept a row for every fixture it had ever timed, so after a family of
+# dirs was retired the top of it named units that no longer exist, and the pole read off it
+# was a dead one. The merge keeps a row only while "${FXROOT}${name}/run.sh" exists.
+#
+# THREE ROWS, ONE PROPERTY APART. `gone` is a dir deleted since its row was written, and it
+# must go. `kept` is a live dir the skip did not dispatch, and it must stay at its seeded
+# value -- that is arm 4's subject, re-asserted here in the same world so a prune keyed on
+# the DISPATCH LIST rather than on the disk fails this arm and not only arm 4. `dead` is a
+# dir that still exists with no run.sh, which the dispatch loop does not run either, so the
+# prune's test and the list's test are shown to be the same test. The run is GREEN and
+# narrowed, so the merge is reached; arm 5 owns the red case.
+T="$WORK/prune"; seed "$T" "$HOOK" || broken "seed failed"
+export SDO_TRACE="$WORK/prune.trace"
+mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+mkdir -p "$T/tests/fixtures/dead" && : > "$T/tests/fixtures/dead/notes.txt" || broken "could not seed the run.sh-less dir"
+seed_mapped "$T" || broken "could not seed the read-set map for arm 4c"
+printf 'aaa 1\nmmm 5\nzzz 9\ngone 777\ndead 555\n' > "$WORK/prune.seed" || broken "could not write the arm 4c seed"
+rc="$(narrow_by_skip "$T" prune "$WORK/prune.seed")"
+case "$rc" in broken:*) broken "arm 4c ${rc#broken:}" ;; esac
+pr_gone="$(awk '$1 == "gone" || $1 == "dead"' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+pr_aaa="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+pr_n="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)" || pr_n=0
+if [ "$rc" = 0 ] && [ -z "$pr_gone" ] && [ "$pr_aaa" = 1 ] && [ "$pr_n" -eq 3 ]; then
+  ok "a green narrowed run drops the rows for a deleted dir and a run.sh-less dir and keeps the undispatched live unit at its seeded 1 (3 rows) — the prune keys on the disk, not on the dispatch list"
+else
+  bad "after a green narrowed run the record holds $pr_n row(s), aaa='${pr_aaa:-gone}', dead rows '$(printf '%s' "$pr_gone" | tr '\n' ',')' (rc=$rc) — a row with no run.sh on disk survives and names a dead pole, or a skipped live unit lost its cost"
 fi
 unset SDO_TRACE
 
@@ -433,19 +498,20 @@ fi
 # that dispatches every unit, a merge and a replace produce byte-identical records. The
 # arm only discriminates on a NARROWED run, so the mutant is what proves the arm is
 # reading the narrowing rather than the tree.
+#
+# NARROWED THE WAY ARM 4 IS, BY THE SKIP WITH AAA'S DIR KEPT. Narrowed by deleting aaa's dir
+# instead, the prune would drop aaa's row under the unmutated hook too, and this mutant would
+# score a kill against a state the merge itself produces.
 if mut m4 's|\[ -s "\$DURATIONS_RECORD" \] && cat "\$DURATIONS_RECORD"|false|'; then M="$MUT"
   T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
-  export SDO_TRACE="$T/trace"
+  export SDO_TRACE="$WORK/m4.trace"
   mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 2; mkfx_trace "$T" zzz 2
-  cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" \
-    || broken "could not install the seeded durations record under M4"
-  mv "$T/tests/fixtures/aaa" "$WORK/m4.withheld" || broken "could not withhold a fixture under M4"
-  : > "$SDO_TRACE"
-  rc="$(drive "$T" "$WORK/m4b.out")"
+  seed_mapped "$T" || broken "could not seed the read-set map under M4"
+  rc="$(narrow_by_skip "$T" m4b "$SEEDREC")"
+  case "$rc" in broken:*) broken "M4 ${rc#broken:}" ;; esac
   n_m4="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
   case "$n_m4" in ''|*[!0-9]*) n_m4=0 ;; esac
   m4_kept="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
-  mv "$WORK/m4.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the fixture withheld under M4"
   if [ "$rc" = 0 ] && [ "$n_m4" -eq 2 ] && [ -z "$m4_kept" ]; then
     ok "M4 with the old record not read the same narrowed run cuts it to 2 lines and loses aaa's seeded cost — arm 4 is measuring the merge and not the tree"
   else
@@ -481,11 +547,52 @@ else
   fi
 fi
 
+# M6 -- THE PRUNE REMOVED (BL-744's defect), and M7 -- THE PRUNE KEYED ON A LITERAL
+# `core/fixtures/` rather than on FXROOT. Both are driven through arm 4c's world. M6 must leave
+# the deleted dir's row in; M7, on the consumer hook this fixture resolves first (FXROOT
+# `tests/fixtures/`), must fail arm 4c's predicate -- which is why arm 4c asserts the row count
+# and aaa's value and not only the absence of the dead rows.
+m67() {                        # m67 <label>  -> prints "<rc> <rows> <aaa> <gone-rows>"
+  local t="$WORK/$1" r
+  seed "$t" "$MUT" || { echo "broken"; return 0; }
+  SDO_TRACE="$WORK/$1.trace"; export SDO_TRACE
+  mkfx_trace "$t" aaa 0; mkfx_trace "$t" mmm 0; mkfx_trace "$t" zzz 0
+  mkdir -p "$t/tests/fixtures/dead" && : > "$t/tests/fixtures/dead/notes.txt"
+  seed_mapped "$t" || { echo "broken"; return 0; }
+  r="$(narrow_by_skip "$t" "$1" "$WORK/prune.seed")"
+  unset SDO_TRACE
+  case "$r" in broken:*) echo "broken"; return 0 ;; esac
+  printf '%s %s %s %s\n' "$r" "$(grep -c . "$t/.git/ai-dlc-fixture-durations" 2>/dev/null || :)" \
+    "$(awk '$1 == "aaa" { print $2 }' "$t/.git/ai-dlc-fixture-durations" 2>/dev/null)" \
+    "$(awk '$1 == "gone" || $1 == "dead"' "$t/.git/ai-dlc-fixture-durations" 2>/dev/null | grep -c . || :)"
+}
+if mut m6 '/while read -r k v; do \[ -f "\${FXROOT}\${k}\/run.sh" \]/d'; then
+  read -r m6_rc m6_n m6_aaa m6_gone <<<"$(m67 m6)"
+  [ "$m6_rc" = broken ] && broken "M6 the narrowed world did not build"
+  if [ "$m6_rc" = 0 ] && [ "$m6_gone" = 2 ] && [ "$m6_aaa" = 1 ]; then
+    ok "M6 with the prune removed the deleted dir's and the run.sh-less dir's rows survive the merge -- arm 4c is measuring the prune"
+  else
+    bad "M6 the unpruned merge left rc=$m6_rc rows=$m6_n aaa='$m6_aaa' dead-rows=$m6_gone -- arm 4c would pass against the defect BL-744 fixed"
+  fi
+fi
+if mut m7 's|\[ -f "\${FXROOT}\${k}/run.sh" \]|[ -f "core/fixtures/${k}/run.sh" ]|'; then
+  read -r m7_rc m7_n m7_aaa m7_gone <<<"$(m67 m7)"
+  [ "$m7_rc" = broken ] && broken "M7 the narrowed world did not build"
+  # On the consumer layout a literal key prunes EVERY row, `.merged` is then empty, and the
+  # `[ -s ]` guard skips the copy -- so the record is FROZEN at its seed (5 rows), never written
+  # again. Measured: rc=0 rows=5 aaa=1. Arm 4c's own predicate is what must fail here.
+  if [ "$m7_rc" = 0 ] && ! { [ "$m7_n" = 3 ] && [ "$m7_aaa" = 1 ] && [ "$m7_gone" = 0 ]; }; then
+    ok "M7 with the prune keyed on a literal core/fixtures/ the consumer-layout record is not the 3-row pruned one (rows=$m7_n) -- arm 4c reads the prune's KEY, not only its presence"
+  else
+    bad "M7 the literally-keyed prune produced the pruned record anyway (rc=$m7_rc rows=$m7_n aaa='$m7_aaa' dead-rows=$m7_gone) -- arm 4c cannot tell a FXROOT key from one that prunes every consumer row"
+  fi
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted
 # from inside a conditional: an assertion that never executed prints nothing, and a short
 # green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=15
+EXPECTED_ASSERTIONS=18
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

@@ -2260,8 +2260,12 @@ run_fixtures() {
   # Old record first, this run second, last value wins: a fixture that ran gets its new
   # cost, a fixture that was skipped keeps the one it had. `NF == 2` is the same test the
   # ordering step above applies, so what is written and what is read cannot drift apart.
-  # A cost left behind for a fixture you have deleted is harmless -- nothing looks up a
-  # name with no directory -- and is not worth the code to remove.
+  # A COST LEFT BEHIND FOR A FIXTURE YOU HAVE DELETED IS DROPPED HERE. A row is kept only
+  # while "${FXROOT}${name}/run.sh" exists -- the same test the fixture list is built on --
+  # so a fixture that was skipped keeps its cost and one that was removed loses it. A stale
+  # row is not harmless: this record is where the slowest fixture is read off, and old rows
+  # for deleted fixtures sat at the top of it. FXROOT, not a literal path, because this
+  # code is shared byte-for-byte with the distribution's hook, whose fixtures live elsewhere.
   # A RUN WITH ANY RED FIXTURE RECORDS NO COSTS. Even the fixtures that passed in it were timed
   # under that run's conditions, and a cost recorded from a run that went wrong elsewhere can be
   # several times the fixture's real cost -- which then puts it at the front of every later run.
@@ -2271,6 +2275,7 @@ run_fixtures() {
   if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
     { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
       | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+      | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
       | sort > "$out/.merged"
     [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
   fi

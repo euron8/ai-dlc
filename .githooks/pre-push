@@ -2380,11 +2380,15 @@ run_fixtures() {
   # correctly. The `[ -s ]` guard inside the brace group degrades to "just this run's
   # costs", which is byte-for-byte the previous behaviour there.
   #
-  # A GHOST KEY FOR A DELETED FIXTURE IS DELIBERATELY LEFT IN. It costs ~20 bytes under
-  # .git, nothing reads a key with no unit, and `suite-dispatch-order` already feeds a
-  # literal `ghost` line and asserts the suite still runs complete. Pruning against the
-  # on-disk set would need a pre-skip copy of the list, i.e. another executable line in
-  # this I66-joined region, to buy a defect nobody has measured.
+  # A KEY WHOSE FIXTURE IS GONE IS PRUNED HERE, keyed on "${FXROOT}${name}/run.sh" -- the
+  # same test the list loop above dispatches on, so a row survives exactly when its unit
+  # could be dispatched again. A ghost key was once left in as harmless, and it was not:
+  # this record is where the suite pole is read, and dead units were sitting at the top of it,
+  # so the pole read off it named a unit that no longer exists. A SKIPPED unit keeps its
+  # row, because the test is the directory on disk and not the narrowed dispatch list.
+  # FXROOT and not a literal path: this block is I66-joined with the consumer hook, where
+  # the fixtures live under tests/fixtures/, and a literal core/fixtures there prunes
+  # every row the consumer has.
   # A RED POOL MERGES NOTHING, and the gate is on the RUN, not on each unit. A unit that came back
   # ok inside a red run was still timed under that run's load, and those are exactly the rows that
   # poisoned this record: readset-skip-d at 928s against 330-502s in every clean gate, and three
@@ -2397,6 +2401,7 @@ run_fixtures() {
   if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then
     { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
       | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+      | while read -r k v; do [ -f "${FXROOT}${k}/run.sh" ] && printf '%s %s\n' "$k" "$v"; done \
       | sort > "$out/.merged"
     [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
   fi
