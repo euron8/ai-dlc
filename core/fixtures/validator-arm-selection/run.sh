@@ -461,7 +461,7 @@ if [ "$i66m_rc" -ne 0 ] && grep -q 'I66 the two pre-push fixture-suite runners h
 else
   bad "MUTANT SURVIVED: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
 fi
-# THE READSET_KEYROWS SPAN, edited in ONE hook. The runner sources the declared-fixture composer out of whichever hook
+# THE READSET_KEYROWS SPAN (the READSET_LOCK span follows it), edited in ONE hook. The runner sources the declared-fixture composer out of whichever hook
 # it finds, so a span that differs between the two keys a consumer's fixtures differently from this repo's. Two
 # mutants, each on a fresh copy of the control tree with the consumer hook left byte-identical: an EXECUTABLE line of
 # the span (readset_decl_tool_hashes' filter, which the comment-stripped pool compare must see) and the BEGIN SENTINEL
@@ -487,6 +487,29 @@ i66_one kx '$2 == "T" && !($3 in have) { have[$3] = 1; print $3 }' '$2 == "T" { 
   'I66 the two pre-push fixture-suite runners have forked' 'an executable READSET_KEYROWS line edited'
 i66_one ks '# READSET_KEYROWS_BEGIN' '# READSET_KEYROWS_BEGINS' \
   'I66 the READSET_KEYROWS span of .githooks/pre-push is unsound' 'the READSET_KEYROWS_BEGIN sentinel renamed' 1
+# THE READSET_LOCK SPAN, the third. Two hook mutants through i66_one and one deriver mutant. A COMMENT line inside the span
+# is invisible to the comment-stripped pool compare, so only the whole-span byte compare can see it; the BEGIN sentinel
+# renamed (whole line) is the span-soundness arm's; and the deriver's literal extraction text renamed in the tree copy of
+# core/scripts/derive-fixture-readsets.sh is the grep -qF arm's. Each anchor must match exactly once and the copy must differ.
+i66_one lc 'never a restatement. Nothing else between the' 'never a restatement. Nothing else between THE' \
+  "I66 the two pre-push hooks' READSET_LOCK spans have forked" 'a comment line inside the READSET_LOCK span edited'
+i66_one ls '# READSET_LOCK_BEGIN' '# READSET_LOCK_BEGINS' \
+  'I66 the READSET_LOCK span of .githooks/pre-push is unsound' 'the READSET_LOCK_BEGIN sentinel renamed' 1
+i66_dv() { # the deriver's extraction literal renamed in a fresh copy of the control tree
+  local d="$TMP/i66ld" f="core/scripts/derive-fixture-readsets.sh" n out rc
+  mkdir -p "$d" && cp -Rp "$TMP/i66c/." "$d/" || broke "could not copy the I66 control tree for ld"
+  n="$(MC="$TMP/i66ld.n" awk '
+    BEGIN { f = "/^# READSET_LOCK_BEGIN$/,"; n = 0 }
+    { i = index($0, f); if (i > 0) { $0 = substr($0, 1, i - 1) "/^# READSET_LOCK_BEGINS$/," substr($0, i + length(f)); n++ } print }
+    END { print n > ENVIRON["MC"] }' "$TMP/i66c/$f" > "$d/$f" && cat "$TMP/i66ld.n")"
+  if [ "$n" != 1 ] || cmp -s "$TMP/i66c/$f" "$d/$f"; then
+    broke "the READSET_LOCK deriver mutant ld DID NOT APPLY: the anchor matched ${n:-?} line(s) of $f, not 1"
+  fi
+  out="$(bash "$d/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -qF -- 'no longer extracts the span with the literal sentinels '"'"'# READSET_LOCK_BEGIN'"'" <<< "$out"; then ok "MUTANT: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
+  else bad "MUTANT SURVIVED: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh left --arms I66 at rc $rc without the sentinel message: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
+}
+i66_dv
 fi
 
 # --- Arm 3: EVERY declared id selected must be BYTE-IDENTICAL to a plain run ---------------
