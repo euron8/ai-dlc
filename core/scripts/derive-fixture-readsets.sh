@@ -1764,6 +1764,10 @@ for fx in $LIST; do
   # then the fail-closed block reads `settled` and OMITS it from the map as "tracing never settled".
   # LOAD-FREE: an unsettled trace is never emitted, so a slow attach costs the fixture its mapping
   # (it runs every push) and cannot record a short set as complete.
+  # The sandbox streams are keyed on this run's full sentinel path. fs_usage output is a different line
+  # format whose path spelling and truncation were never measured against "$SENTINEL" (it is root-only), and
+  # it is filtered to $TREE/ with no peer deriver's markers in it, so that mode keeps the bare name.
+  if [ "$TRACER" = fs_usage ]; then SENT_KEY=readset-sentinel; else SENT_KEY="$SENTINEL"; fi
   settled=0; i=0
   while [ "$i" -lt 100 ]; do
     if [ "$TRACER" = fs_usage ]; then
@@ -1776,7 +1780,7 @@ for fx in $LIST; do
     # Keyed on THIS run's sentinel path, not the bare marker name, here and at the flush and window-cut
     # greps below: the stream predicate is the FXTAG alone, so a concurrent deriver tracing the same
     # fixture name lands ITS marker reads in this stream, and a bare name cut the window at a peer's.
-    if grep -qF "$SENTINEL" "$raw" 2>/dev/null \
+    if grep -qF "$SENT_KEY" "$raw" 2>/dev/null \
        && { [ "$TRACER" != both ] || grep -q 'readset-sentinel' "$raw.fsu" 2>/dev/null; }; then
       settled=1; break
     fi
@@ -1880,7 +1884,7 @@ for fx in $LIST; do
   # the open line did not already carry, and they are the ONLY lines fs_usage truncates --
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
-  last="$(grep -nF "$SENTINEL" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
+  last="$(grep -nF "$SENT_KEY" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
   lost=0
   if [ "$TRACER" = fs_usage ]; then
     tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \

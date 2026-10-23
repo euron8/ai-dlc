@@ -155,13 +155,13 @@ verify: manual — the owed work is a judgment of the non-mutant poles and a per
 
 **DEFECT.** Under `--local-map` and `--in-pool` the stream predicate is `eventMessage CONTAINS "FXTAG=$fx;"`, the fixture name alone. A concurrent deriver tracing the same fixture name lands its own marker reads (a different `$MARKDIR`) in this run's stream. `derive-fixture-readsets.sh` located its window with `grep 'readset-sentinel'` (settle, and the last-start cut) and `grep 'readset-end'` (flush, and the first-end cut), all bare names, so a peer's marker read was taken for this run's. The contract adversary measured 12 of 12 concurrent same-name windows cut at the other deriver's marker, 6 at a foreign start and 6 at a foreign end. A foreign end truncates the window's tail, and a lost stat or negative lookup there is invisible to the loss canary (atime sees only reads of files that exist at the scan), so the short set maps.
 
-Fix: all four greps are keyed with `grep -F` on this run's full `"$SENTINEL"` and `"$ENDMARK"` paths, the shape the liveness probe already used. `$MARKDIR` is under `$TRACE_ROOT`, unique per run. `sandbox_paths` keeps only paths under `$TREE/`, and the markers are outside it, so a peer's marker paths cannot enter the set through the `grep -v '^\.readset-sentinel$'` line either.
+Fix: all four greps are keyed with `grep -F` on this run's full sentinel and `"$ENDMARK"` paths (`SENT_KEY`, which is `"$SENTINEL"` under the sandbox tracers and the bare name under `--tracer fs_usage`, whose root-only line format was not measured), the shape the liveness probe already used. `$MARKDIR` is under `$TRACE_ROOT`, unique per run. `sandbox_paths` keeps only paths under `$TREE/`, and the markers are outside it, so a peer's marker paths cannot enter the set through the `grep -v '^\.readset-sentinel$'` line either.
 
 Proven by the `FOREIGN markers` arm and three `FOREIGN MUTANT` arms in `core/fixtures/readset-skip/run.sh` (stub stream, foreign sentinel and foreign end interleaved, the foreign end ahead of this run's own).
 
-verify: sh f=core/scripts/derive-fixture-readsets.sh; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENTINEL|ENDMARK)" "\$raw"' "$f")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" "$f"
+verify: sh f=core/scripts/derive-fixture-readsets.sh; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENT_KEY|ENDMARK)" "\$raw"' "$f")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" "$f"
 
-The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENTINEL"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
+The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
 

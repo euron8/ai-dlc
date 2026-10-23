@@ -4394,7 +4394,7 @@ fi
 exec "$@"
 STUB
     chmod +x "$SG/sandbox-exec"
-    sed 's|last="$(grep -nF "$SENTINEL" "$raw"|last="$(grep -n readset-sentinel "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-start.sh"
+    sed 's|last="$(grep -nF "$SENT_KEY" "$raw"|last="$(grep -n readset-sentinel "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-start.sh"
     sed 's|endl="$(grep -nF "$ENDMARK" "$raw"|endl="$(grep -n readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-end.sh"
     sed 's|grep -qF "$ENDMARK" "$raw"|grep -q readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-flush.sh"
     fg_run() { rm -f "$SG/endn"; lm_seed; lm_run "$1" "$SL/whole.list" same PATH="$SG:$SL:$PATH" FG_COUNT="$SG/endn"; }
