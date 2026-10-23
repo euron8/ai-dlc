@@ -6993,7 +6993,8 @@ else
     # `# <key>:` comment grammar scripts/validate-decl-reasons.sh reads for `# reason:` (that script is
     # unchanged: it ignores every other comment). The citation is RESOLVED, not trusted: the cited
     # line of the cited file, under the scanned tree, must hold a `-f`, `-e` or `-d` test naming the
-    # declared path's basename, and must not read that file (`cat`, `<`, `grep`, `awk` and kin). A
+    # declared path's basename, must not read that file (`cat`, `<`, `grep`, `awk` and kin), and must
+    # not be a shell comment: a cited line whose first non-blank character is `#` tests nothing. A
     # citation past the end of its file, or of a file that cannot be opened, is a finding -- awk
     # getline returns -1 there, and a short count is how this tells it from a read. With that class
     # admitted the corpus measured 0 findings, against a control of the bare `core/` lines the same
@@ -7013,6 +7014,7 @@ else
           while (n < cl && (getline l < (root "/" cf)) > 0) n++
           close(root "/" cf)
           if (cl == 0 || n != cl) return "copy-only cites " k ", which does not exist"
+          if (l ~ /^[[:blank:]]*#/) return "copy-only cites " k ", which is a comment and tests nothing"
           b = base; gsub(/\./, "[.]", b)
           ext = "(^|[^A-Za-z0-9_-])-[efd][[:blank:]]+\"?([^[:blank:]\"]*/)?" b "\"?([[:blank:];]|]|$)"
           rd = "(^|[^A-Za-z0-9_])(cat|grep|awk|sed|head|tail|cut|wc|diff|cmp|source)[[:blank:]][^|;&]*" b "|<[[:blank:]]*\"?[^[:blank:]\"]*" b
@@ -7063,12 +7065,14 @@ else
                "$i55_pd"/core/fixtures/j "$i55_pd"/core/fixtures/k "$i55_pd"/core/fixtures/l \
                "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o \
                "$i55_pd"/a5/core/fixtures/p1 "$i55_pd"/a5/core/fixtures/p2 "$i55_pd"/a5/core/fixtures/p3 \
-               "$i55_pd"/a5/core/fixtures/p4 "$i55_pd"/a5/core/fixtures/p5 "$i55_pd"/a5/cite
+               "$i55_pd"/a5/core/fixtures/p4 "$i55_pd"/a5/core/fixtures/p5 "$i55_pd"/a5/core/fixtures/p6 \
+               "$i55_pd"/a5/cite
       # ARM 5 SELF-PROBE, BOTH DIRECTIONS, seeded in this same probe directory under its own root
       # `a5/` so neither arm reads the other arm's seeds, and scanned BEFORE the corpus. (p1) a bare
       # `docs/x.md` fires; (p2) `+docs/x.md` is quiet; (p3) a copy-only citing a real `-f` test of
       # VERSION is quiet; (p4) a copy-only citing a line holding `cat VERSION` fires; (p5) a copy-only
-      # citing a line past the end of a real file fires, which is the getline -1 trap.
+      # citing a line past the end of a real file fires, which is the getline -1 trap; (p6) a
+      # copy-only citing a COMMENT that spells `[ -f "$d/VERSION" ]` fires, the near-miss of p3.
       printf 'docs/x.md\n'  > "$i55_pd/a5/core/fixtures/p1/inputs.decl"
       printf '+docs/x.md\n' > "$i55_pd/a5/core/fixtures/p2/inputs.decl"
       printf '# copy-only: cite/ok.sh:2 walks up for the marker\nVERSION\n' > "$i55_pd/a5/core/fixtures/p3/inputs.decl"
@@ -7076,6 +7080,8 @@ else
       printf '# copy-only: cite/ok.sh:9 past the end\nVERSION\n'           > "$i55_pd/a5/core/fixtures/p5/inputs.decl"
       printf 'd="$HERE"\nif [ -f "$d/VERSION" ]; then R="$d"; fi\n' > "$i55_pd/a5/cite/ok.sh"
       printf 'v="$(cat VERSION)"\n' > "$i55_pd/a5/cite/rd.sh"
+      printf '# copy-only: cite/cm.sh:1 a comment\nVERSION\n'              > "$i55_pd/a5/core/fixtures/p6/inputs.decl"
+      printf '  # [ -f "$d/VERSION" ] once found the root here\n' > "$i55_pd/a5/cite/cm.sh"
       i55_bprobe="$(i55_bare_scan "$i55_pd/a5" "$i55_tops" core)"
       printf 'OWN="$(cd "$HERE/../../.." && pwd)"\ncat "$OWN/docs/x"\n' > "$i55_pd/core/fixtures/k/run.sh"
       printf 'RD="$HERE"\nwhile [ "$RD" != "/" ] && [ ! -f "$RD/VERSION" ]; do RD="$(dirname "$RD")"; done\ncat "$RD/docs/x"\n' > "$i55_pd/core/fixtures/l/run.sh"
@@ -7130,10 +7136,10 @@ else
       [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
       [ "$i55_pr" = "b c d e f g h i k l m o " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o '. Fixtures a and j (a + declared, literal reach ending at a boundary) and n (a mktemp root nothing derives) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a VERSION walk-up or a literal climb, and the corpus scan below would be read through it."
     fi
-    # ARM 5'S PROBE VERDICT. Exactly p1, p4 and p5 flagged, each for its own reason, and a CTL line
-    # that read all five declarations; built from builtins so a pass costs no fork.
-    i55_bwant="core/fixtures/p1/inputs.decl:1: docs/x.md -- a bare line under an excluded top keys nothing${i55_nl}core/fixtures/p4/inputs.decl:2: VERSION -- copy-only cites cite/rd.sh:1, which reads the content of VERSION${i55_nl}core/fixtures/p5/inputs.decl:2: VERSION -- copy-only cites cite/ok.sh:9, which does not exist${i55_nl}CTL 0 5"
-    [ "$i55_bprobe" = "$i55_bwant" ] || err "I55 arm 5's self-probe did not discriminate: a bare docs/x.md (p1), a copy-only citing \`cat VERSION\` (p4) and one citing a line past the end of its file (p5) must fire, and +docs/x.md (p2) and a copy-only citing a real \`[ -f .../VERSION ]\` test (p3) must stay quiet. Got:${i55_nl}${i55_bprobe:-<nothing: the probe tree was never built, or the scan printed nothing>}${i55_nl}The corpus scan below reads through this same function, so its zero would mean nothing."
+    # ARM 5'S PROBE VERDICT. Exactly p1, p4, p5 and p6 flagged, each for its own reason, and a CTL
+    # line that read all six declarations; built from builtins so a pass costs no fork.
+    i55_bwant="core/fixtures/p1/inputs.decl:1: docs/x.md -- a bare line under an excluded top keys nothing${i55_nl}core/fixtures/p4/inputs.decl:2: VERSION -- copy-only cites cite/rd.sh:1, which reads the content of VERSION${i55_nl}core/fixtures/p5/inputs.decl:2: VERSION -- copy-only cites cite/ok.sh:9, which does not exist${i55_nl}core/fixtures/p6/inputs.decl:2: VERSION -- copy-only cites cite/cm.sh:1, which is a comment and tests nothing${i55_nl}CTL 0 6"
+    [ "$i55_bprobe" = "$i55_bwant" ] || err "I55 arm 5's self-probe did not discriminate: a bare docs/x.md (p1), a copy-only citing \`cat VERSION\` (p4), one citing a line past the end of its file (p5) and one citing a comment that spells the test (p6) must fire, and +docs/x.md (p2) and a copy-only citing a real \`[ -f .../VERSION ]\` test (p3) must stay quiet. Got:${i55_nl}${i55_bprobe:-<nothing: the probe tree was never built, or the scan printed nothing>}${i55_nl}The corpus scan below reads through this same function, so its zero would mean nothing."
     # THE CONTROL COUNTS THROUGH THE SAME FUNCTION, so it reads the per-file derived roots the scan
     # reads: `core` is an included top no fixture declares with `+`, so every reach of it is printed.
     i55_ctl="$(i55_reach_scan "$REPO_ROOT" core | grep -c .)" || i55_ctl=0

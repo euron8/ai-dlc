@@ -98,6 +98,8 @@ die() { printf 'suite-content-key: %s\n' "$*" >&2; exit 1; }
 # a whole-suite re-run -- minutes, on the reference tree -- triggered by editing a
 # file. Four fixture verdicts DO read its content (BL-797); each keys it with
 # `+CLAUDE.md` in its own inputs.decl, and I55 arm 5 refuses a bare declaration.
+# layer-contract-conformance-b runs the same full control but has no CLAUDE.md in
+# its hermetic sandbox; the parent's `+CLAUDE.md` re-runs that family.
 # EXCLUDE_BEGIN
 EXCLUDE="
 .git
