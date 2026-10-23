@@ -5147,24 +5147,55 @@ pcv_failset() {
 #   M-direxcl  the work-tree exclusion widened from the report FILE to its DIRECTORY, which hides
 #              layer-adjudication-register.jsonl from the key                              -> PC-V10
 #   M-exit3    er_cache_record called before the mismatch tail, so exit 1 and exit 3 record -> PC-V9 PC-V10
-pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built and differs
-  local d="$PCV_ROOT/$1" a t m n
-  case "$1" in
-    M-region)  m=replace
-               a='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do'
-               t='  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env; do' ;;
-    M-direxcl) m=replace; a='    _er_ex="$_er_rel"'; t='    _er_ex="${_er_rel%/*}"' ;;
-    M-exit3)   m=before;  a='[ "$cause" = BLOCKERS-RESOLVED ] && exit 3'; t='er_cache_record' ;;
-    *) return 1 ;;
-  esac
-  mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" || return 1
-  n="$(grep -cxF -- "$a" "$EMIT")" || n=0
-  printf '%s\n' "$n" > "$d/anchor-count"
+# BL-777's four, each against the key's own tools (V56 no cksum, V57 no sha256 tool):
+#   M-cksum    the `command -v cksum` refusal made a no-op: the env field then fails and the
+#              per-field fallback names a DIFFERENT cause                                  -> PC-V56
+#   M-base     BOTH layers reverted (true base): no cksum refusal, and the field loop's two
+#              refusals back to a bare return 1, so neither tool's absence names anything  -> PC-V56 PC-V57
+#   M-sha      the sha256-failure refusal dropped: a failed er_sha256 returns 1 unnamed   -> PC-V57
+#   M-unarmed  the stderr print guard loses its EMIT_REPORT_VERIFY_CACHE=1 conjunct, so the
+#              refusal prints unarmed and V56's unarmed-identity half sees it             -> PC-V56
+# pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
+# that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
+pcv_ed() {
+  local f="$1/eng/emit-report.sh" n
+  n="$(grep -cxF -- "$3" "$f")" || n=0
+  printf '%s\n' "$n" >> "$1/anchor-count"
   [ "$n" -eq 1 ] || return 1
-  awk -v a="$a" -v t="$t" -v m="$m" '$0 == a { print t; if (m == "replace") next } { print }' "$EMIT" > "$d/eng/emit-report.sh" || return 1
+  awk -v a="$3" -v t="$4" -v m="$2" '$0 == a { print t; if (m == "replace") next } { print }' "$f" > "$f.ed" \
+    && mv -f "$f.ed" "$f"
+}
+pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, parses, and differs
+  local d="$PCV_ROOT/$1"
+  local r9ck='    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }'
+  local r9fld='      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"'
+  local r9sha='      [ -s "$_er_tmp/key.refused" ] && return 1'
+  mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
+  case "$1" in
+    M-region)  pcv_ed "$d" replace \
+                 '  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do' \
+                 '  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env; do' ;;
+    M-direxcl) pcv_ed "$d" replace '    _er_ex="$_er_rel"' '    _er_ex="${_er_rel%/*}"' ;;
+    M-exit3)   pcv_ed "$d" before '[ "$cause" = BLOCKERS-RESOLVED ] && exit 3' 'er_cache_record' ;;
+    M-cksum)   pcv_ed "$d" replace "$r9ck" '    || :' ;;
+    M-base)    pcv_ed "$d" replace "$r9ck" '    || :' && pcv_ed "$d" replace "$r9fld" '      :' \
+                 && pcv_ed "$d" replace "$r9sha" '      return 1' ;;
+    M-sha)     pcv_ed "$d" replace "$r9sha" '      return 1' ;;
+    M-unarmed) pcv_ed "$d" replace '   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' \
+                 '   && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' ;;
+    *) return 1 ;;
+  esac || return 1
+  bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
   ! cmp -s "$EMIT" "$d/eng/emit-report.sh"
 }
-pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V55" ;; M-exit3) echo "PC-V9 PC-V10" ;; esac; }
+pcv_want() {
+  case "$1" in
+    M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V55" ;; M-exit3) echo "PC-V9 PC-V10" ;;
+    M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57" ;; M-sha) echo "PC-V57" ;; M-unarmed) echo "PC-V56" ;;
+  esac
+}
+# pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
+pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed) echo BL-777 ;; *) echo BL-679 ;; esac; }
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
 # to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
 # which made this phase the suite pole (BL-699). Each mutant now runs the always-on prefix PC-V0 PC-V1
@@ -5184,6 +5215,8 @@ pcv_scope() {
     M-region)  echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9" ;;
     M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10 PC-V55" ;;
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
+    # BL-777: both tool arms run for each, so the one a mutant must NOT kill is its same-run control.
+    M-cksum|M-base|M-sha|M-unarmed) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V56 PC-V57" ;;
   esac
 }
 # A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
@@ -5202,6 +5235,8 @@ pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
   printf '%s\n' "${out# }"
 }
 PCV_MUTS="M-region M-direxcl M-exit3"
+# BL-777's mutants score only where V56/V57 run (PCV_R9); where they are PENDING no kill can be read.
+[ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
@@ -5223,14 +5258,14 @@ else
   fi
   for _m in $PCV_MUTS; do
     if [ -z "$(pcv_scope "$_m")" ]; then
-      bad "MUTANT NOT SCOPED [BL-679 $_m]: pcv_scope names no arms for it, so it would run none and score nothing"
+      bad "MUTANT NOT SCOPED [$(pcv_bl "$_m") $_m]: pcv_scope names no arms for it, so it would run none and score nothing"
     elif [ -n "$(pcv_offscope "$_m")" ]; then
-      bad "FIXTURE BROKEN [BL-679 $_m]: its declared kill set names [$(pcv_offscope "$_m")], which pcv_scope does not run, so that kill would be read off an arm that never ran"
+      bad "FIXTURE BROKEN [$(pcv_bl "$_m") $_m]: its declared kill set names [$(pcv_offscope "$_m")], which pcv_scope does not run, so that kill would be read off an arm that never ran"
     elif pcv_mk "$_m"; then
       PCV_BUILT="$PCV_BUILT $_m"
       ( pcv_suite "$PCV_ROOT/$_m/eng/emit-report.sh" "$PCV_ROOT/$_m" "$(pcv_scope "$_m")" ) > "$PCV_ROOT/$_m.log" 2>&1 &
     else
-      bad "MUTANT NOT BUILT [BL-679 $_m]: its anchor occurs $(cat "$PCV_ROOT/$_m/anchor-count" 2>/dev/null || echo '?') time(s) in emit-report.sh (want 1), or the edit changed nothing -- re-anchor it on the engine's line"
+      bad "MUTANT NOT BUILT [$(pcv_bl "$_m") $_m]: its anchor(s) occur [$(tr '\n' ' ' < "$PCV_ROOT/$_m/anchor-count" 2>/dev/null || echo '?')] time(s) in emit-report.sh (want 1), or the edit changed nothing -- re-anchor it on the engine's line"
     fi
   done
   wait
@@ -5246,20 +5281,20 @@ else
   for _m in $PCV_BUILT; do
     _got="$(pcv_failset "$PCV_ROOT/$_m/verdicts" "$(pcv_scope "$_m")")"; _want="$(pcv_want "$_m")"
     if [ -n "$PCV_CTLFAIL" ]; then
-      bad "MUTANT UNSCORED [BL-679 $_m]: the unmutated control did not pass [$PCV_CTLFAIL], so a kill set read against it would credit the control's failures as kills"
+      bad "MUTANT UNSCORED [$(pcv_bl "$_m") $_m]: the unmutated control did not pass [$PCV_CTLFAIL], so a kill set read against it would credit the control's failures as kills"
       continue
     fi
     case " $_got " in
-      *" PC-V0 "*) bad "MUTANT HARNESS BROKEN [BL-679 $_m]: the copy failed the seed sanity arm, so its score is a copy that did not run" ;;
+      *" PC-V0 "*) bad "MUTANT HARNESS BROKEN [$(pcv_bl "$_m") $_m]: the copy failed the seed sanity arm, so its score is a copy that did not run" ;;
       *)
         _nv="$(pcv_noverdict "$PCV_ROOT/$_m/verdicts" "$(pcv_scope "$_m")")"
         if [ -n "$_nv" ]; then
-          bad "FIXTURE BROKEN [BL-679 $_m]: scoped arms [$_nv] left no verdict, so no pcv_in group ran them and a kill there would be unearned"
+          bad "FIXTURE BROKEN [$(pcv_bl "$_m") $_m]: scoped arms [$_nv] left no verdict, so no pcv_in group ran them and a kill there would be unearned"
           continue
         fi
-        if [ "$_got" = "$_want" ]; then ok "mutant BL-679 $_m fails exactly [$_want] within its scope"
-        elif [ -z "$_got" ]; then bad "MUTANT SURVIVED [BL-679 $_m]: every arm passed with the edit in place, so [$_want] cannot see it"
-        else bad "MUTANT [BL-679 $_m] failed [$_got], expected exactly [$_want] -- the arms are entangled or one is vacuous"; fi ;;
+        if [ "$_got" = "$_want" ]; then ok "mutant $(pcv_bl "$_m") $_m fails exactly [$_want] within its scope"
+        elif [ -z "$_got" ]; then bad "MUTANT SURVIVED [$(pcv_bl "$_m") $_m]: every arm passed with the edit in place, so [$_want] cannot see it"
+        else bad "MUTANT [$(pcv_bl "$_m") $_m] failed [$_got], expected exactly [$_want] -- the arms are entangled or one is vacuous"; fi ;;
     esac
   done
 fi
