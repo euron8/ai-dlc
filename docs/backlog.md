@@ -475,3 +475,13 @@ BL-587's s315 block count is 6 core-operand rows, of which the reader blocks 4. 
 Separately, `check-owed-derivations.sh` reads a 9th field `cyc` in its pass-2 loop that no producer ever sets to 1, so its `[ "$cyc" != 1 ]` tests are vacuous; it predates batch 241 and is left untouched.
 
 verify: manual — a decision on whether to build, not a tree state.
+
+## BL-796 — `wait-for-deliverable.sh --mark` writes whatever step, seat and shard words a remediator part's caller passes
+
+**NOTE.** Source: batch 241, release r12. Closed by derivation in `--mark`, not by refusal.
+
+On the consumer, s320's remediator part markers read `carry-over-evaluation remediator 2`, `coe 7 remediator 7` (shifted fields) and `coe-party remediator 1/8`, where `core/team-roles/remediator.md` says the step is the part directory's name up to `-repair`, the seat is `remediator`, and the shard is the part file's name without `.md`. `--mark` checked only that a non-review marker had at least 4 fields. A read-only census found no reader of the step, seat or shard words of a sealed marker (`has_marker` reads the prefix, `seal_of` reads `sha=`, `content-seal.sh` uses `$3` only on a bare marker, `join-remediator-shards.sh` reads the step only for party-mode seat files), and `_gate-procedures.md` tells briefs `shard:` is `i/N`, so a refusal would reject markers that lead briefs produce.
+
+Fix: for a file at `planning-artifacts/s<N>/shards/<D>/<b>.md` with `<D>` ending `-repair-p<M>` or `-repair`, `--mark` keeps its arity and `findings=` checks and then writes `seat-complete: <D minus suffix> remediator <b> sha=<hex> findings=<n>`. Every other path writes the caller's words. Scored by EC40 and the mutant EC40m in `core/fixtures/remediator-shard-join`.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl796.sh
