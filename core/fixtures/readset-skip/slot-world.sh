@@ -97,7 +97,7 @@ down() {
     if [ "$rp" != "$PPID" ]; then
       n0="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n0=0
       i=0
-      while [ "$i" -lt 100 ]; do
+      while [ "$i" -lt 300 ]; do
         n="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n=0
         [ "$n" -gt "$n0" ] && break
         /bin/sleep 0.1; i=$((i + 1))
