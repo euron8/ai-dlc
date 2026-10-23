@@ -132,6 +132,10 @@
 #     against the DEPLOYED sha, recording a correction as `old -> new` (def-copy-*). The cr and qa
 #     rows are line-mode `contains` pins inside lists para mode cannot split: keep each pinned
 #     phrase on ONE line. The named def-copy-cr-pred mutant is the ids-only rewrite.
+#   - a visual-drift fix-forward in deploy-validate.md §4: the `dev` brief names the browser specs, the
+#     dev records their run or why they could not run, and when they could not run the lead runs them
+#     against the redeployed instance and records that run as the `playwright` evidence (the ff-specs
+#     rows, para pins: the §4 list is ONE paragraph whose lead is its first line).
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -534,6 +538,10 @@ def-copy-dv-sha|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal 
 def-copy-dv-refence|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|a pinned fence whose sha is not the deployed sha is re-run at the deployed sha first.
 def-copy-dv-oldnew|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|record the correction under `deferred_ac_discharge` as `old -> new`
 def-copy-dv-silent|S|steps/deploy-validate.md|### 4b.|### 5.|**Check every literal against the deployed sha before running the predicate.**|para|Never a silent substitution.
+ff-specs-brief|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|names the browser spec files covering the drifted surface
+ff-specs-record|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|records either their run (invocation, pass/fail counts) or why they could not run
+ff-specs-lead|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|the lead runs them against the redeployed instance before re-verifying
+ff-specs-evidence|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|as the `playwright` evidence this section already names. A could-not-run record is not a pass.
 PINS
 }
 
@@ -998,6 +1006,7 @@ impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**P
 sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
 def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
+ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation and counts in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1023,7 +1032,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 6 ] || bad "named: $n_named named mutant(s) read, wanted 6"
+[ "$n_named" -eq 7 ] || bad "named: $n_named named mutant(s) read, wanted 7"
 
 # --- 4b. a join over seat or cross files passes --complete -----------------------
 # A seat or cross shard writes its file early and is finished only at its final `seat-complete:`

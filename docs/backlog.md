@@ -518,6 +518,16 @@ Built: `code-reviewer.md` Ownership (and the Responsibilities bullet and "As the
 
 verify: sh bash core/fixtures/process-rule-pins/receipt-bl788.sh
 
+## BL-789 — deploy-validate allows a placement fix-forward with its browser specs unrun
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319.
+
+Section 4 of `deploy-validate.md` sent a visual-drift fix to a `dev` teammate and then had the lead redeploy and re-verify, without naming the browser specs. In graph sprint 319 the dev's record already said its Playwright specs were not run and claimed no pass, so the record was honest, and nobody then ran them against the redeployed instance.
+
+Built: the drift bullet now has the fix-forward `dev` brief name the browser spec files covering the drifted surface and the dev record their run or why they could not run. When they could not run, the lead runs them against the redeployed instance before re-verifying and records that run as the `playwright` evidence. A could-not-run record is not a pass. Pinned by the `ff-specs-*` rows and the `ff-specs-lead-run` named mutant of `process-rule-pins`.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl789.sh
+
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Not built.

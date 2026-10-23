@@ -391,6 +391,12 @@ If `is_ui_epic == true`:
   the UI source (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
   for its brief and join); the lead then redeploys and re-verifies. Redeploy and
   re-verification are deploy-gate orchestration (Rule 28a) and stay on the lead.
+  The fix-forward `dev` brief names the browser spec files covering the drifted
+  surface, and the dev's deliverable file records either their run (invocation,
+  pass/fail counts) or why they could not run. When they could not run, the lead
+  runs them against the redeployed instance before re-verifying, and records that
+  run's invocation and counts in the Deploy Status Report row as the `playwright`
+  evidence this section already names. A could-not-run record is not a pass.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
