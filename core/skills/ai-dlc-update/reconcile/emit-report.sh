@@ -1718,7 +1718,6 @@ er_key() {
       return 1
     fi
     if ! v="$(er_sha256 "$_er_tmp/key.f.$f")"; then
-      [ -s "$_er_tmp/key.refused" ] && return 1
       if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
         er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"
       else

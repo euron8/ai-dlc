@@ -5169,7 +5169,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local d="$PCV_ROOT/$1"
   local r9ck='    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }'
   local r9fld='      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"'
-  local r9sha='      [ -s "$_er_tmp/key.refused" ] && return 1'
+  local r9sha='      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then'
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
     M-region)  pcv_ed "$d" replace \
@@ -5179,8 +5179,8 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-exit3)   pcv_ed "$d" before '[ "$cause" = BLOCKERS-RESOLVED ] && exit 3' 'er_cache_record' ;;
     M-cksum)   pcv_ed "$d" replace "$r9ck" '    || :' ;;
     M-base)    pcv_ed "$d" replace "$r9ck" '    || :' && pcv_ed "$d" replace "$r9fld" '      :' \
-                 && pcv_ed "$d" replace "$r9sha" '      return 1' ;;
-    M-sha)     pcv_ed "$d" replace "$r9sha" '      return 1' ;;
+                 && pcv_ed "$d" before "$r9sha" '      return 1' ;;
+    M-sha)     pcv_ed "$d" before "$r9sha" '      return 1' ;;
     M-unarmed) pcv_ed "$d" replace '   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' \
                  '   && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' ;;
     *) return 1 ;;
