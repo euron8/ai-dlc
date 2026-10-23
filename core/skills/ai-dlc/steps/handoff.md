@@ -30,7 +30,9 @@ Execute this 5-step procedure in order:
    names a deliverable path: one call per kind of deliverable, each
    `run_in_background: true` — `scripts/ai-dlc/wait-for-deliverable.sh <path>
    [<path> ...]` for a plain deliverable, `scripts/ai-dlc/wait-for-deliverable.sh
-   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, and
+   --complete <path> [<path> ...]` for seat, shard, cross and repair-part files, epic part files and
+   for a teammate's markdown result file whose dispatch's spawn-ledger row carries
+   `"mark":"rendered"` (the scope "Bounded-join beat" states), and
    `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` for a
    serial-remediator row. The flag is per call and a call mixing the two flags
    is refused (exit 64), so a mixed set is up to three calls and a set of one

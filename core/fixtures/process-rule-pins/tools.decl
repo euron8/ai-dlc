@@ -19,3 +19,5 @@ sed
 sort
 tr
 wc
+mv
+shasum

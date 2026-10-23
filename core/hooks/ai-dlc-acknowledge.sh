@@ -864,7 +864,7 @@ Do this now, in order:
 1. READ the operator's message. It arrived mid-turn, most likely alongside a tool result, and is easy to scroll past. Find it.
 2. RESPOND to it in text. Answer the question, accept the correction, or state what you will do differently. Do not silently continue.
 3. THEN classify intent, per the pause contract:
-   (a) Resume intent (including /ai-dlc resume, handoff resume, or natural resume language) -> \`rm -f _bmad-output/pipeline-paused.flag\`, then RE-READ the current step file (Rule 22) and continue.
+   (a) Resume intent (including /ai-dlc resume, handoff resume, or natural resume language) -> run \`rm -f _bmad-output/pipeline-paused.flag\` as its own Bash call, with nothing chained before or after it, then run \`[ ! -e _bmad-output/pipeline-paused.flag ]\` as a separate call that must exit 0 before anything advances; on a non-zero exit, repeat the rm alone. A denied call runs none of its parts. Then RE-READ the current step file (Rule 22) and continue.
    (b) Question / correction / clarification -> answer it, leave the flag in place, and wait. The operator is steering.
    (c) Handoff request -> follow the Rule 2 handoff protocol; leave the flag in place.
 

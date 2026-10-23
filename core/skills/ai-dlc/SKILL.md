@@ -1069,7 +1069,9 @@ UserPromptSubmit hook creates `_bmad-output/pipeline-paused.flag` on
 every user message, including the `/ai-dlc` invocation itself. If the
 flag is not deleted here, the Stop hook will treat the next text-only
 response as an intentional pause and allow the pipeline to stall.
-Execute: `rm -f _bmad-output/pipeline-paused.flag`
+Run `rm -f _bmad-output/pipeline-paused.flag` as its own Bash call, with nothing chained before or after it,
+then run `[ ! -e _bmad-output/pipeline-paused.flag ]` as a separate call that must exit 0 before anything advances;
+on a non-zero exit, repeat the rm alone. A denied call runs none of its parts.
 
 **Load consumer layers (Rule 27).** After this core file, check for the
 consumer's additive/shadow layers and load them if present:

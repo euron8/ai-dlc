@@ -1000,6 +1000,9 @@ done <<<"$(named_mutants)"
 # deliverable with a bare call beside its --complete one (carry-over-evaluation.md joins the
 # analyst artifact that way), so the unit is the paragraph, never the single call. A join that
 # names no seat or cross path is exempt.
+# A paragraph carrying the spawn-ledger token `"mark":"rendered"` is P=1 too: that is the condition on
+# which "Bounded-join beat" arms `--complete` over a teammate's markdown result file, and it is text the
+# battery's strip leaves in place, so the home's `--complete` line is guarded without a seat word in it.
 # How the false-positive set reached zero: a per-call clause rule flagged the analyst call in
 # that mixed paragraph; a section-wide rule pulled the generic "Join every spawn" paragraph of
 # the Validation cycle in under item 1. Paragraph scope with "any COMPLETE" is the narrowing.
@@ -1014,7 +1017,7 @@ join_scan() {
         k = index(rest, "`"); args = (k ? substr(rest, 1, k - 1) : rest)
         ln = 0; for (q = 1; q <= nl; q++) if (st[q] <= base + i) ln = lno[q]
         # A --mark or --mark-repair call is the seat CLOSING its own file, not a join.
-        if (args !~ /^--mark(-repair)?([^A-Za-z-]|$)/) printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete([^A-Za-z-]|$)/ ? "COMPLETE" : "BARE")
+        if (args !~ /^--mark(-repair)?([^A-Za-z-]|$)/) printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/ || index(p, "\"mark\":\"rendered\"") > 0), (args ~ /--complete([^A-Za-z-]|$)/ ? "COMPLETE" : "BARE")
       }
       base += i + 23; s = rest
     }
@@ -1054,6 +1057,19 @@ if [ "$n_mk" = 0 ] && [ "$n_mb" = 1 ]; then
   ok "join-pre: a seat's --mark close is not read as a join (0 calls); a bare seat join beside one is still flagged (1)"
 else
   bad "join-pre: FIXTURE BROKEN -- mark-only calls=$n_mk (want 0), mark+bare findings=$n_mb (want 1)"
+fi
+# The rendered-mark key, both directions: a paragraph keyed on the ledger token with only a bare call is
+# flagged; the same paragraph with its --complete call passes; the bare token `mark` alone is not the key.
+printf 'When the row carries `"mark":"rendered"`, join with `scripts/ai-dlc/wait-for-deliverable.sh --dispatch <agentId> <path>`.\n' > "$JS/rm-off.md"
+printf 'When the row carries `"mark":"rendered"`, join with `scripts/ai-dlc/wait-for-deliverable.sh --complete --dispatch <agentId> <path>`.\n' > "$JS/rm-ok.md"
+printf 'When the row has no mark, join with `scripts/ai-dlc/wait-for-deliverable.sh --dispatch <agentId> <path>`.\n' > "$JS/rm-near.md"
+n_rmo="$(join_findings "$JS/rm-off.md" | grep -c .)" || n_rmo=0
+n_rmk="$(join_findings "$JS/rm-ok.md" | grep -c .)" || n_rmk=0
+n_rmn="$(join_findings "$JS/rm-near.md" | grep -c .)" || n_rmn=0
+if [ "$n_rmo" = 1 ] && [ "$n_rmk" = 0 ] && [ "$n_rmn" = 0 ]; then
+  ok "join-pre: a \"mark\":\"rendered\" paragraph with only a bare call is flagged (1); with --complete it passes (0); one naming no ledger token is exempt (0)"
+else
+  bad "join-pre: FIXTURE BROKEN -- rendered-key bare=$n_rmo (want 1), complete=$n_rmk (want 0), no-token=$n_rmn (want 0)"
 fi
 n_off="$(join_findings "$JS/off.md" | grep -c .)" || n_off=0
 n_ex="$(join_findings "$JS/exempt.md" | grep -c .)" || n_ex=0
@@ -1472,6 +1488,235 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
 else
   bad "window-count: FIXTURE BROKEN -- probe '$wv1' / '$wv2' / '$wv3' / '$wv4' / '$wv5' / '$wv6'"
 fi
+
+# --- 4h. the join contract for a teammate's markdown result file ------------------------------------
+# "Bounded-join beat" in _gate-procedures.md is the ONE home of the contract: every brief naming such a
+# file closes with a rendered `--mark` line copied from there, and the beat is `--complete --dispatch` only
+# when the dispatch's spawn-ledger row carries `"mark":"rendered"` (a teammate briefed without the line
+# writes no marker, and `--complete` would read its file UNFINISHED until the cap). The defect these arms
+# exist for: a `--mark` line retyped as `rows=<n>` exited 64 and wrote nothing, and a beat with no
+# `--complete` read a header-only file as DELIVERED.
+#   (a) home: the slice carries exactly one rendered `--mark` span, `<lead engine>`-rooted, `findings=<n>`
+#       last, plus the `"mark":"rendered"` condition and its `--complete --dispatch` call.
+#   (b) deploy-validate.md: every dispatch site reads and follows the home. GRAMMAR: a match of
+#       `[Dd]ispatch (its |the |a )?(`<role>`|closing writer)` that STARTS on a line (the next line is
+#       joined so a wrapped `dispatch its` / `closing writer` is read); outside fences. The site's UNIT is
+#       its list item (a `- ` or `<n>. ` line up to the next item or blank) or its paragraph, with
+#       whitespace collapsed; it must carry `READ AND FOLLOW` and `"Bounded-join beat"`.
+#   (c) every block carrying `<lead engine>/wait-for-deliverable.sh --mark <file>` names `<deliverable>`.
+#   (d) the rendered span, EXTRACTED from the home and filled in, runs against a scratch file and seals.
+gp_home() { awk '/^#+ Bounded-join beat/{f=1;print;next} f&&/^#{1,3} /{exit} f{print}' "$1"; }
+home_spans() { gp_home "$1" | grep -oE '`<lead engine>/wait-for-deliverable\.sh --mark [^`]*`' | tr -d '`'; }
+home_verdict() { # home_verdict <gp file> -> "<spans> <findings-last> <rendered-token> <complete-dispatch>"
+  local sp h n fl rt cd
+  sp="$(home_spans "$1")"; h="$(gp_home "$1")"
+  n="$(grep -c . <<<"$sp")" || n=0
+  fl=0; [ "$n" = 1 ] && case "$sp" in *' findings=<n>') fl=1 ;; esac
+  rt="$(grep -cF '"mark":"rendered"' <<<"$h")" || rt=0
+  cd="$(grep -cF 'wait-for-deliverable.sh --complete --dispatch <agentId>' <<<"$h")" || cd=0
+  printf '%s %s %s %s' "$n" "$fl" "$rt" "$cd"
+}
+GP4G="$SKILL_DIR/steps/_gate-procedures.md"
+MG="$WORK/mark-contract"; mkdir -p "$MG" || exit 2
+set -- $(home_verdict "$GP4G")
+if [ "$1" = 1 ] && [ "$2" = 1 ] && [ "$3" -ge 1 ] && [ "$4" -ge 1 ]; then
+  ok "mark-home: \"Bounded-join beat\" renders one <lead engine> --mark line ending findings=<n>, and arms --complete --dispatch on \"mark\":\"rendered\" ($3 token line(s))"
+else
+  bad "mark-home: \"Bounded-join beat\" spans=$1 (want 1), findings-last=$2 (want 1), \"mark\":\"rendered\" lines=$3 (want >=1), --complete --dispatch lines=$4 (want >=1)"
+fi
+# (a2) home scope: the row decides only a non-shard teammate's result file, so seat, shard, cross and
+# repair-part files keep --complete whatever the row says (a seat whose row predates the key would
+# otherwise get a bare beat and a header-only file reads DELIVERED); and the read line's third outcome,
+# empty output from an unresolved meta file, is `bare`. Read on the home with whitespace collapsed.
+MS_CARVE='seat, shard, cross and repair-part files keep `--complete`'
+MS_EPIC='as do epic part files'
+MS_BARE='Any output but `rendered`, empty too, is `bare`.'
+mark_scope() { # mark_scope <gp file> -> "<carve-out> <not-rendered-is-bare> <epic-parts-named>"
+  local h c=0 b=0 e=0; h="$(gp_home "$1" | tr '\n' ' ' | tr -s ' ')"
+  case "$h" in *"$MS_CARVE"*) c=1 ;; esac
+  case "$h" in *"$MS_BARE"*) b=1 ;; esac
+  case "$h" in *"$MS_EPIC"*) e=1 ;; esac
+  printf '%s %s %s' "$c" "$b" "$e"
+}
+set -- $(mark_scope "$GP4G")
+if [ "$1" = 1 ] && [ "$2" = 1 ] && [ "$3" = 1 ]; then
+  ok "mark-scope: \"Bounded-join beat\" keeps --complete for seat, shard, cross, repair-part and epic part files whatever the row, and reads any output but rendered as bare"
+else
+  bad "mark-scope: \"Bounded-join beat\" carve-out=$1 (want 1), not-rendered-is-bare=$2 (want 1), epic-parts-named=$3 (want 1)"
+fi
+#   M-s1 drop the carve-out clause; M-s2 drop the not-rendered-is-bare sentence; M-s3 drop the epic-part phrase: mark-scope names each.
+awk -v s="$MS_CARVE" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && index($0, s)) sub(/seat, shard, cross and repair-part files keep `--complete`/, "files keep"); print }' "$GP4G" > "$MG/gp-nocarve.md"
+awk -v s="$MS_BARE" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && (i = index($0, s))) $0 = substr($0, 1, i - 1) substr($0, i + length(s)); print }' "$GP4G" > "$MG/gp-nobare.md"
+awk -v s="$MS_EPIC" '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f && (i = index($0, s))) $0 = substr($0, 1, i - 1) substr($0, i + length(s)); print }' "$GP4G" > "$MG/gp-noepic.md"
+for ms in nocarve:1 nobare:2 noepic:3; do
+  mf="$MG/gp-${ms%%:*}.md"
+  if cmp -s "$GP4G" "$mf"; then bad "MUTANT mark/${ms%%:*}: DID NOT APPLY"; continue; fi
+  set -- $(mark_scope "$mf")
+  case "${ms##*:}" in 1) mv="$1" ;; 2) mv="$2" ;; *) mv="$3" ;; esac
+  if [ "$mv" = 0 ]; then ok "MUTANT mark/${ms%%:*}: the home without that clause is named by mark-scope ($1 $2)"
+  else bad "MUTANT mark/${ms%%:*}: SURVIVED mark-scope ($1 $2)"; fi
+done
+
+# (a3) the two COPIES of the `--complete` carve-out list (the auto-handoff procedure in _gate-procedures.md
+# and handoff.md step 1) name epic part files in the same list sentence as the home does. Each site's
+# paragraph is read with the span bounds the gp-stop-repair-part / ho-stop-repair-part rows use, whitespace
+# collapsed; the sentence is the `--complete <path> ...` list ending at `and for a teammate's markdown`.
+EP_SENT='for seat, shard, cross and repair-part files, epic part files and for a teammate'
+site_epic() { # site_epic <file> <span start prefix> <span end prefix> -> 1 if the list sentence names epic part files
+  local p; p="$(awk -v a="$2" -v b="$3" '
+    index($0, a) == 1 { f = 1 }
+    f && index($0, b) == 1 { exit }
+    f { print }' "$1" | tr '\n' ' ' | tr -s ' ')"
+  case "$p" in *"$EP_SENT"*) printf 1 ;; *) printf 0 ;; esac
+}
+HO4G="$SKILL_DIR/steps/handoff.md"
+GP_A='## Auto-handoff evaluation (referenced by step files)'; GP_B='## Context reminder threshold check'
+HO_A='Execute this 5-step procedure in order:'; HO_B='**Resume is snapshot-driven.**'
+if [ "$(site_epic "$GP4G" "$GP_A" "$GP_B")" = 1 ]; then
+  ok "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md names epic part files in the --complete list sentence"
+else
+  bad "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md does not carry 'epic part files' in the --complete list sentence"
+fi
+if [ "$(site_epic "$HO4G" "$HO_A" "$HO_B")" = 1 ]; then
+  ok "mark-epic-ho: handoff.md step 1 names epic part files in the --complete list sentence"
+else
+  bad "mark-epic-ho: handoff.md step 1 does not carry 'epic part files' in the --complete list sentence"
+fi
+#   M-e1 delete `epic part files ` from the _gate-procedures.md auto-handoff list only: mark-epic-gp names it.
+#   M-e2 delete it from handoff.md only: mark-epic-ho names it.
+awk -v a="$GP_A" -v b="$GP_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$GP4G" > "$MG/gp-noepic-ho-site.md"
+awk -v a="$HO_A" -v b="$HO_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$HO4G" > "$MG/ho-noepic.md"
+if cmp -s "$GP4G" "$MG/gp-noepic-ho-site.md"; then bad "MUTANT mark/epic-gp: DID NOT APPLY"
+elif [ "$(site_epic "$MG/gp-noepic-ho-site.md" "$GP_A" "$GP_B")" = 0 ]; then ok "MUTANT mark/epic-gp: the auto-handoff list without epic part files is named by mark-epic-gp"
+else bad "MUTANT mark/epic-gp: SURVIVED mark-epic-gp"; fi
+if cmp -s "$HO4G" "$MG/ho-noepic.md"; then bad "MUTANT mark/epic-ho: DID NOT APPLY"
+elif [ "$(site_epic "$MG/ho-noepic.md" "$HO_A" "$HO_B")" = 0 ]; then ok "MUTANT mark/epic-ho: the handoff.md list without epic part files is named by mark-epic-ho"
+else bad "MUTANT mark/epic-ho: SURVIVED mark-epic-ho"; fi
+
+# (d) The engine is the one this layout ships: core/scripts in the distribution, scripts/ai-dlc installed.
+case "$LAYOUT" in
+  dist) WFD="$ROOT/core/scripts/wait-for-deliverable.sh" ;;
+  *)    WFD="$ROOT/scripts/ai-dlc/wait-for-deliverable.sh" ;;
+esac
+# run_rendered <gp file> <scratch dir> -> "<rc> <last line>"; the span is filled in, never retyped here.
+run_rendered() {
+  local sp line rc d="$2"
+  sp="$(home_spans "$1")"
+  [ "$(grep -c . <<<"$sp")" = 1 ] || { printf 'NOSPAN'; return; }
+  printf '# Result\n\nfinding text\n' > "$d/result.md"
+  line="${sp//<lead engine>/$(dirname "$WFD")}"
+  line="${line//<file>/$d/result.md}"; line="${line//<step>/deploy-validate}"
+  line="${line//<role>/dev}"; line="${line//<shard>/none}"; line="${line//<n>/0}"
+  case "$line" in *'<'*|*'>'*) printf 'UNFILLED %s' "$line"; return ;; esac
+  set -f; set -- $line; set +f
+  bash "$@" >/dev/null 2>&1; rc=$?
+  printf '%s %s' "$rc" "$(awk 'NF { l = $0 } END { print l }' "$d/result.md")"
+}
+if [ ! -f "$WFD" ]; then
+  bad "mark-runs: FIXTURE BROKEN -- the engine $WFD is absent, so the rendered line could not be run"
+else
+  echo "HERMETIC-CONSUMED $(cd "$(dirname "$WFD")" && pwd)/$(basename "$WFD")"
+  mkdir -p "$MG/real" || exit 2
+  mr="$(run_rendered "$GP4G" "$MG/real")"
+  if [[ "$mr" =~ ^0\ seat-complete:\ deploy-validate\ dev\ none\ sha=[0-9a-f]+\ findings=0$ ]]; then
+    ok "mark-runs: the --mark line extracted from \"Bounded-join beat\", filled in, exits 0 and seals (${mr#0 })"
+  else
+    bad "mark-runs: the rendered --mark line from \"Bounded-join beat\" did not seal a scratch file: '$mr' (want '0 seat-complete: deploy-validate dev none sha=<hex> findings=0')"
+  fi
+fi
+
+# (b) deploy-validate.md dispatch sites.
+dv_sites() { # dv_sites <file> -> one "<line>\t<0|1 cites the home>" per dispatch site
+  awk '
+  { L[NR] = $0 }
+  END {
+    u = 0; fence = 0
+    for (i = 1; i <= NR; i++) {
+      t = L[i]; sub(/^[ \t]+/, "", t)
+      if (substr(t, 1, 3) == "```") { fence = !fence; F[i] = 1; u++; continue }
+      if (fence) { F[i] = 1; continue }
+      if (t == "") { u++; U[i] = -1; continue }
+      if (t ~ /^([0-9]+\.|-) /) u++
+      U[i] = u; T[u] = T[u] " " t
+    }
+    re = "[Dd]ispatch (its |the |a )?(`[a-z-]+`|closing writer)"
+    for (i = 1; i <= NR; i++) {
+      if (F[i] || U[i] == -1) continue
+      j = L[i]; if (i < NR && !F[i + 1]) { n = L[i + 1]; sub(/^[ \t]+/, "", n); j = j " " n }
+      if (match(j, re) && RSTART <= length(L[i])) {
+        q = T[U[i]]; gsub(/[ \t]+/, " ", q)
+        print i "\t" ((index(q, "READ AND FOLLOW") && index(q, "\"Bounded-join beat\"")) ? 1 : 0)
+      }
+    }
+  }' "$1"
+}
+DV="$MG/dv"; mkdir -p "$DV" || exit 2
+printf '%s\n' 'Each remedial dispatch is one repair between two smoke runs.' '"Split dispatch" serial exception 2.' \
+  'past gate 3: dispatch its' 'closing writer and re-run.' '' 'no dispatch of a teammate.' \
+  '3. If code issue: dispatch `dev` to fix the code; the lead' '   then re-deploys. The lead work here is the dispatch, the' \
+  '4. If deployment issue: dispatch the `ops` teammate to fix it.' '' '- For drift: dispatch a `dev` teammate to correct' \
+  '  the source.' '' 'a code-reviewer dispatched after gate 3.' '```' 'dispatch `dev` inside a fence' '```' > "$DV/probe.md"
+dv_probe="$(dv_sites "$DV/probe.md" | cut -f1 | tr '\n' ' ')"
+if [ "$dv_probe" = "3 7 9 11 " ]; then
+  DVF="$SKILL_DIR/steps/deploy-validate.md"
+  dv_out="$(dv_sites "$DVF")"
+  dv_n="$(grep -c . <<<"$dv_out")" || dv_n=0
+  dv_unc="$(awk -F'\t' '$2 == 0 { printf "%s ", $1 }' <<<"$dv_out")"
+  if [ "$dv_n" = 5 ] && [ -z "$dv_unc" ]; then
+    ok "mark-dv: deploy-validate.md has 5 dispatch sites by the stated grammar, each reading and following \"Bounded-join beat\" (probe: 4 shapes read, 6 near-misses and a fenced line not)"
+  else
+    bad "mark-dv: deploy-validate.md has $dv_n dispatch site(s) by the stated grammar (want 5); uncited at line(s): ${dv_unc:-none}"
+  fi
+  # MUTANT: the ops site loses its citation; the arm must name that site.
+  awk '{ if (index($0, "dispatch the `ops` teammate")) ops = 1; if (ops && index($0, "(READ AND FOLLOW")) { sub(/ \(READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"$/, ""); ops = 2 } if (ops == 2 && index($0, "for its brief and join), re-deploy")) { sub(/for its brief and join\), re-deploy/, "re-deploy"); ops = 0 } print }' "$DVF" > "$DV/dv-mut.md"
+  if cmp -s "$DVF" "$DV/dv-mut.md"; then bad "MUTANT mark-dv: DID NOT APPLY"
+  elif [ "$(dv_sites "$DV/dv-mut.md" | awk -F'\t' '$2 == 0' | grep -c .)" = 1 ]; then ok "MUTANT mark-dv: the ops site without its citation is named by mark-dv"
+  else bad "MUTANT mark-dv: SURVIVED ($(dv_sites "$DV/dv-mut.md" | tr '\t\n' ': '))"; fi
+else
+  bad "mark-dv: FIXTURE BROKEN -- the grammar read probe lines [$dv_probe], want [3 7 9 11 ]"
+fi
+
+# (c) every isolated-brief block naming the seat or teammate --mark close names <deliverable>.
+dl_scan() { # dl_scan <files...> -> "<file>:<first line> deliverable=0|1" per block holding the close
+  awk '
+  function flush() { if (hit) print fn ":" st " deliverable=" (index(para, "<deliverable>") ? 1 : 0); para = ""; hit = 0; st = 0 }
+  FNR == 1 { flush(); fn = FILENAME }
+  /^[ \t]*$/ { flush(); next }
+  { if (st == 0) st = FNR; para = para "\n" $0; if (index($0, "<lead engine>/wait-for-deliverable.sh --mark <file>")) hit = 1 }
+  END { flush() }' "$@"
+}
+dl_out="$(dl_scan "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md "$SKILL_DIR"/rule-bodies/*.md)"
+dl_n="$(grep -c 'deliverable=' <<<"$dl_out")" || dl_n=0
+dl_bad="$(grep 'deliverable=0' <<<"$dl_out" | sed "s|$ROOT/||" | tr '\n' ' ')"
+dl_dev="$(grep -c "/dev.md:.* deliverable=1" <<<"$dl_out")" || dl_dev=0
+dl_home="$(grep -c "_gate-procedures.md:.* deliverable=1" <<<"$dl_out")" || dl_home=0
+if [ "$dl_n" -ge 5 ] && [ -z "$dl_bad" ] && [ "$dl_dev" -ge 1 ] && [ "$dl_home" -ge 2 ]; then
+  ok "mark-deliverable: all $dl_n block(s) carrying the <lead engine> --mark <file> close name <deliverable> (dev.md and both _gate-procedures.md blocks among them)"
+else
+  bad "mark-deliverable: $dl_n block(s), unnamed: [${dl_bad:-none}], dev.md=$dl_dev (want >=1), _gate-procedures.md=$dl_home (want >=2)"
+fi
+
+# MUTANTS of the contract, each a copy guarded by cmp -s, each scored on its killing arm.
+#   M-a drop --complete from the home's rendered call: the widened join scan (4b) flags the home paragraph.
+awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/wait-for-deliverable\.sh --complete --dispatch/, "wait-for-deliverable.sh --dispatch"); print }' "$GP4G" > "$MG/gp-nocomplete.md"
+if cmp -s "$GP4G" "$MG/gp-nocomplete.md"; then bad "MUTANT mark/no-complete: DID NOT APPLY"
+elif mnc_o="$(join_findings "$MG/gp-nocomplete.md")"; grep -q . <<<"$mnc_o"; then ok "MUTANT mark/no-complete: the home without --complete is flagged by join (the \"mark\":\"rendered\" paragraph key)"
+else bad "MUTANT mark/no-complete: SURVIVED -- the home lost --complete and the join scan stayed quiet"; fi
+#   M-b render rows=<n>: mark-runs (d) refuses it; mark-home (a) reads findings= no longer last.
+awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/<shard> findings=<n>`/, "<shard> rows=<n>`"); print }' "$GP4G" > "$MG/gp-rows.md"
+if cmp -s "$GP4G" "$MG/gp-rows.md"; then bad "MUTANT mark/rows: DID NOT APPLY"
+elif [ ! -f "$WFD" ]; then bad "MUTANT mark/rows: FIXTURE BROKEN -- no engine to run"
+else
+  mkdir -p "$MG/rows" || exit 2
+  mrr="$(run_rendered "$MG/gp-rows.md" "$MG/rows")"
+  case "$mrr" in 0\ seat-complete:*) bad "MUTANT mark/rows: SURVIVED mark-runs ('$mrr')" ;;
+    *) ok "MUTANT mark/rows: the rendered rows=<n> line is refused by the engine (mark-runs: '${mrr%% *}'), not sealed" ;; esac
+fi
+#   M-c drop the <deliverable> clause from dev.md: mark-deliverable (c) names the block.
+awk '{ sub(/ A worktree brief also carries `<deliverable>`.*$/, ""); print }' "$ROLES_DIR/dev.md" > "$MG/dev-nodeliv.md"
+if cmp -s "$ROLES_DIR/dev.md" "$MG/dev-nodeliv.md"; then bad "MUTANT mark/no-deliverable: DID NOT APPLY"
+elif mnd_o="$(dl_scan "$MG/dev-nodeliv.md")"; grep -q 'deliverable=0' <<<"$mnd_o"; then ok "MUTANT mark/no-deliverable: dev.md without its <deliverable> clause is named by mark-deliverable"
+else bad "MUTANT mark/no-deliverable: SURVIVED"; fi
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""
