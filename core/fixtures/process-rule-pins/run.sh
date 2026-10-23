@@ -297,6 +297,9 @@ gp-advname-record|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## 
 gp-redispatch-series|S|steps/_gate-procedures.md|## Gate-adjudication dispatch|## Validation cycle|**A re-dispatch is a whole new dispatch.**|para|The `gate_series_id` is exempt: the same-series rule decides it at dispatch, never `close`.
 gadj-brief-series|R|gate-adjudicator.md|## Contract|## The verdict|The lead's dispatch gives you|para|(e) the `gate_series_id`
 gadj-copy-series|R|gate-adjudicator.md|## The verdict|## Ownership|Write exactly the shape below.|para|`gate_series_id` is copied byte-for-byte from your brief, never invented
+gadj-fail-surface|R|gate-adjudicator.md|## Contract|## The verdict|4. **Every verdict is PASS or FAIL with non-empty evidence.|para|comparison surface
+gadj-fail-exhausted|R|gate-adjudicator.md|## Contract|## The verdict|4. **Every verdict is PASS or FAIL with non-empty evidence.|para|exhausted
+gadj-fail-scope|R|gate-adjudicator.md|## Contract|## The verdict|4. **Every verdict is PASS or FAIL with non-empty evidence.|para|could evaluate
 gv-body-must|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|MUST carry, in the same row
 gv-body-output|S|steps/gate-validation.md|### 12.|### 13.|**A state claim MUST carry its command.**|para|the command that produced it and that command's output
 r13-body-void|S|rule-bodies/rule-13.md||## HANDOFF PROTOCOL|**An operator attribution MUST cite the operator's message.**|para|never entered the locked set
