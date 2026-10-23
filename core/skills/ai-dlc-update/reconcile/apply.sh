@@ -3346,6 +3346,11 @@ if [ -f "$TI_RENDERER" ]; then
      && git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1; then
     ti_tracked=""
     ti_pats="$(jq -r '.paths[] | select(.transient) | .ignore // empty' "$TI_SCHEMA" 2>/dev/null)"
+    # BL-685: the declared OUT-OF-ROOT patterns are honoured here too, because the renderer puts them
+    # in the same block -- a tracked path under one (a worktree committed as a gitlink) is the same
+    # rule-does-nothing state as a tracked transient path. `[]?` keeps an older declaration valid.
+    ti_oor="$(jq -r '.out_of_root[]? | .pattern // empty' "$TI_SCHEMA" 2>/dev/null)"
+    [ -z "$ti_oor" ] || ti_pats="$(printf '%s\n%s' "$ti_pats" "$ti_oor")"
     # Staged like every other loop input here. This row runs AFTER the stamp on the ordinary run, so
     # a failed stage only renders a staging-refused row (a DECISION there, a WORKLIST under --finish,
     # where it runs before the stamp and withholds); it never reads as "nothing tracked".

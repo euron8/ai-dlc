@@ -27,6 +27,20 @@
       "minLength": 1,
       "description": "The pipeline output directory, prefixed onto each transient entry's ignore pattern. Declared rather than hard-coded in install.sh so the rendered block and the invariant's grammar cannot disagree about where these paths live."
     },
+    "out_of_root": {
+      "type": "array",
+      "minItems": 1,
+      "description": "OPTIONAL. Transient paths OUTSIDE root that the consumer's .gitignore block must still carry. They are not entries of paths because paths is the set-compare against what core/ constructs under root, and these are made by something else (the harness). sync-transient-ignore.sh renders each pattern after the transient half, inside the same markers. I95 refuses a pattern here that starts with root/ (it belongs in paths) and still refuses a paths[].ignore that escapes root, so this field is the ONLY declared way to put an out-of-root rule into the block.",
+      "items": {
+        "type": "object",
+        "required": ["pattern", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {"type": "string", "minLength": 1, "description": "The .gitignore pattern, repo-root relative, rendered verbatim."},
+          "reason": {"type": "string", "minLength": 1, "description": "What creates the path and why it is outside root."}
+        }
+      }
+    },
     "paths": {
       "type": "array",
       "minItems": 1,
@@ -87,6 +101,12 @@
   "block_begin": "# BEGIN AI/DLC transient pipeline state (managed by install.sh -- do not edit)",
   "block_end": "# END AI/DLC transient pipeline state",
   "root": "_bmad-output",
+  "out_of_root": [
+    {
+      "pattern": ".claude/worktrees/",
+      "reason": "Claude Code agent worktrees (EnterWorktree / Agent isolation). Each is a full linked checkout of the consumer, created and deleted by the harness rather than by AI/DLC machinery, so no producer under core/ constructs it and the population grammar cannot derive it. Unignored, every one lists as untracked in `git status`, and a broad `git add` stages a nested repository as an embedded gitlink."
+    }
+  ],
   "paths": [
     {
       "name": ".adversarial-stop",

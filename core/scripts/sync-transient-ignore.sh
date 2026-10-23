@@ -10,7 +10,8 @@
 # two callers: install.sh at install time, and this script by name on any pull afterwards.
 #
 # WHAT IT RENDERS. A marker-bounded block of ignore patterns, one per entry declared transient
-# in schemas/pipeline-state-paths.json. It is a PROJECTION of that declaration and restates
+# in schemas/pipeline-state-paths.json, then one per `out_of_root` pattern (paths outside the
+# pipeline root, such as `.claude/worktrees/`). It is a PROJECTION of that declaration and restates
 # nothing: the markers, the root and the patterns all come from the file, because a second
 # copy of any of them drifts silently and the symptom is a consumer committing scratch files.
 # Invariant I95 in the distribution binds the declaration to the machinery that writes the
@@ -109,6 +110,13 @@ if [ -z "$PATTERNS" ]; then
   echo "sync-transient-ignore.sh: $SCHEMA declares no transient ignore patterns; refusing to write an empty block" >&2
   exit 2
 fi
+# THE OUT-OF-ROOT HALF (BL-685): transient paths the consumer's tree carries OUTSIDE root, such as
+# the harness's `.claude/worktrees/`. Declared in their own field because `paths` is a set-compare
+# against what core/ constructs under root and these are constructed by nothing there. Optional:
+# an older declaration without the field renders exactly as before. Rendered after the transient
+# half, inside the same markers, so --check and uninstall need nothing new.
+OOR_PATTERNS="$(jq -r '.out_of_root[]? | .pattern // empty' "$SCHEMA")"
+[ -z "$OOR_PATTERNS" ] || PATTERNS="$(printf '%s\n%s' "$PATTERNS" "$OOR_PATTERNS")"
 
 GITIGNORE="$PROJECT_ROOT/.gitignore"
 DESIRED="$(printf '%s\n%s\n%s' "$IG_BEGIN" "$PATTERNS" "$IG_END")"
