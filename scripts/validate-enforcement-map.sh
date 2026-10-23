@@ -5566,9 +5566,10 @@ fi
 # it. rt_scan takes the span NAME first; the self-probe runs once per span, so each name is proven to discriminate.
 # THE READSET_LOCK SPAN IS THE THIRD, held the same way AND byte for byte across the two hooks. The read-set deriver
 # (core/scripts/derive-fixture-readsets.sh) sources the trace-window slot's pid-file writer and stale test out of
-# whichever hook it finds, so a consumer whose span differed would judge the slot by different rules from this repo,
-# and the comment-stripped FIXTURE_POOL compare never sees this span. The compare is WHOLE-SPAN, comments included,
-# because the span is sourced verbatim; it holds no fixture-root path, so no tests/fixtures mapping applies. Its own
+# whichever hook it finds, so a consumer whose span differed would judge the slot by different rules from this repo.
+# The span sits INSIDE the FIXTURE_POOL block, so the comment-stripped compare above already binds its executable
+# lines; what that compare cannot see is its comments and its sentinels. The compare here is WHOLE-SPAN, comments
+# included, because the span is sourced verbatim; it holds no fixture-root path, so no tests/fixtures mapping applies. Its own
 # self-probe (an identical pair stays quiet, a one-byte divergence flags) runs before the hooks are compared.
 rt_scan() { # <span name> <file>... -> one `<file>\t<reason>` line per file
   local rt_sn="$1"; shift
