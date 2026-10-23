@@ -832,10 +832,82 @@ mutsec head2000 \
   "L:pass X:fails S:head" \
   "a larger head passes every world short of its bound, and only the structural arm refuses it"
 
+# ============================================================================
+# THE PLAYWRIGHT ARM READS A RUN, NOT A MENTION. deploy-validate.md §4 writes the automated row as
+# `playwright` with the trace path, and the trace is Playwright's `.zip`. A bare `grep -qi
+# playwright` accepted a could-not-run row as visual evidence. Six cases, one web/** world:
+#   i   could-not-run row only                                   FAIL
+#   ii  could-not-run row + USER-CONFIRMED                       PASS (the operator arm is untouched)
+#   iii a real run row with its .zip trace                       PASS
+#   iv  no playwright at all                                     FAIL
+#   v   NEAR-MISS: "could not run, no trace captured" — carries `trace`, so a fix keyed on `trace`
+#       instead of `.zip` passes it                              FAIL
+#   vi  NEAR-MISS: a playwright line with `xzip` and no `.zip` — an unescaped dot matches it   FAIL
+# ============================================================================
+battery_pw() {  # <script> -> "i:<v> ii:<v> iii:<v> iv:<v> v:<v> vi:<v>", each PASS|FAIL|none
+  local S="$1" L t="" tag notes
+  c5_world playwright web/src/components/Pw.jsx
+  for tag in i ii iii iv v vi; do
+    case "$tag" in
+      i)   notes='playwright: could not run (no webServer)' ;;
+      ii)  notes='playwright: could not run (no webServer); USER-CONFIRMED visual verification captured' ;;
+      iii) notes='playwright: npx playwright test --trace on, trace test-results/x-trace.zip, 3 passed' ;;
+      iv)  notes='deploy completed' ;;
+      v)   notes='playwright: could not run, no trace captured' ;;
+      vi)  notes='playwright: run recorded, trace at test-results/x-xzip' ;;
+    esac
+    write_gatelog "$notes"
+    L="$(check5_line "$S")"
+    case "$L" in *PASS*) t="$t $tag:PASS" ;; *FAIL*) t="$t $tag:FAIL" ;; *) t="$t $tag:none" ;; esac
+  done
+  printf '%s' "${t# }"
+}
+EXPECTED_PW="i:FAIL ii:PASS iii:PASS iv:FAIL v:FAIL vi:FAIL"
+
+# --- 12. the shipping validator reads a run, not a mention -----------------------
+GOTPW="$(battery_pw "$WORK/bin/validate-mandatory-rules.sh")"
+if [ "$GOTPW" = "$EXPECTED_PW" ]; then
+  ok "playwright evidence: a could-not-run row FAILs alone and PASSes beside USER-CONFIRMED, a run row with its .zip trace PASSes, no playwright FAILs, and both near-misses (a 'no trace captured' row, an xzip with no .zip) FAIL"
+else
+  bad "playwright battery: expected [$EXPECTED_PW], got [$GOTPW]"
+fi
+
+# --- 13. CONTROL: the unmutated copy beside the section mutants answers identically ---
+PWCGOT="$(battery_pw "$SECCTL/validate-mandatory-rules.sh")"
+if [ "$PWCGOT" = "$EXPECTED_PW" ]; then
+  ok "CONTROL: an unmutated copy with its siblings answers the playwright battery identically"
+else
+  echo "FIXTURE ERROR: the unmutated playwright control does not reproduce — expected [$EXPECTED_PW], got [$PWCGOT]." >&2
+  exit 2
+fi
+
+# --- 14. MUTANT: the bare match restored -----------------------------------------
+PWM="$WORK/mutpw-bare"
+mkdir -p "$PWM"
+cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
+   "$WORK/bin/validate-cycle-commits.sh" "$PWM/"
+sed "s@^      if awk 'tolower(\$0) ~ /playwright/ .*\$@      if grep -qi 'playwright' <<<\"\$SPRINT_SECTION\"; then@" \
+  "$WORK/bin/validate-mandatory-rules.sh" > "$PWM/validate-mandatory-rules.sh" \
+  || { echo "FIXTURE ERROR: mutant 'bare' sed DID NOT APPLY" >&2; exit 2; }
+if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$PWM/validate-mandatory-rules.sh"; then
+  echo "FIXTURE ERROR: mutant 'bare' matched nothing — the playwright awk line was reshaped." >&2
+  exit 2
+fi
+bash -n "$PWM/validate-mandatory-rules.sh" \
+  || { echo "FIXTURE ERROR: mutant 'bare' is not valid bash" >&2; exit 2; }
+PWMGOT="$(battery_pw "$PWM/validate-mandatory-rules.sh")"
+if [ "$PWMGOT" = "i:PASS ii:PASS iii:PASS iv:FAIL v:PASS vi:PASS" ]; then
+  ok "MUTANT bare: restoring grep -qi 'playwright' PASSes the could-not-run row and both near-misses, and moves nothing else"
+elif [ "$PWMGOT" = "$EXPECTED_PW" ]; then
+  bad "MUTANT bare SURVIVED: the bare match restored moves no case"
+else
+  bad "MUTANT bare: expected [i:PASS ii:PASS iii:PASS iv:FAIL v:PASS vi:PASS], got [$PWMGOT]"
+fi
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 34 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 34" >&2
+if [ "$asserted" -ne 37 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 37" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

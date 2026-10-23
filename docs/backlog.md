@@ -448,16 +448,6 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: manual
 
-## BL-792 — Check 5 accepts a could-not-run playwright row as a UI sprint's visual evidence
-
-**NOTE.** Source: batch 241, lead ai-dlc-58, raised by the r1 tip adversary, filed by the r1 owner ai-dlc-12. Filed OPEN; not built.
-
-Check 5 of `core/scripts/validate-mandatory-rules.sh` accepts a UI sprint's visual evidence when its gate-log sprint section matches `grep -qi 'playwright'` (line 522; the FAIL text is at line 530). Any row that merely mentions playwright therefore satisfies the check, a could-not-run row included, for example "playwright: could not run (no webServer)". The rule `deploy-validate.md` section 4 now states, "A could-not-run record is not a pass." (BL-789), has no enforcer. It was not fixed in the r1 release because Check 5 lies outside that release's file set and its permissive match predates BL-789.
-
-Owed: a measurement before any tightening. Over the reference consumer's archived gate logs, count the sprint sections that carry `playwright` only in a could-not-run or not-run sense. A could-not-run sprint whose operator confirmed visually also carries `USER-CONFIRMED`, and Check 5 must keep accepting that. The match is tightened only once that population is measured and the false-positive set is empty or enumerated.
-
-verify: manual — the fix needs its false-positive set measured on a consumer's archived gate logs before the match can be tightened.
-
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Partly built: the deny text only.
