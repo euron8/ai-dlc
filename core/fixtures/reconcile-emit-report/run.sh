@@ -3632,6 +3632,15 @@ if { grep -qF 'B5 submodule.recurse=true makes a consumer git grep' "$EMIT" && g
 else
   printf 'PENDING: PC-V64..PC-V76 not run, engine lacks the B5 gitlink or B6 nested-repository refusals\n'
 fi
+# THE B7 ARMS (BL-685 B7, BL-800: V77..V88) need the engine that keys an untracked symlink by identity,
+# read off its named `B7 the symlink ` refusal. Same gate shape as PCV_R11. PCV_R12 also selects V39
+# shape (c)'s expectation: accept-and-key with B7, the R2 refusal without it.
+PCV_R12=0
+if grep -qF "B7 the symlink '" "$EMIT" || ! pcv_installed "$EMIT"; then
+  PCV_R12=1; PCV_IDS="$PCV_IDS PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87 PC-V88"
+else
+  printf 'PENDING: PC-V77..PC-V88 not run, engine lacks the B7 symlink refusals\n'
+fi
 pcv_setup
 
 # ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
@@ -4022,9 +4031,15 @@ pcv_r6world() {
     pcv_back
   fi
 
-  # V39 R2: four shapes, each a refusal with the link in place and a HIT once it is gone. Every link
-  # is one a key without R2 would have followed silently or keyed by its target's bytes: the two
-  # root links are IGNORED (info/exclude), so `ls-files -o -i -- <root>` lists nothing through them.
+  # V39 R2: four shapes, each with the link in place and a HIT once it is gone. (a), (b) and (d) are
+  # refusals: every such link is one a key without R2 would have followed silently or keyed by its
+  # target's bytes, and the two root links are IGNORED (info/exclude), so `ls-files -o -i -- <root>`
+  # lists nothing through them. B7 MOVED (c) FROM REFUSAL TO ACCEPT-AND-KEY: an ignored link under a
+  # read root to an in-tree FILE stays inside the root, does not dangle and lies under no unlogged
+  # root, so er_link_target accepts it and keys the target's bytes. (c) therefore re-records with a
+  # fresh exit-0 render, HITS on the next run, and MISSES once the target is edited (asserted by value:
+  # the opt-out's exit, and a rewritten record where that exit is 0). An installed engine without B7
+  # (PCV_R12=0) still asserts (c)'s old R2 refusal, which is that engine's correct behaviour.
   local ex="$PC_C/.git/info/exclude" fails="" why=""
   mkdir -p "$PC_C/.git/info" && touch "$ex" && cp "$ex" "$PS_D/exclude.keep"
   mkdir -p "$PS_D/r6-out/ai-dlc/extensions"
@@ -4041,10 +4056,29 @@ pcv_r6world() {
     pcv_r6refuse v39b R2 || { fails="$fails b"; why="$why b[$R6_WHY]"; }
     rm -f "$PC_C/skills"; cp "$PS_D/exclude.keep" "$ex"; pcv_back
   fi
-  # (c) an IGNORED symlink under a read root: .claude/r6-link -> notes/pc-v4.txt.
+  # (c) an IGNORED symlink under a read root: .claude/r6-link -> notes/pc-v4.txt. Accepted and keyed
+  # since B7 (see the header above); refused by R2 on an engine without B7.
   if ! pcv_ctl v39c; then fails="$fails c:control"; else
     ln -s ../notes/pc-v4.txt "$PC_C/.claude/r6-link" && printf '/.claude/r6-link\n' >> "$ex"
-    pcv_r6refuse v39c R2 || { fails="$fails c"; why="$why c[$R6_WHY]"; }
+    if [ "${PCV_R12:-0}" -eq 1 ]; then
+      local c_ok=0 c_why c_rc c_hit c_n c_nc c_rec
+      cp "$PC_C/notes/pc-v4.txt" "$PS_D/v39c-target.keep"
+      pcm v39c
+      pcv_is_miss 0 && [ -f "$PC_REC" ] && ! cmp -s "$PC_REC" "$PS_D/rec.keep" && c_ok=1
+      c_why="with the link [$(pcv_why), record $(cmp -s "$PC_REC" "$PS_D/rec.keep" && echo unchanged || echo RE-RECORDED)]"
+      cp "$PC_REC" "$PS_D/v39c.rec" 2>/dev/null
+      pcm v39c.h; c_why="$c_why, next run [$(pcv_why)]"; pcv_is_hit v39c.h "$PC_REC" || c_ok=0
+      printf 'v4 edited behind the r6-link\n' > "$PC_C/notes/pc-v4.txt"
+      pcm v39c.e; c_rc="$PRC"; c_hit="$PHIT"; c_n="$PN"
+      pcm v39c.en nocache; c_nc="$PRC"; PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
+      c_rec=unchanged; cmp -s "$PC_REC" "$PS_D/v39c.rec" || c_rec=RE-RECORDED
+      c_why="$c_why, after the target edit [$(pcv_why), opt-out $c_nc, record $c_rec]"
+      { pcv_is_miss "$c_nc" && { [ "$c_nc" -ne 0 ] || [ "$c_rec" = RE-RECORDED ]; }; } || c_ok=0
+      cp "$PS_D/v39c-target.keep" "$PC_C/notes/pc-v4.txt"
+      [ "$c_ok" -eq 1 ] || { fails="$fails c"; why="$why c[$c_why (want a fresh exit-0 re-record, a HIT, then a miss at the opt-out's exit)]"; }
+    else
+      pcv_r6refuse v39c R2 || { fails="$fails c"; why="$why c[$R6_WHY]"; }
+    fi
     rm -f "$PC_C/.claude/r6-link"; cp "$PS_D/exclude.keep" "$ex"; pcv_back
   fi
   # (d) a TRACKED symlink outside every read root: notes/r6-tracked -> pc-v4.txt, staged by path.
@@ -4056,9 +4090,9 @@ pcv_r6world() {
   # The near miss for (d), and the undo of every shape: the tree without any link HITS.
   pcm v39h
   if [ -z "$fails" ] && pcv_is_hit v39h "$PC_REC"; then
-    pcv_v PC-V39 "a symlinked read root, a symlinked parent of one, an ignored symlink under one and a tracked symlink each MISS by refusal (fresh exit-0 render, record untouched, R2 named), and the same tree without the link HITS"
+    pcv_v PC-V39 "a symlinked read root, a symlinked parent of one and a tracked symlink each MISS by refusal (fresh exit-0 render, record untouched, R2 named); an ignored file link under one is keyed by its target (B7: records, HITS, misses after a target edit); and the same tree without any link HITS"
   else
-    pcv_x PC-V39 "symlink refusals failed [${fails# }]${why}; after every undo [$(pcv_why)] (want four R2 refusals and then a hit)"
+    pcv_x PC-V39 "symlink shapes failed [${fails# }]${why}; after every undo [$(pcv_why)] (want three R2 refusals, the keyed file link, and then a hit)"
   fi
 }
 
@@ -4696,6 +4730,180 @@ pcv_b56world() {
     else
       pcv_x PC-V70 "FIXTURE BROKEN: the two ignored nested repositories (a .git directory and a gitfile) could not be seeded"
     fi
+  fi
+  return 0
+}
+
+# ---- V77..V88 (BL-685 B7, BL-800): untracked symlinks keyed by identity, and the read log's L refusal ----
+# World B7 (pcv_b7world) is one layer-adjudication-tier seed with an IGNORED `.agents/` holding the link
+# targets, outside every read root, so no git listing names a target file and a content change there
+# moves no field. Every link name an ignored arm uses is in .git/info/exclude BEFORE the first record,
+# so no arm changes the ignore set. Each arm opens with pcv_kctl and leaves the base record and tree.
+#     V77  B7-pos: the graph shape, an ignored DIR link `.claude/skills/sx -> ../../.agents/skills/sx`:
+#          records, HITS, and after a content change behind the link STILL HITS (identity is keyed,
+#          content is not). Its target is IGNORED, not tracked: a tracked target's edit moves conswork
+#          and misses for that reason. Same-run control of every B7 mutant.
+#     V78  B7-retarget, on V77's record: the link repointed to `.agents/skills/sy` MISSES and
+#          re-records; then the same target RESPELLED (`../.././.agents/skills/sy`, one resolved path)
+#          MISSES again, because each readlink string is keyed. The respelling is the step only the
+#          readlink string separates, so a key without it HITS there.
+#     V79  B7-file: an ignored FILE link `.claude/skills/f.md -> ../../.agents/f.md` records and HITS,
+#          and a content change behind it MISSES (a file target's bytes are keyed).
+#     V80  B7-outside: an ignored link to a mktemp dir outside the consumer refuses.
+#     V81  B7-dangling: an ignored dangling link refuses.
+#     V82  B7-contains (link): an ignored `.claude/skills/up -> ..` resolves to `.claude`, which contains
+#          the link, and refuses.
+#     V83  B7-contains (root): an unignored top-level `lnk-cl -> .claude` resolves to the read root
+#          `.claude` and refuses. Unignored, because an ignored link outside every root is listed by
+#          nothing. V82 and V83 reach different refusal lines.
+#     V84  B7-corpus: an unignored `_bmad-output/lnk` refuses (a root walked without logging).
+#     V85  B7-hooks: an unignored `.claude/hooks/lnk` refuses.
+#     V86  B7-corpus-root: an unignored `docs/escalations/lnk` (predicate-sites.md's `corpus-root:`) refuses.
+#     V87  B7-tracked: a STAGED link (mode 120000) still refuses with R2's tracked cause.
+# World B7L (pcv_b7lworld), its own seed:
+#     V88  B7-logL (BL-800), the X2 shape: `.claude/skills/ai-dlc` is ITSELF an ignored link to an
+#          in-tree dir, so layer-drift.sh's walk of `.claude/skills/ai-dlc/extensions` crosses it and
+#          logs `L` values. The render does not record, naming the logL cause; then a new IGNORED
+#          extension behind the link (no listing names it) must still render fresh at the opt-out's
+#          non-zero exit with no record. The extensions dir itself as the link (the X shape) cannot
+#          serve: find does not descend a start-point link, so the render never moves.
+pcv_b7world() {
+  local ids="PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87" m gd ex out k1 rec
+  PCV_ENVPRE=""
+  pcv_lat b7 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"
+  mkdir -p "$gd/info" "$L_C/.agents/skills/sx/references" "$L_C/.agents/skills/sy" \
+    && printf '/.agents/\n/.claude/skills/sx\n/.claude/skills/f.md\n/.claude/skills/out\n/.claude/skills/dang\n/.claude/skills/up\n' >> "$ex" \
+    && printf 'SKILL v1\n' > "$L_C/.agents/skills/sx/SKILL.md" && printf 'ref v1\n' > "$L_C/.agents/skills/sx/references/r.md" \
+    && printf 'SKILL y\n' > "$L_C/.agents/skills/sy/SKILL.md" && printf 'file v1\n' > "$L_C/.agents/f.md" \
+    && git -C "$L_C" check-ignore -q -- .agents/ && git -C "$L_C" check-ignore -q -- .claude/skills/sx \
+    || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: could not seed the ignored .agents/ targets and the exclude lines"; done; return 0; }
+  pcv_lat_approve b7 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: the world rendered no region"; done; return 0; }
+  pcv_run b7.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    for m in $ids; do pcv_x "$m" "control: the B7 world did not record before any link ($(pcv_why); $(pcv_b56cause b7.r))"; done; return 0
+  fi
+  cp "$L_REC" "$PS_D/b7base.rec"
+  if pcv_in PC-V77 && pcv_kctl PC-V77; then
+    ln -s ../../.agents/skills/sx "$L_C/.claude/skills/sx"
+    if pcv_b56rec PC-V77 b7p "an ignored directory link .claude/skills/sx to an ignored in-tree dir"; then
+      printf 'SKILL v2 MOVED\n' > "$L_C/.agents/skills/sx/SKILL.md"; printf 'ref v2\n' > "$L_C/.agents/skills/sx/references/r.md"
+      pcv_run b7p.c "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+      if pcv_is_hit b7p.c "$L_REC"; then
+        pcv_v PC-V77 "an ignored directory link .claude/skills/sx -> ../../.agents/skills/sx renders fresh with exit 0, records, HITS, and still HITS after the content behind it changes (identity keyed, content not)"
+      else
+        pcv_x PC-V77 "the directory link recorded and hit, but a content change behind it did not HIT ($(pcv_why); $(pcv_b56cause b7p.c)) -- a directory target's content is keyed, or the link's identity moved"
+      fi
+    fi
+  fi
+  # V78 runs on V77's link and record.
+  if pcv_in PC-V78 && pcv_kctl PC-V78; then
+    rm -f "$L_C/.claude/skills/sx"; ln -s ../../.agents/skills/sy "$L_C/.claude/skills/sx"
+    pcv_kstep b7rt; rec=unchanged; cmp -s "$L_REC" "$PS_D/krec.keep" || rec=RE-RECORDED
+    k1="[$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause b7rt)]"
+    if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = RE-RECORDED ]; then
+      cp "$L_REC" "$PS_D/b7rt.rec"
+      rm -f "$L_C/.claude/skills/sx"; ln -s ../.././.agents/skills/sy "$L_C/.claude/skills/sx"
+      pcv_kstep b7rs; rec=unchanged; cmp -s "$L_REC" "$PS_D/b7rt.rec" || rec=RE-RECORDED
+      if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = RE-RECORDED ]; then
+        pcv_v PC-V78 "the directory link repointed to another in-tree dir MISSES and re-records, and the same target respelled (one resolved path, a different readlink string) MISSES and re-records again"
+      else
+        pcv_x PC-V78 "the link respelled to the same resolved dir: [$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause b7rs)] (want a fresh exit-0 miss that re-records: the readlink string is keyed)"
+      fi
+    else
+      pcv_x PC-V78 "the link repointed to .agents/skills/sy: $k1 (want a fresh exit-0 miss that re-records)"
+    fi
+  fi
+  rm -f "$L_C/.claude/skills/sx"; cp "$PS_D/b7base.rec" "$L_REC"
+  if pcv_in PC-V79 && pcv_kctl PC-V79; then
+    ln -s ../../.agents/f.md "$L_C/.claude/skills/f.md"
+    if pcv_b56rec PC-V79 b7f "an ignored file link .claude/skills/f.md to an ignored in-tree file"; then
+      cp "$L_REC" "$PS_D/b7f.rec"; printf 'file v2\n' > "$L_C/.agents/f.md"
+      pcv_kstep b7fe; rec=unchanged; cmp -s "$L_REC" "$PS_D/b7f.rec" || rec=RE-RECORDED
+      if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = RE-RECORDED ]; then
+        pcv_v PC-V79 "an ignored file link records and HITS, and a content change behind it MISSES and re-records (a file target's bytes are keyed)"
+      else
+        pcv_x PC-V79 "a content change behind the file link: [$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause b7fe)] (want a fresh exit-0 miss that re-records)"
+      fi
+      printf 'file v1\n' > "$L_C/.agents/f.md"
+    fi
+    rm -f "$L_C/.claude/skills/f.md"; cp "$PS_D/b7base.rec" "$L_REC"
+  fi
+  if pcv_in PC-V80 && pcv_kctl PC-V80; then
+    out="$(mktemp -d "$PS_D/b7out.XXXXXX")" && printf 'outside\n' > "$out/x.md" && ln -s "$out" "$L_C/.claude/skills/out"
+    pcv_b56refuse PC-V80 b7o "an ignored link to a dir outside the consumer" "B7 the symlink '.claude/skills/out' resolves outside the consumer root (hop 1, "
+    rm -f "$L_C/.claude/skills/out"
+  fi
+  if pcv_in PC-V81 && pcv_kctl PC-V81; then
+    ln -s ../../nowhere "$L_C/.claude/skills/dang"
+    pcv_b56refuse PC-V81 b7d "an ignored dangling link" "B7 the symlink '.claude/skills/dang' is dangling (its chain ends at a path that does not exist)"
+    rm -f "$L_C/.claude/skills/dang"
+  fi
+  if pcv_in PC-V82 && pcv_kctl PC-V82; then
+    ln -s .. "$L_C/.claude/skills/up"
+    pcv_b56refuse PC-V82 b7cu "an ignored link .claude/skills/up -> .." "B7 the symlink '.claude/skills/up' resolves to '.claude', which contains the link itself"
+    rm -f "$L_C/.claude/skills/up"
+  fi
+  if pcv_in PC-V83 && pcv_kctl PC-V83; then
+    ln -s .claude "$L_C/lnk-cl"
+    if ! git -C "$L_C" check-ignore -q -- lnk-cl; then
+      pcv_b56refuse PC-V83 b7cr "an unignored top-level link lnk-cl -> .claude" "B7 the symlink 'lnk-cl' resolves to the read root '.claude'"
+    else
+      pcv_x PC-V83 "FIXTURE BROKEN: lnk-cl is ignored, so no listing names it"
+    fi
+    rm -f "$L_C/lnk-cl"
+  fi
+  for m in "PC-V84 b7e _bmad-output" "PC-V85 b7h .claude/hooks" "PC-V86 b7k docs/escalations"; do
+    set -- $m
+    if pcv_in "$1" && pcv_kctl "$1"; then
+      if mkdir -p "$L_C/$3" && ln -s "$(printf '%s' "$3/" | sed 's#[^/]*/#../#g').agents/skills/sx" "$L_C/$3/lnk" \
+         && [ -d "$L_C/$3/lnk" ] && ! git -C "$L_C" check-ignore -q -- "$3/lnk"; then
+        pcv_b56refuse "$1" "$2" "an unignored link $3/lnk to an in-tree dir" "B7 the symlink '$3/lnk' lies under '$3', a root a consumer program walks without logging its reads"
+      else
+        pcv_x "$1" "FIXTURE BROKEN: $3/lnk is not an unignored link to .agents/skills/sx"
+      fi
+      rm -f "$L_C/$3/lnk"; rmdir "$L_C/$3" 2>/dev/null
+    fi
+  done
+  if pcv_in PC-V87 && pcv_kctl PC-V87; then
+    ln -s ../../.agents/skills/sy "$L_C/.claude/skills/tlink" && git -C "$L_C" add -- .claude/skills/tlink >/dev/null 2>&1
+    case "$(git -C "$L_C" ls-files -s -- .claude/skills/tlink 2>/dev/null)" in
+      120000\ *) pcv_b56refuse PC-V87 b7t "a staged link .claude/skills/tlink (mode 120000)" "R2 the consumer tracks a symlink (mode 120000), whose target the key does not follow" ;;
+      *) pcv_x PC-V87 "FIXTURE BROKEN: .claude/skills/tlink did not stage as mode 120000" ;;
+    esac
+    git -C "$L_C" rm -q --cached -- .claude/skills/tlink >/dev/null 2>&1; rm -f "$L_C/.claude/skills/tlink"
+  fi
+  return 0
+}
+pcv_b7lworld() {
+  local gd ex s1 s1_ok=0 rec
+  PCV_ENVPRE=""
+  pcv_lat b7l || { pcv_x PC-V88 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"
+  if ! { mkdir -p "$gd/info" "$L_C/.agents" && printf '/.agents/\n/.claude/skills/ai-dlc\n' >> "$ex" \
+         && mv "$L_C/.claude/skills/ai-dlc" "$L_C/.agents/aidlc" \
+         && { pcv_b56g -C "$L_C" rm -r -q --cached -- .claude/skills/ai-dlc && pcv_b56g -C "$L_C" commit -qm b7l; } >/dev/null 2>&1 \
+         && ln -s ../../.agents/aidlc "$L_C/.claude/skills/ai-dlc" && [ -d "$L_C/.claude/skills/ai-dlc/extensions" ] \
+         && git -C "$L_C" check-ignore -q -- .claude/skills/ai-dlc && [ -z "$(git -C "$L_C" ls-files -- .claude/skills/ai-dlc)" ]; }; then
+    pcv_x PC-V88 "FIXTURE BROKEN: .claude/skills/ai-dlc could not become an ignored link to an ignored in-tree dir with nothing tracked under it"; return 0
+  fi
+  pcv_lat_approve b7l || { pcv_x PC-V88 "FIXTURE BROKEN: the linked world rendered no region"; return 0; }
+  rm -f "$L_REC"
+  pcv_run b7l1 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  rec=absent; [ -f "$L_REC" ] && rec=WRITTEN
+  s1="[$(pcv_why), record $rec, stderr: $(grep -F "$PCV_RECWHY" "$PS_D/b7l1.err" | sed -n 1p)]"
+  pcv_is_miss 0 && [ "$rec" = absent ] && grep -qF -- "${PCV_RECWHY}R2 a symlink lies on a consumer path a detector read (" "$PS_D/b7l1.err" && s1_ok=1
+  printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: b7l\n---\n\n### 907. [ext:b7l] Behind the link.\n\nBody.\n' > "$L_C/.agents/aidlc/extensions/b7l.md"
+  if ! git -C "$L_C" check-ignore -q -- .agents/aidlc/extensions/b7l.md; then
+    pcv_x PC-V88 "FIXTURE BROKEN: the new extension behind the link is not ignored, so a listing keys it"; return 0
+  fi
+  pcv_kstep b7l2; rec=absent; [ -f "$L_REC" ] && rec=WRITTEN
+  if [ "$K_NC" -eq 0 ]; then
+    pcv_x PC-V88 "FIXTURE BROKEN: the opt-out render after a new extension behind the link exits 0, so the render does not read through the link"
+  elif [ "$s1_ok" -eq 1 ] && pcv_is_miss "$K_NC" && [ "$rec" = absent ]; then
+    pcv_v PC-V88 "a walk crossing .claude/skills/ai-dlc (itself a link) renders fresh with exit 0 and records nothing, naming the logL cause; after a new extension behind the link the cached run renders fresh at the opt-out's exit $K_NC, still with no record"
+  else
+    pcv_x PC-V88 "a walk crossing the linked .claude/skills/ai-dlc: first $s1; after a new extension behind it [$(pcv_why), opt-out $K_NC, record $rec] (want two fresh renders, the second at the opt-out's exit, no record, and the logL cause named) -- a hit there is a stale PASS"
   fi
   return 0
 }
@@ -5749,6 +5957,11 @@ pcv_suite() {
     if pcv_in PC-V65; then pcv_b5bworld; fi
     if pcv_in PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75 PC-V76; then pcv_b56world; fi
   fi
+  # ---- V77..V88: B7 untracked symlinks and the read log's L refusal (BL-685, BL-800) ----
+  if [ "${PCV_R12:-0}" -eq 1 ]; then
+    if pcv_in PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87; then pcv_b7world; fi
+    if pcv_in PC-V88; then pcv_b7lworld; fi
+  fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
   if [ "$PCV_R6" -eq 1 ]; then
@@ -5882,6 +6095,27 @@ pcv_failset() {
 #                     must name the work-tree directory `x` (same predicate)        -> PC-V73 PC-V74
 #   M-b6-batch-rc     every nested repository accepted when the batch's check-ignore exits 0
 #                     (any input matched)                                                 -> PC-V75
+# BL-685 B7's nine and BL-800's one, each reverting one condition of er_link_target / er_link_inside
+# or the read log's L refusal. V77 (the accepted directory link) is the same-run control of all ten:
+#   M-b7-key          the readlink strings dropped from a directory link's identity: a repoint
+#                     still misses (the resolved path moves), the respelling does not       -> PC-V78
+#   M-b7-inside       both inside-the-root checks dropped (per hop, and at the end)          -> PC-V80
+#   M-b7-dangling     the dangling refusal dropped. The chain then falls to "ends at neither a
+#                     regular file nor a directory", still a refusal: the kill is the CAUSE
+#                     text, and this mutant produces no stale pass                          -> PC-V81
+#   M-b7-contains-link  the `.`, itself and contains-the-link lines dropped: V82 then reaches the
+#                     read-root line and names a different cause                            -> PC-V82
+#   M-b7-contains-root  the equals- and contains-a-read-root lines dropped                  -> PC-V83
+#   M-b7-corpus       `_bmad-output` dropped from the fixed unlogged roots                   -> PC-V84
+#   M-b7-hooks        `.claude/hooks` dropped from the fixed unlogged roots                  -> PC-V85
+#   M-b7-croot        every `corpus-root:` emptied before the unlogged-root test             -> PC-V86
+#   M-b7-filehash     a FILE target keyed by identity only (BOTH layers: er_link_target's byte
+#                     hash, and er_hash_list's fall-through, which hashes through the link).
+#                     V39 shape (c) does not join its set: that link's target is TRACKED, so
+#                     conswork keys the edit and it misses under this mutant too           -> PC-V79
+#   M-b7-logL         (BL-800) the dead `{ exit 0 } END { exit 1 }` form restored at the L
+#                     refusal, so a walk through a linked .claude/skills/ai-dlc records and
+#                     then HITS stale after a new extension appears behind the link        -> PC-V88
 # pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
 # that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
 pcv_ed() {
@@ -5912,6 +6146,18 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local b6co="        case \"\$r/\" in \"\$p/\"*) er_refuse \"B6 the nested repository '\$p' contains the read root '\$r', which every git listing skips\"; return 1 ;; esac"
   local b6pf="      printf '%s/\\0' \"\$p\" >> \"\$_er_tmp/key.nested\" || return 1"
   local b6rc='    case "$?" in 0|1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac'
+  local b7id="    printf 'd\\0%s\\0%s\\0' \"\$_er_lchain\" \"\$_er_lrel\""
+  local b7hop="    case \"\$d/\" in \"\$_er_root\"/*) ;; *) _er_lwhy=\"resolves outside the consumer root (hop \$n, '\$t')\"; return 1 ;; esac"
+  local b7end='  case "$d/" in "$_er_root"/*) ;; *) _er_lwhy="resolves outside the consumer root"; return 1 ;; esac'
+  local b7dg='  [ -e "$p" ] || { _er_lwhy="is dangling (its chain ends at a path that does not exist)"; return 1; }'
+  local b7c1="  if [ \"\$_er_lrel\" = . ]; then er_refuse \"B7 the symlink '\$rel' resolves to the consumer root itself, which contains every read root\"; return 1; fi"
+  local b7c2="  if [ \"\$_er_lrel\" = \"\$rel\" ]; then er_refuse \"B7 the symlink '\$rel' resolves to itself\"; return 1; fi"
+  local b7c3="  case \"\$rel/\" in \"\$_er_lrel/\"*) er_refuse \"B7 the symlink '\$rel' resolves to '\$_er_lrel', which contains the link itself\"; return 1 ;; esac"
+  local b7r1="    if [ \"\$_er_lrel\" = \"\$r\" ]; then er_refuse \"B7 the symlink '\$rel' resolves to the read root '\$r'\"; return 1; fi"
+  local b7r2="    case \"\$r/\" in \"\$_er_lrel/\"*) er_refuse \"B7 the symlink '\$rel' resolves to '\$_er_lrel', which contains the read root '\$r'\"; return 1 ;; esac"
+  local b7fx='  for u in _bmad-output .claude/hooks; do'
+  local b7cr='    u="${u%"${u##*[![:space:]]}"}"; u="${u%/}"'
+  local b7L="  if LC_ALL=C awk -F'\\t' '\$3 ~ /^L / { f = 1; exit } END { exit !f }' \"\$_er_tmp/key.log-sorted\"; then"
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
     M-region)  pcv_ed "$d" replace \
@@ -5950,6 +6196,17 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-b6-dotgit-path) pcv_ed "$d" replace "$b6pf" '      printf '"'"'%s/.git\0'"'"' "$p" >> "$_er_tmp/key.nested" || return 1' ;;
     M-b6-batch-rc) pcv_ed "$d" replace "$b6rc" \
                  '    case "$?" in 0) : > "$_er_tmp/key.nested" ;; 1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac' ;;
+    M-b7-key)  pcv_ed "$d" replace "$b7id" "    printf 'd\\0%s\\0' \"\$_er_lrel\"" ;;
+    M-b7-inside) pcv_ed "$d" replace "$b7hop" '    :' && pcv_ed "$d" replace "$b7end" '  :' ;;
+    M-b7-dangling) pcv_ed "$d" replace "$b7dg" '  :' ;;
+    M-b7-contains-link) pcv_ed "$d" replace "$b7c1" '  :' && pcv_ed "$d" replace "$b7c2" '  :' && pcv_ed "$d" replace "$b7c3" '  :' ;;
+    M-b7-contains-root) pcv_ed "$d" replace "$b7r1" '    :' && pcv_ed "$d" replace "$b7r2" '    :' ;;
+    M-b7-corpus) pcv_ed "$d" replace "$b7fx" '  for u in .claude/hooks; do' ;;
+    M-b7-hooks) pcv_ed "$d" replace "$b7fx" '  for u in _bmad-output; do' ;;
+    M-b7-croot) pcv_ed "$d" replace "$b7cr" '    u=""' ;;
+    M-b7-filehash) pcv_ed "$d" replace '  if [ "$_er_lkind" = d ]; then' '  if :; then' \
+                 && pcv_ed "$d" replace '      [ "$_er_lkind" != d ] || continue' '      continue' ;;
+    M-b7-logL) pcv_ed "$d" replace "$b7L" "  if LC_ALL=C awk -F'\\t' '\$3 ~ /^L / { exit 0 } END { exit 1 }' \"\$_er_tmp/key.log-sorted\"; then" ;;
     *) return 1 ;;
   esac || return 1
   bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
@@ -5964,12 +6221,18 @@ pcv_want() {
     M-gitlink-refuse) echo "PC-V64 PC-V65" ;; M-gitlink-prune) echo "PC-V64" ;; M-hashlist-skip) echo "PC-V67" ;;
     M-recurse) echo "PC-V68" ;; M-glob) echo "PC-V69" ;; M-b5-root) echo "PC-V76" ;; M-b6-ignored) echo "PC-V73 PC-V74 PC-V75" ;;
     M-b6-under) echo "PC-V71" ;; M-b6-contains) echo "PC-V72" ;; M-b6-dotgit-path) echo "PC-V73 PC-V74" ;; M-b6-batch-rc) echo "PC-V75" ;;
+    M-b7-key) echo "PC-V78" ;; M-b7-inside) echo "PC-V80" ;; M-b7-dangling) echo "PC-V81" ;;
+    M-b7-contains-link) echo "PC-V82" ;; M-b7-contains-root) echo "PC-V83" ;;
+    M-b7-corpus) echo "PC-V84" ;; M-b7-hooks) echo "PC-V85" ;; M-b7-croot) echo "PC-V86" ;;
+    M-b7-filehash) echo "PC-V79" ;; M-b7-logL) echo "PC-V88" ;;
   esac
 }
 PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b5-root M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
+PCV_B7MUTS="M-b7-key M-b7-inside M-b7-dangling M-b7-contains-link M-b7-contains-root M-b7-corpus M-b7-hooks M-b7-croot M-b7-filehash M-b7-logL"
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
 pcv_bl() {
-  case " $PCV_B56MUTS " in *" $1 "*) echo BL-685; return 0 ;; esac
+  case "$1" in M-b7-logL) echo BL-800; return 0 ;; esac
+  case " $PCV_B56MUTS $PCV_B7MUTS " in *" $1 "*) echo BL-685; return 0 ;; esac
   case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; *) echo BL-679 ;; esac
 }
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
@@ -6010,6 +6273,13 @@ pcv_scope() {
     M-b6-under|M-b6-contains) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V72" ;;
     M-b6-dotgit-path) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V71 PC-V73 PC-V74" ;;
     M-b6-batch-rc) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V70 PC-V73 PC-V75" ;;
+    # BL-685 B7 / BL-800: V77, the accepted directory link, runs under every one; each also runs a
+    # sibling arm of its own condition that it must NOT kill.
+    M-b7-key|M-b7-filehash) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V78 PC-V79" ;;
+    M-b7-inside|M-b7-dangling) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V80 PC-V81" ;;
+    M-b7-contains-link|M-b7-contains-root) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V82 PC-V83" ;;
+    M-b7-corpus|M-b7-hooks|M-b7-croot) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V84 PC-V85 PC-V86" ;;
+    M-b7-logL) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V88" ;;
   esac
 }
 # A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
@@ -6034,6 +6304,8 @@ PCV_MUTS="M-region M-direxcl M-exit3"
 [ "${PCV_R10:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-b1 M-b2 M-b3 M-b4 M-secret"
 # BL-685 B5/B6's mutants score only where V64..V76 run (PCV_R11).
 [ "${PCV_R11:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS $PCV_B56MUTS"
+# BL-685 B7 and BL-800's mutants score only where V77..V88 run (PCV_R12).
+[ "${PCV_R12:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS $PCV_B7MUTS"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
