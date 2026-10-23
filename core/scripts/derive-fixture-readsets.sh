@@ -263,6 +263,15 @@ elif [ "$TRACER" = both ]; then
 else
   TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset}"
 fi
+# THE TRACE-WINDOW SLOT, ONE PER UID, OUTSIDE EVERY TRACE ROOT, so derivers from different sessions and
+# worktrees share it (see rs_slot_acquire below). AI_DLC_READSET_SLOT names a private slot instead; it
+# exists so core/fixtures/readset-skip can drive the slot without contending with the box's real one.
+RS_SLOT="${AI_DLC_READSET_SLOT:-/private/tmp/ai-dlc-readset-window-$(id -u)}"
+# ONE ASSIGNMENT, ON ITS OWN LINE: a waiter's heartbeat interval, in 0.2s polls. readset-skip points a COPY
+# of this script at a shorter interval, so its heartbeat arm needs no clock.
+RS_SLOT_BEAT=100
+# The most stale breaks one acquire makes before it runs its window unslotted (see rs_slot_acquire).
+RS_SLOT_BREAKS=5
 
 # THE FIXTURE ROOT IS READ OFF THE RUNNER THAT WILL CONSUME THE MAP, not restated here. The
 # map's key is a fixture BASENAME and the runner looks it up against the directories its own
@@ -301,6 +310,17 @@ if grep -q '^readset_digests() ' "$UNIVERSE_SPAN" && grep -q '^readset_committed
   . "$UNIVERSE_SPAN" && HAVE_UNIVERSE=1
 fi
 rm -f "$UNIVERSE_SPAN"
+# THE RUNNER'S LOCK HELPERS, SOURCED, NEVER RESTATED: the window slot's pid file is written by the hook's
+# readset_lock_write and judged by its readset_lock_stale, read out of the runner's READSET_LOCK span. A
+# runner with no such span (an older hook) leaves the slot off, and a slotted mode says so once.
+LOCK_SPAN="$(mktemp "${TMPDIR:-/tmp}/readset-lock.XXXXXX")" || die "mktemp failed"
+sed -n '/^# READSET_LOCK_BEGIN$/,/^# READSET_LOCK_END$/p' "$RUNNER" > "$LOCK_SPAN"
+HAVE_LOCK=0
+if grep -q '^readset_lock_stale() ' "$LOCK_SPAN" && grep -q '^readset_lock_write() ' "$LOCK_SPAN"; then
+  # shellcheck disable=SC1090
+  . "$LOCK_SPAN" && HAVE_LOCK=1
+fi
+rm -f "$LOCK_SPAN"
 READSET_MAP="$MAP_REL"
 GITCOMMON="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null)"
 case "$GITCOMMON" in ''|/*) ;; *) GITCOMMON="$REPO_ROOT/$GITCOMMON" ;; esac
@@ -1116,9 +1136,107 @@ mkdir -p "$TRACE_ROOT/t" "$TRACE_ROOT/w" || die "cannot create $TRACE_ROOT"
 # `/private/tmp/...`; a `/tmp/...` root would make the sandbox's `subpath` and the stream
 # predicate match nothing, and every fixture would come back with an atime-only read-set.
 TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
+# THE TRACE-WINDOW SLOT (BL-584). Every `--local-map` and `--in-pool` window adds to ONE box-wide pool of
+# kernel Sandbox reports, so a heavy fixture's window drives `dropped during` notices into every window
+# that overlaps it, and each of those discards its fixture below. Forced, with `small` (40 tagged reads)
+# traced beside a neighbour deriver tracing `big` (25 passes of `xargs -P 8 cat` over 3000 files): the
+# subject's windows read notices/delivered/canary 56/37/3, 62/35/5 and 51/33/7 without a slot, and
+# 0/40/0 three times with one, while `big` still issued 59-61k reports per window.
+# THE SLOT CHANGES THE SCHEDULE, NOT THE WORK, the BL-375 shape the launch line's width knobs state: the
+# same fixture does the same reads, and only the windows stop overlapping, so the read-set derived with the
+# slot is the read-set without it. It is a per-uid mkdir lock at RS_SLOT, taken immediately before a
+# window's sentinel writes and released immediately after its stream is stopped. ONLY under `--local-map`
+# (which `--in-pool` sets): the plain `--list`/`--all`/`--reconcile` modes are hand-run, and stay unslotted.
+# ITS PID FILE IS THE HOOK'S: readset_lock_write records `$$` and its start time, and a waiter breaks a slot
+# whose holder readset_lock_stale calls stale -- the hook's watchdog KILLs a deriver's group, which skips the
+# EXIT trap, so a slot can outlive its holder. The break is not atomic between several waiters that see one
+# dead holder in the same poll: at most one extra window then overlaps, and the drop notice and the loss
+# canary below discard it -- fail-closed, never a short row set.
+# A WAITER HEARTBEATS: it writes nothing else, and the pool's POOL_STALL refuses a unit whose pool log and
+# watched root gain no bytes, so every RS_SLOT_BEAT polls (20s at 0.2s) it says one line to stdout, which is
+# that pool log. The stale test runs INSIDE the wait loop, so a heartbeat can never keep a waiter alive
+# behind a dead holder.
+# RE-ENTRANT BY HOLDER PID: the holder hands its traced fixture READSET_SLOT_HOLDER=<pid>:<slot> on the
+# launch line's `env`, and a deriver that inherits a marker naming THIS slot skips the acquire only when the
+# slot's pid file names that same pid and readset_lock_stale calls it live. A stale marker or a foreign one
+# (a live pid the pid file does not name) waits like anyone else. No AI_DLC_ prefix: fixtures scrub it.
+# EVERY EXIT FROM THE WAIT LOOP IS BOUNDED, AND THE ONES THAT CANNOT TAKE THE SLOT FAIL OPEN ON OVERLAP ONLY.
+# A `mkdir` failure is HELD only when the slot path exists as a directory. A path that does not exist after
+# the failure (a missing or unwritable parent) and a path that is not a directory each end the wait at once;
+# so does a stale break whose `rmdir` failed on a directory that no pid file has re-claimed, and so does the
+# RS_SLOT_BREAKS-th break of one acquire (a slot whose pid file cannot be removed reads stale again on every
+# poll). Each prints ONE `slot: UNSLOTTED` line naming the slot and the reason, and that window runs without
+# the slot: it may overlap another deriver's, and the drop-notice guard and the loss canary still discard an
+# overlapped window, which is the no-span behaviour above. The break path sleeps like the wait path, so no
+# exit from this loop spins. Before this, an old regular file at the slot path spun about 300 lines a second
+# and never acquired, an old directory holding a stray file cycled break and HELD with no end, and a missing
+# parent read HELD forever; under `--in-pool` the waiter's growing log also kept POOL_STALL from refusing it.
+RS_SLOT_HELD=""
+RS_SLOT_MARK="${READSET_SLOT_HOLDER:-}"
+[ -z "$LOCAL_MAP" ] || [ "$HAVE_LOCK" = 1 ] || say "note: $RUNNER has no READSET_LOCK span, so the trace windows are NOT slotted and may overlap another deriver's"
+rs_slot_acquire() {
+  local hp rp w=0 b=0 rmrc why=""
+  RS_SLOT_HELD=""
+  [ -n "$LOCAL_MAP" ] || return 0
+  [ "$HAVE_LOCK" = 1 ] || return 0
+  case "${READSET_SLOT_HOLDER:-}" in
+    *:"$RS_SLOT")
+      hp="${READSET_SLOT_HOLDER%%:*}"; rp=""
+      { read -r rp _; } < "$RS_SLOT/pid" 2>/dev/null
+      if [ -n "$hp" ] && [ "$rp" = "$hp" ] && ! readset_lock_stale "$RS_SLOT" >/dev/null; then
+        RS_SLOT_HELD=nested
+        say "slot: nested inside holder pid $hp of $RS_SLOT -- not waiting"
+        return 0
+      fi ;;
+  esac
+  until mkdir "$RS_SLOT" 2>/dev/null; do
+    if [ ! -e "$RS_SLOT" ] && [ ! -L "$RS_SLOT" ]; then
+      mkdir "$RS_SLOT" 2>/dev/null && break
+      why="cannot be created (its parent ${RS_SLOT%/*} is missing or not writable)"; break
+    fi
+    if [ ! -d "$RS_SLOT" ]; then
+      why="exists and is not a directory"; break
+    fi
+    if readset_lock_stale "$RS_SLOT" >/dev/null; then
+      rp=""; { read -r rp _; } < "$RS_SLOT/pid" 2>/dev/null
+      say "slot: broke a stale slot $RS_SLOT (holder pid ${rp:-none})"
+      rm -f "$RS_SLOT/pid" 2>/dev/null; rmdir "$RS_SLOT" 2>/dev/null; rmrc=$?
+      if [ "$rmrc" -ne 0 ] && [ -d "$RS_SLOT" ] && [ ! -f "$RS_SLOT/pid" ]; then
+        why="is a stale directory that rmdir could not remove (it holds more than the pid file)"; break
+      fi
+      b=$((b + 1))
+      if [ "$b" -ge "$RS_SLOT_BREAKS" ]; then
+        why="was broken $b times in this acquire and is still not free"; break
+      fi
+      sleep 0.2
+      continue
+    fi
+    [ "$w" -eq 0 ] && say "slot: waiting for $RS_SLOT"
+    w=$((w + 1))
+    [ $((w % RS_SLOT_BEAT)) -eq 0 ] && say "slot: heartbeat, still waiting for $RS_SLOT ($w polls)"
+    sleep 0.2
+  done
+  if [ -n "$why" ]; then
+    say "slot: UNSLOTTED -- $RS_SLOT $why; this window runs without the slot and may overlap another deriver's, and the drop-notice guard and the loss canary still discard an overlapped window"
+    return 0
+  fi
+  readset_lock_write "$RS_SLOT" "$$" 2>/dev/null
+  RS_SLOT_HELD=1
+  RS_SLOT_MARK="$$:$RS_SLOT"
+}
+rs_slot_release() {
+  local rp=""
+  [ "$RS_SLOT_HELD" = 1 ] || { RS_SLOT_HELD=""; return 0; }
+  RS_SLOT_HELD=""; RS_SLOT_MARK="${READSET_SLOT_HOLDER:-}"
+  { read -r rp _; } < "$RS_SLOT/pid" 2>/dev/null
+  [ "$rp" = "$$" ] || return 0
+  rm -f "$RS_SLOT/pid"; rmdir "$RS_SLOT" 2>/dev/null
+}
+[ -z "$LOCAL_MAP" ] || trap 'rs_slot_release' EXIT
 # `--local-map` removes the trace root it created on EVERY exit, a refusal included. `--in-pool` does
 # not: its worker removes the root in the background once the verdict is recorded, off the pool's path.
-[ -z "$LOCAL_MAP" ] || [ -n "$IN_POOL" ] || trap 'rm -rf "$TRACE_ROOT"' EXIT
+# Either way the EXIT trap releases a held slot first.
+[ -z "$LOCAL_MAP" ] || [ -n "$IN_POOL" ] || trap 'rs_slot_release; rm -rf "$TRACE_ROOT"' EXIT
 TREE="$TRACE_ROOT/t"
 WORK="$TRACE_ROOT/w"
 SENTINEL="$TREE/.readset-sentinel"
@@ -1635,6 +1753,7 @@ for fx in $LIST; do
   # predicate per fixture window, as the other modes run one stream per window.
   STREAM_PRED="sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\""
   [ -z "$LOCAL_MAP" ] || STREAM_PRED="eventMessage CONTAINS \"FXTAG=$fx;\""
+  rs_slot_acquire
   echo "sentinel-$fx" > "$SENTINEL"
   echo "end-$fx" > "$ENDMARK"
   reset_atimes
@@ -1677,6 +1796,10 @@ for fx in $LIST; do
   # then the fail-closed block reads `settled` and OMITS it from the map as "tracing never settled".
   # LOAD-FREE: an unsettled trace is never emitted, so a slow attach costs the fixture its mapping
   # (it runs every push) and cannot record a short set as complete.
+  # The sandbox streams are keyed on this run's full sentinel path. fs_usage output is a different line
+  # format whose path spelling and truncation were never measured against "$SENTINEL" (it is root-only), and
+  # it is filtered to $TREE/ with no peer deriver's markers in it, so that mode keeps the bare name.
+  if [ "$TRACER" = fs_usage ]; then SENT_KEY=readset-sentinel; else SENT_KEY="$SENTINEL"; fi
   settled=0; i=0
   while [ "$i" -lt 100 ]; do
     if [ "$TRACER" = fs_usage ]; then
@@ -1686,7 +1809,10 @@ for fx in $LIST; do
     fi
     # Under `both`, settled means BOTH captures carry the sentinel: a fixture started when only
     # one tracer was live would be compared against a set that missed its opening reads.
-    if grep -q 'readset-sentinel' "$raw" 2>/dev/null \
+    # Keyed on THIS run's sentinel path, not the bare marker name, here and at the flush and window-cut
+    # greps below: the stream predicate is the FXTAG alone, so a concurrent deriver tracing the same
+    # fixture name lands ITS marker reads in this stream, and a bare name cut the window at a peer's.
+    if grep -qF "$SENT_KEY" "$raw" 2>/dev/null \
        && { [ "$TRACER" != both ] || grep -q 'readset-sentinel' "$raw.fsu" 2>/dev/null; }; then
       settled=1; break
     fi
@@ -1718,7 +1844,7 @@ for fx in $LIST; do
     ( cd "$TREE" && sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
   # `--in-pool`: the verdict is recorded the moment the fixture exits, so a refusal anywhere below still
@@ -1754,10 +1880,11 @@ for fx in $LIST; do
     flushed=0; i=0
     while [ "$i" -lt 100 ]; do
       sandboxed cat "$ENDMARK" >/dev/null 2>&1 </dev/null
-      if grep -q 'readset-end' "$raw" 2>/dev/null; then flushed=1; break; fi
+      if grep -qF "$ENDMARK" "$raw" 2>/dev/null; then flushed=1; break; fi
       sleep 0.2; i=$(( i + 1 ))
     done
     kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
+    rs_slot_release
     if [ -n "$fsu_pid" ]; then
       # Same reaping as the fs_usage mode: `$!` is grep, so the tracer itself is named too.
       sleep 1
@@ -1789,7 +1916,7 @@ for fx in $LIST; do
   # the open line did not already carry, and they are the ONLY lines fs_usage truncates --
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
-  last="$(grep -n 'readset-sentinel' "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
+  last="$(grep -nF "$SENT_KEY" "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
   lost=0
   if [ "$TRACER" = fs_usage ]; then
     tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
@@ -1798,7 +1925,7 @@ for fx in $LIST; do
       | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
   else
     # The window is strictly between the LAST start sentinel and the FIRST end sentinel.
-    endl="$(grep -n 'readset-end' "$raw" 2>/dev/null | head -1 | cut -d: -f1)"; : "${endl:=0}"
+    endl="$(grep -nF "$ENDMARK" "$raw" 2>/dev/null | head -1 | cut -d: -f1)"; : "${endl:=0}"
     if [ "$endl" -gt "$last" ]; then
       sed -n "$(( last + 1 )),$(( endl - 1 ))p" "$raw" > "$WORK/$fx.win"
     else
