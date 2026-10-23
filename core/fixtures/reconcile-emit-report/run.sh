@@ -3445,6 +3445,20 @@ fi
 # The round-8 gate sits OUTSIDE the round-7 one, so an engine without the round-7 marker cannot carry the
 # round-8 ids into a SKIP: they FAIL by name, or run.
 pcv_r8gate "$EMIT"
+# V56/V57 (BL-777): the key's OWN tools absent, each refused BY NAME. The causes are the engine's words,
+# pinned here on purpose (a fixture may pin its own engine). An installed engine that predates them is a
+# pre-migration state (PENDING, not run); in the distribution the arms always run, so an engine without
+# the refusals FAILS them by name rather than skipping.
+PCV_R9CK='cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys'
+PCV_R9SHA='neither shasum nor sha256sum is on PATH, so no field can be hashed'
+PCV_R9=0
+if [ "$PCV_R6" -eq 1 ]; then
+  if grep -qF "$PCV_R9CK" "$EMIT" || ! pcv_installed "$EMIT"; then
+    PCV_R9=1; PCV_IDS="$PCV_IDS PC-V56 PC-V57"
+  else
+    printf 'PENDING: PC-V56 PC-V57 not run, engine lacks the named cksum refusal\n'
+  fi
+fi
 if [ "$PCV_R7F" -eq 1 ]; then
   # PC-V52 (round-8 B4) needs a CASE-INSENSITIVE filesystem where the worlds are built: measured here,
   # beside the suite root. A case-sensitive one prints SKIP and no ok line, never a pass.
@@ -3904,6 +3918,105 @@ pcv_r6world() {
   else
     pcv_x PC-V39 "symlink refusals failed [${fails# }]${why}; after every undo [$(pcv_why)] (want four R2 refusals and then a hit)"
   fi
+}
+
+# ---- V56 (cksum) and V57 (the sha256 tool): the KEY's own tools absent (BL-777) ----
+# Each PATH REPLACES the fixture's own: pcv_run only PREPENDS $PS_SHIM, and on macOS every tool sits in
+# /usr/bin beside cksum, so no PATH entry can be dropped. The arm sets PATH to a FARM -- a directory of
+# symlinks to every tool the current PATH resolves (first wins, as PATH resolves), minus the dropped
+# names -- so every run reads exactly `$PS_SHIM:<farm>`, and the discrimination check runs under that
+# same composed PATH: the dropped tools must not resolve and awk, sed, sort and git must, else FIXTURE
+# BROKEN, never PASS.
+# THE WORLD CARRIES NO layer-adjudication-register. With one, layer-drift.sh pipes its digest cache key
+# through cksum (layer-drift.sh:1227), so a cksum-less PATH would change the RENDER and not only the key.
+# The main world has none (seed.sh writes none); checked below rather than assumed.
+# pcv_farm <dir> <name>... -- <dir> resolves every tool PATH does except <name>...
+pcv_farm() {
+  local t="$1" d n
+  shift
+  mkdir -p "$t" || return 1
+  local IFS=:
+  for d in $PATH; do
+    [ -d "$d" ] && [ "$d" != "$t" ] && [ "$d" != "$PS_SHIM" ] && ln -s "$d"/* "$t"/ 2>/dev/null
+  done
+  for n in "$@"; do rm -f "$t/$n"; done
+  return 0
+}
+# pcv_resolves <path> <tool>... -- 0 when every tool resolves under exactly <path>
+pcv_resolves() {
+  local p="$1" t
+  shift
+  for t in "$@"; do ( PATH="$p"; command -v "$t" >/dev/null 2>&1 ) || return 1; done
+}
+# pcv_resolvesnone <path> <tool>... -- 0 when no tool resolves under exactly <path>
+pcv_resolvesnone() {
+  local p="$1" t
+  shift
+  for t in "$@"; do ( PATH="$p"; command -v "$t" >/dev/null 2>&1 ) && return 1; done
+  return 0
+}
+# pcv_markcause <err> <cause> -- 0 when <err> carries the refusal line WHOLE: the mark, then the cause,
+# then nothing, and at least one character follows the mark (so an empty cause can never pass).
+pcv_markcause() {
+  grep -qxF "${PCV_R6MARK}$2" "$1" \
+    && awk -v m="$PCV_R6MARK" 'index($0, m) == 1 && length($0) > length(m) { f = 1 } END { exit !f }' "$1"
+}
+pcv_r9world() {
+  local reg="$PC_C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+  local fa="$PS_D/r9-nocksum" fb="$PS_D/r9-nosha" ck op a why nm nmok hok u0 u1 uok
+  if [ -e "$reg" ]; then
+    pcv_x PC-V56 "FIXTURE BROKEN: the main world carries $reg, so layer-drift.sh calls cksum in the render and a cksum-less PATH is not a key-only change"
+    pcv_x PC-V57 "FIXTURE BROKEN: the main world carries $reg (see PC-V56)"
+    return 0
+  fi
+  ck="$(command -v cksum 2>/dev/null)"
+  # V56: no cksum. The refusal names it (a fresh exit-0 render, record untouched); the near miss is the
+  # SAME farm plus a cksum link, which keys: no mark, the record rewritten, and the next run HITS. Then
+  # the UNARMED run is byte-identical (stdout, stderr, exit) with and without the link.
+  if [ -z "$ck" ] || ! pcv_farm "$fa" cksum || ! pcv_resolvesnone "$PS_SHIM:$fa" cksum \
+     || ! pcv_resolves "$PS_SHIM:$fa" awk sed sort git; then
+    pcv_x PC-V56 "FIXTURE BROKEN: the farm $fa does not lack cksum while resolving awk, sed, sort and git under PATH=\$PS_SHIM:$fa (or cksum is not on the fixture's own PATH)"
+  elif ! pcv_ctl v56; then pcv_noctl PC-V56
+  else
+    op="$PATH"; PATH="$fa"
+    a=0; pcv_r6refuse v56 "$PCV_R9CK" && pcv_markcause "$PS_D/v56.err" "$PCV_R9CK" && a=1; why="$R6_WHY"
+    ln -s "$ck" "$fa/cksum"
+    pcm v56n; nm="$(pcv_why)"; nmok=0
+    pcv_is_miss 0 && ! cmp -s "$PC_REC" "$PS_D/rec.keep" && ! grep -qF "$PCV_R6MARK" "$PS_D/v56n.err" && nmok=1
+    pcm v56h; hok=0; pcv_is_hit v56h "$PC_REC" && hok=1
+    rm -f "$fa/cksum"
+    PCV_ARM="-u EMIT_REPORT_VERIFY_CACHE"
+    pcm v56u0; u0="$PRC"
+    ln -s "$ck" "$fa/cksum"
+    pcm v56u1; u1="$PRC"
+    PCV_ARM=""; PATH="$op"; rm -f "$fa/cksum"
+    uok=0
+    [ "$u0" -eq 0 ] && [ "$u0" = "$u1" ] && [ "$(cat "$PS_D/v56u0.out")" = "$PCV_OKLINE" ] \
+      && cmp -s "$PS_D/v56u0.out" "$PS_D/v56u1.out" && cmp -s "$PS_D/v56u0.err" "$PS_D/v56u1.err" && uok=1
+    if [ "$a" -eq 1 ] && [ "$nmok" -eq 1 ] && [ "$hok" -eq 1 ] && [ "$uok" -eq 1 ]; then
+      pcv_v PC-V56 "no cksum on PATH renders fresh (exit 0, record untouched) naming cksum as the cause; the same farm with a cksum link keys (no refusal, record rewritten, then a hit); the unarmed run is byte-identical with and without it"
+    else
+      pcv_x PC-V56 "cksum absent [$why, refusal $a, stderr: $(sed -n 1p "$PS_D/v56.err")]; near miss with cksum [$nm, ok $nmok, then hit $hok]; unarmed identity $uok (exits $u0/$u1) (want a named cksum refusal, a keyed near miss, and identical unarmed runs)"
+    fi
+    pcv_back
+  fi
+  # V57: neither shasum nor sha256sum. The per-field refusal's sha256-tool site names the absent tool.
+  if ! pcv_farm "$fb" shasum sha256sum || ! pcv_resolvesnone "$PS_SHIM:$fb" shasum sha256sum \
+     || ! pcv_resolves "$PS_SHIM:$fb" cksum awk sed sort git; then
+    pcv_x PC-V57 "FIXTURE BROKEN: the farm $fb does not lack shasum and sha256sum while resolving cksum, awk, sed, sort and git under PATH=\$PS_SHIM:$fb"
+  elif ! pcv_ctl v57; then pcv_noctl PC-V57
+  else
+    op="$PATH"; PATH="$fb"
+    a=0; pcv_r6refuse v57 "$PCV_R9SHA" && pcv_markcause "$PS_D/v57.err" "$PCV_R9SHA" && a=1
+    PATH="$op"
+    if [ "$a" -eq 1 ]; then
+      pcv_v PC-V57 "no sha256 tool on PATH renders fresh (exit 0, record untouched) naming the absent shasum/sha256sum as the cause"
+    else
+      pcv_x PC-V57 "sha256 tool absent [$R6_WHY, stderr: $(sed -n 1p "$PS_D/v57.err")] (want a fresh exit-0 render, record untouched, the absent tool named)"
+    fi
+    pcv_back
+  fi
+  return 0
 }
 
 # ---- V42 (B2): the DETECTORS hash a consumer file with --no-filters, run directly ----
@@ -4949,6 +5062,8 @@ pcv_suite() {
   if [ "$PCV_R6" -eq 1 ]; then
     if pcv_in PC-V38 PC-V39; then pcv_r6world; fi
     if [ "$PCV_V42" -eq 1 ] && pcv_in PC-V42; then pcv_b2world; fi
+    # ---- V56, V57: the key's own tools (cksum, the sha256 tool) absent, in the MAIN world (BL-777) ----
+    if [ "$PCV_R9" -eq 1 ] && pcv_in PC-V56 PC-V57; then pcv_r9world; fi
   fi
   # ---- V44..V47: the round-7 partition, in the MAIN world after the round-6 arms ----
   if [ "$PCV_R7" -eq 1 ]; then
