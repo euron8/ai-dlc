@@ -10,15 +10,15 @@
 #         leading or trailing blank. EMPTY when the pid does not exist or neither source can
 #         read it (no ps output, and no perl or not darwin).
 #
-# ONE DEFINITION, TWO READERS. wait-for-deliverable.sh writes this value into a beat's argv
-# record (`.wait-beats/.beat-argv-<pid>`, line `start=`) and compares it for its chained-beat
-# guard; core/hooks/ai-dlc-hookwake.sh compares the record's value against a fresh read of the
-# same pid. The two must produce the same bytes for the same live process, so both source THIS
-# file -- each from its own directory, which install.sh fills from core/scripts/ as
-# scripts/ai-dlc/ in a consumer, never by counting `..` hops.
+# ONE DEFINITION. wait-for-deliverable.sh's shell-identity markers are the reader: a beat stores
+# its calling shell's start time in `.shell-<pid>` and the chained-beat guard and the marker prune
+# compare it against a fresh read of the same pid. Write and read must produce the same bytes for
+# the same live process, so wait-for-deliverable.sh sources THIS file -- from its own directory,
+# which install.sh fills from core/scripts/ as scripts/ai-dlc/ in a consumer, never by counting
+# `..` hops.
 #
-# LC_ALL=C because `lstart` is locale-formatted: two callers under different locales would
-# render one start time two ways and read a live beat as a recycled pid. It also makes `ps` and
+# LC_ALL=C because `lstart` is locale-formatted: two reads under different locales would render
+# one start time two ways and read a live shell as a recycled pid. It also makes `ps` and
 # the perl fallback agree: a value written through one source must read equal through the other.
 #
 # THE SECOND SOURCE (BL-686). `/bin/ps` is setuid root and `sandbox-exec` refuses to exec it, so
