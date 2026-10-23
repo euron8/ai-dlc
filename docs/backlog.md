@@ -491,7 +491,7 @@ verify: manual — the fix needs its own contract; the allowance is not yet mode
 
 Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` glob and data form, measured to an empty false-positive set with `adversarial-shard-merge` acquitted and a seeded `lib.sh`-only unscrubbed invoker reported.
 
-verify: sh s="$(awk '/^# --- I10: fixture hermeticity/{f=1} f&&/^# --- I13:/{exit} f' scripts/validate-enforcement-map.sh | grep -Ev '^[[:space:]]*#|^[[:space:]]*err ')"; grep -qE 'grep[^|]*lib\.sh|/\*/lib\.sh|"/lib\.sh"' <<<"$s"
+verify: sh f="$(awk '/^# --- I10: fixture hermeticity/{s=1} s&&/^i10_unscrubbed\(\) \{/{g=1} g{print} g&&/^}/{exit}' scripts/validate-enforcement-map.sh)"; [ -n "$f" ] || exit 1; eval "$f" || exit 1; t="$(mktemp -d)" || exit 1; for c in liboff libcomment libglob libscrubcomment; do mkdir "$t/$c" && printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$t/$c/run.sh" || exit 1; done; printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/liboff/lib.sh"; printf '%s\n' '  # runs hooks/ai-dlc-x.sh' > "$t/libcomment/lib.sh"; printf '%s\n' 'cp core/hooks/ai-dlc-*.sh "$T"' > "$t/libglob/lib.sh"; printf '%s\n' '# unset "$_v"' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/libscrubcomment/lib.sh"; [ "$(i10_unscrubbed "$t")" = "$(printf '%s\n' "$t/liboff/run.sh" "$t/libscrubcomment/run.sh")" ]
 
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 

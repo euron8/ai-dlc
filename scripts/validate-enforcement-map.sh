@@ -1469,9 +1469,43 @@ ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtu
 # -- a hook passed to a function that runs it, one copied to .githooks/pre-push and run by
 # relative path, extracted hook spans sourced, a path resolved by a helper from a basename, an
 # invoker in lib.sh -- so the narrower grammar would exempt real hook drivers.
+#
+# THE UNIT IS run.sh PLUS lib.sh, WHEN ONE EXISTS. A fixture whose hook invoker and scrub both
+# live in lib.sh was outside the run.sh-only population: adversarial-shard-merge runs its hook
+# at lib.sh:183 and scrubs at lib.sh:10, and its run.sh names neither. Measured: the run.sh
+# population is 56 and the widened unit is 57, adding adversarial-shard-merge and nothing else,
+# with 0 offenders on both. run.sh keeps its pattern VERBATIM -- applying the lib grammar below
+# to run.sh drops mandatory-rules-snapshot-position from the population. A lib.sh adds its
+# fixture only on a NON-comment line (first non-blank character not `#`) naming `hooks/ai-dlc`
+# or `$HOOK` once the glob form `hooks/ai-dlc-*` is removed from it; there is no yaml-form clause,
+# because no lib.sh carries hook names as seed data. A lib.sh scrub counts only on a non-comment
+# line. advisor-gate-deny/lib.sh runs its hook as `bash "$h"`, which this grammar cannot spell --
+# a known false negative, harmless because that fixture's run.sh is in the population and scrubs.
+# OUTSIDE THE UNIT, each for its own reason: seed.sh writes the fixture's seeded tree, and
+# BL-786 measured its two hook-naming hits as false positives -- a comment naming the
+# `hooks/ai-dlc-*.sh` glob, and `- hooks/ai-dlc-*.sh` yaml seed data; receipt*.sh are receipts
+# run by the backlog-receipt validator, not by the fixture; content-seal/seal-lib.sh resolves
+# the content-seal hook but is sourced by merge-arms.sh and join-arms.sh, which name no hook and
+# each scrub on their own line 3 before sourcing it. One grep over every lib.sh and one awk filter,
+# never a loop over directories, because this block runs under the suite pole. The probe below
+# adds four lib.sh cases: an unscrubbed lib-only invoker and one whose only scrub is a comment
+# are REPORTED; a lib.sh scrub, a comment-only hook mention and the glob form are NOT.
 i10_unscrubbed() {
   local i10_fx
-  i10_fx="$(grep -lE 'hooks/ai-dlc|\$HOOK' "$1"/*/run.sh 2>/dev/null)"
+  i10_fx="$( { grep -lE 'hooks/ai-dlc|\$HOOK' "$1"/*/run.sh 2>/dev/null
+    printf '%s\n' '@@i10@@'
+    grep -HE 'hooks/ai-dlc|\$HOOK|unset "\$_v"|env -u AI_DLC' "$1"/*/lib.sh 2>/dev/null; } | LC_ALL=C awk '
+    $0 == "@@i10@@" { lib = 1; next }
+    !lib { unit[$0] = 1; next }
+    {
+      i = index($0, "/lib.sh:"); if (i == 0) next
+      d = substr($0, 1, i - 1); t = substr($0, i + 8)
+      c = (t ~ /^[[:blank:]]*#/)
+      if (!c && t ~ /unset "\$_v"|env -u AI_DLC/) scrub[d] = 1
+      gsub(/hooks\/ai-dlc-\*/, "", t)
+      if (!c && t ~ /hooks\/ai-dlc|\$HOOK/) unit[d "/run.sh"] = 1
+    }
+    END { for (r in unit) if (!(substr(r, 1, length(r) - 7) in scrub)) print r }' | LC_ALL=C sort)"
   [ -n "$i10_fx" ] || return 0
   printf '%s\n' "$i10_fx" | tr '\n' '\0' | xargs -0 grep -LE 'unset "\$_v"|env -u AI_DLC' 2>/dev/null
 }
@@ -1483,11 +1517,21 @@ if [ -n "$i10_probe" ] && [ -d "$i10_probe" ]; then
   printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' 'bash "$HOOK"' > "$i10_probe/unset-loop/run.sh"
   printf '%s\n' 'env -u AI_DLC_MODEL_ROW bash "$HOOK"' > "$i10_probe/env-u/run.sh"
   printf '%s\n' 'echo "no hook here"' > "$i10_probe/hookless/run.sh"
+  mkdir "$i10_probe/liboff" "$i10_probe/libscrub" "$i10_probe/libcomment" "$i10_probe/libglob" "$i10_probe/libscrubcomment"
+  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/liboff/run.sh"
+  printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/liboff/lib.sh"
+  printf '%s\n' '. "$(dirname "$0")/lib.sh"' 'bash "$HOOK" </dev/null' > "$i10_probe/libscrub/run.sh"
+  printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' > "$i10_probe/libscrub/lib.sh"
+  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libcomment/run.sh"
+  printf '%s\n' '  # runs hooks/ai-dlc-x.sh' > "$i10_probe/libcomment/lib.sh"
+  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libglob/run.sh"
+  printf '%s\n' 'cp core/hooks/ai-dlc-*.sh "$T"' > "$i10_probe/libglob/lib.sh"
+  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libscrubcomment/run.sh"
+  printf '%s\n' '# unset "$_v"' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/libscrubcomment/lib.sh"
   i10_pgot="$(i10_unscrubbed "$i10_probe")"
-  i10_pwant="$i10_probe/unscrubbed/run.sh
-$i10_probe/varonly/run.sh"
+  i10_pwant="$(printf '%s\n' "$i10_probe/unscrubbed/run.sh" "$i10_probe/varonly/run.sh" "$i10_probe/liboff/run.sh" "$i10_probe/libscrubcomment/run.sh" | LC_ALL=C sort)"
   rm -rf "$i10_probe"
-  [ "$i10_pgot" = "$i10_pwant" ] || err "I10 hermeticity self-probe failed: over a seeded tree it reported [${i10_pgot}], want exactly [${i10_pwant}] -- the unscrubbed path-naming fixture and the unscrubbed \$HOOK-only fixture, and nothing else. The scan cannot be shown to fire, so its silence over core/fixtures/ below means nothing."
+  [ "$i10_pgot" = "$i10_pwant" ] || err "I10 hermeticity self-probe failed: over a seeded tree it reported [${i10_pgot}], want exactly [${i10_pwant}] -- the unscrubbed path-naming fixture, the unscrubbed \$HOOK-only fixture, the unscrubbed lib.sh-only invoker and the lib.sh invoker whose only scrub is a comment, and nothing else. The scan cannot be shown to fire, so its silence over core/fixtures/ below means nothing."
 else
   err "I10 could not create its probe directory, so neither direction of its hermeticity scan was proven this run."
 fi
