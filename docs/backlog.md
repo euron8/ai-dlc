@@ -452,13 +452,15 @@ verify: manual
 
 **NOTE.** Source: BL-783's contract adversary, batch 240, filed by lead ai-dlc-3f. Filed OPEN, not built; the same class as BL-783.
 
-`core/hooks/ai-dlc-acknowledge.sh:740-755` lets a LEAD (no agent id) Explore dispatch through while paused when four conditions hold: the call carries neither `name` nor `team_name`, its prompt is readable, its prompt cites no `team-roles/<role>.md`, and no agent definition named Explore shadows the built-in. `core/scripts/validate-steering-budget.sh` models none of it: `grep -c Explore core/scripts/validate-steering-budget.sh` returns 0 (control: `grep -c "Check B"` on the same file returns 11). Check B would therefore count such a dispatch after an operator message as a steamroll.
+`core/hooks/ai-dlc-acknowledge.sh:740-755` lets a LEAD (no agent id) Explore dispatch through while paused when four conditions hold: the call carries neither `name` nor `team_name`, its prompt is readable, its prompt cites no `team-roles/<role>.md`, and no agent definition named Explore shadows the built-in. Before the fix `core/scripts/validate-steering-budget.sh` modelled none of it: at 508062b5b, `grep -c Explore core/scripts/validate-steering-budget.sh` returned 0, with `grep -c "Check B"` on the same file returning 15 as the control (the 11 first recorded here was already stale). With the fix, the same two commands return 11 and 16. Check B therefore counted such a dispatch after an operator message as a steamroll.
 
 Measured on graph, read-only, over main-session transcripts since 2026-10-15T18:49:36Z: 168 sessions, 1600 Agent/Task tool_use blocks parsed (control), 0 lead Explore dispatches, so 0 after an operator message (`grep -l '"subagent_type":"Explore"' ~/.claude/projects/-Users-n8-git-graph/*.jsonl | wc -l` returns 1 file, which the window parse did not count, so it predates the window or sits in a non-main record). The defect is latent in the corpus, reachable by any lead that dispatches Explore.
 
 Owed: the four conditions need their own contract before a fix, and a validator change must bind to the hook's logic the way BL-783 binds to the hook's updater-session predicate, never restate it.
 
-verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.
+The receipt below drives Check B through `--count` on three seeded transcripts, each an operator message followed by one lead `Agent` dispatch with `subagent_type` `Explore`. It requires 0 for the allowed dispatch, 1 for the same dispatch carrying `"name": null`, and 1 for a prompt citing `team-roles/dev.md`. An empty count is exit 9.
+
+verify: sh d=$(mktemp -d) && o='{"type":"user","timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"hold on, change the plan please"}}' && c() { printf '%s\n%s\n' "$o" "{\"type\":\"assistant\",\"timestamp\":\"2026-07-04T10:00:05Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"Agent\",\"input\":{\"subagent_type\":\"Explore\",$1\"prompt\":\"$2\"}}]}}" > "$d/x.jsonl"; bash core/scripts/validate-steering-budget.sh --transcript "$d/x.jsonl" --count 2>/dev/null; } && a=$(c '' 'find where X is defined') && n=$(c '"name":null,' 'find where X is defined') && r=$(c '' 'read team-roles/dev.md, then find X') && { [ -n "$a" ] && [ -n "$n" ] && [ -n "$r" ] || exit 9; } && [ "$a$n$r" = 011 ]
 
 ## BL-792 — Check 5 accepts a could-not-run playwright row as a UI sprint's visual evidence
 

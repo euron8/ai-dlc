@@ -615,6 +615,39 @@ const isAdvancing = (b) => ADVANCING.has(b.name) ||
 const UPDATER_MARKER_ERE = String.raw`"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"`;
 // <<< I128 UPDATER MARKER ERE <<<
 const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");
+
+// A LEAD'S BUILT-IN Explore DISPATCH IS ALLOWED WHILE PAUSED, as the hook decides it
+// (acknowledge.sh's Explore allowance, the `Agent|Task)` arm after Check 2a), so it is not a
+// steamroll either -- and the hook's own deny text offers that dispatch to a paused lead. The
+// hook allows it when every conjunct holds; each is mirrored here, compared the way the hook does:
+//   - the tool is Agent or Task;
+//   - `subagent_type` is exactly "Explore" (the hook compares inside jq, so "explore",
+//     "Explore " and ["Explore"] are something else -- `===` refuses all three);
+//   - neither a `name` nor a `team_name` KEY is present. jq's `has()` is true for `"name": null`,
+//     so this tests the key with `in`, never the value's truthiness;
+//   - the prompt does not match the hook's team-roles ERE below. An absent prompt reads as "",
+//     as the hook's `// empty` does, and is allowed.
+// NOT RE-CHECKED: the empty agent_id -- Check B reads only non-sidechain records (the
+// `!r.isSidechain` filter where the transcript is read), which are the lead's own calls.
+// NOT MODELLED: `explore_shadowed`. When an agent definition named Explore exists the hook DENIES
+// the call, and a denied call is already acquitted by `denied`, so modelling it here would
+// change no count. Measured on graph: 0 agent definitions named Explore.
+// The ERE is the hook's, byte for byte, and vem I128 binds it to the `grep -qE '...' <<<
+// "$EXPLORE_PROMPT"` line of acknowledge.sh. A String.raw so the source bytes ARE the value; the
+// hook greps line by line and the pattern cannot cross a newline, so one test over the whole
+// prompt means what grep -qE means.
+// >>> I128 EXPLORE ROLE ERE: acknowledge.sh's Explore-prompt pattern, verbatim >>>
+const EXPLORE_ROLE_ERE = String.raw`team-roles/[a-z][a-z-]*\.md`;
+// <<< I128 EXPLORE ROLE ERE <<<
+const EXPLORE_ROLE_RE = new RegExp(EXPLORE_ROLE_ERE);
+const isPausedExploreAllowed = (b) => {
+  const input = b.input;
+  if (!(b.name === "Agent" || b.name === "Task")) return false;
+  if (!input || typeof input !== "object") return false;
+  if (input.subagent_type !== "Explore") return false;
+  if ("name" in input || "team_name" in input) return false;
+  return !EXPLORE_ROLE_RE.test(String(input.prompt ?? ""));
+};
 // The verdict of the LAST marker on one raw line, keyed as the hook's `case` keys it, by suffix:
 // 1 updater, 0 pipeline, null no marker. The hook greps every line, sidechain records included,
 // so this runs before the sidechain filter.
@@ -996,9 +1029,12 @@ for (const f of files) {
       // A DENIED advancing call is not a steamroll -- the lead tried and the hook
       // stopped it. Counting the attempt inverts the check's meaning: it reports
       // "executed straight through it" about a call that never executed.
-      // AND A CALL THE HOOK ALLOWS BECAUSE THIS IS AN UPDATER SESSION is not one either.
+      // AND A CALL THE HOOK ALLOWS BECAUSE THIS IS AN UPDATER SESSION is not one either, nor a
+      // lead Explore dispatch the hook allows while paused. That acquittal sits HERE, never in
+      // isAdvancing: Check C uses isAdvancing to reset a wait run, which is a different question.
       const adv = uses.filter(isAdvancing)
-        .find(b => !denied.has(b.id) && !inUpdaterSession(b, updBefore.get(rr)));
+        .find(b => !denied.has(b.id) && !inUpdaterSession(b, updBefore.get(rr)) &&
+                   !isPausedExploreAllowed(b));
       if (adv && !cleared) {
         steam.push({ f: path.basename(f), tool: adv.name, msg: txt.slice(0, 60).replace(/\n/g, " ") });
         break;
