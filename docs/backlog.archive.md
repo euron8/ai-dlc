@@ -37795,3 +37795,17 @@ Fix: under `--gate qa`, a PASS is refused unless the file (the merge: the first 
 Measured, read-only on graph, every committed `qa-validation*.md` across its refs (87 distinct blobs), `--check-serial --gate qa` against this distribution's qa.md: 62 PASS records refused `carries no 'Canonical run:' line` (no graph record writes the label; its qa.md predates it, so in the merge path those sets are LEGACY and unchanged), 23 NEEDS_REWORK accepted, 2 refused on the existing Check 1 count (unchanged). Corrected readings: s319 5.1 p1 is NEEDS_REWORK and is accepted (the fold's early-REJECT row). s319 1.5's PASS with its exemption re-spelled `Canonical run: none, <reason>` is ACCEPTED over `adb997beb..a3f2d402e` and `..f4e4533ee` (record-only), and the same file over a code-touching range is refused, so the defect was the missing exemption, as the fold says. Filter rule, on graph's `qa-validation*.md` blobs across all history (185; 38 carry a backticked pytest invocation on an honest-green or canonical line): with graph's conventions file 28 are accepted and 10 refused (6 name a file; 4 name an undeclared path, one `rebalancer` and three prose tokens the parser reads as paths). Without it 10 are accepted and 28 refused, 22 of them for a path, 18 of those the root `rebalancer/tests`, which graph's records use (27 invocations) and its conventions declare canonical, so the merge and `--check-serial` read `docs/coding-conventions.md` in the frozen worktree.
 
 verify: sh bash core/fixtures/review-shard-merge/receipt-bl769.sh core/scripts/merge-review-shards.sh
+## BL-771 — sprint-review.md §2's party fan-out cites the seats x parts axis but not the waves bound
+
+**LANDED (v0.916.0, verified 91bdf9a82).**
+
+**NOTE.** Source: batch 240, the graph watcher's read of `core/skills/ai-dlc/steps/sprint-review.md`. Filed and closed by the owner in the same release.
+
+At 5b5388924, `sprint-review.md` §2 (`:99-103`) cited only Rule 28's "Split dispatch" (the seats x parts axis) for the sprint-level party fan-out. The bound on that fan-out is the waves sentence at `_gate-procedures.md:421-423` and the Waves paragraph of `rule-bodies/rule-28.md:156`, which includes the rejected-spawn sentence. The batch's graph watcher read the step file alone and concluded the fan-out was unbounded. The lead ruled it a NOTE: the citation chain resolved, and the miss was a one-file grep.
+
+Fix (this release's tip): one sentence in §2 citing the waves sentence of `_gate-procedures.md` "Validation cycle" item 1 and Rule 28's Waves paragraph, and a `para` row `srev-waves-cite` in `core/fixtures/process-rule-pins/run.sh`, killed by its generated negate, relocate, fence and comment mutants.
+
+Receipt scores, measured on extracted copies: fix 0, sentence deleted 1, sentence moved into §3 1, sentence commented out 1, reworded with the same anchors 0, file absent 9. Re-scored at closing: 1 at 5b5388924, 0 at this release's tip.
+
+verify: sh f=core/skills/ai-dlc/steps/sprint-review.md; [ -f "$f" ] || exit 9; awk "BEGIN{g=sprintf(\"%c%c%c\",96,96,96)} /^### 2\. Sprint-Level Party Mode/{s=1;next} /^### 3\./{s=0} substr(\$0,1,3)==g{fe=!fe;next} fe||/<!--/{next} s&&/_gate-procedures\.md/&&/Validation cycle/&&/Rule 28/&&/Waves paragraph/{h=1} END{exit h?0:1}" "$f"
+

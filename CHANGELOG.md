@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.916.0] - 2026-10-22
+
+Batch 240, lead ai-dlc-3f, release R7. It closes BL-771, files BL-771, advances BL-699 and BL-616 as PARTIAL, and closes no `PC-` id. Net for this release: 1 closed, 1 filed = 0. Engine code a consumer runs from step 3 of the delivering pull: none. Step text changes: `core/skills/ai-dlc/steps/sprint-review.md`. Fixture changes: `core/fixtures/reconcile-emit-report`, the new shipping shard `core/fixtures/reconcile-emit-report-d`, `core/fixtures/reconcile-emit-report-b`, `core/fixtures/reconcile-emit-report-c`, `core/fixtures/process-rule-pins` and `core/fixtures/readset-skip`. Packaging: `scripts/uninstall.sh`, `core/skills/ai-dlc/core-manifest.md` and `core/skills/ai-dlc-update/fixture-manifest.md` name the new shard. Distribution-only: one comment line in `scripts/validate-enforcement-map.sh`.
+
+### BL-699 — the nine pcv_latarm arms run in a fourth reconcile-emit-report shard (PARTIAL; the entry stays open)
+
+The nine `pcv_latarm` arms (V17..V25) moved out of shard a's `pcache` phase into a new phase `pcvlat`, dealt to a new shipping shard `reconcile-emit-report-d` (`SHARDS="a b c d"`, `PHASES_d="pcvlat"`). The cache-arm helpers are hoisted to one definition above both phases, so nothing is duplicated. A new stray-verdict check, `pcv_unexpected`, makes an arm that writes a verdict in a phase whose id list does not read it FAIL; before, a `pcv_latarm` left behind in `pcache` wrote an `ok` that nothing read. It has a self-probe, a near-miss probe and a mutant. The `-d` dir declares shard a's tool list, because shard c's lacks `shasum`, which the engine's record hash needs in the sandbox. Packaging is in `uninstall.sh`, `core-manifest.md` and `fixture-manifest.md`. The `-b` and `-c` shard headers, which wrongly said they were named in `setup-sites.md`, now name `core-manifest.md` and ai-dlc-update's `fixture-manifest.md`, as the `-d` header does. Shard a ran rc=0 with 112 assertions and shard d rc=0 with 23, all nine ok, through `hermetic-run.sh`. A base-versus-tip comparison of the remaining ids' verdicts was not run. The entry's `verify:` line is now `verify: manual`, because the old structural receipt read as a close-candidate on an entry that is still open. Owed: whether the nine arms can share one record per world (b236-bl699-share), and the before/after durations, which are not measured here.
+
+### BL-616 — `ck_mut` names a dropped verdict when a readset-skip world moves (PARTIAL; the entry stays open)
+
+A forced dropped verdict reproduces `readset-skip-d`'s false RED. One seeded unit sending `kill -TERM $PPID` makes `pool_abort` exit 130 with no verdict, and with beta dropped the shipped `ck_mut` reads `moved worlds 'f l'`, the set graph reported. The lead candidate, the pool watcher's first poll after `sleep 1`, is ruled out: a forced 2 s stall moved 0 of 24 cells. On a FAIL, `ck_mut` now prints, for every moved world, the want and got vectors and that world's `no verdict recorded` / `produced a verdict` / `REFUSED` pool lines, so the next field red names a drop. The trigger of the drop is not established; three candidates are listed in the entry, and the live-trace watchdog's group TERM under pgid reuse is the first to test. No stall arm and no timing mutant were added, because no elapsed-time dependence exists. Items still owed: the drop's trigger, census item 8, the solo-against-pool receipts, census items 5 and 6, and the remaining unread `readset-skip` polls.
+
+### BL-771 — sprint-review.md section 2 cites the waves bound for the party fan-out
+
+Section 2 of the sprint-review step cited only Rule 28's "Split dispatch" for the sprint-level party fan-out, so a reader of the step file alone could conclude the fan-out was unbounded. It now carries one sentence citing the waves sentence of `_gate-procedures.md` "Validation cycle" item 1 and Rule 28's Waves paragraph. `core/fixtures/process-rule-pins` gains the `srev-waves-cite` row, killed by its generated negate, relocate, fence and comment mutants. The closing receipt is a plain `sh` body and scores 0 on the fix and non-zero on each of deletion, relocation into section 3 and commenting out.
+
 ## [0.915.0] - 2026-10-22
 
 Batch 240, lead ai-dlc-3f, release R6b. It files and closes BL-768 and BL-769 in the same release, closes no `PC-` id, and leaves the live backlog count unchanged. Net for this release: 2 closed, 2 filed = 0.

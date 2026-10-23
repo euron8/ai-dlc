@@ -30,10 +30,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # probe, because a shard that skipped them could report green against a harness that never ran.
 #
 # THE SHARD ARRIVES AS AN ARGUMENT (`--group b`), never from the environment: the pre-push runner
-# scrubs AI_DLC_*, and a fallback-to-'a' design would run shard 'a' three times. A run with no
+# scrubs AI_DLC_*, and a fallback-to-'a' design would run shard 'a' once per shard. A run with no
 # argument is shard 'a' -- which is what the pool globs for this directory -- and the sibling
-# directories `-b` and `-c` are drivers that run this file with their shard and exit 2 unless its
-# verdict line names that shard.
+# directories `-b`, `-c` and `-d` are drivers that run this file with their shard and exit 2 unless
+# its verdict line names that shard.
 #
 # THE COVERAGE JOIN (J0) runs in every shard before anything is seeded: the declared phase set is
 # derived from this file's own `if rer_phase` lines, every one must have its end marker, the lists
@@ -43,13 +43,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # exactly the phases its list names. The mutants live inside the phases, so they inherit the join.
 #
 # A PHASE'S HELPERS LIVE INSIDE THE PHASE, and nothing is shared between phases except what is
-# defined above them: the world guards, `ok`/`bad`, the seed variables and the shadowed-validator
-# consumer seed. That was checked by listing every name each phase defines and every line outside
-# it that reads one.
-SHARDS="a b c"
+# defined above them: the world guards, `ok`/`bad`, the seed variables, the shadowed-validator
+# consumer seed, and the cache arms' helpers (the "CACHE-ARM HELPERS" block above phase pcache),
+# which phases pcache and pcvlat both read. That was checked by listing every name each phase
+# defines and every line outside it that reads one.
+SHARDS="a b c d"
 PHASES_a="seeded b230 moved shadow b1b2 wg pcache"
 PHASES_b="vworlds1 vworlds2"
 PHASES_c="step3b sb"
+PHASES_d="pcvlat"
 GROUP=a
 case "${1:-}" in
   --group)
@@ -74,6 +76,21 @@ rer_partition_ok() {
   echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
   return 1
 }
+# rer_deal <declared file> -> 0 when the phases dealt across SHARDS (read from the PHASES_* shell
+# variables as they stand) cover <declared> exactly and no shard is dealt nothing; prints J0's
+# reason and returns 1 otherwise. One definition, read by J0 and by J0's declaration-text probe.
+rer_deal() {
+  local s l why
+  for s in $SHARDS; do eval "printf '%s\n' \${PHASES_$s:-}"; done | grep . > "$RER_JW/dealt"
+  if ! why="$(rer_partition_ok "$1" "$RER_JW/dealt")"; then
+    echo "the phase deal does not cover the declared phases exactly -- $why"; return 1
+  fi
+  for s in $SHARDS; do
+    eval "l=\"\${PHASES_$s:-}\""
+    [ -n "$l" ] || { echo "shard '$s' is declared and dealt no phases; an empty shard passes everything it never checked"; return 1; }
+  done
+  return 0
+}
 # The world-guard battery re-runs copies of this file in probe-only mode from a tree that carries no
 # sibling drivers; those copies exit before any phase, so the join has nothing to bind there.
 if [ -z "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
@@ -91,20 +108,33 @@ if rer_partition_ok "$RER_JW/pd" "$RER_JW/pdup" >/dev/null || rer_partition_ok "
 fi
 sed -n 's/^if rer_phase \([a-z0-9_]*\); then$/\1/p' "$RER_SELF" > "$RER_JW/declared"
 sed -n 's/^fi # end rer_phase \([a-z0-9_]*\)$/\1/p' "$RER_SELF" > "$RER_JW/ended"
-for _s in $SHARDS; do eval "printf '%s\n' \${PHASES_$_s:-}"; done | grep . > "$RER_JW/dealt"
 rer_ndecl="$(grep -c . "$RER_JW/declared")" || rer_ndecl=0
 rer_ndup="$(sort "$RER_JW/declared" | uniq -d | grep -c .)" || rer_ndup=0
 if [ "$rer_ndecl" -eq 0 ] || [ "$rer_ndup" -ne 0 ] || ! cmp -s "$RER_JW/declared" "$RER_JW/ended"; then
   echo "FIXTURE BROKEN: [J0] $rer_ndecl rer_phase blocks derived from $RER_SELF ($rer_ndup declared twice), or their end markers do not pair with them one for one" >&2
   rm -rf "$RER_JW"; exit 2
 fi
-if ! rer_why="$(rer_partition_ok "$RER_JW/declared" "$RER_JW/dealt")"; then
-  echo "FIXTURE BROKEN: [J0] the phase deal does not cover the declared phases exactly -- $rer_why" >&2
+# The live deal is checked FIRST, so a broken declaration is refused with its own reason rather than
+# as a probe whose unedited control failed.
+if ! rer_why="$(rer_deal "$RER_JW/declared")"; then
+  echo "FIXTURE BROKEN: [J0] $rer_why" >&2
+  rm -rf "$RER_JW"; exit 2
+fi
+# THE DEAL CHECK ALSO PROVES IT FIRES ON THE DECLARATION TEXT: the SHARDS= and
+# PHASES_*= lines are read off this file, PHASES_d is emptied in that copy, and rer_deal run over the
+# copy must refuse naming exactly PHASES_d's phases as dealt to no shard, while the unedited copy
+# passes. A shard whose list was emptied would otherwise run nothing and print PASS for it.
+rer_decl="$(sed -n -e '/^SHARDS="[a-z ]*"$/p' -e '/^PHASES_[a-z]="[a-z0-9_ ]*"$/p' "$RER_SELF")"
+rer_dslug="$(sed -n 's/^PHASES_d="\([a-z0-9_ ]*\)"$/\1/p' "$RER_SELF" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
+rer_dmut="$(printf '%s\n' "$rer_decl" | sed 's/^PHASES_d=".*"$/PHASES_d=""/')"
+rer_pmsg="$(eval "$rer_dmut"; rer_deal "$RER_JW/declared")" && rer_prc=0 || rer_prc=$?
+rer_cmsg="$(eval "$rer_decl"; rer_deal "$RER_JW/declared")" && rer_crc=0 || rer_crc=$?
+if [ -z "$rer_dslug" ] || [ "$rer_dmut" = "$rer_decl" ] || [ "$rer_crc" -ne 0 ] || [ "$rer_prc" -eq 0 ] \
+   || [ "$rer_pmsg" != "the phase deal does not cover the declared phases exactly -- dealt twice: {} dealt to no shard: {${rer_dslug% }} dealt but not declared: {}" ]; then
+  echo "FIXTURE BROKEN: [J0] the deal check's declaration-text probe did not discriminate: PHASES_d {${rer_dslug% }} emptied gave rc=$rer_prc [$rer_pmsg], the unedited text rc=$rer_crc [$rer_cmsg]" >&2
   rm -rf "$RER_JW"; exit 2
 fi
 for _s in $SHARDS; do
-  eval "_l=\"\${PHASES_$_s:-}\""
-  [ -n "$_l" ] || { echo "FIXTURE BROKEN: [J0] shard '$_s' is declared and dealt no phases; an empty shard passes everything it never checked" >&2; rm -rf "$RER_JW"; exit 2; }
   [ "$_s" = a ] && continue
   _drv="$HERE/../reconcile-emit-report-$_s/run.sh"
   # The driver must INVOKE this file with its shard as the argument. Comments are stripped whole-
@@ -3089,114 +3119,79 @@ fi # end rer_phase wg
 #
 # AN ENGINE WITHOUT THE CACHE (a consumer whose fixture arrived before its engine) prints SKIP and
 # no ok line: it is never green.
-if rer_phase pcache; then
+#
+# V17..V25 are NOT in this phase: they run in phase pcvlat (shard d), below it, through the helpers
+# hoisted into the block that follows.
+
+# ---- CACHE-ARM HELPERS: DEFINITIONS ONLY, read by phases pcache and pcvlat ----
+# Hoisted out of phase pcache so phase pcvlat (shard d) can call the same helpers: nothing here RUNS
+# at definition time. The run-time setup is pcv_setup, called at the top of each of the two phases.
+# Below the probe-only exit, so the world-guard battery's copies never reach this block.
 PCV_HITP='emit-report: accepted a recorded PASS ('
 PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V55"
-# THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
-# tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
-# (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
-PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
-PCV_R6=0
-if grep -qF "$PCV_R6MARK" "$EMIT"; then
-  PCV_R6=1
-  PCV_IDS="$PCV_IDS PC-V32 PC-V38 PC-V39 PC-V40 PC-V42"
-else
-  printf '  SKIP  PC-V32 PC-V38..PC-V40 PC-V42: %s carries no named recorded-PASS refusal, so the round-6 partition cannot be checked against it\n' "$EMIT"
-fi
-# THE ROUND-7 ARMS (the receipts field that replaced R4, V41 rewritten to assert it; the dist's linked
-# worktrees; the named directory refusal) need an engine that prints the directory refusal's cause.
-# V46 (an escaping `fixtures:` value) needs layer-drift.sh's own escape row as well, read from the
-# engine directory beside emit-report.sh. An engine without either prints SKIP and no ok line.
-PCV_R7MARK='a listed path is a directory (a nested work tree or an unignored worktree): '
-PCV_R7LDMARK='which escapes tests/fixtures/ (a .. component or a leading /)'
-PCV_TAB="$(printf '\t')"
-PCV_R7=0; PCV_R7LD=0; PCV_R7F=0; PCV_CI=0
-# THE ROUND-8 GATE (V48..V54). These arms need the read-log engine: emit-report.sh writes a version-2
-# record (`ai-dlc-verify-pass 2`) carrying consumer-read.sh's read log. The fixture and that engine CAN
-# arrive in different pulls (a fixture rides step 2 when it names a changed machinery path, while a
-# DEFERred or CARRYd engine slice lands in the gated apply), so the gate stays. It NEVER SKIPS: a
-# missing marker is a FAIL line per id, "round-8 gate marker absent", because a skipped round-8 arm is
-# the defect class itself. PCV_R8_FORCE=1 runs the arms against an engine without the marker; that is
-# how a red run on a pre-fix engine exercises them, and it is the only way the gate is bypassed.
-PCV_R8MARK='ai-dlc-verify-pass 2'
-PCV_R8IDS="PC-V48 PC-V49 PC-V50 PC-V51 PC-V53 PC-V54"
-# pcv_installed <emit> -- 0 in the INSTALLED layout. The layout is seed.sh's own decision (seed.sh:12
-# picks the dist path, :14 the installed one), read back off the EMIT it chose; never a walk for VERSION.
-# An installed tree whose engine predates a pin is a pre-migration state: PENDING, never a failure.
-pcv_installed() { case "$1" in */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) return 0 ;; esac; return 1; }
-pcv_r8gate() { # pcv_r8gate <emit> -- sets PCV_R7F and adds the round-8 ids; a FAIL line per id when absent
-  local i
-  if grep -qF "$PCV_R8MARK" "$1" || [ "${PCV_R8_FORCE:-}" = 1 ]; then
-    PCV_R7F=1; PCV_IDS="$PCV_IDS $PCV_R8IDS"
-    grep -qF "$PCV_R8MARK" "$1" || printf '  NOTE  PC-V48..PC-V54: PCV_R8_FORCE=1 runs the round-8 arms against %s, which carries no read-log record\n' "$1"
-  elif pcv_installed "$1"; then
-    printf 'PENDING: round-8 arms not run, engine lacks ai-dlc-verify-pass 2\n'
-  else
-    for i in $PCV_R8IDS; do bad "$i round-8 gate marker absent: $1 carries no '$PCV_R8MARK' record, so the round-8 arms cannot run against it (set PCV_R8_FORCE=1 to run them anyway)"; done
-  fi
+# pcv_setup -- the suite root, the bash the shim execs, the adjudication seed, and the cache never
+# opted out of by the caller's environment. Run at the top of each phase that runs cache arms.
+pcv_setup() {
+  PCV_ROOT="$WORK/pcache"; mkdir -p "$PCV_ROOT"
+  PCV_BASH="$(command -v bash)"
+  PCV_LAT_SEED="$HERE/../layer-adjudication-tier/seed.sh"
+  unset AI_DLC_VERIFY_NO_CACHE
 }
-# V42's TWO CALL-SITE MUTANTS pin the fixed engine's `cr_hash` lines in preclassify.sh and layer-drift.sh.
-# An engine without them is a pre-migration state on a consumer (PENDING, V42 not run, no FAIL) and a
-# broken pin in the distribution (V42 runs and FAILs naming the anchor). Never a fallback anchor: a mutant
-# scored against the old code scores a different subject.
-PCV_V42=1
-if [ "$PCV_R6" -eq 1 ] && pcv_installed "$EMIT" \
-   && { [ "$(grep -cF 'cr_hash "$CONS" "$1"' "$(dirname "$EMIT")/preclassify.sh")" != 1 ] \
-        || [ "$(grep -cF 'cr_hash "$CONSUMER" "$1"' "$(dirname "$EMIT")/layer-drift.sh")" != 1 ]; }; then
-  PCV_V42=0; PCV_IDS="$(printf '%s\n' $PCV_IDS | grep -vxF PC-V42 | tr '\n' ' ')"
-  printf 'PENDING: PC-V42 not run, engine lacks the cr_hash call sites its mutants pin\n'
-fi
-if [ "$PCV_R6" -eq 1 ] && grep -qF "$PCV_R7MARK" "$EMIT"; then
-  PCV_R7=1
-  PCV_IDS="$PCV_IDS PC-V41 PC-V44 PC-V45 PC-V47"
-  if grep -qF "$PCV_R7LDMARK" "$(dirname "$EMIT")/layer-drift.sh"; then
-    PCV_R7LD=1; PCV_IDS="$PCV_IDS PC-V46"
-  else
-    printf '  SKIP  PC-V46: %s carries no escape refusal for a fixtures: value, so the round-7 B4 arm cannot be checked against it\n' "$(dirname "$EMIT")/layer-drift.sh"
+# pcv_cache_engine <ids> -- 0 when $EMIT carries the recorded-PASS cache; otherwise prints the SKIP
+# line naming <ids> and returns 1. AN ENGINE WITHOUT THE CACHE (a consumer whose fixture arrived
+# before its engine) prints SKIP and no ok line: it is never green.
+pcv_cache_engine() {
+  grep -qF "$PCV_HITP" "$EMIT" && return 0
+  printf '  SKIP  %s: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$1" "$EMIT"
+  return 1
+}
+# pcv_shim -- the PATH shim at $PS_SHIM/bash that counts every detector launch into $PCV_COUNT.
+pcv_shim() {
+  mkdir -p "$PS_SHIM" || return 1
+  { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
+    && chmod +x "$PS_SHIM/bash"
+}
+# pcv_unexpected <verdicts> <ids> -- every id carrying a verdict line (`ok <id> ` or `FAIL <id> ` at
+# line start) that <ids> does not name, once each. An arm left in a phase whose list does not read it
+# writes a verdict nobody reads; this is what makes that state visible.
+pcv_unexpected() {
+  local id out=""
+  for id in $(sed -n -E 's/^(ok|FAIL) (PC-V[0-9]+)( .*)?$/\2/p' "$1" 2>/dev/null | sort -u); do
+    case " $2 " in *" $id "*) ;; *) out="$out $id" ;; esac
+  done
+  printf '%s\n' "${out# }"
+}
+# pcv_unexpected_probe <dir> -- 0 when pcv_unexpected names a seeded stray id (ok PC-V17 against a
+# list naming PC-V1, so a prefix match would acquit it) and stays quiet on the near-misses: the same
+# id indented or behind a DIAG prefix, and the same line against a list that names it.
+pcv_unexpected_probe() {
+  mkdir -p "$1" || return 1
+  printf 'ok PC-V1 a\nok PC-V17 stray\nFAIL PC-V2 b\n' > "$1/offender"
+  printf 'ok PC-V1 a\n  ok    PC-V17 indented\n  DIAG  pcache ship.log | ok PC-V17 diag\nFAIL PC-V2 b\n' > "$1/nearmiss"
+  [ "$(pcv_unexpected "$1/offender" "PC-V1 PC-V2")" = "PC-V17" ] \
+    && [ -z "$(pcv_unexpected "$1/nearmiss" "PC-V1 PC-V2")" ] \
+    && [ -z "$(pcv_unexpected "$1/offender" "PC-V1 PC-V2 PC-V17")" ]
+}
+# pcv_read_ids <verdicts> <ids> <phase> -- one ok/bad per id in <ids> (ok line -> ok, FAIL line -> bad,
+# no line -> bad), then a bad for every verdict id <ids> does not name. The stray check proves it
+# can fire before it reads the corpus.
+pcv_read_ids() {
+  local _id _l _u
+  for _id in $2; do
+    _l="$(grep -m1 -E "^(ok|FAIL) $_id " "$1" 2>/dev/null)"
+    case "$_l" in
+      "ok $_id "*)   ok "${_l#ok }" ;;
+      "FAIL $_id "*) bad "${_l#FAIL }" ;;
+      *)             bad "$_id produced no verdict -- the suite stopped before reaching it" ;;
+    esac
+  done
+  if ! pcv_unexpected_probe "$(dirname "$1")/unexpected-probe"; then
+    bad "FIXTURE BROKEN: [$3] the stray-verdict check did not name a seeded stray id, or named a near-miss, so its silence below would prove nothing"
   fi
-else
-  printf '  SKIP  PC-V41 PC-V44..PC-V47: %s carries no named directory refusal, so the round-7 partition cannot be checked against it\n' "$EMIT"
-fi
-# The round-8 gate sits OUTSIDE the round-7 one, so an engine without the round-7 marker cannot carry the
-# round-8 ids into a SKIP: they FAIL by name, or run.
-pcv_r8gate "$EMIT"
-if [ "$PCV_R7F" -eq 1 ]; then
-  # PC-V52 (round-8 B4) needs a CASE-INSENSITIVE filesystem where the worlds are built: measured here,
-  # beside the suite root. A case-sensitive one prints SKIP and no ok line, never a pass.
-  _pci="$WORK/pcv-case-probe"
-  if mkdir -p "$_pci" && : > "$_pci/CaseR8" && [ -e "$_pci/caser8" ]; then
-    PCV_CI=1; PCV_IDS="$PCV_IDS PC-V52"
-  else
-    printf '  SKIP  PC-V52: the filesystem under %s is case-sensitive, so the round-8 B4 case-variant receipt cannot be built\n' "$WORK"
-  fi
-fi
-# THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
-# reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
-# such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
-PCV_OLD_SHA=2875c7adfc82324c204f66e651fcd166f6e33655
-PCV_OLD_ENG=""
-_pr="$HERE"
-while [ -n "$_pr" ] && [ "$_pr" != / ]; do
-  if [ -e "$_pr/.git" ] && [ -f "$_pr/core/skills/ai-dlc-update/reconcile/emit-report.sh" ]; then break; fi
-  _pr="$(dirname "$_pr")"
-done
-if [ -n "$_pr" ] && [ "$_pr" != / ] && git -C "$_pr" cat-file -e "${PCV_OLD_SHA}^{commit}" 2>/dev/null; then
-  _po="$WORK/pcache-old-engine"; mkdir -p "$_po"
-  git -C "$_pr" ls-tree --name-only "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/" > "$_po.list" 2>/dev/null
-  _pn=0; _pt="$(grep -c . "$_po.list")" || _pt=0
-  while IFS= read -r _pf; do
-    git -C "$_pr" show "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/${_pf}" > "$_po/$_pf" 2>/dev/null && _pn=$((_pn+1))
-  done < "$_po.list"
-  if [ "$_pt" -gt 0 ] && [ "$_pn" -eq "$_pt" ] && [ -f "$_po/emit-report.sh" ] && ! grep -qF "$PCV_HITP" "$_po/emit-report.sh"; then
-    PCV_OLD_ENG="$_po/emit-report.sh"
-  fi
-fi
-PCV_ROOT="$WORK/pcache"; mkdir -p "$PCV_ROOT"
-PCV_BASH="$(command -v bash)"
-PCV_LAT_SEED="$HERE/../layer-adjudication-tier/seed.sh"
-unset AI_DLC_VERIFY_NO_CACHE
-
+  for _u in $(pcv_unexpected "$1" "$2"); do
+    bad "$_u wrote a verdict in phase $3, whose id list does not read it -- an arm runs in a phase that never scores it"
+  done
+}
 pcv_v() { printf 'ok %s %s\n' "$1" "$2" >> "$PS_D/verdicts"; }
 pcv_x() { printf 'FAIL %s %s\n' "$1" "$2" >> "$PS_D/verdicts"; }
 pcv_why() { printf 'rc=%s hit=%s detector-launches=%s' "$PRC" "$PHIT" "$PN"; }
@@ -3380,6 +3375,108 @@ pcv_latarm() {
   fi
   return 0
 }
+if rer_phase pcache; then
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V55"
+# THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
+# tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
+# (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
+PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
+PCV_R6=0
+if grep -qF "$PCV_R6MARK" "$EMIT"; then
+  PCV_R6=1
+  PCV_IDS="$PCV_IDS PC-V32 PC-V38 PC-V39 PC-V40 PC-V42"
+else
+  printf '  SKIP  PC-V32 PC-V38..PC-V40 PC-V42: %s carries no named recorded-PASS refusal, so the round-6 partition cannot be checked against it\n' "$EMIT"
+fi
+# THE ROUND-7 ARMS (the receipts field that replaced R4, V41 rewritten to assert it; the dist's linked
+# worktrees; the named directory refusal) need an engine that prints the directory refusal's cause.
+# V46 (an escaping `fixtures:` value) needs layer-drift.sh's own escape row as well, read from the
+# engine directory beside emit-report.sh. An engine without either prints SKIP and no ok line.
+PCV_R7MARK='a listed path is a directory (a nested work tree or an unignored worktree): '
+PCV_R7LDMARK='which escapes tests/fixtures/ (a .. component or a leading /)'
+PCV_TAB="$(printf '\t')"
+PCV_R7=0; PCV_R7LD=0; PCV_R7F=0; PCV_CI=0
+# THE ROUND-8 GATE (V48..V54). These arms need the read-log engine: emit-report.sh writes a version-2
+# record (`ai-dlc-verify-pass 2`) carrying consumer-read.sh's read log. The fixture and that engine CAN
+# arrive in different pulls (a fixture rides step 2 when it names a changed machinery path, while a
+# DEFERred or CARRYd engine slice lands in the gated apply), so the gate stays. It NEVER SKIPS: a
+# missing marker is a FAIL line per id, "round-8 gate marker absent", because a skipped round-8 arm is
+# the defect class itself. PCV_R8_FORCE=1 runs the arms against an engine without the marker; that is
+# how a red run on a pre-fix engine exercises them, and it is the only way the gate is bypassed.
+PCV_R8MARK='ai-dlc-verify-pass 2'
+PCV_R8IDS="PC-V48 PC-V49 PC-V50 PC-V51 PC-V53 PC-V54"
+# pcv_installed <emit> -- 0 in the INSTALLED layout. The layout is seed.sh's own decision (seed.sh:12
+# picks the dist path, :14 the installed one), read back off the EMIT it chose; never a walk for VERSION.
+# An installed tree whose engine predates a pin is a pre-migration state: PENDING, never a failure.
+pcv_installed() { case "$1" in */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) return 0 ;; esac; return 1; }
+pcv_r8gate() { # pcv_r8gate <emit> -- sets PCV_R7F and adds the round-8 ids; a FAIL line per id when absent
+  local i
+  if grep -qF "$PCV_R8MARK" "$1" || [ "${PCV_R8_FORCE:-}" = 1 ]; then
+    PCV_R7F=1; PCV_IDS="$PCV_IDS $PCV_R8IDS"
+    grep -qF "$PCV_R8MARK" "$1" || printf '  NOTE  PC-V48..PC-V54: PCV_R8_FORCE=1 runs the round-8 arms against %s, which carries no read-log record\n' "$1"
+  elif pcv_installed "$1"; then
+    printf 'PENDING: round-8 arms not run, engine lacks ai-dlc-verify-pass 2\n'
+  else
+    for i in $PCV_R8IDS; do bad "$i round-8 gate marker absent: $1 carries no '$PCV_R8MARK' record, so the round-8 arms cannot run against it (set PCV_R8_FORCE=1 to run them anyway)"; done
+  fi
+}
+# V42's TWO CALL-SITE MUTANTS pin the fixed engine's `cr_hash` lines in preclassify.sh and layer-drift.sh.
+# An engine without them is a pre-migration state on a consumer (PENDING, V42 not run, no FAIL) and a
+# broken pin in the distribution (V42 runs and FAILs naming the anchor). Never a fallback anchor: a mutant
+# scored against the old code scores a different subject.
+PCV_V42=1
+if [ "$PCV_R6" -eq 1 ] && pcv_installed "$EMIT" \
+   && { [ "$(grep -cF 'cr_hash "$CONS" "$1"' "$(dirname "$EMIT")/preclassify.sh")" != 1 ] \
+        || [ "$(grep -cF 'cr_hash "$CONSUMER" "$1"' "$(dirname "$EMIT")/layer-drift.sh")" != 1 ]; }; then
+  PCV_V42=0; PCV_IDS="$(printf '%s\n' $PCV_IDS | grep -vxF PC-V42 | tr '\n' ' ')"
+  printf 'PENDING: PC-V42 not run, engine lacks the cr_hash call sites its mutants pin\n'
+fi
+if [ "$PCV_R6" -eq 1 ] && grep -qF "$PCV_R7MARK" "$EMIT"; then
+  PCV_R7=1
+  PCV_IDS="$PCV_IDS PC-V41 PC-V44 PC-V45 PC-V47"
+  if grep -qF "$PCV_R7LDMARK" "$(dirname "$EMIT")/layer-drift.sh"; then
+    PCV_R7LD=1; PCV_IDS="$PCV_IDS PC-V46"
+  else
+    printf '  SKIP  PC-V46: %s carries no escape refusal for a fixtures: value, so the round-7 B4 arm cannot be checked against it\n' "$(dirname "$EMIT")/layer-drift.sh"
+  fi
+else
+  printf '  SKIP  PC-V41 PC-V44..PC-V47: %s carries no named directory refusal, so the round-7 partition cannot be checked against it\n' "$EMIT"
+fi
+# The round-8 gate sits OUTSIDE the round-7 one, so an engine without the round-7 marker cannot carry the
+# round-8 ids into a SKIP: they FAIL by name, or run.
+pcv_r8gate "$EMIT"
+if [ "$PCV_R7F" -eq 1 ]; then
+  # PC-V52 (round-8 B4) needs a CASE-INSENSITIVE filesystem where the worlds are built: measured here,
+  # beside the suite root. A case-sensitive one prints SKIP and no ok line, never a pass.
+  _pci="$WORK/pcv-case-probe"
+  if mkdir -p "$_pci" && : > "$_pci/CaseR8" && [ -e "$_pci/caser8" ]; then
+    PCV_CI=1; PCV_IDS="$PCV_IDS PC-V52"
+  else
+    printf '  SKIP  PC-V52: the filesystem under %s is case-sensitive, so the round-8 B4 case-variant receipt cannot be built\n' "$WORK"
+  fi
+fi
+# THE PRE-CACHE ENGINE for V26, extracted from this checkout's history into a scratch dir, every file of
+# reconcile/ at 2875c7ad. The root is found by walking up for `.git` beside the engine; a tree with no
+# such history (a consumer, a hermetic sandbox) leaves PCV_OLD_ENG empty and V26 says which comparison it made.
+PCV_OLD_SHA=2875c7adfc82324c204f66e651fcd166f6e33655
+PCV_OLD_ENG=""
+_pr="$HERE"
+while [ -n "$_pr" ] && [ "$_pr" != / ]; do
+  if [ -e "$_pr/.git" ] && [ -f "$_pr/core/skills/ai-dlc-update/reconcile/emit-report.sh" ]; then break; fi
+  _pr="$(dirname "$_pr")"
+done
+if [ -n "$_pr" ] && [ "$_pr" != / ] && git -C "$_pr" cat-file -e "${PCV_OLD_SHA}^{commit}" 2>/dev/null; then
+  _po="$WORK/pcache-old-engine"; mkdir -p "$_po"
+  git -C "$_pr" ls-tree --name-only "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/" > "$_po.list" 2>/dev/null
+  _pn=0; _pt="$(grep -c . "$_po.list")" || _pt=0
+  while IFS= read -r _pf; do
+    git -C "$_pr" show "${PCV_OLD_SHA}:core/skills/ai-dlc-update/reconcile/${_pf}" > "$_po/$_pf" 2>/dev/null && _pn=$((_pn+1))
+  done < "$_po.list"
+  if [ "$_pt" -gt 0 ] && [ "$_pn" -eq "$_pt" ] && [ -f "$_po/emit-report.sh" ] && ! grep -qF "$PCV_HITP" "$_po/emit-report.sh"; then
+    PCV_OLD_ENG="$_po/emit-report.sh"
+  fi
+fi
+pcv_setup
 
 # ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
 # One seed for five arms (each a seed of its own would multiply this phase's cost). Every arm opens
@@ -4522,8 +4619,7 @@ pcv_in() { # pcv_in <id>... -- 0 when the suite has no scope, or its scope names
 pcv_suite() {
   PS_E="$1"; PS_D="$2"; PS_SHIM="$2/shim"; PCV_ENG=""; PS_S="${3:-}"
   mkdir -p "$PS_SHIM" && : > "$PS_D/verdicts" || return 1
-  { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
-    && chmod +x "$PS_SHIM/bash" || { pcv_x PC-V0 "FIXTURE BROKEN: could not write the PATH shim"; return 1; }
+  pcv_shim || { pcv_x PC-V0 "FIXTURE BROKEN: could not write the PATH shim"; return 1; }
 
   # ---- the main world ----
   # The dist is a BARE MIRROR of a copy of the seeded dist (the cache refuses a non-bare dist, R1);
@@ -4606,8 +4702,9 @@ pcv_suite() {
   fi
   fi # end pcv_in PC-V3 PC-V9
 
-  # ---- V4..V31 but V10, with V40/V41: one group, because each arm opens on the state the arm before it left ----
-  if pcv_in PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V26 PC-V40 PC-V41 PC-V15 PC-V16 PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; then
+  # ---- V4..V16 and V26..V31, with V40/V41: one group, because each arm opens on the state the arm before it left ----
+  # V17..V25 are not here: each seeds its own world (pcv_latarm), so they run in phase pcvlat, shard d.
+  if pcv_in PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V26 PC-V40 PC-V41 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; then
   # ---- V4 / V11 / V12 / V13: consumer changes the region does not see, each a miss at exit 0 ----
   if ! pcv_ctl v4; then pcv_noctl PC-V4; else
     printf 'v4 changed\n' > "$PC_C/notes/pc-v4.txt"; pcm v4
@@ -4836,24 +4933,9 @@ pcv_suite() {
     fi
   fi
 
-  # ---- V17..V20: inputs the render reads that a key can miss, each in its own adjudication world ----
-  # Each world is layer-adjudication-tier's seed (a git top level whose render carries an adjudicable
-  # extension). The change is chosen so the FRESH render really differs: each arm asserts the cached
-  # run is a fresh render with a NON-ZERO exit equal to an AI_DLC_VERIFY_NO_CACHE=1 run on the same
-  # tree, so an arm whose change the render cannot see fails here rather than passing vacuously.
-  pcv_latarm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
-  pcv_latarm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
-  pcv_latarm PC-V19 v19 "a TRACKED file's chmod under core.filemode=false, which git status cannot see,"
-  pcv_latarm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
-  pcv_latarm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
-  pcv_latarm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
-  pcv_latarm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
-  pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
-  pcv_latarm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
-
   # ---- V27..V31: inputs the key REFUSES or keys after a fourth review, in ONE shared world ----
   pcv_kworld
-  fi # end pcv_in V4..V31 but V10, with V40/V41
+  fi # end pcv_in V4..V16 and V26..V31, with V40/V41
 
   # ---- V32..V36: a fifth review's key gaps, two worlds of their own ----
   # Each world is seeded fresh by its own pcv_lat, so each is its own group.
@@ -4978,6 +5060,8 @@ pcv_want() { case "$1" in M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V55" ;; 
 # the same-run control: V9 on M-region, V3 on M-exit3. WHAT THIS GIVES UP: an arm outside a mutant's
 # groups can no longer show up in its kill set, so a change that would entangle such an arm (the
 # V17..V20 ordering hazard noted in pcv_latarm) is not caught by the scoring; no declared kill is lost.
+# V17..V25 are outside every mutant's reach entirely: they run in phase pcvlat (shard d), against the
+# shipping engine only.
 # The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, k5, r6, b2 and r7 worlds) hold
 # no declared kill, so no mutant runs them; the shipping suite still runs every one.
 pcv_scope() {
@@ -5004,8 +5088,7 @@ pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
 }
 PCV_MUTS="M-region M-direxcl M-exit3"
 
-if ! grep -qF "$PCV_HITP" "$EMIT"; then
-  printf '  SKIP  PC-V0..PC-V54: %s carries no recorded-PASS cache, so this engine predates BL-679 and no cache arm can be checked against it\n' "$EMIT"
+if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
   mkdir -p "$PCV_ROOT/ship"
   ( pcv_suite "$EMIT" "$PCV_ROOT/ship" ) > "$PCV_ROOT/ship.log" 2>&1 &
@@ -5036,14 +5119,7 @@ else
     fi
   done
   wait
-  for _id in $PCV_IDS; do
-    _l="$(grep -m1 -E "^(ok|FAIL) $_id " "$PCV_ROOT/ship/verdicts" 2>/dev/null)"
-    case "$_l" in
-      "ok $_id "*)   ok "${_l#ok }" ;;
-      "FAIL $_id "*) bad "${_l#FAIL }" ;;
-      *)             bad "$_id produced no verdict -- the suite stopped before reaching it" ;;
-    esac
-  done
+  pcv_read_ids "$PCV_ROOT/ship/verdicts" "$PCV_IDS" pcache
   if grep -q '^FAIL ' "$PCV_ROOT/ship/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/ship.log" ]; then
     awk 'NR <= 20 { print "  DIAG  pcache ship.log | " $0 }' "$PCV_ROOT/ship.log"
   fi
@@ -5073,6 +5149,42 @@ else
   done
 fi
 fi # end rer_phase pcache
+
+# --- V17..V25: inputs the render reads that a key can miss, each in its own adjudication world ---
+# Phase pcvlat, shard d. Each world is layer-adjudication-tier's seed (a git top level whose render
+# carries an adjudicable extension), built FRESH by pcv_latarm's own pcv_lat, so no arm reads the main
+# world or the state another arm left: that is why they could leave pcache's ordered group. The
+# change is chosen so the FRESH render really differs: each arm asserts the cached run is a fresh
+# render with a NON-ZERO exit equal to an AI_DLC_VERIFY_NO_CACHE=1 run on the same tree, so an arm
+# whose change the render cannot see fails here rather than passing vacuously. They run against the
+# shipping engine only; no mutant's kill set names them. Verdicts are read by pcv_read_ids, the
+# same rule as pcache's, over exactly PCV_LAT_IDS, and a verdict for any other id is a FAIL.
+if rer_phase pcvlat; then
+pcv_setup
+PCV_LAT_IDS="PC-V17 PC-V18 PC-V19 PC-V20 PC-V21 PC-V22 PC-V23 PC-V24 PC-V25"
+if pcv_cache_engine "PC-V17..PC-V25"; then
+  PS_E="$EMIT"; PS_D="$PCV_ROOT/lat"; PS_SHIM="$PS_D/shim"; PCV_ENG=""
+  if mkdir -p "$PS_D" && : > "$PS_D/verdicts" && pcv_shim; then
+    (
+      pcv_latarm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
+      pcv_latarm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
+      pcv_latarm PC-V19 v19 "a TRACKED file's chmod under core.filemode=false, which git status cannot see,"
+      pcv_latarm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
+      pcv_latarm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
+      pcv_latarm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
+      pcv_latarm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
+      pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
+      pcv_latarm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
+    ) > "$PCV_ROOT/lat.log" 2>&1
+    pcv_read_ids "$PS_D/verdicts" "$PCV_LAT_IDS" pcvlat
+    if grep -q '^FAIL ' "$PS_D/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/lat.log" ]; then
+      awk 'NR <= 20 { print "  DIAG  pcvlat lat.log | " $0 }' "$PCV_ROOT/lat.log"
+    fi
+  else
+    bad "FIXTURE BROKEN: [pcvlat] could not create $PS_D, its verdicts file, or the PATH shim, so V17..V25 cannot run"
+  fi
+fi
+fi # end rer_phase pcvlat
 
 # J1: the SET of phases entered equals this shard's list AS DECLARED IN THIS FILE'S TEXT, and no
 # phase dealt to another shard was entered. A count off the loop variable cannot see a shard whose
