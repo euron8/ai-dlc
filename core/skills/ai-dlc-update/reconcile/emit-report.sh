@@ -1832,6 +1832,10 @@ er_key() {
   # and no detector reads.
   if [ -n "$_er_dotgit" ]; then
     : > "$_er_tmp/key.nested" || return 1
+    # The `.git` list is STAGED and the loop reads the file (BL-360, `er_stage`): a failed write
+    # is a named refusal, never an empty list that accepts every nested repository.
+    er_stage key.dotgit "$_er_dotgit" 2>/dev/null \
+      || { er_refuse "B6 the nested-repository list could not be staged, so no nested repository was classified"; return 1; }
     while IFS= read -r p; do
       p="${p#./}"; p="${p%/.git}"
       while IFS= read -r r; do
@@ -1841,7 +1845,7 @@ er_key() {
         case "$r/" in "$p/"*) er_refuse "B6 the nested repository '$p' contains the read root '$r', which every git listing skips"; return 1 ;; esac
       done < "$_er_tmp/key.r2roots"
       printf '%s/\0' "$p" >> "$_er_tmp/key.nested" || return 1
-    done <<< "$_er_dotgit"
+    done < "$_er_tmp/key.dotgit"
     # The exit code decides NOTHING about which path is ignored: `--stdin` exits 0 when ANY input
     # matched and 1 when none did. Only a status other than those (128, an error) is read, as a named
     # refusal, never as "none ignored" or "all ignored". That arm has no probe: no consumer state
