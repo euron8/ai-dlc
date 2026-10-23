@@ -117,6 +117,8 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
    PASS-by-default.** For each escalated check, cite the `file:line`, command output, or
    artifact state that settles it — on a PASS as much as a FAIL. An unjustified PASS is the
    exact failure the escalation exists to prevent.
+   A FAIL on a check you could evaluate is complete only when that check's comparison surface
+   is exhausted, not when the first deviation settles it.
 
 5. **A check you cannot evaluate is `FAIL`, with the reason as evidence.** If an artifact you
    need is missing, unreadable, or the check is ambiguous against what you were given, you

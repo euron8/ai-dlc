@@ -472,7 +472,7 @@ verify: manual — the subject is a review, not a code state; it closes when the
 
 One sentence for `core/team-roles/gate-adjudicator.md:116-118` (the rule that every verdict is PASS or FAIL with evidence): a FAIL is complete only when the check's comparison surface is exhausted, not when one deviation settles it. It would cover every `adjudication: llm` check, where BL-765 covers Check 9 alone.
 
-verify: manual — the sentence is prose with no mechanical predicate.
+verify: sh f=core/team-roles/gate-adjudicator.md; grep -qF "comparison surface" "$f" && grep -qF "exhausted" "$f" && grep -qF "could evaluate" "$f"
 
 
 ## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
