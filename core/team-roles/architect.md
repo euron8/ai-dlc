@@ -120,6 +120,14 @@ value moves and its text does not. A rebind that keys no literal says so, with t
 showed it. `stories-test-strategy.md` `## Rename Verification` owns finding a rename's
 references, and this contract owns pricing a re-target.
 
+**An ADR probe keyed on a literal this repository writes cites its producer.** An ADR
+verification probe that filters on, or compares against, a literal a component of this
+repository writes carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha>
+-- <producing file>`, whose recorded output is the producing line, or names the literal's
+external source; `pm.md` turns an unrun ADR probe into an acceptance criterion, so the fence
+travels with it into the story. `validate-artifact-derivations.sh` owns the fence
+grammar.
+
 ## A fold architecture dispatch — run the skill, then write its provenance block
 
 When `bug-investigation.md` §4 dispatches you over a folded bug-fix story, it names

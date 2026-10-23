@@ -498,6 +498,16 @@ Owed: the four conditions need their own contract before a fix, and a validator 
 
 verify: manual — the fix needs its own contract; the allowance is not yet modelled by any predicate to test.
 
+## BL-787 — a discharge predicate can filter on a literal no component of this repository writes
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319, the one recording that the role files let a discharge predicate quote a literal no producer wrote.
+
+Story 1.3's deferred-AC predicate D-2 filtered `WHERE trigger = 'organic'` (graph `docs/reviews/s319/1-3-qa-validation-p2.md:87`), while `rebalancer/execution.py` writes `trigger="manual_offramp"` and never `trigger="organic"`. A predicate keyed on a value nothing writes can never match, so the deferral it discharges was unverifiable from the moment it was written, and no role file asked anyone to check the literal against its producer.
+
+Built: `core/team-roles/qa.md`'s **Deferred-AC discharge predicate (HARD GATE).** item now requires a predicate that filters on, or compares against, a literal a component of this repository writes to carry a `derived` fence pinned to the go-signal sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, and makes a literal written nowhere at that sha REJECT unless the predicate names its external source or asserts the literal's absence; the item's Catches / false positive / remove-when sentences cover it. `core/team-roles/pm.md`'s probabilistic-AC bullet has PM, who writes the AC before the producer exists, name the AC of this story that requires the literal, with the fence owed at gate 2, and routes an external literal to the existing "Verify the field name, type, and unit against the real source first" sentence. `core/team-roles/architect.md`'s evidence contract gains a paragraph putting the same fence on an ADR verification probe keyed on such a literal, citing `validate-artifact-derivations.sh` for the grammar. `process-rule-pins` pins all three (pred-lit-qa, pred-lit-pm, pred-lit-arch) and carries a named mutant softening the REJECT to a note.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl787.sh
+
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Not built.

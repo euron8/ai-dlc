@@ -248,17 +248,28 @@ For each completed task, verify:
   test, query, or observable, and the step at which it is checked (e.g. a
   named smoke probe at deploy-validate, a query returning a stated result).
   A bare "deferred" / "verify after deploy" with no citable discharge
-  predicate is REJECT: it is an untracked hole, not a deferral. QA records
+  predicate is REJECT: it is an untracked hole, not a deferral. A discharge
+  predicate that filters on, or compares against, a literal a component of
+  this repository writes (a column value, enum member, event name, UI label,
+  status string) carries a `derived` fence pinned to the go-signal sha,
+  `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded
+  output is the producing line.
+  A literal this repository writes nowhere at that sha is REJECT, unless the
+  predicate names its external source (a third-party API, a config file, an
+  operator action, a PR body) or asserts the literal's absence. QA records
   each deferred AC's predicate in the validation verdict so a later step can
   mechanically confirm it; the closing writer — a `code-reviewer` the lead
   dispatches after gate 3 — copies those AC ids into the story's
   `deferred_acs` in `sprint-status.yaml` at `done` (`code-reviewer.md` "As the
   Closing Writer"),
   which is how `sprint-status.sh close` sees them still owed. Catches a deferred AC that no step is bound to
-  re-check, so it silently never gets verified; false positive is an AC
-  whose discharge is genuinely a single named check already scheduled (cite
-  it); remove when deferred ACs carry a machine-checked discharge reference
-  by convention.
+  re-check, so it silently never gets verified, and a predicate filtering on
+  a literal no component writes, so it can never match; false positive is an
+  AC whose discharge is genuinely a single named check already scheduled (cite
+  it), or a literal only a system outside this repository writes (name that
+  source); remove when deferred ACs carry a machine-checked discharge
+  reference by convention and a predicate's literals are checked against
+  their producer mechanically.
 - [ ] Tests exist and pass for the new functionality
 - [ ] No regressions (full test suite passes)
 - [ ] **Honest-green canonical profile (HARD GATE).** QA's independent

@@ -117,6 +117,13 @@
 #     phrase on ONE line, and not on the `- **I --` line itself, which opens the span). Section 4g
 #     binds the window size the item STATES to the hook's `ADVISOR_GATE_WINDOW` default, so the
 #     prose cannot drift from the hook it names.
+#   - a discharge predicate that filters on a literal a component of this repository writes carries
+#     a sha-pinned `derived` fence citing the producing line, and a literal written nowhere at that
+#     sha is REJECT unless the predicate names its external source (qa.md Validation Checklist,
+#     pred-lit-qa); pm.md names the AC requiring the literal and leaves the fence owed at gate 2
+#     (pred-lit-pm); an ADR probe keyed on such a literal carries the same fence (architect.md
+#     evidence contract, pred-lit-arch). pred-lit-qa and pred-lit-pm are line-mode `contains` pins:
+#     keep each phrase on ONE line. The named mutant softens the REJECT to a note.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -502,6 +509,9 @@ hand-gaps-rule24|S|rule-bodies/rule-24.md||**Excluded.**|## Gaps|contains
 hand-design-role|R|ux.md||## Escalation|## Design decisions|contains
 hand-design-step|S|steps/ui-direction.md||### 5.|## Design decisions|contains
 r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it returns.|the window of `ai-dlc-advisor-gate.sh` (`ADVISOR_GATE_WINDOW`|contains
+pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains
+pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains
+pred-lit-arch|R|architect.md|## The evidence contract|## A fold architecture dispatch|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
 PINS
 }
 
@@ -964,6 +974,7 @@ impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**
 impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route|A story already dispatched keeps its route, rework included|A story already dispatched is re-evaluated at rework
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`|is absent or `false` and|is absent and
 sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing tag|or whose owned paths are capital-path or high-blast-radius|contains||, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`.|.
+pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -989,7 +1000,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 4 ] || bad "named: $n_named named mutant(s) read, wanted 4"
+[ "$n_named" -eq 5 ] || bad "named: $n_named named mutant(s) read, wanted 5"
 
 # --- 4b. a join over seat or cross files passes --complete -----------------------
 # A seat or cross shard writes its file early and is finished only at its final `seat-complete:`
