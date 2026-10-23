@@ -3251,53 +3251,73 @@ pcv_lat_approve() { # pcv_lat_approve <tag> -- render at the full base sha and w
 }
 PCV_HOOKREG='scripts/ai-dlc/validate-hook-registration.sh'
 PCV_QEXT='.claude/skills/ai-dlc/extensions/q"x.md'
-# ---- V55: a TRACKED file in the report's OWN directory, read only by a cr_run program ----
-# The one input only the work-tree git fields key. The consumer's validate-hook-registration.sh runs
-# through cr_run (emit-report.sh, the consumer-copy branch), which logs `x` and none of the program's
-# reads; the file is tracked, so consignored (ignored files only) does not cover it; so conswork's
-# `ls-files -m`, which excludes exactly the report FILE, is the only field that sees it change. This is
-# M-direxcl's subject: widening that exclusion to the report's DIRECTORY hides it, and the change rides
-# the record. Directions: the world records and HITS; the change MISSES with the opt-out's exit, which
-# is non-zero because the region prints the program's output (a world where it is 0 is BROKEN).
+# ---- V55 (round-9 B2): the CONSUMER'S OWN validate-hook-registration.sh runs, and the record REFUSES ----
+# THEIRS ships no validator, so emit-report.sh's second branch runs the consumer's copy through cr_run:
+# arbitrary consumer code whose reads nothing records. The fix logs `!` there, so no PASS is recorded
+# from a render that ran it. The V56 shape: the copy at 644 (the third branch, NOT CHECKED) records and
+# HITS -- the near miss; then chmod 755, so the second branch runs, and the report re-approved so the
+# fresh render exits 0 exactly as the opt-out does. The cached run must then be that fresh exit-0
+# render, leave the 644 record BYTE-IDENTICAL, and name the cause on stderr through the armed
+# record-time line; a second run renders fresh again. A key that did not refuse re-records there and
+# the second run HITS.
+# (This world used to be M-direxcl's subject, a tracked file read only through this carrier. The
+# carrier now refuses, so that subject is gone: PC-V63 is M-direxcl's subject now.)
+PCV_RECWHY='emit-report: recorded PASS not recorded: '
 pcv_v55world() {
-  local f="_bmad-output/ai-dlc-update/r8-hookreg.txt" rc hit n nc
+  local rc hit n nc rec
   PCV_ENVPRE=""
   pcv_lat v55 || { pcv_x PC-V55 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
   if git -C "$L_D" cat-file -e "${L_T}:core/scripts/validate-hook-registration.sh" 2>/dev/null; then
-    pcv_x PC-V55 "FIXTURE BROKEN: theirs ships validate-hook-registration.sh, so the consumer's copy (the cr_run carrier) never runs"; return 0
+    pcv_x PC-V55 "FIXTURE BROKEN: theirs ships validate-hook-registration.sh, so the consumer's copy never runs"; return 0
   fi
-  mkdir -p "$L_C/scripts/ai-dlc" "$L_C/_bmad-output/ai-dlc-update" \
-    && printf '#!/bin/bash\n# reads through its --root argument, never its cwd: engines differ in where they run it from\nr=.; while [ "$#" -gt 0 ]; do case "$1" in --root) r="${2:-.}"; shift 2 ;; *) shift ;; esac; done\ncat "$r/%s"\n' "$f" > "$L_C/$PCV_HOOKREG" && chmod 755 "$L_C/$PCV_HOOKREG" \
-    && printf 'HOOKREG-R8-one\n' > "$L_C/$f" \
-    && { git -C "$L_C" add -- "$PCV_HOOKREG" "$f" && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm v55; } >/dev/null 2>&1 \
-    || { pcv_x PC-V55 "FIXTURE BROKEN: could not commit the carrier and the tracked file"; return 0; }
-  if [ "$(dirname "$L_R")" != "$L_C/$(dirname "$f")" ] || ! git -C "$L_C" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
-    pcv_x PC-V55 "FIXTURE BROKEN: $f is not a tracked file in the report's own directory"; return 0
-  fi
-  # THE CARRIER IS CWD-INDEPENDENT: run once from a directory that is NOT the consumer root (the
-  # pre-fix engine runs it from the caller's cwd, the fixed one from the root), it still prints the
-  # tracked file's bytes through --root.
-  mkdir -p "$PS_D/v55-elsewhere" && [ "$(cd "$PS_D/v55-elsewhere" && pwd -P)" != "$(cd "$L_C" && pwd -P)" ] \
-    && grep -q 'HOOKREG-R8-one' <<< "$( cd "$PS_D/v55-elsewhere" && "$PCV_BASH" "$L_C/$PCV_HOOKREG" --root "$L_C" 2>&1 )" \
-    || { pcv_x PC-V55 "FIXTURE BROKEN: the carrier run from a cwd other than the consumer root, with --root, did not print the tracked file's bytes"; return 0; }
-  if ! pcv_lat_approve v55 || ! grep -q 'HOOKREG-R8-one' "$PS_D/region-v55.md"; then
-    pcv_x PC-V55 "FIXTURE BROKEN: the approval does not carry the tracked file's bytes, so the cr_run carrier did not run"; return 0
+  mkdir -p "$L_C/scripts/ai-dlc" \
+    && printf '#!/bin/bash\necho HOOKREG-R9-CONSUMER-COPY\n' > "$L_C/$PCV_HOOKREG" && chmod 644 "$L_C/$PCV_HOOKREG" \
+    && { git -C "$L_C" add -- "$PCV_HOOKREG" && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm v55; } >/dev/null 2>&1 \
+    || { pcv_x PC-V55 "FIXTURE BROKEN: could not commit the consumer's validator copy at 644"; return 0; }
+  if ! pcv_lat_approve v55 || grep -q 'HOOKREG-R9-CONSUMER-COPY' "$PS_D/region-v55.md"; then
+    pcv_x PC-V55 "FIXTURE BROKEN: the 644 approval rendered no region, or already carries the copy's output (so the copy ran at 644)"; return 0
   fi
   pcv_run v55r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
-  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then pcv_x PC-V55 "control: the carrier world did not record ($(pcv_why))"; return 0; fi
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then pcv_x PC-V55 "near miss: the copy at 644 did not record ($(pcv_why))"; return 0; fi
   pcv_run v55c "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
-  if ! pcv_is_hit v55c "$L_REC"; then pcv_x PC-V55 "control: the unchanged carrier world did not HIT ($(pcv_why))"; return 0; fi
-  printf 'HOOKREG-R8-two\n' > "$L_C/$f"
+  if ! pcv_is_hit v55c "$L_REC"; then pcv_x PC-V55 "near miss: the copy at 644 recorded but did not HIT ($(pcv_why))"; return 0; fi
+  cp "$L_REC" "$PS_D/v55rec.keep"
+  chmod 755 "$L_C/$PCV_HOOKREG"
+  if ! pcv_lat_approve v55x || ! grep -q 'HOOKREG-R9-CONSUMER-COPY' "$PS_D/region-v55x.md"; then
+    pcv_x PC-V55 "FIXTURE BROKEN: at 755 the approval does not carry the copy's output, so the consumer's copy did not run"; return 0
+  fi
   pcv_run v55 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; rc="$PRC"; hit="$PHIT"; n="$PN"
   pcv_run v55.n "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; nc="$PRC"; PRC="$rc"; PHIT="$hit"; PN="$n"
-  if [ "$nc" -eq 0 ]; then
-    pcv_x PC-V55 "FIXTURE BROKEN: the opt-out exits 0 after the tracked file changed, so the region does not print the carrier's output"
-  elif pcv_is_miss "$nc"; then
-    pcv_v PC-V55 "a TRACKED file in the report's own directory, read only by the consumer's hook validator through cr_run, records and HITS, and a change to it MISSES with the opt-out's exit $nc"
+  rec=REWRITTEN; cmp -s "$L_REC" "$PS_D/v55rec.keep" && rec=unchanged
+  local w1="$(pcv_why)"
+  pcv_run v55b "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if [ "$nc" -ne 0 ]; then
+    pcv_x PC-V55 "FIXTURE BROKEN: the opt-out render at 755, after the re-approval, exits $nc, so this is not the exit-0 path that records"
+  elif [ "$rc" -eq 0 ] && [ "$hit" -eq 0 ] && [ "$n" -gt 0 ] && [ "$rec" = unchanged ] && cmp -s "$L_REC" "$PS_D/v55rec.keep" \
+       && grep -qF "${PCV_RECWHY}" "$PS_D/v55.err" && grep -qF 'consumer-validator' <<< "$(grep -F "${PCV_RECWHY}" "$PS_D/v55.err")" \
+       && pcv_is_miss 0; then
+    pcv_v PC-V55 "the consumer's own validator at 755 (THEIRS ships none) renders fresh with the opt-out's exit 0, leaves the 644 record untouched, names the consumer-validator refusal on stderr, and renders fresh again; the same copy at 644 records and HITS"
   else
-    pcv_x PC-V55 "a change to a TRACKED file in the report's directory, read only through cr_run, did not force a fresh render: [$(pcv_why), opt-out $nc] -- the work-tree fields exclude more than the report file"
+    pcv_x PC-V55 "the consumer's own validator ran: first [$w1, record $rec, stderr: $(grep -F "$PCV_RECWHY" "$PS_D/v55.err" | sed -n 1p)], second [$(pcv_why)], opt-out $nc (want two fresh exit-0 renders, the record untouched, the consumer-validator cause named)"
   fi
   return 0
+}
+# ---- V18/V19's subject: a file whose -x a LOGGED reader tests (preclassify's mode_at_theirs) ----
+# pcv_latmode <tag> -- adds core/scripts/r9-mode.sh at mode 100755 in a new THEIRS commit (on a ref, so
+# V22's dist prune keeps it), and the consumer's scripts/ai-dlc/r9-mode.sh with the same bytes at 644.
+# The add is an `A` row whose consumer copy equals theirs, so preclassify's mode_at_theirs tests the
+# copy's -x through pc_ctest (logged): at 644 the bucket is UPSTREAM-ONLY-ADD, at 755 ALREADY-PRESENT.
+pcv_latmode() {
+  local ix="$PS_D/$1-mode.idx" bl tr c
+  GIT_INDEX_FILE="$ix" git -C "$L_D" read-tree "$L_T" >/dev/null 2>&1 \
+    && bl="$(printf '#!/bin/sh\necho r9-mode\n' | git -C "$L_D" hash-object -w --stdin)" \
+    && GIT_INDEX_FILE="$ix" git -C "$L_D" update-index --add --cacheinfo 100755 "$bl" core/scripts/r9-mode.sh >/dev/null 2>&1 \
+    && tr="$(GIT_INDEX_FILE="$ix" git -C "$L_D" write-tree)" \
+    && c="$(git -C "$L_D" -c user.email=f@f -c user.name=fixture commit-tree "$tr" -p "$L_T" -m r9-mode)" \
+    && git -C "$L_D" update-ref refs/heads/r9-mode "$c" >/dev/null 2>&1 \
+    && mkdir -p "$L_C/scripts/ai-dlc" && printf '#!/bin/sh\necho r9-mode\n' > "$L_C/scripts/ai-dlc/r9-mode.sh" \
+    && chmod 644 "$L_C/scripts/ai-dlc/r9-mode.sh" || return 1
+  L_T="$c"
 }
 # pcv_latarm <id> <tag> <description> -- seed, approve, record, HIT control, change, then a MISS whose exit
 # equals an opt-out render of the same tree and is non-zero (so the change is one the render sees).
@@ -3310,9 +3330,8 @@ pcv_latarm() {
     # V24: approved and recorded under a UTF-8 collation, verified under LC_ALL=C, where the render's
     # sorted lists come out in another order.
     v24) PCV_ENVPRE="-u LC_ALL LANG=en_US.UTF-8" ;;
-    # V19: the hook-registration shim at 644, committed under core.filemode=false below.
-    v19) mkdir -p "$L_C/scripts/ai-dlc"
-         printf '#!/bin/bash\necho "HOOKREG-SHIM-RAN"\n' > "$L_C/$PCV_HOOKREG"; chmod 644 "$L_C/$PCV_HOOKREG" ;;
+    # V19: scripts/ai-dlc/r9-mode.sh at 644 (pcv_latmode), committed under core.filemode=false below.
+    v19) pcv_latmode v19 || { pcv_x "$id" "FIXTURE BROKEN: could not add the mode-checked theirs file and its consumer copy"; return 0; } ;;
   esac
   if [ "$t" = v19 ]; then
     git -C "$L_C" config core.filemode false
@@ -3327,7 +3346,7 @@ pcv_latarm() {
     pcv_x "$id" "control: the unchanged world did not record [$rec] and then hit [$ctl], so a miss after the change would prove nothing"; return 0
   fi
   case "$t" in
-    v19) chmod 755 "$L_C/$PCV_HOOKREG" ;;
+    v19) chmod 755 "$L_C/scripts/ai-dlc/r9-mode.sh" ;;
     v24) PCV_ENVPRE="LC_ALL=C" ;;
   esac
   # The cached run goes FIRST: an opt-out run before it would, under M-exit3, record the changed tree
@@ -3380,7 +3399,7 @@ pcv_garm() {
     v20) b2="$(git -C "$L_D" rev-parse --short "$L_B" 2>/dev/null)"
          [ -n "$b2" ] && [ "$b2" != "$L_B" ] || { pcv_x "$id" "FIXTURE BROKEN: no short spelling distinct from the full base sha"; return 0; } ;;
     v17) pcv_g17 nohooks ;;
-    v18) chmod 755 "$L_C/$PCV_HOOKREG" ;;
+    v18) chmod 755 "$L_C/scripts/ai-dlc/r9-mode.sh" ;;
     v23) git -C "$L_D" config core.abbrev 20 >/dev/null 2>&1 ;;
     v21) git -C "$L_C" prune --expire=now >/dev/null 2>&1
          ! git -C "$L_C" cat-file -e "$G_DC" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling consumer commit in place"; return 0; } ;;
@@ -3394,7 +3413,7 @@ pcv_garm() {
   PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
   case "$t" in
     v17) pcv_g17 hooks ;;
-    v18) chmod 644 "$L_C/$PCV_HOOKREG" ;;
+    v18) chmod 644 "$L_C/scripts/ai-dlc/r9-mode.sh" ;;
     v23) git -C "$L_D" config --unset core.abbrev >/dev/null 2>&1 ;;
     v21) s="$(git -C "$L_C" hash-object -t commit -w "$PS_D/grp-dc.commit" 2>/dev/null)"
          [ "$s" = "$G_DC" ] || undo="the saved bytes of the pruned consumer commit did not re-write to its sha" ;;
@@ -3440,10 +3459,11 @@ pcv_latgrp() {
     && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$G_DC" > "$ovr/demo-c.md" \
     && printf -- '---\nshadows: steps/demo.md\nbase_sha: %s\n---\n\nbody\n' "$G_DD" > "$ovr/demo-d.md" \
     || { pcv_grpx "FIXTURE BROKEN: could not write the two overrides"; return 0; }
-  # V17: an UNTRACKED extension whose name carries a double quote. V18: an untracked hook-registration shim at 644.
+  # V17: an UNTRACKED extension whose name carries a double quote. V18: an untracked
+  # scripts/ai-dlc/r9-mode.sh at 644 whose -x preclassify's mode_at_theirs tests (pcv_latmode, which
+  # moves L_T to a theirs adding core/scripts/r9-mode.sh at 100755).
   pcv_g17 hooks
-  mkdir -p "$L_C/scripts/ai-dlc" && printf '#!/bin/bash\necho "HOOKREG-SHIM-RAN"\n' > "$L_C/$PCV_HOOKREG" && chmod 644 "$L_C/$PCV_HOOKREG" \
-    || { pcv_grpx "FIXTURE BROKEN: could not write the V17 extension or the V18 shim"; return 0; }
+  pcv_latmode grp || { pcv_grpx "FIXTURE BROKEN: could not write the V17 extension or the V18 mode-checked file"; return 0; }
   # V23: a fixture core DELETED on a side branch, which the render names by an ABBREVIATED sha.
   wt="$PS_D/grp/wt"
   { git -C "$L_D" worktree add -q --detach "$wt" "$L_B" \
@@ -3460,7 +3480,7 @@ pcv_latgrp() {
   fi
   pcv_garm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
   pcv_garm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
-  pcv_garm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/validate-hook-registration.sh going 644 to 755, a bit the render reads,"
+  pcv_garm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/r9-mode.sh going 644 to 755, a bit preclassify's mode_at_theirs reads through the read log,"
   pcv_garm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
   pcv_garm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
   pcv_garm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
@@ -3468,7 +3488,7 @@ pcv_latgrp() {
   return 0
 }
 if rer_phase pcache; then
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V55"
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V63"
 # THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
 # tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
 # (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
@@ -3585,6 +3605,22 @@ if [ -n "$_pr" ] && [ "$_pr" != / ] && git -C "$_pr" cat-file -e "${PCV_OLD_SHA}
   if [ "$_pt" -gt 0 ] && [ "$_pn" -eq "$_pt" ] && [ -f "$_po/emit-report.sh" ] && ! grep -qF "$PCV_HITP" "$_po/emit-report.sh"; then
     PCV_OLD_ENG="$_po/emit-report.sh"
   fi
+fi
+# THE ROUND-9 ARMS (BL-685: V55 rewritten as the consumer-validator refusal, V59..V62) need the engine
+# that names a record-time refusal (`recorded PASS not recorded: `) and records THEIRS' validator reads
+# (cr_run_reads). An INSTALLED engine without both is a pre-migration state (PENDING, not run); in the
+# distribution they always run, so an engine without the fixes FAILS them by name. They also need THEIRS'
+# validator, the tree's own validate-hook-registration.sh, found beside this fixture in either layout
+# (core/scripts/ here, scripts/ai-dlc/ on a consumer); found in neither, V59..V62 FAIL as FIXTURE BROKEN.
+PCV_R10=0
+PCV_HRV=""
+for _h in "$HERE/../../scripts/validate-hook-registration.sh" "$HERE/../../../scripts/ai-dlc/validate-hook-registration.sh"; do
+  if [ -f "$_h" ]; then PCV_HRV="$(cd "$(dirname "$_h")" && pwd)/validate-hook-registration.sh"; break; fi
+done
+if { grep -qF 'recorded PASS not recorded: ' "$EMIT" && grep -qF 'cr_run_reads' "$EMIT"; } || ! pcv_installed "$EMIT"; then
+  PCV_R10=1; PCV_IDS="$PCV_IDS PC-V55 PC-V59 PC-V60 PC-V61 PC-V62"
+else
+  printf 'PENDING: PC-V55 PC-V59..PC-V62 not run, engine lacks the record-time refusal line or cr_run_reads\n'
 fi
 pcv_setup
 
@@ -4158,6 +4194,267 @@ pcv_r9world() {
       pcv_x PC-V58 "sha256 tool answers garbage [$why, refusal $a, stderr: $(grep -F "$PCV_R6MARK" "$PS_D/v58.err" | sed -n 1p)]; near miss with the real shasum [$nm, ok $nmok, then hit $hok] (want a fresh exit-0 render, record untouched, the bad digest named for a field, and a keyed near miss)"
     fi
     pcv_back
+  fi
+  return 0
+}
+
+# ---- V59..V62: the round-9 BLOCKERs (BL-685), in ONE adjudication world whose THEIRS ships the validator ----
+# THEIRS gains core/scripts/validate-hook-registration.sh, the tree's own copy (PCV_HRV), so the render
+# runs it through cr_run_reads and keys the read list it records. The consumer carries a tracked
+# .claude/settings.json and an IGNORED core/skills/ai-dlc-update/reconcile/settings-merge.sh -- the
+# validator's first candidate, outside every consignored read root, so the recorded list is the ONLY
+# field that can see it. Every sub-arm opens with a HIT control on the restored world (pcv_kctl) and
+# puts the record back after it (pcv_kback).
+#   V59 (B1)  the ignored settings-merge.sh's pattern edited after the record MISSES with the opt-out's
+#             exit; then MIXED ENGINES (c): a THEIRS whose validator carries no recorder writes no list,
+#             so the render is fresh with the opt-out's exit 0, the record untouched, `reads-list` named.
+#   V60 (B3)  HEAD detached onto an unreferenced commit (refs and status unchanged) MISSES; a `shallow`
+#             file written MISSES; an UNBORN clone records and HITS, and its symbolic-ref moved MISSES.
+#   V61 (B4)  CLAUDE_PROJECT_DIR, a name on a non-comment line of THEIRS' validator (so in the derived
+#             set), changed after the record MISSES and then HITS its own re-record; near miss: R9FOO,
+#             a name nothing reads, HITS.
+#   V62       ONE armed run with CLAUDE_CODE_MESSAGING_TOKEN=<marker>, with the engine's key directory
+#             kept (an `rm` shim that refuses only that one directory, under a TMPDIR of its own):
+#             the marker is in NO file under that directory and not in the record. Positive control:
+#             a GIT_* variable's marker, which the env field keys by name and value, IS there. The
+#             control is a GIT_* name rather than a derived one so that M-b4 (the derived set emptied)
+#             kills V61 alone; the arm's own mutant is M-secret.
+pcv_hrv_norec() { # pcv_hrv_norec <out> -- PCV_HRV with the read recorder block removed (an older THEIRS)
+  awk '/^# --- THE READ RECORDER/ { s = 1 } !s { print } /^# --- end recorder/ { s = 0 }' "$PCV_HRV" > "$1" \
+    && ! cmp -s "$PCV_HRV" "$1" && ! grep -q 'HOOKREG_READS_OUT' "$1" && grep -q 'merge_candidates' "$1"
+}
+pcv_r9addhrv() { # pcv_r9addhrv <validator file> -- prints a commit on L_T's tree carrying it at core/scripts/
+  local ix="$PS_D/r9k-$$-$RANDOM.idx" bl tr
+  GIT_INDEX_FILE="$ix" git -C "$L_D" read-tree "$L_T" >/dev/null 2>&1 \
+    && bl="$(git -C "$L_D" hash-object -w -- "$1")" \
+    && GIT_INDEX_FILE="$ix" git -C "$L_D" update-index --add --cacheinfo 100755 "$bl" core/scripts/validate-hook-registration.sh >/dev/null 2>&1 \
+    && tr="$(GIT_INDEX_FILE="$ix" git -C "$L_D" write-tree)" \
+    && git -C "$L_D" -c user.email=f@f -c user.name=fixture commit-tree "$tr" -p "$L_T" -m r9-hookreg
+}
+# pcv_r9kmiss <id> <tag> <description> -- the cached run MISSES with the opt-out's exit; FAIL and 1 if not.
+pcv_r9kmiss() {
+  pcv_kstep "$2"
+  pcv_is_miss "$K_NC" && return 0
+  pcv_x "$1" "$3 did not force a fresh render: [$(pcv_why)], opt-out exits $K_NC -- a recorded PASS answered for an input it never keyed"
+  return 1
+}
+pcv_r9kworld() {
+  local ids="PC-V59 PC-V60 PC-V61 PC-V62" p sm="core/skills/ai-dlc-update/reconcile/settings-merge.sh" tn to gd br c
+  local ex ok why td mk mk2 kd n op
+  if [ -z "$PCV_HRV" ]; then for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: validate-hook-registration.sh was found in neither layout beside this fixture, so THEIRS cannot ship it"; done; return 0; fi
+  pcv_lat r9k || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  tn="$(pcv_r9addhrv "$PCV_HRV")" && [ -n "$tn" ] && git -C "$L_D" update-ref refs/heads/r9-hookreg "$tn" >/dev/null 2>&1 \
+    || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: could not commit the validator into a THEIRS"; done; return 0; }
+  L_T="$tn"
+  ex="$L_C/.git/info/exclude"
+  mkdir -p "$L_C/.git/info" "$L_C/$(dirname "$sm")" \
+    && printf '/core/\n' >> "$ex" \
+    && printf '#!/bin/bash\n# fixture stand-in: the ownership test is the line the validator extracts\n  ($c | test("/\\\\.claude/hooks/%s-[^/]+\\\\.sh")) or\n' ai-dlc > "$L_C/$sm" \
+    && printf '{\n  "hooks": {}\n}\n' > "$L_C/.claude/settings.json" \
+    && { git -C "$L_C" add -- .claude/settings.json && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm r9k; } >/dev/null 2>&1 \
+    || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: could not seed the settings file and the ignored settings-merge.sh"; done; return 0; }
+  if ! git -C "$L_C" check-ignore -q -- "$sm" || ! pcv_lat_approve r9k \
+     || ! grep -qF "pattern (from $sm)" "$PS_D/region-r9k.md"; then
+    for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: $sm is not ignored, or the approval does not show THEIRS' validator reading it (no 'pattern (from $sm)' line)"; done; return 0
+  fi
+  pcv_run r9k.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    for p in $ids; do pcv_x "$p" "control: the world whose THEIRS ships the recording validator did not render and record ($(pcv_why); stderr: $(sed -n 1p "$PS_D/r9k.r.err"))"; done; return 0
+  fi
+
+  # V59 (B1), first half: the ignored settings-merge.sh's extracted pattern changes. The pattern is
+  # printed into the region, so the opt-out exits non-zero.
+  local v59a=0
+  if pcv_kctl PC-V59; then
+    cp "$L_C/$sm" "$PS_D/r9k-sm.keep"
+    sed 's#ai-dlc-\[^/\]+#ai-dlc-[^/]*#' "$PS_D/r9k-sm.keep" > "$L_C/$sm"
+    if cmp -s "$PS_D/r9k-sm.keep" "$L_C/$sm"; then pcv_x PC-V59 "FIXTURE BROKEN: the settings-merge.sh pattern edit changed nothing"
+    else
+      pcv_kstep r9k59
+      if [ "$K_NC" -eq 0 ]; then pcv_x PC-V59 "FIXTURE BROKEN: the opt-out render after the settings-merge.sh edit exits 0, so the region does not print the pattern"
+      elif pcv_is_miss "$K_NC"; then v59a=1
+      else pcv_x PC-V59 "an IGNORED settings-merge.sh that THEIRS' validator read, edited after the record, did not force a fresh render: [$(pcv_why)], opt-out $K_NC -- the validator's own reads are not keyed"; fi
+    fi
+    cat "$PS_D/r9k-sm.keep" > "$L_C/$sm"; pcv_kback
+  fi
+
+  # V61 (B4): the near miss first, against the kept record.
+  # The derived name is CLAUDE_PROJECT_DIR, which THEIRS' validator reads on a non-comment line (its
+  # root fallback): the set takes names from validate-hook-registration.sh at THEIRS. Checked on the
+  # file THEIRS ships, through a here-string (a `grep -q` fed by a pipe answers EPIPE under pipefail).
+  local hv
+  if pcv_kctl PC-V61; then
+    hv="$(grep -v '^[[:space:]]*#' "$PCV_HRV" 2>/dev/null)" || hv=""
+    if ! grep -qF 'CLAUDE_PROJECT_DIR' <<< "$hv" || grep -qF 'R9FOO' <<< "$hv"; then
+      pcv_x PC-V61 "FIXTURE BROKEN: no non-comment line of THEIRS' validator names CLAUDE_PROJECT_DIR (or one names R9FOO), so the derived and non-derived names are not told apart"
+    else
+      PCV_ENVPRE="R9FOO=r9-near"; pcv_run r9k61nm "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; PCV_ENVPRE=""
+      if ! pcv_is_hit r9k61nm "$L_REC"; then
+        pcv_x PC-V61 "near miss: R9FOO, a variable no closure line names, set after the record did not HIT ($(pcv_why)) -- the env field keys more than the derived set"
+      else
+        PCV_ENVPRE="CLAUDE_PROJECT_DIR=$PS_D/r9-claude-project-dir"
+        if pcv_r9kmiss PC-V61 r9k61 "CLAUDE_PROJECT_DIR, a derived-set name, changed after the record,"; then
+          pcv_run r9k61h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+          if pcv_is_hit r9k61h "$L_REC"; then
+            pcv_v PC-V61 "CLAUDE_PROJECT_DIR changed after the record MISSES with the opt-out's exit $K_NC and then HITS its own re-record; R9FOO, a name no closure line reads, HITS the original record"
+          else
+            pcv_x PC-V61 "CLAUDE_PROJECT_DIR changed after the record missed, but the same value did not HIT the record it wrote ($(pcv_why))"
+          fi
+        fi
+        PCV_ENVPRE=""
+      fi
+    fi
+    pcv_kback
+  fi
+
+  # V62: the secret arm.
+  if pcv_kctl PC-V62; then
+    td="$PS_D/r9k-secret-tmp"; kd="$PS_D/r9k-secret-rm"; mk="R9SECRET-$$-$RANDOM-MARK"; mk2="R9KEYED-$$-$RANDOM-MARK"
+    mkdir -p "$td" "$kd" \
+      && printf '#!/bin/sh\nfor a in "$@"; do case "$a" in "$PCV_KEEPTMP"/emit-report.??????) exit 0 ;; esac; done\nexec %s "$@"\n' "$(command -v rm)" > "$kd/rm" && chmod +x "$kd/rm"
+    op="$PATH"; PATH="$kd:$PATH"
+    PCV_ENVPRE="TMPDIR=$td PCV_KEEPTMP=$td CLAUDE_CODE_MESSAGING_TOKEN=$mk GIT_R9_SECRET_CTL=$mk2"
+    pcv_run r9k62 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; why="$(pcv_why)"
+    PCV_ENVPRE=""; PATH="$op"
+    n="$(find "$td" -maxdepth 1 -type d -name 'emit-report.*' | grep -c .)" || n=0
+    if [ "$n" -lt 1 ] || [ -z "$(find "$td" -name key.f.env)" ]; then
+      pcv_x PC-V62 "FIXTURE BROKEN: the engine's key directory did not survive under $td ($n kept, run [$why]), so a grep of it would prove nothing"
+    elif ! grep -rqF -- "$mk2" "$td"; then
+      pcv_x PC-V62 "positive control: GIT_R9_SECRET_CTL's marker, a variable the env field keys by name and value, is in no file under the kept key directory, so the grep cannot see a keyed value [$why]"
+    elif grep -rqF -- "$mk" "$td" || grep -qF -- "$mk" "$L_REC"; then
+      pcv_x PC-V62 "CLAUDE_CODE_MESSAGING_TOKEN's value was written to $(grep -rlF -- "$mk" "$td" "$L_REC" | sed -n 1p) -- the recorded-PASS key carries a secret [$why]"
+    else
+      pcv_v PC-V62 "an armed run with CLAUDE_CODE_MESSAGING_TOKEN set writes its value to no file under the kept key directory and not to the record, while a keyed GIT_* variable's value is there"
+    fi
+    pcv_kback
+  fi
+
+  # V60 (B3): detached HEAD, then a shallow file, then the unborn clone.
+  ok=1; why=""
+  if pcv_kctl PC-V60; then
+    br="$(git -C "$L_C" symbolic-ref -q HEAD)"
+    c="$(git -C "$L_C" -c user.email=f@f -c user.name=fixture commit-tree 'HEAD^{tree}' -p HEAD -m r9-detached 2>/dev/null)"
+    git -C "$L_C" for-each-ref > "$PS_D/r9k-refs0" 2>&1; git -C "$L_C" status --porcelain > "$PS_D/r9k-st0" 2>&1
+    if [ -z "$br" ] || [ -z "$c" ] || ! git -C "$L_C" update-ref --no-deref HEAD "$c" >/dev/null 2>&1; then ok=0; why="$why detached:FIXTURE-BROKEN[no branch, or no unreferenced commit to detach onto]"
+    else
+      git -C "$L_C" for-each-ref > "$PS_D/r9k-refs1" 2>&1; git -C "$L_C" status --porcelain > "$PS_D/r9k-st1" 2>&1
+      if ! cmp -s "$PS_D/r9k-refs0" "$PS_D/r9k-refs1" || ! cmp -s "$PS_D/r9k-st0" "$PS_D/r9k-st1" || git -C "$L_C" symbolic-ref -q HEAD >/dev/null; then
+        ok=0; why="$why detached:FIXTURE-BROKEN[a ref or the status moved, or HEAD is not detached]"
+      else
+        pcv_kstep r9k60d; pcv_is_miss "$K_NC" || { ok=0; why="$why detached[$(pcv_why), opt-out $K_NC]"; }
+      fi
+      git -C "$L_C" symbolic-ref HEAD "$br"
+    fi
+    pcv_kback
+    gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"
+    if [ -e "$gd/shallow" ]; then ok=0; why="$why shallow:FIXTURE-BROKEN[a shallow file already exists]"
+    else
+      git -C "$L_C" rev-parse HEAD > "$gd/shallow"
+      pcv_kstep r9k60s; pcv_is_miss "$K_NC" || { ok=0; why="$why shallow[$(pcv_why), opt-out $K_NC]"; }
+      rm -f "$gd/shallow"
+    fi
+    pcv_kback
+    pcv_run r9k60h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; pcv_is_hit r9k60h "$L_REC" || { ok=0; why="$why restored[$(pcv_why)]"; }
+    # The unborn clone: its own consumer, report and record; the L_* globals are swapped and put back.
+    local oc="$L_C" orr="$L_R" orec="$L_REC" u="$PS_D/r9k-unborn"
+    if ! git clone -q "$oc" "$u" >/dev/null 2>&1 || ! git -C "$u" symbolic-ref HEAD refs/heads/r9-unborn \
+       || git -C "$u" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+      ok=0; why="$why unborn:FIXTURE-BROKEN[the clone did not take an unborn HEAD]"
+    else
+      L_C="$u"; L_R="$u/_bmad-output/ai-dlc-update/reconcile-report.md"; L_REC="$(git -C "$u" rev-parse --absolute-git-dir)/ai-dlc-verify-pass"
+      mkdir -p "$(dirname "$L_R")"
+      if ! pcv_lat_approve r9ku; then ok=0; why="$why unborn:FIXTURE-BROKEN[no region]"
+      else
+        pcv_run r9ku.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+        if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then ok=0; why="$why unborn-records[$(pcv_why); $(grep -F "$PCV_RECWHY" "$PS_D/r9ku.r.err" | sed -n 1p)]"
+        else
+          pcv_run r9ku.c "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+          if ! pcv_is_hit r9ku.c "$L_REC"; then ok=0; why="$why unborn-hits[$(pcv_why)]"
+          else
+            cp "$L_REC" "$PS_D/r9ku.rec"
+            git -C "$u" symbolic-ref HEAD refs/heads/r9-unborn-moved
+            pcv_kstep r9ku; pcv_is_miss "$K_NC" || { ok=0; why="$why unborn-symref[$(pcv_why), opt-out $K_NC]"; }
+            git -C "$u" symbolic-ref HEAD refs/heads/r9-unborn; cp "$PS_D/r9ku.rec" "$L_REC"
+            pcv_run r9ku.h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; pcv_is_hit r9ku.h "$L_REC" || { ok=0; why="$why unborn-restored[$(pcv_why)]"; }
+          fi
+        fi
+      fi
+      L_C="$oc"; L_R="$orr"; L_REC="$orec"
+    fi
+    if [ "$ok" -eq 1 ]; then
+      pcv_v PC-V60 "HEAD detached onto an unreferenced commit (refs and status unchanged) MISSES, a shallow file MISSES, each with the opt-out's exit, and the restored world HITS; an unborn clone records and HITS, and its symbolic-ref moved MISSES, then HITS once put back"
+    else
+      pcv_x PC-V60 "consumer HEAD, symbolic ref and shallow:${why} (want each a fresh render with the opt-out's exit, the restored worlds a HIT, the unborn clone recording)"
+    fi
+  fi
+
+  # V59 (c), last because it moves THEIRS: the same world against a THEIRS whose validator predates
+  # the recorder. The report is re-approved there so the fresh render exits 0, as the opt-out does.
+  if [ "$v59a" -eq 1 ] && pcv_kctl PC-V59; then
+    if ! pcv_hrv_norec "$PS_D/r9k-hrv-old.sh" || ! to="$(pcv_r9addhrv "$PS_D/r9k-hrv-old.sh")" || [ -z "$to" ] \
+       || ! git -C "$L_D" update-ref refs/heads/r9-hookreg-old "$to" >/dev/null 2>&1; then
+      pcv_x PC-V59 "FIXTURE BROKEN: could not derive a validator without the recorder, or commit it into a THEIRS"
+    else
+      L_T="$to"
+      if ! pcv_lat_approve r9kold || ! grep -qF "pattern (from $sm)" "$PS_D/region-r9kold.md"; then
+        pcv_x PC-V59 "FIXTURE BROKEN: the recorder-less validator at THEIRS did not run in the approval"
+      else
+        pcv_kstep r9k59c; local c1="$(pcv_why)" r1=REWRITTEN
+        cmp -s "$L_REC" "$PS_D/krec.keep" && r1=unchanged
+        pcv_run r9k59c2 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+        if [ "$K_NC" -eq 0 ] && [ "$r1" = unchanged ] && cmp -s "$L_REC" "$PS_D/krec.keep" && pcv_is_miss 0 \
+           && grep -qF 'reads-list' <<< "$(grep -F "$PCV_RECWHY" "$PS_D/r9k59c.err" 2>/dev/null)"; then
+          pcv_v PC-V59 "an IGNORED settings-merge.sh read only by THEIRS' validator, edited after the record, MISSES (the recorded read list keys it), and an untouched world HITS; a THEIRS whose validator records nothing (mixed engines, c) renders fresh twice with the opt-out's exit 0, the record untouched and the reads-list refusal named"
+        else
+          pcv_x PC-V59 "mixed engines (c), THEIRS' validator without the recorder: first [$c1, record $r1, stderr: $(grep -F "$PCV_RECWHY" "$PS_D/r9k59c.err" | sed -n 1p)], second [$(pcv_why)], opt-out $K_NC (want two fresh exit-0 renders, the record untouched, reads-list named)"
+        fi
+      fi
+      L_T="$tn"
+    fi
+  fi
+  return 0
+}
+
+# ---- V63: M-direxcl's subject, a TRACKED file in the report's OWN directory read only through a GLOB ----
+# The file is read by nothing but a ledger `verify: sh` receipt, and the receipt names it through a
+# glob token, which ledger-reverify.sh drops before it logs a subject (a `*` token is never cr_test-ed),
+# so no read-log entry and no receipts-field entry names it; it is tracked, so consignored (ignored
+# files only) does not cover it. conswork's `ls-files -m`, which excludes exactly the report FILE, is the
+# only field that sees it change. M-direxcl widens that exclusion to the report's DIRECTORY and the edit
+# rides the record. Directions: records and HITS; the edit MISSES with the opt-out's non-zero exit.
+pcv_v63world() {
+  local f="_bmad-output/ai-dlc-update/r9-glob.txt" lg rc hit n nc
+  PCV_ENVPRE=""
+  pcv_lat v63 || { pcv_x PC-V63 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  lg="$L_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+  printf 'keep\n' > "$L_C/$f" \
+    && printf '# Push-candidate ledger (fixture)\n\n## PC-FIXTURE-R9-GLOB — a receipt reading the report directory through a glob\n\nverify: sh grep -q keep _bmad-output/ai-dlc-update/r9-glob*.txt\n' > "$lg" \
+    && { git -C "$L_C" add -- "$f" "$lg" && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm v63; } >/dev/null 2>&1 \
+    || { pcv_x PC-V63 "FIXTURE BROKEN: could not commit the glob-read file and its ledger"; return 0; }
+  if [ "$(dirname "$L_R")" != "$L_C/$(dirname "$f")" ] || ! git -C "$L_C" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+    pcv_x PC-V63 "FIXTURE BROKEN: $f is not a tracked file in the report's own directory"; return 0
+  fi
+  # The receipt's token set, read from the producer: the glob token is cut at its `*`, so the subject
+  # logged is the PREFIX `.../r9-glob` (absent), never the file. Positive control: that prefix IS listed.
+  local tok
+  tok="$(bash "$(dirname "$PS_E")/ledger-reverify.sh" --receipt-tokens "$L_D" "$L_B" "$L_C" "$L_T" 2>/dev/null)" || tok=""
+  if ! grep -qxF "SUBJECT${PCV_TAB}_bmad-output/ai-dlc-update/r9-glob" <<< "$tok" || grep -qxF "SUBJECT${PCV_TAB}$f" <<< "$tok"; then
+    pcv_x PC-V63 "FIXTURE BROKEN: --receipt-tokens does not list the glob's cut prefix, or lists $f itself, so conswork is not shown to be the only field that sees the file [$(printf '%s' "$tok" | tr '\n\t' '; ')]"; return 0
+  fi
+  pcv_lat_approve v63 || { pcv_x PC-V63 "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  pcv_run v63r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then pcv_x PC-V63 "control: the glob-receipt world did not record ($(pcv_why))"; return 0; fi
+  pcv_run v63c "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! pcv_is_hit v63c "$L_REC"; then pcv_x PC-V63 "control: the unchanged glob-receipt world did not HIT ($(pcv_why))"; return 0; fi
+  printf 'gone\n' > "$L_C/$f"
+  pcv_run v63 "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; rc="$PRC"; hit="$PHIT"; n="$PN"
+  pcv_run v63.n "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; nc="$PRC"; PRC="$rc"; PHIT="$hit"; PN="$n"
+  if [ "$nc" -eq 0 ]; then
+    pcv_x PC-V63 "FIXTURE BROKEN: the opt-out exits 0 after the glob-read file changed, so the receipt's verdict does not reach the region"
+  elif pcv_is_miss "$nc"; then
+    pcv_v PC-V63 "a TRACKED file in the report's own directory, read only by a ledger sh receipt through a glob token, records and HITS, and a change to it MISSES with the opt-out's exit $nc"
+  else
+    pcv_x PC-V63 "a change to a TRACKED file in the report's directory, read only through a glob receipt token, did not force a fresh render: [$(pcv_why), opt-out $nc] -- the work-tree fields exclude more than the report file"
   fi
   return 0
 }
@@ -5199,7 +5496,12 @@ pcv_suite() {
   if pcv_in PC-V33; then pcv_k3world; fi
   if pcv_in PC-V34; then pcv_k4world; fi
   if pcv_in PC-V37; then pcv_k5world; fi
-  if pcv_in PC-V55; then pcv_v55world; fi
+  # ---- V55, V59..V63: the round-9 BLOCKERs (BL-685) and M-direxcl's subject ----
+  if [ "$PCV_R10" -eq 1 ]; then
+    if pcv_in PC-V55; then pcv_v55world; fi
+    if pcv_in PC-V59 PC-V60 PC-V61 PC-V62; then pcv_r9kworld; fi
+  fi
+  if pcv_in PC-V63; then pcv_v63world; fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
   if [ "$PCV_R6" -eq 1 ]; then
@@ -5220,8 +5522,9 @@ pcv_suite() {
 
   # ---- V10: a REGISTER ROW resolves HARD-LAYER-ADJUDICATION-MISSING: a miss reaching exit 3 ----
   # The world is layer-adjudication-tier's seed (its own git top level, one adjudicable row). The
-  # register lives in _bmad-output/ai-dlc-update/, the directory the report lives in, so a key that
-  # excluded the whole directory would hit here. After the exit-3 run the record must be unchanged
+  # register lives in _bmad-output/ai-dlc-update/, the directory the report lives in, but layer-drift.sh
+  # reads it through the read log, so a key excluding that whole directory still MISSES here: this arm
+  # is M-direxcl's same-run control, and PC-V63 is its subject. After the exit-3 run the record must be unchanged
   # and a second run must reach exit 3 again: a record written on exit 3 would turn it into a hit.
   if ! pcv_in PC-V10; then :
   elif ! command -v jq >/dev/null 2>&1; then pcv_x PC-V10 "jq is not on PATH; layer-drift.sh cannot read the register, so no resolution can be seeded"
@@ -5287,8 +5590,9 @@ pcv_failset() {
 # THE MUTANTS. Each is a COPY of the reconcile directory with one line of emit-report.sh edited by
 # awk on an exact whole-line anchor that must occur ONCE, guarded by cmp -s. Expected kill sets:
 #   M-region   the region field dropped from the key loop: a doctored region rides the record -> PC-V3
-#   M-direxcl  the work-tree exclusion widened from the report FILE to its DIRECTORY, which hides
-#              layer-adjudication-register.jsonl from the key                              -> PC-V10
+#   M-direxcl  the work-tree exclusion widened from the report FILE to its DIRECTORY, which hides a
+#              tracked file there that only a glob receipt token reads (V55's old subject, the
+#              consumer validator, now refuses)                                             -> PC-V63
 #   M-exit3    er_cache_record called before the mismatch tail, so exit 1 and exit 3 record -> PC-V9 PC-V10
 # BL-777's five, each against the key's own tools (V56 no cksum, V57 no sha256 tool, V58 a sha256
 # tool answering garbage):
@@ -5304,6 +5608,12 @@ pcv_failset() {
 #   M-hex      ONLY the garbage-digest refusal made a no-op, cause 3 (no sha256 tool) left
 #              intact: a tool that answers garbage returns 1 unnamed, while V57's absent
 #              tool still names its cause                                                 -> PC-V58
+# BL-685's five, each reverting exactly one round-9 fix:
+#   M-b1       THEIRS' validator run as plain `bash` again, so its reads are logged by nothing -> PC-V59
+#   M-b2       the consumer-validator `!` removed, so a render that ran consumer code records -> PC-V55
+#   M-b3       consobjects' HEAD, symbolic-ref and shallow lines removed (every layer)       -> PC-V60
+#   M-b4       the derived env-name set emptied                                             -> PC-V61
+#   M-secret   CLAUDE_CODE_ added to the derived set as a prefix, so the token is keyed     -> PC-V62
 # pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
 # that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
 pcv_ed() {
@@ -5311,7 +5621,9 @@ pcv_ed() {
   n="$(grep -cxF -- "$3" "$f")" || n=0
   printf '%s\n' "$n" >> "$1/anchor-count"
   [ "$n" -eq 1 ] || return 1
-  awk -v a="$3" -v t="$4" -v m="$2" '$0 == a { print t; if (m == "replace") next } { print }' "$f" > "$f.ed" \
+  # Anchor and text through ENVIRON, never `-v`: `-v` strips one level of escaping, so an anchor
+  # carrying a literal `\t` (M-b2's printf format) would never equal its own line.
+  PCV_EA="$3" PCV_ET="$4" awk -v m="$2" '$0 == ENVIRON["PCV_EA"] { print ENVIRON["PCV_ET"]; if (m == "replace") next } { print }' "$f" > "$f.ed" \
     && mv -f "$f.ed" "$f"
 }
 pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, parses, and differs
@@ -5320,6 +5632,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local r9fld='      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"'
   local r9sha='      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then'
   local r9hex='        er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"'
+  local b2l='    [ -z "${CR_LOG:-}" ] || printf '"'"'!\tconsumer-validator\t-\n'"'"' >> "$CR_LOG"'
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
     M-region)  pcv_ed "$d" replace \
@@ -5334,6 +5647,16 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-hex)     pcv_ed "$d" replace "$r9hex" '        :' ;;
     M-unarmed) pcv_ed "$d" replace '   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' \
                  '   && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then' ;;
+    M-b1)      pcv_ed "$d" replace '    hro="$(cr_run_reads "$CONSUMER" "$hrr" bash "$hrv" --root "$CONSUMER" 2>&1)"' \
+                 '    hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)"' ;;
+    M-b2)      pcv_ed "$d" replace "$b2l" '    :' ;;
+    M-b3)      pcv_ed "$d" replace '  echo "head"' '  :' \
+                 && pcv_ed "$d" replace '  cr_git "$CONSUMER" rev-parse -q --verify HEAD || echo unborn' '  :' \
+                 && pcv_ed "$d" replace '  cr_git "$CONSUMER" symbolic-ref -q HEAD || echo detached' '  :' \
+                 && pcv_ed "$d" replace '  gd="$(cr_git "$CONSUMER" rev-parse --path-format=absolute --git-common-dir)" || return 1' '  :' \
+                 && pcv_ed "$d" replace '  er_file_or_absent shallow "$gd/shallow" || return 1' '  :' ;;
+    M-b4)      pcv_ed "$d" replace '  er_env_names > "$_er_tmp/key.envnames" || return 1' '  : > "$_er_tmp/key.envnames" || return 1' ;;
+    M-secret)  pcv_ed "$d" before '  compgen -e > "$_er_tmp/key.envexp" || return 1' '  echo CLAUDE_CODE_ >> "$_er_tmp/key.envtok" || return 1' ;;
     *) return 1 ;;
   esac || return 1
   bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
@@ -5341,13 +5664,14 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
 }
 pcv_want() {
   case "$1" in
-    M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V55" ;; M-exit3) echo "PC-V9 PC-V10" ;;
+    M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V63" ;; M-exit3) echo "PC-V9 PC-V10" ;;
+    M-b1) echo "PC-V59" ;; M-b2) echo "PC-V55" ;; M-b3) echo "PC-V60" ;; M-b4) echo "PC-V61" ;; M-secret) echo "PC-V62" ;;
     M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57 PC-V58" ;; M-sha) echo "PC-V57 PC-V58" ;; M-unarmed) echo "PC-V56" ;;
     M-hex) echo "PC-V58" ;;
   esac
 }
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
-pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; *) echo BL-679 ;; esac; }
+pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; *) echo BL-679 ;; esac; }
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
 # to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
 # which made this phase the suite pole (BL-699). Each mutant now runs the always-on prefix PC-V0 PC-V1
@@ -5365,7 +5689,11 @@ pcv_bl() { case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; *) 
 pcv_scope() {
   case "$1" in
     M-region)  echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9" ;;
-    M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10 PC-V55" ;;
+    M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10 PC-V63" ;;
+    # BL-685: V59..V62 share one world, so each of their mutants runs all four, the other three its
+    # same-run control; M-b2's V55 world is its own.
+    M-b1|M-b3|M-b4|M-secret) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V59 PC-V60 PC-V61 PC-V62" ;;
+    M-b2) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V55" ;;
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
     # BL-777: all three tool arms run for each, so any a mutant must NOT kill is its same-run control.
     M-cksum|M-base|M-sha|M-unarmed|M-hex) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V56 PC-V57 PC-V58" ;;
@@ -5389,6 +5717,8 @@ pcv_noverdict() { # pcv_noverdict <verdicts> <scope>
 PCV_MUTS="M-region M-direxcl M-exit3"
 # BL-777's mutants score only where V56/V57/V58 run (PCV_R9); where they are PENDING no kill can be read.
 [ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed M-hex"
+# BL-685's mutants score only where V55 and V59..V62 run (PCV_R10).
+[ "${PCV_R10:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-b1 M-b2 M-b3 M-b4 M-secret"
 
 if ! pcv_cache_engine "PC-V0..PC-V55 but PC-V17..PC-V25"; then :
 else
@@ -5474,7 +5804,7 @@ if pcv_cache_engine "PC-V17..PC-V25"; then
   if mkdir -p "$PS_D" && : > "$PS_D/verdicts" && pcv_shim; then
     (
       pcv_latgrp
-      pcv_latarm PC-V19 v19 "a TRACKED file's chmod under core.filemode=false, which git status cannot see,"
+      pcv_latarm PC-V19 v19 "a TRACKED scripts/ai-dlc/r9-mode.sh's chmod under core.filemode=false, which git status cannot see and mode_at_theirs reads,"
       pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
     ) > "$PCV_ROOT/lat.log" 2>&1
     pcv_read_ids "$PS_D/verdicts" "$PCV_LAT_IDS" pcvlat
