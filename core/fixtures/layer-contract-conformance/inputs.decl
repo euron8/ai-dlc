@@ -1,5 +1,6 @@
-# layer-contract-conformance and its shard driver b (which execs this run.sh --group b) share ONE declaration shape.
-# The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh; VERSION is the renderer's root marker.
+# layer-contract-conformance and its shard driver b (which execs this run.sh --group b) declare the same paths but ONE:
+# this declaration keys +CLAUDE.md, which a FIFO probe found read under this directory's run and not under the shard's.
+# The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh --arm-lines <src>, which needs no root marker.
 !scripts/validate-enforcement-map.sh
 scripts/
 # reason: core/ is walked by content -- the validator this fixture runs (run.sh:750) finds every core/*.sh and derives core/*/, scripts/validate-enforcement-map.sh:2476 and :3327.
@@ -8,6 +9,4 @@ templates/
 .githooks/
 patterns/
 .claude/rules/
-docs/
-CLAUDE.md
-VERSION
++CLAUDE.md

@@ -9,4 +9,5 @@
 !scripts/validate-hermetic-consumption.sh
 core/scripts/core-paths.sh
 core/fixtures/
+# copy-only: core/fixtures/hermetic-consumption/run.sh:55 run.sh tests for the marker beside the validator; nothing reads its content
 VERSION

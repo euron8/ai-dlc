@@ -6,7 +6,7 @@
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 scripts/backlog-reverify.sh
-docs/backlog.archive.md
++docs/backlog.archive.md
 core/skills/ai-dlc/steps/gate-validation.md
 core/fixtures/gate-verdict-grep-shape/
 core/skills/ai-dlc-update/reconcile/consumer-read.sh

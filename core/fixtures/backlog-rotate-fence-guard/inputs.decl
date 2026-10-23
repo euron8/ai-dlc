@@ -2,6 +2,7 @@
 # reconcile library the rotator sources; run.sh copies all three into mktemp roots to build mutants.
 # VERSION is the marker run.sh, the rotator and the reverifier each walk up for, declared plain so
 # the walk resolves inside the sandbox.
+# copy-only: core/fixtures/backlog-rotate-fence-guard/run.sh:41 run.sh walks up for the marker; nothing reads its content
 VERSION
 !scripts/backlog-rotate.sh
 scripts/backlog-reverify.sh

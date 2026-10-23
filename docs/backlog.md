@@ -485,3 +485,16 @@ On the consumer, s320's remediator part markers read `carry-over-evaluation reme
 Fix: for a file at `planning-artifacts/s<N>/shards/<D>/<b>.md` with `<D>` ending `-repair-p<M>` or `-repair`, `--mark` keeps its arity and `findings=` checks and then writes `seat-complete: <D minus suffix> remediator <b> sha=<hex> findings=<n>`. Every other path writes the caller's words. Scored by EC40 and the mutant EC40m in `core/fixtures/remediator-shard-join`.
 
 verify: sh bash core/fixtures/remediator-shard-join/receipt-bl796.sh
+
+## BL-797 — a bare inputs.decl line under a content-key-excluded top keys nothing, so the file it names can change and no verdict that reads it re-runs
+
+**NOTE.** Source: batch 241, release r12. Open.
+
+`scripts/suite-content-key.sh` excludes `.git CHANGELOG.md VERSION docs CLAUDE.md`. A `core/fixtures/*/inputs.decl` line under one of those tops has no `.now` row in the hook, so it carries no per-fixture key value, and the outer key skips the whole top. Only a leading `+` keys it (`readset_decl_parse` in `.githooks/pre-push`). Census at c9dea46c2: 33 bare lines over 257 declarations. Dispositions, ruled by the lead:
+- 8 content reads now carry `+`: backlog-receipt-binding `docs/backlog.archive.md`, invariant-index `docs/invariant-index.md`, vocabulary-index `docs/invariant-index.md` and `docs/vocabulary-index.md`, and `CLAUDE.md` in validator-arm-selection, layer-contract-conformance, ledger-status-vocabulary and validator-fork-budget.
+- 13 lines nothing reads were deleted: the three docs lines of validator-arm-selection; all four of validator-arm-selection-b; CLAUDE.md in layer-contract-conformance-b; VERSION in layer-contract-conformance(-b) and ledger-status-vocabulary; and the `docs/` directory line in both layer-contract-conformance decls. No arm those two drive reads docs/ content: vem has no non-comment read under docs/, against a control of 33 for templates/ under the same filter, and render-invariant-index is called there only as `--arm-lines <src>`, which resolves no root.
+- 12 `VERSION` lines are copy-only. Each now carries a `# copy-only: <path>:<line>` citation of the `-f` test that needs the file to exist.
+
+Guard: I55 arm 5 in `scripts/validate-enforcement-map.sh`, with a self-probe in both directions that runs before the corpus. The new arm is numbered 5 because arm 4 is the existing `_RECORD` arm, which `core/fixtures/suite-dispatch-order/run.sh` cites by that number. The `scripts/suite-content-key.sh` comment saying that no fixture verdict depends on CLAUDE.md is corrected. Its sentence at :82-83, which says vem names CLAUDE.md only in comments, is also stale (vem reads it at four corpus walks) and is left for the owner.
+
+verify: sh d=$(mktemp -d) && tar -cf - scripts core .githooks | (cd "$d" && tar -xf -) && bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1

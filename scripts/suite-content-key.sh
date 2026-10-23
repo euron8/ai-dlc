@@ -95,7 +95,8 @@ die() { printf 'suite-content-key: %s\n' "$*" >&2; exit 1; }
 # `audit-rule-files.sh` reads CLAUDE.md on EVERY push as its own pre-push step,
 # outside the fixture suite and unaffected by this key. What the exclusion removes is
 # a whole-suite re-run -- minutes, on the reference tree -- triggered by editing a
-# file whose content no fixture verdict depends on.
+# file. Four fixture verdicts DO read its content (BL-797); each keys it with
+# `+CLAUDE.md` in its own inputs.decl, and I55 arm 5 refuses a bare declaration.
 # EXCLUDE_BEGIN
 EXCLUDE="
 .git
