@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.931.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r9 (docs). It files BL-795 OPEN (a NOTE, `verify: manual`), touches BL-699 without closing it, and closes no `PC-` id. NET: entries closed 0 minus filed 1 = -1. BL-795 is a coverage gap measured by this batch's BL-699 share reading, filed on purpose and not built. Engine code: none. Rulebook changes: none. Fixture changes: none. Packaging: none. Backlog: `docs/backlog.md`.
+
+### BL-699 — the share reading is done: seven of the nine pcvlat arms can share one recorded world
+
+The owed b236-bl699-share reading was taken from the code at bdb981712, with no fixture run. The nine `pcv_latarm` arms (V17..V25) cannot all share one record. V18 and V19 need the same hook-registration path untracked and tracked respectively; V19's `git add -A` would track the other arms' untracked pre-states; V21 and V22 write the same override file; and V24's record locale is a key field. Seven arms (V17, V18, V20, V21, V22, V23, V25) can share one world in a fixed order, each opening with its own HIT control on the restored world, proving its own cached-against-opt-out MISS, undoing its change and asserting the record unchanged. Read from the code, phase pcvlat goes from 9/36/9 (approve/verify/seed) to 3/30/3, 45 renders down to 33. The superseded batch-240 Owed paragraph is removed. The merge is scheduled this batch as its own fixture-only release; (d), the before/after durations comparison, is a timing run and stays banked under NO TIMING RUNS. The entry stays open.
+
+### BL-795 — filed: V17..V25 have no engine-side mutant
+
+A NOTE measured by the same reading. Each `pcv_latarm` arm's only guard is its own FIXTURE BROKEN check, which proves the render sees the change but not that the engine keys it. The entry names the nine engine sites a mutant would remove, one per arm, and owes a decision on whether those mutants are worth their cost. Not built.
+
 ## [0.930.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r7. It files and closes BL-794, files BL-793 OPEN (a NOTE, `verify: manual`, a residual of BL-781), and closes no `PC-` id. NET: entries closed 1 minus filed 2 = -1. BL-793 is a consumer-watched residual, filed on purpose and not built. Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-protect.sh` (deny text only; no re-render). Rulebook changes: none. Fixture changes: `core/fixtures/context-mode-protect` (`run.sh` arm 9c and its CONTEXT-RESTORED mutant, `tools.decl`, and a new `receipt-bl794.sh`). Packaging: none. Backlog: `docs/backlog.md`.
