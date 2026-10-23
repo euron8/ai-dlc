@@ -1948,7 +1948,10 @@ er_log_entries() {
   if LC_ALL=C grep -q '^!' "$_er_tmp/key.log-sorted"; then
     er_refuse "a detector asked for a consumer path the read log cannot re-take ($(LC_ALL=C grep -m1 '^!' "$_er_tmp/key.log-sorted" | tr '\t' ' '))"; return 1
   fi
-  if LC_ALL=C awk -F'\t' '$3 ~ /^L / { exit 0 } END { exit 1 }' "$_er_tmp/key.log-sorted"; then
+  # B7 A FLAG, never `{ exit 0 } END { exit 1 }`: an `exit` in a rule still runs END, whose own
+  # `exit 1` then wins, so that form answered "no L entry" on every log (measured: a record written
+  # holding three `L` reads of a linked extensions directory).
+  if LC_ALL=C awk -F'\t' '$3 ~ /^L / { f = 1; exit } END { exit !f }' "$_er_tmp/key.log-sorted"; then
     er_refuse "R2 a symlink lies on a consumer path a detector read ($(LC_ALL=C awk -F'\t' '$3 ~ /^L / { print $2; exit }' "$_er_tmp/key.log-sorted"))"; return 1
   fi
   if ! LC_ALL=C awk -F'\t' '{ k = $1 FS $2; if (k in v && v[k] != $3) exit 1; v[k] = $3 }' "$_er_tmp/key.log-sorted"; then
