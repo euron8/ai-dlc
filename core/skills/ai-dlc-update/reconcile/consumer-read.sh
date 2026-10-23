@@ -26,6 +26,8 @@
 #   cr_git   <root> <git-args...>     `git -C <root> <git-args...>`
 #   cr_run   <root> <cmd...>          <cmd> with its working directory at <root>, for a program that
 #                                     resolves consumer-relative paths against its cwd
+#   cr_run_reads <root> <list> <cmd...> <cmd> with HOOKREG_READS_OUT=<list>, then the read list the
+#                                     program RECORDED is logged entry by entry (see the function)
 #   cr_retake <root> <log>            re-takes every entry of a log, printing it as it reads NOW
 #
 # THE PATH IS REFUSED, NEVER NORMALISED. A <rel> with a `..` component or a leading `/` returns 2
@@ -291,6 +293,44 @@ cr_run() {
   shift
   cr__log x "$root" .
   ( cd "$root" && "$@" )
+}
+
+# cr_run_reads <root> <list> <cmd...> -- for a program that RECORDS its own consumer reads (today
+# validate-hook-registration.sh, the hook-registration section's validator at THEIRS). <cmd> runs with
+# HOOKREG_READS_OUT=<list> in its environment and the caller's cwd unchanged; its stdout, stderr and
+# exit are its own, and nothing this function does reaches either stream. Only when CR_LOG is set is
+# the list then read: its first line must be the sentinel `hookreg-reads 1`, and each later line is
+# `<kind> TAB <path relative to <root>>`, logged through the existing door as the path the program
+# recorded -- `t` through cr_test, `r` through cr_hash, `w` through cr_walk. A list that is missing,
+# lacks the sentinel, carries no entry after it, or holds a `!` (a subprocess, whose reads no list
+# names) or any other kind logs `!`, so the record refuses: an older program that writes no list
+# fails CLOSED, never records unkeyed. The variable has no AI_DLC_ prefix: fixtures scrub that prefix.
+cr_run_reads() {
+  local root="$1" rf="$2" rc k p first n=0 bad=0
+  shift 2
+  HOOKREG_READS_OUT="$rf" "$@"; rc=$?
+  [ -n "${CR_LOG:-}" ] || return "$rc"
+  if [ ! -f "$rf" ]; then printf '!\treads-list\t-\n' >> "$CR_LOG"; return "$rc"; fi
+  {
+    IFS= read -r first || first=""
+    if [ "$first" = "hookreg-reads 1" ]; then
+      # `|| [ -n "$k" ]`: a last entry with no trailing newline is still an entry, never dropped.
+      while IFS="$(printf '\t')" read -r k p || [ -n "$k" ]; do
+        n=$((n + 1))
+        [ -n "$p" ] || { bad=1; continue; }
+        case "$k" in
+          t) cr_test "$root" -e "$p" >/dev/null 2>&1 ;;
+          r) cr_hash "$root" "$p" >/dev/null 2>&1 ;;
+          w) cr_walk "$root" "$p" >/dev/null 2>&1 ;;
+          *) bad=1 ;;
+        esac
+      done
+    else
+      bad=1
+    fi
+  } < "$rf"
+  [ "$bad" = 0 ] && [ "$n" -gt 0 ] || printf '!\treads-list\t-\n' >> "$CR_LOG"
+  return "$rc"
 }
 
 # cr_retake <root> <log> -- every entry of <log> re-taken now, one line each, in the log's order and

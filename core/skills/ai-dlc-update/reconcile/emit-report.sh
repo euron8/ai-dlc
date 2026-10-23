@@ -131,8 +131,9 @@
 #                predicate-sites.md, the other consumer paths the detectors name, and every
 #                destination preclassify.sh's map_consumer writes; then every EMPTY directory under
 #                those roots, which no git listing names;
-#   consobjects  <consumer>'s `for-each-ref`, its EFFECTIVE `config --list`, and the same four
-#                git-dir and attributes files as distrefs;
+#   consobjects  <consumer>'s `for-each-ref`, its HEAD (`rev-parse -q --verify HEAD` or `unborn`, and
+#                `symbolic-ref -q HEAD` or `detached`), its EFFECTIVE `config --list`, the same four
+#                git-dir and attributes files as distrefs, and the bytes (or `absent`) of its `shallow`;
 #   consresolve  each override `base_sha` and the stamp's `commit:` / `skill_commit:`, resolved as a
 #                commit through the OBJECT STORE of <dist> and of <consumer> (not through refs: a
 #                prune of an unreferenced commit moves the region with no ref moving), or `unresolved`;
@@ -140,7 +141,13 @@
 #                distinguished, and the file the last one names; every `GIT_*` variable by name and
 #                value; the bytes (or `absent`) of the system attributes file `git var
 #                GIT_ATTR_SYSTEM` names; `git --version` and `--exec-path`; and the resolved path and
-#                binary `cksum` of awk, sed and sort;
+#                binary `cksum` of awk, sed and sort; then a DERIVED set of `AI_DLC_*` and `CLAUDE_*`
+#                names, each by name and value, set and unset distinguished: every such token on a
+#                non-comment line of the engine closure, of the predicate-sites.md `entry:` files at
+#                THEIRS and BASE (read from <dist>), and of validate-hook-registration.sh at THEIRS,
+#                a trailing `_` read as a prefix, minus what the engine sets itself, lib.sh's
+#                unexported AI_DLC_MEMO_* and the cache's own control (er_env_names). LIMIT: a text
+#                grep cannot see a reader that builds the name (`${!name}`, `env | grep`);
 #   region       the report region's hash after the dist-path normalisation below, which must equal
 #                the region of the render that passed -- an edit OUTSIDE the region still hits, one
 #                byte inside it misses;
@@ -153,11 +160,15 @@
 #                its own -- a `hooks:` or `fixtures:` value, a bare `scripts/` path, a receipt
 #                subject, a case variant of a directory -- is keyed exactly as it was read, with no
 #                hand-listed root deciding. ledger-reverify.sh logs every `sh` receipt's subject
-#                tokens through cr_test before the receipt runs. consignored and its roots remain as
-#                a BELT for the programs run through cr_run (predicate validators, the consumer's own
-#                hook-registration validator, `sh` receipts), whose own reads no log can see.
+#                tokens through cr_test before the receipt runs. THEIRS' validate-hook-registration.sh
+#                RECORDS its own reads (cr_run_reads): each stat, open and listing it made under the
+#                root is logged as it recorded it, and a list that is missing, unsentinelled, empty
+#                or names a subprocess is `!`. consignored and its roots remain as a BELT for the
+#                programs run through cr_run (predicate validators, `sh` receipts), whose own reads
+#                no log can see.
 # The `!` entries consumer-read.sh writes, a symlink on any logged path or under any walk, and a path
-# read twice with two answers are REFUSED (er_log_entries).
+# read twice with two answers are REFUSED (er_log_entries). With the cache armed, a refusal found at
+# record time is named on stderr too (`recorded PASS not recorded: <cause>`).
 # REFUSED, a miss for both the hit and the record, because no field could see the input:
 #   - a directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read
 #     and search: git lists nothing beneath it;
@@ -171,6 +182,10 @@
 #   - a path component named `.git` anywhere below the consumer root (other than its own top-level
 #     `.git` and `.claude/worktrees`): git lists nothing beneath it, repository or not;
 #   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled;
+#   - a render that ran the CONSUMER'S OWN validate-hook-registration.sh (THEIRS predates it, before
+#     v0.357.0): arbitrary consumer code whose reads nothing records, so it logs `!`;
+#   - a render whose THEIRS validate-hook-registration.sh wrote no well-formed read list (one that
+#     predates the recorder, or one that ran a subprocess): `!`, never an unkeyed record;
 #   - R1 a <dist> that is NOT A BARE REPOSITORY: its work tree's `.gitattributes` and checkout are
 #     read by nothing the key lists, and the update skill's dist (dist-clone.sh) is always bare;
 #   - R2 a SYMLINK IN THE CONSUMER'S INPUT SET: any tracked symlink (mode 120000); a symlink at or
@@ -205,10 +220,17 @@
 #
 # THE LIMITS, STATED RATHER THAN HIDDEN. (1) The record is a CACHE, NOT AN ATTESTATION: anyone who
 # can write the git-dir can forge one, and `AI_DLC_VERIFY_NO_CACHE=1` (any non-empty value) forces a
-# fresh render for an operator who wants the detectors' own word. (2) `predicate-differential.sh`
+# fresh render for an operator who wants the detectors' own word. (2) What each program run at the
+# consumer root now is: THEIRS' hook-registration validator is KEYED by the read list it records
+# itself; the consumer's own copy is REFUSED; consumer HEAD (commit, symbolic ref or detached, unborn)
+# and `shallow` are KEYED (consobjects); the AI_DLC_*/CLAUDE_* variables those programs and the
+# closure name are KEYED by a derived name set (env), with the text-grep LIMIT stated there; every
+# other variable, and a path outside the consumer root, is a LIMIT (below); the pruned zones (`.git`,
+# `.claude/worktrees`) are read by no detector and keyed by nothing. `predicate-differential.sh`
 # runs validators with the consumer as cwd (cr_run), so their read set is OPEN: the corpus records
 # and the paths in their `invoke:` arguments are logged, but an IGNORED file outside the consignored
-# roots that one of them opens on its own is not keyed, and its change can leave a stale PASS.
+# roots that one of them opens on its own is not keyed, and its change can leave a stale PASS; nor is
+# a file OUTSIDE the consumer root, or an environment variable outside the derived set.
 # The same holds for the consumer's ledger `sh` receipts, which run with $DIST exported and can read
 # the dist's reflog or any other git state outside the key; `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
 # More widely, a ledger `verify: sh` receipt (ledger-reverify.sh runs it as `bash -c` at the consumer
@@ -235,9 +257,10 @@
 # (6) A file CHANGED AND RESTORED DURING the render (A to B and back to A between the key taken
 # before it and the key taken after) records a PASS for bytes the detectors read as B: both keys see
 # A. Nothing here can observe a state that existed only between the two key computations.
-# (7) A REPORT FILE PLACED AT A DETECTOR INPUT (the push-candidate ledger, say) is excluded from the
-# work-tree fields as the report, so an edit to it outside the region still hits while the
-# detectors read the edited file. The report belongs at its own path; the opt-out re-renders.
+# (7) A REPORT FILE READ BY ANY CARRIER -- placed at a detector input (the push-candidate ledger,
+# say), or opened by a program run at the root (a `sh` receipt, a predicate validator) -- is excluded
+# from the work-tree fields as the report, so an edit to it outside the region still hits while that
+# reader sees the edited file. The report belongs at its own path; the opt-out re-renders.
 set -uo pipefail
 # NO PATHNAME EXPANSION ANYWHERE IN THE CLOSURE: an unquoted expansion that globbed against the cwd
 # read consumer (or caller) paths no key entry named. consumer-read.sh carries the reasoning.
@@ -815,10 +838,17 @@ render() {
   # TMPDIR symlink or trailing slash), so the rewrite keys on the copy's BASENAME at the end of
   # the `bash` word, never on `$hrv`.
   sub "Hook registration (every shipped ai-dlc hook is wired in .claude/settings.json — a present-but-unregistered hook never fires):"
-  local hrv hro
+  local hrv hro hrr
   hrv="$(mktemp)"
+  # THE VALIDATOR RECORDS ITS OWN CONSUMER READS (cr_run_reads): every stat, open and listing its
+  # body makes under --root, written to the list HOOKREG_READS_OUT names, from the SAME run that
+  # printed the section. That list is logged entry by entry, so the key covers exactly what this run
+  # read and no hand-written restatement of the validator's read set exists to drift. A THEIRS that
+  # predates the recorder writes no list, and the record refuses. The list is a fresh empty file, so
+  # a stale one cannot stand in for this run's.
+  hrr="$(mktemp)"
   if git -C "$DIST" show "$THEIRS:core/scripts/validate-hook-registration.sh" > "$hrv" 2>/dev/null && [ -s "$hrv" ]; then
-    hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)"
+    hro="$(cr_run_reads "$CONSUMER" "$hrr" bash "$hrv" --root "$CONSUMER" 2>&1)"
     # A rewrite that FAILED keeps the validator's own text: an unstable path line fails
     # `--verify` loudly, while an empty section would read as "nothing unregistered".
     local hrs
@@ -827,15 +857,18 @@ render() {
                n = length(ENVIRON["HRB"]); if (length(w) > n && substr(w, length(w) - n) == "/" ENVIRON["HRB"]) $0 = substr($0, 1, i + 4) ENVIRON["HRI"] (s ? substr(r, s) : "") }
              print }')" && [ -n "$hrs" ] && hro="$hrs"
   elif cr_test "$CONSUMER" -x scripts/ai-dlc/validate-hook-registration.sh; then
-    # The consumer's OWN copy runs: its bytes are logged by the test above, its reads by nothing
-    # (`x`, the same open read set as cr_run's).
+    # The consumer's OWN copy runs: its bytes are logged by the test above, its reads by nothing.
+    # It is arbitrary consumer code, so its read set is unknowable here: the `!` refuses the record
+    # by name, and no PASS is ever recorded from a render that ran it. The branch runs only when
+    # THEIRS predates the validator (before v0.357.0).
     # Run by its root-relative name from the root: `cd scripts/ai-dlc && pwd` inside it resolves to
     # the same logical directory the absolute spelling did, so the printed self path is unchanged.
     hro="$(cr_run "$CONSUMER" bash scripts/ai-dlc/validate-hook-registration.sh --root "$CONSUMER" 2>&1)"
+    [ -z "${CR_LOG:-}" ] || printf '!\tconsumer-validator\t-\n' >> "$CR_LOG"
   else
     hro="  validator absent at ${THEIRS}:core/scripts/validate-hook-registration.sh and on the consumer — NOT CHECKED (this is not a pass)"
   fi
-  rm -f "$hrv"
+  rm -f "$hrv" "$hrr"
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
   # EACH DETECTOR RUNS ONCE PER RENDER, AND THE WRAPPER IS HANDED THE ROWS.
@@ -1514,11 +1547,23 @@ er_kf_consignored() {
 }
 # The consumer's refs, then its EFFECTIVE config (local, global through $HOME, system): config moves
 # what git prints, and an override's `log -1 --format=%s` runs here.
+#
+# Then the consumer's HEAD, which for-each-ref does not list: its commit (or `unborn`, a fresh repo,
+# where a plain `rev-parse HEAD` exits 128 and the field would never compute) and what it points at
+# (or `detached`), the mirror of distrefs' HEAD line. A program run at the root reads HEAD (a `log -1`
+# in a validator moved the region with every ref unchanged). Then the git-dir's `shallow` file, whose
+# grafts move every history walk with no ref moving.
 er_kf_consobjects() {
+  local gd
   cr_git "$CONSUMER" for-each-ref || return 1
+  echo "head"
+  cr_git "$CONSUMER" rev-parse -q --verify HEAD || echo unborn
+  cr_git "$CONSUMER" symbolic-ref -q HEAD || echo detached
   echo "config"
   cr_git "$CONSUMER" config --list || return 1
   er_repo_files "$CONSUMER" || return 1
+  gd="$(cr_git "$CONSUMER" rev-parse --path-format=absolute --git-common-dir)" || return 1
+  er_file_or_absent shallow "$gd/shallow" || return 1
 }
 # er_file_or_absent <label> <path> -- the label, then the path's content hash or `absent`.
 er_file_or_absent() {
@@ -1611,6 +1656,77 @@ er_kf_env() {
     printf '%s %s ' "$_tl" "$_tp"
     if [ -f "$_tp" ]; then cksum < "$_tp" || return 1; else echo "not-a-file"; fi
   done
+  # THE AI_DLC_* AND CLAUDE_* VARIABLES THE RENDER CAN READ, by name and value, set and unset
+  # distinguished. The name set is DERIVED at key time, never hand-listed (er_env_names); keying every
+  # such variable instead would never hit (this process exports a fresh AI_DLC_RECONCILE_MEMO before
+  # the key) and would write secrets such as a CLAUDE_CODE_* token into the field. LIMIT: the
+  # derivation is a text grep, so a reader that builds a name (`${!name}`, `env | grep`) is invisible
+  # to it, and an entry's own sourced siblings are not scanned.
+  echo "named-env"
+  er_env_names > "$_er_tmp/key.envnames" || return 1
+  local _en
+  while IFS= read -r _en; do
+    if eval "[ -n \"\${$_en+x}\" ]"; then eval "printf '%s=set %s\0' \"\$_en\" \"\$$_en\""
+    else printf '%s=unset\0' "$_en"; fi
+  done < "$_er_tmp/key.envnames"
+}
+# er_env_names -- the AI_DLC_*/CLAUDE_* names the render can read, one per line, sorted: every
+# `(AI_DLC|CLAUDE)_[A-Z0-9_]+` token on a non-comment line of the engine closure (emit-report.sh and
+# every `$SELF/<x>.sh` it names, transitively, the derivation validate-consumer-reads.sh uses), of each
+# predicate-sites.md `entry:` file at THEIRS and at BASE as <dist> holds it, and of
+# validate-hook-registration.sh at THEIRS. A token ending `_` is a PREFIX: it stands for every
+# exported variable carrying it. Subtracted: what this engine sets for its children
+# (AI_DLC_PROJECT_ROOT and AI_DLC_KNOWN_SKILLS_EXT at predicate-differential.sh's validator runs, the
+# latter keyed above with its file; AI_DLC_RECONCILE_MEMO, whose inheritance is refused), lib.sh's
+# unexported AI_DLC_MEMO_* state, and the cache's own control AI_DLC_VERIFY_NO_CACHE. A dist file that
+# is absent at a ref adds nothing; one that is present and cannot be read fails the field.
+er_env_names() {
+  local todo="emit-report.sh" seen=" " f g ref e
+  : > "$_er_tmp/key.envsrc" || return 1
+  while [ -n "$todo" ]; do
+    f="${todo%% *}"; case "$todo" in *" "*) todo="${todo#* }" ;; *) todo="" ;; esac
+    case "$seen" in *" $f "*) continue ;; esac
+    seen="$seen$f "
+    # A named file that is absent is skipped, as validate-consumer-reads.sh's closure skips it: the
+    # engine field already keys which files exist here.
+    [ -f "$SELF/$f" ] || continue
+    { LC_ALL=C grep -v '^[[:space:]]*#' "$SELF/$f" || [ "$?" -eq 1 ]; } > "$_er_tmp/key.envfile" || return 1
+    cat "$_er_tmp/key.envfile" >> "$_er_tmp/key.envsrc" || return 1
+    # grep's 1 (a file naming no sibling) is not a failure; pipefail would read it as one.
+    { LC_ALL=C grep -oE '\$\{?SELF\}?/[A-Za-z0-9_.-]+\.sh' "$_er_tmp/key.envfile" || [ "$?" -eq 1 ]; } \
+      | sed -E 's,.*/,,' | LC_ALL=C sort -u > "$_er_tmp/key.envnext" || return 1
+    while IFS= read -r g; do todo="${todo:+$todo }$g"; done < "$_er_tmp/key.envnext"
+  done
+  sed -n 's/^entry:[[:space:]]*//p' "$SELF/predicate-sites.md" | sed 's/[[:space:]]*$//' | LC_ALL=C sort -u \
+    > "$_er_tmp/key.enventries" || return 1
+  echo core/scripts/validate-hook-registration.sh >> "$_er_tmp/key.enventries" || return 1
+  for ref in "$THEIRS" "$BASE"; do
+    while IFS= read -r e; do
+      [ -n "$e" ] || continue
+      if [ "$e" = core/scripts/validate-hook-registration.sh ] && [ "$ref" != "$THEIRS" ]; then continue; fi
+      git -C "$DIST" cat-file -e "${ref}:${e}" 2>/dev/null || continue
+      git -C "$DIST" show "${ref}:${e}" > "$_er_tmp/key.envfile" 2>/dev/null || return 1
+      LC_ALL=C grep -v '^[[:space:]]*#' "$_er_tmp/key.envfile" >> "$_er_tmp/key.envsrc"
+    done < "$_er_tmp/key.enventries"
+  done
+  # The whole identifier is matched, then kept only when it STARTS with the prefix: a bare
+  # `(AI_DLC|CLAUDE)_` match would cut `AI_DLC_LIB_LEVEL` out of lib.sh's `_AI_DLC_LIB_LEVEL`.
+  { LC_ALL=C grep -oE '[A-Za-z0-9_]*(AI_DLC|CLAUDE)_[A-Z0-9_]+' "$_er_tmp/key.envsrc" || [ "$?" -eq 1 ]; } \
+    | { LC_ALL=C grep -E '^(AI_DLC|CLAUDE)_' || [ "$?" -eq 1 ]; } | LC_ALL=C sort -u > "$_er_tmp/key.envtok" || return 1
+  compgen -e > "$_er_tmp/key.envexp" || return 1
+  while IFS= read -r e; do
+    case "$e" in
+      *_) while IFS= read -r g; do case "$g" in "$e"*) printf '%s\n' "$g" ;; esac; done < "$_er_tmp/key.envexp" ;;
+      *) printf '%s\n' "$e" ;;
+    esac
+  done < "$_er_tmp/key.envtok" | LC_ALL=C sort -u | {
+    while IFS= read -r e; do
+      case "$e" in
+        AI_DLC_PROJECT_ROOT|AI_DLC_KNOWN_SKILLS_EXT|AI_DLC_RECONCILE_MEMO|AI_DLC_VERIFY_NO_CACHE|AI_DLC_MEMO_*) ;;
+        *) printf '%s\n' "$e" ;;
+      esac
+    done
+  }
 }
 # The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
 # records only when the render equalled this region byte for byte, so the recorded value IS the
@@ -1777,14 +1893,27 @@ er_log_retake() {
 # taken AFTER the render equals the one taken before it AND every logged read re-takes to the value it
 # had when the detector made it. The record carries the fixed key and the log's entries. Silent on
 # every failure.
+# WITH THE CACHE ARMED, A RECORD-TIME REFUSAL IS NAMED on stderr (`recorded PASS not recorded: <cause>`,
+# er_rec_why): a `!` in the log, a moved read or a moved key was silent, so a render that can never
+# record read exactly like one that did. Unarmed, stderr is unchanged. The line never begins `cause:`
+# or `approved-region:`, which apply.sh parses from this stderr.
+er_rec_why() {
+  [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] || return 0
+  echo "emit-report: recorded PASS not recorded: $1" >&2
+}
 er_cache_record() {
   local k1 t
   [ -n "$_er_key0" ] || return 0
   [ -n "${CR_LOG:-}" ] || return 0
-  k1="$(er_key)" || return 0
-  [ "$k1" = "$_er_key0" ] || return 0
-  er_log_entries "$CR_LOG" > "$_er_tmp/key.log-entries" 2>/dev/null || return 0
-  er_log_retake "$_er_tmp/key.log-entries" || return 0
+  : > "$_er_tmp/key.refused" 2>/dev/null
+  if ! k1="$(er_key 2>/dev/null)"; then
+    er_rec_why "the key could not be re-taken after the render ($(sed -n 1p "$_er_tmp/key.refused" 2>/dev/null))"; return 0
+  fi
+  [ "$k1" = "$_er_key0" ] || { er_rec_why "the key taken after the render differs from the one taken before it"; return 0; }
+  if ! er_log_entries "$CR_LOG" > "$_er_tmp/key.log-entries" 2>/dev/null; then
+    er_rec_why "$(sed -n 1p "$_er_tmp/key.refused" 2>/dev/null)"; return 0
+  fi
+  er_log_retake "$_er_tmp/key.log-entries" || { er_rec_why "a consumer path the render read no longer reads the same"; return 0; }
   t="$(mktemp "$_er_gd/ai-dlc-verify-pass.XXXXXX" 2>/dev/null)" || return 0
   if { printf 'ai-dlc-verify-pass 2\nkey %s\n' "$k1" && sed 's/^/read	/' "$_er_tmp/key.log-entries"; } > "$t" 2>/dev/null; then
     mv -f "$t" "$_er_rec" 2>/dev/null || rm -f "$t"
