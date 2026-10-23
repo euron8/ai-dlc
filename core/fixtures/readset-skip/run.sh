@@ -6530,16 +6530,29 @@ if sg slot; then
 # BL-584: the deriver's `--local-map`/`--in-pool` windows take a per-uid slot so no two overlap. Driven
 # WHOLE by slot-world.sh, beside this file, in a stub-stream world with no real `log stream` and no clock:
 # every property is read off an ordering record the traced fixtures write or a line the deriver must
-# print. The same driver is BL-584's receipt. Seven scenarios (see its header), then one mutant per
+# print. The same driver is BL-584's evidence. Twelve scenarios (see its header), then one mutant per
 # property, each a cmp -s guarded copy that must fail EXACTLY its own scenarios:
-#   noacq    the acquire call deleted               -> order, nested, stalemark, foreign, stale and beat
-#   nostale  the stale break never fires             -> stale
-#   noreent  no marker is ever honoured              -> nested
-#   anymark  any marker naming this slot is honoured -> stalemark and foreign
-#   nobeat   the heartbeat line deleted              -> beat
-#   nogate   the slot taken without --local-map      -> plain
+#   noacq      the acquire call deleted               -> every scenario but plain
+#   nostale    the stale break never fires             -> stale, oldempty, stray and rebreak
+#   noreent    no marker is ever honoured              -> nested
+#   anymark    any marker naming this slot is honoured -> stalemark and foreign
+#   nobeat     the heartbeat line deleted              -> beat
+#   nogate     the slot taken without --local-map      -> plain
+#   normdir    a failed rmdir after a break unchecked  -> stray
+#   nodir      the not-a-directory test removed        -> file
+#   noparent   the missing-path test removed           -> noparent
+#   nobound    the per-acquire break bound removed     -> rebreak
+#   nobrksleep the break path's sleep deleted          -> rebreak
+#   noline     the UNSLOTTED reason line deleted       -> file, stray, noparent and rebreak
+#   late       acquire moved to just before the fixture run, after the stream start and settle
+#                                                      -> order, stalemark and foreign
+#   early      release moved to just after the fixture run, before the flush and stream stop
+#                                                      -> order, stalemark and foreign
 # noacq moves `nested` too, and is right to: with no acquire there is no holder, so the nested deriver's
-# marker names nobody and the "nested" line never prints.
+# marker names nobody and the "nested" line never prints; with no acquire nothing ever fails open either.
+# nostale moves oldempty, stray and rebreak because each is reached only through a stale break. noline moves
+# all four fail-open scenarios because the line is the one thing they share. late and early move exactly
+# the three scenarios in which B waits behind A, which are the ones whose order record places two windows.
 SLOT_ARMS=0
 SLOT_W="$HERE/slot-world.sh"
 if [ -z "$DERIVER" ] || [ ! -f "$SLOT_W" ]; then
@@ -6554,15 +6567,18 @@ slot_score() { # <deriver copy> -> "<rc>|<failed scenarios, sorted, space-joined
 }
 SLOT_ARMS=$((SLOT_ARMS+1))
 S0="$(slot_score "$DERIVER")"
-if [ "$S0" = "0|" ] && [ "$(grep -c '^PASS ' "$SLOT_T/last.out")" = 7 ]; then
-  ok "SLOT: all seven slot-world scenarios PASS on the shipped deriver (order, nested, stalemark, foreign, stale, beat, plain)"
+if [ "$S0" = "0|" ] && [ "$(grep -c '^PASS ' "$SLOT_T/last.out")" = 12 ]; then
+  ok "SLOT: all twelve slot-world scenarios PASS on the shipped deriver (order, nested, stalemark, foreign, stale, beat, plain, file, stray, noparent, rebreak, oldempty)"
 else
-  bad "SLOT: the shipped deriver did not pass all seven slot-world scenarios: '$S0' — $(grep -m1 '^FAIL' "$SLOT_T/last.out" | sed 's/^.*-- A: /A: /' | cut -c1-400)"
+  bad "SLOT: the shipped deriver did not pass all twelve slot-world scenarios: '$S0' — $(grep -m1 '^FAIL' "$SLOT_T/last.out" | sed 's/^.*-- A: /A: /' | cut -c1-400)"
 fi
-slot_mut() { # <name> <sed expr> <expected failed set>
+slot_mut() { # <name> <sed expr | awk:<awk program>> <expected failed set>
   local m="$SLOT_T/d.$1.sh" got
   SLOT_ARMS=$((SLOT_ARMS+1))
-  sed "$2" "$DERIVER" > "$m"
+  case "$2" in
+    awk:*) awk "${2#awk:}" "$DERIVER" > "$m" ;;
+    *)     sed "$2" "$DERIVER" > "$m" ;;
+  esac
   if cmp -s "$DERIVER" "$m"; then bad "SLOT MUTANT $1 did not apply: the edit matched nothing in the deriver"; return; fi
   got="$(slot_score "$m")"
   case "$got" in
@@ -6570,12 +6586,20 @@ slot_mut() { # <name> <sed expr> <expected failed set>
     *) bad "SLOT MUTANT $1: expected '1|$3', got '$got'" ;;
   esac
 }
-slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat foreign nested order stale stalemark'
-slot_mut nostale 's/^    if readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/    if false; then/' 'stale'
+slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat file foreign nested noparent oldempty order rebreak stale stalemark stray'
+slot_mut nostale 's/^    if readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/    if false; then/' 'oldempty rebreak stale stray'
 slot_mut noreent 's/^    \*:"\$RS_SLOT")$/    __never__)/' 'nested'
 slot_mut anymark 's/^      if \[ -n "\$hp" \] \&\& \[ "\$rp" = "\$hp" \] \&\& ! readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/      if [ -n "$hp" ]; then/' 'foreign stalemark'
 slot_mut nobeat  '/slot: heartbeat, still waiting/d' 'beat'
 slot_mut nogate  '/^  \[ -n "\$LOCAL_MAP" \] || return 0$/d' 'plain'
+slot_mut normdir 's/^      if \[ "\$rmrc" -ne 0 \] && \[ -d "\$RS_SLOT" \] && \[ ! -f "\$RS_SLOT\/pid" \]; then$/      if false; then/' 'stray'
+slot_mut nodir   's/^    if \[ ! -d "\$RS_SLOT" \]; then$/    if false; then/' 'file'
+slot_mut noparent 's/^    if \[ ! -e "\$RS_SLOT" \] && \[ ! -L "\$RS_SLOT" \]; then$/    if false; then/' 'noparent'
+slot_mut nobound 's/^      if \[ "\$b" -ge "\$RS_SLOT_BREAKS" \]; then$/      if false; then/' 'rebreak'
+slot_mut nobrksleep '/^      sleep 0\.2$/d' 'rebreak'
+slot_mut noline  '/^    say "slot: UNSLOTTED -- /d' 'file noparent rebreak stray'
+slot_mut late    'awk:/^  rs_slot_acquire$/ {next} /^  # Run it the way the pre-push runner runs it/ {print "  rs_slot_acquire"} {print}' 'foreign order stalemark'
+slot_mut early   'awk:/^    rs_slot_release$/ {next} /^  flushed=1$/ {print "  rs_slot_release"} {print}' 'foreign order stalemark'
 fi
 
 # A NO-PROGRESS NET THAT FIRED ANYWHERE IS A REFUSAL, NOT A VERDICT: the run is FIXTURE BROKEN, exit 2.

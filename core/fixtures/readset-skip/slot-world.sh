@@ -4,33 +4,45 @@
 # Usage: slot-world.sh <deriver> <hook> [scenario ...]
 #   <deriver>  a copy of core/scripts/derive-fixture-readsets.sh (the shipped one, or a mutant)
 #   <hook>     the pre-push hook whose READSET_LOCK span the world's runner carries
-#   scenario   any of: order nested stalemark foreign stale beat plain (default: all)
+#   scenario   any of: order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty
+#              (default: all)
 # Prints one `PASS <scenario>` or `FAIL <scenario>: <why>` line per scenario.
 # Exit:  0 = every scenario passed, 1 = one did not, 9 = the world could not be built (not a verdict).
 #
-# ONE SOURCE FOR TWO READERS: core/fixtures/readset-skip's `slot` unit runs it against the shipped
-# deriver and against one mutant per property, and BL-584's `verify: sh` receipt runs it against the
-# shipped deriver. Both therefore DRIVE the deriver; neither greps its text.
+# core/fixtures/readset-skip's `slot` unit runs it against the shipped deriver and against one mutant
+# per property, and BL-584 names it as the evidence that drives the slot (that entry's receipt is manual).
+# It DRIVES the deriver; it never greps its text.
 #
 # NO REAL `log stream`, AND NO CLOCK. The deriver's one LOG_BIN line is pointed at a stub that tails a
 # feed file, and a stub sandbox-exec appends the report lines a profile would. Every property is read
-# off an ORDERING RECORD the fixtures write (`a-in`, `b-waited`, `a-out`, `b-in`, `b-out`) or off a line
-# the deriver must PRINT; the only waits are bounded polls that exist so a regressed deriver cannot hang
-# the caller, and their bound is never the thing measured.
+# off an ORDERING RECORD (the fixtures write `a-in`, `b-waited`, `a-out`, `b-in`, `b-out`; the stream stub
+# writes `<t>-stream-up` and `<t>-stream-down`, see it below) or off a line the deriver must PRINT; the
+# only waits are bounded polls that exist so a regressed deriver cannot hang the caller, and their bound
+# is never the thing measured.
 #
 # THE WORLD: one repo whose runner carries the hook's READSET_LOCK span and the FXROOT line, with two
 # fixtures. `fa`, traced by deriver A, records `a-in`, then (in the scenarios that need a second
 # deriver) starts deriver B on `fb` with a chosen READSET_SLOT_HOLDER, waits until B either prints
-# `slot: waiting` (recorded as `b-waited`) or finishes `fb`, and records `a-out`. `fb` records `b-in`
-# and `b-out`. So `a-in b-waited a-out b-in b-out` is two windows in sequence and `a-in b-in b-out a-out`
-# is B's window inside A's.
-#   order      B a sibling (no marker): must wait                -> a-in b-waited a-out b-in b-out
-#   nested     B inherits A's live marker: must NOT wait         -> a-in b-in b-out a-out, and B says nested
-#   stalemark  B's marker names a DEAD pid on this slot: waits   -> a-in b-waited a-out b-in b-out
-#   foreign    B's marker names a LIVE pid the slot's pid file does not: waits -> the same
+# `slot: waiting` (recorded as `b-waited`), stops its stream or exits, and records `a-out`. `fb` records
+# `b-in` and `b-out`. The deriver takes the slot before its stream starts and releases it after the
+# stream is stopped, so two windows in sequence read SEQ below, with A's stream-down before B's
+# stream-up and each fixture inside its own stream; B's window nested inside A's reads with B's whole
+# stream inside A's.
+#   order      B a sibling (no marker): must wait                -> SEQ
+#   nested     B inherits A's live marker: must NOT wait         -> B's stream inside A's, and B says nested
+#   stalemark  B's marker names a DEAD pid on this slot: waits   -> SEQ
+#   foreign    B's marker names a LIVE pid the slot's pid file does not: waits -> SEQ
 #   stale      the slot is pre-held by a dead pid: A breaks it, says so, and never says waiting
 #   beat       the slot is pre-held by a live pid: a waiting A prints a heartbeat (interval cut to 1 poll)
 #   plain      the slot is pre-held by a live pid: a plain `--list --tracer sandbox` run does not wait
+# FAIL-OPEN: a slot that cannot be taken prints ONE `slot: UNSLOTTED -- <slot> <reason>` line, never waits,
+# and runs its window unslotted:
+#   file       an old regular FILE at the slot path                     -> "exists and is not a directory"
+#   stray      an old slot dir holding a stray file (rmdir fails)       -> "is a stale directory that rmdir ..."
+#   noparent   the slot's parent directory does not exist               -> "cannot be created (its parent ..."
+#   rebreak    a dead holder's pid file in an unwritable dir: it breaks again every poll, so the breaks are
+#              bounded (-> "was broken 5 times ...") and a sleep separates each one from the next
+#   oldempty   CONTROL: an old EMPTY slot dir with no pid file is broken once and acquired, as before
 set -uo pipefail
 
 [ $# -ge 2 ] || { echo "usage: slot-world.sh <deriver> <hook> [scenario ...]" >&2; exit 9; }
@@ -38,7 +50,7 @@ DV_IN="$1"; HK_IN="$2"; shift 2
 [ -f "$DV_IN" ] && [ -f "$HK_IN" ] || { echo "slot-world: cannot read $DV_IN or $HK_IN" >&2; exit 9; }
 DV_IN="$(cd "$(dirname "$DV_IN")" && pwd -P)/$(basename "$DV_IN")"
 HK_IN="$(cd "$(dirname "$HK_IN")" && pwd -P)/$(basename "$HK_IN")"
-SCEN="$*"; [ -n "$SCEN" ] || SCEN="order nested stalemark foreign stale beat plain"
+SCEN="$*"; [ -n "$SCEN" ] || SCEN="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/slot-world.XXXXXX")" || exit 9
 W="$(cd "$W" && pwd -P)"
@@ -59,14 +71,53 @@ for a in "$@"; do case "$a" in /*) printf 'x Sandbox: cat(1) allow file-read-dat
 # binary for exec to find -- run as a command, bash takes its builtin.
 "$@"
 STUB
+# The stream stub records `<t>-stream-up` when it starts and `<t>-stream-down` when the deriver stops it,
+# from its TERM trap, so the order record also places every window's stream: <t> is the fixture tag with
+# its leading `f` dropped (`fa` -> a), `p` for an untagged plain-mode stream, and the liveness probe's
+# stream is not recorded. The deriver kills it and then `wait`s on it, so the down line is on disk before
+# the deriver's next statement. ONE FORCED INTERLEAVING, so the `early` mutant is not a race: in a pair
+# scenario, a stream of A's stopped while the slot's pid file no longer names A (its deriver, `$PPID`)
+# after B has recorded `b-waited`, holds its down line until another stream has come up (bounded polls).
+# The shipped deriver releases after the stop, so its pid file names A at every stop and the hold never runs.
 cat > "$ST/logstream" <<'STUB'
 #!/bin/bash
-exec tail -n 0 -f "$STUB_FEED"
+t=""
+for a in "$@"; do case "$a" in *FXTAG=*) t="${a#*FXTAG=}"; t="${t%%;*}" ;; esac; done
+case "$t" in
+  __liveness__) exec tail -n 0 -f "$STUB_FEED" ;;
+  '') t=p ;;
+  f*) t="${t#f}" ;;
+esac
+echo "$t-stream-up" >> "$SW_ORDER"
+tail -n 0 -f "$STUB_FEED" &
+tp=$!
+down() {
+  if [ -n "${SW_B_MODE:-}" ] && [ "$t" = a ] && grep -qx b-waited "$SW_ORDER"; then
+    rp=""; { read -r rp _; } < "$AI_DLC_READSET_SLOT/pid" 2>/dev/null
+    if [ "$rp" != "$PPID" ]; then
+      n0="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n0=0
+      i=0
+      while [ "$i" -lt 100 ]; do
+        n="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n=0
+        [ "$n" -gt "$n0" ] && break
+        /bin/sleep 0.1; i=$((i + 1))
+      done
+    fi
+  fi
+  echo "$t-stream-down" >> "$SW_ORDER"
+  kill "$tp" 2>/dev/null
+  exit 0
+}
+trap down TERM INT
+wait "$tp"
 STUB
 # The beat scenario's sleep counts its calls, so the world can wait for N wait-loop polls without a clock.
+# With SW_SLEEP_MARK set it also writes `SW-SLEEP` to stderr, which is the deriver's output, so the rebreak
+# scenario can read off that output whether a sleep separates two consecutive stale breaks.
 cat > "$W/beatbin/sleep" <<'STUB'
 #!/bin/bash
 echo x >> "$SW_SLEEPS"
+[ -n "${SW_SLEEP_MARK:-}" ] && echo SW-SLEEP >&2
 exec /bin/sleep "$@"
 STUB
 chmod +x "$ST/sandbox-exec" "$ST/logstream" "$W/beatbin/sleep" || exit 9
@@ -99,7 +150,8 @@ if [ -n "${SW_B_MODE:-}" ]; then
   i=0
   while [ "$i" -lt 3000 ]; do
     grep -q 'slot: waiting' "$SW_BOUT" 2>/dev/null && { echo b-waited >> "$O"; break; }
-    grep -qx b-out "$O" && break
+    grep -qx b-stream-down "$O" && break
+    bp="$(cat "$SW_BPID" 2>/dev/null)"; [ -n "$bp" ] && ! kill -0 "$bp" 2>/dev/null && break
     /bin/sleep 0.1; i=$((i + 1))
   done
 fi
@@ -142,11 +194,13 @@ run_a() {
   mkdir -p "$d" || exit 9
   : > "$d/order"; : > "$d/feedA"; : > "$d/feedB"; : > "$d/bout"; : > "$d/sleeps"
   cp "$dv" "$R/core/scripts/derive-fixture-readsets.sh" || exit 9
-  local P="$ST:$PATH"; [ "$s" = beat ] && P="$W/beatbin:$P"
-  ( cd "$R" && exec env -u READSET_SLOT_HOLDER PATH="$P" AI_DLC_READSET_SLOT="$d/slot" STUB_FEED="$d/feedA" \
+  local P="$ST:$PATH" M=""
+  case "$s" in beat) P="$W/beatbin:$P" ;; rebreak) P="$W/beatbin:$P"; M=1 ;; esac
+  ( cd "$R" && exec env -u READSET_SLOT_HOLDER PATH="$P" STUB_FEED="$d/feedA" \
       AI_DLC_READSET_TRACE_ROOT="$d/trA" SW_ORDER="$d/order" SW_B_MODE="$bm" SW_R="$R" SW_FEEDB="$d/feedB" \
       SW_TRB="$d/trB" SW_IPB="$d/ipB" SW_BOUT="$d/bout" SW_BPID="$d/bpid" SW_DEADPID="$DEAD" SW_LIVEPID="$LIVE" \
-      SW_SLEEPS="$d/sleeps" bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
+      SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
+      bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
 }
 order_of() { tr '\n' ' ' < "$1/order" | sed 's/ $//'; }
@@ -165,14 +219,69 @@ pair() { # <scenario> <B mode> <expected order>
   pass "$s"
 }
 cp "$R/core/scripts/derive-fixture-readsets.sh" "$W/deriver.in.sh" || exit 9
+# failopen <scenario> <slot path> <reason text> -- a slot that cannot be taken: A must print ONE `slot: UNSLOTTED`
+# line naming the slot and exactly this reason, never wait, and run its window unslotted. Bounded by the
+# deriver exiting, by the line, or by 20 `broke` lines (a regressed loop that breaks forever), never a clock.
+failopen() {
+  local s="$1" sl="$2" why="$3" d="$W/$1" i=0 n
+  run_a "$s" "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
+  while [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do
+    grep -Eq 'slot: (UNSLOTTED|waiting)' "$d/aout" 2>/dev/null && break
+    n="$(grep -c 'slot: broke' "$d/aout")" || n=0
+    [ "$n" -ge 20 ] && break
+    /bin/sleep 0.1; i=$((i + 1))
+  done
+  grep -q 'slot: UNSLOTTED' "$d/aout" || kill -KILL "$APID" 2>/dev/null
+  reap "$APID"
+  if [ "$(grep -c 'slot: UNSLOTTED' "$d/aout")" = 1 ] && grep -qF "slot: UNSLOTTED -- $sl $why" "$d/aout" \
+     && ! grep -q 'slot: waiting' "$d/aout" && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ]; then
+    return 0
+  fi
+  fail "$s" "expected one 'slot: UNSLOTTED -- $sl $why', no wait, and fa run unslotted: order '$(order_of "$d")', $(grep 'slot:' "$d/aout" | sort | uniq -c | head -3 | tr '\n' ' ' | cut -c1-240)"
+  return 1
+}
+
+# TWO WINDOWS IN SEQUENCE, as the deriver places them: A takes the slot before its stream starts and gives it up
+# after the stream is stopped, so A's stream-down precedes B's stream-up, and each fixture runs inside its own stream.
+SEQ='a-stream-up a-in b-waited a-out a-stream-down b-stream-up b-in b-out b-stream-down'
 
 for s in $SCEN; do
   d="$W/$s"
   case "$s" in
-    order)     pair order sibling 'a-in b-waited a-out b-in b-out' ;;
-    nested)    pair nested nested 'a-in b-in b-out a-out' ;;
-    stalemark) pair stalemark stalemark 'a-in b-waited a-out b-in b-out' ;;
-    foreign)   pair foreign foreign 'a-in b-waited a-out b-in b-out' ;;
+    order)     pair order sibling "$SEQ" ;;
+    nested)    pair nested nested 'a-stream-up a-in b-stream-up b-in b-out b-stream-down a-out a-stream-down' ;;
+    stalemark) pair stalemark stalemark "$SEQ" ;;
+    foreign)   pair foreign foreign "$SEQ" ;;
+    file)
+      mkdir -p "$d" && printf 'junk\n' > "$d/slot" && touch -t 202001010000 "$d/slot" || exit 9
+      failopen file "$d/slot" 'exists and is not a directory' && pass file ;;
+    stray)
+      mkdir -p "$d/slot" && : > "$d/slot/stray" && touch -t 202001010000 "$d/slot" || exit 9
+      failopen stray "$d/slot" 'is a stale directory that rmdir could not remove' && pass stray ;;
+    noparent)
+      mkdir -p "$d" || exit 9
+      SW_SLOT_AT="$d/missing/slot" failopen noparent "$d/missing/slot" "cannot be created (its parent $d/missing is missing or not writable)" && pass noparent ;;
+    rebreak)
+      # A stale pid file in a directory this user cannot write: neither `rm` nor `rmdir` can clear it, so
+      # every poll breaks the same slot again. The breaks must be bounded and each must be followed by a
+      # sleep before the next one (read off the stub sleep's `SW-SLEEP` lines in the deriver's own output).
+      mkdir -p "$d/slot" && printf '%s %s\n' "$DEAD" "$(date +%s)" > "$d/slot/pid" && chmod 555 "$d/slot" || exit 9
+      if failopen rebreak "$d/slot" 'was broken 5 times in this acquire and is still not free'; then
+        if awk '/slot: broke/ { if (b) bad = 1; b = 1 } /^SW-SLEEP$/ { b = 0 } END { exit bad }' "$d/aout"; then pass rebreak
+        else fail rebreak "two stale breaks with no sleep between them: the break path spins"; fi
+      fi
+      chmod 755 "$d/slot" ;;
+    oldempty)
+      # CONTROL for the fail-open arms: an old EMPTY slot directory with no pid file is stale and removable,
+      # so A breaks it once and acquires it, exactly as before.
+      mkdir -p "$d/slot" && touch -t 202001010000 "$d/slot" || exit 9
+      run_a oldempty "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
+      wait_for "$APID" "$d/aout" 'slot: (waiting|UNSLOTTED)|^  fa ' >/dev/null
+      grep -Eq 'slot: (waiting|UNSLOTTED)' "$d/aout" && kill -KILL "$APID" 2>/dev/null
+      reap "$APID"
+      if [ "$(grep -c 'slot: broke a stale slot' "$d/aout")" = 1 ] && ! grep -Eq 'slot: (waiting|UNSLOTTED)' "$d/aout" \
+         && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ] && [ ! -e "$d/slot" ]; then pass oldempty
+      else fail oldempty "an old empty slot dir must be broken once and acquired: order '$(order_of "$d")', $(grep 'slot:' "$d/aout" | head -2 | tr '\n' ' ' | cut -c1-160)"; fi ;;
     stale)
       mkdir -p "$d/slot" && printf '%s %s\n' "$DEAD" "$(date +%s)" > "$d/slot/pid" || exit 9
       run_a stale "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
@@ -180,7 +289,7 @@ for s in $SCEN; do
       grep -q 'slot: waiting' "$d/aout" && kill -KILL "$APID" 2>/dev/null
       reap "$APID"
       if grep -q "slot: broke a stale slot .* (holder pid $DEAD)" "$d/aout" && ! grep -q 'slot: waiting' "$d/aout" \
-         && [ "$(order_of "$d")" = 'a-in a-out' ]; then pass stale
+         && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ]; then pass stale
       else fail stale "expected 'broke a stale slot' naming pid $DEAD, no wait, and fa run: order '$(order_of "$d")', $(grep -m1 'slot:' "$d/aout" | cut -c1-100)"; fi ;;
     beat)
       mkdir -p "$d/slot" && printf '%s %s\n' "$LIVE" "$(date +%s)" > "$d/slot/pid" || exit 9
@@ -194,7 +303,7 @@ for s in $SCEN; do
         done
       fi
       kill -KILL "$APID" 2>/dev/null; reap "$APID"
-      if grep -q 'slot: waiting' "$d/aout" && grep -q 'slot: heartbeat, still waiting' "$d/aout" && [ ! -s "$d/order" ]; then pass beat
+      if grep -q 'slot: waiting' "$d/aout" && grep -q 'slot: heartbeat, still waiting' "$d/aout" && ! grep -qx a-in "$d/order"; then pass beat
       else fail beat "a waiter behind live pid $LIVE printed no heartbeat over 3 polls (or never waited, or ran fa): $(grep 'slot:' "$d/aout" | head -2 | tr '\n' ' ' | cut -c1-160)"; fi ;;
     plain)
       mkdir -p "$d/slot" && printf '%s %s\n' "$LIVE" "$(date +%s)" > "$d/slot/pid" || exit 9
@@ -202,7 +311,7 @@ for s in $SCEN; do
       wait_for "$APID" "$d/aout" 'slot: waiting|^  fa ' >/dev/null
       grep -q 'slot: waiting' "$d/aout" && kill -KILL "$APID" 2>/dev/null
       reap "$APID"
-      if ! grep -q 'slot:' "$d/aout" && [ "$(order_of "$d")" = 'a-in a-out' ] && [ -d "$d/slot" ]; then pass plain
+      if ! grep -q 'slot:' "$d/aout" && [ "$(order_of "$d")" = 'p-stream-up a-in a-out p-stream-down' ] && [ -d "$d/slot" ]; then pass plain
       else fail plain "a plain --list run touched the slot held by live pid $LIVE: order '$(order_of "$d")', $(grep -m1 'slot:' "$d/aout" | cut -c1-100)"; fi ;;
     *) echo "slot-world: unknown scenario '$s'" >&2; exit 9 ;;
   esac

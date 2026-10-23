@@ -270,6 +270,8 @@ RS_SLOT="${AI_DLC_READSET_SLOT:-/private/tmp/ai-dlc-readset-window-$(id -u)}"
 # ONE ASSIGNMENT, ON ITS OWN LINE: a waiter's heartbeat interval, in 0.2s polls. readset-skip points a COPY
 # of this script at a shorter interval, so its heartbeat arm needs no clock.
 RS_SLOT_BEAT=100
+# The most stale breaks one acquire makes before it runs its window unslotted (see rs_slot_acquire).
+RS_SLOT_BREAKS=5
 
 # THE FIXTURE ROOT IS READ OFF THE RUNNER THAT WILL CONSUME THE MAP, not restated here. The
 # map's key is a fixture BASENAME and the runner looks it up against the directories its own
@@ -1158,11 +1160,22 @@ TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
 # launch line's `env`, and a deriver that inherits a marker naming THIS slot skips the acquire only when the
 # slot's pid file names that same pid and readset_lock_stale calls it live. A stale marker or a foreign one
 # (a live pid the pid file does not name) waits like anyone else. No AI_DLC_ prefix: fixtures scrub it.
+# EVERY EXIT FROM THE WAIT LOOP IS BOUNDED, AND THE ONES THAT CANNOT TAKE THE SLOT FAIL OPEN ON OVERLAP ONLY.
+# A `mkdir` failure is HELD only when the slot path exists as a directory. A path that does not exist after
+# the failure (a missing or unwritable parent) and a path that is not a directory each end the wait at once;
+# so does a stale break whose `rmdir` failed on a directory that no pid file has re-claimed, and so does the
+# RS_SLOT_BREAKS-th break of one acquire (a slot whose pid file cannot be removed reads stale again on every
+# poll). Each prints ONE `slot: UNSLOTTED` line naming the slot and the reason, and that window runs without
+# the slot: it may overlap another deriver's, and the drop-notice guard and the loss canary still discard an
+# overlapped window, which is the no-span behaviour above. The break path sleeps like the wait path, so no
+# exit from this loop spins. Before this, an old regular file at the slot path spun about 300 lines a second
+# and never acquired, an old directory holding a stray file cycled break and HELD with no end, and a missing
+# parent read HELD forever; under `--in-pool` the waiter's growing log also kept POOL_STALL from refusing it.
 RS_SLOT_HELD=""
 RS_SLOT_MARK="${READSET_SLOT_HOLDER:-}"
 [ -z "$LOCAL_MAP" ] || [ "$HAVE_LOCK" = 1 ] || say "note: $RUNNER has no READSET_LOCK span, so the trace windows are NOT slotted and may overlap another deriver's"
 rs_slot_acquire() {
-  local hp rp w=0
+  local hp rp w=0 b=0 rmrc why=""
   RS_SLOT_HELD=""
   [ -n "$LOCAL_MAP" ] || return 0
   [ "$HAVE_LOCK" = 1 ] || return 0
@@ -1177,10 +1190,25 @@ rs_slot_acquire() {
       fi ;;
   esac
   until mkdir "$RS_SLOT" 2>/dev/null; do
+    if [ ! -e "$RS_SLOT" ] && [ ! -L "$RS_SLOT" ]; then
+      mkdir "$RS_SLOT" 2>/dev/null && break
+      why="cannot be created (its parent ${RS_SLOT%/*} is missing or not writable)"; break
+    fi
+    if [ ! -d "$RS_SLOT" ]; then
+      why="exists and is not a directory"; break
+    fi
     if readset_lock_stale "$RS_SLOT" >/dev/null; then
       rp=""; { read -r rp _; } < "$RS_SLOT/pid" 2>/dev/null
       say "slot: broke a stale slot $RS_SLOT (holder pid ${rp:-none})"
-      rm -f "$RS_SLOT/pid"; rmdir "$RS_SLOT" 2>/dev/null
+      rm -f "$RS_SLOT/pid" 2>/dev/null; rmdir "$RS_SLOT" 2>/dev/null; rmrc=$?
+      if [ "$rmrc" -ne 0 ] && [ -d "$RS_SLOT" ] && [ ! -f "$RS_SLOT/pid" ]; then
+        why="is a stale directory that rmdir could not remove (it holds more than the pid file)"; break
+      fi
+      b=$((b + 1))
+      if [ "$b" -ge "$RS_SLOT_BREAKS" ]; then
+        why="was broken $b times in this acquire and is still not free"; break
+      fi
+      sleep 0.2
       continue
     fi
     [ "$w" -eq 0 ] && say "slot: waiting for $RS_SLOT"
@@ -1188,6 +1216,10 @@ rs_slot_acquire() {
     [ $((w % RS_SLOT_BEAT)) -eq 0 ] && say "slot: heartbeat, still waiting for $RS_SLOT ($w polls)"
     sleep 0.2
   done
+  if [ -n "$why" ]; then
+    say "slot: UNSLOTTED -- $RS_SLOT $why; this window runs without the slot and may overlap another deriver's, and the drop-notice guard and the loss canary still discard an overlapped window"
+    return 0
+  fi
   readset_lock_write "$RS_SLOT" "$$" 2>/dev/null
   RS_SLOT_HELD=1
   RS_SLOT_MARK="$$:$RS_SLOT"
