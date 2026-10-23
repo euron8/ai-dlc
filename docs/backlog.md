@@ -434,6 +434,8 @@ verify: manual — the owed half is a measurement of graph's next stories round 
 - **The old receipt, and why the line is now `verify: manual`.** The previous closing line was `verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; c="$(grep -cE '^[[:space:]]*\( pcv_suite "\$EMIT" "\$PCV_ROOT/ship" \)' "$f")" || c=0; [ "$c" = 1 ] || exit 9; n="$(grep -cE '^[[:space:]]*\( pcv_suite "\$PCV_ROOT/\$_m/eng/emit-report\.sh" "\$PCV_ROOT/\$_m" "\$\(pcv_scope "\$_m"\)" \)' "$f")" || n=0; s="$(grep -cE '^[[:space:]]*_got="\$\(pcv_failset "\$PCV_ROOT/\$_m/verdicts" "\$\(pcv_scope "\$_m"\)"\)"' "$f")" || s=0; [ "$n" = 1 ] && [ "$s" = 1 ]`. It exited 0 at 782fd93f9 (control: file absent, exit 9). It checks that the kill-scope plumbing exists, so it read as a CLOSE-CANDIDATE on an entry that is still open.
 - **The new receipt for the `-d` split (quoted, not installed as `verify:`).** `f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; [ -f core/fixtures/reconcile-emit-report-d/run.sh ] || exit 1; grep -qE '^SHARDS="([a-z]+ )*d( [a-z]+)*"$' "$f" || exit 1; s="$(sed -n 's/^PHASES_d="\([a-z0-9_]*\)"$/\1/p' "$f")"; [ -n "$s" ] || exit 1; awk -v s="$s" 'BEGIN { n = split("17 18 19 20 21 22 23 24 25", v, " ") } /^[[:blank:]]*#/ { next } $0 == "if rer_phase " s "; then" { i = 1; o++; next } $0 == "fi # end rer_phase " s { i = 0; next } { for (k = 1; k <= n; k++) { re = "PC-V" v[k] "([^0-9]|$)"; if (i && $0 ~ re) h[k] = 1; if (!i && $0 ~ /PCV_IDS=/ && $0 ~ re) bad = 1 } } /^[[:blank:]]*pcv_latarm[[:blank:]]/ { if (i) c++; else bad = 1 } END { if (bad || o != 1 || c < 1) exit 1; for (k = 1; k <= n; k++) if (!h[k]) exit 1 }' "$f"`. Scores: fix 0; call left in `pcache` 1; V17 back in `PCV_IDS=` 1; V25 appended by `PCV_IDS="$PCV_IDS ..."` 1; `PHASES_d` absent 1; `PHASES_d` names `sb` 1; second spelling (slug `latnine`, the nine as a loop with one literal call line) 0; file absent 9.
 - **Owed, named exactly.** (b236-bl699-share), the reading of whether the nine arms can share one record per world; and (d), the before/after durations, a timing measurement that is not in this release.
+- **Progress (batch 241, r9; the entry stays OPEN, `verify: manual`).** The b236-bl699-share reading is done, from the code at bdb981712, with no fixture run. The nine `pcv_latarm` arms cannot all share one record. V18 and V19 need `scripts/ai-dlc/validate-hook-registration.sh` untracked and tracked respectively (`run.sh:3333-3339`), and that path is each arm's subject. V19's `git add -A` (`:3338`) would track the other arms' untracked pre-states. V21 and V22 both write `overrides/demo.md` (`:3329`). V24's record locale is a key field (`emit-report.sh:1578-1581`), so every HIT in a UTF-8 world must run under UTF-8. Seven arms can share one world: V17, V18, V20, V21, V22, V23 and V25, in the order V20, V17, V18, V23, V21, V22, V25. They follow the V27..V31 pattern (`run.sh:3499-3520`): each arm opens with its own HIT control on the restored world, its MISS is its own cached-against-opt-out pair, and it is undone afterwards. The undos are a rewrite (V17), `chmod 644` (V18), `config --unset core.abbrev` (V23), re-writing the pruned commit from its saved `cat-file` bytes with the sha asserted (V21, V22), and the existing chmod (V25). After each arm, the record is asserted byte-identical: every change forces a non-zero exit, and `er_cache_record` runs only on exit 0 (`emit-report.sh:1886-1887`). V19 and V24 keep their own worlds. Read from the code (`pcv_lat_approve`, `pcv_run`, `pcv_lat` per arm), phase pcvlat goes from 9/36/9 (approve/verify/seed) to 3/30/3, which is 45 renders down to 33. Lead ruling (ai-dlc-58): the merge is built this batch as its own fixture-only release, because removing work needs no timing to justify it.
+- **Owed, named exactly.** The seven-arm merge, which is scheduled this batch as its own release. And (d), the before/after durations comparison: (d) is a timing run and stays banked under the batch's NO TIMING RUNS ruling. It would size the saving, not decide it.
 
 verify: manual
 
@@ -517,3 +519,21 @@ Owed, not built: the structural cause is that the deny is per call, so one prote
 
 verify: manual — the batch-granularity fix needs its own contract; no predicate over the tree exists yet.
 
+## BL-795 — V17..V25 have no engine-side mutant, so nothing proves the key field each one tests is load-bearing
+
+**NOTE.** Measured by batch 241 r9's BL-699 share reading (read-only, at bdb981712; lead ai-dlc-58). Filed OPEN, not built.
+
+The nine `pcv_latarm` arms in phase pcvlat (`core/fixtures/reconcile-emit-report/run.sh`) are outside every mutant's reach: the phase header and `:5269` both say no mutant's kill set names them. Each arm's only guard is its own FIXTURE BROKEN check, which requires the opt-out render after the change to exit non-zero. That proves the render sees the change. It does not prove the engine keys it. A key field could be deleted and the arm would still pass, provided some OTHER field also moved. The nine subjects, each the engine site one mutant would remove:
+- V17: conswork's untracked NUL list
+- V18: er_hash_list's exec token
+- V19: er_cgit's forced core.fileMode
+- V20: er_kf_base's ref-as-typed
+- V21: consresolve, consumer side
+- V22: consresolve, dist side
+- V23: distrefs' abbrev
+- V24: er_kf_env's locale
+- V25: the unreadable-directory refusal
+
+Owed: a decision, on its own value, on whether engine-side mutants for these arms are worth their cost. Each mutant suite re-runs the phase.
+
+verify: manual — a decision on whether to build, not a tree state.
