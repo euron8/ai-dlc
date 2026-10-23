@@ -395,8 +395,10 @@ If `is_ui_epic == true`:
   surface, and the dev's deliverable file records either their run (invocation,
   pass/fail counts) or why they could not run. When they could not run, the lead
   runs them against the redeployed instance before re-verifying, and records that
-  run's invocation and counts in the Deploy Status Report row as the `playwright`
-  evidence this section already names. A could-not-run record is not a pass.
+  run's invocation, counts and `.zip` trace path in the Deploy Status Report row
+  as the `playwright` evidence this section already names; pass `--trace on` to
+  `npx playwright test`, since a config with no `trace` setting records none by
+  default and the flag overrides it. A could-not-run record is not a pass.
   That run is part of the lead's re-verification, deploy-gate orchestration under Rule 28a as the redeploy is.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
@@ -405,9 +407,10 @@ If `is_ui_epic == true`:
   Status Report row of this sprint's `## Gate Log: Sprint <N>` section,
   write `USER-CONFIRMED` for a visual check the operator confirmed, and
   `playwright` with the trace path for an automated one — both when both
-  ran. Check 5 of `scripts/ai-dlc/validate-mandatory-rules.sh` searches
-  that section for exactly those two tokens and FAILs a `web/**` sprint
-  whose section carries neither, whatever else the evidence says.
+  ran. Check 5 of `scripts/ai-dlc/validate-mandatory-rules.sh` accepts
+  `USER-CONFIRMED`, or `playwright` only on a line that also carries the
+  run's `.zip` trace path, and FAILs a `web/**` sprint whose section carries
+  neither; a could-not-run row does not count.
 
 ### 4b. Deferred-AC discharge verification (Hard Gate — Non-Skippable)
 
