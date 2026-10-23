@@ -13,6 +13,8 @@
 # Each span is whitespace-collapsed, lowercased and HTML-comment stripped. "A copy of the predicate"
 # is a copy verb within 80 characters before `predicate`, or `predicate` within 60 before one, with no
 # period between, so an entry that only CITES the verdict holding the predicate does not satisfy it.
+# Each negation is judged per sentence: a clause holds when one sentence carries it and that same
+# sentence does not negate it, so a correct sentence elsewhere in the span cannot void it.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 ROOT="${1:-.}"
@@ -45,11 +47,19 @@ span() {
   END { gsub(/[[:space:]]+/, " ", out); print tolower(out) }' "$1"
 }
 COPY='(cop(y|ies|ied)[^.]{0,80}predicate|predicate[^.]{0,60}cop(y|ies|ied))'
+NOCOPY='(not|never|no) (its |the |that ac.s )?predicate|predicate is not copied'
 has()  { grep -qF -- "$2" <<<"$1"; }
+# sents <span>: one sentence per line, split after a period followed by a blank (as receipt-bl787.sh
+# does) and after a bold lead-in's closing `.**`; a line opening `**` is that lead-in, a title and not
+# a rule body, so it is dropped and cannot carry a clause its body sentence negates.
+sents() { printf '%s\n' "$1" | awk '{ gsub(/\. /, ".\n"); gsub(/\.\*\* /, ".**\n"); print }' | grep -vE '^\*\*[^*]*\.\*\*$'; }
+# sat <span> <positive ERE> <negation ERE>: 0 when ONE sentence matches the positive ERE and that same
+# sentence does not match the negation ERE, so a correct sentence elsewhere in the span that happens
+# to carry a negation word does not void the clause.
+sat() { local s m; s="$(sents "$1")" || return 1; m="$(grep -E -- "$2" <<<"$s")" || return 1
+  m="$(grep -vE -- "$3" <<<"$m")" || return 1; [ -n "$m" ]; }
 # A copy clause that negates the predicate (ids only) is no copy.
-hasE() { grep -qE -- "$2" <<<"$1" && ! grep -qE -- '(not|never|no) (its |the |that ac.s )?predicate|predicate is not copied' <<<"$1"; }
-# neg <span> <ERE>: 0 when the span carries a NEGATED form of a clause the checks above found.
-neg()  { grep -qE -- "$2" <<<"$1"; }
+hasE() { sat "$1" "$2" "$NOCOPY"; }
 rc=0
 fail() { echo "FAIL: $1"; rc=1; }
 
@@ -57,8 +67,7 @@ c="$(span "$CR" '## Ownership' '## ')"
 has "$c" 'story file' && has "$c" '`## deferred acs`' || fail "code-reviewer.md Ownership does not name the story file's ## Deferred ACs"
 hasE "$c" "$COPY" || fail "code-reviewer.md Ownership does not copy the predicate text into the entry"
 has "$c" '`- **<id>**`' || fail "code-reviewer.md Ownership does not open each entry with - **<id>**"
-has "$c" '`none.`' || fail "code-reviewer.md Ownership does not write None. for a story with no deferred AC"
-neg "$c" '(never|not|no) (write )?`none\.`|gets no section' && fail "code-reviewer.md Ownership negates the None. section"
+sat "$c" '`none\.`' '(never|not|no) (write )?`none\.`|gets no section' || fail "code-reviewer.md Ownership does not write None. for a story with no deferred AC, or negates it"
 has "$c" '`## dev agent record`' || fail "code-reviewer.md Ownership does not place the section by ## Dev Agent Record"
 
 q="$(span "$QA" "$QLEAD" '- [ ]|## ')"
@@ -66,12 +75,12 @@ has "$q" 'story file' && has "$q" '`## deferred acs`' || fail "qa.md discharge-p
 hasE "$q" "$COPY" || fail "qa.md discharge-predicate item does not say the predicate is copied"
 
 d="$(span "$DV" '### 4b.' '### |## ')"
-has "$d" 'story file' && has "$d" '`## deferred acs`' || fail "deploy-validate.md 4b does not read the predicate from the story file's ## Deferred ACs"
-neg "$d" '(not|never) (from )?the story file' && fail "deploy-validate.md 4b negates the read from the story file"
+has "$d" 'story file' && has "$d" '`## deferred acs`' || fail "deploy-validate.md 4b does not name the story file's ## Deferred ACs"
+sat "$d" '(from|in) the story file' '(not|never) (from )?the story file' || fail "deploy-validate.md 4b does not read the predicate from the story file, or negates the read"
 hasE "$d" '(fall ?back|fallback)[^.]{0,60}qa verdict|qa verdict[^.]{0,60}(fall ?back|fallback)' || fail "deploy-validate.md 4b has no QA-verdict fallback for a story with no section"
 hasE "$d" 'closing.writer defect' || fail "deploy-validate.md 4b does not name a missing entry a closing-writer defect"
-has "$d" 'deployed sha' || fail "deploy-validate.md 4b does not check literals against the deployed sha"
-neg "$d" 'never (against )?the deployed sha|not against the deployed sha' && fail "deploy-validate.md 4b negates the deployed-sha check"
+has "$d" 'deployed sha' || fail "deploy-validate.md 4b does not name the deployed sha"
+sat "$d" 'check (each|every) literal' 'never (against )?the deployed sha|not against the deployed sha' || fail "deploy-validate.md 4b does not check literals against the deployed sha, or negates the check"
 has "$d" '`old -> new`' || fail "deploy-validate.md 4b does not record a corrected literal as old -> new"
 has "$d" 'never a silent substitution' || fail "deploy-validate.md 4b does not forbid a silent substitution"
 
