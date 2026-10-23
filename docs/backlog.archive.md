@@ -38298,3 +38298,18 @@ Guard: I55 arm 5 in `scripts/validate-enforcement-map.sh`, with a self-probe in 
 Limit: arm 5 binds the CITED line only. It does not prove that the reader reads the file's content nowhere else, and backlog-ledger is the measured instance: its citation of backlog-reverify.sh:103 was a real `-f` test, and the same engine greps the content at :449. Other shapes the tip adversary found that the arm acquits, 0 of them in the corpus today: an echo-quoted `[ -f VERSION ]` string; `. ./VERSION`; a basename-only match (`docs/plans/VERSION` acquitted by a test on `$d/VERSION`); a cited in-tree symlink whose target is out of tree; and a `./docs/x.md` decl line, which evades the scan because its top is read as `.`. A citation naming a directory makes the awk abort, which surfaces as the misleading "control read 0" message rather than as a finding on that line. The new arm is numbered 5 because arm 4 is the existing `_RECORD` arm, which `core/fixtures/suite-dispatch-order/run.sh` cites by that number. The `scripts/suite-content-key.sh` comment saying that no fixture verdict depends on CLAUDE.md is corrected. Its sentence at :82-83, which said vem names CLAUDE.md only in comments, was also stale (vem reads it at run time in the roots of I108 and I121-I123) and is corrected.
 
 verify: sh d=$(mktemp -d) && tar -cf - scripts core .githooks | (cd "$d" && tar -xf -) && bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1 && printf 'docs/backlog.md\n' >> "$d/core/fixtures/backlog-receipt-binding/inputs.decl" && ! bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1
+## BL-801 — the owed-derivations fixture grew from 21s to 636s loaded in 0.936.0, because every mutant re-runs every reader world
+
+**LANDED (v0.938.0, verified df3ac545c).**
+
+**DEFECT (efficiency).** Source: batch 241, lead ai-dlc-58; the growth was reported by the r6 owner at the 0.936.0 dress.
+
+`core/fixtures/owed-derivations` was recorded at 21s at c9dea46c2. That was the 38-arm reader-only fixture, before the living sweep existed. The 0.936.0 dress recorded it at 636s loaded, second in `.git/ai-dlc-fixture-durations` behind reconcile-emit-report (858s). The growth is the whole of 0.936.0's change to the fixture: 38 to 249 arms, plus mutants M1-M19, M12b, mA and mB, each one a full reader run.
+
+The shape: `lw_all` runs 23 reader invocations plus 3 `--scope-batch` invocations (26 in all) and 52 arms per call. It is called once for the real arms and once per mutant. There are 22 mutants, so the mutant phase makes 572 reader invocations, while a mutant's verdict reads only its own required arms.
+
+Under the standing rule, a wall clock is a defect until it is justified.
+
+Owed: shard the mutant battery, or have each mutant run only the worlds its required arms live in (as BL-699 did for pcvlat). Every kill set is kept.
+
+verify: sh bash core/fixtures/owed-derivations/receipt-bl801.sh
