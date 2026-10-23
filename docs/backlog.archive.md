@@ -38313,3 +38313,21 @@ Under the standing rule, a wall clock is a defect until it is justified.
 Owed: shard the mutant battery, or have each mutant run only the worlds its required arms live in (as BL-699 did for pcvlat). Every kill set is kept.
 
 verify: sh bash core/fixtures/owed-derivations/receipt-bl801.sh
+## BL-798 — the sandbox tracer's settle, flush and window-cut greps match a bare marker name, so a concurrent deriver's markers cut this run's window
+
+**LANDED (v0.940.0, verified c6f082357).**
+
+**DEFECT.** Under `--local-map` and `--in-pool` the stream predicate is `eventMessage CONTAINS "FXTAG=$fx;"`, the fixture name alone. A concurrent deriver tracing the same fixture name lands its own marker reads (a different `$MARKDIR`) in this run's stream. `derive-fixture-readsets.sh` located its window with `grep 'readset-sentinel'` (settle, and the last-start cut) and `grep 'readset-end'` (flush, and the first-end cut), all bare names, so a peer's marker read was taken for this run's. The contract adversary measured 12 of 12 concurrent same-name windows cut at the other deriver's marker, 6 at a foreign start and 6 at a foreign end. A foreign end truncates the window's tail, and a lost stat or negative lookup there is invisible to the loss canary (atime sees only reads of files that exist at the scan), so the short set maps.
+
+Fix: all four greps are keyed with `grep -F` on this run's full sentinel and `"$ENDMARK"` paths (`SENT_KEY`, which is `"$SENTINEL"` under the sandbox tracers and the bare name under `--tracer fs_usage`, whose root-only line format was not measured), the shape the liveness probe already used. `$MARKDIR` is under `$TRACE_ROOT`, unique per run. `sandbox_paths` keeps only paths under `$TREE/`, and the markers are outside it, so a peer's marker paths cannot enter the set through the `grep -v '^\.readset-sentinel$'` line either.
+
+Proven by the `FOREIGN markers` arm and three `FOREIGN MUTANT` arms in `core/fixtures/readset-skip/run.sh` (stub stream, foreign sentinel and foreign end interleaved, the foreign end ahead of this run's own).
+
+--tracer fs_usage keeps the bare marker match; a concurrent same-name fs_usage trace can still cut a window; unmeasured here because fs_usage needs root and is operator-only
+
+The receipt below binds the sandbox-stream keys only and says nothing about fs_usage.
+
+verify: sh f=core/scripts/derive-fixture-readsets.sh; c="$(grep -vE '^[[:space:]]*#' "$f")"; [ "$(grep -cE 'grep( -[a-zA-Z]+)* -[a-zA-Z]*F[a-zA-Z]*( -[a-zA-Z]+)* "\$(SENT_KEY|ENDMARK)" "\$raw"' <<<"$c")" -ge 4 ] && ! grep -qE "grep -[a-zA-Z]+ '?readset-(sentinel|end)'? \"\\\$raw\"" <<<"$c"
+
+The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. Both counts are taken over the deriver's non-comment lines, so a comment spelling the keyed grep cannot stand in for a live one. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
+

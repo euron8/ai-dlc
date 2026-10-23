@@ -880,6 +880,10 @@ readset_trace_add() { # <out> <fixture> <deriver sha>
   fi
 }
 
+# READSET_LOCK_BEGIN
+# The three lock helpers below are SOURCED by derive-fixture-readsets.sh for its trace-window slot, so the
+# slot's writer and its stale test are this hook's own, never a restatement. Nothing else between the
+# sentinels: the deriver sources the whole span.
 # THE START TIME OF A PID, ONE NORMALISED STRING, for the live-trace lock. The writer and the reader
 # both call this, so the two sides cannot disagree on locale, zone or column padding: `ps` runs
 # under LC_ALL=C TZ=UTC0 and its words are re-joined by single spaces. Prints nothing and returns 1
@@ -952,6 +956,7 @@ readset_lock_stale() { # <lock dir>
   [ -n "$(find "$lk" -maxdepth 0 -mmin +1 2>/dev/null)" ] && return 0
   return 1
 }
+# READSET_LOCK_END
 
 # AFTER A GREEN SUITE, START ONE DETACHED TRACE OF THE UNMAPPED FIXTURES THAT RAN. The push is never
 # delayed: every descriptor goes to a log under the git dir, so git has nothing to wait on, and the
