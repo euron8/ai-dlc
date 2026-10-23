@@ -636,6 +636,13 @@ const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");
 // "$EXPLORE_PROMPT"` line of acknowledge.sh. A String.raw so the source bytes ARE the value; the
 // hook greps line by line and the pattern cannot cross a newline, so one test over the whole
 // prompt means what grep -qE means.
+// The TESTED STRING is the one the hook builds: `jq -r '.tool_input.prompt // empty'` gives ""
+// for null, false or a missing key, a string raw, and anything else as JSON text, containers
+// pretty-printed at two spaces -- so an object prompt citing a role is denied there and must
+// count here. Measured against jq -r for 1, 0, true, false, null, arrays, objects and nested
+// containers: identical, except a number's spelling (1.50, 1E+3), which carries no letter and
+// cannot match the role ERE on either side. vem I128 binds the RegExp construction line below
+// the terminator, so the ERE bytes it compares are the ERE actually tested.
 // >>> I128 EXPLORE ROLE ERE: acknowledge.sh's Explore-prompt pattern, verbatim >>>
 const EXPLORE_ROLE_ERE = String.raw`team-roles/[a-z][a-z-]*\.md`;
 // <<< I128 EXPLORE ROLE ERE <<<
@@ -646,7 +653,8 @@ const isPausedExploreAllowed = (b) => {
   if (!input || typeof input !== "object") return false;
   if (input.subagent_type !== "Explore") return false;
   if ("name" in input || "team_name" in input) return false;
-  return !EXPLORE_ROLE_RE.test(String(input.prompt ?? ""));
+  const p = input.prompt;
+  return !EXPLORE_ROLE_RE.test(p == null || p === false ? "" : typeof p === "string" ? p : JSON.stringify(p, null, 2));
 };
 // The verdict of the LAST marker on one raw line, keyed as the hook's `case` keys it, by suffix:
 // 1 updater, 0 pipeline, null no marker. The hook greps every line, sidechain records included,

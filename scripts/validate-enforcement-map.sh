@@ -8229,6 +8229,16 @@ fi
 #          isPausedExploreAllowed tests a prompt against. The hook's other conjuncts (Agent|Task,
 #          exact `Explore`, no `name`/`team_name` key) are tool-shape facts the fixture
 #          check-25-steering-conduct scores through --count, not text this arm can compare.
+#   CONSTRUCT  the ERE bytes are not the RegExp tested unless the line that builds it reads them:
+#          the line IMMEDIATELY after each `<<< I128 EXPLORE ROLE ERE <<<` / `<<< I128 UPDATER
+#          MARKER ERE <<<` terminator must be byte-exactly `const EXPLORE_ROLE_RE = new
+#          RegExp(EXPLORE_ROLE_ERE);` / `const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE,
+#          "g");`. Any other line there is CONSTRUCT-DIFFER (a construction naming another literal
+#          left the String.raw bytes equal and read SAME before this member), and a missing
+#          terminator is ANCHOR. Narrowing: exact whole-line equality, no trimming and no regex, on
+#          the one line after a fixed-string terminator; each terminator occurs once in the
+#          validator (control: the opener of each block also once). FP set on the live tree: empty.
+#          Inside the same awk; no fork added.
 # A hook arm added, removed or edited without the validator moving, or the reverse, fails here.
 #
 # COMPARISON. ALLOW is a SET (order is not a property the validator reads; it tests every
@@ -8245,7 +8255,9 @@ fi
 # ALLOW-DIFFER, a one-byte ERE drift ERE-DIFFER, a zero-member hook side EMPTY:hook and a
 # zero-member validator list between intact anchors EMPTY:val, a one-byte XERE drift
 # ERE-DIFFER:explore, a validator missing its XERE opener ERE-EMPTY:explore-val, a hook missing
-# its XERE line ERE-EMPTY:explore-hook and a hook carrying it twice ANCHOR:explore-hook-lines:2 --
+# its XERE line ERE-EMPTY:explore-hook, a hook carrying it twice ANCHOR:explore-hook-lines:2, an
+# Explore construction line naming another literal CONSTRUCT-DIFFER:explore, an updater one
+# CONSTRUCT-DIFFER:updater and a validator missing its Explore terminator ANCHOR:explore-terminator --
 # before the shipped pair is read. Then the arm-SHAPE units, each run against the full list and against
 # the list missing that arm: `) ;;  # comment`, `);;` and the pattern and `;;` on two lines must
 # read SAME and ALLOW-DIFFER respectively; `) : ;;` and a pattern line whose `;;` follows a `#`
@@ -8278,8 +8290,8 @@ i128_val=core/scripts/validate-steering-budget.sh
 I128_AWK='
 function start(g, r) {
   if (!(g in seen)) { seen[g] = 1; order[++ng] = g }
-  cur = g; role = r; incase = 0; done = 0; inval = 0; wantere = 0; wantx = 0; pend = ""
-  if (r == "hook") { hopen[g] = 0; hgen[g] = 0; hxn[g] = 0 } else { vopen[g] = 0; vclose[g] = 0 }
+  cur = g; role = r; incase = 0; done = 0; inval = 0; wantere = 0; wantx = 0; wantxc = 0; wantec = 0; pend = ""
+  if (r == "hook") { hopen[g] = 0; hgen[g] = 0; hxn[g] = 0 } else { vopen[g] = 0; vclose[g] = 0; vxc[g] = ""; vec[g] = "" }
 }
 function arm(p) {
   if (index(p, "?") || index(p, "[") || index(p, "\"") || index(p, q) || index(p, "\\")) { if (!(cur in hpat)) hpat[cur] = p }
@@ -8316,6 +8328,10 @@ role == "val" && wantx {
   wantx = 0; a = index($0, "String.raw`"); b = index($0, "`;")
   if (a && b > a) vxere[cur] = substr($0, a + 11, b - a - 11)
 }
+role == "val" && wantxc { wantxc = 0; vxc[cur] = ($0 == xcon) ? "ok" : $0; next }
+role == "val" && wantec { wantec = 0; vec[cur] = ($0 == econ) ? "ok" : $0; next }
+role == "val" && index($0, xterm) { wantxc = 1; next }
+role == "val" && index($0, eterm) { wantec = 1; next }
 role == "val" && index($0, vereo) { wantere = 1; next }
 role == "val" && index($0, vxo) { wantx = 1; next }
 role == "val" && index($0, vopenm) { inval = 1; vopen[cur]++; next }
@@ -8346,6 +8362,10 @@ END {
     else if (hxere[g] == "") v = "ERE-EMPTY:explore-hook"
     else if (vxere[g] == "") v = "ERE-EMPTY:explore-val"
     else if (hxere[g] != vxere[g]) v = "ERE-DIFFER:explore"
+    else if (vxc[g] == "") v = "ANCHOR:explore-terminator"
+    else if (vxc[g] != "ok") v = "CONSTRUCT-DIFFER:explore:" vxc[g]
+    else if (vec[g] == "") v = "ANCHOR:updater-terminator"
+    else if (vec[g] != "ok") v = "CONSTRUCT-DIFFER:updater:" vec[g]
     else v = "SAME:" hn[g]
     print g " " v
   }
@@ -8357,26 +8377,38 @@ i128_vo='// >>> I128 PAUSE-WRITE ALLOW ARMS: the hook'"'"'s case patterns, verba
 i128_vc='// <<< I128 PAUSE-WRITE ALLOW ARMS <<<'
 i128_veo='// >>> I128 UPDATER MARKER ERE:'
 i128_vxo='// >>> I128 EXPLORE ROLE ERE:'
+i128_xterm='// <<< I128 EXPLORE ROLE ERE <<<'
+i128_eterm='// <<< I128 UPDATER MARKER ERE <<<'
+i128_xcon='const EXPLORE_ROLE_RE = new RegExp(EXPLORE_ROLE_ERE);'
+i128_econ='const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");'
 i128_ere='"name":"Skill","input":\{"skill":"ai-dlc(-update)?"'
 i128_xere='team-roles/[a-z][a-z-]*\.md'
 i128_hx="          elif grep -qE '${i128_xere}' <<< \"\$EXPLORE_PROMPT\"; then${i128_nl}"
 i128_hk="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}${i128_hx}    case \"\$FP\" in${i128_nl}      */a/*|a/*) ;;${i128_nl}      # a comment between arms${i128_nl}      */b.md|b.md) ;;${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
 i128_hk0="  # ${i126_open}${i128_nl}  LAST_SKILL=\$(grep -oE '${i128_ere}' \"\$TRANSCRIPT\" 2>/dev/null | tail -1)${i128_nl}${i128_hx}    case \"\$FP\" in${i128_nl}      */_bmad-output/*|_bmad-output/*)${i128_nl}        x=1 ;;${i128_nl}    esac"
-i128_vx="${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}\`;${i128_nl}"
-i128_vl="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}"
+i128_vxt="${i128_xterm}${i128_nl}${i128_xcon}${i128_nl}"
+i128_vet="${i128_eterm}${i128_nl}${i128_econ}${i128_nl}"
+i128_vx="${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}\`;${i128_nl}${i128_vxt}"
+i128_vl="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}"
 i128_vsame="${i128_vl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
 i128_vdrop="${i128_vl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_vere="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere%\?\"}\"\`;${i128_nl}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
+i128_vere="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere%\?\"}\"\`;${i128_nl}${i128_vet}${i128_vx}${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
 i128_v0="${i128_vl}];${i128_nl}${i128_vc}"
 # The Explore-ERE units: a one-byte drift of the validator's copy, the validator's opener removed,
 # the hook's line removed, and the hook's line written twice. Each must read its own verdict.
 i128_vxlist="${i128_vo}${i128_nl}const L = [${i128_nl}  \"*/b.md|b.md\",${i128_nl}  \"*/a/*|a/*\",${i128_nl}];${i128_nl}${i128_vc}"
-i128_vxd="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}x\`;${i128_nl}${i128_vxlist}"
-i128_vxn="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}const X = String.raw\`${i128_xere}\`;${i128_nl}${i128_vxlist}"
+i128_vxd="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}${i128_vxo} x >>>${i128_nl}const X = String.raw\`${i128_xere}x\`;${i128_nl}${i128_vxt}${i128_vxlist}"
+i128_vxn="${i128_veo} x >>>${i128_nl}const E = String.raw\`${i128_ere}\`;${i128_nl}${i128_vet}const X = String.raw\`${i128_xere}\`;${i128_nl}${i128_vxt}${i128_vxlist}"
+# The construction units: each copy's ERE bytes intact, its RegExp construction line naming
+# another literal (xcon, econ) or its terminator removed (xcterm). Each must read its own verdict.
+i128_vxc="${i128_vsame/"${i128_xcon}"/const EXPLORE_ROLE_RE = new RegExp(\"team-roles/[a-z]+\\\\.md\");}"
+i128_vec="${i128_vsame/"${i128_econ}"/const UPDATER_MARKER_RE = new RegExp(\"x\", \"g\");}"
+i128_vxct="${i128_vsame/"${i128_xterm}"/}"
 i128_hxn="${i128_hk/"${i128_hx}"/}"
 i128_hxd="${i128_hk/"${i128_hx}"/${i128_hx}${i128_hx}}"
 i128_stream="@@UNIT same hook${i128_nl}${i128_hk}${i128_nl}@@UNIT same val${i128_nl}${i128_vsame}${i128_nl}@@UNIT drop hook${i128_nl}${i128_hk}${i128_nl}@@UNIT drop val${i128_nl}${i128_vdrop}${i128_nl}@@UNIT ere hook${i128_nl}${i128_hk}${i128_nl}@@UNIT ere val${i128_nl}${i128_vere}${i128_nl}@@UNIT empty hook${i128_nl}${i128_hk0}${i128_nl}@@UNIT empty val${i128_nl}${i128_vsame}${i128_nl}@@UNIT emptyv hook${i128_nl}${i128_hk}${i128_nl}@@UNIT emptyv val${i128_nl}${i128_v0}"
 i128_stream="${i128_stream}${i128_nl}@@UNIT xdrift hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xdrift val${i128_nl}${i128_vxd}${i128_nl}@@UNIT xnoval hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xnoval val${i128_nl}${i128_vxn}${i128_nl}@@UNIT xnohook hook${i128_nl}${i128_hxn}${i128_nl}@@UNIT xnohook val${i128_nl}${i128_vsame}${i128_nl}@@UNIT xdup hook${i128_nl}${i128_hxd}${i128_nl}@@UNIT xdup val${i128_nl}${i128_vsame}"
+i128_stream="${i128_stream}${i128_nl}@@UNIT xcon hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xcon val${i128_nl}${i128_vxc}${i128_nl}@@UNIT xecon hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xecon val${i128_nl}${i128_vec}${i128_nl}@@UNIT xcterm hook${i128_nl}${i128_hk}${i128_nl}@@UNIT xcterm val${i128_nl}${i128_vxct}"
 # The shape units: the b arm respelled in each accepted form must read SAME against the full
 # list and ALLOW-DIFFER against the list missing it; a no-op body and a glob metacharacter REFUSE.
 i128_hpre="${i128_hk%%      \*/b.md|b.md) ;;*}"
@@ -8388,11 +8420,12 @@ done
 if [ ! -f "$i128_hook" ] || [ ! -f "$i128_val" ]; then
   err "I128 cannot find $i128_hook or $i128_val. With either side absent there is nothing to compare, which would read as agreement."
 else
-  i128_out="$(awk -v hf="$i128_hook" -v q="$i128_q" -v i126="$i126_open" -v vopenm="$i128_vo" -v vclosem="$i128_vc" -v vereo="$i128_veo" -v vxo="$i128_vxo" "$I128_AWK" - "$i128_hook" "$i128_val" <<<"$i128_stream" 2>/dev/null)"
+  i128_out="$(awk -v hf="$i128_hook" -v q="$i128_q" -v i126="$i126_open" -v vopenm="$i128_vo" -v vclosem="$i128_vc" -v vereo="$i128_veo" -v vxo="$i128_vxo" -v xterm="$i128_xterm" -v eterm="$i128_eterm" -v xcon="$i128_xcon" -v econ="$i128_econ" "$I128_AWK" - "$i128_hook" "$i128_val" <<<"$i128_stream" 2>/dev/null)"
   i128_p_same=""; i128_p_drop=""; i128_p_ere=""; i128_p_empty=""; i128_p_emptyv=""; i128_v=""; i128_p_shape=""; i128_p_x=""
   while IFS=' ' read -r i128_g i128_r; do
     case "$i128_g" in
-      x*)    i128_p_x="${i128_p_x} ${i128_g}=${i128_r}" ;;
+      x*)    case "$i128_r" in CONSTRUCT-DIFFER:*) i128_cs="${i128_r#CONSTRUCT-DIFFER:}"; i128_r="CONSTRUCT-DIFFER:${i128_cs%%:*}" ;; esac
+             i128_p_x="${i128_p_x} ${i128_g}=${i128_r}" ;;
       same)  i128_p_same="$i128_r" ;;
       drop)  i128_p_drop="$i128_r" ;;
       ere)   i128_p_ere="$i128_r" ;;
@@ -8403,7 +8436,7 @@ else
     esac
   done <<<"$i128_out"
   i128_shape_want=" trail-eq=SAME trail-dr=ALLOW-DIFFER nosp-eq=SAME nosp-dr=ALLOW-DIFFER split-eq=SAME split-dr=ALLOW-DIFFER noop-eq=REFUSE-SHAPE noop-dr=REFUSE-SHAPE cmt-eq=REFUSE-SHAPE cmt-dr=REFUSE-SHAPE glob-eq=REFUSE-PATTERN glob-dr=REFUSE-PATTERN"
-  i128_x_want=" xdrift=ERE-DIFFER:explore xnoval=ERE-EMPTY:explore-val xnohook=ERE-EMPTY:explore-hook xdup=ANCHOR:explore-hook-lines:2"
+  i128_x_want=" xdrift=ERE-DIFFER:explore xnoval=ERE-EMPTY:explore-val xnohook=ERE-EMPTY:explore-hook xdup=ANCHOR:explore-hook-lines:2 xcon=CONSTRUCT-DIFFER:explore xecon=CONSTRUCT-DIFFER:updater xcterm=ANCHOR:explore-terminator"
   if [ "$i128_p_same" != "SAME:2" ] || [ "${i128_p_drop%%:*}" != ALLOW-DIFFER ] || [ "$i128_p_ere" != ERE-DIFFER ] || [ "$i128_p_empty" != EMPTY:hook ] || [ "$i128_p_emptyv" != EMPTY:val ] || [ "$i128_p_shape" != "$i128_shape_want" ] || [ "$i128_p_x" != "$i128_x_want" ]; then
     err "I128's own probe failed: a reordered equal pair with a comment between arms read '$i128_p_same' (want SAME:2), a dropped validator member '$i128_p_drop' (want ALLOW-DIFFER), a one-byte ERE drift '$i128_p_ere' (want ERE-DIFFER), a zero-arm hook '$i128_p_empty' (want EMPTY:hook), a zero-member validator list between intact anchors '$i128_p_emptyv' (want EMPTY:val); the arm-shape units read '${i128_p_shape# }' (want '${i128_shape_want# }'); the Explore-ERE units read '${i128_p_x# }' (want '${i128_x_want# }'). The extractor cannot tell agreement from drift, so no verdict on the shipped pair means anything."
   else
@@ -8411,6 +8444,7 @@ else
       SAME:*) : ;;
       ALLOW-DIFFER:*) err "I128 Check B's pause-write allow list in $i128_val has drifted from the empty-bodied arms before the generic _bmad-output arm of $i128_hook:${i128_v#ALLOW-DIFFER:}. Check B would score a write the hook allows while paused as a steamroll, or acquit one the hook denies. Copy the hook's case pattern verbatim into PAUSE_WRITE_ALLOW." ;;
       ERE-DIFFER:explore) err "I128 the Explore role ERE in $i128_val (line after its '$i128_vxo' opener) is not byte-identical to the grep -qE pattern on $i128_hook's '<<< \"\$EXPLORE_PROMPT\"' line. Check B would acquit an Explore dispatch whose prompt the hook treats as a role citation, or count one the hook allows. Copy the hook's pattern verbatim into EXPLORE_ROLE_ERE." ;;
+      CONSTRUCT-DIFFER:*) i128_cs="${i128_v#CONSTRUCT-DIFFER:}"; err "I128 the RegExp construction line after $i128_val's '${i128_cs%%:*}' ERE terminator is not exactly the one that tests that ERE: it reads '${i128_cs#*:}'. The ERE bytes this arm compares would then not be the RegExp Check B tests, and a different literal would read as agreement. Restore it to '$i128_xcon' (explore) or '$i128_econ' (updater)." ;;
       ERE-DIFFER) err "I128 the updater-marker ERE in $i128_val (line after its '$i128_veo' opener) is not byte-identical to the grep -oE pattern on the line after $i128_hook's I126 opener. Check B would decide 'updater session' differently from the hook that allows its calls." ;;
       REFUSE-SHAPE:*) err "I128 cannot classify a line in the case region of $i128_hook's pause-write arm, before its generic _bmad-output arm: '${i128_v#REFUSE-SHAPE:}'. This arm reads only an empty-bodied '<pattern>) ;;' arm (a trailing comment, ');;', or the pattern and ';;' on two ADJACENT lines); any other shape there, a comment or blank line between a pattern and its ';;' included,, a ': ;;' no-op body included, may be a write the hook allows that Check B cannot see, so it is refused rather than read as agreement. Respell it as '<pattern>) ;;'." ;;
       REFUSE-PATTERN:*) err "I128 an allow arm of $i128_hook carries a quote, backslash, '?' or '[' ('${i128_v#REFUSE-PATTERN:}'). Check B converts only '*' to a regex and takes every other byte literally, so this pattern would compare equal here and match differently there. Spell the arm with literal bytes and '*' only." ;;

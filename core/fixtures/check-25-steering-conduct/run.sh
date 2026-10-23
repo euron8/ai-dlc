@@ -991,6 +991,9 @@ pbmut first-marker-wins 's#^      if (v !== null) upd = v;$#      if (v !== null
 #   ex-lower     ex-agent with "subagent_type":"explore"                        1
 #   ex-team      ex-agent plus "team_name"                                      1
 #   ex-gp        ex-agent with subagent_type general-purpose (the control)      1
+#   ex-objrole   ex-agent with an OBJECT prompt citing team-roles/dev.md        1
+#                (jq -r emits a non-string as JSON text, which the hook greps)
+#   ex-hyphen    ex-agent with a prompt citing team-roles/a-b.md                1
 echo
 echo "  -- paused lead Explore dispatch (BL-784) --"
 EX="$AWORK/ex"; mkdir -p "$EX"
@@ -1004,12 +1007,14 @@ ex_seed role     Agent '{"subagent_type":"Explore","description":"find X","promp
 ex_seed lower    Agent '{"subagent_type":"explore","description":"find X","prompt":"find where X is defined"}'
 ex_seed team     Agent '{"subagent_type":"Explore","description":"find X","team_name":"t","prompt":"find where X is defined"}'
 ex_seed gp       Agent '{"subagent_type":"general-purpose","description":"find X","prompt":"find where X is defined"}'
-EX_CELLS="agent task noprompt namenull role lower team gp"
+ex_seed objrole  Agent '{"subagent_type":"Explore","description":"find X","prompt":{"a":"team-roles/dev.md"}}'
+ex_seed hyphen   Agent '{"subagent_type":"Explore","description":"find X","prompt":"read team-roles/a-b.md, then find X"}'
+EX_CELLS="agent task noprompt namenull role lower team gp objrole hyphen"
 exv() { local v="$1" o="" c n; for c in $EX_CELLS; do n="$(acount "$v" "$EX/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
-EX_WANT=00011111
+EX_WANT=0001111111
 w ex-shipped "$(exv "$VALIDATOR")" "$EX_WANT" \
-  "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1"
-w ex-mutant-control "$(exv "$MCTL")" "$EX_WANT" "control: an unmutated copy beside the mutants reads all eight Explore cells as shipped"
+  "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1, an object prompt citing a role 1, team-roles/a-b.md 1"
+w ex-mutant-control "$(exv "$MCTL")" "$EX_WANT" "control: an unmutated copy beside the mutants reads all ten Explore cells as shipped"
 exmut() { # exmut <name> <sed> <want> <why>
   mut "$1" "$2" || return 0
   local got; got="$(exv "$MUTP")"
@@ -1018,16 +1023,19 @@ exmut() { # exmut <name> <sed> <want> <why>
 }
 # MUTANT EX1 -- the acquittal dropped from Check B's filter: every Explore cell counts.
 exmut explore-acquittal-dropped 's#^                   !isPausedExploreAllowed(b));$#                   true);#' \
-  11111111 "without the acquittal, the allowed Explore dispatches are steamrolls again"
+  1111111111 "without the acquittal, the allowed Explore dispatches are steamrolls again"
 # MUTANT EX2 -- the key test done by truthiness: "name": null reads as no name and is acquitted.
 exmut explore-key-by-truthiness 's#^  if ("name" in input || "team_name" in input) return false;$#  if (input.name || input.team_name) return false;#' \
-  00001111 "with the key tested by truthiness, a name:null dispatch the hook routes to the teammate runner is acquitted"
+  0000111111 "with the key tested by truthiness, a name:null dispatch the hook routes to the teammate runner is acquitted"
 # MUTANT EX3 -- the role ERE never matches: a team-roles citation is acquitted.
-exmut explore-role-ere-dead 's#^  return !EXPLORE_ROLE_RE.test(String(input.prompt ?? ""));$#  return true;#' \
-  00010111 "without the role test, a prompt the dispatch guard rewrites to a role is acquitted"
+exmut explore-role-ere-dead 's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return true;#' \
+  0001011100 "without the role test, a prompt the dispatch guard rewrites to a role is acquitted"
 # MUTANT EX4 -- subagent_type compared case-insensitively.
 exmut explore-case-folded 's#^  if (input.subagent_type !== "Explore") return false;$#  if (String(input.subagent_type).toLowerCase() !== "explore") return false;#' \
-  00011011 "with the type compared case-insensitively, lower-case explore is acquitted"
+  0001101111 "with the type compared case-insensitively, lower-case explore is acquitted"
+# MUTANT EX5 -- the prompt coerced with String(): an object prompt reads "[object Object]".
+exmut explore-prompt-string-coerced 's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return !EXPLORE_ROLE_RE.test(String(p ?? ""));#' \
+  0001111101 "with String() coercion, an object prompt citing a role (which jq -r emits as JSON text the hook greps) is acquitted"
 
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
