@@ -166,9 +166,14 @@ cp -R "$(dirname "$HOOK")/." "$_MUT/" 2>/dev/null
 _OLD='story files."'
 _NEW='story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."'
 _SRC="$(cat "$HOOK"; printf x)"; _SRC="${_SRC%x}"
-printf '%s' "${_SRC/"$_OLD"/"$_NEW"}" > "$_MUT/ai-dlc-protect.sh"
+printf '%s' "${_SRC/"$_OLD"/$_NEW}" > "$_MUT/ai-dlc-protect.sh"
 if cmp -s "$HOOK" "$_MUT/ai-dlc-protect.sh"; then
   bad "mutant CONTEXT-RESTORED did not differ from the fix (DID NOT APPLY)"
+elif ! bash -n "$_MUT/ai-dlc-protect.sh" 2>/dev/null; then
+  bad "mutant CONTEXT-RESTORED does not parse (a crashing hook is killed at the deny conjunct, not the NOT protected one)"
+elif _MO="$(printf '%s' "$(jb 'cat docs/architecture.md')" | CLAUDE_PROJECT_DIR="$LAYERED" bash "$_MUT/ai-dlc-protect.sh" 2>/dev/null)"; \
+     ! { grep -q '"permissionDecision": *"deny"' <<<"$_MO" && grep -qF 'NOT protected' <<<"$_MO"; }; then
+  bad "mutant CONTEXT-RESTORED output lacks deny + 'NOT protected': its kill would not come from the NOT protected conjunct"
 elif ! { cp "$HOOK" "$_MUT/ctl.sh" && ctxarm "$_MUT/ctl.sh"; }; then
   bad "mutant CONTEXT-RESTORED harness broken: an unmutated copy in the same directory fails the 9c arm"
 elif ! ctxarm "$_MUT/ai-dlc-protect.sh" \

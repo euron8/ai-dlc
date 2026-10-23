@@ -3,7 +3,8 @@
 # ctx_batch_execute JSON on stdin, in a scratch project whose layer file protects
 # docs/architecture.md, and asserts on the deny's output:
 #   b  it does NOT say 'NOT protected' (core cannot know a consumer's layer)
-#   c  it DOES say 'Use the native Read tool' (so a hook that emits nothing fails)
+#   c  it DOES say 'Use the native Read tool'
+# A hook that emits nothing never reaches (c): the deny control at line 23 catches it first and exits 9.
 # Exit: 0 = BL-794 fixed, 1 = regressed, 9 = the receipt cannot measure its subject.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
