@@ -3364,8 +3364,8 @@ The deny text states, in this order:
      reads an ai-dlc core file and no longer reproduces. No record row exists for it and no reconcile
      log names it, so its 5th column is `-`. Its reason is `LIVING-STALE`, `LIVING-ALLOWLIST`,
      `LIVING-READS-STDIN` or `LIVING-UNRUN`: `LIVING-` plus the validator's FAIL kind, or UNRUN.
-     A `LIVING-GRAMMAR` fail names a fence opener, which has no command and so no operand, and it
-     never blocks. **Remedy: re-run the row's command and rewrite the fence and the sentence it
+     A GRAMMAR fail names a fence opener, which has no command and so no operand: it produces no row
+     and never blocks. **Remedy: re-run the row's command and rewrite the fence and the sentence it
      supports IN PLACE.** No record write closes it, and a `REPOINTED` append does nothing for it.
      When that living file is notarized by a met series in the same sprint, so it cannot be edited
      mid-pass, follow `_gate-procedures.md` "Divergence resolution dispatch".
