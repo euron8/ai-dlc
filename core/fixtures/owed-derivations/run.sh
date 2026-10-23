@@ -945,7 +945,7 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
     "$({ [ "$s9r" = 0 ] && [ "$BRC" = 0 ] && [ "$s9a" = "$BOUT" ] && [ "$(printf '%s\n' "$BOUT" | cut -f1 | tr '\n' ' ')" = "LIVING PAST CURRENT LIVING " ]; } && echo 0 || echo 1)"
   local s10full="$s9a"
   [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
-  BOUT="$( cd / &&printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
+  BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$LS1" bash "$lone/scripts/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
   lw_arm S10 "apply.sh's copy shape (reader + real sprint-status.sh + schema, NO core-paths.sh, no validator): --scope-batch over a root with a stale LIVING core fence -> exit 0, byte-identical to the full sibling set" \
     "$({ [ ! -e "$lone/scripts/core-paths.sh" ] && [ "$BRC" = 0 ] && [ -n "$s10full" ] && [ "$BOUT" = "$s10full" ]; } && echo 0 || echo 1)"
   lw_end; fi
@@ -976,21 +976,19 @@ req_seen() {
     case "$LW_SEEN" in *" $a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a was not evaluated, so its world never ran"; return 1 ;; esac
   done
 }
-# THE NULL-MUTANT CONTROL, once per DISTINCT required set: the reader plus a trailing comment line, so cmp
+# THE NULL-MUTANT CONTROL, once per MUTANT, keyed on its id: the reader plus a trailing comment line, so cmp
 # differs and behaviour does not. It must SURVIVE with every required arm evaluated: a required arm that
 # fails under it is failing on leftover state or on a split unit, never on the mutation.
-LW_NULLED="|"; LW_NINV_NULL=0
-null_ctl() { # <required set>
+LW_NINV_NULL=0
+null_ctl() { # <required set> <mutant id>
   local n="$WORK/mut.null.sh" a hit="" k0="$LW_NINV"
-  case "$LW_NULLED" in *"|$1|"*) return 0 ;; esac
-  LW_NULLED="$LW_NULLED$1|"
   { cat "$BIN/check-owed-derivations.sh"; printf '# null-mutant control: a comment, no behaviour\n'; } > "$n"
-  if cmp -s "$BIN/check-owed-derivations.sh" "$n"; then bad "NULL ($1) FIXTURE BROKEN: the null copy is byte-identical to the reader"; return; fi
+  if cmp -s "$BIN/check-owed-derivations.sh" "$n"; then bad "NULL ($2: $1) FIXTURE BROKEN: the null copy is byte-identical to the reader"; return; fi
   LW_REQ="$1"; LW_FAILED=""; LW_SEEN=" "; lw_all "$n" null
   LW_NINV_NULL=$((LW_NINV_NULL + LW_NINV - k0))
-  req_seen "NULL ($1)" "$1" || return
+  req_seen "NULL ($2: $1)" "$1" || return
   for a in $1; do case " $LW_FAILED " in *" $a "*) hit="$hit $a" ;; esac; done
-  if [ -z "$hit" ]; then ok "NULL ($1) SURVIVES: no required arm failed under an unmutated copy"; else bad "NULL ($1) required arm(s)$hit failed under an UNMUTATED copy (leftover state or a split world)"; fi
+  if [ -z "$hit" ]; then ok "NULL ($2: $1) SURVIVES: no required arm failed under an unmutated copy"; else bad "NULL ($2: $1) required arm(s)$hit failed under an UNMUTATED copy (leftover state or a split world)"; fi
 }
 mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
   local m="$WORK/mut.$1.sh" a miss=""
@@ -1008,7 +1006,7 @@ mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <n
   req_seen "$1" "$2" || return
   for a in $2; do case " $LW_FAILED " in *" $a "*) ;; *) miss="$miss $a" ;; esac; done
   if [ -z "$miss" ]; then ok "$1 killed: arm(s)$LW_FAILED failed (required: $2)"; else bad "$1 SURVIVED: arm(s)$miss did not fail (failed:${LW_FAILED:- none})"; fi
-  null_ctl "$2"
+  null_ctl "$2" "$1"
 }
 mut_case M1 "S1 S4b S7 RP2 SL1 SL2 CD1 CDD4 S11n S12n" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
 mut_case M2 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'

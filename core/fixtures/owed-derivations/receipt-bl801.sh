@@ -18,6 +18,9 @@ SUBJ="${1:-$HERE/run.sh}"
 [ -f "$SUBJ" ] || { echo "REFUSED: no run.sh at $SUBJ" >&2; exit 9; }
 D="$(mktemp -d "${TMPDIR:-/tmp}/bl801rcpt.XXXXXX")" || { echo "REFUSED: mktemp" >&2; exit 9; }
 trap '[ -n "$D" ] && [ -d "$D" ] && rm -rf "$D"' EXIT
+_nb="$(grep -c '^# ---- lw-harness: begin' "$SUBJ")"; _ne="$(grep -c '^# ---- lw-harness: end' "$SUBJ")"
+_lb="$(grep -n '^# ---- lw-harness: begin' "$SUBJ" | head -1 | cut -d: -f1)"; _le="$(grep -n '^# ---- lw-harness: end' "$SUBJ" | head -1 | cut -d: -f1)"
+{ [ "$_nb" = 1 ] && [ "$_ne" = 1 ] && [ "$_lb" -lt "$_le" ]; } 2>/dev/null || { echo "REFUSED: run.sh must hold exactly one lw-harness begin and one end marker, begin first" >&2; exit 9; }
 sed -n '/^# ---- lw-harness: begin/,/^# ---- lw-harness: end/p' "$SUBJ" > "$D/harness.sh"
 grep -c '^lw_all() {' "$D/harness.sh" > "$D/n" 2>/dev/null
 [ "$(cat "$D/n")" = 1 ] || { echo "REFUSED: run.sh carries no marked lw-harness block holding lw_all" >&2; exit 9; }

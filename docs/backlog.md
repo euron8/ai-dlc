@@ -488,4 +488,4 @@ Under the standing rule, a wall clock is a defect until it is justified.
 
 Owed: shard the mutant battery, or have each mutant run only the worlds its required arms live in (as BL-699 did for pcvlat). Every kill set is kept.
 
-verify: manual — a fixture-cost change scored at the gate by its own receipt.
+verify: sh bash core/fixtures/owed-derivations/receipt-bl801.sh
