@@ -6980,12 +6980,12 @@ else
     # DECLARES. A bare `inputs.decl` line whose top is in the EXCLUDE set keys nothing: the hook has
     # no `.now` row for it, so the per-fixture key carries no value for that path, and the outer key
     # skips the whole top. The line reads as a declared input and is not one -- edit the file and no
-    # verdict that reads it re-runs (BL-797: 33 such lines over 257 declarations, 8 of them content
+    # verdict that reads it re-runs (BL-797: 33 such lines over 257 declarations, 9 of them content
     # reads). A `+` keys it (see arm 3, and readset_decl_parse in .githooks/pre-push). The excluded
     # set is $i55_excl, derived from the EXCLUDE block above and never retyped here.
     #
     # THE THIRD CLASS, AND HOW THE FALSE-POSITIVE SET REACHED ZERO. The first census split the 33 into
-    # content reads (`+` them) and lines nothing reads (delete them), and left 12 `VERSION` lines that
+    # content reads (`+` them) and lines nothing reads (delete them), and left 11 `VERSION` lines that
     # are neither. Each fixture, or the script it copies, tests for VERSION with `-f` to find its root
     # inside the sandbox, so the FILE must be copied while its CONTENT is never read. Keying it would
     # re-run those 12 fixtures on every release bump for nothing; deleting it breaks the walk-up. So a

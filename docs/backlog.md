@@ -490,7 +490,7 @@ verify: sh bash core/fixtures/remediator-shard-join/receipt-bl796.sh
 
 ## BL-797 — a bare inputs.decl line under a content-key-excluded top keys nothing, so the file it names can change and no verdict that reads it re-runs
 
-**NOTE.** Source: batch 241, release r12. Open.
+**NOTE.** Source: batch 241, release r12. Closed by I55 arm 5 and the declaration dispositions below.
 
 `scripts/suite-content-key.sh` excludes `.git CHANGELOG.md VERSION docs CLAUDE.md`. A `core/fixtures/*/inputs.decl` line under one of those tops has no `.now` row in the hook, so it carries no per-fixture key value, and the outer key skips the whole top. Only a leading `+` keys it (`readset_decl_parse` in `.githooks/pre-push`). Census at c9dea46c2: 33 bare lines over 257 declarations. Dispositions, ruled by the lead:
 - 9 content reads now carry `+`: backlog-receipt-binding `docs/backlog.archive.md`, invariant-index `docs/invariant-index.md`, vocabulary-index `docs/invariant-index.md` and `docs/vocabulary-index.md`, `CLAUDE.md` in validator-arm-selection, layer-contract-conformance, ledger-status-vocabulary and validator-fork-budget, and backlog-ledger `VERSION`. backlog-ledger was first filed copy-only; its run.sh seeds `has VERSION "."` and `lacks VERSION "."` receipts that backlog-reverify.sh answers by grepping `$REPO_ROOT/VERSION`, and a differential confirms the read (`0.935.0` gives CLOSE-CANDIDATE, `nodot` gives STILL-LIVE).
