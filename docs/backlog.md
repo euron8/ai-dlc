@@ -476,3 +476,16 @@ Separately, `check-owed-derivations.sh` reads a 9th field `cyc` in its pass-2 lo
 
 verify: manual — a decision on whether to build, not a tree state.
 
+## BL-801 — the owed-derivations fixture grew from 21s to 636s loaded in 0.936.0, because every mutant re-runs every reader world
+
+**DEFECT (efficiency).** Source: batch 241, lead ai-dlc-58; the growth was reported by the r6 owner at the 0.936.0 dress.
+
+`core/fixtures/owed-derivations` was recorded at 21s at c9dea46c2. That was the 38-arm reader-only fixture, before the living sweep existed. The 0.936.0 dress recorded it at 636s loaded, second in `.git/ai-dlc-fixture-durations` behind reconcile-emit-report (858s). The growth is the whole of 0.936.0's change to the fixture: 38 to 249 arms, plus mutants M1-M19, M12b, mA and mB, each one a full reader run.
+
+The shape: `lw_all` runs 23 reader invocations plus 3 `--scope-batch` invocations (26 in all) and 52 arms per call. It is called once for the real arms and once per mutant. There are 22 mutants, so the mutant phase makes 572 reader invocations, while a mutant's verdict reads only its own required arms.
+
+Under the standing rule, a wall clock is a defect until it is justified.
+
+Owed: shard the mutant battery, or have each mutant run only the worlds its required arms live in (as BL-699 did for pcvlat). Every kill set is kept.
+
+verify: manual — a fixture-cost change scored at the gate by its own receipt.
