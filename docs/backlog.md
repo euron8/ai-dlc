@@ -480,7 +480,16 @@ verify: manual — the fix needs its false-positive set measured on a consumer's
 
 Owed: the Bash allowance gets its own contract, and a false-positive set measured over real Bash calls before any Bash-pattern deny is built.
 
-verify: manual — the fix needs its own contract and a measured false-positive set first, so no predicate over the tree exists to test yet.
+**Measured (batch 241, r8 contract adversary, graph read-only; the entry stays OPEN as a NOTE).** All figures below are the r8 contract adversary's read-only measurement over graph transcripts and repo, not re-derived by the builder; the one repo-checkable fact is the graph commit `2f2aafe0d`, whose `_bmad-output/pipeline-continuation-log.md` carries the `21:34:08Z -- USER_PAUSE` row.
+
+- Premise correction. The flag was NOT stale. It was raised at 21:34:08Z by the operator message "api error, retry". At 21:34:13Z the lead ran `rm -f …flag; curl …` as one compound call, and the context-mode PreToolUse hook refused the whole call, so the clear never ran. That is exactly the shape `:867` already forbids, a clear chained with other commands. The deploys followed at 21:36:13Z, 21:43:17Z and 21:46:09Z (`ecs-deploy.sh` rebalancer, ui, aggregator), and the operator had approved them with "approved. proceed." at 21:28:32Z. The filing's "21:34 EDT" is 21:34 UTC, which is 17:34 EDT.
+- Measurement. 1742 lead Bash calls fall inside paused windows out of 32896 in total. This is a ceiling, because the flag reconstruction raises the flag on every genuine operator message. By class (allowed / hook-denied): read-only 847/3, other write 487/6, push-merge-deploy by regex 235/26, flag-clear 136/2. The candidate deny pattern `git push|gh pr merge|deploy` matches 241 allowed calls, 62 of which are pure false positives where "deploy" is only a grep argument or a path. Of the calls that actually run the command: 74 pushes (57 under a handoff steer or the handoff touch path), 2 merges (both operator-directed), and 3 deploys (all s319, all operator-approved). Bash calls that advanced the pipeline against a waiting operator: 0.
+- Plan action 0a. `handoff.md:73`, `retro.md:1217` and `_gate-procedures.md:1487/1490` all instruct a paused lead to `git push` with the flag in place, and `retro.md` instructs a `gh pr merge`. A Bash deny in the hook would therefore break the handoff protocol on its first push, which is a BLOCKER. Validator-only scoring would carry the same false-positive set, and Check 25's ratchet would turn each one into a gate FAIL, which is a DEFECT. So neither is built.
+- Gap recorded. Check B cannot see Bash writes into denied `_bmad-output/` paths. 9 such calls exist: 4 party-mode appends under a question steer, and at least 2 operator-directed. Its grammar cannot express a write through `python3 - <<EOF … open(p,'w')`, the shape of the s319 snapshot write at 21:36:07Z, so a zero from that grammar is a floor of unknown depth.
+- This release. The `:871` deny text no longer calls Bash read-only.
+- Still owed. If a future Bash mechanism is wanted, it needs a predicate that separates a sanctioned handoff push from an advancing one. No act measured here separates them.
+
+verify: manual — no Bash predicate separates a sanctioned paused push from an advancing one, so nothing over the tree can be tested yet.
 
 ## BL-791 — a consumer-authored file inside a core-claimed fixture directory is not reported before a pull's whole-directory write, and one was lost
 
