@@ -38032,3 +38032,15 @@ Scores: fix 0; `dev.md` clause deleted 1; item 7's absolute-path wording removed
 
 verify: sh bash -c 'set -uo pipefail; o="$(awk '\''function fl(){ if (h) print (index(p, "<deliverable>") ? 1 : 0); p=""; h=0 }   FNR==1{fl()} /^[ \t]*$/{fl(); next}   { p = p $0; if (index($0, "<lead engine>/wait-for-deliverable.sh --mark <file>")) h=1 } END{fl()}'\''   core/team-roles/*.md core/skills/ai-dlc/steps/*.md)"; [ "$(grep -c . <<<"$o")" -ge 5 ] || exit 1; ! grep -qx 0 <<<"$o" || exit 1; awk '\''/^7\. A worktree-isolated teammate/{f=1} f&&/^\*\*Bounded-join dispatch mandate/{exit} f'\'' core/skills/ai-dlc/steps/_dispatch-protocol.md | grep -qF '\''<deliverable>'\'''
 
+## BL-786 — I10 reads only run.sh, so a fixture whose hook invoker lives in lib.sh is outside its population
+
+**LANDED (v0.925.0, verified 30053a50c).**
+
+**NOTE.** Source: batch 240, lead ai-dlc-3f. Filed by the r13 owner; not built.
+
+`adversarial-shard-merge` runs a hook at `lib.sh:183` and scrubs at `lib.sh:10`, but I10 never reads `lib.sh`. Widening the unit to `run.sh` + `lib.sh` + `seed.sh` with I10's patterns verbatim was measured: population 55 to 58, offenders 0 to 2, `adversarial-shard-merge` acquitted. Both offenders are false positives: `check-15-bypass/seed.sh:558` is a comment naming the `hooks/ai-dlc-*.sh` glob, and `core-paths-audit-diff/seed.sh:54,95` are `- hooks/ai-dlc-*.sh` yaml seed data. Neither executes a hook, so the widening was not shipped.
+
+Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` glob and data form, measured to an empty false-positive set with `adversarial-shard-merge` acquitted and a seeded `lib.sh`-only unscrubbed invoker reported.
+
+verify: sh f="$(awk '/^# --- I10: fixture hermeticity/{s=1} s&&/^i10_unscrubbed\(\) \{/{g=1} g{print} g&&/^}/{exit}' scripts/validate-enforcement-map.sh)"; [ -n "$f" ] || exit 1; eval "$f" || exit 1; t="$(mktemp -d)" || exit 1; for c in liboff libcomment libglob libscrubcomment libvar libenvu libscrub; do mkdir "$t/$c" && printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$t/$c/run.sh" || exit 1; done; printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/liboff/lib.sh"; printf '%s\n' '  # runs hooks/ai-dlc-x.sh' > "$t/libcomment/lib.sh"; printf '%s\n' 'cp core/hooks/ai-dlc-*.sh "$T"' > "$t/libglob/lib.sh"; printf '%s\n' '# unset "$_v"' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/libscrubcomment/lib.sh"; printf '%s\n' 'bash "$HOOK"' > "$t/libvar/lib.sh"; printf '%s\n' 'env -u AI_DLC_X bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/libenvu/lib.sh"; printf '%s\n' 'bash "$HOOK"' >> "$t/libscrub/run.sh"; printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' > "$t/libscrub/lib.sh"; [ "$(i10_unscrubbed "$t")" = "$(printf '%s\n' "$t/liboff/run.sh" "$t/libscrubcomment/run.sh" "$t/libvar/run.sh")" ]
+
