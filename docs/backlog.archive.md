@@ -38044,3 +38044,39 @@ Owed: a widened unit whose pattern excludes comments and the `hooks/ai-dlc-*` gl
 
 verify: sh f="$(awk '/^# --- I10: fixture hermeticity/{s=1} s&&/^i10_unscrubbed\(\) \{/{g=1} g{print} g&&/^}/{exit}' scripts/validate-enforcement-map.sh)"; [ -n "$f" ] || exit 1; eval "$f" || exit 1; t="$(mktemp -d)" || exit 1; for c in liboff libcomment libglob libscrubcomment libvar libenvu libscrub; do mkdir "$t/$c" && printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$t/$c/run.sh" || exit 1; done; printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/liboff/lib.sh"; printf '%s\n' '  # runs hooks/ai-dlc-x.sh' > "$t/libcomment/lib.sh"; printf '%s\n' 'cp core/hooks/ai-dlc-*.sh "$T"' > "$t/libglob/lib.sh"; printf '%s\n' '# unset "$_v"' 'bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/libscrubcomment/lib.sh"; printf '%s\n' 'bash "$HOOK"' > "$t/libvar/lib.sh"; printf '%s\n' 'env -u AI_DLC_X bash "$ROOT/core/hooks/ai-dlc-x.sh"' > "$t/libenvu/lib.sh"; printf '%s\n' 'bash "$HOOK"' >> "$t/libscrub/run.sh"; printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' > "$t/libscrub/lib.sh"; [ "$(i10_unscrubbed "$t")" = "$(printf '%s\n' "$t/liboff/run.sh" "$t/libscrubcomment/run.sh" "$t/libvar/run.sh")" ]
 
+## BL-787 — a discharge predicate can filter on a literal no component of this repository writes
+
+**LANDED (v0.926.0, verified 1d23ebba2).**
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319, the one recording that the role files let a discharge predicate quote a literal no producer wrote.
+
+Story 1.3's deferred-AC predicate D-2 filtered `WHERE trigger = 'organic'` (graph `docs/reviews/s319/1-3-qa-validation-p2.md:87`), while `rebalancer/execution.py` writes `trigger="manual_offramp"` and never `trigger="organic"`. A predicate keyed on a value nothing writes can never match, so the deferral it discharges was unverifiable from the moment it was written, and no role file asked anyone to check the literal against its producer.
+
+Built: `core/team-roles/qa.md`'s **Deferred-AC discharge predicate (HARD GATE).** item now requires a predicate that filters on, or compares against, a literal a component of this repository writes to carry a `derived` fence pinned to the go-signal sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, and makes a literal written nowhere at that sha REJECT unless the predicate names its external source or asserts the literal's absence; the item's Catches / false positive / remove-when sentences cover it. `core/team-roles/pm.md`'s probabilistic-AC bullet has PM, who writes the AC before the producer exists, name the AC of this story that requires the literal, with the fence owed at gate 2, and routes an external literal to the existing "Verify the field name, type, and unit against the real source first" sentence. `core/team-roles/architect.md`'s evidence contract gains a paragraph putting the same fence on an ADR verification probe keyed on such a literal, citing `validate-artifact-derivations.sh` for the grammar. `process-rule-pins` pins them with pred-lit-qa, pred-lit-qa-fence (qa.md's sha-pinned `git grep` fence form), pred-lit-pm, pred-lit-pm-gate (pm.md's "is owed at gate 2" clause) and pred-lit-arch, and carries a named mutant softening the REJECT to a note. The receipt requires the enumerated external-source escape and refuses a negated REJECT.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl787.sh
+
+## BL-788 — a deferred AC's discharge predicate lived only in the QA review file, so deploy-validate §4b ran a predicate no step checked against the deployed sha
+
+**LANDED (v0.926.0, verified 1d23ebba2).**
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; a consumer filing from graph sprint 319 (the deferred-AC predicate that lives only in the QA review file).
+
+At `done` the closing writer copied only the deferred AC ids into `deferred_acs`; the predicate itself stayed in the QA verdict. Graph s319: predicate `PI-1.2-a` appears twice in `docs/reviews/s319/1-2-qa-validation-p2.md` and zero times in its story file, and at deploy-validate §4b it named a label the deployed bundle did not carry, with nothing telling the lead to check that literal against what was deployed.
+
+Built: `code-reviewer.md` Ownership (and, so the role's "exactly these writes" enumeration names it, the "As the Closing Writer" list and a closing-writer sentence appended to the Responsibilities bullet, which keeps its base text otherwise) has the closing writer write a `## Deferred ACs` section into the story file at `done` — each entry opening `- **<id>**` with the id written to `deferred_acs`, the predicate text copied from the latest-pass QA verdict (the highest `-p<N>`, or the unsuffixed file when there is only pass 1) and that verdict's path, `None.` for a story with none, placed before `## Dev Agent Record`. `qa.md`'s discharge-predicate item says the same. `deploy-validate.md` §4b reads the predicate from that section, falls back to the QA verdict for a pre-migration story with no section (recorded under `deferred_ac_discharge`), reports a missing entry or a `None.` beside a non-empty `deferred_acs` as a closing-writer defect, and checks each literal against the deployed sha (the commit the production deploy was built from, recorded as `deployed_sha` under `deferred_ac_discharge`), recording a correction as `old -> new` or re-deferring; its false-positive cost now counts one `git grep` per named literal against that sha. Pinned by `process-rule-pins` rows `def-copy-*`, with a named ids-only mutant. The receipt refuses a negated predicate copy, a negated `None.` section, a negated story-file read and a negated deployed-sha check.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl788.sh
+
+## BL-789 — deploy-validate allows a placement fix-forward with its browser specs unrun
+
+**LANDED (v0.926.0, verified 1d23ebba2).**
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319.
+
+Section 4 of `deploy-validate.md` sent a visual-drift fix to a `dev` teammate and then had the lead redeploy and re-verify, without naming the browser specs. In graph sprint 319 the dev's record already said its Playwright specs were not run and claimed no pass, so the record was honest, and nobody then ran them against the redeployed instance.
+
+Built: the drift bullet now has the fix-forward `dev` brief name the browser spec files covering the drifted surface and the dev record their run or why they could not run. When they could not run, the lead runs them against the redeployed instance before re-verifying and records that run as the `playwright` evidence. A could-not-run record is not a pass. The lead's run is stated to be part of its re-verification, deploy-gate orchestration under Rule 28 (a), as the redeploy is. Pinned by the `ff-specs-*` rows (`ff-specs-lead` is keyed on the could-not-run conditional, "When they could not run, the lead runs them ...") and the `ff-specs-lead-run` named mutant of `process-rule-pins`; the receipt requires that the lead run follow from could-not-run.
+
+verify: sh bash core/fixtures/process-rule-pins/receipt-bl789.sh
+

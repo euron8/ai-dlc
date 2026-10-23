@@ -46,6 +46,13 @@ source; do not infer either value from anywhere else.
   in the story implementing the decision the ADR records,
   with its discharge predicate named in the AC text — an acceptance criterion
   added to existing scope, never a new capability.
+  A discharge predicate that filters on, or compares against, a literal a
+  component of this repository writes is written before that producer exists,
+  so the predicate names the AC of this story that requires the literal, and
+  the sha-pinned `derived` fence citing the producing line is owed at gate 2
+  (`qa.md` "Deferred-AC discharge predicate (HARD GATE)"). A literal an
+  external system writes is verified under the first bullet of this section:
+  "Verify the field name, type, and unit against the real source first".
 - **Link a prior-artifact numeric anchor at authorship.** An AC citing a prior
   story's number as its scale anchor MUST link the artifact containing that
   number when the AC is written. A citation whose source cannot be located at

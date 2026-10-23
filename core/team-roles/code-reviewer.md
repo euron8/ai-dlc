@@ -39,6 +39,14 @@ source; do not infer either value from anywhere else.
   and never a list wrapped over two lines: `sprint-status.sh check-stories`
   reports either as a FINDING and `close` refuses on it. deploy-validate §4b
   clears the ids; `close` refuses the sprint while any remain.
+  At `done` the closing writer also writes a `## Deferred ACs` section into the story file.
+  Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,
+  and carries that AC's predicate text copied from the verdict file the gate-2 check read
+  (the latest-pass QA verdict (the highest `-p<N>`, or the unsuffixed file when there is only pass 1), which the closing writer reads), and cites that verdict path.
+  A story with no deferred AC gets the section with body `None.`.
+  The section sits directly BEFORE `## Dev Agent Record`;
+  in a story with no Dev Agent Record it is the last `## ` section, above any provenance block.
+  deploy-validate §4b reads each owed predicate from that section.
 
 ## Responsibilities
 
@@ -62,7 +70,8 @@ source; do not infer either value from anywhere else.
   updates the story file `Status:` header and `sprint-status.yaml` to `done`,
   writes the story's `deferred_acs` beside `status: done` in both views, and
   makes the upstream close-out, all in the closing commit. As a gate-1 reviewer
-  you do NOT make these writes.
+  you do NOT make these writes. The closing writer also writes the story file's
+  `## Deferred ACs` section (Ownership above) in that commit.
 
 ## Constraints
 
@@ -247,6 +256,8 @@ otherwise). Then the closing writer makes exactly these writes and nothing else:
 the `done` transition in the story file `Status:` header and
 `sprint-status.yaml`, `deferred_acs` in both canonical views taken from the
 merged QA file's `## Deferred ACs`, or the deferred record in the serial file,
+the story file's `## Deferred ACs` section, each owed id with the predicate
+taken from that same QA verdict (placement and form under Ownership above),
 the upstream close-out `implementation.md` section 5 requires (the
 story's carry-over-backlog item set to `CLOSED - delivered in sprint <N> via
 <story-id>`, and a `RESOLVED` line appended to its `docs/escalations/pending.md`
