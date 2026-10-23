@@ -391,6 +391,13 @@ If `is_ui_epic == true`:
   the UI source (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
   for its brief and join); the lead then redeploys and re-verifies. Redeploy and
   re-verification are deploy-gate orchestration (Rule 28a) and stay on the lead.
+  The fix-forward `dev` brief names the browser spec files covering the drifted
+  surface, and the dev's deliverable file records either their run (invocation,
+  pass/fail counts) or why they could not run. When they could not run, the lead
+  runs them against the redeployed instance before re-verifying, and records that
+  run's invocation and counts in the Deploy Status Report row as the `playwright`
+  evidence this section already names. A could-not-run record is not a pass.
+  That run is part of the lead's re-verification, deploy-gate orchestration under Rule 28a as the redeploy is.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
@@ -433,10 +440,30 @@ on any other ground. `sprint-status.sh close` (retro Close-Out Sweep) exits
 3 and writes neither view while any story still carries an id, or carries
 the field in any shape other than one single-line `[..]` list.
 
+**Read each owed predicate from the story file.** The lead reads each owed
+AC's predicate from the story file's `## Deferred ACs` section, which the
+closing writer writes at `done` (`code-reviewer.md` Ownership): each entry
+opens with `- **<id>**` and cites the QA verdict it was copied from.
+
+**A story file with no `## Deferred ACs` section is a pre-migration story.**
+Fall back to the QA verdict for its predicate and record the fallback under `deferred_ac_discharge`.
+
+**A missing entry is a closing-writer defect.** When the section is present
+and an owed id has no entry opening with that exact id, or the body is `None.` beside a non-empty `deferred_acs`,
+report it in the gate log as a closing-writer defect, then run the predicate from the QA verdict.
+
+**Check every literal against the deployed sha before running the predicate.**
+The deployed sha is the commit the production deploy was built from. Record it as `deployed_sha: <sha>` under `deferred_ac_discharge` before checking any literal.
+Check each literal the predicate names against the DEPLOYED sha; a pinned fence whose sha is not the deployed sha is re-run at the deployed sha first.
+A literal the deployed sha does not carry: correct the predicate against it
+and record the correction under `deferred_ac_discharge` as `old -> new`, or
+re-defer the AC by item 2 above. Never a silent substitution.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
 "verify after deploy" that no step ever re-checks, so the sprint closes
 with an unverified acceptance criterion. False-positive cost: one
-predicate run per deferred AC — the predicate the AC already named.
+predicate run per deferred AC — the predicate the AC already named — plus
+one `git grep` per literal that predicate names, run against the deployed sha.
 Removal condition: retire once deferred-AC predicates are collected and
 run automatically at deploy time.
 
