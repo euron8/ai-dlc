@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.932.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r8. It closes BL-784, touches BL-785 without closing it, and closes no `PC-` id. NET: entries closed 1 minus filed 0 = 1. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-steering-budget.sh`, which `install.sh` derives from `core/scripts/*` and lands at `scripts/ai-dlc/`, and `core/hooks/ai-dlc-acknowledge.sh` (deny text only; no re-render). Rulebook changes: none. Distribution-only validator: `scripts/validate-enforcement-map.sh` (I128) and its derived `docs/invariant-index.md`. Fixture changes: `core/fixtures/check-25-steering-conduct`. Packaging: none. Backlog: `docs/backlog.md`.
+
+### BL-784 — Check B acquits a lead Explore dispatch that the pause hook allows
+
+`ai-dlc-acknowledge.sh` lets a lead Explore dispatch through while the pipeline is paused, and `validate-steering-budget.sh` Check B modelled none of it, so it would have scored such a dispatch as a steamroll. Check B's filter now carries a new `isPausedExploreAllowed` predicate. It is not part of `isAdvancing`, which Check C uses.
+
+The predicate allows only an `Agent` or `Task` call with `subagent_type === "Explore"`. It treats `name` and `team_name` as present if the KEY exists, whatever its value. It rejects a prompt that matches the hook's team-roles ERE; a non-string prompt is first turned into text the way `jq -r` would render it (`JSON.stringify` with indent 2). `explore_shadowed` is omitted on purpose: a shadowed call is one the hook denies, and Check B's existing `denied` set already acquits denied calls. The graph corpus has 0 shadow definitions.
+
+`vem` I128 gains a third member that byte-binds the role ERE to the hook's `grep -qE` line, and it also binds each ERE's `RegExp` construction line. A mutant that changed only the construction line, leaving the ERE bytes identical, made `vem` exit 1. I128 gains 0 forks.
+
+The `check-25-steering-conduct` fixture has ten Explore cells reading `0001111111`, and 5 mutants each kill their own cells. PB3 was re-anchored, and KILL-COUNT is 31.
+
+Receipt: it exits 0 on the fix, 1 with `team_name` dropped, 1 with `Task` dropped, 1 with the acquittal dropped, 1 on base, and 0 with the `hasOwnProperty` spelling.
+
+Timing, CPU user+sys, 3 interleaved reps at one path: base 31.12/30.72/30.22s, tip 30.59/29.95/30.00s. The ranges overlap, so no cost is resolvable at ±0.6s.
+
+Graph false-positive set, read-only: 4914 lead `Agent`/`Task` calls, 1 Explore, 0 while paused. The fix is built anyway because the hook's deny text offers an Explore dispatch to a paused lead, and Check 25's ratchet would then fail the gate.
+
+### BL-785 — the pause deny text no longer calls Bash read-only; the entry stays OPEN as a NOTE
+
+The pause deny text in `core/hooks/ai-dlc-acknowledge.sh` called Bash read-only. It now says Read, Grep and Glob are read-only, and that Bash is allowed but not read-only. The text adds no push or merge instruction, because `handoff.md:73` tells a paused lead to push.
+
+Measured on graph, read-only: 1742 paused lead Bash calls (a ceiling). The pattern `git push|gh pr merge|deploy` matches 241 allowed calls, 62 of them pure false positives. 0 calls advanced the pipeline against a waiting operator.
+
+Nothing further is built. A hook deny would break the handoff protocol, which is a BLOCKER. A validator-only score would carry the same false-positive set into Check 25 gate FAILs, which is a DEFECT.
+
+The filing's premise is corrected from graph commit `2f2aafe0d`: the flag was raised at 21:34:08Z (UTC, not EDT), and its clear was lost to a compound call that another hook refused.
+
 ## [0.931.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r9 (docs). It files BL-795 OPEN (a NOTE, `verify: manual`), touches BL-699 without closing it, and closes no `PC-` id. NET: entries closed 0 minus filed 1 = -1. BL-795 is a coverage gap measured by this batch's BL-699 share reading, filed on purpose and not built. Engine code: none. Rulebook changes: none. Fixture changes: none. Packaging: none. Backlog: `docs/backlog.md`.
