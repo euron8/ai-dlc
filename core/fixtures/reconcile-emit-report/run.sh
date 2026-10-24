@@ -3637,9 +3637,9 @@ fi
 # shape (c)'s expectation: accept-and-key with B7, the R2 refusal without it.
 PCV_R12=0
 if grep -qF "B7 the symlink '" "$EMIT" || ! pcv_installed "$EMIT"; then
-  PCV_R12=1; PCV_IDS="$PCV_IDS PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87 PC-V88"
+  PCV_R12=1; PCV_IDS="$PCV_IDS PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87 PC-V88 PC-V89"
 else
-  printf 'PENDING: PC-V77..PC-V88 not run, engine lacks the B7 symlink refusals\n'
+  printf 'PENDING: PC-V77..PC-V89 not run, engine lacks the B7 symlink refusals\n'
 fi
 pcv_setup
 
@@ -4907,6 +4907,60 @@ pcv_b7lworld() {
   fi
   return 0
 }
+# World B7B (pcv_b7bworld), its own seed:
+#     V89  B7-logL-B (BL-800), SHAPE B, THE BASE-REACHABLE SHAPE: an ignored link `docs/retro` to an
+#          outside dir holding f.md, read ONLY by a ledger `verify: sh grep -q x "$CONSUMER/docs/retro/f.md"`
+#          receipt. R2's per-root walk never visited docs/ (no read root lies there), so at main from
+#          0.889.0 to 0.940.0, with the cache armed, nothing but the read log's L refusal stood between
+#          this world and a stale PASS, and that refusal was dead. V88's X2 shape covers only the
+#          read-root case. The base record is taken before the link and the ledger exist; with both in
+#          place and the report re-approved, the cached run renders fresh at exit 0, names the logL
+#          cause for docs/retro/f.md, and leaves that record byte-identical; after f.md changes behind
+#          the link, the cached run is again a fresh render at the opt-out's exit, never a hit. Under
+#          M-b7-logL the record FORMS on the first run and the change is ACCEPTED (a hit) while a fresh
+#          render adds a CLOSE-CANDIDATE row: that is the stale HIT.
+pcv_b7bworld() {
+  local gd ex out s1 s1_ok=0 rec
+  PCV_ENVPRE=""
+  pcv_lat b7b || { pcv_x PC-V89 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
+  gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"
+  pcv_lat_approve b7b0 || { pcv_x PC-V89 "FIXTURE BROKEN: the base world rendered no region"; return 0; }
+  pcv_run b7b.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
+    pcv_x PC-V89 "control: the base world did not record before the link ($(pcv_why); $(pcv_b56cause b7b.r))"; return 0
+  fi
+  cp "$L_REC" "$PS_D/b7b-base.rec"
+  out="$(mktemp -d "$PS_D/b7bout.XXXXXX")"
+  if ! { mkdir -p "$gd/info" "$out/retro" "$L_C/docs" && printf 'x\n' > "$out/retro/f.md" \
+         && printf '/docs/retro\n' >> "$ex" && ln -s "$out/retro" "$L_C/docs/retro" \
+         && printf '%s\n' '# ledger' '' '## PC-R9REACH — a consumer-side invariant read through a link' '' \
+              'verify: sh grep -q x "$CONSUMER/docs/retro/f.md"' > "$L_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md" \
+         && { pcv_b56g -C "$L_C" add -- _bmad-output/ai-dlc-update/push-candidate-ledger.md && pcv_b56g -C "$L_C" commit -qm b7b; } >/dev/null 2>&1 \
+         && git -C "$L_C" check-ignore -q -- docs/retro && [ -z "$(git -C "$L_C" ls-files -- docs)" ]; }; then
+    pcv_x PC-V89 "FIXTURE BROKEN: could not seed the ignored link docs/retro and the ledger's sh receipt"; return 0
+  fi
+  pcv_lat_approve b7b || { pcv_x PC-V89 "FIXTURE BROKEN: the linked world rendered no region"; return 0; }
+  pcv_kstep b7b1; rec=unchanged; cmp -s "$L_REC" "$PS_D/b7b-base.rec" || rec=REWRITTEN
+  s1="[$(pcv_why), opt-out $K_NC, record $rec, stderr: $(grep -F "$PCV_RECWHY" "$PS_D/b7b1.err" | sed -n 1p)]"
+  pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = unchanged ] \
+    && grep -qF -- "${PCV_RECWHY}R2 a symlink lies on a consumer path a detector read (docs/retro/f.md)" "$PS_D/b7b1.err" && s1_ok=1
+  printf 'y\n' > "$out/retro/f.md"
+  # The render-visibility control: the receipt now fails, so a fresh render adds a CLOSE-CANDIDATE row
+  # for PC-R9REACH that the approved report (rendered while it reproduced, STILL-LIVE, unlisted) lacks.
+  "$PCV_BASH" "$PS_E" "$L_D" "$L_B" "$L_C" "$L_T" > "$PS_D/region-b7b2.md" 2>/dev/null
+  if ! grep -qE 'CLOSE-CANDIDATE.*PC-R9REACH|PC-R9REACH.*CLOSE-CANDIDATE' "$PS_D/region-b7b2.md" || grep -q 'PC-R9REACH' "$L_R"; then
+    pcv_x PC-V89 "FIXTURE BROKEN: after f.md changed behind the link a fresh render carries no CLOSE-CANDIDATE row for PC-R9REACH (or the approved report already did), so the change is not one the render sees"; return 0
+  fi
+  pcv_kstep b7b2; rec=unchanged; cmp -s "$L_REC" "$PS_D/b7b-base.rec" || rec=REWRITTEN
+  if [ "$K_NC" -eq 0 ]; then
+    pcv_x PC-V89 "FIXTURE BROKEN: the opt-out render after f.md changed exits 0, so the report does not disagree with the new CLOSE-CANDIDATE row"
+  elif [ "$s1_ok" -eq 1 ] && [ "$PHIT" -eq 0 ] && pcv_is_miss "$K_NC" && [ "$rec" = unchanged ]; then
+    pcv_v PC-V89 "an ignored link docs/retro to an outside dir, read only by a ledger sh receipt, renders fresh with exit 0, leaves the record byte-identical and names the logL cause for docs/retro/f.md; after f.md changes behind the link the cached run renders fresh at the opt-out's exit $K_NC, never a hit"
+  else
+    pcv_x PC-V89 "shape B (docs/retro, a ledger sh receipt): first $s1; after f.md changed [$(pcv_why), opt-out $K_NC, record $rec] (want two fresh renders at the opt-out's exit, the record untouched, the logL cause named) -- a hit there is a stale PASS"
+  fi
+  return 0
+}
 
 # ---- V42 (B2): the DETECTORS hash a consumer file with --no-filters, run directly ----
 # A CRLF consumer file, and `* text` in a NON-BARE dist's work-tree .gitattributes. preclassify.sh
@@ -5961,6 +6015,7 @@ pcv_suite() {
   if [ "${PCV_R12:-0}" -eq 1 ]; then
     if pcv_in PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87; then pcv_b7world; fi
     if pcv_in PC-V88; then pcv_b7lworld; fi
+    if pcv_in PC-V89; then pcv_b7bworld; fi
   fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
@@ -6115,7 +6170,10 @@ pcv_failset() {
 #                     conswork keys the edit and it misses under this mutant too           -> PC-V79
 #   M-b7-logL         (BL-800) the dead `{ exit 0 } END { exit 1 }` form restored at the L
 #                     refusal, so a walk through a linked .claude/skills/ai-dlc records and
-#                     then HITS stale after a new extension appears behind the link        -> PC-V88
+#                     then HITS stale after a new extension appears behind the link; and in
+#                     shape B (V89, the base-reachable one) the record forms through docs/retro
+#                     and the change behind it is ACCEPTED while a fresh render adds a
+#                     CLOSE-CANDIDATE row                                          -> PC-V88 PC-V89
 # pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
 # that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
 pcv_ed() {
@@ -6224,7 +6282,7 @@ pcv_want() {
     M-b7-key) echo "PC-V78" ;; M-b7-inside) echo "PC-V80" ;; M-b7-dangling) echo "PC-V81" ;;
     M-b7-contains-link) echo "PC-V82" ;; M-b7-contains-root) echo "PC-V83" ;;
     M-b7-corpus) echo "PC-V84" ;; M-b7-hooks) echo "PC-V85" ;; M-b7-croot) echo "PC-V86" ;;
-    M-b7-filehash) echo "PC-V79" ;; M-b7-logL) echo "PC-V88" ;;
+    M-b7-filehash) echo "PC-V79" ;; M-b7-logL) echo "PC-V88 PC-V89" ;;
   esac
 }
 PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b5-root M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
@@ -6279,7 +6337,7 @@ pcv_scope() {
     M-b7-inside|M-b7-dangling) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V80 PC-V81" ;;
     M-b7-contains-link|M-b7-contains-root) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V82 PC-V83" ;;
     M-b7-corpus|M-b7-hooks|M-b7-croot) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V84 PC-V85 PC-V86" ;;
-    M-b7-logL) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V88" ;;
+    M-b7-logL) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V88 PC-V89" ;;
   esac
 }
 # A KILL IS EVIDENCE ONLY WHEN ITS ARM RAN. pcv_failset counts an id with no verdict line as failed, so
