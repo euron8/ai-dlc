@@ -36,3 +36,4 @@ tr
 uniq
 wc
 python3
+readlink
