@@ -38351,6 +38351,6 @@ CORRECTION of a false claim: 0.939.0's text said BL-800 was "unreachable at main
 
 v0.941.0 removes R2's per-root walk (B7 of BL-685), so the L refusal is now the only guard: every logged walk refuses an L crossing, and that refusal is what keeps a read-through out of the key.
 
-Consumer exposure not measured: the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
+Consumer exposure: none. Operator answer 2026-10-24: graph never set EMIT_REPORT_VERIFY_CACHE=1, so its cache was never armed; the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
 
 verify: sh bash core/fixtures/reconcile-emit-report/receipt-round9.sh BL-800

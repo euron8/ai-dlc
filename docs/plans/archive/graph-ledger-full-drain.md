@@ -19142,3 +19142,71 @@ and the close checklist in `docs/analysis/b238-close-list.md`; scratch-path cita
   when the consult or the push shared a parallel tool block with another call; every push and merge sent alone
   passed. Send push and merge calls alone.
 
+**BATCH 240 IS CLOSED: SIXTEEN RELEASES, `v0.909.0` THROUGH `v0.924.0`. THE NEXT SESSION STARTS BATCH 241.**
+The batch-239 block below this one is history; this block replaces it. Lead was ai-dlc-3f. Owners: ai-dlc-be (R1),
+ai-dlc-27 (R4), ai-dlc-74 (r7, r10, r13), ai-dlc-59 (r8, r9), ai-dlc-e6 (r5b, r11), ai-dlc-24 (r5c, r12); R2, R3, R5a,
+R6a and R6b were lead-dispatched releases. Graph-watch was ai-dlc-a6, polling every 10 minutes. No `graph-*` session
+was messaged.
+- **Landed** (squash, PR, closes):
+  - `v0.909.0` `58db3d175` #1267 BL-756, 757, 758, 759, 760; `v0.910.0` `e434c2247` #1268 BL-761, 762, 763, 764, 765;
+  - `v0.911.0` `ed5ba0e9e` #1269 BL-767; `v0.912.0` `782fd93f9` #1270 BL-770; `v0.913.0` `5b5388924` #1271 BL-716, 733, 736;
+  - `v0.914.0` `20338ced6` #1272 BL-701, 750, 751, 752, 754, 755; `v0.915.0` `1c2fefc62` #1273 BL-768, 769;
+  - `v0.916.0` `8649dfce5` #1274 BL-771 (BL-699 and BL-616 progress); `v0.917.0` `94e05a71b` #1275 BL-692;
+  - `v0.918.0` `527a0769e` #1276 BL-744; `v0.919.0` `664c4a145` #1277 BL-685 part (a), no close;
+  - `v0.920.0` `fe45cf787` #1278 BL-779, 780; `v0.921.0` `ca340488c` #1279 BL-778; `v0.922.0` `8267655d2` #1280 BL-781, 783
+    (filed BL-784); `v0.923.0` `664262275` #1281 BL-772, 774, 782 (filed BL-786); `v0.924.0` `8336c4009` #1282 BL-773, 775, 776.
+  Every batch-240 LANDED line in the archive (37 lines) is re-anchored on its squash, so the batch-240 `-dev` refs can
+  be deleted.
+- **Operator rulings this batch.**
+  - Build every buildable adjudicated entry.
+  - NO TIMING RUNS, and RELEASES BEFORE MEASUREMENTS (action 0's release schedule).
+  - BL-778, on the advisor gate: "it's a waste of an advisor call to force one within so few turns ... It had literally
+    been called a handful of turns apart, what value does that provide?"
+  - BL-779 and BL-780, on the checkpoint: "1. Already done. 2. What am I supposed to do about it? 3. Ack. 4. How does
+    this need my attention? 5. Not sure these are actual issues, thoughts? 6. Done."
+  - BL-751 stays report-only, operator ruling 2026-10-23: "Report only." (0.914.0 counts future `recorded_utc` rows as
+    `FUTURE=` without refusing them.)
+- **Lead rulings carried forward.**
+  - BL-524 UNBADGED stands: an LR-, D-<n>, money or byte-pin question carries no recommendation and says why.
+  - The lead never authors a terminal escalation status.
+  - BL-774's premise was the lead's filing error: graph's S308 ruling did not cover s319.
+  - A review covers the tree that ships: after a conflict-resolving rebase, a delta adversary pass on the rebased tip
+    (owner-rules flow step 4).
+- **Owner rules gained five clauses** (action 0's owner-rules block): flow step 4, the delta adversary after a
+  conflict-resolving rebase; step 5, every hand ends on `validate-enforcement-map.sh` and
+  `validate-shell-portability.sh`, and a pinned-prose conflict resolution is its own hand unit; step 6, the NET is
+  derived from `base..tip`; step 8, advisor before the dress, the real push and the merge; step 9, a reachability list
+  before any `git branch -D`. The graph-watch bullet now names the subagent transcripts and the verdict or story file
+  as the source of a finding.
+- **The derive block's archive union now takes every ledger-carrying ref's archive**, qualified or not. On a scratch
+  ref seeded at goal state with a stale live copy of an id HEAD archived, the old block read that id arch=0 live=1 and
+  the new one reads arch=1 live=0.
+- **Backlog.** Filed this batch: BL-758 through BL-786. Live at close: 17; archive 756. **The next free id is BL-787.**
+  Open entries filed this batch, all NOTEs: BL-777 (emit-report `cksum` key), BL-784 (Check B and the lead-Explore
+  allowance), BL-785 (the pause gate admits Bash), BL-786 (I10 does not read `lib.sh`).
+- **The derive block's receipt histogram reads 0 `CLOSE-CANDIDATE` at close.** BL-695's `sh` receipt exited 0 on the
+  shipped half and is now quoted in its body under `verify: manual`.
+- **Measured** (loaded): the suite pole is reconcile-emit-report, 849 s on 0.917.0's dress (+26 s; the lead's reading),
+  and the record reads 865 s at close. The durations record was pruned from 319 to 261 rows, 58 dead to 0, by 0.918.0
+  (BL-744). The validator fork count was 3374 against FORK_BUDGET 3465 at 0.923.0 and 0.924.0 (the lead's reading).
+- **Observations.**
+  - An r12 hand's harness worktree vanished mid-run (inferred: harness reclaim of an unchanged isolation worktree;
+    unverified).
+  - A stray directory `/private/tmp/claude-501/-Users-n8/git-ai-dlc/` holding a 2-byte `msg616.txt` of unknown origin
+    was left in place.
+  - The main checkout is detached at the latest squash by design, so every peer push runs the current hook.
+- **Not built, with reasons.** BL-538 (the flip half needs a redesign), BL-553(b) (not buildable as specified), BL-583
+  (re-scoped to poles outside BL-699 and BL-755), BL-587 (the f7 survivor goes to the operator first), BL-691 (NOTE
+  stands; no stall measured), BL-706 (banked under NO TIMING RUNS), BL-753 (adversary pass done; keep the hook OFF),
+  each as its entry's batch-240 note says. BL-584 owed (3), BL-616 owed (8), BL-685 part (b) and BL-699 (d) are
+  partials, as their entries say. BL-766 was filed as a NOTE and not built.
+- **Graph at close**: installed 0.908.0, shipped 0.924.0: SIXTEEN behind, a WIDE range. Bootstrapping files changed
+  since 0.908.0's squash `25a31205d`: `core/skills/ai-dlc-update/SKILL.md`, `fixture-manifest.md`, `reconcile/apply.sh`,
+  `reconcile/emit-report.sh` and `core/skills/ai-dlc/SKILL.md`; mode-only changes under `core/`: 0 (of 197 raw). The
+  pull is REQUIRED by action 7's differential: BL-783's rehearsal ran graph's installed `validate-steering-budget.sh`
+  (FAIL (B): 5) and 0.922.0's (PASS) over the same `--since` on a `file://` clone, with the two binaries differing.
+  Graph's s319 retro is paused at Step 5 awaiting the operator, with five S319 PCs filed uncommitted in its
+  working-tree ledger. **Operator ruling 2026-10-23: "I will update graph, no runbook needed." Batch 241 writes NO
+  pull runbook; the operator runs the 0.908.0 to 0.924.0 pull themself; the five S319 PCs join batch 241's scope once
+  committed.**
+
