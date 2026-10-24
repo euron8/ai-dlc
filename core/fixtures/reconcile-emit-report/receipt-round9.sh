@@ -304,7 +304,59 @@ world_b7() {
   if [ "$ACC" = 1 ]; then echo "world B7: DEFECT: the armed run accepted a recorded PASS after the untracked directory link was retargeted (rc $RC)"; return 1; fi
   echo "world B7: FIXED: the armed run did not accept (rc $RC)"; return 0
 }
+# BL-800 shape B (the verdict world): an ignored link docs/retro to a directory outside every read root,
+# read by a ledger entry's `verify: sh` line. Record, hit, change the file behind the link, armed again.
 world_bl800() {
+  local rb rx
+  world_bl800_b; rb=$?
+  world_bl800_x2; rx=$?
+  if [ "$rb" = 2 ] || [ "$rx" = 2 ]; then return 2; fi
+  if [ "$rb" = 1 ] || [ "$rx" = 1 ]; then return 1; fi
+  return 0
+}
+world_bl800_b() {
+  local out
+  mkl bl800b || { echo "world BL-800 (B): BROKEN: build"; return 2; }
+  out="$W/outside"; mkdir -p "$out/retro" "$C/docs" || return 2
+  printf 'x\n' > "$out/retro/f.md"
+  printf '/docs/retro\n' >> "$C/.gitignore"
+  ln -s "$out/retro" "$C/docs/retro" || return 2
+  printf '# ledger\n\n## PC-R9REACH -- a consumer-side invariant read through a link\n\nverify: sh grep -q x "$CONSUMER/docs/retro/f.md"\n' \
+    > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md" || return 2
+  { GL -C "$C" add -A && GL -C "$C" commit -qm world; } >/dev/null 2>&1
+  git -C "$C" check-ignore -q docs/retro && [ -z "$(git -C "$C" ls-files docs)" ] || { echo "world BL-800 (B): BROKEN: link setup"; return 2; }
+  render || { echo "world BL-800 (B): BROKEN: render"; return 2; }
+  # A fixed engine may REFUSE to record a run whose verify line read through the link. Then no record
+  # exists to accept; the control proves the refusal is the link's: the same world with docs/retro a real
+  # ignored directory must record.
+  rm -f "$RECORD"
+  armed rec0 ""
+  if [ "$RC" = 0 ] && [ -s "$RECORD" ]; then
+    armed hit0 ""
+    [ "$RC" = 0 ] && [ "$ACC" = 1 ] || { echo "world BL-800 (B): BROKEN: the recorded world did not accept its record (rc $RC)"; return 2; }
+    cp "$RECORD" "$W/rec.keep" || return 2
+  else
+    [ "$RC" = 0 ] || { echo "world BL-800 (B): BROKEN: the unchanged armed run exited $RC"; return 2; }
+    rm "$C/docs/retro" && mkdir "$C/docs/retro" && printf 'x\n' > "$C/docs/retro/f.md" || return 2
+    rm -f "$RECORD"; armed ctl ""
+    [ "$RC" = 0 ] && [ -s "$RECORD" ] || { echo "world BL-800 (B): BROKEN: control: a real ignored directory did not record (rc $RC)"; return 2; }
+    rm -f "$RECORD"
+    rm -r "$C/docs/retro" && ln -s "$out/retro" "$C/docs/retro" || return 2
+    echo "world BL-800 (B): no record formed through the link (refused); control records"
+    printf 'y\n' > "$out/retro/f.md"
+    armed sub ""
+    if [ "$ACC" = 1 ]; then echo "world BL-800 (B): DEFECT: accepted (emit-report: accepted a recorded PASS) with no record"; return 1; fi
+    echo "world BL-800 (B): FIXED: the armed run did not accept (rc $RC)"; return 0
+  fi
+  printf 'y\n' > "$out/retro/f.md"
+  fresh sub.f ""
+  [ "$RC" != 0 ] || { echo "world BL-800 (B): BROKEN: the change behind the link did not reach the region (fresh rc 0)"; return 2; }
+  cp "$W/rec.keep" "$RECORD" || return 2
+  armed sub ""
+  if [ "$ACC" = 1 ]; then echo "world BL-800 (B): DEFECT: the armed run accepted a recorded PASS (emit-report: accepted a recorded PASS) after the file behind an ignored link read by a ledger verify line changed (rc $RC)"; return 1; fi
+  echo "world BL-800 (B): FIXED: the armed run did not accept (rc $RC)"; return 0
+}
+world_bl800_x2() {
   mkx bl800 1 || { echo "world BL-800: BROKEN: build"; return 2; }
   rm -f "$RECORD"
   armed rec0 ""
