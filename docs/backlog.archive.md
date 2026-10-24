@@ -38034,7 +38034,7 @@ verify: sh bash -c 'set -uo pipefail; o="$(awk '\''function fl(){ if (h) print (
 
 ## BL-786 — I10 reads only run.sh, so a fixture whose hook invoker lives in lib.sh is outside its population
 
-**LANDED (v0.925.0, verified 30053a50c).**
+**LANDED (v0.925.0, verified 143c92c70).**
 
 **NOTE.** Source: batch 240, lead ai-dlc-3f. Filed by the r13 owner; not built.
 
@@ -38046,7 +38046,7 @@ verify: sh f="$(awk '/^# --- I10: fixture hermeticity/{s=1} s&&/^i10_unscrubbed\
 
 ## BL-787 — a discharge predicate can filter on a literal no component of this repository writes
 
-**LANDED (v0.926.0, verified 1d23ebba2).**
+**LANDED (v0.926.0, verified c17de1709).**
 
 **DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319, the one recording that the role files let a discharge predicate quote a literal no producer wrote.
 
@@ -38058,7 +38058,7 @@ verify: sh bash core/fixtures/process-rule-pins/receipt-bl787.sh
 
 ## BL-788 — a deferred AC's discharge predicate lived only in the QA review file, so deploy-validate §4b ran a predicate no step checked against the deployed sha
 
-**LANDED (v0.926.0, verified 1d23ebba2).**
+**LANDED (v0.926.0, verified c17de1709).**
 
 **DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; a consumer filing from graph sprint 319 (the deferred-AC predicate that lives only in the QA review file).
 
@@ -38070,7 +38070,7 @@ verify: sh bash core/fixtures/process-rule-pins/receipt-bl788.sh
 
 ## BL-789 — deploy-validate allows a placement fix-forward with its browser specs unrun
 
-**LANDED (v0.926.0, verified 1d23ebba2).**
+**LANDED (v0.926.0, verified c17de1709).**
 
 **DEFECT.** Source: batch 241, lead ai-dlc-58, owner ai-dlc-12; consumer filing from graph sprint 319.
 
@@ -38082,7 +38082,7 @@ verify: sh bash core/fixtures/process-rule-pins/receipt-bl789.sh
 
 ## BL-766 — gate-adjudicator.md never says a FAIL is complete only when the check's comparison surface is exhausted
 
-**LANDED (v0.927.0, verified 94215a606).**
+**LANDED (v0.927.0, verified e30a7795c).**
 
 **NOTE.** Source: BL-765's diagnosis, batch 240. Filed by lead ai-dlc-3f. Not built.
 
@@ -38093,7 +38093,7 @@ verify: sh f=core/team-roles/gate-adjudicator.md; grep -qF "comparison surface" 
 
 ## BL-790 — a review shard does not record whether the advisor ran, so an unavailable advisor is stated in prose the merge cannot read
 
-**LANDED (v0.927.0, verified 94215a606).**
+**LANDED (v0.927.0, verified e30a7795c).**
 
 **DEFECT.** Closes PC-S319-QA-ROLE-DOES-NOT-ASK-THE-VERDICT-TO-RECORD-ADVISOR-UNAVAILABLE. Batch 241, cluster r2.
 
@@ -38108,7 +38108,7 @@ The ABSENCE of the line is refused only when the gate's role file carries the se
 verify: sh bash core/fixtures/review-shard-merge/receipt-bl790.sh core/scripts/merge-review-shards.sh
 ## BL-753 — the hookwake hook's blocking predicate (J1-J4) has never had an adversary pass, and it must have one before the hook can default on
 
-**LANDED (v0.928.0, verified 766525548).**
+**LANDED (v0.928.0, verified 508062b5b).**
 
 **DEFECT.** Source: operator ruling, batch 239, on BL-538 ("I'll take your recommendation"). Filed by lead ai-dlc-13.
 
@@ -38131,7 +38131,7 @@ verify: sh t=templates/settings.json.template; ! test -e core/hooks/ai-dlc-hookw
 
 ## BL-777 — emit-report.sh's recorded-PASS cache keys with `cksum`, so on a box without `cksum` it silently never records and nothing says why
 
-**LANDED (v0.929.0, verified 49ea5fe).**
+**LANDED (v0.929.0, verified bdb981712).**
 
 **NOTE.** Found while building BL-692's fixture (batch 240): the sandbox's `tools.decl` lacked `cksum`, and the cache never recorded. Not built, and a candidate for a later release, not BL-692's.
 
@@ -38144,7 +38144,7 @@ verify: sh bash core/fixtures/reconcile-emit-report/receipt-cksum-absent.sh
 
 ## BL-794 — the protect hook's deny CONTEXT says the planning corpus is NOT protected, contradicting a consumer layer that protects it
 
-**LANDED (v0.930.0, verified ef8beb438).**
+**LANDED (v0.930.0, verified 318ae1316).**
 
 **DEFECT.** Source: batch 241, lead ai-dlc-58, cluster r7 (finding F3).
 
@@ -38156,7 +38156,7 @@ verify: sh bash core/fixtures/context-mode-protect/receipt-bl794.sh core/hooks/a
 
 ## BL-784 — Check B of `validate-steering-budget.sh` does not model the hook's lead-Explore allowance while paused, so it would score such a dispatch as a steamroll
 
-**LANDED (v0.932.0, verified 3e98bf3e6).**
+**LANDED (v0.932.0, verified 73f3e8b39).**
 
 **NOTE.** Source: BL-783's contract adversary, batch 240, filed by lead ai-dlc-3f. Filed OPEN, not built; the same class as BL-783.
 
@@ -38174,7 +38174,7 @@ verify: sh d=$(mktemp -d) && o='{"type":"user","timestamp":"2026-07-04T10:00:00Z
 
 ## BL-792 — Check 5 accepts a could-not-run playwright row as a UI sprint's visual evidence
 
-**LANDED (v0.933.0, verified e5b8d2ee3).**
+**LANDED (v0.933.0, verified 6d9218cf1).**
 
 **NOTE.** Source: batch 241, lead ai-dlc-58, raised by the r1 tip adversary, filed by the r1 owner ai-dlc-12. Filed OPEN; not built.
 
@@ -38186,7 +38186,7 @@ verify: sh bash core/fixtures/check5-anchor-base/receipt-bl792.sh core/scripts/v
 
 ## BL-791 — a consumer-authored file inside a core-claimed fixture directory is not reported before a pull's whole-directory write, and one was lost
 
-**LANDED (v0.934.0, verified 5218086b8).**
+**LANDED (v0.934.0, verified 4dca310ba).**
 
 **NOTE.** Source: batch 241, lead ai-dlc-58. Filed by the r4 owner; not built.
 
@@ -38219,7 +38219,7 @@ verify: sh l=$(grep -E '^[[:space:]]*for _pc_reloc in ' core/skills/ai-dlc-updat
 
 ## BL-587 — a reconcile that records derivations "owed to the sprint's derivation-validator step" has no channel to the sprint lead, so the debt is silently dropped
 
-**LANDED (v0.936.0, verified 67a833a45).**
+**LANDED (v0.936.0, verified ced2899db).**
 
 **DEFECT.** Filed by peer session ai-dlc-68 (listed as ai-dlc-4e [e15800]) from the graph s319 watch; intake re-derived every figure read-only on graph.
 - The 0.793.0 reconcile log `_bmad-output/ai-dlc-update/reconcile-log-20261016T0725Z.md:35-43` records the operator's AskUserQuestion disposition "**leave untouched, record as owed**" and lists 8 newly-failing `grep -n` derivations "Owed to the S319 session's derivation-validator step": carry-over-evaluation-architect-5.md:13 and :23, carry-over-evaluation-pm-5.md:13, prd.md:1289, carry-over-evaluation-party-repair-p1.md:632, requirements-party-repair.md:859, shards/carry-over-evaluation-party-repair-p1/5.md:15 and shards/requirements-party-repair/08.md:102 (the BL-581 set). `prd.md:1289` and `s319/requirements-party-repair.md:859` still hold their old `$ grep -n -F -e "  ok  %-44s" … scripts/ai-dlc/validate-artifact-budget.sh` commands in the working tree.
@@ -38270,7 +38270,7 @@ verify: sh bash core/fixtures/owed-derivations/receipt-bl587.sh
 
 ## BL-796 — `wait-for-deliverable.sh --mark` writes whatever step, seat and shard words a remediator part's caller passes
 
-**LANDED (v0.937.0, verified 28d6f2f1a).**
+**LANDED (v0.937.0, verified f47915c09).**
 
 **NOTE.** Source: batch 241, release r12. Closed by derivation in `--mark`, not by refusal.
 
@@ -38284,7 +38284,7 @@ verify: sh bash core/fixtures/remediator-shard-join/receipt-bl796.sh
 
 ## BL-797 — a bare inputs.decl line under a content-key-excluded top keys nothing, so the file it names can change and no verdict that reads it re-runs
 
-**LANDED (v0.937.0, verified 28d6f2f1a).**
+**LANDED (v0.937.0, verified f47915c09).**
 
 **NOTE.** Source: batch 241, release r12. Closed by I55 arm 5 and the declaration dispositions below.
 
@@ -38300,7 +38300,7 @@ Limit: arm 5 binds the CITED line only. It does not prove that the reader reads 
 verify: sh d=$(mktemp -d) && tar -cf - scripts core .githooks | (cd "$d" && tar -xf -) && bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1 && printf 'docs/backlog.md\n' >> "$d/core/fixtures/backlog-receipt-binding/inputs.decl" && ! bash "$d/scripts/validate-enforcement-map.sh" --arms I55 >/dev/null 2>&1
 ## BL-801 — the owed-derivations fixture grew from 21s to 636s loaded in 0.936.0, because every mutant re-runs every reader world
 
-**LANDED (v0.938.0, verified df3ac545c).**
+**LANDED (v0.938.0, verified 9e3565f56).**
 
 **DEFECT (efficiency).** Source: batch 241, lead ai-dlc-58; the growth was reported by the r6 owner at the 0.936.0 dress.
 
@@ -38312,10 +38312,12 @@ Under the standing rule, a wall clock is a defect until it is justified.
 
 Owed: shard the mutant battery, or have each mutant run only the worlds its required arms live in (as BL-699 did for pcvlat). Every kill set is kept.
 
+Of the 281 counted reader invocations after the change, 195 run outside the mutant phase (the real-mode lw_all pass and the pre-sweep rd/scope_in and W/G arms) and 86 inside it, 43 of those null controls; the counts cannot split the 394 s loaded figure into phases.
+
 verify: sh bash core/fixtures/owed-derivations/receipt-bl801.sh
 ## BL-798 — the sandbox tracer's settle, flush and window-cut greps match a bare marker name, so a concurrent deriver's markers cut this run's window
 
-**LANDED (v0.940.0, verified c6f082357).**
+**LANDED (v0.940.0, verified 2e322a41b).**
 
 **DEFECT.** Under `--local-map` and `--in-pool` the stream predicate is `eventMessage CONTAINS "FXTAG=$fx;"`, the fixture name alone. A concurrent deriver tracing the same fixture name lands its own marker reads (a different `$MARKDIR`) in this run's stream. `derive-fixture-readsets.sh` located its window with `grep 'readset-sentinel'` (settle, and the last-start cut) and `grep 'readset-end'` (flush, and the first-end cut), all bare names, so a peer's marker read was taken for this run's. The contract adversary measured 12 of 12 concurrent same-name windows cut at the other deriver's marker, 6 at a foreign start and 6 at a foreign end. A foreign end truncates the window's tail, and a lost stat or negative lookup there is invisible to the loss canary (atime sees only reads of files that exist at the scan), so the short set maps.
 
@@ -38333,7 +38335,7 @@ The receipt binds the emitting lines, not the behaviour: it demands at least fou
 
 ## BL-800 — the read log's L refusal at emit-report.sh never fires (awk's END exit overrides the rule's exit)
 
-**LANDED (v0.941.0, verified 4aa215cc0).**
+**LANDED (v0.941.0, verified 5dc2dee7c).**
 
 **DEFECT.** Source: batch 241, lead ai-dlc-58, release r9 (B7); found by the B7 build hand while building B7, which measured the dead refusal holding three `L` reads in a written record; filed and closed in v0.941.0.
 
@@ -38349,6 +38351,6 @@ CORRECTION of a false claim: 0.939.0's text said BL-800 was "unreachable at main
 
 v0.941.0 removes R2's per-root walk (B7 of BL-685), so the L refusal is now the only guard: every logged walk refuses an L crossing, and that refusal is what keeps a read-through out of the key.
 
-Consumer exposure not measured: the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
+Consumer exposure: none. Operator answer 2026-10-24: graph never set EMIT_REPORT_VERIFY_CACHE=1, so its cache was never armed; the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
 
 verify: sh bash core/fixtures/reconcile-emit-report/receipt-round9.sh BL-800
