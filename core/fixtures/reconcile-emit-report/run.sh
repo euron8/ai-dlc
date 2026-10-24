@@ -3641,6 +3641,14 @@ if grep -qF "B7 the symlink '" "$EMIT" || ! pcv_installed "$EMIT"; then
 else
   printf 'PENDING: PC-V77..PC-V91 not run, engine lacks the B7 symlink refusals\n'
 fi
+# V92 and V93 need the engine whose directory-link test is a tracked-file PRESENCE test, read off its
+# named `under which git lists no tracked file` refusal. Same gate shape; they run inside world B7C.
+PCV_R13=0
+if [ "$PCV_R12" -eq 1 ] && { grep -qF "under which git lists no tracked file" "$EMIT" || ! pcv_installed "$EMIT"; }; then
+  PCV_R13=1; PCV_IDS="$PCV_IDS PC-V92 PC-V93"
+else
+  printf 'PENDING: PC-V92 PC-V93 not run, engine lacks the B7 tracked-target presence refusal\n'
+fi
 pcv_setup
 
 # ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
@@ -4986,10 +4994,20 @@ pcv_b7bworld() {
 #          changes behind the link it renders fresh at the opt-out's exit, never a hit. Under
 #          M-b7-unkeyed the link is accepted by identity alone, re-records, and the change behind it is
 #          ACCEPTED (a hit) while a fresh render adds a CLOSE-CANDIDATE row: the stale PASS.
+#     V92  B7-presence-case: `notes -> ARCHIVE/RETRO`, the ignored `archive/retro` typed in another
+#          case. On a case-insensitive volume the link resolves, keeps the typed case, and the
+#          ignored listing over it lists nothing; git lists no tracked file there either, so it
+#          refuses by the presence cause with the record byte-identical, and after f.md changes
+#          renders fresh at the opt-out's exit. On a case-sensitive volume the link dangles and
+#          er_link_inside's refusal is asserted instead.
+#     V93  B7-presence-git: `notes -> .git/zz`. git lists nothing under .git, ignored or tracked, so
+#          it refuses by the presence cause, the same two steps. Under M-b7-presence both links are
+#          accepted by the ignored test alone, re-record, and the change behind them HITS.
 pcv_b7cworld() {
   local gd ex rec s1 s1_ok=0
   PCV_ENVPRE=""
-  pcv_lat b7c || { for m in PC-V90 PC-V91; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  local m
+  pcv_lat b7c || { for m in PC-V90 PC-V91 PC-V92 PC-V93; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   gd="$(git -C "$L_C" rev-parse --absolute-git-dir)"; ex="$gd/info/exclude"
   if ! { mkdir -p "$gd/info" "$L_C/kept/retro" "$L_C/archive/retro" && printf 'x\n' > "$L_C/kept/retro/f.md" \
          && printf 'x\n' > "$L_C/archive/retro/f.md" && printf '/archive/\n' >> "$ex" \
@@ -4998,9 +5016,9 @@ pcv_b7cworld() {
          && { pcv_b56g -C "$L_C" add -- kept _bmad-output/ai-dlc-update/push-candidate-ledger.md && pcv_b56g -C "$L_C" commit -qm b7c; } >/dev/null 2>&1 \
          && ln -s kept/retro "$L_C/notes" && ! git -C "$L_C" check-ignore -q -- notes \
          && git -C "$L_C" check-ignore -q -- archive/retro/f.md && [ -n "$(git -C "$L_C" ls-files -- kept/retro/f.md)" ]; }; then
-    for m in PC-V90 PC-V91; do pcv_x "$m" "FIXTURE BROKEN: could not seed the unignored link notes, the tracked kept/retro, the ignored archive/retro and the ledger's sh receipt"; done; return 0
+    for m in PC-V90 PC-V91 PC-V92 PC-V93; do pcv_x "$m" "FIXTURE BROKEN: could not seed the unignored link notes, the tracked kept/retro, the ignored archive/retro and the ledger's sh receipt"; done; return 0
   fi
-  pcv_lat_approve b7c || { for m in PC-V90 PC-V91; do pcv_x "$m" "FIXTURE BROKEN: the linked world rendered no region"; done; return 0; }
+  pcv_lat_approve b7c || { for m in PC-V90 PC-V91 PC-V92 PC-V93; do pcv_x "$m" "FIXTURE BROKEN: the linked world rendered no region"; done; return 0; }
   rm -f "$L_REC"; : > "$PS_D/krec.keep"
   if pcv_in PC-V91; then
     if pcv_b56rec PC-V91 b7c "an unignored link notes to the tracked dir kept/retro"; then
@@ -5035,8 +5053,63 @@ pcv_b7cworld() {
     else
       pcv_x PC-V90 "a link to an ignored dir read by a ledger sh receipt: first $s1; after f.md changed [$(pcv_why), opt-out $K_NC, record $rec] (want two fresh renders, the second at the opt-out's exit, the record untouched, er_dirlinks_keyed's cause named) -- a hit there is a stale PASS"
     fi
+    rm -f "$L_C/notes"; ln -s kept/retro "$L_C/notes"; printf 'x\n' > "$L_C/archive/retro/f.md"; pcv_kback
+  fi
+  if [ "${PCV_R13:-0}" -eq 1 ] && pcv_in PC-V92 PC-V93 && [ ! -f "$L_REC" ]; then
+    m=PC-V92; pcv_in PC-V92 || m=PC-V93
+    if ! pcv_b56rec "$m" b7c0p "the control world (notes -> the tracked kept/retro)"; then
+      [ "$m" = PC-V93 ] || ! pcv_in PC-V93 || pcv_x PC-V93 "control: the B7C world did not record before the link (see PC-V92)"
+      return 0
+    fi
+  fi
+  [ "${PCV_R13:-0}" -eq 1 ] || return 0
+  if pcv_in PC-V92 && pcv_kctl PC-V92; then
+    # The case-insensitive volume is the shape; on a case-sensitive one ARCHIVE/RETRO names nothing,
+    # the link dangles, and the refusal that fires is er_link_inside's, asserted by value instead.
+    if [ -d "$L_C/ARCHIVE/RETRO" ]; then
+      pcv_b7cpres PC-V92 b7cc ARCHIVE/RETRO "$L_C/archive/retro/f.md" \
+        "B7 the symlink 'notes' resolves to 'ARCHIVE/RETRO', under which git lists no tracked file" \
+        "an unignored link notes -> ARCHIVE/RETRO over the ignored archive/retro on a case-insensitive volume"
+    else
+      rm -f "$L_C/notes"; ln -s ARCHIVE/RETRO "$L_C/notes"
+      pcv_b56refuse PC-V92 b7cc "an unignored link notes -> ARCHIVE/RETRO on a case-sensitive volume, where it dangles" \
+        "B7 the symlink 'notes' ends at neither a regular file nor a directory"
+    fi
+    rm -f "$L_C/notes"; ln -s kept/retro "$L_C/notes"; printf 'x\n' > "$L_C/archive/retro/f.md"; pcv_kback
+  fi
+  if pcv_in PC-V93 && pcv_kctl PC-V93; then
+    if [ -d "$L_C/.git" ] && mkdir -p "$L_C/.git/zz" && printf 'x\n' > "$L_C/.git/zz/f.md"; then
+      pcv_b7cpres PC-V93 b7cg .git/zz "$L_C/.git/zz/f.md" \
+        "B7 the symlink 'notes' resolves to '.git/zz', under which git lists no tracked file" \
+        "an unignored link notes -> .git/zz, under which git lists nothing"
+    else
+      pcv_x PC-V93 "FIXTURE BROKEN: the consumer has no .git directory to hold .git/zz/f.md"
+    fi
+    rm -f "$L_C/notes"; ln -s kept/retro "$L_C/notes"; pcv_kback
   fi
   return 0
+}
+# pcv_b7cpres <id> <tag> <link target> <file behind it> <cause> <what> -- world B7C's presence arms,
+# run after pcv_kctl. `notes` repointed to <link target>: the cached run renders fresh at exit 0,
+# leaves the record byte-identical and names <cause>; after <file> changes behind the link it renders
+# fresh at the opt-out's non-zero exit, never a hit. Under M-b7-presence the link is accepted, the
+# record is rewritten, and the change is a HIT: the stale PASS.
+pcv_b7cpres() {
+  local rec s1 s1_ok=0
+  rm -f "$L_C/notes"; ln -s "$3" "$L_C/notes"
+  pcv_kstep "$2"; rec=unchanged; cmp -s "$L_REC" "$PS_D/krec.keep" || rec=REWRITTEN
+  s1="[$(pcv_why), opt-out $K_NC, record $rec, stderr: $(pcv_b56cause "$2")]"
+  pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = unchanged ] && grep -qF -- "${PCV_R6MARK}$5" "$PS_D/$2.err" && s1_ok=1
+  printf 'y\n' > "$4"
+  pcv_kstep "$2.e"; rec=unchanged; cmp -s "$L_REC" "$PS_D/krec.keep" || rec=REWRITTEN
+  if [ "$K_NC" -eq 0 ]; then
+    pcv_x "$1" "FIXTURE BROKEN: the opt-out render after f.md changed behind notes exits 0, so the report does not disagree with the receipt's new verdict"
+  elif [ "$s1_ok" -eq 1 ] && [ "$PHIT" -eq 0 ] && pcv_is_miss "$K_NC" && [ "$rec" = unchanged ]; then
+    pcv_v "$1" "$6, read only by a ledger sh receipt, renders fresh with exit 0, leaves the record byte-identical and names the cause: $5; after f.md changes behind the link the cached run renders fresh at the opt-out's exit $K_NC, never a hit"
+  else
+    pcv_x "$1" "$6: first $s1; after f.md changed [$(pcv_why), opt-out $K_NC, record $rec] (want two fresh renders, the second at the opt-out's exit, the record untouched, the cause '$5' named) -- a hit there is a stale PASS"
+  fi
+  printf 'x\n' > "$4"
 }
 
 # ---- V42 (B2): the DETECTORS hash a consumer file with --no-filters, run directly ----
@@ -6093,7 +6166,7 @@ pcv_suite() {
     if pcv_in PC-V77 PC-V78 PC-V79 PC-V80 PC-V81 PC-V82 PC-V83 PC-V84 PC-V85 PC-V86 PC-V87; then pcv_b7world; fi
     if pcv_in PC-V88; then pcv_b7lworld; fi
     if pcv_in PC-V89; then pcv_b7bworld; fi
-    if pcv_in PC-V90 PC-V91; then pcv_b7cworld; fi
+    if pcv_in PC-V90 PC-V91 PC-V92 PC-V93; then pcv_b7cworld; fi
   fi
 
   # ---- V38, V39, V42: the round-6 partition (R1, R2) and the detectors' --no-filters (B2) ----
@@ -6228,8 +6301,9 @@ pcv_failset() {
 #                     must name the work-tree directory `x` (same predicate)        -> PC-V73 PC-V74
 #   M-b6-batch-rc     every nested repository accepted when the batch's check-ignore exits 0
 #                     (any input matched)                                                 -> PC-V75
-# BL-685 B7's nine and BL-800's one, each reverting one condition of er_link_target / er_link_inside
-# or the read log's L refusal. V77 (the accepted directory link) is the same-run control of all ten:
+# BL-685 B7's ten and BL-800's one, each reverting one condition of er_link_target / er_link_inside /
+# er_dirlinks_keyed or the read log's L refusal. V77 (the accepted directory link) is the same-run
+# control of all eleven:
 #   M-b7-key          the readlink strings dropped from a directory link's identity: a repoint
 #                     still misses (the resolved path moves), the respelling does not       -> PC-V78
 #   M-b7-inside       both inside-the-root checks dropped (per hop, and at the end)          -> PC-V80
@@ -6237,6 +6311,11 @@ pcv_failset() {
 #                     IGNORED path is keyed by identity alone: V90's link re-records and the
 #                     change behind it is ACCEPTED, a stale PASS; V91 (tracked target) is its
 #                     same-run near-miss                                                    -> PC-V90
+#   M-b7-presence     er_dirlinks_keyed's tracked-file presence refusal dropped, so the ignored
+#                     listing alone decides, an ABSENCE test: `notes -> ARCHIVE/RETRO` (another
+#                     case than the ignored dir) and `notes -> .git/zz` list nothing ignored, are
+#                     accepted, re-record, and the change behind them HITS, a stale PASS. V90 and
+#                     V91 are its same-run controls                                 -> PC-V92 PC-V93
 #   M-b7-contains-link  the `.`, itself and contains-the-link lines dropped: V82 then reaches the
 #                     read-root line and names a different cause                            -> PC-V82
 #   M-b7-contains-root  the equals- and contains-a-read-root lines dropped                  -> PC-V83
@@ -6293,6 +6372,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
   local b7r2="    case \"\$r/\" in \"\$_er_lrel/\"*) er_refuse \"B7 the symlink '\$rel' resolves to '\$_er_lrel', which contains the read root '\$r'\"; return 1 ;; esac"
   local b7fx='  for u in _bmad-output .claude/hooks; do'
   local b7cr='    u="${u%"${u##*[![:space:]]}"}"; u="${u%/}"'
+  local b7pr="    [ \"\$k\" -eq 1 ] || { er_refuse \"B7 the symlink '\$l' resolves to '\$t', under which git lists no tracked file\"; return 1; }"
   local b7L="  if LC_ALL=C awk -F'\\t' '\$3 ~ /^L / { f = 1; exit } END { exit !f }' \"\$_er_tmp/key.log-sorted\"; then"
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
@@ -6335,6 +6415,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
     M-b7-key)  pcv_ed "$d" replace "$b7id" "    printf 'd\\0%s\\0' \"\$_er_lrel\"" ;;
     M-b7-inside) pcv_ed "$d" replace "$b7hop" '    :' && pcv_ed "$d" replace "$b7end" '  :' ;;
     M-b7-unkeyed) pcv_ed "$d" replace '  er_dirlinks_keyed || return 1' '  :' ;;
+    M-b7-presence) pcv_ed "$d" replace "$b7pr" '    :' ;;
     M-b7-contains-link) pcv_ed "$d" replace "$b7c1" '  :' && pcv_ed "$d" replace "$b7c2" '  :' && pcv_ed "$d" replace "$b7c3" '  :' ;;
     M-b7-contains-root) pcv_ed "$d" replace "$b7r1" '    :' && pcv_ed "$d" replace "$b7r2" '    :' ;;
     M-b7-corpus) pcv_ed "$d" replace "$b7fx" '  for u in .claude/hooks; do' ;;
@@ -6357,14 +6438,14 @@ pcv_want() {
     M-gitlink-refuse) echo "PC-V64 PC-V65" ;; M-gitlink-prune) echo "PC-V64" ;; M-hashlist-skip) echo "PC-V67" ;;
     M-recurse) echo "PC-V68" ;; M-glob) echo "PC-V69" ;; M-b5-root) echo "PC-V76" ;; M-b6-ignored) echo "PC-V73 PC-V74 PC-V75" ;;
     M-b6-under) echo "PC-V71" ;; M-b6-contains) echo "PC-V72" ;; M-b6-dotgit-path) echo "PC-V73 PC-V74" ;; M-b6-batch-rc) echo "PC-V75" ;;
-    M-b7-key) echo "PC-V78" ;; M-b7-inside) echo "PC-V80" ;; M-b7-unkeyed) echo "PC-V90" ;;
+    M-b7-key) echo "PC-V78" ;; M-b7-inside) echo "PC-V80" ;; M-b7-unkeyed) echo "PC-V90" ;; M-b7-presence) echo "PC-V92 PC-V93" ;;
     M-b7-contains-link) echo "PC-V82" ;; M-b7-contains-root) echo "PC-V83" ;;
     M-b7-corpus) echo "PC-V84" ;; M-b7-hooks) echo "PC-V85" ;; M-b7-croot) echo "PC-V86" ;;
     M-b7-filehash) echo "PC-V79" ;; M-b7-logL) echo "PC-V88 PC-V89" ;;
   esac
 }
 PCV_B56MUTS="M-gitlink-refuse M-gitlink-prune M-hashlist-skip M-recurse M-glob M-b5-root M-b6-ignored M-b6-under M-b6-contains M-b6-dotgit-path M-b6-batch-rc"
-PCV_B7MUTS="M-b7-key M-b7-inside M-b7-unkeyed M-b7-contains-link M-b7-contains-root M-b7-corpus M-b7-hooks M-b7-croot M-b7-filehash M-b7-logL"
+PCV_B7MUTS="M-b7-key M-b7-inside M-b7-unkeyed M-b7-presence M-b7-contains-link M-b7-contains-root M-b7-corpus M-b7-hooks M-b7-croot M-b7-filehash M-b7-logL"
 # pcv_bl <name> -- the backlog entry a mutant belongs to, for its verdict lines
 pcv_bl() {
   case "$1" in M-b7-logL) echo BL-800; return 0 ;; esac
@@ -6414,6 +6495,9 @@ pcv_scope() {
     M-b7-key|M-b7-filehash) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V78 PC-V79" ;;
     M-b7-inside) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V80 PC-V81" ;;
     M-b7-unkeyed) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V90 PC-V91" ;;
+    # V90 (refused by the IGNORED test, which this mutant keeps) and V91 (a tracked target) are its
+    # same-run controls.
+    M-b7-presence) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V90 PC-V91 PC-V92 PC-V93" ;;
     M-b7-contains-link|M-b7-contains-root) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V82 PC-V83" ;;
     M-b7-corpus|M-b7-hooks|M-b7-croot) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V84 PC-V85 PC-V86" ;;
     M-b7-logL) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V77 PC-V88 PC-V89" ;;
