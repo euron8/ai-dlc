@@ -124,7 +124,7 @@ Graph-watch was ai-dlc-a6, polling every 10 minutes. No `graph-*` session was me
 - **Not built, with reasons**, each as its entry says: BL-538 (hook half retired; the per-notification turn is
   owed), BL-553(b) (not buildable as specified), BL-583 (NOTE; a judgment and a dollar figure), BL-691 (no stall
   measured), BL-695 (a graph measurement), BL-706 (NO TIMING RUNS). Partials: BL-584 owed (3) (solo high-load drop
-  unexplained), BL-616 (census 1-4 shipped at 0.804.0; items 3, 5, 6, 8 and the trigger owed), BL-685 part (b) and
+  unexplained), BL-616 (census 1-4 shipped at 0.804.0; owed: the dropped-verdict trigger, census item 8, owed item 3, the BL-632 threshold census), BL-685 part (b) and
   its named residuals, BL-699 (d). NOTEs BL-785, BL-793, BL-795, BL-799 not built.
 - **Graph at close**: installed 0.924.0 on both the checked-out branch and `main`, shipped 0.941.0: SEVENTEEN behind,
   a WIDE range. Bootstrapping files changed since 0.924.0's squash `8336c4009`:
