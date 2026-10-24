@@ -1327,18 +1327,20 @@ er_link_inside() {
 # in-tree file outside every consignored root, cached 0 where a fresh render gave 1).
 # A DIRECTORY target: the link's IDENTITY ONLY -- the kind `d`, every readlink string in the chain and
 # the resolved root-relative path (er_hash_list already wrote its path) -- and not the content
-# beneath it, which is keyed by git: the link is accepted only over a target git lists as tracked,
-# with nothing ignored (er_dirlinks_keyed refuses every other target by name), so a file it reaches
-# is a tracked one, keyed by consindex and conswork's status, or an untracked unignored one, keyed by
-# conswork's `ls-files -o`. Two things stand behind the identity key: no LOGGED read can cross the
-# link (consumer-read.sh's cr__links turns any logged path or walk through a symlink into an `L`
-# value, and er_log_entries refuses every `L` entry), and an UNLOGGED read through it -- a ledger
-# `sh` receipt runs arbitrary consumer code -- reaches only content git keys (measured: an ignored
-# target read that way through an unignored `notes` link was ACCEPTED STALE before
-# er_dirlinks_keyed, and so were a target typed in another case than the ignored directory on disk
-# and a target under .git, before its tracked-file presence test). THE REMAINING GAP: an EMPTY
-# directory is keyed by no field anywhere, link or not, so one appearing or vanishing beneath an
-# accepted target moves nothing in the key.
+# beneath it, which is keyed by git. THE RULE: a directory link is accepted only when the target's
+# files on disk equal git's tracked list (er_dirlinks_keyed refuses every other target by name), so
+# every file it reaches is a tracked one, keyed by consindex and conswork's status. Two things stand
+# behind the identity key: no LOGGED read can cross the link (consumer-read.sh's cr__links turns any
+# logged path or walk through a symlink into an `L` value, and er_log_entries refuses every `L`
+# entry), and an UNLOGGED read through it -- a ledger `sh` receipt runs arbitrary consumer code --
+# reaches only content git keys (measured: an ignored target, a target typed in another case than
+# the ignored directory on disk, a target under .git, and a non-repository `sub/.git/f.md` under an
+# ignored `sub/` in a tracked target were each ACCEPTED STALE through an unignored `notes` link
+# before the disk became the oracle). THE ONE REMAINING GAP: an EMPTY directory has no content to
+# key, link or not, so one appearing or vanishing beneath an accepted target moves nothing. THE
+# GOVERNING LIMIT is the header's (`verify: sh` is arbitrary code, :244-246): a receipt can read an
+# ignored file by its own path with no link at all (the no-link control NOLNKIG is accepted stale
+# exactly so), and B7 closes the link spellings, not that limit.
 er_link_target() {
   local rel="$2" r u
   er_link_inside "$1" || { er_refuse "B7 the symlink '$rel' $_er_lwhy"; return 1; }
@@ -1406,38 +1408,66 @@ er_hash_list() {
     printf '%s\n' "$h"
   done < "$_er_tmp/key.nl"
 }
-# er_dirlinks_keyed -- B7 0 when every accepted directory link's resolved target is one under which
-# git lists at least one TRACKED file and NO path is IGNORED. er_hash_list wrote each accepted link
-# and its target to key.dirlinks as NUL pairs. Two git calls answer for all of them, each over every
-# target as a `:(literal)` pathspec. The IGNORED listing first: any listed path refuses, naming the
-# link whose target holds it. Then the TRACKED listing, a PRESENCE test, because the ignored one is an
-# ABSENCE test and reads zero whenever the spelling misses (measured: `notes -> ARCHIVE/RETRO` over
-# an ignored `archive/retro` on a case-insensitive volume, and `notes -> .git/zz`, under which git
-# lists nothing, were both ACCEPTED STALE). A target under which git lists no tracked file refuses,
-# so it fails CLOSED: a missed case spelling and a .git target list none, and so does a target
-# holding only untracked unignored content, which is the safe direction. Each tracked path is
-# attributed to its target by path prefix in this shell. Forks: those two git calls per key take
-# when at least one directory link was accepted, none otherwise, and never one per link.
+# er_dirlinks_keyed -- B7 0 when, for every accepted directory link, the files ON DISK under its
+# resolved target equal the files git TRACKS there, both made relative to the target. THE DISK IS THE
+# ORACLE: anything on disk git does not list refuses -- ignored, untracked, under a `.git` component,
+# in a nested repository, or reached by a case spelling git does not share -- and so does a tracked
+# file missing from disk. An ignored listing used to decide alone, an ABSENCE test that read zero
+# whenever git could not see the content (measured: `notes -> ARCHIVE/RETRO` over an ignored dir on a
+# case-insensitive volume, `notes -> .git/zz`, and a non-repository `kept/retro/sub/.git/f.md` under
+# an ignored `sub/` in a tracked target were each ACCEPTED STALE); equality subsumes it and it is gone.
+# A target under which git lists no tracked file keeps its own named refusal. er_hash_list wrote each
+# accepted link and its target to key.dirlinks as NUL pairs; one `ls-files` over every target as a
+# `:(literal)` pathspec lists B for all of them, attributed by path prefix in this shell. FORKS: that
+# one git call per key take when at least one directory link was accepted, none otherwise; and per
+# accepted link four more -- find, two sorts, cmp. The prefix strips and the naming walk are builtins.
 er_dirlinks_keyed() {
-  local l t e k
+  local l t e k c s
   local -a ps=()
   [ -s "$_er_tmp/key.dirlinks" ] || return 0
   while IFS= read -r -d '' l && IFS= read -r -d '' t; do ps+=( ":(literal)$t" ); done < "$_er_tmp/key.dirlinks"
-  cr_git "$CONSUMER" ls-files -z -o -i --exclude-standard -- "${ps[@]}" > "$_er_tmp/key.dlign" 2>/dev/null \
-    || { er_refuse "B7 git ls-files could not list the ignored paths beneath the accepted directory links' targets"; return 1; }
-  if [ -s "$_er_tmp/key.dlign" ]; then
-    e=""; IFS= read -r -d '' e < "$_er_tmp/key.dlign"
-    while IFS= read -r -d '' l && IFS= read -r -d '' t; do
-      case "$e" in "$t"/*) er_refuse "B7 the symlink '$l' resolves to '$t', beneath which git lists the IGNORED path '$e', whose content no field keys"; return 1 ;; esac
-    done < "$_er_tmp/key.dirlinks"
-    er_refuse "B7 git lists the IGNORED path '$e' beneath an accepted directory link's target, whose content no field keys"; return 1
-  fi
   cr_git "$CONSUMER" ls-files -z -- "${ps[@]}" > "$_er_tmp/key.dltrk" 2>/dev/null \
     || { er_refuse "B7 git ls-files could not list the tracked files beneath the accepted directory links' targets"; return 1; }
   while IFS= read -r -d '' l && IFS= read -r -d '' t; do
+    # B: git's tracked list under the target, made relative to it. k: 1 once one is listed, 2 on a
+    # failed write, which refuses by name and is never read as an empty or an equal set.
     k=0
-    while IFS= read -r -d '' e; do case "$e" in "$t"/*) k=1; break ;; esac; done < "$_er_tmp/key.dltrk"
+    : > "$_er_tmp/key.dlb" && : > "$_er_tmp/key.dla" \
+      || { er_refuse "B7 the lists under '$t' could not be staged"; return 1; }
+    while IFS= read -r -d '' e; do
+      case "$e" in "$t"/*) printf '%s\0' "${e#"$t"/}" || { k=2; break; }; k=1 ;; esac
+    done < "$_er_tmp/key.dltrk" > "$_er_tmp/key.dlb"
+    [ "$k" -ne 2 ] || { er_refuse "B7 the tracked list under '$t' could not be staged"; return 1; }
     [ "$k" -eq 1 ] || { er_refuse "B7 the symlink '$l' resolves to '$t', under which git lists no tracked file"; return 1; }
+    # A: everything on disk under the target that is not a directory -- a regular file, a symlink
+    # (to a file or a directory, never followed: find runs without -L), a fifo -- by absolute path
+    # through /usr/bin/find, made relative to the target. A link under the target is "on disk" and
+    # git lists it only as a tracked 120000 entry, which R2 refuses anyway, so any link there makes
+    # A and B differ and the link refuses: the fail-closed direction.
+    /usr/bin/find "$_er_root/$t" ! -type d -print0 > "$_er_tmp/key.dlfind" 2>/dev/null \
+      || { er_refuse "B7 find could not walk '$t', the target of the symlink '$l'"; return 1; }
+    c=0
+    while IFS= read -r -d '' e; do printf '%s\0' "${e#"$_er_root/$t"/}" || { c=2; break; }; done < "$_er_tmp/key.dlfind" > "$_er_tmp/key.dla"
+    [ "$c" -eq 0 ] || { er_refuse "B7 the on-disk list under '$t' could not be staged"; return 1; }
+    LC_ALL=C sort -z "$_er_tmp/key.dla" > "$_er_tmp/key.dla.s" 2>/dev/null \
+      && LC_ALL=C sort -z "$_er_tmp/key.dlb" > "$_er_tmp/key.dlb.s" 2>/dev/null \
+      || { er_refuse "B7 the on-disk and tracked lists under '$t' could not be sorted"; return 1; }
+    cmp -s "$_er_tmp/key.dla.s" "$_er_tmp/key.dlb.s"; c=$?
+    [ "$c" -ne 0 ] || continue
+    [ "$c" -eq 1 ] || { er_refuse "B7 cmp could not compare the on-disk and tracked lists under '$t'"; return 1; }
+    # They differ. Name the first entry on disk that git does not list; failing that, the first git
+    # lists that is not on disk. The NAME is a message only; the refusal was decided by cmp above.
+    s="$_er_nl"
+    while IFS= read -r -d '' e; do s="$s$e$_er_nl"; done < "$_er_tmp/key.dlb.s"
+    while IFS= read -r -d '' e; do
+      case "$s" in *"$_er_nl$e$_er_nl"*) ;; *) er_refuse "B7 the symlink '$l' resolves to '$t', under which '$e' exists on disk but git does not list it"; return 1 ;; esac
+    done < "$_er_tmp/key.dla.s"
+    s="$_er_nl"
+    while IFS= read -r -d '' e; do s="$s$e$_er_nl"; done < "$_er_tmp/key.dla.s"
+    while IFS= read -r -d '' e; do
+      case "$s" in *"$_er_nl$e$_er_nl"*) ;; *) er_refuse "B7 the symlink '$l' resolves to '$t', under which git lists '$e' but it is not on disk"; return 1 ;; esac
+    done < "$_er_tmp/key.dlb.s"
+    er_refuse "B7 the symlink '$l' resolves to '$t', whose files on disk differ from git's tracked list"; return 1
   done < "$_er_tmp/key.dirlinks"
 }
 _er_nl='
@@ -1998,7 +2028,7 @@ er_key() {
   # was never what kept a READ-THROUGH out of the key: the read log's `L` refusal (er_log_entries) is,
   # because cr__links turns every logged path or walk that crosses a link into an `L` value. A ledger
   # `sh` receipt runs arbitrary consumer code, which reads through a link UNLOGGED, so a directory
-  # link is accepted only over a target git lists as tracked, with nothing ignored
+  # link is accepted only when its target's files on disk equal git's tracked list
   # (er_dirlinks_keyed): what the link reaches is then content git keys. The roots are er_read_roots.
   # key.r2idx and key.r2roots were taken once, above the B5 gitlink derivation.
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.r2idx" > "$_er_tmp/key.r2lines" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
@@ -2040,8 +2070,8 @@ er_key() {
     fi
     printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
   done
-  # B7 every directory link the fields accepted, checked in one batch for ignored content beneath its
-  # target and in one more for at least one tracked file there.
+  # B7 every directory link the fields accepted: its target's files on disk must equal git's tracked
+  # list there, one ls-files for all of them.
   er_dirlinks_keyed || return 1
   er_sha256 "$_er_tmp/key.block"
 }
