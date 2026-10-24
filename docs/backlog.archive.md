@@ -38331,3 +38331,24 @@ verify: sh f=core/scripts/derive-fixture-readsets.sh; c="$(grep -vE '^[[:space:]
 
 The receipt binds the emitting lines, not the behaviour: it demands at least four `grep -F` calls on `"$SENT_KEY"` or `"$ENDMARK"` against `"$raw"` and no bare-name grep on `"$raw"`. Both counts are taken over the deriver's non-comment lines, so a comment spelling the keyed grep cannot stand in for a live one. It cannot see a keyed grep whose path variable is wrong; the fixture arm drives that.
 
+## BL-800 — the read log's L refusal at emit-report.sh never fires (awk's END exit overrides the rule's exit)
+
+**LANDED (v0.941.0, verified 4aa215cc0).**
+
+**DEFECT.** Source: batch 241, lead ai-dlc-58, release r9 (B7); found by the B7 build hand while building B7, which measured the dead refusal holding three `L` reads in a written record; filed and closed in v0.941.0.
+
+BL-800 was a live exposure at main from 0.889.0 to 0.940.0 whenever the cache was armed with `EMIT_REPORT_VERIFY_CACHE=1` (it is off by default), through any LOGGED consumer read whose path crosses an ignored symlink outside every read root, for example a ledger `verify: sh` receipt's subject (the measured shape B), or a resolved hooks: or fixtures: value checked with cr_test.
+
+The cause: the read log's L refusal in `er_log_entries` (`core/skills/ai-dlc-update/reconcile/emit-report.sh`) was `$3 ~ /^L / { exit 0 } END { exit 1 }`, which always exits 1, because awk runs END after a rule's `exit` and END's exit wins. So it answered "no L entry" on every log. It is now `{ f = 1; exit } END { exit !f }`.
+
+The measured world (shape B): an ignored link `docs/retro` pointing at an outside dir, and a ledger receipt `verify: sh grep -q x "$CONSUMER/docs/retro/f.md"`. At base 2e322a41b the record formed carrying `read t docs/retro/f.md L docs/retro`; after f.md changed, the armed run accepted the recorded PASS while a fresh render added a `CLOSE-CANDIDATE PC-R9REACH` row. At the fix, it refuses with `R2 a symlink lies on a consumer path a detector read (docs/retro/f.md)`. R2's per-root walk never visits docs/, which is why R2 did not pre-empt it.
+
+The narrower true claim: R2 DID pre-empt the read-root shapes. A link at `.claude/skills/ai-dlc` and a link above a read root were both refused at base. A logged walk rooted outside the read roots cannot be built, because every logged walk is rooted under a read root.
+
+CORRECTION of a false claim: 0.939.0's text said BL-800 was "unreachable at main and in this release because R2 refuses first". That was false (see the CHANGELOG for v0.941.0).
+
+v0.941.0 removes R2's per-root walk (B7 of BL-685), so the L refusal is now the only guard: every logged walk refuses an L crossing, and that refusal is what keeps a read-through out of the key.
+
+Consumer exposure not measured: the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
+
+verify: sh bash core/fixtures/reconcile-emit-report/receipt-round9.sh BL-800

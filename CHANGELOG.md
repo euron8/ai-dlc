@@ -19,6 +19,53 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.941.0] - 2026-10-23
+
+Batch 241, lead ai-dlc-58, release r9 (B7). It closes BL-800, files BL-800, and closes no `PC-` id. NET: entries closed 1 minus filed 1 = 0. The NET is 0 because BL-800 is filed and closed in this same release, and BL-685 stays open by design, on `verify: manual`, the default flip and the A2b mutant; the default stays OFF. Engine code: `core/skills/ai-dlc-update/reconcile/emit-report.sh` only. Fixture changes: `core/fixtures/reconcile-emit-report/` (`run.sh`, `receipt-round9.sh`). Rulebook changes: none. Packaging: none. Backlog: `docs/backlog.md` (the BL-800 entry and the BL-685 progress bullet).
+
+Bootstrapping: engine code ships here, and it is live from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine.
+
+### BL-800 — a live exposure at main from 0.889.0 to 0.940.0 when the cache was armed; filed and closed here
+
+BL-800 was a live exposure at main from 0.889.0 to 0.940.0 whenever the cache was armed with `EMIT_REPORT_VERIFY_CACHE=1` (it is off by default), through any LOGGED consumer read whose path crosses an ignored symlink outside every read root, for example a ledger `verify: sh` receipt's subject (the measured shape B), or a resolved hooks: or fixtures: value checked with cr_test.
+
+The read log's L refusal in `er_log_entries` was `$3 ~ /^L / { exit 0 } END { exit 1 }`, which always exits 1, because awk runs END after a rule's `exit` and END's exit wins. So it answered "no L entry" on every log. It is now `{ f = 1; exit } END { exit !f }`. The B7 build hand found it while building B7, by measuring the dead refusal holding three `L` reads in a written record.
+
+The measured world (shape B): an ignored link `docs/retro` pointing at an outside dir, and a ledger receipt `verify: sh grep -q x "$CONSUMER/docs/retro/f.md"`. At base 2e322a41b the record formed carrying `read t docs/retro/f.md L docs/retro`; after f.md changed, the armed run accepted the recorded PASS while a fresh render added a `CLOSE-CANDIDATE PC-R9REACH` row. At the fix, it refuses with `R2 a symlink lies on a consumer path a detector read (docs/retro/f.md)`. R2's per-root walk never visits docs/, which is why R2 did not pre-empt it.
+
+The narrower true claim: R2 DID pre-empt the read-root shapes. A link at `.claude/skills/ai-dlc` and a link above a read root were both refused at base. A logged walk rooted outside the read roots cannot be built, because every logged walk is rooted under a read root.
+
+CORRECTION of a false claim: 0.939.0's text said BL-800 was "unreachable at main and in this release because R2 refuses first". That was false. It rested on a census, and a read-only experiment then built a counterexample (shape B above).
+
+Consumer exposure not measured: the read of graph's settings and transcripts was not run. Exposure needs two conditions: the cache armed via `EMIT_REPORT_VERIFY_CACHE=1`, and a `sh` receipt crossing an ignored link outside the read roots.
+
+### BL-685 — B7: an untracked symlink under a read root no longer refuses outright; the entry stays OPEN
+
+- A DIRECTORY link is keyed by its IDENTITY (its path, each readlink string in the chain, its resolved root-relative path, and kind `d`), never by the content behind it. A FILE link keeps its byte hash.
+- A link is accepted only if it is untracked, its chain resolves inside the consumer root with every hop inside, it is not dangling, its target neither equals nor contains the link or any read root, and it does not lie under a root a consumer program walks unlogged (every `corpus-root:`, `_bmad-output`, `.claude/hooks`). Each failure refuses by name. B7 also refuses a dir link whose resolved target holds content git does not key. B7 accepts a directory link only when the files on disk under its resolved target (`find ! -type d`, so a link inside the target is an entry and never followed) EQUAL the files git tracks there. Any file on disk git does not list refuses by name: ignored, untracked, under a `.git` component, a case or Unicode-normalisation variant, a nested repository or submodule, a special file. So does a tracked file missing from disk, and so does a target with no tracked file. The equality replaced an earlier ignored-only listing (an absence check that read zero whenever a spelling missed), and that listing is deleted. Cost: one `git ls-files` per key take when a directory link is accepted, plus four forks per accepted link.
+- This release removes R2's per-root walk, so the L refusal is now the only guard. The guarantee, stated in the engine beside the key: content is not keyed because every logged walk refuses an L crossing (`er_log_entries`), and that refusal is what keeps a read-through out of the key. LIMIT: a ledger `sh` receipt can read through anything, as it already could. KNOWN LIMITS: B7 closes link spellings, not the receipt limit. A `verify: sh` receipt can still read ignored content without any link. Other known limits: an empty directory under an accepted target is keyed by nothing; a clean or eol filter can hide an edit to a tracked file, link or not; there is a window between the target walk and the receipt's read. The bounding delta review: no probe got the equality test to accept a target whose content is not all keyed. NOTE: a tracked filename containing a newline is refused by the existing `ls-files -v` flag check, which fails closed.
+- The contract adversary measured that no closure detector reads through a graph-shaped link: 33 logged reads, 0 naming the link or target (control 12), and the render and sorted read log were identical after the content behind the link changed.
+- PC-V39 shape (c) changed from an R2 refusal to accept-and-key, a deliberate behaviour change, and its target is tracked, so it shows acceptance, not link keying (V79 covers that).
+- The BL-360 here-string fix from 0.939.0 is preserved, with 0 non-comment `<<<`.
+- Cost: the R2 per-root `find` walk is removed (one fewer `find` per read root on every key take). Per link: 2 forks, or 3 for a directory link.
+
+### Arms and mutants
+
+Arms: thirteen new arms in phase pcache, shard a: V77 B7-pos, an ignored dir link with an IGNORED target, records, HITs, and still HITs after the content behind it changes; V78 retarget, which MISSes, plus a respelling of the same target, which MISSes again (a plain repoint misses even without the readlink string, because the resolved path is keyed); V79 file link, which MISSes on a content change; V80 outside; V81 dangling; V82 contains the link (`..`); V83 contains a read root; V84 under _bmad-output; V85 under .claude/hooks; V86 under a corpus-root (docs/escalations); V87 tracked link (the existing R2 cause); V88 BL-800 X2 shape (`.claude/skills/ai-dlc` itself a link); V89 BL-800 shape B (the ignored `docs/retro` link read by a ledger receipt). V80-V89 each refuse by name with the record untouched. PC-V39 shape (c) is rewritten from an R2 refusal to accept-and-key, as a deliberate behaviour change; fold arms: V90 (an ignored target refuses: no tracked file), V91 (a fully tracked target records and HITs, then MISSes on change), V92 (a case-variant spelling refuses), V93 (a target under `.git` refuses) and V94 (a non-repository `.git` directory under a tracked target refuses). Mutants: eleven new mutants, M-b7-key [V78], M-b7-inside [V80], M-b7-contains-link [V82], M-b7-contains-root [V83], M-b7-corpus [V84], M-b7-hooks [V85], M-b7-croot [V86], M-b7-filehash [V79], M-b7-logL [V88 V89], and M-b7-unkeyed and M-b7-presence (described below), which makes 35 in the reconcile-emit-report mutant set. M-b7-logL makes both worlds record and then hit stale after the content behind the link changes. The dangling-link guard was deleted as vacuous (its removal changed no outcome); V81 asserts the refusal that fires. Fold mutants: M-b7-unkeyed [V90 V92 V93 V94] drops the equality test; M-b7-presence [V94] accepts on tracked-presence alone. On a case-sensitive volume V92's link dangles and refuses earlier, so M-b7-unkeyed does not kill V92 there. Rescore: an independent rescore by a hand that built none of it: shard a PASS 183/183, exit 0, at tip 4aa215cc0 (restacked onto 0.940.0); all 35 mutants fail exactly their declared sets.
+
+### Receipt
+
+`core/fixtures/reconcile-emit-report/receipt-round9.sh`: receipt-round9.sh gains a B7 world and a BL-800 world (shape B, plus the X2 sub-world), and a world selector. `receipt-round9.sh BL-800`: fix scores 0; base 0.940.0 scores 1, by a stale accept; the dead awk restored scores 1; the check deleted outright scores 1. The whole receipt: fix scores 0; base scores 2 (the B7 world cannot record on the old engine).
+
+### Rehearsal
+
+On an APFS copy of the real consumer graph, WITH its ignored link `.claude/skills/swap-integration` present and its gitlink: 3 of 3 armed pairs recorded and hit on the shipping tip 4aa215cc0, re-taken on the same APFS copy with the link present (its target holds 2 files on disk, 2 tracked), the 12-field key identical within each pair, no refusal in any run. This is the real-graph-layout hit-rate figure. The derived env names were all unset, so variation inside a real pull was held, not tested. The copy's 17 submodule pointers were asserted inside the copy, and the real graph was unchanged before and after.
+
+### Still PARTIAL
+
+- The hardlink, firmlink and bind mount; limit (6); the receipt's clock and network; the rest of the key's fields, not re-reviewed.
+
+
 ## [0.940.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r13. It files and closes BL-798 (DEFECT) in the same release, advances BL-584 owed (3) to PARTIAL without closing it, and closes no `PC-` id. NET: entries closed 1 minus filed 1 = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/derive-fixture-readsets.sh` (the trace-window slot and the keyed marker greps) and `core/git-hooks/pre-push`, whose only change is the new `READSET_LOCK_BEGIN` / `READSET_LOCK_END` sentinel pair around three existing lock helpers. Rulebook a consumer receives at the reconcile merge: none. Fixture changes: `readset-skip` (a new `slot` unit driven through a new `slot-world.sh`, and the FOREIGN arms) and `validator-arm-selection` (its I66 trees now copy the deriver). Packaging: `readset-skip` already ships and is covered by its manifest glob and uninstall entry, and `slot-world.sh` is tracked executable (100755), so no manifest or uninstall entry is owed. Distribution-only: the I66 change in `scripts/validate-enforcement-map.sh`. Backlog: `docs/backlog.md`.
