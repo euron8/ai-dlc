@@ -38464,3 +38464,16 @@ Known narrowings:
 verify: sh V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] || exit 9; n(){ bash "$V" --explain-cmd "$1" 2>/dev/null | awk -F'\t' '$2=="ARGV"{c++} END{print c+0}'; }; [ "$(n "grep -c 'a;b' f.txt && grep -c b g.txt")" = 2 ] && [ "$(n 'grep -n x .claude/skills/ai-dlc/steps/retro.md; echo "exit:$?"')" = 1 ] && [ "$(grep -cw cyc core/scripts/check-owed-derivations.sh)" = 0 ]
 
 
+## BL-803 — the lane join's UNWRITTEN refusal sends the reader to the wrong cause when the cited file's only ledgered write lies outside the window
+
+**LANDED (v0.945.0, verified e18a5bd69).**
+
+**NOTE.** Found by the batch-242 graph watcher (ai-dlc-fa, poll 17, 01:18 EDT 2026-10-26). Graph s320 `stories-party-serial --pass 1 --since 2026-10-26T05:08:00Z` refused `lane-5.md` at 05:14:06Z citing `s320/stories/story-2-2-...md`. The write ledger holds 15 Edit rows for that file, the last at 04:58:11Z by agent a738d69fd9219c258, which is before `--since`; lane-5's `artifact_sha_before` equals its `artifact_sha_after` (ff5b6dd2b4b99cfe). The refusal is correct, but its remedy text named only Bash and never-written causes, which is not the cause here.
+
+Graph recovered by rewriting the part record (`edit: n/a`) and re-joining plainly; `--rerun` refuses this shape at the join's "cites no file written in the window" check (`join-remediator-shards.sh:2204`).
+
+Owed: the UNWRITTEN refusal looks the cited file up in the ledger and names the cause it finds (a write before `--since`, a write after `--until`, or a write this join set aside), keeping the existing text when the ledger has no row for it.
+
+No PC id: graph has not filed it.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl803.sh

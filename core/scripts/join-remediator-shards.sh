@@ -2517,7 +2517,10 @@ PAREOF
 #   UNWRITTEN  a part cites a file no agent wrote under the artifact in the window. This is also
 #              how a LOST LEDGER ROW surfaces: the hook's append is silent on failure (it must
 #              never block the Edit), so a write it failed to record reads here as a claimed
-#              edit with no write, and the join refuses rather than acquits.
+#              edit with no write, and the join refuses rather than acquits. Its remedy is read
+#              from the ledger with the time filter dropped: a write of that path set aside by
+#              this join, a last write before --since or a first write after --until is named
+#              with its ts and agent, and only a path with no row at all keeps the Bash cause.
 #   AMBIG      a cited token matches more than one written file -- the citation names no file.
 #   UNCITED    a written file no part cites: its writer delivered no record (the missing shard).
 #   DOUBLE     one written file cited by two parts: two records claim one region.
@@ -2549,10 +2552,72 @@ JOINRES="$({ printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print "W\t" $1 "\t" $
     for (q in npw) if (npw[q] > 1) print "SPAN\t" q "\t" pwl[q]
   }' | sort)"
 
+# THE UNWRITTEN REMEDY (BL-803). Read only when JOINRES carries an UNWRITTEN row: ONE jq pass over the
+# ledger under ROWS' own kind / agent_id / APATH / SHARD_REL-DOCMODE filters, the time filter dropped.
+# Each UNWRITTEN token resolves by the coverage join's rule (a path equal to it, or it a `/`-suffix of
+# the path); a token resolving to no path or to more than one keeps the two-cause text. For the one
+# path P: ASIDE = its earliest in-window row (in the window, yet absent from ROWS: this join set it
+# aside); BEFORE = its LATEST row before SINCE; AFTER = its EARLIEST row after UNTIL. `-` is empty.
+# Lines: token, P, aside ts, aside agent, before ts, before agent, after ts, after agent.
+UW_LOOK=""
+_uw="$(printf '%s\n' "$JOINRES" | awk -F'\t' '$1 == "UNWRITTEN" { print $3 }' | sort -u)"
+if [ -n "$_uw" ]; then
+  UW_LOOK="$({ printf '%s\n' "$_uw" | sed '/^$/d; s/^/T\t/'
+               jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
+    inputs | select(type == "object") | select(.kind == "artifact-write")
+     | select((.agent_id // "") != "") | select((.ts | type) == "string")
+     | select(.path == $ap or (.path | startswith($ap + "/")))
+     | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
+     | ["R", .path, (.agent_id | tostring), .ts] | @tsv' "$LEDGER" 2>/dev/null; } | awk -F'\t' -v s="$SINCE" -v u="$UNTIL" '
+    $1 == "T" { nt++; TK[nt] = $2; next }
+    $1 == "R" { p = $2; ag = $3; ts = $4
+                if (!(p in seen)) { seen[p] = 1; np++; P[np] = p }
+                if (ts >= s && ts <= u) { if (!(p in at) || ts < at[p]) { at[p] = ts; aa[p] = ag } }
+                else if (ts < s)        { if (!(p in bt) || ts > bt[p]) { bt[p] = ts; ba[p] = ag } }
+                else                    { if (!(p in ft) || ts < ft[p]) { ft[p] = ts; fa[p] = ag } }
+                next }
+    function d(x) { return (x == "" ? "-" : x) }
+    END {
+      for (k = 1; k <= nt; k++) {
+        tok = TK[k]; n = 0; hit = ""
+        for (i = 1; i <= np; i++) {
+          p = P[i]
+          if (p == tok || (length(p) > length(tok) && substr(p, length(p) - length(tok)) == "/" tok)) { n++; hit = p }
+        }
+        if (n != 1) continue
+        print tok "\t" hit "\t" d(at[hit]) "\t" d(aa[hit]) "\t" d(bt[hit]) "\t" d(ba[hit]) "\t" d(ft[hit]) "\t" d(fa[hit])
+      }
+    }')"
+fi
+unwritten_remedy() { # <token> -> the remedy clause after " -- "
+  local _l _x _p _at _aa _bt _ba _ft _fa _r=""
+  _l="$(printf '%s\n' "$UW_LOOK" | awk -F'\t' -v t="$1" '$1 == t { print; exit }')"
+  if [ -n "$_l" ]; then
+    IFS='	' read -r _x _p _at _aa _bt _ba _ft _fa <<UWEOF
+$_l
+UWEOF
+    if [ "$_at" != "-" ]; then
+      if [ -n "$RERUN" ]; then
+        printf '%s' "${_p} was written in the window at ${_at} by ${_aa}, but this join set that write aside (a --rerun supersedes it): the re-run writes it after its start, or the part stops citing it"
+      else
+        printf '%s' "${_p} was written in the window at ${_at} by ${_aa}, but this join set that write aside: see the join's other refusal for that file, or the part stops citing it"
+      fi
+      return 0
+    fi
+    [ "$_bt" != "-" ] && _r="the ledger's last write of ${_p} was at ${_bt} by ${_ba}, before --since ${SINCE}: the part cites an edit it did not make in this window; rewrite the part record through a re-dispatch writing with Write, an entry whose fix was already in place taking \`edit: n/a\`, then re-run the join with the same --since and a new --until, or re-dispatch that shard if the edit is still owed"
+    if [ "$_ft" != "-" ]; then
+      _x="the ledger's first write of ${_p} after the window was at ${_ft} by ${_fa}, after --until ${UNTIL}: take a new --until after the shard reports and re-run the join"
+      _r="${_r:+${_r}; also }${_x}"
+    fi
+  fi
+  [ -n "$_r" ] || _r="the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit"
+  printf '%s' "$_r"
+}
+
 if [ -n "$JOINRES" ]; then
   while IFS='	' read -r kind a b c; do
     case "$kind" in
-      UNWRITTEN) refuse "${a} cites ${b}, which no dispatched agent wrote under ${APATH} in the window -- the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit" ;;
+      UNWRITTEN) refuse "${a} cites ${b}, which no dispatched agent wrote under ${APATH} in the window -- $(unwritten_remedy "$b")" ;;
       AMBIG)     refuse "${a} cites ${b}, which matches more than one written file (${c}); cite the path, not the basename" ;;
       UNCITED)   refuse "${a} was written in the window by ${b} and is cited by no shard record -- a missing shard" ;;
       DOUBLE)    refuse "${a} is cited by more than one shard record (${b}); one file belongs to one shard" ;;

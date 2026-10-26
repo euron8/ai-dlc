@@ -152,6 +152,91 @@ p_basecite "$JOIN"   && ok "A5: control -- a bare basename citation still resolv
   || bad "A5: a basename citation stopped resolving (rc=$RC): $(cat "$JO")"
 p_unwrittenmsg "$JOIN" && ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly" \
   || bad "A6: the UNWRITTEN refusal line does not name the Bash cause and the re-dispatch, or names hand-assembly: $(cat "$JO")"
+# A8-A11 (BL-803): the UNWRITTEN remedy read from the ledger with the time filter dropped; A6 is the NONE control.
+p_uwbefore "$JOIN" && ok "A8: the cited file written only BEFORE --since, at three ts by two agents neither of them the part's writer -> the LATEST row's ts and agent, the record-rewrite remedy, and no Bash cause" \
+  || bad "A8: the before-window remedy is not the latest row's, or still names the Bash cause (rc=$RC): $(cat "$JO")"
+p_uwafter "$JOIN" && ok "A9: the cited file written only AFTER --until -> the EARLIEST after-window row and the new --until remedy" \
+  || bad "A9: the after-window remedy is absent or not the earliest row's (rc=$RC): $(cat "$JO")"
+p_uwaside "$JOIN" && ok "A10: a --rerun part citing a file whose only in-window row the re-run superseded -> the set-aside remedy naming that row" \
+  || bad "A10: the set-aside remedy is absent (rc=$RC): $(cat "$JO")"
+p_uwboth "$JOIN" && ok "A11: a before- and an after-window row -> the BEFORE clause, then '; also ' and the AFTER clause" \
+  || bad "A11: both window sides were not named, joined by '; also ' (rc=$RC): $(cat "$JO")"
+p_uwamb "$JOIN" && ok "A12: a cited basename resolving to two paths once the time filter is dropped -> exactly the NONE clause" \
+  || bad "A12: the ambiguous-once-untimed remedy is not exactly the NONE clause (rc=$RC): $(cat "$JO")"
+p_sjaside "$JOIN" && ok "A13: subject mode, a part citing the prd.md written IN PLACE, no --rerun -> the no-rerun set-aside clause, and no '(a --rerun supersedes it)'" \
+  || bad "A13: the subject-mode set-aside remedy is not the no-rerun text (rc=$RC): $(cat "$JO")"
+p_uwshard "$JOIN" && ok "A14: a token that is a /-suffix only of a path under shards/, written in the window -> exactly the NONE clause" \
+  || bad "A14: the shards/ row reached the remedy lookup (rc=$RC): $(cat "$JO")"
+p_sjrraside "$JOIN" && ok "A15: subject mode WITH --rerun (A13's in-place prd.md row, another section re-run) -> exactly the rerun set-aside clause, '(a --rerun supersedes it)' included" \
+  || bad "A15: the subject-mode --rerun set-aside remedy is not the rerun text (rc=$RC): $(cat "$JO")"
+# U5: the ASIDE branch keyed on SUBJMODE instead of RERUN -> A15 dies, A6 unchanged. A10 (files, --rerun)
+# and A13 (subject, none) cannot see it: across them the two flags vary together. The anchor is the
+# ASIDE branch's own 6-space indent; the re-run narrowing's `if [ -n "$RERUN" ]` sits at column 0.
+_ud="$(mktemp -d "$WORK/U5.XXXXXX")" || exit 2
+cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: U5 could not copy the join's sibling scripts" >&2; exit 2; }
+sed 's@^      if \[ -n "\$RERUN" \]; then$@      if [ "$SUBJMODE" != 1 ]; then@' "$JOIN" > "$_ud/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: U5 could not write the mutated join" >&2; exit 2; }
+if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
+  bad "U5: FIXTURE STALE -- the ASIDE-branch mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif [ "$(diff "$JOIN" "$_ud/join-remediator-shards.sh" | grep -c '^>')" != 1 ]; then
+  bad "U5: the ASIDE-branch mutation edited more than one line of $JOIN; re-anchor it on the ASIDE branch alone"
+elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
+  bad "U5: the sibling validator is absent from the copy or the mutated join does not parse"
+elif p_sjrraside "$_ud/join-remediator-shards.sh"; then
+  bad "U5 ASIDE keyed on SUBJMODE: SURVIVED -- A15 holds against the mutated join"
+elif ! grep -qF "$SJPA/prd.md was written in the window at " "$JO"; then
+  bad "U5: A15 failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
+else
+  p_unwrittenmsg "$_ud/join-remediator-shards.sh" && ok "U5 ASIDE keyed on SUBJMODE: KILLED by [A15], and A6 is UNCHANGED" \
+    || bad "U5: the NONE control A6 also moved under the mutant -- the arms are entangled"
+fi
+# U3: the lookup's resolution keeps a token resolving to MORE than one path -> A12 dies, A6 unchanged.
+# U4: the lookup's SHARD_REL clause deleted (a shards/ row reaches it) -> A14 dies, A6 unchanged.
+# Each is a copy in a copy of the join's directory, guarded by cmp -s. U4 deletes the clause only
+# inside the lookup's jq program, which opens on the one `jq -rn --arg ap "$APATH"` line; ROWS and
+# DROWS carry the same clause and are left alone.
+for um in 'U3%s@^        if (n != 1) continue$@        if (n == 0) continue@%ambiguous token resolved%p_uwamb' \
+          'U4%/jq -rn --arg ap "\$APATH" --arg sh/,/startswith(\$sh/{/startswith(\$sh/d;}%SHARD_REL clause deleted%p_uwshard'; do
+  _id="${um%%\%*}"; _r="${um#*\%}"; _e="${_r%%\%*}"; _r="${_r#*\%}"; _lab="${_r%%\%*}"; _p="${_r#*\%}"
+  _ud="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
+  cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: $_id could not copy the join's sibling scripts" >&2; exit 2; }
+  sed "$_e" "$JOIN" > "$_ud/join-remediator-shards.sh" || { echo "FIXTURE BROKEN: $_id could not write the mutated join" >&2; exit 2; }
+  if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
+    bad "$_id: FIXTURE STALE -- the $_lab mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+  elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
+    bad "$_id: the sibling validator is absent from the copy or the mutated join does not parse"
+  elif "$_p" "$_ud/join-remediator-shards.sh"; then
+    bad "$_id $_lab: SURVIVED -- $_p holds against the mutated join"
+  elif [ -z "$UW_L" ]; then
+    bad "$_id: $_p failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
+  else
+    p_unwrittenmsg "$_ud/join-remediator-shards.sh" && ok "$_id $_lab: KILLED by [$_p], and A6 is UNCHANGED" \
+      || bad "$_id: the NONE control A6 also moved under the mutant -- the arms are entangled"
+  fi
+done
+# U1: the lookup disabled (every UNWRITTEN takes the NONE text) -> A8 dies, A6 unchanged.
+# U2: the EARLIEST before-window row kept instead of the latest -> A8 dies, A6 unchanged.
+# Each is a copy in a copy of the join's directory, guarded by cmp -s.
+# The list separator is `%`: U2's expression carries `||`.
+for um in 'U1%s@^if \[ -n "\$_uw" \]; then$@if false; then@%lookup disabled' \
+          'U2%s@ || ts > bt\[p\]) { bt\[p\] = ts@ || ts < bt[p]) { bt[p] = ts@%earliest before-window row'; do
+  _id="${um%%\%*}"; _r="${um#*\%}"; _e="${_r%%\%*}"; _lab="${_r#*\%}"
+  _ud="$(mktemp -d "$WORK/$_id.XXXXXX")" || exit 2
+  cp "$(dirname "$JOIN")"/*.sh "$_ud/" || { echo "FIXTURE BROKEN: $_id could not copy the join's sibling scripts" >&2; exit 2; }
+  sed "$_e" "$JOIN" > "$_ud/join-remediator-shards.sh" || { echo "FIXTURE BROKEN: $_id could not write the mutated join" >&2; exit 2; }
+  if cmp -s "$JOIN" "$_ud/join-remediator-shards.sh"; then
+    bad "$_id: FIXTURE STALE -- the $_lab mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+  elif [ ! -f "$_ud/validate-adversarial-convergence.sh" ] || ! bash -n "$_ud/join-remediator-shards.sh" 2>/dev/null; then
+    bad "$_id: the sibling validator is absent from the copy or the mutated join does not parse"
+  elif p_uwbefore "$_ud/join-remediator-shards.sh"; then
+    bad "$_id $_lab: SURVIVED -- A8 holds against the mutated join"
+  elif ! uw_line >/dev/null; then
+    bad "$_id: A8 failed for another reason than its remedy text (rc=$RC): $(cat "$JO")"
+  else
+    p_unwrittenmsg "$_ud/join-remediator-shards.sh" && ok "$_id $_lab: KILLED by [A8], and A6 is UNCHANGED" \
+      || bad "$_id: the NONE control A6 also moved under the mutant -- the arms are entangled"
+  fi
+done
 
 # ---- subject mode. B2 first: a dispatched Write of the SPEC under specs/s9/ is a ledger row, and a
 # Write under specs/ outside a sprint slot is not (the near-miss).

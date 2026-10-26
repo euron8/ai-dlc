@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.945.0] - 2026-10-26
+
+Batch 242, lead ai-dlc-b4, release c4-unwritten-remedy. It files and closes BL-803; no `PC-` id applies, because graph has not filed it. NET: 0 (BL-803 filed and closed). Engine code: `core/scripts/join-remediator-shards.sh`. Rulebook changes: `core/skills/ai-dlc/steps/_gate-procedures.md`. Fixture changes: `core/fixtures/remediator-shard-join/` (`run.sh`, `lib.sh`, new `receipt-bl803.sh`). Packaging: none. Backlog: `docs/backlog.md` (the BL-803 entry).
+
+Bootstrapping: the join is engine code, live from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine. It arrives together with its fixture, so no fixture ships ahead of its subject.
+
+### BL-803 — the lane join's UNWRITTEN refusal reads the ledger and names the cause it finds, instead of always blaming Bash; filed and closed here
+
+- The graph watcher found it on s320: `stories-party-serial --pass 1 --since 2026-10-26T05:08:00Z` refused `lane-5.md` for citing `s320/stories/story-2-2-...md`. The ledger holds 15 Edit rows for that file, the last at 04:58:11Z, which is before `--since`, and lane-5's `artifact_sha_before` equals its `artifact_sha_after`. The refusal was correct, but its remedy named only a write through a tool that reaches no Edit matcher, or a file never written, and neither was the cause.
+- The refusal and its count are unchanged, and so is the leading clause `<part> cites <token>, which no dispatched agent wrote under <artifact-path> in the window`. Only the text after ` -- ` changes. No new exit code and no new refusal.
+- The remedy is chosen by one `jq` pass over the ledger, run only when the join result carries an UNWRITTEN row. It applies the same `kind`, `agent_id`, artifact-path and shard filters the window rows use, with the time filter dropped, and resolves the cited token by the coverage join's own rule (a path equal to the token, or the token a `/`-suffix of exactly one path). Four cases:
+  - set aside: the path has an in-window row that this join dropped. With `--rerun` given, the remedy names that row's ts and agent, says the `--rerun` supersedes it, and says the re-run writes it after its start or the part stops citing it. Without `--rerun` (the subject-mode in-place filter, an alias drop), the remedy names the row, says the join set it aside, and points to the join's other refusal for that file or to the part ceasing to cite it; it never names `--rerun`.
+  - before: the latest row for the path is before `--since`. The remedy names its ts and agent and says to rewrite the part record through a re-dispatch writing with Write, an entry whose fix was already in place taking `edit: n/a`, then re-run the join with the same `--since` and a new `--until`, or re-dispatch the shard if the edit is still owed.
+  - after: the earliest row for the path is after `--until`. The remedy names its ts and agent and says to take a new `--until` after the shard reports.
+  - none: no row, or a token resolving to more than one path once the time filter is dropped, keeps the previous two-cause text byte for byte.
+  A path with rows on both sides of the window gets the before clause, then `; also `, then the after clause. A set-aside row takes precedence over both.
+- The cure the before remedy names is the one graph used and the contract adversary measured at exit 0: rewrite the part record and re-join plainly. No before or after remedy names `--rerun`, because `--rerun` refuses this shape at the join's "cites no file written in the window" check. `_gate-procedures.md` carries the same sentence at the hand-off list: a refusal naming a write before `--since` is cured by correcting the part record and re-joining with a new `--until`, never by `--rerun`; one naming a write after `--until` by a new `--until`.
+- Fixtures: `remediator-shard-join` arms A8 through A15 beside A6, which is unchanged and is the none-case control.
+  - A8 seeds three before-window rows at different ts by two agents, neither the part's writer, and asserts the latest row's ts and agent and the absence of the Bash cause.
+  - A9 asserts the earliest after-window row.
+  - A10 is a `--rerun` world with a superseded in-window row.
+  - A11 seeds both sides and asserts the `; also ` join.
+  - A12 cites a bare basename that resolves to two paths once the time filter is dropped and asserts exactly the none text.
+  - A13 is a subject-mode world where the prd.md is written in place and no `--rerun` is given; it asserts the set-aside text without `(a --rerun supersedes it)`.
+  - A14 cites a token that is a `/`-suffix only of a path under `shards/`, written in the window, and asserts exactly the none text.
+  - A15 is subject mode with `--rerun` (A13's in-place prd.md row, another section re-run) and asserts exactly the `--rerun` set-aside text.
+- Mutants, each applied to a copy of the join and guarded by `cmp -s` with FIXTURE STALE on a no-op, each also asserting that A6 is unchanged under it:
+  - U1 disables the lookup, so every UNWRITTEN takes the none text; A8 kills it.
+  - U2 keeps the earliest before-window row instead of the latest; A8 kills it.
+  - U3 keeps a token resolving to more than one path (`n != 1` becomes `n == 0`); A12 kills it.
+  - U4 deletes the SHARD_REL clause inside the lookup's jq program; A14 kills it. The filter stays: measured, deleting it printed a false ASIDE for a cited `shards/` record.
+  - U5 keys the set-aside branch on SUBJMODE instead of RERUN; A15 kills it. A10 and A13 cannot see it because across them the two flags vary together, and subject mode with `--rerun` separates SUBJMODE from RERUN.
+- Receipt: `core/fixtures/remediator-shard-join/receipt-bl803.sh` drives the real join (or the copy named by its first argument) through the fixture's own world builders, in four worlds. It reads the before-window text when the part cites the full path and when it cites the bare basename, and the none text when a same-basename file lies under another directory inside the artifact path and when one lies outside the artifact path.
+
 ## [0.944.0] - 2026-10-26
 
 Batch 242, lead ai-dlc-b4, cluster c3. It closes BL-793 and BL-799, files no entry, and closes no `PC-` id. NET: entries closed 2 minus filed 0 = -2. Operator ruling, 2026-10-25, relayed by lead ai-dlc-b4: "Ship if it matches". Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/validate-artifact-derivations.sh`, `core/scripts/check-owed-derivations.sh` and `core/hooks/ai-dlc-protect.sh`. Backlog: `docs/backlog.md`.
