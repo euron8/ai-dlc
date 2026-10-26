@@ -3691,6 +3691,15 @@ if [ "$PCV_R13" -eq 1 ] && { grep -qF "exists on disk but git does not list it" 
 else
   printf 'PENDING: PC-V94 not run, engine lacks the B7 on-disk equality refusal\n'
 fi
+# V95 (BL-699) needs the engine that memoizes the env-name set per process, read off the memo's hit
+# test (the line M-memo anchors on, so a comment naming the memo file cannot set the flag). It runs
+# inside the round-9 world, so it also needs PCV_R10. Same gate shape as PCV_R13.
+PCV_R15=0
+if [ "$PCV_R10" -eq 1 ] && { grep -qF '  if [ -s "$_er_tmp/key.envnames.memo" ]; then' "$EMIT" || ! pcv_installed "$EMIT"; }; then
+  PCV_R15=1; PCV_IDS="$PCV_IDS PC-V95"
+else
+  printf 'PENDING: PC-V95 not run, engine lacks the per-process env-name memo\n'
+fi
 pcv_setup
 
 # ---- V27..V31: ONE shared adjudication world, the arms in sequence, each undone before the next ----
@@ -4313,7 +4322,10 @@ pcv_r9world() {
 #             a GIT_* variable's marker, which the env field keys by name and value, IS there. The
 #             control is a GIT_* name rather than a derived one so that M-b4 (the derived set emptied)
 #             cannot take the positive control away from V62; the arm's own mutant is M-secret.
-# Each sub-arm is also gated by pcv_in on its own id, because each of M-b1, M-b3, M-b4 and M-secret is
+#   V95       (BL-699, PCV_R15) a run that WRITES the record probes THEIRS' validator from er_env_names
+#             exactly once across its two keys (the memo); the hit run's count is the shim's control.
+#             See pcv_r9kmemo. Its mutant is M-memo.
+# Each sub-arm is also gated by pcv_in on its own id, because each of M-b1, M-b3, M-b4, M-secret and M-memo is
 # scoped to its single arm (pcv_scope); the world's setup (seed, approve, recording run) runs once.
 pcv_hrv_norec() { # pcv_hrv_norec <out> -- PCV_HRV with the read recorder block removed (an older THEIRS)
   awk '/^# --- THE READ RECORDER/ { s = 1 } !s { print } /^# --- end recorder/ { s = 0 }' "$PCV_HRV" > "$1" \
@@ -4334,9 +4346,61 @@ pcv_r9kmiss() {
   pcv_x "$1" "$3 did not force a fresh render: [$(pcv_why)], opt-out exits $K_NC -- a recorded PASS answered for an input it never keyed"
   return 1
 }
+# pcv_r9kmemo -- V95's body, run inside pcv_r9kworld after its pcv_kctl. A git shim of its own,
+# prepended to PATH only around this arm's two runs (never PS_SHIM, whose bash count the hit test
+# reads), logs each git argv with a leading `-C <dir>` dropped into PCV_R9KGITLOG; it is shebanged with
+# the absolute PCV_BASH and execs the git resolved BEFORE the prepend, and prints nothing (pcv_is_hit
+# compares stdout byte for byte). The counted line is er_env_names' own probe of THEIRS' validator,
+# `cat-file -e <L_T>:core/scripts/validate-hook-registration.sh`, which no other closure script issues
+# in this world.
+#   RECORDING leg (the memo test): the record moved aside, so this run must WRITE it (absent before,
+#   present after, a fresh exit-0 render), which means er_cache_record re-took the key and it matched.
+#   Both keys ran, and the argv count must be exactly 1. M-memo (the hit test bypassed) makes it 2.
+#   HIT leg (the control, not a memo test): the restored record HITS through the same shim, and the
+#   count is at least 1, so the shim does see the argv on the key path and a 1 above is not a shim
+#   that saw nothing.
+pcv_r9kmemo() {
+  local sd="$PS_D/r9k-memo-shim" lg="$PS_D/r9k-memo.log" rg av n1 n2 rec1=0 hit2=0 why1 why2
+  rg="$(command -v git)" || rg=""
+  case "$rg" in /*) ;; *) pcv_x PC-V95 "FIXTURE BROKEN: git does not resolve to an absolute path ([$rg]), so the shim has nothing to exec"; return 0 ;; esac
+  av="cat-file -e ${L_T}:core/scripts/validate-hook-registration.sh"
+  mkdir -p "$sd" \
+    && { printf '#!%s\n' "$PCV_BASH"
+         printf '%s\n' 'if [ -n "${PCV_R9KGITLOG:-}" ]; then if [ "${1:-}" = -C ]; then printf "%s\n" "${*:3}" >> "$PCV_R9KGITLOG"; else printf "%s\n" "$*" >> "$PCV_R9KGITLOG"; fi; fi'
+         printf 'exec "%s" "$@"\n' "$rg"; } > "$sd/git" \
+    && chmod +x "$sd/git" || { pcv_x PC-V95 "FIXTURE BROKEN: could not write the git shim"; return 0; }
+  # The shim's own probe: one call through it logs its argv once, minus the -C pair, and still runs git.
+  : > "$lg"
+  if ! PCV_R9KGITLOG="$lg" "$sd/git" -C "$L_D" cat-file -e "${L_T}:core/scripts/validate-hook-registration.sh" \
+     || [ "$(grep -cxF -- "$av" "$lg")" != 1 ]; then
+    pcv_x PC-V95 "FIXTURE BROKEN: the git shim did not log [$av] exactly once for one call through it, or THEIRS does not carry the validator, so its counts would prove nothing"; return 0
+  fi
+  mv -f "$L_REC" "$PS_D/r9k-memo.rec.aside" || { pcv_x PC-V95 "FIXTURE BROKEN: could not move the record aside"; return 0; }
+  : > "$lg"
+  if [ -e "$L_REC" ]; then pcv_x PC-V95 "FIXTURE BROKEN: the record is still there after moving it aside"; return 0; fi
+  PCV_ENVPRE="PCV_R9KGITLOG=$lg" PATH="$sd:$PATH" pcv_run r9k95r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; why1="$(pcv_why)"
+  pcv_is_miss 0 && [ -f "$L_REC" ] && rec1=1
+  n1="$(grep -cxF -- "$av" "$lg")" || n1=0
+  cp "$lg" "$PS_D/r9k-memo.rec.log"
+  : > "$lg"
+  PCV_ENVPRE="PCV_R9KGITLOG=$lg" PATH="$sd:$PATH" pcv_run r9k95h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; why2="$(pcv_why)"
+  pcv_is_hit r9k95h "$L_REC" && hit2=1
+  n2="$(grep -cxF -- "$av" "$lg")" || n2=0
+  if [ "$rec1" -ne 1 ]; then
+    pcv_x PC-V95 "control: with the record moved aside the run did not render fresh and WRITE it [$why1; $(grep -F "$PCV_RECWHY" "$PS_D/r9k95r.err" | sed -n 1p)], so both keys did not run and a count there would prove nothing"
+  elif [ "$hit2" -ne 1 ] || [ "$n2" -lt 1 ]; then
+    pcv_x PC-V95 "control: the re-recorded world through the shim [$why2] did not HIT, or the shim logged [$av] $n2 time(s) on the key path (want at least 1), so a count of $n1 on the recording run would prove nothing"
+  elif [ "$n1" -ne 1 ]; then
+    pcv_x PC-V95 "a RECORDING run issued [$av] $n1 time(s) (want 1): er_env_names ran once per key instead of once per process; every cat-file -e it logged: [$(grep -F 'cat-file -e' "$PS_D/r9k-memo.rec.log" | tr '\n' ';')]"
+  else
+    pcv_v PC-V95 "a run that WROTE the record (absent before, present after) issued er_env_names' THEIRS validator probe exactly $n1 time across its two keys; the hit run through the same shim issued it $n2 time(s), so the shim sees it on the key path"
+  fi
+  return 0
+}
 pcv_r9kworld() {
   local ids="PC-V59 PC-V60 PC-V61 PC-V62" p sm="core/skills/ai-dlc-update/reconcile/settings-merge.sh" tn to gd br c
   local ex ok why td mk mk2 kd n op
+  [ "${PCV_R15:-0}" -eq 1 ] && ids="$ids PC-V95"
   if [ -z "$PCV_HRV" ]; then for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: validate-hook-registration.sh was found in neither layout beside this fixture, so THEIRS cannot ship it"; done; return 0; fi
   pcv_lat r9k || { for p in $ids; do pcv_x "$p" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   tn="$(pcv_r9addhrv "$PCV_HRV")" && [ -n "$tn" ] && git -C "$L_D" update-ref refs/heads/r9-hookreg "$tn" >/dev/null 2>&1 \
@@ -4423,6 +4487,12 @@ pcv_r9kworld() {
     else
       pcv_v PC-V62 "an armed run with CLAUDE_CODE_MESSAGING_TOKEN set writes its value to no file under the kept key directory and not to the record, while a keyed GIT_* variable's value is there"
     fi
+    pcv_kback
+  fi
+
+  # V95 (BL-699): the env-name set is computed once per process. Gated by PCV_R15 as well as pcv_in.
+  if [ "${PCV_R15:-0}" -eq 1 ] && pcv_in PC-V95 && pcv_kctl PC-V95; then
+    pcv_r9kmemo
     pcv_kback
   fi
 
@@ -6231,7 +6301,7 @@ pcv_suite() {
   # ---- V55, V59..V63: the round-9 BLOCKERs (BL-685) and M-direxcl's subject ----
   if [ "$PCV_R10" -eq 1 ]; then
     if pcv_in PC-V55; then pcv_v55world; fi
-    if pcv_in PC-V59 PC-V60 PC-V61 PC-V62; then pcv_r9kworld; fi
+    if pcv_in PC-V59 PC-V60 PC-V61 PC-V62 PC-V95; then pcv_r9kworld; fi
   fi
   if pcv_in PC-V63; then pcv_v63world; fi
   # ---- V64..V76: B5 gitlinks and B6 ignored nested repositories (BL-685) ----
@@ -6366,7 +6436,11 @@ pcv_harnessset() {
 #   M-b1       THEIRS' validator run as plain `bash` again, so its reads are logged by nothing -> PC-V59
 #   M-b2       the consumer-validator `!` removed, so a render that ran consumer code records -> PC-V55
 #   M-b3       consobjects' HEAD, symbolic-ref and shallow lines removed (every layer)       -> PC-V60
-#   M-b4       the derived env-name set emptied                                             -> PC-V61
+#   M-b4       the derived env-name set emptied (the values loop reads /dev/null, so the memo
+#              hit path is emptied too)                                                     -> PC-V61
+# BL-699's one:
+#   M-memo     er_kf_env's memo hit test made `if false`, so every key recomputes the name set
+#              and a recording run probes THEIRS' validator twice                           -> PC-V95
 #   M-secret   CLAUDE_CODE_ added to the derived set as a prefix, so the token is keyed     -> PC-V62
 # BL-685 B5/B6's eleven, each reverting one condition of the gitlink keying or the nested-repository
 # acceptance (V66 has none: three fields move at once, see its world's header):
@@ -6477,7 +6551,8 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
                  && pcv_ed "$d" replace '  cr_git "$CONSUMER" symbolic-ref -q HEAD || echo detached' '  :' \
                  && pcv_ed "$d" replace '  gd="$(cr_git "$CONSUMER" rev-parse --path-format=absolute --git-common-dir)" || return 1' '  :' \
                  && pcv_ed "$d" replace '  er_file_or_absent shallow "$gd/shallow" || return 1' '  :' ;;
-    M-b4)      pcv_ed "$d" replace '  er_env_names > "$_er_tmp/key.envnames" || return 1' '  : > "$_er_tmp/key.envnames" || return 1' ;;
+    M-b4)      pcv_ed "$d" replace '  done < "$_er_tmp/key.envnames"' '  done < /dev/null' ;;
+    M-memo)    pcv_ed "$d" replace '  if [ -s "$_er_tmp/key.envnames.memo" ]; then' '  if false; then' ;;
     M-secret)  pcv_ed "$d" before '  compgen -e > "$_er_tmp/key.envexp" || return 1' '  echo CLAUDE_CODE_ >> "$_er_tmp/key.envtok" || return 1' ;;
     M-gitlink-refuse) pcv_ed "$d" before '  cat "$_er_tmp/key.r2idx" || return 1' \
                  '  while IFS= read -r -d '"''"' e; do case "$e" in 160000\ *) return 1 ;; esac; done < "$_er_tmp/key.r2idx"' ;;
@@ -6513,7 +6588,7 @@ pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, 
 pcv_want() {
   case "$1" in
     M-region) echo "PC-V3" ;; M-direxcl) echo "PC-V63" ;; M-exit3) echo "PC-V9 PC-V10" ;;
-    M-b1) echo "PC-V59" ;; M-b2) echo "PC-V55" ;; M-b3) echo "PC-V60" ;; M-b4) echo "PC-V61" ;; M-secret) echo "PC-V62" ;;
+    M-b1) echo "PC-V59" ;; M-b2) echo "PC-V55" ;; M-b3) echo "PC-V60" ;; M-b4) echo "PC-V61" ;; M-secret) echo "PC-V62" ;; M-memo) echo "PC-V95" ;;
     M-cksum) echo "PC-V56" ;; M-base) echo "PC-V56 PC-V57 PC-V58" ;; M-sha) echo "PC-V57 PC-V58" ;; M-unarmed) echo "PC-V56" ;;
     M-hex) echo "PC-V58" ;;
     M-gitlink-refuse) echo "PC-V64 PC-V65" ;; M-gitlink-prune) echo "PC-V64" ;; M-hashlist-skip) echo "PC-V67" ;;
@@ -6531,7 +6606,7 @@ PCV_B7MUTS="M-b7-key M-b7-inside M-b7-unkeyed M-b7-presence M-b7-contains-link M
 pcv_bl() {
   case "$1" in M-b7-logL) echo BL-800; return 0 ;; esac
   case " $PCV_B56MUTS $PCV_B7MUTS " in *" $1 "*) echo BL-685; return 0 ;; esac
-  case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; *) echo BL-679 ;; esac
+  case "$1" in M-cksum|M-base|M-sha|M-unarmed|M-hex) echo BL-777 ;; M-b1|M-b2|M-b3|M-b4|M-secret) echo BL-685 ;; M-memo) echo BL-699 ;; *) echo BL-679 ;; esac
 }
 # THE ARMS A MUTANT RUNS, and they are the population "fails exactly [...]" is read over. A mutant used
 # to run all 32 arms, three near-full copies of the shipping suite each paying ~90 --verify renders,
@@ -6558,6 +6633,7 @@ pcv_scope() {
     M-b3)     echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V60" ;;
     M-b4)     echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V61" ;;
     M-secret) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V62" ;;
+    M-memo)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V95" ;;
     M-b2) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V55" ;;
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
     # BL-777: all three tool arms run for each, so any a mutant must NOT kill is its same-run control.
@@ -6607,6 +6683,8 @@ PCV_MUTS="M-region M-direxcl M-exit3"
 [ "${PCV_R9:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-cksum M-base M-sha M-unarmed M-hex"
 # BL-685's mutants score only where V55 and V59..V62 run (PCV_R10).
 [ "${PCV_R10:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-b1 M-b2 M-b3 M-b4 M-secret"
+# BL-699's mutant scores only where V95 runs (PCV_R15).
+[ "${PCV_R15:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS M-memo"
 # BL-685 B5/B6's mutants score only where V64..V76 run (PCV_R11).
 [ "${PCV_R11:-0}" -eq 1 ] && PCV_MUTS="$PCV_MUTS $PCV_B56MUTS"
 # BL-685 B7 and BL-800's mutants score only where V77..V88 run (PCV_R12).

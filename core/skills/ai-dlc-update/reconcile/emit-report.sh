@@ -1803,10 +1803,20 @@ er_kf_env() {
   # such variable instead would never hit (this process exports a fresh AI_DLC_RECONCILE_MEMO before
   # the key) and would write secrets such as a CLAUDE_CODE_* token into the field. LIMIT: the
   # derivation is a text grep, so a reader that builds a name (`${!name}`, `env | grep`) is invisible
-  # to it, and an entry's own sourced siblings are not scanned.
+  # to it, and an entry's own sourced siblings are not scanned. The NAME set is memoized per process in
+  # key.envnames.memo, written only after er_env_names succeeds, while the values below are re-read on
+  # every call; a dist blob that turns unreadable between the two keys therefore now records, which is
+  # harmless because the next lookup is a fresh process with a fresh $_er_tmp.
   echo "named-env"
-  er_env_names > "$_er_tmp/key.envnames" || return 1
-  local _en
+  local _en _em
+  if [ -s "$_er_tmp/key.envnames.memo" ]; then
+    cp "$_er_tmp/key.envnames.memo" "$_er_tmp/key.envnames" || return 1
+  else
+    er_env_names > "$_er_tmp/key.envnames" || return 1
+    if _em="$(mktemp "$_er_tmp/key.envnames.memo.XXXXXX")" && cp "$_er_tmp/key.envnames" "$_em"; then
+      mv -f "$_em" "$_er_tmp/key.envnames.memo" || :
+    fi
+  fi
   while IFS= read -r _en; do
     if eval "[ -n \"\${$_en+x}\" ]"; then eval "printf '%s=set %s\0' \"\$_en\" \"\$$_en\""
     else printf '%s=unset\0' "$_en"; fi
@@ -1821,7 +1831,9 @@ er_kf_env() {
 # (AI_DLC_PROJECT_ROOT and AI_DLC_KNOWN_SKILLS_EXT at predicate-differential.sh's validator runs, the
 # latter keyed above with its file; AI_DLC_RECONCILE_MEMO, whose inheritance is refused), lib.sh's
 # unexported AI_DLC_MEMO_* state, and the cache's own control AI_DLC_VERIFY_NO_CACHE. A dist file that
-# is absent at a ref adds nothing; one that is present and cannot be read fails the field.
+# is absent at a ref adds nothing; one that is present and cannot be read fails the field. It runs at
+# most once per process (er_kf_env memoizes it), which is sound because the parent shell exports no
+# AI_DLC_*/CLAUDE_* name between the key before the render and er_cache_record's, and the render runs in $( ).
 er_env_names() {
   local todo="emit-report.sh" seen=" " f g ref e
   : > "$_er_tmp/key.envsrc" || return 1
