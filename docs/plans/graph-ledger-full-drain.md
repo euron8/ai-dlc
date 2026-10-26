@@ -1009,7 +1009,10 @@ candidate's surviving half is upstream's to file and build, never a question for
       `git for-each-ref` list of every `<batch>-<cluster>*` and `worktree-agent-*` branch you
       created, each tip shown reachable from the kept `-dev` ref or `origin/main` (by ancestry,
       else by patch-id, else by every added line present), sent to <lead> BEFORE any
-      `git branch -D`. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
+      `git branch -D`. The list also names every worktree under your scratchpad and
+      `.claude/worktrees/` from `git worktree list --porcelain`, each HEAD shown reachable the same
+      way: a hand's clean validation worktree is DETACHED, holds no branch, and a branch-keyed list
+      never sees it. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
 
    **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
    gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries
