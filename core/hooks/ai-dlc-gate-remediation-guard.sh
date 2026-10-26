@@ -324,7 +324,8 @@
 #   durable, because it is evidence about a pass and is read by
 #   `validate-gate-adjudication.sh` at the gate as well as by this hook)
 # - Appends to: _bmad-output/planning-artifacts/.artifact-writes.jsonl (arm 2's record of a
-#   dispatched agent's planning-artifact, spec or gate-adjudication part-file write; read by
+#   dispatched agent's planning-artifact, spec or gate-adjudication part-file write, or its write
+#   to the document a sections split manifest names, wherever that document lies; read by
 #   `join-remediator-shards.sh` and `merge-adversarial-shards.sh`)
 # - Rewrites: _bmad-output/.gate-remediation-in-force (arm 7b's one-line-keyed cache;
 #   declared transient in schemas/pipeline-state-paths.json, so it renders into the
@@ -604,7 +605,61 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
 # select by prefix first, so a `gate-adjudication/` row reaches none of them.
 # STATED GAP: in `--subject` mode `join-remediator-shards.sh` drops these rows by its subject-set
 # filter, not by a prefix, so "by prefix first" does not describe that mode.
-record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact, spec or part-file write
+# The census holds for the sections-document rows below too: `merge-adversarial-shards.sh` selects by
+# shard prefix, the seal readers read only `content-seal` rows, `--subject` mode never selects a path
+# outside its subject set, and `--agent-writes` now lists such a row, which its trailer states.
+#
+# A SECTIONS ROUND'S DOCUMENT (BL-802). A sections round assembles its sections back into the
+# document the split was cut from, and that document may lie outside the state dir (`docs/...`).
+# Its lane round edits the assembled document in place, and the lane join can attest one writer only
+# from a row, so a dispatched Edit, Write or MultiEdit to a file that is the `document` of a sections
+# split manifest under THIS state dir -- `<state>/planning-artifacts/s*/shards/*/sections/.manifest`
+# -- is recorded too. The arm is reached only after every arm above missed, so a document INSIDE the
+# planning-artifacts tree is recorded by those arms and never twice.
+#  - SCOPE: any document a manifest names, never a hard-coded name. A SUBJECT round's manifests sit one
+#    level deeper (`shards/<subj>/<stem>/sections/.manifest`) and the glob does not reach them: every
+#    subject file is in-state today and recorded above. A future out-of-state subject file would go
+#    unrecorded by this arm, and its join would refuse it as unwritten.
+#  - RESOLUTION: the written path is resolved as `partition-document.sh`'s `abs_path` records the
+#    manifest's `document` -- the directory physically, plus the basename -- with `cd -P`, so a `lnk/..`
+#    segment resolves the way the kernel resolves the write. The file itself is not symlink-resolved.
+#  - COST: one awk over the glob compares BASENAMES first and leaves each manifest at its `document`
+#    line; the `pwd -P` forks and the full comparison run only on a basename hit. A non-hit write costs
+#    the glob plus that awk; the ledger is not read.
+#  - SPELLING: inside the state dir, the ledger's `<state-dir-name>/...`; otherwise relative to the
+#    PHYSICAL project dir (`docs/architecture.md`), which is `join-remediator-shards.sh`'s `DOC_REL` and
+#    its `LANE-ARTIFACT-PATH:`. Never relative to `_raw_root`, the state dir's parent, which differs
+#    under a nested state dir. A document outside the project dir records nothing.
+#  - ONE ROW per write, however many manifests name the document.
+#  - FORGERY: a dispatched agent can Write a manifest naming any path. The effect is record-only rows
+#    that no reader selects unless a join's `--artifact-path` covers them; no allow or deny moves.
+manifest_doc_rel() { # $1 file_path -> sets _mdr_rel to the ledger spelling, rc 1 when no manifest names it
+  _mdr_rel=""
+  _mdr_b="${1##*/}"
+  [ -n "$_mdr_b" ] || return 1
+  _mdr_fp="$1"
+  set -- "$LOG_DIR"/planning-artifacts/s*/shards/*/sections/.manifest
+  [ -f "$1" ] || return 1
+  _mdr_docs="$(awk -F'\t' -v b="$_mdr_b" '$1 == "document" { n = $2; sub(/.*\//, "", n); if (n == b) print $2; nextfile }' "$@" 2>/dev/null)"
+  [ -n "$_mdr_docs" ] || return 1
+  case "$_mdr_fp" in /*) ;; *) _mdr_fp="${PROJECT_DIR}/${_mdr_fp}" ;; esac
+  _mdr_d="$(cd -P "${_mdr_fp%/*}" 2>/dev/null && pwd -P)" || return 1
+  _mdr_abs="${_mdr_d}/${_mdr_b}"
+  _mdr_hit=0
+  while IFS= read -r _mdr_l; do [ "$_mdr_l" = "$_mdr_abs" ] && _mdr_hit=1; done <<MDREOF
+$_mdr_docs
+MDREOF
+  [ "$_mdr_hit" = 1 ] || return 1
+  # The state dir first: it usually lies inside the project dir, and its spelling wins.
+  _mdr_sp="$(cd -P "$LOG_DIR" 2>/dev/null && pwd -P)" || return 1
+  _mdr_pp="$(cd -P "$PROJECT_DIR" 2>/dev/null && pwd -P)" || return 1
+  case "$_mdr_abs" in
+    "$_mdr_sp"/*) _mdr_rel="${STATE_DIR_NAME}/${_mdr_abs#"$_mdr_sp"/}" ;;
+    "$_mdr_pp"/*) _mdr_rel="${_mdr_abs#"$_mdr_pp"/}" ;;
+    *) return 1 ;;
+  esac
+}
+record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact, spec, part-file or sections-document write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
   # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the
   # state directory's name cannot move the cut; the generic form is the fallback for a payload
@@ -625,7 +680,8 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
     "$LOG_DIR"/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
     */${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}"; _raw_root="${1%%/${STATE_DIR_NAME}/*}" ;;
     ${STATE_DIR_NAME}/gate-adjudication/*.part-*.jsonl) _raw_rel="$1" ;;
-    *) return 0 ;;
+    # A SECTIONS ROUND'S DOCUMENT, reached only after every arm above missed. See the header.
+    *) manifest_doc_rel "$1" || return 0; _raw_rel="$_mdr_rel" ;;
   esac
   # PHYSICAL, so `/tmp` and `/private/tmp` are one tree and a reader canonicalising its own root the
   # same way compares bytes. A root that does not resolve is recorded as spelled.

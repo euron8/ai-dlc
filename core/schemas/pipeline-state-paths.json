@@ -367,7 +367,7 @@
         {
           "name": ".artifact-writes.jsonl",
           "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
-          "reason": "One row per dispatched agent's planning-artifact write (arm 2). Read only by join-remediator-shards.sh, by time window. Not rotated."
+          "reason": "One row per dispatched agent's write to a planning artifact, a sprint spec, a gate-adjudication part file, or the document a sections split manifest names wherever it lives (arm 2), plus content-seal rows. Read by time window by join-remediator-shards.sh and merge-adversarial-shards.sh; the seal readers read only content-seal rows. Not rotated."
         }
       ]
     },
