@@ -598,6 +598,151 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   else
     bad "FIXTURE BROKEN: could not build the wrapped sprint-status.sh trees"
   fi
+
+  # --- BL-815 CAPTURE NORMALISATION (cn_*) ------------------------------------------------------
+  # A separately named block: the --list-captures arms land beside it, not inside it. receipt-bl815.sh
+  # owns the world and the cells (its header lists them). Every relative token resolves from the
+  # TOPLEVEL: an inner `a/../b`, physical-absolute and symlinked-alias spellings of a tracked capture
+  # with no command line must each be REFUSED no-command (judged, not merely warned); the toplevel
+  # spelling is the unchanged control; a leading `../` climbs out and WARNs capture-unresolved
+  # (outside) although the story-directory reading names a tracked file, and a RED one is REFUSED
+  # red-untracked; an untracked non-ignored citation and an other-worktree / climbing one WARN with
+  # their reasons; one the frozen .gitignore ignores prints nothing; the WARN never moves the exit;
+  # --list-captures lists the toplevel spellings; and cell xr holds BOTH readers to one answer on one
+  # `./` token. Every mutant is written beside record-only-diff.sh in the control tree and must FAIL
+  # its own named cell and leave the ctl cell standing.
+  cn_run() { bash "$DIR/receipt-bl815.sh" "$1" 2>&1; }
+  cn_out="$(cn_run "$HECTL")"; cn_rc=$?
+  if [ "$cn_rc" -eq 0 ]; then ok "CAPTURE NORMALISATION: inner ../, absolute and aliased spellings of a tracked capture are judged (no-command), a leading ../ is outside the repository (WARN, or red-untracked when RED), untracked and outside citations WARN capture-unresolved with their reasons, a frozen-.gitignore'd one prints nothing, the exit is unchanged, --list-captures lists the toplevel spellings, and both readers agree on one ./ token"
+  else bad "CAPTURE NORMALISATION: receipt-bl815.sh exited $cn_rc on the shipped validator: $(tr '\n' ' ' <<<"$cn_out")"; fi
+  cn_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
+    local m o rc
+    if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
+    o="$(cn_run "$m")"; rc=$?
+    if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the toplevel control cell -- $5"
+    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then ok "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
+  }
+  cn_mutant cn-n1-no-normaliser '    cap_norm "$t" || CN=""' '    CN="$t"' inner "N1: the normaliser removed, an a/../b capture is not judged"
+  cn_mutant cn-n2-no-warn '[ -z "$ureason" ] || warn "capture-unresolved' '[ -z "$ureason" ] || : "capture-unresolved' un "N2: the capture-unresolved WARN removed, an untracked citation is silent"
+  cn_mutant cn-n3-dotdot-from-story '    *) p="$t" ;;' '    ./*|../*) p="${STORY%/*}/$t" ;; *) p="$t" ;;' dd "N3: ./ and ../ resolved against the story's directory, not the toplevel"
+  cn_mutant cn-n5-split-readers 'cap_tokens 0 <<<"$TEXT" | cap_resolve' 'cap_tokens 0 <<<"$TEXT" | while IFS="$TAB" read -r r x; do [ "${x#./}" = "$x" ] || x="${STORY%/*}/$x"; printf "%s\t%s\n" "$r" "$x"; done | cap_resolve' xr "N5: the handoff arms read ./ from the story's directory while --list-captures reads it from the toplevel"
+  cn_mutant cn-n4-no-ignore-exempt 'elif ignored_at_frozen "$cap"; then' 'elif false; then' ign "N4: the frozen-.gitignore exemption removed, a gitignored full-suite capture WARNs"
+  cn_mutant cn-n6-silent-unreadable 'warn "gitignore-unreadable' ': "gitignore-unreadable' gu "N6: an unreadable frozen .gitignore set is not named, the WARNs lose their cause"
+  # --- end BL-815 CAPTURE NORMALISATION -----------------------------------------------------------
+
+  # --- BL-809 ARMS (b9_*) ---------------------------------------------------------------------------
+  # Arms (m) K-UNQUOTED (a refusal) and (n) PLACEHOLDER (a WARN). receipt-bl809.sh owns the world and
+  # the cells (its header lists them): `-k alpha or beta` unquoted is REFUSED k-unquoted; `-k "a or b"`,
+  # `-k 'a and b'` and single-word `-k alpha` are quiet; `<tree>` on a `$ ` line WARNs placeholder;
+  # `<redacted>` and `<base-worktree>` are quiet; the placeholder WARN never moves the exit; a capture
+  # with no command line is the unchanged no-command control (cell ctl). Every mutant is written beside
+  # record-only-diff.sh in the control tree and must FAIL its own named cell and leave ctl standing.
+  b9_run() { bash "$DIR/receipt-bl809.sh" "$1" 2>&1; }
+  b9_out="$(b9_run "$HECTL")"; b9_rc=$?
+  if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"
+  else bad "BL-809 ARMS: receipt-bl809.sh exited $b9_rc on the shipped validator: $(tr '\n' ' ' <<<"$b9_out")"; fi
+  b9_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
+    local m o rc
+    if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
+    o="$(b9_run "$m")"; rc=$?
+    if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the no-command control cell -- $5"
+    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then ok "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
+  }
+  b9_mutant b9-m1-no-kunq 'if [ -n "$kl" ]; then' 'if false; then' kunq "M1: arm (m) removed, an unquoted multi-word -k passes"
+  b9_mutant b9-m2-quoted $'[^[:space:]"\'"\'"\']+[[:space:]]+(or' '[^[:space:]]+[[:space:]]+(or' kq "M2: arm (m) accepts a quoted expression as unquoted"
+  b9_mutant b9-m3-no-exempt 'if (p != "<redacted>" && p != "<base-worktree>") print' 'print' red "M3: arm (n)'s <redacted>/<base-worktree> exemptions removed"
+  b9_mutant b9-m4-refusal 'warn "placeholder' 'refuse "placeholder' rc "M4: arm (n) made a refusal, so a placeholder moves the exit"
+  # --- end BL-809 ARMS ------------------------------------------------------------------------------
+fi
+
+# --- BL-808: --list-captures ------------------------------------------------------
+# One world, three commits. L1's story cites: cap1 on a RED line AND on a plain line (one row),
+# cap2 as `./`, the bare basename cap3.txt (a capture dir's file), and -- each of which must print
+# NOTHING although its target is TRACKED -- `../x/y.txt` (a leading `../` climbs above the toplevel), an
+# absolute x/y.txt under a directory OUTSIDE the world (an absolute path under the toplevel is BL-815's
+# and lists its toplevel spelling, receipt-bl815.sh cell lc), a glob over
+# cap4, an elided path to cap6, the bare y.txt (tracked, but x/ is not a capture dir at L1), and the
+# untracked evidence/s1/untracked.txt (on disk only). L2 adds a full-path x/y.txt citation (the
+# control that x/y.txt is printable at all); the working tree then cites cap5 on disk only, so the
+# read at L2 must not print it, and L3 commits that line (the control that cap5 is printable).
+# The vector is every cell's exact output; each mutant must move exactly its own lines.
+if [ "$WORLDS_OK" -eq 1 ]; then
+  LC_W="$WORK/world-listcaps"
+  lc_ok=1
+  mkdir -p "$LC_W/evidence/s1" "$LC_W/x" "$LC_W/docs/stories" && gitw "$LC_W" init -q || lc_ok=0
+  if [ "$lc_ok" -eq 1 ]; then
+    for i in 1 2 3 4 5 6; do printf '$ pytest\nline %s\n' "$i" > "$LC_W/evidence/s1/cap$i.txt"; done
+    printf 'y\n' > "$LC_W/x/y.txt"
+    {
+      printf '# Story\n'
+      printf 'Evidence: `evidence/s1/cap1.txt` is the RED capture, and ./evidence/s1/cap2.txt the green one.\n'
+      printf 'Again, for the record: evidence/s1/cap1.txt\n'
+      printf 'Relative: ../x/y.txt\n'
+      printf 'Absolute: %s/x/y.txt and /etc/hosts.txt\n' "$WORK/world-listcaps-outside"
+      printf 'Bare: cap3.txt and y.txt and nosuch.txt\n'
+      printf 'Glob: evidence/s1/cap*.txt\n'
+      printf 'Elided: evidence/.../cap6.txt\n'
+      printf 'Untracked: evidence/s1/untracked.txt\n'
+    } > "$LC_W/docs/stories/s.md"
+    gitw "$LC_W" add -A && gitw "$LC_W" commit -qm l1 || lc_ok=0
+    printf 'untracked\n' > "$LC_W/evidence/s1/untracked.txt"
+    printf 'Tracked: x/y.txt\n' >> "$LC_W/docs/stories/s.md"
+    gitw "$LC_W" add docs/stories/s.md && gitw "$LC_W" commit -qm l2 || lc_ok=0
+    printf 'Later: evidence/s1/cap5.txt\n' >> "$LC_W/docs/stories/s.md"
+    LC1="$(gitw "$LC_W" rev-parse HEAD~1)"; LC2="$(gitw "$LC_W" rev-parse HEAD)"
+  fi
+  # Seed controls: every must-not-print target is tracked at L1, and untracked.txt is not.
+  lc_seed=""
+  for p in x/y.txt evidence/s1/cap4.txt evidence/s1/cap5.txt evidence/s1/cap6.txt; do
+    gitw "$LC_W" cat-file -e "${LC1:-x}:$p" 2>/dev/null || lc_seed="$lc_seed $p"
+  done
+  gitw "$LC_W" cat-file -e "${LC1:-x}:evidence/s1/untracked.txt" 2>/dev/null && lc_seed="$lc_seed untracked-is-tracked"
+  [ -f "$LC_W/evidence/s1/untracked.txt" ] || lc_seed="$lc_seed untracked-absent"
+  if [ "$lc_ok" -ne 1 ] || [ -n "$lc_seed" ]; then
+    bad "LIST-CAPTURES: FIXTURE BROKEN -- the world could not be built or cannot express its cases [${lc_seed# }]"
+  else
+    lc_cell() { # <script> <frozen> -> "rc:<line>,<line>,..."
+      local o rc
+      o="$(bash "$1" -C "$LC_W" --list-captures docs/stories/s.md "$2" 2>/dev/null)"; rc=$?
+      printf '%s:%s' "$rc" "$(printf '%s\n' "$o" | grep . | tr '\n' ',')"
+    }
+    lc_vec() { # <script> -> L1 | L2 (disk carries cap5) | L3 (cap5 committed)
+      local a b c
+      a="$(lc_cell "$1" "$LC1")"; b="$(lc_cell "$1" "$LC2")"
+      c="$(lc_cell "$1" "$LC3")"
+      printf '%s | %s | %s' "$a" "$b" "$c"
+    }
+    gitw "$LC_W" add docs/stories/s.md && gitw "$LC_W" commit -qm l3 && LC3="$(gitw "$LC_W" rev-parse HEAD)"
+    # After L3 the on-disk story still cites cap5, so the L2 cell reads a disk that names it: only a
+    # read AT the ref keeps cap5 out of that cell.
+    E='evidence/s1/'
+    LCWANT="0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,x/y.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,${E}cap5.txt,x/y.txt,"
+    got="$(lc_vec "$HE")"
+    if [ "$got" = "$LCWANT" ]; then
+      ok "LIST-CAPTURES: the story read AT the ref prints cap1 once (RED and plain citations), cap2 from './', the bare cap3.txt from its capture dir; '../', an outside absolute, glob, elided, untracked and the bare y.txt outside a capture dir print nothing; x/y.txt prints once cited by full path; cap5 cited on disk only is not printed at L2 and is at L3"
+    else
+      bad "LIST-CAPTURES: want [$LCWANT] got [$got]"
+    fi
+    lc_mutant() { # <name> <from> <to> <want> <label>
+      local m got
+      if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: list-captures mutation '$1' matched nothing"; return; fi
+      got="$(lc_vec "$m")"
+      if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own lines only: $5"
+      elif [ "$got" = "$LCWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
+      else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
+    }
+    U="${E}untracked.txt,"
+    lc_mutant lc-no-tracked 'tracked "$FROZEN" "$p" && printf' 'printf' \
+      "0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,$U | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,${U}x/y.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,${E}cap5.txt,${U}x/y.txt," \
+      "--list-captures skips the cat-file -e filter, so the untracked citation prints"
+    lc_mutant lc-no-bare 'if [ -n "$lc_bare" ] && [ -n "$lc_full" ]; then' 'if false; then' \
+      "0:${E}cap1.txt,${E}cap2.txt, | 0:${E}cap1.txt,${E}cap2.txt,x/y.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap5.txt,x/y.txt," \
+      "--list-captures drops the bare-basename resolution, so cap3.txt is lost"
+  fi
 fi
 
 echo

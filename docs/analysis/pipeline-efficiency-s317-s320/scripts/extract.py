@@ -8,7 +8,7 @@ Outputs (scratchpad/out/):
 """
 import json, os, re, sys, glob, datetime as dt
 
-ROOT = os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
+ROOT = os.environ.get("EXTRACT_ROOT") or os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
 OUT = sys.argv[1]
 WIN_START = "2026-10-05T14:00:00Z"          # s316 close, 10:00 -0400
 S318_START = "2026-10-12T02:30:00Z"         # after the s317 retro segment ends (02:28Z)
@@ -56,6 +56,7 @@ fh = {k: open(os.path.join(OUT, k + ".jsonl"), "w") for k in ("units", "segs", "
 def scan(path, kind, meta):
     usage = {}           # message.id -> (model, usage, ts, step)
     step = "pre-step"; main = "pre-step"
+    whole = set()        # step files this transcript has read without offset/limit
     segs = {}            # step -> dict
     pend = {}            # tool_use_id -> (name, ts, step)
     first = last = None; prev_t = None; prev_type = None
@@ -101,7 +102,13 @@ def scan(path, kind, meta):
                 if mm and c.get("name") == "Read":
                     name = mm.group(1)
                     S["reads"] += 1
-                    if name not in SUBPROC:
+                    # A Read with offset/limit of a step file this transcript already read WHOLE
+                    # is a re-read of one passage, not entry into that step. A slice of a file
+                    # not yet read whole (gate-validation is read in slices on entry) still enters.
+                    isslice = "offset" in c.get("input", {}) or "limit" in c.get("input", {})
+                    sliced = isslice and name in whole
+                    if not isslice: whole.add(name)
+                    if name not in SUBPROC and not sliced:
                         if name == "gate-validation":
                             step = "gate-validation[" + main + "]"
                         else:

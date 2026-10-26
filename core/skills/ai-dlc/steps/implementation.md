@@ -305,7 +305,8 @@ and `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --strategy <froze
 first commit, on every handoff including a rework re-handoff.
 Exit 1 refuses the handoff: send the dev its `REFUSED` lines (a capture with
 no command line, `replay-preamble` for a `validate-mutation-red.sh` capture with
-a hand-written `$ ` line above the script's own, a mutation-RED capture not committed, a glob cited as a
+a hand-written `$ ` line above the script's own, `k-unquoted` for a capture whose `$ ` line passes `-k`
+an unquoted multi-word expression, a mutation-RED capture not committed, a glob cited as a
 capture that matches no committed file, an empty or unresolvable Strategy
 Test IDs cell, `status-not-review` for a story whose status at the frozen SHA
 is not `review`, `status-yaml-mismatch` for a story whose status disagrees
@@ -323,7 +324,8 @@ exits 1. A `SKIP STATUS (<reason>)` line means a status check could not decide
 A SKIP whose reason names the story's or the yaml's own content goes back to the
 dev; only a structural SKIP (the sibling script missing, no envelope yet)
 proceeds to dispatch. Only
-exit 1 blocks dispatch. `WARN` lines do not refuse; exit 2 means nothing was
+exit 1 blocks dispatch. `WARN` lines do not refuse (`placeholder` for a `<name>`
+left unexpanded on a capture's `$ ` line is one); exit 2 means nothing was
 checked, is recorded verbatim in the story's gate log, and does NOT block
 dispatch. On a rework re-handoff `<base>` stays the manifest's `base`, so the
 no-command check reads every capture the story's range touched and the
@@ -333,15 +335,21 @@ and glob checks read every capture the whole story cites.
 **Gate-1 dispatch: the review partitions by changed-file group.** At the
 commit-presence check, with the frozen SHA recorded (the freeze below),
 run in the frozen dev worktree
-`partition-review-diff.sh --map <worktree> <base> <frozen-sha> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
+`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --list-captures <story-file> <frozen-sha> > <captures file>`,
+then
+`partition-review-diff.sh --map <worktree> <base> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
 where `<base>` is the base of the two-dot range the check above logs,
-`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters. A
+`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters. When
+`--list-captures` exits 2, partition without `--exclude-captures` and record its
+line in the story's gate log. The cited captures leave the threshold COUNT
+only: they stay in the parts and in the range every reviewer reads. Under the
+flag, a range of at most one counted file answers `SERIAL`. A
 later pass appends its pass marker to the directory,
 `<story-index>-code-review-<sha12>-p<M>`, matching the `-p<M>` of the review
 file it merges into; the merge refuses a directory whose marker differs from
 its `--out`.
 Review sharding is on by default: the program answers `SERIAL:` (exit 3)
-when the story's reviewable files fall below the threshold, which is the
+when the story's counted reviewable files fall below the threshold, which is the
 built-in default in `partition-review-diff.sh`;
 `AI_DLC_REVIEW_SHARD_MIN_FILES` in `.claude/settings.json` `env` overrides it,
 and setting it to `0` turns review sharding off. On `SERIAL`, dispatch one
@@ -399,10 +407,13 @@ shard does, each a `#### ` heading under its container, never a bullet, and carr
 `reviewed-sha: <full frozen sha>` line, because the next pass carries by that heading and
 partitions from that sha.
 A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
-run the partition with `<prior-sha>` in place of `<base>`, where `<prior-sha>` is the
-column-0 `reviewed-sha:` of the pass M-1 review file, into the `-p<M>` shard directory, so
+run the partition with `<prior-sha>` in place of `<base>`,
+`partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,
+where `<prior-sha>` is the
+column-0 `reviewed-sha:` of the pass M-1 review file and `<captures file>` is
+`--list-captures` read at `<frozen-sha>` as above, so
 the manifest's `base` line records the prior sha, and dispatch on its answer exactly as
-above, `SERIAL` included. When that run is refused (exit 2: the prior sha does not resolve
+above, `SERIAL` included: a delta of at most one counted file is one reviewer, `shard: 1/1 <story-index>`. When that run is refused (exit 2: the prior sha does not resolve
 or is not an ancestor of the frozen sha, after a rebase or a force-push), record the refusal
 line in the gate log and run the full `<base>..<frozen-sha>` partition instead; a re-review
 never dispatches a `shard: 1/1` delta of no stated range. The partition drops the scan
@@ -435,8 +446,9 @@ section is a retro finding.
 **Gate-2 dispatch: the validation partitions by changed-file group too.**
 After the DAR-fold preflight, with the go-signal SHA recorded (it may differ
 from gate 1's frozen SHA after a rework pass), run in the frozen dev worktree
-`partition-review-diff.sh --map <worktree> <base> <go-signal-sha> --shard-dir <root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`,
-fresh on that SHA, where `<root>` is the absolute path of the frozen worktree,
+`partition-review-diff.sh --map <worktree> <base> <go-signal-sha> --exclude-captures <captures file> --shard-dir <root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`,
+fresh on that SHA, `<captures file>` written by `--list-captures` at `<go-signal-sha>` as at gate 1
+(on its exit 2, without the flag, the line recorded in the gate log), where `<root>` is the absolute path of the frozen worktree,
 `<base>` is the same two-dot base gate 1 used, `<go-signal-sha>` is the full
 SHA and `<sha12>` its first twelve characters. A later pass appends its pass
 marker, `<story-index>-qa-validation-<sha12>-p<M>`, matching the `-p<M>` of the

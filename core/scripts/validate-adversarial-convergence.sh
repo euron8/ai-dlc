@@ -2671,11 +2671,14 @@ fi
 # =============================================================================
 # GATE ONLY, like K: --cycle-state has exited above, and this arm reads git.
 #
-# `_gate-procedures.md` validation-cycle item 2 ("Elicitation takes the axis and the shape of the
-# step's adversarial pass"): a `stories/` of two or more files is elicited by one adversary per
-# story ordinal plus one cross-story adversary per cross group, each writing
-# `s<N>/shards/stories-elicitation/<ordinal>.md` (cross: `cross-<g>.md`, or `cross.md` at one
-# group), never one voice. A one-file `stories/` is ONE adversary at `shard: 1/1`, writing `01.md`.
+# `_gate-procedures.md` validation-cycle item 2: a `stories/` of two or more files is elicited by one
+# adversary per story ordinal, each writing `s<N>/shards/stories-elicitation/<ordinal>.md`, plus ONE
+# cross-story adversary briefed with every ordinal, writing `cross.md`, never one voice. The cross
+# part is accepted as `cross.md` alone OR the complete `cross-1..G` set of `--cross-groups K` (the
+# shape before this rule, so older dirs judge unchanged); a partial `cross-<g>` set is cause (c).
+# Measured reason: per-story shards 26 unique survivors on s319 (32 with s320, provisional) against 2 (3)
+# for the cross groups, over the s319-s320 stories elicitation.
+# A one-file `stories/` is ONE adversary at `shard: 1/1`, writing `01.md`.
 # No merge reads that directory, so before this arm nothing read which shape ran.
 #
 #   subject    the sprint of the series: the terminal pass is `stories-adversarial-p<M>.md` in an
@@ -2692,18 +2695,20 @@ fi
 #              `merge-adversarial-shards.sh --map` prints for this `stories/` (asked through a staged
 #              `s<N>/shards/stories-p1/` beside a link to the real `stories/`, because `--map` derives
 #              the stories dir from the shard-dir path and refuses the elicitation dir's name), plus
-#              the keys of `partition-document.sh --cross-groups <K>` (`k3_xkeys`). `--map` refuses
-#              K < 2, so K = 1's set {01} is item 2's prose. Ordinals compare numerically.
+#              the keys of `partition-document.sh --cross-groups <K>` (`k3_xkeys`), for which a
+#              lone `cross.md` stands in. `--map` refuses K < 2, so K = 1's set {01} is item 2's
+#              prose. Ordinals compare numerically.
 #   verdicts   PASS -- the shard dir holds exactly the want set (a record beside it is the merged
 #              summary and is allowed); at K = 1 a record alone is NOT-OWED, one voice being the
 #              shape. FAIL, every cause listed together:
 #                (a) single voice -- a record and no shard dir, K >= 2;
 #                (b) ordinals missing, listed;
-#                (c) cross shards short -- "<n> cross shard(s) where G=<G> are owed", the owed names
-#                    listed and any off-shape cross file named; a legacy single `cross.md` at K > 2
-#                    is this cause, never a PASS;
-#                (d) wrong names present, listed (not `<digits>.md`/`cross*.md`, out of 1..K, or a
-#                    duplicate ordinal);
+#                (c) cross shards short -- neither `cross.md` alone nor the complete `cross-1..G`:
+#                    "<n> cross shard(s) where G=<G> are owed", both accepted forms listed and any
+#                    off-shape cross file named;
+#                (d) wrong names present, listed (not `<digits>.md`/`cross*.md`, out of 1..K, a
+#                    duplicate ordinal, `cross.md` beside the complete `cross-1..G`, or any cross
+#                    file where none is owed);
 #                (e) owed-absent -- `full`, no record and no shard dir.
 #
 # A RECORD IS JUDGED BY THE RULE OF THE RELEASE IT WAS PRODUCED UNDER. Item 2's sharded shape
@@ -2745,7 +2750,7 @@ fi
 # and the era bound above, which is what keeps a resumed or re-gated old sprint from wedging.
 # PREDICTION, to be REPLACED by the measured census of the reference consumer's s310-s319 (run the
 # validator per sprint over `s<N>/stories-adversarial-p`): under TODAY's rule -- s310 (e), s314 (a),
-# s315 (a, the `-p1` record), s316 (a), s317 (c: `cross.md` where G=6 owes cross-1..cross-6), s318
+# s315 (a, the `-p1` record), s316 (a), s317 PASS (its lone `cross.md` is the whole cross part), s318
 # (a); s311 carry-over-single, s312 lightweight and s313 standard NOT-OWED; s319 no stories series.
 # Under each record's ERA: s310 and s314-s318 PENDING, s311-s313 NOT-OWED, FAIL set EMPTY.
 # THE FAIL PATH IS PROVEN ONLY BY THE SEEDED SELF-PROBE BELOW: no sprint on that corpus was elicited
@@ -2879,7 +2884,8 @@ l_cover() {
 # THE DELTA (BL-733). A story split or added after a correctly sharded elicitation owes only the
 # stories no ORDINAL shard names and the cross groups that hold one of them, elicited into a SIBLING
 # dir `s<N>/shards/stories-elicitation-delta-k<K>/` at today's K: `<story-basename>.md` per owed
-# story, `cross-<g>.md` (`cross.md` at one group) per owed group, each shard line at K. No root
+# story and ONE `cross.md` (or, accepted too, `cross-<g>.md` for every owed group), each shard line
+# at K. No root
 # record is written for it: `l_records` globs `stories-elicitation*.md`, so one would read as a voice.
 #   ORDINAL COVERAGE IS READ FROM ORDINAL SHARDS ONLY -- a non-cross file whose `artifact:` is ONE
 #   `.md` under this sprint's `s<N>/stories/`. A cross shard's `<name>=` entries never acquit an
@@ -2910,7 +2916,7 @@ l_onames() {
 # -> L_DBAD (why the base is not a complete elicitation for its own K; empty when it is), L_DKB (that
 # K), L_DU (today's stories no base ordinal names) and L_DG (the owed cross keys), each space-led.
 l_delta_owed() {
-  L_DBAD=""; L_DU=""; L_DG=""; L_DKB=0
+  L_DBAD=""; L_DU=""; L_DG=""; L_DX=" none"; L_DKB=0
   l_kparse "$1"
   if [ -n "$L_KBAD" ]; then L_DBAD="$L_KBAD"; return 0; fi
   L_DKB="$L_KREC"; l_dents=""
@@ -2950,6 +2956,8 @@ l_delta_owed() {
   while read -r l_dt l_dv; do
     case "$l_dt" in U) L_DU="$L_DU $l_dv" ;; G) L_DG="$L_DG $l_dv" ;; esac
   done <<< "$l_dr"
+  # The cross part as printed: one `cross.md` whenever a story is owed, the per-group names accepted.
+  L_DX=" none"; [ -z "$L_DU" ] || L_DX=" cross.md (or all of${L_DG})"
 }
 # $1 delta dir, $2 sprint number, $3 today's K -> L_V (PASS | FAIL) and L_WHY, against L_DU / L_DG.
 # An owed story is covered only by `<story>.md` whose `artifact:` names that story under s<N>/stories/.
@@ -2959,7 +2967,9 @@ l_delta_judge() {
     [ -e "$l_df" ] || continue
     l_dn="${l_df##*/}"; l_dhave="$l_dhave$l_dn "
     case "$l_dn" in
-      cross.md|cross-*.md)
+      cross.md)
+        [ -n "$L_DU" ] || l_dwrong="$l_dwrong $l_dn" ;;
+      cross-*.md)
         case "$L_DG " in *" ${l_dn%.md} "*) ;; *) l_dwrong="$l_dwrong $l_dn" ;; esac ;;
       *.md)
         case "$L_DU " in
@@ -2973,9 +2983,15 @@ l_delta_judge() {
     esac
   done
   for l_ds in $L_DU; do case "$l_dcov" in *" $l_ds "*) ;; *) l_dmo="$l_dmo $l_ds.md" ;; esac; done
-  for l_dx in $L_DG; do case "$l_dhave" in *" $l_dx.md "*) ;; *) l_dmx="$l_dmx $l_dx.md" ;; esac; done
+  # One `cross.md` is owed when any story is; every owed `cross-<g>.md` is accepted in its place.
+  l_dgn=""
+  for l_dx in $L_DG; do
+    l_dgn="$l_dgn $l_dx.md"
+    case "$l_dhave" in *" $l_dx.md "*) ;; *) l_dmx="$l_dmx $l_dx.md" ;; esac
+  done
+  case "$l_dhave" in *" cross.md "*) l_dmx="" ;; *) [ -n "$l_dgn" ] || [ -z "$L_DU" ] || l_dmx=" cross.md" ;; esac
   [ -z "$l_dmo" ] || L_WHY="(b) delta ordinals missing:${l_dmo}"
-  [ -z "$l_dmx" ] || L_WHY="${L_WHY}${L_WHY:+; }(c) delta cross shards missing:${l_dmx}"
+  [ -z "$l_dmx" ] || L_WHY="${L_WHY}${L_WHY:+; }(c) delta cross shard missing: cross.md (or every owed group:${l_dgn}; missing:${l_dmx})"
   [ -z "$l_dwrong" ] || L_WHY="${L_WHY}${L_WHY:+; }(d) wrong names present in the delta:${l_dwrong}"
   l_kparse "$1"
   if [ -n "$L_KBAD" ]; then L_WHY="${L_WHY}${L_WHY:+; }${L_KBAD} (the delta)"
@@ -2984,7 +3000,7 @@ l_delta_judge() {
   fi
   if [ -n "$L_WHY" ]; then L_V=FAIL; else
     L_V=PASS
-    L_WHY="shards/stories-elicitation/ is complete for its K=${L_DKB} and shards/stories-elicitation-delta-k$3/ holds exactly the delta owed (stories:${L_DU:- none}; cross:${L_DG:- none})"
+    L_WHY="shards/stories-elicitation/ is complete for its K=${L_DKB} and shards/stories-elicitation-delta-k$3/ holds exactly the delta owed (stories:${L_DU:- none}; cross:${L_DX})"
   fi
 }
 
@@ -3048,9 +3064,12 @@ l_judge() {
         case " $l_have " in *" $l_w "*) ;; *) l_p="00000$l_w"; l_p="${l_p:$((${#l_p} - ${#2}))}"; l_mo="$l_mo $l_p.md" ;; esac ;;
     esac
   done
+  # A lone `cross.md` is the whole cross part where cross-1..G are owed, but only ALONE: beside any
+  # `cross-<g>` it is neither accepted form, and beside the complete set it is a stray (d).
+  if [ -n "$l_mx" ] && [ "$l_xh" -eq 0 ] && [ "$l_xoff" = " cross.md" ]; then l_mx=""; l_xoff=""; fi
   if [ -n "$l_mo" ]; then L_WHY="(b) ordinals missing:${l_mo}"; fi
   if [ -n "$l_mx" ]; then
-    L_WHY="${L_WHY}${L_WHY:+; }(c) cross shards short: ${l_xh} cross shard(s) where G=${l_xo} are owed (owed:${l_xnames})${l_xoff:+; found instead:${l_xoff}}"
+    L_WHY="${L_WHY}${L_WHY:+; }(c) cross shards short: ${l_xh} cross shard(s) where G=${l_xo} are owed (owed: cross.md, or all of${l_xnames})${l_xoff:+; found instead:${l_xoff}}"
   else
     l_wrong="${l_wrong}${l_xoff}"
   fi
@@ -3078,6 +3097,7 @@ if [ -n "$l_sd" ] && [ "$K_COUNT" -ge 1 ]; then
   l_records "$AC_T/l-probe/a"; lp_ra="$L_RECS"
   l_records "$AC_T/l-probe/b"; lp_rb="$L_RECS"
   l_W3="1 2 3 cross-1 cross-2 cross-3"
+  l_W7="1 2 3 4 5 6 7 cross-1 cross-2 cross-3 cross-4 cross-5 cross-6"
   l_NL='
 '
   lp_bad=""
@@ -3093,8 +3113,14 @@ PASS -|full|3|$l_W3|0|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
 PASS -|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
 FAIL b|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
 FAIL d|full|3|$l_W3|0|1|01.md,02.md,04.md,cross-1.md,cross-2.md,cross-3.md
-FAIL c|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md
+PASS -|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md
 FAIL c|full|3|$l_W3|1|1|01.md,02.md,03.md,cross-1.md,cross-2.md
+PASS -|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross.md
+PASS -|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross-1.md,cross-2.md,cross-3.md,cross-4.md,cross-5.md,cross-6.md
+FAIL c|full|7|$l_W7|0|1|01.md,02.md,03.md,04.md,05.md,06.md,07.md,cross-1.md,cross-2.md,cross-3.md
+FAIL c|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md,cross-1.md
+FAIL d|full|3|$l_W3|0|1|01.md,02.md,03.md,cross.md,cross-1.md,cross-2.md,cross-3.md
+FAIL d|full|1|1|0|1|01.md,cross.md
 FAIL e|full|3|$l_W3|0|0|
 NOT-OWED -|standard|3|$l_W3|0|0|
 NOT-OWED -|carry-over-single|3|$l_W3|1|0|
@@ -3104,15 +3130,21 @@ NOT-OWED -|full|1|1|1|0|
 FAIL b|full|1|1|0|1|02.md
 FAIL d|full|3|$l_W3|0|1|01.md,1.md,02.md,03.md,cross-1.md,cross-2.md,cross-3.md
 EOF
-  # The legacy `cross.md` at K=3 must be (c), naming the owed set and the file found, and NOT (d).
+  # A lone `cross.md` at K=3 is the whole cross part. A PARTIAL cross-<g> set (cross-1..3 of G=6 at
+  # K=7) must be (c), naming both accepted forms and never (d); `cross.md` beside one `cross-<g>` is
+  # neither form, so (c) names it as found instead.
+  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md"
+  [ "$L_V $L_WHY" = "PASS shards/stories-elicitation/ holds exactly the owed set" ] || lp_bad="$lp_bad [lone cross.md: $L_V '$L_WHY']"
+  l_judge full 7 "$l_W7" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}04.md${l_NL}05.md${l_NL}06.md${l_NL}07.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
+  case "$L_WHY" in
+    *"(d)"*) lp_bad="$lp_bad [partial cross set read as (d): '$L_WHY']" ;;
+    "(c) cross shards short: 3 cross shard(s) where G=6 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md)") ;;
+    *) lp_bad="$lp_bad [partial cross set: '$L_WHY']" ;;
+  esac
+  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md${l_NL}cross-1.md"
+  case "$L_WHY" in *"found instead: cross.md"*) ;; *) lp_bad="$lp_bad [cross.md beside cross-1: '$L_WHY']" ;; esac
   # A correct COUNT with wrong names must name both the missing ordinal and the stray: a judge
   # that compared counts passes it. Ordinals print at the merge's width (K=3: `3.md`).
-  l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}03.md${l_NL}cross.md"
-  case "$L_WHY" in
-    *"(d)"*) lp_bad="$lp_bad [legacy cross.md read as (d): '$L_WHY']" ;;
-    *"(c) cross shards short: 0 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md); found instead: cross.md"*) ;;
-    *) lp_bad="$lp_bad [legacy cross.md: '$L_WHY']" ;;
-  esac
   l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}04.md${l_NL}cross-1.md${l_NL}cross-2.md${l_NL}cross-3.md"
   case "$L_WHY" in *"(b) ordinals missing: 3.md"*"(d) wrong names present: 04.md"*) ;; *) lp_bad="$lp_bad [count-not-names: '$L_WHY']" ;; esac
   # THE RECORDED K, both directions. c: 01.md bare (as the reference consumer's is), the K on a later
@@ -3146,7 +3178,7 @@ EOF
   lp_ku="$(l_kuse 5 3 && printf y)$(l_kuse 3 3 && printf y)$(l_kuse 1 3 && printf y)$(l_kuse 2 3 && printf y)$(l_kuse '' 3 && printf y)"
   [ "$lp_ku" = "y" ] || lp_bad="$lp_bad [l_kuse 5/3 3/3 1/3 2/3 none/3: '$lp_ku' want 'y' (larger only)]"
   l_judge full 3 "$l_W3" 0 1 "01.md${l_NL}02.md${l_NL}cross-1.md"
-  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md)") ;; *) lp_bad="$lp_bad [equality under-sharded: $L_V '$L_WHY']" ;; esac
+  case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md)") ;; *) lp_bad="$lp_bad [equality under-sharded: $L_V '$L_WHY']" ;; esac
   l_judge full 3 "$l_W3" 0 1 "01.md"
   case "$L_V $L_WHY" in "FAIL (b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed"*) ;; *) lp_bad="$lp_bad [grow, one voice at shard: 1/1: $L_V '$L_WHY']" ;; esac
   # THE SUBJECT COVER, in the forms a real elicitation writes (s317's 03.md, 04.md and cross.md): i,
@@ -3313,7 +3345,7 @@ EOF
         l_delta_judge "$l_dd" "$l_n" "$l_k"; l_dv="$L_V"; l_dwhy="$L_WHY"
       fi
     elif [ -z "$L_DBAD" ] && [ -n "$L_DU" ]; then
-      l_dhint="stories:${L_DU}; cross:${L_DG:- none}"
+      l_dhint="stories:${L_DU}; cross:${L_DX}"
     fi
     L_KREC="$l_ksv"; L_KBAD="$l_kbsv"
   fi
@@ -3408,21 +3440,21 @@ EOF
         elif [ -n "$l_dhint" ] || [ "$l_dmode" -eq 1 ]; then
           # THE DELTA REMEDY (BL-733): the base is complete for its own K, so only the stories no
           # ordinal shard names and the cross groups holding one of them are owed.
-          if [ -z "$l_dhint" ]; then l_dhint="stories:${L_DU:- none}; cross:${L_DG:- none}"; fi
+          if [ -z "$l_dhint" ]; then l_dhint="stories:${L_DU:- none}; cross:${L_DX}"; fi
           err "L -- ELICITATION" "s${l_n}'s stories elicitation over ${l_k} stories is not the sharded shape: ${L_WHY}.
       It is dated ${l_at} (${l_at_from}), after ${L_RELEASE} was stamped (${l_stamp}), so
       _gate-procedures.md validation-cycle item 2 binds it. shards/stories-elicitation/ is complete
       for the K it was elicited at, so ONLY THE DELTA is owed -- ${l_dhint} -- one adversary per
-      owed story writing s${l_n}/shards/stories-elicitation-delta-k${l_k}/<story-basename>.md and one
-      cross-story adversary per owed group writing cross-<g>.md there (cross.md at one group), each
-      briefed at shard: <i>/${l_k}. Elicit the delta (item 2, the delta clause) before this gate."
+      owed story writing s${l_n}/shards/stories-elicitation-delta-k${l_k}/<story-basename>.md and ONE
+      cross-story adversary writing cross.md there, each briefed at shard: <i>/${l_k}. Elicit the
+      delta (item 2, the delta clause) before this gate."
         else
           err "L -- ELICITATION" "s${l_n}'s stories elicitation over ${l_k} stories is not the sharded shape: ${L_WHY}.
       It is dated ${l_at} (${l_at_from}), after ${L_RELEASE} was stamped (${l_stamp}), so
       _gate-procedures.md validation-cycle item 2 binds it: one adversary per story ordinal
-      (scripts/ai-dlc/merge-adversarial-shards.sh --map) plus one cross-story adversary per group
-      (scripts/ai-dlc/partition-document.sh --cross-groups <K>; cross.md only at K=2), each writing
-      s${l_n}/shards/stories-elicitation/<ordinal>.md or cross-<g>.md; one story is ONE adversary at
+      (scripts/ai-dlc/merge-adversarial-shards.sh --map) plus ONE cross-story adversary briefed with
+      every ordinal, each writing s${l_n}/shards/stories-elicitation/<ordinal>.md or cross.md (the
+      complete cross-<g>.md set of --cross-groups <K> is accepted too); one story is ONE adversary at
       shard: 1/1 writing 01.md. No shard dir complete for its own K exists to top up with a delta,
       so re-run the elicitation in that shape before this gate."
         fi ;;

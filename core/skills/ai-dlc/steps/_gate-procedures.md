@@ -316,7 +316,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    early is never taken as finished, a seat editing above its marker is not either, and a seat
    still appending shows as progress on its own file rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
    `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
-   shard that disagrees. A code review or QA over `partition-review-diff.sh --map` dispatches
+   shard that disagrees. A code review or QA over `partition-review-diff.sh --map ... --exclude-captures` dispatches
    its cross shards in the same wave as its parts, and its first cross shard arms its own
    `--complete --since <round epoch>` beat on the part files, under a state directory its brief
    names, before the hand-over replays (`implementation.md`, Gate-1 and Gate-2 dispatch). A party round's seat files are read by the lead and by
@@ -465,9 +465,16 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    **Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**
    The subject is sharded for elicitation exactly as "Adversarial review dispatch" shards it for
    the step's convergence passes; a lighter shape is not the lead's to choose. Two or more files
-   (`stories/`, the files axis): one `adversary` per story ordinal plus one cross-story
-   `adversary` per cross group, never one voice under `shard: none (serial-document)`, which Rule
-   28 keeps for a single document. The story ordinals are the ones
+   (`stories/`, the files axis): one `adversary` per story ordinal plus ONE cross-story
+   `adversary` for stories elicitation, briefed with every ordinal and writing `cross.md`, never
+   one per cross group and never one voice under `shard: none (serial-document)`, which Rule 28
+   keeps for a single document. Only elicitation takes the single cross shard: the party round,
+   the convergence passes and their repairs keep one cross agent per cross group. Measured, the
+   per-story shards carried 26 unique surviving catches on s319 (32 with s320, provisional) against the cross groups' 2 (3), and every
+   cross group already read every story.
+   The cross shard's brief carries `shard: cross/<K> <ordinals>`, K being the ordinal count and
+   `<ordinals>` every ordinal `--map` printed, plus the whole map, and it closes with `--mark`
+   under the shard word `cross`. The story ordinals are the ones
    `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being
    the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first, as item 1
    does for the party round; `--map` refuses the `<artifact>-elicitation/` directory, whose name is
@@ -480,8 +487,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    requirements subject: as below. On the files and sections axes each shard runs
    `/bmad-advanced-elicitation` in its own context scoped to its part, records findings and edits
    nothing, writes early and closes with its `seat-complete:` line as item 1 states, and writes
-   `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (a cross
-   shard: `cross-<g>.md`, or `cross.md` when there is one group) with
+   `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-elicitation/<ordinal>.md` (the
+   files-axis cross shard: `cross.md`; a sections-axis cross shard: `cross-<g>.md`, or `cross.md`
+   when there is one group) with
    `skill: bmad-advanced-elicitation`, the `artifact:` and `artifact_sha:` an adversarial shard on
    its axis notarizes, and no `verdict:` line. Each finding in it is a `### ` heading inside
    `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s
@@ -505,15 +513,15 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    When `shards/stories-elicitation/` is complete for the K it was elicited at, and `stories/`
    has since gained a story no ORDINAL shard in it names (a split, or an addition), elicit ONLY
    the delta, never the whole round again. The owed stories are those whose file no ordinal
-   shard's `artifact:` names; a cross shard's `<name>=` entry never covers a story. The owed
-   cross groups are every group of today's `partition-document.sh --cross-groups <K>` that holds
-   the ordinal of an owed story (by `merge-adversarial-shards.sh --map`), never the groups whose
-   index list changed. Dispatch one `adversary` per owed story and one per owed group, each
-   briefed at today's K (`shard: <i>/<K>`), writing
+   shard's `artifact:` names; a cross shard's `<name>=` entry never covers a story. When any
+   story is owed, one cross-story shard is owed too. Dispatch one `adversary` per owed story,
+   briefed at today's K (`shard: <i>/<K>`), and ONE cross-story `adversary` briefed
+   `shard: cross/<K> <ordinals>` with every ordinal of today's `merge-adversarial-shards.sh
+   --map`, writing
    `_bmad-output/planning-artifacts/s<N>/shards/stories-elicitation-delta-k<K>/<story-basename>.md`
-   and `cross-<g>.md` there (`cross.md` at one group), in the same shard-file shape as above. Write
-   no root `stories-elicitation-delta*.md` record. Check 24 arm L names the owed stories and groups
-   in its remedy. A base that is not complete for its own K, or that is one voice at
+   and one `cross.md` there, in the same shard-file shape as above. Write
+   no root `stories-elicitation-delta*.md` record. Check 24 arm L names the owed stories and the
+   cross shard in its remedy. A base that is not complete for its own K, or that is one voice at
    `shard: 1/1`, has nothing to top up: re-run the whole elicitation in the shape above.
 
 <!-- BEGIN GENERATED: provenance-block/elicitation — source: .claude/schemas/provenance-block.json; do not edit by hand -->

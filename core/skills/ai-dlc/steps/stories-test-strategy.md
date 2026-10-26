@@ -545,9 +545,11 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 **Adversarial repair dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** SM, Dev, Architect, TEA — every story: every
   acceptance criterion, every edge case, every dependency. `stories/` is a files-axis
-  subject (Rule 28, "Split dispatch"), so the round, elicitation, each review pass and each repair
+  subject (Rule 28, "Split dispatch"), so the round, each review pass and each repair
   are sharded per story ordinal plus one cross-story part per cross group, as the "Validation cycle", "Adversarial
-  review dispatch" and "Adversarial repair dispatch" sub-routines say. Their joins are
+  review dispatch" and "Adversarial repair dispatch" sub-routines say. Elicitation is sharded per
+  story ordinal plus ONE cross-story part briefed with every ordinal (`cross.md`), as the
+  "Validation cycle" item 2 says. Their joins are
   `merge-adversarial-shards.sh` and `join-remediator-shards.sh`.
 - **source-fidelity check:** for each story derived from a carry-over item or user
   instruction, verify every AC preserves the specific details from the source.
@@ -562,8 +564,9 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 edge-case defects no later pass raises; the cross-story party catches a defect between stories,
 such as a funds destination one story sets and another sweeps; sharded elicitation catches what
 one voice over every story misses, such as an uncapped mint through a raised wallet read, where
-a single voice found at most one unique defect. False-positive cost: one agent per (seat or
-shard, story ordinal) and per cross group, and their repairs. Removal condition: measured
+a single voice found at most one unique defect. False-positive cost: for the party round, one
+agent per (seat, story ordinal) and per (seat, cross group); for elicitation, one agent per
+story ordinal and one cross-story agent; and their repairs. Removal condition: measured
 sprints in which a round carries no unique MAJOR or CRITICAL catch that survives to the shipped
 stories.
 
