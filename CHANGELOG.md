@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.950.0] - 2026-10-26
+
+Batch 243, cluster c5. It closes BL-795 and BL-695, advances BL-538 without closing it, files no entry, and closes no ledger id. NET: entries closed 2 minus filed 0 = +2. Engine code: none. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh` (fixture arm `PC-V96`, mutants M-v25 and M-v25wr; `PCV_R6MARK` and `pcv_installed` hoisted to top level). Rulebook changes: none. Backlog: `docs/backlog.md` (BL-795, BL-695, BL-538).
+
+### BL-795 — M-v25 is scored in a mode-400 world, where the chmod-000 world could not discriminate; closed
+
+- The chmod 000 world cannot discriminate: both of er_key's walks exit 1 before V25's line, the unreadable-directory walk and the nested-`.git` walk. A mode-400 directory passes both walks, so V25's line is the refuser.
+- Fixture arm `PC-V96` is that world, in shard c (pcvmut) beside the mutants and never in shard d. Its preflight `pcv_g96disc` runs before any run is scored, and an engine without `PCV_R6MARK` reports PENDING. The fix side must refuse with V25's own cause line. Fixture arm `PC-V25` keeps its 000 world unchanged.
+- Corrected premise: M-v25 SURVIVEs in fixture arm `PC-V96`. Conswork and the hit-path read-log re-take each cover V25 on their own, where batch 242 had said the read log alone covers it. The committed ablation M-v25wr removes V25's line, conswork's three key lines and the re-take. It is a standing KILL (STALE-HIT, rc=0, hit=1, 0 detector launches, opt-out rc=1). M-v25 counts as SURVIVE only when M-v25wr scored KILL in the same run; otherwise it is HARNESS.
+- Controls, each exit 1 in its own scratch tree: M-v25wr built without the re-take edit makes M-v25 score HARNESS, and fixture arm `PC-V96` at chmod 000 reports FIXTURE BROKEN.
+- GNU find is UNMEASURED-PLATFORM. This box has only BSD find, so this is a limit of the box and not a claim about GNU find. Where the preflight fails and `find --version` reports GNU findutils, fixture arm `PC-V96` writes PENDING, which makes it a permanent non-check there and never a PASS.
+- The `verify:` line is a two-part receipt. Its first half is a structural awk over the fixture that tracks shell quoting, so a comment, a dead quoted literal or a heredoc cannot satisfy it. Its second half drives shard c through `hermetic-run.sh` with a fresh verdict store and requires the three ok lines for fixture arm `PC-V96`, M-v25's survival and M-v25wr's kill. Each input was scored in its own scratch worktree, `cmp`-different from the fix: 0 on the fix and on a second correct spelling, 1 on the base and on eight broken variants (three that only the drive refuses, five that the awk refuses, three of them moving a required check into a dead literal or heredoc), 9 on a missing file. `validate-backlog-receipts.sh` scores it ALREADY-PASSING.
+- NOTE, recorded and not filed: V17's SURVIVE row stands on an ablation that exists only in a scratch copy, and no committed arm runs it. A later batch decides it.
+
+### BL-695 — a sharded stories round no longer waits at a per-seat barrier on graph's s320 stories round; closed
+
+- `bash scripts/audit-party-wave-barrier.sh --trace` on graph's s320 stories-round lead transcript (`d22c7889-6a0a-4353-9626-d39017478bc3.jsonl`) exits 0 with 0 findings (rounds=3, batches=24). The cap of 42 is read from the environment variable (capsrc=env, no `--cap` given), and `--cap 42` gives the same result.
+- In the stories round 33 exits REFILLED and 1 was SLOTS-FULL. The final 42 of 76 exits are the round's tail, which the detector does not judge by design. The control s319 `a0701ce0` with `--cap 42` exits 1 and fires on batches 2 and 3.
+- This is one round after the prose fix. It meets the close condition the entry named and is not proof the barrier cannot return; the detector stays available to re-run.
+
+### BL-538 — s320 per-wake re-count; the entry stays PARTIAL
+
+- Over four graph s320 lead transcripts, 472 of 648 wakes (73%) end with no tool call under f7's heuristic. That figure is a floor of unknown accuracy: the same counter reproduces the s319 window of 37 of 54 exactly but does not reproduce the window of 20 of 29.
+- About 112 of the 472 idle wakes restate that an armed join or beat covers them. That is a text-regex approximation, not a classification of each turn.
+- The mechanism that would remove these turns has no design since the hook was retired, so the entry stays PARTIAL and its verify line is unchanged.
+
 ## [0.949.0] - 2026-10-26
 
 Batch b243, lead ai-dlc-8a, cluster c1. It closes BL-804 and BL-807, and files and closes BL-814 and BL-816 on the same branch. It closes no pipeline-check id. NET: entries closed 4 minus filed 2 = 2. Engine code a consumer runs from step 3 of the delivering pull: `core/scripts/wait-for-deliverable.sh`, `core/scripts/join-remediator-shards.sh`. Gate-only code: `core/scripts/validate-adversarial-convergence.sh` (arm J3). Rulebook changes: `core/team-roles/remediator.md`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/skills/ai-dlc/steps/requirements.md`, `core/skills/ai-dlc/steps/architecture.md`, `core/skills/ai-dlc/steps/gate-validation.md` (Check 24 now lists sixteen arms, adding J3). `core/skills/ai-dlc/SKILL.md` is unchanged from 0.948.0: the Rule 7 pointer to the J3 record grammar was dropped at the gate, and the grammar stays in `_gate-procedures.md`. Fixture changes: `remediator-shard-join` (arms, mutants, receipts for BL-804, BL-807 and BL-816), `check-24-adversarial-convergence` (arm J3, receipt-bl814), `check-24-adversarial-convergence-b` (unit j3), `content-seal` (CS-J9, new CS-J9v). Backlog: `docs/backlog.md` (BL-804, BL-807, BL-814, BL-816). Range: ce275f7e9..6c4b735ee is the builder branch (17 commits, 21 files, +1689/-41 against 0.948.0); the gate adds three commits (SKILL.md cut, gate-validation arm list, J3 era) and the release commit. Wall clock: not timed (NO TIMING RUNS); unit j3 moved to check-24 shard b by recorded loaded cost (lead ruling), structure only.

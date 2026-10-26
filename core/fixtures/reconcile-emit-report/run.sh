@@ -3128,6 +3128,13 @@ fi # end rer_phase wg
 # at definition time. The run-time setup is pcv_setup, called at the top of each of the two phases.
 # Below the probe-only exit, so the world-guard battery's copies never reach this block.
 PCV_HITP='emit-report: accepted a recorded PASS ('
+# Hoisted to top level (pcache, pcvlat and pcvmut all read them; the file is `set -u`): the named
+# recorded-PASS refusal's prefix, and the installed-layout test.
+PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
+# pcv_installed <emit> -- 0 in the INSTALLED layout. The layout is seed.sh's own decision (seed.sh:12
+# picks the dist path, :14 the installed one), read back off the EMIT it chose; never a walk for VERSION.
+# An installed tree whose engine predates a pin is a pre-migration state: PENDING, never a failure.
+pcv_installed() { case "$1" in */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) return 0 ;; esac; return 1; }
 PCV_OKLINE="emit-report: the report's mechanical region is present, current, and complete."
 # pcv_setup -- the suite root, the bash the shim execs, the adjudication seed, and the cache never
 # opted out of by the caller's environment. Run at the top of each phase that runs cache arms.
@@ -3164,12 +3171,12 @@ pcv_shim() {
   { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
     && chmod +x "$PS_SHIM/bash"
 }
-# pcv_unexpected <verdicts> <ids> -- every id carrying a verdict line (`ok <id> ` or `FAIL <id> ` at
-# line start) that <ids> does not name, once each. An arm left in a phase whose list does not read it
-# writes a verdict nobody reads; this is what makes that state visible.
+# pcv_unexpected <verdicts> <ids> -- every id carrying a verdict line (`ok <id> `, `FAIL <id> ` or
+# `PENDING <id> ` at line start) that <ids> does not name, once each. An arm left in a phase whose list
+# does not read it writes a verdict nobody reads; this is what makes that state visible.
 pcv_unexpected() {
   local id out=""
-  for id in $(sed -n -E 's/^(ok|FAIL) (PC-V[0-9]+)( .*)?$/\2/p' "$1" 2>/dev/null | sort -u); do
+  for id in $(sed -n -E 's/^(ok|FAIL|PENDING) (PC-V[0-9]+)( .*)?$/\2/p' "$1" 2>/dev/null | sort -u); do
     case " $2 " in *" $id "*) ;; *) out="$out $id" ;; esac
   done
   printf '%s\n' "${out# }"
@@ -3185,16 +3192,51 @@ pcv_unexpected_probe() {
     && [ -z "$(pcv_unexpected "$1/nearmiss" "PC-V1 PC-V2")" ] \
     && [ -z "$(pcv_unexpected "$1/offender" "PC-V1 PC-V2 PC-V17")" ]
 }
+# THE ONE ACCEPTED PENDING (BL-795). PC-V96's mode-400 world discriminates only where `find` walks a
+# mode-400 directory with exit 0 (BSD find, measured). GNU find is UNMEASURED-PLATFORM on this box, so
+# where the reader's OWN `find --version` reports GNU findutils, PC-V96's arm writes
+# `PENDING PC-V96 UNMEASURED-PLATFORM: <cause>` and that line counts neither ok nor bad. Every other
+# PENDING -- another id, no token, or a non-GNU find -- is bad: on BSD the world must discriminate.
+pcv_gnufind() { case "$(find --version 2>/dev/null)" in *"GNU findutils"*) return 0 ;; esac; return 1; }
+pcv_pending_ok() {
+  case "$1" in "PENDING PC-V96 "*UNMEASURED-PLATFORM*) pcv_gnufind; return ;; esac
+  return 1
+}
+# pcv_pending_probe <dir> -- 0 when pcv_pending_ok refuses a PENDING for another id, a PENDING without
+# the token (both under a stubbed GNU find) and the right line under a stubbed BSD find, AND accepts the
+# right line under the stubbed GNU find: the one accept is the control that the refusals are not a
+# reader refusing everything. Setting PATH clears bash's command hash, so each stub is the `find` run.
+pcv_pending_probe() {
+  local g="$1/gnu" b="$1/bsd" ln='PENDING PC-V96 UNMEASURED-PLATFORM: probe'
+  mkdir -p "$g" "$b" || return 1
+  printf '#!/bin/sh\necho "find (GNU findutils) 4.9.0"\n' > "$g/find" \
+    && printf '#!/bin/sh\necho "find: illegal option -- -" >&2\nexit 1\n' > "$b/find" \
+    && chmod +x "$g/find" "$b/find" || return 1
+  ! ( PATH="$g:$PATH"; pcv_pending_ok 'PENDING PC-V17 UNMEASURED-PLATFORM: probe' ) \
+    && ! ( PATH="$g:$PATH"; pcv_pending_ok 'PENDING PC-V96 probe' ) \
+    && ! ( PATH="$b:$PATH"; pcv_pending_ok "$ln" ) \
+    && ( PATH="$g:$PATH"; pcv_pending_ok "$ln" )
+}
 # pcv_read_ids <verdicts> <ids> <phase> -- one ok/bad per id in <ids> (ok line -> ok, FAIL line -> bad,
-# no line -> bad), then a bad for every verdict id <ids> does not name. The stray check proves it
-# can fire before it reads the corpus.
+# an accepted PENDING (pcv_pending_ok) -> printed and counted neither, no line -> bad), then a bad for
+# every verdict id <ids> does not name. The stray check proves it can fire before it reads the corpus,
+# and where <ids> names PC-V96 the PENDING reader proves it refuses before it accepts.
 pcv_read_ids() {
   local _id _l _u
+  case " $2 " in *" PC-V96 "*)
+    if ! pcv_pending_probe "$(dirname "$1")/pending-probe"; then
+      bad "FIXTURE BROKEN: [$3] the PENDING reader accepted a PENDING for another id, without UNMEASURED-PLATFORM or under BSD find, or refused the one it must accept under GNU find"
+    fi ;;
+  esac
   for _id in $2; do
     _l="$(grep -m1 -E "^(ok|FAIL) $_id " "$1" 2>/dev/null)"
+    [ -n "$_l" ] || _l="$(grep -m1 -E "^PENDING $_id " "$1" 2>/dev/null)"
     case "$_l" in
       "ok $_id "*)   ok "${_l#ok }" ;;
       "FAIL $_id "*) bad "${_l#FAIL }" ;;
+      "PENDING $_id "*)
+        if pcv_pending_ok "$_l"; then printf '  %s\n' "$_l"
+        else bad "$_id wrote [$_l], which is not the one accepted PENDING (PC-V96, UNMEASURED-PLATFORM, GNU find)"; fi ;;
       *)             bad "$_id produced no verdict -- the suite stopped before reaching it" ;;
     esac
   done
@@ -3334,7 +3376,7 @@ pcv_latmode() {
 }
 # pcv_latarm <id> <tag> <description> -- seed, approve, record, HIT control, change, then a MISS whose exit
 # equals an opt-out render of the same tree and is non-zero (so the change is one the render sees).
-# Only V19 and V24 run here; the other seven arms share pcv_latgrp's world.
+# Only V19 and V24 run here; the other eight arms (V96 among them) share pcv_latgrp's world.
 pcv_latarm() {
   local id="$1" t="$2" rec ctl n0
   PCV_ENVPRE=""
@@ -3378,17 +3420,28 @@ pcv_latarm() {
   fi
   return 0
 }
-# ---- V20 V17 V18 V23 V21 V22 V25: ONE shared adjudication world, the arms in that order ----
-# One seed, one approve, one recording run for seven arms. Every pre-state is laid down before the
+# ---- V20 V17 V18 V23 V21 V22 V25 V96: ONE shared adjudication world, the arms in that order ----
+# One seed, one approve, one recording run for eight arms. Every pre-state is laid down before the
 # approve. Each arm: a HIT control on the restored world (pcv_gctl, so a failed undo shows as THIS
 # arm's control failing), the change, the cached run, the opt-out run, the undo, and only then its one
 # verdict. An arm whose control fails has written its FAIL and returns without changing or undoing
 # anything. The record is never copied back: no pass-path run exits 0, so nothing rewrites it, and the
-# next arm's control is its reader. A CLOSING control after V25 reads V25's undo, and V25's verdict is
-# written only after it. V19 (a commit of the whole tree) and V24 (a locale key field) cannot share
+# next arm's control is its reader. A CLOSING control after V25 (and after V96) reads that arm's undo,
+# and its verdict is written only after it. V19 (a commit of the whole tree) and V24 (a locale key field) cannot share
 # this world and keep their own pcv_latarm worlds.
-PCV_GRP_IDS="PC-V20 PC-V17 PC-V18 PC-V23 PC-V21 PC-V22 PC-V25"
-# PCV_LSCOPE (phase pcvmut, BL-795): the ONE arm a mutant of this world runs; empty runs all seven.
+#
+# PC-V96 (BL-795) IS THE MODE-400 TWIN OF PC-V25 AND RUNS IN SHARD c (phase pcvmut), NEVER IN d.
+# PC-V25's chmod 000 makes both er_key walks (emit-report.sh:1964-1966, :1974-1975) exit 1 before
+# V25's own refusal line is reached, so no mutant of that line can be scored there. At chmod 400 both
+# walks exit 0 (BSD find), the unreadable-directory walk names the directory, and V25's line is the
+# refusal that fires -- the world M-v25 and M-v25wr need. It is in this list so pcv_latgrp runs it in
+# the order and under the undo and closing control written here; it runs in pcvmut because pcvmut
+# already builds this whole world once per mutant (pcv_lrun -> pcv_latgrp under PCV_LSCOPE), so one more
+# job there with PS_E="$EMIT" and PCV_LSCOPE=PC-V96 (pcv_ship96) reuses all of it, in parallel with the
+# mutants, while shard d -- the suite's pole -- gains nothing: pcvlat scopes itself to this list minus
+# PC-V96.
+PCV_GRP_IDS="PC-V20 PC-V17 PC-V18 PC-V23 PC-V21 PC-V22 PC-V25 PC-V96"
+# PCV_LSCOPE (phase pcvmut, BL-795): the ONE arm a mutant of this world runs; empty runs all eight.
 # Read through `${..:-}`, never bare: phase pcvlat (shard d) never sets it, and the file is `set -u`.
 pcv_lin() {
   [ -z "${PCV_LSCOPE:-}" ] && return 0
@@ -3424,6 +3477,28 @@ pcv_g17() {
     printf -- '---\nkind: check\nreason: q\n---\n\n### 902. [ext:q] Q.\n\nBody.\n' > "$L_C/$PCV_QEXT"
   fi
 }
+# pcv_g96disc -- 0 when the mode-400 world discriminates M-v25 on this platform, run on the seeded
+# consumer with extensions/ already at 400. Copies of er_key's two walks (emit-report.sh:1964-1966 and
+# :1974-1975), without the gitlink prune because (c) asserts there is none:
+#   (a) the unreadable-directory walk exits 0 and prints EXACTLY `<root>/./.claude/skills/ai-dlc/extensions`;
+#   (b) the nested-.git walk exits 0;
+#   (c) the consumer's index carries 0 gitlinks (mode 160000).
+# The copies are bound to the engine by the fix-side cause line pcv_garm requires of v96, so an engine
+# change the copies miss turns PC-V96 red rather than leaving them green alone. Sets G96_WHY on failure.
+pcv_g96disc() {
+  local r o rc s n
+  G96_WHY=""
+  r="$(cd "$L_C" && pwd -P)" || { G96_WHY="the consumer root does not resolve"; return 1; }
+  o="$(find "$r/." \( -name .git -o -path "$r/./.claude/worktrees" \) -prune -o -type d ! -perm -u+rx -print 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] || { G96_WHY="find exits $rc on the unreadable-directory walk"; return 1; }
+  [ "$o" = "$r/./.claude/skills/ai-dlc/extensions" ] || { G96_WHY="the unreadable-directory walk printed [$o], want exactly the extensions directory"; return 1; }
+  find "$r/." \( -path "$r/./.git" -o -path "$r/./.claude/worktrees" \) -prune -o -name .git -prune -print >/dev/null 2>&1; rc=$?
+  [ "$rc" -eq 0 ] || { G96_WHY="find exits $rc on the nested-.git walk"; return 1; }
+  s="$(git -C "$L_C" ls-files -s 2>/dev/null)" || { G96_WHY="git ls-files -s failed in the consumer"; return 1; }
+  n="$(grep -c '^160000 ' <<< "$s")" || n=0
+  [ "$n" -eq 0 ] || { G96_WHY="the consumer carries $n gitlink(s), which the copied walks do not prune"; return 1; }
+  return 0
+}
 # pcv_garm <id> <tag> <description> -- one arm of the shared world.
 pcv_garm() {
   local id="$1" t="$2" b2="$L_B" c_rc c_hit c_n nc undo="" s vk vt
@@ -3439,6 +3514,16 @@ pcv_garm() {
     v22) git -C "$L_D" prune --expire=now >/dev/null 2>&1
          ! git -C "$L_D" cat-file -e "$G_DD" 2>/dev/null || { pcv_x "$id" "FIXTURE BROKEN: the prune left the dangling dist commit in place"; return 0; } ;;
     v25) chmod 000 "$L_C/.claude/skills/ai-dlc/extensions" ;;
+    v96) chmod 400 "$L_C/.claude/skills/ai-dlc/extensions"
+         if ! pcv_g96disc; then
+           chmod 755 "$L_C/.claude/skills/ai-dlc/extensions"
+           if pcv_gnufind; then
+             printf 'PENDING %s UNMEASURED-PLATFORM: GNU find on a mode-400 directory: %s, so the walks refuse before V25\n' "$id" "$G96_WHY" >> "$PS_D/verdicts"
+           else
+             pcv_x "$id" "FIXTURE BROKEN: the 400 world does not discriminate: $G96_WHY"
+           fi
+           return 0
+         fi ;;
   esac
   # The cached run goes FIRST, as in pcv_latarm: an opt-out run before it could record the changed tree.
   pcv_run "$t" "$L_C" "$L_R" "$L_D" "$b2" "$L_T"; c_rc="$PRC"; c_hit="$PHIT"; c_n="$PN"
@@ -3452,7 +3537,7 @@ pcv_garm() {
          [ "$s" = "$G_DC" ] || undo="the saved bytes of the pruned consumer commit did not re-write to its sha" ;;
     v22) s="$(git -C "$L_D" hash-object -t commit -w "$PS_D/grp-dd.commit" 2>/dev/null)"
          [ "$s" = "$G_DD" ] || undo="the saved bytes of the pruned dist commit did not re-write to its sha" ;;
-    v25) chmod 755 "$L_C/.claude/skills/ai-dlc/extensions" ;;
+    v25|v96) chmod 755 "$L_C/.claude/skills/ai-dlc/extensions" ;;
   esac
   [ -n "$undo" ] || [ "$nc" -eq 0 ] || pcv_lobs "$id" "$nc"
   if [ -n "$undo" ]; then
@@ -3464,12 +3549,22 @@ pcv_garm() {
   else
     vk=x; vt="$3 did not force a fresh render: [$(pcv_why)], opt-out render exits $nc -- a recorded PASS answered for a tree it never rendered"
   fi
-  if [ "$t" = v25 ]; then
-    pcv_run grp.close "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
-    if ! pcv_is_hit grp.close "$L_REC" && [ "$vk" = v ]; then
-      vk=x; vt="closing control: the shared world restored after V25 did not HIT ($(pcv_why)), so V25's undo left the world changed"
+  # V96's FIX-SIDE BINDING: against the shipping engine, the cached run must have refused BY NAME with
+  # V25's own cause, the line pcv_g96disc's walk copies stand for. An engine without the named refusal
+  # (PCV_R6MARK) is a pre-migration engine: PENDING, the conjunct not checked, never a FAIL.
+  if [ "$t" = v96 ] && [ "$vk" = v ] && [ "$PS_E" = "$EMIT" ]; then
+    if ! grep -qF "$PCV_R6MARK" "$EMIT"; then
+      printf 'PENDING: %s cause-line check not run, %s carries no named recorded-PASS refusal\n' "$id" "$EMIT"
+    elif ! grep -qxF "${PCV_R6MARK}a directory under the consumer is unreadable, so git lists nothing beneath it" "$PS_D/v96.err"; then
+      vk=x; vt="$3 rendered fresh, but not through V25's refusal: the cached run's stderr does not carry [${PCV_R6MARK}a directory under the consumer is unreadable, so git lists nothing beneath it] (first refusal: [$(grep -F "$PCV_R6MARK" "$PS_D/v96.err" | sed -n 1p)]), so the world does not reach V25's line"
     fi
   fi
+  case "$t" in v25|v96)
+    pcv_run grp.close "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
+    if ! pcv_is_hit grp.close "$L_REC" && [ "$vk" = v ]; then
+      vk=x; vt="closing control: the shared world restored after $id did not HIT ($(pcv_why)), so its undo left the world changed"
+    fi ;;
+  esac
   if [ "$vk" = v ]; then pcv_v "$id" "$vt"; else pcv_x "$id" "$vt"; fi
   return 0
 }
@@ -3519,14 +3614,17 @@ pcv_latgrp() {
   pcv_lin PC-V21 && pcv_garm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
   pcv_lin PC-V22 && pcv_garm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
   pcv_lin PC-V25 && pcv_garm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
+  pcv_lin PC-V96 && pcv_garm PC-V96 v96 "chmod 400 on .claude/skills/ai-dlc/extensions, which find walks with exit 0 and git cannot list beneath,"
   return 0
 }
 if rer_phase pcache; then
+# PC-V96 is TAKEN: it is the shared adjudication world's mode-400 arm (PCV_GRP_IDS), run by phase
+# pcvmut in shard c. Never reuse it here.
 PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V63"
 # THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
 # tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
 # (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
-PCV_R6MARK='emit-report: recorded PASS refused, re-rendering: '
+# PCV_R6MARK is defined at top level, beside PCV_HITP.
 PCV_R6=0
 if grep -qF "$PCV_R6MARK" "$EMIT"; then
   PCV_R6=1
@@ -3551,10 +3649,7 @@ PCV_R7=0; PCV_R7LD=0; PCV_R7F=0; PCV_CI=0
 # how a red run on a pre-fix engine exercises them, and it is the only way the gate is bypassed.
 PCV_R8MARK='ai-dlc-verify-pass 2'
 PCV_R8IDS="PC-V48 PC-V49 PC-V50 PC-V51 PC-V53 PC-V54"
-# pcv_installed <emit> -- 0 in the INSTALLED layout. The layout is seed.sh's own decision (seed.sh:12
-# picks the dist path, :14 the installed one), read back off the EMIT it chose; never a walk for VERSION.
-# An installed tree whose engine predates a pin is a pre-migration state: PENDING, never a failure.
-pcv_installed() { case "$1" in */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) return 0 ;; esac; return 1; }
+# pcv_installed is defined at top level, beside PCV_HITP.
 pcv_r8gate() { # pcv_r8gate <emit> -- sets PCV_R7F and adds the round-8 ids; a FAIL line per id when absent
   local i
   if grep -qF "$PCV_R8MARK" "$1" || [ "${PCV_R8_FORCE:-}" = 1 ]; then
@@ -6058,7 +6153,7 @@ pcv_suite() {
   fi # end pcv_in PC-V3 PC-V9
 
   # ---- V4..V16 and V26..V31, with V40/V41: one group, because each arm opens on the state the arm before it left ----
-  # V17..V25 are not here: they seed their own adjudication worlds (seven share pcv_latgrp's, V19 and V24 each have a pcv_latarm world), so they run in phase pcvlat, shard d.
+  # V17..V25 are not here: they seed their own adjudication worlds (seven share pcv_latgrp's, V19 and V24 each have a pcv_latarm world), so they run in phase pcvlat, shard d; V96, the eighth arm of pcv_latgrp's world, runs in pcvmut, shard c.
   if pcv_in PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V26 PC-V40 PC-V41 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31; then
   # ---- V4 / V11 / V12 / V13: consumer changes the region does not see, each a miss at exit 0 ----
   if ! pcv_ctl v4; then pcv_noctl PC-V4; else
@@ -6760,8 +6855,9 @@ fi # end rer_phase pcache
 # --- V17..V25: inputs the render reads that a key can miss, in three adjudication worlds ---
 # Phase pcvlat, shard d. Each world is layer-adjudication-tier's seed (a git top level whose render
 # carries an adjudicable extension), built FRESH by pcv_lat, so no arm reads pcache's main world.
-# SEVEN ARMS SHARE ONE WORLD (pcv_latgrp): V20, V17, V18, V23, V21, V22, V25, in that order, over one
-# approve and one record. Those seven DO read the state the arms before them left, so each opens with
+# SEVEN ARMS SHARE ONE WORLD HERE (pcv_latgrp): V20, V17, V18, V23, V21, V22, V25, in that order, over
+# one approve and one record; its eighth arm, V96, runs in pcvmut (shard c), and this phase scopes it
+# out. Those seven DO read the state the arms before them left, so each opens with
 # a HIT control on the restored world and undoes its change before its verdict, a failed undo turns
 # the NEXT arm's control red, and a closing control after V25 reads V25's undo. V19 (it commits the
 # whole tree) and V24 (its record locale is a key field) keep their own pcv_latarm worlds and run after
@@ -6778,6 +6874,8 @@ if pcv_cache_engine "PC-V17..PC-V25"; then
   PS_E="$EMIT"; PS_D="$PCV_ROOT/lat"; PS_SHIM="$PS_D/shim"; PCV_ENG=""
   if mkdir -p "$PS_D" && : > "$PS_D/verdicts" && pcv_shim; then
     (
+      # PC-V96 runs in shard c (pcvmut), not here: the shared world's ids minus PC-V96, derived.
+      PCV_LSCOPE="$(printf '%s\n' $PCV_GRP_IDS | grep -vxF PC-V96 | tr '\n' ' ')"
       pcv_latgrp
       pcv_latarm PC-V19 v19 "a TRACKED scripts/ai-dlc/r9-mode.sh's chmod under core.filemode=false, which git status cannot see and mode_at_theirs reads,"
       pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8, where the render's sort order differs,"
@@ -6795,7 +6893,7 @@ fi # end rer_phase pcvlat
 # --- BL-795: ENGINE-SIDE MUTANTS FOR V17..V25, phase pcvmut, shard c ---
 # One mutant per arm, each a copy of the reconcile directory with that arm's subject site of
 # emit-report.sh removed by pcv_ed (a whole-line anchor occurring once). Each runs ONLY its own arm:
-# V19 and V24 through pcv_latarm, the other seven through pcv_latgrp under PCV_LSCOPE naming that one
+# V19 and V24 through pcv_latarm, the others through pcv_latgrp under PCV_LSCOPE naming that one
 # arm (the whole shared world is still seeded, approved and recorded). These tables sit beside
 # pcache's (pcv_mk, pcv_want, pcv_scope, PCV_MUTS), never inside them, and pcache's launch is not
 # touched.
@@ -6811,15 +6909,23 @@ fi # end rer_phase pcvlat
 # the table is data: flipping a row changes one word.
 if rer_phase pcvmut; then
 pcv_setup
-# M-v25 is OWED, not scored: chmod 000 makes er_key's own walks (emit-report.sh:1952-1953, :1962-1963)
-# and er_kf_consignored refuse before V25's subject line is reached, so that input cannot discriminate
-# the mutant. It stays built (pcv_lmk) and tabled, and joins this list when a discriminating input exists.
-PCV_LMUTS="M-v17 M-v18 M-v19 M-v20 M-v21 M-v22 M-v23 M-v24"
+# M-v25 IS SCORED IN PC-V96'S MODE-400 WORLD, NOT PC-V25'S 000 ONE. Measured (scratch copies, shard c
+# pcvmut, BSD find): at chmod 000 er_key's own walks (emit-report.sh:1964-1966, :1974-1975) exit 1
+# before V25's line is reached, so every variant renders FRESH and none can be scored. At chmod 400 both
+# walks exit 0 and the fix side refuses with V25's cause line. There M-v25 renders FRESH, and so does
+# M-v25 with only the hit-path re-take removed and M-v25 with only conswork's three key lines removed:
+# conswork (git lists nothing beneath the directory, which moves only the conswork field between key
+# takes) and the read log's re-take EACH cover V25 alone. M-v25wr removes V25's line, conswork's three
+# and the re-take, and answers a STALE-HIT (rc=0, hit=1, 0 detector launches, opt-out rc=1): the
+# committed ablation that M-v25's SURVIVE row is read against. pcv_lscore accepts M-v25's SURVIVE only
+# when M-v25wr scored KILL in the same run, because that STALE-HIT is the one observation that no other
+# refuser fires before the key compare in this world.
+PCV_LMUTS="M-v17 M-v18 M-v19 M-v20 M-v21 M-v22 M-v23 M-v24 M-v25 M-v25wr"
 # pcv_lscope <name> -- the one arm the mutant runs.
 pcv_lscope() {
   case "$1" in
     M-v17) echo PC-V17 ;; M-v18) echo PC-V18 ;; M-v19) echo PC-V19 ;; M-v20) echo PC-V20 ;; M-v21) echo PC-V21 ;;
-    M-v22) echo PC-V22 ;; M-v23) echo PC-V23 ;; M-v24) echo PC-V24 ;; M-v25) echo PC-V25 ;;
+    M-v22) echo PC-V22 ;; M-v23) echo PC-V23 ;; M-v24) echo PC-V24 ;; M-v25|M-v25wr) echo PC-V96 ;;
   esac
 }
 # pcv_lwant <name> -- KILL, or SURVIVE:<covering field>.
@@ -6833,7 +6939,8 @@ pcv_lwant() {
     M-v22) echo "KILL" ;;
     M-v23) echo "SURVIVE:distrefs-config" ;;
     M-v24) echo "KILL" ;;
-    M-v25) echo "OWED:input-non-discriminating" ;;
+    M-v25) echo "SURVIVE:conswork+read-log" ;;
+    M-v25wr) echo "KILL" ;;
   esac
 }
 # pcv_lmk <name> -> 0 when <root>/lmut/<name>/eng/emit-report.sh is built, parses, and differs.
@@ -6846,6 +6953,7 @@ pcv_lwant() {
 #   M-v23  distrefs' auto-abbrev length line removed
 #   M-v24  er_kf_env's locale loop over no names
 #   M-v25  the unreadable-directory refusal removed
+#   M-v25wr  M-v25, plus conswork's three key lines and the hit path's read-log re-take removed
 pcv_lmk() {
   local d="$PCV_ROOT/lmut/$1"
   local a18="    if cr_test \"\$CONSUMER\" -x \"\$p\"; then printf 'x %s\\0' \"\$p\"; else printf -- '- %s\\0' \"\$p\"; fi"
@@ -6864,6 +6972,11 @@ pcv_lmk() {
     M-v23) pcv_ed "$d" replace '  echo "abbrev ${#_ab}"' '  :' ;;
     M-v24) pcv_ed "$d" replace '  for _lv in LANG LC_ALL LC_COLLATE LC_CTYPE; do' '  for _lv in; do' ;;
     M-v25) pcv_ed "$d" replace "$a25" '  :' ;;
+    M-v25wr) pcv_ed "$d" replace "$a25" '  :' \
+             && pcv_ed "$d" replace '  er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1' '  :' \
+             && pcv_ed "$d" replace '  er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1' '  :' \
+             && pcv_ed "$d" replace '  er_hash_list "$_er_tmp/key.work" || return 1' '  :' \
+             && pcv_ed "$d" replace '     && er_log_retake "$_er_tmp/key.rec-reads"; then' '     ; then' ;;
     *) return 1 ;;
   esac || return 1
   bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
@@ -6882,22 +6995,53 @@ pcv_lrun() {
     *)      pcv_latgrp ;;
   esac
 }
-# pcv_lscore <name> -- one verdict per mutant, read off the observation and checked against the arm's
-# own verdict line: a STALE-HIT with the arm's FAIL is KILL, a FRESH with the arm's ok is SURVIVE, and
-# anything else (no observation, the two disagreeing, a verdict for another id) is HARNESS.
+# pcv_ship96 -- PC-V96 against the SHIPPING engine, in a suite dir of its own: pcv_lrun's shape with
+# PS_E="$EMIT", so pcv_garm's fix-side cause-line check runs. Launched beside the mutants.
+pcv_ship96() {
+  PS_E="$EMIT"; PS_D="$PCV_ROOT/ship96/s"; PS_SHIM="$PS_D/shim"; PCV_ENG=""; PCV_LSCOPE=PC-V96
+  mkdir -p "$PS_D" && : > "$PS_D/verdicts" && : > "$PS_D/obs" && pcv_shim || { echo "could not create $PS_D or its shim"; return 1; }
+  pcv_latgrp
+}
+# pcv_lclass <name> -- KILL, SURVIVE, PENDING or HARNESS, read off the mutant's files alone (so a score
+# that depends on ANOTHER mutant's class does not depend on loop order). A STALE-HIT with the arm's FAIL
+# is KILL, a FRESH with the arm's ok is SURVIVE; no ok/FAIL line but the one accepted PENDING
+# (pcv_pending_ok) is PENDING; anything else (no observation, the two disagreeing, a verdict for another
+# id) is HARNESS.
+pcv_lclass() {
+  local id obs vl pl d="$PCV_ROOT/lmut/$1/s"
+  id="$(pcv_lscope "$1")"
+  vl="$(grep -m1 -E "^(ok|FAIL) $id " "$d/verdicts" 2>/dev/null)"
+  obs="$(grep -m1 "^$id " "$d/obs" 2>/dev/null)"
+  [ -z "$(pcv_unexpected "$d/verdicts" "$id")" ] || { echo HARNESS; return 0; }
+  if [ -z "$vl" ] && [ -z "$obs" ]; then
+    pl="$(grep -m1 -E "^PENDING $id " "$d/verdicts" 2>/dev/null)"
+    if [ -n "$pl" ] && pcv_pending_ok "$pl"; then echo PENDING; return 0; fi
+  fi
+  case "$obs:$vl" in
+    "$id STALE-HIT "*":FAIL $id "*) echo KILL ;;
+    "$id FRESH "*":ok $id "*) echo SURVIVE ;;
+    *) echo HARNESS ;;
+  esac
+}
+# pcv_lscore <name> -- one verdict per mutant off pcv_lclass. M-v25's SURVIVE is accepted only when
+# M-v25wr scored KILL in the same run; otherwise it is HARNESS, because without that STALE-HIT nothing
+# shows the world reaches the key compare with no other refuser in front of it.
 pcv_lscore() {
   local m="$1" id want obs vl got stray d="$PCV_ROOT/lmut/$1/s"
   id="$(pcv_lscope "$m")"; want="$(pcv_lwant "$m")"
-  vl="$(grep -m1 -E "^(ok|FAIL) $id " "$d/verdicts" 2>/dev/null)"
+  vl="$(grep -m1 -E "^(ok|FAIL|PENDING) $id " "$d/verdicts" 2>/dev/null)"
   obs="$(grep -m1 "^$id " "$d/obs" 2>/dev/null)"
   stray="$(pcv_unexpected "$d/verdicts" "$id")"
-  got=HARNESS
-  case "$obs:$vl" in
-    "$id STALE-HIT "*":FAIL $id "*) got=KILL ;;
-    "$id FRESH "*":ok $id "*) got=SURVIVE ;;
-  esac
-  [ -z "$stray" ] || got=HARNESS
+  got="$(pcv_lclass "$m")"
   obs="${obs#"$id "}"
+  if [ "$got" = PENDING ]; then
+    printf '  PENDING mutant BL-795 %s not scored: %s\n' "$m" "$vl"
+    return 0
+  fi
+  if [ "$m" = M-v25 ] && [ "$got" = SURVIVE ] && [ "$(pcv_lclass M-v25wr)" != KILL ]; then
+    bad "MUTANT HARNESS [BL-795 $m]: $id rendered fresh [$obs], but M-v25wr did not score KILL in this run [$(pcv_lclass M-v25wr)], so nothing shows the world reaches the key compare -- the SURVIVE proves nothing"
+    return 0
+  fi
   if [ "$got" = HARNESS ]; then
     bad "MUTANT HARNESS/ENTANGLED [BL-795 $m]: $id observed [${obs:-nothing}], verdict [${vl:-none}], strays [${stray}] -- a control-red, broken or entangled arm, never a kill"
   elif [ "$got" = KILL ] && [ "$want" = KILL ]; then
@@ -6910,9 +7054,10 @@ pcv_lscore() {
     bad "MUTANT SURVIVED [BL-795 $m]: declared [$want], but $id rendered fresh [$obs] -- another field covers the subject"
   fi
 }
-if pcv_cache_engine "BL-795 mutants M-v17..M-v25"; then
+if pcv_cache_engine "BL-795 mutants M-v17..M-v25wr and PC-V96"; then
   mkdir -p "$PCV_ROOT/lmut"
   _lbuilt=""
+  ( pcv_ship96 ) > "$PCV_ROOT/ship96.log" 2>&1 &
   for _m in $PCV_LMUTS; do
     if [ -z "$(pcv_lscope "$_m")" ] || [ -z "$(pcv_lwant "$_m")" ]; then
       bad "MUTANT NOT SCOPED [BL-795 $_m]: pcv_lscope or pcv_lwant names nothing for it, so it would score nothing"
@@ -6928,6 +7073,11 @@ if pcv_cache_engine "BL-795 mutants M-v17..M-v25"; then
     fi
   done
   wait
+  # PC-V96, the mode-400 world, on the shipping engine (pcv_read_ids also runs the PENDING reader's probe).
+  pcv_read_ids "$PCV_ROOT/ship96/s/verdicts" "PC-V96" pcvmut
+  if grep -q '^FAIL ' "$PCV_ROOT/ship96/s/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/ship96.log" ]; then
+    awk 'NR <= 20 { print "  DIAG  pcvmut ship96.log | " $0 }' "$PCV_ROOT/ship96.log"
+  fi
   for _m in $_lbuilt; do
     pcv_lscore "$_m"
     if [ -s "$PCV_ROOT/lmut/$_m.log" ]; then awk -v p="  DIAG  pcvmut $_m.log | " 'NR <= 10 { print p $0 }' "$PCV_ROOT/lmut/$_m.log"; fi
