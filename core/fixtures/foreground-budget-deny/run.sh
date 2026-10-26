@@ -44,7 +44,33 @@
 #               token (`grep -q '^done' f`, `[ -f $S/chain.done ]`). Its allow twins live in the arm owning each
 #               shared gate: the loop with `run_in_background` in BG, at 120000 in BOUNDARY, and
 #               with no timeout plus a `pg_isready` retry loop with no timeout in NOTIMEOUT
-#   EXIT        every call above exits 0
+#   WAITER      Deny A: wait-for-deliverable.sh as a command word whose segment ends in a lone `&`
+#               (the two graph shapes with `2>&1` right before it, `( wfd x ) &`, `nohup`,
+#               `& disown`, `wfd a & wfd b & wait`, ...) at 600000 -> deny. The budget would deny
+#               these anyway, so the REASON is the assertion: it names the waiter and
+#               `run_in_background: true`, and is not the steering-budget reason
+#   WAITERNEAR  its allow twins at 5000: `wfd x; sleep 5 & y`, `2>&1`, `>&2`, `&>f`, `&&`,
+#               `|& tee`, a quoted mention, `T=$(wfd ...) && sleep 1 &`. The last two seeds,
+#               `bash -c 'wfd x &'` and `w=.../wfd; $w x &`, are KNOWN NON-COVERAGE (23 of
+#               graph's 25 backgrounded waiters are denied; these wrappers are the 2 misses), so
+#               a widening of the matcher flips them here visibly
+#   SNAPWRITE   Deny B: `sed -i` (BSD, GNU, `.bak`, `--in-place`), `perl -pi`, `>`/`>>`, `tee
+#               [-a]`, cp/mv onto, git checkout/restore, python open(p,'w') and write_text, node
+#               writeFileSync, a variable-held path, at 600000 -> deny; reason names
+#               pipeline-snapshot.md and the Edit tool, not the budget
+#   SNAPREAD    its allow twins at 5000: cat/grep/sed -n/`<`, git add/show/diff, cp FROM, a
+#               `.bak` copy, `>> ...-history.md`, open(p) and open(p,'r'), a redirect to another
+#               file, and `bash script --write <snapshot>`
+#   SCOPE       both shapes with no detector and no timeout, and under agent_id +
+#               run_in_background: true -> deny with each one's own reason
+#   REGEXLIMIT  commands long enough to exhaust the regex retry limit: a waiter then 1000 ` >>f` redirects
+#               at 600000 (either reason), the same plus `; wfd z &` at 5000 and a waiter then 30000
+#               blanks then `y; wfd z &` at 5000 (waiter reason), `sed` with 3000 `-i ` at
+#               600000 -> deny, and stderr carries neither `not readable` nor `Regex failure`
+#   FAILOPEN    the WAITER seeds on the shipped hook print no `not readable`, `Regex failure` or
+#               fail-open text: a compile error in a shape regex is rethrown by `safetest` and shows
+#               up here, where the old broad catch would have swallowed it silently
+#   EXIT       every call above exits 0
 #
 # THE POLL FP SET. Replaying graph's 1,599 foreground over-budget subagent Bash calls (3,227
 # transcript files) through the hook denies 198: 152 sleeping loops, 46 long sleeps, 17.0 h of
@@ -227,6 +253,103 @@ score() {
   # retry with no timeout -- sit in BG, BOUNDARY and NOTIMEOUT: those gates are shared with the
   # lead's arm, so the arm that owns each gate owns its poll twin too.
 
+  # WAITER (Deny A): wait-for-deliverable.sh as a command word whose segment ends in a lone `&`.
+  # Driven at 600000 from the lead, so a hook WITHOUT Deny A still denies on budget: the reason
+  # is what discriminates -- it must name the waiter and its remedy, never the budget.
+  local W='scripts/ai-dlc/wait-for-deliverable.sh' S='_bmad-output/pipeline-snapshot.md'
+  for _c in "$W --complete p >/dev/null 2>&1 & echo armed" \
+            "$W --complete p > /dev/null 2>&1 & sleep 0; echo" \
+            "( $W x ) &" "nohup $W x &" "$W x & disown" "$W a & $W b & wait" \
+            "cd /r && $W x &" "$W x 2>&1 &" \
+            "$W --since \"\$(date -u +%FT%TZ)\" p >/dev/null 2>&1 & disown; echo" \
+            "$W --since t p 2>&1 | head -3 &"; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" '')"; chk_rc
+    [ "$DEC" = deny ] || note WAITER
+    case "$REASON_TXT" in *'backgrounds wait-for-deliverable.sh'*'run_in_background: true'*) ;; *) note WAITER ;; esac
+    case "$REASON_TXT" in *'steering budget'*) note WAITER ;; esac
+    # FAILOPEN: the jq pass must have run clean -- a printed fail-open or regex error is a failure.
+    case "$ERR_TXT" in *'not readable'*|*'Regex failure'*|*'fail-open'*) note FAILOPEN ;; esac
+  done
+  # WAITERNEAR: the allow twins, at a timeout within budget so only Deny A could refuse them.
+  for _c in "$W x; sleep 5 & y" "$W x 2>&1" "$W x >&2" "$W x &>f" "$W x && y" "$W x |& tee f" \
+            "grep '$W x &' f" "echo \"run $W x &\"" "grep -n wait-for-deliverable.sh core/x.md &" \
+            "T=\$($W --dispatch-ts a1) && sleep 1 &" "T=\$($W --dispatch-ts a1 2>&1 | tail -1); echo \$T" \
+            "bash -c '$W x &'" \
+            "w=$W; \$w x &"; do
+    # The last two are KNOWN NON-COVERAGE, not correct allows: 23 of graph's 25 backgrounded
+    # waiters are denied, and these are the 2 misses -- the waiter behind a wrapper (inside a
+    # `bash -c` string, and called through a variable). They are seeded so that any widening of
+    # the matcher that starts catching a wrapper flips them here, deliberately and visibly.
+    call "$h" "$REAL" - "$(jq -nc --arg c "$_c" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; chk_rc
+    [ "$DEC" = allow ] || note WAITERNEAR
+  done
+
+  # SNAPWRITE (Deny B): a shell or interpreter write of pipeline-snapshot.md. Driven at 600000,
+  # so the reason discriminates as in WAITER.
+  for _c in "sed -i '' 's/a/b/' $S" "sed -i 's/a/b/' $S" "sed -i.bak 's/a/b/' $S" \
+            "sed --in-place 's/a/b/' $S" "perl -pi -e 's/a/b/' $S" \
+            "echo x > $S" "echo x >> $S" "printf x >\"$S\"" "echo x | tee $S" "echo x | tee -a $S" \
+            "cp /tmp/s.md $S" "mv /tmp/s.md $S" "git checkout HEAD -- $S" "git restore $S" \
+            "python3 -c \"open('$S','w').write('x')\"" \
+            $'python3 - <<\'EOF\'\np=\''"$S"$'\'\nL=open(p).read()\nopen(p,\'w\').write(L)\nEOF' \
+            $'python3 - <<\'EOF\'\nfrom pathlib import Path\np=Path(\''"$S"$'\')\np.write_text(\'x\')\nEOF' \
+            "node -e \"fs.writeFileSync('$S','x')\"" \
+            "S=$S; sed -i '' \"s/a/b/\" \"\$S\""; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" '')"; chk_rc
+    [ "$DEC" = deny ] || note SNAPWRITE
+    case "$REASON_TXT" in *'writes pipeline-snapshot.md'*'Edit tool'*) ;; *) note SNAPWRITE ;; esac
+    case "$REASON_TXT" in *'steering budget'*) note SNAPWRITE ;; esac
+  done
+  # SNAPREAD: the allow twins -- reads, a copy FROM it, an append to the history file, a
+  # read-only interpreter open, a script given the path -- within budget, so only Deny B could refuse.
+  for _c in "cat $S" "grep -n x $S" "sed -n '1,5p' $S" "wc -l < $S" \
+            "git add $S && git commit -m x" "git show HEAD:$S" "git diff -- $S" \
+            "cp $S /tmp/s.md" "cp $S $S.bak" "echo x >> _bmad-output/pipeline-snapshot-history.md" \
+            $'python3 - <<\'EOF\'\np=\''"$S"$'\'\nh=\'_bmad-output/pipeline-snapshot-history.md\'\nL=open(p).read()\nopen(h,\'a\').write(L)\nEOF' \
+            "python3 -c \"print(open('$S').read())\"" "python3 -c \"print(open('$S','r').read())\"" \
+            "grep x $S > /tmp/out.txt 2>&1" \
+            "scripts/ai-dlc/validate-artifact-budget.sh --only pipeline-snapshot.md 2>&1 | head" \
+            "bash scripts/ai-dlc/render-x.sh --write $S"; do
+    call "$h" "$REAL" - "$(jq -nc --arg c "$_c" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; chk_rc
+    [ "$DEC" = allow ] || note SNAPREAD
+  done
+
+  # SCOPE: both shapes are denied OUTSIDE every gate the budget deny applies -- no detector on
+  # disk and no timeout (every budget read fails open there), and from a subagent with
+  # run_in_background: true. A deny moved behind the timeout/agent_id/background scope fails here.
+  local _p
+  for _p in "$(jq -nc --arg c "$W x &" '{tool_name:"Bash", tool_input:{command:$c}}')" \
+            "$(jq -nc --arg c "$W x &" '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:$c, timeout:600000, run_in_background:true}}')"; do
+    call "$h" "$NONE" - "$_p"; chk_rc
+    [ "$DEC" = deny ] || note SCOPE
+    case "$REASON_TXT" in *'backgrounds wait-for-deliverable.sh'*'run_in_background: true'*) ;; *) note SCOPE ;; esac
+  done
+  for _p in "$(jq -nc --arg c "echo x > $S" '{tool_name:"Bash", tool_input:{command:$c}}')" \
+            "$(jq -nc --arg c "echo x > $S" '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:$c, timeout:600000, run_in_background:true}}')"; do
+    call "$h" "$NONE" - "$_p"; chk_rc
+    [ "$DEC" = deny ] || note SCOPE
+    case "$REASON_TXT" in *'writes pipeline-snapshot.md'*'Edit tool'*) ;; *) note SCOPE ;; esac
+  done
+
+  # REGEXLIMIT: a valid command (every seed passes bash -n -c) long enough to exhaust the regex engine's retry limit must not
+  # turn into a jq error, which the hook reads as unparseable input and ALLOWS -- losing both the
+  # shape deny and the budget deny. Each seed asserts its decision and a clean stderr.
+  local _g _b
+  _g="$(printf '%1000s' '' | sed 's/ / >>f/g')"
+  _b="$(printf '%30000s' '')"
+  # The in-place verb is assembled so this file carries no literal suffix-less in-place sed (S1).
+  local _ip; _ip="$(printf '%3000s' '' | sed 's/ /-i /g')"
+  for _p in "$(jq -nc --arg c "$W x$_g" '{tool_name:"Bash", tool_input:{command:$c, timeout:600000}}')" \
+            "$(jq -nc --arg c "$W x$_g; $W z &" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "$W x ${_b}y; $W z &" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')" \
+            "$(jq -nc --arg c "sed $_ip $S.bak" '{tool_name:"Bash", tool_input:{command:$c, timeout:600000}}')"; do
+    call "$h" "$REAL" - "$_p"; chk_rc
+    [ "$DEC" = deny ] || note REGEXLIMIT
+    case "$ERR_TXT" in *'not readable'*|*'Regex failure'*) note REGEXLIMIT ;; esac
+    # Every seed at 5000 can only be refused by Deny A, so it must carry the waiter reason.
+    case "$_p" in *'"timeout":5000'*) case "$REASON_TXT" in *'backgrounds wait-for-deliverable.sh'*) ;; *) note REGEXLIMIT ;; esac ;; esac
+  done
+
   [ "$exitbad" -eq 0 ] || note EXIT
   printf '%s\n' "$failed" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'
 }
@@ -241,7 +364,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK")"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT SUBPOLL EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT FAILOPEN EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -281,7 +404,7 @@ CTL="$(score "$MUT/hook-control.sh")"
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
 # holding a deny cell; each of the others fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON SUBPOLL" \
+mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL WAITER" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
 # 2. denies a call already sent to the background.
 mut denies-background "BG" -e '/and \.tool_input\.run_in_background != true/d'
@@ -306,7 +429,7 @@ mut reason-drops-background "REASON" -e 's/Re-issue the same call with run_in_ba
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON SUBPOLL" -e '2i\
+mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL WAITER" -e '2i\
 exit 0'
 # 13. no push allowance: the pipeline's required foreground push is denied.
 mut drop-push "PUSH" -e '/and (is_push | not)/d'
@@ -330,6 +453,28 @@ mut drop-poll-reason "SUBPOLL" -e 's/^POLL="\${T##\* }"$/POLL=0/'
 mut loopend-word "SUBPOLL" -e 's/(?!" + loopend + ")/(?!\\\\bdone\\\\b)/'
 # 23. the loop end without the redirect characters: `done>out; sleep 5` reads as a poll.
 mut loopend-no-redirect "AGENT" -e 's/done(\[ \\t;&|)<>\\n\]|\$)/done([ \\t;\&|)\\n]|$)/'
+# 24. m-amp: the waiter's redirect alternative stops consuming the `&` of `2>&1`/`>&2`, so that
+#     `&` reads as the lone one and `wfd x 2>&1` is denied.
+mut m-amp "WAITERNEAR" -e 's/(?>\[<>\]+)(?:&\[0-9-\]\*|(?!&))/(?>[<>]+)/'
+# 25. m-scope: Deny A moved behind the timeout and agent_id scope, so a waiter with no timeout, or
+#     from a subagent, rides the gates that exempted exactly the calls that carried this shape.
+mut m-scope "SCOPE" -e 's/and (\$cmd | safetest(wfdbg)) then "DENY A"/and ($cmd | safetest(wfdbg)) and (.tool_input.timeout | type) == "number" and (.agent_id \/\/ "") == "" then "DENY A"/'
+# 26. m-append: the redirect write drops `>>`, so an append onto the snapshot is not seen.
+mut m-append "SNAPWRITE" -e 's/\[0-9\]\*>>?\[|\]?/[0-9]*>(?!>)[|]?/'
+# 27. m-read: Deny B made fail-closed on any mention of the snapshot, so a read is refused.
+mut m-read "SNAPREAD" -e 's/ and (\$cmd | snapwrite) then "DENY B"/ then "DENY B"/'
+# 28. m-noatomic: the redirect run loses its atomic group, so a waiter segment of 1000 `>` that
+#     ends in `;` exhausts the retry limit and, caught, hides the LATER waiter's lone `&`.
+mut m-noatomic "REGEXLIMIT" -e 's/|(?>\[<>\]+)(?:&/|[<>]+(?:\&/'
+# 29. m-blanktail: the tail's blank run may start after a blank, so a 30000-blank run followed by
+#     no `&` re-scans quadratically and the later waiter is missed.
+mut m-blanktail "REGEXLIMIT" -e 's/)\*?(?<!\[ \\t\])\[ \\t\]\*(?:/)*?[ \\t]*(?:/'
+# 30. m-notry: the shape tests lose their catch, so a regex error is a jq error and the call fails open.
+mut m-notry "REGEXLIMIT" -e 's/def safetest(\$re): try test(\$re) catch (if (tostring | test("retry-limit")) then false else error end);/def safetest($re): test($re);/'
+# 31. m-badre: a compile error injected into wfdbg. The narrowed catch rethrows it, the jq pass fails
+# and the hook prints its fail-open message and allows: WAITER, SCOPE, REGEXLIMIT (no deny) and FAILOPEN (printed error)
+# both go red. The OLD broad catch with the same injection would print nothing and redden the no-deny arms (WAITER, SCOPE, REGEXLIMIT) but never FAILOPEN.
+mut m-badre "FAILOPEN REGEXLIMIT SCOPE WAITER" -e 's/wait-for-deliverable\\\\\.sh/&(/'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \

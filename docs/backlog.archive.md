@@ -38477,3 +38477,21 @@ Owed: the UNWRITTEN refusal looks the cited file up in the ledger and names the 
 No PC id: graph has not filed it.
 
 verify: sh bash core/fixtures/remediator-shard-join/receipt-bl803.sh
+## BL-805 — a lead can start a `wait-for-deliverable.sh` beat with a shell `&`, which leaves an untracked waiter nothing reaps or reports
+
+**LANDED (v0.947.0, verified ec35c5e5e).**
+
+**DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 29, 03:31 EDT 2026-10-26). Just before 07:29:08Z, graph's s320 lead started a beat as `wait-for-deliverable.sh … &` inside a foreground Bash call instead of with `run_in_background: true`. In its own words: "That last call backgrounded the beat with `&` instead of the proper `run_in_background` flag, so it won't notify me." It re-armed a proper beat (`b7ura551y`) and left the stray running to its own timeout. No outcome was affected, but nothing tracked or reaped the stray, and a lead that did NOT notice would have waited on a beat that can never wake it.
+
+Core states the flag (`core/skills/ai-dlc/SKILL.md:1024`, `:1033`: "`run_in_background: true`"). `core/hooks/ai-dlc-foreground-budget.sh` already parses a single `&` (its header, `:190`, "single `&` counts too") but only to police a foreground budget, so this shape is not refused.
+
+**Closed (batch 243).** Deny A in `core/hooks/ai-dlc-foreground-budget.sh` refuses a Bash call that runs `wait-for-deliverable.sh` as a command word in a segment ended by a lone `&` (not `&&`, `&>`, `|&`, nor the `&` of `2>&1`/`>&2`), for every caller and whatever the call's timeout, `agent_id` or `run_in_background`. The matcher is `def wfdbg` at `:216`, the verdict (`then "DENY A"`) at `:247`, the early-branch handling and reason text (`'DENY A') deny`) at `:279-285`, and the header section (`# DENY A, A BACKGROUNDED WAITER`) at `:56-79`. The reason tells the lead to re-issue the same command without the `&` and with `run_in_background: true`. The `&` is refused under `run_in_background: true` too, because that remedy is always available and one waiter per call is the convention.
+
+Measurement 0a, driving the shipped hook. Over every line under `core/` and `templates/` (`core/fixtures` excluded) that names the waiter there are 148 lines and the hook denies 0. Over graph's transcripts, 7,280 Bash calls name the waiter and 23 distinct commands are denied, every one a real lone-`&` waiter; the false-positive set is empty. An independent scan for a lone `&` on a line naming the script, with quoted strings and redirection `&`s removed, found 25: the 23 plus two documented misses.
+
+**Known non-coverage, stated so the close does not read as total.** Deny A refused 23 of the 25 graph lone-`&` waiters and does NOT refuse the other 2: `bash -c 'wfd x &'` (the `&` is inside a quoted string) and a waiter called through a variable, `$w x &`. Both are wrappers around the subject, whose shape is the lone `&`, so the close stands; the hook header records them as known misses (`core/hooks/ai-dlc-foreground-budget.sh:69-70`, "Known misses"; `:71-79` with the measurement, "Measured on graph's transcripts").
+
+The receipt (`core/fixtures/foreground-budget-deny/receipt-bl805.sh`, a tracked driver script, because an inline one-liner classifies UNSCORABLE and fails R2) drives the shipped hook with a real graph shape (`wait-for-deliverable.sh … >/dev/null 2>&1 & echo armed`) and requires a deny whose reason names `run_in_background: true`, then requires the same command joined with `;` instead of `&` to be allowed. Scored under `set -uo pipefail` on scratch copies: the fix 0; base `bd0be5e51` (no deny) 1; the lone-`&` test widened to also match `2>&1` 1 (the allow seed catches it); the deny gated behind a declared timeout 1; and the `./scripts/ai-dlc/wait-for-deliverable.sh x &` spelling 0.
+
+verify: sh bash core/fixtures/foreground-budget-deny/receipt-bl805.sh
+
