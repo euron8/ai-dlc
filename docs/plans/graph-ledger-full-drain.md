@@ -93,15 +93,17 @@ session was messaged.
   - When each review pass finds one more spelling, replace the oracle: BL-799's cd carry is a closed list (`cat wc
     head cut nl comm sha256sum`), and a listed command a review breaks comes OFF the list, with no new round.
   - A conflict resolution that authors no prose (0 removed, added lines byte-identical) is mechanical, not a hand unit.
-- **Backlog.** Filed this batch: BL-802 through BL-806. Live at close: 13; archive 780. **The next free id is BL-807.**
-  Open entries filed this batch: BL-804, BL-805 and BL-806, all DEFECTs from the graph watch. BL-785 (batch 240) is
-  still open.
+- **Backlog.** Filed this batch: BL-802 through BL-807. Live at close: 14; archive 780. **The next free id is BL-808.**
+  Open entries filed this batch: BL-804 through BL-807, all DEFECTs from the graph watch. BL-807 was filed after the
+  close: graph's stories-serial lane join refused a round in which no lane wrote, and graph's lead hand-assembled the
+  record, a case outside BL-802's fix. BL-785 (batch 240) is still open.
 - **Watch verdicts** (ai-dlc-fa, read only).
   - BL-772/775 HOLDS on graph s320 stories: all 4 parts, and every party, elicitation and adversarial seat and repair
     set read so far, carry exactly one `--mark`-written completion line whose sha recomputes, with 0 `rows=`.
   - BL-774 has NOT fired: no s320 smoke ran during the batch.
   - Batch 241's owed line-537 edit to graph's `carry-over-backlog.md` was applied at `a1308c4fa`.
-  - The join refusal BL-802 fixes hit graph twice (architecture party and elicitation lanes) and never on stories.
+  - The join refusal BL-802 fixes hit graph twice, on the architecture party and elicitation lanes. The same emitter
+    fired a third time, on stories, for a different cause (no lane wrote the subject), filed as BL-807.
   - The watch also produced BL-803 (in 0.945.0), BL-804, BL-805 and BL-806.
   - ai-dlc-fa watches into batch 243 and is not closable while BL-774 has not fired.
 - **Not built, with reasons**, each as its entry says: BL-538, BL-695 (a graph measurement), BL-583, BL-584, BL-616,
@@ -1025,7 +1027,8 @@ given at batch 90.
 
    - Your FIRST tool calls are action 0's `ListAgents` and then, in ONE parallel block, action 0's
      roll-call messages and these `Agent` spawns:
-     a **sweep hand** (`sonnet`, findings as text) that runs the derive block verbatim and
+     a **sweep hand** (`sonnet`, findings as text) that runs the derive block verbatim, one
+     script per fence with its output labelled (never one concatenated script), and
      returns the counts, the unfiled list with filing dates, and every control's value; and a
      **consumer-history hand** (`sonnet`) that reads the READ-ONLY consumer for the state the
      sweep cannot see — unpushed branches ahead of `main`, the porcelain set, the stamp. Run
@@ -1619,8 +1622,11 @@ given at batch 90.
      "$W" origin/main`, then in `$W` read ONLY the five live sections `## RESUME HERE` names,
      in the order it names them, with no memory of this session. If any sentence needs this
      session's context to make sense, it is not resumable; fix it and go back to action 6.
-   - **Run `### Derive the state; do not trust the numbers below` verbatim from `$W`** and
-     compare every figure to the block's claims. A mismatch is a stop, not a note.
+   - **Run `### Derive the state; do not trust the numbers below` verbatim from `$W`**, one
+     script per fence with its output labelled, and compare every figure to the block's claims.
+     A mismatch is a stop, not a note. Batch 242's 6b hand concatenated the fences and read the
+     PC-citing INSTRUMENT count as the worklist; re-derive a reported mismatch figure by figure
+     before acting on it.
    - **Assert action 1 names no shipped work — counting RELEASE commits only.** For every
      `PC-` id action 1 offers as NEXT work:
      `git log -F --grep='<id>' --format=%H origin/main` must be EMPTY. For the id the block says

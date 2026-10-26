@@ -506,3 +506,15 @@ Owed: a check, not an instruction, because the instruction to take times from `d
 
 verify: manual
 
+
+## BL-807 — the lane join refuses a round in which no lane wrote the subject, so a lead hand-assembles a record of no-edit lanes
+
+**DEFECT.** Filed after the batch-242 close from the graph watch (ai-dlc-fa, poll 33, 04:15 EDT 2026-10-26), verified read-only by the lead. In graph s320, at 08:06:35Z, `join-remediator-shards.sh --sprint 320 --artifact stories-serial --pass 1 --artifact-path _bmad-output/planning-artifacts/s320 --since 2026-10-26T07:52:21Z --until 2026-10-26T08:06:32Z` exited 2 with `REFUSED: the ledger records no dispatched write under _bmad-output/planning-artifacts/s320 in [...]; disjointness is unproven`. That is the empty-`ROWS` refusal at `core/scripts/join-remediator-shards.sh:2471` on `97d41f5d1`. All 10 lanes were no-edit: only lanes 4 and 7 carry non-`n/a` `edit:` lines, both marked `(escalated)` to the fan-in. Graph's `.artifact-writes.jsonl` for that window holds 0 non-shard rows under `s320`, against 59 shard rows as the control. Graph's lead then hand-assembled `s320/stories-serial-repair-p1.md` from the 10 lane parts, under the header `HAND-ASSEMBLED from 10 lane parts by the lead` and a disclosure.
+
+This is NOT BL-802's shape, and 0.942.0 does not fix it. BL-802 records a write to a document OUTSIDE the state dir; here the document is inside the state dir, and no lane wrote anything. A round with zero subject writes is trivially disjoint, but the join can only prove disjointness from ledger rows, so it refuses the one round that needs no proof. It is the third hand-assembled serial record in graph s320; the other two are BL-802's architecture instances.
+
+A finding about graph's record, not an instruction: the disclosure calls this "the filed candidate for a no-subject-write lane round (not refiled here; retro to add the instance)". No such candidate exists. `no-subject` reads 0, and any `PC-` id containing NO-EDIT, NO-SUBJECT, NO-WRITE or ZERO-WRITE reads 0, on graph's sprint branch and its HEAD, with `PC-S320-JOIN-REMEDIATOR` reading 1 as the control.
+
+Owed: the join accepts a round where every lane part's `edit:` lines are `n/a` or `(escalated)`, and the ledger holds no subject write in the window. It emits a joined record whose header says so, rather than refusing. The acceptance must key on the lane parts' own fields AND the empty ledger together, so that a lane that wrote and failed to ledger its write (BL-802's class) still refuses. Fixture: a no-edit round joins, a round with one unledgered `edit:` still refuses, and a mutant that accepts on the empty ledger alone is killed.
+
+verify: manual
