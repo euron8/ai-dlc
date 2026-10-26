@@ -1016,8 +1016,13 @@ item. `LANE-EDGES: UNASSESSED` means the worklist did not run clean and every fi
 The join also prints `LANE-ARTIFACT: <lane artifact> --pass <M>`, the lane round's name derived
 from round one's record name; copy LANE-ARTIFACT, never infer it from `--artifact` or `--subject`
 (the subject party round's is `requirements-party-serial --pass 1`, not `requirements-serial`,
-which names the subject pass-1 round's lane record). Below, `<lane artifact>` and `<M>` are that
-line's two values.
+which names the subject pass-1 round's lane record).
+Beside it the round-one join prints `LANE-ARTIFACT-PATH: <path>`, the lane join's `--artifact-path`
+spelled as the write ledger spells it: the slot `<state basename>/planning-artifacts/s<N>` after a
+files round, the assembled document after a sections round (project-relative when it lies outside the
+state dir, `<state basename>/...` when inside it), the state basename after a subject round. Copy
+LANE-ARTIFACT-PATH, never infer it from the slot, the state dir or the document's location. Below,
+`<lane artifact>`, `<M>` and `<path>` are those lines' values.
 Dispatch ONE serial remediator per lane, in parallel, each brief carrying its `LANE:` line, its
 `LANE-ITEM:` lines and every `ESCALATED:` line verbatim, and the line `shard: none (authoring-chain)`
 (Rule 28 exception 3: it reads the joined record the shards produced; commentary goes after the
@@ -1028,9 +1033,7 @@ files; the part opens with its own
 before equal to the bytes round one's join left, so Check 24 arm J2 chains the lanes between the
 join and the fan-in. Beat-join the lanes with `--complete`
 and run the same join over them, files mode, `--artifact <lane artifact> --pass <M>
---artifact-path <path>` (`<path>` the slot `_bmad-output/planning-artifacts/s<N>` after a files
-round, the state dir `_bmad-output` after a sections or subject round, whose assembled files lie
-outside the slot), so a file two lanes wrote, or one no lane cites, refuses exactly as in round
+--artifact-path <path>` (`<path>` copied from `LANE-ARTIFACT-PATH:`), so a file two lanes wrote, or one no lane cites, refuses exactly as in round
 one; it writes `s<N>/<lane artifact>-repair-p<M>.md` and prints no `LANE:` line. Then dispatch
 ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line and every `ESCALATED:` line the
 lane join printed, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`

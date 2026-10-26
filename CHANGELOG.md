@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.942.0] - 2026-10-25
+
+Batch 242, lead ai-dlc-b4, release c1-pcs320. It closes BL-802 and BL-553, files BL-802, and closes `PC-S320-JOIN-REMEDIATOR-SHARDS-REFUSES-A-LANE-WHOSE-ONLY-FILE-IS-UNDER-DOCS`. NET: entries closed 2 minus filed 1 = 1. The NET is 1 because BL-802 is filed and closed in this same release and BL-553 is closed by operator ruling. Engine code: `core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/scripts/join-remediator-shards.sh`. Rulebook changes: `core/skills/ai-dlc/steps/_gate-procedures.md`. Schema: `core/schemas/pipeline-state-paths.json` (a reason string only). Fixture changes: `core/fixtures/gate-remediation-deny/` (`run.sh`, `inputs.decl`, `tools.decl`) and `core/fixtures/remediator-shard-join/` (`run.sh`, `lib.sh`, new `receipt-bl802.sh`). Packaging: none. Backlog: `docs/backlog.md` (the BL-802 entry and the BL-553 ruling).
+
+Bootstrapping: the hook and the join are live from step 3 of the pull that delivers them, because steps 1-2 run the consumer's old engine.
+
+### BL-802 — the write ledger records a sections round's document outside the state dir, and the lane join no longer refuses a lane whose only file lies there; filed and closed here
+
+- The consumer's lane join refused two serial-repair rounds at the REFUSED line (`join-remediator-shards.sh:2448`): the architecture party round and the architecture elicitation round. Both records were hand-assembled on operator approval. The control, a lane whose document lies inside the state dir, joined with the same `--artifact-path`.
+- The defect was on the ledger side. `record_artifact_write` returned 0 for every path outside `<state>/planning-artifacts/`, `<state>/specs/s<N>/` and the gate part files. A sections round's assembled document (the consumer's `docs/architecture.md`) left no row, and the join cannot tell one lane writer from two dispatched writers without one. Measured on the consumer's ledger: 12421 `artifact-write` rows, 0 outside `_bmad-output/`, and every `docs/` row (1226) a `content-seal` row.
+- The hook gains a final arm that records a dispatched Edit/Write/MultiEdit to the `document` of a sections split manifest under the state dir. A basename comparison in one awk gates the `pwd -P` forks; on the consumer's checkout a non-matching write reads 32 manifest lines and no ledger row. The directory is resolved physically (`cd -P`), so a `lnk/..` payload resolves where the kernel writes it. The path is spelled state-dir-relative inside the state dir and relative to the physical project dir otherwise, so a nested state dir spells the same. A document outside the project dir records nothing, and a document named by several manifests records one row per write.
+- The round-one join prints `LANE-ARTIFACT-PATH: <path>` beside `LANE-ARTIFACT:`, and the lane join's `--artifact-path` is COPIED from it, never inferred. `DOC_REL` and the ledger spelling derive from the shared `root_rel`, and the record's `- artifact:` line is unchanged byte for byte. No refusal changes.
+- Scope and limits: subject-round manifests sit one level deeper and are not globbed (every subject file is in the state dir today). A forged manifest yields record-only rows that no reader selects unless an `--artifact-path` covers them. A write through a file-level symlink is not recorded.
+- Carriers corrected: the `--agent-writes` trailer and its header text, the recorder's header, `_gate-procedures.md`, and the `.artifact-writes.jsonl` reason in `pipeline-state-paths.json`.
+- Fixtures: `gate-remediation-deny` arm MD (MD1-MD9: two manifests one row, relative and symlinked-directory spellings, same-basename and other-tree near-misses, nested state dir, an in-state document outside the recorded folders, and a `lnk/..` payload into a decoy) with mutants `md-raw-root`, `md-basename`, `md-suffix`, `md-no-state-spelling` and `md-cd-logical`; `remediator-shard-join` arms LP1-LP5 (out-of-state and in-state documents in default and nested layouts JOINED with the copied `LANE-ARTIFACT-PATH`, and a second writer refused) with mutants `LPm1` and `LPm4`. `remediator-shard-join/lib.sh` asserts the new trailer byte for byte. Receipt: `core/fixtures/remediator-shard-join/receipt-bl802.sh`.
+
+### BL-553 — part (b) closed as a dead premise by operator ruling 2026-10-25; the entry is closed
+
+- Part (b), the target-containment refusal, is not buildable as specified: the spawn ledger has 14 of 6,317 rows with a deliverable field, so the dispatch join the refusal would key on has almost nothing to join against, and a generous reconstruction still refuses about 190 legitimate `--since`-only beats.
+- Part (b) was the only part keeping the entry open, so the ruling closes it. Docs only: no code, fixture or schema changed for this entry.
+
 ## [0.941.0] - 2026-10-23
 
 Batch 241, lead ai-dlc-58, release r9 (B7). It closes BL-800, files BL-800, and closes no `PC-` id. NET: entries closed 1 minus filed 1 = 0. The NET is 0 because BL-800 is filed and closed in this same release, and BL-685 stays open by design, on `verify: manual`, the default flip and the A2b mutant; the default stays OFF. Engine code: `core/skills/ai-dlc-update/reconcile/emit-report.sh` only. Fixture changes: `core/fixtures/reconcile-emit-report/` (`run.sh`, `receipt-round9.sh`). Rulebook changes: none. Packaging: none. Backlog: `docs/backlog.md` (the BL-800 entry and the BL-685 progress bullet).

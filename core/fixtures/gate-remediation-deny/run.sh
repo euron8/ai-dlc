@@ -1678,6 +1678,140 @@ fi
 rm -rf "$W"
 
 # =============================================================================
+# ARM MD — A SECTIONS ROUND'S DOCUMENT (BL-802). A dispatched agent's write to the `document` a sections
+# split manifest under THIS state dir names records ONE artifact-write row, spelled project-relative
+# outside the state dir and `<state basename>/...` inside it. Every manifest is written by the REAL
+# splitter, `partition-document.sh --split`, never by hand. Each cell drives its own agent id, so a cell's
+# count is its own. The world, per state layout (x = the state dir's parent below the project, empty by default):
+#   <x>docs/design-notes.md     split TWICE (a party and an elicitation repair dir): two manifests, one document
+#   <x>other/design-notes.md    the same basename in another directory, named by no manifest
+#   wt/<x>docs/design-notes.md  the same relative path in another tree inside the project (BL-596's shape)
+#   <state>/notes/handoff.md    a document INSIDE the state dir but outside planning-artifacts/, specs/s<N>/
+#                               and the gate part files: the only input that enters the state-spelling branch
+#   lnk -> <x>docs              a directory symlink, so one payload spells the document non-physically
+# The workspace itself sits under TMPDIR (`/var/...` or `/tmp`, both links to `/private/...`), and the
+# manifest records the physical path, so every absolute payload below is a non-physical spelling too.
+# =============================================================================
+PARTITION="$(pick "$HERE/../../scripts/partition-document.sh" \
+                  "$HERE/../../../scripts/ai-dlc/partition-document.sh")"
+[ -n "$PARTITION" ] || { echo "FIXTURE ERROR: cannot locate partition-document.sh; arm MD seeds its manifests with the real splitter" >&2; exit 2; }
+md_doc() { printf '# %s\n\n## Goals\nThe first goal, in one line of prose.\nThe second goal, in one line of prose.\n\n## Scope\nThe first scope item, in one line of prose.\nThe second scope item, in one line of prose.\n\n## Risks\nThe first risk, in one line of prose.\nThe second risk, in one line of prose.\n' "$1"; }
+md_world() { # <state rel> -> sets MD_W (bare call, never in $( ): a FIXTURE ERROR must stop the run)
+  local s="$1" x="" w pa
+  case "$s" in */*) x="${s%/*}/" ;; esac
+  MD_W="$(mktemp -d "${TMPDIR:-/tmp}/grd-md.XXXXXX")" || { echo "FIXTURE ERROR: arm MD could not create a workspace" >&2; exit 2; }
+  w="$MD_W"; pa="$w/$s/planning-artifacts/s5/shards"
+  mkdir -p "$w/$s/notes" "$w/${x}docs" "$w/${x}other" "$w/wt/${x}docs" "$pa" || { echo "FIXTURE ERROR: arm MD mkdir failed" >&2; exit 2; }
+  printf '# Pipeline Snapshot\n' > "$w/$s/pipeline-snapshot.md"
+  md_doc "Design notes" > "$w/${x}docs/design-notes.md"
+  cp "$w/${x}docs/design-notes.md" "$w/${x}other/design-notes.md"
+  cp "$w/${x}docs/design-notes.md" "$w/wt/${x}docs/design-notes.md"
+  md_doc "Handoff" > "$w/$s/notes/handoff.md"
+  bash "$PARTITION" --split "$w/${x}docs/design-notes.md" "$pa/design-notes-party-repair-p1" >/dev/null 2>&1 \
+    && bash "$PARTITION" --split "$w/${x}docs/design-notes.md" "$pa/design-notes-elicitation-repair-p1" >/dev/null 2>&1 \
+    && bash "$PARTITION" --split "$w/$s/notes/handoff.md" "$pa/handoff-repair-p1" >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: arm MD: partition-document.sh --split failed; no manifest exists and every MD cell would read as recording nothing" >&2; exit 2; }
+  ln -s "$w/${x}docs" "$w/lnk" || { echo "FIXTURE ERROR: arm MD could not create the directory symlink" >&2; exit 2; }
+  # MD9's decoy: lnkup -> else/a, so `lnkup/..` is `else` to the kernel and the project root to the text,
+  # and else/docs/design-notes.md is a document no manifest names.
+  mkdir -p "$w/else/a" "$w/else/docs" && cp "$w/${x}docs/design-notes.md" "$w/else/docs/design-notes.md" \
+    && ln -s "$w/else/a" "$w/lnkup" || { echo "FIXTURE ERROR: arm MD could not build MD9's decoy" >&2; exit 2; }
+  MD_UP="$(cd -P "$w/lnkup/.." 2>/dev/null && pwd -P)"; MD_ELSE="$(cd -P "$w/else" 2>/dev/null && pwd -P)"
+  MD_PROJ="$(cd -P "$w" 2>/dev/null && pwd -P)"
+  # Two manifests name the document, by its physical path: the precondition of the one-row cell.
+  MD_NMAN="$(awk -F'\t' -v d="$(cd -P "$w/${x}docs" && pwd -P)/design-notes.md" '$1 == "document" && $2 == d { n++ } END { print n + 0 }' "$pa"/*/sections/.manifest)"
+}
+md_cell() { # <ledger> <agent> -> "<rows>:<paths, space-joined>"
+  [ -f "$1" ] || { printf '0:'; return; }
+  printf '%s:%s' "$(jq -n --arg a "$2" '[inputs | select(.kind == "artifact-write" and .agent_id == $a)] | length' "$1" 2>/dev/null || printf ERR)" \
+    "$(jq -r --arg a "$2" 'select(.kind == "artifact-write" and .agent_id == $a) | .path' "$1" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+}
+md_run() { # [hook] -> MD1..MD8, MD_NMAN_D, MD_NMAN_N; two fresh worlds per run, so no hook variant reads another's rows
+  local h="${1:-$HOOK}" L
+  md_world _bmad-output; MD_NMAN_D="$MD_NMAN"
+  L="$MD_W/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md1abs "" "$h" >/dev/null
+  drive "$MD_W" Edit "docs/design-notes.md" md2rel "" "$h" "" "$MD_W" >/dev/null
+  drive "$MD_W" Edit "$MD_W/lnk/design-notes.md" md3lnk "" "$h" >/dev/null
+  drive "$MD_W" Edit "$MD_W/other/design-notes.md" md4near "" "$h" >/dev/null
+  drive "$MD_W" Edit "$MD_W/wt/docs/design-notes.md" md5tree "" "$h" >/dev/null
+  drive "$MD_W" Write "$MD_W/_bmad-output/notes/handoff.md" md6gap "" "$h" >/dev/null
+  drive "$MD_W" Edit "$MD_W/lnkup/../docs/design-notes.md" md9up "" "$h" >/dev/null
+  drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md9ctl "" "$h" >/dev/null
+  MD1="$(md_cell "$L" md1abs)"; MD2="$(md_cell "$L" md2rel)"; MD3="$(md_cell "$L" md3lnk)"
+  MD4="$(md_cell "$L" md4near)"; MD5="$(md_cell "$L" md5tree)"; MD6="$(md_cell "$L" md6gap)"
+  MD9="$(md_cell "$L" md9up)"; MD9C="$(md_cell "$L" md9ctl)"; MD_UP_D="$MD_UP"; MD_ELSE_D="$MD_ELSE"; MD_PROJ_D="$MD_PROJ"
+  rm -rf "$MD_W"
+  md_world x/_bmad-output; MD_NMAN_N="$MD_NMAN"
+  L="$MD_W/x/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+  AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" Edit "$MD_W/x/docs/design-notes.md" md7nest "" "$h" >/dev/null
+  AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" MultiEdit "$MD_W/x/_bmad-output/notes/handoff.md" md8gapn "" "$h" >/dev/null
+  MD7="$(md_cell "$L" md7nest)"; MD8="$(md_cell "$L" md8gapn)"
+  rm -rf "$MD_W"
+}
+MD1_W="1:docs/design-notes.md"; MD4_W="0:"; MD5_W="0:"; MD6_W="1:_bmad-output/notes/handoff.md"
+MD7_W="1:x/docs/design-notes.md"; MD8_W="1:_bmad-output/notes/handoff.md"; MD9_W="0:"
+md_run "$HOOK"
+[ "$MD_NMAN_D" = 2 ] && [ "$MD_NMAN_N" = 2 ] || bad "MD-pre: FIXTURE BROKEN — the splitter wrote $MD_NMAN_D / $MD_NMAN_N manifests naming the document (want 2 / 2)"
+# MD9 discriminates a physical from a textual `..` only where the two differ: the kernel must resolve
+# lnkup/.. to else/, never to the project root. Without that the cell reads 0: under either resolution.
+[ -n "$MD_UP_D" ] && [ "$MD_UP_D" = "$MD_ELSE_D" ] && [ "$MD_UP_D" != "$MD_PROJ_D" ] \
+  && ok "MD9-pre: the kernel resolves lnkup/.. to the decoy's parent ($MD_UP_D), not the project root" \
+  || bad "MD9-pre: FIXTURE BROKEN — lnkup/.. resolved to '$MD_UP_D' (want '$MD_ELSE_D', not '$MD_PROJ_D'); MD9 cannot discriminate"
+[ "$MD1" = "$MD1_W" ] && ok "MD1: one absolute write to a document TWO split manifests name -> exactly ONE row, project-relative ($MD1)" \
+  || bad "MD1: the sections document recorded '$MD1' (want '$MD1_W')"
+[ "$MD2" = "$MD1_W" ] && ok "MD2: the same document by a RELATIVE payload path -> ONE row, the same spelling" \
+  || bad "MD2: the relative spelling recorded '$MD2' (want '$MD1_W')"
+[ "$MD3" = "$MD1_W" ] && ok "MD3: the same document through a directory symlink -> ONE row, the same spelling (the directory is resolved physically)" \
+  || bad "MD3: the symlinked spelling recorded '$MD3' (want '$MD1_W')"
+[ "$MD4" = "$MD4_W" ] && ok "MD4: the same BASENAME in another directory, named by no manifest -> NO row (MD1 is its twin)" \
+  || bad "MD4: a same-basename near-miss recorded '$MD4'"
+[ "$MD5" = "$MD5_W" ] && ok "MD5: the same RELATIVE path in another tree inside the project (BL-596) -> NO row" \
+  || bad "MD5: the other-tree near-miss recorded '$MD5'"
+[ "$MD6" = "$MD6_W" ] && ok "MD6: a manifest's document INSIDE the state dir outside planning-artifacts/ -> ONE row in the state spelling ($MD6)" \
+  || bad "MD6: the in-state document recorded '$MD6' (want '$MD6_W')"
+[ "$MD7" = "$MD7_W" ] && ok "MD7: AI_DLC_STATE_DIR=x/_bmad-output, the document at x/docs/ -> ONE row, project-relative ($MD7), never relative to the state dir's parent" \
+  || bad "MD7: the nested-layout document recorded '$MD7' (want '$MD7_W')"
+[ "$MD8" = "$MD8_W" ] && ok "MD8: nested, a document inside the state dir outside planning-artifacts/ -> the state-spelling branch: '$MD8', not x/_bmad-output/..." \
+  || bad "MD8: the nested in-state document recorded '$MD8' (want '$MD8_W')"
+[ "$MD9" = "$MD9_W" ] && ok "MD9: a payload <project>/lnkup/../docs/design-notes.md, which the kernel writes to else/docs/, -> NO row" \
+  || bad "MD9: the lnkup/.. payload recorded '$MD9' (the kernel writes the decoy else/docs/design-notes.md)"
+[ "$MD9C" = "$MD1_W" ] && ok "MD9-ctl: the same run's direct <project>/docs/design-notes.md write -> ONE row ($MD9C)" \
+  || bad "MD9-ctl: the direct write recorded '$MD9C' (want '$MD1_W')"
+# MD's mutants, each a copy guarded by cmp -s and bash -n in mut(), each killing its own cell while a named
+# control cell holds. md-raw-root: the project dir replaced by the state dir's parent (`_raw_root`), which is the
+# project dir in the default layout, so only MD7 separates them. md-basename: the full comparison dropped, so a
+# basename hit records. md-suffix: the comparison on the last two path components, which MD4 cannot see and MD5
+# can. md-no-state-spelling: the state-dir case deleted, which in the default layout spells the same string.
+if mut md-raw-root 's@_mdr_pp="\$(cd -P "\$PROJECT_DIR" @_mdr_pp="$(cd -P "${LOG_DIR%/*}" @'; then
+  md_run "$MW/md-raw-root.sh"
+  [ "$MD7" != "$MD7_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m2 spelled relative to _raw_root: KILLED by [MD7] (recorded '$MD7'), and MD1 is UNCHANGED" \
+    || bad "MD-m2: MD7='$MD7' MD1='$MD1' (want MD7 moved off '$MD7_W', MD1 '$MD1_W')"
+fi
+if mut md-basename 's@\[ "\$_mdr_l" = "\$_mdr_abs" \] && _mdr_hit=1@_mdr_hit=1@'; then
+  md_run "$MW/md-basename.sh"
+  [ "$MD4" != "$MD4_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m3 basename-only match: KILLED by [MD4] (recorded '$MD4'), and MD1 is UNCHANGED" \
+    || bad "MD-m3: MD4='$MD4' MD1='$MD1' (want MD4 a row, MD1 '$MD1_W')"
+fi
+if mut md-suffix 's@\[ "\$_mdr_l" = "\$_mdr_abs" \] && _mdr_hit=1@[ "${_mdr_l#"${_mdr_l%/*/*}"/}" = "${_mdr_abs#"${_mdr_abs%/*/*}"/}" ] \&\& _mdr_hit=1@'; then
+  md_run "$MW/md-suffix.sh"
+  [ "$MD5" != "$MD5_W" ] && [ "$MD4" = "$MD4_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m3b dir/basename suffix match: KILLED by [MD5] (recorded '$MD5'), and MD4 and MD1 are UNCHANGED" \
+    || bad "MD-m3b: MD5='$MD5' MD4='$MD4' MD1='$MD1' (want MD5 a row, MD4 none, MD1 '$MD1_W')"
+fi
+if mut md-no-state-spelling '/^    "\$_mdr_sp"\/\*) _mdr_rel=/d'; then
+  md_run "$MW/md-no-state-spelling.sh"
+  [ "$MD8" != "$MD8_W" ] && [ "$MD6" = "$MD6_W" ] && ok "MD-mgap the state-spelling case deleted: KILLED by [MD8] (recorded '$MD8'), and MD6 is UNCHANGED" \
+    || bad "MD-mgap: MD8='$MD8' MD6='$MD6' (want MD8 moved off '$MD8_W', MD6 '$MD6_W')"
+fi
+# md-cd-logical: the written file's directory resolved by a logical `cd`, which folds lnkup/.. textually
+# into the project root, so the decoy write records the manifest's document. Only manifest_doc_rel's line.
+if mut md-cd-logical 's@_mdr_d="\$(cd -P @_mdr_d="$(cd @'; then
+  md_run "$MW/md-cd-logical.sh"
+  [ "$MD9" != "$MD9_W" ] && [ "$MD9C" = "$MD1_W" ] && ok "MD-mcd logical cd: KILLED by [MD9] (recorded '$MD9'), and MD9-ctl is UNCHANGED" \
+    || bad "MD-mcd: MD9='$MD9' MD9C='$MD9C' (want MD9 a row, MD9C '$MD1_W')"
+fi
+
+# =============================================================================
 # ARM 3b — THE LEAD'S PRODUCT EDIT, with NO gate directory at all. Every DENY cell has an
 # ALLOW twin one property apart, and every conjunct has a mutant that kills its own cell
 # while a cell it must not reach stays put.

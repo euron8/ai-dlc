@@ -1656,13 +1656,13 @@ p_agentwrites() {
   drive "$w" Edit "$w/$REL/c-partial.md" "$AG4" "" "" 2026-10-15T19:40:00Z
   drive "$w" Edit "$w/$REL/$S31" "$AG4" "" "" 2026-10-15T19:40:01Z
   drive "$w" Edit "$w/$REL/f-post-join.md" "$AG2" "" "" 2026-10-15T19:40:02Z
-  want="$(printf '%s\n%s\n%s' "$REL/c-partial.md" "$REL/$S31" 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/')"
+  want="$(printf '%s\n%s\n%s' "$REL/c-partial.md" "$REL/$S31" 'not covered: Bash writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files and sections-split documents')"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" > "$JO" 2>&1; RC=$?
   got="$(cat "$JO")"
   [ "$RC" -eq 0 ] && [ "$got" = "$want" ] || return 1
   # An agent with no rows prints the trailer alone, rc 0.
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes a00000000000000000 > "$JO" 2>&1; rc2=$?
-  [ "$rc2" -eq 0 ] && [ "$(cat "$JO")" = 'not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/' ] || return 1
+  [ "$rc2" -eq 0 ] && [ "$(cat "$JO")" = 'not covered: Bash writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files and sections-split documents' ] || return 1
   # Another flag is refused.
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --agent-writes "$AG4" --sprint 1 > "$JO" 2>&1; rc3=$?
   [ "$rc3" -eq 2 ] && has "$JO" "REFUSED:" || return 1
@@ -1883,3 +1883,65 @@ p_lanename() { # the subject party join prints the lane round's name derived fro
   sj_party "$1" "architecture-dev-1.md#F-1" || return 1
   [ "$RC" -eq 0 ] && has "$JO" "LANE-ARTIFACT: requirements-party-serial --pass 1" && ! has "$JO" "LANE-ARTIFACT: requirements-serial "
 }
+
+# ---- THE LANE PATH (BL-802). A sections round's document is edited IN PLACE by its lane round, and the
+# lane join can attest one writer only from a ledger row. p_lc drives the whole chain with the REAL
+# splitter, the REAL hook and the REAL join: split the document, three section writers and parts, the
+# round-one --document join, then ONE dispatched agent (AG4) edits the assembled document and the
+# files-mode lane join runs with --artifact-path COPIED from the round-one LANE-ARTIFACT-PATH: line, over
+# one lane part citing that same copied path. The document name is not `architecture`, so nothing here
+# keys on the consumer's file name.
+# p_lc <hook> <join> <state rel> <doc rel> [second agent] -> LC_RC1 LC_LAP LC_N LC_NA LC_OUT, RC, $JO
+#   LC_N = AG4's rows whose path is the copied LANE-ARTIFACT-PATH; LC_NA = all of AG4's rows. With a
+#   second agent, that agent also edits the document in the window (the negative).
+p_lc() {
+  local h="$1" j="$2" s="$3" d="$4" w st sn rd i a L
+  LC_RC1=""; LC_LAP=""; LC_N=0; LC_NA=0; LC_OUT=""; RC=""
+  w="$(mktemp -d "$WORK/lc.XXXXXX")" || return 1
+  st="${d##*/}"; st="${st%.md}"; sn="${s##*/}"
+  rd="$s/planning-artifacts/s305/shards/${st}-repair-p1"
+  mkdir -p "$w/$s/planning-artifacts/s305" "$(dirname "$w/$d")" || return 1
+  printf '# Pipeline Snapshot\n' > "$w/$s/pipeline-snapshot.md"
+  { printf '# Design notes\n\n## Goals\nThe first goal, in one line of prose.\nThe second goal, in one line of prose.\n\n'
+    printf '## Scope\nThe first scope item, in one line of prose.\nThe second scope item, in one line of prose.\n\n'
+    printf '## Risks\nThe first risk, in one line of prose.\nThe second risk, in one line of prose.\n'; } > "$w/$d"
+  bash "$PARTITION" --split "$w/$d" "$w/$rd" >/dev/null 2>&1 || return 1
+  [ -f "$w/$rd/sections/3.md" ] && [ -f "$w/$rd/sections/.manifest" ] || return 1
+  for i in 1 2 3; do
+    case "$i" in 1) a="$AG1" ;; 2) a="$AG2" ;; *) a="$AG3" ;; esac
+    printf 'Repaired by the section %s remediator.\n' "$i" >> "$w/$rd/sections/$i.md"
+    HOOK="$h" AI_DLC_STATE_DIR="$s" drive "$w" Edit "$w/$rd/sections/$i.md" "$a"
+    printf -- '- **disposition:** repaired\n- **edit:** `%s/planning-artifacts/s305/shards/%s-repair-p1/sections/%s.md:2`\n%s\n- **derivation:** the section %s finding, edited in its copy\n' \
+      "$sn" "$st" "$i" "$SIB_SEC" "$i" > "$w/$rd/$i.md"
+  done
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" AI_DLC_STATE_DIR="$s" bash "$j" --document "$d" "$w/$rd" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO.r1" 2>&1
+  LC_RC1=$?
+  LC_LAP="$(sed -n 's/^LANE-ARTIFACT-PATH: //p' "$JO.r1")"
+  [ -n "$LC_LAP" ] || return 0
+  # The lane round: ONE dispatched agent edits the assembled document in place, by its absolute path.
+  printf 'The lane remediator edit.\n' >> "$w/$d"
+  HOOK="$h" AI_DLC_STATE_DIR="$s" drive "$w" Edit "$w/$d" "$AG4"
+  [ -z "${5:-}" ] || HOOK="$h" AI_DLC_STATE_DIR="$s" drive "$w" Edit "$w/$d" "$5"
+  mkdir -p "$w/$s/planning-artifacts/s305/shards/${st}-serial-repair-p1" || return 1
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:3`\n%s\n- **derivation:** n/a (no factual claim)\n' \
+    "$LC_LAP" "$SIB_INS" > "$w/$s/planning-artifacts/s305/shards/${st}-serial-repair-p1/lane-1.md"
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" AI_DLC_STATE_DIR="$s" bash "$j" --sprint 305 --artifact "${st}-serial" --pass 1 \
+    --artifact-path "$LC_LAP" --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+  RC=$?
+  LC_OUT="$w/$s/planning-artifacts/s305/${st}-serial-repair-p1.md"
+  L="$w/$s/planning-artifacts/.artifact-writes.jsonl"
+  if [ -f "$L" ]; then
+    LC_N="$(jq -n --arg p "$LC_LAP" --arg a "$AG4" '[inputs | select(.kind == "artifact-write" and .agent_id == $a and .path == $p)] | length' "$L" 2>/dev/null)" || LC_N=ERR
+    LC_NA="$(jq -n --arg a "$AG4" '[inputs | select(.kind == "artifact-write" and .agent_id == $a)] | length' "$L" 2>/dev/null)" || LC_NA=ERR
+  fi
+  return 0
+}
+lc_joined() { # <the LANE-ARTIFACT-PATH the ledger spells> -- round one joined and printed it, the lane join
+  # copied it and JOINED one part / one writer, its record written, AG4 holding exactly ONE row, at that path
+  [ "$LC_RC1" = 0 ] && [ "$LC_LAP" = "$1" ] && [ "$RC" = 0 ] && has "$JO" "(1 parts, 1 writers)" \
+    && [ -f "$LC_OUT" ] && [ "$LC_N" = 1 ] && [ "$LC_NA" = 1 ]
+}
+lc_why() { printf 'r1 rc=%s LANE-ARTIFACT-PATH=%s lane rc=%s rows-at-path=%s rows=%s: %s' "$LC_RC1" "$LC_LAP" "$RC" "$LC_N" "$LC_NA" "$(grep -m 2 -E 'REFUSED|JOINED' "$JO" 2>/dev/null | tr '\n' ' ')"; }

@@ -30,3 +30,6 @@ touch
 tr
 wc
 tail
+# arm MD: partition-document.sh hashes the document it splits, and the symlinked-directory cell links one.
+shasum
+ln

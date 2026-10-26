@@ -35,7 +35,8 @@
 #       nothing. It prints, sorted and unique, each `path` that ONE agent wrote according to the
 #       write ledger (rows `kind: "artifact-write"`, `agent_id` equal to <agent_id>, and `ts` at or
 #       after --since when given), then one trailer line stating what the ledger cannot see: Bash
-#       writes, and writes outside planning-artifacts/ and specs/s<N>/. A handoff runs it for each
+#       writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files
+#       and the documents sections split manifests name. A handoff runs it for each
 #       stopped agent, with the `TaskStop` task_id as <agent_id>, so the agent's partial edits are
 #       read from the ledger and never inferred from `git status`. An agent with no rows, or a
 #       missing ledger, prints the trailer alone and exits 0; a malformed id exits 2.
@@ -520,7 +521,7 @@ if [ "$AGENTMODE" = 1 ]; then
       || die "the write ledger ${LEDGER} does not parse as JSON lines"
     [ -z "$_aw" ] || printf '%s\n' "$_aw"
   fi
-  echo "not covered: Bash writes, and writes outside planning-artifacts/ and specs/s<N>/"
+  echo "not covered: Bash writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files and sections-split documents"
   exit 0
 fi
 
@@ -1743,6 +1744,23 @@ phys() { # <path> -> physical absolute path of an existing file or dir, rc 1 if 
   d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
   b="$(basename "$1")"; printf '%s/%s\n' "$d" "$b"
 }
+# root_rel <physical abs path> -> the path relative to the PHYSICAL project root, or as given when it
+# lies outside it. The record's `- artifact:` line and the ledger spelling below share it.
+root_rel() {
+  local r
+  r="$(cd "$JR_ROOT" 2>/dev/null && pwd -P)" || r=""
+  if [ -n "$r" ]; then case "$1" in "$r"/*) printf '%s\n' "${1#"$r"/}"; return 0 ;; esac; fi
+  printf '%s\n' "$1"
+}
+# ledger_rel <physical abs path> -> the write ledger's spelling of that file: `<state-dir-name>/...`
+# inside the state dir, else root_rel. The recorder's manifest arm in
+# `ai-dlc-gate-remediation-guard.sh` (manifest_doc_rel) spells a sections document by the same rule.
+ledger_rel() {
+  local s
+  s="$(cd "$STATE" 2>/dev/null && pwd -P)" || s=""
+  if [ -n "$s" ]; then case "$1" in "$s"/*) printf '%s/%s\n' "${STATE##*/}" "${1#"$s"/}"; return 0 ;; esac; fi
+  root_rel "$1"
+}
 SUBJ_SET=""; SUBJ_SECTIONED=""; SUBJ_OUTSIDE=""
 if [ "$SUBJMODE" = 1 ]; then
   SUBJ_REC="${SHARD_DIR}/.subject"
@@ -1963,6 +1981,11 @@ lane_report() {
   if _la="$(lane_name "${OUT##*/}")"; then
     _lan="${_la%%	*}"; _lap="${_la##*	}"
     echo "LANE-ARTIFACT: ${_lan} --pass ${_lap}"
+    # THE LANE JOIN'S --artifact-path, in the ledger's spelling, so the lead copies it: the slot after
+    # a files round, the document after a sections round, the state dir after a subject round.
+    if [ "$SUBJMODE" = 1 ]; then echo "LANE-ARTIFACT-PATH: ${STATE_NAME}"
+    elif [ "$DOCMODE" = 1 ]; then echo "LANE-ARTIFACT-PATH: $(ledger_rel "$DOC_ABS")"
+    else echo "LANE-ARTIFACT-PATH: ${SHARD_REL%/shards}"; fi
   fi
   # THE NODE MAP: every written file in the ledger's spelling -> the file a serial remediator edits.
   if [ "$SUBJMODE" = 1 ]; then
@@ -2607,9 +2630,7 @@ elif [ "$DOCMODE" = 1 ]; then
   }
   if command -v shasum >/dev/null 2>&1; then DOC_AFTER="$(shasum -a 256 "$DOC_ABS" | cut -d' ' -f1)"
   else DOC_AFTER="$(sha256sum "$DOC_ABS" | cut -d' ' -f1)"; fi
-  _rootp="$(cd "$JR_ROOT" 2>/dev/null && pwd -P)" || _rootp=""
-  DOC_REL="$DOC_ABS"
-  [ -n "$_rootp" ] && case "$DOC_ABS" in "$_rootp"/*) DOC_REL="${DOC_ABS#"$_rootp"/}" ;; esac
+  DOC_REL="$(root_rel "$DOC_ABS")"
 fi
 
 # --- write the single record every reader globs for.

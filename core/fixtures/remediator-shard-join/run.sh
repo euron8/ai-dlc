@@ -637,6 +637,70 @@ else
     bad "LN9: a failing esc_cites was not refused (rc=$RC): $(head -3 "$JO")"
   fi
 fi
+
+# ---- the lane path (BL-802): the round-one join prints LANE-ARTIFACT-PATH, the lane join copies it, and the
+# ledger holds exactly one row for the lane writer's in-place edit of the assembled document. p_lc in lib.sh.
+LP_OUT=docs/design-notes.md; LP_COE=_bmad-output/planning-artifacts/s305/coe.md
+p_lc "$HOOK" "$JOIN" _bmad-output "$LP_OUT"
+lc_joined "$LP_OUT" && ok "LP1: a sections document outside the state dir ($LP_OUT): LANE-ARTIFACT-PATH prints it project-relative, the lane join given that path JOINS 1 part / 1 writer, ONE row at that path" \
+  || bad "LP1: the out-of-state lane did not join on the copied path ($(lc_why))"
+p_lc "$HOOK" "$JOIN" x/_bmad-output "x/$LP_OUT"
+lc_joined "x/$LP_OUT" && ok "LP2: the same under AI_DLC_STATE_DIR=x/_bmad-output: the row and LANE-ARTIFACT-PATH are x/$LP_OUT (project-relative, not relative to the state dir's parent) and JOINED" \
+  || bad "LP2: the nested out-of-state lane did not join ($(lc_why))"
+p_lc "$HOOK" "$JOIN" _bmad-output "$LP_COE"
+lc_joined "$LP_COE" && ok "LP3: an in-state (coe) document: LANE-ARTIFACT-PATH prints the state spelling $LP_COE, ONE row, JOINED" \
+  || bad "LP3: the in-state lane did not join ($(lc_why))"
+p_lc "$HOOK" "$JOIN" x/_bmad-output "x/$LP_COE"
+lc_joined "$LP_COE" && ok "LP4: the in-state (coe) document under x/_bmad-output: LANE-ARTIFACT-PATH prints $LP_COE (the state basename, not x/...), ONE row, JOINED" \
+  || bad "LP4: the nested in-state lane did not join ($(lc_why))"
+p_lc "$HOOK" "$JOIN" _bmad-output "$LP_OUT" "$AG2"
+if [ "$LC_LAP" = "$LP_OUT" ] && [ "$RC" = 2 ] && has "$JO" "$LP_OUT was written by more than one agent in the window" && [ ! -e "$LC_OUT" ]; then
+  ok "LP5: LP1 one property apart, a second dispatched agent also edits the document in the window -> the lane join REFUSES (exit 2) naming it, no record"
+else
+  bad "LP5: two writers of the lane's document were not refused ($(lc_why))"
+fi
+# LPm1: the recorder's manifest arm removed (the `*)` returns 0 as before the fix) -> LP1 dies with the consumer's
+# REFUSED line; LP3 (the in-state document, recorded by the planning-artifacts arm) is the control that must not move.
+# LPm4: LANE-ARTIFACT-PATH printed by root_rel (project-relative) for a sections document -> LP4 dies; LP3 and LP1
+# (where the two spellings agree) must not move. Each mutant is a copy in a copy of its program's directory, guarded by cmp -s.
+LPM="$(mktemp -d "$WORK/lpm.XXXXXX")" || exit 2
+mkdir -p "$LPM/h" "$LPM/j" || exit 2
+sed 's@^    \*) manifest_doc_rel "\$1" || return 0; _raw_rel="\$_mdr_rel" ;;$@    *) return 0 ;;@' "$HOOK" > "$LPM/h/ai-dlc-gate-remediation-guard.sh" \
+  || { echo "FIXTURE BROKEN: LPm1 could not write the mutated hook" >&2; exit 2; }
+if cmp -s "$HOOK" "$LPM/h/ai-dlc-gate-remediation-guard.sh"; then
+  bad "LPm1: FIXTURE STALE -- the manifest-arm mutation matched nothing in $HOOK; re-anchor it, never relax the assertion"
+elif ! bash -n "$LPM/h/ai-dlc-gate-remediation-guard.sh" 2>/dev/null; then
+  bad "LPm1: the mutated hook does not parse"
+else
+  p_lc "$LPM/h/ai-dlc-gate-remediation-guard.sh" "$JOIN" _bmad-output "$LP_OUT"
+  if lc_joined "$LP_OUT"; then bad "LPm1: SURVIVED -- LP1 holds against a hook with no manifest arm"
+  elif [ "$RC" = 2 ] && has "$JO" "the ledger records no dispatched write under $LP_OUT in" && [ "$LC_NA" = 0 ]; then
+    p_lc "$LPM/h/ai-dlc-gate-remediation-guard.sh" "$JOIN" _bmad-output "$LP_COE"
+    lc_joined "$LP_COE" && ok "LPm1 the manifest arm removed: KILLED by [LP1] with the consumer's 'records no dispatched write' REFUSED line, and LP3 is UNCHANGED" \
+      || bad "LPm1: the in-state control LP3 also moved under the mutant ($(lc_why)) -- the arms are entangled"
+  else
+    bad "LPm1: LP1 failed for another reason than the missing row ($(lc_why))"
+  fi
+fi
+cp "$(dirname "$JOIN")"/*.sh "$LPM/j/" || { echo "FIXTURE BROKEN: LPm4 could not copy the join's sibling scripts" >&2; exit 2; }
+sed 's@^    elif \[ "\$DOCMODE" = 1 \]; then echo "LANE-ARTIFACT-PATH: \$(ledger_rel "\$DOC_ABS")"$@    elif [ "$DOCMODE" = 1 ]; then echo "LANE-ARTIFACT-PATH: $(root_rel "$DOC_ABS")"@' "$JOIN" > "$LPM/j/join-remediator-shards.sh" \
+  || { echo "FIXTURE BROKEN: LPm4 could not write the mutated join" >&2; exit 2; }
+if cmp -s "$JOIN" "$LPM/j/join-remediator-shards.sh"; then
+  bad "LPm4: FIXTURE STALE -- the LANE-ARTIFACT-PATH mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif [ ! -f "$LPM/j/partition-document.sh" ] || ! bash -n "$LPM/j/join-remediator-shards.sh" 2>/dev/null; then
+  bad "LPm4: the splitter is absent from the copy or the mutated join does not parse"
+else
+  p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" x/_bmad-output "x/$LP_COE"
+  if lc_joined "$LP_COE"; then bad "LPm4: SURVIVED -- LP4 holds against a join printing the project-relative spelling for an in-state document"
+  elif [ "$LC_LAP" = "x/$LP_COE" ]; then
+    p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" _bmad-output "$LP_COE"; _c3=0; lc_joined "$LP_COE" && _c3=1
+    p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" _bmad-output "$LP_OUT"; _c1=0; lc_joined "$LP_OUT" && _c1=1
+    [ "$_c3$_c1" = 11 ] && ok "LPm4 LANE-ARTIFACT-PATH by root_rel: KILLED by [LP4] (it printed x/$LP_COE), and LP3 and LP1 are UNCHANGED" \
+      || bad "LPm4: a control moved under the mutant (LP3=$_c3 LP1=$_c1, want 1 1)"
+  else
+    bad "LPm4: LP4 failed for another reason than the spelling ($(lc_why))"
+  fi
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2
