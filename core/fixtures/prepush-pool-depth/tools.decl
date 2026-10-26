@@ -13,8 +13,10 @@ find
 git
 grep
 kill
+ln
 ls
 mkdir
+mkfifo
 mktemp
 mv
 ps

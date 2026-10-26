@@ -363,6 +363,209 @@ else
   else bad "NEST CONTROL: open chain started [$N_OPEN], want [stub-a stub-b stub-c ]"; fi
 fi
 
+# ------------------------------------------------- the nested root is watched (BL-691) ------
+# A unit that drives the pool again makes its nested pool root at /tmp/fx.XXXXXX, outside its own watched
+# root, so before the fix an outer unit whose only progress is its nested pool's scratch was refused. The
+# fix makes the watched root discoverable (`.pool-unit`), the nested pool registers its root there
+# (`.pool-nested`, with `.pool-parent` naming the marker dir), and the watcher walks validated entries.
+# FORCED, not waited for: the outer pool's window is AI_DLC_POOL_STALL=5, exported before the block is
+# sourced. Stub A sends its output to /dev/null (so the outer log never grows), scrubs AI_DLC_* (so the
+# inner pool runs its default window), heartbeats into its own TMPDIR only until stub B has started, then
+# waits on an inner pool over a tree holding stub B. Stub B writes one byte a second under ITS OWN TMPDIR
+# for PN_SECS=16 seconds, more than three windows. So the nested scratch is the outer unit's only progress.
+#   grow   -- fix: ok. base (the three edits reverted): REFUSED. The pair must DIFFER in this run.
+#   silent -- B writes nothing for the same time: REFUSED under the fix (a registered root is not progress).
+#   hlink  -- A lists a symlink (spelled bare and with a trailing slash) to a dir it grows, whose
+#             .pool-parent names A's own root: REFUSED under the fix.
+#   hout   -- A lists the OUTER pool root itself and grows a file in it: REFUSED (no .pool-parent there).
+# Every drive runs in its own pair of worlds, concurrently; the inner root a killed inner pool leaves is
+# removed by the drive only after its basename matches fx.?????? literally.
+cat > "$WORK/pn.stub-a" <<'FX'
+#!/usr/bin/env bash
+for _v in $(env | sed -n "s/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$_v"; done
+exec > /dev/null 2>&1
+g=""
+case "$PN_MODE" in
+  grow|silent)
+    ( cd "$PN_DIR/b" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 && . "$PN_BLK" && run_fixtures ) &
+    s=$SECONDS
+    while [ ! -s "$PN_DIR/btmp" ] && [ $((SECONDS - s)) -lt 60 ]; do printf x >> "$TMPDIR/hb"; sleep 1; done
+    wait
+    exit 0 ;;
+  hlink)
+    me="$(cd "$TMPDIR" && pwd -P)"
+    mkdir -p "$PN_DIR/hgrow" "$PN_DIR/hl"
+    printf '%s\n' "$me" > "$PN_DIR/hgrow/.pool-parent"
+    ln -s "$PN_DIR/hgrow" "$PN_DIR/hl/fx.hostil"
+    printf '%s\n%s\n' "$PN_DIR/hl/fx.hostil" "$PN_DIR/hl/fx.hostil/" > "$TMPDIR/.pool-nested"
+    g="$PN_DIR/hgrow/g" ;;
+  hout)
+    printf '%s\n' "${TMPDIR%/*}" > "$TMPDIR/.pool-nested"
+    g="${TMPDIR%/*}/.hgrow" ;;
+  fifo)
+    # a listed fx.?????? directory whose .pool-parent is a FIFO; then no progress at all until the
+    # fixture writes $PN_DIR/release (or a 90s cap), so only a refusal can end this unit early
+    mkdir -p "$PN_DIR/hf/fx.fifo00" && mkfifo "$PN_DIR/hf/fx.fifo00/.pool-parent"
+    printf '%s\n' "$PN_DIR/hf/fx.fifo00" > "$TMPDIR/.pool-nested"
+    s=$SECONDS
+    while [ ! -e "$PN_DIR/release" ] && [ $((SECONDS - s)) -lt 90 ]; do sleep 1; done
+    exit 0 ;;
+esac
+i=0; while [ "$i" -lt "$PN_SECS" ]; do printf x >> "$g"; sleep 1; i=$((i + 1)); done
+exit 0
+FX
+cat > "$WORK/pn.stub-b" <<'FX'
+#!/usr/bin/env bash
+printf '%s\n' "$TMPDIR" > "$PN_DIR/btmp"
+# silent is ONE sleep, so the inner pool's own bookkeeping (its watcher's pid record) stays still too
+[ "$PN_MODE" = grow ] || { sleep "$PN_SECS"; exit 0; }
+i=0; while [ "$i" -lt "$PN_SECS" ]; do printf x >> "$TMPDIR/grow"; sleep 1; i=$((i + 1)); done
+exit 0
+FX
+PN_PIDS=""
+pn_drive() { # pn_drive <block> <mode> <tag>: backgrounded; writes ok, REFUSED or OTHER to $WORK/pn.<tag>.v
+  local blk="$1" mode="$2" tag="$3" d="$WORK/pn.$3" fxr w
+  fxr="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$blk" | sort -u)"
+  mkdir -p "$d/a/$fxr/stub-a" "$d/b/$fxr/stub-b"
+  cp "$WORK/pn.stub-a" "$d/a/$fxr/stub-a/run.sh"; cp "$WORK/pn.stub-b" "$d/b/$fxr/stub-b/run.sh"
+  for w in a b; do
+    ( cd "$d/$w" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+  done
+  ( cd "$d/a" && export AI_DLC_POOL_STALL=5 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PN_BLK="$blk" PN_MODE="$mode" PN_DIR="$d" PN_SECS=16
+    . "$blk" >/dev/null 2>&1; run_fixtures > "$d/out" 2>&1
+    if grep -q '^   ok    stub-a$' "$d/out"; then v=ok
+    elif grep -q '^   REFUSED  stub-a  ' "$d/out"; then v=REFUSED
+    else v=OTHER; fi
+    printf '%s\n' "$v" > "$WORK/pn.$tag.v"
+    if [ -s "$d/btmp" ]; then
+      p="$(cat "$d/btmp")"; p="${p%/*}"
+      case "${p##*/}" in fx.??????) [ -d "$p" ] && rm -rf -- "$p" ;; esac
+    fi ) > /dev/null 2>&1 &
+  case "$mode" in fifo) PF_PIDS="$PF_PIDS $!" ;; *) PN_PIDS="$PN_PIDS $!" ;; esac
+}
+PF_PIDS=""; PF_TAGS=""
+pn_v() { local v; v="$(cat "$WORK/pn.$1.v" 2>/dev/null)"; printf '%s' "${v:-none}"; }
+# THE NEWEST ROOT IS INSIDE THE WATCHER'S READ WINDOW. The watcher reads the first 16 lines of
+# `.pool-nested`, so a registration that appended put a newer live root out of sight once 16 older live
+# roots were listed. ord_drive seeds 17 live directories straight into an owned `.t.abcde` marker
+# directory's list (no inner pools), runs ONE pool over a single no-op stub under that marker, and writes
+# to $WORK/ord.<tag>.v the line number of the one entry that is not a seed ("none" if there is not exactly
+# one, so a registration that wrote nothing cannot pass). Backgrounded beside the pn drives.
+ord_drive() { # ord_drive <block> <tag>
+  local blk="$1" tag="$2" d="$WORK/ord.$2" fxr i m
+  fxr="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$blk" | sort -u)"
+  mkdir -p "$d/w/$fxr/s" "$d/u/.t.abcde" && : > "$d/u/.t.abcde/.pool-unit" || return 1
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$d/w/$fxr/s/run.sh"
+  ( cd "$d/w" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+  m="$(cd "$d/u/.t.abcde" && pwd -P)"
+  i=0; while [ "$i" -lt 17 ]; do mkdir -p "$d/old/$i"; printf '%s\n' "$d/old/$i" >> "$d/seed"; i=$((i + 1)); done
+  cp "$d/seed" "$m/.pool-nested"
+  ( cd "$d/w" && export TMPDIR="$m" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1
+    . "$blk" >/dev/null 2>&1; run_fixtures >/dev/null 2>&1
+    awk 'NR == FNR { s[$0] = 1; next } !($0 in s) { n++; at = FNR } END { print (n == 1 ? at : "none") }' "$d/seed" "$m/.pool-nested" > "$WORK/ord.$tag.v" ) > /dev/null 2>&1 &
+  PN_PIDS="$PN_PIDS $!"
+}
+ord_v() { local v; v="$(cat "$WORK/ord.$1.v" 2>/dev/null)"; printf '%s' "${v:-none}"; }
+# pn_mut <name> <sed-expr> <source block> -> sets PN_M to the mutant copy, or returns 1 (reported) on a
+# sed failure or a no-op. Never called inside $( ): `bad` must count in this shell.
+pn_mut() {
+  PN_M="$WORK/pn.mut.$1.sh"
+  sed "$2" "$3" > "$PN_M" || { bad "MUTANT $1: sed did not apply"; return 1; }
+  if cmp -s "$3" "$PN_M"; then bad "MUTANT $1: the edit matched nothing, so it is not a mutant"; return 1; fi
+}
+# the base block: all three edits reverted (marker write, registration, watcher read), plus their locals
+PN_BASE_EX='/^      : > "\$wr\/.pool-unit"; wp=/d
+/^  # A NESTED POOL REGISTERS ITS ROOT/,/^  done$/d
+/^          set --; nn=0$/,/^          done < "\$wr\/.pool-nested"$/d
+s/ \${1+"\$@"} -type f -ls/ -type f -ls/
+s/ fx_m fx_p fx_t fx_e$//
+s/^      local lg="\$1" rc wr wp$/      local lg="$1" rc wr/'
+PN_HN=0
+for HOOK in $HOOKS; do
+  PN_HN=$((PN_HN + 1))
+  PB="$WORK/pn.block$PN_HN.sh"; sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK" > "$PB"
+  pn_mut "base$PN_HN" "$PN_BASE_EX" "$PB" || continue; PBASE="$PN_M"
+  # the base must carry none of the three subjects, or it is not the base
+  PN_CODE="$(grep -v '^ *#' "$PBASE")"
+  if grep -q 'pool-unit\|pool-nested\|pool-parent' <<< "$PN_CODE"; then bad "[$PN_HN] the base block still names a subject"; continue; fi
+  bash -n "$PBASE" || { bad "[$PN_HN] the base block does not parse"; continue; }
+  pn_drive "$PB" grow "fix$PN_HN"; pn_drive "$PBASE" grow "base$PN_HN"
+  pn_drive "$PB" silent "silent$PN_HN"; pn_drive "$PB" hlink "hlink$PN_HN"; pn_drive "$PB" hout "hout$PN_HN"
+  pn_drive "$PB" fifo "fifo$PN_HN"; PF_TAGS="$PF_TAGS fifo$PN_HN"
+  ord_drive "$PB" "ord$PN_HN"
+  if [ "$PN_HN" -eq 1 ]; then
+    # the registration as a plain append: the pruned rewrite (two lines) becomes one `>>` of the new root
+    pn_mut appendreg '/^            { printf .%s\\n. "\$fx_p"$/{N;s/.*/            printf "%s\\n" "$fx_p" >> "$fx_m\/.pool-nested"; rm -f "$fx_t"/;}' "$PB" \
+      && ord_drive "$PN_M" m-appendreg
+    # the pre-fix watcher line: the regular-file check on .pool-parent dropped, so the read opens the FIFO
+    pn_mut nofifoguard 's/ \[ -f "\$e\/.pool-parent" \] && \[ ! -L "\$e\/.pool-parent" \] &&//' "$PB" \
+      && { pn_drive "$PN_M" fifo m-nofifoguard; PF_TAGS="$PF_TAGS m-nofifoguard"; }
+    # mutants of the first resolved hook only, as above: I66 holds the twin to the same program
+    pn_mut nomark 's/^      : > "\$wr\/.pool-unit"; /      /' "$PB" && pn_drive "$PN_M" grow m-nomark
+    pn_mut noread 's/ \${1+"\$@"} -type f -ls/ -type f -ls/' "$PB" && pn_drive "$PN_M" grow m-noread
+    pn_mut novalidate 's/case "\${e##\*\/}" in fx\.??????) .* ;; esac$/set -- ${1+"$@"} "$e"/' "$PB" \
+      && { pn_drive "$PN_M" hlink m-novalidate-hlink; pn_drive "$PN_M" hout m-novalidate-hout; }
+  fi
+done
+for p in $PN_PIDS; do wait "$p"; done
+# THE FIFO ARM IS BOUNDED BY ITS OWN DEADLINE, never by the drive: a watcher that opens the FIFO blocks
+# forever, so its unit can only end when its stub is released. Wait on the CONDITION (every fixed hook's
+# verdict file present) up to PF_DEADLINE seconds from launch, snapshot every fifo verdict AT that moment,
+# and only then release the stubs (each drive's own $d/release), so a hung watcher's unit exits, its
+# worker kills the watcher, and every drive pid recorded in PF_PIDS is reaped by `wait`. The mutant's
+# verdict is read from the snapshot: under it the watcher never polls again, so nothing is recorded in time.
+PF_DEADLINE=40; pf_s=$SECONDS
+while [ $((SECONDS - pf_s)) -lt "$PF_DEADLINE" ]; do
+  pf_all=1
+  for t in $PF_TAGS; do case "$t" in fifo*) [ -s "$WORK/pn.$t.v" ] || pf_all=0 ;; esac; done
+  [ "$pf_all" = 1 ] && break
+  sleep 1
+done
+# the mutant gets the same window past its twins' verdicts that they needed from launch, at least 10s
+pf_el=$((SECONDS - pf_s)); [ "$pf_el" -lt 10 ] && pf_el=10
+pf_s2=$SECONDS; while [ ! -s "$WORK/pn.m-nofifoguard.v" ] && [ $((SECONDS - pf_s2)) -lt "$pf_el" ]; do sleep 1; done
+for t in $PF_TAGS; do printf '%s\n' "$(pn_v "$t")" > "$WORK/pf.$t.at"; : > "$WORK/pn.$t/release"; done
+for p in $PF_PIDS; do wait "$p"; done
+PN_HN=0
+for HOOK in $HOOKS; do
+  PN_HN=$((PN_HN + 1)); T="nested-root:${HOOK#"$ROOT"/}"
+  f="$(pn_v "fix$PN_HN")"; b="$(pn_v "base$PN_HN")"
+  if [ "$f" = ok ] && [ "$b" = REFUSED ]; then
+    ok "[$T] an outer unit whose only progress is its nested pool's scratch is ok under the fix and REFUSED on the base block, in one run"
+  else bad "[$T] forced nested arm: fix=$f base=$b, want fix=ok base=REFUSED"; fi
+  v="$(pn_v "silent$PN_HN")"
+  [ "$v" = REFUSED ] && ok "[$T] near-miss: a registered nested root that writes nothing is REFUSED" \
+                     || bad "[$T] near-miss: a silent registered nested root read $v, want REFUSED"
+  v="$(pn_v "hlink$PN_HN")"
+  [ "$v" = REFUSED ] && ok "[$T] a listed symlink to a growing dir is never walked: REFUSED" \
+                     || bad "[$T] a listed symlink to a growing dir read $v, want REFUSED"
+  v="$(pn_v "hout$PN_HN")"
+  [ "$v" = REFUSED ] && ok "[$T] a listed path naming the outer pool root itself is never walked: REFUSED" \
+                     || bad "[$T] a listed outer pool root read $v, want REFUSED"
+  v="$(ord_v "ord$PN_HN")"
+  case "$v" in [1-9]|1[0-6]) ok "[$T] with 17 live roots already listed, the new root registers at line $v, inside the watcher's 16-line window" ;;
+    *) bad "[$T] with 17 live roots already listed, the new root registered at line $v, want 1-16 (the watcher reads only the first 16)" ;; esac
+  v="$(cat "$WORK/pf.fifo$PN_HN.at" 2>/dev/null)"
+  [ "$v" = REFUSED ] && ok "[$T] a listed entry whose .pool-parent is a FIFO is never read: the silent unit is REFUSED inside ${PF_DEADLINE}s" \
+                     || bad "[$T] a listed FIFO .pool-parent: the unit read ${v:-none} at the deadline, want REFUSED (a watcher blocked on the FIFO never refuses)"
+done
+v="$(ord_v m-appendreg)"
+[ "$v" = 18 ] && ok "MUTANT m-appendreg killed: a plain >> append registers the new root at line 18, outside the watcher's window" \
+              || bad "MUTANT m-appendreg: the appended root registered at line $v, want 18"
+v="$(cat "$WORK/pf.m-nofifoguard.at" 2>/dev/null)"
+[ "$v" = none ] && ok "MUTANT m-nofifoguard killed: with the regular-file check dropped the watcher blocks on the FIFO and no verdict is recorded by the deadline" \
+                || bad "MUTANT m-nofifoguard: the FIFO arm read ${v:-unset} at the deadline, want none (no verdict)"
+v="$(pn_v m-nofifoguard)"
+[ "$v" = ok ] && ok "MUTANT m-nofifoguard control: released after the deadline, the same unit then reaches ok -- the drive ran and was only blocked" \
+              || bad "MUTANT m-nofifoguard control: after release the drive read $v, want ok"
+for m in m-nomark m-noread; do
+  v="$(pn_v "$m")"
+  [ "$v" = REFUSED ] && ok "MUTANT $m killed: the forced nested arm is REFUSED" || bad "MUTANT $m: the forced nested arm read $v, want REFUSED"
+done
+v="$(pn_v m-novalidate-hlink)"; w="$(pn_v m-novalidate-hout)"
+[ "$v" = ok ] && [ "$w" = ok ] && ok "MUTANT m-novalidate killed: with the list unvalidated both hostile entries count as progress (ok, ok)" \
+                              || bad "MUTANT m-novalidate: hostile entries read hlink=$v hout=$w, want ok ok"
+
 echo
 if [ "$fails" -gt 0 ]; then echo "FAIL: $fails of $asserts assertions wrong."; exit 1; fi
 echo "PASS: all $asserts assertions correct."

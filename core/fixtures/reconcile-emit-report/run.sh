@@ -50,7 +50,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SHARDS="a b c d"
 PHASES_a="seeded b230 moved shadow b1b2 wg pcache"
 PHASES_b="vworlds1 vworlds2"
-PHASES_c="step3b sb"
+PHASES_c="step3b sb pcvmut"
 PHASES_d="pcvlat"
 GROUP=a
 case "${1:-}" in
@@ -3146,6 +3146,19 @@ pcv_cache_engine() {
   return 1
 }
 # pcv_shim -- the PATH shim at $PS_SHIM/bash that counts every detector launch into $PCV_COUNT.
+# pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
+# that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count. Read by
+# pcache's pcv_mk and pcvmut's pcv_lmk.
+pcv_ed() {
+  local f="$1/eng/emit-report.sh" n
+  n="$(grep -cxF -- "$3" "$f")" || n=0
+  printf '%s\n' "$n" >> "$1/anchor-count"
+  [ "$n" -eq 1 ] || return 1
+  # Anchor and text through ENVIRON, never `-v`: `-v` strips one level of escaping, so an anchor
+  # carrying a literal `\t` (M-b2's printf format) would never equal its own line.
+  PCV_EA="$3" PCV_ET="$4" awk -v m="$2" '$0 == ENVIRON["PCV_EA"] { print ENVIRON["PCV_ET"]; if (m == "replace") next } { print }' "$f" > "$f.ed" \
+    && mv -f "$f.ed" "$f"
+}
 pcv_shim() {
   mkdir -p "$PS_SHIM" || return 1
   { printf '#!%s\n' "$PCV_BASH"; printf '%s\n' 'printf "x\n" >> "$PCV_COUNT"'; printf 'exec "%s" "$@"\n' "$PCV_BASH"; } > "$PS_SHIM/bash" \
@@ -3355,6 +3368,7 @@ pcv_latarm() {
   pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; n0="$PRC"
   PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
   PCV_ENVPRE=""
+  [ "$n0" -eq 0 ] || pcv_lobs "$id" "$n0"
   if [ "$n0" -eq 0 ]; then
     pcv_x "$id" "FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees and a hit would be correct"
   elif pcv_is_miss "$n0"; then
@@ -3374,7 +3388,26 @@ pcv_latarm() {
 # written only after it. V19 (a commit of the whole tree) and V24 (a locale key field) cannot share
 # this world and keep their own pcv_latarm worlds.
 PCV_GRP_IDS="PC-V20 PC-V17 PC-V18 PC-V23 PC-V21 PC-V22 PC-V25"
-pcv_grpx() { local p; for p in $PCV_GRP_IDS; do pcv_x "$p" "$1"; done; }
+# PCV_LSCOPE (phase pcvmut, BL-795): the ONE arm a mutant of this world runs; empty runs all seven.
+# Read through `${..:-}`, never bare: phase pcvlat (shard d) never sets it, and the file is `set -u`.
+pcv_lin() {
+  [ -z "${PCV_LSCOPE:-}" ] && return 0
+  case " $PCV_LSCOPE " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+pcv_grpx() { local p; for p in $PCV_GRP_IDS; do if pcv_lin "$p"; then pcv_x "$p" "$1"; fi; done; }
+# pcv_lobs <id> <opt-out rc> -- what the cached run after the change WAS, one line in $PS_D/obs:
+# FRESH (pcv_is_miss: no hit line, the opt-out's exit, detectors launched), STALE-HIT (exit 0, the hit
+# line, no detector launched, against an opt-out render that exits non-zero: a recorded PASS answered
+# for a tree it never rendered), or OTHER. Written only after the arm's own control HIT and only when
+# the opt-out render exits non-zero, so a STALE-HIT line is a POSITIVE observation phase pcvmut scores
+# as a kill, never the absence of an ok line.
+pcv_lobs() {
+  local k=OTHER
+  if pcv_is_miss "$2"; then k=FRESH
+  elif [ "$PRC" -eq 0 ] && [ "$PHIT" -eq 1 ] && [ "$PN" -eq 0 ]; then k=STALE-HIT; fi
+  printf '%s %s rc=%s hit=%s detector-launches=%s opt-out-rc=%s\n' "$1" "$k" "$PRC" "$PHIT" "$PN" "$2" >> "$PS_D/obs"
+}
 # pcv_gctl <id> -- pcv_kctl's shape (pcache's, which shard d does not define): the restored shared
 # world HITS the one record; non-zero, with the arm's FAIL, if not.
 pcv_gctl() {
@@ -3421,6 +3454,7 @@ pcv_garm() {
          [ "$s" = "$G_DD" ] || undo="the saved bytes of the pruned dist commit did not re-write to its sha" ;;
     v25) chmod 755 "$L_C/.claude/skills/ai-dlc/extensions" ;;
   esac
+  [ -n "$undo" ] || [ "$nc" -eq 0 ] || pcv_lobs "$id" "$nc"
   if [ -n "$undo" ]; then
     vk=x; vt="FIXTURE BROKEN: the undo did not restore the world: $undo"
   elif [ "$nc" -eq 0 ]; then
@@ -3478,13 +3512,13 @@ pcv_latgrp() {
   if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
     pcv_grpx "control: the shared world's first --verify did not render and record ($(pcv_why))"; return 0
   fi
-  pcv_garm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
-  pcv_garm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
-  pcv_garm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/r9-mode.sh going 644 to 755, a bit preclassify's mode_at_theirs reads through the read log,"
-  pcv_garm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
-  pcv_garm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
-  pcv_garm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
-  pcv_garm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
+  pcv_lin PC-V20 && pcv_garm PC-V20 v20 "a --verify recorded with the FULL base sha and re-run with the SHORT spelling of the same commit"
+  pcv_lin PC-V17 && pcv_garm PC-V17 v17 "an UNTRACKED extension whose name carries a double quote, rewritten between the calls (its hooks: line dropped),"
+  pcv_lin PC-V18 && pcv_garm PC-V18 v18 "an UNTRACKED scripts/ai-dlc/r9-mode.sh going 644 to 755, a bit preclassify's mode_at_theirs reads through the read log,"
+  pcv_lin PC-V23 && pcv_garm PC-V23 v23 "git config core.abbrev 20 in the dist, which re-spells an abbreviated sha the region prints,"
+  pcv_lin PC-V21 && pcv_garm PC-V21 v21 "a prune of the dangling CONSUMER commit an override's base_sha names"
+  pcv_lin PC-V22 && pcv_garm PC-V22 v22 "a prune of the dangling DIST commit an override's base_sha names"
+  pcv_lin PC-V25 && pcv_garm PC-V25 v25 "chmod 000 on .claude/skills/ai-dlc/extensions, a directory the render reads,"
   return 0
 }
 if rer_phase pcache; then
@@ -4278,7 +4312,9 @@ pcv_r9world() {
 #             the marker is in NO file under that directory and not in the record. Positive control:
 #             a GIT_* variable's marker, which the env field keys by name and value, IS there. The
 #             control is a GIT_* name rather than a derived one so that M-b4 (the derived set emptied)
-#             kills V61 alone; the arm's own mutant is M-secret.
+#             cannot take the positive control away from V62; the arm's own mutant is M-secret.
+# Each sub-arm is also gated by pcv_in on its own id, because each of M-b1, M-b3, M-b4 and M-secret is
+# scoped to its single arm (pcv_scope); the world's setup (seed, approve, recording run) runs once.
 pcv_hrv_norec() { # pcv_hrv_norec <out> -- PCV_HRV with the read recorder block removed (an older THEIRS)
   awk '/^# --- THE READ RECORDER/ { s = 1 } !s { print } /^# --- end recorder/ { s = 0 }' "$PCV_HRV" > "$1" \
     && ! cmp -s "$PCV_HRV" "$1" && ! grep -q 'HOOKREG_READS_OUT' "$1" && grep -q 'merge_candidates' "$1"
@@ -4326,7 +4362,7 @@ pcv_r9kworld() {
   # V59 (B1), first half: the ignored settings-merge.sh's extracted pattern changes. The pattern is
   # printed into the region, so the opt-out exits non-zero.
   local v59a=0
-  if pcv_kctl PC-V59; then
+  if pcv_in PC-V59 && pcv_kctl PC-V59; then
     cp "$L_C/$sm" "$PS_D/r9k-sm.keep"
     sed 's#ai-dlc-\[^/\]+#ai-dlc-[^/]*#' "$PS_D/r9k-sm.keep" > "$L_C/$sm"
     if cmp -s "$PS_D/r9k-sm.keep" "$L_C/$sm"; then pcv_x PC-V59 "FIXTURE BROKEN: the settings-merge.sh pattern edit changed nothing"
@@ -4344,7 +4380,7 @@ pcv_r9kworld() {
   # root fallback): the set takes names from validate-hook-registration.sh at THEIRS. Checked on the
   # file THEIRS ships, through a here-string (a `grep -q` fed by a pipe answers EPIPE under pipefail).
   local hv
-  if pcv_kctl PC-V61; then
+  if pcv_in PC-V61 && pcv_kctl PC-V61; then
     hv="$(grep -v '^[[:space:]]*#' "$PCV_HRV" 2>/dev/null)" || hv=""
     if ! grep -qF 'CLAUDE_PROJECT_DIR' <<< "$hv" || grep -qF 'R9FOO' <<< "$hv"; then
       pcv_x PC-V61 "FIXTURE BROKEN: no non-comment line of THEIRS' validator names CLAUDE_PROJECT_DIR (or one names R9FOO), so the derived and non-derived names are not told apart"
@@ -4369,7 +4405,7 @@ pcv_r9kworld() {
   fi
 
   # V62: the secret arm.
-  if pcv_kctl PC-V62; then
+  if pcv_in PC-V62 && pcv_kctl PC-V62; then
     td="$PS_D/r9k-secret-tmp"; kd="$PS_D/r9k-secret-rm"; mk="R9SECRET-$$-$RANDOM-MARK"; mk2="R9KEYED-$$-$RANDOM-MARK"
     mkdir -p "$td" "$kd" \
       && printf '#!/bin/sh\nfor a in "$@"; do case "$a" in "$PCV_KEEPTMP"/emit-report.??????) exit 0 ;; esac; done\nexec %s "$@"\n' "$(command -v rm)" > "$kd/rm" && chmod +x "$kd/rm"
@@ -4392,7 +4428,7 @@ pcv_r9kworld() {
 
   # V60 (B3): detached HEAD, then a shallow file, then the unborn clone.
   ok=1; why=""
-  if pcv_kctl PC-V60; then
+  if pcv_in PC-V60 && pcv_kctl PC-V60; then
     br="$(git -C "$L_C" symbolic-ref -q HEAD)"
     c="$(git -C "$L_C" -c user.email=f@f -c user.name=fixture commit-tree 'HEAD^{tree}' -p HEAD -m r9-detached 2>/dev/null)"
     git -C "$L_C" for-each-ref > "$PS_D/r9k-refs0" 2>&1; git -C "$L_C" status --porcelain > "$PS_D/r9k-st0" 2>&1
@@ -4451,7 +4487,7 @@ pcv_r9kworld() {
 
   # V59 (c), last because it moves THEIRS: the same world against a THEIRS whose validator predates
   # the recorder. The report is re-approved there so the fresh render exits 0, as the opt-out does.
-  if [ "$v59a" -eq 1 ] && pcv_kctl PC-V59; then
+  if pcv_in PC-V59 && [ "$v59a" -eq 1 ] && pcv_kctl PC-V59; then
     if ! pcv_hrv_norec "$PS_D/r9k-hrv-old.sh" || ! to="$(pcv_r9addhrv "$PS_D/r9k-hrv-old.sh")" || [ -z "$to" ] \
        || ! git -C "$L_D" update-ref refs/heads/r9-hookreg-old "$to" >/dev/null 2>&1; then
       pcv_x PC-V59 "FIXTURE BROKEN: could not derive a validator without the recorder, or commit it into a THEIRS"
@@ -4521,22 +4557,23 @@ pcv_v63world() {
 }
 
 # ---- V64..V76: B5 GITLINKS and B6 IGNORED NESTED REPOSITORIES (BL-685), the V56 shape ----
-# Three worlds, each a fresh pcv_lat. Every arm after a world's first record opens with a HIT control
+# Two worlds, each a fresh pcv_lat. Every arm after a world's first record opens with a HIT control
 # (pcv_kctl) and undoes its own change before the next arm: a byte image of .git/config and
 # .git/info/exclude is put back, a seeded directory is MOVED out (never deleted), and the record is
 # put back (pcv_kback). A refusal arm asserts a fresh render with the opt-out's exit 0, the record
 # BYTE-IDENTICAL (cmp -s), and the named cause on stderr. A positive arm asserts a fresh exit-0 render
 # that writes a NEW record, then a HIT on it.
-#   World A (pcv_b5aworld): an initialised gitlink vendor/sub carrying a nested gitlink inner.
+#   World A (pcv_b5world): an initialised gitlink vendor/sub carrying a nested gitlink inner.
 #     V64  G-record (a): records and HITS.
 #     V67  G-checkout: a commit inside the submodule, NOT staged (status v2 moves, the index does not)
 #          records and HITS; ls-files -m lists the gitlink, which er_hash_list must skip.
 #     V66  G-miss: a different submodule commit staged and committed MISSES, then re-records and HITS.
 #          NO SINGLE-SITE MUTANT KILLS V66: three fields move at once (consindex's index line, the
 #          status v2 hI field, consobjects' HEAD), so dropping any one of them still misses.
-#   World B (pcv_b5bworld): V65 G-record (b), an UNINITIALISED gitlink (an empty directory), records
-#     and HITS. No .git is on disk, so it is M-gitlink-prune's same-run control.
-#   World C (pcv_b56world): no gitlink in the index at rest.
+#     V65  G-record (b), LAST in the same world: vendor/sub is taken out of the index and its directory
+#          moved out; an UNINITIALISED gitlink (an empty directory) records and HITS. No .git is on disk
+#          (asserted), so it is M-gitlink-prune's same-run control.
+#   World B (pcv_b56world): no gitlink in the index at rest.
 #     V68  G-recurse: submodule.recurse=true refuses by name.
 #     V69  G-glob: a gitlink named `v*x` refuses by name (it cannot be a find -path operand).
 #     V76  G-root: a gitlink staged at .claude/sub (uninitialised, nothing on disk) lies under the
@@ -4586,18 +4623,18 @@ pcv_b56refuse() {
   fi
   pcv_kback
 }
-pcv_b5aworld() {
-  local s="vendor/sub" o m
+pcv_b5world() {
+  local s="vendor/sub" o m rec ids="PC-V64 PC-V65 PC-V66 PC-V67" gone="$PS_D/b5-gone" f
   PCV_ENVPRE=""
-  pcv_lat b5a || { for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
+  pcv_lat b5 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; done; return 0; }
   pcv_b56repo "$L_C/$s" && pcv_b56repo "$L_C/$s/inner" \
     && { pcv_b56g -C "$L_C/$s" add inner && pcv_b56g -C "$L_C/$s" commit -qm inner \
          && pcv_b56g -C "$L_C" add "$s" && pcv_b56g -C "$L_C" commit -qm b5a; } >/dev/null 2>&1
   case "$(git -C "$L_C" ls-files -s -- "$s" 2>/dev/null)|$(git -C "$L_C/$s" ls-files -s -- inner 2>/dev/null)" in
     160000\ *"|"160000\ *) ;;
-    *) for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: $s is not a gitlink carrying the nested gitlink inner"; done; return 0 ;;
+    *) for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: $s is not a gitlink carrying the nested gitlink inner"; done; return 0 ;;
   esac
-  pcv_lat_approve b5a || { for m in PC-V64 PC-V66 PC-V67; do pcv_x "$m" "FIXTURE BROKEN: the gitlink world rendered no region"; done; return 0; }
+  pcv_lat_approve b5 || { for m in $ids; do pcv_x "$m" "FIXTURE BROKEN: the gitlink world rendered no region"; done; return 0; }
   : > "$PS_D/krec.keep"
   pcv_b56rec PC-V64 b5a "an initialised gitlink carrying a nested submodule" \
     && pcv_v PC-V64 "an initialised gitlink carrying a nested submodule renders fresh with exit 0, records, and the next run HITS"
@@ -4622,7 +4659,7 @@ pcv_b5aworld() {
     if [ "$(git -C "$L_C" ls-files -s -- "$s" | cut -d' ' -f2)" = "$o" ]; then
       pcv_x PC-V66 "FIXTURE BROKEN: the staged submodule commit did not change"
     else
-      pcv_kstep b5am; local rec=unchanged
+      pcv_kstep b5am; rec=unchanged
       cmp -s "$L_REC" "$PS_D/krec.keep" || rec=RE-RECORDED
       if pcv_is_miss 0 && [ "$K_NC" -eq 0 ] && [ "$rec" = RE-RECORDED ]; then
         pcv_run b5am.h "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
@@ -4636,22 +4673,33 @@ pcv_b5aworld() {
       fi
     fi
   fi
-  return 0
-}
-pcv_b5bworld() {
-  PCV_ENVPRE=""
-  pcv_lat b5b || { pcv_x PC-V65 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
-  mkdir -p "$L_C/vendor/u" \
-    && { pcv_b56g -C "$L_C" update-index --add --cacheinfo "160000,$L_T,vendor/u" && pcv_b56g -C "$L_C" commit -qm b5b; } >/dev/null 2>&1
-  case "$(git -C "$L_C" ls-files -s -- vendor/u 2>/dev/null)" in
-    160000\ *) ;;
-    *) pcv_x PC-V65 "FIXTURE BROKEN: vendor/u is not a gitlink"; return 0 ;;
-  esac
-  if [ -e "$L_C/vendor/u/.git" ]; then pcv_x PC-V65 "FIXTURE BROKEN: the uninitialised gitlink has a .git on disk"; return 0; fi
-  pcv_lat_approve b5b || { pcv_x PC-V65 "FIXTURE BROKEN: the gitlink world rendered no region"; return 0; }
-  : > "$PS_D/krec.keep"
-  pcv_b56rec PC-V65 b5b "an uninitialised gitlink (an empty directory)" \
-    && pcv_v PC-V65 "an uninitialised gitlink (an empty directory, no .git) renders fresh with exit 0, records, and the next run HITS"
+  # V65 G-record (b), in the SAME world (one seed and one mirror clone for all four arms): vendor/sub leaves
+  # the index (git rm --cached) and its directory is MOVED out under $PS_D, never deleted, so no .git is on
+  # disk and V65 is M-gitlink-prune's same-run control. Then vendor/u is staged as an UNINITIALISED gitlink
+  # (an empty directory), re-approved, the record reset (world B started with none), and recorded.
+  if pcv_in PC-V65; then
+    rm -f "$L_REC"
+    if ! { mkdir -p "$gone" && pcv_b56g -C "$L_C" rm -q --cached "$s" >/dev/null 2>&1 && mv "$L_C/$s" "$gone/sub" \
+           && pcv_b56g -C "$L_C" commit -qm b5-rm-sub >/dev/null 2>&1; }; then
+      pcv_x PC-V65 "FIXTURE BROKEN: $s could not be removed from the index and moved out of the consumer"
+    else
+      mkdir -p "$L_C/vendor/u" \
+        && { pcv_b56g -C "$L_C" update-index --add --cacheinfo "160000,$L_T,vendor/u" && pcv_b56g -C "$L_C" commit -qm b5b; } >/dev/null 2>&1
+      f="$(find "$L_C" -path "$L_C/.git" -prune -o -name .git -print 2>/dev/null | sed -n 1p)"
+      case "$(git -C "$L_C" ls-files -s -- vendor/u 2>/dev/null)" in
+        160000\ *)
+          if [ -e "$L_C/vendor/u/.git" ]; then pcv_x PC-V65 "FIXTURE BROKEN: the uninitialised gitlink has a .git on disk"
+          elif [ -n "$f" ]; then pcv_x PC-V65 "FIXTURE BROKEN: a .git other than the consumer's own is on disk ($f), so V65 is not M-gitlink-prune's same-run control"
+          elif ! pcv_lat_approve b5b; then pcv_x PC-V65 "FIXTURE BROKEN: the gitlink world rendered no region"
+          else
+            : > "$PS_D/krec.keep"
+            pcv_b56rec PC-V65 b5b "an uninitialised gitlink (an empty directory)" \
+              && pcv_v PC-V65 "an uninitialised gitlink (an empty directory, no .git) renders fresh with exit 0, records, and the next run HITS"
+          fi ;;
+        *) pcv_x PC-V65 "FIXTURE BROKEN: vendor/u is not a gitlink" ;;
+      esac
+    fi
+  fi
   return 0
 }
 pcv_b56world() {
@@ -6188,8 +6236,7 @@ pcv_suite() {
   if pcv_in PC-V63; then pcv_v63world; fi
   # ---- V64..V76: B5 gitlinks and B6 ignored nested repositories (BL-685) ----
   if [ "${PCV_R11:-0}" -eq 1 ]; then
-    if pcv_in PC-V64 PC-V66 PC-V67; then pcv_b5aworld; fi
-    if pcv_in PC-V65; then pcv_b5bworld; fi
+    if pcv_in PC-V64 PC-V65 PC-V66 PC-V67; then pcv_b5world; fi
     if pcv_in PC-V68 PC-V69 PC-V70 PC-V71 PC-V72 PC-V73 PC-V74 PC-V75 PC-V76; then pcv_b56world; fi
   fi
   # ---- V77..V88: B7 untracked symlinks and the read log's L refusal (BL-685, BL-800) ----
@@ -6284,6 +6331,16 @@ pcv_failset() {
   printf '%s\n' "${out# }"
 }
 
+# pcv_harnessset <verdicts> <scope> -- the scoped ids whose FAIL text begins `control:` or `FIXTURE BROKEN`.
+# Those are the harness failing, never a mutant's kill; the scorer reports them as MUTANT HARNESS.
+pcv_harnessset() {
+  local id out=""
+  for id in $2; do
+    if grep -qE "^FAIL $id (control:|FIXTURE BROKEN)" "$1" 2>/dev/null; then out="$out $id"; fi
+  done
+  printf '%s\n' "${out# }"
+}
+
 # THE MUTANTS. Each is a COPY of the reconcile directory with one line of emit-report.sh edited by
 # awk on an exact whole-line anchor that must occur ONCE, guarded by cmp -s. Expected kill sets:
 #   M-region   the region field dropped from the key loop: a doctored region rides the record -> PC-V3
@@ -6367,18 +6424,7 @@ pcv_failset() {
 #                     shape B (V89, the base-reachable one) the record forms through docs/retro
 #                     and the change behind it is ACCEPTED while a fresh render adds a
 #                     CLOSE-CANDIDATE row                                          -> PC-V88 PC-V89
-# pcv_ed <dir> <mode> <anchor> <text> -- one whole-line edit of <dir>/eng/emit-report.sh, on an anchor
-# that must occur ONCE in the copy as it stands; each count is appended to <dir>/anchor-count.
-pcv_ed() {
-  local f="$1/eng/emit-report.sh" n
-  n="$(grep -cxF -- "$3" "$f")" || n=0
-  printf '%s\n' "$n" >> "$1/anchor-count"
-  [ "$n" -eq 1 ] || return 1
-  # Anchor and text through ENVIRON, never `-v`: `-v` strips one level of escaping, so an anchor
-  # carrying a literal `\t` (M-b2's printf format) would never equal its own line.
-  PCV_EA="$3" PCV_ET="$4" awk -v m="$2" '$0 == ENVIRON["PCV_EA"] { print ENVIRON["PCV_ET"]; if (m == "replace") next } { print }' "$f" > "$f.ed" \
-    && mv -f "$f.ed" "$f"
-}
+# pcv_ed is defined in the CACHE-ARM HELPERS block above phase pcache, which phase pcvmut also reads.
 pcv_mk() { # pcv_mk <name> -> 0 when <root>/<name>/eng/emit-report.sh is built, parses, and differs
   local d="$PCV_ROOT/$1"
   local r9ck='    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }'
@@ -6505,9 +6551,13 @@ pcv_scope() {
   case "$1" in
     M-region)  echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9" ;;
     M-direxcl) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V10 PC-V63" ;;
-    # BL-685: V59..V62 share one world, so each of their mutants runs all four, the other three its
-    # same-run control; M-b2's V55 world is its own.
-    M-b1|M-b3|M-b4|M-secret) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V59 PC-V60 PC-V61 PC-V62" ;;
+    # BL-685: V59..V62 share one world (one seed, approve and recording run); each of their mutants runs
+    # only its own arm, each arm gated by pcv_in. Its same-run control is the prefix (V1/V14 HIT on the
+    # mutant) and the arm's own pcv_kctl HIT before its change; M-b2's V55 world is its own.
+    M-b1)     echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V59" ;;
+    M-b3)     echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V60" ;;
+    M-b4)     echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V61" ;;
+    M-secret) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V62" ;;
     M-b2) echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V55" ;;
     M-exit3)   echo "PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V10" ;;
     # BL-777: all three tool arms run for each, so any a mutant must NOT kill is its same-run control.
@@ -6616,6 +6666,11 @@ else
           bad "FIXTURE BROKEN [$(pcv_bl "$_m") $_m]: scoped arms [$_nv] left no verdict, so no pcv_in group ran them and a kill there would be unearned"
           continue
         fi
+        _hs="$(pcv_harnessset "$PCV_ROOT/$_m/verdicts" "$(pcv_scope "$_m")")"
+        if [ -n "$_hs" ]; then
+          bad "MUTANT HARNESS [$(pcv_bl "$_m") $_m]: scoped arms [$_hs] failed with a control: or FIXTURE BROKEN verdict, which is the harness and never a kill"
+          continue
+        fi
         if [ "$_got" = "$_want" ]; then ok "mutant $(pcv_bl "$_m") $_m fails exactly [$_want] within its scope"
         elif [ -z "$_got" ]; then bad "MUTANT SURVIVED [$(pcv_bl "$_m") $_m]: every arm passed with the edit in place, so [$_want] cannot see it"
         else bad "MUTANT [$(pcv_bl "$_m") $_m] failed [$_got], expected exactly [$_want] -- the arms are entangled or one is vacuous"; fi ;;
@@ -6658,6 +6713,149 @@ if pcv_cache_engine "PC-V17..PC-V25"; then
   fi
 fi
 fi # end rer_phase pcvlat
+
+# --- BL-795: ENGINE-SIDE MUTANTS FOR V17..V25, phase pcvmut, shard c ---
+# One mutant per arm, each a copy of the reconcile directory with that arm's subject site of
+# emit-report.sh removed by pcv_ed (a whole-line anchor occurring once). Each runs ONLY its own arm:
+# V19 and V24 through pcv_latarm, the other seven through pcv_latgrp under PCV_LSCOPE naming that one
+# arm (the whole shared world is still seeded, approved and recorded). These tables sit beside
+# pcache's (pcv_mk, pcv_want, pcv_scope, PCV_MUTS), never inside them, and pcache's launch is not
+# touched.
+#
+# THREE-VALUED. pcv_lwant says KILL, or SURVIVE:<the key field that already covers the case>, per
+# mutant; HARNESS is never expected. The score is read off pcv_lobs's line, a POSITIVE observation:
+# KILL is a STALE-HIT (the cached run exit 0 with the hit line and no detector launched, against an
+# opt-out render of the same tree exiting non-zero), SURVIVE is FRESH (the cached run rendered with the
+# opt-out's exit). pcv_lobs writes only after the arm's own HIT control passed on the mutant, so a
+# control-red or FIXTURE BROKEN arm leaves no observation and scores HARNESS, never a kill -- which is
+# why no unmutated re-run is needed here: shard d's pcvlat is the shipping pass over the same arms. A
+# KILL where SURVIVE was declared FAILS, and so does the reverse. Which SURVIVEs stand is a ruling, so
+# the table is data: flipping a row changes one word.
+if rer_phase pcvmut; then
+pcv_setup
+# M-v25 is OWED, not scored: chmod 000 makes er_key's own walks (emit-report.sh:1952-1953, :1962-1963)
+# and er_kf_consignored refuse before V25's subject line is reached, so that input cannot discriminate
+# the mutant. It stays built (pcv_lmk) and tabled, and joins this list when a discriminating input exists.
+PCV_LMUTS="M-v17 M-v18 M-v19 M-v20 M-v21 M-v22 M-v23 M-v24"
+# pcv_lscope <name> -- the one arm the mutant runs.
+pcv_lscope() {
+  case "$1" in
+    M-v17) echo PC-V17 ;; M-v18) echo PC-V18 ;; M-v19) echo PC-V19 ;; M-v20) echo PC-V20 ;; M-v21) echo PC-V21 ;;
+    M-v22) echo PC-V22 ;; M-v23) echo PC-V23 ;; M-v24) echo PC-V24 ;; M-v25) echo PC-V25 ;;
+  esac
+}
+# pcv_lwant <name> -- KILL, or SURVIVE:<covering field>.
+pcv_lwant() {
+  case "$1" in
+    M-v17) echo "SURVIVE:read-log" ;;
+    M-v18) echo "SURVIVE:read-log" ;;
+    M-v19) echo "SURVIVE:read-log" ;;
+    M-v20) echo "KILL" ;;
+    M-v21) echo "KILL" ;;
+    M-v22) echo "KILL" ;;
+    M-v23) echo "SURVIVE:distrefs-config" ;;
+    M-v24) echo "KILL" ;;
+    M-v25) echo "OWED:input-non-discriminating" ;;
+  esac
+}
+# pcv_lmk <name> -> 0 when <root>/lmut/<name>/eng/emit-report.sh is built, parses, and differs.
+#   M-v17  conswork's hash of the untracked (and modified) NUL list removed
+#   M-v18  er_hash_list's exec token removed: every listed path prints `-`
+#   M-v19  er_cgit's forced `-c core.fileMode=true` dropped from both branches
+#   M-v20  er_kf_base without the ref as typed: only the resolved commit and core tree
+#   M-v21  consresolve's consumer-side resolution removed
+#   M-v22  consresolve's dist-side resolution removed
+#   M-v23  distrefs' auto-abbrev length line removed
+#   M-v24  er_kf_env's locale loop over no names
+#   M-v25  the unreadable-directory refusal removed
+pcv_lmk() {
+  local d="$PCV_ROOT/lmut/$1"
+  local a18="    if cr_test \"\$CONSUMER\" -x \"\$p\"; then printf 'x %s\\0' \"\$p\"; else printf -- '- %s\\0' \"\$p\"; fi"
+  local a19a='  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"'
+  local a19b='  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi'
+  local a25='  [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }'
+  mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
+  case "$1" in
+    M-v17) pcv_ed "$d" replace '  er_hash_list "$_er_tmp/key.work" || return 1' '  :' ;;
+    M-v18) pcv_ed "$d" replace "$a18" "    printf -- '- %s\\0' \"\$p\"" ;;
+    M-v19) pcv_ed "$d" replace "$a19a" "${a19a/ -c core.fileMode=true/}" && pcv_ed "$d" replace "$a19b" "${a19b/ -c core.fileMode=true/}" ;;
+    M-v20) pcv_ed "$d" replace 'er_kf_base()   { er_kf_ref "$BASE"; }' \
+             'er_kf_base()   { git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" || return 1; git -C "$DIST" rev-parse -q --verify "${BASE}:core"; }' ;;
+    M-v21) pcv_ed "$d" replace '    cr_git "$CONSUMER" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved' '    :' ;;
+    M-v22) pcv_ed "$d" replace '    git -C "$DIST" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved' '    :' ;;
+    M-v23) pcv_ed "$d" replace '  echo "abbrev ${#_ab}"' '  :' ;;
+    M-v24) pcv_ed "$d" replace '  for _lv in LANG LC_ALL LC_COLLATE LC_CTYPE; do' '  for _lv in; do' ;;
+    M-v25) pcv_ed "$d" replace "$a25" '  :' ;;
+    *) return 1 ;;
+  esac || return 1
+  bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
+  ! cmp -s "$EMIT" "$d/eng/emit-report.sh"
+}
+# pcv_lrun <name> -- the mutant's one arm, in a suite dir of its own, against the mutant engine.
+pcv_lrun() {
+  local id
+  id="$(pcv_lscope "$1")"
+  PS_E="$PCV_ROOT/lmut/$1/eng/emit-report.sh"; PS_D="$PCV_ROOT/lmut/$1/s"; PS_SHIM="$PS_D/shim"; PCV_ENG=""
+  PCV_LSCOPE="$id"
+  mkdir -p "$PS_D" && : > "$PS_D/verdicts" && : > "$PS_D/obs" && pcv_shim || { echo "could not create $PS_D or its shim"; return 1; }
+  case "$id" in
+    PC-V19) pcv_latarm PC-V19 v19 "a TRACKED scripts/ai-dlc/r9-mode.sh's chmod under core.filemode=false," ;;
+    PC-V24) pcv_latarm PC-V24 v24 "a verify under LC_ALL=C of a PASS recorded under en_US.UTF-8," ;;
+    *)      pcv_latgrp ;;
+  esac
+}
+# pcv_lscore <name> -- one verdict per mutant, read off the observation and checked against the arm's
+# own verdict line: a STALE-HIT with the arm's FAIL is KILL, a FRESH with the arm's ok is SURVIVE, and
+# anything else (no observation, the two disagreeing, a verdict for another id) is HARNESS.
+pcv_lscore() {
+  local m="$1" id want obs vl got stray d="$PCV_ROOT/lmut/$1/s"
+  id="$(pcv_lscope "$m")"; want="$(pcv_lwant "$m")"
+  vl="$(grep -m1 -E "^(ok|FAIL) $id " "$d/verdicts" 2>/dev/null)"
+  obs="$(grep -m1 "^$id " "$d/obs" 2>/dev/null)"
+  stray="$(pcv_unexpected "$d/verdicts" "$id")"
+  got=HARNESS
+  case "$obs:$vl" in
+    "$id STALE-HIT "*":FAIL $id "*) got=KILL ;;
+    "$id FRESH "*":ok $id "*) got=SURVIVE ;;
+  esac
+  [ -z "$stray" ] || got=HARNESS
+  obs="${obs#"$id "}"
+  if [ "$got" = HARNESS ]; then
+    bad "MUTANT HARNESS/ENTANGLED [BL-795 $m]: $id observed [${obs:-nothing}], verdict [${vl:-none}], strays [${stray}] -- a control-red, broken or entangled arm, never a kill"
+  elif [ "$got" = KILL ] && [ "$want" = KILL ]; then
+    ok "mutant BL-795 $m kills $id: after its own control HIT, the cached run answered a stale PASS [$obs]"
+  elif [ "$got" = SURVIVE ] && [ "${want%%:*}" = SURVIVE ]; then
+    ok "mutant BL-795 $m survives $id as declared: the cached run rendered fresh [$obs], so ${want#SURVIVE:} covers the case"
+  elif [ "$got" = KILL ]; then
+    bad "MUTANT KILLED [BL-795 $m]: declared [$want], but $id answered a stale PASS [$obs] -- the declared covering field does not cover it"
+  else
+    bad "MUTANT SURVIVED [BL-795 $m]: declared [$want], but $id rendered fresh [$obs] -- another field covers the subject"
+  fi
+}
+if pcv_cache_engine "BL-795 mutants M-v17..M-v25"; then
+  mkdir -p "$PCV_ROOT/lmut"
+  _lbuilt=""
+  for _m in $PCV_LMUTS; do
+    if [ -z "$(pcv_lscope "$_m")" ] || [ -z "$(pcv_lwant "$_m")" ]; then
+      bad "MUTANT NOT SCOPED [BL-795 $_m]: pcv_lscope or pcv_lwant names nothing for it, so it would score nothing"
+    elif pcv_lmk "$_m"; then
+      _lbuilt="$_lbuilt $_m"
+      ( pcv_lrun "$_m" ) > "$PCV_ROOT/lmut/$_m.log" 2>&1 &
+    else
+      case "$EMIT" in
+        # Installed layout: a pre-migration engine lacks the anchor; PENDING, as pcache's mutants are.
+        */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) printf 'PENDING: mutant %s not scored, engine lacks its anchor\n' "$_m" ;;
+        *) bad "MUTANT NOT BUILT [BL-795 $_m]: its anchor(s) occur [$(tr '\n' ' ' < "$PCV_ROOT/lmut/$_m/anchor-count" 2>/dev/null || echo '?')] time(s) in emit-report.sh (want 1), or the edit changed nothing or does not parse" ;;
+      esac
+    fi
+  done
+  wait
+  for _m in $_lbuilt; do
+    pcv_lscore "$_m"
+    if [ -s "$PCV_ROOT/lmut/$_m.log" ]; then awk -v p="  DIAG  pcvmut $_m.log | " 'NR <= 10 { print p $0 }' "$PCV_ROOT/lmut/$_m.log"; fi
+  done
+fi
+fi # end rer_phase pcvmut
 
 # J1: the SET of phases entered equals this shard's list AS DECLARED IN THIS FILE'S TEXT, and no
 # phase dealt to another shard was entered. A count off the loop variable cannot see a shard whose
