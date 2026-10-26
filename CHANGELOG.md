@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.946.0] - 2026-10-26
+
+Batch 243, cluster c4. It advances BL-699 without closing it, files no entry, and closes no `PC-` id. NET: entries closed 0 minus filed 0 = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/skills/ai-dlc-update/reconcile/emit-report.sh`. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh` (fixture arm `PC-V95`, mutant M-memo, mutant M-b4 re-anchored). Rulebook changes: none. Backlog: `docs/backlog.md` (the BL-699 entry).
+
+Bootstrapping: `emit-report.sh` is engine code, live from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine. This release carries it alone. Its fixture arm ships in the same pull and is gated on the memo, so it reports PENDING against an installed engine that lacks the memo. No fixture ships ahead of its subject.
+
+### BL-699 — `er_kf_env` memoizes the env-name set per process, so a recording `--verify` run calls `er_env_names` once instead of twice; the entry stays OPEN (PARTIAL)
+
+- A recording run takes two keys: `_er_key0` before the render, and k1 inside `er_cache_record`. Each key ran `er_env_names`, about 11 git forks per call (`cat-file -e` plus `show` for each of the 5 `predicate-sites.md` `entry:` lines at THEIRS and BASE, plus `validate-hook-registration.sh` at THEIRS). A hit and a non-zero miss took one key, and only a recording miss took two.
+- `er_kf_env` now computes the AI_DLC_*/CLAUDE_* name set once per process. When `"$_er_tmp/key.envnames.memo"` is non-empty it copies the memo into `key.envnames`. Otherwise it runs `er_env_names`, then writes the memo from those same bytes with `mktemp` and `mv -f`, so the memo exists only after `er_env_names` succeeded. `key.envnames` stays the values loop's only input on both paths, and the values are still re-read on every call, so a VALUE that changes between the two keys still moves k1 and refuses the record.
+- The reuse is sound because the whole file carries `export` at two lines only, `AI_DLC_RECONCILE_MEMO` (before both keys) and `CR_LOG CR_ROOT` (between them). No AI_DLC_*/CLAUDE_* name is assigned between the two keys, and the render runs in `$( )`, so nothing it sets reaches the parent. The name set's other inputs are keyed elsewhere: the engine closure by `er_kf_engine`, and the dist blobs at THEIRS and BASE by the base/theirs fields.
+- The one behaviour change: a dist blob that turns unreadable between the two keys now records instead of refusing. That is harmless because the next lookup is a fresh process with a fresh `$_er_tmp`. The field comments say so.
+- Fixture `reconcile-emit-report`:
+  - New fixture arm `PC-V95` runs inside the round-9 world with the record moved aside. It counts `cat-file -e <THEIRS>:core/scripts/validate-hook-registration.sh` through a per-arm `git` shim on a run that wrote the record, and the count must be exactly 1. The hit run through the same shim is the control that the shim sees that argv at all.
+  - Pre-migration gate: an installed layout whose engine lacks the memo's hit test reports `PENDING: PC-V95 not run, engine lacks the per-process env-name memo`, not a failure.
+  - New mutant M-memo bypasses the hit test, which makes the count 2 and fails the memo arm. It is scoped to that arm.
+  - Mutant M-b4 is re-anchored to the `done < "$_er_tmp/key.envnames"` line (anchor count 1) and replaces it with `done < /dev/null`, so it empties the values loop's input on the memo-hit path as well. Its kill set and its scope row are unchanged.
+- BL-699 stays OPEN, PARTIAL, `verify: manual`. Owed item (d), the `.git/ai-dlc-fixture-durations` comparison, is still owed under NO TIMING RUNS, and this release records no durations. The "OWED, not built: `er_env_names` runs twice" bullet is marked RESOLVED in batch 243, c4.
+
 ## [0.945.0] - 2026-10-26
 
 Batch 242, lead ai-dlc-b4, release c4-unwritten-remedy. It files and closes BL-803; no `PC-` id applies, because graph has not filed it. NET: 0 (BL-803 filed and closed). Engine code: `core/scripts/join-remediator-shards.sh`. Rulebook changes: `core/skills/ai-dlc/steps/_gate-procedures.md`. Fixture changes: `core/fixtures/remediator-shard-join/` (`run.sh`, `lib.sh`, new `receipt-bl803.sh`). Packaging: none. Backlog: `docs/backlog.md` (the BL-803 entry).
