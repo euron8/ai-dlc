@@ -910,7 +910,10 @@ printf 'probe/untracked-driver.sh\n' > "$P/.gitignore"
 {
   printf '# Probe ledger\n\n'
   printf '## BL-901\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'PROBEMARKER'"
-  printf '## BL-902\n\nverify: sh out="$(bash probe/tool.sh)"; grep -q %s <<<"$out"\n\n' "'READY'"
+  # A PROSE LEAD-IN BULLET INSIDE THE HOST, BEFORE ITS RECEIPT. Under a loose label rule it opens
+  # a phantom BL-632 that takes BL-902's receipt, BL-902 has no row, and the sh-receipt COUNT is
+  # still 12 -- so the count arm cannot see it; the per-id asserts below can.
+  printf '## BL-902\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: sh out="$(bash probe/tool.sh)"; grep -q %s <<<"$out"\n\n' "'READY'"
   printf '## BL-903\n\nverify: sh grep -q %s probe/subject.txt || exit 9\n\n' "'NINEMARK'"
   printf '## BL-904\n\nverify: sh test -f probe/absent-file.txt\n\n'
   printf '## BL-905\n\nverify: sh ! grep -q %s probe/flip.txt\n\n' "'ZEROFLIP'"
@@ -1002,6 +1005,9 @@ r1_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; printf '%s\n' "$R1_OUT" |
 
 [ "$R1_SH" -eq 12 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 12, so the entry grammar did not read the probe and nothing below is about the scorer."
 [ "$(probe_status "$R1_OUT" BL-901)" = "PROSE-CLOSABLE" ] || r1_fail "the seeded prose-closable receipt did NOT flip under a seed carrying its own grep literal (got: $(probe_status "$R1_OUT" BL-901)). The scorer cannot produce a finding, so a clean corpus below would mean only that it ran."
+# BEFORE BL-902's check, deliberately: a phantom that took BL-902's receipt also empties BL-902's
+# row, so the BOUND check below would exit first and this arm could never speak.
+[ -z "$(probe_status "$R1_OUT" BL-632)" ] || r1_fail "the prose bullet '- **BL-632 is LANDED**' inside BL-902 was read as an entry (row $(probe_status "$R1_OUT" BL-632)), so it took BL-902's receipt. The label rule in reconcile/lib.sh backlog_entry_label() must take a bullet only in its strict form."
 [ "$(probe_status "$R1_OUT" BL-902)" = "BOUND" ] || r1_fail "the receipt that DRIVES its subject was reported $(probe_status "$R1_OUT" BL-902), not BOUND. An arm that flags a bound receipt puts every honest receipt in the finding set."
 [ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the base-exit-9 receipt was reported $(probe_status "$R1_OUT" BL-903), not OUT-OF-POPULATION. A receipt answering a question about its own preconditions is not reproducing, and seeding it scores a flip that is not about prose."
 case "$(probe_detail "$R1_OUT" BL-903)" in

@@ -353,7 +353,8 @@ unquote() { # unquote <value>
 # from one home: the difference is a derivation, not a second list.
 #
 # The label rules also stay put: unifying them changes rotate's `moved-names` output, which is
-# a behaviour change and not this one's business. That is the same admission rule this file
+# a behaviour change and not this one's business. (This is about the PC- ledger readers; the
+# BL- readers share `backlog_entry_label_awk()` below.) That is the same admission rule this file
 # opened with — a helper earns a place here only when two tools disagreeing about it is itself
 # a bug.
 #
@@ -512,9 +513,18 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
 # said it "is defined ONCE ... A guard keyed on a restatement of the predicate it protects drifts
 # from it." A second reader -- the backlog depth ceiling -- then needed it and restated it, which
 # is exactly the drift this file's `ledger_entry_awk` header records happening within ONE release.
-# Moved here so both readers load it. NOTE this does NOT unify rotate's and reverify's label rules
-# with each other -- that stays barred for the reason stated above, because it would change
-# rotate's `moved-names` output.
+# Moved here so every reader loads it: rotate, the depth ceiling, and `backlog-reverify.sh`. The
+# old bar on unifying reverify's label rule with this one was about rotate's PRIVATE copy, which
+# no longer exists; reverify's copy was token-identical to this function (measured: its label
+# column over the live backlog and the archive byte-compared equal before the switch).
+#
+# A BULLET TAKES A LABEL ONLY IN THE STRICT FORM -- the id, then `**` and an em dash or end of
+# line, or the id then an em dash inside the bold span (`- **BL-902 — title**`). The loose rule
+# (strip, cut at the first `**`, take `^BL-[0-9]+`) labelled a prose lead-in such as
+# `- **BL-632 is LANDED** ...` inside another entry's body, which opened a phantom entry that
+# took the host's `verify:` line. It is the same strictness `ledger_entry_shape()` applies to
+# the column-0 bare-bold record, and for the same reason. Headings are unchanged. The em dash
+# is a literal, never a bracket class (a multibyte character).
 # A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
 backlog_entry_label_awk() {
   printf '%s\n' 'function backlog_entry_label(l,   line, shape) {
@@ -522,7 +532,11 @@ backlog_entry_label_awk() {
   if (shape == "") return ""
   line = l
   if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-  else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
+  else {
+    sub(/^(- )?\*\*/, "", line)
+    if (line !~ /^BL-[0-9]+(\*\*([ \t]+—|[ \t]*$)|[ \t]+—)/) return ""
+    sub(/\*\*.*$/, "", line)
+  }
   if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
   return ""
 }'

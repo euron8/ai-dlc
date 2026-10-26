@@ -220,6 +220,44 @@ else
   note "ok    b16 -- on the real ledger the ceiling and the classifier agree at $b16_arm entries"
 fi
 
+# ===== p1: A PROSE LEAD-IN BULLET ON THE REAL LEDGER (BL-820). ==============================
+# The real ledger plus one host entry that carries `- **BL-632 is LANDED** prose` before its
+# receipt must count exactly ONE more than the real ledger alone -- the host, never the phantom.
+# The ceiling is the cheap reader; the label rule is lib.sh's, shared by every BL- reader.
+# Declared empty, the real ledger counts 0 and the marker is no longer last once the host is
+# appended, so that branch is not a count comparison and is skipped by name.
+# m-loose (the strict bullet test deleted from the seed's lib.sh) must read +2.
+p1_seed() { # p1_seed <dir>
+  seed_s "$1"; cp "$REAL_LEDGER" "$1/docs/backlog.md"
+  printf '\n## BL-898 — host\n\nBody.\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: manual\n' >> "$1/docs/backlog.md"
+}
+if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ "$b16_arm" -gt 0 ]; then
+  p1_seed "$TMP/p1"
+  p1_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1")")"
+  if [ "$p1_arm" = "$(( b16_arm + 1 ))" ]; then
+    note "ok    p1 -- a host carrying a '- **BL-632 is LANDED**' lead-in adds exactly one entry to the real ledger ($b16_arm -> $p1_arm)"
+  else
+    note "FAIL  p1 -- the real ledger counts $b16_arm and with one host appended counts '${p1_arm}', want $(( b16_arm + 1 ))"; rc=1
+  fi
+  p1_seed "$TMP/p1m"
+  p1m_lib="$TMP/p1m/core/skills/ai-dlc-update/reconcile/lib.sh"
+  sed '/if (line !~ \/^BL-/d' "$LIBSRC" > "$p1m_lib"
+  if cmp -s "$LIBSRC" "$p1m_lib"; then
+    note "FAIL  p1 m-loose -- the label mutation DID NOT APPLY"; rc=1
+  else
+    p1m_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1m")")"
+    if [ "$p1m_arm" = "$(( b16_arm + 2 ))" ]; then
+      note "ok    p1 m-loose -- KILLED: with the loose label rule the lead-in counts too ($b16_arm -> $p1m_arm)"
+    else
+      note "FAIL  p1 m-loose SURVIVED: the loose rule read '${p1m_arm}', want $(( b16_arm + 2 ))"; rc=1
+    fi
+  fi
+elif [ "$b16_de" -eq 0 ]; then
+  note "SKIP  p1 -- the real ledger is declared empty, so there is no count to compare"
+else
+  note "FAIL  p1 -- no usable real-ledger count from b16 (arm='$b16_arm' declared-empty rc=$b16_de)"; rc=1
+fi
+
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-real-ledger -- j1 and b16 hold on the real ledger"
 fi

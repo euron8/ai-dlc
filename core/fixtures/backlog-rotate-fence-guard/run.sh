@@ -1154,17 +1154,82 @@ if [ -n "$M9" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------------------
+# PHANTOM — a prose lead-in bullet inside a CLOSED entry is body text, not an entry (BL-820).
+# BL-402 is closed and carries `- **BL-632 is LANDED** prose` BEFORE its receipt; BL-404 below it
+# is an OPEN entry in the legitimate list form `- **BL-404** — t`. The fix moves BL-402 whole
+# (the bullet with it) and leaves BL-404 live. Measured on each mutant before these arms were
+# written: m-loose splits BL-402, its receipt travels to the phantom, and the EVIDENCE arm refuses
+# (BL-402 NEEDS-REVIEW, no receipt); m-heading-only stops labelling BL-404, so the closed entry
+# swallows it and the open entry is ARCHIVED at exit 0.
+# ---------------------------------------------------------------------------------------
+PH="$WORK/phantom"
+mkcase "$PH" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed host, whose body opens a bold lead-in bullet
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+- **BL-632 is LANDED** prose about another entry
+
+verify: has VERSION "."
+
+- **BL-404** — open list entry
+
+verify: lacks VERSION "."
+
+## BL-403 — open heading entry
+
+verify: lacks VERSION "."
+EOM
+ph_split_ok() { # the phantom moved with its host, the open list entry stayed live
+  grep -qxF -- '- **BL-632 is LANDED** prose about another entry' "$PH/backlog.archive.md" \
+    && grep -q '^## BL-402 ' "$PH/backlog.archive.md" \
+    && grep -qxF -- '- **BL-404** — open list entry' "$PH/backlog.md" \
+    && ! grep -qF 'BL-404' "$PH/backlog.archive.md"
+}
+reseed "$PH"; run_rt "$RT" "$PH" --apply
+if [ "$LAST_RC" -eq 0 ] && ph_split_ok && conserved "$PH"; then
+  ok "phantom-bullet" "a closed entry carrying a '- **BL-632 is LANDED**' lead-in moves whole, and the open list entry BL-404 stays live"
+else
+  bad "phantom-bullet" "exit $LAST_RC; the host, its lead-in and the open list entry did not split as one closed entry and one live: $(printf '%s' "$LAST_OUT" | grep -E 'REFUSING|BL-' | head -3 | tr '\n' '|')"
+fi
+# M10 — m-loose: the strict bullet test deleted. Only reconcile/lib.sh carries it, so
+# mutate_either falls through to the library.
+M10="$(mutate_either m10-loose-label -e '/if (line !~ \/^BL-/d')"
+if [ -n "$M10" ]; then
+  reseed "$PH"; run_rt "$M10" "$PH" --apply
+  if [ "$LAST_RC" -ne 0 ] && has "$EVIDENCE_SAYS" "$LAST_OUT" && has "BL-402" "$LAST_OUT" && cmp -s "$PH/backlog.md" "$PH/pristine.ledger"; then
+    killed m10-loose-label "phantom-bullet would FAIL: the loose label rule opens a phantom BL-632 that takes BL-402's receipt, and the evidence arm refuses BL-402 (exit $LAST_RC)"
+  else
+    bad "mutant:m10-loose-label" "the loose label rule did not refuse BL-402 on the evidence arm (exit $LAST_RC): $(printf '%s' "$LAST_OUT" | grep REFUSING | head -1)"
+  fi
+fi
+# M11 — m-heading-only: a bullet never takes a label. The list entry BL-404 is then body text of
+# the closed BL-402 above it and is archived with it — an open entry swept, at exit 0.
+M11="$(mutate_either m11-heading-only-label -e 's/if (line !~ /if (1 || line !~ /')"
+if [ -n "$M11" ]; then
+  reseed "$PH"; run_rt "$M11" "$PH" --apply
+  if [ "$LAST_RC" -eq 0 ] && grep -qxF -- '- **BL-404** — open list entry' "$PH/backlog.archive.md" \
+     && ! grep -qF 'BL-404' "$PH/backlog.md"; then
+    killed m11-heading-only-label "phantom-bullet would FAIL: with bullets never labelled the open list entry BL-404 is archived with the closed entry above it (exit 0)"
+  else
+    bad "mutant:m11-heading-only-label" "bullets unlabelled and BL-404 was not swept (exit $LAST_RC)"
+  fi
+fi
+
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# ELEVEN BUILT, NINE KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# THIRTEEN BUILT, ELEVEN KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
 # show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 11 ] && [ "$KILLS" -eq 9 ]; then
-  ok "mutants" "11 mutants built (9 targets + m2's and m5's single-layer twins) and all 9 targets killed the arm they name"
+if [ "${MUT_ATTEMPTED:-0}" -eq 13 ] && [ "$KILLS" -eq 11 ]; then
+  ok "mutants" "13 mutants built (11 targets + m2's and m5's single-layer twins) and all 11 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 11 mutants built, $KILLS of 9 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 13 mutants built, $KILLS of 11 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo

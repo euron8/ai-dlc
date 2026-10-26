@@ -313,10 +313,13 @@ if [ "$MOVED_COUNT" = "0" ]; then
 fi
 
 echo "backlog-rotate: $MOVED_COUNT closed entr(y|ies) would move to $ARCHIVE"
-# `[[:space:]]`, never `[ \t]` -- in a POSIX bracket expression the latter is the character SET
-# backslash-and-t, not a tab, so it silently truncates any value ending in `t`. I71 fails the
-# push on it, and it caught this line.
-grep -E '^#{2,6}[[:space:]]+BL-[0-9]+|^- \*\*BL-[0-9]+' "$AWKF.moved" 2>/dev/null | sed 's/^/  /'
+# THE MOVED NAMES ARE THE LINES `backlog_entry_label()` LABELS, NEVER A SECOND GREP. A private
+# regex here listed a prose lead-in such as `- **BL-632 is LANDED**` as a moved entry while the
+# split (and MOVED_ANN below) did not; the display now reads the same rule the split cuts on. It
+# is a one-line pass here rather than a read of MOVED_ANN because that is built after the census
+# refusal below, and this line is printed before it.
+LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
+  { if (backlog_entry_label($0) != "") print "  " $0 }' "$AWKF.moved" 2>/dev/null
 
 # CONSERVATION, ASSERTED ALWAYS AND INDEPENDENTLY OF EITHER PREDICATE. The two verdict-based
 # checks can only catch a MISCLASSIFICATION; neither can see a line that fell out of both
@@ -364,11 +367,14 @@ if [ "$LIVE_ENTRIES" -eq 0 ]; then
   # moved, not a live entry. The fence guard above has already refused every ledger where this
   # file's fence reading and CommonMark's disagree, so a plain toggle on a delimiter at column 0-3
   # is safe here.
+  # THIRD NARROWING: A BOLD BULLET COUNTS ONLY IN THE STRICT FORM `backlog_entry_label()` USES -- the
+  # id then `**` and an em dash or end of line, or the id then an em dash inside the span. The loose
+  # form counted `**BL-11** (x)` and `**BL-12**: x`, prose the label rule no longer reads as an entry.
   CENSUS="$(LC_ALL=C awk '
     { t = $0; sub(/^ ? ? ?/, "", t) }
     !inf && (t ~ /^```/ || t ~ /^~~~/) { inf = 1; fc = substr(t, 1, 1); next }
     inf { if (substr(t, 1, 1) == fc && t ~ /^(```+|~~~+)[ \t]*$/) inf = 0; next }
-    /^[ \t]*#+[ \t]*`?BL-[0-9]/ || /^[ \t]*-?[ \t]*\*\*`?BL-[0-9]+`?\*\*/ { print "  line " NR " of the moved set: " $0 }' "$AWKF.moved")"
+    /^[ \t]*#+[ \t]*`?BL-[0-9]/ || /^[ \t]*-?[ \t]*\*\*`?BL-[0-9]+`?(\*\*([ \t]+—|[ \t]*$)|[ \t]+—)/ { print "  line " NR " of the moved set: " $0 }' "$AWKF.moved")"
   CENSUS_N="$(printf '%s' "$CENSUS" | awk 'END { print NR }')"
   if [ "$CENSUS_N" -gt "$MOVED_COUNT" ]; then
     echo "backlog-rotate: REFUSING — this rotation empties the ledger, but the moved set carries $CENSUS_N entry-like id lines against $MOVED_COUNT entr(y|ies) the parser split out:" >&2

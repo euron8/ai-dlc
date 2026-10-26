@@ -187,7 +187,7 @@ esac
 # with nothing wrong with it. A minimal heredoc-in-substitution parses fine; it is the
 # unbalanced paren in the BODY that breaks it, which is why the construct looks innocent.
 AWKF="$(mktemp)" || unresolved "-" "unresolved: mktemp failed, so the entry parser could not be built. Nothing was re-verified."
-{ ledger_entry_awk; cat <<'AWK'
+{ ledger_entry_awk; backlog_entry_label_awk; cat <<'AWK'
 function flush(   r) {
   if (label == "") return
   r = receipt; if (r == "") r = "@NONE@"
@@ -195,28 +195,22 @@ function flush(   r) {
   label = ""; closed = 0; receipt = ""
 }
 {
-  shape = ledger_entry_shape($0)
-  if (shape != "") {
-    line = $0
-    if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-    else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
-    # THE LABEL RULE IS LOCAL, AND lib.sh SAYS SO -- only the BOUNDARY is shared, because the
-    # two callers extract a label differently from a bullet and from a heading.
-    #
-    # AN ENTRY IS AN ID, NOT ANY HEADING. Measured on this file's own first run: the preamble's
-    # `## Receipts` section parsed as an entry, and because that section QUOTES the closing
-    # annotation form while explaining it, the entry came back ALREADY-CLOSED. Prose about the
-    # ledger became a row in it. So a heading opens an entry only when it opens with an id --
-    # and a heading that does not is not a boundary at all, or every prose section would end
-    # the entry above it.
-    #
-    # Extracting by match() rather than truncating at the ` -- ` title separator also removes
-    # the em-dash from the grammar entirely. The first cut truncated with a BRACKET CLASS over
-    # a multibyte em-dash, which is this machine's documented trap -- a multibyte character
-    # needs an alternation, never a class -- and it silently kept the whole title as the label.
-    if (match(line, /^BL-[0-9]+/)) {
+  # THE LABEL RULE IS lib.sh's `backlog_entry_label()`, the one rotate and the depth ceiling
+  # load. This file used to carry a private copy; it was token-identical, and a bullet-form fix
+  # (a prose lead-in `- **BL-<n> is ...**` opening a phantom entry that took the host's
+  # `verify:`) would otherwise have had to land twice.
+  #
+  # AN ENTRY IS AN ID, NOT ANY HEADING. Measured on this file's own first run: the preamble's
+  # `## Receipts` section parsed as an entry, and because that section QUOTES the closing
+  # annotation form while explaining it, the entry came back ALREADY-CLOSED. Prose about the
+  # ledger became a row in it. So an entry-shaped line opens an entry only when it carries an id
+  # -- and one that does not is not a boundary at all, or every prose section would end the
+  # entry above it.
+  if (ledger_entry_shape($0) != "") {
+    lbl = backlog_entry_label($0)
+    if (lbl != "") {
       flush()
-      label = substr(line, 1, RLENGTH)
+      label = lbl
     }
     next
   }

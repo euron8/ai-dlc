@@ -1185,6 +1185,67 @@ else
     git -C "$gd_caller" worktree prune >/dev/null 2>&1 ) || true
 fi
 
+# ===== PHANTOM. A PROSE LEAD-IN BULLET INSIDE AN ENTRY IS NOT AN ENTRY (BL-820). =============
+# Its own seed, NOT bl_seed_ledger: class_check hardcodes that seed's classification set and the
+# BL_N/BL_PC pair, and a stale pair is how m10 once went vacuous. BL-850 carries
+# `- **BL-632 is LANDED** prose` BEFORE its receipt; BL-851 is the legitimate list form
+# `- **BL-851** — t`. Both receipts grep a literal the probe file lacks, so each is PROSE-CLOSABLE
+# by name -- a presence-shaped reading, and a subject that emits nothing fails it.
+PH_ARGS="--max-prose-closable 9 --min-sh-receipts 0 --min-entries 0"
+ph_world() { # ph_world <dir> [<sed-expr for the seed's lib.sh>] -- 0 built, 1 the sed did not apply
+  local d="$1" l
+  seed "$d"
+  {
+    printf '# Probe backlog\n\n## BL-850 — host\n\nBody.\n\n- **BL-632 is LANDED** prose about another entry\n\n'
+    printf 'verify: sh grep -q %s probe/subject.txt\n\n' "'MARK850'"
+    printf -- '- **BL-851** — a list entry\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK851'"
+  } > "$d/docs/backlog.md"
+  if [ -n "${2:-}" ]; then
+    l="$d/core/skills/ai-dlc-update/reconcile/lib.sh"
+    sed "$2" "$LIBSRC" > "$l" || return 1
+    cmp -s "$l" "$LIBSRC" && return 1
+  fi
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m phantom >/dev/null 2>&1 )
+  return 0
+}
+# ph01 -- the fix: both entries classified, no BL-632 row, two sh receipts over two entries.
+ph_world "$TMP/ph01"
+# shellcheck disable=SC2086
+ph_out="$(run_v "" "$TMP/ph01" $PH_ARGS)"; ph_rc=$?
+if [ "$ph_rc" -eq 0 ] && [ "$(cls "$ph_out" BL-850)" = PROSE-CLOSABLE ] && [ "$(cls "$ph_out" BL-851)" = PROSE-CLOSABLE ] \
+   && [ -z "$(cls "$ph_out" BL-632)" ] && grep -qE '^SUMMARY entries=2 sh-receipts=2 ' <<<"$ph_out"; then
+  note "ok    ph01 -- the lead-in bullet inside BL-850 opens no entry: BL-850 keeps its receipt, the list entry BL-851 is scored, 2 entries"
+else
+  note "FAIL  ph01 -- exit $ph_rc, BL-850=$(cls "$ph_out" BL-850) BL-851=$(cls "$ph_out" BL-851) BL-632=$(cls "$ph_out" BL-632)"
+  printf '%s\n' "$ph_out" | grep -E '^SUMMARY|SELF-PROBE' | sed 's/^/      /'; rc=1
+fi
+# m-loose -- the strict bullet test deleted from the seed's lib.sh. The validator's OWN self-probe
+# carries the same phantom inside its BL-902, so it refuses with exit 2 before the corpus is read.
+# This is the committed mutant the self-probe's absence-shaped BL-632 arm needs: it proves that arm
+# can fire. Keyed on the self-probe's sentence AND on BL-632, never on the exit code alone.
+if ph_world "$TMP/phl" '/if (line !~ \/^BL-/d'; then
+  # shellcheck disable=SC2086
+  phl_out="$(run_v "" "$TMP/phl" $PH_ARGS)"; phl_rc=$?
+  if [ "$phl_rc" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$phl_out" && grep -qF "BL-632" <<<"$phl_out" \
+     && ! grep -qF "OK: validate-backlog-receipts" <<<"$phl_out"; then
+    note "ok    m-loose -- KILLED: with the loose label rule the self-probe's phantom takes BL-902's receipt and the subject refuses (exit 2) naming BL-632"
+  else
+    note "FAIL  m-loose SURVIVED: loose label rule and the subject exited $phl_rc without a self-probe refusal naming BL-632"; rc=1
+  fi
+else note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1; fi
+# m-heading-only -- bullets never labelled. The self-probe ledger is all headings, so it passes;
+# the list entry BL-851 then vanishes from the corpus and the entry count drops to 1.
+if ph_world "$TMP/phh" 's/if (line !~ /if (1 || line !~ /'; then
+  # shellcheck disable=SC2086
+  phh_out="$(run_v "" "$TMP/phh" $PH_ARGS)"
+  if [ -z "$(cls "$phh_out" BL-851)" ] && [ "$(cls "$phh_out" BL-850)" = PROSE-CLOSABLE ] \
+     && grep -qE '^SUMMARY entries=1 sh-receipts=1 ' <<<"$phh_out"; then
+    note "ok    m-heading-only -- KILLED: with bullets never labelled the list entry BL-851 is not scored (1 entry), while BL-850 still is"
+  else
+    note "FAIL  m-heading-only SURVIVED: BL-851=$(cls "$phh_out" BL-851) BL-850=$(cls "$phh_out" BL-850)"; rc=1
+  fi
+else note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1; fi
+
 # ===== MEMO. A RECEIPT MUST NOT INHERIT THE STATE reconcile/lib.sh EXPORTED IN THE PARENT. =====
 # The parent sources lib.sh, which EXPORTS `AI_DLC_RECONCILE_MEMO`, and every `--score-one` worker
 # inherited it through the environment -- so a receipt driving a reconcile script borrowed the

@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.951.0] - 2026-10-26
+
+Batch b243, lead ai-dlc-8a, cluster c6a. It closes two entries: BL-818 and BL-820. No `PC-` id is closed. NET: entries closed 2 minus filed 0 = 2.
+
+Bootstrapping: the foreground-budget hook is engine code a consumer runs from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine. `lib.sh` is consumer engine too, but `backlog_entry_label` has no consumer caller (core/ has none outside lib.sh). Each change ships with its fixture, so no fixture ships ahead of its subject.
+
+### BL-818 — a payload jq cannot parse now denies instead of failing open
+
+- `ai-dlc-foreground-budget.sh` reads the payload raw (`jq -Rrs`) and parses it inside the program: `try fromjson catch "@PARSEFAIL@"`. Only that sentinel denies. The deny is emitted by `printf`, names the cause ("could not be parsed as JSON") and the remedy ("Re-issue the command without the unparseable escape"; if it recurs on an ordinary command, check the jq install). Empty stdin is special-cased to allow.
+- The deny is keyed on the sentinel, not on jq's exit status, because jq exits 5 for a parse error, a runtime error and a regex compile error alike. A deny keyed on a non-zero exit would wedge every Bash call on any program fault. Any other non-zero exit stays fail-open with the existing "jq pass ... failed" stderr line (arm PROGFAULT, mutant m-anyfail). jq absent still allows, unchanged, because denying then would block every Bash call in the session (arm NOJQ, mutant m-nojqdeny).
+- Measured (M1, read-only, jq-1.8.1, graph transcripts, 2026-10-26): 0 parse failures over 193,592 Bash tool_uses (177,976 distinct commands), so the deny wedges 0 real calls. The only reachable fail-open input was a deliberately appended lone high surrogate such as `\ud800`, which lost every deny the hook owns. jq-1.8.1 and macOS's jq-1.7.1-apple behave identically on every arm.
+- A sanitiser that rewrote a lone high surrogate before parsing was designed and dropped: 0 of 193,592 payloads carry one, layer 2's deny is the remedy with an always-available re-issue, and jq `gsub` is quadratic, so a hook timeout would reopen the evasion. The lead's earlier condition 3 (sanitiser byte-identical on all 177,976 distinct commands) is withdrawn by that ruling.
+- The existing MALFORMED arm (truncated JSON, previously allow) became UNPARSEABLE (deny); `silent-malformed` became `parse-drops-remedy`; mutant m-failopen reverts the deny to allow. Four payload shapes Claude Code never sends (two concatenated objects, an object followed by garbage, a raw NUL after the object, nesting past jq's depth limit) also move from allow to the parse deny.
+- Receipt: see the entry.
+
+### BL-820 — a prose `- **BL-<n>` lead-in inside an entry no longer opens a phantom entry
+
+- `backlog_entry_label()` in `lib.sh` takes a bullet label only in the strict form: the id then `**` and an em dash or end of line, or the id then an em dash inside the bold span (`- **BL-902 — title**`). It is the strictness `ledger_entry_shape()` already applies to the column-0 bare-bold record. Headings are unchanged. `function backlog_entry_label(l,` is byte-identical in its signature.
+- `scripts/backlog-reverify.sh` now calls `backlog_entry_label` and its private copy is deleted. Identity was proved before the switch: reverify's label column over docs/backlog.md and docs/backlog.archive.md at base, byte-compared before and after, matched (backlog 22 = 22, archive 781 = 781). The lib.sh note barring that unification is reworded, since the bar was about rotate's private copy, which no longer exists.
+- `scripts/backlog-rotate.sh`: the census regex is narrowed to the same strict form, and the moved-names display derives from `backlog_entry_label` instead of a second grep.
+- `validate-backlog-receipts.sh`: the R1 self-probe ledger gains a phantom `- **BL-632 is LANDED**` row inside host BL-902, checked before the BOUND check that would otherwise pre-empt it, so R2 proves it can fire on this shape.
+- Measured effect: labels on the real ledgers are unchanged (backlog 22 = 22, archive 781 = 781); the only lines dropped across backlog, archive, plans, fixtures and scripts are 9 plan-prose lines (875 loose labels against 866 strict), and nothing is added. At 2bf9ce466 the strict rule takes the backlog from 21 to 20 entries, exactly `:286 BL-632`.
+- Fixtures carry the discriminating seed (a prose lead-in inside a host, the host's `verify:` after it, the entry count unmoved) with list-form assertions kept; mutants m-loose and m-heading-only. Receipt: see the entry.
+
 ## [0.950.0] - 2026-10-26
 
 Batch 243, cluster c5. It closes BL-795 and BL-695, advances BL-538 without closing it, files no entry, and closes no ledger id. NET: entries closed 2 minus filed 0 = +2. Engine code: none. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh` (fixture arm `PC-V96`, mutants M-v25 and M-v25wr; `PCV_R6MARK` and `pcv_installed` hoisted to top level). Rulebook changes: none. Backlog: `docs/backlog.md` (BL-795, BL-695, BL-538).
