@@ -517,4 +517,11 @@ A finding about graph's record, not an instruction: the disclosure calls this "t
 
 Owed: the join accepts a round where every lane part's `edit:` lines are `n/a` or `(escalated)`, and the ledger holds no subject write in the window. It emits a joined record whose header says so, rather than refusing. The acceptance must key on the lane parts' own fields AND the empty ledger together, so that a lane that wrote and failed to ledger its write (BL-802's class) still refuses. Fixture: a no-edit round joins, a round with one unledgered `edit:` still refuses, and a mutant that accepts on the empty ledger alone is killed.
 
+
+**Second instance (graph-watch poll 38, 05:10 EDT 2026-10-26), verified read-only by the lead.** Stories pass 2's lane round hit the same refusal at 09:02:19Z on `s320/stories-serial-repair-p2.md`. Both lanes (`lane-1.md`, story 2.2; `lane-2.md`, story 4.1) carry `edit: n/a`. The write ledger in the true lane window, 08:58:40Z to 09:02:19Z, holds 0 non-shard `s320` rows, against 12 shard rows as the control. Graph's lead hand-assembled the record again (`HAND-ASSEMBLED from 2 lane parts by the lead`), making the fourth refused record and the fifth hand-assembled one in s320.
+
+**A second claim, carried by the same entry:** the lead passed a hand-chosen window, `--since 2026-10-26T09:00:00Z --until 2026-10-26T09:30:00Z`. The `--until` was 28 minutes in the future when the join ran, and the `--since` began about 80 seconds after the lanes were dispatched at 08:58:49Z, so the window did not match the lane epoch. It changed nothing here, because no lane wrote, but on a round with edits it would mis-scope the disjointness check: a write before the hand-chosen `--since` falls outside it. `core/scripts/join-remediator-shards.sh` on `7fa7d0a4d` has no guard refusing an `--until` later than its own clock (a grep for one reads 0). That makes it the join's instance of BL-806's class, an estimated time used as fact. The record's disclosure also rewrites the refusal's bracketed window as "in the lane window", so it no longer quotes the emitted line verbatim.
+
+Owed, in addition: the join refuses an `--until` later than its own clock, or derives the window from the lane round's own dispatch epoch rather than from flags a lead types.
+
 verify: manual
