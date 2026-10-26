@@ -756,14 +756,14 @@ mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT
   mv "$m.t" "$m"; MUT="$m"
 }
 # st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
-if mutx st-a 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls' 'cur="$(find "$wr" ${wx:+"$wx"} -type f -ls'; then
+if mutx st-a 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$wr" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
   T="$WORK/st-a"; st_world "$T" "$MUT" s
   rc="$(st_drive "$T" "$WORK/st-a.out")"; st_alive "$T" s >/dev/null
   st_refused "$WORK/st-a.out" s && ok "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive" \
                                 || bad "st-a (s) was not refused with the log dropped from the signature (rc=$rc)"
 fi
 # st-w: the signature ignores the watched root, so (w), whose only progress is under it, is refused.
-if mutx st-w 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls' 'cur="$(find "$lg" ${wx:+"$wx"} -type f -ls'; then
+if mutx st-w 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
   T="$WORK/st-w"; st_world "$T" "$MUT" w
   rc="$(st_drive "$T" "$WORK/st-w.out")"; st_alive "$T" w >/dev/null
   st_refused "$WORK/st-w.out" w && ok "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive" \

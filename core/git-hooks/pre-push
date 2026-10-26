@@ -370,6 +370,17 @@ fi
 #   - the watched root's limit: 77 of 307 fixture run.sh files use a bare `mktemp -d`, and `mktemp -t`
 #     likewise, which on macOS ignore TMPDIR; their scratch writes are NOT seen. A unit whose only work
 #     is silent computation, or writes outside the root, is refused, by design.
+#   - a NESTED POOL's root (a unit that drives this block again) is `/tmp/fx.XXXXXX`, outside the watched
+#     root, because no unit TMPDIR passes the 35-encoded root rule (BL-691). So the watched root is
+#     DISCOVERABLE: pool_run writes an empty `.pool-unit` marker into it, and a nested run_fixtures walks up
+#     from its physical TMPDIR to the nearest `.t.?????` directory it owns that carries one, writes that
+#     directory into its own root as `.pool-parent`, and puts its root FIRST in the marker directory's
+#     `.pool-nested` (pruned of removed roots on every rewrite, and never through a symlink), so the newest
+#     root is inside the 16 lines the watcher reads each poll. It walks an entry only when it is a directory,
+#     not a symlink, named `fx.??????`, and its `.pool-parent` is a regular file (a FIFO would block the
+#     `read`, and the watcher with it) naming this watched root. The unit under test writes the list as
+#     the same uid, so this is a consistency check, not a security boundary. A nested pool that fell back to a bare
+#     `mktemp -d` root is not named `fx.??????` and stays unwatched.
 # AT THE IN-POOL TRACE SITE A THIRD PATH IS WATCHED, `wx`: the traced fixture's own output file, which the
 # deriver writes as `$WORK/<fx>.log` with WORK="$AI_DLC_READSET_TRACE_ROOT/w". That trace root lives under
 # the hook's TMPDIR, outside the watched root, and the pool log there gets only the deriver's say-lines, so
@@ -1948,7 +1959,7 @@ apply_readset_skip() {
 }
 
 run_fixtures() {
-  local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err
+  local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
     printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
     return 1
@@ -1994,6 +2005,24 @@ run_fixtures() {
   # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
   # gets its safety from the same dot.
   mkdir -p "$out/.dur" "$out/.log" "$out/.pr" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
+  # A NESTED POOL REGISTERS ITS ROOT with the nearest enclosing unit's watcher (BL-691; the watched-root
+  # comment at POOL_STALL says why). A run under no `.pool-unit` marker writes nothing.
+  fx_m=""
+  if [ -n "${TMPDIR:-}" ]; then fx_m="$(cd "$TMPDIR" 2>/dev/null && pwd -P)" || fx_m=""; fi
+  while [ -n "$fx_m" ]; do
+    case "${fx_m##*/}" in
+      .t.?????)
+        if [ -f "$fx_m/.pool-unit" ] && [ ! -L "$fx_m/.pool-unit" ] && [ -O "$fx_m" ]; then
+          if [ ! -L "$fx_m/.pool-nested" ] && fx_p="$(cd "$out" 2>/dev/null && pwd -P)" && printf '%s\n' "$fx_m" > "$fx_p/.pool-parent" \
+            && fx_t="$(mktemp "$fx_m/.pool-nested.XXXXXX" 2>/dev/null)"; then
+            { printf '%s\n' "$fx_p"
+              if [ -f "$fx_m/.pool-nested" ]; then while IFS= read -r fx_e; do [ -d "$fx_e" ] && printf '%s\n' "$fx_e"; done < "$fx_m/.pool-nested"; fi; } > "$fx_t" 2>/dev/null && mv -f "$fx_t" "$fx_m/.pool-nested" 2>/dev/null || rm -f "$fx_t"
+          fi
+          break
+        fi ;;
+    esac
+    fx_m="${fx_m%/*}"
+  done
   # EMPTY THE THIS-RUN RECORD HERE, on the first line that only runs because the pool is
   # starting. Anything that goes wrong after this -- no fixtures, a red unit, a dead worker --
   # leaves the file empty, so finding it empty tells you no complete measurement exists instead
@@ -2090,9 +2119,10 @@ run_fixtures() {
   # FAILS with a log line naming it; it is never run un-sandboxed instead.
   # EVERY RUN SITE GOES THROUGH pool_run (BL-606), the in-pool trace's deriver call included: a hung trace
   # is a hung unit. The unit leads its own group; a WATCHER beside it (its own group too, so the walk never
-  # sees it) reads the byte signature once a second -- one `find -ls` over the watched root and the log,
-  # summed by one awk -- and walks the tree with one `ps` and one awk to know what a kill must reach: five
-  # forks a poll with the `sleep`. NO `{}` MAY APPEAR IN THIS BODY: `xargs -I{}` substitutes it inside the
+  # sees it) reads the byte signature once a second -- one `find -ls` over the watched root, the log and
+  # every validated nested pool root listed in the root's `.pool-nested`, summed by one awk; the list is
+  # read and validated with builtins only (`read`, `[`, `case`), so it adds no fork -- and walks the tree
+  # with one `ps` and one awk to know what a kill must reach: five forks a poll with the `sleep`. NO `{}` MAY APPEAR IN THIS BODY: `xargs -I{}` substitutes it inside the
   # body string too, so a `find -exec stat {} +` becomes a stat of the unit's own path and the sum is wrong.
   # The worker blocks on `wait` for the unit itself,
   # so a unit that exits costs no poll latency. On POOL_STALL still polls the watcher records the refusal
@@ -2139,10 +2169,11 @@ run_fixtures() {
     } 2>/dev/null
     trap pool_abort INT TERM HUP
     pool_run() {
-      local lg="$1" rc wr
+      local lg="$1" rc wr wp
       shift
       wr="$(mktemp -d "$AI_DLC_FX_OUT/.t.XXXXX" 2>&1)" && [ -d "$wr" ] \
         || { printf "pre-push: pool: no watched root under %s (%s); the unit is NOT run\n" "$AI_DLC_FX_OUT" "$wr" | tee "$lg" >&2; return 1; }
+      : > "$wr/.pool-unit"; wp="$(cd "$wr" && pwd -P)" || wp="$wr"
       self="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d " ")"
       : > "$pr.g"; rm -f "$pr.st"
       set -m
@@ -2155,7 +2186,12 @@ run_fixtures() {
           w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
           [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
-          cur="$(find "$wr" "$lg" ${wx:+"$wx"} -type f -ls 2>/dev/null | awk "{ s += \$7 } END { print s + 0 }")"
+          set --; nn=0
+          [ -f "$wr/.pool-nested" ] && [ ! -L "$wr/.pool-nested" ] && while [ "$nn" -lt 16 ] && IFS= read -r e; do
+            nn=$((nn + 1)); x=""
+            case "${e##*/}" in fx.??????) [ -d "$e" ] && [ ! -L "$e" ] && [ -f "$e/.pool-parent" ] && [ ! -L "$e/.pool-parent" ] && read -r x < "$e/.pool-parent" && [ "$x" = "$wp" ] && set -- ${1+"$@"} "$e" ;; esac
+          done < "$wr/.pool-nested"
+          cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls 2>/dev/null | awk "{ s += \$7 } END { print s + 0 }")"
           if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi
           [ "$still" -gt "$max" ] && { max=$still; printf "%s\n" "$max" > "$pr.st"; }
           if [ "$still" -ge "$POOL_STALL" ]; then

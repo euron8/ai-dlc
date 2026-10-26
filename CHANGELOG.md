@@ -19,6 +19,62 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.943.0] - 2026-10-26
+
+Batch 242, cluster c2-suite. It closes BL-691, advances BL-699 and BL-795 to PARTIAL without closing them, and closes no `PC-` id. NET: entries closed 1, filed 0. Engine code a consumer runs from step 3 of the delivering pull: `.githooks/pre-push` and `core/git-hooks/pre-push`, byte-identical in the FIXTURE_POOL block (I66). Fixture changes: `prepush-pool-depth`, `consumer-suite-pool`, `reconcile-emit-report` and `reconcile-emit-report-c`. Rulebook changes: none. Backlog: `docs/backlog.md` (the BL-691, BL-699 and BL-795 entries).
+
+### BL-691 — a nested pool's root is registered with the enclosing unit's watcher; closed LANDED
+
+A unit that drives the fixture pool again makes its nested pool root at `/tmp/fx.XXXXXX`, outside its own watched root. The outer watcher could not see the nested pool's scratch writes, so a unit whose only progress was there was refused.
+
+The backlog's owed shape (root under the caller's TMPDIR when `PREPUSH_POOL_DEPTH` is above 0) was not built. `prepush-pool-depth/run.sh` unsets the marker and re-exports a chosen depth, so depth cannot trigger it, and no unit TMPDIR is short enough for the root rule to take one. Both hooks now do the following instead.
+
+- `pool_run` writes an empty `.pool-unit` marker into each watched root.
+- A nested `run_fixtures` walks up from its physical TMPDIR to the nearest owned `.t.?????` directory that carries the marker. It writes that directory into its own root as `.pool-parent`, and registers its root at the FIRST line of the marker directory's `.pool-nested`, ahead of the surviving older roots, so the newest root is always inside the 16 lines the watcher reads.
+- The watcher reads the first 16 lines of `.pool-nested` with builtins only, so the poll still costs five forks. It walks an entry only when the entry is a directory, not a symlink, named `fx.??????`, and its `.pool-parent` is a regular, non-symlink file equal to the watched root. A FIFO at `.pool-parent` is refused before any read, so it cannot block the watcher.
+- No path length changes.
+
+Verified, as recorded in the commits and the backlog entry:
+
+- `prepush-pool-depth` forces the nested case at `AI_DLC_POOL_STALL=5`. It is ok under the fix and REFUSED on the base block, in the same run, per hook.
+- A silent nested root, a listed symlink to a growing directory and a listed outer pool root are each REFUSED. A FIFO `.pool-parent` is REFUSED within a 40s deadline, per hook.
+- An ordering arm seeds 17 live roots and requires the one registered root to fall within the first 16 lines.
+- Mutants m-nomark, m-noread, m-nofifoguard and m-appendreg are killed. Mutant m-novalidate reads both hostile entries as progress.
+- `consumer-suite-pool`'s st-a and st-w are re-anchored on the new `find` line.
+- BL-691's receipt now drives the watcher as well as the registration, with the extra rows and the position check; it was re-scored after both fixes.
+
+### BL-699 — one gitlink record world and four single-arm mutants; the entry stays PARTIAL
+
+Two of the entry's named cuts are built in `core/fixtures/reconcile-emit-report/run.sh`. Their counts are read off the code, and no fixture was instrumented.
+
+- **Cut 1:** worlds b5a and b5b merge into one `pcv_b5world` that calls `pcv_lat` once. Seeds go from 2 to 1 for ship, M-gitlink-refuse and M-gitlink-prune, and stay 1 for M-hashlist-skip. Approves are unchanged.
+- **Cut 2:** M-b1, M-b3, M-b4 and M-secret each get one `pcv_scope` row (PC-V59, PC-V60, PC-V61, PC-V62), and each r9k sub-arm is gated by `pcv_in` on its own id. Approves go M-b1 3 to 2, M-b3 3 to 2, M-b4 3 to 1 and M-secret 3 to 1; ship stays 3.
+- **Harness verdicts:** a scoped id whose FAIL text begins `control:` or `FIXTURE BROKEN` is now scored MUTANT HARNESS, never a kill.
+
+Observed through `hermetic-run.sh reconcile-emit-report` (shard a, exit 0): M-b1 fails exactly [PC-V59], M-b3 [PC-V60], M-b4 [PC-V61], M-secret [PC-V62], M-gitlink-refuse [PC-V64 PC-V65], M-gitlink-prune [PC-V64] and M-hashlist-skip [PC-V67].
+
+Still open:
+
+- The `er_env_names` doubled call on a recording run is OWED and not built. `emit-report.sh` is a bootstrapping file whose change must ship alone, and a memo would re-anchor mutant M-b4.
+- Owed item (d) stays banked.
+- The entry remains `verify: manual`.
+
+### BL-795 — engine-side mutants for V17 through V24 in shard c; eight scored, V25 owed
+
+Phase `pcvmut` (`PHASES_c="step3b sb pcvmut"`) builds one mutant per arm of V17..V24 in its own `pcv_lmk`, `pcv_lwant`, `pcv_lscope` and `PCV_LMUTS` tables. Each mutant runs only its own arm. A kill is a positive STALE-HIT, and a control-red arm scores HARNESS.
+
+Eight mutants are scored:
+
+- KILL for V20, V21, V22 and V24. Each answered a stale PASS (rc=0, hit line, 0 detector launches) where the opt-out render exits 1.
+- SURVIVE for V17, V18, V19 and V23. This is a PARTIAL DEAD PREMISE: another field already covers each case.
+  - V17, V18 and V19 are covered by the read log (the hit path's `er_log_retake`).
+  - V23 is covered by distrefs' `git config --list`, which keys `core.abbrev`.
+  - Each SURVIVE stands on a scratch ablation that turned it into a STALE-HIT (PHIT=1, PN=0).
+
+V25 is OWED as input-non-discriminating. The arm's `chmod 000` never reaches V25's subject, because three refusers fire ahead of V25's line: the walks at `emit-report.sh:1952-1953` and `:1962-1963`, and `er_kf_consignored`. M-v25 keeps a builder row labelled OWED and sits outside PCV_LMUTS, so nothing scores it and the phase holds eight mutants. Shard c adds 28 full renders, read off the code.
+
+The entry stays PARTIAL with `verify: manual`. The owed item is an input that the logged walk (`consumer-read.sh:129-139`) visits and no key walk does, or a finding that those sets are equal.
+
 ## [0.942.0] - 2026-10-25
 
 Batch 242, lead ai-dlc-b4, release c1-pcs320. It closes BL-802 and BL-553, files BL-802, and closes `PC-S320-JOIN-REMEDIATOR-SHARDS-REFUSES-A-LANE-WHOSE-ONLY-FILE-IS-UNDER-DOCS`. NET: entries closed 2 minus filed 1 = 1. The NET is 1 because BL-802 is filed and closed in this same release and BL-553 is closed by operator ruling. Engine code: `core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/scripts/join-remediator-shards.sh`. Rulebook changes: `core/skills/ai-dlc/steps/_gate-procedures.md`. Schema: `core/schemas/pipeline-state-paths.json` (a reason string only). Fixture changes: `core/fixtures/gate-remediation-deny/` (`run.sh`, `inputs.decl`, `tools.decl`) and `core/fixtures/remediator-shard-join/` (`run.sh`, `lib.sh`, new `receipt-bl802.sh`). Packaging: none. Backlog: `docs/backlog.md` (the BL-802 entry and the BL-553 ruling).
