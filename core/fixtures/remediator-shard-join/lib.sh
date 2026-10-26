@@ -359,6 +359,92 @@ p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch
     && grep -qF "re-dispatch that shard writing through Edit, Write or MultiEdit" <<<"$l" \
     && ! grep -qiE "hand.assembl" <<<"$l"
 }
+# ---- THE UNWRITTEN REMEDY (BL-803): the clause after the refusal is read from the ledger with the
+# time filter dropped. Every row is the REAL hook's, its clock pinned by drive's ts. The window is
+# [UW_S, UW_U]; the part's own Write (by AG1, in the window) is a shards/ row files mode drops.
+UW_S=2026-06-01T00:00:00Z; UW_U=2026-06-01T01:00:00Z
+UW_PD=$SLOT/shards/stories-repair-p1
+run_join_w() { # <join-script> <world> [extra args] -> RC, $JO, over [UW_S, UW_U]
+  stamp "$2"
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
+    --since "$UW_S" --until "$UW_U" "${@:3}" > "$JO" 2>&1
+  RC=$?
+}
+uw_line() { # -> the refusal line for part 01 citing S21, or rc 1
+  [ "$RC" -eq 2 ] || return 1
+  grep -F "01.md cites $REL/$S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO"
+}
+uw_world() { # <join> <ts@agent>... -> RC, $JO: S21 written only at the given ts, part 01 citing it;
+  # S22 written in the window by AG2 and cited by part 02 (an empty window dies before the join)
+  local w j="$1" r; shift; w="$(new_world)"
+  for r in "$@"; do drive "$w" Edit "$w/$REL/$S21" "${r##*@}" "" "" "${r%@*}"; done
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
+  part "$w" 01 2.1; part "$w" 02 2.2
+  drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  run_join_w "$j" "$w"
+}
+UW_BEFORE="the ledger's last write of $REL/$S21 was at"
+UW_AFTER="the ledger's first write of $REL/$S21 after the window was at"
+p_uwbefore() { # two before-window rows by agents that are NOT the part's writer -> the LATEST named
+  local l; uw_world "$1" "2026-05-01T00:00:00Z@$AG2" "2026-05-20T00:00:00Z@$AG3" "2026-05-10T00:00:00Z@$AG2"
+  l="$(uw_line)" || return 1
+  grep -qF "$UW_BEFORE 2026-05-20T00:00:00Z by $AG3, before --since $UW_S: the part cites an edit it did not make in this window; rewrite the part record through a re-dispatch writing with Write, an entry whose fix was already in place taking \`edit: n/a\`, then re-run the join with the same --since and a new --until, or re-dispatch that shard if the edit is still owed" <<<"$l" \
+    && ! grep -qF "reaches no Edit matcher" <<<"$l" && ! grep -qF "; also " <<<"$l"
+}
+p_uwafter() { # two after-window rows -> the EARLIEST named, and no before-window clause
+  local l; uw_world "$1" "2026-06-03T00:00:00Z@$AG3" "2026-06-02T00:00:00Z@$AG2"
+  l="$(uw_line)" || return 1
+  grep -qF -- "-- $UW_AFTER 2026-06-02T00:00:00Z by $AG2, after --until $UW_U: take a new --until after the shard reports and re-run the join" <<<"$l" \
+    && ! grep -qF "reaches no Edit matcher" <<<"$l" && ! grep -qF "$UW_BEFORE" <<<"$l"
+}
+p_uwboth() { # a before- and an after-window row -> BEFORE, then "; also " AFTER
+  local l; uw_world "$1" "2026-05-20T00:00:00Z@$AG3" "2026-06-02T00:00:00Z@$AG2"
+  l="$(uw_line)" || return 1
+  grep -qF -- "-- $UW_BEFORE 2026-05-20T00:00:00Z by $AG3, before --since $UW_S: " <<<"$l" \
+    && grep -qF "or re-dispatch that shard if the edit is still owed; also $UW_AFTER 2026-06-02T00:00:00Z by $AG2, after --until $UW_U: take a new --until" <<<"$l" \
+    && ! grep -qF "reaches no Edit matcher" <<<"$l"
+}
+p_uwaside() { # a --rerun part citing two files, the re-run rewriting only one: the other's in-window
+  # row is superseded, so the join set it aside -> the ASIDE clause, naming that row
+  local w l; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" 2026-06-01T00:05:00Z
+  drive "$w" Edit "$w/$REL/$S22" "$AG1" "" "" 2026-06-01T00:06:00Z
+  part "$w" 01 2.1 2.2
+  drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:07:00Z
+  drive "$w" Edit "$w/$REL/$S22" "$AG4" "" "" 2026-06-01T00:25:00Z
+  drive "$w" Write "$w/$UW_PD/01.md" "$AG4" "" "" 2026-06-01T00:26:00Z
+  run_join_w "$1" "$w" --rerun 01.md@2026-06-01T00:20:00Z
+  l="$(uw_line)" || return 1
+  grep -qF -- "-- $REL/$S21 was written in the window at 2026-06-01T00:05:00Z by $AG1, but this join set that write aside (a --rerun supersedes it): the re-run writes it after its start, or the part stops citing it" <<<"$l" \
+    && ! grep -qF "reaches no Edit matcher" <<<"$l" && ! grep -qF "$UW_BEFORE" <<<"$l"
+}
+# The NONE clause, byte-for-byte; A12 and A14 assert it whole. UW_L is the refusal line a predicate
+# found, so a mutant loop can tell a moved remedy (UW_L set) from a world that never refused (empty).
+UW_NONE="the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit"
+UW_L=""
+p_uwamb() { # the cited basename resolves to TWO paths once the time filter is dropped ($REL/S21 and
+  # $SLOT/epics/S21, both written only before --since) -> the NONE clause, no ledger row named
+  local w; UW_L=""; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG3" "" "" 2026-05-20T00:00:00Z
+  drive "$w" Edit "$w/$SLOT/epics/$S21" "$AG3" "" "" 2026-05-21T00:00:00Z
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
+  abspart "$w/$UW_PD" "$S21"; part "$w" 02 2.2
+  run_join_w "$1" "$w"
+  [ "$RC" -eq 2 ] || return 1
+  UW_L="$(grep -F "01.md cites $S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
+  [ "${UW_L#*in the window -- }" = "$UW_NONE" ]
+}
+p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
+  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
+  local w; UW_L=""; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
+  abspart "$w/$UW_PD" "shards/stories-repair-p1/01.md"; part "$w" 02 2.2
+  drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  run_join_w "$1" "$w"
+  [ "$RC" -eq 2 ] || return 1
+  UW_L="$(grep -F "01.md cites shards/stories-repair-p1/01.md, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
+  [ "${UW_L#*in the window -- }" = "$UW_NONE" ]
+}
 # ---- SUBJECT MODE. A git world holding the requirements subject (trunk main, sprint 9 on a
 # branch), split by the REAL partition-subject.sh; every write is a ledger row the REAL hook
 # recorded -- including the SPEC's, under specs/s9/, which the hook ledgers since B2.
@@ -435,6 +521,42 @@ p_sjoos() { # prd.md written IN PLACE (out-of-scope text) while its sections wer
   printf 'An out-of-scope edit.\n' >> "$w/$SJPA/prd.md"; drive "$w" Edit "$w/$SJPA/prd.md" a8888888888888888
   run_sjoin "$1" "$w"
   sj_refused "$w" "$SJPA/prd.md was written IN PLACE"
+}
+p_sjaside() { # a part citing the sectioned prd.md that an agent wrote IN PLACE in the window, no --rerun:
+  # the subject filter set that row aside -> the no-rerun ASIDE clause, never "(a --rerun supersedes it)"
+  local w o l c; w="$(subj_world)" || return 1
+  sj_all "$w"
+  o="$(sj_part_rows "$w" | head -1 | cut -f2)"
+  printf 'An in-place edit.\n' >> "$w/$SJPA/prd.md"; drive "$w" Edit "$w/$SJPA/prd.md" a9999999999999999
+  sj_part "$w" "$o" "$SJPA/prd.md"
+  run_sjoin "$1" "$w"
+  [ "$RC" -eq 2 ] || return 1
+  l="$(grep -F "$o.md cites $SJPA/prd.md, which no dispatched agent wrote under $SJSD in the window -- " "$JO")" || return 1
+  c="${l#*in the window -- }"
+  case "$c" in
+    "$SJPA/prd.md was written in the window at "*" by a9999999999999999, but this join set that write aside: see the join's other refusal for that file, or the part stops citing it") ;;
+    *) return 1 ;;
+  esac
+  ! grep -qF "(a --rerun supersedes it)" <<<"$l"
+}
+p_sjrraside() { # A13's world joined WITH --rerun: one other SECTION part re-run by a new agent after S_P
+  # (the RR9 shape). SUBJMODE and RERUN are both set, so the ASIDE clause is the rerun one -- the only
+  # world where the two flags disagree about which clause to print (A10: files + rerun; A13: subject alone)
+  local w o r f l c; w="$(subj_world)" || return 1
+  DTS="$(gts 19:25:00)"; sj_all "$w"; DTS=""
+  o="$(sj_part_rows "$w" | head -1 | cut -f2)"
+  r="$(sj_part_rows "$w" | awk -F'\t' -v o="$o" '$7 != "-" && $2 != o { print $2; exit }')"
+  f="$(sj_part_rows "$w" | awk -F'\t' -v r="$r" '$2 == r { print $7 }')"
+  [ -n "$o" ] && [ -n "$r" ] && [ -n "$f" ] || return 1
+  printf 'An in-place edit.\n' >> "$w/$SJPA/prd.md"; drive "$w" Edit "$w/$SJPA/prd.md" a9999999999999999 "" "" "$(gts 19:30:00)"
+  sj_part "$w" "$o" "$SJPA/prd.md"
+  printf 'Re-run.\n' >> "$w/$f"; drive "$w" Edit "$w/$f" "$G_NEW" "" "" "$(gts 19:50:00)"
+  drive "$w" Write "$w/$SJRD/$r.md" "$G_NEW" "" "" "$(gts 19:51:00)"
+  run_sjoin "$1" "$w" 1 --rerun "$r.md@$G_SP"
+  [ "$RC" -eq 2 ] || return 1
+  l="$(grep -F "$o.md cites $SJPA/prd.md, which no dispatched agent wrote under $SJSD in the window -- " "$JO")" || return 1
+  c="${l#*in the window -- }"
+  [ "$c" = "$SJPA/prd.md was written in the window at $(gts 19:30:00) by a9999999999999999, but this join set that write aside (a --rerun supersedes it): the re-run writes it after its start, or the part stops citing it" ]
 }
 p_sjnopart() { # the UNCHANGED brief (no part) written in the window -> REFUSED: no shard owns it
   local w; w="$(subj_world)" || return 1

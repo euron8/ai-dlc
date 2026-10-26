@@ -1060,7 +1060,11 @@ than one agent in the window`, or a part whose entry `sets part of the fix aside
 hand-off:
 
 1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
-   join lists every reason it refused; clear each one.
+   join lists every reason it refused; clear each one. A refusal whose remedy names a write before
+   `--since` is cured by correcting the part record (an entry whose fix was already in place takes
+   `edit: n/a`) and re-running the join with the same `--since` and a new `--until`, never by
+   `--rerun`, which refuses a part citing no file written in the window; one naming a write after
+   `--until` is cured by a new `--until`.
 
 1b. **Re-run one part with `--rerun`.** When the refusal is confined to one part's files, re-run
    that part alone and run the join again.
