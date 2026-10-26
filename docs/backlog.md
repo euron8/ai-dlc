@@ -537,15 +537,22 @@ per spawn fell about 40%, from $1.98 to $1.13, and spawns per story rose from 44
 entries below are the measured sources of the added spawns, and BL-812 carries the outcome target. Every receipt
 is `manual` at filing; the batch that builds an entry owes its behavioural `sh` receipt and the probe behind it.
 
-**Amended 2026-10-26: the baseline is s317, and no entry here closes on a tree receipt.** As filed, BL-812's
-target was s318, the regressed sprint, which s319 already met while regressing, and each of BL-808 through BL-811
-could close when its mechanism shipped. That is the shape under which all 19 entries of the ranked defects table
-in `docs/analysis/pipeline-efficiency-s317-s318.md` closed (BL-397, BL-398, BL-504, BL-507 to BL-520, BL-568,
-BL-569: each archived with `**LANDED (v`) and per-story cost did not move. Each entry now states the per-story
-reduction it owes against s317, measured
-by `docs/analysis/pipeline-efficiency-s317-s320/scripts/` on the first graph sprint that runs it. An entry whose
-mechanism has shipped and whose reduction has not been measured is PARTIAL, whatever its `verify:` line says. A
-measured sprint that misses an entry's number reopens that entry. BL-817 makes this a mechanism.
+**Amended 2026-10-26: no entry here closes on a tree receipt.** As filed, each of BL-808 through BL-811 could
+close when its mechanism shipped. That is the shape under which all 19 entries of the ranked defects table in
+`docs/analysis/pipeline-efficiency-s317-s318.md` closed (BL-397, BL-398, BL-504, BL-507 to BL-520, BL-568,
+BL-569: each archived with `**LANDED (v`) and per-story cost did not move.
+
+The goal is a pipeline in which every step earns its wall clock and its tokens. It is not a number. The rule that
+decides a step is the step-value rule (`docs/analysis/step-value-s317-s319.md`, "A step with no measured value
+goes" in `.claude/rules/operator-rulings.md`): a step, round or fan-out width is kept on a named failure case and
+on catches no other step makes that survive to the shipped artifact, and a rare high-consequence catch is judged
+on consequence, not frequency. So each entry here closes on a measured graph sprint, read by
+`docs/analysis/pipeline-efficiency-s317-s320/scripts/`, that states what its own step's machine hours and tokens
+per story did against s317 and s319. A cost that fell closes the entry. A cost that did not fall closes it only
+with that rule's evidence for what the cost buys; without it, the cost is waste the entry still owes. The s317 and
+s319 figures beside each entry are reference points, not pass bars: a fixed bar can be met by cutting a step that
+catches real defects, which the rule forbids. An entry whose mechanism has shipped and whose sprint has not been
+measured is PARTIAL, whatever its `verify:` line says. BL-817 makes this a mechanism.
 
 ## BL-808 — the gate-1 partition counts committed test-evidence captures as reviewable files, so an evidence-heavy diff fans out to ten reviewers
 
@@ -570,9 +577,9 @@ Owed: the reviewable count excludes the captures the story CITES as evidence. Ke
 diverge per consumer. The captures stay in the range the reviewers read. Measure the partitioner before and after,
 because the pole runs fixtures that invoke it.
 
-Outcome owed, jointly with BL-809: implementation plus gate-validation[implementation] read 14.1 spawns and $24.3
-per story in s317, and 31.5 spawns and $30.7 in s319. The two entries together owe that step back to at most 14.1
-spawns and $24.3 per story on the measured sprint.
+Outcome, jointly with BL-809: implementation plus gate-validation[implementation] read 14.1 spawns and $24.3
+per story in s317, and 31.5 spawns and $30.7 in s319. The measured sprint reports that step's figures beside
+these, and any reviewer width it keeps names the catches that width alone made.
 
 verify: manual
 
@@ -599,10 +606,12 @@ Owed:
 
 Item 1 is the wall-clock lever and is not optional. A re-review pass is a serial wait (rework, freeze, review)
 whatever its width, so a narrower pass removes dollars and a removed pass removes hours. BL-808 makes passes
-narrower and removes none. Outcome owed: gate-1 re-review passes per reviewed story at most s317's 0.62 (13 over
-21; s319 read 1.91, 44 over 23), and implementation plus gate-validation[implementation] machine hours per story
-(`steps.csv` active plus agent wait, operator wait excluded) at most 1.4, both on the measured sprint. That step
-read 1.87 h per story in s317 and 1.80 in s319; 1.4 is 25% under s317, the share the ranked set claimed removable. The implementation spawn and dollar figure is owed jointly with BL-808.
+narrower and removes none. Reference points: gate-1 re-review passes per reviewed story read 0.62 in s317 (13
+over 21) and 1.91 in s319 (44 over 23); implementation plus gate-validation[implementation] machine hours per
+story (`steps.csv` active plus agent wait, operator wait excluded) read 1.87 and 1.80. The measured sprint reports
+both. A re-review pass is earned by a code finding the pass caught; a pass spent only on evidence or bookkeeping a
+validator could settle is the waste this entry removes. The implementation spawn and dollar figure is reported
+jointly with BL-808.
 
 verify: manual
 
@@ -627,13 +636,14 @@ Owed: measure s319 and s320 carry-over rounds by the step-value method: REFOUND,
 REPAIR-INTRODUCED and UNIQUE-SURVIVED, with a high-consequence guard. Remove each round with no unique surviving
 catch, and give each kept round its `Failure caught:` line.
 
-**Amended: "has a unique catch" is not the test.** Almost every round has one, so the test as filed keeps every
-round and removes nothing. The test is the cost of each unique surviving catch, per round AND per fan-out width:
-for each round, the catches the per-part shards made against those only its cross groups made, and the dollars and
-agent-minutes of each. A cross group or a round whose unique catches cost more than the step's median per catch is
-narrowed or merged, and a kept width states that cost beside its `Failure caught:` line. Outcome owed:
-carry-over-evaluation at most s317's 49 spawns and $96 per sprint (the table above, `origin/main`'s extractor), on
-the measured sprint. s320 reads 114 and $127 on that extractor, and 132 and $159 on BL-813's corrected one. A measurement that keeps every round and every width does not discharge this entry.
+**Amended: the measurement goes down to the fan-out width.** A round can earn its place while most of its width
+does not, and the round-level measurement cannot see that. For each round, separate the catches the per-part
+shards made from those only its cross groups made, with the consequence of each and the dollars and agent-minutes
+each width cost. A cross group whose unique surviving catches are none, or are low-consequence catches another
+round also makes, is narrowed or merged. One that carries a high-consequence catch no other round makes is kept on
+consequence, and states that catch and its cost beside its `Failure caught:` line. Reference points:
+carry-over-evaluation read 49 spawns and $96 in s317 (the table above, `origin/main`'s extractor); s320 read 114
+and $127 on that extractor, and 132 and $159 on BL-813's corrected one.
 
 verify: manual
 
@@ -654,8 +664,9 @@ s317 7.0 ($23.3, 26% of subagent dollars), s318 20.5 ($50.3, 46%), s319 24.9 ($3
 stories 13.2 ($30.0, 43%). s319's largest holder is implementation and its gate: 273 cross-shard spawns. In stories elicitation the cross groups made 3
 unique surviving catches at $25.15 each against the per-story shards' 32 at $3.06, and every cross group read
 every story. Owed: one cross agent per split dispatch (code review, QA validation, party, elicitation, adversarial
-passes and repairs, on every axis), unless a measurement of that dispatch's cross yield per group justifies more.
-Outcome owed: cross-shard spawns per story at most s317's 7.0 on the measured sprint (s319 read 24.9).
+passes and repairs, on every axis), unless that dispatch's measured cross catches justify more under the
+step-value rule, a high-consequence catch counting on consequence. The measured sprint reports cross-shard spawns
+per story beside s317's 7.0 and s319's 24.9.
 
 verify: manual
 
@@ -668,18 +679,17 @@ was never run. Per story, subagent dollars were flat ($88, $109, $88) across s31
 fan-out instead of reducing it.
 
 Owed:
-1. **A target, measured on consumer transcripts by `docs/analysis/pipeline-efficiency-s317-s320/scripts/` over the
-   first graph sprint that runs the fixes:** subagent dollars per story and machine hours per story (lead active
-   plus agent wait, operator wait excluded) at most $66 and 3.6 h, and spawns per story at most 33. Each is 25%
-   under s317 ($88, 4.8 h, 44.5), the share of sprint cost the ranked set claimed removable ($500 of $1,700–2,300).
-   s319 read $88, 4.7 h and 78.0, and fails all three. The target as first filed was s318, the regressed sprint,
-   which s319 met at $88 while regressing; "below s317" would also have let s319's 4.7 h pass. A target the
-   regressed sprint passes is not a target.
+1. **The outcome is measured on consumer transcripts by `docs/analysis/pipeline-efficiency-s317-s320/scripts/`
+   over the first graph sprint that runs the fixes:** machine hours (lead active plus agent wait, operator wait
+   excluded), tokens, subagent dollars and spawns, per story and per step, beside s317 ($88, 4.8 h, 44.5 spawns)
+   and s319 ($88, 4.7 h, 78.0). Each step whose cost did not fall carries the step-value evidence for what that
+   cost buys. The goal is efficiency, not a number: a fixed bar can be met by cutting a step that catches real
+   defects, and the step-value rule decides every cut.
 2. **The release that ships the last of BL-808 through BL-811 states that measurement as owed, and this entry
    closes only on the measured sprint,** never on a tree receipt.
-3. **The release also states its projected per-story figures,** derived from the owed reductions of BL-808 through
-   BL-811, so that the measured sprint is read against a prediction. A sprint that misses the target reopens each
-   entry whose own step figure did not move.
+3. **The release also states its projected per-story figures for each step it changed,** so that the measured
+   sprint is read against a prediction. A step that moved less than projected is explained from the sprint, and
+   an entry whose step did not move and carries no value evidence reopens.
 
 verify: manual
 
@@ -697,19 +707,28 @@ moved, and for an efficiency entry the outcome is the claim.
 Owed:
 1. **A close predicate keyed on the outcome.** Because the ranked set was never tagged, the predicate cannot key
    on the tag alone: an entry is an efficiency entry if it carries the tag OR cites an efficiency analysis under
-   `docs/analysis/` as its source. `scripts/backlog-rotate.sh` will not archive one carrying `**LANDED (v` unless it also carries an `Outcome measured:` line naming the consumer
-   sprint, the script that measured it, and the before and after per-story figure of its own step against s317.
-   `validate-backlog-receipts.sh` fails the push on such an entry whose figure did not fall, or whose line
-   names no sprint. Before the arm ships, its self-probe fires both ways: a seeded `LANDED` with no outcome line,
-   and a seeded one with a met figure.
-2. **The filing shape.** An efficiency entry states, at filing, its baseline sprint, its per-story target and the
-   step it owns. The arm above refuses one that does not.
-3. **Re-audit the 32 archived closes named above.** For each, measure its own step's per-story spawns, dollars and
-   machine hours across s317–s320 with `docs/analysis/pipeline-efficiency-s317-s320/scripts/`. An entry whose
-   step did not move is reopened into this ledger with its figure. An entry whose step moved keeps its close
-   and gains its `Outcome measured:` line in the archive.
+   `docs/analysis/` as its source. `scripts/backlog-rotate.sh` will not archive one carrying `**LANDED (v` unless it
+   also carries an `Outcome measured:` line naming the consumer sprint, the script that measured it, and the before
+   and after per-story machine hours and tokens of its own step. Where that figure did not fall, the line must
+   also cite the step-value evidence that the cost buys a catch no other step makes, as a `path:line` that
+   resolves to a step-value analysis table row or a `Failure caught:` line; a sentence alone does not satisfy it. `validate-backlog-receipts.sh`
+   fails the push on such an entry with no outcome line, with a line naming no sprint, or with a figure that did
+   not fall and no value citation. It never fails an entry for missing a number. Before the arm ships, its
+   self-probe fires on a seeded `LANDED` with no outcome line and on one whose figure did not fall with no
+   citation, and stays quiet on one whose figure fell and on one whose figure did not fall with a citation.
+2. **The filing shape.** An efficiency entry states, at filing, its baseline sprint, the step it owns, and the
+   movement it expects in that step's machine hours and tokens, and it CITES the step-value ruling
+   ("A step with no measured value goes", `.claude/rules/operator-rulings.md`) as its decision rule rather
+   than restating it or substituting a number for it. BL-808 through BL-812 were filed from an analysis that
+   carried that rule, and their first amendment replaced it with fixed per-story bars: the goal was defined and
+   the filing did not carry it. The arm above refuses an entry that does not cite the ruling.
+3. **Re-audit the 32 archived closes named above.** For each, measure its own step's per-story machine hours,
+   tokens, dollars and spawns across s317–s320 with `docs/analysis/pipeline-efficiency-s317-s320/scripts/`. An
+   entry whose step did not move and carries no value evidence is reopened into this ledger with its figure. An
+   entry whose step moved, or whose cost is shown to buy unique catches, keeps its close and gains its
+   `Outcome measured:` line in the archive.
 
-Outcome owed: the arm fires on a seeded unmeasured efficiency close, and every one of the 32 archived closes
-carries an `Outcome measured:` line or is reopened.
+Outcome owed: the arm behaves as its self-probe states, and every one of the 32 archived closes carries an
+`Outcome measured:` line or is reopened.
 
 verify: manual

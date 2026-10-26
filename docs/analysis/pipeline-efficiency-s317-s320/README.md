@@ -50,3 +50,9 @@ The efficiency releases (0.782.0–0.786.0) reached graph on 2026-10-14/15, so s
 them and s319 and s320 after. The price per spawn fell about 40%, mostly from cheaper role bindings.
 Spawns per story rose by about the same factor, so the cost per story did not move. Dollars are
 API-list-equivalent at the prices in `spawns.py`.
+
+**The decision rule for everything filed from this directory is the step-value ruling**, "A step with no
+measured value goes" in `.claude/rules/operator-rulings.md`, applied as `docs/analysis/step-value-s317-s319.md`
+applies it: a step, round or fan-out width is kept on catches no other step makes that survive to the shipped
+artifact, a rare high-consequence catch judged on consequence. The figures here are measurements to report beside
+that rule, never pass bars.
