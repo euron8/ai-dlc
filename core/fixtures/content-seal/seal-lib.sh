@@ -52,6 +52,12 @@ race_engine() {
     printf 'if [ "${BASH_SOURCE[0]}" != "$0" ]; then . "$REAL"; return 0; fi\n'
     printf 'case "${1:-}" in --record|--record-expect) printf "written through Bash after the move\\n" >> "${@: -1}" ;; esac\n'
     printf 'exec bash "$REAL" "$@"\n'; } > "$1/content-seal.sh" || return 1
+  # The installed layout: the join (its checks_field segments a replayed record) and the validator sit
+  # beside the engine. The validator is a COUNTING wrapper over the real one: each replay the mark runs
+  # appends a line to <dir>/validator.calls, so an arm can assert the BL-816 replay actually ran.
+  cp "$SRCDIR/join-remediator-shards.sh" "$1/join-remediator-shards.sh" || return 1
+  { printf '#!/bin/bash\nprintf "called\\n" >> %q\n' "$1/validator.calls"
+    printf 'exec bash %q "$@"\n' "$SRCDIR/validate-artifact-derivations.sh"; } > "$1/validate-artifact-derivations.sh" || return 1
   printf '%s' "$1/wait-for-deliverable.sh"
 }
 # in_set <path relative to the state dir> -> the DECLARATION's answer (content-seal.sh seal_sealed),

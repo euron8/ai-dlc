@@ -892,6 +892,25 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    elicitation editing an artifact its own series had already notarised, buying a five-pass
    sub-cycle nobody scheduled.
 
+   **Every MAJOR the terminal MET pass leaves is closed on a record** (Check 24 arm J3), the
+   underived ones included. A MAJOR's key is `<shard-file>#<id>`, the remediator's `source:`
+   grammar (`1.md#F-1`, `cross-2.md#F-1`; an unsharded pass keys on its own file name). Close
+   each key one of two ways:
+   1. REPAIRED: an entry of `<artifact>-repair-p<M>.md` or `<artifact>-serial-repair-p<M>.md` for
+      the terminal pass M names it in `source:` with `disposition: repaired`, and the record
+      starts from a sha that pass notarized.
+   2. DEFERRED: `s<N>/<artifact>-deferral-p<M>.md` beside the pass carries the pair
+      ```
+      - source: <key>
+      - deferred-to: <successor step>
+      ```
+      where the successor is the one `J3_SUCCESSORS` in `validate-adversarial-convergence.sh`
+      declares for the series. The successor's analyst restates each deferred key verbatim in the
+      context digest that row names, as a requirement input, and that step's Check 24 refuses a key
+      the digest does not name. A series with no row there (stories, architecture) closes its
+      MAJORs only by repair.
+   Otherwise dispatch another pass in this series.
+
    **THE AMENDMENT PROCEDURE — a notarized artifact that must move after MET.** Check 24 arm J2
    compares the file the terminal MET pass notarized against the bytes on disk. Amend it one of
    these ways, in the same dispatch as the edit:

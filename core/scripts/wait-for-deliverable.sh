@@ -647,6 +647,27 @@ seal_of() {
 #      seal_of reads sha=) and a lead brief produces `shard: i/N`, which a refusal would reject. These
 #      directory names cannot overlap term 4: a review directory ends in 12 hex digits (optionally
 #      -p<M>), and `repair` is not 12 hex digits. Every other path writes the caller's words.
+#   6. A REMEDIATOR FILE (`--mark-repair`, or `--mark` on a term-5 part) stating `derivations: not
+#      replayed` is REPLAYED here, because the join refuses that line and a refusal there costs a whole
+#      re-dispatch (BL-804). Which lines count is the JOIN's own judgment: the sibling
+#      join-remediator-shards.sh's checks_field is extracted and run (CF_LINES=1) on the body plus a
+#      provisional marker of this call's token, so a part holding no repaired entry, and in a joined
+#      record every shard segment above the block this call closes, is left as written. When it names
+#      lines, the sibling validate-artifact-derivations.sh runs on the snapshot, with
+#      AI_DLC_PROJECT_ROOT the state dir's parent and AI_DLC_DERIV_SUPERSEDE_FROM the file (so the
+#      supersession the gate applies to a record applies here). Exit 0 with `OK: <n> derivation(s)`
+#      rewrites each named line to `<indent>derivations: replayed <n>` in a fresh copy, and that copy is
+#      what is sealed: after term 1, before the seal, so term 3's row records the rewritten bytes and
+#      nothing is laundered. <n> is the WHOLE FILE's count, one figure for every rewritten line. Exit 1
+#      refuses (64) relaying the FAIL line, with the deferral remedy only where the join lets the
+#      record defer (a `sections/.manifest` or `.subject` in its shard dir); any other exit, or an
+#      exit 0 with no OK line, refuses as no verdict. Either sibling absent is a 64 naming reinstall.
+#      `replayed <n>` and `deferred to the join` lines, and a file with no derivations line, are never touched.
+#      A CLAIMED REPLAY IS CHECKED, NEVER REWRITTEN (BL-816). When the segment this call closes states
+#      `replayed <n>` (checks_field's RPL line gives that segment's first and last line), the validator
+#      runs the same way, and exit 1 refuses (64) only on a `FAIL (<KIND>): <copy>:<line>` whose line
+#      lies inside that range; a FAIL in any other segment is left to the join, and n is not compared.
+#      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 case "${1:-}" in
@@ -751,6 +772,8 @@ $MK_OUT
         if [ -n "$mk_rs_" ]; then MK_F="$mk_rs_ remediator ${mk_pb_%.md}"; fi ;;
       esac
     fi
+    MK_REM=""; [ "$MK_MODE" = "--mark-repair" ] && MK_REM=1
+    [ "$MK_MODE" = "--mark" ] && [ -z "$MK_REVIEW" ] && [ -n "${mk_rs_:-}" ] && MK_REM=0
     if [ -n "$MK_REVIEW" ]; then :; else
     MK_STATE=""; MK_ROWED=0; MK_SRC="$MK_FILE"
     case "$MK_PHYS" in */planning-artifacts/*) MK_STATE="${MK_PHYS%%/planning-artifacts/*}" ;; esac
@@ -779,6 +802,76 @@ $MK_OUT
       mark_refuse "$MK_STATE/planning-artifacts/.artifact-writes.jsonl carries content-seal rows but $MK_SEAL is absent, so the file's seal cannot be honoured; reinstall ai-dlc."
     fi
     MK_KEEP=1; has_marker "$MK_SRC" && MK_KEEP=0
+    # THE REPLAY (header: "--mark", term 6). Between term 1 and the seal, so the seal and term 3's row
+    # cover the rewritten bytes and nothing is laundered.
+    if [ -n "$MK_REM" ] && LC_ALL=C awk '/^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = tolower($0); gsub(/[*_`\r]/, "", v); if (v ~ /not replayed|replayed [0-9]/) f = 1 } END { exit !f }' "$MK_SRC"; then
+      mk_rdrop_() { rm -f "$MK_PRB" "$MK_VO" "$MK_VE"; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; }
+      mk_sd_="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      MK_JOIN="$mk_sd_/join-remediator-shards.sh"; MK_VAL="$mk_sd_/validate-artifact-derivations.sh"
+      MK_PRB=""; MK_VO=""; MK_VE=""
+      [ -f "$MK_JOIN" ] || { mk_rdrop_; mark_refuse "a record stating 'derivations: not replayed' or 'replayed <n>' is checked here, and the join's checks_field, which segments it, is not beside this script ($MK_JOIN); reinstall ai-dlc."; }
+      [ -f "$MK_VAL" ] || { mk_rdrop_; mark_refuse "a record stating 'derivations: not replayed' or 'replayed <n>' is checked by validate-artifact-derivations.sh, which is not beside this script ($MK_VAL); reinstall ai-dlc."; }
+      mk_n_="$(grep -c '^checks_field() {' "$MK_JOIN")" || mk_n_=0
+      [ "$mk_n_" = 1 ] || { mk_rdrop_; mark_refuse "found $mk_n_ 'checks_field() {' definitions in $MK_JOIN (want exactly 1); reinstall ai-dlc."; }
+      MK_PRB="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+      # The record AS THE JOIN WILL READ IT: this call's body and a provisional marker of this call's
+      # token, so the segment that marker closes is the one this call seals (line numbers unchanged).
+      { seal_body "$MK_SRC" "$MK_KEEP"; printf '%s%s sha=0%s%s\n' "$MARK_TOKEN" "$MK_F" "${MK_TAIL:+ }" "$MK_TAIL"; } > "$MK_PRB" \
+        || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+      MK_CF="$( eval "$(sed -n '/^checks_field() {/,/^}/p' "$MK_JOIN")" && CF_LINES=1 checks_field "$MK_REM" "$MK_PRB" | awk -F'\t' '$1 == "NRL" || $1 == "RPL"' )" \
+        || { mk_rdrop_; mark_refuse "the join's checks_field could not read $MK_FILE."; }
+      MK_NRL="$(printf '%s\n' "$MK_CF" | awk -F'\t' '$1 == "NRL" { print $2 }')"
+      MK_RPL="$(printf '%s\n' "$MK_CF" | awk -F'\t' '$1 == "RPL" { l = $2 " " $3 } END { print l }')"
+      if [ -n "${MK_NRL# }" ] || [ -n "$MK_RPL" ]; then
+        MK_VO="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" && MK_VE="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" \
+          || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+        if [ -n "$MK_STATE" ]; then
+          AI_DLC_PROJECT_ROOT="$(dirname "$MK_STATE")" AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+        else
+          AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+        fi
+        mk_vn_="$(sed -n 's/^OK: \([0-9][0-9]*\) derivation(s) .*/\1/p' "$MK_VO" | tail -1)"
+        # BL-816: a block claiming `replayed <n>` is refused only on a FAIL whose `<copy>:<line>` lies in
+        # that block's own range (n is not compared). A FAIL in another segment is the join's to judge;
+        # a FAIL line naming no line of the copy is kept, so an attribution that cannot be read refuses.
+        # An exit 1 is a VERDICT only beside the validator's own `FAIL: <n> stale or unrunnable derivation(s)`
+        # summary on stderr; one without it (a `set -u` fault, a syntax error) is a crash, never a FAIL set
+        # that happens to miss this block, and is refused as no verdict on both the replayed and not-replayed paths.
+        mk_vs_=0; [ "$mk_vrc_" -eq 1 ] && grep -q '^FAIL: [0-9][0-9]* stale or unrunnable derivation' "$MK_VE" && mk_vs_=1
+        MK_ATT=""
+        if [ "$mk_vs_" = 1 ] && [ -z "${MK_NRL# }" ]; then
+          MK_ATT="$(LC_ALL=C awk -v pfx="$MK_SRC:" -v lo="${MK_RPL% *}" -v hi="${MK_RPL#* }" '/^FAIL \([A-Z-]+\): / {
+              i = index($0, pfx); r = (i ? substr($0, i + length(pfx)) : ""); if (!match(r, /^[0-9]+/)) { print; next }
+              ln = substr(r, 1, RLENGTH) + 0; if (ln >= lo + 0 && ln <= hi + 0) print }' "$MK_VE")"
+        fi
+        if [ -z "${MK_NRL# }" ] && { { [ "$mk_vrc_" -eq 0 ] && [ -n "$mk_vn_" ]; } || { [ "$mk_vs_" = 1 ] && [ -z "$MK_ATT" ]; }; }; then
+          rm -f "$MK_PRB" "$MK_VO" "$MK_VE"
+        elif [ "$mk_vrc_" -eq 0 ] && [ -n "$mk_vn_" ]; then
+          MK_RW="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+          LC_ALL=C awk -v ls="$MK_NRL" -v n="$mk_vn_" 'BEGIN { k = split(ls, a, " "); for (i = 1; i <= k; i++) at[a[i]] = 1 }
+            FNR in at { match($0, /^[[:space:]-]*/); print substr($0, 1, RLENGTH) "derivations: replayed " n; next } { print }' "$MK_SRC" > "$MK_RW" \
+            || { rm -f "$MK_RW"; mk_rdrop_; mark_refuse "cannot write the replayed copy of $MK_FILE."; }
+          rm -f "$MK_PRB" "$MK_VO" "$MK_VE"; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"
+          MK_SRC="$MK_RW"
+        else
+          mk_vr_="$(grep -E '^(FAIL|REFUSED|ERROR):' "$MK_VE" | head -3)"; [ -n "$mk_vr_" ] || mk_vr_="$(head -3 "$MK_VE")"
+          if [ "$mk_vs_" = 1 ]; then
+            mk_pd_="${MK_PHYS%/*}"
+            if [ "$MK_REM" = 1 ]; then mk_sh_="$mk_pd_/shards/$(basename "$MK_PHYS" .md)"; else mk_sh_="$mk_pd_"; fi
+            MK_DEFER=""
+            if [ -f "$mk_sh_/sections/.manifest" ] || [ -f "$mk_sh_/.subject" ]; then
+              MK_DEFER=" Where a fence names your own section file or the document assembled from it, which reads stale until assembly, write 'derivations: deferred to the join (section/subject shard)' instead."
+            fi
+            MK_RESTORE="fix the stale derivation(s) (validate-artifact-derivations.sh $MK_FILE names each), then mark again.$MK_DEFER"
+            [ -n "${MK_NRL# }" ] || { mk_rdrop_; mark_refuse "'$MK_FILE' states 'derivations: replayed <n>' in the block this call seals (lines ${MK_RPL% *}-${MK_RPL#* }), and a fence inside it does not reproduce: $MK_ATT -- fix the stale fence (validate-artifact-derivations.sh $MK_FILE names each), replay again, then mark.$MK_DEFER"; }
+            mk_rdrop_; mark_refuse "'$MK_FILE' states 'derivations: not replayed', and the replay this call ran failed: $mk_vr_ -- $MK_RESTORE"
+          fi
+          mk_rdrop_; mark_refuse "'$MK_FILE' states 'derivations: ${MK_NRL:+not }replayed', and the replay this call ran gave no verdict (exit $mk_vrc_): $mk_vr_ -- re-run once the fault is gone or fix the fence, then mark again."
+        fi
+      else
+        rm -f "$MK_PRB"
+      fi
+    fi
     MK_TMP="${MK_FILE}.mark-tmp.$$"
     mk_drop_() { rm -f "$MK_TMP"; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; }
     seal_body "$MK_SRC" "$MK_KEEP" > "$MK_TMP" || { mk_drop_; mark_refuse "cannot write $MK_TMP."; }

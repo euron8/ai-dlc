@@ -124,7 +124,12 @@ else bad "CS-J8: --mark-repair on an unsealed part: rc=$MRC, its row ${r8:-none}
 # CS-J9: a Bash write between --mark-repair's move and its row (stub sibling) -> no program row,
 # 64, and --escalations refuses the record on the join's own seal row.
 joined; re9="$(race_engine "$WORK/race-j")" || { echo "FIXTURE BROKEN: CS-J9 race engine" >&2; exit 2; }
+# As CS-J6: the serial remediator's own triple and check lines close the block this call seals, and its
+# `derivations: replayed 0` is the claim the BL-816 replay checks (the joined shards' lines are other segments').
+printf '\n- artifact: _bmad-output/planning-artifacts/s305/stories/story-2.1.md\n- artifact_sha_before: 0\n- artifact_sha_after: 0\n- advisor: called\n- derivations: replayed 0\n' >> "$RREC"
+seal_hook "$RW" Edit "$RREC" "$AG4"
 mark_rep "$re9" "$RREC"
+n9="$(grep -c called "$WORK/race-j/validator.calls" 2>/dev/null)" || n9=0; m9="$(head -c 600 "$WORK/mark.out")"
 # As CS-K4r: the race is forced only when the record carries a seal row. Its absence is this arm's verdict.
 if grep -q 'written through Bash after the move' "$RREC"; then ok "CS-J9r: race forced: the record carried a seal row and the stub wrote after --mark-repair's move"
 else bad "CS-J9r: race not forced: no seal row, so --mark-repair never reached --record-expect and the stub never wrote"; fi
@@ -132,6 +137,15 @@ run_esc "$RW" "$RREC"
 if [ "$MRC" = 64 ] && ! grep -qF "$PROW" "$RW/$ST/planning-artifacts/.artifact-writes.jsonl" && [ "$RC" -eq 2 ] && has "$JO" "$TOKEN"; then
   ok "CS-J9: a write between --mark-repair's move and its row: no row recorded, 64, --escalations refuses the record"
 else bad "CS-J9: the write after --mark-repair's move was sealed or not refused: mark rc=$MRC, --escalations rc=$RC: $(head -2 "$JO")"; fi
+
+# CS-J9v: the BL-816 replay RAN on CS-J9's mark (the engine copy's validator sibling was invoked), and the
+# same engine reads 0 calls on a record the prefilter skips (no `derivations: replayed` line).
+joined; sed '/derivations: replayed/d' "$RREC" > "$RREC.nr" && cp "$RREC.nr" "$RREC"
+re9c="$(race_engine "$WORK/race-j-ctl")" || { echo "FIXTURE BROKEN: CS-J9v control engine" >&2; exit 2; }
+mark_rep "$re9c" "$RREC"
+n9c="$(grep -c called "$WORK/race-j-ctl/validator.calls" 2>/dev/null)" || n9c=0
+if [ "$n9" -ge 1 ] && [ "$n9c" = 0 ]; then ok "CS-J9v: the replay ran on the mark (validator called ${n9}x; 0x on a record the prefilter skips)"
+else bad "CS-J9v: [$m9] validator calls: $n9 on the replayed-record mark (want >=1), $n9c on a prefilter-skipped one (want 0)"; fi
 
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

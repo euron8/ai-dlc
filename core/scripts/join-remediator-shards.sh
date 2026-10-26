@@ -474,6 +474,17 @@ case "$SINCE" in $ISO) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${S
 case "$UNTIL" in $ISO) ;; *) die "--until must be YYYY-MM-DDTHH:MM:SSZ (got '${UNTIL}')" ;; esac
 [ "$SINCE" \> "$UNTIL" ] && die "--since ${SINCE} is after --until ${UNTIL}"
 command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
+# A FUTURE --until (BL-807). The window's upper bound is a time the lanes have already reported by, so
+# one later than this join's own clock is an estimate used as fact. 120s of slack absorbs clock skew.
+# The answer is read as the literal `true`/`false`: a jq that cannot evaluate refuses, never acquits.
+# Both sides go through fromdateiso8601, so a jq whose parser applies a local DST offset applies it to
+# both and the skew cancels (`now` alone is epoch seconds and would not carry it).
+_fut="$(jq -n --arg u "$UNTIL" '($u | fromdateiso8601) > ((now | todateiso8601 | fromdateiso8601) + 120)' 2>/dev/null)" || _fut=""
+case "$_fut" in
+  false) ;;
+  true) die "--until ${UNTIL} is later than this join's clock ($(date -u +%Y-%m-%dT%H:%M:%SZ)) by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window" ;;
+  *) die "--until ${UNTIL} could not be compared with this join's clock (jq fromdateiso8601 did not answer); take --until from \`date -u\` after the last lane reports" ;;
+esac
 fi
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -1429,8 +1440,26 @@ CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-compl
 # `- advisor: one attempt was made ...`, and such a line neither opens a record's era nor counts as
 # the field. So a record binds only from its first GRAMMAR line, and inside a bound file a prose
 # line is a value outside the grammar. The LABEL stays case-sensitive, as arm H's repair_field is.
+# CF_LINES=1 (off by default, so the join and its self-probes read exactly the lines above) adds one
+# "NRL\t <n>..." line naming the line numbers of the `not replayed` values in the segment the file's
+# LAST terminator closes (a part: the whole part). `wait-for-deliverable.sh --mark`/`--mark-repair`
+# extracts this function and reads that line to replay the record before sealing it (BL-804). When
+# that segment states `replayed <n>` it adds "RPL\t<first line>\t<last line>", the segment's own line
+# range (its first chunk's first line through the line before the next chunk opens, or the file's
+# last line), which --mark uses to attribute a validator FAIL to the segment it closes (BL-816).
+# A chunk edge is never inside a fence (`fence { next }` below), so a fence lies wholly in or out.
+# CF_EDITS=1 (off by default) prints ONLY one "EDT\t<value>" line per `edit:` value that is not a no-edit
+# value, under any heading whose entry is not dispositioned escalated, and nothing else: the no-lane
+# acceptance's key 2 (BL-807). A no-edit value is `n/a` or `none` read by val() and kw() above, so
+# `n/a (escalated)`, `` `none` `` and `**n/a** (the fix was already in place)` read as no edit, and an
+# extension-less path, prose, `.MD:3` or an empty value wrapped onto the next line do not -- a value is
+# judged, never tokenised, so a spelling part_cites cannot tokenise still refuses. `n/a (insertion)` and
+# `n/a (deletion)` are NOT no-edit here: they are the siblings field's forms, and team-roles/remediator.md
+# defines them as an edit that inserted or deleted text, so on an `edit:` line they name a write. Fail closed.
+# An entry dispositioned repaired or operator-ruling that carries NO `edit:` line prints
+# "EDT\t(no edit: line)": an absent value is not a no-edit value, so it cannot acquit key 2 either.
 checks_field() {
-  awk -v rec="$1" -v dok="${CF_DEFER:-1}" '
+  awk -v rec="$1" -v dok="${CF_DEFER:-1}" -v nrl="${CF_LINES:-0}" -v ed="${CF_EDITS:-0}" '
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
@@ -1439,8 +1468,8 @@ checks_field() {
     # opens at line 1, at each shard marker (M), at each `- artifact:` triple line (T) and after each
     # column-0 `repair-complete:` terminator (E), which closes the chunk it ends.
     function brk(t) { nk++; ck[nk] = t; cl[nk] = FNR }
-    function seg(lo, hi,   j) { sa = 0; sd = 0; sr = 0; sn = 0; sb = ""
-      for (j = lo; j <= hi; j++) { sa += ca[j]; sd += cd[j]; sr += cr[j]; if (cn[j]) sn = 1; sb = sb cb[j] } }
+    function seg(lo, hi,   j) { sa = 0; sd = 0; sr = 0; sn = 0; sy = 0; sb = ""; sl = ""
+      for (j = lo; j <= hi; j++) { sa += ca[j]; sd += cd[j]; sr += cr[j]; if (cn[j]) sn = 1; if (cy[j]) sy = 1; sb = sb cb[j]; sl = sl cnl[j] } }
     function emit(what, w) { print "CHK\t" b "\t" what w }
     # judge <chunks lo..hi> <label> <mode> <need>. Mode E: a part (or an unmarked record with no
     # terminator), bound only once it carries a grammar line, the record era per segment. Mode S: a
@@ -1455,12 +1484,20 @@ checks_field() {
       if (mode != "V") { if (!sa) emit("no advisor: line", w); if (!sd) emit("no derivations: line", w) }
       if (sb != "") emit("a value outside the grammar:" sb, w)
       if (sn) emit("derivations: not replayed", w)
+      if (sn && nrl == 1 && own) print "NRL\t" sl
+      if (sy && nrl == 1 && own) print "RPL\t" cl[lo] "\t" (hi < nk ? cl[hi + 1] - 1 : FNR)
     }
     function blk(j) { return " (the block closed at line " tl[j] " by \047" tx[j] "\047)" }
     BEGIN { nk = 1; ck[1] = "H"; cl[1] = 1 }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
+    function eflush(   i) { if (edp !~ /^escalat/) for (i = 1; i <= nev; i++) print "EDT\t" ev[i]
+      if (edp ~ /^(repaired|operator-ruling)/ && !esaw) print "EDT\t(no edit: line)"
+      nev = 0; edp = ""; esaw = 0 }
+    ed == 1 && /^#+[ \t]/ { eflush() }
+    ed == 1 && tolower($0) ~ /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { edp = val() }
+    ed == 1 && /^[[:space:]-]*[*_`]*edit[*_`]*:/ { esaw = 1; v = val(); if (!kw(v, "n/a|none") || v ~ /^n\/a[ \t]*\((insertion|deletion)\)/) ev[++nev] = v; next }
     rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { sawe = 0; brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
     rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
                                       split(tx[nk], tw, " "); ts[nk] = (tw[2] == "serial"); brk("E"); next }
@@ -1468,18 +1505,19 @@ checks_field() {
     /^[[:space:]-]*[*_`]*advisor[*_`]*:/ { v = val()
       if (kw(v, "called|unavailable")) ca[nk]++; else cb[nk] = cb[nk] " advisor: " v; next }
     /^[[:space:]-]*[*_`]*derivations[*_`]*:/ { v = val()
-      if (kw(v, "not replayed")) { cd[nk]++; cn[nk] = 1 }
-      else if (kw(v, "replayed [0-9]+")) cd[nk]++
+      if (kw(v, "not replayed")) { cd[nk]++; cn[nk] = 1; cnl[nk] = cnl[nk] " " FNR }
+      else if (kw(v, "replayed [0-9]+")) { cd[nk]++; cy[nk] = 1 }
       else if (kw(v, "deferred to the join")) { cd[nk]++; if (!dok) cb[nk] = cb[nk] " derivations: deferred in a files-mode part" }
       else cb[nk] = cb[nk] " derivations: " v
       next }
     /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
+      if (ed == 1) { eflush(); exit }
       b = FILENAME; sub(/.*\//, "", b)
       # A PART is one segment, bound unconditionally once it holds a repaired entry.
-      if (rec == 0) { if (nrep == 0) exit; judge(1, nk, "", "S", 0); exit }
-      lm = 0; nt = 0
-      for (j = 1; j <= nk; j++) { if (ck[j] == "M") lm = j; if (tl[j]) nt++ }
+      if (rec == 0) { if (nrep == 0) exit; own = 1; judge(1, nk, "", "S", 0); exit }
+      lm = 0; nt = 0; lt = 0
+      for (j = 1; j <= nk; j++) { if (ck[j] == "M") lm = j; if (tl[j]) { nt++; lt = j } }
       lo = 1
       if (!lm) {
         # AN UNMARKED RECORD (the one unsharded remediator, or a record no join wrote) owes the lines
@@ -1519,7 +1557,7 @@ checks_field() {
       # THE BLOCKS: each runs to the terminator that closes it; the next opens after it. A block
       # closed by `repair-complete: serial` owes both lines; any other block (`spec-render`) is judged
       # on its values alone; an unterminated tail is era-gated like a part. Parts never reach a block.
-      for (j = lo; j <= nk; j++) if (tl[j]) { judge(lo, j, blk(j), (ts[j] ? "S" : "V"), (lm && !ts[j])); lo = j + 1 }
+      for (j = lo; j <= nk; j++) if (tl[j]) { own = (j == lt); judge(lo, j, blk(j), (ts[j] ? "S" : "V"), (lm && !ts[j])); own = 0; lo = j + 1 }
       if (lo <= nk) judge(lo, nk, (lm ? " (the unterminated block from line " cl[lo] ")" : ""), "E", (lm > 0))
     }' "$2"
 }
@@ -2468,7 +2506,10 @@ RWEOF
 $_ovl
 ROEOF
 fi
-[ -n "$ROWS" ] || die "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
+# AN EMPTY LEDGER IS DECIDED AFTER THE PARTS ARE READ (BL-807), never refused here: a round in which no
+# lane wrote the subject is trivially disjoint, and only the parts' own `edit:` lines can say so.
+NOLANE=0; NOLANE_LINE=""
+[ -n "$ROWS" ] || NOLANE=1
 
 OVERLAPS="$(printf '%s\n' "$ROWS" | awk -F'\t' '
   { n[$1]++; w[$1] = (w[$1] == "" ? $2 : w[$1] ", " $2) }
@@ -2492,6 +2533,7 @@ WRITERS="$(printf '%s\n' "$ROWS" | awk -F'\t' '{print $2}' | sort -u)"
 # A cited token is a path-shaped run ending in a document extension; a `:<line>` suffix, prose
 # and backticks around it fall away because the token grammar cannot spell them.
 CITES=""
+EDITS=""
 CF_DEFER=1; [ "$DOCMODE$SUBJMODE" = 00 ] && CF_DEFER=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
@@ -2499,6 +2541,7 @@ while IFS= read -r p; do
     repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
   done
   checks_refusals "$(checks_field 0 "$p")"
+  EDITS="${EDITS}$(CF_EDITS=1 checks_field 0 "$p")"
   _pc="$(part_cites "$p")"
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
@@ -2510,6 +2553,64 @@ TOKEOF
 done <<PAREOF
 $PARTS
 PAREOF
+
+# --- A ROUND IN WHICH NO LANE WROTE THE SUBJECT (BL-807). Accepted only on THREE keys together:
+#   1. no in-window row under the artifact path (ROWS empty, decided above);
+#   2. no part cites an edited file: every non-escalated entry's `edit:` VALUE is n/a or none as
+#      checks_field's val()/kw() read it (EDITS empty), and no token was cited (CITES empty). Keyed on
+#      CITES alone it was keyed on TOKENS, and a lane that wrote through Bash with an off-grammar `edit:`
+#      (`.../story-2.1` with no extension, prose, `.MD:3`, `.markdown:3`, a cite wrapped onto the next
+#      line) cited nothing part_cites can spell and was accepted under a header saying no lane wrote;
+#   3. no LANE AGENT has a subject row at ANY time. The lane agents are the writers of the part records
+#      themselves (`<repair dir>/<part>.md`, non-recursive, the rows the re-run arm reads), and a subject
+#      row is one ROWS' own path filters keep with the time filter dropped, a part record excepted. A
+#      lane that wrote and failed to ledger its write cites it (key 2); a lane whose write fell outside a
+#      mis-chosen window still holds the row (key 3). Every part must hold a row of its own, or the lane
+#      set is not the round's and key 3 would pass over nothing.
+# A part citing a file over an empty window falls through to the coverage join, where every citation
+# is UNWRITTEN with the ledger's own remedy (BL-803), beside the refusal this line always gave.
+if [ "$NOLANE" = 1 ]; then
+  if [ -n "$CITES" ] || [ -n "$EDITS" ]; then
+    refuse "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
+  else
+    _nlpx="${SHARD_REL}/${SHARD_DIR##*/}/"
+    _nlr="$(jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" --arg px "$_nlpx" '
+      inputs | select(type == "object") | select(.kind == "artifact-write")
+       | select((.agent_id // "") != "") | select((.path | type) == "string")
+       | (.path | ltrimstr($px)) as $b
+       | if (.path | startswith($px)) and ($b | contains("/") | not) and ($b | endswith(".md"))
+         then ["P", $b, (.agent_id | tostring)] | @tsv
+         elif (.path == $ap or (.path | startswith($ap + "/"))) and ($doc == "1" or ((.path | startswith($sh + "/")) | not))
+         then ["S", .path, (.agent_id | tostring), (.ts // "-" | tostring)] | @tsv
+         else empty end' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    # Subject mode: APATH is the whole state dir, so a subject row is one on the split's own file set
+    # (the K, S and O paths ROWS' subject filter reads), never another sprint's or seat's file.
+    _nlk=""
+    [ "$SUBJMODE" = 1 ] && _nlk="$(printf '%s\n%s\n%s\n' "$SUBJ_SET" "$SUBJ_SECTIONED" "$SUBJ_OUTSIDE" | sed '/^$/d; s/^/K	/')"
+    _nlres="$({ printf '%s\n' "$PARTS" | sed '/^$/d; s@.*/@B	@'; printf '%s\n' "$_nlk" | sed '/^$/d'; printf '%s\n' "$_nlr" | sed '/^$/d'; } | awk -F'\t' -v sj="$SUBJMODE" '
+      $1 == "B" { pb[++nb] = $2; next }
+      $1 == "K" { ks[$2] = 1; next }
+      $1 == "P" { has[$2] = 1; la[$3] = 1; next }
+      $1 == "S" { if (sj == "1" && !($2 in ks)) next; s[++ns] = $2 "\t" $3 "\t" $4; next }
+      END {
+        for (i = 1; i <= nb; i++) if (!(pb[i] in has)) print "NOROW\t" pb[i]
+        for (i = 1; i <= ns; i++) { split(s[i], f, "\t"); if (f[2] in la) print "WROTE\t" s[i] }
+        n = 0; for (a in la) n++; print "LANES\t" n
+      }')"
+    _nll=0
+    while IFS='	' read -r _k _a _b _c; do
+      case "$_k" in
+        NOROW) refuse "no lane wrote under ${APATH} in the window and no part cites a file, but ${_nlpx}${_a} has no ledger row, so its writer is unknown and cannot be shown to have written nothing; re-dispatch that lane writing its part record through Edit, Write or MultiEdit" ;;
+        WROTE) refuse "no lane wrote under ${APATH} in [${SINCE}, ${UNTIL}], but lane agent ${_b} wrote ${_a} at ${_c}, outside that window and cited by no part: take --since from the lane dispatch and --until from \`date -u\` after the last lane reports, and cite the edit in that lane's part" ;;
+        LANES) _nll="$_a" ;;
+      esac
+    done <<NLEOF
+$_nlres
+NLEOF
+    NOLANE_LINE="no lane wrote the subject: 0 ledger rows under ${APATH} in [${SINCE}, ${UNTIL}], and every part cites no edited file (${_nll} lane agent(s), none with a subject row at any time)"
+  fi
+fi
 
 # THE COVERAGE JOIN. Ledger side: file -> writers (harness ids). Part side: part -> cited files.
 # A cited token resolves to the ledger path it equals or is a `/`-suffix of, so a bare basename,
@@ -2715,21 +2816,21 @@ TMP="${OUT}.join.$$"
   [ -z "$AL_LINES" ] || printf '%s' "$AL_LINES"
   [ -z "$NEST_LINES" ] || printf '%s' "$NEST_LINES"
   if [ "$SUBJMODE" = 1 ]; then
-    echo "every subject file and section copy was written by exactly one agent ${_inwin};"
+    if [ -n "$NOLANE_LINE" ]; then echo "${NOLANE_LINE};"; else echo "every subject file and section copy was written by exactly one agent ${_inwin};"; fi
     printf '%s\n' "$ASM_LINE" | sed 's/^/partition-subject.sh: /'
     echo ""
     echo "- artifact: ${_srm}"
     echo "- artifact_sha_before:${SUBJ_BEFORE}"
     echo "- artifact_sha_after:${SUBJ_AFTER}"
   elif [ "$DOCMODE" = 1 ]; then
-    echo "every section under ${APATH} was written by exactly one agent ${_inwin};"
+    if [ -n "$NOLANE_LINE" ]; then echo "${NOLANE_LINE};"; else echo "every section under ${APATH} was written by exactly one agent ${_inwin};"; fi
     echo "partition-document.sh: ${ASM_LINE}"
     echo ""
     echo "- artifact: ${DOC_REL}"
     echo "- artifact_sha_before: ${DOC_BEFORE}"
     echo "- artifact_sha_after: ${DOC_AFTER}"
   else
-    echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent ${_inwin}."
+    if [ -n "$NOLANE_LINE" ]; then echo "${NOLANE_LINE}."; else echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent ${_inwin}."; fi
   fi
   echo ""
   while IFS= read -r p; do

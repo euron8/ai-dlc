@@ -38560,3 +38560,92 @@ token-pass rows, 14 of 17 passes naming at least one line, and 19 of 30 flips.
 
 verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl815.sh core/scripts/validate-handoff-evidence.sh
 
+## BL-804 — a remediator writes `derivations: not replayed` although replay is its default, and the join's refusal costs a whole re-dispatch
+
+**LANDED (v0.949.0, verified e6e7f8375).**
+
+**DEFECT (efficiency).** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 16, 01:07 EDT 2026-10-26). In graph s320, the `stories-party --pass 1` repair join refused at 05:05:46Z with `REFUSED: 11.md: derivations: not replayed; …` (the checks-field refusal in `core/scripts/join-remediator-shards.sh`). Part 11 is story 3.5, in `s320/shards/stories-party-repair-p1/11.md`. `core/team-roles/remediator.md:134-139` makes replay the default ("Replay is the default: run `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit"), but the remediator wrote `not replayed` anyway. Graph's lead recovered by contract: a record-only re-run (agent a0481edc5f18691e2) replayed 5 derivations and re-marked, and the re-join returned rc=0. The cost was one dispatch and about 2 minutes. One instance, measured from the transcript.
+
+Owed: a mechanism that makes the default the act, not the instruction. For example, the `--mark` path of `wait-for-deliverable.sh` could run the replay itself when a repair record says `not replayed` and its fences name no deferred document, then write the count. That moves a refusal the join already makes to the point where the remediator can still fix it. Measure the false-positive set first: a record whose fences are legitimately deferred must not be forced.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl804.sh
+
+## BL-807 — the lane join refuses a round in which no lane wrote the subject, so a lead hand-assembles a record of no-edit lanes
+
+**LANDED (v0.949.0, verified e6e7f8375).**
+
+**DEFECT.** Filed after the batch-242 close from the graph watch (ai-dlc-fa, poll 33, 04:15 EDT 2026-10-26), verified read-only by the lead. In graph s320, at 08:06:35Z, `join-remediator-shards.sh --sprint 320 --artifact stories-serial --pass 1 --artifact-path _bmad-output/planning-artifacts/s320 --since 2026-10-26T07:52:21Z --until 2026-10-26T08:06:32Z` exited 2 with `REFUSED: the ledger records no dispatched write under _bmad-output/planning-artifacts/s320 in [...]; disjointness is unproven`. That is the empty-`ROWS` refusal at `core/scripts/join-remediator-shards.sh:2471` on `97d41f5d1`. All 10 lanes were no-edit: only lanes 4 and 7 carry non-`n/a` `edit:` lines, both marked `(escalated)` to the fan-in. Graph's `.artifact-writes.jsonl` for that window holds 0 non-shard rows under `s320`, against 59 shard rows as the control. Graph's lead then hand-assembled `s320/stories-serial-repair-p1.md` from the 10 lane parts, under the header `HAND-ASSEMBLED from 10 lane parts by the lead` and a disclosure.
+
+This is NOT BL-802's shape, and 0.942.0 does not fix it. BL-802 records a write to a document OUTSIDE the state dir; here the document is inside the state dir, and no lane wrote anything. A round with zero subject writes is trivially disjoint, but the join can only prove disjointness from ledger rows, so it refuses the one round that needs no proof. It is the third hand-assembled serial record in graph s320; the other two are BL-802's architecture instances.
+
+A finding about graph's record, not an instruction: the disclosure calls this "the filed candidate for a no-subject-write lane round (not refiled here; retro to add the instance)". No such candidate exists. `no-subject` reads 0, and any `PC-` id containing NO-EDIT, NO-SUBJECT, NO-WRITE or ZERO-WRITE reads 0, on graph's sprint branch and its HEAD, with `PC-S320-JOIN-REMEDIATOR` reading 1 as the control.
+
+Owed: the join accepts a round where every lane part's `edit:` lines are `n/a` or `(escalated)`, and the ledger holds no subject write in the window. It emits a joined record whose header says so, rather than refusing. The acceptance must key on the lane parts' own fields AND the empty ledger together, so that a lane that wrote and failed to ledger its write (BL-802's class) still refuses. Fixture: a no-edit round joins, a round with one unledgered `edit:` still refuses, and a mutant that accepts on the empty ledger alone is killed.
+
+
+**Second instance (graph-watch poll 38, 05:10 EDT 2026-10-26), verified read-only by the lead.** Stories pass 2's lane round hit the same refusal at 09:02:19Z on `s320/stories-serial-repair-p2.md`. Both lanes (`lane-1.md`, story 2.2; `lane-2.md`, story 4.1) carry `edit: n/a`. The write ledger in the true lane window, 08:58:40Z to 09:02:19Z, holds 0 non-shard `s320` rows, against 12 shard rows as the control. Graph's lead hand-assembled the record again (`HAND-ASSEMBLED from 2 lane parts by the lead`), making the fourth refused record and the fifth hand-assembled one in s320.
+
+**A second claim, carried by the same entry:** the lead passed a hand-chosen window, `--since 2026-10-26T09:00:00Z --until 2026-10-26T09:30:00Z`. The `--until` was 28 minutes in the future when the join ran, and the `--since` began about 80 seconds after the lanes were dispatched at 08:58:49Z, so the window did not match the lane epoch. It changed nothing here, because no lane wrote, but on a round with edits it would mis-scope the disjointness check: a write before the hand-chosen `--since` falls outside it. `core/scripts/join-remediator-shards.sh` on `7fa7d0a4d` has no guard refusing an `--until` later than its own clock (a grep for one reads 0). That makes it the join's instance of BL-806's class, an estimated time used as fact. The record's disclosure also rewrites the refusal's bracketed window as "in the lane window", so it no longer quotes the emitted line verbatim.
+
+Owed, in addition: the join refuses an `--until` later than its own clock, or derives the window from the lane round's own dispatch epoch rather than from flags a lead types.
+
+The future-`--until` guard parses both sides with `fromdateiso8601`, so a parser's DST skew cancels; measured identical under TZ=UTC, America/New_York and Europe/London on jq 1.7.1-apple and jq 1.8.1. jq < 1.7 is UNMEASURED-PLATFORM: no jq 1.6 exists on this box.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl807.sh
+
+
+## BL-814 — a MAJOR left open at EXIT_CONDITION_MET is neither deferred nor repaired on any record, and Check 24 passes the series
+
+**LANDED (v0.949.0, verified e6e7f8375).**
+
+**DEFECT.** Rule 7 (`core/skills/ai-dlc/SKILL.md:229-231`) says that after a series stamps
+`EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's artifact or it re-opens the series on this
+record. The deferral has no producer grammar, no record and no join: `validate-adversarial-convergence.sh`
+adjudicates MET on `blocking = findings_major - findings_major_underived` against `MAJOR_EXIT_CEILING=3`
+(`:384`, `:599-604`), and `grep -ci defer` on that file reads 1 against `grep -c MAJOR` reading 55 as the
+control. So a MET pass may carry up to three blocking MAJORs, and any number of underived ones, that nothing
+afterwards has to answer for.
+
+Measured on graph's committed corpus (read only; scripts `bl814-census.sh`, `bl814-repair.sh`, `bl814-e.sh`
+in the batch-243 scratchpad). Over 346 `s*/*-adversarial-p*.md` files, 115 stamp MET and 42 of those carry
+`findings_major` > 0; 0 of the 42 carry any deferral token, against the negative control `ZZQ-BL814-NEVER`
+reading 0. Two of the 42 are underived-only (`blocking` 0), so a check keyed on the blocking count cannot see
+them; s320 `coe-adversarial-p3.md` is one (major 3, underived 3). A floor of 8 terminal MET blocks with
+MAJOR > 0 are repaired by no same-pass record and cited by no other document in their sprint.
+
+s319 and s320 `coe` were deferred correctly BY HAND, which is the shape the record should take: s319
+`requirements-context.md:176` ("3 MAJOR deferred as inputs") and s320 `requirements-context.md` §3 carry the
+pass-3 residue forward as requirement inputs. Nothing checked either. The s319 `coe-adversarial-p1.md:301`
+remark is the adversary's own cross-group header, not a lead edit, so there is no second entry.
+
+Owed: a gate-only arm (J3) after the `--cycle-state` exit, keyed on raw `findings_major`, that refuses a
+post-era terminal MET pass with a MAJOR closed neither by a `source:` token in a repair link chained from
+the notarized sha nor by a deferral record naming the step's declared successor; a second gate-only arm at
+the successor's Check 24 that refuses a deferred key its context digest does not name; an era gate on the
+stamp (`k_stamp_parse`, a new `J3_RELEASE`), so every pre-era block reads PENDING.
+
+verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl814.sh
+
+## BL-816 — a remediator that hand-writes `derivations: replayed <n>` is never checked at `--mark`, so only the honest `not replayed` writer meets the replay
+
+**LANDED (v0.949.0, verified e6e7f8375).**
+
+**DEFECT.** Filed in batch 243, cluster c1, beside BL-804. After BL-804, `wait-for-deliverable.sh --mark` and `--mark-repair` replay a remediator record that states `derivations: not replayed`. A record that states `replayed <n>` passes `--mark` without the validator running, so the remediator who writes the truthful line is checked and the one who claims a replay is not. The same release removes the permission at `core/team-roles/remediator.md:136-137` to write the count from a FAIL line. This entry is the enforcer of that prohibition.
+
+Classification, from graph s320 (READ ONLY, run by the hand c1-816-classify with `validate-artifact-derivations.sh` on each joined record):
+
+- `architecture-party-serial-repair-p1`: 2 of 40 derivations fail.
+- `stories-serial-repair-p1`: 1 of 50 fails.
+- `stories-party-serial-repair-p1`: 7 of 83 fail.
+- `stories-serial-repair-p4`: 3 of 20 fail.
+- Control: `requirements-serial-repair-p1` exits 0.
+
+The population holds **0 false replay claims**. Every derivations line reads `replayed <n>`, with n equal to the whole file's count (83/83, 20/20, 50/50, 40/40). **All 13 FAILs are false positives caused by later edits**: story-2-1 and story-2-2 carry mtimes of 09:23-09:24 against records written 01:59-08:47, and the failures show line shifts and an edited-out phrase. Six sit in shard segments and seven in serial triples. None of the 13 can arise at mark time, because each subject edit came after the record was marked.
+
+Value note: no instance of a false claim has been measured. The check is worth building because the prohibition it enforces ships in the same release, and an unenforced prohibition is a suggestion. At mark time it can only refuse a fence that is stale at the moment the remediator claims it replayed, inside the segment being marked.
+
+LIMITS: the cause of the 13 FAILs rests on mtimes plus the line-shift pattern, with no diff of the subject files. Graph was read through the validator's read-only allowlist, with no status snapshot taken.
+
+Owed: in the `--mark` segment selection BL-804 uses (a part with at least one repaired entry; the serial block's own triple of a joined record), when that segment states `replayed <n>`, run the validator with the same root override and copy, and refuse 64 only on FAIL lines whose fence lies inside the judged segment's line range. n is not compared. Remedy: fix the stale fence, replay again, mark.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl816.sh

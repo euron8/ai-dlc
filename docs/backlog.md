@@ -492,14 +492,6 @@ Shard c adds 28 full renders, read off the code. Each scored mutant costs an app
 
 verify: manual — V25 is owed an input that discriminates; the eight scored rows are held by phase pcvmut itself.
 
-## BL-804 — a remediator writes `derivations: not replayed` although replay is its default, and the join's refusal costs a whole re-dispatch
-
-**DEFECT (efficiency).** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 16, 01:07 EDT 2026-10-26). In graph s320, the `stories-party --pass 1` repair join refused at 05:05:46Z with `REFUSED: 11.md: derivations: not replayed; …` (the checks-field refusal in `core/scripts/join-remediator-shards.sh`). Part 11 is story 3.5, in `s320/shards/stories-party-repair-p1/11.md`. `core/team-roles/remediator.md:134-139` makes replay the default ("Replay is the default: run `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit"), but the remediator wrote `not replayed` anyway. Graph's lead recovered by contract: a record-only re-run (agent a0481edc5f18691e2) replayed 5 derivations and re-marked, and the re-join returned rc=0. The cost was one dispatch and about 2 minutes. One instance, measured from the transcript.
-
-Owed: a mechanism that makes the default the act, not the instruction. For example, the `--mark` path of `wait-for-deliverable.sh` could run the replay itself when a repair record says `not replayed` and its fences name no deferred document, then write the count. That moves a refusal the join already makes to the point where the remediator can still fix it. Measure the false-positive set first: a record whose fences are legitimately deferred must not be forced.
-
-verify: manual
-
 ## BL-806 — a lead can write an estimated, future-dated time into `pipeline-snapshot.md`, and a resuming session reads it as fact
 
 **DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 30, 03:42 EDT 2026-10-26). At 07:39:12Z graph's s320 lead ran a `sed` that wrote `| 18/19 delivered at 07:50Z (still out: cross-1 only …` into `_bmad-output/pipeline-snapshot.md`. That stamp is 11 minutes after the moment it was written. The row's previous value read `16/19 delivered at 07:35Z`, so the time was estimated, not taken from `date`. `core/skills/ai-dlc/SKILL.md:52` makes a resuming session read that file in full before any pipeline action, so a wrong time there becomes a resuming lead's premise. No outcome was affected this time.
@@ -519,26 +511,6 @@ Measurement 0a, driving the shipped hook over graph's transcripts: 4,617 Bash ca
 - Measurement 2, hook input (graph transcripts): 5,236 jsonl files, 351,365 tool_uses, 5,695 touching the snapshot (3,552 Edit, 9 Write, 2,134 Bash). The motivating write is a Bash `sed` at 2026-10-26T07:39:12Z in `d22c7889…jsonl`, with `07:50Z` 648 s ahead; it is invisible to the write-time hook, and Deny B now refuses it. Edit payloads: 163 token fires without a rollover rule, 133 with. After narrowing (`~`, range ends, CLOCK CORRECTION/NOTE lines, 12 h rollover, backticked) about 55 fire, about 51 true positives and about 4 false positives, BY HAND CLASSIFICATION, not a derived count. An FP class that cannot be enumerated remains: a quoted earlier time under 12 h old (`08:57:12Z` quoted at 00:38). Controls: `99:99Z` 0; the motivating row matches. Eight CLOCK CORRECTION rewrites by graph leads show the true-positive class is real.
 - Design when it ships: warn-only, exit-2 text on Edit/Write payloads at write time (like `check_malformed_stamps`, never the gate population), whose remedy never says to overwrite.
 - What unblocks it: a grammar that separates a QUOTED time from a STAMPED one, for example anchoring on the stamp's field position (the leading stamp of a Recent Activity line, the status cell's own stamp slot) rather than any `HH:MMZ` token in the text. It ships only with a derived false-positive set that is empty or enumerated.
-
-verify: manual
-
-
-## BL-807 — the lane join refuses a round in which no lane wrote the subject, so a lead hand-assembles a record of no-edit lanes
-
-**DEFECT.** Filed after the batch-242 close from the graph watch (ai-dlc-fa, poll 33, 04:15 EDT 2026-10-26), verified read-only by the lead. In graph s320, at 08:06:35Z, `join-remediator-shards.sh --sprint 320 --artifact stories-serial --pass 1 --artifact-path _bmad-output/planning-artifacts/s320 --since 2026-10-26T07:52:21Z --until 2026-10-26T08:06:32Z` exited 2 with `REFUSED: the ledger records no dispatched write under _bmad-output/planning-artifacts/s320 in [...]; disjointness is unproven`. That is the empty-`ROWS` refusal at `core/scripts/join-remediator-shards.sh:2471` on `97d41f5d1`. All 10 lanes were no-edit: only lanes 4 and 7 carry non-`n/a` `edit:` lines, both marked `(escalated)` to the fan-in. Graph's `.artifact-writes.jsonl` for that window holds 0 non-shard rows under `s320`, against 59 shard rows as the control. Graph's lead then hand-assembled `s320/stories-serial-repair-p1.md` from the 10 lane parts, under the header `HAND-ASSEMBLED from 10 lane parts by the lead` and a disclosure.
-
-This is NOT BL-802's shape, and 0.942.0 does not fix it. BL-802 records a write to a document OUTSIDE the state dir; here the document is inside the state dir, and no lane wrote anything. A round with zero subject writes is trivially disjoint, but the join can only prove disjointness from ledger rows, so it refuses the one round that needs no proof. It is the third hand-assembled serial record in graph s320; the other two are BL-802's architecture instances.
-
-A finding about graph's record, not an instruction: the disclosure calls this "the filed candidate for a no-subject-write lane round (not refiled here; retro to add the instance)". No such candidate exists. `no-subject` reads 0, and any `PC-` id containing NO-EDIT, NO-SUBJECT, NO-WRITE or ZERO-WRITE reads 0, on graph's sprint branch and its HEAD, with `PC-S320-JOIN-REMEDIATOR` reading 1 as the control.
-
-Owed: the join accepts a round where every lane part's `edit:` lines are `n/a` or `(escalated)`, and the ledger holds no subject write in the window. It emits a joined record whose header says so, rather than refusing. The acceptance must key on the lane parts' own fields AND the empty ledger together, so that a lane that wrote and failed to ledger its write (BL-802's class) still refuses. Fixture: a no-edit round joins, a round with one unledgered `edit:` still refuses, and a mutant that accepts on the empty ledger alone is killed.
-
-
-**Second instance (graph-watch poll 38, 05:10 EDT 2026-10-26), verified read-only by the lead.** Stories pass 2's lane round hit the same refusal at 09:02:19Z on `s320/stories-serial-repair-p2.md`. Both lanes (`lane-1.md`, story 2.2; `lane-2.md`, story 4.1) carry `edit: n/a`. The write ledger in the true lane window, 08:58:40Z to 09:02:19Z, holds 0 non-shard `s320` rows, against 12 shard rows as the control. Graph's lead hand-assembled the record again (`HAND-ASSEMBLED from 2 lane parts by the lead`), making the fourth refused record and the fifth hand-assembled one in s320.
-
-**A second claim, carried by the same entry:** the lead passed a hand-chosen window, `--since 2026-10-26T09:00:00Z --until 2026-10-26T09:30:00Z`. The `--until` was 28 minutes in the future when the join ran, and the `--since` began about 80 seconds after the lanes were dispatched at 08:58:49Z, so the window did not match the lane epoch. It changed nothing here, because no lane wrote, but on a round with edits it would mis-scope the disjointness check: a write before the hand-chosen `--since` falls outside it. `core/scripts/join-remediator-shards.sh` on `7fa7d0a4d` has no guard refusing an `--until` later than its own clock (a grep for one reads 0). That makes it the join's instance of BL-806's class, an estimated time used as fact. The record's disclosure also rewrites the refusal's bracketed window as "in the lane window", so it no longer quotes the emitted line verbatim.
-
-Owed, in addition: the join refuses an `--until` later than its own clock, or derives the window from the lane round's own dispatch epoch rather than from flags a lead types.
 
 verify: manual
 
@@ -910,3 +882,4 @@ It was fixed for 0.947.0 by rewording the bullet to `- **Discharged: BL-632 is L
 **Owed:** the remedy is for c6, batch 243, to decide, after BL-818. Either the backlog grammar refuses a `- **BL-` bullet inside an entry body, or the reverify engine opens an entry only at `## BL-`.
 
 verify: manual
+

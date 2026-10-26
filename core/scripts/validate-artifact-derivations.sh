@@ -2828,6 +2828,7 @@ if [ "$unrun" -gt 0 ]; then
   exit 2
 fi
 if [ "$fails" -gt 0 ]; then
+  # Read by wait-for-deliverable.sh --mark: an exit 1 without this exact summary line is a crash, not a verdict.
   printf 'FAIL: %s stale or unrunnable derivation(s) of %s checked in %s file(s).\n' \
     "$fails" "$checked" "$files_seen" >&2
   exit 1

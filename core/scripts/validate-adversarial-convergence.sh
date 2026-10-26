@@ -4239,6 +4239,338 @@ ${j2s_bad}      A notarized stem is amended on the record, one of two ways (_gat
   fi
 fi
 
+# =============================================================================
+# J3. OPEN MAJOR AT MET -- every MAJOR the terminal MET pass leaves is repaired or deferred on a record.
+# =============================================================================
+# GATE ONLY, like K, K2, H and J2: --cycle-state has exited above, and this arm reads git. It is never
+# a --cycle-state rc: a running cycle that stops on it would deny the very dispatch that closes it
+# (ai-dlc-acknowledge.sh and ai-dlc-continue.sh deny on rc 3).
+#
+# Rule 7 (SKILL.md): after the series stamps EXIT_CONDITION_MET, a finding is DEFERRED to the next
+# step's artifact or it re-opens the series on this record. Arm B adjudicates MET on the BLOCKING count
+# against MAJOR_EXIT_CEILING, so a MET pass may carry MAJORs -- and any number of underived ones -- that
+# nothing afterwards has to answer for. Measured on the reference consumer: of 115 MET blocks, 42 carry
+# findings_major > 0, two of them underived-only (blocking 0), and 0 carry any deferral.
+#
+#   subject    the TERMINAL pass, `$LAST_FILE`, named `<stem>-adversarial-p<M>.md`, stamping MET with a
+#              raw findings_major > 0. THE KEY IS THE RAW COUNT, NOT `blocking`: an underived MAJOR is
+#              still a filed finding (adversary.md), and keying on blocking acquits major == underived.
+#   key        `<shard-file>#<id>` -- the remediator's `source:` grammar (remediator.md, "a party repair
+#              names the seat finding"), byte for byte: the shard file from the merged pass's
+#              `## Shard:` heading (`story 01` -> 01.md, `section 1` -> 1.md, `cross-story group 2 (...)`
+#              -> cross-2.md, a bare `cross-story` -> cross.md), the id the finding's `### ` heading read
+#              as join-remediator-shards.sh src_ids reads a seat heading (emphasis and brackets dropped,
+#              a `Finding ` prefix dropped, `[A-Za-z0-9][A-Za-z0-9.-]*`, trailing `[.-]` stripped, a digit
+#              required), so `### F-1: title` keys `F-1` and `### MAJOR — ...` keys nothing. Keys are
+#              counted DISTINCT. An unsharded pass keys on its own basename (`<pass file>#<id>`). Only
+#              `### ` headings inside a `## Findings` section, outside fences, whose first severity word
+#              is MAJOR (merge-adversarial-shards.sh, FINDING GRAMMAR). A token qualified by THIS pass's
+#              shard dir (`<stem>-p<M>/1.md#F-1`) is the same key; one qualified by another pass is not.
+#   CLOSED     (a) REPAIRED: a `source:` token of a `disposition: repaired` entry in
+#              `<stem>-repair-p<M>.md` or `<stem>-serial-repair-p<M>.md` -- pass M's own records, never
+#              an earlier pass's, whose ids collide -- structured for arm H, whose OWN triple is a link.
+#              The remediator writes one `artifact:`/`artifact_sha_before:`/`artifact_sha_after:`
+#              triple above the entries it covers, so a token is tied to the triple above it; that
+#              triple's before differs from its after (an identity triple moved no bytes) and is a sha
+#              the terminal pass notarized (its `artifact_sha`, or one `<stem>=<sha>` member). One
+#              linked triple closes no token under another triple or in the other record.
+#              (b) DEFERRED: a pair `- source: <key>` / `- deferred-to: <step>` in
+#              `<stem>-deferral-p<M>.md` beside the pass, `<step>` equal to the successor J3_SUCCESSORS
+#              declares for the stem. A stem with no row (stories, architecture) has no successor
+#              artifact that carries a finding forward, so only (a) closes its MAJORs.
+#   FAIL       a key closed by neither, a key deferred to another step, or fewer MAJOR headings than
+#              findings_major (a MAJOR nothing can name is one nothing can close) -- when the series'
+#              FIRST pass is at or after the first commit stamping `.claude/.ai-dlc-version` at
+#              J3_RELEASE or later (`k_stamp_parse`, K_RELEASE rebound).
+#   PENDING    printed, never counted: no such stamp, a first pass before it, or a first invoked_at that
+#              is not ISO 8601 UTC.
+#
+# THE SUCCESSOR'S HALF (J3 -- DEFERRAL). At the successor's own Check 24, every `- source:` key a
+# `*-deferral-p*.md` in the sprint dir defers to THIS series' stem must appear verbatim in the context
+# artifact J3_SUCCESSORS declares for it (`requirements-context.md`, `architecture-context.md`), where
+# the successor restates it as an input -- on token boundaries (the char before is not in
+# `[A-Za-z0-9._/-]`, the char after not in `[A-Za-z0-9.-]`), so `cross-1.md#F-1` and `1.md#F-10` do not
+# name `1.md#F-1`. Same era ladder, on the successor series' first pass.
+#   LIMIT, stated so it is not read as coverage: that is a MENTION, not a resolution. The arm proves the
+#   finding reached the next step's input; whether the next step's artifact answered it is that step's
+#   own adversarial cycle. A key names a shard file and an id, so two deferral records to one step whose
+#   keys coincide are satisfied by one mention.
+#
+# INTENDED TIGHTENING, stated so a reader does not take J2 for J3: a repair chain whose entries name no
+# `source:` ids satisfies J2 (the bytes moved on the record) and closes nothing here.
+#
+# FALSE-POSITIVE SET. On the reference consumer as committed, no repo stamps J3_RELEASE, so every
+# subject is PENDING and none fails. With the constant lowered below its stamp, the s320 stories series
+# (3 MAJORs, each named by a `source:` token of its pass-4 repair records, linked from the notarized
+# per-story shas) is CLOSED, and the s320 coe series (3 underived MAJORs, deferred only in prose) FAILS --
+# the shape this arm exists for.
+# PLACEHOLDER: the release owner sets J3_RELEASE to this release's VERSION at the gate.
+J3_RELEASE="0.949.0"
+# THE DEFERRAL MAP, declared once: `<series stem>:<step file>:<successor step>:<successor context artifact>`.
+# Each row's successor is the step file's `nextStepFile:`, and its context artifact is the digest that
+# successor writes to `s<N>/`; the check-24 fixture binds both against the step files.
+J3_SUCCESSORS="coe:carry-over-evaluation:requirements:requirements-context.md
+carry-over-evaluation:carry-over-evaluation:requirements:requirements-context.md
+requirements:requirements:architecture:architecture-context.md
+research-requirements:research-requirements:architecture:architecture-context.md"
+
+j3_succ() {  # $1 series stem -> J3_SUCC, J3_CTX (both empty when the stem declares no successor)
+  local row
+  J3_SUCC=""; J3_CTX=""
+  while IFS= read -r row; do
+    [ "${row%%:*}" = "$1" ] || continue
+    row="${row#*:}"; row="${row#*:}"
+    J3_SUCC="${row%%:*}"; J3_CTX="${row#*:}"; return 0
+  done <<J3EOF
+$J3_SUCCESSORS
+J3EOF
+}
+j3_ctx_for() {  # $1 successor step -> J3_CTX, the context artifact of the first row naming it
+  local row s
+  J3_CTX=""
+  while IFS= read -r row; do
+    s="${row#*:}"; s="${s#*:}"
+    [ "${s%%:*}" = "$1" ] || continue
+    J3_CTX="${s#*:}"; return 0
+  done <<J3EOF
+$J3_SUCCESSORS
+J3EOF
+}
+# $1 pass file -> one `<shard-file>#<id>` per MAJOR finding heading. No apostrophe in the awk text.
+j3_keys() {
+  awk -v base="${1##*/}" '
+    function sev(h,   best, bp, i, w, p) {
+      best = ""; bp = 0
+      split("CRITICAL MAJOR MINOR NIT", w, " ")
+      for (i = 1; i <= 4; i++) { p = index(h, w[i]); if (p > 0 && (bp == 0 || p < bp)) { bp = p; best = w[i] } }
+      return best
+    }
+    /SKILL_INVOCATION_PROVENANCE v1/ { skip = 1; next }
+    /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
+    skip { next }
+    { l = $0; sub(/^[ \t]+/, "", l) }
+    fch == "b" { if (l ~ /^```+[ \t]*$/) fch = ""; next }
+    fch == "t" { if (l ~ /^~~~+[ \t]*$/) fch = ""; next }
+    substr(l, 1, 3) == "```" { inf = l; sub(/^`+/, "", inf); if (index(inf, "`") == 0) { fch = "b"; next } }
+    substr(l, 1, 3) == "~~~" { fch = "t"; next }
+    /^## Shard: / { h = substr($0, 11); sh = "?"; fnd = 0
+      if (match(h, /^cross-(story|section|part) group [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = "cross-" a[3] ".md" }
+      else if (h ~ /^cross-(story|section|part)[ \t]*$/) sh = "cross.md"
+      else if (match(h, /^(story|section|part) [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = a[2] ".md" }
+      next }
+    /^## / { fnd = ($0 ~ /^## Findings/); next }
+    /^### / && fnd && sev($0) == "MAJOR" { s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s)
+      sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
+      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
+        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }' "$1"
+}
+# The label reader both record readers share: the label opens the line, emphasis tolerated as arm H
+# reads it, colon immediately after; sets v to the value with emphasis and backticks removed.
+J3_LAB='function lab(n,   r) { r = "^[[:space:]-]*[*_`]?[*_`]?" n "[*_`]?[*_`]?:"
+  if (match($0, r)) { v = substr($0, RSTART + RLENGTH); sub(/^[*_`]+[[:space:]]+/, "", v); gsub(/[`*]/, "", v)
+    sub(/^[[:space:]]+/, "", v); return 1 }
+  return 0 }'
+# $1 repair record -> `T\t<triple>\t<before>\t<after>` per triple (the `artifact:` label opens one, as
+# repair_entries reads it; first before/after kept, lowercased), and `S\t<triple>\t<token>` per `source:`
+# token of an entry whose disposition is `repaired`, tied to the triple above it (0: above any triple).
+j3_sources() {
+  awk "$J3_LAB"'
+    function flush() { if (tr > 0) print "T\t" tr "\t" bf "\t" af }
+    /^### / || /^<!-- shard:/ { src = ""; next }
+    lab("artifact") { flush(); tr++; bf = ""; af = ""; next }
+    lab("artifact_sha_before") { if (tr > 0 && bf == "") { bf = tolower(v); sub(/[[:space:]]+$/, "", bf) }; next }
+    lab("artifact_sha_after") { if (tr > 0 && af == "") { af = tolower(v); sub(/[[:space:]]+$/, "", af) }; next }
+    lab("source") { src = v; next }
+    lab("disposition") { split(v, d, /[[:space:]]+/)
+      if (tolower(d[1]) == "repaired" && src != "") { n = split(src, t, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (t[i] != "") print "S\t" tr + 0 "\t" t[i] }
+      src = ""; next }
+    END { flush() }' "$1"
+}
+# $1 deferral record -> `<token>\t<step>` per deferred key.
+j3_deferrals() {
+  awk "$J3_LAB"'
+    lab("source") { src = v; next }
+    lab("deferred-to") { split(v, d, /[[:space:]]+/)
+      if (src != "") { n = split(src, t, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (t[i] != "") print t[i] "\t" d[1] }
+      src = ""; next }' "$1"
+}
+j3_era() {  # $1 pass dir -> J3_ERA: `owed`, or the PENDING reason
+  local w root="" at="${P_AT[0]:-}"
+  w="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+  while [ -n "$w" ]; do
+    if [ -f "$w/.claude/.ai-dlc-version" ]; then root="$w"; break; fi
+    w="${w%/*}"
+  done
+  J3_STAMP=""
+  if [ -n "$root" ]; then stamp_log "$root"; J3_STAMP="$(K_RELEASE="$J3_RELEASE" k_stamp_parse < "$STAMP_LOG")"; fi
+  if [ -z "$J3_STAMP" ]; then
+    J3_ERA="no commit${root:+ in $root} stamps .claude/.ai-dlc-version at ${J3_RELEASE} or later -- not owed yet."
+    return 0
+  fi
+  case "$at" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    *) J3_ERA="the series' first pass $(basename "${P_FILE[0]}") has no ISO 8601 UTC invoked_at ('${at}') to date against ${J3_STAMP}."; return 0 ;;
+  esac
+  if [[ "$at" < "$J3_STAMP" ]]; then
+    J3_ERA="the series opened ($(basename "${P_FILE[0]}"), ${at}) before ${J3_RELEASE} was stamped (${J3_STAMP}). Legacy series."
+  else
+    J3_ERA=owed
+  fi
+}
+
+J3_ARM=0; j3_b="${LAST_FILE##*/}"; j3_m=""; j3_stem=""
+case "$j3_b" in
+  *-adversarial-p[0-9]*".md")
+    j3_m="${j3_b##*-adversarial-p}"; j3_m="${j3_m%.md}"; j3_stem="${j3_b%-adversarial-p*}"
+    case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;
+esac
+j3_dir="$(dirname "${LAST_FILE:-.}")"
+J3_OPEN=0
+[ "$N" -gt 0 ] && [ "$J3_ARM" -eq 1 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ] \
+  && [ "${LAST_MAJOR:-0}" -gt 0 ] 2>/dev/null && J3_OPEN=1
+J3_INBOUND=0
+if [ "$N" -gt 0 ] && [ "$J3_ARM" -eq 1 ]; then
+  for j3_r in "$j3_dir"/*-deferral-p*.md; do [ -f "$j3_r" ] && { J3_INBOUND=1; break; }; done
+fi
+if [ "$J3_OPEN" -eq 1 ] || [ "$J3_INBOUND" -eq 1 ]; then
+  # THE SELF-PROBE, both directions, before the corpus -- and only here, where a MAJOR at MET or a
+  # deferral record makes the readers load-bearing. The pole invokes this validator hundreds of times.
+  printf '%s\n' '# probe' '## Shard: section 1' '## Findings' '### F-1 — MAJOR — kept' '```text' \
+    '### F-9 — MAJOR — fenced' '```' '### F-2 — MINOR — not major' '## Probes' '### F-3 — MAJOR — outside Findings' \
+    '## Shard: cross-section group 2 (1,2)' '## Findings' '### F-1 — MAJOR — cross' > "$AC_T/j3p-adversarial-p1.md" \
+    && printf '%s\n' '## Findings' '### M1 — MAJOR — unsharded' > "$AC_T/j3u-adversarial-p1.md" \
+    && printf '%s\n' '### F-0 — MAJOR' '- source: 0.md#F-0' '- disposition: repaired' '- artifact: a.md' \
+    '- **artifact_sha_before:** AA' '- artifact_sha_after: bb' '### F-1 — MAJOR' '- **source:** `1.md#F-1` cross-2.md#F-1' '- **disposition:** repaired' \
+    '### F-2 — MAJOR' '- source: 2.md#F-2' '- disposition: escalated' '- edit: x' > "$AC_T/j3p-rec.md" \
+    && printf '%s\n' '- **source:** p/1.md#F-1' '- **deferred-to:** `requirements`' '- source: 2.md#F-2' \
+    '- deferred-to: architecture (next)' '- deferred-to: orphan' > "$AC_T/j3p-def.md" || {
+    echo "validate-adversarial-convergence.sh: arm J3 self-probe could not stage; no verdict" >&2; exit 2; }
+  j3p1="$(j3_keys "$AC_T/j3p-adversarial-p1.md" | tr '\n' ' ')"
+  j3p2="$(j3_keys "$AC_T/j3u-adversarial-p1.md" | tr '\n' ' ')"
+  j3p3="$(j3_sources "$AC_T/j3p-rec.md" | tr '\t\n' ': ')"
+  j3p4="$(j3_deferrals "$AC_T/j3p-def.md" | tr '\t\n' ': ')"
+  j3_succ coe; j3p5="$J3_SUCC:$J3_CTX"; j3_succ stories; j3p6="$J3_SUCC:$J3_CTX"
+  IFS=. read -r j3_maj j3_min j3_pat <<EOF
+$J3_RELEASE
+EOF
+  j3_pred="${j3_maj}.$((j3_min - 1)).${j3_pat}"
+  j3p7="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J3_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j3_pred" \
+          'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J3_RELEASE" k_stamp_parse)"
+  j3p8="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j3_pred" | K_RELEASE="$J3_RELEASE" k_stamp_parse)"
+  if [ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ] || [ "$j3p2" != "j3u-adversarial-p1.md#M1 " ] \
+     || [ "$j3p3" != "S:0:0.md#F-0 S:1:1.md#F-1 S:1:cross-2.md#F-1 T:1:aa:bb " ] || [ "$j3p4" != "p/1.md#F-1:requirements 2.md#F-2:architecture " ] \
+     || [ "$j3p5" != "requirements:requirements-context.md" ] || [ "$j3p6" != ":" ] \
+     || [ "$j3p7" != "2026-01-02T00:00:00Z" ] || [ -n "$j3p8" ]; then
+    echo "validate-adversarial-convergence.sh: arm J3 self-probe failed (keys '$j3p1', unsharded '$j3p2', sources '$j3p3', deferrals '$j3p4', map '$j3p5' / '$j3p6', stamp '$j3p7', near-miss '$j3p8'); no verdict" >&2
+    exit 2
+  fi
+fi
+
+if [ "$J3_OPEN" -eq 1 ]; then
+  j3_pd="${j3_stem}-p${j3_m}"
+  j3_keys "$LAST_FILE" > "$AC_T/j3-keys"
+  j3_nk=0; while IFS= read -r j3_l; do [ -n "$j3_l" ] && j3_nk=$((j3_nk + 1)); done < "$AC_T/j3-keys"
+  j3_unkeyed=$((LAST_MAJOR - j3_nk))
+  # The notarized shas: one sha256, or each member of a `<stem>=<sha>` list, lowercased.
+  for j3_t in $(block_field "$LAST_FILE" 'artifact_sha'); do
+    printf '%s\n' "${j3_t#*[=@]}"
+  done | tr 'A-F' 'a-f' > "$AC_T/j3-nsha"
+  # A token closes only when the triple it sits under is a link: its before differs from its after
+  # (an identity triple moved no bytes) and a before member is a sha this pass notarized.
+  : > "$AC_T/j3-tok"; j3_recs=""
+  for j3_rec in "$j3_dir/${j3_stem}-repair-p${j3_m}.md" "$j3_dir/${j3_stem}-serial-repair-p${j3_m}.md"; do
+    [ -f "$j3_rec" ] || continue
+    repair_field disposition "$j3_rec" && repair_field edit "$j3_rec" && repair_field derivation "$j3_rec" || continue
+    j3_recs="$j3_recs ${j3_rec##*/}"
+    j3_sources "$j3_rec" | awk -F'\t' 'FILENAME == ARGV[1] { if ($0 != "") n[$0] = 1; next }
+      $1 == "T" && $3 != $4 { m = split($3, t, /[[:space:]]+/)
+        for (i = 1; i <= m; i++) { s = t[i]; sub(/^[^=@]*[=@]/, "", s); if (s in n) lk[$2] = 1 } }
+      $1 == "S" { st[++ns] = $2; sk[ns] = $3 }
+      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/j3-nsha" - >> "$AC_T/j3-tok"
+  done
+  j3_succ "$j3_stem"
+  : > "$AC_T/j3-def"
+  [ -f "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" ] && j3_deferrals "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" > "$AC_T/j3-def"
+  j3_bad="$(awk -F'\t' -v pd="$j3_pd" -v succ="$J3_SUCC" -v m="$j3_m" '
+    function norm(t,   p) { if (index(t, pd "/") == 1) return substr(t, length(pd) + 2)
+      p = index(t, "/" pd "/"); if (p) return substr(t, p + length(pd) + 2); return t }
+    FILENAME == ARGV[1] { if ($0 != "") k[++nk] = $0; next }
+    FILENAME == ARGV[2] { r[norm($1)] = 1; next }
+    FILENAME == ARGV[3] { d[norm($1)] = $2; next }
+    END { for (i = 1; i <= nk; i++) { x = k[i]; if (x in r) continue
+            if (x in d) { if (succ != "" && d[x] == succ) continue
+              if (succ == "") print "        " x ": deferred to " d[x] ", but this step declares no successor that carries a finding forward"
+              else print "        " x ": deferred to " d[x] ", not to " succ ", the step after this one" }
+            else print "        " x ": repaired on no linked record of pass " m " and deferred by none" } }' \
+    "$AC_T/j3-keys" "$AC_T/j3-tok" "$AC_T/j3-def")"
+  if [ "$j3_unkeyed" -gt 0 ]; then
+    j3_bad="${j3_bad:+$j3_bad
+}        ${j3_unkeyed} of findings_major ${LAST_MAJOR} carry no MAJOR \`### \` heading under \`## Findings\`, so no key names them"
+  fi
+  if [ -n "$j3_bad" ]; then
+    j3_era "$j3_dir"
+    if [ "$J3_ERA" != owed ]; then
+      printf 'PENDING (J3 -- OPEN MAJOR): %s stamps EXIT_CONDITION_MET with MAJORs neither repaired nor deferred on a record:\n%s\n' "$j3_b" "$j3_bad"
+      echo "      $J3_ERA"
+    else
+      if [ -n "$J3_SUCC" ]; then
+        j3_defer="DEFER    dispatch a remediator to write $j3_dir/${j3_stem}-deferral-p${j3_m}.md, one pair per MAJOR:
+                   - source: <key>
+                   - deferred-to: ${J3_SUCC}
+                 and restate each key in s<N>/${J3_CTX} (checked at ${J3_SUCC}'s Check 24)."
+      else
+        j3_defer="DEFER    not open to this step: '${j3_stem}' declares no successor in J3_SUCCESSORS,
+                 so only a repair closes its MAJORs."
+      fi
+      err "J3 -- OPEN MAJOR" "${j3_b} stamps EXIT_CONDITION_MET over findings_major ${LAST_MAJOR}, and these
+      MAJORs are left open -- Rule 7: after MET a finding is DEFERRED to the next step's artifact or it
+      re-opens the series on this record:
+${j3_bad}
+      Close each one on the record (repair records read:${j3_recs:- none}):
+        REPAIR   a dispatched remediator's ${j3_stem}-repair-p${j3_m}.md (or -serial-repair-p${j3_m}.md)
+                 whose entry names the key in 'source:' (<shard-file>#<id>), with 'disposition: repaired',
+                 and an 'artifact_sha_before:' equal to a sha this pass notarized.
+        ${j3_defer}
+        REOPEN   or dispatch another pass in this series."
+    fi
+  fi
+fi
+
+if [ "$J3_INBOUND" -eq 1 ]; then
+  : > "$AC_T/j3-in"
+  for j3_r in "$j3_dir"/*-deferral-p*.md; do
+    [ -f "$j3_r" ] || continue
+    j3_deferrals "$j3_r" | awk -F'\t' -v s="$j3_stem" -v r="${j3_r##*/}" '$2 == s { print $1 "\t" r }' >> "$AC_T/j3-in"
+  done
+  j3_ctx_for "$j3_stem"
+  if [ -s "$AC_T/j3-in" ] && [ -n "$J3_CTX" ]; then
+    j3_cf="$j3_dir/$J3_CTX"
+    [ -f "$j3_cf" ] || { j3_cf="$AC_T/j3-no-context"; : > "$j3_cf"; }
+    # A mention is the key on token boundaries: `1.md#F-1` is not named by `cross-1.md#F-1` or `1.md#F-10`.
+    j3_miss="$(awk -F'\t' -v pc='[A-Za-z0-9._/-]' -v nc='[A-Za-z0-9.-]' 'FILENAME == ARGV[1] { all = all "\n" $0; next }
+      { r = all; hit = 0
+        while ((p = index(r, $1)) > 0) { pre = substr(r, p - 1, 1); post = substr(r, p + length($1), 1)
+          if ((p == 1 || pre !~ pc) && (post == "" || post !~ nc)) { hit = 1; break }
+          r = substr(r, p + 1) }
+        if (!hit) print "        " $1 " (" $2 ")" }' "$j3_cf" "$AC_T/j3-in")"
+    [ -f "$j3_dir/$J3_CTX" ] || j3_miss="        $J3_CTX does not exist in $j3_dir
+$j3_miss"
+    if [ -n "$j3_miss" ]; then
+      j3_era "$j3_dir"
+      if [ "$J3_ERA" != owed ]; then
+        printf 'PENDING (J3 -- DEFERRAL): keys deferred to %s are not named in %s:\n%s\n' "$j3_stem" "$J3_CTX" "$j3_miss"
+        echo "      $J3_ERA"
+      else
+        err "J3 -- DEFERRAL" "findings deferred to ${j3_stem} are not carried into its input. A deferral record
+      in ${j3_dir} defers each key below to ${j3_stem}, and ${J3_CTX} -- the context digest this
+      step writes before it drafts -- does not name it:
+${j3_miss}
+      Restate each key verbatim in ${j3_dir}/${J3_CTX}, as a requirement input this step answers."
+      fi
+    fi
+  fi
+fi
+
 # --- D. TERMINAL ------------------------------------------------------------
 case "$LAST_VERDICT" in
   EXIT_CONDITION_MET) ;;

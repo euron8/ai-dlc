@@ -57,12 +57,12 @@ fi
 # declared set exactly, so no unit can fall out of every shard, and every declared shard must have a
 # driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
 #   a  core corp pair tstrat   the v0.52-v0.103 cases, --cycle-state and the stall exit, the corpus third state, pairing, the test-strategy series (BL-723)
-#   b  hook k2 elic     the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants, arm L
+#   b  hook k2 elic j3  the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants, arm L, arm J3 (BL-814)
 #   c  arms_ij pass1 j2h  arm J and I, the pass-1 guard, arm J2 and J's door, arm H by series
 #   d  k3               arm K3, K3 widened, J2 per stem, K3 cross groups (every world a git repository)
 SHARDS="a b c d"
 UNITS_a="core corp pair tstrat"
-UNITS_b="hook k2 elic"
+UNITS_b="hook k2 elic j3"
 UNITS_c="arms_ij pass1 j2h"
 UNITS_d="k3"
 GROUP=a
@@ -220,12 +220,15 @@ fi
 # validator, an UNMUTATED COPY (presence-shaped: it must print `fixed`), and each mutant, built in a
 # copy of the validator's whole directory so its siblings resolve. Worlds land under $ROOT.
 RCPT_SIBS="validate-steering-budget.sh partition-document.sh partition-subject.sh merge-adversarial-shards.sh validate-artifact-budget.sh validate-provenance-block.sh"
-rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1>
+rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1> [<the exact NOT FIXED line>]
+  # The fifth argument names WHICH worlds flipped: a mutant that crashes the validator (rc 2 in every
+  # world) also prints NOT FIXED and would otherwise read as a kill.
   local out rc want_say="fixed ("
   [ "$4" -eq 0 ] || want_say="NOT FIXED"
+  [ -z "${5:-}" ] || want_say="$5"
   ASSERTIONS=$((ASSERTIONS + 1))
   out="$(TMPDIR="$ROOT" bash "$2" "$3" 2>&1)"; rc=$?
-  if [ "$rc" -eq "$4" ] && grep -qF -- "$want_say" <<<"$out"; then
+  if [ "$rc" -eq "$4" ] && { if [ -n "${5:-}" ]; then grep -qxF -- "$want_say" <<<"$out"; else grep -qF -- "$want_say" <<<"$out"; fi; }; then
     printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1 | cut -c1-110)"
   else
     FAILURES=$((FAILURES + 1))
@@ -254,7 +257,11 @@ PY
     ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
   fi
-  rcpt_cell "$label" "$rcpt" "$d/validate-adversarial-convergence.sh" "$want"
+  # `<rc>|<line>`: the receipt's exact NOT FIXED line, so a crash that flips every world is not a kill.
+  case "$want" in
+    *"|"*) rcpt_cell "$label" "$rcpt" "$d/validate-adversarial-convergence.sh" "${want%%|*}" "${want#*|}" ;;
+    *) rcpt_cell "$label" "$rcpt" "$d/validate-adversarial-convergence.sh" "$want" ;;
+  esac
 }
 echo "check-24 adversarial-convergence fixture (shard $GROUP)"
 echo
@@ -2410,6 +2417,109 @@ h_mutate h-stem-unstripped "FOREIGN/1 FOREIGN/1 PENDING/0 PENDING/0 MISSING/1" \
   '  H_STEM="${b%-adversarial}"' '  H_STEM="$b"' \
   '  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \' '  if false \'
 
+fi
+
+if sg j3; then
+echo
+# --- ARM J3 (BL-814): every MAJOR the terminal MET pass leaves is repaired or deferred on a record ---
+# The receipt as an arm: it builds its own worlds (coe, architecture and stories series, each a repo
+# stamped at the validator's J3_RELEASE) and drives the validator it is handed. Mutants, each a
+# plausible regression: the subject keyed on blocking (the underived-only world passes); a key without
+# its shard file (two `F-1`s read as one closed key); any deferred-to accepted; an era gate on the
+# version file's presence (the legacy world FAILs); every pass's repair record read (a stale pass's
+# identity entry closes the terminal pass's colliding id); the successor's digest matched as a substring
+# (cross-1.md#F-1 names 1.md#F-1); an identity triple read as a link; one linked triple closing every
+# token of both records; the heading id read raw (`F-1:` is not F-1, and two headings of one key count
+# twice); the DEFER remedy telling the lead to write a record its guard denies. Each mutant names the
+# exact NOT FIXED line it must produce, so a mutant that crashes the validator (rc 2 everywhere) is no kill.
+echo "--- arm J3 (BL-814): receipt-bl814.sh against the validator, a control copy and thirteen mutants"
+R814="$DIR/receipt-bl814.sh"
+[ -f "$R814" ] || broken "receipt-bl814.sh is not beside run.sh"
+J3NF="receipt BL-814: NOT FIXED --"
+rcpt_cell "J3 shipped validator"     "$R814" "$VALIDATOR" 0
+rcpt_mut  "J3-0 control (unmutated)" "$R814" 0
+rcpt_mut  "J3-1 keyed on blocking"   "$R814" "1|$J3NF underonly(rc=0)" \
+  '  && [ "${LAST_MAJOR:-0}" -gt 0 ] 2>/dev/null && J3_OPEN=1' \
+  '  && [ "$(( ${LAST_MAJOR:-0} - $(block_field "$LAST_FILE" findings_major_underived | tr -cd 0-9) ))" -gt 0 ] 2>/dev/null && J3_OPEN=1'
+rcpt_mut  "J3-2 bare finding id"     "$R814" "1|$J3NF undeferred(rc=1) stalepass(rc=1) twof1(rc=0) ident(rc=1) partlink(rc=0) seriallink(rc=0) dupid(rc=0)" \
+  '        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" '        if (t ~ /[0-9]/) print t } }'"' \"\$1\"" \
+  '    FILENAME == ARGV[2] { r[norm($1)] = 1; next }' '    FILENAME == ARGV[2] { x = norm($1); sub(/^.*#/, "", x); r[x] = 1; next }' \
+  '    FILENAME == ARGV[3] { d[norm($1)] = $2; next }' '    FILENAME == ARGV[3] { x = norm($1); sub(/^.*#/, "", x); d[x] = $2; next }' \
+  '  if [ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ] || [ "$j3p2" != "j3u-adversarial-p1.md#M1 " ] \' '  if [ "$j3p1" != "F-1 F-1 " ] || [ "$j3p2" != "M1 " ] \'
+rcpt_mut  "J3-3 any deferred-to"     "$R814" "1|$J3NF wrongstep(rc=0) nosucc(rc=0)" \
+  '            if (x in d) { if (succ != "" && d[x] == succ) continue' '            if (x in d) { continue'
+rcpt_mut  "J3-4 era on presence"     "$R814" "1|$J3NF legacy(rc=1)" \
+  '  if [[ "$at" < "$J3_STAMP" ]]; then' '  if false; then'
+rcpt_mut  "J3-5 any pass's record"   "$R814" "1|$J3NF stalepass(rc=0)" \
+  '  for j3_rec in "$j3_dir/${j3_stem}-repair-p${j3_m}.md" "$j3_dir/${j3_stem}-serial-repair-p${j3_m}.md"; do' \
+  '  for j3_rec in "$j3_dir/${j3_stem}"-*repair-p*.md; do'
+rcpt_mut  "J3-6 dispatch narrowed to one digit" "$R814" "1|$J3NF p12(rc=0)" \
+  '  *-adversarial-p[0-9]*".md")' '  *-adversarial-p[0-9]".md")'
+# Widening the outer pattern alone is an EQUIVALENT mutant (the inner digits-only case still rejects pX and a bare p),
+# so J3-7 widens it and drops the inner guard together: the near-miss world pxp2 is then judged and FAILs.
+rcpt_mut  "J3-7 dispatch widened, digits guard gone" "$R814" "1|$J3NF pxp2(rc=1)" \
+  '  *-adversarial-p[0-9]*".md")' '  *-adversarial-p*".md")' \
+  '    case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;' '    J3_ARM=1 ;;'
+rcpt_mut  "J3-8 successor substring" "$R814" "1|$J3NF substr(rc=0)" \
+  '          if ((p == 1 || pre !~ pc) && (post == "" || post !~ nc)) { hit = 1; break }' '          if (1) { hit = 1; break }'
+rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=1)" \
+  '      $1 == "T" && $3 != $4 { m = split' '      $1 == "T" { m = split'
+rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink(rc=0) seriallink(rc=0)" \
+  '      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }'"'" \
+  '      END { for (i = 1; i <= ns; i++) print sk[i]; for (x in lk) { print "#LINKED"; break } }'"'" \
+  '  done
+  j3_succ "$j3_stem"' '  done
+  grep -qx '"'#LINKED'"' "$AC_T/j3-tok" || : > "$AC_T/j3-tok"
+  j3_succ "$j3_stem"'
+rcpt_mut  "J3-11 heading id read raw" "$R814" "1|$J3NF dupid(rc=0) idpunct(rc=1)" \
+  '    /^### / && fnd && sev($0) == "MAJOR" { s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s)
+      sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
+      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
+        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" \
+  '    /^### / && fnd && sev($0) == "MAJOR" { print (sh == "" ? base : sh) "#" $2 }'"' \"\$1\""
+rcpt_mut  "J3-12 keys counted with repeats" "$R814" "1|$J3NF dupid(rc=0)" \
+  'if (!seen[k]++) print k } } }'"' \"\$1\"" 'print k } } }'"' \"\$1\""
+rcpt_mut  "J3-13 remedy says write"  "$R814" "1|$J3NF undeferred(rc=1)" \
+  'DEFER    dispatch a remediator to write $j3_dir' 'DEFER    write $j3_dir'
+
+# THE DEFERRAL MAP IS BOUND TO THE STEP FILES. Each J3_SUCCESSORS row `<stem>:<step>:<succ>:<ctx>` names
+# a step file whose `nextStepFile:` is `./<succ>.md`, and a successor step file that writes `s<N>/<ctx>`.
+# Self-probe first, both directions: a seeded row whose successor is wrong is refused.
+J3_STEPS=""
+for cand in "$DIR/../../skills/ai-dlc/steps" "$DIR/../../../.claude/skills/ai-dlc/steps"; do
+  [ -f "$cand/carry-over-evaluation.md" ] && [ -f "$cand/requirements.md" ] && { J3_STEPS="$cand"; break; }
+done
+[ -n "$J3_STEPS" ] || broken "BL-814: the step files are not under either layout from $DIR"
+j3_bind() {  # $1 one map row -> 0 when it agrees with the step files
+  local step succ ctx r="$1"
+  r="${r#*:}"; step="${r%%:*}"; r="${r#*:}"; succ="${r%%:*}"; ctx="${r#*:}"
+  [ -f "$J3_STEPS/$step.md" ] && [ -f "$J3_STEPS/$succ.md" ] || return 1
+  grep -qx "nextStepFile: ./$succ.md" "$J3_STEPS/$step.md" || return 1
+  grep -qF "s<N>/$ctx" "$J3_STEPS/$succ.md"
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+if ! j3_bind "coe:carry-over-evaluation:requirements:requirements-context.md" \
+   || j3_bind "coe:carry-over-evaluation:architecture:architecture-context.md" \
+   || j3_bind "requirements:requirements:architecture:requirements-context.md"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s the binding self-probe did not discriminate (a true row, a wrong successor, a wrong digest)\n' "J3-MAP"
+else
+  j3_rows="$(awk '/^J3_SUCCESSORS="/ { on = 1; sub(/^J3_SUCCESSORS="/, "") } on { l = $0; e = sub(/"$/, "", l); print l; if (e) exit }' "$VALIDATOR")"
+  j3_n=0; j3_off=""
+  while IFS= read -r j3_r; do
+    [ -n "$j3_r" ] || continue
+    j3_n=$((j3_n + 1))
+    j3_bind "$j3_r" || j3_off="$j3_off {$j3_r}"
+  done <<J3EOF
+$j3_rows
+J3EOF
+  if [ "$j3_n" -lt 2 ] || [ -n "$j3_off" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s J3_SUCCESSORS row(s) read; disagreeing with the step files:%s\n' "J3-MAP" "$j3_n" "${j3_off:- none (too few rows read)}"
+  else
+    printf '  ok    %-28s %s J3_SUCCESSORS rows each agree with nextStepFile: and the successor digest\n' "J3-MAP" "$j3_n"
+  fi
+fi
 fi
 if sg k3; then
 echo
