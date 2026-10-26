@@ -597,6 +597,24 @@ Outcome, jointly with BL-809: implementation plus gate-validation[implementation
 per story in s317, and 31.5 spawns and $30.7 in s319. The measured sprint reports that step's figures beside
 these, and any reviewer width it keeps names the catches that width alone made.
 
+**Fix (this release).** `validate-handoff-evidence.sh --list-captures [-C <repo>] <story-file> <frozen>` prints
+every capture the story cites under the handoff arms' own grammar, only when tracked at `<frozen>`, in toplevel
+spelling; a bare capture basename resolves to the tracked files of that name inside the story's capture
+directories. `partition-review-diff.sh --map ... --exclude-captures <file>` drops the intersection of that list
+with the reviewable files from the threshold COUNT only, and a counted file count of at most one answers SERIAL.
+The flag never touches the file set, because `merge-review-shards.sh` re-derives the map with a flagless re-run
+and compares it byte for byte; the file-set mutant is its guard. `implementation.md` runs the pair at gate 1, at
+the re-review and at gate 2. Delivered effect, measured by the contract adversary: 19 of 30 s319 sharded passes
+flip to SERIAL, against 24 of 30 with every capture-extension file excluded and 13 of 30 with cited-only paths.
+That is below the entry's original estimate. The before/after partitioner timing the entry asked for was not
+run: NO TIMING RUNS (lead ruling, batch 243).
+Under the amendment above this entry does not close on the shipped mechanism; it stays open until the measured
+sprint reports the joint outcome with BL-809, read by the step-value ruling, with the s317 and s319 figures as
+reference points. Receipt for the shipped mechanism (scored text, not the close
+predicate): `bash core/fixtures/review-shard-merge/receipt-bl808.sh core/scripts/partition-review-diff.sh` — fix 0,
+the flag parsed but not applied 1, the list length subtracted 1 and the captures dropped from the file set 1,
+second spelling (the intersection with `comm`) 0.
+
 verify: manual
 
 ## BL-809 — a re-review pass is spent on evidence and bookkeeping findings that a validator could settle, so a story is reviewed up to nine times
@@ -628,6 +646,36 @@ story (`steps.csv` active plus agent wait, operator wait excluded) read 1.87 and
 both. A re-review pass is earned by a code finding the pass caught; a pass spent only on evidence or bookkeeping a
 validator could settle is the waste this entry removes. The implementation spawn and dollar figure is reported
 jointly with BL-808.
+
+**Status (this release).** PARTIAL. Item 2 is closed and part of item 3 shipped; item 1 and the rest of
+item 3 are owed.
+- Item 2, closed by BL-808: `partition-review-diff.sh --exclude-captures` answers SERIAL for a counted
+  (non-capture) delta of at most one file, whatever the threshold. The re-review step text in
+  `implementation.md` cites that SERIAL answer as one reviewer, `shard: 1/1 <story-index>`.
+- Item 3, shipped in `validate-handoff-evidence.sh` (handoff mode, the in-range captures arm (a) reads):
+  - Arm (m) K-UNQUOTED is a refusal, `k-unquoted`: a `$ ` line that passes `-k` an unquoted multi-word
+    expression. Measured read-only over graph s317-s319 at 100 gate-1 passes (519 in-range captures,
+    402 `$ ` lines), it had 4 hits, all true positives (s319 3-1 p4/p6, raised at
+    `3-1-code-review-p6.md:741`). The FP set is empty. The shipped arm reads only cited captures, as
+    arm (a) does, so it refuses 2 of the 4. The two `ac9` captures at p6 are in range but uncited.
+  - Arm (n) PLACEHOLDER is a WARN (lead ruling) for a `<name>` on a `$ ` line. `<redacted>` and
+    `<base-worktree>` are exempt; the latter is the one FP, s319 `lint-base.txt:1`, which its reviewer
+    accepted. FP 0 after the exemptions.
+- Item 3, still owed:
+  - The per-AC untracked-citation arm has 1 TP (s317 2-3) against 22 FP in two shape classes: rows
+    deferred to deploy-validate, and a `git rm` disposition line. The exclusion wording is unmeasured.
+  - The wrong-commit capture is unchanged; it stays the head WARN (lead ruling).
+- Item 1 is OWED. The part-status grammar (F5) routed 2 code findings as evidence-only over s319's 110
+  Critical/Important (`3-2-code-review-p2.md:82`, `4-3-code-review-p2.md:294`). Every safe variant routes
+  0 of 25 s319 re-review passes serial, against 11 that qualify by hand. The unblocker is a FINDING-level
+  grammar: the finding body cites at least one capture and names no non-capture code path (backtick or
+  `file:line`). It must never key on the part's status.
+- Receipt for the shipped part: `core/fixtures/story-evidence-scaffold/receipt-bl809.sh` (exit 0 on the fix,
+  non-zero with arm (m) removed or arm (n) made a refusal). This entry takes it when it closes; until then
+  `verify:` stays manual.
+- The amended scope (item 1, an evidence-or-bookkeeping NEEDS_REWORK re-checked through the validator and
+  one serial reviewer) is not in this release; it rides cluster c6, a separate release in batch 243. It is
+  not dropped.
 
 verify: manual
 
@@ -661,6 +709,21 @@ consequence, and states that catch and its cost beside its `Failure caught:` lin
 carry-over-evaluation read 49 spawns and $96 in s317 (the table above, `origin/main`'s extractor); s320 read 114
 and $127 on that extractor, and 132 and $159 on BL-813's corrected one.
 
+**Status (this release).** PARTIAL. The `Failure caught:` lines shipped: each round's line is in
+`carry-over-evaluation.md` §3a, pinned by `process-rule-pins` rows `coe-26c-caught` and `coe-26c-loop`. The
+round-level measurement in `docs/analysis/step-value-carry-over-s319-s320.md` is recorded as evidence for the
+per-round, per-width measurement: party, elicitation and adversarial p1 carry unique surviving catches, and p2's
+9 MAJORs sit in text only it could read and all 9 shipped fixed. That evidence does not discharge this entry; the
+KEEP or narrow decision per round and per width is c6's, under the step-value ruling.
+The amended scope (the measurement per round down to the fan-out width) is not in this release; it rides
+cluster c6, a separate release in batch 243. It is not dropped. Receipt for the shipped mechanism (scored text,
+not the close predicate): `s=$(LC_ALL=C awk '/^### 3a\. /{g=1;next} g&&/^### /{exit} g' core/skills/ai-dlc/steps/carry-over-evaluation.md); [ -n "$s" ] && grep -qF 'Failure caught:' <<<"$s" && grep -qE '^- Adversarial pass(es)? 2[^:]*: Failure caught:' <<<"$s"`
+— it holds the §3a `Failure caught:` lines in place, including adversarial pass 2's. Scored by this rebase: fix 0,
+the pre-release `carry-over-evaluation.md` (bd0be5e51) 1. Scores recorded by the hands that built the receipt, under
+`set -uo pipefail`: the §3a paragraph deleted 1; the adversarial-loop line missing with the other three
+`Failure caught:` lines present 1; the second spelling ("Adversarial pass 2 onward (the convergence loop): Failure
+caught:") 0.
+
 verify: manual
 
 ## BL-811 — sharded stories elicitation costs thirteen times the single voice it replaced
@@ -683,6 +746,27 @@ every story. Owed: one cross agent per split dispatch (code review, QA validatio
 passes and repairs, on every axis), unless that dispatch's measured cross catches justify more under the
 step-value rule, a high-consequence catch counting on consequence. The measured sprint reports cross-shard spawns
 per story beside s317's 7.0 and s319's 24.9.
+
+**Fix (this release).** Measured in `docs/analysis/step-value-stories-elicitation-s319-s320.md`
+over s319 r1, s319 r2 and s320, which is provisional because its stories gate has not passed.
+Per-story shards: 52 shards, 32 unique survivors (26 on s319), $3.06 per survivor, and both unique
+CRITICALs. Cross-group shards: 18 shards, 3 unique survivors (2 on s319), $25.15 per survivor, 52%
+re-raised. Story size does not predict per-story yield (Spearman −0.025, n = 52). The validation-cycle
+item 2 in `_gate-procedures.md` now dispatches stories elicitation as one `adversary` per ordinal plus
+ONE cross-story `adversary` briefed with every ordinal, writing `cross.md`. Its delta clause owes one
+`cross.md`. Rule 28, `stories-test-strategy.md` §4 and Check 24 arm L's text follow. The party round,
+the convergence passes and the sections and subject axes keep their cross groups. "At most 2 MAJORs
+at risk, no CRITICAL" is a counterfactual UPPER BOUND on s319: it assumes the single voice loses all of
+the cross catches (s319 r1 cross-1#F-2 and cross-4#F-1, plus s320 cross-4#F-3, provisional). Every
+cross-group shard already read every story, so the one all-ordinal voice reads each of those pairs.
+Counterfactual saving: $58.98 over three rounds ($39.85 on s319). It is computed as Σ cross minus the
+costliest cross shard per round.
+The amended scope (one cross agent per split dispatch at every step; stories elicitation is the instance shipped
+here) (unless that dispatch's measured cross catches justify more under the step-value rule, a high-consequence catch counting on consequence) is not in this release; it rides cluster c6, a separate release in batch 243. It is not dropped. Receipt for
+the shipped mechanism (scored text, not the close predicate): `f=core/skills/ai-dlc/steps/_gate-procedures.md; v=$(LC_ALL=C awk '/^## Validation cycle/{g=1;next} g&&/^## /{exit} g' "$f" | tr -s ' \n\t' '   '); e=$(LC_ALL=C awk '/Elicitation takes the axis and the shape/{g=1} g&&/^[[:space:]]*$/{exit} g' "$f" | tr -s ' \n\t' '   '); [ -n "$e" ] && grep -qiE '(one|a single) cross-story `adversary`' <<<"$e" && grep -qF '`cross.md`' <<<"$e" && ! grep -qF 'cross-story `adversary` per cross group' <<<"$e" && grep -qF 'one cross-story agent per (seat, cross group)' <<<"$v"`
+— scored by this rebase: fix 0, the pre-release `_gate-procedures.md` (bd0be5e51) 1. Scores recorded by the hands that
+built the receipt: the old per-cross-group sentence restored (the bd0be5e51 file) 1; the party round also collapsed
+to one cross 1; the second spelling ("a single cross-story") 0.
 
 verify: manual
 

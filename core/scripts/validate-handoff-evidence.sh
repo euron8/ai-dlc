@@ -5,6 +5,19 @@
 #
 #   validate-handoff-evidence.sh [-C <repo>] <story-file> <base> <frozen>
 #   validate-handoff-evidence.sh [-C <repo>] --strategy <ref> <story-file>...
+#   validate-handoff-evidence.sh [-C <repo>] --list-captures <story-file> <frozen>
+#
+# LIST-CAPTURES MODE prints, one per line, every CAPTURE (grammar below) the story cites, the story
+# read at <frozen> as handoff mode reads it. Each token goes through the handoff arms' normaliser
+# (cap_norm, below), and a path is printed only when `git cat-file -e <frozen>:<path>` passes,
+# toplevel-relative with no `./` (the spelling `git diff --numstat` prints): a `./` or absolute
+# spelling of a tracked capture prints its toplevel path; UNRESOLVABLE (a leading `../`, a path
+# outside the repository) and phantom tokens print
+# nothing. A bare basename the story names
+# with a capture extension prints every file tracked at <frozen> with that basename directly inside
+# one of the story's capture directories (the directories of its full-path captures, as arm (c)
+# reads them). Deduplicated, sorted under LC_ALL=C. Exit 0 (empty output allowed), 2 UNEVALUABLE.
+# partition-review-diff.sh --exclude-captures reads this list.
 #
 # <story-file> is relative to the repository's top level or absolute, in both modes. norm_story
 # turns every story argument into ONE toplevel-relative path before anything reads it: an
@@ -27,12 +40,34 @@
 # was meant. Each cost a full review pass to find. The checks below are the mechanical part
 # of that class; a reviewer still grades what the captures SAY.
 #
-# HANDOFF MODE — four refusals, one warning.
+# HANDOFF MODE — five refusals; no WARN line changes the exit.
 #
 #   A CAPTURE is a path token the story cites that contains a `/`, does not contain `...`,
 #   and ends in `.txt`, `.log` or `.out`. Bare basenames and elided paths cannot be
 #   resolved and are not read; that is an acquittal, stated here so nobody mistakes it for
 #   coverage. `.md` evidence files are not captures (they carry their own prose header).
+#   Every capture token is NORMALISED (cap_norm, shared with --list-captures) to its toplevel
+#   spelling before any arm reads it: every relative token resolves from the TOPLEVEL (`./x` is
+#   `x`, `a/../b` is `b`), an absolute token under this repository's toplevel (physical,
+#   `pwd -P`) becomes toplevel-relative, and `.`/`..` segments fold. An absolute token under no
+#   toplevel of this repository (another worktree's path, `/etc/...`) or one that climbs above the
+#   toplevel (any leading `../`) is UNRESOLVABLE. So an absolute- or `./`-spelled tracked capture is
+#   judged by (a)/(j)/WARN like its toplevel spelling, and (b) no longer calls such a tracked RED
+#   capture untracked; a leading-`../` citation is never skipped silently (CAPTURE-UNRESOLVED or
+#   (b) names it). WHY TOPLEVEL: graph's committed stories carry 0 `./` tokens and 2 `../` tokens,
+#   both in s320 3.3, and neither base (toplevel or story directory) resolves either `../` token.
+#   Both choices are therefore UNMEASURED, taken for consistency with the shipping validator, which
+#   strips `./` and resolves the remainder from the toplevel; a later batch with a discriminating
+#   token re-decides them. The subject of this normaliser is the silent skip, not a change to what
+#   `./` means.
+#   CAPTURE-UNRESOLVED (WARN, never a refusal, exit unchanged). A cited capture that (b) does not
+#   refuse and that is UNRESOLVABLE (`resolves outside the repository`) or not tracked at <frozen>
+#   (`not tracked at <sha12>`) prints one `WARN capture-unresolved <token>: <reason>` line. An
+#   untracked path that a `.gitignore` TRACKED AT <frozen> ignores prints nothing: that is the
+#   gitignored full-suite capture (b) acquits below. Measured on graph s319's four affected
+#   stories (1-2, 1-5, 3-1, 4-3, 27 passes): every untracked toplevel-spelled citation was
+#   ignored by the frozen `.gitignore` (`test-results/`, `*.txt`), so the exemption is the
+#   whole of that set, and the 4-3 citation into another worktree WARNs.
 #
 #   (a) NO-COMMAND. A capture added or modified in <base>..<frozen> whose first 25 lines
 #       carry no command line: one beginning `$ `, `command: `, `cmd=`, `sha=<sha> cmd=`,
@@ -40,7 +75,8 @@
 #       output, an xdist banner) is not a header. dev.md `## QA Handoff Evidence`
 #       prescribes `$ <command>` first, then a line carrying `head: <sha>`. A capture outside
 #       the range is not this story's and is not read, so an UNTRACKED capture escapes (a)
-#       by construction — (b) owns the RED case and nothing owns the rest. <base> is the gate-1
+#       by construction — (b) owns the RED case and CAPTURE-UNRESOLVED (above) the rest, a
+#       WARN unless the frozen `.gitignore` ignores it. <base> is the gate-1
 #       partition manifest's `base` (the parent of the dev's first commit) on EVERY handoff,
 #       rework included (implementation.md), so on a rework (a) reads every capture the story's
 #       range touched, not only the rework's; (b) and (c) read the whole story regardless. RANGE
@@ -63,6 +99,26 @@
 #       replay header, so an earlier `$ ` line is hand-written (dev.md: commit the capture as
 #       the script wrote it). A replay with no `$ ` line above it is accepted: the engine
 #       before the `$ ` line was added printed none. A capture without the replay line is not read by (j).
+#   (m) K-UNQUOTED. An in-range capture (a)'s range reads, whose first 25 lines carry a `$ ` line
+#       passing `-k` an UNQUOTED multi-word expression: `-k <word> (or|and|not) <word>`, the first
+#       word not opening with `"` or `'`. The shell splits it, so pytest receives `-k <word>` and
+#       the rest as paths, and the line does not replay the run it labels. Refused `k-unquoted`.
+#       Quoted (`-k "a or b"`) and single-word (`-k foo`) expressions are not read. MEASURED on the
+#       reference consumer, read-only, over 100 gate-1 passes of s317-s319 (519 in-range captures,
+#       402 `$ ` lines): 4 hits, every one a true positive (s319 3-1 p4 and p6, the mutation-RED
+#       captures `ac8-generation-compare`, `ac9-nonarray`, `ac9-redirect`, raised by the reviewer
+#       at `3-1-code-review-p6.md:741`). FP set empty, with no narrowing needed. That count is over
+#       EVERY in-range capture; this arm reads only the ones the story CITES, as (a) does, so the
+#       shipped arm refuses 2 of the 4 (`ac8-generation-compare` at p4 and p6). The story at p6
+#       cites neither ac9 capture, so (m) does not read them.
+#   (n) PLACEHOLDER (WARN, never a refusal, exit unchanged). An in-range capture (a)'s range
+#       reads, whose first 25 lines carry a `$ ` line with an unexpanded `<name>` placeholder
+#       (`<[A-Za-z_-]+>`): one `WARN placeholder <capture>: ...` line per placeholder. Narrowing,
+#       same population as (m): every `<x>` first; then `<redacted>` exempt (credential hygiene:
+#       a capture must not carry the secret it elides); then `<base-worktree>` exempt, the one
+#       remaining hit (s319 3-3 `test-results/s319-3-3-evidence/lint-base.txt:1`), which its
+#       reviewer accepted. FP 0 after that. A WARN because an enumerated FP set a reviewer
+#       accepted is correct data, and a WARN cannot wedge a correct handoff.
 #   WARN. A capture's `head:` sha is missing, does not resolve, or names a tree that
 #       differs from <frozen> outside the cited captures and the story file. For a replay
 #       capture the sha is the first `head:` after the replay header, falling back to the
@@ -212,6 +268,8 @@ G rev-parse --git-dir >/dev/null 2>&1 || { echo "$ME: UNEVALUABLE — not a git 
 
 refused=0
 refuse() { printf 'REFUSED %s\n' "$1"; refused=1; }
+# (m)'s predicate: a `$ ` line, then `-k`, then an unquoted word, then or/and/not and more text.
+KUNQ_RE='^\$ .*[[:space:]]-k[[:space:]]+[^[:space:]"'"'"']+[[:space:]]+(or|and|not)[[:space:]]'
 warn()   { printf 'WARN %s\n' "$1"; }
 
 resolve() { # <ref> -> full sha or empty
@@ -362,6 +420,118 @@ if [ "${1:-}" = "--strategy" ]; then
   exit 0
 fi
 
+# ------------------------------------------------------------------------- capture grammar
+# The ONE capture grammar (header: HANDOFF MODE, "A CAPTURE is ..."), shared by the handoff arms
+# and --list-captures. cap_tokens <bare> reads story text on stdin and prints one line per capture
+# token, the citing line's RED flag beside it: "<0|1>\t<token>". With <bare> = 1 it ALSO prints
+# "B\t<basename>" for a token with no `/` that otherwise passes the grammar; with 0 those are
+# dropped exactly as before (the handoff arms never read a bare basename). The token is printed as
+# the story spells it; cap_norm below is the ONE place it becomes a toplevel-relative path.
+CAPX='\.(txt|log|out)'
+TAB="$(printf '\t')"
+# cap_norm <token> -> CN set to the token's toplevel-relative path, return 0; CN empty, return 1
+# when it is UNRESOLVABLE. Every relative token, `./` and `../` spellings included, is resolved
+# from the TOPLEVEL, never from the story file's directory: `./x` is `x`, as the shipping
+# validator always read it, and `a/../b` is `b`. An absolute token is resolved physically: its
+# deepest existing ancestor directory through `cd -P` (so a `/tmp` spelling of a `/private/tmp`
+# repo, or a symlinked parent, is the same path), then held to the toplevel (itself `pwd -P`).
+# `.` and `..` segments are then folded lexically: the captures are read at <frozen> through git,
+# where no directory is a symlink. An absolute token under no toplevel of this repository (another
+# worktree's path, `/etc/...`) and a token that climbs above the toplevel (any leading `../`) are
+# UNRESOLVABLE. The header (HANDOFF MODE) says why `../` is toplevel-relative and that the choice
+# is unmeasured.
+cap_norm() {
+  local t="$1" p d tail seg rest out=""
+  CN=""
+  case "$t" in
+    /*)
+      d="${t%/*}"; tail="${t##*/}"
+      while [ -n "$d" ] && [ ! -d "$d" ]; do tail="${d##*/}/$tail"; d="${d%/*}"; done
+      d="$(cd -P "${d:-/}" 2>/dev/null && pwd -P)" || return 1
+      p="${d%/}/$tail"
+      case "$p" in "$TOP"/*) p="${p#"$TOP"/}" ;; *) return 1 ;; esac ;;
+    *) p="$t" ;;
+  esac
+  rest="$p"
+  while [ -n "$rest" ]; do
+    case "$rest" in */*) seg="${rest%%/*}"; rest="${rest#*/}" ;; *) seg="$rest"; rest="" ;; esac
+    case "$seg" in
+      ""|.) ;;
+      ..) [ -n "$out" ] || return 1
+          case "$out" in */*) out="${out%/*}" ;; *) out="" ;; esac ;;
+      *) out="${out:+$out/}$seg" ;;
+    esac
+  done
+  [ -n "$out" ] || return 1
+  CN="$out"
+}
+# cap_resolve: cap_tokens lines on stdin -> "<red>\t<token>\t<path>", <path> empty when cap_norm
+# finds the token UNRESOLVABLE (the empty field is last, so a tab-IFS read keeps the columns).
+# "B\t<basename>" lines pass through unchanged.
+cap_resolve() {
+  local red t
+  while IFS="$TAB" read -r red t; do
+    [ -n "$t" ] || continue
+    if [ "$red" = B ]; then printf 'B\t%s\n' "$t"; continue; fi
+    cap_norm "$t" || CN=""
+    printf '%s\t%s\t%s\n' "$red" "$t" "$CN"
+  done
+}
+cap_tokens() {
+  LC_ALL=C awk -v capx="$CAPX" -v bare="$1" '
+  {
+    line=$0; red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
+    while (match(line, /[A-Za-z0-9_.\/-]+/)) {
+      t=substr(line, RSTART, RLENGTH); line=substr(line, RSTART+RLENGTH)
+      sub(/[.]+$/, "", t)
+      slash = (t ~ /\//)
+      if (t ~ /\.\.\./) continue
+      if (!slash && bare != 1) continue
+      if (t !~ ("[^/]" capx "$")) continue
+      b=t; sub(/.*\//, "", b)
+      if (b ~ /^(requirements|constraints)[^\/]*\.txt$/ || b == "CMakeLists.txt" || b ~ /^(LICENSE|robots)\.txt$/) continue
+      if (!slash) { print "B\t" t; continue }
+      print red "\t" t
+    }
+  }'
+}
+
+# ------------------------------------------------------------------------- list-captures
+# --list-captures [-C <repo>] <story-file> <frozen>: every capture the story cites (cap_tokens),
+# story read at <frozen> through norm_story + story_text, each token normalised by cap_norm and
+# printed ONLY when tracked at <frozen> (`git cat-file -e`). Also every blob tracked
+# at <frozen> whose basename is a bare capture basename the story names, inside one of the story's
+# capture directories (the directories of its full-path captures, as (c) uses them). Paths are
+# toplevel-relative, the spelling `git diff --numstat` prints; deduplicated after the RED column
+# is stripped; sorted under LC_ALL=C. Exit 0 (output may be empty), 2 UNEVALUABLE.
+if [ "${1:-}" = "--list-captures" ]; then
+  [ $# -eq 3 ] || { echo "usage: $ME [-C <repo>] --list-captures <story-file> <frozen>" >&2; exit 2; }
+  FROZEN="$(resolve "$3")"; [ -n "$FROZEN" ] || { echo "$ME: UNEVALUABLE — frozen does not resolve: $3" >&2; exit 2; }
+  STORY="$(norm_story "$2")" || exit 2
+  TEXT="$(story_text "$FROZEN" "$STORY")" || { echo "$ME: UNEVALUABLE — cannot read $STORY at $FROZEN or on disk" >&2; exit 2; }
+  lc_toks="$(cap_tokens 1 <<<"$TEXT" | cap_resolve)"
+  # Every token through cap_norm, the handoff arms' normaliser: `./` and absolute spellings of a
+  # tracked capture list under their toplevel spelling; an UNRESOLVABLE token (a leading `../`)
+  # lists nothing.
+  lc_full="$(awk -F'\t' '$1 != "B" && $3 != "" {print $3}' <<<"$lc_toks" | LC_ALL=C sort -u)"
+  lc_bare="$(awk -F'\t' '$1 == "B" {print $2}' <<<"$lc_toks" | LC_ALL=C sort -u)"
+  {
+    if [ -n "$lc_full" ]; then
+      while IFS= read -r p; do tracked "$FROZEN" "$p" && printf '%s\n' "$p"; done <<<"$lc_full"
+    fi
+    if [ -n "$lc_bare" ] && [ -n "$lc_full" ]; then
+      lc_dirs="$(awk '{sub(/\/[^\/]*$/, ""); print}' <<<"$lc_full" | LC_ALL=C sort -u)"
+      while IFS= read -r d; do
+        # --full-tree: the pathspec is toplevel-relative whatever directory -C names.
+        G ls-tree --full-tree "$FROZEN" -- "$d/" 2>/dev/null \
+          | HE_BARE="$lc_bare" awk -F'\t' 'BEGIN { n = split(ENVIRON["HE_BARE"], L, "\n"); for (i = 1; i <= n; i++) want[L[i]] = 1 }
+              { split($1, m, " "); if (m[2] != "blob") next; b = $2; sub(/.*\//, "", b); if (b in want) print $2 }'
+      done <<<"$lc_dirs"
+    fi
+  } | LC_ALL=C sort -u
+  exit 0
+fi
+
 # ------------------------------------------------------------------------- handoff
 [ $# -eq 3 ] || { echo "usage: $ME [-C <repo>] <story-file> <base> <frozen>" >&2; exit 2; }
 STORY="$(norm_story "$1")" || exit 2
@@ -374,23 +544,30 @@ elif ! G merge-base --is-ancestor "$BASE" "$FROZEN" 2>/dev/null; then
   warn "range-base: base ${BASE:0:12} is not an ancestor of ${FROZEN:0:12}, so arm (a) reads a diff, not this story's range"
 fi
 
-CAPX='\.(txt|log|out)'
-# Capture tokens: contain '/', end in a capture extension, no '...'. One per line, with the
-# citing line's RED flag beside it: "<0|1>\t<path>".
-CAPS="$(LC_ALL=C awk -v capx="$CAPX" '
-  {
-    line=$0; red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
-    while (match(line, /[A-Za-z0-9_.\/-]+/)) {
-      t=substr(line, RSTART, RLENGTH); line=substr(line, RSTART+RLENGTH)
-      sub(/[.]+$/, "", t)
-      if (t !~ /\// || t ~ /\.\.\./) continue
-      if (t !~ ("[^/]" capx "$")) continue
-      sub(/^\.\//, "", t)
-      b=t; sub(/.*\//, "", b)
-      if (b ~ /^(requirements|constraints)[^\/]*\.txt$/ || b == "CMakeLists.txt" || b ~ /^(LICENSE|robots)\.txt$/) continue
-      print red "\t" t
-    }
-  }' <<<"$TEXT" | sort -u)"
+# One line per cited capture: "<red>\t<token as cited>\t<toplevel path, empty when UNRESOLVABLE>".
+CAPS="$(cap_tokens 0 <<<"$TEXT" | cap_resolve | sort -u)"
+# ignored_at_frozen <path>: 0 when a `.gitignore` tracked at <frozen> ignores <path>. The blobs are
+# written once into a scratch repository (the reviewer's commit decides, never this worktree's
+# `.gitignore`, its info/exclude or the operator's global excludes) and asked by check-ignore.
+IGN_DIR=""
+ignored_at_frozen() {
+  local gi gis
+  if [ -z "$IGN_DIR" ]; then
+    IGN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/he-ignore.XXXXXX")" || return 1
+    trap 'rm -rf "$IGN_DIR"' EXIT
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_DIR" init -q 2>/dev/null || return 1
+    # ls-tree failed: the exemption set is UNKNOWN, so name the cause once and treat it as EMPTY (every untracked citation WARNs; never "all ignored").
+    if ! gis="$(G ls-tree -r --name-only --full-tree "$FROZEN" 2>/dev/null)"; then
+      warn "gitignore-unreadable ${FROZEN:0:12}: exemption set unknown"; gis=""
+    fi
+    while IFS= read -r gi; do
+      case "$gi" in .gitignore|*/.gitignore) ;; *) continue ;; esac
+      mkdir -p "$IGN_DIR/$(dirname "$gi")" && G show "$FROZEN:$gi" > "$IGN_DIR/$gi" 2>/dev/null
+    done <<<"$gis"
+  fi
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_DIR" -c core.excludesFile=/dev/null \
+    check-ignore --no-index -q -- "$1" 2>/dev/null
+}
 CHANGED="$(G diff --name-only --no-renames "$BASE" "$FROZEN" 2>/dev/null)"
 inrange() { # <path>
   local l
@@ -401,21 +578,42 @@ inrange() { # <path>
 CAPDIRS=""
 seen=""
 if [ -n "$CAPS" ]; then
-  while IFS="$(printf '\t')" read -r red cap; do
-    d="${cap%/*}"
-    case " $CAPDIRS " in *" $d/ "*) ;; *) CAPDIRS="$CAPDIRS $d/" ;; esac
-    base_name="${cap##*/}"
+  while IFS="$TAB" read -r red tok cap; do
+    [ -n "$tok" ] || continue
+    if [ -n "$cap" ]; then
+      d="${cap%/*}"
+      case " $CAPDIRS " in *" $d/ "*) ;; *) CAPDIRS="$CAPDIRS $d/" ;; esac
+    fi
+    base_name="${tok##*/}"
     isred="$red"
     if grep -qiE '(^|[-_.])(red|mutation|mut)([-_.]|$)' <<<"$base_name"; then isred=1; fi
-    # (b) RED capture not tracked at the frozen sha.
-    if [ "$isred" -eq 1 ] && ! tracked "$FROZEN" "$cap"; then
-      case " $seen " in *" b:$cap "*) ;; *)
-        seen="$seen b:$cap"
-        refuse "red-untracked $cap: cited as a mutation-RED capture and not tracked at ${FROZEN:0:12} (commit it; a gitignored capture needs git add -f)" ;;
+    # (b) RED capture not tracked at the frozen sha (or UNRESOLVABLE, so the reviewer cannot read it).
+    if [ "$isred" -eq 1 ] && { [ -z "$cap" ] || ! tracked "$FROZEN" "$cap"; }; then
+      case " $seen " in *" b:$tok "*) ;; *)
+        seen="$seen b:$tok"
+        if [ -z "$cap" ]; then
+          refuse "red-untracked $tok: cited as a mutation-RED capture by a spelling that resolves outside the repository (cite it by its path from the repository top level, and commit it)"
+        else
+          refuse "red-untracked $tok: cited as a mutation-RED capture and $cap is not tracked at ${FROZEN:0:12} (commit it; a gitignored capture needs git add -f)"
+        fi ;;
       esac
+      continue
+    fi
+    # CAPTURE-UNRESOLVED. A cited capture no arm can read: never a refusal (a gitignored full-suite
+    # capture cited without RED words is acquitted by design), never silent. One WARN per token;
+    # an untracked path the frozen tree's own `.gitignore` ignores is that acquittal and prints none.
+    if [ -z "$cap" ] || ! tracked "$FROZEN" "$cap"; then
+      case " $seen " in *" u:$tok "*) ;; *)
+        seen="$seen u:$tok"
+        if [ -z "$cap" ]; then ureason="resolves outside the repository"
+        elif ignored_at_frozen "$cap"; then ureason=""
+        else ureason="not tracked at ${FROZEN:0:12}"; fi
+        [ -z "$ureason" ] || warn "capture-unresolved $tok: $ureason" ;;
+      esac
+      continue
     fi
     # (a) in-range capture with no '$ ' command line in its first 25 lines.
-    if inrange "$cap" && tracked "$FROZEN" "$cap"; then
+    if inrange "$cap"; then
       case " $seen " in *" a:$cap "*) continue ;; esac
       seen="$seen a:$cap"
       hdr="$(G show "$FROZEN:$cap" 2>/dev/null | head -n 25)"
@@ -423,6 +621,17 @@ if [ -n "$CAPS" ]; then
         refuse "no-command $cap: none of its first 25 lines is a command line ('\$ <command>', 'command: <command>', 'cmd=<command>', or validate-mutation-red.sh's own 'mutation-red replay' header; the capture header is '\$ <command>' then 'head: <sha>')"
         continue
       fi
+      # (m) K-UNQUOTED: the first `$ ` line passing -k an unquoted multi-word expression.
+      kl="$(LC_ALL=C grep -nE "$KUNQ_RE" <<<"$hdr" | head -n 1)"
+      if [ -n "$kl" ]; then
+        refuse "k-unquoted $cap: line ${kl%%:*} passes -k an unquoted multi-word expression, which the shell splits, so the line does not replay the run; quote it (-k \"a or b\")"
+      fi
+      # (n) PLACEHOLDER: one WARN per `<name>` on a `$ ` line; <redacted> and <base-worktree> exempt.
+      phs="$(LC_ALL=C awk '/^\$ /{ s=$0; while (match(s, /<[A-Za-z_-]+>/)) { p=substr(s, RSTART, RLENGTH); s=substr(s, RSTART+RLENGTH); if (p != "<redacted>" && p != "<base-worktree>") print NR " " p } }' <<<"$hdr")"
+      while IFS=' ' read -r pn pp; do
+        [ -n "$pn" ] || continue
+        warn "placeholder $cap: line $pn carries $pp on its '\$ ' line, a placeholder the command cannot replay with"
+      done <<<"$phs"
       # (j) REPLAY-PREAMBLE. Lines are numbered within the first 25: rl is the first
       # `mutation-red replay` line, fd the first `$ ` line. The script prints its own `$ ` line
       # immediately above its replay line, so a `$ ` line above the replay that is not the one
@@ -448,7 +657,7 @@ if [ -n "$CAPS" ]; then
           hd="$(G diff --name-only --no-renames "$hs" "$FROZEN" 2>/dev/null)"
           # CAPS is multi-line: it goes through ENVIRON, never `awk -v`, which BSD awk aborts
           # on (`newline in string`) — that abort made every head-tree WARN an artifact.
-          others="$(HE_CAPS="$CAPS" HE_STORY="$STORY" awk 'BEGIN { caps=ENVIRON["HE_CAPS"]; story=ENVIRON["HE_STORY"]; n=split(caps, L, "\n"); for (i=1; i<=n; i++) { sub(/^[^\t]*\t/, "", L[i]); skip[L[i]]=1 }; skip[story]=1 }
+          others="$(HE_CAPS="$CAPS" HE_STORY="$STORY" awk 'BEGIN { caps=ENVIRON["HE_CAPS"]; story=ENVIRON["HE_STORY"]; n=split(caps, L, "\n"); for (i=1; i<=n; i++) { split(L[i], F, "\t"); if (F[3] != "") skip[F[3]]=1 }; skip[story]=1 }
             NF && !($0 in skip) {c++} END {print c+0}' <<<"$hd")"
           [ "$others" -eq 0 ] || warn "head-tree $cap: head ${h:0:12} differs from ${FROZEN:0:12} in $others file(s) outside the cited captures and the story"
         fi

@@ -2156,8 +2156,11 @@ CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS, **K
 **L** ELICITATION. Arm L runs on the stories series (`s<N>/stories-adversarial-p`) and judges
 the sprint's stories elicitation against `_gate-procedures.md` validation-cycle item 2: it
 reads `s<N>/stories/`, `s<N>/stories-elicitation*.md` (repair records excluded),
-`s<N>/shards/stories-elicitation/` and the sprint's `validation_intensity`, and takes the owed
-shard names from `merge-adversarial-shards.sh --map` and `partition-document.sh --cross-groups`.
+`s<N>/shards/stories-elicitation/` and the sprint's `validation_intensity`. It owes one shard per
+ordinal `merge-adversarial-shards.sh --map` prints, plus a cross part that is EITHER `cross.md`
+alone (item 2's one cross-story shard) OR the complete `cross-1..G` set of
+`partition-document.sh --cross-groups` (the per-group shape, still accepted); a partial
+`cross-<g>` set FAILs (c).
 Only `full` owes elicitation: `standard`, `lightweight` and `carry-over-single` read NOT-OWED, and
 any other value PENDING. An elicitation dated before the release that shipped item 2's shape prints
 PENDING. When the install history cannot date it, the line reads `PENDING (L -- ELICITATION): era
@@ -2172,9 +2175,10 @@ the recorded K reads `PENDING
 it FAILs. A story split or added after a correctly sharded elicitation is judged by NAME through
 the delta clause of validation-cycle item 2: when `shards/stories-elicitation/` is complete for its
 own K, only the stories no ordinal shard names (a cross shard's `<name>=` entries never cover one)
-and the current cross groups holding one of them are owed, in
+are owed, plus one `cross.md` when any story is owed (the per-group names of the current cross
+groups holding an owed story are still accepted in its place), in
 `s<N>/shards/stories-elicitation-delta-k<K>/`. That dir holding exactly that set PASSes. Short or
-misnamed, it FAILs. Absent, the FAIL's remedy names the owed stories and groups. A base not complete
+misnamed, it FAILs. Absent, the FAIL's remedy names the owed stories and the cross shard. A base not complete
 for its own K, or one `shard: 1/1` voice, is never topped up, and its remedy is the full re-run. A recorded K equal to or smaller than today's is judged against today's `stories/` as
 usual, so a `shard: 1/1` single voice over several stories still FAILs. Shard lines recording two
 different values of K, or a K outside 1..999, FAIL. The arm's real-corpus receipt is OWED, not

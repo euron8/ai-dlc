@@ -38495,3 +38495,68 @@ The receipt (`core/fixtures/foreground-budget-deny/receipt-bl805.sh`, a tracked 
 
 verify: sh bash core/fixtures/foreground-budget-deny/receipt-bl805.sh
 
+## BL-813 — the s317–s320 extractor charges a step's mid-step re-read to the step it quotes, so graph s320's carry-over adversarial round was counted under route
+
+**LANDED (v0.948.0, verified 8204071a4).**
+
+**DEFECT (efficiency).** `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` changed the current step
+at every `Read` of a step file, including a `Read` with `offset`/`limit` that only re-reads one passage of a file
+already in context. In graph s320 the lead re-read `route.md` at lines 650–670 at 17:24Z, in the middle of
+carry-over evaluation, and the next 21 spawns ("Adversarial p1 …", "Repair p1 …") were charged to `route`. The rule
+now ignores a sliced `Read` of a step file the transcript has already read whole; a sliced first read still enters
+the step, because `gate-validation` is read in slices on entry.
+
+Measured on `~/.claude/projects/-Users-n8-git-graph/`: s320 carry-over-evaluation 111 spawns / $125.66 became
+132 / $158.55 and s320 `route` 21 / $32.89 became 0, while s319 carry-over stayed 88 / $86.66. The same rule moved
+s317 sprint-review 156 / $264.83 to 161 / $267.12, s317 gate-validation[sprint-review] 11 to 6, s317 retro 8 to 9,
+s317 deploy-validate 4 to 3, s318 implementation 164 to 162, s318 gate-validation[implementation] 59 to 61, s319
+implementation 494 to 481, s319 gate-validation[implementation] 136 to 149, s319 gate-validation[route] 2 to 0 and
+gate-validation[carry-over-evaluation] 0 to 2. The grand total is unchanged at 4098 spawns and $5947.30. Any
+per-step table in `docs/analysis/pipeline-efficiency-s317-s320/` read from the unfixed extractor carries these
+displacements.
+
+verify: sh bash docs/analysis/pipeline-efficiency-s317-s320/scripts/check-slice-reads.sh docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py docs/analysis/pipeline-efficiency-s317-s320/fixture-root
+
+## BL-815 — the handoff validator skips a capture cited by a `../` or absolute path, and calls a tracked RED capture untracked
+
+**LANDED (v0.948.0, verified 8204071a4).**
+
+**DEFECT.** `validate-handoff-evidence.sh`'s only capture-token normalisation was a `./` strip. A `../` or
+absolute token reached every arm verbatim. Arms (a), (j) and the head WARN all sat inside
+`if inrange "$cap" && tracked "$FROZEN" "$cap"`, which has no else branch. So a non-RED citation spelled `../`
+or absolute, or one that was untracked, was skipped with no output at all. A RED one spelled that way was
+refused by (b) as `red-untracked … not tracked` even when the file was tracked under its toplevel spelling.
+
+Measured on graph's s319, read-only, over the 17 code-review passes of stories 1-2, 1-5, 3-1 and 4-3: 38
+token-pass rows, 30 of them silent. The silent rows cover 8 distinct citations: 4-3's absolute path into
+another worktree (`/Users/n8/git/graph-s319-story-2-3b/…/control-failures-base.txt`, 5 passes), four 1-5
+`test-results/` captures, and three 3-1 `test-results/` captures. The tracked rows among them (3-1 p2, p4 and p5)
+are out of range; every untracked one is ignored by the `.gitignore` tracked at that pass's frozen sha
+(`test-results/`, `*.txt`). graph s320 3-3 cites two captures as `../test-results/…`. Neither is tracked at
+graph HEAD.
+
+**Fix (this release).** A new function, `cap_norm`, is the one normaliser for the handoff arms and
+`--list-captures`. It resolves every relative token from the toplevel, `./` and `../` spellings included:
+`./x` is `x`, and `a/../b` is `b`. It maps an absolute token under the physical toplevel to
+toplevel-relative. It treats as UNRESOLVABLE a token under no toplevel of this repository, or one that climbs
+above the toplevel, which includes every leading `../`. A cited capture that (b) does not refuse, and that is
+unresolvable or untracked at <frozen>, prints one `WARN capture-unresolved <token>: <reason>` line. The exit
+code is unchanged. The WARN does not fire when a `.gitignore` tracked at <frozen> ignores the path, which is the
+gitignored full-suite acquittal. An unresolvable RED citation is still refused, and the refusal names the
+spelling. On the s319 census the 4-3 citation now WARNs on all 5 passes, and the 7 gitignored ones stay quiet
+by that exemption. The BL-808 flip count is 19 of 30 under both the old and the new `--list-captures`. Also, when `git ls-tree` cannot read the frozen tree's `.gitignore` set, the validator prints `WARN gitignore-unreadable <sha12>: exemption set unknown` and treats the exemption set as empty, so every untracked citation WARNs; it is never a refusal and never a silent acquittal. Cell `gu` of `receipt-bl815.sh` forces that failure through a git shim, and mutant cn-n6 is killed by it.
+
+**Why the toplevel.** Graph's committed stories carry 0 `./` tokens and 2 `../` tokens, both in s320 3.3.
+Neither base, the toplevel or the story's directory, resolves either `../` token. Both choices, `./` from the
+toplevel and `../` from the toplevel, are therefore UNMEASURED. They are taken for consistency with the shipping
+validator, which strips `./` and resolves the remainder from the toplevel. A later batch with a discriminating
+token re-decides them. The subject of this entry is the silent skip, not a change to what `./` means. A leading
+`../` is reported as outside the repository: a WARN `capture-unresolved … resolves outside the repository`, or
+(b)'s `red-untracked` refusal when it is cited as RED. Before this correction `cap_norm` read `./` from the
+story's directory, so `--list-captures` dropped a `./` citation that BL-808 lists, and both readers now share
+the toplevel reading. The receipt's cell `xr` holds both readers to one answer on one `./` token. The census
+and flip figures above were re-measured under the toplevel reading and are unchanged: 25 silent and 13 named
+token-pass rows, 14 of 17 passes naming at least one line, and 19 of 30 flips.
+
+verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl815.sh core/scripts/validate-handoff-evidence.sh
+

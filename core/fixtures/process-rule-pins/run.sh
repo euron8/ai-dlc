@@ -26,7 +26,7 @@
 #     The sts-esc-why and dve-capital rows are line-mode `contains` pins: keep each pinned phrase
 #     on ONE line of its subject.
 #   - elicitation takes the axis and shape of the step's adversarial pass for every subject: the
-#     files axis per story plus cross groups and never one serial-document voice, the sections axis
+#     files axis per story plus ONE cross-story shard (`cross.md`) and never one serial-document voice, the sections axis
 #     per part plus cross groups or one serial-document voice on a SERIAL answer
 #     (_gate-procedures.md "Validation cycle" item 2), and stories-test-strategy.md step 4 names
 #     elicitation among the sharded passes. sts-elic-sharded is a line-mode `contains` pin: keep
@@ -73,6 +73,10 @@
 #     never the full step name and never the series stem `coe-adversarial` (carry-over-evaluation.md
 #     §3a). A blank line sets that bullet apart from the two above it, so `- The series is` is its
 #     own paragraph's lead for the coe-stem-* rows.
+#   - every kept carry-over round names the defect it caught in §3a's Minimum mechanism
+#     paragraph (coe-26c-caught, a line-mode `contains` pin: its delete mutant removes every
+#     `Failure caught:` line, which is the paragraph losing its subject), and the adversarial
+#     loop's later passes keep their own line (coe-26c-loop, a `prefix` pin: keep it on ONE line).
 #   - an adversary SHARD writes `tool_use_id: NOT_ACCESSIBLE` and the merge derives each shard's
 #     dispatch id from the harness records (_gate-procedures.md "Adversarial review dispatch", the
 #     "It writes findings to" paragraph; adversary.md Contract item 2, which item 1 runs into with no
@@ -396,7 +400,7 @@ impl-esc-before|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**
 impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|A story already dispatched keeps its route
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`
 dve-capital|R|dev-escalated.md|## Identity|## Contract|capital-path / high-blast-radius owned paths|contains
-elic-shape-files|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per story ordinal plus one cross-story `adversary` per cross group, never one voice under `shard: none (serial-document)`
+elic-shape-files|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per story ordinal plus ONE cross-story `adversary` for stories elicitation, briefed with every ordinal and writing `cross.md`, never one per cross group and never one voice under `shard: none (serial-document)`
 elic-shape-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per part plus one cross-part `adversary` per cross group; a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)`
 elic-shape-ordinals|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The story ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first
 elic-shape-onefile|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|A `stories/` holding ONE file is ONE `adversary` briefed `shard: 1/1 <story-index>`
@@ -407,7 +411,7 @@ rem-revised-seats|R|remediator.md|## Contract|## The evidence contract|**A brief
 elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
 gp-req-p1-prior|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Requirements pass 1 reviews the elicitation repair.**|para|handing it `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record
-sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|so the round, elicitation, each review pass and each repair|contains
+sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|Elicitation is sharded per|contains
 impl-rr-delta|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|run the partition with `<prior-sha>` in place of `<base>`
 impl-rr-prior|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|column-0 `reviewed-sha:` of the pass M-1 review file
 impl-rr-fanout|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|dispatches through this same fan-out
@@ -481,6 +485,8 @@ dev-one-story|R|dev.md|## Responsibilities|## As a party seat|- Implement the st
 dev-hardblock-idle|R|dev.md|## Escalation Protocol|## CI-vs-local divergence diagnostic order|- **HARD_BLOCK** (story contradicts architecture|para|and go idle; you do not pick up another story.
 coe-stem-token|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|`<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is `coe`
 coe-stem-dir|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- The series is|para|s<N>/shards/coe-p<M>/
+coe-26c-caught|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|Failure caught:|contains|
+coe-26c-loop|S|steps/carry-over-evaluation.md|### 3a. Validation cycle (Rule 8)|### 4. Deferral Handling|- Adversarial passes 2 and later: Failure caught:|prefix|
 gp-shard-sentinel|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|It writes findings to|para|`tool_use_id: NOT_ACCESSIBLE`
 gp-shard-derived|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|It writes findings to|para|the merge derives each shard's dispatch id
 gp-shard-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>`

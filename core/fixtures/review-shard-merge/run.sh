@@ -298,6 +298,19 @@ arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard 
 # BL-763: every owner-duplicate refusal in one run, and --check-shard exits 2 on one (--mark keys on it).
 arm2 x_dupall "X10: K=3 -- duplicates in cross-2 and cross-3 print two REFUSED lines (tails cross-2, cross-3), one prints one, an owner's own repeat merges, --check-shard over a duplicate exits 2 with no SHARD-OK, a duplicate then a later per-shard refusal print both (the duplicate first), an earlier per-shard refusal stands alone, and one shard's duplicate then its own verdict-backing refusal print two lines naming it; nothing written" \
               "X10: a merge did not name every owner duplicate in one run, or --check-shard passed a duplicate"
+# BL-808: cited captures leave the threshold COUNT, never the file set (partition-review-diff.sh
+# --exclude-captures). XC1 is the discriminating seed: a capture-heavy diff that stays sharded, so the
+# merge's flagless re-derivation must reproduce the flagged map. M43-M46 below are owned by these.
+arm2 xc_merge "XC1: $((DFLT + 2)) code files and 10 captures partitioned WITH --exclude-captures into a shard dir (no exclude key in its manifest) merge end to end: the merge's flagless re-derivation reproduces the recorded map" \
+              "XC1: a capture-heavy flagged partition did not merge through the flagless re-derivation"
+arm2 xc_flip "XC2: $((DFLT - 1)) code files and 10 captures partition without the flag; with it -> exit 3, 'SERIAL: $((DFLT - 1)) reviewable file(s) (... 10 cited capture(s) not counted), below the threshold of $DFLT', no shard dir written" \
+             "XC2: the flag did not flip a capture-heavy diff to SERIAL cleanly"
+arm2 xc_count "XC3: the excluded count is the INTERSECTION -- a list of 13 lines (cap10 only as CRLF, an out-of-diff path, a scan-root path, a duplicate) prints '10 cited capture(s) not counted'; the same ten spelled './' print 0, in the same arm" \
+              "XC3: the excluded count is not the list's intersection with the counted files"
+arm2 xc_one "XC4: one code file and five captures under --min-files 1 partition without the flag and answer SERIAL 'a review of at most one counted file is never sharded' with it; two code files under the same flag still shard" \
+            "XC4: a one-counted-file review was sharded, or a two-file one was not"
+arm2 xc_missing "XC5: --exclude-captures naming a file that does not exist -> REFUSED exit 2, nothing on stdout, no manifest" \
+                "XC5: an unreadable capture list was not refused"
 
 # ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
 # Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
@@ -497,9 +510,22 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     adv_qa "ad-q-present-absent{" "the advisor absence refusal deleted"
   CS_ONLY=ad-q-legacy-absent mut_run M42 merge-review-shards.sh '  if [ "$ADV_AT" = legacy ]; then' '  if false; then' \
     adv_qa "ad-q-legacy-absent{" "the advisor era check deleted, so a legacy shard's absence is refused"
+  # BL-808. M43 the flag parsed but the exclusion not applied. M44 the captures dropped from the FILE
+  # SET as well as the count, so the flagged map differs from the merge's flagless re-run -- killed
+  # through the merge's own map-cmp refusal. M45 the list's LENGTH subtracted, not its intersection.
+  # M46 the one-counted-file SERIAL rule (C8) removed.
+  CS_ONLY=xc-flip mut_run M43 partition-review-diff.sh '  NF_REV=$((NF_REV - XC))' '  :' xc_flip "xc-flip{" \
+    "the --exclude-captures list parsed but not subtracted from the count"
+  CS_ONLY=xc-merge mut_run M44 partition-review-diff.sh '  NF_REV=$((NF_REV - XC))' \
+    '  NF_REV=$((NF_REV - XC)); awk -F'"'"'\t'"'"' '"'"'FNR == NR { sub(/\r$/, ""); L[$0] = 1; next } !($2 in L)'"'"' "$XCAP" "$T/files" > "$T/files.x" && mv "$T/files.x" "$T/files"' \
+    xc_merge "differs from the map it records" "the cited captures dropped from the file set, not only from the count"
+  CS_ONLY=xc-count mut_run M45 partition-review-diff.sh '  NF_REV=$((NF_REV - XC))' '  XC="$(grep -c . "$XCAP")"; NF_REV=$((NF_REV - XC))' \
+    xc_count "xc-count{" "the list length subtracted instead of its intersection with the counted files"
+  CS_ONLY=xc-one mut_run M46 partition-review-diff.sh '  if [ "$NF_REV" -le 1 ]; then' '  if false; then' xc_one "xc-one{" \
+    "the one-counted-file SERIAL rule removed"
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 42 ]; then ok "VBCTL: CONTROL -- each of M1-M42's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 42), the same copy every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 42 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 46 ]; then ok "VBCTL: CONTROL -- each of M1-M46's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 46), the same copy every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 46 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
@@ -1034,6 +1060,32 @@ fi
 _s12=""
 p_hc_role "$QA_MD" || _s12="$_s12 qa.md-As-a-Shard"
 p_hc_step "$STEP_MD" || _s12="$_s12 implementation.md-Gate-2-dispatch"
+# XC-STEP (BL-808): every literal partition invocation in implementation.md -- gate 1, the pass-M>=2
+# re-review and gate 2 -- passes --exclude-captures ON THE SAME LINE as its `--map <worktree>`. The
+# invocation count is held to exactly 3 (the control: a count below 3 means an invocation lost its
+# literal and the per-line join would pass on fewer), and the flagged count must equal it. The
+# offender drops the flag from the FIRST invocation only, on a copy.
+xc_step_counts() { # <file> -> "<invocations> <flagged>"
+  local a b
+  a="$(grep -cF -- 'partition-review-diff.sh --map <worktree>' "$1")" || a=0
+  b="$(grep -F -- 'partition-review-diff.sh --map <worktree>' "$1" | grep -cF -- '--exclude-captures')" || b=0
+  printf '%s %s' "$a" "$b"
+}
+p_xc_step() { [ "$(xc_step_counts "$1")" = "3 3" ]; }
+awk '!done && index($0, "partition-review-diff.sh --map <worktree>") && sub(/ --exclude-captures/, "") { done = 1 } { print }' \
+  "$STEP_MD" > "$WORK/xc-step-drop.md"
+if cmp -s "$STEP_MD" "$WORK/xc-step-drop.md"; then
+  bad "XC-STEP-pre: FIXTURE STALE -- the drop-the-flag offender matched no invocation carrying ' --exclude-captures', so the probe would score the shipped text"
+elif p_xc_step "$WORK/xc-step-drop.md"; then
+  bad "XC-STEP-pre: FIXTURE BROKEN -- the step pin passed a copy with --exclude-captures dropped from one invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
+else
+  ok "XC-STEP-pre: the step pin refuses a copy with --exclude-captures dropped from one invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
+fi
+if p_xc_step "$STEP_MD"; then
+  ok "XC-STEP: implementation.md carries exactly 3 'partition-review-diff.sh --map <worktree>' invocations (gate 1, the re-review, gate 2), each passing --exclude-captures on the same line"
+else
+  bad "XC-STEP: implementation.md's partition invocations and flagged ones read [$(xc_step_counts "$STEP_MD")], want [3 3]"
+fi
 if [ -z "$_s12" ]; then
   ok "S12: qa.md's As a Shard and implementation.md's Gate-2 paragraph tell every part shard to write 'handovers: <n>', 0 when it handed nothing over"
 else

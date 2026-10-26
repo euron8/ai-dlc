@@ -5,6 +5,7 @@
 # USAGE
 #   partition-review-diff.sh --map <worktree> <base> <frozen-sha>
 #                            [--min-files N] [--max-parts K] [--shard-dir <dir>]
+#                            [--exclude-captures <file>]
 #       stdout: one line per part, `<ordinal>\t<groups>\t<file>\t<file>...`, exit 0.
 #       <groups> is the part's group keys joined by `,`; every file after it is one TAB-separated
 #       column. A diff that does not partition prints ONE line `SERIAL: <reason>` on STDOUT and
@@ -14,6 +15,10 @@
 #       never reuses gate 1's manifest.
 #       With --shard-dir, a partitioned run ALSO writes `<dir>/.manifest` (creating <dir>), the
 #       record merge-review-shards.sh re-derives the map from. SERIAL writes nothing.
+#       --exclude-captures <file> names the story's cited captures, one toplevel-relative path per
+#       line (`validate-handoff-evidence.sh --list-captures` writes it). They leave the THRESHOLD
+#       COUNT only (THRESHOLD below); the part set, the map and the manifest are byte-identical
+#       with and without the flag. An unreadable <file> is REFUSED.
 #
 #   Every refusal is exit 2 with ONE stderr line `partition-review-diff: REFUSED — <reason>`,
 #   and a refusal writes nothing.
@@ -38,6 +43,11 @@
 #   are in the CHANGELOG entry that made sharding the default. `--max-parts K` (default 4) must be an integer from
 #   2 to 64. Either value longer than 9 digits is REFUSED before any arithmetic, which would
 #   otherwise wrap it.
+#   THE COUNTED FILES. The count held to N is the reviewable files (after PART SET step 2); under
+#   --exclude-captures, minus those of them the list names -- the INTERSECTION, so a listed path
+#   outside the diff or under a scan root subtracts nothing. The SERIAL line then carries
+#   `, <c> cited capture(s) not counted`, and a counted file count of at most 1 is SERIAL whatever
+#   N is (a one-file review is never sharded). Without the flag nothing here changes.
 #
 # THE PART SET -- nothing else in core may restate it; callers read `--map`.
 #   1. FILES. `git -C <worktree> diff --numstat --no-renames <base>..<frozen-sha>` -- TWO dots,
@@ -62,7 +72,10 @@
 #   5. PACKING. Groups in order of weight descending, key ascending, each into the lightest of K
 #      bins (lowest ordinal on a tie). Empty bins are dropped. Within a part, keys and files are
 #      sorted. Ordinals are 1-based, zero-padded to the width of the part count.
-#   SERIAL when: the threshold is 0 (sharding off); fewer reviewable files (after 2) than N; fewer than two groups.
+#   Cited captures (--exclude-captures) are NOT dropped from steps 3-5: they stay atoms, grouped
+#   and packed like any other file; only the THRESHOLD count leaves them out.
+#   SERIAL when: the threshold is 0 (sharding off); fewer counted files (THRESHOLD) than N; at most
+#   one counted file under --exclude-captures; fewer than two groups.
 #
 # THE MANIFEST (`<dir>/.manifest` -- a dotfile, so no `*.md` glob over the shard dir sees it)
 #   worktree\t<ABSOLUTE physical path>
@@ -78,7 +91,7 @@ set -u
 export LC_ALL=C
 
 refuse() { printf 'partition-review-diff: REFUSED — %s\n' "$*" >&2; exit 2; }
-USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>]"
+USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>]"
 
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -86,18 +99,22 @@ case "${1:-}" in
   *) refuse "$USAGE" ;;
 esac
 
-WT=""; BASE=""; SHA=""; MINF=""; MAXP=""; SDIR=""; MINF_SET=0
+WT=""; BASE=""; SHA=""; MINF=""; MAXP=""; SDIR=""; MINF_SET=0; XCAP=""; XCAP_SET=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --min-files) [ "$#" -ge 2 ] || refuse "--min-files needs a value"; MINF="$2"; MINF_SET=1; shift 2 ;;
     --max-parts) [ "$#" -ge 2 ] || refuse "--max-parts needs a value"; MAXP="$2"; shift 2 ;;
     --shard-dir) [ "$#" -ge 2 ] || refuse "--shard-dir needs a value"; SDIR="$2"; shift 2 ;;
+    --exclude-captures) [ "$#" -ge 2 ] || refuse "--exclude-captures needs a file"; XCAP="$2"; XCAP_SET=1; shift 2 ;;
     --*) refuse "unknown flag $1" ;;
     *) if [ -z "$WT" ]; then WT="$1"; elif [ -z "$BASE" ]; then BASE="$1"
        elif [ -z "$SHA" ]; then SHA="$1"; else refuse "unexpected argument $1"; fi; shift ;;
   esac
 done
 [ -n "$WT" ] && [ -n "$BASE" ] && [ -n "$SHA" ] || refuse "$USAGE"
+if [ "$XCAP_SET" -eq 1 ]; then
+  [ -f "$XCAP" ] && [ -r "$XCAP" ] || refuse "--exclude-captures file $XCAP is not a readable file; an unread list would exclude nothing and read exactly like one that matched nothing"
+fi
 
 REVIEW_SHARD_DEFAULT_MIN_FILES=8
 if [ "$MINF_SET" -eq 1 ]; then
@@ -167,10 +184,33 @@ awk -F'\t' '
 NF_REV="$(grep -c . "$T/files")" || NF_REV=0
 NF_ALL="$(grep -c . "$T/numstat")" || NF_ALL=0
 
+# --exclude-captures: cited captures leave the COUNT, never the file set. The excluded count is
+# the INTERSECTION of the list with the reviewable files above (scan roots already dropped), never
+# NF_REV minus the list's length: a listed path outside the diff or under a scan root excludes
+# nothing. NEVER touch $T/files here: merge-review-shards.sh re-derives the map with a FLAGLESS
+# re-run (its `bash "$PART"` call) and cmp's it against the manifest's part lines, so the map must
+# be identical with and without this flag. The flag changes WHETHER a diff partitions, not WHAT.
+XC=0
+if [ "$XCAP_SET" -eq 1 ]; then
+  XC="$(awk -F'\t' 'FNR == NR { sub(/\r$/, ""); if ($0 != "") L[$0] = 1; next } ($2 in L) { c++ } END { print c + 0 }' \
+    "$XCAP" "$T/files")" || refuse "cannot read --exclude-captures file $XCAP"
+  NF_REV=$((NF_REV - XC))
+fi
+
 if [ "$MINF" -eq 0 ]; then
   echo "SERIAL: review sharding is disabled -- $MINF_SRC is 0"; exit 3
 fi
-if [ "$NF_REV" -lt "$MINF" ]; then
+if [ "$XCAP_SET" -eq 1 ]; then
+  # C8: a review whose counted (non-capture) files number at most one is never sharded, whatever N.
+  if [ "$NF_REV" -le 1 ]; then
+    echo "SERIAL: $NF_REV reviewable file(s) ($NF_ALL in the diff, scan roots excluded, $XC cited capture(s) not counted); a review of at most one counted file is never sharded, whatever the threshold"
+    exit 3
+  fi
+  if [ "$NF_REV" -lt "$MINF" ]; then
+    echo "SERIAL: $NF_REV reviewable file(s) ($NF_ALL in the diff, scan roots excluded, $XC cited capture(s) not counted), below the threshold of $MINF ($MINF_SRC)"
+    exit 3
+  fi
+elif [ "$NF_REV" -lt "$MINF" ]; then
   echo "SERIAL: $NF_REV reviewable file(s) ($NF_ALL in the diff, scan roots excluded), below the threshold of $MINF ($MINF_SRC)"
   exit 3
 fi

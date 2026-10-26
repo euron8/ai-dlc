@@ -66,7 +66,10 @@ joins them with bounded-join beats (Rule 29). The axes:
   it cites; a per-part agent reports only findings citing its own part
   alone, a cross-part agent only findings citing two or more. A review
   the program answers `SERIAL` is `shard: 1/1 <story-index>`, never
-  `shard: none (…)`.
+  `shard: none (…)`. Stories elicitation is the one exception to the
+  per-group count: it dispatches ONE cross-story agent briefed with every
+  ordinal, writing `cross.md` (`_gate-procedures.md`, validation-cycle
+  item 2).
 - **sections** -- a single document that `partition-document.sh --map`
   partitions: one agent per part the map prints plus one cross-part
   agent per cross group (below), reporting interactions only, citing parts by

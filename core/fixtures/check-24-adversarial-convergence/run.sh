@@ -3023,9 +3023,13 @@ echo
 # in the second commit, so a shallow clone carries the sprint.
 #   l-pass     K=10, 01..10 + cross-1..6, post                      OK PASS, exit 0 (K=10, because
 #              --map pads to the digit count of K: only a two-digit K prints `01`, so only it
-#              can tell the `$1 + 0` de-padding from its absence)
+#              can tell the `$1 + 0` de-padding from its absence; the complete per-group set)
 #   l-voice    K=3, one stories-elicitation.md record, post         FAIL (a), exit 1
-#   l-legacy   K=3, 01..03 + cross.md, post                         FAIL (c), never (d)
+#   l-legacy   K=3, 01..03 + cross.md, post                         OK PASS: ONE cross shard is the rule
+#   l-full7    K=7, 01..07 + cross-1..6 (G=6), post                 OK PASS: the complete set still accepted
+#   l-part7    K=7, 01..07 + cross-1..3 only, post                  FAIL (c), never (d): the control
+#   l-dx       l-grow2's base + a delta-k3 of story-3.md + cross.md OK PASS: the delta owes one cross.md
+#   l-dxno     l-dx without the delta's cross.md                    FAIL (c) delta cross shard missing
 #   l-absent   full, no record, no dir; dated by the first pass     FAIL (e)
 #   l-std      intensity standard, nothing elicited                 OK NOT-OWED
 #   l-pre      l-voice dated between the two stamps                 PENDING, legal in its era
@@ -3041,7 +3045,7 @@ echo
 #   l-eqshort  shards record K=3 (equality) and hold 01, 02, cross-1; stories/ 3    FAIL (b)+(c), the
 #              plain today's-K text, no `shards record` suffix -- nothing moves at equality
 #   l-grow     ONE file, 01.md carrying `shard: 1/1 stories`; stories/ 3            FAIL (b)+(c), never PENDING
-#   l-grow2    shards record K=2, the complete 2-set (01, 02, cross.md); stories/ 3 FAIL, never PENDING
+#   l-grow2    shards record K=2, the complete 2-set (01, 02, cross.md); stories/ 3 FAIL (b) 3.md only, never PENDING
 #   l-replace  shards record K=5 over story-1..5, complete; stories/ now story-1..3 + story-new
 #              (shrink WITH replacement)                                             FAIL, names story-new
 #   l-replace1 l-moved's covering names, one current story renamed 3 -> 8           FAIL, names story-8
@@ -3141,6 +3145,7 @@ l_git() { # <name> two|pred|none|nostamp -- the stamp history, every file in the
 L_SET3="01.md 02.md 03.md cross-1.md cross-2.md cross-3.md"
 L_SET10="01.md 02.md 03.md 04.md 05.md 06.md 07.md 08.md 09.md 10.md cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md"
 L_SET5="01.md 02.md 03.md 04.md 05.md cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md"
+L_ORD7="01.md 02.md 03.md 04.md 05.md 06.md 07.md"
 L_BUILT=1; L_BAD=""
 l_bad() { L_BUILT=0; L_BAD="$L_BAD $1"; }
 # shellcheck disable=SC2086 -- the sets are word lists by design
@@ -3151,6 +3156,9 @@ for v in "voice|$L_POST|two" "pre|$L_PRE|two" "pred|$L_POST|pred" "undated||two"
   { l_world "l-$n" 3 full && l_prov "$LW/l-$n/s9/stories-elicitation.md" "$at" "" && l_git "l-$n" "$gm"; } || l_bad "l-$n"
 done
 { l_world l-legacy 3 full && l_shards l-legacy "$L_POST" "" 01.md 02.md 03.md cross.md && l_git l-legacy two; } || l_bad l-legacy
+{ l_world l-full7 7 full && l_shards l-full7 "$L_POST" "" $L_ORD7 cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md \
+    && l_git l-full7 two; } || l_bad l-full7
+{ l_world l-part7 7 full && l_shards l-part7 "$L_POST" "" $L_ORD7 cross-1.md cross-2.md cross-3.md && l_git l-part7 two; } || l_bad l-part7
 { l_world l-absent 3 full && l_git l-absent two; } || l_bad l-absent
 { l_world l-std 3 standard && l_git l-std none; } || l_bad l-std
 # l_reline <file> <exact old line> <new line> -- one whole-line rewrite, refused unless it applied.
@@ -3202,6 +3210,23 @@ L_N3="story-1 story-2 story-3"
     && mv "$LW/l-grow/01.n" "$LW/l-grow/s9/shards/stories-elicitation/01.md" \
     && grep -qx 'shard: 1/1 stories' "$LW/l-grow/s9/shards/stories-elicitation/01.md" && l_git l-grow two; } || l_bad l-grow
 { l_world l-grow2 3 full && l_rshards l-grow2 "$L_POST" 2 bare "story-1 story-2" 01.md 02.md cross.md && l_git l-grow2 two; } || l_bad l-grow2
+# l-dx / l-dxno: l-grow2's base, plus the delta-k3 it owes (story-3 and the cross part), in s317's layout.
+l_dshard() { # <world> <file> <story | cross>
+  local d="$LW/$1/s9/shards/stories-elicitation-delta-k3"
+  mkdir -p "$d" || return 1
+  { printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\ninvoked_at: %s\n' "$L_POST"
+    printf 'tool_use_id: NOT_ACCESSIBLE\nmode: subagent\nlead_role: stories.md\n'
+    if [ "$3" = cross ]; then printf 'artifact: s9/stories/\nartifact_sha: story-1=%064d story-2=%064d story-3=%064d\n' 1 2 3
+    else printf 'artifact: %s/%s/s9/stories/%s.md\nartifact_sha: %064d\n' "$LWP" "$1" "$3" 3; fi
+    printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n\n'
+    if [ "$3" = cross ]; then printf 'shard: cross/3 cross\n'; else printf 'shard: 03/3 %s\n' "$3"; fi
+    printf '\nFindings: 0 critical, 0 major, 0 minor.\n'; } > "$d/$2"
+}
+for w in l-dx l-dxno; do
+  { l_world "$w" 3 full && l_rshards "$w" "$L_POST" 2 bare "story-1 story-2" 01.md 02.md cross.md \
+      && l_dshard "$w" story-3.md story-3 && { [ "$w" = l-dxno ] || l_dshard "$w" cross.md cross; } \
+      && l_git "$w" two; } || l_bad "$w"
+done
 { cp -R "$LW/l-voice" "$LW/l-nogit" && rm -rf "$LW/l-nogit/.git"; } || l_bad l-nogit
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
   GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git clone -q --depth 1 "file://$LWP/l-voice" "$LW/l-shallow" ) >/dev/null 2>&1 \
@@ -3242,8 +3267,15 @@ else
   l_cell l-voice   1 "ONLY THE DELTA" "FAIL (L -- ELICITATION): s9's stories elicitation over 3 stories is not the sharded shape: (a) single voice" \
     "after 0.782.0 was stamped (2026-10-05T00:00:00Z)" \
     "No shard dir complete for its own K exists to top up with a delta," "so re-run the elicitation in that shape before this gate."
-  l_cell l-legacy  1 "(d) wrong names" "$L_FL" \
-    "(c) cross shards short: 0 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md); found instead: cross.md"
+  # ONE cross shard over every ordinal is the rule (BL-811); the complete per-group set is still
+  # accepted (l-pass, l-full7), and a PARTIAL per-group set is (c), never (d) and never a PASS.
+  l_cell l-legacy  0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS -- shards/stories-elicitation/ holds exactly the owed set (3 stories"
+  l_cell l-full7   0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS -- shards/stories-elicitation/ holds exactly the owed set (7 stories"
+  l_cell l-part7   1 "(d) wrong names" "$L_FL" \
+    "(c) cross shards short: 3 cross shard(s) where G=6 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md cross-4.md cross-5.md cross-6.md)"
+  l_cell l-dx      0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS -- shards/stories-elicitation/ is complete for its K=2 and shards/stories-elicitation-delta-k3/ holds exactly the delta owed (stories: story-3; cross: cross.md (or all of cross-2 cross-3))"
+  l_cell l-dxno    1 "OK (L" "$L_FL" \
+    "(c) delta cross shard missing: cross.md (or every owed group: cross-2.md cross-3.md; missing: cross-2.md cross-3.md)"
   l_cell l-absent  1 - "$L_FL" "(e) owed-absent" "(the series' first pass stories-adversarial-p1.md)"
   l_cell l-std     0 "$L_FL" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 NOT-OWED -- validation_intensity is standard"
   l_cell l-pre     0 "$L_FL" "PENDING (L -- ELICITATION): stories-adversarial-p1.md: s9: (a) single voice" \
@@ -3260,16 +3292,16 @@ else
   l_cell l-match   0 "stories/ changed since" "OK (L -- ELICITATION): stories-adversarial-p1.md: s9 PASS"
   l_cell l-kdis    1 - "$L_FL" "(f) the shard: lines do not record one K in 1..999: 02.md=3 03.md=4"
   l_cell l-eqshort 1 "shards record K=" "$L_FL" \
-    "not the sharded shape: (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross-1.md cross-2.md cross-3.md)."
+    "not the sharded shape: (b) ordinals missing: 3.md; (c) cross shards short: 1 cross shard(s) where G=3 are owed (owed: cross.md, or all of cross-1.md cross-2.md cross-3.md)."
   # BL-733: one voice at `shard: 1/1` is never a base a delta tops up -- the full re-run is named.
   l_cell l-grow    1 "ONLY THE DELTA" "$L_FL" \
     "(b) ordinals missing: 2.md 3.md; (c) cross shards short: 0 cross shard(s) where G=3 are owed" \
     "shards record K=1, fewer than the 3 stories/ holds" "No shard dir complete for its own K exists to top up"
   # BL-733: a base complete for its K=2 whose ordinals name story-1 and story-2 owes only story-3 and
-  # the K=3 cross groups holding ordinal 3 (groups 2 and 3: `1,3` and `2,3`), never cross-1 (`1,2`).
-  l_cell l-grow2   1 "cross-1 cross-2" "$L_FL" "(b) ordinals missing: 3.md" \
-    "found instead: cross.md" "shards record K=2, fewer than the 3 stories/ holds" \
-    "ONLY THE DELTA is owed -- stories: story-3; cross: cross-2 cross-3 --" "s9/shards/stories-elicitation-delta-k3/<story-basename>.md"
+  # ONE cross.md, the per-group form accepted being the K=3 groups holding ordinal 3 (groups 2 and 3:
+  # `1,3` and `2,3`), never cross-1 (`1,2`). Its lone cross.md is now the whole cross part: no (c).
+  l_cell l-grow2   1 "cross-1 cross-2" "$L_FL" "not the sharded shape: (b) ordinals missing: 3.md; shards record K=2, fewer than the 3 stories/ holds" \
+    "ONLY THE DELTA is owed -- stories: story-3; cross: cross.md (or all of cross-2 cross-3) --" "s9/shards/stories-elicitation-delta-k3/<story-basename>.md"
   # BL-733: the shrink WITH replacement still FAILs, and what it owes is the one story never elicited.
   l_cell l-replace 1 "stories/ changed since" "$L_FL" "(d) wrong names present: 05.md" \
     "shards record K=5, but they never name the story file(s) stories/ holds: story-new" \
@@ -3316,55 +3348,72 @@ PY
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
       fi
     fi
-    got=""; for c in l-pass l-legacy l-moved l-under l-grow l-replace l-eqshort l-match l-foreign; do got="$got $(l_class "$d/validate-adversarial-convergence.sh" "$c")"; done
+    got=""; for c in $L_MW; do got="$got $(l_class "$d/validate-adversarial-convergence.sh" "$c")"; done
     got="${got# }"
     if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
+  L_MW="l-pass l-legacy l-moved l-under l-grow l-replace l-eqshort l-match l-foreign"
   #                                       pass legacy moved   under  grow replace eqshort match foreign
-  l_mut "LX0 control (unmutated)"        "OK FAIL PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
+  l_mut "LX0 control (unmutated)"        "OK OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
   # The staging symlink pointed at an empty dir: --map reads no stories and every judged world stops
   # judging. The end-to-end FAIL depends on the staged map, not on a listing of the shard dir.
   l_mut "LX1 --map staged on nothing"    "PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING" \
     'ln -s "$l_sd/stories" "$AC_T/l/s$l_n/stories"' 'mkdir -p "$AC_T/l/s$l_n/stories"'
   # The de-padding gone: --map's `01` never meets the judge's `1`, so a complete dir FAILs. Only the
   # two-digit K of l-pass pads; the recorded-K judgment builds its own unpadded set.
-  l_mut "LX2 ordinals not de-padded"     "FAIL FAIL PENDING FAIL+K FAIL FAIL FAIL OK FAIL" \
+  l_mut "LX2 ordinals not de-padded"     "FAIL OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL" \
     'printf "%s%d", s, $1 + 0' 'printf "%s%s", s, $1'
   # The recorded K ignored: the moved stories/ FAILs a correct elicitation, and the under-sharded one
   # PASSes against today's smaller K.
-  l_mut "LX3 recorded K ignored"         "OK FAIL FAIL OK FAIL FAIL FAIL OK FAIL" \
+  l_mut "LX3 recorded K ignored"         "OK OK FAIL OK FAIL FAIL FAIL OK FAIL" \
     '    if [ -z "$l_kcov" ] && l_kuse "$L_KREC" "$l_k"; then' '    if false; then'
   # The recorded-K branch as an EXEMPTION: any honoured recorded K reads PENDING, whether or not the
   # dir is complete for it. The under-sharded world is acquitted -- the regression this binds.
-  l_mut "LX4 recorded K acquits all"     "OK FAIL PENDING PENDING FAIL FAIL FAIL OK FAIL" \
+  l_mut "LX4 recorded K acquits all"     "OK OK PENDING PENDING FAIL FAIL FAIL OK FAIL" \
     $'        if [ "$L_V" = PASS ]; then\n          l_kmsg=' $'        if true; then\n          l_kmsg='
   # The GROW direction re-admitted (any K_rec other than today's honoured, the first cut of this
   # branch): one voice at `shard: 1/1` over three stories is complete for K=1 and reads PENDING. The
   # self-probe's direction conjunct goes with it, or the mutant exits 2 and reads SILENT everywhere.
-  l_mut "LX5 smaller recorded K honoured" "OK FAIL PENDING FAIL+K PENDING FAIL FAIL OK FAIL" \
+  l_mut "LX5 smaller recorded K honoured" "OK OK PENDING FAIL+K PENDING FAIL FAIL OK FAIL" \
     'l_kuse() { [ -n "$1" ] && [ "$1" -gt "$2" ]; }' 'l_kuse() { [ -n "$1" ] && [ "$1" != "$2" ]; }' \
     '[ "$lp_ku" = "y" ] || lp_bad=' 'true || lp_bad='
   # The subject-cover test dropped: a shrink WITH replacement is complete for K_rec=5 and reads
   # PENDING although story-new was never elicited -- in l-replace, and in l-foreign too.
-  l_mut "LX6 subject cover dropped"      "OK FAIL PENDING FAIL+K FAIL PENDING FAIL OK PENDING" \
+  l_mut "LX6 subject cover dropped"      "OK OK PENDING FAIL+K FAIL PENDING FAIL OK PENDING" \
     '    if [ -z "$l_kcov" ] && l_kuse "$L_KREC" "$l_k"; then' '    if l_kuse "$L_KREC" "$l_k"; then'
   # EQUALITY honoured (-gt to -ge): killed on a VERDICT by l-match, complete at K_rec == K == 3 with
   # subjects covering today's stories, which flips OK -> PENDING. l-eqshort keeps its causes but is
   # judged through the recorded-K branch, so its text gains `the shard headers record` (FAIL+K). The
   # self-probe's direction conjunct (3 over 3 refused) goes with it.
-  l_mut "LX7 equality honoured"          "OK FAIL PENDING FAIL+K FAIL FAIL FAIL+K PENDING FAIL" \
+  l_mut "LX7 equality honoured"          "OK OK PENDING FAIL+K FAIL FAIL FAIL+K PENDING FAIL" \
     'l_kuse() { [ -n "$1" ] && [ "$1" -gt "$2" ]; }' 'l_kuse() { [ -n "$1" ] && [ "$1" -ge "$2" ]; }' \
     '[ "$lp_ku" = "y" ] || lp_bad=' 'true || lp_bad='
   # The SPRINT SCOPE dropped (basename-only, the pre-fix reader): s8's same-named story-new covers s9's,
   # so l-foreign reads PENDING; only it moves. The four self-probe conjuncts that seed a foreign sprint
   # go with it, or the mutant exits 2 and reads SILENT everywhere.
-  l_mut "LX8 sprint scope dropped"       "OK FAIL PENDING FAIL+K FAIL FAIL FAIL OK PENDING" \
+  l_mut "LX8 sprint scope dropped"       "OK OK PENDING FAIL+K FAIL FAIL FAIL OK PENDING" \
     'l_insprint() { case "$1" in "$2"|*/"$2") return 0 ;; esac; return 1; }' 'l_insprint() { return 0; }' \
     '|| lp_bad="$lp_bad [cover, foreign-sprint ordinal:' '|| : "$lp_bad [cover, foreign-sprint ordinal:' \
     '|| lp_bad="$lp_bad [cover, foreign-sprint cross:' '|| : "$lp_bad [cover, foreign-sprint cross:' \
     '|| lp_bad="$lp_bad [cover, s19 ordinal suffix:' '|| : "$lp_bad [cover, s19 ordinal suffix:' \
     'then lp_bad="$lp_bad [l_insprint boundary' 'then : "$lp_bad [l_insprint boundary'
+  # BL-811, ONE cross shard: its own worlds. LM1 and LM2 also silence the self-probe's verdict, whose
+  # lone-cross and partial-set rows refuse each of them (exit 2) before the live arm is reached.
+  L_MW="l-legacy l-full7 l-part7 l-dx l-dxno"
+  #                                         legacy full7 part7 dx dxno
+  l_mut "LM0 control (unmutated)"          "OK OK FAIL OK FAIL"
+  # The old rule: a lone cross.md never stands in for cross-1..G, so l-legacy FAILs (c).
+  l_mut "LM1 lone cross refused"           "FAIL OK FAIL OK FAIL" \
+    'then l_mx=""; l_xoff=""; fi' 'then :; fi' \
+    '|| [ -n "$lp_bad" ]; then' '|| false; then'
+  # Any non-empty cross subset accepted: the partial cross-1..3 of G=6 at K=7 PASSes.
+  l_mut "LM2 any cross subset accepted"    "OK OK OK OK FAIL" \
+    'if [ -n "$l_mx" ] && [ "$l_xh" -eq 0 ] && [ "$l_xoff" = " cross.md" ]; then' 'if [ -n "$l_mx" ] && { [ "$l_xh" -gt 0 ] || [ -n "$l_xoff" ]; }; then' \
+    '|| [ -n "$lp_bad" ]; then' '|| false; then'
+  # The delta owes no cross at all: a delta of story-3.md alone PASSes.
+  l_mut "LM3 delta owes no cross"          "OK OK FAIL OK OK" \
+    '  case "$l_dhave" in *" cross.md "*) l_dmx="" ;; *) [ -n "$l_dgn" ] || [ -z "$L_DU" ] || l_dmx=" cross.md" ;; esac' '  l_dmx=""'
 fi
 
 # --- BL-733: THE DELTA, the receipt as an arm. Its worlds are the reference consumer's s319 split

@@ -169,6 +169,18 @@ convergence loop adjudicated by nobody reads exactly like a loop that converged.
 list is DERIVED, never hand-maintained — see I11 in `validate-enforcement-map.sh`.
 *Removed when:* Rule 8 stops binding this step.
 
+**Minimum mechanism (Rule 26(c)).** Each round is kept on a catch no other round raised and whose
+fix shipped:
+- Party (§3, part and cross): Failure caught: an operator-owned choice the evaluation decided itself, a new code path not bound to the existing mechanism it must share (a claim function bypassing the nonce manager), and a funds-destination edit with no typed confirmation.
+- Elicitation (§3a, part and cross): Failure caught: a defect the party repair wrote, which no earlier round read, such as an operator-ruled threshold re-pinned to another value.
+- Adversarial pass 1: Failure caught: an operator's decision recorded as the lead's call.
+- Adversarial passes 2 and later: Failure caught: a defect the previous adversarial repair wrote, which no earlier pass could read, such as a candidate cause with the wrong sign or a false claim about a field; the terminal pass is the convergence exit Check 24 reads.
+
+False-positive cost: one agent per (seat, part) and per cross group in each round, and each
+round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
+CRITICAL catch that survives to the shipped evaluation; the loop's terminal pass goes only when
+Rule 8 stops binding this step.
+
 ### 4. Deferral Handling
 
 If the agent determines any item should be DEFERRED (not implemented

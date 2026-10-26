@@ -8,12 +8,16 @@
 #   exit 0   the fix is present        exit 1   it is not        exit 9   the receipt cannot measure
 #
 # The reference consumer's s319 shape: a base elicited complete at K=19, then the 8th story split in
-# two (K=20), so every ordinal after the split point renumbers. Owed by name: cross groups {1,4,5} of
-# `--cross-groups 20`; a diff of the two index lists answers {3,5,6}.
+# two (K=20), so every ordinal after the split point renumbers. Owed by name: story-08a, story-08b and
+# ONE cross.md, or (accepted) cross groups {1,4,5} of `--cross-groups 20`; a diff of the two index
+# lists answers {3,5,6}.
 #   nodelta    base only                                   FAIL, remedy names the delta, no cross-3
-#   full       base + the exact delta                      PASS, exit 0
+#   full       base + the exact delta, one cross.md        PASS, exit 0
+#   fullg      base + the delta, cross-1/4/5 per group     PASS, exit 0 (the per-group names accepted)
+#   one        a base whose cross part is one cross.md + the delta   PASS, exit 0
+#   nocross    the delta's ordinals, no cross shard        FAIL, names cross.md
 #   miss       the delta without story-08b.md              FAIL, names story-08b.md
-#   crossonly  the delta's cross shards, no ordinal shard  FAIL: a cross voice acquits no story
+#   crossonly  the delta's cross shard, no ordinal shard   FAIL: a cross voice acquits no story
 #   xnamed     nodelta whose base cross shards name TODAY's 20 stories (graph's live s319 cross
 #              shards do): FAIL owing story-08a/08b -- a cross `<name>=` entry never acquits an ordinal
 #   voice      base = ONE `shard: 1/1` voice naming every story by dir form, + the delta   FAIL
@@ -65,20 +69,25 @@ crs() { # file shard-line names...
   printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\ninvoked_at: 2026-10-06T00:00:00Z\ntool_use_id: NOT_ACCESSIBLE\nmode: subagent\nlead_role: stories.md\nartifact: _bmad-output/planning-artifacts/s9/stories/\nartifact_sha:%s\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n\n# Stories elicitation, cross shard\n\n%s\n\nFindings: 0 critical, 0 major, 0 minor.\n' \
     "$s" "$sl" > "$f"
 }
-base() { # world [xnamed: the cross shards name TODAY's stories, as graph's live s319 cross shards do]
+base() { # world [xnamed: the cross shards name TODAY's stories, as graph's live s319 cross shards do | one: ONE cross.md]
   local d="$B/$1/s9/shards/stories-elicitation" i=0 n g names="$BASE"
   mkdir -p "$d" || return 1
   [ "${2:-}" = xnamed ] && names="$NOW"
   for n in $BASE; do i=$((i + 1)); ord "$d/$(printf %02d "$i").md" "$n" 19 "$(printf %02d "$i")"; done
+  if [ "${2:-}" = one ]; then crs "$d/cross.md" "shard: cross/19 cross" $names; return; fi
   for g in 1 2 3 4 5 6; do crs "$d/cross-$g.md" "shard: cross/19 cross-$g" $names; done
 }
-delta() { # world [skip-story] [no-ordinals]
+delta() { # world [skip-story] [no-ordinals | groups: cross-1/4/5 | nocross]
   local d="$B/$1/s9/shards/stories-elicitation-delta-k20" n g
   mkdir -p "$d" || return 1
   if [ "${3:-}" != no-ordinals ]; then
     for n in story-08a story-08b; do [ "$n" = "${2:-}" ] || ord "$d/$n.md" "$n" 20 "$n"; done
   fi
-  for g in 1 4 5; do crs "$d/cross-$g.md" "shard: cross/20 cross-$g" $NOW; done
+  case "${3:-}" in
+    nocross) ;;
+    groups) for g in 1 4 5; do crs "$d/cross-$g.md" "shard: cross/20 cross-$g" $NOW; done ;;
+    *) crs "$d/cross.md" "shard: cross/20 cross" $NOW ;;
+  esac
 }
 stamp() {
   local w="$B/$1"
@@ -90,6 +99,9 @@ stamp() {
 }
 { world nodelta && base nodelta && stamp nodelta \
   && world full && base full && delta full && stamp full \
+  && world fullg && base fullg && delta fullg "" groups && stamp fullg \
+  && world one && base one one && delta one && stamp one \
+  && world nocross && base nocross && delta nocross "" nocross && stamp nocross \
   && world miss && base miss && delta miss story-08b && stamp miss \
   && world crossonly && base crossonly && delta crossonly "" no-ordinals && stamp crossonly \
   && world xnamed && base xnamed xnamed && stamp xnamed \
@@ -109,18 +121,22 @@ run() { OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/s9/stor
 bad=""
 run nodelta
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] \
-  && [[ "$OUT" == *"stories: story-08a story-08b; cross: cross-1 cross-4 cross-5"* ]] \
+  && [[ "$OUT" == *"stories: story-08a story-08b; cross: cross.md (or all of cross-1 cross-4 cross-5)"* ]] \
   && [[ "$OUT" == *"stories-elicitation-delta-k20/"* ]] && [[ "$OUT" != *"cross-3"* ]] || bad="$bad nodelta(rc=$RC)"
-run full
-[ "$RC" -eq 0 ] && [[ "$OUT" == *"OK (L -- ELICITATION)"* ]] && [[ "$OUT" == *"stories-elicitation-delta-k20/ holds exactly the delta owed"* ]] || bad="$bad full(rc=$RC)"
+for w in full fullg one; do
+  run "$w"
+  [ "$RC" -eq 0 ] && [[ "$OUT" == *"OK (L -- ELICITATION)"* ]] && [[ "$OUT" == *"stories-elicitation-delta-k20/ holds exactly the delta owed"* ]] || bad="$bad $w(rc=$RC)"
+done
+run nocross
+[ "$RC" -eq 1 ] && [[ "$OUT" == *"(c) delta cross shard missing: cross.md (or every owed group: cross-1.md cross-4.md cross-5.md;"* ]] || bad="$bad nocross(rc=$RC)"
 run miss
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] && [[ "$OUT" == *"story-08b.md"* ]] || bad="$bad miss(rc=$RC)"
 run crossonly
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] && [[ "$OUT" == *"story-08a.md story-08b.md"* ]] || bad="$bad crossonly(rc=$RC)"
 run xnamed
-[ "$RC" -eq 1 ] && [[ "$OUT" == *"stories: story-08a story-08b; cross: cross-1 cross-4 cross-5"* ]] || bad="$bad xnamed(rc=$RC)"
+[ "$RC" -eq 1 ] && [[ "$OUT" == *"stories: story-08a story-08b; cross: cross.md (or all of cross-1 cross-4 cross-5)"* ]] || bad="$bad xnamed(rc=$RC)"
 run voice
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] && [[ "$OUT" != *"OK (L"* ]] || bad="$bad voice(rc=$RC)"
 if [ -n "$bad" ]; then echo "receipt BL-733: NOT FIXED --$bad"; exit 1; fi
-echo "receipt BL-733: fixed (delta owed by name {story-08a story-08b; cross-1 cross-4 cross-5}, judged in stories-elicitation-delta-k20/)"
+echo "receipt BL-733: fixed (delta owed by name {story-08a story-08b; cross.md or cross-1 cross-4 cross-5}, judged in stories-elicitation-delta-k20/)"
 exit 0

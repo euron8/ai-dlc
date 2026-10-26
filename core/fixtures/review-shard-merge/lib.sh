@@ -198,6 +198,43 @@ for r in "$REPO_S" "$REPO_N"; do
 done
 S_BASE="$(G -C "$REPO_S" rev-parse HEAD~1)"; S_SHA="$(G -C "$REPO_S" rev-parse HEAD)"
 N_BASE="$(G -C "$REPO_N" rev-parse HEAD~1)"; N_SHA="$(G -C "$REPO_N" rev-parse HEAD)"
+# BL-808 (--exclude-captures). REPO_X: X1 adds DFLT+2 code files over four dirs and ten captures under
+# evidence/s1/ (counted DFLT+2 after exclusion, so it STAYS sharded); X2 deletes three code files
+# (DFLT-1 counted, so the flag flips it to SERIAL while the flagless run still partitions); X3 adds one
+# scan-root file. REPO_Y: Y1 is ONE code file plus five captures (C8), Y2 a second code file.
+REPO_X="$WORK/repo-x"; REPO_Y="$WORK/repo-y"
+new_repo "$REPO_X" && new_repo "$REPO_Y" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+_i=0; while [ "$_i" -lt "$((DFLT + 2))" ]; do _i=$((_i + 1)); lines "$REPO_X/x$((_i % 4))/c$_i.py" "$((_i + 4))" "x-$_i"; done
+_i=0; while [ "$_i" -lt 10 ]; do _i=$((_i + 1)); lines "$REPO_X/evidence/s1/cap$_i.txt" 3 "cap-$_i"; done
+G -C "$REPO_X" add -A && G -C "$REPO_X" commit -q -m x1 \
+  && G -C "$REPO_X" rm -q x1/c1.py x2/c2.py x3/c3.py && G -C "$REPO_X" commit -q -m x2 \
+  || { echo "FIXTURE ERROR: repo X could not be built" >&2; exit 2; }
+lines "$REPO_X/docs/reviews/s1/r.txt" 3 r
+G -C "$REPO_X" add -A && G -C "$REPO_X" commit -q -m x3 || { echo "FIXTURE ERROR: repo X could not be built" >&2; exit 2; }
+lines "$REPO_Y/src/only.py" 40 only
+for _i in 1 2 3 4; do lines "$REPO_Y/evidence/s1/cap$_i.txt" 3 "y-cap-$_i"; done
+lines "$REPO_Y/other/c.log" 2 clog
+G -C "$REPO_Y" add -A && G -C "$REPO_Y" commit -q -m y1 || { echo "FIXTURE ERROR: repo Y could not be built" >&2; exit 2; }
+lines "$REPO_Y/other/two.py" 30 two
+G -C "$REPO_Y" add -A && G -C "$REPO_Y" commit -q -m y2 || { echo "FIXTURE ERROR: repo Y could not be built" >&2; exit 2; }
+for r in "$REPO_X" "$REPO_Y"; do
+  [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository" >&2; exit 2; }
+done
+X_BASE="$(G -C "$REPO_X" rev-parse HEAD~3)"; X1_SHA="$(G -C "$REPO_X" rev-parse HEAD~2)"
+X2_SHA="$(G -C "$REPO_X" rev-parse HEAD~1)"; X3_SHA="$(G -C "$REPO_X" rev-parse HEAD)"
+X1_SHA12="$(printf '%s' "$X1_SHA" | cut -c1-12)"
+Y_BASE="$(G -C "$REPO_Y" rev-parse HEAD~2)"; Y1_SHA="$(G -C "$REPO_Y" rev-parse HEAD~1)"; Y2_SHA="$(G -C "$REPO_Y" rev-parse HEAD)"
+# The lists, in the spelling `git diff --numstat` prints (the spelling --list-captures emits).
+# XC_ALL: the ten captures. XC_SEED: nine as LF lines, cap10 ONLY as a CRLF line, a path outside the
+# diff, the scan-root path, and a duplicate -- its intersection with the counted files is 10, its
+# length 13. XC_DOT: the ten in a `./` spelling, which names nothing in the diff (the spelling control).
+# XC_Y: Y's four captures and its .log.
+XC_ALL="$WORK/xc-all"; XC_SEED="$WORK/xc-seed"; XC_DOT="$WORK/xc-dot"; XC_Y="$WORK/xc-y"
+: > "$XC_ALL"; : > "$XC_DOT"
+_i=0; while [ "$_i" -lt 10 ]; do _i=$((_i + 1))
+  printf 'evidence/s1/cap%d.txt\n' "$_i" >> "$XC_ALL"; printf './evidence/s1/cap%d.txt\n' "$_i" >> "$XC_DOT"; done
+{ sed -n '1,9p' "$XC_ALL"; printf 'evidence/s1/cap10.txt\r\n'; printf 'nowhere/else/out.txt\ndocs/reviews/s1/r.txt\nevidence/s1/cap1.txt\n'; } > "$XC_SEED"
+printf 'evidence/s1/cap1.txt\nevidence/s1/cap2.txt\nevidence/s1/cap3.txt\nevidence/s1/cap4.txt\nother/c.log\n' > "$XC_Y"
 
 # THE REVIEW TREE (BL-737). content-seal.sh --review-shard places a shard with `git rev-parse
 # --show-toplevel` and refuses one that is not at docs/reviews/s<N>/shards/<idx>-code-review-<sha12>/
@@ -2703,6 +2740,83 @@ p_serial_role() { # <qa.md> <code-reviewer.md>
   nq="$(grep -cF -- "$SR_ROLE_CMD <validation file> --gate qa" "$1")" || nq=0
   nc="$(grep -cF -- "$SR_ROLE_CMD <review file> --gate code-review" "$2")" || nc=0
   [ "$nq" -ge 1 ] && [ "$nc" -ge 1 ]
+}
+
+# ------------------------------------------------------------------------------------ BL-808
+# --exclude-captures. One cell per predicate, so each mutant runs exactly its owner. Failures land in
+# WHY as `xc-<cell>{want ... got ...}`; mut_run keys each kill on a token only that cell can print.
+xc_serial() { # <file> -> the SERIAL line, or empty
+  grep '^SERIAL: ' "$1" 2>/dev/null | head -1
+}
+p_xc_merge() { # (i) X_BASE..X1: DFLT+2 counted after ten captures leave the count -> partitions WITH
+  # the flag into a shard dir, and the merge's FLAGLESS re-derivation accepts the set it recorded.
+  local sd="$1" w d o k n
+  WHY=""; cell xc-merge || return 0
+  w="$(wdir)" || { WHY="xc-merge{the work dir was not made}"; return 1; }
+  d="$w/1-code-review-$X1_SHA12"
+  bash "$sd/partition-review-diff.sh" --map "$REPO_X" "$X_BASE" "$X1_SHA" --exclude-captures "$XC_ALL" \
+    --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null; k=$?
+  n="$(grep -cE '^[0-9]+	' "$w/map")" || n=0
+  [ "$k" -eq 0 ] && [ "$n" -ge 2 ] && [ -f "$d/.manifest" ] \
+    || { WHY="xc-merge{want a flagged partition of >= 2 parts got rc=$k parts=$n [$(head -1 "$w/map") $(head -1 "$w/map.err")]}"; return 1; }
+  # F2: no manifest line records the exclusion (it would join the manifest cmp at re-run).
+  n="$(grep -c 'exclude' "$d/.manifest")" || n=0
+  [ "$n" -eq 0 ] || { WHY="xc-manifest{want no exclude key in the manifest got $n line(s)}"; return 1; }
+  for k in $(cut -f1 "$w/map"); do shard "$d" "$k" APPROVED "$k" "$X1_SHA"; done
+  ( SHARD_SHA="$X1_SHA"; xshards "$sd" "$d" APPROVED ) || { WHY="xc-merge{the cross shards were not written}"; return 1; }
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] \
+    || { WHY="xc-merge{want MERGED got rc=$RC [$(grep -m1 'REFUSED' "$MO")]}"; return 1; }
+}
+p_xc_flip() { # (iii) X_BASE..X2: DFLT-1 code + 10 captures. Flagless partitions; flagged answers
+  # SERIAL exit 3 naming the ten, and writes no shard dir.
+  local sd="$1" d n want got
+  WHY=""; cell xc-flip || return 0
+  d="$(mktemp -d "$WORK/xflip.XXXXXX")/sd"
+  run_part "$sd" "$REPO_X" "$X_BASE" "$X2_SHA"
+  n="$(grep -cE '^[0-9]+	' "$PO")" || n=0
+  [ "$PRC" -eq 0 ] && [ "$n" -ge 2 ] || { WHY="xc-flip-ctl{want the flagless run to partition got rc=$PRC parts=$n}"; return 1; }
+  run_part "$sd" "$REPO_X" "$X_BASE" "$X2_SHA" --exclude-captures "$XC_ALL" --shard-dir "$d"
+  want="rc=3 SERIAL: $((DFLT - 1)) reviewable file(s) ($((DFLT + 9)) in the diff, scan roots excluded, 10 cited capture(s) not counted), below the threshold of $DFLT dir=n"
+  got="rc=$PRC $(xc_serial "$PO" | sed 's/ (the built-in default.*//') dir=$([ -e "$d" ] && echo y || echo n)"
+  [ "$want" = "$got" ] || { WHY="xc-flip{want '$want' got '$got'}"; return 1; }
+}
+p_xc_count() { # (iv) X_BASE..X3 under --min-files 100 (SERIAL either way, so the count is printed):
+  # the seeded list (nine LF lines, cap10 ONLY as CRLF, an out-of-diff path, the scan-root path, a
+  # duplicate) excludes its INTERSECTION, 10, never its length 13; the `./` list in the same arm
+  # excludes 0 -- the count moves 0 -> 10 on the spelling alone.
+  local sd="$1" a b wa wb
+  WHY=""; cell xc-count || return 0
+  run_part "$sd" "$REPO_X" "$X_BASE" "$X3_SHA" --min-files 100 --exclude-captures "$XC_DOT"
+  a="rc=$PRC $(xc_serial "$PO" | sed 's/, below the threshold.*//')"
+  run_part "$sd" "$REPO_X" "$X_BASE" "$X3_SHA" --min-files 100 --exclude-captures "$XC_SEED"
+  b="rc=$PRC $(xc_serial "$PO" | sed 's/, below the threshold.*//')"
+  wa="rc=3 SERIAL: $((DFLT + 9)) reviewable file(s) ($((DFLT + 10)) in the diff, scan roots excluded, 0 cited capture(s) not counted)"
+  wb="rc=3 SERIAL: $((DFLT - 1)) reviewable file(s) ($((DFLT + 10)) in the diff, scan roots excluded, 10 cited capture(s) not counted)"
+  [ "$a" = "$wa" ] && [ "$b" = "$wb" ] || { WHY="xc-count{want '$wa' / '$wb' got '$a' / '$b'}"; return 1; }
+}
+p_xc_one() { # (C8) Y_BASE..Y1: one code file + five captures under --min-files 1. Flagless it
+  # partitions; flagged it is SERIAL on the one-file rule. Y_BASE..Y2 (two code files) still shards.
+  local sd="$1" n want got
+  WHY=""; cell xc-one || return 0
+  run_part "$sd" "$REPO_Y" "$Y_BASE" "$Y1_SHA" --min-files 1
+  n="$(grep -cE '^[0-9]+	' "$PO")" || n=0
+  [ "$PRC" -eq 0 ] && [ "$n" -ge 2 ] || { WHY="xc-one-ctl{want the flagless one-file run to partition got rc=$PRC parts=$n}"; return 1; }
+  run_part "$sd" "$REPO_Y" "$Y_BASE" "$Y1_SHA" --min-files 1 --exclude-captures "$XC_Y"
+  want="rc=3 SERIAL: 1 reviewable file(s) (6 in the diff, scan roots excluded, 5 cited capture(s) not counted); a review of at most one counted file is never sharded, whatever the threshold"
+  got="rc=$PRC $(xc_serial "$PO")"
+  [ "$want" = "$got" ] || { WHY="xc-one{want '$want' got '$got'}"; return 1; }
+  run_part "$sd" "$REPO_Y" "$Y_BASE" "$Y2_SHA" --min-files 1 --exclude-captures "$XC_Y"
+  n="$(grep -cE '^[0-9]+	' "$PO")" || n=0
+  [ "$PRC" -eq 0 ] && [ "$n" -ge 2 ] || { WHY="xc-two{want two counted files to shard got rc=$PRC parts=$n}"; return 1; }
+}
+p_xc_missing() { # a list file that does not exist -> REFUSED exit 2, nothing on stdout, no manifest
+  local sd="$1" d
+  WHY=""; cell xc-missing || return 0
+  d="$(mktemp -d "$WORK/xmiss.XXXXXX")/sd"
+  run_part "$sd" "$REPO_X" "$X_BASE" "$X1_SHA" --exclude-captures "$WORK/xc-no-such-list" --shard-dir "$d"
+  part_refused "--exclude-captures file $WORK/xc-no-such-list is not a readable file" "$d" \
+    || { WHY="xc-missing{want REFUSED exit 2 got rc=$PRC [$(head -1 "$PE")]}"; return 1; }
 }
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
