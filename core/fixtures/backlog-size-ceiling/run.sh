@@ -368,8 +368,9 @@ fi
 rm -f "$b14_lib.orig"
 
 # ===== THE CROSS-CHECK JOINS. ===========================================================
-# Bind the arm's local label rule to the SHIPPING classifiers, at fixture time rather than on
-# the gate's hot path. NO NUMBER IS HARDCODED in either: a literal would go stale on the next
+# Bind the ceiling's entry count to the SHIPPING classifier's distinct row ids, at fixture time
+# rather than on the gate's hot path. b15 catches drift in reverify's row emission (for example a
+# dropped flush() on a new label). NO NUMBER IS HARDCODED in either: a literal would go stale on the next
 # filed entry, and equality alone is satisfied by two broken predicates that both return 0, so
 # both sides are asserted non-zero as well.
 
@@ -545,6 +546,43 @@ else
     *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
   esac
 fi
+
+# ===== A PROSE LEAD-IN BULLET IS NOT AN ENTRY (BL-820). ==================================
+# p01 -- `- **BL-632 is LANDED** prose` inside a host entry, before the host's receipt, must
+# not count: the seed writes BL_K entries and the arm must still say BL_K. A loose label rule
+# counts BL_K+1. The legitimate list form keeps counting, which b07 and d03 already assert.
+PH_BODY='- **BL-632 is LANDED** prose about another entry'
+ph_seed() { # ph_seed <dir> -- BL_K entries; the phantom bullet sits inside BL-001, before its verify:
+  seed "$1"
+  # `cp`, never `mv`: tools.decl does not declare `mv`, and the hermetic sandbox has none.
+  awk -v ph="$PH_BODY" '{ print } /^Body of entry 1\.$/ { print ""; print ph }' "$1/docs/backlog.md" > "$1/docs/backlog.md.new" \
+    && cp "$1/docs/backlog.md.new" "$1/docs/backlog.md"; rm -f "$1/docs/backlog.md.new"
+  grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { note "FAIL  p01 -- the phantom bullet was not seeded into $1"; rc=1; return 1; }
+}
+ph_seed "$TMP/p01" && count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"
+PH_ANCHOR='if (line !~ /^BL-'
+ph_n="$(grep -cF "$PH_ANCHOR" "$LIBSRC")" || ph_n=0
+ph_z="$(grep -cF 'ZQ-NEVER-IN-LIB-QZ' "$LIBSRC")" || ph_z=0
+if [ "$ph_n" -ne 1 ] || [ "$ph_z" -ne 0 ]; then
+  note "FAIL  p-anchor -- the strict bullet test appears $ph_n times in lib.sh (control $ph_z); the mutants below need exactly one"; rc=1
+fi
+# m-loose -- the strict test deleted: the phantom counts, so p01's seed reads BL_K+1. A count arm
+# is pass-shaped, so the kill is asserted as the inverse: the arm passes and reports one MORE.
+ph_seed "$TMP/mloose"
+case "$(mutate "$TMP/mloose/core/skills/ai-dlc-update/reconcile/lib.sh" '/if (line !~ \/^BL-/d'; echo $?)" in
+  0) ml_out="$(run_v "" "$TMP/mloose")"; ml_rc=$?
+     if [ "$ml_rc" -eq 0 ] && [ "$(bl_reported "$ml_out")" = "$(( BL_K + 1 ))" ]; then
+       note "ok    m-loose -- KILLED: with the loose label rule the lead-in bullet counts as an entry ($(( BL_K + 1 )) against $BL_K)"
+     else note "FAIL  m-loose SURVIVED: loose label rule and p01's ledger exited $ml_rc reporting '$(bl_reported "$ml_out")'"; rc=1; fi ;;
+  *) note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1 ;;
+esac
+# m-heading-only -- bullets never labelled. The arm's own self-probe seeds a list entry, so it
+# refuses before the corpus (exit 2); this is the label rule's twin of d06's shape-rule mutant.
+seed "$TMP/mhead"
+case "$(mutate "$TMP/mhead/core/skills/ai-dlc-update/reconcile/lib.sh" 's/if (line !~ /if (1 || line !~ /'; echo $?)" in
+  0) selfprobe_check "m-heading-only bullets never labelled in lib.sh" "$TMP/mhead" ;;
+  *) note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1 ;;
+esac
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-size-ceiling -- control green, every probe holds"

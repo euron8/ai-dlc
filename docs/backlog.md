@@ -747,26 +747,6 @@ Outcome owed: the arm behaves as its self-probe states, and every one of the 32 
 
 verify: manual
 
-## BL-818 — a lone surrogate escape in a Bash command makes `ai-dlc-foreground-budget.sh`'s jq parse fail, so the hook fails open and loses every deny, the budget deny included
-
-**DEFECT.** Found by cluster c2's delta adversary in batch 243. `core/hooks/ai-dlc-foreground-budget.sh` parses the PreToolUse payload with `jq`. A `tool_input.command` containing the JSON escape `\ud800` (a lone high surrogate) makes that parse fail, and the hook prints `ai-dlc-foreground-budget: the tool call is not readable JSON, so its timeout cannot be checked; allowing it (fail-open)` to stderr and emits no verdict. Every deny the hook owns is lost for that call: the foreground-budget deny, Deny A (a backgrounded waiter) and Deny B (a shell write of the snapshot). A command that would be refused is allowed by appending the escape to it.
-
-**Reproduction (re-run in batch 243, jq-1.8.1).** Script: `scratchpad/f7/repro.sh`. It extracts the hook from `bd0be5e51` (base) and from `2bbab2b39` (the batch-243 c2 tip), pipes `{"tool_name":"Bash","tool_input":{"command":"<c>","timeout":600000}}` to each with `AI_DLC_STEERING_BUDGET=120`, and reads the verdict with `jq -r '.hookSpecificOutput.permissionDecision // "allow"'`. An empty verdict below means the hook printed nothing.
-
-| command `<c>` | base `bd0be5e51` | tip `2bbab2b39` |
-|---|---|---|
-| `sleep 9` (control: no escape) | deny | deny |
-| `sleep 9 \ud800` | no verdict, fail-open message on stderr | no verdict, fail-open message on stderr |
-| `wait-for-deliverable.sh x >/dev/null 2>&1 & echo armed` (control) | deny | deny |
-| the same waiter with ` \ud800 z` appended | no verdict, fail-open message on stderr | no verdict, fail-open message on stderr |
-| the same waiter with ` \udc00 z` appended (second control) | deny | deny |
-
-The behaviour is identical at base `bd0be5e51`, so it predates batch 243 and is not introduced by the BL-805 or BL-806 work. A lone low surrogate `\udc00` does not trigger it (confirmed; the delta adversary measured the same). The adversary's own script is `scratchpad/d2.MqWv/sur.sh`.
-
-**Owed:** fixed in cluster c6, batch 243. Open design question for c6's contract: on a jq parse failure, should the hook fail CLOSED (deny, which wedges any command jq cannot parse) or fall back to a non-jq budget check? Measure first how many of graph's 253,881 real Bash commands jq fails to parse; that count decides whether a fail-closed deny would wedge real work.
-
-verify: manual
-
 ## BL-819 — the lead session's own hours and tokens are outside every efficiency entry, and they are most of the wall clock
 
 **DEFECT (efficiency).** BL-808 through BL-811 count subagent spawns and subagent dollars, and BL-812 counts
@@ -807,20 +787,6 @@ Owed:
 Reference points, not pass bars: the table above. This entry closes on a measured graph sprint that reports the
 lead's per-step hours and tokens against s317 and s319, with value evidence for any class whose cost did not
 fall.
-
-verify: manual
-
-## BL-820 — a prose bullet opening `- **BL-<n>` inside an entry body is read as an entry boundary, so the host entry's verify: line moves to a phantom entry
-
-**DEFECT.** Found by cluster c2's 0.947.0 gate pre-suite in batch 243. At 2bf9ce466, `docs/backlog.md:286` opened with the bullet `- **BL-632 is LANDED**` inside BL-616's batch-243 paragraph. `ledger_entry_shape()` treats a line matching `^- \*\*` as an entry boundary, and its label rule took `BL-632` as that entry's id. BL-632 therefore became a phantom entry that received BL-616's `verify: manual`, so `backlog-reverify.sh` reported BL-616 NEEDS-REVIEW with "carries no 'verify:' receipt".
-
-The pre-push step `validate-backlog-receipts.sh` then failed R2 with entries 21, sh receipts 0, manual 20.
-
-The same split was present at ec35c5e5e and passed there (rc 0, "1 driver"), because BL-805's `verify: sh` driver receipt satisfied R2. The rotation at 2bf9ce466 had removed that driver, so the same split failed. The trap is invisible whenever a driver receipt is present.
-
-It was fixed for 0.947.0 by rewording the bullet to `- **Discharged: BL-632 is LANDED**`. origin/main af80abefd carries 0 bullets matching `^- \*\*BL-[0-9]` (`git show af80abefd:docs/backlog.md | grep -c '^- \*\*BL-[0-9]'` returns 0; the same file has 20 `^## BL-` headings, so the read is not empty).
-
-**Owed:** the remedy is for c6, batch 243, to decide, after BL-818. Either the backlog grammar refuses a `- **BL-` bullet inside an entry body, or the reverify engine opens an entry only at `## BL-`.
 
 verify: manual
 

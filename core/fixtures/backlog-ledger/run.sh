@@ -986,6 +986,61 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------------------
+# Seed P — a PROSE LEAD-IN BULLET inside an entry body is not an entry (BL-820).
+# `- **BL-632 is LANDED** prose` sits inside BL-150, BEFORE BL-150's receipt. A loose label
+# rule opens a phantom BL-632 there, the phantom takes the receipt, and BL-150 reads
+# NEEDS-REVIEW "carries no 'verify:'". BL-151 is the legitimate list form, `- **BL-151** — t`,
+# which must keep parsing: a rule that stopped labelling bullets at all would pass the phantom
+# arm and lose it. Two mutants of the label rule in reconcile/lib.sh, each in its own root with
+# the unmutated engine copied beside it, and each guarded by `cmp -s`.
+# ---------------------------------------------------------------------------------------
+LP="$WORK/p.md"
+printf '# Probe ledger\n\n## BL-150 — host\n\nBody.\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: sh true\n\n- **BL-151** — a list entry\n\nverify: sh true\n' > "$LP"
+p_ok() { # p_ok <output> — 0 when the host keeps its receipt, the list entry parses, and no phantom row exists
+  grep -qE '^CLOSE-CANDIDATE	BL-150	' <<<"$1" || { echo "BL-150 lost its receipt: $(grep -E '	BL-150	' <<<"$1" | cut -f1,3 | cut -c1-80)"; return 1; }
+  grep -qE '^CLOSE-CANDIDATE	BL-151	' <<<"$1" || { echo "the list entry BL-151 has no CLOSE-CANDIDATE row"; return 1; }
+  ! grep -qE '	BL-632	' <<<"$1" || { echo "a phantom BL-632 row exists"; return 1; }
+  [ "$(grep -c '	' <<<"$1")" -eq 2 ] || { echo "$(grep -c '	' <<<"$1") rows, want 2"; return 1; }
+  return 0
+}
+PO="$(bash "$RV" "$LP" 2>&1)"
+if pm="$(p_ok "$PO")"; then ok "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"
+else bad "phantom-bullet" "$pm"; fi
+LIBP="$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+LN="$(grep -c 'if (line !~ /^BL-' "$LIBP")" || LN=0
+LZ="$(grep -c 'ZQ-NEVER-IN-LIB-QZ' "$LIBP")" || LZ=0
+if [ "$LN" -eq 1 ] && [ "$LZ" -eq 0 ]; then ok "label-anchor" "the strict bullet test is unique in lib.sh (control: an impossible token reads 0)"
+else bad "label-anchor" "the strict bullet test appears $LN times (control $LZ); the mutations below need exactly one"; fi
+p_mut() { # p_mut <name> <sed-expr> -> echoes the mutated engine path, empty when the sed did not apply
+  local r="$WORK/$1"
+  mkdir -p "$r/scripts" "$r/core/skills/ai-dlc-update/reconcile"
+  printf '0.0.0\n' > "$r/VERSION"
+  cp "$RV" "$r/scripts/backlog-reverify.sh"
+  sed "$2" "$LIBP" > "$r/core/skills/ai-dlc-update/reconcile/lib.sh" || return 1
+  cmp -s "$LIBP" "$r/core/skills/ai-dlc-update/reconcile/lib.sh" && return 1
+  printf '%s' "$r/scripts/backlog-reverify.sh"
+}
+# m-loose: the strict test deleted, so the label rule is the loose one the defect shipped with.
+PM="$(p_mut mut-loose '/if (line !~ \/^BL-/d')"
+if [ -z "$PM" ]; then bad "mutation-loose" "DID NOT APPLY: the strict bullet test was not found"
+else
+  MO="$(bash "$PM" "$LP" 2>&1)"
+  if grep -qE '^CLOSE-CANDIDATE	BL-151	' <<<"$MO" && grep -qE '	BL-632	' <<<"$MO" \
+     && grep -qE '^NEEDS-REVIEW	BL-150	' <<<"$MO"; then
+    ok "mutation-loose" "killed: the loose rule opens a phantom BL-632 that takes BL-150's receipt (BL-150 NEEDS-REVIEW), while BL-151 still parses"
+  else bad "mutation-loose" "SURVIVED: $(cut -f1,2 <<<"$MO" | tr '\n' ' ')"; fi
+fi
+# m-heading-only: bullets never take a label, so the list entry vanishes.
+PM="$(p_mut mut-heading-only 's/if (line !~ /if (1 || line !~ /')"
+if [ -z "$PM" ]; then bad "mutation-heading-only" "DID NOT APPLY: the strict bullet test was not found"
+else
+  MO="$(bash "$PM" "$LP" 2>&1)"
+  if grep -qE '^CLOSE-CANDIDATE	BL-150	' <<<"$MO" && ! grep -qE '	BL-151	' <<<"$MO"; then
+    ok "mutation-heading-only" "killed: with bullets never labelled the list entry BL-151 has no row, while BL-150 still parses"
+  else bad "mutation-heading-only" "SURVIVED: $(cut -f1,2 <<<"$MO" | tr '\n' ' ')"; fi
+fi
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   echo "PASS: every assertion holds."

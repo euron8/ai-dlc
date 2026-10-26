@@ -26,7 +26,16 @@
 #   NONBASH     a Read carrying timeout 600000                    -> allow
 #   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why; a subagent
 #               poll there -> allow too (its fail-open stderr is asserted under SUBPOLL)
-#   MALFORMED   unparseable stdin -> allow, and stderr says fail-open
+#   UNPARSEABLE truncated JSON, jq present -> deny naming the parse cause and its remedy, and
+#               stderr carries no fail-open line
+#   SURROGATE   `\ud800` appended to a waiter, a snapshot write and a budget breach -> deny with
+#               the PARSE reason (both jq-1.8.1 and jq-1.7.1-apple refuse a lone high surrogate);
+#               same-run control: each command without the escape gets no parse deny, and a deny
+#               it does get carries its own reason
+#   PROGFAULT   a compile error injected into the hook's jq program, `echo hi` -> allow, with the
+#               fail-open line on stderr (a program fault is not an unparseable payload)
+#   NOJQ        jq absent (PATH=/var/empty, /bin/bash by absolute path) on the OVER payload ->
+#               allow, with the fail-open line on stderr
 #   PUSH        `git push -u origin HEAD`, `cd /x && git push` and `git push -u origin HEAD 2>&1`
 #               (the `&` of a redirection is not a chain), foreground at 600000 -> allow
 #               (the pipeline requires a foreground push at that timeout)
@@ -66,8 +75,8 @@
 #   REGEXLIMIT  commands long enough to exhaust the regex retry limit: a waiter then 1000 ` >>f` redirects
 #               at 600000 (either reason), the same plus `; wfd z &` at 5000 and a waiter then 30000
 #               blanks then `y; wfd z &` at 5000 (waiter reason), `sed` with 3000 `-i ` at
-#               600000 -> deny, and stderr carries neither `not readable` nor `Regex failure`
-#   FAILOPEN    the WAITER seeds on the shipped hook print no `not readable`, `Regex failure` or
+#               600000 -> deny, and stderr carries no `jq pass` failure, `not readable` or `Regex failure`
+#   FAILOPEN    the WAITER seeds on the shipped hook print no `jq pass` failure, `not readable`, `Regex failure` or
 #               fail-open text: a compile error in a shape regex is rethrown by `safetest` and shows
 #               up here, where the old broad catch would have swallowed it silently
 #   EXIT       every call above exits 0
@@ -96,6 +105,10 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 . "$WORK/env.sh"
 
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq not found; the hook fails open without it, so no arm here could fire" >&2; exit 2; }
+# NOJQ's control: under PATH=/var/empty no jq resolves, so that arm really drives the jq-absent path.
+if env PATH=/var/empty /bin/bash -c 'command -v jq' >/dev/null 2>&1; then
+  echo "FIXTURE ERROR: jq resolves under PATH=/var/empty, so the NOJQ arm cannot reach the jq-absent path" >&2; exit 2
+fi
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -198,9 +211,54 @@ score() {
   [ "$DEC" = allow ] || note NODETECTOR
   case "$ERR_TXT" in *'validate-steering-budget.sh'*'fail-open'*) ;; *) note SUBPOLL ;; esac
 
+  # UNPARSEABLE: jq present and a payload that does not parse -> deny naming the parse cause and
+  # its remedy, never the fail-open line.
   call "$h" "$REAL" - '{"tool_name":"Bash","tool_input":{"command":"x","timeout":600000'; chk_rc
-  [ "$DEC" = allow ] || note MALFORMED
-  case "$ERR_TXT" in *'not readable JSON'*'fail-open'*) ;; *) note MALFORMED ;; esac
+  [ "$DEC" = deny ] || note UNPARSEABLE
+  case "$REASON_TXT" in *'could not be parsed as JSON'*'Re-issue the command without the unparseable escape'*'check the jq install'*) ;; *) note UNPARSEABLE ;; esac
+  case "$ERR_TXT" in *'fail-open'*) note UNPARSEABLE ;; esac
+
+  # SURROGATE: a lone high surrogate escape `\ud800` appended to a waiter, a snapshot write and a
+  # budget breach. jq-1.8.1 and jq-1.7.1-apple both refuse it, so each is denied with the PARSE
+  # reason, not the subject's own. Same-run control: the identical command without the escape
+  # is not a parse deny, and where it is denied its reason is its own.
+  local _sc _st _sr
+  for _sc in "scripts/ai-dlc/wait-for-deliverable.sh x &|5000|backgrounds wait-for-deliverable.sh" \
+             "echo x > _bmad-output/pipeline-snapshot.md|5000|writes pipeline-snapshot.md" \
+             "sleep 9|600000|steering budget"; do
+    _sr="${_sc##*|}"; _st="${_sc%|*}"; _st="${_st##*|}"; _sc="${_sc%%|*}"
+    call "$h" "$REAL" - "$(jq -nc --arg c "$_sc __SURR__" --argjson t "$_st" '{tool_name:"Bash", tool_input:{command:$c, timeout:$t}}' | sed 's/__SURR__/\\ud800/')"; chk_rc
+    [ "$DEC" = deny ] || note SURROGATE
+    case "$REASON_TXT" in *'could not be parsed as JSON'*'Re-issue the command without the unparseable escape'*) ;; *) note SURROGATE ;; esac
+    case "$REASON_TXT" in *"$_sr"*) note SURROGATE ;; esac
+    case "$ERR_TXT" in *'fail-open'*) note SURROGATE ;; esac
+    call "$h" "$REAL" - "$(jq -nc --arg c "$_sc" --argjson t "$_st" '{tool_name:"Bash", tool_input:{command:$c, timeout:$t}}')"; chk_rc
+    case "$REASON_TXT" in *'could not be parsed'*) note SURROGATE ;; esac
+    if [ "$DEC" = deny ]; then case "$REASON_TXT" in *"$_sr"*) ;; *) note SURROGATE ;; esac; fi
+  done
+
+  # PROGFAULT: a compile error injected into the jq program (a copy of THIS hook, in the push
+  # regex every call evaluates) makes jq exit non-zero on `echo hi`. That is a program fault, not
+  # an unparseable payload: allow, with the fail-open line on stderr.
+  local _pf="$MUT/hook-pf.sh"
+  sed 's/def pushfirst: test("/def pushfirst: test("(/' "$h" > "$_pf"
+  if cmp -s "$h" "$_pf"; then note PROGFAULT; else
+    call "$_pf" "$REAL" - '{"tool_name":"Bash","tool_input":{"command":"echo hi"}}'; chk_rc
+    [ "$DEC" = allow ] || note PROGFAULT
+    case "$ERR_TXT" in *'jq pass'*'fail-open'*) ;; *) note PROGFAULT ;; esac
+  fi
+
+  # NOJQ: jq absent -> allow with stderr, on an over-budget call jq-present DENIES (OVER).
+  # /usr/bin/jq exists on macOS, so the hook runs under PATH=/var/empty by absolute /bin/bash.
+  # Fed from a file, not a pipe: this path exits without reading stdin, and under pipefail a
+  # writer that loses that race reports EPIPE as the call's status.
+  bash_call 600000 false > "$WORK/nojq.json"
+  env PATH=/var/empty CLAUDE_PROJECT_DIR="$REAL" /bin/bash "$h" <"$WORK/nojq.json" >"$OUTF" 2>"$ERRF"
+  [ "$?" -eq 0 ] || exitbad=1
+  DEC="$(jq -r '.hookSpecificOutput.permissionDecision // empty' "$OUTF" 2>/dev/null)"
+  [ -n "$DEC" ] || DEC=allow
+  [ "$DEC" = allow ] || note NOJQ
+  case "$(cat "$ERRF")" in *'jq not found'*'fail-open'*) ;; *) note NOJQ ;; esac
 
   call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD' '')"; chk_rc
   [ "$DEC" = allow ] || note PUSH
@@ -268,7 +326,7 @@ score() {
     case "$REASON_TXT" in *'backgrounds wait-for-deliverable.sh'*'run_in_background: true'*) ;; *) note WAITER ;; esac
     case "$REASON_TXT" in *'steering budget'*) note WAITER ;; esac
     # FAILOPEN: the jq pass must have run clean -- a printed fail-open or regex error is a failure.
-    case "$ERR_TXT" in *'not readable'*|*'Regex failure'*|*'fail-open'*) note FAILOPEN ;; esac
+    case "$ERR_TXT" in *'jq pass'*|*'not readable'*|*'Regex failure'*|*'fail-open'*) note FAILOPEN ;; esac
   done
   # WAITERNEAR: the allow twins, at a timeout within budget so only Deny A could refuse them.
   for _c in "$W x; sleep 5 & y" "$W x 2>&1" "$W x >&2" "$W x &>f" "$W x && y" "$W x |& tee f" \
@@ -345,7 +403,7 @@ score() {
             "$(jq -nc --arg c "sed $_ip $S.bak" '{tool_name:"Bash", tool_input:{command:$c, timeout:600000}}')"; do
     call "$h" "$REAL" - "$_p"; chk_rc
     [ "$DEC" = deny ] || note REGEXLIMIT
-    case "$ERR_TXT" in *'not readable'*|*'Regex failure'*) note REGEXLIMIT ;; esac
+    case "$ERR_TXT" in *'jq pass'*|*'not readable'*|*'Regex failure'*) note REGEXLIMIT ;; esac
     # Every seed at 5000 can only be refused by Deny A, so it must carry the waiter reason.
     case "$_p" in *'"timeout":5000'*) case "$REASON_TXT" in *'backgrounds wait-for-deliverable.sh'*) ;; *) note REGEXLIMIT ;; esac ;; esac
   done
@@ -364,7 +422,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK")"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT FAILOPEN EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT FAILOPEN EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -420,8 +478,8 @@ mut any-tool "NONBASH" -e 's/if \.tool_name == "Bash"/if true/'
 mut no-timeout-is-long "NOTIMEOUT" \
   -e 's/and (\.tool_input\.timeout | type) == "number"/and true/' \
   -e 's/| \.tool_input\.timeout | if/| (.tool_input.timeout \/\/ 600000) | if/'
-# 8. malformed input allowed silently.
-mut silent-malformed "MALFORMED" -e '/not readable JSON/d'
+# 8. the parse deny loses its remedy: a deny with no remedy reads as a hook bug.
+mut parse-drops-remedy "SURROGATE UNPARSEABLE" -e 's/ Re-issue the command without the unparseable escape\. If this recurs on an ordinary command, check the jq install (`jq --version`)\.//'
 # 9. no detector: fall back to a literal and deny.
 mut no-detector-literal "NODETECTOR" -e 's/allowing it (fail-open)"; exit 0$/allowing it (fail-open)"; B=120; SRC=\/dev\/null/'
 # 10. the reason stops naming the background re-issue.
@@ -429,7 +487,7 @@ mut reason-drops-background "REASON" -e 's/Re-issue the same call with run_in_ba
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL WAITER" -e '2i\
+mut silence "AGENT BOUNDARY DEFAULT ENV NODETECTOR NOJQ OVER PROGFAULT PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL SURROGATE UNPARSEABLE WAITER" -e '2i\
 exit 0'
 # 13. no push allowance: the pipeline's required foreground push is denied.
 mut drop-push "PUSH" -e '/and (is_push | not)/d'
@@ -475,13 +533,21 @@ mut m-notry "REGEXLIMIT" -e 's/def safetest(\$re): try test(\$re) catch (if (tos
 # and the hook prints its fail-open message and allows: WAITER, SCOPE, REGEXLIMIT (no deny) and FAILOPEN (printed error)
 # both go red. The OLD broad catch with the same injection would print nothing and redden the no-deny arms (WAITER, SCOPE, REGEXLIMIT) but never FAILOPEN.
 mut m-badre "FAILOPEN REGEXLIMIT SCOPE WAITER" -e 's/wait-for-deliverable\\\\\.sh/&(/'
+# 32. m-failopen: the parse sentinel allowed, as before the fix -- a lone surrogate appended to any
+#     refused command loses every deny again.
+mut m-failopen "SURROGATE UNPARSEABLE" -e "s/^  '@PARSEFAIL@') printf .*; exit 0 ;;\$/  '@PARSEFAIL@') exit 0 ;;/"
+# 33. m-anyfail: the deny keyed on jq's exit status, which is 5 for a program fault as for a parse
+#     error, so a fault in the program denies every call.
+mut m-anyfail "PROGFAULT" -e 's/^if \[ "\$PARSE_RC" -ne 0 \]; then$/if [ "$PARSE_RC" -ne 0 ]; then T=@PARSEFAIL@; elif false; then/'
+# 34. m-nojqdeny: the jq-absent path denies, which would refuse every Bash call in the session.
+mut m-nojqdeny "NOJQ" -e '/^command -v jq/s/exit 0; }$/echo "{\\"hookSpecificOutput\\":{\\"permissionDecision\\":\\"deny\\"}}"; exit 0; }/'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \
   || bad "$n_kill of $n_mut mutants killed"
 
 # Clean up by name: the seed's files and directories, never a recursive delete of a variable.
-rm -f "$OUTF" "$ERRF" "$WORK/env.sh" "$MUT"/hook-*.sh \
+rm -f "$OUTF" "$ERRF" "$WORK/env.sh" "$WORK/nojq.json" "$MUT"/hook-*.sh \
       "$REAL/scripts/ai-dlc/validate-steering-budget.sh" "$SHIFT/scripts/ai-dlc/validate-steering-budget.sh"
 rmdir "$REAL/scripts/ai-dlc" "$REAL/scripts" "$REAL" "$SHIFT/scripts/ai-dlc" "$SHIFT/scripts" "$SHIFT" \
       "$NONE" "$MUT" "$WORK" 2>/dev/null
