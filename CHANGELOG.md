@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.947.0] - 2026-10-26
+
+Batch 243, cluster c2. It closes BL-805, ships part (a) of BL-806, files BL-818 and BL-820 and records batch-243 progress on BL-616; it closes no `PC-` id. NET: entries closed 1 minus filed 2 = -1 (BL-818 filed: a lone-surrogate jq parse fail-open in the same hook, present at base; BL-820 filed: a bold `BL-` bullet inside an entry body opens a phantom entry, found by this gate; both to be fixed in c6). Engine code a consumer runs from step 3 of the delivering pull: `core/hooks/ai-dlc-foreground-budget.sh`. Fixture: `core/fixtures/foreground-budget-deny/` gains seven arms (WAITER, WAITERNEAR, SNAPWRITE, SNAPREAD, SCOPE, REGEXLIMIT, FAILOPEN), eight mutants (m-amp, m-scope, m-append, m-read, m-noatomic, m-blanktail, m-notry, m-badre) and the receipt script `receipt-bl805.sh`. Packaging: none (the hook is already registered and the manifests carry the fixture directory). Backlog: `docs/backlog.md` (BL-805, BL-806, BL-616, BL-818, BL-820).
+
+Bootstrapping: the hook is engine code a consumer runs from step 3 of the delivering pull, because step 2 self-updates and re-invokes; the fixture arrives in the same pull as the hook it guards.
+
+### BL-805 — a Bash call that backgrounds `wait-for-deliverable.sh` with a shell `&` is refused; closed
+
+- Deny A in `core/hooks/ai-dlc-foreground-budget.sh` refuses a command that runs the waiter as a command word in a segment ended by a lone `&` (not `&&`, `&>`, `|&`, nor the `&` of `2>&1`/`>&2`). It applies to every caller and whatever the call's timeout, `agent_id` or `run_in_background`, and it is decided before every scope gate and fail-open. The reason says to re-issue the command without the `&` and with `run_in_background: true`.
+- The shape regexes cannot fail the call open on a jq `retry-limit-in-match` exhaustion: the redirect run is an atomic group, the trailing blank run carries a lookbehind, and `safetest` reads only a retry-limit error as "not this shape" (the budget check still applies) and rethrows any other regex error, so a broken edit to a deny regex fails loudly. No known input reaches the remaining catch: the four REGEXLIMIT seeds and 0 of 12,414 real graph payloads.
+- Measured: under `core/` and `templates/` (`core/fixtures` excluded) 148 lines naming the waiter, 0 denied; graph transcripts 7,280 Bash calls naming it, 23 distinct denies, every one a real lone-`&` waiter, false-positive set empty.
+- Known non-coverage: an independent scan found 25 lone-`&` waiters, so 2 are not refused: `bash -c 'wfd x &'` and a waiter called through a variable (`$w x &`). Both are wrappers; the hook header records them and the fixture seeds both as near-miss allows.
+- The receipt drives the shipped hook (one deny seed, one allow seed, both decided with jq rather than on output spacing, in the shipped and the `.claude/hooks/` layout) and replaces `verify: manual`.
+
+### BL-806 — a shell write of `pipeline-snapshot.md` is refused (part a); the estimated-future-stamp check (part b) is still owed
+
+- Deny B refuses a Bash call that names `pipeline-snapshot.md` and carries a write shape (`sed`/`perl -i`, a `>`/`>>` redirect, `tee`, `cp|mv|install|ln` onto it, `git checkout|restore`, an interpreter write). The remedy is the Edit or Write tool, so `ai-dlc-derivation-capture.sh` judges the written stamps. Reads and `pipeline-snapshot-history.md` appends stay allowed. Two over-refusals no core instruction uses are recorded in the hook header: `git restore --staged <snapshot>` and `tee -a log < <snapshot>`.
+- Measured on graph transcripts: 4,617 Bash calls name the snapshot, 1,912 denied (1,905 Deny B records plus 7 Deny A; 1,740 tagged by write shape, tag counts summing to 1,773 since a record can carry several, and 165 untagged `sed -i` writes that a quote-aware scan resolved to the snapshot); false-positive set empty by an independent second reading. A fail-closed alternative was rejected because it denied 1,465 non-writes. Over `core/` and `templates/`, 517 payloads and 1 deny, the validator's own self-probe body, not an issued command.
+- The entry stays PARTIAL with `verify: manual`. Part (b) is owed: two measurements (568 committed revisions, 0 true positives in 292 fires; hook-input payloads, about 4 hand-classified false positives and an unenumerable quoted-earlier-time class) show a bare `HH:MMZ` token is not yet separable from a quoted time. What unblocks it is a stamp-position grammar.
+
+### BL-818 — filed: a lone surrogate escape fails the foreground-budget hook open
+
+- Filed, not fixed here. A Bash command containing the JSON escape `\ud800` makes the hook's jq parse fail, so the hook fails open and every deny is lost, the budget deny included. Identical at base `bd0be5e51`; `\udc00` does not trigger it. To be fixed in c6, batch 243.
+
+### BL-820 — filed: a bold `BL-` bullet inside an entry body opens a phantom entry
+
+- Filed, not fixed here. A bullet in BL-616's new paragraph opened with a bold `BL-632`, and the ledger parser read it as an entry boundary, so BL-616's `verify: manual` moved to a phantom entry and the receipts step failed R2 once BL-805's driver receipt rotated out. The bullet is reworded in this release; origin/main carried no such bullet. To be fixed in c6, batch 243.
+
+### BL-616 — batch-243 progress: candidate (a), watchdog process-group reuse, not reproduced
+
+- The entry stays PARTIAL, `verify: manual`. Forcing the watchdog's `-$dp` onto an inner worker's group killed the whole outer unit rather than dropping one verdict; the positive control (`kill -TERM $PPID`) reproduced the drop and the negative control dropped nothing. No fix was built.
+- A new batch-243 paragraph gives the current lines (`.githooks/pre-push:279`, `:2764`, `:1171-1183`, `core/git-hooks/pre-push:1071-1083`); the earlier paragraphs' cites were correct at their anchored shas and are left as written. The BL-632 owed item is recorded as discharged, citing its LANDED line.
+
 ## [0.946.0] - 2026-10-26
 
 Batch 243, cluster c4. It advances BL-699 without closing it, files no entry, and closes no `PC-` id. NET: entries closed 0 minus filed 0 = 0. Engine code a consumer runs from step 3 of the delivering pull: `core/skills/ai-dlc-update/reconcile/emit-report.sh`. Fixture changes: `core/fixtures/reconcile-emit-report/run.sh` (fixture arm `PC-V95`, mutant M-memo, mutant M-b4 re-anchored). Rulebook changes: none. Backlog: `docs/backlog.md` (the BL-699 entry).

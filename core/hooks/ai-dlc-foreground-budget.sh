@@ -41,13 +41,105 @@
 #   must act on a subagent poll itself, because nothing downstream will. The convention is the
 #   one `ai-dlc-acknowledge.sh` states: `agent_id`, never `agent_type`.
 #
-# WHY IT CANNOT WEDGE. Every deny is satisfiable on the next call, by two actions that are
-# always available: the same call with `run_in_background: true`, or the same call with a
-# timeout at or under the budget. The poll reason names the first, and backgrounding the job
-# itself rather than the wait. A call with no timeout, a timeout within budget,
-# `run_in_background: true`, a `git push`, or a teammate's non-poll call is never touched. Every state this hook cannot read -- no `jq`,
-# unparseable input, an unreadable budget, no detector to take the default from -- ALLOWS the
-# call and says so on stderr. A guard that cannot read its input must not deny.
+# WHY IT CANNOT WEDGE. Every deny is satisfiable on the next call, by an action that is always
+# available. A budget deny: the same call with `run_in_background: true`, or with a timeout at
+# or under the budget; the poll reason names the first, and backgrounding the job itself rather
+# than the wait. A WAITER deny (DENY A, below): the same command without the `&`, with
+# `run_in_background: true`. A SNAPSHOT deny (DENY B, below): the same change made with the Edit
+# or Write tool. Apart from those two command shapes, a call with no timeout, a timeout within
+# budget, `run_in_background: true`, a `git push`, or a teammate's non-poll call is never
+# touched; the two shapes are refused whatever the call's timeout, caller or backgrounding. Every
+# state this hook cannot read -- no `jq`, unparseable input, an unreadable budget, no detector to
+# take the default from -- ALLOWS a budget-scoped call and says so on stderr; no `jq` and
+# unparseable input allow the two shapes too. A guard that cannot read its input must not deny.
+#
+# DENY A, A BACKGROUNDED WAITER. A command that runs `wait-for-deliverable.sh` as a command word
+# (any path prefix; at the start or after `;` `&&` `||` `|` `(` a newline `then` `do` `else`,
+# optionally behind `nohup`/`env`/`exec`/`bash`/`sh` and `VAR=x`) whose SEGMENT ends in a lone
+# `&` -- an `&` that is not `&&`, `&>`, `|&`, nor the `&` of `2>&1`/`>&2`/`<&0`. The segment may
+# carry quoted words, a `$(...)` and a `|` before that `&`, so `wfd ... 2>&1 | head -3 &` and
+# `wfd --since "$(date ...)" ... & disown` are both seen. The harness's completion notification
+# belongs to the CALL: a waiter put behind `&` inside it detaches from the call, the call
+# returns, and the beat it was armed for is never delivered. One waiter per call, backgrounded by
+# `run_in_background: true`, is the convention, and that remedy is always available -- which is
+# why the `&` is refused under `run_in_background: true` too, and why `wfd a & wfd b & wait` is
+# refused. It runs before the timeout and `agent_id` gates because those gates exempt exactly the
+# calls that carried this shape (no timeout, a subagent). A mention inside a quoted argument
+# (`grep 'wait-for-deliverable.sh x &' f`, `echo "... &"`) is not a command word and is allowed.
+# Known misses: `bash -c 'wfd x &'` (the `&` is inside a quoted string) and a waiter called
+# through a variable (`w=.../wait-for-deliverable.sh; $w x &`).
+# Measured on graph's transcripts (5,236 files, 253,881 Bash calls; 7,280 naming the script, 5,913
+# distinct): 23 distinct commands denied, and every one backgrounds the waiter with a lone `&`
+# (`>/dev/null 2>&1 &`, `... & echo armed`, `... & sleep 0; echo`, `... & disown`, `( ... & )`,
+# `... 2>&1 | head -3 &`). An independent scan for a lone `&` on a line naming the script, with
+# quoted strings and redirection `&`s removed, found 25: the 23, plus the two documented misses
+# (one via `$wait`, one inside `bash -c '...'`). FP set: empty. The first grammar ended the
+# segment at any quote or `$(`/`|`, which missed 4 of the 25; the quoted-word, `$(...)` and pipe
+# alternatives in the segment class are that narrowing. `wfd ...; sleep 5 & y` and
+# `T=$(wfd --dispatch-ts a) && sleep 1 &` stay allowed: the `&` closes another segment.
+#
+# DENY B, A SHELL WRITE OF THE SNAPSHOT. A command naming `pipeline-snapshot.md` (as a path ending
+# there: `pipeline-snapshot.md.bak` and `pipeline-snapshot-history.md` are other files) that
+# WRITES it: `sed`/`perl` with `-i`/`--in-place` (BSD `-i ''`, GNU `-i`, `-i.bak`), a `>`/`>>`
+# redirect onto it, `tee [-a]` naming it, `cp|mv|install|ln` with it as the LAST operand, `git
+# checkout|restore` of it, or an interpreter write -- `open(<it>, 'w'|'a'|'x'|'+')`,
+# `.write_text(`, `.write_bytes(`, `.open('w')`, `writeFileSync`/`appendFile*` -- on the literal
+# path or on a variable assigned that path earlier in the same command (`p='...snapshot.md'` then
+# `open(p,'w')`, `S=...; sed -i '' ... "$S"`). A shell write reaches no PostToolUse hook, so
+# `ai-dlc-derivation-capture.sh` (which judges `*/pipeline-snapshot.md` writes made by Edit or
+# Write) never sees the stamps it wrote; the remedy routes the same change through that judge.
+# Reads stay allowed: `cat`, `grep`, `sed -n`, `<`, a `python3` `open(p)` or `open(p,'r')`, a
+# redirect whose TARGET is another file, `git add/commit/show/diff`, `cp` FROM it, and a
+# `bash <core script> ... pipeline-snapshot.md` call -- no core script takes the snapshot
+# path as an argument and writes it (`rotate-snapshot-archive.sh` writes the ARCHIVE).
+# Measured on graph's transcripts: 4,617 Bash calls name the snapshot (4,346 distinct). The
+# shipped hook denies 1,912 (1,873 distinct); an independent second reading, keyed on the
+# variable's LAST binding before each interpreter write site plus a tokenised shell-write scan,
+# calls 1,856 of the 1,873 a write of the snapshot, and the other 17 were read one by one: all 17
+# are `sed -i ''` writes of it whose expression spans quotes the scan could not tokenise. FP set:
+# empty. Misses: 5 commands carry `sed -i` naming `pipeline-snapshot.md` only INSIDE the
+# substitution text while the file written is another one (`gate-log.md`, `carry-over-backlog.md`)
+# -- allowed, correctly. Narrowing: a variable binding counts only when the path is its whole
+# value (`p=Path('...snapshot.md')`, not `x=f(p)` on a line that merely mentions it), and the
+# variable must not be followed by `.`/`/` (so `p.with_suffix(...)` and `$p/...` are other files)
+# except `.write_text(`/`.write_bytes(`/`.open(`. The fail-closed alternative -- deny a command
+# naming the snapshot unless every segment naming it starts with a whitelisted read verb -- was
+# measured on the same corpus and denied 1,465 commands the second reading calls no write
+# (`scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md`, `ls`,
+# `python3 - <<EOF` that only reads); a deny that refuses a read wedges every resume, so the
+# write-shape list ships. Over every line under core/ and templates/ (core/fixtures excluded)
+# naming either subject -- 222 files, 148 lines naming the waiter, 146 naming the snapshot, 517
+# payloads (each line and each backtick span on it) -- the hook denies one: the self-probe
+# redirect `} > "$LPROBE_D/state/pipeline-snapshot.md"` inside validate-artifact-budget.sh, which
+# is script body, never a Bash call an agent issues.
+# Known over-refusals, both refused and neither instructed by core: `git restore --staged <snapshot>`
+# (index-only, the file is untouched) and `tee -a log < <snapshot>` (reads the snapshot). A grep of
+# core/ and templates/ (core/fixtures excluded) finds 0 lines carrying either shape against a
+# control of 153 lines naming the snapshot.
+# Cost: the variable-binding regex is superlinear in the number of bindings. The adversary measured
+# 1000 bindings at 3.1 s, with ordinary calls at about 0.08 s against base's 0.04 s; re-measured
+# here, 1000 `pN=<snapshot>;` bindings cost 1.6 s per call and a short command naming neither
+# subject 0.02 s, the same at base and here.
+#
+# A REGEX THAT RUNS OUT OF RETRIES IS "NOT THIS SHAPE", NEVER A jq ERROR. Onigmo aborts a match
+# with `retry-limit-in-match` on a long run of characters a nested quantifier can split many ways,
+# and an uncaught error turned the whole call into "not readable JSON" -- allowed, losing the
+# budget deny with the shape deny. Measured: a waiter followed by 50 or more `>` did that. Three
+# changes, each with its own REGEXLIMIT seed and mutant: the redirect run is an atomic group
+# `(?>[<>]+)`; the blank run before the lone `&` may start only after a non-blank `(?<![ \t])`, so a
+# 30000-blank run no longer rescans quadratically and drops a LATER waiter; and every shape test
+# goes through `safetest`, so any remaining exhaustion degrades to "not this shape" and the budget scope
+# still applies. ONLY a retry-limit exhaustion does: `safetest` catches an error whose text contains
+# `retry-limit` (the message is `Regex failure: retry-limit-in-match over`) and rethrows any other, so a
+# compile error in `wfdbg` or a Deny B regex fails the jq pass, prints the "not readable JSON" fail-open
+# message on every call and is loud, instead of silently never denying. Degrading to "not this shape"
+# (the budget check still applies) rather than denying is deliberate: denying a command the regex
+# cannot evaluate would wedge correct work. No known input reaches the residue: the 4 REGEXLIMIT seeds
+# are the only inputs measured to exhaust it, and 0 of 12,414 real graph payloads raised a jq parse
+# failure or changed a verdict. Measured: `sed` with 3000 repeated `-i `
+# ahead of a target that is NOT the snapshot (`...snapshot.md.bak`) exhausts the Deny B test; caught,
+# it is the correct allow, where before it failed the call open. The same run ahead of the
+# snapshot itself is denied.
 #
 # THE BUDGET IS THE DETECTOR'S, NOT A SECOND COPY OF IT. `AI_DLC_STEERING_BUDGET` is read first,
 # exactly as the detector reads it. When it is unset the default is taken from the detector's
@@ -57,6 +149,12 @@
 # a timeout. If the detector's line is ever respelled this read finds nothing and the hook
 # fails OPEN, loudly on stderr; the `foreground-budget-deny` fixture drives the hook against a
 # copy of the REAL detector so that respelling fails the suite instead.
+#
+# THE TWO SHAPES RIDE THE ONE jq PASS. Each regex runs only after a plain `contains` on the
+# command finds its subject, so a Bash call naming neither pays two substring tests and nothing
+# else. The jq program answers `DENY A` or `DENY B` FIRST, before the tool_name/background/
+# timeout/push scope it applies to every other verdict, and the shell acts on that answer before
+# the empty-scope exit and before the budget and detector reads.
 #
 # PROTOCOL. PreToolUse hook, matcher `Bash`: reads the tool call as JSON on stdin, emits a JSON
 # decision on stdout. Deny is `permissionDecision: "deny"`, never exit code 2, the contract
@@ -114,6 +212,26 @@ command -v jq >/dev/null 2>&1 || { say "jq not found, so the tool call cannot be
 # loop is in scope: by a looser loop-then-sleep regex over all calls, the 26 sleeping loops that
 # declare no timeout, the 10 at or under budget and the 54 backgrounded ones never reach the test.
 T="$(jq -r '
+  def cmdtext: (if (.tool_input | type) == "object" then .tool_input.command else "" end) // "" | tostring;
+  def wfdbg: "(?:^|[;&|\n(]|(?:^|[ \t;\n])(?:then|do|else)[ \t\n])[ \t\n]*(?:(?:nohup|env|exec|bash|sh)[ \t]+|[A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*wait-for-deliverable\\.sh[\"\u0027]?(?=[ \t\n;&|)<>]|$)(?:\"[^\"\n]*\"|\u0027[^\u0027\n]*\u0027|\\$\\([^()\n]*\\)|[^;&|\n()<>\"\u0027]|[|](?![|&])|(?>[<>]+)(?:&[0-9-]*|(?!&))|&>>?)*?(?<![ \t])[ \t]*(?:\\)[ \t]*)*&(?![&>])";
+  def ps: "pipeline-snapshot\\.md(?![A-Za-z0-9_.-])";
+  def seg: "(?:\u0027[^\u0027\n]*\u0027|\"[^\"\n]*\"|[^;&|\n\u0027\"])*";
+  def bw: "(?:^|[^A-Za-z0-9_./-])";
+  def inplaceverb: "(?:g?sed|perl)";
+  def shwrite($tg): bw + inplaceverb + "[ \t](?:" + seg + "[ \t])?(?:-[A-Za-z]*i|--in-place)" + seg + $tg
+    + "|(?:^|[^0-9&>=-])[0-9]*>>?[|]?[ \t]*" + $tg
+    + "|" + bw + "tee[ \t]" + seg + $tg
+    + "|" + bw + "(?:cp|mv|install|ln)[ \t]" + seg + $tg + "[\"\u0027]?[ \t]*(?:$|[;&|\n)])"
+    + "|" + bw + "git[ \t]" + seg + "(?:checkout|restore)[ \t]" + seg + $tg;
+  def pywrite($tg): "open\\([ \t]*(?:Path\\([ \t]*)?" + $tg + "[ \t]*\\)?[ \t]*,[ \t]*(?:mode[ \t]*=[ \t]*)?[\"\u0027][rbt]*[wax+]"
+    + "|(?:Path\\([ \t]*)?" + $tg + "[ \t]*\\)?\\.(?:write_text|write_bytes)\\("
+    + "|(?:Path\\([ \t]*)?" + $tg + "[ \t]*\\)?\\.open\\([ \t]*(?:mode[ \t]*=[ \t]*)?[\"\u0027][rbt]*[wax+]"
+    + "|(?:writeFileSync|appendFileSync|writeFile|appendFile)\\([ \t]*" + $tg;
+  def lit: "[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*" + ps + "[\"\u0027]?";
+  def bind: "(?:^|[^A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:Path\\([ \t]*)?[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*" + ps + "[\\s\\S]*?(?:";
+  def var: "[\"\u0027]?(?:\\$\\{?)?(?<![A-Za-z0-9_.])\\1\\}?(?![A-Za-z0-9_/-])(?!\\.(?!write_|open\\())[\"\u0027]?";
+  def safetest($re): try test($re) catch (if (tostring | test("retry-limit")) then false else error end);
+  def snapwrite: safetest(shwrite(lit) + "|" + pywrite(lit)) or safetest(bind + shwrite(var) + "|" + pywrite(var) + ")");
   def cmdpos: "(^|[;&|\n(]|(^|[ \t;\n])(then|do|else)[ \t\n])[ \t\n]*";
   def loopend: "[;&|\n][ \t]*done([ \t;&|)<>\n]|$)";
   def loopsleep: test(cmdpos + "(until|while|for)[ \t](?:(?!" + loopend + ")[\\s\\S])*" + cmdpos + "sleep([ \t]|$)");
@@ -125,6 +243,10 @@ T="$(jq -r '
     | ($c | test("^[ \t]*(cd[ \t]+[^;&|\n]+&&[ \t]*)?([A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*git[ \t]+push([ \t]|$)"))
       and ($c | chained | not);
   def pushchain: ((if (.tool_input | type) == "object" then .tool_input.command else "" end) // "") | tostring | pushfirst and chained;
+  (if .tool_name == "Bash" then cmdtext else "" end) as $cmd
+  | if ($cmd | contains("wait-for-deliverable.sh")) and ($cmd | safetest(wfdbg)) then "DENY A"
+  elif ($cmd | contains("pipeline-snapshot.md")) and ($cmd | snapwrite) then "DENY B"
+  else
   pushchain as $pc
   | if .tool_name == "Bash"
      and (.tool_input | type) == "object"
@@ -135,12 +257,32 @@ T="$(jq -r '
     | (if $agent == "" then false else is_poll end) as $poll
     | select($agent == "" or $poll)
     | .tool_input.timeout | if . < 0 then 0 elif . > 1e9 then 1e9 else . end | -((-.) | floor) | tostring | . + " " + (if $pc then "1" else "0" end) + " " + (if $poll then "1" else "0" end)
-  else empty end' 2>/dev/null)"
+  else empty end end' 2>/dev/null)"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then
   say "the tool call is not readable JSON, so its timeout cannot be checked; allowing it (fail-open)"
   exit 0
 fi
+
+deny() {
+  jq -n --arg reason "$1" \
+    '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: $reason
+      }
+    }'
+  exit 0
+}
+
+# The two command-shape denies are decided HERE, before the empty-scope exit and before every
+# budget and detector fail-open below, so no timeout, agent_id, run_in_background or missing
+# detector can exempt them.
+case "$T" in
+  'DENY A') deny "AI/DLC: this Bash call backgrounds wait-for-deliverable.sh with a shell \`&\`. The waiter's completion notification then never reaches you: the call returns at once and the beat is orphaned. Re-issue the same command WITHOUT the trailing \`&\` and with run_in_background: true, one waiter per call, and act on its completion notification." ;;
+  'DENY B') deny "AI/DLC: this Bash call writes pipeline-snapshot.md by shell (sed -i, perl -i, a > or >> redirect, tee, cp/mv/install/ln onto it, git checkout/restore of it, or an interpreter open/write_text on it). A shell write reaches no PostToolUse hook, so the stamps it writes are never judged. Make the change with the Edit tool (or Write) so ai-dlc-derivation-capture.sh judges the written stamps. Reading the snapshot by shell is not refused." ;;
+esac
 
 [ -n "$T" ] || exit 0
 POLL="${T##* }"

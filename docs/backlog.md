@@ -280,6 +280,14 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
   - The census covers `sleep`, `-lt` loops, `timeout` and `deadline` spellings. It cannot see a bound spelled through a variable such as `$cl` or `$ceil`.
 - **Still owed.** The trigger of the dropped verdict; census item 8 (`readset-sandbox-root-clause` all-lossy rate at pool load); Owed item 3 (solo-against-pool receipt per fixed unit, with a load-free control); the remaining census of time and numeric thresholds in assertions (BL-632).
 
+**Progress (batch 243; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** Read at origin/main `bd0be5e51`.
+
+- **Current lines for drifted cites, re-derived at `bd0be5e51` with grep and sed.** `--max-unstable 0` is at `.githooks/pre-push:279` (`--max-unstable 0 --min-entries 1`). The suite-pole step is at `.githooks/pre-push:2764` (`step "suite pole (this run's longest fixture; information, not a verdict)" pole_info_step`). The live-trace watchdog group kills are at `.githooks/pre-push:1171-1183` and `core/git-hooks/pre-push:1071-1083` (`kill -TERM -- "-$dp"` through `kill -TERM -- "-$sp"`). The earlier paragraphs' cites were correct at their anchored shas and are left as written: `git show f4ca6764:.githooks/pre-push | sed -n 269p` returns `--max-unstable 0 --min-sh-receipts 0 --min-entries 1`, and `git show 65d51577b:.githooks/pre-push | sed -n 2723p` returns the `step "suite pole ..." pole_info_step` line.
+- **Discharged: BL-632 is LANDED**, at `docs/backlog.archive.md:35919` (`**LANDED (v0.849.0, verified ee52d23d).**`, under the heading at `:35917`). The batch-241 paragraph's `**Still owed.**` clause "the remaining census of time and numeric thresholds in assertions (BL-632)" is therefore discharged; the old text is left as written.
+- **Candidate (a) NOT REPRODUCED (hand H3's scratch harness; not re-measured at intake).** The harness sourced the hook's `FIXTURE_POOL_BEGIN..END` span and `readset-skip`'s `CK_HELPERS` (real `ck_push`, live trace off, `AI_DLC_FIXTURE_JOBS=1`) and ran the watchdog subshell verbatim with `cl=1` and an injected `dp`, for both `.githooks/pre-push` and `core/git-hooks/pre-push`, with identical results. Arms: base ok x3, rc 0. Positive control (`beta` runs `kill -TERM $PPID`): `FAIL beta (no verdict recorded)` and `2 of 3 fixtures produced a verdict`, rc 1, which is H2's shape. Negative (`dp` = an unrelated `set -m` group): watchdog exit 3, ok x3. Alias (`dp` = the inner worker's pgid, which equals the outer unit's group): watchdog exit 3, outer unit exit 143, no verdict lines. `dp` = `beta`'s own group gives `FAIL beta` with a verdict recorded. `dp` = the inner watcher's group gives ok x3. Reason: the inner pool worker never leads its own group, so a group TERM reaching it also ends xargs and the fixture; a single dropped verdict with siblings ok needs a TERM to the worker's pid alone, and the watchdog signals only groups. Pre-reap aliasing cannot occur, because `$dp` is an unreaped child.
+- **NOTE (no fix built).** A window remains after the reap: the watchdog's `kill -0 -- "-$dp"` poll and unconditional `kill -KILL -- "-$dp"` (`.githooks/pre-push:1172-1173`) can still fire on a reusable id if its sleep ended just before `kill "$wp"` (`:1181`). Reuse would need pid wrap within that window, and the table above shows the result would not be a single drop anyway.
+- **Still owed after this paragraph.** The trigger of the dropped verdict (candidates (b) and (c)); census item 8; owed item 3. Items 8 and owed-3 are not run under the batch's NO TIMING RUNS ruling.
+
 verify: manual
 
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
@@ -492,19 +500,25 @@ Owed: a mechanism that makes the default the act, not the instruction. For examp
 
 verify: manual
 
-## BL-805 — a lead can start a `wait-for-deliverable.sh` beat with a shell `&`, which leaves an untracked waiter nothing reaps or reports
-
-**DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 29, 03:31 EDT 2026-10-26). Just before 07:29:08Z, graph's s320 lead started a beat as `wait-for-deliverable.sh … &` inside a foreground Bash call instead of with `run_in_background: true`. In its own words: "That last call backgrounded the beat with `&` instead of the proper `run_in_background` flag, so it won't notify me." It re-armed a proper beat (`b7ura551y`) and left the stray running to its own timeout. No outcome was affected, but nothing tracked or reaped the stray, and a lead that did NOT notice would have waited on a beat that can never wake it.
-
-Core states the flag (`core/skills/ai-dlc/SKILL.md:1024`, `:1033`: "`run_in_background: true`"). `core/hooks/ai-dlc-foreground-budget.sh` already parses a single `&` (its header, `:92`) but only to police a foreground budget, so this shape is not refused. Owed: a PreToolUse refusal of a Bash command that starts `wait-for-deliverable.sh` with a trailing or embedded `&`, with a remedy naming `run_in_background: true`. Grep the step files for every call it would refuse before shipping it (plan action 0a: a new DENY hook).
-
-verify: manual
-
 ## BL-806 — a lead can write an estimated, future-dated time into `pipeline-snapshot.md`, and a resuming session reads it as fact
 
 **DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 30, 03:42 EDT 2026-10-26). At 07:39:12Z graph's s320 lead ran a `sed` that wrote `| 18/19 delivered at 07:50Z (still out: cross-1 only …` into `_bmad-output/pipeline-snapshot.md`. That stamp is 11 minutes after the moment it was written. The row's previous value read `16/19 delivered at 07:35Z`, so the time was estimated, not taken from `date`. `core/skills/ai-dlc/SKILL.md:52` makes a resuming session read that file in full before any pipeline action, so a wrong time there becomes a resuming lead's premise. No outcome was affected this time.
 
 Owed: a check, not an instruction, because the instruction to take times from `date` exists in this repo's own rules and was not followed. Either the snapshot writer stamps times itself, or a hook or validator refuses a snapshot time later than the write's own clock. Measure the false-positive set first: a deliberately future time (a stated deadline) must be spelled differently from a delivery stamp.
+
+**Progress (batch 243; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** Part (a) shipped; part (b) is owed.
+
+**(a) shipped.** Deny B in `core/hooks/ai-dlc-foreground-budget.sh` (`elif ... then "DENY B"` at `:248`, header `# DENY B, A SHELL WRITE OF THE SNAPSHOT` at `:81-122`) refuses a Bash call that names `pipeline-snapshot.md` (as a path ending there; `pipeline-snapshot-history.md` appends stay allowed) and carries a write shape: `sed`/`perl` with `-i`/`--in-place`, a `>`/`>>` redirect onto it, `tee [-a]`, `cp|mv|install|ln` with it as the last operand, `git checkout|restore` of it, or an interpreter write (`open(…,'w'|'a'|'x'|'+')`, `.write_text(`, `.write_bytes(`, `writeFileSync`) on the literal path or on a variable bound to it earlier in the command. Reads stay allowed (`cat`, `grep`, `sed -n`, `<`, `python3 open(p)`, `cp` from it, `git add/commit/show/diff`). It is an early branch decided before every scope gate and fail-open, so no timeout, `agent_id` or missing detector exempts it. The remedy is the Edit or Write tool, so `ai-dlc-derivation-capture.sh` judges the written stamps; that hook's own header (`core/hooks/ai-dlc-derivation-capture.sh:134`, "reaches no PostToolUse hook") says a Bash `sed -i` on the snapshot reaches no PostToolUse hook, which is how the motivating `07:50Z` row went unjudged.
+
+Measurement 0a, driving the shipped hook over graph's transcripts: 4,617 Bash calls name the snapshot and 1,912 are denied (1,905 by Deny B and 7 by Deny A, which fires on the waiter shape in the same corpus; 1,873 distinct). Of the 1,905 Deny B records (1,866 distinct), an independent second reading tags 1,740 by write shape: interpreter open-w 1,630, `sed -i` 121, cp/mv 10, tee 7, `git restore` 3 and redirect 2. These are tag counts, and a record can carry more than one, so they sum to 1,773. The other 165 records (164 distinct) carry no tag from that reading. A quote-aware scan of each `sed -i` invocation's file operand resolves all 164 distinct records to the snapshot, so they are `sed -i` writes that the reading's regex did not tokenise. The false-positive set is empty by an independent second reading. The fail-closed alternative (deny any command naming the snapshot unless it starts with a whitelisted read verb) was measured on the same corpus and rejected: it denied 1,465 commands that are not writes. Over `core/` and `templates/` (`core/fixtures` excluded) there are 517 payloads and exactly 1 deny, the validator's own self-probe body at `core/scripts/validate-artifact-budget.sh:1951` (`} > "$LPROBE_D/state/pipeline-snapshot.md"`), which is script body and not a command an agent issues. No core script takes the snapshot path as an argument and writes it.
+
+(a)'s receipt, QUOTED and not installed (the entry's receipt line stays manual): drive the shipped hook with `{"tool_name":"Bash","tool_input":{"command":"sed -i '' 's/a/b/' _bmad-output/pipeline-snapshot.md"}}` and require a deny naming Edit; require `sed -n 1p _bmad-output/pipeline-snapshot.md` and a `>>` onto `pipeline-snapshot-history.md` to be allowed; the `sed -i.bak` spelling must also deny. It has not been scored here; the fixture arms of the hook change carry the scored form.
+
+**(b) owed: a bare `HH:MMZ` in a stamp position is not yet separable from a quoted time.** Two measurements, both with controls, and neither yields a grammar with an empty or enumerated false-positive set.
+- Measurement 1, committed history of graph (file:// clone, read-only): 568 revisions of `_bmad-output/pipeline-snapshot.md`, now = the commit's `%ct`. 999 bare tokens, 292 fire (more than 600 s ahead) in 73 revisions. A 12 h previous-day rule removes 137 of them. The remainder is 184 `~` approximations, 35 range ends, 1 stray `T` and 72 other in 22 distinct texts, all false positives (times on another date, quoted past times); 0 true positives. The motivating `18/19 delivered` row was never committed: `git log -S` returns 0 for it against 1 for the `in_flight_sub_step` control. Controls: the HEAD path exists (`cat-file` 0, a missing path 128); `99:99Z` gets 0 hits; the shipping dated-stamp arm on the same population finds 71 revisions and 342 FUTURE findings.
+- Measurement 2, hook input (graph transcripts): 5,236 jsonl files, 351,365 tool_uses, 5,695 touching the snapshot (3,552 Edit, 9 Write, 2,134 Bash). The motivating write is a Bash `sed` at 2026-10-26T07:39:12Z in `d22c7889…jsonl`, with `07:50Z` 648 s ahead; it is invisible to the write-time hook, and Deny B now refuses it. Edit payloads: 163 token fires without a rollover rule, 133 with. After narrowing (`~`, range ends, CLOCK CORRECTION/NOTE lines, 12 h rollover, backticked) about 55 fire, about 51 true positives and about 4 false positives, BY HAND CLASSIFICATION, not a derived count. An FP class that cannot be enumerated remains: a quoted earlier time under 12 h old (`08:57:12Z` quoted at 00:38). Controls: `99:99Z` 0; the motivating row matches. Eight CLOCK CORRECTION rewrites by graph leads show the true-positive class is real.
+- Design when it ships: warn-only, exit-2 text on Edit/Write payloads at write time (like `check_malformed_stamps`, never the gate population), whose remedy never says to overwrite.
+- What unblocks it: a grammar that separates a QUOTED time from a STAMPED one, for example anchoring on the stamp's field position (the leading stamp of a Recent Activity line, the status cell's own stamp slot) rather than any `HH:MMZ` token in the text. It ships only with a derived false-positive set that is empty or enumerated.
 
 verify: manual
 
@@ -736,6 +750,26 @@ Outcome owed: the arm behaves as its self-probe states, and every one of the 32 
 
 verify: manual
 
+## BL-818 — a lone surrogate escape in a Bash command makes `ai-dlc-foreground-budget.sh`'s jq parse fail, so the hook fails open and loses every deny, the budget deny included
+
+**DEFECT.** Found by cluster c2's delta adversary in batch 243. `core/hooks/ai-dlc-foreground-budget.sh` parses the PreToolUse payload with `jq`. A `tool_input.command` containing the JSON escape `\ud800` (a lone high surrogate) makes that parse fail, and the hook prints `ai-dlc-foreground-budget: the tool call is not readable JSON, so its timeout cannot be checked; allowing it (fail-open)` to stderr and emits no verdict. Every deny the hook owns is lost for that call: the foreground-budget deny, Deny A (a backgrounded waiter) and Deny B (a shell write of the snapshot). A command that would be refused is allowed by appending the escape to it.
+
+**Reproduction (re-run in batch 243, jq-1.8.1).** Script: `scratchpad/f7/repro.sh`. It extracts the hook from `bd0be5e51` (base) and from `2bbab2b39` (the batch-243 c2 tip), pipes `{"tool_name":"Bash","tool_input":{"command":"<c>","timeout":600000}}` to each with `AI_DLC_STEERING_BUDGET=120`, and reads the verdict with `jq -r '.hookSpecificOutput.permissionDecision // "allow"'`. An empty verdict below means the hook printed nothing.
+
+| command `<c>` | base `bd0be5e51` | tip `2bbab2b39` |
+|---|---|---|
+| `sleep 9` (control: no escape) | deny | deny |
+| `sleep 9 \ud800` | no verdict, fail-open message on stderr | no verdict, fail-open message on stderr |
+| `wait-for-deliverable.sh x >/dev/null 2>&1 & echo armed` (control) | deny | deny |
+| the same waiter with ` \ud800 z` appended | no verdict, fail-open message on stderr | no verdict, fail-open message on stderr |
+| the same waiter with ` \udc00 z` appended (second control) | deny | deny |
+
+The behaviour is identical at base `bd0be5e51`, so it predates batch 243 and is not introduced by the BL-805 or BL-806 work. A lone low surrogate `\udc00` does not trigger it (confirmed; the delta adversary measured the same). The adversary's own script is `scratchpad/d2.MqWv/sur.sh`.
+
+**Owed:** fixed in cluster c6, batch 243. Open design question for c6's contract: on a jq parse failure, should the hook fail CLOSED (deny, which wedges any command jq cannot parse) or fall back to a non-jq budget check? Measure first how many of graph's 253,881 real Bash commands jq fails to parse; that count decides whether a fail-closed deny would wedge real work.
+
+verify: manual
+
 ## BL-819 — the lead session's own hours and tokens are outside every efficiency entry, and they are most of the wall clock
 
 **DEFECT (efficiency).** BL-808 through BL-811 count subagent spawns and subagent dollars, and BL-812 counts
@@ -776,5 +810,19 @@ Owed:
 Reference points, not pass bars: the table above. This entry closes on a measured graph sprint that reports the
 lead's per-step hours and tokens against s317 and s319, with value evidence for any class whose cost did not
 fall.
+
+verify: manual
+
+## BL-820 — a prose bullet opening `- **BL-<n>` inside an entry body is read as an entry boundary, so the host entry's verify: line moves to a phantom entry
+
+**DEFECT.** Found by cluster c2's 0.947.0 gate pre-suite in batch 243. At 2bf9ce466, `docs/backlog.md:286` opened with the bullet `- **BL-632 is LANDED**` inside BL-616's batch-243 paragraph. `ledger_entry_shape()` treats a line matching `^- \*\*` as an entry boundary, and its label rule took `BL-632` as that entry's id. BL-632 therefore became a phantom entry that received BL-616's `verify: manual`, so `backlog-reverify.sh` reported BL-616 NEEDS-REVIEW with "carries no 'verify:' receipt".
+
+The pre-push step `validate-backlog-receipts.sh` then failed R2 with entries 21, sh receipts 0, manual 20.
+
+The same split was present at ec35c5e5e and passed there (rc 0, "1 driver"), because BL-805's `verify: sh` driver receipt satisfied R2. The rotation at 2bf9ce466 had removed that driver, so the same split failed. The trap is invisible whenever a driver receipt is present.
+
+It was fixed for 0.947.0 by rewording the bullet to `- **Discharged: BL-632 is LANDED**`. origin/main af80abefd carries 0 bullets matching `^- \*\*BL-[0-9]` (`git show af80abefd:docs/backlog.md | grep -c '^- \*\*BL-[0-9]'` returns 0; the same file has 20 `^## BL-` headings, so the read is not empty).
+
+**Owed:** the remedy is for c6, batch 243, to decide, after BL-818. Either the backlog grammar refuses a `- **BL-` bullet inside an entry body, or the reverify engine opens an entry only at `## BL-`.
 
 verify: manual
