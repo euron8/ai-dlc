@@ -338,6 +338,64 @@ if [ -n "$FILE_PATHS" ]; then
 fi
 
 # -----------------------------------------------------------------------------
+# Offending commands of a batch — REASON and log ONLY, never the decision.
+#
+# The decision above reads every element of the batch joined, so a deny named
+# paths but not which commands carried them, and the agent re-sent the whole
+# batch blind. This step names the commands by 1-based position and label.
+#
+# It is deliberately NOT the decision source: the base extraction stays the one
+# program that allows or denies, and this step can only change the words. It
+# searches each element's `tojson` (string or object, LABEL INCLUDED) with the
+# same PATH_RE and is_protected test, so a path carried only by a label still
+# names its command. If it names nothing, REASON falls back to the base text.
+#
+# Strings, not arrays: bash 3.2 + `set -u` errors on an empty array expansion,
+# and a non-zero exit here is a silent fail-open (see ROOT_SEGMENTS). Fields are
+# split on \037, which `tojson` always escapes and the label sanitiser strips;
+# a TAB separator would collapse an empty label field under IFS whitespace rules.
+# -----------------------------------------------------------------------------
+OFF_IDX=""
+OFF_N=0
+OFF_LABELS=""
+OFF_LABN=0
+OFF_TOTAL=0
+if [ "$TOOL_NAME" = "mcp__plugin_context-mode_context-mode__ctx_batch_execute" ] && [ -z "$EXT_BAD" ] && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
+  OFF_ROWS=$(echo "$INPUT" | jq -r '
+      (.tool_input.commands // []) | if type == "array" then . else [] end
+      | to_entries[]
+      | "\(.key + 1)\u001f\(if (.value | type) == "object" and (.value.label != null)
+                          then (.value.label | tostring | gsub("[\u0000-\u001f]"; " "))
+                          else "" end)\u001f\(.value | tojson)"' 2>/dev/null || true)
+  while IFS=$'\037' read -r _oi _olab _oel; do
+    [ -z "$_oi" ] && continue
+    OFF_TOTAL=$((OFF_TOTAL + 1))
+    _ohit=1
+    _ops="$(printf '%s' "$_oel" | grep -oE "$PATH_RE")" || _ops=""
+    while IFS= read -r _op; do
+      [ -z "$_op" ] && continue
+      if is_protected "$_op"; then _ohit=0; break; fi
+    done <<< "$_ops"
+    if [ "$_ohit" -eq 0 ]; then
+      OFF_IDX="${OFF_IDX}${OFF_IDX:+, }${_oi}"
+      OFF_N=$((OFF_N + 1))
+      if [ -n "$_olab" ]; then
+        OFF_LABELS="${OFF_LABELS}${OFF_LABELS:+, }\"${_olab}\""
+        OFF_LABN=$((OFF_LABN + 1))
+      fi
+    fi
+  done <<< "$OFF_ROWS"
+fi
+
+OFF_DESC=""
+if [ -n "$OFF_IDX" ]; then
+  if [ "$OFF_N" -eq 1 ]; then OFF_DESC="command ${OFF_IDX} of ${OFF_TOTAL}"
+  else OFF_DESC="commands ${OFF_IDX} of ${OFF_TOTAL}"; fi
+  if [ "$OFF_LABN" -eq 1 ]; then OFF_DESC="${OFF_DESC} (label ${OFF_LABELS})"
+  elif [ "$OFF_LABN" -gt 1 ]; then OFF_DESC="${OFF_DESC} (labels ${OFF_LABELS})"; fi
+fi
+
+# -----------------------------------------------------------------------------
 # Log and decide
 # -----------------------------------------------------------------------------
 
@@ -351,12 +409,22 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     for p in "${PROTECTED_HITS[@]}"; do
       echo "  - \`${p}\`"
     done
+    if [ -n "$OFF_DESC" ]; then echo "- Offending commands: ${OFF_DESC}"; fi
     echo ""
   } >> "$LOG_FILE"
 
   if [ -n "$EXT_BAD" ]; then
     REASON="extensions/protected-paths.json is malformed, so the protected-path set cannot be resolved: ${EXT_BAD}. Failing closed. Fix the file (shape: {\"protected_paths\":[\"...\"],\"excluded_paths\":[\"...\"]}, both optional, string arrays) or remove it to fall back to the core set."
     CONTEXT="A broken layer file must never silently degrade to the core-only protected set — that would read as 'nothing matched' while the consumer's own verbatim-load paths went unguarded. Use the native Read tool meanwhile; calls carrying no path are unaffected."
+  elif [ -n "$OFF_DESC" ]; then
+    OFF_CLEAN=$((OFF_TOTAL - OFF_N))
+    if [ "$OFF_CLEAN" -gt 0 ]; then
+      OFF_NEXT="The other ${OFF_CLEAN} of ${OFF_TOTAL} carry no protected path: re-send those as their own batch."
+    else
+      OFF_NEXT="No command in this batch is free of protected paths."
+    fi
+    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Offending: ${OFF_DESC}. ${OFF_NEXT} Use native Read for the protected paths' verbatim content."
+    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
   else
     REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read for verbatim content."
     CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."

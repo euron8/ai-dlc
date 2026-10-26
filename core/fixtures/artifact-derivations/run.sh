@@ -1941,6 +1941,300 @@ else
   bad "s-never-row could not read the first OPT_NEVER row out of the script -- the intersection arm is unscored"
 fi
 
+# --- T. --explain-cmd EXPLAINS EVERY SEGMENT OF A REFUSED CHAIN, AND NOTHING ELSE MOVES ------------
+# A chain is refused by the substring ban before any scan, so --explain-cmd printed only its VERDICT
+# and the owed-derivations sweep, which asks only ARGV/WORD lines, never saw a chain's operands
+# (BL-799). explain_chain now prints each SAFE segment's ARGV/WORD lines before base's VERDICT line.
+# Every segment is re-gated before seg_check's eval -- the substring ban minus the operators split
+# on, the segment's own scan status, and the pipe scan over the segment alone -- because that eval
+# executes `$(…)`, `> f` and `<(…)` when nothing stands in front of it.
+#
+# THE REFERENCE IS THE VALIDATOR WITH ITS ONE explain_chain CALL LINE DELETED. Nothing else reaches
+# the new code, so that copy is the pre-change behaviour (measured byte-identical to the base
+# release's script over these inputs when the arm was written; the sandbox carries no history to
+# extract it from). The A1 arm compares the CHECK path, where the call is never entered, against it.
+T="$WORK/t"; mkdir -p "$T/.claude"
+printf 'x\n' > "$T/f.txt"; printf 'b\n' > "$T/g.txt"
+TREF="$T/ref-$VBASE"
+T_REFUSED='-	VERDICT	REFUSED	it can chain, redirect or substitute (one of ; & > < $( ${ ||)'
+T_TWO="grep -c 'a;b' f.txt && grep -c b g.txt"
+T_RETRO='grep -n x .claude/skills/ai-dlc/steps/retro.md; echo "exit:$?"'
+T_NEAR="grep -c 'a;b' f.txt"
+T_PIPE='a | b; c'
+# The substitutions come BEFORE the safe `cat g.txt`, so the arm also proves splitting resumes after
+# each one closes.
+T_CAN='echo $(touch CANARY1); cat f.txt > CANARY2; cat <(touch CANARY3); echo ${X:-y}; cat g.txt'
+# THE SPLIT TABLE: `<label>|<command>|<expected ARGV values, comma-joined, in order>`. EVERY EXPECTED
+# SPLIT CAME FROM BASH, NOT FROM THE SCANNER: each command was run with every top-level segment
+# prefixed by a marker `echo SEGk` (substitution bodies only `echo`), in an empty scratch dir, and
+# the markers bash printed are the segments. A segment carrying a substitution, an ANSI-C quote or an
+# expanding `$` contributes no ARGV line; every other segment contributes its own. Each substitution
+# body carries a `touch` canary, which t-failclosed asserts never ran.
+#   t-subst-resume   splitting resumes after `$( )` closes
+#   t-nested         `$( $( ) )` closes twice; the `;` between is inside the outer frame
+#   t-bt-in-subst    a backtick frame inside `$( )`, carrying its own `;`
+#   t-sqparen/dqparen a `)` inside single or double quotes within `$( )` does not close it
+#   t-brace-semi     a `;` inside `${X:-a;b}` is not a split
+#   t-procsub        `<( )` is a frame
+#   t-arith          `$((1+2))`: a bare `(` inside a frame nests
+#   t-nested-esc     an escaped `\)` inside nested frames closes nothing; a tracker that drops to
+#                    depth 0 at the inner `)` splits `cat g.txt` out of the outer body (t-m5)
+#   t-ansi-*         `$'...'`: a backslash takes the next character, the first other `'` ends it --
+#                    `\'`, `\\`, a `;` inside, `\x27`, and an `\'` hiding a `; touch ...; echo '`
+#                    that a backslash-blind end would split out (t-m6)
+T_SPLIT="t-subst-resume|cat f.txt; echo \$(touch CANARY1); cat g.txt|cat f.txt,cat g.txt
+t-nested|cat f.txt; echo \$(echo \$(touch CANARY4); cat f.txt); cat g.txt|cat f.txt,cat g.txt
+t-bt-in-subst|cat f.txt; echo \$(echo \`touch CANARY5; cat f.txt\`); cat g.txt|cat f.txt,cat g.txt
+t-sqparen|cat f.txt; echo \$(echo ')'; touch CANARY6); cat g.txt|cat f.txt,cat g.txt
+t-dqparen|cat f.txt; echo \$(echo \")\"; touch CANARY7); cat g.txt|cat f.txt,cat g.txt
+t-brace-semi|cat f.txt; echo \${X:-a;b}; cat g.txt|cat f.txt,cat g.txt
+t-procsub|cat f.txt; cat <(touch CANARY3; cat f.txt); cat g.txt|cat f.txt,cat g.txt
+t-arith|cat f.txt; echo \$((1+2)); cat g.txt|cat f.txt,cat g.txt
+t-nested-esc|cat f.txt; echo \$(echo \$(touch CANARY8); cat g.txt; echo \\)); cat f.txt|cat f.txt,cat f.txt
+t-ansi-esc|grep -c \$'a\\'b' f.txt; cat g.txt|cat g.txt
+t-ansi-bsbs|grep -c \$'a\\\\' f.txt; cat g.txt|cat g.txt
+t-ansi-semi|grep -c \$'a;b' f.txt ; cat g.txt|cat g.txt
+t-ansi-x27|grep -c \$'a\\x27b' f.txt; cat g.txt|cat g.txt
+t-ansi-trap|grep -c \$'a\\'; touch CANARY9; echo '; cat g.txt|cat g.txt"
+#   t-cd          the carried prefix, applied to the raw word before %q
+#   t-cd-dyn      a dynamic cd (status 6) explains nothing after it, itself included
+#   t-cd-up       a cd above the root explains nothing after it
+#   t-cd-abs      an absolute cd explains nothing after it
+#   t-cd-compose  successive literal cds compose
+#   t-pushd       pushd explains nothing after it
+#   t-cd-before   a segment before the cd is root-relative, one after `cd web &&` is prefixed
+#   t-cd-norm     `./` and `//` collapse, `..` resolves inside the path, an absolute operand stays
+#   t-cd-gitc     git is off CD_LIST: `git -C` under a prefix ends the explanation
+#   t-cd-gitgrep  git is off CD_LIST: `git grep` under a prefix ends the explanation
+#   t-cd-file, t-cd-pattern, t-cd-epat, t-cd-drec  grep is off CD_LIST (this machine's BSD grep takes
+#                 `--label <v>` and `--context[=num]`, which the option table does not know), so every
+#                 grep shape under a prefix ends the explanation -- the -f, pattern, -e and joined-value
+#                 shapes the position-aware rule once covered
+#   t-cd-dash     an operand that is exactly `-` is stdin and printed unprefixed: `scripts/ai-dlc/-`
+#                 would match the core glob `scripts/ai-dlc/*`
+#   t-cd-core     a slash-free word after a cd into core is still prefixed (no blanket slash-free skip)
+#   t-cd-semi     `;` after a cd ends the explanation (a failed cd leaves the root)
+#   t-cd-or       `||` after a cd ends it (the next segment runs only when the cd FAILED)
+#   t-cd-bg       `&` after a cd ends it (the cd ran in a background subshell)
+#   t-cd-mixed    the prefix crosses `&&`, and a later `||` ends the explanation
+#   t-cd-glob     an unquoted glob under a prefix ends it (the eval would glob in the root)
+#   t-cd-qglob    a QUOTED or escaped `*` is not a glob, so the segment is explained
+#   t-cd-tilde    an unquoted `~` under a prefix ends it (the eval would expand it from the root's shell)
+#   t-cd-orleft   a `||` before the cd in its and-or list: the cd may be skipped, so it is not carried
+#   t-cd-orleft2  the same with `&&` first and the `||` just before the cd
+#   t-cd-orleft3  `grep -q x f.txt || cd web && cat P` (the filed shape)
+#   t-cd-andleft  only `&&` before the cd: carried
+#   t-cd-orreset  a `||` before a `;` does not reach a cd after the `;`
+#   CD_LIST, one arm per listed command, each asserting every operand is prefixed and no option value
+#   is: t-cd-cat (t-cd), t-cd-wc, t-cd-head (`-n 5` keeps 5), t-cd-cut (`-d :` and `-f 1` kept: the
+#   reader asks any command's `-f` value, and cut's `1` is printed as base prints it, unprefixed), t-cd-nl
+#   (`-b a` kept), t-cd-comm, t-cd-sha256sum.
+#   Off the list, each ends the explanation: t-cd-rg, t-cd-echo, t-cd-sed, t-cd-printf, t-cd-test,
+#   t-cd-awk, t-cd-tail, t-cd-sort, t-cd-ls (`-D <format>`), t-cd-diff (`-L`, `-A`, `-X` ...), the grep
+#   rows above, and t-cd-pipeoff (an off-list stage in a pipe ends it too).
+#   t-cd-pipe     a pipe of two listed commands is explained, prefixed
+# Fields are `^`-separated: the commands themselves carry `|` and `||`.
+T_CD="t-cd^cd web && cat .claude/skills/ai-dlc/SKILL.md^cd web,cat .claude/skills/ai-dlc/SKILL.md^web/.claude/skills/ai-dlc/SKILL.md
+t-cd-dyn^cd \"\$D\" && cat x^^
+t-cd-up^cd .. && cat y^cd ..^
+t-cd-abs^cd /tmp && cat y^cd /tmp^
+t-cd-compose^cd a && cd b && cat z^cd a,cd b,cat z^a/b/z
+t-pushd^pushd web && cat .claude/skills/ai-dlc/SKILL.md^pushd web^
+t-cd-before^cat f.txt; cd web && cat g.txt^cat f.txt,cd web,cat g.txt^f.txt,web/g.txt
+t-cd-norm^cd ./web//src/ && cat ../x /abs/y^cd ./web//src/,cat ../x /abs/y^web/x,/abs/y
+t-cd-file^cd web && grep -f pats.txt -c x ../g.txt^cd web^
+t-cd-gitc^cd web && git -C sub log x; cat g.txt^cd web^
+t-cd-pattern^cd .claude/skills && grep -c ai-dlc README.md^cd .claude/skills^
+t-cd-epat^cd web && grep -c a.md -e x && grep -e x -c f.txt^cd web^
+t-cd-gitgrep^cd web && git grep -n x f.txt^cd web^
+t-cd-core^cd .claude/skills/ai-dlc && cat SKILL.md^cd .claude/skills/ai-dlc,cat SKILL.md^.claude/skills/ai-dlc/SKILL.md
+t-cd-semi^cat f.txt; cd web; cat g.txt^cat f.txt,cd web^f.txt
+t-cd-or^cd web || cat P^cd web^
+t-cd-bg^cd web & cat P^cd web^
+t-cd-mixed^cd web && cat P || cat Q^cd web,cat P^web/P
+t-cd-glob^cd .claude/skills/ai-dlc && cat *.md^cd .claude/skills/ai-dlc^
+t-cd-qglob^cd web && cat '*.md' && cat g.txt^cd web,cat \\*.md,cat g.txt^web/\\*.md,web/g.txt
+t-cd-tilde^cd web && cat ~/x && cat g.txt^cd web^
+t-cd-orleft^cat a || cd web && cat x^cat a,cd web^a
+t-cd-orleft2^cat a && cat b || cd web && cat x^cat a,cat b,cd web^a,b
+t-cd-orleft3^grep -q x f.txt || cd web && cat P^grep -q x f.txt,cd web^x,f.txt
+t-cd-andleft^cat a && cd web && cat x^cat a,cd web,cat x^a,web/x
+t-cd-orreset^cat a || cat b; cd web && cat x^cat a,cat b,cd web,cat x^a,b,web/x
+t-cd-wc^cd web && wc -l f.txt g.txt^cd web,wc -l f.txt g.txt^web/f.txt,web/g.txt
+t-cd-head^cd web && head -n 5 f.txt^cd web,head -n 5 f.txt^web/f.txt
+t-cd-cut^cd web && cut -d : -f 1 g.txt^cd web,cut -d : -f 1 g.txt^1,web/g.txt
+t-cd-nl^cd web && nl -b a f.txt^cd web,nl -b a f.txt^web/f.txt
+t-cd-ls^cd web && ls -1 sub^cd web^
+t-cd-diff^cd web && diff -q a b^cd web^
+t-cd-dash^cd scripts/ai-dlc && cat -^cd scripts/ai-dlc,cat -^-
+t-cd-comm^cd web && comm -12 a b^cd web,comm -12 a b^web/a,web/b
+t-cd-sha256sum^cd web && sha256sum f.txt^cd web,sha256sum f.txt^web/f.txt
+t-cd-pipe^cd web && cat f.txt | wc -l^cd web,cat f.txt,wc -l^web/f.txt
+t-cd-pipeoff^cd web && cat f.txt | sort^cd web^
+t-cd-rg^cd .claude/skills && rg -c ai-dlc README.md^cd .claude/skills^
+t-cd-echo^cd scripts && echo ai-dlc^cd scripts^
+t-cd-sed^cd web && sed -n 1p f.txt^cd web^
+t-cd-printf^cd scripts && printf ai-dlc^cd scripts^
+t-cd-test^cd scripts && test -n ai-dlc^cd scripts^
+t-cd-awk^cd scripts && awk 1 f.txt^cd scripts^
+t-cd-tail^cd web && tail -n 1 f.txt^cd web^
+t-cd-sort^cd web && sort f.txt^cd web^
+t-cd-drec^cd scripts && grep -drecurse ai-dlc x.txt && grep -Dread ai-dlc y.txt^cd scripts^"
+t_ex() { ( cd "$2" && AI_DLC_PROJECT_ROOT="$2" bash "$1" --explain-cmd "$3" 2>&1 ); } # validator root cmd
+t_argvs() { grep -c '^-	ARGV	' <<< "$1" || true; }
+if mut_copy "$TREF" '/^      \[ "\$EXPLAIN" = 1 \] && explain_chain "\$c"$/d'; then
+  ok "t-ref                  the reference copy (explain_chain's call line deleted) was built"
+else
+  bad "t-ref the explain_chain call line was not found exactly as anchored -- no T verdict below is readable"
+fi
+# THE TWO SIDES DIFFER on a chain and agree on a near-miss, so the comparisons below are readings.
+t_d1="$(t_ex "$VALIDATOR" "$T" "$T_TWO")"; t_d2="$(t_ex "$TREF" "$T" "$T_TWO")"
+[ -n "$t_d2" ] && [ "$t_d1" != "$t_d2" ] \
+  && ok "t-diff-seed            the validator and the reference DIFFER on a chain under --explain-cmd" \
+  || bad "t-diff-seed the validator and the reference print the same bytes for a chain -- the T comparisons are unreadable"
+T_A1_CMDS="grep -c x f.txt && cat g.txt
+grep -c x f.txt; cat g.txt
+grep -c x f.txt || cat g.txt
+grep -c x f.txt & cat g.txt
+cat f.txt | wc -l; cat g.txt
+grep -c x f.txt;# cat g.txt
+cat f.txt > T_OUT1
+cat < f.txt
+echo \$(cat f.txt)
+echo \${X:-y}
+grep -c x f.txt 2>&1; cat g.txt
+grep -c x f.txt |& cat
+$T_TWO
+$T_NEAR"
+t_arms() { # <validator> <quiet> -> T_FAILED
+  local V="$1" q="$2" failed="" o r i c ro rr tc
+  tarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3: ${4:-}"; fi; }
+  # t-two: a quoted `;` is not split on, so exactly two segments, both operands asked, base's verdict.
+  o="$(t_ex "$V" "$T" "$T_TWO")"
+  [ "$(t_argvs "$o")" = 2 ] && grep -qx -e '-	WORD	grep		operand		f.txt' <<< "$o" \
+    && grep -qx -e '-	WORD	grep		operand		g.txt' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+  tarm t-two $? "two ARGV lines (operands f.txt, g.txt) and base's VERDICT for: $T_TWO" "$o"
+  # t-retro: the graph shape -- a `$?` segment contributes nothing, the grep is asked.
+  o="$(t_ex "$V" "$T" "$T_RETRO")"
+  [ "$(t_argvs "$o")" = 1 ] && grep -qx -e '-	ARGV	grep -n x .claude/skills/ai-dlc/steps/retro.md' <<< "$o" \
+    && grep -qx -e '-	WORD	grep		operand		.claude/skills/ai-dlc/steps/retro.md' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+  tarm t-retro $? "exactly one ARGV line, the grep, operand asked, for: $T_RETRO" "$o"
+  # t-near: no top-level operator, so base's bytes exactly.
+  o="$(t_ex "$V" "$T" "$T_NEAR")"; r="$(t_ex "$TREF" "$T" "$T_NEAR")"
+  [ -n "$r" ] && [ "$o" = "$r" ] && [ "$o" = "$T_REFUSED" ]
+  tarm t-near $? "a quoted ; alone prints the reference's bytes: $T_NEAR" "$o"
+  # t-pipe: a segment's own pipe stages are walked, in source order.
+  o="$(t_ex "$V" "$T" "$T_PIPE")"
+  [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ' ')" = "a b c " ]
+  tarm t-pipe $? "ARGV lines a, b, c in order for: $T_PIPE" "$o"
+  # t-canary: no segment carrying a substitution or a redirection reaches the eval, and the safe
+  # segment after them is still explained. WHAT IT DISCRIMINATES IS NARROWER THAN THE CANARY LIST:
+  # under the ban-skip mutant (t-m4) only CANARY2 appears. `$(`, `<(` and `${` are stopped by the
+  # segment's own scan status as well as by the ban, so for those three the arm cannot tell the two
+  # gates apart; the BAN's only ban-alone subject here is the redirection. The status gate's own
+  # subjects are the `$?` in t-retro and the backtick, which the ban does not carry.
+  tc="$(mktemp -d "$T/canary.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+  o="$(t_ex "$V" "$tc" "$T_CAN")"
+  [ ! -e "$tc/CANARY1" ] && [ ! -e "$tc/CANARY2" ] && [ ! -e "$tc/CANARY3" ] \
+    && [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')" = "cat g.txt," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+  tarm t-canary $? "no CANARY file created, the safe segment after the substitutions still explained" "$(ls "$tc" | tr '\n' ' ') $o"
+  # THE SPLIT TABLE, each row its own arm, all in ONE fresh scratch root. t-failclosed then asserts
+  # that root holds exactly what was seeded: whatever a tracker mis-split, no substitution body ran.
+  # It is scored under every mutant too, so a mutant that mis-splits must still leave it green.
+  tc="$(mktemp -d "$T/split.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+  local lbl cmd want got
+  while IFS='|' read -r lbl cmd want; do
+    o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
+    [ "$got" = "$want," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+    tarm "$lbl" $? "ARGV [$want] for: $cmd" "got [$got] $o"
+  done <<< "$T_SPLIT"
+  [ "$(ls -A "$tc" | tr '\n' ' ')" = ".claude f.txt g.txt " ]
+  tarm t-failclosed $? "after every split row the scratch root holds only what was seeded (no substitution body ran)" "$(ls -A "$tc" | tr '\n' ' ')"
+  # THE cd TABLE: `<label>|<command>|<ARGV lines>|<operand-class words>`, both comma-joined in order. A
+  # literal relative `cd` is carried: later operands read `<dir>/<word>`; anything else that changes
+  # directory leaves every later segment unexplained (the ARGV column then stops at the cd).
+  while IFS='^' read -r lbl cmd want wops; do
+    o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
+    gops="$(awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { printf "%s,", $7 }' <<< "$o")"
+    [ "$got" = "${want:+$want,}" ] && [ "$gops" = "${wops:+$wops,}" ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+    tarm "$lbl" $? "ARGV [$want] operands [$wops] for: $cmd" "got ARGV [$got] operands [$gops]"
+  done <<< "$T_CD"
+  # t-a1: the CHECK path's verdict and text equal the reference's for every chain, redirect and
+  # substitution form, and each is the ALLOWLIST refusal (a presence, so silence cannot pass).
+  i=0
+  while IFS= read -r c; do
+    i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-$i.md"
+    ro="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$V" "a1-$i.md" 2>&1)"; rr=$?
+    r="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$TREF" "a1-$i.md" 2>&1)"
+    if [ "$rr|$ro" != "1|$r" ] || ! grep -q '^FAIL (ALLOWLIST): ' <<< "$r"; then
+      failed="$failed t-a1"; [ "$q" = 1 ] || bad "t-a1 the check path differs from the reference for: $c"
+    fi
+  done <<< "$T_A1_CMDS"
+  [ "$i" -ge 10 ] || failed="$failed t-a1"
+  case " $failed " in *" t-a1 "*) ;; *) [ "$q" = 1 ] || ok "t-a1                   the check path is the reference's, byte for byte, over $i chain/redirect/substitution commands" ;; esac
+  T_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+t_arms "$VALIDATOR" 0
+[ -z "$T_FAILED" ] \
+  && ok "t-control              the unmutated validator fails no T arm, so a mutant's failed set is its own" \
+  || bad "t-control the unmutated validator failed T arm(s): $T_FAILED -- no mutant verdict below is readable"
+# T's mutants, each a copy guarded by mut_copy, parsed with bash -n, declared to fail EXACTLY its set.
+#   t-m1  the control-operator split made quote-blind     t-m2  the first segment dropped
+#   t-m3  the chain walk entered when EXPLAIN=0, a passing chain then returned safe
+#   t-m4  the per-segment substring ban skipped
+t_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$T/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  bash -n "$M" 2>/dev/null || { bad "$label does not parse -- no verdict was scored"; return; }
+  t_arms "$M" 1
+  if [ -z "$T_FAILED" ]; then bad "$label SURVIVED -- no T arm failed against it"
+  elif [ "$T_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $T_FAILED"
+  else bad "$label killed by the WRONG arm set: failed [$T_FAILED], declared [$want]"; fi
+}
+t_mutant t-m1 "t-two" \
+  's/^        if (chain \&\& sq == 0 \&\& dq == 0 \&\& (ch == ";" /        if (chain \&\& (ch == ";" /'
+t_mutant t-m2 "t-arith t-brace-semi t-bt-in-subst t-cd t-cd-abs t-cd-andleft t-cd-awk t-cd-before t-cd-bg t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-dash t-cd-diff t-cd-drec t-cd-dyn t-cd-echo t-cd-epat t-cd-file t-cd-gitc t-cd-gitgrep t-cd-glob t-cd-head t-cd-ls t-cd-mixed t-cd-nl t-cd-norm t-cd-or t-cd-orleft t-cd-orleft2 t-cd-orleft3 t-cd-orreset t-cd-pattern t-cd-pipe t-cd-pipeoff t-cd-printf t-cd-qglob t-cd-rg t-cd-sed t-cd-semi t-cd-sha256sum t-cd-sort t-cd-tail t-cd-test t-cd-tilde t-cd-up t-cd-wc t-dqparen t-nested t-nested-esc t-pipe t-procsub t-pushd t-retro t-sqparen t-subst-resume t-two" \
+  's/^    walked=1$/    [ "$walked" = 1 ] || { walked=1; continue; }/'
+t_mutant t-m3 "t-a1" \
+  's/^      \[ "\$EXPLAIN" = 1 \] && explain_chain "\$c"$/      if [ "$EXPLAIN" != 1 ]; then explain_chain "$c" \&\& return 0; fi; [ "$EXPLAIN" = 1 ] \&\& explain_chain "$c"/'
+t_mutant t-m4 "t-canary" \
+  "s/^      \\*'<'\\*|\\*'>'\\*|\\*'\\\$('\\*|\\*'\\\${'\\*|\\*'&'\\*) all=1; ao_next; continue ;;\$/      ZZ-NEVER) all=1; ao_next; continue ;;/"
+#   t-m5  a closing `)` or `}` drops the tracker to depth 0 instead of popping one frame
+#   t-m6  an ANSI-C quote ends at the first `'`, a backslash before it notwithstanding
+# Neither may create a file: t-failclosed stays OUT of both declared sets, so each kill below is
+# also the evidence that the mis-split failed closed.
+t_mutant t-m5 "t-nested-esc" \
+  's/ { dq = SV\[length(stk)\]; stk = substr(stk, 1, length(stk) - 1); out = out ch; prev = "x"; continue }$/ { dq = SV[length(stk)]; stk = ""; out = out ch; prev = "x"; continue }/'
+t_mutant t-m6 "t-ansi-esc t-ansi-trap" \
+  's/if (ch == BS) { i++; if (i <= n) out = out substr(\$0, i, 1) } else if (ch == SQ) aq = 0/if (ch == SQ) aq = 0/'
+#   t-m7   the carried prefix dropped: a later operand is printed root-relative again
+#   t-m9   the prefix carried across `;` (both the set and the stop): `cd x; cat y` prefixes y
+#   t-m10  the glob/tilde stop dropped
+#   t-m11  the `||`/`&` stop after a cd dropped (both the set and the stop)
+#   t-m13  the closed list dropped: every command under a prefix is explained and prefixed
+#   t-m14  the `||`-before rule dropped: a cd after a `||` in its and-or list is carried
+#   t-m15  `-` prefixed like any other operand
+# t-m8 (pattern prefixed) and t-m12 (letter-matched option walk) are RETIRED: their subject, grep's
+# position-aware pattern rule (grep_pattern_given), was deleted when grep came off CD_LIST.
+T_PFX_SED='s/^    if \[ "\$pfx" = 1 \]; then$/    if false; then/'
+t_mutant t-m7 "t-cd t-cd-andleft t-cd-before t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-head t-cd-mixed t-cd-nl t-cd-norm t-cd-orreset t-cd-pipe t-cd-qglob t-cd-sha256sum t-cd-wc" "$T_PFX_SED"
+t_mutant t-m9 "t-cd-semi" \
+  's/^      \[ "\$sop" = "&&" \] || \[ -z "\$sop" \] || cdstop=1$/      [ "$sop" = "\&\&" ] || [ "$sop" = ";" ] || [ -z "$sop" ] || cdstop=1/' \
+  's/if \[ "\$sop" = "&&" \] && \[ "\$andok" = 1 \] && cd_norm/if { [ "$sop" = "\&\&" ] || [ "$sop" = ";" ]; } \&\& [ "$andok" = 1 ] \&\& cd_norm/'
+t_mutant t-m10 "t-cd-glob t-cd-tilde" \
+  '/^      \[ "\$sgl" = 0 \] || { all=1; break; }$/d'
+t_mutant t-m11 "t-cd-bg t-cd-mixed t-cd-or" \
+  's/^      \[ "\$sop" = "&&" \] || \[ -z "\$sop" \] || cdstop=1$/      [ "$sop" = ";" ] \&\& cdstop=1/' \
+  's/if \[ "\$sop" = "&&" \] && \[ "\$andok" = 1 \] && cd_norm/if [ "$sop" != ";" ] \&\& [ "$andok" = 1 ] \&\& cd_norm/'
+t_mutant t-m13 "t-cd-awk t-cd-diff t-cd-drec t-cd-echo t-cd-epat t-cd-file t-cd-gitgrep t-cd-ls t-cd-pattern t-cd-pipeoff t-cd-printf t-cd-rg t-cd-sed t-cd-sort t-cd-tail t-cd-test" \
+  's/^  case " \$CD_LIST " in \*" \$1 "\*) \[ -z "\$2" \] ;; \*) return 1 ;; esac$/  return 0/'
+t_mutant t-m14 "t-cd-orleft t-cd-orleft2 t-cd-orleft3" \
+  's/ && \[ "\$andok" = 1 \] && cd_norm/ \&\& cd_norm/'
+t_mutant t-m15 "t-cd-dash" \
+  's/ && \[ "\$1" = operand \] && \[ "\$w" != - \]; then$/ \&\& [ "$1" = operand ]; then/'
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."

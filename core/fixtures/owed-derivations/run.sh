@@ -29,6 +29,9 @@
 # S6b a superseding ledger row closes the stale one, S6c a stale superseding row does not, S6d the same
 # pair outside the ledger does not; S11a-c `git -C` operands and a `-f` value block, S11n their consumer
 # twins stay silent; S12a-e core DIRECTORIES block (lead ruling A), S12n consumer directories stay silent;
+# CH1/CH2 a chain FAILing ALLOWLIST with a core operand (before `;`, in a second `&&` segment) blocks as
+# LIVING-ALLOWLIST, CH1n its consumer twin stays silent, MV1 a validator mutant without its explain_chain
+# call fails CH1 and CH2 only;
 # S13 a validator exit 2 with no UNRUN line is a refusal (S13c its control); S14 a root-absolute core
 # operand blocks. S6e-S6g a later ledger copy the validator never RUNS (unclosed fence, indented output
 # line, CRLF opener) acquits nothing; PU an OWED row whose only copy is in an unclosed fence reads MOVED;
@@ -633,14 +636,33 @@ C12D='find .claude/skills/ai-dlc -name a.md'
 C12E='git ls-files .claude/skills/ai-dlc/steps'
 C12N1='ls server/'
 C12N2='grep -rc qqalpha web/src'
+# CH1/CH1n/CH2: CHAINS the substring ban refuses, so each FAILs ALLOWLIST. The validator's --explain-cmd
+# prints the ARGV/WORD lines of every safe segment (the `echo "exit:$?"` segment expands `$?` and prints
+# none). CH1 a core operand before `;`, CH1n its consumer twin, CH2 a core operand in the SECOND `&&` segment.
+C13A='grep -n x .claude/skills/ai-dlc/steps/retro.md; echo "exit:$?"'
+C13N='grep -n x server/x.py; echo "exit:$?"'
+C13B='grep -c qqalpha server/x.py && grep -c qqalpha .claude/skills/ai-dlc/steps/a.md'
+# CH3: the CH1 operand behind a literal `cd web &&`. The validator carries the cd, so the operand is
+# explained as web/.claude/..., which is not core: the row stays silent while CH1 still opens.
+C13C='cd web && grep -n x .claude/skills/ai-dlc/steps/retro.md'
+# CH4: grep's PATTERN behind a literal cd into a directory a core glob sits under. A prefixed pattern
+# would read `.claude/skills/ai-dlc`, which the directory rule asks as core. grep is OFF the cd list
+# (its option table does not know `--label`/`--context` on this machine's grep), so nothing of the
+# grep segment is explained under the prefix and no word of it is asked.
+C13D='cd .claude/skills && grep -n ai-dlc README.md'
+# CH5: CH4's POSITIVE twin -- the carry reaches a core file, so a silently dead carry fails it.
+# CH6: an off-list command under a prefix (echo's word is text) is never explained.
+C13E='cd .claude/skills && cat ai-dlc/SKILL.md'
+C13F='cd scripts && echo ai-dlc'
 { printf '# PRD\n\n'
-  for c in "$C11A" "$C11B" "$C11C" "$C11N1" "$C11N2" "$C12A" "$C12B" "$C12C" "$C12D" "$C12E" "$C12N1" "$C12N2"; do lfence "$c" 999; printf '\n'; done
+  for c in "$C11A" "$C11B" "$C11C" "$C11N1" "$C11N2" "$C12A" "$C12B" "$C12C" "$C12D" "$C12E" "$C12N1" "$C12N2" "$C13A" "$C13N" "$C13B" "$C13C" "$C13D" "$C13E" "$C13F"; do lfence "$c" 999; printf '\n'; done
 } > "$LS11/$LPRD"
 g "$LS11" init -q; g "$LS11" add -A; g "$LS11" commit -qm seed
 k11() { printf '%s:%s' "$LPRD" "$(line_of "$LS11/$LPRD" "\$ $1")"; }
 K_11A="$(k11 "$C11A")"; K_11B="$(k11 "$C11B")"; K_11C="$(k11 "$C11C")"; K_11N1="$(k11 "$C11N1")"; K_11N2="$(k11 "$C11N2")"
 K_12A="$(k11 "$C12A")"; K_12B="$(k11 "$C12B")"; K_12C="$(k11 "$C12C")"; K_12D="$(k11 "$C12D")"; K_12E="$(k11 "$C12E")"
 K_12N1="$(k11 "$C12N1")"; K_12N2="$(k11 "$C12N2")"
+K_13A="$(k11 "$C13A")"; K_13N="$(k11 "$C13N")"; K_13B="$(k11 "$C13B")"; K_13C="$(k11 "$C13C")"; K_13D="$(k11 "$C13D")"; K_13E="$(k11 "$C13E")"; K_13F="$(k11 "$C13F")"
 # S13: the validator exits 2 with NO UNRUN line. A wrapper removes a second fenced (consumer-only,
 # reproducing) file, runs the real validator, then puts the file back, so the world is unchanged for the
 # next reader. The reader must refuse with its "no verdict" line. S13c control: the same world, nothing removed.
@@ -723,7 +745,7 @@ row "$K_LSB8C" "$LCMD" > "$WORK/lsb8c.tsv"
 for k in "$K_DD1" "$K_DD2" "$K_DD3" "$K_DD4" "$K_DD5" "$K_RP3" "$K_RP4" "$K_RP5" "$K_PP" "$K_LSB8C" "$K_LS6E" "$K_LS6F" "$K_LS6G" "$K_LSPU" "$K_GC" "$K_G1" "$K_G2" "$K_RP1" "$K_RP2" "$K_SL1" "$K_SL2" "$K_CD1" "$K_CD2"; do
   case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
 done
-for k in "$K_LS6C1" "$K_LS6C2" "$K_LS6D" "$K_11A" "$K_11B" "$K_11C" "$K_11N1" "$K_11N2" "$K_12A" "$K_12B" "$K_12C" "$K_12D" "$K_12E" "$K_12N1" "$K_12N2" "$K_LS14"; do
+for k in "$K_LS6C1" "$K_LS6C2" "$K_LS6D" "$K_11A" "$K_11B" "$K_11C" "$K_11N1" "$K_11N2" "$K_12A" "$K_12B" "$K_12C" "$K_12D" "$K_12E" "$K_12N1" "$K_12N2" "$K_13A" "$K_13N" "$K_13B" "$K_LS14"; do
   case "$k" in *:|*::*) echo "FIXTURE ERROR: a seeded LIVING derivation line was not found ($k)" >&2; exit 2 ;; esac
 done
 LIN="$LPRD
@@ -740,7 +762,8 @@ rc_is "S2c control: the validator FAILS the past-sprint core fence" 1 "$(lv "$LS
 rc_is "S4c control: the validator prints an UNRUN line for each awk-137 fence (core, consumer)" 11 "$(lv "$LS4C" "$LPRD" | grep -c '^UNRUN: ')$(lv "$LS4S" "$LPRD" | grep -c '^UNRUN: ')"
 rc_is "S8c control: neither deleted core file exists, and the validator FAILS all three fences" 3 "$([ ! -e "$LS8/scripts/ai-dlc/gone.sh" ] && [ ! -e "$LS8/scripts/ai-dlc/deleted.sh" ] && lv "$LS8" "$LPRD" | grep -c '^FAIL (STALE): ')"
 rc_is "S6bc control: the validator FAILS only the first ledger fence in S6b (the later copy reproduces)" 1 "$(lv "$LS6B" "$LLEDGER" | grep -c '^FAIL (')"
-rc_is "S11c0 control: the validator gives a FAIL or UNRUN line for all twelve S11/S12 fences" 12 "$(lv "$LS11" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
+rc_is "S11c0 control: the validator gives a FAIL or UNRUN line for all nineteen S11/S12/CH fences" 19 "$(lv "$LS11" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
+rc_is "CHc control: the validator FAILs exactly the seven CH chain fences as ALLOWLIST (a chain is never run)" 7 "$(lv "$LS11" "$LPRD" | grep -c '^FAIL (ALLOWLIST): ')"
 rc_is "S15c0 control: the validator gives a FAIL or UNRUN line for all eighteen G/RP/SL/CD fences" 18 "$(lv "$LS15" "$LPRD" | grep -cE '^(FAIL \(|UNRUN: )')"
 s6ec=""
 for d in "$LS6E" "$LS6F" "$LS6G"; do
@@ -925,6 +948,14 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_arm S12d "find .claude/skills/ai-dlc -name a.md blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12D"; } && echo 0 || echo 1)"
   lw_arm S12e "git ls-files .claude/skills/ai-dlc/steps blocks" "$({ [ "$r11" = 1 ] && has_open "$K_12E"; } && echo 0 || echo 1)"
   lw_arm S12n "near-miss, same world: consumer directories server/ and web/src stay silent" "$({ ! has_open "$K_12N1" && ! has_open "$K_12N2"; } && echo 0 || echo 1)"
+  reason11() { awk -F'\t' -v k="$1" '$1 == "OPEN" && $2 == k && $6 == "living-sweep" { print $3 }' <<<"$o11"; }
+  lw_arm CH1 "a chain FAILing ALLOWLIST, grep -n x <core retro.md>; echo \"exit:\$?\", blocks as LIVING-ALLOWLIST living-sweep (its safe segment is explained)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13A")" = LIVING-ALLOWLIST ]; } && echo 0 || echo 1)"
+  lw_arm CH1n "near-miss, same world: the same chain over a consumer operand (server/x.py) stays silent" "$(! has_open "$K_13N" && echo 0 || echo 1)"
+  lw_arm CH2 "a && chain whose core operand is in its SECOND segment blocks as LIVING-ALLOWLIST living-sweep" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13B")" = LIVING-ALLOWLIST ]; } && echo 0 || echo 1)"
+  lw_arm CH3 "a chain FAILing ALLOWLIST behind a literal cd web && opens NO row: its operand is web/.claude/..., not core (control: CH1 opens in this same run)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13A")" = LIVING-ALLOWLIST ] && ! has_open "$K_13C"; } && echo 0 || echo 1)"
+  lw_arm CH4 "cd .claude/skills && grep -n ai-dlc README.md opens NO row: grep is off the cd list, so the segment is not explained and its pattern never becomes .claude/skills/ai-dlc (control: CH1 opens in this same run)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13A")" = LIVING-ALLOWLIST ] && ! has_open "$K_13D"; } && echo 0 || echo 1)"
+  lw_arm CH5 "cd .claude/skills && cat ai-dlc/SKILL.md OPENS as LIVING-ALLOWLIST living-sweep: the carried cd reaches the core path (CH4's positive twin)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13E")" = LIVING-ALLOWLIST ]; } && echo 0 || echo 1)"
+  lw_arm CH6 "cd scripts && echo ai-dlc opens NO row: echo is off the cd list, so its word is never prefixed into scripts/ai-dlc (control: CH5 opens in this same run)" "$({ [ "$r11" = 1 ] && [ "$(reason11 "$K_13E")" = LIVING-ALLOWLIST ] && ! has_open "$K_13F"; } && echo 0 || echo 1)"
   lw_end; fi
   if lw_world ls13; then
   lw_rd "$b" "$LS13" "$none"
@@ -1093,6 +1124,42 @@ EOF
 mut_case M21 "S9" 1 '  exit 0' "$BATCH_LEAK"
 # M22: the sweep refuses on EVERY validator exit, a verdict included (the always-refuse mirror of mA).
 mut_case M22 "S13c" 1 '    0|1) return 0 ;;' '    0|1) ;;'
+# MV1: a VALIDATOR mutant. The reader runs the validator copied into the ROOT, so the mutant is a copy of
+# the LS11 world whose validator has its `explain_chain` call removed (base: a refused chain explains no
+# segment, so no core operand is asked). The real reader is driven over that copy through the same world
+# filter; CH1 and CH2 must fail, CH1n must stay silent. Its control is the same copy with the validator
+# unmutated, under which every CH arm holds.
+mv_world() { # <tag> <validator source> -> sets MVW
+  MVW="$WORK/ls11.$1"; cp -R "$LS11" "$MVW"; cp "$2" "$MVW/scripts/ai-dlc/validate-artifact-derivations.sh"
+}
+mv_case() { # <tag> <validator source> -> LW_FAILED over the CH arms in the copied world
+  local keep="$LS11"
+  mv_world "$1" "$2"; LS11="$MVW"
+  LW_REQ="CH1 CH1n CH2"; LW_FAILED=""; LW_SEEN=" "; lw_all "$BIN/check-owed-derivations.sh" "$1"
+  LS11="$keep"
+}
+MVSRC="$WORK/mv1.validator.sh"
+mut_line "$VALIDATOR" "$MVSRC" 1 '      [ "$EXPLAIN" = 1 ] && explain_chain "$c"' '      :'
+mv_rc=$?
+if [ "$mv_rc" != 0 ]; then
+  bad "MV1 FIXTURE BROKEN: the explain_chain call line was not found in the validator, so the mutant is not scored"
+elif ! bash -n "$MVSRC"; then
+  bad "MV1 FIXTURE BROKEN: the mutated validator does not parse"
+else
+  mv_case mv1 "$MVSRC"
+  req_seen MV1 "CH1 CH1n CH2" && {
+    case " $LW_FAILED " in *" CH1 "*) mv_ch1=1 ;; *) mv_ch1=0 ;; esac
+    case " $LW_FAILED " in *" CH2 "*) mv_ch2=1 ;; *) mv_ch2=0 ;; esac
+    case " $LW_FAILED " in *" CH1n "*) mv_chn=1 ;; *) mv_chn=0 ;; esac
+    if [ "$mv_ch1$mv_ch2$mv_chn" = 110 ]; then ok "MV1 killed: the validator without its explain_chain call fails CH1 and CH2, and CH1n stays silent (failed:$LW_FAILED)"
+    else bad "MV1 expected CH1 and CH2 to fail and CH1n to hold (CH1=$mv_ch1 CH2=$mv_ch2 CH1n=$mv_chn, failed:${LW_FAILED:- none})"; fi
+  }
+  mv_case mv1null "$VALIDATOR"
+  req_seen "MV1 control" "CH1 CH1n CH2" && {
+    if [ -z "$LW_FAILED" ]; then ok "MV1 control: the same copied world with the UNMUTATED validator holds every CH arm"
+    else bad "MV1 control: CH arm(s)$LW_FAILED failed under the unmutated validator in the copied world"; fi
+  }
+fi
 printf '  mutant-phase reader invocations: %s (mutants %s, null controls %s)\n' "$LW_NINV" "$((LW_NINV - LW_NINV_NULL))" "$LW_NINV_NULL"
 LW_MODE=real
 
