@@ -93,7 +93,7 @@ session was messaged.
   - When each review pass finds one more spelling, replace the oracle: BL-799's cd carry is a closed list (`cat wc
     head cut nl comm sha256sum`), and a listed command a review breaks comes OFF the list, with no new round.
   - A conflict resolution that authors no prose (0 removed, added lines byte-identical) is mechanical, not a hand unit.
-- **Backlog.** Filed this batch: BL-802 through BL-807. Live at close: 14; archive 780. **The next free id is BL-808.**
+- **Backlog.** Filed this batch: BL-802 through BL-807. Live at close: 14; archive 780. **The next free id is BL-813** (BL-808 through BL-812 filed 2026-10-26 after the close, from `docs/analysis/pipeline-efficiency-s317-s320/`).
   Open entries filed this batch: BL-804 through BL-807, all DEFECTs from the graph watch. BL-807 was filed after the
   close: graph's stories-serial lane join refused a round in which no lane wrote, and graph's lead hand-assembled the
   record, a case outside BL-802's fix. BL-785 (batch 240) is still open.

@@ -525,3 +525,113 @@ Owed: the join accepts a round where every lane part's `edit:` lines are `n/a` o
 Owed, in addition: the join refuses an `--until` later than its own clock, or derives the window from the lane round's own dispatch epoch rather than from flags a lead types.
 
 verify: manual
+
+
+## Efficiency regression after the ranked set (filed 2026-10-26)
+
+Filed from [`docs/analysis/pipeline-efficiency-s317-s320/`](analysis/pipeline-efficiency-s317-s320/), which
+re-runs the s317–s318 extractor over graph s317–s320. The efficiency releases (0.782.0–0.786.0) reached graph
+on 2026-10-14/15. **Measured per story, with operator wait excluded, they removed nothing.** Subagent dollars per
+story read $88 for s317, $109 for s318 and $88 for s319. Machine hours per story read 4.8, 4.7 and 4.7. The price
+per spawn fell about 40%, from $1.98 to $1.13, and spawns per story rose from 44.5 to 78.0. The first four
+entries below are the measured sources of the added spawns, and the last carries the outcome target. Every receipt
+is `manual` at filing; the batch that builds an entry owes its behavioural `sh` receipt and the probe behind it.
+
+## BL-808 — the gate-1 partition counts committed test-evidence captures as reviewable files, so an evidence-heavy diff fans out to ten reviewers
+
+**DEFECT (efficiency).** `partition-review-diff.sh` excludes only the scan roots (`_bmad-output`, `docs/retro`,
+`docs/reviews`, `docs/escalations` on graph), so every `test-results/*.txt` capture counts toward the 8-file
+threshold (`REVIEW_SHARD_DEFAULT_MIN_FILES`). Since BL-510's capture header and committed-RED rules, a fix that
+touches one code file and re-records fifteen captures crosses the threshold. It then dispatches 4 part reviewers
+and 6 cross reviewers, because `partition-document.sh --cross-groups 4` prints six groups.
+
+Measured on graph s319. Each pass's range is taken from its merged review's `<base>..<sha>` Summary line or the
+prior pass's `reviewed-sha:`, and the program was re-run on it:
+- Re-reviews: 21 of 44 passes shard today, and 2 would shard if captures were not counted. Story 3.1 p6's part
+  map is two `test-results/` files in parts 1–2, a third part mixing code with mutation captures, and a fourth part of
+  captures only.
+- Pass 1: 10 stories sharded, and 4 would still shard without captures. Those 10 ranges held 81 captures, against
+  20 in s318's 4 sharded ranges.
+- Cost: a sharded code-review pass averaged 12.9 spawns, $19.70 and 103 agent-minutes. A serial pass averaged
+  $0.90 and 5 agent-minutes.
+
+Owed: the reviewable count excludes the captures the story CITES as evidence. Key the exclusion on what
+`validate-handoff-evidence.sh` already resolves at the same pre-gate-1 call, not on a path prefix, which would
+diverge per consumer. The captures stay in the range the reviewers read. Measure the partitioner before and after,
+because the pole runs fixtures that invoke it.
+
+verify: manual
+
+## BL-809 — a re-review pass is spent on evidence and bookkeeping findings that a validator could settle, so a story is reviewed up to nine times
+
+**DEFECT (efficiency).** Graph s319 ran 44 gate-1 re-review passes over 23 reviewed stories. s317 ran 13 over 21
+and s318 ran 16 over 14. Story 3.1 ran 9 passes: p5, p8 and p9 carried 0 findings, and p4, p6 and p7's findings
+are capture labels, `$` lines, stale citations and story-record wording.
+- Finding mix: about 2 in 3 of the 250 `#### ` findings in s319's `-p<M>` files are evidence or bookkeeping
+  (167 matched an evidence or bookkeeping keyword set). That is a heading-keyword classification and a floor of
+  unknown precision. The derived form is a finding under a part whose map row is entirely captures.
+- Code-shaped findings: the remainder include real code findings (a PUT of `inf` returning 500, a live smoke that
+  passes silently on null), so the round itself is not the defect.
+- BL-510 is PARTIAL: it reaches about 7 of 12 evidence verdicts and 0 of 10 bookkeeping verdicts by its own
+  measurement, and the rest still return as review findings.
+
+Owed:
+1. A NEEDS_REWORK whose every Critical and Important finding is evidence or bookkeeping re-checks through
+   `validate-handoff-evidence.sh` and the one serial reviewer it names, not through a fresh fan-out.
+2. A re-review whose delta, captures excluded (BL-808), touches no more than one code file dispatches one serial
+   reviewer.
+3. Extend the validator to the evidence classes s319's findings show it does not refuse: a capture labelling the
+   wrong commit, a `$` line that cannot replay, and a stale per-AC citation.
+
+verify: manual
+
+## BL-810 — carry-over evaluation runs party, elicitation, cross and adversarial rounds whose yield has never been measured
+
+**DEFECT (efficiency).** Carry-over-evaluation spawns in graph:
+
+| | s317 | s318 | s319 | s320 |
+|---|---|---|---|---|
+| Spawns | 49 | 79 | 88 | 114 |
+| Dollars | $96 | $110 | $87 | $127 |
+
+s320's step ran 5.8 machine hours, against 2.9 in s318 and 2.8 in s319. Cross shards appeared in s319 (24) and
+held in s320 (24); elicitation and adversarial shards grew alongside them.
+
+`docs/analysis/step-value-s317-s319.md` measured requirements, architecture, stories and sprint-review rounds and
+never carry-over's. No `Failure caught:` line exists for these rounds. Under the step-value ruling
+(`.claude/rules/operator-rulings.md`, "A step with no measured value goes"), an element with no measured value is
+removed or merged by the batch.
+
+Owed: measure s319 and s320 carry-over rounds by the step-value method: REFOUND, MISSED-BY-PRIOR,
+REPAIR-INTRODUCED and UNIQUE-SURVIVED, with a high-consequence guard. Remove each round with no unique surviving
+catch, and give each kept round its `Failure caught:` line.
+
+verify: manual
+
+## BL-811 — sharded stories elicitation costs thirteen times the single voice it replaced
+
+**DEFECT (efficiency).** Stories elicitation spawns read 23 for $72 in s317, 5 for $12 in s318, 92 for $162 in
+s319, and 44 for $65 in s320. 0.782.0 (BL-509) made stories elicitation sharded. The keep-sharded verdict in
+`docs/analysis/step-value-s317-s319.md` rests on s317's unique yield, so this entry does not reopen that verdict.
+It owes the cost per shard instead: the shard count, the seat's model binding, and whether the shards share
+one context write. Measure s319 and s320 yield per shard, so that the count is set by the yield and not by the
+part count.
+
+verify: manual
+
+## BL-812 — the efficiency program shipped fixes with no per-story outcome target, and the outcome went unmeasured until two sprints later
+
+**DEFECT (efficiency).** The ranked set summed to about $500 of removable cost against roughly $1,700–2,300 per
+sprint. Every closed entry closed on a tree receipt, and the "Measuring the change" paragraph under the ranked-set heading
+was never run. Per story, subagent dollars were flat ($88, $109, $88) across s317–s319, and machine hours were flat
+(4.8, 4.7, 4.7). In the same window, BL-808 through BL-811 added spawns, and BL-510's capture rules fed BL-507's
+fan-out instead of reducing it.
+
+Owed:
+1. **A target, measured on consumer transcripts by `docs/analysis/pipeline-efficiency-s317-s320/scripts/` over the
+   first graph sprint that runs the fixes:** subagent dollars per story and machine hours per story (lead active
+   plus agent wait, operator wait excluded) below s318's $109 and 4.7 h, and spawns per story below s318's 71.5.
+2. **The release that ships the last of BL-808 through BL-811 states that measurement as owed, and this entry
+   closes only on the measured sprint,** never on a tree receipt.
+
+verify: manual
