@@ -482,3 +482,27 @@ Shard c adds 28 full renders, read off the code. Each scored mutant costs an app
 
 verify: manual — V25 is owed an input that discriminates; the eight scored rows are held by phase pcvmut itself.
 
+## BL-804 — a remediator writes `derivations: not replayed` although replay is its default, and the join's refusal costs a whole re-dispatch
+
+**DEFECT (efficiency).** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 16, 01:07 EDT 2026-10-26). In graph s320, the `stories-party --pass 1` repair join refused at 05:05:46Z with `REFUSED: 11.md: derivations: not replayed; …` (the checks-field refusal in `core/scripts/join-remediator-shards.sh`). Part 11 is story 3.5, in `s320/shards/stories-party-repair-p1/11.md`. `core/team-roles/remediator.md:134-139` makes replay the default ("Replay is the default: run `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit"), but the remediator wrote `not replayed` anyway. Graph's lead recovered by contract: a record-only re-run (agent a0481edc5f18691e2) replayed 5 derivations and re-marked, and the re-join returned rc=0. The cost was one dispatch and about 2 minutes. One instance, measured from the transcript.
+
+Owed: a mechanism that makes the default the act, not the instruction. For example, the `--mark` path of `wait-for-deliverable.sh` could run the replay itself when a repair record says `not replayed` and its fences name no deferred document, then write the count. That moves a refusal the join already makes to the point where the remediator can still fix it. Measure the false-positive set first: a record whose fences are legitimately deferred must not be forced.
+
+verify: manual
+
+## BL-805 — a lead can start a `wait-for-deliverable.sh` beat with a shell `&`, which leaves an untracked waiter nothing reaps or reports
+
+**DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 29, 03:31 EDT 2026-10-26). Just before 07:29:08Z, graph's s320 lead started a beat as `wait-for-deliverable.sh … &` inside a foreground Bash call instead of with `run_in_background: true`. In its own words: "That last call backgrounded the beat with `&` instead of the proper `run_in_background` flag, so it won't notify me." It re-armed a proper beat (`b7ura551y`) and left the stray running to its own timeout. No outcome was affected, but nothing tracked or reaped the stray, and a lead that did NOT notice would have waited on a beat that can never wake it.
+
+Core states the flag (`core/skills/ai-dlc/SKILL.md:1024`, `:1033`: "`run_in_background: true`"). `core/hooks/ai-dlc-foreground-budget.sh` already parses a single `&` (its header, `:92`) but only to police a foreground budget, so this shape is not refused. Owed: a PreToolUse refusal of a Bash command that starts `wait-for-deliverable.sh` with a trailing or embedded `&`, with a remedy naming `run_in_background: true`. Grep the step files for every call it would refuse before shipping it (plan action 0a: a new DENY hook).
+
+verify: manual
+
+## BL-806 — a lead can write an estimated, future-dated time into `pipeline-snapshot.md`, and a resuming session reads it as fact
+
+**DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 30, 03:42 EDT 2026-10-26). At 07:39:12Z graph's s320 lead ran a `sed` that wrote `| 18/19 delivered at 07:50Z (still out: cross-1 only …` into `_bmad-output/pipeline-snapshot.md`. That stamp is 11 minutes after the moment it was written. The row's previous value read `16/19 delivered at 07:35Z`, so the time was estimated, not taken from `date`. `core/skills/ai-dlc/SKILL.md:52` makes a resuming session read that file in full before any pipeline action, so a wrong time there becomes a resuming lead's premise. No outcome was affected this time.
+
+Owed: a check, not an instruction, because the instruction to take times from `date` exists in this repo's own rules and was not followed. Either the snapshot writer stamps times itself, or a hook or validator refuses a snapshot time later than the write's own clock. Measure the false-positive set first: a deliberately future time (a stated deadline) must be spelled differently from a delivery stamp.
+
+verify: manual
+
