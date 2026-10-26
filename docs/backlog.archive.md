@@ -38356,7 +38356,7 @@ Consumer exposure: none. Operator answer 2026-10-24: graph never set EMIT_REPORT
 verify: sh bash core/fixtures/reconcile-emit-report/receipt-round9.sh BL-800
 ## BL-553 — the lead arms a beat on a sentinel nothing will write, to keep the Stop hook quiet
 
-**LANDED (v0.942.0, verified 5b34c8be6).** Closed by operator ruling 2026-10-25 (part (b), dead premise); docs only.
+**LANDED (v0.942.0, verified 32675cf1f).** Closed by operator ruling 2026-10-25 (part (b), dead premise); docs only.
 
 **Operator ruling 2026-10-25: part (b) is closed as a dead premise, and that closes the entry.** The entry's own text says part (b), the target-containment refusal, is not buildable as specified: the spawn ledger has 14 of 6,317 rows with a deliverable field, so the dispatch join the refusal would key on has almost nothing to join against, and even a generous reconstruction still refuses about 190 legitimate `--since`-only beats. Part (b) was the only part keeping this entry open (the DEFECT paragraph below ends "The entry stays open only on part (b), below."), so with it closed nothing is owed here.
 
@@ -38372,7 +38372,7 @@ verify: manual
 
 ## BL-802 — the write ledger records no row for a sections round's document outside the state dir, so the lane join refuses a lane whose only file lies there
 
-**LANDED (v0.942.0, verified 5b34c8be6).** Filed and closed in this release; the write ledger now records a sections round's document outside the state dir.
+**LANDED (v0.942.0, verified 32675cf1f).** Filed and closed in this release; the write ledger now records a sections round's document outside the state dir.
 
 **DEFECT.** On the consumer, `join-remediator-shards.sh` refused two serial-repair lane joins at `join-remediator-shards.sh:2448` (the `REFUSED` line), and both records were hand-assembled on operator approval. Instance one is the architecture party round, window [2026-10-25T04:20:52Z, 10:14:00Z], `s320/architecture-party-serial-repair-p1.md`. Instance two is the architecture elicitation round, window [2026-10-25T23:27:15Z, 23:42:33Z], `s320/architecture-elicitation-serial-repair-p1.md`. In both, the lane's only file was `docs/architecture.md`, the `document` of a sections split manifest, which lies outside the state dir. The control is `s320/coe-party-serial-repair-p1.md`: its document lies inside the state dir, and the same `--artifact-path _bmad-output` joined it.
 
@@ -38385,7 +38385,7 @@ Filed by the consumer as `PC-S320-JOIN-REMEDIATOR-SHARDS-REFUSES-A-LANE-WHOSE-ON
 verify: sh bash core/fixtures/remediator-shard-join/receipt-bl802.sh
 ## BL-691 — a nested pool makes its pool root outside the OUTER unit's watched TMPDIR, so the outer watcher does not see the nested pool's scratch writes
 
-**LANDED (v0.943.0, verified 1054383e8).** A nested pool registers its root first in the enclosing unit's .pool-nested and the watcher reads that list under builtin-only guards, and the receipt now drives the watcher and the registration order.
+**LANDED (v0.943.0, verified cef015398).** A nested pool registers its root first in the enclosing unit's .pool-nested and the watcher reads that list under builtin-only guards, and the receipt now drives the watcher and the registration order.
 
 **NOTE.** A fixture that drives the real hook's pool makes a nested pool: `core/fixtures/prepush-pool-depth/run.sh` calls `run_fixtures` at depth 1 (`:79`, `:120`), and `core/fixtures/readset-skip/run.sh` sources the extracted FIXTURE_POOL block (`:287`, `:361`). `core/fixtures/self-update-fixture-log/run.sh` drives the hook through `h_enter` (`:2090`) and names PREPUSH_POOL_DEPTH (`:2063`); whether it reaches `run_fixtures` was not established. The nested pool chooses its root at the `out=` line (`.githooks/pre-push:2030`, `core/git-hooks/pre-push:1938`), which is `/tmp/fx.XXXXXX` and not under the caller's TMPDIR. The outer pool watches a per-unit TMPDIR (`TMPDIR="$wr" "$@"`, `.githooks/pre-push:2206`; the watched-root limit is commented at `:467-:469`). The nested pool's scratch writes land outside that root, so the outer watcher sees only the nested hook's log output. Whether the outer progress check still holds for those three fixtures is UNRUN.
 
@@ -38401,7 +38401,7 @@ verify: sh for f in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$f" ] |
 
 ## BL-793 — the protect hook's deny is per call, so one protected token refuses a whole mixed ctx_batch_execute batch
 
-**LANDED (v0.944.0, verified 50a0ca75f).** The deny decision is unchanged; a denied ctx_batch_execute batch now names its offending commands by 1-based position and label, states the non-offending count, and tells the agent to re-send the rest as its own batch. The naming step runs only on a deny. A grep error (status 2) in the naming step reads as no offender, so the REASON falls back to base's text; that is the designed fail-closed path, and the deny decision does not depend on it. See the Progress paragraph below.
+**LANDED (v0.944.0, verified 438352f93).** The deny decision is unchanged; a denied ctx_batch_execute batch now names its offending commands by 1-based position and label, states the non-offending count, and tells the agent to re-send the rest as its own batch. The naming step runs only on a deny. A grep error (status 2) in the naming step reads as no offender, so the REASON falls back to base's text; that is the designed fail-closed path, and the deny decision does not depend on it. See the Progress paragraph below.
 
 **NOTE.** Source: batch 241, lead ai-dlc-58, cluster r7. A residual of BL-781. Not built. The part already shipped is BL-794, which removed the CONTEXT sentence that contradicted a consumer layer.
 
@@ -38422,7 +38422,7 @@ verify: sh H=core/hooks/ai-dlc-protect.sh; [ -f "$H" ] || exit 9; d=$(mktemp -d)
 
 ## BL-799 — the derivation validator gives a refused `&&`/`;` chain an ALLOWLIST FAIL with no per-segment ARGV/WORD lines, so check-owed-derivations.sh's living sweep cannot judge a core operand inside one
 
-**LANDED (v0.944.0, verified 092dacb81).** `--explain-cmd` explains every safe segment of a refused control-operator chain, each re-gated before any eval, with the closed-list cd carry and the narrowings stated below; the vacuous `cyc` field is removed. Operator ruling, 2026-10-25, relayed by lead ai-dlc-b4: "Ship if it matches". It matches: s315 +2 at push-candidate-ledger.md :1377 and :1379, :1309 silent, s316-s320 unchanged.
+**LANDED (v0.944.0, verified 438352f93).** `--explain-cmd` explains every safe segment of a refused control-operator chain, each re-gated before any eval, with the closed-list cd carry and the narrowings stated below; the vacuous `cyc` field is removed. Operator ruling, 2026-10-25, relayed by lead ai-dlc-b4: "Ship if it matches". It matches: s315 +2 at push-candidate-ledger.md :1377 and :1379, :1309 silent, s316-s320 unchanged.
 
 **NOTE.** Graph has 2 instances at s315, both in push-candidate-ledger.md, both `;` chains with a core operand that the living sweep does not see: `:1377` `grep -n "PERSONA_MARKERS\|PHASE_LABELS" .claude/skills/ai-dlc/steps/retro.md; echo "exit:$?"` and `:1379` `grep -rn "John (PM)\|Amelia (Dev)\|Winston (Architect)" .claude/team-roles/*.md; echo "exit:$?"`. A third `;` chain at `:1309` reads CLAUDE.md, which is not core, so it is correctly silent. s320 has 0 of the named shapes. The source is the contract adversary's s315-s320 FAIL census, which lists every validator FAIL over graph's living documents per sprint tree. Filed OPEN, not built.
 
@@ -38466,7 +38466,7 @@ verify: sh V=core/scripts/validate-artifact-derivations.sh; [ -f "$V" ] || exit 
 
 ## BL-803 — the lane join's UNWRITTEN refusal sends the reader to the wrong cause when the cited file's only ledgered write lies outside the window
 
-**LANDED (v0.945.0, verified e18a5bd69).**
+**LANDED (v0.945.0, verified eaa8ff6ba).**
 
 **NOTE.** Found by the batch-242 graph watcher (ai-dlc-fa, poll 17, 01:18 EDT 2026-10-26). Graph s320 `stories-party-serial --pass 1 --since 2026-10-26T05:08:00Z` refused `lane-5.md` at 05:14:06Z citing `s320/stories/story-2-2-...md`. The write ledger holds 15 Edit rows for that file, the last at 04:58:11Z by agent a738d69fd9219c258, which is before `--since`; lane-5's `artifact_sha_before` equals its `artifact_sha_after` (ff5b6dd2b4b99cfe). The refusal is correct, but its remedy text named only Bash and never-written causes, which is not the cause here.
 

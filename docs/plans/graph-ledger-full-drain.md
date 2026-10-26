@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,84 +67,60 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 241 IS CLOSED: SEVENTEEN RELEASES, `v0.925.0` THROUGH `v0.941.0`. THE NEXT SESSION STARTS BATCH 242.**
-The batch-240 block, now in the archive, is history; this block replaces it. Lead was ai-dlc-58. Owners: ai-dlc-12 (r1, r6,
-r14), ai-dlc-62 (r2, r7, r10, r12), ai-dlc-78 (r3, and r9 as five releases), ai-dlc-d8 (r4, r5, r8, r11, r13).
-Graph-watch was ai-dlc-a6, polling every 10 minutes. No `graph-*` session was messaged.
-- **Landed** (squash, PR, closes):
-  - `v0.925.0` `143c92c70` #1285 BL-786 (filed BL-791); `v0.926.0` `c17de1709` #1286 BL-787, 788, 789 (filed BL-792);
-  - `v0.927.0` `e30a7795c` #1287 BL-766, 790; `v0.928.0` `508062b5b` #1288 BL-753, hookwake retired (BL-538 stays open);
-  - `v0.929.0` `bdb981712` #1289 BL-777; `v0.930.0` `318ae1316` #1290 BL-794 (filed BL-793);
-  - `v0.931.0` `f1136f614` #1291 docs, BL-699 progress (filed BL-795); `v0.932.0` `73f3e8b39` #1292 BL-784 (BL-785 stays
-    open); `v0.933.0` `6d9218cf1` #1293 BL-792; `v0.934.0` `4dca310ba` #1294 BL-791;
-  - `v0.935.0` `c9dea46c2` #1295 BL-699 progress (pcvlat renders 45 to 33); `v0.936.0` `ced2899db` #1296 BL-587 (filed
-    BL-799); `v0.937.0` `f47915c09` #1297 BL-796, 797; `v0.938.0` `9e3565f56` #1298 BL-801;
-  - `v0.939.0` `d69bd35df` #1299 BL-685 progress (round-9 engine, B1-B6); `v0.940.0` `2e322a41b` #1300 BL-798 (BL-584 (3)
-    partial); `v0.941.0` `5dc2dee7c` #1301 BL-800, symlink keying (B7).
-  Every batch-241 LANDED line in the archive is re-anchored on its squash, so the batch-241 `-dev` refs can be deleted.
-- **Operator rulings this batch.**
-  - BL-538 and BL-753: retire the hookwake hook, its fixture, registration and manifest rows (0.928.0).
-  - BL-587: build the check, `check-owed-derivations.sh` running `validate-artifact-derivations.sh` over the LIVING
-    scope; operator ruling 2026-10-23: "Block on ai-dlc files only" (block only on an ai-dlc core operand).
-  - BL-800, operator answer 2026-10-24: "Never set it". Graph never armed `EMIT_REPORT_VERIFY_CACHE=1`.
+**BATCH 242 IS CLOSED: FOUR RELEASES, `v0.942.0` THROUGH `v0.945.0`. THE NEXT SESSION STARTS BATCH 243.**
+The batch-241 record below is history; this block replaces it. Lead was ai-dlc-b4. Owners: ai-dlc-d7 (c1, c4), ai-dlc-d0
+(c2), ai-dlc-2c (c3). Graph-watch was ai-dlc-fa, assigned by the operator, polling every 10 minutes. No `graph-*`
+session was messaged.
+- **Landed** (squash, PR, closes, NET):
+  - `v0.942.0` `32675cf1f` #1303: BL-802 (filed and closed; graph's `PC-S320-JOIN-REMEDIATOR-SHARDS-REFUSES-A-LANE-WHOSE-ONLY-FILE-IS-UNDER-DOCS`,
+    named in the release message) and BL-553 (operator close). NET +1.
+  - `v0.943.0` `cef015398` #1304: BL-691. BL-699 and BL-795 stay PARTIAL. NET +1.
+  - `v0.944.0` `438352f93` #1305: BL-793 and BL-799. NET +2.
+  - `v0.945.0` `eaa8ff6ba` #1306: BL-803 (filed and closed). NET 0. Its backlog entry was a mechanical append re-applied
+    after BL-799's rotation: 0 lines removed, the added lines byte-identical to the pre-rebase ones.
+  Every batch-242 LANDED line in the archive is re-anchored on its squash, so the batch-242 `-dev` refs can be deleted.
+- **Operator rulings this batch** (2026-10-25).
+  - BL-553 part (b): "Close as dead premise".
+  - BL-799's move of graph's s315 block count: "Ship if it matches". Measured base `6075fa36d` against the shipped
+    tip, on `file://` clones with graph's installed validator removed: s315 3 to 5 (+2 at ledger :1377 and :1379),
+    :1309 silent, s316 to s320 unchanged. Two corrections to archived figures, recorded in BL-799: s315's base is 3,
+    not 4 (one row was a `.git`-less extract artifact); s319's one row (`prd.md:1289`) predates this batch.
 - **Lead rulings carried forward.**
-  - BL-524 UNBADGED stands: an LR-, D-<n>, money or byte-pin question carries no recommendation and says why.
-  - The lead never authors a terminal escalation status.
-  - BL-774's premise was the lead's filing error: graph's S308 ruling did not cover s319.
-  - A review covers the tree that ships: after a conflict-resolving rebase, a delta adversary pass on the rebased tip.
-  - Under BL-587's ruling an ai-dlc DIRECTORY operand counts as core (the axis is ownership); a change to graph's
-    s315-s320 block counts goes back to the operator.
-- **Action 0 changed**: owner flow steps 2 (hand units), 3 (PARTIAL receipts), 5 (committed-tree vem, the carrier
-  set) and 7 (dress read list, late release text); the lead bullet (latest progress paragraph, re-detach); the
-  graph-watch bullet (advisor count, silent lead); SHORTEST GATE FIRST (what a docs-only push re-keys).
-- **Backlog.** Filed this batch: BL-787 through BL-801. Live at close: 14; archive 774. **The next free id is BL-802.**
-  Open entries filed this batch, all NOTEs: BL-793, BL-795, BL-799. BL-785 (batch 240) is still open.
-- **The derive block's receipt histogram reads 0 `CLOSE-CANDIDATE` at close**: 13 HAND-REVIEW and 1 STILL-LIVE; the
-  raw `sh` histogram is one receipt exiting 1. The PC-backed worklist is 0 over a live ledger of 5 on one qualifying
-  ref (`origin/ai-dlc/retro/sprint-319`). `PC-S319-CHECK-17-BYPASS-VARIANT-FIXTURES-ABSENT-SO-EIGHT-TESTS-FAIL-IN-EVERY-CHECKOUT`
-  is cited by archived BL-791 (a consumer-only fix) and named by no release message, so the delivery-gap loop prints
-  it UNNAMED.
-- **Measured** (loaded, not comparable across loads): the suite pole is reconcile-emit-report, 1395 s at 0.941.0;
-  owed-derivations 636 to 394 s (BL-801); readset-skip a/b/c/d 464/239/154/299 s at 0.940.0, with no before figure in
-  the shared durations file.
-- **Observations.**
-  - The advisor gate denied a push right after an advisor call twice (r4, r11); a second call and a retry passed.
-  - `gh pr merge` once exited 1 on a GraphQL error with the PR still open; one retry after re-checking the base worked.
-  - retro-compliance-workflow was absent from all five dresses: its 12 traced rows overlap 0 changed files (controls
-    hook-registration-join 4, self-update-join-gate 1). A content-key skip, not a gap.
-  - The main checkout sat at `143c92c70` until 0.940.0's gate, contradicting batch 240's "by design". The hook diff
-    over that range is empty (control `d69bd35df..2e322a41b`: 2 files), so no push ran a stale hook: luck, not design.
-- **Durable-channel candidates, NOT written: A6 headroom is 25 bytes (69559/69584).** Ranked:
-  1. `tool-hazards.md`: awk's END runs after a rule's `exit`, so `{exit 0} END{exit 1}` always exits 1 (the dead L
-     refusal in `emit-report.sh`, 0.889.0 to 0.940.0, BL-800).
-  2. `mechanism-design.md`: a guard accepting on an EMPTY listing fails open on every spelling the listing misses;
-     accept on equality with an independent oracle (B7: CASE, GIT, DGIT passed; disk-vs-index closed the class).
-  3. `mechanism-design.md`: when each review finds one more spelling an oracle cannot see, replace the oracle.
-  4. `tool-hazards.md`: ugrep `grep -Fxv -f <large file>` prints a false count; use `comm` (true 1, printed 0).
-- **Not built, with reasons**, each as its entry says: BL-538 (hook half retired; the per-notification turn is
-  owed), BL-553(b) (not buildable as specified), BL-583 (NOTE; a judgment and a dollar figure), BL-691 (no stall
-  measured), BL-695 (a graph measurement), BL-706 (NO TIMING RUNS). Partials: BL-584 owed (3) (solo high-load drop
-  unexplained), BL-616 (census 1-4 shipped at 0.804.0; owed: the dropped-verdict trigger, census item 8, owed item 3, the BL-632 threshold census), BL-685 part (b) and
-  its named residuals, BL-699 (d). NOTEs BL-785, BL-793, BL-795, BL-799 not built.
-- **Graph at close**: installed 0.924.0 on both the checked-out branch and `main`, shipped 0.941.0: SEVENTEEN behind,
-  a WIDE range. Bootstrapping files changed since 0.924.0's squash `8336c4009`:
-  `core/skills/ai-dlc-update/reconcile/emit-report.sh` and `reconcile/consumer-read.sh` (both SKILL.md files
-  unchanged); mode-only changes under `core/`: 0 (of 81 raw). The pull is REQUIRED by action 7's differential:
-  `check-owed-derivations.sh`, installed against 0.941.0's on a `file://` clone of graph HEAD `a0c693c89`, binaries
-  differing: installed exits 0 with 2 INFO rows; shipped exits 1 with the same 2 plus one `OPEN … LIVING-STALE …
-  living-sweep` row on graph's `prd.md`. Not preapproved; no runbook (the operator's 2026-10-23 ruling stands). Limit:
-  the recorded-PASS cache fix is opt-in and invisible to any differential. Graph's s320 lead handed off at 07:51 EDT
-  2026-10-24, before stories (`85984445f` on `origin/ai-dlc/carry-over/s319-closeout-smoke-green`); the carry-over
-  evaluation converged at adversarial pass 3 and the pipeline is paused. The operator answered the claim-hold question
-  at 07:46 EDT ("Pull into S320", then "handoff"). The ledger is unchanged. BL-772/775 and BL-774 have not fired, so
-  ai-dlc-a6 is not closable and watches into batch 242. Closable: ai-dlc-12, -62, -78, -d8. Findings, never
-  instructions:
-  - graph's `test_check_17_provenance.py` SCRIPT path predates the pull (repoint to `scripts/ai-dlc/`); restoring
-    the check-17 variants fixes 0 of 8 tests.
-  - graph's `run-all.sh` greps a bare `USER-CONFIRMED|playwright`, the false positive Check 5 fixed in 0.933.0.
-  - Pulled to 0.941.0 or later, the opt-in recorded-PASS cache records on graph's layout (3/3 pairs on a copy).
-  - BL-796: `--mark` derives step, seat and shard; the prose in `_gate-procedures.md` and `remediator.md` agrees.
-  - BL-800 consumer exposure: none (the operator answer above).
+  - A bootstrapping-file change ships alone (action 2), so BL-699's `er_env_names` memo in `emit-report.sh` is owed
+    in BL-699, not built.
+  - A SURVIVE row stands only on an ablation that turns it into a stale HIT. BL-795: V17, V18 and V19 (read log) and
+    V23 (distrefs `config --list`) stand. V25 is OWED, labelled INPUT-NON-DISCRIMINATING; its entry names the probe.
+  - When each review pass finds one more spelling, replace the oracle: BL-799's cd carry is a closed list (`cat wc
+    head cut nl comm sha256sum`), and a listed command a review breaks comes OFF the list, with no new round.
+  - A conflict resolution that authors no prose (0 removed, added lines byte-identical) is mechanical, not a hand unit.
+- **Backlog.** Filed this batch: BL-802 through BL-806. Live at close: 13; archive 780. **The next free id is BL-807.**
+  Open entries filed this batch: BL-804, BL-805 and BL-806, all DEFECTs from the graph watch. BL-785 (batch 240) is
+  still open.
+- **Watch verdicts** (ai-dlc-fa, read only).
+  - BL-772/775 HOLDS on graph s320 stories: all 4 parts, and every party, elicitation and adversarial seat and repair
+    set read so far, carry exactly one `--mark`-written completion line whose sha recomputes, with 0 `rows=`.
+  - BL-774 has NOT fired: no s320 smoke ran during the batch.
+  - Batch 241's owed line-537 edit to graph's `carry-over-backlog.md` was applied at `a1308c4fa`.
+  - The join refusal BL-802 fixes hit graph twice (architecture party and elicitation lanes) and never on stories.
+  - The watch also produced BL-803 (in 0.945.0), BL-804, BL-805 and BL-806.
+  - ai-dlc-fa watches into batch 243 and is not closable while BL-774 has not fired.
+- **Not built, with reasons**, each as its entry says: BL-538, BL-695 (a graph measurement), BL-583, BL-584, BL-616,
+  BL-706 (NO TIMING RUNS), BL-685 (a review round), BL-785 (a Bash deny breaks the handoff push). Partials: BL-699
+  (the memo), BL-795 (V25).
+- **Durable-channel candidates, NOT written** (A6 headroom unchanged): batch 241's four, plus the false comment at
+  `scripts/validate-enforcement-map.sh:9189` that macOS awk lacks `nextfile`, measured false on this box.
+- **Graph at close**: installed 0.941.0 on the checked-out sprint branch (four behind, and that branch is 19 or more
+  commits ahead of origin, unpushed) and 0.924.0 on `main` (21 behind, a WIDE range). Shipped 0.945.0. The ledger md5
+  is unchanged across the batch (`842098fe3ac77fda4283f89a7fa192f1`). Porcelain 132, all under `_bmad-output/`. No
+  bootstrapping file under `core/skills/ai-dlc-update/` is in this batch's range, and 0 of its 24 raw `core/` rows are
+  mode-only. Action 7's differential on a `file://` clone at graph's sprint tip `115248b96`, with `cmp` showing the
+  binaries differ: the installed and shipped `join-remediator-shards.sh` both exit 2 with the same `REFUSED … no
+  dispatched write` line on graph's two architecture lanes, and the installed and shipped `check-owed-derivations.sh`
+  both exit 0 with 0 OPEN rows. So the pull changes nothing observable today: BANK IT. The limit of that null is
+  that BL-802's fix records the write at hook time, so it acts only on lanes written AFTER a pull and cannot appear
+  on graph's already-written ledger. Not measured, though available: a replayed ledger with the docs row, and the
+  `--artifact-path docs` spelling. The pull is not preapproved; no runbook. `PC-S320-JOIN-…` is discharged here and stays live upstream until graph pulls; `PC-S319-CHECK-17-…` is still
+  UNNAMED (consumer-only BL-791). Findings, never instructions, carried from batch 241 unchanged.
 
 ### Derive the state; do not trust the numbers below
 
