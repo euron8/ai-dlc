@@ -592,6 +592,110 @@ elif p_markderive "$EM40B/wait-for-deliverable.sh"; then
 else
   ok "EC40m2 the plain -repair branch removed: KILLED by [EC40]"
 fi
+# EC41 (BL-804): --mark / --mark-repair replay a remediator record stating `derivations: not replayed`.
+p_replay "$SRCDIR/wait-for-deliverable.sh" && ok "EC41: --mark replays a not replayed remediator part -- two reproducing fences under one triple written replayed 2 and sealed, a stale fence refused 64 with the file byte-identical (the deferral remedy only in a section-split dir), a deferred line, a non-repair seat and a part with no repaired entry untouched; --mark-repair on a joined record rewrites the serial block's own line to replayed 3 and leaves the shard body's line alone" \
+  || bad "EC41: the --mark replay failed at case ${R804:-?} (BL-804)"
+# EC41m / EC41m2: the rewrite dropped (KILLED by case a), and a rewrite on a forged OK verdict that never
+# ran the validator (KILLED by case b). Each built in a copy of the whole script dir, so the join and the
+# validator sit beside the mutant; the unmutated control in the same dir passes first.
+# TMPDIR points into $WORK for these runs: the `drop` mutant never removes the wfd-mark.* snapshot it took,
+# and under the host's TMPDIR that file outlived the fixture. Restored after the loop.
+_ec41_tmp="${TMPDIR-}"; _ec41_set="${TMPDIR+1}"; export TMPDIR="$WORK"
+for _m in drop forge; do
+  EM41="$(mktemp -d "$WORK/ec41m.XXXXXX")" || exit 2
+  cp "$SRCDIR"/*.sh "$EM41/" || { echo "FIXTURE BROKEN: EC41m could not copy the sibling scripts into $EM41" >&2; exit 2; }
+  case "$_m" in
+    drop) _want=a; awk '$0 != "          MK_SRC=\"$MK_RW\""' "$SRCDIR/wait-for-deliverable.sh" > "$EM41/wfd.mut" ;;
+    forge) _want=b; awk -v k='bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?' '{ i = index($0, k)
+        if (i && substr($0, i + length(k)) == "") $0 = substr($0, 1, i - 1) "echo \"OK: 2 derivation(s) in 1 block(s) across 1 file(s) reproduce at HEAD.\" > \"$MK_VO\"; mk_vrc_=0"
+        print }' "$SRCDIR/wait-for-deliverable.sh" > "$EM41/wfd.mut" ;;
+  esac || { echo "FIXTURE BROKEN: EC41m ($_m) could not write the mutant" >&2; exit 2; }
+  if cmp -s "$SRCDIR/wait-for-deliverable.sh" "$EM41/wfd.mut"; then
+    bad "EC41m ($_m): FIXTURE STALE -- the mutation matched nothing in $SRCDIR/wait-for-deliverable.sh; re-anchor it, never relax the assertion"
+  elif ! bash -n "$EM41/wfd.mut" 2>/dev/null || ! p_replay "$EM41/wait-for-deliverable.sh"; then
+    bad "EC41m ($_m): the mutant is not valid shell or the unmutated control in the copy did not pass (case ${R804:-?})"
+  else
+    mv -f "$EM41/wfd.mut" "$EM41/wait-for-deliverable.sh"
+    if p_replay "$EM41/wait-for-deliverable.sh"; then
+      bad "EC41m ($_m): SURVIVED -- EC41 holds against it"
+    elif [ "$R804" = "$_want" ]; then
+      ok "EC41m ($_m): KILLED by [EC41 case $_want]"
+    else
+      bad "EC41m ($_m): failed at case $R804, not its own case $_want"
+    fi
+  fi
+done
+if [ -n "$_ec41_set" ]; then export TMPDIR="$_ec41_tmp"; else unset TMPDIR; fi
+# EC42 (BL-816): --mark checks a claimed `replayed <n>` and refuses only on a stale fence inside the block it seals.
+p_claim "$SRCDIR/wait-for-deliverable.sh" && ok "EC42: --mark checks a claimed replay -- a clean joined record and a part claiming replayed 7 over 2 reproducing fences marked, sealed and never rewritten; a stale fence on the FIRST and on the LAST fence line of the serial block, and in a part, refused 64 with the file byte-identical; a stale fence in the SHARD segment above it left to the join, the serial block marked" \
+  || bad "EC42: the claimed-replay check failed at case ${R816:-?} (BL-816)"
+# EC42m: attribution dropped (any FAIL refuses; KILLED by case b), attribution inverted (KILLED by c), the
+# range opened one chunk late (KILLED by c) and closed one chunk early (KILLED by d). Each built in a copy of
+# the whole script dir, the unmutated control in that copy passing first. The line-level `<` for `<=` at
+# either bound is an EQUIVALENT mutant and is not committed: a bound is a chunk edge (a triple, a shard
+# marker, a terminator), and checks_field skips fence lines, so no `$ ` line can sit on one.
+for _m in attr invert late early; do
+  EM42="$(mktemp -d "$WORK/ec42m.XXXXXX")" || exit 2
+  cp "$SRCDIR"/*.sh "$EM42/" || { echo "FIXTURE BROKEN: EC42m could not copy the sibling scripts into $EM42" >&2; exit 2; }
+  _k='ln = substr(r, 1, RLENGTH) + 0; if (ln >= lo + 0 && ln <= hi + 0) print }'
+  _j='if (sy && nrl == 1 && own) print "RPL\t" cl[lo] "\t" (hi < nk ? cl[hi + 1] - 1 : FNR)'
+  case "$_m" in
+    attr) _want=b; _t=wait-for-deliverable.sh; _r='ln = substr(r, 1, RLENGTH) + 0; print }' ;;
+    invert) _want=c; _t=wait-for-deliverable.sh; _r='ln = substr(r, 1, RLENGTH) + 0; if (!(ln >= lo + 0 && ln <= hi + 0)) print }' ;;
+    late) _want=c; _t=join-remediator-shards.sh; _k="$_j"; _r='if (sy && nrl == 1 && own) print "RPL\t" cl[lo + 1] "\t" (hi < nk ? cl[hi + 1] - 1 : FNR)' ;;
+    early) _want=d; _t=join-remediator-shards.sh; _k="$_j"; _r='if (sy && nrl == 1 && own) print "RPL\t" cl[lo] "\t" (cl[hi] - 1)' ;;
+  esac
+  # The anchors reach awk through ENVIRON, which keeps their `\t` as two characters (awk -v would not).
+  K42="$_k" R42="$_r" awk 'BEGIN { k = ENVIRON["K42"]; r = ENVIRON["R42"] } { i = index($0, k); if (i) $0 = substr($0, 1, i - 1) r substr($0, i + length(k)); print }' \
+    "$SRCDIR/$_t" > "$EM42/mut" || { echo "FIXTURE BROKEN: EC42m ($_m) could not write the mutant" >&2; exit 2; }
+  if cmp -s "$SRCDIR/$_t" "$EM42/mut"; then
+    bad "EC42m ($_m): FIXTURE STALE -- the mutation matched nothing in $SRCDIR/$_t; re-anchor it, never relax the assertion"
+  elif ! bash -n "$EM42/mut" 2>/dev/null || ! p_claim "$EM42/wait-for-deliverable.sh"; then
+    bad "EC42m ($_m): the mutant is not valid shell or the unmutated control in the copy did not pass (case ${R816:-?})"
+  else
+    mv -f "$EM42/mut" "$EM42/$_t"
+    if p_claim "$EM42/wait-for-deliverable.sh"; then
+      bad "EC42m ($_m): SURVIVED -- EC42 holds against it"
+    elif [ "$R816" = "$_want" ]; then
+      ok "EC42m ($_m): KILLED by [EC42 case $_want]"
+    else
+      bad "EC42m ($_m): failed at case $R816, not its own case $_want"
+    fi
+  fi
+done
+# EC43 (BL-816, B1): a validator exit 1 with no `FAIL: <n> stale or unrunnable` summary is a crash, never a FAIL set
+# that misses the block being sealed. Predicate p_vcrash in lib.sh.
+p_vcrash "$SRCDIR" && ok "EC43: a validator that dies under set -u (exit 1, no FAIL line) -> --mark-repair over a stale replayed 2 block and --mark over a clean not-replayed part each refused 64 as no verdict, the file byte-identical; the real validator marks a clean record and refuses a stale fence as stale" \
+  || bad "EC43: the crashed-validator refusal failed at case ${RVC:-?} (BL-816)"
+# EC43m: (summary) the summary-line requirement reverted in --mark, KILLED by crash-serial; (reword) the validator's
+# summary reworded at its emission site, KILLED by ctl-stale, and the reworded run must still refuse that stale
+# fence 64 as no verdict with the file byte-identical (fail closed, never sealed). Each in a copy of the whole dir.
+for _m in summary reword; do
+  EM43="$(mktemp -d "$WORK/ec43m.XXXXXX")" || exit 2
+  cp "$SRCDIR"/*.sh "$EM43/" || { echo "FIXTURE BROKEN: EC43m could not copy the sibling scripts into $EM43" >&2; exit 2; }
+  case "$_m" in
+    summary) _want=crash-serial; _t=wait-for-deliverable.sh; _k="[ \"\$mk_vrc_\" -eq 1 ] && grep -q '^FAIL: [0-9][0-9]* stale or unrunnable derivation' \"\$MK_VE\" && mk_vs_=1"; _r="[ \"\$mk_vrc_\" -eq 1 ] && mk_vs_=1" ;;
+    reword) _want=ctl-stale; _t=validate-artifact-derivations.sh; _k="printf 'FAIL: %s stale or unrunnable derivation(s) of"; _r="printf 'FAIL: %s derivation(s) stale or unrunnable of" ;;
+  esac
+  K43="$_k" R43="$_r" awk 'BEGIN { k = ENVIRON["K43"]; r = ENVIRON["R43"] } { i = index($0, k); if (i) $0 = substr($0, 1, i - 1) r substr($0, i + length(k)); print }' \
+    "$SRCDIR/$_t" > "$EM43/mut" || { echo "FIXTURE BROKEN: EC43m ($_m) could not write the mutant" >&2; exit 2; }
+  if cmp -s "$SRCDIR/$_t" "$EM43/mut"; then
+    bad "EC43m ($_m): FIXTURE STALE -- the mutation matched nothing in $SRCDIR/$_t; re-anchor it, never relax the assertion"
+  elif ! bash -n "$EM43/mut" 2>/dev/null || ! p_vcrash "$EM43"; then
+    bad "EC43m ($_m): the mutant is not valid shell or the unmutated control in the copy did not pass (case ${RVC:-?})"
+  else
+    mv -f "$EM43/mut" "$EM43/$_t"
+    if p_vcrash "$EM43"; then
+      bad "EC43m ($_m): SURVIVED -- EC43 holds against it"
+    elif [ "$RVC" != "$_want" ]; then
+      bad "EC43m ($_m): failed at case $RVC, not its own case $_want"
+    elif [ "$_m" = reword ] && ! { _f="$RVC_W/_bmad-output/planning-artifacts/s9/c-repair-p1.md"; cmp -s "$_f" "$_f.before" && has "$_f.out" 'gave no verdict (exit 1)'; }; then
+      bad "EC43m (reword): KILLED, but the reworded summary did not fail closed -- the stale fence was not refused as no verdict with the file byte-identical"
+    else
+      ok "EC43m ($_m): KILLED by [EC43 case $_want]"
+    fi
+  fi
+done
 p_gaploc "$JOIN" && ok "EC35:--escalations, a gap-fill edit's location is REPORTED after the count, rc 0 -- a section citing D-5 named, the adjacent section of the same file not, a dead section copy mapped through its manifest span, an unresolvable cite said so" || bad "EC35: the gap-fill location did not resolve as specified (rc=$RC): $(cat "$JO")"
 p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
   || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"
@@ -785,6 +889,108 @@ else
   else
     bad "LPm4: LP4 failed for another reason than the spelling ($(lc_why))"
   fi
+fi
+
+# ---- BL-807, claim 1: a round in which no lane wrote the subject joins; a lane that cited a file, a lane agent with a
+# subject row outside the window, or a part record with no row still refuses. Predicates in lib.sh (p_nl*).
+p_nl2lane "$JOIN" && ok "NL1: the lane round's two lanes, both \`edit: n/a\`, an empty ledger window -> JOINED (2 parts, 0 writers), the header's no-lane line REPLACING the one-writer sentence, no lane report (-serial)" \
+  || bad "NL1: the two-lane no-edit round did not join with the no-lane header (rc=$RC): $(grep -m1 REFUSED "$JO")"
+p_nlesc "$JOIN" && ok "NL2: a round-one record, one lane \`edit: n/a\` and one ESCALATED entry naming a story -> JOINED, ESCALATED-COUNT 1, LANE-COUNT 0, the escalation to the fan-in" \
+  || bad "NL2: the n/a + escalated round did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"
+p_nlcites "$JOIN" && ok "NL3: one lane cites a file it never ledgered, the window empty -> REFUSED with the 'records no dispatched write' line verbatim AND the coverage join's UNWRITTEN line" \
+  || bad "NL3: a lane citing an unledgered edit was not refused with both lines (rc=$RC): $(grep -m2 REFUSED "$JO" | tr '\n' ' ')"
+p_nloutside "$JOIN" && ok "NL4: a lane agent's only subject write lies BEFORE --since and is cited by no part -> REFUSED naming the row" \
+  || bad "NL4: a lane agent's out-of-window subject write was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
+p_nlnorow "$JOIN" && ok "NL5: a part record with no ledger row -> REFUSED (its writer is unknown), never accepted over an empty lane set" \
+  || bad "NL5: a part with no ledger row was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
+p_nldoc "$JOIN" && ok "NL6: --document, every section part \`edit: n/a\`, no section copy written -> JOINED, assembled, the section sentence replaced by the no-lane line" \
+  || bad "NL6: the no-edit document round did not join with the no-lane header (rc=$RC): $(grep -m1 REFUSED "$JO")"
+# NL7: key 2 judges the edit: VALUE, not its tokens. The same world (a Bash write to the subject, no ledger row)
+# refuses with an extension-less cite and joins with the ALLOW twin `` `n/a` (escalated) ``, one property apart.
+if p_nlnoext "$JOIN"; then
+  _nl7=$RC; p_nlnoext "$JOIN" '`n/a` (escalated)'
+  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
+    ok "NL7: a lane citing the subject with no extension (\`.../story-2.1-positions-on-demand\` line 3), its write unledgered -> REFUSED 'records no dispatched write' (rc=$_nl7); the same world with \`n/a\` (escalated) -> JOINED"
+  else bad "NL7: the ALLOW twin \`n/a\` (escalated) did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
+else
+  bad "NL7: a lane citing the subject with no extension was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
+fi
+# NL8: an absent edit: line is not a no-edit value. A part whose second entry is repaired with NO edit: line refuses;
+# the same part with that entry `skipped (nit)` (graph's only no-edit-line shape) joins, one property apart.
+# The operator-ruling case also draws the missing-ruling-cite refusal; NL8 requires the key-2 line beside it.
+if p_nlnoedit "$JOIN" && p_nlnoedit "$JOIN" 'operator-ruling (F-3 is ruled)'; then
+  _nl8=$RC; p_nlnoedit "$JOIN" 'skipped (nit)'
+  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
+    ok "NL8: a lane's repaired entry, and an operator-ruling entry, with no edit: line -> REFUSED 'records no dispatched write' (rc=$_nl8); the same entry \`skipped (nit)\` -> JOINED"
+  else bad "NL8: the ALLOW twin \`skipped (nit)\` with no edit: line did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
+else
+  bad "NL8: a lane's repaired or operator-ruling entry with no edit: line was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
+fi
+# NLm: each acceptance key removed in a copy of the join's whole directory, cmp -s guarded; each must die on its own arm
+# and leave NL1 (the accepted round) joined. (a) accept on the empty ledger alone; (b) no any-time clause; (c) no cites
+# test; (d) no part-row test. (a) and (c) still exit 2 through the coverage join's UNWRITTEN line -- the two guards
+# cover each other on the exit code, so NL3 kills them on the 'records no dispatched write' line it requires.
+NLM="$(mktemp -d "$WORK/nlm.XXXXXX")" || exit 2
+nl_mut() { # <tag> <sed expr> -> the mutant's path, or empty when it did not apply
+  mkdir -p "$NLM/$1" && cp "$(dirname "$JOIN")"/*.sh "$NLM/$1/" || return 1
+  sed "$2" "$JOIN" > "$NLM/$1/join-remediator-shards.sh" || return 1
+  cmp -s "$JOIN" "$NLM/$1/join-remediator-shards.sh" && return 1
+  bash -n "$NLM/$1/join-remediator-shards.sh" 2>/dev/null || return 1
+  printf '%s' "$NLM/$1/join-remediator-shards.sh"
+}
+nl_score() { # <tag> <killing predicate> <label>
+  local m; m="$(nl_mut "$1" "$NL_SED")"
+  if [ -z "$m" ]; then bad "NLm$1: FIXTURE STALE -- the mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"; return; fi
+  p_nl2lane "$m"
+  if [ "$RC" -ne 0 ] || ! has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then bad "NLm$1: the accepted round NL1 did not join under the mutant (rc=$RC) -- the copy did not run or the arms are entangled"; return; fi
+  if "$2" "$m"; then bad "NLm$1: SURVIVED -- $3"; else ok "NLm$1 $3: KILLED by [$2] (rc=$RC), NL1 still joins"; fi
+}
+NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if false; then/; s/^        WROTE) refuse /        WROTE) : /; s/^        NOROW) refuse /        NOROW) : /'
+nl_score a p_nlcites "acceptance on the empty ledger alone (the cites, lane-agent and part-row keys all skipped)"
+NL_SED='s/^        WROTE) refuse /        WROTE) : /'
+nl_score b p_nloutside "the any-time lane-agent clause dropped"
+NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if false; then/'
+nl_score c p_nlcites "the cites test dropped"
+NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if [ -n "$CITES" ]; then/'
+nl_score e p_nlnoext "key 2 reverted to CITES empty (tokens, not edit: values)"
+NL_SED='s/^        NOROW) refuse /        NOROW) : /'
+nl_score d p_nlnorow "the part-row test dropped"
+NL_SED='/^      if (edp ~ \/^(repaired|operator-ruling)\/ && !esaw) print "EDT\\t(no edit: line)"$/d'
+nl_score f p_nlnoedit "the no-edit-line emit dropped (an absent edit: line read as no edit)"
+p_nlnoedit_ruling() { p_nlnoedit "$1" 'operator-ruling (F-3 is ruled)'; }
+NL_SED='s/^      if (edp ~ \/^(repaired|operator-ruling)\/ && !esaw)/      if (edp ~ \/^(repaired)\/ \&\& !esaw)/'
+nl_score g p_nlnoedit_ruling "operator-ruling dropped from the no-edit-line emit"
+# NL8 twin: the KEY is matched case-insensitively. `- Disposition: Repaired` with no edit: line refuses exactly as the
+# lowercase spelling does; the ALLOW twin is the same capitalised key with `Skipped (nit)`.
+p_nlnoedit_cap() { p_nlnoedit "$1" 'Repaired' 'Disposition'; }
+if p_nlnoedit_cap "$JOIN"; then
+  _nl8c=$RC; p_nlnoedit "$JOIN" 'Skipped (nit)' 'Disposition'
+  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
+    ok "NL8c: a lane's \`- Disposition: Repaired\` entry with no edit: line -> REFUSED 'records no dispatched write' (rc=$_nl8c); the same capitalised key \`Skipped (nit)\` -> JOINED"
+  else bad "NL8c: the ALLOW twin \`Disposition: Skipped (nit)\` did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
+else
+  bad "NL8c: a capitalised \`Disposition: Repaired\` entry with no edit: line was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
+fi
+NL_SED='s/^    ed == 1 && tolower(\$0) ~ \/\^/    ed == 1 \&\& \/^/'
+nl_score h p_nlnoedit_cap "the eflush disposition key match reverted to case-sensitive"
+
+# ---- BL-807, claim 2: an --until later than the join's own clock + 120s is refused; one inside the slack proceeds.
+p_untilfut "$JOIN" 3600
+if [ "$RC" -eq 2 ] && has "$JO" "$FUT_TXT" && ! has "$JO" "JOINED:"; then
+  p_untilfut "$JOIN" 60; _u60=$RC; p_untilfut "$JOIN" 0; _u0=$RC
+  [ "$_u60$_u0" = 00 ] && ok "UF1: --until now+1h -> REFUSED with the take-it-from-date remedy; now+60s and now -> JOINED" \
+    || bad "UF1: an --until inside the slack did not join (now+60s rc=$_u60, now rc=$_u0)"
+else
+  bad "UF1: an --until one hour ahead was not refused (rc=$RC): $(head -2 "$JO" | tr '\n' ' ')"
+fi
+NL_SED='s/^  true) die "--until /  true) : "--until /'
+_ufm="$(nl_mut uf "$NL_SED")"
+if [ -z "$_ufm" ]; then bad "UFm: FIXTURE STALE -- the guard mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+else
+  p_untilfut "$_ufm" 0; _c=$RC; p_untilfut "$_ufm" 3600
+  if [ "$_c" -ne 0 ]; then bad "UFm: the unmutated-shape control (until now) did not join under the mutant copy (rc=$_c)"
+  elif [ "$RC" -eq 0 ] && has "$JO" "JOINED:"; then ok "UFm the future-until guard removed: KILLED by [UF1] (now+1h JOINED under the mutant), the now control unchanged"
+  else bad "UFm: SURVIVED or broke -- now+1h under the guardless copy rc=$RC: $(head -1 "$JO")"; fi
 fi
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

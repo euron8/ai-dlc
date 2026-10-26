@@ -79,6 +79,11 @@ new_world() { # -> a fresh project root (own mktemp: a counter bumped inside $( 
 # still the real hook's -- only the clock is fixed. Without a ts the shim is not on PATH at all.
 DSHIM="$WORK/dshim"; mkdir -p "$DSHIM" || exit 2
 printf '#!/bin/sh\nprintf "%%s\\n" "$FIX_DRIVE_TS"\n' > "$DSHIM/date" && chmod +x "$DSHIM/date" || exit 2
+# THE JOIN'S --until (BL-807), taken from the REAL clock at each join invocation. The join refuses an
+# --until later than its own clock, so no window may be closed by a far-future constant. The real clock is
+# right at every site: no join runs while DTS is set, and every pinned row (2026-05, 06 and 10-15 seeds)
+# lies before it. Never the shim's pinned ts: rows driven after it (a re-run's 19:50) would leave the window.
+jnow() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 drive() { # <world> <tool> <file_path> <agent_id or ""> [tool_use_id] [transcript_path] [ts] [session]
   # -- the REAL hook, a PreToolUse payload. With no optional argument the payload is the one every
   # older arm drove: transcript_path "" and no tool_use_id key. ts defaults to $DTS when that is set;
@@ -139,7 +144,7 @@ bind_scratch "$WORK"
 run_join() { # <join-script> <world> [extra args] -> RC, $JO
   stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" "${@:3}" > "$JO" 2>&1
   RC=$?
 }
 out_of() { printf '%s' "$1/_bmad-output/planning-artifacts/s305/stories-repair-p1.md"; }
@@ -237,7 +242,7 @@ doc_out() { printf '%s' "$1/$SLOT/prd-repair-p1.md"; }
 run_docjoin() { # <join-script> <world> [extra args]
   stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --document "$DOCREL" "$2/$RDREL" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:3}" > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" "${@:3}" > "$JO" 2>&1
   RC=$?
 }
 doc_refused() { # <world> <token> -- exit 2, the token, no record, no staging file
@@ -288,7 +293,7 @@ p_filesguard() { # the SAME split dir joined in FILES mode -> refused: its secti
   sec_edit "$w" 1 "$AG1"; docpart "$w" 1
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact prd --pass 1 --artifact-path "$SLOT" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1
   RC=$?
   doc_refused "$w" "was split by section" && [ -f "$w/$RDREL/sections/1.md" ]
 }
@@ -492,7 +497,7 @@ sj_out() { printf '%s' "$1/$SJPA/s9/requirements-repair-p1.md"; }
 run_sjoin() { # <join> <world> [pass] [extra args]
   stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --subject 9 --pass "${3:-1}" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z "${@:4}" > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" "${@:4}" > "$JO" 2>&1
   RC=$?
 }
 sj_refused() { [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(sj_out "$1")" ]; }
@@ -580,7 +585,7 @@ sj_party() { # <join> <source token> -> RC, $JO, SJP_W: a --pass party join, eve
     printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n%s\n- **derivation:** party %s\n- **source:** %s\n' "$f" "$SIB_SEC" "$o" "$2" > "$rd/$o.md"
   done
   stamp "$w"
-  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; RC=$?
 }
 p_sjnames() { # --pass party / elicitation read and write their own names; a party record is not *-repair-p<M>
   sj_party "$1" "architecture-dev-1.md#F-1" || return 1
@@ -608,7 +613,7 @@ ppart() { # <world> <name> <block> <source tokens> -- a real repair block, its s
 run_pjoin() { # <join> <world>
   stamp "$2"
   AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories-party --pass 1 --artifact-path "$SLOT" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1
   RC=$?
 }
 pout() { printf '%s' "$1/$SLOT/stories-party-repair-p1.md"; }
@@ -718,7 +723,7 @@ p_partydoc() { # seats x sections: a document split into <doc>-party-repair-p1, 
   done
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$rd" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; RC=$?
   o="$(grep -c 'Repaired by the section' "$w/$DOCREL")" || o=0
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$w/$SLOT/prd-party-repair-p1.md" ] \
     && has "$w/$SLOT/prd-party-repair-p1.md" "architecture-tea-1.md#F-3" && [ "$o" -eq 3 ]
@@ -742,7 +747,7 @@ p_sjbase() { # --base other than the manifest's -> REFUSED before anything is re
   sj_all "$w"
   SJG "$w" commit -q --allow-empty -m other >/dev/null 2>&1 || return 1   # HEAD is now NOT the base
   stamp "$w"
-  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass 1 --base HEAD --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass 1 --base HEAD --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; RC=$?
   sj_refused "$w" "is not the subject manifest's base"
 }
 p_sjgate() { # the requirements gate's FAILURE repair: --artifact gate-<type> -> gate-planning-repair-p1.md, never requirements-repair-p1.md
@@ -751,7 +756,7 @@ p_sjgate() { # the requirements gate's FAILURE repair: --artifact gate-<type> ->
     sj_all "$w"
     stamp "$w"
     AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass 1 \
-      --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1 || exit 1
+      --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1 || exit 1
     [ -f "$w/$SJPA/s9/gate-planning-repair-p1.md" ] && [ ! -e "$w/$SJPA/s9/requirements-repair-p1.md" ] \
       && has "$JO" "gate-planning-repair-p1.md" && has "$w/$SJPA/s9/gate-planning-repair-p1.md" "- artifact: $SJPA/s9/requirements-subject.md" )
 }
@@ -760,11 +765,11 @@ p_sjgatenear() { # near-misses of the gate form: a non-gate --artifact, and a ga
   sj_all "$w"
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact stories --pass 1 \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; ra=$?
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; ra=$?
   has "$JO" "applies with --subject only as gate-<type>" || return 1
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass party \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; rb=$?
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; rb=$?
   has "$JO" "needs a numeric --pass" || return 1
   [ "$ra" -eq 2 ] && [ "$rb" -eq 2 ] && ! ls "$w/$SJPA/s9/"*-repair*.md >/dev/null 2>&1
 }
@@ -1251,6 +1256,163 @@ p_markderive() { # <wfd>
   case "$last" in "seat-complete: custom seat 1/8 sha="*" findings=1") ;; *) return 1 ;; esac
 }
 
+# ---- BL-804: --mark / --mark-repair REPLAY a remediator record stating `derivations: not replayed`
+# (wait-for-deliverable.sh header, term 6). Each case drives the real --mark on a seeded state dir whose
+# seal rows content-seal.sh wrote: (a) a repaired part, two reproducing fences under ONE triple ->
+# marked, the line reads `replayed 2`, sealed, `content-seal.sh --check` clean (term 3's row is the
+# rewritten bytes); (b) a stale fence -> 64, the file byte-identical, FAIL relayed, no deferral remedy
+# (files mode); (b2) the same in a section-split shard dir -> the deferral remedy offered; (c) a
+# `deferred` line over a stale fence -> marked, untouched; (d) a non-repair shard dir (the not-a-
+# remediator control) and (e) a part holding no repaired entry, both stale -> marked, `not replayed`
+# untouched; (f) a joined record under --mark-repair -> the `not replayed` inside its
+# `<!-- shard: 01 -->` body untouched, the serial block's own line `replayed 3` (the whole file's
+# count, over two triples), sealed. R804 names the case that failed. Takes the wfd to drive.
+r804_part() { # <file> <derivations value> <tok count recorded> [disposition]
+  printf -- '- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- **derivations:** %s\n\n### F-1 — MAJOR\n- disposition: %s\n- edit: _bmad-output/planning-artifacts/s9/data.txt:1\n\n```derived\n$ grep -c tok _bmad-output/planning-artifacts/s9/data.txt\n%s\n$ grep -c zed _bmad-output/planning-artifacts/s9/data.txt\n1\n```\n' "$2" "${4:-repaired}" "$3" > "$1"
+}
+r804_sealed() { # <file> -> 0 when the marker's sha= is the digest of the body above it
+  local want have
+  want="$(awk 'NF { l = $0 } END { n = split(l, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] ~ /^sha=/) print substr(w[i], 5) }' "$1")"
+  have="$(awk 'NF { L = NR } { a[NR] = $0 } END { for (i = 1; i < L; i++) print a[i] }' "$1" | shasum -a 256 | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$want" = "$have" ]
+}
+p_replay() { # <wfd>
+  local w pa sd st f o rc
+  R804=setup
+  w="$(mktemp -d "$WORK/rp.XXXXXX")" || return 1
+  st="$w/_bmad-output"; pa="$st/planning-artifacts"; sd="$pa/s9/shards"
+  mkdir -p "$sd/stories-repair-p1" "$sd/prd-repair-p1/sections" "$sd/plain" || return 1
+  printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  : > "$sd/prd-repair-p1/sections/.manifest"
+  f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'not replayed' 2
+  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  R804=a; bash "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a.out" 2>&1 || return 1
+  [ "$(grep -c '^- derivations: replayed 2$' "$f")" = 1 ] && [ "$(grep -ci 'not replayed' "$f")" = 0 ] || return 1
+  case "$(tail -n 1 "$f")" in "seat-complete: stories remediator 01 sha="*" findings=1") ;; *) return 1 ;; esac
+  r804_sealed "$f" || return 1
+  o="$(bash "$SRCDIR/content-seal.sh" --check "$st" "$f" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && [ -z "$o" ] || return 1
+  f="$sd/stories-repair-p1/02.md"; r804_part "$f" 'not replayed' 3
+  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  cp "$f" "$w/b.before"
+  R804=b; bash "$1" --mark "$f" stories remediator 02 findings=1 > "$w/b.out" 2>&1; rc=$?
+  [ "$rc" = 64 ] && cmp -s "$f" "$w/b.before" && has "$w/b.out" 'FAIL: 1 stale' \
+    && has "$w/b.out" 'fix the stale derivation' && ! has "$w/b.out" 'deferred to the join' || return 1
+  f="$sd/prd-repair-p1/01.md"; r804_part "$f" 'not replayed' 3; cp "$f" "$w/b2.before"
+  R804=b2; bash "$1" --mark "$f" prd remediator 01 findings=1 > "$w/b2.out" 2>&1; rc=$?
+  [ "$rc" = 64 ] && cmp -s "$f" "$w/b2.before" && has "$w/b2.out" "write 'derivations: deferred to the join" || return 1
+  f="$sd/stories-repair-p1/03.md"; r804_part "$f" 'deferred to the join (section shard)' 3
+  R804=c; bash "$1" --mark "$f" stories remediator 03 findings=1 > "$w/c.out" 2>&1 || return 1
+  [ "$(grep -c '^- \*\*derivations:\*\* deferred to the join (section shard)$' "$f")" = 1 ] || return 1
+  f="$sd/plain/04.md"; r804_part "$f" 'not replayed' 3
+  R804=d; bash "$1" --mark "$f" review seat 04 findings=1 > "$w/d.out" 2>&1 || return 1
+  [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] || return 1
+  f="$sd/stories-repair-p1/05.md"; r804_part "$f" 'not replayed' 3 escalated
+  R804=e; bash "$1" --mark "$f" stories remediator 05 findings=1 > "$w/e.out" 2>&1 || return 1
+  [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] || return 1
+  f="$pa/s9/stories-repair-p1.md"
+  { printf '# Repair record\n\n<!-- shard: 01 -->\n'; r804_part /dev/stdout 'not replayed' 2
+    printf '\n- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: y\n- artifact_sha_after: z\n- advisor: called\n- derivations: not replayed\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n```derived\n$ grep -c . _bmad-output/planning-artifacts/s9/data.txt\n3\n```\n'; } > "$f"
+  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  R804=f; bash "$1" --mark-repair "$f" 1 > "$w/f.out" 2>&1 || return 1
+  [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] && [ "$(grep -c '^- derivations: replayed 3$' "$f")" = 1 ] || return 1
+  case "$(tail -n 1 "$f")" in "repair-complete: serial 1 sha="*) ;; *) return 1 ;; esac
+  r804_sealed "$f" || return 1
+  R804=ok
+}
+
+# ---- A CLAIMED REPLAY IS CHECKED, ATTRIBUTED TO THE SEGMENT BEING MARKED (BL-816; wait-for-deliverable.sh
+# header, term 6). r816_rec writes a joined record: a shard segment (lines 3-17, its fence closing on 17, the
+# line above the serial block) and a serial block of TWO triples, lines 18 to the last line, so its range
+# spans two of checks_field's chunks and a range off by one chunk at either end loses a fence. Stale flags:
+#   $2 shard: line 15's fence records 5 (it reproduces 2) -- outside the judged range;
+#   $3 first: line 20, the command of the fence opening on 19 right under the serial triple on 18 (the
+#      first line a fence can occupy: line 18 is the triple, a chunk edge, and no edge lies inside a fence);
+#   $4 last: the serial block's last fence ends `$ grep -c e` + its closer, the file's last two lines
+#      (empty recorded output, so the command sits on the second-to-last line of the range).
+# $5 the label spelling of the serial claim (default `- derivations:`).
+r816_rec() { # <file> <shard 0|1> <first 0|1> <last 0|1> [label]
+  local d=_bmad-output/planning-artifacts/s9/data.txt
+  { printf '# Repair record\n\n<!-- shard: 01 -->\n- artifact: %s\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- derivations: replayed 1\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: %s:1\n\n```derived\n$ grep -c tok %s\n%s\n```\n' "$d" "$d" "$d" "$( [ "$2" = 1 ] && echo 5 || echo 2 )"
+    printf -- '- artifact: %s\n```derived\n$ grep -c zed %s\n%s\n```\n- artifact_sha_before: y\n- artifact_sha_after: z\n- advisor: called\n%s replayed 2\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n' "$d" "$d" "$( [ "$3" = 1 ] && echo 4 || echo 1 )" "${5:-- derivations:}"
+    printf -- '- artifact: %s\n- artifact_sha_before: z\n- artifact_sha_after: w\n\n```derived\n$ grep -c o %s\n2\n$ grep -c e %s\n' "$d" "$d" "$d"
+    [ "$4" = 1 ] || printf '1\n'
+    printf '```\n'; } > "$1"
+}
+# r816_mark <case> <wfd> <file> <want pass|refuse> -> 0 when --mark-repair did exactly that: pass = rc 0, the
+# body above the marker byte-identical to the file before (a claim is never rewritten), the marker sealed and
+# `content-seal.sh --check` clean; refuse = rc 64, the file byte-identical, the message naming the claim.
+r816_mark() {
+  local o rc; R816="$1"
+  bash "$SRCDIR/content-seal.sh" --record "$R816_ST" program:fixture "$3" > /dev/null 2>&1 || return 1
+  cp "$3" "$3.before" || return 1
+  bash "$2" --mark-repair "$3" 1 > "$3.out" 2>&1; rc=$?
+  if [ "$4" = refuse ]; then
+    [ "$rc" = 64 ] && cmp -s "$3" "$3.before" && has "$3.out" "states 'derivations: replayed <n>' in the block this call seals" \
+      && has "$3.out" 'fix the stale fence'
+    return
+  fi
+  [ "$rc" = 0 ] || return 1
+  case "$(tail -n 1 "$3")" in "repair-complete: serial 1 sha="*) ;; *) return 1 ;; esac
+  sed '$d' "$3" | cmp -s - "$3.before" && r804_sealed "$3" || return 1
+  o="$(bash "$SRCDIR/content-seal.sh" --check "$R816_ST" "$3" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && [ -z "$o" ]
+}
+# p_claim <wfd>: (a) clean record -> marked; (a2) a part claiming `replayed 7` over 2 reproducing fences -> marked
+# (n is not compared); (c) the stale fence on the judged block's FIRST fence line -> refused; (d) on its
+# LAST -> refused; (a3) a part claiming `replayed 2` over a stale fence -> refused; (b) a stale fence in the
+# SHARD segment only, the serial block clean -> marked. The order puts each mutant's own case first: an
+# inverted or chunk-shifted range dies at c or d, and a dropped attribution dies only at b.
+p_claim() { # <wfd>
+  local w pa sd f
+  R816=setup
+  w="$(mktemp -d "$WORK/rc.XXXXXX")" || return 1
+  R816_ST="$w/_bmad-output"; pa="$R816_ST/planning-artifacts"; sd="$pa/s9/shards"
+  mkdir -p "$sd/stories-repair-p1" || return 1
+  printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  f="$pa/s9/a-repair-p1.md"; r816_rec "$f" 0 0 0; r816_mark a "$1" "$f" pass || return 1
+  f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'replayed 7' 2
+  R816=a2; bash "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a2.out" 2>&1 || return 1
+  [ "$(grep -c '^- \*\*derivations:\*\* replayed 7$' "$f")" = 1 ] && r804_sealed "$f" || return 1
+  f="$pa/s9/c-repair-p1.md"; r816_rec "$f" 0 1 0; r816_mark c "$1" "$f" refuse || return 1
+  has "$f.out" '(lines 18-' && has "$f.out" ':20 records an output' || return 1
+  f="$pa/s9/d-repair-p1.md"; r816_rec "$f" 0 0 1; r816_mark d "$1" "$f" refuse || return 1
+  has "$f.out" ":$(( $(wc -l < "$f") - 1 )) records an output" || return 1
+  f="$sd/stories-repair-p1/02.md"; r804_part "$f" 'replayed 2' 3; cp "$f" "$w/a3.before"
+  R816=a3; bash "$1" --mark "$f" stories remediator 02 findings=1 > "$w/a3.out" 2>&1
+  [ "$?" = 64 ] && cmp -s "$f" "$w/a3.before" && has "$w/a3.out" ':12 records an output' || return 1
+  f="$pa/s9/b-repair-p1.md"; r816_rec "$f" 1 0 0; r816_mark b "$1" "$f" pass || return 1
+  R816=ok
+}
+# p_vcrash <dir holding the scripts under test>: an exit 1 is a verdict only beside the validator's
+# `FAIL: <n> stale or unrunnable` summary (wait-for-deliverable.sh header, term 6). Controls with that dir's own
+# validator: a clean record marked, a stale serial fence refused as a stale fence. Then a copy of the dir whose
+# validator dies under `set -u` right after its `set -uo pipefail` (exit 1, no FAIL line of any kind, asserted
+# alone first): the stale serial record and a CLEAN `not replayed` part each refused 64 as no verdict, the file
+# byte-identical. RVC names the failing case; RVC_W the world.
+p_vcrash() {
+  local w pa sd f c rc
+  RVC=setup; w="$(mktemp -d "$WORK/vc.XXXXXX")" || return 1; RVC_W="$w"
+  c="$w/crash"; mkdir -p "$c" && cp "$1"/*.sh "$c/" || return 1
+  awk '{ print } /^set -uo pipefail$/ && !d { print "echo \"$AI_DLC_NO_SUCH_VAR_X\" > /dev/null"; d = 1 }' \
+    "$1/validate-artifact-derivations.sh" > "$c/validate-artifact-derivations.sh" || return 1
+  RVC=inject; cmp -s "$1/validate-artifact-derivations.sh" "$c/validate-artifact-derivations.sh" && return 1
+  R816_ST="$w/_bmad-output"; pa="$R816_ST/planning-artifacts"; sd="$pa/s9/shards"
+  mkdir -p "$sd/stories-repair-p1" || return 1
+  printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  f="$pa/s9/a-repair-p1.md"; r816_rec "$f" 0 0 0; RVC=ctl-clean; r816_mark a "$1/wait-for-deliverable.sh" "$f" pass || return 1
+  f="$pa/s9/c-repair-p1.md"; r816_rec "$f" 0 1 0; RVC=ctl-stale; r816_mark c "$1/wait-for-deliverable.sh" "$f" refuse || return 1
+  f="$pa/s9/k-repair-p1.md"; r816_rec "$f" 0 1 0; cp "$f" "$f.before"; RVC=crash-alone
+  AI_DLC_PROJECT_ROOT="$w" bash "$c/validate-artifact-derivations.sh" "$f" > /dev/null 2> "$w/k.verr"; rc=$?
+  [ "$rc" = 1 ] && has "$w/k.verr" 'AI_DLC_NO_SUCH_VAR_X' && ! grep -q '^FAIL' "$w/k.verr" || return 1
+  RVC=crash-serial; bash "$c/wait-for-deliverable.sh" --mark-repair "$f" 1 > "$f.out" 2>&1; rc=$?
+  [ "$rc" = 64 ] && cmp -s "$f" "$f.before" && has "$f.out" "states 'derivations: replayed', and the replay this call ran gave no verdict (exit 1)" || return 1
+  f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'not replayed' 2; cp "$f" "$f.before"; RVC=crash-part
+  bash "$c/wait-for-deliverable.sh" --mark "$f" stories remediator 01 findings=1 > "$f.out" 2>&1; rc=$?
+  [ "$rc" = 64 ] && cmp -s "$f" "$f.before" && has "$f.out" "states 'derivations: not replayed', and the replay this call ran gave no verdict (exit 1)" || return 1
+  RVC=ok
+}
+
 # ---- THE ADVERSARIAL REPAIR NAME (BL-662): the record carries no round word, so an artifact ending in
 # -adversarial is refused in files and document mode, naming <artifact minus -adversarial>-repair-p<M>.
 advname_world() { # <shard dir name> -> a world with the series' x-adversarial-p1.md and that (empty) shard dir
@@ -1264,7 +1426,7 @@ p_advname() { # (a) --document into shards/x-adversarial-repair-p1/ -> rc 2, no 
   local w; w="$(advname_world x-adversarial-repair-p1)" || return 1
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$SLOT/shards/x-adversarial-repair-p1" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$JO" "ends in -adversarial" && has "$JO" "shards/x-repair-p1/" && has "$JO" "x-repair-p1.md" \
     && has "$JO" "arm H of validate-adversarial-convergence.sh" \
     && [ ! -e "$w/$SLOT/x-repair-p1.md" ] && [ ! -e "$w/$SLOT/x-adversarial-repair-p1.md" ] || return 1
@@ -1280,7 +1442,7 @@ p_advname() { # (a) --document into shards/x-adversarial-repair-p1/ -> rc 2, no 
   w="$(advname_world adversarial-notes-repair-p1)" || return 1
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$SLOT/shards/adversarial-notes-repair-p1" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1; RC=$?
   [ -s "$JO" ] && ! has "$JO" "ends in -adversarial"
 }
 # ---- RE-RUN OF ONE PART (--rerun <part>.md@<ISO>) AND THE ALIAS RULE. Every row is still the REAL
@@ -1330,7 +1492,7 @@ p_rrgraph() { # the graph shape, section 2 re-run by a NEW agent after S_P: with
   [ "$RC" -eq 0 ] && has "$JO" "(6 parts, 6 writers, 3 superseded rows)" && [ -f "$o" ] \
     && grep -qx -- "rerun: 2.md since $G_SP; superseded on $RDREL/sections/2.md: $G_ORIG $G_ORPH (3 rows, $(gts 19:27:42)..$(gts 19:27:48))" "$o" \
     && grep -qx -- "every section under $RDREL/sections was written by exactly one agent in its window;" "$o" \
-    && has "$o" "; window 2000-01-01T00:00:00Z .. 2999-12-31T23:59:59Z;" \
+    && grep -qE "; window 2000-01-01T00:00:00Z \.\. 2[0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z;" "$o" \
     && has "$w/$DOCREL" "Repaired at 19:50:00 by $G_NEW."
 }
 rr_refused() { # <join> <world> <token> -- the --rerun 2.md join refused naming the token, nothing assembled or written
@@ -2038,7 +2200,7 @@ p_lc() {
   done
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" AI_DLC_STATE_DIR="$s" bash "$j" --document "$d" "$w/$rd" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO.r1" 2>&1
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO.r1" 2>&1
   LC_RC1=$?
   LC_LAP="$(sed -n 's/^LANE-ARTIFACT-PATH: //p' "$JO.r1")"
   [ -n "$LC_LAP" ] || return 0
@@ -2051,7 +2213,7 @@ p_lc() {
     "$LC_LAP" "$SIB_INS" > "$w/$s/planning-artifacts/s305/shards/${st}-serial-repair-p1/lane-1.md"
   stamp "$w"
   AI_DLC_PROJECT_ROOT="$w" AI_DLC_STATE_DIR="$s" bash "$j" --sprint 305 --artifact "${st}-serial" --pass 1 \
-    --artifact-path "$LC_LAP" --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+    --artifact-path "$LC_LAP" --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1
   RC=$?
   LC_OUT="$w/$s/planning-artifacts/s305/${st}-serial-repair-p1.md"
   L="$w/$s/planning-artifacts/.artifact-writes.jsonl"
@@ -2067,3 +2229,120 @@ lc_joined() { # <the LANE-ARTIFACT-PATH the ledger spells> -- round one joined a
     && [ -f "$LC_OUT" ] && [ "$LC_N" = 1 ] && [ "$LC_NA" = 1 ]
 }
 lc_why() { printf 'r1 rc=%s LANE-ARTIFACT-PATH=%s lane rc=%s rows-at-path=%s rows=%s: %s' "$LC_RC1" "$LC_LAP" "$RC" "$LC_N" "$LC_NA" "$(grep -m 2 -E 'REFUSED|JOINED' "$JO" 2>/dev/null | tr '\n' ' ')"; }
+
+# ---- A ROUND IN WHICH NO LANE WROTE THE SUBJECT (BL-807, claim 1). Every row is the REAL hook's, its clock
+# pinned; the window is [NL_S, NL_U]. Each lane writes its own part record in the window (a shards/ row files
+# mode drops from ROWS, and the join reads as the lane's agent id). Acceptance keys on three things together:
+# no in-window subject row, no part citing a file, no lane agent with a subject row at ANY time.
+NL_S=2026-06-01T00:00:00Z; NL_U=2026-06-01T01:00:00Z
+NL_LINE="no lane wrote the subject: 0 ledger rows under $SLOT in [$NL_S, $NL_U], and every part cites no edited file"
+nlpart() { # <file> <heading> <disposition> <edit text> -- one entry, every field the join's contract reads
+  printf -- '### %s\n- disposition: %s\n- edit: %s\n- siblings: n/a (insertion)\n- derivation: n/a (no factual claim)\n' "$2" "$3" "$4" > "$1"
+}
+nl_world() { # <shard dir name> -> a world whose lanes lane-1 (AG1) and lane-2 (AG2) each wrote their part record
+  local w d; w="$(new_world)" || return 1; d="$w/$SLOT/shards/$1"; mkdir -p "$d" || return 1
+  nlpart "$d/lane-1.md" "F-1 — MAJOR" repaired 'n/a (the fix was already in place)'
+  nlpart "$d/lane-2.md" "F-2 — MAJOR" repaired 'n/a'
+  drive "$w" Write "$d/lane-1.md" "$AG1" "" "" 2026-06-01T00:10:00Z
+  drive "$w" Write "$d/lane-2.md" "$AG2" "" "" 2026-06-01T00:11:00Z
+  printf '%s' "$w"
+}
+run_nljoin() { # <join> <world> <artifact> -> RC, $JO over [NL_S, NL_U]
+  stamp "$2"
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact "$3" --pass 1 --artifact-path "$SLOT" \
+    --since "$NL_S" --until "$NL_U" > "$JO" 2>&1
+  RC=$?
+}
+p_nl2lane() { # graph's second instance: the lane round (stories-serial), two lanes, both `edit: n/a` -> JOINED,
+  # the header's no-lane line REPLACING the one-writer sentence, 0 writers, no lane report (a -serial artifact)
+  local w o; w="$(nl_world stories-serial-repair-p1)" || return 1
+  run_nljoin "$1" "$w" stories-serial
+  o="$w/$SLOT/stories-serial-repair-p1.md"
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)" && [ -f "$o" ] \
+    && grep -qxF -- "$NL_LINE (2 lane agent(s), none with a subject row at any time)." "$o" \
+    && ! has "$o" "was written by exactly one agent" && ! has "$JO" "LANE"
+}
+p_nlesc() { # graph's first instance, a round-one record: one lane `edit: n/a`, one ESCALATED entry whose `edit:`
+  # names a story (the serial remediator's file, never this shard's) -> JOINED, ESCALATED-COUNT 1; the lane report
+  # runs (not -serial) and, with no written file, reports 0 lanes and the escalation to the fan-in
+  local w d o; w="$(nl_world stories-repair-p1)" || return 1; d="$w/$SLOT/shards/stories-repair-p1"
+  nlpart "$d/lane-2.md" "F-2 — MAJOR" escalated "\`$REL/$S22:4\` (escalated: the fix crosses lanes)"
+  drive "$w" Write "$d/lane-2.md" "$AG2" "" "" 2026-06-01T00:12:00Z
+  run_nljoin "$1" "$w" stories
+  o="$(out_of "$w")"
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && has "$JO" "(2 parts, 0 writers)" && has "$JO" "ESCALATED-COUNT: 1" \
+    && grep -qxF -- "$NL_LINE (2 lane agent(s), none with a subject row at any time)." "$o" \
+    && ! has "$o" "was written by exactly one agent" && has "$JO" "LANE-COUNT: 0" && has "$JO" "FANIN: ESCALATED: lane-2.md"
+}
+p_nlcites() { # one lane cites an edit it never ledgered (BL-802's class), the window empty -> REFUSED, exit 2, the
+  # existing refusal text verbatim AND the coverage join's UNWRITTEN line beside it, nothing written
+  local w d; w="$(nl_world stories-serial-repair-p1)" || return 1; d="$w/$SLOT/shards/stories-serial-repair-p1"
+  nlpart "$d/lane-1.md" "F-1 — MAJOR" repaired "\`$REL/$S21:3\`"
+  run_nljoin "$1" "$w" stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: the ledger records no dispatched write under $SLOT in [$NL_S, $NL_U]; disjointness is unproven" \
+    && has "$JO" "lane-1.md cites $REL/$S21, which no dispatched agent wrote under $SLOT in the window -- " \
+    && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ]
+}
+p_nlnoext() { # <join> [<edit text>] -- a lane REALLY wrote the subject through Bash (no ledger row) and its
+  # `edit:` cites it in a spelling part_cites cannot tokenise (default: the path with no extension) -> REFUSED
+  # with the 'records no dispatched write' line verbatim, nothing written. Key 2 keyed on tokens accepted it.
+  local w d; w="$(nl_world stories-serial-repair-p1)" || return 1; d="$w/$SLOT/shards/stories-serial-repair-p1"
+  nlpart "$d/lane-1.md" "F-1 — MAJOR" repaired "${2:-\`$REL/story-2.1-positions-on-demand\` line 3}"
+  printf 'edited by bash\n' >> "$w/$REL/$S21"
+  run_nljoin "$1" "$w" stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: the ledger records no dispatched write under $SLOT in [$NL_S, $NL_U]; disjointness is unproven" \
+    && ! has "$JO" "JOINED" && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ]
+}
+p_nloutside() { # a lane agent wrote the subject only BEFORE --since and cites nothing -> REFUSED naming the row
+  local w; w="$(nl_world stories-serial-repair-p1)" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" 2026-05-20T00:00:00Z
+  run_nljoin "$1" "$w" stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "but lane agent $AG1 wrote $REL/$S21 at 2026-05-20T00:00:00Z, outside that window and cited by no part" \
+    && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ]
+}
+p_nlnorow() { # a part record with no ledger row: its writer is unknown -> REFUSED naming it, not accepted
+  local w d; w="$(new_world)" || return 1; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1
+  nlpart "$d/lane-1.md" "F-1 — MAJOR" repaired 'n/a'
+  nlpart "$d/lane-2.md" "F-2 — MAJOR" repaired 'n/a'
+  drive "$w" Write "$d/lane-1.md" "$AG1" "" "" 2026-06-01T00:10:00Z
+  run_nljoin "$1" "$w" stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "shards/stories-serial-repair-p1/lane-2.md has no ledger row, so its writer is unknown" \
+    && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ]
+}
+p_nlnoedit() { # <join> [<second disposition> [<its key spelling>]] -- lane-1's part: F-1 `edit: n/a`, then F-3 dispositioned repaired (default)
+  # with NO `edit:` line, so the part still carries the field arm H requires. An absent value is not a no-edit value
+  # -> REFUSED 'records no dispatched write', nothing written. `skipped (nit)` as $2 is the ALLOW twin (graph's shape).
+  local w d; w="$(nl_world stories-serial-repair-p1)" || return 1; d="$w/$SLOT/shards/stories-serial-repair-p1"
+  { nlpart /dev/stdout "F-1 — MAJOR" repaired 'n/a (the fix was already in place)'
+    printf -- '\n### F-3 — MINOR\n- %s: %s\n- siblings: n/a (insertion)\n- derivation: n/a (no factual claim)\n' "${3:-disposition}" "${2:-repaired}"; } > "$d/lane-1.md.new" \
+    && mv -f "$d/lane-1.md.new" "$d/lane-1.md" || return 1
+  run_nljoin "$1" "$w" stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: the ledger records no dispatched write under $SLOT in [$NL_S, $NL_U]; disjointness is unproven" \
+    && ! has "$JO" "JOINED" && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ]
+}
+p_nldoc() { # document mode: three section parts, every `edit: n/a`, no section copy written -> JOINED, assembled,
+  # the section header sentence replaced by the no-lane line (`;`-terminated, the partition line after it)
+  local w i o; w="$(doc_world)" || return 1
+  for i in 1 2 3; do
+    nlpart "$w/$RDREL/$i.md" "S-$i — MAJOR" repaired 'n/a (the section already says it)'
+    drive "$w" Write "$w/$RDREL/$i.md" "$AG1" "" "" "2026-06-01T00:1${i}:00Z"
+  done
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$RDREL" --since "$NL_S" --until "$NL_U" > "$JO" 2>&1; RC=$?
+  o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && has "$JO" "(3 parts, 0 writers)" \
+    && grep -qxF -- "no lane wrote the subject: 0 ledger rows under $RDREL/sections in [$NL_S, $NL_U], and every part cites no edited file (1 lane agent(s), none with a subject row at any time);" "$o" \
+    && ! has "$o" "was written by exactly one agent"
+}
+
+# ---- A FUTURE --until (BL-807, claim 2): the join refuses an --until later than its own clock + 120s.
+FUT_TXT="by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window"
+utc_plus() { jq -nr --argjson s "$1" 'now + $s | strftime("%Y-%m-%dT%H:%M:%SZ")'; }
+p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world closed at now + offset
+  local w; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
+    --since 2000-01-01T00:00:00Z --until "$(utc_plus "$2")" > "$JO" 2>&1
+  RC=$?
+}

@@ -34,6 +34,15 @@ bounds this analyst dispatch, not that chain, which is Rule 28's. If
 `planning_offload: off`, the lead reads the code and the existing architecture
 itself, and still dispatches the section 2–3 chain. Per SKILL.md Rule 24.
 
+**Deferred findings (Check 24 arm J3).** Before section 1, list
+`_bmad-output/planning-artifacts/s<N>/*-deferral-p*.md`. Every `- source:` key paired with
+`- deferred-to: architecture` is restated in `s<N>/architecture-context.md` exactly as the record
+spells it, as a requirement input this step answers. The analyst's brief names those records and
+the analyst writes the keys. Only where §0 above dispatches no analyst (`planning_offload: off`, or
+any variant other than feature, brownfield-a and brownfield-c) does the lead write
+`s<N>/architecture-context.md` carrying them.
+Grammar: `_gate-procedures.md`, "Every MAJOR the terminal MET pass leaves is closed on a record".
+
 ### 1. Context Loading
 
 Read the PRD and product brief from `_bmad-output/planning-artifacts/`.

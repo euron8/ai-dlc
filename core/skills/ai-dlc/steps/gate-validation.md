@@ -2149,10 +2149,10 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces fifteen arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces sixteen arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
 **E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD, **I** RESOLUTION
-CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS, **K3** SUBJECT,
+CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **J3** OPEN MAJOR, **K** SHARD, **K2** SECTIONS, **K3** SUBJECT,
 **L** ELICITATION. Arm L runs on the stories series (`s<N>/stories-adversarial-p`) and judges
 the sprint's stories elicitation against `_gate-procedures.md` validation-cycle item 2: it
 reads `s<N>/stories/`, `s<N>/stories-elicitation*.md` (repair records excluded),

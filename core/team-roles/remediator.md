@@ -133,11 +133,13 @@ The two lines after each triple you write say which checks this dispatch ran. `a
 when an `advisor` call returned a result; `advisor: unavailable` when the tool was absent or
 every call errored or was rate-limited. Replay is the default: run
 `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit and write
-`derivations: replayed <n>`, `<n>` being the derivation count on its `OK:` summary line (or the
-"checked" count on its `FAIL:` line). Write `derivations: deferred to the join (section/subject
+`derivations: replayed <n>`, `<n>` being the derivation count on its `OK:` summary line; on a
+`FAIL:` line, fix the stale fence, then mark. Write `derivations: deferred to the join (section/subject
 shard)` only when a fence of yours names your section file or the document assembled from it,
 which reads stale until assembly; a fence naming code, a history file or `pending.md` replays
-now. `derivations: not replayed` when you did not run it, which the join refuses. A check you skipped is
+now. `derivations: not replayed` when you did not run it, which the join refuses; `--mark` and
+`--mark-repair` then replay the record themselves, write `replayed <n>` from its `OK:` line, and
+refuse the mark on a `FAIL:` line, so fix the stale fence and mark again. A check you skipped is
 stated here, in the record the join and the next pass read, never only in your final message.
 
 Then, per finding:
@@ -270,6 +272,9 @@ entry carries a `source:` line with one `<seat-file>#<finding-id>` token per sea
 edit applies, the id being the first token of that finding's `##` heading. Finding ids collide
 across seats, so the file is never dropped. `join-remediator-shards.sh` refuses an entry with no
 `source:` and a token that resolves to no finding of that seat file.
+
+**A deferral record, when your brief asks for one**, is `s<N>/<artifact>-deferral-p<M>.md` in the
+grammar of `_gate-procedures.md`, "Every MAJOR the terminal MET pass leaves is closed on a record".
 
 **The three labels are read LITERALLY by the gate.** `validate-adversarial-convergence.sh`
 arm H decides whether this record is structured by looking for each label at the start of a

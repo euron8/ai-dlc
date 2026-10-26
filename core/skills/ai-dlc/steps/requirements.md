@@ -37,6 +37,14 @@ Rule 20) and its REPAIR passes dispatch (remediator, `_gate-procedures.md` "Adve
 repair dispatch"). The lead keeps orchestration — dispatch, the join, and the Rule 11/13
 scope calls. If `planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
 
+**Deferred findings (Check 24 arm J3).** Before section 1, list
+`_bmad-output/planning-artifacts/s<N>/*-deferral-p*.md`. Every `- source:` key paired with
+`- deferred-to: requirements` is restated in `s<N>/requirements-context.md` exactly as the record
+spells it, as a requirement input this step answers. The analyst's brief names those records and
+the analyst writes the keys. Only where this step dispatches no analyst (`planning_offload: off`)
+does the lead write `s<N>/requirements-context.md` carrying them. Grammar: `_gate-procedures.md`,
+"Every MAJOR the terminal MET pass leaves is closed on a record".
+
 ### 1. Context Loading and Prior-Decision Search
 
 Read existing artifacts if they exist:
