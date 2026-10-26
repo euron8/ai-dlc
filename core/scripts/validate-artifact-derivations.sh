@@ -1473,6 +1473,122 @@ fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 # refused with the "writes a file or runs a command" message rather than as merely unlisted, and AT
 # STARTUP the validator exits 2 when any NEVER token is also a table row, so a row that widens the
 # table onto a known exec vector fails every run instead of shipping.
+# THE QUOTE SCAN, ONE PROGRAM IN TWO MODES. `quote_scan 0` is the scan cmd_is_safe has always run:
+# it splits a command on its top-level `|` and exits 3/4/5/6 on an unbalanced quote, ANSI-C
+# quoting, a backtick or an expanding `$` (cmd_is_safe's comments, below, say why each). Every
+# line of that mode is unchanged; the lines that open with `chain &&` are inert in it.
+#
+# `quote_scan 1` serves ONLY --explain-cmd, through explain_chain (below cmd_is_safe). It reads
+# the same quote state with the same rules and splits on the top-level CONTROL operators `;`
+# `&&` `||` `&` instead of on `|` -- a `|` stays inside its segment, for the mode-0 scan of that
+# segment to split. It prints one `<status><TAB><op><TAB><glob><TAB><segment>` line per segment --
+# <op> the control operator that ENDED it (`;` `&&` `||` `&`, empty for the last), <glob> 1 when it
+# carries an unquoted, unescaped `*`, `?` or `[` -- all at the end of
+# the record, so a whole-command refusal prints none. Status 0 is clean; 4, 5 and 6 are mode 0's
+# classes; 8 is a `$(`, `${`, `<(` or `>(` opener. A per-segment class never exits: the segment
+# is recorded as refused and the scan goes on.
+#
+# SUBSTITUTIONS ARE TRACKED, NOT SPLIT. `stk` holds one character per open frame: `(` for `$(`,
+# `<(` and `>(`, `{` for `${`, a backtick for a backtick, `p` for a bare `(` inside a frame (so
+# `$((1+2))` closes twice). Entering a frame saves the double-quote state and starts the frame
+# unquoted, the way bash reads a substitution's body; a `)` or `}` closes only outside quotes, and
+# a control operator inside any frame is text, not a split point. When the last frame closes,
+# splitting resumes: `a; echo $(x; y); b` is three segments, and the middle one is status 8.
+#
+# `$'...'` IS TRACKED TOO, by the rule bash itself was measured to follow (oracle: each segment
+# prefixed by a marker echo, bash run on `$'a\'b'; c`, `$'a\\'; c`, `$'a;b' ; c`, `$'a\x27b'; c`
+# and `$'a\'; echo X; echo '; c`, every one two segments): inside the quote a backslash takes the
+# next character whatever it is, and the first other `'` ends it. Mode 0 still refuses `$'`
+# outright -- its disagreement with bash is about TOGGLES, which this mode does not use there.
+#
+# A WRONG SPLIT HERE CANNOT RUN ANYTHING, and that is why tracking is allowed to be imperfect (a
+# `case` pattern's `)` inside `$( )` closes the frame early, for one). explain_chain hands a segment
+# to seg_check's eval only when the segment's OWN TEXT carries none of `< > $( ${ &`, its own status
+# here is clean, and the mode-0 scan of that text alone accepts it -- so whatever text arrives
+# there is text `eval "set -- <text>"` can only quote-remove and expand braces and globs in. A
+# mis-split costs a wrong ARGV line, never an execution.
+#
+# What refuses the WHOLE command (no segment lines): a quote, a `$'`, or a frame still open at the
+# end (exit 3), and `|&` anywhere (exit 7). `&` after `<` or with `>` on either side (`<&`, `>&`,
+# `&>`, `2>&1`) is part of a redirection, not an operator; it stays in its segment, which the
+# segment gate then refuses. After every operator the word boundary resets, so the `#` in
+# `a;# x` opens a comment, as it does for bash.
+quote_scan() { # $1 mode: 0 = pipe split (the safety scan), 1 = control-operator split (explain only)
+  awk -v chain="$1" '
+    BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92); HASH = sprintf("%c", 35); BT = sprintf("%c", 96)
+            DX = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789@*#?$!-[" }
+    { sq = 0; dq = 0; out = ""; n = length($0); prev = " "
+      ns = 0; st = 0; stk = ""; aq = 0; gl = 0
+      for (i = 1; i <= n; i++) {
+        ch = substr($0, i, 1)
+        # Inside an ANSI-C quote (mode 1): a backslash takes the next character, the first other SQ ends it.
+        if (chain && aq) { out = out ch; if (ch == BS) { i++; if (i <= n) out = out substr($0, i, 1) } else if (ch == SQ) aq = 0; prev = "x"; continue }
+        # Unquoted `#` opening a word is a comment: the shell reads no further and
+        # neither do we, so nothing after it can open a quote or be a pipe.
+        if (ch == HASH && sq == 0 && dq == 0 && (prev == " " || prev == "\t")) break
+        # ANSI-C QUOTING IS REFUSED, AND THE TEST BELONGS HERE RATHER THAN IN THE
+        # METACHARACTER BAN ABOVE. A dollar sign opening a quote makes bash read an
+        # escaped quote inside it as a LITERAL where this scan reads a toggle, so the two
+        # disagree about where the quotes are and a bar can land in the window between
+        # them. Measured: a command this scan called one segment, whose second stage bash
+        # ran. Banning the two characters as a SUBSTRING instead refuses 21 correct
+        # commands in the reference corpus, every one a regex end-anchor before a closing
+        # quote. Only the quote STATE separates those two populations, and only this loop
+        # has it.
+        if (chain && ch == "$" && sq == 0 && dq == 0 && i < n && substr($0, i+1, 1) == SQ) { if (st == 0) st = 4; aq = 1; out = out ch SQ; i++; prev = "x"; continue }
+        if (ch == "$" && sq == 0 && dq == 0 && i < n && substr($0, i+1, 1) == SQ) exit 4
+        # A DOLLAR THAT EXPANDS: the class above, plus a double quote outside double quotes.
+        # (mode 1) A FRAME OPENS: `$(`, `<(`/`>(` outside double quotes, `${`.
+        if (chain && sq == 0 && i < n && substr($0, i+1, 1) == "(" && (ch == "$" || (dq == 0 && (ch == "<" || ch == ">")))) { if (st == 0) st = 8; SV[length(stk) + 1] = dq; stk = stk "("; dq = 0; out = out ch "("; i++; prev = " "; continue }
+        if (chain && sq == 0 && ch == "$" && i < n && substr($0, i+1, 1) == "{") { if (st == 0) st = 8; SV[length(stk) + 1] = dq; stk = stk "{"; dq = 0; out = out ch "{"; i++; prev = "x"; continue }
+        if (chain && ch == "$" && sq == 0 && i < n && (index(DX, substr($0, i+1, 1)) > 0 || (dq == 0 && substr($0, i+1, 1) == DQ))) { if (st == 0) st = 6; out = out ch; prev = ch; continue }
+        if (ch == "$" && sq == 0 && i < n && (index(DX, substr($0, i+1, 1)) > 0 || (dq == 0 && substr($0, i+1, 1) == DQ))) exit 6
+        # Inside single quotes a backslash is literal; everywhere else it escapes the
+        # next character, so that character can never open, close or be a delimiter.
+        if (ch == BS && sq == 0) { out = out ch; i++; if (i <= n) out = out substr($0, i, 1); prev = "x"; continue }
+        # A BACKTICK OUTSIDE SINGLE QUOTES IS COMMAND SUBSTITUTION, unquoted and inside
+        # double quotes alike, so it is refused here, where the quote state is known. It
+        # sits after the backslash branch because an escaped backtick is a literal, and
+        # before the toggles because its own quote state is the one that decides.
+        # (mode 1) A backtick closes the frame it opened, or opens one.
+        if (chain && ch == BT && sq == 0) { if (st == 0) st = 5; if (substr(stk, length(stk)) == BT) { dq = SV[length(stk)]; stk = substr(stk, 1, length(stk) - 1) } else { SV[length(stk) + 1] = dq; stk = stk BT; dq = 0 }; out = out ch; prev = " "; continue }
+        if (ch == BT && sq == 0) exit 5
+        if (ch == SQ && dq == 0) { sq = !sq; out = out ch; prev = ch; continue }
+        if (ch == DQ && sq == 0) { dq = !dq; out = out ch; prev = ch; continue }
+        # (mode 1) INSIDE A FRAME, OUTSIDE QUOTES: a bare `(` nests, `)` or `}` closes its own kind.
+        if (chain && sq == 0 && dq == 0 && stk != "" && (ch == "(" || ch == ")" || ch == "}")) {
+          top = substr(stk, length(stk))
+          if (ch == "(" && top != "{") { SV[length(stk) + 1] = 0; stk = stk "p"; out = out ch; prev = " "; continue }
+          if ((ch == ")" && (top == "(" || top == "p")) || (ch == "}" && top == "{")) { dq = SV[length(stk)]; stk = substr(stk, 1, length(stk) - 1); out = out ch; prev = "x"; continue }
+        }
+        # THE CONTROL OPERATORS (mode 1 only). A `|` that is not `||` stays in the segment;
+        # `&` beside a `>` is a redirection; inside a frame every operator is text.
+        if (chain && sq == 0 && dq == 0 && (ch == ";" || ch == "&" || ch == "|")) {
+          nx = (i < n) ? substr($0, i+1, 1) : ""; lc = (i > 1) ? substr($0, i-1, 1) : ""
+          if (ch == "|" && nx == "&") exit 7
+          if (stk != "") { out = out ch; prev = " "; continue }
+          if (ch == "|" && nx != "|") { out = out ch; prev = " "; continue }
+          if (ch == "&" && (lc == ">" || lc == "<" || nx == ">")) { out = out ch; prev = ch; continue }
+          op = (ch == ";") ? ";" : ((ch == "|") ? "||" : ((nx == "&") ? "&&" : "&"))
+          if (ch == "|" || (ch == "&" && nx == "&")) i++
+          ns++; SG[ns] = st "\t" op "\t" gl "\t" out; out = ""; st = 0; gl = 0; prev = " "; continue
+        }
+        if (ch == "|" && sq == 0 && dq == 0) { print out; out = ""; prev = " "; continue }
+        # (mode 1) An unquoted, unescaped glob character or tilde marks the segment (explain_chain reads it).
+        if (chain && sq == 0 && dq == 0 && (ch == "*" || ch == "?" || ch == "[" || ch == "~")) gl = 1
+        out = out ch; prev = ch
+      }
+      if (chain) {
+        if (sq || dq || aq || stk != "") exit 3
+        ns++; SG[ns] = st "\t\t" gl "\t" out
+        for (k = 1; k <= ns; k++) print SG[k]
+        next
+      }
+      if (sq || dq) exit 3
+      print out
+    }'
+}
+
 cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   local c="$1" seg segs scan_rc=0 first_kind="" first_why=""
   REFUSED=""
@@ -1484,6 +1600,7 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   case "$c" in
     *';'*|*'&'*|*'>'*|*'<'*|*'$('*|*'${'*|*'||'*)
       REFUSED="it can chain, redirect or substitute (one of ; & > < \$( \${ ||)"
+      [ "$EXPLAIN" = 1 ] && explain_chain "$c"
       return 1 ;;
   esac
   # SPLIT ON A TOP-LEVEL `|` ONLY, THE WAY THE SHELL DOES. `tr '|' '\n'` was quote-blind,
@@ -1523,43 +1640,7 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   # The quote characters are built with `sprintf` rather than written literally, because a
   # literal `'` inside a single-quoted awk program needs `'"'"'` and that escaping is
   # itself a place this has to be got right.
-  segs="$(printf '%s' "$c" | awk '
-    BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92); HASH = sprintf("%c", 35); BT = sprintf("%c", 96)
-            DX = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789@*#?$!-[" }
-    { sq = 0; dq = 0; out = ""; n = length($0); prev = " "
-      for (i = 1; i <= n; i++) {
-        ch = substr($0, i, 1)
-        # Unquoted `#` opening a word is a comment: the shell reads no further and
-        # neither do we, so nothing after it can open a quote or be a pipe.
-        if (ch == HASH && sq == 0 && dq == 0 && (prev == " " || prev == "\t")) break
-        # ANSI-C QUOTING IS REFUSED, AND THE TEST BELONGS HERE RATHER THAN IN THE
-        # METACHARACTER BAN ABOVE. A dollar sign opening a quote makes bash read an
-        # escaped quote inside it as a LITERAL where this scan reads a toggle, so the two
-        # disagree about where the quotes are and a bar can land in the window between
-        # them. Measured: a command this scan called one segment, whose second stage bash
-        # ran. Banning the two characters as a SUBSTRING instead refuses 21 correct
-        # commands in the reference corpus, every one a regex end-anchor before a closing
-        # quote. Only the quote STATE separates those two populations, and only this loop
-        # has it.
-        if (ch == "$" && sq == 0 && dq == 0 && i < n && substr($0, i+1, 1) == SQ) exit 4
-        # A DOLLAR THAT EXPANDS: the class above, plus a double quote outside double quotes.
-        if (ch == "$" && sq == 0 && i < n && (index(DX, substr($0, i+1, 1)) > 0 || (dq == 0 && substr($0, i+1, 1) == DQ))) exit 6
-        # Inside single quotes a backslash is literal; everywhere else it escapes the
-        # next character, so that character can never open, close or be a delimiter.
-        if (ch == BS && sq == 0) { out = out ch; i++; if (i <= n) out = out substr($0, i, 1); prev = "x"; continue }
-        # A BACKTICK OUTSIDE SINGLE QUOTES IS COMMAND SUBSTITUTION, unquoted and inside
-        # double quotes alike, so it is refused here, where the quote state is known. It
-        # sits after the backslash branch because an escaped backtick is a literal, and
-        # before the toggles because its own quote state is the one that decides.
-        if (ch == BT && sq == 0) exit 5
-        if (ch == SQ && dq == 0) { sq = !sq; out = out ch; prev = ch; continue }
-        if (ch == DQ && sq == 0) { dq = !dq; out = out ch; prev = ch; continue }
-        if (ch == "|" && sq == 0 && dq == 0) { print out; out = ""; prev = " "; continue }
-        out = out ch; prev = ch
-      }
-      if (sq || dq) exit 3
-      print out
-    }')" || scan_rc=$?
+  segs="$(printf '%s' "$c" | quote_scan 0)" || scan_rc=$?
   case "${scan_rc:-0}" in
     0) ;;
     4) REFUSED="it uses \$'...' ANSI-C quoting, which this checker does not model -- bash and
@@ -1587,6 +1668,175 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   [ -n "$first_kind" ] || return 0
   refusal_text "$first_kind" "$first_why"
   return 1
+}
+
+# EXPLAIN_CHAIN: --explain-cmd ONLY, and it decides no verdict. A command the substring ban refused
+# still prints that ban's sentence as its VERDICT; this prints, before it, the ARGV and WORD lines of
+# every segment that would have been safe on its own, so the owed-derivations sweep, which asks
+# only WORD/ARGV lines, sees the operands of a chain (BL-799). It is called from exactly one line,
+# guarded by `EXPLAIN = 1`, and outside --explain-cmd no line of it runs.
+#
+# EVERY SEGMENT IS RE-GATED BEFORE seg_check, BECAUSE seg_check EVALS ITS INPUT. The eval is safe in
+# cmd_is_safe only because the substring ban and the quote scan run first; measured against the
+# eval with neither in front of it, `$(touch C)`, `> C` and `<(touch C)` each created C. So a
+# segment reaches seg_check only when (a) its own text carries none of `< > $( ${ &` -- the
+# substring ban minus the operators it was split on, and `&` survives only inside a redirection --
+# AND (b) quote_scan 1 recorded it clean (no expanding `$`, backtick, `$'` or substitution opener)
+# AND (c) quote_scan 0 over the segment alone accepts it, which also yields its `|` stages. A
+# segment failing any of the three prints nothing; it is not guessed at.
+#
+# A command with no top-level control operator (one segment) prints nothing here, so its output is
+# base's bytes exactly, even when the ban refused it for a QUOTED metacharacter. Whole-command
+# refusals (unbalanced quote, `|&`) print nothing either. Empty segments print nothing. REFUSED is
+# saved and restored, so the VERDICT line is the ban's sentence. Returns 0 only when every
+# segment was walked and passed -- which no caller reads as a verdict.
+#
+# A LITERAL `cd` IS CARRIED; ANY OTHER DIRECTORY CHANGE ENDS THE EXPLANATION. Every operand is printed
+# as if root-relative, and after `cd web &&` it is not: the reader would ask --is-core about
+# `.claude/...` when bash reads `web/.claude/...`. So:
+#   - A segment whose raw text is exactly `cd <dir>` (one blank, nothing else), where <dir> is a plain
+#     relative path (`[A-Za-z0-9_./-]`, no leading `-` or `/`), that passes the three gates and is one
+#     pipe stage, and that normalises lexically (collapse `./` and `//`, resolve `a/..`) to a path that
+#     does not climb above the root, SETS the prefix EXPLAIN_CDP; successive ones compose. Every later
+#     operand-class WORD, and the val of `-f`/`--file`, is printed as `<prefix>/<word>` normalised the
+#     same way (explain_word), before its `%q` quoting. An absolute word is left as it is.
+#   - THE PREFIX CROSSES `&&` ONLY, AND ONLY FROM AN ALL-`&&` START. Bash runs the next segment in the
+#     cd's directory only when the cd succeeded and the two share a shell: after `;` a failed cd leaves
+#     the root, after `||` the next segment runs only when the cd FAILED, and `&` runs the cd in a
+#     background subshell. And in `a || cd web && b` the cd is SKIPPED whenever `a` succeeds, while `b`
+#     still runs. So a cd is carried only when it ends in `&&` and every operator from the start of its
+#     and-or list (the command start, or the last `;` or `&`) up to it is `&&`; and any segment under a
+#     prefix that ends in `;`, `||` or `&` ends the explanation. Whether the directory exists is never
+#     tested.
+#   - ONLY A COMMAND WHOSE EVERY OPERAND IS A PATH IS EXPLAINED UNDER A PREFIX: the closed list CD_LIST.
+#     Any other command under a prefix ends the explanation, its own segment included, and so does a
+#     segment seg_check refused (its word classes cannot be trusted). The list, and every command left
+#     off it, is decided per command below CD_LIST. Only operands are prefixed; every option value
+#     (`head -n 5`, `cut -f 1`) is printed as it is, and so is an operand that is exactly `-` (stdin).
+#   - A GLOB OR A TILDE UNDER A PREFIX ends the explanation: seg_check's eval expands `*`, `?`, `[` and
+#     `~` in the root, not in the cd target, so its argv is not what bash would read there.
+#   - Every other directory change ends the explanation: the segment's own lines still print, and NO
+#     later segment is explained. That is any other `cd` (dynamic, quoted, refused, a bare `cd`, two
+#     operands, absolute, `-`, climbing above the root, inside a pipe), `pushd`, `popd`, and any segment
+#     whose first word may run one -- read from the raw text, NEVER evaluated: the first blank-delimited
+#     token with quote characters and backslashes deleted; a token that is not then a plain word (`$D`,
+#     `{`, `X=1`, empty), or is builtin, command, eval, exec, source, `.`, time or a reserved word.
+#   - The ARGV line of a carried segment stays bash's argv, unprefixed: the reader reads ARGV only for a
+#     `git` segment with `-C`, and git is off the list, so no git segment prints under a prefix; every
+#     other operand is read from WORD.
+# Stopping early only drops lines, which fails quiet: an operand never asked opens no row.
+#
+# CD_LIST, DECIDED PER ALLOWED COMMAND. A command stays OFF unless every operand it takes is shown to
+# be a path; an option-arity doubt also keeps it off. "+2 read as a file" was measured on this machine
+# by running `<cmd> +2 f.txt` with no file `+2`: an error naming `+2` means the operand was opened.
+#   ON  cat wc head cut nl comm sha256sum -- every operand is a file; `+2` is opened as a file by each.
+#       Option values are never prefixed, so `head -n 5` keeps `5` and `cut -f 1` keeps `1`. An operand
+#       that is exactly `-` is stdin, not a file: printed as `cd scripts/ai-dlc/-` it would match the
+#       core glob `scripts/ai-dlc/*`, so it is printed unprefixed, as base prints it.
+#   OFF ls -- this machine's ls takes `-D <format>`, a value-taking option the table does not know.
+#   OFF diff -- `-L`, `-A`, `-X`, `--algorithm`, `--exclude-from`, `--horizon-lines` and
+#       `--changed-group-format` take values the table does not know.
+#   OFF grep -- this machine's grep (BSD 2.6.0) takes `--label <v>` and an attached-only
+#       `--context[=num]`, which the table does not know; its pattern operand is also not a path.
+#   OFF tail sort uniq -- a `+N` operand is an offset, a key or a skip count, not a file (measured).
+#   OFF shasum -- a `+N` operand is parsed as an option (measured: "Unknown option: 2").
+#   OFF echo printf test -- their operands are text or expression tokens.
+#   OFF basename dirname -- their operands are names handled as strings, never opened.
+#   OFF awk sed -- the first operand is a program or a script (and awk takes `var=value` operands).
+#   OFF find -- its expression carries tokens (`!`, `(`) and primaries whose values are paths
+#       (`-newer`, `-samefile`) that are classed as values, so not every path is an operand.
+#   OFF git -- its operands are revisions, pathspecs and `<rev>:<path>` words, `git grep` included.
+#   OFF rg -- not installed on the machine the table was built on; its rows come from the man text
+#       alone, so its arity is unmeasured.
+CD_LIST="cat wc head cut nl comm sha256sum"
+for cd_w in $CD_LIST; do
+  case " $ALLOWED_CMDS " in *" $cd_w "*) ;; *)
+    printf 'REFUSED: CD_LIST names %s, which is not on ALLOWED_CMDS; no verdict.\n' "$cd_w" >&2; exit 2 ;;
+  esac
+done
+cd_listed() { # $1 cmd  $2 sub -> 0 when the cd prefix may be applied to this command's operands
+  case " $CD_LIST " in *" $1 "*) [ -z "$2" ] ;; *) return 1 ;; esac
+}
+EXPLAIN_CDP=""
+cd_norm() { # $1 a relative path -> CDN (lexically normalised, "" = the root); 1 when it climbs above it
+  local r="$1" s out=""
+  while [ -n "$r" ]; do
+    s="${r%%/*}"
+    case "$r" in */*) r="${r#*/}" ;; *) r="" ;; esac
+    case "$s" in
+      ''|.) ;;
+      ..) [ -n "$out" ] || return 1
+          case "$out" in */*) out="${out%/*}" ;; *) out="" ;; esac ;;
+      *) out="${out:+$out/}$s" ;;
+    esac
+  done
+  CDN="$out"
+}
+# ao_next: after a segment, the and-or state the NEXT cd reads -- reset at `;`, `&` or the end, broken
+# by `||`, kept by `&&`. Reads and sets explain_chain's sop and andok.
+ao_next() { case "$sop" in "&&") ;; "||") andok=0 ;; *) andok=1 ;; esac; }
+explain_chain() { # $1 a command the substring ban refused -> 0 every segment passed, 1 otherwise
+  local c="$1" saved="$REFUSED" lines nl st cseg stages stage all=0 walked=0 cdstop=0 fw nst trim sop sgl
+  local andok=1 buf sc ok
+  EXPLAIN_CDP=""
+  lines="$(printf '%s' "$c" | quote_scan 1)" || { REFUSED="$saved"; return 1; }
+  nl="$(printf '%s\n' "$lines" | grep -c .)" || nl=0
+  [ "$nl" -ge 2 ] || { REFUSED="$saved"; return 1; }
+  while IFS= read -r cseg; do
+    [ "$cdstop" = 0 ] || { all=1; break; }
+    st="${cseg%%$'\t'*}"; cseg="${cseg#*$'\t'}"
+    sop="${cseg%%$'\t'*}"; cseg="${cseg#*$'\t'}"
+    sgl="${cseg%%$'\t'*}"; cseg="${cseg#*$'\t'}"
+    case "$cseg" in *[![:space:]]*) ;; *) continue ;; esac
+    walked=1
+    if [ -n "$EXPLAIN_CDP" ]; then
+      [ "$sgl" = 0 ] || { all=1; break; }
+      [ "$sop" = "&&" ] || [ -z "$sop" ] || cdstop=1
+    fi
+    trim="${cseg#"${cseg%%[![:space:]]*}"}"; trim="${trim%"${trim##*[![:space:]]}"}"
+    fw="${trim%%[[:space:]]*}"
+    fw="$(printf '%s' "$fw" | tr -d "\"'\\\\")"
+    case "$fw" in
+      ''|*[!A-Za-z0-9_./-]*) cdstop=1 ;;
+      cd|pushd|popd|builtin|command|eval|exec|source|.|time|if|then|elif|else|while|until|do|for|case|select|function|coproc) cdstop=1 ;;
+    esac
+    case "$cseg" in
+      *'<'*|*'>'*|*'$('*|*'${'*|*'&'*) all=1; ao_next; continue ;;
+    esac
+    [ "$st" = 0 ] || { all=1; ao_next; continue; }
+    stages="$(printf '%s' "$cseg" | quote_scan 0)" || { all=1; ao_next; continue; }
+    nst=0
+    if [ -n "$EXPLAIN_CDP" ] && [ "$fw" != cd ]; then
+      # UNDER A PREFIX: every stage is walked into a buffer, and the segment prints only when each stage
+      # passed seg_check AND is a CD_LIST command; otherwise nothing of it prints and the walk ends.
+      buf=""; ok=1
+      while IFS= read -r stage; do
+        nst=$((nst + 1))
+        sc="$(seg_check "$stage" && printf '\001%s' "${SA[0]}")" || { ok=0; break; }
+        case "$sc" in *$'\001'*) ;; *) ok=0; break ;; esac
+        cd_listed "${sc##*$'\001'}" "" || { ok=0; break; }
+        buf="$buf${sc%$'\001'*}"
+      done <<< "$stages"
+      [ "$ok" = 1 ] || { all=1; break; }
+      printf '%s' "$buf"
+    else
+      while IFS= read -r stage; do
+        nst=$((nst + 1))
+        seg_check "$stage" || all=1
+      done <<< "$stages"
+    fi
+    # THE CARRIED cd: seg_check left this segment's argv in SA.
+    if [ "$fw" = cd ] && [ "$nst" = 1 ] && [ "${#SA[@]}" = 2 ] && [ "$trim" = "cd ${SA[1]}" ]; then
+      case "${SA[1]}" in
+        -*|/*|*[!A-Za-z0-9_./-]*) ;;
+        *) if [ "$sop" = "&&" ] && [ "$andok" = 1 ] && cd_norm "${EXPLAIN_CDP:+$EXPLAIN_CDP/}${SA[1]}"; then EXPLAIN_CDP="$CDN"; cdstop=0; fi ;;
+      esac
+    fi
+    ao_next
+  done <<< "$lines"
+  EXPLAIN_CDP=""
+  REFUSED="$saved"
+  [ "$walked" = 1 ] && [ "$all" = 0 ]
 }
 
 refusal_text() { # $1 kind  $2 what -> REFUSED
@@ -1618,7 +1868,16 @@ seg_refuse() { # $1 kind  $2 what
 }
 explain_word() { # $1 class  $2 token  $3 the argv word -- reads seg_check's first/sub
   if [ "$EXPLAIN" = 1 ]; then
-    printf '%s\tWORD\t%s\t%s\t%s\t%s\t%q\n' "$EXPLAIN_ID" "$first" "$sub" "$1" "$2" "$3"
+    local w="$3" pfx=0
+    # A carried `cd` (explain_chain) prefixes the operands of a CD_LIST command; never an absolute
+    # word, never `-` (stdin), never an option value.
+    if [ -n "$EXPLAIN_CDP" ] && cd_listed "$first" "$sub" && [ "$1" = operand ] && [ "$w" != - ]; then
+      pfx=1
+    fi
+    if [ "$pfx" = 1 ]; then
+      case "$w" in /*) ;; *) if cd_norm "$EXPLAIN_CDP/$w"; then w="${CDN:-.}"; else w="$EXPLAIN_CDP/$w"; fi ;; esac
+    fi
+    printf '%s\tWORD\t%s\t%s\t%s\t%s\t%q\n' "$EXPLAIN_ID" "$first" "$sub" "$1" "$2" "$w"
   fi
 }
 explain_argv() { # prints seg_check's argv, each word shell-quoted

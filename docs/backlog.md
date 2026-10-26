@@ -443,23 +443,6 @@ Owed: the Bash allowance gets its own contract, and a false-positive set measure
 
 verify: manual — no Bash predicate separates a sanctioned paused push from an advancing one, so nothing over the tree can be tested yet.
 
-## BL-793 — the protect hook's deny is per call, so one protected token refuses a whole mixed ctx_batch_execute batch
-
-**NOTE.** Source: batch 241, lead ai-dlc-58, cluster r7. A residual of BL-781. Not built. The part already shipped is BL-794, which removed the CONTEXT sentence that contradicted a consumer layer.
-
-Measured read-only on graph. Remediator seat agent-aa5cb612, s320, transcript `~/.claude/projects/-Users-n8-git-graph/719a49a0-4d69-4cae-8cd2-732e622893b7/subagents/agent-aa5cb61243fcd2180.jsonl`:
-- Two ctx_batch_execute calls were denied, at 13:51:44Z (PROTECTED_HITS: docs/escalations/pending.md) and 13:53:54Z (the s319 story-3-2 file, .claude/team-roles/code-reviewer.md, docs/architecture.md, pending.md). Each was a mixed batch of 4 and 7 commands, of which only 1-2 touched a protected path.
-- The seat re-ran the same greps and seds through plain Bash, which the protect hook does not match: it is registered only on the context-mode MCP matcher. It then made one native Read of pending.md at 13:57:22Z.
-- The single-line picks (`sed -n 406p`, `sed -n 100p`, `sed -n 965p`) have a verbatim native equivalent in Read with offset/limit. The `grep -c`/`grep -n` on pending.md has none.
-- Native Grep was NOT offered: it is absent from the seat's tool list, absent from the deferred tools, and appears 0 times in the rendered prompt. The transcript carries 0 Grep tool_use calls against 12 Read calls (12 parsed tool_use Read blocks, `python3 -I` over the transcript, read at 2026-10-23T14:32:47Z). Across graph, 0 transcripts modified in the last 7 days carry a Grep tool_use, against 1411 that carry Read. Naming native Grep in the deny or in the rendered agent line would point at a tool that does not exist, so neither ships.
-- The Bash reads of protected files were byte-equal to native Read (pending.md:4858, code-reviewer.md:406, audit-anchors.md:61 as a prefix). Those were short one-line picks. That is not evidence that Bash is a verbatim channel, because the compressor hazard was measured on a long `cat -n`, per `.claude/rules/tool-hazards.md`.
-- Harm, measured: the denial dropped two requested reads, architecture.md:965 and story-3-2:100. Both were requested inside the denied 13:53:54Z batch (`sed -n 100p [^;]*story-3-2` matches 1 call, `sed -n 965p [^;]*architecture\.md` matches 1 call), and no tool read either line afterwards. Control: `sed -n 406p [^;]*code-reviewer` matches 2 calls, the denied batch and one later Bash call that ran. An impossible token matches 0. The seat's own text cites neither line, at the time of reading (2026-10-23T14:32:47Z) its last record was 2026-10-23T14:27:32Z, and no s320 lane-1 output exists to cite them. Two reads were dropped and never re-sought, and no cite of them reached any output, so the measured harm is 0.
-- Rate: 45 denials across 23 agents in s319, against 2 in 1 agent in s320 so far. The 0.922.0 native-Read line is in 18 of 18 of graph's rendered agents.
-
-Owed, not built: the structural cause is that the deny is per call, so one protected token refuses a whole mixed batch. A fix is structural (for example, a deny naming which commands to split out) and needs its own contract.
-
-verify: manual — the batch-granularity fix needs its own contract; no predicate over the tree exists yet.
-
 ## BL-795 — V17..V25 have no engine-side mutant, so nothing proves the key field each one tests is load-bearing
 
 **NOTE.** Measured by batch 241 r9's BL-699 share reading (read-only, at bdb981712; lead ai-dlc-58). Filed OPEN, not built.
@@ -498,19 +481,4 @@ That makes three refusers ahead of V25's line, and none of them is coverage. Owe
 Shard c adds 28 full renders, read off the code. Each scored mutant costs an approve, a recording run and an opt-out, plus a cached render on a SURVIVE: 4 × 4 + 4 × 3.
 
 verify: manual — V25 is owed an input that discriminates; the eight scored rows are held by phase pcvmut itself.
-
-## BL-799 — the derivation validator gives a refused `&&`/`;` chain an ALLOWLIST FAIL with no per-segment ARGV/WORD lines, so check-owed-derivations.sh's living sweep cannot judge a core operand inside one
-
-**NOTE.** Graph has 2 instances at s315, both in push-candidate-ledger.md, both `;` chains with a core operand that the living sweep does not see: `:1377` `grep -n "PERSONA_MARKERS\|PHASE_LABELS" .claude/skills/ai-dlc/steps/retro.md; echo "exit:$?"` and `:1379` `grep -rn "John (PM)\|Amelia (Dev)\|Winston (Architect)" .claude/team-roles/*.md; echo "exit:$?"`. A third `;` chain at `:1309` reads CLAUDE.md, which is not core, so it is correctly silent. s320 has 0 of the named shapes. The source is the contract adversary's s315-s320 FAIL census, which lists every validator FAIL over graph's living documents per sprint tree. Filed OPEN, not built.
-
-The shape is a command chained with `&&` or `;`, for example `git -C web ls-files x.sh && grep -c qqalpha scripts/ai-dlc/x.sh`. `core/scripts/validate-artifact-derivations.sh` (`--explain-cmd`) answers it with an ALLOWLIST FAIL and prints no per-segment ARGV/WORD lines, so `check-owed-derivations.sh`'s living sweep never asks it about the core operand inside the chain. The owner is the validator, not the reader; the pre-fold reader (381896f2b) and the current one behave alike.
-
-Owed: a fix would have the validator explain each segment of a refused chain, so the reader can ask its operands.
-
-BL-587's s315 block count is 6 core-operand rows, of which the reader blocks 4. The operator's "Block on ai-dlc files only" ruling was given on the 4 figure. A follow-up that builds BL-799 changes s315's count, and that change goes back to the operator.
-
-Separately, `check-owed-derivations.sh` reads a 9th field `cyc` in its pass-2 loop that no producer ever sets to 1, so its `[ "$cyc" != 1 ]` tests are vacuous; it predates batch 241 and is left untouched.
-
-verify: manual — a decision on whether to build, not a tree state.
-
 

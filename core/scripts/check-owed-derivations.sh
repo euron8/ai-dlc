@@ -740,7 +740,7 @@ repoint_of() { # <key> -> "<new key><SEP><new command>" for the LATEST REPOINTED
 while IFS="$SEP" read -r key cmd _recd _act range logn; do
   [ -n "$key" ] || continue
   classify "${key%:*}"; sc="$SCOPE_TOKEN"
-  tkey="$key"; tcmd="$cmd"; hops=0; cyc=0; seen="$SEP$key$SEP"
+  tkey="$key"; tcmd="$cmd"; hops=0; seen="$SEP$key$SEP"
   while :; do
     nx="$(repoint_of "$tkey")"
     [ -n "$nx" ] || break
@@ -752,8 +752,8 @@ while IFS="$SEP" read -r key cmd _recd _act range logn; do
     case "$seen" in *"$SEP$tkey$SEP"*) break ;; esac
     seen="$seen$tkey$SEP"
   done
-  printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n' "$key" "$cmd" "$range" "$logn" "$sc" "$tkey" "$tcmd" "$hops" "$cyc" >> "$TMP/targets"
-  if [ "$sc" != PAST ] && [ "$sc" != HISTORY ] && [ "$cyc" = 0 ]; then printf '%s\n' "${tkey%:*}" >> "$TMP/files.raw"; fi
+  printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n' "$key" "$cmd" "$range" "$logn" "$sc" "$tkey" "$tcmd" "$hops" >> "$TMP/targets"
+  if [ "$sc" != PAST ] && [ "$sc" != HISTORY ]; then printf '%s\n' "${tkey%:*}" >> "$TMP/files.raw"; fi
 done < "$TMP/rows"
 sort -u "$TMP/files.raw" > "$TMP/files"
 
@@ -793,7 +793,7 @@ superseded_by() { # <stderr file> <abs:ln> -> the later line number, empty when 
 }
 # ---- pass 2: judge ----------------------------------------------------------------------------
 nopen=0
-while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
+while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops; do
   [ -n "$key" ] || continue
   if [ "$sc" = HISTORY ]; then
     printf 'INFO\thistory\t%s is in a history file (an archive, or an ai-dlc rotation output): unrepaired debt that is no longer enforced, NOT closed ($ %s; %s; %s)\n' "$key" "$cmd" "$range" "$logn"
@@ -809,7 +809,7 @@ while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops cyc; do
   # THE DERIVATION IS LOCATED BY CONTENT, NOT BY LINE NUMBER (see the header). A re-pointed row is judged
   # as the NEW derivation: its own file, its own command, the same checks.
   found=""; nfound=0
-  if [ "$cyc" != 1 ] && [ -f "$ROOT/$rel" ]; then
+  if [ -f "$ROOT/$rel" ]; then
     # A failed `--list` is a refusal whatever the file's own run gave (list_of exits 2).
     list_of "$rel"
     found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \
