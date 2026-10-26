@@ -711,7 +711,8 @@ Owed:
    on the tag alone: an entry is an efficiency entry if it carries the tag OR cites an efficiency analysis under
    `docs/analysis/` as its source. `scripts/backlog-rotate.sh` will not archive one carrying `**LANDED (v` unless it
    also carries an `Outcome measured:` line naming the consumer sprint, the script that measured it, and the before
-   and after per-story machine hours and tokens of its own step. Where that figure did not fall, the line must
+   and after per-story machine hours and tokens of its own step, lead and subagent separately (BL-819). Where
+   that figure did not fall, the line must
    also cite the step-value evidence that the cost buys a catch no other step makes, as a `path:line` that
    resolves to a step-value analysis table row or a `Failure caught:` line; a sentence alone does not satisfy it. `validate-backlog-receipts.sh`
    fails the push on such an entry with no outcome line, with a line naming no sprint, or with a figure that did
@@ -732,5 +733,48 @@ Owed:
 
 Outcome owed: the arm behaves as its self-probe states, and every one of the 32 archived closes carries an
 `Outcome measured:` line or is reopened.
+
+verify: manual
+
+## BL-819 — the lead session's own hours and tokens are outside every efficiency entry, and they are most of the wall clock
+
+**DEFECT (efficiency).** BL-808 through BL-811 count subagent spawns and subagent dollars, and BL-812 counts
+machine hours without saying how much of them is the lead's. No entry attributes hours or dollars to the lead
+session, which is the larger share of the machine hours, and whose cost rose. Per story, from this ledger's s317–s320 extraction
+(`steps.csv`, pipeline bucket, operator wait excluded, prices as `roll.py`):
+
+| | s317 | s318 | s319 | s320 (through stories) |
+|---|---|---|---|---|
+| Lead active h / story | 2.93 | 2.48 | 2.74 | 1.29 |
+| Agent wait h / story | 1.85 | 2.18 | 1.91 | 1.27 |
+| Lead active share of machine hours | 61% | 53% | 59% | 50% |
+| Lead $ / story | 15.2 | 23.3 | 23.6 | 10.6 |
+
+The implementation step holds the largest part: lead active 18.7 h in both s317 and s319, and lead dollars $41
+in s317 against $145 in s319. Gate-validation is second (10.5 h and 9.8 h). Narrowing a parallel fan-out
+(BL-808, BL-811) removes subagent tokens and little wall clock, because a fan-out takes as long as its slowest
+shard; lead active time is the part of the wall clock that is serial. The lead hours come from the same gap
+summation as every machine-hour figure here, which over-counts when timestamps arrive out of order (about +5 h on
+s320's total); that changes no direction, and the attribution below should correct it before it builds on it.
+
+Expected movement, a projection to read the measured sprint against and not a bar: implementation lead dollars
+per story back toward s317's level at flat or lower lead hours, and lead active hours per story falling in every
+step whose lead work is mechanised under item 2.
+
+Owed:
+1. **Attribute the lead's active time and tokens inside each step** of s319 and s320, with the extractor
+   extended for it: dispatch and brief writing, reading and merging shard output, repair loops, validator and
+   gate runs, re-reads of step files, and compaction recovery. Each class gets hours, tokens and dollars per
+   story. The implementation step's lead dollars rising from $41 to $145 at flat hours is explained from it.
+2. **Decide each class by the step-value ruling** ("A step with no measured value goes",
+   `.claude/rules/operator-rulings.md`, as applied in `docs/analysis/step-value-s317-s319.md`). Lead work that
+   carries no catch or decision another element does not already make is removed or mechanised: a merge or a
+   check the lead reads and re-derives by hand that a program already answers goes to the program.
+3. **Lead hours and lead tokens join every efficiency outcome.** BL-812's measured sprint and BL-817's
+   `Outcome measured:` line report lead active hours and lead dollars beside the subagent figures, per step.
+
+Reference points, not pass bars: the table above. This entry closes on a measured graph sprint that reports the
+lead's per-step hours and tokens against s317 and s319, with value evidence for any class whose cost did not
+fall.
 
 verify: manual
