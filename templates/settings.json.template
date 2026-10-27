@@ -7,8 +7,8 @@
   },
   "aiDlcRoles": {
     "adversary": {
-      "model": "opus",
-      "effort": "medium",
+      "model": "sonnet",
+      "effort": "high",
       "omitClaudeMd": true
     },
     "analyst": {
