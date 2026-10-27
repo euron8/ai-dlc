@@ -280,8 +280,9 @@ step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
 
 # 1f2. BL-817: an efficiency close in the ARCHIVE carries its outcome. The bare run above judges the
 #     live ledger only, and rotation moves a close out of its sight the moment it is archived -- so
-#     a close with no `Outcome measured:` line, or one whose line names no sprint, cites nothing or
-#     lacks the token-equivalent/gap-inclusive shape, is caught here or nowhere. One pass over
+#     a close with no `Outcome measured:` line, or one whose line names no sprint, cites nothing,
+#     lacks the token-equivalent/gap-inclusive shape, or does not report a lead figure and a
+#     subagent figure (hours or dollars) separately, is caught here or nowhere. One pass over
 #     docs/backlog.archive.md: the self-probe and the efficiency arms only, no receipt checkouts.
 #     Distribution-only; the consumer hook needs nothing (no ledger, and I66 binds only the runner).
 step "backlog archive efficiency closes (an efficiency close carries its outcome)" \

@@ -1358,6 +1358,8 @@ memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|B
 #   ef-noclose  a tagged LANDED entry with no outcome line                     -> NO-OUTCOME
 #   ef-sprintless a sprintless line WITHOUT the no-step wording              -> NO-SPRINT
 #   ef-untagged an untagged entry citing docs/analysis/                         -> F-UNTAGGED
+#   ef-noseat   a sprint-branch line with all three labels and the words lead/subagent but only a
+#               percentage and a call count beside them (no `<n> h` / `$<n>` seat figure) -> SHAPE
 #   ef-second   the second spelling of a valid line (bold label, `sprint 321`, a Failure caught:
 #               citation resolved by its phrase)                                -> OK
 # Mutants (copies, cmp-guarded through `mut`): m-noclose removes the close arm's population test,
@@ -1365,7 +1367,7 @@ memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|B
 # untagged-citing refusal. Each must turn exactly its own world red; E0 is part of the subject, so
 # a mutant the self-probe catches exits 2 -- which is a kill BY THE SELF-PROBE, asserted as such.
 EF_RUL='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
-EF_SHP='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+EF_SHP='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive, lead active 0.4 h, subagent $5'
 ef_seed() { # ef_seed <dir> <ledger-body>
   seed "$1"
   mkdir -p "$1/docs/analysis"
@@ -1451,6 +1453,17 @@ goes\" in \`.claude/rules/operator-rulings.md\`.
 
 <br>**Outcome measured:** graph sprint 321, $EF_SHP; did not fall; \`docs/analysis/v.md:2\` \"EFFC phrase\".
 " "" 0
+EF_NOSEAT="# probe
+
+## BL-980
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: graph s321, token-equivalent \$9 with API \$8 beside it, 1.0 h gap-inclusive; lead 40% of calls, subagent 12 calls.
+"
+ef_world ef-noseat "$TMP/efns" "$EF_NOSEAT" "SHAPE BL-980|" 1
 # ef-pathsprint: a no-step close whose only s<NNN> token sits inside a path segment (BL-821's shape)
 # must take the no-step branch, so it reads OK; a sprint branch would refuse it as SHAPE.
 EF_PATHSPRINT="# probe
@@ -1513,6 +1526,10 @@ if mut "$d_pn" 's/^  _t="\$(sed -e .*$/  _t="$1"/'; then
     note "FAIL  m-nopathnarrow -- SURVIVED: rc $rc_v, rows [$(ef_rows "$out")]"; rc=1
   fi
 fi
+# m-noseat: eff_shape_ok back to the three-label form, eff_seat_ok defined and never called.
+ef_mut m-noseat 's#^eff_shape_ok() .*$#eff_shape_ok() { case "$1" in *token-equivalent*) ;; *) return 1 ;; esac; case "$1" in *API*) ;; *) return 1 ;; esac; case "$1" in *gap-inclusive*) return 0 ;; esac; return 1; }#' ef-noseat "$EF_NOSEAT"
+# m-seatword: eff_seat_ok reduced to the words lead and subagent occurring (the word-only regression).
+ef_mut m-seatword 's#^eff_seat_ok() {$#eff_seat_ok() { grep -qi lead <<<"$1" \&\& grep -qi subagent <<<"$1"; }; eff_seat_orig() {#' ef-noseat "$EF_NOSEAT"
 ef_mut m-nofiling 's/^      \[ "\$_a" = "1" \] .. \[ "\$_t" != "1" \] .. \[ "\$_n" != "1" \] .. printf .F-UNTAGGED.*$/      :/' ef-untagged "# probe
 
 ## BL-977

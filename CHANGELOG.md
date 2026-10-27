@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.956.0] - 2026-10-27
+
+Batch b244, cluster c2. It closes two entries, BL-513 and BL-694, both on a measured outcome from the committed snapshot. It advances BL-817, which stays PARTIAL with `verify: manual`. No entry is filed and no `PC-` id is closed. NET: entries closed 2 minus filed 0 = -2.
+
+### BL-817 — the seat-figure arm requires a lead figure and a subagent figure; five archive lines amended
+
+- Status: PARTIAL, `verify: manual`. Item 1's arm now requires, on a sprint-branch `Outcome measured:` line, a lead figure and a subagent figure, one per seat, in hours or dollars. Only the presence of a figure is judged, never its value. Items 2 and 3 are unchanged: item 2 still owes the baseline sprint, owned step and expected movement, and item 3's coverage clause holds.
+- Grammar, in `scripts/validate-backlog-receipts.sh` (`eff_seat_ok`). The seat word needs a letter on neither side, the first number after it must carry a unit while `sNNN`, `sprint NNN` and `BL-NNN` are skipped, and each seat's scan stops at the next seat word. The contract's first grammar, a character window, accepted `leading 1.2 h`, `mislead $3`, a figure across a comma in another subject's clause, and one figure shared by both seats. E0 seeds BL-969..BL-976 hold each rule, and removing one rule flips exactly its seed.
+- False-positive set: empty. The old predicate gives 0 rows over the base and tip archive and ledger. The new predicate gives 5 SHAPE rows over the base archive (BL-509, BL-511, BL-515, BL-568, BL-569, the arm's own subject) and 0 over the base archive (fc71a7b10) with this release's five amended lines applied (21 in the close population, 16 on the no-step branch) and over the live ledger.
+- Archive amendment. The five sprint-branch outcome lines that carried no seat figure gained ground-truth seat figures from the committed snapshot; three had their s320 figures re-taken. No direction verdict flipped.
+- Analysis scripts, under this heading and not as their own entry: `extract.py` gains `EXTRACT_WIN_END`, `roll.py` gains `--seats`, and `docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot/` commits the extraction (README.md, seats.txt, steps.csv) that the amended lines cite.
+- The receipt seeds one sprint-branch line carrying only `Lead-seat share 2%, subagent seats 3` and requires `--archive` to exit 1 with `BL-990	SHAPE`. The fix scores 0; the old three-label predicate and a word-only `eff_seat_ok` each score 1.
+- `docs/analysis/pipeline-efficiency-s317-s320/scripts/cap_rejections.py` and `docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot/cap_rejections.txt` now source archive line 32954's re-counted figures, and the seat scan also stops at a sentence break (`. ` or `; `).
+
+### BL-513 — closed: the step group fell in s319
+
+- Outcome measured on graph s319 from the committed snapshot: sprint-review plus gate-validation[sprint-review] per story fell from 0.37 h to 0.13 h gap-inclusive and from $13.4 to $5.8 token-equivalent. s320 has not reached sprint-review. The entry's own subject was counted from graph's committed sprint-review gate verdicts: check 21 FAILs 2 of 2 pre-fix sprints (s317, s318) and 0 of 1 post-fix sprint (s319). The entry rotates to the archive.
+
+### BL-694 — closed: the bucket fell on s320, the first whole post-fix sprint
+
+- Outcome measured on graph s320 from the committed snapshot: the ai-dlc-update bucket per story fell from $5.2 (s317 and s318 pooled) to $3.5 and from 1.27 h to 0.82 h gap-inclusive. Consumer side, read only: 0 of graph's 12 merged pulls after the fix's arrival touch `reconcile/setup-sites.md`. The entry rotates to the archive.
+
 ## [0.955.0] - 2026-10-27
 
 Batch b244, lead ai-dlc-45, cluster c5. It closes one entry, BL-831, which was filed before this release. No `PC-` id is closed. NET: entries closed 1 minus filed 0 = -1.

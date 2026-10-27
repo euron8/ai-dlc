@@ -13,6 +13,9 @@ OUT = sys.argv[1]
 # WIN_START is a parameter: argv[2], else $EXTRACT_WIN_START, else just after graph's s313 close
 # (commit 6a4469196, 2026-09-25T20:31-04:00), so s314 onward is selected. Records before it are dropped.
 WIN_START = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("EXTRACT_WIN_START")) or "2026-09-26T00:35:00Z"
+# WIN_END pins a snapshot: argv[3], else $EXTRACT_WIN_END, else unbounded. A record whose timestamp is LATER
+# than it is dropped, compared as an instant (not as a string, so fractional seconds order correctly).
+WIN_END = (sys.argv[3] if len(sys.argv) > 3 else os.environ.get("EXTRACT_WIN_END")) or None
 os.makedirs(OUT, exist_ok=True)
 
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")
@@ -20,6 +23,7 @@ SUBPROC = {"_gate-procedures", "_dispatch-protocol"}
 
 def ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+WIN_END_TS = ts(WIN_END) if WIN_END else None
 
 # Each edge is the END of sprint n: graph's last close commit for that sprint plus a few minutes
 # (36f74d63c s314 2026-09-28T15:07:38-04, 7b74011a9 s315 2026-09-30T16:55:42-04,
@@ -77,6 +81,7 @@ def scan(path, kind, meta):
         t = r.get("timestamp")
         if not t or t < WIN_START: continue
         tt = ts(t)
+        if WIN_END_TS is not None and tt > WIN_END_TS: continue
         first = first or t; last = t
         typ = r.get("type")
         S = seg(step); S["lines"] += 1
