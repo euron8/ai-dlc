@@ -2756,6 +2756,29 @@ w="$(k3_world k3w-nomf "$K3_POST")" && k3_document_pass "$w" "$K3S" nomanifest \
 w="$(k3_world k3w-other "$K3_POST")" && k3_other_pass "$w" "$K3S" || k3w_bad k3w-other
 w="$(k3_world k3w-brief "$K3_POST")" && k3w_single "$w" product-brief "$K3PA/product-brief.md" || k3w_bad k3w-brief
 w="$(k3_world k3w-arch "$K3_POST")" && k3w_single "$w" architecture-impact "$K3PA/s9/architecture-impact.md" || k3w_bad k3w-arch
+# k3w-subj (BL-829): the widened `prd-adversarial-p1` whose artifact IS the subject manifest, so K3's
+# terminal pass takes branch (b) -- four notarized stems, shas matching -- and fails its key set
+# (k3-wrongset's `1=` -> `99=`, which is not the lone-cross shape, so K3C/K3D never rebind). The repo
+# is stamped strictly BETWEEN K3_RELEASE and K3B_RELEASE: branch (b)'s rebind to K3B_RELEASE reads
+# PENDING "not owed yet", and dating it against K3_RELEASE convicts. The stamp is derived from the
+# validator's own constants and refused unless it separates them.
+K3W_MID=""
+IFS=. read -r k3m_ma k3m_mi k3m_pa <<EOF
+$K3_PRED
+EOF
+K3W_B="$(sed -n 's/^K3B_RELEASE="\([0-9.]*\)"$/\1/p' "$VALIDATOR")"
+IFS=. read -r k3b_ma k3b_mi k3b_pa <<EOF
+$K3W_B
+EOF
+if [ -n "$k3m_mi" ] && [ -n "$k3b_mi" ] && [ "$k3m_ma" = "$k3b_ma" ] && [ $((k3m_mi + 1)) -lt "$k3b_mi" ]; then
+  K3W_MID="${k3m_ma}.$((k3m_mi + 1)).${k3m_pa}"
+fi
+w="$(k3_world k3w-subj "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_subject_pass "$w" "$K3S" \
+  && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/$K3PA/s9/prd-adversarial-p1.md" \
+  && rm "$w/$K3PA/s9/requirements-adversarial-p1.md" \
+  && grep -q '^artifact: .*s9/requirements-subject\.md$' "$w/$K3PA/s9/prd-adversarial-p1.md" \
+  && grep -q '^shard_tool_use_ids:.* 99=' "$w/$K3PA/s9/prd-adversarial-p1.md" \
+  && [ "$(grep -c '^file: ' "$w/$K3PA/s9/requirements-subject.md")" -eq 4 ] || k3w_bad k3w-subj
 
 # --- J2 PER STEM (J2S_RELEASE): a subject stem moved after the requirements series met ---------
 # Each world is k3-subject's (a MET `merge --subject` pass notarizing the four stems, so K3 itself is
@@ -2896,6 +2919,8 @@ else
   k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
   k3w_cell k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
+  k3w_cell k3w-subj  "$VALIDATOR" "$K3W/k3w-subj"  prd 0 "at ${K3W_B} or later -- not owed yet." "FAIL (K3"
+  k3w_cell k3w-subj-b "$VALIDATOR" "$K3W/k3w-subj" prd 0 "is not the subject map's ordinals plus cross groups" "FAIL (K3"
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
   k3w_cell j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
   k3w_cell j2s-nochain-j2 "$VALIDATOR" "$K3W/j2s-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"
@@ -2928,7 +2953,7 @@ else
   }
   rowmut() { # <label> <row fn> <expected row> [<old> <new>]...
     local label="$1" fn="$2" want="$3" d got; shift 3
-    d="$(mktemp -d "$K3W/rowmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
+    d="$(mktemp -d "$K3W/rowmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"; ROWMUT_D="$d"
     ASSERTIONS=$((ASSERTIONS + 1))
     if [ ! -f "$d/partition-subject.sh" ]; then
       FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE BROKEN -- partition-subject.sh is not beside the copy\n' "$label"; return
@@ -2947,7 +2972,7 @@ PY
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
       fi
     fi
-    got="$("$fn" "$d/validate-adversarial-convergence.sh")"
+    got="$("$fn" "$d/validate-adversarial-convergence.sh")"; ROWMUT_GOT="$got"
     if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
@@ -2965,6 +2990,29 @@ PY
     'k3_wide=1; k3_rel="$K3B_RELEASE"' 'k3_wide=1; k3_rel="$K3_RELEASE"'
   rowmut "K3WX4 K3B_RELEASE lowered" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
     'K3B_RELEASE="0.738.0"' 'K3B_RELEASE="0.735.0"'
+  # BL-829: branch (b) -- the terminal pass reviews the subject manifest -- re-binds k3_rel after the
+  # key-set miss; dropping ONLY its widened conjunct dates k3w-subj against K3_RELEASE and convicts a
+  # repo stamped between the two releases. The line is load-bearing as a whole too: branch (b)'s stem
+  # loop reads the manifest with `read -r k3_k k3_st k3_rel`, clobbering the case arm's binding, so a
+  # deleted line dates against whatever that loop left (measured: FAIL, killed). This mutant keeps
+  # `k3_rel="$K3_RELEASE"` so that it tests the widened rebind and nothing else.
+  k3w_subj_row() { k3w_class "$1" k3w-subj prd 'K3 -- SUBJECT'; }
+  K3W_B_LINE='k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"'
+  ROWMUT_GOT=none; rowmut "K3WX6c k3w-subj control" k3w_subj_row "PENDING"; K3W_SUBJ_FIX="$ROWMUT_GOT"
+  ROWMUT_GOT=none; rowmut "K3WX6 (b) K3B conjunct dropped" k3w_subj_row "FAIL" "$K3W_B_LINE" 'k3_rel="$K3_RELEASE"'
+  K3W_SUBJ_MUT="$ROWMUT_GOT"
+  # The mutant APPLIED: the original line is gone from the copy and the kept binding stands alone
+  # on its line exactly once; and the world DISCRIMINATES: the two programs give different verdicts.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  k3w_o="$(grep -cF -- "$K3W_B_LINE" "$ROWMUT_D/validate-adversarial-convergence.sh")" || k3w_o=0
+  k3w_r="$(grep -cx -- '[[:space:]]*k3_rel="$K3_RELEASE"' "$ROWMUT_D/validate-adversarial-convergence.sh")" || k3w_r=0
+  k3w_v="$(grep -cF -- "$K3W_B_LINE" "$VALIDATOR")" || k3w_v=0
+  if [ "$k3w_v" -eq 1 ] && [ "$k3w_o" -eq 0 ] && [ "$k3w_r" -eq 1 ] && [ "$K3W_SUBJ_FIX" = PENDING ] && [ "$K3W_SUBJ_MUT" = FAIL ]; then
+    printf '  ok    %-28s line %s->%s, kept binding %s; fix %s, mutant %s\n' "K3WX6 applied, discriminates" "$k3w_v" "$k3w_o" "$k3w_r" "$K3W_SUBJ_FIX" "$K3W_SUBJ_MUT"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s line validator=%s mutant=%s, kept binding %s; fix %s, mutant %s (want 1 0 1 PENDING FAIL)\n' "K3WX6 applied, discriminates" "$k3w_v" "$k3w_o" "$k3w_r" "$K3W_SUBJ_FIX" "$K3W_SUBJ_MUT"
+  fi
   # k3_names rooted at the sprint dir, no walk up (self-probe conjunct with it): only a stem the
   # manifest names relative to a root it can no longer find drops out -- every stem, in- or out-of-s<N>.
   rowmut "K3WX5 manifest root not walked" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \

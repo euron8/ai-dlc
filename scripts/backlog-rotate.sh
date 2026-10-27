@@ -263,7 +263,7 @@ fi
 AWKF="$(mktemp)" || { echo "backlog-rotate: mktemp failed" >&2; exit 2; }
 trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved" "$AWKF.nooutcome"' EXIT
 
-{ ledger_entry_awk; printf '%s\n' "$BACKLOG_LABEL_AWK"; cat <<'AWK'
+{ ledger_entry_awk; printf '%s\n' "$BACKLOG_LABEL_AWK"; backlog_efficiency_tag_awk; cat <<'AWK'
 # Emits the ledger split in two: LIVE lines to one file, CLOSED entries to another, with every
 # byte accounted for. The preamble -- everything before the first id-shaped entry -- always
 # stays live.
@@ -302,9 +302,10 @@ function flush(   i) {
     next
   }
   if (label == "") { print > LIVE; next }
-  # AN EFFICIENCY CLOSE CARRIES ITS OUTCOME (BL-817). The tag is the bold form, so prose that
-  # quotes the bare phrase is not an efficiency entry; the outcome line opens a line.
-  if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1
+  # AN EFFICIENCY CLOSE CARRIES ITS OUTCOME (BL-817). The tag is one of the four bold forms that
+  # reconcile/lib.sh's backlog_efficiency_tagged() names (BL-835), so prose that quotes the bare
+  # phrase is not an efficiency entry; the outcome line opens a line.
+  if (backlog_efficiency_tagged($0)) tagged = 1
   if ($0 ~ /^(<br>)?(\*\*)?Outcome measured:/) outcome = 1
   # STRICTER THAN backlog-reverify.sh's PREDICATE, ON PURPOSE. Rotate's closed-set must be a
   # strict SUBSET of reverify's, or the --check acceptance test below is comparing two readers
@@ -328,8 +329,10 @@ AWK
 MOVED_COUNT="$(awk -v LIVE="$AWKF.live" -v MOVED="$AWKF.moved" -v NOOUTCOME="$AWKF.nooutcome" -f "$AWKF" "$LEDGER" 2>&1 >/dev/null)"
 MOVED_COUNT="${MOVED_COUNT:-0}"
 
-# THE OUTCOME GUARD (BL-817). An efficiency entry -- the bold `**DEFECT (efficiency).**` tag --
-# that carries the close annotation leaves the ledger only with an `Outcome measured:` line. A
+# THE OUTCOME GUARD (BL-817). An efficiency entry -- one carrying a bold efficiency tag in any of
+# the four forms `**DEFECT (efficiency).**`, `**DEFECT, efficiency.**`, `**NOTE (efficiency).**` or
+# `**DEFECT. [efficiency rank N] ...**`, decided by backlog_efficiency_tagged() in reconcile/lib.sh,
+# the one predicate validate-backlog-receipts.sh's E arms also read (BL-835) -- that carries the close annotation leaves the ledger only with an `Outcome measured:` line. A
 # receipt proves the mechanism shipped; for an efficiency entry the outcome is the claim, and the
 # ranked set of 19 closed on receipts while per-story cost never moved. Refused BEFORE anything is
 # written. What the line must SAY is validate-backlog-receipts.sh's close arm, which the push runs;
@@ -337,7 +340,8 @@ MOVED_COUNT="${MOVED_COUNT:-0}"
 if [ -s "$AWKF.nooutcome" ]; then
   echo "backlog-rotate: REFUSING — an efficiency close carries no outcome line:" >&2
   sed 's/^/  /' "$AWKF.nooutcome" >&2
-  echo "  Each entry above is tagged **DEFECT (efficiency).** and annotated LANDED, and has no line opening" >&2
+  echo "  Each entry above carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**," >&2
+  echo "  **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) and is annotated LANDED, and has no line opening" >&2
   echo "  'Outcome measured:'. Add one naming the consumer sprint, the measuring script and the per-story" >&2
   echo "  before/after (or the explicit no-graph-pipeline-step form), or reopen the entry. Nothing was moved" >&2
   echo "  and nothing was written." >&2

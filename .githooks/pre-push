@@ -340,6 +340,14 @@ step "write-format steering (every shared append-only artifact declares its entr
 step "fixture git-env scrub (a directly-run fixture cannot clobber the caller's index)" \
   bash scripts/validate-fixture-git-env.sh --max-unscrubbed 0
 
+# 2b'. A mutant kill is emitted only through mutant_killed (core/fixtures/lib/mutant.sh), which
+#     refuses unless the same run asserted the unmutated arm passed. A kill printed any other way
+#     can be the SEED failing rather than the mutation -- measured on check-22, 41 of 43 arms.
+#     The allowlist is DOWN-ONLY: an unlisted unrouted kill fails, and so does a stale row.
+#     Standalone, one awk over the corpus, deliberately NOT an arm of validate-enforcement-map.sh.
+step "mutant kills route through mutant_killed (down-only allowlist)" \
+  bash scripts/validate-mutant-kills.sh
+
 # 2d. THE SHIPPED RENDERER, DRIVEN AGAINST THIS TREE. `.claude/agents/<role>.md` frontmatter is
 #     the only channel that binds a role's reasoning EFFORT to its subagent. A prompt cannot set
 #     effort -- measured on the reference consumer, every spawn ran at the effort the SESSION

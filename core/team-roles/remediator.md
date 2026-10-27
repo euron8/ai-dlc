@@ -137,9 +137,10 @@ every call errored or was rate-limited. Replay is the default: run
 `FAIL:` line, fix the stale fence, then mark. Write `derivations: deferred to the join (section/subject
 shard)` only when a fence of yours names your section file or the document assembled from it,
 which reads stale until assembly; a fence naming code, a history file or `pending.md` replays
-now. `derivations: not replayed` when you did not run it, which the join refuses; `--mark` and
-`--mark-repair` then replay the record themselves, write `replayed <n>` from its `OK:` line, and
-refuse the mark on a `FAIL:` line, so fix the stale fence and mark again. A check you skipped is
+now. `derivations: not replayed` when you did not run it, which the join refuses; `--mark` then
+replays a part or shard record itself, writes `replayed <n>` from its `OK:` line, and refuses the
+mark on a `FAIL:` line, so fix the stale fence and mark again. The serial or unsharded remediator
+replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself. A check you skipped is
 stated here, in the record the join and the next pass read, never only in your final message.
 
 Then, per finding:

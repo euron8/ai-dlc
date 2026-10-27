@@ -1448,17 +1448,92 @@ if [ -n "$M14" ]; then
   fi
 fi
 
+# OUTCOME GUARD, EVERY TAG SPELLING (BL-835). The guard keyed on `**DEFECT (efficiency).**` alone
+# while the ledgers carry three more forms; each is its own world so one form refusing cannot
+# carry another. The near-miss world closes two untagged entries whose bold spans carry the word
+# `efficiency` (prose bold, and a DEFECT tier with the word after it) and must rotate.
+eff_form_world() { # eff_form_world <dir> <tag line>
+  mkcase "$1" <<EOM
+# Probe backlog
+
+## BL-603 — closed efficiency entry, other spelling, no outcome
+
+$2 A step costs too much.
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## BL-604 — open
+
+verify: lacks VERSION "."
+EOM
+}
+EF1="$WORK/eff-form-comma";  eff_form_world "$EF1" '**DEFECT, efficiency.**'
+EF2="$WORK/eff-form-note";   eff_form_world "$EF2" '**NOTE (efficiency).**'
+EF3="$WORK/eff-form-rank";   eff_form_world "$EF3" '**DEFECT. [efficiency rank 3] $12, 40 agent-minutes.**'
+for EFW in "$EF1" "$EF2" "$EF3"; do
+  reseed "$EFW"; run_rt "$RT" "$EFW" --apply
+  if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-603" "$LAST_OUT" \
+     && cmp -s "$EFW/backlog.md" "$EFW/pristine.ledger" && cmp -s "$EFW/backlog.archive.md" "$EFW/pristine.archive"; then
+    ok "outcome-${EFW##*/}" "that tag spelling, closed with no outcome line, is refused and nothing is written"
+  else
+    bad "outcome-${EFW##*/}" "exit $LAST_RC; a close in that tag spelling with no outcome line was not refused"
+  fi
+done
+EFN="$WORK/eff-form-nearmiss"
+mkcase "$EFN" <<'EOM'
+# Probe backlog
+
+## BL-605 — closed, prose bold carrying the word
+
+**Lead hours and lead tokens join every efficiency outcome.** Prose, not a tag.
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## BL-606 — closed, a DEFECT tier with the word after it
+
+**DEFECT.** The efficiency of this step is poor.
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## BL-607 — open
+
+verify: lacks VERSION "."
+EOM
+reseed "$EFN"; run_rt "$RT" "$EFN" --apply
+if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-605 ' "$EFN/backlog.archive.md" && grep -q '^## BL-606 ' "$EFN/backlog.archive.md" \
+   && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then
+  ok "outcome-nearmiss" "untagged closes whose bold spans carry the word efficiency rotate without an outcome line"
+else
+  bad "outcome-nearmiss" "exit $LAST_RC; an untagged close carrying the word efficiency in bold was refused or not archived"
+fi
+# M16 — the single-spelling predicate restored: rotate keys on `**DEFECT (efficiency).**` again.
+M16="$(mutate m16-one-spelling -e 's/if (backlog_efficiency_tagged(\$0)) tagged = 1/if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1/')"
+if [ -n "$M16" ]; then
+  reseed "$EF1"; run_rt "$M16" "$EF1" --apply
+  if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-603 ' "$EF1/backlog.archive.md"; then
+    killed m16-one-spelling "outcome-eff-form-comma would FAIL: the single-spelling guard archives a **DEFECT, efficiency.** close with no outcome at exit 0"
+  else
+    bad "mutant:m16-one-spelling" "the single-spelling guard still did not archive the **DEFECT, efficiency.** close (exit $LAST_RC)"
+  fi
+fi
+
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# SEVENTEEN BUILT, FIFTEEN KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# EIGHTEEN BUILT, SIXTEEN KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
 # show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 17 ] && [ "$KILLS" -eq 15 ]; then
-  ok "mutants" "17 mutants built (15 targets + m2's and m5's single-layer twins) and all 15 targets killed the arm they name"
+if [ "${MUT_ATTEMPTED:-0}" -eq 18 ] && [ "$KILLS" -eq 16 ]; then
+  ok "mutants" "18 mutants built (16 targets + m2's and m5's single-layer twins) and all 16 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 17 mutants built, $KILLS of 15 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 18 mutants built, $KILLS of 16 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo

@@ -34713,6 +34713,8 @@ Built (b235-c9-h4): the budget now lives in `fork-budget.txt` at the repo root, 
 
 **LANDED (v0.822.0, verified edcae8aa).** FORK_BUDGET lives in fork-budget.txt at the repo root, read only by validator-fork-budget; a budget-only change re-keys that one fixture.
 
+Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite, where a budget-only edit to `scripts/validate-enforcement-map.sh` re-ran every unit keyed on that validator, and after the move to `fork-budget.txt` the runner's own `hermetic-run.sh --key-only` re-keyed `validator-fork-budget` alone (the Built line above).
+
 verify: manual
 
 ## BL-650 — 0.818.0's Limits line says the delivering pull is denied "once"; a DEFERred pull was denied twice
@@ -38439,4 +38441,149 @@ Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s
 Outcome measured: graph s319 and s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (the committed snapshot `docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot/`, extract.py with EXTRACT_WIN_END=2026-10-27T13:08:00Z, roll.py --seats; the steps.csv rows of the ai-dlc-update bucket per story); before (s317+s318 pooled, 34 stories) 1.27 h gap-inclusive (gap 0.85 h), token-equivalent $5.2 (API $5.2), 12.9M tokens, lead active 0.42 h, lead $5.2, subagent active 0.00 h, subagent $0.0; s319 (20 stories, straddles the fix's arrival at graph 38d7a2cc1 on 2026-10-19, so not a post-fix sprint) 1.59 h gap-inclusive (gap 1.01 h), token-equivalent $8.6 (API $8.6), 22.1M tokens, lead active 0.59 h, lead $8.4, subagent active 0.02 h, subagent $0.2; after s320 (13 stories, the first whole post-fix sprint) 0.82 h gap-inclusive (gap 0.59 h), token-equivalent $3.5 (API $3.5), 8.5M tokens, lead active 0.22 h, lead $3.3, subagent active 0.01 h, subagent $0.2. Consumer side, read only: 0 of graph's 12 merged pulls after 38d7a2cc1 (993b0593d through de74610e2) change `reconcile/setup-sites.md`, against 1 line on each of the first-parent pre-fix pulls 8f313c3c0 and e9ff06651. The bucket fell from $5.2 to $3.5 per story on s320.
 
 verify: manual
+
+## BL-823 — the remediator join's BADDISP check reads only a lowercase `disposition:` key, so a capitalised `Disposition:` with an out-of-set value is never refused
+
+**LANDED (v0.957.0, verified de56b5b52).** `DISP_KEY_ERE` is defined once in `join-remediator-shards.sh` and read at all seven disposition-key sites, so the key is lowercase in any form or any case on a list item and a capitalised column-0 summary is never a key. `remediator-shard-join` pins DK1 and DK2 with mutant DKm, and `receipt-bl823.sh` scores the fix 0 against two regressions and a second spelling.
+
+**DEFECT.** Filed at the batch-243 close. ai-dlc-33 found it after c1 had been built, so the fix was kept out of 0.949.0, whose CHANGELOG names this id. `core/scripts/join-remediator-shards.sh:600` opens a disposition on `/^[[:space:]-]*[*_\`]*disposition[*_\`]*:/`, which is case-sensitive. BADDISP (`:1029`) therefore never sees a value under `Disposition:` or `DISPOSITION:`. 0.949.0's no-edit-line rule already matches the key case-insensitively, so the two arms disagree about what a disposition line is.
+
+Measured on graph's main tree, read only, with `/usr/bin/grep`. The key grammar was `^[[:space:]-]*[*_\`]*<word>[*_\`]*:` over 26059 `.md` files, excluding `.git` and `node_modules`. It found 1188 capitalised-key lines in 535 files (including graph's worktree copies). The control was 17915 lowercase-key lines, and the impossible token `ZZQ-NEVER-9731` returned 0. Narrowing to record-like files (a capitalised key AND either an `edit:` line or a lowercase `disposition:` line) left 4 files. Three are committed records that folding the case would refuse:
+- `_bmad-output/planning-artifacts/s292/product-brief-repair-p1.md:7` (`**Disposition:** 4 repaired / 0 escalated.`)
+- `_bmad-output/planning-artifacts/s292/research-repair-p1.md:6`
+- `_bmad-output/planning-artifacts/s302/architecture-repair-p1.md:424`, a prose line in a file that carries 15 lowercase-key lines.
+
+The fourth, `s301/archive/cycle-1/discovery-context.md`, is prose with no space after its colon.
+
+**Corrected site list.** `:600` is not BADDISP's reader. The key is recognised at seven sites in the join, and before this fix only one of them folded case:
+- `src_check` (NOSOURCE);
+- `contract_check`, which sets the `dfull` that BADDISP reads;
+- two sites in `checks_field`: the no-edit-line rule, which folded case on every line, and the repaired count, which lowercased only the value;
+- the `--escalations` entry count (`grep -c`);
+- `part_cites`;
+- `esc_cites`.
+
+**Ruled shape.** A summary line is a key that BADDISP never reads, because only list items are keys. The key is recognised when it is lowercase in any form, as before, or when it is in any case on a list item: `^[[:space:]]*-[[:space:]]*[*_\`]*disposition[*_\`]*:` with a case-insensitive key. This is one predicate, `DISP_KEY_ERE`, defined once in the join. Each of the six awk sites takes it as `-v DK=` and tests `$0 ~ DK`, and the grep takes it as its pattern, so no site spells the key itself. The no-edit-line rule narrows by exactly the seven capitalised lines below, none of which is a list item. A key based on the value's shape was rejected, because the s304 and s315 values are not counts.
+
+**False-positive set, measured with the shipping predicate.** The predicate was extracted from the join and run over graph main 91a665334, read only (`git show`/`ls-tree`). It covered 1643 committed `.md` records under `_bmad-output/planning-artifacts/` whose path names repair, fold or shard, 248585 lines in all. The predicate recognises all 7565 lowercase key lines, every one of which is a list item. It recognises none of the 7 capitalised lines, and none of those is a list item:
+- `s292/product-brief-repair-p1.md:7`
+- `s292/research-repair-p1.md:6`
+- `s302/architecture-repair-p1.md:424`
+- `s304/derivation-hygiene-repair-p4.md:11`
+- `s315/gate-planning-repair-p2.md:7`, `:56` and `:100`
+
+In the same invocation, a capitalised list item scored 1, the s292 column-0 summary scored 0, and the impossible token `ZZQ-BL823-NEVER-4417` returned 0. The FP set is empty.
+
+Fixture: `remediator-shard-join` arm DK1 (`- **Disposition:** frobnicated` in era is refused BADDISP and not NODISP), arm DK2 (the column-0 summary, in the preamble and inside an in-era entry, gives rc 0 and nothing refused), and mutant DKm (contract_check's key restored to the case-sensitive literal, asserted to edit exactly one site, killed by DK1 with DK2 still clean).
+
+The receipt runs the join on seeded records, under `set -uo pipefail`. Scored builds:
+- the fix: exit 0;
+- `:600` folded alone (the original plan): exit 1;
+- every site folded with no list-item condition: exit 3, because the summary overwrites the entry's disposition;
+- a second correct spelling, an inline list-item clause ORed in at each site: exit 0.
+
+Not measured, though reachable: whether the join reads the files holding the other ~1184 capitalised lines as parts.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl823.sh
+
+## BL-827 — two fixtures read their seed through `read … < <(bash seed.sh)`, so a failed seed reports assertion FAILs instead of FIXTURE BROKEN and arms an `rm -rf` on an empty-derived path
+
+**LANDED (v0.957.0, verified de56b5b52).** `ledger-reverify` and `self-update-gate` capture the seed with its exit checked and assert four non-empty fields and a DIST under the mktemp prefix before the EXIT trap arms, so a failed seed reads `FIXTURE BROKEN: seed exited` at exit 2. The tree-wide arm was decided against on the census: nothing is left for it to fire on.
+
+**DEFECT.** Filed at the batch-243 close. c6a's first 0.951.0 dress went red on `ledger-reverify-b`. Its capture opens with `error: unable to create temporary file: Invalid argument`, then `fatal: updating files failed`, then `rm: "." and ".." may not be removed`. It was a transient git fault, not a fault in c6a: solo runs at 18dc7d27f and at the c6a squash both exited 0 with 0 FAIL, and a re-dress went green.
+
+The fixture's handling of that fault is what is wrong. `core/fixtures/ledger-reverify/run.sh:155` reads the seed as `read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")`. A process substitution's exit status is discarded, and `read` returns 0 on empty input, so all four variables come up empty and every row then reports `got=<none>` as an assertion FAIL. The EXIT trap in the same file runs `rm -rf "$(dirname "$DIST")"`, which with DIST empty is `rm -rf .`. Only rm's refusal of `.` stopped it. `core/fixtures/self-update-gate/run.sh:115-116` has the same shape. Grepping `read -r [A-Z_ ]+< <\(bash "\$DIR/seed\.sh"\)` over `core/fixtures/*/run.sh` finds exactly these 2.
+
+Owed, in both fixtures:
+1. Run the seed into a captured variable with its exit checked, and on failure report FIXTURE BROKEN with exit 2.
+2. Assert every field is non-empty and DIST is a directory before the trap is armed.
+3. Guard the trap on a non-empty DIST under the mktemp prefix.
+4. Add a mutant: a seed that exits 1 must read BROKEN.
+
+Then decide whether a tree-wide arm refusing `read … < <(…)` of a seed whose status is the only failure signal earns its place. Measure its false-positive set first.
+
+**Tree-wide arm: decided against, with the census.** Over `core/fixtures/*/run.sh` there are 5 `read … < <(` sites. Two are the subjects (`ledger-reverify/run.sh` and `self-update-gate/run.sh`, both on `bash "$DIR/seed.sh"`), two are `read -r ue_off … < <(printf … | uescape_scan)` in `ledger-reverify/run.sh`, and one sits inside a string literal in `procsub-staged-refusal/run.sh`. Once the two subjects are fixed nothing remains for an arm to fire on, so it would be a check that cannot fire.
+
+**Fix.** Both fixtures capture the seed as `seed_out="$(bash … seed.sh)" || { echo "FIXTURE BROKEN: seed exited $?" >&2; exit 2; }`, read the four fields from a here-string, assert all four non-empty, and assert DIST matches the seed's own `${TMPDIR:-/tmp}/<prefix>-*/dist` pattern and is a directory, all before the EXIT trap is armed. The seed-fails mutant runs the whole fixture with `LR_SEED` or `SG_SEED` pointing at a failing seed, so the run passes the J0 join and reads the exact text `FIXTURE BROKEN: seed exited` at exit 2. Its control is a seed that exits 0 with junk, which must exit 2 without that text.
+
+**Receipt scored under `set -uo pipefail`**, run from the repo root with stdin closed, against four spellings of the seed read (each variant a full copy of `self-update-gate` with the one block replaced):
+
+| Spelling | Exit |
+|---|---|
+| the fix | 0 |
+| the original `read … < <(bash seed.sh)` | 1 |
+| status captured, trap armed before the non-empty check | 1 |
+| status captured via `seed_rc=$?`, `[[ … ]]` prefix test, no trap-first | 0 |
+
+verify: sh R="$PWD"; t="$(mktemp -d)"; cd "$t" && printf 'exit 1\n' > "$t/f" && printf 'exit 0\n' > "$t/e" && o1="$(SG_SEED="$t/f" bash "$R/core/fixtures/self-update-gate/run.sh" 2>&1)"; r1=$?; o2="$(SG_SEED="$t/e" bash "$R/core/fixtures/self-update-gate/run.sh" 2>&1)"; r2=$?; o3="$(LR_SEED="$t/f" bash "$R/core/fixtures/ledger-reverify/run.sh" --group a 2>&1)"; r3=$?; o4="$(LR_SEED="$t/e" bash "$R/core/fixtures/ledger-reverify/run.sh" --group a 2>&1)"; r4=$?; [ "$r1" -eq 2 ] && [ "$r2" -eq 2 ] && [ "$r3" -eq 2 ] && [ "$r4" -eq 2 ] && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$o1" && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$o3" && ! grep -qF 'seed exited' <<< "$o2" && ! grep -qF 'seed exited' <<< "$o4" && ! grep -qF 'may not be removed' <<< "$o2"
+
+## BL-829 — K3's widened series stamps K3B_RELEASE in branch (b), and no mutant or world reaches that line
+
+**LANDED (v0.957.0, verified de56b5b52).** World `k3w-subj` in `check-24-adversarial-convergence` reaches K3 branch (b)'s widened stamp rebind, and mutant K3WX6, which drops only the `k3_wide` conjunct, reads FAIL (K3). `receipt-bl829.sh` scores the fix 0, the conjunct dropped 1, an unconditional K3B binding 1 and a second spelling 0.
+
+**DEFECT.** Filed at the batch-243 close from c6b (BL-811's W1). `core/scripts/validate-adversarial-convergence.sh:2652`, `k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"`, sits in branch (b), the terminal pass that reviews `requirements-subject.md`. `k3_wide` is set by the widened case arm at `:2462`. Of the 7 k3w worlds (post, pre, pred, nomf, other, brief, arch), 3 are confirmed by their expected text to take branch (a). The hand's claim that a mutant at `:2652` scores identical to the real run is a derivation, not a run.
+
+Owed: one widened-series world whose terminal pass reviews `requirements-subject.md`, stamped between K3_RELEASE and K3B_RELEASE, plus a mutant at `:2652` that the world kills.
+
+Built: world `k3w-subj` in `core/fixtures/check-24-adversarial-convergence/run.sh` (unit k3, shard d). It is a widened `prd-adversarial-p1` whose artifact is `s9/requirements-subject.md`, with four notarized stems whose shas match. Its key set is the map's ordinals and cross groups with `1=` replaced by `99=`, which is not the lone-cross shape, so K3C and K3D never rebind. The repo is stamped at 0.736.0, derived from the validator's constants. The fix reads PENDING ("at 0.738.0 or later -- not owed yet."), and mutant K3WX6 reads FAIL (K3). K3WX6 drops only the conjunct and keeps `k3_rel="$K3_RELEASE"`. An in-arm assertion checks that the mutant applied (original line 1 -> 0, kept binding 0 -> 1) and that the two programs give different verdicts. Deleting the whole line is NOT an equivalent mutant, although `:2462` binds K3B_RELEASE. Branch (b)'s stem loop at `:2587` reads the manifest with `read -r k3_k k3_st k3_rel`, which clobbers that binding, so `:2652` restores it. Measured: with the line deleted, k3w-subj reads FAIL and the receipt exits 1. K3WX6 keeps `k3_rel="$K3_RELEASE"` so that it tests the widened rebind alone. On its own, k3w-subj cannot see a mutant that binds K3B_RELEASE unconditionally, because every widened world reads PENDING under the fix and under that mutant alike. Only the receipt's `requirements-adversarial-p1` world separates the two (req=PENDING).
+
+The receipt runs `receipt-bl829.sh`, which builds its own worlds and reads no fixture file. It runs two worlds stamped at 0.736.0, `prd-adversarial-p1` (want PENDING) and `requirements-adversarial-p1` (want FAIL), and reads each verdict only off branch (b)'s key-set line. Scored under `set -uo pipefail`, each against a full copy of `core/scripts/`:
+- the fix: exit 0;
+- the conjunct dropped: exit 1 (wide=FAIL);
+- K3B_RELEASE bound unconditionally in branch (b): exit 1 (req=PENDING);
+- the second spelling, `if [ "$k3_wide" -eq 1 ]; then k3_rel="$K3B_RELEASE"; fi`: exit 0.
+
+verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl829.sh
+
+## BL-830 — handoff-resume-guard's bg1 mutant is killed by the slice band alone, with zero margin
+
+**LANDED (v0.957.0, verified de56b5b52).** `handoff-resume-guard` scores bg1 by `bg1_convicts` (`proh>0 && ctl>0`) and leaves the slice band to arm 1. Mutant bg1b seeds the prohibition on a 130-line slice and bg1 stays KILLED, so the band alone no longer decides it.
+
+**DEFECT.** Filed at the batch-243 close. c6b's first 0.952.0 dress went red on `handoff-resume-guard`: the Bounded-join beat slice in `core/skills/ai-dlc/steps/_gate-procedures.md` had grown to 62 lines against `BEAT_BAND_MAX=60` (`core/fixtures/handoff-resume-guard/run.sh:1020`), and mutant bg1 survived. The fix re-wrapped the prose to 57 lines. bg1's prohibition copy now scores 60 lines, so it is killed only because it reaches the band ceiling exactly. One more line in that section re-breaks bg1. What bg1 asserts, a sentence forbidding the backgrounded call, is never caught on its content.
+
+Owed: bg1 killed by the prohibition arm (`proh>0`) independently of the band, with a mutant proving that the band alone no longer decides it.
+
+Fixed in `core/fixtures/handoff-resume-guard/run.sh`: bg1's kill is scored by `bg1_convicts` (`proh>0 && ctl>0`), the band stays arm 1's (`bg_band_ok`), and mutant bg1b seeds the prohibition on a slice padded to 130 lines (no heading, no `run_in_background` in the padding). It asserts the world is out of band, that the live slice scores `proh=0`, and that bg1 stays KILLED. The receipt runs the fixture's own scoring functions, extracted between its `BEGIN`/`END bg-scoring` markers, on that world under `set -uo pipefail`. Scored: the fix exits 0; the old band-bound conjunct exits 1; a fix dropping `ctl>0` exits 2 on a second world whose dispatch heading is renamed so `ctl=0`; a second correct spelling (`-ge 1` on both) exits 0.
+
+verify: sh set -uo pipefail; f=core/fixtures/handoff-resume-guard/run.sh; g=core/skills/ai-dlc/steps/_gate-procedures.md; BEAT_BAND_MAX=60; eval "$(sed -n "/^# BEGIN bg-scoring/,/^# END bg-scoring/p" "$f")"; w=$(mktemp); v=$(mktemp); awk '{print} /^\*\*The call\.\*\* One `Bash` call/{print ""; print "**Never pass `run_in_background: true` to this beat** — the lead must see"; print "the result inline."; for(i=1;i<=70;i++) print "Padding " i}' "$g" > "$w"; sed "s/^## Gate-adjudication dispatch.*/## Renamed section/" "$w" > "$v"; set -- $(score_bg "$w"); [ "$1" -gt "$BEAT_BAND_MAX" ] || exit 9; bg1_convicts "$@" || exit 1; set -- $(score_bg "$v"); [ "$2" -eq 0 ] || exit 8; ! bg1_convicts "$@" || exit 2
+
+## BL-834 — story-evidence-scaffold's RED LINE block calls the validator 28 times to fill a 7-cell vector
+
+**LANDED (v0.957.0, verified de56b5b52).** `story-evidence-scaffold`'s RED LINE block drives one world `rvall` and calls the validator once per program, so 28 invocations become 4 with the same seven-cell vector. A counter file asserts the 4, and the receipt scores the per-world loop restored 1 and two cells sharing a token 1.
+
+**DEFECT.** Filed 2026-10-27 in batch 244. The BL-833 RED LINE block in `core/fixtures/story-evidence-scaffold/run.sh` (lines 661-709 at `7c8a88fd7`) seeded one git world per cell over `RVCASES` (7 worlds), and its `rv_vec` called `verdict` once per world. `rv_vec` ran 4 times (the fix on `$HECTL`, then mutants rv-m1, rv-m2 and rv-m3), so the block made 28 validator invocations. The premise is that count, read from `run.sh`. Context only, not a measurement of this fix: the fixture's loaded pole rose from 276s to 387s at 0.953.0, the release that added the block.
+
+**The fix.** One world, `rvall`, whose story carries all 7 cell lines. Each line cites its own `../test-results/<cell>.txt` (`RVCELLS` in `world.sh`). No basename carries a red/mut/mutation word or three all-caps hyphenated segments, except rvcap, which keeps `S320-3-3-X.txt`. `rv_vec` drives each program once. A reader keyed on the `REFUSED red-untracked <token>` lines rebuilds the same 7-cell vector, so `RVWANT` and the three mutant want strings are byte-identical, and the three-way read (own cell / SURVIVED / entangled) is unchanged. The collapse is sound because the validator sets `red` per record, names the token in each refusal, and dedupes on `b:$tok`. When the program rc is not 0 or 1, every cell takes that rc. Otherwise a cell is 1 when a REFUSED line names its token, and 0 when none does. `:W`, `:S` and `:E` are facts about the one program run, so they are broadcast to every cell. The block moved into `rv_block` in `world.sh` so that it can be driven alone.
+
+New arms, each carried in the vector string because `rv_vec` runs inside `$( )`:
+- program rc is 1 exactly when some cell refused;
+- a REFUSED line that is not red-untracked, or names no cell token, is a STRAY;
+- rvid and rvnone each show their own `WARN capture-unresolved <tok>`, which proves their line was parsed;
+- the cell tokens are pairwise distinct;
+- a counter file that `verdict()` appends to asserts exactly 4 invocations.
+
+The untracked-seed control loops over every cell basename plus `S320-3-3-X.txt`, with a positive conjunct showing that the probe sees the tracked `full.txt`.
+
+**Receipt.** It runs `rv_block` alone, never the whole fixture, and never greps text. It sources `world.sh` in a child `bash -c`, builds the control tree, and drives the block. It requires: rc 0, the counter at 4, all three mutants killed on their own cell, and no FAIL line. Scored under `set -uo pipefail` on scratch copies, from their root:
+- the fix: 0;
+- the per-world loop restored (each program driven once per cell, 28 calls): 1;
+- two cells sharing a token (rvmut cites rvred's `word.txt`): 1;
+- a second correct spelling (tokens renamed `c1.txt`..`c6.txt`, plus an awk reader in place of the `grep -qxF` reader): 0;
+- subject absent: 9.
+
+verify: sh set -uo pipefail; W="core/fixtures/story-evidence-scaffold/world.sh"; M="core/fixtures/lib/mutant.sh"; [ -f "$W" ] && [ -f "$M" ] && [ -f core/scripts/validate-handoff-evidence.sh ] || exit 9; T="$(mktemp -d)"; o="$(WORK="$T" bash -c 'set -u; rc=0; ok() { printf "ok %s\n" "$1"; }; bad() { printf "FAIL %s\n" "$1"; rc=1; }; . "$2" || exit 9; . "$1" || exit 9; HECTL="$(mk_tree control)" || exit 9; rv_block; exit "$rc"' _ "$PWD/$W" "$PWD/$M" 2>&1)"; r=$?; [ "$r" = 9 ] && exit 9; n="$(grep -c . "$T/.vcalls")" || n=0; k="$(grep -cE "^ok MUTATION 'rv-m[123]-[a-z-]+' killed" <<<"$o")" || k=0; f="$(grep -c '^FAIL' <<<"$o")" || f=0; [ "$r" = 0 ] && [ "$n" = 4 ] && [ "$k" = 3 ] && [ "$f" = 0 ]
+
+## BL-835 — the efficiency-close guard keys on one tag spelling, so a closed efficiency entry in any other spelling leaves the ledger with no outcome line
+
+**LANDED (v0.957.0, verified de56b5b52).** `backlog-rotate.sh` and `validate-backlog-receipts.sh` both read `backlog_efficiency_tagged()` from `reconcile/lib.sh`, so all four efficiency tag spellings owe an outcome line and the two readers cannot drift. BL-614 takes a no-step `Outcome measured:` line, and mutant m16 of `backlog-rotate-fence-guard` restores the single spelling.
+
+**DEFECT.** Filed in batch 244 (release cluster b244-c4). `scripts/backlog-rotate.sh`'s outcome guard and `scripts/validate-backlog-receipts.sh`'s E arms each decided "is this an efficiency entry" with `index($0, ...)` on the single bold spelling DEFECT (efficiency). The second runs E1 over the archive at pre-push. BL-817 item 1 says an entry is an efficiency entry if it carries the tag, and the ledgers carry four bold spellings of it: DEFECT (efficiency), DEFECT, efficiency, NOTE (efficiency), and DEFECT. [efficiency rank N] (BL-716's sits mid-line). Each is written bold with a closing period; they are spelled without the bold markers here so this entry does not itself read as tagged. Bold PROSE carrying the word (a sentence such as "Lead hours and lead tokens join every efficiency outcome.") is not a tag.
+
+**Measured at 7c8a88fd7, by entry id.** The widened grammar tags 31 live entries against 29 for the single spelling, and 20 archive entries against 18. Closed, newly tagged, with no `Outcome measured:` line: live 0, archive 1, BL-614 (NOTE tier, LANDED v0.822.0). Control in the same run: the other 19 tagged closed archive entries carry an outcome line, and the single spelling's closed-no-outcome set is empty in both files. The widening also moves E3: BL-583 and BL-685 entered the tagged population and lacked the full step-value citation (F-RULING).
+
+**The fix.** One predicate, `backlog_efficiency_tagged()`, emitted by `backlog_efficiency_tag_awk()` in `core/skills/ai-dlc-update/reconcile/lib.sh`, which both scripts already source. Its grammar is unanchored: `\*\*(DEFECT|NOTE)( \(efficiency\)\.|, efficiency\.|\. \[efficiency rank [0-9]+\])`. Both readers call it, so the two cannot drift. E0 seeds the three new spellings closed with no outcome (each NO-OUTCOME) and a prose-bold near-miss that must stay out of the close population. `backlog-rotate-fence-guard` adds one refusal world per new spelling, a near-miss world that rotates, and mutant m16, which restores the single spelling and is killed. BL-614 takes a no-step outcome line drawn from its own Built line. BL-583 and BL-685 cite `.claude/rules/operator-rulings.md` in full.
+
+**Receipt.** It RUNS both scripts on seeded ledgers in a `mktemp` dir and never reads script text. Ledger a closes four entries with no outcome, one per spelling, each citing the ruling; ledger b closes one prose-bold entry. Rotate must refuse a, naming all four, and must not raise the outcome refusal on b. Receipts `--efficiency-only --root .` must exit 1 on a with exactly four NO-OUTCOME rows, and print OK on b. The tag spellings are assembled from `${B}` so this line does not tag the entry. Scored under `set -uo pipefail` on full copies of the committed tree with lib.sh's predicate swapped: the fix 0; the original single spelling 1; a predicate adding only the comma spelling, which misses NOTE and the rank form, 1; a second correct spelling, the four forms as one alternation with `[0-9][0-9]*`, 0.
+
+verify: sh set -uo pipefail; RT=scripts/backlog-rotate.sh; RV=scripts/validate-backlog-receipts.sh; [ -f "$RT" ] && [ -f "$RV" ] || exit 9; T="$(mktemp -d)"; B='**'; C='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'; L="${B}LANDED (v0.1.0, verified abc1234).${B}"; { printf '# l\n\n'; n=1; for g in "${B}DEFECT, efficiency.${B}" "${B}NOTE (efficiency).${B}" "Lead. ${B}DEFECT. [efficiency rank 3] \$1, 4 agent-minutes.${B}" "${B}DEFECT (efficiency).${B}"; do printf '## BL-90%s\n\n%s x. %s\n\n%s\n\n' "$n" "$g" "$C" "$L"; n=$((n+1)); done; } > "$T/a.md"; printf '# l\n\n## BL-905\n\n%sLead hours join every efficiency outcome.%s x.\n\n%s\n\n## BL-906\n\nopen\n' "$B" "$B" "$L" > "$T/b.md"; o="$(bash "$RT" "$T/a.md" 2>&1)"; [ $? -eq 2 ] || exit 1; for i in 1 2 3 4; do grep -q "^  BL-90$i\$" <<<"$o" || exit 1; done; o="$(bash "$RV" "$T/a.md" --efficiency-only --root . 2>&1)"; [ $? -eq 1 ] || exit 1; [ "$(grep -cE '^FAIL: E.BL-90[1-4].NO-OUTCOME$' <<<"$o")" -eq 4 ] || exit 1; o="$(bash "$RT" "$T/b.md" 2>&1)"; grep -q 'BL-905' <<<"$o" || exit 9; ! grep -q 'efficiency close carries no outcome' <<<"$o" || exit 1; o="$(bash "$RV" "$T/b.md" --efficiency-only --root . 2>&1)" || exit 1; grep -q '^OK: ' <<<"$o"
 

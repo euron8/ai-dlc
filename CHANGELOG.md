@@ -19,6 +19,70 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.957.0] - 2026-10-27
+
+Batch b244, lead ai-dlc-45, cluster c4. It closes BL-823, BL-827, BL-829 and BL-830, files and closes BL-834 and BL-835 in the same release, advances BL-828, which stays PARTIAL with `verify: manual`, and records work on BL-804 and BL-685, which stay open. No `PC-` id is closed. NET: entries closed 6 minus filed 2 = -4. Engine code a consumer runs: `core/scripts/join-remediator-shards.sh`, `core/scripts/wait-for-deliverable.sh`, `core/skills/ai-dlc-update/reconcile/lib.sh`. Rulebook change: `core/team-roles/remediator.md`. Fixture changes: `backlog-rotate-fence-guard`, `check-22-spawn-ledger`, `check-24-adversarial-convergence`, `handoff-resume-guard`, `ledger-reverify`, `process-rule-pins`, `remediator-shard-join`, `self-update-gate`, `story-evidence-scaffold` and the shared `core/fixtures/lib/mutant.sh`. Distribution-only scripts: `scripts/backlog-rotate.sh`, `scripts/validate-backlog-receipts.sh`, `scripts/validate-mutant-kills.sh`, `scripts/mutant-kills-allowlist.txt`. Packaging: none. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+Bootstrapping: this release EDITS `.githooks/pre-push`, which gains a `validate-mutant-kills` step (distribution-only), so the lead pushes it from the main checkout detached at the commit. It changes three consumer engine files, `core/scripts/join-remediator-shards.sh`, `core/scripts/wait-for-deliverable.sh` and `core/skills/ai-dlc-update/reconcile/lib.sh`, and `wait-for-deliverable.sh` now extracts the join's `DISP_KEY_ERE` definition along with its function. They are live from step 3 of the pull that delivers them unless that pull DEFERs them, because steps 1-2 run the consumer's old engine. The consumer hook `core/git-hooks/pre-push` is untouched.
+
+Pairing hazard (BL-823). `join-remediator-shards.sh` and `wait-for-deliverable.sh` land together in step 2's one self-update commit, so in a normal pull both are new from step 3. The old-extractor pairing is reachable only in a SELF-UPDATE-CARRY window: a consumer whose own `wait-for-deliverable.sh` is CARRIED keeps the old extractor until the gated apply at step 7. It FAILS CLOSED: the old extractor against the new join prints `DISP_KEY_ERE: unbound variable` and `--mark` skips replay silently (rc 0, because the script runs `set -u` without pipefail), and the join then refuses loudly with `REFUSED: <part>.md: derivations: not replayed`. The remedy is to finish the pull, so the gated apply at step 7 replaces the carried `wait-for-deliverable.sh`. The reverse pairing, a new extractor against an old join, refuses with "reinstall ai-dlc".
+
+### BL-823 — the remediator join reads one disposition-key predicate at all seven sites
+
+- Fix. `DISP_KEY_ERE` is defined once in `core/scripts/join-remediator-shards.sh` and read by `src_check`, `contract_check` (whose `dfull` BADDISP reads), the two `checks_field` sites, the `--escalations` entry count, `part_cites` and `esc_cites`. The key is recognised lowercase in any form, or in any case on a list item; a capitalised column-0 line is a summary and never a key. The original plan, folding `:600` alone, was wrong: `:600` is not BADDISP's reader.
+- `--mark` extracts `checks_field` from the join, so `wait-for-deliverable.sh` now extracts the predicate beside it and refuses unless exactly one is defined.
+- False-positive set, measured with the shipping predicate over graph main 91a665334, read only: 1643 committed repair, fold and shard records. All 7565 lowercase key lines are list items and are recognised. The 7 capitalised lines, none of them list items, are not recognised. The set is empty. A key keyed on the value's shape was rejected, because the s304 and s315 values are not counts.
+- Fixture. `remediator-shard-join` arms DK1 (a capitalised list-item out-of-set value is refused BADDISP) and DK2 (the column-0 summary is not refused), mutant DKm (`contract_check`'s key reverted to case-sensitive, killed by DK1), and NLmh re-anchored on the shared predicate.
+- Receipt. `receipt-bl823.sh` runs the join on seeded records under `set -uo pipefail`: the fix 0; `:600` folded alone 1; every site folded with no list-item condition 3; a second correct spelling 0.
+
+### BL-827 — two fixtures capture their seed with its exit checked
+
+- Fix. `ledger-reverify` and `self-update-gate` capture the seed into a variable with its exit checked, read the four fields from a here-string, assert all four non-empty, and assert DIST matches the seed's own `${TMPDIR:-/tmp}/<prefix>-*/dist` pattern and is a directory, all before the EXIT trap is armed. A failed seed reads `FIXTURE BROKEN: seed exited` at exit 2 instead of arming `rm -rf` on an empty-derived path.
+- Mutant. The whole fixture runs with a failing seed (`LR_SEED` or `SG_SEED`), and its control is a seed that exits 0 with junk, which must exit 2 without that text.
+- Tree-wide arm: decided against, with the census. There are 5 `read ... < <(` sites over `core/fixtures/*/run.sh`; two are the subjects, so once they are fixed nothing remains for an arm to fire on.
+- Receipt scored under `set -uo pipefail` against four spellings: the fix 0, the original 1, status captured with the trap armed first 1, a second correct spelling 0.
+
+### BL-828 — PARTIAL: the base-pass helper, a down-only allowlist arm and three migrated fixtures
+
+- Status: PARTIAL. `verify: manual` is kept. Owed: migrate the remaining allowlisted fixtures, removing each row in the change that migrates it.
+- Built. `core/fixtures/lib/mutant.sh` gains `need_base` and `mutant_killed`, the one sanctioned way to emit a kill, which refuses with FIXTURE BROKEN unless the unmutated arm passed in the same run. `scripts/validate-mutant-kills.sh` is a standalone `.githooks/pre-push` step: M1 refuses an unrouted `KILLED`/`killed` in a fixture missing from the allowlist, M2 a stale row, M3 a duplicate row, so the allowlist only shrinks. A mktemp self-probe runs first in both directions.
+- Census at 7c8a88fd7, 262 `run.sh`: 875 non-comment lines in 127 fixtures. The allowlist is the output of `--derive`.
+- Migrated: `check-22-spawn-ledger`, `story-evidence-scaffold` and `handoff-resume-guard` (every kill through `mutant_killed`; the helper `bg1_convicts` carries no kill word). `check-24-adversarial-convergence` had 0 kill lines at base and at tip, so it needed no migration. The allowlist is 127 fixtures at the census and 124 rows at the tip (derived: `grep -v '^#'` over the file at 46de59ae3 counts 124).
+- Arm M4 refuses a row added against origin/main's allowlist. This release SKIPs it, because origin/main has no allowlist yet.
+
+### BL-829 — a world reaches K3 branch (b)'s widened stamp rebind
+
+- Built. World `k3w-subj` in `check-24-adversarial-convergence`: a widened `prd-adversarial-p1` whose artifact is `s9/requirements-subject.md`, stamped 0.736.0 between K3_RELEASE and K3B_RELEASE. The fix reads PENDING and mutant K3WX6, which drops only the `k3_wide` conjunct and keeps `k3_rel="$K3_RELEASE"`, reads FAIL (K3). Deleting the whole line is not an equivalent mutant, because the stem loop's `read` clobbers the `:2462` binding.
+- Receipt. `receipt-bl829.sh` builds its own worlds. Scored: the fix 0; the conjunct dropped 1; K3B_RELEASE bound unconditionally 1; a second spelling 0.
+
+### BL-830 — handoff-resume-guard's bg1 is killed by the prohibition arm alone
+
+- Fix. bg1's kill is scored by `bg1_convicts` (`proh>0 && ctl>0`); the slice band stays arm 1's. Mutant bg1b seeds the prohibition on a slice padded to 130 lines and asserts the world is out of band and bg1 stays KILLED.
+- Receipt. It was repaired on the branch after BL-828 phase B renamed `bg1_killed` to `bg1_convicts`, and it calls the current name. It runs the fixture's own scoring functions between the `BEGIN`/`END bg-scoring` markers. Scored: the fix 0; the old band-bound conjunct 1; a fix dropping `ctl>0` 2; a second spelling 0.
+
+### BL-834 — story-evidence-scaffold's RED LINE block drives one world, 28 validator calls become 4 (filed and closed here)
+
+- Fix. The seven cells move into one world `rvall` whose story carries all seven lines, each citing its own distinct `../test-results/<cell>.txt`. `rv_vec` drives each program once and rebuilds the same seven-cell vector from the `REFUSED red-untracked <token>` lines, so `RVWANT` and the mutant want strings are unchanged. New arms: program rc is 1 exactly when some cell refused, a STRAY refusal, rvid and rvnone each show their own `WARN capture-unresolved`, pairwise-distinct tokens, and a counter file asserting exactly 4 invocations.
+- Receipt. It was repaired on the branch after BL-828 phase B relocated the helpers it calls (`mutant_killed` is now needed by `world.sh`), and it calls the current names. It drives `rv_block` alone. Scored: the fix 0; the per-world loop restored 1; two cells sharing a token 1; a second spelling 0; subject absent 9. The premise is an invocation count, not a timing.
+
+### BL-835 — the efficiency-close guard reads all four tag spellings from one predicate (filed and closed here)
+
+- Fix. `backlog_efficiency_tagged()`, emitted by `backlog_efficiency_tag_awk()` in `core/skills/ai-dlc-update/reconcile/lib.sh`, is read by `scripts/backlog-rotate.sh`'s outcome guard and `scripts/validate-backlog-receipts.sh`'s E arms, so the two cannot drift. The four forms are `**DEFECT (efficiency).**`, `**DEFECT, efficiency.**`, `**NOTE (efficiency).**` and `**DEFECT. [efficiency rank N]**`; prose bold stays out.
+- Consumer reach: `reconcile/lib.sh` is consumer engine, but `backlog_efficiency_tag_awk` has no consumer caller. Its only callers are `scripts/backlog-rotate.sh` and `scripts/validate-backlog-receipts.sh` (distribution) and one fixture.
+- False-positive set: BL-614, the one closed entry the widened E1 newly refuses, takes a no-step `Outcome measured:` line. BL-583 and BL-685, newly in E3's population, cite the step-value ruling by its full path.
+- Fixture. E0 gains the three new spellings and a prose near-miss; `backlog-rotate-fence-guard` gains one refused world per spelling, a near-miss world and mutant m16.
+- Receipt scored under `set -uo pipefail`: the fix 0; the single-spelling predicate 1; a predicate adding only the comma form 1; a second correct spelling 0.
+
+### BL-804 — the opt-out sentence is fixed; the entry stays OPEN
+
+- The premise was false: `remediator.md` orders the join before `--mark-repair` on purpose. The defect was one sentence offering the serial or unsharded remediator `not replayed` as an option its own earlier join refuses. It is rescoped to `--mark`, with the serial remediator replaying before its join. `process-rule-pins` pins it (row `rem-serial-replay`, a named mutant, arm `rem-serial-optout`).
+- No LANDED line. The close needs its receipt plus a measured outcome under BL-817: the first graph sprint on this release showing no `not replayed` refusal at the join.
+
+### BL-685 — round-9 `cr_run` key review recorded; the entry stays OPEN
+
+- Part (b), a review only, is recorded in the entry: one DEFECT (D-r9b-1), no BLOCKER. The recorded-PASS default is NOT flipped and stays OFF. D-r9b-1, a predicate run through `cr_run` reading the index stat cache the key does not hash, is the precondition for the flip and is built by a later batch.
+- No LANDED line; `verify: manual` is kept.
+
 ## [0.956.0] - 2026-10-27
 
 Batch b244, cluster c2. It closes two entries, BL-513 and BL-694, both on a measured outcome from the committed snapshot. It advances BL-817, which stays PARTIAL with `verify: manual`. No entry is filed and no `PC-` id is closed. NET: entries closed 2 minus filed 0 = -2.

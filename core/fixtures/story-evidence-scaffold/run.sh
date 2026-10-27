@@ -67,6 +67,10 @@ trap 'rm -rf "$WORK"' EXIT
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+MUT_LIB="$(cd "$DIR/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "story-evidence-scaffold: subjects $STS $GV $DEV $QA $CR $IMP $SR"
 
@@ -185,7 +189,7 @@ for v in STS GV DEV QA CR IMP SR; do eval "cp \"\${$v}\" \"$WORK/ctl-$v.md\""; d
 cout="$(check "$WORK/ctl-STS.md" "$WORK/ctl-GV.md" "$WORK/ctl-DEV.md" "$WORK/ctl-QA.md" "$WORK/ctl-CR.md" "$WORK/ctl-IMP.md" "$WORK/ctl-SR.md")"
 if [ -z "$cout" ] && [ -n "$(h2 "$WORK/ctl-DEV.md" '## QA Handoff Evidence')" ] \
    && [ -n "$(h3 "$WORK/ctl-GV.md" '^### 21\. ')" ]; then
-  ok "CONTROL: unmutated copies pass and the keyed sections are non-empty, so a mutant's finding below is the mutation"
+  ok "CONTROL: unmutated copies pass and the keyed sections are non-empty, so a mutant's finding below is the mutation"; B_ctl=1
 else
   bad "CONTROL: unmutated copies fail -- every mutant verdict below is uninterpretable ($cout)"
 fi
@@ -208,7 +212,7 @@ mutant() { # <name> <subject var> <awk-program> <expected-finding-prefix> <label
   if [ -n "$others" ]; then
     bad "MUTATION '$name' fired other arms too ($others) -- the arms are entangled"
   else
-    ok "MUTATION '$name' killed by its own arm only: $label"
+    mutant_killed "${B_ctl:-0}" "$name" "MUTATION '$name' killed by its own arm only: $label"
   fi
 }
 
@@ -315,13 +319,13 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   }
   RWANT='0:range-empty:, 0:range-base:, n:'
   got="$(range_vec "$HECTL")"
-  if [ "$got" = "$RWANT" ]; then ok "RANGE: base == frozen and a non-ancestor base each WARN and exit 0; the story's own range warns nothing"
+  if [ "$got" = "$RWANT" ]; then ok "RANGE: base == frozen and a non-ancestor base each WARN and exit 0; the story's own range warns nothing"; B_range=1
   else bad "RANGE: want [$RWANT] got [$got]"; fi
   range_mutant() { # <name> <from> <to> <want vector> <label>
     local m got
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: range mutation '$1' matched nothing"; return; fi
     got="$(range_vec "$m")"
-    if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own range cell only: $5"
+    if [ "$got" = "$4" ]; then mutant_killed "${B_range:-0}" "$1" "MUTATION '$1' killed, moving its own range cell only: $5"
     elif [ "$got" = "$RWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
     else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
   }
@@ -343,13 +347,13 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   }
   RPWANT='1:replay-preamble,:W 1:replay-preamble,:W 0::W 0::W head=head-tree fallback=head-tree u8=1:replay-preamble,:W'
   got="$(rp_vec "$HECTL")"
-  if [ "$got" = "$RPWANT" ]; then ok "REPLAY-PREAMBLE: a hand '\$ ' above the script's own refuses (with and without a second '\$ '), a replay at line 1 and the script's '\$ ' right above the replay are accepted, and head: is read from the replay block, falling back to the first head: when the block has none"
+  if [ "$got" = "$RPWANT" ]; then ok "REPLAY-PREAMBLE: a hand '\$ ' above the script's own refuses (with and without a second '\$ '), a replay at line 1 and the script's '\$ ' right above the replay are accepted, and head: is read from the replay block, falling back to the first head: when the block has none"; B_rp=1
   else bad "REPLAY-PREAMBLE: want [$RPWANT] got [$got]"; fi
   rp_mutant() { # <name> <from> <to> <want> <label>
     local m got
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: replay mutation '$1' matched nothing"; return; fi
     got="$(rp_vec "$m")"
-    if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own cell only: $5"
+    if [ "$got" = "$4" ]; then mutant_killed "${B_rp:-0}" "$1" "MUTATION '$1' killed, moving its own cell only: $5"
     elif [ "$got" = "$RPWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
     else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
   }
@@ -401,7 +405,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     }
     ABSWANT='0: 0: 0: 2: climb=2 lnk=2 sdirty=0 scommit=1'
     got="$(abs_vec "$HECTL")"
-    if [ "$got" = "$ABSWANT" ]; then ok "ABSOLUTE STORY: an absolute story path, physical or through a symlinked alias, reads as the relative one; a relative climb and a lnk/.. hop out of the tree exit 2 (UNEVALUABLE, no read); strategy mode reads the ref, not the working tree"
+    if [ "$got" = "$ABSWANT" ]; then ok "ABSOLUTE STORY: an absolute story path, physical or through a symlinked alias, reads as the relative one; a relative climb and a lnk/.. hop out of the tree exit 2 (UNEVALUABLE, no read); strategy mode reads the ref, not the working tree"; B_abs=1
     else bad "ABSOLUTE STORY: want [$ABSWANT] got [$got]"; fi
     # Mutant: the raw path in both modes. Every layer is reverted: both norm_story calls go, and the
     # disk fallback reads an absolute story as given and a relative one under -C, as 0.910.0 did.
@@ -416,7 +420,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     else
       RAWWANT='1:story-untracked, 1:story-untracked, 1:story-untracked, 1:story-untracked, climb=1 lnk=1 sdirty=1 scommit=1'
       got="$(abs_vec "$m")"
-      if [ "$got" = "$RAWWANT" ]; then ok "MUTATION 'raw-story' killed: the raw path refuses an absolute story as story-untracked, reads both escapes, and reads strategy mode's working tree"
+      if [ "$got" = "$RAWWANT" ]; then mutant_killed "${B_abs:-0}" raw-story "MUTATION 'raw-story' killed: the raw path refuses an absolute story as story-untracked, reads both escapes, and reads strategy mode's working tree"
       elif [ "$got" = "$ABSWANT" ]; then bad "MUTATION 'raw-story' SURVIVED -- the story path used raw in both modes"
       else bad "MUTATION 'raw-story' moved [$got], want [$RAWWANT]"; fi
     fi
@@ -442,13 +446,13 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       }
       SYMWANT='out=2 outabs=2 in=0 tracked=0'
       got="$(sym_vec "$HECTL")"
-      if [ "$got" = "$SYMWANT" ]; then ok "STORY SYMLINK: an untracked story symlinked out of the tree exits 2 (relative and absolute), one symlinked to an in-tree file is read, and a tracked symlink blob reads as its link string"
+      if [ "$got" = "$SYMWANT" ]; then ok "STORY SYMLINK: an untracked story symlinked out of the tree exits 2 (relative and absolute), one symlinked to an in-tree file is read, and a tracked symlink blob reads as its link string"; B_sym=1
       else bad "STORY SYMLINK: want [$SYMWANT] got [$got]"; fi
       if ! m="$(mkmut no-story-symlink he 'if [ -L "$TOP/$2" ]; then' 'if false; then')" || [ -z "$m" ]; then
         bad "FIXTURE ERROR: mutation 'no-story-symlink' matched nothing"
       else
         got="$(sym_vec "$m")"
-        if [ "$got" = 'out=1 outabs=1 in=0 tracked=0' ]; then ok "MUTATION 'no-story-symlink' killed: without the -L check the outside file is read (empty-cell)"
+        if [ "$got" = 'out=1 outabs=1 in=0 tracked=0' ]; then mutant_killed "${B_sym:-0}" no-story-symlink "MUTATION 'no-story-symlink' killed: without the -L check the outside file is read (empty-cell)"
         elif [ "$got" = "$SYMWANT" ]; then bad "MUTATION 'no-story-symlink' SURVIVED -- an untracked story symlink out of the tree is read"
         else bad "MUTATION 'no-story-symlink' moved [$got], want [out=1 outabs=1 in=0 tracked=0]"; fi
       fi
@@ -468,7 +472,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     printf '%s' "${o# }"
   }
   got="$(fc_vec "$HECTL")"
-  if [ "$got" = "$FCWANT" ]; then ok "RUN-RECORD: a reasoned none over a story+yamls+docs/reviews+test-results diff accepted, over a diff touching a test refused full-collection-none, a bare none refused, a missing line refused, a dependency-setup none with no reason refused, dev.md without the label prescription is LEGACY and with it refuses both missing lines; a .py under test-results/ and a conftest.py under docs/reviews/ make a record diff non-record; N/A, TBD and an empty value over a code diff each refused, an empty value continued by the invocation accepted, a dependency-setup N/A refused; dev.md untracked at <frozen> but on disk keys LEGACY both ways; an empty value over a fenced run and over `- Invocation:` accepted, over a bold label refused; a none carrying a runner span and a two-word span naming no runner refused; a venv interpreter with its packages accepted as a setup"
+  if [ "$got" = "$FCWANT" ]; then ok "RUN-RECORD: a reasoned none over a story+yamls+docs/reviews+test-results diff accepted, over a diff touching a test refused full-collection-none, a bare none refused, a missing line refused, a dependency-setup none with no reason refused, dev.md without the label prescription is LEGACY and with it refuses both missing lines; a .py under test-results/ and a conftest.py under docs/reviews/ make a record diff non-record; N/A, TBD and an empty value over a code diff each refused, an empty value continued by the invocation accepted, a dependency-setup N/A refused; dev.md untracked at <frozen> but on disk keys LEGACY both ways; an empty value over a fenced run and over `- Invocation:` accepted, over a bold label refused; a none carrying a runner span and a two-word span naming no runner refused; a venv interpreter with its packages accepted as a setup"; B_fc=1
   else bad "RUN-RECORD: want [$FCWANT] got [$got]"; fi
   fc_mutant() { # <name> <he|ro> <from> <to> <want> <label>
     local m got t
@@ -480,7 +484,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       mv "$(dirname "$t")/record-only-diff.sh.tmp" "$(dirname "$t")/record-only-diff.sh"; m="$t"
     elif ! m="$(mkmut "$1" he "$3" "$4")" || [ -z "$m" ]; then bad "FIXTURE ERROR: run-record mutation '$1' matched nothing"; return; fi
     got="$(fc_vec "$m")"
-    if [ "$got" = "$5" ]; then ok "MUTATION '$1' killed, moving its own cells only: $6"
+    if [ "$got" = "$5" ]; then mutant_killed "${B_fc:-0}" "$1" "MUTATION '$1' killed, moving its own cells only: $6"
     elif [ "$got" = "$FCWANT" ]; then bad "MUTATION '$1' SURVIVED -- $6"
     else bad "MUTATION '$1' moved [$got], want [$5] -- the cells are entangled"; fi
   }
@@ -544,11 +548,11 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   if build_world "$WORK/world-fcconv" fcconv && build_world "$WORK/world-fcconv-none" fcconv-none; then
     cv_c="$(verdict "$HECTL" "$WORK/world-fcconv" h)"; cv_n="$(verdict "$HECTL" "$WORK/world-fcconv-none" h)"
     if [ "$cv_c" = '0:' ] && [ "$cv_n" = '1:full-collection-none,' ]; then
-      ok "CONVENTIONS: a runner the conventions declare canonical (tox -e all) is accepted at the dev gate, and the same value with no conventions file is refused full-collection-none"
+      ok "CONVENTIONS: a runner the conventions declare canonical (tox -e all) is accepted at the dev gate, and the same value with no conventions file is refused full-collection-none"; B_conv=1
     else bad "CONVENTIONS: want [0:] and [1:full-collection-none,] got [$cv_c] and [$cv_n]"; fi
     if cv_m="$(mkmut fc-no-conv he 'run-shape "$fc" ${ev_conv:+"$ev_conv"}; then' 'run-shape "$fc"; then')" && [ -n "$cv_m" ]; then
       cv_mv="$(verdict "$cv_m" "$WORK/world-fcconv" h)"
-      if [ "$cv_mv" = '1:full-collection-none,' ]; then ok "MUTATION 'fc-no-conv' killed: the dev gate dropping the conventions argument refuses fcconv"
+      if [ "$cv_mv" = '1:full-collection-none,' ]; then mutant_killed "${B_conv:-0}" fc-no-conv "MUTATION 'fc-no-conv' killed: the dev gate dropping the conventions argument refuses fcconv"
       elif [ "$cv_mv" = "$cv_c" ]; then bad "MUTATION 'fc-no-conv' SURVIVED -- the dev gate drops the conventions argument"
       else bad "MUTATION 'fc-no-conv' moved [$cv_mv], want [1:full-collection-none,]"; fi
     else bad "FIXTURE ERROR: mutation 'fc-no-conv' matched nothing"; fi
@@ -574,7 +578,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     got="$(rc_vec "$RC3" "$RC0")"
     skip_line="$(bash "$RC3" -C "$WORK/world-notreview" "$STORY" "$(cat "$WORK/world-notreview/.B")" "$(cat "$WORK/world-notreview/.T")" 2>/dev/null | grep -c '^SKIP STATUS (implementation-view row .*exited 3: sprint-status: synthetic failure')" || skip_line=0
     if [ "$got" = "$RCWANT" ] && [ "$skip_line" -eq 1 ]; then
-      ok "SIBLING EXIT: a sprint-status.sh exiting 3 after its story line still lets (g) refuse status-not-review, and the row half prints one SKIP STATUS naming the exit; the same wrapper at exit 0 prints none"
+      ok "SIBLING EXIT: a sprint-status.sh exiting 3 after its story line still lets (g) refuse status-not-review, and the row half prints one SKIP STATUS naming the exit; the same wrapper at exit 0 prints none"; B_rc3=1
     else
       bad "SIBLING EXIT: want [$RCWANT] and one SKIP STATUS naming exit 3, got [$got] and $skip_line"
     fi
@@ -589,7 +593,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     done
     if [ "$m1_kill" = x ]; then :
     elif [ "$m1_kill" = '0::W:S' ] && [ "$m1_ctl" = '1:status-not-review,:W' ]; then
-      ok "MUTATION 'skip-on-exit' killed: arm (g) gated on the sibling's exit reads the story line as a SKIP at exit 3 (identity control at exit 0 still refuses)"
+      mutant_killed "${B_rc3:-0}" skip-on-exit "MUTATION 'skip-on-exit' killed: arm (g) gated on the sibling's exit reads the story line as a SKIP at exit 3 (identity control at exit 0 still refuses)"
     elif [ "$m1_kill" = '1:status-not-review,:W:S' ]; then
       bad "MUTATION 'skip-on-exit' SURVIVED -- arm (g) gated on the sibling's exit"
     else
@@ -613,7 +617,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # its own named cell and leave the ctl cell standing.
   cn_run() { bash "$DIR/receipt-bl815.sh" "$1" 2>&1; }
   cn_out="$(cn_run "$HECTL")"; cn_rc=$?
-  if [ "$cn_rc" -eq 0 ]; then ok "CAPTURE NORMALISATION: inner ../, absolute and aliased spellings of a tracked capture are judged (no-command), a leading ../ is outside the repository (WARN, or red-untracked when RED), untracked and outside citations WARN capture-unresolved with their reasons, a frozen-.gitignore'd one prints nothing, the exit is unchanged, --list-captures lists the toplevel spellings, and both readers agree on one ./ token"
+  if [ "$cn_rc" -eq 0 ]; then ok "CAPTURE NORMALISATION: inner ../, absolute and aliased spellings of a tracked capture are judged (no-command), a leading ../ is outside the repository (WARN, or red-untracked when RED), untracked and outside citations WARN capture-unresolved with their reasons, a frozen-.gitignore'd one prints nothing, the exit is unchanged, --list-captures lists the toplevel spellings, and both readers agree on one ./ token"; B_cn=1
   else bad "CAPTURE NORMALISATION: receipt-bl815.sh exited $cn_rc on the shipped validator: $(tr '\n' ' ' <<<"$cn_out")"; fi
   cn_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
     local m o rc
@@ -621,7 +625,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     o="$(cn_run "$m")"; rc=$?
     if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the toplevel control cell -- $5"
-    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then ok "MUTATION '$1' killed by cell $4: $5"
+    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_cn:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
     else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
   }
   cn_mutant cn-n1-no-normaliser '    cap_norm "$t" || CN=""' '    CN="$t"' inner "N1: the normaliser removed, an a/../b capture is not judged"
@@ -641,7 +645,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # record-only-diff.sh in the control tree and must FAIL its own named cell and leave ctl standing.
   b9_run() { bash "$DIR/receipt-bl809.sh" "$1" 2>&1; }
   b9_out="$(b9_run "$HECTL")"; b9_rc=$?
-  if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"
+  if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"; B_b9=1
   else bad "BL-809 ARMS: receipt-bl809.sh exited $b9_rc on the shipped validator: $(tr '\n' ' ' <<<"$b9_out")"; fi
   b9_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
     local m o rc
@@ -649,7 +653,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     o="$(b9_run "$m")"; rc=$?
     if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the no-command control cell -- $5"
-    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then ok "MUTATION '$1' killed by cell $4: $5"
+    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_b9:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
     else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
   }
   b9_mutant b9-m1-no-kunq 'if [ -n "$kl" ]; then' 'if false; then' kunq "M1: arm (m) removed, an unquoted multi-word -k passes"
@@ -659,53 +663,9 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # --- end BL-809 ARMS ------------------------------------------------------------------------------
 
   # --- BL-833 RED LINE (rv_*) -----------------------------------------------------------------------
-  # Which story LINE marks its captures RED. The rv* worlds (world.sh) each add one line citing
-  # `../test-results/x.txt`: arm (b) is reached (the spelling resolves outside the repository), and the
-  # basename carries no red/mut/mutation word, so only the LINE grammar decides. Cells, in order: rvid (a
-  # `-RED-` segment of an all-caps hyphenated identifier, graph s320 3.3:77's shape) quiet; rvred
-  # (standalone RED), rvproven (PROVEN) and rvmut (`Mutation-RED capture:`) refused red-untracked; rvmix
-  # (the identifier plus a standalone RED) refused; rvnone (no verdict word) quiet. Each quiet cell is the
-  # near-miss of the refused cell beside it, one property apart. Mutants: rv-m1 the pre-fix grammar on the
-  # unblanked line (rvid refuses), rv-m2 a `-`-bounded grammar on the unblanked line (rvmut and rvcap go quiet), rv-m3 the blanking applied to `line` itself (rvcap, whose capture basename is an identifier, is destroyed and goes quiet). rvcap: `Mutation-RED capture:` citing `../test-results/S320-3-3-X.txt`, refused red-untracked.
-  RVCASES='rvid rvred rvproven rvmut rvmix rvnone rvcap'
-  rv_ok=1
-  for v in $RVCASES; do build_world "$WORK/world-$v" "$v" || { rv_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done
-  # Seed control: test-results/x.txt is not tracked in any rv world, so no reading of the token resolves
-  # to a tracked capture and arm (b) is the only arm that can name it.
-  for v in $RVCASES; do gitw "$WORK/world-$v" cat-file -e "$(cat "$WORK/world-$v/.T" 2>/dev/null):test-results/x.txt" 2>/dev/null && { rv_ok=0; bad "FIXTURE BROKEN: rv world '$v' tracks test-results/x.txt"; }; done
-  for v in $RVCASES; do gitw "$WORK/world-$v" cat-file -e "$(cat "$WORK/world-$v/.T" 2>/dev/null):test-results/S320-3-3-X.txt" 2>/dev/null && { rv_ok=0; bad "FIXTURE BROKEN: rv world '$v' tracks test-results/S320-3-3-X.txt"; }; done
-  if [ "$rv_ok" -eq 1 ]; then
-    rv_vec() { # <script>
-      local s="$1" o="" v
-      for v in $RVCASES; do o="$o $v=$(verdict "$s" "$WORK/world-$v" h)"; done
-      printf '%s' "${o# }"
-    }
-    RVWANT='rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W'
-    got="$(rv_vec "$HECTL")"
-    if [ "$got" = "$RVWANT" ]; then ok "RED LINE: a RED inside an all-caps hyphenated identifier does not mark its line RED; a standalone RED, PROVEN and Mutation-RED each refuse an outside-spelled capture red-untracked, an identifier beside a standalone RED still refuses, a line with no verdict word is quiet"
-    else bad "RED LINE: want [$RVWANT] got [$got]"; fi
-    rv_mutant() { # <name> <from> <to> <want> <label>
-      local m got nf nt
-      if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: red-line mutation '$1' matched nothing"; return; fi
-      # Applied: the mutant carries the replacement and no longer the original line.
-      nf="$(grep -cF -- "$2" "$m")" || nf=0; nt="$(grep -cF -- "$3" "$m")" || nt=0
-      if [ "$nf" != 0 ] || [ "$nt" != 1 ]; then bad "FIXTURE ERROR: red-line mutation '$1' did not apply (from x$nf, to x$nt)"; return; fi
-      got="$(rv_vec "$m")"
-      if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own cell only: $5"
-      elif [ "$got" = "$RVWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
-      else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
-    }
-    RVFIX='red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0'
-    rv_mutant rv-m1-old-grammar "$RVFIX" 'red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0' \
-      'rvid=1:red-untracked,:W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W' \
-      "the pre-fix grammar on the unblanked line: a hyphen-joined -RED- identifier refuses its capture"
-    rv_mutant rv-m2-hyphen-bound "$RVFIX" 'red = (line ~ /(^|[^A-Za-z-])(RED|PROVEN)([^A-Za-z-]|$)/) ? 1 : 0' \
-      'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=0::W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
-      "a hyphen-bounded grammar on the unblanked line: Mutation-RED no longer marks its capture RED (rvmut, and rvcap whose line is the same wording)"
-    rv_mutant rv-m3-blank-line 'line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)' 'line=$0; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", line); l2=line' \
-      'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
-      "the blanking applied to the line itself instead of a copy: a capture whose basename is an all-caps hyphenated identifier is destroyed"
-  fi
+  # One world, one validator call per program, read per cell by token: rv_block in world.sh, whose header
+  # carries the cells, the mutants and the BL-834 invocation count.
+  rv_block
   # --- end BL-833 RED LINE --------------------------------------------------------------------------
 fi
 
@@ -773,7 +733,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     LCWANT="0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,x/y.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap3.txt,${E}cap5.txt,x/y.txt,"
     got="$(lc_vec "$HE")"
     if [ "$got" = "$LCWANT" ]; then
-      ok "LIST-CAPTURES: the story read AT the ref prints cap1 once (RED and plain citations), cap2 from './', the bare cap3.txt from its capture dir; '../', an outside absolute, glob, elided, untracked and the bare y.txt outside a capture dir print nothing; x/y.txt prints once cited by full path; cap5 cited on disk only is not printed at L2 and is at L3"
+      ok "LIST-CAPTURES: the story read AT the ref prints cap1 once (RED and plain citations), cap2 from './', the bare cap3.txt from its capture dir; '../', an outside absolute, glob, elided, untracked and the bare y.txt outside a capture dir print nothing; x/y.txt prints once cited by full path; cap5 cited on disk only is not printed at L2 and is at L3"; B_lc=1
     else
       bad "LIST-CAPTURES: want [$LCWANT] got [$got]"
     fi
@@ -781,7 +741,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       local m got
       if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: list-captures mutation '$1' matched nothing"; return; fi
       got="$(lc_vec "$m")"
-      if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own lines only: $5"
+      if [ "$got" = "$4" ]; then mutant_killed "${B_lc:-0}" "$1" "MUTATION '$1' killed, moving its own lines only: $5"
       elif [ "$got" = "$LCWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
       else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
     }

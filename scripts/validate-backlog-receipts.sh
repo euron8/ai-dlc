@@ -781,8 +781,12 @@ fi
 # cost over graph s317-s319 never moved. Three arms, one entry scanner:
 #
 #   E1 CLOSE (live ledger and, via --archive, docs/backlog.archive.md). Population: an entry
-#      annotated `**LANDED (v<digit>` that carries the bold `**DEFECT (efficiency).**` tag, or that
-#      carries an `Outcome measured:` line at all. TAG-ONLY by the lead's ruling: an untagged
+#      annotated `**LANDED (v<digit>` that carries a bold efficiency tag, or that carries an
+#      `Outcome measured:` line at all. The tag is any of four forms, `**DEFECT (efficiency).**`,
+#      `**DEFECT, efficiency.**`, `**NOTE (efficiency).**` and `**DEFECT. [efficiency rank N] ...**`,
+#      decided by backlog_efficiency_tagged() in reconcile/lib.sh -- the one predicate
+#      backlog-rotate.sh's outcome guard also reads (BL-835); bold prose carrying the word is not
+#      a tag. The same predicate sets E3's tagged population. TAG-ONLY by the lead's ruling: an untagged
 #      entry is not judged here by reading what it cites -- E3 closes that escape at FILING. It
 #      fires on: no outcome line (NO-OUTCOME); a line naming no sprint (NO-SPRINT); a line stating
 #      no direction (NO-DIRECTION); a figure that did not fall with no value citation that
@@ -823,7 +827,7 @@ fi
 # per-receipt checkout scorer, which costs a checkout per receipt and has nothing to say here.
 # ===========================================================================
 EFFAWK="$WORK/eff.awk"
-{ ledger_entry_awk; backlog_entry_label_awk; cat <<'AWK'
+{ ledger_entry_awk; backlog_entry_label_awk; backlog_efficiency_tag_awk; cat <<'AWK'
 function eflush() {
   if (label == "") return
   gsub(/[ \t]+/, " ", text); gsub(/[ \t]+/, " ", oc)
@@ -836,7 +840,7 @@ function eflush() {
   if (label == "") next
   if (ledger_entry_shape($0) == "heading" && $0 ~ /^##[ \t]/) { eflush(); next }
   text = text " " $0
-  if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1
+  if (backlog_efficiency_tagged($0)) tagged = 1
   if ($0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) landed = 1
   if (inoc) { if ($0 ~ /^[ \t]*$/) inoc = 0; else oc = oc " " $0 }
   if (ocn == 0 && $0 ~ /^(<br>)?(\*\*)?Outcome measured:/) { ocn = 1; inoc = 1; oc = $0 }
@@ -1018,16 +1022,23 @@ EPS="$EPL, lead active 0.4 h, subagent \$5"
   printf '## BL-976\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; Lead (BL-819) s321 1.2 h; Subagent sprint 321 $5.6; fell.\n\n' "$EPR" "$EPL"
   printf '## BL-977\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagent seats ran hosted models only. token-equivalent $9 (API $8), 1.0 h gap-inclusive; fell.\n\n' "$EPR"
   printf '## BL-978\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagents were not used; 1.0 h gap-inclusive, token-equivalent $9 (API $8); fell.\n' "$EPR"
+  # THE OTHER THREE TAG SPELLINGS (BL-835), each closed with no outcome line, each must fire
+  # NO-OUTCOME; and the near-miss, bold PROSE carrying the word, closed with no outcome, which must
+  # stay out of the close population.
+  printf '\n## BL-979\n\n**DEFECT, efficiency.** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
+  printf '## BL-980\n\n**NOTE (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
+  printf '## BL-981\n\nPreamble. **DEFECT. [efficiency rank 3] $12, 40 agent-minutes.** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
+  printf '## BL-982\n\n**Lead hours and lead tokens join every efficiency outcome.** x.\n\n**LANDED (v0.1.0, verified abc1234).**\n\n'
 } > "$EP/backlog.md"
-EP_WANT="F-RULING BL-961|F-UNTAGGED BL-963|NO-OUTCOME BL-951|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|SHAPE BL-969|SHAPE BL-970|SHAPE BL-971|SHAPE BL-972|SHAPE BL-973|SHAPE BL-974|SHAPE BL-977|SHAPE BL-978|"
+EP_WANT="F-RULING BL-961|F-UNTAGGED BL-963|NO-OUTCOME BL-951|NO-OUTCOME BL-979|NO-OUTCOME BL-980|NO-OUTCOME BL-981|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|SHAPE BL-969|SHAPE BL-970|SHAPE BL-971|SHAPE BL-972|SHAPE BL-973|SHAPE BL-974|SHAPE BL-977|SHAPE BL-978|"
 EP_GOT="$(eff_corpus "$EP/backlog.md" "$EP" live | LC_ALL=C sort | tr '\t' ' ' | tr '\n' '|')"
 if [ "$EP_GOT" != "$EP_WANT" ]; then
   echo "$(me): SELF-PROBE FAILED -- E0: the efficiency arms over the seeded ledger reported [$EP_GOT], expected [$EP_WANT]. Each seeded case is one branch of E1/E2/E3 (an absent row is a branch that cannot fire; an extra row is one that fires on a quiet case), so no corpus verdict from these arms would mean anything." >&2
   exit 2
 fi
 read -r EP_ENT EP_POP EP_NS < "$WORK/eff.counts"
-[ "$EP_ENT" = 28 ] && [ "$EP_POP" = 23 ] && [ "$EP_NS" = 2 ] || {
-  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch, expected 28 / 23 / 2. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint." >&2; exit 2; }
+[ "$EP_ENT" = 32 ] && [ "$EP_POP" = 26 ] && [ "$EP_NS" = 2 ] || {
+  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch, expected 32 / 26 / 2. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint; BL-982's prose bold must stay out of the close population." >&2; exit 2; }
 EP_ARCH="$(eff_corpus "$EP/backlog.md" "$EP" archive | cut -f1 | grep -c '^F-')" || EP_ARCH=0
 [ "$EP_ARCH" -eq 0 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive applied a FILING arm ($EP_ARCH row(s)); filing is judged on the live ledger only." >&2; exit 2; }
 
@@ -1037,7 +1048,7 @@ EFF_N="$(printf '%s' "$EFF_OUT" | grep -c .)" || EFF_N=0
 eff_report() {
   [ "$EFF_N" -eq 0 ] && return 0
   printf '%s\n' "$EFF_OUT" | awk -F'\t' '{ printf "FAIL: E\t%s\t%s\n", $2, $1 }' >&2
-  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. F-UNTAGGED: an entry citing docs/analysis/ carries **DEFECT (efficiency).** or the 'no graph pipeline step' line." >&2
+  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. F-UNTAGGED: an entry citing docs/analysis/ carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**, **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) or the 'no graph pipeline step' line." >&2
   return 1
 }
 if [ -n "$EFF_MODE" ]; then

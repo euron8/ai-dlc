@@ -1,7 +1,12 @@
-# `core/fixtures/lib/` — the shared fixture preamble
+# `core/fixtures/lib/` — the shared fixture preamble and mutant helpers
 
 Not a fixture. This directory holds `preamble.sh`, the seam every fixture `run.sh`
-that builds a scratch repository sources before its first git call.
+that builds a scratch repository sources before its first git call, and `mutant.sh`,
+whose `mutant_killed <flag> <name> <message>` is the one sanctioned way to emit a
+mutant kill: it refuses (FIXTURE BROKEN, no `ok`) unless the flag says the unmutated
+arm passed in the same run. `scripts/validate-mutant-kills.sh` binds that, over a
+down-only allowlist; `core/fixtures/check-22-spawn-ledger/run.sh` probes the helper
+in both directions and carries its mutants. The rest of this file is about `preamble.sh`.
 
 **No `run.sh`, deliberately.** There is no condition here to drive. The file is a
 sourced fragment whose entire body is one `unset`, and its behaviour is observable

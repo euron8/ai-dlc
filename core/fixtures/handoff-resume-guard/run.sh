@@ -49,6 +49,10 @@ ROOT="$(bash "$HERE/seed.sh")"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # Drive the hook exactly as the harness does: JSON on stdin, decision on stdout.
 # A fresh state dir per case, so the rapid-fire backoff cannot leak between them.
@@ -1018,6 +1022,7 @@ fi
 # beat slice from 46 lines to 93 and the subject arm then reads a token from the neighbour.
 # Derived with THIS slicer on the subject at tip: 46 lines. Band max 60.
 BEAT_BAND_MAX=60
+# BEGIN bg-scoring (extracted by BL-830's verify receipt; keep self-contained)
 bg_cF() { local n; n="$(grep -cF -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
 bg_cE() { local n; n="$(grep -cE -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
 # Both slicers key on the heading TEXT at any level and terminate on the next heading at
@@ -1037,6 +1042,12 @@ score_bg() {
   proh="$(bg_cE '(Never|never|Do not|do not|must not|Avoid|avoid) [^.]*run_in_background' "$b")"
   printf '%s %s %s %s' "$bl" "$ctl" "$subj" "$proh"
 }
+# bg1 (a seeded prohibition) is killed by the prohibition arm with the control alive. The
+# band is arm 1's job alone and is deliberately NOT a conjunct here: scoring the kill on it
+# made bg1 die only by sitting at the band ceiling. Args: the four score_bg fields.
+bg1_convicts() { [ "$4" -gt 0 ] && [ "$2" -gt 0 ]; }
+bg_band_ok() { [ "$1" -gt 0 ] && [ "$1" -le "$BEAT_BAND_MAX" ]; }
+# END bg-scoring
 
 if [ -z "${GATE_PROC_MD:-}" ]; then
   bad "FIXTURE BROKEN — _gate-procedures.md unresolved, so the beat-backgrounded arms asserted nothing"
@@ -1047,8 +1058,8 @@ else
 
   # ARM 1 — the slice is in band. Out of band, every content arm below it is being
   # satisfied by a neighbouring section rather than by the beat.
-  if [ "$BG_L" -gt 0 ] && [ "$BG_L" -le "$BEAT_BAND_MAX" ]; then
-    ok "beat-slice-band: the Bounded-join beat slice is $BG_L lines (band 1..$BEAT_BAND_MAX)"
+  if bg_band_ok "$BG_L"; then
+    ok "beat-slice-band: the Bounded-join beat slice is $BG_L lines (band 1..$BEAT_BAND_MAX)"; B_band=1
   else
     bad "beat-slice-band: the slice is $BG_L lines, outside 1..$BEAT_BAND_MAX — it has run past its terminating heading and is reading a neighbouring section's prose as its own"
   fi
@@ -1057,21 +1068,21 @@ else
   # present elsewhere. Its loss is a RESTRUCTURE and is reported separately: an ordinary
   # reword of the dispatch call form is not this work and must not read as a live defect.
   if [ "$BG_CTL" -gt 0 ]; then
-    ok "beat-bg-control: the Gate-adjudication dispatch slice still spells the call form ($BG_CTL) — the slicer and the grep both ran"
+    ok "beat-bg-control: the Gate-adjudication dispatch slice still spells the call form ($BG_CTL) — the slicer and the grep both ran"; B_bgctl=1
   else
     bad "beat-bg-control: the dispatch slice spells 'run_in_background: true' $BG_CTL times. At zero this is a restructure of the neighbouring section, not a live defect in the beat — the subject arm below is unanchored and its reading proves nothing either way."
   fi
 
   # ARM 3 — the SUBJECT.
   if [ "$BG_SUBJ" -gt 0 ]; then
-    ok "beat-is-backgrounded: the Bounded-join beat slice spells 'run_in_background: true' ($BG_SUBJ)"
+    ok "beat-is-backgrounded: the Bounded-join beat slice spells 'run_in_background: true' ($BG_SUBJ)"; B_bgsubj=1
   else
     bad "beat-is-backgrounded: the Bounded-join beat prescribes the call and never says it is backgrounded. A foreground beat's exit trap clears the in-flight marker before the turn ends, so the join reads as armed and is not — and this section is the ONLY sanctioned way to wait for a teammate, so every join delegating to it by name inherits the omission."
   fi
 
   # ARM 4 — POLARITY. A prohibition carries the token and asserts the opposite.
   if [ "$BG_PROH" -eq 0 ]; then
-    ok "beat-bg-polarity: no sentence in the slice forbids the backgrounded call"
+    ok "beat-bg-polarity: no sentence in the slice forbids the backgrounded call"; B_bgpol=1
   else
     bad "beat-bg-polarity: the slice FORBIDS passing run_in_background to this beat ($BG_PROH). That contradicts wait-for-deliverable.sh's own premise and ai-dlc-continue.sh's enumeration of dead beats, and it satisfies a bare token-presence anchor while inverting the property."
   fi
@@ -1096,10 +1107,36 @@ else
     bad "MUTANT bg1 DID NOT APPLY — the prohibition rewrite produced a byte-identical copy, so the verdict below would be scored against the original"
   else
     set -- $(score_bg "$M_PROH")
-    if [ "$4" -gt 0 ] && [ "$2" -gt 0 ] && [ "$1" -le "$BEAT_BAND_MAX" ]; then
-      ok "MUTANT bg1 KILLED: a seeded prohibition is convicted by beat-bg-polarity (proh=$4) with the control alive (ctl=$2)"
+    if bg1_convicts "$1" "$2" "$3" "$4"; then
+      mutant_killed "$(( ${B_bgpol:-0} && ${B_bgctl:-0} ))" bg1 "MUTANT bg1 KILLED: a seeded prohibition is convicted by beat-bg-polarity (proh=$4) with the control alive (ctl=$2)"
     else
       bad "MUTANT bg1 SURVIVED: prohibition copy scored lines=$1 ctl=$2 subj=$3 proh=$4; wanted proh>0. A sentence forbidding the backgrounded call passes a token anchor while asserting the opposite of the fix."
+    fi
+  fi
+
+  # M-BG1b — the same prohibition on a slice PADDED past the band (no heading, no
+  # run_in_background in the padding). bg1 must stay KILLED: under the old scoring, which also
+  # demanded lines<=band, this world read SURVIVED. The band assertion proves the world is the
+  # discriminating input, and BG_PROH=0 on the live file proves proh comes only from the seed.
+  M_PROHPAD="$BGW/gp-prohibition-padded.md"
+  awk '
+    { print }
+    /^the result inline\.$/ {
+      for (i = 1; i <= 70; i++) print "Padding line " i " of the oversized-slice world."
+    }
+  ' "$M_PROH" > "$M_PROHPAD"
+  if cmp -s "$M_PROH" "$M_PROHPAD"; then
+    bad "MUTANT bg1b DID NOT APPLY — the padding rewrite produced a byte-identical copy"
+  else
+    set -- $(score_bg "$M_PROHPAD")
+    if bg_band_ok "$1"; then
+      bad "MUTANT bg1b WORLD NOT DISCRIMINATING: padded slice is $1 lines, still in band 1..$BEAT_BAND_MAX, so it cannot separate a band-free kill from a band-bound one"
+    elif [ "$BG_PROH" -ne 0 ]; then
+      bad "MUTANT bg1b CONTROL BROKEN: the live slice already scores proh=$BG_PROH, so proh on the padded copy is not attributable to the seed"
+    elif ! bg1_convicts "$1" "$2" "$3" "$4"; then
+      bad "MUTANT bg1b SURVIVED: padded prohibition copy scored lines=$1 ctl=$2 subj=$3 proh=$4; wanted proh>0 and ctl>0 independent of the band"
+    else
+      mutant_killed "$(( ${B_bgpol:-0} && ${B_bgctl:-0} ))" bg1b "MUTANT bg1b KILLED with the slice at $1 lines (band max $BEAT_BAND_MAX, arm 1 would fail it): proh=$4 ctl=$2 decide it without the band, where the old band-bound scoring reads SURVIVED"
     fi
   fi
 
@@ -1131,7 +1168,7 @@ else
   else
     set -- $(score_bg "$M_NOBG")
     if [ "$3" -eq 0 ] && [ "$2" -gt 0 ] && [ "$4" -eq 0 ] && [ "$1" -le "$BEAT_BAND_MAX" ]; then
-      ok "MUTANT bg2 KILLED: with the fix reverted the beat slice carries the call form 0 times while the control still reads $2 — beat-is-backgrounded discriminates"
+      mutant_killed "${B_bgsubj:-0}" bg2 "MUTANT bg2 KILLED: with the fix reverted the beat slice carries the call form 0 times while the control still reads $2 — beat-is-backgrounded discriminates"
     else
       bad "MUTANT bg2 SURVIVED: fix-removed copy scored lines=$1 ctl=$2 subj=$3 proh=$4; wanted subj=0 with ctl>0. Arm 3 cannot tell the pre-fix section from the fixed one."
     fi
@@ -1164,7 +1201,7 @@ else
   else
     set -- $(score_bg "$M_OVER")
     if [ "$1" -gt "$BEAT_BAND_MAX" ]; then
-      ok "MUTANT bg3 KILLED: the beat slice grows to $1 lines and beat-slice-band refuses it, rather than the subject arm reading a call form off the swallowed neighbour"
+      mutant_killed "${B_band:-0}" bg3 "MUTANT bg3 KILLED: the beat slice grows to $1 lines and beat-slice-band refuses it, rather than the subject arm reading a call form off the swallowed neighbour"
     else
       bad "MUTANT bg3 SURVIVED: over-read copy's beat slice read $1 lines (subj=$3), still in band. The slice has absorbed the next section and the subject arm is scoring the neighbour's prose."
     fi

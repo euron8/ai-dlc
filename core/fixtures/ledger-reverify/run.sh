@@ -152,7 +152,19 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$CLOSER")" && pwd)/$(basename "$CLOSER"
 # unit, J1 and the floor -- is exit 2 after the unit's own stderr has been replayed once.
 LR_DONE=""
 exec 3>&2
-read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")
+# The seed's exit status is its only failure signal and a process substitution discards it, so a
+# failed seed used to arrive as four empty variables and `rm -rf "$(dirname "")"` in the trap below.
+# Capture it, and check the four fields and the mktemp prefix BEFORE that trap is armed.
+# LR_SEED overrides the seed path for the seed-fails mutant below; unset, it is the shipped seed.
+seed_out="$(bash "${LR_SEED:-$DIR/seed.sh}")" || { echo "FIXTURE BROKEN: seed exited $?" >&2; exit 2; }
+read -r DIST BASE CONS THEIRS <<< "$seed_out"
+for _f in DIST BASE CONS THEIRS; do
+  [ -n "${!_f}" ] || { echo "FIXTURE BROKEN: seed printed no value for $_f" >&2; exit 2; }
+done
+case "$DIST" in
+  "${TMPDIR:-/tmp}"/ledger-reverify-*/dist) [ -d "$DIST" ] || { echo "FIXTURE BROKEN: seed's DIST is not a directory: $DIST" >&2; exit 2; } ;;
+  *) echo "FIXTURE BROKEN: seed's DIST is not under ${TMPDIR:-/tmp}/ledger-reverify-*: $DIST" >&2; exit 2 ;;
+esac
 trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >&3; rm -rf "$(dirname "$DIST")"; [ "${LR_DONE:-}" = 1 ] || { echo "FIXTURE BROKEN: shard exited before dispatch completed" >&3; exit 2; }' EXIT
 
 OUT="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
@@ -6085,6 +6097,34 @@ printf '  ok    %s\n' "$LR_JOIN_LINE"
 if [ "$ASSERTIONS" -ne 6 ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s %s assertions ran before dispatch, want the shared control'"'"'s 6 -- something outside every lr_unit_ ran, in every shard\n' "[shared]" "$ASSERTIONS"
+fi
+# BL-827 MUTANT (placed after the shared-control count, which is exactly six and would move): a seed that exits 1 must read FIXTURE BROKEN: seed exited and exit 2, and not fall
+# through to assertions on four empty variables. It drives THIS fixture whole, with LR_SEED pointing at
+# a failing seed, so the run reaches the seed check past the real J0 join and the real sibling files;
+# a copied run.sh alone would die at J0 before the seed was read and pass for the wrong reason. The
+# control is a seed that exits 0 and prints junk: the same harness must then NOT print "seed exited",
+# so the text is the failing status and not something the harness always emits.
+if [ "$GROUP" = a ] && [ -z "${LR_SEED:-}" ]; then
+  _sm="$(mktemp -d "${TMPDIR:-/tmp}/bl827-seed-XXXXXX")"
+  printf '#!/bin/sh\nexit 1\n' > "$_sm/fail.sh"
+  printf '#!/bin/sh\necho garbage\n' > "$_sm/junk.sh"
+  _smo="$(LR_SEED="$_sm/fail.sh" bash "$DIR/run.sh" --group a 2>&1)"; _smr=$?
+  _sco="$(LR_SEED="$_sm/junk.sh" bash "$DIR/run.sh" --group a 2>&1)"; _scr=$?
+  rm -rf "$_sm"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$_smr" = 2 ] && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$_smo"; then
+    printf '  ok    %-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2\n' "seed-fails"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited\n' "seed-fails" "$_smr"
+  fi
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$_scr" = 2 ] && grep -qF 'FIXTURE BROKEN' <<< "$_sco" && ! grep -qF 'seed exited' <<< "$_sco"; then
+    printf '  ok    %-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)\n' "seed-fails-ctl"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s rc=%s want 2, FIXTURE BROKEN and no seed exited\n' "seed-fails-ctl" "$_scr"
+  fi
 fi
 # A unit's stderr is captured to a FILE with `2>`, never with `$( )`, which would run the unit in
 # a subshell and lose every ASSERTIONS and FAILURES it moved. It is replayed to stderr after the
