@@ -933,6 +933,42 @@ Owed: bg1 killed by the prohibition arm (`proh>0`) independently of the band, wi
 
 verify: manual
 
+## BL-831 — skill and role prose names the model a role runs, or ranks one role's model against another's, while `aiDlcRoles` is the only source
+
+**DEFECT.** Filed 2026-10-27 on an operator ruling: the skill is model-agnostic, because a role's model and effort come from `aiDlcRoles` in the consumer's `.claude/settings.json` and from nowhere else (`core/team-roles/adversary.md:49-51`, `core/skills/ai-dlc-update/reconcile/apply.sh:1317-1326`). Prose naming a model, or saying one role runs a cheaper, stronger or higher-tier model than another, is a claim about config that the skill cannot know. Remove it, comparisons included. The adjudicator stays on its configured model; this entry corrects the prose, not the config.
+
+**The case that exposed it.** `core/team-roles/gate-adjudicator.md:5-6` tells the agent "The lead runs on a cheaper model and dispatches you — a fresh, independent context on the Opus tier". The template has bound `gate-adjudicator` to `sonnet`/`medium` since 0.781.0 (`6c8ea1d9d`, `templates/settings.json.template:39-42`). Graph's spawn ledger records 151 opus adjudicator spawns through 2026-09-07 and 365 sonnet spawns from 2026-09-08 (control: adversary, 1398 opus, 0 sonnet, same file). Both statements are false today.
+
+Sites, derived at `ba92b4199`:
+
+- **Model named for a role, or a cheaper or stronger comparison:** `core/team-roles/gate-adjudicator.md:5-9`; `core/skills/ai-dlc/steps/_gate-procedures.md:181-182`; `core/skills/ai-dlc/steps/gate-validation.md:163-165`; `core/skills/ai-dlc/steps/gate-validation.md:2679-2683` (Check 26's minimum mechanism: its failure case is "the lead on a cheaper model" and its removal condition is "the lead returns to Opus", so restate both on the property the escalation really buys, which is a fresh, independent context); `core/skills/ai-dlc/rule-bodies/rule-20.md:91, 96-97`; `core/skills/ai-dlc/enforcement-map.yaml:608-609`; `core/schemas/gate-adjudication-verdict.json:6-8` (the `$comment`); `core/fixtures/gate-adjudication/README.md:4-5` and `run.sh:6`; `core/skills/ai-dlc/steps/implementation.md:83, 135` and `core/skills/ai-dlc/steps/stories-test-strategy.md:28, 41` ("on a stronger model than `dev`" / "`code-reviewer`", "a different model tier"); `core/team-roles/pm-escalated.md:1, 5, 15`, `dev-escalated.md:1` and `code-reviewer-escalated.md:1` ("escalated tier" / "escalated model tier"; the bodies of the other two already say "escalated route").
+- **A model named in measurement or history prose:** `core/team-roles/remediator.md:298` and `core/skills/ai-dlc/steps/_gate-procedures.md:1323` ("an Opus agent"); `core/skills/ai-dlc/steps/gate-validation.md:1903`; `core/skills/ai-dlc/enforcement-map.yaml:1357-1360, 1367`; `core/skills/ai-dlc-update/SKILL.md:2334`; `core/scripts/validate-artifact-derivations.sh:24, 49`. Keep each measurement and drop the model name.
+- **A stale model coupling:** `core/skills/ai-dlc-update/SKILL.md:1778` gives "`gate-adjudicator` ← `adversary`'s model" as a setup-token default, which the apply engine stopped doing in v0.174.0. `:2161` proposes the adversary's `/model` as the default for a new role, and role files carry no `/model`.
+
+**Out of scope, and why.** `core/skills/ai-dlc-setup/SKILL.md` documents the `aiDlcModels` keys and the `model` enum. That is the config surface itself, so it names models correctly. `_gate-procedures.md:1625`'s `model_family` enum and `reconcile/template-sites.md:166` are mechanism. Hook comments in `core/hooks/` are code.
+
+**In scope, with a binding to move.** The advisor sentence "forwards your whole transcript to a stronger reviewer" appears in 20 core files, and `core/skills/ai-dlc/SKILL.md:1054` says "a lead that holds a stronger reviewer". Both are comparisons. I122 (`scripts/validate-enforcement-map.sh:14299-14312`) compares each `core/team-roles/*.md` advisor paragraph, opener to closing line, against the MODAL copy, so the role-file copies must be reworded identically in one change, or every file left behind scores DRIFT. Its probe seed at `:14255` is self-contained and does not read the corpus. The copies outside `core/team-roles/` (`SKILL.md:1019`, `postcompact-digest.md:299`) sit outside I122's population; check whether another invariant binds the digest to SKILL.md before rewording them.
+
+**Pins.** No fixture or validator asserts on any of the role-model phrases above. `core/fixtures/gate-adjudication/` only mentions them, in its README and a `run.sh` comment, and is in the site list. Control: `# Role: Developer` is pinned by `layer-readopt-gate/seed.sh` and `setup-config-drift/seed.sh`, so check those seeds still match after the `dev-escalated.md` title changes.
+
+Owed: reword every site above. Then measure the receipt's false-positive set and decide whether it earns a place as an arm (no model name or tier comparison in the shipped skill and role prose, outside the setup skill), since a rule with no enforcer drifts back.
+
+verify: sh S="core/team-roles core/skills/ai-dlc core/skills/ai-dlc-update/SKILL.md core/schemas core/fixtures/gate-adjudication core/scripts/validate-artifact-derivations.sh"; [ "$(git grep -l -F gate-adjudicator -- $S | wc -l)" -gt 0 ] || exit 9; ! git grep -q -P '\b(Opus|Sonnet|Haiku|Fable|opus|sonnet|haiku|fable)\b|cheaper.model|stronger (model|reviewer)|higher .model|model tier|escalated (model )?tier|model quality|Opus-grade' -- $S && ! git grep -q -F 'gate-adjudicator` ← `adversary' -- core/skills/ai-dlc-update/SKILL.md
+
+## BL-832 — the adversary role's configured binding moves from opus/medium to sonnet/high
+
+**DEFECT.** Filed 2026-10-27 on an operator ruling: set `aiDlcRoles.adversary` to `"model": "sonnet"`, `"effort": "high"`. This is not a measured change, and none is owed before or after it. It is a config change only. BL-831 makes the prose model-agnostic, so no prose site moves with this entry.
+
+Today `templates/settings.json.template:9-13` reads `opus`/`medium`. The consumer's `.claude/settings.json` reads the same, as do its sprint worktrees.
+
+Owed:
+
+1. `templates/settings.json.template`: the adversary entry becomes `sonnet`/`high`, with `omitClaudeMd` unchanged.
+2. **A pull does not carry this to an existing consumer.** `core/skills/ai-dlc-update/reconcile/settings-merge.sh:221-228` merges `aiDlcRoles` at the role level with the consumer's entry winning (`$t + $u`), so a consumer that already has an `adversary` entry keeps `opus`/`medium`. Only a fresh install gets the new default. Graph's `aiDlcRoles.adversary` is the consumer's own setting. The release states that, as a note to the operator, so the operator can change it; this repo never writes it.
+3. Fixtures that seed their own `"adversary": { "model": "opus" }` (`core/fixtures/check-22-spawn-ledger/run.sh:199, 955`, `core/fixtures/retired-layer-contract/seed.sh:116`) are synthetic settings for their own worlds and do not read the template. Confirm that in the gate run, and do not edit them.
+
+verify: sh [ -r templates/settings.json.template ] || exit 9; command -v jq >/dev/null || exit 9; [ "$(jq -r '.aiDlcRoles.adversary.model + "/" + .aiDlcRoles.adversary.effort' templates/settings.json.template)" = "sonnet/high" ]
+
 ## Reopened by BL-817's re-audit (batch 243)
 
 Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
