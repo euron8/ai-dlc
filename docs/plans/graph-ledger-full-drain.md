@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,54 +67,58 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 243 IS CLOSED: SEVEN RELEASES, `v0.946.0` THROUGH `v0.952.0`. THE NEXT SESSION STARTS BATCH 244.**
-The batch-242 record is rotated to the archive; this block replaces it. Lead was ai-dlc-8a. Owners: ai-dlc-33 (c1), ai-dlc-14 (c2, c6a,
-c6b), ai-dlc-f1 (c3), ai-dlc-12 (c4, c5); ai-dlc-b4 audited BL-817's counts. No `graph-*` session was messaged. No graph watch ran: ai-dlc-fa was
-gone at roll call and the operator appointed none.
+**BATCH 244 IS CLOSED: SIX RELEASES, `v0.953.0` THROUGH `v0.958.0`. THE NEXT SESSION STARTS BATCH 245.**
+This block replaces the batch-243 record. Lead was ai-dlc-45. Owners: ai-dlc-d7 (c1, c4), ai-dlc-f0 (c2), ai-dlc-c5 (c3, c5,
+c6). No `graph-*` session was messaged. No graph watch ran.
 - **Landed** (squash, PR, closes, NET as each release message derives it):
-  - `v0.946.0` `af80abefd` #1311: BL-699 PARTIAL (memo shipped; item (d) blocked under NO TIMING RUNS). NET 0.
-  - `v0.947.0` `1326b45f5` #1312: BL-805 closed, BL-806 part (a); BL-818 and BL-820 filed. NET −1.
-  - `v0.948.0` `ce275f7e9` #1313: BL-808, BL-809 and BL-810 partials; BL-813 and BL-815 (the two capture fixes) filed
-    and closed. NET 0.
-  - `v0.949.0` `94c8dcdc7` #1314: BL-804, BL-807, BL-814, BL-816 (BL-814 and BL-816 filed and closed). NET +2.
-  - `v0.950.0` `18dc7d27f` #1315: BL-795 and BL-695 closed; BL-538 s320 re-count. NET +2.
-  - `v0.951.0` `6d0340091` #1316: BL-818 and BL-820 closed. NET +2.
-  - `v0.952.0` `abd42574d` #1317: BL-809, BL-810, BL-811, BL-817, BL-819 progress; BL-821 and BL-824 filed and closed;
-    BL-817's re-audit reopened 19 archived closes (BL-397, 398, 507, 508, 510, 512, 513, 514, 541, 543, 550, 552, 594,
-    615, 679, 694, 695, 716, 804) under `## Reopened by BL-817's re-audit (batch 243)`. NET −19. Its first dress went
-    red on three fix defects from its own diff and the re-squash went green.
-  Every batch-243 LANDED line in the archive is re-anchored on its squash. Every batch-243 branch is deleted; unlanded
-  tips are anchored under `refs/archive/b243-<cluster>/`.
-- **Operator rulings this batch** (2026-10-26).
-  - BL-817's 11 UNATTRIBUTABLE closes: "Stay closed, say so".
-  - The s317 cost basis: "Token-equivalent $" (local calls priced at the sprint's hosted lead mix, API $ beside it).
-  - Wall clock: "that's not acceptable. find a more efficient way to get past this." The owner-rules block now says
-    a serial carrier pre-run never runs when nothing else gates, and a hand runs each fixture whose subject it edited.
-- **Lead rulings carried forward.**
-  - A filing found after its release is built rides a later release (BL-823, BL-828, and BL-817's amendment).
-  - A non-BL `##` heading ends a rotated entry's span; a `##` heading whose FIRST token is a `BL-` id stays an entry.
-  - BL-826 was withdrawn: its premise was a tracker misparse of `record …; … close` command lines. No id carries it.
-- **Backlog.** Filed at this close: BL-823, BL-825, BL-827, BL-828, BL-829 and BL-830, plus an amendment to BL-817
-  (its 0.952.0 arm does not require lead and subagent figures; 0 of 19 reopened and 0 of 21 archived outcome lines
-  carry one). BL-822 was reserved and never used. Live at close: 41; archive 774. **The next free id is BL-833.**
-- **NOTEs** (no entry): BL-821's receipt runs only by hand; c6b's widened left-boundary class has no mutant of its own;
-  a c6b hand swept the graph clone during c5's GATE OPEN (ruled: 0.950.0's verdict stands); BL-811 supersedes
-  BL-464's "cross.md alone is refused", pointed to from the CHANGELOG; c1's stale `inputs.decl` comment rides a later
-  release; the three orphan `worktree-agent-*` branches a152b28a, a84f9b61 and aee5795a belong to no batch-243 hand
-  and were left in place.
-- **Not built, with reasons**, each as its entry says: BL-538, BL-583, BL-584, BL-616, BL-706 and BL-699 item (d) (NO TIMING RUNS), BL-685,
-  BL-785, and the 19 reopened entries, which each owe a measured graph sprint on the release that carries their fix.
-- **Graph at close**: installed 0.951.0 on the checked-out branch `ai-dlc-update/0.951.0-reconcile-20261027T014606Z`
-  (1 behind) and 0.924.0 on `main` (28 behind, a WIDE range). Shipped 0.952.0. Ledger md5 at the sprint tip
-  `ebc737df75c3d4fb7f5c334ad171b82f`; porcelain 6. Derive block at abd42574d: worklist 0 rows; live 1, archive 382;
-  PENDING 1 (`PC-S319-CHECK-17-…`, still UNNAMED, consumer-only BL-791). No `preclassify.sh`, `apply.sh` or
-  `ledger-reverify.sh` in either range; `core/skills/ai-dlc-update/` carries `fixture-manifest.md` and, from main only,
-  `reconcile/consumer-read.sh`, `emit-report.sh` and `lib.sh`; mode-only 0 in both. Action 7's differential on a
-  `file://` clone at graph's sprint tip `9d022b6e8`: `validate-spawn-ledger.sh` is the one changed engine whose
-  binaries differ (`cmp -s`), and at s319 and s320 its finding sets agree (remediation text and one zero S4 count line
-  differ). `check-owed-derivations.sh` and `join-remediator-shards.sh` are byte-identical to the 0.951.0 install. BANK
-  IT. Not covered, though available: the reconcile `lib.sh`/`consumer-read.sh`/`emit-report.sh` changes from main act
-  only in an apply; the S4 arm reads 0 today. The pull is not preapproved; no runbook.
+  - `v0.953.0` `897fd3345` #1320: BL-833 filed and closed, and PC-S320-HANDOFF-EVIDENCE-RED-TOKEN-MATCHES-HYPHEN-BOUNDED-RED-IN-A-BACKLOG-ID
+    closed. NET 0.
+  - `v0.954.0` `7c8a88fd7` #1321: BL-699, BL-785 and BL-832 closed; BL-812 advanced and still PARTIAL. NET −3.
+  - `v0.955.0` `ea44b9bde` #1322: BL-831 closed (skill and role prose names no model; Class 1d audit arm). NET −1.
+  - `v0.956.0` `9d0bca846` #1323: BL-513 and BL-694 closed; BL-817 item 1 now requires lead and subagent seat figures. NET −2.
+  - `v0.957.0` `619d7acd9` #1324: BL-823, BL-827, BL-829 and BL-830 closed; BL-834 and BL-835 filed and closed; BL-828
+    PARTIAL (`scripts/validate-mutant-kills.sh`, a new `.githooks/pre-push` step, with a down-only allowlist). NET −4.
+  - `v0.958.0` `3a7c743cd` #1325: BL-825 closed (a waived gate verdict is recorded `FAIL_WAIVED`, never PASS) and BL-594's
+    p1 carve-out reverted on its own measurement. NET −2.
+  Batch NET −12. Every batch-244 LANDED line in the archive is re-anchored on its squash.
+- **Operator rulings this batch** (2026-10-27).
+  - BL-699: "Close without (d)".
+  - BL-785: "Close as unbuildable".
+  - "I want the two newest BL items releases prioritized in this batch", read as BL-831 and BL-832. Both shipped.
+- **Lead rulings that bind a subject if it is picked.**
+  - BL-804's premise is the opt-out prose at `core/team-roles/remediator.md`, not the join-before-mark order, which is
+    by design.
+  - A `FAIL_WAIVED` waiver binds only when its entry header carries the verdict's sprint as `S<N>`.
+  - BL-837 needs its own contract and adversary, because its fix changes arm 7a for every gate.
+- **Backlog.** Filed at this close: BL-836 (nothing at pre-push asserts an OPEN entry's `verify: sh` receipt still runs)
+  and BL-837 (the remediation guard's binding is skipped when a verdict carries a plain FAIL, so a forged unbound verdict
+  acquits through an in-force SUPPRESSED entry; already on `main`). Live at close: 33; archive 789. **The next free id is
+  BL-838.** Incidental closes (action 5, diffed by ID, base `fc71a7b10` against `3a7c743cd`): none. The exit-0 set was
+  empty at both ends.
+- **NOTEs** (no entry):
+  - c4's tip adversary found that an old `wait-for-deliverable.sh` meeting a new `join-remediator-shards.sh` in a
+    SELF-UPDATE-CARRY window fails closed; it is stated in the 0.957.0 release text.
+  - `check-24` carries 0 mutant kills.
+  - BL-685's round-9 flip precondition is recorded in its body.
+  - `enforcement-map-derivations` arm A41 selected "the first walker row" and broke on an unrelated enum addition;
+    0.958.0 fixed the selector.
+  - 0.957.0's dress pole read 1758s loaded under load 25-38, a figure not comparable across loads.
+  - `audit-rule-files.sh` reports a local-tier NARRATIVE_DRIFT at `core/skills/ai-dlc/steps/discovery.md:166`.
+- **Not built, with reasons**, each as its entry says: BL-538, BL-583, BL-584, BL-616 and BL-706 (NO TIMING RUNS), BL-685,
+  BL-804, BL-828's 124 remaining allowlisted fixtures, BL-836 and BL-837 (filed at this close), and the reopened
+  entries, which each owe a measured graph sprint on the release that carries their fix.
+- **Graph at close**: installed 0.952.0 on the checked-out branch `ai-dlc/carry-over/s319-closeout-smoke-green` (6 releases behind, WIDE)
+  and 0.924.0 on `main` (34 behind, WIDE). Shipped 0.958.0. Derive block at `3a7c743cd`: worklist 0 rows; live 2, archive 382;
+  PENDING 1 (`PC-S319-CHECK-17-…`, still UNNAMED, consumer-only BL-791); untouched 1 (`PC-S320-HANDOFF-…`, named in
+  0.953.0's release message). No `preclassify.sh`, `apply.sh` or `ledger-reverify.sh` in
+  either range; the checked-out range changes `core/skills/ai-dlc-update/SKILL.md` and `reconcile/lib.sh`; mode-only 0 in
+  both. Action 7's differential on a `file://` clone at graph's sprint tip `5b04bbf01`, `cmp -s` asserting the binaries
+  differ: `audit-rule-files.sh` agrees on its finding set (38, tier-1 1, both exit 1; the distribution adds a Class 1d
+  section reading N/A in a consumer layout), and `validate-artifact-derivations.sh --list --all` is identical. BANK IT.
+  Not covered, though available with seeded inputs: the six other changed engines (`validate-gate-adjudication`,
+  `validate-handoff-evidence`, `validate-suppression-lifetime`, `join-remediator-shards`, `rotate-gate-adjudication`,
+  `wait-for-deliverable`), which need a gate type, shards, a story or an escalations file; the reconcile changes act only
+  in an apply. The pull is not preapproved; no runbook.
 
 ### Derive the state; do not trust the numbers below
 
@@ -967,7 +971,9 @@ candidate's surviving half is upstream's to file and build, never a question for
       the rebased tip.
    5. Every hand brief ends with `bash scripts/validate-enforcement-map.sh` and `bash
       scripts/validate-shell-portability.sh` on the hand's own branch before it reports done
-      (fixture-only verification missed an I54b and an S12 finding at batch 240). A conflict
+      (fixture-only verification missed an I54b and an S12 finding at batch 240), and with
+      `bash scripts/validate-no-dead-doc-refs.sh` and `bash scripts/validate-mutant-kills.sh`
+      on the same tree (batch 244: two releases failed their pre-suite on exactly these). A conflict
       resolution inside pinned prose is its own hand unit. A hand runs vem on its COMMITTED tree: a
       clean `git worktree add` at its sha, never its working tree, and it reads I77 by seeding a
       control that must fail. The carrier set is every fixture whose inputs.decl declares a file
@@ -1013,7 +1019,9 @@ candidate's surviving half is upstream's to file and build, never a question for
       `git branch -D`. The list also names every worktree under your scratchpad and
       `.claude/worktrees/` from `git worktree list --porcelain`, each HEAD shown reachable the same
       way: a hand's clean validation worktree is DETACHED, holds no branch, and a branch-keyed list
-      never sees it. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
+      never sees it. Key the worktree half on PATHS (your scratchpad, and `.claude/worktrees/agent-<id>`
+      for each agent id your session spawned), never on branch names: a hand may name its own
+      branch, and batch 244's branch-keyed list missed three. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
 
    **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
    gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries

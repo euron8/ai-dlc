@@ -38275,7 +38275,7 @@ verify: manual
 
 ## BL-833 — an all-caps hyphenated identifier containing `RED` marks every capture on its line RED, so a `../` spelling is refused `red-untracked`
 
-**LANDED (v0.953.0, verified 8c8b66d53).** `cap_tokens` now blanks all-caps hyphenated identifiers of three or more segments in a copy of the line before the `RED`/`PROVEN` test, so a `RED` inside `CO-S318-...-NOT-STALE-RED-AT-BASE-...` no longer marks the line's captures RED, while `mutation-RED`, `Mutation-RED` and `RED-before-fix` still do. `story-evidence-scaffold` pins six cells, and mutants `rv-m1-old-grammar` and `rv-m2-hyphen-bound` each go red on their own cell.
+**LANDED (v0.953.0, verified 897fd3345).** `cap_tokens` now blanks all-caps hyphenated identifiers of three or more segments in a copy of the line before the `RED`/`PROVEN` test, so a `RED` inside `CO-S318-...-NOT-STALE-RED-AT-BASE-...` no longer marks the line's captures RED, while `mutation-RED`, `Mutation-RED` and `RED-before-fix` still do. `story-evidence-scaffold` pins six cells, and mutants `rv-m1-old-grammar` and `rv-m2-hyphen-bound` each go red on their own cell.
 
 **DEFECT.** Filed 2026-10-27 from a consumer candidate on the reference consumer's sprint-319 carry-over. `cap_tokens` in `core/scripts/validate-handoff-evidence.sh` set the RED flag once per line, with `-` as a word boundary, so a `RED` inside a hyphenated identifier such as `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` marked every capture on that line RED. Arm (b) then refused a `../test-results/...` spelling as `red-untracked`, although the story claimed no mutation-RED. The header contract is that a capture is cited as RED when its line carries the verdict word `RED` or `PROVEN`; an identifier segment is not that word.
 
@@ -38288,7 +38288,7 @@ verify: manual
 verify: sh set -uo pipefail; SCR="${SCR:-core/scripts}/validate-handoff-evidence.sh"; [ -f "$SCR" ] || exit 9; T="$(mktemp -d)"; g() { d="$1"; shift; GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$d" -c user.name=fx -c user.email=fx@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; mk() { w="$T/$1"; mkdir -p "$w/stories" "$w/test-results"; g "$w" init -q; printf 'test-results/\n' > "$w/.gitignore"; printf -- '---\nstatus: review\n---\n# Story 1\n' > "$w/stories/story-1.md"; g "$w" add -A; g "$w" commit -qm base; g "$w" rev-parse HEAD > "$w/.B"; printf '$ pytest -q\nhead: x\n1 passed\n' > "$w/test-results/x.txt"; cp "$w/test-results/x.txt" "$w/test-results/S320-3-3-X.txt"; printf '%s\n' "$2" >> "$w/stories/story-1.md"; g "$w" add -A; g "$w" commit -qm work; g "$w" rev-parse HEAD > "$w/.T"; o="$(bash "$SCR" -C "$w" stories/story-1.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>&1)"; n="$(grep -c 'REFUSED red-untracked' <<<"$o")" || n=0; echo "$n"; }; n="$(mk neg 'x CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED `../test-results/x.txt`')"; p="$(mk pos 'Mutation-RED capture: `../test-results/S320-3-3-X.txt`')"; [ "$n" = 0 ] && [ "$p" -ge 1 ]
 ## BL-699 — reconcile-emit-report's pcache phase costs over ten minutes and is the suite pole on every push that re-keys it
 
-**LANDED (v0.954.0, verified 55fa10528).** **DEFECT, efficiency.** Filed by the lead (ai-dlc-c8) in batch 236 from ai-dlc-77 [e29316]'s measurement. Owner: ai-dlc-77 [e29316].
+**LANDED (v0.954.0, verified 7c8a88fd7).** **DEFECT, efficiency.** Filed by the lead (ai-dlc-c8) in batch 236 from ai-dlc-77 [e29316]'s measurement. Owner: ai-dlc-77 [e29316].
 - **The cause.** 0.834.0 added phase pcache to `core/fixtures/reconcile-emit-report` (arms PC-V0..V26 and mutants M-region, M-direxcl, M-exit3). Every push whose content key touches that fixture pays it.
 - **Measured:** the owner's phase run took over 10 min. In the 0.834.0 dress rehearsal (9ffd957a9), the process tree at 14:42 EDT 2026-10-18 showed `reconcile-emit-report/run.sh` at 9:00 elapsed, the longest in the pool, with four sub-processes at 3:10. That rehearsal failed on another unit and wrote no durations row.
 - **Direction (lead-ruled):** make the phase do less. Either share one seeded world across the PC-V cases, or move the pcache mutants into a `.dist-only` battery. Choose by reading the phase, not by timing it.
@@ -38321,7 +38321,7 @@ verify: sh f=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$f" ] || 
 
 ## BL-785 — the pause gate allows Bash, so a Bash-driven deploy is not treated as pipeline-advancing while paused
 
-**LANDED (v0.954.0, verified 55fa10528).** **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Partly built: the deny text only.
+**LANDED (v0.954.0, verified 7c8a88fd7).** **NOTE.** Source: batch 240, lead ai-dlc-3f (finding raised by the r12 owner). Partly built: the deny text only.
 
 Before batch 241, `core/hooks/ai-dlc-acknowledge.sh:871` told the paused session "Read-only tools (Read, Grep, Glob, Bash) are still ALLOWED", and the gate admitted Bash on that footing, so a deploy driven through Bash was not scored as pipeline-advancing while the pause flag was present. Graph s319: the 21:34 UTC 2026-10-22 deploy ran with the flag present, and the operator had authorised the deploy, so no harm followed.
 
@@ -38342,7 +38342,7 @@ verify: sh S=core/hooks/ai-dlc-acknowledge.sh; [ -r "$S" ] || exit 9; P="$(awk '
 
 ## BL-832 — the adversary role's configured binding moves from opus/medium to sonnet/high
 
-**LANDED (v0.954.0, verified 55fa10528).** **DEFECT.** Filed 2026-10-27 on an operator ruling: set `aiDlcRoles.adversary` to `"model": "sonnet"`, `"effort": "high"`. This is not a measured change, and none is owed before or after it. It is a config change only. BL-831 makes the prose model-agnostic, so no prose site moves with this entry.
+**LANDED (v0.954.0, verified 7c8a88fd7).** **DEFECT.** Filed 2026-10-27 on an operator ruling: set `aiDlcRoles.adversary` to `"model": "sonnet"`, `"effort": "high"`. This is not a measured change, and none is owed before or after it. It is a config change only. BL-831 makes the prose model-agnostic, so no prose site moves with this entry.
 
 Today `templates/settings.json.template:9-13` reads `opus`/`medium`. The consumer's `.claude/settings.json` reads the same, as do its sprint worktrees.
 
@@ -38356,7 +38356,7 @@ verify: sh [ -r templates/settings.json.template ] || exit 9; command -v jq >/de
 
 ## BL-831 — skill and role prose names the model a role runs, or ranks one role's model against another's, while `aiDlcRoles` is the only source
 
-**LANDED (v0.955.0, verified 913424cc0).** **DEFECT.** Filed 2026-10-27 on an operator ruling: the skill is model-agnostic, because a role's model and effort come from `aiDlcRoles` in the consumer's `.claude/settings.json` and from nowhere else (`core/team-roles/adversary.md:49-51`, `core/skills/ai-dlc-update/reconcile/apply.sh:1317-1326`). Prose naming a model, or saying one role runs a cheaper, stronger or higher-tier model than another, is a claim about config that the skill cannot know. Remove it, comparisons included. The adjudicator stays on its configured model; this entry corrects the prose, not the config.
+**LANDED (v0.955.0, verified ea44b9bde).** **DEFECT.** Filed 2026-10-27 on an operator ruling: the skill is model-agnostic, because a role's model and effort come from `aiDlcRoles` in the consumer's `.claude/settings.json` and from nowhere else (`core/team-roles/adversary.md:49-51`, `core/skills/ai-dlc-update/reconcile/apply.sh:1317-1326`). Prose naming a model, or saying one role runs a cheaper, stronger or higher-tier model than another, is a claim about config that the skill cannot know. Remove it, comparisons included. The adjudicator stays on its configured model; this entry corrects the prose, not the config.
 
 **The case that exposed it.** `core/team-roles/gate-adjudicator.md:5-6` tells the agent "The lead runs on a cheaper model and dispatches you — a fresh, independent context on the Opus tier". The template has bound `gate-adjudicator` to `sonnet`/`medium` since 0.781.0 (`6c8ea1d9d`, `templates/settings.json.template:39-42`). Graph's spawn ledger records 151 opus adjudicator spawns through 2026-09-07 and 365 sonnet spawns from 2026-09-08 (control: adversary, 1398 opus, 0 sonnet, same file). Both statements are false today.
 
@@ -38382,7 +38382,7 @@ verify: sh S="core/team-roles core/skills/ai-dlc core/skills/ai-dlc-update/SKILL
 
 ## BL-513 — Check 21 fails on dev-filled Strategy Test ID cells that nothing re-checks after a rename
 
-**LANDED (v0.956.0, verified 5c323de28).** **DEFECT (efficiency).** Closed in 0.783.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+**LANDED (v0.956.0, verified 9d0bca846).** **DEFECT (efficiency).** Closed in 0.783.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 **DEFECT. [efficiency rank 7] about $7.** `stories-test-strategy.md` leaves the `Kind` and
 `Resolves to` cells "for the dev". Check 21 FAILed the sprint-review gate in both sprints on those
@@ -38414,7 +38414,7 @@ verify: manual
 
 ## BL-694 — a consumer reconcile push re-runs every reconcile-engine fixture for a one-line `core_manifest` append in `setup-sites.md`
 
-**LANDED (v0.956.0, verified 5c323de28).** Closed in 0.864.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+**LANDED (v0.956.0, verified 9d0bca846).** Closed in 0.864.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 Closed in 0.864.0 (verified 3bdf958b4eb3c3fc6c3c5c77213e98ae9b2c329e) on a tree receipt, reopened by BL-817. ** — fix (1) shipped in 0.855.0; fixes (2) and (3) close with 21 declarations recorded as cannot-narrow under the current decl grammar (no glob) and 3 narrowed from a sandbox trace.**
 
@@ -38444,7 +38444,7 @@ verify: manual
 
 ## BL-823 — the remediator join's BADDISP check reads only a lowercase `disposition:` key, so a capitalised `Disposition:` with an out-of-set value is never refused
 
-**LANDED (v0.957.0, verified de56b5b52).** `DISP_KEY_ERE` is defined once in `join-remediator-shards.sh` and read at all seven disposition-key sites, so the key is lowercase in any form or any case on a list item and a capitalised column-0 summary is never a key. `remediator-shard-join` pins DK1 and DK2 with mutant DKm, and `receipt-bl823.sh` scores the fix 0 against two regressions and a second spelling.
+**LANDED (v0.957.0, verified 619d7acd9).** `DISP_KEY_ERE` is defined once in `join-remediator-shards.sh` and read at all seven disposition-key sites, so the key is lowercase in any form or any case on a list item and a capitalised column-0 summary is never a key. `remediator-shard-join` pins DK1 and DK2 with mutant DKm, and `receipt-bl823.sh` scores the fix 0 against two regressions and a second spelling.
 
 **DEFECT.** Filed at the batch-243 close. ai-dlc-33 found it after c1 had been built, so the fix was kept out of 0.949.0, whose CHANGELOG names this id. `core/scripts/join-remediator-shards.sh:600` opens a disposition on `/^[[:space:]-]*[*_\`]*disposition[*_\`]*:/`, which is case-sensitive. BADDISP (`:1029`) therefore never sees a value under `Disposition:` or `DISPOSITION:`. 0.949.0's no-edit-line rule already matches the key case-insensitively, so the two arms disagree about what a disposition line is.
 
@@ -38488,7 +38488,7 @@ verify: sh bash core/fixtures/remediator-shard-join/receipt-bl823.sh
 
 ## BL-827 — two fixtures read their seed through `read … < <(bash seed.sh)`, so a failed seed reports assertion FAILs instead of FIXTURE BROKEN and arms an `rm -rf` on an empty-derived path
 
-**LANDED (v0.957.0, verified de56b5b52).** `ledger-reverify` and `self-update-gate` capture the seed with its exit checked and assert four non-empty fields and a DIST under the mktemp prefix before the EXIT trap arms, so a failed seed reads `FIXTURE BROKEN: seed exited` at exit 2. The tree-wide arm was decided against on the census: nothing is left for it to fire on.
+**LANDED (v0.957.0, verified 619d7acd9).** `ledger-reverify` and `self-update-gate` capture the seed with its exit checked and assert four non-empty fields and a DIST under the mktemp prefix before the EXIT trap arms, so a failed seed reads `FIXTURE BROKEN: seed exited` at exit 2. The tree-wide arm was decided against on the census: nothing is left for it to fire on.
 
 **DEFECT.** Filed at the batch-243 close. c6a's first 0.951.0 dress went red on `ledger-reverify-b`. Its capture opens with `error: unable to create temporary file: Invalid argument`, then `fatal: updating files failed`, then `rm: "." and ".." may not be removed`. It was a transient git fault, not a fault in c6a: solo runs at 18dc7d27f and at the c6a squash both exited 0 with 0 FAIL, and a re-dress went green.
 
@@ -38519,7 +38519,7 @@ verify: sh R="$PWD"; t="$(mktemp -d)"; cd "$t" && printf 'exit 1\n' > "$t/f" && 
 
 ## BL-829 — K3's widened series stamps K3B_RELEASE in branch (b), and no mutant or world reaches that line
 
-**LANDED (v0.957.0, verified de56b5b52).** World `k3w-subj` in `check-24-adversarial-convergence` reaches K3 branch (b)'s widened stamp rebind, and mutant K3WX6, which drops only the `k3_wide` conjunct, reads FAIL (K3). `receipt-bl829.sh` scores the fix 0, the conjunct dropped 1, an unconditional K3B binding 1 and a second spelling 0.
+**LANDED (v0.957.0, verified 619d7acd9).** World `k3w-subj` in `check-24-adversarial-convergence` reaches K3 branch (b)'s widened stamp rebind, and mutant K3WX6, which drops only the `k3_wide` conjunct, reads FAIL (K3). `receipt-bl829.sh` scores the fix 0, the conjunct dropped 1, an unconditional K3B binding 1 and a second spelling 0.
 
 **DEFECT.** Filed at the batch-243 close from c6b (BL-811's W1). `core/scripts/validate-adversarial-convergence.sh:2652`, `k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"`, sits in branch (b), the terminal pass that reviews `requirements-subject.md`. `k3_wide` is set by the widened case arm at `:2462`. Of the 7 k3w worlds (post, pre, pred, nomf, other, brief, arch), 3 are confirmed by their expected text to take branch (a). The hand's claim that a mutant at `:2652` scores identical to the real run is a derivation, not a run.
 
@@ -38537,7 +38537,7 @@ verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl829.sh
 
 ## BL-830 — handoff-resume-guard's bg1 mutant is killed by the slice band alone, with zero margin
 
-**LANDED (v0.957.0, verified de56b5b52).** `handoff-resume-guard` scores bg1 by `bg1_convicts` (`proh>0 && ctl>0`) and leaves the slice band to arm 1. Mutant bg1b seeds the prohibition on a 130-line slice and bg1 stays KILLED, so the band alone no longer decides it.
+**LANDED (v0.957.0, verified 619d7acd9).** `handoff-resume-guard` scores bg1 by `bg1_convicts` (`proh>0 && ctl>0`) and leaves the slice band to arm 1. Mutant bg1b seeds the prohibition on a 130-line slice and bg1 stays KILLED, so the band alone no longer decides it.
 
 **DEFECT.** Filed at the batch-243 close. c6b's first 0.952.0 dress went red on `handoff-resume-guard`: the Bounded-join beat slice in `core/skills/ai-dlc/steps/_gate-procedures.md` had grown to 62 lines against `BEAT_BAND_MAX=60` (`core/fixtures/handoff-resume-guard/run.sh:1020`), and mutant bg1 survived. The fix re-wrapped the prose to 57 lines. bg1's prohibition copy now scores 60 lines, so it is killed only because it reaches the band ceiling exactly. One more line in that section re-breaks bg1. What bg1 asserts, a sentence forbidding the backgrounded call, is never caught on its content.
 
@@ -38549,7 +38549,7 @@ verify: sh set -uo pipefail; f=core/fixtures/handoff-resume-guard/run.sh; g=core
 
 ## BL-834 — story-evidence-scaffold's RED LINE block calls the validator 28 times to fill a 7-cell vector
 
-**LANDED (v0.957.0, verified de56b5b52).** `story-evidence-scaffold`'s RED LINE block drives one world `rvall` and calls the validator once per program, so 28 invocations become 4 with the same seven-cell vector. A counter file asserts the 4, and the receipt scores the per-world loop restored 1 and two cells sharing a token 1.
+**LANDED (v0.957.0, verified 619d7acd9).** `story-evidence-scaffold`'s RED LINE block drives one world `rvall` and calls the validator once per program, so 28 invocations become 4 with the same seven-cell vector. A counter file asserts the 4, and the receipt scores the per-world loop restored 1 and two cells sharing a token 1.
 
 **DEFECT.** Filed 2026-10-27 in batch 244. The BL-833 RED LINE block in `core/fixtures/story-evidence-scaffold/run.sh` (lines 661-709 at `7c8a88fd7`) seeded one git world per cell over `RVCASES` (7 worlds), and its `rv_vec` called `verdict` once per world. `rv_vec` ran 4 times (the fix on `$HECTL`, then mutants rv-m1, rv-m2 and rv-m3), so the block made 28 validator invocations. The premise is that count, read from `run.sh`. Context only, not a measurement of this fix: the fixture's loaded pole rose from 276s to 387s at 0.953.0, the release that added the block.
 
@@ -38575,7 +38575,7 @@ verify: sh set -uo pipefail; W="core/fixtures/story-evidence-scaffold/world.sh";
 
 ## BL-835 — the efficiency-close guard keys on one tag spelling, so a closed efficiency entry in any other spelling leaves the ledger with no outcome line
 
-**LANDED (v0.957.0, verified de56b5b52).** `backlog-rotate.sh` and `validate-backlog-receipts.sh` both read `backlog_efficiency_tagged()` from `reconcile/lib.sh`, so all four efficiency tag spellings owe an outcome line and the two readers cannot drift. BL-614 takes a no-step `Outcome measured:` line, and mutant m16 of `backlog-rotate-fence-guard` restores the single spelling.
+**LANDED (v0.957.0, verified 619d7acd9).** `backlog-rotate.sh` and `validate-backlog-receipts.sh` both read `backlog_efficiency_tagged()` from `reconcile/lib.sh`, so all four efficiency tag spellings owe an outcome line and the two readers cannot drift. BL-614 takes a no-step `Outcome measured:` line, and mutant m16 of `backlog-rotate-fence-guard` restores the single spelling.
 
 **DEFECT.** Filed in batch 244 (release cluster b244-c4). `scripts/backlog-rotate.sh`'s outcome guard and `scripts/validate-backlog-receipts.sh`'s E arms each decided "is this an efficiency entry" with `index($0, ...)` on the single bold spelling DEFECT (efficiency). The second runs E1 over the archive at pre-push. BL-817 item 1 says an entry is an efficiency entry if it carries the tag, and the ledgers carry four bold spellings of it: DEFECT (efficiency), DEFECT, efficiency, NOTE (efficiency), and DEFECT. [efficiency rank N] (BL-716's sits mid-line). Each is written bold with a closing period; they are spelled without the bold markers here so this entry does not itself read as tagged. Bold PROSE carrying the word (a sentence such as "Lead hours and lead tokens join every efficiency outcome.") is not a tag.
 
@@ -38589,7 +38589,7 @@ verify: sh set -uo pipefail; RT=scripts/backlog-rotate.sh; RV=scripts/validate-b
 
 ## BL-825 — a gate check waived by the operator records `PASS`, so every reader of the verdict sees PASS on a ledger its validator refuses
 
-**LANDED (v0.958.0, verified cb508c7bb).** **DEFECT.** Filed at the batch-243 close from c6b's read-only Check 22 audit of graph s317–s319 (one hand of ai-dlc-14's). Check 22 ran in every sprint, and every arm that fails today was already in graph's installed validator: 0.772.0, 0.781.0 and 0.908.0. The control was `spawn-ledger` appearing 13 times in each copy. All three sprints recorded PASS through an explicit, operator-authorised waiver:
+**LANDED (v0.958.0, verified 3a7c743cd).** **DEFECT.** Filed at the batch-243 close from c6b's read-only Check 22 audit of graph s317–s319 (one hand of ai-dlc-14's). Check 22 ran in every sprint, and every arm that fails today was already in graph's installed validator: 0.772.0, 0.781.0 and 0.908.0. The control was `spawn-ledger` appearing 13 times in each copy. All three sprints recorded PASS through an explicit, operator-authorised waiver:
 - s317: the first implementation verdict (20261009T124524Z) is FAIL, with 9 arm-S3 serial exceptions. All 21 later verdicts are PASS, and the last one's reason says the 124 Rule 19 rows plus the 9 S3 rows "equal the operator-authorized OVERRIDDEN waiver totals".
 - s318: gate-log lines 293, 362, 427, 495 and 563 read `22 — Teammate-spawn role binding | PASSED`. Line 563 says "rc 1 by design on 21 historical rows", under `[S318-CHECK22-HISTORICAL-SPAWN-ROLE-BINDING-OVERRIDDEN]`.
 - s319: all 15 implementation verdicts are PASS.
@@ -38621,7 +38621,7 @@ verify: sh for f in core/scripts/validate-gate-adjudication.sh core/scripts/vali
 
 ## BL-594 — requirements adversarial p1 re-reads the whole subject after elicitation; brief it as a pass-2+ review of the elicitation repair
 
-**LANDED (v0.958.0, verified cb508c7bb).** **DEFECT (efficiency).** Closed in 0.822.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+**LANDED (v0.958.0, verified 3a7c743cd).** **DEFECT (efficiency).** Closed in 0.822.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 **DEFECT, RE-SCOPED BY OPERATOR RULING (batch 235, 2026-10-16, relayed by lead ai-dlc-9c).** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md`, as "make elicitation the first convergence pass and drop p1's round". That design is OUT.
 

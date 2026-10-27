@@ -899,6 +899,24 @@ Owed: migrate the remaining allowlisted fixtures, removing each row in the chang
 
 verify: manual
 
+## BL-836 — nothing at pre-push asserts that an OPEN entry's `verify: sh` receipt still runs, so a rename inside a release breaks it silently
+
+**DEFECT.** Filed at the batch-244 close. Found in the c4 tip adversary's F4 check. At pre-push, the only program that executes live receipts is `scripts/validate-backlog-receipts.sh`, and it `eval`s each one at `:316` and `:376`. A receipt exiting outside 0 and 1 counts as OUT-OF-POPULATION, capped at 1, and nothing asserts rc 0. `scripts/backlog-rotate.sh` executes receipts only for the entries it moves (`:510`). So an OPEN entry whose receipt stops measuring its subject keeps passing every gate. Measured twice in batch 244, both caught by hand before the release commit: c4's phase-B renames broke the BL-830 receipt (`bg1_killed` became `bg1_convicts`), and the BL-834 receipt lacked `core/fixtures/lib/mutant.sh` after it moved there.
+
+Owed: a pre-push arm that executes every OPEN `verify: sh` receipt whose entry's own release is on the branch, or whose subject path the branch touches, and fails on any exit other than the receipt's recorded expectation. It needs a measured false-positive set over the live ledger before it ships, and both directions probed.
+
+verify: manual
+
+## BL-837 — the remediation guard skips dispatch binding when a verdict carries any plain FAIL, so a forged unbound verdict acquits through an in-force SUPPRESSED entry
+
+**DEFECT.** Filed at the batch-244 close, from the c6 second delta adversary (owner ai-dlc-c5). The defect is already on `main` and independent of `FAIL_WAIVED`. In `core/hooks/ai-dlc-gate-remediation-guard.sh`, arm 7a's dispatch binding runs only when `LIVE_CLEAN=1` (`:1070-1080`, `:1209`). A verdict carrying any plain FAIL leaves `LIVE_CLEAN=0`, so binding never runs.
+
+Forged input: a newer UNBOUND verdict whose only plain FAIL is a check that an in-force, genuinely cited SUPPRESSED entry covers. Arm 7b covers that check, so the real bound pass's uncovered FAIL is never read. The guard returns ALLOW, both at the pre-c6 guard (0.957.0, `619d7acd9`) and at 0.958.0, with no `GATE_VERDICT_UNBOUND` logged. Expected: DENY with `GATE_VERDICT_UNBOUND`, because an unbound verdict may convict but never acquit. Controls in the same probe: a forged all-PASS verdict and a forged `FAIL_WAIVED`-only verdict both DENY. Check 26 is outside this path.
+
+Owed: run the binding whenever arm 7b could empty the fail set, not only when the fail set is already empty. That changes arm 7a for every gate, so the fix needs its own contract and adversary. It also owes a guard fixture arm with this forged input and a mutant restoring the `LIVE_CLEAN`-only condition.
+
+verify: manual
+
 ## Reopened by BL-817's re-audit (batch 243)
 
 Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
