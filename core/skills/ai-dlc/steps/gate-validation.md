@@ -202,7 +202,8 @@ inline-evaluating an `llm` check is a Rule 20 solo violation.
 check, or an adjudicator verdict adopted through Check 26 — run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP|PENDING>`.
 A post-compaction resume reads this ledger to skip settled checks (Rule 21). Record a
-`FAIL` too. On a re-dispatch, mint the fresh nonce and `open` it; the old ledger needs no
+`FAIL` too. A `FAIL_WAIVED` check is checkpointed `PASS`: the checkpoint records gate progress,
+as `26 PASS` does, and the per-check `FAIL_WAIVED` lives in the verdict and in GATE_METRIC. On a re-dispatch, mint the fresh nonce and `open` it; the old ledger needs no
 clearing. After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close` (SKILL.md
 Rule 32 touchpoint G2 applies before it).
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
@@ -951,8 +952,10 @@ consumer history yields decisive efficacy/cost data (no prose parsing, no
 cross-catalog confound). Per-line schema:
 
 ```
-{"v":1,"sprint":<N>,"gate":"<type>","phase":"<from→to>","ts":"<ISO8601Z>","sha":"<HEAD>","catalog":"core","check":"<id>","title":"<short>","verdict":"PASS|FAIL|NA|DEFERRED","defect_class":<"token"|null>,"evidence":"<path|run-id>","tok_slice":<int>}
+{"v":1,"sprint":<N>,"gate":"<type>","phase":"<from→to>","ts":"<ISO8601Z>","sha":"<HEAD>","catalog":"core","check":"<id>","title":"<short>","verdict":"PASS|FAIL|FAIL_WAIVED|NA|DEFERRED","waiver_id":"<escalation header>","defect_class":<"token"|null>,"evidence":"<path|run-id>","tok_slice":<int>}
 ```
+
+`FAIL_WAIVED` is a FAIL the operator waived, never a PASS, and `waiver_id` is present only on a `FAIL_WAIVED` row. Check 12 copies both from the adopted adjudication verdict. This verdict vocabulary is not a rendered vocabulary-index row.
 
 - **Emit validation checks only — NOT the procedural gate-mechanics checks
   12–15** (this log-append, 13 announce, 14 snapshot, 15 verify-snapshot).
@@ -1960,6 +1963,8 @@ violation of any of the other four:
    content-free waiver — writable without anyone having looked at the output,
    which is the forgeable-evidence shape Check 26 exists to reject.
 
+A violation cleared by a verified `OVERRIDDEN` entry is recorded `FAIL_WAIVED`, with `waiver_id` set to that entry's escalation header, verbatim after `## `. It is never recorded `PASS`, and its gate-log line says `FAIL_WAIVED`, not `PASSED`. The operator's authority and the four-arm clearing rule are unchanged; only what is recorded changes.
+
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
 it is the lead dispositioning its own recorded violation, whether under Rule 19
 or Rule 28. A self-report is the
@@ -2672,7 +2677,7 @@ names, so this check is only as honest as the corpus the lead points it at — t
 property `AI_DLC_ESCALATIONS` has, and of every validator the lead runs.
 
 **PASS:** exit 0 — every escalated check covered, well-formed, each PASS or `FAIL` under an
-in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:
+in-force `SUPPRESSED` entry naming it. A `FAIL_WAIVED` is accepted only with a `waiver_id` resolving to a current-sprint `OVERRIDDEN` entry, or `SUPPRESSED` entry naming this check, whose citation verifies. A waived gate records `26 PASS` in gate-checkpoint, because the gate passed under a verified waiver, while the per-check value lives in the verdict (`scripts/ai-dlc/gate-checkpoint.sh` is unchanged). **FAIL:** any nonzero exit. Fixture:
 `tests/fixtures/gate-adjudication/`. The `--series` rung over these verdicts runs
 at `## Gate Failure` step 4, which says how to read its vacuous line.
 

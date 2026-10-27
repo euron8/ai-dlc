@@ -109,8 +109,13 @@
         {
           "name": "verdict",
           "required": true,
-          "enum": ["PASS", "FAIL"],
-          "doc": "PASS or FAIL. There is no third value and no empty value. A check you cannot evaluate is FAIL-with-reason, never omitted and never PASS-by-default."
+          "enum": ["PASS", "FAIL", "FAIL_WAIVED"],
+          "doc": "PASS, FAIL or FAIL_WAIVED, and no empty value. A check you cannot evaluate is FAIL-with-reason, never omitted and never PASS-by-default. FAIL_WAIVED is a FAIL the operator waived: the check failed, the evidence says why, and `waiver_id` names the escalation entry carrying the operator's authority. It is NOT a pass, and every reader treats it as failing except where it verifies that waiver (rules.waiver_id). Use it only when your brief names the waiving entry; never mint one."
+        },
+        {
+          "name": "waiver_id",
+          "required": false,
+          "doc": "the waiving entry's header line in the sprint's escalation file (pending.md), verbatim after the leading `## `. Present and non-empty on a FAIL_WAIVED verdict and ABSENT on every other one (rules.waiver_id)."
         },
         {
           "name": "evidence",
@@ -136,8 +141,12 @@
       "why": "The adjudicator evaluates exactly the derived worklist. A missing id is an unadjudicated check; an extra id is a check it was not asked to judge; a duplicate is an ambiguous verdict. All three block."
     },
     "all_pass": {
-      "assert": "every verdicts[].verdict is PASS",
-      "why": "One FAIL is a failed gate check. The lead owns the block; the verdict is what it adopts."
+      "assert": "every verdicts[].verdict is PASS, or is FAIL_WAIVED with a waiver_id that resolves to a current-sprint OVERRIDDEN or SUPPRESSED escalation entry whose operator citation verifies",
+      "why": "One FAIL is a failed gate check. The lead owns the block; the verdict is what it adopts. A FAIL_WAIVED whose waiver does not resolve and verify is a FAIL."
+    },
+    "waiver_id": {
+      "assert": "verdicts[].waiver_id is present and non-empty when verdict is FAIL_WAIVED, and absent otherwise. Its value is the waiving entry's header line in pending.md verbatim after the leading `## `, joined to that header by exact string equality after trailing whitespace is stripped from both sides",
+      "why": "The fields list has no conditional-requiredness construct, so the condition is declared here and both readers (validate-gate-adjudication.sh, validate-suppression-lifetime.sh) cite this rule at the line that enforces it. A waiver with no id cannot be joined to the authority that granted it, and an id on a PASS or a FAIL is a second claim the verdict value does not make."
     },
     "series_nonce_sortable": {
       "assert": "--series only: every verdict in scope has a gate_nonce matching the gate_nonce pattern and prefixed with its own gate_type — legacy verdicts carrying no gate_series_id included",

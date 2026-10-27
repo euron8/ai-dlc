@@ -15,3 +15,6 @@ tail
 tr
 wc
 grep
+cmp
+cp
+sort

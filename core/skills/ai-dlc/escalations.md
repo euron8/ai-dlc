@@ -29,6 +29,8 @@ authority has made a `DECIDED_AUTONOMOUSLY` call, whatever it labels it.
 **Impact if skipped:** [What happens if work continues without this answer]
 ```
 
+An entry that may waive a check (a FAIL_WAIVED verdict's `waiver_id`) names its sprint as `S<N>` in its header; without that token it cannot waive.
+
 **Terminal statuses** (set at resolution, never at authorship): `RESOLVED | OVERRIDDEN | SUPPRESSED`
 
 Those two lines — the `**Status:**` line in the format block above and the terminal

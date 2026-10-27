@@ -334,6 +334,74 @@ cat > "$f" <<EOF
 **Operator authorization:** ${A0} | "Override, proceed, file backlog item"
 EOF
 
+# ---- THE WAIVED VERDICT: FAIL_WAIVED rows carrying a waiver_id ---------------
+# The shape the producer writes: Check 12 copies `verdict` and `waiver_id` from the adopted
+# adjudication verdict into each GATE_METRIC row. The id is the waiving entry's header after
+# `## ` (rules.waiver_id), so it carries the em dash and brackets real headers carry. Every
+# timeline is three gates after A0 with check 32 FAIL_WAIVED at each, in alternating spacings,
+# and the LATEST row's spacing differs between the two timelines most arms read, so neither
+# spacing alone can carry the suite.
+emit_w_unspaced() { # <ts> <check> <waiver_id>
+  printf '{"v":1,"sprint":400,"gate":"planning","phase":"a→b","ts":"%s","sha":"deadbeef","catalog":"core","check":"%s","title":"t","verdict":"FAIL_WAIVED","waiver_id":"%s","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1" "$2" "$3"
+}
+emit_w_spaced() {   # <ts> <check> <waiver_id>
+  printf '{"v": 1, "sprint": 400, "gate": "planning", "phase": "a→b", "ts": "%s", "sha": "deadbeef", "catalog": "core", "check": "%s", "title": "t", "verdict": "FAIL_WAIVED", "waiver_id": "%s", "defect_class": null, "evidence": "e", "tok_slice": 1}\n' "$1" "$2" "$3"
+}
+gm_waived() { # <file> <waiver_id> <latest-spacing: spaced|unspaced>
+  {
+    emit_unspaced "$G1" "16" "PASS"; emit_w_spaced "$G1" "32" "$2"
+    emit_spaced   "$G2" "16" "PASS"; emit_w_unspaced "$G2" "32" "$2"
+    emit_unspaced "$G3" "16" "PASS"
+    if [ "$3" = "spaced" ]; then emit_w_spaced "$G3" "32" "$2"; else emit_w_unspaced "$G3" "32" "$2"; fi
+  } > "$1"
+}
+W_OVR="[S400 gate — the operator waived Check 32] [lead] - ${A0}"
+W_SUP1="[S400 gate — a one-gate waiver of Check 32] [lead] - ${A0}"
+W_SUP3="[S400 gate — a three-gate waiver of Check 32] [lead] - ${A0}"
+W_OTHER="[S400 gate — a different entry] [lead] - ${A0}"
+W_DEC="[S400 gate — decided by the lead] [lead] - ${A0}"
+W_ARCH="[S399 gate — archived at retro] [lead] - 2026-04-01T00:00:00Z"
+GM_W_OVR="$WORK/gm-waived-ovr.jsonl";     gm_waived "$GM_W_OVR" "$W_OVR" spaced
+GM_W_OTHER="$WORK/gm-waived-other.jsonl"; gm_waived "$GM_W_OTHER" "$W_OTHER" unspaced
+GM_W_SUP1="$WORK/gm-waived-sup1.jsonl";   gm_waived "$GM_W_SUP1" "$W_SUP1" unspaced
+GM_W_SUP3="$WORK/gm-waived-sup3.jsonl";   gm_waived "$GM_W_SUP3" "$W_SUP3" spaced
+GM_W_NONE="$WORK/gm-waived-none.jsonl";   gm_waived "$GM_W_NONE" "[S400 gate — no such entry] [lead] - ${A0}" spaced
+GM_W_DEC="$WORK/gm-waived-dec.jsonl";     gm_waived "$GM_W_DEC" "$W_DEC" unspaced
+GM_W_ARCH="$WORK/gm-waived-arch.jsonl";   gm_waived "$GM_W_ARCH" "$W_ARCH" spaced
+GM_W_EMPTY="$WORK/gm-waived-emptyid.jsonl"; gm_waived "$GM_W_EMPTY" "" unspaced
+
+# W-match: the OVERRIDDEN entry IS the waiver the rows name, trailing whitespace on its header.
+f="$(mkcase waiver-match)"
+printf '## %s  \n**Status:** OVERRIDDEN\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nThe gate failed Check 32 and the operator waived it.\n' "$W_OVR" "$A0" > "$f"
+# W-other: a RESOLVED entry naming Check 32, while the rows name a DIFFERENT, OVERRIDDEN entry.
+f="$(mkcase waiver-other-entry)"
+cat > "$f" <<EOF
+## ${W_OTHER}
+**Status:** OVERRIDDEN
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+
+An unrelated disposition.
+
+## [S400] [Lead] - ${A0} — gate BLOCKED
+**Status:** RESOLVED
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+
+The gate blocked on Check 32 and the operator waved it through.
+EOF
+# W-sup1 / W-sup3: SUPPRESSED waivers of 32, one gate and three gates, over three gates.
+f="$(mkcase waiver-suppressed-expired)"
+printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 1 gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n' "$W_SUP1" "$A0" > "$f"
+f="$(mkcase waiver-suppressed-inforce)"
+printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 3 gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n' "$W_SUP3" "$A0" > "$f"
+# W-dec: the id resolves, to an entry that is neither OVERRIDDEN nor SUPPRESSED.
+f="$(mkcase waiver-wrong-status)"
+printf '## %s\n**Status:** DECIDED_AUTONOMOUSLY\n\nNo operator was asked.\n' "$W_DEC" > "$f"
+# W-arch: the id is absent from pending.md and present in the archive beside it.
+f="$(mkcase waiver-archived)"
+printf '## %s\n**Status:** DECIDED_AUTONOMOUSLY\n\nUnrelated.\n' "$W_DEC" > "$f"
+printf '# Escalation archive\n\n## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** 2026-04-01T00:00:00Z | "Override, proceed, file backlog item"\n' "$W_ARCH" \
+  > "$WORK/cases/waiver-archived/pending-archive.md"
+
 # ---- THE CWD WORLDS --------------------------------------------------------
 # The metrics file is the ONE input this script locates for itself, and it is located while
 # the process cwd is whatever the caller happened to be in. `ai-dlc-gate-remediation-guard.sh`
@@ -404,6 +472,14 @@ GM_FIXED="$GM_FIXED"
 GM_BROKEN="$GM_BROKEN"
 GM_COLLIDE="$GM_COLLIDE"
 GM_COLLIDE_EXT="$GM_COLLIDE_EXT"
+GM_W_OVR="$GM_W_OVR"
+GM_W_OTHER="$GM_W_OTHER"
+GM_W_SUP1="$GM_W_SUP1"
+GM_W_SUP3="$GM_W_SUP3"
+GM_W_NONE="$GM_W_NONE"
+GM_W_DEC="$GM_W_DEC"
+GM_W_ARCH="$GM_W_ARCH"
+GM_W_EMPTY="$GM_W_EMPTY"
 G1="$G1"
 G2="$G2"
 G3="$G3"

@@ -12,7 +12,7 @@ holes this fixture proves are closed:
 
 - a **missing** escalated check (uncovered → reads as covered);
 - an **empty evidence** (an unjustified PASS);
-- a **third verdict value** (`MAYBE`) where the enum is PASS/FAIL only;
+- a **third verdict value** (`MAYBE`) where the enum is PASS/FAIL/FAIL_WAIVED only (FAIL_WAIVED is a FAIL the operator waived, carrying the waiver id, never a PASS);
 - a **map adjudication typo** (`lmm`) that would silently shrink the escalated set — caught at
   the *derivation* layer, before any verdict is trusted;
 - an **absent** verdict (non-delivery reading as a clean gate);

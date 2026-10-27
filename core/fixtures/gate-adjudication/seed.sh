@@ -323,6 +323,51 @@ ESC_PADDED="$WORK/esc/floor-padded.md"
 ESC_BLANKQ="$WORK/esc/floor-blankq.md"
 ESC_WHOLE="$WORK/esc/floor-whole.md"
 
+# ---- FAIL_WAIVED: a waived FAIL, and the waiver it names ------------------------------------
+# The waiver_id is the waiving entry's header after `## ` (rules.waiver_id), so it carries the
+# em dash and brackets real headers carry. The OVERRIDDEN entry cites the same genuine operator
+# turn every SUPPRESSED entry above cites, so its citation verifies against $TDIR.
+W_ID="[S401 gate — the operator waived this check] [lead] - ${A0}"
+ESC_WAIVER="$WORK/esc/waiver-overridden.md"
+cat > "$ESC_WAIVER" <<EOF
+## ${W_ID}
+**Status:** OVERRIDDEN
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+
+The gate failed Check ${X}; the operator waived it.
+EOF
+# A RESOLVED entry naming X in prose and carrying no suppression field (ESC_RESOLVED's prose
+# quotes the field label, which the malformed-attempt arm reads), so FW0's rc is the terminal
+# arm's alone.
+ESC_FW0_RESOLVED="$WORK/esc/fw0-resolved.md"
+cat > "$ESC_FW0_RESOLVED" <<EOF
+## [S401 gate — closed out, no waiver] [lead] - ${A0}
+**Status:** RESOLVED
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+
+The gate blocked on Check ${X} and the finding was discussed.
+EOF
+# The consumer-shaped timeline Check 12 writes from an adopted waived verdict: X recorded
+# FAIL_WAIVED with its waiver_id, in BOTH spacings, at two gates after A0; Y PASS beside it.
+emit_w_unspaced() { # <ts> <check> <waiver_id>
+  printf '{"v":1,"sprint":401,"gate":"implementation","phase":"a→b","ts":"%s","sha":"deadbeef","catalog":"core","check":"%s","title":"t","verdict":"FAIL_WAIVED","waiver_id":"%s","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1" "$2" "$3"
+}
+emit_w_spaced() {   # <ts> <check> <waiver_id>
+  printf '{"v": 1, "sprint": 401, "gate": "implementation", "phase": "a→b", "ts": "%s", "sha": "deadbeef", "catalog": "core", "check": "%s", "title": "t", "verdict": "FAIL_WAIVED", "waiver_id": "%s", "defect_class": null, "evidence": "e", "tok_slice": 1}\n' "$1" "$2" "$3"
+}
+GM_WAIVED="$WORK/gm-waived.jsonl"
+{
+  emit_w_unspaced "2026-07-02T01:00:00Z" "$X" "$W_ID"; emit_spaced "2026-07-02T01:00:00Z" "$Y" "PASS"
+  emit_w_spaced   "2026-07-03T01:00:00Z" "$X" "$W_ID"; emit_unspaced "2026-07-03T01:00:00Z" "$Y" "PASS"
+} > "$GM_WAIVED"
+# The PASS twin: the same rows with X recorded PASS. Every arm reading GM_WAIVED as failing
+# reads this one as clean, so the two differ by the verdict alone.
+GM_WAIVED_PASS="$WORK/gm-waived-pass-twin.jsonl"
+{
+  emit_unspaced "2026-07-02T01:00:00Z" "$X" "PASS"; emit_spaced "2026-07-02T01:00:00Z" "$Y" "PASS"
+  emit_spaced   "2026-07-03T01:00:00Z" "$X" "PASS"; emit_unspaced "2026-07-03T01:00:00Z" "$Y" "PASS"
+} > "$GM_WAIVED_PASS"
+
 ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 [ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
 
@@ -437,6 +482,10 @@ ESC_STALE_TS="$ESC_STALE_TS"
 ESC_FUTURE_TS="$ESC_FUTURE_TS"
 ESC_MISSING="$ESC_MISSING"
 ESC_EMPTY="$ESC_EMPTY"
+ESC_WAIVER="$ESC_WAIVER"
+ESC_FW0_RESOLVED="$ESC_FW0_RESOLVED"
+GM_WAIVED="$GM_WAIVED"
+GM_WAIVED_PASS="$GM_WAIVED_PASS"
 ESC_PADDED="$ESC_PADDED"
 ESC_BLANKQ="$ESC_BLANKQ"
 ESC_WHOLE="$ESC_WHOLE"

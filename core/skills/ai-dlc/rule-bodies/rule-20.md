@@ -91,7 +91,7 @@ every gate the lead dispatches `gate-adjudicator` shards under ONE nonce, sliced
 the gate type in a fresh, independent context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
 own schema, `.claude/schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
 sub-skills: no Skill runs, and it emits no `SKILL_INVOCATION_PROVENANCE` block — it is off the
-Check 17 path. The lead adopts its per-check verdicts ONLY through fail-closed Check 26 and
+Check 17 path. The lead adopts its per-check verdicts ONLY through fail-closed Check 26 (verdicts are PASS or FAIL; `FAIL_WAIVED` is a FAIL the operator waived, carrying the waiver id, never a PASS) and
 never evaluates an `llm` check inline; roleplaying those judgments in the lead's own context
 is exactly the solo failure this rule forbids, and escalating them to a fresh, independent
 context is what keeps the gate's judgment out of the context whose work it judges. Procedure:

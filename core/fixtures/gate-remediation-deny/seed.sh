@@ -396,6 +396,120 @@ LEDGER
     install_sibling; metrics "$METRICS" 2
     rm -f "$W/docs/escalations/pending.md"
     ;;
+  waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two)
+    # ARM 7a OVER A FAIL_WAIVED-ONLY PASS. `forged-clean`'s shape: a bound failing pass at
+    # 19:30:44Z, then a round-nonce 21:00:00Z verdict recording check 7 FAIL_WAIVED under the
+    # REAL waiver below. The one gate-adjudicator dispatch is 16s after the older nonce, so that
+    # pass binds and the newer one does not -- unless `-bound` adds the write row that binds it.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    cat > "$W/_bmad-output/gate-adjudication/story-20260811T210000Z.verdict.json" <<'EOF'
+{
+  "schema_id": "GATE_ADJUDICATION_VERDICT v1",
+  "gate_type": "story",
+  "gate_series_id": "story-s302-20260811T210000Z",
+  "gate_nonce": "story-20260811T210000Z",
+  "generated_at": "2026-08-11T21:00:00Z",
+  "adjudicator_agent_id": "gate-adjudicator@session-seed",
+  "catalog": "core",
+  "verdicts": [
+    {"check_id":"7","verdict":"FAIL_WAIVED","waiver_id":"[S302-GATE3-STORY-W] [lead] - 2026-08-01T00:00:00Z — seeded waiver","evidence":"waived"},
+    {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}
+  ]
+}
+EOF
+    cat > "$W/_bmad-output/spawn-ledger.jsonl" <<'LEDGER'
+{"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}
+{"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}
+LEDGER
+    [ "$CASE" = waived-forged-bound ] && printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"agate-adjudicator-s302-x-0123456789abcdef","session":"t","tool":"Write"}' \
+      > "$W/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
+    install_sibling; metrics "$METRICS" 2
+    cat > "$W/docs/escalations/pending.md" <<'EOF'
+# Pending
+
+## [S302-GATE3-STORY-W] [lead] - 2026-08-01T00:00:00Z — seeded waiver
+
+**Status:** OVERRIDDEN
+
+**Operator authorization:** 2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"
+
+The gate failed Check 7; the operator waived it.
+EOF
+    # The near-misses, each `-unbound` plus ONE property:
+    #   -dup     a PLAIN FAIL row on check 7 beside the waived one. The id lists differ while a
+    #            plain FAIL stands, and a waiver must never lift a plain FAIL row by its id.
+    #   -nullid  a plain FAIL row whose check_id is null.
+    #   -two     a SECOND forged FAIL_WAIVED-only pass at 20:00:00Z, and the ledger's one
+    #            gate-adjudicator row moved BEFORE every nonce, so nothing binds and the fallback
+    #            picks that second forgery as the substitute. A substitute may only convict.
+    _wf="$W/_bmad-output/gate-adjudication/story-20260811T210000Z.verdict.json"
+    case "$CASE" in
+      waived-forged-dup|waived-forged-nullid)
+        _wid_v='"7"'; [ "$CASE" = waived-forged-nullid ] && _wid_v='null'
+        python3 - "$_wf" "$_wid_v" <<'PY'
+import json, sys
+p, cid = sys.argv[1], json.loads(sys.argv[2])
+d = json.load(open(p))
+d["verdicts"].append({"check_id": cid, "verdict": "FAIL", "evidence": "plain FAIL beside the waived row"})
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+        ;;
+      waived-forged-two)
+        printf '%s\n' '{"v":1,"ts":"2026-08-11T10:00:00Z","sprint":302,"name":"gate-adjudicator-s302-old","role":"gate-adjudicator"}' \
+          > "$W/_bmad-output/spawn-ledger.jsonl"
+        sed -e 's/story-20260811T210000Z/story-20260811T200000Z/g' -e 's/2026-08-11T21:00:00Z/2026-08-11T20:00:00Z/' \
+          "$_wf" > "$W/_bmad-output/gate-adjudication/story-20260811T200000Z.verdict.json"
+        ;;
+    esac
+    ;;
+  waived-real|waived-fabricated|waived-noverifier|waived-tab)
+    # FAIL_WAIVED. Check 7 is the pass's only failing check, recorded FAIL_WAIVED with a waiver_id,
+    # and pending.md carries ONE OVERRIDDEN entry citing the genuine operator turn -- and NO
+    # SUPPRESSED entry, so nothing but the waiver join can lift check 7. The three cases differ in
+    # one property each: `-fabricated` names an id no entry carries; `-noverifier` drops the
+    # citation verifier, so the waiver cannot be verified.
+    _wid="[S302-GATE3-STORY-W] [lead] - 2026-08-01T00:00:00Z — seeded waiver"
+    [ "$CASE" = waived-fabricated ] && _wid="[S302-GATE3-STORY-FORGED] [lead] - 2026-08-01T00:00:00Z — no such entry"
+    cat > "$W/_bmad-output/gate-adjudication/story-20260811T193044Z.verdict.json" <<EOF
+{
+  "schema_id": "GATE_ADJUDICATION_VERDICT v1",
+  "gate_type": "story",
+  "gate_series_id": "story-s302-20260811T193044Z",
+  "gate_nonce": "story-20260811T193044Z",
+  "generated_at": "2026-08-11T19:30:44Z",
+  "adjudicator_agent_id": "gate-adjudicator@session-seed",
+  "catalog": "core",
+  "verdicts": [
+    {"check_id":"7","verdict":"FAIL_WAIVED","waiver_id":"${_wid}","evidence":"citation drift in test-strategy.md; waived"},
+    {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}
+  ]
+}
+EOF
+    install_sibling; metrics "$METRICS" 2
+    cat > "$W/docs/escalations/pending.md" <<'EOF'
+# Pending
+
+## [S302-GATE3-STORY-W] [lead] - 2026-08-01T00:00:00Z — seeded waiver
+
+**Status:** OVERRIDDEN
+
+**Operator authorization:** 2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"
+
+The gate failed Check 7; the operator waived it.
+EOF
+    [ "$CASE" = waived-noverifier ] && rm -f "$W/scripts/ai-dlc/validate-steering-budget.sh"
+    # -tab: the real waiver_id with a trailing TAB. rules.waiver_id strips trailing whitespace on
+    # both sides, as Check 26's Python `rstrip()` does, so this still names the entry.
+    if [ "$CASE" = waived-tab ]; then
+      python3 - "$W/_bmad-output/gate-adjudication/story-20260811T193044Z.verdict.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["verdicts"][0]["waiver_id"] += "\t"
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+    fi
+    ;;
   suppressed-oldsibling)
     # A CONSUMER RUNS ITS OWN INSTALLED ENGINE, and this hook can arrive one pull ahead of a
     # sibling that dispatches the mode it asks for. Measured on the reference consumer while
@@ -459,6 +573,23 @@ case "$CASE" in
       || { echo "seed.sh: case '$CASE' has no citation verifier; arm 7b would fail closed on every entry" >&2; rm -rf "$W"; exit 2; }
     ls "$W"/sessions-jsonl/*.jsonl >/dev/null 2>&1 \
       || { echo "seed.sh: case '$CASE' seeded no transcript corpus; no citation could ever verify" >&2; rm -rf "$W"; exit 2; }
+    ;;
+  waived-real|waived-fabricated|waived-noverifier|waived-tab|waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two)
+    # The waiver cases' inputs, both directions: the sibling and an OVERRIDDEN entry are there,
+    # no SUPPRESSED entry is (or the in-force join could lift check 7 by itself), and only
+    # `-noverifier` lacks the verifier.
+    [ -s "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" ] && [ -s "$METRICS" ] \
+      && grep -q '^\*\*Status:\*\* OVERRIDDEN' "$W/docs/escalations/pending.md" \
+      && ! grep -q '^\*\*Suppresses:\*\*' "$W/docs/escalations/pending.md" \
+      && grep -q '"FAIL_WAIVED"' "$W"/_bmad-output/gate-adjudication/*.verdict.json \
+      || { echo "seed.sh: case '$CASE' is missing the sibling, the OVERRIDDEN entry or the FAIL_WAIVED verdict, or carries a SUPPRESSED entry" >&2; rm -rf "$W"; exit 2; }
+    if [ "$CASE" = waived-noverifier ]; then
+      [ ! -f "$W/scripts/ai-dlc/validate-steering-budget.sh" ] \
+        || { echo "seed.sh: case '$CASE' still has the citation verifier" >&2; rm -rf "$W"; exit 2; }
+    else
+      [ -s "$W/scripts/ai-dlc/validate-steering-budget.sh" ] \
+        || { echo "seed.sh: case '$CASE' has no citation verifier; the waiver would fail closed for the wrong reason" >&2; rm -rf "$W"; exit 2; }
+    fi
     ;;
   suppressed-nosibling)
     [ ! -f "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" ] \

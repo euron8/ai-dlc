@@ -79,6 +79,38 @@
 # entries are simply not listed; the diagnostics for them stay on stderr, because a caller
 # leaning on a suppression that is malformed should see why it did not count.
 #
+# THE WAIVED VERDICT, FAIL_WAIVED, AND WHAT EXPIRES IT
+# A gate-metrics row may record `"verdict": "FAIL_WAIVED"` with a `waiver_id`: the check failed
+# and the operator waived it through the escalation entry the id names. It is NOT a pass. The
+# id's form is the schema's `rules.waiver_id` (core/schemas/gate-adjudication-verdict.json):
+# the waiving entry's header line verbatim after its leading `## ` (or `### `, which this parser
+# also reads as an entry), joined by exact string equality after trailing whitespace is stripped
+# from both sides. Every arm below that reads the id uses that spelling and nothing looser.
+#   - The row's waiver must RESOLVE: an id naming no entry in this file fails with its own
+#     message, and so does one naming an entry that is neither OVERRIDDEN nor SUPPRESSED, and
+#     a FAIL_WAIVED row carrying no id at all. The population is the LATEST row per (catalog,
+#     check), the same row every other arm reads. An id found only in `pending-archive.md`
+#     beside this file is acquitted with a NOTE: escalations.md moves terminal entries there at
+#     retro close, the latest row is always the PREVIOUS gate's, and without the acquittal the
+#     first gate of every sprint after a waived one would fail on an entry correctly archived.
+#   - A SUPPRESSED waiver keeps the existing lifetime: the expiry arm treats FAIL_WAIVED as
+#     still failing, so a waiver outlives its `**Expires after:**` exactly as a suppression does.
+#     A SUPPRESSED waiver naming a check other than its own `**Suppresses:**` target fails.
+#   - An OVERRIDDEN waiver does NOT expire by gate count, and no OVERRIDDEN entry may carry
+#     `**Expires after:**` (that is the malformed-attempt arm below). Its bound is elsewhere:
+#     gate-validation.md Check 22 names every violation per spawn, so a NEW unnamed violation is
+#     a fresh FAIL that no existing OVERRIDDEN entry waives.
+#   - The terminal arm stands down for exactly one row: a RESOLVED/OVERRIDDEN entry naming
+#     Check N is not failed when N's latest row is FAIL_WAIVED with `waiver_id` equal to THIS
+#     entry's key. Every other FAIL_WAIVED row is FAIL to that arm.
+# TWO KEYS, AND WHICH ONE JOINS. `short` (the header cut to 92 characters) remains the key of
+# every MESSAGE and every `--baseline` line, unchanged, so no baseline on disk moves. The waiver
+# join uses `wkey`, the FULL header stripped as above, because a 92-character prefix is not the
+# spelling the producer copies and two entries sharing a prefix would be one waiver. The join is
+# on BYTES: the metrics row is read by jstr(), which does not decode JSON escapes, so a producer
+# writing `—` for an em dash, or `\"` inside the id, yields an id that matches nothing and
+# fails closed as unresolvable.
+#
 # USAGE
 #   validate-suppression-lifetime.sh --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
@@ -87,6 +119,16 @@
 #   validate-suppression-lifetime.sh --in-force --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
 #                                   [--enforcement-map <enforcement-map.yaml>]
+#   validate-suppression-lifetime.sh --waivers --escalations <pending.md>
+#                                   [--gate-metrics <gate-metrics.jsonl>]
+#                                   [--enforcement-map <enforcement-map.yaml>]
+#
+# `--waivers` answers exactly as `--in-force` does (same refusals, same exit, counts on stderr)
+# and lists every entry that may stand behind a FAIL_WAIVED verdict: each OVERRIDDEN entry, and
+# each SUPPRESSED entry `--in-force` would list. One row per entry, tab-separated, header LAST:
+#   <status> <catalog-or-empty> <check-or-empty> <expires-or-empty> <operator-auth line> <waiver key>
+# Six fields with the citation fifth, the shape of an `--in-force` row, so the gate verifies
+# both through one loop. The citation is carried unverified, as there.
 #
 # EXIT
 #   0  no suppression is past its expiry on a still-failing check, and no terminal entry
@@ -104,6 +146,7 @@ GATE_METRICS=""
 ENFORCEMENT_MAP=""
 BASELINE=""
 IN_FORCE=0
+WAIVERS=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -113,8 +156,10 @@ while [ $# -gt 0 ]; do
     --enforcement-map) ENFORCEMENT_MAP="${2:-}"; shift 2 ;;
     --baseline)        BASELINE="${2:-}"; shift 2 ;;
     --in-force)        IN_FORCE=1; shift ;;
+    # A query mode beside --in-force, and it takes every --in-force path: IN_FORCE is set too.
+    --waivers)         IN_FORCE=1; WAIVERS=1; shift ;;
     -h|--help)
-      sed -n '1,90p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '1,/^set -u$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0 ;;
 # MODE_DISPATCH_END
     *)
@@ -404,6 +449,11 @@ GATES_N="$(grep -c . <<<"${GATE_TS:-}" || true)"
 # id, so an author error that drops it must not buy WIDER coverage than writing it
 # correctly would: a bare id can only ever have named a check in this catalog, because
 # that is the only catalog whose ids this script resolves.
+#
+# THE THIRD FIELD IS THE ROW'S `waiver_id`, empty on every row that is not FAIL_WAIVED. It
+# travels with the verdict for the ts's reason: the terminal arm's stand-down and the waiver
+# arm both key on the waiver of the SAME row whose verdict they read. Callers split on the
+# first and last tab, so the ts is the middle field.
 latest_verdict() {
   local id="$1"
   local cat="${2:-}"
@@ -418,10 +468,38 @@ latest_verdict() {
       if (g != wantcat) next
       t = jstr($0, "ts")
       v = jstr($0, "verdict")
-      if (t >= bestt) { bestt = t; bestv = v }
+      w = jstr($0, "waiver_id")
+      if (t >= bestt) { bestt = t; bestv = v; bestw = w }
     }
-    END { print bestv "\t" bestt }
+    END { print bestv "\t" bestt "\t" bestw }
   ' "$GATE_METRICS"
+}
+
+# waived_latest -> one line per (catalog, check) whose LATEST row is FAIL_WAIVED:
+#   <catalog>\t<check>\t<ts>\t<waiver_id>
+# The population of the waiver arm in section 6c. Latest-per-key by the rule latest_verdict
+# applies, so the two can never disagree about which row a check's verdict is.
+waived_latest() {
+  [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ] || return 0
+  awk "$JSTR_AWK"'
+    {
+      c = jstr($0, "check"); if (c == "") next
+      g = jstr($0, "catalog"); if (g == "") g = "core"
+      k = g "\t" c
+      t = jstr($0, "ts")
+      if (!(k in bt) || t >= bt[k]) { bt[k] = t; bv[k] = jstr($0, "verdict"); bw[k] = jstr($0, "waiver_id") }
+    }
+    END { for (k in bt) if (bv[k] == "FAIL_WAIVED") print k "\t" bt[k] "\t" bw[k] }
+  ' "$GATE_METRICS" | sort
+}
+
+# entry_key <header> -> the waiver key: the header without its `## `/`### ` marker, trailing
+# whitespace stripped. rules.waiver_id in gate-adjudication-verdict.json. No fork: one per entry.
+entry_key() {
+  local k="${1#\#\#\# }"
+  [ "$k" != "$1" ] || k="${1#\#\# }"
+  k="${k%"${k##*[![:space:]]}"}"
+  printf '%s' "$k"
 }
 
 # gates_since <iso-ts> -> count of distinct gate events recorded strictly after it
@@ -462,9 +540,18 @@ matched_baseline=""
 # it cannot occur in markdown prose the way `|` or `~` can.
 in_force_n=0
 unresolved_n=0
+waivers_n=0
+# Every entry's waiver key, status and suppression target, for section 6c's join:
+#   <wkey>\037<status>\037<suppcat>\037<supp>
+ENTRY_KEYS=""
 while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat authline; do
   [ -n "${header:-}" ] || continue
+  # `short` is the message and --baseline key and is unchanged; `wkey` is the waiver join key.
+  # The header comment's "TWO KEYS" paragraph says why they differ.
   short="$(printf '%s' "$header" | cut -c1-92)"
+  wkey="$(entry_key "$header")"
+  ENTRY_KEYS="${ENTRY_KEYS}${wkey}$(printf '\037')${status:-}$(printf '\037')${suppcat:-}$(printf '\037')${supp:-}
+"
 
   # --- a suppression declared by its fields but classified as something else ---
   # Sited ABOVE the case, not inside it as an else, because the case branches on the
@@ -544,7 +631,12 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         [ "$GATES_N" -eq 0 ] || elapsed="$(gates_since "$authts")"
         if [ "$elapsed" -le "$expires" ]; then
           in_force_n=$((in_force_n + 1))
-          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$suppcat" "$supp" "$expires" "$elapsed" "$authline" "$short"
+          if [ "$WAIVERS" -eq 1 ]; then
+            waivers_n=$((waivers_n + 1))
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "SUPPRESSED" "$suppcat" "$supp" "$expires" "$authline" "$wkey"
+          else
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$suppcat" "$supp" "$expires" "$elapsed" "$authline" "$short"
+          fi
         fi
         continue
       fi
@@ -557,9 +649,10 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
       elapsed="$(gates_since "$authts")"
       vrow="$(latest_verdict "$supp" "$suppcat")"
       verdict="${vrow%%$'\t'*}"
-      vts="${vrow#*$'\t'}"
+      vts="${vrow#*$'\t'}"; vts="${vts%%$'\t'*}"
       if [ "$elapsed" -gt "$expires" ]; then
-        if [ "$verdict" = "FAIL" ]; then
+        # FAIL_WAIVED is still failing, so a SUPPRESSED waiver expires on this same lifetime.
+        if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then
           key="EXPIRED:$supp"
           if baselined "$key"; then
             matched_baseline="$matched_baseline$key
@@ -568,7 +661,7 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
             bad=$((bad + 1))
             echo "FAIL: suppression of check '$supp' is past its lifetime and the check is" >&2
             echo "      STILL FAILING. Authorized $authts, **Expires after:** $expires gate(s)," >&2
-            echo "      $elapsed gate(s) recorded since; latest recorded verdict is FAIL." >&2
+            echo "      $elapsed gate(s) recorded since; latest recorded verdict is $verdict." >&2
             echo "      Verdict source: the row at ts $vts in $GATE_METRICS -- the PREVIOUS" >&2
             echo "      gate's recorded verdict. This gate's own row is written by Check 12," >&2
             echo "      which runs after Check 2." >&2
@@ -581,6 +674,15 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
       fi
       ;;
     RESOLVED|OVERRIDDEN)
+      # --waivers lists every OVERRIDDEN entry: it may stand behind a FAIL_WAIVED verdict, and
+      # does not expire by gate count (header, "THE WAIVED VERDICT").
+      if [ "$WAIVERS" -eq 1 ]; then
+        if [ "$status" = "OVERRIDDEN" ]; then
+          waivers_n=$((waivers_n + 1))
+          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "OVERRIDDEN" "" "" "" "$authline" "$wkey"
+        fi
+        continue
+      fi
       # --- the loophole: a terminal entry closing a check that is still red ---
       [ -n "$named" ] || continue
       hit=""
@@ -596,7 +698,13 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         # stray non-core bracket would then ask for a verdict in a catalog whose ids were
         # never resolved, and every such entry would silently stop being checked.
         vrow="$(latest_verdict "$id" core)"
-        [ "${vrow%%$'\t'*}" = "FAIL" ] || continue
+        tverdict="${vrow%%$'\t'*}"
+        # THE ONE STAND-DOWN (header, "THE WAIVED VERDICT"): this entry IS the waiver the row
+        # names, by rules.waiver_id's exact join. Any other FAIL_WAIVED is FAIL here.
+        if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'\t'}" = "$wkey" ]; then
+          continue
+        fi
+        [ "$tverdict" = "FAIL" ] || [ "$tverdict" = "FAIL_WAIVED" ] || continue
         hit="$hit $id"
       done
       [ -n "$hit" ] || continue
@@ -621,6 +729,10 @@ $RECORDS
 EOF
 
 # ---- 6b. The in-force query answers here, with its counts, and never with exit 1 ------
+if [ "$WAIVERS" -eq 1 ]; then
+  echo "WAIVERS: entries_scanned=$ENTRIES_N suppressed=$suppressed_n waivers=$waivers_n lifetime_unresolved=$unresolved_n gates_recorded=$GATES_N catalog=$CATALOG_N metrics=${GATE_METRICS:-(none found)}" >&2
+  exit 0
+fi
 if [ "$IN_FORCE" -eq 1 ]; then
   if [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ]; then
     echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N metrics=$GATE_METRICS" >&2
@@ -629,6 +741,68 @@ if [ "$IN_FORCE" -eq 1 ]; then
   fi
   exit 0
 fi
+
+# ---- 6c. Every FAIL_WAIVED latest row names a waiver that resolves ----------
+# Header, "THE WAIVED VERDICT". The population is the latest row per (catalog, check); the
+# join is rules.waiver_id's exact equality against every entry's `wkey`. An id resolving only
+# in the sibling `pending-archive.md` is acquitted with a NOTE, never silently.
+waived_n=0
+ARCHIVE="$(dirname "$ESCALATIONS")/pending-archive.md"
+ARCHIVE_KEYS=""
+if [ -f "$ARCHIVE" ]; then
+  ARCHIVE_KEYS="$(sed -n 's/^#\{2,3\} //p' "$ARCHIVE" | sed 's/[[:space:]]*$//')"
+fi
+WAIVED_ROWS="$(waived_latest)"
+while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
+  [ -n "${wcheck:-}" ] || continue
+  waived_n=$((waived_n + 1))
+  wid="${wid%"${wid##*[![:space:]]}"}"
+  if [ -z "$wid" ]; then
+    bad=$((bad + 1))
+    echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED at ts $wts with NO waiver_id." >&2
+    echo "      rules.waiver_id requires a non-empty id on every FAIL_WAIVED: a waiver that names" >&2
+    echo "      no entry cannot be joined to the operator authority behind it. Source: $GATE_METRICS" >&2
+    continue
+  fi
+  # Through ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
+  wrec="$(K="$wid" awk -F "$(printf '\037')" '$1 == ENVIRON["K"] { print; exit }' <<<"$ENTRY_KEYS")"
+  if [ -z "$wrec" ]; then
+    if [ -n "$ARCHIVE_KEYS" ] && grep -qxF -- "$wid" <<<"$ARCHIVE_KEYS"; then
+      echo "NOTE: check '$wcheck' [$wcat] FAIL_WAIVED at ts $wts names an entry archived to $ARCHIVE;" >&2
+      echo "      the row is the previous gate's, recorded before the entry was moved. Not adjudicated." >&2
+      continue
+    fi
+    bad=$((bad + 1))
+    echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED at ts $wts under waiver_id" >&2
+    echo "      '$wid', which names NO entry in $ESCALATIONS. A waiver is an escalation entry's" >&2
+    echo "      header verbatim after its '## ' (rules.waiver_id); one that resolves to nothing" >&2
+    echo "      waives nothing, and the check is a FAIL." >&2
+    continue
+  fi
+  wstatus="$(awk -F "$(printf '\037')" '{ print $2 }' <<<"$wrec")"
+  case "$wstatus" in
+    OVERRIDDEN) : ;;  # no gate-count bound: Check 22's per-spawn naming bounds it (header)
+    SUPPRESSED)
+      wscat="$(awk -F "$(printf '\037')" '{ print $3 }' <<<"$wrec")"
+      wsupp="$(awk -F "$(printf '\037')" '{ print $4 }' <<<"$wrec")"
+      if [ "$wsupp" != "$wcheck" ] || [ "${wscat:-core}" != "$wcat" ]; then
+        bad=$((bad + 1))
+        echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED under the SUPPRESSED entry" >&2
+        echo "      '$wid', which suppresses [${wscat:-core}] '$wsupp' and nothing else. A suppression" >&2
+        echo "      waives the check it names." >&2
+      fi
+      # Its lifetime is the expiry arm's, applied to this entry in section 6 above.
+      ;;
+    *)
+      bad=$((bad + 1))
+      echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED under waiver_id '$wid'," >&2
+      echo "      whose entry classifies as '${wstatus:-(none)}', neither OVERRIDDEN nor SUPPRESSED." >&2
+      echo "      Only an operator's OVERRIDDEN or SUPPRESSED disposition can waive a FAIL." >&2
+      ;;
+  esac
+done <<EOF
+$WAIVED_ROWS
+EOF
 
 # ---- 7. A baseline may not outlive its cause -------------------------------
 if [ -n "$BASELINE_KEYS" ]; then
@@ -645,7 +819,7 @@ $BASELINE_KEYS
 EOF
 fi
 
-SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n gates_recorded=$GATES_N catalog=$CATALOG_N"
+SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n waived_rows=$waived_n gates_recorded=$GATES_N catalog=$CATALOG_N"
 if [ "$bad" -gt 0 ]; then
   echo "FAIL: $bad suppression-lifetime violation(s). $SUMMARY" >&2
   exit 1

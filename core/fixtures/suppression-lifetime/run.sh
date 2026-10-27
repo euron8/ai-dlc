@@ -291,9 +291,11 @@ fi
 # MUTANT K: the ts dropped from the row latest_verdict returns. 18a and 18b must die; the
 # verdicts (rc of 2 and 7) must not move, or the ts channel is entangled with the verdict.
 SL_MUT_K="$WORK/mutant-k-no-ts.sh"
-SL_K_A='END { print bestv "\t" bestt }'
+# The row is <verdict>\t<ts>\t<waiver_id>; the mutant empties the middle field and keeps the
+# third, so only the ts channel moves.
+SL_K_A='END { print bestv "\t" bestt "\t" bestw }'
 SL_K_N="$(grep -cF -- "$SL_K_A" "$VALIDATOR")" || SL_K_N=0
-A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" }" substr($0, i + length(ENVIRON["A"])); print }' \
+A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" \"\\t\" bestw }" substr($0, i + length(ENVIRON["A"])); print }' \
   "$VALIDATOR" > "$SL_MUT_K"
 if [ "$SL_K_N" -ne 1 ]; then
   bad "MUTANT K anchor matches $SL_K_N line(s), not 1 — re-anchor it"
@@ -318,7 +320,7 @@ fi
 
 # MUTANT L: the ts printed is the LAST matching row read, not the newest. Only 18d can see it.
 SL_MUT_L="$WORK/mutant-l-last-ts.sh"
-A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" t }" substr($0, i + length(ENVIRON["A"])); print }' \
+A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" t \"\\t\" bestw }" substr($0, i + length(ENVIRON["A"])); print }' \
   "$VALIDATOR" > "$SL_MUT_L"
 if [ "$SL_K_N" -ne 1 ] || cmp -s "$VALIDATOR" "$SL_MUT_L"; then
   bad "MUTANT L did not apply — anchor count $SL_K_N"
@@ -1333,6 +1335,123 @@ else
     readable-never 0011111111 "$SR_G3" 'if false; then'
   sr_score "MUTANT R-readable-always (the -r test always true): ONLY the I/O cells' reason goes red" \
     readable-always 1111100111 "$SR_G3" 'if true; then'
+fi
+
+# ==============================================================================
+# W1-W8: THE WAIVED VERDICT. A gate-metrics row recording FAIL_WAIVED with a waiver_id.
+# Each arm is PRESENCE-shaped on its message or on the OK summary's `waived_rows=` count, so a
+# subject that prints nothing fails every one. Each mutant below is scored only after the arm
+# it targets PASSED unmutated in this same run (`w_base`), so a red mutant is never the base.
+# ==============================================================================
+W_PASSED=" "
+w_ok()   { ok "$2"; W_PASSED="$W_PASSED$1 "; }
+w_base() { case "$W_PASSED" in *" $1 "*) return 0 ;; esac; return 1; }
+w_quiet() { [ "$LAST_RC" = "0" ] && grep -qF "waived_rows=$1 " <<<"$LAST_OUT"; }
+
+# W1 (BLOCKER 2): the OVERRIDDEN entry naming Check 32 IS the waiver the latest row names,
+# its header carrying trailing whitespace the join strips. Quiet, and the row was counted.
+drive "$VALIDATOR" waiver-match "$GM_W_OVR"
+if w_quiet 1; then w_ok W1 "W1: an OVERRIDDEN entry naming Check 32 is NOT failed when 32's latest row is FAIL_WAIVED under that entry's own header (trailing whitespace stripped), 1 waived row counted"
+else bad "W1: the matching waiver was not quiet (rc=$LAST_RC): $(printf '%s' "$LAST_OUT" | head -3)"; fi
+# W1b: the same entry over a plain FAIL timeline still fires — the stand-down is the waiver's.
+drive "$VALIDATOR" waiver-match "$GM_FAILING"
+if [ "$LAST_RC" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT"; then w_ok W1b "W1b: the same OVERRIDDEN entry over a plain FAIL timeline still fires — only the named waiver stands it down"
+else bad "W1b: the OVERRIDDEN entry over a FAIL timeline did not fire (rc=$LAST_RC)"; fi
+# W2 (BLOCKER 2): a DIFFERENT entry, RESOLVED and naming Check 32, fires while the rows name an
+# OVERRIDDEN entry that resolves. Any other FAIL_WAIVED is FAIL to the terminal arm.
+drive "$VALIDATOR" waiver-other-entry "$GM_W_OTHER"
+if [ "$LAST_RC" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT" && ! grep -q "names NO entry" <<<"$LAST_OUT"; then
+  w_ok W2 "W2: a RESOLVED entry naming Check 32 FIRES when 32 is FAIL_WAIVED under a different entry, and that waiver itself resolves"
+else bad "W2: a FAIL_WAIVED under another entry acquitted a RESOLVED entry naming the check (rc=$LAST_RC)"; fi
+# W3 (BLOCKER 1): an OVERRIDDEN waiver does not expire by gate count: three gates, quiet.
+drive "$VALIDATOR" waiver-match "$GM_W_OVR"
+if w_quiet 1 && [ "$(grep -oE '"ts": *"[^"]*"' "$GM_W_OVR" | sed 's/.*"\([^"]*\)"$/\1/' | sort -u | grep -c .)" -eq 3 ]; then
+  w_ok W3 "W3: an OVERRIDDEN waiver over 3 recorded gates is quiet — it carries no gate-count lifetime"
+else bad "W3: an OVERRIDDEN waiver expired by count, or the timeline does not hold 3 gates (rc=$LAST_RC)"; fi
+# W4 (BLOCKER 1): a SUPPRESSED waiver past its 1-gate lifetime, still FAIL_WAIVED, fires; its
+# 3-gate twin over the same three gates is quiet.
+drive "$VALIDATOR" waiver-suppressed-expired "$GM_W_SUP1"
+w4a=0; [ "$LAST_RC" = "1" ] && grep -q "latest recorded verdict is FAIL_WAIVED" <<<"$LAST_OUT" && w4a=1
+drive "$VALIDATOR" waiver-suppressed-inforce "$GM_W_SUP3"
+if [ "$w4a" -eq 1 ] && w_quiet 1; then w_ok W4 "W4: a SUPPRESSED waiver past its lifetime FIRES on a FAIL_WAIVED row; the 3-gate twin over the same gates is quiet"
+else bad "W4: SUPPRESSED waiver lifetime: expired-fired=$w4a in-force rc=$LAST_RC"; fi
+# W5 (BLOCKER 1): an unresolvable waiver_id fires with its own message. The escalations file
+# names no check, so no terminal arm can fire beside it and the waiver arm owns the rc.
+drive "$VALIDATOR" waiver-wrong-status "$GM_W_NONE"
+if [ "$LAST_RC" = "1" ] && grep -q "which names NO entry" <<<"$LAST_OUT"; then w_ok W5 "W5: a FAIL_WAIVED whose waiver_id names no pending.md entry FIRES with its own message"
+else bad "W5: an unresolvable waiver_id did not fire (rc=$LAST_RC)"; fi
+# W6: the id resolves to an entry neither OVERRIDDEN nor SUPPRESSED.
+drive "$VALIDATOR" waiver-wrong-status "$GM_W_DEC"
+if [ "$LAST_RC" = "1" ] && grep -q "neither OVERRIDDEN nor SUPPRESSED" <<<"$LAST_OUT"; then w_ok W6 "W6: a waiver_id resolving to a DECIDED_AUTONOMOUSLY entry FIRES"
+else bad "W6: a waiver resolving to a non-waiving status did not fire (rc=$LAST_RC)"; fi
+# W7: an id found only in the archive beside pending.md is acquitted, with a NOTE — the
+# boundary world after a retro moved the entry. Without it, every next sprint's first gate wedges.
+drive "$VALIDATOR" waiver-archived "$GM_W_ARCH"
+if w_quiet 1 && grep -q "names an entry archived" <<<"$LAST_OUT"; then w_ok W7 "W7: a waiver_id resolving only in pending-archive.md is acquitted with a NOTE, not silently"
+else bad "W7: the archived waiver was not acquitted with its NOTE (rc=$LAST_RC)"; fi
+# W8: a FAIL_WAIVED row with an empty waiver_id fires.
+drive "$VALIDATOR" waiver-match "$GM_W_EMPTY"
+if [ "$LAST_RC" = "1" ] && grep -q "with NO waiver_id" <<<"$LAST_OUT"; then w_ok W8 "W8: a FAIL_WAIVED row with an empty waiver_id FIRES"
+else bad "W8: an empty waiver_id did not fire (rc=$LAST_RC)"; fi
+
+# --- the waiver mutants: copies, one anchor each, counted at 1 and cmp-guarded ----------------
+w_mut() { # <out> <anchor> <replacement>
+  local n; n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+  [ "$n" -eq 1 ] || { W_WHY="anchor matches $n line(s), not 1: $2"; return 1; }
+  A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' "$VALIDATOR" > "$1"
+  if cmp -s "$VALIDATOR" "$1"; then W_WHY="changed no bytes"; return 1; fi
+  bash -n "$1" 2>/dev/null || { W_WHY="does not parse"; return 1; }
+}
+# MW-standdown (BLOCKER 2): the terminal arm's stand-down removed. W1 must die; W2 holds.
+SL_MW_SD="$WORK/mutant-w-standdown.sh"
+if ! w_base W1 || ! w_base W2; then bad "MW-standdown: W1/W2 did not pass unmutated in this run, so this mutant's verdict would be about the base"
+elif ! w_mut "$SL_MW_SD" 'if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'"'"'\t'"'"'}" = "$wkey" ]; then' 'if false; then'; then bad "MW-standdown DID NOT APPLY: $W_WHY"
+else
+  # Scored on the MESSAGE, not rc alone: W1 must die by the terminal arm's own "recorded
+  # FAILING" line (the stand-down's subject), and W2 must still fire by that same line.
+  drive "$SL_MW_SD" waiver-match "$GM_W_OVR"; mw1="$LAST_RC"; mw1m=0; grep -q "recorded FAILING" <<<"$LAST_OUT" && mw1m=1
+  drive "$SL_MW_SD" waiver-other-entry "$GM_W_OTHER"; mw2="$LAST_RC"; mw2m=0; grep -q "recorded FAILING" <<<"$LAST_OUT" && mw2m=1
+  [ "$mw1" = "1" ] && [ "$mw1m" = "1" ] && [ "$mw2" = "1" ] && [ "$mw2m" = "1" ] && ok "MW-standdown killed by W1 alone — without the stand-down the matching waiver fires, W2 unchanged" \
+    || bad "MW-standdown scored W1=$mw1/recorded-FAILING=$mw1m W2=$mw2/recorded-FAILING=$mw2m, wanted 1/1 1/1"
+fi
+# MW-resolve (BLOCKER 1): an unresolvable id passes silently. W5 must die; W1 holds.
+SL_MW_RS="$WORK/mutant-w-resolve.sh"
+if ! w_base W5 || ! w_base W1; then bad "MW-resolve: W5/W1 did not pass unmutated in this run"
+elif ! w_mut "$SL_MW_RS" '  if [ -z "$wrec" ]; then' '  if [ -z "$wrec" ]; then continue; fi; if false; then'; then bad "MW-resolve DID NOT APPLY: $W_WHY"
+else
+  # Scored on the MESSAGE: W5 dies when its own "which names NO entry" line is GONE and the OK
+  # summary counts the row (waived_rows=1), so the acquittal is the skipped resolution's and not
+  # a subject that ran nothing; W1 holds by the same quiet summary.
+  drive "$SL_MW_RS" waiver-wrong-status "$GM_W_NONE"; mr5="$LAST_RC"; mr5m=0
+  grep -q "which names NO entry" <<<"$LAST_OUT" || { w_quiet 1 && mr5m=1; }
+  drive "$SL_MW_RS" waiver-match "$GM_W_OVR"; mr1="$LAST_RC"; mr1m=0; w_quiet 1 && mr1m=1
+  [ "$mr5" = "0" ] && [ "$mr5m" = "1" ] && [ "$mr1" = "0" ] && [ "$mr1m" = "1" ] && ok "MW-resolve killed by W5 alone — skipping resolution acquits an id naming nothing, W1 unchanged" \
+    || bad "MW-resolve scored W5=$mr5/no-message-and-counted=$mr5m W1=$mr1/quiet=$mr1m, wanted 0/1 0/1"
+fi
+# MW-lifetime (BLOCKER 1): the expiry arm reads FAIL_WAIVED as clean. W4's expired half dies.
+SL_MW_LT="$WORK/mutant-w-lifetime.sh"
+if ! w_base W4; then bad "MW-lifetime: W4 did not pass unmutated in this run"
+elif ! w_mut "$SL_MW_LT" 'if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then' 'if [ "$verdict" = "FAIL" ]; then'; then bad "MW-lifetime DID NOT APPLY: $W_WHY"
+else
+  drive "$SL_MW_LT" waiver-suppressed-expired "$GM_W_SUP1"; ml="$LAST_RC"
+  drive "$SL_MW_LT" expired-still-failing "$GM_FAILING"; mlc="$LAST_RC"
+  [ "$ml" = "0" ] && [ "$mlc" = "1" ] && ok "MW-lifetime killed by W4 — a SUPPRESSED waiver past its lifetime goes quiet when FAIL_WAIVED reads clean; the plain-FAIL expiry still fires" \
+    || bad "MW-lifetime scored waived=$ml plain=$mlc, wanted 0/1"
+fi
+# MW-overridden (BLOCKER 1): OVERRIDDEN refused as a waiver. W3 dies — the quiet is that branch's.
+SL_MW_OV="$WORK/mutant-w-overridden.sh"
+if ! w_base W3; then bad "MW-overridden: W3 did not pass unmutated in this run"
+elif ! w_mut "$SL_MW_OV" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; then bad "MW-overridden DID NOT APPLY: $W_WHY"
+else
+  # Scored on the MESSAGE: the mutant's only observable is the violation COUNT with no per-arm
+  # line, so W3 dies when the summary reads exactly one violation and no other arm printed a
+  # FAIL line -- the failure is the OVERRIDDEN branch's and nothing else's. The twin stays quiet.
+  drive "$SL_MW_OV" waiver-match "$GM_W_OVR"; mo="$LAST_RC"; mom=0
+  grep -q "^FAIL: 1 suppression-lifetime violation(s)" <<<"$LAST_OUT" \
+    && [ "$(grep -c '^FAIL: ' <<<"$LAST_OUT")" = "1" ] && mom=1
+  drive "$SL_MW_OV" waiver-suppressed-inforce "$GM_W_SUP3"; moc="$LAST_RC"; mocm=0; w_quiet 1 && mocm=1
+  [ "$mo" = "1" ] && [ "$mom" = "1" ] && [ "$moc" = "0" ] && [ "$mocm" = "1" ] && ok "MW-overridden killed by W3 — W3's quiet is the OVERRIDDEN branch's, the SUPPRESSED twin unchanged" \
+    || bad "MW-overridden scored ovr=$mo/count-only=$mom sup=$moc/quiet=$mocm, wanted 1/1 0/1"
 fi
 
 echo

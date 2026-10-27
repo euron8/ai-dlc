@@ -552,11 +552,7 @@ You review the RESOLVED artifact. You do not re-adjudicate the operator's decisi
 ## Later passes review the REPAIR, not the document again
 
 Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
-changed** — the repair is the artifact under review. **Requirements pass 1 is briefed under
-this contract too:** on the requirements subject your prior pass is the merged elicitation
-record `s<N>/requirements-elicitation.md` and your repair record is
-`s<N>/requirements-elicitation-repair.md` (`steps/_gate-procedures.md`, "Validation cycle"
-item 3); your filename and the pass you stamp stay pass 1. You MUST:
+changed** — the repair is the artifact under review. You MUST:
 
 1. **Verify the prior pass's findings were repaired**, one by one: for each, state
    `repaired` / `partially repaired` / `not repaired` / `repaired wrongly`. A

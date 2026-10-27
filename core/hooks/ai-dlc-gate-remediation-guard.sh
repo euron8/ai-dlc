@@ -72,7 +72,8 @@
 #   7. target is outside the guarded roots -> allow
 #  7a. the clean newest pass is bound to a dispatch -> allow (the gate really is not failing);
 #      UNBOUND -> fall back to the newest BOUND pass and adjudicate on that instead
-#  7b. every live FAIL is under an in-force SUPPRESSED entry
+#  7b. every live FAIL is under an in-force SUPPRESSED entry, or is FAIL_WAIVED under a waiver
+#      `--waivers` lists and whose citation verifies
 #                                    -> allow, and log GATE_REMEDIATION_SUPPRESSED
 #   8. a bound repair record exists  -> allow, and log GATE_REMEDIATION_LIFTED
 #   9. a verified operator citation  -> allow, and log GATE_REMEDIATION_LIFTED
@@ -1020,9 +1021,41 @@ done
 # --- 5. Does the live pass record a FAIL?
 # `jq -e` so an unparseable file is distinguishable from a clean one. A verdict
 # file that EXISTS and does not parse is the state that must never read as a pass.
-FAILED_CHECKS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
-                   "$LIVE_VERDICT" 2>/dev/null)"
+# A FAIL_WAIVED READS AS A FAIL HERE, and at the two selects in arm 7a, because all three go
+# through `fail_sets`. It is lifted from the lock only at arm 7b, and only when
+# `validate-suppression-lifetime.sh --waivers` lists the waiver_id it names and that entry's
+# operator citation verifies through the same `cite_verifies` loop the SUPPRESSED rows take. A
+# waiver_id is written by the adjudicator, so taken on trust it would be a self-discharge one
+# field wide. Every unreachable step of that path -- no escalations file, no sibling, a sibling
+# refusal, no corpus, no verifier, a citation that does not verify -- leaves the check failing.
+# ONE `jq` either way, three lines: the plain-FAIL ids, the FAIL_WAIVED ids, and the COUNT of
+# plain FAIL rows. Ids go through `tostring`, so a null or numeric id is a token the loops below
+# can see rather than an empty word that vanishes. A verdict with no FAIL_WAIVED makes line 2
+# empty, and then arm 7b never runs `--waivers` (the common path costs nothing more than before).
+# A PLAIN FAIL IS NEVER LIFTED BY A WAIVER, whatever its id: the waiver join lifts FAIL_WAIVED
+# ROWS, so the two kinds are kept apart from here to the partition at arm 7b.
+# An id that is empty or carries whitespace is emitted as `(malformed-id)`, which no catalog id
+# matches, so it can be neither suppressed nor waived and the row stays failing; read raw, it
+# would vanish under word splitting and its FAIL with it.
+# NO REGEX HERE, deliberately: `test()` needs a jq built with oniguruma, and an error on this line
+# is the fail-OPEN branch below, so it must hold on any jq. The waiver join uses regex and fails
+# closed instead.
+fail_sets() { # <verdict> -> "<FAIL ids>\n<FAIL_WAIVED ids>\n<plain FAIL count>", jq's own rc
+  jq -r 'def tok: tostring | if . == "" or (explode | any(. <= 32)) then "(malformed-id)" else . end;
+         ([.verdicts[]? | select(.verdict=="FAIL") | .check_id | tok] | join(" ")),
+         ([.verdicts[]? | select(.verdict=="FAIL_WAIVED") | .check_id | tok] | join(" ")),
+         ([.verdicts[]? | select(.verdict=="FAIL")] | length)' "$1" 2>/dev/null
+}
+read_fail_sets() { # <fail_sets output> -> PLAIN_FAILS WAIVED_CANDIDATES PLAIN_N FAILED_CHECKS
+  PLAIN_FAILS=""; WAIVED_CANDIDATES=""; PLAIN_N=""
+  { IFS= read -r PLAIN_FAILS; IFS= read -r WAIVED_CANDIDATES; IFS= read -r PLAIN_N; } <<RFSEOF
+$1
+RFSEOF
+  FAILED_CHECKS="${PLAIN_FAILS}${PLAIN_FAILS:+${WAIVED_CANDIDATES:+ }}${WAIVED_CANDIDATES}"
+}
+FAIL_SETS="$(fail_sets "$LIVE_VERDICT")"
 JQ_RC=$?
+read_fail_sets "$FAIL_SETS"
 if [ "$JQ_RC" -ne 0 ]; then
   log_event GATE_STATE_UNADJUDICABLE \
     "$(basename "$LIVE_VERDICT") is the newest gate pass and does NOT parse as JSON." \
@@ -1035,6 +1068,15 @@ fi
 # how that file cleared the lead. The two path filters below are pure `case` statements and
 # cost nothing, so the expensive question is asked only for a guarded path.
 [ -n "$FAILED_CHECKS" ] || LIVE_CLEAN=1
+# A VERDICT WHOSE EVERY FAILING CHECK IS FAIL_WAIVED IS ONE ARM 7b CAN ACQUIT, so it must bind
+# exactly as a clean one does: an unbound verdict may convict but never acquit. Decided on the
+# COUNT of plain FAIL rows, never on comparing id strings: a duplicate, null or numeric id makes
+# two id lists differ while every plain FAIL is still there to be lifted. Anything but a positive
+# count binds. Without this, a lead could mint a round-nonce verdict recording every failing
+# check FAIL_WAIVED under one genuine OVERRIDDEN id, skip arm 7a, and have arm 7b open the lock.
+if [ -n "$WAIVED_CANDIDATES" ]; then
+  case "$PLAIN_N" in [1-9]|[1-9][0-9]*) ;; *) LIVE_CLEAN=1 ;; esac
+fi
 LIVE_CLEAN="${LIVE_CLEAN:-0}"
 
 # --- 6. The permitted set (Rule 28(a)). First match wins; enumerated in the header.
@@ -1176,8 +1218,12 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
   BOUND_STEM="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^bound://p' | head -1)"
   case "${LIVE_BIND:-}" in
     unbound|unbound-malformed) ;;
-    *) exit 0 ;;   # bound, exempt, nocorpus, or the query failed -- unchanged behaviour
+    # bound, exempt, nocorpus, or the query failed: a clean verdict exits as before; a
+    # FAIL_WAIVED-only one is the live pass and goes on to arm 7b, which verifies its waivers.
+    *) [ -n "$FAILED_CHECKS" ] || exit 0 ;;
   esac
+fi
+if [ "$LIVE_CLEAN" -eq 1 ] && { [ "${LIVE_BIND:-}" = unbound ] || [ "${LIVE_BIND:-}" = unbound-malformed ]; }; then
   SUBST_HOW="the newest BOUND pass"
   if [ -z "$BOUND_STEM" ]; then
     # NOTHING IN THE DIRECTORY IS BOUND. An unbound verdict may still convict, so the fallback
@@ -1186,9 +1232,11 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
     # forged clean pass beside an unbound failing one, silently.
     for _cs in $(printf '%s' "$CONFORMING_STEMS" | sort -r); do
       [ "$_cs" != "$LIVE_NONCE" ] || continue
-      _cf="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
-               "${GATE_DIR}/${_cs}.verdict.json" 2>/dev/null)" || _cf=""
-      [ -n "$_cf" ] || continue
+      _cf="$(fail_sets "${GATE_DIR}/${_cs}.verdict.json")" || _cf=""
+      # Any failing row, plain or FAIL_WAIVED: the substitute only ever CONVICTS (its waivers are
+      # never consulted, below), so a FAIL_WAIVED-only pass is a pass with something to convict on.
+      read_fail_sets "$_cf"
+      [ -n "$FAILED_CHECKS" ] || continue
       BOUND_STEM="$_cs"; SUBST_HOW="the newest FAILING pass, itself unbound"
       break
     done
@@ -1196,13 +1244,18 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
   [ -n "$BOUND_STEM" ] || exit 0
   SUBST_VERDICT="${GATE_DIR}/${BOUND_STEM}.verdict.json"
   [ -f "$SUBST_VERDICT" ] || exit 0
-  FAILED_CHECKS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
-                     "$SUBST_VERDICT" 2>/dev/null)" || FAILED_CHECKS=""
+  FAIL_SETS="$(fail_sets "$SUBST_VERDICT")" || FAIL_SETS=""
+  read_fail_sets "$FAIL_SETS"
+  # AN UNBOUND SUBSTITUTE CONVICTS ONLY. Every FAIL_WAIVED in it reads as a plain FAIL, so it
+  # never reaches the waiver join -- and with no candidates left, `--waivers` is not asked either.
+  # Without this a second forged FAIL_WAIVED-only pass becomes the substitute and its own waiver
+  # acquits it.
+  PLAIN_FAILS="$FAILED_CHECKS"; WAIVED_CANDIDATES=""
   [ -n "$FAILED_CHECKS" ] || exit 0
   UNBOUND_NOTE="$(basename "$LIVE_VERDICT") is the newest pass by nonce and NO dispatch record binds it"
   log_event GATE_VERDICT_UNBOUND \
     "$UNBOUND_NOTE." \
-    "It records no FAIL, so it would have cleared the Rule 28 deny; it may not." \
+    "It records no plain FAIL, so it would have cleared the Rule 28 deny; it may not." \
     "Adjudicating on ${BOUND_STEM} instead (${SUBST_HOW}), whose FAILs are: ${FAILED_CHECKS}." \
     "A verdict binds by a .verdict-writes.jsonl row for its own stem, or by a gate-adjudicator" \
     "dispatch within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work has neither."
@@ -1320,6 +1373,8 @@ fi
 IN_FORCE_STATUS=""
 IN_FORCE_ROWS=""
 SUPPRESSED_CHECKS=""
+WAIVER_LIFTED=""
+WAIVERS_STATUS=""
 UNVERIFIED_CITES=0
 ESC_FILE="${PROJECT_DIR}/docs/escalations/pending.md"
 CACHE_FILE="${LOG_DIR}/.gate-remediation-in-force"
@@ -1418,7 +1473,11 @@ else
   # size-and-mtime form is blind to exactly the class this term exists for -- a same-length
   # edit (`Math.abs(ts - authMs)` to `Math.abs(authMs - ts)`) under a checkout that preserves
   # mtime left the key byte-identical, measured by the batch-64 adversary.
-  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(ckey "$STEER_SCRIPT")"
+  # `+waivers` and the `w` term: the cache now also holds the VERIFIED waiving entries
+  # (`waiver:`-tagged rows), and only when the live pass carries a FAIL_WAIVED were they asked
+  # for. A cache written without them must never answer for a pass that needs them, or a real
+  # waiver reads as locked until the escalations file next moves.
+  CACHE_KEY="${LIVE_NONCE}|+cite+at+waivers|w${WAIVED_CANDIDATES:+1}|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(ckey "$STEER_SCRIPT")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
@@ -1438,6 +1497,29 @@ else
         --escalations "$ESC_FILE" 2>/dev/null)"
     fi
     SUPP_RC=$?
+    # THE WAIVING ENTRIES, asked of the same owner and ONLY when the live pass carries a
+    # FAIL_WAIVED, so the common path pays nothing for them. Tagged `waiver:` in the first field,
+    # which no catalog is spelled with -- the tagging validate-gate-adjudication.sh applies to the
+    # same rows -- so the ONE verification loop below checks both kinds and they are split apart
+    # after. Fail closed: a `--waivers` exit other than 0 lists no waiver and every FAIL_WAIVED
+    # stays a FAIL; the in-force rows are not withdrawn for it.
+    WAIVERS_STATUS=""
+    if [ "$SUPP_RC" -eq 0 ] && [ -n "$WAIVED_CANDIDATES" ]; then
+      if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+        _WROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --waivers \
+          --escalations "$ESC_FILE" --gate-metrics "$AI_DLC_GATE_METRICS" 2>/dev/null)"
+      else
+        _WROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --waivers \
+          --escalations "$ESC_FILE" 2>/dev/null)"
+      fi
+      _WRC=$?
+      if [ "$_WRC" -eq 0 ]; then
+        [ -z "$_WROWS" ] || IN_FORCE_ROWS="${IN_FORCE_ROWS}${IN_FORCE_ROWS:+
+}$(printf '%s\n' "$_WROWS" | sed 's/^/waiver:/')"
+      else
+        WAIVERS_STATUS="refused:validate-suppression-lifetime.sh --waivers exited ${_WRC}"
+      fi
+    fi
     if [ "$SUPP_RC" -eq 0 ]; then
       IN_FORCE_STATUS="ok:${ESC_FILE}"
       # THE CITATION IS VERIFIED BEFORE THE ROWS ARE CACHED, so what the cache holds is the
@@ -1478,14 +1560,58 @@ if [ -n "$IN_FORCE_ROWS" ]; then
   # rejects, and the disagreement surfaces as a gate that blocks beside a guard that allows.
   VERDICT_CATALOG="$(jq -r '.catalog // ""' "$LIVE_VERDICT" 2>/dev/null)"
   # Every row reaching here has already had its citation verified, cold or from the cache.
+  # `waiver:` rows are excluded by name: they cover only through the waiver join below.
   COVERED="$(printf '%s\n' "$IN_FORCE_ROWS" | LC_ALL=C awk -F'\t' -v want="$VERDICT_CATALOG" '
-    NF >= 6 && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
+    NF >= 6 && $1 !~ /^waiver:/ && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
+  # THE WAIVER JOIN -- validate-gate-adjudication.sh's FAIL_WAIVED carve-out, applied to the same
+  # verified rows so the gate and this lock cannot disagree about one entry. A FAIL_WAIVED check
+  # is waived only when its waiver_id, trailing whitespace stripped (rules.waiver_id), equals a
+  # verified `waiver:` row's key; the entry's header carries the verdict's sprint as S<N> (the
+  # `-s<N>-` of gate_series_id, S40 never matching 401); and the entry is OVERRIDDEN, or SUPPRESSED
+  # naming this check in this verdict's catalog. Asked only when the pass carries a FAIL_WAIVED.
+  #
+  # IN jq, ON RAW STRINGS. The verified rows go in by `--arg` and are split on their real tabs, and
+  # the verdict is read as JSON, so neither side is ever escaped: `@tsv` turned a tab or a
+  # backslash into `\t` / `\\` and the join then disagreed with Check 26 about the same entry. The
+  # trailing-whitespace strip is Python's `str.rstrip()` set (ASCII whitespace, \x1c-\x1f, \x85
+  # and Unicode separators), because Check 26 strips with that. An id is lifted only when EVERY
+  # FAIL_WAIVED row carrying it resolves. A plain FAIL row wearing the same id is untouched: the
+  # partition below sends plain rows past the waiver set entirely. A jq without regex support
+  # errors here, which lists no waiver -- fail closed.
+  WAIVED_CHECKS=""
+  if [ -n "$WAIVED_CANDIDATES" ]; then
+    WAIVED_CHECKS="$(jq -r --arg rows "$IN_FORCE_ROWS" '
+      def ws: sub("[\\s\\p{Z}\\x1c-\\x1f\\x85]+$"; "");
+      def tok: tostring | if . == "" or (explode | any(. <= 32)) then "(malformed-id)" else . end;
+      ($rows | split("\n") | map(split("\t")) | map(select(length >= 6 and (.[0] | startswith("waiver:"))))
+        | reduce .[] as $r ({}; ($r[5:] | join("\t") | ws) as $k
+            | if has($k) then . else .[$k] = {st: ($r[0][7:]), cat: (if $r[1] == "" then "core" else $r[1] end), cid: $r[2]} end)) as $W
+      | (first((.gate_series_id // "") | tostring | capture("-s(?<n>[0-9]+)-") | .n) // null) as $n
+      | ((.catalog // "") | tostring) as $cat
+      | [.verdicts[]? | select(.verdict == "FAIL_WAIVED")
+          | (.check_id | tok) as $c | ((.waiver_id // "") | tostring | ws) as $wid | $W[$wid] as $w
+          | {c: $c, ok: ($w != null and $n != null and ($wid | test("[Ss]" + $n + "(?![0-9])"))
+                         and ($w.st == "OVERRIDDEN" or ($w.st == "SUPPRESSED" and $w.cat == $cat and $w.cid == $c)))}]
+      | group_by(.c)[] | select(all(.ok)) | .[0].c
+      ' "$LIVE_VERDICT" 2>/dev/null)" || WAIVED_CHECKS=""
+  fi
+  # THE PARTITION, kept by KIND. A plain FAIL can be covered by an in-force SUPPRESSED entry and by
+  # nothing else; a FAIL_WAIVED by its resolved waiver first, then the same SUPPRESSED cover.
   REMAINING=""
-  for _c in $FAILED_CHECKS; do
+  for _c in $PLAIN_FAILS; do
     # `-x`, and the mutant that drops it is committed. A substring match acquits a FAIL on `3`
     # under a suppression naming `3a` and the reverse, which is the grain the repair-record
     # join at arm 8 already spells out one screen down.
     if grep -qxF "$_c" <<<"$COVERED"; then
+      SUPPRESSED_CHECKS="${SUPPRESSED_CHECKS:+$SUPPRESSED_CHECKS }$_c"
+    else
+      REMAINING="${REMAINING:+$REMAINING }$_c"
+    fi
+  done
+  for _c in $WAIVED_CANDIDATES; do
+    if [ -n "$WAIVED_CHECKS" ] && grep -qxF "$_c" <<<"$WAIVED_CHECKS"; then
+      WAIVER_LIFTED="${WAIVER_LIFTED:+$WAIVER_LIFTED }$_c"
+    elif grep -qxF "$_c" <<<"$COVERED"; then
       SUPPRESSED_CHECKS="${SUPPRESSED_CHECKS:+$SUPPRESSED_CHECKS }$_c"
     else
       REMAINING="${REMAINING:+$REMAINING }$_c"
@@ -1500,7 +1626,7 @@ fi
 if [ -z "$FAILED_CHECKS" ]; then
   log_event GATE_REMEDIATION_SUPPRESSED \
     "Tool: ${TOOL_NAME} on ${FP}" \
-    "Live pass ${LIVE_NONCE}: every recorded FAIL (${SUPPRESSED_CHECKS}) is covered by an in-force SUPPRESSED entry." \
+    "Live pass ${LIVE_NONCE}: every recorded FAIL is covered -- by an in-force SUPPRESSED entry (${SUPPRESSED_CHECKS:-none}), or FAIL_WAIVED under a verified waiver (${WAIVER_LIFTED:-none})." \
     "Rule 28 does not apply: no repair is owed for a check the operator has dispositioned." \
     "Carve-out source: ${IN_FORCE_STATUS}"
   exit 0
@@ -1520,6 +1646,8 @@ case "$IN_FORCE_STATUS" in
   ok:*) [ -n "$SUPPRESSED_CHECKS" ] && SUPP_NOTE=" $(printf '%s' "$SUPPRESSED_CHECKS" | wc -w | tr -d ' ') other FAIL(s) are under an in-force suppression; these are not." ;;
   *)    SUPP_NOTE=" No SUPPRESSED carve-out was applied (${IN_FORCE_STATUS}); a suppression that cannot be read covers nothing." ;;
 esac
+[ -z "$WAIVER_LIFTED" ] || SUPP_NOTE="${SUPP_NOTE} $(printf '%s' "$WAIVER_LIFTED" | wc -w | tr -d ' ') other check(s) are FAIL_WAIVED under a verified waiver; these are not."
+[ -z "$WAIVERS_STATUS" ] || SUPP_NOTE="${SUPP_NOTE} No FAIL_WAIVED waiver was verified (${WAIVERS_STATUS}), so every FAIL_WAIVED here reads as FAIL."
 
 # -----------------------------------------------------------------------------
 # LIFT ARM 8 -- a dispatched remediator's repair record, bound to THIS pass.
