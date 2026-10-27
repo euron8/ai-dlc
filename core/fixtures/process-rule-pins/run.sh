@@ -86,12 +86,6 @@
 #     <shard>.md@<dispatched-at>`, and a refusal naming another shard's writer is a finding
 #     (gp-shard-rerun*); the probe ledger is not rotated mid-round and a "predates transcript_path"
 #     refusal is re-run, never hand-filled (gp-probe-ledger*). Same section, each its own paragraph.
-#   - requirements adversarial pass 1 is briefed under the pass-2+ contract and handed the merged
-#     elicitation record and the elicitation repair record as its prior pass and repair
-#     (_gate-procedures.md "Validation cycle" item 3; gp-req-p1-prior). KNOWN LIMIT: a PRESENCE pin.
-#     It proves the brief names both records, never that a lead hands them over or that a p1 shard
-#     reviews the repair rather than re-reading the subject; no program reads a brief's inputs.
-#     Its token spans both file names, so keep them in ONE sentence of that paragraph.
 #   - the architecture step's section 2-3 architect chain joins on its chain record with
 #     `--complete`, never on the spine (architecture.md section 2; arch-chain-join). The spine is
 #     seeded header-first, so a plain join on it delivers a header. The marker predicate itself is
@@ -412,7 +406,6 @@ gp-revised-status|S|steps/_gate-procedures.md|## Validation cycle|## Where a cha
 rem-revised-seats|R|remediator.md|## Contract|## The evidence contract|**A brief that carries `revised-seats: <path>…`**|para|Re-read each named seat's findings from the file on disk
 elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
-gp-req-p1-prior|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Requirements pass 1 reviews the elicitation repair.**|para|handing it `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|Elicitation is sharded per|contains
 impl-rr-delta|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|run the partition with `<prior-sha>` in place of `<base>`
 impl-rr-prior|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|column-0 `reviewed-sha:` of the pass M-1 review file

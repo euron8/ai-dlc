@@ -526,7 +526,11 @@ while IFS="$(printf '\t')" read -r _um_series _um_file; do
   [ -n "$_um_series" ] || continue
   survivor_unmovable "$_um_series" || continue
   printf '%s\t%s\n' "$_um_series" "$_um_file" >> "$TMPD/unmatchable"
-  _um_fc="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL")] | length' "$_um_file" 2>/dev/null)" || _um_fc=0
+  # A FAIL_WAIVED COUNTS AS A FAIL HERE, and at the survivor select below. The guard
+  # (ai-dlc-gate-remediation-guard.sh, arm 5 and arm 7b) reads FAIL_WAIVED as FAIL unless its
+  # waiver verifies against the transcript corpus, and this script has no corpus to verify one
+  # with. So it takes the guard's fail-closed reading: a waived verdict left live may still deny.
+  _um_fc="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL" or .verdict=="FAIL_WAIVED")] | length' "$_um_file" 2>/dev/null)" || _um_fc=0
   _um_ts="$(conforming_nonce "$(basename "$_um_file" .verdict.json)")" || _um_ts="-"
   _um_f=0; [ "${_um_fc:-0}" != 0 ] && _um_f=1
   printf '%s\t%s\t%s\n' "$_um_series" "$_um_ts" "$_um_f" >> "$TMPD/member_rows"
@@ -715,7 +719,8 @@ for f in "$SRC"/*.verdict.json; do
   _ts="$(conforming_nonce "$_stem")" || continue
   if [ -z "$SURVIVOR_TS" ] || [ "$_ts" \> "$SURVIVOR_TS" ]; then
     SURVIVOR_TS="$_ts"; SURVIVOR_STEM="$_stem"
-    SURVIVOR_FAILS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
+    # FAIL_WAIVED counts: see the unmatchable-series select above for why.
+    SURVIVOR_FAILS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL" or .verdict=="FAIL_WAIVED") | .check_id] | join(" ")' \
                         "$f" 2>/dev/null)" || SURVIVOR_FAILS=""
     _series="$(jq -r '.gate_series_id // empty' "$f" 2>/dev/null)" || _series=""
     if survivor_unmovable "$_series"; then

@@ -867,24 +867,6 @@ fall.
 
 verify: manual
 
-## BL-825 — a gate check waived by the operator records `PASS`, so every reader of the verdict sees PASS on a ledger its validator refuses
-
-**DEFECT.** Filed at the batch-243 close from c6b's read-only Check 22 audit of graph s317–s319 (one hand of ai-dlc-14's). Check 22 ran in every sprint, and every arm that fails today was already in graph's installed validator: 0.772.0, 0.781.0 and 0.908.0. The control was `spawn-ledger` appearing 13 times in each copy. All three sprints recorded PASS through an explicit, operator-authorised waiver:
-- s317: the first implementation verdict (20261009T124524Z) is FAIL, with 9 arm-S3 serial exceptions. All 21 later verdicts are PASS, and the last one's reason says the 124 Rule 19 rows plus the 9 S3 rows "equal the operator-authorized OVERRIDDEN waiver totals".
-- s318: gate-log lines 293, 362, 427, 495 and 563 read `22 — Teammate-spawn role binding | PASSED`. Line 563 says "rc 1 by design on 21 historical rows", under `[S318-CHECK22-HISTORICAL-SPAWN-ROLE-BINDING-OVERRIDDEN]`.
-- s319: all 15 implementation verdicts are PASS.
-
-The defect is the vocabulary, not the waivers, which are the operator's. `core/schemas/gate-adjudication-verdict.json:112` allows only `["PASS", "FAIL"]`, so a waived FAIL is recorded as PASS, and the waiver survives only in free-text reason and an escalation id. Anything that reads the verdict field sees a clean PASS: a later audit, a step-value count, or `core/scripts/validate-suppression-lifetime.sh`, which re-reads the recorded verdict from gate-metrics.jsonl and so cannot expire a waiver recorded as PASS.
-
-One residue is excluded: graph s319's 4 general-purpose rows with `role_file_readable=false` are absent from that sprint's gate record, which says 0 unreadable role files. They are undated. These rows are also outside Rule 19 by design (`core/scripts/validate-spawn-ledger.sh:1306-1321`), which is a separate question.
-
-Owed:
-1. A distinct waived state in the verdict vocabulary (for example `OVERRIDDEN`), carrying the waiver id. It needs the schema, its owner in `docs/vocabulary-index.md`, the gate procedure that writes it, and every reader of the field.
-2. `validate-suppression-lifetime.sh` expiring on the waived state.
-3. A consumer-shaped fixture arm proving that a waived FAIL is not read as PASS.
-
-verify: manual
-
 ## BL-828 — mutant arms that score a kill without asserting their unmutated arm passed in the same run
 
 **DEFECT.** Filed at the batch-243 close. In c6b, a fold found that 41 of `check-22-spawn-ledger`'s 43 mutant arms scored a kill without first asserting that the arm passed on the unmutated tree in the same run. A mutant that breaks the arm's setup, rather than the subject, therefore read as killed. 0.952.0 fixed check-22: `need_base` now occurs 52 times in `core/fixtures/check-22-spawn-ledger/run.sh`. No census has been taken across the other fixtures.
@@ -1413,35 +1395,6 @@ Closed in 0.794.0 (verified 8aab009d) on a tree receipt, reopened by BL-817. rul
 Former receipt (the mechanism, not the outcome): sh f=core/skills/ai-dlc/rule-bodies/rule-28.md; t=$(tr "\n" " " < "$f"); case "$t" in *"Two notifications are not covered. One whose status is failed"*) ;; *) exit 1;; esac; case "$t" in *"post no status line for the agent"*) ;; *) exit 1;; esac
 
 Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
-
-verify: manual
-
-## BL-594 — requirements adversarial p1 re-reads the whole subject after elicitation; brief it as a pass-2+ review of the elicitation repair
-
-**DEFECT (efficiency).** Closed in 0.822.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
-
-**DEFECT, RE-SCOPED BY OPERATOR RULING (batch 235, 2026-10-16, relayed by lead ai-dlc-9c).** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md`, as "make elicitation the first convergence pass and drop p1's round". That design is OUT.
-
-**The finding that re-scoped it** (batch 235 intake's opus contract adversary, read at origin/main a0451c70):
-- Premise NOT SUPPORTED. The analysis BL-594 cited gives p1 "Keep as the convergence exit" (`:111`) and "Measured, no round is removable on the ruling's terms" (`:114`); p1 also has unique surviving findings (0/1 s317, 0/3 s318, `:57`, `:61`), none high-consequence. Its MAJORs are mostly repair-introduced (18/21 s318, 17/27 s319), a cost archived BL-508 owns (`:116-118`).
-- Round counts under the original design's only safe form (elicitation stamps a verdict but can never be terminal; p2 always runs): s317 elicitation, p1, p2 -> p1, p2, p3; s318 four review rounds -> four. **Rounds removed per sprint: 0** — p1 survives under the name p2.
-- The original design also contradicted Rule 8 and arm J (MET honoured at pass 1, a freeze point), broke arm H (the elicitation repair record is not `*-repair-p1.md`), loosened arm C (s319 elicitation's 14 CRITICALs would become the prior-scope baseline), and forked `skill:` between `ai-dlc-adversary-review` and `bmad-advanced-elicitation`.
-
-**The re-scope (operator-ruled):** the one real difference is that the round after the elicitation repair re-reads the whole subject instead of reviewing the repair. Brief requirements adversarial p1 under the pass-2+ contract, handing it the merged `s<N>/requirements-elicitation.md` and `s<N>/requirements-elicitation-repair.md` as "the prior pass's findings and the repair record" (`_gate-procedures.md` ~:539-541). One prose carve-out in `core/team-roles/adversary.md` (~:509-512) and `_gate-procedures.md` "Validation cycle" item 3. No names, verdicts, merge flags or arms K3, J or H change, and BL-575's elicitation axis stays "no verdict".
-
-Owed: FIRST measure the saving on graph's sprints (the p1 round's wall clock and dollars against a pass-2+ round's, s317-s319, read-only; a transcript sweep, so it needs a slot). **If the measured saving is 0, it does not ship.** Then the carve-out, with a fixture row pinning the p1 brief's prior-pass inputs. Ships on the shared BL-575/BL-577 branch.
-
-Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
-
-Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
-Built: (C1/C2, branch b235-c9-h3) `_gate-procedures.md` "Validation cycle" item 3 and the "Adversarial review dispatch" pass-2+ sentence hand every requirements p1 shard, and the one-part serial adversary, `s<N>/requirements-elicitation.md` as the prior pass and `s<N>/requirements-elicitation-repair.md` as its repair; `adversary.md` "Later passes review the REPAIR" carries the carve-out. No name, verdict, merge flag or arm changes. Pin `gp-req-p1-prior` in `process-rule-pins` is a presence pin only. Measured saving, and its preconditions: graph sprint s318 only (the one sprint with p1, p2 and p3 all present); per shard, p1 102.6k output tokens and 1562 s summed wall, p2 18.5k and 290 s; tokens, not dollars; span is per-shard wall summed. Graph's next sprint must show the same sweep's p1 per-shard figure falling toward p2's, not near p1's.
-
-Closed in 0.822.0 (verified edcae8aa) on a tree receipt, reopened by BL-817. Requirements adversarial p1 is briefed under the pass-2+ contract with requirements-elicitation.md and requirements-elicitation-repair.md as its prior pass and repair; pinned by process-rule-pins gp-req-p1-prior.
-
-Former receipt (the mechanism, not the outcome): manual
-
-Re-audit (BL-817): graph s318 against s319, s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, requirements: before (s318 pooled, 13 stories) 0.47 h gap-inclusive, token-equivalent $25.4 (API $25.4), 44.0M tokens; after s319 (20 stories) 0.44 h gap-inclusive (gap 0.16 h), token-equivalent $14.1 (API $14.1), 26.3M tokens; s320 (13 stories) 0.54 h gap-inclusive (gap 0.28 h), token-equivalent $15.7 (API $15.7), 28.1M tokens. Lead-seat local-model share of calls in this step group: s318 0%, s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. Its own stated test fails: requirements adversarial p1 per shard did not move toward p2 (API $ per shard p1/p2: s319 $2.23/$1.54, ratio 1.45, engine 0.789 before the fix; s320 $1.24/$0.83, ratio 1.50, engine 0.924-0.947 after it).
 
 verify: manual
 

@@ -39,6 +39,29 @@
 #        → THE STALL RUNG. Groups every verdict found by gate_series_id and errors when one
 #          check_id holds FAIL across K consecutive passes of one gate. See "THE STALL RUNG".
 #
+# FAIL_WAIVED (rules.waiver_id, rules.all_pass). A third verdict value: the check FAILED and the
+# operator waived it through the escalation entry `waiver_id` names. Every reader here treats it
+# as a FAIL -- the coverage arm, the repair-record arm (FAIL -> FAIL_WAIVED owes no repair
+# record) -- except two. The --series stall run is BROKEN by a FAIL_WAIVED pass whose waiver
+# RESOLVES through `validate-suppression-lifetime.sh --waivers` by Check 26's own join
+# (`waiver_covers`), not cite-verified there; a later FAIL then starts a new run from 1. A
+# FAIL_WAIVED whose waiver does not resolve, or that cannot be resolved for want of the sibling or
+# the escalations file, continues the run as FAIL. And the
+# carve-out, which lets it pass only when the waiver resolves through
+# `validate-suppression-lifetime.sh --waivers` to an OVERRIDDEN entry, or to an in-force
+# SUPPRESSED entry naming this check, and that entry's citation verifies by the same loop the
+# SUPPRESSED rows take. THE WAIVER IS SPRINT-SCOPED: the waiving entry's header must carry the
+# verdict's sprint as `S<N>` (the verdict's sprint is the `s<N>` of its gate_series_id), so an
+# entry left in pending.md by an earlier sprint, or one whose header names no sprint, waives
+# nothing. The join runs here, not in the sibling's --waivers, which stays unchanged for its
+# only other reader. MID-PULL, MEASURED on the ea44b9bde engine with a seeded FAIL_WAIVED row:
+# this validator refused it at the enum arm (exit 1), `--series` did not count it toward a stall
+# (it fired the repair-record arm instead, reading FAIL -> FAIL_WAIVED as a repair), and
+# validate-suppression-lifetime.sh read it as clean in both its terminal and its expiry arm (exit
+# 0 where the plain-FAIL control exits 1), which is no worse than the PASS the same gate records
+# today. A consumer that DEFERs the engine but merges the rulebook writes FAIL_WAIVED into that
+# old enum arm, so every waived gate blocks there: it fails closed.
+#
 # THE COVERAGE MODE (--coverage). WHAT IT IS FOR: the gate-adjudicator runs it on the verdict
 # it just wrote, before returning the path, so a coverage gap costs a same-dispatch fix
 # instead of a full re-dispatch. There is no partial re-adjudication to fall back on — a gap
@@ -588,7 +611,9 @@ if [ "$MODE" = "adjudicate" ]; then
     # all-PASS gate. The token test is a superset of the JSON test: any FAIL verdict carries
     # the string, and a false hit only costs the parse. An absent verdict falls through to
     # the python block's own exit 2.
-    if [ ! -f "$VERDICT_PATH" ] || ! grep -q '"FAIL"' "$VERDICT_PATH"; then
+    # FAIL_WAIVED needs the escalations parse too (its waiver is verified below), and `"FAIL"`
+    # does not match it, so the token test is widened rather than added beside.
+    if [ ! -f "$VERDICT_PATH" ] || ! grep -qE '"FAIL(_WAIVED)?"' "$VERDICT_PATH"; then
         GA_IN_FORCE_STATUS="not-needed:no FAIL token in the verdict"
     elif [ ! -f "$ESC" ]; then
         GA_IN_FORCE_STATUS="no-escalations-file:$ESC"
@@ -607,6 +632,26 @@ if [ "$MODE" = "adjudicate" ]; then
                 --escalations "$ESC" --enforcement-map "$MAP")"
         fi
         supp_rc=$?
+        # THE WAIVING ENTRIES, asked of the same owner. A FAIL_WAIVED verdict's waiver_id must name
+        # one of these rows, and each row's citation is verified by the SAME loop below as the
+        # in-force rows: the rows are tagged `waiver:` in their first field, which no catalog is
+        # spelled with, verified together, and split apart after. Asked only when the verdict
+        # carries the token; a refusal here is a refusal of the whole carve-out, as above.
+        GA_WAIVER_ROWS=""
+        if [ "$supp_rc" -eq 0 ] && grep -qF '"FAIL_WAIVED"' "$VERDICT_PATH"; then
+            if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+                GA_WAIVER_ROWS="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --waivers \
+                    --escalations "$ESC" --enforcement-map "$MAP" --gate-metrics "$AI_DLC_GATE_METRICS")"
+            else
+                GA_WAIVER_ROWS="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --waivers \
+                    --escalations "$ESC" --enforcement-map "$MAP")"
+            fi
+            supp_rc=$?
+            if [ -n "$GA_WAIVER_ROWS" ]; then
+                GA_IN_FORCE="${GA_IN_FORCE}${GA_IN_FORCE:+
+}$(printf '%s\n' "$GA_WAIVER_ROWS" | sed 's/^/waiver:/')"
+            fi
+        fi
         if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"
             # --- THE CITATION IS VERIFIED BEFORE A ROW CAN COVER ANYTHING -------------------
@@ -663,11 +708,15 @@ if [ "$MODE" = "adjudicate" ]; then
                         ga_auth="$(printf '%s' "$ga_row" | LC_ALL=C awk -F'\t' '{ print $5 }')"
                         ga_quote="$(cite_quote "$ga_auth")"
                         ga_header="$(printf '%s' "$ga_row" | cut -f6-)"
+                        case "$ga_row" in
+                            waiver:*) ga_kind="a waiving escalation entry" ;;
+                            *)        ga_kind="an in-force SUPPRESSED entry" ;;
+                        esac
                         # Measured after whitespace is collapsed and trimmed, as --cite matches it.
                         ga_nquote="$(cite_norm "$ga_quote")"
                         if [ "$(cite_nlen "$ga_nquote")" -lt 12 ]; then
                             GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
-                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry's operator citation is too short to be evidence (under 12 characters once whitespace is collapsed: '${ga_nquote}'), so it suppresses nothing: ${ga_header}"
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — ${ga_kind}'s operator citation is too short to be evidence (under 12 characters once whitespace is collapsed: '${ga_nquote}'), so it suppresses nothing: ${ga_header}"
                             continue
                         fi
                         # THE VERIFIER'S EXIT IS READ IN THREE TIERS, never as a boolean. 0 is
@@ -699,7 +748,7 @@ if [ "$MODE" = "adjudicate" ]; then
 "
                         elif [ "$ga_rc" -eq 2 ]; then
                             GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
-                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries${ga_ts:+ within the tolerance of its own authorization time ${ga_ts}}, so it suppresses nothing: ${ga_header}"
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — ${ga_kind} cites an operator message that no genuine operator turn in ${STEER_ARG} carries${ga_ts:+ within the tolerance of its own authorization time ${ga_ts}}, so it suppresses nothing: ${ga_header}"
                         else
                             GA_VERIFIER_ERRORS=$((GA_VERIFIER_ERRORS + 1))
                             echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE — the citation verifier failed (validate-steering-budget.sh rc=${ga_rc}) before it could say whether a genuine operator turn carries this entry's quote, so the entry suppresses nothing until it can be verified. This is a tooling failure, not a finding about the citation (is node on PATH?): ${ga_header}"
@@ -712,11 +761,54 @@ GAROWEOF
             fi
         else
             GA_IN_FORCE=""
-            GA_IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force exited $supp_rc"
+            GA_IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force or --waivers exited $supp_rc"
         fi
     fi
 fi
-export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES
+# --- THE WAIVING ENTRIES FOR THE STALL RUNG (--series) ------------------------------------------
+# A FAIL_WAIVED breaks its check's stall run only under a waiver that resolves (run_series, by
+# `waiver_covers`). The rows come from the same owner Check 26 asks, and are NOT cite-verified
+# here: citation verification is Check 26's and the guard's. Asked only when a verdict in scope
+# carries the token, so a series with no FAIL_WAIVED makes no sibling call. FAIL CLOSED: no
+# escalations file, no sibling, or a sibling exit other than 0 lists no waiver, and every
+# FAIL_WAIVED then continues its run as a FAIL.
+GA_SERIES_WAIVERS=""
+if [ "$MODE" = "series" ] && grep -rqF '"FAIL_WAIVED"' -- "${SERIES_PATHS[@]}" 2>/dev/null; then
+    # The escalations path Check 26 reads (`ESC=` above, BL-326), spelled with a default on its own
+    # line so the two assignments are not one literal.
+    S_ESC="${AI_DLC_ESCALATIONS:-}"
+    [ -n "$S_ESC" ] || S_ESC="$GA_MAP_ROOT/docs/escalations/pending.md"
+    S_SUPP=""
+    for cand in "$GA_SCRIPT_DIR" "$GA_ROOT/core/scripts" "$GA_ROOT/scripts/ai-dlc"; do
+        [ -f "$cand/validate-suppression-lifetime.sh" ] && { S_SUPP="$cand"; break; }
+    done
+    S_STATUS=""
+    if [ ! -f "$S_ESC" ]; then
+        S_STATUS="no escalations file at $S_ESC"
+    elif [ -z "$S_SUPP" ]; then
+        S_STATUS="validate-suppression-lifetime.sh not found beside $GA_SCRIPT_DIR"
+    else
+        if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+            GA_SERIES_WAIVERS="$(bash "$S_SUPP/validate-suppression-lifetime.sh" --waivers \
+                --escalations "$S_ESC" --enforcement-map "$MAP" --gate-metrics "$AI_DLC_GATE_METRICS" 2>/dev/null)"
+        else
+            GA_SERIES_WAIVERS="$(bash "$S_SUPP/validate-suppression-lifetime.sh" --waivers \
+                --escalations "$S_ESC" --enforcement-map "$MAP" 2>/dev/null)"
+        fi
+        s_rc=$?
+        if [ "$s_rc" -ne 0 ]; then
+            GA_SERIES_WAIVERS=""
+            S_STATUS="validate-suppression-lifetime.sh --waivers exited $s_rc"
+        fi
+    fi
+    [ -z "$S_STATUS" ] || echo "VALIDATE-GATE-ADJUDICATION: NOTE (--series) — no waiver could be resolved (${S_STATUS}), so every FAIL_WAIVED in scope counts as FAIL in its stall run." >&2
+fi
+export GA_SERIES_WAIVERS
+# Split the verified rows back apart. A waiver row never reaches the in-force reader, whose
+# dict would otherwise absorb any six-field row as a suppression of its third field.
+GA_WAIVERS="$(printf '%s\n' "$GA_IN_FORCE" | sed -n 's/^waiver://p')"
+GA_IN_FORCE="$(printf '%s\n' "$GA_IN_FORCE" | grep -v '^waiver:')"
+export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES GA_WAIVERS
 export GA_SHARD
 # The content seal (--merge only): the sibling that owns the sealed set and the comparison. Empty when absent; the merge then refuses
 # only a ledger that carries seal rows it cannot compare.
@@ -836,6 +928,41 @@ def escalated_for(gt):
 # value exits 2 here too. This mode does not consume the derived set, but a corpus adjudicated
 # against a broken taxonomy is a corpus whose FAILs may be missing checks nobody judged, and a
 # run computed over it would be short. Fail closed rather than count it.
+# --- THE WAIVER JOIN, one definition for Check 26's carve-out and for the stall rung ---------
+# rules.waiver_id: a FAIL_WAIVED's waiver_id, trailing whitespace stripped, equals the header key
+# of a row the sibling's `--waivers` listed (first row wins); the entry's header carries the
+# verdict's sprint as `S<N>` (the `-s<N>-` of gate_series_id, S40 never matching 401); and the
+# entry is OVERRIDDEN, or SUPPRESSED naming this check in this catalog. Whether the rows were
+# CITE-VERIFIED is the caller's business: Check 26 hands in verified rows, the rung does not
+# verify. The sprint grammar is the one validate-escalation-resolution.sh applies to its
+# current-sprint scope (its RECORDS awk: header ~ "[Ss]<N>([^0-9]|$)"); not single-sourced with
+# it, that one is awk in a different program.
+def load_waivers(raw):
+    out = {}
+    # "\n"-only split, matching the remediation guard's split of the same rows: splitlines() also breaks on U+2028/U+2029, \x1c-\x1e, \x85, \x0b, \x0c inside a header.
+    for line in raw.split("\n"):
+        parts = line.split("\t", 5)
+        if len(parts) < 6:
+            continue
+        w_status, w_cat, w_cid, _exp, _auth, w_key = parts
+        out.setdefault(w_key.rstrip(), (w_status, w_cat or "core", w_cid))
+    return out
+
+
+def verdict_sprint(V):
+    m = re.search(r"-s([0-9]+)-", str(V.get("gate_series_id", "")))
+    return m.group(1) if m else None
+
+
+def waiver_sprint_ok(wid, vsprint):
+    return vsprint is not None and re.search(r"[Ss]%s(?![0-9])" % vsprint, wid) is not None
+
+
+def waiver_covers(w, wid, vsprint, catalog, cid):
+    return bool(w) and waiver_sprint_ok(wid, vsprint) and (
+        w[0] == "OVERRIDDEN" or (w[0] == "SUPPRESSED" and (w[1], w[2]) == (catalog, cid)))
+
+
 def run_series():
     # THE THRESHOLD IS A HARD CONSTANT, and deliberately not a schema field or an env var.
     # K is the one dial that turns this rung off: set it to 99 and a stalled gate reports
@@ -845,6 +972,9 @@ def run_series():
     # with the backtest, is in this file's header. Shape lives in the schema; the number that
     # decides whether a stall is visible does not.
     K = 3
+    # The waiving entries the shell prelude asked the sibling for: only when a verdict in scope
+    # carries FAIL_WAIVED, never cite-verified here. Empty means no FAIL_WAIVED can resolve.
+    series_waivers = load_waivers(os.environ.get("GA_SERIES_WAIVERS", ""))
 
     # --- collect ---
     files = []
@@ -943,9 +1073,22 @@ def run_series():
         if sid is not None:
             placed_sids.add(str(sid))
         entry = {}
+        v_catalog = str(V.get("catalog", ""))
+        v_sprint = verdict_sprint(V)
         for e in V.get("verdicts", []) or []:
             if isinstance(e, dict) and e.get("check_id") is not None:
-                entry[str(e["check_id"])] = e.get("verdict")
+                vd = e.get("verdict")
+                cid_s = str(e["check_id"])
+                # A FAIL_WAIVED leaves the stall run only under a waiver that RESOLVES, by the
+                # one join Check 26 uses. Every other FAIL_WAIVED -- unresolved, wrong sprint,
+                # or no waiver rows at all because the sibling or the escalations file was not
+                # there -- is recorded as FAIL and continues the run. The repair-record arm
+                # reads FAIL and FAIL_WAIVED alike, so this changes nothing there.
+                if vd == "FAIL_WAIVED":
+                    wid = str(e.get("waiver_id", "")).rstrip()
+                    if not waiver_covers(series_waivers.get(wid), wid, v_sprint, v_catalog, cid_s):
+                        vd = "FAIL"
+                entry[cid_s] = vd
         passes.append((str(sid), gt, nonce, path, entry))
 
     # LEGACY POSTURE — fail-open ONLY for a verdict that provably cannot be a pass of a live
@@ -1035,6 +1178,10 @@ def run_series():
                     # this is a stated choice, not a measured one.
                     run[cid] = 0
             for cid, vd in sorted(entry.items()):
+                # A FAIL_WAIVED pass BREAKS the check's run: the operator has taken the check
+                # out of the remediation loop, so a check waived on every pass is not a loop
+                # failing to converge and must not stall. A later FAIL starts a new run at 1.
+                # The repair-record arm below still counts it as failing on both sides.
                 if vd == "FAIL":
                     run[cid] = run.get(cid, 0) + 1
                     if run[cid] == 1:
@@ -1119,8 +1266,10 @@ def run_series():
             entries = series[sid]
             gt = entries[0][1]
             for n in range(len(entries) - 1):
-                cur_fails = {c for c, v in entries[n][3].items() if v == "FAIL"}
-                nxt_fails = {c for c, v in entries[n + 1][3].items() if v == "FAIL"}
+                # FAIL -> FAIL_WAIVED is no repair (the check still failed and was waived), so a
+                # waived check counts as failing on both sides and owes no repair record.
+                cur_fails = {c for c, v in entries[n][3].items() if v in ("FAIL", "FAIL_WAIVED")}
+                nxt_fails = {c for c, v in entries[n + 1][3].items() if v in ("FAIL", "FAIL_WAIVED")}
                 if not cur_fails or len(nxt_fails) >= len(cur_fails):
                     continue
                 M = n + 1
@@ -1531,8 +1680,27 @@ def merge_seal(parts, vp):
 if mode in ("merge", "check-part"):
     PART_ITEM_FIELDS = next(f for f in S["fields"] if f["name"] == "verdicts")["item_fields"]
     PART_ENV_KEYS = ("gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id")
-    PART_LINE_KEYS = set(PART_ENV_KEYS) | {f["name"] for f in PART_ITEM_FIELDS}
+    # The REQUIRED key set; an item field the schema marks `required: false` (waiver_id) may also
+    # appear, and nothing else may. rules.waiver_id decides when it must.
+    PART_OPT_KEYS = {f["name"] for f in PART_ITEM_FIELDS if f.get("required") is False}
+    PART_LINE_KEYS = set(PART_ENV_KEYS) | {f["name"] for f in PART_ITEM_FIELDS} - PART_OPT_KEYS
 PART_NAME_RE = re.compile(r"^(.*)\.part-([1-9][0-9]*)of([1-9][0-9]*)\.jsonl$")
+
+
+def waiver_rule(vd, entry):
+    """rules.waiver_id in gate-adjudication-verdict.json: present and non-empty on a FAIL_WAIVED
+    verdict, absent on every other. Returns the defect sentence, or '' when the rule holds."""
+    wid = entry.get("waiver_id")
+    if vd == "FAIL_WAIVED":
+        if not isinstance(wid, str) or not wid.strip():
+            return ("has verdict 'FAIL_WAIVED' and no non-empty waiver_id. rules.waiver_id: the id "
+                    "names the waiving escalation entry's header after its '## '; a waiver that "
+                    "names no entry waives nothing.")
+    elif "waiver_id" in entry:
+        return (f"has verdict {vd!r} and carries a waiver_id. rules.waiver_id: the field exists "
+                f"only on a FAIL_WAIVED verdict, and on any other it is a claim the verdict does "
+                f"not make.")
+    return ""
 
 
 def part_name(p, label, nonce=None):
@@ -1571,9 +1739,9 @@ def part_row(p, n, raw, nonce, label, aid_derived, shared=None):
         refuse(f"{label}: {p}:{n} is not a JSON object ({exc}).")
     if not isinstance(row, dict):
         refuse(f"{label}: {p}:{n} is not a JSON object.")
-    if set(row) != PART_LINE_KEYS:
+    if set(row) - PART_OPT_KEYS != PART_LINE_KEYS:
         refuse(f"{label}: {p}:{n} carries fields {sorted(row)}, not exactly "
-               f"{sorted(PART_LINE_KEYS)}.")
+               f"{sorted(PART_LINE_KEYS)} (plus {sorted(PART_OPT_KEYS)} where rules.waiver_id requires it).")
     if row["gate_nonce"] != nonce:
         refuse(f"{label}: {p}:{n} carries gate_nonce {row['gate_nonce']!r}, not this "
                f"verdict's {nonce!r} — it is another gate pass's work.")
@@ -1594,11 +1762,16 @@ def part_row(p, n, raw, nonce, label, aid_derived, shared=None):
                 refuse(f"{label}: {p}:{n} carries {k} {row[k]!r} where an earlier line "
                        f"carries {shared[k]!r}; the parts are not one gate pass.")
     for f in PART_ITEM_FIELDS:
+        if f["name"] not in row:
+            continue    # only an optional field can be absent here; the key-set test above
         val = row[f["name"]]
         if f.get("non_empty") and (val is None or not str(val).strip()):
             refuse(f"{label}: {p}:{n} has an empty {f['name']}.")
         if "enum" in f and val not in f["enum"]:
             refuse(f"{label}: {p}:{n} has {f['name']} {val!r}, not one of {f['enum']}.")
+    _wv = waiver_rule(row.get("verdict"), row)
+    if _wv:
+        refuse(f"{label}: {p}:{n} {_wv}")
     return row
 
 
@@ -1668,7 +1841,7 @@ if mode == "merge":
             if aid not in agents:
                 agents.append(aid)
             rows.append((str(row["check_id"]), p,
-                         {f["name"]: row[f["name"]] for f in PART_ITEM_FIELDS}))
+                         {f["name"]: row[f["name"]] for f in PART_ITEM_FIELDS if f["name"] in row}))
     seen_at = {}
     for cid, p, _ in rows:
         seen_at.setdefault(cid, []).append(p)
@@ -1888,14 +2061,19 @@ def coverage_arms():
             block(1, f"check_id {cid!r} appears more than once — a duplicated verdict is ambiguous.")
         seen.append(cid)
         vd = entry.get("verdict")
-        if vd not in ("PASS", "FAIL"):
-            block(1, f"check_id {cid!r} has verdict {vd!r}, not PASS or FAIL. There is no third "
-                     f"value: a check you cannot evaluate is FAIL-with-reason.")
+        if vd not in ("PASS", "FAIL", "FAIL_WAIVED"):
+            block(1, f"check_id {cid!r} has verdict {vd!r}, not PASS, FAIL or FAIL_WAIVED. A check "
+                     f"you cannot evaluate is FAIL-with-reason.")
+        _wv = waiver_rule(vd, entry)
+        if _wv:
+            block(1, f"check_id {cid!r} {_wv}")
         ev = entry.get("evidence")
         if ev is None or (isinstance(ev, str) and not ev.strip()):
             block(1, f"check_id {cid!r} has empty evidence. An unjustified verdict — even a PASS — "
                      f"is the failure this path exists to prevent.")
-        if vd == "FAIL":
+        # A FAIL_WAIVED is a FAIL here. Whether its waiver lets the gate proceed is the carve-out's
+        # question, below; this function only says which checks failed.
+        if vd in ("FAIL", "FAIL_WAIVED"):
             fails.append(cid)
 
     expected = set(E)
@@ -2043,16 +2221,59 @@ unverified_cites = int(os.environ.get("GA_UNVERIFIED_CITES", "0") or 0)
 verifier_errors = int(os.environ.get("GA_VERIFIER_ERRORS", "0") or 0)
 unbounded_cites = int(os.environ.get("GA_UNBOUNDED_CITES", "0") or 0)
 in_force = {}
-for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
+# "\n"-only split, matching the remediation guard (see load_waivers).
+for raw in os.environ.get("GA_IN_FORCE", "").split("\n"):
     parts = raw.split("\t", 5)
     if len(parts) < 6:
         continue
     cat, cid_s, expires, elapsed, _auth, header = parts
     in_force.setdefault((cat or "core", cid_s), (expires, elapsed, header))
 catalog = str(V.get("catalog", ""))
+# --- the FAIL_WAIVED carve-out --------------------------------------------------------------
+# A FAIL_WAIVED is non-blocking ONLY when its waiver_id names a waiving entry the sibling's
+# --waivers listed (OVERRIDDEN, or SUPPRESSED and in force) and whose operator citation the
+# shell prelude VERIFIED, by the same loop and the same predicate as the in-force rows. The join
+# is rules.waiver_id's: exact equality after trailing whitespace is stripped from both sides. A
+# SUPPRESSED waiver must also suppress this check in this catalog. Every other FAIL_WAIVED is a
+# FAIL and falls through to the SUPPRESSED carve-out and then to the block, like any FAIL.
+waivers = load_waivers(os.environ.get("GA_WAIVERS", ""))
+verdict_of = {str(e.get("check_id")): e for e in V.get("verdicts", []) if isinstance(e, dict)}
+# SPRINT SCOPE. The verdict's sprint is the `s<N>` field of gate_series_id (gate-validation.md
+# "At gate entry": <gate_type>[-<slug>]-s<N>-<TS>); a verdict with no such field has no known
+# sprint and its waiver cannot be scoped, so it fails closed. The join is `waiver_covers`, the
+# one the stall rung uses too.
+vsprint = verdict_sprint(V)
+waived = []
+unwaived = []
+for cid in fails:
+    e = verdict_of.get(cid, {})
+    if e.get("verdict") != "FAIL_WAIVED":
+        continue
+    wid = str(e.get("waiver_id", "")).rstrip()
+    w = waivers.get(wid)
+    sprint_ok = waiver_sprint_ok(wid, vsprint)
+    if waiver_covers(w, wid, vsprint, catalog, cid):
+        waived.append(cid)
+        print(f"VALIDATE-GATE-ADJUDICATION: WAIVED — check {cid!r} FAIL_WAIVED is covered by its "
+              f"{w[0] if w else 'UNRESOLVED'} waiver, citation verified: {wid}")
+    elif w and not sprint_ok:
+        unwaived.append(cid)
+        _hs = ",".join("S" + n for n in re.findall(r"[Ss]([0-9]+)", wid)) or "none"
+        _vs = vsprint if vsprint is not None else "unknown (gate_series_id has no -s<N>-)"
+        print(f"VALIDATE-GATE-ADJUDICATION: UNWAIVED — check {cid!r} is FAIL_WAIVED under a "
+              f"sprint-scoped waiver, and the waiving entry's header carries sprint {_hs} while "
+              f"the verdict's sprint is {_vs}: an entry waives only a check of the sprint its "
+              f"header names as S<N>; it is a FAIL.")
+    else:
+        unwaived.append(cid)
+        print(f"VALIDATE-GATE-ADJUDICATION: UNWAIVED — check {cid!r} is FAIL_WAIVED under waiver_id "
+              f"{wid!r}, which names no current OVERRIDDEN or in-force SUPPRESSED entry whose "
+              f"citation verifies{'' if not w else ' for this check'}; it is a FAIL.")
 suppressed = []
 blocking = []
 for cid in fails:
+    if cid in waived:
+        continue
     hit = in_force.get((catalog, cid))
     if hit:
         expires, elapsed, header = hit
@@ -2084,8 +2305,22 @@ if blocking:
         if suppressed:
             reason += (f" {len(suppressed)} other FAIL(s) are under an in-force suppression; "
                        f"these are not.")
+        if waived:
+            reason += f" {len(waived)} other FAIL_WAIVED check(s) are under a verified waiver; these are not."
+    if unwaived:
+        reason += (f" FAIL_WAIVED with no verified waiver: "
+                   f"{sorted(unwaived, key=lambda x: (len(x), x))}.")
     block(1, f"gate check(s) FAILED per the adjudicator: {sorted(blocking, key=lambda x: (len(x), x))}. "
              f"The lead owns the block; this verdict is what it adopts.{reason}")
+
+if waived:
+    # Its own line, and never the all-PASS one: a waived gate passed, its checks did not.
+    print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "
+          f"{gate_type}, {len(E) - len(suppressed) - len(waived)} PASS, {len(waived)} FAIL_WAIVED "
+          f"under a verified waiver: {sorted(waived, key=lambda x: (len(x), x))}, "
+          f"{len(suppressed)} FAIL under an in-force SUPPRESSED entry, "
+          f"unbounded-citation: {unbounded_cites})")
+    sys.exit(0)
 
 if suppressed:
     print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "

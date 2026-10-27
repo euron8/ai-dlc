@@ -767,6 +767,127 @@ else
   bad "S28-twin: the operator's whole short answer did not verify (rc=$RC) — S28/S29 cannot tell a floor from a verifier that refuses this corpus"
 fi
 
+# ============================================================================
+# FW0-FW5: FAIL_WAIVED — a waived FAIL is NOT a pass, and passes the GATE only through a
+# waiver that resolves and verifies. Each predicate takes a validator path so the mutants below
+# score these same bodies. Every one is PRESENCE-shaped: it demands a line only its path prints.
+# ============================================================================
+fw_set() { # fw_set <verdict> [<waiver_id>] — check X only; an absent second arg writes no field
+  python3 - "$VERDICT" "$X" "$@" <<'PY'
+import json, sys
+p, x, vd = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(p))
+for v in d["verdicts"]:
+    if v["check_id"] == x:
+        v["verdict"] = vd
+        v["evidence"] = "fixture: check %s failed; seeded %s" % (x, vd)
+        d["gate_series_id"] = "implementation-s401-20260715T140322Z"
+        if len(sys.argv) > 4:
+            v["waiver_id"] = sys.argv[4]
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+}
+fw_run() { # fw_run <validator> <escalations> <gate-metrics> <transcript-dir> -> RC, $SOUT
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+  AI_DLC_ESCALATIONS="$2" AI_DLC_GATE_METRICS="$3" \
+    bash "$1" "$GATE_TYPE" "$VERDICT" --transcript-dir "$4" > "$SOUT" 2>&1
+  RC=$?
+}
+W_ID="$(sed -n 's/^## //p' "$ESC_WAIVER" | head -1)"
+FW_WAIVED_LINE="VALIDATE-GATE-ADJUDICATION: WAIVED — check '$X' FAIL_WAIVED is covered by its OVERRIDDEN waiver"
+# FW1: a FAIL_WAIVED whose waiver_id names the OVERRIDDEN entry, citation genuine -> exit 0, and
+# the PASS line counts it as FAIL_WAIVED, never as all-PASS.
+fw_p1() { restore; fw_set FAIL_WAIVED "$W_ID"; fw_run "$1" "$ESC_WAIVER" "$GM_WAIVED" "$TDIR"
+  [ "$RC" -eq 0 ] && has "$FW_WAIVED_LINE" && has "1 FAIL_WAIVED under a verified waiver" && ! has "all PASS)"; }
+# FW2: the same verdict, waiver_id naming no entry -> exit 1, UNWAIVED, X blocks.
+fw_p2() { restore; fw_set FAIL_WAIVED "[S401 gate — no such entry] [lead] - 2026-07-02T00:00:00Z"
+  fw_run "$1" "$ESC_WAIVER" "$GM_WAIVED" "$TDIR"
+  [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "$BLOCK_X"; }
+# FW3: a waiver_id on a PASS is refused by rules.waiver_id.
+fw_p3() { restore; fw_set PASS "$W_ID"; fw_run "$1" "$ESC_WAIVER" "$GM_WAIVED" "$TDIR"
+  [ "$RC" -eq 1 ] && has "has verdict 'PASS' and carries a waiver_id"; }
+# FW4: a FAIL_WAIVED with no waiver_id at all is refused by rules.waiver_id.
+fw_p4() { restore; fw_set FAIL_WAIVED; fw_run "$1" "$ESC_WAIVER" "$GM_WAIVED" "$TDIR"
+  [ "$RC" -eq 1 ] && has "has verdict 'FAIL_WAIVED' and no non-empty waiver_id"; }
+# FW5: the waiver resolves and its quote is carried only where no operator said it -> exit 1.
+fw_p5() { restore; fw_set FAIL_WAIVED "$W_ID"; fw_run "$1" "$ESC_WAIVER" "$GM_WAIVED" "$TDIR_FORGED"
+  [ "$RC" -eq 1 ] && has "UNVERIFIED — a waiving escalation entry cites" && has "$BLOCK_X"; }
+# FW6-FW8: the waiver is SPRINT-SCOPED (FW1 is case (a), the right sprint's token). The same valid
+# OVERRIDDEN entry, citation genuine, with its header's sprint token changed; verdict sprint 401.
+fw_hdr() { # fw_hdr <file> <sed s-expression body on line 1> -> prints the new header id
+  sed "1s/$2/" "$ESC_WAIVER" > "$1"; sed -n 's/^## //p' "$1" | head -1; }
+FW_E6="$WORK/esc/waiver-no-token.md";     FW_I6="$(fw_hdr "$FW_E6" 'S401 gate/gate')"
+FW_E7="$WORK/esc/waiver-other-sprint.md"; FW_I7="$(fw_hdr "$FW_E7" 'S401/S402')"
+FW_E8="$WORK/esc/waiver-prefix-sprint.md"; FW_I8="$(fw_hdr "$FW_E8" 'S401/S40')"
+fw_sp() { # fw_sp <validator> <esc> <id> -> RC, $SOUT
+  restore; fw_set FAIL_WAIVED "$3"; fw_run "$1" "$2" "$GM_WAIVED" "$TDIR"; }
+# FW6: header carries no sprint token -> UNWAIVED, message names "none" and the verdict's 401.
+fw_p6() { fw_sp "$1" "$FW_E6" "$FW_I6"
+  [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "carries sprint none" && has "verdict's sprint is 401" && has "$BLOCK_X"; }
+# FW7: header names a different sprint -> UNWAIVED, message names both.
+fw_p7() { fw_sp "$1" "$FW_E7" "$FW_I7"
+  [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "carries sprint S402" && has "verdict's sprint is 401" && has "$BLOCK_X"; }
+# FW8: header token S40 is a prefix of 401 -> UNWAIVED.
+fw_p8() { fw_sp "$1" "$FW_E8" "$FW_I8"
+  [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "carries sprint S40 " && has "$BLOCK_X"; }
+FW_PREDS="1 2 3 4 5 6 7 8 9 10"
+fw_score() { # <label> <validator> <expected dead, e.g. "1 2 5" | NONE>
+  local p dead=""
+  for p in $FW_PREDS; do "fw_p$p" "$2" || dead="$dead $p"; done
+  dead="${dead# }"
+  if [ "$3" = "NONE" ]; then
+    [ -z "$dead" ] && ok "$1: FW1-FW5 all hold" || bad "$1: FW predicate(s) [$dead] failed"
+  elif [ "$dead" = "$3" ]; then ok "$1: KILLED by FW[$3] and nothing else"
+  elif [ -z "$dead" ]; then bad "$1 SURVIVED — no FW arm watches the line it edits"
+  else bad "$1 killed FW[$dead], expected exactly FW[$3]"; fi
+}
+# FW9/FW10: a waiver header carrying U+2028 mid-line. The sibling's rows are split on "\n" only, as
+# the remediation guard splits them; splitlines() would cut the header at the U+2028. FW9: waiver_id is
+# the full header -> WAIVED. FW10 (twin): waiver_id is the fragment before the U+2028 -> UNWAIVED.
+# The U+2028 is written by python escape, never pasted.
+FW_E9="$WORK/esc/waiver-u2028.md"
+python3 - "$ESC_WAIVER" "$FW_E9" <<'PYU'
+import sys
+L = open(sys.argv[1], encoding="utf-8").read().split("\n")
+assert "the operator waived" in L[0]
+L[0] = L[0].replace("the operator waived", "the operator\u2028waived")
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(L))
+PYU
+FW_I9="$(sed -n 's/^## //p' "$FW_E9" | head -1)"
+FW_I10="$(python3 -c 'import sys; print(sys.argv[1].split("\u2028")[0])' "$FW_I9")"
+[ "$FW_I9" != "$FW_I10" ] || echo "FIXTURE BROKEN: FW9/FW10 header carries no U+2028" >&2
+fw_p9() { fw_sp "$1" "$FW_E9" "$FW_I9"
+  [ "$RC" -eq 0 ] && has "$FW_WAIVED_LINE" && has "1 FAIL_WAIVED under a verified waiver"; }
+fw_p10() { fw_sp "$1" "$FW_E9" "$FW_I10"
+  [ "$RC" -eq 1 ] && has "UNWAIVED — check '$X'" && has "$BLOCK_X"; }
+FW_BASE=0
+fw_score "FW1-FW5 (the shipped validator)" "$VALIDATOR" NONE
+# FW6-FW8 gate the base too: FW-MS and FW-MR are scored on them, so a mutant verdict on those arms
+# is about its mutation only when they held unmutated in this run.
+fw_p1 "$VALIDATOR" && fw_p2 "$VALIDATOR" && fw_p5 "$VALIDATOR" \
+  && fw_p6 "$VALIDATOR" && fw_p7 "$VALIDATOR" && fw_p8 "$VALIDATOR" \
+  && fw_p9 "$VALIDATOR" && fw_p10 "$VALIDATOR" && FW_BASE=1
+
+# FW0: the consumer-shaped rows. Check 12 writes the adopted FAIL_WAIVED into gate-metrics in
+# BOTH spacings; the sibling reads them. A RESOLVED entry naming X FIRES over them (a waived
+# FAIL is failing), and is silent over the PASS twin, so the two differ by the verdict alone.
+# Both spacings carry the latest row in turn: the full file ends spaced, its first gate unspaced.
+GM_WAIVED_U="$WORK/gm-waived-unspaced-latest.jsonl"
+head -2 "$GM_WAIVED" > "$GM_WAIVED_U"
+SL_V="$(dirname "$VALIDATOR")/validate-suppression-lifetime.sh"
+fw0() { bash "$SL_V" --escalations "$ESC_FW0_RESOLVED" --gate-metrics "$1" --enforcement-map "$MAP" > "$SOUT" 2>&1; RC=$?; }
+fw0 "$GM_WAIVED";      fw0a="$RC"; fw0a_m=0; has "recorded FAILING" && fw0a_m=1
+fw0 "$GM_WAIVED_U";    fw0b="$RC"; fw0b_m=0; has "recorded FAILING" && fw0b_m=1
+fw0 "$GM_WAIVED_PASS"; fw0c="$RC"
+[ "$fw0c" -eq 0 ] || sed 's/^/        FW0-pass-twin: /' "$SOUT" | head -6
+if [ "$fw0a" -eq 1 ] && [ "$fw0a_m" -eq 1 ] && [ "$fw0b" -eq 1 ] && [ "$fw0b_m" -eq 1 ] && [ "$fw0c" -eq 0 ]; then
+  ok "FW0: consumer-shaped FAIL_WAIVED rows (latest spaced, and latest unspaced) are read as FAILING, never PASS; the PASS twin is clean"
+else
+  bad "FW0: a FAIL_WAIVED gate-metrics row read as PASS (spaced rc=$fw0a/$fw0a_m unspaced rc=$fw0b/$fw0b_m pass-twin rc=$fw0c)"
+fi
+
+# The two FAIL_WAIVED mutants run at the end of this file, after cv_mutdir and cv_apply exist.
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"
@@ -1826,6 +1947,49 @@ else
     && ok "corpus: the Gate Failure block names 'pipeline-snapshot-history.md' — the lead-repair exemption is stated where the re-run rule is" \
     || bad "corpus: the Gate Failure block does not name 'pipeline-snapshot-history.md' — the lead-repair exemption is missing from the step that decides the re-run set"
 fi
+
+# ============================================================================
+# THE FAIL_WAIVED MUTANTS — scored on FW1-FW5 in a sibling-complete copy, after an unmutated
+# control on the same predicates, and only when the shipped validator passed them in this run.
+# ============================================================================
+if [ "$FW_BASE" -ne 1 ]; then
+  bad "FW mutants: FW1/FW2/FW5/FW6/FW7/FW8 did not pass unmutated in this run, so no mutant verdict below would be about its mutation"
+else
+  fw_score "FW-M0 control (unmutated sandbox copy)" "$(cv_mutdir fwm0)/validate-gate-adjudication.sh" NONE
+  # FW-MP: FAIL_WAIVED read as PASS by the coverage arm. A waived FAIL then reaches no carve-out
+  # and the gate prints all-PASS, so every arm that needs it to be failing dies.
+  FW_MP="$(cv_mutdir fwmp)"
+  if cv_apply "$FW_MP/validate-gate-adjudication.sh" '        if vd in ("FAIL", "FAIL_WAIVED"):
+            fails.append(cid)' '        if vd == "FAIL":
+            fails.append(cid)'; then
+    fw_score "FW-MP (FAIL_WAIVED read as PASS)" "$FW_MP/validate-gate-adjudication.sh" "1 2 5 6 7 8 9 10"
+  else bad "FW-MP DID NOT APPLY: the coverage arm's fails anchor is absent or not unique"; fi
+  # FW-MR: waiver resolution skipped — any FAIL_WAIVED passes. FW2, FW5 and FW10 die; FW1 and FW9 hold.
+  FW_MR="$(cv_mutdir fwmr)"
+  if cv_apply "$FW_MR/validate-gate-adjudication.sh" \
+       '    return bool(w) and waiver_sprint_ok(wid, vsprint) and (' \
+       '    return True or bool(w) and waiver_sprint_ok(wid, vsprint) and ('; then
+    fw_score "FW-MR (waiver resolution skipped)" "$FW_MR/validate-gate-adjudication.sh" "2 5 6 7 8 10"
+  else bad "FW-MR DID NOT APPLY: the waiver-resolution anchor is absent or not unique"; fi
+  # FW-MS: the sprint join dropped. FW6, FW7 and FW8 die; FW1 (right sprint) and FW2/FW5 hold.
+  FW_MS="$(cv_mutdir fwms)"
+  if cv_apply "$FW_MS/validate-gate-adjudication.sh" \
+       '    return vsprint is not None and re.search(r"[Ss]%s(?![0-9])" % vsprint, wid) is not None' \
+       '    return True'; then
+    fw_score "FW-MS (sprint join dropped)" "$FW_MS/validate-gate-adjudication.sh" "6 7 8"
+  else bad "FW-MS DID NOT APPLY: the sprint-join anchor is absent or not unique"; fi
+  # FW-MU: both sibling-row readers restored to splitlines(). The header is cut at the U+2028, so FW9
+  # (full header) goes UNWAIVED and FW10 (the fragment) is waived; every other arm holds.
+  FW_MU="$(cv_mutdir fwmu)"
+  if cv_apply "$FW_MU/validate-gate-adjudication.sh" '    for line in raw.split("\n"):' '    for line in raw.splitlines():' \
+     && cv_apply "$FW_MU/validate-gate-adjudication.sh" 'os.environ.get("GA_IN_FORCE", "").split("\n"):' 'os.environ.get("GA_IN_FORCE", "").splitlines():'; then
+    FW_PREDS_SAVE="$FW_PREDS"; FW_PREDS="9 10"
+    fw_score "FW-MU (sibling rows split with splitlines)" "$FW_MU/validate-gate-adjudication.sh" "9 10"
+    FW_PREDS="$FW_PREDS_SAVE"
+  else bad "FW-MU DID NOT APPLY: a sibling-row split anchor is absent or not unique"; fi
+fi
+ga_clean_ledgers
+restore
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-adjudication: PASS"; exit 0; fi

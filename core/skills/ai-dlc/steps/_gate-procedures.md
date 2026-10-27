@@ -593,13 +593,6 @@ SKILL_INVOCATION_PROVENANCE_END -->
    Check 24 reads (Rule 8). False-positive cost: one pass and its repair per round until the
    exit. Removal condition: repairs that measurably stop writing defects, and a Rule 8 that no
    longer counts an exit.
-
-   **Requirements pass 1 reviews the elicitation repair.** On the requirements subject the
-   lead briefs every pass-1 shard, and the one adversary of a subject that maps to one part,
-   under the pass-2+ contract (`team-roles/adversary.md`, "Later passes review the REPAIR"),
-   handing it `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior
-   pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md`
-   as the repair record. It is still pass 1 of the series, and elicitation still carries no verdict.
 4. Append the step's changelog ("Where a changelog is written" below), then proceed to
    the step's next action.
 
@@ -659,8 +652,7 @@ Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
-again. On pass 1 of the requirements subject, sharded or one-part, that pair is the elicitation
-record: `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` as the prior pass's findings and `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md` as the repair record ("Validation cycle" item 3). Every adversary brief, sharded or not, also carries the early-write instruction of
+again. Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
 act once it has finished, never with the header: the ONE Bash call
 `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`,

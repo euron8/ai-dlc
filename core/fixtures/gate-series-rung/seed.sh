@@ -18,6 +18,31 @@ import json, os, sys
 root = sys.argv[1]
 
 
+WAIVER_ID = "[S302 gate — check 7 waived] [lead] - 2026-08-11T18:00:00Z"
+# A waiver_id naming NO entry: same shape, same sprint token, no header carries it.
+UNRESOLVED_ID = "[S302 gate — no such entry] [lead] - 2026-08-11T18:00:00Z"
+WID = {}   # case -> the waiver_id its FAIL_WAIVED rows carry
+
+
+def entry(c, v, case=None):
+    e = {"check_id": c, "verdict": v, "evidence": "fixture: check %s" % c}
+    if v == "FAIL_WAIVED":
+        # rules.waiver_id: required and non-empty on FAIL_WAIVED, forbidden otherwise.
+        e["waiver_id"] = WID.get(case, WAIVER_ID)
+    return e
+
+
+def escalations(case):
+    # The OVERRIDDEN entry WAIVER_ID names, in the shape escalations.md prescribes. The rung asks
+    # validate-suppression-lifetime.sh --waivers for it; it does not cite-verify.
+    d = os.path.join(root, case, "docs", "escalations")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "pending.md"), "w", encoding="utf-8") as fh:
+        fh.write("# Pending\n\n## %s\n\n**Status:** OVERRIDDEN\n\n"
+                 "**Operator authorization:** 2026-08-11T18:00:00Z | \"waive check 7 for this gate\"\n\n"
+                 "The gate failed Check 7; the operator waived it.\n" % WAIVER_ID)
+
+
 def verdict(case, nonce, sid, checks, gate_type="story"):
     d = os.path.join(root, case, "_bmad-output", "gate-adjudication")
     os.makedirs(d, exist_ok=True)
@@ -29,10 +54,7 @@ def verdict(case, nonce, sid, checks, gate_type="story"):
         "generated_at": "2026-08-11T18:30:00Z",
         "adjudicator_agent_id": "gate-adjudicator-fixture",
         "catalog": "core",
-        "verdicts": [
-            {"check_id": c, "verdict": v, "evidence": "fixture: check %s" % c}
-            for c, v in sorted(checks.items())
-        ],
+        "verdicts": [entry(c, v, case) for c, v in sorted(checks.items())],
     }
     with open(os.path.join(d, nonce + ".verdict.json"), "w", encoding="utf-8") as fh:
         fh.write(json.dumps(doc, indent=2) + "\n")
@@ -53,6 +75,26 @@ for i, v in enumerate(["PASS", "FAIL", "FAIL", "FAIL"], start=1):
     verdict("stall-fires", N(i), S, {"7": v, "22": "PASS"})
 for i, v in enumerate(["PASS", "FAIL", "PASS", "FAIL"], start=1):
     verdict("stall-silent", N(i), S, {"7": v, "22": "PASS"})
+
+# --- PAIR 1b: a FAIL_WAIVED pass BREAKS the run only under a waiver that RESOLVES. --------
+# The series id carries `-s302-`, the sprint the waiving entry's header names as S302, and each
+# case writes its own docs/escalations/pending.md with that OVERRIDDEN entry.
+# waived-x3           check 7 FAIL_WAIVED on passes 2,3,4 under the RESOLVING waiver -> no run;
+#                     the operator took the check out of the loop. stall-fires with FAIL replaced
+#                     by FAIL_WAIVED, so the two differ by that value alone.
+# unresolved-x3       the same three FAIL_WAIVED rows under a waiver_id that names NO entry, the
+#                     escalations file identical -> each counts as FAIL and the check STALLS.
+# waived-then-fail    FAIL_WAIVED (resolving) on pass 1, then FAIL on 2,3,4 -> a NEW run of 3
+#                     starting at pass 2. A rung that kept the waiver in the run reports pass 1.
+SW = "story-s302-20260811T1830Z"
+WID["unresolved-x3"] = UNRESOLVED_ID
+for case in ("waived-x3", "unresolved-x3"):
+    for i, v in enumerate(["PASS", "FAIL_WAIVED", "FAIL_WAIVED", "FAIL_WAIVED"], start=1):
+        verdict(case, N(i), SW, {"7": v, "22": "PASS"})
+    escalations(case)
+for i, v in enumerate(["FAIL_WAIVED", "FAIL", "FAIL", "FAIL"], start=1):
+    verdict("waived-then-fail", N(i), SW, {"7": v, "22": "PASS"})
+escalations("waived-then-fail")
 
 # --- PAIR 2: the split-series defeat. Verdicts BYTE-IDENTICAL; only the series id moves. --
 # split-joined  four FAILs under one id            -> the stall rung catches it.

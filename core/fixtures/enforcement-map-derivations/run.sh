@@ -371,19 +371,36 @@ cr_enum_all() {
 # assumed, and the result is required to EXIST, because a path that resolves to nothing makes
 # the caller's mutation match nothing and `edit_json` would report a broken fixture for a
 # reason that has nothing to do with the schema.
+#
+# THE FIRST WALKER ROW IS NOT ENOUGH. A41's mutation (the regex in A41 below, repeated in
+# cr_enum_onePerLine) needs the enum's tail one member per line, and an INLINE enum such as
+# gate-adjudication-verdict.json's yields a walker row that mutation cannot match. So the first
+# row whose file ALSO holds that layout wins. A41 is the sole caller.
+cr_enum_onePerLine() {
+  python3 -c '
+import re, sys
+s = open(sys.argv[1]).read()
+sys.exit(0 if re.search(r"^(\s*)\"([A-Z]+(?:[-_][A-Z]+)+)\"\n(\s*\])", s, re.M) else 1)
+' "$1"
+}
+
 cr_enum_schema() {
-  local w base
+  local w b base
   w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
         "$1/scripts/render-vocabulary-index.sh")"
   [ -n "$w" ] || return 1
-  base="$(python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    base="core/schemas/${b##*/}"
+    [ -f "$1/$base" ] || continue
+    cr_enum_onePerLine "$1/$base" || continue
+    printf '%s\n' "$base"
+    return 0
+  done < <(python3 -c "$w" "$1/core/schemas" 2>/dev/null \
           | awk -F'\t' '{ n = split($3, m, " ")
                           for (i = 1; i <= n; i++)
-                            if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/) { print $1; exit } }')"
-  [ -n "$base" ] || return 1
-  base="core/schemas/${base##*/}"
-  [ -f "$1/$base" ] || return 1
-  printf '%s\n' "$base"
+                            if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/) { print $1; break } }')
+  return 1
 }
 
 cr_enum_unseen() {
@@ -1313,7 +1330,7 @@ A41_i112_enum_exclusion_is_derived() {
   local schema tok
   schema="$(cr_enum_schema "$t")"
   if [ -z "$schema" ]; then
-    bad "FIXTURE BROKEN — no schema under core/schemas/ yields a screaming-compound enum member through render-vocabulary-index.sh's walker, so there is no enum to extend and this assertion would prove nothing about how the exclusion is built."
+    bad "FIXTURE BROKEN — no row of render-vocabulary-index.sh's walker names a schema under core/schemas/ that carries a one-per-line screaming-compound enum tail, which cr_enum_schema/cr_enum_onePerLine require for this assertion's mutation, so there is no enum to extend and this assertion would prove nothing about how the exclusion is built."
     return
   fi
   tok="SUPERSEDED_BY"; tok="${tok}_UPSTREAM"

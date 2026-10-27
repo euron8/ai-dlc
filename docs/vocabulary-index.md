@@ -41,7 +41,7 @@ each whole document, so a schema cannot gain a vocabulary this table does not sh
 | Schema | Field | Members |
 |---|---|---|
 | `audit-anchors.json` | `close_reason` | `reset` `abandoned` |
-| `gate-adjudication-verdict.json` | `verdict` | `PASS` `FAIL` |
+| `gate-adjudication-verdict.json` | `verdict` | `PASS` `FAIL` `FAIL_WAIVED` |
 | `layer-adjudication-register.json` | `verdict` | `still-additive` `contradicts-core` `retire` |
 | `provenance-block.json` | `mode` | `solo` `subagent` |
 | `provenance-block.json` | `verdict` | `EXIT_CONDITION_MET` `EXIT_CONDITION_NOT_MET` `DIVERGENT_HARD_BLOCK` |

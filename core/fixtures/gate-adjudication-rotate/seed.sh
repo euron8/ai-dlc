@@ -256,6 +256,24 @@ case "$CASE" in
   strand-unselectable)
     seed_s308; seed_unselectable_fail
     ;;
+  # FAIL_WAIVED twins of `strand-unselectable` and `unmatchable`: the failing check is recorded
+  # FAIL_WAIVED with a waiver_id, and that is the only difference. The rotator cannot verify a
+  # waiver (it has no transcript corpus), so it reads FAIL_WAIVED as FAIL, as the guard does
+  # when the waiver cannot be verified, and both must refuse exactly as their FAIL twins do.
+  strand-unselectable-waived)
+    seed_s308; seed_unselectable_fail
+    sed -i.bak 's/"verdict":"FAIL","evidence"/"verdict":"FAIL_WAIVED","waiver_id":"[S310 gate] [lead] - 2026-07-01T00:00:00Z","evidence"/' \
+      "$GA/planning-20260701T000000Z.verdict.json"; rm -f "$GA/planning-20260701T000000Z.verdict.json.bak"
+    grep -q '"FAIL_WAIVED"' "$GA/planning-20260701T000000Z.verdict.json" \
+      || { echo "seed.sh: case '$CASE' did not rewrite the survivor to FAIL_WAIVED" >&2; exit 2; }
+    ;;
+  unmatchable-waived)
+    seed_unmatchable_fail; seed_unmatchable_pass; seed_legacy
+    sed -i.bak 's/"verdict":"FAIL","evidence"/"verdict":"FAIL_WAIVED","waiver_id":"[S309 gate] [lead] - 2026-09-09T00:00:00Z","evidence"/' \
+      "$GA/planning-20260909T120000Z.verdict.json"; rm -f "$GA/planning-20260909T120000Z.verdict.json.bak"
+    grep -q '"FAIL_WAIVED"' "$GA/planning-20260909T120000Z.verdict.json" \
+      || { echo "seed.sh: case '$CASE' did not rewrite the unmatchable FAIL to FAIL_WAIVED" >&2; exit 2; }
+    ;;
   # The same case with a DIFFERENT unselectable shape (sprint-LAST rather than
   # sprint-first). A predicate that hardcodes the other seed's spelling passes
   # `strand-unselectable` and strands this one.

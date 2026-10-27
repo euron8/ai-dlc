@@ -1241,6 +1241,104 @@ if mut m9-substring-join 's@if grep -qxF "\$_c" <<<"\$COVERED"; then@if grep -qF
   kill_arm m9-substring-join allow "$W" "M9: a substring covered-set join ALLOWS S11 — the whole-token match is load-bearing"
 fi
 rm -rf "$W"
+
+# --- W1-W3. FAIL_WAIVED reads as FAIL unless its waiver verifies. Check 7 is the only failing
+# check and NO SUPPRESSED entry exists, so only the waiver join can lift it. Each world is fresh,
+# because arm 7b caches its verified rows and a mutant reading the control's cache would never
+# reach the join it edits.
+w_drive() { # <case> [hook] -> 0 when the lead's edit is ALLOWED
+  seed "$1"; local o; o="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${2:-$HOOK}")"; WLOG="$W/_bmad-output/pipeline-continuation-log.md"
+  W_OUT="$o"; ! denied "$o"; }
+w_p1() { w_drive waived-real "${1:-}" && grep -q 'FAIL_WAIVED under a verified waiver (7)' "$WLOG" 2>/dev/null; local r=$?; rm -rf "$W"; return $r; }
+w_p2() { ! w_drive waived-fabricated "${1:-}" && case "$W_OUT" in *'check(s) `7`'*) true ;; *) false ;; esac; local r=$?; rm -rf "$W"; return $r; }
+w_p3() { ! w_drive waived-noverifier "${1:-}" && case "$W_OUT" in *'check(s) `7`'*) true ;; *) false ;; esac; local r=$?; rm -rf "$W"; return $r; }
+W_BASE=1
+if w_p1; then ok "W1: FAIL_WAIVED under a real, verified OVERRIDDEN waiver -> ALLOWED, and logged as waived"
+else bad "W1: a FAIL_WAIVED whose waiver_id names a verified OVERRIDDEN entry stayed LOCKED (or allowed silently)"; W_BASE=0; fi
+if w_p2; then ok "W2: FAIL_WAIVED naming a fabricated waiver_id -> DENIED, check 7 named"
+else bad "W2: a FAIL_WAIVED under a waiver_id no escalation entry carries ESCAPED the lock"; W_BASE=0; fi
+if w_p3; then ok "W3: FAIL_WAIVED whose waiver cannot be verified (no citation verifier) -> DENIED"
+else bad "W3: the waiver was taken without its citation being verifiable — the lock failed open"; W_BASE=0; fi
+
+# W-MJ: the waiver_id join dropped — any verified waiving entry lifts any FAIL_WAIVED. Killed by W2
+# alone (W1 holds: the id is real; W3 holds: nothing verifies, so no entry exists to lift it).
+# Scored only when W1-W3 passed unmutated in this run.
+# W4/W5: arm 7a over a FAIL_WAIVED-only pass, one property apart. The newer verdict records
+# check 7 FAIL_WAIVED under the REAL waiver, so arm 7b alone would ALLOW it; only the dispatch
+# binding separates the two. Unbound -> it may not acquit: DENY, logged GATE_VERDICT_UNBOUND,
+# adjudicated on the older bound FAIL. Bound -> arm 7b verifies the waiver: ALLOW.
+seed waived-forged-unbound
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT" && grep -q 'GATE_VERDICT_UNBOUND' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "W4: an UNBOUND round-nonce verdict whose only failing check is FAIL_WAIVED under a real waiver -> DENIED, GATE_VERDICT_UNBOUND logged"
+else bad "W4: an unbound FAIL_WAIVED-only verdict ACQUITTED the lead — arm 7a was skipped and arm 7b opened the lock"; fi
+rm -rf "$W"
+seed waived-forged-bound
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if ! denied "$OUT" && grep -q 'FAIL_WAIVED under a verified waiver (7)' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "W5: the same verdict BOUND by its write row -> ALLOWED through the verified waiver"
+else bad "W5: a bound FAIL_WAIVED-only verdict under a verified waiver stayed locked, or allowed without verifying it"; fi
+rm -rf "$W"
+
+# --- W6-W9. The near-misses of W4, and the trailing-tab id. Locked: a PLAIN FAIL on the waived
+# check's own id (W6), a plain FAIL with a null id (W7), two forged FAIL_WAIVED-only passes where
+# the second becomes the unbound substitute (W8). Unlocked: the real waiver_id with a trailing tab,
+# which Check 26's rstrip() matches (W9).
+wn_locked() { # <case> <hook|""> <the check(s) the deny must name, exactly> -> 0 when so
+  seed "$1"; local o; o="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${2:-$HOOK}")"
+  denied "$o" && case "$o" in *"check(s) \`$3\`"*) true ;; *) false ;; esac; local r=$?; rm -rf "$W"; return $r; }
+# W6: the plain FAIL on 7 stays; the waived 7 row is lifted, so `7` is the one left standing.
+w_p6() { wn_locked waived-forged-dup "${1:-}" 7; }
+# W7: the null-id plain FAIL stays failing under the token `null`, never as a word that vanishes.
+w_p7() { wn_locked waived-forged-nullid "${1:-}" null; }
+w_p8() { seed waived-forged-two; local o; o="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${1:-$HOOK}")"
+  denied "$o" && grep -q 'Adjudicating on story-20260811T200000Z' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null
+  local r=$?; rm -rf "$W"; return $r; }
+w_p9() { w_drive waived-tab "${1:-}" && grep -q 'FAIL_WAIVED under a verified waiver (7)' "$WLOG" 2>/dev/null; local r=$?; rm -rf "$W"; return $r; }
+WN_BASE=1
+if w_p6; then ok "W6: an unbound FAIL_WAIVED verdict carrying a PLAIN FAIL on the same check 7 -> DENIED; a waiver never lifts a plain FAIL row"
+else bad "W6: a plain FAIL sharing the waived check's id was lifted by the waiver"; WN_BASE=0; fi
+if w_p7; then ok "W7: the same verdict with a plain FAIL whose check_id is null -> DENIED"
+else bad "W7: a null-id plain FAIL vanished and the waiver opened the lock"; WN_BASE=0; fi
+if w_p8; then ok "W8: two forged FAIL_WAIVED-only passes, nothing bound -> DENIED, the second forgery adjudicated as a CONVICT-ONLY substitute"
+else bad "W8: the unbound substitute was acquitted by its own waiver"; WN_BASE=0; fi
+if w_p9; then ok "W9: the real waiver_id with a trailing TAB -> ALLOWED, as Check 26's rstrip() reads it"
+else bad "W9: a tab-trailing waiver_id the gate accepts stayed LOCKED — the guard and Check 26 disagree about one entry"; WN_BASE=0; fi
+wn_score() { # <mutant> <expected dead ids> <label>
+  local d=""; w_p6 "$MW/$1.sh" || d="$d 6"; w_p7 "$MW/$1.sh" || d="$d 7"; w_p8 "$MW/$1.sh" || d="$d 8"; w_p9 "$MW/$1.sh" || d="$d 9"
+  d="${d# }"
+  if [ "$d" = "$2" ]; then ok "$3: KILLED by W[$2] and nothing else"; else bad "$3: failed W[$d], expected exactly W[$2]"; fi
+}
+if [ "$WN_BASE" -ne 1 ]; then
+  bad "W-MP/W-MS not scored: W6-W9 did not pass unmutated in this run, so a mutant verdict would not be about its mutation"
+else
+  # W-MP: the partition by KIND removed — plain FAIL ids go through the waiver set by id.
+  if mut wmp-no-kind-partition 's@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
+    wn_score wmp-no-kind-partition 6 "W-MP (a waiver lifts a plain FAIL by its check id)"
+  fi
+  # W-ME: the B1 fix reverted WHOLE -- LIVE_CLEAN by string equality of the two id lists AND the
+  # waiver lifting by check id. Both layers, because on the new fail_sets the string test alone is
+  # EQUIVALENT to the count (FAILED_CHECKS is built PLAIN then WAIVED, so the lists are equal
+  # exactly when no plain FAIL exists) and a one-layer revert would kill nothing.
+  if mut wme-string-equality 's@^  case "\$PLAIN_N" in \[1-9\]|\[1-9\]\[0-9\]\*) ;; \*) LIVE_CLEAN=1 ;; esac$@  [ "$FAILED_CHECKS" != "$WAIVED_CANDIDATES" ] || LIVE_CLEAN=1@;s@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
+    wn_score wme-string-equality 6 "W-ME (B1 reverted: string-equality LIVE_CLEAN and the id-keyed lift)"
+  fi
+  # W-MS: the unbound substitute keeps its FAIL_WAIVED rows and takes the waiver join.
+  if mut wms-substitute-waives '/^  PLAIN_FAILS="\$FAILED_CHECKS"; WAIVED_CANDIDATES=""$/d'; then
+    wn_score wms-substitute-waives 8 "W-MS (the unbound substitute is acquitted by its own waiver)"
+  fi
+fi
+
+if [ "$W_BASE" -ne 1 ]; then
+  bad "W-MJ not scored: W1-W3 did not pass unmutated in this run, so a mutant verdict would not be about its mutation"
+elif mut wmj-no-waiver-join 's@{c: \$c, ok: (\$w != null and \$n != null@{c: $c, ok: (true or $w != null and $n != null@'; then
+  _wd=""
+  w_p1 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 1"
+  w_p2 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 2"
+  w_p3 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 3"
+  if [ "$_wd" = " 2" ]; then ok "W-MJ: dropping the waiver_id join is KILLED by W2 (fabricated id) and nothing else"
+  else bad "W-MJ: dropping the waiver_id join failed W[${_wd# }], expected exactly W[2]"; fi
+fi
 seed suppressed
 if [ -f "$MW/m9-substring-join.sh" ]; then
   kill_arm m9-substring-join allow "$W" "M9: ...and S1 is UNCHANGED under it (the mutant kills only its own arm)"

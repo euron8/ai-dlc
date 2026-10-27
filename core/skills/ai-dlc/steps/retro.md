@@ -1121,8 +1121,8 @@ explicit disposition on that entry — `approved-deferral` / `do-now` /
 `descope` — per Rule 13 + Rule 12 Tier 1. A recorded operator disposition
 is the only thing that unblocks the commit, it never converts the FAIL
 into a PASS, and the gate log entry records the check as FAILED with the
-disposition beside it. The verdict vocabulary is closed at PASS and FAIL
-in `.claude/schemas/gate-adjudication-verdict.json`; a check the lead
+disposition beside it. The verdict vocabulary is closed at PASS, FAIL and FAIL_WAIVED
+in `.claude/schemas/gate-adjudication-verdict.json`, where FAIL_WAIVED is a FAIL the operator waived, carrying the waiver id, never a PASS; a check the lead
 cannot evaluate is FAIL-with-reason, never a third state.
 
 **The disposition is recorded before the checkpoint and surfaces at it.**

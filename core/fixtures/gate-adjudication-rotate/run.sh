@@ -1129,6 +1129,43 @@ else
   fi
 fi
 
+# =============================================================================
+# ARMS (w.1)/(w.2) — FAIL_WAIVED counts as a FAIL at both selects. The rotator has no
+# transcript corpus, so it cannot verify a waiver, and the guard reads an unverifiable
+# FAIL_WAIVED as FAIL. Only the LOCKED direction is constructible here: there is no input
+# through which this script could verify a waiver and unlock it. Each world is the FAIL twin
+# with the failing check rewritten to FAIL_WAIVED, so it must refuse exactly as that twin does.
+# =============================================================================
+wv_p1() { # <rotator> -- the survivor select
+  seed strand-unselectable-waived
+  local b a o r; b="$(treehash "$PROJ")"; o="$( ( cd "$PROJ" && bash "$1" --sprint s308 --apply ) 2>&1 )"; r=$?; a="$(treehash "$PROJ")"
+  [ "$r" -eq 1 ] && [ "$b" = "$a" ] && grep -q 'no mode can move' <<<"$o"; }
+wv_p2() { # <rotator> -- the unmatchable-series select
+  seed unmatchable-waived
+  local o r; o="$( ( cd "$PROJ" && bash "$1" --sprint s308 --apply ) 2>&1 )"; r=$?
+  [ "$r" -eq 1 ] && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$(refusal_block "$o")"; }
+WV_BASE=1
+if wv_p1 "$ROT"; then ok "(w.1) a FAIL_WAIVED unselectable survivor is refused like its FAIL twin, tree byte-identical"
+else bad "(w.1) a FAIL_WAIVED survivor was rotated past as if clean — an unverifiable waiver left live as the guard's pass"; WV_BASE=0; fi
+if wv_p2 "$ROT"; then ok "(w.2) a FAIL_WAIVED unmatchable series refuses the empty selection like its FAIL twin"
+else bad "(w.2) a FAIL_WAIVED unmatchable series read as PASS-only and the close exited past it"; WV_BASE=0; fi
+# MUTATION W — both selects narrowed back to FAIL only. (w.1) and (w.2) must both die; gated on
+# both having passed unmutated in this run.
+if [ "$WV_BASE" -ne 1 ]; then
+  bad "MUTATION W not scored: (w.1)/(w.2) did not pass unmutated in this run"
+else
+  MUTW="$W/mut-waived-as-pass.sh"
+  sed 's/select(.verdict=="FAIL" or .verdict=="FAIL_WAIVED")/select(.verdict=="FAIL")/g' "$ROT" > "$MUTW"
+  _mw_n="$(grep -c 'FAIL_WAIVED")' "$MUTW")" || _mw_n=0
+  if cmp -s "$ROT" "$MUTW" || [ "$_mw_n" != 0 ]; then
+    bad "MUTATION W: the narrowing did not apply to every select ($_mw_n left); (w.1)/(w.2) are UNPROVEN"
+  else
+    _wd=""; wv_p1 "$MUTW" || _wd="$_wd 1"; wv_p2 "$MUTW" || _wd="$_wd 2"
+    if [ "$_wd" = " 1 2" ]; then ok "MUTATION W: with FAIL_WAIVED read as clean at both selects, (w.1) and (w.2) both go red"
+    else bad "MUTATION W: narrowing both selects failed (w.[${_wd# }]), expected exactly (w.[1 2])"; fi
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "gate-adjudication-rotate: PASS"

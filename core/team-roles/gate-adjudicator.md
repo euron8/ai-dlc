@@ -102,7 +102,7 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
 
    - **0** — return the path. That is the end of your work.
    - **1** — your verdict is defective and the message names the defect: a missing, extra or
-     duplicated check id, a verdict outside the PASS/FAIL enum, empty evidence, a bad envelope
+     duplicated check id, a verdict outside the PASS/FAIL/FAIL_WAIVED enum, empty evidence, a bad envelope
      field, or a `gate_nonce` that is not this filename's stem. Fix the file and re-run until
      it is 0.
    - **2** — the path is wrong or the file is unreadable. Re-check the path the lead handed
@@ -113,8 +113,8 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
    check the dispatch binding or the suppression carve-out. A 0 here means the verdict is
    well-formed and covers exactly the derived set. The lead's full run still decides.
 
-4. **Every verdict is PASS or FAIL with non-empty evidence. There is no third value, and no
-   PASS-by-default.** For each escalated check, cite the `file:line`, command output, or
+4. **Every verdict is PASS or FAIL with non-empty evidence. There is no value you may write on your own authority beyond these two, and no
+   PASS-by-default.** You write `FAIL_WAIVED` only when the check FAILS on its own terms and a verified `OVERRIDDEN` or `SUPPRESSED` escalation entry clears that failure, setting `waiver_id` to that entry's header verbatim after `## `. It is never a PASS, you never write it on your own authority, and Check 26 refuses one whose `waiver_id` does not resolve. For each escalated check, cite the `file:line`, command output, or
    artifact state that settles it — on a PASS as much as a FAIL. An unjustified PASS is the
    exact failure the escalation exists to prevent.
    A FAIL on a check you could evaluate is complete only when that check's comparison surface
@@ -198,7 +198,7 @@ extra, no duplicate.
 ```
 <!-- END GENERATED: gate-adjudication-verdict -->
 
-`verdict` is `PASS` or `FAIL` — the enum has no empty and no third value. `evidence` is
+`verdict` is `PASS`, `FAIL` or (as below) `FAIL_WAIVED` — the enum has no empty value, and `FAIL_WAIVED` is written by you only when the check FAILS on its own terms and a verified `OVERRIDDEN` or `SUPPRESSED` escalation entry clears the failure, with `waiver_id` set to that entry's header verbatim after `## `; it is never a PASS, is never written on your own authority, and Check 26 refuses one whose `waiver_id` does not resolve. `evidence` is
 required non-empty on every entry. The lead runs `validate-gate-adjudication.sh <gate_type>
 <verdict_path>` through `verdict.sh`; a missing entry, an unexpected entry, a duplicate, an
 empty evidence, a bad envelope, a nonce mismatch, or any `FAIL` blocks the gate.
