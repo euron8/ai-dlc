@@ -784,6 +784,8 @@ Owed:
 Outcome owed: the arm behaves as its self-probe states, and every one of the 32 archived closes carries an
 `Outcome measured:` line or is reopened.
 
+**Amendment (batch-243 close).** Item 1's arm shipped in 0.952.0 narrower than item 1. `eff_shape_ok` at `scripts/validate-backlog-receipts.sh:864` requires only `token-equivalent`, `API` and `gap-inclusive`. It does not require a lead figure and a subagent figure, so an outcome line that reports neither still satisfies it. Measured line by line by ai-dlc-b4: 0 of the 19 re-audit lines in the reopened set, and 0 of the 21 archived `Outcome measured:` lines, carry a lead hour or lead dollar figure. Those that mention the lead give a local-model share, a count of the lead's Agent calls, or prose saying no step applies. Control: `lead dollars` occurs 5 times in the ledger, all in BL-819. Owed: the arm requires per-step lead and subagent figures, as item 1 and BL-819 item 3 already say, with its false-positive set measured over the reopened set and the archive. No close was false: BL-817 was not closed in 0.952.0.
+
 verify: manual
 
 ## BL-819 — the lead session's own hours and tokens are outside every efficiency entry, and they are most of the wall clock
@@ -849,6 +851,85 @@ fall.
 - **L1, beat polls.** `_gate-procedures.md` "Bounded-join beat" gave no progress-check form; it now prescribes `wait-for-deliverable.sh --complete --status <the wave's paths>`, never a grep, listing or count of the shard directory. s319/s320 had 163+164 and 22+38 hand probes. In a 30-hit sample, 12–14 asked the progress question that per-path `--status` already answers; the rest are partition checks (4), required reads of delivered content (5), orientation (5) and pre-dispatch checks (2). Recorded as already mechanised, with that residual. Pinned by `process-rule-pins` row `gp-beat-status`.
 - **L2, gate re-reads.** Already prescribed: `gate-validation.md` and `SKILL.md` direct `gate-checkpoint.sh`. No step text changed. Residual: 4 re-runs in s319 and 0 in s320 — identical validator calls already run before a compaction in the same gate, across the 7 compactions whose recovery block carried the gate-resume section, excluding the prescribed snapshot budget call. All 4 fell in the 2 windows where the lead did not call `gate-checkpoint.sh done`. Recorded as already mechanised.
 - **L3, snapshot updates.** Items 1–3 of "Sub-step snapshot update" were one Edit per row; they are now one `bash scripts/ai-dlc/snapshot-update.sh` call. The program runs `validate-artifact-budget.sh --stamps-only` on the lines it adds and writes nothing on a finding. s319: 445 snapshot Edits in 298 consecutive runs; s320: 219 in 123. One call per run is −7.35 and −7.38 calls per story; no dollar figure is claimed. Pinned by `gp-snap-program` and by the program's own fixture `snapshot-update-stamps`. 0.947.0's Deny B had already refused the 451 python and 49 `sed -i` snapshot writes of s319.
+
+verify: manual
+
+## BL-823 — the remediator join's BADDISP check reads only a lowercase `disposition:` key, so a capitalised `Disposition:` with an out-of-set value is never refused
+
+**DEFECT.** Filed at the batch-243 close. ai-dlc-33 found it after c1 had been built, so the fix was kept out of 0.949.0, whose CHANGELOG names this id. `core/scripts/join-remediator-shards.sh:600` opens a disposition on `/^[[:space:]-]*[*_\`]*disposition[*_\`]*:/`, which is case-sensitive. BADDISP (`:1029`) therefore never sees a value under `Disposition:` or `DISPOSITION:`. 0.949.0's no-edit-line rule already matches the key case-insensitively, so the two arms disagree about what a disposition line is.
+
+Measured on graph's main tree, read only, with `/usr/bin/grep`. The key grammar was `^[[:space:]-]*[*_\`]*<word>[*_\`]*:` over 26059 `.md` files, excluding `.git` and `node_modules`. It found 1188 capitalised-key lines in 535 files (including graph's worktree copies). The control was 17915 lowercase-key lines, and the impossible token `ZZQ-NEVER-9731` returned 0. Narrowing to record-like files (a capitalised key AND either an `edit:` line or a lowercase `disposition:` line) left 4 files. Three are committed records that folding the case would refuse:
+- `_bmad-output/planning-artifacts/s292/product-brief-repair-p1.md:7` (`**Disposition:** 4 repaired / 0 escalated.`)
+- `_bmad-output/planning-artifacts/s292/research-repair-p1.md:6`
+- `_bmad-output/planning-artifacts/s302/architecture-repair-p1.md:424`, a prose line in a file that carries 15 lowercase-key lines.
+
+The fourth, `s301/archive/cycle-1/discovery-context.md`, is prose with no space after its colon.
+
+Owed:
+1. A ruled shape for a capitalised summary line, either a summary key that BADDISP never reads or a refusal. The ruling comes before the case fold.
+2. The fold itself, at `:600`.
+3. A fixture arm with a mutant, seeded with the capitalised out-of-set value.
+4. The false-positive set re-measured over graph's committed records.
+
+Not measured, though reachable: whether the join reads the other ~1184 lines' files as parts.
+
+verify: manual
+
+## BL-825 — a gate check waived by the operator records `PASS`, so every reader of the verdict sees PASS on a ledger its validator refuses
+
+**DEFECT.** Filed at the batch-243 close from c6b's read-only Check 22 audit of graph s317–s319 (one hand of ai-dlc-14's). Check 22 ran in every sprint, and every arm that fails today was already in graph's installed validator: 0.772.0, 0.781.0 and 0.908.0. The control was `spawn-ledger` appearing 13 times in each copy. All three sprints recorded PASS through an explicit, operator-authorised waiver:
+- s317: the first implementation verdict (20261009T124524Z) is FAIL, with 9 arm-S3 serial exceptions. All 21 later verdicts are PASS, and the last one's reason says the 124 Rule 19 rows plus the 9 S3 rows "equal the operator-authorized OVERRIDDEN waiver totals".
+- s318: gate-log lines 293, 362, 427, 495 and 563 read `22 — Teammate-spawn role binding | PASSED`. Line 563 says "rc 1 by design on 21 historical rows", under `[S318-CHECK22-HISTORICAL-SPAWN-ROLE-BINDING-OVERRIDDEN]`.
+- s319: all 15 implementation verdicts are PASS.
+
+The defect is the vocabulary, not the waivers, which are the operator's. `core/schemas/gate-adjudication-verdict.json:112` allows only `["PASS", "FAIL"]`, so a waived FAIL is recorded as PASS, and the waiver survives only in free-text reason and an escalation id. Anything that reads the verdict field sees a clean PASS: a later audit, a step-value count, or `core/scripts/validate-suppression-lifetime.sh`, which re-reads the recorded verdict from gate-metrics.jsonl and so cannot expire a waiver recorded as PASS.
+
+One residue is excluded: graph s319's 4 general-purpose rows with `role_file_readable=false` are absent from that sprint's gate record, which says 0 unreadable role files. They are undated. These rows are also outside Rule 19 by design (`core/scripts/validate-spawn-ledger.sh:1306-1321`), which is a separate question.
+
+Owed:
+1. A distinct waived state in the verdict vocabulary (for example `OVERRIDDEN`), carrying the waiver id. It needs the schema, its owner in `docs/vocabulary-index.md`, the gate procedure that writes it, and every reader of the field.
+2. `validate-suppression-lifetime.sh` expiring on the waived state.
+3. A consumer-shaped fixture arm proving that a waived FAIL is not read as PASS.
+
+verify: manual
+
+## BL-827 — two fixtures read their seed through `read … < <(bash seed.sh)`, so a failed seed reports assertion FAILs instead of FIXTURE BROKEN and arms an `rm -rf` on an empty-derived path
+
+**DEFECT.** Filed at the batch-243 close. c6a's first 0.951.0 dress went red on `ledger-reverify-b`. Its capture opens with `error: unable to create temporary file: Invalid argument`, then `fatal: updating files failed`, then `rm: "." and ".." may not be removed`. It was a transient git fault, not a fault in c6a: solo runs at 18dc7d27f and at the c6a squash both exited 0 with 0 FAIL, and a re-dress went green.
+
+The fixture's handling of that fault is what is wrong. `core/fixtures/ledger-reverify/run.sh:155` reads the seed as `read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")`. A process substitution's exit status is discarded, and `read` returns 0 on empty input, so all four variables come up empty and every row then reports `got=<none>` as an assertion FAIL. The EXIT trap in the same file runs `rm -rf "$(dirname "$DIST")"`, which with DIST empty is `rm -rf .`. Only rm's refusal of `.` stopped it. `core/fixtures/self-update-gate/run.sh:115-116` has the same shape. Grepping `read -r [A-Z_ ]+< <\(bash "\$DIR/seed\.sh"\)` over `core/fixtures/*/run.sh` finds exactly these 2.
+
+Owed, in both fixtures:
+1. Run the seed into a captured variable with its exit checked, and on failure report FIXTURE BROKEN with exit 2.
+2. Assert every field is non-empty and DIST is a directory before the trap is armed.
+3. Guard the trap on a non-empty DIST under the mktemp prefix.
+4. Add a mutant: a seed that exits 1 must read BROKEN.
+
+Then decide whether a tree-wide arm refusing `read … < <(…)` of a seed whose status is the only failure signal earns its place. Measure its false-positive set first.
+
+verify: manual
+
+## BL-828 — mutant arms that score a kill without asserting their unmutated arm passed in the same run
+
+**DEFECT.** Filed at the batch-243 close. In c6b, a fold found that 41 of `check-22-spawn-ledger`'s 43 mutant arms scored a kill without first asserting that the arm passed on the unmutated tree in the same run. A mutant that breaks the arm's setup, rather than the subject, therefore read as killed. 0.952.0 fixed check-22: `need_base` now occurs 52 times in `core/fixtures/check-22-spawn-ledger/run.sh`. No census has been taken across the other fixtures.
+
+Owed: the census over `core/fixtures/*/run.sh`, with its false-positive set measured and enumerated before any arm ships. Then either a shared base-pass helper, or an arm that refuses a kill with no same-run base pass. Mechanism as `.claude/rules/fixture-mutants.md` states it.
+
+verify: manual
+
+## BL-829 — K3's widened series stamps K3B_RELEASE in branch (b), and no mutant or world reaches that line
+
+**DEFECT.** Filed at the batch-243 close from c6b (BL-811's W1). `core/scripts/validate-adversarial-convergence.sh:2652`, `k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"`, sits in branch (b), the terminal pass that reviews `requirements-subject.md`. `k3_wide` is set by the widened case arm at `:2462`. Of the 7 k3w worlds (post, pre, pred, nomf, other, brief, arch), 3 are confirmed by their expected text to take branch (a). The hand's claim that a mutant at `:2652` scores identical to the real run is a derivation, not a run.
+
+Owed: one widened-series world whose terminal pass reviews `requirements-subject.md`, stamped between K3_RELEASE and K3B_RELEASE, plus a mutant at `:2652` that the world kills.
+
+verify: manual
+
+## BL-830 — handoff-resume-guard's bg1 mutant is killed by the slice band alone, with zero margin
+
+**DEFECT.** Filed at the batch-243 close. c6b's first 0.952.0 dress went red on `handoff-resume-guard`: the Bounded-join beat slice in `core/skills/ai-dlc/steps/_gate-procedures.md` had grown to 62 lines against `BEAT_BAND_MAX=60` (`core/fixtures/handoff-resume-guard/run.sh:1020`), and mutant bg1 survived. The fix re-wrapped the prose to 57 lines. bg1's prohibition copy now scores 60 lines, so it is killed only because it reaches the band ceiling exactly. One more line in that section re-breaks bg1. What bg1 asserts, a sentence forbidding the backgrounded call, is never caught on its content.
+
+Owed: bg1 killed by the prohibition arm (`proh>0`) independently of the band, with a mutant proving that the band alone no longer decides it.
 
 verify: manual
 
@@ -1526,7 +1607,7 @@ verify: manual
 
 Closed in 0.949.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
-Closed in 0.949.0 (verified e6e7f8375) on a tree receipt, reopened by BL-817.
+Closed in 0.949.0 (verified 94c8dcdc7) on a tree receipt, reopened by BL-817.
 
 **DEFECT (efficiency).** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 16, 01:07 EDT 2026-10-26). In graph s320, the `stories-party --pass 1` repair join refused at 05:05:46Z with `REFUSED: 11.md: derivations: not replayed; …` (the checks-field refusal in `core/scripts/join-remediator-shards.sh`). Part 11 is story 3.5, in `s320/shards/stories-party-repair-p1/11.md`. `core/team-roles/remediator.md:134-139` makes replay the default ("Replay is the default: run `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit"), but the remediator wrote `not replayed` anyway. Graph's lead recovered by contract: a record-only re-run (agent a0481edc5f18691e2) replayed 5 derivations and re-marked, and the re-join returned rc=0. The cost was one dispatch and about 2 minutes. One instance, measured from the transcript.
 

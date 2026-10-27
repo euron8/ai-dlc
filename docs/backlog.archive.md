@@ -37975,7 +37975,7 @@ No PC id: graph has not filed it.
 verify: sh bash core/fixtures/remediator-shard-join/receipt-bl803.sh
 ## BL-805 — a lead can start a `wait-for-deliverable.sh` beat with a shell `&`, which leaves an untracked waiter nothing reaps or reports
 
-**LANDED (v0.947.0, verified ec35c5e5e).**
+**LANDED (v0.947.0, verified 1326b45f5).**
 
 **DEFECT.** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 29, 03:31 EDT 2026-10-26). Just before 07:29:08Z, graph's s320 lead started a beat as `wait-for-deliverable.sh … &` inside a foreground Bash call instead of with `run_in_background: true`. In its own words: "That last call backgrounded the beat with `&` instead of the proper `run_in_background` flag, so it won't notify me." It re-armed a proper beat (`b7ura551y`) and left the stray running to its own timeout. No outcome was affected, but nothing tracked or reaped the stray, and a lead that did NOT notice would have waited on a beat that can never wake it.
 
@@ -37993,7 +37993,7 @@ verify: sh bash core/fixtures/foreground-budget-deny/receipt-bl805.sh
 
 ## BL-813 — the s317–s320 extractor charges a step's mid-step re-read to the step it quotes, so graph s320's carry-over adversarial round was counted under route
 
-**LANDED (v0.948.0, verified 8204071a4).**
+**LANDED (v0.948.0, verified ce275f7e9).**
 
 **DEFECT (efficiency).** `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` changed the current step
 at every `Read` of a step file, including a `Read` with `offset`/`limit` that only re-reads one passage of a file
@@ -38017,7 +38017,7 @@ verify: sh bash docs/analysis/pipeline-efficiency-s317-s320/scripts/check-slice-
 
 ## BL-815 — the handoff validator skips a capture cited by a `../` or absolute path, and calls a tracked RED capture untracked
 
-**LANDED (v0.948.0, verified 8204071a4).**
+**LANDED (v0.948.0, verified ce275f7e9).**
 
 **DEFECT.** `validate-handoff-evidence.sh`'s only capture-token normalisation was a `./` strip. A `../` or
 absolute token reached every arm verbatim. Arms (a), (j) and the head WARN all sat inside
@@ -38060,7 +38060,7 @@ verify: sh bash core/fixtures/story-evidence-scaffold/receipt-bl815.sh core/scri
 
 ## BL-807 — the lane join refuses a round in which no lane wrote the subject, so a lead hand-assembles a record of no-edit lanes
 
-**LANDED (v0.949.0, verified e6e7f8375).**
+**LANDED (v0.949.0, verified 94c8dcdc7).**
 
 **DEFECT.** Filed after the batch-242 close from the graph watch (ai-dlc-fa, poll 33, 04:15 EDT 2026-10-26), verified read-only by the lead. In graph s320, at 08:06:35Z, `join-remediator-shards.sh --sprint 320 --artifact stories-serial --pass 1 --artifact-path _bmad-output/planning-artifacts/s320 --since 2026-10-26T07:52:21Z --until 2026-10-26T08:06:32Z` exited 2 with `REFUSED: the ledger records no dispatched write under _bmad-output/planning-artifacts/s320 in [...]; disjointness is unproven`. That is the empty-`ROWS` refusal at `core/scripts/join-remediator-shards.sh:2471` on `97d41f5d1`. All 10 lanes were no-edit: only lanes 4 and 7 carry non-`n/a` `edit:` lines, both marked `(escalated)` to the fan-in. Graph's `.artifact-writes.jsonl` for that window holds 0 non-shard rows under `s320`, against 59 shard rows as the control. Graph's lead then hand-assembled `s320/stories-serial-repair-p1.md` from the 10 lane parts, under the header `HAND-ASSEMBLED from 10 lane parts by the lead` and a disclosure.
 
@@ -38084,7 +38084,7 @@ verify: sh bash core/fixtures/remediator-shard-join/receipt-bl807.sh
 
 ## BL-814 — a MAJOR left open at EXIT_CONDITION_MET is neither deferred nor repaired on any record, and Check 24 passes the series
 
-**LANDED (v0.949.0, verified e6e7f8375).**
+**LANDED (v0.949.0, verified 94c8dcdc7).**
 
 **DEFECT.** Rule 7 (`core/skills/ai-dlc/SKILL.md:229-231`) says that after a series stamps
 `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's artifact or it re-opens the series on this
@@ -38116,7 +38116,7 @@ verify: sh bash core/fixtures/check-24-adversarial-convergence/receipt-bl814.sh
 
 ## BL-816 — a remediator that hand-writes `derivations: replayed <n>` is never checked at `--mark`, so only the honest `not replayed` writer meets the replay
 
-**LANDED (v0.949.0, verified e6e7f8375).**
+**LANDED (v0.949.0, verified 94c8dcdc7).**
 
 **DEFECT.** Filed in batch 243, cluster c1, beside BL-804. After BL-804, `wait-for-deliverable.sh --mark` and `--mark-repair` replay a remediator record that states `derivations: not replayed`. A record that states `replayed <n>` passes `--mark` without the validator running, so the remediator who writes the truthful line is checked and the one who claims a replay is not. The same release removes the permission at `core/team-roles/remediator.md:136-137` to write the count from a FAIL line. This entry is the enforcer of that prohibition.
 
@@ -38139,7 +38139,7 @@ Owed: in the `--mark` segment selection BL-804 uses (a part with at least one re
 verify: sh bash core/fixtures/remediator-shard-join/receipt-bl816.sh
 ## BL-795 — V17..V25 have no engine-side mutant, so nothing proves the key field each one tests is load-bearing
 
-**LANDED (v0.950.0, verified ead061bea).**
+**LANDED (v0.950.0, verified 18dc7d27f).**
 
 **NOTE.** Measured by batch 241 r9's BL-699 share reading (read-only, at bdb981712; lead ai-dlc-58). Filed OPEN, not built.
 
@@ -38211,7 +38211,7 @@ verify: sh F=core/fixtures/reconcile-emit-report/run.sh; [ -f "$F" ] || exit 9; 
 
 ## BL-818 — a lone surrogate escape in a Bash command makes `ai-dlc-foreground-budget.sh`'s jq parse fail, so the hook fails open and loses every deny, the budget deny included
 
-**LANDED (v0.951.0, verified f62705a3c).** `ai-dlc-foreground-budget.sh` parses the payload inside the jq program and denies on the `@PARSEFAIL@` sentinel, with fixed `printf` text naming the cause and the remedy. jq absent and any other program fault stay fail-open with the stderr line. A lone high surrogate now gets the parse deny; no sanitiser was added (0 of 193,592 Bash tool_uses carry one, and gsub is quadratic).
+**LANDED (v0.951.0, verified 6d0340091).** `ai-dlc-foreground-budget.sh` parses the payload inside the jq program and denies on the `@PARSEFAIL@` sentinel, with fixed `printf` text naming the cause and the remedy. jq absent and any other program fault stay fail-open with the stderr line. A lone high surrogate now gets the parse deny; no sanitiser was added (0 of 193,592 Bash tool_uses carry one, and gsub is quadratic).
 
 **DEFECT.** Found by cluster c2's delta adversary in batch 243. `core/hooks/ai-dlc-foreground-budget.sh` parses the PreToolUse payload with `jq`. A `tool_input.command` containing the JSON escape `\ud800` (a lone high surrogate) makes that parse fail, and the hook prints `ai-dlc-foreground-budget: the tool call is not readable JSON, so its timeout cannot be checked; allowing it (fail-open)` to stderr and emits no verdict. Every deny the hook owns is lost for that call: the foreground-budget deny, Deny A (a backgrounded waiter) and Deny B (a shell write of the snapshot). A command that would be refused is allowed by appending the escape to it.
 
@@ -38233,7 +38233,7 @@ verify: sh d=$(mktemp -d); ( set -uo pipefail; H=core/hooks/ai-dlc-foreground-bu
 
 ## BL-820 — a prose bullet opening `- **BL-<n>` inside an entry body is read as an entry boundary, so the host entry's verify: line moves to a phantom entry
 
-**LANDED (v0.951.0, verified f62705a3c).** A bullet takes a ledger label only in the strict form (id, then `**` and an em dash or end of line, or id then an em dash inside the span). A prose `- **BL-632 is LANDED**` lead-in inside a host entry no longer opens a phantom entry or takes the host's `verify:`. `backlog-reverify.sh` now calls lib.sh's `backlog_entry_label`; rotate's census and moved-names are narrowed to the same rule. Labels on the real ledgers are unchanged (backlog 22 = 22, archive 781 = 781); only plan prose is dropped.
+**LANDED (v0.951.0, verified 6d0340091).** A bullet takes a ledger label only in the strict form (id, then `**` and an em dash or end of line, or id then an em dash inside the span). A prose `- **BL-632 is LANDED**` lead-in inside a host entry no longer opens a phantom entry or takes the host's `verify:`. `backlog-reverify.sh` now calls lib.sh's `backlog_entry_label`; rotate's census and moved-names are narrowed to the same rule. Labels on the real ledgers are unchanged (backlog 22 = 22, archive 781 = 781); only plan prose is dropped.
 
 **DEFECT.** Found by cluster c2's 0.947.0 gate pre-suite in batch 243. At 2bf9ce466, `docs/backlog.md:286` opened with the bullet `- **BL-632 is LANDED**` inside BL-616's batch-243 paragraph. `ledger_entry_shape()` treats a line matching `^- \*\*` as an entry boundary, and its label rule took `BL-632` as that entry's id. BL-632 therefore became a phantom entry that received BL-616's `verify: manual`, so `backlog-reverify.sh` reported BL-616 NEEDS-REVIEW with "carries no 'verify:' receipt".
 
@@ -38249,7 +38249,7 @@ verify: sh d=$(mktemp -d); ( set -uo pipefail; printf '# P\n\n## BL-616 — host
 
 ## BL-821 — impl_passes.py's pass regex missed G1p<N> and pass-<N> and read only one digit, so 157 s317–s319 spawns carried the wrong pass number
 
-**LANDED (v0.952.0, verified 023b9ea16).**
+**LANDED (v0.952.0, verified abd42574d).**
 
 **DEFECT (efficiency).** `docs/analysis/pipeline-efficiency-s317-s320/scripts/impl_passes.py` matched `(?:\bp|pass )(\d)`: it missed `G1p3` (no word boundary), missed `pass-12`, and read `pass 12` as 1. Fixed: it reads `p<N>`, `G1p<N>`, `pass <N>`, `pass-<N>` and `pass_<N>`, with multi-digit numbers, and the sprints are an argument (default 314..320). Re-taken over s317–s319: 157 spawns change pass number (88 from 1 to 2, 38 from 1 to 3, 20 from 1 to 4, 11 from 1 to 5). Moved figures, s319 only (s317 and s318 are unchanged): the gate-1 reviewed-story pass distribution 1:8, 2:3, 3:3, 4:2, 6:2, 9:1 becomes 1:6, 2:3, 3:3, 4:2, 5:2, 6:2, 9:1; dollars by pass 1..7 302, 102, 61, 16, 3, 19, 7 become 184, 139, 83, 60, 19, 19, 7; gate-1 reviewer shards per pass, mean 6.5 and max 50, become 5.5 and 11. None of the old figures was quoted in a tracked document.
 
@@ -38267,7 +38267,7 @@ verify: sh T=$(mktemp -d) || exit 9; X=docs/analysis/pipeline-efficiency-s317-s3
 
 Fix (batch 243, c6b): the split ends an entry at a column-0 `##` heading that carries no BL- label, decided by lib.sh's `ledger_entry_shape()` so a fenced `## prose` line stays inside its entry. The section heading and what follows it stay live until the next BL- label. A `###` subheading is below the entry level and still moves with its entry. Pinned by `core/fixtures/backlog-rotate-fence-guard`: section between a closed and a live entry stays live; section after the last closed entry at EOF stays live; `###` inside a closed entry moves with it; mutant `m12-section-span` reverting the fix goes red.
 
-**LANDED (v0.952.0, verified 023b9ea16).** `backlog-rotate.sh` now ends a moved span at a non-BL `##` heading, while a `###` inside an entry still moves with it. `backlog-rotate-fence-guard` pins both directions, and mutant `m12-section-span` reverts the fix and goes red.
+**LANDED (v0.952.0, verified abd42574d).** `backlog-rotate.sh` now ends a moved span at a non-BL `##` heading, while a `###` inside an entry still moves with it. `backlog-rotate-fence-guard` pins both directions, and mutant `m12-section-span` reverts the fix and goes red.
 
 verify: manual
 
