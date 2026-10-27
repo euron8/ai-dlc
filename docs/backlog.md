@@ -917,6 +917,121 @@ Owed: run the binding whenever arm 7b could empty the fail set, not only when th
 
 verify: manual
 
+## Graph s320 implementation review (filed 2026-10-27)
+
+Found by reading graph's s320 lead transcripts (`0de9fe4e`, `ca14f3b7`), its spawn ledger, its commit log and the `docs/reviews/s320/` gate records, read only, at graph `b975b7746`. Times are EDT. At filing, 10 of 13 stories were done after about 16 hours of implementation; 1.3 was in review and 2.1 and 2.2 had never been dispatched. Derivations are named in each entry.
+
+## BL-838 — the shipped dev seat is haiku, and implementation reworks rose once dev and QA moved to haiku
+
+**DEFECT (efficiency). Operator ruling 2026-10-27: `dev` → sonnet/medium, `dev-escalated` → sonnet/high.** `templates/settings.json.template` `aiDlcRoles` pins `dev` to haiku/medium and `dev-escalated` to sonnet/medium; 0.781.0 (`6c8ea1d9d`) set both, moving dev from sonnet and dev-escalated from opus/high.
+
+Measured in graph (spawn ledger `model_bound`/`effort_bound`, and story review files by the highest `-p<N>` per story under `docs/reviews/s31N/`):
+
+| Sprint | dev | qa | stories through both gates at pass 1 | gate-1 / gate-2 passes per story |
+|---|---|---|---|---|
+| s317 | sonnet/medium (82), then haiku/high (40), then haiku/medium (13) | sonnet | 9/17 | 1.71 / 1.18 |
+| s318 | haiku/medium | sonnet | 4/13 | 2.23 / 1.38 |
+| s319 | haiku/medium | haiku | 4/18 | 3.00 / 1.78 |
+| s320 | haiku/medium | haiku | 4/10 | 1.80 / 2.30 |
+
+This is confounded: specs got denser and gates were added over the same sprints, and s317's dev rows carry no story id, so its sonnet and haiku stories cannot be split. The s320 4.2 trace is the direct evidence. Its gate-1 p1 and gate-2 p1 failed on the AC2 literal grep `not.toContain(COMPLETE_HODL.hodl_wallet)`, the AC7 enumeration and the AC7 two-cause state, and gate-1 p4 failed on a control test that never reached the modal. The story file as dispatched (`27481ace9`, 18469 B) states the first three verbatim: the grep 3 times, "two-cause" 2 times. Each miss costs a serial gate pass of about 12 minutes and five seats, so a cheaper dev spawn is not a cheaper story.
+
+QA, consumer side: the template pins `qa` to sonnet/medium, and graph's `.claude/settings.json` overrode it to haiku in the 0.789.0 reconcile (`b3f2fe199`, graph-local). The operator ruled QA back to sonnet/medium. That is graph's setting and is owed in graph, not here. The same reconcile also moved graph's `code-reviewer` from opus to sonnet against the template's opus.
+
+Owed: the template change, `render-agent-definitions.sh` output in the fixtures that pin these tiers re-checked (`core/fixtures/dispatch-model-guard/seed.sh:57-58` seeds its own values), and an `Outcome measured:` line on the next graph sprint, using the table's two columns.
+
+Tree check for the template half (exit 0 when fixed; measured 1 on `origin/main` `cb1486eac` and 0 on a copy with both roles changed): `python3 -c 'import json,sys;r=json.load(open("templates/settings.json.template"))["aiDlcRoles"];sys.exit(0 if (r["dev"]["model"],r["dev"]["effort"],r["dev-escalated"]["model"],r["dev-escalated"]["effort"])==("sonnet","medium","sonnet","high") else 1)'`. It is not the `verify:` line because `validate-backlog-receipts.sh`'s seed grammar cannot spell a python predicate (R2 reads it UNSCORABLE), and the entry closes on the outcome line anyway.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-839 — a story held on a lead precondition falls out of the lead's worklist, and nothing re-surfaces it
+
+**DEFECT. BLOCKER-grade in s320.** The s320 wave plan (`_bmad-output/planning-artifacts/s320/wave-plan.md`, written 06:25Z) holds 2.1 and then 2.2 "for the amendment": the lead commits 2.1's `## Tolerance (pre-stated)` through a PM re-dispatch before the ops dispatch (story 2.1 AC2, line 115). Sixteen hours later the amendment had not happened: 0 spawn-ledger rows since 02:00 name 2.1 or 2.2 (control: 1.3 has 5), 0 `pm` spawns since 02:00 (control: 42 earlier in the sprint), the story file's last commit is 01:50, and `pipeline-snapshot.md` carries neither story in its worklist. The lead session compacted 38 times over that span. 2.2 waits on 2.1's `## Outcome`, so the chain still has to run in series after every other story is done.
+
+The wave plan is a document the lead wrote once. Nothing reads it back, and no snapshot field carries a held story's unblock action, so after a compaction the hold is invisible.
+
+Owed: every held story and its unblock action carried as a snapshot field that the post-compact digest renders, and a check at the implementation step's exit (and at each wave join) that every `ready-for-dev` story is dispatched or names its hold. Probe it with a seeded story held on an amendment that never lands.
+
+verify: manual
+
+## BL-840 — a story can set a dated read window that becomes the sprint's earliest close, with no deferral path stated
+
+**DEFECT.** s320 story 1.3 AC4 scores the s319 monitor "operator press by T+7", ceiling 2026-10-29T21:36:22Z. Its dependencies line requires that AC4 "runs in the final 12 hours before its ceiling" (from epoch 1793266582, 05:36 EDT on 10-29). So the sprint cannot close before then, two days after every other story could have, and nothing in readiness, stories adversarial or the wave plan surfaced that. The closing writer's `deferred_acs` path (`implementation.md:167`) already exists, and s320 used it for 1.2 AC4, 3.3 AC4/AC5 and 3.4 AC7/AC8, but the story does not name it for AC4.
+
+Owed: the stories step (or readiness) refuses an AC whose earliest permitted run time falls after the sprint's planned close unless the AC states its deferral (`deferred_acs` and the carry-over item). The wave plan states the sprint's earliest close derived from those windows.
+
+verify: manual
+
+## BL-841 — while an AskUserQuestion is pending, the lead advances no lane
+
+**DEFECT (efficiency).** Today's nine AskUserQuestion waits add up to 242 minutes (`tool_use` to `tool_result`, lead transcripts). The lead is single-threaded on the question, so every lane whose next step is ready waits behind it. Clearest case: the question at 02:57 waited 95 minutes; story 1.1's gate-2 PASS committed at 03:11, and the next spawn-ledger row is at 04:35 (0 rows between 03:11 and 04:34). The spawn ledger's long gaps on 10-27 (101, 56, 44 and 69 minutes) line up with the 02:57, 05:22, 06:22 and 07:06 questions. Of the nine, two were mechanical Check 22 questions (BL-842), and one (4.1 AC13, unmeetable as written) genuinely gated its story.
+
+Owed: before a blocking question, the lead dispatches every ready action on lanes the question does not touch and arms their joins; the question names the lanes it holds. Measure it as lane idle minutes during operator waits on the next graph sprint. Handoff gaps stay excluded by ruling; an operator wait inside a session is not a handoff gap.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-842 — Check 22 routes a spawn-ledger binding question to the operator
+
+**DEFECT.** Twice on 10-27 (02:57, waiting 95 minutes, and 09:38) Check 22 failed on one old spawn-ledger row: the test-strategy pass-3 cross reviewer, then the pass-2 QA cross reviewer. Each question asked whether that row carried its role binding and brief. That is a mechanical fact about the ledger with a closed set of remediations (BL-512's Check 22 arm 4 shapes), not an operator decision. BL-512 removed discarded passes for this check; it did not remove the operator from the loop.
+
+Owed: a Check 22 failure on a ledger row resolves through its named remediation (a sharded re-dispatch or a cited Rule 28 exception) without an AskUserQuestion; `steps/` text routing a Check 22 failure to the operator is removed. A guard or fixture arm that counts operator questions citing Check 22 in a seeded run.
+
+verify: manual
+
+## BL-843 — capture heads and counts are retyped into the Dev Agent Record, so every re-capture re-stales the record
+
+**DEFECT (efficiency).** s320 4.2 gate-2 p2 failed because Dev Agent Record lines 171 and 185 named capture heads (`bb38de110`, `8dc444e17`) that the captures' own headers contradict (`59a3d3c5e (+dirty)`, `2cb736e8`/`760cb0d4`). Rework 3 re-captured, which moved the head to `9bba0b54`, and p3 failed on line 171 again plus line 189. Reworks 3 and 4 state "No code or test file changed". 4.1's QA p1-p3 failed on the same class ("record-only", commit titles 09:19, 09:37, 10:00). Four 4.2 passes plus three 4.1 passes, each about 12 minutes and five QA seats, were spent on metadata the capture files already carry.
+
+BL-510 made a divergent `head:` a WARN in `validate-handoff-evidence.sh`, and BL-809 item 3 left "the wrong-commit capture" as a WARN. The finding still costs a full pass because a model retypes the value. That is the "render safety-critical output; do not let a model retype it" rule from `mechanism-design.md`.
+
+Owed: the Dev Agent Record cites captures by path only, and the heads and counts are rendered from the capture headers into a generated block with a `--check` at the pre-gate handoff. QA's checklist stops comparing prose to headers.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-844 — a record-only gate-2 rework re-runs the full QA fan-out, and a gate-3 rework re-runs gates 1 and 2
+
+**DEFECT (efficiency).** BL-809 item 1 routes a record-only gate-1 re-review to the validator and one serial reviewer. Gate 2 has no such route. In s320 4.2, QA p2, p3, p5 and p6 each failed only on record or capture-metadata findings, and each re-dispatch was five QA seats (four parts and a cross; lead transcript 12:06, 13:31, 14:50, 15:05), followed by a gate-3 pass. 4.2 ran 14 gate passes and about 50 seats.
+
+Owed: a gate-2 NEEDS_REWORK whose every Critical and Important finding is `Class: EVIDENCE|BOOKKEEPING` re-checks through `validate-handoff-evidence.sh` and one serial QA seat over the open findings, the way BL-809 item 1 does at gate 1. Measure it as gate-2 passes per story, the BL-838 column.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-845 — Check 11's smoke coverage, a mechanical arm, runs first at gate 3, after gate 2 has passed
+
+**DEFECT (efficiency).** s320 4.2 passed gate 2 at p4 (13:58), then gate 3 failed Check 11 (14:04): the `hodl_wallet` typed-confirm step had no browser smoke test. Four gate-2 passes had not raised it. The fix (rework 5) then sent 4.2 back through gate-1 p4 and p5 and gate-2 p5 to p7, about 1h45m of serial wall clock (14:04 to 15:51). Check 11 reads the story file and the diff, both fixed at the gate-2 go-signal.
+
+Owed: the gate-3 script arms that read only the frozen diff and story file (Check 11 at least) run at the gate-2 go-signal and refuse there. Probe with a story whose Check 11 fails at a gate-2 PASS sha.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-846 — QA reports one instance of a defect class per pass, so a class with two instances costs two passes
+
+**DEFECT (efficiency).** s320 4.2 QA p5 failed because one Playwright replay could not be reproduced from its capture (no `webServer`, no start command). p6 then failed on the same class in a second capture (`playwright-sweep-hodl-story-4-2-green.txt` line 1 names port 5173 with no start command). The same happened with 4.2's head stamps across p2 and p3. QA ran on haiku in s320 (BL-838).
+
+Owed: QA's checklist requires that a finding sweep its class across the story's whole evidence set and list every instance, and the rework brief carries that list. A fixture arm seeding two instances of one class and asserting both are reported.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+verify: manual
+
+## BL-847 — the stories step never reads the QA checklist that gate 2 applies, so a spec can contradict its own gate
+
+**DEFECT.** s320 4.2 as dispatched had a `## Smoke Test Updates` section reading "None", derived by grepping `scripts/test-aws-smoke.sh` for HODL (0 hits). Gate-2 p1 failed C2 ("Smoke-test-update HARD GATE unmet: the browser HODL spec is not updated") and gate 3 failed Check 11 on the same surface. It also failed C1, "Visual consistency: any CSS/layout change verified via computed style". That rule lives in graph's `extensions/roles/qa-domain.md:167` and `overrides/team-roles__qa__bug-class-sweep.md:249`, and the dispatched story mentioned computed style 0 times. `stories-test-strategy.md:261` names `## Smoke Test Updates` as read by Check 11's smoke clause but does not define which surface counts as smoke, and the stories step loads no QA domain extension.
+
+Owed: the stories step reads the QA checklist that gate 2 will apply, consumer extensions included, and every HARD GATE item that the story's diff class triggers appears in the story's ACs or test strategy. The smoke surface is one definition shared by `stories-test-strategy.md`, QA and Check 11.
+
+verify: manual
+
 ## Reopened by BL-817's re-audit (batch 243)
 
 Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
