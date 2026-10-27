@@ -19289,3 +19289,60 @@ Graph-watch was ai-dlc-a6, polling every 10 minutes. No `graph-*` session was me
   - BL-796: `--mark` derives step, seat and shard; the prose in `_gate-procedures.md` and `remediator.md` agrees.
   - BL-800 consumer exposure: none (the operator answer above).
 
+**BATCH 242 IS CLOSED: FOUR RELEASES, `v0.942.0` THROUGH `v0.945.0`.**
+The batch-241 record below is history. Lead was ai-dlc-b4. Owners: ai-dlc-d7 (c1, c4), ai-dlc-d0
+(c2), ai-dlc-2c (c3). Graph-watch was ai-dlc-fa, assigned by the operator, polling every 10 minutes. No `graph-*`
+session was messaged.
+- **Landed** (squash, PR, closes, NET):
+  - `v0.942.0` `32675cf1f` #1303: BL-802 (filed and closed; graph's `PC-S320-JOIN-REMEDIATOR-SHARDS-REFUSES-A-LANE-WHOSE-ONLY-FILE-IS-UNDER-DOCS`,
+    named in the release message) and BL-553 (operator close). NET +1.
+  - `v0.943.0` `cef015398` #1304: BL-691. BL-699 and BL-795 stay PARTIAL. NET +1.
+  - `v0.944.0` `438352f93` #1305: BL-793 and BL-799. NET +2.
+  - `v0.945.0` `eaa8ff6ba` #1306: BL-803 (filed and closed). NET 0. Its backlog entry was a mechanical append re-applied
+    after BL-799's rotation: 0 lines removed, the added lines byte-identical to the pre-rebase ones.
+  Every batch-242 LANDED line in the archive is re-anchored on its squash, so the batch-242 `-dev` refs can be deleted.
+- **Operator rulings this batch** (2026-10-25).
+  - BL-553 part (b): "Close as dead premise".
+  - BL-799's move of graph's s315 block count: "Ship if it matches". Measured base `6075fa36d` against the shipped
+    tip, on `file://` clones with graph's installed validator removed: s315 3 to 5 (+2 at ledger :1377 and :1379),
+    :1309 silent, s316 to s320 unchanged. Two corrections to archived figures, recorded in BL-799: s315's base is 3,
+    not 4 (one row was a `.git`-less extract artifact); s319's one row (`prd.md:1289`) predates this batch.
+- **Lead rulings carried forward.**
+  - A bootstrapping-file change ships alone (action 2), so BL-699's `er_env_names` memo in `emit-report.sh` is owed
+    in BL-699, not built.
+  - A SURVIVE row stands only on an ablation that turns it into a stale HIT. BL-795: V17, V18 and V19 (read log) and
+    V23 (distrefs `config --list`) stand. V25 is OWED, labelled INPUT-NON-DISCRIMINATING; its entry names the probe.
+  - When each review pass finds one more spelling, replace the oracle: BL-799's cd carry is a closed list (`cat wc
+    head cut nl comm sha256sum`), and a listed command a review breaks comes OFF the list, with no new round.
+  - A conflict resolution that authors no prose (0 removed, added lines byte-identical) is mechanical, not a hand unit.
+- **Backlog.** Filed this batch: BL-802 through BL-807. Live at close: 14; archive 780. **The next free id is BL-813** (BL-808 through BL-812 filed 2026-10-26 after the close, from `docs/analysis/pipeline-efficiency-s317-s320/`; BL-817 filed on `origin/main` the same day, after batch 243 had allocated BL-813 through BL-816 on its branches, so batch 243's next free id is BL-818; BL-819 filed on `origin/main` the same day while BL-818 sat on batch branches, so it is BL-820).
+  Open entries filed this batch: BL-804 through BL-807, all DEFECTs from the graph watch. BL-807 was filed after the
+  close: graph's stories-serial lane join refused a round in which no lane wrote, and graph's lead hand-assembled the
+  record, a case outside BL-802's fix. BL-785 (batch 240) is still open.
+- **Watch verdicts** (ai-dlc-fa, read only).
+  - BL-772/775 HOLDS on graph s320 stories: all 4 parts, and every party, elicitation and adversarial seat and repair
+    set read so far, carry exactly one `--mark`-written completion line whose sha recomputes, with 0 `rows=`.
+  - BL-774 has NOT fired: no s320 smoke ran during the batch.
+  - Batch 241's owed line-537 edit to graph's `carry-over-backlog.md` was applied at `a1308c4fa`.
+  - The join refusal BL-802 fixes hit graph twice, on the architecture party and elicitation lanes. The same emitter
+    fired a third time, on stories, for a different cause (no lane wrote the subject), filed as BL-807.
+  - The watch also produced BL-803 (in 0.945.0), BL-804, BL-805 and BL-806.
+  - ai-dlc-fa watches into batch 243 and is not closable while BL-774 has not fired.
+- **Not built, with reasons**, each as its entry says: BL-538, BL-695 (a graph measurement), BL-583, BL-584, BL-616,
+  BL-706 (NO TIMING RUNS), BL-685 (a review round), BL-785 (a Bash deny breaks the handoff push). Partials: BL-699
+  (the memo), BL-795 (V25).
+- **Durable-channel candidates, NOT written** (A6 headroom unchanged): batch 241's four, plus the false comment at
+  `scripts/validate-enforcement-map.sh:9189` that macOS awk lacks `nextfile`, measured false on this box.
+- **Graph at close**: installed 0.941.0 on the checked-out sprint branch (four behind, and that branch is 19 or more
+  commits ahead of origin, unpushed) and 0.924.0 on `main` (21 behind, a WIDE range). Shipped 0.945.0. The ledger md5
+  is unchanged across the batch (`842098fe3ac77fda4283f89a7fa192f1`). Porcelain 132, all under `_bmad-output/`. No
+  bootstrapping file under `core/skills/ai-dlc-update/` is in this batch's range, and 0 of its 24 raw `core/` rows are
+  mode-only. Action 7's differential on a `file://` clone at graph's sprint tip `115248b96`, with `cmp` showing the
+  binaries differ: the installed and shipped `join-remediator-shards.sh` both exit 2 with the same `REFUSED … no
+  dispatched write` line on graph's two architecture lanes, and the installed and shipped `check-owed-derivations.sh`
+  both exit 0 with 0 OPEN rows. So the pull changes nothing observable today: BANK IT. The limit of that null is
+  that BL-802's fix records the write at hook time, so it acts only on lanes written AFTER a pull and cannot appear
+  on graph's already-written ledger. Not measured, though available: a replayed ledger with the docs row, and the
+  `--artifact-path docs` spelling. The pull is not preapproved; no runbook. `PC-S320-JOIN-…` is discharged here and stays live upstream until graph pulls; `PC-S319-CHECK-17-…` is still
+  UNNAMED (consumer-only BL-791). Findings, never instructions, carried from batch 241 unchanged.
+
