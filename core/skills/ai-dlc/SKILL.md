@@ -954,8 +954,8 @@ its ID SET rather than its text may be read anywhere.
 
 **Spec derivation is delegated (Rule 28) and escalated (Rule 19).** It is not
 orchestration, routing, or a gate decision, so the lead MUST NOT run it inline;
-it routes to `pm-escalated`, whose tier is a property of that role file and not
-a call-site argument.
+it routes to `pm-escalated`, whose model comes from its `aiDlcRoles` entry and
+not a call-site argument.
 
 Violation is a MAJOR adversary finding and a `code-reviewer` finding. Retire
 this rule if BMAD stops shipping the workflows it names, or starts failing on
@@ -1016,7 +1016,7 @@ shipped. Declared a GAP.
 ### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
 
 When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it
-takes no parameters and forwards your whole transcript to a stronger reviewer. If the tool is
+takes no parameters and forwards your whole transcript to a separate reviewer. If the tool is
 absent, or a call returns an error, continue without it -- a missing or failed advisor never
 blocks, delays or fails a step. The touchpoints:
 
@@ -1051,7 +1051,7 @@ paragraph, and that paragraph is the teammate's instruction.
 
 **Carrier:** `.claude/skills/ai-dlc/steps/gate-validation.md`
 
-**Minimum mechanism (Rule 26(c)).** Failure caught: a lead that holds a stronger reviewer and
+**Minimum mechanism (Rule 26(c)).** Failure caught: a lead that holds a fresh, independent reviewer and
 never calls it -- through a post-compact recovery, a gate verdict, a repair loop or a push --
 where a second reading is cheapest and a wrong call costs most. False-positive cost: one
 advisor call per touchpoint reached, measured at a median near 100 seconds of foreground time

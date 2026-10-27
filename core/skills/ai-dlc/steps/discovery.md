@@ -201,10 +201,10 @@ defect authored here is ratified downstream, not caught. The EARS restatement is
 the specific judgment at stake: converting a stated mechanism into the behavior
 it was meant to produce requires knowing what the mechanism was supposed to
 cause, and getting it wrong yields a requirement that passes every gate while
-the code does nothing. Cost is one dispatch per sprint. Per Rule 19 the tier is
-a property of the role file, so this is a route to `pm-escalated`, never a
-call-site model override — the dispatch guard rebinds an override back to the
-role file's value.
+the code does nothing. Cost is one dispatch per sprint. Per Rule 19 the model
+comes from the role's `aiDlcRoles` entry, so this is a route to `pm-escalated`,
+never a call-site model override — the dispatch guard rebinds an override back
+to the configured value.
 
 **Dispatched, not inline.** Rule 28: spec production is not orchestration,
 routing, or a gate decision, so the lead MUST NOT run it in its own

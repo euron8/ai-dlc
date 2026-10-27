@@ -1,8 +1,8 @@
 # Fixture: gate-adjudication
 
 Adversarial self-test for **Check 26** and `scripts/ai-dlc/validate-gate-adjudication.sh` — the
-fail-closed reader through which a cheaper-model lead adopts the escalated `adjudication: llm`
-gate checks from a fresh Opus `gate-adjudicator`.
+fail-closed reader through which the lead adopts the escalated `adjudication: llm`
+gate checks from a fresh, independent `gate-adjudicator`.
 
 ## The bypass scenario
 

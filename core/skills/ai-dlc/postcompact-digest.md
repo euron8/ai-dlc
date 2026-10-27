@@ -296,7 +296,7 @@ from a guess.
 
 ### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
 When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it
-takes no parameters and forwards your whole transcript to a stronger reviewer. If the tool is
+takes no parameters and forwards your whole transcript to a separate reviewer. If the tool is
 absent, or a call returns an error, continue without it -- a missing or failed advisor never
 blocks, delays or fails a step. The touchpoints:
 - **R -- post-compact recovery.** After the `postcompact-digest.md` Read, and after arming any

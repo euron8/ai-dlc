@@ -1202,6 +1202,151 @@ else
     bad "a failing/empty resolver was not refused (non-zero: rc=$rc_f named=$f_named; empty: rc=$rc_e named=$e_named) — it was scored as ownership"
   fi
 fi
+
+# ================= Class 1d: ROLE_MODEL_NAMING (distribution layout) =================
+# The arm runs only in the distribution layout, so it gets its own DISTRIBUTION tree:
+# the consumer corpus above can only ever show its N/A line. Every assertion is
+# PRESENCE-shaped (a named verdict line must APPEAR), so a subject that emits nothing
+# fails them, and two committed mutants prove the arm and its self-probe each fire.
+DW="$WORK/dist"
+dfresh() {
+  rm -rf "$DW"
+  mkdir -p "$DW/core/skills/ai-dlc/steps" "$DW/core/team-roles" \
+           "$DW/core/skills/ai-dlc-update" "$DW/core/skills/ai-dlc-setup"
+  printf '# Skill\n\nThe lead MUST run the gate.\n' > "$DW/core/skills/ai-dlc/SKILL.md"
+  printf '# Core manifest\n\ncore_manifest:\n  - SKILL.md\n  - steps/*.md\n' \
+    > "$DW/core/skills/ai-dlc/core-manifest.md"
+  printf 'The step runs on a fresh, independent context.\n' > "$DW/core/skills/ai-dlc/steps/example.md"
+  printf '# Role: Developer\n\nYou implement the story.\n' > "$DW/core/team-roles/dev.md"
+  printf '# Update\n\nSetup-token defaults are resolved from `aiDlcRoles`.\n' \
+    > "$DW/core/skills/ai-dlc-update/SKILL.md"
+  printf '# Setup\n\nThe `model` enum is opus, sonnet or haiku.\n' > "$DW/core/skills/ai-dlc-setup/SKILL.md"
+}
+daudit() { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic 2>&1 ); }
+drc()    { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic >/dev/null 2>&1; echo $? ); }
+
+# --- Assertion 33: clean distribution tree -> CLEAN, out-of-population setup skill quiet
+dfresh
+out="$(daudit)"
+if has 'layout: distribution' "$out" && has 'ROLE_MODEL_NAMING: CLEAN' "$out" && [ "$(drc)" = "0" ]; then
+  ok "distribution tree with model names only in ai-dlc-setup -> ROLE_MODEL_NAMING CLEAN, exit 0"
+else
+  bad "the clean distribution tree did not score ROLE_MODEL_NAMING CLEAN at exit 0 — Class 1d's arms below are unreadable"
+fi
+
+# --- Assertion 34: "the Opus tier" in a role file FIRES and gates
+dfresh
+echo 'You are dispatched on the Opus tier.' >> "$DW/core/team-roles/dev.md"
+out="$(daudit)"
+if has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" && has 'ROLE_MODEL_NAMING: FLAGGED' "$out" \
+   && [ "$(drc)" = "1" ]; then
+  ok "seeded 'the Opus tier' in a role file -> ROLE_MODEL_NAMING FLAGGED, --fail-on=deterministic exit 1"
+else
+  bad "a model named in a role file went undetected — Class 1d cannot fire"
+fi
+
+# --- Assertion 35: the gate-adjudicator <- adversary coupling, in a second spelling, FIRES
+dfresh
+echo 'Defaults: the `adversary`'"'"'s model is taken for `gate-adjudicator`.' \
+  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+out="$(daudit)"
+has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "the adversary-model -> gate-adjudicator coupling, reversed word order -> FLAGGED" \
+  || bad "the stale coupling went undetected when spelled adversary-first"
+
+# --- Assertion 35b: three regressions the earlier grammar scored 0 each FIRE, one per file
+# R1 ranks with no tier word, R2 is the coupling model-before-adversary, R3 is the stale
+# claim that a role FILE pins the model. Each sits in a different population file, so each
+# line number below can only come from its own seed.
+dfresh
+echo 'You run on a more capable model than `dev`.' >> "$DW/core/team-roles/dev.md"
+echo '`gate-adjudicator` defaults to the model `adversary` uses.' \
+  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+echo 'the dispatch guard binds `dev`'"'"'s model to `dev.md`'"'"'s pin' \
+  >> "$DW/core/skills/ai-dlc/steps/example.md"
+out="$(daudit)"
+has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "R1 'a more capable model than dev' in a role file -> FLAGGED" \
+  || bad "R1, a model ranking with no tier word, went undetected"
+has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "R2 'gate-adjudicator defaults to the model adversary uses' -> FLAGGED" \
+  || bad "R2, the coupling spelled model-before-adversary, went undetected"
+has 'core/skills/ai-dlc/steps/example.md:2  ROLE_MODEL_NAMING' "$out" \
+  && ok "R3 'binds dev's model to dev.md's pin' in a step file -> FLAGGED" \
+  || bad "R3, the stale role-file-pins-the-model claim, went undetected"
+
+# --- Assertion 35c: the rewordings the tier narrowing must NOT acquit FIRE, one per file
+# E1/E2 are the natural rewordings of code-reviewer-escalated.md:62 and :66 at fc71a7b10,
+# the sites the arm was built on; E3 is a bare "of the escalation" suffix; T1 names a
+# tier-1 class but is not the "tier-<n> finding stays at this tier" shape. Only "of the
+# escalation ladder" and that one shape are exempt, so all four must fire.
+dfresh
+echo 'The lead binds your tier of the escalation by routing the review to you.' >> "$DW/core/team-roles/dev.md"
+echo 'the lead chose this tier of the escalation by routing the review here.' \
+  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+echo 'you are already on this tier of the escalation path.' >> "$DW/core/skills/ai-dlc/steps/example.md"
+echo 'A tier-1 finding is routed here because the lead chose this tier for the review.' \
+  >> "$DW/core/skills/ai-dlc/SKILL.md"
+out="$(daudit)"
+has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "E1 'binds your tier of the escalation' -> FLAGGED" \
+  || bad "E1, the reworded :62 site, was acquitted by a bare 'of the escalation' exemption"
+has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "E2 'chose this tier of the escalation' -> FLAGGED" \
+  || bad "E2, the reworded :66 site, was acquitted by a bare 'of the escalation' exemption"
+has 'core/skills/ai-dlc/steps/example.md:2  ROLE_MODEL_NAMING' "$out" \
+  && ok "E3 'this tier of the escalation path' -> FLAGGED" \
+  || bad "E3, a bare 'of the escalation' suffix, was acquitted"
+has 'core/skills/ai-dlc/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+  && ok "T1 'a tier-1 finding ... the lead chose this tier' -> FLAGGED" \
+  || bad "T1 was acquitted by a whole-line tier-<n> guard"
+
+# --- Assertion 36: near-misses INSIDE the population stay quiet
+dfresh
+printf 'Record `model_family=OPUS` in the row.\nThe three-tier escalation stays.\n' \
+  >> "$DW/core/skills/ai-dlc/steps/example.md"
+printf 'A tier-1 finding stays at this tier until the retro dispositions it.\n' \
+  >> "$DW/core/skills/ai-dlc/steps/example.md"
+printf 'When the story leaves your tier of the escalation ladder, message the lead.\n' \
+  >> "$DW/core/team-roles/dev.md"
+out="$(daudit)"
+has 'ROLE_MODEL_NAMING: CLEAN' "$out" \
+  && ok "model_family=OPUS, 'three-tier escalation', 'tier-1 ... this tier', 'your tier of the escalation' -> CLEAN" \
+  || bad "a mechanism enum, the escalation ladder or a finding tier was flagged as a role-model claim"
+
+# --- Assertion 37: consumer layout -> N/A, never a scan of the consumer's own files
+fresh
+echo 'You are dispatched on the Opus tier.' >> "$WORK/t/.claude/team-roles/dev.md"
+out="$(audit)"
+has 'ROLE_MODEL_NAMING: N/A' "$out" \
+  && ok "consumer layout -> ROLE_MODEL_NAMING N/A (the arm runs in the distribution only)" \
+  || bad "Class 1d ran in a consumer layout, over text the consumer cannot edit"
+
+# --- Assertion 38: MUTANTS, each a copy of the audit beside its real resolver ---------
+# M1 empties the corpus emit: the seeded role-file hit must then score CLEAN, which
+# proves Assertion 34's FLAGGED came from this arm. M2 blinds the regex: the self-probe
+# must then refuse with exit 2 BEFORE any corpus verdict, which proves the probe fires.
+DM="$WORK/dmut"; mkdir -p "$DM"
+cp "$(dirname "$AUDIT")/core-paths.sh" "$DM/core-paths.sh"
+sed 's/emit("ROLE_MODEL_NAMING", model_hits(_pop), 1/emit("ROLE_MODEL_NAMING", [], 1/' "$AUDIT" > "$DM/m1.sh"
+sed 's/m = MODEL_RX.search(raw)/m = None/' "$AUDIT" > "$DM/m2.sh"
+if cmp -s "$AUDIT" "$DM/m1.sh" || cmp -s "$AUDIT" "$DM/m2.sh"; then
+  bad "a Class 1d mutation DID NOT APPLY — its anchor is gone, so the mutant proves nothing"
+else
+  dfresh
+  echo 'You are dispatched on the Opus tier.' >> "$DW/core/team-roles/dev.md"
+  out1="$(daudit "$DM/m1.sh")"; rc2="$(drc "$DM/m2.sh")"; err2="$(daudit "$DM/m2.sh")"
+  if has 'ROLE_MODEL_NAMING: CLEAN' "$out1" && [ "$(drc)" = "1" ]; then
+    ok "MUTANT m1 (arm emits nothing) -> the seeded hit scores CLEAN; unmutated exits 1 on the same tree"
+  else
+    bad "MUTANT m1 survived or its control is dead — Assertion 34 is not proven by Class 1d"
+  fi
+  if [ "$rc2" = "2" ] && has 'ROLE_MODEL_NAMING self-probe' "$err2"; then
+    ok "MUTANT m2 (regex blinded) -> the self-probe refuses with exit 2 before the corpus"
+  else
+    bad "MUTANT m2 survived (rc=$rc2) — the self-probe cannot fire"
+  fi
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi
 echo "retro-audit-scans: $fails assertion(s) FAILED" >&2

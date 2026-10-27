@@ -1775,7 +1775,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    slice**; that is what advances the stamp's `skill_version`/`skill_commit` beside
    `version`/`commit` (see the re-stamp bullet at the end of this step).
    - `RESOLVED …` — already done, no operator step: pure applies (core overwritten from theirs),
-     setup-token defaults (e.g. `gate-adjudicator` ← `adversary`'s model), **known-drift refiles**
+     new-role arrivals (a new role file states no model or effort, so there is nothing to fill: its model and effort come from its `aiDlcRoles` entry), **known-drift refiles**
      (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
      "migrate the drift" chore, automated), catalog relabels, **setup-sited merges**
      (`setup-site-merge`: a setup-sited file whose only consumer delta is its declared setup
@@ -2157,9 +2157,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      leftover-token gate below then blocks delivery after every other write has
      landed. Substitute BEFORE the write: for each site `setup-sites.md` declares on
      that path, **ask the operator one closed question**, proposing the value the
-     consumer already uses for its nearest-equivalent role as the default (for a new
-     team-role's `/model`, that is the role with the same effort tier — `adversary`
-     for a high-effort reviewer). Then write theirs with the answers substituted in.
+     consumer already uses for its nearest-equivalent role as the default (a new
+     team-role's model and effort are not such a site: they come from its
+     `aiDlcRoles` entry, never from the role file). Then write theirs with the answers substituted in.
      Every role file predates the consumer's install, so `ai-dlc-setup` filled these
      tokens once and the pull never had to. This bucket exists for the case that
      breaks: a template-bearing core file that postdates the consumer's install, of
@@ -2331,7 +2331,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    while `setup-sites.md` went untouched for nine minor versions, so the manifest
    did not declare that role's model sites at all. The first
    consumer pull to touch that file would have overwritten a live
-   a live opus model string with that role's unfilled placeholder and broken
+   a live model string with that role's unfilled placeholder and broken
    every adversary dispatch — with nothing in the run to catch it. A manifest is a
    hand-maintained list and WILL go stale again; this gate is what makes the next
    staleness loud instead of silent.
@@ -2591,8 +2591,8 @@ For each file listed in `setup-sites.md`, before overwriting with `theirs`:
 
 **Setup site inside an overridden section.** A setup site can sit inside a
 section that ALSO has a consumer `overrides/` entry shadowing it (e.g. a
-`#Identity` override on a team-role file whose model `/model` lines are
-declared sites within that same section). These are two independent layers and
+`#Identity` override on a team-role file whose own lines are declared sites
+within that same section). These are two independent layers and
 must not be conflated: **core** is still restored to `theirs` verbatim and the
 setup value reinjected into its span (per above) — core stays byte-reconcilable;
 the **override** shadows the section at load time per Rule 27 (`overrides >

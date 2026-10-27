@@ -88,13 +88,13 @@ every gate the lead dispatches `gate-adjudicator` shards under ONE nonce, sliced
 `validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and joined by `--merge`
 (Rule 28, "Split dispatch": worklist-items axis; N may be 1). Each is bound per Rule 19 to
 `.claude/team-roles/gate-adjudicator.md`, and together they evaluate every `adjudication: llm` check for
-the gate type in a fresh Opus context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
+the gate type in a fresh, independent context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
 own schema, `.claude/schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
 sub-skills: no Skill runs, and it emits no `SKILL_INVOCATION_PROVENANCE` block — it is off the
 Check 17 path. The lead adopts its per-check verdicts ONLY through fail-closed Check 26 and
 never evaluates an `llm` check inline; roleplaying those judgments in the lead's own context
-is exactly the solo failure this rule forbids, and escalating them to a fresh Opus context is
-what lets a cheaper-model lead run the gate without weakening it. Procedure:
+is exactly the solo failure this rule forbids, and escalating them to a fresh, independent
+context is what keeps the gate's judgment out of the context whose work it judges. Procedure:
 `_gate-procedures.md`, "Gate-adjudication dispatch".
 
 **Provenance block.** Every invocation MUST emit a

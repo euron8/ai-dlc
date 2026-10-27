@@ -98,8 +98,8 @@ carries the same instruction; this section is its standing copy.
   commit each phase atomically — in particular, a symbol-removal commit BEFORE
   the commit that updates its callers — so a mid-flight interruption leaves an
   inspectable `git diff` rather than a half-applied orphan.
-- The lead may assign a local model for stories that meet ALL of the following
-  criteria:
+- The lead may route to `dev` stories that meet ALL of the following criteria
+  when `aiDlcRoles.dev` names a local model:
   - The story has a precise implementation checklist with specific functions,
     file paths, input/output contracts, and test cases defined in the ACs.
   - No architectural judgment or cross-file reasoning beyond the files listed
@@ -111,7 +111,8 @@ carries the same instruction; this section is its standing copy.
   Local model assignments are a cost optimization for high-volume, fully
   prescribed work. If you are running on a local model and encounter a task
   that exceeds these boundaries, message the lead (`SendMessage` `to: "main"`) immediately. The lead will
-  reassign to the standard model rather than having you struggle through it.
+  re-route the story to a role whose configured model can carry it rather than
+  having you struggle through it.
 - Post-approval cleanup commits (applying review suggestions, completing
   follow-up fixes found during visual review) must reference the originating
   story or review in the commit message body.
@@ -369,7 +370,7 @@ no command-prefix allow rule and can stop an unattended sprint until a human app
 
 **Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
 call it before your first edit or write, and again before you write your deliverable or verdict.
-It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+It takes no parameters and forwards your whole transcript to a separate reviewer; weigh what it
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 

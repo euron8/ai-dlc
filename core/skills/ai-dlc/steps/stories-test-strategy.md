@@ -25,9 +25,9 @@ in the source artifacts. The lead owns the routing, not the edit.
 A story's frontmatter MAY carry a **routing tag** that changes WHICH role
 the lead binds when it dispatches the story, overriding the default `dev`.
 This is the sanctioned way to give a story a different contract or a
-different model tier: model is a property of the role file, not of the
-dispatch call site (SKILL.md Rule 19; the dispatch guard binds the model
-from the role file and rebinds any call-site override back to it), so
+different model: the model comes from the role's `aiDlcRoles` entry, not
+from the dispatch call site (SKILL.md Rule 19; the dispatch guard binds the
+model from `aiDlcRoles` and rebinds any call-site override back to it), so
 "this story needs a different role/model" is always expressed as "route
 this story to a different role file."
 
@@ -38,7 +38,7 @@ ONE place, to add a route):**
 | Frontmatter flag           | Routed role file                        | Why |
 |----------------------------|-----------------------------------------|-----|
 | `protected_path_editor: true` | `.claude/team-roles/protected-path-editor.md` | Editing the rulebook/governance surface needs the strictest change discipline and lead-reviewed diffs. |
-| `escalate_model: true`     | `.claude/team-roles/dev-escalated.md`   | The standard Dev contract on a stronger model than `dev`, as configured in `aiDlcRoles`, for work that needs architectural judgment, cross-layer analysis, or an open-ended implementation approach, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`. |
+| `escalate_model: true`     | `.claude/team-roles/dev-escalated.md`   | The standard Dev contract on the model and effort configured for `dev-escalated` in `aiDlcRoles`, for work that needs architectural judgment, cross-layer analysis, or an open-ended implementation approach, or whose owned paths are capital-path or high-blast-radius — the same criterion that routes a review to `code-reviewer-escalated`. |
 
 Absent any routing tag, a story is dispatched to `dev` as usual.
 
