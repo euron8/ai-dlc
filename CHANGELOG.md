@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.954.0] - 2026-10-27
+
+Batch b244, lead ai-dlc-45, cluster c3. It closes BL-699, BL-785 and BL-832, and advances BL-812, which stays PARTIAL with `verify: manual`. No `PC-` id is closed. NET: entries closed 3 minus filed 0 = -3. Engine code a consumer runs: none. Rulebook changes: none. Template change: `templates/settings.json.template`. Fixture changes: none. Packaging: none. Backlog: `docs/backlog.md`.
+
+### BL-699 — closed on the operator ruling "Close without (d)"; the `er_env_names` memo shipped earlier
+
+- Item (d), the before/after durations comparison, is dropped under the NO TIMING RUNS ruling, on the entry's own sentence that it "would size the saving, not decide it".
+- What shipped earlier: the `er_env_names` memo in `er_kf_env` (`core/skills/ai-dlc-update/reconcile/emit-report.sh`), fixture arm PC-V95, and mutant M-memo.
+- The entry now carries the outcome line "Outcome measured: no graph pipeline step; the cost lives in core/fixtures/reconcile-emit-report/run.sh".
+- The new `verify: sh` receipt replaces the one quoted in the batch-243 paragraph. It reads only the non-comment lines of `er_kf_env`'s body and does not run the reconcile-emit-report fixture. It binds the `|| return 1` on the hit-path copy and on the compute-path call, the `mktemp`/`cp`/`mv -f` triple through one temp variable, and no other non-comment line naming the memo file.
+
+### BL-785 — closed as unbuildable on the operator ruling
+
+- Operator ruling, 2026-10-27, verbatim: "Close as unbuildable".
+- What shipped: the `REASON="` deny text in `core/hooks/ai-dlc-acknowledge.sh` no longer calls Bash read-only.
+- No Bash enforcement mechanism can be built, because no measured act separates a sanctioned paused push from an advancing one.
+- The entry reopens only if such a separation is found.
+- The receipt keys on the REASON span only. It extracts the `REASON="` block and requires `Bash.*not read-only` inside it. It also requires that the string `Read-only tools (Read, Grep, Glob, Bash)` appears nowhere in the file.
+
+### BL-832 — the adversary role template binding moves from opus/medium to sonnet/high
+
+- `templates/settings.json.template` sets `aiDlcRoles.adversary` to `"model": "sonnet"` and `"effort": "high"`. `omitClaudeMd` stays `true`.
+- Operator note: a pull does NOT carry this to an existing consumer. `core/skills/ai-dlc-update/reconcile/settings-merge.sh:221-228` merges `aiDlcRoles` at the role level, with the consumer's entry winning. Graph keeps opus/medium until the operator changes its own `.claude/settings.json`. This repo never writes that file.
+- The fixtures that seed their own adversary settings, `check-22-spawn-ledger` and `retired-layer-contract`, are unedited.
+
+### BL-812 — item 3's projections are stated; the entry stays PARTIAL
+
+- Status: PARTIAL, `verify: manual`. The entry body carries a "Status (b244 c3)" paragraph and a table of projected per-story figures for the steps 0.948.0 and 0.952.0 changed. See that entry; the table is not restated here.
+- Items 1 and 2 are still owed, since they need the measured graph sprint.
+- Item 3 stays open. The release that ships BL-809 item 2 owes its own projection.
+
+NOTE: BL-699 and BL-785 are scored after close only by `backlog-reverify.sh --closed-receipts`.
+
 ## [0.953.0] - 2026-10-27
 
 Batch b244, cluster c1. It closes BL-833 and the consumer push candidate `PC-S320-HANDOFF-EVIDENCE-RED-TOKEN-MATCHES-HYPHEN-BOUNDED-RED-IN-A-BACKLOG-ID`, and files BL-833. NET: entries closed 1 minus filed 1 = 0, plus 1 candidate closed. BL-833 is filed and closed in this release.
