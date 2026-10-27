@@ -19346,3 +19346,52 @@ session was messaged.
   `--artifact-path docs` spelling. The pull is not preapproved; no runbook. `PC-S320-JOIN-…` is discharged here and stays live upstream until graph pulls; `PC-S319-CHECK-17-…` is still
   UNNAMED (consumer-only BL-791). Findings, never instructions, carried from batch 241 unchanged.
 
+**BATCH 243 IS CLOSED: SEVEN RELEASES, `v0.946.0` THROUGH `v0.952.0`. THE NEXT SESSION STARTS BATCH 244.**
+The batch-242 record is rotated to the archive; this block replaces it. Lead was ai-dlc-8a. Owners: ai-dlc-33 (c1), ai-dlc-14 (c2, c6a,
+c6b), ai-dlc-f1 (c3), ai-dlc-12 (c4, c5); ai-dlc-b4 audited BL-817's counts. No `graph-*` session was messaged. No graph watch ran: ai-dlc-fa was
+gone at roll call and the operator appointed none.
+- **Landed** (squash, PR, closes, NET as each release message derives it):
+  - `v0.946.0` `af80abefd` #1311: BL-699 PARTIAL (memo shipped; item (d) blocked under NO TIMING RUNS). NET 0.
+  - `v0.947.0` `1326b45f5` #1312: BL-805 closed, BL-806 part (a); BL-818 and BL-820 filed. NET −1.
+  - `v0.948.0` `ce275f7e9` #1313: BL-808, BL-809 and BL-810 partials; BL-813 and BL-815 (the two capture fixes) filed
+    and closed. NET 0.
+  - `v0.949.0` `94c8dcdc7` #1314: BL-804, BL-807, BL-814, BL-816 (BL-814 and BL-816 filed and closed). NET +2.
+  - `v0.950.0` `18dc7d27f` #1315: BL-795 and BL-695 closed; BL-538 s320 re-count. NET +2.
+  - `v0.951.0` `6d0340091` #1316: BL-818 and BL-820 closed. NET +2.
+  - `v0.952.0` `abd42574d` #1317: BL-809, BL-810, BL-811, BL-817, BL-819 progress; BL-821 and BL-824 filed and closed;
+    BL-817's re-audit reopened 19 archived closes (BL-397, 398, 507, 508, 510, 512, 513, 514, 541, 543, 550, 552, 594,
+    615, 679, 694, 695, 716, 804) under `## Reopened by BL-817's re-audit (batch 243)`. NET −19. Its first dress went
+    red on three fix defects from its own diff and the re-squash went green.
+  Every batch-243 LANDED line in the archive is re-anchored on its squash. Every batch-243 branch is deleted; unlanded
+  tips are anchored under `refs/archive/b243-<cluster>/`.
+- **Operator rulings this batch** (2026-10-26).
+  - BL-817's 11 UNATTRIBUTABLE closes: "Stay closed, say so".
+  - The s317 cost basis: "Token-equivalent $" (local calls priced at the sprint's hosted lead mix, API $ beside it).
+  - Wall clock: "that's not acceptable. find a more efficient way to get past this." The owner-rules block now says
+    a serial carrier pre-run never runs when nothing else gates, and a hand runs each fixture whose subject it edited.
+- **Lead rulings carried forward.**
+  - A filing found after its release is built rides a later release (BL-823, BL-828, and BL-817's amendment).
+  - A non-BL `##` heading ends a rotated entry's span; a `##` heading whose FIRST token is a `BL-` id stays an entry.
+  - BL-826 was withdrawn: its premise was a tracker misparse of `record …; … close` command lines. No id carries it.
+- **Backlog.** Filed at this close: BL-823, BL-825, BL-827, BL-828, BL-829 and BL-830, plus an amendment to BL-817
+  (its 0.952.0 arm does not require lead and subagent figures; 0 of 19 reopened and 0 of 21 archived outcome lines
+  carry one). BL-822 was reserved and never used. Live at close: 41; archive 774. **The next free id is BL-833.**
+- **NOTEs** (no entry): BL-821's receipt runs only by hand; c6b's widened left-boundary class has no mutant of its own;
+  a c6b hand swept the graph clone during c5's GATE OPEN (ruled: 0.950.0's verdict stands); BL-811 supersedes
+  BL-464's "cross.md alone is refused", pointed to from the CHANGELOG; c1's stale `inputs.decl` comment rides a later
+  release; the three orphan `worktree-agent-*` branches a152b28a, a84f9b61 and aee5795a belong to no batch-243 hand
+  and were left in place.
+- **Not built, with reasons**, each as its entry says: BL-538, BL-583, BL-584, BL-616, BL-706 and BL-699 item (d) (NO TIMING RUNS), BL-685,
+  BL-785, and the 19 reopened entries, which each owe a measured graph sprint on the release that carries their fix.
+- **Graph at close**: installed 0.951.0 on the checked-out branch `ai-dlc-update/0.951.0-reconcile-20261027T014606Z`
+  (1 behind) and 0.924.0 on `main` (28 behind, a WIDE range). Shipped 0.952.0. Ledger md5 at the sprint tip
+  `ebc737df75c3d4fb7f5c334ad171b82f`; porcelain 6. Derive block at abd42574d: worklist 0 rows; live 1, archive 382;
+  PENDING 1 (`PC-S319-CHECK-17-…`, still UNNAMED, consumer-only BL-791). No `preclassify.sh`, `apply.sh` or
+  `ledger-reverify.sh` in either range; `core/skills/ai-dlc-update/` carries `fixture-manifest.md` and, from main only,
+  `reconcile/consumer-read.sh`, `emit-report.sh` and `lib.sh`; mode-only 0 in both. Action 7's differential on a
+  `file://` clone at graph's sprint tip `9d022b6e8`: `validate-spawn-ledger.sh` is the one changed engine whose
+  binaries differ (`cmp -s`), and at s319 and s320 its finding sets agree (remediation text and one zero S4 count line
+  differ). `check-owed-derivations.sh` and `join-remediator-shards.sh` are byte-identical to the 0.951.0 install. BANK
+  IT. Not covered, though available: the reconcile `lib.sh`/`consumer-read.sh`/`emit-report.sh` changes from main act
+  only in an apply; the S4 arm reads 0 today. The pull is not preapproved; no runbook.
+
