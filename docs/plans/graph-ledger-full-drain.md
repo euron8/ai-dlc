@@ -96,7 +96,7 @@ gone at roll call and the operator appointed none.
   - BL-826 was withdrawn: its premise was a tracker misparse of `record …; … close` command lines. No id carries it.
 - **Backlog.** Filed at this close: BL-823, BL-825, BL-827, BL-828, BL-829 and BL-830, plus an amendment to BL-817
   (its 0.952.0 arm does not require lead and subagent figures; 0 of 19 reopened and 0 of 21 archived outcome lines
-  carry one). BL-822 was reserved and never used. Live at close: 41; archive 774. **The next free id is BL-831.**
+  carry one). BL-822 was reserved and never used. Live at close: 41; archive 774. **The next free id is BL-833.**
 - **NOTEs** (no entry): BL-821's receipt runs only by hand; c6b's widened left-boundary class has no mutant of its own;
   a c6b hand swept the graph clone during c5's GATE OPEN (ruled: 0.950.0's verdict stands); BL-811 supersedes
   BL-464's "cross.md alone is refused", pointed to from the CHANGELOG; c1's stale `inputs.decl` comment rides a later
