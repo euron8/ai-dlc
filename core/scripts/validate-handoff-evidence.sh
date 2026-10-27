@@ -83,10 +83,17 @@
 #       WARN: base == frozen (an empty range, so (a) reads nothing) or a base that is not an
 #       ancestor of frozen.
 #   (b) RED-UNTRACKED. A capture cited AS a mutation-RED capture that is not tracked at
-#       <frozen>. A capture is cited as RED when the line citing it carries the word `RED`
-#       or `PROVEN` (upper case, the verdict words), or its basename carries `red`,
-#       `mutation` or `mut` as a `-`/`_`/`.`-delimited word. A gitignored full-suite capture
-#       cited without those words is NOT refused: a full-collection run is not a RED.
+#       <frozen>. A capture is cited as RED when the line citing it carries `RED` or `PROVEN`
+#       (upper case, the verdict words) as a word, not as a segment of an all-caps hyphenated
+#       identifier of three or more segments (`CO-S318-...-RED-AT-...`); `mutation-RED` still
+#       counts; or its basename carries `red`, `mutation` or `mut` as a `-`/`_`/`.`-delimited
+#       word. A gitignored full-suite capture cited without those words is NOT refused: a
+#       full-collection run is not a RED.
+#       MEASURED on the reference consumer, read-only, over its 1145 stories at 036a69cc8 plus
+#       67 s317-s320 stories at the carry-over ref: blanking those identifiers changes the RED
+#       flag on 23 lines, every one an identifier (s320 3.3:77, 3.2:93), and on 0 verdict lines.
+#       Adding `-` to the boundary class instead drops 349 verdict lines (`mutation-RED`,
+#       `RED-before-fix`, ...).
 #   (c) GLOB-CITED. A token carrying `*` or `{`…`}` cited as a capture path — its last
 #       segment ends in a capture extension, or its directory is the directory of a
 #       capture the same story cites — of which some brace alternative matches NO file
@@ -480,7 +487,8 @@ cap_resolve() {
 cap_tokens() {
   LC_ALL=C awk -v capx="$CAPX" -v bare="$1" '
   {
-    line=$0; red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
+    line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)
+    red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
     while (match(line, /[A-Za-z0-9_.\/-]+/)) {
       t=substr(line, RSTART, RLENGTH); line=substr(line, RSTART+RLENGTH)
       sub(/[.]+$/, "", t)

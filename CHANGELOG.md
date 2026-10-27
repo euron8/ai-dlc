@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.953.0] - 2026-10-27
+
+Batch b244, cluster c1. It closes BL-833 and the consumer push candidate `PC-S320-HANDOFF-EVIDENCE-RED-TOKEN-MATCHES-HYPHEN-BOUNDED-RED-IN-A-BACKLOG-ID`, and files BL-833. NET: entries closed 1 minus filed 1 = 0, plus 1 candidate closed. BL-833 is filed and closed in this release.
+
+Bootstrapping: `validate-handoff-evidence.sh` is consumer engine, live from step 3 of the pull that delivers it, because steps 1-2 run the consumer's old engine. The fix ships with its fixture arms and mutants in `story-evidence-scaffold`, so no fixture ships ahead of its subject.
+
+### BL-833 — an all-caps hyphenated identifier containing `RED` no longer marks every capture on its line RED (filed and closed here)
+
+- `cap_tokens` in `core/scripts/validate-handoff-evidence.sh` blanks all-caps hyphenated identifiers of three or more segments in a COPY of the line, then applies the unchanged `RED`/`PROVEN` grammar to the copy. The original line still feeds the capture `match` loop, so a capture such as `S320-3-3-X.txt` is not destroyed. A `RED` that is only a segment of an identifier such as `CO-S318-...-NOT-STALE-RED-AT-BASE-...` no longer makes arm (b) refuse a `../test-results/...` spelling as `red-untracked`. The header contract in arm (b) now states the word-not-segment rule.
+- Not adding `-` to the boundary classes: measured over the reference consumer's 1145 stories plus 67 from the carry-over ref, that change loses 349 genuine verdict lines (`mutation-RED` 142, `Mutation-RED` 61, `RED-before-fix`, `RED-on-revert`, `SCORED-RED`) to fix 23 identifier lines. The blanking differs from the old grammar on those same 23 lines, all identifier class, and on 0 verdict lines.
+- `story-evidence-scaffold` gains the RED LINE arm: six worlds (`rvid`, `rvred`, `rvproven`, `rvmut`, `rvmix`, `rvnone`) whose capture basename carries no `red`, `mut` or `mutation` word, so only the line grammar decides. Mutants `rv-m1-old-grammar` (the pre-fix grammar refuses `rvid`) and `rv-m2-hyphen-bound` (a `-`-bounded grammar stops refusing `rvmut`) each move their own cell only.
+
 ## [0.952.0] - 2026-10-26
 
 Batch b243, lead ai-dlc-8a, cluster c6b. It closes two entries, both filed by this release: BL-821 and BL-824. It advances BL-809, BL-810, BL-811, BL-817 and BL-819, all still PARTIAL with `verify: manual`, and reopens 19 archived efficiency closes into the live ledger. No `PC-` id is closed. NET: entries closed 2 minus filed 21 = -19. The 21 are the 19 reopens plus BL-821 and BL-824; the reopen list is in the BL-817 section. The 19 entries reopened by BL-817 are filings of owed outcomes, not new defects.

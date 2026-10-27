@@ -244,6 +244,22 @@ EOS
              mkdir -p "$w/docs" || return 2
              printf '# Conventions\n\nThe canonical full-collection run is `tox -e all`.\n' > "$w/docs/coding-conventions.md"
            fi ;;
+    # BL-833: which LINE marks a capture RED. Each world is CLEAN plus one line citing `../test-results/x.txt`,
+    # a spelling that climbs above the toplevel (so arm (b) is reached with no tracked path) under a basename
+    # carrying no red/mut/mutation word (so the basename clause cannot rescue the verdict under any grammar).
+    # rvid: graph s320 3.3:77's shape, `RED` only as a segment of an all-caps hyphenated identifier -- NOT
+    # refused. rvred: a standalone `RED`; rvproven: `PROVEN`; rvmut: `Mutation-RED capture:`, the producer's
+    # own wording (dev.md) -- each REFUSED red-untracked. rvmix: the identifier AND a standalone `RED` on one
+    # line -- REFUSED, so blanking the identifier is not blanking the line. rvnone: no verdict word -- NOT
+    # refused. rvcap: `Mutation-RED capture:` citing a capture whose basename is itself an all-caps hyphenated
+    # identifier -- REFUSED, pinning that the blanking runs on a copy of the line. Driven by run.sh, not CASES.
+    rvid)  printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` closes only when the transcribed run passes, `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    rvred) printf 'Self-check: RED on revert, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    rvproven) printf 'Self-check: PROVEN, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    rvmut) printf 'Mutation-RED capture: `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    rvmix) printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` stays open; RED on revert, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    rvcap) printf 'Mutation-RED capture: `../test-results/S320-3-3-X.txt`.\n' >> "$w/$STORY" ;;
+    rvnone) printf 'Close-out: the transcribed run passes, `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
     fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
