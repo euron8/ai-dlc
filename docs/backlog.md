@@ -1684,3 +1684,4 @@ Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s
 Owed: the step's per-story cost on a measured graph sprint, or the step-value evidence for what that cost buys; and, per BL-812 item 3, an explanation of s320's rise drawn from the sprint itself. Not a rebuild: the shipped wave sizing (0.950.0) stands.
 
 verify: manual
+

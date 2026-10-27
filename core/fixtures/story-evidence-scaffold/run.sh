@@ -657,6 +657,56 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   b9_mutant b9-m3-no-exempt 'if (p != "<redacted>" && p != "<base-worktree>") print' 'print' red "M3: arm (n)'s <redacted>/<base-worktree> exemptions removed"
   b9_mutant b9-m4-refusal 'warn "placeholder' 'refuse "placeholder' rc "M4: arm (n) made a refusal, so a placeholder moves the exit"
   # --- end BL-809 ARMS ------------------------------------------------------------------------------
+
+  # --- BL-833 RED LINE (rv_*) -----------------------------------------------------------------------
+  # Which story LINE marks its captures RED. The rv* worlds (world.sh) each add one line citing
+  # `../test-results/x.txt`: arm (b) is reached (the spelling resolves outside the repository), and the
+  # basename carries no red/mut/mutation word, so only the LINE grammar decides. Cells, in order: rvid (a
+  # `-RED-` segment of an all-caps hyphenated identifier, graph s320 3.3:77's shape) quiet; rvred
+  # (standalone RED), rvproven (PROVEN) and rvmut (`Mutation-RED capture:`) refused red-untracked; rvmix
+  # (the identifier plus a standalone RED) refused; rvnone (no verdict word) quiet. Each quiet cell is the
+  # near-miss of the refused cell beside it, one property apart. Mutants: rv-m1 the pre-fix grammar on the
+  # unblanked line (rvid refuses), rv-m2 a `-`-bounded grammar on the unblanked line (rvmut and rvcap go quiet), rv-m3 the blanking applied to `line` itself (rvcap, whose capture basename is an identifier, is destroyed and goes quiet). rvcap: `Mutation-RED capture:` citing `../test-results/S320-3-3-X.txt`, refused red-untracked.
+  RVCASES='rvid rvred rvproven rvmut rvmix rvnone rvcap'
+  rv_ok=1
+  for v in $RVCASES; do build_world "$WORK/world-$v" "$v" || { rv_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done
+  # Seed control: test-results/x.txt is not tracked in any rv world, so no reading of the token resolves
+  # to a tracked capture and arm (b) is the only arm that can name it.
+  for v in $RVCASES; do gitw "$WORK/world-$v" cat-file -e "$(cat "$WORK/world-$v/.T" 2>/dev/null):test-results/x.txt" 2>/dev/null && { rv_ok=0; bad "FIXTURE BROKEN: rv world '$v' tracks test-results/x.txt"; }; done
+  for v in $RVCASES; do gitw "$WORK/world-$v" cat-file -e "$(cat "$WORK/world-$v/.T" 2>/dev/null):test-results/S320-3-3-X.txt" 2>/dev/null && { rv_ok=0; bad "FIXTURE BROKEN: rv world '$v' tracks test-results/S320-3-3-X.txt"; }; done
+  if [ "$rv_ok" -eq 1 ]; then
+    rv_vec() { # <script>
+      local s="$1" o="" v
+      for v in $RVCASES; do o="$o $v=$(verdict "$s" "$WORK/world-$v" h)"; done
+      printf '%s' "${o# }"
+    }
+    RVWANT='rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W'
+    got="$(rv_vec "$HECTL")"
+    if [ "$got" = "$RVWANT" ]; then ok "RED LINE: a RED inside an all-caps hyphenated identifier does not mark its line RED; a standalone RED, PROVEN and Mutation-RED each refuse an outside-spelled capture red-untracked, an identifier beside a standalone RED still refuses, a line with no verdict word is quiet"
+    else bad "RED LINE: want [$RVWANT] got [$got]"; fi
+    rv_mutant() { # <name> <from> <to> <want> <label>
+      local m got nf nt
+      if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: red-line mutation '$1' matched nothing"; return; fi
+      # Applied: the mutant carries the replacement and no longer the original line.
+      nf="$(grep -cF -- "$2" "$m")" || nf=0; nt="$(grep -cF -- "$3" "$m")" || nt=0
+      if [ "$nf" != 0 ] || [ "$nt" != 1 ]; then bad "FIXTURE ERROR: red-line mutation '$1' did not apply (from x$nf, to x$nt)"; return; fi
+      got="$(rv_vec "$m")"
+      if [ "$got" = "$4" ]; then ok "MUTATION '$1' killed, moving its own cell only: $5"
+      elif [ "$got" = "$RVWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
+      else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
+    }
+    RVFIX='red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0'
+    rv_mutant rv-m1-old-grammar "$RVFIX" 'red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0' \
+      'rvid=1:red-untracked,:W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W' \
+      "the pre-fix grammar on the unblanked line: a hyphen-joined -RED- identifier refuses its capture"
+    rv_mutant rv-m2-hyphen-bound "$RVFIX" 'red = (line ~ /(^|[^A-Za-z-])(RED|PROVEN)([^A-Za-z-]|$)/) ? 1 : 0' \
+      'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=0::W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
+      "a hyphen-bounded grammar on the unblanked line: Mutation-RED no longer marks its capture RED (rvmut, and rvcap whose line is the same wording)"
+    rv_mutant rv-m3-blank-line 'line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)' 'line=$0; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", line); l2=line' \
+      'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
+      "the blanking applied to the line itself instead of a copy: a capture whose basename is an all-caps hyphenated identifier is destroyed"
+  fi
+  # --- end BL-833 RED LINE --------------------------------------------------------------------------
 fi
 
 # --- BL-808: --list-captures ------------------------------------------------------
