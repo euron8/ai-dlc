@@ -31,6 +31,7 @@ python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/planning.py $OUT doc
 python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/decompose.py $OUT   # spawns/story x $/spawn
 python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/impl_passes.py $OUT # implementation passes and shards
 python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/operator_asks.py
+EXTRACT_WIN_END=<ISO instant> python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT; python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --seats   # pinned snapshot, lead and subagent per story (b244-snapshot/)
 ```
 
 Token control: the units==segs sums must be equal; they were at 15.66 B on both sides at measurement. s320 was

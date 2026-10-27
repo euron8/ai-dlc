@@ -1,4 +1,7 @@
-"""Per-sprint, per-step roll-up of steps.csv. Usage: roll.py <OUT>
+"""Per-sprint, per-step roll-up of steps.csv. Usage: roll.py <OUT> [--seats]
+
+--seats prints, per story, the lead and subagent figures separately for the cited step groups (pooled s317+s318,
+then each sprint) and for every step per sprint: lead active h, lead $, subagent active h, subagent $.
 
 Hours are GAP-INCLUSIVE: elapsed = active + op_wait + agent_wait, where the two waits are the time between
 consecutive records longer than 300 s. That time is recorded separately as `gap` (extract.py) and printed beside
@@ -53,7 +56,78 @@ def calls(r, pre):
             c[k[len(pre) + 1:-6]] += float(v)
     return c
 
+def step_base(st):
+    """roll.py's step grouping: gate-validation[x] rolls up as gate[x], any other [suffix] is dropped."""
+    return st.split('[')[0] if not st.startswith('gate-validation') else 'gate[' + st[16:-1] + ']'
+
+# Step groups the backlog's Outcome measured: lines cite. None = the whole bucket.
+GROUPS = [
+    ('stories-test-strategy', 'pipeline', {'stories-test-strategy'}),
+    ('route plus artifact-consolidation plus pre-step', 'pipeline', {'route', 'artifact-consolidation', 'pre-step'}),
+    ('the whole pipeline bucket', 'pipeline', None),
+    ('architecture', 'pipeline', {'architecture'}),
+    ('requirements', 'pipeline', {'requirements'}),
+    ('sprint-review plus gate-validation[sprint-review]', 'pipeline', {'sprint-review', 'gate[sprint-review]'}),
+    ('the ai-dlc-update bucket', 'ai-dlc-update', None),
+]
+POPS = [('before s317+s318 pooled', (317, 318)), ('s317', (317,)), ('s318', (318,)), ('s319', (319,)), ('s320', (320,))]
+
+def seat_sum(rows, HM, bucket, steps, sprints):
+    """Sums one population's steps.csv rows per seat. Hours are gap-inclusive lead-segment elapsed; lead active
+    is active_h; subagent active is sub_active_h summed over subagents (it can exceed elapsed). Dollars use usd()
+    with hosted_mix(), exactly as the main roll-up does, including the FALLBACK and PENDING handling."""
+    T = collections.defaultdict(float)
+    for r in rows:
+        if r['bucket'] != bucket: continue
+        n = int(r['sprint'])
+        if n not in sprints: continue
+        if steps is not None and step_base(r["step"]) not in steps: continue
+        T['el'] += float(r['elapsed_h']); T['act'] += float(r['active_h'])
+        T['gap'] += float(r['agent_wait_h']) + float(r['op_wait_h']); T['subh'] += float(r['sub_active_h'])
+        for seat in ('lead', 'sub'):
+            api = usd(r, seat); mix = HM[seat][n]
+            if sum(mix.values()) <= 0 and n in FALLBACK: mix = HM[seat][FALLBACK[n]]
+            te = usd(r, seat, True, mix)
+            if te is None: T['pending'] += 1; te = api
+            T[seat + '$'] += api; T[seat + '$e'] += te
+            T[seat + 'tok'] += sum(float(v or 0) for c, v in r.items() if c.startswith(seat + '_') and c.endswith(('_in', '_out', '_cr', '_cw')))
+            for c, v in r.items():
+                if c.startswith(seat + '_') and c.endswith('_calls'):
+                    T[seat + 'calls'] += float(v or 0)
+                    if c == f"{seat}_{LOCAL}_calls": T[seat + 'local'] += float(v or 0)
+    return T
+
+def money(te, api):
+    return f"${te:.1f}" if f"{te:.1f}" == f"{api:.1f}" else f"${te:.1f} (API ${api:.1f})"
+
+def seat_line(T, sn):
+    te = T['lead$e'] + T['sub$e']; api = T['lead$'] + T['sub$']
+    share = 100 * T['leadlocal'] / T['leadcalls'] if T['leadcalls'] else 0
+    return (f"{T['el']/sn:.2f} h gap-inclusive (gap {T['gap']/sn:.2f} h), token-equivalent ${te/sn:.1f} (API ${api/sn:.1f}), "
+            f"{(T['leadtok'] + T['subtok'])/sn/1e6:.1f}M tokens; lead active {T['act']/sn:.2f} h, lead {money(T['lead$e']/sn, T['lead$']/sn)}, "
+            f"subagent active {T['subh']/sn:.2f} h, subagent {money(T['sub$e']/sn, T['sub$']/sn)}; "
+            f"lead-seat local share {share:.0f}% of {T['leadcalls']:.0f} calls" + (f"; PENDING rows {T['pending']:.0f}" if T['pending'] else ""))
+
+def seats(rows):
+    HM = {seat: hosted_mix(rows, seat) for seat in ('lead', 'sub')}
+    print(f"per story; STORIES = {STORIES}; $ token-equivalent, API beside it where it differs")
+    print("== cited step groups")
+    for label, bucket, steps in GROUPS:
+        print(f"-- {label} [{bucket}]")
+        for pl, ns in POPS:
+            sn = sum(STORIES[n] for n in ns)
+            print(f"   {pl} ({sn} stories): " + seat_line(seat_sum(rows, HM, bucket, steps, set(ns)), sn))
+    print("== every step, per sprint")
+    keys = sorted({(r["bucket"], step_base(r["step"])) for r in rows if int(r['sprint']) in STORIES})
+    for bucket, st in keys:
+        for n in sorted(STORIES):
+            T = seat_sum(rows, HM, bucket, {st}, {n})
+            if T['el'] or T['subh'] or T['leadcalls'] or T['subcalls']:
+                print(f"   s{n} {bucket} {st} ({STORIES[n]} stories): " + seat_line(T, STORIES[n]))
+
 if __name__ == '__main__':
+    if len(sys.argv) > 2 and sys.argv[2] == '--seats':
+        seats(list(csv.DictReader(open(sys.argv[1] + '/steps.csv')))); sys.exit(0)
     rows = list(csv.DictReader(open(sys.argv[1] + '/steps.csv')))
     HM = {seat: hosted_mix(rows, seat) for seat in ('lead', 'sub')}
     PENDING = set(); FB = set()

@@ -1,0 +1,8 @@
+root <frozen clone of ~/.claude/projects/-Users-n8-git-graph, taken 2026-10-27T13:29:41Z>; lead transcripts 158; WIN_START 2026-09-26T00:35:00Z; WIN_END 2026-10-27T13:08:00Z
+s314 agent_calls 104 cap_rejected 0
+s315 agent_calls 206 cap_rejected 20
+s316 agent_calls 852 cap_rejected 155
+s317 agent_calls 1015 cap_rejected 51
+s318 agent_calls 984 cap_rejected 53
+s319 agent_calls 1604 cap_rejected 7
+s320 agent_calls 868 cap_rejected 0

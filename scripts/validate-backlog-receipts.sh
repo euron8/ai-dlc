@@ -789,13 +789,17 @@ fi
 #      resolves (NO-VALUE-CITATION). A value citation is `path:line "quoted phrase"`, RESOLVED BY
 #      THE PHRASE: some line of that file carries the phrase AND is a `Failure caught:` line or a
 #      table row. The line number is a pointer for the reader and is not what binds, because step
-#      files move. It never fails an entry for a missing number.
+#      files move. A seat figure's PRESENCE is required (E2); its VALUE never is, and no
+#      threshold or comparison is applied to any number.
 #      ONE ISOLATED BRANCH, eff_nostep_ok, accepts a SPRINTLESS line, and only when it says there
 #      is no graph pipeline step AND names where the cost lives (operator ruling). It is one
 #      function so a mutant widening it is one edit and is killed by the self-probe.
 #   E2 SHAPE (D6). A sprint-naming outcome line carries the token-equivalent basis, the API figure
-#      beside it, and the gap-inclusive hours label (operator ruling). Not applied to the no-step
-#      branch: a line saying there is no step has no figure to label.
+#      beside it, and the gap-inclusive hours label (operator ruling), AND a figure for each SEAT:
+#      the lead and the subagents reported separately, each seat word followed by an hours
+#      (`<n> h`) or dollar (`$<n>`) figure as the first number after it (eff_seat_ok, BL-817's
+#      batch-243 amendment). Not applied to the no-step branch: a line saying there is no step has
+#      no figure to label.
 #   E3 FILING (live ledger only). A tagged entry CITES the step-value ruling -- the phrase "A step
 #      with no measured value goes" and `.claude/rules/operator-rulings.md`, both, read over the
 #      whitespace-collapsed entry so a wrapped phrase still counts (F-RULING). An entry citing
@@ -861,7 +865,66 @@ eff_names_sprint() {
   _t="$(sed -e 's/`[^`]*`//g' -e 's#[^[:space:]]*/[^[:space:]]*##g' <<<"$1")"
   grep -qE '(^|[^A-Za-z0-9_./])(s|sprint )[0-9]{3}([^0-9]|$)' <<<"$_t"
 }
-eff_shape_ok() { case "$1" in *token-equivalent*) ;; *) return 1 ;; esac; case "$1" in *API*) ;; *) return 1 ;; esac; case "$1" in *gap-inclusive*) return 0 ;; esac; return 1; }
+# THE SEAT FIGURES (BL-817 item 1, its batch-243 amendment; BL-819 item 3). A sprint-naming line
+# reports the step for the LEAD seat and the SUBAGENT seat separately: each seat word -- `lead`,
+# `subagent`, `subagents`, any case, a letter on neither side, so `leading` and `mislead` are not
+# seats and `Lead-seat` is -- needs at least one occurrence whose FIRST number is a figure, `<n> h`
+# or `$<n>`. Skipped before that number: `sNNN`, `sprint NNN` and `BL-NNN` tokens, which name a
+# sprint or an entry and are not a figure. One occurrence is scanned only up to the next seat word
+# of either kind, so `lead and subagent 1.2 h` gives the lead nothing and one figure never serves
+# both seats. The scan also stops at a sentence break (`. ` or `; `), so a later total is not taken as the
+# seat's figure. No character window: a percentage or a call count is the
+# first number after `Lead-seat local-model share ... s317 2%` and after `lead Agent calls (s317
+# 51`, and that alone refuses them. Only the PRESENCE of a figure is judged, never its value.
+# The text reaches awk on stdin, never by -v, which strips one level of escaping.
+# FALSE-POSITIVE STORY: the contract's first grammar was a character window from the seat word to a
+# figure. The contract adversary showed that it accepts `leading 1.2 h` and `mislead $3`, a figure
+# across a comma in another subject's clause, and one figure shared by both seats (`lead and subagent
+# 1.2 h`). This spelling applies letter boundaries on the seat word, requires the FIRST number after
+# it to carry a unit while skipping sNNN / sprint NNN / BL-NNN, and stops each seat's scan at the next
+# seat word. E0 seeds BL-969..BL-978 hold each rule, and removing any one rule flips exactly its seed:
+# no-boundary flips BL-974, no-skip flips BL-976, no-stop flips BL-972, no-sentence-cut flips BL-977 and BL-978.
+# FP-SET: measured with this validator at the collected tip of this release against base (fc71a7b10), over
+# copies of both corpora passed by path. The old predicate gives 0 rows over the base archive, the tip
+# archive, the base live ledger and the tip live ledger. The new predicate over the BASE archive gives
+# exactly 5 SHAPE rows, BL-509, BL-511, BL-515, BL-568 and BL-569: sprint-branch outcome lines that
+# carried no lead or subagent figure, the arm's own subject and not false positives. Over the base
+# archive (fc71a7b10) with this release's five amended lines applied it gives 0 rows (21 in the close population, 16 on the no-step branch); over the live ledger,
+# base and tip, 0 rows with 0 in the close population (BL-513 and BL-694 are not yet stamped `**LANDED`;
+# a stamped copy gave 2 in the close population, both valid). The false-positive set is EMPTY, and the
+# 5 true positives were dispositioned by amendment from the committed snapshot, so the exception set
+# is empty.
+eff_seat_ok() {
+  LC_ALL=C awk '
+  function fig(seg,   p, r) {
+    gsub(/(^|[^a-z0-9])(s|sprint )[0-9][0-9][0-9][0-9]*/, " ", seg)
+    gsub(/(^|[^a-z0-9])bl-[0-9][0-9]*/, " ", seg)
+    p = match(seg, /[0-9]/)
+    if (p == 0) return 0
+    if (p > 1 && substr(seg, p - 1, 1) == "$") return 1
+    r = substr(seg, p)
+    match(r, /^[0-9][0-9.,]*/)
+    r = substr(r, RLENGTH + 1)
+    return (r ~ /^ ?h([^a-z]|$)/)
+  }
+  { t = t " " tolower($0) }
+  END {
+    lead = 0; sub_ = 0
+    while (match(t, /(^|[^a-z])(lead|subagents|subagent)([^a-z]|$)/)) {
+      w = substr(t, RSTART, RLENGTH)
+      kind = (w ~ /lead/) ? "lead" : "sub"
+      e = RSTART + RLENGTH - 1
+      if (substr(t, e, 1) !~ /[a-z]/) e = e - 1
+      t = substr(t, e + 1)
+      seg = t
+      if (match(seg, /(^|[^a-z])(lead|subagents|subagent)([^a-z]|$)/)) seg = substr(seg, 1, RSTART)
+      q = match(seg, /[.;] /); if (q) seg = substr(seg, 1, q)
+      if (fig(seg)) { if (kind == "lead") lead = 1; else sub_ = 1 }
+    }
+    exit !(lead && sub_)
+  }' <<<"$1"
+}
+eff_shape_ok() { case "$1" in *token-equivalent*) ;; *) return 1 ;; esac; case "$1" in *API*) ;; *) return 1 ;; esac; case "$1" in *gap-inclusive*) ;; *) return 1 ;; esac; eff_seat_ok "$1"; }
 # eff_cite_ok <outcome-text> <root> -- 0 iff some `path:line "phrase"` resolves BY THE PHRASE to a
 # `Failure caught:` line or a table row of that file under <root>. grep, never awk getline: an
 # unopenable file must not read as an empty one.
@@ -922,7 +985,8 @@ EOF
 EP="$WORK/effprobe"; mkdir -p "$EP/docs"
 printf '| E-9 | ROWPHRASE alpha |\n**Mechanism.** Failure caught: FCPHRASE beta\nPLAINPHRASE gamma\n' > "$EP/docs/v.md"
 EPR='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
-EPS='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+EPL='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+EPS="$EPL, lead active 0.4 h, subagent \$5"
 {
   printf '# probe\n\n'
   printf '## BL-951\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
@@ -943,17 +1007,27 @@ EPS='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
   printf '## BL-965\n\nAn ordinary entry.\n\n'
   printf '## BL-966\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step; the cost lives in docs/analysis/pipeline-efficiency-s317-s320/scripts/x.py, analysis tooling.\n\n' "$EPR"
   printf '## BL-967\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: measured on s319 and s320, %s; fell from 2.0 h.\n\n' "$EPR" "$EPS"
-  printf '## BL-968\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the `s319` run, see docs/analysis/pipeline-efficiency-s317-s320/x.md, %s; fell.\n' "$EPR" "$EPS"
+  printf '## BL-968\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the `s319` run, see docs/analysis/pipeline-efficiency-s317-s320/x.md, %s; fell.\n\n' "$EPR" "$EPS"
+  printf '## BL-969\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-970\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s. Lead-seat local-model share of calls in this step group: s321 2%%; subagent seats ran hosted models only (opus, sonnet, haiku); lead `Agent` calls (s321 51). The step fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-971\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead share 2%%, token-equivalent $39.1 (API $39.1), 0.9 h gap-inclusive, subagent $5.6; fell.\n\n' "$EPR"
+  printf '## BL-972\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead and subagent 1.2 h; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-973\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead active 1.2 h; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-974\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; leading 1.2 h, mislead $3; subagent $5.6; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-975\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead active 1.2 h, lead $3.4; subagents 0.8 h / $5.6; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-976\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; Lead (BL-819) s321 1.2 h; Subagent sprint 321 $5.6; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-977\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagent seats ran hosted models only. token-equivalent $9 (API $8), 1.0 h gap-inclusive; fell.\n\n' "$EPR"
+  printf '## BL-978\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagents were not used; 1.0 h gap-inclusive, token-equivalent $9 (API $8); fell.\n' "$EPR"
 } > "$EP/backlog.md"
-EP_WANT="F-RULING BL-961|F-UNTAGGED BL-963|NO-OUTCOME BL-951|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|"
+EP_WANT="F-RULING BL-961|F-UNTAGGED BL-963|NO-OUTCOME BL-951|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|SHAPE BL-969|SHAPE BL-970|SHAPE BL-971|SHAPE BL-972|SHAPE BL-973|SHAPE BL-974|SHAPE BL-977|SHAPE BL-978|"
 EP_GOT="$(eff_corpus "$EP/backlog.md" "$EP" live | LC_ALL=C sort | tr '\t' ' ' | tr '\n' '|')"
 if [ "$EP_GOT" != "$EP_WANT" ]; then
   echo "$(me): SELF-PROBE FAILED -- E0: the efficiency arms over the seeded ledger reported [$EP_GOT], expected [$EP_WANT]. Each seeded case is one branch of E1/E2/E3 (an absent row is a branch that cannot fire; an extra row is one that fires on a quiet case), so no corpus verdict from these arms would mean anything." >&2
   exit 2
 fi
 read -r EP_ENT EP_POP EP_NS < "$WORK/eff.counts"
-[ "$EP_ENT" = 18 ] && [ "$EP_POP" = 13 ] && [ "$EP_NS" = 2 ] || {
-  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch, expected 18 / 13 / 2. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint." >&2; exit 2; }
+[ "$EP_ENT" = 28 ] && [ "$EP_POP" = 23 ] && [ "$EP_NS" = 2 ] || {
+  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch, expected 28 / 23 / 2. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint." >&2; exit 2; }
 EP_ARCH="$(eff_corpus "$EP/backlog.md" "$EP" archive | cut -f1 | grep -c '^F-')" || EP_ARCH=0
 [ "$EP_ARCH" -eq 0 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive applied a FILING arm ($EP_ARCH row(s)); filing is judged on the live ledger only." >&2; exit 2; }
 
@@ -963,12 +1037,12 @@ EFF_N="$(printf '%s' "$EFF_OUT" | grep -c .)" || EFF_N=0
 eff_report() {
   [ "$EFF_N" -eq 0 ] && return 0
   printf '%s\n' "$EFF_OUT" | awk -F'\t' '{ printf "FAIL: E\t%s\t%s\n", $2, $1 }' >&2
-  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. F-UNTAGGED: an entry citing docs/analysis/ carries **DEFECT (efficiency).** or the 'no graph pipeline step' line." >&2
+  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. F-UNTAGGED: an entry citing docs/analysis/ carries **DEFECT (efficiency).** or the 'no graph pipeline step' line." >&2
   return 1
 }
 if [ -n "$EFF_MODE" ]; then
   eff_report || exit 1
-  echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over 18 seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch)."
+  echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over ${EP_ENT} seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch)."
   exit 0
 fi
 
