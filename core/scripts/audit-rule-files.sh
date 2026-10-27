@@ -50,6 +50,7 @@ set -euo pipefail
 #   Class 1   narrative drift        (Rule 18)                    tier 2
 #   Class 1a  origin tag / origin parenthetical / embedded date    tier 1
 #   Class 1c  the identifier grant rule-authoring.md must carry    tier 1
+#   Class 1d  a role's model named or ranked (distribution only)   tier 1
 #   Class 1b  incomplete Rule 26(c) triple                         tier 2
 #   Class 2   rule weakness          (Rule 18)                     tier 2
 #   Class 3   complexity accretion   — NOT MECHANIZED, DID-NOT-RUN
@@ -468,6 +469,158 @@ else:
                                              "no backticked placeholder template (`Rule <n>`, "
                                              "`Step <n>`) appears in it"))
     emit("IDENTIFIER_GRANT", grant_hits, 1)
+
+# --------------------------------------------------------------- Class 1d
+# Skill and role prose naming the model a role runs, or ranking one role's model
+# against another's. The skill is model-agnostic: a role's model and effort come
+# from `aiDlcRoles` in the consumer's `.claude/settings.json` and from nowhere else,
+# so a sentence saying a role runs on Opus, or on a cheaper or stronger model than
+# another, is a claim about config the skill cannot know. Tier 1 because there is
+# no calibration reading of such a sentence: the measured FP set inside the
+# population is EMPTY, so a hit is a violation on sight (BL-831).
+#
+# POPULATION, DECLARED RATHER THAN EXEMPTED. `core/team-roles/*.md`,
+# `core/skills/ai-dlc/**/*.md` and `core/skills/ai-dlc-update/SKILL.md`. The setup
+# skill is OUT of population, not exempted by a list: it documents the
+# `aiDlcModels` keys and the `model` enum, which is the config surface itself and
+# names models correctly. `reconcile/` and `.claude/rules/` are out for the same
+# reason -- mechanism and authoring prose, never shipped role prose. The five S files
+# that are not `.md` (enforcement-map.yaml, the verdict schema, the gate-adjudication
+# fixture's README and run.sh, validate-artifact-derivations.sh) stay receipt-only.
+#
+# DISTRIBUTION LAYOUT ONLY. On a consumer the population is core text the consumer
+# cannot edit, and a pull runs its NEW engine from step 3 while the rulebook it
+# would scan waits for the reconcile merge -- so a tier-1 arm there would fail the
+# consumer's own push on core prose it is forbidden to touch. The arm reports N/A
+# in the consumer layout and never reads `CLAUDE.md` or `docs/coding-conventions.md`.
+#
+# THE GRAMMAR IS THE RECEIPT'S, ON RAW LINES. Case-sensitive, so the uppercase
+# `model_family=OPUS|FABLE|...` enum is mechanism and stays quiet. No `used()` and no
+# `scannable()`: a backticked "higher `model`" and a `# Role: ... (escalated tier)`
+# heading are both in scope, and either filter deletes them. Bare-tier comparisons
+# are keyed on the possessive or determiner before "tier" ("standard tier", "your
+# tier", "dev's tier"), because "three-tier escalation" is the escalation ladder,
+# not a model rank -- that phrase is the self-probe's near-miss. The coupling clause
+# matches a `gate-adjudicator` default taken from the `adversary`'s model in either
+# word order, rather than one spelling of it.
+#
+# NARROWING STORY. The receipt grammar run over this population at the commit BL-831
+# was filed against hit only in-scope sites (FOLDED D1). Run over the WIDER set an
+# earlier draft considered, it scored 10 lines in `ai-dlc-setup/SKILL.md`, one in
+# `reconcile/template-sites.md` and one in `.claude/rules/operator-rulings.md` -- all
+# config-surface, mechanism or authoring text. The narrowing is the population
+# boundary above, never a per-line exemption, so no site INSIDE the population is
+# acquitted by it. `core/hooks/`, `core/scripts/`, `core/rules/` and `templates/` are
+# outside the population too; over that whole wider set the grammar scores 117 lines
+# against the pre-review grammar's 113. Outside this file the two differ by exactly one
+# line, `ai-dlc-dispatch-guard.sh:1326`, a hook comment the pin clause adds (94 against
+# 93); the rest is this file's own MODEL_RX source and comments, which move with
+# every edit here.
+#
+# THE ALTERNATIONS ADDED BY THE TIP REVIEW, AND THEIR NARROWING. Three regressions
+# exited 0 on the earlier grammar: "a more capable model than `dev`" (a ranking with no
+# tier word), "`gate-adjudicator` defaults to the model `adversary` uses" (model before
+# adversary), and "binds `dev`'s model to `dev.md`'s pin" (the stale claim that a role
+# FILE holds the model; role files state neither, `reconcile/setup-sites.md:193`).
+# Hence `(more|less) (capable|powerful) model`, the two model-before-adversary coupling
+# orders, and the pin clause. `this tier` and `your tier` were narrowed to the two
+# measured false positives and nothing wider. Neither fires when followed by the Rule 12
+# ladder's own term, "of the escalation ladder" ("When the story leaves your tier of the
+# escalation ladder"); a bare "of the escalation" suffix is NOT exempt, because "The lead
+# binds your tier of the escalation by routing the review to you" is the natural rewording
+# of `code-reviewer-escalated.md:62` at fc71a7b10, the site this arm was built on, and it
+# must fire. `this tier` is also quiet in one fixed shape, "tier-<n> finding stays at this
+# tier", and not on every line naming a `tier-<n>` class: "A tier-1 finding is routed here
+# because the lead chose this tier for the review" fires. Both near-misses are in the
+# self-probe's quiet direction below; the rewordings are firing seeds in retro-audit-scans.
+# KNOWN FUTURE FALSE POSITIVES OF THE PIN CLAUSE, NOT NARROWED: each of these fires, and
+# none is a model claim -- "the role file pins its contract line", "each role file holds
+# the model-agnostic contract", "`core-manifest.md`'s pins are the source", "`install.md`'s
+# pin on the jq version". The clause cannot tell a role file pinning a model from a file
+# pinning anything else without a model word, and adding one would acquit R3. Remedy:
+# reword (for example "the role file states its contract line", "the manifest's entries").
+# KNOWN FUTURE FALSE POSITIVE, NOT NARROWED: a step-file line quoting the lowercase
+# `aiDlcModels` key names (`fable`, `opus`, `sonnet`, `haiku`) fires. Those keys are
+# the config surface, which belongs in the setup skill; inside this population the
+# remedy is to reword, pointing at `aiDlcModels` rather than listing its keys.
+print("--- Class 1d: Role Model Naming (tier 1) ---")
+MODEL_RX = re.compile(
+    r"\b(Opus|Sonnet|Haiku|Fable|opus|sonnet|haiku|fable)\b|cheaper.model|stronger (model|reviewer)"
+    r"|higher .model|model tier|escalated (model )?tier|model quality|Opus-grade"
+    r"|(more|less) (capable|powerful) model"
+    r"|\b(standard|whose|dev.s) tier\b|\byour tier\b(?! of the escalation ladder)"
+    r"|(?<!tier-[0-9] finding stays at )\bthis tier\b(?! of the escalation ladder)|standard model"
+    r"|`[a-z-]+\.md`.s pins?\b|role file.{0,20}(\bpins?\b|holds the model)"
+    r"|gate-adjudicator.{0,40}\badversary\b.{0,12}\bmodel\b"
+    r"|\badversary\b.{0,12}\bmodel\b.{0,40}gate-adjudicator"
+    r"|gate-adjudicator.{0,40}\bmodel\b.{0,20}\badversary\b"
+    r"|\bmodel\b.{0,20}\badversary\b.{0,40}gate-adjudicator")
+
+
+def model_population(base):
+    out = sorted(glob.glob(os.path.join(base, "core/team-roles/*.md")))
+    out += tree(os.path.join(base, "core/skills/ai-dlc"))
+    fp = os.path.join(base, "core/skills/ai-dlc-update/SKILL.md")
+    if os.path.isfile(fp):
+        out.append(fp)
+    return [p for p in dict.fromkeys(out) if os.path.isfile(p)]
+
+
+def model_hits(files, strip=""):
+    hits = []
+    for p in files:
+        for i, raw in enumerate(lines(p), 1):
+            m = MODEL_RX.search(raw)
+            if m:
+                rel = p[len(strip):] if strip and p.startswith(strip) else p
+                hits.append((rel, i, f"names or ranks a role model '{m.group(0)}': {raw.strip()[:100]}"))
+    return hits
+
+
+if LAYOUT != "distribution":
+    print("  ROLE_MODEL_NAMING: N/A  n=[]  (consumer layout: the population is core text the"
+          " consumer cannot edit; the arm runs in the distribution)")
+    print()
+elif MUTANT:
+    emit("ROLE_MODEL_NAMING", [], 1)
+else:
+    # SELF-PROBE, BEFORE THE CORPUS, ON A mktemp TREE. Both directions: a seeded
+    # "the Opus tier" in a role file must fire, and an uppercase `model_family=OPUS`
+    # plus a "three-tier escalation" in a step file -- both inside the population --
+    # must stay quiet. A probe that fails either way refuses the audit (exit 2): a
+    # scan that cannot fire, or one that flags everything, reads exactly like a clean
+    # corpus.
+    import tempfile
+    _pd = tempfile.mkdtemp(prefix="audit-model-probe.")
+    os.makedirs(os.path.join(_pd, "core/team-roles"))
+    os.makedirs(os.path.join(_pd, "core/skills/ai-dlc/steps"))
+    with open(os.path.join(_pd, "core/team-roles/probe.md"), "w") as fh:
+        fh.write("# Role: Probe\n\nYou are dispatched on the Opus tier.\n")
+    with open(os.path.join(_pd, "core/skills/ai-dlc/steps/probe.md"), "w") as fh:
+        fh.write("Record `model_family=OPUS` in the row.\nThe three-tier escalation stays.\n"
+                 "A tier-1 finding stays at this tier until the retro dispositions it.\n"
+                 "When the story leaves your tier of the escalation ladder, message the lead.\n")
+    _probe = model_hits(model_population(_pd), _pd + os.sep)
+    _fire = [h for h in _probe if h[0] == "core/team-roles/probe.md"]
+    _quiet = [h for h in _probe if h[0] == "core/skills/ai-dlc/steps/probe.md"]
+    for _f in ("core/team-roles/probe.md", "core/skills/ai-dlc/steps/probe.md"):
+        os.unlink(os.path.join(_pd, _f))
+    for _d in ("core/team-roles", "core/skills/ai-dlc/steps", "core/skills/ai-dlc", "core/skills", "core", ""):
+        os.rmdir(os.path.join(_pd, _d))
+    if len(_fire) != 1 or _quiet:
+        sys.stdout.flush()
+        sys.stderr.write(
+            "audit-rule-files: FAIL — ROLE_MODEL_NAMING self-probe: seeded 'the Opus tier' "
+            f"scored {len(_fire)} (want 1), seeded near-misses scored {len(_quiet)} (want 0).\n"
+            "  The arm cannot discriminate, so its corpus verdict would mean nothing.\n")
+        sys.exit(2)
+    _pop = model_population("")
+    if not _pop:
+        sys.stdout.flush()
+        sys.stderr.write("audit-rule-files: FAIL — ROLE_MODEL_NAMING population is empty in the "
+                         "distribution layout; a scan of nothing is not a clean scan.\n")
+        sys.exit(2)
+    emit("ROLE_MODEL_NAMING", model_hits(_pop), 1, f"  [{len(_pop)} population files]")
 
 # ---------------------------------------------------------------- Class 1
 # Narrative drift: rule text carrying the story of its own origin. Tier 2 — a

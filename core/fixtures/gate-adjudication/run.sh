@@ -3,7 +3,7 @@
 # contract, plus the DERIVATION assertion.
 #
 # THE DEFECT THIS EXISTS TO CATCH. The gate-adjudication verdict is the ONE deliverable through
-# which a cheaper-model lead adopts the read-and-compare judgment checks. If the validator that
+# which the lead adopts the read-and-compare judgment checks. If the validator that
 # reads it can be fooled — a missing check that reads as covered, a stale verdict that reads as
 # fresh, a bad map value that silently empties the escalated set, an absent file that reads as a
 # pass — then a judgment check is adjudicated by no one, which reads EXACTLY like a check that

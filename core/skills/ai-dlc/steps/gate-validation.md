@@ -160,9 +160,9 @@ rendered namespace.
 
 ## Validation Checklist
 
-**Gate-adjudication escalation (before the checklist).** The lead may run on a cheaper model;
+**Gate-adjudication escalation (before the checklist).** The lead never judges these inline;
 the `adjudication: llm` checks (read-and-compare judgment) are escalated, once per gate, to a
-fresh Opus `gate-adjudicator`.
+fresh, independent `gate-adjudicator` context.
 
 SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
 
@@ -1900,7 +1900,7 @@ a fact about the past. No later action
 changes it, so without a clearing path this check fails forever on a sprint where
 it fired once — the gate becomes unpassable by any consumer action, which is a
 defect in the check and not a finding about the sprint. (Exactly that happened: a
-`protected-path-editor` ran on sonnet against an opus-5 pin, the lead
+`protected-path-editor` ran on a model other than its configured one, the lead
 self-reported it, and four gate attempts failed with nothing anyone could do —
 the operator could not clear it either, because this check did not read the
 escalation where an authorization would live.)
@@ -2030,8 +2030,8 @@ story handled by a plain `dev`).
 **Minimum mechanism (Rule 26(c)).** Failure caught: a subagent run
 without its role contract — a dev without its ownership/constraint
 boundary, the lead absorbing a protected-path edit it should have
-delegated (Rule 28), or an `escalate_model` story silently run on the
-standard model instead of the routed `dev-escalated` tier. False-positive
+delegated (Rule 28), or an `escalate_model` story silently run by a
+plain `dev` instead of the routed `dev-escalated` role. False-positive
 cost: one JSONL read plus one frontmatter read per routed story —
 persisted artifacts written by a hook and by the lead's own story files, no
 new artifact. Removal condition: retire once the Agent-tool spawn API
@@ -2676,11 +2676,13 @@ in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:
 `tests/fixtures/gate-adjudication/`. The `--series` rung over these verdicts runs
 at `## Gate Failure` step 4, which says how to read its vacuous line.
 
-**Minimum mechanism (Rule 26(c)).** Failure caught: the lead on a cheaper model silently
-mis-judging or skipping a judgment check — a check that cannot fire reads exactly like one that
+**Minimum mechanism (Rule 26(c)).** Failure caught: the lead judging an `adjudication: llm`
+check inline, in the same context that produced and steered the work under judgment, and so
+silently mis-judging or skipping it — a check that cannot fire reads exactly like one that
 passed, and an absent verdict reads exactly like a clean one. False-positive cost: one
-adjudicator dispatch and one script call per gate. Removal condition: retire if the lead
-returns to Opus for all gates, or the escalated checks become script-adjudicated.
+adjudicator dispatch and one script call per gate. Removal condition: retire if every
+escalated check becomes script-adjudicated, or if those judgments are carried out in a fresh,
+independent context by a route other than this dispatch.
 
 ### 27. Routing sanity — a subordinated defect (first planning gate).
 <!-- CHECK_LOADED: 27 -->

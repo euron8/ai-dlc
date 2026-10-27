@@ -611,12 +611,7 @@ your-project/
           doc-reconciliation.md         <-- brownfield-c
           doc-repair-backfill.md        <-- brownfield-c continuation
     team-roles/
-      architect.md                       <-- opus
-      code-reviewer.md                   <-- sonnet (high effort)
-      dev.md                             <-- sonnet (default)
-      pm.md                              <-- sonnet (high effort)
-      qa.md                              <-- sonnet
-      analyst.md                         <-- sonnet (planning offload)
+      *.md                               <-- one file per role; each role's model and effort come from aiDlcRoles in .claude/settings.json
     settings.json                        <-- Agent Teams flag
   _bmad/                                 <-- BMAD v6 framework
     core/                                <-- adversarial review, party mode

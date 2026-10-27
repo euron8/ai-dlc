@@ -21,7 +21,7 @@
 #
 # the command existed, would have caught it, and was simply not re-run after the edit
 # that falsified it. Each of those costs a full adversary dispatch to discover and a full
-# remediator dispatch to fix — two Opus-`high` agents to recover a number a `grep -c`
+# remediator dispatch to fix — two high-effort agents to recover a number a `grep -c`
 # would have produced.
 #
 # So this is not a style check. It is the loop's dominant finding class, moved from
@@ -46,7 +46,7 @@
 # still a MAJOR under `team-roles/adversary.md`'s underived-claim rung, and the adjacent
 # rung now also requires the reviewing pass to EXECUTE any recipe it reads rather than
 # judge it plausible. So not fencing a claim does not avoid the work; it moves the work
-# to two Opus agents and a round trip. Fencing it spends one exit code.
+# to two agents and a round trip. Fencing it spends one exit code.
 #
 # WHAT IT CANNOT DO, stated so a pass is not over-read: it proves the recorded output is
 # what the recorded command produces at HEAD. It does not prove the command MEASURES the

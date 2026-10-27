@@ -80,12 +80,12 @@ NOT hardcode a second copy here. The two routes today:
   are dispatched one at a time.
 - `escalate_model: true` → dispatch the story to a `dev-escalated`
   teammate (from `.claude/team-roles/dev-escalated.md`) instead of
-  `dev`. Same Dev contract, on a stronger model than `dev`, as configured
-  in `aiDlcRoles`. Do NOT instead
-  pass a higher `model` param to a `dev` dispatch — the dispatch guard
-  binds `dev`'s model to `dev.md`'s pin and rebinds a call-site override
-  back to it, so a higher `model` on a `dev` dispatch is silently corrected
-  to dev's tier, never honored. Escalation is a ROLE, not a call-site param.
+  `dev`. Same Dev contract, on the model and effort configured for
+  `dev-escalated` in `aiDlcRoles`. Do NOT instead
+  pass a different `model` param to a `dev` dispatch — the dispatch guard
+  binds `dev`'s model to `aiDlcRoles.dev` and rebinds a call-site override
+  back to it, so a different `model` on a `dev` dispatch is silently corrected
+  to the configured key, never honored. Escalation is a ROLE, not a call-site param.
 
 - Before a story's FIRST dev dispatch, if its `escalate_model` is absent
   or `false` and its owned paths meet the routing map's capital-path /
@@ -132,11 +132,11 @@ axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
   in docs/reviews/. For a capital-path or high-blast-radius diff (the
   criterion the routing map's `escalate_model` row states), dispatch a
   `code-reviewer-escalated` teammate (from `code-reviewer-escalated.md`)
-  instead — same review contract, on a stronger model than
-  `code-reviewer`, as configured in `aiDlcRoles`. As with
+  instead — same review contract, on the model and effort configured
+  for `code-reviewer-escalated` in `aiDlcRoles`. As with
   `dev-escalated`, escalation is a ROLE, not a call-site `model` param: a
-  higher `model` on a plain `code-reviewer` dispatch is silently corrected to
-  the standard tier by the dispatch guard. A gate-1 review is Rule 28,
+  different `model` on a plain `code-reviewer` dispatch is silently corrected to
+  `aiDlcRoles.code-reviewer` by the dispatch guard. A gate-1 review is Rule 28,
   "Split dispatch": files axis, over the story's changed-file set:
   `partition-review-diff.sh --map` derives the parts and
   `merge-review-shards.sh` joins them (Section 6, gate-1 dispatch).

@@ -1,4 +1,4 @@
-# Role: Code Reviewer (escalated tier)
+# Role: Code Reviewer (escalated route)
 
 ## Identity
 
@@ -30,7 +30,7 @@ no command-prefix allow rule and can stop an unattended sprint until a human app
 
 **Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
 call it before your first edit or write, and again before you write your deliverable or verdict.
-It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+It takes no parameters and forwards your whole transcript to a separate reviewer; weigh what it
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 
@@ -59,8 +59,8 @@ carried in every role contract, so they add nothing either. There is no second c
 Reviewer rules here on purpose: `code-reviewer.md` is the single source of truth for how a
 Code Reviewer behaves. This role is that same reviewer on the key this file names.
 
-Escalation is a ROLE, not a call-site parameter. The lead binds your tier by routing the
-review here; the dispatch guard binds `code-reviewer`'s model to `code-reviewer.md`'s pin
-and rebinds a call-site `model` override back to it, so a higher `model` on a plain
-`code-reviewer` dispatch is silently corrected to the standard tier, never honored. Do not
-down-shift or re-request a model — the lead chose this tier by routing the review here.
+Escalation is a ROLE, not a call-site parameter. The lead binds your route by routing the
+review here; the dispatch guard binds `code-reviewer`'s model to its `aiDlcRoles` entry
+and rebinds a call-site `model` override back to it, so a different `model` on a plain
+`code-reviewer` dispatch is silently corrected to the configured one, never honored. Do not
+down-shift or re-request a model — the lead chose this route by routing the review here.

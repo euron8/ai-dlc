@@ -605,8 +605,8 @@ checks:
         posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path> --transcript <path> --transcript-dir <dir>; exit 0 required;
           exit 0 with a `PASS` line carrying `EXAMINED NOTHING` from the --series stall rung
           is not a pass, nothing was verified — no verdict carried a gate_series_id)
-        why: the lead runs on a cheaper model and escalates every adjudication:llm check for the
-          gate type to ONE fresh Opus gate-adjudicator subagent. This is the SINGLE fail-closed
+        why: the lead never judges inline and escalates every adjudication:llm check for the
+          gate type to ONE fresh, independent gate-adjudicator subagent. This is the SINGLE fail-closed
           check through which the lead adopts those per-check verdicts — a missing / malformed /
           stale verdict, an uncovered escalated check, a duplicate, or any FAIL blocks. The lead
           never evaluates an llm check inline (that is a Rule 20 solo violation), so if this check
@@ -1337,8 +1337,8 @@ non_catalog_units:
 
   - id: dispatch-model-binding
     title: Teammate dispatch model binding (v0.70.0) — a teammate runs on the model
-      its role file pins, and a dispatch that omits the model param does not
-      silently inherit the lead's
+      its role's aiDlcRoles entry configures, and a dispatch that omits the model
+      param does not silently inherit the lead's
     adjudication: script
     hard_block: true
     enforcer:
@@ -1346,25 +1346,30 @@ non_catalog_units:
       - core/scripts/render-agent-definitions.sh
     call_sites:
       - site: ai-dlc-dispatch-guard.sh (PreToolUse Agent|Task) — THE ONLY TEETH
-        posture: runtime DENY of a role-bound dispatch whose model tier disagrees
-          with the role file's pin, or which passes no model param at all
+        posture: runtime CORRECTION of a role-bound dispatch whose model disagrees
+          with the role's aiDlcRoles entry, or which passes no model param at all
+          (the guard corrects rather than denies, per
+          core/hooks/ai-dlc-dispatch-guard.sh:71-73; with no rendered definition
+          its PreToolUse updatedInput carries only model, and effort binds only
+          through the rendered .claude/agents/<role>.md that updatedInput selects
+          by setting subagent_type)
         why: >-
           there is NO gate-time backstop and there cannot be one — an
           Agent-spawned teammate leaves no transcript, so nothing downstream can
           learn what model it ran on, and a verdict that self-reports its own
           model is the trust circularity that keeps H1/H2 with the lead. The
           dispatch param is the only observable ground truth and it is observable
-          BEFORE the work. Measured on graph S291 (v0.70.0 Sonnet-lead A/B):
+          BEFORE the work. Measured on graph S291 (v0.70.0 lead-model A/B):
           the lead dropped the param on 3 of 42 spawns, so every remediator ran
-          Sonnet against an opus pin — and an inherited gate-adjudicator would
-          collapse the v0.62.0 Opus escalation to Sonnet-judging-Sonnet while
-          Check 26 still passed green.
+          the lead's model instead of its configured one — and an inherited
+          gate-adjudicator would collapse the v0.62.0 escalation to the lead's
+          model judging the lead's model while Check 26 still passed green.
     checks:
       - id: pin-agreement
-        asserts: a dispatch binding team-roles/<role>.md requests a model whose
-          tier matches that file's declared pin
-        protects: the role file as the single source of truth for a teammate's
-          model — v0.62.0's Opus escalation and v0.56.0's fresh-context repair
+        asserts: a dispatch binding team-roles/<role>.md requests the model
+          key that role's aiDlcRoles entry configures
+        protects: aiDlcRoles in .claude/settings.json as the single source of truth for a
+          teammate's model — v0.62.0's escalation and v0.56.0's fresh-context repair
           both rest on it
       - id: no-silent-inherit
         asserts: a role-bound dispatch names a model explicitly

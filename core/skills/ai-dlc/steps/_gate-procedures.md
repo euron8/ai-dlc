@@ -178,8 +178,8 @@ was never created and answers a different question than the join does.
 ## Gate-adjudication dispatch (referenced by the gate)
 
 When `gate-validation.md` says "dispatch the gate-adjudicator", execute this. It escalates
-the read-and-compare (`adjudication: llm`) checks of ONE gate to a fresh Opus subagent so the
-lead can run on a cheaper model without weakening the gate. The lead still owns PASS/FAIL: it
+the read-and-compare (`adjudication: llm`) checks of ONE gate to a fresh, independent subagent
+context, so no judgment is made in the lead's own context. The lead still owns PASS/FAIL: it
 adopts the verdict only through Check 26.
 
 **Script arms before the adjudicator.** Nothing is dispatched until the script checks pass.
@@ -1320,7 +1320,7 @@ the validator; never send an exit 2 to the remediator. Exit 1 costs an exit code
 reaches the adversary instead: measured across four sprints of this pipeline, **78% of the
 MAJOR findings raised at pass 2 and later were introduced by a prior repair**, and the single
 largest sub-shape is a derivation that was correct when written, was never re-run after a
-later edit, and was rediscovered one pass downstream by an Opus agent running the same
+later edit, and was rediscovered one pass downstream by an agent running the same
 command the artifact already carried.
 
 Run the same command after the AUTHORING step too, before the cycle's first pass — the same

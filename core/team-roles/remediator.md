@@ -295,7 +295,7 @@ should not have to find. Measured on the reference consumer: 12 of 74 records di
 **The fence is `derived` and it is load-bearing.** `scripts/ai-dlc/validate-artifact-derivations.sh`
 re-runs every command inside one of those blocks and compares against the recorded output, so a
 claim written this way is checked by a script before the next adversarial pass is dispatched
-rather than by an Opus agent one pass later. The `ai-dlc-derivation-capture.sh` hook runs that
+rather than by an agent one pass later. The `ai-dlc-derivation-capture.sh` hook runs that
 same checker on the block as you WRITE it, so an output you recorded without running the command
 is refused inside the tool call that wrote it. Record the output **verbatim** — a `-> 7` annotation
 or a trailing `<- the count is clean` makes the block unreadable to the checker; put the
@@ -323,7 +323,7 @@ no command-prefix allow rule and can stop an unattended sprint until a human app
 
 **Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
 call it before your first edit or write, and again before you write your deliverable or verdict.
-It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+It takes no parameters and forwards your whole transcript to a separate reviewer; weigh what it
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 

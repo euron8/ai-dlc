@@ -6,7 +6,7 @@ Read-heavy exploration in planning **and retro** steps is the lead's
 largest avoidable cache-read cost: every file the lead reads inline accumulates in its
 context and is re-read every subsequent turn. To keep the lead lean,
 the *exploration* portion of designated steps is dispatched to an
-`analyst` subagent (read-only, bound to the analyst role file per Rule 19 — model + role-contract line) whose raw
+`analyst` subagent (read-only, bound per Rule 19 — the model from `aiDlcRoles.analyst` + the role-contract line) whose raw
 reading never enters the lead's context.
 
 **Config.** `planning_offload` (default `on`). When `on`, the steps
@@ -30,7 +30,7 @@ since the read was already done upstream by `doc-reconciliation`.
 **Dispatch contract.** Each offloaded step's Section 0 defines its own
 concrete dispatch — the analyst's exploration scope, the canonical output
 artifact path, and the resume point — and spawns the `analyst` via the
-Agent tool (bound to the analyst role file per Rule 19 — model + role-contract line). The
+Agent tool (bound per Rule 19 — the model from `aiDlcRoles.analyst` + the role-contract line). The
 cross-cutting rules the lead applies to every such dispatch: dispatch with
 `run_in_background: true` and bounded-join it (Rule 29 — a blocking analyst
 spawn locks the operator out for its full duration); order the

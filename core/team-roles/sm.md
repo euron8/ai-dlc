@@ -89,7 +89,7 @@ no command-prefix allow rule and can stop an unattended sprint until a human app
 
 **Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
 call it before your first edit or write, and again before you write your deliverable or verdict.
-It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+It takes no parameters and forwards your whole transcript to a separate reviewer; weigh what it
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 
