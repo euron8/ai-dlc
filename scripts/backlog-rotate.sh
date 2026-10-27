@@ -261,7 +261,7 @@ fi
 # unmatched open to that counter. Measured while writing backlog-reverify.sh: the shell
 # swallowed the rest of the file and reported `unexpected EOF` a hundred lines later.
 AWKF="$(mktemp)" || { echo "backlog-rotate: mktemp failed" >&2; exit 2; }
-trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved"' EXIT
+trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved" "$AWKF.nooutcome"' EXIT
 
 { ledger_entry_awk; printf '%s\n' "$BACKLOG_LABEL_AWK"; cat <<'AWK'
 # Emits the ledger split in two: LIVE lines to one file, CLOSED entries to another, with every
@@ -269,9 +269,10 @@ trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved"' EXIT
 # stays live.
 function flush(   i) {
   if (label == "") return
+  if (closed && tagged && !outcome) print label > NOOUTCOME
   if (closed) { for (i = 1; i <= n; i++) print buf[i] > MOVED; movedn++ }
   else        { for (i = 1; i <= n; i++) print buf[i] > LIVE }
-  label = ""; closed = 0; n = 0
+  label = ""; closed = 0; n = 0; tagged = 0; outcome = 0
 }
 {
   # Via the shared helper, so the fence guard above and this split can never disagree about what
@@ -284,7 +285,27 @@ function flush(   i) {
     buf[++n] = $0
     next
   }
+  # A SECTION HEADING ENDS THE ENTRY ABOVE IT (BL-824). A `##` line carrying no BL- label is a
+  # ledger SECTION, at the same level as the entries, so the span of the entry above it ends
+  # there and the section's heading and prose stay live. Before this, the span ran on to the next
+  # BL- label: archiving the entry above a section archived the section, and a gate once had to
+  # restore the "Efficiency regression after the ranked set" preamble by hand. Keyed on the SHAPE
+  # helper, never on a bare `^## `: a FENCED `## prose` line is not entry-shaped to lib.sh and
+  # stays inside its entry, and a `###` subheading is below the entry level and moves with it.
+  # A `##` heading whose FIRST TOKEN is a BL- id (bare, in backticks, or bold) is NOT a section even
+  # when the label parser cannot read it: such a heading is a mis-spelled LIVE entry, and the
+  # entry-like id census below must still see it. An id later in the prose (`## Reopened by BL-817's
+  # re-audit`) names a section, so the test is the first token and never "any BL- id on the line".
+  if (label != "" && ledger_entry_shape($0) == "heading" && $0 ~ /^##[ \t]/ && $0 !~ /^##[ \t]+[`*]*BL-[0-9]/) {
+    flush()
+    print > LIVE
+    next
+  }
   if (label == "") { print > LIVE; next }
+  # AN EFFICIENCY CLOSE CARRIES ITS OUTCOME (BL-817). The tag is the bold form, so prose that
+  # quotes the bare phrase is not an efficiency entry; the outcome line opens a line.
+  if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1
+  if ($0 ~ /^(<br>)?(\*\*)?Outcome measured:/) outcome = 1
   # STRICTER THAN backlog-reverify.sh's PREDICATE, ON PURPOSE. Rotate's closed-set must be a
   # strict SUBSET of reverify's, or the --check acceptance test below is comparing two readers
   # that share a defect and its agreement means nothing. Measured while writing this file: with
@@ -303,8 +324,25 @@ END { flush(); print movedn+0 > "/dev/stderr" }
 AWK
 } > "$AWKF"
 
-MOVED_COUNT="$(awk -v LIVE="$AWKF.live" -v MOVED="$AWKF.moved" -f "$AWKF" "$LEDGER" 2>&1 >/dev/null)"
+: > "$AWKF.nooutcome"
+MOVED_COUNT="$(awk -v LIVE="$AWKF.live" -v MOVED="$AWKF.moved" -v NOOUTCOME="$AWKF.nooutcome" -f "$AWKF" "$LEDGER" 2>&1 >/dev/null)"
 MOVED_COUNT="${MOVED_COUNT:-0}"
+
+# THE OUTCOME GUARD (BL-817). An efficiency entry -- the bold `**DEFECT (efficiency).**` tag --
+# that carries the close annotation leaves the ledger only with an `Outcome measured:` line. A
+# receipt proves the mechanism shipped; for an efficiency entry the outcome is the claim, and the
+# ranked set of 19 closed on receipts while per-story cost never moved. Refused BEFORE anything is
+# written. What the line must SAY is validate-backlog-receipts.sh's close arm, which the push runs;
+# this guard asks only that it exists, so the archive never takes an efficiency close without one.
+if [ -s "$AWKF.nooutcome" ]; then
+  echo "backlog-rotate: REFUSING — an efficiency close carries no outcome line:" >&2
+  sed 's/^/  /' "$AWKF.nooutcome" >&2
+  echo "  Each entry above is tagged **DEFECT (efficiency).** and annotated LANDED, and has no line opening" >&2
+  echo "  'Outcome measured:'. Add one naming the consumer sprint, the measuring script and the per-story" >&2
+  echo "  before/after (or the explicit no-graph-pipeline-step form), or reopen the entry. Nothing was moved" >&2
+  echo "  and nothing was written." >&2
+  exit 2
+fi
 
 if [ "$MOVED_COUNT" = "0" ]; then
   echo "backlog-rotate: no entry carries the annotation form '**LANDED (v' — nothing to move."

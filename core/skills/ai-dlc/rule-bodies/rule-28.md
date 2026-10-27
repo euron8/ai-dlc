@@ -55,24 +55,23 @@ subagent context and the lead in orchestration (Rule 23).
 **Split dispatch: one agent per independent part.** Rule 28 decides
 WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
-axis, the lead dispatches one agent per part, plus one cross-part agent
-per cross group where the axis says parts interact, in the waves described below, and
+axis, the lead dispatches one agent per part, plus ONE cross-part agent
+(one per seat on a seats axis) where the axis says parts interact, in the waves described below, and
 joins them with bounded-join beats (Rule 29). The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`), or a
   story's changed-file set as `partition-review-diff.sh --map` prints it:
-  one agent per file or part plus one cross-part agent per cross group
+  one agent per file or part plus one cross-part agent
   (below), reporting interactions only. Every finding or edit names the parts
   it cites; a per-part agent reports only findings citing its own part
   alone, a cross-part agent only findings citing two or more. A review
   the program answers `SERIAL` is `shard: 1/1 <story-index>`, never
-  `shard: none (…)`. Stories elicitation is the one exception to the
-  per-group count: it dispatches ONE cross-story agent briefed with every
-  ordinal, writing `cross.md` (`_gate-procedures.md`, validation-cycle
-  item 2).
+  `shard: none (…)`. Stories elicitation dispatches the same ONE
+  cross-story agent briefed with every ordinal, writing `cross.md`
+  (`_gate-procedures.md`, validation-cycle item 2).
 - **sections** -- a single document that `partition-document.sh --map`
   partitions: one agent per part the map prints plus one cross-part
-  agent per cross group (below), reporting interactions only, citing parts by
+  agent (below), reporting interactions only, citing parts by
   the same rule as the files axis. A review joins with
   `merge-adversarial-shards.sh --document`; a repair shard edits only
   its section file from `partition-document.sh --split`, and
@@ -85,18 +84,17 @@ joins them with bounded-join beats (Rule 29). The axes:
 - **surfaces** -- the surfaces a Rule 24 Section 0 declares: one analyst
   per surface, no cross-part agent.
 - **seats x parts** -- a party-mode round over a files-axis subject: one
-  persona agent per (seat, part) plus one cross-part agent per (seat,
-  cross group). The seats record findings and edit nothing; a files-axis
-  repair applies them.
+  persona agent per (seat, part) plus one cross-part agent per seat. The
+  seats record findings and edit nothing; a files-axis repair applies them.
 - **seats x sections** -- a party-mode round over a sections-axis subject:
-  one persona agent per (seat, part) plus one cross-part agent per (seat,
-  cross group). The seats record findings and edit nothing; a
-  sections-axis repair applies them.
+  one persona agent per (seat, part) plus one cross-part agent per seat.
+  The seats record findings and edit nothing; a sections-axis repair
+  applies them.
 - **subject** -- a subject of several files reviewed as one, under one
   base recorded in its manifest (the requirements step's brief, spec,
   PRD and architecture-impact record): one agent per part that
-  `partition-subject.sh --map` prints plus one cross-part agent per
-  cross group (below), reporting interactions only, citing parts by the same rule as the
+  `partition-subject.sh --map` prints plus one cross-part agent
+  (below), reporting interactions only, citing parts by the same rule as the
   files axis. A file unchanged since the base has no part. A review
   joins with `merge-adversarial-shards.sh --subject`; a repair shard
   edits only its section file and `join-remediator-shards.sh --subject`
@@ -104,25 +102,24 @@ joins them with bounded-join beats (Rule 29). The axes:
   part is exception 4.
 - **seats x subject-parts** -- a party-mode round over a subject-axis
   subject: one persona agent per (seat, part) plus one cross-part agent
-  per (seat, cross group). The seats record findings and edit nothing; a
-  subject-axis repair applies them.
+  per seat. The seats record findings and edit nothing; a subject-axis
+  repair applies them.
 
-**The cross-part agent is sharded too.** On the sections and subject
-axes, on an adversarial review over stories, and on the three seats
-axes, there is one cross-part agent per cross group, not one per round:
-the groups are the rows `partition-document.sh --cross-groups <K>`
-prints for the map's part count K, at most six, and every unordered
-pair of parts lies inside at least one. Each goes out in the same waves
-as the parts. A cross agent reads the WHOLE subject: its group's pairs
-are its focus, not its boundary, and it may cite any part. The groups
-cover every pair but not every triple, so a group-bounded read loses
-a finding resting on three or more parts that no group holds, and a
-cross agent's wall clock tracks the tokens it writes, not the bytes it
-reads. A cross finding is OWNED by the lowest group whose row holds its
-two smallest cited ordinals, as `partition-document.sh --cross-owner
-<K> <ordinal,ordinal,...>` prints. The join accepts a finding reported outside its
-owner, and refuses it only when the owner's shard carries the identical
-cited set. Every part and cross agent writes its file early
+**One cross-part agent, never one per group.** On every axis that has a
+cross-part agent -- code review and QA validation, an adversarial pass or
+repair, elicitation -- the dispatch has ONE, and a party round has one per
+seat. It is briefed with every ordinal the map printed, goes out in the
+same waves as the parts, reads the WHOLE subject, may cite any part, and
+writes `cross.md`. It replaces one cross agent per row of
+`partition-document.sh --cross-groups <K>`: measured over the s319 and s320
+stories elicitation, the per-story shards made 32 unique surviving catches
+at $3.06 each against the cross groups' 3 at $25.15, and every cross group
+had already read every story (`BL-811`). Both merges and Check 24 still
+accept a COMPLETE `cross-1..G` set written by a dispatch before this rule,
+never mixed with `cross.md`; in such a set a cross finding is OWNED by the
+group `partition-document.sh --cross-owner <K> <ordinal,ordinal,...>`
+prints, and the join refuses one reported outside its owner only when the
+owner's shard carries the identical cited set. Every part and cross agent writes its file early
 and ends it with one `seat-complete: ... sha=<hex> findings=<n>` line,
 appended once as its final act by `wait-for-deliverable.sh --mark`, and its
 join beat passes `--complete`
@@ -132,8 +129,8 @@ cross agent.
 **Code review and QA shard their execution too.** On a review over
 `partition-review-diff.sh --map`, at gate 1 and gate 2 alike, each part
 agent replays the mutation-REDs anchored in its part in its own detached
-worktree at the frozen sha, and every cross agent goes out in the same
-wave as the parts. The first cross agent does its part-independent work
+worktree at the frozen sha, and the cross agent goes out in the same
+wave as the parts. The cross agent does its part-independent work
 first and joins the part files itself only before the hand-over replays
 and the per-AC table (`implementation.md`, the Gate-1 and Gate-2
 dispatch paragraphs). What remains on that one agent is the canonical
@@ -166,7 +163,7 @@ readable value, when the lead can read one -- a Bash `printenv
 CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, or the "You can run <N> subagents"
 text of a rejection this session already holds; (2) otherwise the
 rejection probe: while the cap is unknown, the first wave is the whole
-ROUND -- every seat's every part and every cross group -- so the
+ROUND -- every seat's every part and every seat's cross agent -- so the
 wave-size floor is every undispatched member, and the first rejection
 that wave draws carries the cap; (3) never an assumed or remembered
 number, and never a number written here. Every fan-out in ai-dlc
@@ -303,11 +300,12 @@ this clause and names its axis and its join; it does not restate them.
 
 The lead's written dispatch plan names, for every dispatch, its axis
 and part count or which of (1)-(4) keeps it whole. Every shard brief
-carries one line `shard: <i>/<N> <part-key>` (a cross-part agent:
-`shard: cross/<K> g<g>/<G> <ordinals>`, its group of G and that group's
-ordinals, K being the map's part count; no axis keeps a single cross
-agent, a code or QA review over `partition-review-diff.sh --map`
-included, except where `--cross-groups` prints one group, which is K=2)
+carries one line `shard: <i>/<N> <part-key>` (the cross-part agent:
+`shard: cross/<K> g1/1 <ordinals>`, K being the map's part count and
+`<ordinals>` every ordinal 1..K, comma-joined, without zero padding --
+Check 22 arm S4 refuses a brief that omits one; every axis keeps ONE
+cross agent per dispatch, one per seat in a party round, a code or QA
+review over `partition-review-diff.sh --map` included)
 or `shard: none (<exception 1-4>)`. A
 sections-axis part key is the part's heading from the map, as in
 `shard: 2/5 ## Functional Requirements`; a document the map reports

@@ -2410,9 +2410,16 @@ fi
 # dispatch obeyed the program in force. A pass carrying the OLD shape (ordinals plus one `cross`)
 # where the pinned copy prints several groups is dated against K3C_RELEASE, not K3_RELEASE, so a
 # series opened before the cross groups shipped reads PENDING rather than being convicted.
+# THE LONE CROSS (K3D_RELEASE). From K3D_RELEASE the dispatch owes ONE cross adversary (BL-811), and
+# merge-adversarial-shards.sh merges a lone `cross` at any K. A pass whose key set is the ordinals
+# plus one `cross` is therefore ACQUITTED when its series opened at or after K3D_RELEASE's stamp
+# (k3_opened_after); before that stamp it keeps the K3C_RELEASE verdict unchanged. The grouped set
+# stays accepted at every date. K3D_RELEASE is written as a placeholder on the branch and stamped
+# with the release version at cut; k3_stamp_probe refuses the placeholder, exit 2.
 K3_RELEASE="0.735.0"
 K3B_RELEASE="0.738.0"
 K3C_RELEASE="0.744.0"
+K3D_RELEASE="0.952.0"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
   printf '%s\n' $1 | awk -F= -v re="^(${DISPATCH_ID_PREFIXES// /|})." 'NF >= 2 && $2 ~ re { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
@@ -2525,6 +2532,26 @@ EOF
     fi
   }
   k3_stamp_probe
+  # k3_opened_after -> 0 when the series' first pass is an ISO 8601 UTC invoked_at at or after the
+  # stamp of the release bound in k3_rel, in the consumer root above that pass; 1 otherwise (no root,
+  # no stamp, no ISO date, or earlier). The same reads the finding's dating below makes.
+  k3_opened_after() {
+    local at="${P_AT[0]:-}" sw sroot="" st=""
+    sw="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+    while [ -n "$sw" ]; do
+      if [ -f "$sw/.claude/.ai-dlc-version" ]; then sroot="$sw"; break; fi
+      sw="${sw%/*}"
+    done
+    [ -n "$sroot" ] || return 1
+    stamp_log "$sroot"
+    st="$(K_RELEASE="$k3_rel" k_stamp_parse < "$STAMP_LOG")"
+    [ -n "$st" ] || return 1
+    case "$at" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+      *) return 1 ;;
+    esac
+    ! [[ "$at" < "$st" ]]
+  }
 
   k3_term="${LAST_FILE##*/}"
   k3_mf="$k3_dir/requirements-subject.md"
@@ -2614,9 +2641,18 @@ EOF
           if [ -z "$k3_pending" ]; then
             k3_want_s="$(k3_want "$AC_T/k3-real" "$k3_xk" | tr '\n' ' ')"
             if [ "$k3_have" != "$k3_want_s" ]; then
-              k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross groups {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
-              # The pre-groups shape (ordinals plus one `cross`) is dated against K3C_RELEASE.
-              if [ "$k3_have" = "$(k3_want "$AC_T/k3-real" cross | tr '\n' ' ')" ]; then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi
+              k3_lone=0; [ "$k3_have" = "$(k3_want "$AC_T/k3-real" cross | tr '\n' ' ')" ] && k3_lone=1
+              # THE LONE CROSS (K3D_RELEASE): ordinals plus one `cross` is the dispatched shape for a
+              # series opened at or after K3D_RELEASE's stamp, and acquitted there. Before it, that
+              # shape keeps its old verdict, dated against K3C_RELEASE below.
+              k3_dok=0
+              if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3D_RELEASE"; k3_stamp_probe; k3_opened_after && k3_dok=1; fi
+              if [ "$k3_dok" -eq 0 ]; then
+                k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross groups {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
+                k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"
+                # The pre-groups shape (ordinals plus one `cross`) is dated against K3C_RELEASE.
+                if [ "$k3_lone" -eq 1 ]; then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi
+              fi
             fi
           fi
         else
@@ -2656,8 +2692,8 @@ EOF
       err "K3 -- SUBJECT" "${k3_term}: ${k3_why}. The series opened (${k3_at}) after ${k3_rel}
       was stamped (${k3_stamp}), so the requirements step's subject axis binds it (Rule 28, \"Split
       dispatch\": subject): one adversary per part scripts/ai-dlc/partition-subject.sh --map prints,
-      plus one cross-part adversary per group scripts/ai-dlc/partition-document.sh --cross-groups <K>
-      prints (cross-1..cross-<G>; a single cross at K=2), joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
+      plus ONE cross-part adversary reading every part, writing cross.md (the per-group cross-1..cross-<G>
+      of scripts/ai-dlc/partition-document.sh --cross-groups <K> is accepted too), joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
       which writes this pass file with 'artifact:' = the subject manifest. A subject that maps to one
       part is reviewed by one adversary that writes the pass itself, naming the manifest, with no
       shard line. Re-run the pass that way and write it as the NEXT pass number; this arm reads only

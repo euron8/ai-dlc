@@ -113,9 +113,9 @@ for your findings, and (d) a shared context block. You MUST:
    `### ` there is a finding and carries its UPPERCASE severity (FINDING GRAMMAR,
    `merge-adversarial-shards.sh`'s header).
 5. **As a shard** — your brief carries `shard: <ordinal>/<K> <basename>` or
-   `shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis). Review only
-   your story; as a cross shard, read EVERY story, take the pairs of your group as your focus,
-   and cite any story a finding rests on (Rule 28, "The cross-part agent is sharded too").
+   `shard: cross/<K> g1/1 <ordinals>` (Rule 28, "Split dispatch": files axis). Review only
+   your story; as the cross shard, read EVERY story
+   and cite any story a finding rests on (Rule 28, "One cross-part agent, never one per group").
    Write the file's header first and append each finding as you verify it. When you have
    finished, and only then, close the shard with ONE Bash call,
    `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`,
@@ -139,15 +139,16 @@ for your findings, and (d) a shared context block. You MUST:
    Write your shard to its result path only; a `<shard>.draft` beside it is ignored by the merge,
    but a shard always ends in its `seat-complete:` line, so it chunks at the result path and
    needs no draft.
-   **As a cross shard**, before you record a finding, run
+   **As one shard of a per-group cross set** (`cross-<g>`, dispatched before Rule 28's one-cross
+   rule; the one cross shard `cross` skips this paragraph), before you record a finding, run
    `scripts/ai-dlc/partition-document.sh --cross-owner <K> <ordinal,ordinal,...>` (the ordinals the finding cites, comma-joined). When
    the group it prints is not your own, record the finding only if the owner's focus pairs would
    not surface it; otherwise name it under `## Cross-references`, which is not a finding.
 
    **As a section shard** — your brief carries `shard: <ordinal>/<K> <heading>` or
-   `shard: cross/<K> g<g>/<G> <ordinals>` over ONE document (Rule 28, "Split dispatch": sections
-   axis). Read only your line range of the real document, read-only; as a cross shard, read the
-   WHOLE document, take the pairs of your group as your focus, and cite any section a finding
+   `shard: cross/<K> g1/1 <ordinals>` over ONE document (Rule 28, "Split dispatch": sections
+   axis). Read only your line range of the real document, read-only; as the cross shard, read the
+   WHOLE document and cite any section a finding
    rests on. Every finding carries exactly one `sections: <ordinal>[, ...]`
    line citing ordinals from the map in your brief — your own ordinal alone, or two or more if
    you are a cross shard — and never a `stories:` line. `artifact:` names the whole document and
@@ -155,7 +156,7 @@ for your findings, and (d) a shared context block. You MUST:
    merge checks every shard's sha against the document and refuses a mismatch.
 
    **As a subject shard** — your brief carries `shard: <ordinal>/<K> <file-stem> <heading>` or
-   `shard: cross/<K> g<g>/<G> <ordinals>` over the requirements subject (Rule 28, "Split
+   `shard: cross/<K> g1/1 <ordinals>` over the requirements subject (Rule 28, "Split
    dispatch": subject axis). Your read scope, your `sections:` citations, your `artifact:` and your per-stem
    `artifact_sha` are exactly those `steps/_gate-procedures.md`, "Adversarial review dispatch",
    prescribes in its paragraph **Shard the requirements subject**; follow that paragraph, not

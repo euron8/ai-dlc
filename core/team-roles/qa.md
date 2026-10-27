@@ -335,7 +335,9 @@ For each completed task, verify:
     confirmed present in output
   - **If ANY of these are missing, REJECT the story. This is not deferrable.**
 - [ ] **Smoke test updates (HARD GATE):** For stories that introduce,
-  modify, or remove user-facing functionality:
+  modify, or remove user-facing functionality (a rework that adds or edits a
+  smoke test re-runs gate 1 before your re-validation, under Rule A in
+  `implementation.md`; a capture- or record-only rework does not):
   - [ ] Smoke tests added/updated/removed in the same commit
   - [ ] "Smoke Test Updates" section exists in the story file
   - [ ] Changes cover the story's primary user-facing path
@@ -383,8 +385,8 @@ For each completed task, verify:
   `SendMessage` your full validation verdict (per-AC PASS/FAIL with
   Expected/Got) to the lead (`to: "main"`). A part shard delivers its shard file's absolute
   path and its `shard-verdict:` value instead, never per-AC rows, which only
-  the first cross shard writes. The first cross shard (`cross-1`, or `cross`
-  when there is one cross group) delivers its shard file's absolute path, its
+  the first cross shard writes. The first cross shard (`cross`, or `cross-1`
+  of a per-group set) delivers its shard file's absolute path, its
   `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows
   stay in the file. Every other cross shard delivers its shard file's absolute
   path and its `shard-verdict:` value. A silent idle is NOT a delivery — the lead treats
@@ -455,12 +457,11 @@ for it.
 ## As a Shard
 
 **As a shard**, your brief carries `shard: <ordinal>/<K> <group>` or
-`shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis),
+`shard: cross/<K> g1/1 <ordinals>` (Rule 28, "Split dispatch": files axis),
 the part map, and the ABSOLUTE path of the one shard file you write:
-`<ordinal>.md`, or `cross-<g>.md` (`cross.md` when there is one cross group)
-in the shard directory. A cross brief also carries the whole group table from
-`partition-document.sh --cross-groups <K>`. As a cross shard, read the WHOLE
-diff: your group's pairs are your FOCUS, and you may cite any part. The merge
+`<ordinal>.md`, or `cross.md` for the one cross shard,
+in the shard directory. As the cross shard, read the WHOLE
+diff, and you may cite any part. The merge
 refuses your finding only when the group `partition-document.sh --cross-owner`
 names already carries the identical `parts:` set. Write there and nowhere
 else, never to the validation file above. Write your header first and append
@@ -503,7 +504,8 @@ hand-over is not a REJECT of its own. The hand-over finding goes under
 one column-0 `handover: <AC-id>` line beside its `parts:` line. Beyond that
 setup and those replays, a part shard runs no suite, no build and no live run.
 
-**With more than one cross group, the FIRST cross shard (`cross-1`) is "the
+**In a per-group cross set (`cross-1..G`, dispatched before Rule 28's one-cross
+rule), the FIRST cross shard (`cross-1`) is "the
 cross shard" of the next paragraph**: it alone executes in the frozen
 worktree, runs every handed-over replay, and writes the per-AC table and the
 deferred-AC record. Every other cross shard (`cross-2` onward) executes

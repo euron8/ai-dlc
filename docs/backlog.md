@@ -58,7 +58,6 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-
 ## Pipeline-efficiency ranked set (efficiency ranks 1–14)
 
 Filed from [`docs/analysis/pipeline-efficiency-s317-s318.md`](analysis/pipeline-efficiency-s317-s318.md),
@@ -73,8 +72,6 @@ measured afterwards on consumer transcripts, re-running `pipeline-efficiency-s31
 the sprints after the fix lands. graph is the reference, not the only population:
 `magic-bonus-calc-engine` also runs ai-dlc (0.780.0) and has its own transcripts. Measure on every
 consumer that has run the fixed release, and name the population beside each figure.
-
-
 
 ## Sprint 319 lead-transcript review (filed 2026-10-15)
 
@@ -106,6 +103,8 @@ Owed: a stated lead response to a notification for an agent whose deliverable an
 
 **Third reading (batch 243, c5; transcript-only; the entry stays PARTIAL).** The s320 lead work spans four transcripts under `~/.claude/projects/-Users-n8-git-graph/`: `719a49a0` (the opening session, 133 dispatches), `d71fcbce` (a short resume, 4), `d22c7889` (the main s320 lead, 539) and `04c0da6d` (the latest resume, 35). They were identified as the non-sidechain sessions whose first human turn is `/ai-dlc`. `888e1365` (the s319 lead) and `913d04cc` were rejected for carrying almost no s320 mentions, and `fa7ce946` for being an `/ai-dlc-update` session. Under f7's heuristic (a wake ends with no tool call when no `tool_use` block appears before the next user line), the wakes and the no-tool-call wakes per transcript are 125/91, 7/1, 482/355 and 34/25, which sum to 472 of 648 (73%). The same counter reproduces the s319 `c61a91eb` window of 37 of 54 exactly (up to transcript line 2838) but does NOT reproduce the window of 20 of 29 (its nearest reading is 23 of 40 at line 2702). The 73% figure is therefore a FLOOR OF UNKNOWN ACCURACY, not an exact count. The wake definition (a non-sidechain user line carrying the task-notification tag that is not a `tool_result`) is this counter's own, and a raw tag count disagrees with it: 2482 occurrences against 482 parsed wakes in `d22c7889`, because the tag also appears in queued and quoted lines. About 112 of the 472 idle wakes explicitly restate that an armed join or beat covers them; that number is a TEXT-REGEX APPROXIMATION, not a classification of each turn. One example is `d22c7889` line 716: "Covered by the armed join; nothing to do until it reports." The mechanism that would remove these turns has no design since the hook was retired, so the entry stays PARTIAL and its verify line is unchanged.
 
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
+
 verify: manual
 
 ## BL-583 — the push suite's non-mutant poles have not been judged on value, and no per-gate wall clock or dollar figure has been measured
@@ -125,7 +124,6 @@ Owed, under the step-value ruling in `operator-rulings.md` ("A step with no meas
 Caveat: the record is a loaded-cost set from recent runs, not a solo timing, and a content-keyed push runs only part of it. The per-gate figure needs the gate log of a real release push (0.794.0 onward). Related: BL-558, BL-592, CLAUDE.md "A wall clock is a defect until it is justified".
 
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
-
 
 **Partial, v0.810.0.** Item (a), the sandbox re-trace of 13 of the 14 stale fixtures, landed in intake 2 (`52555359`). Items (b) and (c) land here: `fold-architect-ledger-join-mutants` runs C0 and the M6 premise in shard `a` only, bound by a J2 arm, and `derivation-capture-mutants` is four pool units with a derived deal and coverage join (J0, J1, J1b) and no redundant control. Open: the remaining phase-2 items (gate-adjudication M0 in one shard, the readset-skip-digest and advisor-gate-deny controls in one shard each, the ledger-reverify-shard control) and the per-gate wall clock and dollars, which need the gate log of a real release push.
 
@@ -175,6 +173,8 @@ Caveat: in a linked worktree the local map is a different file (the BL-558 sympt
 Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
 
 **The completeness proof covers `inputs.decl` only (batch 236; root cause BL-676).** `tools.decl` KEYS tools but does not RESTRICT them. The sandbox PATH is `$HR_TOOL_DIRS:$HR_BIN` (`core/scripts/hermetic-run.sh:544`: `env -i PATH="$HR_TOOL_DIRS:$HR_BIN"`; header `:54-55`: "PATH pinned to the fixed tool dirs plus a symlink farm / of the declared tools (keyed and unkeyed)"), so every system tool dir is reachable whether declared or not. Removing a tool line therefore makes no fixture fail, and a removed tool line is invisible to any receipt or fixture. Of the 5 `inputs.decl` lines, 4 are mutated by `core/fixtures/hermetic-runner/run.sh` (DC1 `core/scripts/hermetic-run.sh`, DC2 `core/scripts/core-paths.sh`, DC3 `core/fixtures/lib/`, DC4 `.githooks/pre-push`), and two groups cannot be caught. All `tools.decl` lines cannot, because the sandbox never refuses an undeclared tool, so a dropped line changes nothing a fixture can observe. The fifth `inputs.decl` line, `core/git-hooks/pre-push`, cannot on the distribution, because the fixture never opens it there, although it is still part of the key. The result "one tool removed: 0" is therefore not coverage.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
 
 verify: manual — (3)'s solo high-load drop remainder is open, so a live receipt would read CLOSE-CANDIDATE
 
@@ -289,6 +289,8 @@ Each fixed unit still owes its solo-against-pool receipt, with a load-free contr
 - **Candidate (a) NOT REPRODUCED (hand H3's scratch harness; not re-measured at intake).** The harness sourced the hook's `FIXTURE_POOL_BEGIN..END` span and `readset-skip`'s `CK_HELPERS` (real `ck_push`, live trace off, `AI_DLC_FIXTURE_JOBS=1`) and ran the watchdog subshell verbatim with `cl=1` and an injected `dp`, for both `.githooks/pre-push` and `core/git-hooks/pre-push`, with identical results. Arms: base ok x3, rc 0. Positive control (`beta` runs `kill -TERM $PPID`): `FAIL beta (no verdict recorded)` and `2 of 3 fixtures produced a verdict`, rc 1, which is H2's shape. Negative (`dp` = an unrelated `set -m` group): watchdog exit 3, ok x3. Alias (`dp` = the inner worker's pgid, which equals the outer unit's group): watchdog exit 3, outer unit exit 143, no verdict lines. `dp` = `beta`'s own group gives `FAIL beta` with a verdict recorded. `dp` = the inner watcher's group gives ok x3. Reason: the inner pool worker never leads its own group, so a group TERM reaching it also ends xargs and the fixture; a single dropped verdict with siblings ok needs a TERM to the worker's pid alone, and the watchdog signals only groups. Pre-reap aliasing cannot occur, because `$dp` is an unreaped child.
 - **NOTE (no fix built).** A window remains after the reap: the watchdog's `kill -0 -- "-$dp"` poll and unconditional `kill -KILL -- "-$dp"` (`.githooks/pre-push:1172-1173`) can still fire on a reusable id if its sleep ended just before `kill "$wp"` (`:1181`). Reuse would need pid wrap within that window, and the table above shows the result would not be a single drop anyway.
 - **Still owed after this paragraph.** The trigger of the dropped verdict (candidates (b) and (c)); census item 8; owed item 3. Items 8 and owed-3 are not run under the batch's NO TIMING RUNS ruling.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
 
 verify: manual
 
@@ -455,7 +457,6 @@ Measurement 0a, driving the shipped hook over graph's transcripts: 4,617 Bash ca
 
 verify: manual
 
-
 ## Efficiency regression after the ranked set (filed 2026-10-26)
 
 Filed from [`docs/analysis/pipeline-efficiency-s317-s320/`](analysis/pipeline-efficiency-s317-s320/), which
@@ -528,6 +529,10 @@ predicate): `bash core/fixtures/review-shard-merge/receipt-bl808.sh core/scripts
 the flag parsed but not applied 1, the list length subtracted 1 and the captures dropped from the file set 1,
 second spelling (the intersection with `comm`) 0.
 
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
+
+Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model call priced at that sprint's hosted lead mix; s317 is the only sprint with local lead calls, 44% of its lead calls) with API dollars beside them, and every hour figure in this entry is gap-inclusive (operator and agent waits over 300 s included; the gap is measured separately by the extractor). Per story, implementation plus gate-validation[implementation], from `docs/analysis/pipeline-efficiency-s317-s320/scripts/` at b243-c6b-E 459c5418d: s317 2.01 h gap-inclusive, token-equivalent $36.8 (API $31.4); s318 0.91 h gap-inclusive, token-equivalent $32.5 (API $32.5); s319 2.09 h gap-inclusive, token-equivalent $41.3 (API $41.3).
+
 verify: manual
 
 ## BL-809 — a re-review pass is spent on evidence and bookkeeping findings that a validator could settle, so a story is reviewed up to nine times
@@ -560,8 +565,25 @@ both. A re-review pass is earned by a code finding the pass caught; a pass spent
 validator could settle is the waste this entry removes. The implementation spawn and dollar figure is reported
 jointly with BL-808.
 
-**Status (this release).** PARTIAL. Item 2 is closed and part of item 3 shipped; item 1 and the rest of
-item 3 are owed.
+**Status (this release).** PARTIAL. Item 1 and item 3 shipped; item 2 is owed with its FP set below; `verify: manual` until the measured sprint.
+
+Item 1, the record-only route. Each Critical/Important finding carries one `Class: CODE|TEST|EVIDENCE|BOOKKEEPING` line (owner `code-reviewer.md`; TEST is code-class; a finding admitting any code fix is CODE). `merge-review-shards.sh` refuses a value outside the set and accepts a missing one. `partition-review-diff.sh --route` routes a re-review to `validate-handoff-evidence.sh` plus one serial reviewer only when every prior Critical/Important finding is EVIDENCE or BOOKKEEPING and the delta from the prior `reviewed-sha:` to the frozen sha carries no code path. It sends the pass full on zero findings, a missing or unknown Class, any unrouted finding, an unresolvable or non-ancestor sha, and an empty or unreadable delta. The delta's code class (`partition-review-diff.sh`, THE CODE CLASS) drops a path under a scan root, a `.md`, a `.txt/.log/.out` outside any test directory, or a `.txt/.log/.out` that `--list-captures` names; any code-extension file is code wherever it sits and whether or not the story cites it. Measured on graph with the shipped predicate: 0/3/6 routed passes (s317/s318/s319). M7's 4 for s318 used a `test-results/` path-prefix partition. The shipped class counts `test-results/red_splat_copy.py`, which the s318 2-3 story cites, as code, so s318 2-3-p3 goes full (fail closed). Labels: blind re-label disagreement was s317 13/86 (5 cross E|B) and s318 5/75 (1 crosses). Without the delta guard, s317 routes 3 passes on M7's labels and 1 on the blind labels, and the s317 2-6 miss appears under one labeller only. The guard removes it under both, so the delta guard is the safety property and Class is the saving.
+
+Guard cost, PRICE / VALUE. VALUE is a pass the guard sent full whose re-review raised at least one CODE or TEST finding; PRICE is every other such pass (clean, or evidence and bookkeeping findings only). The guard sent 11 passes full that the class oracle would have routed: PRICE 10, VALUE 1. VALUE is a full re-review pass that caught a CODE or TEST finding the record-only route would have missed; a pass whose only findings are EVIDENCE or BOOKKEEPING is PRICE, because the route would have settled those.
+- s317, PRICE 2, VALUE 1. 1-2-p3 and 1-2-p4 are PRICE. 2-6-p4 is VALUE: it caught 2 code findings that the s317 2-6 rework had introduced by deleting an assertion.
+- s318, PRICE 3, VALUE 0. 1-1-p3 is PRICE: its one Important finding (the mutation captures are gitignored and not in the commit) is EVIDENCE. 2-3-p2 is PRICE: its two Important findings (`ac4-hunks.txt` and `ac1-ac3-green.txt` record no command or head sha; the close signal claims a RED for a binding that has no capture) are both EVIDENCE. 2-3-p3 is PRICE: APPROVED with no Critical or Important finding (its one Suggestion is the red-splat driver's exit code).
+- s319, PRICE 5, VALUE 0. 2-3b-p4, 3-1-p8, 3-2-p5 and 4-3-p5 are PRICE: each raised no Critical or Important finding. 4-4-p3 is PRICE: its one Important finding is EVIDENCE (`ac1-unavailable` is labelled "AC1 d and AC2 b" but its recapture runs only `-t ST319-4.4-01`), and the verdict stayed APPROVED.
+- Derived by reading each pass's review file in graph's clone (read-only), with the labels as the s318 blind re-label and the s319 reading of M4b's findings; the class of each finding is the label, and a pass with no Critical/Important finding has none to label.
+
+Item 3, Rule A. Gate 1 re-runs after a QA rework iff the range adds a test file, or changes a code or test file on a line that is not blank, a comment or a docstring; captures and records never trigger it (`partition-review-diff.sh --gate1-rerun`). Saving in s319: 2 of 44 passes (2-3a-p2 and 3-1-p9, both after QA-only reworks). 2-3a-p3 still re-runs, because 2-3a-b added 26 executable lines. The justified post-APPROVED re-runs 1-1-p3 (18 lines) and 4-4-p4 (1 added spec) still re-run. 3-1-p6 was waste.
+
+Item 2, narrowing a mixed re-review to the files its CODE findings name, is not shipped. Its FP set over s317–s319 is 1 of 19 mixed-prior passes: s319 3-1-p3 raised a CODE finding (a dead nested function) in `rebalancer/tests/test_s319_3_1_merkl_rewards.py`, a file outside the prior CODE findings' set. CODE was read as C and H on s317/s318 and N on s319; control: an empty narrowing set flags 7 of 7.
+
+Receipts (evidence for the shipped mechanism; `verify:` stays manual):
+- `bash core/fixtures/review-reroute/receipt-bl809-route.sh core/scripts/partition-review-diff.sh` (fix 0; guard removed 1; missing Class routing 1; second spelling 0)
+- `bash core/fixtures/review-reroute/receipt-bl809-rulea.sh core/scripts/partition-review-diff.sh` (fix 0; docstring filter removed 1; added test file ignored 1; second spelling 0)
+
+Earlier releases, under the Owed numbering above (kept as written):
 - Item 2, closed by BL-808: `partition-review-diff.sh --exclude-captures` answers SERIAL for a counted
   (non-capture) delta of at most one file, whatever the threshold. The re-review step text in
   `implementation.md` cites that SERIAL answer as one reviewer, `shard: 1/1 <story-index>`.
@@ -578,17 +600,10 @@ item 3 are owed.
   - The per-AC untracked-citation arm has 1 TP (s317 2-3) against 22 FP in two shape classes: rows
     deferred to deploy-validate, and a `git rm` disposition line. The exclusion wording is unmeasured.
   - The wrong-commit capture is unchanged; it stays the head WARN (lead ruling).
-- Item 1 is OWED. The part-status grammar (F5) routed 2 code findings as evidence-only over s319's 110
-  Critical/Important (`3-2-code-review-p2.md:82`, `4-3-code-review-p2.md:294`). Every safe variant routes
-  0 of 25 s319 re-review passes serial, against 11 that qualify by hand. The unblocker is a FINDING-level
-  grammar: the finding body cites at least one capture and names no non-capture code path (backtick or
-  `file:line`). It must never key on the part's status.
-- Receipt for the shipped part: `core/fixtures/story-evidence-scaffold/receipt-bl809.sh` (exit 0 on the fix,
-  non-zero with arm (m) removed or arm (n) made a refusal). This entry takes it when it closes; until then
-  `verify:` stays manual.
-- The amended scope (item 1, an evidence-or-bookkeeping NEEDS_REWORK re-checked through the validator and
-  one serial reviewer) is not in this release; it rides cluster c6, a separate release in batch 243. It is
-  not dropped.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
+
+Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model call priced at that sprint's hosted lead mix; s317 is the only sprint with local lead calls, 44% of its lead calls) with API dollars beside them, and every hour figure in this entry is gap-inclusive (operator and agent waits over 300 s included; the gap is measured separately by the extractor). Per story, implementation plus gate-validation[implementation], from `docs/analysis/pipeline-efficiency-s317-s320/scripts/` at b243-c6b-E 459c5418d: s317 2.01 h gap-inclusive, token-equivalent $36.8 (API $31.4); s318 0.91 h gap-inclusive, token-equivalent $32.5 (API $32.5); s319 2.09 h gap-inclusive, token-equivalent $41.3 (API $41.3).
 
 verify: manual
 
@@ -637,6 +652,17 @@ the pre-release `carry-over-evaluation.md` (bd0be5e51) 1. Scores recorded by the
 `Failure caught:` lines present 1; the second spelling ("Adversarial pass 2 onward (the convergence loop): Failure
 caught:") 0.
 
+**Status (c6b).** PARTIAL, still open. The per-round, per-width measurement is in `docs/analysis/step-value-carry-over-s319-s320.md`, "Per-width", by `scripts/width.py` over s319 and s320 (320 CRITICAL/MAJOR findings, joined by token).
+- Result: every high-consequence catch for party, elicitation and p1 was made by a per-part shard. Cross groups alone made only p2's half-fixed `Dependencies` field and its wrong IL claim.
+- Decision: per-part shards stay in every round; party cross narrows to one per seat; elicitation, p1, p2 and p3 cross merge to one agent briefed with every section; p2's two cross catches are kept on consequence (one cross agent reading every section sees them), their cost beside the `Failure caught:` lines in §3a.
+- Coverage guard: Check 22 arm S4 (`validate-spawn-ledger.sh`) refuses a one-cross dispatch (`cross/<K> g1/1 <ordinals>`) whose brief omits any section; it binds the BRIEF, not reads; FP 0 over graph's 7242-row spawn ledger (no real g1/1 row yet, so its accept path is covered by seeded arms only). Arm S4X binds the emitter templates to that spelling.
+- Cross spend removed per sprint (sum minus costliest): s319 $13.54 party, $7.49 elicitation, $6.03 p1; s320 $16.33 party, $4.50 elicitation, $12.85 p1, $10.06 p2, $8.27 p3. Party keeps one per seat, so its saving is below its figure.
+- Still owed: a measured sprint (spawns, dollars and agent-hours per width) beside s319 and s320. The cross-only counts are ceilings (token join; 27 findings carry none). s320's p2 and p3 rest on one sprint. Not closed.
+
+Receipt (prose, `verify:` stays manual): `s=$(LC_ALL=C awk '/^### 3a\. /{g=1;next} g&&/^### /{exit} g' core/skills/ai-dlc/steps/carry-over-evaluation.md | tr -s ' \n\t' '   '); [ -n "$s" ] && grep -qiE 'party dispatches one cross agent per seat' <<<"$s" && grep -qiE 'elicitation and each adversarial pass dispatch one cross agent' <<<"$s" && ! grep -qF 'one agent per (seat, part) and per cross group' <<<"$s"` (fix 0; pre-change 1; old line restored 1; width paragraph deleted 1; party clause reworded away 1; rewrapped 0).
+
+Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model call priced at that sprint's hosted lead mix; s317 is the only sprint with local lead calls, 44% of its lead calls) with API dollars beside them, and every hour figure in this entry is gap-inclusive (operator and agent waits over 300 s included; the gap is measured separately by the extractor). Per story, the four planning steps (carry-over-evaluation is not separable in this table), from `docs/analysis/pipeline-efficiency-s317-s320/scripts/` at b243-c6b-E 459c5418d: s317 1.91 h gap-inclusive, token-equivalent $54.2 (API $54.1); s318 2.95 h gap-inclusive, token-equivalent $80.0 (API $80.0); s319 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4); s320 5.54 h gap-inclusive, token-equivalent $78.9 (API $78.9).
+
 verify: manual
 
 ## BL-811 — sharded stories elicitation costs thirteen times the single voice it replaced
@@ -650,15 +676,20 @@ part count.
 
 **Amended: widened to every split dispatch's cross groups.** Stories elicitation is one instance. Every split
 dispatch pays one cross agent per cross group from `partition-document.sh --cross-groups`, which is 6 cross
-agents beside 4 parts. Spawns whose description names a cross shard (`cross g<n>`, `cross-<n>`, `cross shard`,
-`cross-part`, `cross-story`, `cross/`, `cross remediator`; `cross-section` and `cross seat` excluded), per story:
-s317 7.0 ($23.3, 26% of subagent dollars), s318 20.5 ($50.3, 46%), s319 24.9 ($36.8, 42%), s320 through
-stories 13.2 ($30.0, 43%). s319's largest holder is implementation and its gate: 273 cross-shard spawns. In stories elicitation the cross groups made 3
-unique surviving catches at $25.15 each against the per-story shards' 32 at $3.06, and every cross group read
-every story. Owed: one cross agent per split dispatch (code review, QA validation, party, elicitation, adversarial
-passes and repairs, on every axis), unless that dispatch's measured cross catches justify more under the
-step-value rule, a high-consequence catch counting on consequence. The measured sprint reports cross-shard spawns
-per story beside s317's 7.0 and s319's 24.9.
+agents beside 4 parts. Cross-shard spawns, counted on one population: the rows of the s317–s320 spawn extraction
+(4098 rows) whose description matches `cross g\d|cross-\d|cross shard|cross-part|cross-story|cross/|cross remediator`
+and not `cross-section|cross seat`. As a control, 671 s319–s320 descriptions contain "cross" at all, and 2 of those are
+excluded. s317: 134 cross spawns, 6.4 per story ($449.5, $21.4 per story, 24% of subagent dollars). s319: 360 cross
+spawns, 18.0 per story ($512.1, $25.6 per story, 29%), of which implementation and its gate hold 171 (159 + 12). The
+count is a floor: a spawn whose description names no cross token is not counted. 24.9 per story, 273, $36.8 and 42%
+were filed without a reproducible derivation and are withdrawn. API price = token-equivalent here: the subagent seats
+ran no local model in s317 or s319 (s317 sonnet 566 / opus 316 / haiku 52 / fable 1; s319 sonnet 668 / opus 557 /
+haiku 336). In stories elicitation the cross groups made 3 unique surviving catches at $25.15 each against the
+per-story shards' 32 at $3.06, and every cross group read every story. Owed: one cross agent per split dispatch (code
+review, QA validation, elicitation, adversarial passes and repairs, on every axis; party: one per seat), unless that
+dispatch's measured cross catches justify more under the step-value rule, a high-consequence catch counting on
+consequence. The measured sprint reports cross spawns per story on this same script and population beside s317's 6.4
+and s319's 18.0.
 
 **Fix (this release).** Measured in `docs/analysis/step-value-stories-elicitation-s319-s320.md`
 over s319 r1, s319 r2 and s320, which is provisional because its stories gate has not passed.
@@ -674,12 +705,16 @@ the cross catches (s319 r1 cross-1#F-2 and cross-4#F-1, plus s320 cross-4#F-3, p
 cross-group shard already read every story, so the one all-ordinal voice reads each of those pairs.
 Counterfactual saving: $58.98 over three rounds ($39.85 on s319). It is computed as Σ cross minus the
 costliest cross shard per round.
-The amended scope (one cross agent per split dispatch at every step; stories elicitation is the instance shipped
-here) (unless that dispatch's measured cross catches justify more under the step-value rule, a high-consequence catch counting on consequence) is not in this release; it rides cluster c6, a separate release in batch 243. It is not dropped. Receipt for
-the shipped mechanism (scored text, not the close predicate): `f=core/skills/ai-dlc/steps/_gate-procedures.md; v=$(LC_ALL=C awk '/^## Validation cycle/{g=1;next} g&&/^## /{exit} g' "$f" | tr -s ' \n\t' '   '); e=$(LC_ALL=C awk '/Elicitation takes the axis and the shape/{g=1} g&&/^[[:space:]]*$/{exit} g' "$f" | tr -s ' \n\t' '   '); [ -n "$e" ] && grep -qiE '(one|a single) cross-story `adversary`' <<<"$e" && grep -qF '`cross.md`' <<<"$e" && ! grep -qF 'cross-story `adversary` per cross group' <<<"$e" && grep -qF 'one cross-story agent per (seat, cross group)' <<<"$v"`
-— scored by this rebase: fix 0, the pre-release `_gate-procedures.md` (bd0be5e51) 1. Scores recorded by the hands that
-built the receipt: the old per-cross-group sentence restored (the bd0be5e51 file) 1; the party round also collapsed
-to one cross 1; the second spelling ("a single cross-story") 0.
+Status (c6b). The engine now accepts a lone `cross.md` at any K, and the prose collapses cross to one agent per dispatch;
+this supersedes BL-464's "cross.md alone is refused". Receipt for the shipped mechanism (scored text, not the close
+predicate): `bash core/fixtures/review-shard-merge/receipt-bl811.sh core/scripts/merge-review-shards.sh` (scores 0/1/1/0 under
+`set -uo pipefail`). The earlier inline receipt block is removed: it keyed on the
+sentence `one cross-story agent per (seat, cross group)`, which this release deleted, so it scores 1 now. The entry
+stays PARTIAL: the measured sprint is owed.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
+
+Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model call priced at that sprint's hosted lead mix; s317 is the only sprint with local lead calls, 44% of its lead calls) with API dollars beside them, and every hour figure in this entry is gap-inclusive (operator and agent waits over 300 s included; the gap is measured separately by the extractor). Per story, stories-test-strategy, from `docs/analysis/pipeline-efficiency-s317-s320/scripts/` at b243-c6b-E 459c5418d: s317 0.69 h gap-inclusive, token-equivalent $29.4 (API $29.4); s318 1.91 h gap-inclusive, token-equivalent $31.1 (API $31.1); s319 0.80 h gap-inclusive, token-equivalent $26.0 (API $26.0); s320 0.93 h gap-inclusive, token-equivalent $39.1 (API $39.1).
 
 verify: manual
 
@@ -703,6 +738,10 @@ Owed:
 3. **The release also states its projected per-story figures for each step it changed,** so that the measured
    sprint is read against a prediction. A step that moved less than projected is explained from the sprint, and
    an entry whose step did not move and carries no value evidence reopens.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
+
+Basis (operator ruling, BL-817): dollars are token-equivalent (a local-model call priced at that sprint's hosted lead mix; s317 is the only sprint with local lead calls, 44% of its lead calls) with API dollars beside them, and every hour figure in this entry is gap-inclusive (operator and agent waits over 300 s included; the gap is measured separately by the extractor). Per story, the whole pipeline bucket, from `docs/analysis/pipeline-efficiency-s317-s320/scripts/` at b243-c6b-E 459c5418d: s317 5.37 h gap-inclusive, token-equivalent $112.2 (API $103.4); s318 5.75 h gap-inclusive, token-equivalent $132.4 (API $132.3); s319 5.50 h gap-inclusive, token-equivalent $111.7 (API $111.7); s320 5.79 h gap-inclusive, token-equivalent $80.6 (API $80.6).
 
 verify: manual
 
@@ -761,8 +800,8 @@ session, which is the larger share of the machine hours, and whose cost rose. Pe
 | Lead active share of machine hours | 61% | 53% | 59% | 50% |
 | Lead $ / story | 15.2 | 23.3 | 23.6 | 10.6 |
 
-The implementation step holds the largest part: lead active 18.7 h in both s317 and s319, and lead dollars $41
-in s317 against $145 in s319. Gate-validation is second (10.5 h and 9.8 h). Narrowing a parallel fan-out
+The implementation step holds the largest part: lead active 18.7 h in s317 and 17.9 h in s319 (first given here as 18.7 h in both; the Correction block below has the corrected figure), and lead dollars $41.25
+in s317 against $136.54 in s319 (API price; see the Correction block). Gate-validation is second (10.5 h and 9.8 h). Narrowing a parallel fan-out
 (BL-808, BL-811) removes subagent tokens and little wall clock, because a fan-out takes as long as its slowest
 shard; lead active time is the part of the wall clock that is serial. The lead hours come from the same gap
 summation as every machine-hour figure here, which over-counts when timestamps arrive out of order (about +5 h on
@@ -776,7 +815,7 @@ Owed:
 1. **Attribute the lead's active time and tokens inside each step** of s319 and s320, with the extractor
    extended for it: dispatch and brief writing, reading and merging shard output, repair loops, validator and
    gate runs, re-reads of step files, and compaction recovery. Each class gets hours, tokens and dollars per
-   story. The implementation step's lead dollars rising from $41 to $145 at flat hours is explained from it.
+   story. The implementation step's lead dollars rising from $41.25 to $136.54 is explained from it.
 2. **Decide each class by the step-value ruling** ("A step with no measured value goes",
    `.claude/rules/operator-rulings.md`, as applied in `docs/analysis/step-value-s317-s319.md`). Lead work that
    carries no catch or decision another element does not already make is removed or mechanised: a merge or a
@@ -788,5 +827,743 @@ Reference points, not pass bars: the table above. This entry closes on a measure
 lead's per-step hours and tokens against s317 and s319, with value evidence for any class whose cost did not
 fall.
 
+**Status (c6b).** PARTIAL, `verify: manual`.
+
+**Correction (batch 243).** The implementation step's lead dollars rose from $41.25 (s317) to $136.54 (s319) at API price, corrected from $145, which does not reproduce on the fixed extractor. That is a true dollar rise caused by the model move: the s317 lead seat ran local qwen38flash-mlx for 68.1% of the implementation step's lead calls (1,530 of 2,248), 66.0% across implementation and its gate, and 43.5% across the whole sprint (3,539 of 8,133). s318–s320 lead seats are about 100% Sonnet. Priced token-equivalent, with s317's local calls at s317's own hosted lead mix (opus 60 / sonnet 4,528 calls), the implementation lead figure is $120.11 against $136.54: **+13.7% real**. Lead calls fell from 2,248 to 2,010 (**−10.6%**, not flat). Active hours went from 18.7 to 17.9; elapsed hours, gap-inclusive, from 26.0 to 27.0.
+
+**Instrument defects, with figures.** Gap time is 91% of "other" hours; every hour figure here is labelled gap-inclusive with the gap beside it. The extractor's 10-05 mtime cut hid s314–s316; the extractor now selects by in-file timestamp, and those sprints are visible (fixed).
+
+**Token-equivalent table** (hours gap-inclusive; local calls priced at that sprint's hosted lead mix; bracket = all local calls at Sonnet .. at Opus):
+
+| sprint | API $ | token-eq $ (lead / sub) | bracket | elapsed h (gap h) | per story API / token-eq |
+|---|---|---|---|---|---|
+| s314 | 341 | 555 (214 / 341), FALLBACK: s315 hosted lead mix | 555 .. 666 (opus end = observed predecessor) | 59.3 (24.2) | — |
+| s315 | 505 | 505 | — | 32.1 (19.0) | — |
+| s316 | 1,307 | 1,307 | — | 100.1 (71.0) | — |
+| s317 | 2,172 | 2,357 (505 / 1,852) | 2,356 .. 2,440 | 112.8 (51.4) | 103.4 / 112.2 (21 stories) |
+| s318 | 1,720 | 1,721 | — | 74.8 (42.6) | 132.3 / 132.4 (13) |
+| s319 | 2,234 | 2,234 | — | 110.0 (55.2) | 111.7 / 111.7 (20) |
+| s320 | 1,048 | 1,048 | — | 75.3 (58.5) | 80.6 / 80.6 (13) |
+
+**Mechanisations (batch 243):**
+- **L1, beat polls.** `_gate-procedures.md` "Bounded-join beat" gave no progress-check form; it now prescribes `wait-for-deliverable.sh --complete --status <the wave's paths>`, never a grep, listing or count of the shard directory. s319/s320 had 163+164 and 22+38 hand probes. In a 30-hit sample, 12–14 asked the progress question that per-path `--status` already answers; the rest are partition checks (4), required reads of delivered content (5), orientation (5) and pre-dispatch checks (2). Recorded as already mechanised, with that residual. Pinned by `process-rule-pins` row `gp-beat-status`.
+- **L2, gate re-reads.** Already prescribed: `gate-validation.md` and `SKILL.md` direct `gate-checkpoint.sh`. No step text changed. Residual: 4 re-runs in s319 and 0 in s320 — identical validator calls already run before a compaction in the same gate, across the 7 compactions whose recovery block carried the gate-resume section, excluding the prescribed snapshot budget call. All 4 fell in the 2 windows where the lead did not call `gate-checkpoint.sh done`. Recorded as already mechanised.
+- **L3, snapshot updates.** Items 1–3 of "Sub-step snapshot update" were one Edit per row; they are now one `bash scripts/ai-dlc/snapshot-update.sh` call. The program runs `validate-artifact-budget.sh --stamps-only` on the lines it adds and writes nothing on a finding. s319: 445 snapshot Edits in 298 consecutive runs; s320: 219 in 123. One call per run is −7.35 and −7.38 calls per story; no dollar figure is claimed. Pinned by `gp-snap-program` and by the program's own fixture `snapshot-update-stamps`. 0.947.0's Deny B had already refused the 451 python and 49 `sed -i` snapshot writes of s319.
+
 verify: manual
 
+## Reopened by BL-817's re-audit (batch 243)
+
+Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
+
+## BL-397 — a story reaches gate-1 without the evidence sections, and reaches QA without a full-collection run with counts
+
+**DEFECT (efficiency).** Closed in 0.674.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT.** Filed by the consumer as PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE.
+
+**Claims, enumerated.** (1) No story file carried `Production Integrity Tests`, `Smoke Test Updates`
+and, for renames, `Rename Verification` at its first submission: the filing says 0 of 5. (2) Story
+1.5 reached QA without the dev having run the full suite and failed gate-2 on a baseline-fixture
+test. (3) Check 21 failed pass 1 with 0 of 31 strategy test ids cited in any Dev Agent Record.
+(4) Code review has no baseline-fixture sweep when a diff changes a handler's result shape.
+
+**Premise, re-derived at `origin/main` 144c41b8.** The story template is BMAD's, and no ai-dlc
+step tells the lead to add the evidence headings: `Strategy Test IDs` occurs in 0 files under `core/`
+(control: `Production Integrity Tests` occurs in 4). `dev.md` already requires a canonical
+full-collection run, but only inside `## Workflow Per Task` item 15. The dev side requires no counts: `deselect`
+occurs 0 times in `dev.md` outside that section and once inside it. The phrase is the `--deselect`
+flag, not a count. `code-reviewer.md` contains `baseline-fixture` 0 times (control: `fixture` 9).
+At the consumer's final S315 tip, 5 of 5 stories carry the Production Integrity Tests and Smoke
+Test Updates headings and 2 of 5 carry Rename Verification, because rework added them. The
+first-submission state the filing counts was not walked. That walk was available but not taken,
+because this session's harness refuses git commands aimed at the consumer tree. Claim (1) is an
+unmeasured claim, not an unmeasurable one. Claim (2) is the seats' reading and was not
+re-derived.
+
+**Consumer overrides, read-only, `graph/.claude/skills/ai-dlc/overrides/`.** 10 override files
+(control: 10 of 10 carry `shadows:`). The consumer shadows `team-roles/dev.md#Workflow Per Task` and
+`team-roles/qa.md#Validation Checklist` wholesale (`team-roles__dev__bug-class-sweep.md`,
+`team-roles__qa__bug-class-sweep.md`). Nothing shadows `code-reviewer.md`, `stories-test-strategy.md`
+or Check 21. Any upstream text inside those two sections never reaches this consumer's dev or QA
+until the consumer re-adopts the overrides against the new base. That is why the new requirements
+sit in sibling sections.
+
+**The fix.** `stories-test-strategy.md` Pre-Flight Checklist item (c) requires four headings in
+every story file. They are `## Production Integrity Tests`, `## Smoke Test Updates`,
+`## Rename Verification` and `## Strategy Test IDs`, the last a table with a closed `Kind`
+vocabulary. `dev.md` gains `## QA Handoff Evidence`: the full-collection invocation, its working
+directory and collected/passed/failed/deselected/skipped/xfailed counts before the handoff
+message, the four sections filled, and every table row resolved. `qa.md` gains
+`## Handoff Evidence Precondition`, a REJECT before any checklist item when that evidence is
+absent. `code-reviewer.md` Field Verification item 5 adds the baseline-fixture sweep, with a
+control, as an Important finding. Check 21 names the table as its citation set (BL-398).
+
+**Fixture.** `story-evidence-scaffold` (ships) has section-keyed arms. The dev and qa arms first
+stub the two shadowed sections, as the loader does, so text moved into them is a finding. It has
+twelve copy mutants, each killed by its own arm only, plus a control and a cwd probe. Bound to
+Check 21 in `enforcement-map.yaml`. Its read-set is not yet traced; the operator runs
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "story-evidence-scaffold"`.
+
+**Receipt, scored.** Tip 1 (no fixture). Fix 0. Wrong fix A exits 1: it folds the dev text into
+the shadowed `## Workflow Per Task`, which a whole-file grep accepts. Wrong fix B exits 1: it puts
+the qa precondition inside the shadowed `## Validation Checklist`. Exit 9 means a subject role
+file is gone or the fixture reports FIXTURE BROKEN.
+
+Closed in 0.674.0 (verified f7eec6f5) on a tree receipt, reopened by BL-817.
+
+Held note (batch 177): shipped the Pre-Flight scaffold (c), the dev `## QA Handoff Evidence` and
+qa `## Handoff Evidence Precondition` sections outside the consumer's shadowed sections, the
+code-reviewer baseline-fixture sweep, and fixture `story-evidence-scaffold`.
+
+Former receipt (the mechanism, not the outcome): sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/team-roles/dev.md ] && [ -f core/team-roles/qa.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in dev-into-workflow dev-no-counts qa-into-checklist cr-no-sweep drop-strategy-heading move-strategy-heading; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
+
+Re-audit (BL-817): graph s314+s315 against s317, s318, s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, implementation plus gate-validation[implementation]: before (s314+s315 pooled, 9 stories) 2.00 h gap-inclusive, token-equivalent $29.0 (API $23.1), 71.4M tokens (s314 token-equivalent is the FALLBACK: s315's hosted lead mix); after s317 (21 stories) 2.01 h gap-inclusive (gap 0.71 h), token-equivalent $36.8 (API $31.4), 71.3M tokens; s318 (13 stories) 0.91 h gap-inclusive (gap 0.17 h), token-equivalent $32.5 (API $32.5), 71.7M tokens; s319 (20 stories) 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens. Lead-seat local-model share of calls in this step group: s314 100%, s315 0%, s317 66%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. Measured against s314+s315 with a WEAK BASELINE: 9 stories, s314's lead seat 100% local. Bracket: token-equivalent before reads $29.0 at the sonnet FALLBACK and $32.2 at the opus observed predecessor; every after-sprint figure is above both ends, so the pricing choice cannot decide this entry.
+
+verify: manual
+
+## BL-398 — a strategy case letter is not bound to a test until sprint-review, and a re-point story lists its consumers from memory
+
+**DEFECT (efficiency).** Closed in 0.674.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT.** Filed by the consumer as PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING.
+
+**Claims, enumerated.** (1) Nothing at authoring or story close resolves a strategy case letter
+to a test name: planned case `(g)` of `1.4-UNIT-002` had no test until sprint-review. (2) Nothing
+requires a re-point story to enumerate every consumer of the constant by `git grep`, with a
+control. The filing's instance is one constant left un-normalized for a sprint.
+
+**Premise, re-derived at `origin/main` 144c41b8.** `stories-test-strategy.md` names no strategy case
+letters. Its one `lowercase letter` hit, line 156, is the AC-ordinal grammar (control:
+`Test Strategy` occurs 4 times). Check 21 resolved "every test the strategy names" against "a Dev Agent
+Record" citation with no prescribed shape. A DAR prose mention therefore counted, and a lettered
+case inside one strategy row was never its own unit. **Measured on the consumer, read-only:**
+S315's strategy row for `1.4-UNIT-002` lists cases (a) to (g). The story's Check 21 repair section
+maps 6 of the 7 to nodes in `server/tests/test_s315_4_base_binding.py` and states (g) has none. A
+per-letter check over that population returns 6 resolved and 1 unresolved: the true (g), with 0
+false positives. **N=1 strategy row**, so the zero is a floor, not a rate. That figure was taken
+over the repair section's PROSE mapping, and it scores the per-letter resolution logic only. The
+shipped Check 21 wording does not accept that prose as a citation. On S315 as it stands, with no
+story carrying the table, the check FAILS on shape and never reaches the letters. The same story carries
+rows no collectable node can satisfy: `1.4-OPS-001`/`-004` are deploy-time and `1.4-UNIT-005` is a
+shell predicate. The table's `Kind` column exists so those rows do not fail a node check.
+
+**Consumer overrides.** No override shadows `stories-test-strategy.md` or Check 21. The consumer
+overrides `steps/gate-validation.md#Check 20` and `#Check 5` only, so this reaches the consumer on
+its next pull with no re-adoption.
+
+**The fix.** Pre-Flight item (c)'s `## Strategy Test IDs` table has one row per strategy id and
+per lettered case, with `Kind` ∈ {`test`, `predicate`, `deploy-time`}. Step 5 item 3 writes the
+rows and requires the strategy's letter count to equal the row count. Check 21 names that table
+as its citation set and says a DAR prose mention is not a citation. It fails a letter with no row,
+a `test` row whose node is not on disk, and an empty `Resolves to`, and reports a strategy with
+no id table as a stated SKIP, never a PASS. **Re-point consumers:** `## Rename Verification` now
+requires `git grep` of the old and new names, every hit dispositioned, with a control. This half
+is prose plus fixture only, and there is no mechanical check. A re-point story's consumer set has
+no machine-readable declaration to join against, so its false-positive set cannot be measured.
+
+**Fixture.** `story-evidence-scaffold` (shared with BL-397): the per-letter binding, the closed
+vocabulary, the citation set, the unrowed-letter arm, the SKIP-not-PASS arm and an unisolatable
+Check 21. Each has a mutant killed by its own arm only.
+
+**Receipt, scored.** Tip 1. Fix 0. Wrong fix A exits 1: Check 21 keeps accepting a DAR naming a
+test as a citation. Wrong fix B exits 1: a table-less strategy reads PASS and Step 5 writes "rows
+as needed".
+
+Closed in 0.674.0 (verified f7eec6f5) on a tree receipt, reopened by BL-817.
+
+Held note (batch 177): shipped the `## Strategy Test IDs` table with per-letter rows and a closed
+Kind vocabulary, Step 5's binding, Check 21 reading that table with a stated SKIP, the
+`## Rename Verification` git-grep enumeration, and fixture `story-evidence-scaffold`.
+
+Former receipt (the mechanism, not the outcome): sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/skills/ai-dlc/steps/gate-validation.md ] && [ -f core/skills/ai-dlc/steps/stories-test-strategy.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in no-letter-binding open-kind dar-prose-citation letter-unchecked skip-as-pass no-check-21; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
+
+Re-audit (BL-817): graph s314+s315 against s317, s318, s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, stories-test-strategy: before (s314+s315 pooled, 9 stories) 1.28 h gap-inclusive, token-equivalent $20.3 (API $17.5), 34.8M tokens (s314 token-equivalent is the FALLBACK: s315's hosted lead mix); after s317 (21 stories) 0.69 h gap-inclusive (gap 0.35 h), token-equivalent $29.4 (API $29.4), 42.6M tokens; s318 (13 stories) 1.91 h gap-inclusive (gap 1.42 h), token-equivalent $31.1 (API $31.1), 58.1M tokens; s319 (20 stories) 0.80 h gap-inclusive (gap 0.45 h), token-equivalent $26.0 (API $26.0), 44.8M tokens. Lead-seat local-model share of calls in this step group: s314 100%, s315 0%, s317 2%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. Measured against s314+s315 with a WEAK BASELINE: 9 stories, s314's lead seat 100% local. Bracket: token-equivalent before reads $20.3 at the sonnet FALLBACK and $21.7 at the opus observed predecessor; every after-sprint figure is above both ends, so the pricing choice cannot decide this entry.
+
+verify: manual
+
+## BL-507 — a re-review after rework re-runs the full sharded fan-out instead of reviewing the fix delta
+
+**DEFECT (efficiency).** Closed in 0.785.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 1] $282, 1,258 agent-minutes.** In graph s317 every code-review pass after a
+NEEDS_REWORK re-ran the full gate-1 fan-out (10-13 escalated Opus/high shards) at $20-43 a pass:
+story 2.6 took five passes (about $149) and 1.2 took four (about $115). In s318, from the third pass on,
+the lead reviewed only the fix delta at $1-3 a pass, with the same catch quality. Nothing in core
+asks for that: the s318 behaviour was the lead's own choice. Costed in the analysis as the excess of
+the 11 full-fan-out re-review passes over the median delta pass ($1.70), from
+`pipeline-efficiency-s317-s318/role-efficacy/impl/` (`rework-labels.tsv`).
+
+**The fix is a delta review that is still sharded, by operator ruling.** No partition change was
+needed: `partition-review-diff.sh`'s `<base>` argument already partitions the delta when it is given
+the prior pass's `reviewed-sha:`. That was measured by this batch's contract on 26 real graph pass
+pairs, and the probe below re-checks the mechanism on a seeded repository. Because the
+partition drops the scan roots, a delta review can miss defects in the story record. For example,
+s318 2.4 p2 found an Important on a DAR self-contradiction that no delta hunk touched. So the first
+cross shard is briefed with the whole story record and the full prior..frozen diff. Every prior
+Critical/Important is carried, and Check 1 checks the carry with `validate-carried-findings.sh`.
+
+**Stated residual.** A delta pass does not re-find a pre-existing defect that lies outside the
+delta (s317 2.6 p3, the AC9 Strategy row). Check 21(b) and BL-513's refusal catch it downstream.
+**Predicted cost.** At the default threshold, s318 1-1 p3, 2-3 p3, 2-4 p2 and 2-4 p3 would still
+shard, to about 10 seats each, because test-results captures count as reviewable files. The $282
+filed above will therefore not fully reproduce under the sharding ruling. The saving comes from the
+narrower range and the carried-finding brief, not from a single delta reviewer.
+
+**Pre-migration.** The validator reads the review's own repository and HEAD, never where its
+running copy sits, because a story is reviewed in its own worktree and checked by the main
+checkout's copy. A branch whose history never added the program reads PENDING, and so does a
+review committed before the earliest add. A program that sits in the checkout but was never
+committed there (gitignored or untracked) binds, with a NOTE. A shallow repository is refused.
+A prior is held to the `#### ` form only when it carries the template's column-0 `reviewed-sha:`
+line and was not committed before the add. graph's leads persist reviews late (one snapshot
+commit persisted s318 2.4 p1 and p2 together), so the commit alone cannot say a prior was written
+under the rule. Any other prior has its findings carried by heading or by an id-led bold label,
+and any other line in it prints a NOTE. In a held prior, lead-in prose before the first `#### `
+is a NOTE, and only a bullet or a bold finding-id line there fails. A label prior is also
+answered by its finding id alone, and trailing punctuation never decides a match.
+`validate-carried-findings.sh --list <prior>` prints the exact carry strings, and the Gate-1
+re-review brief carries them. The serial template in `code-reviewer.md` now writes `#### `
+findings and a column-0 `reviewed-sha:` line.
+
+The earlier prose receipt was closable by one sentence and is replaced by a probe. The probe runs
+the validator on seeded pass pairs, including an `open` carry under NEEDS_REWORK that must pass.
+It also runs a seeded worktree topology: a pre-pull story branch reads PENDING, a revert and
+re-add of the program still binds, and a story spanning the pull passes. After the pull, a marked
+bullet prior fails, a marked heading prior with lead-in prose passes, and a lazily persisted
+unmarked prior carried by id alone passes. `--list` must print the exact carry string. It runs `--map` on a
+seeded repository with the prior sha as the base (rc 0) and with the pair reversed (rc 2), and
+requires the step and Check 1 text.
+
+Closed in 0.785.0 (verified 0f7e0e0c) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-507-carried-findings.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, implementation plus gate-validation[implementation]: before (s317+s318 pooled, 34 stories) 1.59 h gap-inclusive, token-equivalent $35.2 (API $31.8), 71.5M tokens; after s319 (20 stories) 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens. Lead-seat local-model share of calls in this step group: s317 66%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-508 — a repair pass writes the defects the next adversary pass finds
+
+**DEFECT (efficiency).** Closed in 0.786.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 2] about $105 across both sprints.** In every planning series read
+(carry-over, requirements, architecture) in both sprints, each MAJOR on pass 2 or 3 sat in text the
+previous repair wrote or half-fixed: 19 traced, 16 read in full, one true re-find. In stories the
+adversary labelled repair-introduced majors s317 p1 0/11, p2 2/9, p3 2/4 and s318 p1 16/30, p2 8/19,
+p3 1/2. Typical forms: one copy fixed and its sibling left, line cites shifted, a false count written
+by the repair. Costed as planning third passes that ran only because every pass-2 MAJOR was repair-made
+($39 s318 + $2 s317), plus the stories repair-introduced share of later-pass adversary and
+remediator spend (4/13 × $97 ≈ $30 s317, 9/21 × $80 ≈ $34 s318). The remediator's drop from
+high to medium effort at the s317/s318 boundary coincides with the rise; that is confounded and is
+graph's setting, not core's. Subsumes the earlier "adversary series length" finding.
+
+Efficacy, re-read for the fix: about 10 of about 33 sampled repair-introduced MAJORs are a sibling
+left unfixed or a moved cite; the rest are underived claims the existing evidence contract already
+forbids. The fix reaches that third, so the $105 is not what it recovers. The fix: every `repaired`
+entry with a real edit carries `- siblings:`. A files-mode shard writes a fence grepping the
+replaced text over ONLY its own files (a concurrent shard fixing a copy elsewhere would turn a
+wider fence stale) plus a control count of the new text, and names an out-of-shard sibling on an
+unfenced `escalated` entry. A section or subject shard writes `n/a (section shard; re-checked by
+the serial remediator after assembly)`, because assembly deletes the section file its control
+names. An insertion-only edit writes `n/a (insertion)`, a deletion-only edit `n/a (deletion)`. The serial
+remediator runs the cross-file grep over the assembled files (`s<N>/stories s<N>/epics` after a
+files-mode join, never the slot, `shards/` or a record) and re-checks moved cites, after the join.
+Every repaired edit owes that grep, so the join prints `SERIAL-REQUIRED: <n>` (repaired entries
+with a real edit) beside `ESCALATED-COUNT`, and the procedure dispatches the serial remediator in
+every mode when either is above 0. Before this it ran only for an escalation or a multi-file
+finding, and in graph s318 `stories-repair-p3` and `stories-elicitation-repair-p1` no serial
+remediator ran. `join-remediator-shards.sh`
+refuses a missing field in every parts mode, total omission included: the era is the install,
+since parts are written fresh by agents reading the installed role file. Only `--sources`, which
+checks a record that may span a pull, keeps a PENDING line, binding from the record's first
+carrier onward. 0 of graph's 202 s317/s318 shard parts carry the field. The arm's own awk, run
+over scratch copies of them, flags 936 entries in 193 parts, with the same run's set-aside count of
+1 as its control. Those parts are never re-joined, though: 20 of their 23 dirs already hold a joined record, which a join
+refuses to overwrite; the other 3 belong to closed sprints; and no shipped program calls the join.
+The field is read in its four forms and no other: a presence reader passed `- siblings: checked`,
+and a reader keyed on the word passed any entry whose prose mentions a sibling. The fence is a
+`text`-labelled one, a point-in-time record that `validate-artifact-derivations.sh` and the capture
+hook never replay: as a `derived` fence its control went STALE the first time a later pass rewrote the
+text it counts, and the slot-wide re-run exits 1, "send back to the remediator" (graph's s318 slot
+already reads 3316 stale of 4475). The join counts the control once, in parts mode, and refuses a
+fence whose text is not in the file it names.
+
+Cost, measured by re-running the join over graph's eight files-mode s317/s318 stories repair
+rounds, with a compliant `siblings:` line added to every non-escalated entry: SERIAL-REQUIRED reads
+71, 185, 23, 11, 4, 31 and 24 on the seven that join (s317 elicitation, party, adversarial p1, p2;
+s318 elicitation, stories p1, p2). That is 349 repaired edits whose cross-file sibling grep the
+serial remediator now owes, against the earlier dispatch rule, under which s318 stories-repair-p3
+and stories-elicitation-repair-p1 ran no serial remediator. The eighth round, s318 party, refuses on
+the known sm-05 set-aside (BL-519), its one true positive; there are 0 false refusals.
+
+Residue (operator ruling: BL-508 closes on the after-join cite re-check, with this recorded): the
+`grep -rn -F` line's output is recorded at the edit, never checked at write time (the capture hook
+replays only `derived` fences) and never re-run; whether the grepped text is
+really the replaced text (the write ledger carries no old_string); a files-mode shard writing the
+section-shard form skips the fence, because the four forms are not gated by mode; a `--sources`
+record omitting the field everywhere reads PENDING; and a substantive mis-repair whose prose and
+pin agree.
+
+Closed in 0.786.0 (verified 4aa734c4) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-508-siblings.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s317+s318 pooled, 34 stories) 2.31 h gap-inclusive, token-equivalent $64.1 (API $64.0), 107.1M tokens; after s319 (20 stories) 2.12 h gap-inclusive (gap 1.20 h), token-equivalent $56.4 (API $56.4), 100.9M tokens; s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s317 1%, s318 0%, s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-510 — implementation rework is driven by evidence and bookkeeping, not code
+
+**DEFECT (efficiency).** Closed in 0.787.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 4] $34, 131 agent-minutes after removing BL-507's overlap.** 22 of 33
+implementation rework verdicts in s317-s318 were evidence (12: captures with no command or head sha,
+uncommitted or gitignored RED files, a truncated capture) or bookkeeping (10: empty headings, status
+not flipped, a missing Dev Agent Record line). They held under every dev binding and every reviewer
+tier. This is the class BL-397 closed at v0.674.0; it recurs under 0.78x. Understated: in s318 the dev
+spawn stayed alive across fix rounds, so its fix work cannot be split out. Per-verdict labels:
+`docs/analysis/pipeline-efficiency-s317-s318/role-efficacy/impl/exp.py:7-26` (the `CLS` table;
+the `rework-labels.tsv` this entry first cited exists nowhere).
+
+Premise correction: the capture grammar the close condition names did not exist. dev.md prescribed
+no capture header and no "head sha", and graph's captures are committed `test-results/*.txt` files
+cited by path, not story fences. **PARTIAL.** Built: `core/scripts/validate-handoff-evidence.sh`,
+run by implementation.md's pre-gate commit-presence check before gate 1, refuses a cited capture
+in the story's range with no command line, a cited mutation-RED capture not tracked at the frozen
+sha, and a glob or brace cited as a capture of which some alternative matches no tracked file; a
+missing or divergent `head:` is a WARN, never a refusal. Exit 1 blocks gate-1 dispatch; exit 2 is
+recorded and does not. dev.md `## QA Handoff Evidence` now prescribes the header (`$ <command>`,
+`head: <sha>`, `(+dirty)` for an uncommitted tree) and committed RED captures, and
+`validate-mutation-red.sh` prints `head:` and `cwd:`. Reach: about 7 of the 12 evidence (E)
+verdicts and 0 of the 10 bookkeeping (B) verdicts. Measured over all 32 s317/s318 story merges:
+10 refusals in 5 stories, each a capture the reviewer could not read as evidence — (a) s317 1.2
+`p2-full`, `p3-full`, s317 2.2 `p2-db-passed`, s318 2.3 `ac4-pin-tests`, s318 2.5
+`head-canonical-run` and the two `mutation-drop-*-full` (no command line); (b) s317 2.1
+`mutation-pop`, `mutation-recorder` (gitignored REDs); (c) s317 2.2 `s317-2-2-mutation-*.txt` (a
+glob over gitignored REDs, matching nothing tracked). The three other globs (s318 2.3 twice, s318
+2.4 `seed{1,2,3}`) match committed files and are acquitted. Each refusal is enumerated in the
+script header. The 30 head-tree WARNs were artifacts of a BSD `awk -v` abort on multi-line input
+until it moved to ENVIRON; they are now computed, and stderr is empty on all 32.
+
+Operator ruling (batch 229): ship the evidence half and keep this entry open. The receipt chains the
+evidence probe to `probes/bl-510-bookkeeping.sh`, which the batch that builds the B class writes;
+until it exists the receipt exits non-zero and the entry cannot rotate as closed.
+
+Bookkeeping half (batch 230). Built: the same script, at the same pre-gate-1 call, reads the story
+at the frozen sha through git and refuses `status-not-review` (the story's status is not `review`),
+`status-yaml-mismatch` (it disagrees with the story's row in the IMPLEMENTATION view of
+sprint-status.yaml) and `heading-demoted` (one of the four evidence headings appears only below
+`## ` or only at `# `, code fences stripped). The status grammar and the row join are
+`sprint-status.sh`'s, through a new `story-status --ref <sha> <story-file>` mode, so there is one
+parser. A committed story with no status refuses `status-missing`, and a story file not tracked at
+the frozen sha refuses `story-untracked`, because the reviewer reads the commit (both 0 over the 63
+gate-1 snapshots below). An absence the row arm cannot decide (no yaml, no row) prints a
+`SKIP STATUS (<reason>)` line and does not refuse; the reason is the sibling's stderr, and the
+story line is parsed even when the row half fails. Lines are read with a trailing CR stripped and
+under `LC_ALL=C`, and the story and yaml are decoded with replacement, so a CRLF story or one
+non-UTF-8 byte cannot turn an arm into a silent pass. The heading grammar is one awk function shared
+with strategy mode; `## Rename Verification (dev)` is that heading at level 2 in both.
+
+Covered shapes, at gate 1: s317 4.3a CR p1 (status `in-progress`) and s318 1.5 CR p1 (three
+headings at `###`), 2 of the 10 B labels. s317 4.2a also: its status read `ready-for-dev` in the
+story and both yaml views at an APPROVED gate-1 sha, and its QA validation
+(`docs/reviews/s317/4-2a-qa-validation.md:57` in graph) records the lead flipping the sprint-branch
+copy instead. The arm refuses that pass. 6 of the 10 B labels are at QA, not gate 1.
+
+Uncovered shapes. The Dev Agent Record: `dev.md:166` requires it before submission, while
+`implementation.md`'s DAR-fold preflight (gate-2 dispatch) folds it into the story AFTER gate 1
+approves. s317 2.7 and 4.2a were APPROVED without one. The two contradict each other; reconciling
+them is a flow change and not in this release. Empty evidence headings: no arm (operator ruling,
+batch 230). Three B labels match no shape here: s317 2.6 QA p1 (the dev edited another story's
+artifacts), s318 1.5 QA p1 (stale derived fences) and s318 2.6 CR p3 (a recipe anchor line).
+
+False-positive set, by population. Graph, a read-only clone at 2b6f952e7. Gate 1: every s317/s318
+code-review pass with a `reviewed-sha:` (56; the contract counted 49) plus, for the 7 that record
+none (s317 1-4, 1-6, 2-2 twice, 3-2, 4-2b, 4-3b), the first story-branch commit reading `review`:
+63 snapshots over 34 story files. 3 bookkeeping refusals, 0 false positives, as named above. The
+evidence arms refuse 6 more there, all in the 0.783.0 class (a RED capture the reviewer could not
+read): s317 2.1 p1 and 2.3 p2 (APPROVED), the s317 2.2 proxy twice (APPROVED), s317 2.3 p1 and s318
+1.1 p1 (NEEDS_REWORK); 2.3 and 1.1 p1 are new to this population because their REDs were committed
+only after gate 1. 0 level-1 evidence
+headings (control: 63 `# Story` headings). Arm 2 refuses 0. The same run with the PLANNING view
+refuses 8 passes (s317 1.2 four times, 2.2 twice, s318 2.1 and 2.6), 2 of them APPROVED gates. The
+story-merge tips (35 merge second-parents over 34 stories, re-derived; the 0.783.0 header says 32):
+base and tip scripts print identical evidence and strategy refusals; the only
+new lines are 19 `status-not-review` on tips that read `done`, which is post-gate state.
+
+Gate 2, not added. At each QA go-signal sha (44 of 45 validation files; s317 4-2b records none) the
+bookkeeping arms refuse 3: s317 4.2a QA p1 (`ready-for-dev`, a true positive) and 4.2a QA p2 and
+p3 (`status-yaml-mismatch`, story `review`, story-branch row `ready-for-dev`). p3 PASSED, and p2
+records the status finding closed: by then the lead keeps the canonical row on the sprint branch,
+so the story branch's copy lags. Those two are false positives. The contract's condition was a
+false-positive set of 0, so there is no second invocation at gate 2.
+
+Narrowing. Merge tips were the first population and are wrong for it: 19 of 35 read `done`. The
+planning view was the first row source and lags at three APPROVED gate-1 shas. A missing Dev Agent
+Record was an arm and was dropped because core's own flow puts it after gate 1. The trailing-text
+heading counts as level 2; read as absent it would hide `(dev)` headings.
+
+Closed in 0.787.0 (verified 2dc7b58d) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-handoff-evidence.sh && bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-510-bookkeeping.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, implementation plus gate-validation[implementation]: before (s317+s318 pooled, 34 stories) 1.59 h gap-inclusive, token-equivalent $35.2 (API $31.8), 71.5M tokens; after s319 (20 stories) 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens. Lead-seat local-model share of calls in this step group: s317 66%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-512 — gate passes are discarded for lead paperwork, most often a Check 22 waiver
+
+**DEFECT (efficiency).** Closed in 0.784.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 6] $16, 132 adjudicator-minutes.** Seven gate nonces were discarded for
+lead-caused reasons across both sprints, 3 of them the same Check 22 waiver with no Rule 28
+exception, under both the Sonnet and the local qwen lead at about 0.08 per active hour. Check 22
+fired correctly each time; the waste is the discarded pass, not an escape. Two further discards
+(Check 1 verdict form, Check 5 drift) are inferred, not stated as lead error.
+
+The count did not reproduce as stated. Re-derived from graph's lead transcripts, the measured Check 22
+discards are three nonces: s317 `implementation-20261010T230257Z` (a tier-pin waiver naming "82 dev
+and 42 code-reviewer rows" and no spawn), and s317 `124524Z` and s318 `011534Z` (waivers naming
+every `invalid-exception` spawn and citing no Rule 28 exception, or only "the four"). All four lead
+`OVERRIDDEN` writes in s317-s318 were Bash `cat >> … <<EOF` appends, so no Edit/Write matcher sees
+them. The check runs at dispatch: `ai-dlc-dispatch-guard.sh` refuses an implementation-gate
+`gate-adjudicator` dispatch (Check 22 is in that manifest row only) when a current-sprint `OVERRIDDEN`
+entry that dispositions Check 22 names no spawn of the sprint (catches 230257Z), or when a shardable
+`invalid-exception` ledger row is not named by an `OVERRIDDEN` entry that remediates it as Check 22
+clearing arm 4 accepts, by a sharded re-dispatch or a cited exception (1)-(4) (catches 124524Z and
+011534Z). The Remediation field is assembled across graph's wrapped continuation lines before it is
+read, and a negation counts only in the clause before the `re-dispatch` claim (or before a cited
+exception), so "re-dispatched sharded, not serially" covers and "exception (3) does not apply" does
+not. A refused dispatch writes no spawn-ledger row. Over graph's pending-archive.md + pending.md,
+S298-S318, clause 1 denies nothing, and clause 2 denies only S316/S317 rows that arm S3 fails under
+the 0.783.0 validator, which counts party seats as shardable (`party_seats`). Graph ran S317 under a
+validator with no `party_seats`, so a party-seat `invalid-exception` row passed Check 22 there and is
+denied here (the tea row `toolu_012cdPrfgjVUGRG1X3sAcT1g`, measured). Corrected at the batch-230 close:
+the guard judges only the snapshot's current `sprint_id`, so a prior sprint's rows never refuse a later
+sprint's adjudicator. What refuses one after the pull is the current sprint's own shardable
+`invalid-exception` rows with no remediation (graph: 3, 11 and 3 in S316, S317 and S318); the waiver
+shape is action 7 of `docs/plans/graph-pull-0781-to-0787.md`. The tip
+adversary's replay over graph's S317 nonces: 20 denied, 19 of them recorded as Check 22 PASSED
+under graph's own validator.
+
+Closed in 0.784.0 (verified d4880724) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-512-adjudicator-dispatch-waiver.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, every gate-validation step: before (s317+s318 pooled, 34 stories) 0.86 h gap-inclusive, token-equivalent $12.2 (API $11.0), 27.5M tokens; after s319 (20 stories) 0.87 h gap-inclusive (gap 0.34 h), token-equivalent $17.9 (API $17.9), 47.0M tokens; s320 (13 stories) 0.05 h gap-inclusive (gap 0.00 h), token-equivalent $1.2 (API $1.2), 3.4M tokens. Lead-seat local-model share of calls in this step group: s317 57%, s318 0%, s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. s320 is partial (through stories), so its gate figure covers the planning gates only.
+
+verify: manual
+
+## BL-513 — Check 21 fails on dev-filled Strategy Test ID cells that nothing re-checks after a rename
+
+**DEFECT (efficiency).** Closed in 0.783.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 7] about $7.** `stories-test-strategy.md` leaves the `Kind` and
+`Resolves to` cells "for the dev". Check 21 FAILed the sprint-review gate in both sprints on those
+cells: s317 empty cells (Sonnet dev, story 2.7), s318 prose instead of a test node (Haiku dev, 2.2)
+and a test that a sprint-review fix renamed (dev-escalated, commit `7d917eb94`), which escalated
+review and QA then passed. Not tea's strategy: no failing cell traces to it. This is the class
+BL-398 closed at v0.674.0; the rename path is new.
+
+Premise correction: the re-check belongs in sprint-review §4 "Gate Validation and Proceed", not
+§3, because graph overrides §3. `validate-handoff-evidence.sh --strategy` refuses an empty `Kind`
+or `Resolves to` cell, a `test` cell any of whose `<path>.py::<name>` nodes is untracked or
+undefined at the ref, and a row too short to carry `Resolves to` under a header that has the
+column (0 such rows at the five measured shas). It never refuses on the `Kind` vocabulary or on a `test` cell with no `.py::` node,
+because 72 off-vocabulary and 43 no-node rows in the s317/s318 corpus would false-fire. Measured
+on graph: 1 refusal at `7d917eb94` (TS-2.7-04(b), the true positive), 0 at `148518a74`,
+`28a15fce4` and `2176343a4`; 4 empty cells at `0259395b4` (s317 2.7, true positives). It runs
+before Seam B and in implementation's pre-gate step. dev.md and stories-test-strategy.md Rename
+Verification require a rename to re-bind every cell naming the old node across all story files.
+
+Closed in 0.783.0 (verified f621fd36) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-513-strategy-cells.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, sprint-review plus gate-validation[sprint-review]: before (s317+s318 pooled, 34 stories) 0.37 h gap-inclusive, token-equivalent $13.4 (API $12.2), 29.4M tokens; after s319 (20 stories) 0.13 h gap-inclusive (gap 0.05 h), token-equivalent $5.8 (API $5.8), 16.2M tokens. Lead-seat local-model share of calls in this step group: s317 100%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. The step group's figure fell in s319; the entry's own subject (Check 21 failing on dev-filled cells) was not counted by this re-audit, so the fall is not attributed to it.
+
+verify: manual
+
+## BL-514 — subagents poll with bare `sleep`, and no guard sees a subagent's wait
+
+**DEFECT (efficiency).** Closed in 0.782.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 8] 5.4-12.4 h of subagent wall clock.** 228 subagent Bash calls whose first
+token is `sleep` ran 12.4 h, about 196 s each; the narrow count (commands beginning `sleep`, `until`
+or `while`) is 125 calls, 5.4 h, mostly qa and code-reviewer. `ai-dlc-foreground-budget.sh` exempts
+any call carrying an `agent_id` by design, and `validate-steering-budget.sh` drops `isSidechain`
+records, so neither can see it. Measured: a lead call with `timeout: 900000` is denied, a subagent's
+`sleep 200` with the same timeout is not.
+
+Premise corrected on re-measurement: the 228 first-token `sleep` calls / 12.4 h do not reproduce.
+There are 80 first-word subagent sleeps (57 refused by the harness, 23 ran, 0.03 h). The cost is
+foreground sleeping LOOPS, usually behind a prefix such as `S=/x;` or `cd x &&`, so the arm matches
+a sleeping loop or a `sleep` of 30 s or more at any command position. Replaying graph's subagent
+Bash calls through the fixed hook (budget 120 s) denies 198: 152 loops and 46 long sleeps, 17.0 h of
+tool_use-to-tool_result wall clock.
+
+Closed in 0.782.0 (verified 6fe903b6) on a tree receipt, reopened by BL-817.
+
+Former receipt (the mechanism, not the outcome): sh bash docs/analysis/pipeline-efficiency-s317-s318/probes/bl-514-subagent-poll.sh
+
+Re-audit (BL-817): graph s317+s318 against s319, s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the whole pipeline bucket: before (s317+s318 pooled, 34 stories) 5.52 h gap-inclusive, token-equivalent $119.9 (API $114.5), 228.3M tokens; after s319 (20 stories) 5.50 h gap-inclusive (gap 2.76 h), token-equivalent $111.7 (API $111.7), 255.3M tokens; s320 (13 stories) 5.79 h gap-inclusive (gap 4.50 h), token-equivalent $80.6 (API $80.6), 142.6M tokens. Lead-seat local-model share of calls in this step group: s317 44%, s318 0%, s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. The subject (bare `sleep` polls) has no step of its own; the whole-pipeline figure is stated as the population it would move.
+
+verify: manual
+
+## BL-541 — the serial remediator's join is a beat on a record that already exists and is appended to, so it returns on every append and never on completion
+
+Closed in 0.828.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.828.0 (verified a777c5b4) on a tree receipt, reopened by BL-817. The lease-race half: the beat takes `.beat-inflight` and its EXIT trap directly after the state-dir mkdir, before `--dispatch` resolution, so a beat blocked on the spawn ledger is seen by the stop hook (section 20; receipt below).
+
+**PARTIAL (v0.796.0, verified e3073787; v0.815.0, verified a88f88d4) — the completion signal and its join step shipped; the stop-hook lease-race trace is OPEN.** `_gate-procedures.md` joins the serial and unsharded remediator with `wait-for-deliverable.sh --complete-repair --dispatch <agentId>`, and the auto-handoff and `handoff.md` step 1 split a mixed in-flight set into plain, `--complete` and `--complete-repair` calls. The second subject, whether `ai-dlc-continue.sh`'s `beat_lease_live` misreads a lease a just-returned beat rewrote, is untraced.
+
+**PARTIAL (v0.794.0, verified 8aab009d) — the prose half shipped.** remediator.md: the serial remediator, and the one unsharded remediator, end the record with `repair-complete: serial <pass>` at column 0; a part or shard remediator writes no such line.
+
+**DEFECT (efficiency).** `_gate-procedures.md:975` joins a repair with `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`. For the serial cross-section or cross-part remediator, that path is the JOINED record, which exists before the dispatch, and the remediator APPENDS its entries to it (`:940-942`). The plain predicate, "non-empty and written since the join armed", is therefore met by the first append and by every one after it. `--complete` cannot help: it keys on a last line beginning `seat-complete:`, and a repair record carries none (`wait-for-deliverable.sh:254-312`). So nothing distinguishes a serial remediator that has finished from one that has written one entry.
+
+Measured in graph s319 lead session `62eadbbe-59c3-436d-bf7c-931ebc09ecba`, 23:54Z to 00:04Z: 21 `wait-for-deliverable.sh` invocations on `s319/requirements-party-repair.md` and two lead-made sentinel files. 9 were plain `--since <ts>`, 6 used `--reset --since`, and two waited on sentinels the remediator would never write, so they could only time out. Each return woke a ~300K-token lead turn (BL-538). The lead diagnosed it itself ("each beat returns as soon as the remediator writes again") but had no correct form to arm.
+
+The stop hook also fired "NO LIVE WAIT-BEAT IS ARMED" at 00:00:49Z, seconds after the lead armed beat `bcd634p7x`. That repeats 23:13:02Z, when the lead read `.beat-inflight` five seconds later as holding a future epoch. Both are consistent with `ai-dlc-continue.sh`'s lease test (`beat_lease_live`, around `:290`) misreading a lease a just-returned beat rewrote. Neither is proven, because the marker may have cleared between the hook and the read.
+
+Owed: a completion signal the serial remediator writes last (a terminal line in its appended block that the beat can key on, as `seat-complete:` does for seats), and a step that tells the lead to arm `--complete`-style on it; or a join on the agent's own completion notification instead of a file. Separately, trace whether the stop hook's lease read can race a beat's own marker rewrite.
+
+Former receipt (the mechanism, not the outcome): sh S=core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || S=scripts/ai-dlc/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; S="$(pwd -P)/$S"; command -v mkfifo >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; mkfifo "$d/_bmad-output/spawn-ledger.jsonl" || exit 9; row="$(printf '{"v":1,"ts":"%s","name":"r","tool_use_id":"toolu_R541"}' "$(date -u -r $(( $(date +%s) - 30 )) +%Y-%m-%dT%H:%M:%SZ)")"; ( exec 3> "$d/_bmad-output/spawn-ledger.jsonl"; : > "$d/reached"; while [ ! -e "$d/release" ]; do sleep 0.1; done; printf '%s\n' "$row" >&3 ) & h=$!; ( cd "$d" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR= AI_DLC_TEAMMATE_DIR=/nonexistent AI_DLC_PROJECT_ROOT="$d" AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 bash "$S" --dispatch toolu_R541 x.md ) > "$d/o" 2>&1 & b=$!; n=0; while [ ! -e "$d/reached" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n+1)); done; [ -e "$d/reached" ] || { kill "$b" "$h" 2>/dev/null; exit 9; }; m="$(cat "$d/_bmad-output/.beat-inflight" 2>/dev/null)"; : > "$d/release"; wait "$h"; wait "$b"; grep -q '^WAITING   x.md' "$d/o" || exit 9; [ "${m#* }" = "$b" ]
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-543 — the serial remediator discovers its sibling and moved-cite worklist by hand, making it the longest single wait in the planning steps
+
+Closed in 0.815.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.815.0 (verified a88f88d4) on a tree receipt, reopened by BL-817. `core/scripts/serial-remediation-worklist.sh` derives the serial remediator's replaced-text HITs and MOVED-CITEs from the pre-repair copies the splitters now keep (`sections/.before`, `.before/<stem>`), and removes each copy it resolved unless `--keep` is passed. A file with no copy is UNASSESSABLE, exit 3. The sections and subject repair dispatch runs it once after the join and before the serial dispatch, and the remediator adjudicates its hits instead of deriving them. Fixture `serial-remediation-worklist`.
+
+**DEFECT (efficiency).** In s319 carry-over-evaluation (2.8 h), the two serial cross-section remediators took 42 min (party repair, 19:54–20:36Z) and 29 min (elicitation repair, 20:53–21:22Z), about 42% of the step. Every parallel fan-out in the same step finished in 5–15 min. In requirements, the serial cross-part remediator ran 52 min (23:11Z–00:04Z). Most of that work is mechanical. For every `repaired` entry it runs `grep -rn -F '<replaced text>'` over the assembled files, and it re-reads every cite into an edited file (`_gate-procedures.md:991-1002`). BL-508 (v0.786.0) made the serial remediator run whenever `SERIAL-REQUIRED` is above 0, so this cost now lands on every sharded repair. Owed: the join emits that worklist itself, meaning each repaired entry's replaced text with its grep hits over the assembled files, and each cite into an edited file whose line moved. The serial remediator is then briefed to adjudicate the hits rather than find them. Measure by re-timing the serial remediator on the next consumer sprint.
+
+**Fourth timing (graph s319 requirements elicitation repair).** The serial cross-part remediator ran 31 min, 01:19:04Z to 01:50:12Z. It spent 14 min reading before its first write at 01:33:02Z, then made 28 record appends and 48 subject edits (prd.md 28, architecture-impact.md 8, product-brief.md 8, .memlog.md 4) for 20 repaired, 5 escalated and 1 skipped. That makes four serial passes in one sprint, at 42, 29, 52 and 31 min, every one longer than the parallel fan-out it follows.
+
+Former receipt (the mechanism, not the outcome): manual
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-550 — party seats grep for files that do not exist, because nothing gives them the repository's real paths
+
+Closed in 0.794.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.794.0 (verified 8aab009d) on a tree receipt, reopened by BL-817. The party-seat section of architect, dev, pm and tea (byte-identical across the four, I124) tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it, and that a grep which errored searched nothing.
+
+**DEFECT (efficiency).** Across 134 s319 party and elicitation seat transcripts there are 105 "No such file or directory" lines. Seats guessed paths such as `rebalancer/db.py`, `rebalancer/state_store.py`, `server/main.py`, `rebalancer/config_schema.py`, `infra/lib/ecs-stack.ts` and `rebalancer/execution_log.py`, none of which exist and none of which the subject files cite (`grep -l -F` over the PRD, SPEC, brief and `architecture-impact.md` returns 0 for each, against 3 for the control `rebalancer/execution.py`). Each miss is a tool round trip and a guess that can be filled in with an invented answer. Owed: the seat brief carries the subject's cited code paths (derivable from the subject files) and an instruction to resolve any other path with `git ls-files` before reading it.
+
+**Second instance, the adversarial round (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1, 2026-10-16).** Filed by peer session ai-dlc-68. Seven parts (1, 2, 6, 8, 13, cross-3 and cross-6) made 13 greps for nonexistent paths: `dashboard/`, `extensions/`, `shared/`, `shared/tokens.py`, `aggregator/`, `rebalancer/config_schema.py`, `rebalancer/config.example.json`, `rebalancer/tests/test_s318_subscribe_pin.py`, `test_s245_subscribe_pin.py`, `web/src/pages/Dashboard.jsx|tsx` and `web/src/hooks`. Three more greps died on `ugrep` limits: "exceeds complexity limits" on `.{0,80}` and `[^.]{0,140}` (parts 12 and cross-6), and "empty (sub)expression" on `\b` inside an alternation (cross-5). The brief owed above should also state a pattern form that `ugrep` accepts.
+
+Former receipt (the mechanism, not the outcome): sh for r in architect dev pm tea; do s=$(LC_ALL=C awk "/^## As a party seat/{g=1} g&&/^## /&&!/party seat/{exit} g" "core/team-roles/$r.md"); case "$s" in *"list it first with \`git ls-files <dir-or-glob>\`"*) ;; *) exit 1;; esac; done
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-552 — the lead posts a status line for every finished seat even with a join covering the round
+
+Closed in 0.794.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.794.0 (verified 8aab009d) on a tree receipt, reopened by BL-817. rule-28: a notification for an agent whose deliverable a live beat covers gets no status line and no re-check; a `--complete` round is reported once, from the merge. A failed agent and a held rejected set are carved out.
+
+**DEFECT (efficiency).** Distinct from BL-538 (the wake itself): even when the lead does take a turn, the step files give it nothing to do with "seat N delivered" except narrate it. In the s319 party round (36 seats) and elicitation round (19 shards), almost every arrival produced a lead message of the form "<seat> delivered (n findings). The join beat is still armed …". The text carries per-seat finding counts that the merge recomputes anyway. Owed: the step files say a notification for an agent inside an armed `--complete` join gets no per-agent summary; the lead ends the turn, and reports the round once from the merge.
+
+Former receipt (the mechanism, not the outcome): sh f=core/skills/ai-dlc/rule-bodies/rule-28.md; t=$(tr "\n" " " < "$f"); case "$t" in *"Two notifications are not covered. One whose status is failed"*) ;; *) exit 1;; esac; case "$t" in *"post no status line for the agent"*) ;; *) exit 1;; esac
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-594 — requirements adversarial p1 re-reads the whole subject after elicitation; brief it as a pass-2+ review of the elicitation repair
+
+**DEFECT (efficiency).** Closed in 0.822.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT, RE-SCOPED BY OPERATOR RULING (batch 235, 2026-10-16, relayed by lead ai-dlc-9c).** Filed by ai-dlc-b8 from ai-dlc-de's `docs/analysis/step-value-s317-s319.md`, as "make elicitation the first convergence pass and drop p1's round". That design is OUT.
+
+**The finding that re-scoped it** (batch 235 intake's opus contract adversary, read at origin/main a0451c70):
+- Premise NOT SUPPORTED. The analysis BL-594 cited gives p1 "Keep as the convergence exit" (`:111`) and "Measured, no round is removable on the ruling's terms" (`:114`); p1 also has unique surviving findings (0/1 s317, 0/3 s318, `:57`, `:61`), none high-consequence. Its MAJORs are mostly repair-introduced (18/21 s318, 17/27 s319), a cost archived BL-508 owns (`:116-118`).
+- Round counts under the original design's only safe form (elicitation stamps a verdict but can never be terminal; p2 always runs): s317 elicitation, p1, p2 -> p1, p2, p3; s318 four review rounds -> four. **Rounds removed per sprint: 0** — p1 survives under the name p2.
+- The original design also contradicted Rule 8 and arm J (MET honoured at pass 1, a freeze point), broke arm H (the elicitation repair record is not `*-repair-p1.md`), loosened arm C (s319 elicitation's 14 CRITICALs would become the prior-scope baseline), and forked `skill:` between `ai-dlc-adversary-review` and `bmad-advanced-elicitation`.
+
+**The re-scope (operator-ruled):** the one real difference is that the round after the elicitation repair re-reads the whole subject instead of reviewing the repair. Brief requirements adversarial p1 under the pass-2+ contract, handing it the merged `s<N>/requirements-elicitation.md` and `s<N>/requirements-elicitation-repair.md` as "the prior pass's findings and the repair record" (`_gate-procedures.md` ~:539-541). One prose carve-out in `core/team-roles/adversary.md` (~:509-512) and `_gate-procedures.md` "Validation cycle" item 3. No names, verdicts, merge flags or arms K3, J or H change, and BL-575's elicitation axis stays "no verdict".
+
+Owed: FIRST measure the saving on graph's sprints (the p1 round's wall clock and dollars against a pass-2+ round's, s317-s319, read-only; a transcript sweep, so it needs a slot). **If the measured saving is 0, it does not ship.** Then the carve-out, with a fixture row pinning the p1 brief's prior-pass inputs. Ships on the shared BL-575/BL-577 branch.
+
+Cross-ref BL-569 (three validation rounds with no stated distinction) and archived BL-508 (repairs write the defects the next pass finds).
+
+Scheduled in batch 235 for a later release (scope ruling: the boundary is the release).
+
+Built: (C1/C2, branch b235-c9-h3) `_gate-procedures.md` "Validation cycle" item 3 and the "Adversarial review dispatch" pass-2+ sentence hand every requirements p1 shard, and the one-part serial adversary, `s<N>/requirements-elicitation.md` as the prior pass and `s<N>/requirements-elicitation-repair.md` as its repair; `adversary.md` "Later passes review the REPAIR" carries the carve-out. No name, verdict, merge flag or arm changes. Pin `gp-req-p1-prior` in `process-rule-pins` is a presence pin only. Measured saving, and its preconditions: graph sprint s318 only (the one sprint with p1, p2 and p3 all present); per shard, p1 102.6k output tokens and 1562 s summed wall, p2 18.5k and 290 s; tokens, not dollars; span is per-shard wall summed. Graph's next sprint must show the same sweep's p1 per-shard figure falling toward p2's, not near p1's.
+
+Closed in 0.822.0 (verified edcae8aa) on a tree receipt, reopened by BL-817. Requirements adversarial p1 is briefed under the pass-2+ contract with requirements-elicitation.md and requirements-elicitation-repair.md as its prior pass and repair; pinned by process-rule-pins gp-req-p1-prior.
+
+Former receipt (the mechanism, not the outcome): manual
+
+Re-audit (BL-817): graph s318 against s319, s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, requirements: before (s318 pooled, 13 stories) 0.47 h gap-inclusive, token-equivalent $25.4 (API $25.4), 44.0M tokens; after s319 (20 stories) 0.44 h gap-inclusive (gap 0.16 h), token-equivalent $14.1 (API $14.1), 26.3M tokens; s320 (13 stories) 0.54 h gap-inclusive (gap 0.28 h), token-equivalent $15.7 (API $15.7), 28.1M tokens. Lead-seat local-model share of calls in this step group: s318 0%, s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. Its own stated test fails: requirements adversarial p1 per shard did not move toward p2 (API $ per shard p1/p2: s319 $2.23/$1.54, ratio 1.45, engine 0.789 before the fix; s320 $1.24/$0.83, ratio 1.50, engine 0.924-0.947 after it).
+
+verify: manual
+
+## BL-615 — adversary seats and shards are never told to resolve a code path with `git ls-files`, so BL-550's second instance is uncovered
+
+Closed in 0.827.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.827.0 (verified 04adbf68) on a tree receipt, reopened by BL-817. `team-roles/adversary.md` gains a contract item: before reading or grepping a code path its brief does not cite, the adversary lists it with `git ls-files <dir-or-glob>` and reads only what that returns. The wording is adversary-specific, outside the I123-bound adjacency, and opens no "As a party seat" heading (I124 still passes on architect, dev, pm and tea). Pinned by the `process-rule-pins` R row `adv-ls-files`.
+
+**DEFECT (efficiency).** Filed by peer session ai-dlc-c9 at lead ai-dlc-9c's direction, out of c9's release (a), where it was item A6 and was taken out because BL-550 is closed and A6 would have closed nothing. Intake re-derived it read-only at origin/main `86d3a695`.
+
+BL-550 is archived LANDED (v0.794.0, verified `2f6d5199`) on its role-file half: the party-seat section of `architect`, `dev`, `pm` and `tea`, byte-identical across the four under I124, tells a seat to list a code path with `git ls-files <dir-or-glob>` before reading it. Its receipt loops over `architect dev pm tea` only. The archived entry also records a **second instance, in the adversarial round** (graph s319 resumed lead `f65eae3b`, requirements-adversarial-p1): seven parts (1, 2, 6, 8, 13, cross-3 and cross-6) made 13 greps for paths that do not exist, such as `dashboard/`, `shared/tokens.py` and `rebalancer/config_schema.py`.
+
+Those shards run the `adversary` role. `_gate-procedures.md:413`, `:422`, `:444`, `:585` and `:609` dispatch "one `adversary` per story ordinal", "one `adversary` per part plus one cross-part `adversary`", and so on. The adversary side has no instruction:
+- `git ls-files` counts over `core/team-roles/*.md`: `adversary.md` 0, against `dev` 2 and `architect`, `pm` and `tea` 1 each (the control).
+- `_gate-procedures.md` has 0 mentions of `ls-files` (control: 28 mentions of `adversary`).
+- `adversary.md` (552 lines, 9 `##` headings) never says "code path" and has no `## As a party seat` section.
+
+So the LANDED close never reached the role that produced the second instance. The open backlog does not cover it either (0 `ls-files` mentions).
+
+Constraint on the fix: I124 (`scripts/validate-enforcement-map.sh:13573`, `i124_names='architect dev pm tea'`) binds the party-seat section to exactly those four roles. Its half B fails the push on any other role file carrying a heading opening "As a party seat". The instruction therefore cannot reach `adversary.md` by copying that section. It needs its own text in `adversary.md`, or in the shard brief `_gate-procedures.md` dispatches, or I124's list must widen deliberately. The I123 chunking paragraph is the other binding a role-file edit has to respect.
+
+Rejected at contract time: release (a)'s A6 candidate derived a `code paths:` block for the brief with a hand-written regex in prose (`git ls-files | grep -F -x -f <(grep -ohE '[A-Za-z0-9_./-]+\.[a-z]{1,4}' …)`). The contract adversary flagged it as verification-discipline's hand-regex class (a second implementation of a path grammar). Whether the fix is prose or a mechanism is this entry's decision.
+
+Owed:
+1. Decide prose (an `adversary.md` or shard-brief instruction) or a mechanism (a path list derived by shipping code, not a prose regex), and record why.
+2. Receipt: run the shipping code, not a grep of the role file. For example, a shard brief rendered for a subject naming a non-existent path shows the resolved/absent split; or, for prose, a receipt over the dispatched brief and not over BL-550's four files. Control: the four party-seat roles still pass I124.
+
+Related: BL-550 (archived; both instances), I124, I123.
+
+Former receipt (the mechanism, not the outcome): sh t="$(awk '/^## Constraints/{p=1;next} p&&/^## /{exit} p' core/team-roles/adversary.md | tr '\n' ' ' | tr -s ' ')"; [ -n "$t" ] || exit 9; grep -qE 'path[^.]*(does not|do not|never|neither)[^.]*cite' <<<"$t" && grep -qE 'git ls-files <[^>]+>`[^.]*read only what' <<<"$t" && ! grep -qE '^#+ As a party seat' core/team-roles/adversary.md && bash scripts/validate-enforcement-map.sh --arms I123,I124 >/dev/null 2>&1
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-679 — one consumer pull re-runs `emit-report.sh --verify` three or four times, each a full detector re-render, and no caller accepts an earlier PASS
+
+Closed in 0.834.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.834.0 (verified d4281b59) on a tree receipt, reopened by BL-817. `emit-report.sh --verify` records an exit-0 PASS in the consumer's git-dir, and accepts a matching one only with `EMIT_REPORT_VERIFY_CACHE=1`. It ships off by default, and with that unset every `--verify` is byte-identical to the previous release. Exit 1 and exit 3 are never recorded. The default turns on only after a key review finds no BLOCKER (BL-685). Tests: reconcile-emit-report PC-V0..V26 and mutants M-region, M-direxcl and M-exit3; receipt below.
+
+**DEFECT (efficiency).** In the graph pull session `f78aa565` (0.823.0 to 0.828.0), f7 measured `emit-report.sh --verify` run 3-4 times in one pull, each a full re-render of every detector at 3-14 minutes, about 35 of the pull's 116 in-session minutes. Source: f7's transcript read, not re-derived here; a transcript-only figure. Handoff gaps are excluded from the 116.
+
+Sites, re-derived against this tree at 9ad0e21c (f7's consumer line numbers matched the distribution's exactly):
+- `core/skills/ai-dlc-update/SKILL.md:1514` (the first step-7 `emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` instruction, "it MUST exit 0") and `:1720` (the second statement of the same gate, "(1) ... exits 0"). `:1748` says to run `--verify` again after pasting a freshly rendered region.
+- `core/skills/ai-dlc-update/reconcile/apply.sh:259`, the union gate's own call: `bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"`.
+- Inside each `--verify`, `core/skills/ai-dlc-update/reconcile/emit-report.sh:832` runs `predicate-differential.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"`. `--verify` begins at `:67` and re-renders the whole region through `render()` (`:165`), so every caller pays every detector, this one included.
+
+Owed: key a recorded PASS on (dist, base, theirs, consumer tree hash, region hash). A later caller in the same pull whose key matches accepts the recorded PASS instead of re-running the detectors. An edit outside the mechanical region leaves the key unchanged and so triggers no re-run; an edit inside the region, or any change to the four tree identities, changes the key and re-runs. The write is made only by a `--verify` that exited 0, and the PASS is read, not trusted from the report text. f7 estimates about 20 minutes removable per pull, which makes this the first of the pull-path costs; that estimate is f7's and is not re-measured here. Probe: a second `--verify` on an unchanged key skips the render (assert by detector invocation count, not by output), and a one-byte edit inside the region re-renders and fails. Control: an edit outside the region on the same key still accepts.
+
+Note that `emit-report.sh` and `apply.sh` are the consumer's INSTALLED engine, so the pull that delivers this fix still runs the old re-runs.
+
+No existing receipt shape fits: the subject is a count of detector invocations across a multi-caller pull, which needs a seeded world and a driver of the real `--verify`, and no such receipt has been written or run here (UNRUN).
+
+Former receipt (the mechanism, not the outcome): sh f="$(mktemp)" || exit 9; bash core/fixtures/reconcile-emit-report/run.sh >"$f" 2>&1 </dev/null; [ -s "$f" ] || exit 9; grep -Eq '^ +ok +PC-V1( |$)' "$f" && grep -Eq '^ +ok +PC-V3( |$)' "$f" && grep -Eq '^ +ok +PC-V10( |$)' "$f" && grep -Eq '^ +ok +PC-V4( |$)' "$f" && grep -Eq '^ +ok +PC-V26( |$)' "$f" && ! grep -Eq '^ +FAIL +PC-V' "$f"; r=$?; rm -f "$f"; exit $r
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the ai-dlc-update bucket (consumer pulls): before (s319 pooled, 20 stories) 1.59 h gap-inclusive, token-equivalent $8.6 (API $8.6), 22.1M tokens; after s320 (13 stories) 0.56 h gap-inclusive (gap 0.43 h), token-equivalent $2.1 (API $2.1), 4.9M tokens. Lead-seat local-model share of calls in this step group: s319 1%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. The bucket's figure fell in s320, a partial sprint with one pull; the entry's own subject (`emit-report.sh --verify` re-runs per pull) was not counted by this re-audit, so the fall is not attributed to it.
+
+verify: manual
+
+## BL-694 — a consumer reconcile push re-runs every reconcile-engine fixture for a one-line `core_manifest` append in `setup-sites.md`
+
+Closed in 0.864.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.864.0 (verified 3bdf958b4eb3c3fc6c3c5c77213e98ae9b2c329e) on a tree receipt, reopened by BL-817. ** — fix (1) shipped in 0.855.0; fixes (2) and (3) close with 21 declarations recorded as cannot-narrow under the current decl grammar (no glob) and 3 narrowed from a sandbox trace.**
+
+Corrections to this entry: `apply-worklist-rows` is not over-wide (it copies `"$REC"/*.sh "$REC"/*.md` at `run.sh:139` and its clean trace reads `setup-sites.md`), so fix (2)'s premise held for only 1 of its 7 (`self-update-fixture-log`), and 6 of 7 copy the directory; the 18 undecided are 17 (`self-update-reinvoke-liveness` already declares only `!…/preclassify.sh` and `!…/setup-sites.md`); and the 58 and 80 above were 53 and 74 at 0.842.0 (b37113afc).
+
+**DEFECT (efficiency).** `core/skills/ai-dlc-update/reconcile/setup-sites.md` carries the `core_manifest:` list (`:56`), which gains one `  - core/fixtures/<name>/**` line for every new shipping fixture (207 such lines today, from `:77`). The same file is read by `apply.sh` (`manifest_dests`, `:2035`, which keeps only `scripts/ai-dlc/` destinations) and by `preclassify.sh` (`:201`, `:221`). Each fixture's `inputs.decl` that declares the whole `core/skills/ai-dlc-update/reconcile/` directory (58 of them, by `grep -lxE '!?core/skills/ai-dlc-update/reconcile/' core/fixtures/*/inputs.decl | wc -l`, a leading `!` marks a line required and it is keyed all the same; 80 `inputs.decl` files name something under `reconcile/`) therefore re-runs when that one line is appended, although no engine code treats a `fixtures/<name>/**` entry differently. Filed by peer session ai-dlc-c0 (batch 236 CONSUMERPUSH), id allocated by lead ai-dlc-c8; diagnosed read-only from graph's committed history and a file:// clone.
+
+Measured case: graph's push of the 0.823.0 to 0.828.0 reconcile (graph commit b8d46687d, parent fbe7ab4d3; branch tip 18202a8c) selected 139 of 224 shipped fixtures: `read-set keys: 139 of 224 fixture(s) run (131 changed, 1 unrecorded, 7 stale); skipping 85`. The line comes from graph session f78aa565's uncommitted push log, which is not in graph's committed history. The 17.6-minute figure is BL-583's evidence and was not re-derived here. Classification of the 139: declared file changed 43; changed only via a declared directory 51 (45 of them only via `setup-sites.md`); traced file changed 22; own dir changed 12; unmapped 4; unrecorded 1; stale 7; full-suite fallback 0. The consumer layout does not inflate the selection.
+
+The `setup-sites.md` diff on that push was `+  - core/fixtures/content-seal/**`, and it was the ONLY changed input for 48 fixtures. Of those 48, 23 are correct by trace (`apply.sh` `manifest_dests` and `preclassify.sh` parse the block), 7 are over-wide by trace (apply-self-overwrite, apply-worklist-rows, layer-absorption-retire, ledger-reverify, ledger-reverify-dist-only-reach, self-update-fixture-log, self-update-gate), and 18 are untraced. Even the 23 re-ran for a change no engine code treats differently. The append occurred on 11 of graph's 23 reconcile commits since 2026-10-01, so the cost recurs on most pulls. The 48 are a subset of the 58 directory declarations: per the diagnosis the append changed the key of 57 fixtures, and for 48 of them it was the only changed input.
+
+Owed, ranked: (1) take the per-fixture list out of `setup-sites.md` (its own file that the engine fixtures neither declare nor read, or a glob minus `.dist-only`), rebinding I8 (`scripts/validate-enforcement-map.sh:1361`) and I5 (`:3801`) and keeping `preclassify.sh`'s fixture set; this removes up to 48 re-runs on that push and the recurrence. (2) Narrow the 7 trace-evidenced declarations after a re-trace. (3) Trace the 18 undecided before narrowing any.
+
+Fix (1) moved the 207 entries into the `core_manifest:` block of `core/skills/ai-dlc-update/fixture-manifest.md`, outside `reconcile/`; on a one-fixture append the fixtures whose declaration covers the changed manifest file (a covering directory or the file itself, by `grep -lxE`) go from 88 (58 of them by the exact `reconcile/` line) to 29: 26 declare `core/` or `core/skills/`, which the same append to `core-manifest.md` already re-keys, and 3 (`core-write-guard`, `preclassify-mode-bucket`, `preclassify-rename-row`) declare `core/skills/ai-dlc-update/fixture-manifest.md` itself because they read it.
+
+NOTE, no code change: the `core-paths.sh --audit-diff` base-ref fallback to `setup-sites.md` (`:224-232`) is reachable only from a base older than v0.20.0, and its output there is the same as before this change, because `core-manifest.md` was added at 218b0726f (v0.20.0) and never deleted (`git log --diff-filter=D -- core/skills/ai-dlc/core-manifest.md` gives 0 rows, against 3 for a `--diff-filter=D` control over `core/fixtures/*`).
+
+A `file://` rehearsal took a consumer installed by c7fc78b88's `install.sh` and pulled the fix tip: the consumer's own installed `self-update-gate.sh` returned SELF-UPDATE-OK with no carry, the step-2 slice write (an agent action per `core/skills/ai-dlc-update/SKILL.md:384-397`, which no program performs) copied exactly the 6 rows the consumer's installed old `preclassify.sh` gave, with `fixture-manifest.md` as UPSTREAM-ONLY-ADD, and `self-update-push.sh` then exited 0, leaving the consumer's `fixture-manifest.md` at the tip's md5 and the new `preclassify --untangle` on that tree at 909 rows, 771 of them fixture rows, the same as before the move. UNRUN there: `self-update-fixtures.sh` with its 48 covering fixtures, the consumer's pre-push (no hook wired), the PR, auto-merge and re-invoke, the guard hook, and step 7.
+
+Former receipt (the mechanism, not the outcome): sh [ "$(grep -cE '^[[:space:]]*-[[:space:]]*core/fixtures/[A-Za-z0-9_-]+/\*\*' core/skills/ai-dlc-update/reconcile/setup-sites.md)" -eq 0 ]
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, the ai-dlc-update bucket (consumer pulls): before (s319 pooled, 20 stories) 1.59 h gap-inclusive, token-equivalent $8.6 (API $8.6), 22.1M tokens; after s320 (13 stories) 0.56 h gap-inclusive (gap 0.43 h), token-equivalent $2.1 (API $2.1), 4.9M tokens. Lead-seat local-model share of calls in this step group: s319 1%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. The bucket's figure fell in s320, a partial sprint with one pull; the entry's own subject (reconcile fixtures re-run per push) was not counted by this re-audit, so the fall is not attributed to it.
+
+verify: manual
+
+## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
+
+Closed in 0.913.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.913.0 (verified 5b5388924) on a tree receipt, reopened by BL-817. **DEFECT (efficiency).** Relayed by ai-dlc-5d from graph S319; dedupe re-derived on the distribution by lead ai-dlc-37; id allocated by ai-dlc-37; filed by peer session ai-dlc-c0 (batch 236), with BL-713's release.
+
+`core/scripts/join-remediator-shards.sh:741` defines SERIAL-REQUIRED (parts mode only) as the count of `repaired` entries with a real edit, each owing the cross-file sibling grep and moved-cite check that no shard can run, and the procedure dispatches ONE serial remediator whenever that count or ESCALATED-COUNT is above 0. However many cross-part items there are, one agent works them all, in sequence.
+
+Evidence, relayed by ai-dlc-5d and not re-measured by this filing (load 2–28, so the wall clock is an observation, not a timing): graph S319 stories, 2026-10-19. The 19 parallel shards finished in about 8 minutes (20:10–20:17 EDT); the join reported SERIAL-REQUIRED 148; the one serial agent ran 62 minutes (20:24:49–21:26:53, 172 tool calls, 77 Edit), while the lead re-armed its wait beat 7 times and ran nothing else. That is 148 items in 62 minutes, about 0.42 minutes per item, as an observation; no per-item baseline exists to compare it against.
+
+Prior art, not a duplicate: archived **BL-543** (LANDED v0.815.0, verified a88f88d4) cut the serial remediator's DISCOVERY work — `core/scripts/serial-remediation-worklist.sh` now derives its replaced-text HITs and MOVED-CITEs from the splitters' pre-repair copies instead of the agent finding them by hand — on S319 rounds whose serial remediators took 42, 29 and 31 minutes. Those rounds recorded no SERIAL-REQUIRED counts (BL-543 records one round's 28 appends and 48 edits only), so they are not a baseline for tonight's figure and are not compared with it. BL-543 did not change the COUNT: every cross-part item still goes to the one agent, and that is what this filing owes.
+
+Dedupe, re-derived with `grep -c` at origin/main: "SERIAL-REQUIRED" 3 in docs/backlog.archive.md and 0 in docs/backlog.md; "serial remediator" 35 in the archive, the relevant one BL-543; control BL-583 6.
+
+Owed, the mechanism left to the builder: partition the SERIAL-REQUIRED items by the parts they touch, so disjoint sets run as parallel serial lanes and each lane keeps the serial guarantee within its own set. A fixture arm (or receipt): a seeded join whose two disjoint item sets dispatch to two lanes, while an overlapping pair stays in one lane.
+
+Measured input for the partition, graph-watch, batch 238. These figures come from the graph watcher's scratch run of `core/scripts/serial-remediation-worklist.sh` over s319's stories party repair, relayed by the batch-238 lead; this filing did not re-measure them. The run's SUMMARY read `files 19 replaced 115 hits 135 moved-cites 1`, over 19 parts and 148 SERIAL-REQUIRED entries. Taking the parts each item touches as edges, the lane components are: edit only, 19; edit ∪ MOVED-CITE, 18; edit ∪ HIT, 1. One boilerplate line merges every lane: the sprint-title `architecture_refs` line that every story carries (`story-2-1:8-10`, hunk `6.md#F-9`), which HITs line 9 of 18 other stories. On this corpus, a partition on HIT edges therefore yields one lane, the status quo, unless a HIT on a line common to all parts is excluded from the edge set. The builder must decide whether such a common-line HIT can be excluded safely, or must be routed as a single fan-in item.
+
+Built (batch 240, R2): lanes are keyed on FILES from each part's `edit:` set, joined only by MOVED-CITE edges from the worklist the join now runs after a sections or subject assembly (`--keep`); a HIT or escalation reaching two or more lanes is one FANIN item, so the common-line HIT is routed to the fan-in and never excluded. Lanes run as a second parts-mode round through the same join (`--artifact <name>-serial`), and `--escalations`/`--sources` read that round's record after round one's.
+
+Former receipt (the mechanism, not the outcome): sh bash core/fixtures/remediator-shard-join/receipt-bl716.sh
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, stories-test-strategy: before (s319 pooled, 20 stories) 0.80 h gap-inclusive, token-equivalent $26.0 (API $26.0), 44.8M tokens; after s320 (13 stories) 0.93 h gap-inclusive (gap 0.40 h), token-equivalent $39.1 (API $39.1), 65.0M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+verify: manual
+
+## BL-804 — a remediator writes `derivations: not replayed` although replay is its default, and the join's refusal costs a whole re-dispatch
+
+Closed in 0.949.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Closed in 0.949.0 (verified e6e7f8375) on a tree receipt, reopened by BL-817.
+
+**DEFECT (efficiency).** Filed at the batch-242 close from the graph watch (ai-dlc-fa, poll 16, 01:07 EDT 2026-10-26). In graph s320, the `stories-party --pass 1` repair join refused at 05:05:46Z with `REFUSED: 11.md: derivations: not replayed; …` (the checks-field refusal in `core/scripts/join-remediator-shards.sh`). Part 11 is story 3.5, in `s320/shards/stories-party-repair-p1/11.md`. `core/team-roles/remediator.md:134-139` makes replay the default ("Replay is the default: run `scripts/ai-dlc/validate-artifact-derivations.sh <your record>` after your last edit"), but the remediator wrote `not replayed` anyway. Graph's lead recovered by contract: a record-only re-run (agent a0481edc5f18691e2) replayed 5 derivations and re-marked, and the re-join returned rc=0. The cost was one dispatch and about 2 minutes. One instance, measured from the transcript.
+
+Owed: a mechanism that makes the default the act, not the instruction. For example, the `--mark` path of `wait-for-deliverable.sh` could run the replay itself when a repair record says `not replayed` and its fences name no deferred document, then write the count. That moves a refusal the join already makes to the point where the remediator can still fix it. Measure the false-positive set first: a record whose fences are legitimately deferred must not be forced.
+
+Former receipt (the mechanism, not the outcome): sh bash core/fixtures/remediator-shard-join/receipt-bl804.sh
+
+Re-audit (BL-817): graph s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, stories-test-strategy: 0.93 h gap-inclusive, token-equivalent $39.1 (API $39.1), 65.0M tokens, the baseline. No graph sprint has run 0.949.0 yet. Owed: first graph sprint on >=0.949.0. The shipped mechanism (0.949.0, `wait-for-deliverable.sh --mark` replays the derivations) stands; the reopen owes the outcome, not a rebuild.
+
+verify: manual
+
+## BL-695 — a sharded stories party round waits on its slowest seat at every wave, because the lead split the round by seat and joined each seat before dispatching the next
+
+Closed in 0.950.0 on a mechanism measurement; step cost did not fall; reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT (efficiency).** f7 measured, graph s319 lead sessions c61a91eb and a0701ce0, 0.830.0; transcript-only, not re-derived here: (1) in the stories-test-strategy party round, per-story seats ran a median of 5.5-6.5 min and cross seats a median of 15.5-18.3 min, with one cross seat at 43.2 min; (2) f7 estimated the pole at 40-80 min per round — an estimate, not a measurement; (3) the TEA seat ran per-story n=19, median 2.0 min, max 6.6, and cross n=6, median 17.5 min, max 35.3, about 20-29 min of pole per wave. The batch 236 WAVES adversary read the same two transcripts, read only: "Concurrent subagent limit reached" appears 0 times in either (control: 9 other graph transcripts carry it); the round went out as four waves of 25 agents, one seat each (19 per-story + 6 cross), against a probable cap of 42, so about 17 slots sat idle in every wave. From each wave's last seat to the next dispatch: Dev to Architect 35.6 min after the last per-story seat and 15.6 min after the last cross seat (beat cadence plus a 429 episode); Architect to TEA 11.8 min and 14 s; TEA ended the round on a 29.1 min pole. The cross pole in each in-session transition is the gap between its last per-story seat and its last cross seat: (35.6 - 15.6) + (11.8 - 0.2) = 20.0 + 11.6 = 31.6 min across the two. The 15.6 min of beat cadence and 429 overhead after the Dev round's last cross seat is separate from that pole. SM to Dev is excluded: it was a session handoff.
+
+Cause: a per-seat barrier the LEAD imposed, with the cap never probed — not one the cap forced. The lead wrote "the other three seats follow once the harness cap is known from any rejections", against `rule-28.md`'s "until a rejection has shown the cap, the first wave is the whole set". Two prose sites licensed the barrier: Rule 28's Waves paragraph joined each wave "before the next wave spawns", and both Rule 28's missing-set sentence and `_gate-procedures.md`'s party-round join folded the rejected set into "the next wave". Nothing in a later wave reads a seat file, so the barrier buys nothing. This is the open measurement of BL-464 claim 7, which is the parent: the per-group cross fan-out shipped, and the pole that remains is the barrier.
+
+Owed: the prose half lands in this release. `rule-28.md` takes the cap from `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` when the lead can read it, else from the rejection probe, never from a remembered number; sizes a wave at no less than min(remaining, cap - running); says a seat is not a wave; refills a slot on each exit; arms one beat per refill over only that refill's paths, never `--reset`; adds the undispatched-members exit as a third uncovered notification; and re-dispatches MISSING after the join and the rejected set on the first exit. `_gate-procedures.md` splits MISSING from rejected and dispatches cross members first, worded as a tendency (the earlier calls were admitted first in 52 of 63 graph messages with rejections, and not in 11). The detector is the read-only transcript-replay script `scripts/audit-party-wave-barrier.sh`, which judges a delivered exit of a round member whose response turn carries no Agent/Task dispatch for the round while RUNNING < CAP; no beat is read, and the earlier beat predicate and its narrowings are gone. Its false-positive set is measured on the graph transcripts plus c61a91eb and a0701ce0. Its remaining blind spots: (1) a ceiling below the harness cap that someone legitimately set, because the replay reads no conversation; (2) operator pause or question windows, which read as unanswered exits: two of the 13 corpus findings over 187 graph transcripts, 22e0f5c2 b30 and ea675b67 b32, sit wholly inside a Rule 29 pause and are FALSE (the other 11 are TRUE); (3) an enqueue with no delivery is never judged; (4) RUNNING undercounts when Agent records are out of the harness's order, measured up to 16 mid-wave, so an idle count of 1-3 is within that error; (5) a round re-run under the same name reads as a later batch; (6) a round's last stretch, with no later new member, is never judged; (7) with no readable cap and no `--cap`, the transcript is unjudged (UNKNOWN-CAP). A live PreToolUse WARN is not buildable, because the dispatch-guard matcher is `Agent|Task` only, so it cannot see the Bash beat, and it cannot know whether round members remain undispatched. The real close is the consumer's next stories round showing seats refilling during the cross pole.
+
+Lead ruling: s319 (a0701ce0) was a real barrier, but the detector reads it UNKNOWN-CAP because the transcript records no cap. With `--cap 42` it fires twice (batches 2 and 3, running=24, idle=18, gaps 3348 s and 1364 s). The Rule 28 cap order, the environment variable when readable and otherwise the rejection probe, is what puts the cap into future transcripts.
+
+Receipt: the detector run as a transcript replay, plus the prose conjuncts. It exits 9 if `scripts/audit-party-wave-barrier.sh`, `rule-28.md`, `_gate-procedures.md` or `_dispatch-protocol.md` is missing, then writes seeds (a), (b), (c) and (e) into a `mktemp` dir it leaves in place, and requires the detector to exit 0 on (b), refill on exit, and on (c), a cap-forced wave, and to exit 1 on (a), a wave held for the previous join with slots free, and on (e), the measured s319 shape: four 25-member seat waves, each fully joined, cap 42 from a `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=42` tool_result line, three FINDINGs at idle 18. Seed (c) is what kills the free-slot test removed: without it that mutant only widens findings and the three other seeds cannot see it. The prose is read with newlines folded to spaces, since both files wrap. "A rejected spawn is undelivered" must be in `rule-28.md` (a positive control, else exit 9); "next wave carries" must be absent from `rule-28.md` and "the next wave carries" from `_gate-procedures.md`; `join each wave|wave is joined|before the next wave spawns` must be absent from both, and "Each wave is joined in ONE beat" or "wave is joined" from `_dispatch-protocol.md`; `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and, in any case, "a seat is not a wave" must be present in `rule-28.md`. Anything else is exit 1.
+
+**Progress (0.857.0; entry stays OPEN).** Shipped: the prose half and the detector.
+- Prose: `rule-28.md`, `_gate-procedures.md` and `_dispatch-protocol.md` size a wave from the harness cap, refill it on each exit, and no longer treat a seat as a wave.
+- Detector: `scripts/audit-party-wave-barrier.sh`, a read-only transcript replay, with the `party-wave-barrier` fixture.
+- Corpus census, from the detector header's FINAL STATE: 13 findings over 187 graph transcripts, 11 TRUE and 2 FALSE. The two FALSE are 22e0f5c2 b30 and ea675b67 b32, both inside a Rule 29 pause window, which the replay cannot see (residual 2).
+- The entry stays open until the consumer's next stories round is measured.
+
+**The shipped-half receipt (batch 240; quoted, not installed as `verify:`).** It exits 0 on origin/main at 0.924.0, because the prose half and the detector shipped, so as the closing line it read the entry as a CLOSE-CANDIDATE while the consumer half is still owed: `D=scripts/audit-party-wave-barrier.sh; R=core/skills/ai-dlc/rule-bodies/rule-28.md; G=core/skills/ai-dlc/steps/_gate-procedures.md; P=core/skills/ai-dlc/steps/_dispatch-protocol.md; [ -f "$D" ] || exit 9; [ -f "$R" ] && [ -f "$G" ] && [ -f "$P" ] || exit 9; T="$(mktemp -d "${TMPDIR:-/tmp}/bl695.XXXXXX")" || exit 9; bash "$D" --seed a "$T/a.jsonl" --seed b "$T/b.jsonl" --seed c "$T/c.jsonl" --seed e "$T/e.jsonl" || exit 9; bash "$D" "$T/b.jsonl" >/dev/null 2>&1; rb=$?; bash "$D" "$T/c.jsonl" >/dev/null 2>&1; rc=$?; bash "$D" "$T/a.jsonl" >/dev/null 2>&1; ra=$?; bash "$D" "$T/e.jsonl" >/dev/null 2>&1; re=$?; [ "$rb" = 0 ] && [ "$rc" = 0 ] && [ "$ra" = 1 ] && [ "$re" = 1 ] || exit 1; r="$(tr '\n' ' ' < "$R" | tr -s ' ')"; g="$(tr '\n' ' ' < "$G" | tr -s ' ')"; p="$(tr '\n' ' ' < "$P" | tr -s ' ')"; n="$(grep -c 'A rejected spawn is undelivered' <<<"$r")" || n=0; [ "$n" -gt 0 ] || exit 9; n1="$(grep -c 'next wave carries' <<<"$r")" || n1=0; n2="$(grep -c 'the next wave carries' <<<"$g")" || n2=0; n3="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$r")" || n3=0; n4="$(grep -cE 'join each wave|wave is joined|before the next wave spawns' <<<"$g")" || n4=0; n5="$(grep -c 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS' <<<"$r")" || n5=0; n6="$(grep -ci 'a seat is not a wave' <<<"$r")" || n6=0; n7="$(grep -cE 'Each wave is joined in ONE beat|wave is joined' <<<"$p")" || n7=0; [ "$n1" = 0 ] && [ "$n2" = 0 ] && [ "$n3" = 0 ] && [ "$n4" = 0 ] && [ "$n7" = 0 ] && [ "$n5" -gt 0 ] && [ "$n6" -gt 0 ] || exit 1; exit 0`
+
+**Mechanism evidence (c5's measured close, kept verbatim).** **Measured close (batch 243, c5).** The transcript is graph's s320 stories-round lead, `d22c7889-6a0a-4353-9626-d39017478bc3.jsonl`, identified as the one transcript carrying the s320 stories party round's Agent spawns (76 delivered exits for round s320/stories); its own note sizes the waves "waves capped at 42 (CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS)". `bash scripts/audit-party-wave-barrier.sh --trace <transcript>` exits 0 with 0 findings, rounds=3, batches=24, and a cap of 42 read from the transcript with capsrc=env (no `--cap` given); with `--cap 42` the result is the same. No "Concurrent subagent limit reached" rejection occurs, so the cap came from the environment variable, which is the Rule 28 cap order working. Shape: in the stories round 33 exits REFILLED at running=39 of 42 and 1 was SLOTS-FULL, through 03:41Z; the final 42 exits are the round's tail after its last member was dispatched (76 = 42 + 34), which the detector does not judge by design. Control from the same evidence: s319 `a0701ce0` with `--cap 42` exits 1 and fires on batches 2 and 3 (running=24, idle=18, gaps 3348 s and 1364 s), as the lead ruling above records, and the detector's self-probe passed. This is ONE round's measurement after the prose fix. A barrier that did not recur on one round is the close condition this entry named, so the entry closes on that; it is not proof the barrier cannot return, and the detector stays available to re-run.
+
+Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py at b243-c6b-E 459c5418d; the step rows of steps.csv per story); per story, stories-test-strategy: s319 (20 stories) 0.80 h gap-inclusive (gap 0.45 h), token-equivalent $26.0 (API $26.0), 44.8M tokens; s320 (13 stories) 0.93 h gap-inclusive (gap 0.40 h), token-equivalent $39.1 (API $39.1), 65.0M tokens. Lead seat 0% local in both sprints; subagent seats ran hosted models only. The step did not fall: the wave barrier did not recur, and the step cost more per story.
+
+Owed: the step's per-story cost on a measured graph sprint, or the step-value evidence for what that cost buys; and, per BL-812 item 3, an explanation of s320's rise drawn from the sprint itself. Not a rebuild: the shipped wave sizing (0.950.0) stands.
+
+verify: manual

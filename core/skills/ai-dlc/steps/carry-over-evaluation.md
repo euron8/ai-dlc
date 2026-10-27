@@ -176,8 +176,18 @@ fix shipped:
 - Adversarial pass 1: Failure caught: an operator's decision recorded as the lead's call.
 - Adversarial passes 2 and later: Failure caught: a defect the previous adversarial repair wrote, which no earlier pass could read, such as a candidate cause with the wrong sign or a false claim about a field; the terminal pass is the convergence exit Check 24 reads.
 
-False-positive cost: one agent per (seat, part) and per cross group in each round, and each
-round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
+Width, measured on the s319 and s320 carry-over evaluations, per shard: the
+high-consequence catches named above for party, elicitation and pass 1 were each made by a per-part shard (the
+claim-signing one by two cross shards as well), and none was made by a cross shard alone. The only high-consequence catches a cross group made alone are pass 2's half-fixed
+`Dependencies` field and its wrong claim about an IL field, and both were made by a cross agent that read every
+section. So the per-part shards stay, and the cross width narrows to the BL-811 ruling: party dispatches ONE cross
+agent per seat (not per cross group), and elicitation and each adversarial pass dispatch ONE cross agent briefed
+with every section. Cross spend removed per sprint (sum of the cross shards minus the costliest one, as BL-811
+counts it; party keeps one per seat, so its saving is below the figure): s319 $13.5 party, $7.5 elicitation, $6.0
+pass 1; s320 $16.3 party, $4.5 elicitation, $31.2 passes 1 to 3.
+
+False-positive cost: one agent per (seat, part), one cross agent per seat in the party round and one per
+elicitation or adversarial pass, and each round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
 CRITICAL catch that survives to the shipped evaluation; the loop's terminal pass goes only when
 Rule 8 stops binding this step.
 

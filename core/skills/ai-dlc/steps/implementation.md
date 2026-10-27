@@ -272,7 +272,9 @@ Monitor task progress:
 - Mediate file conflicts between teammates
 - When code reviewer sends findings → ensure dev applies ALL fixes
   (simplification/removal findings included, per Rule 7 and Rule 26(d))
-- When QA sends failures → ensure dev fixes and QA re-validates
+- When QA sends failures → ensure dev fixes and QA re-validates; gate 1
+  re-runs on that rework first unless Rule A answers `GATE1-SKIP`
+  (**Gate 1 after a QA rework**, below)
 - When a QA `NEEDS_REWORK` names a `requirement divergence` HARD_BLOCK
   (`qa.md` Validation Checklist), ask the operator by `AskUserQuestion`
   under Rule 3(a), with no flag, before dispatching any dev rework.
@@ -358,12 +360,12 @@ stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise
 dispatch one reviewer with `shard: 1/1 <story-index>` and record the
 refusal line verbatim in the story's gate log. Otherwise dispatch one reviewer
 per line the map prints, briefed `shard: <i>/<N> <group>` with the map
-and its shard path `<ordinal>.md` in the shard directory, plus one cross
-reviewer per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed
-`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table, the whole
-diff to read with its group's pairs as its focus (it may cite any part; Rule 28,
-"The cross-part agent is sharded too") and its shard path `cross-<g>.md`, or `cross.md` when the table
-has one row (Rule 28, "Split dispatch": files axis), all in the same wave and
+and its shard path `<ordinal>.md` in the shard directory, plus ONE cross
+reviewer, briefed `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every
+ordinal 1..K comma-joined without padding) with the whole map, the whole
+diff to read (it may cite any part; Rule 28, "One cross-part agent, never one
+per group") and its shard path `cross.md`
+(Rule 28, "Split dispatch": files axis), all in the same wave and
 the first cross reviewer in the first wave.
 Part reviewers run no suite and no build. Each part reviewer replays, with
 `validate-mutation-red.sh`, the mutation-REDs whose anchor file lies in its
@@ -372,7 +374,7 @@ canonical dependency setup, as a part QA does at gate 2, and hands an AC whose
 replay cannot reach a GREEN baseline there to the first cross reviewer as a
 `#### ` finding carrying one `handover: <AC-id>` line; every part shard carries
 one header line `handovers: <n>`, `0` when it handed nothing over. The first
-cross reviewer (`cross-1`, or `cross` when there is one) runs the suite once in
+cross reviewer (`cross`, or `cross-1` of a per-group set) runs the suite once in
 the frozen worktree and the RED replays for any anchor in no part's files, then
 joins the part shard files as the first cross QA does below and runs every
 handed-over replay there, recorded as `handover-run:` lines; every other cross
@@ -406,6 +408,16 @@ the shard directory together with the merged file. A serial review writes its fi
 shard does, each a `#### ` heading under its container, never a bullet, and carries one column-0
 `reviewed-sha: <full frozen sha>` line, because the next pass carries by that heading and
 partitions from that sha.
+**The record-only route of a re-review.** Before partitioning a re-review, pass M >= 2, run
+`scripts/ai-dlc/partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>`.
+On `ROUTE:` (exit 0) every Critical and Important finding of pass M-1 carries
+`Class: EVIDENCE` or `Class: BOOKKEEPING` and the delta from its `reviewed-sha:` carries no
+code or test path. The pass is then the handoff validator plus ONE serial reviewer: run
+`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
+as at the pre-gate check, and dispatch one reviewer, `shard: 1/1 <story-index>`, carrying every
+`--list` line as below and the validator's output. Any other answer (`FULL:`, any exit but 0)
+is a full re-review as follows. Never route on the classes alone: a rework that edits a test
+under bookkeeping findings is exactly what a full pass catches.
 A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
 run the partition with `<prior-sha>` in place of `<base>`,
 `partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,
@@ -443,6 +455,15 @@ is guaranteed present in the canonical story file by the merge step
 itself, making the fold redundant. Dispatching gate2 with an empty DAR
 section is a retro finding.
 
+**Gate 1 after a QA rework (Rule A).** When a QA `NEEDS_REWORK` sends the
+story back to dev, gate 1 re-runs on the rework iff the range adds a test file
+or changes a code or test file on a line that is not blank, a comment or a
+docstring. Captures and records never trigger it. Run
+`scripts/ai-dlc/partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha> --exclude-captures <captures file>`,
+`<go-signal-sha>` being the sha QA validated. `GATE1-SKIP:` dispatches QA's
+re-validation directly; `GATE1-RERUN:`, or any refusal, runs gate 1 as a
+re-review pass first.
+
 **Gate-2 dispatch: the validation partitions by changed-file group too.**
 After the DAR-fold preflight, with the go-signal SHA recorded (it may differ
 from gate 1's frozen SHA after a rework pass), run in the frozen dev worktree
@@ -460,11 +481,10 @@ dispatch one QA with `shard: 1/1 <story-index>` and record the refusal line
 verbatim in the story's gate log. Otherwise dispatch one QA per line the map
 prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
 its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
-("Split dispatch": files axis). The cross QAs, one per row
-`partition-document.sh --cross-groups <K>` prints (K = N), briefed
-`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole
-diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one
-row), are dispatched in the same wave as the part QAs, the first cross QA in
+("Split dispatch": files axis). ONE cross QA, briefed
+`shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K
+comma-joined without padding) with the whole map and the whole diff to read,
+writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in
 the first wave whatever the cap leaves for the rest, and the first cross QA's
 brief names the absolute path of every part shard file, the round's epoch and
 a beat state directory of its own, given as an absolute path outside the shard
@@ -478,10 +498,10 @@ part shard files itself with
 backgrounded and re-armed as a Rule 29 beat is; without `--since` a part that
 finished during the canonical run reads as written before the join and never
 delivers. The first cross QA
-(`cross-1`, or `cross`) is the execution owner: it alone runs in the frozen
+(`cross`, or `cross-1` of a per-group set written before Rule 28's one-cross rule) is the execution owner: it alone runs in the frozen
 worktree, runs every handed-over replay and writes the per-AC table and the
-`## Deferred ACs` section; every other cross QA executes nothing and reports
-interaction findings only, focused on its group's pairs. Every shard writes its
+`## Deferred ACs` section; every other cross QA of such a set executes nothing and reports
+interaction findings only. Every shard writes its
 header first, appends each finding as it is verified, checks itself with
 `<lead engine>/merge-review-shards.sh <shard dir> --gate qa --check-shard <shard file>` until
 SHARD-OK, and, once finished, closes it with ONE Bash call, never with its header (every shard brief carries the absolute path of the LEAD checkout's `scripts/ai-dlc` as `<lead engine>`; the seat runs both scripts from it, never from its worktree):

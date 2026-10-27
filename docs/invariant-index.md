@@ -146,3 +146,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I126 | the ai-dlc session-marker scan is ONE line, in every hook that asks the question |
 | I127 | the pre-push stop-early opt-out is named in exactly two tracked files |
 | I128 | Check B's pause-write allow list, updater-marker ERE and Explore role ERE are the pause hook's, byte for byte |
+| I129 | the finding-class set is ONE set across code-reviewer.md, the merge's grammar and the record-only route |

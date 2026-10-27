@@ -1061,7 +1061,7 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   Step 7), record it here so `deploy-validate.md` can read it from the
   snapshot after a handoff or `/compact` rather than re-detecting.
 - **Recent Activity** — last ~10 entries of gate passages, significant
-  commits, key artifacts touched. Append a one-line entry for this gate
+  commits, key artifacts touched. Insert a one-line entry at the TOP (newest first) for this gate
   passage (gate name, timestamp, key artifacts touched); older entries
   can be pruned.
 - **Open Items** — unresolved triage items, pending human decisions,

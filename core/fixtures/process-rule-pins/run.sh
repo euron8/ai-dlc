@@ -27,7 +27,7 @@
 #     on ONE line of its subject.
 #   - elicitation takes the axis and shape of the step's adversarial pass for every subject: the
 #     files axis per story plus ONE cross-story shard (`cross.md`) and never one serial-document voice, the sections axis
-#     per part plus cross groups or one serial-document voice on a SERIAL answer
+#     per part plus ONE cross-part shard (`cross.md`) or one serial-document voice on a SERIAL answer
 #     (_gate-procedures.md "Validation cycle" item 2), and stories-test-strategy.md step 4 names
 #     elicitation among the sharded passes. sts-elic-sharded is a line-mode `contains` pin: keep
 #     that phrase on ONE line of step 4. The files-axis story ordinals come from
@@ -338,6 +338,8 @@ party-seats-record|S|steps/_gate-procedures.md|## Validation cycle|## Where a ch
 party-seats-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|carrying one `sections:` line
 party-early-write|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Write the file's header first
 party-complete-line|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Every beat that joins such a file passes `--complete`
+gp-snap-program|S|steps/_gate-procedures.md|## Sub-step snapshot update|## Bounded-join beat|**Write items 1–3 with ONE `bash scripts/ai-dlc/snapshot-update.sh` call**, never one Edit per row:|para|runs the write-time stamp check on the lines it added, and writes nothing on a finding
+gp-beat-status|S|steps/_gate-procedures.md|## Bounded-join beat|## Gate-adjudication dispatch|**A progress check between beats is `scripts/ai-dlc/wait-for-deliverable.sh --complete --status <the wave's paths>`**|para|It is never a grep for `seat-complete:`, nor a listing or count of the shard directory
 party-one-writer|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|never back to a seat
 party-source|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|carries `source: <seat-file>#<finding-id>`
 party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|the seats still edit nothing, and ONE remediator
@@ -401,7 +403,7 @@ impl-esc-keep|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pr
 impl-esc-false|S|steps/implementation.md|**Pre-dispatch routing (Rule 28).**|**Pre-dispatch auth check.**|- Before a story's FIRST dev dispatch|para|is absent or `false`
 dve-capital|R|dev-escalated.md|## Identity|## Contract|capital-path / high-blast-radius owned paths|contains
 elic-shape-files|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per story ordinal plus ONE cross-story `adversary` for stories elicitation, briefed with every ordinal and writing `cross.md`, never one per cross group and never one voice under `shard: none (serial-document)`
-elic-shape-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per part plus one cross-part `adversary` per cross group; a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)`
+elic-shape-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|one `adversary` per part plus ONE cross-part `adversary` writing `cross.md`; a `SERIAL:` answer is ONE `adversary` under `shard: none (serial-document)`
 elic-shape-ordinals|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The story ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first
 elic-shape-onefile|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|A `stories/` holding ONE file is ONE `adversary` briefed `shard: 1/1 <story-index>`
 gp-revised-seats|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|The remediator brief also carries `revised-seats:`

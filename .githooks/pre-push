@@ -278,6 +278,15 @@ step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
     --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
     --max-unstable 0 --min-entries 1
 
+# 1f2. BL-817: an efficiency close in the ARCHIVE carries its outcome. The bare run above judges the
+#     live ledger only, and rotation moves a close out of its sight the moment it is archived -- so
+#     a close with no `Outcome measured:` line, or one whose line names no sprint, cites nothing or
+#     lacks the token-equivalent/gap-inclusive shape, is caught here or nowhere. One pass over
+#     docs/backlog.archive.md: the self-probe and the efficiency arms only, no receipt checkouts.
+#     Distribution-only; the consumer hook needs nothing (no ledger, and I66 binds only the runner).
+step "backlog archive efficiency closes (an efficiency close carries its outcome)" \
+  bash scripts/validate-backlog-receipts.sh --archive
+
 # 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
 #     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a
 #     backup suffix, `\s` matches a literal `s`, `mapfile` reads nothing. Every arm reports

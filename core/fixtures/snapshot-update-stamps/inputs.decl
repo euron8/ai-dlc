@@ -1,0 +1,4 @@
+# snapshot-update-stamps drives the program under test and the stamp validator it calls as a
+# sibling; every mutant copies both into one directory. Its own directory is copied by the runner.
+!core/scripts/snapshot-update.sh
+!core/scripts/validate-artifact-budget.sh

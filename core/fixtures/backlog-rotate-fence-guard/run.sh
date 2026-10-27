@@ -1219,17 +1219,246 @@ if [ -n "$M11" ]; then
   fi
 fi
 
+# SECTION SPAN (BL-824). A `##` heading carrying no BL- label is a ledger SECTION at the entries'
+# own level, so it ends the span of the closed entry above it: the heading and its prose stay live.
+# Three worlds, every one asserted as the rotation OUTCOME (what landed in which file), never as the
+# absence of a message:
+#   SEC-MID   closed entry, then a section, then a live entry   -> section live, closed archived
+#   SEC-EOF   live entry, closed entry, then a section at EOF   -> section live (no next entry to stop it)
+#   SUB-IN    a `###` subheading INSIDE a closed entry          -> moves WITH its entry (the near-miss:
+#             a span that ended at ANY heading would strand it, so this world kills an over-wide fix)
+# The prose-fence world above is the other near-miss: a FENCED `## prose` line stays in its entry.
+SM="$WORK/sec-mid"
+mkcase "$SM" <<'EOM'
+# Probe backlog
+
+## BL-501 — closed
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## Efficiency regression after the ranked set
+
+SECTION-MID-SENTINEL — this prose belongs to the section and must stay live.
+
+## BL-502 — open
+
+verify: lacks VERSION "."
+EOM
+SE="$WORK/sec-eof"
+mkcase "$SE" <<'EOM'
+# Probe backlog
+
+## BL-503 — open
+
+verify: lacks VERSION "."
+
+## BL-504 — closed
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## A trailing section
+
+SECTION-EOF-SENTINEL — the last lines of the file, with no entry after them.
+EOM
+SI="$WORK/sub-in"
+mkcase "$SI" <<'EOM'
+# Probe backlog
+
+## BL-505 — closed, with a subheading in its body
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+### A subheading inside the entry
+
+SUBHEAD-SENTINEL — body text under the subheading, part of the closed entry.
+
+verify: has VERSION "."
+
+## BL-506 — open
+
+verify: lacks VERSION "."
+EOM
+SR="$WORK/sec-reopened"
+mkcase "$SR" <<'EOM'
+# Probe backlog
+
+## BL-507 — closed
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## Reopened by BL-817's re-audit (batch 243)
+
+SECTION-REOPENED-SENTINEL — a section whose heading names a BL- id later in the prose; it stays live.
+
+## BL-508 — open
+
+verify: lacks VERSION "."
+EOM
+sec_reopened_ok() {
+  grep -qxF "## Reopened by BL-817's re-audit (batch 243)" "$SR/backlog.md" && grep -q 'SECTION-REOPENED-SENTINEL' "$SR/backlog.md" \
+    && ! grep -q 'SECTION-REOPENED-SENTINEL' "$SR/backlog.archive.md" && ! grep -qF 'Reopened by BL-817' "$SR/backlog.archive.md" \
+    && grep -q '^## BL-507 ' "$SR/backlog.archive.md" && grep -q '^## BL-508 ' "$SR/backlog.md"
+}
+sec_mid_ok() {
+  grep -qx '## Efficiency regression after the ranked set' "$SM/backlog.md" && grep -q 'SECTION-MID-SENTINEL' "$SM/backlog.md" \
+    && ! grep -q 'SECTION-MID-SENTINEL' "$SM/backlog.archive.md" && grep -q '^## BL-501 ' "$SM/backlog.archive.md" \
+    && grep -q '^## BL-502 ' "$SM/backlog.md"
+}
+sec_eof_ok() {
+  grep -qx '## A trailing section' "$SE/backlog.md" && grep -q 'SECTION-EOF-SENTINEL' "$SE/backlog.md" \
+    && ! grep -q 'SECTION-EOF-SENTINEL' "$SE/backlog.archive.md" && grep -q '^## BL-504 ' "$SE/backlog.archive.md"
+}
+sub_in_ok() {
+  grep -q 'SUBHEAD-SENTINEL' "$SI/backlog.archive.md" && grep -qx '### A subheading inside the entry' "$SI/backlog.archive.md" \
+    && ! grep -q 'SUBHEAD-SENTINEL' "$SI/backlog.md" && grep -q '^## BL-506 ' "$SI/backlog.md"
+}
+reseed "$SM"; run_rt "$RT" "$SM" --apply
+if [ "$LAST_RC" -eq 0 ] && sec_mid_ok && conserved "$SM"; then
+  ok "section-mid" "a section between a closed and a live entry stays live; the closed entry alone is archived"
+else
+  bad "section-mid" "exit $LAST_RC; the section between BL-501 and BL-502 did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+fi
+reseed "$SE"; run_rt "$RT" "$SE" --apply
+if [ "$LAST_RC" -eq 0 ] && sec_eof_ok && conserved "$SE"; then
+  ok "section-eof" "a section after the last closed entry, at EOF, stays live"
+else
+  bad "section-eof" "exit $LAST_RC; the trailing section was archived with BL-504: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+fi
+reseed "$SR"; run_rt "$RT" "$SR" --apply
+if [ "$LAST_RC" -eq 0 ] && sec_reopened_ok && conserved "$SR"; then
+  ok "section-reopened" "a section whose heading names a BL- id after its first token stays live"
+else
+  bad "section-reopened" "exit $LAST_RC; the Reopened-by-BL-817 section did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
+fi
+reseed "$SI"; run_rt "$RT" "$SI" --apply
+if [ "$LAST_RC" -eq 0 ] && sub_in_ok && conserved "$SI"; then
+  ok "subhead-in-entry" "a ### subheading inside a closed entry moves with it"
+else
+  bad "subhead-in-entry" "exit $LAST_RC; the ### subheading did not move with BL-505"
+fi
+# M12 — the section-span fix reverted: a non-BL `##` heading no longer ends the entry. Anchored on
+# the one line the fix added, which nothing else in the rotator carries.
+M12="$(mutate m12-section-span -e 's/^  if (label != "" .. ledger_entry_shape(.0) == "heading" .. .0 ~ .^##.*) {$/  if (0) {/')"
+if [ -n "$M12" ]; then
+  reseed "$SM"; run_rt "$M12" "$SM" --apply
+  m12_mid=1; sec_mid_ok || m12_mid=0
+  reseed "$SE"; run_rt "$M12" "$SE" --apply
+  m12_eof=1; sec_eof_ok || m12_eof=0
+  if [ "$m12_mid" -eq 0 ] && [ "$m12_eof" -eq 0 ] && grep -q 'SECTION-EOF-SENTINEL' "$SE/backlog.archive.md"; then
+    killed m12-section-span "section-mid and section-eof would FAIL: with the fix reverted the section is archived with the closed entry above it"
+  else
+    bad "mutant:m12-section-span" "fix reverted and a section still stayed live (mid=$m12_mid eof=$m12_eof)"
+  fi
+fi
+# M15 — the first-token exclusion widened back to ANY BL- id on the heading line. The Reopened
+# section then reads as an entry-shaped heading and is archived with the closed entry above it; only
+# the Reopened seed can see it. The sed anchors on the one exclusion the fix added (`+` after the
+# bracket class distinguishes it from the level test beside it), and the cmp guard in mutate()
+# refuses a sed that changed nothing.
+M15="$(mutate m15-any-bl-id -e 's|/^##\[ \\t\]+.*BL-\[0-9\]/) {$|/BL-[0-9]/) {|')"
+if [ -n "$M15" ]; then
+  if ! grep -qF '$0 !~ /BL-[0-9]/) {' "$M15"; then
+    bad "mutant:m15-any-bl-id" "the mutation DID NOT APPLY: the widened exclusion is not in the mutant"
+  else
+    reseed "$SR"; run_rt "$M15" "$SR" --apply
+    if ! sec_reopened_ok && grep -q 'SECTION-REOPENED-SENTINEL' "$SR/backlog.archive.md"; then
+      killed m15-any-bl-id "section-reopened would FAIL: an exclusion keyed on any BL- id archives the Reopened section with BL-507"
+    else
+      bad "mutant:m15-any-bl-id" "the exclusion widened to any BL- id and the Reopened section still stayed live (exit $LAST_RC)"
+    fi
+  fi
+fi
+# M13 — the over-wide fix: the span ends at ANY heading, `###` included. Built from the shipping
+# line by dropping its level test, so it is the fix one property wider; only SUB-IN can see it.
+M13="$(mutate m13-any-heading -e 's/^  if (label != "" .. ledger_entry_shape(.0) == "heading" .. .0 ~ .^##.*) {$/  if (label != "" \&\& ledger_entry_shape($0) == "heading") {/')"
+if [ -n "$M13" ]; then
+  reseed "$SI"; run_rt "$M13" "$SI" --apply
+  if ! sub_in_ok && grep -q 'SUBHEAD-SENTINEL' "$SI/backlog.md"; then
+    killed m13-any-heading "subhead-in-entry would FAIL: a span ending at any heading strands the ### subheading and its body in the live file"
+  else
+    bad "mutant:m13-any-heading" "a span ending at any heading still moved the ### subheading with its entry (exit $LAST_RC)"
+  fi
+fi
+
+# OUTCOME GUARD (BL-817). A closed entry tagged `**DEFECT (efficiency).**` with no line opening
+# `Outcome measured:` is refused and nothing is written; the same entry with the line rotates.
+# One property apart, so a guard refusing every tagged close fails the second world.
+OUTCOME_SAYS="an efficiency close carries no outcome line"
+EO="$WORK/eff-no-outcome"
+mkcase "$EO" <<'EOM'
+# Probe backlog
+
+## BL-601 — closed efficiency entry with no outcome
+
+**DEFECT (efficiency).** A step costs too much.
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+## BL-602 — open
+
+verify: lacks VERSION "."
+EOM
+EY="$WORK/eff-outcome"
+mkcase "$EY" <<'EOM'
+# Probe backlog
+
+## BL-601 — closed efficiency entry with its outcome
+
+**DEFECT (efficiency).** A step costs too much.
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+Outcome measured: graph s321, per story 1.0 h to 0.5 h gap-inclusive; fell.
+
+verify: has VERSION "."
+
+## BL-602 — open
+
+verify: lacks VERSION "."
+EOM
+reseed "$EO"; run_rt "$RT" "$EO" --apply
+if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-601" "$LAST_OUT" \
+   && cmp -s "$EO/backlog.md" "$EO/pristine.ledger" && cmp -s "$EO/backlog.archive.md" "$EO/pristine.archive"; then
+  ok "outcome-refused" "a tagged efficiency close with no Outcome measured: line is refused by name and nothing is written"
+else
+  bad "outcome-refused" "exit $LAST_RC; the tagged close without an outcome line was not refused by the outcome arm"
+fi
+reseed "$EY"; run_rt "$RT" "$EY" --apply
+if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-601 ' "$EY/backlog.archive.md" && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then
+  ok "outcome-carried" "the same close carrying its Outcome measured: line rotates"
+else
+  bad "outcome-carried" "exit $LAST_RC; a tagged close WITH its outcome line did not rotate"
+fi
+# M14 — the outcome guard switched off.
+M14="$(mutate m14-outcome-off -e 's/^if \[ -s "\$AWKF.nooutcome" \]; then$/if false; then/')"
+if [ -n "$M14" ]; then
+  reseed "$EO"; run_rt "$M14" "$EO" --apply
+  if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-601 ' "$EO/backlog.archive.md"; then
+    killed m14-outcome-off "outcome-refused would FAIL: with the guard off the tagged close with no outcome is archived at exit 0"
+  else
+    bad "mutant:m14-outcome-off" "guard off and the close was still not archived (exit $LAST_RC)"
+  fi
+fi
+
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# THIRTEEN BUILT, ELEVEN KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# SEVENTEEN BUILT, FIFTEEN KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
 # show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 13 ] && [ "$KILLS" -eq 11 ]; then
-  ok "mutants" "13 mutants built (11 targets + m2's and m5's single-layer twins) and all 11 targets killed the arm they name"
+if [ "${MUT_ATTEMPTED:-0}" -eq 17 ] && [ "$KILLS" -eq 15 ]; then
+  ok "mutants" "17 mutants built (15 targets + m2's and m5's single-layer twins) and all 15 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 13 mutants built, $KILLS of 11 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 17 mutants built, $KILLS of 15 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo

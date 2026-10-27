@@ -19,6 +19,79 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.952.0] - 2026-10-26
+
+Batch b243, lead ai-dlc-8a, cluster c6b. It closes two entries, both filed by this release: BL-821 and BL-824. It advances BL-809, BL-810, BL-811, BL-817 and BL-819, all still PARTIAL with `verify: manual`, and reopens 19 archived efficiency closes into the live ledger. No `PC-` id is closed. NET: entries closed 2 minus filed 21 = -19. The 21 are the 19 reopens plus BL-821 and BL-824; the reopen list is in the BL-817 section. The 19 entries reopened by BL-817 are filings of owed outcomes, not new defects.
+
+Bootstrapping: this release edits `.githooks/pre-push`, so the lead pushes it from the main checkout detached at the commit. `partition-review-diff.sh`, `merge-review-shards.sh`, `merge-adversarial-shards.sh`, `validate-adversarial-convergence.sh` and `snapshot-update.sh` are consumer engine, live from step 3 of the pull that delivers them, because steps 1-2 run the consumer's old engine. Each change ships with its fixture, so no fixture ships ahead of its subject. `snapshot-update-stamps` and `review-reroute` ship. `K3D_RELEASE` is stamped 0.952.0 in the release commit, so check-24 shard d is green only on the stamped tree.
+
+### BL-809 — the record-only re-review route and Rule A ship; narrowing a mixed re-review is owed
+
+- Status: PARTIAL, `verify: manual`. Item 1 and item 3 shipped. Item 2 is owed with its false-positive set: 1 of 19 mixed-prior passes (s319 3-1-p3 raised a CODE finding in a test file outside the prior CODE findings' set); control: an empty narrowing set flags 7 of 7.
+- Item 1. Each Critical/Important finding carries one `Class: CODE|TEST|EVIDENCE|BOOKKEEPING` line, owned by `code-reviewer.md` (TEST is code-class; a finding admitting any code fix is CODE). `merge-review-shards.sh` refuses a present value outside the set and accepts a missing one. `validate-carried-findings.sh --classes` is its own mode; `--list` and the carry string are unchanged. `partition-review-diff.sh --route` routes only when every prior Critical/Important finding is EVIDENCE or BOOKKEEPING and the delta from the prior `reviewed-sha:` to the frozen sha carries no code path. It sends the pass full on zero findings, a missing or unknown Class, any unrouted finding, an unresolvable or non-ancestor sha, and an empty or unreadable delta.
+- The code-class partition, exactly: it drops a path under a scan root, a `.md`, a `.txt/.log/.out` outside any test directory, and a `.txt/.log/.out` that `--list-captures` names. Any code-extension file is code wherever it sits and whether or not the story cites it.
+- Shipped routed passes (s317/s318/s319): 0/3/6. M7's 4 for s318 used a `test-results/` path-prefix partition. The shipped class counts `test-results/red_splat_copy.py`, which the s318 2-3 story cites, as code, so s318 2-3-p3 goes full.
+- Blind re-label disagreement: s317 13/86 (5 cross the E|B boundary), s318 5/75 (1 crosses). Labeller dependence: without the delta guard, s317 routes 3 passes on M7's labels and 1 on the blind labels, so the s317 2-6 miss appears under one labeller only. The guard removes it under both. The delta guard is the safety property; Class is the saving.
+- Guard cost, PRICE / VALUE: s317 2/1, s318 3/0, s319 5/0, so 10 PRICE and 1 VALUE over the 11 passes the guard sent full that the class oracle would have routed. VALUE is a full re-review pass that caught a CODE or TEST finding the record-only route would have missed. A pass whose only findings are EVIDENCE or BOOKKEEPING is PRICE, because the route would have settled those, hence s318 1-1-p3 and 2-3-p2 are PRICE.
+- Item 3, Rule A (`partition-review-diff.sh --gate1-rerun`). Gate 1 re-runs after a QA rework iff the range adds a test file or changes a code or test line that is not blank, a comment or a docstring. Captures and records never trigger it. Saving in s319: 2 of 44 passes (2-3a-p2, 3-1-p9). 2-3a-p3 still re-runs, because 2-3a-b added 26 executable lines. The justified post-APPROVED re-runs 1-1-p3 and 4-4-p4 still re-run, and 3-1-p6 was waste.
+- Invariant I129 binds the class set across owner, merge grammar and route; the vocabulary and invariant indexes are re-rendered. Fixture `review-reroute` (ships): 18 arms, a step-text pin, an unmutated control, five mutants (m-classonly, m-failopen-missing, m-strict, m-nodocstring, m-pyext) and two receipts. The USAGE string names `--route` and `--gate1-rerun`.
+
+### BL-810 — per-width measurement of carry-over evaluation; party cross narrows, other rounds merge
+
+- Status: PARTIAL, still open. `scripts/width.py` over s319 and s320 (320 CRITICAL/MAJOR findings) is reported in `docs/analysis/step-value-carry-over-s319-s320.md`, "Per-width".
+- Per-width decisions: per-part shards stay in every round. Party cross narrows to one per seat. Elicitation, p1, p2 and p3 cross merge to one agent briefed with every section. p2's two cross catches are kept on consequence, with their cost beside the `Failure caught:` lines in §3a. Every high-consequence catch for party, elicitation and p1 was made by a per-part shard.
+- Arm S4 of Check 22 (`validate-spawn-ledger.sh`) binds the BRIEF at G=1: a one-cross dispatch (`cross/<K> g1/1 <ordinals>`) whose brief omits any section is refused. S4 normalises zero-padded and spaced ordinals before comparing them to 1..K, because `partition-document.sh --map` pads at K>=10; S4 is the only reader of that ordinal list. FP 0 over graph's 7242-row spawn ledger; no real g1/1 row exists yet, so the accept path is covered by seeded arms. Arm S4X binds the emitter templates (all six) to that spelling.
+- Owed: a measured sprint beside s319 and s320. Cross-only counts are ceilings (27 findings carry no token).
+
+### BL-811 — both merges and K3 accept a lone cross.md at any K; cross collapses to one agent
+
+- The engine accepts a lone `cross.md` at any K as well as the full `cross-<g>` set; mixing the two stays refused. This supersedes BL-464's "cross.md alone is refused". The archive is not edited. The prose collapses cross to one agent per split dispatch (party: one per seat). `merge-review-shards.sh`, `merge-adversarial-shards.sh` and `validate-adversarial-convergence.sh` (K3) all follow; `--check-shard` binds the delivered shape too, so a QA lone `cross.md` at K>2 is not wedged. `K3D_RELEASE` is stamped 0.952.0, guarded by check-24 shard d's `k3d-release-probe`.
+- Figures, corrected and counted on one population (the s317–s320 spawn extraction, 4098 rows, by the m5-cross script): s317 has 134 cross spawns, 6.4 per story ($449.5, $21.4 per story, 24% of subagent dollars). s319 has 360 cross spawns, 18.0 per story ($512.1, $25.6 per story, 29%), of which implementation and its gate hold 171 (159 + 12). They are "corrected" from the filed 7.0 for s317. 24.9/story, 273, $36.8 and 42% were filed without a reproducible derivation and are withdrawn.
+- The count is a floor (a spawn whose description names no cross token is not counted). API price equals token-equivalent here: the subagent seats ran no local model in s317 or s319, so there are no local subagent calls to reprice.
+- The inline receipt block is removed (it scored 1 once its conjunct was deleted). The shipped mechanism's receipt is `receipt-bl811.sh` in `core/fixtures/review-shard-merge`, scored 0/1/1/0. The measured sprint is owed.
+
+### BL-817 — an efficiency close now needs an outcome; 19 archived closes are reopened
+
+- Tag-only close arm. An efficiency entry is one carrying the `DEFECT (efficiency)` tag. `backlog-rotate.sh` refuses to archive one with `**LANDED (v` and no `Outcome measured:` line. `validate-backlog-receipts.sh` fails on no line, a line naming no sprint, a figure that did not fall with no value citation, and an outcome line missing its token-equivalent basis with API beside it or its gap-inclusive hours label. The 19 ranked entries were tagged, so the tag covers BL-397, BL-398 and BL-504.
+- Filing arm. A live entry citing `docs/analysis/` with neither the tag nor the explicit "no graph pipeline step" line is refused, and an efficiency entry that does not cite the step-value ruling (".claude/rules/operator-rulings.md", "A step with no measured value goes") is refused. The ruling citation was added to every live efficiency entry.
+- The no-step branch is isolated: it accepts a sprintless line only when the line says there is no graph pipeline step and names where the cost lives. A sprintless line without that wording fires. `eff_names_sprint` counts a sprint token only as a standalone word, not inside a path or backticks. Re-measure, old against new: live 1 flip (BL-821, expected), archive 0 of 20. The self-probe keeps a path-embedded token with no no-step wording firing, so the narrowing acquits nothing it should judge.
+- `--archive` mode of `validate-backlog-receipts.sh` reads `docs/backlog.archive.md` and is wired into `.githooks/pre-push`. The archive close population is 20 (5 sprint, 15 no-step).
+- Reopened (19, listed from the heading changes in `git diff origin/main..<release> -- docs/backlog.md`): BL-397, BL-398, BL-507, BL-508, BL-510, BL-512, BL-513, BL-514, BL-541, BL-543, BL-550, BL-552, BL-594, BL-615, BL-679, BL-694, BL-695, BL-716, BL-804. BL-695's provenance line reads: "Closed in 0.950.0 on a mechanism measurement; step cost did not fall; reopened by BL-817." Each reopened entry carries its figures at API and token-equivalent price, the model mix, gap-inclusive hours, and the script plus sprint range. The 19 entries reopened by BL-817 are filings of owed outcomes, not new defects.
+- Status: PARTIAL, `verify: manual`.
+
+### BL-819 — lead dollars re-taken; two mechanisations were already in place, one is new
+
+- Correction: the implementation step's lead dollars rose from $41.25 (s317) to $136.54 (s319) at API price, "corrected from $145, which does not reproduce on the fixed extractor". The rise is a true dollar rise caused by the model move: the s317 lead ran local qwen38flash-mlx for 68.1% of implementation lead calls (1,530 of 2,248). Priced token-equivalent, with s317's local calls at s317's own hosted lead mix, the figure is $120.11 against $136.54, which is +13.7% real. Lead calls fell from 2,248 to 2,010 (-10.6%, not flat).
+- The local share was 43.5% across the whole-sprint lead (3,539 of 8,133) and 68.1% across implementation alone.
+- L1, beat polls: `_gate-procedures.md` now prescribes `wait-for-deliverable.sh --complete --status <the wave's paths>`, pinned by `gp-beat-status`. Recorded as already mechanised, with a residual from a 30-hit sample.
+- L2, gate re-reads: already prescribed, no step text changed. Residual: 4 re-runs in s319 and 0 in s320, all 4 in the 2 windows where the lead did not call `gate-checkpoint.sh done`.
+- L3, snapshot updates: new `snapshot-update.sh` replaces one Edit per row with one call, pinned by `gp-snap-program` and the fixture `snapshot-update-stamps`. It writes only after `validate-artifact-budget.sh --stamps-only` passes on the lines it adds. The result is -7.35 calls per story (s319) and -7.38 (s320), with no dollar figure claimed. The Deny B header in the foreground-budget hook now names the program: no verdict change and no exemption.
+- The sub-step update and Check 14 now say newest-first, matching the program and the order the lead already used.
+- The token-equivalent table and the instrument defects (gap time is 91% of "other" hours; the mtime cut hid s314–s316) are in the entry. Status: PARTIAL, `verify: manual`.
+
+### BL-821 — impl_passes.py's pass regex missed G1p<N> and pass-<N> (filed and closed here)
+
+- `impl_passes.py` matched `(?:\bp|pass )(\d)`. It missed `G1p3` and `pass-12`, and read `pass 12` as 1. It now reads `p<N>`, `G1p<N>`, `pass <N>`, `pass-<N>` and `pass_<N>`, multi-digit, with the sprints as an argument (default 314..320).
+- Re-taken over s317–s319, 157 spawns change pass number (88 from 1 to 2, 38 from 1 to 3, 20 from 1 to 4, 11 from 1 to 5). Moved figures are s319 only. Gate-1 reviewed-story pass distribution 1:8, 2:3, 3:3, 4:2, 6:2, 9:1 becomes 1:6, 2:3, 3:3, 4:2, 5:2, 6:2, 9:1. Dollars by pass 1..7 move from 302, 102, 61, 16, 3, 19, 7 to 184, 139, 83, 60, 19, 19, 7. Gate-1 reviewer shards per pass, mean 6.5 and max 50, become 5.5 and 11. No old figure was quoted in a tracked document.
+- Carries the no-step line (analysis tooling) and cites the step-value ruling. Its `verify: sh` receipt seeds `G1p3`, `pass-4`, `pass 12` and `p2` in a `mktemp` dir and expects 3, 4, 12, 2.
+
+### BL-824 — backlog-rotate.sh's moved span ran through a non-BL ## section (filed and closed here)
+
+- The rotate span now ends at a column-0 `##` heading that carries no BL- label, decided by `ledger_entry_shape()` so a fenced `## prose` line stays inside its entry. A `###` subheading inside an entry body still moves with its entry. Before the fix, base ce275f7e9 and c6a 3b6f68db6 both archived the section while BL-902 stayed live; 0.949.0's gate hand-restored the "Efficiency regression after the ranked set" preamble.
+- Pinned by `core/fixtures/backlog-rotate-fence-guard`: a section between a closed and a live entry stays live, a section after the last closed entry at EOF stays live, `###` moves with its entry, and mutant `m12-section-span` reverts the fix and goes red.
+
+### Extractor (unit E) — transcripts are selected by in-file timestamp; s314–s316 are visible
+
+- `extract.py` selects transcripts by the in-file record time, not by mtime. The 10-05 mtime cut had hidden s314–s316. `WIN_START` is now a parameter and the (317,318,319) hardcode in `impl_passes.py` is removed. Gap time is recorded separately and hours stay gap-inclusive, labelled as such, with the gap beside them.
+- `roll.py` adds a token-equivalent dollar column, pricing local-model calls at each sprint's hosted lead mix, with the $0 API figure beside it; the mix is stated beside each cross-sprint figure. s314 is a FALLBACK at s315's mix: $555, bracket $555–$666, with opus the observed predecessor.
+- The analysis scripts' fixture-root is not gate-run, so no `core/fixtures` home was added; BL-821's scored receipt is its carrier. A tracked `__pycache__/*.pyc` is removed and `__pycache__/` and `*.pyc` are ignored.
+
+### Check 22
+
+41 of 43 mutant arms now assert their unmutated arm passed in the same run (`need_base`); otherwise they report FIXTURE BROKEN instead of a kill. The guard itself is proven before any arm runs: `need_base_probe` asserts FIXTURE BROKEN with exit 2 on a failing baseline and a silent return on a passing one, and a no-op `need_base` mutant is refused by that probe. A mechanical binding check, self-tested on a seeded file first, shows each of the 22 call sites passes a flag set only by its own unmutated arm's `ok`, or a value run on the unmutated subject. The S4N ordinal lists are literals, because `seq` and `paste` are not in the fixture's `tools.decl` and the padded lists came out empty under `hermetic-run`.
+
+NOTE: BL-821's receipt is scored manually only (0/1/1/0 at the tip, set -uo pipefail, temp-dir count 1240 = 1240); a receipt landed in its own release is never scored by any mode.
+
 ## [0.951.0] - 2026-10-26
 
 Batch b243, lead ai-dlc-8a, cluster c6a. It closes two entries: BL-818 and BL-820. No `PC-` id is closed. NET: entries closed 2 minus filed 0 = 2.

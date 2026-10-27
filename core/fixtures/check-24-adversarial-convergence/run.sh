@@ -2611,13 +2611,14 @@ k3_xkeys() { # <scripts dir> <K> -> the cross shard keys the partitioner names f
   [ "$g" -ge 1 ] || return 1
   if [ "$g" -eq 1 ]; then echo cross; else seq 1 "$g" | sed 's/^/cross-/'; fi
 }
-k3_subject_pass() { # <world> <scripts dir> [at] -> s9/requirements-adversarial-p1.md by merge --subject
+k3_subject_pass() { # <world> <scripts dir> [at|lone] -> s9/requirements-adversarial-p1.md by merge --subject
+  # lone: ONE cross.md in place of the groups (BL-811's dispatched shape), merged by the REAL merge.
   local w="$1" d="$1/$K3PA/s9/shards/requirements-p1" m=0 o sl x
   AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
   mkdir -p "$d"; sl="$(k3_stems "$w")"
   [ "${3:-}" = at ] && sl="$(printf '%s' "$sl" | sed 's/=/@/g')"
   for o in $(cut -f1 "$w/subject.map"); do m=$((m + 1)); k3_shard "$d" "$o" "$o" "$m" "$K3PA/s9/requirements-subject.md" "$sl"; done
-  x="$(k3_xkeys "$2" "$(grep -c . "$w/subject.map")")" || return 1
+  if [ "${3:-}" = lone ]; then x=cross; else x="$(k3_xkeys "$2" "$(grep -c . "$w/subject.map")")" || return 1; fi
   for o in $x; do m=$((m + 1)); k3_shard "$d" "$o" "1, 2" "$((40 + m))" "$K3PA/s9/requirements-subject.md" "$sl"; done
   bash "$2/merge-adversarial-shards.sh" --subject 9 "$d" >/dev/null 2>&1
 }
@@ -2961,7 +2962,7 @@ PY
     'k3_names "$k3_dir" "$k3_wf" || k3_go=0' 'true || k3_go=0'
   # The widened candidate dated against K3_RELEASE: a repo stamped at 0.735.0 convicts retroactively.
   rowmut "K3WX3 widened stamp not rebound" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
-    'k3_rel="$K3B_RELEASE"' 'k3_rel="$K3_RELEASE"'
+    'k3_wide=1; k3_rel="$K3B_RELEASE"' 'k3_wide=1; k3_rel="$K3_RELEASE"'
   rowmut "K3WX4 K3B_RELEASE lowered" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
     'K3B_RELEASE="0.738.0"' 'K3B_RELEASE="0.735.0"'
   # k3_names rooted at the sprint dir, no walk up (self-probe conjunct with it): only a stem the
@@ -3001,7 +3002,8 @@ fi
 # --- ARM K3 CROSS GROUPS (K3C_RELEASE): the want-set's cross half is --cross-groups <K> ---------
 # Every world is k3-subject's (a `merge --subject` pass over a 6-part subject, so cross-1..6), then:
 #   k3-subject    (above) the grouped shape, post-stamp                        SILENT
-#   k3c-old       the pass in the PRE-GROUPS shape (ordinals + one cross), post-stamp     FAIL (K3
+#   k3c-old       the pass in the PRE-GROUPS shape (ordinals + one cross), post-stamp, the repo
+#                 stamped AT K3C_RELEASE (below K3D, before the lone cross was owed)       FAIL (K3
 #   k3c-oldpre    the same, series opened BEFORE the stamp                    PENDING Legacy
 #   k3c-oldpred   the same, repo stamped only at K3C_RELEASE's predecessor    PENDING not owed
 #   k3c-pinold    installed layout; the copy in force has no --cross-groups,
@@ -3017,7 +3019,19 @@ $K3C_REL
 EOF
 K3C_PRED="${k3c_ma}.$((k3c_mi - 1)).${k3c_pa}"
 [ -n "$K3C_REL" ] || k3c_bad K3C_RELEASE-unreadable
-w="$(k3_world k3c-old "$K3_POST")" && k3_subject_pass "$w" "$K3S" && k3_oldshape "$w" || k3c_bad k3c-old
+# K3D_RELEASE (BL-811, the lone cross): read here because k3c-old is stamped at its predecessor -- a
+# repo stamped at or above K3D_RELEASE acquits the one-cross shape, which is K3D's row below.
+K3D_REL="$(sed -n 's/^K3D_RELEASE="\([^"]*\)"$/\1/p' "$VALIDATOR")"
+K3D_PRED=""
+if [[ "$K3D_REL" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  IFS=. read -r k3d_ma k3d_mi k3d_pa <<EOF
+$K3D_REL
+EOF
+  K3D_PRED="${k3d_ma}.$((k3d_mi - 1)).${k3d_pa}"
+fi
+# k3c-old and k3c-pinold are stamped AT K3C_RELEASE: at or after the cross groups, below any K3D, so
+# the one-cross shape is never acquitted by K3D in them (a 9.0.0 stamp would acquit K3CX2's pinold).
+w="$(k3_world k3c-old "$K3_POST" "" "" "$K3C_REL")" && k3_subject_pass "$w" "$K3S" && k3_oldshape "$w" || k3c_bad k3c-old
 w="$(k3_world k3c-oldpre "$K3_LATE")" && k3_subject_pass "$w" "$K3S" && k3_oldshape "$w" || k3c_bad k3c-oldpre
 w="$(k3_world k3c-oldpred "$K3_POST" "" "" "$K3C_PRED")" && k3_subject_pass "$w" "$K3S" && k3_oldshape "$w" || k3c_bad k3c-oldpred
 # k3c-pinold: the tracked partitioner at the stamp commit is the real one with --cross-groups
@@ -3025,7 +3039,7 @@ w="$(k3_world k3c-oldpred "$K3_POST" "" "" "$K3C_PRED")" && k3_subject_pass "$w"
 K3C_STUB="$K3W/stub-xg-scripts"; mkdir -p "$K3C_STUB" && cp "$K3_REAL"/*.sh "$K3C_STUB/" \
   && awk '{ gsub(/cross-groups/, "cross-gXXXXX"); print }' "$K3_REAL/partition-document.sh" > "$K3C_STUB/partition-document.sh" \
   && ! grep -q -- '--cross-groups' "$K3C_STUB/partition-document.sh" && grep -q -- '--scope-ref' "$K3C_STUB/partition-document.sh" || k3c_bad k3c-stub
-w="$(k3_world k3c-pinold "$K3_POST" "" "$K3C_STUB")" && cp "$K3_REAL"/*.sh "$w/scripts/ai-dlc/" \
+w="$(k3_world k3c-pinold "$K3_POST" "" "$K3C_STUB" "$K3C_REL")" && cp "$K3_REAL"/*.sh "$w/scripts/ai-dlc/" \
   && k3_subject_pass "$w" "$K3_REAL" && k3_oldshape "$w" || k3c_bad k3c-pinold
 
 echo
@@ -3117,6 +3131,91 @@ PY
   k3c_mut "K3CX4 K3C stamp not rebound" "SILENT FAIL PENDING ${k3c_pc} SILENT" \
     "K3C_RELEASE=\"${K3C_REL}\"" 'K3C_RELEASE="99.0.0"' \
     'then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi' 'then :; fi'
+fi
+
+# --- ARM K3 LONE CROSS (K3D_RELEASE, BL-811): ordinals + ONE cross, written by the REAL merge --------
+#   k3d-lone      a lone cross.md merged --subject, repo stamped 9.0.0, series opened after     SILENT
+#   k3d-lonepred  the same pass, repo stamped only at K3D_RELEASE's predecessor            FAIL (K3, the old verdict
+#   k3d-lonepre   the same pass, series opened BEFORE the 9.0.0 stamp                      PENDING Legacy, the old verdict
+# K3D_RELEASE is a placeholder on the branch, stamped at cut: the shape cell FAILS until then, as K3C's did.
+K3D_BUILT=1; K3D_BAD=""
+k3d_bad() { K3D_BUILT=0; K3D_BAD="$K3D_BAD $1"; }
+[ "$K3C_BUILT" -eq 1 ] || k3d_bad K3C-worlds   # k3c_class, which the rows below read, is K3C's
+[ -n "$K3D_PRED" ] || k3d_bad K3D_RELEASE-unstamped
+w="$(k3_world k3d-lone "$K3_POST")" && k3_subject_pass "$w" "$K3S" lone || k3d_bad k3d-lone
+w="$(k3_world k3d-lonepred "$K3_POST" "" "" "${K3D_PRED:-0.0.0}")" && k3_subject_pass "$w" "$K3S" lone || k3d_bad k3d-lonepred
+w="$(k3_world k3d-lonepre "$K3_LATE")" && k3_subject_pass "$w" "$K3S" lone || k3d_bad k3d-lonepre
+echo
+echo "--- arm K3 lone cross (K3D_RELEASE ${K3D_REL})"
+# The same shape cell K3C_RELEASE carries above (k3c-release-shape), with its predicate held in one
+# function and probed BOTH ways first: the placeholder must read red and a stamped value green, so a
+# cell that could never fail (or never pass) is caught before it judges the real value.
+k3d_rel_ok() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+ASSERTIONS=$((ASSERTIONS + 1))
+if ! k3d_rel_ok "0.0.0-CUT" && k3d_rel_ok "0.950.0"; then
+  printf '  ok    %-28s the shape cell reads the placeholder 0.0.0-CUT red and a stamped 0.950.0 green\n' k3d-release-probe
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN -- the shape cell does not separate 0.0.0-CUT from a stamped release\n' k3d-release-probe
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+if k3d_rel_ok "$K3D_REL"; then
+  printf '  ok    %-28s K3D_RELEASE is %s\n' k3d-release-shape "$K3D_REL"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s K3D_RELEASE is [%s], not <major>.<minor>.<patch> -- stamp it with the release version at cut\n' k3d-release-shape "$K3D_REL"
+fi
+if [ "$K3_BUILT" -ne 1 ] || [ "$K3D_BUILT" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN -- world(s)%s did not build (under %s)\n' "k3d-worlds" "$K3D_BAD" "$K3W"
+else
+  # The lone pass must carry exactly one `cross=` id and no group id, or its cells prove nothing.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  k3d_ids="$(sed -n 's/^shard_tool_use_ids://p' "$K3W/k3d-lone/$K3PA/s9/requirements-adversarial-p1.md")"
+  case "$k3d_ids" in
+    *" cross-"*|"") FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE BROKEN -- k3d-lone ids are [%s], not ordinals + one cross\n' k3d-shape "$k3d_ids" ;;
+    *" cross="*) printf '  ok    %-28s the merged lone pass carries one cross= id and no group id\n' k3d-shape ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE BROKEN -- k3d-lone ids are [%s]\n' k3d-shape "$k3d_ids" ;;
+  esac
+  k3_cell k3d-lone      "$VALIDATOR" "$K3W/k3d-lone"     0 - "K3 -- SUBJECT"
+  k3_cell k3d-lonepred  "$VALIDATOR" "$K3W/k3d-lonepred" 1 "is not the subject map's ordinals plus cross groups" -
+  k3_cell k3d-lonepre   "$VALIDATOR" "$K3W/k3d-lonepre"  0 "Legacy series." "FAIL (K3"
+  k3d_row() { # <validator> -> lone lonepred lonepre grouped
+    printf '%s %s %s %s' "$(k3c_class "$1" k3d-lone)" "$(k3c_class "$1" k3d-lonepred)" "$(k3c_class "$1" k3d-lonepre)" "$(k3c_class "$1" k3-subject)"
+  }
+  k3d_mut() { # <label> <expected row> [<old> <new>]...
+    local label="$1" want="$2" d got; shift 2
+    d="$(mktemp -d "$K3W/k3dmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
+    ASSERTIONS=$((ASSERTIONS + 1))
+    if [ $# -gt 0 ]; then
+      if ! python3 - "$d/validate-adversarial-convergence.sh" "$@" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read(); a = sys.argv[2:]
+for i in range(0, len(a), 2):
+    if s.count(a[i]) != 1: sys.exit(3)
+    s = s.replace(a[i], a[i + 1])
+open(p, "w", encoding="utf-8").write(s)
+PY
+      then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- an anchor is not in the validator exactly once\n' "$label"; return; fi
+      if cmp -s "$VALIDATOR" "$d/validate-adversarial-convergence.sh" || ! bash -n "$d/validate-adversarial-convergence.sh" 2>/dev/null; then
+        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
+      fi
+    fi
+    got="$(k3d_row "$d/validate-adversarial-convergence.sh")"
+    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
+  }
+  #                                   lone   lonepred lonepre grouped
+  k3d_mut "K3DX0 control (unmutated)" "SILENT FAIL PENDING SILENT"
+  # m-k2only: the lone-cross acquittal removed (the pre-BL-811 rule), so the post-stamp lone pass is convicted.
+  k3d_mut "m-k2only (K3D acquittal off)" "FAIL FAIL PENDING SILENT" \
+    'k3_opened_after && k3_dok=1; fi' 'false && k3_dok=1; fi'
+  # The gate read: K3D_RELEASE raised above every world's stamp, so no series is after it -- the old verdict everywhere.
+  k3d_mut "K3DX2 K3D raised to 99.0.0" "FAIL FAIL PENDING SILENT" \
+    "K3D_RELEASE=\"${K3D_REL}\"" 'K3D_RELEASE="99.0.0"'
+  # The acquittal widened to every date: the before-stamp series is acquitted too, so the old verdicts go.
+  k3d_mut "K3DX3 date rule dropped" "SILENT SILENT SILENT SILENT" \
+    'k3_opened_after && k3_dok=1; fi' 'k3_dok=1; fi'
 fi
 
 fi

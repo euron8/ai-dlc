@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# review-reroute/run.sh -- the record-only route of a gate-1 re-review and Rule A, the gate-1 re-run
+# after a QA rework: partition-review-diff.sh --route and --gate1-rerun, the Class line's grammar in
+# merge-review-shards.sh, and validate-carried-findings.sh --classes.
+#
+# Usage: run.sh        Exit: 0 every assertion holds, 1 a regression, 2 fixture broken.
+#
+# WHAT IS AT STAKE. A route that sends a re-review to one serial reviewer when the rework edited code
+# skips the review that would have caught it; that misroute is ship-blocking. So the route is a
+# CONJUNCTION (every prior Critical/Important finding EVIDENCE|BOOKKEEPING, AND a delta with no code
+# path) and fails closed. Rule A's error in the costly direction is a skipped gate-1 run over a real
+# code change, so it re-runs on anything it cannot read as blank, comment or docstring.
+#
+# ARMS (world.sh holds the seeds; each range is one commit on the base B0):
+#   C1a a prior with NO Class lines is ACCEPTED by --check-serial (old-engine carried findings)
+#   C1b the same prior routes FULL over a records-only delta
+#   C2  `Class: FOO` is REFUSED by --check-serial, naming the value
+#   C3  `Class: EVIDENCE` / `Class: BOOKKEEPING` are accepted (the control for C2)
+#   CL  --classes prints `<class>\t<carry string>` per finding, `-` when unclassed; --list is unchanged
+#   R1  EVIDENCE|BOOKKEEPING prior + a delta editing a TEST file -> FULL (graph s317 2-6 p3's shape)
+#   R2  EVIDENCE|BOOKKEEPING prior + a delta of review records, story records and captures -> ROUTE
+#   R3  a prior with zero Critical/Important findings -> FULL
+#   R4  a prior whose reviewed-sha names no commit -> FULL, exit 1
+#   R5  a TEST-class prior finding + a records-only delta -> FULL
+#   R6  a .py under test-results/ -> FULL, uncited AND with a captures list naming it (graph s318 2-3)
+#   A1  an 18-line live smoke test added to an existing test file -> GATE1-RERUN (graph s319 1-1-b)
+#   A2  a records- and captures-only rework -> GATE1-SKIP (graph s319 2-3a-a, 3-1-c)
+#   A3  a comment-only test edit -> GATE1-SKIP
+#   A4  a docstring-only edit -> GATE1-SKIP
+#   A5  an added test file whose body is a docstring and a comment -> GATE1-RERUN (an ADDED test)
+#   A6  a line inside a triple-quoted string ASSIGNED to a name -> GATE1-RERUN (it is code, not a
+#       docstring: A4's near-miss, so a filter dropping every triple-quoted line dies here)
+#   A7  a JS block-comment-only edit -> GATE1-SKIP
+#   S1  implementation.md names both modes on their invocation lines; code-reviewer.md states the
+#       class rule once
+# MUTANTS (each in a copy of the subject's WHOLE script directory; each must kill exactly its arm):
+#   m-classonly         the delta guard removed            -> R1 R6 (both are deltas the guard alone sends full)
+#   m-failopen-missing  a finding with no Class routes     -> C1b
+#   m-strict            an absent Class is refused         -> C1a
+#   m-nodocstring       the docstring filter removed       -> A4
+#   m-pyext             a cited .py leaves the code class  -> R6
+# The unmutated copy must pass every arm first (CTL), so a copy that cannot run is FIXTURE BROKEN.
+set -uo pipefail
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SD=""; ROOT=""
+d="$HERE"
+while [ -n "$d" ] && [ "$d" != "/" ]; do
+  for c in "$d/core/scripts" "$d/scripts/ai-dlc"; do
+    [ -z "$SD" ] && [ -f "$c/partition-review-diff.sh" ] && SD="$c" && ROOT="$d"
+  done
+  [ -n "$SD" ] && break
+  d="$(dirname "$d")"
+done
+[ -n "$SD" ] || { echo "FIXTURE ERROR: partition-review-diff.sh not found above $HERE in either layout; nothing was asserted" >&2; exit 2; }
+for f in merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh; do
+  [ -f "$SD/$f" ] || { echo "FIXTURE ERROR: $f is not beside $SD/partition-review-diff.sh" >&2; exit 2; }
+done
+GRAMMAR=""; STEP=""; ROLE=""
+for c in "$ROOT/core/skills/ai-dlc" "$ROOT/.claude/skills/ai-dlc"; do
+  [ -z "$GRAMMAR" ] && [ -f "$c/artifact-path-grammar.md" ] && GRAMMAR="$c/artifact-path-grammar.md"
+  [ -z "$STEP" ] && [ -f "$c/steps/implementation.md" ] && STEP="$c/steps/implementation.md"
+done
+for c in "$ROOT/core/team-roles/code-reviewer.md" "$ROOT/.claude/team-roles/code-reviewer.md"; do
+  [ -z "$ROLE" ] && [ -f "$c" ] && ROLE="$c"
+done
+[ -n "$GRAMMAR" ] && [ -n "$STEP" ] && [ -n "$ROLE" ] || { echo "FIXTURE ERROR: artifact-path-grammar.md, steps/implementation.md or code-reviewer.md not found under $ROOT" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
+echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-carried-findings.sh"
+echo "review-reroute: subject dir = $SD"
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/review-reroute.XXXXXX")" || exit 2
+WORK="$(cd "$WORK" && pwd -P)"
+trap 'rm -rf "$WORK"' EXIT
+. "$HERE/world.sh" || { echo "FIXTURE ERROR: cannot source world.sh" >&2; exit 2; }
+W="$WORK/w"; mkdir -p "$W" || exit 2
+rr_world "$W" "$GRAMMAR" || { echo "FIXTURE BROKEN: the seeded repository did not build" >&2; exit 2; }
+R="$W/repo"; B0="$(rr_ref "$W" B0)"
+for n in TEST_EDIT RECORDS SMOKE RECORDS_QA COMMENT DOCSTRING ASSIGNED NEWTEST JSCOMMENT; do
+  [ -n "$(rr_ref "$W" "$n")" ] || { echo "FIXTURE BROKEN: seed $n has no ref" >&2; exit 2; }
+done
+
+fails=0
+ok()  { printf '  ok    %s\n' "$1"; }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+TAB="$(printf '\t')"
+# Each arm takes the script directory under test and returns 0 when its assertion holds.
+route() { OUT="$(bash "$1/partition-review-diff.sh" --route "$R" "$2" "$(rr_ref "$W" "$3")" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
+rerun() { OUT="$(bash "$1/partition-review-diff.sh" --gate1-rerun "$R" "$B0" "$(rr_ref "$W" "$2")" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
+serial() { OUT="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$1/merge-review-shards.sh" --check-serial "$2" --gate code-review 2>&1)"; RC=$?; }
+arm_C1a() { serial "$1" "$W/prior-noclass.md"; [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: ' <<<"$OUT"; }
+arm_C1b() { route "$1" "$W/prior-noclass.md" RECORDS; [ "$RC" -eq 1 ] && grep -q '^FULL: .*carries no Class line' <<<"$OUT"; }
+arm_C2()  { serial "$1" "$W/prior-foo.md"; [ "$RC" -eq 2 ] && grep -q "^REFUSED: .*'Class: FOO' is not one of" <<<"$OUT"; }
+arm_C3()  { serial "$1" "$W/prior-evidence.md"; [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: ' <<<"$OUT"; }
+arm_CL()  {
+  local a b c
+  a="$(bash "$1/validate-carried-findings.sh" --classes "$W/prior-evidence.md" 2>/dev/null)" || return 1
+  b="$(bash "$1/validate-carried-findings.sh" --classes "$W/prior-noclass.md" 2>/dev/null)" || return 1
+  c="$(bash "$1/validate-carried-findings.sh" --list "$W/prior-evidence.md" 2>/dev/null)" || return 1
+  [ "$a" = "EVIDENCE${TAB}The capture records no head sha
+BOOKKEEPING${TAB}The story cites a stale line" ] \
+    && [ "$b" = "-${TAB}The capture records no head sha
+-${TAB}The story cites a stale line" ] \
+    && [ "$c" = "The capture records no head sha
+The story cites a stale line" ]
+}
+arm_R1() { route "$1" "$W/prior-evidence.md" TEST_EDIT; [ "$RC" -eq 1 ] && grep -q '^FULL: .*rebalancer/tests/test_engine.py' <<<"$OUT"; }
+arm_R2() { route "$1" "$W/prior-evidence.md" RECORDS; [ "$RC" -eq 0 ] && grep -q '^ROUTE: 2 Critical/Important finding(s)' <<<"$OUT"; }
+arm_R3() { route "$1" "$W/prior-zero.md" RECORDS; [ "$RC" -eq 1 ] && grep -q '^FULL: .*carries no Critical or Important finding' <<<"$OUT"; }
+arm_R4() { route "$1" "$W/prior-badsha.md" RECORDS; [ "$RC" -eq 1 ] && grep -q '^FULL: the prior reviewed-sha .* names no commit' <<<"$OUT"; }
+arm_R5() { route "$1" "$W/prior-code.md" RECORDS; [ "$RC" -eq 1 ] && grep -q '^FULL: .*is Class TEST' <<<"$OUT"; }
+# R6: a .py under test-results/ is CODE whether or not the story cites it. The captures list a story
+# yields never names one (--list-captures prints .txt/.log/.out only), so the cited spelling here is
+# the harder one: a list that DOES name it still must not move it out of the code class.
+arm_R6() {
+  route "$1" "$W/prior-evidence.md" PYCAP; [ "$RC" -eq 1 ] && grep -q '^FULL: .*test-results/red_copy.py' <<<"$OUT" || return 1
+  OUT="$(bash "$1/partition-review-diff.sh" --route "$R" "$W/prior-evidence.md" "$(rr_ref "$W" PYCAP)" --exclude-captures "$W/captures-cited-py" 2>&1)"; RC=$?
+  [ "$RC" -eq 1 ] && grep -q '^FULL: .*test-results/red_copy.py' <<<"$OUT"
+}
+arm_A1() { rerun "$1" SMOKE;     [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*server/test_live_smoke.py' <<<"$OUT"; }
+arm_A2() { rerun "$1" RECORDS_QA; [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: ' <<<"$OUT"; }
+arm_A3() { rerun "$1" COMMENT;    [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 code path' <<<"$OUT"; }
+arm_A4() { rerun "$1" DOCSTRING;  [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 code path' <<<"$OUT"; }
+arm_A5() { rerun "$1" NEWTEST;    [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*adds the test file rebalancer/tests/test_new.py' <<<"$OUT"; }
+arm_A6() { rerun "$1" ASSIGNED;   [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*rebalancer/engine.py' <<<"$OUT"; }
+arm_A7() { rerun "$1" JSCOMMENT;  [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 code path' <<<"$OUT"; }
+ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7"
+for a in $ARMS; do
+  if "arm_$a" "$SD"; then ok "$a"; else bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
+done
+# S1: the step text routes by both modes, on their invocation lines; the role file states the rule.
+if grep -qF 'partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha>' "$STEP" \
+   && grep -qF 'partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha>' "$STEP" \
+   && [ "$(grep -c 'TEST is code-class' "$ROLE")" = 1 ]; then
+  ok "S1: implementation.md invokes --route and --gate1-rerun; code-reviewer.md states 'TEST is code-class' once"
+else bad "S1: implementation.md lost a --route/--gate1-rerun invocation, or code-reviewer.md does not state 'TEST is code-class' exactly once"; fi
+
+# ---- mutants ------------------------------------------------------------------------------------
+M="$WORK/mut"; mkdir -p "$M" || exit 2
+# The copy holds every sibling the three subjects resolve beside themselves, and nothing else.
+mkcopy() {
+  local dst="$M/$1" f; mkdir -p "$dst" || return 1
+  for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh; do
+    cp "$SD/$f" "$dst/$f" || return 1
+  done
+  echo "$dst"
+}
+# mut <name> <file> <old exact substring> <new> -> the mutated directory, or empty when nothing changed
+mut() {
+  local dst; dst="$(mkcopy "$1")" || { echo ""; return; }
+  RR_O="$3" RR_N="$4" awk '!done && (i = index($0, ENVIRON["RR_O"])) { $0 = substr($0, 1, i - 1) ENVIRON["RR_N"] substr($0, i + length(ENVIRON["RR_O"])); done = 1 } { print }' \
+    "$SD/$2" > "$dst/$2.m" && mv "$dst/$2.m" "$dst/$2" || { echo ""; return; }
+  if cmp -s "$SD/$2" "$dst/$2"; then echo ""; else echo "$dst"; fi
+}
+CTL="$(mkcopy ctl)"
+died=""; for a in $ARMS; do "arm_$a" "$CTL" || died="$died $a"; done
+if [ -n "$CTL" ] && [ -z "$died" ]; then ok "CTL: the unmutated copy of $SD passes every arm"
+else bad "CTL: FIXTURE BROKEN -- the unmutated copy failed:${died:- (no copy)}; no mutant verdict below is evidence"; fi
+score() { # <mutant dir> <the arm that must die> <description>
+  local md="$1" want="$2" a died=""
+  [ -n "$md" ] || { bad "MUTANT $3: the mutation did not apply"; return; }
+  for a in $ARMS; do "arm_$a" "$md" || died="$died $a"; done
+  if [ "$died" = " $want" ]; then ok "MUTANT $3: killed by $want alone"
+  else bad "MUTANT $3: arms that died:${died:- none} (want exactly $want)"; fi
+}
+score "$(mut classonly partition-review-diff.sh '  [ "$ncode" -eq 0 ] || full "the delta' '  : || full "the delta')" "R1 R6" "m-classonly, the delta guard removed"
+score "$(mut failopen partition-review-diff.sh "-) full \"the prior finding '\$rd_' carries no Class line\" ;;" '-) ;;')" C1b "m-failopen-missing, a finding with no Class routes"
+score "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" C1a "m-strict, an absent Class is refused"
+score "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" R6 "m-pyext, a cited .py leaves the code class"
+score "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" A4 "m-nodocstring, the docstring filter removed"
+
+if [ "$fails" -eq 0 ]; then echo "review-reroute: PASS"; exit 0; fi
+echo "review-reroute: $fails FAILED"; exit 1

@@ -38,17 +38,23 @@
 #   part, and the CROSS SHARDS (below). <sha12> is the first 12 characters of the manifest's
 #   frozen sha.
 #
-# THE CROSS SHARDS. One per row of `partition-document.sh --cross-groups <K>` (K = the part
-#   count of the re-derived map), named `cross-<g>.md`, and `cross.md` iff that table has
-#   exactly one row (G=1, i.e. K=2). The table is read from that one speller, never restated
-#   here. Every `cross-<g>` it prints is required; a `cross-<g>` it does not print, `cross.md`
-#   beside any `cross-<g>.md`, `cross.md` when G>1 and `cross-<g>.md` when G=1 are each REFUSED.
+# THE CROSS SHARDS. Two shapes, both accepted at ANY K, never mixed. The DISPATCHED shape is ONE
+#   cross reviewer reading every part, writing `cross.md`. The GROUPED shape (the dispatch before
+#   that, still merged) is one shard per row of `partition-document.sh --cross-groups <K>` (K =
+#   the part count of the re-derived map), named `cross-<g>.md`, and `cross.md` iff that table has
+#   exactly one row (G=1, i.e. K=2). The table is read from that one speller, never restated here.
+#   A grouped set must be complete; a partial `cross-<g>` set, a `cross-<g>` the table does not
+#   print, `cross.md` beside any `cross-<g>.md`, and `cross-<g>.md` when G=1 are each REFUSED.
+#   Every reader below takes the DELIVERED shape (`cross_shape`): a lone `cross.md` is the one
+#   cross key, its execution owner and the owner of every cross finding, and the title counts it
+#   as one shard.
 #   THE OWNER RULE. The groups overlap, so each cross finding citing two or more parts has one
 #   owner, the shard `partition-document.sh --cross-owner <K> <cited ordinals>` names (`cross`
-#   when G=1). A cross reviewer reads the WHOLE diff and may cite any part, so a finding outside
+#   when the set delivered one cross shard). A cross reviewer reads the WHOLE diff and may cite
+#   any part, so a finding outside
 #   its owner's shard is accepted, and REFUSED only when the owner's shard carries a finding
 #   citing the IDENTICAL set -- the one case the two are the same finding.
-#   THE FIRST CROSS SHARD (`cross` when G=1, else `cross-1`) is the EXECUTION owner: it alone
+#   THE FIRST CROSS SHARD (`cross` when one was delivered, else `cross-1`) is the EXECUTION owner: it alone
 #   runs in the frozen worktree, which nothing else may mutate -- the one canonical suite run and
 #   every handed-over replay -- and under --gate qa it alone carries the per-AC table and the
 #   deferred record. Every other cross shard executes nothing and reports interaction findings
@@ -317,7 +323,7 @@
 #       advisor: called | unavailable
 #   `called` when an advisor call returned a result; `unavailable` when the tool was absent, or every
 #   call errored or was rate-limited (remediator.md's meanings). It is checked PER SHARD, never on the
-#   merged file, which carries K+G of them. Under --check-serial the review file carries one.
+#   merged file, which carries one per delivered shard. Under --check-serial the review file carries one.
 #   REFUSED in every era: two such lines; a value outside the two (trailing blanks and CR tolerated, as
 #   join-remediator-shards.sh tolerates them); and the label indented, bulleted (the remediator's own
 #   `- advisor: called` is the near-miss), decorated (`**advisor:**`) or numbered. The label is matched
@@ -333,6 +339,17 @@
 #   the sentinel, LEGACY; with it, the absence is REFUSED naming the fallback (`untracked at <sha>, read
 #   on disk`) and its remedy, commit `.claude/team-roles/`, because the on-disk copy may postdate the
 #   shards. --check-serial keys on the INSTALLED role file, as its canonical-run branch does.
+#   THE CLASS LINE, --gate code-review ONLY (never --gate qa). A `#### ` finding under a Critical or
+#   Important container in `## Findings` carries at most one column-0 line outside fences
+#       Class: <one member of the set code-reviewer.md's template declares>
+#   The set is LIFTED from the installed code-reviewer.md by CLASS_SET_AWK, byte-identical to the
+#   renderer's (I129), never retyped. REFUSED: a present value outside that set, and two `Class:`
+#   lines in one finding. A finding with NO `Class:` line is ACCEPTED: old-engine findings carry
+#   none, and an unclassed finding is fail-closed downstream (partition-review-diff.sh --route sends
+#   the next pass to a full re-review), so an omission costs a pass and never a miss. An installed
+#   code-reviewer.md declaring no `Class:` line (a consumer between the engine pull and the
+#   reconcile merge) declares no set, and no `Class:` line is checked. Checked per shard by the merge
+#   and --check-shard, and on the one file by --check-serial.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -346,8 +363,8 @@
 # THE OUTPUT. The gate's merged title, a summary naming the range and shard count, the
 #   `## Verdict` heading with the worst-of value on the next line (the template's own shape), a
 #   table of shard verdicts, the part map, then every shard body in ordinal order, the cross
-#   shards last in group order (`## Shard: cross` when G=1, `## Shard: cross-<g> (<ordinals>)`
-#   otherwise).
+#   shards last in group order (`## Shard: cross` for one delivered cross shard,
+#   `## Shard: cross-<g> (<ordinals>)` for each group otherwise).
 #   CONSERVATION: every finding heading of every shard appears in the output, counted.
 #   The assembled file must match Check 1's pattern exactly once, and the value read back Check
 #   1's way (the value rule gate-validation.md Check 1 states) must equal the recomputed verdict.
@@ -505,6 +522,11 @@ VSET="$(awk '/^## Verdict$/ { on = 1; next }
     | LC_ALL=C sort -u | tr '\n' ' ')"
 [ "$VSET" = "$WANT_VSET" ] \
   || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
+# THE FINDING-CLASS SET (header: SHARD GRAMMAR, THE CLASS LINE). Byte-identical to CLASS_SET_AWK in
+# scripts/render-vocabulary-index.sh (I129). Empty when the installed role file declares none.
+CLASS_SET_AWK='/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { n = split(substr($0, 8), m, /[[:blank:]]*\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'
+CLASS_SET=""
+[ "$GATE" != code-review ] || CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u | tr '\n' ' ')"
 # THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (the role file's
 # `## Findings` block after its first `## Verdict`, to the next `## `), never retyped: the first word
 # of each `### ` heading, in order -- the first is the Critical class, the second the Important
@@ -718,6 +740,31 @@ adv_gate() {
   else refuse "$1 carries no column-0 'advisor:' line${ADV_WHY}: write 'advisor: called' when an advisor call returned a result, 'advisor: unavailable' when the tool was absent or every call errored or was rate-limited"
   fi
 }
+# ---- THE CLASS LINE (header: SHARD GRAMMAR, THE CLASS LINE). class_gate <file>: one function for the
+# per-shard check and --check-serial, code review only. Fences are read as adv_gate reads them.
+class_gate() {
+  [ "$GATE" = code-review ] && [ -n "$CLASS_SET" ] || return 0
+  cg_o_="$(CG_SET=" $CLASS_SET" awk '
+    function close_f() { if (inf && ncls == 0) print "ABSENT\t" fl; inf = 0; ncls = 0 }
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+    !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+    f { next }
+    /^# / || /^## / { close_f(); fs = ($0 ~ /^## [ \t]*[Ff]indings/); sev = 0; next }
+    /^### / { close_f(); h = tolower(substr($0, 5)); sub(/^[ \t*]+/, "", h); sev = fs && (h ~ /^(critical|important)/); next }
+    /^#### / { close_f(); if (sev) { inf = 1; fl = NR }; next }
+    inf && /^Class:/ { ncls++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
+                       if (ncls > 1) print "DUP\t" NR
+                       else if (v == "" || v ~ /[ \t]/ || index(ENVIRON["CG_SET"] " ", " " v " ") == 0) print "BAD\t" NR "\t" v }
+    END { close_f() }' "$1")" \
+    || refuse_to lead "reading the Class lines of $1 did not run (awk failed); repair the environment in the lead checkout and check again"
+  while IFS="$TAB" read -r cg_k_ cg_l_ cg_v_; do
+    case "$cg_k_" in
+      ABSENT) continue ;; # an unclassed finding is accepted; partition-review-diff.sh --route sends the next pass full
+      DUP) refuse "$1:$cg_l_ is a second 'Class:' line in one finding; a Critical or Important finding carries one, a member of ${CLASS_SET% } ($ROLE_NAME's template)" ;;
+      BAD) refuse "$1:$cg_l_ 'Class: $cg_v_' is not one of ${CLASS_SET% } ($ROLE_NAME's template); TEST is code-class, and a finding admitting any code fix is CODE" ;;
+    esac
+  done <<<"$cg_o_"
+}
 # ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
 # ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
 if [ -n "$SERIAL" ]; then
@@ -734,6 +781,7 @@ if [ -n "$SERIAL" ]; then
   ADV_AT_PATH="$ROLE_MD"; ADV_WHY="; $ROLE_MD prescribes it"
   if adv_has "$ROLE_MD"; then ADV_AT="present"; else ADV_AT="legacy"; fi
   adv_gate "$SERIAL"
+  class_gate "$SERIAL"
   if [ "$GATE" = qa ]; then
     WORST="$C1V"
     printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
@@ -823,9 +871,17 @@ while IFS="$TAB" read -r gg gl; do
   [ "$gg" = "$i" ] && [[ $gl =~ ^[0-9]+(,[0-9]+)+$ ]] \
     || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
 done < "$T/groups"
-if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"
-else CROSS_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
-CROSS_FIRST="${CROSS_KEYS%% *}"
+if [ "$G" -eq 1 ]; then XTABLE_KEYS="cross"
+else XTABLE_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
+# THE DELIVERED SHAPE (header: THE CROSS SHARDS). XTABLE_KEYS is the table's grouped spelling and
+# names what a `cross-<g>` may be; CROSS_KEYS, CROSS_FIRST and XG are the shape the set DELIVERED --
+# the table's until the staging (or --check-shard's target) reads a lone `cross.md`, then `cross`,
+# `cross` and 1. Every set-level reader below reads these three, never G.
+cross_shape() { # <grouped|lone>
+  if [ "$1" = lone ]; then CROSS_KEYS="cross"; XG=1; else CROSS_KEYS="$XTABLE_KEYS"; XG="$G"; fi
+  CROSS_FIRST="${CROSS_KEYS%% *}"
+}
+cross_shape grouped
 is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
 
 # ---- THE SHARD KEY: one grammar, read by the staging below, by --check-shard's target and by the
@@ -979,23 +1035,24 @@ done
 dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || refuse_to "$(awk -F'\t' -v k="$dup" '$1 == k { b = $2; sub(/.*\//, "", b); printf "%s%s", (n++ ? " " : ""), b }' "$T/shards")" \
   "shard $dup was delivered more than once in $SDIR"
-# The cross shards delivered must be EXACTLY the table's: a mix of `cross.md` and `cross-<g>.md`,
-# a `cross-<g>` the table does not print, or the wrong spelling for G are each refused by name.
+# The cross shards delivered are ONE of two shapes at any K: a lone `cross.md`, or EXACTLY the
+# table's `cross-1..G` (`cross.md` again when G=1). A mix of the two, a `cross-<g>` the table does
+# not print, and a partial `cross-<g>` set (the missing-shard loop) are each refused by name.
 x_plain=0; x_num=0
 while IFS="$TAB" read -r xk xf; do
   case "$xk" in
     cross) x_plain=1 ;;
     cross-*) x_num=1
-      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
+      case " $XTABLE_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $XTABLE_KEYS, or one cross.md)" ;; esac ;;
   esac
 done < "$T/shards"
 [ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
-  && refuse "$SDIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
-[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \
-  && refuse "$SDIR holds cross.md, but the part map has $K parts, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
+  && refuse "$SDIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: one cross.md, or $XTABLE_KEYS)"
+if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi
+x_alt=""; [ "$XTABLE_KEYS" = cross ] || [ "$CROSS_KEYS" = cross ] || x_alt=", or one cross.md in place of the groups"
 for idx in $ORDINALS $CROSS_KEYS; do
   [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] \
-    || refuse_to "$idx" "shard $idx is missing from $SDIR (expected: $ORDINALS and $CROSS_KEYS)"
+    || refuse_to "$idx" "shard $idx is missing from $SDIR (expected: $ORDINALS and $CROSS_KEYS$x_alt)"
 done
 
 # ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
@@ -1100,6 +1157,7 @@ check_shard() {
   if [ "$r" -gt "$WORST_R" ]; then WORST_R="$r"; WORST="$v"; fi
   printf '| %s | %s |\n' "$key" "$v" >> "$T/vtable" || refuse "cannot stage the verdict table"
   adv_at_sha; adv_gate "$sf"
+  class_gate "$sf"
   nf="$(awk '$1 == "C" { print $2 }' "$P")"; NFIND=$((NFIND + ${nf:-0}))
   # The marker's count against the findings parsed here: a shard truncated after its marker, or
   # marked before its findings, disagrees. `scn` is set by the caller (the staged marker, or under
@@ -1208,7 +1266,7 @@ check_shard() {
       # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
       own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err" < /dev/null)" \
         || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
-      if [ "$G" -eq 1 ]; then ownk="cross"; else ownk="cross-$own"; fi
+      if [ "$XG" -eq 1 ]; then ownk="cross"; else ownk="cross-$own"; fi
       # A cross reviewer reads the whole diff and may cite any part, so a finding outside its
       # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set.
       if [ "$ownk" != "$key" ]; then
@@ -1320,6 +1378,9 @@ if [ -n "$CHECK" ]; then
   # --check-shard: the one target, keyed by its own name; the set-level joins are the merge's.
   key_of_name "$(basename "$CHECK")" || key_refuse "$?" "$CHECK"
   key="$KEY_OF"; sf="$CHECK"
+  # The delivered shape is the target's own: a `cross.md` target is the lone cross shard at any K,
+  # so it is the execution owner and the owner of every cross finding (as the merge reads it).
+  if [ "$key" = cross ]; then cross_shape lone; fi
   [ -f "$sf" ] || refuse_to "$key" "$sf is not a regular file; write the shard, then check it"
   scn=""
   if [ "$CHECK_N_SET" = 1 ]; then scn="$CHECK_N"
@@ -1407,9 +1468,9 @@ if [ "$GATE" = qa ]; then
 fi
 
 {
-  printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + G))"
+  printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + XG))"
   printf '## Summary\n\n'
-  if [ "$G" -eq 1 ]; then XWORD="one cross shard"; else XWORD="$G cross shards"; fi
+  if [ "$XG" -eq 1 ]; then XWORD="one cross shard"; else XWORD="$XG cross shards"; fi
   printf 'Merged by merge-review-shards.sh from %s part shards and %s, all reviewing\n' "$K" "$XWORD"
   printf '`%s..%s`. The verdict below is RECOMPUTED as the worst shard verdict; the\n' "$M_BASE" "$M_SHA"
   printf 'shard verdicts in the table are advisory inputs to it.\n\n'

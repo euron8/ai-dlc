@@ -23,6 +23,46 @@
 #   Every refusal is exit 2 with ONE stderr line `partition-review-diff: REFUSED — <reason>`,
 #   and a refusal writes nothing.
 #
+#   partition-review-diff.sh --route <worktree> <pass M-1 review file> <frozen-sha>
+#                            [--exclude-captures <file>]
+#       THE RECORD-ONLY ROUTE of a gate-1 re-review (implementation.md, the re-review paragraph).
+#       stdout ONE line. `ROUTE: <reason>`, exit 0, ONLY when BOTH hold:
+#         (a) the prior's Critical/Important findings number at least one and every one's class,
+#             read by the sibling `validate-carried-findings.sh --classes <pass M-1 file>`, is in
+#             ROUTE_CLASSES (EVIDENCE, BOOKKEEPING: code-reviewer.md's template owns the set);
+#         (b) the delta <prior reviewed-sha>..<frozen-sha> carries no CODE path (THE CODE CLASS).
+#       Every other outcome is `FULL: <reason>`, exit 1, and the pass is a full re-review: zero
+#       findings, a finding with no Class line (old-engine findings carry none), an unknown or
+#       repeated Class, any finding outside ROUTE_CLASSES, a classes read that failed, a prior with
+#       no single full `reviewed-sha:` value, a sha that names no commit or is not an ancestor of
+#       <frozen-sha>, an empty or unreadable delta, an unreadable captures file, a bad argument.
+#       This mode never exits 2: no refusal in it can read as anything but FULL. WHY (b) EXISTS:
+#       classes alone route a pass whose rework edited a test (graph s317 2-6 p3: every prior
+#       finding bookkeeping, its rework deleted an assertion, p4 caught two code findings). The
+#       delta guard is the safety property; the classes are the saving.
+#
+#   partition-review-diff.sh --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]
+#       RULE A: whether gate 1 re-runs after a QA rework. <base>..<frozen-sha> is the rework range
+#       (the go-signal sha QA validated, then the new frozen sha). stdout ONE line:
+#       `GATE1-RERUN: <reason>` when the range ADDS a test file (THE TEST NAME, the part set's
+#       step 3 grammar) or changes a CODE path on a line that is not blank, not a comment and
+#       not a docstring (THE LINE FILTER), else `GATE1-SKIP: <reason>`; exit 0 for both. Any
+#       other exit (2 on a refusal) means re-run: the step text keys on `GATE1-SKIP` alone.
+#
+#   THE CODE CLASS (both modes). A path in the range is CODE unless it is under a scan root (as
+#   above), ends in `.md`, ends in `.txt`/`.log`/`.out` with no path component that is a test
+#   directory (`test`, `tests`, `__tests__`, `spec`, `specs`, `e2e`, `fixtures`), or is a
+#   `.txt`/`.log`/`.out` path --exclude-captures names. So captures and records never count, and a
+#   golden `.txt` under a test directory does. A code-extension file stays CODE wherever it sits and
+#   whether or not the story cites it: graph s318 2-3's story cites `test-results/red_splat_copy.py`,
+#   and the route sends that pass to a full re-review (fail closed).
+#   THE LINE FILTER (--gate1-rerun). Changed line numbers come from `git diff -U0`; each side's
+#   blob is classified line by line, by extension: Python (`.py`) `#` lines, and a triple-quoted
+#   string that OPENS a statement (a docstring; `x = """..."""` is code); C-family and JS/TS
+#   (`.js .jsx .ts .tsx .mjs .cjs .sol .go .rs .java .kt .swift .c .h .cc .cpp .css .scss`)
+#   `//` lines and `/* ... */` blocks; shell, YAML, TOML, Ruby (`.sh .bash .yml .yaml .toml .rb`)
+#   `#` lines. Every other extension drops blank lines only. A binary row counts as a change.
+#
 # INPUTS. <worktree> is the frozen dev worktree (any directory git resolves a work tree from).
 #   <base> is any commit-ish and is recorded resolved; it must be an ANCESTOR of <frozen-sha>
 #   (`git merge-base --is-ancestor`), else REFUSED -- against a diverged base the two-dot range
@@ -91,11 +131,190 @@ set -u
 export LC_ALL=C
 
 refuse() { printf 'partition-review-diff: REFUSED — %s\n' "$*" >&2; exit 2; }
-USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>]"
+USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
+
+# ---- shared by --route and --gate1-rerun (header: THE CODE CLASS, THE LINE FILTER) -----------------
+# THE TEST NAME: the three basename expressions of THE PART SET step 3, the one test grammar here.
+TEST_NAME_AWK='function is_test_name(p,   b) { b = p; sub(/.*\//, "", b); return (b ~ /^test_.+\.[^.]+$/ || b ~ /.+_test\.[^.]+$/ || b ~ /.+\.(test|spec)\.[^.]+$/) }'
+# code_paths <roots file> <captures file or empty> < `<status>\t<path>` rows -> the CODE rows, unchanged.
+CODE_CLASS_AWK='
+  FILENAME == ARGV[1] { if ($0 != "") { sub(/\/+$/, ""); R[++nr] = $0 }; next }
+  FILENAME == ARGV[2] { sub(/\r$/, ""); if ($0 != "") X[$0] = 1; next }
+  {
+    p = $2; if (p == "") next
+    for (i = 1; i <= nr; i++) if (p == R[i] || index(p, R[i] "/") == 1) next
+    if ((p in X) && p ~ /\.(txt|log|out)$/) next
+    if (p ~ /\.md$/) next
+    if (p ~ /\.(txt|log|out)$/) {
+      n = split(p, c, "/"); td = 0
+      for (i = 1; i < n; i++) if (c[i] ~ /^(test|tests|__tests__|spec|specs|e2e|fixtures)$/) td = 1
+      if (!td) next
+    }
+    print
+  }'
+# The per-language classifier: prints the line numbers of a blob that are CODE (not blank, not a
+# comment, not a docstring). LANG is py, c, hash or plain. No apostrophe anywhere in this program.
+LINE_CODE_AWK='
+  BEGIN { L = ENVIRON["PR_LANG"]; Q3D = sprintf("%c%c%c", 34, 34, 34); Q3S = sprintf("%c%c%c", 39, 39, 39) }
+  function cnt(s, d,   n, i) { n = 0; while ((i = index(s, d)) > 0) { n++; s = substr(s, i + 3) }; return n }
+  {
+    t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t)
+    if (L == "py") {
+      if (ds != "") { if (index(t, ds) > 0) { if (dk == "code") { print NR; lc = substr(t, length(t)) }; ds = ""; dk = "" } else if (dk == "code") print NR; next }
+      if (t == "" || substr(t, 1, 1) == "#") next
+      u = t; sub(/^[rRuUbBfF]{1,2}/, "", u)
+      # A DOCSTRING opens a statement: the previous code line does not leave an expression open.
+      if ((substr(u, 1, 3) == Q3D || substr(u, 1, 3) == Q3S) && lc !~ /[([{,=+%*\\-]/) {
+        d = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next
+      }
+      print NR; lc = substr(t, length(t))
+      if (cnt(t, Q3D) % 2 == 1) { ds = Q3D; dk = "code" } else if (cnt(t, Q3S) % 2 == 1) { ds = Q3S; dk = "code" }
+      next
+    }
+    if (L == "c") {
+      if (bc) { if (index(t, "*/") > 0) bc = 0; next }
+      if (t == "" || substr(t, 1, 2) == "//") next
+      if (substr(t, 1, 2) == "/*") { r = substr(t, 3); if (index(r, "*/") == 0) bc = 1; next }
+      print NR; next
+    }
+    if (L == "hash") { if (t == "" || substr(t, 1, 1) == "#") next; print NR; next }
+    if (t != "") print NR
+  }'
+lang_of() {
+  case "$1" in
+    *.py) echo py ;;
+    *.js|*.jsx|*.ts|*.tsx|*.mjs|*.cjs|*.sol|*.go|*.rs|*.java|*.kt|*.swift|*.c|*.h|*.cc|*.cpp|*.css|*.scss) echo c ;;
+    *.sh|*.bash|*.yml|*.yaml|*.toml|*.rb) echo hash ;;
+    *) echo plain ;;
+  esac
+}
+# mode_setup <worktree> -> WT_ABS, T, the roots file at $T/roots; returns 1 with MS_WHY on any failure.
+mode_setup() {
+  MS_WHY=""
+  [ -d "$1" ] || { MS_WHY="no worktree directory at $1"; return 1; }
+  WT_ABS="$(cd "$1" 2>/dev/null && pwd -P)" || { MS_WHY="cannot enter $1"; return 1; }
+  git -C "$WT_ABS" rev-parse --git-dir >/dev/null 2>&1 || { MS_WHY="$WT_ABS is not inside a git repository"; return 1; }
+  T="$(mktemp -d "${TMPDIR:-/tmp}/partition-review-diff.XXXXXX")" || { MS_WHY="mktemp failed"; return 1; }
+  trap 'rm -rf "$T"' EXIT
+  CFG="$(cd "$(dirname "$0")" && pwd)/artifact-path-config.sh"
+  [ -f "$CFG" ] || { MS_WHY="$CFG is absent, so the scan roots cannot be read"; return 1; }
+  bash "$CFG" --scan-roots --root "$WT_ABS" > "$T/roots" 2>/dev/null && grep -q . "$T/roots" \
+    || { MS_WHY="artifact-path-config.sh --scan-roots --root $WT_ABS printed no scan root"; return 1; }
+  return 0
+}
+full_sha_ok() { case "$1" in *[!0-9a-f]*|"") return 1 ;; esac; [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]; }
+
+# ---- --route (header: THE RECORD-ONLY ROUTE) --------------------------------------------------------
+# The classes that route. A subset of code-reviewer.md's template set (I129 binds the two).
+ROUTE_CLASSES="EVIDENCE BOOKKEEPING"
+route_mode() {
+  full() { printf 'FULL: %s\n' "$*"; exit 1; }
+  [ "$#" -eq 3 ] || [ "$#" -eq 5 ] || full "usage: partition-review-diff.sh --route <worktree> <pass M-1 review file> <frozen-sha> [--exclude-captures <file>]"
+  RW="$1"; RP="$2"; RS="$3"; RX=""
+  if [ "$#" -eq 5 ]; then
+    [ "$4" = --exclude-captures ] || full "unknown argument $4"
+    RX="$5"; [ -f "$RX" ] && [ -r "$RX" ] || full "--exclude-captures file $RX is not a readable file"
+  fi
+  [ -f "$RP" ] && [ -r "$RP" ] || full "prior review $RP is not a readable file"
+  mode_setup "$RW" || full "$MS_WHY"
+  full_sha_ok "$RS" || full "frozen sha '$RS' is not a full lowercase hex object name"
+  RS_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${RS}^{commit}")" || full "frozen sha $RS names no commit in $WT_ABS"
+  # (a) the classes, through the sibling's own reader of the prior's findings.
+  VCF="$(cd "$(dirname "$0")" && pwd)/validate-carried-findings.sh"
+  [ -f "$VCF" ] || full "$VCF is absent, so the prior's classes cannot be read"
+  bash "$VCF" --classes "$RP" > "$T/classes" 2> "$T/classes.err" || full "validate-carried-findings.sh --classes $RP exited non-zero: $(head -1 "$T/classes.err")"
+  nfind="$(grep -c . "$T/classes")" || nfind=0
+  [ "$nfind" -ge 1 ] || full "$RP carries no Critical or Important finding; a re-review with nothing to route is a full review"
+  TABC="$(printf '\t')"
+  while IFS="$TABC" read -r rc_ rd_; do
+    case " $ROUTE_CLASSES " in
+      *" $rc_ "*) ;;
+      *) case "$rc_" in
+           -) full "the prior finding '$rd_' carries no Class line" ;;
+           *) full "the prior finding '$rd_' is Class $rc_, not one of $ROUTE_CLASSES" ;;
+         esac ;;
+    esac
+  done < "$T/classes"
+  # (b) the delta guard.
+  shas="$(awk '
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { f = 0; next }
+    !f && /^[ \t]*(```|~~~)/ { f = 1; next }
+    f { next }
+    /^reviewed-sha:/ { v = $0; sub(/^reviewed-sha:[ \t]*/, "", v); gsub(/[`\r \t]/, "", v); print v }' "$RP" | LC_ALL=C sort -u)"
+  nsha="$(printf '%s\n' "$shas" | grep -c .)" || nsha=0
+  [ "$nsha" -eq 1 ] || full "$RP carries $nsha distinct reviewed-sha value(s) outside a fence; the delta needs exactly one"
+  case "$shas" in *[!0-9a-f]*) full "the prior reviewed-sha '$shas' is not a hex object name" ;; esac
+  [ "${#shas}" -ge 7 ] || full "the prior reviewed-sha '$shas' is too short to resolve"
+  PS_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${shas}^{commit}")" || full "the prior reviewed-sha $shas names no commit in $WT_ABS"
+  git -C "$WT_ABS" merge-base --is-ancestor "$PS_FULL" "$RS_FULL" || full "the prior reviewed-sha $PS_FULL is not an ancestor of $RS_FULL (a rebase or force-push); the delta is not this rework"
+  git -C "$WT_ABS" -c core.quotePath=false diff --name-status --no-renames --no-textconv --no-ext-diff \
+    "${PS_FULL}..${RS_FULL}" > "$T/delta" 2>/dev/null || full "git diff ${PS_FULL}..${RS_FULL} failed in $WT_ABS"
+  grep -q . "$T/delta" || full "the delta ${PS_FULL}..${RS_FULL} is empty; nothing reworked is nothing to route"
+  : > "$T/xcap"; [ -z "$RX" ] || cp "$RX" "$T/xcap" || full "cannot read $RX"
+  awk -F'\t' "$CODE_CLASS_AWK" "$T/roots" "$T/xcap" "$T/delta" > "$T/code" || full "classifying the delta failed"
+  ncode="$(grep -c . "$T/code")" || ncode=0
+  [ "$ncode" -eq 0 ] || full "the delta ${PS_FULL:0:12}..${RS_FULL:0:12} changes $ncode code path(s), first $(awk -F'\t' 'NR == 1 { print $2 }' "$T/code"); a rework that edits code or tests is re-reviewed in full whatever the findings' classes"
+  printf 'ROUTE: %s Critical/Important finding(s), every one %s; the delta %s..%s (%s path(s)) carries no code path\n' \
+    "$nfind" "$(printf '%s' "$ROUTE_CLASSES" | sed 's/ /|/g')" "${PS_FULL:0:12}" "${RS_FULL:0:12}" "$(grep -c . "$T/delta")"
+  exit 0
+}
+
+# ---- --gate1-rerun (header: RULE A) -----------------------------------------------------------------
+gate1_rerun_mode() {
+  GW=""; GB=""; GS=""; GX=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --exclude-captures) [ "$#" -ge 2 ] || refuse "--exclude-captures needs a file"; GX="$2"; shift 2 ;;
+      --*) refuse "unknown flag $1" ;;
+      *) if [ -z "$GW" ]; then GW="$1"; elif [ -z "$GB" ]; then GB="$1"; elif [ -z "$GS" ]; then GS="$1"; else refuse "unexpected argument $1"; fi; shift ;;
+    esac
+  done
+  [ -n "$GS" ] || refuse "usage: partition-review-diff.sh --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
+  [ -z "$GX" ] || { [ -f "$GX" ] && [ -r "$GX" ]; } || refuse "--exclude-captures file $GX is not a readable file"
+  mode_setup "$GW" || refuse "$MS_WHY"
+  full_sha_ok "$GS" || refuse "frozen sha '$GS' is not a full lowercase hex object name"
+  GS_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${GS}^{commit}")" || refuse "frozen sha $GS names no commit in $WT_ABS"
+  GB_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${GB}^{commit}")" || refuse "base '$GB' names no commit in $WT_ABS"
+  git -C "$WT_ABS" merge-base --is-ancestor "$GB_FULL" "$GS_FULL" || refuse "base $GB_FULL is not an ancestor of $GS_FULL"
+  git -C "$WT_ABS" -c core.quotePath=false diff --name-status --no-renames --no-textconv --no-ext-diff \
+    "${GB_FULL}..${GS_FULL}" > "$T/delta" 2>/dev/null || refuse "git diff ${GB_FULL}..${GS_FULL} failed in $WT_ABS"
+  : > "$T/xcap"; [ -z "$GX" ] || cp "$GX" "$T/xcap" || refuse "cannot read $GX"
+  awk -F'\t' "$CODE_CLASS_AWK" "$T/roots" "$T/xcap" "$T/delta" > "$T/code" || refuse "classifying the range failed"
+  added="$(awk -F'\t' "$TEST_NAME_AWK"' $1 == "A" && is_test_name($2) { print $2; exit }' "$T/code")"
+  if [ -n "$added" ]; then
+    printf 'GATE1-RERUN: the range %s..%s adds the test file %s\n' "${GB_FULL:0:12}" "${GS_FULL:0:12}" "$added"; exit 0
+  fi
+  exec_n=0; first=""
+  while IFS="$(printf '\t')" read -r st p; do
+    [ -n "$p" ] || continue
+    git -C "$WT_ABS" diff -U0 --no-renames --no-textconv --no-ext-diff "${GB_FULL}..${GS_FULL}" -- "$p" > "$T/hunks" 2>/dev/null \
+      || refuse "git diff -U0 of $p failed"
+    if grep -q '^Binary files ' "$T/hunks"; then exec_n=$((exec_n + 1)); first="${first:-$p}"; continue; fi
+    awk '/^@@ / { split($2, o, ","); split($3, n, ","); os = substr(o[1], 2) + 0; oc = (o[2] == "" ? 1 : o[2] + 0)
+                  ns = substr(n[1], 2) + 0; nc = (n[2] == "" ? 1 : n[2] + 0)
+                  for (i = 0; i < oc; i++) print "O\t" os + i; for (i = 0; i < nc; i++) print "N\t" ns + i }' "$T/hunks" > "$T/changed"
+    lang="$(lang_of "$p")"
+    : > "$T/codelines"
+    if [ "$st" != A ]; then git -C "$WT_ABS" show "${GB_FULL}:$p" 2>/dev/null | PR_LANG="$lang" awk "$LINE_CODE_AWK" | awk '{ printf "O\t%s\n", $0 }' >> "$T/codelines"; fi
+    if [ "$st" != D ]; then git -C "$WT_ABS" show "${GS_FULL}:$p" 2>/dev/null | PR_LANG="$lang" awk "$LINE_CODE_AWK" | awk '{ printf "N\t%s\n", $0 }' >> "$T/codelines"; fi
+    k="$(awk 'FNR == NR { C[$0] = 1; next } ($0 in C) { n++ } END { print n + 0 }' "$T/codelines" "$T/changed")"
+    if [ "$k" -gt 0 ]; then exec_n=$((exec_n + k)); first="${first:-$p}"; fi
+  done < "$T/code"
+  ncode="$(grep -c . "$T/code")" || ncode=0
+  if [ "$exec_n" -gt 0 ]; then
+    printf 'GATE1-RERUN: the range %s..%s changes %s non-blank, non-comment, non-docstring line(s) in code or test paths, first %s\n' \
+      "${GB_FULL:0:12}" "${GS_FULL:0:12}" "$exec_n" "$first"; exit 0
+  fi
+  printf 'GATE1-SKIP: the range %s..%s adds no test file and changes no code or test line outside blanks, comments and docstrings (%s code path(s) read, %s path(s) in the range)\n' \
+    "${GB_FULL:0:12}" "${GS_FULL:0:12}" "$ncode" "$(grep -c . "$T/delta")"
+  exit 0
+}
 
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
   --map) shift ;;
+  --route) shift; route_mode "$@" ;;
+  --gate1-rerun) shift; gate1_rerun_mode "$@" ;;
   *) refuse "$USAGE" ;;
 esac
 

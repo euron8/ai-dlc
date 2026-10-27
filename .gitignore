@@ -47,3 +47,7 @@ _bmad-output/
 .claude/rules/**
 !.claude/rules/**/
 !.claude/rules/**/*.md
+
+# Compiled Python bytecode: never tracked.
+__pycache__/
+*.pyc
