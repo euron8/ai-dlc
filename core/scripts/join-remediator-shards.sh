@@ -563,6 +563,20 @@ SLEOF
   fi
 fi
 
+# --- THE DISPOSITION KEY (BL-823). ONE predicate, read by every site that recognises the key: src_check,
+# contract_check (whose `dfull` BADDISP reads), checks_field's no-edit-line and repaired counts, the
+# --escalations entry count, part_cites and esc_cites. Each awk takes it as `-v DK="$DISP_KEY_ERE"` and
+# tests `$0 ~ DK`; the grep takes it as its pattern. No site spells the key itself, so none can drift.
+# The key is recognised LOWERCASE in any form, as before, OR in ANY CASE on a LIST ITEM. A capitalised
+# column-0 line is a SUMMARY, never a key: measured over graph main 91a665334 (1638 committed repair,
+# fold and shard records under planning-artifacts), 7565 lowercase key lines, every one a list item, and
+# 7 capitalised lines, none a list item -- s292 product-brief-repair-p1:7 and research-repair-p1:6
+# (`**Disposition:** 4 repaired / 0 escalated.`), s302 architecture-repair-p1:424 (prose), s304
+# derivation-hygiene-repair-p4:11 and s315 gate-planning-repair-p2:7, :56 and :100. Folding case on
+# every line would read those as keys: a summary inside an entry overwrites its disposition. No
+# backslash may enter this value: `awk -v` strips one level of escaping.
+DISP_KEY_ERE='^([[:space:]-]*[*_`]*disposition|[[:space:]]*-[[:space:]]*[*_`]*[Dd][Ii][Ss][Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn])[*_`]*:'
+
 # --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
 # pair resolves against the sprint's seat files -- never the id alone, which collides across seats.
 SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
@@ -590,14 +604,14 @@ src_ids() {
 src_check() {
   local sd="$1" sdp ids toks; shift
   sdp="$(cd "$sd" 2>/dev/null && pwd -P)" || sdp="$sd"
-  toks="$(awk '
+  toks="$(awk -v DK="$DISP_KEY_ERE" '
     function flush() { if (disp && !nsrc && !ruled) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0; ruled = 0 }
     FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
     /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { disp = 1; v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
+    $0 ~ DK { disp = 1; v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
       sub(/[^a-z-].*$/, "", v); ruled = (v == "operator-ruling"); next }
     /^[[:space:]-]*[*_`]*source[*_`]*:/ {
       nsrc++; v = $0; sub(/^[^:]*:/, "", v); n = 0
@@ -991,7 +1005,7 @@ src_probe() {
 #   SETASIDE\t<rec>\t<entry>\t<line>
 contract_check() {
   local srcm="$1"; shift
-  awk -v src="$srcm" '
+  awk -v src="$srcm" -v DK="$DISP_KEY_ERE" '
     BEGIN { SIBNA["n/a (insertion)"] = 1; SIBNA["n/a (deletion)"] = 1
             SIBNA["n/a (section shard; re-checked by the serial remediator after assembly)"] = 1
             VOC["repaired"] = 1; VOC["escalated"] = 1; VOC["skipped"] = 1; VOC["not-reproduced"] = 1
@@ -1083,7 +1097,7 @@ contract_check() {
     /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur); h = toupper($0); hl = FNR
                  sev = (h ~ /(^|[^A-Z])(CRITICAL|MAJOR)([^A-Z]|$)/); next }
     /^[ \t]*$/ { inclaim = 0; next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+    $0 ~ DK {
       v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v)
       split(v, a, /[^a-z]/); disp = a[1]; draw = v; gsub(/[\t\r]/, " ", draw); sub(/[ \t]+$/, "", draw); dfull = v; sub(/[^a-z-].*$/, "", dfull); inclaim = 0; next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
@@ -1459,7 +1473,7 @@ CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-compl
 # An entry dispositioned repaired or operator-ruling that carries NO `edit:` line prints
 # "EDT\t(no edit: line)": an absent value is not a no-edit value, so it cannot acquit key 2 either.
 checks_field() {
-  awk -v rec="$1" -v dok="${CF_DEFER:-1}" -v nrl="${CF_LINES:-0}" -v ed="${CF_EDITS:-0}" '
+  awk -v rec="$1" -v dok="${CF_DEFER:-1}" -v nrl="${CF_LINES:-0}" -v ed="${CF_EDITS:-0}" -v DK="$DISP_KEY_ERE" '
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
@@ -1496,7 +1510,7 @@ checks_field() {
       if (edp ~ /^(repaired|operator-ruling)/ && !esaw) print "EDT\t(no edit: line)"
       nev = 0; edp = ""; esaw = 0 }
     ed == 1 && /^#+[ \t]/ { eflush() }
-    ed == 1 && tolower($0) ~ /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { edp = val() }
+    ed == 1 && $0 ~ DK { edp = val() }
     ed == 1 && /^[[:space:]-]*[*_`]*edit[*_`]*:/ { esaw = 1; v = val(); if (!kw(v, "n/a|none") || v ~ /^n\/a[ \t]*\((insertion|deletion)\)/) ev[++nev] = v; next }
     rec == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { sawe = 0; brk("M"); cm[nk] = $0; sub(/^<!-- shard: /, "", cm[nk]); sub(/ -->.*$/, "", cm[nk]); next }
     rec == 1 && /^repair-complete:/ { tl[nk] = FNR; tx[nk] = $0; gsub(/[\t\r]/, " ", tx[nk]); sub(/[ ]+$/, "", tx[nk])
@@ -1510,7 +1524,7 @@ checks_field() {
       else if (kw(v, "deferred to the join")) { cd[nk]++; if (!dok) cb[nk] = cb[nk] " derivations: deferred in a files-mode part" }
       else cb[nk] = cb[nk] " derivations: " v
       next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
+    $0 ~ DK { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
       if (ed == 1) { eflush(); exit }
       b = FILENAME; sub(/.*\//, "", b)
@@ -1761,7 +1775,7 @@ fi
 # elicitation or gate repair after its serial pass appended -- where --sources refuses for want of a
 # party-mode/s<N> directory. Open escalations are reported, never a refusal.
 if [ "$SRCMODE" = 2 ]; then
-  n_disp="$(grep -c -E '^[[:space:]-]*[*_`]*disposition[*_`]*:' "$SRC_REC")" || n_disp=0
+  n_disp="$(grep -c -E -e "$DISP_KEY_ERE" "$SRC_REC")" || n_disp=0
   [ "$n_disp" -gt 0 ] || die "${SRC_REC} carries no entry with a 'disposition:' line; no escalation can be read"
   record_tail "$@"
 fi
@@ -1955,10 +1969,10 @@ fi
 # entries carry a path on `edit:`.
 part_cites() {
   local _toks _t
-  _toks="$(awk '
+  _toks="$(awk -v DK="$DISP_KEY_ERE" '
     function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
     /^#+[ \t]/ { emit(); next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+    $0 ~ DK {
       disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       line = $0; sub(/^[^:]*:/, "", line)
@@ -1994,14 +2008,14 @@ resolve_cites() {
 # and "<part> <heading>\t-" for one naming none. The heading is contract_check's own `cur` spelling,
 # so the key equals the tail of its ESCALATED: line; a key that does not match routes to the fan-in.
 esc_cites() {
-  awk -v pt="${1##*/}" '
+  awk -v pt="${1##*/}" -v DK="$DISP_KEY_ERE" '
     function trim(v) { gsub(/^[ \t`]+|[ \t`]+$/, "", v); return v }
     function emit(   i) { if (disp ~ /^escalat/) { if (nt == 0) print pt " " cur "\t-"; for (i = 1; i <= nt; i++) print pt " " cur "\t" tk[i] }
                           nt = 0; disp = "" }
     /^[ \t]*(```|~~~)/ { fence = !fence; next }
     fence { next }
     /^#+[ \t]/ { emit(); cur = $0; sub(/^#+[ \t]+/, "", cur); gsub(/[\t\r]/, " ", cur); cur = trim(cur); next }
-    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ {
+    $0 ~ DK {
       disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       line = $0; sub(/^[^:]*:/, "", line)

@@ -1,4 +1,5 @@
 core/scripts/validate-spawn-ledger.sh
+core/fixtures/lib/
 core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
 core/skills/ai-dlc/steps/gate-validation.md

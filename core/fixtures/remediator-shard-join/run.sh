@@ -971,8 +971,28 @@ if p_nlnoedit_cap "$JOIN"; then
 else
   bad "NL8c: a capitalised \`Disposition: Repaired\` entry with no edit: line was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
 fi
-NL_SED='s/^    ed == 1 && tolower(\$0) ~ \/\^/    ed == 1 \&\& \/^/'
+NL_SED='s/^    ed == 1 && \$0 ~ DK {/    ed == 1 \&\& \/^[[:space:]-]*[*_`]*disposition[*_`]*:\/ {/'
 nl_score h p_nlnoedit_cap "the eflush disposition key match reverted to case-sensitive"
+
+# ---- BL-823: one disposition-key predicate (DISP_KEY_ERE) at every site. A capitalised LIST ITEM is the key, so an
+# out-of-set value under it is refused BADDISP; a capitalised column-0 summary is not, so it neither refuses nor
+# overwrites the entry's disposition (graph s292's `**Disposition:** 4 repaired / 0 escalated.`).
+p_dispcap "$JOIN" && ok "DK1: \`- **Disposition:** frobnicated\` in era -> REFUSED BADDISP by name, not NODISP" \
+  || bad "DK1: a capitalised list-item disposition outside the vocabulary was not refused BADDISP (rc=$RC): $(grep -m2 -E 'REFUSED|JOINED|ESCALATED' "$JO")"
+p_dispsummary "$JOIN" && ok "DK2: a column-0 \`**Disposition:** 4 repaired / 0 escalated.\` summary, in the preamble and inside an in-era entry -> rc 0, nothing refused" \
+  || bad "DK2: a capitalised summary line was read as a disposition key (rc=$RC): $(grep -m2 -E 'REFUSED|ESCALATED' "$JO")"
+# DKm: contract_check's key (the reader that sets the `dfull` BADDISP reads) restored to the case-sensitive literal,
+# anchored inside contract_check because part_cites and esc_cites open with the same `$0 ~ DK {` line.
+_dkm="$(nl_mut dk '/^contract_check() {$/,/^}$/ s/^    \$0 ~ DK {$/    \/^[[:space:]-]*[*_`]*disposition[*_`]*:\/ {/')"
+if [ -z "$_dkm" ]; then bad "DKm: FIXTURE STALE -- the mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+elif [ "$(grep -c '^    \$0 ~ DK {$' "$_dkm")" -ne "$(( $(grep -c '^    \$0 ~ DK {$' "$JOIN") - 1 ))" ]; then
+  bad "DKm: the mutation did not edit exactly one site (contract_check's) -- the anchor is not unique"
+else
+  p_dispsummary "$_dkm"; _c=$RC
+  if [ "$_c" -ne 0 ] || ! has "$JO" "ESCALATED-COUNT: 0"; then bad "DKm: the near-miss control DK2 did not pass under the mutant copy (rc=$_c) -- the copy did not run or the arms are entangled"
+  elif p_dispcap "$_dkm"; then bad "DKm: SURVIVED -- contract_check's case-sensitive key still refused the capitalised list item BADDISP"
+  else ok "DKm contract_check's key reverted to case-sensitive: KILLED by [DK1] (rc=$RC, no BADDISP for F-2), DK2 still clean"; fi
+fi
 
 # ---- BL-807, claim 2: an --until later than the join's own clock + 120s is refused; one inside the slack proceeds.
 p_untilfut "$JOIN" 3600

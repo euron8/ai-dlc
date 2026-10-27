@@ -112,12 +112,52 @@ done
 rm -rf "$JW"
 echo "  [J0] coverage join: $ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; this shard runs {$MINE}"
 
-read -r DIST BASE THEIRS CONS < <(bash "$DIR/seed.sh")
+# The seed's exit status is its only failure signal and a process substitution discards it, so a
+# failed seed used to arrive as four empty variables and `rm -rf "$(dirname "")"` in the trap below.
+# Capture it, and check the four fields and the mktemp prefix BEFORE that trap is armed.
+# SG_SEED overrides the seed path for the seed-fails mutant; unset, it is the shipped seed.
+seed_out="$(bash "${SG_SEED:-$DIR/seed.sh}")" || { echo "FIXTURE BROKEN: seed exited $?" >&2; exit 2; }
+read -r DIST BASE THEIRS CONS <<< "$seed_out"
+for _f in DIST BASE THEIRS CONS; do
+  [ -n "${!_f}" ] || { echo "FIXTURE BROKEN: seed printed no value for $_f" >&2; exit 2; }
+done
+case "$DIST" in
+  "${TMPDIR:-/tmp}"/self-update-gate-fx-*/dist) [ -d "$DIST" ] || { echo "FIXTURE BROKEN: seed's DIST is not a directory: $DIST" >&2; exit 2; } ;;
+  *) echo "FIXTURE BROKEN: seed's DIST is not under ${TMPDIR:-/tmp}/self-update-gate-fx-*: $DIST" >&2; exit 2 ;;
+esac
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
 FAILURES=0
 ASSERTIONS=0
 echo "self-update-gate fixture"
 echo
+# BL-827 MUTANT: a seed that exits 1 must read FIXTURE BROKEN: seed exited and exit 2, and not fall
+# through to assertions on four empty variables. It drives THIS fixture whole, with SG_SEED pointing at
+# a failing seed, so the run reaches the seed check past the real J0 join and the real sibling files;
+# a copied run.sh alone would die at J0 before the seed was read and pass for the wrong reason. The
+# control is a seed that exits 0 and prints junk: the same harness must then NOT print "seed exited",
+# so the text is the failing status and not something the harness always emits.
+if [ "$GROUP" = a ] && [ -z "${SG_SEED:-}" ]; then
+  _sm="$(mktemp -d "${TMPDIR:-/tmp}/bl827-seed-XXXXXX")"
+  printf '#!/bin/sh\nexit 1\n' > "$_sm/fail.sh"
+  printf '#!/bin/sh\necho garbage\n' > "$_sm/junk.sh"
+  _smo="$(SG_SEED="$_sm/fail.sh" bash "$DIR/run.sh" --group a 2>&1)"; _smr=$?
+  _sco="$(SG_SEED="$_sm/junk.sh" bash "$DIR/run.sh" --group a 2>&1)"; _scr=$?
+  rm -rf "$_sm"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$_smr" = 2 ] && grep -qF 'FIXTURE BROKEN: seed exited' <<< "$_smo"; then
+    printf '  ok    %-22s a seed that exits 1 reads FIXTURE BROKEN: seed exited, exit 2\n' "seed-fails"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s rc=%s want 2 and the text FIXTURE BROKEN: seed exited\n' "seed-fails" "$_smr"
+  fi
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$_scr" = 2 ] && grep -qF 'FIXTURE BROKEN' <<< "$_sco" && ! grep -qF 'seed exited' <<< "$_sco"; then
+    printf '  ok    %-22s a seed that exits 0 with junk reads BROKEN without seed exited (the harness discriminates)\n' "seed-fails-ctl"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s rc=%s want 2, FIXTURE BROKEN and no seed exited\n' "seed-fails-ctl" "$_scr"
+  fi
+fi
 
 SS="$(dirname "$DIST")/ss"; rm -rf "$SS"
 mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps" "$SS/dist/core/rules"

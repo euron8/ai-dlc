@@ -9,3 +9,4 @@ core/schemas/pause-routing.json
 core/skills/ai-dlc/steps/handoff.md
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/skills/ai-dlc/steps/retro.md
+core/fixtures/lib/

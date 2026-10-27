@@ -52,8 +52,38 @@ story_awk() { # <world> <awk program> -> rewrite the story in place; 1 when it c
   if cmp -s "$1/.s" "$1/$STORY"; then rm -f "$1/.s"; return 1; fi
   mv "$1/.s" "$1/$STORY"
 }
+# BL-833/BL-834 RED LINE cells, in vector order, each `<cell>:<the token its line cites>`. Every token climbs
+# above the toplevel (`../`), so arm (b) is reached with no tracked path, and every token is DISTINCT, because
+# the validator dedupes its refusals and WARNs per token and run.sh attributes each REFUSED line to a cell by
+# its token alone. No basename carries a red/mut/mutation word (the basename clause cannot rescue a verdict)
+# or three all-caps hyphenated segments (the blanking cannot reach it), except rvcap's, which is the point.
+# rvid: graph s320 3.3:77's shape, `RED` only as a segment of an all-caps hyphenated identifier -- NOT
+# refused. rvred: a standalone `RED`; rvproven: `PROVEN`; rvmut: `Mutation-RED capture:`, the producer's
+# own wording (dev.md) -- each REFUSED red-untracked. rvmix: the identifier AND a standalone `RED` on one
+# line -- REFUSED, so blanking the identifier is not blanking the line. rvnone: no verdict word -- NOT
+# refused. rvcap: `Mutation-RED capture:` citing a capture whose basename is itself an all-caps hyphenated
+# identifier -- REFUSED, pinning that the blanking runs on a copy of the line.
+RVCELLS='rvid:../test-results/ident.txt rvred:../test-results/word.txt rvproven:../test-results/proven.txt rvmut:../test-results/capture.txt rvmix:../test-results/mixed.txt rvnone:../test-results/plain.txt rvcap:../test-results/S320-3-3-X.txt'
+rv_tok() { # <cell> -> its token
+  local c
+  for c in $RVCELLS; do [ "${c%%:*}" = "$1" ] && { printf '%s' "${c#*:}"; return 0; }; done
+  return 1
+}
+rv_line() { # <cell> -> the story line for that cell
+  local t
+  t="$(rv_tok "$1")" || return 1
+  case "$1" in
+    rvid)  printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` closes only when the transcribed run passes, `%s`.\n' "$t" ;;
+    rvred) printf 'Self-check: RED on revert, capture `%s`.\n' "$t" ;;
+    rvproven) printf 'Self-check: PROVEN, capture `%s`.\n' "$t" ;;
+    rvmut|rvcap) printf 'Mutation-RED capture: `%s`.\n' "$t" ;;
+    rvmix) printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` stays open; RED on revert, capture `%s`.\n' "$t" ;;
+    rvnone) printf 'Close-out: the transcribed run passes, `%s`.\n' "$t" ;;
+    *) return 1 ;;
+  esac
+}
 build_world() { # <dir> <variant>
-  local w="$1" v="$2" b
+  local w="$1" v="$2" b c
   mkdir -p "$w/tests" "$w/test-results" "$w/stories" "$w/tools" || return 2
   gitw "$w" init -q || return 2
   printf 'test-results/\n' > "$w/.gitignore"
@@ -244,22 +274,9 @@ EOS
              mkdir -p "$w/docs" || return 2
              printf '# Conventions\n\nThe canonical full-collection run is `tox -e all`.\n' > "$w/docs/coding-conventions.md"
            fi ;;
-    # BL-833: which LINE marks a capture RED. Each world is CLEAN plus one line citing `../test-results/x.txt`,
-    # a spelling that climbs above the toplevel (so arm (b) is reached with no tracked path) under a basename
-    # carrying no red/mut/mutation word (so the basename clause cannot rescue the verdict under any grammar).
-    # rvid: graph s320 3.3:77's shape, `RED` only as a segment of an all-caps hyphenated identifier -- NOT
-    # refused. rvred: a standalone `RED`; rvproven: `PROVEN`; rvmut: `Mutation-RED capture:`, the producer's
-    # own wording (dev.md) -- each REFUSED red-untracked. rvmix: the identifier AND a standalone `RED` on one
-    # line -- REFUSED, so blanking the identifier is not blanking the line. rvnone: no verdict word -- NOT
-    # refused. rvcap: `Mutation-RED capture:` citing a capture whose basename is itself an all-caps hyphenated
-    # identifier -- REFUSED, pinning that the blanking runs on a copy of the line. Driven by run.sh, not CASES.
-    rvid)  printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` closes only when the transcribed run passes, `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
-    rvred) printf 'Self-check: RED on revert, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
-    rvproven) printf 'Self-check: PROVEN, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
-    rvmut) printf 'Mutation-RED capture: `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
-    rvmix) printf 'Close-out: `CO-S318-SERVER-TESTS-COMMITTED-FIXTURE-NOT-STALE-RED-AT-BASE-A36B15CBE-UNOWNED` stays open; RED on revert, capture `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
-    rvcap) printf 'Mutation-RED capture: `../test-results/S320-3-3-X.txt`.\n' >> "$w/$STORY" ;;
-    rvnone) printf 'Close-out: the transcribed run passes, `../test-results/x.txt`.\n' >> "$w/$STORY" ;;
+    # BL-833/BL-834: which LINE marks a capture RED. ONE world, CLEAN plus one line per RED LINE cell (rv_line
+    # below), each citing its own token from RVCELLS. Driven by run.sh, not CASES.
+    rvall) for c in $RVCELLS; do rv_line "${c%%:*}" >> "$w/$STORY" || return 2; done ;;
     fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
@@ -313,13 +330,18 @@ verdict() {
   # A world carrying `.LC` is driven under that locale: with no locale set (`env -i`, or an
   # inherited C locale) BSD awk never aborts, so a world about the abort must force one itself.
   [ -f "$w/.LC" ] && lc="$(cat "$w/.LC")"
+  # One line per validator invocation: the RED LINE block's count arm (and BL-834's receipt) read it.
+  printf '1\n' >> "$WORK/.vcalls"
   if [ "$m" = s ]; then o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" --strategy "$(cat "$w/.T")" "$STORY" 2>"$e")"; rc=$?
   else o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
   k="$(awk '/^REFUSED /{print $2}' <<<"$o" | sort | tr '\n' ',')"
-  case "$o" in *"WARN head-tree test-results/full.txt"*) k="$k:W" ;; esac
-  case "$o" in *"SKIP STATUS ("*) k="$k:S" ;; esac
-  grep -qv '^validate-handoff-evidence: ' "$e" && k="$k:E"
-  printf '%s:%s' "$rc" "$k"
+  # The program-level flags, kept apart so a caller sharing this shell (rv_vec) can broadcast them.
+  VERDICT_FLAGS=""
+  case "$o" in *"WARN head-tree test-results/full.txt"*) VERDICT_FLAGS="$VERDICT_FLAGS:W" ;; esac
+  case "$o" in *"SKIP STATUS ("*) VERDICT_FLAGS="$VERDICT_FLAGS:S" ;; esac
+  grep -qv '^validate-handoff-evidence: ' "$e" && VERDICT_FLAGS="$VERDICT_FLAGS:E"
+  VERDICT_OUT="$o"; VERDICT_RC="$rc"
+  printf '%s:%s%s' "$rc" "$k" "$VERDICT_FLAGS"
 }
 # Cases 10-13 are appended so the 1-9 indices every mutant below names stay put, and 14-23 after
 # them for the same reason.
@@ -438,3 +460,97 @@ mkmut() {
   mv "$m.tmp" "$m"
   printf '%s\n' "$t"
 }
+
+# --- BL-833 RED LINE (rv_*) -----------------------------------------------------------------------
+# Which story LINE marks its captures RED. ONE world (rvall) carries every RVCELLS line, so each program
+# is driven ONCE and its output is read per cell by TOKEN: a cell is refused when a `REFUSED red-untracked
+# <its token>:` line names it. BL-834: the block was 7 worlds x 4 programs = 28 validator calls; it is 4.
+# Cells, in order: rvid quiet; rvred, rvproven, rvmut refused red-untracked; rvmix refused; rvnone quiet;
+# rvcap refused (world.sh's RVCELLS comment says why each). Each quiet cell is the near-miss of the refused
+# cell beside it, one property apart. Mutants: rv-m1 the pre-fix grammar on the unblanked line (rvid
+# refuses), rv-m2 a `-`-bounded grammar on the unblanked line (rvmut and rvcap go quiet), rv-m3 the
+# blanking applied to `line` itself (rvcap, whose capture basename is an identifier, is destroyed and goes
+# quiet). The sourcing script defines WORK, HECTL, ok and bad; BL-834's receipt drives this function alone.
+rv_vec() { # <script> -> "<cell>=<rc>:<kinds><flags> ..." in RVCELLS order, plus a STRAY/RC/NOWARN token
+  # on any program-level violation, which no want string carries, so the comparison fails and names it.
+  # Runs inside `$( )`: a `bad` here would be lost, so every finding travels in the string.
+  local s="$1" c t prc o fl out="" any=0 crc k refd
+  verdict "$s" "$WORK/world-rvall" h > /dev/null
+  prc="$VERDICT_RC"; o="$VERDICT_OUT"
+  # :W (the clean story's `WARN head-tree test-results/full.txt`), :S and :E are facts about the ONE
+  # program run, not about any line, so every cell carries the same flags: a broadcast, not a per-cell read.
+  fl="$VERDICT_FLAGS"
+  # The refused tokens, read exactly ($3 with its trailing colon cut). Any REFUSED line that is not
+  # red-untracked, or names no cell token, is a STRAY: dropping it would hide a refusal in the clean half.
+  refd="$(awk '/^REFUSED /{ t = $3; sub(/:$/, "", t); print $2 " " t }' <<<"$o")"
+  while read -r k t; do
+    [ -n "$k" ] || continue
+    if [ "$k" != red-untracked ] || ! case " $RVCELLS " in *":$t "*) true ;; *) false ;; esac; then out="$out STRAY[$k:$t]"; fi
+  done <<<"$refd"
+  for c in $RVCELLS; do
+    t="${c#*:}"
+    if grep -qxF "red-untracked $t" <<<"$refd"; then any=1; k="red-untracked,"; crc=1
+    else k=""; crc=0
+      # The two cells quiet by design (rvid, rvnone) must show their line was PARSED: their own
+      # capture-unresolved WARN. Not asked of a cell a mutant silences: rv-m3 destroys rvcap's token.
+      case "${c%%:*}" in rvid|rvnone) grep -qF "WARN capture-unresolved $t: " <<<"$o" || out="$out NOWARN[${c%%:*}]" ;; esac
+    fi
+    case "$prc" in 0|1) ;; *) crc="$prc" ;; esac
+    out="$out ${c%%:*}=$crc:$k$fl"
+  done
+  # rc is 1 exactly when some cell refused.
+  case "$prc:$any" in 0:0|1:1) ;; *) out="$out RC[$prc:$any]" ;; esac
+  printf '%s' "${out# }"
+}
+rv_mutant() { # <name> <from> <to> <want> <label>
+  local m got nf nt
+  if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: red-line mutation '$1' matched nothing"; return; fi
+  # Applied: the mutant carries the replacement and no longer the original line.
+  nf="$(grep -cF -- "$2" "$m")" || nf=0; nt="$(grep -cF -- "$3" "$m")" || nt=0
+  if [ "$nf" != 0 ] || [ "$nt" != 1 ]; then bad "FIXTURE ERROR: red-line mutation '$1' did not apply (from x$nf, to x$nt)"; return; fi
+  got="$(rv_vec "$m")"
+  if [ "$got" = "$4" ]; then mutant_killed "${B_rv:-0}" "$1" "MUTATION '$1' killed, moving its own cell only: $5"
+  elif [ "$got" = "$RVWANT" ]; then bad "MUTATION '$1' SURVIVED -- $5"
+  else bad "MUTATION '$1' moved [$got], want [$4] -- the cells are entangled"; fi
+}
+rv_block() {
+  local rv_ok=1 c t n got T
+  # The tokens are pairwise distinct: two cells sharing one would merge into one refusal (the validator
+  # dedupes per token) and the reader could not tell them apart.
+  n="$(for c in $RVCELLS; do printf '%s\n' "${c#*:}"; done | sort | uniq -d | grep -c .)" || n=0
+  t="$(for c in $RVCELLS; do printf '%s\n' "${c#*:}"; done | grep -c .)" || t=0
+  if [ "$n" = 0 ] && [ "$t" = 7 ]; then ok "RED LINE: the 7 cell tokens are pairwise distinct"
+  else rv_ok=0; bad "RED LINE: the cell tokens are not 7 distinct tokens ($t tokens, $n duplicated) -- two cells would read as one"; fi
+  build_world "$WORK/world-rvall" rvall || { rv_ok=0; bad "FIXTURE BROKEN: could not seed git world 'rvall'"; }
+  # Seed control: no cell's capture, and not S320-3-3-X.txt, is tracked at .T, so no reading of a token
+  # resolves to a tracked capture and arm (b) is the only arm that can name it. Positive conjunct: the same
+  # probe DOES see the tracked test-results/full.txt, so its silence is not a probe that sees nothing.
+  T="$(cat "$WORK/world-rvall/.T" 2>/dev/null)"
+  gitw "$WORK/world-rvall" cat-file -e "${T:-x}:test-results/full.txt" 2>/dev/null || { rv_ok=0; bad "FIXTURE BROKEN: the rv seed probe cannot see the tracked test-results/full.txt"; }
+  for c in $RVCELLS S320-3-3-X.txt; do
+    t="${c#*:}"; t="${t##*/}"
+    gitw "$WORK/world-rvall" cat-file -e "${T:-x}:test-results/$t" 2>/dev/null && { rv_ok=0; bad "FIXTURE BROKEN: the rv world tracks test-results/$t"; }
+  done
+  [ "$rv_ok" -eq 1 ] || return 0
+  : > "$WORK/.vcalls"
+  RVWANT='rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W'
+  got="$(rv_vec "$HECTL")"
+  if [ "$got" = "$RVWANT" ]; then ok "RED LINE: a RED inside an all-caps hyphenated identifier does not mark its line RED; a standalone RED, PROVEN and Mutation-RED each refuse an outside-spelled capture red-untracked, an identifier beside a standalone RED still refuses, a line with no verdict word is quiet; rvid and rvnone each WARN capture-unresolved on their own token"; B_rv=1
+  else bad "RED LINE: want [$RVWANT] got [$got]"; fi
+  RVFIX='red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0'
+  rv_mutant rv-m1-old-grammar "$RVFIX" 'red = (line ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0' \
+    'rvid=1:red-untracked,:W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=1:red-untracked,:W' \
+    "the pre-fix grammar on the unblanked line: a hyphen-joined -RED- identifier refuses its capture"
+  rv_mutant rv-m2-hyphen-bound "$RVFIX" 'red = (line ~ /(^|[^A-Za-z-])(RED|PROVEN)([^A-Za-z-]|$)/) ? 1 : 0' \
+    'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=0::W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
+    "a hyphen-bounded grammar on the unblanked line: Mutation-RED no longer marks its capture RED (rvmut, and rvcap whose line is the same wording)"
+  rv_mutant rv-m3-blank-line 'line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)' 'line=$0; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", line); l2=line' \
+    'rvid=0::W rvred=1:red-untracked,:W rvproven=1:red-untracked,:W rvmut=1:red-untracked,:W rvmix=1:red-untracked,:W rvnone=0::W rvcap=0::W' \
+    "the blanking applied to the line itself instead of a copy: a capture whose basename is an all-caps hyphenated identifier is destroyed"
+  # One validator call per program: the fix and three mutants. rv_vec runs inside `$( )`, so the count
+  # travels through the file verdict appends to, never a shell variable.
+  n="$(grep -c . "$WORK/.vcalls")" || n=0
+  if [ "$n" = 4 ]; then ok "RED LINE: 4 validator invocations, one per program (the fix and three mutants)"
+  else bad "RED LINE: $n validator invocations in the block, want 4 (one per program)"; fi
+}
+# --- end BL-833 RED LINE --------------------------------------------------------------------------

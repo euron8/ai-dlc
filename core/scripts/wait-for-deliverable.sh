@@ -813,12 +813,15 @@ $MK_OUT
       [ -f "$MK_VAL" ] || { mk_rdrop_; mark_refuse "a record stating 'derivations: not replayed' or 'replayed <n>' is checked by validate-artifact-derivations.sh, which is not beside this script ($MK_VAL); reinstall ai-dlc."; }
       mk_n_="$(grep -c '^checks_field() {' "$MK_JOIN")" || mk_n_=0
       [ "$mk_n_" = 1 ] || { mk_rdrop_; mark_refuse "found $mk_n_ 'checks_field() {' definitions in $MK_JOIN (want exactly 1); reinstall ai-dlc."; }
+      # checks_field reads the join's one disposition-key predicate (BL-823), so it is extracted beside it.
+      mk_n_="$(grep -c '^DISP_KEY_ERE=' "$MK_JOIN")" || mk_n_=0
+      [ "$mk_n_" = 1 ] || { mk_rdrop_; mark_refuse "found $mk_n_ 'DISP_KEY_ERE=' definitions in $MK_JOIN (want exactly 1); reinstall ai-dlc."; }
       MK_PRB="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
       # The record AS THE JOIN WILL READ IT: this call's body and a provisional marker of this call's
       # token, so the segment that marker closes is the one this call seals (line numbers unchanged).
       { seal_body "$MK_SRC" "$MK_KEEP"; printf '%s%s sha=0%s%s\n' "$MARK_TOKEN" "$MK_F" "${MK_TAIL:+ }" "$MK_TAIL"; } > "$MK_PRB" \
         || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
-      MK_CF="$( eval "$(sed -n '/^checks_field() {/,/^}/p' "$MK_JOIN")" && CF_LINES=1 checks_field "$MK_REM" "$MK_PRB" | awk -F'\t' '$1 == "NRL" || $1 == "RPL"' )" \
+      MK_CF="$( eval "$(grep '^DISP_KEY_ERE=' "$MK_JOIN"; sed -n '/^checks_field() {/,/^}/p' "$MK_JOIN")" && CF_LINES=1 checks_field "$MK_REM" "$MK_PRB" | awk -F'\t' '$1 == "NRL" || $1 == "RPL"' )" \
         || { mk_rdrop_; mark_refuse "the join's checks_field could not read $MK_FILE."; }
       MK_NRL="$(printf '%s\n' "$MK_CF" | awk -F'\t' '$1 == "NRL" { print $2 }')"
       MK_RPL="$(printf '%s\n' "$MK_CF" | awk -F'\t' '$1 == "RPL" { l = $2 " " $3 } END { print l }')"

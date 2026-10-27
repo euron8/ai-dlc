@@ -510,6 +510,7 @@ gp-stop-repair-part|S|steps/_gate-procedures.md|## Auto-handoff evaluation (refe
 ho-stop-repair-part|S|steps/handoff.md|Execute this 5-step procedure in order:|**Resume is snapshot-driven.**|1. **Stop all in-flight teammates first.**|para|for seat, shard, cross and repair-part files
 rem-part-mark|R|remediator.md|## Contract|## The evidence contract|**Close your part with `--mark`.**|para|<lead engine>/wait-for-deliverable.sh --mark <part path> <step> remediator <shard> findings=<n>
 rem-render-before-mark|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator, or as the one unsharded remediator**|para|line BEFORE your `--mark-repair`, never after it
+rem-serial-replay|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|The two lines after each triple you write say which checks this dispatch ran.|para|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.
 gp-redispatch-fresh|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|`TaskStop` the resident remediator and send ONE fresh `Agent` dispatch
 gp-redispatch-never|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**A completed record is never reopened by `SendMessage`.**|para|Never resume the finished remediator with `SendMessage`
 r28-no-reopen|S|rule-bodies/rule-28.md||**A dispatched teammate reaches the lead with `SendMessage` `to: "main"`.**|- **Retracted or narrowed scope.**|para|re-dispatches it fresh
@@ -1021,6 +1022,7 @@ sts-esc-why|S|steps/stories-test-strategy.md|**Routing map|Absent any routing ta
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains||writes nowhere at that sha is REJECT, unless the|writes nowhere at that sha is a finding to note, unless the
 def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
 ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation, counts and `.zip` trace path in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
+rem-serial-replay|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|The two lines after each triple you write say which checks this dispatch ran.|para|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The record is replayed by `--mark` and `--mark-repair` themselves.
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1046,7 +1048,29 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 7 ] || bad "named: $n_named named mutant(s) read, wanted 7"
+[ "$n_named" -eq 8 ] || bad "named: $n_named named mutant(s) read, wanted 8"
+
+# --- 4a2. the serial remediator is never told --mark-repair replays for it ----------
+# The rem-serial-replay pin proves the replacement sentence is present; this arm proves the
+# opt-out it replaced is absent, keyed on the emitted clause in the flattened record-format
+# paragraph (the serial join runs BEFORE --mark-repair, so a `not replayed` it is offered is
+# refused). Both directions: the shipped file reads 0, and a copy with the old clause restored
+# reads 1, so a key that cannot match fails the control instead of passing.
+RSR="$ROLES_DIR/remediator.md"
+if [ -f "$RSR" ]; then
+  flatten "$RSR" "$M/rsr.flat.md"
+  rsr_re='`--mark` and `--mark-repair` then replay the record'
+  rsr_n="$(grep -cF -- "$rsr_re" "$M/rsr.flat.md")" || rsr_n=0
+  lreplace "$M/rsr.flat.md" "$M/rsr.mut.md" "and writes \`replayed <n>\` itself." "and writes \`replayed <n>\` itself. \`--mark\` and \`--mark-repair\` then replay the record themselves."
+  rsr_m="$(grep -cF -- "$rsr_re" "$M/rsr.mut.md")" || rsr_m=0
+  if [ "$rsr_m" -ge 1 ] && [ "$rsr_n" -eq 0 ]; then
+    ok "rem-serial-optout: absent from remediator.md (control: the restored old clause reads $rsr_m)"
+  else
+    bad "rem-serial-optout: real=$rsr_n mutant=$rsr_m (wanted 0 and >=1)"
+  fi
+else
+  bad "rem-serial-optout: remediator.md absent"
+fi
 
 # --- 4b. a join over seat or cross files passes --complete -----------------------
 # A seat or cross shard writes its file early and is finished only at its final `seat-complete:`

@@ -48,16 +48,18 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
-# need_base <flag> <mutant-name> -- a mutant's kill condition is a value the UNMUTATED arm it guards
-# would also print if it were failing, so a mutant is scored only when that arm PASSED in this run
-# (flag 1). Otherwise the "kill" is the seed failing, not the mutation: FIXTURE BROKEN, never ok.
-need_base() {
-  [ "$1" = 1 ] && return 0
-  bad "FIXTURE BROKEN: MUTANT $2 not scored -- the unmutated arm it guards did not pass in this run, so its kill would read the seed failing"
-  return 2
-}
-# need_base_probe -- need_base ITSELF, both directions, in subshells so the probe counts nothing:
-# a failing flag must print FIXTURE BROKEN and return 2; a passing flag must return 0 silently.
+# need_base <flag> <mutant-name> and mutant_killed <flag> <mutant-name> <message> live in the
+# shared lib/mutant.sh: a mutant's kill condition is a value the UNMUTATED arm it guards would also
+# print if it were failing, so a mutant is scored only when that arm PASSED in this run (flag 1).
+# Otherwise the "kill" is the seed failing, not the mutation: FIXTURE BROKEN, never ok. Every kill
+# below is emitted through mutant_killed; scripts/validate-mutant-kills.sh refuses one that is not.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# need_base_probe -- need_base and mutant_killed ITSELF, both directions, in subshells so the probe
+# counts nothing: a failing flag must print FIXTURE BROKEN, return 2 and (for mutant_killed) print no
+# ok; a passing flag must return 0 silently from need_base and print the ok from mutant_killed.
 need_base_probe() {
   local o r
   o="$(need_base 0 probe-fail 2>&1)"; r=$?
@@ -65,6 +67,14 @@ need_base_probe() {
   [ "$r" -eq 2 ] || return 1
   o="$(need_base 1 probe-pass 2>&1)"; r=$?
   [ "$r" -eq 0 ] && [ -z "$o" ] || return 1
+  o="$(mutant_killed 0 probe-mk-fail "probe-mk-fail-msg" 2>&1)"; r=$?
+  case "$o" in *"FIXTURE BROKEN"*) ;; *) return 1 ;; esac
+  case "$o" in *"probe-mk-fail-msg"*) return 1 ;; esac
+  [ "$r" -eq 2 ] || return 1
+  o="$(mutant_killed 1 probe-mk-pass "probe-mk-pass-msg" 2>&1)"; r=$?
+  case "$o" in *"ok    probe-mk-pass-msg"*) ;; *) return 1 ;; esac
+  case "$o" in *"FIXTURE BROKEN"*) return 1 ;; esac
+  [ "$r" -eq 0 ] || return 1
   return 0
 }
 
@@ -72,31 +82,48 @@ echo "check-22-spawn-ledger:"
 
 # --- NB. need_base is probed BEFORE any arm, and every call site is bound to an unmutated run ---------
 if need_base_probe; then
-  ok "NB SELF-PROBE: need_base reports FIXTURE BROKEN and returns 2 on a failing baseline flag, and returns 0 silently on a passing one"
+  ok "NB SELF-PROBE: need_base and mutant_killed report FIXTURE BROKEN and return 2 on a failing baseline flag (mutant_killed printing no ok); on a passing one need_base returns 0 silently and mutant_killed prints its ok"
 else
   echo "FIXTURE BROKEN: the need_base self-probe failed -- a mutant guard that cannot refuse would let every guarded mutant score a kill over a failing baseline" >&2
   exit 2
 fi
-# NB MUTANT: need_base made a no-op (always success). Its definition and the probe are lifted from
-# THIS file into a copy; the unmutated copy must exit 0 and the mutant must be refused by the probe.
+# NB MUTANTS: need_base made a no-op (always success), and mutant_killed made to skip need_base.
+# Their definitions are lifted from lib/mutant.sh and the probe from THIS file into a copy; the
+# unmutated copy must exit 0 and each mutant must be refused by the probe.
 SELF_FILE="$HERE/$(basename "$0")"
-nb_lift() { # file -> the bad() line, need_base and need_base_probe, then a probe call
+nb_lift() { # run.sh lib -> the ok()/bad() lines, need_base, mutant_killed and need_base_probe, then a probe call
   printf 'set -uo pipefail\nfails=0\nasserted=0\n'
+  grep '^ok()  {' "$1"
   grep '^bad() {' "$1"
-  awk '/^need_base\(\) \{$/ || /^need_base_probe\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$1"
+  awk '/^need_base\(\) \{$/ || /^mutant_killed\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$2"
+  awk '/^need_base_probe\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$1"
   printf 'need_base_probe || exit 2\nexit 0\n'
 }
-nb_lift "$SELF_FILE" > "$WORK/nb-ctl.sh"
+nb_lift "$SELF_FILE" "$MUT_LIB" > "$WORK/nb-ctl.sh"
 sed 's/^  \[ "\$1" = 1 \] && return 0$/  return 0/' "$WORK/nb-ctl.sh" > "$WORK/nb-mut.sh"
-if ! grep -q '^need_base_probe() {$' "$WORK/nb-ctl.sh" || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mut.sh"; then
-  bad "FIXTURE BROKEN: NB mutant did not apply -- need_base or its probe could not be lifted from $SELF_FILE"
+sed 's/^  need_base[ ]"\$1" "\$2" || return 2$/  :/' "$WORK/nb-ctl.sh" > "$WORK/nb-mkmut.sh"
+if ! grep -q '^need_base_probe() {$' "$WORK/nb-ctl.sh" || ! grep -q '^mutant_killed() {$' "$WORK/nb-ctl.sh" \
+   || ! grep -q '^ok()  {' "$WORK/nb-ctl.sh" \
+   || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mut.sh" || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mkmut.sh"; then
+  bad "FIXTURE BROKEN: an NB mutant did not apply -- need_base, mutant_killed or the probe could not be lifted from $SELF_FILE and $MUT_LIB"
 else
   bash "$WORK/nb-ctl.sh" >/dev/null 2>&1; nb_c=$?
-  bash "$WORK/nb-mut.sh" >/dev/null 2>&1; nb_m=$?
-  if [ "$nb_c" -eq 0 ] && [ "$nb_m" -eq 2 ]; then
-    ok "NB MUTANT killed: need_base made a no-op (always success) is refused by the self-probe (exit 2), while the lifted unmutated copy exits 0"
+  if [ "$nb_c" -eq 0 ]; then
+    ok "NB CONTROL: the lifted unmutated need_base, mutant_killed and probe exit 0"; B_nbctl=1
   else
-    bad "NB MUTANT: unmutated copy exit $nb_c (want 0), no-op mutant exit $nb_m (want 2)"
+    bad "NB CONTROL: the lifted unmutated copy exited $nb_c (want 0)"
+  fi
+  bash "$WORK/nb-mut.sh" >/dev/null 2>&1; nb_m=$?
+  if [ "$nb_m" -eq 2 ]; then
+    mutant_killed "${B_nbctl:-0}" nb "NB MUTANT killed: need_base made a no-op (always success) is refused by the self-probe (exit 2), while the lifted unmutated copy exits 0"
+  else
+    bad "NB MUTANT: no-op need_base exit $nb_m (want 2)"
+  fi
+  bash "$WORK/nb-mkmut.sh" >/dev/null 2>&1; nb_k=$?
+  if [ "$nb_k" -eq 2 ]; then
+    mutant_killed "${B_nbctl:-0}" nbmk "NB MUTANT (mutant_killed skips need_base) killed: a kill emitted over a failing flag is refused by the self-probe (exit 2)"
+  else
+    bad "NB MUTANT (mutant_killed skips need_base): exit $nb_k (want 2)"
   fi
 fi
 # NB BINDING: every need_base call site passes either a B_<name> flag or a $([ "$VAR" = ... ]) test.
@@ -143,10 +170,11 @@ END {
     if (s ~ /^need_base_probe\(\) \{$/) { inprobe = 1; continue }
     if (inprobe) { if (s ~ /^\}$/) inprobe = 0; continue }
     if ((i in H) || s ~ /^[ \t]*#/) continue
-    p = index(s, "need_base \"")
+    p = index(s, "need_base \""); w = 10
+    if (p == 0) { p = index(s, "mutant_killed \""); w = 14 }
     if (p == 0) continue
     if (p > 1 && substr(s, p - 1, 1) ~ /[A-Za-z0-9_]/) continue
-    a = substr(s, p + 10)
+    a = substr(s, p + w)
     sites++
     if (a ~ /^"\$\{B_[A-Za-z0-9_]+:-0\}"/ || a ~ /^"\$B_[A-Za-z0-9_]+"/) {
       match(a, /B_[A-Za-z0-9_]+/); nm = substr(a, RSTART, RLENGTH)
@@ -166,16 +194,18 @@ need_base "${B_g:-0}" g
 need_base "1" c
 B_u=1
 need_base "${B_u:-0}" u
-ok "MUTANT m killed"; B_m=1
+ok "MUTANT m scored"; B_m=1
 need_base "${B_m:-0}" m
 XGOT="$(fn "$M")"
 need_base "$([ "$XGOT" = a ] && echo 1)" x
 VGOT="$(fn "$VSL")"
 need_base "$([ "$VGOT" = a ] && echo 1)" v
+mutant_killed "1" mc "msg"
+mutant_killed "${B_g:-0}" mg "msg"
 SEED
 NB_SEED="$(awk -f "$WORK/nb-bind.awk" "$WORK/nb-seed.sh" | awk '$1 == "UNBOUND" { printf "%s ", $2 } $1 == "SITES" { printf "| %s", $2 }')"
-if [ "$NB_SEED" != "3 5 7 9 | 6" ]; then
-  echo "FIXTURE BROKEN: the need_base binding check over its seeded file reported [$NB_SEED], expected [3 5 7 9 | 6] -- it must flag a constant, an unconditional flag, a flag set by a MUTANT ok and a mutant's value, and pass a bound flag and a \$VSL value" >&2
+if [ "$NB_SEED" != "3 5 7 9 12 | 8" ]; then
+  echo "FIXTURE BROKEN: the need_base binding check over its seeded file reported [$NB_SEED], expected [3 5 7 9 12 | 8] -- it must flag a constant (at a need_base and at a mutant_killed site), an unconditional flag, a flag set by a MUTANT ok and a mutant's value, and pass a bound flag at both kinds of site and a \$VSL value" >&2
   exit 2
 fi
 NB_OUT="$(awk -f "$WORK/nb-bind.awk" "$SELF_FILE")"
@@ -1446,7 +1476,7 @@ elif ! need_base "$B_s3" "S3 (a)"; then :
 else
   a_mv="$(cpmoved "$(cpvec "$S3A")")"; a_ok="$(s3ok "$S3A")"; a_oos="$(s3oos "$S3A")"
   if [ "$a_mv" = "shard" ] && [ "$a_ok" = OK ] && [ "$a_oos" != FAIL1 ]; then
-    ok "S3 MUTANT (a) killed: a validator that ignores invalid-exception passes the invented exception -- C1's shard cell moves (and the exit-3 arm, stated overlap); the near-miss stays OK"
+    mutant_killed "$B_s3" "S3 (a)" "S3 MUTANT (a) killed: a validator that ignores invalid-exception passes the invented exception -- C1's shard cell moves (and the exit-3 arm, stated overlap); the near-miss stays OK"
   else
     bad "S3 MUTANT (a): moved [$a_mv] near-miss [$a_ok] exit-3 [$a_oos]; expected [shard] OK and not FAIL1"
   fi
@@ -1458,7 +1488,7 @@ elif ! need_base "$B_s3" "S3 (c)"; then :
 else
   c_mv="$(cpmoved "$(cpvec "$S3C")")"; c_ok="$(s3ok "$S3C")"; c_oos="$(s3oos "$S3C")"
   if [ -z "$c_mv" ] && [ "$c_ok" = OK ] && [ "$c_oos" = "rc=3" ]; then
-    ok "S3 MUTANT (c) killed: S3 under the exit-3 branch reads exit 3 (nothing compared) on a sprint carrying an invented exception -- the exit-3 arm alone catches it"
+    mutant_killed "$B_s3" "S3 (c)" "S3 MUTANT (c) killed: S3 under the exit-3 branch reads exit 3 (nothing compared) on a sprint carrying an invented exception -- the exit-3 arm alone catches it"
   else
     bad "S3 MUTANT (c): moved [$c_mv] near-miss [$c_ok] exit-3 [$c_oos]; expected [] OK rc=3"
   fi
@@ -1505,7 +1535,7 @@ elif ! need_base "$B_s4" S4; then :
 else
   a4_miss="$(s4v "$S4A" cp-s4-miss.jsonl)"; a4_ok="$(s4v "$S4A" cp-s4-ok.jsonl)"; a4_mv="$(cpmoved "$(cpvec "$S4A")")"
   if [ "$a4_miss" = "rc=0" ] && [ "$a4_ok" = OK ] && [ -z "$a4_mv" ]; then
-    ok "S4 MUTANT killed: a validator that drops the coverage check passes the incomplete one-cross brief (rc=0) while the near-miss stays OK and C1 does not move"
+    mutant_killed "$B_s4" S4 "S4 MUTANT killed: a validator that drops the coverage check passes the incomplete one-cross brief (rc=0) while the near-miss stays OK and C1 does not move"
   else
     bad "S4 MUTANT: offender [$a4_miss] near-miss [$a4_ok] C1 moved [$a4_mv]; expected rc=0 OK []"
   fi
@@ -1557,7 +1587,7 @@ elif ! need_base "$([ "$s4n_pad_base" = PASS ] && echo 1)" "S4N (unmutated padde
 else
   n_pad="$(s4nv "$S4N" cp-s4n-pad.jsonl)"; n_miss="$(s4nv "$S4N" cp-s4n-padmiss.jsonl)"; n_sp="$(s4nv "$S4N" cp-s4n-space.jsonl)"
   if [ "$n_pad" = REFUSE ] && [ "$n_miss" = REFUSE ] && [ "$n_sp" = PASS ]; then
-    ok "S4N MUTANT killed: a validator that no longer strips leading zeros refuses the complete padded brief while the spaced brief still passes"
+    mutant_killed "$([ "$s4n_pad_base" = PASS ] && echo 1)" S4N "S4N MUTANT killed: a validator that no longer strips leading zeros refuses the complete padded brief while the spaced brief still passes"
   else
     bad "S4N MUTANT: padded [$n_pad] padded-miss [$n_miss] spaced [$n_sp]; expected REFUSE REFUSE PASS"
   fi
@@ -1720,7 +1750,7 @@ else
   else
     mv_="$(rvmoved "$(rvvec "$RVA")")"
     [ "$mv_" = "reviewer ok" ] \
-      && ok "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa, remediator and the dev near-miss unmoved" \
+      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rva "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa, remediator and the dev near-miss unmoved" \
       || bad "S3 MUTANT (rva): moved [$mv_], expected [reviewer ok]"
   fi
   RVC="$(s3mut rvc "$(rvsed code-reviewer-escalated '')")"
@@ -1728,7 +1758,7 @@ else
   else
     mv_="$(rvmoved "$(rvvec "$RVC")")"
     [ "$mv_" = "escalated" ] \
-      && ok "S3 MUTANT (rvc) killed: SHARD_ROLES without code-reviewer-escalated passes its invented exception -- S3-R2 alone moves" \
+      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvc "S3 MUTANT (rvc) killed: SHARD_ROLES without code-reviewer-escalated passes its invented exception -- S3-R2 alone moves" \
       || bad "S3 MUTANT (rvc): moved [$mv_], expected [escalated]"
   fi
   # (rvb) the pre-fix state: qa dropped from the set. S3-R3 alone moves, FAIL1 -> OK.
@@ -1737,7 +1767,7 @@ else
   else
     mv_="$(rvmoved "$(rvvec "$RVB")")"
     [ "$mv_" = "qa" ] \
-      && ok "S3 MUTANT (rvb) killed: SHARD_ROLES without qa passes the qa row's invented exception -- S3-R3 alone moves" \
+      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvb "S3 MUTANT (rvb) killed: SHARD_ROLES without qa passes the qa row's invented exception -- S3-R3 alone moves" \
       || bad "S3 MUTANT (rvb): moved [$mv_], expected [qa]"
   fi
   # (rvd) the near-miss can fire: SHARD_ROLES gaining dev FAILS the dev row -- S3-R6 alone moves.
@@ -1746,7 +1776,7 @@ else
   else
     mv_="$(rvmoved "$(rvvec "$RVD")")"
     [ "$mv_" = "dev" ] \
-      && ok "S3 MUTANT (rvd) killed: SHARD_ROLES gaining dev FAILS the dev near-miss -- S3-R6 alone moves, so R6's OK is about membership" \
+      && mutant_killed "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" rvd "S3 MUTANT (rvd) killed: SHARD_ROLES gaining dev FAILS the dev near-miss -- S3-R6 alone moves, so R6's OK is about membership" \
       || bad "S3 MUTANT (rvd): moved [$mv_], expected [dev]"
   fi
 fi
@@ -1827,7 +1857,7 @@ else
     if [ -z "$M" ]; then bad "FIXTURE BROKEN: party-seat mutant ($1) did not apply -- its anchor was renamed"; return; fi
     need_base "$([ "$PTGOT" = "FAIL1 OK OKW" ] && echo 1)" "PT ($1)" || return
     local got; got="$(ptvec "$M")"
-    [ "$got" = "$3" ] && ok "PT MUTANT ($1) killed: $4 [$got]" \
+    [ "$got" = "$3" ] && mutant_killed "$([ "$PTGOT" = "FAIL1 OK OKW" ] && echo 1)" "PT ($1)" "PT MUTANT ($1) killed: $4 [$got]" \
       || bad "PT MUTANT ($1): scored [$got], expected [$3] -- $4"
   }
   # (pta) THE PRE-FIX DERIVATION: seats are aiDlcRoles entries with no model. A model-pinned tea
@@ -1877,7 +1907,7 @@ d
   elif ! need_base "$([ "$PSGOT" = "cis sm tea ux" ] && echo 1)" "PS (ux.md reworded)"; then :
   else
     PSMUT="$(pscell "$WORK/psm/team-roles")"
-    [ "$PSMUT" = "cis sm tea" ] && ok "PS MUTANT (ux.md reworded) killed: the seat set reads [$PSMUT], so the PS cell would fail" \
+    [ "$PSMUT" = "cis sm tea" ] && mutant_killed "$([ "$PSGOT" = "cis sm tea ux" ] && echo 1)" "PS (ux.md reworded)" "PS MUTANT (ux.md reworded) killed: the seat set reads [$PSMUT], so the PS cell would fail" \
       || bad "PS MUTANT (ux.md reworded) scored [$PSMUT], expected [cis sm tea] -- the PS cell cannot see one lost seat"
   fi
   fi
@@ -2011,7 +2041,7 @@ tmut() { # name sed-expression expected-cell description
   bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: tier mutant '$n' does not parse"; return; }
   need_base "$([ "$TGOT" = "$T_EXPECTED" ] && [ "$TCTL" = "$T_EXPECTED" ] && echo 1)" "t-$n" || return
   mv="$(tmoved "$(tvec "$M")")"
-  [ "$mv" = "$3" ] && ok "MUTANT t-$n killed: $4 -- moves only the $3 cell" \
+  [ "$mv" = "$3" ] && mutant_killed "$([ "$TGOT" = "$T_EXPECTED" ] && [ "$TCTL" = "$T_EXPECTED" ] && echo 1)" "t-$n" "MUTANT t-$n killed: $4 -- moves only the $3 cell" \
     || bad "MUTANT t-$n: moved [$mv], expected only [$3]"
 }
 # The defect itself: the dispatch-time pin replaced by the pin read from settings NOW.
@@ -2088,7 +2118,7 @@ kmut() { # name sed-expression expected-cells description
   bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: K mutant '$n' does not parse"; return; }
   need_base "$([ "$KGOT" = "$K_EXPECTED" ] && [ "$KCTL" = "$K_EXPECTED" ] && echo 1)" "k-$n" || return
   mv="$(kmoved "$(kvec "$M")")"
-  [ "$mv" = "$3" ] && ok "MUTANT k-$n killed: $4 -- moves only [$3]" || bad "MUTANT k-$n: moved [$mv], expected only [$3]"
+  [ "$mv" = "$3" ] && mutant_killed "$([ "$KGOT" = "$K_EXPECTED" ] && [ "$KCTL" = "$K_EXPECTED" ] && echo 1)" "k-$n" "MUTANT k-$n killed: $4 -- moves only [$3]" || bad "MUTANT k-$n: moved [$mv], expected only [$3]"
 }
 # The 0.773.0 shape: no retry against the resolved string, the key alone decides.
 kmut nokeyresolve 's/^      elif matches_pin "\$tier_observed" || \[ "\$tier_resolved_ok" = true \]; then$/      elif matches_pin "$tier_observed"; then/' "mp set" \

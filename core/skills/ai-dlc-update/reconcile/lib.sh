@@ -542,6 +542,25 @@ backlog_entry_label_awk() {
 }'
 }
 
+# THE EFFICIENCY TAG RULE (BL-835) -- which `BL-` entry lines mark an efficiency entry, read by
+# `backlog-rotate.sh`'s outcome guard and `validate-backlog-receipts.sh`'s E arms. Both keyed on
+# the one spelling `**DEFECT (efficiency).**` while the ledgers carry four, so a closed entry in
+# any other spelling left the ledger with no outcome line. Defined here, beside the label rule,
+# so the two readers cannot drift apart again. The four forms, each a bold tag span:
+#   `**DEFECT (efficiency).**`   `**DEFECT, efficiency.**`   `**NOTE (efficiency).**`
+#   `**DEFECT. [efficiency rank N] ...**`
+# UNANCHORED, because a tag can sit mid-line. Bold PROSE carrying the word (`**Lead hours ... every
+# efficiency outcome.**`) is not a tag: the span must open with the tier word and the tag spelling.
+# FALSE-POSITIVE SET, measured by entry id over the distribution's live and archived backlog ledgers before
+# this shipped (closed, newly tagged, no outcome line): live 0, archive 1 (BL-614), fixed in the
+# archive in the same release. Control: the 19 other tagged closed archive entries carry outcomes.
+# A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
+backlog_efficiency_tag_awk() {
+  printf '%s\n' 'function backlog_efficiency_tagged(l) {
+  return (l ~ /\*\*(DEFECT|NOTE)( \(efficiency\)\.|, efficiency\.|\. \[efficiency rank [0-9]+\])/)
+}'
+}
+
 # A NO-OP, DELIBERATELY. `ledger_entry_id()` is emitted by `ledger_entry_awk()` above, because
 # the fence-aware shape rule reads it. Callers concatenate `"$(ledger_entry_awk)$(ledger_entry_id_awk)"`
 # and defining the function twice is an awk error, so this emits NOTHING -- not a comment, which

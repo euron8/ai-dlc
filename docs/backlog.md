@@ -116,7 +116,7 @@ Measured from `.git/ai-dlc-fixture-durations` in the main checkout, a LOADED-cos
 - Intake, re-derived at 06:18 EDT (288 rows, the record rewritten since): sum 27473 s; 41 mutant rows at 11346 s, 41%; 10 of the top 15 are mutant batteries (`derivation-capture-mutants` 737, `review-shard-merge-mutants` and `-b`/`-c` 728-729, `adversarial-shard-merge-mutants` 694, `remediator-shard-join-mutants` and `-b`/`-c`/`-d` 583-589, `updater-session-signals-mutants` 367), and the five non-mutant rows are `suite-pole-guard` 493, `readset-skip-d` 453, `ledger-reverify` 409, `-b` 392 and `-d` 362. Fixture directories: 290 (`/usr/bin/find core/fixtures -mindepth 1 -maxdepth 1 -type d`).
 The two readings differ because the record moves with every push. The shape holds across both: the mutant batteries dominate the top of the rank.
 
-Owed, under the step-value ruling in `operator-rulings.md` ("A step with no measured value goes") applied to fixtures — a fixture or mutant shard stays only on evidence, a named defect class it catches that no other unit catches; without that the batch retires or merges it, and it is not put to the operator as a choice:
+Owed, under the step-value ruling in `.claude/rules/operator-rulings.md` ("A step with no measured value goes") applied to fixtures — a fixture or mutant shard stays only on evidence, a named defect class it catches that no other unit catches; without that the batch retires or merges it, and it is not put to the operator as a choice:
 1. Rank by cost first: the mutant batteries, then the non-mutant poles.
 2. For each sharded battery, measure whether its mutants kill anything the base fixture's arms do not; shards of one battery that kill the same set are redundant.
 3. State the gate wall clock removed per release and the dollars beside it.
@@ -297,6 +297,7 @@ verify: manual
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 
 **DEFECT, efficiency.** Found by ai-dlc-77 [e29316] in batch 236 while building BL-679.
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
 - **The cause.** BL-679's key field `distrefs` hashes the dist's `for-each-ref`, HEAD and shallow flag. On a dist
   that is the main ai-dlc checkout, or a worktree of it, agent sessions create, advance and delete branches
   continuously. So the key taken after the render differs from the one taken before, and no record is written.
@@ -375,6 +376,21 @@ verify: manual
   - **Cost:** the R2 per-root `find` walk is removed (one fewer `find` per read root on every key take). Per link: 2 forks, or 3 for a directory link.
   - The BL-360 here-string fix from 0.939.0 is preserved, with 0 non-comment `<<<`.
   - **Still PARTIAL (named, not fixed):** the hardlink, firmlink and bind mount; limit (6); the receipt's clock and network; the rest of the key's fields, not re-reviewed in round 9.
+- **Round 9 D-r9b-1 (DEFECT, NOT FIXED, a precondition for the flip):** a predicate run through `cr_run` reads the index stat cache, which the key does not hash. Round 5 F3 forces `core.trustctime=true` and `core.checkStat=default` only on the KEY's own status (`er_cgit`), while the predicates `predicate-differential.sh` runs through `cr_run` run plain git under the consumer's config. The example is `validate-snapshot-conservation.sh:263`, `git -C "$ROOT" diff "$BASE" -- "$SNAPSHOT"`. Under a relaxed stat config, a same-size, mtime-kept rewrite makes that diff read the stale index blob. The key hashes the same bytes at record and hit time, so a later `touch` changes what the predicate reads while no key field or logged read moves, and the armed run accepts a stale PASS where a fresh render exits 1.
+  - **Probe** `p2-snapstat.sh`: under `checkStat=minimal` plus `trustctime=false`, `checkStat=minimal` alone and `trustctime=false` alone, the armed run was rc 0 (accepted) and the fresh run rc 1 (STABLE -> RECLASSIFIES). The default-config control was correctly accepted. Each single setting exposes it, which is wider than F3's measured conjunction.
+  - **Exposure** needs the cache armed, either relaxed setting, a pull whose predicate read-set differs between BASE and THEIRS, a same-size mtime-kept rewrite of a corpus file, and an mtime change between verifies. The reference consumer is not exposed (all three settings unset): `git -C /Users/n8/git/graph config --get core.checkStat`, `core.trustctime` and `core.ignoreStat` each printed nothing (rc 1), and the control `git -C /Users/n8/git/graph config --get core.repositoryformatversion` printed 0.
+  - **OWED, the precondition for the flip:** a later batch builds this; this release does not, and part (b) is a review only.
+  - **Owed fix:** `er_key` in `core/skills/ai-dlc-update/reconcile/emit-report.sh` refuses by name, beside the existing `core.ignoreStat=true` refusal, when the effective `core.checkStat` is anything other than `default` or `core.trustctime=false`. Do not force the settings into `cr_run`, which would change the render.
+  - **Owed arm:** the p2 world under each single setting is refused with no record formed. Its ALLOW twin: the default config records and hits. Its mutant: deleting the refusal makes the run accept stale.
+- **Round 9 checked, no finding** (recorded so round 10 does not repeat them):
+  - `layer-drift.sh:1341` `diff --quiet` in `adj_spent_note`: same mechanism, but only the detail column is fed, and no region prints it.
+  - `ls-files --with-tree` on a bare dist works.
+  - Env names read only by an entry's sourced siblings are already the B4 LIMIT.
+  - `k2_resolve_file` walk-up is already LIMIT (2).
+  - `generated_at` is on the write path, not the `--series` invoke.
+  - Reflog reads: 0 hits.
+  - gettext/locale: unrun, and it cannot fire on this host. NOTE at most.
+- **Round 9 verdict (key review, under the lead's ruling):** one DEFECT (D-r9b-1), no BLOCKER, so the flip is not held by the review, and D-r9b-1 is a precondition for the flip, built by a later batch.
 verify: manual
 
 ## BL-706 — no reconcile step runs the derivation differential on every pull, so a consumer whose pulls never hit a derivation never gets an owed-derivations record
@@ -851,27 +867,6 @@ fall.
 
 verify: manual
 
-## BL-823 — the remediator join's BADDISP check reads only a lowercase `disposition:` key, so a capitalised `Disposition:` with an out-of-set value is never refused
-
-**DEFECT.** Filed at the batch-243 close. ai-dlc-33 found it after c1 had been built, so the fix was kept out of 0.949.0, whose CHANGELOG names this id. `core/scripts/join-remediator-shards.sh:600` opens a disposition on `/^[[:space:]-]*[*_\`]*disposition[*_\`]*:/`, which is case-sensitive. BADDISP (`:1029`) therefore never sees a value under `Disposition:` or `DISPOSITION:`. 0.949.0's no-edit-line rule already matches the key case-insensitively, so the two arms disagree about what a disposition line is.
-
-Measured on graph's main tree, read only, with `/usr/bin/grep`. The key grammar was `^[[:space:]-]*[*_\`]*<word>[*_\`]*:` over 26059 `.md` files, excluding `.git` and `node_modules`. It found 1188 capitalised-key lines in 535 files (including graph's worktree copies). The control was 17915 lowercase-key lines, and the impossible token `ZZQ-NEVER-9731` returned 0. Narrowing to record-like files (a capitalised key AND either an `edit:` line or a lowercase `disposition:` line) left 4 files. Three are committed records that folding the case would refuse:
-- `_bmad-output/planning-artifacts/s292/product-brief-repair-p1.md:7` (`**Disposition:** 4 repaired / 0 escalated.`)
-- `_bmad-output/planning-artifacts/s292/research-repair-p1.md:6`
-- `_bmad-output/planning-artifacts/s302/architecture-repair-p1.md:424`, a prose line in a file that carries 15 lowercase-key lines.
-
-The fourth, `s301/archive/cycle-1/discovery-context.md`, is prose with no space after its colon.
-
-Owed:
-1. A ruled shape for a capitalised summary line, either a summary key that BADDISP never reads or a refusal. The ruling comes before the case fold.
-2. The fold itself, at `:600`.
-3. A fixture arm with a mutant, seeded with the capitalised out-of-set value.
-4. The false-positive set re-measured over graph's committed records.
-
-Not measured, though reachable: whether the join reads the other ~1184 lines' files as parts.
-
-verify: manual
-
 ## BL-825 — a gate check waived by the operator records `PASS`, so every reader of the verdict sees PASS on a ledger its validator refuses
 
 **DEFECT.** Filed at the batch-243 close from c6b's read-only Check 22 audit of graph s317–s319 (one hand of ai-dlc-14's). Check 22 ran in every sprint, and every arm that fails today was already in graph's installed validator: 0.772.0, 0.781.0 and 0.908.0. The control was `spawn-ledger` appearing 13 times in each copy. All three sprints recorded PASS through an explicit, operator-authorised waiver:
@@ -890,43 +885,35 @@ Owed:
 
 verify: manual
 
-## BL-827 — two fixtures read their seed through `read … < <(bash seed.sh)`, so a failed seed reports assertion FAILs instead of FIXTURE BROKEN and arms an `rm -rf` on an empty-derived path
-
-**DEFECT.** Filed at the batch-243 close. c6a's first 0.951.0 dress went red on `ledger-reverify-b`. Its capture opens with `error: unable to create temporary file: Invalid argument`, then `fatal: updating files failed`, then `rm: "." and ".." may not be removed`. It was a transient git fault, not a fault in c6a: solo runs at 18dc7d27f and at the c6a squash both exited 0 with 0 FAIL, and a re-dress went green.
-
-The fixture's handling of that fault is what is wrong. `core/fixtures/ledger-reverify/run.sh:155` reads the seed as `read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")`. A process substitution's exit status is discarded, and `read` returns 0 on empty input, so all four variables come up empty and every row then reports `got=<none>` as an assertion FAIL. The EXIT trap in the same file runs `rm -rf "$(dirname "$DIST")"`, which with DIST empty is `rm -rf .`. Only rm's refusal of `.` stopped it. `core/fixtures/self-update-gate/run.sh:115-116` has the same shape. Grepping `read -r [A-Z_ ]+< <\(bash "\$DIR/seed\.sh"\)` over `core/fixtures/*/run.sh` finds exactly these 2.
-
-Owed, in both fixtures:
-1. Run the seed into a captured variable with its exit checked, and on failure report FIXTURE BROKEN with exit 2.
-2. Assert every field is non-empty and DIST is a directory before the trap is armed.
-3. Guard the trap on a non-empty DIST under the mktemp prefix.
-4. Add a mutant: a seed that exits 1 must read BROKEN.
-
-Then decide whether a tree-wide arm refusing `read … < <(…)` of a seed whose status is the only failure signal earns its place. Measure its false-positive set first.
-
-verify: manual
-
 ## BL-828 — mutant arms that score a kill without asserting their unmutated arm passed in the same run
 
 **DEFECT.** Filed at the batch-243 close. In c6b, a fold found that 41 of `check-22-spawn-ledger`'s 43 mutant arms scored a kill without first asserting that the arm passed on the unmutated tree in the same run. A mutant that breaks the arm's setup, rather than the subject, therefore read as killed. 0.952.0 fixed check-22: `need_base` now occurs 52 times in `core/fixtures/check-22-spawn-ledger/run.sh`. No census has been taken across the other fixtures.
 
 Owed: the census over `core/fixtures/*/run.sh`, with its false-positive set measured and enumerated before any arm ships. Then either a shared base-pass helper, or an arm that refuses a kill with no same-run base pass. Mechanism as `.claude/rules/fixture-mutants.md` states it.
 
-verify: manual
+**PARTIAL: the mechanism is in, and three fixtures are migrated.** "No same-run base pass" is data flow, so it cannot be grepped. The emission site can be. `core/fixtures/lib/mutant.sh` now carries `need_base` and `mutant_killed <flag> <name> <message>`, which is the one sanctioned way to emit a kill. It refuses (FIXTURE BROKEN, return 2, no `ok`) unless the flag says the unmutated arm passed in the same run. `scripts/validate-mutant-kills.sh` is a standalone `.githooks/pre-push` step, not an arm of `validate-enforcement-map.sh`. Its arms:
 
-## BL-829 — K3's widened series stamps K3B_RELEASE in branch (b), and no mutant or world reaches that line
+- M1 refuses a `KILLED`/`killed` on a non-comment line of a `run.sh` that is not routed through `mutant_killed`, in a fixture missing from `scripts/mutant-kills-allowlist.txt`.
+- M2 refuses a stale row: a listed fixture with no unrouted kill left, or with no `run.sh`.
+- M3 refuses a duplicate row.
+- M4 refuses a row whose fixture is not on the allowlist at `origin/main`, so an added row or a count-keeping swap fails. It SKIPs with its reason when `origin/main` does not resolve or carries no allowlist yet.
 
-**DEFECT.** Filed at the batch-243 close from c6b (BL-811's W1). `core/scripts/validate-adversarial-convergence.sh:2652`, `k3_rel="$K3_RELEASE"; [ "$k3_wide" -eq 1 ] && k3_rel="$K3B_RELEASE"`, sits in branch (b), the terminal pass that reviews `requirements-subject.md`. `k3_wide` is set by the widened case arm at `:2462`. Of the 7 k3w worlds (post, pre, pred, nomf, other, brief, arch), 3 are confirmed by their expected text to take branch (a). The hand's claim that a mutant at `:2652` scores identical to the real run is a derivation, not a run.
+So the allowlist only shrinks. A mktemp self-probe runs first and checks both directions.
 
-Owed: one widened-series world whose terminal pass reviews `requirements-subject.md`, stamped between K3_RELEASE and K3B_RELEASE, plus a mutant at `:2652` that the world kills.
+The census, at 7c8a88fd7, covered 262 `run.sh`:
 
-verify: manual
+- Case-insensitive `killed` on non-comment lines: 882 lines in 127 fixtures.
+- Case-sensitive `KILLED|killed`: 875 lines in the same 127. The 7 dropped lines are `SIGKILLed`.
+- 234 comment lines are excluded.
+- 360 of the 875 lines carry no `mut` word. They are kept, because the arm is keyed per fixture.
 
-## BL-830 — handoff-resume-guard's bg1 mutant is killed by the slice band alone, with zero margin
+The allowlist is the output of `--derive`, never typed. That was 127 fixtures, and it is **124** rows now because three fixtures are migrated, `check-22-spawn-ledger`, `story-evidence-scaffold` and `handoff-resume-guard`:
 
-**DEFECT.** Filed at the batch-243 close. c6b's first 0.952.0 dress went red on `handoff-resume-guard`: the Bounded-join beat slice in `core/skills/ai-dlc/steps/_gate-procedures.md` had grown to 62 lines against `BEAT_BAND_MAX=60` (`core/fixtures/handoff-resume-guard/run.sh:1020`), and mutant bg1 survived. The fix re-wrapped the prose to 57 lines. bg1's prohibition copy now scores 60 lines, so it is killed only because it reaches the band ceiling exactly. One more line in that section re-breaks bg1. What bg1 asserts, a sentence forbidding the backgrounded call, is never caught on its content.
+- Every kill goes through `mutant_killed`.
+- NB BINDING covers both kinds of call site.
+- A second NB mutant, `mutant_killed` skipping `need_base`, is refused.
 
-Owed: bg1 killed by the prohibition arm (`proh>0`) independently of the band, with a mutant proving that the band alone no longer decides it.
+Owed: migrate the remaining allowlisted fixtures, removing each row in the change that migrates it.
 
 verify: manual
 
@@ -1555,6 +1542,8 @@ Owed: a mechanism that makes the default the act, not the instruction. For examp
 Former receipt (the mechanism, not the outcome): sh bash core/fixtures/remediator-shard-join/receipt-bl804.sh
 
 Re-audit (BL-817): graph s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, stories-test-strategy: 0.93 h gap-inclusive, token-equivalent $39.1 (API $39.1), 65.0M tokens, the baseline. No graph sprint has run 0.949.0 yet. Owed: first graph sprint on >=0.949.0. The shipped mechanism (0.949.0, `wait-for-deliverable.sh --mark` replays the derivations) stands; the reopen owes the outcome, not a rebuild.
+
+Owed (batch b244, c4), the premise of the mechanism above corrected. The ordering was not the defect: `core/team-roles/remediator.md` orders `join-remediator-shards.sh --escalations` before `wait-for-deliverable.sh --mark-repair` on purpose, `core/skills/ai-dlc/steps/_gate-procedures.md` agrees, and graph's repair subagent (agent-a2ba43cd07934d6e7, 2026-10-27T09:01Z) followed it. Its join refused `derivations: not replayed`; it replayed, edited the line to `replayed 1`, re-joined at rc 0, and then marked. That cost about 16s inside the dispatch and no re-dispatch, so the join before the mark is the designed loop. The real defect was one sentence in `remediator.md` that said `--mark` and `--mark-repair` replay the record themselves, which offered the serial or unsharded remediator `not replayed` as an option its own earlier join refuses. Resolved: the sentence now scopes the replay to `--mark` and says the serial remediator replays before its join and writes `replayed <n>` itself, pinned in `process-rule-pins` by the `rem-serial-replay` row, a named mutant that restores the old clause, and the `rem-serial-optout` arm. The entry stays OPEN: it is decided by its receipt plus a measured outcome under BL-817, the first graph sprint on a release carrying this sentence showing no `not replayed` refusal at the join.
 
 verify: manual
 

@@ -1016,6 +1016,17 @@ p_dispvocab() { # in era, `done` refused; `not-reproduced` and a pre-era `done` 
   [ "$RC" -eq 2 ] && has "$JO" "the F-3 — MINOR entry is dispositioned 'done'" \
     && ! has "$JO" "the F-0 — MINOR entry" && ! has "$JO" "the F-2 — MINOR entry"
 }
+# BL-823: the key in ANY case on a LIST ITEM is a disposition; a capitalised column-0 line is a summary.
+# F-1 opens the era (its siblings: field), so F-2's out-of-set value is read by BADDISP.
+p_dispcap() { # `- **Disposition:** frobnicated` in era -> rc 2, BADDISP names it, never NODISP
+  esc_rec "$1" '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- **Disposition:** frobnicated\n- edit: n/a\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-2 — MINOR entry is dispositioned 'frobnicated'" \
+    && ! has "$JO" "the F-2 — MINOR entry carries an 'edit:' line and no 'disposition:' line"
+}
+p_dispsummary() { # graph s292's column-0 summary inside an in-era repaired entry -> rc 0, nothing refused
+  esc_rec "$1" '**Disposition:** 4 repaired / 0 escalated.\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- disposition: repaired\n- edit: n/a\n**Disposition:** 4 repaired / 0 escalated.\n'
+  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0"
+}
 p_dispruling() { # operator-ruling: both cite forms resolve and need no source:; an unresolved and a missing cite refuse
   ruling_world "$1" '### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:51:50Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: SHA256:2222222222222222222222222222222222222222222222222222222222222222\n'
   local ok1=0; [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && ok1=1
