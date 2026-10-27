@@ -1347,6 +1347,179 @@ memo_mut m-memo-name 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added |BR_LIB
 # The derivation dropped: only the synthesised export leaks.
 memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|BR_LIB_VARS="AI_DLC_RECONCILE_MEMO"|' "$LEAK_PROBE" "$LEAK_PROBE"
 
+# ===== THE EFFICIENCY ARMS (BL-817): E1 close, E2 shape, E3 filing. =========================
+# Driven through `--efficiency-only` on seeded ledgers, which runs the subject's own E0 self-probe
+# and then the arms, and exits before the per-receipt checkout scorer. Every world is one entry;
+# every verdict is read off the subject's own `FAIL: E<TAB><id><TAB><code>` rows, so each arm is
+# PRESENCE-shaped: an expected row must APPEAR, and the quiet twin must carry the OK line.
+#   ef-good     a valid close, a valid no-step close, a tagged entry citing the ruling, an untagged
+#               docs/analysis/ citer carrying the no-step line, and a section preamble citing
+#               docs/analysis/ after an entry (the narrowing) -> OK, zero rows
+#   ef-noclose  a tagged LANDED entry with no outcome line                     -> NO-OUTCOME
+#   ef-sprintless a sprintless line WITHOUT the no-step wording              -> NO-SPRINT
+#   ef-untagged an untagged entry citing docs/analysis/                         -> F-UNTAGGED
+#   ef-second   the second spelling of a valid line (bold label, `sprint 321`, a Failure caught:
+#               citation resolved by its phrase)                                -> OK
+# Mutants (copies, cmp-guarded through `mut`): m-noclose removes the close arm's population test,
+# m-widenostep widens the no-step branch to accept any sprintless line, m-nofiling removes the
+# untagged-citing refusal. Each must turn exactly its own world red; E0 is part of the subject, so
+# a mutant the self-probe catches exits 2 -- which is a kill BY THE SELF-PROBE, asserted as such.
+EF_RUL='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
+EF_SHP='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+ef_seed() { # ef_seed <dir> <ledger-body>
+  seed "$1"
+  mkdir -p "$1/docs/analysis"
+  printf '| row | EFROW phrase |\n**M.** Failure caught: EFFC phrase\n' > "$1/docs/analysis/v.md"
+  printf '%s' "$2" > "$1/docs/backlog.md"
+}
+ef_rows() { printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: E" { print $3 " " $2 }' | LC_ALL=C sort | tr '\n' '|'; }
+EF_GOOD="# probe
+
+## BL-971
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: graph s321, $EF_SHP; fell from 2.0 h.
+
+## BL-972
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: no graph pipeline step; the cost lives in scripts/x.sh.
+
+## BL-973
+
+**DEFECT (efficiency).** open. $EF_RUL
+
+## BL-974
+
+Filed from docs/analysis/x.md; there is no graph pipeline step.
+
+## A section
+
+Section prose citing docs/analysis/x.md.
+"
+ef_world() { # ef_world <name> <dir> <ledger> <want-rows> <want-rc>
+  local out rc_v got
+  ef_seed "$2" "$3"
+  out="$( (cd "$2" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  got="$(ef_rows "$out")"
+  if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && { [ "$5" -ne 0 ] || grep -qF 'OK: validate-backlog-receipts --efficiency-only' <<<"$out"; }; then
+    note "ok    $1 -- rc $rc_v, rows [${got}]"
+  else
+    note "FAIL  $1 -- rc $rc_v (want $5), rows [${got}] (want [$4])"
+    printf '%s\n' "$out" | grep -v '^FAIL: E' | sed 's/^/      /' | head -4; rc=1
+  fi
+}
+ef_world ef-good "$TMP/efgood" "$EF_GOOD" "" 0
+ef_world ef-noclose "$TMP/efnc" "# probe
+
+## BL-975
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+" "NO-OUTCOME BL-975|" 1
+ef_world ef-sprintless "$TMP/efsl" "# probe
+
+## BL-976
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: the cost fell.
+" "NO-SPRINT BL-976|" 1
+ef_world ef-untagged "$TMP/efut" "# probe
+
+## BL-977
+
+Filed from docs/analysis/x.md with no tag.
+" "F-UNTAGGED BL-977|" 1
+ef_world ef-second "$TMP/ef2" "# probe
+
+## BL-978
+
+**DEFECT (efficiency).** x. Cites \"A step with no measured value
+goes\" in \`.claude/rules/operator-rulings.md\`.
+
+<br>**LANDED (v0.1.0, verified abc1234).**
+
+<br>**Outcome measured:** graph sprint 321, $EF_SHP; did not fall; \`docs/analysis/v.md:2\` \"EFFC phrase\".
+" "" 0
+# ef-pathsprint: a no-step close whose only s<NNN> token sits inside a path segment (BL-821's shape)
+# must take the no-step branch, so it reads OK; a sprint branch would refuse it as SHAPE.
+EF_PATHSPRINT="# probe
+
+## BL-979
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: no graph pipeline step; the cost lives in this repo's analysis scripts (\`docs/analysis/pipeline-efficiency-s317-s320/scripts/impl_passes.py\`), which are analysis tooling.
+"
+ef_world ef-pathsprint "$TMP/efps" "$EF_PATHSPRINT" "" 0
+
+# ef_mut <name> <sed> <world-dir-name> <ledger> -- the mutant must turn its world from red to green
+# (the arm stopped firing) OR be refused by the subject's own E0 self-probe (exit 2 naming E0).
+ef_mut() {
+  local d="$TMP/$1" out rc_v
+  ef_seed "$d" "$4"
+  mut "$d" "$2" || return
+  out="$( (cd "$d" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF 'SELF-PROBE FAILED -- E0' <<<"$out"; then
+    note "ok    $1 -- killed by the subject's own E0 self-probe before the corpus"
+  elif [ "$rc_v" -eq 0 ]; then
+    note "ok    $1 -- killed: the $3 world, red on the shipped subject, reads green with the arm mutated"
+  else
+    note "FAIL  $1 -- SURVIVED: rc $rc_v, $(printf '%s\n' "$out" | grep -E '^FAIL|SELF-PROBE' | head -2 | tr '\n' '|')"; rc=1
+  fi
+}
+ef_mut m-noclose 's/^    if \[ "\$_ld" = "1" \] .. { \[ "\$_t" = "1" \] || \[ "\$_on" = "1" \]; }; then$/    if false; then/' ef-noclose "# probe
+
+## BL-975
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+"
+ef_mut m-widenostep 's/^eff_nostep_ok() { case .*$/eff_nostep_ok() { return 0; }/' ef-sprintless "# probe
+
+## BL-976
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: the cost fell.
+"
+# m-nopathnarrow reverts the standalone-word narrowing: the raw line is matched again, so the
+# path-embedded s317 reads as a sprint. The ef-pathsprint world (green on the subject) is used as the
+# seed, so a survivor is rc 0 there; the kill is E0's own BL-966 case refusing first (exit 2), or
+# the world turning red. ef_mut scores rc 0 as a kill, so this one is scored here instead.
+d_pn="$TMP/m-nopathnarrow"; ef_seed "$d_pn" "$EF_PATHSPRINT"
+if mut "$d_pn" 's/^  _t="\$(sed -e .*$/  _t="$1"/'; then
+  out="$( (cd "$d_pn" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF 'SELF-PROBE FAILED -- E0' <<<"$out"; then
+    note "ok    m-nopathnarrow -- killed by the subject's own E0 self-probe (BL-966) before the corpus"
+  elif [ "$rc_v" -eq 1 ] && [ "$(ef_rows "$out")" = "SHAPE BL-979|" ]; then
+    note "ok    m-nopathnarrow -- killed: the ef-pathsprint world reads SHAPE BL-979 with the narrowing reverted"
+  else
+    note "FAIL  m-nopathnarrow -- SURVIVED: rc $rc_v, rows [$(ef_rows "$out")]"; rc=1
+  fi
+fi
+ef_mut m-nofiling 's/^      \[ "\$_a" = "1" \] .. \[ "\$_t" != "1" \] .. \[ "\$_n" != "1" \] .. printf .F-UNTAGGED.*$/      :/' ef-untagged "# probe
+
+## BL-977
+
+Filed from docs/analysis/x.md with no tag.
+"
+
 # ===== THE RECEIPT / FIXTURE-ARM JOIN (BL-278). ==============================================
 # A closed entry's receipt and the fixture arms covering the same subject divide the work: the
 # receipt establishes the fix is present, the arms establish what the receipt cannot express. That

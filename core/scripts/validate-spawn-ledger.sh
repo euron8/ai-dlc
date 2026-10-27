@@ -922,6 +922,18 @@ matches_pin() {
 #       FAILS, counted in SHARD_VIOL, printed with the row's `shard_raw`, and decided on its
 #       own before the exit-3 branch, because the shardable set is not Rule 19 scope.
 #
+#   S4  a shardable row whose shard is `cross/<K> g1/1 <ordinals>` -- the ONE cross agent of a
+#       dispatch (G=1) -- and whose ordinal list does not contain every ordinal 1..K. FAILS. One
+#       cross agent replaces the per-group crosses only if its brief covers the whole partition.
+#       THIS BINDS THE BRIEF, NOT A READ SET: the ledger records the `shard:` line and no reads, so
+#       whether the agent then read every section is not observable here. K is the brief's own
+#       declared part count; the ledger carries no document, so no `--map` call is made and the
+#       arm adds no fork -- it is one more branch in shard_scan's single awk pass. It reads only
+#       the trailing ordinals, so a change to the `g<g>/<G>` token does not move it. SCOPE: G=1
+#       only. A per-group cross (G>1, every row measured on graph's s317-s320 ledgers before the
+#       one-cross dispatch) covers a subset by design and is not an S4 subject; `cross/<K> cross`
+#       rows carry no ordinals and are not judged.
+#
 #   S1  a SHARDABLE row whose dispatch carried no parseable `shard:` line (`shard: null`).
 #       The grammar is defined once, in ai-dlc-dispatch-guard.sh (THE SHARD LINE, in its
 #       CONTRACT header), and not restated here.
@@ -1065,6 +1077,27 @@ shard_scan() {
       if ($4 == "__NOKEY__") print "P\t" $2
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
       else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5 "\t" $6
+      else if ($4 ~ /^cross\/[0-9]+ g1\/1 /) {
+        # S4: the ONE cross agent of a dispatch (G=1) must name every section ordinal 1..K.
+        # Only the trailing ordinal list is read, so a change to the `g<g>/<G>` token does not
+        # move it. Legacy per-group crosses (G>1) each cover a subset by design and never reach here.
+        cv_k = $4; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
+        cv_l = $4; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
+        # Each ordinal is NORMALISED before the comparison: blanks around it and leading zeros are
+        # stripped, because `partition-document.sh --map` zero-pads at K>=10 and not every emitter
+        # file says "without padding". One bad token (empty, a lone 0, non-digit) refuses the brief.
+        cv_miss = 0; cv_ok = 1; cv_s = ","
+        cv_n = split(cv_l, cv_p, ",")
+        for (cv_i = 1; cv_i <= cv_n; cv_i++) {
+          cv_t = cv_p[cv_i]; gsub(/^[ \t]+|[ \t]+$/, "", cv_t); sub(/^0+/, "", cv_t)
+          if (cv_t !~ /^[0-9]+$/) { cv_ok = 0; break }
+          cv_s = cv_s cv_t ","
+        }
+        if (!cv_ok) cv_miss = cv_k
+        else { for (cv_i = 1; cv_i <= cv_k; cv_i++) if (index(cv_s, "," cv_i ",") == 0) cv_miss++ }
+        if (cv_k >= 1 && cv_miss > 0) print "C\t" $2 "\t" $3 "\t" $4 "\t" $6
+        else print "S\t" $2 "\t" $4
+      }
       else print "S\t" $2 "\t" $4
     }
     END {
@@ -1101,6 +1134,9 @@ shard_self_probe() {
     '{"v":1,"sprint":7,"name":"adv-b","role":"adversary","tool_use_id":"toolu_B","shard":"1/2 01"}' \
     '{"v":1,"sprint":7,"name":"adv-inv","role":"adversary","tool_use_id":"toolu_I","shard":"invalid-exception","shard_raw":"none (made up)"}' \
     '{"v":1,"sprint":7,"name":"adv-ok3","role":"adversary","tool_use_id":"toolu_K","shard":"none (3)"}' \
+    '{"v":1,"sprint":7,"name":"cov-miss","role":"adversary","tool_use_id":"toolu_CM","shard":"cross/4 g1/1 1,2,3"}' \
+    '{"v":1,"sprint":7,"name":"cov-ok","role":"adversary","tool_use_id":"toolu_CO","shard":"cross/4 g1/1 1,2,3,4"}' \
+    '{"v":1,"sprint":7,"name":"cov-legacy","role":"adversary","tool_use_id":"toolu_CL","shard":"cross/6 g2/6 1,2,5"}' \
     '{"v":1,"sprint":7,"name":"adv-c","role":"adversary","tool_use_id":"toolu_C"}' \
     '{"v":1,"sprint":7,"name":"seat","role":"tea","tool_use_id":"toolu_D","shard":null}' \
     '{"v":1,"sprint":7,"name":"dev-a","role":"dev","tool_use_id":"toolu_E","shard":null}' \
@@ -1140,6 +1176,11 @@ shard_self_probe() {
   sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
   sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)${TAB}toolu_I" "an invalid-exception row to FAIL under S3 with its raw text and tool_use_id"
   sp_want "S${TAB}adv-ok3${TAB}none (3)" "a valid serial exception to read as a carried shard line"
+  sp_want "C${TAB}cov-miss${TAB}adversary${TAB}cross/4 g1/1 1,2,3${TAB}toolu_CM" "a one-cross dispatch whose brief omits section 4 to be REFUSED under S4"
+  sp_want "S${TAB}cov-ok${TAB}cross/4 g1/1 1,2,3,4" "a one-cross dispatch naming every section to read as a carried shard line"
+  sp_want "S${TAB}cov-legacy${TAB}cross/6 g2/6 1,2,5" "a legacy per-group cross (G>1, a subset by design) to read as a carried shard line"
+  sp_not "C${TAB}cov-ok" "a one-cross dispatch naming every section was refused"
+  sp_not "C${TAB}cov-legacy" "a legacy per-group cross covering a subset was refused"
   sp_not "S${TAB}adv-inv" "an invalid-exception row was counted as a carried shard line"
   sp_not "X${TAB}adv-ok3" "a valid serial exception was FAILED under S3"
   sp_not "X${TAB}adv-c" "a row with no shard KEY was FAILED under S3"
@@ -1736,7 +1777,7 @@ SHARD_SET=" ${SHARD_ROLES} ${SHARD_SEATS} "
 SH_OUT=""
 SH_RC=0
 SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR")" || SH_RC=$?
-SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0; SHARD_VIOL=0
+SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0; SHARD_VIOL=0; SHARD_COV=0
 if [ "$SH_RC" -ne 0 ]; then
   # EXIT 2, NOT A WARNING. Since S3 can FAIL, an unreadable ledger here is an arm that did not
   # run, and a warning would let the run exit 0 over it.
@@ -1759,18 +1800,24 @@ else
          echo "      grammar accepts (N may be 1). Re-dispatch sharded, or name the exception and verify the output." >&2
          echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
          echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
+      C) SHARD_COV=$((SHARD_COV + 1))
+         [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
+         echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' is the ONE cross agent of its dispatch (G=1) and its brief does not name every section:" >&2
+         echo "      shard: ${sh_c}" >&2
+         echo "      A single cross agent stands in for every cross group only if its brief covers ordinals 1..K of the" >&2
+         echo "      partition. Re-dispatch it briefed with every section (arm S4; it binds the BRIEF, not the agent's reads)." >&2 ;;
       U) SH_WARN=$((SH_WARN + 1))
          echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
          case "$sh_b" in
            code-reviewer|code-reviewer-escalated)
              echo "      Rule 28: one reviewer per part 'partition-review-diff.sh --map' prints for the story diff"
-             echo "      plus its cross agent(s) -- 'shard: cross/<K> g<g>/<G> <ordinals>', one per row of"
-             echo "      'partition-document.sh --cross-groups <K>' -- or 'shard: 1/1 <story-index>' when the map is SERIAL"
+             echo "      plus ONE cross agent -- 'shard: cross/<K> g1/1 <ordinals>', every ordinal 1..K"
+             echo "      comma-joined -- or 'shard: 1/1 <story-index>' when the map is SERIAL"
              echo "      (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
            qa)
              echo "      Rule 28: for a gate-2 validation, one QA per part 'partition-review-diff.sh --map' prints on the"
-             echo "      go-signal sha plus its cross agent(s), 'shard: cross/<K> g<g>/<G> <ordinals>' one per row of"
-             echo "      'partition-document.sh --cross-groups <K>', or 'shard: 1/1 <story-index>' when the map is SERIAL;"
+             echo "      go-signal sha plus ONE cross agent, 'shard: cross/<K> g1/1 <ordinals>' with every ordinal"
+             echo "      1..K comma-joined, or 'shard: 1/1 <story-index>' when the map is SERIAL;"
              echo "      a qa seat with no story diff is 'shard: 1/1 <key>' (grammar: ai-dlc-dispatch-guard.sh, THE SHARD"
              echo "      LINE). Not a failure." ;;
            *)
@@ -1796,6 +1843,7 @@ fi
 echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SHARD_VIOL} FAILED on an invented serial exception (S3), ${SH_WARN} WARNED without one,"
 echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); merged-pass ids: ${SH_JOINED} joined,"
 echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
+echo "  cover (S4): ${SHARD_COV} one-cross dispatch(es) (G=1) whose brief omits a section."
 # THE SEAT SET PRINTS ON EVERY RUN, because an empty one changes no verdict on its own: it only
 # removes rows from S1 and S3. WARN rather than exit 2 -- a consumer always has the directory
 # (the dispatch guard is inert without it), so an empty derivation is a moved or renamed
@@ -1817,6 +1865,12 @@ fi
 # exit 0 on a sprint full of uncited dispatches.
 if [ "$SHARD_VIOL" -gt 0 ]; then
   echo "FAIL: ${SHARD_VIOL} Rule 28 invalid serial exception(s) across the S${SPRINT_NUM} shardable row(s) (arm S3)." >&2
+  [ "$VIOL" -gt 0 ] && echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2
+  exit 1
+fi
+
+if [ "$SHARD_COV" -gt 0 ]; then
+  echo "FAIL: ${SHARD_COV} one-cross dispatch(es) in S${SPRINT_NUM} whose brief omits a section of the partition (arm S4)." >&2
   [ "$VIOL" -gt 0 ] && echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2
   exit 1
 fi

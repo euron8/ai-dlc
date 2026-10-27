@@ -1,18 +1,24 @@
 import json,collections,re,sys
 S=sys.argv[1]
+# Sprints are an argument (argv[2], comma list), default every sprint the extractor assigned.
+SPRINTS=tuple(int(x) for x in sys.argv[2].split(',')) if len(sys.argv)>2 else (314,315,316,317,318,319,320)
+# Pass number: `p<N>` / `G1p<N>` / `pass <N>` / `pass-<N>` / `pass_<N>`, one or more digits.
+PASS_RE=re.compile(r'(?:(?<![A-Za-z])p|[Pp]ass[ _-])(\d+)')
+def pass_of(d):
+    m=PASS_RE.search(d)
+    return int(m.group(1)) if m else 1
 rows=[]
 for l in open(S+"/spawns.jsonl"):
     s=json.loads(l)
     st=s['step']; st=st[16:-1] if st.startswith('gate-validation[') else st
-    if st!='implementation' or s['sprint'] not in (317,318,319): continue
+    if st!='implementation' or s['sprint'] not in SPRINTS: continue
     if not s['role'].startswith(('code-reviewer','qa')): continue
     d=s['description']
     story=re.search(r'(?<![\d.])(\d{1,2}\.\d{1,2})(?![\d.])',d)
     g=re.search(r'(?:[Gg]ate[- ]?|\bG)(\d)',d)
-    p=re.search(r'(?:\bp|pass )(\d)',d)
     kind='closing' if 'losing' in d else ('delta' if 'delta' in d.lower() else ('qa' if 'QA' in d or s['role'].startswith('qa') else 'cr'))
-    rows.append(dict(sp=s['sprint'],story=story.group(1) if story else '?',gate=g.group(1) if g else '?',ps=int(p.group(1)) if p else 1,kind=kind,usd=s['usd'],d=d,start=s['start'],role=s['role']))
-for n in (317,318,319):
+    rows.append(dict(sp=s['sprint'],story=story.group(1) if story else '?',gate=g.group(1) if g else '?',ps=pass_of(d),kind=kind,usd=s['usd'],d=d,start=s['start'],role=s['role']))
+for n in SPRINTS:
     R=[r for r in rows if r['sp']==n]
     unparsed=sum(1 for r in R if r['story']=='?' or r['gate']=='?')
     passes=collections.defaultdict(set); shards=collections.Counter(); usd=collections.Counter()

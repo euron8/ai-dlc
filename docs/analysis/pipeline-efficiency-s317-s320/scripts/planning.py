@@ -1,5 +1,6 @@
 import csv,collections,sys
-exec(open(sys.argv[2]).read().split("rows=list")[0])
+import importlib.util
+_sp=importlib.util.spec_from_file_location("roll",sys.argv[2]); _m=importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_m); usd=_m.usd
 rows=list(csv.DictReader(open(sys.argv[1]+'/steps.csv')))
 G={'carry-over-evaluation':'carry','requirements':'req','architecture':'arch','stories-test-strategy':'stories'}
 A=collections.defaultdict(lambda: collections.defaultdict(float))

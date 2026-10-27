@@ -1126,7 +1126,6 @@ p_q_ho_widen() { local d o f; d="$(qworld "$1" PASS PASS PASS PASS)" || return 1
 # ------------------------------------------------------------------- the sharded cross reviewer
 # The cross reviewer is one shard per row of `partition-document.sh --cross-groups <K>`. Each arm
 # below demands the merge's own refusal message, so a world refused for another reason fails it.
-QT_X_ONLY="a single cross shard is owed only at K=2"
 QT_X_MIX="mixes cross.md with cross-<g>.md"
 QT_X_OWNER="a finding owned by cross-1 (partition-document.sh --cross-owner)"
 QT_X_AC="(cross-2) carries a '## Acceptance Criteria' section; only cross-1, the execution owner"
@@ -1154,17 +1153,54 @@ p_x_k8() { # X1: K=8 -> eight parts and cross-1..6 merge; the title counts 14 sh
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qF '(merged from 14 shards)' <<<"$(sed -n 1p "$o")" \
     && has "$o" "## Shard: cross-1 (1,2,3,4)" && has "$o" "## Shard: cross-6 (5,6,7,8)" && has "$o" "#### F-cross-6-1 "
 }
-p_x_only() { # X2: K=8 (and K=3) with ONE cross.md in place of the groups -> REFUSED, nothing written
-  local sd="$1" d g SHARD_SHA="$E_SHA"
-  d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
-  for g in 1 2 3 4 5 6; do rm -f "$d/cross-$g.md"; done
-  shard "$d" cross APPROVED "1, 8"; run_merge "$sd" "$d"; refused_clean "$QT_X_ONLY" "$d" || return 1
-  SHARD_SHA="$B_SHA"; d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  rm -f "$d"/cross-*.md; shard "$d" cross APPROVED "1, 3"; run_merge "$sd" "$d"; refused_clean "$QT_X_ONLY" "$d"
+p_x_lone() { # X2 (BL-811): ONE cross.md in place of the groups at K>2 is the DISPATCHED shape -> ACCEPTED.
+  # x-lone-k8: K=8 (G=6), code-review: merges, titled 9 shards (K + the ONE delivered), the parts in
+  #   order then `## Shard: cross` last with no group header, and a 1, 2 finding (cross-1's under the
+  #   groups) owned by the lone cross, count +1.
+  # x-lone-qa: K=3 (G=3), --gate qa: the lone cross.md carries the per-AC table and merges PASS (it is
+  #   the execution owner), and --check-shard over it answers SHARD-OK (what --mark seals on).
+  # x-partial: K=8 with cross-6.md removed from the complete set -> REFUSED naming cross-6.
+  local sd="$1" d o n0 g pl cl SHARD_SHA="$E_SHA"
+  WHY=""
+  if cell x-lone-k8; then
+    d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="x-lone-k8{the K=8 world was not built}"; return 1; }
+    [ "$(nparts "$d")" = 8 ] || { WHY="x-lone-k8{the world has $(nparts "$d") parts, not 8}"; return 1; }
+    for g in 1 2 3 4 5 6; do rm -f "$d/cross-$g.md"; done
+    shard "$d" cross APPROVED "1, 8"; o="$(out_of "$d")"; run_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || { WHY="x-lone-k8{want MERGED got rc=$RC $(head -1 "$MO")}"; return 1; }
+    n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"
+    pl="$(grep -n '^## Shard: part 8$' "$o" | cut -d: -f1)"; cl="$(grep -n '^## Shard: cross$' "$o" | cut -d: -f1)"
+    grep -qF '(merged from 9 shards)' <<<"$(sed -n 1p "$o")" && has "$o" "8 part shards and one cross shard" \
+      && [ -n "$pl" ] && [ -n "$cl" ] && [ "$pl" -lt "$cl" ] && ! has "$o" "## Shard: cross-" && has "$o" "#### F-cross-1 " \
+      || { WHY="x-lone-k8{title [$(sed -n 1p "$o")], part 8 at ${pl:-none}, cross at ${cl:-none}}"; return 1; }
+    rm -f "$o"; xfinding "$d/cross.md" F-own "1, 2" || { WHY="x-lone-k8{the owner seed did not apply}"; return 1; }
+    run_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "findings=$((n0 + 1)) " && has "$o" "#### F-own " \
+      || { WHY="x-lone-k8{a 1, 2 finding in the lone cross.md: rc=$RC $(head -1 "$MO")}"; return 1; }
+  fi
+  if cell x-lone-qa; then
+    SHARD_SHA="$B_SHA"; d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="x-lone-qa{the qa world was not built}"; return 1; }
+    [ -f "$d/cross-3.md" ] || { WHY="x-lone-qa{the seed is not grouped}"; return 1; }
+    rm -f "$d"/cross-*.md; qshard "$d" cross PASS "1, 3"; o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "verdict=PASS " && has "$o" "| AC | Verdict | Evidence |" && [ "$(check1_value "$o")" = PASS ] \
+      || { WHY="x-lone-qa{want MERGED PASS got rc=$RC $(head -1 "$MO")}"; return 1; }
+    run_check "$sd" "$d" qa "$d/cross.md"
+    [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK:" || { WHY="x-lone-qa{--check-shard cross.md rc=$CRC $(head -1 "$CO")}"; return 1; }
+  fi
+  if cell x-partial; then
+    SHARD_SHA="$E_SHA"; d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="x-partial{the K=8 world was not built}"; return 1; }
+    [ -f "$d/cross-6.md" ] && rm -f "$d/cross-6.md"; run_merge "$sd" "$d"
+    refused_clean "shard cross-6 is missing from" "$d" || { WHY="x-partial{want REFUSED naming cross-6 got rc=$RC $(head -1 "$MO")}"; return 1; }
+  fi
+  [ -z "$WHY" ]
 }
 p_x_mix() { # X3: cross.md beside cross-1..3 -> REFUSED
-  local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  shard "$d" cross APPROVED "1, 3"; run_merge "$1" "$d"; refused_clean "$QT_X_MIX" "$d"; }
+  local d
+  WHY=""; cell x-mix || return 0
+  d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || { WHY="x-mix{the world was not built}"; return 1; }
+  shard "$d" cross APPROVED "1, 3"; run_merge "$1" "$d"
+  refused_clean "$QT_X_MIX" "$d" || { WHY="x-mix{want REFUSED as a mix got rc=$RC $(head -1 "$MO")}"; return 1; }
+}
 p_x_unknown() { # X4: cross-4 at K=3 (G=3), and cross-1.md in place of cross.md at K=2 (G=1) -> each REFUSED
   local sd="$1" d SHARD_SHA="$B_SHA"
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
@@ -1312,7 +1348,7 @@ p_x_dupall() {
   fi
   [ -z "$WHY" ]
 }
-X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat x_dupall"
+X_ALL="x_k8 x_lone x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat x_dupall"
 # ------------------------------------------------------- gate-1 hand-overs (--gate code-review)
 # A code-review part shard replays its own part's mutation-REDs and hands over only what its own
 # worktree cannot bring to GREEN; the execution owner (cross-1) runs the hand-overs. The grammar

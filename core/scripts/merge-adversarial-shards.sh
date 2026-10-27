@@ -222,12 +222,16 @@
 #   may each honestly stamp EXIT_CONDITION_MET while the artifact holds 6.
 #
 # SHARD FILES (non-recursive, `<shard-dir>/*`)
-#   `<ordinal>.md` one per story, plus the CROSS SHARDS: one per row of
+#   `<ordinal>.md` one per story, plus the CROSS SHARDS in one of two shapes, both accepted at ANY
+#   K and never mixed. The DISPATCHED shape is ONE cross adversary reading every unit, writing
+#   `cross.md`. The GROUPED shape (the dispatch before that, still merged) is one shard per row of
 #   `partition-document.sh --cross-groups <K>` (K = the unit count, in EVERY mode), named
 #   `cross-<g>.md` -- and `cross.md` iff that table has exactly one row (G=1, i.e. K=2). The
-#   table is read from that one speller, never restated here. Every `cross-<g>` the table prints
-#   is required; a `cross-<g>` it does not print, `cross.md` beside any `cross-<g>.md`, `cross.md`
-#   when G>1 and `cross-<g>.md` when G=1 are each REFUSED. Any other non-dot entry is REFUSED -- a
+#   table is read from that one speller, never restated here. A grouped set must be complete; a
+#   partial `cross-<g>` set, a `cross-<g>` the table does not print, `cross.md` beside any
+#   `cross-<g>.md`, and `cross-<g>.md` when G=1 are each REFUSED. Every reader takes the DELIVERED
+#   shape: a lone `cross.md` is the one cross key, its first shard and the owner of every cross
+#   finding. Any other non-dot entry is REFUSED -- a
 #   re-dispatch written beside the original must not be silently ignored. The one exception is
 #   `<shard name>.draft` where `<shard name>` is itself a valid shard name (`2.md.draft`,
 #   `cross-1.md.draft`): the adversary's unfinished copy, which the write ledger already accepts
@@ -355,7 +359,7 @@
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
 #   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's DERIVED
 #   id (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
-#   (`cross=<id>` when G=1), every id derived; invoked_at is the EARLIEST shard, each shard's own
+#   (`cross=<id>` when one cross shard was delivered), every id derived; invoked_at is the EARLIEST shard, each shard's own
 #   value first bounded on both sides (THE INVOKED_AT BOUND, below). The merged body opens with the
 #   ordinal map (the `--map` output, fenced), then every shard body in ordinal order, the cross
 #   shards last in group order under one header per group, each with its own provenance block
@@ -816,9 +820,17 @@ while IFS="$(printf '\t')" read -r gg gl; do
   [ "$gg" = "$i" ] && [[ $gl =~ $RE_GROUP ]] \
     || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
 done < "$T/groups"
-if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"
-else CROSS_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
-CROSS_FIRST="${CROSS_KEYS%% *}"
+if [ "$G" -eq 1 ]; then XTABLE_KEYS="cross"
+else XTABLE_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
+# THE DELIVERED SHAPE (header: SHARD FILES). XTABLE_KEYS is the table's grouped spelling and names
+# what a `cross-<g>` may be; CROSS_KEYS, CROSS_FIRST and XG are the shape the set DELIVERED -- the
+# table's until the staging reads a lone `cross.md`, then `cross`, `cross` and 1. Every set-level
+# reader below reads these three, never G.
+cross_shape() { # <grouped|lone>
+  if [ "$1" = lone ]; then CROSS_KEYS="cross"; XG=1; else CROSS_KEYS="$XTABLE_KEYS"; XG="$G"; fi
+  CROSS_FIRST="${CROSS_KEYS%% *}"
+}
+cross_shape grouped
 
 # ---- the exit ceilings, read from their one declaration ----------------------------------
 VALIDATOR="$(cd "$(dirname "$0")" && pwd)/validate-adversarial-convergence.sh"
@@ -869,9 +881,9 @@ for f in "$SHARD_DIR"/*; do
   esac
   if [ "$is_draft" -eq 1 ]; then
     # Only a draft of a shard this set OWES is skipped: `cross-9.md.draft` hangs off no shard.
-    case " $ORDINALS $CROSS_KEYS " in
+    case " $ORDINALS cross $XTABLE_KEYS " in
       *" $key "*) printf 'NOTE: ignored draft %s\n' "$b" >&2 ;;
-      *) collect "$f is a draft of $key, which is no shard of this set (the shards are: $ORDINALS and $CROSS_KEYS)" ;;
+      *) collect "$f is a draft of $key, which is no shard of this set (the shards are: $ORDINALS and one cross.md or $XTABLE_KEYS)" ;;
     esac
     continue
   fi
@@ -882,22 +894,23 @@ while IFS= read -r dup; do
   [ -n "$dup" ] || continue
   collect "shard $dup was delivered more than once in $SHARD_DIR"
 done < "$T/dups"
-# The cross shards delivered must be EXACTLY the table's: a mix of `cross.md` and `cross-<g>.md`,
-# a `cross-<g>` the table does not print, or the wrong spelling for G are each refused by name.
+# The cross shards delivered are ONE of two shapes at any K: a lone `cross.md`, or EXACTLY the
+# table's `cross-1..G` (`cross.md` again when G=1). A mix of the two, a `cross-<g>` the table does
+# not print, and a partial `cross-<g>` set (the missing-shard loop) are each refused by name.
 x_plain=0; x_num=0
 while IFS="$(printf '\t')" read -r xk xf; do
   case "$xk" in
     cross) x_plain=1 ;;
     cross-*) x_num=1
-      case " $CROSS_KEYS " in *" $xk "*) ;; *) collect "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
+      case " $XTABLE_KEYS " in *" $xk "*) ;; *) collect "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $XTABLE_KEYS, or one cross.md)" ;; esac ;;
   esac
 done < "$T/shards"
 [ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
-  && collect "$SHARD_DIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
-[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \
-  && collect "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
+  && collect "$SHARD_DIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: one cross.md, or $XTABLE_KEYS)"
+if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi
+x_alt=""; [ "$XTABLE_KEYS" = cross ] || [ "$CROSS_KEYS" = cross ] || x_alt=", or one cross.md in place of the groups"
 for idx in $ORDINALS $CROSS_KEYS; do
-  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || collect "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS)"
+  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || collect "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS$x_alt)"
 done
 phase_barrier
 
@@ -1416,7 +1429,7 @@ for key in $ORDINALS $CROSS_KEYS; do
       # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
       own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err")" \
         || { collect "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"; continue; }
-      [ "$G" -eq 1 ] && ownk="cross" || ownk="cross-$own"
+      [ "$XG" -eq 1 ] && ownk="cross" || ownk="cross-$own"
       # A cross shard reads the whole document and may cite any ordinal, so a finding outside its
       # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set, the
       # one case the two are the same finding and would be summed twice.
@@ -1441,7 +1454,7 @@ for key in $ORDINALS $CROSS_KEYS; do
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))
 
   # --- the body, provenance block stripped ---
-  # One header per cross GROUP: `cross-story` at G=1 (the bytes before cross groups existed),
+  # One header per cross GROUP: `cross-story` for a lone `cross` (the bytes before cross groups existed),
   # `cross-story group <g> (<ordinals>)` otherwise, so a reader sees which pairs each group saw.
   xh=""
   if [ "$is_x" -eq 1 ] && [ "$key" != "cross" ]; then

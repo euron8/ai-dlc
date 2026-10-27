@@ -180,6 +180,7 @@ core_manifest:
   - fixtures/scope-confirmation/**
   - fixtures/snapshot-archive-rotate/**
   - fixtures/snapshot-conservation/**
+  - fixtures/snapshot-update-stamps/**
   - fixtures/trunk-audit-gate/**
   - fixtures/suppression-lifetime/**
   - fixtures/self-update-fixture-log/**
@@ -281,6 +282,7 @@ core_manifest:
   - fixtures/mandatory-rules-snapshot-position/**
   - fixtures/mutation-red-replay/**
   - fixtures/carried-findings/**
+  - fixtures/review-reroute/**
   - fixtures/trunk-audit-classes/**
   - fixtures/story-fields-derive/**
   - fixtures/transient-ignore-block/**

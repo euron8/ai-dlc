@@ -13,6 +13,15 @@
 #       lines into the re-review briefs (implementation.md, `**Gate-1 dispatch`). NOTE and FAIL
 #       lines go to stderr; exit 1 when a finding cannot be carried (a post-rule bullet), 2 on a
 #       refusal, else 0.
+#   validate-carried-findings.sh --classes <pass M-1 review file>
+#       Prints one line per Critical/Important finding of that pass, `<class>\t<carry string>`,
+#       in --list's order and nothing else on stdout. <class> is the value of the finding's
+#       column-0 `Class:` line (code-reviewer.md's template; merge-review-shards.sh SHARD GRAMMAR
+#       checks the value), `-` when it carries none, `?` when it carries two. A label prior and a
+#       pre-rule line that is a NOTE under --list print `-`: neither is classed. Exit codes are
+#       --list's. The carry string is never extended with the class: --list's lines are pasted
+#       verbatim into `carried:` lines and matched by Check 1. Its reader is
+#       partition-review-diff.sh --route, which routes on these classes and fails closed on `-`/`?`.
 #
 # THE SUBJECT. A delta re-review (implementation.md, the `**Gate-1 dispatch` paragraph) reads only the fix delta,
 # so a prior finding the delta never touched is silently dropped unless something carries it.
@@ -96,11 +105,13 @@ set -u
 export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
-USAGE="usage: validate-carried-findings.sh <pass M-1 review file> <pass M review file> | --list <pass M-1 review file>"
+USAGE="usage: validate-carried-findings.sh <pass M-1 review file> <pass M review file> | --list <pass M-1 review file> | --classes <pass M-1 review file>"
 case "${1:-}" in -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;; esac
 [ "$#" -eq 2 ] || refuse "$USAGE"
-LIST=0
-if [ "$1" = "--list" ]; then LIST=1; PRIOR="$2"; CUR="$2"; else PRIOR="$1"; CUR="$2"; fi
+LIST=0; CLASSES=0
+if [ "$1" = "--list" ]; then LIST=1; PRIOR="$2"; CUR="$2"
+elif [ "$1" = "--classes" ]; then LIST=1; CLASSES=1; PRIOR="$2"; CUR="$2"
+else PRIOR="$1"; CUR="$2"; fi
 [ -f "$PRIOR" ] && [ -r "$PRIOR" ] || refuse "prior review $PRIOR is not a readable file"
 [ -f "$CUR" ] && [ -r "$CUR" ] || refuse "review $CUR is not a readable file"
 
@@ -235,13 +246,34 @@ fails=0
 n_prior=0; n_res=0; n_open=0
 # ---- --list: the carry strings, and nothing else on stdout ----------------------------------------
 if [ "$LIST" -eq 1 ]; then
+  # --classes: the Class of every `#### ` heading finding, in the order the priors reader above emits
+  # them -- the SAME fence, `## Findings` and container grammar, so the n-th heading row there is the
+  # n-th line here. A label prior (id non-empty) is never a heading and is printed unclassed.
+  hcls=""
+  if [ "$CLASSES" -eq 1 ]; then
+    hcls="$(awk '
+      function norm(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+      function flush() { if (inf) print (nc == 1 ? cv : (nc == 0 ? "-" : "?")); inf = 0; nc = 0; cv = "" }
+      { t = $0; sub(/^[ \t]+/, "", t) }
+      fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
+      substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~" { fence = substr(t, 1, 3); next }
+      /^# / || /^## / { flush(); fs = (substr($0, 1, 3) == "## " && tolower(norm(substr($0, 4))) ~ /^findings/); sev = ""; next }
+      /^### / { flush(); h = tolower(norm(substr($0, 5))); sub(/^\**/, "", h)
+                sev = (h ~ /^critical/ ? "Critical" : (h ~ /^important/ ? "Important" : "")); next }
+      /^#### / { flush(); if (fs && sev != "") inf = 1; next }
+      inf && /^Class:/ { nc++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); if (v == "" || v ~ /[ \t]/) v = "?"; cv = v }
+      END { flush() }' "$PRIOR")"
+  fi
+  hn=0
   while IFS="$TAB" read -r sev disp k id; do
     [ -n "$disp" ] || continue
     case "$sev" in
       NOTE)     say "NOTE: $PRIOR:$k is a $disp line of a prior not held to the heading form, neither a \"#### \" heading nor a bold label; not carried" ;;
       LEADIN)   say "NOTE: $PRIOR:$k is lead-in prose in a $disp container before its first \"#### \" heading; not a finding" ;;
       UNPARSED) say "FAIL: $PRIOR:$k carries a $disp finding that is not a \"#### \" heading, so it cannot be carried"; fails=$((fails + 1)) ;;
-      *)        printf '%s\n' "$disp" ;;
+      *)        if [ "$CLASSES" -eq 0 ]; then printf '%s\n' "$disp"
+                elif [ -n "$id" ]; then printf '%s\t%s\n' "-" "$disp"
+                else hn=$((hn + 1)); c="$(sed -n "${hn}p" <<<"$hcls")"; printf '%s\t%s\n' "${c:--}" "$disp"; fi ;;
     esac
   done <<EOF
 $priors

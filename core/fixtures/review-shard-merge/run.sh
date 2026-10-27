@@ -60,6 +60,10 @@ seed_controls
 arm() { # <predicate> <label-ok> <label-bad>
   if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3 (rc=${RC:-?}): $(cat "$MO" 2>/dev/null | head -3)"; fi
 }
+arm2() { # <predicate> <label-ok> <label-bad> -- the predicate sets WHY to what it saw
+  WHY=""
+  if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3:${WHY:- (no reason recorded)}"; fi
+}
 arm part "P1: repo A (all files under app/) partitions to >= 2 parts above --min-files 4, app/ split across parts, no part keyed on bare app/, the docs/reviews/ artifact excluded" \
          "P1: repo A did not partition by adaptive depth"
 arm dflt_lo "P2: key unset, no flag, $((DFLT - 1)) reviewable files ($DFLT in the diff, one under a scan root) -> exit 3, 'SERIAL:' naming the built-in default $DFLT and $KEY, no manifest" \
@@ -186,9 +190,9 @@ arm q_ho_widen "H24: under 'handovers: 0', 'handover' followed by an em dash, en
                "H24: a hand-over spelling the widened malformed-line pattern names was merged"
 arm x_k8 "X1: K=8 -- eight parts and cross-1..6 (one per --cross-groups row) merge, titled 'merged from 14 shards', one body header per group" \
          "X1: a K=8 shard dir with every cross group was not merged as fourteen shards"
-arm x_only "X2: K=8, and K=3, with one cross.md in place of the cross groups -> REFUSED 'a single cross shard is owed only at K=2', nothing at --out" \
-           "X2: a single unsharded cross reviewer was merged where the cross groups were owed"
-arm x_mix "X3: cross.md beside cross-1..3 -> REFUSED as a mix, nothing at --out" "X3: cross.md and cross-<g>.md merged together"
+arm2 x_lone "X2: ONE cross.md in place of the groups at K>2 is ACCEPTED (BL-811) -- K=8 merges titled 9 shards, the parts then '## Shard: cross' last, a 1, 2 finding owned by it; K=3 --gate qa merges PASS with its per-AC table and --check-shard cross.md is SHARD-OK; a partial cross-1..5 set at K=8 REFUSED naming cross-6" \
+          "X2: the lone cross shard at K>2 was refused, mis-merged, or a partial cross-<g> set was merged"
+arm2 x_mix "X3: cross.md beside cross-1..3 -> REFUSED as a mix, nothing at --out" "X3: cross.md and cross-<g>.md merged together"
 arm x_unknown "X4: cross-4 at K=3, and cross-1.md in place of cross.md at K=2 -> each REFUSED as a group --cross-groups does not print" \
               "X4: a cross shard naming a group the table does not print was merged"
 arm x_owner "X5: K=8, a finding citing 1, 2 in cross-3 AND in its owner cross-1 -> REFUSED naming the owner; 1, 2, 7 in cross-3 alone merges, count +1; the same finding in cross-1 merges and the finding count rises by one" \
@@ -214,11 +218,8 @@ arm cr_hc_missing "G5: --gate code-review, a part shard with no 'handovers:' lin
 
 # ------------------------------------------------------------------------------------ BL-737
 # Each predicate sets WHY to what it saw. A predicate that never ran leaves no `ok` line, so every arm
-# here is presence-shaped: the receipt counts these labels' `ok` lines, never the exit alone.
-arm2() { # <predicate> <label-ok> <label-bad>
-  WHY=""
-  if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3:${WHY:- (no reason recorded)}"; fi
-}
+# here is presence-shaped: the receipt counts these labels' `ok` lines, never the exit alone. arm2
+# itself is defined beside arm, above, because X2 and X3 use it too.
 arm2 cs "CS1: --check-shard prints the full merge's REFUSED line byte-for-byte, the physical path through a symlinked alias, for $CS_N single-defect worlds (every per-shard class under both gates, the marker count, key= and <shard>, and the content seal; qa includes graph's '## Deferred live check (not scored here)' part heading); a clean shard answers SHARD-OK" \
          "CS1: --check-shard's verdict is not the merge's own"
 arm2 copies "CP1: has_marker, content_hash, seal_body and seal_of in merge-review-shards.sh, and content-seal.sh's seal_review_body body, are byte-identical to wait-for-deliverable.sh's, extracted by name, and a one-byte drift in either copy is seen" \
@@ -523,9 +524,17 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     xc_count "xc-count{" "the list length subtracted instead of its intersection with the counted files"
   CS_ONLY=xc-one mut_run M46 partition-review-diff.sh '  if [ "$NF_REV" -le 1 ]; then' '  if false; then' xc_one "xc-one{" \
     "the one-counted-file SERIAL rule removed"
+  # BL-811. m-k2only restores the K=2-only rule (a lone cross.md refused wherever the table has more
+  # than one row), so the lone-cross cell goes red on its own refusal text. m-nomix drops the mixed
+  # refusal, so cross.md beside cross-1..3 is no longer refused as a mix.
+  CS_ONLY=x-lone-k8 mut_run m-k2only merge-review-shards.sh 'if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
+    '[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] && refuse "$SDIR holds cross.md, but the part map has $K parts, whose cross groups are $XTABLE_KEYS; a single cross shard is owed only at K=2"; if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
+    x_lone "owed only at K=2" "the K=2-only lone-cross rule restored"
+  CS_ONLY=x-mix mut_run m-nomix merge-review-shards.sh '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \' \
+    x_mix "x-mix{" "the mixed cross.md + cross-<g>.md refusal dropped"
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 46 ]; then ok "VBCTL: CONTROL -- each of M1-M46's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 46), the same copy every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 46 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 48 ]; then ok "VBCTL: CONTROL -- each of M1-M46, m-k2only and m-nomix's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 48), the same copy every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 48 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
@@ -943,7 +952,7 @@ fi
 # every part shard and writing `handover-run:`); the Deliver-before-idle bullet (the first cross
 # shard, cross-1, delivers the count of hand-overs it ran).
 p_ho_step() { local t; t="$(step2_para "$1" | joined)"
-  grep -qF 'The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own' <<<"$t" \
+  grep -qF 'ONE cross QA, briefed `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K comma-joined without padding) with the whole map and the whole diff to read, writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own' <<<"$t" \
     && grep -qF 'the first cross QA in the first wave whatever the cap leaves for the rest' <<<"$t" \
     && grep -qF 'and only then joins the part shard files itself with `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`' <<<"$t" \
     && grep -qF 'Once that join completes, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
@@ -953,17 +962,17 @@ p_ho_role() { local t; t="$(role_sect "$1" | joined)"
     && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, run in the background and re-armed until every path is DELIVERED.' <<<"$t" \
     && grep -qF 'Once the join completes, the cross shard reads every part shard `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over replay in the frozen worktree after the project'"'"'s canonical dependency setup, and records each one as a column-0 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line' <<<"$t"; }
 p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
-  grep -qF 'The first cross shard (`cross-1`, or `cross` when there is one cross group) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
+  grep -qF 'The first cross shard (`cross`, or `cross-1` of a per-group set) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
 # OFFENDERS: the parts-first (two-wave) dispatch restored; the cross QA's own --complete join
 # dropped; the cross-read dropped from each site; the hand-over placed under Deferred; the
 # same-wave sentence moved out of its paragraph; the cross delivery dropped.
-sed -e 's/^row), are dispatched in the same wave as the part QAs, the first cross QA in$/row), are dispatched only after every part shard file exists, the first cross QA in/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
+sed -e 's/^writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in$/writing `cross.md` there, is dispatched only after every part shard file exists, the first cross QA in/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
 sed -e 's/^`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,$/`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`,/' "$STEP_MD" > "$WORK/ho-step-nojoin.md"
 sed -e 's/^the first wave whatever the cap leaves for the rest, and the first cross QA.s$/the wave after the parts, and the first cross QA'"'"'s/' "$STEP_MD" > "$WORK/ho-step-latewave.md"
 sed -e 's/^completes, the first cross QA reads every part shard file for `handover:` lines, runs each$/completes, the first cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own"; d = 1; p = 0 }
-     /^row\), are dispatched in the same wave as the part QAs, the first cross QA in$/ { print "row), are dispatched only after every part shard file exists, the first cross QA in"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
-grep -q '^row), are dispatched only after every part shard file exists' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
+awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "ONE cross QA, briefed `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K comma-joined without padding) with the whole map and the whole diff to read, writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own"; d = 1; p = 0 }
+     /^writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in$/ { print "writing `cross.md` there, is dispatched only after every part shard file exists, the first cross QA in"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
+grep -q '^writing `cross.md` there, is dispatched only after every part shard file exists' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
 sed -e 's/^`### Important`, never under a `### Deferred` container, and carries exactly$/`### Deferred ACs`, and carries exactly/' "$QA_MD" > "$WORK/ho-role-deferred.md"
 sed -e 's/^the join completes, the cross shard reads every part shard$/the join completes, the cross shard may read a part shard/' "$QA_MD" > "$WORK/ho-role-noread.md"
 sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,$/scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`,/' "$QA_MD" > "$WORK/ho-role-nojoin.md"
@@ -1012,7 +1021,7 @@ p_cr_role() { local t; t="$(role_sect "$1" | joined)"
     && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, backgrounded and re-armed until each is DELIVERED.' <<<"$t" \
     && grep -qF '`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>`' <<<"$t"; }
 sed -e 's/^Part reviewers run no suite and no build\. Each part reviewer replays, with$/Part reviewers EXECUTE NOTHING. Each part reviewer replays, with/' "$STEP_MD" > "$WORK/cr-step-exec.md"
-sed -e 's/^has one row (Rule 28, "Split dispatch": files axis), all in the same wave and$/has one row (Rule 28, "Split dispatch": files axis), and/' "$STEP_MD" > "$WORK/cr-step-wave.md"
+sed -e 's/^(Rule 28, "Split dispatch": files axis), all in the same wave and$/(Rule 28, "Split dispatch": files axis), and/' "$STEP_MD" > "$WORK/cr-step-wave.md"
 sed -e 's/^one header line `handovers: <n>`, `0` when it handed nothing over\. The first$/one header line, `0` when it handed nothing over. The first/' "$STEP_MD" > "$WORK/cr-step-nocount.md"
 sed -e 's/^`parts:` set\. As a part shard you run no suite and no build\. You replay,$/`parts:` set. As a part shard you EXECUTE NOTHING. You replay,/' "$ROLE_MD" > "$WORK/cr-role-exec.md"
 sed -e 's/^(`git worktree add --detach <tmp> <sha>`), never in the shared frozen$/in the shared frozen/' "$ROLE_MD" > "$WORK/cr-role-shared.md"

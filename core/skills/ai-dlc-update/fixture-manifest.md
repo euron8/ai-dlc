@@ -43,6 +43,7 @@ core_manifest:
   - core/fixtures/scope-confirmation/**
   - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
+  - core/fixtures/snapshot-update-stamps/**
   - core/fixtures/trunk-audit-gate/**
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-fixture-log/**
@@ -156,6 +157,7 @@ core_manifest:
   - core/fixtures/mandatory-rules-snapshot-position/**
   - core/fixtures/mutation-red-replay/**
   - core/fixtures/carried-findings/**
+  - core/fixtures/review-reroute/**
   - core/fixtures/trunk-audit-classes/**
   - core/fixtures/story-fields-derive/**
   - core/fixtures/transient-ignore-block/**

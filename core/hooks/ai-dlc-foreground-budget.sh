@@ -93,8 +93,13 @@
 # Write) never sees the stamps it wrote; the remedy routes the same change through that judge.
 # Reads stay allowed: `cat`, `grep`, `sed -n`, `<`, a `python3` `open(p)` or `open(p,'r')`, a
 # redirect whose TARGET is another file, `git add/commit/show/diff`, `cp` FROM it, and a
-# `bash <core script> ... pipeline-snapshot.md` call -- no core script takes the snapshot
-# path as an argument and writes it (`rotate-snapshot-archive.sh` writes the ARCHIVE).
+# `bash <core script> ... pipeline-snapshot.md` call. ONE core script writes the snapshot:
+# `snapshot-update.sh`, the shell writer `_gate-procedures.md` "Sub-step snapshot update" names.
+# It passes under that same rule, not under an exemption -- no verdict here names it -- and it
+# carries the judge this deny routes writes to: it runs `validate-artifact-budget.sh
+# --stamps-only` on the lines it adds BEFORE it writes, and writes nothing on a finding
+# (`core/fixtures/snapshot-update-stamps`, with a mutant per removed layer). Any OTHER script
+# handed the path is unjudged, as before. `rotate-snapshot-archive.sh` writes the ARCHIVE.
 # Measured on graph's transcripts: 4,617 Bash calls name the snapshot (4,346 distinct). The
 # shipped hook denies 1,912 (1,873 distinct); an independent second reading, keyed on the
 # variable's LAST binding before each interpreter write site plus a tokenised shell-write scan,

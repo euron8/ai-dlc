@@ -250,7 +250,8 @@ k_world() {
 
 # ---------------------------------------------------------------- the cross groups (BL-464)
 # Every mode at K=8 (files, --document, --subject --elicitation): cross-1..6 merges; cross.md alone
-# refuses; a finding duplicated into a non-owner group refuses; and K=2 with cross.md merges.
+# merges too (BL-811, the dispatched shape); a partial cross-<g> set refuses; a finding duplicated
+# into a non-owner group refuses; and K=2 with cross.md merges.
 # 8-section document, and an 8-unit subject built from the --document world's own partitioner.
 doc8_world() { # -> the shard dir of a --document world over an 8-part document
   local w pa i
@@ -323,8 +324,24 @@ p_xgroups() {
   [ "$K" -ge 5 ] || return 1                       # G = 6 needs K >= 5; the seed must express it
   xset "$mode" "$d" "$K" groups; xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  # THE LONE CROSS (BL-811): one cross.md in place of the groups at K=8 is the dispatched shape and
+  # MERGES -- titled K+1 shards, the per-unit bodies first and the one cross body last under the
+  # group-less header, tool_use_id the lone cross's derived id and its id keyed `cross=`, never `cross-`.
+  local lo lx lh lp
   d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" single; xmerge "$m" "$mode" "$d"
-  [ "$RC" -eq 2 ] && has "$MO" "holds cross.md, but" || return 1
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  case "$mode" in
+    files) lo="$(out_of "$d")"; lh="## Shard: cross-story"; lp="## Shard: story $K" ;;
+    document) lo="$(doc_out_of "$d")"; lh="## Shard: cross-section"; lp="## Shard: section $K" ;;
+    elicit) lo="$(dirname "$(dirname "$d")")/requirements-elicitation.md"; lh="## Shard: cross-part"; lp="## Shard: part $K" ;;
+  esac
+  lx="$(grep -nx -- "$lh" "$lo" | cut -d: -f1)"; lp="$(grep -nx -- "$lp" "$lo" | cut -d: -f1)"
+  [ -n "$lx" ] && [ -n "$lp" ] && [ "$lp" -lt "$lx" ] && ! grep -q '^## Shard: cross-[a-z]* group ' "$lo" \
+    && grep -qF "(merged from $((K + 1)) shards)" "$lo" && grep -qx "tool_use_id: $(did_of "$d" cross)" "$lo" \
+    && grep -q '^shard_tool_use_ids:.* cross=' "$lo" && ! grep -q '^shard_tool_use_ids:.* cross-[0-9]' "$lo" || return 1
+  # A partial grouped set (cross-6 missing) is refused by name, never read as some other shape.
+  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; rm -f "$d/cross-6.md"; xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "shard cross-6 is missing from" || return 1
   # The duplicate: the pair (1, 2) sits in the first quarter, so SEVERAL groups cover it and exactly
   # one owns it. Seed the finding in its owner AND in another group that also covers it (the overlap
   # the owner rule exists for), and the merge must refuse naming the owner.

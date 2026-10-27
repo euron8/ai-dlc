@@ -546,7 +546,7 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 - **party-mode seats / subject:** SM, Dev, Architect, TEA — every story: every
   acceptance criterion, every edge case, every dependency. `stories/` is a files-axis
   subject (Rule 28, "Split dispatch"), so the round, each review pass and each repair
-  are sharded per story ordinal plus one cross-story part per cross group, as the "Validation cycle", "Adversarial
+  are sharded per story ordinal plus ONE cross-story part (one per seat in the round), as the "Validation cycle", "Adversarial
   review dispatch" and "Adversarial repair dispatch" sub-routines say. Elicitation is sharded per
   story ordinal plus ONE cross-story part briefed with every ordinal (`cross.md`), as the
   "Validation cycle" item 2 says. Their joins are
@@ -565,7 +565,7 @@ edge-case defects no later pass raises; the cross-story party catches a defect b
 such as a funds destination one story sets and another sweeps; sharded elicitation catches what
 one voice over every story misses, such as an uncapped mint through a raised wallet read, where
 a single voice found at most one unique defect. False-positive cost: for the party round, one
-agent per (seat, story ordinal) and per (seat, cross group); for elicitation, one agent per
+agent per (seat, story ordinal) and one cross agent per seat; for elicitation, one agent per
 story ordinal and one cross-story agent; and their repairs. Removal condition: measured
 sprints in which a round carries no unique MAJOR or CRITICAL catch that survives to the shipped
 stories.

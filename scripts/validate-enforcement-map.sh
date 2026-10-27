@@ -14819,6 +14819,75 @@ SHARD_ROLES in core/scripts/validate-spawn-ledger.sh decides which rows arm S3 f
   fi
 fi
 
+# --- I129: the finding-class set is ONE set across code-reviewer.md, the merge's grammar and the record-only route ---
+# vocabulary: finding classes
+# vocabulary-invariant: I129
+# vocabulary-owner: core/team-roles/code-reviewer.md
+# vocabulary-extract: finding-classes
+# vocabulary-readers: core/scripts/merge-review-shards.sh, core/scripts/partition-review-diff.sh
+#
+# WHAT IT BINDS. code-reviewer.md's review template declares the finding classes ONCE, as the
+# column-0 `Class: CODE | TEST | EVIDENCE | BOOKKEEPING` line under each Critical/Important finding
+# heading. merge-review-shards.sh lifts that set with CLASS_SET_AWK and refuses a finding whose
+# `Class:` value is outside it; partition-review-diff.sh --route routes a re-review record-only only
+# when every prior class is in ROUTE_CLASSES. Three findings, each with its own subject:
+#   1. CLASS_SET_AWK in the merge is not byte-identical to the renderer's (or either is missing or
+#      doubled): the set the merge refuses against and the set the index renders would be two
+#      grammars that agree today.
+#   2. the owner declares fewer than two members (the template line moved or lost its shape): the
+#      merge would check nothing, and this arm would compare nothing.
+#   3. a ROUTE_CLASSES member the owner does not declare: the route would key on a class no
+#      reviewer can write, which reads as a route that never fires.
+# THE ROUTE IS FAIL-CLOSED ON ITS OWN, so a CODE member in ROUTE_CLASSES is not this arm's subject:
+# the route's delta guard and its fixture own the safety property; this arm owns the spelling.
+# FALSE-POSITIVE SET: EMPTY on the tree this shipped on -- one CLASS_SET_AWK line in each file,
+# byte-identical; four owner members; ROUTE_CLASSES EVIDENCE BOOKKEEPING, both members. Graph's
+# three prose `Class: a ...` lines (s315 reviews) are lower case and do not match the owner grammar.
+# ONE GREP PER FILE, ONE AWK OVER THE OWNER, NO LOOP OVER FILES.
+i129_check() { # i129_check <renderer> <merge> <owner> <partition> -> one finding per line, nothing on agreement
+  local r m o p set rc nl='
+'
+  for p in "$1" "$2" "$3" "$4"; do [ -r "$p" ] || { printf 'UNREAD %s\n' "$p"; return; }; done
+  r="$(grep -E "^CLASS_SET_AWK='" "$1")" || r=''
+  m="$(grep -E "^CLASS_SET_AWK='" "$2")" || m=''
+  case "$r" in '') printf 'MISSING CLASS_SET_AWK in %s\n' "$1"; return ;; *"$nl"*) printf 'MULTI CLASS_SET_AWK in %s\n' "$1"; return ;; esac
+  case "$m" in '') printf 'MISSING CLASS_SET_AWK in %s\n' "$2"; return ;; *"$nl"*) printf 'MULTI CLASS_SET_AWK in %s\n' "$2"; return ;; esac
+  [ "$r" = "$m" ] || { printf 'FORK CLASS_SET_AWK differs between %s and %s\n' "$1" "$2"; return; }
+  r="${r#CLASS_SET_AWK=\'}"; r="${r%\'}"
+  set="$(awk "$r" "$3" | tr '\n' ' ')"
+  case "$set" in *" "*" "*) ;; *) printf 'OWNER %s declares [%s]; the template line carries at least two members\n' "$3" "${set% }"; return ;; esac
+  rc="$(grep -E '^ROUTE_CLASSES="[A-Z_ ]*"$' "$4")" || rc=''
+  case "$rc" in '') printf 'MISSING ROUTE_CLASSES in %s\n' "$4"; return ;; *"$nl"*) printf 'MULTI ROUTE_CLASSES in %s\n' "$4"; return ;; esac
+  rc="${rc#ROUTE_CLASSES=\"}"; rc="${rc%\"}"
+  for m in $rc; do case " $set" in *" $m "*) ;; *) printf 'ROUTE %s routes on %s, which %s does not declare\n' "$4" "$m" "$3" ;; esac; done
+}
+# THE PROBE, BEFORE THE CORPUS, IN BOTH DIRECTIONS: agreement is quiet; a forked grammar, an
+# owner with no template line, and an undeclared route class are each reported.
+i129_pd="$(mktemp -d "${TMPDIR:-/tmp}/i129-XXXXXX")"
+i129_g="CLASS_SET_AWK='/^Class: [A-Z_]+( \\| [A-Z_]+)+\$/ { n = split(substr(\$0, 8), m, /[[:blank:]]*\\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'"
+printf '%s\n' "$i129_g" > "$i129_pd/r.sh"; printf '%s\n' "$i129_g" > "$i129_pd/m.sh"
+printf '%s\n' "${i129_g/exit/next}" > "$i129_pd/m-fork.sh"
+printf '%s\n' '#### t' 'Class: PA | PB | PC' > "$i129_pd/o.md"
+printf '%s\n' '#### t' 'Class: PA' > "$i129_pd/o-none.md"
+printf '%s\n' 'ROUTE_CLASSES="PB PC"' > "$i129_pd/p.sh"
+printf '%s\n' 'ROUTE_CLASSES="PB PZ"' > "$i129_pd/p-bad.sh"
+i129_bad=''
+[ -z "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o.md" "$i129_pd/p.sh")" ] || i129_bad="$i129_bad match-not-quiet"
+case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m-fork.sh" "$i129_pd/o.md" "$i129_pd/p.sh")" in FORK*) ;; *) i129_bad="$i129_bad fork-not-reported" ;; esac
+case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o-none.md" "$i129_pd/p.sh")" in OWNER*) ;; *) i129_bad="$i129_bad owner-not-reported" ;; esac
+case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o.md" "$i129_pd/p-bad.sh")" in ROUTE*PZ*) ;; *) i129_bad="$i129_bad route-not-reported" ;; esac
+rm -rf "$i129_pd"
+if [ -n "$i129_bad" ]; then
+  err "I129's probe failed on seed(s):$i129_bad, so the corpus below was not read. Each names a direction the arm must report or stay quiet in; a probe that did not fire means the corpus result would read as agreement for the reason a broken grammar does."
+else
+  i129_out="$(i129_check "$REPO_ROOT/scripts/render-vocabulary-index.sh" "$REPO_ROOT/core/scripts/merge-review-shards.sh" "$REPO_ROOT/core/team-roles/code-reviewer.md" "$REPO_ROOT/core/scripts/partition-review-diff.sh")"
+  if [ -n "$i129_out" ]; then
+    err "I129: the finding-class set is not one set:
+$i129_out
+code-reviewer.md's template \`Class:\` line declares it; merge-review-shards.sh refuses a finding's value outside it with a CLASS_SET_AWK line byte-identical to scripts/render-vocabulary-index.sh's; partition-review-diff.sh's ROUTE_CLASSES must name only declared members. Change the owner, then make the two CLASS_SET_AWK lines equal and ROUTE_CLASSES a subset."
+  fi
+fi
+
 # --- I127: the pre-push stop-early opt-out is named in exactly two tracked files ---
 # WHAT IT BINDS. The hook's stop-early (a red step above the fixture pool skips the pool) has one
 # opt-out env var, for a sandboxed COPY of the hook whose validator steps fail only because the

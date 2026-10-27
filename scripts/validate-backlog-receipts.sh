@@ -493,12 +493,14 @@ fi
 # ===========================================================================
 # PARENT MODE
 # ===========================================================================
-QUIET=0; LEDGER=""; ROOT_ARG=""
+QUIET=0; LEDGER=""; ROOT_ARG=""; EFF_MODE=""
 MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""
-usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--min-sh-receipts N] [--min-entries N]" >&2; }
+usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--min-sh-receipts N] [--min-entries N]" >&2; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quiet) QUIET=1; shift ;;
+    --archive) EFF_MODE=archive; shift ;;
+    --efficiency-only) EFF_MODE=live; shift ;;
     --root) ROOT_ARG="${2:-}"; shift 2 ;;
     --max-prose-closable) MAX_PC="${2:-}"; shift 2 ;;
     --max-unscorable) MAX_UNSC="${2:-}"; shift 2 ;;
@@ -537,6 +539,7 @@ BR_LIB_VARS="AI_DLC_RECONCILE_MEMO $(_br_added "$_br_pre_e" "$(compgen -e)")"
 unset _br_pre_e
 
 DEFAULTED=0
+if [ -z "$LEDGER" ] && [ "$EFF_MODE" = "archive" ]; then LEDGER="$SELF_ROOT/docs/backlog.archive.md"; DEFAULTED=1; fi
 [ -n "$LEDGER" ] || { LEDGER="$SELF_ROOT/docs/backlog.md"; DEFAULTED=1; }
 [ -f "$LEDGER" ] || { echo "$(me): FAIL -- $LEDGER is not a file" >&2; exit 2; }
 
@@ -770,6 +773,203 @@ if [ -z "$R0_THEIRS" ]; then
 fi
 if [ "$R0_THEIRS" != "$PATH_CLASS" ]; then
   echo "$(me): FAIL -- R0: the path-split class has DRIFTED. This file carries '$PATH_CLASS'; ${CLASS_FUNC}() in $CLASS_SOURCE carries '$R0_THEIRS'. That function's own header calls a second copy 'a second chance for the two to drift, and a drift here is silent in both directions at once'. Change the class in ONE place and re-run." >&2; exit 2
+fi
+
+# ===========================================================================
+# E -- THE EFFICIENCY ARMS (BL-817). A receipt proves a mechanism shipped; for an efficiency
+# entry the OUTCOME is the claim, and the ranked set of 19 closed on tree receipts while per-story
+# cost over graph s317-s319 never moved. Three arms, one entry scanner:
+#
+#   E1 CLOSE (live ledger and, via --archive, docs/backlog.archive.md). Population: an entry
+#      annotated `**LANDED (v<digit>` that carries the bold `**DEFECT (efficiency).**` tag, or that
+#      carries an `Outcome measured:` line at all. TAG-ONLY by the lead's ruling: an untagged
+#      entry is not judged here by reading what it cites -- E3 closes that escape at FILING. It
+#      fires on: no outcome line (NO-OUTCOME); a line naming no sprint (NO-SPRINT); a line stating
+#      no direction (NO-DIRECTION); a figure that did not fall with no value citation that
+#      resolves (NO-VALUE-CITATION). A value citation is `path:line "quoted phrase"`, RESOLVED BY
+#      THE PHRASE: some line of that file carries the phrase AND is a `Failure caught:` line or a
+#      table row. The line number is a pointer for the reader and is not what binds, because step
+#      files move. It never fails an entry for a missing number.
+#      ONE ISOLATED BRANCH, eff_nostep_ok, accepts a SPRINTLESS line, and only when it says there
+#      is no graph pipeline step AND names where the cost lives (operator ruling). It is one
+#      function so a mutant widening it is one edit and is killed by the self-probe.
+#   E2 SHAPE (D6). A sprint-naming outcome line carries the token-equivalent basis, the API figure
+#      beside it, and the gap-inclusive hours label (operator ruling). Not applied to the no-step
+#      branch: a line saying there is no step has no figure to label.
+#   E3 FILING (live ledger only). A tagged entry CITES the step-value ruling -- the phrase "A step
+#      with no measured value goes" and `.claude/rules/operator-rulings.md`, both, read over the
+#      whitespace-collapsed entry so a wrapped phrase still counts (F-RULING). An entry citing
+#      `docs/analysis/` with neither the tag nor the "no graph pipeline step" line is refused
+#      (F-UNTAGGED): that is the untagged-filing escape the tag-only E1 would otherwise leave open.
+#      The ruling is matched as TEXT and never resolved on disk, so this arm adds no read.
+#
+# THE NARROWING, AND ITS MEASUREMENT. The receipt parser above lets an entry run to the next BL-
+# label, so a `## Section` preamble between two entries is read as the body of the entry above it.
+# Measured on the live ledger before this arm: E3 named exactly ONE entry, BL-807 (later BL-806
+# after a rebase) -- whose own text cites nothing under docs/analysis/; the hit was the "Efficiency
+# regression after the ranked set" section preamble below it. In THESE arms only, a column-0 `##`
+# heading carrying no BL- label closes the entry (the shape helper decides it, so a fenced `##`
+# line does not). After it the live FP set is 0. Controls in the same measurement: the six tagged
+# citers (BL-538/810/811/812/817/819) all read as citing. The receipt parser is left alone --
+# changing what it calls an entry body moves receipts, which is not this arm's business.
+# F-RULING's FP set before the ledger amendment: 9 named tagged entries (538, 584, 616, 695, 804,
+# 808, 809, 811, 812), each fixed in the ledger in the same release; no narrowing was needed.
+#
+# --archive and --efficiency-only run the self-probe and these arms only, and exit before the
+# per-receipt checkout scorer, which costs a checkout per receipt and has nothing to say here.
+# ===========================================================================
+EFFAWK="$WORK/eff.awk"
+{ ledger_entry_awk; backlog_entry_label_awk; cat <<'AWK'
+function eflush() {
+  if (label == "") return
+  gsub(/[ \t]+/, " ", text); gsub(/[ \t]+/, " ", oc)
+  printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, oc
+  label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""
+}
+{
+  lbl = backlog_entry_label($0)
+  if (lbl != "") { eflush(); label = lbl; text = $0; next }
+  if (label == "") next
+  if (ledger_entry_shape($0) == "heading" && $0 ~ /^##[ \t]/) { eflush(); next }
+  text = text " " $0
+  if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1
+  if ($0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) landed = 1
+  if (inoc) { if ($0 ~ /^[ \t]*$/) inoc = 0; else oc = oc " " $0 }
+  if (ocn == 0 && $0 ~ /^(<br>)?(\*\*)?Outcome measured:/) { ocn = 1; inoc = 1; oc = $0 }
+}
+END { eflush() }
+AWK
+} > "$EFFAWK"
+
+# THE ISOLATED NO-STEP BRANCH. Both conditions, and nothing else may accept a sprintless line.
+eff_nostep_ok() { case "$1" in *"no graph pipeline step"*) grep -qE 'the cost lives in [^ .]' <<<"$1" ;; *) return 1 ;; esac; }
+# A SPRINT TOKEN COUNTS ONLY AS A STANDALONE WORD. Backtick spans are removed first, then every
+# whitespace-delimited token carrying a `/` (a path), and only then is `s<NNN>` / `sprint <NNN>`
+# matched, with `/`, `.` and `_` also refused as the left boundary. FALSE-POSITIVE STORY: the first
+# spelling matched ANY `s<3 digits>`, so BL-821's no-step Outcome line, which cites
+# `docs/analysis/pipeline-efficiency-s317-s320/scripts/impl_passes.py`, took the sprint branch and
+# failed SHAPE once stamped (the delta adversary's `FAIL: E BL-821 SHAPE` on a scratch copy). Re-measured
+# over the live ledger and the archive at this narrowing, old against new predicate on every entry
+# carrying an Outcome line: live, 1 flip, BL-821 sprint -> no-step, expected (its line cites a path
+# and carries no standalone sprint token); archive, 0 flips of 20 (15 no-step and 5 sprint unchanged).
+# E0 seeds all three shapes: a path-embedded token on a no-step line (BL-966, no-step), prose
+# "measured on s319 and s320" (BL-967, sprint branch), and -- THE GUARD AGAINST OVER-ACQUITTAL -- a
+# token only inside backticks and a path with no no-step wording (BL-968), which must still FIRE as
+# NO-SPRINT: the narrowing removes a false sprint, it never grants the no-step acquittal.
+eff_names_sprint() {
+  local _t
+  _t="$(sed -e 's/`[^`]*`//g' -e 's#[^[:space:]]*/[^[:space:]]*##g' <<<"$1")"
+  grep -qE '(^|[^A-Za-z0-9_./])(s|sprint )[0-9]{3}([^0-9]|$)' <<<"$_t"
+}
+eff_shape_ok() { case "$1" in *token-equivalent*) ;; *) return 1 ;; esac; case "$1" in *API*) ;; *) return 1 ;; esac; case "$1" in *gap-inclusive*) return 0 ;; esac; return 1; }
+# eff_cite_ok <outcome-text> <root> -- 0 iff some `path:line "phrase"` resolves BY THE PHRASE to a
+# `Failure caught:` line or a table row of that file under <root>. grep, never awk getline: an
+# unopenable file must not read as an empty one.
+eff_cite_ok() {
+  local _c _p _ph _hits
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _p="${_c%%:*}"
+    _ph="$(sed -n 's/^[^"]*"\([^"]*\)".*/\1/p' <<<"$_c")"
+    [ -n "$_ph" ] && [ -f "$2/$_p" ] || continue
+    _hits="$(grep -F -- "$_ph" "$2/$_p" 2>/dev/null)" || continue
+    grep -qE 'Failure caught:|^[[:space:]]*\|' <<<"$_hits" && return 0
+  done <<EOF
+$(grep -oE '[A-Za-z0-9_./-]+\.(md|sh|py):[0-9]+[^"]{0,16}"[^"]+"' <<<"$1")
+EOF
+  return 1
+}
+# eff_close <outcome-present> <outcome-text> <root> -> a finding code, or nothing
+eff_close() {
+  [ "$1" = "1" ] || { echo NO-OUTCOME; return; }
+  if ! eff_names_sprint "$2"; then
+    eff_nostep_ok "$2" && return
+    echo NO-SPRINT; return
+  fi
+  eff_shape_ok "$2" || { echo SHAPE; return; }
+  case "$2" in
+    *"did not fall"*) eff_cite_ok "$2" "$3" || echo NO-VALUE-CITATION ;;
+    *fell*) ;;
+    *) echo NO-DIRECTION ;;
+  esac
+}
+# eff_corpus <ledger> <root> <live|archive> -> `CODE<TAB>LABEL` per finding; counts to $WORK/eff.counts
+eff_corpus() {
+  local _l _t _a _r _n _ld _on _oc _code _pop=0 _ns=0 _ent=0
+  while IFS="$(printf '\t')" read -r _l _t _a _r _n _ld _on _oc; do
+    [ -n "$_l" ] || continue
+    _ent=$((_ent + 1))
+    if [ "$3" = "live" ]; then
+      [ "$_t" = "1" ] && [ "$_r" != "1" ] && printf 'F-RULING\t%s\n' "$_l"
+      [ "$_a" = "1" ] && [ "$_t" != "1" ] && [ "$_n" != "1" ] && printf 'F-UNTAGGED\t%s\n' "$_l"
+    fi
+    if [ "$_ld" = "1" ] && { [ "$_t" = "1" ] || [ "$_on" = "1" ]; }; then
+      _pop=$((_pop + 1))
+      _code="$(eff_close "$_on" "$_oc" "$2")"
+      if [ -n "$_code" ]; then printf '%s\t%s\n' "$_code" "$_l"
+      elif ! eff_names_sprint "$_oc"; then _ns=$((_ns + 1)); fi
+    fi
+  done <<EOF
+$(awk -f "$EFFAWK" "$1")
+EOF
+  printf '%s %s %s\n' "$_ent" "$_pop" "$_ns" > "$WORK/eff.counts"
+}
+
+# E0 -- THE SELF-PROBE, BEFORE ANY CORPUS, BOTH DIRECTIONS. One seeded ledger, every case one
+# entry; the expected finding SET is compared whole, so a case that stops firing and a case that
+# starts firing both fail it. BL-959 is the second spelling of a valid line (bold label, `sprint
+# 321`, a `Failure caught:` citation); BL-958 cites a phrase that resolves to an ordinary line.
+EP="$WORK/effprobe"; mkdir -p "$EP/docs"
+printf '| E-9 | ROWPHRASE alpha |\n**Mechanism.** Failure caught: FCPHRASE beta\nPLAINPHRASE gamma\n' > "$EP/docs/v.md"
+EPR='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
+EPS='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+{
+  printf '# probe\n\n'
+  printf '## BL-951\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
+  printf '## BL-952\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall.\n\n' "$EPR" "$EPS"
+  printf '## BL-953\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; fell from 2.0 h.\n\n' "$EPR" "$EPS"
+  printf '## BL-954\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall;\nvalue: docs/v.md:1 "ROWPHRASE alpha".\n\n' "$EPR" "$EPS"
+  printf '## BL-955\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step; the cost lives in scripts/x.sh.\n\n' "$EPR"
+  printf '## BL-956\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the cost fell.\n\n' "$EPR"
+  printf '## BL-957\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, API $8, 1.0 h gap-inclusive; fell.\n\n' "$EPR"
+  printf '## BL-958\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall; docs/v.md:3 "PLAINPHRASE gamma".\n\n' "$EPR" "$EPS"
+  printf '## BL-959\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n<br>**Outcome measured:** graph sprint 321, %s; did not fall; `docs/v.md:2` "FCPHRASE beta".\n\n' "$EPR" "$EPS"
+  printf '## BL-960\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step.\n\n' "$EPR"
+  printf '## BL-961\n\n**DEFECT (efficiency).** filed without the ruling.\n\n'
+  printf '## BL-962\n\n**DEFECT (efficiency).** Cites "A step with no measured value\ngoes" in `.claude/rules/operator-rulings.md`.\n\n'
+  printf '## BL-963\n\nFiled from docs/analysis/x.md with no tag.\n\n'
+  printf '## BL-964\n\nFiled from docs/analysis/x.md; there is no graph pipeline step.\n\n'
+  printf '## A section heading\n\nSection prose citing docs/analysis/x.md.\n\n'
+  printf '## BL-965\n\nAn ordinary entry.\n\n'
+  printf '## BL-966\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step; the cost lives in docs/analysis/pipeline-efficiency-s317-s320/scripts/x.py, analysis tooling.\n\n' "$EPR"
+  printf '## BL-967\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: measured on s319 and s320, %s; fell from 2.0 h.\n\n' "$EPR" "$EPS"
+  printf '## BL-968\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the `s319` run, see docs/analysis/pipeline-efficiency-s317-s320/x.md, %s; fell.\n' "$EPR" "$EPS"
+} > "$EP/backlog.md"
+EP_WANT="F-RULING BL-961|F-UNTAGGED BL-963|NO-OUTCOME BL-951|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|"
+EP_GOT="$(eff_corpus "$EP/backlog.md" "$EP" live | LC_ALL=C sort | tr '\t' ' ' | tr '\n' '|')"
+if [ "$EP_GOT" != "$EP_WANT" ]; then
+  echo "$(me): SELF-PROBE FAILED -- E0: the efficiency arms over the seeded ledger reported [$EP_GOT], expected [$EP_WANT]. Each seeded case is one branch of E1/E2/E3 (an absent row is a branch that cannot fire; an extra row is one that fires on a quiet case), so no corpus verdict from these arms would mean anything." >&2
+  exit 2
+fi
+read -r EP_ENT EP_POP EP_NS < "$WORK/eff.counts"
+[ "$EP_ENT" = 18 ] && [ "$EP_POP" = 13 ] && [ "$EP_NS" = 2 ] || {
+  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch, expected 18 / 13 / 2. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint." >&2; exit 2; }
+EP_ARCH="$(eff_corpus "$EP/backlog.md" "$EP" archive | cut -f1 | grep -c '^F-')" || EP_ARCH=0
+[ "$EP_ARCH" -eq 0 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive applied a FILING arm ($EP_ARCH row(s)); filing is judged on the live ledger only." >&2; exit 2; }
+
+EFF_OUT="$(eff_corpus "$LEDGER" "$SUBJECT_ROOT" "${EFF_MODE:-live}")"
+read -r EFF_ENT EFF_POP EFF_NS < "$WORK/eff.counts"
+EFF_N="$(printf '%s' "$EFF_OUT" | grep -c .)" || EFF_N=0
+eff_report() {
+  [ "$EFF_N" -eq 0 ] && return 0
+  printf '%s\n' "$EFF_OUT" | awk -F'\t' '{ printf "FAIL: E\t%s\t%s\n", $2, $1 }' >&2
+  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. F-UNTAGGED: an entry citing docs/analysis/ carries **DEFECT (efficiency).** or the 'no graph pipeline step' line." >&2
+  return 1
+}
+if [ -n "$EFF_MODE" ]; then
+  eff_report || exit 1
+  echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over 18 seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch)."
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------
@@ -1215,6 +1415,7 @@ if [ "$SH_RECEIPTS" -lt "$MIN_SH" ]; then
     RC=1
   fi
 fi
+eff_report || RC=1
 [ "$RC" -ne 0 ] && exit 1
 
 # THE WORKTREE REGISTRY IS ASSERTED BACK. Each checkout registers in the subject repository,

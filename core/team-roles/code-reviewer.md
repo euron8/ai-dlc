@@ -128,10 +128,12 @@ APPROVED | NEEDS_REWORK | BLOCKED
 ### Critical (must fix before merge)
 
 #### <finding title>
+Class: CODE | TEST | EVIDENCE | BOOKKEEPING
 
 ### Important (should fix, can be follow-up)
 
 #### <finding title>
+Class: CODE | TEST | EVIDENCE | BOOKKEEPING
 
 ### Suggestions (optional improvements)
 
@@ -160,6 +162,17 @@ so a renamed heading or a verdict buried in prose blocks the gate rather than
 degrading quietly. Emit the value alone on the line after the heading, or as
 `## Verdict: <VALUE>`.
 
+**Every Critical and Important finding carries one column-0 `Class:` line**
+directly under its heading, the ONE member of the template's set that names
+what its fix changes: `CODE` (production code), `TEST` (test code),
+`EVIDENCE` (a capture, a `$` line, a RED record) or `BOOKKEEPING` (the story
+record, a citation, a count). TEST is code-class. A finding whose fix admits
+ANY code or test change is `CODE` or `TEST`, never `EVIDENCE` or
+`BOOKKEEPING`, however small the change. The next pass is routed by these
+lines (`implementation.md`, the re-review paragraph), so a code fix filed as
+evidence skips the review that would have caught it. The SHARD GRAMMAR section
+of `merge-review-shards.sh` refuses a value outside the set.
+
 **A serial review writes its findings the way a shard does.** Each finding is a
 `#### ` heading under its `### Critical`, `### Important` or `### Suggestions`
 container in `## Findings`, never a bullet, its body below the heading; a
@@ -168,6 +181,9 @@ by that heading, and `validate-carried-findings.sh` fails a prior whose
 Critical or Important finding is a bullet. The review also carries one
 column-0 `reviewed-sha: <full frozen sha>` line, resolved with `git rev-parse`
 in the frozen worktree: the next pass partitions its delta from that sha.
+A QA rework reaches you as a new pass only when Rule A re-runs gate 1
+(`implementation.md`, **Gate 1 after a QA rework**): the rework added a test
+file or changed a code or test line that is not blank, a comment or a docstring.
 Before you return, run
 `<lead engine>/merge-review-shards.sh --check-serial <review file> --gate code-review`
 from the lead checkout's `scripts/ai-dlc` path your brief carries. It reads your
@@ -186,10 +202,10 @@ on the two files and fails the review otherwise.
 ## As a Shard
 
 **As a shard** — your brief carries `shard: <ordinal>/<K> <group>` or
-`shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis),
-with the whole group table from `partition-document.sh --cross-groups <K>`
-when you are a cross shard. Review only the files your part of the map lists.
-As a cross shard, read the WHOLE diff: the pairs of your group are your FOCUS,
+`shard: cross/<K> g1/1 <ordinals>` (Rule 28, "Split dispatch": files axis),
+with the whole map when you are the cross shard. Review only the files your
+part of the map lists.
+As the cross shard, read the WHOLE diff,
 and you may cite any part. The merge refuses your finding only when the group
 `partition-document.sh --cross-owner` names already carries the identical
 `parts:` set. As a part shard you run no suite and no build. You replay,
@@ -203,7 +219,7 @@ graded: a `#### ` finding under `### Important` citing `parts: <your ordinal>`
 that names the AC and the reason, with exactly one column-0
 `handover: <AC-id>` line. As a part shard you also carry one column-0
 `handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.
-The first cross shard (`cross-1`, or `cross` when there is one group) runs the
+The first cross shard (`cross`, or `cross-1` of a per-group set) runs the
 suite once in the frozen worktree and the RED replays for any anchor in no
 part's files, both before it reads any part file. It is dispatched in the same
 wave as the parts, so it then joins the part shard files its brief names with
@@ -215,7 +231,7 @@ the frozen worktree and records each as a column-0
 a `#### ` finding citing exactly the parts it ran replays for. A result other
 than `RED` raises the merged verdict to at least `NEEDS_REWORK`. Every other
 cross shard executes nothing. Write to the shard path your brief names
-(`<ordinal>.md`, `cross-<g>.md`, or `cross.md` for one group), never to the
+(`<ordinal>.md`, or `cross.md`), never to the
 review file above. Write your header first and append each finding as you
 verify it. When you have finished, check your shard before you mark it. Run both scripts from `<lead engine>`, the lead checkout's `scripts/ai-dlc` path your brief carries, never from your worktree:
 `<lead engine>/merge-review-shards.sh <shard dir> --gate <gate> --check-shard

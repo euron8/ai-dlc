@@ -151,3 +151,55 @@ finding sits in repair-written text.
 
 The residue-at-MET defect, the residue deferral at the convergence exit (`validate-adversarial-convergence.sh`
 and `gate-validation.md`), is BL-814, owned elsewhere.
+
+## Per-width (BL-810 amended scope)
+
+Measured for batch 243 by `scripts/width.py <graph> <s319-shipped> <s320-r4-shipped> <out.json>`, which
+counts every CRITICAL and MAJOR heading per shard (320 findings, MINOR excluded) and joins each finding to
+the others by shared backticked tokens, `CO-S…` ids and `file:line` cites (two shared tokens, or one id).
+Per-shard dollars from `cost2.py` and the extractor's `spawns.jsonl`. Controls: the 16 round totals match
+`counts.py` and the Cost table above (88 / $86.66 and 132 / $158.55 reproduce); 27 of 320 findings carry no
+token and can only read as unjoined, so every "alone" figure below is a ceiling on uniqueness.
+
+| Round (sprint) | Part shards: n / $ | Part-only MAJOR+ (no cross, no other round) | Cross groups: n / $ | Cross-only MAJOR+ | Cross re-raised by a part shard |
+|---|---|---|---|---|---|
+| Party s319 | 24 / $18.81 | 31 of 62 | 24 / $16.47 | 20 of 53 | 32 of 53 |
+| Party s320 | 32 / $18.17 | 20 of 59 | 24 / $18.79 | 11 of 38 | 24 of 38 |
+| Elicitation s319 | 6 / $9.46 | 13 of 21 | 6 / $9.54 | 12 of 20 | 4 of 20 |
+| Elicitation s320 | 3 / $10.46 | 10 of 15 | 3 / $7.32 | 4 of 9 | 0 of 9 |
+| Adversarial p1 s319 | 6 / $4.71 | 0 of 0 | 6 / $7.61 | 2 of 3 | 0 of 3 |
+| Adversarial p1 s320 | 7 / $9.91 | 5 of 13 | 6 / $16.22 | 5 of 15 | 7 of 15 |
+| Adversarial p2 s320 | 7 / $12.18 | 3 of 7 | 6 / $12.56 | 1 of 2 | 0 of 2 |
+| Adversarial p3 s320 | 7 / $7.62 | 0 of 1 | 6 / $10.28 | 1 of 2 | 0 of 2 |
+
+"Cross-only" means no part shard of the same round and no other round raised it by the token join. A cross
+group's MAJOR is a cross-section defect only if it names sections in its heading; the party cross headings
+do (`sections: 3,4`), the elicitation and adversarial ones carry the sections in a `sections:` line.
+
+Cost of narrowing, by the BL-811 rule (one cross agent per split dispatch; party one per seat), measured as
+the cross shards' sum minus the costliest one in each round: s319 party $13.54, elicitation $7.49, p1 $6.03;
+s320 party $16.33, elicitation $4.50, p1 $12.85, p2 $10.06, p3 $8.27. Agent-hours on cross groups: s319 1.2 +
+0.7 + 0.5; s320 2.8 + 0.7 + 1.5 + 0.7 + 0.5. Party keeps four, so its saving is smaller than the figure.
+
+### Decisions
+
+| Round and width | Decision | Ground |
+|---|---|---|
+| Party, per-part (seat x section) | KEEP | Made the claim-signing, nonce-manager and `hodl_wallet` catches: 62 and 59 MAJOR+ findings, 31 and 20 alone |
+| Party, cross groups | NARROW to one per seat (BL-811) | 32 of 53 and 24 of 38 cross findings re-raised by a part shard; the remainder is low or medium consequence (section-pair consistency, locator and derivation gaps); the claim-signing catch was also raised by part shards (architect 2, 4, 6; pm 4) |
+| Elicitation, per-part | KEEP | Made the only CRITICAL in either sprint (s319 `2.md` F-1, dust floor) |
+| Elicitation, cross groups | MERGE to one cross agent with every section | Cross-only findings are locator, derivation and section-pair gaps; no CRITICAL; 13 of 29 re-raised by a part shard or another round |
+| Adversarial p1, per-part | KEEP | s320 `1.md` F-1, the operator decision recorded as the lead's call |
+| Adversarial p1, cross groups | MERGE to one | s320 `cross-3` F-1 re-raised the same defect; s319 cross-only findings are 2 MAJORs; the cross agent reads every section |
+| Adversarial p2, per-part | KEEP | Part shard `2.md` F-1 is a high-consequence catch only p2 could read |
+| Adversarial p2, cross groups | MERGE to one, KEEP the catch | `cross-1` F-1 (half-fixed `Dependencies`) and `cross-2` F-1 (wrong IL claim) are catches no other round makes; a single cross agent that reads every section sees both |
+| Adversarial p3, per-part and cross | KEEP the terminal pass, MERGE cross to one | 0 of 2 shipped fixed; terminal pass Check 24 reads |
+
+### Conflicts and limits
+
+- **BL-811 and party:** BL-811's receipt reads the party round as keeping one cross per seat; this decision
+  agrees, so there is no conflict. If the lead later collapses party to one overall, the claim-signing catch
+  is still raised by part shards and the decision would need no change.
+- **Not measured:** per-width survival to the shipped artifact is by the existing token-presence method (see Blind
+  spots); the join is by token, not by reading, so cross-only counts are ceilings. The measured post-change
+  sprint is owed: spawns, dollars and agent-hours per width beside s319 and s320 (BL-810 stays open).

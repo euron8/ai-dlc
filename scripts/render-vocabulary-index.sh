@@ -439,7 +439,18 @@ vocab_extract_shard_roles() {
   sed -n 's/^SHARD_ROLES="\([a-z -]*\)"$/\1/p' "$1" | tr ' ' '\n' | grep -v '^$' | LC_ALL=C sort -u
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts cite-verdicts shard-roles'
+# THE FINDING-CLASS GRAMMAR IS A ONE-LINE VARIABLE because it has three readers: this extractor,
+# merge-review-shards.sh (which carries the byte-identical line and refuses a value outside the
+# set it lifts), and I129 in scripts/validate-enforcement-map.sh, which holds the two lines equal.
+# KEYED ON THE TEMPLATE LINE: a column-0 `Class:` followed by two or more bare members joined by
+# ` | `. A finding's own `Class: EVIDENCE` line carries one member and no pipe, and graph's prose
+# `Class: a per-chain ...` lines carry lower case, so neither is the declaration.
+CLASS_SET_AWK='/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { n = split(substr($0, 8), m, /[[:blank:]]*\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'
+vocab_extract_finding_classes() {
+  awk "$CLASS_SET_AWK" "$1" | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts cite-verdicts shard-roles finding-classes'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -521,6 +532,7 @@ extract_with() { # extract_with <slug> <owner-path>
     review-verdicts)    vocab_extract_review_verdicts    "$2" ;;
     cite-verdicts)      vocab_extract_cite_verdicts      "$2" ;;
     shard-roles)        vocab_extract_shard_roles        "$2" ;;
+    finding-classes)    vocab_extract_finding_classes    "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -987,6 +999,15 @@ probe_extract shard-roles "$PROBE_DIR/shard.sh" "probe-a probe-b"
 printf '%s\n' '# SHARD_ROLES="probe-commented"' '  SHARD_ROLES="probe-indented"' > "$PROBE_DIR/shard-none.sh"
 [ -z "$(vocab_extract_shard_roles "$PROBE_DIR/shard-none.sh")" ] || \
   probe_fail "the shard-roles extractor returned a member from a file whose only SHARD_ROLES lines are a comment and an indented local; it is reading text about the set rather than the top-level assignment Check 22 runs."
+
+# The finding-class seed: the template line (synthetic members), a finding's single-member line,
+# a lower-case prose line and a bulleted alternation. Only the template line is the set.
+printf '%s\n' '#### probe finding' 'Class: PROBE_ONE' 'Class: a prose sentence about a class' \
+  '- Class: PROBE_X | PROBE_Y' 'Class: PROBE_B | PROBE_A' 'Class: PROBE_C | PROBE_D' > "$PROBE_DIR/classes.md"
+probe_extract finding-classes "$PROBE_DIR/classes.md" "PROBE_A PROBE_B"
+printf '%s\n' 'Class: PROBE_ONE' 'Class: a prose sentence' '- Class: PROBE_X | PROBE_Y' '  Class: PROBE_P | PROBE_Q' > "$PROBE_DIR/classes-none.md"
+[ -z "$(vocab_extract_finding_classes "$PROBE_DIR/classes-none.md")" ] || \
+  probe_fail "the finding-classes extractor returned a member from a file carrying no column-0 template alternation; it is reading a finding's own Class line, prose, a bullet or an indented line."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a

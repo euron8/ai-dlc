@@ -48,8 +48,144 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+# need_base <flag> <mutant-name> -- a mutant's kill condition is a value the UNMUTATED arm it guards
+# would also print if it were failing, so a mutant is scored only when that arm PASSED in this run
+# (flag 1). Otherwise the "kill" is the seed failing, not the mutation: FIXTURE BROKEN, never ok.
+need_base() {
+  [ "$1" = 1 ] && return 0
+  bad "FIXTURE BROKEN: MUTANT $2 not scored -- the unmutated arm it guards did not pass in this run, so its kill would read the seed failing"
+  return 2
+}
+# need_base_probe -- need_base ITSELF, both directions, in subshells so the probe counts nothing:
+# a failing flag must print FIXTURE BROKEN and return 2; a passing flag must return 0 silently.
+need_base_probe() {
+  local o r
+  o="$(need_base 0 probe-fail 2>&1)"; r=$?
+  case "$o" in *"FIXTURE BROKEN"*) ;; *) return 1 ;; esac
+  [ "$r" -eq 2 ] || return 1
+  o="$(need_base 1 probe-pass 2>&1)"; r=$?
+  [ "$r" -eq 0 ] && [ -z "$o" ] || return 1
+  return 0
+}
 
 echo "check-22-spawn-ledger:"
+
+# --- NB. need_base is probed BEFORE any arm, and every call site is bound to an unmutated run ---------
+if need_base_probe; then
+  ok "NB SELF-PROBE: need_base reports FIXTURE BROKEN and returns 2 on a failing baseline flag, and returns 0 silently on a passing one"
+else
+  echo "FIXTURE BROKEN: the need_base self-probe failed -- a mutant guard that cannot refuse would let every guarded mutant score a kill over a failing baseline" >&2
+  exit 2
+fi
+# NB MUTANT: need_base made a no-op (always success). Its definition and the probe are lifted from
+# THIS file into a copy; the unmutated copy must exit 0 and the mutant must be refused by the probe.
+SELF_FILE="$HERE/$(basename "$0")"
+nb_lift() { # file -> the bad() line, need_base and need_base_probe, then a probe call
+  printf 'set -uo pipefail\nfails=0\nasserted=0\n'
+  grep '^bad() {' "$1"
+  awk '/^need_base\(\) \{$/ || /^need_base_probe\(\) \{$/ { p = 1 } p { print } p && /^\}$/ { p = 0 }' "$1"
+  printf 'need_base_probe || exit 2\nexit 0\n'
+}
+nb_lift "$SELF_FILE" > "$WORK/nb-ctl.sh"
+sed 's/^  \[ "\$1" = 1 \] && return 0$/  return 0/' "$WORK/nb-ctl.sh" > "$WORK/nb-mut.sh"
+if ! grep -q '^need_base_probe() {$' "$WORK/nb-ctl.sh" || cmp -s "$WORK/nb-ctl.sh" "$WORK/nb-mut.sh"; then
+  bad "FIXTURE BROKEN: NB mutant did not apply -- need_base or its probe could not be lifted from $SELF_FILE"
+else
+  bash "$WORK/nb-ctl.sh" >/dev/null 2>&1; nb_c=$?
+  bash "$WORK/nb-mut.sh" >/dev/null 2>&1; nb_m=$?
+  if [ "$nb_c" -eq 0 ] && [ "$nb_m" -eq 2 ]; then
+    ok "NB MUTANT killed: need_base made a no-op (always success) is refused by the self-probe (exit 2), while the lifted unmutated copy exits 0"
+  else
+    bad "NB MUTANT: unmutated copy exit $nb_c (want 0), no-op mutant exit $nb_m (want 2)"
+  fi
+fi
+# NB BINDING: every need_base call site passes either a B_<name> flag or a $([ "$VAR" = ... ]) test.
+# A flag is bound when every `B_<name>=1` sits on the line of an unmutated arm's `ok "` (no MUTANT),
+# or is an all-ones conjunction of bound flags; a VAR is bound when its every `VAR="$(` assignment
+# runs "$VSL", the unmutated mut/control.sh, or pscell over the unmutated role files. Any other
+# argument (a constant, a mutant's value) is UNBOUND. Calls inside need_base_probe are exempt.
+cat > "$WORK/nb-bind.awk" <<'AWK'
+{ L[NR] = $0 }
+END {
+  # heredoc bodies are data, never code: mark them so neither loop reads a seed or a program
+  for (i = 1; i <= NR; i++) {
+    if (tag != "") { if (L[i] == tag) tag = ""; else H[i] = 1; continue }
+    if (match(L[i], /<<'?[A-Za-z_]+'?[ \t]*$/)) { tag = substr(L[i], RSTART + 2); gsub(/[' \t]/, "", tag) }
+  }
+  for (i = 1; i <= NR; i++) {
+    s = L[i]
+    if ((i in H) || s ~ /^[ \t]*#/) continue
+    t = s
+    while (match(t, /B_[A-Za-z0-9_]+=1/)) {
+      nm = substr(t, RSTART, RLENGTH - 2); seen[nm] = 1
+      if (index(s, "ok \"") > 0 && index(s, "MUTANT") == 0) okset[nm] = 1
+      else if (index(s, "] && " nm "=1") > 0 && index(s, "\"${B_") > 0) depl[nm] = s
+      else badset[nm] = 1
+      t = substr(t, RSTART + RLENGTH)
+    }
+    if (match(s, /^[ \t]*[A-Za-z0-9_]+="\$\(/)) {
+      v = s; sub(/^[ \t]*/, "", v); sub(/=.*/, "", v)
+      if (index(s, "\"$VSL\"") || index(s, "mut/control.sh\"") || index(s, "pscell \"$WORK/ps/")) vok[v] = 1
+      else vbad[v] = 1
+    }
+  }
+  for (nm in okset) if (!(nm in badset)) bound[nm] = 1
+  for (pass = 0; pass < 5; pass++) for (nm in depl) {
+    if ((nm in bound) || (nm in badset)) continue
+    d = depl[nm]; n = 0; all = 1
+    while (match(d, /\$\{B_[A-Za-z0-9_]+/)) { dn = substr(d, RSTART + 2, RLENGTH - 2); n++; if (!(dn in bound)) all = 0; d = substr(d, RSTART + RLENGTH) }
+    want = ""; for (k = 0; k < n; k++) want = want "1"
+    if (n > 0 && all && index(depl[nm], "= " want " ]") > 0) bound[nm] = 1
+  }
+  inprobe = 0
+  for (i = 1; i <= NR; i++) {
+    s = L[i]
+    if (s ~ /^need_base_probe\(\) \{$/) { inprobe = 1; continue }
+    if (inprobe) { if (s ~ /^\}$/) inprobe = 0; continue }
+    if ((i in H) || s ~ /^[ \t]*#/) continue
+    p = index(s, "need_base \"")
+    if (p == 0) continue
+    if (p > 1 && substr(s, p - 1, 1) ~ /[A-Za-z0-9_]/) continue
+    a = substr(s, p + 10)
+    sites++
+    if (a ~ /^"\$\{B_[A-Za-z0-9_]+:-0\}"/ || a ~ /^"\$B_[A-Za-z0-9_]+"/) {
+      match(a, /B_[A-Za-z0-9_]+/); nm = substr(a, RSTART, RLENGTH)
+      if (!(nm in bound)) print "UNBOUND " i " flag " nm
+    } else if (a ~ /^"\$\(\[ /) {
+      e = a; sub(/ && echo 1\)".*$/, "", e); nv = 0; ub = 0
+      while (match(e, /\[ "\$[A-Za-z0-9_]+"/)) { v = substr(e, RSTART + 4, RLENGTH - 5); nv++; if (!(v in vok) || (v in vbad)) ub = 1; e = substr(e, RSTART + RLENGTH) }
+      if (nv == 0 || ub) print "UNBOUND " i " test " a
+    } else print "UNBOUND " i " arg " a
+  }
+  print "SITES " (sites + 0)
+}
+AWK
+cat > "$WORK/nb-seed.sh" <<'SEED'
+ok "g"; B_g=1
+need_base "${B_g:-0}" g
+need_base "1" c
+B_u=1
+need_base "${B_u:-0}" u
+ok "MUTANT m killed"; B_m=1
+need_base "${B_m:-0}" m
+XGOT="$(fn "$M")"
+need_base "$([ "$XGOT" = a ] && echo 1)" x
+VGOT="$(fn "$VSL")"
+need_base "$([ "$VGOT" = a ] && echo 1)" v
+SEED
+NB_SEED="$(awk -f "$WORK/nb-bind.awk" "$WORK/nb-seed.sh" | awk '$1 == "UNBOUND" { printf "%s ", $2 } $1 == "SITES" { printf "| %s", $2 }')"
+if [ "$NB_SEED" != "3 5 7 9 | 6" ]; then
+  echo "FIXTURE BROKEN: the need_base binding check over its seeded file reported [$NB_SEED], expected [3 5 7 9 | 6] -- it must flag a constant, an unconditional flag, a flag set by a MUTANT ok and a mutant's value, and pass a bound flag and a \$VSL value" >&2
+  exit 2
+fi
+NB_OUT="$(awk -f "$WORK/nb-bind.awk" "$SELF_FILE")"
+NB_SITES="$(sed -n 's/^SITES //p' <<<"$NB_OUT")"
+NB_UNB="$(grep -c '^UNBOUND' <<<"$NB_OUT")" || NB_UNB=0
+if [ "${NB_SITES:-0}" -gt 0 ] && [ "$NB_UNB" -eq 0 ]; then
+  ok "NB BINDING: all $NB_SITES need_base call sites pass a flag set only by an unmutated arm's ok, or a test over a value run on \$VSL or the unmutated control (the check fired both ways on its seeded file first)"
+else
+  bad "NB BINDING: $NB_UNB of ${NB_SITES:-0} need_base call site(s) are not bound to an unmutated run: $(grep '^UNBOUND' <<<"$NB_OUT" | tr '\n' ';')"
+fi
 
 # --- the consumer config every arm resolves its pin against --------------------
 # `dev` pins the key `sonnet`, `protected-path-editor` pins `opus`, and `tea` is a party
@@ -303,7 +439,7 @@ fi
 # arm and the X arm together, and two moved tokens make one of them vacuous.
 out="$(bash "$VSL" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
 if [ "$rc" -eq 3 ] && grep -q 'NO ROLE-BOUND ROWS' <<<"$out" && grep -q 'general-purpose' <<<"$out"; then
-  ok "a sprint whose every row is out of scope exits 3 and NAMES the roles it skipped — not a pass, and the one way the filter could hide a real role is visible in the message"
+  ok "a sprint whose every row is out of scope exits 3 and NAMES the roles it skipped — not a pass, and the one way the filter could hide a real role is visible in the message"; B_allout=1
 else
   bad "an all-out-of-scope ledger reported rc=$rc: ${out%%$'\n'*}"
 fi
@@ -312,6 +448,7 @@ fi
 sed 's/^if \[ "\$CHECKED" -eq 0 \]; then$/if false; then/' "$VSL" > "$WORK/nzs.sh"
 if cmp -s "$VSL" "$WORK/nzs.sh"; then
   bad "FIXTURE BROKEN: the all-out-of-scope guard's line was renamed, so this mutant proves nothing"
+elif ! need_base "${B_allout:-0}" norolebound; then :
 else
   bash "$WORK/nzs.sh" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ]; then
@@ -335,7 +472,7 @@ cp "$VSL" "$WORK/mut/control.sh"
 
 CTL="$(battery "$WORK/mut/control.sh")"
 if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in the mutant directory answers every arm (so a mutant's silence is the mutation, not the copy)"
+  ok "CONTROL: an unmutated copy in the mutant directory answers every arm (so a mutant's silence is the mutation, not the copy)"; B_ctl=1
 else
   bad "CONTROL copy did not reproduce the shipping battery: expected [$EXPECTED], got [$CTL]"
 fi
@@ -358,6 +495,7 @@ mutant() { # name sed-expression expected-arm description
     bad "FIXTURE BROKEN: mutation '$n' matched nothing — the line it targets was renamed, so this mutant proves nothing"
     return
   fi
+  need_base "${B_ctl:-0}" "$n" || return
   got="$(battery "$M")"
   mv="$(moved "$got")"
   if [ "$mv" = "$arm" ]; then
@@ -448,7 +586,7 @@ if [ "$rc" -eq 0 ] && grep -q "^NOTE: \[dev-story-1\]" <<<"$out" \
    && ! grep -q "^NOTE: \[devops-audit\]" <<<"$out" \
    && grep -q '1 of them named after a declared role' <<<"$out" \
    && ! grep -q '^FAIL: \[' <<<"$out"; then
-  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"
+  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"; B_suspect=1
 else
   bad "the suspect row was not surfaced (rc=$rc): $out"
 fi
@@ -458,6 +596,7 @@ fi
 sed 's|      "\$nr_k"\|"\$nr_k"-\*) |      "$nr_k"*) |' "$VSL" > "$WORK/widen.sh"
 if cmp -s "$VSL" "$WORK/widen.sh"; then
   bad "FIXTURE BROKEN: the name_role boundary pattern was renamed, so this mutant proves nothing"
+elif ! need_base "${B_suspect:-0}" nameboundary; then :
 else
   out="$(bash "$WORK/widen.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if grep -q '^NOTE: \[devops-audit\]' <<<"$out"; then
@@ -470,6 +609,7 @@ fi
 sed 's/^    _nr="\$(name_role "\${name}")"$/    _nr=""/' "$VSL" > "$WORK/nosus.sh"
 if cmp -s "$VSL" "$WORK/nosus.sh"; then
   bad "FIXTURE BROKEN: the name_role call site was renamed, so this mutant proves nothing"
+elif ! need_base "${B_suspect:-0}" suspectnote; then :
 else
   out="$(bash "$WORK/nosus.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if ! grep -q '^NOTE: \[dev-story-1\]' <<<"$out"; then
@@ -486,7 +626,7 @@ fi
 # `(roles: general-purpose fork general-purpose fork)` for two distinct roles.
 out="$(bash "$VSL" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
 if grep -q '3 row(s) out of Rule 19 scope (roles: general-purpose fork),' <<<"$out"; then
-  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"
+  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"; B_dedup=1
 else
   bad "the COUNTS role list did not de-duplicate: $(grep 'out of Rule 19 scope' <<<"$out")"
 fi
@@ -494,6 +634,7 @@ fi
 sed 's/^      \*) OUTSCOPE_ROLES="\${OUTSCOPE_ROLES}\${role:-<none>}\${NL}" ;;$/      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;/' "$VSL" > "$WORK/nodedup.sh"
 if cmp -s "$VSL" "$WORK/nodedup.sh"; then
   bad "FIXTURE BROKEN: the accumulator line was renamed, so this mutant proves nothing"
+elif ! need_base "${B_dedup:-0}" dedup; then :
 else
   out="$(bash "$WORK/nodedup.sh" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if grep -q 'general-purpose fork general-purpose' <<<"$out"; then
@@ -530,7 +671,7 @@ JSON
 bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >"$WORK/nr-a.out" 2>&1; a=$?
 bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >"$WORK/nr-b.out" 2>&1; b=$?
 if [ "$a" -eq 3 ] && [ "$b" -eq 3 ] && grep -q '<none>' "$WORK/nr-a.out"; then
-  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"
+  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"; B_norole=1
 else
   bad "the role-less row answered rc=$a with an empty roles block and rc=$b with a populated one; expected 3 and 3"
 fi
@@ -538,6 +679,7 @@ fi
 sed 's/^  \[ -n "\$1" \] || return 1$/  : ; /' "$VSL" > "$WORK/noguard.sh"
 if cmp -s "$VSL" "$WORK/noguard.sh"; then
   bad "FIXTURE BROKEN: the empty-role guard line was renamed, so this mutant proves nothing"
+elif ! need_base "${B_norole:-0}" emptyrole; then :
 else
   bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >/dev/null 2>&1; a=$?
   bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >/dev/null 2>&1; b=$?
@@ -555,7 +697,7 @@ out="$(bash "$VSL" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK
 if [ "$rc" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$out" \
    && grep -q '1 row(s) the dispatch guard did not write (roles: dev)' <<<"$out" \
    && grep -q 'examined 1 S900 spawn row' <<<"$out"; then
-  ok "a hand-written row naming a DECLARED role is counted and named as not-a-dispatch-record rather than judged, while the guard row beside it in the same ledger is still examined — its absent fields are not observations about a dispatch"
+  ok "a hand-written row naming a DECLARED role is counted and named as not-a-dispatch-record rather than judged, while the guard row beside it in the same ledger is still examined — its absent fields are not observations about a dispatch"; B_foreign=1
 else
   bad "the foreign row was judged or miscounted (rc=$rc): $out"
 fi
@@ -568,6 +710,7 @@ if cmp -s "$VSL" "$WORK/noschema.sh"; then
   bad "FIXTURE BROKEN: the schema-marker projection was renamed, so this mutant proves nothing"
 elif ! bash -n "$WORK/noschema.sh" 2>/dev/null; then
   bad "FIXTURE BROKEN: the schema mutant does not parse — the sed damaged the script rather than mutating it"
+elif ! need_base "${B_foreign:-0}" foreignschema; then :
 else
   out="$(bash "$WORK/noschema.sh" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
   n=$(grep -c '^FAIL: \[' <<<"$out") || n=0
@@ -674,7 +817,7 @@ R="$(evsl e-disagree.jsonl e-disagree.probe)"
 if [ "$(ercv "$R")" -eq 1 ] && grep -q "records effort='low'" <<<"$R" \
    && grep -q "effort_bound=" <<<"$R" && grep -q "'high'" <<<"$R" \
    && grep -q "aiDlcRoles.dev.effort" <<<"$R" && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
-  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the LEDGER's bound level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"
+  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the LEDGER's bound level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"; B_e2=1
 else
   bad "the disagreeing row did not fail as expected: $R"
 fi
@@ -739,7 +882,7 @@ R="$(evsl e-sameRole.jsonl e-sameRole.probe)"
 if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[dev-first\]' <<<"$R" \
    && ! grep -q 'FAIL: \[dev-second\]' <<<"$R" \
    && grep -q 'effort: 1 verified.*1 mismatch' <<<"$R"; then
-  ok "E5 two SAME-ROLE spawns completing in REVERSE dispatch order: the offender is named as dev-first and dev-second is verified -- the join resolves on the tool-use id, which no completion order can permute"
+  ok "E5 two SAME-ROLE spawns completing in REVERSE dispatch order: the offender is named as dev-first and dev-second is verified -- the join resolves on the tool-use id, which no completion order can permute"; B_e5=1
 else
   bad "E5 the same-role out-of-order pair was mis-scored: $R"
 fi
@@ -768,7 +911,7 @@ prow toolu_PINNED low claude-opus-4-8 2.1.269               > "$WORK/e-new.probe
 R="$(evsl e-pinned.jsonl e-old.probe)"
 if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 refused on a pre-2.1.267' <<<"$R" \
    && grep -q 'PENDING: \[dev-pinned\]' <<<"$R"; then
-  ok "a pinned-effort model on a pre-2.1.267 transcript is REFUSED and named, not scored -- the field is not evidence on that build"
+  ok "a pinned-effort model on a pre-2.1.267 transcript is REFUSED and named, not scored -- the field is not evidence on that build"; B_e6=1
 else
   bad "the pre-2.1.267 pinned row was not refused: $R"
 fi
@@ -878,6 +1021,7 @@ fi
 sed 's/^  if \[ -z "\$effortbound" \] || \[ "\$defbound" != "true" \]; then$/  if true; then/' "$VSL" > "$WORK/noeffortarm.sh"
 if cmp -s "$VSL" "$WORK/noeffortarm.sh"; then
   bad "FIXTURE BROKEN: the effort arm's scope test was renamed, so this mutant proves nothing"
+elif ! need_base "${B_e2:-0}" noeffortarm; then :
 else
   bash "$WORK/noeffortarm.sh" --ledger "$WORK/e-disagree.jsonl" --sprint 900 \
        --settings "$WORK/settings.json" --probe "$WORK/e-disagree.probe" >/dev/null 2>&1; rc=$?
@@ -897,6 +1041,7 @@ fi
 sed 's@select((.tool_use_id // "") == \$t) \] | last@select(true) ] | last@' "$VSL" > "$WORK/rolejoin.sh"
 if cmp -s "$VSL" "$WORK/rolejoin.sh"; then
   bad "FIXTURE BROKEN: the tool_use_id join expression was renamed, so this mutant proves nothing"
+elif ! need_base "${B_e5:-0}" unjoined; then :
 else
   out="$(bash "$WORK/rolejoin.sh" --ledger "$WORK/e-sameRole.jsonl" --sprint 900 \
          --settings "$WORK/settings.json" --probe "$WORK/e-sameRole.probe" 2>&1)"
@@ -912,6 +1057,7 @@ fi
 sed 's@< \[2,1,267\])@< [0,0,0])@' "$VSL" > "$WORK/nofloor.sh"
 if cmp -s "$VSL" "$WORK/nofloor.sh"; then
   bad "FIXTURE BROKEN: the version floor was renamed, so this mutant proves nothing"
+elif ! need_base "${B_e6:-0}" nofloor; then :
 else
   bash "$WORK/nofloor.sh" --ledger "$WORK/e-pinned.jsonl" --sprint 900 \
        --settings "$WORK/settings.json" --probe "$WORK/e-old.probe" >/dev/null 2>&1; rc=$?
@@ -1043,7 +1189,7 @@ cpmoved() { # got -> names of the differing cells
 # --- C1. every VIOL route FAILS, names its own class, AND names the clearing path ---
 CPGOT="$(cpvec "$VSL")"
 if [ "$CPGOT" = "$CP_EXPECTED" ]; then
-  ok "C1 all five FAIL routes -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, an effort mismatch under --probe, and an invalid Rule 28 serial exception (S3, printing the brief's own text) -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"
+  ok "C1 all five FAIL routes -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, an effort mismatch under --probe, and an invalid Rule 28 serial exception (S3, printing the brief's own text) -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"; B_c1=1
 else
   bad "C1 the clearing path is not named on every VIOL route: expected [$CP_EXPECTED], got [$CPGOT] (differing: $(cpmoved "$CPGOT"))"
 fi
@@ -1146,7 +1292,7 @@ fi
 
 SV="$(stepverdict "$GV")"
 if [ "$SV" = "ALL-FOUR" ]; then
-  ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"
+  ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"; B_c2=1
 else
   bad "C2 gate-validation.md's disposition section does not scope to every VIOL route: $SV"
 fi
@@ -1176,6 +1322,7 @@ cpmut() { # name anchor -> writes $WORK/cp-<name>.sh, returns 1 if it did not ap
 # cpscore <name> <expected-cell> <description>
 cpscore() {
   local n="$1" cell="$2" desc="$3" M="$WORK/cp-$1.sh" got mv
+  need_base "${B_c1:-0}" "$n" || return
   got="$(cpvec "$M")"
   mv="$(cpmoved "$got")"
   if [ "$mv" = "$cell" ]; then
@@ -1224,6 +1371,7 @@ if cmp -s "$WORK/mut/control.sh" "$WORK/cp-m4.sh"; then
   bad "FIXTURE BROKEN: mutation m4 matched nothing -- the 19(b) arm's condition was renamed, so this mutant proves nothing"
 elif ! bash -n "$WORK/cp-m4.sh" 2>/dev/null; then
   bad "FIXTURE BROKEN: mutation m4 does not parse -- the edit damaged the script rather than mutating it"
+elif ! need_base "${B_c1:-0}" m4; then :
 else
   M4="$(cpvec "$WORK/cp-m4.sh")"
   M4CELL="$(printf '%s' "$M4" | cut -d' ' -f3)"
@@ -1242,6 +1390,7 @@ awk '{ sub(/\*\*Dispositioning a recorded Check 22 violation that already happen
   "$GV" > "$WORK/cp-m5.md"
 if cmp -s "$GV" "$WORK/cp-m5.md"; then
   bad "FIXTURE BROKEN: mutation m5 matched nothing -- the disposition section's header was renamed, so this mutant proves nothing"
+elif ! need_base "${B_c2:-0}" m5; then :
 else
   M5="$(stepverdict "$WORK/cp-m5.md")"
   if [ "$M5" = "HEADER-SCOPED-TO-TIER" ]; then
@@ -1270,11 +1419,12 @@ s3oos() { # script -> FAIL1 | rc=N...
      && grep -qF "'shard: 1/1 <key>'" <<<"$o"; then printf 'FAIL1'; else printf 'rc=%s' "$rc"; fi
 }
 [ "$(s3ok "$VSL")" = OK ] \
-  && ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL" \
+  && { ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL"; B_s3ok=1; } \
   || bad "S3 near-miss: a valid none (4) row scored [$(s3ok "$VSL")], expected OK"
 [ "$(s3oos "$VSL")" = FAIL1 ] \
-  && ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1, and the FAIL names the row WITH its tool_use_id, prints its shard_raw, and names the 'shard: 1/1 <key>' form" \
+  && { ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1, and the FAIL names the row WITH its tool_use_id, prints its shard_raw, and names the 'shard: 1/1 <key>' form"; B_s3oos=1; } \
   || bad "S3 exit-3 world: scored [$(s3oos "$VSL")], expected FAIL1 -- S3 is being decided under the exit-3 branch"
+B_s3=0; [ "${B_c1:-0}${B_s3ok:-0}${B_s3oos:-0}" = 111 ] && B_s3=1
 
 # S3 MUTANTS. Anchored OUTSIDE shard_scan on purpose: the self-probe calls shard_scan, so a
 # mutation there exits 2 before the corpus and moves every cell, which reads as entanglement.
@@ -1292,6 +1442,7 @@ s3mut() { # name sed-expr -> path, or empty when it did not apply
 S3A="$(s3mut a 's/^      X) SHARD_VIOL=\$((SHARD_VIOL + 1))$/      Xdisabled) SHARD_VIOL=$((SHARD_VIOL + 1))/')"
 if [ -z "$S3A" ]; then
   bad "FIXTURE BROKEN: S3 mutant (a) did not apply -- the reader branch was renamed"
+elif ! need_base "$B_s3" "S3 (a)"; then :
 else
   a_mv="$(cpmoved "$(cpvec "$S3A")")"; a_ok="$(s3ok "$S3A")"; a_oos="$(s3oos "$S3A")"
   if [ "$a_mv" = "shard" ] && [ "$a_ok" = OK ] && [ "$a_oos" != FAIL1 ]; then
@@ -1303,12 +1454,164 @@ fi
 S3C="$(s3mut c 's/^if \[ "\$SHARD_VIOL" -gt 0 \]; then$/if [ "$SHARD_VIOL" -gt 0 ] \&\& [ "$CHECKED" -gt 0 ]; then/')"
 if [ -z "$S3C" ]; then
   bad "FIXTURE BROKEN: S3 mutant (c) did not apply -- the S3 exit guard was renamed"
+elif ! need_base "$B_s3" "S3 (c)"; then :
 else
   c_mv="$(cpmoved "$(cpvec "$S3C")")"; c_ok="$(s3ok "$S3C")"; c_oos="$(s3oos "$S3C")"
   if [ -z "$c_mv" ] && [ "$c_ok" = OK ] && [ "$c_oos" = "rc=3" ]; then
     ok "S3 MUTANT (c) killed: S3 under the exit-3 branch reads exit 3 (nothing compared) on a sprint carrying an invented exception -- the exit-3 arm alone catches it"
   else
     bad "S3 MUTANT (c): moved [$c_mv] near-miss [$c_ok] exit-3 [$c_oos]; expected [] OK rc=3"
+  fi
+fi
+
+# --- S4. THE ONE CROSS AGENT'S BRIEF NAMES EVERY SECTION --------------------------------------------
+# A single cross agent (G=1) replaces the per-group crosses only if its brief covers ordinals 1..K.
+# S4 binds the BRIEF's `shard:` line; the ledger records no reads. Three worlds, each Rule 19-clean
+# and after an epoch row so S4 is the only route to an exit 1: a brief missing ordinal 4 of 4
+# (REFUSE), a brief naming 1..4 plus a legacy per-group cross covering a subset (PASS, both), and
+# the miss repeated with an out-of-order complete list (PASS: order is not coverage).
+row dev sonnet sonnet true true cp-epoch >  "$WORK/cp-s4-miss.jsonl"
+jq -nc '{v:1,sprint:900,name:"cp-s4-miss",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:true,role_file_readable:true,shard:"cross/4 g1/1 1,2,3",tool_use_id:"toolu_S4M"}' >> "$WORK/cp-s4-miss.jsonl"
+row dev sonnet sonnet true true cp-epoch >  "$WORK/cp-s4-ok.jsonl"
+jq -nc '{v:1,sprint:900,name:"cp-s4-ok",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:true,role_file_readable:true,shard:"cross/4 g1/1 3,1,4,2",tool_use_id:"toolu_S4O"}' >> "$WORK/cp-s4-ok.jsonl"
+jq -nc '{v:1,sprint:900,name:"cp-s4-legacy",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:true,role_file_readable:true,shard:"cross/6 g2/6 1,2,5",tool_use_id:"toolu_S4L"}' >> "$WORK/cp-s4-ok.jsonl"
+s4v() { # script ledger -> REFUSE | OK | rc=N...
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/$2" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF '(tool_use_id toolu_S4M)' <<<"$o" && grep -qF 'does not name every section' <<<"$o" \
+     && grep -qF 'shard: cross/4 g1/1 1,2,3' <<<"$o"; then printf 'REFUSE'
+  elif [ "$rc" -eq 0 ] && grep -q '2 shardable row(s) carry a shard line, 0 FAILED' <<<"$o" \
+     && grep -qF 'cover (S4): 0 one-cross' <<<"$o"; then printf 'OK'
+  else printf 'rc=%s' "$rc"; fi
+}
+B_s4=0
+[ "$(s4v "$VSL" cp-s4-miss.jsonl)" = REFUSE ] \
+  && { ok "S4 offender: a one-cross dispatch (cross/4 g1/1) whose brief omits section 4 exits 1, naming the row's tool_use_id, the missing coverage and the brief's own shard line"; B_s4=1; } \
+  || bad "S4 offender: scored [$(s4v "$VSL" cp-s4-miss.jsonl)], expected REFUSE"
+[ "$(s4v "$VSL" cp-s4-ok.jsonl)" = OK ] \
+  && ok "S4 near-miss: a complete out-of-order brief and a legacy per-group cross (G>1, a subset by design) both exit 0, counted as carrying a shard line, with S4 at zero" \
+  || { bad "S4 near-miss: scored [$(s4v "$VSL" cp-s4-ok.jsonl)], expected OK"; B_s4=0; }
+[ "${B_c1:-0}" = 1 ] || B_s4=0
+# S4 MUTANT: the coverage check dropped (the reader ignores the C record, so nothing can refuse).
+# Anchored OUTSIDE shard_scan on purpose, like the S3 mutants: the self-probe calls shard_scan, so a
+# mutation inside it exits 2 before the corpus. The offender must then pass, so the refusal cell dies.
+S4A="$(s3mut s4a 's/^      C) SHARD_COV=\$((SHARD_COV + 1))$/      Cdisabled) SHARD_COV=$((SHARD_COV + 1))/')"
+if [ -z "$S4A" ]; then
+  bad "FIXTURE BROKEN: S4 mutant did not apply -- the coverage branch was renamed"
+elif ! need_base "$B_s4" S4; then :
+else
+  a4_miss="$(s4v "$S4A" cp-s4-miss.jsonl)"; a4_ok="$(s4v "$S4A" cp-s4-ok.jsonl)"; a4_mv="$(cpmoved "$(cpvec "$S4A")")"
+  if [ "$a4_miss" = "rc=0" ] && [ "$a4_ok" = OK ] && [ -z "$a4_mv" ]; then
+    ok "S4 MUTANT killed: a validator that drops the coverage check passes the incomplete one-cross brief (rc=0) while the near-miss stays OK and C1 does not move"
+  else
+    bad "S4 MUTANT: offender [$a4_miss] near-miss [$a4_ok] C1 moved [$a4_mv]; expected rc=0 OK []"
+  fi
+fi
+
+# --- S4N. ORDINALS ARE NORMALISED BEFORE THEY ARE COMPARED ------------------------------------------
+# `partition-document.sh --map` zero-pads ordinals at K>=10 and not every emitter file teaches the
+# unpadded spelling, so a lead copying from --map writes `01,02,...,12`; a space after each comma is
+# the other natural spelling. S4 strips surrounding blanks and leading zeros, so both are COMPLETE
+# briefs. The dropped-07 world is the discriminating input: the padded list is refused only because
+# a real ordinal is missing, not because it is padded.
+s4n_ledger() { # file shard-line tool_use_id
+  row dev sonnet sonnet true true cp-epoch > "$WORK/$1"
+  jq -nc --arg s "$2" --arg t "$3" '{v:1,sprint:900,name:"cp-s4n",role:"adversary",model_bound:"opus",model_requested:"opus",
+    role_contract_cited:true,role_file_readable:true,shard:$s,tool_use_id:$t}' >> "$WORK/$1"
+}
+# LITERALS, not `seq | paste`: neither tool is in tools.decl, so under hermetic-run a generated
+# list came out EMPTY and the padded arm could not pass.
+s4n_pad='01,02,03,04,05,06,07,08,09,10,11,12'
+s4n_padmiss='01,02,03,04,05,06,08,09,10,11,12'
+s4n_ledger cp-s4n-pad.jsonl "cross/12 g1/1 ${s4n_pad}" toolu_S4NP
+s4n_ledger cp-s4n-padmiss.jsonl "cross/12 g1/1 ${s4n_padmiss}" toolu_S4NM
+s4n_ledger cp-s4n-space.jsonl "cross/4 g1/1 1, 2, 3, 4" toolu_S4NS
+s4nv() { # script ledger -> PASS | REFUSE | rc=N...
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/$2" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF 'cover (S4): 0 one-cross' <<<"$o"; then printf 'PASS'
+  elif [ "$rc" -eq 1 ] && grep -qF 'does not name every section' <<<"$o"; then printf 'REFUSE'
+  else printf 'rc=%s' "$rc"; fi
+}
+s4n_pad_base="$(s4nv "$VSL" cp-s4n-pad.jsonl)"
+[ "$s4n_pad_base" = PASS ] \
+  && ok "S4N padded: a complete one-cross brief at K=12 spelled 01,02,...,12 (as --map prints it) exits 0 with S4 at zero" \
+  || bad "S4N padded: scored [$s4n_pad_base], expected PASS"
+[ "$(s4nv "$VSL" cp-s4n-padmiss.jsonl)" = REFUSE ] \
+  && ok "S4N padded offender: the same padded brief with 07 dropped exits 1 (padding does not excuse a missing section)" \
+  || bad "S4N padded offender: scored [$(s4nv "$VSL" cp-s4n-padmiss.jsonl)], expected REFUSE"
+[ "$(s4nv "$VSL" cp-s4n-space.jsonl)" = PASS ] \
+  && ok "S4N spaced: a complete one-cross brief at K=4 spelled '1, 2, 3, 4' exits 0 with S4 at zero" \
+  || bad "S4N spaced: scored [$(s4nv "$VSL" cp-s4n-space.jsonl)], expected PASS"
+# S4N MUTANT: the leading-zero strip removed, so the padded complete brief is refused.
+S4N="$(s3mut s4n 's/; sub(\/^0+\/, "", cv_t)$//')"
+if [ -z "$S4N" ]; then
+  bad "FIXTURE BROKEN: S4N mutant did not apply -- the normalisation line was renamed"
+elif ! need_base "$([ "$s4n_pad_base" = PASS ] && echo 1)" "S4N (unmutated padded arm scored [$s4n_pad_base])"; then
+  # The mutant's kill is a padded REFUSE; if the unmutated padded arm cannot PASS in this same
+  # run, that REFUSE is the seed failing, not the mutation, and must not score as a kill.
+  :
+else
+  n_pad="$(s4nv "$S4N" cp-s4n-pad.jsonl)"; n_miss="$(s4nv "$S4N" cp-s4n-padmiss.jsonl)"; n_sp="$(s4nv "$S4N" cp-s4n-space.jsonl)"
+  if [ "$n_pad" = REFUSE ] && [ "$n_miss" = REFUSE ] && [ "$n_sp" = PASS ]; then
+    ok "S4N MUTANT killed: a validator that no longer strips leading zeros refuses the complete padded brief while the spaced brief still passes"
+  else
+    bad "S4N MUTANT: padded [$n_pad] padded-miss [$n_miss] spaced [$n_sp]; expected REFUSE REFUSE PASS"
+  fi
+fi
+
+# --- S4X. THE EMITTER'S OWN SPELLING IS IN S4's SCOPE (BL-811, cross-unit) ----------------------------
+# S4 keys on `cross/<K> g1/1 <ordinals>`. The role, step and rule files every cross agent is briefed
+# from teach the shard line; if they spelled it any other way (`cross/<K> <ordinals>`, `cross/<K>
+# cross`), S4 would judge no real one-cross dispatch and stay green. So the row here is BUILT FROM their
+# own template: every `shard: cross/<K> ...` they teach must be ONE spelling, instantiated at K=4 with
+# every ordinal (the guard records the value with blank runs collapsed, which this text already is).
+# Complete -> exit 0 with S4 at zero; one ordinal dropped -> exit 1 with S4 at ONE. The drop is the
+# discriminating input: it refuses only if the spelling is in S4's scope.
+# Every emitter is read: the three role files and the three step/rule files that brief a cross agent,
+# each in the layout this tree has (core/ upstream, .claude/ in a consumer). All six must be found.
+S4X_FILES=""; S4X_MISS=""
+for _r in team-roles/adversary.md team-roles/code-reviewer.md team-roles/qa.md \
+          skills/ai-dlc/steps/_gate-procedures.md skills/ai-dlc/steps/implementation.md skills/ai-dlc/rule-bodies/rule-28.md; do
+  _f=""; for _c in "$ROOT/core/$_r" "$ROOT/.claude/$_r"; do [ -f "$_c" ] && { _f="$_c"; break; }; done
+  if [ -n "$_f" ]; then S4X_FILES="$S4X_FILES $_f"; else S4X_MISS="$S4X_MISS $_r"; fi
+done
+s4x_tpl=""; s4x_sites=0
+if [ -z "$S4X_MISS" ]; then
+  # shellcheck disable=SC2086
+  s4x_tpl="$(cat $S4X_FILES | grep -oE 'shard: cross/<K>[^`]*' | sort -u)"
+  # shellcheck disable=SC2086
+  s4x_sites="$(cat $S4X_FILES | grep -oE 'shard: cross/<K>[^`]*' | grep -c .)" || s4x_sites=0
+fi
+s4x_n="$(printf '%s\n' "$s4x_tpl" | grep -c .)" || s4x_n=0
+if [ -n "$S4X_MISS" ]; then
+  bad "S4X: FIXTURE BROKEN -- emitter file(s) not found in either layout:$S4X_MISS"
+elif [ "$s4x_n" -ne 1 ]; then
+  bad "S4X: FIXTURE BROKEN -- the six emitter files teach $s4x_n cross shard-line spelling(s) across $s4x_sites site(s), not one: [$(printf '%s' "$s4x_tpl" | tr '\n' '|')]"
+else
+  s4x_val="${s4x_tpl#shard: }"
+  s4x_full="$(printf '%s' "$s4x_val" | sed -e 's/<K>/4/' -e 's/<ordinals>/1,2,3,4/')"
+  s4x_drop="$(printf '%s' "$s4x_val" | sed -e 's/<K>/4/' -e 's/<ordinals>/1,2,3/')"
+  s4x_row() { # <ledger> <name> <shard>
+    row dev sonnet sonnet true true cp-epoch > "$WORK/$1"
+    jq -nc --arg n "$2" --arg s "$3" '{v:1,sprint:900,name:$n,role:"adversary",model_bound:"opus",model_requested:"opus",
+      role_contract_cited:true,role_file_readable:true,shard:$s,tool_use_id:"toolu_S4X"}' >> "$WORK/$1"
+  }
+  s4x_row cp-s4x-full.jsonl cp-s4x-full "$s4x_full"; s4x_row cp-s4x-drop.jsonl cp-s4x-drop "$s4x_drop"
+  s4x_v() { # ledger -> rc=<n> cover=<n>
+    local o rc c
+    o="$(bash "$VSL" --ledger "$WORK/$1" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+    c="$(sed -n 's/^ *cover (S4): \([0-9]*\) one-cross.*/\1/p' <<<"$o" | head -1)"
+    printf 'rc=%s cover=%s' "$rc" "${c:-none}"
+  }
+  s4x_f="$(s4x_v cp-s4x-full.jsonl)"; s4x_d="$(s4x_v cp-s4x-drop.jsonl)"
+  if [ "$s4x_f" = "rc=0 cover=0" ] && [ "$s4x_d" = "rc=1 cover=1" ]; then
+    ok "S4X: the one cross shard line [$s4x_val] the six emitter files teach at $s4x_sites site(s), instantiated at K=4, is judged by S4 -- every ordinal passes (rc=0, cover 0), one dropped refuses (rc=1, cover 1)"
+  else
+    bad "S4X: the role files' cross shard line [$s4x_val] is not bound to S4 -- full [$s4x_f] want [rc=0 cover=0], one ordinal dropped [$s4x_d] want [rc=1 cover=1]"
   fi
 fi
 
@@ -1408,6 +1711,7 @@ if [ "$RVSRC" -ne 1 ]; then
   bad "FIXTURE BROKEN: the SHARD_ROLES line is in the validator $RVSRC time(s) (want 1); the reviewer mutants below have no subject"
 elif [ "$rvwords_ok" -ne 1 ]; then
   bad "S3 membership: SHARD_ROLES [$RVLIST] does not carry code-reviewer, code-reviewer-escalated, qa and remediator without dev -- a regression in the validator, not the harness; the membership mutants stand down until it does"
+elif ! need_base "$([ "$RVGOT" = "$RV_EXPECTED $RV_NEAR" ] && echo 1)" "S3 rva/rvb/rvc/rvd"; then :
 else
   # (rva) drops code-reviewer: the R1 cell moves, and the ALLOW twin with it (stated overlap --
   # the twin's positive conjunct is that a code-reviewer 1/1 row is COUNTED, which is membership).
@@ -1521,6 +1825,7 @@ else
     local M
     M="$(s3mut "$1" "$2")"
     if [ -z "$M" ]; then bad "FIXTURE BROKEN: party-seat mutant ($1) did not apply -- its anchor was renamed"; return; fi
+    need_base "$([ "$PTGOT" = "FAIL1 OK OKW" ] && echo 1)" "PT ($1)" || return
     local got; got="$(ptvec "$M")"
     [ "$got" = "$3" ] && ok "PT MUTANT ($1) killed: $4 [$got]" \
       || bad "PT MUTANT ($1): scored [$got], expected [$3] -- $4"
@@ -1569,6 +1874,7 @@ d
     "$PT_SRC/ux.md" > "$WORK/psm/team-roles/ux.md"
   if cmp -s "$PT_SRC/ux.md" "$WORK/psm/team-roles/ux.md"; then
     bad "FIXTURE BROKEN: the PS mutant (ux.md reworded) did not apply -- the persona sentence moved"
+  elif ! need_base "$([ "$PSGOT" = "cis sm tea ux" ] && echo 1)" "PS (ux.md reworded)"; then :
   else
     PSMUT="$(pscell "$WORK/psm/team-roles")"
     [ "$PSMUT" = "cis sm tea" ] && ok "PS MUTANT (ux.md reworded) killed: the seat set reads [$PSMUT], so the PS cell would fail" \
@@ -1703,6 +2009,7 @@ tmut() { # name sed-expression expected-cell description
     bad "FIXTURE BROKEN: tier mutation '$n' matched nothing -- the line it targets was renamed, so this mutant proves nothing"; return
   fi
   bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: tier mutant '$n' does not parse"; return; }
+  need_base "$([ "$TGOT" = "$T_EXPECTED" ] && [ "$TCTL" = "$T_EXPECTED" ] && echo 1)" "t-$n" || return
   mv="$(tmoved "$(tvec "$M")")"
   [ "$mv" = "$3" ] && ok "MUTANT t-$n killed: $4 -- moves only the $3 cell" \
     || bad "MUTANT t-$n: moved [$mv], expected only [$3]"
@@ -1779,6 +2086,7 @@ kmut() { # name sed-expression expected-cells description
   sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: could not write K mutant $n"; return; }
   if cmp -s "$WORK/mut/control.sh" "$M"; then bad "FIXTURE BROKEN: K mutation '$n' matched nothing"; return; fi
   bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: K mutant '$n' does not parse"; return; }
+  need_base "$([ "$KGOT" = "$K_EXPECTED" ] && [ "$KCTL" = "$K_EXPECTED" ] && echo 1)" "k-$n" || return
   mv="$(kmoved "$(kvec "$M")")"
   [ "$mv" = "$3" ] && ok "MUTANT k-$n killed: $4 -- moves only [$3]" || bad "MUTANT k-$n: moved [$mv], expected only [$3]"
 }

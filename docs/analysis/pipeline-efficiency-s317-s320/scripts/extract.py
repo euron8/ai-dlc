@@ -10,8 +10,9 @@ import json, os, re, sys, glob, datetime as dt
 
 ROOT = os.environ.get("EXTRACT_ROOT") or os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
 OUT = sys.argv[1]
-WIN_START = "2026-10-05T14:00:00Z"          # s316 close, 10:00 -0400
-S318_START = "2026-10-12T02:30:00Z"         # after the s317 retro segment ends (02:28Z)
+# WIN_START is a parameter: argv[2], else $EXTRACT_WIN_START, else just after graph's s313 close
+# (commit 6a4469196, 2026-09-25T20:31-04:00), so s314 onward is selected. Records before it are dropped.
+WIN_START = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("EXTRACT_WIN_START")) or "2026-09-26T00:35:00Z"
 os.makedirs(OUT, exist_ok=True)
 
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")
@@ -20,7 +21,11 @@ SUBPROC = {"_gate-procedures", "_dispatch-protocol"}
 def ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
 
-EDGES = [("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),("2099-01-01T00:00:00Z",320)]
+# Each edge is the END of sprint n: graph's last close commit for that sprint plus a few minutes
+# (36f74d63c s314 2026-09-28T15:07:38-04, 7b74011a9 s315 2026-09-30T16:55:42-04,
+#  8eb9429a1 s316 2026-10-05T09:58:27-04; the s317-s319 edges follow the same rule).
+EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T14:00:00Z",316),
+         ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),("2099-01-01T00:00:00Z",320)]
 def sprint_of(t):
     if t < WIN_START: return None
     for e, n in EDGES:
@@ -65,7 +70,7 @@ def scan(path, kind, meta):
     compactions = 0; humans = 0; skills = {}
     def seg(s):
         return segs.setdefault(s, dict(first=None, last=None, active=0.0, op_wait=0.0, agent_wait=0.0,
-                                       reads=0, compactions=0, humans=0, tool_bytes=0, hook_bytes=0, lines=0))
+                                       reads=0, compactions=0, humans=0, tool_bytes=0, hook_bytes=0, lines=0, gap=0.0))
     for line in open(path, errors="replace"):
         try: r = json.loads(line)
         except Exception: continue
@@ -78,7 +83,12 @@ def scan(path, kind, meta):
         S["first"] = S["first"] or t; S["last"] = t
         if prev_t is not None:
             gap = max(0.0, tt - prev_t)
+            # "gap" is the time between consecutive records that exceeds 300 s. It is charged to op_wait or
+            # agent_wait below AND recorded here on its own, so op_wait + agent_wait == gap. Hours built
+            # from active + op_wait + agent_wait are therefore gap-inclusive.
             if gap <= 300: S["active"] += gap
+            else: S["gap"] += gap
+            if gap <= 300: pass
             elif (typ == "user" and human_prompt(r)) or any(v[0] == "AskUserQuestion" for v in pend.values()): S["op_wait"] += gap
             else: S["agent_wait"] += gap
         prev_t = tt
@@ -153,9 +163,26 @@ def scan(path, kind, meta):
         if S["first"] is None: continue
         fh["segs"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=s, sprint=sprint_of(S["first"]), **S)) + "\n")
 
-cut = dt.datetime(2026, 10, 5, 9, 0).timestamp()
-leads = [p for p in glob.glob(ROOT + "/*.jsonl") if os.path.getmtime(p) >= cut]
-subs = [p for p in glob.glob(ROOT + "/*/subagents/*.jsonl") if os.path.getmtime(p) >= cut]
+def last_ts(path):
+    """Timestamp of the last timestamped record in the file, read from its tail. None if there is none."""
+    with open(path, "rb") as f:
+        f.seek(0, 2); size = f.tell(); n = 1 << 16
+        while True:
+            f.seek(max(0, size - n)); chunk = f.read().decode("utf-8", "replace")
+            for line in reversed(chunk.splitlines()):
+                try: t = json.loads(line).get("timestamp")
+                except Exception: continue
+                if t: return t
+            if n >= size: return None
+            n *= 4
+
+def in_window(p):
+    # Selected by the in-file timestamp window, never by mtime: a copied or touched file keeps its records.
+    t = last_ts(p)
+    return t is None or t >= WIN_START
+
+leads = [p for p in glob.glob(ROOT + "/*.jsonl") if in_window(p)]
+subs = [p for p in glob.glob(ROOT + "/*/subagents/*.jsonl") if in_window(p)]
 print("leads", len(leads), "subs", len(subs), file=sys.stderr)
 for p in sorted(leads): scan(p, "lead", None)
 for i, p in enumerate(sorted(subs)):

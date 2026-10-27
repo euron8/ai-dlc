@@ -143,14 +143,15 @@ p_b4doc_nomf "$MERGE" && ok "U10: the same --document prd.md merge with NO manif
 p_b4doc_other "$MERGE" && ok "U11: --document of an s9 file the manifest does NOT name, manifest present -> MERGED (B4 keys on the manifest's files, not on the manifest's presence)" \
   || bad "U11: a --document merge of a file outside the subject was refused beside a manifest (rc=$RC): $(cat "$MO")"
 
-# ---- the cross groups (BL-464). Every K>=3 shard set owes one cross shard per row of
-# partition-document.sh --cross-groups <K>, in EVERY mode; X1-X3 drive K=8 through each mode (and
-# K=2 through files and --document), each predicate presence-shaped in every cell.
-p_xfiles "$MERGE" && ok "X1: files mode, K=8: cross-1..6 merges (tool_use_id = cross-1's); cross.md alone REFUSED; a finding in its owner AND another covering group REFUSED naming the owner, its owner alone merges major=1, a (1, 2, K-1) finding held only by a non-owner merges major=1; K=2 cross.md merges, K=2 cross-1.md REFUSED" \
+# ---- the cross groups (BL-464, BL-811). A K>=3 shard set carries ONE cross.md (the dispatched shape)
+# or one cross shard per row of partition-document.sh --cross-groups <K>, never both, in EVERY mode;
+# X1-X3 drive K=8 through each mode (and K=2 through files and --document), each predicate
+# presence-shaped in every cell.
+p_xfiles "$MERGE" && ok "X1: files mode, K=8: cross-1..6 merges (tool_use_id = cross-1's); cross.md alone MERGES titled K+1 shards, its body last under '## Shard: cross-story', tool_use_id the lone cross's, keyed cross=; cross-1..5 without cross-6 REFUSED; a finding in its owner AND another covering group REFUSED naming the owner, its owner alone merges major=1, a (1, 2, K-1) finding held only by a non-owner merges major=1; K=2 cross.md merges, K=2 cross-1.md REFUSED" \
   || bad "X1: files-mode cross groups (rc=$RC): $(cat "$MO")"
-p_xdoc "$MERGE" && ok "X2: --document, K=8: the same four cells, and K=2 cross.md merges" \
+p_xdoc "$MERGE" && ok "X2: --document, K=8: the same five cells (the lone cross under '## Shard: cross-section'), and K=2 cross.md merges" \
   || bad "X2: --document cross groups (rc=$RC): $(cat "$MO")"
-p_xelicit "$MERGE" && ok "X3: --subject --elicitation over the 6-part subject: cross-1..6 merges, cross.md REFUSED, the non-owner duplicate REFUSED, the owner alone counted once" \
+p_xelicit "$MERGE" && ok "X3: --subject --elicitation over the 6-part subject: cross-1..6 merges, cross.md alone MERGES (under '## Shard: cross-part'), a partial set REFUSED, the non-owner duplicate REFUSED, the owner alone counted once" \
   || bad "X3: elicitation cross groups (rc=$RC): $(cat "$MO")"
 p_xmix "$MERGE" && ok "X4: cross.md beside cross-1..3.md -> REFUSED as a mix, nothing written" || bad "X4: (rc=$RC) $(cat "$MO")"
 p_xunknown "$MERGE" && ok "X5: cross-7.md at K=3 -> REFUSED, the table does not print group 7, nothing written" || bad "X5: (rc=$RC) $(cat "$MO")"
@@ -369,6 +370,23 @@ PY
   [ -f "$md/partition-document.sh" ] && [ -f "$md/validate-adversarial-convergence.sh" ] && bash -n "$md/merge-adversarial-shards.sh" || return 0
   printf '%s' "$md/merge-adversarial-shards.sh"
 }
+# m-k2only (BL-811): the K=2-only lone-cross rule restored. X1's files-mode world then refuses the
+# lone cross.md at K=8 on that rule's own text, and the grouped set (its control) still merges.
+mk2="$(mut_merge 'if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
+  '[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] && collect "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $XTABLE_KEYS; a single cross shard is owed only at K=2"; if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi')"
+if [ -z "$mk2" ]; then bad "m-k2only: FIXTURE STALE -- the lone-cross anchor is not in the merge exactly once; re-anchor it, never relax X1"
+else
+  p_xfiles "$MERGE" || bad "m-k2only: CONTROL -- X1 over the unmutated merge failed (rc=$RC), so the mutant verdict is not evidence"
+  p_xfiles "$mk2"; mrc=$RC
+  if [ "$mrc" -eq 2 ] && has "$MO" "a single cross shard is owed only at K=2"; then
+    ok "m-k2only: with the K=2-only rule restored, X1 goes red on that rule's refusal of the lone cross.md at K=8"
+  else bad "m-k2only: SURVIVED or died for another reason (rc=$mrc): $(head -2 "$MO")"; fi
+fi
+# m-nomix (BL-811): the mixed-shape refusal dropped. X4 then merges cross.md beside cross-1..3.
+mnm="$(mut_merge '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \')"
+if [ -z "$mnm" ]; then bad "m-nomix: FIXTURE STALE -- the mixed-refusal anchor is not in the merge exactly once"
+elif p_xmix "$mnm"; then bad "m-nomix: SURVIVED -- X4 still refuses the mix with the mixed refusal dropped"
+else ok "m-nomix: with the mixed refusal dropped, X4 no longer refuses cross.md beside cross-1..3 (rc=$RC)"; fi
 # RM-A: "any ### opens a finding" restored. RS1's world then reads the probes heading as a finding, so
 # the reserved-form refusal is gone and the count it inflates is what refuses (--dry-run prints every
 # refusal of that phase, so the marker-count mismatch is visible beside the citation refusal).
