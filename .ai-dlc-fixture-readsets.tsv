@@ -69,22 +69,6 @@ retro-compliance-workflow	core/fixtures/retro-compliance-workflow/run.sh
 retro-compliance-workflow	core/fixtures/retro-compliance-workflow/seed.sh
 retro-compliance-workflow	core/schemas/provenance-block.json
 retro-compliance-workflow	core/scripts/validate-provenance-block.sh
-self-update-join-gate	.gitattributes
-self-update-join-gate	core
-self-update-join-gate	core/fixtures
-self-update-join-gate	core/fixtures/lib
-self-update-join-gate	core/fixtures/lib/preamble.sh
-self-update-join-gate	core/fixtures/self-update-join-gate
-self-update-join-gate	core/fixtures/self-update-join-gate/run.sh
-self-update-join-gate	core/fixtures/self-update-join-gate/seed.sh
-self-update-join-gate	core/skills
-self-update-join-gate	core/skills/ai-dlc-update
-self-update-join-gate	core/skills/ai-dlc-update/reconcile
-self-update-join-gate	core/skills/ai-dlc-update/reconcile/consumer-read.sh
-self-update-join-gate	core/skills/ai-dlc-update/reconcile/lib.sh
-self-update-join-gate	core/skills/ai-dlc-update/reconcile/preclassify.sh
-self-update-join-gate	core/skills/ai-dlc-update/reconcile/self-update-gate.sh
-self-update-join-gate	core/skills/ai-dlc-update/reconcile/setup-sites.md
 # digest hook-registration-join c45c40848589cebd3e926e78188d9e8f48905ecc3fc0a7e6650dcc1d03ad11ea
 # digest retro-compliance-workflow 01d1f386a7ce52950c2d61f9e70071e4cb48d62931f3fe9732fa612b871c312e
 # digest self-update-join-gate e3e08fa4d5a783ed37c45715a3e2b8b6b4509272d0f68ead7c01d14f31efa385

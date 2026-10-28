@@ -43,18 +43,36 @@
 # `MATRIX <mutant> <arm> KILLED|GREEN` row. An arm is KILLED when its unmutated assertion no longer holds on the
 # mutant's output. The block below is the one source; a plain run refuses a mutant with no row, and a cell that
 # disagrees with its row is a failure. Arm tokens are the base-pass flag names without the B_ prefix.
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh forwards no argument, and this
-# fixture has no inputs.decl (its range is derived live from the distribution's git history, which a declaration
-# cannot express), so run.sh is invoked directly from the repo root of a `git clone` of the branch.
+# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh forwards no argument, so --matrix is
+# run directly from the repo root of the branch, where seed.sh takes its range from range.sh (the same file
+# git.decl's `range @range.sh` line derives the sandbox range from).
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-join-gate/run.sh --matrix
 # MUTANT-MATRIX A decides=a2,a3 twins=a1
 # MUTANT-MATRIX B decides=a2,a3 twins=a1
 # MUTANT-MATRIX C decides=rc11 twins=rc22
+# MUTANT-MATRIX F decides=lay,rec twins=nav
 # A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
 # base-pass flag of the cell's own arm. The mutant names reach mutant_killed as literals at their kill sites and
 # as a variable in mx_cell.
 # MUTANT-MATRIX-DYNAMIC mx_cell why=passes each of the mutant names A B C as a variable and every name keeps its own row
 # MUTANT-MATRIX-CONTROL CONTROL why=the unmutated gate copy must reproduce the real DEFER verdict so a mutant's change is attributable
+#
+# ONE REAL SAFE-STOP WALK, ON r_old, AND EVERY OTHER GATE RUN PASSES `--no-safe-stop-advice`. A deferring classify
+# spawns `advise_safe_stop`, a walk that runs one nested classify per release candidate in the range; no assertion
+# here except the walk's own end-to-end proof reads a SAFE-STOP row, so the walk is kept on r_old alone and every
+# other run (the registry, the rc-pair table, the copies and mutants) skips it. The flag skips that function and
+# nothing else, and three arms hold it there: `nav` (the run prints NOT-A-VERDICT on stderr), `rec` and `lay` (under
+# the flag the verdict record is still opened and the enclosed-layout refusal still fires), with mutant F -- the
+# flag reusing the walk's own AI_DLC_GATE_IN_SAFE_STOP cost guard, which disables both -- killed by rec and lay.
+# Arm `cs` holds the other half: no shipped caller passes the flag.
+#
+# r_noanchor's assertion reads its R1 UNDECIDED row, which R1 emits before any advise_safe_stop call, so its walk
+# is skipped too; the arm still requires that row in the flagged run.
+#
+# EVERY GATE COPY IS A COPY OF THE WHOLE core/skills/ai-dlc-update/ TREE, its gate still named self-update-gate.sh.
+# The gate resolves preclassify.sh beside itself (`dirname "$SELF_SRC"`) and preclassify.sh resolves
+# ../fixture-manifest.md, so a lone copy runs arm C without its siblings; and the invocation budget's gate row
+# counts a start by that path suffix, so the copies are counted as the gate starts they are.
 set -uo pipefail
 MATRIX=0
 for _a in "$@"; do
@@ -69,6 +87,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HERE="$(cd "$(dirname "$0")" && pwd)"
 D_ROOT="$(cd "$HERE/../../.." && pwd)"
 GATE="$D_ROOT/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
+FLAG=--no-safe-stop-advice
 
 # Distribution-only, and say WHY accurately. The gate IS shipped to consumers (it lands at
 # .claude/skills/ai-dlc-update/reconcile/), so "not present" would be a false reason. What a
@@ -126,19 +145,32 @@ export -f clone_tree
 # scheduled: `cmp -s` proves the sed landed and `bash -n` proves the result is still a
 # program. A copy that is not a program dies instantly and its silence would otherwise
 # score as a kill.
-CTRL="$WORK/gate-control.sh"; cp "$GATE" "$CTRL"
+# gate_copy <name> -> the path of self-update-gate.sh in a fresh copy of the whole core/skills/ai-dlc-update/ tree
+# under $WORK/g-<name>, or the empty string when the copy lacks the gate or its preclassify.sh sibling. The whole
+# skill directory, not reconcile/ alone: preclassify.sh also resolves ../fixture-manifest.md beside its own dir.
+gate_copy() {
+  local d="$WORK/g-$1/core/skills/ai-dlc-update"
+  mkdir -p "${d%/*}" && clone_tree "$D_ROOT/core/skills/ai-dlc-update" "$d" || return 0
+  [ -f "$d/reconcile/self-update-gate.sh" ] && [ -f "$d/reconcile/preclassify.sh" ] && printf '%s\n' "$d/reconcile/self-update-gate.sh"
+}
+# gate_mutate <name> <sed program> -> the path of a copy whose gate is the sed of the real one (empty: no copy).
+# A sed that dies leaves the copy's unmutated gate in place, which mut_state then reports as vacuous.
+gate_mutate() {
+  local g; g="$(gate_copy "$1")"
+  [ -n "$g" ] || return 0
+  sed "$2" "$GATE" > "$g.mut" && mv "$g.mut" "$g"
+  printf '%s\n' "$g"
+}
+# mut_state <copy path> -> ok, vacuous, notaprogram or nocopy. Derived from the copy, because `$( )` sets nothing here.
+mut_state() { if [ -z "$1" ]; then echo nocopy; elif cmp -s "$GATE" "$1"; then echo vacuous; elif ! bash -n "$1" 2>/dev/null; then echo notaprogram; else echo ok; fi; }
+CTRL="$(gate_copy CTRL)"
+[ -n "$CTRL" ] && cmp -s "$GATE" "$CTRL" || { echo "FIXTURE ERROR: the unmutated control copy of the skill tree did not build beside its preclassify.sh" >&2; exit 2; }
 
-MUT_A="$WORK/mutant-a.sh"
-sed 's/^    r1_missing=.*/    r1_missing=""/' "$CTRL" > "$MUT_A"
-MUT_A_BUILD=ok
-cmp -s "$CTRL" "$MUT_A" && MUT_A_BUILD=vacuous
-[ "$MUT_A_BUILD" = ok ] && { bash -n "$MUT_A" 2>/dev/null || MUT_A_BUILD=notaprogram; }
-
-MUT_B="$WORK/mutant-b.sh"
-sed 's/^if \[ -n "\$R2_RB" \]; then/if true; then/' "$CTRL" > "$MUT_B"
-MUT_B_BUILD=ok
-cmp -s "$CTRL" "$MUT_B" && MUT_B_BUILD=vacuous
-[ "$MUT_B_BUILD" = ok ] && { bash -n "$MUT_B" 2>/dev/null || MUT_B_BUILD=notaprogram; }
+MUT_A="$(gate_mutate MUT_A 's/^    r1_missing=.*/    r1_missing=""/')"; MUT_A_BUILD="$(mut_state "$MUT_A")"
+MUT_B="$(gate_mutate MUT_B 's/^if \[ -n "\$R2_RB" \]; then/if true; then/')"; MUT_B_BUILD="$(mut_state "$MUT_B")"
+# MUTANT F -- the flag reuses the walk's own cost guard instead of a variable of its own. That one change disables
+# the verdict record and the enclosed-layout refusal under the flag, which arms rec and lay must catch.
+MUT_F="$(gate_mutate MUT_F 's/^  GATE_NO_SS_ADVICE=1$/  GATE_NO_SS_ADVICE=1; AI_DLC_GATE_IN_SAFE_STOP=1/')"; MUT_F_BUILD="$(mut_state "$MUT_F")"
 
 # The anchor-stripped consumer for assertion 5, also built here: its absence is a FIXTURE
 # BROKEN verdict rather than an assertion, so it must be settled before anything schedules.
@@ -153,17 +185,18 @@ else
 fi
 
 # ============================ PHASE 2: run the gates in a pool ============================
-# The registry is <label>\t<gate-script>\t<consumer-source>. Runs are declared here and
+# The registry is <label>\t<gate-script>\t<consumer-source>\t<first argument>. Runs are declared here and
 # rendered in this order below, so the output is byte-comparable against the serial version
-# this replaces — which is the differential the refactor had to produce.
+# this replaces — which is the differential the refactor had to produce. Column 4 is `-` on r_old alone, the one
+# run whose SAFE-STOP walk is real; every other run passes the flag.
 RUNS="$WORK/runs"
 : > "$RUNS"
-printf '%s\t%s\t%s\n' r_old      "$GATE"  "$CONS_OLD"     >> "$RUNS"
-printf '%s\t%s\t%s\n' r_current  "$GATE"  "$CONS_CURRENT" >> "$RUNS"
-[ "$NOANCHOR_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_noanchor "$GATE" "$NOANCHOR" >> "$RUNS"
-printf '%s\t%s\t%s\n' r_control  "$CTRL"  "$CONS_OLD"     >> "$RUNS"
-[ "$MUT_A_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_muta "$MUT_A" "$CONS_OLD"     >> "$RUNS"
-[ "$MUT_B_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_mutb "$MUT_B" "$CONS_CURRENT" >> "$RUNS"
+printf '%s\t%s\t%s\t%s\n' r_old      "$GATE"  "$CONS_OLD"     -       >> "$RUNS"
+printf '%s\t%s\t%s\t%s\n' r_current  "$GATE"  "$CONS_CURRENT" "$FLAG" >> "$RUNS"
+[ "$NOANCHOR_BUILD" = ok ] && printf '%s\t%s\t%s\t%s\n' r_noanchor "$GATE" "$NOANCHOR" "$FLAG" >> "$RUNS"
+printf '%s\t%s\t%s\t%s\n' r_control  "$CTRL"  "$CONS_OLD"     "$FLAG" >> "$RUNS"
+[ "$MUT_A_BUILD" = ok ] && printf '%s\t%s\t%s\t%s\n' r_muta "$MUT_A" "$CONS_OLD"     "$FLAG" >> "$RUNS"
+[ "$MUT_B_BUILD" = ok ] && printf '%s\t%s\t%s\t%s\n' r_mutb "$MUT_B" "$CONS_CURRENT" "$FLAG" >> "$RUNS"
 
 N_RUNS="$(grep -c . "$RUNS" || true)"
 if [ "$N_RUNS" -lt 4 ]; then
@@ -183,11 +216,13 @@ AI_DLC_SUJG_OUT="$OUTD" AI_DLC_SUJG_RUNS="$RUNS" \
     l="$1"
     g="$(awk -F"\t" -v k="$l" "\$1==k{print \$2}" "$AI_DLC_SUJG_RUNS")"
     c="$(awk -F"\t" -v k="$l" "\$1==k{print \$3}" "$AI_DLC_SUJG_RUNS")"
-    [ -n "$g" ] && [ -n "$c" ] || exit 0
+    f="$(awk -F"\t" -v k="$l" "\$1==k{print \$4}" "$AI_DLC_SUJG_RUNS")"
+    [ -n "$g" ] && [ -n "$c" ] && [ -n "$f" ] || exit 0
+    set --; [ "$f" = - ] || set -- "$f"
     priv="$AI_DLC_SUJG_OUT/$l.consumer"
     clone_tree "$c" "$priv" || exit 0
-    bash "$g" "$AI_DLC_SUJG_DIST" "$AI_DLC_SUJG_BASE" "$AI_DLC_SUJG_THEIRS" "$priv" \
-      > "$AI_DLC_SUJG_OUT/$l.txt" 2>&1
+    bash "$g" "$@" "$AI_DLC_SUJG_DIST" "$AI_DLC_SUJG_BASE" "$AI_DLC_SUJG_THEIRS" "$priv" \
+      > "$AI_DLC_SUJG_OUT/$l.txt" 2> "$AI_DLC_SUJG_OUT/$l.err"
     printf done > "$AI_DLC_SUJG_OUT/$l.done"
     rm -rf "$priv"
   ' _ {} < <(cut -f1 "$RUNS")
@@ -196,8 +231,13 @@ AI_DLC_SUJG_OUT="$OUTD" AI_DLC_SUJG_RUNS="$RUNS" \
 # A MISSING VERDICT IS A FAILURE, not a gap: serially a run that never happened could not
 # produce a grep hit either, but it also could not be mistaken for one that did. `.done` is
 # written after the run, so its absence means the pool dropped work.
+# stdout and stderr are captured apart so the `nav` arm can say which stream carried the banner; verdict() prints
+# both, as the merged capture this replaced did, so every other arm reads what it always read.
 have() { [ -f "$OUTD/$1.done" ]; }
-verdict() { cat "$OUTD/$1.txt" 2>/dev/null; }
+verdict() { cat "$OUTD/$1.txt" "$OUTD/$1.err" 2>/dev/null; }
+# THE GATE'S REQUIRED SENTINEL IS PRINTED HERE, once r_old produced a verdict, so a run in which no gate executed
+# cannot satisfy it.
+have r_old && echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
 dropped() { bad "$1 produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one"; }
 
 # ===================== PHASE 3: evaluate, serially, in declaration order =====================
@@ -223,9 +263,12 @@ mx_holds() {
     a4) grep -q 'rulebook-coupled-fixtures' <<<"$2" ;;
     rc22) [ "$2" = "SELF-UPDATE-OK" ] ;;
     rc11) [ "$2" = "SELF-UPDATE-OK" ] ;;
+    lay) awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $2 == "pre-push" && $3 ~ /UNSUPPORTED LAYOUT/ {f = 1} END {exit !f}' <<<"$2" ;;
+    rec) grep -q '^record: ' <<<"$2" && grep -qx 'RECORD-FILE-PRESENT' <<<"$2" ;;
+    nav) grep -q 'NOT-A-VERDICT' <<<"$2" ;;
   esac
 }
-mx_flag() { case "$1" in a1) echo "${B_a1:-0}" ;; a2) echo "${B_a2:-0}" ;; a3) echo "${B_a3:-0}" ;; a4) echo "${B_a4:-0}" ;; rc22) echo "${B_rc22:-0}" ;; rc11) echo "${B_rc11:-0}" ;; esac; }
+mx_flag() { case "$1" in a1) echo "${B_a1:-0}" ;; a2) echo "${B_a2:-0}" ;; a3) echo "${B_a3:-0}" ;; a4) echo "${B_a4:-0}" ;; rc22) echo "${B_rc22:-0}" ;; rc11) echo "${B_rc11:-0}" ;; lay) echo "${B_lay:-0}" ;; rec) echo "${B_rec:-0}" ;; nav) echo "${B_nav:-0}" ;; esac; }
 # mx_cell <mutant> <arm> <the output the arm reads>
 mx_cell() {
   local m="$1" t="$2" role
@@ -298,9 +341,45 @@ if [ "$NOANCHOR_BUILD" != ok ]; then
   bad "FIXTURE BROKEN — no gate-validation.md in the seeded consumer, so assertion 5 tests nothing"
 elif ! have r_noanchor; then dropped r_noanchor
 elif grep -q 'SELF-UPDATE-UNDECIDED' <<<"$(verdict r_noanchor)"; then
-  ok "an unparseable anchor side returns UNDECIDED — an empty set does not read as agreement"
+  ok "an unparseable anchor side returns UNDECIDED — an empty set does not read as agreement (read with the SAFE-STOP walk skipped: R1 emits it before any walk)"
 else
   bad "a consumer with no parseable anchors did not return UNDECIDED — a false zero would read as a clean join"
+fi
+
+# --- WALK: r_old's one real SAFE-STOP walk ran, and the flagged runs ran none ------
+# The end-to-end proof that the walk works is r_old's SELF-UPDATE-SAFE-STOP row; the flagged registry runs that
+# defer (r_noanchor, r_control) must carry none, or the flag did not skip it.
+ss_flagged=""
+for l in r_noanchor r_control; do
+  have "$l" && grep -q 'SELF-UPDATE-SAFE-STOP' <<<"$(verdict "$l")" && ss_flagged="$ss_flagged $l"
+done
+if ! have r_old; then dropped r_old
+elif ! grep -q 'SELF-UPDATE-SAFE-STOP' <<<"$out"; then
+  bad "WALK: r_old, the one run without the flag, carries no SELF-UPDATE-SAFE-STOP row — the kept walk is not exercised"
+elif [ -n "$ss_flagged" ]; then
+  bad "WALK: flagged run(s)$ss_flagged still carry a SELF-UPDATE-SAFE-STOP row — --no-safe-stop-advice did not skip the walk"
+else
+  ok "WALK: r_old's real walk emits its SAFE-STOP row, and the flagged deferring runs emit none"
+fi
+
+# --- nav: every flagged run says NOT-A-VERDICT on STDERR, and only there -----------
+# r_old, the unflagged run, is the in-run control: the banner must be absent from it, so a banner printed
+# unconditionally cannot pass.
+nav_bad=""; nav_n=0
+for l in r_current r_noanchor r_control r_muta r_mutb; do
+  have "$l" || continue
+  nav_n=$((nav_n + 1))
+  grep -q 'NOT-A-VERDICT' "$OUTD/$l.err" 2>/dev/null || nav_bad="$nav_bad $l:no-stderr-banner"
+  grep -q 'NOT-A-VERDICT' "$OUTD/$l.txt" 2>/dev/null && nav_bad="$nav_bad $l:banner-on-stdout"
+done
+if [ "$nav_n" -lt 5 ]; then
+  bad "nav: only $nav_n of the 5 flagged registry runs produced a verdict"
+elif grep -q 'NOT-A-VERDICT' "$OUTD/r_old.err" "$OUTD/r_old.txt" 2>/dev/null; then
+  bad "nav: the UNFLAGGED r_old printed NOT-A-VERDICT — the banner is unconditional, so it marks nothing"
+elif [ -n "$nav_bad" ]; then
+  bad "nav: the NOT-A-VERDICT banner is wrong on$nav_bad"
+else
+  ok "nav: all $nav_n flagged runs print NOT-A-VERDICT on stderr and not on stdout; unflagged r_old prints none"; B_nav=1
 fi
 
 # ------------------------------------------------------------------------------
@@ -386,7 +465,7 @@ rcpair() {
   printf '# pair %s-%s\nexit %s\n' "$1" "$2" "$2" > "$RCD/dist/core/scripts/validate-probe.sh"
   ( cd "$RCD/dist" && git add -A && git commit -q -m "new $2" --allow-empty ) >/dev/null 2>&1
   local theirs; theirs="$( cd "$RCD/dist" && git rev-parse HEAD )"
-  bash "${3:-$GATE}" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
+  bash "${3:-$GATE}" "$FLAG" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
     | grep -oE 'SELF-UPDATE-(OK|DEFER|UNDECIDED)[[:space:]]+validate-probe\.sh' | head -1 \
     | awk '{print $1}'
 }
@@ -436,9 +515,10 @@ else
   # driven through the same rc-pair harness. It must move 1,1 and ONLY 1,1: 2,2 was already
   # covered by the narrow form, so a mutant that moved both would mean the two arms are one
   # assertion wearing two labels.
-  GATE_C="$WORK/gate-narrow.sh"
-  sed 's|^    if \[ "\$rc_cur" -ne "\$rc_new" \] && \[ "\$rc_new" -ne 0 \]; then$|    if ! { [ "$rc_cur" -eq 2 ] \&\& [ "$rc_new" -eq 2 ]; } \&\& [ "$rc_new" -ne 0 ]; then|' "$GATE" > "$GATE_C"
-  if cmp -s "$GATE" "$GATE_C"; then
+  GATE_C="$(gate_mutate C 's|^    if \[ "\$rc_cur" -ne "\$rc_new" \] && \[ "\$rc_new" -ne 0 \]; then$|    if ! { [ "$rc_cur" -eq 2 ] \&\& [ "$rc_new" -eq 2 ]; } \&\& [ "$rc_new" -ne 0 ]; then|')"
+  if [ -z "$GATE_C" ]; then
+    bad "FIXTURE BROKEN: the skill-tree copy for MUTANT C did not build"
+  elif cmp -s "$GATE" "$GATE_C"; then
     bad "FIXTURE STALE: could not build MUTANT C — the equality arm's condition was reworded, so the widening is asserted by nothing"
   elif ! bash -n "$GATE_C" 2>/dev/null; then
     bad "MUTANT C is not a valid program — its silence would have scored as a kill"
@@ -451,6 +531,85 @@ else
       bad "MUTANT C SURVIVED: it moved the wrong set — 1,1 gave [$C_11] (expected SELF-UPDATE-UNDECIDED) and 2,2 gave [$C_22] (expected SELF-UPDATE-OK). Either the 1,1 arm is vacuous or it is entangled with the 2,2 arm."
     fi
   fi
+fi
+
+# ============================================================================
+# THE FLAG SKIPS advise_safe_stop ONLY: rec and lay, and MUTANT F. Two gate runs, both flagged, on the rc world's
+# tiny dist with the rc consumer copied INSIDE an enclosing repository, where the gate stops at its layout arm about
+# a second in. Under the flag, the unmutated gate must still open its verdict record (`record:` on stderr and the file
+# on disk) and still refuse the enclosed layout. MUTANT F reuses the walk's AI_DLC_GATE_IN_SAFE_STOP guard for the
+# flag, which silences both; F must still print the banner and a SELF-UPDATE- row, so a copy that never ran cannot
+# score as the kill.
+ENC="$WORK/enc"
+mkdir -p "$ENC" && git -C "$ENC" -c init.defaultBranch=main init -q . \
+  || { echo "FIXTURE ERROR: could not init the enclosing repository" >&2; exit 2; }
+RC_THEIRS="$( cd "$RCD/dist" && git rev-parse HEAD )"
+# enc_run <label> <gate> -> runs the flagged gate on a fresh enclosed copy; prints the stdout+stderr, then the line
+# RECORD-FILE-PRESENT when a verdict record exists in that copy afterwards (derived from the disk, not the text).
+enc_run() {
+  local sub="$ENC/sub-$1" n=0 f
+  clone_tree "$RCD/consumer" "$sub"
+  # The rc-pair runs above recorded into the rc consumer; a copied record would satisfy rec for any gate.
+  rm -rf "$sub/_bmad-output"
+  bash "$2" "$FLAG" "$RCD/dist" "$RC_BASE" "$RC_THEIRS" "$sub" > "$WORK/$1.enc.out" 2> "$WORK/$1.enc.err"
+  for f in "$sub/_bmad-output/ai-dlc-update/"self-update-gate-*.md; do [ -f "$f" ] && n=$((n + 1)); done
+  cat "$WORK/$1.enc.out" "$WORK/$1.enc.err"
+  [ "$n" -gt 0 ] && echo RECORD-FILE-PRESENT
+}
+E_U="$(enc_run u "$GATE")"
+if grep -q 'NOT-A-VERDICT' "$WORK/u.enc.err" 2>/dev/null && ! grep -q 'NOT-A-VERDICT' "$WORK/u.enc.out" 2>/dev/null; then :; else
+  bad "nav: the flagged enclosed run did not print NOT-A-VERDICT on stderr alone"; fi
+if grep -q '^record: ' <<<"$E_U" && grep -qx 'RECORD-FILE-PRESENT' <<<"$E_U"; then
+  ok "rec: under --no-safe-stop-advice the gate still opens its verdict record (stderr names it, the file is on disk)"; B_rec=1
+else
+  bad "rec: under --no-safe-stop-advice no verdict record was written — the flag reached past advise_safe_stop"
+fi
+if awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $2 == "pre-push" && $3 ~ /UNSUPPORTED LAYOUT/ {f = 1} END {exit !f}' <<<"$E_U"; then
+  ok "lay: under --no-safe-stop-advice a consumer inside an enclosing repository is still refused UNSUPPORTED LAYOUT"; B_lay=1
+else
+  bad "lay: under --no-safe-stop-advice the enclosed consumer was not refused — the flag reached the layout arm"
+fi
+if [ "$MUT_F_BUILD" != ok ]; then
+  bad "MUTANT F did not build ($MUT_F_BUILD) — the flag's own assignment line moved, so rec and lay are guarded by nothing"
+else
+  E_F="$(enc_run f "$MUT_F")"
+  if ! grep -q 'NOT-A-VERDICT' <<<"$E_F" || ! grep -q '^SELF-UPDATE-' <<<"$E_F"; then
+    bad "MUTANT F printed no banner or no SELF-UPDATE- row — a copy that did not run cannot score a kill"
+  else
+    mx_cell F lay "$E_F"; mx_cell F rec "$E_F"; mx_cell F nav "$E_F"
+    if ! mx_holds lay "$E_F" && ! mx_holds rec "$E_F"; then
+      mutant_killed "$(( ${B_lay:-0} && ${B_rec:-0} ))" F "MUTANT F killed — the flag reusing the walk's guard drops the record and the layout refusal, and rec and lay both fail on it"
+    else
+      bad "MUTANT F SURVIVED: with the flag on the walk's guard, rec or lay still held — that arm is not testing the flag's scope"
+    fi
+  fi
+fi
+
+# ============================================================================
+# cs: NO SHIPPED CALLER PASSES THE FLAG. One awk over every file of core/skills/ai-dlc-update/ except the gate,
+# which defines it: non-comment lines carrying --no-safe-stop-advice (want 0), and, in the SAME invocation, non-comment
+# lines naming self-update-gate.sh (the control, want >= 1, so a zero is a scan that saw the call sites). Scoped to
+# the skill directory because every non-comment mention of the gate in core/ outside core/fixtures/ lives there
+# (measured over all of core/ at the time of writing); declaring all of core/ would rekey this fixture on every core
+# change. core/fixtures/ is excluded by construction -- this fixture passes the flag. A self-probe runs the same awk
+# on a seeded tree first: one non-comment flag line and one commented, so it must answer exactly 1.
+cs_scan() { # <dir> <excluded file> -> "<files> <control> <hits>"
+  find "$1" -type f ! -path "$2" -print0 | xargs -0 awk 'FNR == 1 {nf++} /^[[:blank:]]*#/ {next}
+    /self-update-gate\.sh/ {c++} /--no-safe-stop-advice/ {h++} END {print nf + 0, c + 0, h + 0}'
+}
+CSP="$WORK/cs-probe"; mkdir -p "$CSP"
+printf 'bash self-update-gate.sh --no-safe-stop-advice a b c d\n' > "$CSP/call.sh"
+printf '# bash self-update-gate.sh --no-safe-stop-advice in prose\n' > "$CSP/prose.sh"
+read -r csp_f csp_c csp_h <<<"$(cs_scan "$CSP" /dev/null)"
+read -r cs_f cs_c cs_h <<<"$(cs_scan "$D_ROOT/core/skills/ai-dlc-update" "$GATE")"
+if [ "${csp_f:-0}" -ne 2 ] || [ "${csp_h:-0}" -ne 1 ] || [ "${csp_c:-0}" -ne 1 ]; then
+  bad "cs: FIXTURE BROKEN — the scan's self-probe read files=$csp_f control=$csp_c hits=$csp_h, want 2 1 1"
+elif [ "${cs_f:-0}" -lt 1 ] || [ "${cs_c:-0}" -lt 1 ]; then
+  bad "cs: the scan saw $cs_f file(s) and $cs_c gate call site(s) under core/skills/ai-dlc-update — a zero here is a scan that read nothing"
+elif [ "${cs_h:-0}" -ne 0 ]; then
+  bad "cs: $cs_h non-comment line(s) under core/skills/ai-dlc-update pass --no-safe-stop-advice — a shipped caller would read a DEFER with no SAFE-STOP row as the answer"
+else
+  ok "cs: no shipped caller passes --no-safe-stop-advice ($cs_f files, control: $cs_c non-comment lines naming the gate)"
 fi
 
 # MX0: a plain run executes no matrix-only cell; --matrix scores every cell and says how many.
