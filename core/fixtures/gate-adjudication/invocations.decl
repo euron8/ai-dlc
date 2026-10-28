@@ -1,0 +1,3 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+559 *
+248 core/scripts/validate-gate-adjudication.sh

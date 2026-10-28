@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+363 *
+111 core/hooks/ai-dlc-continue.sh
+22 core/hooks/ai-dlc-recover.sh

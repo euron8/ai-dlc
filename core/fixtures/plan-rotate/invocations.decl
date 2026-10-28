@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+52 *
+46 scripts/plan-rotate.sh
+4 scripts/validate-plan-shape.sh

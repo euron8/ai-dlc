@@ -1,0 +1,5 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+56 *
+10 core/scripts/serial-remediation-worklist.sh
+7 core/scripts/partition-document.sh
+2 core/scripts/partition-subject.sh
