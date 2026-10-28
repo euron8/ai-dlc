@@ -244,7 +244,7 @@ clauses; they bind every fixture, and clause 2 binds every mutant battery.
 2. **A mutant runs only the world where its arm decides, plus its named twins.** The mutant by
    arm matrix is measured once, from a real hermetic run, and recorded in the fixture's header,
    with the command that re-measures it, which is re-run whenever an arm or a mutant is added
-   or changed. "Killed by its own arm alone" is a test-quality property established at
+   or changed. A battery change re-measures `invocations.decl` beside the matrix. "Killed by its own arm alone" is a test-quality property established at
    authoring and re-established on change, never re-checked per push. Measured: `readset-skip`
    scored 15 mutants against 15 worlds on every push. The block forms are `MUTANT-MATRIX`,
    `MUTANT-MATRIX-FULL` (a whole world vector, with its reason), `MUTANT-MATRIX-CONTROL` (a
