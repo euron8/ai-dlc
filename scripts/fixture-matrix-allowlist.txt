@@ -114,7 +114,6 @@ push-drain-refusals	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 readset-sandbox-root-clause	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 readset-stage1-verdict	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 reconcile-blocking-list	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-reconcile-emit-report	no MUTANT-MATRIX block; floor: S1 b230_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 relocation-preclassify	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 request-coverage	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 requirements-step	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
