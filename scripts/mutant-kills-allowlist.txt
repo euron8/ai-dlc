@@ -79,7 +79,6 @@ postcompact-rulebook-recovery
 preclassify-mode-bucket
 preclassify-rename-row
 prepush-pool-depth
-prepush-worktree-env-scrub
 process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
