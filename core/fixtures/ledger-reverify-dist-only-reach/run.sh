@@ -47,9 +47,42 @@
 # by a file-size limit without first failing the entries write, so this spelling arm is what holds
 # them: the same grammar as `procsub-staged-refusal`'s r5, plus an unquoted-or-quoted `<<WORD`
 # heredoc opener, with a self-probe in both directions before the real file is scanned.
+#
+# THE MUTANT MATRIX. A cell is one reading of an engine copy, RED on a mutant when it is not the unmutated engine's:
+# A (the seven part-A kinds), E (the part-E non-ASCII kinds), E5 (the Latin-1 kinds under both locales), B (the
+# ulimit refusal), C (the spelling scan: no here-string, no heredoc) and D (an unusable TMPDIR refuses). A mutant's
+# row names the cells that kill it (decides) and the cell it could plausibly co-trip but must leave GREEN (twins).
+# The part-A mutants edit the engine's non-comment lines, which is exactly what the spelling scan C reads, and C costs
+# no engine run, so C is their twin; the part-E and E5 mutants must leave part A's seven ASCII kinds where they were,
+# and M-B1 likewise, which is the property each of those scorers already asserted. A plain run scores each mutant
+# on its deciding cells and its twin only. The matrix is re-measured whenever an arm or a mutant is added or changed,
+# by the REMEASURE command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX
+# line each. No validator unit is selected here, so there is no outside-unit diff.
+# MUTANT-MATRIX M-A1 decides=A twins=C
+# MUTANT-MATRIX M-A2 decides=A twins=C
+# MUTANT-MATRIX M-A3 decides=A twins=C
+# MUTANT-MATRIX M-A4 decides=A twins=C
+# MUTANT-MATRIX M-A5 decides=A twins=C
+# MUTANT-MATRIX M-A6 decides=A twins=C
+# MUTANT-MATRIX M-E1 decides=E twins=A
+# MUTANT-MATRIX M-E2 decides=E twins=A
+# MUTANT-MATRIX M-E3 decides=E twins=A
+# MUTANT-MATRIX M-E5S decides=E5 twins=A
+# MUTANT-MATRIX M-E5A decides=E5 twins=A
+# MUTANT-MATRIX M-B1 decides=B,C twins=A
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-reverify-dist-only-reach/run.sh --matrix
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Any other
+# argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "ledger-reverify-dist-only-reach: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 RV=""; d="$HERE"
 while [ "$d" != "/" ]; do
   for cand in "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" \
@@ -70,6 +103,11 @@ trap 'rm -rf "$W"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+# A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*).
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 broken() { printf '  FAIL  FIXTURE BROKEN -- %s\n' "$1"; echo "ledger-reverify-dist-only-reach: FIXTURE BROKEN" >&2; exit 2; }
 g() { git -C "$1" -c user.email=f@f -c user.name=f -c commit.gpgsign=false "${@:2}"; }
 
@@ -205,41 +243,155 @@ mut_line() { # <tag> <old exact line> <new line> -> path of the mutant engine, o
 # UNMUTATED CONTROL from a copied directory, with a POSITIVE conjunct: it must reproduce all four
 # kinds, so a copy that cannot run reads BROKEN rather than scoring every mutant as a kill.
 CTL_D="$W/mut-control"; mkdir -p "$CTL_D" && cp "$RECON"/*.sh "$CTL_D/" 2>/dev/null
-[ "$(kinds_a "$(run_a "$CTL_D/ledger-reverify.sh")")" = "$WANT_A" ] \
-  || broken "the UNMUTATED copy in a scratch directory does not reproduce the seven kinds, so every mutant verdict below would be unreadable"
-ok "A control: the unmutated engine copied whole reproduces all seven kinds"
+if [ "$(kinds_a "$(run_a "$CTL_D/ledger-reverify.sh")")" = "$WANT_A" ]; then
+  ok "A control: the unmutated engine copied whole reproduces all seven kinds"; B_A=1
+else
+  broken "the UNMUTATED copy in a scratch directory does not reproduce the seven kinds, so every mutant verdict below would be unreadable"
+fi
 
-score_a() { # <tag> <mutant path> <want kinds> <what it proves>
-  local _got
-  if [ -z "$2" ]; then bad "A mutant $1 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
-  _got="$(kinds_a "$(run_a "$2")")"
-  if [ "$_got" = "$3" ]; then ok "A mutant $1 killed: $4"
-  else bad "A mutant $1 read '$_got', want '$3'"; fi
+# --- THE MATRIX CELLS, single-sourced. cell_read <cell> <engine> is one reading of an engine copy; cell_red <cell>
+# <engine> is 0 RED (the reading is not the unmutated engine's), 1 GREEN, 2 UNKNOWN CELL (an unknown name must never
+# read as GREEN). Cells A, E, E5, B and D are driven by worlds built further down; a cell is only read once its world
+# exists (the per-push twins are A and C, and A's world is already built here).
+MX_CELLS='A E E5 B C D'
+MXL="$W/mx.ledger"; : > "$MXL"
+MXR="$W/mx.reg"; : > "$MXR"
+BROKEN=0; MX_FAILS=0
+c_scan() { # <file> -> "<non-comment lines> <here-strings> <heredocs>[ at <line numbers>]"
+  awk '/^[[:blank:]]*#/ { next }
+       { n++
+         if ((" " $0 " ") ~ /[^<]<<<[^<]/) { h++; at = at " " FNR }
+         else if ($0 ~ /[^<]<<-?[[:blank:]]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?[[:blank:]]*$/) { d++; at = at " " FNR } }
+       END { printf "%d %d %d%s\n", n, h + 0, d + 0, (at == "" ? "" : " at" at) }' "$1"; }
+b_read() { # <engine> -> "rc=<n> rows=<n> refuse=<0|1>" under the ulimit that forces the staging write to fail
+  local _e="$1" _rc _n _rf=0
+  _rc="$(run_b "$_e" "$LIM")"; _n="$(hand_rows)"
+  grep -qF "the ledger's entries could not be staged" "$ERR" && _rf=1
+  printf 'rc=%s rows=%s refuse=%s' "$_rc" "$_n" "$_rf"
 }
-score_a M-A1 "$(mut_line a1 '  if [ -n "$LR_DIST_ONLY" ]; then' '  if false; then')" \
+d_read() { # <engine> -> "<rc>:<NAMED rows>:<names TMPDIR>" for a missing and a read-only TMPDIR
+  local _e="$1" _out="" _shape _td _rc _nr _nm
+  for _shape in "missing:$W/no-such-tmp" "read-only:$RO"; do
+    _td="${_shape#*:}"
+    if [ "${_shape%%:*}" = read-only ]; then chmod 555 "$RO"; fi
+    _rc=0; TMPDIR="$_td" bash "$_e" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED" > "$W/dx.out" 2> "$W/dx.err" || _rc=$?
+    if [ "${_shape%%:*}" = read-only ]; then chmod 755 "$RO"; fi
+    _nr="$(awk -F'\t' '$1 ~ /^NAMED-UPSTREAM/ {c++} END {print c+0}' "$W/dx.out")"
+    _nm=0; if grep -qF "could not be created under TMPDIR=$_td " "$W/dx.err"; then _nm=1; fi
+    _out="$_out $_rc:$_nr:$_nm"
+  done
+  printf '%s' "${_out# }"
+}
+cell_exp() {
+  case "$1" in
+    A) printf '%s' "$WANT_A" ;;
+    E) printf '%s' "$E_WANT" ;;
+    E5) printf '%s|%s' "$E5_WANT" "$E5_WANT" ;;
+    B) printf 'rc=2 rows=0 refuse=1' ;;
+    C) printf '0 0' ;;
+    D) printf '2:0:1 2:0:1' ;;
+    *) return 2 ;;
+  esac
+}
+cell_read() {
+  local _r
+  case "$1" in
+    A) kinds_a "$(run_a "$2")" ;;
+    E) kinds_e "$(run_e "$2")" ;;
+    E5) printf '%s|%s' "$(kinds_e5 "$(run_e5 "$2" utf8)")" "$(kinds_e5 "$(run_e5 "$2" lang)")" ;;
+    B) b_read "$2" ;;
+    C) _r="$(c_scan "$2")"; set -- $_r; printf '%s %s' "$2" "$3" ;;
+    D) d_read "$2" ;;
+    *) return 2 ;;
+  esac
+}
+cell_red() { # cell_red <cell> <engine>
+  local _want _got
+  _want="$(cell_exp "$1")" || return 2
+  _got="$(cell_read "$1" "$2")"
+  [ "$_got" != "$_want" ]
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+mx_reg() { printf '%s\t%s\n' "$1" "$2" >> "$MXR"; }
+# mx_twins <mutant> <engine>: per-push, every twin cell must stay GREEN under the mutant.
+mx_twins() {
+  local _m="$1" _e="$2" _tw _t _r
+  _tw="$(mx_row "$_m" twins)"
+  if [ -z "$_tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$_m"; return; fi
+  printf 'plain-twins %s\n' "$_m" >> "$MXL"
+  for _t in $(printf '%s' "$_tw" | tr ',' ' '); do
+    cell_red "$_t" "$_e"; _r=$?
+    if [ "$_r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$_m" "$_t"
+    elif [ "$_r" -eq 0 ]; then bad "$_m: its twin $_t also went RED on this mutant, so the kill is not confined to its own cells"; fi
+  done
+}
+# mx_score <mutant> <engine>: MATRIX-ONLY. Scores the mutant's engine copy on EVERY cell. It records itself in the
+# ledger first (rule 9). A crashed engine prints no FAIL, so a rc outside 0/1/2 or a stderr crash word is BROKEN.
+mx_score() {
+  local _m="$1" _e="$2" _dec _tw _c _dl="" _tl="" _uex="" _g=0 _tot=0 _er _rc=0
+  printf 'mx-score %s\n' "$_m" >> "$MXL"
+  _er="$(bash "$_e" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED" 2>&1 >/dev/null)" || _rc=$?
+  if [ "$_rc" -gt 2 ] || grep -qE 'unbound variable|command not found|syntax error' <<<"$_er"; then
+    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$_m"; return
+  fi
+  _dec="$(mx_row "$_m" decides)"; _tw="$(mx_row "$_m" twins)"
+  for _c in $(printf '%s' "$_dec" | tr ',' ' '); do
+    if cell_red "$_c" "$_e"; then _dl="$_dl,$_c:RED"; else _dl="$_dl,$_c:GREEN"; _uex="$_uex $_c:GREEN"; fi
+  done
+  for _c in $(printf '%s' "$_tw" | tr ',' ' '); do
+    if cell_red "$_c" "$_e"; then _tl="$_tl,$_c:RED"; _uex="$_uex $_c:RED"; else _tl="$_tl,$_c:GREEN"; fi
+  done
+  for _c in $MX_CELLS; do
+    case ",$_dec,$_tw," in *",$_c,"*) continue ;; esac
+    _tot=$((_tot + 1)); cell_red "$_c" "$_e" || _g=$((_g + 1))
+  done
+  if [ -n "$_uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$_m" "${_dl#,}" "${_tl#,}" "$_g" "$_tot" "$(printf '%s' "${_uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$_m" "${_dl#,}" "${_tl#,}" "$_g" "$_tot"
+  fi
+}
+
+score_a() { # <flag> <tag> <mutant path> <want kinds> <what it proves>
+  local _got
+  if [ -z "$3" ]; then bad "A mutant $2 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
+  _got="$(kinds_a "$(run_a "$3")")"
+  if [ "$_got" = "$4" ]; then mutant_killed "$1" "$2" "A mutant $2 killed: $5"
+  else bad "A mutant $2 read '$_got', want '$4'"; fi
+  mx_twins "$2" "$3"; mx_reg "$2" "$3"
+}
+score_a "${B_A:-0}" M-A1 "$(mut_line a1 '  if [ -n "$LR_DIST_ONLY" ]; then' '  if false; then')" \
   "$NU $NU $NU $NU $NU $NU $NU" \
   "with the filter off S801 and S805 read NAMED-UPSTREAM again (the defect) and only those two move"
-score_a M-A2 "$(mut_line a2 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { next }')" \
+score_a "${B_A:-0}" M-A2 "$(mut_line a2 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { next }')" \
   "$DO $NU $DO $NU $DO $DO $NU" \
   "dropping every core/fixtures/ path demotes the SHIPPING fixtures' S803 and S806, and only those two move"
-score_a M-A3 "$(mut_line a3 'LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \' 'LR_DIST_ONLY="$( (cd "$DIST" && find core/fixtures -name .dist-only) 2>/dev/null \')" \
+score_a "${B_A:-0}" M-A3 "$(mut_line a3 'LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \' 'LR_DIST_ONLY="$( (cd "$DIST" && find core/fixtures -name .dist-only) 2>/dev/null \')" \
   "$NU $NU $NU $NU $NU $NU $NU" \
   "reading the markers from the CHECKOUT (at base) instead of THEIRS loses both markers and S801, S805 read NAMED-UPSTREAM"
 # M-A4 moves S807 as well as S804, and both are its subject: the rename listing without detection
 # is itself a mixed commit (the dist-only destination sorts before core/scripts/b.sh).
-score_a M-A4 "$(mut_line a4 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) exit }')" \
+score_a "${B_A:-0}" M-A4 "$(mut_line a4 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) exit }')" \
   "$DO $NU $NU $DO $DO $NU $DO" \
   "a filter that stops at the first dist-only path loses the mixed commits' core scripts, and only S804 and S807 move"
 # M-A5: FIX 1 REVERTED. The set is collapsed to spaces and split on " ", exactly the shipped defect
 # (the derivation's `tr` and the awk split were its two layers; this restores both effects at the
 # one line that consumes the set). `sp ace` becomes the keys `sp` and `ace`.
-score_a M-A5 "$(mut_line a5 '      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }' '      BEGIN { d = ENVIRON["LR_D"]; gsub(/\n/, " ", d); n = split(d, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }')" \
+score_a "${B_A:-0}" M-A5 "$(mut_line a5 '      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }' '      BEGIN { d = ENVIRON["LR_D"]; gsub(/\n/, " ", d); n = split(d, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }')" \
   "$DO $NU $NU $NU $NU $DO $NU" \
   "a space-split marker set leaves the dist-only 'sp ace' (S805) at NAMED-UPSTREAM and demotes the shipping 'sp' (S806), and only those two move"
 # M-A6: FIX 2 REVERTED. Rename detection back on, so S807 lists only its dist-only destination.
 L6_FIX='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" -c core.quotePath=false log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \'
 L6_MUT='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" -c core.quotePath=false log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \'
-score_a M-A6 "$(mut_line a6 "$L6_FIX" "$L6_MUT")" \
+score_a "${B_A:-0}" M-A6 "$(mut_line a6 "$L6_FIX" "$L6_MUT")" \
   "$DO $NU $NU $NU $DO $NU $DO" \
   "with rename detection the commit moving an installed script into a dist-only fixture reads docs-only, and only S807 moves"
 
@@ -333,6 +485,7 @@ kinds_e() { # <rows> -> S821 S822 S823 kinds, then E4-CAFE and E4-PLAIN as resol
 
 E_GOT="$(kinds_e "$(run_e "$RV")")"
 if [ "$E_GOT" = "$E_WANT" ]; then
+  B_E=1
   ok "E: S821 (non-ASCII dist-only fixture) -> DOCS-ONLY; S822 (non-ASCII shipping fixture), S823 (non-ASCII script) -> NAMED-UPSTREAM; scripts/ai-dlc/café.sh resolves by basename and is judged, beside its ASCII control"
 else
   bad "E: read '$E_GOT', want '$E_WANT'"
@@ -346,20 +499,22 @@ L46_FIX='LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --nam
 L46_MUT='LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \'
 L06_FIX='  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" 2>/dev/null |'
 L06_MUT='  git -C "$DIST" ls-tree -r --name-only "$THEIRS" 2>/dev/null |'
-score_e() { # <tag> <mutant path> <want E kinds> <what it proves>
-  local _got _ga
-  if [ -z "$2" ]; then bad "E mutant $1 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
-  _got="$(kinds_e "$(run_e "$2")")"; _ga="$(kinds_a "$(run_a "$2")")"
-  if [ "$_got" = "$3" ] && [ "$_ga" = "$WANT_A" ]; then ok "E mutant $1 killed: $4"
-  else bad "E mutant $1 read '$_got' (want '$3') and part A '$_ga' (want '$WANT_A')"; fi
+score_e() { # <flag> <tag> <mutant path> <want E kinds> <what it proves>
+  local _got
+  if [ -z "$3" ]; then bad "E mutant $2 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
+  _got="$(kinds_e "$(run_e "$3")")"
+  if [ "$_got" = "$4" ]; then mutant_killed "$1" "$2" "E mutant $2 killed: $5"
+  else bad "E mutant $2 read '$_got' (want '$4')"; fi
+  # part A's seven ASCII kinds must not move: a mutant that moved them would be breaking more than quoting.
+  mx_twins "$2" "$3"; mx_reg "$2" "$3"
 }
-score_e M-E1 "$(mut_line e1 "$L91_FIX" "$L91_MUT")" \
+score_e "${B_E:-0}" M-E1 "$(mut_line e1 "$L91_FIX" "$L91_MUT")" \
   "$DO $DO $DO resolved resolved" \
   "with named_reach listing C-quoted the non-ASCII shipping fixture and script read docs-only, and part A does not move"
-score_e M-E2 "$(mut_line e2 "$L46_FIX" "$L46_MUT")" \
+score_e "${B_E:-0}" M-E2 "$(mut_line e2 "$L46_FIX" "$L46_MUT")" \
   "$NU $NU $NU resolved resolved" \
   "with the marker listing C-quoted the non-ASCII dist-only fixture leaves the set and S821 reads NAMED-UPSTREAM, and part A does not move"
-score_e M-E3 "$(mut_line e3 "$L06_FIX" "$L06_MUT")" \
+score_e "${B_E:-0}" M-E3 "$(mut_line e3 "$L06_FIX" "$L06_MUT")" \
   "$DO $NU $NU unresolved resolved" \
   "with the basename listing C-quoted scripts/ai-dlc/café.sh matches no basename while its ASCII control still resolves"
 
@@ -419,6 +574,7 @@ for _sh in utf8 lang; do
   _got="$(kinds_e5 "$(run_e5 "$RV" "$_sh")")"
   if [ "$_got" = "$E5_WANT" ]; then
     ok "E5 ($_sh): S831 (ASCII dist-only) and S832 (Latin-1 dist-only) -> DOCS-ONLY, S833 (Latin-1 shipping) -> NAMED-UPSTREAM"
+    case "$_sh" in utf8) B_E5_utf8=1 ;; lang) B_E5_lang=1 ;; esac
   else
     bad "E5 ($_sh): read '$_got', want '$E5_WANT'"
   fi
@@ -434,24 +590,24 @@ L53_FIX='  | LC_ALL=C sed -n '"'"'s#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p'"
 L53_MUT='  | sed -n '"'"'s#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p'"'"')" || LR_DIST_ONLY=""'
 L22_FIX='    _files="$(printf '"'"'%s\n'"'"' "$_files" | LR_D="$LR_DIST_ONLY" LC_ALL=C awk '"'"
 L22_MUT='    _files="$(printf '"'"'%s\n'"'"' "$_files" | LR_D="$LR_DIST_ONLY" awk '"'"
-score_e5() { # <tag> <calibration word> <mutant> <want> <what>
-  local _sh _got _fails=0 _ga
-  if [ -z "$3" ]; then bad "E5 mutant $1 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
+score_e5() { # <flag> <tag> <calibration word> <mutant> <want> <what>
+  local _sh _got _fails=0
+  if [ -z "$4" ]; then bad "E5 mutant $2 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
   case " $e5_cal " in
-    *" $2 "*) : ;;
-    *) ok "E5 mutant $1 NOT SCORED: this platform's tools do not abort on invalid UTF-8 ($e5_cal), so the mutant cannot be told from the fix here"; return ;;
+    *" $3 "*) : ;;
+    *) ok "E5 mutant $2 NOT SCORED: this platform's tools do not abort on invalid UTF-8 ($e5_cal), so the mutant cannot be told from the fix here"; return ;;
   esac
   for _sh in utf8 lang; do
-    _got="$(kinds_e5 "$(run_e5 "$3" "$_sh")")"
-    [ "$_got" = "$4" ] || { bad "E5 mutant $1 ($_sh) read '$_got', want '$4'"; _fails=1; }
+    _got="$(kinds_e5 "$(run_e5 "$4" "$_sh")")"
+    [ "$_got" = "$5" ] || { bad "E5 mutant $2 ($_sh) read '$_got', want '$5'"; _fails=1; }
   done
-  _ga="$(kinds_a "$(run_a "$3")")"
-  [ "$_ga" = "$WANT_A" ] || { bad "E5 mutant $1 moved part A: '$_ga'"; _fails=1; }
-  [ "$_fails" -eq 0 ] && ok "E5 mutant $1 killed: $5"
+  if [ "$_fails" -eq 0 ]; then mutant_killed "$1" "$2" "E5 mutant $2 killed: $6"; fi
+  # part A's seven ASCII kinds must not move.
+  mx_twins "$2" "$4"; mx_reg "$2" "$4"
 }
-score_e5 M-E5S sed-abort "$(mut_line e5s "$L53_FIX" "$L53_MUT")" "$NU $NU $NU" \
+score_e5 "$(( ${B_E5_utf8:-0} && ${B_E5_lang:-0} ))" M-E5S sed-abort "$(mut_line e5s "$L53_FIX" "$L53_MUT")" "$NU $NU $NU" \
   "with the marker sed in the caller's UTF-8 locale one Latin-1 name empties the whole dist-only set and BOTH dist-only namings, the ASCII one included, read NAMED-UPSTREAM"
-score_e5 M-E5A awk-abort "$(mut_line e5a "$L22_FIX" "$L22_MUT")" "$DO $NU $NU" \
+score_e5 "$(( ${B_E5_utf8:-0} && ${B_E5_lang:-0} ))" M-E5A awk-abort "$(mut_line e5a "$L22_FIX" "$L22_MUT")" "$DO $NU $NU" \
   "with named_reach's filter awk in the caller's UTF-8 locale the Latin-1 dist-only naming aborts it and reads NAMED-UPSTREAM, while the ASCII one stays DOCS-ONLY"
 
 # =================================================================================================
@@ -497,7 +653,7 @@ else
 fi
 rc="$(run_b "$RV" "$LIM")"; n="$(hand_rows)"
 if [ "$rc" = 2 ] && [ "$n" = 0 ] && grep -qF "the ledger's entries could not be staged" "$ERR"; then
-  ok "B: under ulimit -f $LIM the shipped engine REFUSES (rc 2) naming the entries staging write, and emits no row"
+  ok "B: under ulimit -f $LIM the shipped engine REFUSES (rc 2) naming the entries staging write, and emits no row"; B_B=1
 else
   bad "B: under ulimit -f $LIM the shipped engine exited $rc with $n HAND-REVIEW row(s); want rc 2, 0 rows and the entries refusal on stderr ($(head -c 300 "$ERR"))"
 fi
@@ -536,10 +692,11 @@ else
   fi
   rc="$(run_b "$MB/ledger-reverify.sh" "$LIM")"; n="$(hand_rows)"
   if [ "$rc" = 0 ] && [ "$n" = 0 ]; then
-    ok "B mutant M-B1 killed: with the here-string restored the same limit reads ZERO entries at rc 0 -- the empty ledger the conversion refuses"
+    mutant_killed "${B_B:-0}" M-B1 "B mutant M-B1 killed: with the here-string restored the same limit reads ZERO entries at rc 0 -- the empty ledger the conversion refuses"
   else
-    bad "B mutant M-B1 exited $rc with $n row(s) under the limit; want rc 0 and 0 rows (the defect). If rows survived, the limit no longer forces the here-string's staging"
+    bad "B mutant M-B1 SURVIVED: exited $rc with $n row(s) under the limit; want rc 0 and 0 rows (the defect). If rows survived, the limit no longer forces the here-string's staging"
   fi
+  mx_twins M-B1 "$MB/ledger-reverify.sh"; mx_reg M-B1 "$MB/ledger-reverify.sh"
 fi
 
 # =================================================================================================
@@ -568,12 +725,6 @@ chmod 755 "$RO"
 # =================================================================================================
 # PART C -- no here-string and no heredoc in the engine's non-comment lines
 # =================================================================================================
-c_scan() { # <file> -> "<non-comment lines> <here-strings> <heredocs>[ at <line numbers>]"
-  awk '/^[[:blank:]]*#/ { next }
-       { n++
-         if ((" " $0 " ") ~ /[^<]<<<[^<]/) { h++; at = at " " FNR }
-         else if ($0 ~ /[^<]<<-?[[:blank:]]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?[[:blank:]]*$/) { d++; at = at " " FNR } }
-       END { printf "%d %d %d%s\n", n, h + 0, d + 0, (at == "" ? "" : " at" at) }' "$1"; }
 PROBE="$W/c-probe.sh"
 cat > "$PROBE" <<'PROBE_EOF'
 done <<< "$ENTRIES"
@@ -591,7 +742,7 @@ esac
 r="$(c_scan "$RV")"
 set -- $r
 if [ "$1" -gt 0 ] && [ "$2" -eq 0 ] && [ "$3" -eq 0 ]; then
-  ok "C: ledger-reverify.sh carries 0 here-strings and 0 heredocs over $1 non-comment lines"
+  ok "C: ledger-reverify.sh carries 0 here-strings and 0 heredocs over $1 non-comment lines"; B_C=1
 else
   bad "C: ledger-reverify.sh read '$r' (non-comment lines, here-strings, heredocs) -- a staged-input read was respelled as one bash 3.2 can lose"
 fi
@@ -600,13 +751,37 @@ fi
 if [ -f "$MB/ledger-reverify.sh" ]; then
   r="$(c_scan "$MB/ledger-reverify.sh")"; set -- $r
   if [ "$2" -eq 1 ] && [ "$3" -eq 0 ]; then
-    ok "C mutant killed: the scan flags M-B1's restored 'done <<< \"\$ENTRIES\"' in the engine's own text (1 here-string)"
+    mutant_killed "${B_C:-0}" M-B1 "C mutant M-B1 killed: the scan flags M-B1's restored 'done <<< \"\$ENTRIES\"' in the engine's own text (1 here-string)"
   else
-    bad "C mutant: the scan read '$r' over M-B1, want exactly 1 here-string and 0 heredocs"
+    bad "C mutant M-B1 SURVIVED: the scan read '$r' over M-B1, want exactly 1 here-string and 0 heredocs"
   fi
 else
   bad "C mutant: M-B1's copy is absent, so the spelling arm has no mutant"
 fi
+
+# MATRIX-ONLY: every registered mutant engine is scored on every cell, after every world those cells read is built.
+if [ "$MODE" = matrix ]; then
+  while IFS=$'\t' read -r -u 3 _mm _me; do
+    mx_score "$_mm" "$_me"
+  done 3< "$MXR"
+fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL: it
+# must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9 the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9 a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "M-A1 M-A2 M-A3 M-A4 M-A5 M-A6 M-B1 M-E1 M-E2 M-E3 M-E5A M-E5S " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  fails=$((fails + MX_FAILS))
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "ledger-reverify-dist-only-reach: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ledger-reverify-dist-only-reach: PASS"; exit 0; fi
