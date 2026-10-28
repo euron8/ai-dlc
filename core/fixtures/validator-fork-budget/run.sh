@@ -451,7 +451,8 @@ mx_red() {
     Psplice)  grep -qF 'the splice probe must score' "$f" ;;
     Passign)  grep -qF 'the assignment probe must score' "$f" ;;
     Pbase)    grep -qE 'positive probe|fork-free probe' "$f" ;;
-    Mpipe)    grep -qF 'SELF-PROBE FAILED' "$f" || grep -qF 'PIPELINE BROKEN' "$f" ;;
+    # The PIPELINE BROKEN disjunct was removed: it reads true on an UNMUTATED profiler, because `--section total` reports LASTARM 0.
+    Mpipe)    grep -qF 'SELF-PROBE FAILED' "$f" ;;
     *) return 2 ;;
   esac
 }
@@ -528,7 +529,7 @@ if sed "s/PS4='+@\${LINENO}@ '/PS4='+ '/" "$TMP/fake/scripts/fp-neutered.sh" > "
     cat "$TMP/m1.err" > "$TMP/mx.m1-marker-neutered.txt"
     [ -s "$TMP/mx.m1-marker-neutered.txt" ] || echo "(the profiler failed with no stderr)" > "$TMP/mx.m1-marker-neutered.txt"
   fi
-  mx_score m1-marker-neutered "${B_live:-0}" "m1-marker-neutered: a neutered PS4 reads as BROKEN or is refused by the profiler's own self-probe"
+  mx_score m1-marker-neutered "${B_live:-0}" "m1-marker-neutered: a neutered PS4 is refused by the profiler's own self-probe"
 else
   bad "m1-marker-neutered DID NOT APPLY -- the PS4 sed matched nothing; no mutation occurred, so nothing was proven"
 fi
