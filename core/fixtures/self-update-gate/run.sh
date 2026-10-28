@@ -2970,9 +2970,9 @@ ss_assert "prewritten-nm-seed" \
   "core/scripts/modeonly.sh,core/scripts/moved.sh,|same-blob" \
   "the mode-only script IS in the range's changed set while its blob never moved, so it reaches the loop and only the second conjunct can excuse it"
 
-pw_rows() { # pw_rows <gate> <script> -> "<status>|<pw-marker>"
-  local o
-  o="$(bash "$1" "$PW/dist" "$PW_BASE" "$PW_THEIRS" "$PW/cons" 2>/dev/null)"
+pw_rows() { pw_rows_of "$(bash "$1" "$PW/dist" "$PW_BASE" "$PW_THEIRS" "$PW/cons" 2>/dev/null)" "$2"; }
+pw_rows_of() { # pw_rows_of <captured gate output> <script> -> "<status>|<pw-marker>"
+  local o="$1"
   printf '%s|%s\n' \
     "$(printf '%s\n' "$o" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}')" \
     "$(printf '%s\n' "$o" | awk -F'\t' -v s="$2" '$2 == s && $3 ~ /ALREADY at theirs/ {print "pw"; exit}')"
@@ -3014,7 +3014,8 @@ if cmp -s "$GATE" "$VR_M9"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "prewritten-mut-conj"
 else
-  vr_m9_got="$(pw_rows "$VR_M9" modeonly.sh)|$(pw_rows "$VR_M9" moved.sh)"
+  vr_m9_o="$(bash "$VR_M9" "$PW/dist" "$PW_BASE" "$PW_THEIRS" "$PW/cons" 2>/dev/null)"   # ONE gate start; both scripts' rows are read from it
+  vr_m9_got="$(pw_rows_of "$vr_m9_o" modeonly.sh)|$(pw_rows_of "$vr_m9_o" moved.sh)"
   if [ "$MATRIX" = 1 ]; then mx_row "prewritten-mut-conj" "modeonly=$(pw_rows "$GATE" modeonly.sh) moved=$(pw_rows "$GATE" moved.sh)" "modeonly=$(printf '%s' "$vr_m9_got" | cut -d'|' -f1-2) moved=$(printf '%s' "$vr_m9_got" | cut -d'|' -f3-4)"; fi
   if [ "$vr_m9_got" = "SELF-UPDATE-UNDECIDED|pw|SELF-UPDATE-UNDECIDED|pw" ]; then
     mutant_killed "${B_pw:-0}" "prewritten-mut-conj" "$(printf '%-16s KILLED (%s)' "prewritten-mut-conj" \
@@ -3460,9 +3461,9 @@ ss_assert "pp-escape-new-subdir" "$(pp_esc_drive new "$PP_ESC/repo/sub")" "0" "t
 ss_assert "pp-escape-new-real"   "$(pp_esc_drive new "$PP_ESC/real")"    "1" "ALLOW twin: a real world that is its own repository is driven normally, once"
 
 # pp_scan <gate> <consumer> -> "pp=<status|none> sum=<n summary DEFER rows> ss=<n SAFE-STOP rows> und=<n>"
-pp_scan() {
-  local o
-  o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null)"
+pp_scan() { pp_scan_of "$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null)"; }
+pp_scan_of() { # pp_scan_of <captured gate output>: the scan over one capture, shared by every cell that reads it
+  local o="$1"
   printf 'pp=%s sum=%s ss=%s und=%s\n' \
     "$(printf '%s\n' "$o" | awk -F'\t' '$2 == "pre-push" {print $1; exit} END{if (!NR) print "none"}' | { read -r x; printf '%s' "${x:-none}"; })" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "-" {n++} END{print n+0}')" \
@@ -3497,8 +3498,9 @@ rm -rf "$PP_ENC/sub"; cp -R "$CONS" "$PP_ENC/sub"; rm -rf "$PP_ENC/sub/.git" "$P
 # pp_layout <gate> <consumer> -> count of pre-push UNDECIDED rows whose text NAMES the layout. Presence-
 # shaped on the message, because a status count alone passes against any other UNDECIDED (an unborn
 # HEAD, a detached one).
-pp_layout() {
-  bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null \
+pp_layout() { pp_layout_of "$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null)"; }
+pp_layout_of() { # pp_layout_of <captured gate output>
+  printf '%s\n' "$1" \
     | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $2 == "pre-push" && $3 ~ /UNSUPPORTED LAYOUT/ && $3 ~ /subdirectory of the enclosing repository/ {n++} END{print n+0}'
 }
 pp_enc_row="$(pp_scan "$GATE" "$PP_ENC/sub")"; pp_enc_hit="$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
@@ -3563,7 +3565,8 @@ else
     "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"; then B_ppc=1; fi
   ppc_cell() { # <gate> <miscased|canonical>
     case "$2" in
-      miscased) DRV_OUT="$(pp_scan "$1" "$PP_GREEN_MIS")|$(pp_layout "$1" "$PP_GREEN_MIS")" ;;
+      miscased) ppc_o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$PP_GREEN_MIS" 2>/dev/null)"   # ONE gate start, both cells read it
+                DRV_OUT="$(pp_scan_of "$ppc_o")|$(pp_layout_of "$ppc_o")" ;;
       canonical) DRV_OUT="$(pp_scan "$1" "$PP_GREEN")" ;;
     esac
   }
