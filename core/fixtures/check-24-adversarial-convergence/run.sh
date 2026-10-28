@@ -470,6 +470,15 @@ fi
 # MUTANT-MATRIX-CONTROL live-series-control-shipped why=the shipped derivation on the no-decoy world, the baseline both live-series mutants are read against
 # MUTANT-MATRIX-DYNAMIC rcpt_mut why=the receipt battery passes each mutant label and its exact NOT FIXED line as arguments; every label it produces has its own row above
 # MUTANT-MATRIX-DYNAMIC _sp-loop why=the adjudication-unlocked-<spelling> loop passes six spellings as a variable; these are seeded cases, not mutants, so it produces no mutant row
+# MUTANT-MATRIX MUTATION-seam-constant decides=MUTATION-seam-constant.seam-row twins=MUTATION-seam-constant.full-row
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2 why=the J2 battery's control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-H why=the H battery's control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-K3 why=the K3-widened control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2S why=the J2-per-stem control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-L why=the arm-L control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J3-receipt why=the unmutated copy through the J3 seam must make the BL-814 receipt say fixed over every world
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2T-receipt why=the unmutated copy through the J2 seam must make the BL-736 receipt say fixed over every world
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-LD-receipt why=the unmutated copy through the L seam must make the BL-733 receipt say fixed over every world
 # MUTANT-MATRIX-END
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
