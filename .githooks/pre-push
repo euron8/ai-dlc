@@ -340,6 +340,12 @@ step "fixture git-env scrub (a directly-run fixture cannot clobber the caller's 
 step "mutant kills route through mutant_killed (down-only allowlist)" \
   bash scripts/validate-mutant-kills.sh
 
+# 2b''. Fixture hygiene: no `-d …/.git` or declared-tool check that SKIPs with exit 0 (H1/H2), no `sh` start the
+#     invocation counter cannot see (H3), and a mutant battery declares its MUTANT-MATRIX block (H5) or sits on the
+#     derived down-only scripts/fixture-matrix-allowlist.txt. Standalone, NOT an arm of validate-enforcement-map.sh.
+step "fixture hygiene (false skips, sh starts, mutant-matrix blocks)" \
+  bash scripts/validate-fixture-hygiene.sh
+
 # 2d. THE SHIPPED RENDERER, DRIVEN AGAINST THIS TREE. `.claude/agents/<role>.md` frontmatter is
 #     the only channel that binds a role's reasoning EFFORT to its subagent. A prompt cannot set
 #     effort -- measured on the reference consumer, every spawn ran at the effort the SESSION

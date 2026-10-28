@@ -16,22 +16,28 @@
 #   A4  nohdr, armed    -> rc 1, J5 naming Mx
 #   A5  nodecl, armed   -> rc 1, J2 printing `3 *` and `2 core/scripts/sub.sh`
 #   A6  mis, two of the three arming variables -> inert exactly as A3
+#   A7  held, armed: a fixture with NO Mx row that is a row of the (seeded) scripts/fixture-matrix-allowlist.txt beside
+#       the judge -> rc 0, `J5 EXEMPT, not judged`, verdict recorded (the exemption twin of A4, one property apart)
 #   SP  the judge's --self-probe standalone -> rc 0, all cells green
 #   NM  a plain run executes no matrix-only cell (control: the per-push mutant drives ran)
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
 # MUTANT-MATRIX MJ3 decides=A2,SP twins=A3
-# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5 twins=A3
-# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5 twins=A3
+# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5,A7 twins=A3
+# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7 twins=A3
+# MUTANT-MATRIX MEXEMPT decides=A7,SP twins=A4
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the four literals above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5 and A6 green under
-# MJ3, and A6 and SP green under MGATE and MPASS; only A3 is named as the twin, because only A3 runs per push. Per
-# push: MJ3 runs SP with twin A3 (the per-fixture judge no longer repeats the self-probe, so only the J3 cells and the
-# A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1 with twin A3.
-#   MJ3    the judge's J3 compare removed            -> SP names the J3 off-by-one cell
-#   MGATE  the runner's judge call disabled           -> A2 records a pass for a mismatching fixture
-#   MPASS  the runner's BASH_ENV passthrough dropped  -> A1 is J1 BROKEN: the counter never loaded
+# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5, A6 and A7 green
+# under MJ3, A6 and SP green under MGATE and MPASS, and A1-A6 green under MEXEMPT; only the twin each mutant runs per
+# push is named. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer repeats the self-probe, so only
+# the J3 cells and the A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1 with twin A3; MEXEMPT runs A7
+# with twin A4 (the same unrowed Mx, judged rather than exempt).
+#   MJ3      the judge's J3 compare removed            -> SP names the J3 off-by-one cell
+#   MGATE    the runner's judge call disabled           -> A2 records a pass for a mismatching fixture
+#   MPASS    the runner's BASH_ENV passthrough dropped  -> A1 is J1 BROKEN: the counter never loaded
+#   MEXEMPT  the judge's J5 allowlist exemption removed -> A7 FAILs J5 on an allowlisted fixture
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-invocation-budget: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -60,8 +66,9 @@ JREL=scripts/validate-fixture-invocations.sh
 RREL=core/scripts/hermetic-run.sh
 
 # --- the subject tree, and mutants of it ------------------------------------------------------------------------
-mk_subject() { # <dir>
+mk_subject() { # <dir>; the H5 allowlist beside the judge is SEEDED, listing only the probe fixture `held`
   mkdir -p "$1/scripts" "$1/core/scripts" "$1/core/fixtures/lib" \
+    && printf '# seeded\nheld\tS1 a mutation helper\n' > "$1/scripts/fixture-matrix-allowlist.txt" \
     && cp -p "$ROOT/$JREL" "$1/scripts/" \
     && cp -p "$ROOT/$RREL" "$ROOT/core/scripts/core-paths.sh" "$1/core/scripts/" \
     && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$1/core/fixtures/lib/"
@@ -85,10 +92,12 @@ mk_mutant MGATE "$RREL" 'if [ "$hr_fxc" = 1 ] && [ "$hr_rc" -eq 0 ]; then' 'if f
   || { echo "FIXTURE BROKEN: mutant MGATE DID NOT APPLY (the judge call moved in $RREL)" >&2; exit 2; }
 mk_mutant MPASS "$RREL" ' "BASH_ENV=$FXCOUNT_RC"' '' \
   || { echo "FIXTURE BROKEN: mutant MPASS DID NOT APPLY (the BASH_ENV passthrough moved in $RREL)" >&2; exit 2; }
+mk_mutant MEXEMPT "$JREL" 'if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then' 'if false; then' \
+  || { echo "FIXTURE BROKEN: mutant MEXEMPT DID NOT APPLY (the J5 allowlist exemption moved in $JREL)" >&2; exit 2; }
 
 # --- the probe worlds, each built once --------------------------------------------------------------------------
-mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0>
-  local w="$1" f="$1/core/fixtures/probe"
+mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0> [fixture name, default probe]
+  local w="$1" f="$1/core/fixtures/${4:-probe}"
   mkdir -p "$f" "$w/core/scripts" "$w/core/fixtures/lib" "$w/.githooks" "$w/scripts" || return 1
   cp -p "$ROOT/.githooks/pre-push" "$w/.githooks/pre-push" && cp -p "$ROOT/scripts/suite-content-key.sh" "$w/scripts/" \
     && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$w/core/fixtures/lib/" || return 1
@@ -106,6 +115,7 @@ mk_world "$WORK/w-ok" '3 *|2 core/scripts/sub.sh' 1 \
   && mk_world "$WORK/w-mis" '2 *|2 core/scripts/sub.sh' 1 \
   && mk_world "$WORK/w-nohdr" '3 *|2 core/scripts/sub.sh' 0 \
   && mk_world "$WORK/w-nodecl" - 1 \
+  && mk_world "$WORK/w-held" '3 *|2 core/scripts/sub.sh' 0 held \
   || { echo "FIXTURE BROKEN: could not build the probe worlds" >&2; exit 2; }
 
 # --- one drive per cell -----------------------------------------------------------------------------------------
@@ -116,15 +126,16 @@ drive() {
   if [ "$2" = SP ]; then
     bash "$s/$JREL" --self-probe > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
-  case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; esac
+  local fx=probe
+  case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; A7) w=held; fx=held ;; esac
   rcf="$(bash "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
   case "$2" in
     A3) env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$st" \
-          bash "$s/$RREL" --root "$WORK/w-$w" probe ;;
+          bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
     A6) env -u FXCOUNT_JUDGE FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" AI_DLC_VERDICT_STORE="$st" \
-          bash "$s/$RREL" --root "$WORK/w-$w" probe ;;
+          bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
     *)  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" FXCOUNT_JUDGE="$s/$JREL" AI_DLC_VERDICT_STORE="$st" \
-          bash "$s/$RREL" --root "$WORK/w-$w" probe ;;
+          bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
   esac > "$WORK/c.$t.out" 2>&1
   echo $? > "$WORK/c.$t.rc"
 }
@@ -141,12 +152,14 @@ verdict() {
     A3|A6) rcis "$t" 0 && has "$t" 'probe: verdict recorded in' && ! has "$t" 'invocation budget' && [ ! -e "$WORK/fxd.$t/probe" ] ;;
     A4) rcis "$t" 1 && has "$t" 'probe: FAIL (J5): mutant_killed reported Mx, which has no' ;;
     A5) rcis "$t" 1 && has "$t" 'probe: FAIL (J2)' && has "$t" '  3 *' && has "$t" '  2 core/scripts/sub.sh' ;;
-    SP) rcis "$t" 0 && has "$t" 'self-probe: 29 cells, all green' ;;
+    A7) rcis "$t" 0 && has "$t" 'held: J5 EXEMPT, not judged: held is a row of scripts/fixture-matrix-allowlist.txt' \
+          && has "$t" 'held: verdict recorded in' && ! has "$t" '(J5): mutant_killed reported' ;;
+    SP) rcis "$t" 0 && has "$t" 'self-probe: 34 cells, all green' ;;
     *) return 1 ;;
   esac
 }
-ARMS="A1 A2 A3 A4 A5 A6 SP"
-MUTANTS="MJ3 MGATE MPASS"
+ARMS="A1 A2 A3 A4 A5 A6 A7 SP"
+MUTANTS="MJ3 MGATE MPASS MEXEMPT"
 
 if [ "$MODE" = matrix ]; then
   # THE MATRIX: every mutant against every arm, never on a plain run (arm NM asserts that).
@@ -184,10 +197,12 @@ score() {
 drive MJ3.SP SP "$WORK/mut-MJ3" & drive MJ3.A3 A3 "$WORK/mut-MJ3" &
 drive MGATE.A2 A2 "$WORK/mut-MGATE" & drive MGATE.A3 A3 "$WORK/mut-MGATE" &
 drive MPASS.A1 A1 "$WORK/mut-MPASS" & drive MPASS.A3 A3 "$WORK/mut-MPASS" &
+drive MEXEMPT.A7 A7 "$WORK/mut-MEXEMPT" & drive MEXEMPT.A4 A4 "$WORK/mut-MEXEMPT" &
 wait
 score MJ3 SP A3 'FAIL  self-probe J3 a * row off by one'
 score MGATE A2 A3 'probe: verdict recorded in'
 score MPASS A1 A3 'probe: FIXTURE BROKEN (J1)'
+score MEXEMPT A7 A4 'held: FAIL (J5): mutant_killed reported Mx, which has no'
 
 # NM: a plain run reached no matrix-only cell, and its per-push mutant drives did run.
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"

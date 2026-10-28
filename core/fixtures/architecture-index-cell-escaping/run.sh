@@ -49,12 +49,13 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "architecture-index-cell-escapin
 
 echo "architecture-index-cell-escaping:"
 
-# The subject is a node program. Without an interpreter nothing below can run, and a fixture
-# that silently exits 0 here would be a green light nobody earned — so say so out loud.
-# Same posture as check-25-steering-conduct, which has the same dependency.
+# The subject is a node program, and node is a declared tool (tools.decl). Without it nothing
+# below can run, and an exit 0 here would be a green light nobody earned, so a missing node is
+# FIXTURE BROKEN (exit 2), never a skip.
 command -v node >/dev/null 2>&1 || {
-  echo "  SKIP  node is not on PATH; architecture-index-cell-escaping cannot exercise a node subject"
-  exit 0
+  echo "  FAIL  node is not on PATH; architecture-index-cell-escaping cannot exercise a node subject"
+  echo "architecture-index-cell-escaping: FIXTURE BROKEN"
+  exit 2
 }
 
 # Both install layouts, NAMED rather than derived from one another (I33). In the

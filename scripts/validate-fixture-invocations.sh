@@ -46,6 +46,11 @@
 #       `exec bash "$IMPL" --group ...` is joined against its IMPL's run.sh). A name with no row, or with a
 #       `# MUTANT-MATRIX-CONTROL <name>` row, FAILs. The join sees only kills scored through mutant_killed: a battery
 #       on scripts/mutant-kills-allowlist.txt emits its kills its own way and is covered by the static join alone.
+#       EXEMPT: a fixture (a shard stub resolved to its IMPL) that is a row of scripts/fixture-matrix-allowlist.txt,
+#       validate-fixture-hygiene.sh's derived down-only H5 allowlist of batteries with no block yet, is not joined;
+#       J5 prints `J5 EXEMPT, not judged` for it, never the ok line alone. An absent allowlist exempts nothing.
+#
+# usage, also:  validate-fixture-invocations.sh --impl-of <run.sh>...   the one shard-stub resolver (see fxc_impl_of).
 #
 # BLIND ROUTES -- starts this counter does not see, each stated with how it is bounded:
 #   B1  `sh` starts (`/bin/sh` reads no BASH_ENV): refused statically by validate-fixture-hygiene.sh's H3.
@@ -112,12 +117,36 @@ fxc_glob_n() {
     printf '%s\n' "$n" )
 }
 
+# fxc_impl_of <run.sh>...: THE ONE SHARD-STUB RESOLVER (validate-fixture-hygiene.sh's H5 calls it through
+# --impl-of rather than carrying a second grammar). One awk over every file named; for each file that is a shard stub
+# -- a line `[exec ]bash "$IMPL" --group ...` -- prints `<file>\t<IMPL fixture>` from its `IMPL="$HERE/../<f>/run.sh"`
+# line, or `<file>\t!` when that line is absent. A file that is not a stub prints nothing. Both spellings are live:
+# 22 stubs `exec` the IMPL, and ledger-reverify-b/c/d and reconcile-emit-report-b/c/d run it without `exec`.
+fxc_impl_of() {
+  [ $# -gt 0 ] || return 0
+  awk 'function flush() { if (cur != "" && stub) print cur "\t" (impl == "" ? "!" : impl) }
+    FNR == 1 { flush(); cur = FILENAME; stub = 0; impl = "" }
+    /^[[:space:]]*(exec[[:space:]]+)?bash "\$IMPL" --group/ { stub = 1 }
+    impl == "" && /^IMPL="\$HERE\/\.\.\/[A-Za-z0-9_.-]+\/run\.sh"$/ { s = $0; sub(/^IMPL="\$HERE\/\.\.\//, "", s); sub(/\/run\.sh"$/, "", s); impl = s }
+    END { flush() }' "$@"
+}
+
+# fxc_allowlisted <fixture>: 0 when <fixture> is a row of scripts/fixture-matrix-allowlist.txt beside this script
+# (field 1, exact). An absent allowlist exempts nothing -- the fail-closed direction.
+# FXC_ALLOW is assigned here, never read from the environment; only the self-probe repoints it, at its own seed.
+FXC_ALLOW="${FXC_SELF%/*}/fixture-matrix-allowlist.txt"
+fxc_allowlisted() {
+  [ -f "$FXC_ALLOW" ] || return 1
+  F="$1" awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$FXC_ALLOW"
+}
+
 # fxc_mutant_rows <run.sh> <root>: print `M <name>` and `C <name>` rows, following a shard stub to its IMPL.
 fxc_mutant_rows() {
   local f="$1" impl
-  if grep -q '^[[:space:]]*exec bash "\$IMPL" --group' "$f" 2>/dev/null; then
-    impl="$(sed -n 's|^IMPL="\$HERE/\.\./\([A-Za-z0-9_.-]*\)/run\.sh"$|\1|p' "$f" | head -1)"
-    [ -n "$impl" ] || return 3
+  impl="$(fxc_impl_of "$f")"
+  if [ -n "$impl" ]; then
+    impl="${impl##*$'\t'}"
+    [ "$impl" != '!' ] || return 3
     f="$(dirname "$(dirname "$f")")/$impl/run.sh"
     [ -f "$f" ] || return 3
   fi
@@ -197,7 +226,14 @@ EOF
     done < "$w/rows"
   fi
   # J5
+  local key="${fd##*/}"
   if [ -s "$log.mutants" ]; then
+    key="$(fxc_impl_of "$fd/run.sh" 2>/dev/null)"; key="${key##*$'\t'}"; [ -n "$key" ] || key="${fd##*/}"
+  fi
+  if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then
+    printf '%s: J5 EXEMPT, not judged: %s is a row of scripts/fixture-matrix-allowlist.txt (no MUTANT-MATRIX block yet); its %s reported mutant name(s) were not joined\n' \
+      "$fx" "$key" "$(LC_ALL=C sort -u "$log.mutants" | awk 'END { print NR }')"
+  elif [ -s "$log.mutants" ]; then
     if ! fxc_mutant_rows "$fd/run.sh" "$root" > "$w/mrows"; then
       printf '%s: FIXTURE BROKEN (J5): %s is a shard stub whose IMPL run.sh cannot be resolved\n' "$fx" "${fd#"$root"/}/run.sh"; rm -rf "$w"; return 2
     fi
@@ -287,6 +323,23 @@ fxc_self_probe() {
   sp_cell "J5 a shard stub joins its IMPL's rows" 0 j5s "$SPR/logm" "ok"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-CONTROL Mb why=x\n' > "$SPR/j5c/run.sh"
   sp_cell "J5 a reported name with a CONTROL row FAILs" 1 j5c "$SPR/logm" "MUTANT-MATRIX-CONTROL row"
+  # A non-exec shard stub (`bash "$IMPL" --group x > out`, the ledger-reverify-b form) resolves to its IMPL too.
+  mkdir -p "$SPR/j5n"; cp "$fd/inputs.decl" "$SPR/j5n/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5n/invocations.decl"
+  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nbash "$IMPL" --group b > "$HERE/o"\n' > "$SPR/j5n/run.sh"
+  sp_cell "J5 a non-exec shard stub joins its IMPL's rows" 0 j5n "$SPR/logm" "ok"
+  # The allowlist exemption, both ways. Each world reports Mb with no row for it, so only the exemption passes it.
+  mkdir -p "$SPR/heldfx" "$SPR/heldfx2" "$SPR/heldst"
+  for d in heldfx heldfx2 heldst; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"
+    printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n' > "$SPR/$d/run.sh"; done
+  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../heldfx/run.sh"\nexec bash "$IMPL" --group b\n' > "$SPR/heldst/run.sh"
+  local fxc_allow_real="$FXC_ALLOW"
+  FXC_ALLOW="$S/allow.txt"; printf '# probe allowlist\nheldfx\tS1 a mutation helper\n' > "$FXC_ALLOW"
+  sp_cell "J5 a fixture on the allowlist is EXEMPT, with a printed line" 0 heldfx "$SPR/logm" "heldfx is a row of scripts/fixture-matrix-allowlist.txt"
+  sp_cell "J5 a stub of an allowlisted IMPL is EXEMPT" 0 heldst "$SPR/logm" "J5 EXEMPT, not judged: heldfx"
+  sp_cell "J5 a fixture whose name only shares a prefix with a row (heldfx2) FAILs" 1 heldfx2 "$SPR/logm" "reported Mb, which has no"
+  FXC_ALLOW="$S/absent-allow.txt"
+  sp_cell "J5 an absent allowlist exempts nothing" 1 heldfx "$SPR/logm" "reported Mb, which has no"
+  FXC_ALLOW="$fxc_allow_real"
   # END TO END through the generated rc. Every child bash is under env -i; the invoker exports BASH_ENV and
   # FXCOUNT_LOG naming the probe's own files, so the no-passthrough leg's zero is a statement about env -i.
   bash_bin="${BASH:-/bin/bash}"
@@ -317,7 +370,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 29 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 29
+  [ "$SP_N" -eq 34 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 34
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2
@@ -326,6 +379,7 @@ fxc_self_probe() {
 # ---------------------------------------------------------------------------------------------------------------
 FXC_FX=""; FXC_DECL=""; FXC_LOG=""; FXC_ROOT=""
 case "${1:-}" in
+  --impl-of) shift; fxc_impl_of "$@"; exit $? ;;
   --gen-rc) [ $# -eq 2 ] || { echo "usage: $0 --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
   --self-probe)
     SP_VERBOSE=1; fxc_self_probe; r=$?

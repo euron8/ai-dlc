@@ -1,0 +1,5 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), twice, identical.
+# 7 validator runs (dirty, clean, derive, four mutants), each calling the resolver twice (probe, corpus).
+22 *
+7 scripts/validate-fixture-hygiene.sh
+14 scripts/validate-fixture-invocations.sh

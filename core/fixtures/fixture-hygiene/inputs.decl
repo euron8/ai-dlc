@@ -1,0 +1,7 @@
+# fixture-hygiene drives the REAL validator against probe projects under mktemp.
+# The subject, and the shard-stub resolver it calls, both REQUIRED: run.sh prints HERMETIC-CONSUMED for each once
+# arms D1 and C held on them.
+!scripts/validate-fixture-hygiene.sh
+!scripts/validate-fixture-invocations.sh
+# preamble.sh and mutant.sh, sourced here.
+core/fixtures/lib/

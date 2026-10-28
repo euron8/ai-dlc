@@ -1,4 +1,4 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), twice, identical.
-30 *
-18 scripts/validate-fixture-invocations.sh
-11 core/scripts/hermetic-run.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), twice, identical.
+39 *
+24 scripts/validate-fixture-invocations.sh
+14 core/scripts/hermetic-run.sh
