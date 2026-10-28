@@ -7,7 +7,6 @@
 # that shipped the arm.
 adversarial-shard-merge
 apply-drift-after-write
-apply-restamp-worklist
 ci-gates-resolution
 claude-rules-joins
 context-mode-protect

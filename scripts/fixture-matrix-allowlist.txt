@@ -12,7 +12,6 @@ answer-handoff-routing	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-drift-after-write	no MUTANT-MATRIX block; floor: S1 v2d_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-machinery-stamp	no MUTANT-MATRIX block; floor: S1 mutdir(),S2 cmp -s + mutant
 apply-relabel-noop-row	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-apply-restamp-worklist	no MUTANT-MATRIX block; floor: S1 mut_apply(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-self-overwrite	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-setup-sited-merge	no MUTANT-MATRIX block; floor: S1 mut_new(),S2 cmp -s + mutant
 bmad-invocation-resolve	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
