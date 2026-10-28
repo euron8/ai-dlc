@@ -1876,7 +1876,7 @@ verify: manual
 
 ## BL-868 — no fixture verdict or invocation count may depend on load: the `±` rows, the polls and the watchdogs go
 
-**DEFECT (efficiency).** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
+**DEFECT.** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
 
 **Known instances, each with its owner session and state.**
 
