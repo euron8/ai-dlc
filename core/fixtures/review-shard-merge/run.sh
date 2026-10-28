@@ -130,11 +130,11 @@ echo "$NAME:"
 seed_controls
 
 arm() { # <predicate> <label-ok> <label-bad>
-  if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3 (rc=${RC:-?}): $(cat "$MO" 2>/dev/null | head -3)"; fi
+  if "p_$1" "$SRCDIR"; then ok "$2"; eval "ARMOK_$1=1"; else bad "$3 (rc=${RC:-?}): $(cat "$MO" 2>/dev/null | head -3)"; fi
 }
 arm2() { # <predicate> <label-ok> <label-bad> -- the predicate sets WHY to what it saw
   WHY=""
-  if "p_$1" "$SRCDIR"; then ok "$2"; else bad "$3:${WHY:- (no reason recorded)}"; fi
+  if "p_$1" "$SRCDIR"; then ok "$2"; eval "ARMOK_$1=1"; else bad "$3:${WHY:- (no reason recorded)}"; fi
 }
 arm part "P1: repo A (all files under app/) partitions to >= 2 parts above --min-files 4, app/ split across parts, no part keyed on bare app/, the docs/reviews/ artifact excluded" \
          "P1: repo A did not partition by adaptive depth"
@@ -464,7 +464,12 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
     [ "$VB_CTL_OK" = 1 ] || { bad "$id: FIXTURE ERROR -- the unmutated control copy $vb_ctl was not built from the derived set"; return; }
     WHY=""; CS_RAN=0
-    if "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then
+    # The control copy is byte-identical to SRCDIR (sib_copy), and the arm that runs this predicate over SRCDIR passed
+    # earlier in THIS run with every cell, this one included: that pass is the base-pass flag, so the cell is not
+    # re-run over the copy (one run per distinct state). A predicate with no passing arm runs its cell here.
+    if [ "$(eval "printf %s \"\${ARMOK_$5:-0}\"")" = 1 ] && [ "$RSM_MATRIX" = 0 ]; then
+      VB_CTL_N=$((VB_CTL_N + 1)); ok "VBCTL $id: cell '$CS_ONLY' of $5 passed unmutated (arm $5 passed over the byte-identical SRCDIR set earlier in this run)"; B_rsm_ctl=1
+    elif "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then
       VB_CTL_N=$((VB_CTL_N + 1)); ok "VBCTL $id: cell '$CS_ONLY' of $5 passed over the unmutated copy, one cell run"; B_rsm_ctl=1
     else bad "$id: FIXTURE ERROR -- the unmutated copy failed cell '$CS_ONLY' of $5 (cells run: $CS_RAN):${WHY}"; return; fi
     sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
