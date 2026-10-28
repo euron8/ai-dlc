@@ -2,8 +2,23 @@
 # enforcement-map-derivations — assert the derivations validate-enforcement-map.sh runs
 # in a LOOP still fire.
 #
-# Usage: run.sh [--run-one <assertion>] [--group <shard>]
+# Usage: run.sh [--run-one <assertion>] [--matrix]
 # Exit:  0 = every assertion holds, 1 = a check regressed, 2 = fixture broken.
+#
+# MUTANT BATTERY. Five assertions mutate the VALIDATOR itself (every other assertion seeds an
+# offender into the tree the validator walks, which is a seed and not a mutant). Per push each
+# mutant runs on its DECIDING arm, which must report it, plus its named TWIN, an arm the measured
+# matrix shows GREEN under that mutant, which must stay green: the kill is confined to its arm.
+# `--matrix` replays every mutant against every arm this file drives and prints one row per cell;
+# the header lines below are joined to that grid by the same mode, and the matrix is re-measured
+# whenever an arm or a mutant changes. The deciding arm of each mutant is the arm its assertion
+# is named for; the twin is read from this header by the assertion, so there is no second list.
+# MUTANT-MATRIX i84-slot-whole-file-grep decides=I84 twins=I86
+# MUTANT-MATRIX i85-blinded-scanner decides=I85 twins=I86
+# MUTANT-MATRIX i85-heredoc-unnarrowed decides=I85 twins=I86
+# MUTANT-MATRIX i33b-blinded-predicate decides=I33b twins=I86
+# MUTANT-MATRIX i54-unpruned-find decides=I54 twins=I86
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/enforcement-map-derivations/run.sh --matrix
 #
 # THE DEFECT THIS EXISTS TO CATCH, and why it is a separate fixture from
 # enforcement-map-sites. Six of that validator's invariants evaluate a predicate once per
@@ -68,6 +83,95 @@ broken=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
+# The mutant helpers (mutant_killed, need_base) and the matrix-row printer. Sourced, so no
+# `killed` token sits on a code line of this file (validate-mutant-kills.sh M1).
+[ -f "$HERE/../lib/mutant.sh" ] && [ -f "$HERE/../lib/matrix.sh" ] || {
+  echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh or matrix.sh not found beside this fixture" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+
+# fail_count <output> <arm id> — the validator findings that NAME this arm. The id is followed by
+# a non-alphanumeric or the line end, so I11 never counts I112's findings and I3 never counts I33b's.
+fail_count() {
+  local c
+  c="$(grep -cE "^FAIL: $2([^0-9A-Za-z]|\$)" <<<"$1")" || c=0
+  printf '%s' "$c"
+}
+
+# mutant_apply <name> <tree> — build the named mutant of the validator, in the tree's own copy,
+# under `edit`'s cmp -s guard. One place, so the per-push run and the matrix mutate identically.
+mutant_apply() {
+  local f="$2/scripts/validate-enforcement-map.sh"
+  case "$1" in
+    i84-slot-whole-file-grep)
+      edit "$f" '/^  awk -v s="\$i84_slot" / { print "  grep -qF \"$i84_slot\" \"$1\" 2>/dev/null"; next } { print }' ;;
+    i85-blinded-scanner)
+      edit "$f" '{ sub(/if \(c == "`" && p != "\\\\"\) \{/, "if (c == \"~\" \&\& p != \"\\\\\\\\\") {") } { print }' ;;
+    i85-heredoc-unnarrowed)
+      edit "$f" '{ sub(/hd != "" \{ if \(\$0 == hd\) \{ hd = ""; hdq = 0 \} ; next \}/, "hd != \"\" { if ($0 == hd) { hd = \"\" } }") } { print }' ;;
+    i33b-blinded-predicate)
+      edit "$f" '{ if ($0 ~ /\^\[\[:space:\]\]\*\[A-Za-z_\]\[A-Za-z0-9_\]\*="\\\$\\\(dirname/ && !done) { sub(/\/\^.*\/ \{/, "/ZZNOMATCHZZ/ {"); done=1 } } { print }' ;;
+    i54-unpruned-find)
+      edit "$f" "$WT_UNPRUNE" ;;
+    *) bad "FIXTURE BROKEN — no mutant named '$1' is defined"; return 1 ;;
+  esac
+}
+
+# mutant_case <name> <label> <want> <want_n> [control label] — one mutant, on its DECIDING arm and
+# its ONE named TWIN, in ONE validator run per state (`--arms <decides>,<twin>`).
+#
+# The header line `# MUTANT-MATRIX <name> decides=<arm> twins=<arm>` is the only place the pair is
+# written, and this reads it, so there is no second list to drift. The deciding arm must equal the
+# arm this assertion's NAME declares. State 1 is the UNMUTATED tree, which must reach its verdict
+# line with no finding from either arm: that is the same-run base pass handed to mutant_killed, and
+# it is also the control that the harness itself runs the shipped validator green. State 2 is the
+# mutant: the deciding arm must report <want>, and the twin must report nothing, so the kill is
+# confined to its arm. <want_n> > 0 additionally requires exactly that many findings, all naming
+# the deciding arm.
+mutant_case() {
+  local name="$1" label="$2" want="$3" want_n="$4" clabel="${5:-}"
+  local id hdr twin dec out rc n base=0
+  id="$(arm_of)"
+  hdr="$(grep "^# MUTANT-MATRIX $name " "$0")"
+  dec="${hdr#*decides=}"; dec="${dec%% *}"
+  twin="${hdr#*twins=}"; twin="${twin%% *}"
+  if [ -z "$id" ] || [ "$dec" != "$id" ] || [ -z "$twin" ] || [ "$twin" = "-" ] || [ "$twin" = "$id" ]; then
+    bad "FIXTURE BROKEN — mutant '$name' has no header line naming decides=$id and a twin different from it (read decides='$dec' twins='$twin')"
+    exit 2
+  fi
+  out="$(run_map "$id,$twin")"
+  rc=$?
+  sel_guard "$rc" "$id,$twin" "$out"
+  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
+  case "$out" in
+    *"OK: enforcement-map.yaml in sync with"*) [ "$n" -eq 0 ] && base=1 ;;
+  esac
+  need_base "$base" "$name" || return 0
+  ok "${clabel:-$id mutant control: the unmutated copy passes $id and its twin $twin}"
+  mutant_apply "$name" "$t" || return 0
+  out="$(run_map "$id,$twin")"
+  rc=$?
+  sel_guard "$rc" "$id,$twin" "$out"
+  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
+  case "$out" in
+    *"$want"*) ;;
+    *) bad "$label — $id did NOT report it. The predicate no longer reaches this subject."
+       grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
+       return 0 ;;
+  esac
+  if [ "$(fail_count "$out" "$twin")" -ne 0 ]; then
+    bad "$label — but the twin $twin ALSO reported under this mutant, so the kill is not confined to $id and the matrix row for $name is out of date"
+    return 0
+  fi
+  if [ "$want_n" -gt 0 ] && { [ "$n" -ne "$want_n" ] || [ "$(fail_count "$out" "$id")" -ne "$n" ]; }; then
+    bad "$label — $n finding(s), $(fail_count "$out" "$id") naming $id, where $want_n naming $id were expected"
+    return 0
+  fi
+  mutant_killed "$base" "$name" "$label"
+}
+
 SKILL_REL="core/skills/ai-dlc/SKILL.md"
 
 # I112's three subjects, named once. The arm compares each OWNER's template line against that
@@ -76,22 +180,25 @@ CR_OWNER="core/team-roles/code-reviewer.md"
 QA_OWNER="core/team-roles/qa.md"
 CR_READER="core/skills/ai-dlc/steps/gate-validation.md"
 
-# seed_tree — build this process's own pristine tree and scratch dir. Called by --run-one
-# only, so a worker owns everything it touches and no two workers share a path.
+# seed_tree — build this process's own scratch dir. Called by --run-one and --matrix only, so a
+# worker owns everything it touches and no two workers share a path.
 seed_tree() {
-  PRISTINE="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
   WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 }
 
-# A fresh COPY of the pristine seed, never an edit of it. A mutation applied in place
-# leaks into every later assertion, and the one that leaks reads as the one that fired.
-# It stays a copy even now that each assertion has its own process: the arms of a single
-# assertion still need a clean tree between them, and a `fresh()` that handed back the
-# pristine root itself would put that back the way it was.
+# fresh [dir] — a newly seeded tree, MOVED into place, never an edit of a shared one. A mutation
+# applied in place leaks into every later assertion, and the one that leaks reads as the one that
+# fired, so every call builds its own world. Each used to copy the seed twice, once into a
+# per-process pristine root and once more here, and no assertion ever read the pristine root
+# again; the seed is now the only copy, renamed into place within one TMPDIR (same volume, so the
+# rename moves nothing). An assertion that calls `fresh` twice pays one seed per call, which is
+# what it always needed. The default path is $WORK/t; the matrix names its own.
 fresh() {
-  rm -rf "$WORK/t"
-  cp -R "$PRISTINE" "$WORK/t"
-  printf '%s' "$WORK/t"
+  local dest="${1:-$WORK/t}" p
+  rm -rf "$dest"
+  p="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; return 1; }
+  mv "$p" "$dest" || { echo "FIXTURE ERROR: could not move the seeded tree into place" >&2; return 1; }
+  printf '%s' "$dest"
 }
 
 # edit <file> <awk program> — rewrite a file through awk, then REQUIRE the bytes changed.
@@ -793,11 +900,9 @@ A17b_i84_slot_only_in_a_comment_is_reported() {
 # revert dies on a message only the reverted predicate can produce.
 A17c_i84_whole_file_slot_grep_mutant_is_reported() {
   t="$(fresh)"
-  if edit "$t/scripts/validate-enforcement-map.sh" \
-       '/^  awk -v s="\$i84_slot" / { print "  grep -qF \"$i84_slot\" \"$1\" 2>/dev/null"; next } { print }'; then
-    assert_fires "I84 mutant: i84_names_slot reverted to a whole-file grep is REPORTED by the slot probe" \
-                 "appears ONLY in a comment"
-  fi
+  mutant_case i84-slot-whole-file-grep \
+    "I84 mutant: i84_names_slot reverted to a whole-file grep is REPORTED by the slot probe" \
+    "appears ONLY in a comment" 0
 }
 
 # The declaration going missing from its home is REPORTED, rather than leaving every reader
@@ -900,11 +1005,9 @@ A23_i85_backtick_in_message() {
 # are the same output otherwise.
 A24_i85_fails_closed_when_blind() {
   t="$(fresh)"
-  if edit "$t/scripts/validate-enforcement-map.sh" \
-       '{ sub(/if \(c == "`" && p != "\\\\"\) \{/, "if (c == \"~\" \&\& p != \"\\\\\\\\\") {") } { print }'; then
-    assert_fires "I85 a BLINDED scanner reports its own probe rather than a clean tree" \
-                 "positive probe was NOT reported"
-  fi
+  mutant_case i85-blinded-scanner \
+    "I85 a BLINDED scanner reports its own probe rather than a clean tree" \
+    "positive probe was NOT reported" 0
 }
 
 # --- Assertion 25: I85 — the heredoc narrowing is load-bearing ---------------
@@ -914,11 +1017,9 @@ A24_i85_fails_closed_when_blind() {
 # turned off. The negative probe is what refuses that, so break the skip and require it.
 A25_i85_heredoc_narrowing_holds() {
   t="$(fresh)"
-  if edit "$t/scripts/validate-enforcement-map.sh" \
-       '{ sub(/hd != "" \{ if \(\$0 == hd\) \{ hd = ""; hdq = 0 \} ; next \}/, "hd != \"\" { if ($0 == hd) { hd = \"\" } }") } { print }'; then
-    assert_fires "I85 losing the quoted-heredoc narrowing is REPORTED by its own negative probe" \
-                 "negative probe WAS reported"
-  fi
+  mutant_case i85-heredoc-unnarrowed \
+    "I85 losing the quoted-heredoc narrowing is REPORTED by its own negative probe" \
+    "negative probe WAS reported" 0
 }
 
 # --- Assertion 26: I33b — the two-step walk across the install split ---------
@@ -1029,11 +1130,9 @@ A27c_i33b_pattern_substitution_is_not_a_walk() {
 # no other, and the unmutated subject stays silent.
 A27_i33b_fails_closed_when_blind() {
   t="$(fresh)"
-  if edit "$t/scripts/validate-enforcement-map.sh" \
-       '{ if ($0 ~ /\^\[\[:space:\]\]\*\[A-Za-z_\]\[A-Za-z0-9_\]\*="\\\$\\\(dirname/ && !done) { sub(/\/\^.*\/ \{/, "/ZZNOMATCHZZ/ {"); done=1 } } { print }'; then
-    assert_fires "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
-                 "positive probe was NOT reported"
-  fi
+  mutant_case i33b-blinded-predicate \
+    "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
+    "positive probe was NOT reported" 0
 }
 
 # --- Assertion 28: I86 — apply.sh must not restate the row token ------------
@@ -1923,13 +2022,9 @@ A56_i54_worktrees_sibling_still_fires() {
 A57_i54_unpruned_find_mutant_reports_worktree() {
   t="$(fresh)"
   wt_seed ".claude/worktrees/agent-x"
-  local before="$fails"
-  assert_silent "I54 mutant control: the unmutated copy is silent on the agent-x offender"
-  [ "$fails" -eq "$before" ] || return 0
-  if edit "$t/scripts/validate-enforcement-map.sh" "$WT_UNPRUNE"; then
-    assert_fires_n "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
-                   ".claude/worktrees/agent-x/scripts/zz.sh:3:" 1
-  fi
+  mutant_case i54-unpruned-find \
+    "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
+    ".claude/worktrees/agent-x/scripts/zz.sh:3:" 1
 }
 
 # THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
@@ -1992,7 +2087,7 @@ $FN
        exit 2 ;;
   esac
   seed_tree
-  trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
+  trap 'rm -rf "$WORK"' EXIT
   : > "$WORK/calls"
   "$FN"
   fn_rc=$?
@@ -2033,88 +2128,110 @@ $FN
 fi
 
 # ---------------------------------------------------------------------------
-# THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE
+# ONE DIRECTORY, ONE POOL. THE -b SHARD DIRECTORY IS GONE.
 # ---------------------------------------------------------------------------
-# The pre-push suite is POLE-BOUND: its makespan tracks its single longest unit, and the
-# unit is a DIRECTORY, because `core/fixtures/*/run.sh` is what the outer pool schedules.
-# This directory sat on the suite's top shelf -- 452s in `.git/ai-dlc-fixture-durations`
-# against a 173s next-longest outside that shelf -- and the inner pool below could not change
-# it, because an inner pool moves work off the wall clock only while there are free cores and
-# the outer pool has already taken them. Run ALONE from the repo root it costs 136s of wall
-# clock and ~930 CPU-seconds; that solo figure and the 452s are NOT comparable, because the
-# recorded one is measured under the 16-way outer pool.
+# This fixture was split across two directories because it was the pre-push suite's pole: 452s
+# loaded, against a 173s next-longest, and a pool inside one directory could not move it. It is
+# no longer near the pole. Every assertion now seeds ONE tree (the seed was copied twice before,
+# once into a per-process pristine root and again by `fresh`) and runs the validator through
+# `--arms` on its own arm alone, so the whole assertion set is one pool of JOBS workers. The
+# second directory only re-paid the control's whole-file validator run and a second 27 MB seed
+# per worker, which is cost with no scheduling benefit left to buy.
 #
-# So the fixture is SHARDED ACROSS DIRECTORIES, which is the same move and the same reason
-# as the sibling `enforcement-map-sites`. Each shard is a directory the outer pool can start
-# independently and interleave with everything else.
-#
-# TWO, NOT THREE. Every shard re-pays the control's validator run in full, so each further
-# shard adds a fixed cost to what the machine computes while removing a smaller slice from
-# this directory's critical path -- and the added concurrency inflates every other unit's
-# loaded cost at the same time. Two takes the largest available cut and pays that fixed cost
-# once.
-#
-# ROUND-ROBIN, NOT CONTIGUOUS HALVES. These assertions differ by an order of magnitude in
-# cost -- several seed a tree and run the validator once, a few run it over rebuilt trees --
-# so a contiguous cut puts the expensive neighbours in one shard and rebuilds the pole inside
-# it. Dealing them out in turn spreads that without anyone having to maintain a cost table
-# that would go stale the first time an assertion changed.
-#
-# EVERY SHARD RUNS THE CONTROL. A00 is the arm that says the validator is not simply broken,
-# and a shard without it would report its own assertions as kills earned against a tree
-# nobody checked. It costs one validator run per shard and it is not optional.
-SHARDS="a b"
+# WHAT THAT TAKES AWAY IS THE SHARD COVERAGE JOIN, and nothing is lost by it: there is no longer
+# a declared shard whose driver could be deleted, and no round-robin deal that could drop an
+# assertion. Dispatch is the single derived list `$NAMES`, guarded by the zero guard and the
+# defined-versus-listed join above, and by the per-assertion verdict file and the selection join
+# below, which are unchanged.
 
-# THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE, and the reason here is
-# NOT the sibling's. That file scrubs every ambient AI_DLC_* name near its top for I10, so a
-# tunable would be unset before it could be read; this file carries no scrub at all (it
-# assembles its one hook token rather than spelling it, and its worker wrapper is named EMD_*
-# for the reason at the pool below). The reason the argument form is used HERE is that the two
-# fixtures share ONE shard protocol: the same --group parse, the same membership guard, the
-# same coverage join, the same round-robin partition. A protocol spelled two ways is two
-# grammars to keep in step, and the shard driver beside this directory is written against the
-# argument form. Keeping them identical is what lets either file's shard machinery be read
-# as evidence about the other's.
-GROUP=a
-if [ "${1:-}" = "--group" ]; then
-  GROUP="${2:-}"
-  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
-fi
-case " $SHARDS " in
-  *" $GROUP "*) ;;
-  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
-esac
+# --matrix: replay EVERY mutant against EVERY arm this file drives, once, and print one row per
+# cell with that CELL's own polarity (`tripped` iff that arm reported under that mutant). This is
+# the measurement the `# MUTANT-MATRIX` header lines are read from; it is NOT run per push, and
+# the plain run asserts below that no matrix cell executed. One validator run per state lists all
+# the arms, so it costs one run per mutant plus one for the unmutated tree.
+MX_CELLS=0
+if [ "${1:-}" = "--matrix" ]; then
+  echo "enforcement-map-derivations mode: FULL"
+  seed_tree
+  trap 'rm -rf "$WORK"' EXIT
+  : > "$WORK/calls"
+  MX_ARMS="$(printf '%s\n' "$NAMES" | while IFS= read -r _n; do arm_id_of "$_n"; done | grep . | sort -u | paste -sd, -)"
+  MX_NARMS="$(tr ',' '\n' <<<"$MX_ARMS" | grep -c .)" || MX_NARMS=0
+  [ "$MX_NARMS" -ge 10 ] || { echo "FIXTURE ERROR: derived $MX_NARMS arm id(s) from the assertion names" >&2; exit 2; }
 
-# THE COVERAGE JOIN. Sharding moves assertions out of this directory, so the failure mode it
-# introduces is a shard whose directory is deleted, renamed, or never installed: the suite
-# then runs fewer assertions and reports a shorter green run, which is this repository's
-# named recurring defect wearing a new hat. Shard `a` therefore DERIVES the set of shards
-# that actually exist beside it and refuses to pass if any declared shard has no driver.
-# The control is the same grep finding this file's own sibling directories at all.
-if [ "$GROUP" = a ]; then
-  missing=""
-  for _s in $SHARDS; do
-    [ "$_s" = a ] && continue
-    [ -f "$HERE/../enforcement-map-derivations-$_s/run.sh" ] || missing="$missing $_s"
-  done
-  if [ -n "$missing" ]; then
-    echo "FIXTURE ERROR: shard(s)$missing declared in SHARDS have no driver directory beside this one." >&2
-    echo "  Their assertions would run NOWHERE, and this suite would report a shorter green run." >&2
-    exit 2
+  # mx_grid <label> <tree> — one validator run listing every arm; sets MX_TRIPPED to the arms
+  # that reported. rc 2 is a selection failure and nothing was measured.
+  mx_grid() {
+    local out rc a c
+    out="$(bash "$2/scripts/validate-enforcement-map.sh" --arms "$MX_ARMS" 2>&1)"
+    rc=$?
+    sel_guard "$rc" "$MX_ARMS" "$out"
+    MX_TRIPPED=""
+    for a in $(tr ',' ' ' <<<"$MX_ARMS"); do
+      c="$(fail_count "$out" "$a")"
+      if [ "$c" -gt 0 ]; then
+        matrix_row "$1" "$a" 1 TRIPPED yes
+        MX_TRIPPED="$MX_TRIPPED $a"
+      else
+        matrix_row "$1" "$a" 0 GREEN no
+      fi
+      MX_CELLS=$((MX_CELLS + 1))
+    done
+    MX_OUT="$out"
+  }
+
+  t="$(fresh "$WORK/mx-base")" || exit 2
+  mx_grid unmutated "$t"
+  if [ -z "$MX_TRIPPED" ] && case "$MX_OUT" in *"OK: enforcement-map.yaml in sync with"*) true ;; *) false ;; esac; then
+    ok "MATRIX base: the unmutated tree is green on all $MX_NARMS arms"
+  else
+    bad "MATRIX base: the unmutated tree tripped:$MX_TRIPPED — every row below is unattributable"
   fi
+
+  mx_n=0
+  while IFS= read -r hdr; do
+    [ -n "$hdr" ] || continue
+    set -- $hdr
+    mx_m="$3"; mx_d="${4#decides=}"; mx_tw="${5#twins=}"
+    mx_n=$((mx_n + 1))
+    t="$(fresh "$WORK/mx-$mx_n")" || exit 2
+    [ "$mx_m" != i54-unpruned-find ] || wt_seed ".claude/worktrees/agent-x"
+    mutant_apply "$mx_m" "$t" || continue
+    mx_grid "$mx_m" "$t"
+    printf '  MATRIX-MUTANT %s tripped=[%s]\n' "$mx_m" "${MX_TRIPPED# }"
+    mx_bad=""
+    case " $MX_TRIPPED " in *" $mx_d "*) ;; *) mx_bad="$mx_bad deciding $mx_d did not trip;" ;; esac
+    for _tw in $(tr ',' ' ' <<<"$mx_tw"); do
+      case " $MX_TRIPPED " in *" $_tw "*) mx_bad="$mx_bad twin $_tw tripped;" ;; esac
+    done
+    if [ -z "$mx_bad" ]; then
+      ok "MATRIX $mx_m: deciding $mx_d tripped, twin $mx_tw green"
+    else
+      bad "MATRIX $mx_m:$mx_bad (tripped:$MX_TRIPPED)"
+    fi
+  done <<EOF_MX
+$(grep '^# MUTANT-MATRIX [^ ]' "$0")
+EOF_MX
+  if [ "$MX_CELLS" -eq $(( (mx_n + 1) * MX_NARMS )) ] && [ "$mx_n" -ge 5 ]; then
+    ok "MATRIX: $MX_CELLS cells = ($mx_n mutants + the unmutated tree) x $MX_NARMS arms"
+  else
+    bad "MATRIX: $MX_CELLS cells where ($mx_n mutants + 1) x $MX_NARMS arms were expected"
+  fi
+  [ "$fails" -eq 0 ] || { echo "$0: matrix FAILED" >&2; exit 1; }
+  echo "enforcement-map-derivations: MATRIX PASS"
+  exit 0
 fi
 
 NAME="enforcement-map-derivations"
-[ "$GROUP" = a ] || NAME="enforcement-map-derivations-$GROUP"
-
 echo "$NAME:"
+echo "enforcement-map-derivations mode: PUSH"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
 SELF="$HERE/$(basename "$0")"
 
 # The control, first and alone. Its verdict licenses every assertion after it, so a failure
-# here stops the run rather than reporting fourteen unattributable kills.
+# here stops the run rather than reporting unattributable kills.
 CTL="$(printf '%s\n' "$NAMES" | head -1)"
 EMD_OUT="$OUT" bash "$SELF" --run-one "$CTL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
 ctl_rc=$?
@@ -2126,58 +2243,22 @@ if [ "$ctl_rc" -ne 0 ]; then
   exit 2
 fi
 
-# FOUR, and the arithmetic is the whole reason. This pool nests inside the pre-push suite's
-# own pool, so a knob here multiplies against a knob there and the product is what lands on
-# the machine. This fixture used to be ONE directory at 8 wide; it is now TWO directories,
-# and the outer pool starts both. Two directories x 4 = the same 8 cores this fixture
-# demanded before the split, so the split buys wall clock without raising the load the rest
-# of the suite is scheduled against.
+# EIGHT. The pool nests inside the pre-push suite's own pool, so a knob here multiplies against
+# a knob there. The fixture ran as two directories of four workers each; one directory of eight
+# is the same demand on the machine.
 #
 # The worker wrapper's two variables are NOT named AI_DLC_*. I10 requires a fixture that
 # drives a hook to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that
-# would have to be ordered ahead of values this wrapper has already resolved -- the sibling
-# carries exactly that ordering hazard in a comment. This fixture assembles its one hook
-# token rather than spelling it, so it is outside I10's set today; naming these two outside
-# the AI_DLC_ namespace means it stays correct if that ever changes.
-JOBS=4
-# Deal the non-control assertions out to the shards in turn. The partition is DERIVED from
-# the same list the control came off, so an assertion added to this file lands in a shard
-# automatically rather than needing a table updated in a second place.
-printf '%s\n' "$NAMES" | tail -n +2 \
-  | awk -v g="$GROUP" -v shards="$SHARDS" '
-      BEGIN { n = split(shards, S, " ") }
-      { if (S[((NR - 1) % n) + 1] == g) print }
-    ' > "$OUT/list"
+# would have to be ordered ahead of values this wrapper has already resolved. This fixture
+# assembles its one hook token rather than spelling it, so it is outside I10's set today;
+# naming these two outside the AI_DLC_ namespace means it stays correct if that ever changes.
+JOBS=8
+# Every non-control assertion, in source order, derived from the same list the control came off.
+printf '%s\n' "$NAMES" | tail -n +2 > "$OUT/list"
 N_MINE="$(grep -c . "$OUT/list" || true)"
-if [ "$N_MINE" -eq 0 ]; then
-  echo "$NAME: FIXTURE ERROR — shard '$GROUP' was dealt no assertions out of $N_LISTED; an empty shard passes every assertion it never made" >&2
+if [ "$N_MINE" -ne "$((N_LISTED - 1))" ] || [ "$N_MINE" -eq 0 ]; then
+  echo "$NAME: FIXTURE ERROR — dispatching $N_MINE assertion(s) where $((N_LISTED - 1)) non-control assertions are defined" >&2
   exit 2
-fi
-
-# THE PARTITION IS A PARTITION, AND IT IS ASSERTED RATHER THAN ASSUMED. The coverage join
-# above proves every declared shard has a DRIVER; it says nothing about whether the deal
-# reaches every assertion. An off-by-one in the round-robin index, or a shard name in
-# $SHARDS that the awk never emits, drops assertions on the floor in EVERY shard at once —
-# and every shard then prints a shorter green run, which is exactly the failure this file
-# exists to catch one level out. So shard `a` re-runs the same partition for every value of
-# $SHARDS and requires the counts to sum to the non-control total. Shard `a` alone can
-# compute it because the partition is a pure function of $NAMES and $SHARDS, both of which
-# every shard holds.
-if [ "$GROUP" = a ]; then
-  dealt=0
-  for _s in $SHARDS; do
-    _n="$(printf '%s\n' "$NAMES" | tail -n +2 \
-          | awk -v g="$_s" -v shards="$SHARDS" '
-              BEGIN { n = split(shards, S, " ") }
-              { if (S[((NR - 1) % n) + 1] == g) print }
-            ' | grep -c . || true)"
-    dealt=$((dealt + _n))
-  done
-  if [ "$dealt" -ne "$((N_LISTED - 1))" ]; then
-    echo "$NAME: FIXTURE ERROR — the shards $SHARDS were dealt $dealt assertions between them, but this file defines $((N_LISTED - 1)) non-control assertions." >&2
-    echo "  The difference runs NOWHERE, in every shard, and each shard still reports a green run." >&2
-    exit 2
-  fi
 fi
 EMD_SELF="$SELF" EMD_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
@@ -2255,6 +2336,14 @@ elif [ -n "$sel_nofile" ]; then
   fails=$((fails + 1))
 elif [ "$sel_actual" -ne "$sel_expect" ]; then
   printf '  FAIL  %s of %s id-declaring assertion(s) selected their arm — the rest ran something else, and a whole-file run prints ok whatever the selector did\n' "$sel_actual" "$sel_expect"
+  fails=$((fails + 1))
+fi
+
+# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. MX_CELLS is counted only by the --matrix branch above.
+if [ "$MX_CELLS" -eq 0 ]; then
+  printf '  ok    PUSH: no matrix-only cell ran (0 cells); each mutant ran on its deciding arm plus its one named twin\n'
+else
+  printf '  FAIL  PUSH: %s matrix cell(s) ran in a plain run\n' "$MX_CELLS"
   fails=$((fails + 1))
 fi
 

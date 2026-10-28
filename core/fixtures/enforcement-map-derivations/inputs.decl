@@ -1,4 +1,7 @@
-# enforcement-map-derivations and its shard driver (b, which execs the parent's run.sh --group) share ONE declaration.
+# enforcement-map-derivations: one directory, one declaration.
+# The mutant helpers and the matrix-row printer are sourced; HERMETIC-CONSUMED names both.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh
 # seed.sh copies core/, scripts/, .githooks/ and templates/ whole and mutates the copies; the validator then walks them.
 # The validator under test, REQUIRED: the sentinel prints where run.sh passes its distribution-only guard.
 !scripts/validate-enforcement-map.sh
