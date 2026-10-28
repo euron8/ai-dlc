@@ -7277,15 +7277,24 @@ i56_val="$REPO_ROOT/core/scripts/validate-spawn-ledger.sh"
 if [ ! -f "$i56_guard" ] || [ ! -f "$i56_val" ]; then
   err "I56 cannot find core/hooks/ai-dlc-dispatch-guard.sh and/or core/scripts/validate-spawn-ledger.sh. It binds the dispatch-time model pin to the gate-time one; with either file gone it compares nothing and reports agreement it never computed."
 else
-  for i56_f in pin_key matches_pin; do
-    i56_ng="$(grep -c "^${i56_f}() {" "$i56_guard" || true)"
-    i56_nv="$(grep -c "^${i56_f}() {" "$i56_val" || true)"
+  # THREE MORE SHARED PREDICATES (BL-842): `row_in_scope` (the citation deny keys on Check 22's own
+  # scope test) and `cover_missing`, an AWK function both files carry inside an awk program at
+  # column 0 (arm S4 and the cover deny). An awk function opens `function <name>(`, so the
+  # definition pattern is chosen per name; the extraction runs from that line to the first `}` at
+  # column 0, as for the shell functions.
+  for i56_f in pin_key matches_pin row_in_scope cover_missing; do
+    case "$i56_f" in
+      cover_missing) i56_dp="^function ${i56_f}(" ; i56_ap="^function ${i56_f}\("; i56_lbl="function ${i56_f}(...)" ;;
+      *)             i56_dp="^${i56_f}() {"       ; i56_ap="^${i56_f}\(\) \{"  ; i56_lbl="${i56_f}()" ;;
+    esac
+    i56_ng="$(grep -c "$i56_dp" "$i56_guard" || true)"
+    i56_nv="$(grep -c "$i56_dp" "$i56_val" || true)"
     if [ "$i56_ng" != 1 ] || [ "$i56_nv" != 1 ]; then
-      err "I56 expected exactly one ${i56_f}() definition in each of ai-dlc-dispatch-guard.sh (found ${i56_ng}) and validate-spawn-ledger.sh (found ${i56_nv}). Zero means the binding below extracts nothing and passes vacuously; more than one means the later definition silently shadows the earlier, the byte-identity arm compares two spans against one, and a genuine fork could hide behind a duplicate. This is the exact state the guard shipped in until v0.211.0."
+      err "I56 expected exactly one ${i56_lbl} definition in each of ai-dlc-dispatch-guard.sh (found ${i56_ng}) and validate-spawn-ledger.sh (found ${i56_nv}). Zero means the binding below extracts nothing and passes vacuously; more than one means the later definition silently shadows the earlier, the byte-identity arm compares two spans against one, and a genuine fork could hide behind a duplicate. This is the exact state the guard shipped in until v0.211.0."
       continue
     fi
-    i56_a="$(awk "/^${i56_f}\(\) \{/,/^\}/" "$i56_guard" 2>/dev/null)"
-    i56_b="$(awk "/^${i56_f}\(\) \{/,/^\}/" "$i56_val" 2>/dev/null)"
+    i56_a="$(awk "/${i56_ap}/,/^\}/" "$i56_guard" 2>/dev/null)"
+    i56_b="$(awk "/${i56_ap}/,/^\}/" "$i56_val" 2>/dev/null)"
     if [ -z "$i56_a" ] || [ -z "$i56_b" ]; then
       err "I56 located a ${i56_f}() definition line in both files but extracted an EMPTY body from at least one. The comparison below would pass on two empty strings, so it fails here instead."
     elif [ "$i56_a" != "$i56_b" ]; then
