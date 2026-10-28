@@ -526,17 +526,42 @@ MX_ROWS=0; MX_SKIPPED=0
 # every receipt's shipped/control run stay on the FULL entry: those are the end-to-end runs. seam_guard
 # proves, per seamed arm set, that the seam's control row equals the full entry's row over the same worlds.
 SEAM_ARMS=""
-seam_guard() { # <label> <arm set> <row fn> <script>
-  local srow frow nd
-  ASSERTIONS=$((ASSERTIONS + 1))
-  srow="$(SEAM_ARMS="$2"; "$3" "$4")"
-  frow="$(SEAM_ARMS=""; "$3" "$4")"
+row_prov() { # <script> -> "<SEAM_ARMS in force>|<script>|<sha256 of its bytes>": how a row computed NOW is being asked
+  printf '%s|%s|%s' "${SEAM_ARMS:-}" "$1" "$(shasum -a 256 < "$1" | cut -d' ' -f1)"
+}
+# seam_guard_eval <arm set> <row fn> <script> [<full row> <that row's row_prov>] -> SG_VERDICT ok|differ|refused, SG_MSG, SG_SROW.
+# With a precomputed full row the guard REUSES it instead of running the full entry again, and only when the row was
+# computed with no --arms, at this script's path, over these bytes. Anything else is refused BEFORE the seam runs:
+# a guard must never compare the seam against a row that was itself seamed.
+seam_guard_eval() {
+  local srow frow nd src="full side run"
+  SG_VERDICT=""; SG_MSG=""; SG_SROW=""
+  if [ $# -ge 5 ]; then
+    if [ "$5" != "|$3|$(shasum -a 256 < "$3" | cut -d' ' -f1)" ]; then
+      SG_VERDICT=refused
+      SG_MSG="FIXTURE BROKEN -- the reused full row was computed as [$5], want [|$3|<sha256 of $3>] (no --arms, this path, these bytes)"
+      return 0
+    fi
+    frow="$4"; src="full side reused from its baseline"
+  else
+    frow="$(SEAM_ARMS=""; "$2" "$3")"
+  fi
+  srow="$(SEAM_ARMS="$1"; "$2" "$3")"; SG_SROW="$srow"
   nd="$(printf '%s\n' $srow | sort -u | grep -c .)" || nd=0
   if [ -n "$srow" ] && [ "$srow" = "$frow" ] && [ "$nd" -ge 2 ]; then
-    printf '  ok    %-28s seam --arms %s [%s] = full entry\n' "$1" "$2" "$srow"
+    SG_VERDICT=ok; SG_MSG="seam --arms $1 [$srow] = full entry ($src)"
+  else
+    SG_VERDICT=differ; SG_MSG="seam --arms $1 [$srow], full entry [$frow], $nd distinct verdicts (want equal, >= 2)"
+  fi
+}
+seam_guard() { # <label> <arm set> <row fn> <script> [<full row> <its row_prov>]
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ $# -ge 6 ]; then seam_guard_eval "$2" "$3" "$4" "$5" "$6"; else seam_guard_eval "$2" "$3" "$4"; fi
+  if [ "$SG_VERDICT" = ok ]; then
+    printf '  ok    %-28s %s\n' "$1" "$SG_MSG"
   else
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s seam --arms %s [%s], full entry [%s], %s distinct verdicts (want equal, >= 2)\n' "$1" "$2" "$srow" "$frow" "$nd"
+    printf '  FAIL  %-28s %s\n' "$1" "$SG_MSG"
   fi
 }
 # MX0, read once at the end of the shard: a per-push run must have SKIPPED matrix-only cells (else the
@@ -2502,6 +2527,7 @@ j2_score() {  # $1 label  $2 script  $3 expected row
   local i=0 wm; rsel "$3" "$J2_REAL"; wm="$(rmask "$3")"
   for c in $J2_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(j2_cell "$2" "$c")"; else got="$got ."; fi; done
   RSEL=""
+  J2_SCORE_ROW="$(echo $got)"; J2_SCORE_PROV="$(row_prov "$2")"
   if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
@@ -2511,9 +2537,23 @@ j2_score() {  # $1 label  $2 script  $3 expected row
 }
 cp "$VALIDATOR" "$J2_MUT/control.sh"
 j2_score "CONTROL j2 copy" "$J2_MUT/control.sh" "$J2_REAL"
+J2_CTL_ROW="$J2_SCORE_ROW"; J2_CTL_PROV="$J2_SCORE_PROV"
 # The j2 battery's mutants run in this directory, which has no merge beside them, so the guard reads
-# the same copy they do.
-seam_guard "SEAM-GUARD J2" J2 j2_row "$J2_MUT/control.sh"
+# the same copy they do. Its full side is the control row just scored, at this path with no --arms.
+seam_guard "SEAM-GUARD J2" J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$J2_CTL_PROV"
+# MUTANT seam-reused-row: the guard is handed a SEAMED row as its full side. The row is the seam's own answer
+# (so it EQUALS the real full row and a bare comparison would pass) with the provenance of how it was made.
+# The reuse assertion alone must refuse it, before the seam runs -- and must also refuse the right row at
+# another path. The unseamed control row was accepted just above, by the guard itself.
+ASSERTIONS=$((ASSERTIONS + 1))
+sr_prov="$(SEAM_ARMS=J2; row_prov "$J2_MUT/control.sh")"
+seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$SG_SROW" "$sr_prov"; sr_seamed="$SG_VERDICT"
+seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$(row_prov "$VALIDATOR")"; sr_path="$SG_VERDICT"
+if [ "$sr_seamed" = refused ] && [ "$sr_path" = refused ] && [ -n "$J2_CTL_ROW" ] && [ "$J2_CTL_PROV" = "|$J2_MUT/control.sh|$(shasum -a 256 < "$J2_MUT/control.sh" | cut -d' ' -f1)" ]; then
+  printf '  ok    %-28s the reuse assertion refuses a seamed row [%s] and a row from another path\n' "MUTATION seam-reused-row" "$sr_prov"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s seamed row: %s, other path: %s, control prov [%s] -- the guard would compare against a seamed row\n' "MUTATION seam-reused-row" "$sr_seamed" "$sr_path" "$J2_CTL_PROV"
+fi
 
 # $1 label  $2 expected row  $3.. old/new pairs, EACH anchor exactly once in the validator.
 # Every layer of a layered subject is reverted. The fork mutant removes the fork verdict AND the
@@ -2740,6 +2780,7 @@ h_score() {  # $1 label  $2 script  $3 expected row
   local i=0 wm; rsel "$3" "$H_REAL"; wm="$(rmask "$3")"
   for w in $H_WORLDS; do i=$((i + 1)); if ron "$i"; then got="$got $(h_cell "$2" "$w")"; else got="$got ."; fi; done
   RSEL=""
+  H_SCORE_ROW="$(echo $got)"; H_SCORE_PROV="$(row_prov "$2")"
   if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
@@ -2751,7 +2792,8 @@ h_score "H series-named record" "$VALIDATOR" "$H_REAL"
 # The unmutated copy in the mutant directory, siblings beside it. SILENT is a positive cell: it
 # requires the validator's own header line, so a copy that never ran reads NORUN, not SILENT.
 h_score "CONTROL h copy" "$J2_MUT/control.sh" "$H_REAL"
-seam_guard "SEAM-GUARD H" H h_row "$J2_MUT/control.sh"
+# Its full side is the control row just scored, at this path with no --arms.
+seam_guard "SEAM-GUARD H" H h_row "$J2_MUT/control.sh" "$H_SCORE_ROW" "$H_SCORE_PROV"
 expect_says_h() {  # $1 world  $2 label  $3... required substrings
   local w="$1" label="$2" out missing="" want; shift 2
   ASSERTIONS=$((ASSERTIONS + 1))
