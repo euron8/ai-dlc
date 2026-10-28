@@ -150,6 +150,9 @@ GROUP=a
 # every world of its battery. Never per push. A unit carrying a full-vector mode adds itself to
 # MATRIX_UNITS; every other unit prints that it has none, so a partial matrix cannot read as complete.
 # The matrix is measured once and re-measured whenever an arm or a mutant is added or changed, and per push each mutant runs its deciding arm(s).
+#   also trips (consequence, not decided): m1 C6,C7; m2 F1; m5 C6,C7; m6 C5,C8,F1,F2,F3; m7 F1; m11 C4,C5,C8; A1 RA2;
+#   A2 RA1,RA2,RA3; MR1 U5,RA3; M1 R2,A,F1,F2A,F2,G1,G2,I3,J1,KF2,N1,N2E,N3; M2 A,F1,F2A,F2,I3;
+#   M3 F1,F2A,F2,G1,G2,I3,N1,N2E,N3; M5 F2; M6 F2A,F2,G2,I1,I3,N3; M7b F1,F2;
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-restamp-worklist/run.sh --matrix
 # MUTANT-MATRIX BL-m1 decides=BL-1 twins=BL-3
 # MUTANT-MATRIX BL-m2 decides=BL-1 twins=BL-3
