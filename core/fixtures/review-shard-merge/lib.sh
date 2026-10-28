@@ -2325,7 +2325,7 @@ p_fr_graph() {
   fr_refused "$sd" "$d" fr-graph-pre-f2 "$FR_ORPH AC4"
   ! has "$MO" "$FR_VERD" || WHY="$WHY fr-graph-pre-f2-wrong-rule{$(reline "$MO")}"
   d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="$WHY the frozen-QL post-F2 world was not built"; return 1; }
-  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK; hand_keep "$sd" frg_post "$(qout "$d")" "$d"
+  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK
   has "$MO" "LEGACY: $d/cross-2.md $FR_BLEG $QL_SHA's .claude/team-roles/qa.md" || WHY="$WHY fr-graph-post-f2-legacy-line{$(head -2 "$MO" | tr '\n' ' ')}"
   [ -z "$WHY" ]
 }
@@ -2337,12 +2337,10 @@ p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
   if cell frb-legacy; then
-    if hand_use "$sd" frg_post; then   # FR4's post-F2 world is this world
-      [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK " || WHY="$WHY frb-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
-    else
-      d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
-      fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
-    fi
+    # Its own merge, not FR4's post-F2 answer: the REUSE proof measured the two DIFFER (class (a)); the LEGACY line names
+    # the shard file path, which sits in a different shard directory in each arm.
+    d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
+    fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
     has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
   fi
   if cell frb-severity; then
@@ -3136,7 +3134,6 @@ reuse_proof() {
   ru_row owner-set-level q_pm own_qpm_set ru_mk_qpmset
   ru_row owner-dup-merge x_owner x_owner_dup ru_mk_xdup
   ru_row session-control key key_ctl ru_mk_seal
-  ru_row frb-legacy fr_graph frg_post ru_mk_frg
   local p; p="$(ru_pair selfprobe-sha_dir worst3 worst3 ru_mk_shadir)"
   if [ "$p" = DIFFER ]; then ok "REUSE self-probe: a class-(a) sha_dir state against the all-APPROVED answer scores DIFFER"
   else bad "REUSE self-probe BROKEN: a class-(a) sha_dir state against the all-APPROVED answer scored $p, so every EQUAL above is unattributable"; fi
