@@ -127,9 +127,11 @@
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only. The MODEL/DEFINITION path only ever ADDS or CORRECTS --
-#   it never denies. Four separate arms below DO deny, and only those four: the two
-#   deny arms here, THE SHARD DENY under THE SHARD LINE, and THE MARK LINE (a brief whose
-#   `wait-for-deliverable.sh --mark` line the engine would refuse; see `dg_mark_scan`).
+#   it never denies. Six separate arms below DO deny, and only those six: the two
+#   deny arms here, THE SHARD DENY under THE SHARD LINE, THE COVER DENY beside it (a one-cross
+#   brief, `cross/<K> g1/1 <ordinals>`, whose ordinals omit part of 1..K), THE CITATION DENY (a
+#   declared aiDlcRoles role the Rule 19(b) line reached by neither carrier), and THE MARK LINE (a
+#   brief whose `wait-for-deliverable.sh --mark` line the engine would refuse; see `dg_mark_scan`).
 #
 #   THE TWO DENY ARMS. Each emits `permissionDecision: "deny"` with a reason naming the
 #   remedy, and NEVER `updatedInput`: a denied call is not corrected, it is refused. Both
@@ -219,6 +221,22 @@
 #   Nothing here corrects or annotates a shard line, and nothing judges whether a scope is ONE
 #   part or several: that is a judgment about intent, and no act at dispatch separates the two.
 #   The adjudicator-waiver arm reads RECORDED rows, never the brief.
+#
+#   THE COVER DENY. A SHARDABLE dispatch whose line records `cross/<K> g1/1 <ordinals>` -- the
+#   ONE cross agent of a dispatch -- with any ordinal of 1..K absent from <ordinals> is DENIED
+#   before any ledger row is written, because that row is one Check 22 arm S4 FAILS at the gate;
+#   the reason names the missing ordinals and says to re-send covering all K. The "missing
+#   ordinals of 1..K" predicate is ONE function, defined byte-identically here and in
+#   validate-spawn-ledger.sh and bound by the enforcement map, so the deny and arm S4 cannot
+#   disagree. A per-group cross (G>1) and a `cross/<K> cross` line are untouched, and any failure
+#   of the predicate fails OPEN (record-then-allow).
+#
+#   THE CITATION DENY. A dispatch whose role is a declared `aiDlcRoles` key and to which the
+#   Rule 19(b) role-file line reached by neither carrier (`role_contract_cited` false) is DENIED
+#   before any ledger row is written, because Check 22 fails that row. Scope is the validator's
+#   `row_in_scope`, byte-identical here and bound by the enforcement map: an undeclared agent type
+#   (general-purpose, fork, and the rest) is never denied. An unreadable settings.json or
+#   `aiDlcRoles` fails OPEN.
 #
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
@@ -386,8 +404,8 @@ fi
 # on the reference consumer while the guard sat installed and green. A dispatch
 # that identifies its role unambiguously must still be bound; the PROMPT carries
 # no citation, and whether the selected definition carries one is decided once
-# DEFINITION_BOUND is known. Neither is grounds to skip the dispatch, and this
-# guard never denies on a missing citation.
+# DEFINITION_BOUND is known. Neither is grounds to skip the dispatch; a declared role
+# that ends with NEITHER carrier is refused by THE CITATION DENY, before the append.
 if [ -z "$ROLE" ]; then
   ROLE="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null \
     | grep -oE '^[a-z][a-z-]*$' || true)"
@@ -779,6 +797,41 @@ SPAWN_SHARD="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 1p)"
 SPAWN_SHARD_RAW=""
 [ "$SPAWN_SHARD" = "invalid-exception" ] && SPAWN_SHARD_RAW="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 2p)"
 
+# THE REMEDIATES LINE. A re-dispatch that repairs an earlier Check 22 violation of class (i) or
+# (ii) names that row on one brief line, `remediates: <key>`, with <key> the violating row's
+# tool_use_id (or its dispatch name when that differs from its role). Read with THE SHARD LINE's
+# anchoring: a line, after leading blanks and an optional `-`/`*` list marker, whose key is
+# `remediates:` (case-folded, emphasis around the key stripped); a line inside a ``` or ~~~ fence
+# is not read, so pasted output cannot name a row. The key is the first blank-separated token of
+# the value with `*_`"` wrappers and trailing `.,;:)` removed. Exactly one such line records the
+# key as `remediates`; two or more record `remediates_invalid: "multiple"`, because one dispatch
+# remediates exactly one row and the validator refuses an R naming two; none records no field.
+# This is a record of INTENT written from the brief: validate-spawn-ledger.sh decides whether the
+# row is a remedy (it must have RUN, have the named row's role, and be clean on its class).
+# Two lines out: `ok <key>`, `multiple`, or nothing. Any failure here is nothing, never a deny.
+SPAWN_REM_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
+  /^[ \t]*(```|~~~)/ { fence = !fence; next }
+  fence { next }
+  {
+    line = $0
+    sub(/^[ \t]*([-*][ \t]+)?/, "", line)
+    if (!match(tolower(line), /^[*_`]*remediates[*_`]*:/)) next
+    n++
+    v = substr(line, RLENGTH + 1)
+    sub(/^[*_` \t]+/, "", v)
+    sub(/[ \t].*$/, "", v)
+    sub(/^[*_`"]+/, "", v); sub(/[*_`".,;:)]+$/, "", v)
+    key = v
+  }
+  END { if (n > 1) print "multiple"; else if (n == 1 && key != "") print "ok " key }
+' 2>/dev/null || true)"
+SPAWN_REMEDIATES=""
+SPAWN_REMEDIATES_INVALID=""
+case "$SPAWN_REM_OUT" in
+  multiple) SPAWN_REMEDIATES_INVALID=multiple ;;
+  "ok "?*) SPAWN_REMEDIATES="${SPAWN_REM_OUT#ok }" ;;
+esac
+
 # THE DELETED NAME IS RECORDED, NEVER MERELY DROPPED. A lead reading the ledger back sees
 # `name` as the dispatch's identity across every sprint of history; a definition-bound row
 # whose name simply vanished would read as an unnamed dispatch rather than as a named one
@@ -904,6 +957,14 @@ fi
 # negated. Keyed on the Remediation field because the only such sentence on the reference consumer
 # is an UNCHOSEN `**Options:**` line ("(b) re-dispatch the nine as sharded spawns") in the s317
 # entry whose pass was discarded, and the s317 tier-pin Remediation reads "No spawn is re-dispatched".
+#
+# THE OPERATOR-FREE REMEDY COVERS A ROW TOO, AND IT NEEDS NO ENTRY. A row is also covered when
+# validate-spawn-ledger.sh --remediated-keys lists it with class `shard`: a sharded re-dispatch of
+# its role ran, carrying the brief line `remediates: <tool_use_id>` (recorded by THE REMEDIATES LINE
+# below). The validator decides it and this arm only CALLS it; any nonzero rc or malformed line is
+# an EMPTY remedy set, so the deny fires and says the predicate could not run. The OVERRIDDEN path
+# above is unchanged. ARM 2 RUNS ONLY ON THE IMPLEMENTATION GATE-ADJUDICATOR DISPATCH (see ONLY AN
+# IMPLEMENTATION GATE below), so the validator call costs nothing on any other dispatch.
 #
 # THE REMEDIATION IS ASSEMBLED BEFORE IT IS READ. The reference consumer wraps its fields: 62
 # continuation lines sit inside OVERRIDDEN entries, so one sentence spans physical lines. The field
@@ -1126,12 +1187,56 @@ if [ "$ROLE" = gate-adjudicator ] && [ "$DG_IMPL_GATE" = true ] && [ -n "${SPAWN
     rm -f "$_dg_keys"
     _dg_unnamed="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^U	//p')"
     _dg_uncov="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^X	//p' | tr '\n' ' ' | sed 's/ *$//')"
+    # THE OPERATOR-FREE COVERAGE PATH: a row the VALIDATOR reports remediated, class `shard`, is
+    # covered. Asked only when a row is still uncovered, and decided by the validator's own
+    # `--remediated-keys` predicate, never by a copy of it here. It is located by walking UP from
+    # this hook's own directory until a directory holds it in either layout -- the consumer's
+    # `scripts/ai-dlc/` or the distribution's `core/scripts/` -- never by counting `..` hops (I33).
+    # FAIL CLOSED: a missing validator, ANY nonzero exit, or ANY line not shaped
+    # `REMEDIATED<TAB><V><TAB><class><TAB><R>` makes the coverage set EMPTY, so every uncovered row
+    # stays uncovered and the deny below fires with one line saying the predicate could not run.
+    # A nonzero rc is never read as "skip clause 2".
+    _dg_remfail=""
+    if [ -n "$_dg_uncov" ]; then
+      _dg_vsl=""
+      _dg_d="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+      while [ -n "$_dg_d" ] && [ "$_dg_d" != "/" ]; do
+        for _dg_c in "$_dg_d/scripts/ai-dlc/validate-spawn-ledger.sh" "$_dg_d/core/scripts/validate-spawn-ledger.sh"; do
+          [ -f "$_dg_c" ] && { _dg_vsl="$_dg_c"; break 2; }
+        done
+        _dg_d="$(dirname "$_dg_d")"
+      done
+      _dg_rk=""
+      _dg_rrc=127
+      if [ -n "$_dg_vsl" ]; then
+        _dg_rk="$(bash "$_dg_vsl" --remediated-keys --sprint "$SPAWN_SPRINT" --ledger "$SPAWN_LEDGER" \
+          --context "$SPAWN_STATE_DIR/subagent-context.jsonl" --settings "$SETTINGS" 2>/dev/null)"
+        _dg_rrc=$?
+      fi
+      _dg_rbad="$(printf '%s\n' "$_dg_rk" | LC_ALL=C awk -F '\t' 'NF && !(NF == 4 && $1 == "REMEDIATED" && $2 != "" && ($3 == "cite" || $3 == "shard" || $3 == "cover") && $4 != "") { n++ } END { print n + 0 }' 2>/dev/null || echo 1)"
+      if [ -z "$_dg_vsl" ]; then
+        _dg_remfail="no validate-spawn-ledger.sh was found above $(dirname "${BASH_SOURCE[0]}") (rc ${_dg_rrc})"
+      elif [ "$_dg_rrc" -ne 0 ]; then
+        _dg_remfail="validate-spawn-ledger.sh --remediated-keys exited rc ${_dg_rrc}"
+      elif [ "$_dg_rbad" != 0 ]; then
+        _dg_remfail="validate-spawn-ledger.sh --remediated-keys exited rc 0 with ${_dg_rbad} malformed line(s), read as partial output"
+      else
+        # Keyed per uncovered row, on the row key exactly as arm 2 printed it (tool_use_id, else
+        # the distinct name), and only on class `shard`: a `cite` pair covers no S3 row.
+        _dg_uncov="$( { printf '%s\n' "$_dg_rk" | sed -n 's/^REMEDIATED	\([^	]*\)	shard	.*/S	\1/p'
+                        printf '%s\n' "$_dg_waiver" | sed -n 's/^X	/X	/p'; } \
+          | LC_ALL=C awk -F '\t' '$1 == "S" { r[$2] = 1; next } $1 == "X" && !($2 in r) { o = o (o == "" ? "" : " ") $2 } END { print o }' 2>/dev/null)" \
+          || _dg_uncov="$(printf '%s\n' "$_dg_waiver" | sed -n 's/^X	//p' | tr '\n' ' ' | sed 's/ *$//')"
+      fi
+    fi
     _dg_msg=""
     if [ -n "$_dg_unnamed" ]; then
       _dg_msg="An OVERRIDDEN entry for sprint ${SPAWN_SPRINT} in docs/escalations/pending.md dispositions Check 22 and names no spawn of that sprint: $(printf '%s' "$_dg_unnamed" | tr '\n' ' ')-- Check 22 clears exactly the spawns an entry names (gate-validation.md, Check 22 clearing arm 1), so this waiver clears nothing and the gate would fail on it. Name each waived spawn verbatim: its spawn-ledger tool_use_id, its agent id, or its dispatch name (a name equal to the role, such as \`dev\`, names no one spawn)."
     fi
     if [ -n "$_dg_uncov" ]; then
-      _dg_msg="${_dg_msg:+$_dg_msg }Sprint ${SPAWN_SPRINT} has spawn-ledger rows recorded \`shard: invalid-exception\` that no OVERRIDDEN entry both names and remediates: ${_dg_uncov}. Check 22 arm S3 fails each one until an OVERRIDDEN entry names it and remediates it one of the two ways Check 22 clearing arm 4 accepts for this class -- the work was re-dispatched sharded, stated in the entry's Remediation (\`**Remediation:** the work was re-dispatched sharded as <names>\`), or the exception that actually applied is named (\`exception (3)\`, or its short name such as \`authoring-chain\`). A sentence saying none of the four applies, or naming them only as \"the four\", remediates nothing."
+      _dg_msg="${_dg_msg:+$_dg_msg }Sprint ${SPAWN_SPRINT} has spawn-ledger rows recorded \`shard: invalid-exception\` that are neither remediated by a sharded re-dispatch nor named and remediated by an OVERRIDDEN entry: ${_dg_uncov}. Check 22 arm S3 fails each one until it is repaired. The operator-free repair: re-dispatch the row's role SHARDED (a real \`shard: <i>/<N> <key>\` or \`shard: cross/<N> <key>\` line; \`none (<n>)\` is not a repair) with one brief line \`remediates: <tool_use_id>\` naming that row, and let it run; validate-spawn-ledger.sh then reports the row REMEDIATED and the gate needs no escalation entry. The alternative is an OVERRIDDEN entry that names the row and remediates it one of the two ways Check 22 clearing arm 4 accepts -- the work was re-dispatched sharded, stated in the entry's Remediation (\`**Remediation:** the work was re-dispatched sharded as <names>\`), or the exception that actually applied is named (\`exception (3)\`, or its short name such as \`authoring-chain\`). A sentence saying none of the four applies, or naming them only as \"the four\", remediates nothing."
+      [ -n "$_dg_remfail" ] && _dg_msg="${_dg_msg}
+The remediation predicate could not run, so no row was counted remediated: ${_dg_remfail}."
     fi
     [ -n "$_dg_msg" ] && dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because the gate would discard its pass. ${_dg_msg}"
   fi
@@ -1155,6 +1260,73 @@ if [ "${SPAWN_SHARD:-}" = invalid-exception ]; then
       dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief declares a serial exception that is not one of Rule 28's four: \"shard: ${SPAWN_SHARD_RAW}\". \`${ROLE}\` is a shardable role, so the spawn-ledger row this dispatch would write is one Check 22 arm S3 fails at the gate. 'shard: none (<1-4>)' names one of the four exceptions, by number or short name: 1 data-dependency, 2 pass-repair-pass, 3 authoring-chain, 4 serial-document. A single-voice or unsharded dispatch is 'shard: 1/1 <key>', which the grammar accepts (N may be 1). The serial remediator dispatched after join-remediator-shards.sh, appending to its joined record, carries 'shard: none (authoring-chain)'; any other remediator over several files is sharded instead. Only the first parenthesised group is read, so put any commentary AFTER the closing parenthesis, as in 'shard: none (authoring-chain) -- after the join'. A quoted 'shard:' line counts as a shard line, so fence any pasted output (\`\`\` or ~~~). Re-dispatch sharded, or with the exception that actually applies (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE)." ;;
   esac
 fi
+
+# THE COVER DENY (see THE COVER DENY in the CONTRACT header). The predicate below is the ONE
+# definition shared with validate-spawn-ledger.sh arm S4: byte-identical in both files and bound by
+# the enforcement map. It takes the canonical shard value and prints the missing ordinals of 1..K
+# comma-separated (all of 1..K when the ordinal list is malformed), or nothing when the cover is
+# complete or the value is not a G=1 cross. FAIL-OPEN: a nonzero rc or empty output allows.
+dg_cover_missing() {
+  printf '%s\n' "$1" | LC_ALL=C awk '
+function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok, cv_out) {
+  if (cv_v !~ /^cross\/[0-9]+ g1\/1 /) return ""
+  cv_k = cv_v; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
+  cv_l = cv_v; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
+  cv_ok = 1; cv_s = ","
+  cv_n = split(cv_l, cv_p, ",")
+  for (cv_i = 1; cv_i <= cv_n; cv_i++) {
+    cv_t = cv_p[cv_i]; gsub(/^[ \t]+|[ \t]+$/, "", cv_t); sub(/^0+/, "", cv_t)
+    if (cv_t !~ /^[0-9]+$/) { cv_ok = 0; break }
+    cv_s = cv_s cv_t ","
+  }
+  cv_out = ""
+  for (cv_i = 1; cv_i <= cv_k; cv_i++)
+    if (!cv_ok || index(cv_s, "," cv_i ",") == 0) cv_out = cv_out (cv_out == "" ? "" : ",") cv_i
+  return cv_out
+}
+{ m = cover_missing($0); if (m != "") print m }'
+}
+
+# THE CITATION DENY (see THE CITATION DENY in the CONTRACT header). A dispatch whose role is a
+# declared `aiDlcRoles` key and to which the Rule 19(b) line reached by NEITHER carrier
+# (ROLE_CONTRACT_CITED false, computed above: the prompt carrier at the ROLE read, the definition
+# carrier once DEFINITION_BOUND is known) writes a row Check 22 FAILS. The scope test is the
+# validator's own `row_in_scope`, byte-identical in both files, over the same three globals it reads
+# there; any other role -- general-purpose, fork, an undeclared agent type -- is never denied.
+# FAIL-OPEN: an unreadable settings.json or a jq failure leaves the declared set empty, and an
+# empty set puts no uncited role in scope.
+row_in_scope() {  # role, role_contract_cited
+  [ "$2" = "true" ] && return 0
+  # AN EMPTY ROLE IS NOT A DECLARED ONE, and without this line it was — an empty
+  # `DECLARED_ROLES` makes `DECLARED_NL` two newlines, which is exactly the pattern an
+  # empty role builds, so a role-less row matched the membership test and was judged.
+  # Its scope then depended on whether the settings file declared ANY role: measured, the
+  # same row answered rc=1 under `aiDlcRoles: {}` and rc=3 under a one-key block.
+  [ -n "$1" ] || return 1
+  case "$DECLARED_NL" in *"${NL}${1}${NL}"*) return 0 ;; esac
+  return 1
+}
+if [ "$ROLE_CONTRACT_CITED" = false ] && [ -n "$ROLE" ] && [ -r "$SETTINGS" ]; then
+  DECLARED_ROLES="$(jq -r '.aiDlcRoles // {} | keys[]' "$SETTINGS" 2>/dev/null)" || DECLARED_ROLES=""
+  NL='
+'
+  DECLARED_NL="${NL}${DECLARED_ROLES}${NL}"
+  if [ -n "$DECLARED_ROLES" ] && row_in_scope "$ROLE" "$ROLE_CONTRACT_CITED"; then
+    dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because the Rule 19(b) role-contract line reached the teammate by neither carrier: the brief does not name \`.claude/team-roles/${ROLE}.md\`, and no bound \`.claude/agents/${ROLE}.md\` definition carrying that line was selected. \`${ROLE}\` is a declared aiDlcRoles role, so the spawn-ledger row this dispatch would write is one Check 22 fails at the gate (role_contract_cited=false). Re-send it with the brief line \"Your operating contract is \`.claude/team-roles/${ROLE}.md\`. Read it first.\", or select the rendered definition that carries it (re-render with scripts/ai-dlc/render-agent-definitions.sh if it is stale)."
+  fi
+fi
+case "${SPAWN_SHARD:-}" in
+  cross/[0-9]*" g1/1 "*)
+    dg_shardable_set
+    case "$_dg_shardable" in
+      *" $ROLE "*)
+        _dg_cm="$(dg_cover_missing "$SPAWN_SHARD" 2>/dev/null)" || _dg_cm=""
+        if [ -n "$_dg_cm" ]; then
+          _dg_ck="${SPAWN_SHARD#cross/}"; _dg_ck="${_dg_ck%% *}"
+          dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief declares the ONE cross agent of the dispatch (\"shard: ${SPAWN_SHARD}\") and its ordinal list omits part(s) ${_dg_cm} of 1..${_dg_ck}. One cross agent replaces the per-group crosses only when its brief covers the whole partition, so the spawn-ledger row this dispatch would write is one Check 22 arm S4 fails at the gate. Re-send it covering all K: the ordinal list after \`g1/1\` must name every ordinal 1..K, comma-separated (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE and THE COVER DENY)."
+        fi ;;
+    esac ;;
+esac
 
 # THE MARK LINE. A seat brief tells the teammate to close its deliverable with
 #   <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>
@@ -1264,6 +1436,8 @@ jq -nc \
    --arg shardraw "${SPAWN_SHARD_RAW:-}" \
    --arg parent "${DG_AGENT_ID:-}" \
    --arg mark "${SPAWN_MARK:-}" \
+   --arg rem "${SPAWN_REMEDIATES:-}" \
+   --arg reminv "${SPAWN_REMEDIATES_INVALID:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -1313,7 +1487,12 @@ jq -nc \
    # and did not deny: the lead arms a `--complete` beat only for a row that carries it, and a
    # row without the KEY gets a bare beat. Derived from the brief bytes, never claimed by a hand.
    # NO APOSTROPHE HERE either.
-   | if $mark != "" then . + {mark: $mark} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
+   | if $mark != "" then . + {mark: $mark} else . end
+   # `remediates` ONLY when the brief carries exactly one THE REMEDIATES LINE, and
+   # `remediates_invalid` ONLY when it carries more than one; a row with neither KEY named
+   # nothing. Intent, not a remedy: validate-spawn-ledger.sh decides. NO APOSTROPHE HERE either.
+   | if $rem != "" then . + {remediates: $rem} else . end
+   | if $reminv != "" then . + {remediates_invalid: $reminv} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
 # A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
