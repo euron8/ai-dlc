@@ -539,28 +539,6 @@ kills=0
 _n=0
 _want_n=27; [ "$B391" = 1 ] || _want_n=12
 
-# THE PRE-BL-391 COPY, built in BOTH modes. In the distribution it is the subject with the step-6 clause reverted to
-# its pre-BL-391 spelling (the wY mutation's own line pair); in a consumer whose installed text predates BL-391 the
-# subject already is that text. Its unmutated control must pass with the BL-391 conjunct off, or the copy is not sound.
-PRE="$WORK/pre-bl391.md"
-PRE_OLD='     upstream-less — or step 1 or step 2 left it UN-SYNCED on this invocation, **STOP'
-PRE_NEW='     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP'
-if [ "$B391" = 1 ]; then
-  if ! mutate "$SUBJ" "$PRE" "$PRE_OLD" "$PRE_NEW" || cmp -s "$SUBJ" "$PRE"; then
-    bad "FIXTURE STALE: the pre-BL-391 copy did not build -- its anchor line is not in $SUBJ exactly once"
-  fi
-else
-  cp "$SUBJ" "$PRE" || broken "could not copy the subject as the pre-BL-391 copy"
-fi
-_k391="$B391"; B391=0
-cell_rc refuse "$PRE"; _pr1=$?; cell_rc nopush "$PRE"; _pr2=$?
-B391="$_k391"
-if [ -s "$PRE" ] && [ "$_pr1" -eq 0 ] && [ "$_pr2" -eq 0 ]; then
-  ok "control: the unmutated pre-BL-391 copy passes the refuse and no-push arms with the BL-391 conjunct off"; B_refpre=1
-else
-  bad "control: the unmutated pre-BL-391 copy did not pass refuse/no-push (rc $_pr1/$_pr2) -- wD-negate-pre proves nothing"
-fi
-
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding arm and twin. ----
 # MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
 MXL="$WORK/mx.ledger"; : > "$MXL"
@@ -617,6 +595,27 @@ score_row() {
     printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
   fi
 }
+# THE PRE-BL-391 COPY, built in BOTH modes. In the distribution it is the subject with the step-6 clause reverted to
+# its pre-BL-391 spelling (the wY mutation's own line pair); in a consumer whose installed text predates BL-391 the
+# subject already is that text. Its unmutated control must pass with the BL-391 conjunct off, or the copy is not sound.
+PRE="$WORK/pre-bl391.md"
+PRE_OLD='     upstream-less — or step 1 or step 2 left it UN-SYNCED on this invocation, **STOP'
+PRE_NEW='     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP'
+if [ "$B391" = 1 ]; then
+  if ! mutate "$SUBJ" "$PRE" "$PRE_OLD" "$PRE_NEW" || cmp -s "$SUBJ" "$PRE"; then
+    bad "FIXTURE STALE: the pre-BL-391 copy did not build -- its anchor line is not in $SUBJ exactly once"
+  fi
+else
+  cp "$SUBJ" "$PRE" || broken "could not copy the subject as the pre-BL-391 copy"
+fi
+_k391="$B391"; B391=0
+cell_rc refuse "$PRE"; _pr1=$?; cell_rc nopush "$PRE"; _pr2=$?
+B391="$_k391"
+if [ -s "$PRE" ] && [ "$_pr1" -eq 0 ] && [ "$_pr2" -eq 0 ]; then
+  ok "control: the unmutated pre-BL-391 copy passes the refuse and no-push arms with the BL-391 conjunct off"; B_refpre=1
+else
+  bad "control: the unmutated pre-BL-391 copy did not pass refuse/no-push (rc $_pr1/$_pr2) -- wD-negate-pre proves nothing"
+fi
 while IFS='|' read -r mscope mname mold mnew mwant; do
   [ -n "$mname" ] || continue
   case "$mscope:$B391" in all:*|post:1|pre:*) ;; *) continue ;; esac
