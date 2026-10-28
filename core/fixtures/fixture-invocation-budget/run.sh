@@ -21,14 +21,14 @@
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
-# MUTANT-MATRIX MJ3 decides=A1,A2,A4,A5,SP twins=A3
+# MUTANT-MATRIX MJ3 decides=A2,SP twins=A3
 # MUTANT-MATRIX MGATE decides=A1,A2,A4,A5 twins=A3
 # MUTANT-MATRIX MPASS decides=A1,A2,A4,A5 twins=A3
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A6 (and SP for MGATE and
-# MPASS) green under each mutant; only A3 is named as the twin, because only A3 runs per push. Per push: MJ3 runs SP (the judge refuses its own
-# J3 cells before judging anything, so every armed arm fails through SP) with twin A3; MGATE runs A2 with twin A3;
-# MPASS runs A1 with twin A3.
+# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5 and A6 green under
+# MJ3, and A6 and SP green under MGATE and MPASS; only A3 is named as the twin, because only A3 runs per push. Per
+# push: MJ3 runs SP with twin A3 (the per-fixture judge no longer repeats the self-probe, so only the J3 cells and the
+# A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1 with twin A3.
 #   MJ3    the judge's J3 compare removed            -> SP names the J3 off-by-one cell
 #   MGATE  the runner's judge call disabled           -> A2 records a pass for a mismatching fixture
 #   MPASS  the runner's BASH_ENV passthrough dropped  -> A1 is J1 BROKEN: the counter never loaded

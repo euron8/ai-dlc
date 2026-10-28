@@ -11,8 +11,10 @@
 #           write the counter rc file into <dir> and print its path. The .githooks/pre-push hook calls this into its
 #           private run dir; the rc is never tracked.
 #
-# THE SELF-PROBE RUNS FIRST ON EVERY JUDGING CALL, under mktemp, and a failing self-probe is BROKEN (exit 2) before
-# any verdict about the fixture is read. Every arm is probed in both directions, and three end-to-end legs drive the
+# THE SELF-PROBE RUNS ONCE PER PUSH, as part of arming in .githooks/pre-push: a red self-probe FAILs arming, and so
+# the push, before the suite starts, so no fixture is judged by a judge that cannot fire. Per-fixture judging calls do
+# not repeat it (about 0.8 CPU-s each, across every declared fixture, would be the very regrowth this budget refuses).
+# It also runs standalone, and core/fixtures/fixture-invocation-budget drives it. Every arm is probed in both directions, and three end-to-end legs drive the
 # REAL rc this script generates: a known script under `env -i` with the BASH_ENV/FXCOUNT_LOG passthrough logs its
 # known number of starts, and without the passthrough (both variables exported in the invoker) logs none; under
 # xtrace the script's stderr is byte-identical with the counter on and off, while the counter-on run logged rows;
@@ -341,9 +343,5 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$FXC_FX" ] && [ -n "$FXC_DECL" ] && [ -n "$FXC_LOG" ] && [ -n "$FXC_ROOT" ] \
   || { echo "usage: $0 --fixture F --decl D --log L --root R | --self-probe | --gen-rc DIR" >&2; exit 2; }
-if ! fxc_self_probe; then
-  printf '%s: FIXTURE BROKEN: the invocation judge'"'"'s self-probe failed, so no verdict about this fixture is read:\n%s' "$FXC_FX" "$SP_OUT"
-  exit 2
-fi
 fxc_judge "$FXC_FX" "$FXC_DECL" "$FXC_LOG" "$FXC_ROOT"
 exit $?

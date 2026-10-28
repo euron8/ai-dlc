@@ -2742,19 +2742,24 @@ step "shell syntax (every shipped script and hook)" syntax_all
 # 2f. THE INVOCATION BUDGET. Every declared fixture's bash starts are counted by an rc generated into a private run
 #     dir and judged by scripts/validate-fixture-invocations.sh inside hermetic-run.sh, before its verdict-store
 #     write, so a budget mismatch is that fixture's own FAIL. Armed at depth 0 only: a nested copy of this hook is
-#     inert. Passes are recorded in a store of their own, so a pass recorded without counting never satisfies a
-#     counting push. The judge absent is a FAIL here, never an uncounted pass. The run dir holds only the per-fixture
-#     start logs and is left in TMPDIR.
+#     inert. The judge's self-probe runs HERE, once per push, and a red one FAILs arming. Counted passes live in a
+#     store derived from the judge and rc bytes, ALWAYS, even under a preset AI_DLC_VERDICT_STORE: a changed J-arm or
+#     rc voids them, and counted and uncounted entries never share a store. The judge absent is a FAIL here, never an
+#     uncounted pass. The run dir holds only the per-fixture start logs and is left in TMPDIR.
 fxcount_arm() {
-  local run
+  local run sp vk
   FXCOUNT_JUDGE="$PWD/scripts/validate-fixture-invocations.sh"
   [ -f "$FXCOUNT_JUDGE" ] || { printf '   the invocation judge %s is absent: the suite cannot be counted, and an uncounted suite is not a pass\n' "$FXCOUNT_JUDGE"; return 1; }
+  sp="$(bash "$FXCOUNT_JUDGE" --self-probe 2>&1)" || { printf '%s\n   the invocation judge'"'"'s self-probe is red: no fixture is judged by a judge that cannot fire\n' "$sp"; return 1; }
   run="$(mktemp -d "${TMPDIR:-/tmp}/fxcount.XXXXXX")" && mkdir "$run/log" || return 1
   FXCOUNT_RC="$(bash "$FXCOUNT_JUDGE" --gen-rc "$run")" && [ -s "$FXCOUNT_RC" ] || { printf '   the invocation judge did not generate its rc file into %s\n' "$run"; return 1; }
   FXCOUNT_DIR="$run/log"
-  AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts-counted}"
+  vk="$(cat "$FXCOUNT_JUDGE" "$FXCOUNT_RC" | shasum -a 256 | cut -c1-12)"
+  case "$vk" in *[!0-9a-f]*|'') printf '   could not hash the judge and rc into a counted-store key\n'; return 1 ;; esac
+  [ "${#vk}" -eq 12 ] || return 1
+  AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/counted-$vk"
   export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
-  printf '   counting into %s; verdict store %s\n' "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
+  printf '   %s\n   counting into %s; verdict store %s\n' "$(printf '%s\n' "$sp" | tail -1)" "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
 }
 [ "$POOL_DEPTH_IN" -eq 0 ] && step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
 
