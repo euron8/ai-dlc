@@ -23,6 +23,31 @@
 # rewritten, so every later beat re-reads the same mtime and the join walks to a
 # non-delivery on a complete artifact. `since-clamp` is that scenario; it passes
 # only because the subject clamps --since to `now`.
+#
+# MUTANT MATRIX. Each mutant is killed by its deciding case; the twin is a different case that stays
+# green under it (C21 asserts the flagless exhausted path for every mutant). The matrix is re-measured
+# whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX grant-cap decides=C15 twins=C21
+# MUTANT-MATRIX unprune-wait-beats decides=C16 twins=C21
+# MUTANT-MATRIX unexclude-beat-inflight decides=C17 twins=C21
+# MUTANT-MATRIX state-dir-guard decides=C18 twins=C21
+# MUTANT-MATRIX path-exists-check decides=C19 twins=C21
+# MUTANT-MATRIX progress-sampling decides=C20 twins=C21
+# MUTANT-MATRIX resample-gate decides=C27 twins=C21
+# MUTANT-MATRIX restamp-ungated decides=C28 twins=C21
+# MUTANT-MATRIX no-restamp decides=C29 twins=C21
+# MUTANT-MATRIX grant-unconditional decides=C30 twins=C21
+# MUTANT-MATRIX grant-no-counter-rewrite decides=C32 twins=C21
+# MUTANT-MATRIX lease-trap-unconditional decides=C34 twins=C21
+# MUTANT-MATRIX lease-no-heir decides=C35 twins=C21
+# MUTANT-MATRIX lease-always-put decides=C37 twins=C21
+# MUTANT-MATRIX lease-no-early decides=C39 twins=C21
+# MUTANT-MATRIX no-join-memo decides=C41 twins=C21
+# MUTANT-MATRIX since-kept-on-delivery decides=C43 twins=C21
+# MUTANT-MATRIX preupgrade-taken decides=C45 twins=C21
+# MUTANT-MATRIX lease-end-time decides=C47 twins=C21
+# MUTANT-MATRIX-REMEASURE bash core/scripts/hermetic-run.sh core/fixtures/wait-stale-deliverable/run.sh
+#
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning BEFORE this fixture sets its own (I10).
