@@ -140,7 +140,7 @@ verdict() { # <arm> <tag>
     D1) rcis "$t" 1 && [ "$(section "$t" H1)" = '    core/fixtures/fa/run.sh:2: if [ ! -d "$R/.git" ]; then' ] ;;
     D2) rcis "$t" 1 && [ "$(section "$t" H2)" = '    core/fixtures/fa/run.sh:6: command -v jq >/dev/null 2>&1 || { echo "SKIP no jq"; exit 0; }' ] ;;
     D3) rcis "$t" 1 && [ "$(section "$t" H3)" = "    core/fixtures/fa/run.sh:7: sh -c 'exit 0' & p=\$!" ] ;;
-    D5) rcis "$t" 1 && section "$t" H5 | grep -qxF '    FLOOR fb: S1 mkmut()' && [ "$(section "$t" H5 | grep -c .)" = 1 ] ;;
+    D5) rcis "$t" 1 && [ "$(section "$t" H5)" = '    FLOOR fb: S1 mkmut()' ] ;;
     C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- self-probe fired both ways' ;;
     R)  rcis "$t" 0 && has "$t" '; 2 fixture .sh scanned;' ;;
     DV) rcis "$t" 0 && [ "$(cat "$WORK/c.$t.out")" = "$(printf 'fb\tno MUTANT-MATRIX block; floor: S1 mkmut()')" ] ;;
