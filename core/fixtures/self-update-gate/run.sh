@@ -3632,14 +3632,32 @@ pu_landed() { # pu_landed <world> <R> -> landed | absent | other
   else printf other; fi
 }
 pu_real() { ( cd "$1/W" && git push -u origin su ) >/dev/null 2>&1; printf '%s' "$?"; }
-pu_kill() { # pu_kill <label> <mutant> <got> <want> <why>
+# pu_ss: ss_assert that also returns its verdict, so a base arm can set its B_ flag in the passing branch.
+pu_ss() { ss_assert "$@"; [ "$2" = "$3" ]; }
+# A scenario summary is a row of key=value cells; a bare trailing word is renamed to a cell of its own.
+pu_norm() { printf '%s' "$1" | sed -e 's/ byte-equal$/ cmp=byte-equal/' -e 's/ differ$/ cmp=differ/' -e 's/ norun$/ run=norun/'; }
+pu_keys() { local t; for t in $1; do printf '%s ' "${t%%=*}"; done; }
+pu_pick() { # pu_pick "<cells>" "<keys>" -> the named cells, in key order
+  local t k out=""
+  for k in $2; do for t in $1; do case "$t" in "$k="*) out="$out${out:+ }$t" ;; esac; done; done
+  printf '%s' "$out"
+}
+# pu_kill <flag> <label> <mutant> <got> <want> <why> <base> <decides> <twin> -- one scenario drive per mutant. A plain
+# run compares only the decides cells plus the named twin; --matrix prints every cell against <base> (the shipped
+# wrapper's summary for the same scenario) and compares every cell <want> names.
+pu_kill() {
+  local flag="$1" label="$2" m="$3" g w keys
   ASSERTIONS=$((ASSERTIONS + 1))
-  if cmp -s "$PU_SRC" "$2"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "$1"
-  elif [ "$3" = "$4" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
+  if cmp -s "$PU_SRC" "$m"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "$label"; return
+  fi
+  g="$(pu_norm "$4")"; w="$(pu_norm "$5")"
+  if [ "$MATRIX" = 1 ]; then keys="$(pu_keys "$w")"; mx_row "$label" "$(pu_norm "$7")" "$g"; else keys="$8 $9"; fi
+  g="$(pu_pick "$g" "$keys")"; w="$(pu_pick "$w" "$keys")"
+  if [ "$g" = "$w" ]; then
+    mutant_killed "$flag" "$label" "$(printf '%-16s KILLED (%s)' "$label" "$6")"
   else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "$1" "$3" "$4"
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "$label" "$g" "$w"
   fi
 }
 pu_mut() { # pu_mut <name> <awk-program> -> a mutated copy of the wrapper
@@ -3663,18 +3681,18 @@ pu_sc_refuse() { local d; d="$(pu_world "refuse-$2")"; : > "$d/refuse-all"
   printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d")" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
 
 PU_PASS="$(pu_sc_pass "$PU_SRC" shipped)"
-ss_assert "pu-hook-passes" "$PU_PASS|stdout=$(wc -c < "$PU_D/pass-shipped/stdout" | tr -d ' ')|up=$(git -C "$PU_D/pass-shipped/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null)" \
+if pu_ss "pu-hook-passes" "$PU_PASS|stdout=$(wc -c < "$PU_D/pass-shipped/stdout" | tr -d ' ')|up=$(git -C "$PU_D/pass-shipped/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null)" \
   "rc=0 ref=landed n=1|stdout=0|up=origin/su" \
-  "a passing hook: the remote ref is created at the local sha, the hook ran EXACTLY once, stdout is empty, and the upstream is origin/su"
+  "a passing hook: the remote ref is created at the local sha, the hook ran EXACTLY once, stdout is empty, and the upstream is origin/su"; then B_pupass=1; fi
 PU_REF="$(pu_sc_refuse "$PU_SRC" shipped)"
 PU_REF_OUT="$(pu_out "$PU_D/refuse-shipped")"
-ss_assert "pu-hook-refuses" \
+if pu_ss "pu-hook-refuses" \
   "$PU_REF|probe=$(grep -c '^# probe: ' "$PU_REF_OUT" 2>/dev/null)|blocked=$(grep -c '^# probe: pre-push: BLOCKED' "$PU_REF_OUT" 2>/dev/null)|stdout=$(grep -c . "$PU_D/refuse-shipped/stdout")/$(grep -c '^HOOK-REFUSED 1 artifact paths$' "$PU_D/refuse-shipped/stdout")|tracked=$(git -C "$PU_D/refuse-shipped/W" ls-files -- _bmad-output | grep -c .)" \
   "rc=3 ref=absent n=1|probe=6|blocked=1|stdout=1/1|tracked=0" \
-  "a refusing hook: exit 3, nothing pushed, the hook ran once, the record holds the header plus the hook's 5 output lines as '# probe:', stdout is the one HOOK-REFUSED line naming the FAIL phase, and the record is untracked"
+  "a refusing hook: exit 3, nothing pushed, the hook ran once, the record holds the header plus the hook's 5 output lines as '# probe:', stdout is the one HOOK-REFUSED line naming the FAIL phase, and the record is untracked"; then B_purefuse=1; fi
 
 PU_W="$(pu_world prerecv)"
-printf '#!/bin/sh\necho "remote: refused by pre-receive" >&2\nexit 1\n' > "$PU_W/R1/hooks/pre-receive"; chmod +x "$PU_W/R1/hooks/pre-receive"
+printf '#!/usr/bin/env bash\necho "remote: refused by pre-receive" >&2\nexit 1\n' > "$PU_W/R1/hooks/pre-receive"; chmod +x "$PU_W/R1/hooks/pre-receive"
 ss_assert "pu-remote-refuses" "rc=$(pu_run "$PU_SRC" "$PU_W")|$(pu_landed "$PU_W" R1)|n=$(pu_n "$PU_W")|$(cat "$PU_W/stdout")" \
   "rc=4|absent|n=1|TRANSPORT 1" \
   "the hook passes and the remote's pre-receive refuses: exit 4, TRANSPORT on stdout, the hook ran once, nothing landed"
@@ -3704,21 +3722,21 @@ pu_real "$PU_BE" >/dev/null
 PU_BE_REAL="$PU_BE/run-$(pu_n "$PU_BE")"
 pu_be_rc="$(pu_run "$PU_SRC" "$PU_BE")"
 PU_BE_WRAP="$PU_BE/run-$(pu_n "$PU_BE")"
-ss_assert "pu-argv-stdin-as-git" \
+if pu_ss "pu-argv-stdin-as-git" \
   "rc=$pu_be_rc|n=$(pu_n "$PU_BE")|$(cmp -s "$PU_BE_REAL" "$PU_BE_WRAP" && echo byte-equal || echo differ)|$(grep -c "^ARGV:origin|$PU_BE/R2\$" "$PU_BE_WRAP")|$(grep -vc '^ARGV:' "$PU_BE_WRAP")" \
   "rc=3|n=2|byte-equal|1|1" \
-  "the wrapper's hook argv (remote name, PUSH url) and its one stdin ref line are byte-equal to a real git push's to the same bare remote"
+  "the wrapper's hook argv (remote name, PUSH url) and its one stdin ref line are byte-equal to a real git push's to the same bare remote"; then B_puargv=1; fi
 # MUTANTS scored on this world (the refusing hook keeps it unchanged between runs).
 pu_be_mut() { # pu_be_mut <mutant> -> byte-equal | differ
   local f; pu_run "$1" "$PU_BE" >/dev/null; f="$PU_BE/run-$(pu_n "$PU_BE")"
   cmp -s "$PU_BE_REAL" "$f" && printf byte-equal || printf differ
 }
 PU_M="$(pu_mut probe 'BEGIN { a = "refs/heads/%s %s refs/heads/%s %s" } index($0, a) { i = index($0, a); $0 = substr($0, 1, i - 1) "refs/heads/%s %s refs/heads/ai-dlc-update/self-update-%s-probe %s" substr($0, i + length(a)) } { print }')"
-pu_kill "pu-mut-probename" "$PU_M" "$(pu_be_mut "$PU_M")" "differ" \
-  "a ref line built from the gate's old -probe stand-in name is not the line git sends"
+pu_kill "${B_puargv:-0}" "pu-mut-probename" "$PU_M" "cmp=$(pu_be_mut "$PU_M")" "cmp=differ" \
+  "a ref line built from the gate's old -probe stand-in name is not the line git sends" "cmp=byte-equal" "cmp" ""
 PU_M="$(pu_mut fetchargv 'index($0, "remote get-url --push --all") { sub(/remote get-url --push --all/, "remote get-url --all") } { print }')"
-pu_kill "pu-mut-fetchargv" "$PU_M" "$(pu_be_mut "$PU_M")" "differ" \
-  "the fetch url in \$2 is not the url git passes when remote.origin.pushurl is set"
+pu_kill "${B_puargv:-0}" "pu-mut-fetchargv" "$PU_M" "cmp=$(pu_be_mut "$PU_M")" "cmp=differ" \
+  "the fetch url in \$2 is not the url git passes when remote.origin.pushurl is set" "cmp=byte-equal" "cmp" ""
 git -C "$PU_BE/W" config --unset remote.origin.pushurl
 pu_real "$PU_BE" >/dev/null
 ss_assert "pu-argv-control" "$(cmp -s "$PU_BE_REAL" "$PU_BE/run-$(pu_n "$PU_BE")" && echo byte-equal || echo differ)" "differ" \
@@ -3735,9 +3753,10 @@ pu_sc_pushurl() { local d; d="$(pu_world "pushurl-$2")"
   printf 'rc=%s R2=%s n=%s %s' "$rc" "$(pu_landed "$d" R2)" "$(( $(pu_n "$d") - 1 ))" \
     "$(cmp -s "$real" "$d/run-$(pu_n "$d")" && echo byte-equal || echo differ)"
 }
-ss_assert "pu-pushurl-side" "$(pu_sc_pushurl "$PU_SRC" shipped)|$(grep -c ' 0000000000000000000000000000000000000000$' "$PU_D/pushurl-shipped/run-2")" \
+PU_S_PUSHURL="$(pu_sc_pushurl "$PU_SRC" shipped)"
+if pu_ss "pu-pushurl-side" "$PU_S_PUSHURL|$(grep -c ' 0000000000000000000000000000000000000000$' "$PU_D/pushurl-shipped/run-2")" \
   "rc=3 R2=absent n=1 byte-equal|1" \
-  "fetch url already at the local sha, push url lacking it, hook refusing: exit 3, nothing on the push url, the hook ran once, fed the zero-sha line a real push feeds"
+  "fetch url already at the local sha, push url lacking it, hook refusing: exit 3, nothing on the push url, the hook ran once, fed the zero-sha line a real push feeds"; then B_pupushurl=1; fi
 # (2) The remote is already at the local sha: git still runs the hook, on EMPTY stdin.
 pu_sc_current() { local d; d="$(pu_world "current-$2")"
   git -C "$d/W" push -q --no-verify origin su >/dev/null 2>&1; : > "$d/refuse-all"
@@ -3751,9 +3770,10 @@ pu_sc_current() { local d; d="$(pu_world "current-$2")"
     printf 'rc=%s real=%s n=0 stdin=none norun' "$rc" "$before"
   fi
 }
-ss_assert "pu-remote-current" "$(pu_sc_current "$PU_SRC" shipped)" \
+PU_S_CURRENT="$(pu_sc_current "$PU_SRC" shipped)"
+if pu_ss "pu-remote-current" "$PU_S_CURRENT" \
   "rc=3 real=1 n=1 stdin=0 byte-equal" \
-  "the remote already at the local sha: a real push runs the hook on empty stdin (real=1), and so does the wrapper -- exit 3 on a refusing hook, once, byte-equal"
+  "the remote already at the local sha: a real push runs the hook on empty stdin (real=1), and so does the wrapper -- exit 3 on a refusing hook, once, byte-equal"; then B_pucurrent=1; fi
 # (3) The fetch url does not exist, the push url does: the push is decided on the push url alone.
 pu_sc_nofetch() { local d; d="$(pu_world "nofetch-$2")"
   git -C "$d/W" config remote.origin.pushurl "$d/R2"
@@ -3763,13 +3783,13 @@ pu_sc_nofetch() { local d; d="$(pu_world "nofetch-$2")"
 ss_assert "pu-fetch-url-missing" "$(pu_sc_nofetch "$PU_SRC" shipped)" "rc=0 R2=landed n=1" \
   "a fetch url that does not exist and a valid push url: exit 0, the branch lands on the push url, the hook ran once"
 PU_M="$(pu_mut lsfetch 'index($0, "ls-remote \"$URL\"") { sub(/ls-remote "\$URL"/, "ls-remote \"$REMOTE\"") } { print }')"
-pu_kill "pu-mut-lsfetch" "$PU_M" "$(pu_sc_pushurl "$PU_M" lsfetch)" "rc=3 R2=absent n=1 differ" \
-  "ls-remote against the fetch url reads R1's sha, feeds the hook an empty stdin, and differs from the real push"
+pu_kill "${B_pupushurl:-0}" "pu-mut-lsfetch" "$PU_M" "$(pu_sc_pushurl "$PU_M" lsfetch)" "rc=3 R2=absent n=1 differ" \
+  "ls-remote against the fetch url reads R1's sha, feeds the hook an empty stdin, and differs from the real push" "$PU_S_PUSHURL" "cmp" "rc"
 ss_assert "pu-mut-lsfetch-b" "$(pu_sc_nofetch "$PU_M" lsfetch)" "rc=4 R2=absent n=0" \
   "...and the same mutant cannot read a missing fetch url, so it reports TRANSPORT where the real push lands"
 PU_M="$(pu_mut shortcut 'index($0, "if [ \"$REMOTE_SHA\" = \"$LOCAL_SHA\" ]; then") == 1 { print; print "  pinned_push"; next } { print }')"
-pu_kill "pu-mut-shortcut" "$PU_M" "$(pu_sc_current "$PU_M" shortcut)" "rc=0 real=1 n=0 stdin=none norun" \
-  "the up-to-date shortcut skips the hook git would run, and pushes past a refusal"
+pu_kill "${B_pucurrent:-0}" "pu-mut-shortcut" "$PU_M" "$(pu_sc_current "$PU_M" shortcut)" "rc=0 real=1 n=0 stdin=none norun" \
+  "the up-to-date shortcut skips the hook git would run, and pushes past a refusal" "$PU_S_CURRENT" "rc n stdin cmp run" "real"
 
 # SIGPIPE. `git push` runs hooks with SIGPIPE ignored, so a hook's `yes | head -1` sees EPIPE and
 # not a 141. The wrapper ignores it the same way. Each drive RESETS the disposition to default
@@ -3781,15 +3801,16 @@ else
   pu_dfl() { perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV or exit 127' "$@"; }
   pu_sc_sigpipe() { local d; d="$(pu_world "sigpipe-$2")"; : > "$d/sigpipe"
     printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d" pu_dfl)" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
-  ss_assert "pu-sigpipe" "$(pu_sc_sigpipe "$PU_SRC" shipped)" "rc=0 ref=landed n=1" \
-    "a hook that fails iff yes|head -1 died of SIGPIPE passes under the wrapper, driven with SIGPIPE at its default"
+  PU_S_SIGPIPE="$(pu_sc_sigpipe "$PU_SRC" shipped)"
+  if pu_ss "pu-sigpipe" "$PU_S_SIGPIPE" "rc=0 ref=landed n=1" \
+    "a hook that fails iff yes|head -1 died of SIGPIPE passes under the wrapper, driven with SIGPIPE at its default"; then B_pusigpipe=1; fi
   PU_SP="$PU_D/sigpipe-shipped"
   ss_assert "pu-sigpipe-control" \
     "$( ( cd "$PU_SP/W" && pu_dfl .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )|$( ( cd "$PU_SP/W" && perl -e '$SIG{PIPE} = "IGNORE"; exec @ARGV or exit 127' .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" \
     "1|0" "control: the same hook run by hand fails with SIGPIPE at default and passes with it ignored, so the cell above is the wrapper's trap"
   PU_M="$(pu_mut notrap 'BEGIN { a = "trap \047\047 PIPE; " } index($0, a) { i = index($0, a); $0 = substr($0, 1, i - 1) substr($0, i + length(a)) } { print }')"
-  pu_kill "pu-mut-notrap" "$PU_M" "$(pu_sc_sigpipe "$PU_M" notrap)" "rc=3 ref=absent n=1" \
-    "without the trap the hook sees a 141 and refuses a push git would make"
+  pu_kill "${B_pusigpipe:-0}" "pu-mut-notrap" "$PU_M" "$(pu_sc_sigpipe "$PU_M" notrap)" "rc=3 ref=absent n=1" \
+    "without the trap the hook sees a 141 and refuses a push git would make" "$PU_S_SIGPIPE" "rc ref" "n"
 fi
 
 # MUTANTS ON THE ONE-RUN CONTRACT. An unmutated copy in a directory of its own passes first, so a
@@ -3798,14 +3819,14 @@ PU_M="$(pu_mut control '{ print }')"
 ss_assert "pu-mut-control" "$(cmp -s "$PU_SRC" "$PU_M" && echo identical || echo differ)|$(pu_sc_pass "$PU_M" control)" \
   "identical|rc=0 ref=landed n=1" "an unmutated copy of the wrapper, alone in its own directory, pushes and runs the hook once"
 PU_M="$(pu_mut noverify 'index($0, "push --no-verify --no-follow-tags") { sub(/push --no-verify --no-follow-tags/, "push --no-follow-tags") } { print }')"
-pu_kill "pu-mut-noverify" "$PU_M" "$(pu_sc_pass "$PU_M" noverify)" "rc=0 ref=landed n=2" \
-  "a push without --no-verify after the hook ran runs the hook a second time"
+pu_kill "${B_pupass:-0}" "pu-mut-noverify" "$PU_M" "$(pu_sc_pass "$PU_M" noverify)" "rc=0 ref=landed n=2" \
+  "a push without --no-verify after the hook ran runs the hook a second time" "$PU_PASS" "n" "rc"
 PU_M="$(pu_mut pushonrefuse '$0 == "  exit 3" { print "  pinned_push"; next } { print }')"
-pu_kill "pu-mut-pushonrefuse" "$PU_M" "$(pu_sc_refuse "$PU_M" pushonrefuse)" "rc=0 ref=landed n=1" \
-  "a wrapper that pushes on a refusal lands a branch the consumer's own gate refused"
+pu_kill "${B_purefuse:-0}" "pu-mut-pushonrefuse" "$PU_M" "$(pu_sc_refuse "$PU_M" pushonrefuse)" "rc=0 ref=landed n=1" \
+  "a wrapper that pushes on a refusal lands a branch the consumer's own gate refused" "$PU_REF" "rc ref" "n"
 PU_M="$(pu_mut refuse4 '$0 == "  exit 3" { print "  exit 4"; next } { print }')"
-pu_kill "pu-mut-refuse4" "$PU_M" "$(pu_sc_refuse "$PU_M" refuse4)" "rc=4 ref=absent n=1" \
-  "a refusal mapped to exit 4 reads as TRANSPORT and gets the UN-SYNCED disposition"
+pu_kill "${B_purefuse:-0}" "pu-mut-refuse4" "$PU_M" "$(pu_sc_refuse "$PU_M" refuse4)" "rc=4 ref=absent n=1" \
+  "a refusal mapped to exit 4 reads as TRANSPORT and gets the UN-SYNCED disposition" "$PU_REF" "rc" "ref"
 
 # X1. A CONFIGURED REFSPEC MAPS su ONTO main. A real push feeds the hook refs/heads/main (control)
 #     and the hook refuses it; the wrapper pushes only the one ref its hook judged, so main does
@@ -3817,15 +3838,16 @@ pu_sc_x1() { local d m; d="$(pu_world "x1-$2")"
     "$([ "$(pu_at "$d" R1 refs/heads/main)" = "$m" ] && echo kept || echo moved)" "$(pu_landed "$d" R1)" "$(pu_n "$d")" \
     "$(git -C "$d/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null || echo none)"
 }
-ss_assert "pu-x1-refspec" "$(pu_sc_x1 "$PU_SRC" shipped)" "rc=0 main=kept su=landed n=1 up=origin/su" \
-  "remote.origin.push maps su onto main: the wrapper pushes refs/heads/su only, main is not moved, the upstream is origin/su"
+PU_S_X1="$(pu_sc_x1 "$PU_SRC" shipped)"
+if pu_ss "pu-x1-refspec" "$PU_S_X1" "rc=0 main=kept su=landed n=1 up=origin/su" \
+  "remote.origin.push maps su onto main: the wrapper pushes refs/heads/su only, main is not moved, the upstream is origin/su"; then B_pux1=1; fi
 PU_X="$(pu_world x1real)"; git -C "$PU_X/W" config remote.origin.push 'refs/heads/su:refs/heads/main'; printf 'refs/heads/main' > "$PU_X/refuse-stdin"
 pu_x1_m="$(pu_at "$PU_X" R1 refs/heads/main)"; pu_x1_rc="$(pu_real "$PU_X")"
 ss_assert "pu-x1-control" "rc=$pu_x1_rc|$(grep -c ' refs/heads/main ' "$PU_X/run-1")|$([ "$(pu_at "$PU_X" R1 refs/heads/main)" = "$pu_x1_m" ] && echo kept || echo moved)" \
   "rc=1|1|kept" "control: a real git push in the same world feeds the hook refs/heads/main, so the mapping is live and the hook can refuse it"
 PU_M="$(pu_mut unpinned 'index($0, "\"$LOCAL_SHA:refs/heads/$BRANCH\"") { sub(/"\$LOCAL_SHA:refs\/heads\/\$BRANCH"/, "\"$BRANCH\"") } { print }')"
-pu_kill "pu-mut-unpinned" "$PU_M" "$(pu_sc_x1 "$PU_M" unpinned | awk '{print $1, $2}')" "rc=0 main=moved" \
-  "a push of the bare branch name follows the configured refspec and moves main, which the hook never judged"
+pu_kill "${B_pux1:-0}" "pu-mut-unpinned" "$PU_M" "$(pu_sc_x1 "$PU_M" unpinned)" "rc=0 main=moved" \
+  "a push of the bare branch name follows the configured refspec and moves main, which the hook never judged" "$PU_S_X1" "main" "rc"
 
 # X2. push.followTags WITH AN ANNOTATED TAG. A real push feeds the hook the tag (control); the
 #     wrapper pushes no tag.
@@ -3834,39 +3856,44 @@ pu_sc_x2() { local d; d="$(pu_world "x2-$2")"
   printf 'rc=%s tag=%s su=%s n=%s' "$(pu_run "$1" "$d")" "$([ "$(pu_at "$d" R1 refs/tags/v1)" = absent ] && echo absent || echo present)" \
     "$(pu_landed "$d" R1)" "$(pu_n "$d")"
 }
-ss_assert "pu-x2-followtags" "$(pu_sc_x2 "$PU_SRC" shipped)" "rc=0 tag=absent su=landed n=1" \
-  "push.followTags and an annotated tag on the pushed commit: the branch lands and the tag does not"
+PU_S_X2="$(pu_sc_x2 "$PU_SRC" shipped)"
+if pu_ss "pu-x2-followtags" "$PU_S_X2" "rc=0 tag=absent su=landed n=1" \
+  "push.followTags and an annotated tag on the pushed commit: the branch lands and the tag does not"; then B_pux2=1; fi
 PU_X="$(pu_world x2real)"; git -C "$PU_X/W" tag -a -m t v1; git -C "$PU_X/W" config push.followTags true; printf 'refs/tags/' > "$PU_X/refuse-stdin"
 pu_x2_rc="$(pu_real "$PU_X")"
 ss_assert "pu-x2-control" "rc=$pu_x2_rc|$(grep -c '^refs/tags/v1 ' "$PU_X/run-1")" "rc=1|1" \
   "control: a real git push in the same world feeds the hook refs/tags/v1, so the tag would have been pushed"
 PU_M="$(pu_mut followtags 'index($0, "push --no-verify --no-follow-tags") { sub(/ --no-follow-tags/, "") } { print }')"
-pu_kill "pu-mut-followtags" "$PU_M" "$(pu_sc_x2 "$PU_M" followtags)" "rc=0 tag=present su=landed n=1" \
-  "without --no-follow-tags the configured followTags pushes a tag the hook never judged"
+pu_kill "${B_pux2:-0}" "pu-mut-followtags" "$PU_M" "$(pu_sc_x2 "$PU_M" followtags)" "rc=0 tag=present su=landed n=1" \
+  "without --no-follow-tags the configured followTags pushes a tag the hook never judged" "$PU_S_X2" "tag" "su"
 
 # X3. TWO PUSH URLS. git runs the hook once per url; the wrapper refuses before running it.
 pu_sc_x3() { local d; d="$(pu_world "x3-$2")"
   git -C "$d/W" remote set-url --add --push origin "$d/R1"; git -C "$d/W" remote set-url --add --push origin "$d/R2"
   printf 'rc=%s n=%s R1=%s R2=%s' "$(pu_run "$1" "$d")" "$(pu_n "$d")" "$(pu_landed "$d" R1)" "$(pu_landed "$d" R2)"
 }
-ss_assert "pu-x3-multiurl" "$(pu_sc_x3 "$PU_SRC" shipped)" "rc=2 n=0 R1=absent R2=absent" \
-  "a remote with two push urls: exit 2, the hook never ran, nothing pushed to either url"
+PU_S_X3="$(pu_sc_x3 "$PU_SRC" shipped)"
+PU_S_X3="$PU_S_X3 out=$(tr ' ' _ < "$PU_D/x3-shipped/stdout")"
+if pu_ss "pu-x3-multiurl" "${PU_S_X3% out=*}" "rc=2 n=0 R1=absent R2=absent" \
+  "a remote with two push urls: exit 2, the hook never ran, nothing pushed to either url"; then B_pux3=1; fi
 pu_real "$PU_D/x3-shipped" >/dev/null
 ss_assert "pu-x3-control" "$(pu_n "$PU_D/x3-shipped")" "2" \
   "control: a real git push in the same world runs the hook twice, once per push url"
 PU_M="$(pu_mut multiurl 'index($0, "[ \"$su_n\" -eq 1 ] \\") == 1 { print "true || " $0; next } { print }')"
-pu_kill "pu-mut-multiurl" "$PU_M" "$(pu_sc_x3 "$PU_M" multiurl)|$(cat "$PU_D/x3-multiurl/stdout")" "rc=4 n=0 R1=absent R2=absent|TRANSPORT 128" \
-  "without the refusal the two urls reach ls-remote as one newline-joined url, which is misreported as TRANSPORT instead of refused as a usage error"
+pu_x3_m="$(pu_sc_x3 "$PU_M" multiurl)"
+pu_kill "${B_pux3:-0}" "pu-mut-multiurl" "$PU_M" "$pu_x3_m out=$(tr ' ' _ < "$PU_D/x3-multiurl/stdout")" "rc=4 n=0 R1=absent R2=absent out=TRANSPORT_128" \
+  "without the refusal the two urls reach ls-remote as one newline-joined url, which is misreported as TRANSPORT instead of refused as a usage error" "$PU_S_X3" "rc out" "n"
 
 # X4. A HOOK THAT MOVES THE BRANCH. It judged one sha and committed another; nothing is pushed.
 pu_sc_x4() { local d; d="$(pu_world "x4-$2")"; : > "$d/mutate"
   printf 'rc=%s n=%s su=%s' "$(pu_run "$1" "$d")" "$(pu_n "$d")" "$(pu_at "$d" R1 refs/heads/su | sed 's/^[0-9a-f]\{40\}$/present/')"
 }
-ss_assert "pu-x4-moved" "$(pu_sc_x4 "$PU_SRC" shipped)" "rc=2 n=1 su=absent" \
-  "a hook that commits on the branch and passes: exit 2, the hook ran once, nothing pushed"
+PU_S_X4="$(pu_sc_x4 "$PU_SRC" shipped)"
+if pu_ss "pu-x4-moved" "$PU_S_X4" "rc=2 n=1 su=absent" \
+  "a hook that commits on the branch and passes: exit 2, the hook ran once, nothing pushed"; then B_pux4=1; fi
 PU_M="$(pu_mut moved 'index($0, "[ \"$su_after\" = \"$LOCAL_SHA\" ] \\") == 1 { print "true || " $0; next } { print }')"
-pu_kill "pu-mut-moved" "$PU_M" "$(pu_sc_x4 "$PU_M" moved)" "rc=0 n=1 su=present" \
-  "without the check the wrapper pushes after a hook that moved the branch"
+pu_kill "${B_pux4:-0}" "pu-mut-moved" "$PU_M" "$(pu_sc_x4 "$PU_M" moved)" "rc=0 n=1 su=present" \
+  "without the check the wrapper pushes after a hook that moved the branch" "$PU_S_X4" "rc su" "n"
 
 # A1. THE HOOK-REFUSED DISCARD SEQUENCE, END TO END, as SKILL.md step 2 spells it. The
 #     self-update branch commits the slice and the gate record; the wrapper's gate-record check
@@ -3882,7 +3909,7 @@ PU_A_SLICE=scripts/ai-dlc/slice.sh
 mkdir -p "$PU_A/W/_bmad-output/ai-dlc-update" "$PU_A/W/scripts/ai-dlc"
 printf '# gate record\n# base-sha: %s\n# theirs-sha: %s\n# input: -\tABSENT\tcore/git-hooks/pre-push\n\n# verdict: OK\n' \
   "$PU_DB" "$PU_DT" > "$PU_A/W/$PU_A_GATE"
-printf '#!/bin/sh\nexit 0\n' > "$PU_A/W/$PU_A_SLICE"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PU_A/W/$PU_A_SLICE"
 # The ORIGINAL branch is the commit the self-update branch was cut from, as in step 2.
 git -C "$PU_A/W" branch -q orig
 git -C "$PU_A/W" add -- "$PU_A_GATE" "$PU_A_SLICE" && git -C "$PU_A/W" commit -q -m self-update
@@ -5021,30 +5048,59 @@ hu_kill "hu-mut-brace" "$(av_mut hu-brace '      if (pre ~ (GT "[[:space:]]*&&[[
   "the && { … } arm dropped: a step the hook skips on a missing script is refused"
 fi
 if sg hu2; then
-hu_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
+# The unmutated signature, scored in THIS shard: the base-pass flag every hu2 mutant below needs.
+if [ "$(hu_sig "$GATE")" = "$HU_SIG_FIX" ]; then
+  ASSERTIONS=$((ASSERTIONS + 1)); ok "hu2-signature    an unchanged script the new hook asks is judged by the copy the push runs, on every world the hu2 mutants are scored on"; B_hu2=1
+else
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s hu_sig drifted from HU_SIG_FIX\n' "hu2-signature"
+fi
+hu2_cells() { # hu2_cells <gate> <world>... -> hu_sig's token for just those worlds
+  local g="$1" n r out=""; shift
+  for n in "$@"; do
+    r="$(av_run "$g" "$AV/hu-$n")"
+    out="$out${out:+ }$n=$(av_st "$r" validate-y.sh | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$r" validate-y.sh '^ABSENT')" = yes ] && out="$out+absent"
+  done
+  printf '%s\n' "$out"
+}
+hu2_pick() { # hu2_pick "<tokens>" <world>... -> the tokens of those worlds
+  local t n out=""
+  for n in "${@:2}"; do for t in $1; do case "$t" in "$n="*) out="$out${out:+ }$t" ;; esac; done; done
+  printf '%s' "$out"
+}
+# hu2_kill <label> <gate|""> <want-vector> <why> <decides-worlds> <twin-world> -- a plain run drives the decides worlds
+# plus the twin; --matrix drives every world and prints every cell against the unmutated vector.
+hu2_kill() {
+  local label="$1" g="$2" want="$3" why="$4" ws got
+  if [ "$MATRIX" = 1 ]; then ws="$HU_WORLDS"; else ws="$5 $6"; fi
+  if [ -z "$g" ]; then got="DID-NOT-APPLY"; else got="$(hu2_cells "$g" $ws)"; fi
+  [ "$MATRIX" = 1 ] && [ "$got" != DID-NOT-APPLY ] && mx_row "$label" "$HU_SIG_FIX" "$got"
+  mp_killed "${B_hu2:-0}" "$label" "$got" "$(hu2_pick "$want" $ws)" "$why"
+}
+hu2_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
-  "the trailing || not read: [ -f y ] && bash y || fail=1 reads guarded while the push fails on the missing script"
-hu_kill "hu-mut-oneline" "$(av_mut hu-oneline '      if (match(pre, ("(^|[;[:space:]])if' '      if (0 && match(pre, ("(^|[;[:space:]])if')" \
+  "the trailing || not read: [ -f y ] && bash y || fail=1 reads guarded while the push fails on the missing script" "andor" "andand"
+hu2_kill "hu-mut-oneline" "$(av_mut hu-oneline '      if (match(pre, ("(^|[;[:space:]])if' '      if (0 && match(pre, ("(^|[;[:space:]])if')" \
   "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
-  "the one-line if [ -f y ]; then …; fi arm dropped: round 3's guarded world is refused again"
-hu_kill "hu-mut-block" "$(av_mut hu-block '      if (o && !f) { NIF++; IF[NIF] = (t ~' '      if (o && !f) { NIF++; IF[NIF] = 0 && (t ~')" \
+  "the one-line if [ -f y ]; then …; fi arm dropped: round 3's guarded world is refused again" "gdel" "block"
+hu2_kill "hu-mut-block" "$(av_mut hu-block '      if (o && !f) { NIF++; IF[NIF] = (t ~' '      if (o && !f) { NIF++; IF[NIF] = 0 && (t ~')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=DEFER+absent else=DEFER+absent keeptest= awkif=DEFER+absent" \
-  "the enclosing if-block frame never guards: a multi-line guarded step is refused"
-hu_kill "hu-mut-else" "$(av_mut hu-else '      if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0' '      if (0) IF[NIF] = 0')" \
+  "the enclosing if-block frame never guards: a multi-line guarded step is refused" "block keeptest" "andand"
+hu2_kill "hu-mut-else" "$(av_mut hu-else '      if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0' '      if (0) IF[NIF] = 0')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=OK keeptest=DEFER+absent awkif=DEFER+absent" \
-  "else not read: a run in the branch taken when the script is MISSING reads guarded, a false OK"
+  "else not read: a run in the branch taken when the script is MISSING reads guarded, a false OK" "else" "block"
 # ROUND 5 MUTANTS. Each keyed on the line it reverts.
 HU_KEY_NEW="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
 HU_KEY_CUR="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
 HU_KEY_NEW_OLD="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
 HU_KEY_CUR_OLD="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
-hu_kill "hu-mut-dropguard" "$(av_mut hu-dropguard "$HU_KEY_NEW" "$HU_KEY_NEW_OLD" "$HU_KEY_CUR" "$HU_KEY_CUR_OLD")" \
+hu2_kill "hu-mut-dropguard" "$(av_mut hu-dropguard "$HU_KEY_NEW" "$HU_KEY_NEW_OLD" "$HU_KEY_CUR" "$HU_KEY_CUR_OLD")" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest= awkif=DEFER+absent" \
-  "the guard column dropped from the hook-change key: a hook that keeps the test but unties it from the run asks nothing new, and y gets no row"
+  "the guard column dropped from the hook-change key: a hook that keeps the test but unties it from the run asks nothing new, and y gets no row" "keeptest" "block"
 HU_OPEN_NEW='      o = (t ~ /^[[:space:]]*if[[:space:]]+(\[|!|[A-Za-z_.\/])/)'
-hu_kill "hu-mut-awkopen" "$(av_mut hu-awkopen "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)')" \
+hu2_kill "hu-mut-awkopen" "$(av_mut hu-awkopen "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=OK" \
-  "an awk if ( read as a shell opener: the guard frame outlives its fi and the bare run after it reads guarded, a false OK"
+  "an awk if ( read as a shell opener: the guard frame outlives its fi and the bare run after it reads guarded, a false OK" "awkif" "andand"
 # THE STACK BALANCES ON THE SHIPPED HOOK. The scan's END is re-emitted with the frame depth appended,
 # once with the shipped opener and once with the old one, so the assertion proves it can see the
 # imbalance it rules out.
