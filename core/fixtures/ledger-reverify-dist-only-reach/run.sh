@@ -70,6 +70,9 @@
 # MUTANT-MATRIX M-E5S decides=E5 twins=A
 # MUTANT-MATRIX M-E5A decides=E5 twins=A
 # MUTANT-MATRIX M-B1 decides=B,C twins=A
+# MUTANT-MATRIX-DYNAMIC score_a why=the six part-A mutants are six calls of one helper, so the mutant id reaches mutant_killed as $2; each id (M-A1 to M-A6) has its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-DYNAMIC score_e why=the three part-E mutants are three calls of one helper, so the mutant id reaches mutant_killed as $2; each id (M-E1 to M-E3) has its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-DYNAMIC score_e5 why=the two E5 mutants are two calls of one helper, so the mutant id reaches mutant_killed as $2; each id (M-E5S, M-E5A) has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-reverify-dist-only-reach/run.sh --matrix
 set -uo pipefail
 # MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Any other
