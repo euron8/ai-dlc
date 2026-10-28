@@ -56,9 +56,8 @@ to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
 failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
-**Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.** List
-the entries, delete each named entry, and count them. A peer's gate may add entries between your
-listing and your delete, so a second listing is part of the clearing.
+**The shared verdict store is cleared by EXACT LISTING before a gate, never by glob or `rm -rf`.** A
+peer's gate can add entries between the listing and the gate.
 
 **The pool width is `AI_DLC_FIXTURE_JOBS`, default 12**, read at the top of the hook's pool block
 (the variable the hook reads is `AI_DLC_FIXTURE_JOBS`, not `FIXTURE_JOBS`). It was measured on one
@@ -76,6 +75,19 @@ the last green, the push prints `SKIPPED -- this exact tree already passed the w
 no fixtures. Each decision appends one line to `.git/ai-dlc-suite-key.log`
 (`<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>`); count them with
 `awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
+
+**`scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict**, as the
+names between its `# EXCLUDE_BEGIN` and `# EXCLUDE_END` markers. Both skips in `.githooks/pre-push`
+read it: the whole-suite key hashes everything except that set, and the per-fixture read-set skip
+resolves the same set in `readset_excluded_re`. A wrong edit there silently widens or narrows what a
+push skips, so every added line needs the two-tree mutation measurement its header describes.
+
+**`core/scripts/derive-fixture-readsets.sh --reconcile` traces every stale, changed and unmapped
+fixture, with no sudo**, and the hook prints that command when it finds stale fixtures. Its traces
+are recorded in `.git/ai-dlc-fixture-readsets.local`, the local map the hook passes as `--local-map`;
+the hook reads it beside the committed map `.ai-dlc-fixture-readsets.tsv`, and never writes the
+committed one. `AI_DLC_READSET_LIVE_TRACE=0` turns off the detached trace the hook starts after a
+green suite.
 
 **`scripts/census-hermetic-coverage.sh` is the one-time census of what the sandbox hides.** It runs
 each declared fixture twice, once inside `hermetic-run.sh`'s sandbox and once plainly against the real

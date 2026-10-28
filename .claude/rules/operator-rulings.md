@@ -74,7 +74,7 @@ render counts. Reading a duration off a pre-push log stays allowed.
 
 "There should be ZERO tests that depend on load. If they exist, they are defects." A test whose
 verdict or count moves with load is fixed in the test, never tolerated with a ± row, a widened
-bound, a retry or fewer jobs (BL-868).
+bound, a retry or fewer jobs.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 
