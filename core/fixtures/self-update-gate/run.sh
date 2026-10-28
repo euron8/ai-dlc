@@ -11,6 +11,125 @@
 # The three then split by what the comparison SAYS: 0 -> 1 is a new finding (DEFER), 1 -> 1 is
 # agreement and therefore no signal at all (OK, v0.297.0), 1 -> 2 is a real change nobody can
 # attribute (UNDECIDED).
+#
+# MUTANT BATTERY, MEASURED. Each mutant co-trips no other arm, measured at authoring: every cell outside its decides list reads 0 in the
+# --matrix run, a decides list holding several cells being one fault seen through each of them. A plain run drives a mutant's deciding
+# cells plus its named twin only. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX ss-partial-mut decides=armA twins=armC
+# MUTANT-MATRIX ss-nomach-mut decides=nomach twins=cls
+# MUTANT-MATRIX ss-classifier-only-mut decides=cls,hook twins=nomach
+# MUTANT-MATRIX sc-mut-return decides=carry,pre twins=clean
+# MUTANT-MATRIX sc-mut-noset decides=carry,pre twins=clean
+# MUTANT-MATRIX sc-mut-iffalse decides=clean twins=carry
+# MUTANT-MATRIX sc-mut-undec decides=norow twins=carried
+# MUTANT-MATRIX armc-mut-bucket decides=core_rules_doomed.md,core_schemas_fresh.json,core_scripts_reloc.sh twins=core_rules_edited.md
+# MUTANT-MATRIX armc-mut-setf decides=core_rules_doomed.md,core_rules_edited.md,core_schemas_fresh.json,core_scripts_reloc.sh twins=core_git-hooks_pre-push
+# MUTANT-MATRIX armc-mut-base decides=core_rules_doomed.md twins=core_rules_edited.md
+# MUTANT-MATRIX armc-mut-uncond decides=core_rules_steady.md twins=core_rules_doomed.md
+# MUTANT-MATRIX armc-mut-member decides=core_skills_ai-dlc_steps_gate-validation.md twins=core_rules_doomed.md
+# MUTANT-MATRIX armc-mut-safestop decides=core_git-hooks_pre-push,core_rules_doomed.md,core_rules_edited.md,core_schemas_fresh.json,core_scripts_reloc.sh twins=- why=the measured row is dead in every cell, since the mutant removes the re-entry guard and the whole advisory is emitted
+# MUTANT-MATRIX su-mut-noarm-m decides=core_fixtures_fx-mod_run.sh,core_rules_carried.md twins=core_rules_added.md
+# MUTANT-MATRIX su-mut-noarm-a decides=core_fixtures_fx-add_run.sh,core_rules_added.md twins=core_rules_carried.md
+# MUTANT-MATRIX su-mut-wide decides=core_fixtures_fx-edit_run.sh,core_rules_edited.md,core_rules_indexed.md twins=core_rules_carried.md
+# MUTANT-MATRIX su-mut-unscoped decides=core_skills_ai-dlc_artifact-path-grammar.md twins=core_rules_edited.md
+# MUTANT-MATRIX su-mut-nofixture decides=core_fixtures_fx-add_run.sh,core_fixtures_fx-mod_run.sh twins=core_fixtures_fx-edit_run.sh
+# MUTANT-MATRIX su-mut-order decides=core_session-driver_modeflip.sh twins=core_session-driver_modeneed.sh
+# MUTANT-MATRIX su-mut-unresolvable decides=core_fixtures_fx-add_run.sh,core_fixtures_fx-mod_run.sh,core_rules_added.md,core_rules_carried.md twins=core_rules_edited.md
+# MUTANT-MATRIX su-mut-index decides=core_rules_indexed.md twins=core_rules_edited.md
+# MUTANT-MATRIX su-mut-machfn decides=obs twins=- why=a one-cell drive, dead in its only cell, scored on the setup-sites.md UNDECIDED row and the empty carry set together
+# MUTANT-MATRIX pp-enclosed-mut decides=enclosed twins=green
+# MUTANT-MATRIX pp-case-mut decides=miscased twins=canonical
+# MUTANT-MATRIX pp-mut-gatehook decides=enc twins=- why=a one-cell drive, dead in its only cell: the sentinel the restored hook call writes
+# MUTANT-MATRIX pp-mut-recinplace decides=seen twins=- why=a one-cell drive, dead in its only cell: the record file count a consumer process sees mid-run
+# MUTANT-MATRIX stage-mut-status decides=scan twins=- why=a one-cell drive, dead in its only cell: the staging status read
+# MUTANT-MATRIX-CONTROL su-mut-layers why=the sentinel alone must stop the index read once both upper layers are stripped, so the correct outcome is that the mutation survives
+# MUTANT-MATRIX-CONTROL su-mut-eqbase why=the equality guard is inert by construction because the base_h arm already claims every state it could reach
+# MUTANT-MATRIX rec-skc-mutant decides=skc twins=v
+# MUTANT-MATRIX rec-mut-norecord decides=n,rows,v twins=- why=deleting the record-open call removes the record, so every cell of the drive (count, row identity, trailer) moves together
+# MUTANT-MATRIX rec-mut-2printf decides=rows twins=n
+# MUTANT-MATRIX rec-mut-trailer-ok decides=v twins=n
+# MUTANT-MATRIX rec-mut-digest decides=h twins=n
+# MUTANT-MATRIX rec-mut-nested decides=t,f twins=- why=an un-exported safe-stop flag lets the nested walk record, so the trailer count and the record count both rise in the one drive
+# MUTANT-MATRIX range-mut-refs decides=und,ok twins=f2
+# MUTANT-MATRIX range-mut-repo decides=und,f2 twins=ok
+# MUTANT-MATRIX prewritten-mut decides=und,ok,pw twins=- why=dropping the pre-written arm turns every gating script's refusal into an OK row, so all three counts move
+# MUTANT-MATRIX prewritten-mut-conj decides=modeonly,moved twins=- why=the base != theirs conjunct gone refuses both scripts of the pair in one drive, both cells are the kill
+# MUTANT-MATRIX rec-mut-corepath decides=script,dup twins=hook
+# MUTANT-MATRIX pl-mut-a2 decides=w2 twins=w1
+# MUTANT-MATRIX pl-mut-a3 decides=w3 twins=w1
+# MUTANT-MATRIX pl-mut-a4 decides=w5 twins=w1
+# MUTANT-MATRIX pl-mut-a4-base decides=w9 twins=w1
+# MUTANT-MATRIX pl-mut-a5 decides=w4 twins=w1
+# MUTANT-MATRIX pl-mut-a6 decides=w7 twins=w1
+# MUTANT-MATRIX pl-mut-all decides=w1 twins=w2
+# MUTANT-MATRIX pl-mut-order decides=w8 twins=w1
+# MUTANT-MATRIX hu-mut-theirs decides=lfail,lpass,gdel,udel,orecho,andand,andor,block,else,keeptest,awkif twins=- why=judging every unchanged script by theirs copy moves every one of the eleven worlds
+# MUTANT-MATRIX hu-mut-anytest decides=orecho,andor,else,keeptest,awkif twins=lfail
+# MUTANT-MATRIX hu-mut-noguard decides=gdel,andand,block twins=lfail
+# MUTANT-MATRIX hu-mut-brace decides=andand twins=lfail
+# MUTANT-MATRIX sh-mut-assign decides=assign twins=next
+# MUTANT-MATRIX sh-mut-nextline decides=next twins=assign
+# MUTANT-MATRIX sh-mut-fnlast decides=fnlast,fnlast2 twins=assign
+# MUTANT-MATRIX sh-mut-true decides=true twins=assign
+# MUTANT-MATRIX sh-mut-step decides=step,steptrue twins=assign
+# MUTANT-MATRIX sh-mut-steptrue decides=steptrue twins=assign
+# MUTANT-MATRIX pu-mut-probename decides=cmp twins=- why=the scenario summary has exactly one cell and the mutant moves it
+# MUTANT-MATRIX pu-mut-fetchargv decides=cmp twins=- why=the scenario summary has exactly one cell and the mutant moves it
+# MUTANT-MATRIX pu-mut-lsfetch decides=cmp twins=rc
+# MUTANT-MATRIX pu-mut-shortcut decides=rc,n,stdin,cmp,run twins=real
+# MUTANT-MATRIX pu-mut-notrap decides=rc,ref twins=n
+# MUTANT-MATRIX pu-mut-noverify decides=n twins=rc
+# MUTANT-MATRIX pu-mut-pushonrefuse decides=rc,ref twins=n
+# MUTANT-MATRIX pu-mut-refuse4 decides=rc twins=ref
+# MUTANT-MATRIX pu-mut-unpinned decides=main,su,up twins=rc
+# MUTANT-MATRIX pu-mut-followtags decides=tag twins=su
+# MUTANT-MATRIX pu-mut-multiurl decides=rc,out twins=n
+# MUTANT-MATRIX pu-mut-moved decides=rc,su twins=n
+# MUTANT-MATRIX hu-mut-andor decides=andor twins=andand
+# MUTANT-MATRIX hu-mut-oneline decides=gdel twins=block
+# MUTANT-MATRIX hu-mut-block decides=block,keeptest twins=andand
+# MUTANT-MATRIX hu-mut-else decides=else twins=block
+# MUTANT-MATRIX hu-mut-dropguard decides=keeptest twins=block
+# MUTANT-MATRIX hu-mut-awkopen decides=awkif twins=andand
+# MUTANT-MATRIX quote-mut-invoked decides=cafe twins=plain
+# MUTANT-MATRIX quote-mut-changed decides=cafe twins=plain
+# MUTANT-MATRIX quote-mut-r2 decides=r2,ok twins=- why=both cells of the rulebook scan move, no green cell exists
+# MUTANT-MATRIX quote-mut-sep decides=ca,ka,ea,ha twins=- why=all four separator pairs read joined, no green cell exists
+# MUTANT-MATRIX quote-mut-r2split decides=r2,ok twins=- why=both cells of the rulebook scan move, no green cell exists
+# MUTANT-MATRIX quote-mut-r2rc decides=und,ok twins=defer
+# MUTANT-MATRIX theirs-mut-fx-co decides=r2,ok twins=und
+# MUTANT-MATRIX theirs-mut-fx-bare decides=r2,ok twins=und
+# MUTANT-MATRIX theirs-mut-hook decides=und,ok,rec twins=- why=the whole three-cell hook signature moves, no green cell exists
+# MUTANT-MATRIX mp-mut-basestat decides=resolved,ok twins=fired
+# MUTANT-MATRIX mp-mut-gaterc decides=resolved,empty,ok twins=fired
+# MUTANT-MATRIX mp-mut-oldtail decides=resolved,empty,ok twins=carry
+# MUTANT-MATRIX mp-mut-thrstat decides=rc,rows,refused twins=fired
+# MUTANT-MATRIX mp-mut-pcrefuse decides=rc,rows,refused twins=fired
+# MUTANT-MATRIX mp-mut-sitedrc decides=rc,refused twins=- why=both cells of the sited scan move, no green cell exists
+# MUTANT-MATRIX mp-mut-udrc decides=rc,rows,refused twins=fired
+# MUTANT-MATRIX mp-mut-perrow decides=preclassify,derived,left twins=carried
+# MUTANT-MATRIX av-mut-bare decides=render,audit,anchors twins=quiet
+# MUTANT-MATRIX av-mut-hand decides=audit,anchors twins=render
+# MUTANT-MATRIX av-mut-firstline decides=render,agents twins=audit
+# MUTANT-MATRIX av-mut-listed decides=derive twins=render
+# MUTANT-MATRIX av-mut-sibling decides=paths twins=render
+# MUTANT-MATRIX av-mut-stdin decides=anchors twins=render
+# MUTANT-MATRIX av-mut-dollar decides=rooted twins=render
+# MUTANT-MATRIX av-mut-eqund decides=render twins=- why=scored on the drifted world's single render cell, no other cell is read
+# MUTANT-MATRIX c3-mut-nowrite decides=worklist,installed,check twins=pure-apply
+# MUTANT-MATRIX hk-mut-curhook decides=adds,reads twins=absent
+# MUTANT-MATRIX hk-mut-adds decides=absent twins=adds
+# MUTANT-MATRIX hk-mut-carried decides=deleted twins=same
+# MUTANT-MATRIX-DYNAMIC mp_killed why=scores the ss/mp/hk/av/c3 signature mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC cells_kill why=scores the ss/sc/pp/stg cell mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC ac_kill why=scores the armc carry-set mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC ac_kill_pre why=scores the armc preclassify mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC su_kill why=scores the su bucket-set mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC sig_judge why=scores the vr/hu/sh mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC pl_kill why=scores the pl world mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC pu_kill why=scores the pu scenario mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC sd_score why=scores the qw/mp/hk/av/c3 mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-gate/run.sh --matrix
 set -u
 # HERMETIC (I10): the gate reads AI_DLC_* tunables (e.g. AI_DLC_GATE_IN_SAFE_STOP in
 # gate_record_open), so an operator's exported value would change what every cell measures.

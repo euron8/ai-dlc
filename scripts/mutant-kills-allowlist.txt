@@ -50,7 +50,6 @@ retired-layer-passage
 review-carry-over-clauses
 review-shard-merge
 scope-confirmation
-self-update-gate
 self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shadowed-local-validators
