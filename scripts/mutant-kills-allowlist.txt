@@ -23,7 +23,6 @@ decl-reasons
 deploy-validate-smoke-classification
 derivation-capture
 derivation-capture-worktree-root
-dispatch-model-guard
 dist-clone
 divergence-hard-block
 emit-report-refusal
