@@ -2796,6 +2796,7 @@ step "shell syntax (every shipped script and hook)" syntax_all
 #     uncounted pass. The run dir holds only the per-fixture start logs and is left in TMPDIR.
 fxcount_arm() {
   local run sp vk allow
+  [ "$POOL_DEPTH_IN" -eq 0 ] || { printf '   nested pool (depth %s): the outer hook arms the counter; this copy stays inert\n' "$POOL_DEPTH_IN"; return 0; }
   FXCOUNT_JUDGE="$PWD/scripts/validate-fixture-invocations.sh"
   [ -f "$FXCOUNT_JUDGE" ] || { printf '   the invocation judge %s is absent: the suite cannot be counted, and an uncounted suite is not a pass\n' "$FXCOUNT_JUDGE"; return 1; }
   sp="$(bash "$FXCOUNT_JUDGE" --self-probe 2>&1)" || { printf '%s\n   the invocation judge'"'"'s self-probe is red: no fixture is judged by a judge that cannot fire\n' "$sp"; return 1; }
@@ -2816,7 +2817,7 @@ fxcount_arm() {
   export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
   printf '   %s\n   counting into %s; verdict store %s\n' "$(printf '%s\n' "$sp" | tail -1)" "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
 }
-[ "$POOL_DEPTH_IN" -eq 0 ] && step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
+step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
 
 SUITE_SKIPPED=0
 SUITE_STOPPED_EARLY=0

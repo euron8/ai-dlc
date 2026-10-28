@@ -119,7 +119,7 @@ bash -n "$W/prefix.sh" 2> "$W/prefix.err" || { printf 'pregate-self-check: the e
 ns="$(grep -cE '^[[:space:]]*step "' "$W/prefix.sh")" || ns=0
 [ "$ns" -ge 1 ] || { printf 'pregate-self-check: no step calls above the fixture suite in %s\n' "$HOOK" >&2; exit 2; }
 arm_start
-bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
+AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1
 a_rc=$?
 arm_took
 # One verdict per step: the hook prints "── <name>" then, after the step's own output, "   PASS" or "   FAIL".
