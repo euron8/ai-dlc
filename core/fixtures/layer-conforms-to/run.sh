@@ -291,7 +291,7 @@ mx_cell() {
     if [ "$MATRIX" != 1 ] && [ "$role" = D ]; then bad "mutant $m SURVIVED its deciding arm $t"; fi
   else
     mutant_killed "$(( $(mx_flag "$t") && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED"
-    if [ "$MATRIX" != 1 ] && [ "$role" = T ]; then bad "mutant $m killed arm $t, which the header names as its twin"; fi
+    if [ "$MATRIX" != 1 ] && [ "$role" = T ]; then bad "mutant $m tripped arm $t, which the header names as its twin"; fi
   fi
   ASSERTIONS="$a0"
 }
