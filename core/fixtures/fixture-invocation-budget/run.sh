@@ -170,8 +170,9 @@ if [ "$MODE" = matrix ]; then
     for a in $ARMS; do if verdict "$a" "$m.$a"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     printf 'MATRIX %s decides=%s twins=%s\n' "$m" "${dec#,}" "${tw#,}"
   done
-  exit 0
 fi
+# A SEPARATE exit, keyed on MODE: a matrix guard that wrongly opened on a plain run falls through to NM and FAILs.
+[ "$MODE" = matrix ] && exit 0
 
 # --- the unmutated arms -----------------------------------------------------------------------------------------
 for a in $ARMS; do drive "base.$a" "$a" "$SUBJ" & done; wait

@@ -91,8 +91,9 @@
 #     FP SET. The union over the b245-p1 tree is 214 fixtures after shard stubs map to their IMPL (rule 7's estimate
 #     was 210; the gap is this branch's two new batteries plus the census counting every fixture .sh, not run.sh
 #     only): S1 158, S2 212, MKA 124, MKC 4 at base. `_kill`/`kill_by` are NOT S1 tokens (they match process
-#     reapers). 2 carry a block (fixture-invocation-budget, fixture-hygiene; both clean under the row and join
-#     checks), 212 are the derived allowlist. Being a member is a floor claim, not a defect claim, so the allowlist IS
+#     reapers). The block and unblocked-member counts are PRINTED by every run (the `H5 N block(s), M unblocked
+#     member(s)` line) and are not fixed in this comment; the unblocked members are the derived allowlist. Being a
+#     member is a floor claim, not a defect claim, so the allowlist IS
 #     the false-positive set, enumerated by --derive.
 # THE ALLOWLIST scripts/fixture-matrix-allowlist.txt, rows `<fixture>\t<reason>`, DOWN-ONLY:
 #     a member without a block and without a row FAILs; a row whose fixture is not such a member (it gained a block,

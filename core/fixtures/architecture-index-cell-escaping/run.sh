@@ -61,6 +61,10 @@ ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
 
+B_A4=0   # set to 1 beside arm 4's ok: the unmutated subject's adjacent-pair row was intact in THIS run
+# shellcheck source=../lib/mutant.sh
+. "$HERE/../lib/mutant.sh" || { echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
+
 echo "architecture-index-cell-escaping:"
 
 # The subject is a node program, and node is a declared tool (tools.decl). Without it nothing
@@ -214,6 +218,7 @@ node "$WORK/count.js" --file "$WORK/out-subject.md" $KEYS > "$WORK/subject.tsv" 
 p_adj="$(field "$WORK/subject.tsv" '#bothhere' 1)"; c_adj="$(field "$WORK/subject.tsv" '#bothhere' 2)"
 if [ "$p_adj" = 5 ] && [ "$c_adj" = 4 ]; then
   ok "a title and summary carrying an adjacent backslash-pipe pair emit an intact 4-column row (5 unescaped pipes)"
+  B_A4=1
 else
   bad "the adjacent-pair row emitted ${p_adj} unescaped pipes / ${c_adj} cells, expected 5 / 4 — the cell escaping has regressed to the pre-fix order"
 fi
@@ -263,7 +268,7 @@ node "$WORK/count.js" --file "$WORK/out-control.md" $KEYS > "$WORK/control.tsv" 
 
 p_mut="$(field "$WORK/mutant.tsv" '#bothhere' 1)"; c_mut="$(field "$WORK/mutant.tsv" '#bothhere' 2)"
 if [ "$p_mut" = 7 ] && [ "$c_mut" = 6 ]; then
-  ok "MUTANT KILLED: with the escaping reverted the same seed emits 7 unescaped pipes / 6 cells — arm 4 can fire"
+  mutant_killed "$B_A4" MCELL "MUTANT KILLED: with the escaping reverted the same seed emits 7 unescaped pipes / 6 cells — arm 4 can fire"
 else
   bad "the mutant emitted ${p_mut} unescaped pipes / ${c_mut} cells, expected 7 / 6. Arm 4 is passing against a subject whose corruption this fixture cannot produce, which reads exactly like a guard that works"
 fi
