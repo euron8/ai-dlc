@@ -63,7 +63,12 @@ probe, the one unit it edited. The gate runs everything else; a hand re-running 
 
 Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
 control. No fixture, mutant battery or corpus sweep runs without the lead's slot; slotted runs are serial;
-between "GATE OPEN" and "GATE CLOSED" nothing heavy starts. Measure `uptime` before a gate.
+between "GATE OPEN" and "GATE CLOSED" nothing heavy starts.
+
+## No timing runs
+
+None are taken. Cost evidence is the counts the gate records: invocations.decl, exec, fork and
+render counts. Reading a duration off a pre-push log stays allowed.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 

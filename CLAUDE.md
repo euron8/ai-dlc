@@ -81,9 +81,9 @@ compared.**
 invariant added to `validate-enforcement-map.sh` as a nested loop over (subtree × fixture file)
 moved that validator from 13.0s to 18.1s — 39% — which the sharded mutation batteries multiply by
 roughly thirty, and the pole rose by a third. Reshaped to one recursive grep per subtree it is
-back to 13.2s. **Time the validator before and
-after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and exits in
-5ms, which reads as an enormous speed-up and is a broken measurement.
+back to 13.2s. **Count the validator's execs and invocations before and
+after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and counts
+almost nothing, which reads as an enormous reduction and is a broken measurement.
 
 The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
 carries it: a fixture that is green only from the repo root may be asserting nothing,
