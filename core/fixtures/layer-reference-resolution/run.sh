@@ -598,7 +598,7 @@ else
   # `xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an
   # identical green "width 6" line, closing the receipt. Nothing joined the assertion to the
   # dispatch. This counts workers whose [start,end] intervals OVERLAP, which is a property of
-  # the run rather than of a variable, and `consumer-suite-pool/run.sh:274` is the precedent.
+  # the run rather than of a variable, and `consumer-suite-pool/run.sh:275` is the precedent.
   #
   # THE FLOOR IS 4, AND 2 WAS THE WRONG NUMBER FOR A NAMED REASON. "The pool ran concurrently"
   # and "the pool ran at the width this release measured" are two claims, and a floor of 2
