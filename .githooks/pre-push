@@ -2739,6 +2739,25 @@ syntax_all() {
 # SYNTAX_GLOB_END
 step "shell syntax (every shipped script and hook)" syntax_all
 
+# 2f. THE INVOCATION BUDGET. Every declared fixture's bash starts are counted by an rc generated into a private run
+#     dir and judged by scripts/validate-fixture-invocations.sh inside hermetic-run.sh, before its verdict-store
+#     write, so a budget mismatch is that fixture's own FAIL. Armed at depth 0 only: a nested copy of this hook is
+#     inert. Passes are recorded in a store of their own, so a pass recorded without counting never satisfies a
+#     counting push. The judge absent is a FAIL here, never an uncounted pass. The run dir holds only the per-fixture
+#     start logs and is left in TMPDIR.
+fxcount_arm() {
+  local run
+  FXCOUNT_JUDGE="$PWD/scripts/validate-fixture-invocations.sh"
+  [ -f "$FXCOUNT_JUDGE" ] || { printf '   the invocation judge %s is absent: the suite cannot be counted, and an uncounted suite is not a pass\n' "$FXCOUNT_JUDGE"; return 1; }
+  run="$(mktemp -d "${TMPDIR:-/tmp}/fxcount.XXXXXX")" && mkdir "$run/log" || return 1
+  FXCOUNT_RC="$(bash "$FXCOUNT_JUDGE" --gen-rc "$run")" && [ -s "$FXCOUNT_RC" ] || { printf '   the invocation judge did not generate its rc file into %s\n' "$run"; return 1; }
+  FXCOUNT_DIR="$run/log"
+  AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts-counted}"
+  export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE
+  printf '   counting into %s; verdict store %s\n' "$FXCOUNT_DIR" "$AI_DLC_VERDICT_STORE"
+}
+[ "$POOL_DEPTH_IN" -eq 0 ] && step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
+
 SUITE_SKIPPED=0
 SUITE_STOPPED_EARLY=0
 FAIL_BEFORE_SUITE="$fail"

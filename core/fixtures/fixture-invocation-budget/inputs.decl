@@ -1,0 +1,12 @@
+# fixture-invocation-budget drives the REAL judge through the REAL runner against probe projects under mktemp.
+# The subjects, both REQUIRED: run.sh prints HERMETIC-CONSUMED for each once arms A1 and A2 held on them.
+!scripts/validate-fixture-invocations.sh
+!core/scripts/hermetic-run.sh
+# The runner's mapper, copied beside every runner copy (the runner resolves it from its own directory).
+core/scripts/core-paths.sh
+# The hook every probe carries: the runner sources its READSET_TOOLS, READSET_KEYROWS and READSET_VS spans.
+.githooks/pre-push
+# The content-key declaration every probe carries (the hook's EXCLUDE span reader).
+scripts/suite-content-key.sh
+# preamble.sh, and mutant.sh: sourced here, copied into every subject tree and every probe.
+core/fixtures/lib/

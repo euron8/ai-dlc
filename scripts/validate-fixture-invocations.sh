@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+# validate-fixture-invocations.sh -- the invocation budget: a fixture runs its subject exactly as
+# often as its own invocations.decl says, counted from the bash starts of one real run.
+#
+# usage:  validate-fixture-invocations.sh --fixture <name> --decl <invocations.decl> --log <start log> --root <sandbox root>
+#           judge one fixture's counted run (exit 0 pass, 1 FAIL, 2 BROKEN). Called by core/scripts/hermetic-run.sh
+#           inside its sandbox span when FXCOUNT_RC, FXCOUNT_DIR and FXCOUNT_JUDGE are all set.
+#         validate-fixture-invocations.sh --self-probe
+#           the self-probe alone, printing every cell (exit 0 / 2).
+#         validate-fixture-invocations.sh --gen-rc <dir>
+#           write the counter rc file into <dir> and print its path. The .githooks/pre-push hook calls this into its
+#           private run dir; the rc is never tracked.
+#
+# THE SELF-PROBE RUNS FIRST ON EVERY JUDGING CALL, under mktemp, and a failing self-probe is BROKEN (exit 2) before
+# any verdict about the fixture is read. Every arm is probed in both directions, and three end-to-end legs drive the
+# REAL rc this script generates: a known script under `env -i` with the BASH_ENV/FXCOUNT_LOG passthrough logs its
+# known number of starts, and without the passthrough (both variables exported in the invoker) logs none; under
+# xtrace the script's stderr is byte-identical with the counter on and off, while the counter-on run logged rows;
+# and a seeded loop sourcing the real core/fixtures/lib/mutant.sh reports its names for J5. Every child bash the
+# self-probe starts runs under `env -i`, so a self-probe running inside a counted fixture writes nothing into that
+# fixture's log and answers the same counted or not.
+#
+# THE COUNTER. BASH_ENV names an rc whose self-removing DEBUG trap appends one row `<BASH_SOURCE[0] or -c>\t<pid>`
+# to $FXCOUNT_LOG at the first command of every bash start: nested, inside `$( )`, and `bash -c` included. The
+# whole trap is wrapped in `{ } 2>/dev/null`, so xtrace output is unchanged and an unwritable log writes nothing.
+#
+# THE DECLARATION: core/fixtures/<f>/invocations.decl. `#` comments and blank lines ignored. Rows:
+#   <count> *              every bash start of the run, run.sh included. REQUIRED, exactly one.
+#   <count> <path>         <path> is a `!` (REQUIRED) line of the fixture's inputs.decl naming a file; a start counts
+#                          when its logged path EQUALS <path> or ENDS in `/<path>` -- so a mutant copy ending in the
+#                          same suffix counts too, by design, and `core/xsub.sh` never counts for `sub.sh`.
+#   <c>+<k>x<glob> *       measured must equal c + k * (number of paths matching <glob> under the sandbox root), for a
+#                          fixture whose start count is a function of a corpus. Allowed on a <path> row too. <glob> is
+#                          root-relative, has no `..` and no blank, and is expanded by bash 3.2 pathname expansion:
+#                          `*` never crosses a `/` (there is no globstar), so a nested corpus spells one glob per level.
+# THE ARMS.
+#   J1  the start log absent or empty -> BROKEN. run.sh is itself a start, so a counted run logs at least one row; an
+#       empty log means the counter never loaded and nothing below would be a measurement.
+#   J2  no invocations.decl -> FAIL, printing the measured rows as the declaration to write.
+#   J3  measured != declared on any row -> FAIL, naming fixture, row, measured, declared and the remedy.
+#   J4  grammar: a malformed row, a duplicate path, no `*` row or two, a path row naming no `!` line -> FAIL.
+#   J5  every mutant name core/fixtures/lib/mutant.sh's mutant_killed appended to <log>.mutants must carry a
+#       `# MUTANT-MATRIX <name> ...` or `# MUTANT-MATRIX-FULL <name> ...` row in the fixture's run.sh (a shard stub
+#       `exec bash "$IMPL" --group ...` is joined against its IMPL's run.sh). A name with no row, or with a
+#       `# MUTANT-MATRIX-CONTROL <name>` row, FAILs. The join sees only kills scored through mutant_killed: a battery
+#       on scripts/mutant-kills-allowlist.txt emits its kills its own way and is covered by the static join alone.
+#
+# BLIND ROUTES -- starts this counter does not see, each stated with how it is bounded:
+#   B1  `sh` starts (`/bin/sh` reads no BASH_ENV): refused statically by validate-fixture-hygiene.sh's H3.
+#   B2  fixtures with no inputs.decl (the `.undeclarable` ones) never run through hermetic-run.sh: out of population,
+#       derived by listing `core/fixtures/*/.undeclarable`.
+#   B3  fixtures running a child under their own `env -i`: starts beneath it are uncounted, deterministically, so
+#       the declared count still binds what the fixture runs outside it.
+#   B4  a fixture setting its own BASH_ENV (snapshot-archive-rotate) replaces the counter for its children.
+#   B5  a nested hermetic-run.sh is inert (only FXCOUNT_LOG crosses its `env -i`, never the three arming variables);
+#       a nested copy of the distribution hook is inert by its PREPUSH_POOL_DEPTH gate.
+#   B6  a SOURCED subject is not a start. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
+#   B8  a start killed before its first command records nothing. A fixture that backgrounds `bash ... &` and kills
+#       it, or runs one under `timeout`, can therefore count fewer starts on a slow run; it makes the kill wait for the
+#       child's first command or is listed with its reason. The two-pass counting slot catches only rates high
+#       enough to show in two passes.
+#   Also unseen: `bash --posix`, `bash -p` and `bash -n` (no BASH_ENV), a script whose first command is a bare
+#   subshell, and an empty script. `bash -s` and `bash < f` log an empty path, process substitution `/dev/fd/<n>`;
+#   both still count toward `*`.
+#
+# THE FALSE-POSITIVE SET is measured in the lead's counting slot, never here: two counting passes on the integrated
+# tip seed every declaration by script and diff each other (any difference is the nondeterminism set), and a third
+# leg adds a throwaway core/scripts/*.sh and a throwaway fixture directory in a scratch copy and re-counts the
+# fixtures declaring those directories; every count that moves takes the `c+kxglob` form. A row that moves between
+# passes on the same tree is a fixture defect to fix or list, never a tolerance.
+#
+# EDITING core/scripts/hermetic-run.sh BETWEEN HR_SANDBOX_BEGIN AND HR_SANDBOX_END CHANGES ITS `#runner` DIGEST,
+# which voids every recorded pass in the verdict store: the next push runs the whole suite once. The arming lives
+# inside that span, so this mechanism's own landing is such an edit.
+#
+# Distribution-only: repo-root scripts/ is never installed, and nothing on a consumer sets the three variables.
+set -u
+
+FXC_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per distinct state' forbids"
+
+fxc_gen_rc() { # <dir>: write <dir>/fxcount.rc, print its path
+  mkdir -p "$1" || return 2
+  cat > "$1/fxcount.rc" <<'RC' || return 2
+{ trap '{ trap - DEBUG; printf "%s\t%s\n" "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}" "$$" >> "$FXCOUNT_LOG"; } 2>/dev/null' DEBUG; } 2>/dev/null
+RC
+  printf '%s\n' "$1/fxcount.rc"
+}
+
+# fxc_count <log> <path>: rows whose first field equals <path> or ends in /<path>
+fxc_count() {
+  P="$2" awk -F'\t' 'BEGIN { p = ENVIRON["P"]; s = "/" p; ls = length(s) }
+    $1 == p || (length($1) > ls && substr($1, length($1) - ls + 1) == s) { n++ } END { print n + 0 }' "$1"
+}
+
+# fxc_glob_n <root> <glob>: number of paths the glob matches under root
+fxc_glob_n() {
+  ( cd "$1" 2>/dev/null || exit 1; set +f; n=0
+    for p in $2; do { [ -e "$p" ] || [ -L "$p" ]; } && n=$((n + 1)); done
+    printf '%s\n' "$n" )
+}
+
+# fxc_mutant_rows <run.sh> <root>: print `M <name>` and `C <name>` rows, following a shard stub to its IMPL.
+fxc_mutant_rows() {
+  local f="$1" impl
+  if grep -q '^[[:space:]]*exec bash "\$IMPL" --group' "$f" 2>/dev/null; then
+    impl="$(sed -n 's|^IMPL="\$HERE/\.\./\([A-Za-z0-9_.-]*\)/run\.sh"$|\1|p' "$f" | head -1)"
+    [ -n "$impl" ] || return 3
+    f="$(dirname "$(dirname "$f")")/$impl/run.sh"
+    [ -f "$f" ] || return 3
+  fi
+  awk '$1 == "#" && ($2 == "MUTANT-MATRIX" || $2 == "MUTANT-MATRIX-FULL") && NF >= 3 { print "M\t" $3 }
+       $1 == "#" && $2 == "MUTANT-MATRIX-CONTROL" && NF >= 3 { print "C\t" $3 }' "$f"
+}
+
+# fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
+fxc_judge() {
+  local fx="$1" decl="$2" log="$3" root="$4" fd inp w rc=0 tot kind c k g tgt raw dcl m n rows
+  fd="$(dirname "$decl")"; inp="$fd/inputs.decl"
+  if [ ! -s "$log" ]; then
+    printf '%s: FIXTURE BROKEN (J1): the invocation log %s is %s -- run.sh is itself a bash start, so a counted run logs at least one row; the counter never loaded\n' \
+      "$fx" "$log" "$([ -e "$log" ] && echo empty || echo absent)"
+    return 2
+  fi
+  w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-judge.XXXXXX")" || return 2
+  : > "$w/req"
+  [ -f "$inp" ] && awk '{ sub(/\r$/, "") } $0 == "" || /^#/ { next }
+      { r = 0; while ((ch = substr($0, 1, 1)) == "!" || ch == "+") { if (ch == "!") r = 1; $0 = substr($0, 2) }
+        if (r && $0 !~ /\/$/) print }' "$inp" > "$w/req"
+  tot="$(awk 'END { print NR }' "$log")"
+  if [ ! -f "$decl" ]; then
+    printf '%s: FAIL (J2): no invocations.decl in the fixture directory. Measured on this run -- write this as %s/invocations.decl:\n' "$fx" "${fd#"$root"/}"
+    printf '  %s *\n' "$tot"
+    while IFS= read -r p; do
+      n="$(fxc_count "$log" "$p")"; [ "$n" -gt 0 ] && printf '  %s %s\n' "$n" "$p"
+    done < "$w/req"
+    rc=1
+  else
+    # J4: one normalised row per line: `<c>\t<k>\t<glob or ->\t<target>\t<raw>`, or `ERR\t<raw>`.
+    awk '{ sub(/\r$/, "") } $0 ~ /^[[:blank:]]*$/ || $0 ~ /^[[:blank:]]*#/ { next }
+      { raw = $0
+        if (NF != 2) { print "ERR\t" raw; next }
+        cnt = $1; t = $2
+        if (cnt ~ /^[0-9]+$/) { print cnt "\t0\t-\t" t "\t" raw; next }
+        if (cnt ~ /^[0-9]+\+[0-9]+x[^[:blank:]]+$/) {
+          p = index(cnt, "+"); x = index(cnt, "x"); g = substr(cnt, x + 1)
+          if (g ~ /^\// || g ~ /(^|\/)\.\.(\/|$)/) { print "ERR\t" raw; next }
+          print substr(cnt, 1, p - 1) "\t" substr(cnt, p + 1, x - p - 1) "\t" g "\t" t "\t" raw; next }
+        print "ERR\t" raw }' "$decl" > "$w/rows"
+    while IFS="$(printf '\t')" read -r kind raw; do
+      [ "$kind" = ERR ] || continue
+      printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>` or `<c>+<k>x<glob> <target>`)\n' "$fx" "$raw"; rc=1
+    done < "$w/rows"
+    awk -F'\t' '$1 != "ERR" { print $4 }' "$w/rows" > "$w/tgts"
+    n="$(grep -cxF '*' "$w/tgts")" || n=0
+    [ "$n" -eq 1 ] || { printf '%s: FAIL (J4): invocations.decl carries %s `*` rows; exactly one is required\n' "$fx" "$n"; rc=1; }
+    while IFS= read -r t; do
+      [ -n "$t" ] || continue
+      printf '%s: FAIL (J4): invocations.decl names %s on more than one row\n' "$fx" "$t"; rc=1
+    done <<EOF
+$(LC_ALL=C sort "$w/tgts" | uniq -d)
+EOF
+    while IFS="$(printf '\t')" read -r c k g tgt raw; do
+      [ "$c" = ERR ] && continue
+      [ -n "$c" ] || continue
+      if [ "$tgt" != '*' ]; then
+        if ! grep -qxF -- "$tgt" "$w/req"; then
+          printf '%s: FAIL (J4): row "%s" names %s, which is not a `!` (REQUIRED) file line of %s -- a path row binds to the declaration, never a second list\n' "$fx" "$raw" "$tgt" "${inp#"$root"/}"; rc=1; continue
+        fi
+        m="$(fxc_count "$log" "$tgt")"
+      else
+        m="$tot"
+      fi
+      dcl="$c"
+      if [ "$g" != - ]; then
+        n="$(fxc_glob_n "$root" "$g")" || { printf '%s: FIXTURE BROKEN (J4): cannot expand %s under %s\n' "$fx" "$g" "$root"; rm -rf "$w"; return 2; }
+        dcl=$((c + k * n))
+      fi
+      # J3
+      if [ "$m" != "$dcl" ]; then
+        printf '%s: FAIL (J3): row "%s": measured %s, declared %s. If this change was meant to alter how often the fixture runs its subject, set the row to %s; %s.\n' \
+          "$fx" "$raw" "$m" "$dcl" "$m" "$FXC_REMEDY_TAIL"
+        rc=1
+      fi
+    done < "$w/rows"
+  fi
+  # J5
+  if [ -s "$log.mutants" ]; then
+    if ! fxc_mutant_rows "$fd/run.sh" "$root" > "$w/mrows"; then
+      printf '%s: FIXTURE BROKEN (J5): %s is a shard stub whose IMPL run.sh cannot be resolved\n' "$fx" "${fd#"$root"/}/run.sh"; rm -rf "$w"; return 2
+    fi
+    while IFS= read -r m; do
+      [ -n "$m" ] || continue
+      if grep -qxF "C$(printf '\t')$m" "$w/mrows"; then
+        printf '%s: FAIL (J5): mutant_killed reported %s, which carries a MUTANT-MATRIX-CONTROL row -- a control is not a mutant and never routes through mutant_killed\n' "$fx" "$m"; rc=1
+      elif ! grep -qxF "M$(printf '\t')$m" "$w/mrows"; then
+        printf '%s: FAIL (J5): mutant_killed reported %s, which has no `# MUTANT-MATRIX %s ...` or `# MUTANT-MATRIX-FULL %s ...` row in the fixture header\n' "$fx" "$m" "$m" "$m"; rc=1
+      fi
+    done <<EOF
+$(LC_ALL=C sort -u "$log.mutants")
+EOF
+  fi
+  rm -rf "$w"
+  [ "$rc" = 0 ] && printf '%s: invocation budget ok: %s start(s)\n' "$fx" "$tot"
+  return "$rc"
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# THE SELF-PROBE.
+SP_FAIL=0; SP_N=0; SP_VERBOSE=0; SP_OUT=""
+sp_ok()  { SP_N=$((SP_N + 1)); [ "$SP_VERBOSE" = 1 ] && printf '  ok    self-probe %s\n' "$1"; return 0; }
+sp_bad() { SP_N=$((SP_N + 1)); SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe $1
+"; [ "$SP_VERBOSE" = 1 ] && printf '  FAIL  self-probe %s\n' "$1"; return 0; }
+# sp_cell <label> <want rc> <want substring, or -> <fixture dir under SPR> [log]: judge in-process, assert both.
+sp_cell() {
+  local out got
+  out="$(fxc_judge p "$SPR/$3/invocations.decl" "${4:-$SPR/log}" "$SPR")"; got=$?
+  if [ "$got" != "$2" ]; then sp_bad "$1 (rc $got, want $2): $(printf '%s' "$out" | head -2 | tr '\n' ' ')"; return; fi
+  if [ "$5" != - ] && ! grep -qF -- "$5" <<<"$out"; then sp_bad "$1 (output lacks: $5)"; return; fi
+  sp_ok "$1"
+}
+fxc_self_probe() {
+  local S fd bash_bin rcf
+  S="$(mktemp -d "${TMPDIR:-/tmp}/fxc-sp.XXXXXX")" || { echo "FIXTURE BROKEN: self-probe cannot mktemp"; return 2; }
+  S="$(cd "$S" && pwd -P)"
+  SPR="$S/root"; fd="$SPR/f"
+  mkdir -p "$fd" "$SPR/core/scripts" "$SPR/core/sub" || return 2
+  printf ':\n' > "$SPR/core/scripts/sub.sh"; printf ':\n' > "$SPR/core/scripts/two.sh"
+  printf '# probe\n!core/scripts/sub.sh\n+core/scripts/two.sh\n!core/sub/\n' > "$fd/inputs.decl"
+  # Two starts of sub.sh (the declared path, and a mutant copy ending in the same suffix) and two near-misses a
+  # suffix match without its `/` boundary, or a basename match, would count: xcore/scripts/sub.sh, core/scripts/xsub.sh.
+  printf '%s\t1\n' "$SPR/f/run.sh" "$SPR/core/scripts/sub.sh" "/elsewhere/m1/core/scripts/sub.sh" "$SPR/xcore/scripts/sub.sh" "$SPR/core/scripts/xsub.sh" "-c" > "$SPR/log"
+  : > "$SPR/empty"
+  # J1 both directions
+  SPN=j1; mkdir -p "$SPR/$SPN"; cp "$fd/inputs.decl" "$SPR/$SPN/"; printf '6 *\n' > "$SPR/$SPN/invocations.decl"
+  sp_cell "J1 absent log is BROKEN" 2 "$SPN" "$SPR/nolog" "(J1)"
+  sp_cell "J1 empty log is BROKEN" 2 "$SPN" "$SPR/empty" "(J1)"
+  sp_cell "J1 a 6-row log passes" 0 "$SPN" "$SPR/log" "6 start(s)"
+  # J2 both directions
+  mkdir -p "$SPR/j2"; cp "$fd/inputs.decl" "$SPR/j2/"
+  sp_cell "J2 no declaration FAILs and prints the declaration" 1 j2 "$SPR/log" "  6 *"
+  sp_cell "J2 the printed declaration carries the path row (suffix match, near-miss excluded)" 1 j2 "$SPR/log" "  2 core/scripts/sub.sh"
+  printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j2/invocations.decl"
+  sp_cell "J2 the printed declaration, written, passes" 0 j2 "$SPR/log" "ok"
+  # J3 both directions, `*`, path and corpus rows
+  mkdir -p "$SPR/j3a" "$SPR/j3b" "$SPR/j3c" "$SPR/j3d"; for d in j3a j3b j3c j3d; do cp "$fd/inputs.decl" "$SPR/$d/"; done
+  printf '4 *\n2 core/scripts/sub.sh\n' > "$SPR/j3a/invocations.decl"
+  sp_cell "J3 a * row off by one FAILs with measured, declared and the remedy" 1 j3a "$SPR/log" "measured 6, declared 4. If this change was meant to alter how often the fixture runs its subject, set the row to 6; $FXC_REMEDY_TAIL"
+  printf '6 *\n3 core/scripts/sub.sh\n' > "$SPR/j3b/invocations.decl"
+  sp_cell "J3 a path row counting the near-miss xsub.sh FAILs" 1 j3b "$SPR/log" "measured 2, declared 3"
+  printf '2+2xcore/scripts/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j3c/invocations.decl"
+  sp_cell "J3 a corpus row 2+2x(2 files) = 6 passes" 0 j3c "$SPR/log" "ok"
+  printf '3+2xcore/scripts/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j3d/invocations.decl"
+  sp_cell "J3 a corpus row 3+2x(2 files) = 7 FAILs" 1 j3d "$SPR/log" "measured 6, declared 7"
+  printf '6+0xcore/nomatch/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j3d/invocations.decl"
+  sp_cell "J3 a corpus glob matching nothing counts 0, not 1 (the literal pattern)" 0 j3d "$SPR/log" "ok"
+  # J4 both directions
+  for spec in "bad:five *" "nostar:2 core/scripts/sub.sh" "twostar:6 *|6 *" "dup:6 *|2 core/scripts/sub.sh|2 core/scripts/sub.sh" \
+              "notbang:6 *|0 core/scripts/two.sh" "dirbang:6 *|0 core/sub" "threecol:6 * extra" "absglob:1+1x/etc/* *"; do
+    SPN="j4${spec%%:*}"; mkdir -p "$SPR/$SPN"; cp "$fd/inputs.decl" "$SPR/$SPN/"
+    printf '%s\n' "${spec#*:}" | tr '|' '\n' > "$SPR/$SPN/invocations.decl"
+    sp_cell "J4 ${spec%%:*} FAILs" 1 "$SPN" "$SPR/log" "(J4)"
+  done
+  mkdir -p "$SPR/j4ok"; cp "$fd/inputs.decl" "$SPR/j4ok/"; printf '# c\n\n6 *\n2 core/scripts/sub.sh\n' > "$SPR/j4ok/invocations.decl"
+  sp_cell "J4 comments, blanks, one * and one ! path row pass" 0 j4ok "$SPR/log" "ok"
+  # J5 both directions, a header, a shard stub, a control
+  mkdir -p "$SPR/j5" "$SPR/j5s" "$SPR/j5c"
+  for d in j5 j5s j5c; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"; done
+  cp "$SPR/log" "$SPR/logm"; printf 'Ma\nMb\nMa\n' > "$SPR/logm.mutants"
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-REMEASURE x\n' > "$SPR/j5/run.sh"
+  sp_cell "J5 an unrowed reported name FAILs" 1 j5 "$SPR/logm" "reported Mb, which has no"
+  printf '# MUTANT-MATRIX-FULL Mb worlds=w1,w2 why=x\n' >> "$SPR/j5/run.sh"
+  sp_cell "J5 every reported name rowed passes" 0 j5 "$SPR/logm" "ok"
+  printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nexec bash "$IMPL" --group b\n' > "$SPR/j5s/run.sh"
+  sp_cell "J5 a shard stub joins its IMPL's rows" 0 j5s "$SPR/logm" "ok"
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-CONTROL Mb why=x\n' > "$SPR/j5c/run.sh"
+  sp_cell "J5 a reported name with a CONTROL row FAILs" 1 j5c "$SPR/logm" "MUTANT-MATRIX-CONTROL row"
+  # END TO END through the generated rc. Every child bash is under env -i; the invoker exports BASH_ENV and
+  # FXCOUNT_LOG naming the probe's own files, so the no-passthrough leg's zero is a statement about env -i.
+  bash_bin="${BASH:-/bin/bash}"
+  rcf="$(fxc_gen_rc "$S/rc")" || { sp_bad "E2E the rc file could not be generated"; rcf=/nonexistent; }
+  printf ':\n' > "$S/inner.sh"
+  printf 'bash -c :\nx="$(bash %s)"\nbash %s\necho done\n' "$S/inner.sh" "$S/inner.sh" > "$S/known.sh"
+  env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/e1.log" "$bash_bin" "$S/known.sh" >/dev/null 2>&1
+  n="$(awk 'END { print NR }' "$S/e1.log" 2>/dev/null)" || n=0
+  [ "$n" = 4 ] && sp_ok "E2E with the passthrough a known script logs its 4 starts" || sp_bad "E2E with the passthrough logged ${n:-0} starts, want 4"
+  ( export BASH_ENV="$rcf" FXCOUNT_LOG="$S/e2.log"; env -i PATH="/usr/bin:/bin" "$bash_bin" "$S/known.sh" >/dev/null 2>&1 )
+  if [ -e "$S/e2.log" ]; then sp_bad "E2E without the passthrough the counter still logged ($(awk 'END { print NR }' "$S/e2.log") rows)"
+  else sp_ok "E2E without the passthrough (both variables exported in the invoker) env -i logs nothing"; fi
+  env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/e3.log" "$bash_bin" -x "$S/known.sh" > /dev/null 2> "$S/on.err"
+  env -i PATH="/usr/bin:/bin" "$bash_bin" -x "$S/known.sh" > /dev/null 2> "$S/off.err"
+  if [ -s "$S/e3.log" ] && [ -s "$S/off.err" ] && cmp -s "$S/on.err" "$S/off.err"; then sp_ok "E2E xtrace stderr is byte-identical with the counter on and off, and the counter-on run logged"
+  else sp_bad "E2E xtrace: stderr differs with the counter on, or the counter-on run logged nothing"; fi
+  # The seeded loop through the REAL mutant.sh: an unrowed name FAILs J5, the same loop rowed passes.
+  local mlib="${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh"
+  if [ ! -f "$mlib" ]; then sp_bad "E2E the real core/fixtures/lib/mutant.sh is absent beside this script ($mlib)"
+  else
+    mkdir -p "$SPR/lp"; cp "$fd/inputs.decl" "$SPR/lp/"; printf '2 *\n' > "$SPR/lp/invocations.decl"
+    printf 'ok() { :; }\nbad() { :; }\n. %s\nfor m in La Lb; do mutant_killed 1 "$m" x; done\nbash -c :\n' "$mlib" > "$SPR/lp/loop.sh"
+    env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/lp.log" "$bash_bin" "$SPR/lp/loop.sh" >/dev/null 2>&1
+    printf '#!/usr/bin/env bash\n# MUTANT-MATRIX La decides=A twins=B\n' > "$SPR/lp/run.sh"
+    sp_cell "E2E a loop reporting an unrowed name through mutant_killed FAILs J5" 1 lp "$S/lp.log" "reported Lb, which has no"
+    printf '# MUTANT-MATRIX Lb decides=A twins=B\n' >> "$SPR/lp/run.sh"
+    sp_cell "E2E the same loop with its row passes" 0 lp "$S/lp.log" "ok"
+  fi
+  rm -rf "$S"
+  # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
+  [ "$SP_N" -eq 29 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 29
+"; }
+  [ "$SP_FAIL" = 0 ] && return 0
+  return 2
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+FXC_FX=""; FXC_DECL=""; FXC_LOG=""; FXC_ROOT=""
+case "${1:-}" in
+  --gen-rc) [ $# -eq 2 ] || { echo "usage: $0 --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
+  --self-probe)
+    SP_VERBOSE=1; fxc_self_probe; r=$?
+    if [ "$r" = 0 ]; then printf 'self-probe: %s cells, all green\n' "$SP_N"; exit 0; fi
+    printf 'self-probe: FIXTURE BROKEN\n'; exit 2 ;;
+esac
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fixture) FXC_FX="${2:-}"; shift 2 ;;
+    --decl) FXC_DECL="${2:-}"; shift 2 ;;
+    --log) FXC_LOG="${2:-}"; shift 2 ;;
+    --root) FXC_ROOT="${2:-}"; shift 2 ;;
+    *) echo "validate-fixture-invocations: unknown argument $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$FXC_FX" ] && [ -n "$FXC_DECL" ] && [ -n "$FXC_LOG" ] && [ -n "$FXC_ROOT" ] \
+  || { echo "usage: $0 --fixture F --decl D --log L --root R | --self-probe | --gen-rc DIR" >&2; exit 2; }
+if ! fxc_self_probe; then
+  printf '%s: FIXTURE BROKEN: the invocation judge'"'"'s self-probe failed, so no verdict about this fixture is read:\n%s' "$FXC_FX" "$SP_OUT"
+  exit 2
+fi
+fxc_judge "$FXC_FX" "$FXC_DECL" "$FXC_LOG" "$FXC_ROOT"
+exit $?

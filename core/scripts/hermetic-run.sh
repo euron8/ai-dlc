@@ -562,9 +562,21 @@ if [ -L "$HR_BIN/git" ]; then
   [ -n "$hr_gxp" ] && [ -d "$hr_gxp" ] || { printf 'hermetic-run: %s: the declared git %s reports no usable --exec-path\n' "$HR_FX" "$hr_g" >&2; exit 2; }
   case "$hr_gxp" in */libexec/git-core) [ -d "${hr_gxp%/libexec/git-core}/share/git-core/templates" ] && hr_gtd="${hr_gxp%/libexec/git-core}/share/git-core/templates" ;; esac
 fi
+# THE INVOCATION COUNTER, armed only when FXCOUNT_RC, FXCOUNT_DIR and FXCOUNT_JUDGE are ALL set (the distribution
+# pre-push sets them at depth 0; nothing on a consumer does). Any of the three unset: nothing below changes the run.
+# All three set but unusable is exit 2, never an uncounted pass. Armed, the fixture gets BASH_ENV naming the rc
+# and FXCOUNT_LOG naming its start log through the same list as the git variables, and the judge runs after it.
+hr_fxc=0
+if [ -n "${FXCOUNT_RC:-}" ] && [ -n "${FXCOUNT_DIR:-}" ] && [ -n "${FXCOUNT_JUDGE:-}" ]; then
+  [ -f "$FXCOUNT_RC" ] && [ -r "$FXCOUNT_RC" ] && [ -d "$FXCOUNT_DIR" ] && [ -f "$FXCOUNT_JUDGE" ] && [ -r "$FXCOUNT_JUDGE" ] \
+    || { printf 'hermetic-run: %s: invocation counter armed but unusable: FXCOUNT_RC and FXCOUNT_JUDGE must be readable files, FXCOUNT_DIR a directory\n' "$HR_FX" >&2; exit 2; }
+  : > "$FXCOUNT_DIR/$HR_FX" && : > "$FXCOUNT_DIR/$HR_FX.mutants" || exit 2
+  hr_fxc=1
+fi
 set --
 [ -z "$hr_gxp" ] || set -- "$@" "GIT_EXEC_PATH=$hr_gxp"
 [ -z "$hr_gtd" ] || set -- "$@" "GIT_TEMPLATE_DIR=$hr_gtd"
+[ "$hr_fxc" = 0 ] || set -- "$@" "BASH_ENV=$FXCOUNT_RC" "FXCOUNT_LOG=$FXCOUNT_DIR/$HR_FX"
 HR_LOG="$HR_WORK/log"
 ( cd "$HR_SB" && env -i PATH="$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
     AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-}" ${1+"$@"} \
@@ -585,6 +597,11 @@ while IFS="$(printf '\t')" read -r r rdecl; do
     hr_missing=1
   fi
 done < "$HR_WORK/required"
+# THE INVOCATION JUDGE, on a clean exit only and BEFORE the verdict store below: a budget mismatch is this
+# fixture's FAIL, so it records no pass and cannot be skipped green on the next push.
+if [ "$hr_fxc" = 1 ] && [ "$hr_rc" -eq 0 ]; then
+  bash "$FXCOUNT_JUDGE" --fixture "$HR_FX" --decl "$HR_SB/$HR_FXROOT/$HR_FX/invocations.decl" --log "$FXCOUNT_DIR/$HR_FX" --root "$HR_SB" 2>&1 || hr_rc=1
+fi
 # HR_SANDBOX_END
 
 printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \
