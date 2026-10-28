@@ -198,12 +198,12 @@ else
 fi
 
 # --- m2: an early death after the cut, by a route other than NUL --------------------------------
-M2_ANCHOR='bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1'
+M2_ANCHOR='AI_DLC_VERDICT_STORE="$W/vs" bash "$W/prefix.sh" < /dev/null > "$W/a.out" 2>&1'
 n_anchor="$(grep -cxF "$M2_ANCHOR" "$SUBJECT")" || n_anchor=0
 if [ "$n_anchor" -eq 1 ]; then ok "m2 mutant: the anchor line occurs exactly once in the subject"; B_m2_anchor=1
 else bad "m2 mutant: the anchor line occurs $n_anchor times in the subject, expected exactly 1"; fi
 MUT2="$WORK/m2-pregate-self-check.sh"
-sed 's/^bash "\$W\/prefix\.sh" < \/dev\/null > "\$W\/a\.out" 2>&1$/: "$ai_dlc_m2_unbound"; &/' "$SUBJECT" > "$MUT2" 2>/dev/null
+sed 's/^AI_DLC_VERDICT_STORE="\$W\/vs" bash "\$W\/prefix\.sh" < \/dev\/null > "\$W\/a\.out" 2>&1$/: "$ai_dlc_m2_unbound"; &/' "$SUBJECT" > "$MUT2" 2>/dev/null
 if [ "$n_anchor" -eq 1 ] && [ -s "$MUT2" ] && ! cmp -s "$SUBJECT" "$MUT2"; then
   bash "$RECEIPT" "$MUT2" > "$WORK/m2.out" 2>&1; echo $? > "$WORK/m2.rc"; m2="$(cat "$WORK/m2.rc")"
   M2_FLAG="$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))"
