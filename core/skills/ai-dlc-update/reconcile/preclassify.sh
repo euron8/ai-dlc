@@ -56,7 +56,10 @@ MODE="${5:-}"
 # silently either: the memo_* calls below then fail with 127, and 127 is not an answer any of
 # them accepts, so the run refuses through pc_fail() naming the call rather than classifying
 # every path MISSING.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) _pc_d0="${0%/*}"; _pc_d0="${_pc_d0:-/}" ;; *) _pc_d0=. ;; esac
+SELF="$(cd "$_pc_d0" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "preclassify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
 
@@ -238,7 +241,7 @@ if _pc_ssp="$(setup_sited_paths)"; then
   SETUP_SITED_PATHS="$_pc_ssp"
 else
   _pc_ssp_rc=$?
-  pc_refuse "the setup-sited path set could not be read from $(dirname "$0")/setup-sites.md (setup_sited_paths returned ${_pc_ssp_rc}), so no file could be told apart from a setup-filled one"
+  pc_refuse "the setup-sited path set could not be read from $_pc_d0/setup-sites.md (setup_sited_paths returned ${_pc_ssp_rc}), so no file could be told apart from a setup-filled one"
 fi
 # --- WHOLE-LINE MEMBERSHIP IS A `case`, NEVER A HERE-STRING OR A HEREDOC -----------------------
 # Both membership tests below were `grep -qxF "$1"` fed by `<<<` or `<<EOF`. bash 3.2 stages
@@ -539,7 +542,7 @@ if [ "$MODE" = "--templates" ]; then
   # file never hash-matches the raw template, so the meaningful question is
   # "did upstream change the template boilerplate since base?". Reads the
   # template_manifest from template-sites.md (co-located).
-  MANIFEST="$(dirname "$0")/template-sites.md"
+  MANIFEST="$_pc_d0/template-sites.md"
   # AN UNREADABLE MANIFEST RENDERED AS A CLEAN `none`, AND THAT IS THE REFUSAL THIS ADDS.
   # With `template-sites.md` absent the awk below printed to stderr, the loop read nothing, the
   # block reached its own `exit 0`, and stdout was EMPTY at rc=0 — indistinguishable from "four
@@ -581,14 +584,14 @@ if [ "$MODE" = "--untangle" ]; then
   # Enumerate the core-manifest glob list from setup-sites.md (co-located
   # with this script) rather than diffing base->theirs, which is always
   # empty when base == theirs.
-  MANIFEST="$(dirname "$0")/setup-sites.md"
+  MANIFEST="$_pc_d0/setup-sites.md"
   # THE FIXTURE ENTRIES ARE A SECOND BLOCK, IN THE SKILL'S `fixture-manifest.md` BESIDE `reconcile/`.
   # They moved out of setup-sites.md so a new shipping fixture's one-line append changes no file in
   # this directory. Read when present and skipped when absent: a reconcile directory copied on its
   # own (as the preclassify fixtures stage one) has no sibling skill root, and those worlds seed no
   # `core/fixtures/` path for the entries to match, so the enumeration is the same either way. The
   # awk ends each file's list at its own dedent (`FNR==1` resets), never at the first file's.
-  FIXMAN="$(dirname "$0")/../fixture-manifest.md"
+  FIXMAN="$_pc_d0/../fixture-manifest.md"
   [ -f "$FIXMAN" ] || { echo "preclassify: --untangle found no fixture-manifest.md beside reconcile/ ($FIXMAN); enumerating setup-sites.md alone, so no core/fixtures/ entry is listed" >&2; FIXMAN=""; }
   # `core.quotePath=false`: every path below is mapped by map_consumer() and shown to git again by
   # blob_hash(); a C-quoted non-ASCII name (`"core/rules/caf\303\251.md"`) matches no `core/*` case,
