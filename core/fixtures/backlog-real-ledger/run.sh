@@ -25,7 +25,19 @@
 #
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
+# THE ONE MUTANT (m-loose, the strict bullet test deleted from the seed's lib.sh) is scored on its
+# deciding arm p1-count (the ceiling reads the real ledger plus one host as +2, not +1) plus ONE named
+# twin, b16-count, which must stay green: the same mutated tree reading the real ledger ALONE still
+# agrees with the unmutated count, so the effect is confined to the phantom bullet. The mutant x arm
+# matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a mutant is added
+# or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
+# MUTANT-MATRIX m-loose decides=p1-count twins=b16-count
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix
 set -u
+
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+MROWS=0
 
 # CLEAR EVERY AMBIENT AI_DLC_* KEY (I87): b16 passes its ceiling as a double-quoted `env` word,
 # which is not an assignment for the probes that do not set it.
@@ -38,6 +50,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 unset BR_RECEIPTS_RUNNING
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$DIR/../lib/mutant.sh" ] && [ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found" >&2; exit 2; }
 ROOT="$(cd "$DIR/../../.." 2>/dev/null && pwd || true)"
 
 find_one() { # find_one <relative path>... -> the first candidate that is a file, both layouts
@@ -73,6 +86,13 @@ cleanup() {
 trap cleanup EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+ok()  { note "ok    $1"; }
+bad() { note "FAIL  $1"; rc=1; }
+. "$DIR/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$DIR/../lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+B_P1=0
 
 # --- j1's seed: a throwaway REPOSITORY, because the receipts validator checks each receipt out of
 # HEAD. It carries the validator, both reconcile files it loads, the classifier (R2's declared-empty
@@ -188,8 +208,13 @@ fi
 # Reverify's own view: one row per entry, id in field 2, restricted to the rows whose verb it
 # resolved as `sh` -- which are exactly the ones it reports STILL-LIVE or CLOSE-CANDIDATE from an
 # sh receipt. Counting its distinct ids for those statuses is its population.
-j1_rev="$( cd "$TMP/j1" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null \
-  | awk -F'\t' '$3 ~ /^sh receipt exited/ { print $2 }' | sort -u | grep -c . )"
+#
+# THE CLASSIFIER RUNS ONCE OVER THE REAL LEDGER FOR BOTH ARMS. It evaluates every receipt in the
+# ledger, which is the cost of this unit, and b16 below asks it for the same ledger minus the anchor.
+# Its rows are held here and b16 subtracts the anchor's row, a rule that is asserted to have removed
+# exactly one row so the subtraction cannot decay into a no-op.
+j1_rows="$( cd "$TMP/j1" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+j1_rev="$(printf '%s\n' "$j1_rows" | awk -F'\t' '$3 ~ /^sh receipt exited/ { print $2 }' | sort -u | grep -c . )"
 if [ -z "$j1_arm" ] || [ -z "$j1_rev" ]; then
   note "FAIL  j1 -- a side produced no value (arm='$j1_arm' reverify='$j1_rev')"; rc=1
 elif [ "$j1_arm" -eq 0 ] || [ "$j1_rev" -eq 0 ]; then
@@ -210,9 +235,19 @@ fi
 seed_s "$TMP/b16"; cp "$REAL_LEDGER" "$TMP/b16/docs/backlog.md"
 b16_out="$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/b16")"
 b16_arm="$(bl_reported "$b16_out")"
-b16_rows="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+# The declared-empty answer for the real ledger was taken above on j1's byte-identical copy of it
+# (before the anchor was appended), so it is not asked again. A declared-empty ledger has no
+# receipts to evaluate, so only that branch asks the classifier for its own rows; otherwise the rows
+# are j1's with the anchor's single row removed.
+b16_de="$j1_de"
+if [ "$b16_de" -eq 0 ]; then
+  b16_rows="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+else
+  b16_rows="$(printf '%s\n' "$j1_rows" | awk -F'\t' -v a="$J1_ANCHOR" '$2 != a')"
+  b16_gone=$(( $(printf '%s\n' "$j1_rows" | grep -c .) - $(printf '%s\n' "$b16_rows" | grep -c .) ))
+  [ "$b16_gone" -eq 1 ] || { note "FAIL  b16 -- removing the anchor's row from the classifier's rows removed $b16_gone rows, want exactly 1"; rc=1; }
+fi
 b16_rev="$(printf '%s\n' "$b16_rows" | cut -f2 | sort -u | grep -c . )"
-( cd "$TMP/b16" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); b16_de=$?
 if [ "$b16_de" -eq 0 ]; then
   b16_nrow="$(printf '%s\n' "$b16_rows" | grep -c .)" || b16_nrow=0
   if [ "$b16_arm" = 0 ] && grep -qF ', declared empty (' <<<"$b16_out" \
@@ -246,7 +281,7 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ "$b16_arm" -gt 0 ]; then
   p1_seed "$TMP/p1"
   p1_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1")")"
   if [ "$p1_arm" = "$(( b16_arm + 1 ))" ]; then
-    note "ok    p1 -- a host carrying a '- **BL-632 is LANDED**' lead-in adds exactly one entry to the real ledger ($b16_arm -> $p1_arm)"
+    note "ok    p1 -- a host carrying a '- **BL-632 is LANDED**' lead-in adds exactly one entry to the real ledger ($b16_arm -> $p1_arm)"; B_P1=1
   else
     note "FAIL  p1 -- the real ledger counts $b16_arm and with one host appended counts '${p1_arm}', want $(( b16_arm + 1 ))"; rc=1
   fi
@@ -257,10 +292,25 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ "$b16_arm" -gt 0 ]; then
     note "FAIL  p1 m-loose -- the label mutation DID NOT APPLY"; rc=1
   else
     p1m_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1m")")"
+    # The twin: the SAME mutated tree reading the real ledger alone (no host appended).
+    seed_s "$TMP/p1mt"; cp "$REAL_LEDGER" "$TMP/p1mt/docs/backlog.md"; cp "$p1m_lib" "$TMP/p1mt/core/skills/ai-dlc-update/reconcile/lib.sh"
+    p1mt_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1mt")")"
     if [ "$p1m_arm" = "$(( b16_arm + 2 ))" ]; then
-      note "ok    p1 m-loose -- KILLED: with the loose label rule the lead-in counts too ($b16_arm -> $p1m_arm)"
+      mutant_killed "$B_P1" m-loose "m-loose [p1-count]: with the loose label rule the lead-in counts too ($b16_arm -> $p1m_arm)"
     else
-      note "FAIL  p1 m-loose SURVIVED: the loose rule read '${p1m_arm}', want $(( b16_arm + 2 ))"; rc=1
+      bad "p1 m-loose SURVIVED: the loose rule read '${p1m_arm}', want $(( b16_arm + 2 ))"
+    fi
+    if [ "$p1mt_arm" = "$b16_arm" ]; then
+      ok "[b16-count] twin of m-loose stays green: the mutated tree reads the real ledger alone at $p1mt_arm, equal to the unmutated $b16_arm"
+    else
+      bad "[b16-count] the twin TRIPPED: the mutated tree reads the real ledger at '${p1mt_arm}', the unmutated tree at $b16_arm"
+    fi
+    if [ "$MATRIX" = 1 ]; then
+      p1_t=GREEN; p1_k=no; [ "$p1m_arm" != "$(( b16_arm + 1 ))" ] && { p1_t=TRIPPED; p1_k=yes; }
+      b16_t=GREEN; b16_k=no; [ "$p1mt_arm" != "$b16_arm" ] && { b16_t=TRIPPED; b16_k=yes; }
+      matrix_row m-loose p1-count 0 "$p1_t" "$p1_k"
+      matrix_row m-loose b16-count 0 "$b16_t" "$b16_k"
+      MROWS=2
     fi
   fi
 elif [ "$b16_de" -eq 0 ]; then
@@ -268,6 +318,11 @@ elif [ "$b16_de" -eq 0 ]; then
 else
   note "FAIL  p1 -- no usable real-ledger count from b16 (arm='$b16_arm' declared-empty rc=$b16_de)"; rc=1
 fi
+
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
+elif [ "$MROWS" -eq 2 ]; then ok "[MX] the matrix run measured 2 cells for the 1 mutant"
+else bad "[MX] matrix rows=$MROWS, 2 expected"; fi
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-real-ledger -- j1 and b16 hold on the real ledger"

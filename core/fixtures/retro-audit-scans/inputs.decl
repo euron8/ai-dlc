@@ -3,3 +3,4 @@
 !core/scripts/audit-rule-files.sh
 !core/scripts/validate-gate-manifest.sh
 core/scripts/core-paths.sh
+core/fixtures/lib/mutant.sh

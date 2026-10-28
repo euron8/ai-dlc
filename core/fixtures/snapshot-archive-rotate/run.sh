@@ -10,9 +10,117 @@
 # different claims and only the second one matters. Measured on the reference consumer: if the
 # history file's content leaves the corpus, destroyed lines go 17 -> 79 against a floor of 40.
 #
-# Usage: run.sh
+# Usage: run.sh [--matrix]
+#   --matrix  re-measure the mutant x arm matrix: every mutant driven through EVERY arm, one
+#             MATRIX row printed per mutant. One-time and on change only; never per push.
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
+#
+# THE MUTANT x ARM MATRIX. "Each mutant is killed by its own arm ALONE" is a property of the
+# battery's QUALITY, not of a push, so it is MEASURED once by `--matrix` and recorded below. It is
+# re-measured whenever an arm or a mutant is added or changed. Per push each mutant runs only its
+# DECIDING arm, which must FAIL, and its TWIN: a different arm the measured matrix shows GREEN under
+# that mutant, chosen as the arm nearest it in subject. The twin must PASS, which proves the kill
+# stays confined to the deciding arm. This recorded matrix plus the per-push twin replaces the
+# exact-vector rule ("a mutant must fail only its own assertion") that driving every arm per mutant
+# used to assert. Names are the column names the MATRIX rows print.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/snapshot-archive-rotate/run.sh --matrix
+# MUTANT-MATRIX-CONTROL MUT why=a splitter that drops one line must be REFUSED by the subject itself (rc 1, accounting does not balance, history byte-identical); survival as a refusal is the pass
+# The CONTROL: lines of assertions 11, 13 and 14 are seed near-misses beside a refusal, not mutants,
+# and carry no header form.
+# MUTANT-MATRIX m1 decides=swap twins=neg
+# MUTANT-MATRIX m2 decides=floor twins=above
+# MUTANT-MATRIX m3 decides=args twins=noval
+# MUTANT-MATRIX m4 decides=ign twins=unw
+# MUTANT-MATRIX m5 decides=neg twins=swap
+# MUTANT-MATRIX m6 decides=neg twins=swap
+# MUTANT-MATRIX m8 decides=unw twins=ign
+# MUTANT-MATRIX m9 decides=ro twins=nohist
+# MUTANT-MATRIX m10 decides=wlate twins=wshort
+# MUTANT-MATRIX m11 decides=wshort twins=wlate
+# MUTANT-MATRIX m13 decides=ulim twins=unw
+# MUTANT-MATRIX mA decides=tshort twins=tlate
+# MUTANT-MATRIX mC decides=tlate twins=tshort
+# MUTANT-MATRIX m14 decides=rohist twins=rodir
+# MUTANT-MATRIX m18 decides=staged twins=gitfail
+# MUTANT-MATRIX m19 decides=rodir twins=rohist
+# MUTANT-MATRIX m23 decides=rosnap twins=idem
+# MUTANT-MATRIX mL1 decides=links twins=mode
+# MUTANT-MATRIX mL2 decides=links twins=mode
+# MUTANT-MATRIX mM decides=mode twins=above
+# MUTANT-MATRIX mR decides=atomic twins=rew
+# MUTANT-MATRIX mK decides=sweep twins=staged
+# MUTANT-MATRIX MX2 decides=sweep twins=atomic
+# MUTANT-MATRIX MX decides=sweep twins=atomic
+# MUTANT-MATRIX MB decides=sweep twins=atomic
+# MUTANT-MATRIX MA2 decides=sweep twins=atomic
+# MUTANT-MATRIX MZ2 decides=sweep twins=atomic
+# MUTANT-MATRIX MZ3 decides=sweep twins=atomic
+# MUTANT-MATRIX MH decides=sweep twins=atomic
+# MUTANT-MATRIX MT decides=sweep twins=atomic
+# MUTANT-MATRIX MUT2 decides=unhead twins=floor
+# MUTANT-MATRIX mH1 decides=h1head twins=above
+# MUTANT-MATRIX mNV decides=noval twins=keep0
+# MUTANT-MATRIX mK0 decides=keep0 twins=noval
+# MUTANT-MATRIX mSM decides=same twins=noval
+# MUTANT-MATRIX mGF decides=gitfail twins=staged
+# MUTANT-MATRIX mGO decides=gitfail twins=atomic
+# MUTANT-MATRIX MTU decides=sweep twins=atomic
+# MUTANT-MATRIX MCH decides=sweep twins=atomic
+# MUTANT-MATRIX MCF decides=sweep twins=atomic
+# MUTANT-MATRIX MCA decides=sweep twins=atomic
+# MUTANT-MATRIX m7 decides=nohist twins=swap
+# MUTANT-MATRIX m12 decides=rew twins=above
+# Measured by --matrix: each mutant's arms that went red, over all 30 arms (every other arm green).
+#   m1 (decides=swap) red: swap,nohist,floor,above,sweep,idem,rosnap
+#   m2 (decides=floor) red: nohist,floor,ign,unw,ulim,wlate,wshort,idem,ro,rosnap
+#   m3 (decides=args) red: nohist,ign,unw,ulim,wlate,wshort,args,idem,ro,rosnap
+#   m4 (decides=ign) red: nohist,floor,ign
+#   m5 (decides=neg) red: neg
+#   m6 (decides=neg) red: neg
+#   m7 (decides=nohist) red: nohist,floor,above,wlate,wshort,sweep,idem
+#   m8 (decides=unw) red: unw,ulim,wlate,wshort
+#   m9 (decides=ro) red: ro
+#   m10 (decides=wlate) red: wlate
+#   m11 (decides=wshort) red: wshort
+#   m13 (decides=ulim) red: ulim,wlate,wshort
+#   m12 (decides=rew) red: unw,ulim,rew,tlate,tshort,mode,atomic,sweep,staged,gitfail
+#   mA (decides=tshort) red: tshort
+#   mC (decides=tlate) red: tlate
+#   m14 (decides=rohist) red: rohist
+#   m18 (decides=staged) red: staged
+#   m19 (decides=rodir) red: rodir
+#   m23 (decides=rosnap) red: rosnap
+#   mL1 (decides=links) red: links
+#   mL2 (decides=links) red: links
+#   mM (decides=mode) red: mode
+#   mR (decides=atomic) red: atomic
+#   mK (decides=sweep) red: atomic,sweep
+#   MX2 (decides=sweep) red: sweep
+#   MX (decides=sweep) red: sweep
+#   MB (decides=sweep) red: sweep
+#   MA2 (decides=sweep) red: sweep
+#   MZ2 (decides=sweep) red: sweep
+#   MZ3 (decides=sweep) red: sweep
+#   MH (decides=sweep) red: sweep
+#   MT (decides=sweep) red: sweep
+#   MUT2 (decides=unhead) red: unhead
+#   mH1 (decides=h1head) red: h1head
+#   mNV (decides=noval) red: noval
+#   mK0 (decides=keep0) red: keep0
+#   mSM (decides=same) red: same
+#   mGF (decides=gitfail) red: gitfail
+#   mGO (decides=gitfail) red: staged,gitfail
+#   MTU (decides=sweep) red: sweep
+#   MCH (decides=sweep) red: sweep
+#   MCF (decides=sweep) red: sweep
+#   MCA (decides=sweep) red: sweep
 set -uo pipefail
+SAR_MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) SAR_MATRIX=1 ;;
+  *) echo "usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 # The absorb arms drive the real control hooks, which read AI_DLC_* tuning variables. A consumer
 # that sets any of them in settings.json must not be able to turn this fixture red.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -94,6 +202,13 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to drive 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/snapshot-archive-rotate/matrix.sh"
 
 # The conservation corpus, built exactly the way validate-snapshot-conservation.sh builds it.
 corpus() { ( cd "$PROJ" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) \
@@ -314,33 +429,19 @@ else
   H0="$(shasum "$MW/_bmad-output/pipeline-snapshot-history.md" | cut -d' ' -f1)"
   m_out="$(bash "$MUT" "$MW/_bmad-output/pipeline-snapshot-history.md" --keep-entries 1 --apply 2>&1)"; m_rc=$?
   H1="$(shasum "$MW/_bmad-output/pipeline-snapshot-history.md" | cut -d' ' -f1)"
+  # A CONTROL, not a mutant: the correct outcome is the subject's OWN refusal (the variant survives
+  # as a refusal), so it carries a MUTANT-MATRIX-CONTROL header line and is not routed as a kill.
   if [ "$m_rc" -eq 1 ] && grep -q 'accounting does not balance' <<<"$m_out" && [ "$H0" = "$H1" ]; then
-    ok "MUTATION: a splitter that drops one line REFUSES and writes nothing — the accounting invariant is live"
+    ok "CONTROL MUT: a splitter that drops one line REFUSES (rc 1, 'accounting does not balance') and the history is byte-identical — the accounting invariant is live"
   else
     bad "MUTATION: a splitter that drops a line was NOT caught (rc=$m_rc); the accounting invariant is inert"
   fi
 fi
 
-# --- MUTATION 2: strip REFUSAL 2's guard and assertion 12 must go red ------------------------
-# Assertion 12 is ABSENCE-shaped — it demands a refusal — so a subject that never checks the
-# marker looks identical to one that checks and finds none. Only a mutant establishes that the
-# arm discriminates at all. The mutation is keyed on the guard's own predicate, not on a line
-# list, and the post-mutation count is asserted 0 against a non-zero unmutated count.
-MUT2="$WORK/mutant2.sh"
-sed 's|^  if \[ "\$N_UNHEADED" -gt 0 \]; then|  if false; then|' "$ROT" > "$MUT2"
-pre="$(grep -c 'N_UNHEADED" -gt 0' "$ROT")" || pre=0
-post="$(grep -c 'N_UNHEADED" -gt 0' "$MUT2")" || post=0
-if cmp -s "$ROT" "$MUT2" || [ "$pre" -eq 0 ] || [ "$post" -ne 0 ]; then
-  bad "MUTATION 2 DID NOT APPLY (unmutated=$pre mutated=$post); REFUSAL 2 is UNPROVEN"
-else
-  m_out="$(bash "$MUT2" "$FLOOR/h.md" --keep-entries 10 --apply 2>&1)"; m_rc=$?
-  # The mutant must do what the OLD code did: affirm, exit 0, never refuse.
-  if [ "$m_rc" -eq 0 ] && grep -q 'nothing to rotate' <<<"$m_out"; then
-    ok "MUTATION 2: with the unheaded-marker guard stripped the file reports nothing-to-rotate and exits 0 — assertion 12 is live, not vacuous"
-  else
-    bad "MUTATION 2: stripping the guard did not restore the silent exit 0 (rc=$m_rc); assertion 12 may be passing for another reason"
-  fi
-fi
+# MUTATION 2 (the unheaded-marker guard stripped) is scored with the other mutants, as MUT2 on the
+# `unhead` arm below, which drives assertion 12's world through whichever rotator is under test.
+# Assertion 12 is ABSENCE-shaped — it demands a refusal — so only a mutant establishes that it
+# discriminates at all.
 
 # =============================================================================================
 # THE ABSORB SWAP. route.md's fresh start is two acts — the rotator absorbs the stale snapshot,
@@ -611,7 +712,7 @@ arm_rew() {
 #   atomic           an `mv` shim fails the rename WITHOUT renaming: rc 1, the history
 #                    byte-identical, and no temp file left.
 #   killed           a KILL-POINT SWEEP: the rotator is SIGKILLed at its Nth external command,
-#                    for EVERY N, each followed by a plain re-run (see arm_killed); plus a kill
+#                    for EVERY N, each followed by a plain re-run (see arm_sweep); plus a kill
 #                    at the staging without --absorb, then re-run plainly.
 #
 # A shim that acts does it itself: it appends its mode to a sentinel file and exits without calling
@@ -703,11 +804,11 @@ trap '_kp_n=""; read -r _kp_n < "$SNAPROT_KC/h"; _kp_n=$(( ${_kp_n:-0} + 1 )); c
 ENVEOF
 # The kill-point sweep runs this many workers at once; every kill point has its own world, its own
 # TMPDIR and its own counter. KL is the limit at the point, in 1024-byte blocks: 1, so a write of a
-# longer file lands part-way (arm_killed asserts the seed makes both histories longer than that).
+# longer file lands part-way (arm_sweep asserts the seed makes both histories longer than that).
 KPAR=12
 KL=1
 KSTRIDE=8
-# The forms that turn the sweep's trace off from inside the rotator (see arm_killed's header).
+# The forms that turn the sweep's trace off from inside the rotator (see arm_sweep's header).
 # Self-probe, both directions, before any rotator is read: each escape form matches, and the
 # shipped rotator's own `set` and `trap` lines do not.
 KESC_RE='set[[:blank:]]+\+[A-Za-z]*T|set[[:blank:]]+\+o[[:blank:]]+functrace|trap[[:blank:]].*DEBUG'
@@ -962,7 +1063,7 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
     # Not killed: N = 0 (the counted run) or N = T (the last point, whose command is the run's own
     # final one, so no later point exists to kill at). Either must complete: rc 0, a clean rotation.
     heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
-    echo "UNKILLED $N $rc1 $heq" > "$d/r.$N.$L"
+    echo "NOKILL $N $rc1 $heq" > "$d/r.$N.$L"
     [ "$rc1" -eq 0 ] && [ "$heq" = yes ] || : > "$d/stop"
     return
   fi
@@ -992,7 +1093,7 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
   heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
   # The trap wrote each point's command text into its counter file.
   at="$(tr -s ' \t' '__' < "$c/$N" 2>/dev/null | cut -c1-60)"
-  echo "KILLED $N $rc1 $rc2 $miss $heq $post $(wc -l < "$d/want" | tr -d ' ') ${hb:-absent} $pb ${at:-unrecorded}" > "$d/r.$N.$L"
+  echo "KILL $N $rc1 $rc2 $miss $heq $post $(wc -l < "$d/want" | tr -d ' ') ${hb:-absent} $pb ${at:-unrecorded}" > "$d/r.$N.$L"
   [ "$rc2" -eq 0 ] && [ "$miss" -eq 0 ] && [ "$heq" = yes ] || : > "$d/stop"
 }
 sweep_worker() {  # <job list file> <dir>: each "N L" line in turn, until a stop file.
@@ -1015,7 +1116,7 @@ sweep_pass() {  # <dir> <job list>: KPAR workers, job i to worker (i mod KPAR), 
   wait
   KPIDS=""
 }
-arm_killed() {
+arm_sweep() {
   local heq ok_all=1 d T N j k L bad nk npost nmiss nmv npart first swept stop bh be tk tl W0 n0 n1 wpost
   local f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 part1
   expect_above || { MSG="cannot build the expected new history"; return 1; }
@@ -1041,10 +1142,13 @@ arm_killed() {
   read -r f1 f2 f3 f4 < "$d/r.0.1"
   T="$(ls "$d/c0.1" | grep -c '^[0-9][0-9]*$')" || T=0
   tk=""; [ "$T" -gt 0 ] && [ -f "$d/c0.1/$T" ] && [ ! -e "$d/c0.1/$(( T + 1 ))" ] && tk=dense
-  if ! { [ "$f1" = UNKILLED ] && [ "$f3" -eq 0 ] && [ "$f4" = yes ] && [ "$tk" = dense ]; }; then
-    MSG="sweep: the counted unkilled run did not complete cleanly ($f1 $f2 $f3, history == clean rotation: ${f4}, points ${T} ${tk:-NOT dense})"
+  if ! { [ "$f1" = NOKILL ] && [ "$f3" -eq 0 ] && [ "$f4" = yes ] && [ "$tk" = dense ]; }; then
+    MSG="sweep: the counted run (no kill point) did not complete cleanly ($f1 $f2 $f3, history == clean rotation: ${f4}, points ${T} ${tk:-NOT dense})"
     return 1
   fi
+  # The counted run's trace, kept for the mutant control (ctl_sweep), which compares its own
+  # counted run on the unmutated copy against this one instead of sweeping a second time.
+  KLAST_C="$d/c0.1"; KLAST_T="$T"
   bad=0; nk=0; npost=0; nmiss=0; nmv=0; npart=0; part1=""; first=""; swept=0; stop=0; tl=""
   # ONE PASS, no barrier. Limit KL at every point 1..T. Limit 0 SAMPLED: every point from W0 to T,
   # plus every KSTRIDE-th point below W0. W0 is SCHEDULED from the counted run's own trace -- the
@@ -1084,9 +1188,9 @@ arm_killed() {
         # THE LAST POINT. No point follows it, so nothing kills; its command still runs under the
         # limit, and the run must complete: rc 0 and a clean rotation. This is its own assertion.
         swept=$((swept + 1))
-        if [ "$f1" = UNKILLED ] && [ "$f3" -eq 0 ] && [ "$f4" = yes ]; then tl="${tl}ok"
-        else bad=$((bad + 1)); tl="${tl}FAILED"; [ -n "$first" ] || first="N=${k} limit ${L} (the last point, unkilled) did not complete a clean rotation: $f1 rc=$f3 clean=$f4"; fi
-      elif [ "$f1" = KILLED ]; then
+        if [ "$f1" = NOKILL ] && [ "$f3" -eq 0 ] && [ "$f4" = yes ]; then tl="${tl}ok"
+        else bad=$((bad + 1)); tl="${tl}FAILED"; [ -n "$first" ] || first="N=${k} limit ${L} (the last point, never signalled) did not complete a clean rotation: $f1 rc=$f3 clean=$f4"; fi
+      elif [ "$f1" = KILL ]; then
         swept=$((swept + 1)); nk=$((nk + 1))
         [ "$f7" = yes ] && npost=$((npost + 1))
         case "$f11" in mv_*) nmv=$((nmv + 1)) ;; esac
@@ -1096,7 +1200,7 @@ arm_killed() {
           [ -n "$first" ] || first="N=${k} limit ${L} KiB after ${f11}: history left at ${f9} bytes, re-run rc=${f4}, ${f5} of ${f8} pre-run lines missing, history == clean rotation: ${f6}"
         fi
       else
-        swept=$((swept + 1)); bad=$((bad + 1)); [ -n "$first" ] || first="N=${k} limit ${L} of ${T} was not killed: $f1 rc=$f3"
+        swept=$((swept + 1)); bad=$((bad + 1)); [ -n "$first" ] || first="N=${k} limit ${L} of ${T} was not stopped at its kill point: $f1 rc=$f3"
       fi
     done
     k=$((k - 1))
@@ -1104,7 +1208,7 @@ arm_killed() {
   if [ "$stop" -eq 0 ] && { [ -z "$wpost" ] || [ "$wpost" -le "$W0" ]; }; then
     bad=$((bad + 1)); [ -n "$first" ] || first="the limit-0 window from N=${W0} (scheduled from the trace) does not contain the first observed post-rename kill (N=${wpost:-none})"
   fi
-  MSG="sweep: ${T} traced points unkilled (history ${bh} -> ${be} bytes); limit ${KL} KiB at all ${n1}, limit 0 at ${n0} (every point from N=${W0}, the one before the traced mv, first post-rename kill observed at N=${wpost:-none}, and every ${KSTRIDE}th below); ${swept} of $(( T + n0 )) point-limit runs swept (from N=${T} down$([ "$stop" -eq 1 ] && echo ', stopped at the first failure')): ${nk} killed, ${bad} failed (${nmiss} lost lines), the last point unkilled and clean at both limits=${tl:-not swept}, ${npost} after the rename, ${nmv} at mv, ${npart} with a history or temp cut at $(( KL * 1024 )) bytes (first: ${part1:-none}); first failure (highest N): ${first:-none}"
+  MSG="sweep: ${T} traced points in the counted run (history ${bh} -> ${be} bytes); limit ${KL} KiB at all ${n1}, limit 0 at ${n0} (every point from N=${W0}, the one before the traced mv, first post-rename kill observed at N=${wpost:-none}, and every ${KSTRIDE}th below); ${swept} of $(( T + n0 )) point-limit runs swept (from N=${T} down$([ "$stop" -eq 1 ] && echo ', stopped at the first failure')): ${nk} stopped at a kill point, ${bad} failed (${nmiss} lost lines), the last point never signalled and clean at both limits=${tl:-not swept}, ${npost} after the rename, ${nmv} at mv, ${npart} with a history or temp cut at $(( KL * 1024 )) bytes (first: ${part1:-none}); first failure (highest N): ${first:-none}"
   { [ "$n0" -gt $(( T - W0 )) ] && [ "$n1" -eq "$T" ] && [ "$swept" -eq $(( n1 + n0 )) ] && [ "$nk" -eq $(( n1 + n0 - 2 )) ] && [ "$tl" = okok ] \
       && [ "$bad" -eq 0 ] && [ "$npost" -ge 2 ] && [ "$nmv" -ge 2 ] && [ "$npart" -ge 1 ]; } || ok_all=0
   [ "$ok_all" -eq 1 ]
@@ -1132,7 +1236,7 @@ arm_staged() {
   o3="$(bash "$R_" "$w2/$HIST_REL" --apply 2>&1)"; rc3=$?
   trk3=no; tracked "$w2" "$ARCH_REL" && trk3=yes
   heq2=no; cmp -s "$w2/$HIST_REL" "$EXPECT" && heq2=yes
-  MSG="staging killed: shim acted ${n1}x, run 1 rc=${rc1}, history unchanged after run 1=${hk}, archive tracked after run 1=${trk0}; run 2 rc=${rc2}, archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}; already-cut + untracked: tracked before=${trk2}, re-run rc=${rc3} ($(head -1 <<<"$o3" | cut -c1-60)), tracked after=${trk3}, history == clean rotation: ${heq2}"
+  MSG="staging SIGKILL: shim acted ${n1}x, run 1 rc=${rc1}, history unchanged after run 1=${hk}, archive tracked after run 1=${trk0}; run 2 rc=${rc2}, archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}; already-cut + untracked: tracked before=${trk2}, re-run rc=${rc3} ($(head -1 <<<"$o3" | cut -c1-60)), tracked after=${trk3}, history == clean rotation: ${heq2}"
   [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$hk" = yes ] && [ "$trk0" = no ] && [ "$rc2" -eq 0 ] \
     && [ "$trk1" = yes ] && [ "$heq" = yes ] && [ -s "$w.want" ] && [ "$miss" -eq 0 ] \
     && [ "$trk2" = no ] && [ "$rc3" -eq 0 ] && grep -q 'nothing to rotate' <<<"$o3" \
@@ -1229,6 +1333,18 @@ arm_args() {
   [ "$rc1" -eq 2 ] && [ "$rc2" -eq 2 ] && [ "$same" = yes ]
 }
 
+# UNHEAD: assertion 12's world (a history at the cut floor carrying unheaded move markers), on a
+# fresh copy, through the rotator under test: refused (rc 1, naming the cut floor), bytes unchanged.
+# A subject with the guard stripped affirms "nothing to rotate" and exits 0 (MUT2).
+arm_unhead() {
+  local w h0 out rc; w="$(mktemp -d "$WORK/uh.XXXXXX")" || { MSG="world dir failed"; return 1; }
+  cp "$FLOOR/h.md" "$w/h.md" || { MSG="floor copy failed"; return 1; }
+  h0="$(shasum "$w/h.md" | cut -d' ' -f1)"
+  out="$(bash "$R_" "$w/h.md" --keep-entries 10 --apply 2>&1)"; rc=$?
+  MSG="rc=${rc}, names the cut floor=$(grep -c 'cut floor' <<<"$out"), says nothing-to-rotate=$(grep -c 'nothing to rotate' <<<"$out"), unchanged=$([ "$(shasum "$w/h.md" | cut -d' ' -f1)" = "$h0" ] && echo yes || echo no)"
+  [ "$rc" -eq 1 ] && grep -q 'cut floor' <<<"$out" && [ "$(shasum "$w/h.md" | cut -d' ' -f1)" = "$h0" ]
+}
+
 # IDEM: absorbing the now-empty snapshot again appends nothing.
 arm_idem() {
   local w rc a0 a1 pre; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
@@ -1242,7 +1358,7 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic killed staged args idem ro rodir rosnap h1head noval keep0 same gitfail"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic sweep staged args idem ro rodir rosnap h1head noval keep0 same gitfail unhead"
 arm_run() {
   case "$1" in
     h1head)   arm_h1head ;;
@@ -1258,7 +1374,7 @@ arm_run() {
     links)    arm_links ;;
     mode)     arm_mode ;;
     atomic)   arm_atomic ;;
-    killed)   arm_killed ;;
+    sweep)    arm_sweep ;;
     staged)   arm_staged ;;
     ulim)   arm_ulim ;;
     wlate)  arm_wshim late ;;
@@ -1273,14 +1389,16 @@ arm_run() {
     unw)    arm_unw ;;
     args)   arm_args ;;
     idem)   arm_idem ;;
+    unhead) arm_unhead ;;
     ro)     arm_ro ;;
   esac
 }
-# run_arms <rotator> <continue hook> <pause hook>: sets FAILED to the space-separated failing arms.
+# run_arms <rotator> <continue hook> <pause hook> [arm list]: sets FAILED to the space-separated
+# failing arms. The list defaults to every arm.
 run_arms() {
   R_="$1"; HC_="$2"; HP_="$3"; FAILED=""
   local a
-  for a in $ARMS; do arm_run "$a" || FAILED="${FAILED} ${a}"; done
+  for a in ${4:-$ARMS}; do arm_run "$a" || FAILED="${FAILED} ${a}"; done
 }
 
 # --- The arms against the shipped subject ---------------------------------------------------
@@ -1313,9 +1431,10 @@ for a in $ARMS; do
     links)    what="REFUSAL — a symlinked history and a hard-linked history: each rc 1 before ANY write, the link and its target / the peer byte-identical, snapshot byte-identical, no archive" ;;
     mode)     what="MODE — a 640 history rotates to the clean result and is still 640 after the rename; a peer file beside it is untouched" ;;
     atomic)   what="ATOMIC — the rename fails (an mv shim that never renames): rc 1, history and snapshot byte-identical, NO temp file left" ;;
-    killed)   what="KILLED — a kill-point sweep with --absorb, traced by a DEBUG trap in the rotator's own shell (builtins, redirections, absolute paths, command -p, subshells): simple command N runs under ulimit -f 1 at every N and ulimit -f 0 at every N from the rename on plus every 8th before, SIGKILL at N+1, the last point unkilled and clean, a kill on mv, one after the rename and one leaving a 1024-byte partial write; each then a plain re-run: rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus, history == clean rotation" ;;
+    sweep)    what="KILL-POINT SWEEP — a kill-point sweep with --absorb, traced by a DEBUG trap in the rotator's own shell (builtins, redirections, absolute paths, command -p, subshells): simple command N runs under ulimit -f 1 at every N and ulimit -f 0 at every N from the rename on plus every 8th before, SIGKILL at N+1, the last point never signalled and clean, a kill on mv, one after the rename and one leaving a 1024-byte partial write; each then a plain re-run: rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus, history == clean rotation" ;;
     staged)   what="STAGED — SIGKILL at the staging after the rename, without --absorb (then a plain re-run: rc 0, archive tracked, history == clean rotation, no pre-run line missing from the corpus)" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
+    unhead) what="REFUSAL — assertion 12's world through the rotator under test: at the cut floor with unheaded move markers, rc 1 naming the cut floor, bytes unchanged" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
     h1head)   what="LINE-1 HEADING — a history with no preamble rotates (rc 0) and conserves: pre-run == moved + kept byte for byte, the archive's tail == moved" ;;
@@ -1329,7 +1448,7 @@ for a in $ARMS; do
     if [ -n "$ROHIST_SKIP" ]; then printf '  skip  %s (%s)\n' "$what" "$MSG"
     # The sweep's reach is reported beside its verdict, on a non-ok line: 12 parallel workers stopping at
     # the first failure make its counts race-dependent, and an ok line holds no run-varying value.
-    elif [ "$a" = killed ]; then ok "$what"; printf '        (%s)\n' "$MSG"
+    elif [ "$a" = sweep ]; then ok "$what"; printf '        (%s)\n' "$MSG"
     else ok "$what"; fi
   else bad "$what ($MSG)"; fi
 done
@@ -1338,8 +1457,9 @@ done
 # Each is a copy with ONE edit, keyed on a line the subject carries exactly once, and asserted to
 # have applied (the anchor count goes 1 -> 0 and the copy differs) before its verdict is read. The
 # copies are driven by the SAME arm functions, and an unmutated copy from the same directory is
-# driven through EVERY arm first: it must pass them all, so a mutant verdict is a verdict about the
-# edit, not the harness. Each mutant then runs ONLY the arm that owns it. Re-running every arm per
+# driven through EVERY arm first (the kill-point sweep by its counted run, see ctl_sweep): it must
+# pass them all, so a mutant verdict is a verdict about the edit, not the harness. Each mutant then
+# runs ONLY the arm that owns it. Re-running every arm per
 # mutant cost most of the fixture's wall clock and scored nothing more: the verdict read is whether
 # the owning arm failed.
 # The hooks' copies carry their schema siblings, because both hooks resolve `../schemas/`.
@@ -1389,25 +1509,107 @@ pair_count() {
     { if (q && $0 == nx) n++; q = ($0 == ENVIRON["MUT_A"]) } END { print n + 0 }' "$1" "$2"
 }
 
-run_arms "$MD/rot-control.sh" "$MD/hooks/ai-dlc-continue.sh" "$MD/hooks/ai-dlc-pause.sh"
+# ctl_sweep: the control's half for the `killed` arm, WITHOUT a second sweep. The sweep is a
+# function of the rotator's bytes and its trace alone (every kill point is a fresh world copied from
+# the same template), and the copy is asserted byte-identical to the shipped rotator. What the copy
+# could still get wrong is whether it RUNS and is TRACED under the harness from its own directory, so
+# its counted unkilled run is driven by the same sweep_one the arm uses, and must: complete with rc 0
+# to a clean rotation, trace densely, and trace the SAME points as the live sweep's counted run — the
+# same T and the same sorted multiset of command texts (not compared by index: pipeline stages and
+# substitutions claim their numbers concurrently). Every kill point the live sweep judged therefore
+# exists in the copy's run, and a second sweep over it re-judged byte-identical inputs: it was
+# ~655 rotator runs, the largest single cost in this fixture, and could score nothing the live one
+# had not.
+ctl_sweep() {
+  local d T tk f1 f2 f3 f4
+  [ -n "${KLAST_C:-}" ] && [ -d "$KLAST_C" ] || { MSG="the live sweep recorded no counted trace"; return 1; }
+  cmp -s "$ROT" "$R_" || { MSG="the control copy is not byte-identical to the shipped rotator"; return 1; }
+  d="$(mktemp -d "$WORK/ctlsweep.XXXXXX")" || { MSG="control sweep dir failed"; return 1; }
+  sweep_one 0 1 "$d"
+  read -r f1 f2 f3 f4 < "$d/r.0.1"
+  T="$(ls "$d/c0.1" | grep -c '^[0-9][0-9]*$')" || T=0
+  tk=""; [ "$T" -gt 0 ] && [ -f "$d/c0.1/$T" ] && [ ! -e "$d/c0.1/$(( T + 1 ))" ] && tk=dense
+  # The numbered files only (the glob skips the hint file `h`); order is irrelevant once sorted.
+  cat "$KLAST_C"/[0-9]* 2>/dev/null | sort > "$d/live.sorted"
+  cat "$d/c0.1"/[0-9]* 2>/dev/null | sort > "$d/ctl.sorted"
+  local same=no; [ -s "$d/live.sorted" ] && cmp -s "$d/live.sorted" "$d/ctl.sorted" && same=yes
+  MSG="control counted run: ${f1} rc=${f3} clean=${f4}, ${T} points (${tk:-NOT dense}) against the live ${KLAST_T}, same traced commands=${same}"
+  [ "$f1" = NOKILL ] && [ "$f3" -eq 0 ] && [ "$f4" = yes ] && [ "$tk" = dense ] \
+    && [ "$T" -eq "$KLAST_T" ] && [ "$same" = yes ]
+}
+
+# Every arm but `killed` is driven in full: each is a handful of rotator runs, and every mutant is
+# scored through these same $MD copies (the hook copies resolve ../schemas/ inside $MD), so the
+# control is what proves THAT tree runs. `killed` is replaced by ctl_sweep above.
+CTL_ARMS=""; for a in $ARMS; do [ "$a" = sweep ] || CTL_ARMS="${CTL_ARMS} ${a}"; done
+run_arms "$MD/rot-control.sh" "$MD/hooks/ai-dlc-continue.sh" "$MD/hooks/ai-dlc-pause.sh" "$CTL_ARMS"
+MSG=""; ctl_sweep || FAILED="${FAILED} sweep(${MSG})"
 if [ -z "$FAILED" ]; then
-  ok "MUTANT CONTROL: the unmutated copies in the mutant tree pass every arm — the harness runs"
+  ok "MUTANT CONTROL: the unmutated copies in the mutant tree pass every arm, the sweep by its counted run tracing the live sweep's points — the harness runs"
+  B_ctl=1
 else
   bad "MUTANT CONTROL: the unmutated copies FAILED:${FAILED} — no mutant verdict below is evidence"
 fi
 
+# The matrix itself is the MUTANT-MATRIX block in this file's header (see its comment there); the
+# per-push run READS it, so the header is the one copy. hdr_row <mutant> prints that mutant's line.
+hdr_row() { grep -E "^# MUTANT-MATRIX $1 decides=" "$HERE/run.sh"; }
+twin_of() {  # <mutant> -> its recorded twins, comma-separated ("-" for none)
+  local r; r="$(hdr_row "$1")" || return 0
+  r="${r##* twins=}"; printf '%s\n' "${r%% *}"
+}
+decides_of() {  # <mutant> -> its recorded deciding arm
+  local r; r="$(hdr_row "$1")" || return 0
+  r="${r#* decides=}"; printf '%s\n' "${r%% *}"
+}
+SCORED=0
+UNSCORED=0   # mutants this host or user cannot express (unw_probe declined): built, not scored
 # score <label> <must-fail arm> <rotator> <continue> <pause> <what>
 score() {
   R_="$3"; HC_="$4"; HP_="$5"; MSG=""; ROHIST_SKIP=""
+  local tw_arm tws dmsg
+  SCORED=$((SCORED + 1))
+  if [ "$SAR_MATRIX" -eq 1 ]; then
+    run_arms "$3" "$4" "$5"
+    # shellcheck disable=SC2086
+    matrix_row "$1" "$2" "$FAILED" $ARMS
+    R_="$3"; HC_="$4"; HP_="$5"; MSG=""; ROHIST_SKIP=""
+  fi
+  if [ "$(decides_of "$1")" != "$2" ]; then
+    bad "$1: the header's MUTANT-MATRIX row says decides=$(decides_of "$1"), the battery scores it on '$2'"
+  fi
   if arm_run "$2"; then
     if [ -n "$ROHIST_SKIP" ]; then
       printf '  skip  %s NOT SCORED: arm %s cannot express its subject for this user (%s) — %s\n' "$1" "'$2'" "$MSG" "$6"
     else
       bad "$1 SURVIVED: arm '$2' did not fail ($MSG) — $6"
     fi
-  else
-    ok "$1 KILLED by '$2' — $6"; printf '        (%s)\n' "$MSG"   # MSG carries race-dependent sweep counts
+    return
   fi
+  dmsg="$MSG"
+  # The kill is emitted through mutant_killed, gated on B_ctl: the unmutated copies passed every arm,
+  # the deciding arm and the twin included, in THIS run.
+  mutant_killed "${B_ctl:-0}" "$1" "$1 KILLED by '$2' — $6" || return
+  printf '        (%s)\n' "$dmsg"   # MSG carries race-dependent sweep counts
+  # The twin: a different arm the measured matrix shows GREEN under this mutant. It must PASS, so
+  # the kill is proven confined to the deciding arm.
+  # The matrix run has just driven every arm, so the twin adds nothing there.
+  [ "$SAR_MATRIX" -eq 1 ] && return
+  tws="$(twin_of "$1")"
+  if [ -z "$tws" ] || [ "$tws" = "-" ]; then bad "$1 has no recorded twin in the header"; return; fi
+  for tw_arm in $(printf '%s' "$tws" | tr ',' ' '); do
+    if [ "$tw_arm" = "$2" ]; then bad "$1's twin is its own deciding arm '$2'"; continue; fi
+    MSG=""; ROHIST_SKIP=""
+    if arm_run "$tw_arm"; then
+      if [ -n "$ROHIST_SKIP" ]; then
+        printf '        (twin %s for %s: skip, cannot express its subject for this user)\n' "'$tw_arm'" "$1"
+      else
+        printf '        (twin %s for %s: PASSES, the kill is confined to %s)\n' "'$tw_arm'" "$1" "'$2'"
+      fi
+    else
+      bad "$1 CO-TRIPS its twin '$tw_arm', which the measured matrix records green — the kill is no longer confined to '$2' ($MSG)"
+    fi
+  done
 }
 CH="$MD/hooks/ai-dlc-continue.sh"; PH="$MD/hooks/ai-dlc-pause.sh"
 
@@ -1557,7 +1759,7 @@ else bad "mR DID NOT APPLY — rewrite_fail's remove is not in the rotator exact
 # lost. The shipped rename is atomic at the same kill point.
 MK_OLD='mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the history failed"'
 if mut_line "$ROT" "$MD/mK.sh" "$MK_OLD" 'cat "$HIST_NEW" > "$HISTORY" || rewrite_fail "the rename over the history failed"'; then
-  score mK killed "$MD/mK.sh" "$CH" "$PH" "the rename replaced by a copy-back through the history, killed between its truncate and its write"
+  score mK sweep "$MD/mK.sh" "$CH" "$PH" "the rename replaced by a copy-back through the history, SIGKILLed between its truncate and its write"
 else bad "mK DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
 
 # MX2 / MX: the two rotators the shape-keyed kill ACCEPTED, each a whole-line replacement of the
@@ -1568,12 +1770,12 @@ else bad "mK DID NOT APPLY — the rename line is not in the rotator exactly onc
 # between the shell's truncate and the write, which the sweep reaches by count, not by shape.
 MX2_NEW="${MK_OLD}; cp -- \"\$HISTORY\" \"\$TMPD/h2\" && cat \"\$TMPD/h2\" > \"\$HISTORY\""
 if mut_line "$ROT" "$MD/mX2.sh" "$MK_OLD" "$MX2_NEW"; then
-  score MX2 killed "$MD/mX2.sh" "$CH" "$PH" "the shipped rename kept, then the history copied back through itself (cp history h2 && cat h2 > history)"
+  score MX2 sweep "$MD/mX2.sh" "$CH" "$PH" "the shipped rename kept, then the history copied back through itself (cp history h2 && cat h2 > history)"
 else bad "MX2 DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
 
 MX_NEW='HREAL="$HISTORY"; HISTORY="$HIST_DIR/.stage-x"; mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the history failed"; HISTORY="$HREAL"; cat "$HIST_DIR/.stage-x" > "$HISTORY"; rm -f "$HIST_DIR/.stage-x"'
 if mut_line "$ROT" "$MD/mX.sh" "$MK_OLD" "$MX_NEW"; then
-  score MX killed "$MD/mX.sh" "$CH" "$PH" "the rename goes to a side file, then the history is written from it (cat side > history)"
+  score MX sweep "$MD/mX.sh" "$CH" "$PH" "the rename goes to a side file, then the history is written from it (cat side > history)"
 else bad "MX DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
 
 # MB / MA2 / MZ2: three rotators the round-8 PATH-shim sweep ACCEPTED, each keeping the shipped rename
@@ -1586,19 +1788,19 @@ else bad "MX DID NOT APPLY — the rename line is not in the rotator exactly onc
 # partial write, which the traced sweep reaches because it kills in the rotator's own shell.
 MB_NEW='cp -- "$HISTORY" "$TMPD/h2" && while IFS= read -r _l || [ -n "$_l" ]; do printf "%s\n" "$_l"; done < "$TMPD/h2" > "$HISTORY"'
 if mut_after "$ROT" "$MD/mB.sh" "$MK_OLD" "$MB_NEW"; then
-  score MB killed "$MD/mB.sh" "$CH" "$PH" "after the rename, the history copied back through itself by builtins only (while read; printf; done > history)"
+  score MB sweep "$MD/mB.sh" "$CH" "$PH" "after the rename, the history copied back through itself by builtins only (while read; printf; done > history)"
 else bad "MB DID NOT APPLY — the rename line is not in the rotator exactly once, or the insert did not land"; fi
 
 MA2_NEW='/bin/cp -- "$HISTORY" "$TMPD/h2" && /bin/cat "$TMPD/h2" > "$HISTORY"'
 if mut_after "$ROT" "$MD/mA2.sh" "$MK_OLD" "$MA2_NEW"; then
-  score MA2 killed "$MD/mA2.sh" "$CH" "$PH" "after the rename, the history copied back through itself by absolute path (/bin/cp, /bin/cat)"
+  score MA2 sweep "$MD/mA2.sh" "$CH" "$PH" "after the rename, the history copied back through itself by absolute path (/bin/cp, /bin/cat)"
 else bad "MA2 DID NOT APPLY — the rename line is not in the rotator exactly once, or the insert did not land"; fi
 
 MZ2_NEW='K_="$HIST_DIR/.$HIST_BASE.rotate.keep"; cp -- "$HISTORY" "$K_" && cat "$K_" > "$HISTORY" && rm -f -- "$K_"'
 MZ2_REC='for _t in "$HIST_DIR/.$HIST_BASE.rotate."*; do if [ -f "$_t" ] && [ -s "$_t" ] && [ -f "$HISTORY" ] && [ ! -s "$HISTORY" ]; then mv -f -- "$_t" "$HISTORY"; fi; done'
 if mut_after "$ROT" "$MD/mZ2a.sh" "$MK_OLD" "$MZ2_NEW" \
    && mut_after "$MD/mZ2a.sh" "$MD/mZ2.sh" 'HIST_BASE="$(basename "$HISTORY")"' "$MZ2_REC"; then
-  score MZ2 killed "$MD/mZ2.sh" "$CH" "$PH" "after the rename, a copy-back through a keep file, recovered at start-up only when the history is EMPTY"
+  score MZ2 sweep "$MD/mZ2.sh" "$CH" "$PH" "after the rename, a copy-back through a keep file, recovered at start-up only when the history is EMPTY"
 else bad "MZ2 DID NOT APPLY — the rename line or the HIST_BASE line is not in the rotator exactly once, or an insert did not land"; fi
 
 # MZ3: MZ2's mirror. The keep file is restored only when the history is NON-EMPTY and shorter than
@@ -1608,7 +1810,7 @@ else bad "MZ2 DID NOT APPLY — the rename line or the HIST_BASE line is not in 
 MZ3_REC='for _t in "$HIST_DIR/.$HIST_BASE.rotate."*; do if [ -f "$_t" ] && [ -s "$_t" ] && [ -s "$HISTORY" ] && [ "$(wc -c < "$HISTORY")" -lt "$(wc -c < "$_t")" ]; then mv -f -- "$_t" "$HISTORY"; fi; done'
 if mut_after "$ROT" "$MD/mZ3a.sh" "$MK_OLD" "$MZ2_NEW" \
    && mut_after "$MD/mZ3a.sh" "$MD/mZ3.sh" 'HIST_BASE="$(basename "$HISTORY")"' "$MZ3_REC"; then
-  score MZ3 killed "$MD/mZ3.sh" "$CH" "$PH" "MZ2's copy-back, recovered at start-up only when the history is NON-empty and shorter than the keep file"
+  score MZ3 sweep "$MD/mZ3.sh" "$CH" "$PH" "MZ2's copy-back, recovered at start-up only when the history is NON-empty and shorter than the keep file"
 else bad "MZ3 DID NOT APPLY — the rename line or the HIST_BASE line is not in the rotator exactly once, or an insert did not land"; fi
 
 # MH: after the rename, a write-through in a CHILD bash that heals itself when its own write fails
@@ -1617,7 +1819,7 @@ else bad "MZ3 DID NOT APPLY — the rename line or the HIST_BASE line is not in 
 # lines.
 MH_NEW='bash -c '"'"'cp -- "$1" "$2" && { cat "$2" > "$1" || mv -f -- "$2" "$1"; }'"'"' _ "$HISTORY" "$TMPD/h2"'
 if mut_after "$ROT" "$MD/mH.sh" "$MK_OLD" "$MH_NEW"; then
-  score MH killed "$MD/mH.sh" "$CH" "$PH" "after the rename, a self-healing write-through in a child bash (bash -c 'cp; cat > history || mv')"
+  score MH sweep "$MD/mH.sh" "$CH" "$PH" "after the rename, a self-healing write-through in a child bash (bash -c 'cp; cat > history || mv')"
 else bad "MH DID NOT APPLY — the rename line is not in the rotator exactly once, or the insert did not land"; fi
 
 # MT: after the rename, the history written back through itself INLINE in the rotator's EXIT trap
@@ -1629,8 +1831,13 @@ MT_TRAP_OLD='trap '"'"'rm -rf "$TMPD"'"'"' EXIT'
 MT_TRAP_NEW='trap '"'"'if [ -n "${_mt:-}" ]; then cp -- "$HISTORY" "$HIST_DIR/.mt-keep" && cat "$HIST_DIR/.mt-keep" > "$HISTORY"; rm -f -- "$HIST_DIR/.mt-keep"; fi; rm -rf "$TMPD"'"'"' EXIT'
 if mut_line "$ROT" "$MD/mTa.sh" "$MT_TRAP_OLD" "$MT_TRAP_NEW" \
    && mut_after "$MD/mTa.sh" "$MD/mT.sh" "$MK_OLD" '_mt=1'; then
-  score MT killed "$MD/mT.sh" "$CH" "$PH" "after the rename, the history copied back through itself inline in the EXIT trap string (a trap handler's inline commands are kill points)"
+  score MT sweep "$MD/mT.sh" "$CH" "$PH" "after the rename, the history copied back through itself inline in the EXIT trap string (a trap handler's inline commands are kill points)"
 else bad "MT DID NOT APPLY — the EXIT trap line or the rename line is not in the rotator exactly once, or the insert did not land"; fi
+
+# MUT2: REFUSAL 2's guard stripped, keyed on the guard's own predicate (anchor 1 -> 0).
+if mut_line "$ROT" "$MD/mU2.sh" '  if [ "$N_UNHEADED" -gt 0 ]; then' '  if false; then'; then
+  score MUT2 unhead "$MD/mU2.sh" "$CH" "$PH" "the unheaded-marker guard stripped: the file reports nothing-to-rotate and exits 0"
+else bad "MUT2 DID NOT APPLY — the unheaded-marker guard is not in the rotator exactly once"; fi
 
 # --- MUTANTS of BL-322's five edge-input fixes, each killed by the arm built for it ---------------
 if mut_line "$ROT" "$MD/mH1.sh" 'if [ "$PREAMBLE_END" -gt 0 ]; then' 'if true; then'; then
@@ -1659,9 +1866,9 @@ if mut_line "$ROT" "$MD/mGOa.sh" 'stage_archive' ':' && mut_after "$MD/mGOa.sh" 
 else bad "mGO DID NOT APPLY — the top-level stage call or the rename line is not in the rotator exactly once"; fi
 
 # MTU: a rotator that turns off the sweep's DEBUG trace before its writes. The sweep cannot kill past
-# it, so arm_killed refuses it by text; this pins the refusal.
+# it, so arm_sweep refuses it by text; this pins the refusal.
 if mut_after "$ROT" "$MD/mTU.sh" 'HIST_BASE="$(basename "$HISTORY")"' 'trap - DEBUG'; then
-  score MTU killed "$MD/mTU.sh" "$CH" "$PH" "the rotator runs 'trap - DEBUG' before its writes (the sweep's trace switched off)"
+  score MTU sweep "$MD/mTU.sh" "$CH" "$PH" "the rotator runs 'trap - DEBUG' before its writes (the sweep's trace switched off)"
 else bad "MTU DID NOT APPLY — the HIST_BASE line is not in the rotator exactly once"; fi
 
 # unw_probe asks whether THIS host and user can make a scratch file read as not writable (`[ -w ]`
@@ -1692,9 +1899,9 @@ MCH_RW='if [ -n "$_ro" ]; then chmod u+w -- "$HISTORY"; fi'
 if mut_after "$ROT" "$MD/mCHa.sh" 'HIST_BASE="$(basename "$HISTORY")"' "$MCH_RO" \
    && mut_after "$MD/mCHa.sh" "$MD/mCH.sh" '# temp that cannot be built never leaves a block in the archive.' "$MCH_RW"; then
   if unw_probe mode; then
-    score MCH killed "$MD/mCH.sh" "$CH" "$PH" "the history chmod a-w at start-up and u+w before the prechecks (a killed world differs from the template only in a mode)"
+    score MCH sweep "$MD/mCH.sh" "$CH" "$PH" "the history chmod a-w at start-up and u+w before the prechecks (a world stopped at a kill point differs from the template only in a mode)"
   else
-    printf '  skip  %s NOT SCORED: this user can write a file with no write bits (root), so chmod a-w cannot make it read as not writable\n' MCH
+    printf '  skip  %s NOT SCORED: this user can write a file with no write bits (root), so chmod a-w cannot make it read as not writable\n' MCH; UNSCORED=$((UNSCORED + 1))
   fi
 else bad "MCH DID NOT APPLY — the HIST_BASE line or the precheck comment is not in the rotator exactly once, or an insert did not land"; fi
 
@@ -1709,9 +1916,9 @@ MCF_RW='if [ -n "$_ro" ]; then chflags nouchg "$HISTORY"; fi'
 if mut_after "$ROT" "$MD/mCFa.sh" 'HIST_BASE="$(basename "$HISTORY")"' "$MCF_RO" \
    && mut_after "$MD/mCFa.sh" "$MD/mCF.sh" '# temp that cannot be built never leaves a block in the archive.' "$MCF_RW"; then
   if unw_probe flag; then
-    score MCF killed "$MD/mCF.sh" "$CH" "$PH" "the history chflags uchg at start-up and nouchg before the prechecks (a killed world differs from the template only in a file flag)"
+    score MCF sweep "$MD/mCF.sh" "$CH" "$PH" "the history chflags uchg at start-up and nouchg before the prechecks (a world stopped at a kill point differs from the template only in a file flag)"
   else
-    printf '  skip  %s NOT SCORED: this host or user cannot make a file read as not writable with chflags uchg\n' MCF
+    printf '  skip  %s NOT SCORED: this host or user cannot make a file read as not writable with chflags uchg\n' MCF; UNSCORED=$((UNSCORED + 1))
   fi
 else bad "MCF DID NOT APPLY — the HIST_BASE line or the precheck comment is not in the rotator exactly once, or an insert did not land"; fi
 
@@ -1720,11 +1927,29 @@ MCA_RW='if [ -n "$_ro" ]; then chmod -N "$HISTORY"; fi'
 if mut_after "$ROT" "$MD/mCAa.sh" 'HIST_BASE="$(basename "$HISTORY")"' "$MCA_RO" \
    && mut_after "$MD/mCAa.sh" "$MD/mCA.sh" '# temp that cannot be built never leaves a block in the archive.' "$MCA_RW"; then
   if unw_probe acl; then
-    score MCA killed "$MD/mCA.sh" "$CH" "$PH" "a deny-write ACL on the history at start-up, removed before the prechecks (a killed world differs from the template only in an ACL)"
+    score MCA sweep "$MD/mCA.sh" "$CH" "$PH" "a deny-write ACL on the history at start-up, removed before the prechecks (a world stopped at a kill point differs from the template only in an ACL)"
   else
-    printf '  skip  %s NOT SCORED: this host or user cannot make a file read as not writable with chmod +a (a BSD ACL)\n' MCA
+    printf '  skip  %s NOT SCORED: this host or user cannot make a file read as not writable with chmod +a (a BSD ACL)\n' MCA; UNSCORED=$((UNSCORED + 1))
   fi
 else bad "MCA DID NOT APPLY — the HIST_BASE line or the precheck comment is not in the rotator exactly once, or an insert did not land"; fi
+
+# PLAIN RUN vs --matrix. A plain (per-push) run prints NO MATRIX row; a --matrix run prints exactly
+# one per scored mutant. Both are keyed on a non-zero count of scored mutants, so a battery that
+# scored nothing cannot pass either. The header must carry one MUTANT-MATRIX row per scored mutant.
+HDR_N="$(grep -cE '^# MUTANT-MATRIX [A-Za-z0-9]+ decides=' "$HERE/run.sh")" || HDR_N=0
+if [ "$SAR_MATRIX" -eq 0 ]; then
+  if [ "$SCORED" -gt 0 ] && [ "$MATRIX_ROWS" -eq 0 ] && [ "$HDR_N" -eq $(( SCORED + UNSCORED )) ]; then
+    ok "PLAIN RUN: ${SCORED} mutants scored on their deciding arm and twin (${UNSCORED} not expressible here), 0 MATRIX rows printed (the matrix-only path did not run), ${HDR_N} MUTANT-MATRIX header rows"
+  else
+    bad "PLAIN RUN: ${SCORED} mutants scored + ${UNSCORED} not expressible, ${MATRIX_ROWS} MATRIX rows printed (want 0), ${HDR_N} header rows (want $(( SCORED + UNSCORED )))"
+  fi
+else
+  if [ "$SCORED" -gt 0 ] && [ "$MATRIX_ROWS" -eq "$SCORED" ]; then
+    ok "MATRIX RUN: ${MATRIX_ROWS} MATRIX rows, one per scored mutant"
+  else
+    bad "MATRIX RUN: ${MATRIX_ROWS} MATRIX rows for ${SCORED} scored mutants"
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

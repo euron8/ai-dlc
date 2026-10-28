@@ -25,9 +25,18 @@
 # after-the-one-shot dispatch of the wrong role. A seeded world written by hand alone found none
 # of batch 145's discriminating cases; the epoch row here is not the subject (S313 has 106 rows).
 #
-# THE MUTATION BATTERY HAS BEEN RETIRED. It edited
-# copies of core's sources and requires each edit to redden exactly the arms named for it here.
+# THE OLD MUTATION BATTERY HAS BEEN RETIRED. One mutant is scored here, of the --probe-from-caller seam.
+# Per push it runs on its DECIDING arm plus one TWIN that must stay green; the full mutant x arm
+# matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a mutant
+# changes. The recorded matrix plus the twin replaces an exact-vector assertion of every arm.
+# MUTANT-MATRIX SEAM-INVERTED decides=SEAM-mutant twins=SEAM-verdict
+# MUTANT-MATRIX PROBE-STUB decides=PROBE-refuses twins=PROBE-seam-skip
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/fold-architect-ledger-join/run.sh --matrix
 set -uo pipefail
+
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+MROWS=0
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -83,6 +92,12 @@ fails=0; asserted=0; stood=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
 sd()  { printf '  --    %s\n' "$1"; stood=$((stood+1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 
 # --- the real inputs, and the controls that they can express the defect --------------------
 STORY="$(awk '/^artifact:/ { sub(/^artifact:[ \t]*/, ""); print; exit }' "$BLOCK_SRC")"
@@ -185,9 +200,23 @@ rel() { printf '%s\n' "${1#"$W"/}"; }  # <absolute path inside the current world
 # EVERY DRIVE RUNS FROM THE WORLD ROOT. The subject reads `_bmad-output/pipeline-snapshot.md`
 # relative to the cwd, so a drive from the caller's cwd would read a consumer's OWN snapshot when
 # this fixture runs there, and every no-snapshot arm would then assert about that sprint.
-drive() {  # args to the subject; sets RC, FIRST, NPASS, OUTF
+# THE SELF-PROBE IS PAID ONCE PER DISTINCT OUTCOME, NOT ONCE PER DRIVE. Every --fold-architect run
+# first runs a self-probe that builds its own world and judges ~30 cases, and it answers the same
+# question each time. A drive therefore passes --probe-from-caller (the subject's explicit flag,
+# which makes stdout line 1 a fixed banner and runs the SAME fa_judge afterwards) unless E2E=1.
+# The banner is REQUIRED on a seam drive and stripped before the arm reads the output; a subject
+# that ignored the flag fails every seam arm with rc 99. E2E=1 drives (one per outcome: FAIL, PASS,
+# NOT-OWED, SKIP, refusal) run the unmodified gate, probe included.
+SEAM_BANNER="PROBE-SKIPPED-BY-CALLER: the fold-architect self-probe did not run (--probe-from-caller); this is not a gate verdict."
+drive() {  # args to the subject; sets RC, FIRST, NPASS, OUTF. E2E=1 -> no seam; DRIVE_PATH -> PATH override
   OUTF="$WORK/out.$WN.$RANDOM"
-  ( cd "$W" && bash "$VSL" "$@" ) > "$OUTF" 2>&1; RC=$?
+  if [ "${E2E:-0}" = 1 ]; then
+    ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" "$@" ) > "$OUTF" 2>&1; RC=$?
+  else
+    ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" --probe-from-caller "$@" ) > "$OUTF.raw" 2>&1; RC=$?
+    if [ "$(sed -n 1p "$OUTF.raw")" = "$SEAM_BANNER" ]; then sed 1d "$OUTF.raw" > "$OUTF"
+    else cp "$OUTF.raw" "$OUTF"; RC=99; fi
+  fi
   FIRST="$(sed -n 1p "$OUTF")"
   NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
 }
@@ -289,7 +318,7 @@ esac
 # --- the eight contract seeds, plus the arms that pin each clause's neighbour ------------------
 # (i) folded story, architecture variant, no residue
 mkworld 313; oneshot "$SLOT/$ONE"
-drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-i 1 "FAIL: no residue" "" 1 "(i) architecture variant, no residue -> FAIL"
 
 # The no-flags DEFAULT: without --variant/--route every fold is OWED. Pinned, not accidental.
@@ -298,7 +327,7 @@ expect A-default 1 "FAIL: no residue" "" 1 "no --variant/--route: the fold is ow
 
 # (ii) residue citing a real architect row after the one-shot
 mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; stamp "$STORY" "$(rel "$SLOT/$ONE")"
-drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-ii 0 "PASS: $ONE -> $RES" "architect dispatch $ARCH_AFTER in S313" 0 "(ii) architect row after the one-shot -> PASS"
 # The residue shape section 4 prescribes is the one the gate's OTHER half accepts.
 bash "$VPB" "$SLOT/$RES" --require-skill bmad-review-adversarial-general >/dev/null 2>&1; pbrc=$?
@@ -317,7 +346,7 @@ expect A-iii 1 "FAIL: residue artifact:" "" 1 "(iii) residue artifact: names a d
 
 # (iv) bug variant, no residue: not owed — and the variant set is read off the REAL route.md
 mkworld 313; oneshot "$SLOT/$ONE"
-drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --variant bug --route "$ROUTE"
+E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --variant bug --route "$ROUTE"
 expect A-iv 0 "NOT-OWED: variant 'bug' runs no architecture step" "" 1 "(iv) bug variant, no residue -> NOT-OWED, never PASS"
 # The legacy one-shot name in an ARCHITECTURE variant is a finding, never an opt-out (contract
 # v3.2 D4). The reference consumer's own S313 file is this shape, byte for byte.
@@ -357,7 +386,7 @@ expect A-vii-near 0 "PASS: $ONE -> $RES" "" 0 "two residues citing two different
 
 # (viii) a sprint whose ledger rows carry no tool_use_id at all (real S310 rows)
 mkworld 310; oneshot "$SLOT/$ONE" "2026-09-10T02:00:00Z" "_bmad-output/planning-artifacts/s310/stories/story-1-1-fix.md"
-drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
+E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-viii 0 "SKIP-PRE-ADOPTION: the ledger carries no tool_use_id on any S310 row" "" 1 "(viii) no tool_use_id for the sprint -> SKIP-PRE-ADOPTION, never PASS"
 # The mid-sprint adoption: real S311 carries ids on some rows and not others. A one-shot whose own
 # tool_use_id joins no S311 adversary row may have been one of the id-less dispatches: SKIP...
@@ -376,7 +405,7 @@ expect A-viii-near 0 "PASS: $ONE -> $RES" "in S311" 0 "one-shot id joins an S311
 mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; : > "$W/_bmad-output/spawn-ledger.jsonl"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-empty 0 "SKIP-PRE-ADOPTION: the ledger carries no tool_use_id on any S313 row" "" 1 "empty ledger -> SKIP-PRE-ADOPTION, never PASS"
-drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/no-such-ledger.jsonl" $VARF
+E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/no-such-ledger.jsonl" $VARF
 expect A-absent 2 "FAIL: no spawn ledger at" "" 1 "absent ledger -> exit 2 refusal, never SKIP"
 
 # --- D1: ordering is anchored on the one-shot's OWN ledger row, never on invoked_at -------------
@@ -493,7 +522,7 @@ for flag in --ledger --sprint --settings --probe --variant --route --snapshot; d
   wait "$wpid" 2>/dev/null
   frc="$(cat "$s" 2>/dev/null)"
   if [ "$frc" = 2 ] && grep -qF -- "FAIL: $flag takes" "$o"; then ok "[D6$flag] $flag given last with no value -> exit 2"
-  elif [ "$frc" = 152 ]; then bad "[D6$flag] $flag given last with no value SPUN until its ${D6_CPU}s CPU cap killed it (rc=152), never refusing"
+  elif [ "$frc" = 152 ]; then bad "[D6$flag] $flag given last with no value SPUN until its ${D6_CPU}s CPU cap ended it (rc=152), never refusing"
   else bad "[D6$flag] $flag given last with no value -> exit 2 -- rc=${frc:-none}"; fi
 done
 
@@ -815,12 +844,88 @@ SHIM_PATH="$W/shim:$PATH"
 OUTF="$WORK/out.$WN.$RANDOM"
 ( cd "$W" && PATH="$SHIM_PATH" bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE" ) > "$OUTF" 2>&1; RC=$?
 FIRST="$(sed -n 1p "$OUTF")"; NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
-expect Dc-reader-dies 2 "FAIL: could not read the pipeline snapshot" "reader rc=137" 1 "the snapshot reader killed mid-read -> exit 2 naming its status, never NOT-OWED from sprint-status"
+expect Dc-reader-dies 2 "FAIL: could not read the pipeline snapshot" "reader rc=137" 1 "the snapshot reader terminated mid-read -> exit 2 naming its status, never NOT-OWED from sprint-status"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE"
 expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, sprint-status says bug" "" 1 "the same world with the real awk reaches the disagreement check"
 
+# --- the --probe-from-caller seam: it is announced, it is not shipped, and it cannot be unconditional --
+# S1: on a seam run line 1 is the banner (drive requires it, rc 99 otherwise) and an end-to-end run
+# of the unmodified gate does NOT carry it. Both sides in one world, one property apart.
+mkworld 313; oneshot "$SLOT/$ONE"
+( cd "$W" && bash "$VSL" --probe-from-caller --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.seam" 2>&1
+( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.e2e" 2>&1
+if [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && [ "$(sed -n 2p "$WORK/s1.seam")" = "$(sed -n 1p "$WORK/s1.e2e")" ] \
+   && ! grep -qF 'PROBE-SKIPPED-BY-CALLER' "$WORK/s1.e2e"; then
+  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"
+else bad "[SEAM-banner] --probe-from-caller banner on the seam run and none end to end -- seam1='$(sed -n 1p "$WORK/s1.seam")' e2e1='$(sed -n 1p "$WORK/s1.e2e")'"; fi
+
+# S2 (no shipped caller passes --probe-from-caller) lives in derived-fence-binding, which is
+# .dist-only and seeds core/ and scripts/ whole; this fixture ships and cannot declare them.
+
+# S3, THE MUTANT: the flag test inverted, so the probe is skipped WITHOUT the flag. Built in a copy
+# of the whole scripts directory (the subject resolves siblings beside itself), guarded by cmp -s.
+# An end-to-end run of it carries the banner, which the real gate never does -- the arm dies here.
+MUTD="$WORK/mutsd"; mkdir -p "$MUTD"; cp "$SD"/*.sh "$MUTD"/
+sed 's/"\${FA_SKIP_PROBE:-0}" = 1/"${FA_SKIP_PROBE:-0}" != 1/' "$VSL" > "$MUTD/validate-spawn-ledger.sh"
+if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the SEAM mutant's sed did not apply" >&2; exit 1; fi
+[ -f "$MUTD/validate-provenance-block.sh" ] || { echo "FIXTURE BROKEN: the mutant copy lacks its sibling" >&2; exit 1; }
+( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s3.mut" 2>&1
+# The base flag: the real end-to-end run carried NO banner (the unmutated gate behaves as base).
+B_SEAM=0; [ "$(sed -n 1p "$WORK/s1.e2e")" != "$SEAM_BANNER" ] && [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && B_SEAM=1
+# Cells. SEAM-mutant: the end-to-end run of the mutant carries the banner. SEAM-verdict (the twin): with
+# the banner line dropped, the mutant's output equals the real end-to-end output, so the verdict itself is intact.
+c_mutant=0; [ "$(sed -n 1p "$WORK/s3.mut")" = "$SEAM_BANNER" ] && c_mutant=1
+c_verdict=0; [ "$(sed 1d "$WORK/s3.mut")" = "$(cat "$WORK/s1.e2e")" ] && c_verdict=1
+# S4, THE SECOND MUTANT: fa_self_probe stubbed to FAIL, in a copy of the shipped script. The gate must
+# refuse (exit 2) because its probe did not hold; a gate whose probe call was deleted, or whose probe was
+# stubbed to succeed, would answer rc 0 here and survive S1 and S3. The twin is the same stub driven WITH
+# the flag: the probe is skipped, so the stubbed probe is never reached and the run stays rc 0 with a banner.
+cp "$SD"/*.sh "$MUTD"/
+awk '$0 == "fa_self_probe() {" { print "fa_self_probe() { return 1; }"; print "fa_self_probe_unused() {"; next } { print }' "$VSL" > "$MUTD/validate-spawn-ledger.sh"
+if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the PROBE-STUB mutant's awk did not apply" >&2; exit 1; fi
+FOLDARGS=(--fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl")
+( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" "${FOLDARGS[@]}" $VARF ) > "$WORK/s4.e2e" 2>&1; s4rc=$?
+( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --probe-from-caller "${FOLDARGS[@]}" $VARF ) > "$WORK/s4.seam" 2>&1; s4src=$?
+( cd "$W" && bash "$VSL" "${FOLDARGS[@]}" $VARF >/dev/null 2>&1 ); real_rc=$?
+c_stub=0; [ "$s4rc" = 2 ] && grep -qF 'the fold-architect self-probe did not hold' "$WORK/s4.e2e" && c_stub=1
+c_stubtwin=0; [ "$s4src" = "$real_rc" ] && [ "$(sed -n 1p "$WORK/s4.seam")" = "$SEAM_BANNER" ] && c_stubtwin=1
+# ENV: an inherited FA_SKIP_PROBE must not skip the probe. The end-to-end run under it equals the plain one.
+( cd "$W" && env FA_SKIP_PROBE=1 bash "$VSL" "${FOLDARGS[@]}" $VARF ) > "$WORK/s5.env" 2>&1
+c_env=0; [ "$(sed -n 1p "$WORK/s5.env")" != "$SEAM_BANNER" ] && cmp -s "$WORK/s5.env" "$WORK/s1.e2e" && c_env=1
+# NONFOLD: the flag outside fold mode is a usage fault.
+( cd "$W" && bash "$VSL" --probe-from-caller --ledger "$W/_bmad-output/spawn-ledger.jsonl" --sprint 313 --settings "$W/none.json" ) > "$WORK/s6.nf" 2>&1; nfrc=$?
+c_nf=0; [ "$nfrc" = 2 ] && grep -qF -- '--probe-from-caller applies to --fold-architect only' "$WORK/s6.nf" && c_nf=1
+if [ "$MATRIX" = 1 ]; then
+  s1rc=0
+  kd() { [ "$1" = 1 ] && echo yes || echo no; }
+  matrix_row SEAM-INVERTED SEAM-mutant 0 "$([ "$c_mutant" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_mutant")"
+  matrix_row SEAM-INVERTED SEAM-verdict 0 "$([ "$c_verdict" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_verdict" = 1 ] && echo no || echo yes)"
+  matrix_row PROBE-STUB PROBE-refuses "$s4rc" "$([ "$c_stub" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_stub")"
+  matrix_row PROBE-STUB PROBE-seam-skip "$s4src" "$([ "$c_stubtwin" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_stubtwin" = 1 ] && echo no || echo yes)"
+  MROWS=4
+fi
+if [ "$c_stub" = 1 ]; then
+  mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
+else bad "[PROBE-refuses] PROBE-STUB SURVIVED: a stubbed-to-fail probe did not make the end-to-end run exit 2 -- rc=$s4rc"; fi
+if [ "$c_stubtwin" = 1 ]; then ok "[PROBE-seam-skip] twin of PROBE-STUB stays green: with the flag the stubbed probe is never reached (banner, rc $s4src)"
+else bad "[PROBE-seam-skip] the twin tripped: the stubbed probe was reached under the flag, rc=$s4src"; fi
+if [ "$c_env" = 1 ]; then ok "[SEAM-env] an inherited FA_SKIP_PROBE=1 with no flag does NOT skip the probe: no banner, output identical to the plain end-to-end run"
+else bad "[SEAM-env] FA_SKIP_PROBE=1 in the environment changed the end-to-end run -- line 1='$(sed -n 1p "$WORK/s5.env")'"; fi
+if [ "$c_nf" = 1 ]; then ok "[SEAM-nonfold] --probe-from-caller outside --fold-architect exits 2 with a usage message"
+else bad "[SEAM-nonfold] --probe-from-caller outside fold mode -- rc=$nfrc"; fi
+if [ "$c_mutant" = 1 ]; then
+  mutant_killed "$B_SEAM" SEAM-INVERTED "[SEAM-mutant] a gate that skips its self-probe WITHOUT the flag is caught: its end-to-end run carries the banner, the real one does not"
+else bad "[SEAM-mutant] SEAM-INVERTED SURVIVED: a gate skipping the probe without the flag -- mutant line 1='$(sed -n 1p "$WORK/s3.mut")'"; fi
+if [ "$c_verdict" = 1 ]; then ok "[SEAM-verdict] twin of SEAM-INVERTED stays green: the mutant's verdict (banner dropped) equals the real end-to-end output"
+else bad "[SEAM-verdict] the twin tripped: the mutant changed more than the banner"; fi
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
+else
+  if [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"; else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
+fi
+
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=72
+EXPECTED_ARMS=80
 if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
   echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
 fi

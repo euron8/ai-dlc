@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.961.0] - 2026-10-28
+
+Batch b245, release b245-fx, part one of a split. Fixture-only optimisation across 54 fixtures, plus five shipped-script changes that serve them. It files one entry, BL-850, as PARTIAL, and records progress on BL-828, which stays open. No entry is closed and no `PC-` id is closed. NET: entries closed 0, filed 1 (BL-850), progress 1 (BL-828).
+
+### What ships
+
+- Mutant batteries narrowed. Each touched fixture measures its full mutant × arm matrix once with `bash core/fixtures/<fx>/run.sh --matrix`, records it in a `# MUTANT-MATRIX` header block, and on each push runs every mutant on its deciding arm plus one measured-green twin. An arm in each fixture asserts that a plain run executed no matrix-only cell.
+- Kills routed through `mutant_killed` behind same-run base-pass flags. `scripts/mutant-kills-allowlist.txt` falls from 124 rows to 91 (BL-828 progress).
+- Shard directories collapsed and deleted, with their `uninstall.sh` and manifest rows: `apply-drift-refile-b`, `-c`, and `ledger-reverify-b`, `-c`, `-d`.
+- Shipped scripts changed:
+  - `core/scripts/core-paths.sh` builds its glob set in one command substitution instead of one per manifest entry. Output is byte-identical over 16 compared modes and inputs.
+  - `core/scripts/validate-spawn-ledger.sh` gains `--probe-from-caller` for fold mode. An inherited `FA_SKIP_PROBE` does not skip the self-probe, and the flag is refused outside fold mode.
+  - `core/scripts/validate-mandatory-rules.sh` gains a `BASH_SOURCE` main guard so check 7 can be sourced. No exit changes.
+  - `scripts/validate-release-version.sh` and `scripts/render-vocabulary-index.sh` (distribution-only): the first is wrapped in functions behind a main guard; the second gains a `--skip-selfprobe` test seam that prints a NOT-A-VERDICT banner on line 1.
+- New shared helper `core/fixtures/lib/matrix.sh`.
+
+### What does NOT ship, stated plainly
+
+- `check-24-adversarial-convergence` is NOT final. Its validator seam is not in this release, so `core/scripts/validate-adversarial-convergence.sh` is unchanged here. The seam and its fixture follow in the next part.
+- The q5 reconcile engine change (retiring BL-679's recorded-PASS cache and adding `emit-report.sh --region-from`) is NOT in this release. It ships with its fixtures.
+- BL-850 and BL-828 stay OPEN.
+- Fixtures that still SKIP with exit 0 on a missing tool ship as they are, for example `agent-definition-render` and `transient-ignore-block` (jq). The enforcer for that rule is not in this release.
+
 ## [0.960.0] - 2026-10-28
 
 Batch b245, cluster c5. It files and closes one entry, BL-848, and records progress on two, BL-836 and BL-817, both of which stay PARTIAL with `verify: manual`. No `PC-` id is closed. NET: entries closed 1 minus filed 1 = 0.

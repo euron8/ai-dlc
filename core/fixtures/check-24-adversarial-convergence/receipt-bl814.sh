@@ -56,8 +56,32 @@ STAMP_FROM="${RCPT_STAMP_FROM:-$SUBJ}"
 # A copy with no constant (the base) is stamped at a release every later constant owes.
 REL="$(sed -n 's/^J3_RELEASE="\([0-9.]*\)"$/\1/p' "$STAMP_FROM")"; [ -n "$REL" ] || REL="99.0.0"
 
-B="$(mktemp -d "${TMPDIR:-/tmp}/bl814-receipt-XXXXXX")" || exit 9
+# RCPT_WORLD_DIR (optional): build the worlds ONCE under <dir>/rel-<REL> and reuse them on every later
+# call stamped at the same release. The validator only reads a world, so a set built for one subject is
+# the set every other subject would build. Absent, each call builds its own under mktemp, as before.
+if [ -n "${RCPT_WORLD_DIR:-}" ]; then
+  B="$RCPT_WORLD_DIR/rel-$REL"
+  [ ! -d "$B" ] || [ -f "$B/.built" ] || { echo "receipt: $B holds a partial world set" >&2; exit 9; }
+  mkdir -p "$B" || exit 9
+else
+  B="$(mktemp -d "${TMPDIR:-/tmp}/bl814-receipt-XXXXXX")" || exit 9
+fi
 B="$(cd "$B" && pwd -P)"
+# RCPT_WORLDS (optional): judge only the named worlds. Every name must be one this receipt judges, or
+# the call is refused (exit 9) -- a filter naming nothing real would otherwise report `fixed`.
+# A world left out never runs the subject; its check line reads rc=99 and is dropped from the verdict, so
+# the NOT FIXED line under a filter is exactly the unfiltered line restricted to the named worlds.
+want() { [ -z "${RCPT_WORLDS:-}" ] && { RAN="$RAN $1 "; return 0; }; case " $RCPT_WORLDS " in *" $1 "*) RAN="$RAN $1 "; return 0 ;; esac; return 1; }
+RAN=""
+rcpt_filter() {
+  [ -n "${RCPT_WORLDS:-}" ] || return 0
+  local x kept=""
+  for x in $RCPT_WORLDS; do
+    case "$RAN" in *" $x "*) ;; *) echo "receipt: RCPT_WORLDS names '$x', which this receipt does not judge" >&2; exit 9 ;; esac
+  done
+  for x in $bad; do case "$x" in *"(rc=99)") ;; *) kept="$kept $x" ;; esac; done
+  bad="$kept"
+}
 D=_bmad-output/planning-artifacts/s1
 lg() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=r -c user.email=r@example.invalid \
        -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
@@ -217,8 +241,11 @@ build() {
   defer "$B/idpunct/$D/coe-deferral-p1.md" requirements 1.md#F-1 cross-1.md#F-1
 }
 sha_of() { doc arch "$2" > "$B/.v"; sha "$B/.v"; }
-build || { echo "receipt: a world could not be built under $B" >&2; exit 9; }
-: > "$B/transcript.jsonl"
+if [ ! -f "$B/.built" ]; then
+  build || { echo "receipt: a world could not be built under $B" >&2; exit 9; }
+  : > "$B/transcript.jsonl"
+  : > "$B/.built"
+fi
 # THE WORLDS ARE WHAT THEY CLAIM: twof1 holds two keys sharing the id F-1, and stalepass's record is pass 1's.
 [ "$(grep -c '^### F-1 — MAJOR' "$B/twof1/$D/architecture-adversarial-p1.md")" = 2 ] \
   && [ -f "$B/stalepass/$D/architecture-repair-p1.md" ] && [ ! -f "$B/stalepass/$D/architecture-repair-p2.md" ] \
@@ -231,7 +258,8 @@ run() { # world stem -> RC, OUT
 bad=""
 # A failing world's output goes to stderr, so a NOT FIXED line can be read without rebuilding the world.
 run_() { run "$@"; }
-run() { OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
+run() { want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
          --transcript "$B/transcript.jsonl" --transcript-dir "$B" 2>&1)"; RC=$?
   [ -z "${RCPT_VERBOSE:-}" ] || printf '== %s rc=%s\n%s\n' "$1" "$RC" "$OUT" >&2; }
 nj() { [[ "$OUT" != *"(J3 -- "* ]]; }
@@ -261,6 +289,8 @@ run partlink architecture; [ "$RC" -eq 1 ] && [[ "$OUT" == *"cross-1.md#F-1: rep
 run seriallink architecture; [ "$RC" -eq 1 ] && [[ "$OUT" == *"cross-1.md#F-1: repaired on no"* ]] && [[ "$OUT" != *"  1.md#F-1: repaired on no"* ]] || bad="$bad seriallink(rc=$RC)"
 run dupid coe;             [ "$RC" -eq 1 ] && [[ "$OUT" == *"1 of findings_major 2 carry no MAJOR"* ]] || bad="$bad dupid(rc=$RC)"
 run idpunct coe;           [ "$RC" -eq 0 ] && nj || bad="$bad idpunct(rc=$RC)"
+rcpt_filter
+[ -z "${RCPT_REPORT:-}" ] || echo "receipt worlds judged:$(echo $RAN)" >&2
 if [ -n "$bad" ]; then echo "receipt BL-814: NOT FIXED --$bad"; exit 1; fi
 echo "receipt BL-814: fixed (open MAJORs at MET refused, deferral to the successor and a linked pass-M repair close them, a stale-pass, unlinked, wrong-step or id-only close refused, underived and unkeyed MAJORs judged, legacy PENDING, the successor's digest names every deferred key)"
 exit 0

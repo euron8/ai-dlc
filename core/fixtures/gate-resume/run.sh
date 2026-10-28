@@ -13,9 +13,38 @@
 # SLICE and CKPT are NEW scripts and may not have arrived yet on a consumer one pull behind
 # this fixture (consumer-boundary.md) — seed.sh resolves them to "" rather than dying, and
 # every arm below reports SKIP (HARD FAIL only in this distribution, where they exist).
+#
+# MUTANT-MATRIX: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
+# runs only its deciding arm plus its twins; `--matrix` measures every cell once and prints a
+# `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell (the b457 mutants over all seven arms).
+# Re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX m1 decides=done-fail twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m2 decides=verdict-vocab twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m3 decides=missing-anchor twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m4 decides=preamble-offset twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m5 decides=current-mtime twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m6 decides=ext-anchor twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m7 decides=refusal-after-write twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m8 decides=refusal-every-action twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m9 decides=loose-regex twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX b457-a decides=S1 twins=S2
+# MUTANT-MATRIX b457-b decides=RB twins=WC
+# MUTANT-MATRIX b457-c decides=S2 twins=NC
+# MUTANT-MATRIX b457-d decides=S3 twins=S2
+# MUTANT-MATRIX b457-e decides=S0 twins=S1,S3
+# MUTANT-MATRIX b457-f decides=NC twins=S2
+# MUTANT-MATRIX b457-g decides=WC twins=S2
+# MUTANT-MATRIX b457-h decides=WC twins=S2
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-resume/run.sh --matrix
+#
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+# --matrix is the ONLY way into matrix mode (see the MUTANT-MATRIX block in the header): parsed and
+# shifted before any other argument. A plain run executes no matrix-only cell.
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -27,6 +56,16 @@ fails=0
 total=0
 ok()  { total=$((total+1)); printf '  ok    %s\n' "$1"; }
 bad() { total=$((total+1)); printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# need_base / mutant_killed (core/fixtures/lib/mutant.sh): every kill below goes through
+# mutant_killed, gated on a B_* flag that the UNMUTATED arm set in THIS run beside its own ok.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_E_DONE=0; B_F_VERDICT=0; B_F2A=0; B_F2B=0; B_F2C=0; B_F2D=0; B_F2E=0
+mcell() { # mcell <mutant> <arm> <1=held|0=broken> -- one MATRIX line per cell, matrix mode only
+  if [ "$MATRIX" = 1 ]; then printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$([ "$3" = 1 ] && echo ok || echo FAIL)"; fi
+}
 skip() { # skip <what> <why>
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -268,7 +307,7 @@ if [ -n "$CKPT" ]; then
   bash "$CKPT" --root "$_eroot" --nonce "$_n1" record 4 PENDING >/dev/null 2>&1
   _edone="$(bash "$CKPT" --root "$_eroot" --nonce "$_n1" done 2>/dev/null)"
   if [ "$_edone" = "1,2" ]; then
-    ok "recording PASS,SKIP,FAIL,PENDING at one nonce: 'done' returns exactly the PASS and SKIP ids (1,2)"
+    ok "recording PASS,SKIP,FAIL,PENDING at one nonce: 'done' returns exactly the PASS and SKIP ids (1,2)"; B_E_DONE=1
   else
     bad "'done' returned '${_edone}', expected exactly '1,2' (PASS+SKIP only)"
   fi
@@ -345,7 +384,7 @@ fi
 if [ -n "$CKPT" ]; then
   _froot="$WORK/ckpt-f"; mkdir -p "$_froot/_bmad-output"
   bash "$CKPT" --root "$_froot" --nonce f1 record 1 PROBABLY >/dev/null 2>&1; _rc=$?
-  [ "$_rc" -eq 2 ] && ok "an unknown verdict token exits 2" || bad "unknown verdict token exited ${_rc}, expected 2"
+  [ "$_rc" -eq 2 ] && { ok "an unknown verdict token exits 2"; B_F_VERDICT=1; } || bad "unknown verdict token exited ${_rc}, expected 2"
 
   bash "$CKPT" --root "$_froot" --nonce f1 record 1 >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "a verdictless record exits 2" || bad "verdictless record exited ${_rc}, expected 2"
@@ -380,25 +419,25 @@ if [ -n "$CKPT" ]; then
     *) _f2named=0 ;;
   esac
   if [ "$_f2rc" -eq 2 ] && [ "$_f2named" = 1 ] && [ "$_f2cur" = "$_f2ctl" ]; then
-    ok "BL-518 (a): 'open' refuses the hyphenated-date nonce, exit 2, names the canonical form and the mint rule, and 'current' still names ${_f2ctl}"
+    ok "BL-518 (a): 'open' refuses the hyphenated-date nonce, exit 2, names the canonical form and the mint rule, and 'current' still names ${_f2ctl}"; B_F2A=1
   else
     bad "BL-518 (a): hyphenated-date open rc=${_f2rc} (want 2), names-canonical=${_f2named} (want 1), current='${_f2cur}' (want ${_f2ctl})"
   fi
 
   bash "$CKPT" --root "$_f2root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _rc=$?
-  [ "$_rc" -eq 2 ] && ok "BL-518 (b): 'open' refuses a nonce whose gate type is outside the schema's closed list (deploy-validate-s304-...), exit 2" \
+  [ "$_rc" -eq 2 ] && { ok "BL-518 (b): 'open' refuses a nonce whose gate type is outside the schema's closed list (deploy-validate-s304-...), exit 2"; B_F2B=1; } \
     || bad "BL-518 (b): deploy-validate-s304-20260822T005500Z open exited ${_rc}, expected 2"
 
   f2_canon_open "$CKPT" "$_f2root"; _rc=$?
   _f2cur="$(bash "$CKPT" --root "$_f2root" current 2>/dev/null)"
   if [ "$_rc" -eq 0 ] && [ "$_f2cur" = "sprint-review-20261011T083048Z" ]; then
-    ok "BL-518 (c): a canonical nonce with a hyphenated gate type (sprint-review-...) opens, exit 0, and becomes current"
+    ok "BL-518 (c): a canonical nonce with a hyphenated gate type (sprint-review-...) opens, exit 0, and becomes current"; B_F2C=1
   else
     bad "BL-518 (c): canonical sprint-review open rc=${_rc} current='${_f2cur}', expected 0 and that nonce"
   fi
 
   bash "$CKPT" --root "$_f2root" --nonce f1 record 1 PASS >/dev/null 2>&1; _rc=$?
-  [ "$_rc" -eq 0 ] && ok "BL-518 (d): 'record' at a non-canonical nonce (f1) still exits 0 -- only 'open' is gated" \
+  [ "$_rc" -eq 0 ] && { ok "BL-518 (d): 'record' at a non-canonical nonce (f1) still exits 0 -- only 'open' is gated"; B_F2D=1; } \
     || bad "BL-518 (d): non-canonical record exited ${_rc}, expected 0 (the refusal must not reach record)"
 
   # (e) the script's regex text equals the schema's pattern. The schema lands at
@@ -413,7 +452,7 @@ if [ -n "$CKPT" ]; then
     _f2want="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["patterns"]["gate_nonce"].replace("\\d","[0-9]"))' "$_f2schema" 2>/dev/null)"
     _f2have="$(f2_regex_of "$CKPT")"
     if [ -n "$_f2want" ] && [ -n "$_f2have" ] && [ "$_f2want" = "$_f2have" ]; then
-      ok "BL-518 (e): gate-checkpoint.sh's NONCE_RE equals the schema's patterns.gate_nonce (\\d as [0-9])"
+      ok "BL-518 (e): gate-checkpoint.sh's NONCE_RE equals the schema's patterns.gate_nonce (\\d as [0-9])"; B_F2E=1
     else
       bad "BL-518 (e): NONCE_RE='${_f2have}' differs from (or either is empty) the schema's '${_f2want}'"
     fi
@@ -557,7 +596,6 @@ fi
 # canonical, and `open` refuses it (BL-518), so the sweep writes it straight into
 # `.gate-checkpoint/OPEN` -- its subject is the recover hook's byte budget, not `open`.
 # ============================================================================
-B457_V_ALL="S0=1 S1=1 S2=1 S3=1 WC=1 RB=1 NC=1"
 # WC_MARGIN (BL-735): the author-time headroom WC demands below the 10000 cliff. What it
 # protects is the sidecar note, the compacted lead's one pointer to the pre-compaction branch
 # and gate-log tail. ai-dlc-recover.sh:639-641 drops that note once ${#BARE} + WRAP_OVERHEAD
@@ -605,26 +643,55 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
     set -- $_p
     printf '%s %s %s %s %s %s\n' "${1:-none}" "${_i:-none}" "${_d:-none}" "${2:-x}" "${3:-x}" "${4:-x}"
   }
-  # b457_eval <hookfile> <tag> -> prints the arm vector; diagnostics to $WORK/b457-<tag>.log
-  b457_eval() {
-    local H="$1" T="$2" D="$WORK/b457-$2" log="$WORK/b457-$2.log" n nonce r
-    local s0=1 s1=1 s2=1 s3=1 wc=1 rb=1 nc=1 hi=0 band=0 dropped=0 under=0 below_no=0
-    : > "$log"
-    # The wrap's own overhead, read off the library the hook sources: marker line + newline.
-    local W=$(( ${#B457_WRAP_PROBE} ))
-    # --- the sweep: unresolvable step file, sidecar, real nonce growing across the cliff ---
-    # THE CAP FOLLOWS THE HEADROOM. Each step adds 24 emitted bytes (the nonce is named twice);
-    # S1 needs worlds at/over 10000, which after the note drops start near n=276 on the shipped
-    # hook (9683 + 2n - 225 >= 10000), so 336 reaches the wrap band with five worlds in it.
-    n=0
-    while [ "$n" -le 336 ]; do
-      nonce="implementation-20261006T120000Z$(printf '%*s' "$n" '' | tr ' ' x)"
-      _mkc457 "$D/sw$n" "$H" unres yes "" 0
-      mkdir -p "$D/sw$n/_bmad-output/.gate-checkpoint"
-      printf '%s\n' "$nonce" > "$D/sw$n/_bmad-output/.gate-checkpoint/OPEN"
-      r="$(_fire457 "$D/sw$n")"; printf 'sweep n=%s len=%s\n' "$n" "$r" >> "$log"
-      set -- $r
-      if [ "$1" = none ] || [ "$6" != 1 ]; then s0=0; s1=0; s3=0; printf '  STALE: no emission or no gate section at n=%s\n' "$n" >> "$log"
+  # The wrap's overhead as the fixture sees it: one marker line, read from a real fire below.
+  B457_WRAP_PROBE=""
+  _mkc457 "$WORK/b457-probe" "$HOOK" res no "" 0
+  _fire457 "$WORK/b457-probe" >/dev/null
+  B457_WRAP_PROBE="$(sed -n '1p' "$WORK/b457-probe/out.ctx" 2>/dev/null)x"
+  case "$B457_WRAP_PROBE" in
+    '[AI-DLC-HOOK-PROVENANCE'*) ok "BL-457 probe: the recover hook's emission opens with the provenance marker (${#B457_WRAP_PROBE} chars with its newline)" ;;
+    *) bad "FIXTURE BROKEN: BL-457 probe -- the recover hook's emission carries no provenance marker line, so the wrap band below is unmeasurable" ;;
+  esac
+
+  # THE WORLDS. Each world is built and fired ONCE per hook file (tag) and its result kept in
+  # $WORK/b457-<tag>/<world>.res; every arm that reads a world reads that record. The sweep is
+  # unresolvable step file + sidecar + a real nonce growing across the cliff; each step adds 24
+  # emitted bytes (the nonce is named twice), and S1 needs worlds at/over 10000, which after the
+  # note drops start near n=276 on the shipped hook (9683 + 2n - 225 >= 10000), so 336 reaches the
+  # wrap band with five worlds in it. B457_SWEEP_DENSE is the full sweep and the SHIPPED hook is
+  # scored on it on every push (the live evidence is never narrowed). The MUTANTS run only the
+  # four-world subset B457_SWEEP, because the --matrix log shows that subset decides each of them;
+  # the shipped hook is also scored on the subset every push, so subset and dense must agree. Its
+  # worlds: 168 the first world past the note drop (under the cliff, note gone), 264 the last
+  # world under the cliff (in [9500,10000) and above the 9950 trim bound), 276 and 324 the wrap band.
+  B457_SWEEP_DENSE=""; _sn=0
+  while [ "$_sn" -le 336 ]; do B457_SWEEP_DENSE="$B457_SWEEP_DENSE $_sn"; _sn=$((_sn + 12)); done
+  B457_SWEEP="168 264 276 324"
+  b457_world() { # b457_world <hookfile> <tag> <world:swN|low|wc|rb> -> the world's _fire457 vector
+    local H="$1" D="$WORK/b457-$2" W="$3" r n
+    if [ -f "$D/$W.res" ]; then cat "$D/$W.res"; return 0; fi
+    case "$W" in
+      sw*) n="${W#sw}"
+           _mkc457 "$D/$W" "$H" unres yes "" 0
+           mkdir -p "$D/$W/_bmad-output/.gate-checkpoint"
+           printf '%s\n' "implementation-20261006T120000Z$(printf '%*s' "$n" '' | tr ' ' x)" > "$D/$W/_bmad-output/.gate-checkpoint/OPEN"
+           r="$(_fire457 "$D/$W")" ;;
+      low) _mkc457 "$D/low" "$H" res no "" 0; r="$(_fire457 "$D/low")" ;;
+      wc)  _mkc457 "$D/wc" "$H" unres yes "implementation-20261006T120000Z" 0; r="$(_fire457 "$D/wc")" ;;
+      rb)  _mkc457 "$D/rb" "$H" res no "" 1200; r="$(_fire457 "$D/rb" 50)" ;;
+    esac
+    printf '%s\n' "$r" > "$D/$W.res"; printf '%s\n' "$r"
+  }
+  # b457_sweep <hookfile> <tag> "<n list>" -> "s0 s1 s3" over those worlds (cached per list)
+  b457_sweep() {
+    local H="$1" T="$2" L="$3" s0=1 s1=1 s3=1 hi=0 band=0 dropped=0 under=0 n r key W low
+    key="$WORK/b457-$T/sweep-$(printf '%s' "$L" | tr -c '0-9' '_').vec"
+    mkdir -p "$WORK/b457-$T"
+    if [ -f "$key" ]; then cat "$key"; return 0; fi
+    W=$(( ${#B457_WRAP_PROBE} ))
+    for n in $L; do
+      r="$(b457_world "$H" "$T" "sw$n")"; set -- $r
+      if [ "$1" = none ] || [ "$6" != 1 ]; then s0=0; s1=0; s3=0
       else
         [ "$2" = "$1" ] || s1=0
         if [ "$1" -ge 10000 ]; then
@@ -636,61 +703,67 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
           if [ "$1" -ge 9500 ]; then under=$((under + 1)); [ "$3" = no ] || s3=0; fi
         fi
       fi
-      n=$((n + 12))
     done
-    [ "$hi" -gt 0 ] && [ "$band" -gt 0 ] || { s1=0; printf '  STALE: hi=%s band=%s\n' "$hi" "$band" >> "$log"; }
-    [ "$dropped" -gt 0 ] || { s0=0; printf '  STALE: no world dropped the sidecar note under the cliff\n' >> "$log"; }
-    [ "$under" -gt 0 ] || { s3=0; printf '  STALE: no world in [9500,10000)\n' >> "$log"; }
-    # --- S2 + NC: far under every bound; one mint per fire ---
-    _mkc457 "$D/low" "$H" res no "" 0
-    r="$(_fire457 "$D/low")"; printf 'low %s\n' "$r" >> "$log"; set -- $r
-    if [ "$1" != none ] && [ "$1" -lt 9500 ] && [ "$3" = no ]; then below_no=1; else s2=0; fi
-    [ "$below_no" = 1 ] || s3=1   # S2 owns the unconditional case; S3 stands down
-    local st="$D/low/_bmad-output/.ai-dlc-context-nonce" lines mark
-    lines="$(grep -c . "$st" 2>/dev/null)" || lines=0
-    mark="$(sed -n '1s/.* nonce=\([0-9a-f]*\) .*/\1/p' "$D/low/out.ctx" 2>/dev/null)"
-    printf 'nc lines=%s mark=%s store=%s\n' "$lines" "$mark" "$(awk '{print $NF}' "$st" 2>/dev/null)" >> "$log"
-    [ "$lines" = 1 ] && [ -n "$mark" ] && [ "$mark" = "$(awk '{print $NF}' "$st")" ] || nc=0
-    # --- WC ---
-    _mkc457 "$D/wc" "$H" unres yes "implementation-20261006T120000Z" 0
-    r="$(_fire457 "$D/wc")"; printf 'wc %s\n' "$r" >> "$log"; set -- $r
-    # $4 is the sidecar-note flag in _fire457's field order (len injected degraded NOTE excerpt gate).
-    [ "$1" != none ] && [ "$6" = 1 ] && [ "$4" = 1 ] && [ "$1" -lt $((10000 - WC_MARGIN)) ] || wc=0
-    # --- RB ---
-    _mkc457 "$D/rb" "$H" res no "" 1200
-    r="$(_fire457 "$D/rb" 50)"; printf 'rb %s\n' "$r" >> "$log"; set -- $r
-    [ "$1" != none ] && [ "$5" = 1 ] && [ "$1" -gt 9500 ] && [ "$1" -lt 9950 ] || rb=0
-    printf 'S0=%s S1=%s S2=%s S3=%s WC=%s RB=%s NC=%s\n' "$s0" "$s1" "$s2" "$s3" "$wc" "$rb" "$nc"
+    [ "$hi" -gt 0 ] && [ "$band" -gt 0 ] || s1=0
+    [ "$dropped" -gt 0 ] || s0=0
+    [ "$under" -gt 0 ] || s3=0
+    # S3 stands down when S2's world says yes, because then S2 owns the case.
+    low="$(b457_world "$H" "$T" low)"; set -- $low
+    [ "$1" != none ] && [ "$1" -lt 9500 ] && [ "$3" = no ] || s3=1
+    printf '%s %s %s\n' "$s0" "$s1" "$s3" | tee "$key"
   }
-  # The wrap's overhead as the fixture sees it: one marker line, read from a real fire below.
-  B457_WRAP_PROBE=""
-  _mkc457 "$WORK/b457-probe" "$HOOK" res no "" 0
-  _fire457 "$WORK/b457-probe" >/dev/null
-  B457_WRAP_PROBE="$(sed -n '1p' "$WORK/b457-probe/out.ctx" 2>/dev/null)x"
-  case "$B457_WRAP_PROBE" in
-    '[AI-DLC-HOOK-PROVENANCE'*) ok "BL-457 probe: the recover hook's emission opens with the provenance marker (${#B457_WRAP_PROBE} chars with its newline)" ;;
-    *) bad "FIXTURE BROKEN: BL-457 probe -- the recover hook's emission carries no provenance marker line, so the wrap band below is unmeasurable" ;;
-  esac
-
-  B457_V="$(b457_eval "$HOOK" fix)"
-  for _arm in $B457_V; do
-    case "$_arm" in
-      S0=1) ok "BL-457 S0: no world at/over the cliff still carries the droppable sidecar note, and the note IS dropped in a world it would have pushed over" ;;
-      S1=1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world" ;;
-      S2=1) ok "BL-457 S2: a world under every bound records degraded=no" ;;
-      S3=1) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound" ;;
-      WC=1) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) keeps the sidecar note and emits under $((10000 - WC_MARGIN)) (WC_MARGIN=${WC_MARGIN})" ;;
-      RB=1) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED" ;;
-      NC=1) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint" ;;
-      *) bad "BL-457 arm ${_arm%=*} FAILED on the shipped hook (see the diagnostic below)" ;;
+  # b457_arm <hookfile> <tag> <arm> <sweep list> -> 1 when the arm holds, 0 when it is broken
+  b457_arm() {
+    local H="$1" T="$2" A="$3" L="$4" r st lines mark
+    case "$A" in
+      S0) set -- $(b457_sweep "$H" "$T" "$L"); echo "$1" ;;
+      S1) set -- $(b457_sweep "$H" "$T" "$L"); echo "$2" ;;
+      S3) set -- $(b457_sweep "$H" "$T" "$L"); echo "$3" ;;
+      S2) r="$(b457_world "$H" "$T" low)"; set -- $r
+          if [ "$1" != none ] && [ "$1" -lt 9500 ] && [ "$3" = no ]; then echo 1; else echo 0; fi ;;
+      NC) b457_world "$H" "$T" low >/dev/null
+          st="$WORK/b457-$T/low/_bmad-output/.ai-dlc-context-nonce"
+          lines="$(grep -c . "$st" 2>/dev/null)" || lines=0
+          mark="$(sed -n '1s/.* nonce=\([0-9a-f]*\) .*/\1/p' "$WORK/b457-$T/low/out.ctx" 2>/dev/null)"
+          if [ "$lines" = 1 ] && [ -n "$mark" ] && [ "$mark" = "$(awk '{print $NF}' "$st")" ]; then echo 1; else echo 0; fi ;;
+      WC) r="$(b457_world "$H" "$T" wc)"; set -- $r
+          # $4 is the sidecar-note flag in _fire457's field order (len injected degraded NOTE excerpt gate).
+          local wc=1
+          [ "$1" != none ] && [ "$6" = 1 ] && [ "$4" = 1 ] && [ "$1" -lt $((10000 - WC_MARGIN)) ] || wc=0
+          echo "$wc" ;;
+      RB) r="$(b457_world "$H" "$T" rb)"; set -- $r
+          if [ "$1" != none ] && [ "$5" = 1 ] && [ "$1" -gt 9500 ] && [ "$1" -lt 9950 ]; then echo 1; else echo 0; fi ;;
     esac
-  done
-  [ "$B457_V" = "$B457_V_ALL" ] || sed 's/^/      /' "$WORK/b457-fix.log" | grep -E 'STALE|wc |rb |low |nc ' >&2
+  }
 
-  # --- MUTANTS (a)-(f). Built by literal replacement, each anchor required to occur EXACTLY
+  # The shipped hook: seven arms, each one ok line, and each arm's same-run base-pass flag
+  # (B457_BASE_<arm>) that gates every mutant keyed on it. Scored on the dense sweep AND the subset on
+  # every push (same tag, so the subset's worlds are the dense run's cached records).
+  for _arm in S0 S1 S2 S3 WC RB NC; do
+    _vs="$(b457_arm "$HOOK" fix "$_arm" "$B457_SWEEP")"
+    _vd="$(b457_arm "$HOOK" fix "$_arm" "$B457_SWEEP_DENSE")"
+    eval "B457_BASE_${_arm}=0"; [ "$_vd" = 1 ] && [ "$_vs" = 1 ] && eval "B457_BASE_${_arm}=1"
+    if [ "$_vd" = 1 ] && [ "$_vs" = 1 ]; then
+      case "$_arm" in
+        S0) ok "BL-457 S0: no world at/over the cliff still carries the droppable sidecar note, and the note IS dropped in a world it would have pushed over" ;;
+        S1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world" ;;
+        S2) ok "BL-457 S2: a world under every bound records degraded=no" ;;
+        S3) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound" ;;
+        WC) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) keeps the sidecar note and emits under $((10000 - WC_MARGIN)) (WC_MARGIN=${WC_MARGIN})" ;;
+        RB) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED" ;;
+        NC) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint" ;;
+      esac
+    else
+      bad "BL-457 arm ${_arm} FAILED on the shipped hook (subset=${_vs}, dense=${_vd}; see $WORK/b457-fix)"
+    fi
+  done
+  B457_BASE_ALL=0
+  [ "$B457_BASE_S0$B457_BASE_S1$B457_BASE_S2$B457_BASE_S3$B457_BASE_WC$B457_BASE_RB$B457_BASE_NC" = 1111111 ] && B457_BASE_ALL=1
+
+  # --- MUTANTS (a)-(h). Built by literal replacement, each anchor required to occur EXACTLY
   # ONCE in the hook (a lost or duplicated anchor is FIXTURE STALE, never a pass), every layer
-  # of a layered fix reverted together, `bash -n` on the result. Each must break its OWN arm
-  # and no other: the expected vector is the full one with that single arm at 0.
+  # of a layered fix reverted together, `bash -n` on the result. Per push a mutant is driven on
+  # its DECIDING arm and its TWIN arm(s) only; --matrix drives all seven (MUTANT-MATRIX header).
   b457_mut() { # b457_mut <tag> <out> <old1> <new1> [<old2> <new2> ...]
     python3 - "$HOOK" "$2" "${@:3}" <<'PY'
 import sys
@@ -702,31 +775,44 @@ for i in range(0, len(pairs), 2):
 open(out, "w").write(src)
 PY
   }
-  b457_score() { # b457_score <tag> <owned-arm> <what> <old1> <new1> ...
-    local tag="$1" arm="$2" what="$3" m="$WORK/recover-$1.sh" v want
-    shift 3
+  b457_score() { # b457_score <tag> <decider-arm> "<twin arms>" <what> <old1> <new1> ...
+    local tag="$1" dec="$2" twins="${3//,/ }" what="$4" m="$WORK/recover-$1.sh" a v arms cells="" held=1
+    shift 4
     if ! b457_mut "$tag" "$m" "$@"; then bad "FIXTURE STALE: BL-457 mutant ($tag) -- an anchor is absent or not unique in the hook"; return; fi
     if cmp -s "$HOOK" "$m"; then bad "FIXTURE STALE: BL-457 mutant ($tag) is byte-identical to the hook"; return; fi
     if ! bash -n "$m" 2>/dev/null; then bad "FIXTURE STALE: BL-457 mutant ($tag) is not valid shell"; return; fi
-    want="$(printf '%s' "$B457_V_ALL" | sed "s/${arm}=1/${arm}=0/")"
-    v="$(b457_eval "$m" "$tag")"
-    if [ "$v" = "$want" ]; then ok "BL-457 mutant ($tag) $what -- killed by ${arm} and by no other arm"
-    else bad "BL-457 mutant ($tag) $what -- expected [$want], got [$v]"; fi
+    arms="$dec $twins"; [ "$MATRIX" = 1 ] && arms="S0 S1 S2 S3 WC RB NC"
+    for a in $arms; do
+      v="$(b457_arm "$m" "$tag" "$a" "$B457_SWEEP")"
+      [ "$MATRIX" = 1 ] && printf 'MATRIX\tb457-%s\t%s\t%s\n' "$tag" "$a" "$([ "$v" = 1 ] && echo ok || echo FAIL)"
+      if [ "$a" = "$dec" ]; then cells="$v"
+      else
+        case " $twins " in *" $a "*) [ "$v" = 1 ] || held=0 ;; esac
+      fi
+    done
+    eval "B457_FLAG=\${B457_BASE_${dec}}"
+    if [ "$cells" = 0 ] && [ "$held" = 1 ]; then
+      mutant_killed "$B457_FLAG" "b457-$tag" "BL-457 mutant b457-$tag ($tag) $what -- killed by ${dec}, twin(s) [${twins}] hold"
+    elif [ "$cells" = 0 ]; then
+      bad "BL-457 mutant b457-$tag ($tag) $what -- deciding arm ${dec} broke, but a twin [${twins}] also broke"
+    else
+      bad "BL-457 mutant b457-$tag ($tag) $what -- deciding arm ${dec} still holds under the mutant"
+    fi
   }
-  if [ "$B457_V" = "$B457_V_ALL" ]; then
-    b457_score a S1 "decides degraded and injected_bytes on the pre-wrap block" \
+  if [ "$B457_BASE_ALL" = 1 ]; then
+    b457_score a S1 "S2" "decides degraded and injected_bytes on the pre-wrap block" \
       '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' '[ "${#CONTEXT}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' \
       'printf '"'"'injected_bytes=%s\n'"'"' "${#EMITTED}"' 'printf '"'"'injected_bytes=%s\n'"'"' "${#CONTEXT}"'
-    b457_score b RB "does not reduce the excerpt budget or its fallback by the wrap" \
+    b457_score b RB "WC" "does not reduce the excerpt budget or its fallback by the wrap" \
       '${#BARE} - EXCERPT_OVERHEAD - WRAP_OVERHEAD ))' '${#BARE} - EXCERPT_OVERHEAD ))' \
       'if [ $(( ${#CONTEXT} + WRAP_OVERHEAD )) -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then' 'if [ "${#CONTEXT}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then'
-    b457_score c S2 "records degraded=yes unconditionally" \
+    b457_score c S2 "NC" "records degraded=yes unconditionally" \
       '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' 'DEGRADED=yes'
-    b457_score d S3 "lowers the degraded threshold to the excerpt's trim bound" \
+    b457_score d S3 "S2" "lowers the degraded threshold to the excerpt's trim bound" \
       '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' '[ "${#EMITTED}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ] && DEGRADED=yes'
-    b457_score e S0 "keys the sidecar-note drop on the pre-wrap length" \
+    b457_score e S0 "S1,S3" "keys the sidecar-note drop on the pre-wrap length" \
       'if [ -n "$SIDECAR_NOTE" ] && [ $(( ${#BARE} + WRAP_OVERHEAD )) -ge "$CONTEXT_LIMIT" ]; then' 'if [ -n "$SIDECAR_NOTE" ] && [ "${#BARE}" -ge "$CONTEXT_LIMIT" ]; then'
-    b457_score f NC "emits through a second wrap call, minting a second nonce" \
+    b457_score f NC "S2" "emits through a second wrap call, minting a second nonce" \
       'jq -n --arg ctx "$EMITTED"' 'jq -n --arg ctx "$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$CONTEXT")"'
     # BL-735 (g)/(h): the emitted text grown by one prose line inside build()'s heredoc. The
     # sizes are derived from the measured WC world (9683 with the note; the note drops at
@@ -735,14 +821,14 @@ PY
     # ~9787: under 10000 AND under 10000 - WC_MARGIN, so only the note assertion kills it --
     # the old WC passed this mutant, which is the hazard BL-735 filed.
     _b735_h='## Rule 23 is why you compacted, and you no longer hold it'
-    b457_score g WC "grows the emitted text by 200 bytes, the sidecar note kept, inside the cliff" \
+    b457_score g WC "S2" "grows the emitted text by 200 bytes, the sidecar note kept, inside the cliff" \
       "$_b735_h" "$_b735_h
 $(printf '%*s' 199 '' | tr ' ' g)"
-    b457_score h WC "grows the emitted text by 329 bytes, enough to drop the sidecar note, still under the margin" \
+    b457_score h WC "S2" "grows the emitted text by 329 bytes, enough to drop the sidecar note, still under the margin" \
       "$_b735_h" "$_b735_h
 $(printf '%*s' 328 '' | tr ' ' h)"
   else
-    bad "BL-457 mutants not scored: the shipped hook's own vector [$B457_V] is not [$B457_V_ALL], so a mutant's vector would be read against a broken baseline"
+    bad "BL-457 mutants not scored: the shipped hook did not hold all seven arms on the shipped-hook sweep, so a mutant's verdict would be read against a broken baseline"
   fi
 else
   skip "BL-457 cliff arms and mutants" "gate-checkpoint.sh is not present in this tree"
@@ -767,8 +853,9 @@ if [ -n "$CKPT" ]; then
     _m1root="$WORK/ckpt-m1-root"; mkdir -p "$_m1root/_bmad-output"
     bash "$MUT1" --root "$_m1root" --nonce m1 record 9 FAIL >/dev/null 2>&1
     _m1d="$(bash "$MUT1" --root "$_m1root" --nonce m1 done 2>/dev/null)"
+    mcell m1 done-fail "$([ "$_m1d" = 9 ] && echo 0 || echo 1)"
     if [ "$_m1d" = "9" ]; then
-      ok "mutant m1: 'done' widened to also emit FAIL -- a check that FAILED now reads as settled, and a resume would skip it"
+      mutant_killed "$B_E_DONE" m1 "mutant m1: 'done' widened to also emit FAIL -- a check that FAILED now reads as settled, and a resume would skip it"
     else
       bad "MUTANT DID NOT FAIL: m1 -- 'done' still excludes a FAIL row after widening the filter (got '${_m1d}')"
     fi
@@ -793,8 +880,9 @@ if [ -n "$CKPT" ]; then
   else
     _m2root="$WORK/ckpt-m2-root"; mkdir -p "$_m2root/_bmad-output"
     bash "$MUT2" --root "$_m2root" --nonce m2 record 5 PROBABLY >/dev/null 2>&1; _m2rc=$?
+    mcell m2 verdict-vocab "$([ "$_m2rc" -eq 0 ] && echo 0 || echo 1)"
     if [ "$_m2rc" -eq 0 ]; then
-      ok "mutant m2: deleting the verdict-vocabulary case arm lets 'record 5 PROBABLY' through (rc 0) -- the closed vocabulary is gone"
+      mutant_killed "$B_F_VERDICT" m2 "mutant m2: deleting the verdict-vocabulary case arm lets 'record 5 PROBABLY' through (rc 0) -- the closed vocabulary is gone"
     else
       bad "MUTANT DID NOT FAIL: m2 -- an arbitrary verdict token is still refused (rc=${_m2rc})"
     fi
@@ -829,8 +917,9 @@ if [ -n "$SLICE" ]; then
   else
     bash "$SLICE" --type planning --file "$_pf3" >/dev/null 2>&1; _m3real=$?
     bash "$MUT3"  --type planning --file "$_pf3" >/dev/null 2>&1; _m3mut=$?
+    mcell m3 missing-anchor "$([ "$_m3mut" -eq 0 ] && echo 0 || echo 1)"
     if [ "$_m3real" -eq 2 ] && [ "$_m3mut" -eq 0 ]; then
-      ok "mutant m3: a required check (7) with no anchor now produces a SILENT plan (rc 0) instead of gate-slice.sh's real refusal (rc 2) -- H1's own FAIL condition is dodged at derivation"
+      mutant_killed "$([ "$_m3real" -eq 2 ] && echo 1 || echo 0)" m3 "mutant m3: a required check (7) with no anchor now produces a SILENT plan (rc 0) instead of gate-slice.sh's real refusal (rc 2) -- H1's own FAIL condition is dodged at derivation"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m3 -- real rc=${_m3real} (want 2), mutant rc=${_m3mut} (want 0)"
     fi
@@ -861,8 +950,9 @@ if [ -n "$SLICE" ]; then
     _m4mut_json="$(bash "$MUT4"  --type planning --file "$GATEFILE" --format json 2>/dev/null)"
     _m4real_off="$(printf '%s' "$_m4real_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["reads"][0]["offset"])' 2>/dev/null)"
     _m4mut_off="$(printf '%s' "$_m4mut_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["reads"][0]["offset"])' 2>/dev/null)"
+    mcell m4 preamble-offset "$([ -n "$_m4mut_off" ] && [ "$_m4mut_off" != 1 ] && echo 0 || echo 1)"
     if [ "$_m4real_off" = "1" ] && [ -n "$_m4mut_off" ] && [ "$_m4mut_off" != "1" ]; then
-      ok "mutant m4: dropping the preamble interval moves the first planned read's offset from 1 to ${_m4mut_off} -- the manifest and loader contract silently drop out of every plan"
+      mutant_killed "$([ "$_m4real_off" = 1 ] && echo 1 || echo 0)" m4 "mutant m4: dropping the preamble interval moves the first planned read's offset from 1 to ${_m4mut_off} -- the manifest and loader contract silently drop out of every plan"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m4 -- real offset[0]=${_m4real_off} (want 1), mutant offset[0]=${_m4mut_off} (want != 1)"
     fi
@@ -929,8 +1019,9 @@ else
   bash "$CKPT" --root "$_m5root" --nonce m5-new record 1 PASS >/dev/null 2>&1
   _m5real="$(bash "$CKPT" --root "$_m5root" current 2>/dev/null)"
   _m5mut="$(bash "$MUT5"  --root "$_m5root" current 2>/dev/null)"
+  mcell m5 current-mtime "$([ "$_m5mut" = m5-new ] && echo 0 || echo 1)"
   if [ -z "$_m5real" ] && [ "$_m5mut" = "m5-new" ] && [ -f "$_m5root/_bmad-output/.gate-checkpoint/${_m5old}.tsv" ]; then
-    ok "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
+    mutant_killed "$([ -z "$_m5real" ] && echo 1 || echo 0)" m5 "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
   else
     bad "MUTANT DID NOT FAIL AS EXPECTED: m5 -- real current='${_m5real}' (want empty), mutant current='${_m5mut}' (want m5-new)"
   fi
@@ -995,8 +1086,9 @@ body forty-two
 EXT
     _m6real="$(bash "$SLICE" --type planning --file "$_epf" --format json 2>/dev/null | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["extension_loads"]))' 2>/dev/null)"
     _m6mut="$(bash "$MUT6"  --type planning --file "$_epf" --format json 2>/dev/null | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["extension_loads"]))' 2>/dev/null)"
+    mcell m6 ext-anchor "$([ "$_m6mut" = 1 ] && echo 0 || echo 1)"
     if [ "$_m6real" = "0" ] && [ "$_m6mut" = "1" ]; then
-      ok "mutant m6: dropping the extension anchor regex's ^ anchor makes an INLINE prose mention of \`<!-- CHECK_LOADED: 42 -->\` register as a real anchor -- an extension author's format EXAMPLE becomes a loaded check"
+      mutant_killed "$([ "$_m6real" = 0 ] && echo 1 || echo 0)" m6 "mutant m6: dropping the extension anchor regex's ^ anchor makes an INLINE prose mention of \`<!-- CHECK_LOADED: 42 -->\` register as a real anchor -- an extension author's format EXAMPLE becomes a loaded check"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m6 -- real extension_loads=${_m6real} (want 0), mutant extension_loads=${_m6mut} (want 1)"
     fi
@@ -1049,8 +1141,9 @@ PY
     bash "$MUT7" --root "$_m7root" --nonce "implementation-20261011T083048Z" open >/dev/null 2>&1
     bash "$MUT7" --root "$_m7root" --nonce "implementation-2026-10-11T083048Z" open >/dev/null 2>&1; _m7rc=$?
     _m7cur="$(bash "$MUT7" --root "$_m7root" current 2>/dev/null)"
+    mcell m7 refusal-after-write "$([ "$_m7cur" = "implementation-2026-10-11T083048Z" ] && echo 0 || echo 1)"
     if [ "$_m7rc" -eq 2 ] && [ "$_m7cur" = "implementation-2026-10-11T083048Z" ]; then
-      ok "mutant m7: the refusal placed after the OPEN marker write still exits 2 but 'current' now names the refused nonce -- (a)'s current conjunct kills it"
+      mutant_killed "$B_F2A" m7 "mutant m7: the refusal placed after the OPEN marker write still exits 2 but 'current' now names the refused nonce -- (a)'s current conjunct kills it"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m7 -- rc=${_m7rc} (want 2), current='${_m7cur}' (want the refused nonce)"
     fi
@@ -1064,8 +1157,9 @@ PY
     _m8root="$WORK/ckpt-m8-root"; mkdir -p "$_m8root/_bmad-output"
     bash "$CKPT" --root "$_m8root" --nonce f1 record 1 PASS >/dev/null 2>&1; _m8real=$?
     bash "$MUT8" --root "$_m8root" --nonce f1 record 1 PASS >/dev/null 2>&1; _m8mut=$?
+    mcell m8 refusal-every-action "$([ "$_m8mut" -eq 2 ] && echo 0 || echo 1)"
     if [ "$_m8real" -eq 0 ] && [ "$_m8mut" -eq 2 ]; then
-      ok "mutant m8: the refusal applied to every action refuses 'record' at f1 (rc 2, real rc 0) -- (d) kills it"
+      mutant_killed "$B_F2D" m8 "mutant m8: the refusal applied to every action refuses 'record' at f1 (rc 2, real rc 0) -- (d) kills it"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m8 -- real record rc=${_m8real} (want 0), mutant rc=${_m8mut} (want 2)"
     fi
@@ -1080,8 +1174,9 @@ PY
     bash "$MUT9" --root "$_m9root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _m9rc=$?
     f2_canon_open "$MUT9" "$_m9root"; _m9ctl=$?
     _m9re="$(f2_regex_of "$MUT9")"
+    mcell m9 loose-regex "$([ "$_m9rc" -eq 0 ] && echo 0 || echo 1)"
     if [ "$_m9rc" -eq 0 ] && [ "$_m9ctl" -eq 0 ] && [ -n "$_m9re" ] && [ "$_m9re" != "${_f2want:-}" ]; then
-      ok "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
+      mutant_killed "$([ "$B_F2B$B_F2C$B_F2E" = 111 ] && echo 1 || echo 0)" m9 "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m9 -- deploy-validate open rc=${_m9rc} (want 0), canonical rc=${_m9ctl} (want 0), regex '${_m9re}' vs schema '${_f2want:-}'"
     fi

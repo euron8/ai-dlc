@@ -23,11 +23,69 @@
 #     there), `|` prose with a separator above it but outside its run (the separator-in-run guard
 #     alone), separator rows at k (the k-1 boundary), and separator-led pairs (the three-row guard).
 #
-# THE MUTANTS AT THE END are copies of the partitioner, each scored against EVERY predicate and
-# the kill set compared for EQUALITY with the one arm that owns the property. An unmutated copy
-# is scored first and must pass every predicate, so a kill below is the mutation's and not the
-# harness's.
+# THE MUTANTS AT THE END are copies of the partitioner. Two modes score them:
+#   - PER PUSH (no argument; what hermetic-run.sh and the pre-push pool run): each mutant runs its
+#     DECIDING arm, which must FAIL, and one named TWIN, an arm the measured matrix shows GREEN for
+#     that mutant, which must PASS. The kill is emitted through mutant_killed behind the same-run
+#     base pass of the deciding arm (B_<arm>, set beside that arm's ok above) and of the MX0
+#     control (B_MX0). The unmutated copy MX0 is asserted byte-identical to the subject the 35 arms
+#     just passed, so the arms' own verdicts are its verdicts and are not re-run on it.
+#   - MATRIX (`--matrix`): the unmutated copy and every mutant are scored against EVERY predicate,
+#     one MATRIX row each (printed by matrix.sh, every cell `<predicate>:killed=yes|no`), and each
+#     mutant's tripped set must EQUAL the recorded kill set passed at its call site. That is the
+#     exact-vector assertion fixture-mutants.md asks for ("a mutant must fail only its own
+#     assertion"); per push, the recorded matrix plus the twin stand in for it.
+# THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root, by
+# the command on the MUTANT-MATRIX-REMEASURE line. It is not re-run through hermetic-run.sh, which
+# forwards no argument. A per-push verdict is only as good as the matrix it reads.
+#
+# The tripped set of each mutant, as measured (every arm not listed is GREEN for it):
+#   MX1 sha_moved | MX2 missing | MX3 fence longfence cfence fence_table | MX7 longfence
+#   MX8 comment cfence | MX9 cfence | MX10 comment | MX4 newline | MX5 cap | MX6 removed
+#   MX11 fence_table | MX12 two_row | MX16 prose_run sep_at_k | MX17 sep_at_k | MX18 prose_run
+#   MX19 fm_crlf_table | MX13 wide_table sep_at_k single_line fm_crlf_table
+#   MX14 serial_dominant fence_table sep_outside_fence two_row prose_run single_line
+#   MX15 single_line | MX20 scope_changed scope_h3 scope_deletion scope_gap | MX21 scope_h3
+#   MX22 scope_deletion | MX23 scope_gap | MX24 cross_cover | MX25 cross_cover cross_owner
+#   MX26 cross_owner | MX27 cross_owner | MX0 (the unmutated copy, a CONTROL) none
+# Each twin is the green arm nearest the deciding arm in subject: the sibling refusal, the sibling
+# fence/comment world, or the sibling --scope-ref / --cross-* arm.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/document-partition/run.sh --matrix
+# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no predicate; it is the base pass every kill is gated on
+# MUTANT-MATRIX MX1 decides=sha_moved twins=missing
+# MUTANT-MATRIX MX2 decides=missing twins=refused_intact
+# MUTANT-MATRIX MX3 decides=fence twins=comment
+# MUTANT-MATRIX MX7 decides=longfence twins=fence
+# MUTANT-MATRIX MX8 decides=comment twins=longfence
+# MUTANT-MATRIX MX9 decides=cfence twins=comment
+# MUTANT-MATRIX MX10 decides=comment twins=cfence
+# MUTANT-MATRIX MX4 decides=newline twins=missing
+# MUTANT-MATRIX MX5 decides=cap twins=serial_one
+# MUTANT-MATRIX MX6 decides=removed twins=unchanged
+# MUTANT-MATRIX MX11 decides=fence_table twins=wide_table
+# MUTANT-MATRIX MX12 decides=two_row twins=wide_table
+# MUTANT-MATRIX MX16 decides=prose_run twins=two_row
+# MUTANT-MATRIX MX17 decides=sep_at_k twins=wide_table
+# MUTANT-MATRIX MX18 decides=prose_run twins=sep_outside_fence
+# MUTANT-MATRIX MX19 decides=fm_crlf_table twins=wide_table
+# MUTANT-MATRIX MX13 decides=wide_table twins=serial_dominant
+# MUTANT-MATRIX MX14 decides=serial_dominant twins=serial_one
+# MUTANT-MATRIX MX15 decides=single_line twins=serial_dominant
+# MUTANT-MATRIX MX20 decides=scope_changed twins=scope_absent
+# MUTANT-MATRIX MX21 decides=scope_h3 twins=scope_changed
+# MUTANT-MATRIX MX22 decides=scope_deletion twins=scope_changed
+# MUTANT-MATRIX MX23 decides=scope_gap twins=sha_moved
+# MUTANT-MATRIX MX24 decides=cross_cover twins=cross_refuse
+# MUTANT-MATRIX MX25 decides=cross_cover twins=cross_refuse
+# MUTANT-MATRIX MX26 decides=cross_owner twins=cross_refuse
+# MUTANT-MATRIX MX27 decides=cross_owner twins=cross_refuse
 set -uo pipefail
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -55,6 +113,13 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found in $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/document-partition/matrix.sh"
 has() { local n; n="$(grep -cF -- "$2" "$1")" || n=0; [ "$n" -gt 0 ]; }
 world() { mktemp -d "$WORK/w.XXXXXX"; }
 body() { # <tag> <lines> -> that many body lines
@@ -565,44 +630,44 @@ p_cross_owner() { # the lowest g holding the two smallest cited ordinals; under 
 
 P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap cross_cover cross_refuse cross_owner"
 
-arm() { # <predicate> <label>
-  if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
+arm() { # <predicate> <label> -- returns 0 only when the predicate held, so the caller binds B_<predicate>
+  if "p_$1" "$PD"; then ok "$2"; return 0; else bad "$2"; return 1; fi
 }
-arm fence            "A1: a \`## \` inside a \`\`\` fence is not a boundary -- 4 parts, headed Alpha/Beta/Gamma/Delta"
-arm longfence        "A17: a \`## \` inside a \`\`\`\` fence past its inner \`\`\` pair, and inside a ~~~ fence past a \`\`\` pair, is not a boundary; a \`\`\` fence closed by \`\`\`\`\` closes"
-arm comment          "A18: a \`## \` inside a multi-line HTML comment is not a boundary; a real \`## \` right after a one-line comment is"
-arm cfence           "A19: an odd \`\`\` inside a comment opens no fence, and a \`<!--\` inside a fence opens no comment"
-arm serial_dominant  "A2: a dominant ## section with no ### and no table -> exit 3 'SERIAL: largest part is', naming lines 9-69 and 'no-boundary'; its ### twin shards"
-arm wide_table       "A20: a dominant ## led by a wide table, no ### -> cut at table rows into 2+ parts under one heading; split + assemble byte-identical"
-arm fence_table      "A21: the same table inside a \`\`\` fence -> no row is a boundary; SERIAL 'no-boundary'"
-arm sep_outside_fence "A25: header + separator outside a \`\`\` fence, rows inside it -> the fence line ends the run; SERIAL 'no-boundary'"
-arm two_row          "A22: never three table rows in a row (each pair opens with its separator) -> no cut; SERIAL 'no-boundary'"
-arm prose_run        "A26: fifteen \`|\`-led prose lines with no separator in their run (one sits above it, outside) -> no cut; SERIAL 'no-boundary'"
-arm sep_at_k         "A27: rows at k-2, k-1, k with the separator at k -> no part opens at the separator; one opens on the row after it"
-arm single_line      "A23: one table row over the cap -> SERIAL naming 'lines 15-15' and 'single-line'"
-arm fm_crlf_table    "A24: front matter + CRLF + no trailing newline, row-split -> split + assemble byte-identical"
-arm serial_one       "A3: one ## section -> exit 3 'SERIAL: one part', and --split creates nothing"
-arm roundtrip        "A4: LF, CRLF and no-trailing-newline documents split + assemble byte-identical, mode 640 kept"
-arm crlf_map         "A5: a CRLF document's map carries no CR (the document does)"
-arm cap              "A6: twelve equal atoms -> 2..8 parts tiling every line (PART_CAP honoured by repacking)"
-arm manifest         "A7: .manifest = absolute document, sha256, and part lines byte-equal to --map"
-arm sha_moved        "A8: the document written in place while split -> REFUSED 'no longer the bytes', the write survives"
-arm missing          "A9: a section deleted -> REFUSED 'section 2 is missing from', document intact"
-arm newline          "A10: a non-last section without its newline -> REFUSED; an emptied section assembles"
-arm refused_intact   "A11: a foreign entry and a missing section -> refused with the document, sections and manifest untouched"
-arm removed          "A12: after assembly no section file remains and the manifest records 'assembled <sha>'"
-arm unchanged        "A13: a re-run prints UNCHANGED; a re-run after an edit refuses 'was already assembled'"
-arm expect_sha       "A14: --expect-sha mismatch -> REFUSED 'is not the reviewed bytes', nothing created; the right sha splits"
-arm relative         "A15: a split given a RELATIVE path assembles the right file from another cwd"
-arm no_overwrite     "A16: a second split over a live sections/ -> REFUSED 'already exists'"
-arm scope_changed    "A28: --scope-ref, one line of Section 6 edited -> Section 6's own range alone, ordinal 1; an unchanged worktree prints nothing"
-arm scope_h3         "A29: --scope-ref, an appended ## with three ### (under half the document, all of the in-scope bytes) -> >=3 parts, no ## Section part"
-arm scope_deletion   "A30: --scope-ref, a deletion-only hunk in Section 3 beside an edit in Section 7 -> exactly Section 3 and Section 7"
-arm scope_absent     "A31: --scope-ref, a file absent at base -> wholly in scope (equal to its unscoped map); a ref naming no commit -> REFUSED"
-arm scope_gap        "A32: --scope-ref --split -> gap rows around the part, assembly byte-exact; an out-of-scope line moved -> REFUSED 'gap lines 1-107 of'"
-arm cross_cover      "A33: --cross-groups K=2..24 -> every pair covered (the fixture's own check, control: K=8 minus its last row has a hole), 1<=G<=6, rows <= 2*ceil(K/4), identical on two runs; K=2 one row '1<TAB>1,2'; K=8 six rows"
-arm cross_refuse     "A34: --cross-groups K in {1,0,x,2.5,-3,''} -> exit 64, nothing on stdout; the K=8 twin exits 0 with rows"
-arm cross_owner      "A35: --cross-owner -> the lowest g holding the two smallest cited ordinals (order and padding free); under two distinct or out of range -> exit 64"
+if arm fence            "A1: a \`## \` inside a \`\`\` fence is not a boundary -- 4 parts, headed Alpha/Beta/Gamma/Delta"; then B_fence=1; fi
+if arm longfence        "A17: a \`## \` inside a \`\`\`\` fence past its inner \`\`\` pair, and inside a ~~~ fence past a \`\`\` pair, is not a boundary; a \`\`\` fence closed by \`\`\`\`\` closes"; then B_longfence=1; fi
+if arm comment          "A18: a \`## \` inside a multi-line HTML comment is not a boundary; a real \`## \` right after a one-line comment is"; then B_comment=1; fi
+if arm cfence           "A19: an odd \`\`\` inside a comment opens no fence, and a \`<!--\` inside a fence opens no comment"; then B_cfence=1; fi
+if arm serial_dominant  "A2: a dominant ## section with no ### and no table -> exit 3 'SERIAL: largest part is', naming lines 9-69 and 'no-boundary'; its ### twin shards"; then B_serial_dominant=1; fi
+if arm wide_table       "A20: a dominant ## led by a wide table, no ### -> cut at table rows into 2+ parts under one heading; split + assemble byte-identical"; then B_wide_table=1; fi
+if arm fence_table      "A21: the same table inside a \`\`\` fence -> no row is a boundary; SERIAL 'no-boundary'"; then B_fence_table=1; fi
+if arm sep_outside_fence "A25: header + separator outside a \`\`\` fence, rows inside it -> the fence line ends the run; SERIAL 'no-boundary'"; then B_sep_outside_fence=1; fi
+if arm two_row          "A22: never three table rows in a row (each pair opens with its separator) -> no cut; SERIAL 'no-boundary'"; then B_two_row=1; fi
+if arm prose_run        "A26: fifteen \`|\`-led prose lines with no separator in their run (one sits above it, outside) -> no cut; SERIAL 'no-boundary'"; then B_prose_run=1; fi
+if arm sep_at_k         "A27: rows at k-2, k-1, k with the separator at k -> no part opens at the separator; one opens on the row after it"; then B_sep_at_k=1; fi
+if arm single_line      "A23: one table row over the cap -> SERIAL naming 'lines 15-15' and 'single-line'"; then B_single_line=1; fi
+if arm fm_crlf_table    "A24: front matter + CRLF + no trailing newline, row-split -> split + assemble byte-identical"; then B_fm_crlf_table=1; fi
+if arm serial_one       "A3: one ## section -> exit 3 'SERIAL: one part', and --split creates nothing"; then B_serial_one=1; fi
+if arm roundtrip        "A4: LF, CRLF and no-trailing-newline documents split + assemble byte-identical, mode 640 kept"; then B_roundtrip=1; fi
+if arm crlf_map         "A5: a CRLF document's map carries no CR (the document does)"; then B_crlf_map=1; fi
+if arm cap              "A6: twelve equal atoms -> 2..8 parts tiling every line (PART_CAP honoured by repacking)"; then B_cap=1; fi
+if arm manifest         "A7: .manifest = absolute document, sha256, and part lines byte-equal to --map"; then B_manifest=1; fi
+if arm sha_moved        "A8: the document written in place while split -> REFUSED 'no longer the bytes', the write survives"; then B_sha_moved=1; fi
+if arm missing          "A9: a section deleted -> REFUSED 'section 2 is missing from', document intact"; then B_missing=1; fi
+if arm newline          "A10: a non-last section without its newline -> REFUSED; an emptied section assembles"; then B_newline=1; fi
+if arm refused_intact   "A11: a foreign entry and a missing section -> refused with the document, sections and manifest untouched"; then B_refused_intact=1; fi
+if arm removed          "A12: after assembly no section file remains and the manifest records 'assembled <sha>'"; then B_removed=1; fi
+if arm unchanged        "A13: a re-run prints UNCHANGED; a re-run after an edit refuses 'was already assembled'"; then B_unchanged=1; fi
+if arm expect_sha       "A14: --expect-sha mismatch -> REFUSED 'is not the reviewed bytes', nothing created; the right sha splits"; then B_expect_sha=1; fi
+if arm relative         "A15: a split given a RELATIVE path assembles the right file from another cwd"; then B_relative=1; fi
+if arm no_overwrite     "A16: a second split over a live sections/ -> REFUSED 'already exists'"; then B_no_overwrite=1; fi
+if arm scope_changed    "A28: --scope-ref, one line of Section 6 edited -> Section 6's own range alone, ordinal 1; an unchanged worktree prints nothing"; then B_scope_changed=1; fi
+if arm scope_h3         "A29: --scope-ref, an appended ## with three ### (under half the document, all of the in-scope bytes) -> >=3 parts, no ## Section part"; then B_scope_h3=1; fi
+if arm scope_deletion   "A30: --scope-ref, a deletion-only hunk in Section 3 beside an edit in Section 7 -> exactly Section 3 and Section 7"; then B_scope_deletion=1; fi
+if arm scope_absent     "A31: --scope-ref, a file absent at base -> wholly in scope (equal to its unscoped map); a ref naming no commit -> REFUSED"; then B_scope_absent=1; fi
+if arm scope_gap        "A32: --scope-ref --split -> gap rows around the part, assembly byte-exact; an out-of-scope line moved -> REFUSED 'gap lines 1-107 of'"; then B_scope_gap=1; fi
+if arm cross_cover      "A33: --cross-groups K=2..24 -> every pair covered (the fixture's own check, control: K=8 minus its last row has a hole), 1<=G<=6, rows <= 2*ceil(K/4), identical on two runs; K=2 one row '1<TAB>1,2'; K=8 six rows"; then B_cross_cover=1; fi
+if arm cross_refuse     "A34: --cross-groups K in {1,0,x,2.5,-3,''} -> exit 64, nothing on stdout; the K=8 twin exits 0 with rows"; then B_cross_refuse=1; fi
+if arm cross_owner      "A35: --cross-owner -> the lowest g holding the two smallest cited ordinals (order and padding free); under two distinct or out of range -> exit 64"; then B_cross_owner=1; fi
 
 # ------------------------------------------------------------------------------ the mutants
 apply() { # <file> then (old, new) pairs through M_1_OLD.. env -- every anchor exactly once
@@ -619,117 +684,154 @@ for i in range(0, len(pairs), 2):
 open(p, "w", encoding="utf-8").write(t)
 PY
 }
-score() { # <label> <script> <expected dead set | NONE>
+score_all() { # <script> -> SC_DEAD: the predicates of $P_ALL that FAIL on it, in P_ALL order
   # Names unique to this function: bash scope is DYNAMIC, so a helper looping over an
   # unlocalised `s` or `p` would silently rewrite the script path under scoring.
-  local sc_label="$1" sc_subj="$2" sc_want="$3" sc_dead="" sc_p
-  for sc_p in $P_ALL; do "p_$sc_p" "$sc_subj" > /dev/null 2>&1 || sc_dead="$sc_dead $sc_p"; done
-  local label="$sc_label" want="$sc_want" dead="$sc_dead"
-  dead="${dead# }"
-  if [ "$want" = "NONE" ]; then
-    [ -z "$dead" ] && ok "$label: every predicate HOLDS on the unmutated copy, so each kill below is the mutation's" \
-      || bad "$label: the UNMUTATED copy failed [$dead]; every mutant verdict below is about a broken harness"
+  local sc_p
+  SC_DEAD=""
+  for sc_p in $P_ALL; do "p_$sc_p" "$1" > /dev/null 2>&1 || SC_DEAD="$SC_DEAD $sc_p"; done
+  SC_DEAD="${SC_DEAD# }"
+}
+mutant() { # <id> <what> <deciding arm> <twin> <recorded kill set> <base-pass flag> <old> <new> [<old> <new> ...]
+  # PER PUSH: the deciding arm must FAIL on the mutant and the twin (an arm the measured matrix
+  # shows GREEN for it) must PASS. --matrix: every predicate, the kill set compared for EQUALITY
+  # with the recorded one, and the row printed. The flag is $6, never copied, so the kill is
+  # emitted behind the same-run base pass of the deciding arm and of the MX0 control.
+  local mt_id="$1" mt_lab="$1 $2" mt_dec="$3" mt_twin="$4" mt_want="$5" d
+  case " $mt_want " in *" $mt_dec "*) ;; *) bad "$mt_lab: FIXTURE BROKEN -- deciding arm [$mt_dec] is not in its kill set [$mt_want]"; return ;; esac
+  case " $mt_want " in *" $mt_twin "*) bad "$mt_lab: FIXTURE BROKEN -- twin [$mt_twin] is inside its own kill set"; return ;; esac
+  case " $P_ALL " in *" $mt_twin "*) ;; *) bad "$mt_lab: FIXTURE BROKEN -- twin [$mt_twin] names no predicate"; return ;; esac
+  d="$(mktemp -d "$WORK/mut.XXXXXX")" || { bad "$mt_lab: FIXTURE BROKEN -- no sandbox"; return; }
+  cp "$PD" "$d/partition-document.sh"
+  if ! apply "$d/partition-document.sh" "${@:7}"; then
+    bad "$mt_lab: FIXTURE STALE -- a mutation anchor is not in the subject exactly once; re-anchor it, never relax the assertion"; return
+  fi
+  cmp -s "$PD" "$d/partition-document.sh" && { bad "$mt_lab: FIXTURE STALE -- the mutated copy is byte-identical"; return; }
+  if [ "$MATRIX" -eq 1 ]; then
+    score_all "$d/partition-document.sh"
+    matrix_row "$mt_id" "$SC_DEAD"
+    if [ "$SC_DEAD" = "$mt_want" ]; then
+      mutant_killed "$6" "$mt_id" "$mt_lab: KILLED by [$mt_want] and nothing else (matrix)"
+    elif [ -z "$SC_DEAD" ]; then bad "$mt_lab SURVIVED -- no arm watches the line it edits"
+    else bad "$mt_lab tripped [$SC_DEAD], expected exactly [$mt_want] -- update the recorded matrix and twins"; fi
     return
   fi
-  if [ -z "$dead" ]; then bad "$label SURVIVED -- no arm watches the line it edits"
-  elif [ "$dead" = "$want" ]; then ok "$label: KILLED by [$want] and nothing else"
-  else bad "$label killed [$dead], expected exactly [$want]"; fi
-}
-mutant() { # <label> <expected> <old> <new> [<old> <new> ...]
-  local label="$1" want="$2" d; shift 2
-  d="$(mktemp -d "$WORK/mut.XXXXXX")" || { bad "$label: FIXTURE BROKEN -- no sandbox"; return; }
-  cp "$PD" "$d/partition-document.sh"
-  if ! apply "$d/partition-document.sh" "$@"; then
-    bad "$label: FIXTURE STALE -- a mutation anchor is not in the subject exactly once; re-anchor it, never relax the assertion"; return
+  if "p_$mt_dec" "$d/partition-document.sh" > /dev/null 2>&1; then
+    bad "$mt_lab SURVIVED its deciding arm [$mt_dec] -- the kill moved; re-measure with --matrix"
+  elif ! "p_$mt_twin" "$d/partition-document.sh" > /dev/null 2>&1; then
+    bad "$mt_lab: twin [$mt_twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
+  else
+    mutant_killed "$6" "$mt_id" "$mt_lab: KILLED by [$mt_dec]; twin [$mt_twin] holds"
   fi
-  cmp -s "$PD" "$d/partition-document.sh" && { bad "$label: FIXTURE STALE -- the mutated copy is byte-identical"; return; }
-  score "$label" "$d/partition-document.sh" "$want"
 }
 
+# THE UNMUTATED COPY (MX0), built exactly as a mutant is. Per push it must map the baseline
+# document from the sandbox and be byte-identical to the subject the arms above just passed, so
+# its predicate verdicts ARE those arms' verdicts. --matrix also scores it on every predicate.
 C0="$(mktemp -d "$WORK/ctl.XXXXXX")" && cp "$PD" "$C0/partition-document.sh"
 CW="$(world)"; doc_plain > "$CW/d.md"
 bash "$C0/partition-document.sh" --map "$CW/d.md" > "$CW/m" 2>&1
-if [ -f "$C0/partition-document.sh" ] && has "$CW/m" "## Section 4"; then
+if [ -f "$C0/partition-document.sh" ] && has "$CW/m" "## Section 4" && cmp -s "$PD" "$C0/partition-document.sh"; then
   ok "MX-pre: the sandbox copy runs and maps a baseline document (a copy that emits nothing cannot pass this)"
-  score "MX0 control (unmutated copy)" "$C0/partition-document.sh" NONE
+  if [ "$MATRIX" -eq 1 ]; then
+    score_all "$C0/partition-document.sh"
+    matrix_row MX0 "$SC_DEAD"
+    if [ -z "$SC_DEAD" ]; then
+      ok "CONTROL MX0 (unmutated copy): every one of the 35 predicates HOLDS on it, tripped=[] (matrix)"; B_MX0=1
+    else
+      bad "MX0 control (unmutated copy) failed [$SC_DEAD]; every mutant verdict below is about a broken harness"
+    fi
+  else
+    ok "CONTROL MX0 (unmutated copy): byte-identical to the subject the 35 arms above passed, and it maps the baseline to 4 parts ending '## Section 4'"; B_MX0=1
+  fi
 else
-  bad "MX-pre: FIXTURE BROKEN -- the sandbox copy did not map the baseline document"
+  bad "MX-pre: FIXTURE BROKEN -- the sandbox copy did not map the baseline document, or it is not the subject's bytes"
 fi
 # Both sha checks are one property (the pre-check and the re-check before the rename); a
 # mutant that removed only the first would still refuse at the second.
-mutant "MX1 the split-sha check removed (both layers)" "sha_moved" \
+mutant MX1 "the split-sha check removed (both layers)" sha_moved missing "sha_moved" "$(( ${B_sha_moved:-0} && ${B_MX0:-0} ))" \
   '[ "$NOW" = "$SHA" ] || refuse' 'true || refuse' \
   '[ "$(sha_of "$DOC")" = "$SHA" ] || { rm -f "$T"; refuse "$DOC moved' 'true || { rm -f "$T"; refuse "$DOC moved'
-mutant "MX2 the missing-section check removed" "missing" \
+mutant MX2 "the missing-section check removed" missing refused_intact "missing" "$(( ${B_missing:-0} && ${B_MX0:-0} ))" \
   '[ -f "$DIR/sections/$o.md" ] || refuse "section $o is missing' 'true || refuse "section $o is missing'
-mutant "MX3 the partition made fence-blind" "fence longfence cfence fence_table" \
+mutant MX3 "the partition made fence-blind" fence comment "fence longfence cfence fence_table" "$(( ${B_fence:-0} && ${B_MX0:-0} ))" \
   '{ match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }' '{ next }'
-mutant "MX7 the fence tracker reverted to the toggle (any fence line closes)" "longfence" \
+mutant MX7 "the fence tracker reverted to the toggle (any fence line closes)" longfence fence "longfence" "$(( ${B_longfence:-0} && ${B_MX0:-0} ))" \
   'if (n >= length(fence)) fence = ""' 'if ($0 ~ /^[ \t]*(```|~~~)/) fence = ""' \
   'fence = substr($0, RSTART, RLENGTH); next }' 'fence = "x"; next }'
-mutant "MX8 the comment tracker dropped" "comment cfence" \
+mutant MX8 "the comment tracker dropped" comment longfence "comment cfence" "$(( ${B_comment:-0} && ${B_MX0:-0} ))" \
   'cmt { if (index($0, "-->")) cmt = 0; next }' '' \
   '/^[ \t]*<!--/ { if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }' ''
-mutant "MX9 a fence may open inside a comment (fence-open checked before comment continuation)" "cfence" \
+mutant MX9 "a fence may open inside a comment (fence-open checked before comment continuation)" cfence comment "cfence" "$(( ${B_cfence:-0} && ${B_MX0:-0} ))" \
   '    cmt { if (index($0, "-->")) cmt = 0; next }
     /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }' \
   '    /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }
     cmt { if (index($0, "-->")) cmt = 0; next }'
-mutant "MX10 a one-line comment left open" "comment" \
+mutant MX10 "a one-line comment left open" comment cfence "comment" "$(( ${B_comment:-0} && ${B_MX0:-0} ))" \
   '{ if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }' '{ cmt = 1; next }'
-mutant "MX4 the trailing-newline check removed" "newline" \
+mutant MX4 "the trailing-newline check removed" newline missing "newline" "$(( ${B_newline:-0} && ${B_MX0:-0} ))" \
   '|| refuse "section $o does not end in a newline' '|| true "section $o does not end in a newline'
-mutant "MX5 the PART_CAP repack removed" "cap" \
+mutant MX5 "the PART_CAP repack removed" cap serial_one "cap" "$(( ${B_cap:-0} && ${B_MX0:-0} ))" \
   'if (pack(target) > cap) {' 'if (0) {'
-mutant "MX6 the section files not removed after assembly" "removed" \
+mutant MX6 "the section files not removed after assembly" removed unchanged "removed" "$(( ${B_removed:-0} && ${B_MX0:-0} ))" \
   'for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done' ':'
-mutant "MX11 a table row inside a fence counts as a cut point" "fence_table" \
+mutant MX11 "a table row inside a fence counts as a cut point" fence_table wide_table "fence_table" "$(( ${B_fence_table:-0} && ${B_MX0:-0} ))" \
   '      if (n >= length(fence)) fence = ""' '      if (n >= length(fence)) fence = ""; else if ($0 ~ /^\|/) TR[NR] = 1'
-mutant "MX12 the three-row condition dropped (a cut right after a run-opening separator)" "two_row" \
+mutant MX12 "the three-row condition dropped (a cut right after a run-opening separator)" two_row wide_table "two_row" "$(( ${B_two_row:-0} && ${B_MX0:-0} ))" \
   'if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1])' 'if (TR[k] && RUNSEP[k - 1])'
-mutant "MX16 the separator requirement removed (any three \`|\` lines cut)" "prose_run sep_at_k" \
+mutant MX16 "the separator requirement removed (any three \`|\` lines cut)" prose_run two_row "prose_run sep_at_k" "$(( ${B_prose_run:-0} && ${B_MX0:-0} ))" \
   'if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1])' 'if (TR[k] && TR[k - 1] && TR[k - 2])'
-mutant "MX17 the separator may be line k itself (the k-1 boundary off by one)" "sep_at_k" \
+mutant MX17 "the separator may be line k itself (the k-1 boundary off by one)" sep_at_k wide_table "sep_at_k" "$(( ${B_sep_at_k:-0} && ${B_MX0:-0} ))" \
   'TR[k - 2] && RUNSEP[k - 1])' 'TR[k - 2] && RUNSEP[k])'
-mutant "MX18 a separator run that does not reset on a non-row line" "prose_run" \
+mutant MX18 "a separator run that does not reset on a non-row line" prose_run sep_outside_fence "prose_run" "$(( ${B_prose_run:-0} && ${B_MX0:-0} ))" \
   'RUNSEP[k] = (TR[k] ? (RUNSEP[k - 1] || SEP[k]) : 0)' 'RUNSEP[k] = (RUNSEP[k - 1] || SEP[k])'
-mutant "MX19 the trailing CR not stripped before the separator match" "fm_crlf_table" \
+mutant MX19 "the trailing CR not stripped before the separator match" fm_crlf_table wide_table "fm_crlf_table" "$(( ${B_fm_crlf_table:-0} && ${B_MX0:-0} ))" \
   'r = $0; sub(/\r$/, "", r); SEP[NR]' 'r = $0; SEP[NR]'
-mutant "MX13 the row split removed" "wide_table sep_at_k single_line fm_crlf_table" \
+mutant MX13 "the row split removed" wide_table serial_dominant "wide_table sep_at_k single_line fm_crlf_table" "$(( ${B_wide_table:-0} && ${B_MX0:-0} ))" \
   '        if (s * 100 > tot * maxpct)
           for' '        if (0)
           for'
-mutant "MX14 the blocking part dropped from the SERIAL line" "serial_dominant fence_table sep_outside_fence two_row prose_run single_line" \
+mutant MX14 "the blocking part dropped from the SERIAL line" serial_dominant serial_one "serial_dominant fence_table sep_outside_fence two_row prose_run single_line" "$(( ${B_serial_dominant:-0} && ${B_MX0:-0} ))" \
   ' (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), (scoped ? "in-scope bytes" : "document"), P1[bi], P2[bi], int(big * 100 / tot), why' '\n", int(big * 100 / tot), (scoped ? "in-scope bytes" : "document")'
-mutant "MX15 the single-line reason never given" "single_line" \
+mutant MX15 "the single-line reason never given" single_line serial_dominant "single_line" "$(( ${B_single_line:-0} && ${B_MX0:-0} ))" \
   'why = "single-line"' 'why = "no-boundary"'
-mutant "MX20 the scope ignored (every line weighs its bytes)" "scope_changed scope_h3 scope_deletion scope_gap" \
+mutant MX20 "the scope ignored (every line weighs its bytes)" scope_changed scope_absent "scope_changed scope_h3 scope_deletion scope_gap" "$(( ${B_scope_changed:-0} && ${B_MX0:-0} ))" \
   'W[k] = (scoped ? (IN[k] ? B[k] : 0) : B[k])' 'W[k] = B[k]'
-mutant "MX21 the ## split threshold computed over the whole document" "scope_h3" \
+mutant MX21 "the ## split threshold computed over the whole document" scope_h3 scope_changed "scope_h3" "$(( ${B_scope_h3:-0} && ${B_MX0:-0} ))" \
   '        s = 0; for (k = a; k <= z; k++) s += W[k]
         if (s * 2 > tot) {' '        s = 0; for (k = a; k <= z; k++) s += B[k]
         tb = 0; for (k = 1; k <= NR; k++) tb += B[k]
         if (s * 2 > tb) {'
-mutant "MX22 deletion-only hunks dropped" "scope_deletion" \
+mutant MX22 "deletion-only hunks dropped" scope_deletion scope_changed "scope_deletion" "$(( ${B_scope_deletion:-0} && ${B_MX0:-0} ))" \
   'if (d == 0) print (c > 0 ? c : 1)' 'if (d == 0) next'
-mutant "MX23 the gap sha unchecked" "scope_gap" \
+mutant MX23 "the gap sha unchecked" scope_gap sha_moved "scope_gap" "$(( ${B_scope_gap:-0} && ${B_MX0:-0} ))" \
   '[ "$(sha_of "$GT")" = "$gs" ] || {' 'true || {'
-mutant "MX24 the last cross group dropped" "cross_cover" \
+mutant MX24 "the last cross group dropped" cross_cover cross_refuse "cross_cover" "$(( ${B_cross_cover:-0} && ${B_MX0:-0} ))" \
   '      for (g = 1; g <= G; g++) {
         row = ""' '      for (g = 1; g < G; g++) {
         row = ""'
 # Two arms die and both findings are true: the owner rule reads the same quarter bounds the
 # table prints, so a short block both opens a pair hole and leaves a cited ordinal in no quarter.
-mutant "MX25 a cross quarter's block one ordinal short" "cross_cover cross_owner" \
+mutant MX25 "a cross quarter's block one ordinal short" cross_cover cross_refuse "cross_cover cross_owner" "$(( ${B_cross_cover:-0} && ${B_MX0:-0} ))" \
   'lo[n] = s; hi[n] = s + sz - 1; s += sz' 'lo[n] = s; hi[n] = s + sz - 2; s += sz'
-mutant "MX26 the cross owner taken as the HIGHEST g" "cross_owner" \
+mutant MX26 "the cross owner taken as the HIGHEST g" cross_owner cross_refuse "cross_owner" "$(( ${B_cross_owner:-0} && ${B_MX0:-0} ))" \
   '    for (g = 1; g <= G; g++)
       if ((QA[g] == q1' '    for (g = G; g >= 1; g--)
       if ((QA[g] == q1'
 
-mutant "MX27 the per-element blank trim removed" "cross_owner" \
+mutant MX27 "the per-element blank trim removed" cross_owner cross_refuse "cross_owner" "$(( ${B_cross_owner:-0} && ${B_MX0:-0} ))" \
   '      gsub(/^[ \t]+|[ \t]+$/, "", C[i])
 ' ''
+
+# THE MODE ARM. A plain run (the per-push one) must print NO matrix row, so the matrix cannot
+# silently ride every push; --matrix must print one row per mutant plus MX0 (27 + 1).
+if [ "$MATRIX" -eq 0 ]; then
+  if [ "$MATRIX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix"
+  else bad "PLAIN-RUN: a plain run printed $MATRIX_ROWS MATRIX row(s); the matrix-only path ran per push"; fi
+else
+  if [ "$MATRIX_ROWS" -eq 28 ]; then ok "MATRIX-RUN: 28 MATRIX rows printed (27 mutants + MX0)"
+  else bad "MATRIX-RUN: $MATRIX_ROWS MATRIX row(s) printed, expected 28"; fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "document-partition: PASS"; exit 0; fi

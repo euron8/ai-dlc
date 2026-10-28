@@ -2,7 +2,7 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # owed-derivations — assert a derivation an operator LEAVES broken stays owed until it is re-pointed.
 #
-# Usage: run.sh [<check-owed-derivations.sh> [<derivation-differential.sh>]]
+# Usage: run.sh [--matrix] [<check-owed-derivations.sh> [<derivation-differential.sh>]]
 #   The arguments existed for a retired mutation battery, which drove this file against mutated copies.
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #
@@ -53,8 +53,49 @@
 # same in pass 2, M13 a `git -C` segment's WORD lines asked again, M14 a failing `--list` in pass 2 read
 # UNASSESSED over a file whose own run gave no verdict, M20 a reproducing LIVING fence opened, M21 LIVING
 # verdicts leaking into --scope-batch, M22 every validator exit refused.
-# A mutant runs only the LIVING worlds holding its required arms (lw_world); a null-mutant control runs once
-# per distinct required set and must SURVIVE.
+# THE MUTANT x ARM MATRIX, re-measured whenever an arm or a mutant is added or changed. `--matrix` runs every
+# mutant over every LIVING world and prints a `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per arm.
+# Per push each mutant runs only its DECIDING arm (which must FAIL) and its TWINS (arms the matrix shows
+# GREEN under it, which must HOLD), so only the worlds holding them. Whether a mutant kills its own arm alone
+# is a property of the battery, settled here and not on every push.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/owed-derivations/run.sh --matrix
+# MUTANT-MATRIX M1 decides=S1 twins=GC
+# MUTANT-MATRIX M2 decides=S1 twins=S3
+# MUTANT-MATRIX M3 decides=S1 twins=S2
+# MUTANT-MATRIX M4 decides=S2 twins=S1
+# MUTANT-MATRIX M5 decides=S5 twins=S1
+# MUTANT-MATRIX M6 decides=S1 twins=S3
+# MUTANT-MATRIX M7 decides=S10 twins=S9
+# MUTANT-MATRIX M8 decides=S6b twins=S6c
+# MUTANT-MATRIX M9 decides=S11a twins=S11n
+# MUTANT-MATRIX M10 decides=S11c twins=S11n
+# MUTANT-MATRIX M11 decides=S12a twins=S12n
+# MUTANT-MATRIX M12 decides=S6e twins=S6b
+# MUTANT-MATRIX M12b decides=PU twins=S7
+# MUTANT-MATRIX M13 decides=G1 twins=GC
+# MUTANT-MATRIX M14 decides=B8c twins=LF
+# MUTANT-MATRIX M15 decides=RP3 twins=RP2
+# MUTANT-MATRIX M16 decides=RP5 twins=RP2
+# MUTANT-MATRIX M17 decides=PP twins=G1
+# MUTANT-MATRIX M18 decides=CDD1 twins=CDD4
+# MUTANT-MATRIX M19 decides=CDD5 twins=CDD4
+# MUTANT-MATRIX M20 decides=S3 twins=S4b
+# MUTANT-MATRIX M21 decides=S9 twins=S10
+# MUTANT-MATRIX M22 decides=S13c twins=S13
+# MUTANT-MATRIX mA decides=S13 twins=S13c
+# MUTANT-MATRIX mB decides=S14 twins=S1
+# MUTANT-MATRIX MV1 decides=CH1 twins=CH1n
+# The full failing sets, as measured: M1 S1 S4b S7 S8 S6f G1 G2 RP2 SL1 SL2 CD1 CDD4 S15n S11n S12n CH1n CH3
+# CH4 CH6; M2 every core-blocking arm plus S4b S7 RP2 SL1 SL2 CD1 CDD4 S11n S12n CH1n (48 arms); M3 and M6
+# every blocking arm (39); M4 S2; M5 S5; M7 S10; M8 S6b; M9 RP1 CD2 RP3 RP5 CDD1-3 CDD5 S15n S11a S11b; M10
+# S11c; M11 S12a-e; M12 S6e S6f S6g; M12b PU; M13 G1 G2 S15n; M14 B8c; M15 RP3 RP4 S15n; M16 RP3 RP5 S15n;
+# M17 PP S15n; M18 CDD1-3 CDD5 S15n; M19 CDD5 S15n; M20 S1 S3 S4a S6 S8 S6b-g S15n CH1-6 S14; M21 S9; M22
+# S13c plus every blocking arm (40); mA S13; mB S14; MV1 CH1-CH6.
+# `lw_world` RESETS every shared world-level global (LW_RESET_VARS) on entry, in both modes, so a filtered mutant
+# run starts each selected world from the same state the live pass does. RSET holds that list EQUAL to the set of
+# variables the drivers and world bodies assign, derived from this file's own text; RSETf and RSETp seed a copy both
+# ways, and RSETr drives a world pair through the real lw_world. CPY holds the copy lw_all runs byte-identical to the reader.
+# MUTANT-MATRIX-DYNAMIC mut_score why=mut_case and MV1 pass their mutant id to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
 # receipt-bl587.sh drives the real reader over S1's seed; receipt-bl801.sh drives the world filter.
 set -uo pipefail
 
@@ -62,6 +103,10 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# `--matrix`, parsed FIRST and shifted off, is the MATRIX mode (see the MUTANT-MATRIX header lines): every
+# mutant runs over every LIVING world. It is an argument because hermetic-run.sh runs a fixture under `env -i`.
+OWED_MATRIX=0
+if [ "${1:-}" = --matrix ]; then OWED_MATRIX=1; shift; fi
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 READER="$(pick "${1:-}" "$HERE/../../scripts/check-owed-derivations.sh" \
   "$HERE/../../../scripts/ai-dlc/check-owed-derivations.sh" "$HERE/../../../core/scripts/check-owed-derivations.sh")"
@@ -126,6 +171,14 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -12; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
 rc_is() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 -- exit was $3, expected $2"; fi; }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# MATRIX mode (`--matrix`): every mutant runs over every LIVING world and prints one
+# `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per recorded arm. Per-push (the default) runs each mutant's
+# deciding arm and its named twins only.
+[ "$OWED_MATRIX" = 1 ] && echo "MATRIX-MODE on"
 TAB="$(printf '\t')"
 
 # rd <root> <record> -> sets OUT (stdout), ERR (stderr), RC
@@ -375,6 +428,15 @@ sc_is Sc9 PAST    "_bmad-output/planning-artifacts/s0/past.md"
 
 # ---- H: the HISTORY class (checked first; INFO, never recorded, never OPEN) ------------------------
 # Each shape is seeded as a real file with a stale fence, so the row would be OPEN if it were not history.
+# THE H SEEDS LIVE IN THEIR OWN ROOTS, never in $R: every record-mode reader call sweeps every LIVING
+# fenced file of its root, so a seed in $R was re-validated by every later B/Sp/Rp/G call that never
+# reads it. $RH holds the history shapes, the live gate-adjudication directory (its verdict files fix
+# the live stem) and LIVEGA; it is the root of every Hr/Hl record call and of the --scope arms over
+# those paths. $RN holds the NEARS near-misses, which classify LIVING and would be swept by a record
+# call; only --scope reads them. Both carry mkroot's `.sprint-id` (1). --scope is path-only plus the
+# sprint id and the live stem, so the Sl/Sl1-4/Ha/Hc arms, which name paths no root holds, read $RH.
+RH="$WORK/rdh"; mkroot "$RH"
+RN="$WORK/rdn"; mkroot "$RN"
 HSHAPES="_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md
 _bmad-output/implementation-artifacts/pre-series/gate-adjudication/g.md
 _bmad-output/pipeline-history/pipeline-snapshot-archive.md
@@ -391,9 +453,9 @@ _bmad-output/pipeline-snapshot-history.md"
 LIVEGA="_bmad-output/gate-adjudication/g.md"
 GA="_bmad-output/gate-adjudication"
 GA_LIVE="planning-20260301T000000Z"; GA_OLD="planning-20260101T000000Z"
-mkdir -p "$R/$GA"
-: > "$R/$GA/$GA_LIVE.verdict.json"; : > "$R/$GA/$GA_OLD.verdict.json"
-for gf in "$GA_LIVE.repair.md" "$GA_OLD.repair.md"; do { printf '# h\n\n'; fence 5; } > "$R/$GA/$gf"; done
+mkdir -p "$RH/$GA"
+: > "$RH/$GA/$GA_LIVE.verdict.json"; : > "$RH/$GA/$GA_OLD.verdict.json"
+for gf in "$GA_LIVE.repair.md" "$GA_OLD.repair.md"; do { printf '# h\n\n'; fence 5; } > "$RH/$GA/$gf"; done
 NEARS="_bmad-output/planning-artifacts/prd-history-notes.md
 _bmad-output/planning-artifacts/archived.md
 _bmad-output/planning-artifacts/data-archive-policy.md
@@ -405,24 +467,35 @@ _bmad-output/planning-artifacts/carry-over-backlog.md
 _bmad-output/planning-artifacts/architecture.md
 _bmad-output/planning-artifacts/carry-over-backlog-archive-notes.md"
 : > "$WORK/hrows.tsv"
-for hp in $HSHAPES $LIVEGA $NEARS; do
-  mkdir -p "$R/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$R/$hp"
+for hp in $HSHAPES $LIVEGA; do
+  mkdir -p "$RH/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$RH/$hp"
 done
+for hp in $NEARS; do
+  mkdir -p "$RN/${hp%/*}"; { printf '# h\n\n'; fence 5; } > "$RN/$hp"
+done
+# Hr: ONE record of thirteen stale rows, one per shape, and ONE reader call. Each shape's arm asserts its
+# OWN key's INFO history line (the reader's text at check-owed-derivations.sh:799, `<key> is in a history
+# file`) appears exactly once and no OPEN line carries that key, so a classifier that drops one shape fails
+# that shape's arm and no other. Hr0 asserts the record as a whole: exit 0, no OPEN line, thirteen INFO.
+: > "$WORK/h1.tsv"; nh=0
 for hp in $HSHAPES; do
-  scope_in "$R" "$hp"; rc_is "Hs $hp --scope -> HISTORY" 0 "$([ "$RC" = 0 ] && [ "$SC" = HISTORY ] && echo 0 || echo 1)"
-  row "$hp:3" "$CMD" > "$WORK/h1.tsv"
-  rd "$R" "$WORK/h1.tsv"
-  rc_is "Hr $hp stale row -> exit 0, one INFO history, no OPEN" 0 "$([ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+  scope_in "$RH" "$hp"; rc_is "Hs $hp --scope -> HISTORY" 0 "$([ "$RC" = 0 ] && [ "$SC" = HISTORY ] && echo 0 || echo 1)"
+  row "$hp:3" "$CMD" >> "$WORK/h1.tsv"; nh=$((nh + 1))
 done
-scope_in "$R" "$GA/$GA_LIVE.repair.md"; rc_is "Hl1 the LIVE-nonce sidecar in gate-adjudication/ (no slot component) --scope -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
-scope_in "$R" "$GA/$GA_LIVE.verdict.json"; rc_is "Hl1b the live verdict file itself (basename equals the live stem plus .verdict.json) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
-row "$GA/$GA_LIVE.repair.md:3" "$CMD" > "$WORK/h2.tsv"; rd "$R" "$WORK/h2.tsv"
+rd "$RH" "$WORK/h1.tsv"
+rc_is "Hr0 the $nh-row history record (one row per shape) -> exit 0, exactly $nh INFO history lines, no OPEN" 0 "$([ "$nh" = 13 ] && [ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 13 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
+for hp in $HSHAPES; do
+  rc_is "Hr $hp stale row -> exit 0, one INFO history, no OPEN" 0 "$([ "$(P="$hp:3 is in a history file" awk -F'\t' 'BEGIN { p = ENVIRON["P"] } $1 == "INFO" && $2 == "history" && index($3, p) == 1 { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(K="$hp:3" awk -F'\t' 'BEGIN { k = ENVIRON["K"] } $1 == "OPEN" && $2 == k { n++ } END { print n + 0 }' <<<"$OUT")" = 0 ] && echo 0 || echo 1)"
+done
+scope_in "$RH" "$GA/$GA_LIVE.repair.md"; rc_is "Hl1 the LIVE-nonce sidecar in gate-adjudication/ (no slot component) --scope -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$RH" "$GA/$GA_LIVE.verdict.json"; rc_is "Hl1b the live verdict file itself (basename equals the live stem plus .verdict.json) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+row "$GA/$GA_LIVE.repair.md:3" "$CMD" > "$WORK/h2.tsv"; rd "$RH" "$WORK/h2.tsv"
 rc_is "Hl2 a stale fence in the live-nonce sidecar is OPEN and blocks (exit 1)" 0 "$([ "$RC" = 1 ] && [ "$(open_count)" = 1 ] && echo 0 || echo 1)"
-scope_in "$R" "$GA/$GA_OLD.repair.md"; rc_is "Hl4 an OLDER stem in the live directory --scope -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-row "$GA/$GA_OLD.repair.md:3" "$CMD" > "$WORK/h2o.tsv"; rd "$R" "$WORK/h2o.tsv"
+scope_in "$RH" "$GA/$GA_OLD.repair.md"; rc_is "Hl4 an OLDER stem in the live directory --scope -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+row "$GA/$GA_OLD.repair.md:3" "$CMD" > "$WORK/h2o.tsv"; rd "$RH" "$WORK/h2o.tsv"
 rc_is "Hl5 a stale fence in the older stem is INFO history, not OPEN (exit 0)" 0 "$([ "$RC" = 0 ] && [ "$(awk -F'\t' '$1 == "INFO" && $2 == "history" { n++ } END { print n + 0 }' <<<"$OUT")" = 1 ] && [ "$(open_count)" = 0 ] && echo 0 || echo 1)"
-scope_in "$R" "$GA/s303/x.md"; rc_is "Hl6 gate-adjudication/s303/x.md with current 1 -> PAST (its slot, not the live-dir rule)" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
-scope_in "$R" "$GA/s1/x.md"; rc_is "Hl7 gate-adjudication/s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$RH" "$GA/s303/x.md"; rc_is "Hl6 gate-adjudication/s303/x.md with current 1 -> PAST (its slot, not the live-dir rule)" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+scope_in "$RH" "$GA/s1/x.md"; rc_is "Hl7 gate-adjudication/s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
 R7="$WORK/rd7"; mkroot "$R7"; mkdir -p "$R7/$GA"; { printf '# h\n\n'; fence 5; } > "$R7/$GA/$GA_LIVE.repair.md"
 scope_in "$R7" "$GA/$GA_LIVE.repair.md"; rc_is "Hl8 NO verdict files in the live directory -> there is no live stem, every file is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 # the nonconforming-ts near-miss: a verdict whose ts is not [0-9]{8}T[0-9]{6}Z is not orderable and is never live
@@ -430,33 +503,33 @@ R8="$WORK/rd8"; mkroot "$R8"; mkdir -p "$R8/$GA"; : > "$R8/$GA/planning-arch.ver
 scope_in "$R8" "$GA/planning-arch.repair.md"; rc_is "Hl9 only a non-conforming verdict stem -> no live stem -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 # slots in every area under _bmad-output (past 3, current 1), and the near-misses
 for ar in analysis implementation-artifacts party-mode-transcripts retro-artifacts; do
-  scope_in "$R" "_bmad-output/$ar/s3/x.md"; rc_is "Sl $ar/s3/x.md with current 1 -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
-  scope_in "$R" "_bmad-output/$ar/s1/x.md"; rc_is "Sl $ar/s1/x.md (current) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+  scope_in "$RH" "_bmad-output/$ar/s3/x.md"; rc_is "Sl $ar/s3/x.md with current 1 -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+  scope_in "$RH" "_bmad-output/$ar/s1/x.md"; rc_is "Sl $ar/s1/x.md (current) -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
 done
-scope_in "$R" "_bmad-output/s5-notes/x.md"; rc_is "Sl1 _bmad-output/s5-notes/x.md (not a whole component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/x/s5.md"; rc_is "Sl2 _bmad-output/x/s5.md (the FILENAME is never a slot) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/analysis/s3/s1/x.md"; rc_is "Sl3 two slot components: the FIRST (s3) decides -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/analysis/s1/archive/x.md"; rc_is "Sl4 s<current>/archive/** in a new area -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md"
+scope_in "$RH" "_bmad-output/s5-notes/x.md"; rc_is "Sl1 _bmad-output/s5-notes/x.md (not a whole component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/x/s5.md"; rc_is "Sl2 _bmad-output/x/s5.md (the FILENAME is never a slot) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/analysis/s3/s1/x.md"; rc_is "Sl3 two slot components: the FIRST (s3) decides -> PAST" 0 "$([ "$SC" = PAST ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/analysis/s1/archive/x.md"; rc_is "Sl4 s<current>/archive/** in a new area -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/implementation-artifacts/s1/gate-adjudication/g.md"
 rc_is "Hl3 the same file rotated under s<N>/gate-adjudication/ is HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
 for np in $NEARS; do
   case "$np" in
     */s1/*) want=CURRENT ;;
     *) want=LIVING ;;
   esac
-  scope_in "$R" "$np"; rc_is "Hn $np (a name that only CONTAINS archive/history, no exact match) --scope -> $want" 0 "$([ "$SC" = "$want" ] && echo 0 || echo 1)"
+  scope_in "$RN" "$np"; rc_is "Hn $np (a name that only CONTAINS archive/history, no exact match) --scope -> $want" 0 "$([ "$SC" = "$want" ] && echo 0 || echo 1)"
 done
-scope_in "$R" "_bmad-output/planning-artifacts/s1/stories/story-3-archive-cleanup.md"; rc_is "Ha1 s<current>/stories/story-3-archive-cleanup.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/s1/requirements-history.md"; rc_is "Ha2 s<current>/requirements-history.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/data-archive-policy.md"; rc_is "Ha3 planning-artifacts/data-archive-policy.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/archived/x.md"; rc_is "Ha4 archived/x.md (contains archive, is not the component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/archive-notes/x.md"; rc_is "Ha5 archive-notes/x.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/s1/archive/x.md"; rc_is "Ha6 near-miss control: s<current>/archive/x.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/carry-over-backlog-archive.md"; rc_is "Ha7 carry-over-backlog-archive.md (a history companion the writer names) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/architecture-history.md"; rc_is "Ha8 planning-artifacts/architecture-history.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/architecture-history.md"; rc_is "Ha9 _bmad-output/architecture-history.md (HISTORY anywhere under the root) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/prd.md"; rc_is "Hc1 control: prd.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
-scope_in "$R" "_bmad-output/planning-artifacts/s1/x.md"; rc_is "Hc2 control: s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/s1/stories/story-3-archive-cleanup.md"; rc_is "Ha1 s<current>/stories/story-3-archive-cleanup.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/s1/requirements-history.md"; rc_is "Ha2 s<current>/requirements-history.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/data-archive-policy.md"; rc_is "Ha3 planning-artifacts/data-archive-policy.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/archived/x.md"; rc_is "Ha4 archived/x.md (contains archive, is not the component) -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/archive-notes/x.md"; rc_is "Ha5 archive-notes/x.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/s1/archive/x.md"; rc_is "Ha6 near-miss control: s<current>/archive/x.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/carry-over-backlog-archive.md"; rc_is "Ha7 carry-over-backlog-archive.md (a history companion the writer names) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/architecture-history.md"; rc_is "Ha8 planning-artifacts/architecture-history.md -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/architecture-history.md"; rc_is "Ha9 _bmad-output/architecture-history.md (HISTORY anywhere under the root) -> HISTORY" 0 "$([ "$SC" = HISTORY ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/prd.md"; rc_is "Hc1 control: prd.md -> LIVING" 0 "$([ "$SC" = LIVING ] && echo 0 || echo 1)"
+scope_in "$RH" "_bmad-output/planning-artifacts/s1/x.md"; rc_is "Hc2 control: s<current>/x.md -> CURRENT" 0 "$([ "$SC" = CURRENT ] && echo 0 || echo 1)"
 # the writer records nothing for a history path: the writer calls --scope per row, so HISTORY is dropped
 # (the end-to-end writer world is Sp3 below, which uses a PAST path; the token is the shared definition)
 
@@ -466,16 +539,16 @@ batch_in() { # <root> <stdin text> -> BOUT, BRC, BERR
   BOUT="$( cd / && printf '%s' "$2" | AI_DLC_PROJECT_ROOT="$1" bash "$BIN/check-owed-derivations.sh" --scope-batch 2>"$WORK/b.err" )"; BRC=$?
   BERR="$(cat "$WORK/b.err")"
 }
-batch_in "$R" "$BPATHS
+batch_in "$RH" "$BPATHS
 "
-PER=""; while IFS= read -r bp; do scope_in "$R" "$bp"; PER="$PER$SC	$bp
+PER=""; while IFS= read -r bp; do scope_in "$RH" "$bp"; PER="$PER$SC	$bp
 "; done <<<"$BPATHS"
 if [ "$BRC" = 0 ] && [ "$BOUT
 " = "$PER" ]; then ok "Bt1 batch output over every --scope world's path equals the per-path --scope tokens (byte compare, input order)"; else bad "Bt1 batch output differs from per-path --scope"; printf '%s\n' "$BOUT" | head -5; fi
 rc_is "Bt1b the batch carries all four tokens (the compare is not over one class)" 4 "$(printf '%s\n' "$BOUT" | cut -f1 | sort -u | awk 'END { print NR + 0 }')"
-batch_in "$R" ""
+batch_in "$RH" ""
 rc_is "Bt2 empty stdin -> exit 0 and no output" 0 "$([ "$BRC" = 0 ] && [ -z "$BOUT" ] && echo 0 || echo 1)"
-batch_in "$R" "$(printf '%s\n\n%s\n' "$PASTDOC" "$S19DOC")
+batch_in "$RH" "$(printf '%s\n\n%s\n' "$PASTDOC" "$S19DOC")
 "
 rc_is "Bt3 a blank input line -> exit 2 and NO partial output" 0 "$([ "$BRC" = 2 ] && [ -z "$BOUT" ] && echo 0 || echo 1)"
 R6="$WORK/rd6"; mkroot "$R6"; rm -f "$R6/.sprint-id"
@@ -580,7 +653,7 @@ rc_is "Rp5 a malformed REPOINTED row refuses the record -> exit 2" 2 "$RC"
 # the names of the arms that failed into LW_FAILED.
 LCMD='grep -n -F qqalpha scripts/ai-dlc/x.sh'      # a CORE operand (scripts/ai-dlc/ is manifest-owned)
 LCON='grep -n -F qqalpha server/x.py'              # a CONSUMER operand
-LUNC="awk 'END { exit 137 }' scripts/ai-dlc/x.sh"  # killed by a signal: UNRUN, on a core operand
+LUNC="awk 'END { exit 137 }' scripts/ai-dlc/x.sh"  # ended by a signal: UNRUN, on a core operand
 LUNS="awk 'END { exit 137 }' server/x.py"          # the same on a consumer operand
 lfence() { printf '```derived\n$ %s\n%s\n```\n' "$1" "$2"; }
 lroot() { # <dir>: mkroot plus a core file and a consumer file, each holding qqalpha on line 1
@@ -785,7 +858,8 @@ rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the remo
 # required set: mut_case asserts only the required arms, so a world holding none of them changes no
 # verdict. An lw_arm outside a gated block is FIXTURE BROKEN in either mode, because no filter could
 # ever select it. A world whose arms read state another invocation set runs as ONE unit (S9 and S10:
-# S10 compares against S9's batch output), so a required arm never reads a leftover global.
+# S10 compares against S9's batch output), and lw_world resets every shared global (LW_RESET_VARS) on entry, so no
+# arm reads a value an earlier world left.
 open_lines() { awk -F'\t' '$1 == "OPEN"' <<<"$OUT"; }
 lopen() { printf 'OPEN\t%s\tLIVING-%s\t$ %s\t-\tliving-sweep' "$1" "$2" "$3"; }
 lw_rd() { # <bin> <root> <record>
@@ -798,15 +872,22 @@ lw_batch() { # <bin> <root> -> BOUT BRC
   [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
   BOUT="$( cd / && printf '%s\n' "$LIN" | AI_DLC_PROJECT_ROOT="$2" bash "$1/check-owed-derivations.sh" --scope-batch 2>/dev/null )"; BRC=$?
 }
-# LW_MAP holds ` <world>:<arm> ` tokens from the real pass; LW_SEEN the arms a mut pass evaluated;
-# LW_NINV counts the mut-mode reader invocations, printed after the battery.
-LW_MODE=real; LW_FAILED=""; LW_CUR=""; LW_MAP=" "; LW_REQ=""; LW_SEEN=" "; LW_NINV=0
+# LW_MAP holds ` <world>:<arm> ` tokens from the real pass, LW_PASS the arms that HELD in it (the same-run
+# base-pass record a kill's flag is read from); LW_SEEN the arms a mut pass evaluated;
+# LW_NINV counts the mut-mode reader invocations and LW_NWORLD the mut-mode world runs, printed after the battery.
+LW_MODE=real; LW_FAILED=""; LW_CUR=""; LW_MAP=" "; LW_REQ=""; LW_SEEN=" "; LW_NINV=0; LW_NWORLD=0; LW_PASS=" "
+# LW_RESET_VARS: every shared world-level global the drivers (lw_rd, lw_batch) and the world bodies assign. `local`
+# variables are scoped to lw_all and cannot leak between worlds, so they are not in it. Arm RSET derives the
+# assigned set from this file's own text and holds the two equal.
+LW_RESET_VARS="OUT ERR RC BOUT BRC"
+lw_reset() { local v; for v in $LW_RESET_VARS; do printf -v "$v" '%s' ''; done; }
 lw_world() { # <world> -> 0 run it, 1 skip it
   local a
+  lw_reset
   LW_CUR=""
   if [ "$LW_MODE" = real ]; then LW_CUR="$1"; return 0; fi
   for a in $LW_REQ; do
-    case "$LW_MAP" in *" $1:$a "*) LW_CUR="$1"; return 0 ;; esac
+    case "$LW_MAP" in *" $1:$a "*) LW_CUR="$1"; LW_NWORLD=$((LW_NWORLD + 1)); return 0 ;; esac
   done
   return 1
 }
@@ -817,7 +898,7 @@ lw_arm() { # <id> <description> <0 holds | 1 does not>
   fi
   if [ "$LW_MODE" = real ]; then
     LW_MAP="$LW_MAP$LW_CUR:$1 "
-    if [ "$3" = 0 ]; then ok "$1 $2"; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
+    if [ "$3" = 0 ]; then ok "$1 $2"; LW_PASS="$LW_PASS$1 "; else bad "$1 $2 (exit $RC)"; printf '%s\n%s\n' "$OUT" "$ERR" | sed 's/^/        | /' | head -8; fi
   else
     LW_SEEN="$LW_SEEN$1 "
     if [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
@@ -990,6 +1071,59 @@ mut_line() {
   O="$4" N="$5" awk -v occ="$3" 'BEGIN { o = ENVIRON["O"]; nw = ENVIRON["N"] } $0 == o && ++c == occ { print nw; next } { print }' "$1" > "$2" || return 1
   ! cmp -s "$1" "$2"
 }
+
+# ---- RSET: the reset list EQUALS the set of globals the drivers and world bodies assign ---------------
+# Derived from run.sh's own text: the lines of lw_rd, lw_batch and every `if lw_world <name>; then ... lw_end; fi`
+# body, at statement position (line start or after `;`) as `NAME=`. `local NAME=` is excluded, because a local is
+# scoped to lw_all and cannot leak between worlds. Pointed at its own subject: the set must hold OUT, RC and BOUT.
+rset_derive() { awk '
+  /^# ---- lw-harness: begin/ { h = 1 } /^# ---- lw-harness: end/ { h = 0 }
+  h && /^lw_(rd|batch)\(\) \{/ { s = 1; next }
+  h && s && /^\}/ { s = 0; next }
+  h && /^  if lw_world / { s = 1; next }
+  h && s && /lw_end; fi/ { s = 0; next }
+  h && s && $0 !~ /^[ \t]*#/ {
+    rest = $0
+    while (match(rest, /(^|;)[ \t]*[A-Za-z_][A-Za-z0-9_]*=/)) {
+      t = substr(rest, RSTART, RLENGTH); sub(/^;?[ \t]*/, "", t); sub(/=$/, "", t); print t
+      rest = substr(rest, RSTART + RLENGTH)
+    }
+  }' "$1"; }
+rset_check() { # <run.sh copy> -> 0 when the listed reset set equals the derived set; 2 when the derived set lacks OUT, RC or BOUT
+  local d l
+  d="$(rset_derive "$1" | LC_ALL=C sort -u | tr '\n' ' ')"
+  l="$(sed -n 's/^LW_RESET_VARS="\(.*\)"$/\1/p' "$1" | head -1 | tr ' ' '\n' | LC_ALL=C sort -u | tr '\n' ' ')"
+  RSET_D="$d"; RSET_L="$l"
+  case " $d" in *" OUT "*) ;; *) return 2 ;; esac
+  case " $d" in *" RC "*) ;; *) return 2 ;; esac
+  case " $d" in *" BOUT "*) ;; *) return 2 ;; esac
+  [ -n "$l" ] && [ "$d" = "$l" ]
+}
+SELF="$HERE/run.sh"
+rset_check "$SELF"; _rr=$?
+rc_is "RSET the globals reset at lw_world entry [$RSET_L] EQUAL the globals the drivers and world bodies assign [$RSET_D], and the derived set holds OUT, RC and BOUT" 0 "$_rr"
+RS_F="$WORK/rset.fail.sh"; RS_P="$WORK/rset.pass.sh"
+mut_line "$SELF" "$RS_F" 1 '  lw_rd "$b" "$LS14" "$none"' '  lw_rd "$b" "$LS14" "$none"
+  ZZSEED=1'; _a1=$?
+mut_line "$RS_F" "$RS_P" 1 'LW_RESET_VARS="OUT ERR RC BOUT BRC"' 'LW_RESET_VARS="OUT ERR RC BOUT BRC ZZSEED"'; _a2=$?
+if [ "$_a1" != 0 ] || [ "$_a2" != 0 ]; then bad "RSET FIXTURE BROKEN: the probe copies did not apply"
+else
+  rset_check "$RS_F"; _pf=$?
+  rc_is "RSETf probe: a copy with a world-level ZZSEED assigned in a world body and MISSING from the reset list is refused (derived set [$RSET_D])" 1 "$_pf"
+  rset_check "$RS_P"; _pp=$?
+  rc_is "RSETp probe: the same copy with ZZSEED PRESENT in the reset list passes" 0 "$_pp"
+fi
+# RSETr: the real lw_world/lw_arm/reset code over a seeded pair. World pa sets RC; world pb's arm reads it.
+RS_H="$WORK/rset.harness.sh"; sed -n '/^# ---- lw-harness: begin/,/^# ---- lw-harness: end/p' "$SELF" > "$RS_H"
+RS_VARS="$(sed -n 's/^LW_RESET_VARS="\(.*\)"$/\1/p' "$SELF" | head -1)"
+rset_pair() { # <LW_RESET_VARS value> -> the verdict of arms PA and PB
+  ( . "$RS_H"; LW_RESET_VARS="$1"; LW_MODE=real
+    ok() { echo "ok $1"; }; bad() { echo "bad $1"; }
+    if lw_world pa; then RC=7; lw_arm PA "pa sets RC" 0; lw_end; fi
+    if lw_world pb; then lw_arm PB "pb reads RC set by pa" "$([ "$RC" = 7 ] && echo 0 || echo 1)"; lw_end; fi ) 2>&1 | awk '/^(ok|bad) P[AB] /{ print $1 " " $2 }' | tr '\n' ' '
+}
+rc_is "RSETr reset probe: with the reset, world pb's arm reading pa's RC FAILS, and without the reset it PASSES (same run, same worlds)" "ok PA bad PB ok PA ok PB " "$(rset_pair "$RS_VARS")$(rset_pair "")"
+
 LW_MODE=mut
 # req_ok <id> <required set>: a required set must be non-empty and every arm in it must be one the real
 # pass recorded in a world. A misspelled arm would otherwise select no world and read as SURVIVED.
@@ -1007,48 +1141,59 @@ req_seen() {
     case "$LW_SEEN" in *" $a "*) ;; *) bad "$1 FIXTURE BROKEN: required arm $a was not evaluated, so its world never ran"; return 1 ;; esac
   done
 }
-# THE NULL-MUTANT CONTROL, once per MUTANT, keyed on its id: the reader plus a trailing comment line, so cmp
-# differs and behaviour does not. It must SURVIVE with every required arm evaluated: a required arm that
-# fails under it is failing on leftover state or on a split unit, never on the mutation.
-LW_NINV_NULL=0
-null_ctl() { # <required set> <mutant id>
-  local n="$WORK/mut.null.sh" a hit="" k0="$LW_NINV"
-  { cat "$BIN/check-owed-derivations.sh"; printf '# null-mutant control: a comment, no behaviour\n'; } > "$n"
-  if cmp -s "$BIN/check-owed-derivations.sh" "$n"; then bad "NULL ($2: $1) FIXTURE BROKEN: the null copy is byte-identical to the reader"; return; fi
-  LW_REQ="$1"; LW_FAILED=""; LW_SEEN=" "; lw_all "$n" null
-  LW_NINV_NULL=$((LW_NINV_NULL + LW_NINV - k0))
-  req_seen "NULL ($2: $1)" "$1" || return
-  for a in $1; do case " $LW_FAILED " in *" $a "*) hit="$hit $a" ;; esac; done
-  if [ -z "$hit" ]; then ok "NULL ($2: $1) SURVIVES: no required arm failed under an unmutated copy"; else bad "NULL ($2: $1) required arm(s)$hit failed under an UNMUTATED copy (leftover state or a split world)"; fi
+LW_ALLARMS="$(for _t in $LW_MAP; do printf '%s ' "${_t#*:}"; done)"
+# lw_base_passed <arms>: every named arm HELD in this run's real pass.
+lw_base_passed() { local a; for a in $1; do case "$LW_PASS" in *" $a "*) ;; *) return 1 ;; esac; done; }
+# mut_score <id> <deciding arm> <twins>: scores LW_FAILED from the pass just run. The kill is the deciding
+# arm FAILING while every twin HOLDS; its flag is 1 only when the deciding arm and every twin held in the
+# real pass of THIS run. MATRIX mode prints a row per recorded arm first, and scores the deciding arm alone
+# (the twins are chosen FROM the matrix).
+mut_score() {
+  local a tbad="" dfail=0 tw="$3" mut_flag=0
+  if [ "$OWED_MATRIX" = 1 ]; then
+    for a in $LW_ALLARMS; do
+      case " $LW_FAILED " in *" $a "*) printf 'MATRIX\t%s\t%s\tFAIL\n' "$1" "$a" ;; *) printf 'MATRIX\t%s\t%s\tok\n' "$1" "$a" ;; esac
+    done
+    tw=""
+  fi
+  if lw_base_passed "$2 $tw"; then mut_flag=1; fi
+  for a in $tw; do case " $LW_FAILED " in *" $a "*) tbad="$tbad $a" ;; esac; done
+  case " $LW_FAILED " in *" $2 "*) dfail=1 ;; esac
+  if [ "$dfail" = 1 ] && [ -z "$tbad" ]; then
+    mutant_killed "$mut_flag" "$1" "$1 killed: deciding arm $2 failed, twin(s) ${tw:-none} held (failed:$LW_FAILED)"
+  elif [ "$dfail" = 0 ]; then
+    bad "$1 SURVIVED: deciding arm $2 did not fail (failed:${LW_FAILED:- none})"
+  else
+    bad "$1 ENTANGLED: twin arm(s)$tbad failed beside deciding arm $2 (failed:$LW_FAILED)"
+  fi
 }
-mut_case() { # <id> <must-fail arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
-  local m="$WORK/mut.$1.sh" a miss=""
-  req_ok "$1" "$2" || return
-  if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$3" "$4" "$5"; then
+mut_case() { # <id> <deciding arm> <twin arms, space-separated> <occurrence> <old line> <new text> [<occ2> <old2> <new2>]
+  local m="$WORK/mut.$1.sh" req="$2 $3"
+  req_ok "$1" "$req" || return
+  [ "$OWED_MATRIX" = 1 ] && req="$LW_ALLARMS"
+  if ! mut_line "$BIN/check-owed-derivations.sh" "$m" "$4" "$5" "$6"; then
     bad "$1 FIXTURE BROKEN: the mutation did not apply (anchor not found), so it is not scored"; return
   fi
-  if [ "$#" -ge 8 ]; then
-    if ! mut_line "$m" "$m.2" "$6" "$7" "$8"; then
+  if [ "$#" -ge 9 ]; then
+    if ! mut_line "$m" "$m.2" "$7" "$8" "$9"; then
       bad "$1 FIXTURE BROKEN: the second mutation did not apply (anchor not found), so it is not scored"; return
     fi
     mv "$m.2" "$m"
   fi
-  LW_REQ="$2"; LW_FAILED=""; LW_SEEN=" "; lw_all "$m" "$1"
-  req_seen "$1" "$2" || return
-  for a in $2; do case " $LW_FAILED " in *" $a "*) ;; *) miss="$miss $a" ;; esac; done
-  if [ -z "$miss" ]; then ok "$1 killed: arm(s)$LW_FAILED failed (required: $2)"; else bad "$1 SURVIVED: arm(s)$miss did not fail (failed:${LW_FAILED:- none})"; fi
-  null_ctl "$2" "$1"
+  LW_REQ="$req"; LW_FAILED=""; LW_SEEN=" "; lw_all "$m" "$1"
+  req_seen "$1" "$req" || return
+  mut_score "$1" "$2" "$3"
 }
-mut_case M1 "S1 S4b S7 RP2 SL1 SL2 CD1 CDD4 S11n S12n" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
-mut_case M2 "S1" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'
-mut_case M3 "S1 S6" 1 '  living_sweep' '  :'
-mut_case M4 "S2" 1 '    [ "$SCOPE_TOKEN" = LIVING ] || continue' '    [ "$SCOPE_TOKEN" = LIVING ] || [ "$SCOPE_TOKEN" = PAST ] || continue'
-mut_case M5 "S5" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/core-paths.sh" ] || return 0; [ -f "$SELF_DIR/core-paths.sh" ] \'
-mut_case M6 "S1 S4a S8 S6c S6d LF GC" 1 '  sweep_and_exit 0' '  exit 0'
-mut_case M7 "S10" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
+mut_case M1 S1 "GC" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    :'
+mut_case M2 S1 "S3" 1 '    grep -qxF -- "$_id" "$TMP/ls.core" || continue' '    grep -qxF -- "$_id" "$TMP/ls.core" && continue'
+mut_case M3 S1 "S2" 1 '  living_sweep' '  :'
+mut_case M4 S2 "S1" 1 '    [ "$SCOPE_TOKEN" = LIVING ] || continue' '    [ "$SCOPE_TOKEN" = LIVING ] || [ "$SCOPE_TOKEN" = PAST ] || continue'
+mut_case M5 S5 "S1" 1 '  [ -f "$SELF_DIR/core-paths.sh" ] \' '  [ -f "$SELF_DIR/core-paths.sh" ] || return 0; [ -f "$SELF_DIR/core-paths.sh" ] \'
+mut_case M6 S1 "S3" 1 '  sweep_and_exit 0' '  exit 0'
+mut_case M7 S10 "S9" 1 'if [ "${1:-}" = "--scope-batch" ]; then' '[ -f "$SELF_DIR/core-paths.sh" ] || { echo "REFUSED: no core-paths.sh beside $0" >&2; exit 2; }
 if [ "${1:-}" = "--scope-batch" ]; then'
-mut_case M8 "S6b" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
-mut_case M9 "S11a S11b RP1 CD2" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
+mut_case M8 S6b "S6c" 1 '    if [ "$_c" = "$LEDGER_REL" ] && ledger_superseded "$_i" "$_c" "$_ln" "$_cmd"; then continue; fi' '    :'
+mut_case M9 S11a "S11n" 1 '    case "$_q" in git\ *) ;; *) continue ;; esac' '    continue'
 # The anchors below carry single quotes, so they are read from quoted heredocs, byte for byte.
 WORDS_LINE="$(cat <<'EOF'
   awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
@@ -1077,9 +1222,9 @@ EOF
 )"
 LEDGER_CALL='  _all="$(list_cmd_lines "$LST" "$2" "$4")" \'
 PASS2_CALL='    found="$(list_cmd_lines "$LST" "$rel" "$tcmd")" \'
-mut_case M10 "S11c" 1 "$WORDS_LINE" "$WORDS_NOVAL"
-mut_case M12 "S6e S6f S6g" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$LEDGER_CALL" '  _all="$(derived_cmd_lines "$ROOT/$2" "$4")" \'
-mut_case M12b "PU" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$PASS2_CALL" '    found="$(derived_cmd_lines "$ROOT/$rel" "$tcmd")" \'
+mut_case M10 S11c "S11n" 1 "$WORDS_LINE" "$WORDS_NOVAL"
+mut_case M12 S6e "S6b" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$LEDGER_CALL" '  _all="$(derived_cmd_lines "$ROOT/$2" "$4")" \'
+mut_case M12b PU "S7" 1 'LST=""; LST_N=0' "$RAWSCAN" 1 "$PASS2_CALL" '    found="$(derived_cmd_lines "$ROOT/$rel" "$tcmd")" \'
 SOFT_LINE='    list_of "$rel"'
 SOFT_NEW="$(cat <<'EOF'
     j="$(idx_of "$rel")"; rc="$(cat "$TMP/f.$j.rc" 2>/dev/null)"
@@ -1089,10 +1234,10 @@ SOFT_NEW="$(cat <<'EOF'
     list_of "$rel"
 EOF
 )"
-mut_case M14 "B8c" 1 "$SOFT_LINE" "$SOFT_NEW"
-mut_case M15 "RP3 RP4" 1 '        *:*) case "$_w" in :[0-3]:*) _p="${_w#:?:}" ;; :*) _p="${_w#:}" ;; *) _p="${_w#*:}" ;; esac' '        *:*) _p="${_w#*:}"' \
+mut_case M14 B8c "LF" 1 "$SOFT_LINE" "$SOFT_NEW"
+mut_case M15 RP3 "RP2" 1 '        *:*) case "$_w" in :[0-3]:*) _p="${_w#:?:}" ;; :*) _p="${_w#:}" ;; *) _p="${_w#*:}" ;; esac' '        *:*) _p="${_w#*:}"' \
   1 '    for _t in "$_w" "$_rw"; do' '    for _t in "$_w" "${_w#*:}"; do'
-mut_case M16 "RP5" 1 '             case "$_p" in ./*) _p="${_gd%/}/${_p#./}" ;; ../*) _p="${_gd%/}/$_p" ;; esac ;;' '             case "$_p" in ../*) _p="${_gd%/}/$_p" ;; esac ;;'
+mut_case M16 RP5 "RP2" 1 '             case "$_p" in ./*) _p="${_gd%/}/${_p#./}" ;; ../*) _p="${_gd%/}/$_p" ;; esac ;;' '             case "$_p" in ../*) _p="${_gd%/}/$_p" ;; esac ;;'
 STICKY_OLD="$(cat <<'EOF'
   awk -F'\t' '$2 == "ARGV" { gc = (substr($3, 1, 7) == "git -C ") } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
 EOF
@@ -1101,13 +1246,13 @@ STICKY_NEW="$(cat <<'EOF'
   awk -F'\t' '$2 == "ARGV" { if ($1 != pid) { gc = 0; pid = $1 } if (substr($3, 1, 7) == "git -C ") gc = 1 } $2 == "WORD" && !gc && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { print $1 "\t" $7 }' "$TMP/ls.explain" > "$TMP/ls.ops"
 EOF
 )"
-mut_case M17 "PP" 1 "$STICKY_OLD" "$STICKY_NEW"
-mut_case M18 "CDD1 CDD2 CDD3" 1 '      collapse_dots "$_p"' '      CP="$_p"; CSYM=0'
-mut_case M19 "CDD5" 1 '      [ "$CSYM" = 0 ] || printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.force"' '      :'
-mut_case M13 "G1 G2 S15n" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
-mut_case M11 "S12a S12b S12c S12d S12e" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
-mut_case mA "S13" 1 '  local nref' '  return 0'
-mut_case mB "S14" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
+mut_case M17 PP "G1" 1 "$STICKY_OLD" "$STICKY_NEW"
+mut_case M18 CDD1 "CDD4" 1 '      collapse_dots "$_p"' '      CP="$_p"; CSYM=0'
+mut_case M19 CDD5 "CDD4" 1 '      [ "$CSYM" = 0 ] || printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.force"' '      :'
+mut_case M13 G1 "GC" 1 "$WORDS_LINE" "$WORDS_ALLGIT"
+mut_case M11 S12a "S12n" 1 '      case "$_globsnl" in *"$NL${_t%/}/"*) printf '"'"'%s\n'"'"' "$_id" >> "$TMP/ls.core"; break ;; esac' '      :'
+mut_case mA S13 "S13c" 1 '  local nref' '  return 0'
+mut_case mB S14 "S1" 1 '      _t="${_t#"$ROOT"/}"' '      :' 1 '      for _k in "$_t" "${_t%/}/"; do' '      for _k in "$_t"; do'
 # M20: every command the validator LISTS in a kept file becomes a candidate, FAIL line or not, so a
 # reproducing core fence is opened.
 VERD_NEW="$(cat <<'EOF'
@@ -1115,27 +1260,31 @@ VERD_NEW="$(cat <<'EOF'
   _i=0; while IFS= read -r _c; do _i=$((_i + 1)); list_of "$_c"; awk -v i="$_i" 'match($0, /:[0-9]+  /) { print i "\t" substr($0, RSTART + 1, RLENGTH - 3) "\tSTALE" }' "$LST" >> "$TMP/ls.verd"; done < "$TMP/ls.rel"
 EOF
 )"
-mut_case M20 "S3" 1 '  : > "$TMP/ls.verd"' "$VERD_NEW"
+mut_case M20 S3 "S4b" 1 '  : > "$TMP/ls.verd"' "$VERD_NEW"
 # M21: --scope-batch lets the LIVING documents' verdicts reach its stdout.
 BATCH_LEAK="$(cat <<'EOF'
   find "$ROOT/_bmad-output" -name '*.md' -exec bash "$ROOT/scripts/ai-dlc/validate-artifact-derivations.sh" {} + 2>&1 >/dev/null | grep '^FAIL ('; exit 0
 EOF
 )"
-mut_case M21 "S9" 1 '  exit 0' "$BATCH_LEAK"
+mut_case M21 S9 "S10" 1 '  exit 0' "$BATCH_LEAK"
 # M22: the sweep refuses on EVERY validator exit, a verdict included (the always-refuse mirror of mA).
-mut_case M22 "S13c" 1 '    0|1) return 0 ;;' '    0|1) ;;'
+mut_case M22 S13c "S13" 1 '    0|1) return 0 ;;' '    0|1) ;;'
+# CPY: the copy lw_all makes for every mutant starts as a `cp` of the reader, so the copies the real pass ran
+# must be byte-identical to $BIN/check-owed-derivations.sh, and M1's mutated copy must differ (the control).
+rc_is "CPY the copies lw_all ran in the real pass are byte-identical to the reader, and M1's mutated copy is not" "same differs" "$({ cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin/check-owed-derivations.sh" && cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin5/check-owed-derivations.sh" && printf same; } || printf DIFFERENT) $(cmp -s "$BIN/check-owed-derivations.sh" "$WORK/mut.M1.sh" && printf same || printf differs)"
 # MV1: a VALIDATOR mutant. The reader runs the validator copied into the ROOT, so the mutant is a copy of
 # the LS11 world whose validator has its `explain_chain` call removed (base: a refused chain explains no
 # segment, so no core operand is asked). The real reader is driven over that copy through the same world
-# filter; CH1 and CH2 must fail, CH1n must stay silent. Its control is the same copy with the validator
-# unmutated, under which every CH arm holds.
+# filter; its deciding arm CH1 must fail and its twin CH1n must hold. Its control is the same copy with the
+# validator unmutated, under which every arm it runs holds.
 mv_world() { # <tag> <validator source> -> sets MVW
   MVW="$WORK/ls11.$1"; cp -R "$LS11" "$MVW"; cp "$2" "$MVW/scripts/ai-dlc/validate-artifact-derivations.sh"
 }
 mv_case() { # <tag> <validator source> -> LW_FAILED over the CH arms in the copied world
   local keep="$LS11"
   mv_world "$1" "$2"; LS11="$MVW"
-  LW_REQ="CH1 CH1n CH2"; LW_FAILED=""; LW_SEEN=" "; lw_all "$BIN/check-owed-derivations.sh" "$1"
+  LW_REQ="CH1 CH1n"; [ "$OWED_MATRIX" = 1 ] && LW_REQ="$LW_ALLARMS"
+  LW_FAILED=""; LW_SEEN=" "; lw_all "$BIN/check-owed-derivations.sh" "$1"
   LS11="$keep"
 }
 MVSRC="$WORK/mv1.validator.sh"
@@ -1147,20 +1296,15 @@ elif ! bash -n "$MVSRC"; then
   bad "MV1 FIXTURE BROKEN: the mutated validator does not parse"
 else
   mv_case mv1 "$MVSRC"
-  req_seen MV1 "CH1 CH1n CH2" && {
-    case " $LW_FAILED " in *" CH1 "*) mv_ch1=1 ;; *) mv_ch1=0 ;; esac
-    case " $LW_FAILED " in *" CH2 "*) mv_ch2=1 ;; *) mv_ch2=0 ;; esac
-    case " $LW_FAILED " in *" CH1n "*) mv_chn=1 ;; *) mv_chn=0 ;; esac
-    if [ "$mv_ch1$mv_ch2$mv_chn" = 110 ]; then ok "MV1 killed: the validator without its explain_chain call fails CH1 and CH2, and CH1n stays silent (failed:$LW_FAILED)"
-    else bad "MV1 expected CH1 and CH2 to fail and CH1n to hold (CH1=$mv_ch1 CH2=$mv_ch2 CH1n=$mv_chn, failed:${LW_FAILED:- none})"; fi
-  }
+  req_seen MV1 "$LW_REQ" && mut_score MV1 CH1 "CH1n"
   mv_case mv1null "$VALIDATOR"
-  req_seen "MV1 control" "CH1 CH1n CH2" && {
-    if [ -z "$LW_FAILED" ]; then ok "MV1 control: the same copied world with the UNMUTATED validator holds every CH arm"
-    else bad "MV1 control: CH arm(s)$LW_FAILED failed under the unmutated validator in the copied world"; fi
+  req_seen "MV1 control" "$LW_REQ" && {
+    if [ -z "$LW_FAILED" ]; then ok "MV1 control: the same copied world with the UNMUTATED validator holds every arm it runs"
+    else bad "MV1 control: arm(s)$LW_FAILED failed under the unmutated validator in the copied world"; fi
   }
 fi
-printf '  mutant-phase reader invocations: %s (mutants %s, null controls %s)\n' "$LW_NINV" "$((LW_NINV - LW_NINV_NULL))" "$LW_NINV_NULL"
+printf '  mutant-phase reader invocations: %s\n' "$LW_NINV"
+printf '  mutant-phase world runs: %s\n' "$LW_NWORLD"
 LW_MODE=real
 
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------

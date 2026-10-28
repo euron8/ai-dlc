@@ -952,6 +952,8 @@ The allowlist is the output of `--derive`, never typed. That was 127 fixtures, a
 
 Owed: migrate the remaining allowlisted fixtures, removing each row in the change that migrates it.
 
+**Progress (0.961.0, batch b245).** 33 more fixtures route their kills through `mutant_killed` behind a same-run base-pass flag, and each change deletes its own row, so `scripts/mutant-kills-allowlist.txt` falls from 124 rows to 91. The remaining 91 stay owed, and the entry stays open.
+
 verify: manual
 
 ## BL-836 — nothing at pre-push asserts that an OPEN entry's `verify: sh` receipt still runs, so a rename inside a release breaks it silently
@@ -1112,6 +1114,49 @@ verify: manual
 **DEFECT.** s320 4.2 as dispatched had a `## Smoke Test Updates` section reading "None", derived by grepping `scripts/test-aws-smoke.sh` for HODL (0 hits). Gate-2 p1 failed C2 ("Smoke-test-update HARD GATE unmet: the browser HODL spec is not updated") and gate 3 failed Check 11 on the same surface. It also failed C1, "Visual consistency: any CSS/layout change verified via computed style". That rule lives in graph's `extensions/roles/qa-domain.md:167` and `overrides/team-roles__qa__bug-class-sweep.md:249`, and the dispatched story mentioned computed style 0 times. `stories-test-strategy.md:261` names `## Smoke Test Updates` as read by Check 11's smoke clause but does not define which surface counts as smoke, and the stories step loads no QA domain extension.
 
 Owed: the stories step reads the QA checklist that gate 2 will apply, consumer extensions included, and every HARD GATE item that the story's diff class triggers appears in the story's ACs or test strategy. The smoke surface is one definition shared by `stories-test-strategy.md`, QA and Check 11.
+
+verify: manual
+
+## BL-850 — fixture optimization
+
+**DEFECT.** An umbrella entry for fixture optimisation: a fixture whose wall clock exceeds what its checks need. Typical causes are a subject run once per assertion, mutant or world instead of once per distinct question, and a full mutant × arm matrix re-scored on every push. Each fixture gets its section in the release that changes it.
+
+**PARTIAL (0.961.0, batch b245 part one).** 54 fixtures are narrowed. Each measures its mutant × arm matrix once by `bash core/fixtures/<fx>/run.sh --matrix`, records it in the header, and on each push runs each mutant's deciding arm plus one green twin. Counts below are before → after per push, from the owners' instrumented runs; "not recorded" means no count was taken. Loaded costs come from the dress.
+
+- check-24-adversarial-convergence: validator executions 1357 → 747; receipt world builds 474 → 43. NOT FINAL: its validator seam follows.
+- readset-skip: hook drives 740 → 221; direct apply calls 228 → 148; deriver runs 339 → 170; git inits 449 → 63; world builds 943 → 348.
+- ledger-reverify: shards b/c/d collapsed into one directory; engine invocations 216 → 212; seeds 4 → 1; baselines 4 → 1; full-ledger sites 34 → 6. Row helpers now match a label as a fixed string up to a boundary.
+- apply-drift-refile: shards b/c collapsed; apply.sh runs 174 → 139; fresh worlds 97 → 75; mutant arm-scorings 65 → 50.
+- foreground-budget-deny: hook invocations 4176 → 489.
+- document-partition: predicate runs 1015 → 89.
+- carried-findings: validator runs about 1100 → 62.
+- census-hermetic-coverage: censuses 24 → 22.
+- snapshot-archive-rotate: the mutant control's re-run of the kill-point sweep (about 655 rotator runs) → one counted run checked against the live trace.
+- enforcement-map-sites: validator runs 185 → 139; whole-template re-seeds 42 → 0.
+- ledger-status-vocabulary: full validator runs 11 → 1.
+- validator-arm-selection: m2 drives 3 representatives instead of every one.
+- serial-remediation-worklist: worklist runs 210 → 30; worlds 210 → 5; mutant cells 168 → 27.
+- remediator-shard-join: 13 repeated unmutated drives → 3 per-family copy controls.
+- prepush-pool-depth: git-init worlds 93 → 14; pool drives about 195 → 23; the hook-2 watcher battery is deleted, because I66 binds that block to hook 1's, and an arm drives `validate-enforcement-map.sh --arms I66` over a one-byte seeded fork.
+- layer-adjudication-tier: layer-drift calls 274 → 114; Part 11 mutant drives 110 → 20.
+- layer-readopt-gate: E2 drives 161 → 57; git inits 161 → 12.
+- gate-resume: hook fires about 288 → 70; the shipped hook's dense sweep is unchanged.
+- party-wave-barrier: self-probe replays about 60 → 3.
+- advisor-gate-deny: hook runs about 679 → 240.
+- askuserquestion-citation: node runs 25 → 9.
+- artifact-path-migration: seed.sh runs 10 → 1 plus clones.
+- artifact-path-conformance: seed.sh runs 9 → 3.
+- audit-anchors-schema: renders 7 → 2.
+- upstream-routing: core-paths.sh about 1s → 0.03s per call, about 70 calls.
+- suite-dispatch-order: real sleeps about 12s → 1s.
+- snapshot-evidence-cell: 260 selector drives → deciding worlds plus one twin.
+- vocabulary-index: the 24 mutant worlds skip the renderer's self-probes through `--skip-selfprobe`; controls keep them.
+- backlog-real-ledger: classifier full-ledger runs 2 → 1.
+- transient-ignore-block: renders about 168 → 90; seeds 80 → 7 plus clones.
+- agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
+- Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
+
+Owed: the remaining fixtures in the b245-fx2 part, among them reconcile-emit-report (render once), check-24-adversarial-convergence's seam, layer-reference-resolution, and the prevention mechanism that refuses regrowth.
 
 verify: manual
 

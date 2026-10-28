@@ -3,3 +3,13 @@
 core/fixtures/lib/
 core/git-hooks/pre-push
 .githooks/pre-push
+core/fixtures/lib/mutant.sh
+scripts/validate-enforcement-map.sh
+scripts/render-invariant-index.sh
+core/scripts/hermetic-run.sh
+core/scripts/derive-fixture-readsets.sh
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/core-manifest.md
+core/skills/ai-dlc-update/fixture-manifest.md
+core/skills/ai-dlc-update/reconcile/setup-sites.md

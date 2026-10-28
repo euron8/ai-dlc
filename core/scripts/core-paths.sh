@@ -276,14 +276,16 @@ if [ -z "$RAW_ENTRIES" ]; then
   exit 2
 fi
 
-CORE_GLOBS=""
-while IFS= read -r e; do
+# One command substitution around the whole loop, not one per entry: to_consumer_glob prints with a
+# builtin, so the per-entry `$( )` was a fork per manifest line for the same bytes.
+CORE_GLOBS="$(while IFS= read -r e; do
   [ -n "$e" ] || continue
-  CORE_GLOBS="${CORE_GLOBS}$(to_consumer_glob "$e")
-"
+  to_consumer_glob "$e"
 done <<EOF
 $RAW_ENTRIES
 EOF
+)
+"
 
 if [ "$MODE" = "--list" ]; then
   printf '%s' "$CORE_GLOBS"

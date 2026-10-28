@@ -28,6 +28,34 @@
 #
 # Usage: run.sh
 
+#
+# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
+# test-quality property, measured ONCE for every mutant x variant arm and recorded below; per push each
+# mutant runs its deciding arm (must flip) and a twin arm the measured matrix shows green (must stay
+# green). The recorded matrix plus the twin REPLACES a per-push exact-vector assertion. Measured
+# co-trips: phase-alternative-restored and absence-widened each also trip the other's arm (V13/V16);
+# prose-gate-on-raw-line also trips V20 V22 V23 V24 V34; negation-window-not-adjacency also trips
+# V27 V31 V32; tests-path-skipped also trips V33; carve-outs-disarmed also trips V24 V34; the two
+# element-2 mutants trip V35 and V36 together. Every other mutant trips only its deciding arm.
+# The matrix is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX phase-alternative-restored decides=V13 twins=V14
+# MUTANT-MATRIX phase-marker-dropped decides=V14 twins=V15
+# MUTANT-MATRIX absence-widened decides=V16 twins=V14
+# MUTANT-MATRIX notimplementederror-dropped decides=V15 twins=V14
+# MUTANT-MATRIX prose-marker-unbounded decides=V18 twins=V19
+# MUTANT-MATRIX prose-gate-on-raw-line decides=V17 twins=V19
+# MUTANT-MATRIX comment-openers-emptied decides=V21 twins=V19
+# MUTANT-MATRIX quote-guard-dropped decides=V22 twins=V21
+# MUTANT-MATRIX negation-window-not-adjacency decides=V25 twins=V28
+# MUTANT-MATRIX tests-path-skipped decides=V26 twins=V24
+# MUTANT-MATRIX test-vocab-without-path-conjunct decides=V30 twins=V26
+# MUTANT-MATRIX carve-outs-disarmed decides=V23 twins=V25
+# MUTANT-MATRIX deferral-word-refusal-dropped decides=V31 twins=V25
+# MUTANT-MATRIX negation-bound-widened decides=V32 twins=V31
+# MUTANT-MATRIX vocab-window-widened decides=V33 twins=V34
+# MUTANT-MATRIX element2-unbounded decides=V36 twins=V37
+# MUTANT-MATRIX element2-token-blacklist decides=V35 twins=V37
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/check-15-bypass/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -39,6 +67,10 @@ TREE="$(bash "$HERE/seed.sh" "$WORK")"
 BACKLOG="$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md"
 [ -f "$BACKLOG" ] || { echo "FAIL: seed did not produce a backlog at '$BACKLOG'" >&2; exit 2; }
 
+# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh): it replaces the per-push
+# mutant stage with the full mutant x arm matrix and prints MATRIX rows from matrix.sh.
+MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
+MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
 fails=0
 note() { printf '  %-6s %-30s %s\n' "$1" "$2" "$3"; }
 
@@ -82,13 +114,12 @@ OUT=""; RC=0
 audit() { OUT="$(bash "${AUDIT_BIN:-$AUDIT}" --root "$TREE" "$@" 2>&1)"; RC=$?; }
 AUDIT_BIN=""
 
-# classify <validator> <tree-relative-path> -> the same token `expect` reads, so the
-# mutant section at the end scores against the SAME classifier as the arms it is proving
-# load-bearing. Two classifiers would be two grammars, and the copy that cannot ship is
-# the one that stays green.
-classify() {
-  local bin="$1" p="$2" out got
-  out="$(bash "$bin" --root "$TREE" "$p" src/v5_honest.py 2>&1)"
+# verdict <output> <tree-relative-path> -> the token `flush_expects` compares: the element a
+# FINDING names, `exempt-upstream`, or `ok`. ONE parser for the arms and for the mutant section,
+# so the mutants score against the SAME classifier as the arms they prove load-bearing; two
+# classifiers would be two grammars, and the copy that cannot ship is the one that stays green.
+verdict() {
+  local out="$1" p="$2" got
   case "$out" in
     *"EXEMPT $p "*) got="exempt-upstream" ;;
     *"FINDING $p:"*)
@@ -99,35 +130,60 @@ classify() {
   printf '%s' "$got"
 }
 
+# classify <validator> <tree-relative-path>... -> sets OUT; one validator run for the whole set.
+# Read each path's token with `verdict "$OUT" <path>`.
+classify() {
+  local bin="$1"; shift
+  OUT="$(bash "$bin" --root "$TREE" "$@" 2>&1)"
+}
+
 # expect <tree-relative-path> <want-element-token|ok|exempt-upstream> <label>
 #
-# CLASSIFIED ON THE VALIDATOR'S PER-PATH LINES, NEVER ON ITS EXIT CODE, and each variant
-# is audited alongside the honest control so the run always has something in scope. Both
-# choices exist to keep these assertions independent of the three below: read as an exit
-# code, a single exempt path yields 4 (audited nothing) and a single clean path yields 0,
-# so a mutation to the EXIT MAPPING alone would flip the ownership variants as well as
-# the vacuity floor — three failures for one defect, which is the entanglement that makes
-# two of the three vacuous. The exit mapping gets its own assertions instead.
+# QUEUED, NOT RUN. The validator's cost is per PATH (about 0.7s each), and every variant used
+# to be audited in its own invocation beside a copy of the honest control, so the 37 variants
+# cost 74 path-audits across 37 process starts. The paths are independent of one another, so
+# `flush_expects` audits the whole queue in ONE run and each queued arm reads its own
+# `FINDING <path>:` / `EXEMPT <path> ` line out of that one output. The honest control is no
+# longer audited beside every variant: classification reads the per-path lines, never the exit
+# code, so nothing depended on a second path being in scope.
+#
+# CLASSIFIED ON THE VALIDATOR'S PER-PATH LINES, NEVER ON ITS EXIT CODE. Read as an exit code, a
+# single exempt path yields 4 (audited nothing) and a single clean path yields 0, so a mutation
+# to the EXIT MAPPING alone would flip the ownership variants as well as the vacuity floor --
+# three failures for one defect, which is the entanglement that makes two of the three vacuous.
+# The exit mapping gets its own assertions instead.
+EXP_PATH=(); EXP_WANT=(); EXP_LABEL=()
 expect() {
-  local want="$2" out got
-  audit "$1" src/v5_honest.py; out="$OUT"
-  case "$out" in
-    *"EXEMPT $1 "*) got="exempt-upstream" ;;
-    *"FINDING $1:"*)
-      got="$(sed -nE "s@^FINDING $1:[0-9]+ ([a-z0-9-]+) .*@\1@p" <<<"$out" | head -1)"
-      [ -n "$got" ] || got="rejected-without-naming-an-element" ;;
-    *) got="ok" ;;
-  esac
-  if [ "$got" = "$want" ]; then
-    case "$want" in
-      ok)              note "ok" "$3" "passes all four elements" ;;
-      exempt-upstream) note "ok" "$3" "dropped from scope — upstream-owned" ;;
-      *)               note "ok" "$3" "rejected on $got" ;;
-    esac
-  else
-    note "BAD" "$3" "wanted '$want', got '$got'"
-    fails=$((fails + 1))
+  EXP_PATH+=("$1"); EXP_WANT+=("$2"); EXP_LABEL+=("$3")
+}
+
+flush_expects() {
+  local i n="${#EXP_PATH[@]}" got want out
+  # A queued path that is not a file would classify as `ok` (no line about it), which is an
+  # absence passing for an audit that never happened.
+  for ((i = 0; i < n; i++)); do
+    [ -f "$TREE/${EXP_PATH[$i]}" ] || { echo "FAIL: queued variant '${EXP_PATH[$i]}' is not a file in the seeded tree" >&2; exit 2; }
+  done
+  audit "${EXP_PATH[@]}"; out="$OUT"
+  # Positive conjunct: the batched run must carry the validator's own counts line for every
+  # queued path, or a run that died would classify every `ok` variant as passing.
+  if ! grep -qE "^validate-stub-audit: $n path\(s\) given," <<<"$out"; then
+    echo "FAIL: the batched run did not report '$n path(s) given' -- every verdict below would be read off a dead run" >&2
+    exit 2
   fi
+  for ((i = 0; i < n; i++)); do
+    want="${EXP_WANT[$i]}"; got="$(verdict "$out" "${EXP_PATH[$i]}")"
+    if [ "$got" = "$want" ]; then
+      case "$want" in
+        ok)              note "ok" "${EXP_LABEL[$i]}" "passes all four elements" ;;
+        exempt-upstream) note "ok" "${EXP_LABEL[$i]}" "dropped from scope — upstream-owned" ;;
+        *)               note "ok" "${EXP_LABEL[$i]}" "rejected on $got" ;;
+      esac
+    else
+      note "BAD" "${EXP_LABEL[$i]}" "wanted '$want', got '$got'"
+      fails=$((fails + 1))
+    fi
+  done
 }
 
 echo "check-15-bypass: driving validate-stub-audit.sh against the seed"
@@ -258,6 +314,8 @@ expect tests/fixtures/check-15-bypass/seed.sh \
 expect tests/fixtures/check-15-bypass-local/seed.sh \
                                 element1-item-ref  "V11 consumer fixture (control)"
 
+flush_expects
+
 # --- THE EXIT MAPPING, in two independent assertions. Both drive the audited-nothing
 # case through a NON-HOT-PATH file rather than through an exempt one, so neither touches
 # the ownership resolve and no exemption mutation can reach them.
@@ -310,21 +368,19 @@ fi
 # layouts (I33). A copy that cannot resolve its sibling dies at exit 2, reports no
 # EXEMPT and no FINDING, and every absence-shaped arm reads that silence as a pass —
 # which is why the CONTROL below is presence-shaped and runs first.
+ok()  { printf '  ok     %s\n' "$1"; }
+bad() { printf '  BAD    %s\n' "$1"; fails=$((fails + 1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/check-15-bypass/matrix.sh"
 MUT="$WORK/mut"
 mkdir -p "$MUT"
 cp "$(dirname "$AUDIT")/core-paths.sh" "$MUT/core-paths.sh" 2>/dev/null \
   || { echo "FAIL: no core-paths.sh beside $AUDIT — every mutant would die resolving it and score a false kill" >&2; exit 2; }
-
-cp "$AUDIT" "$MUT/control.sh"
-c_pros="$(classify "$MUT/control.sh" src/v13_phase_prose_docstring.py)"
-c_defr="$(classify "$MUT/control.sh" src/v14_phase_deferral.py)"
-c_nie="$(classify "$MUT/control.sh" src/v15_notimplemented_bare.py)"
-if [ "$c_defr" = "element1-item-ref" ] && [ "$c_nie" = "element1-item-ref" ] && [ "$c_pros" = "ok" ]; then
-  note "ok" "mutant control" "an unmutated copy reports V14 and V15 and stays quiet on V13"
-else
-  note "BAD" "mutant control" "an unmutated copy answered V13='$c_pros' V14='$c_defr' V15='$c_nie' — the mutants below would be scoring the harness"
-  fails=$((fails + 1))
-fi
 
 # name | sed program | probe | the token the mutant must produce
 #
@@ -420,6 +476,37 @@ MUT_WHY=(
   "V35 — a CLOSED item titled 'reOPEN' is accepted again by a fix that keeps the unbounded .* and merely excludes the literal word OPENAPI; the exclusion closes the receipt and ships the defect, and only a title no blacklist can be keyed on refuses it"
 )
 
+# The TWIN of each mutant: variant path(s) the MEASURED matrix (`run.sh --matrix`) shows GREEN under
+# that mutant, in the same order as MUT_NAME. `-` = no twin.
+MUT_TWIN=(
+  "src/v14_phase_deferral.py"
+  "src/v15_notimplemented_bare.py"
+  "src/v14_phase_deferral.py"
+  "src/v14_phase_deferral.py"
+  "src/v19_comment_bare_stub.py"
+  "src/v19_comment_bare_stub.py"
+  "src/v19_comment_bare_stub.py"
+  "src/v21_slashslash_comment.js"
+  "src/v28_neg_after.sh"
+  "tests/v24_test_double.py"
+  "tests/v26_test_real_deferral.py"
+  "src/v25_neg_word_real_deferral.py"
+  "src/v25_neg_word_real_deferral.py"
+  "src/v31_neg_deferral_word.py"
+  "tests/v34_mock_ten_up.py"
+  "src/v37_open_item_open_word_title.py"
+  "src/v37_open_item_open_word_title.py"
+)
+
+# arm_name <tree-relative-path> -> the arm column name the matrix prints: the variant id of its
+# `expect` label (V13, V37, ...), unique per arm, where file names collide (two seed.sh).
+arm_name() { local k; for ((k = 0; k < ${#EXP_PATH[@]}; k++)); do
+  [ "${EXP_PATH[$k]}" = "$1" ] && { local l="${EXP_LABEL[$k]}"; printf '%s' "${l%% *}"; return; }; done
+  printf 'NOARM:%s' "$1"; }
+# want_of <tree-relative-path> -> what the unmutated validator is asserted to answer for it
+want_of() { local k; for ((k = 0; k < ${#EXP_PATH[@]}; k++)); do
+  [ "${EXP_PATH[$k]}" = "$1" ] && { printf '%s' "${EXP_WANT[$k]}"; return; }; done; printf 'NOARM'; }
+
 # mut_copy <label> <sed-program> <dest> — write the mutated copy.
 #
 # EVERY MUTANT WHOSE REPLACEMENT TEXT CARRIES `&&` IS APPLIED BY AWK, NEVER BY `sed`. An `&`
@@ -443,6 +530,26 @@ mut_copy() {
   esac
 }
 
+cp "$AUDIT" "$MUT/control.sh"
+# ONE control run over every probe and twin path: it is the same-run base pass behind each
+# kill (a mutant's probe must read as asserted on the UNMUTATED copy) and the V13/14/15 control.
+CTL_PATHS=("${MUT_PROBE[@]}")
+for t in "${MUT_TWIN[@]}"; do for tp in $t; do [ "$tp" = "-" ] || CTL_PATHS+=("$tp"); done; done
+classify "$MUT/control.sh" "${CTL_PATHS[@]}"; CTL_OUT="$OUT"
+c_pros="$(verdict "$CTL_OUT" src/v13_phase_prose_docstring.py)"
+c_defr="$(verdict "$CTL_OUT" src/v14_phase_deferral.py)"
+c_nie="$(verdict "$CTL_OUT" src/v15_notimplemented_bare.py)"
+if [ "$c_defr" = "element1-item-ref" ] && [ "$c_nie" = "element1-item-ref" ] && [ "$c_pros" = "ok" ]; then
+  note "ok" "mutant control" "an unmutated copy reports V14 and V15 and stays quiet on V13"
+else
+  note "BAD" "mutant control" "an unmutated copy answered V13='$c_pros' V14='$c_defr' V15='$c_nie' — the mutants below would be scoring the harness"
+  fails=$((fails + 1))
+fi
+
+# THE MUTANT STAGE. Per push each mutant runs its DECIDING arm (the probe, which must now answer the
+# wanted token) and its measured-green TWIN(S) (which must still answer the unmutated token), in ONE
+# validator run. Under --matrix every mutant runs ONCE over every variant arm and prints a MATRIX
+# row. "A mutant fails only its own assertion" is established by the recorded matrix, not per push.
 for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
   label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
   mut_copy "$label" "${MUT_SED[$i]}" "$copy"
@@ -452,14 +559,41 @@ for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
     note "BAD" "MUTANT $label" "the sed matched nothing — no mutation applied, so nothing was proven"
     fails=$((fails + 1)); continue
   fi
-  got="$(classify "$copy" "${MUT_PROBE[$i]}")"
+  probe="${MUT_PROBE[$i]}"
+  if [ "$MATRIX" = "1" ]; then
+    classify "$copy" "${EXP_PATH[@]}"; mx_out="$OUT"; MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
+    mx_t=""; mx_g=""
+    for ((k = 0; k < ${#EXP_PATH[@]}; k++)); do
+      if [ "$(verdict "$mx_out" "${EXP_PATH[$k]}")" = "${EXP_WANT[$k]}" ]; then mx_g="$mx_g,$(arm_name "${EXP_PATH[$k]}")"
+      else mx_t="$mx_t,$(arm_name "${EXP_PATH[$k]}")"; fi
+    done
+    mx_k=no; case "$mx_t," in *",$(arm_name "$probe"),"*) mx_k=yes ;; esac
+    mx_row "$label" "$(arm_name "$probe")" "$mx_k" "${mx_t#,}" "${mx_g#,}"
+    continue
+  fi
+  twin="${MUT_TWIN[$i]}"; tw_paths=""; [ "$twin" = "-" ] || tw_paths="$twin"
+  # shellcheck disable=SC2086
+  classify "$copy" "$probe" $tw_paths
+  got="$(verdict "$OUT" "$probe")"
+  # SAME-RUN BASE PASS: the unmutated copy answered the probe as the arm asserts, in THIS run.
+  bflag=0; [ "$(verdict "$CTL_OUT" "$probe")" = "$(want_of "$probe")" ] && bflag=1
   if [ "$got" = "${MUT_WANT[$i]}" ]; then
-    note "ok" "MUTANT $label" "killed by ${MUT_WHY[$i]}"
+    mutant_killed "$bflag" "$label" "MUTANT $label ${MUT_WHY[$i]}"
   else
-    note "BAD" "MUTANT $label" "SURVIVED — ${MUT_PROBE[$i]} answered '$got', wanted '${MUT_WANT[$i]}'"
+    note "BAD" "MUTANT $label" "SURVIVED — $probe answered '$got', wanted '${MUT_WANT[$i]}'"
     fails=$((fails + 1))
   fi
+  for tp in $tw_paths; do
+    tg="$(verdict "$OUT" "$tp")"
+    if [ "$tg" = "$(want_of "$tp")" ]; then ok "MUTANT $label: twin arm $(arm_name "$tp") stays green ($tg) -- the effect is confined to $(arm_name "$probe")"
+    else note "BAD" "MUTANT $label" "moved its twin arm $(arm_name "$tp") to '$tg' — the arms overlap, re-measure with --matrix"; fails=$((fails + 1)); fi
+  done
 done
+
+if [ "$MATRIX" = "0" ]; then
+  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
+  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -8,3 +8,4 @@
 core/
 patterns/
 templates/
+core/fixtures/lib/mutant.sh

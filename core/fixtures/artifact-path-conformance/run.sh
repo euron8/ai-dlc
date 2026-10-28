@@ -22,6 +22,19 @@
 # THE VERDICT IS NEVER TAKEN FROM THE SUMMARY LINE. The blocking set is read row by row and
 # joined against what the MIGRATION actually moved, in both directions, so neither program can
 # drift into disagreeing with the other about which paths this convention governs.
+#
+# Per push each mutant runs its deciding arm and one twin; the measured matrix replaces an
+# exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
+# column names `--matrix` prints (V-* read the validator on a seeded tree, G-* the gate probes).
+# MUTANT-MATRIX declared-areas-only decides=V-allows-inferred twins=V-empty
+# MUTANT-MATRIX slot-not-exempt decides=V-probe-conform twins=V-empty
+# MUTANT-MATRIX empty-subject-passes decides=V-empty twins=V-allows-inferred
+# MUTANT-MATRIX token-re-dead decides=V-probe-nonconform twins=V-empty
+# MUTANT-MATRIX gate-token-re-dead decides=G-token twins=G-slot
+# MUTANT-MATRIX gate-slot-re-everything decides=G-slot twins=G-token
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-conformance/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -62,17 +75,33 @@ ROLE_QA="$(pick "$HERE/../../team-roles/qa.md" \
 fails=0; asserts=0
 ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
 bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+MATRIX=0; MROWS=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/artifact-path-conformance/matrix.sh"
 
 # The validator prints one indented path per blocking row. Read the PATHS, never the count line.
 blocking_of() { sed -n '/^BLOCKING —/,/^$/p' <<<"$1" | sed -n 's/^  \([^ ].*\)$/\1/p' | grep -v '^(' | sort; }
 
 echo "artifact-path-conformance:"
 
+# ONE seeded non-empty world, cloned per question. seed.sh (git init, ~20 files, a commit) is a pure
+# function of the grammar; every arm that wants the standard tree wants a pristine copy of it. The
+# --empty world is a different state and is still seeded on its own (section 3).
+TPL="$(bash "$HERE/seed.sh" "$GRAMMAR")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+clone_world() {
+  local d; d="$(mktemp -d "${TMPDIR:-/tmp}/apconf-cl-XXXXXX")" || return 1
+  cp -R "$TPL/." "$d" || return 1
+  printf '%s\n' "$d"
+}
+
 # =============================================================================
 # 1. A PRE-MIGRATION TREE. Every class must land in the right one, and the three
 #    that must NOT block are as load-bearing as the ones that must.
 # =============================================================================
-W="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+W="$(clone_world)"
 OUT="$(bash "$VAL" --root "$W" 2>&1)"; RC=$?
 
 [ "$RC" -eq 1 ] && ok "a tree with migratable violations exits 1" \
@@ -173,7 +202,7 @@ grep -q 'VERDICT: PASS' <<<"$OUTE" && bad "an empty subject printed a PASS verdi
 # 4. --report ADDS DETAIL AND CHANGES NO VERDICT. A reporting flag that also
 #    relaxes the gate is a gate with an off switch in its own usage line.
 # =============================================================================
-W3="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+W3="$(clone_world)"
 bash "$VAL" --root "$W3" >/dev/null 2>&1; R_PLAIN=$?
 R_OUT="$(bash "$VAL" --root "$W3" --report 2>&1)"; R_REP=$?
 [ "$R_PLAIN" -eq "$R_REP" ] && ok "--report leaves the exit code alone ($R_PLAIN both ways)" \
@@ -191,7 +220,7 @@ rm -rf "$W3"
 #    live in. Measured on the migration: the absolute call a fixture makes worked
 #    and the relative call every operator types died at `cd: core/scripts`.
 # =============================================================================
-W4="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+W4="$(clone_world)"
 VDIR="$(dirname "$VAL")"; VBASE="$(basename "$VAL")"; MBASE="$(basename "$MIG")"
 ( cd "$VDIR" && bash "./$VBASE" --root "$W4" >/dev/null 2>&1 ); RREL=$?
 [ "$RREL" -eq 1 ] && ok "the validator run by a RELATIVE path still judges the tree (exit 1)" \
@@ -202,80 +231,11 @@ VDIR="$(dirname "$VAL")"; VBASE="$(basename "$VAL")"; MBASE="$(basename "$MIG")"
 rm -rf "$W4"
 
 # =============================================================================
-# 6. MUTANTS. Each removes ONE mechanism and must flip exactly its own arm.
-#    Every mutant is a guarded COPY laid down as a PAIR — validator plus the
-#    resolver it calls — because a lone copy exits 2 at its first line, emits
-#    nothing, and "no output" otherwise scores as a kill.
+# 6. MUTANTS. Scored at the END of this file (after section 7), because the gate mutants
+#    read section 7's probes. Each removes ONE mechanism. Every mutant is a guarded COPY
+#    laid down as a PAIR — validator plus the resolver it calls — because a lone copy
+#    exits 2 at its first line, emits nothing, and "no output" otherwise scores as a kill.
 # =============================================================================
-MUT="$(mktemp -d "${TMPDIR:-/tmp}/apconf-mut-XXXXXX")"
-lay_pair() { mkdir -p "$1"; cp "$VAL" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
-
-# $1 tag  $2 file to mutate: val|config  $3 sed program  $4 seed args  $5 test over $out/$rc  $6 claim
-mutate() {
-  local tag="$1" which="$2" prog="$3" seedargs="$4" test_expr="$5" claim="$6"
-  local d="$MUT/$tag" src dst w out rc
-  asserts=$((asserts+1))
-  lay_pair "$d"
-  if [ "$which" = "val" ]; then src="$VAL"; dst="$d/m.sh"; else src="$CONFIG"; dst="$d/artifact-path-config.sh"; fi
-  sed -E "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
-  if cmp -s "$src" "$dst"; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-20s sed matched NOTHING — the mutant IS the original\n' "$tag"; return
-  fi
-  # shellcheck disable=SC2086
-  w="$(bash "$HERE/seed.sh" "$GRAMMAR" $seedargs)"
-  out="$(bash "$d/m.sh" --root "$w" 2>&1)"; rc=$?
-  if eval "$test_expr"; then printf '  ok    MUTANT %-20s %s\n' "$tag" "$claim"
-  else fails=$((fails+1)); printf '  FAIL  MUTANT %-20s did NOT flip: %s\n' "$tag" "$claim"; fi
-  rm -rf "$w"
-}
-
-# Resolve the slot against DECLARED areas only. The conforming path under an undeclared area
-# becomes a violation — 92 of them on the reference consumer, against a migration planning zero.
-mutate 'declared-areas-only' val \
-  's@^      area = r "/" first .*$@      area = ""@' '' \
-  'grep -q "_bmad-output/brainstorming/s301/discovery-brainstorming.md" <<<"$out"' \
-  'without the inferred-area anchor, an already-conforming path under an undeclared area blocks'
-
-# Drop the positional slot exemption. Every correctly-filed artifact becomes a violation, and
-# the probe reaches that conclusion BEFORE the tree is read -- which is the point of running it
-# first. The two probe mutants are told apart by DIRECTION: this one turns a conforming path
-# into a violation, `token-re-dead` below turns every violation into a conforming path. An
-# assertion on "the probe fired" alone would be satisfied by either and prove neither.
-# THE SED TARGETS THE RESOLVED FORM, and it used to target the literal `/^s[0-9]+$/` that used
-# to sit here. When that literal moved into artifact-path-config.sh --slot-re, this sed matched
-# nothing and the `cmp -s` guard caught it — which is the guard working, and is why the mutation
-# is written against the line rather than against the expression it carries.
-mutate 'slot-not-exempt' val \
-  's@if \(i == slotidx && c\[i\] ~ slotre\) continue@if (0) continue@' '' \
-  '[ "$rc" -eq 2 ] && grep -q "expected CONFORMING, got NONCONFORMING" <<<"$out"' \
-  'without the slot exemption the reserved slot itself reads as a violation, and the probe refuses the run'
-
-# Make the empty-subject guard unable to fire. The greenfield tree then prints a PASS it did not
-# earn — the zero-verification pass this repo keeps finding.
-mutate 'empty-subject-passes' val \
-  's@if \[ "\$N_SUBJECT" -eq 0 \]; then@if [ "$N_SUBJECT" -lt 0 ]; then@' '--empty' \
-  'grep -q "VERDICT: PASS" <<<"$out"' \
-  'with the guard disarmed a tree holding NO artifact reports a verified pass'
-
-# Kill the sprint-token expression in the RESOLVER. Without the self-probe the validator would
-# report a fully-conforming tree; with it, the run refuses to answer at all.
-mutate 'token-re-dead' config \
-  "s@^TOKEN_RE='.*'\$@TOKEN_RE='ZZZ-NOT-A-SPRINT-TOKEN-ZZZ'@" '' \
-  '[ "$rc" -eq 2 ] && grep -q "expected NONCONFORMING, got CONFORMING" <<<"$out"' \
-  'a token expression that matches nothing is caught by the probe instead of reporting a clean tree'
-
-# UNMUTATED CONTROL, from the same directory. The harness itself must not be what fails.
-asserts=$((asserts+1))
-lay_pair "$MUT/control"
-wc="$(bash "$HERE/seed.sh" "$GRAMMAR")"
-ctl_out="$(bash "$MUT/control/m.sh" --root "$wc" 2>&1)"; ctl_rc=$?
-if [ "$ctl_rc" -eq 1 ] && grep -q "BLOCKING —" <<<"$ctl_out"; then
-  ok "CONTROL: an unmutated pair in the mutant directory still judges the tree"
-else
-  bad "CONTROL: an unmutated pair FAILED (rc=$ctl_rc) — the mutant harness is what is broken, not the mutants"
-fi
-rm -rf "$wc" "$MUT" "$W" "$WE"
-
 # =============================================================================
 # 7. CORE'S OWN GATE-EVIDENCE PRESCRIPTIONS. Sections 1-6 hold a CONSUMER's real
 #    filenames to the grammar. This section holds the two prescriptions that
@@ -402,39 +362,6 @@ gp_probe absent         NO-PRESCRIPTION "a role file prescribing NOTHING is repo
 gp_probe other-spelling ""              "a conforming path whose basename is spelled the OTHER way is accepted"
 gp_probe all-sprints    ""              "the s*/ slot and a digit-led story index are accepted"
 
-# --- THE MUTANTS. The two conformance arms below are ABSENCE-shaped, and a dead ------
-# expression produces their same silence. Each mutant kills ONE resolved expression and
-# must silence exactly the probe that reads it; the sides are asserted to DIFFER first,
-# because a `sed` that expanded to the identical line would leave both runs reading the
-# fixed copy and the comparison would hold for the wrong reason.
-gp_mutate() { # $1 tag  $2 sed  $3 var to swap  $4 resolver mode  $5 probe  $6 kind  $7 claim
-  local d="$GP_PROBE/mut-$1" got real mut
-  asserts=$((asserts+1))
-  mkdir -p "$d"; sed -E "$2" "$CONFIG" > "$d/artifact-path-config.sh"
-  if cmp -s "$CONFIG" "$d/artifact-path-config.sh"; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-22s sed matched NOTHING — the mutant IS the original\n' "$1"; return
-  fi
-  eval "real=\"\$$3\""
-  mut="$(bash "$d/artifact-path-config.sh" "$4" 2>/dev/null)"
-  if [ -z "$mut" ] || [ "$mut" = "$real" ]; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-22s the mutated resolver answered "%s" against the live "%s" — the two sides do not differ\n' "$1" "$mut" "$real"; return
-  fi
-  eval "$3=\"\$mut\""; got="$(gp_findings "$GP_PROBE/$5.md")"; eval "$3=\"\$real\""
-  if grep -q "^$6" <<<"$got"; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-22s the offender was still flagged %s with a dead expression: the arms are not reading it\n' "$1" "$6"
-  else
-    printf '  ok    MUTANT %-22s %s\n' "$1" "$7"
-  fi
-}
-gp_mutate 'gate-token-re-dead' \
-  "s@^TOKEN_RE_PRESCRIBED='.*'\$@TOKEN_RE_PRESCRIBED='ZZZ-NOT-A-SPRINT-TOKEN-ZZZ'@" \
-  GP_TOK_RE --token-re-prescribed token TOKEN \
-  'a token expression matching nothing silences the sprint-in-the-basename offender, so the arm reads the resolved ERE and nothing else'
-gp_mutate 'gate-slot-re-everything' \
-  "s@^SLOT_RE_PRESCRIBED='.*'\$@SLOT_RE_PRESCRIBED='.'@" \
-  GP_SLOT_RE --slot-re-prescribed no-slot NO-SLOT \
-  'a slot expression matching EVERY component silences the no-slot offender, which is the shape a widened exemption takes'
-
 # --- CWD-INVARIANCE, asserted here rather than inherited from how the suite drives ---
 # this file. Both sides are required NON-EMPTY before they are compared: two empty
 # answers are equal and establish nothing.
@@ -468,7 +395,100 @@ for gp_role in "code-reviewer:$ROLE_CR" "qa:$ROLE_QA"; do
     ok "...and none of them carries a sprint token outside it"
   fi
 done
-rm -rf "$GP_PROBE" "$GP_EMPTY"
+# =============================================================================
+# 6 (scored here). ARMS are named predicates over one copy directory D (a validator + resolver
+# pair). V-* read the validator on the standard tree and the greenfield tree; G-* read section 7's
+# gate probes through D's resolver. Each arm's RAW output is what killed=yes|no diverges on.
+# =============================================================================
+MUT="$(mktemp -d "${TMPDIR:-/tmp}/apconf-mut-XXXXXX")"
+lay_pair() { mkdir -p "$1"; cp "$VAL" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
+ARMS="V-judges V-allows-inferred V-probe-conform V-probe-nonconform V-empty G-token G-slot"
+dir_run() { # dir_run <D>: run the copy once on the standard tree and once on the greenfield tree
+  local d="$1" w we o
+  if [ ! -f "$d/std.rc" ]; then
+    w="$(clone_world)"; o="$(bash "$d/m.sh" --root "$w" 2>&1)"; printf '%s\n' "$?" > "$d/std.rc"; printf '%s\n' "$o" > "$d/std.out"; rm -rf "$w"
+    we="$(bash "$HERE/seed.sh" "$GRAMMAR" --empty)"; o="$(bash "$d/m.sh" --root "$we" 2>&1)"; printf '%s\n' "$o" > "$d/empty.out"; rm -rf "$we"
+  fi
+}
+arm_raw() { # arm_raw <arm> <D>: the arm's raw verdict token for that copy
+  local a="$1" d="$2" rc o t s sv
+  dir_run "$d"; rc="$(cat "$d/std.rc")"; o="$(cat "$d/std.out")"
+  case "$a" in
+    V-judges) if [ "$rc" = 1 ] && grep -q "BLOCKING —" <<<"$o"; then echo judges; else echo "no-judge-rc$rc"; fi ;;
+    V-allows-inferred) if grep -qxF "_bmad-output/brainstorming/s301/discovery-brainstorming.md" <<<"$(blocking_of "$o")"; then echo blocked; else echo allowed; fi ;;
+    V-probe-conform) if [ "$rc" = 2 ] && grep -q "expected CONFORMING, got NONCONFORMING" <<<"$o"; then echo fired; else echo quiet; fi ;;
+    V-probe-nonconform) if [ "$rc" = 2 ] && grep -q "expected NONCONFORMING, got CONFORMING" <<<"$o"; then echo fired; else echo quiet; fi ;;
+    V-empty) if grep -q "VERDICT: PASS" "$d/empty.out"; then echo pass; else echo nopass; fi ;;
+    G-token) t="$(bash "$d/artifact-path-config.sh" --token-re-prescribed 2>/dev/null)"; s="$GP_TOK_RE"; GP_TOK_RE="$t"
+             sv="$(gp_findings "$GP_PROBE/token.md")"; GP_TOK_RE="$s"; if grep -q "^TOKEN" <<<"$sv"; then echo flags; else echo silent; fi ;;
+    G-slot)  t="$(bash "$d/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"; s="$GP_SLOT_RE"; GP_SLOT_RE="$t"
+             sv="$(gp_findings "$GP_PROBE/no-slot.md")"; GP_SLOT_RE="$s"; if grep -q "^NO-SLOT" <<<"$sv"; then echo flags; else echo silent; fi ;;
+  esac
+}
+arm_holds() { # arm_holds <arm> <raw>
+  case "$1:$2" in V-judges:judges|V-allows-inferred:allowed|V-probe-conform:quiet|V-probe-nonconform:quiet|V-empty:nopass|G-token:flags|G-slot:flags) return 0 ;; esac
+  return 1
+}
+SHIPD="$MUT/ship"; lay_pair "$SHIPD"
+# mutant_score <name> <val|config> <sed program> <deciding arm> <twin arm> <claim>
+mutant_score() {
+  local n="$1" which="$2" prog="$3" dec="$4" tw="$5" claim="$6" d="$MUT/$1" src dst a r sr w kd base
+  lay_pair "$d"
+  if [ "$which" = val ]; then src="$VAL"; dst="$d/m.sh"; else src="$CONFIG"; dst="$d/artifact-path-config.sh"; fi
+  sed -E "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
+  if cmp -s "$src" "$dst"; then bad "MUTANT $n sed matched NOTHING — the mutant IS the original"; return; fi
+  if [ "$MATRIX" = 1 ]; then
+    for a in $ARMS; do
+      r="$(arm_raw "$a" "$d")"; sr="$(arm_raw "$a" "$SHIPD")"
+      if arm_holds "$a" "$r"; then w=GREEN; else w=TRIPPED; fi
+      if [ "$r" = "$sr" ]; then kd=no; else kd=yes; fi
+      matrix_row "$n" "$a" 0 "$w" "$kd"; MROWS=$((MROWS + 1))
+    done
+    ok "MATRIX $n measured against $(printf '%s\n' $ARMS | grep -c .) arms"
+    return 0
+  fi
+  if arm_holds "$dec" "$(arm_raw "$dec" "$SHIPD")"; then base=1; else base=0; fi
+  r="$(arm_raw "$dec" "$d")"
+  if arm_holds "$dec" "$r"; then bad "MUTANT $n SURVIVED on $dec ($r) -- $claim"
+  else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+  r="$(arm_raw "$tw" "$d")"
+  if arm_holds "$tw" "$r"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
+  else bad "T-$n twin $tw TRIPPED ($r) under mutant $n -- the matrix row for this mutant moved"; fi
+}
+
+# UNMUTATED CONTROL, from the same directory layout: every arm must hold on a copy.
+lay_pair "$MUT/control"
+ctl_held=0; ctl_n=0
+for a in $ARMS; do ctl_n=$((ctl_n + 1)); arm_holds "$a" "$(arm_raw "$a" "$MUT/control")" && ctl_held=$((ctl_held + 1)); done
+if [ "$ctl_held" -eq "$ctl_n" ]; then
+  ok "CONTROL: an unmutated pair in the mutant directory holds all $ctl_n arms and still judges the tree"
+else
+  bad "CONTROL: an unmutated pair held $ctl_held of $ctl_n arms -- the mutant harness is what is broken, not the mutants"
+fi
+
+mutant_score declared-areas-only val 's@^      area = r "/" first .*$@      area = ""@' V-allows-inferred V-empty \
+  'without the inferred-area anchor, an already-conforming path under an undeclared area blocks'
+mutant_score slot-not-exempt val 's@if \(i == slotidx && c\[i\] ~ slotre\) continue@if (0) continue@' V-probe-conform V-empty \
+  'without the slot exemption the reserved slot itself reads as a violation, and the probe refuses the run'
+mutant_score empty-subject-passes val 's@if \[ "\$N_SUBJECT" -eq 0 \]; then@if [ "$N_SUBJECT" -lt 0 ]; then@' V-empty V-allows-inferred \
+  'with the guard disarmed a tree holding NO artifact reports a verified pass'
+mutant_score token-re-dead config "s@^TOKEN_RE='.*'\$@TOKEN_RE='ZZZ-NOT-A-SPRINT-TOKEN-ZZZ'@" V-probe-nonconform V-empty \
+  'a token expression that matches nothing is caught by the probe instead of reporting a clean tree'
+mutant_score gate-token-re-dead config "s@^TOKEN_RE_PRESCRIBED='.*'\$@TOKEN_RE_PRESCRIBED='ZZZ-NOT-A-SPRINT-TOKEN-ZZZ'@" G-token G-slot \
+  'a token expression matching nothing silences the sprint-in-the-basename offender'
+mutant_score gate-slot-re-everything config "s@^SLOT_RE_PRESCRIBED='.*'\$@SLOT_RE_PRESCRIBED='.'@" G-slot G-token \
+  'a slot expression matching EVERY component silences the no-slot offender'
+
+# A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
+  else bad "MX plain run executed $MROWS matrix-only rows"; fi
+else
+  _nx=$(( 6 * $(printf '%s\n' $ARMS | grep -c .) ))
+  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (6 mutants)"
+  else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
+fi
+rm -rf "$GP_PROBE" "$GP_EMPTY" "$TPL" "$MUT" "$W" "$WE"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-conformance: PASS ($asserts assertions)"; exit 0; fi

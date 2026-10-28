@@ -6,3 +6,5 @@
 core/hooks/
 core/skills/ai-dlc/
 core/scripts/
+# Sourced by run.sh for mutant_killed.
+core/fixtures/lib/

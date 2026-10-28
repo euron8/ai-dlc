@@ -27,8 +27,41 @@
 # PRESENCE-shaped, so none of them can be satisfied by a validator that emits nothing: measured
 # with `validate-enforcement-map.sh` replaced by `exit 0`, ten of the eleven fail and only the
 # unmutated control passes.
+#
+# THE MUTANT MATRIX. Every mutant is named, and its row below names the cell that KILLS it
+# (decides: the mutant's own expected FAIL line) and the cell it could plausibly co-trip but must
+# leave GREEN (twins: another mutant's expected FAIL line, which must be ABSENT from this
+# mutant's output). A plain run scores each mutant on its deciding cell and checks its twin
+# against the SAME `--arms I39` output, so a twin costs no validator run. Each twin pair sits on
+# the same extraction or the same step, which is where one mutation could trip its neighbour.
+# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
+# command below, run from the repo root. It scores every mutant against every cell, and against
+# every validator arm outside I39 by one full validator run of the same mutated tree, whose
+# sorted FAIL: set must equal the `--arms I39` run's.
+# MUTANT-MATRIX emit-undocumented decides=emit-undocumented twins=documented-unemitted
+# MUTANT-MATRIX documented-unemitted decides=documented-unemitted twins=emit-undocumented
+# MUTANT-MATRIX emitter-zero decides=emitter-zero twins=emit-undocumented
+# MUTANT-MATRIX skill-zero decides=skill-zero twins=documented-unemitted
+# MUTANT-MATRIX heading-phantom decides=heading-phantom twins=heading-zero
+# MUTANT-MATRIX step8-undisposed decides=step8-undisposed twins=near-miss
+# MUTANT-MATRIX near-miss decides=near-miss twins=step8-undisposed
+# MUTANT-MATRIX heading-zero decides=heading-zero twins=heading-phantom
+# MUTANT-MATRIX step8-zero decides=step8-zero twins=step8-undisposed
+# MUTANT-MATRIX half-rename decides=half-rename twins=documented-unemitted
+# MUTANT-MATRIX-CONTROL control why=an unmutated copy must pass every arm so a mutant fire is attributable; nothing is mutated and there is no deciding cell
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-status-vocabulary/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$DIR/$(basename "$0")"
+
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by
+# the suite. Anything else as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "ledger-status-vocabulary: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 # I10 — a fixture must not inherit an ambient tunable that changes what it measures.
 unset AI_DLC_LAYER_CONTRACT
@@ -55,10 +88,10 @@ trap 'rm -rf "$TMP"' EXIT
 
 BASE="$TMP/base"
 mkdir -p "$BASE"
-git -C "$REPO" ls-files -z | while IFS= read -r -d '' f; do
-  mkdir -p "$BASE/$(dirname "$f")"
-  cp "$REPO/$f" "$BASE/$f"
-done
+# One tar pipeline instead of a mkdir+cp pair per file: the same tracked set at the same
+# working-tree content, for two forks in place of thousands. The COPIED floor below is what
+# catches a pipeline that produced nothing.
+git -C "$REPO" ls-files -z | (cd "$REPO" && tar -cf - --null -T - 2>/dev/null) | tar -xf - -C "$BASE"
 COPIED="$(find "$BASE" -type f | wc -l | tr -d ' ')"
 if [ "$COPIED" -lt 100 ]; then
   echo "ledger-status-vocabulary: FIXTURE ERROR — copied only $COPIED files; an incomplete tree fails every invariant and would score every mutant as a kill." >&2
@@ -70,6 +103,7 @@ SK="core/skills/ai-dlc-update/SKILL.md"
 ER="core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 FAILURES=0
+BROKEN=0
 ASSERTIONS=0
 
 echo "ledger-status-vocabulary fixture"
@@ -241,28 +275,137 @@ fi
 # The `cmp -s` guard stays INSIDE the worker, where the copy is made. It is what stops a sed
 # that matched nothing from scoring as a kill, and moving it to the parent would put it on the
 # wrong side of the thing it checks.
+#
+# THE CONTROL IS THE ONE FULL RUN; EVERY MUTANT RUNS `--arms I39`. The control is the licence that
+# the clean tree passes every arm, so it keeps the whole validator. Each mutation touches only
+# I39's inputs and every message asserted below is emitted inside I39, so a mutant needs I39's
+# unit alone. want_n counts `^FAIL:` lines, and under `--arms` that counts only I39's lines where
+# a full run counts every arm; the entanglement want_n guards lives inside I39. Measured by a
+# one-off probe over all ten mutations, each on a copy, full run against `--arms I39`, the
+# sorted `^FAIL:` sets diffed: in every one the sets were identical (1 line each, 18 for
+# half-rename), with no line present in the full run and absent from the selected one.
+#
+# MATRIX-ONLY: under `--matrix` the worker also runs ONE full validator over the same mutated
+# tree (after the `--arms I39` run, before the copy is removed) so phase 3 can diff the two
+# sorted `^FAIL:` sets; equal sets mean every arm outside I39 stayed green. That full run is the
+# only matrix-only cell the worker owns, and it records itself in the ledger first (rule 9).
 LSV_JOBS=8
+MXL="$TMP/mx.ledger"; : > "$MXL"
+LSV_MODE="$MODE" LSV_LEDGER="$MXL" \
 LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUNS" \
   xargs -P "$LSV_JOBS" -I{} bash -c '
     l="$1"
+    if [ "$l" = control ]; then sel=""; else sel="--arms I39"; fi
     f="$(awk -F"\t" -v k="$l" "\$2==k{print \$3}" "$LSV_RUNS")"
     work="$LSV_WORK/w-$l"
-    rm -rf "$work"; cp -R "$LSV_BASE" "$work" || exit 0
+    rm -rf "$work"
+    if ! cp -R "$LSV_BASE" "$work"; then
+      printf "BROKEN copying the base tree failed" > "$LSV_OUT/$l.state"
+      printf done > "$LSV_OUT/$l.done"; exit 0
+    fi
     if [ -n "$f" ]; then
-      sed -f "$LSV_MUTD/$l.sed" "$LSV_BASE/$f" > "$work/$f" 2>/dev/null
+      if ! sed -f "$LSV_MUTD/$l.sed" "$LSV_BASE/$f" > "$work/$f" 2> "$LSV_OUT/$l.sederr"; then
+        printf "BROKEN sed failed: %s" "$(head -1 "$LSV_OUT/$l.sederr")" > "$LSV_OUT/$l.state"
+        printf done > "$LSV_OUT/$l.done"
+        rm -rf "$work"; exit 0
+      fi
       if cmp -s "$LSV_BASE/$f" "$work/$f"; then
         printf UNMUTATED > "$LSV_OUT/$l.state"
         printf done      > "$LSV_OUT/$l.done"
         rm -rf "$work"; exit 0
       fi
     fi
-    bash "$work/scripts/validate-enforcement-map.sh" > "$LSV_OUT/$l.out" 2>&1
+    bash "$work/scripts/validate-enforcement-map.sh" $sel > "$LSV_OUT/$l.out" 2>&1
     printf %s $? > "$LSV_OUT/$l.rc"
+    if [ "$LSV_MODE" = matrix ] && [ "$l" != control ]; then
+      printf "mx-full %s\n" "$l" >> "$LSV_LEDGER"
+      bash "$work/scripts/validate-enforcement-map.sh" > "$LSV_OUT/$l.full.out" 2>&1
+      printf %s $? > "$LSV_OUT/$l.full.rc"
+    fi
     printf done  > "$LSV_OUT/$l.done"
     rm -rf "$work"
   ' _ {} < <(cut -f2 "$RUNS")
 
 # ================= PHASE 3: evaluate, serially, in DECLARATION order =================
+
+# --- THE MATRIX CELLS, single-sourced. A cell is one mutant's expected FAIL line(s); it is RED on
+# an output when that line is present. Both the per-push twin check and the --matrix score read
+# the predicate here, and the registry ($RUNS) is where each `fires` cell's wanted text lives.
+# Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+NM_WANT="heading puts 'NAMED-UPSTREAM' in front of the operator, but SKILL.md step 8"
+HR_FWD="emits 'NAMED-UPSTREAM' but SKILL.md step 3f never documents it"
+HR_REV="documents 'NAMED-ABSORBED' but ledger-reverify.sh never emits it"
+cell_red() {
+  local c="$1" o="$2" w
+  case "$c" in
+    near-miss)   grep -qF -- "$NM_WANT" <<<"$o" ;;
+    half-rename) grep -qF -- "$HR_FWD" <<<"$o" && grep -qF -- "$HR_REV" <<<"$o" ;;
+    *)
+      w="$(awk -F'\t' -v k="$c" '$1=="fires" && $2==k {print $4}' "$RUNS")"
+      [ -n "$w" ] || return 2
+      grep -qF -- "$w" <<<"$o" ;;
+  esac
+}
+CELLS="$(awk -F'\t' '$1!="control"{print $2}' "$RUNS")"
+
+# The header IS the twin list: nothing else in this file restates it.
+mx_row() {
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+
+# mx_twins <mutant> <output> <full-out-file> -- run after the mutant's own kill. Plain mode: every
+# twin must be GREEN on the SAME `--arms I39` output, which costs no validator run. Matrix mode:
+# the full score against every cell, plus the outside-I39 diff against the full run.
+mx_twins() {
+  local m="$1" o="$2" fo="$3" tw t r g=0 tot=0 tws="" uex="" dec c extra outside frc
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then
+    BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return
+  fi
+  if [ "$MODE" != matrix ]; then
+    printf 'plain-twins %s\n' "$m" >> "$MXL"
+    for t in $(printf '%s' "$tw" | tr ',' ' '); do
+      cell_red "$t" "$o"; r=$?
+      if [ "$r" -eq 2 ]; then
+        BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
+      elif [ "$r" -eq 0 ]; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-20s its twin %s also fired on this mutant'"'"'s output — the kill is not confined to its own cell\n' "$m" "$t"
+      fi
+    done
+    return
+  fi
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  frc="$(cat "$OUTD/$m.full.rc" 2>/dev/null)"
+  if grep -qE 'unbound variable|command not found|syntax error' <<<"$o" \
+     || grep -qE 'unbound variable|command not found|syntax error' "$fo" 2>/dev/null \
+     || { [ "$frc" != 0 ] && [ "$frc" != 1 ]; }; then
+    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return
+  fi
+  if cell_red "$m" "$o"; then dec="$m:RED"; else dec="$m:GREEN"; uex="$uex $m:GREEN"; fi
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$t" "$o"; then tws="$tws,$t:RED"; uex="$uex $t:RED"; else tws="$tws,$t:GREEN"; fi
+  done
+  tws="${tws#,}"
+  for c in $CELLS; do
+    [ "$c" = "$m" ] && continue
+    case ",$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$o" || g=$((g + 1))
+  done
+  extra="$(LC_ALL=C comm -13 <(grep '^FAIL:' <<<"$o" | LC_ALL=C sort -u) <(grep '^FAIL:' "$fo" | LC_ALL=C sort -u) | grep -c .)" || extra=0
+  if [ "$extra" -eq 0 ]; then outside=EQUAL; else outside="+$extra"; uex="$uex outside:RED"; fi
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s UNEXPECTED=%s\n' "$m" "$dec" "$tws" "$g" "$tot" "$outside" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    FAILURES=$((FAILURES + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s\n' "$m" "$dec" "$tws" "$g" "$tot" "$outside"
+  fi
+}
+
 while IFS=$'\t' read -r kind label file want want_n why; do
   [ -n "$label" ] || continue
 
@@ -272,6 +415,14 @@ while IFS=$'\t' read -r kind label file want want_n why; do
   if [ ! -f "$OUTD/$label.done" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-20s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one\n' "$label"
+    continue
+  fi
+
+  # BROKEN is the harness failing, not the mutation matching nothing: nothing was tested, so it is
+  # exit 2 after the loop and kept apart from the UNMUTATED FAIL path below.
+  if [ -f "$OUTD/$label.state" ] && [ "$(cut -c1-6 "$OUTD/$label.state")" = "BROKEN" ]; then
+    BROKEN=$((BROKEN + 1))
+    printf '  FIXTURE BROKEN %s: %s\n' "$label" "$(cut -c8- "$OUTD/$label.state")"
     continue
   fi
 
@@ -352,9 +503,43 @@ while IFS=$'\t' read -r kind label file want want_n why; do
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       fi ;;
   esac
+
+  [ "$kind" = control ] || mx_twins "$label" "$out" "$OUTD/$label.full.out"
 done < "$RUNS"
 
+# RULE 9: A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. The worker's full validator run and the
+# score of every cell append to the ledger before doing anything else. The CONTROL is the
+# plain-twins lines the per-push twin check writes to the SAME ledger: they must be present, so
+# an empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(grep -cE '^(mx-full|mx-score) ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$mx_ctl" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-20s the matrix ledger control is EMPTY: no per-push twin check wrote to it, so a zero count of matrix-only cells would mean nothing\n' "rule-9"
+  elif [ "$mx_only" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-20s a plain run executed %d matrix-only cell(s) (%s) — the --matrix measurement leaked into the per-push run\n' "rule-9" "$mx_only" "$(grep -E '^(mx-full|mx-score) ' "$MXL" | head -3 | tr '\n' ' ')"
+  else
+    printf '  ok    %-20s a plain run executed no matrix-only cell, while its %s per-push twin check(s) wrote to the same ledger\n' "rule-9" "$mx_ctl"
+  fi
+else
+  # The header is bound to the measured set both ways: one MATRIX line per row, one row per line.
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort)"
+  mx_cells="$(printf '%s\n' "$CELLS" | LC_ALL=C sort)"
+  if [ "$mx_hdr" != "$mx_cells" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  the MUTANT-MATRIX header and the registered mutants disagree\n'
+  fi
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $(printf '%s\n' "$mx_hdr" | grep -c .) header row(s)"
+fi
+
 echo
+if [ "$BROKEN" -gt 0 ]; then
+  echo "FIXTURE BROKEN: $BROKEN run(s) could not be built, so those assertions tested nothing." >&2
+  exit 2
+fi
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
   exit 1

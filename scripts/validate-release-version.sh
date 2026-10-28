@@ -216,6 +216,7 @@ set -uo pipefail
 # takes only when this environment is unset -- and its `git add` would otherwise
 # write the CALLER's index. The corpus reads below take the same redirection
 # silently. NOTHING ABOVE THIS LINE MAY CALL GIT.
+rv_init() {
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -266,6 +267,11 @@ arm_c_ran=0
 arm_d_ran=0
 arm_d_why=""
 arm_e_ran=0
+# Arm F's flags are declared here as well as in arm_f: a caller that skips arm_f (the fixture's
+# sourced drive) still reaches rv_report, which reads both under `set -u`.
+form_fail=0
+arm_f_ran=0
+}
 
 semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
 
@@ -291,6 +297,7 @@ headings_at() {
     | grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' | sort -u
 }
 
+arm_c_range() {
 range_base=""; range_tip=""; range_why=""
 if [ -n "$COMMIT" ]; then
   range_tip="$COMMIT"
@@ -316,6 +323,7 @@ else
   range_base="$(git rev-parse -q --verify HEAD^ 2>/dev/null)" || range_base=""
   [ -n "$range_base" ] || range_why="origin/main is absent and HEAD is a root commit"
 fi
+}
 
 semver_le() { # <a> <b> -> 0 when a <= b, compared NUMERICALLY per field
   # `sort -V` is not on this box's BSD userland, and a lexical compare puts
@@ -341,6 +349,7 @@ restored_in_history() { # <"## [x.y.z]"> -> a sha when the heading text ever cha
 # 0.9.0 and exempt a release ABOVE the base's top. The `-S` half is not probed
 # here -- it is git's own search, and the release-version-triple fixture drives it
 # both ways (R3 exempt, R5 refused, and a mutant searching from the tip).
+arm_c() {
 arm_c_probe_bad=""
 semver_le 0.9.0 0.10.0 || arm_c_probe_bad="0.9.0 <= 0.10.0 read false"
 semver_le 0.10.0 0.9.0 && arm_c_probe_bad="${arm_c_probe_bad:+$arm_c_probe_bad; }0.10.0 <= 0.9.0 read true"
@@ -401,6 +410,7 @@ else
   # that passed, which is the defect this whole script exists downstream of.
   echo "NOTE  multi-release arm not evaluated -- $range_why"
 fi
+}
 
 # ---------------------------------------------------------------------------
 # D. THE BRANCH INHERITS NOTHING UNPUSHED FROM LOCAL main.
@@ -408,6 +418,7 @@ fi
 # Default mode only. An explicit --range or --commit is a question about those
 # commits, not about the branch the operator happens to be standing on.
 # ---------------------------------------------------------------------------
+arm_d() {
 if [ -n "$COMMIT" ] || [ -n "$RANGE" ]; then
   arm_d_why="scoped-out"
 else
@@ -428,6 +439,7 @@ else
     fi
   fi
 fi
+}
 
 # ---------------------------------------------------------------------------
 # E. NO TRACKED FILE CARRIES A COMMITTED MERGE CONFLICT.
@@ -465,6 +477,7 @@ conflict_files_in() { # <repo-dir> -> tracked paths at HEAD carrying BOTH marker
 # in the header, pinned here so a later author reads it as a measured limit rather
 # than as coverage. A near-miss short of two properties discriminates against
 # neither.
+arm_e() {
 probe_e="$(mktemp -d 2>/dev/null)" || {
   echo "FAIL: arm E could not create its probe directory" >&2; exit 1; }
 trap 'rm -rf "$probe_e"' EXIT
@@ -508,6 +521,7 @@ else
     conflict_fail=1
   fi
 fi
+}
 
 # ---------------------------------------------------------------------------
 # F. A NOT-DISCHARGED CITATION IS SPELLED EXACTLY, OR NOT AT ALL.
@@ -536,11 +550,12 @@ form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" p
 # the SUBJECT, trailing text after a canonical id (dash-only and dotted). Near-misses,
 # each one property from an offender: the canonical body line itself (dash-only and
 # dotted), and the same phrase MID-line (the 3 corpus occurrences are that shape).
+arm_f() {
 form_fail=0
 arm_f_ran=0
 probe_f="$(mktemp -d 2>/dev/null)" || {
   echo "FAIL: arm F could not create its probe directory" >&2; exit 1; }
-trap 'rm -rf "$probe_e" "$probe_f"' EXIT
+trap 'rm -rf "${probe_e:-}" "$probe_f"' EXIT
 (
   cd "$probe_f" || exit 1
   git init -q . || exit 1
@@ -582,7 +597,9 @@ else
     form_fail=1
   fi
 fi
+}
 
+arm_ab() {
 for c in $COMMITS; do
   short="$(git rev-parse --short "$c")"
   subject="$(git log -1 --format=%s "$c" 2>/dev/null)"
@@ -626,7 +643,9 @@ for c in $COMMITS; do
 
   [ "$bad" -eq 0 ] || fails=$((fails+1))
 done
+}
 
+rv_report() {
 if [ "$fails" -ne 0 ]; then
   cat >&2 <<'EOF'
 
@@ -736,3 +755,24 @@ if [ "$arm_f_ran" -eq 1 ]; then summary="$summary; no misspelled not-discharged 
 else                            summary="$summary; CITATION-FORM ARM NOT EVALUATED"; fi
 echo "$summary."
 exit 0
+}
+
+# THE MAIN BODY IS A FUNCTION SEQUENCE, AND IT RUNS ONLY WHEN THIS FILE IS EXECUTED. The
+# release-version-triple fixture sources a copy and calls rv_init, arm_c_range, arm_c, arm_d and
+# arm_ab directly, skipping arm_e and arm_f, whose self-probes each build a scratch repository and
+# were paid on every one of its drives. Sourcing defines the functions and runs nothing; the guard
+# is the idiom core/scripts/content-seal.sh uses. Every `exit` is unchanged: executed, it ends the
+# script as before; in a sourced subshell it ends that subshell with the arm's own status.
+rv_main() {
+  rv_init "$@"
+  arm_c_range
+  arm_c
+  arm_d
+  arm_e
+  arm_f
+  arm_ab
+  rv_report
+}
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  rv_main "$@"
+fi

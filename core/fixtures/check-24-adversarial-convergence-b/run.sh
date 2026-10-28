@@ -10,7 +10,7 @@
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
-# Usage: run.sh
+# Usage: run.sh [--matrix]   (--matrix is forwarded: the mutant-matrix measurement)
 # Exit:  0 = every unit dealt to this shard passes, 1 = one does not, 2 = fixture broken.
 set -uo pipefail
 
@@ -21,4 +21,4 @@ IMPL="$HERE/../check-24-adversarial-convergence/run.sh"
   exit 2
 }
 
-exec bash "$IMPL" --group b
+exec bash "$IMPL" --group b "$@"

@@ -39,8 +39,29 @@ SD="$(cd "$(dirname "$SUBJ")" && pwd)"
   || { echo "receipt: the merge or the partitioner is not beside $SUBJ" >&2; exit 9; }
 command -v git >/dev/null 2>&1 || { echo "receipt: git is not on PATH" >&2; exit 9; }
 
-B="$(mktemp -d "${TMPDIR:-/tmp}/bl733-receipt-XXXXXX")" || exit 9
+# RCPT_WORLD_DIR (optional): build the worlds ONCE under <dir>/worlds and reuse them on every later call
+# (they stamp fixed versions and the validator only reads them). Absent: mktemp per call, as before.
+if [ -n "${RCPT_WORLD_DIR:-}" ]; then
+  B="$RCPT_WORLD_DIR/worlds"
+  [ ! -d "$B" ] || [ -f "$B/.built" ] || { echo "receipt: $B holds a partial world set" >&2; exit 9; }
+  mkdir -p "$B" || exit 9
+else
+  B="$(mktemp -d "${TMPDIR:-/tmp}/bl733-receipt-XXXXXX")" || exit 9
+fi
 B="$(cd "$B" && pwd -P)"
+# RCPT_WORLDS (optional): judge only the named worlds; a name this receipt does not judge is exit 9. A world
+# left out never runs the subject, reads rc=99, and is dropped from the verdict.
+want() { [ -z "${RCPT_WORLDS:-}" ] && { RAN="$RAN $1 "; return 0; }; case " $RCPT_WORLDS " in *" $1 "*) RAN="$RAN $1 "; return 0 ;; esac; return 1; }
+RAN=""
+rcpt_filter() {
+  [ -n "${RCPT_WORLDS:-}" ] || return 0
+  local x kept=""
+  for x in $RCPT_WORLDS; do
+    case "$RAN" in *" $x "*) ;; *) echo "receipt: RCPT_WORLDS names '$x', which this receipt does not judge" >&2; exit 9 ;; esac
+  done
+  for x in $bad; do case "$x" in *"(rc=99)") ;; *) kept="$kept $x" ;; esac; done
+  bad="$kept"
+}
 lg() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=r -c user.email=r@example.invalid \
        -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
 BASE=""; NOW=""
@@ -97,6 +118,7 @@ stamp() {
     printf 'version: 0.782.0\n' > "$w/.claude/.ai-dlc-version" && lg "$w" add -A \
       && GIT_COMMITTER_DATE=2026-10-05T00:00:00Z GIT_AUTHOR_DATE=2026-10-05T00:00:00Z lg "$w" commit -q -m stamp-0.782.0 ) >/dev/null 2>&1
 }
+if [ ! -f "$B/.built" ]; then
 { world nodelta && base nodelta && stamp nodelta \
   && world full && base full && delta full && stamp full \
   && world fullg && base fullg && delta fullg "" groups && stamp fullg \
@@ -108,16 +130,19 @@ stamp() {
   && world voice && mkdir -p "$B/voice/s9/shards/stories-elicitation" \
   && crs "$B/voice/s9/shards/stories-elicitation/01.md" "shard: 1/1 stories" $NOW && delta voice && stamp voice; } \
   || { echo "receipt: a world could not be built under $B" >&2; exit 9; }
+mkdir -p "$B/map/s9/shards/stories-p1" && ln -s "$B/full/s9/stories" "$B/map/s9/stories" || exit 9
+: > "$B/.built"
+fi
 # THE WORLD IS WHAT IT CLAIMS: the split renumbers (today's ordinal 09 is story-08b), and the two
 # owed-group derivations differ on it, so a receipt keyed on {1,4,5} discriminates.
-mkdir -p "$B/map/s9/shards/stories-p1" && ln -s "$B/full/s9/stories" "$B/map/s9/stories" || exit 9
 m="$(bash "$SD/merge-adversarial-shards.sh" --map "$B/map/s9/shards/stories-p1" 2>/dev/null)" || exit 9
 case "$m" in *"09	story-08b.md"*) ;; *) echo "receipt: --map does not renumber at the split" >&2; exit 9 ;; esac
 g19="$(bash "$SD/partition-document.sh" --cross-groups 19)" && g20="$(bash "$SD/partition-document.sh" --cross-groups 20)" || exit 9
 idiff="$(awk -F'\t' 'FNR == NR { o[$1] = $2; next } o[$1] != $2 { printf "%s ", $1 }' <(printf '%s\n' "$g19") <(printf '%s\n' "$g20"))"
 [ "$idiff" = "3 5 6 " ] || { echo "receipt: the index-diff control is '$idiff', not '3 5 6 '" >&2; exit 9; }
 
-run() { OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
+run() { want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
 bad=""
 run nodelta
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] \
@@ -137,6 +162,8 @@ run xnamed
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"stories: story-08a story-08b; cross: cross.md (or all of cross-1 cross-4 cross-5)"* ]] || bad="$bad xnamed(rc=$RC)"
 run voice
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] && [[ "$OUT" != *"OK (L"* ]] || bad="$bad voice(rc=$RC)"
+rcpt_filter
+[ -z "${RCPT_REPORT:-}" ] || echo "receipt worlds judged:$(echo $RAN)" >&2
 if [ -n "$bad" ]; then echo "receipt BL-733: NOT FIXED --$bad"; exit 1; fi
 echo "receipt BL-733: fixed (delta owed by name {story-08a story-08b; cross.md or cross-1 cross-4 cross-5}, judged in stories-elicitation-delta-k20/)"
 exit 0

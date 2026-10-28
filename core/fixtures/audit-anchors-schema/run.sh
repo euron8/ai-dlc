@@ -4,6 +4,12 @@
 # enforced: the header is RENDERED from schemas/audit-anchors.json, --check catches header drift,
 # validate catches entry shape drift, and the reader fails CLOSED on an unreadable schema.
 #
+# Per push the one mutant runs its deciding arm and one twin; the measured matrix replaces an
+# exact-vector assertion (the old "E:no V:pass" pair) and is re-measured whenever an arm or the
+# mutant changes. Arm names are the column names `--matrix` prints.
+# MUTANT-MATRIX no-enum-check decides=E twins=V
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/audit-anchors-schema/run.sh --matrix
+#
 # THE DEFECT THIS EXISTS TO CATCH. The schema lived in two places — templates/audit-anchors.md.template
 # (never shipped) and each project's live audit-anchors.md header (hand-carried) — with nothing
 # comparing them. They diverged, and the de-facto schema survived only in whichever file was carried
@@ -25,13 +31,17 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1))
 echo "audit-anchors-schema:"
 
 # --- Assertion 0: SANITY — render is non-empty and deterministic -------------
-R1="$(bash "$VALIDATOR" --render)"; R2="$(bash "$VALIDATOR" --render)"
+# The render is paid twice here (the determinism question needs two) and every later arm that needs a
+# rendered header cats the first one's bytes from RENDER_F: the output is a pure function of the
+# schema, so re-rendering it per arm asked the same question five more times.
+RENDER_F="$WORK/render.txt"
+bash "$VALIDATOR" --render > "$RENDER_F"; R1="$(cat "$RENDER_F")"; R2="$(bash "$VALIDATOR" --render)"
 [ -n "$R1" ] && [ "$R1" = "$R2" ] && ok "--render is non-empty and deterministic" \
   || bad "--render is empty or non-deterministic — the schema render is the source of truth"
 
 # --- Assertion 1: rendered header + valid entries → validate PASS ------------
 GOOD="$WORK/good.md"
-{ bash "$VALIDATOR" --render; cat <<'EOF'
+{ cat "$RENDER_F"; cat <<'EOF'
 
 ## Entries
 
@@ -67,20 +77,20 @@ bash "$VALIDATOR" --check "$NOHDR" 2>/dev/null && bad "a file with no GENERATED 
 
 # --- Assertion 4: entry missing a REQUIRED field (sha) → validate FAIL -------
 MISS="$WORK/missing-sha.md"
-{ bash "$VALIDATOR" --render; printf '\n## Entries\n\n```yaml\n- sprint: 42\n  closed_at: PENDING\n```\n'; } > "$MISS"
+{ cat "$RENDER_F"; printf '\n## Entries\n\n```yaml\n- sprint: 42\n  closed_at: PENDING\n```\n'; } > "$MISS"
 bash "$VALIDATOR" "$MISS" 2>/dev/null && bad "an entry missing the required 'sha' passed validate" \
   || ok "entry missing required 'sha' → validate FAIL (fail-closed on shape)"
 
 # --- Assertion 5a: non-integer sprint → validate FAIL (structural) ----------
 BADSPRINT="$WORK/bad-sprint.md"
-{ bash "$VALIDATOR" --render; printf '\n## Entries\n\n```yaml\n- sprint: forty-two\n  sha: PENDING\n```\n'; } > "$BADSPRINT"
+{ cat "$RENDER_F"; printf '\n## Entries\n\n```yaml\n- sprint: forty-two\n  sha: PENDING\n```\n'; } > "$BADSPRINT"
 bash "$VALIDATOR" "$BADSPRINT" 2>/dev/null && bad "an entry with a non-integer sprint passed validate" \
   || ok "entry with non-integer 'sprint' → validate FAIL"
 
 # --- Assertion 5b: a real sha with an inline YAML '# comment' → PASS ---------
 # Real consumer files carry backfill notes after the value; the parser must strip the comment.
 COMMENTED="$WORK/commented.md"
-{ bash "$VALIDATOR" --render; printf '\n## Entries\n\n```yaml\n- sprint: 285\n  sha: ad6ecefb72f264771250371541e9f41e3a4a6272 # backfilled on main after retro PR merge\n```\n'; } > "$COMMENTED"
+{ cat "$RENDER_F"; printf '\n## Entries\n\n```yaml\n- sprint: 285\n  sha: ad6ecefb72f264771250371541e9f41e3a4a6272 # backfilled on main after retro PR merge\n```\n'; } > "$COMMENTED"
 bash "$VALIDATOR" "$COMMENTED" >/dev/null 2>&1 && ok "a sha with an inline '# comment' → validate PASS (comment stripped)" \
   || bad "a real sha with a trailing '# comment' was rejected — the parser did not strip the comment"
 
@@ -120,7 +130,7 @@ AI_DLC_AUDIT_ANCHORS_SCHEMA="$BAD_SCHEMA" bash "$VALIDATOR" --render >/dev/null 
 # Seeded from what the real producer emits — a --render header over a FENCED entry list, the shape
 # retro.md Step 5b writes — not from what the entry parser is known to accept.
 CLOSE="$WORK/close.md"
-{ bash "$VALIDATOR" --render
+{ cat "$RENDER_F"
   printf '\n## Entries\n\n```yaml\n- sprint: 900\n  sha: %s\n  closed_at: 2026-06-01T00:00:00Z\n```\n' "$REPO_SHA"
 } > "$CLOSE"
 CR_OUT="$( ( cd "$REPO" && bash "$VALIDATOR" --close-record "$CLOSE" 901 reset "$REPO_SHA" ) 2>/dev/null )"; CR_RC=$?
@@ -197,11 +207,50 @@ if cmp -s "$VALIDATOR" "$MUT_ENUM"; then
   echo "FIXTURE ERROR: mutant 'no-enum-check' matched nothing — the entry-loop enum read was renamed." >&2
   exit 2
 fi
-MGOT="$(enum_battery "$MUT_ENUM")"
-if [ "$MGOT" = "E:no V:pass" ]; then
-  ok "MUTANT no-enum-check: removing the entry-loop enum read lets a hand-written 'paused' validate, and moves nothing else"
+# ARMS of the validator, each one call on a script S; the raw token is what killed=yes|no diverges on.
+# E and V are the enum battery above; the others are the assertions 1-6b that exercise the same
+# validator on a file. Holding means the arm's own expectation holds for S.
+MATRIX=0; MROWS=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/audit-anchors-schema/matrix.sh"
+ARMS="E V GOOD MISS BADSPRINT COMMENTED MIG"
+arm_raw() { # arm_raw <arm> <script>
+  local a="$1" S="$2" rc
+  case "$a" in
+    E)         enum_battery "$S" | cut -d' ' -f1 ;;
+    V)         enum_battery "$S" | cut -d' ' -f2 ;;
+    GOOD)      bash "$S" "$GOOD" >/dev/null 2>&1; echo "rc$?" ;;
+    MISS)      bash "$S" "$MISS" >/dev/null 2>&1; echo "rc$?" ;;
+    BADSPRINT) bash "$S" "$BADSPRINT" >/dev/null 2>&1; echo "rc$?" ;;
+    COMMENTED) bash "$S" "$COMMENTED" >/dev/null 2>&1; echo "rc$?" ;;
+    MIG)       bash "$S" --entries "$MIG" >/dev/null 2>&1; echo "rc$?" ;;
+  esac
+}
+arm_holds() { # arm_holds <arm> <raw>
+  case "$1:$2" in E:E:named|V:V:pass|GOOD:rc0|COMMENTED:rc0|MIG:rc0) return 0 ;; MISS:rc0|BADSPRINT:rc0) return 1 ;; MISS:rc*|BADSPRINT:rc*) return 0 ;; esac
+  return 1
+}
+if [ "$MATRIX" = 1 ]; then
+  for a in $ARMS; do
+    r="$(arm_raw "$a" "$MUT_ENUM")"; sr="$(arm_raw "$a" "$VALIDATOR")"
+    if arm_holds "$a" "$r"; then w=GREEN; else w=TRIPPED; fi
+    if [ "$r" = "$sr" ]; then kd=no; else kd=yes; fi
+    matrix_row no-enum-check "$a" 0 "$w" "$kd"; MROWS=$((MROWS + 1))
+  done
+  ok "MATRIX no-enum-check measured against $MROWS arms"
 else
-  bad "MUTANT no-enum-check: expected [E:no V:pass], got [$MGOT]"
+  # Per push: deciding arm E must stop holding (and diverge from the shipped answer), twin V must hold.
+  _base=0; arm_holds E "$(arm_raw E "$VALIDATOR")" && _base=1
+  r="$(arm_raw E "$MUT_ENUM")"
+  if ! arm_holds E "$r"; then
+    mutant_killed "$_base" no-enum-check "MUTANT no-enum-check (E): removing the entry-loop enum read lets a hand-written 'paused' validate"
+  else bad "MUTANT no-enum-check SURVIVED on E ($r)"; fi
+  r="$(arm_raw V "$MUT_ENUM")"
+  if arm_holds V "$r"; then ok "T-no-enum-check twin V stays GREEN under mutant no-enum-check (a member of the enum still passes)"
+  else bad "T-no-enum-check twin V TRIPPED ($r) under mutant no-enum-check -- the matrix row moved"; fi
 fi
 
 # --- the closed set is READ FROM the schema, not restated --------------------
@@ -283,8 +332,17 @@ usage_is_2 "no sha at all"        "needs <sha>"                             902 
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 23 ]; then
-  echo "audit-anchors-schema: FIXTURE ERROR — ran $asserted assertions, expected 23" >&2
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
+  else bad "MX plain run executed $MROWS matrix-only rows"; fi
+  _want=25
+else
+  if [ "$MROWS" -eq 7 ]; then ok "MX matrix run measured 7 mutant x arm cells (1 mutant x 7 arms)"
+  else bad "MX matrix run measured $MROWS cells, 7 expected"; fi
+  _want=24
+fi
+if [ "$asserted" -ne "$_want" ]; then
+  echo "audit-anchors-schema: FIXTURE ERROR — ran $asserted assertions, expected $_want" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then echo "audit-anchors-schema: PASS ($asserted assertions)"; exit 0; fi

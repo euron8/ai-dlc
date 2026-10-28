@@ -122,6 +122,9 @@
 #                            [--snapshot <pipeline-snapshot.md>] [--route <route.md>]
 #                            [--sprint-status <sprint-status.yaml>]
 #                            [--variant <pipeline_variant>]   (explicit override, for tests)
+#                            [--probe-from-caller]   (the caller vouches for the self-probe, which is
+#                                                     skipped; stdout line 1 is then a banner and the
+#                                                     output is not a gate verdict. For fixtures only.)
 #   Decides whether an ARCHITECT dispositioned a folded bug-fix story, from a record the lead
 #   does not write: the residue's `tool_use_id` must resolve to a spawn-ledger row with role
 #   `architect`, the one-shot's sprint, a `ts` at or after the `ts` of the one-shot's OWN
@@ -163,6 +166,7 @@ FA_VARIANT=""
 FA_ROUTE=""
 FA_SNAPSHOT=""
 FA_SSTATUS=""
+FA_SKIP_PROBE=0
 while [ $# -gt 0 ]; do
   # No MODE_DISPATCH markers here on purpose. I49 and I53 bind the MODES of core-paths.sh
   # and validate-escalation-resolution.sh -- verbs another file names in prose and calls by
@@ -173,6 +177,10 @@ while [ $# -gt 0 ]; do
     --fold-architect)
       [ $# -ge 3 ] || { echo "FAIL: --fold-architect takes two paths: <fold-architecture residue> <bug-fix one-shot>" >&2; exit 2; }
       MODE="fold"; FA_RES="$2"; FA_ONE="$3"; shift 3 ;;
+    # --fold-architect only: the CALLER vouches for the self-probe, which is then skipped, and
+    # stdout line 1 says so. An argv flag, never an environment variable; no shipped caller passes it.
+    --probe-from-caller)
+      FA_SKIP_PROBE=1; shift ;;
     --variant)
       [ $# -ge 2 ] || { echo "FAIL: --variant takes a pipeline_variant name" >&2; exit 2; }
       FA_VARIANT="$2"; shift 2 ;;
@@ -206,6 +214,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+[ "$FA_SKIP_PROBE" = 0 ] || [ "$MODE" = fold ] || { echo "FAIL: --probe-from-caller applies to --fold-architect only" >&2; exit 2; }
 
 # =================================================================================
 # --fold-architect: CHECK 17'S FOLD ARCHITECTURE GATE, LEDGER HALF.
@@ -827,7 +836,11 @@ JSONL
 
 if [ "$MODE" = "fold" ]; then
   command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is not on PATH; the ledger cannot be joined. Exit 2, not a pass." >&2; exit 2; }
-  fa_self_probe || { echo "FAIL: the fold-architect self-probe did not hold, so a verdict on the real input would establish only that the join ran." >&2; exit 2; }
+  if [ "${FA_SKIP_PROBE:-0}" = 1 ]; then
+    echo "PROBE-SKIPPED-BY-CALLER: the fold-architect self-probe did not run (--probe-from-caller); this is not a gate verdict."
+  else
+    fa_self_probe || { echo "FAIL: the fold-architect self-probe did not hold, so a verdict on the real input would establish only that the join ran." >&2; exit 2; }
+  fi
   [ -n "$LEDGER" ] || LEDGER="_bmad-output/spawn-ledger.jsonl"
   # THE VARIANT IS READ, NOT TYPED. `--variant` is an explicit override for tests; the gate
   # passes none. fa_resolve_variant owns the order: --variant, then the snapshot's

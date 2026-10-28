@@ -13,7 +13,7 @@
 # driver directory beside it, so deleting this file cannot quietly shrink the suite.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree —
-# the same resolution `ledger-reverify-d` uses for the implementation it shares, and the one
+# the same resolution every shard driver uses for the implementation it shares, and the one
 # I33 permits.
 #
 # Usage: run.sh

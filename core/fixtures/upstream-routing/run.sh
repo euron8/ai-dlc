@@ -26,7 +26,41 @@
 # THE SUBJECT MAY LEGITIMATELY BE ABSENT ON A CONSUMER — a core fixture ships ahead of the code it
 # guards. That is exit 2 FIXTURE BROKEN, never a green run: "I could not find the subject" and
 # "the subject behaves" are different claims and must not share an exit code.
+# THE MUTANT MATRIX. Each mutant runs per push on its DECIDING arm (which must FAIL under the mutant) plus ONE
+# measured-GREEN twin (which must PASS), so the kill stays confined to its own arm. The full mutant x arm
+# matrix is measured by `--matrix` (an argv flag: every mutant against every arm, one MATRIX row each) and is
+# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin replaces a
+# per-push check that no OTHER arm trips. The arms are the columns of the MATRIX rows.
+# MUTANT-MATRIX disarm decides=named twins=zero
+# MUTANT-MATRIX pair decides=pairskip twins=bracket
+# MUTANT-MATRIX head decides=bracket twins=named
+# MUTANT-MATRIX wide decides=consumer twins=pairskip
+# MUTANT-MATRIX glob decides=emptyglob twins=zero
+# MUTANT-MATRIX entries decides=zero twins=emptyglob
+# MUTANT-MATRIX exitcode decides=reportonly twins=zero
+# MUTANT-MATRIX cwd decides=cwdinv twins=reportonly
+# MUTANT-MATRIX manifest decides=noman twins=cwdinv
+# MUTANT-MATRIX is457 decides=agree twins=named
+# MUTANT-MATRIX existstrue decides=labelabsent twins=nofilter
+# MUTANT-MATRIX existsfalse decides=labelpresent twins=nofilter
+# MUTANT-MATRIX absentfilter decides=nofilter twins=labelabsent
+# MUTANT-MATRIX absentcount decides=jsoncount twins=labelabsent
+# MUTANT-MATRIX rootenv decides=rootprov twins=labelabsent
+# MUTANT-MATRIX rootany decides=unrooted twins=rootprov
+# MUTANT-MATRIX allgone decides=pairomit twins=pairadditive
+# MUTANT-MATRIX promote decides=pairadditive twins=pairomit
+# MUTANT-MATRIX jsonempty decides=pairjson twins=pairedcount
+# MUTANT-MATRIX nopair decides=pairedcount twins=pairjson
+# MUTANT-MATRIX always decides=pairsilent twins=pairzero
+# MUTANT-MATRIX exitzero decides=pairzero twins=pairsilent
+# MUTANT-MATRIX-CONTROL impossible why=an anchor that is present zero times; mkmut and mkmutcp must refuse it, so a no-op cannot pass as a mutation
+# MUTANT-MATRIX-CONTROL control why=an anchor present exactly once; mkmutcp must accept it, proving the refusal above is the anchor and not the helper
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/upstream-routing/run.sh --matrix
 set -uo pipefail
+
+# `--matrix` is an ARGV flag. A plain run executes no matrix-only cell.
+MATRIX=0
+[ "${1:-}" = "--matrix" ] && MATRIX=1
 
 # HERMETIC — a consumer that pins AI_DLC_* in settings.json exports it into every session, and
 # `git push` inherits it. AI_DLC_PROJECT_ROOT in particular would relocate the subject's root out
@@ -34,6 +68,9 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/upstream-routing/matrix.sh"
 
 # Resolve the project root by walking UP for a marker, never by counting `..` hops — a fixture
 # that counts hops answers differently from the root, from a subdirectory and from a sandbox that
@@ -54,7 +91,7 @@ ROOT="$(resolve_root "$HERE" || true)"
 [ -n "$ROOT" ] || { echo "FIXTURE ERROR: no ai-dlc skill dir above $HERE in either layout" >&2; exit 2; }
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
-SUBJ="$(pick "${1:-}" \
+SUBJ="$(pick "$([ "$MATRIX" = 1 ] && echo "" || echo "${1:-}")" \
   "$ROOT/core/scripts/audit-upstream-routing.sh" \
   "$ROOT/scripts/ai-dlc/audit-upstream-routing.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate audit-upstream-routing.sh in either layout" >&2; exit 2; }
@@ -100,11 +137,15 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=54
+EXPECTED_ASSERTIONS=78
 fails=0; made=0
 ok()   { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 show() { sed 's/^/        /' <<<"$1"; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # Here-string, never a pipe. Under `pipefail` a `grep -q` that matches early exits while the
 # writer is still pushing, and the pipeline then reports the writer's EPIPE — a MATCH read as a
 # failed assertion, permanently and with no symptom once the output outgrows the pipe buffer.
@@ -595,119 +636,6 @@ else
   show "$ctl_txt"
 fi
 
-# --- 19. DISARM: the classifier examines zero entries and still reports a clean 0 --------------
-# THE SHAPE THAT MATTERS. It exits 0, prints `MISROUTED (0)`, and still reports the corpus as
-# examined — indistinguishable from a correctly-routed tree to anything that reads only the exit
-# code or the headline. It is caught because every arm above is PRESENCE-shaped.
-M_DISARM="$(mkmut disarm 'for cid, ln, body in entries:' 'for cid, ln, body in []:')"
-if [ -z "$M_DISARM" ]; then
-  bad "MUTANT disarm: the anchor matched nothing — the disarm is unbuilt and the presence arms prove nothing"
-else
-  run_txt "$M_DISARM" "$MAIN" "$WORK/disarm.txt" "$ROOT"; d_rc=$RC; d_txt="$(cat "$WORK/disarm.txt")"
-  if [ "$d_rc" = "0" ] && has 'MISROUTED (0)' "$d_txt" && ! has 'CO-S401-UNPAIRED' "$d_txt"; then
-    ok "MUTANT disarm: a classifier examining nothing prints a clean MISROUTED (0) at exit 0 and is caught only by the presence arms"
-  else
-    bad "MUTANT disarm: rc=$d_rc and the seeded row survived — the disarm did not take, so the presence arms are untested"
-    show "$d_txt"
-  fi
-fi
-
-# --- 20. the pairing discriminator removed (assertion 6 is live) -------------------------------
-M_PAIR="$(mkmut pair '    if PC.search(body):' '    if False:')"
-if [ -z "$M_PAIR" ]; then
-  bad "MUTANT pair: the anchor matched nothing — assertion 6 proves nothing"
-else
-  run_json "$M_PAIR" "$MAIN" "$WORK/pair.json" "$ROOT"; p_rc=$RC
-  p_sum=""; [ "$p_rc" = "0" ] && p_sum="$(summarize "$WORK/pair.json")"
-  if has '^finding=CO-S401-PAIRED$' "$p_sum"; then
-    ok "MUTANT pair: without the PC- skip the near-miss IS reported — so assertion 6 discriminates on the citation"
-  else
-    bad "MUTANT pair: the near-miss stayed unreported with the discriminator gone — assertion 6 passes whatever the subject does"
-  fi
-fi
-
-# --- 21. the heading grammar loses the bracket alternative (assertion 8 is live) ---------------
-M_HEAD="$(mkmut head 'HEAD = re.compile(r"^#{2,4}\s+\[?(CO-[A-Z0-9][A-Z0-9.-]*)\]?")' \
-                     'HEAD = re.compile(r"^#{2,4}\s+(CO-[A-Z0-9][A-Z0-9.-]*)")')"
-if [ -z "$M_HEAD" ]; then
-  bad "MUTANT head: the anchor matched nothing — assertion 8 proves nothing"
-else
-  run_json "$M_HEAD" "$MAIN" "$WORK/head.json" "$ROOT"; h_rc=$RC
-  h_sum=""; [ "$h_rc" = "0" ] && h_sum="$(summarize "$WORK/head.json")"
-  if ! has '^finding=CO-S402-BRACKET$' "$h_sum" && has '^finding=CO-S401-UNPAIRED$' "$h_sum"; then
-    ok "MUTANT head: a grammar knowing only \`### CO-\` drops the bracketed entry while still reporting the other — so assertion 8 is a statement about the SHAPE"
-  else
-    bad "MUTANT head: the bracketed entry survived a grammar that cannot spell it — assertion 8 is vacuous"
-    show "$h_sum"
-  fi
-fi
-
-# --- 22. the predicate widened to match every path (assertion 10 is live) ----------------------
-# Widened, not narrowed: a mutation that makes a guard match NOTHING often reproduces the
-# original's output and scores a kill it did not earn. This one has a positive observable — the
-# consumer-only entry APPEARS.
-M_WIDE="$(mkmut wide '        if any(fnmatch.fnmatch(p, g) for g in globs):' '        if True:')"
-if [ -z "$M_WIDE" ]; then
-  bad "MUTANT wide: the anchor matched nothing — assertion 10 proves nothing"
-else
-  run_json "$M_WIDE" "$MAIN" "$WORK/wide.json" "$ROOT"; w_rc=$RC
-  w_sum=""; [ "$w_rc" = "0" ] && w_sum="$(summarize "$WORK/wide.json")"
-  if has '^finding=CO-S403-CONSUMER$' "$w_sum"; then
-    ok "MUTANT wide: with the glob test gone the consumer-only entry IS convicted — so assertion 10 is a statement about the predicate"
-  else
-    bad "MUTANT wide: the consumer-only entry stayed clean with the predicate matching everything — assertion 10 is vacuous"
-  fi
-fi
-
-# --- 23. the empty-glob refusal removed (assertion 14 is live) --------------------------------
-# The mutant runs beside the EMPTY stub, so the arm being tested is the refusal and not the
-# glob set: without the guard the subject sails past a dead predicate into a clean report.
-M_GLOB="$(mkmut glob 'if [ -z "$GLOBS" ]; then' 'if [ -z "${GLOBS}x" ]; then')"
-if [ -z "$M_GLOB" ]; then
-  bad "MUTANT glob: the anchor matched nothing — assertion 14 proves nothing"
-else
-  cp "$WORK/stub-empty/core-paths.sh" "$(dirname "$M_GLOB")/core-paths.sh"
-  run_txt "$M_GLOB" "$MAIN" "$WORK/mglob.txt" "$ROOT"; g_rc=$RC; g_txt="$(cat "$WORK/mglob.txt")"
-  if [ "$g_rc" = "0" ] && has 'MISROUTED (0)' "$g_txt"; then
-    ok "MUTANT glob: without the refusal an EMPTY glob set yields a confident MISROUTED (0) at exit 0 — so assertion 14 is what stops a dead predicate reading clean"
-  else
-    bad "MUTANT glob: rc=$g_rc with the refusal removed — assertion 14 is vacuous"
-    show "$g_txt"
-  fi
-fi
-
-# --- 24. the zero-entries refusal removed (assertion 16 is live) ------------------------------
-M_ENT="$(mkmut entries 'if not entries:' 'if False:')"
-if [ -z "$M_ENT" ]; then
-  bad "MUTANT entries: the anchor matched nothing — assertion 16 proves nothing"
-else
-  run_txt "$M_ENT" "$ZERO" "$WORK/ment.txt" "$ROOT"; e_rc=$RC; e_txt="$(cat "$WORK/ment.txt")"
-  if [ "$e_rc" = "0" ] && has 'MISROUTED (0)' "$e_txt"; then
-    ok "MUTANT entries: without the refusal an unparseable backlog reports MISROUTED (0) at exit 0 — so assertion 16 is live"
-  else
-    bad "MUTANT entries: rc=$e_rc with the refusal removed — assertion 16 is vacuous"
-    show "$e_txt"
-  fi
-fi
-
-# --- 25. report-only turned into a gate (assertion 11 is live) --------------------------------
-# The anchor is the two-line tail, not the bare `exit 0`: the shell tail and the Python
-# `SystemExit(0)` calls are different exits, and an anchor on the shared spelling would move a
-# cell this arm does not own.
-M_EXIT="$(mkmut exitcode '[ "$rc" = 2 ] && exit 2
-exit 0' '[ "$rc" = 2 ] && exit 2
-exit 1')"
-if [ -z "$M_EXIT" ]; then
-  bad "MUTANT exitcode: the anchor matched nothing — assertion 11 proves nothing"
-else
-  run_txt "$M_EXIT" "$MAIN" "$WORK/mexit.txt" "$ROOT"; x_rc=$RC; x_txt="$(cat "$WORK/mexit.txt")"
-  if [ "$x_rc" = "1" ] && has 'MISROUTED (2) ' "$x_txt"; then
-    ok "MUTANT exitcode: a reporter turned into a gate exits 1 on the same findings — so assertion 11 pins the report-only contract"
-  else
-    bad "MUTANT exitcode: rc=$x_rc — assertion 11 does not actually read the exit code"
-    show "$x_txt"
-  fi
-fi
 
 # =============================================================================================
 # 26-29. THE MANIFEST IS RESOLVED AGAINST THE ROOT MARKER, NOT AGAINST THE PROCESS CWD.
@@ -739,23 +667,6 @@ else
   show "$(diff "$WORK/cwd-root.json" "$WORK/cwd-sub.json" 2>&1 | head -20)"
 fi
 
-# --- 27. MUTANT: the manifest handed back to the cwd (assertion 26 is live) --------------------
-# The mutation restores the measured old behaviour exactly — `--list` with no manifest argument.
-# From the root it still answers; from the subdirectory it yields no globs and refuses. That
-# asymmetry is the whole content of assertion 26, and nothing else in this battery can see it.
-M_CWD="$(mkmut cwd 'GLOBS="$(bash "$CORE_PATHS" --list "$MANIFEST" 2>/dev/null || true)"' \
-                   'GLOBS="$(bash "$CORE_PATHS" --list 2>/dev/null || true)"')"
-if [ -z "$M_CWD" ]; then
-  bad "MUTANT cwd: the anchor matched nothing — assertion 26 proves nothing"
-else
-  run_json "$M_CWD" "$MAIN" "$WORK/mcwd-root.json" "$ROOT" "$ROOT";   mc_root_rc=$RC
-  run_json "$M_CWD" "$MAIN" "$WORK/mcwd-sub.json"  "$ROOT" "$SUBDIR"; mc_sub_rc=$RC
-  if [ "$mc_root_rc" = "0" ] && [ "$mc_sub_rc" = "2" ]; then
-    ok "MUTANT cwd: with the manifest unpassed the SAME tree answers from the root (rc=0) and refuses from a subdirectory (rc=2) — so assertion 26 pins the resolution"
-  else
-    bad "MUTANT cwd: root rc=$mc_root_rc, subdir rc=$mc_sub_rc — assertion 26 is vacuous"
-  fi
-fi
 
 # --- 28. no core-manifest.md under the resolved root -> exit 2 --------------------------------
 # The fifth way to examine nothing, and the one with a trap door: with no manifest the subject
@@ -771,23 +682,6 @@ else
   show "$noman_txt"
 fi
 
-# --- 29. MUTANT: the manifest refusal removed (assertion 28 is live) ---------------------------
-# Without the refusal the empty MANIFEST reaches `--list` as an empty argument and that script
-# falls back to its cwd-relative candidates, so a tree with NO manifest produces a full,
-# confident report borrowed from wherever the process happened to be standing.
-M_MAN="$(mkmut manifest 'if [ -z "$MANIFEST" ]; then' 'if [ -z "${MANIFEST}x" ]; then')"
-if [ -z "$M_MAN" ]; then
-  bad "MUTANT manifest: the anchor matched nothing — assertion 28 proves nothing"
-else
-  run_txt "$M_MAN" "$MAIN" "$WORK/mman.txt" "$WORK/emptyroot" "$ROOT"; mm_rc=$RC
-  mm_txt="$(cat "$WORK/mman.txt")"
-  if [ "$mm_rc" = "0" ] && has 'MISROUTED (2) ' "$mm_txt"; then
-    ok "MUTANT manifest: without the refusal a manifest-less root reports on globs borrowed from the cwd — so assertion 28 is what stops it"
-  else
-    bad "MUTANT manifest: rc=$mm_rc with the refusal removed — assertion 28 is vacuous"
-    show "$mm_txt"
-  fi
-fi
 
 # =============================================================================================
 # 30-42. A GLOB MATCH IS EVIDENCE ABOUT A DESTINATION, NEVER ABOUT A FILE — AND THE TREE THE
@@ -883,34 +777,6 @@ if ! grep -q 'MODE' "$WORK/m457.repl"; then
   exit 2
 fi
 M457="$(mkmutcp is457 "$(cat "$WORK/m457.find")" "$(cat "$WORK/m457.repl")")"
-if [ -z "$M457" ]; then
-  bad "MUTANT is457: the anchor matched nothing — assertions 3-4 prove nothing"
-else
-  m457_dis=""; m457_ref=0
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    ( cd "$GTREE" && bash "$M457" --is-core "$p" "$MANIFEST_F" >/dev/null 2>&1 ); m_rc=$?
-    case "$m_rc" in
-      0) m_says=core ;;
-      1) m_says=not-core ;;
-      *) m_says="refused($m_rc)"; m457_ref=$((m457_ref+1)) ;;
-    esac
-    if has "^path=CO-S400-AGREE[0-9]* ${p}\$" "$inproc"; then mi_says=core; else mi_says=not-core; fi
-    if [ "$(guard_verdict "$p")" = "deny" ]; then mg_says=core; else mg_says=not-core; fi
-    if [ "$mi_says" != "$m_says" ] || [ "$mi_says" != "$mg_says" ]; then
-      m457_dis="${m457_dis}${p}: in-process=${mi_says} --is-core=${m_says} guard=${mg_says}
-"
-    fi
-  done <<EOF
-$AGREE_PATHS
-EOF
-  m457_n="$(printf '%s' "$m457_dis" | grep -c . || true)"
-  if [ "$m457_n" = "1" ] && [ "$m457_ref" = "1" ] && has "^${INVENTED}: " "$m457_dis"; then
-    ok "MUTANT is457: re-applying v0.457.0's \`--is-core\` splits the resolver from the guard on EXACTLY the invented path, which the guard still DENIES — so assertion 3 is what catches a fork at the DECISION, the fork I25 cannot see because it byte-compares only parse_manifest() and to_consumer_glob()"
-  else
-    bad "MUTANT is457: $m457_n disagreement(s) and $m457_ref refusal(s), want exactly 1 of each on $INVENTED — assertion 3 is vacuous or the mutation was not surgical: ${m457_dis:-none}"
-  fi
-fi
 
 # --- the label sandboxes: the tree is the BACKLOG's, and a SECOND tree is what proves it ------
 # THE PAIR MUST SHARE A RUN AND A CORPUS. A near-miss measured in a SEPARATE run is an ADJACENT
@@ -1165,127 +1031,6 @@ else
   show "$unroot_txt"
 fi
 
-# --- 37. MUTANT: existence never checked (assertion 32's FIRES direction is live) -------------
-# The label stops appearing and everything else about the report is unchanged, which is exactly
-# what a broken label looks like from the outside. The positive conjunct — the finding is still
-# named — is what stops a subject that emits NOTHING from scoring as a kill here.
-M_EXT="$(mkmut existstrue '"exists": path_is_present(root, p)' '"exists": True')"
-if [ -z "$M_EXT" ]; then
-  bad "MUTANT existstrue: the anchor matched nothing — assertion 32 proves nothing"
-else
-  run_txt "$M_EXT" "$ABSBL" "$WORK/mext.txt" "$CTREE"; mext_rc=$RC
-  mext_txt="$(cat "$WORK/mext.txt")"
-  if [ "$mext_rc" = "0" ] && has 'CO-S410-ABSENTONLY' "$mext_txt" \
-     && ! has 'NO SUCH FILE HERE' "$mext_txt"; then
-    ok "MUTANT existstrue: with existence hardcoded true the absent path renders unmarked while the finding is still reported — so assertion 32 is what makes the label fire"
-  else
-    bad "MUTANT existstrue: rc=$mext_rc, marker still present or the finding vanished — assertion 32's fires-direction is vacuous"
-    show "$mext_txt"
-  fi
-fi
-
-# --- 38. MUTANT: everything marked absent (assertion 32's SILENT direction is live) -----------
-# The mirror, and the one that a fires-only arm cannot catch: a label that flags EVERY path reads
-# identically to one that discriminates, unless something asserts the near-miss stays quiet.
-M_EXF="$(mkmut existsfalse '"exists": path_is_present(root, p)' '"exists": False')"
-if [ -z "$M_EXF" ]; then
-  bad "MUTANT existsfalse: the anchor matched nothing — assertion 32 proves nothing"
-else
-  run_txt "$M_EXF" "$ABSBL" "$WORK/mexf.txt" "$CTREE"; mexf_rc=$RC
-  mexf_txt="$(cat "$WORK/mexf.txt")"
-  if [ "$mexf_rc" = "0" ] \
-     && has '^      names: scripts/ai-dlc/core-paths\.sh   \[NO SUCH FILE HERE\]$' "$mexf_txt"; then
-    ok "MUTANT existsfalse: with existence hardcoded false the PRESENT path is marked too — so assertion 32's near-miss is what stops a label that flags everything"
-  else
-    bad "MUTANT existsfalse: rc=$mexf_rc and the present path stayed unmarked — assertion 32's silent-direction is vacuous"
-    show "$mexf_txt"
-  fi
-fi
-
-# --- 39. MUTANT: the label turned into a filter (assertion 33 is live) ------------------------
-# The "improvement" assertion 33 exists to catch, built and scored rather than argued about: skip
-# an entry whose named machinery is not on disk. CO-S410-MIXED survives with its marker intact, so
-# this mutant fails assertion 33 and ONLY assertion 33 — the acquittal is the whole finding.
-M_FIL="$(mkmut absentfilter \
-  '    absent_total += sum(1 for r in rows if not r["exists"])' \
-  '    absent_total += sum(1 for r in rows if not r["exists"])
-    if not any(r["exists"] for r in rows): continue')"
-if [ -z "$M_FIL" ]; then
-  bad "MUTANT absentfilter: the anchor matched nothing — assertion 33 proves nothing"
-else
-  run_json "$M_FIL" "$ABSBL" "$WORK/mfil.json" "$CTREE"; mfil_rc=$RC
-  mfil_ids=""; [ "$mfil_rc" = "0" ] && mfil_ids="$(summarize "$WORK/mfil.json" | grep '^finding=' || true)"
-  if [ "$mfil_rc" = "0" ] && ! has '^finding=CO-S410-ABSENTONLY$' "$mfil_ids" \
-     && has '^finding=CO-S410-MIXED$' "$mfil_ids" \
-     && has '^finding=CO-S410-PRESENT$' "$mfil_ids"; then
-    ok "MUTANT absentfilter: filtering on existence ACQUITS the entry whose only machinery path is absent while the other two survive — so assertion 33 is what keeps a true misroute reportable"
-  else
-    bad "MUTANT absentfilter: rc=$mfil_rc, ids [$(echo "$mfil_ids" | tr '\n' ' ')] — assertion 33 is vacuous"
-  fi
-fi
-
-# --- 40. MUTANT: absent_named decoupled from the text (assertion 34 is live) ------------------
-# The text still marks the rows and only the JSON total lies, which is the failure a single-value
-# read could never see — and the reason assertion 34 derives the count twice instead of once.
-M_CNT="$(mkmut absentcount '"absent_named": absent_total,' '"absent_named": 0,')"
-if [ -z "$M_CNT" ]; then
-  bad "MUTANT absentcount: the anchor matched nothing — assertion 34 proves nothing"
-else
-  run_json "$M_CNT" "$ABSBL" "$WORK/mcnt.json" "$CTREE"; mcnt_rc=$RC
-  mcnt_absent=""; [ "$mcnt_rc" = "0" ] && mcnt_absent="$(summarize "$WORK/mcnt.json" | sed -n 's/^absent_named=//p')"
-  mcnt_named=""; [ "$mcnt_rc" = "0" ] && mcnt_named="$(summarize "$WORK/mcnt.json" | grep '^named=.* absent$' || true)"
-  if [ "$mcnt_rc" = "0" ] && [ "$mcnt_absent" = "0" ] && [ -n "$mcnt_named" ]; then
-    ok "MUTANT absentcount: the JSON total reads 0 while named[] still carries absent rows — so assertion 34's two derivations are what bind the count to the rendering"
-  else
-    bad "MUTANT absentcount: rc=$mcnt_rc, absent_named=$mcnt_absent, absent named[] rows [${mcnt_named:-none}] — assertion 34 is vacuous"
-  fi
-fi
-
-# --- 41. MUTANT: the root re-keyed to the RUNNING COPY (assertion 35 is live) -----------------
-# `v0.457.0`'s exact spelling, restored: ask AI_DLC_ROOT instead of walking up from the backlog.
-# Under it the two runs of the SAME corpus diverge — the tree with the files reports them present,
-# the tree without reports them absent — which is the shipped false positive reproduced in one
-# line. The conjunct naming the PRESENT path is what makes this a kill rather than a coincidence:
-# a mutant that merely crashed would also make the reports differ.
-M_ROOTENV="$(mkmut rootenv 'root = backlog_root(backlog)' 'root = os.environ["AI_DLC_ROOT"]')"
-if [ -z "$M_ROOTENV" ]; then
-  bad "MUTANT rootenv: the anchor matched nothing — assertion 35 proves nothing"
-else
-  run_json "$M_ROOTENV" "$ABSBL" "$WORK/mroot-c.json" "$CTREE"; mrootc_rc=$RC
-  run_json "$M_ROOTENV" "$ABSBL" "$WORK/mroot-o.json" "$OTHER"; mrooto_rc=$RC
-  mrooto_present=""; mrootc_present=""
-  [ "$mrooto_rc" = "0" ] && mrooto_present="$(summarize "$WORK/mroot-o.json" | grep '^named=.* present$' || true)"
-  [ "$mrootc_rc" = "0" ] && mrootc_present="$(summarize "$WORK/mroot-c.json" | grep '^named=.* present$' || true)"
-  if [ "$mrootc_rc" = "0" ] && [ "$mrooto_rc" = "0" ] \
-     && ! cmp -s "$WORK/mroot-c.json" "$WORK/mroot-o.json" \
-     && [ -n "$mrootc_present" ] && [ -z "$mrooto_present" ]; then
-    ok "MUTANT rootenv: keying existence on the RUNNING COPY's root makes one corpus render two ways — every path present from the tree that holds them, NONE present from the tree that does not — so assertion 35 is what pins the label to the backlog's tree"
-  else
-    bad "MUTANT rootenv: rc=$mrootc_rc/$mrooto_rc, reports $(cmp -s "$WORK/mroot-c.json" "$WORK/mroot-o.json" && echo identical || echo differing), present rows CTREE [${mrootc_present:-none}] OTHER [${mrooto_present:-none}] — assertion 35 is vacuous"
-  fi
-fi
-
-# --- 42. MUTANT: an unplaceable corpus given a root anyway (assertion 36 is live) -------------
-# The walk terminates at `/` and returns it instead of refusing, so the unrootable backlog gets a
-# root where nothing exists and every path is labelled absent. This is the failure assertion 36's
-# no-labels conjunct owns; the findings-unchanged conjunct survives it, which is correct — the two
-# conjuncts are there for different failures and only one of them is this mutant's.
-M_ROOTANY="$(mkmut rootany '        if parent == d:
-            return None' '        if parent == d:
-            return d')"
-if [ -z "$M_ROOTANY" ]; then
-  bad "MUTANT rootany: the anchor matched nothing — assertion 36 proves nothing"
-else
-  run_txt "$M_ROOTANY" "$UNROOTBL" "$WORK/mrany.txt" "$CTREE"; mrany_rc=$RC
-  mrany_txt="$(cat "$WORK/mrany.txt")"
-  if [ "$mrany_rc" = "0" ] && has 'NO SUCH FILE HERE' "$mrany_txt" \
-     && has 'CO-S410-ABSENTONLY' "$mrany_txt"; then
-    ok "MUTANT rootany: returning a root rather than refusing labels the unplaceable corpus after all, while the findings still report — so assertion 36's no-labels conjunct is what keeps an unasked question from rendering as an answer"
-  else
-    bad "MUTANT rootany: rc=$mrany_rc, marker absent or the findings vanished — assertion 36 is vacuous"
-    show "$mrany_txt"
-  fi
-fi
 
 
 # =============================================================================================
@@ -1410,99 +1155,6 @@ else
   show "$pairs_txt"
 fi
 
-# --- 47. MUTANT: every named path listed (assertion 43's OMIT direction is live) --------------
-# A section that lists EVERY paired entry reads exactly like one that discriminates, until
-# something asserts the placeable entry stays out.
-M_ALLGONE="$(mkmut allgone '        gone = [p for p in mach[:6] if not path_is_present(root, p)]' '        gone = list(mach[:6])')"
-if [ -z "$M_ALLGONE" ]; then
-  bad "MUTANT allgone: the anchor matched nothing — assertion 43 proves nothing"
-else
-  run_txt "$M_ALLGONE" "$PAIRBL" "$WORK/mallgone.txt" "$CTREE"; mag_rc=$RC
-  mag_sec="$(pair_section "$(cat "$WORK/mallgone.txt")")"
-  if [ "$mag_rc" = "0" ] && has 'CO-S430-PAIRED-PRESENT' "$mag_sec" \
-     && has 'CO-S430-PAIRED-ABSENT' "$mag_sec"; then
-    ok "MUTANT allgone: listing every named path regardless of existence pulls the PLACEABLE paired entry into the section — so assertion 43's omit-direction is what makes the section discriminate"
-  else
-    bad "MUTANT allgone: rc=$mag_rc, section [${mag_sec:-absent}] — assertion 43's omit-direction is vacuous"
-  fi
-fi
-
-# --- 48. MUTANT: the listed entry promoted to a finding (assertion 44 is live) ----------------
-# The `continue` is what keeps a routed entry out of the findings. Removing it ONLY for the
-# unplaceable case leaves `paired` and the section untouched, so this mutant fails assertion 44
-# and only assertion 44 — the entanglement is deliberately avoided.
-M_PROMOTE="$(mkmut promote '        if gone:
-            unplaceable.append({"id": cid, "line": ln, "paths": gone})
-        continue' '        if gone:
-            unplaceable.append({"id": cid, "line": ln, "paths": gone})
-        else:
-            continue')"
-if [ -z "$M_PROMOTE" ]; then
-  bad "MUTANT promote: the anchor matched nothing — assertion 44 proves nothing"
-else
-  run_json "$M_PROMOTE" "$PAIRBL" "$WORK/mprom.json" "$CTREE"; mpr_rc=$RC
-  mpr_ids=""; [ "$mpr_rc" = "0" ] && mpr_ids="$(summarize "$WORK/mprom.json" | grep '^finding=' || true)"
-  if [ "$mpr_rc" = "0" ] && has '^finding=CO-S430-PAIRED-ABSENT$' "$mpr_ids" \
-     && has '^finding=CO-S430-UNPAIRED$' "$mpr_ids"; then
-    ok "MUTANT promote: dropping the skip for the unplaceable case turns a ROUTED entry into a misroute finding — so assertion 44 is what keeps the section additive"
-  else
-    bad "MUTANT promote: rc=$mpr_rc, ids [$(echo "$mpr_ids" | tr '\n' ' ')] — assertion 44 is vacuous"
-  fi
-fi
-
-# --- 49. MUTANT: the JSON list emptied (assertion 45's agreement is live) ---------------------
-# The text still renders the section and only the JSON lies, which is the failure a single-value
-# read could never see — the same shape as the absent_named mutant above.
-M_JEMPTY="$(mkmut jsonempty '"paired_unplaceable": unplaceable,' '"paired_unplaceable": [],')"
-if [ -z "$M_JEMPTY" ]; then
-  bad "MUTANT jsonempty: the anchor matched nothing — assertion 45 proves nothing"
-else
-  run_json "$M_JEMPTY" "$PAIRBL" "$WORK/mje.json" "$CTREE"; mje_rc=$RC
-  mje_n=""; [ "$mje_rc" = "0" ] && mje_n="$(summarize "$WORK/mje.json" | sed -n 's/^unplaceable_n=//p')"
-  if [ "$mje_rc" = "0" ] && [ "${mje_n:-x}" = "0" ]; then
-    ok "MUTANT jsonempty: the JSON reports an empty paired_unplaceable while the text section still lists the entry — so assertion 45's two derivations are what bind the machine-readable list to the rendered one"
-  else
-    bad "MUTANT jsonempty: rc=$mje_rc, unplaceable_n=${mje_n:-?} (want 0) — assertion 45 is vacuous"
-  fi
-fi
-
-# --- 50. MUTANT: the listed entry no longer counted as paired (assertion 45's count is live) --
-# The double-count trap from the other side: if `paired` stopped counting an entry the section
-# lists, the two numbers would partition and every downstream reader would be quietly correct to
-# add them. Assertion 45 pins `paired` at 2 precisely so that cannot change unnoticed.
-M_NOPAIR="$(mkmut nopair '        paired += 1          # already routed upstream; the pairing is the discriminator' '        paired += 0          # mutant: the listed entry is no longer counted as paired')"
-if [ -z "$M_NOPAIR" ]; then
-  bad "MUTANT nopair: the anchor matched nothing — assertion 45 proves nothing"
-else
-  run_json "$M_NOPAIR" "$PAIRBL" "$WORK/mnp.json" "$CTREE"; mnp_rc=$RC
-  mnp_paired=""; mnp_n=""
-  if [ "$mnp_rc" = "0" ]; then
-    mnp_paired="$(summarize "$WORK/mnp.json" | sed -n 's/^paired=//p')"
-    mnp_n="$(summarize "$WORK/mnp.json" | sed -n 's/^unplaceable_n=//p')"
-  fi
-  if [ "$mnp_rc" = "0" ] && [ "${mnp_paired:-x}" = "0" ] && [ "${mnp_n:-x}" = "1" ]; then
-    ok "MUTANT nopair: with the counter disarmed \`paired\` reads 0 while the section still lists 1 — so assertion 45's paired=2 conjunct is what stops the count and the section drifting into a partition"
-  else
-    bad "MUTANT nopair: rc=$mnp_rc, paired=${mnp_paired:-?} (want 0), unplaceable_n=${mnp_n:-?} (want 1) — assertion 45's count conjunct is vacuous"
-  fi
-fi
-
-# --- 51. MUTANT: the section rendered unconditionally (assertion 46 is live) ------------------
-# A heading that prints on every run reads as a working section on the corpus that has something
-# to say, and is only caught by the corpus that does not.
-M_ALWAYS="$(mkmut always 'if unplaceable:' 'if True:')"
-if [ -z "$M_ALWAYS" ]; then
-  bad "MUTANT always: the anchor matched nothing — assertion 46 proves nothing"
-else
-  run_txt "$M_ALWAYS" "$PAIRSILENTBL" "$WORK/malw.txt" "$CTREE"; mal_rc=$RC
-  mal_txt="$(cat "$WORK/malw.txt")"
-  if [ "$mal_rc" = "0" ] && has 'PAIRED BUT UNPLACEABLE' "$mal_txt" \
-     && has 'CO-S430-UNPAIRED' "$mal_txt"; then
-    ok "MUTANT always: an unconditional heading renders the section on a corpus with nothing to list — so assertion 46 is what keeps an empty section from reading as a finding"
-  else
-    bad "MUTANT always: rc=$mal_rc, heading $(has 'PAIRED BUT UNPLACEABLE' "$mal_txt" && echo present || echo absent) — assertion 46 is vacuous"
-  fi
-fi
 
 # --- 52. the section RENDERS when there are no findings at all --------------------------------
 # THE CORPUS THAT MOTIVATES THE SECTION IS THE ONE THAT USED TO HIDE IT. A `raise SystemExit(0)`
@@ -1542,32 +1194,290 @@ else
   show "$pairz_txt"
 fi
 
-# --- 53. MUTANT: the early exit restored (assertion 52 is live) -------------------------------
-# The defect as it shipped, one line. Everything else about the run is unchanged — the JSON still
-# carries the entry, the findings branch still renders — so this mutant fails assertion 52 and
-# only assertion 52.
-M_EXIT0="$(mkmut exitzero '    print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
+
+# =============================================================================================
+# THE MUTANTS, AS ARMS. Every mutant is a COPY of the subject (or of core-paths.sh) with ONE predicate
+# changed. Each ARM below is a verdict on the subject's output for one seeded corpus, taking the audit
+# script and the core-paths.sh to drive, so ANY mutant can be asked ANY arm: that is what makes the
+# mutant x arm matrix measurable (`--matrix`). An arm returns 0 when the subject passes it, 1 when not.
+# Per push each mutant runs only its DECIDING arm (which must FAIL) and one measured-GREEN twin (which
+# must PASS). The shipped subject is run through EVERY arm first: that same-run base pass is the flag
+# every kill is emitted behind.
+# =============================================================================================
+AF="$WORK/ar"; mkdir -p "$AF" || { echo "FIXTURE ERROR: cannot create the arm dir" >&2; exit 2; }
+ARMS="named pairskip bracket consumer emptyglob zero reportonly cwdinv noman agree labelabsent labelpresent nofilter jsoncount rootprov unrooted pairomit pairadditive pairjson pairedcount pairsilent pairzero"
+
+# Each arm runs its OWN subject runs and reads the output; none shares a run with another.
+arm_named() { # a finding the main corpus must produce (assertion 5)
+  run_json "$1" "$MAIN" "$AF/$3.named.json" "$ROOT"; [ "$RC" = 0 ] || return 1
+  has '^finding=CO-S401-UNPAIRED$' "$(summarize "$AF/$3.named.json" 2>/dev/null)"
+}
+arm_pairskip() { # the PC-cited near-miss is NOT a finding, the unpaired one is (assertion 6)
+  local s; run_json "$1" "$MAIN" "$AF/$3.pairskip.json" "$ROOT"; [ "$RC" = 0 ] || return 1
+  s="$(summarize "$AF/$3.pairskip.json" 2>/dev/null)"
+  has '^finding=CO-S401-UNPAIRED$' "$s" && ! has '^finding=CO-S401-PAIRED$' "$s"
+}
+arm_bracket() { # the bracketed heading shape reaches the classifier (assertion 8)
+  run_json "$1" "$MAIN" "$AF/$3.bracket.json" "$ROOT"; [ "$RC" = 0 ] || return 1
+  has '^finding=CO-S402-BRACKET$' "$(summarize "$AF/$3.bracket.json" 2>/dev/null)"
+}
+arm_consumer() { # an entry naming only consumer paths is NOT reported (assertion 10)
+  local s; run_json "$1" "$MAIN" "$AF/$3.consumer.json" "$ROOT"; [ "$RC" = 0 ] || return 1
+  s="$(summarize "$AF/$3.consumer.json" 2>/dev/null)"
+  has '^finding=CO-S401-UNPAIRED$' "$s" && ! has '^finding=CO-S403-CONSUMER$' "$s"
+}
+arm_emptyglob() { # an EMPTY glob set is exit 2, not a confident MISROUTED (0) (assertion 14)
+  local d="$AF/$3.eg" t; mkdir -p "$d"; cp "$1" "$d/audit-upstream-routing.sh"; cp "$WORK/stub-empty/core-paths.sh" "$d/core-paths.sh"
+  run_txt "$d/audit-upstream-routing.sh" "$MAIN" "$AF/$3.emptyglob.txt" "$ROOT"; t="$(cat "$AF/$3.emptyglob.txt")"
+  [ "$RC" = 2 ] && has 'EXAMINED NOTHING' "$t" && ! has 'MISROUTED (0)' "$t"
+}
+arm_zero() { # a backlog parsing to 0 entries is exit 2 (assertion 16)
+  local t; run_txt "$1" "$ZERO" "$AF/$3.zero.txt" "$ROOT"; t="$(cat "$AF/$3.zero.txt")"
+  [ "$RC" = 2 ] && has 'EXAMINED NOTHING' "$t" && ! has 'MISROUTED (0)' "$t"
+}
+arm_reportonly() { # exit 0 WITH findings (assertion 11)
+  local t; run_txt "$1" "$MAIN" "$AF/$3.reportonly.txt" "$ROOT"; t="$(cat "$AF/$3.reportonly.txt")"
+  [ "$RC" = 0 ] && has 'MISROUTED (2) ' "$t" && has 'REPORT-ONLY: this exits 0' "$t"
+}
+arm_cwdinv() { # the report is identical from the root and from a subdirectory (assertion 26)
+  local a b; run_json "$1" "$MAIN" "$AF/$3.cwd-root.json" "$ROOT" "$ROOT"; a=$RC
+  run_json "$1" "$MAIN" "$AF/$3.cwd-sub.json" "$ROOT" "$SUBDIR"; b=$RC
+  [ "$a" = 0 ] && [ "$b" = 0 ] && cmp -s "$AF/$3.cwd-root.json" "$AF/$3.cwd-sub.json"
+}
+arm_noman() { # a root with no core-manifest.md is exit 2 (assertion 28)
+  local t; run_txt "$1" "$MAIN" "$AF/$3.noman.txt" "$WORK/emptyroot"; t="$(cat "$AF/$3.noman.txt")"
+  [ "$RC" = 2 ] && has 'EXAMINED NOTHING' "$t" && ! has 'MISROUTED' "$t"
+}
+arm_agree() { # the router, --is-core and the guard agree on every seeded path (assertions 3-4) -- $2 is the core-paths.sh driven
+  local ij p ins is gs
+  run_json "$1" "$AGREE_BL" "$AF/$3.agree.json" "$ROOT"; [ "$RC" = 0 ] || return 1
+  ij="$(summarize "$AF/$3.agree.json" 2>/dev/null)"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    ( cd "$GTREE" && bash "$2" --is-core "$p" "$MANIFEST_F" >/dev/null 2>&1 ); is=$?
+    case "$is" in 0) is=core ;; 1) is=not-core ;; *) return 1 ;; esac
+    if has "^path=CO-S400-AGREE[0-9]* ${p}\$" "$ij"; then ins=core; else ins=not-core; fi
+    case "$(guard_verdict "$p")" in deny) gs=core ;; allow) gs=not-core ;; *) return 1 ;; esac
+    [ "$ins" = "$is" ] && [ "$ins" = "$gs" ] || return 1
+  done <<EOF
+$AGREE_PATHS
+EOF
+  return 0
+}
+arm_labelabsent() { # the label FIRES on the absent path (assertion 32)
+  run_txt "$1" "$ABSBL" "$AF/$3.labelabsent.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  has '^      names: scripts/ai-dlc/merge-gate-verdicts\.sh   \[NO SUCH FILE HERE\]$' "$(cat "$AF/$3.labelabsent.txt")"
+}
+arm_labelpresent() { # ...and STAYS SILENT on the present path of the same entry (assertion 32)
+  run_txt "$1" "$ABSBL" "$AF/$3.labelpresent.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  has '^      names: scripts/ai-dlc/core-paths\.sh$' "$(cat "$AF/$3.labelpresent.txt")"
+}
+arm_nofilter() { # an absent named path changes NO finding (assertion 33)
+  local a b; run_json "$1" "$ABSBL" "$AF/$3.nf-abs.json" "$CTREE" || true; [ "$RC" = 0 ] || return 1
+  run_json "$1" "$PRESBL" "$AF/$3.nf-pres.json" "$CTREE" || true; [ "$RC" = 0 ] || return 1
+  a="$(summarize "$AF/$3.nf-abs.json" 2>/dev/null | grep '^finding=' || true)"
+  b="$(summarize "$AF/$3.nf-pres.json" 2>/dev/null | grep '^finding=' || true)"
+  has '^finding=CO-S410-ABSENTONLY$' "$a" && [ "$a" = "$b" ] && [ -n "$a" ]
+}
+arm_jsoncount() { # --json's absent_named equals the marked text rows (assertion 34)
+  local tn jn; run_txt "$1" "$ABSBL" "$AF/$3.jc.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  run_json "$1" "$ABSBL" "$AF/$3.jc.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  tn="$(grep -c '^      names: .*\[NO SUCH FILE HERE\]$' "$AF/$3.jc.txt" || true)"
+  jn="$(summarize "$AF/$3.jc.json" 2>/dev/null | sed -n 's/^absent_named=//p')"
+  [ -n "$jn" ] && [ "$tn" = "$jn" ] && [ "$tn" -gt 0 ]
+}
+arm_rootprov() { # the same corpus read by subjects rooted in two trees is byte-identical (assertion 35)
+  local a b; run_json "$1" "$ABSBL" "$AF/$3.rp-c.json" "$CTREE"; a=$RC
+  run_json "$1" "$ABSBL" "$AF/$3.rp-o.json" "$OTHER"; b=$RC
+  [ "$a" = 0 ] && [ "$b" = 0 ] && cmp -s "$AF/$3.rp-c.json" "$AF/$3.rp-o.json" \
+    && [ -n "$(summarize "$AF/$3.rp-o.json" 2>/dev/null | grep '^named=.* present$' || true)" ]
+}
+arm_unrooted() { # a backlog with no layered root above it is labelled NOT AT ALL, findings intact (assertion 36)
+  local t; run_txt "$1" "$UNROOTBL" "$AF/$3.unr.txt" "$CTREE"; t="$(cat "$AF/$3.unr.txt")"
+  [ "$RC" = 0 ] && ! has 'NO SUCH FILE HERE' "$t" && has 'CO-S410-ABSENTONLY' "$t"
+}
+arm_pairomit() { # the unplaceable section LISTS the absent paired entry and OMITS the present one (assertion 43)
+  local sec; run_txt "$1" "$PAIRBL" "$AF/$3.po.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  sec="$(pair_section "$(cat "$AF/$3.po.txt")")"
+  [ -n "$sec" ] && has '^  CO-S430-PAIRED-ABSENT ' "$sec" && ! has 'CO-S430-PAIRED-PRESENT' "$sec"
+}
+arm_pairadditive() { # the section changes NO finding (assertion 44)
+  local a b; run_json "$1" "$PAIRBL" "$AF/$3.pa-a.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  run_json "$1" "$PAIRSILENTBL" "$AF/$3.pa-b.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  a="$(summarize "$AF/$3.pa-a.json" 2>/dev/null | grep '^finding=' || true)"
+  b="$(summarize "$AF/$3.pa-b.json" 2>/dev/null | grep '^finding=' || true)"
+  [ -n "$a" ] && [ "$a" = "$b" ]
+}
+arm_pairjson() { # --json's paired_unplaceable agrees with the rendered section (assertion 45)
+  local s sec jn tn; run_json "$1" "$PAIRBL" "$AF/$3.pj.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  run_txt "$1" "$PAIRBL" "$AF/$3.pj.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  s="$(summarize "$AF/$3.pj.json" 2>/dev/null)"; sec="$(pair_section "$(cat "$AF/$3.pj.txt")")"
+  jn="$(printf '%s' "$s" | sed -n 's/^unplaceable_n=//p')"; tn="$(printf '%s' "$sec" | grep -c '^  CO-' || true)"
+  [ "${jn:-0}" -gt 0 ] && [ "${jn:-x}" = "${tn:-y}" ] && has '^unplaceable=CO-S430-PAIRED-ABSENT$' "$s"
+}
+arm_pairedcount() { # `paired` still counts BOTH paired entries, the listed one included (assertion 45)
+  run_json "$1" "$PAIRBL" "$AF/$3.pc.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  has '^paired=2$' "$(summarize "$AF/$3.pc.json" 2>/dev/null)"
+}
+arm_pairsilent() { # SILENT when no paired entry is unplaceable, findings still render (assertion 46)
+  local t s; run_txt "$1" "$PAIRSILENTBL" "$AF/$3.ps.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  run_json "$1" "$PAIRSILENTBL" "$AF/$3.ps.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  t="$(cat "$AF/$3.ps.txt")"; s="$(summarize "$AF/$3.ps.json" 2>/dev/null)"
+  ! has 'PAIRED BUT UNPLACEABLE' "$t" && has '^unplaceable_n=0$' "$s" && has 'MISROUTED (1)' "$t" && has 'CO-S430-UNPAIRED' "$t"
+}
+arm_pairzero() { # the section RENDERS with zero findings (assertion 52)
+  local t s; run_txt "$1" "$PAIRZEROBL" "$AF/$3.pz.txt" "$CTREE"; [ "$RC" = 0 ] || return 1
+  run_json "$1" "$PAIRZEROBL" "$AF/$3.pz.json" "$CTREE"; [ "$RC" = 0 ] || return 1
+  t="$(cat "$AF/$3.pz.txt")"; s="$(summarize "$AF/$3.pz.json" 2>/dev/null)"
+  has 'MISROUTED (0)' "$t" && [ "$(printf '%s' "$s" | grep -c '^finding=' || true)" = 0 ] \
+    && has '^  CO-S430-PAIRED-ABSENT ' "$(pair_section "$t")" && has '^unplaceable_n=1$' "$s"
+}
+
+# --- the mutants: build each copy, refusing a no-op ---------------------------------------------
+build_mut() { # build_mut <name> <find> <replace>  -> sets MP_<name>; a refusal is a FAIL, never a skip
+  local p; p="$(mkmut "$@")"
+  if [ -z "$p" ]; then bad "MUTANT $1: the anchor matched nothing — the mutant is unbuilt and its arm proves nothing"; fi
+  printf -v "MP_$1" '%s' "$p"
+}
+build_mut disarm 'for cid, ln, body in entries:' 'for cid, ln, body in []:'
+build_mut pair '    if PC.search(body):' '    if False:'
+build_mut head 'HEAD = re.compile(r"^#{2,4}\s+\[?(CO-[A-Z0-9][A-Z0-9.-]*)\]?")' \
+               'HEAD = re.compile(r"^#{2,4}\s+(CO-[A-Z0-9][A-Z0-9.-]*)")'
+build_mut wide '        if any(fnmatch.fnmatch(p, g) for g in globs):' '        if True:'
+build_mut glob 'if [ -z "$GLOBS" ]; then' 'if [ -z "${GLOBS}x" ]; then'
+build_mut entries 'if not entries:' 'if False:'
+build_mut exitcode '[ "$rc" = 2 ] && exit 2
+exit 0' '[ "$rc" = 2 ] && exit 2
+exit 1'
+build_mut cwd 'GLOBS="$(bash "$CORE_PATHS" --list "$MANIFEST" 2>/dev/null || true)"' \
+              'GLOBS="$(bash "$CORE_PATHS" --list 2>/dev/null || true)"'
+build_mut manifest 'if [ -z "$MANIFEST" ]; then' 'if [ -z "${MANIFEST}x" ]; then'
+build_mut existstrue '"exists": path_is_present(root, p)' '"exists": True'
+build_mut existsfalse '"exists": path_is_present(root, p)' '"exists": False'
+build_mut absentfilter \
+  '    absent_total += sum(1 for r in rows if not r["exists"])' \
+  '    absent_total += sum(1 for r in rows if not r["exists"])
+    if not any(r["exists"] for r in rows): continue'
+build_mut absentcount '"absent_named": absent_total,' '"absent_named": 0,'
+build_mut rootenv 'root = backlog_root(backlog)' 'root = os.environ["AI_DLC_ROOT"]'
+build_mut rootany '        if parent == d:
+            return None' '        if parent == d:
+            return d'
+build_mut allgone '        gone = [p for p in mach[:6] if not path_is_present(root, p)]' '        gone = list(mach[:6])'
+build_mut promote '        if gone:
+            unplaceable.append({"id": cid, "line": ln, "paths": gone})
+        continue' '        if gone:
+            unplaceable.append({"id": cid, "line": ln, "paths": gone})
+        else:
+            continue'
+build_mut jsonempty '"paired_unplaceable": unplaceable,' '"paired_unplaceable": [],'
+build_mut nopair '        paired += 1          # already routed upstream; the pairing is the discriminator' \
+                 '        paired += 0          # mutant: the listed entry is no longer counted as paired'
+build_mut always 'if unplaceable:' 'if True:'
+build_mut exitzero '    print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
 else:' '    print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
     raise SystemExit(0)
-else:')"
-if [ -z "$M_EXIT0" ]; then
-  bad "MUTANT exitzero: the anchor matched nothing — assertion 52 proves nothing"
+else:'
+# is457 mutates core-paths.sh, not the audit script: its subject is the mutant resolver (built above).
+MP_is457="$M457"
+[ -n "$MP_is457" ] || bad "MUTANT is457: the anchor matched nothing — the agreement arm proves nothing"
+
+# --- the deciding arm and the measured-green twin of every mutant --------------------------------
+DEC_disarm=named;        TWIN_disarm=zero
+DEC_pair=pairskip;       TWIN_pair=bracket
+DEC_head=bracket;        TWIN_head=named
+DEC_wide=consumer;       TWIN_wide=pairskip
+DEC_glob=emptyglob;      TWIN_glob=zero
+DEC_entries=zero;        TWIN_entries=emptyglob
+DEC_exitcode=reportonly; TWIN_exitcode=zero
+DEC_cwd=cwdinv;          TWIN_cwd=reportonly
+DEC_manifest=noman;      TWIN_manifest=cwdinv
+DEC_is457=agree;         TWIN_is457=named
+DEC_existstrue=labelabsent;  TWIN_existstrue=nofilter
+DEC_existsfalse=labelpresent; TWIN_existsfalse=nofilter
+DEC_absentfilter=nofilter;   TWIN_absentfilter=labelabsent
+DEC_absentcount=jsoncount;   TWIN_absentcount=labelabsent
+DEC_rootenv=rootprov;        TWIN_rootenv=labelabsent
+DEC_rootany=unrooted;        TWIN_rootany=rootprov
+DEC_allgone=pairomit;        TWIN_allgone=pairadditive
+DEC_promote=pairadditive;    TWIN_promote=pairomit
+DEC_jsonempty=pairjson;      TWIN_jsonempty=pairedcount
+DEC_nopair=pairedcount;      TWIN_nopair=pairjson
+DEC_always=pairsilent;       TWIN_always=pairzero
+DEC_exitzero=pairzero;       TWIN_exitzero=pairsilent
+MUTANTS="disarm pair head wide glob entries exitcode cwd manifest is457 existstrue existsfalse absentfilter absentcount rootenv rootany allgone promote jsonempty nopair always exitzero"
+
+# --- THE SHIPPED SUBJECT, THROUGH EVERY ARM, BEFORE ANY MUTANT VERDICT IS READ -------------------
+base_fail=""
+for _a in $ARMS; do "arm_$_a" "$SUBJ" "$CPATHS" base || base_fail="$base_fail $_a"; done
+B_ALL=0; [ -z "$base_fail" ] && B_ALL=1
+if [ "$B_ALL" = 1 ]; then
+  ok "CONTROL unmutated-subject: the shipped audit-upstream-routing.sh and core-paths.sh pass every one of the 22 arms in this run — the same-run base pass every kill below is emitted behind"
 else
-  run_txt "$M_EXIT0" "$PAIRZEROBL" "$WORK/mexit.txt" "$CTREE"; mex_rc=$RC
-  mex_txt="$(cat "$WORK/mexit.txt")"
-  run_json "$M_EXIT0" "$PAIRZEROBL" "$WORK/mexit.json" "$CTREE"; mexj_rc=$RC
-  mex_n=""; [ "$mexj_rc" = "0" ] && mex_n="$(summarize "$WORK/mexit.json" | sed -n 's/^unplaceable_n=//p')"
-  # The JSON conjunct is what makes this the RIGHT kill: the mutant must hide the section while
-  # still holding the data, which is the two-renderings-disagree shape. A mutant that simply
-  # emptied the list would also remove the heading and would not be this defect.
-  if [ "$mex_rc" = "0" ] && has 'MISROUTED (0)' "$mex_txt" \
-     && ! has 'PAIRED BUT UNPLACEABLE' "$mex_txt" \
-     && [ "${mex_n:-x}" = "1" ]; then
-    ok "MUTANT exitzero: restoring the exit in the zero-findings branch hides the section while --json still reports $mex_n unplaceable entry — two renderings of one list disagreeing with no error, which is exactly what shipped — so assertion 52 is what keeps the section reachable"
-  else
-    bad "MUTANT exitzero: rc=$mex_rc, heading $(has 'PAIRED BUT UNPLACEABLE' "$mex_txt" && echo present || echo absent), json=${mex_n:-?} (want 1) — assertion 52 is vacuous"
-  fi
+  bad "CONTROL unmutated-subject: the shipped subject FAILS arm(s)${base_fail} — a mutant verdict would read the arm failing, not the mutation"
 fi
+
+what_of() { case "$1" in
+  disarm) echo "the classifier examines no entry: a clean MISROUTED (0) over a populated corpus" ;;
+  pair) echo "the PC- pairing discriminator removed: the routed near-miss is reported too" ;;
+  head) echo "a heading grammar knowing only ### CO-: the bracketed entry is dropped" ;;
+  wide) echo "the glob test replaced by True: a consumer-only entry is convicted" ;;
+  glob) echo "the empty-glob refusal removed: a dead predicate reads MISROUTED (0)" ;;
+  entries) echo "the zero-entries refusal removed: an unparseable backlog reads MISROUTED (0)" ;;
+  exitcode) echo "the reporter turned into a gate: it exits 1 on findings" ;;
+  cwd) echo "--list handed back to the cwd: a subdirectory loses the manifest" ;;
+  manifest) echo "the manifest refusal removed: a manifest-less root borrows globs from the cwd" ;;
+  is457) echo "v0.457.0's --is-core re-applied: the resolver splits from the guard on the invented path" ;;
+  existstrue) echo "existence hardcoded true: the label never fires" ;;
+  existsfalse) echo "existence hardcoded false: the label flags the present path too" ;;
+  absentfilter) echo "the label turned into a filter: a true misroute is acquitted" ;;
+  absentcount) echo "absent_named hardcoded 0: the JSON total disagrees with the text" ;;
+  rootenv) echo "existence keyed on the running copy's root: one corpus renders two ways" ;;
+  rootany) echo "an unplaceable corpus given a root anyway: every path is labelled absent" ;;
+  allgone) echo "every named path listed: the placeable paired entry enters the section" ;;
+  promote) echo "the skip dropped for the unplaceable case: a routed entry becomes a finding" ;;
+  jsonempty) echo "paired_unplaceable emptied: the JSON disagrees with the section" ;;
+  nopair) echo "the paired counter disarmed: paired reads 0 beside a listed entry" ;;
+  always) echo "the section rendered unconditionally: an empty section reads as a finding" ;;
+  exitzero) echo "the early exit restored: the section is hidden at zero findings while --json carries it" ;;
+esac; }
+
+score_mutant() { # score_mutant <name>
+  local m="$1" dec twin a c arm tripped="" rd rt
+  eval "dec=\$DEC_$m; twin=\$TWIN_$m; a=\$MP_$m"
+  c="$CPATHS"; [ "$m" = is457 ] && { c="$M457"; a="$SUBJ"; }
+  if [ "$MATRIX" = 1 ]; then
+    for arm in $ARMS; do "arm_$arm" "$a" "$c" "$m" || tripped="$tripped $arm"; done
+    mx_row "$m" "${tripped# }" "$ARMS" "$dec" "$twin"
+    case " $tripped " in *" $dec "*) rd=fail ;; *) rd=pass ;; esac
+    case " $tripped " in *" $twin "*) rt=fail ;; *) rt=pass ;; esac
+  else
+    "arm_$dec" "$a" "$c" "$m" && rd=pass || rd=fail
+    "arm_$twin" "$a" "$c" "$m" && rt=pass || rt=fail
+  fi
+  if [ "$rd" = fail ]; then
+    mutant_killed "$B_ALL" "$m" "MUTANT $m: arm $dec fails under the mutant ($(what_of "$m"))"
+  else
+    bad "MUTANT $m: arm $dec still PASSES under the mutant — the arm recorded as deciding it cannot see the defect"
+  fi
+  if [ "$rt" = pass ]; then
+    ok "TWIN $m: arm $twin stays green under the mutant, as the measured matrix records — the kill is confined to $dec"
+  else
+    bad "TWIN $m: arm $twin FAILED under the mutant, but the measured matrix has it green — the co-tripping changed"
+  fi
+}
+for _m in $MUTANTS; do score_mutant "$_m"; done
+
+# --- 54. A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL, AND --matrix EXECUTES ALL OF THEM ---------------
+if [ "$MATRIX" = 1 ]; then
+  if [ "$MX_ROWS" -eq 22 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 22)"
+  else bad "--matrix printed $MX_ROWS MATRIX rows, want 22"; fi
+else
+  if [ "$MX_ROWS" -eq 0 ]; then ok "a plain run printed no MATRIX row ($MX_ROWS), so the matrix-only cells did not run"
+  else bad "a plain run printed $MX_ROWS MATRIX rows -- the matrix path is running on every push"; fi
+fi
+
+echo ""
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

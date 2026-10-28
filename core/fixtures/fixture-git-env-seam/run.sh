@@ -42,11 +42,25 @@
 # exported the way git exports it. Every mutant is a COPY guarded by `cmp -s`, and
 # the UNMUTATED copy runs through the same harness in the same battery, so a
 # broken harness cannot let a mutant score a kill.
+#
+# THE MUTANT MATRIX. Five mutants (m1 m2 m3 m4 on arm A, b2 on arm B). Per push each runs on its DECIDING cell
+# and the TWIN cell U (the same driven fixture with GIT_DIR unset, which no seam mutation can reach, so it stays
+# green for every mutant). `--matrix` (an argv flag) runs every mutant over every cell A B U and prints one
+# MATRIX row per cell with killed=yes|no plus a MATRIX-ROW with tripped=[...], from matrix-lib.sh, then stops.
+# The matrix is re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# replaces a per-push exact-vector assertion.
+# MUTANT-MATRIX m1 decides=A twins=U
+# MUTANT-MATRIX m2 decides=A twins=U
+# MUTANT-MATRIX m3 decides=A twins=U
+# MUTANT-MATRIX m4 decides=A twins=U
+# MUTANT-MATRIX b2 decides=B twins=U
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
 set -u
 
 FAILS=0
 ok()   { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+bad()  { fail "$1"; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1"; exit 9; }
 
 # Resolve the repo root by walking UP for a marker. Counting `..` hops answers
@@ -64,6 +78,7 @@ while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/core/fixtures/lib/preamble.sh" ]; do R
 [ -f "$ROOT/core/fixtures/lib/preamble.sh" ] || broken "no core/fixtures/lib/preamble.sh above $0 — cannot locate the repo root, and the seam is this fixture's subject"
 
 SEAM="$ROOT/core/fixtures/lib/preamble.sh"
+. "$ROOT/core/fixtures/lib/mutant.sh"
 
 # The DRIVEN fixture. Chosen because it builds a scratch repo and is unrelated to
 # this subject, so it is not co-maintained with the thing under test.
@@ -126,10 +141,14 @@ victim_username() { # victim_username <victim-root>
 # --- the harness ------------------------------------------------------------
 # Run the driven fixture from TREE, with GIT_DIR armed at the victim, and report
 # "<count-after> <victim-is-a-repo> <core.bare> <user.name>".
-drive() { # drive <tree> <victim-root> [fixture] -> "<n> <yes|no> <bare> <name>"
-  local tree="$1" v="$2" who="${3:-$SUBJECT}" admin
+drive() { # drive <tree> <victim-root> [fixture] [armed: yes|no] -> "<n> <yes|no> <bare> <name>"
+  local tree="$1" v="$2" who="${3:-$SUBJECT}" armed="${4:-yes}" admin
   admin="$(new_victim "$v")" || return 1
-  ( cd "$tree" && GIT_DIR="$admin" bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+  if [ "$armed" = yes ]; then
+    ( cd "$tree" && GIT_DIR="$admin" bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+  else
+    ( cd "$tree" && env -u GIT_DIR bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+  fi
   local n repo=no
   n="$(victim_count "$admin" "$v/wt")"
   [ -d "$v/repo/.git" ] && repo=yes
@@ -248,65 +267,83 @@ ok "H1b harness: core.bare reads not-true and user.name reads the sentinel on a 
 # pristine victim and arm A passed for the same reason. Two inert runs compare
 # equal. Establish that the mutable copy can reach its git calls at all, in the
 # UNMUTATED tree, before reading any mutant's verdict.
-mktree "$WORK/canary" || broken "could not copy the tree"
-canary_out="$( cd "$WORK/canary" && bash "core/fixtures/$SUBJECT/run.sh" 2>&1 )"
+# ONE COPY OF THE TREE SERVES EVERY ARM. The copy (`mktree`) is a tar walk plus a completeness count, and
+# the arms below differ from it by ONE file each (the seam, or the driven fixture's run.sh). Each mutant
+# overwrites that file in TREE, is driven, and is put back by `restore_tree`, which byte-compares every
+# file a mutant touches against $ROOT's before the next arm reads TREE. The canary and arm A read the
+# unmutated tree, so they share it too: they are the same bytes, driven unarmed and armed.
+TREE="$WORK/tree"
+mktree "$TREE" || broken "could not copy the tree"
+restore_tree() { # put back every file a mutant edits, and prove it
+  local f
+  for f in core/fixtures/lib/preamble.sh "core/fixtures/$SUBJECT/run.sh" "core/fixtures/$SUBJECT_C/run.sh"; do
+    [ -f "$ROOT/$f" ] || continue
+    cp -p "$ROOT/$f" "$TREE/$f" || broken "could not restore $f in the shared tree"
+    cmp -s "$ROOT/$f" "$TREE/$f" || broken "the shared tree's $f differs from the shipping one after a restore"
+  done
+}
+SUBJECT_C="setup-config-drift"
+canary_out="$( cd "$TREE" && bash "core/fixtures/$SUBJECT/run.sh" 2>&1 )"
 case "$canary_out" in
   *"FIXTURE ERROR"*|*"FIXTURE BROKEN"*)
     broken "the driven fixture $SUBJECT cannot run in a copied tree: $(printf '%s' "$canary_out" | head -1). Every mutant below would survive against an untouched victim and read as a working seam." ;;
 esac
 ok "H2 driven fixture $SUBJECT runs in the copy tree — mutant verdicts are about the seam, not about a broken copy"
 
-# --- A. THE SHIPPING TREE ---------------------------------------------------
-mktree "$WORK/ship" || broken "could not copy the tree"
-read -r n_ship repo_ship bare_ship name_ship <<EOF
-$(drive "$WORK/ship" "$WORK/v_ship")
-EOF
-if victim_intact "$n_ship" "$repo_ship" "$bare_ship" "$name_ship"; then
+# --- A. THE SHIPPING TREE, ON THREE CELLS ------------------------------------
+# A cell is one driven fixture in the shared tree against a fresh victim:
+#   A  $SUBJECT   with GIT_DIR armed at the victim (the arm the seam exists for)
+#   B  $SUBJECT_C with GIT_DIR armed (the `git -C` form, init in its seed.sh)
+#   U  $SUBJECT   with GIT_DIR UNSET: nothing is inherited, so no mutation of the seam can reach the victim.
+#      It is the measured-green twin of every mutant below: a mutant that wrecks A but also U would be
+#      wrecking by some route other than the inherited GIT_DIR.
+cell() { # <A|B|U> -> VERD (INTACT|WRECKED) and DET ("<n> <repo> <bare> <name>")
+  local who="$SUBJECT" armed=yes
+  case "$1" in B) who="$SUBJECT_C" ;; U) armed=no ;; esac
+  DET="$(drive "$TREE" "$WORK/v_cell" "$who" "$armed")"
+  # shellcheck disable=SC2086
+  if victim_intact $DET; then VERD=INTACT; else VERD=WRECKED; fi
+}
+MX=0; [ "${1:-}" = --matrix ] && MX=1
+mx_pp=0; mx_only=0
+echo "HERMETIC-CONSUMED core/fixtures/fixture-git-env-seam/matrix-lib.sh"
+. "$(cd "$(dirname "$0")" && pwd)/matrix-lib.sh"
+
+if [ ! -f "$ROOT/core/fixtures/$SUBJECT_C/run.sh" ]; then
+  broken "driven fixture $SUBJECT_C is absent -- the 'git -C' form has no subject in this battery"
+fi
+cell A; SV_A="$VERD"; mx_pp=$((mx_pp + 1)); DET_A="$DET"
+if [ "$SV_A" = INTACT ]; then
   ok "A  shipping tree: index 40, victim still a repository, core.bare not true, user.name still the sentinel"
 else
-  fail "A  shipping tree: index=$n_ship repo=$repo_ship bare=$bare_ship name=$name_ship — expected 40/yes/not-true/$VICTIM_SENTINEL. The seam is not protecting a directly-run fixture."
+  fail "A  shipping tree: ($DET_A) — expected 40/yes/not-true/$VICTIM_SENTINEL. The seam is not protecting a directly-run fixture."
+fi
+# B1. SEAM INTACT on the `git -C` form (its init is in a seed.sh the run.sh never makes; the seam reaches it by inheritance).
+cell B; SV_B="$VERD"; mx_pp=$((mx_pp + 1)); DET_B="$DET"
+if [ "$SV_B" = INTACT ]; then
+  ok "B1 $SUBJECT_C (git -C form, init in its seed.sh) with the seam: index 40, repo yes, bare not true, sentinel intact"
+else
+  fail "B1 $SUBJECT_C with the seam intact still moved the victim ($DET_B). The seam does not reach an init the run.sh never makes."
+fi
+cell U; SV_U="$VERD"; mx_pp=$((mx_pp + 1)); DET_U="$DET"
+if [ "$SV_U" = INTACT ]; then
+  ok "U  shipping tree, GIT_DIR unset: victim untouched on all four channels — the twin cell every mutant below is compared against"
+else
+  fail "U  with GIT_DIR unset the victim still moved ($DET_U): the twin cell is not green, so no mutant's confinement can be read"
 fi
 
 # --- MUTANTS ----------------------------------------------------------------
-# Each is a COPY, guarded by `cmp -s`: a mutation that did not apply reads exactly
-# like a fix that works.
-mutate() { # mutate <tree> <file> <sed-free transform via callback file>
-  :
-}
-
-# (m1) THE SEAM'S BODY IS GONE. The file still exists and is still sourced, so
-# every "does it source the preamble" check passes.
-mktree "$WORK/m1" || broken "copy failed"
-printf '# body removed by mutant m1\n' > "$WORK/m1/core/fixtures/lib/preamble.sh"
-cmp -s "$WORK/m1/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m1 did not apply — the mutated seam is byte-identical to the shipping one"
-read -r n1 repo1 bare1 name1 <<EOF
-$(drive "$WORK/m1" "$WORK/v_m1")
-EOF
-if ! victim_intact "$n1" "$repo1" "$bare1" "$name1"; then
-  ok "m1 seam body removed: victim clobbered (index=$n1 repo=$repo1 bare=$bare1 name=$name1) — arm A can fail"
-else
-  fail "m1 seam body removed and the victim survived (index=$n1 repo=$repo1 bare=$bare1 name=$name1). Arm A cannot distinguish a working seam from an empty one."
-fi
-
-# (m2) THE SOURCE LINE IS GONE from the driven fixture. The seam is intact and
-# every other fixture still sources it.
-mktree "$WORK/m2" || broken "copy failed"
-grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT/run.sh" > "$WORK/m2/core/fixtures/$SUBJECT/run.sh" || broken "m2 rewrite failed"
-chmod +x "$WORK/m2/core/fixtures/$SUBJECT/run.sh"
-cmp -s "$WORK/m2/core/fixtures/$SUBJECT/run.sh" "$ROOT/core/fixtures/$SUBJECT/run.sh" && broken "m2 did not apply"
-read -r n2 repo2 bare2 name2 <<EOF
-$(drive "$WORK/m2" "$WORK/v_m2")
-EOF
-if ! victim_intact "$n2" "$repo2" "$bare2" "$name2"; then
-  ok "m2 source line removed: victim clobbered (index=$n2 repo=$repo2 bare=$bare2 name=$name2) — the seam must be SOURCED, not merely present"
-else
-  fail "m2 source line removed and the victim survived (index=$n2 repo=$repo2 bare=$bare2 name=$name2). This fixture would pass over a fixture that never sources the seam."
-fi
-
-# (m3) THE SCRUB IS PRESENT BUT COMMENTED OUT. This is the sharpest one: the file
-# contains the exact correct text, so every grep-shaped check — including the
-# receipt this entry replaces — reports the fix present.
-mktree "$WORK/m3" || broken "copy failed"
+# Each is applied to ONE file of the shared tree, driven, and put back by restore_tree. A cell is a mutant
+# verdict compared with the shipped verdict on the same cell (`--matrix` prints every one).
+# (m1) THE SEAM'S BODY IS GONE. The file still exists and is still sourced, so every "does it source the
+#      preamble" check passes.
+# (m2) THE SOURCE LINE IS GONE from the driven fixture. The seam is intact and every other fixture sources it.
+# (m3) THE SCRUB IS PRESENT BUT COMMENTED OUT. The file contains the exact correct text, so every grep-shaped
+#      check, including the receipt this entry replaces, reports the fix present.
+# (m4) THE SEAM UNSETS THE WRONG VARIABLE. Structurally a scrub, and it matches a regex looking for `unset`
+#      beside a GIT_-shaped name.
+# (b2) THE SEAM STRIPPED FROM THE `git -C` SUBJECT. Without it, B1 passing is consistent with a subject that
+#      never reaches a git write at all.
 sed_free_comment() { # prefix the unset line with '# ' by line surgery, never sed
   local src="$1" dst="$2"
   while IFS= read -r line; do
@@ -316,76 +353,61 @@ sed_free_comment() { # prefix the unset line with '# ' by line surgery, never se
     esac
   done < "$src" > "$dst"
 }
-sed_free_comment "$SEAM" "$WORK/m3/core/fixtures/lib/preamble.sh" || broken "m3 rewrite failed"
-cmp -s "$WORK/m3/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m3 did not apply"
-grep -q 'unset GIT_DIR' "$WORK/m3/core/fixtures/lib/preamble.sh" || broken "m3 removed the text instead of commenting it — the mutant's whole point is that the text is still THERE"
-read -r n3 repo3 bare3 name3 <<EOF
-$(drive "$WORK/m3" "$WORK/v_m3")
-EOF
-if ! victim_intact "$n3" "$repo3" "$bare3" "$name3"; then
-  ok "m3 scrub commented out (text still present): victim clobbered (index=$n3 repo=$repo3 bare=$bare3 name=$name3) — a text anchor cannot see this"
-else
-  fail "m3 scrub commented out and the victim survived (index=$n3 repo=$repo3 bare=$bare3 name=$name3). This fixture is keyed on the TEXT, not the behaviour."
-fi
-
-# (m4) THE SEAM UNSETS THE WRONG VARIABLE. Structurally a scrub, and it even
-# matches a regex looking for `unset` beside a GIT_-shaped name.
-mktree "$WORK/m4" || broken "copy failed"
-printf '# m4: scrubs a variable git does not use\nunset GIT_DIRECTORY_OF_NOTHING\n' > "$WORK/m4/core/fixtures/lib/preamble.sh"
-cmp -s "$WORK/m4/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m4 did not apply"
-read -r n4 repo4 bare4 name4 <<EOF
-$(drive "$WORK/m4" "$WORK/v_m4")
-EOF
-if ! victim_intact "$n4" "$repo4" "$bare4" "$name4"; then
-  ok "m4 wrong variable unset: victim clobbered (index=$n4 repo=$repo4 bare=$bare4 name=$name4) — the arm is keyed on GIT_DIR specifically"
-else
-  fail "m4 unset an unrelated variable and the victim survived (index=$n4 repo=$repo4 bare=$bare4 name=$name4)."
-fi
-
-# --- B. THE `git -C` FORM, WHICH THE FIRST GRAMMAR COULD NOT SPELL ----------
-# Every arm above drives $SUBJECT, whose init is the LITERAL `git init`. That is
-# one input SHAPE, and a battery of one shape agrees with itself: the validator's
-# population grammar was keyed on that same literal for as long as this fixture
-# has existed, so 27 fixture directories running `git -C "$X" init` or
-# `git -c k=v init` sat outside the population AND outside this battery, and both
-# read clean over them. This arm drives a member of that set.
-#
-# THE SUBJECT'S INIT IS IN ITS seed.sh, NOT ITS run.sh, WHICH IS THE POINT. The
-# seam goes in run.sh and reaches the seed by INHERITANCE; a fixture whose run.sh
-# touches no repository still clobbers through its seed, and only driving it says
-# so. Measured on this pair, whole-tree copies, fresh victim each: seam intact,
-# index 40 / bare false / sentinel intact at exit 0; seam stripped, index 2 and
-# core.bare TRUE, ALSO at exit 0 with no diagnostic.
-SUBJECT_C="setup-config-drift"
-if [ ! -f "$ROOT/core/fixtures/$SUBJECT_C/run.sh" ]; then
-  fail "B  driven fixture $SUBJECT_C is absent — the 'git -C' form has no subject in this battery"
-else
-  # B1. SEAM INTACT: the victim survives on all four channels.
-  mktree "$WORK/cship" || broken "copy failed"
-  read -r nc repoc barec namec <<EOF
-$(drive "$WORK/cship" "$WORK/v_cship" "$SUBJECT_C")
-EOF
-  if victim_intact "$nc" "$repoc" "$barec" "$namec"; then
-    ok "B1 $SUBJECT_C (git -C form, init in its seed.sh) with the seam: index 40, repo yes, bare not true, sentinel intact"
+mut_apply() { # <m1|m2|m3|m4|b2> -- every mutant is guarded by cmp -s
+  case "$1" in
+    m1) printf '# body removed by mutant m1\n' > "$TREE/core/fixtures/lib/preamble.sh"
+        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m1 did not apply — the mutated seam is byte-identical to the shipping one" ;;
+    m2) grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT/run.sh" > "$TREE/core/fixtures/$SUBJECT/run.sh" || broken "m2 rewrite failed"
+        chmod +x "$TREE/core/fixtures/$SUBJECT/run.sh"
+        cmp -s "$TREE/core/fixtures/$SUBJECT/run.sh" "$ROOT/core/fixtures/$SUBJECT/run.sh" && broken "m2 did not apply" ;;
+    m3) sed_free_comment "$SEAM" "$TREE/core/fixtures/lib/preamble.sh" || broken "m3 rewrite failed"
+        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m3 did not apply"
+        grep -q 'unset GIT_DIR' "$TREE/core/fixtures/lib/preamble.sh" || broken "m3 removed the text instead of commenting it — the mutant's whole point is that the text is still THERE" ;;
+    m4) printf '# m4: scrubs a variable git does not use\nunset GIT_DIRECTORY_OF_NOTHING\n' > "$TREE/core/fixtures/lib/preamble.sh"
+        cmp -s "$TREE/core/fixtures/lib/preamble.sh" "$SEAM" && broken "m4 did not apply" ;;
+    b2) grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT_C/run.sh" > "$TREE/core/fixtures/$SUBJECT_C/run.sh" || broken "B2 rewrite failed"
+        chmod +x "$TREE/core/fixtures/$SUBJECT_C/run.sh"
+        cmp -s "$TREE/core/fixtures/$SUBJECT_C/run.sh" "$ROOT/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 did not apply — the stripped run.sh is byte-identical to the shipping one"
+        grep -qE '^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh' "$TREE/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 left a seam-sourcing line behind; the mutant would prove nothing" ;;
+  esac
+}
+# The kill message of each mutant, and the deciding cell.
+mut_msg() { case "$1" in
+  m1) echo "m1 seam body removed: victim wrecked on A ($2) while the unarmed twin U stays intact — arm A can fail" ;;
+  m2) echo "m2 source line removed: victim wrecked on A ($2) while the unarmed twin U stays intact — the seam must be SOURCED, not merely present" ;;
+  m3) echo "m3 scrub commented out (text still present): victim wrecked on A ($2) while the unarmed twin U stays intact — a text anchor cannot see this" ;;
+  m4) echo "m4 wrong variable unset: victim wrecked on A ($2) while the unarmed twin U stays intact — the arm is keyed on GIT_DIR specifically" ;;
+  b2) echo "B2 $SUBJECT_C with the seam stripped: victim wrecked on B ($2) while the unarmed twin U stays intact — B1 is a measurement, not a subject that never runs" ;;
+esac; }
+for _m in m1 m2 m3 m4 b2; do
+  mut_apply "$_m"
+  _dc=A; [ "$_m" = b2 ] && _dc=B
+  eval "_sd=\$SV_$_dc"
+  if [ "$MX" = 1 ]; then
+    _trip=""
+    for _c in A B U; do
+      cell "$_c"; mx_only=$((mx_only + 1)); eval "_sc=\$SV_$_c"
+      mx_cell_row "$_m" "$_c" "$_sc" "$VERD" "$DET"
+      [ "$(mx_diverge "$_sc" "$VERD")" = yes ] && _trip="$_trip $_c"
+    done
+    mx_row "$_m" "${_trip# }"
   else
-    fail "B1 $SUBJECT_C with the seam intact still moved the victim (index=$nc repo=$repoc bare=$barec name=$namec). The seam does not reach an init the run.sh never makes."
+    cell "$_dc"; mx_pp=$((mx_pp + 1)); _dv="$VERD"; _dd="$DET"
+    cell U; mx_pp=$((mx_pp + 1)); _uv="$VERD"
+    if [ "$(mx_diverge "$_sd" "$_dv")" = yes ] && [ "$_uv" = INTACT ]; then
+      mutant_killed "$([ "$_sd" = INTACT ] && [ "$SV_U" = INTACT ] && echo 1)" "$_m" "$(mut_msg "$_m" "$_dd")"
+    else
+      fail "$_m did not decide on $_dc with U green: $_dc $_dv ($_dd), U $_uv. This fixture cannot distinguish a working seam from this mutation."
+    fi
   fi
-
-  # B2. SEAM STRIPPED: it must clobber. Without this half, B1 passing is
-  # consistent with a subject that never reaches a git write at all.
-  mktree "$WORK/cstrip" || broken "copy failed"
-  grep -v 'preamble\.sh' "$ROOT/core/fixtures/$SUBJECT_C/run.sh" > "$WORK/cstrip/core/fixtures/$SUBJECT_C/run.sh" || broken "B2 rewrite failed"
-  chmod +x "$WORK/cstrip/core/fixtures/$SUBJECT_C/run.sh"
-  cmp -s "$WORK/cstrip/core/fixtures/$SUBJECT_C/run.sh" "$ROOT/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 did not apply — the stripped run.sh is byte-identical to the shipping one"
-  grep -qE '^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh' "$WORK/cstrip/core/fixtures/$SUBJECT_C/run.sh" && broken "B2 left a seam-sourcing line behind; the mutant would prove nothing"
-  read -r ns repos bares names <<EOF
-$(drive "$WORK/cstrip" "$WORK/v_cstrip" "$SUBJECT_C")
-EOF
-  if ! victim_intact "$ns" "$repos" "$bares" "$names"; then
-    ok "B2 $SUBJECT_C with the seam stripped: victim wrecked (index=$ns repo=$repos bare=$bares name=$names) — B1 is a measurement, not a subject that never runs"
-  else
-    fail "B2 $SUBJECT_C with the seam stripped and the victim survived (index=$ns repo=$repos bare=$bares name=$names). B1 cannot tell a working seam from a fixture that reaches no git write."
-  fi
+  restore_tree
+done
+[ "$MX" = 1 ] && exit 0
+# CS-MX: a PLAIN run executes no matrix-only cell and exactly the per-push cells (3 shipped + 5 mutants x 2).
+if [ "$mx_only" = 0 ] && [ "$mx_pp" = 13 ]; then
+  ok "MX a plain run executed $mx_pp shipped/deciding/twin cells and 0 matrix-only cells"
+else
+  fail "MX a plain run executed $mx_pp per-push cells (want 13) and $mx_only matrix-only cells (want 0)"
 fi
 
 # --- W. THE VALIDATOR'S POPULATION GRAMMAR, driven against a probe tree ------

@@ -21,7 +21,25 @@
 # one's history. Asserting against real commits would make the fixture a snapshot
 # of whatever the log happens to contain, and it would rot on the next release.
 
+
+# MUTANT-MATRIX subject-compare decides=assertion-2,assertion-7b twins=assertion-5
+# MUTANT-MATRIX unanchored-fallback decides=assertion-7c twins=assertion-7a
+# MUTANT-MATRIX range-threshold decides=assertion-9,assertion-10 twins=assertion-8
+# MUTANT-MATRIX branch-base-threshold decides=assertion-13 twins=assertion-15
+# MUTANT-MATRIX pair-anchor decides=assertion-20 twins=assertion-2
+# MUTANT-MATRIX drop-dollar decides=assertion-22 twins=assertion-2
+# MUTANT-MATRIX m-no-removal decides=R1 twins=R2
+# MUTANT-MATRIX m-exempt-all decides=R4 twins=R2
+# MUTANT-MATRIX m-exempt-none decides=R3 twins=R2
+# MUTANT-MATRIX m-search-tip decides=R5 twins=R2
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/release-version-triple/run.sh --matrix
+
 set -uo pipefail
+
+# --matrix replays every mutant against every assertion and prints the grid; a plain run replays
+# each mutant on its deciding assertion and ONE named twin. The mode is printed either way.
+MODE=PUSH
+[ "${1:-}" = "--matrix" ] && MODE=FULL
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
@@ -55,7 +73,7 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=37
+EXPECTED_ASSERTIONS=39
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -81,8 +99,122 @@ commit() {
   git commit -q -m "$3" 2>/dev/null
 }
 
+# drive_src <validator-file> <outfile> [args...] -> the validator's own exit status, output in <outfile>.
+# SOURCES the file in a subshell and calls the SAME functions its main body calls, in its order,
+# minus arm_e and arm_f: those two self-probes each build a scratch repository, the bulk of the
+# cost, and no drive through here asks about them. Assertion 1 executes the whole program, and
+# assertion 22 drives the F mutant that way, so both arms are still proved to fire. An `exit` in an
+# arm ends this subshell with the arm's status, exactly as it ends the script. A sourced copy that
+# defines no arm_ab (an older validator) is refused rather than scored as a pass.
+drive_src() {
+  local v="$1" out="$2"; shift 2
+  (
+    # shellcheck disable=SC1090
+    . "$v" || exit 97
+    command -v arm_ab >/dev/null 2>&1 || exit 98
+    rv_init "$@"; arm_c_range; arm_c; arm_d; arm_ab; rv_report
+  ) >"$out" 2>&1
+}
+
+# --- THE CHECK REGISTRY AND THE MUTANT x ASSERTION MATRIX -----------------------------------
+# reg <name> <kind> <want-exit> <pattern|-|!pattern> <validator args...> snapshots the repository
+# the assertion just read (cwd) and records what it demands of the validator, so any validator
+# file -- the shipped one or a mutant -- can be replayed against that same input later. kind: src
+# (sourced drive, arms E/F skipped), exec (the whole program executed), pair (assertion 20's
+# grammar binding; no repository). A pattern beginning `!` must NOT appear in the output.
+# `bash core/fixtures/release-version-triple/run.sh --matrix` (from the repo root; an argument, so
+# no env switch that hermetic-run's env -i could drop) replays EVERY mutant against EVERY check and prints
+# one `MATRIX <mutant> <check> dead|green` line per cell; per push each mutant is replayed on its
+# deciding input and one twin only (see the MUTANT-MATRIX header).
+SNAP="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+SNAP="$(cd "$SNAP" && pwd)"
+trap 'rm -rf "$WORK" "$SNAP"' EXIT
+CK_N=0; CK_NAME=(); CK_KIND=(); CK_WANT=(); CK_PAT=(); CK_ARGS=(); CK_DIR=()
+MX_N=0; MX_NAME=(); MX_FILE=(); MX_CELLS=0; TWIN_EVALS=0
+reg() {
+  local n="$CK_N"
+  CK_NAME[$n]="$1"; CK_KIND[$n]="$2"; CK_WANT[$n]="$3"; CK_PAT[$n]="$4"; shift 4
+  CK_ARGS[$n]="$*"; CK_DIR[$n]="$SNAP/$n"
+  mkdir -p "$SNAP/$n" || exit 2
+  if [ "${CK_KIND[$n]}" != pair ]; then cp -R "$PWD/." "$SNAP/$n/" || exit 2; fi
+  CK_N=$((n+1))
+}
+regmut() { MX_NAME[$MX_N]="$1"; MX_FILE[$MX_N]="$2"; MX_N=$((MX_N+1)); }
+ck_index() {
+  local j=0
+  while [ "$j" -lt "$CK_N" ]; do
+    if [ "${CK_NAME[$j]}" = "$1" ]; then echo "$j"; return 0; fi
+    j=$((j+1))
+  done
+  return 1
+}
+eval_check() { # <check index> <validator file> -> 0 when the check holds under that file
+  local i="$1" v="$2" st pat out="$SNAP/eval.out"
+  case "${CK_KIND[$i]}" in
+    pair) pair_ok "$ENGINE" "$v"; return $? ;;
+    src)  ( cd "${CK_DIR[$i]}" && drive_src "$v" "$out" ${CK_ARGS[$i]} ); st=$? ;;
+    exec) ( cd "${CK_DIR[$i]}" && bash "$v" ${CK_ARGS[$i]} >"$out" 2>&1 ); st=$? ;;
+    *) return 2 ;;
+  esac
+  [ "$st" = "${CK_WANT[$i]}" ] || return 1
+  pat="${CK_PAT[$i]}"
+  case "$pat" in
+    -)   return 0 ;;
+    '!'*) if grep -q -- "${pat#!}" "$out"; then return 1; fi; return 0 ;;
+    *)   grep -q -- "$pat" "$out" ;;
+  esac
+}
+twin_ok() { # <validator file> <check name> -> 0 when that check still holds under it
+  local i
+  i="$(ck_index "$2")" || { echo "FIXTURE ERROR: no registered check named $2" >&2; exit 2; }
+  TWIN_EVALS=$((TWIN_EVALS+1))
+  eval_check "$i" "$1"
+}
+matrix_run() {
+  local r i f nm dead line hm dec tw d t rowi mxfail=0
+  local rows_n=$((MX_N+1))
+  DEAD=()
+  r=0
+  while [ "$r" -lt "$rows_n" ]; do
+    if [ "$r" = 0 ]; then nm=ORIG; f="$VALIDATOR"; else nm="${MX_NAME[$((r-1))]}"; f="${MX_FILE[$((r-1))]}"; fi
+    dead=""; i=0
+    while [ "$i" -lt "$CK_N" ]; do
+      MX_CELLS=$((MX_CELLS+1))
+      if eval_check "$i" "$f"; then echo "MATRIX $nm ${CK_NAME[$i]} green"
+      else echo "MATRIX $nm ${CK_NAME[$i]} kill"; dead="$dead ${CK_NAME[$i]}"; fi
+      i=$((i+1))
+    done
+    DEAD[$r]="$dead"
+    echo "MATRIX-KILLS $nm by:${dead:- (none)}"
+    r=$((r+1))
+  done
+  [ -z "${DEAD[0]}" ] || { echo "MATRIX-FAIL the unmutated control (ORIG) has dead checks:${DEAD[0]}"; mxfail=1; }
+  rowi=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    set -- $line
+    [ "$#" -ge 5 ] || continue
+    hm="$3"; dec="${4#decides=}"; tw="${5#twins=}"
+    r=0; i=-1
+    while [ "$r" -lt "$MX_N" ]; do [ "${MX_NAME[$r]}" = "$hm" ] && i=$((r+1)); r=$((r+1)); done
+    if [ "$i" -lt 0 ]; then echo "MATRIX-FAIL header names mutant $hm, which the fixture never built"; mxfail=1; continue; fi
+    rowi=$((rowi+1))
+    for d in $(echo "$dec" | tr ',' ' '); do
+      case " ${DEAD[$i]} " in *" $d "*) ;; *) echo "MATRIX-FAIL $hm: deciding check $d is GREEN, the mutant is not dead by it"; mxfail=1 ;; esac
+    done
+    for t in $(echo "$tw" | tr ',' ' '); do
+      case " ${DEAD[$i]} " in *" $t "*) echo "MATRIX-FAIL $hm: twin $t is DEAD, a twin must stay green"; mxfail=1 ;; esac
+    done
+  done <<EOF_HDR
+$(grep '^# MUTANT-MATRIX [^ ]' "$HERE/run.sh")
+EOF_HDR
+  [ "$rowi" = "$MX_N" ] || { echo "MATRIX-FAIL the header names $rowi mutants, the fixture built $MX_N"; mxfail=1; }
+  if [ "$mxfail" = 0 ]; then echo "MATRIX-OK $MX_N mutants x $CK_N checks, every decides dead and every twin green"; fi
+  return "$mxfail"
+}
+
 run() { # run <rev-or-range-flag> <value>
-  bash "$VALIDATOR" "$1" "$2" >"$WORK/out.txt" 2>&1
+  drive_src "$VALIDATOR" "$WORK/out.txt" "$1" "$2"
   echo "$?"
 }
 
@@ -90,12 +222,17 @@ echo "release-version-triple"
 
 # --- 1. All three agreeing passes ---------------------------------------------
 commit 0.1.0 0.1.0 'feat(v0.1.0): the first one'
-status="$(run --commit HEAD)"
-if [ "$status" = "0" ]; then
-  ok "subject, VERSION and CHANGELOG all agreeing passes"
+# The ONE full-program drive of a passing input: the whole validator EXECUTED, so arms E and F run
+# their probes and the summary names both as fired. Every other drive goes through drive_src.
+bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+if [ "$status" = "0" ] \
+   && grep -q 'no committed conflict markers (probe fired both ways)' "$WORK/out.txt" \
+   && grep -q 'no misspelled not-discharged citation (probe fired both ways)' "$WORK/out.txt"; then
+  ok "subject, VERSION and CHANGELOG all agreeing passes, with arms E and F evaluated end to end"
 else
   bad "an agreeing commit failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-1 exec 0 'no misspelled not-discharged citation (probe fired both ways)' --commit HEAD
 
 # --- 2. THE REAL DEFECT: subject ahead of VERSION ------------------------------
 # v0.124.1 exactly: the subject announces a version the tree does not carry.
@@ -105,6 +242,17 @@ if [ "$status" = "1" ] && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$WO
   ok "a subject naming a version VERSION does not carry fails, and both values are named"
 else
   bad "the real defect was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg assertion-2 src 1 'subject says v0.1.1, VERSION says 0.1.0' --commit HEAD
+# The ONE executed run of a FAILING input. Every other failing drive is sourced (drive_src), which
+# bypasses the BASH_SOURCE main guard; this one executes the program, so a guard that never calls
+# rv_main would exit 0 and print nothing here and this arm would go red.
+bash "$VALIDATOR" --commit HEAD >"$WORK/exec-fail.txt" 2>&1; exec_fail_status=$?
+if [ "$exec_fail_status" = "1" ] && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$WORK/exec-fail.txt"; then
+  ok "EXECUTED (not sourced) on a failing input the validator exits 1 and names both versions, so the main guard is wired"
+else
+  bad "the executed validator did not fail assertion 2's input -- exit $exec_fail_status; the BASH_SOURCE main guard may not call rv_main"
+  sed 's/^/        /' "$WORK/exec-fail.txt"
 fi
 
 # --- 3. VERSION ahead of the CHANGELOG ----------------------------------------
@@ -116,6 +264,7 @@ if [ "$status" = "1" ] && grep -q "CHANGELOG's top heading says 0.1.0" "$WORK/ou
 else
   bad "a stale CHANGELOG heading was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-3 src 1 "CHANGELOG's top heading says 0.1.0" --commit HEAD
 
 # --- 4. A CHANGELOG with no heading at all fails -------------------------------
 # Distinct from a stale heading: absence must not read as agreement.
@@ -128,6 +277,7 @@ if [ "$status" = "1" ] && grep -q "no '## \[X.Y.Z\]' heading" "$WORK/out.txt"; t
 else
   bad "a missing heading did not fail -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-4 src 1 "no '## \[X.Y.Z\]' heading" --commit HEAD
 
 # --- 5. A subject with NO version token is not a failure -----------------------
 # Measured on the real repo: 14 of the last 30 bumps predate the convention. A
@@ -141,6 +291,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a tokenless subject failed -- the rejected predicate came back"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-5 src 0 - --commit HEAD
 
 # --- 6. MERGES ARE SKIPPED OVER A RANGE ----------------------------------------
 # A merge's VERSION differs from its first parent by construction and its subject
@@ -159,6 +310,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a merge fired -- the check would block every merge to main"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-6a src 0 - --range HEAD~1..HEAD
 # And the commit the merge BROUGHT IN is still checked on its own, or the skip is
 # a hole rather than a scope.
 git checkout -q -b side2
@@ -171,6 +323,7 @@ if [ "$status" = "1" ]; then
 else
   bad "  a bad commit hid behind a merge -- the skip is a hole"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-6b src 1 - --range HEAD~2..HEAD
 
 # --- 7. THE MUTATION TEST — prove assertion 2's red is predicate A's -----------
 # Neuter the subject comparison on a COPY and demand assertion 2's input go green.
@@ -182,7 +335,7 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
   exit 2
 fi
 commit 0.7.0 0.7.0 'fix(v0.7.1): subject ahead again'
-bash "$MUTANT" --commit HEAD >"$WORK/mut.txt" 2>&1
+drive_src "$MUTANT" "$WORK/mut.txt" --commit HEAD
 mutant_status=$?
 if [ "$mutant_status" = "0" ]; then
   ok "MUTATION: disabling the subject comparison makes assertion 2's input go green"
@@ -190,6 +343,7 @@ else
   bad "MUTATION: assertion 2's input still fails (exit $mutant_status) without predicate A"
   sed 's/^/        /' "$WORK/mut.txt"
 fi
+regmut subject-compare "$MUTANT"
 
 # --- 7a-7d. THE BARE LEADING FORM IS A CLAIM ------------------------------------
 # Release subjects in this repo read `0.754.0 — ...`, with no `v`. Under a v-only
@@ -202,6 +356,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a bare agreeing subject failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-7a src 0 - --commit HEAD
 
 commit 0.9.0 0.9.0 '0.9.1 — ahead'
 status="$(run --commit HEAD)"
@@ -210,6 +365,7 @@ if [ "$status" = "1" ] && grep -q 'subject says v0.9.1, VERSION says 0.9.0' "$WO
 else
   bad "a bare leading version ahead of VERSION was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-7b src 1 'subject says v0.9.1, VERSION says 0.9.0' --commit HEAD
 
 # NEAR-MISS: the same token, mid-subject. A bare version there is a MENTION, not the
 # commit's claim about itself, and the fallback is anchored at the start for that reason.
@@ -221,6 +377,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a mid-subject bare version was read as a claim -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-7c src 0 - --commit "$mid_sha"
 
 # MUTATION: drop the fallback's `^` and demand the near-miss go red. Without this the
 # near-miss could pass because the fallback never ran at all.
@@ -238,7 +395,7 @@ if cmp -s "$VALIDATOR" "$MUT_A"; then
   echo "FIXTURE ERROR: the unanchoring mutation matched nothing" >&2
   exit 2
 fi
-bash "$MUT_A" --commit "$mid_sha" >"$WORK/mut-a.txt" 2>&1
+drive_src "$MUT_A" "$WORK/mut-a.txt" --commit "$mid_sha"
 mut_a_status=$?
 if [ "$mut_a_status" = "1" ] && grep -q 'subject says v0.9.1, VERSION says 0.9.0' "$WORK/mut-a.txt"; then
   ok "MUTATION: an unanchored fallback reads the mid-subject mention as a claim (the ^ is load-bearing)"
@@ -246,6 +403,7 @@ else
   bad "MUTATION: the near-miss still passes (exit $mut_a_status) with the fallback unanchored"
   sed 's/^/        /' "$WORK/mut-a.txt"
 fi
+regmut unanchored-fallback "$MUT_A"
 
 # --- THE RANGE ARMS ------------------------------------------------------------
 #
@@ -296,6 +454,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a single-release range failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-8 src 0 - --range "$base_sha..$one_sha"
 
 # --- 9. Two releases in a range fail, and both are named -----------------------
 release 0.3.0 'feat(v0.3.0): a second release on the same branch'
@@ -308,6 +467,7 @@ if [ "$status" = "1" ] \
 else
   bad "a two-release range was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-9 src 1 'adds 2 release headings' --range "$base_sha..$two_sha"
 
 # --- 10. THE SQUASH ITSELF: one commit, two releases, triple in full agreement --
 # This is the load-bearing assertion. The commit's subject, VERSION and top
@@ -328,6 +488,7 @@ if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; the
 else
   bad "the squash shape was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-10 src 1 'adds 2 release headings' --commit "$squash_sha"
 
 # --- 11. CONTROL: an unmutated COPY still fails on assertion 10's input ---------
 # Assertion 12 flips 10's input to green by editing a copy. That flip only means
@@ -335,7 +496,7 @@ fi
 # goes red -- otherwise a copy that cannot execute would score as a kill.
 COPY="$WORK/copy.sh"
 cp "$VALIDATOR" "$COPY" || exit 2
-bash "$COPY" --commit "$squash_sha" >"$WORK/copy.txt" 2>&1
+drive_src "$COPY" "$WORK/copy.txt" --commit "$squash_sha"
 copy_status=$?
 if [ "$copy_status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/copy.txt"; then
   ok "CONTROL: an unmutated copy of the validator still fails on the same input"
@@ -352,7 +513,7 @@ if cmp -s "$VALIDATOR" "$MUT_C"; then
   echo "  update the sed pattern in assertion 12 to match the real comparison" >&2
   exit 2
 fi
-bash "$MUT_C" --commit "$squash_sha" >"$WORK/mut2.txt" 2>&1
+drive_src "$MUT_C" "$WORK/mut2.txt" --commit "$squash_sha"
 mut_c_status=$?
 if [ "$mut_c_status" = "0" ]; then
   ok "MUTATION: raising the range arm's threshold makes assertion 10's input go green"
@@ -360,6 +521,7 @@ else
   bad "MUTATION: assertion 10's input still fails (exit $mut_c_status) without the range arm"
   sed 's/^/        /' "$WORK/mut2.txt"
 fi
+regmut range-threshold "$MUT_C"
 
 # --- THE BRANCH-BASE ARM -------------------------------------------------------
 # The PRECONDITION of the squash above: commits sitting on local main and not on
@@ -379,7 +541,7 @@ ahead_main="$(git rev-parse HEAD)"
 git checkout -q -b release/0.2.0
 release 0.2.0 'feat(v0.2.0): cut from a main that was ahead'
 
-run0() { bash "$VALIDATOR" >"$WORK/out.txt" 2>&1; echo "$?"; }
+run0() { drive_src "$VALIDATOR" "$WORK/out.txt"; echo "$?"; }
 
 # --- 13. A branch cut from an ahead main fails ---------------------------------
 # Note the range arm stays quiet here: only 0.2.0 is added past origin/main. The
@@ -390,6 +552,7 @@ if [ "$status" = "1" ] && grep -q 'carries 1 commit(s) that are on local main an
 else
   bad "the ahead-main precondition was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-13 src 1 'carries 1 commit(s) that are on local main and not on origin/main'
 
 # --- 14. MUTATION: neuter the branch-base arm ----------------------------------
 MUT_D="$WORK/mutant-base.sh"
@@ -399,7 +562,7 @@ if cmp -s "$VALIDATOR" "$MUT_D"; then
   echo "  update the sed pattern in assertion 14 to match the real comparison" >&2
   exit 2
 fi
-bash "$MUT_D" >"$WORK/mut3.txt" 2>&1
+drive_src "$MUT_D" "$WORK/mut3.txt"
 mut_d_status=$?
 if [ "$mut_d_status" = "0" ]; then
   ok "MUTATION: raising the branch-base arm's threshold makes assertion 13's input go green"
@@ -407,6 +570,7 @@ else
   bad "MUTATION: assertion 13's input still fails (exit $mut_d_status) without the branch-base arm"
   sed 's/^/        /' "$WORK/mut3.txt"
 fi
+regmut branch-base-threshold "$MUT_D"
 
 # --- 15. CONTROL: caught-up origin/main goes silent ----------------------------
 # Keyed on the INHERITANCE, not on merely standing on a branch. Same branch, same
@@ -418,6 +582,7 @@ if [ "$status" = "0" ]; then
 else
   bad "a clean branch failed -- the arm fires on being on a branch at all"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-15 src 0 -
 
 # --- 16. The remedy is not indicted --------------------------------------------
 # Pushing main is HOW unpushed main commits reach origin. An arm that fires on the
@@ -432,6 +597,7 @@ else
   bad "the arm fired on main, or reported an unevaluated arm as green -- exit $status"
   sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-16 src 0 'branch-base arm n/a on main'
 
 # --- 17. An arm that CANNOT be evaluated announces itself ----------------------
 # A quiet skip reads exactly like a pass. With no origin/main there is nothing to
@@ -446,6 +612,7 @@ if [ "$status" = "0" ] \
 else
   bad "an unevaluated arm passed silently -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-17 src 0 'BRANCH-BASE ARM NOT EVALUATED'
 
 # --- 18. An EMPTY range falls back to HEAD, and the verdict names the substitution
 # With no commits of its own, a branch's HEAD is origin/main's tip -- somebody else's
@@ -461,6 +628,7 @@ else
   bad "an empty range reported a pass without naming its substituted subject -- exit $status"
   sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-18 src 0 'range origin/main..HEAD was EMPTY'
 
 # --- 19. CONTROL: the note is not unconditional --------------------------------
 # On main the fallback IS the intended subject, and `branch-base arm n/a on main`
@@ -474,6 +642,7 @@ else
   bad "the empty-range note fired on main, where the fallback is the intended subject -- exit $status"
   sed 's/^/        /' "$WORK/out.txt"
 fi
+reg assertion-19 src 0 '!was EMPTY'
 
 # --- 20/21. ARM F'S CANONICAL GRAMMAR IS THE ENGINE'S, BYTE FOR BYTE ------------
 # The consumer engine's `named_cited_filter` strips a citation line only in its exact
@@ -497,6 +666,7 @@ elif pair_ok "$ENGINE" "$VALIDATOR"; then
 else
   bad "the citation grammar has forked: engine {$(canon_of "$ENGINE" | tr '\n' ' ')} validator {$(canon_of "$VALIDATOR" | tr '\n' ' ')}"
 fi
+reg assertion-20 pair 0 -
 MUT_P="$WORK/pair-mutant.sh"
 sed 's|/^Not-discharged: PC-S\[0-9\]+(-\[A-Za-z0-9_\.-\]+)\*\$/|/^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$|' "$VALIDATOR" > "$MUT_P" || exit 2
 if cmp -s "$VALIDATOR" "$MUT_P"; then
@@ -506,6 +676,7 @@ elif pair_ok "$ENGINE" "$MUT_P"; then
 else
   ok "MUTATION: editing one side of the pair (the validator's closing anchor) breaks the binding"
 fi
+regmut pair-anchor "$MUT_P"
 
 # --- 22. ARM F'S OWN PROBE REFUSES A CANONICAL REGEX MISSING ITS \$ ----------------
 # `Not-discharged: PC-S1-TRAIL (rejected, see BL-9)` is an ORDINARY mention to the engine.
@@ -524,6 +695,8 @@ else
     bad "the drop-\$ mutant was not refused by arm F's probe -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
   fi
 fi
+reg assertion-22 exec 0 'no misspelled not-discharged citation (probe fired both ways)' --commit HEAD
+regmut drop-dollar "$MUT_D"
 
 # --- R1-R5. ARM C IN BOTH DIRECTIONS: REMOVED HEADINGS, RESTORED HEADINGS --------
 #
@@ -579,7 +752,7 @@ snap 0.4.0 '0.4.0 — invents a below-top heading' 0.4.0 0.3.0 0.2.5 0.1.0
 r5_sha="$(git rev-parse HEAD)"
 
 drive() { # drive <validator> <sha> <outfile> -> exit status
-  bash "$1" --commit "$2" >"$3" 2>&1
+  drive_src "$1" "$3" --commit "$2"
   echo "$?"
 }
 
@@ -590,6 +763,7 @@ if [ "$status" = "1" ] && grep -q 'removes release heading(s) present at its bas
 else
   bad "R1: an in-place heading replacement was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg R1 src 1 'removes release heading(s) present at its base: 0.2.0' --commit "$r1_sha"
 
 status="$(drive "$VALIDATOR" "$r2_sha" "$WORK/out.txt")"
 if [ "$status" = "0" ] && grep -q 'no heading removed' "$WORK/out.txt"; then
@@ -597,6 +771,7 @@ if [ "$status" = "0" ] && grep -q 'no heading removed' "$WORK/out.txt"; then
 else
   bad "R2: a normal release failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg R2 src 0 'no heading removed' --commit "$r2_sha"
 
 status="$(drive "$VALIDATOR" "$r3_sha" "$WORK/out.txt")"
 if [ "$status" = "0" ] && grep -q 'NOTE  restored historical heading(s), not counted: 0.2.0' "$WORK/out.txt"; then
@@ -604,6 +779,7 @@ if [ "$status" = "0" ] && grep -q 'NOTE  restored historical heading(s), not cou
 else
   bad "R3: a restored heading was counted as a release -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg R3 src 0 'NOTE  restored historical heading(s), not counted: 0.2.0' --commit "$r3_sha"
 
 status="$(drive "$VALIDATOR" "$r4_sha" "$WORK/out.txt")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; then
@@ -611,6 +787,7 @@ if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; the
 else
   bad "R4: two new releases passed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg R4 src 1 'adds 2 release headings' --commit "$r4_sha"
 
 status="$(drive "$VALIDATOR" "$r5_sha" "$WORK/out.txt")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt" && grep -qF '0.2.5' "$WORK/out.txt"; then
@@ -618,6 +795,7 @@ if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt" && g
 else
   bad "R5: an invented below-top heading was exempted -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
+reg R5 src 1 '0.2.5' --commit "$r5_sha"
 
 # --- R-control: an UNMUTATED COPY reproduces both directions --------------------
 # Positive conjuncts on both sides: the removal FAIL on R1's input AND the NOTE on
@@ -663,6 +841,7 @@ if [ "$status" = "0" ]; then
 else
   bad "MUTATION m-no-removal: R1's input still fails (exit $status) without the removal check"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
+regmut m-no-removal "$WORK/m-no-removal.sh"
 
 mkmut "$WORK/m-exempt-all.sh" "$EXEMPT_IF" 'if true; then'
 status="$(drive "$WORK/m-exempt-all.sh" "$r4_sha" "$WORK/mut-r.txt")"
@@ -671,6 +850,7 @@ if [ "$status" = "0" ]; then
 else
   bad "MUTATION m-exempt-all: R4's input still fails (exit $status) with every heading exempt"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
+regmut m-exempt-all "$WORK/m-exempt-all.sh"
 
 mkmut "$WORK/m-exempt-none.sh" "$EXEMPT_IF" 'if false; then'
 status="$(drive "$WORK/m-exempt-none.sh" "$r3_sha" "$WORK/mut-r.txt")"
@@ -679,6 +859,7 @@ if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/mut-r.txt"; t
 else
   bad "MUTATION m-exempt-none: R3's input still passes (exit $status) with no exemption"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
+regmut m-exempt-none "$WORK/m-exempt-none.sh"
 
 mkmut "$WORK/m-search-tip.sh" '"$range_base" -- CHANGELOG.md' '"$range_tip" -- CHANGELOG.md'
 status="$(drive "$WORK/m-search-tip.sh" "$r5_sha" "$WORK/mut-r.txt")"
@@ -686,6 +867,42 @@ if [ "$status" = "0" ] && grep -q 'not counted: 0.2.5' "$WORK/mut-r.txt"; then
   ok "MUTATION m-search-tip: searching from the tip exempts R5's invented heading (the base is load-bearing)"
 else
   bad "MUTATION m-search-tip: R5's input still fails (exit $status) with the search from the tip"; sed 's/^/        /' "$WORK/mut-r.txt"
+fi
+regmut m-search-tip "$WORK/m-search-tip.sh"
+
+# --- PER-PUSH TWINS, OR THE FULL MATRIX --------------------------------------------------------
+# The assertions above drive each mutant on its deciding input. Each mutant's one named TWIN (the
+# --matrix every mutant is replayed against every check instead and the grid is printed. The
+# mode (FULL or PUSH) is printed either way, so a "matrix" log that is really the push run is visible.
+echo "release-version-triple mode: $MODE"
+if [ "$MODE" = FULL ]; then
+  mx_rc=0; matrix_run || mx_rc=$?
+  if [ "$mx_rc" = 0 ] && [ "$MX_CELLS" = $(( (MX_N + 1) * CK_N )) ]; then
+    ok "MATRIX (--matrix): every mutant replayed against every assertion ($MX_CELLS cells), every decides caught, every twin green"
+  else
+    bad "MATRIX (--matrix): the grid disagrees with the MUTANT-MATRIX header (rc $mx_rc, $MX_CELLS cells)"
+  fi
+else
+  tw_bad=""; n_hdr=0
+  while IFS= read -r hdr; do
+    [ -n "$hdr" ] || continue
+    set -- $hdr
+    [ "$#" -ge 5 ] || continue
+    n_hdr=$((n_hdr+1))
+    hm="$3"; htw="${5#twins=}"; hf=""; hj=0
+    while [ "$hj" -lt "$MX_N" ]; do [ "${MX_NAME[$hj]}" = "$hm" ] && hf="${MX_FILE[$hj]}"; hj=$((hj+1)); done
+    [ -n "$hf" ] || { tw_bad="$tw_bad [$hm never built]"; continue; }
+    for ht in $(echo "$htw" | tr ',' ' '); do
+      twin_ok "$hf" "$ht" || tw_bad="$tw_bad [twin $ht red under $hm]"
+    done
+  done <<EOF_TW
+$(grep '^# MUTANT-MATRIX [^ ]' "$HERE/run.sh")
+EOF_TW
+  if [ -z "$tw_bad" ] && [ "$MX_CELLS" = 0 ] && [ "$n_hdr" = "$MX_N" ] && [ "$TWIN_EVALS" -ge "$n_hdr" ]; then
+    ok "PUSH: no matrix-only cell ran ($MX_CELLS), and each of the $n_hdr mutants was replayed on its one named twin ($TWIN_EVALS)"
+  else
+    bad "PUSH: matrix cells ran in a plain run ($MX_CELLS), or a twin went red, or the header and the fixture disagree:$tw_bad (header $n_hdr, built $MX_N)"
+  fi
 fi
 
 echo ""

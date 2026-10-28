@@ -65,18 +65,31 @@ mut_new "$REF" && mut_sub "$REF" "$CALL" '&& false; then' && mutated "$REF" \
   || broken "the reference copy could not be built: the merge call \`$CALL\` is not on exactly one line of apply.sh"
 
 # --- worlds, built in a bounded pool and reaped before any is read -----------------------------
+# ONE base world (dist at the base commit + consumer at base) serves every variant but d8add; build()
+# copies it and applies only the variant's theirs / consumer edits. The only byte that differs for
+# d8add is qa.md, which is absent from ITS base commit, so d8add builds its own.
+BASE_W="$WORK/base"
+build_base "$BASE_W" clean >"$WORK/out/build.base.log" 2>&1 || broken "the shared base world could not be built (see $WORK/out/build.base.log)"
 FALLBACKS="b1 b1b b2 b2twin d2 conflict d8del d8add d7 spanD spanQ delIM delDV delDVb cadd qd"
 RESOLVES="dol ml com"
-for v in clean cwd mode fin fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES; do
-  case "$v" in cwd|mode) vv=clean ;; fin) vv=d6a ;; *) vv="$v" ;; esac
+# `fin` is NOT built: its first run is the identical drive of the identical world as d6a (neither has a
+# report rendered), so it is a copy of the finished d6a world (below), not a second build plus a second
+# identical drive. `mode` stays its own world: clean's run 1 had a report rendered first, mode's did not.
+for v in clean cwd mode fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES; do
+  case "$v" in cwd|mode) vv=clean ;; *) vv="$v" ;; esac
   bspawn "$WORK/tip-$v" "$vv"
 done
-for v in clean d6a d6b $FALLBACKS; do bspawn "$WORK/ref-$v" "$v"; done
 breap
+# A reference world is the SAME seeded state as its tip world: build() is a function of the variant
+# alone, and the engine under test enters only at the drive. So each reference world is a copy of the
+# tip world, taken after the build and before any drive (cp -Rp keeps mtimes, which untouched() reads).
+for v in clean d6a d6b $FALLBACKS; do
+  cp -Rp "$WORK/tip-$v" "$WORK/ref-$v" || broken "could not copy tip-$v to ref-$v"
+done
 # The world count is derived from the two lists above, so a list that lost a member cannot shrink
-# the expectation with it: 29 tip worlds (10 named + 16 fallbacks + 3 resolves), 19 reference.
+# the expectation with it: 28 built worlds (9 named + 16 fallbacks + 3 resolves); the 19 reference worlds are copies of tip worlds.
 set -- $FALLBACKS; n_fb=$#; set -- $RESOLVES; n_rs=$#
-n_want=$(( (10 + n_fb + n_rs) + (3 + n_fb) ))
+n_want=$(( 9 + n_fb + n_rs ))
 [ "$BUILT_OK" -eq "$n_want" ] && [ "$n_fb" -gt 0 ] && [ "$n_rs" -gt 0 ] \
   || broken "$BUILT_OK worlds built, $n_want owed by the world lists"
 echo "$NAME: $BUILT_OK of $n_want worlds built before any drive"
@@ -87,9 +100,16 @@ grep -q 'reconcile-mechanical' "$WORK/tip-clean/cons/_bmad-output/ai-dlc-update/
 # --- phase 1 drives ----------------------------------------------------------------------------
 launch tip-clean "$REC" "$WORK/tip-clean"
 launch tip-cwd   "$REC" "$WORK/tip-cwd" /
-for v in mode fin fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES; do launch "tip-$v" "$REC" "$WORK/tip-$v"; done
+for v in mode fence spanFar blkLen qdctl d6a d6b $FALLBACKS $RESOLVES; do launch "tip-$v" "$REC" "$WORK/tip-$v"; done
 for v in clean d6a d6b $FALLBACKS; do launch "ref-$v" "$REF" "$WORK/ref-$v"; done
 wait; njobs=0
+
+# --- the fin world is a copy of the finished d6a world --------------------------------------------
+# Same world, same drive, no report rendered for either: the copy carries d6a's run-1 output under the
+# fin label and the tree that run left, which is what --finish below is driven over.
+cp -R "$WORK/tip-d6a" "$WORK/tip-fin" || broken "could not copy tip-d6a to tip-fin"
+for _e in out err rc; do cp "$WORK/out/tip-d6a.$_e" "$WORK/out/tip-fin.$_e" || broken "tip-d6a has no .$_e to carry"; done
+[ -f "$WORK/tip-fin/cons/.claude/$DV" ] || broken "the fin copy lacks the merged file"
 
 # --- phase 1b: the exec bit taken away after the merge, then a re-run (the shortcut must restore
 # it), and --finish over the d6a tree the ordinary run left with its stamp withheld ---------------

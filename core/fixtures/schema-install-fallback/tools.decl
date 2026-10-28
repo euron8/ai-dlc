@@ -30,3 +30,4 @@ uniq
 wc
 diff
 tee
+ln

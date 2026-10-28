@@ -37,6 +37,26 @@
 #
 # Usage: run.sh
 # Exit:  0 = every probe holds, 1 = one regressed, 2 = fixture broken.
+# THE SELF-PROBE IS NOT HOISTED. validate-backlog-size.sh runs its self-probe (two seeded ledgers, a
+# 3-entry and a 2-entry one, a handful of awk calls) before every corpus, in every seed below. A
+# seam that skipped it for most seeds would save about one awk-pair per seed and add a flag to a
+# shipped gate, and the probe is itself the subject of b13, d05, d06, ms and m-heading-only, which
+# need it to run in their own worlds. The unit costs seconds (22 seeds, one validator run each).
+# Each mutant is scored on one deciding arm per push, plus ONE named twin that must stay green on
+# that same output; the full mutant x arm matrix is MEASURED by the --matrix argv mode and is
+# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# replaces the exact-vector assertion that a mutant fails only its own assertion.
+# MUTANT-MATRIX b13 decides=b13 twins=mc
+# MUTANT-MATRIX d05 decides=d05 twins=mc
+# MUTANT-MATRIX d06 decides=d06 twins=mc
+# MUTANT-MATRIX m-heading-only decides=m-heading-only twins=mc
+# MUTANT-MATRIX ms decides=ms twins=mb
+# MUTANT-MATRIX mc decides=mc twins=mb
+# MUTANT-MATRIX mb decides=mb twins=mc
+# MUTANT-MATRIX mp-d04 decides=mp-d04 twins=mb
+# MUTANT-MATRIX mp-d03n decides=mp-d03n twins=mc
+# MUTANT-MATRIX m-loose decides=m-loose twins=mb
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-size-ceiling/run.sh --matrix
 set -u
 
 # CLEAR EVERY AMBIENT AI_DLC_* KEY BEFORE ANY PROBE RUNS, and I87 fails the push without it.
@@ -91,6 +111,56 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+MROWS=0
+ok()  { note "ok    $1"; }
+bad() { note "FAIL  $1"; rc=1; }
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+. "$DIR/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
+. "$DIR/../lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+# Flags are set ONLY in the passing branch of the unmutated arm a mutant guards.
+B_CTRL=0; B_D02=0; B_D03N=0; B_D04=0; B_D07=0; B_P01=0
+KC_OK=0; CC_OK=0
+# A mutant's DECIDING ARM, stored as files so every arm can be scored against every captured output:
+# <id>.want is "eq:N" or "ne:N" for the exit status, <id>.pats one text condition per line (a leading
+# ! means ABSENT). arm_trips returns 0 when the arm's whole predicate holds on a captured run.
+AR="$TMP/arms"; mkdir -p "$AR"
+MUT_IDS=""
+record_arm() { # record_arm <id> <want eq:N|ne:N> <rc> <out> <pattern>...
+  local id="$1" w="$2" r="$3" o="$4"; shift 4
+  printf '%s\n' "$w" > "$AR/$id.want"; printf '%s\n' "$r" > "$AR/$id.rc"
+  printf '%s\n' "$o" > "$AR/$id.out"; printf '%s\n' "$@" > "$AR/$id.pats"
+  MUT_IDS="$MUT_IDS $id"
+}
+arm_trips() { # arm_trips <arm-id> <captured-id>
+  local a="$1" c="$2" w r p
+  w="$(cat "$AR/$a.want")"; r="$(cat "$AR/$c.rc")"
+  case "$w" in eq:*) [ "$r" -eq "${w#eq:}" ] || return 1 ;; ne:*) [ "$r" -ne "${w#ne:}" ] || return 1 ;; esac
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      '!'*) if grep -qF -- "${p#\!}" "$AR/$c.out"; then return 1; fi ;;
+      *)    grep -qF -- "$p" "$AR/$c.out" || return 1 ;;
+    esac
+  done < "$AR/$a.pats"
+  return 0
+}
+twin_of() {
+  case "$1" in
+    b13|d05|d06|m-heading-only|mp-d03n) echo mc ;;
+    ms|mc|mp-d04|m-loose) echo mb ;;
+    mb) echo mc ;;
+  esac
+}
+# score <id> <flag> <message> -- the deciding arm on the mutant's own captured run.
+score() {
+  if arm_trips "$1" "$1"; then mutant_killed "$2" "$1" "$3"
+  else bad "$1 SURVIVED: its deciding arm did not trip -- rc=$(cat "$AR/$1.rc")"; printf '%s\n' "$(cat "$AR/$1.out")" | sed 's/^/      /' | head -3; fi
+}
 
 # BL_K IS 7 AND ARBITRARY. What matters is that the seed writes exactly BL_K entries and the
 # arm says BL_K.
@@ -142,6 +212,7 @@ bl_reported() { printf '%s\n' "$1" | sed -n 's|^OK: validate-backlog-size -- B1 
 count_check() { # count_check <name> <dir> <env> <want> [<extra-args>...]
   local n="$1" d="$2" e="$3" want="$4"; shift 4
   local out rc_v got
+  CC_OK=0
   out="$(run_v "$e" "$d" "$@")"; rc_v=$?
   if [ "$rc_v" -ne 0 ]; then
     note "FAIL  $n -- validator exited $rc_v on a tree that must pass"
@@ -156,11 +227,12 @@ count_check() { # count_check <name> <dir> <env> <want> [<extra-args>...]
     note "FAIL  $n -- the arm reports $got live entries; the seed wrote $want. Quiet at a slack ceiling is not evidence the predicate read the right file."
     rc=1; return
   fi
-  note "ok    $n -- quiet, and the arm counted exactly the $want entries the seed wrote"
+  note "ok    $n -- quiet, and the arm counted exactly the $want entries the seed wrote"; CC_OK=1
 }
 
 kill_check() { # kill_check <name> <dir> <env> <nfail> <substr>
   local n="$1" d="$2" e="$3" want="$4" pat="$5" out rc_v nfail
+  KC_OK=0
   out="$(run_v "$e" "$d")"; rc_v=$?
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
   if [ "$rc_v" -eq 0 ]; then note "FAIL  $n -- probe SURVIVED (validator exited 0)"; rc=1; return; fi
@@ -176,7 +248,7 @@ kill_check() { # kill_check <name> <dir> <env> <nfail> <substr>
     note "FAIL  $n -- $nfail FAIL lines, expected $want"
     printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -4; rc=1; return
   fi
-  note "ok    $n -- killed by its own assertion, and by exactly that many"
+  note "ok    $n -- fails on its own assertion, and by exactly that many"; KC_OK=1
 }
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/${VALIDATOR##*/}"
@@ -184,7 +256,7 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$REVERIFY")" && pwd)/${REVERIFY##*/}"
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
 if out="$(run_v "" "$TMP/control")" && [ -n "$out" ]; then
-  note "ok    control -- clean seed passes, harness is live"
+  note "ok    control -- clean seed passes, harness is live"; B_CTRL=1
 else
   note "FIXTURE BROKEN: the unmutated control did NOT pass. Every probe verdict below is meaningless."
   printf '%s\n' "$out" | sed 's/^/      /'
@@ -330,26 +402,14 @@ seed "$TMP/b13"
 b13_lib="$TMP/b13/core/skills/ai-dlc-update/reconcile/lib.sh"
 cp "$b13_lib" "$b13_lib.orig"
 # RE-ANCHORED when the shape rule became fence-aware: the branch is now an assignment
-# (`else if (… ) sh = "heading"`) inside a larger function, not a bare `return`. Same
-# location, same observable -- the heading branch stops matching.
+# (`else if (... ) sh = "heading"`) inside a larger function. Same location, same observable.
 sed 's|else if (l ~ /\^#{2,6}\[ \\t\]/) sh = "heading"|else if (0) sh = "heading"|' "$b13_lib.orig" > "$b13_lib"
 if cmp -s "$b13_lib" "$b13_lib.orig"; then
-  note "FAIL  b13 -- the sabotage was a NO-OP: lib.sh is byte-identical, so the green below would mean nothing"
-  rc=1
+  bad "b13 -- the sabotage was a NO-OP: lib.sh is byte-identical, so the verdict below would mean nothing"
 else
   b13_out="$(run_v "" "$TMP/b13")"; b13_rc=$?
-  if [ "$b13_rc" -ne 2 ]; then
-    note "FAIL  b13 -- a sabotaged predicate exited $b13_rc, not 2. The arm must refuse before reading the corpus, not report a count."
-    printf '%s\n' "$b13_out" | sed 's/^/      /' | head -4; rc=1
-  elif ! grep -qF "SELF-PROBE FAILED" <<<"$b13_out"; then
-    note "FAIL  b13 -- exited 2 but not on the self-probe's assertion"
-    printf '%s\n' "$b13_out" | sed 's/^/      /' | head -4; rc=1
-  elif grep -qF "OK: validate-backlog-size" <<<"$b13_out"; then
-    note "FAIL  b13 -- the arm reported a count anyway; the self-probe ran AFTER the corpus"
-    rc=1
-  else
-    note "ok    b13 -- a sabotaged predicate refuses with exit 2, before the corpus is read"
-  fi
+  record_arm b13 eq:2 "$b13_rc" "$b13_out" "SELF-PROBE FAILED" "!OK: validate-backlog-size"
+  score b13 "$B_CTRL" "b13 -- a sabotaged predicate refuses with exit 2, before the corpus is read"
 fi
 rm -f "$b13_lib.orig"
 
@@ -431,16 +491,11 @@ mutate() {
   if cmp -s "$1" "$1.orig"; then rm -f "$1.orig"; return 1; fi
   rm -f "$1.orig"; return 0
 }
-# selfprobe_check <name> <dir> -- the arm must refuse with exit 2 on its own self-probe.
-selfprobe_check() {
+# selfprobe_world <id> <dir> -- run the validator on a sabotaged tree and record the run.
+selfprobe_world() {
   local out rc_v
   out="$(run_v "" "$2")"; rc_v=$?
-  if [ "$rc_v" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$out" && ! grep -qF "OK: validate-backlog-size" <<<"$out"; then
-    note "ok    $1 -- refused with exit 2 on the self-probe, before the corpus was read"
-  else
-    note "FAIL  $1 -- wanted exit 2 and SELF-PROBE FAILED, got exit $rc_v"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1
-  fi
+  record_arm "$1" eq:2 "$rc_v" "$out" "SELF-PROBE FAILED" "!OK: validate-backlog-size"
 }
 
 # d01 -- ALLOW: zero entries, the marker last, no id anywhere. OK, and the count reads 0.
@@ -455,32 +510,32 @@ fi
 
 # d02 / d03 -- B1b: the marker last while a real entry is present, in each entry shape.
 seed "$TMP/d02"; de_ledger "$TMP/d02/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
-kill_check "d02 the empty marker beside a live '## BL-' entry fails B1b" "$TMP/d02" "" 1 "FAIL: B1b:"
+kill_check "d02 the empty marker beside a live '## BL-' entry fails B1b" "$TMP/d02" "" 1 "FAIL: B1b:"; B_D02=$KC_OK
 seed "$TMP/d03"; de_ledger "$TMP/d03/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
 kill_check "d03 the empty marker beside a live '- **BL-' entry fails B1b" "$TMP/d03" "" 1 "FAIL: B1b:"
 # d03n -- B1b's near-miss: a live entry with the marker QUOTED above it, not last, passes B1.
 seed "$TMP/d03n"; de_ledger "$TMP/d03n/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
-count_check "d03n a live entry below the marker is not B1b" "$TMP/d03n" "" 1
+count_check "d03n a live entry below the marker is not B1b" "$TMP/d03n" "" 1; B_D03N=$CC_OK
 
 # d04 -- zero entries with the marker quoted in the preamble but NOT last: undeclared, B1 fails.
 seed "$TMP/d04"; de_ledger "$TMP/d04/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
-kill_check "d04 a marker that is not the last non-blank line declares nothing" "$TMP/d04" "" 1 "parsed to ZERO entries"
+kill_check "d04 a marker that is not the last non-blank line declares nothing" "$TMP/d04" "" 1 "parsed to ZERO entries"; B_D04=$KC_OK
 
 # d07 -- clause (c): zero entries, the marker last, but a BL- id in the prose. Undeclared.
 seed "$TMP/d07"; de_ledger "$TMP/d07/docs/backlog.md" "BL-497 moved to the archive.\n\n"
-kill_check "d07 a BL- id anywhere keeps a zero parse undeclared" "$TMP/d07" "" 1 "parsed to ZERO entries"
+kill_check "d07 a BL- id anywhere keeps a zero parse undeclared" "$TMP/d07" "" 1 "parsed to ZERO entries"; B_D07=$KC_OK
 
 # d05 / d06 -- the boundary rule broken in the seed's lib.sh, one shape each, with a real entry of
 # that shape plus the marker: a parser that stopped seeing the entry must refuse on the self-probe,
 # not read the ledger as declared empty or as a zero.
 seed "$TMP/d05"; de_ledger "$TMP/d05/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
 case "$(mutate "$TMP/d05/core/skills/ai-dlc-update/reconcile/lib.sh" 's|else if (l ~ /\^#{2,6}\[ \\t\]/) sh = "heading"|else if (0) sh = "heading"|'; echo $?)" in
-  0) selfprobe_check "d05 heading shape off in lib.sh, a '## BL-' entry and the marker" "$TMP/d05" ;;
+  0) selfprobe_world d05 "$TMP/d05"; score d05 "$B_CTRL" "d05 heading shape off in lib.sh, a '## BL-' entry and the marker: refused with exit 2 on the self-probe, before the corpus" ;;
   *) note "FAIL  d05 -- the heading-shape mutation DID NOT APPLY"; rc=1 ;;
 esac
 seed "$TMP/d06"; de_ledger "$TMP/d06/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
 case "$(mutate "$TMP/d06/core/skills/ai-dlc-update/reconcile/lib.sh" 's|if (l ~ /\^- \\\*\\\*/)  *sh = "bullet"|if (0) sh = "bullet"|'; echo $?)" in
-  0) selfprobe_check "d06 bullet shape off in lib.sh, a '- **BL-' entry and the marker" "$TMP/d06" ;;
+  0) selfprobe_world d06 "$TMP/d06"; score d06 "$B_CTRL" "d06 bullet shape off in lib.sh, a '- **BL-' entry and the marker: refused with exit 2 on the self-probe, before the corpus" ;;
   *) note "FAIL  d06 -- the bullet-shape mutation DID NOT APPLY"; rc=1 ;;
 esac
 
@@ -490,18 +545,16 @@ esac
 seed "$TMP/mc"; de_ledger "$TMP/mc/docs/backlog.md" "BL-497 moved to the archive.\n\n"
 case "$(mutate "$TMP/mc/scripts/backlog-reverify.sh" 's@^  \[ "\$(raw_ids "\$LEDGER")" = 0 \] || return 1$@  :@'; echo $?)" in
   0) mc_out="$(run_v "" "$TMP/mc")"; mc_rc=$?
-     if [ "$mc_rc" -eq 0 ] && grep -qF ', declared empty (' <<<"$mc_out"; then
-       note "ok    mc -- KILLED: without clause (c) a zero parse carrying a BL- id passes as declared empty"
-     else note "FAIL  mc SURVIVED: clause (c) dropped and d07's ledger still exited $mc_rc"; rc=1; fi ;;
+     record_arm mc eq:0 "$mc_rc" "$mc_out" ', declared empty ('
+     score mc "$B_D07" "mc -- without clause (c) a zero parse carrying a BL- id passes as declared empty" ;;
   *) note "FAIL  mc -- the clause-(c) mutation DID NOT APPLY"; rc=1 ;;
 esac
 # mb -- B1b dropped: d02's ledger now passes.
 seed "$TMP/mb"; de_ledger "$TMP/mb/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
 case "$(mutate "$TMP/mb/scripts/validate-backlog-size.sh" 's@^bash "\$REVERIFY" --marker-last "\$LEDGER" >/dev/null 2>&1; ML=\$?$@ML=1@'; echo $?)" in
   0) mb_out="$(run_v "" "$TMP/mb")"; mb_rc=$?
-     if [ "$mb_rc" -eq 0 ] && [ "$(bl_reported "$mb_out")" = 1 ]; then
-       note "ok    mb -- KILLED: without B1b a live entry above the empty marker passes"
-     else note "FAIL  mb SURVIVED: B1b dropped and d02's ledger still exited $mb_rc"; rc=1; fi ;;
+     record_arm mb eq:0 "$mb_rc" "$mb_out" 'OK: validate-backlog-size -- B1 1/'
+     score mb "$B_D02" "mb -- without B1b a live entry above the empty marker passes" ;;
   *) note "FAIL  mb -- the B1b mutation DID NOT APPLY"; rc=1 ;;
 esac
 # ms -- the self-probe's bullet seed dropped: d06's bullet-blind parser is no longer refused on
@@ -516,9 +569,8 @@ case "$(mutate "$TMP/ms/core/skills/ai-dlc-update/reconcile/lib.sh" 's|if (l ~ /
 esac
 if [ "$ms_ok" -eq 1 ]; then
   ms_out="$(run_v "" "$TMP/ms")"; ms_rc=$?
-  if [ "$ms_rc" -ne 2 ] && ! grep -qF "SELF-PROBE FAILED" <<<"$ms_out"; then
-    note "ok    ms -- KILLED: with headings alone in the self-probe a bullet-blind parser reaches the corpus (exit $ms_rc)"
-  else note "FAIL  ms SURVIVED: the self-probe still refused a bullet-blind parser without its bullet seed"; rc=1; fi
+  record_arm ms ne:2 "$ms_rc" "$ms_out" "!SELF-PROBE FAILED"
+  score ms "$B_CTRL" "ms -- with headings alone in the self-probe a bullet-blind parser reaches the corpus (exit $ms_rc)"
 fi
 
 # mp -- THE POSITION RULE replaced by presence: the classifier's marker_last body swapped for a
@@ -533,17 +585,15 @@ else
   seed "$TMP/mp4"; de_ledger "$TMP/mp4/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
   case "$(mutate "$TMP/mp4/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
     0) mp4_out="$(run_v "" "$TMP/mp4")"; mp4_rc=$?
-       if [ "$mp4_rc" -eq 0 ] && grep -qF ', declared empty (' <<<"$mp4_out"; then
-         note "ok    mp/d04 -- KILLED: with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty"
-       else note "FAIL  mp/d04 SURVIVED: presence-keyed marker and d04's ledger still exited $mp4_rc"; rc=1; fi ;;
+       record_arm mp-d04 eq:0 "$mp4_rc" "$mp4_out" ', declared empty ('
+       score mp-d04 "$B_D04" "mp/d04 -- with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty" ;;
     *) note "FAIL  mp/d04 -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
   esac
   seed "$TMP/mp3"; de_ledger "$TMP/mp3/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
   case "$(mutate "$TMP/mp3/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
     0) mp3_out="$(run_v "" "$TMP/mp3")"; mp3_rc=$?
-       if [ "$mp3_rc" -eq 1 ] && grep -qF "FAIL: B1b:" <<<"$mp3_out"; then
-         note "ok    mp/d03n -- KILLED: with the position rule replaced by presence, a live entry below a quoted marker trips B1b"
-       else note "FAIL  mp/d03n SURVIVED: presence-keyed marker and d03n's ledger exited $mp3_rc without B1b"; rc=1; fi ;;
+       record_arm mp-d03n eq:1 "$mp3_rc" "$mp3_out" "FAIL: B1b:"
+       score mp-d03n "$B_D03N" "mp/d03n -- with the position rule replaced by presence, a live entry below a quoted marker trips B1b" ;;
     *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
   esac
 fi
@@ -560,7 +610,7 @@ ph_seed() { # ph_seed <dir> -- BL_K entries; the phantom bullet sits inside BL-0
     && cp "$1/docs/backlog.md.new" "$1/docs/backlog.md"; rm -f "$1/docs/backlog.md.new"
   grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { note "FAIL  p01 -- the phantom bullet was not seeded into $1"; rc=1; return 1; }
 }
-ph_seed "$TMP/p01" && count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"
+ph_seed "$TMP/p01" && { count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"; B_P01=$CC_OK; }
 PH_ANCHOR='if (line !~ /^BL-'
 ph_n="$(grep -cF "$PH_ANCHOR" "$LIBSRC")" || ph_n=0
 ph_z="$(grep -cF 'ZQ-NEVER-IN-LIB-QZ' "$LIBSRC")" || ph_z=0
@@ -572,18 +622,36 @@ fi
 ph_seed "$TMP/mloose"
 case "$(mutate "$TMP/mloose/core/skills/ai-dlc-update/reconcile/lib.sh" '/if (line !~ \/^BL-/d'; echo $?)" in
   0) ml_out="$(run_v "" "$TMP/mloose")"; ml_rc=$?
-     if [ "$ml_rc" -eq 0 ] && [ "$(bl_reported "$ml_out")" = "$(( BL_K + 1 ))" ]; then
-       note "ok    m-loose -- KILLED: with the loose label rule the lead-in bullet counts as an entry ($(( BL_K + 1 )) against $BL_K)"
-     else note "FAIL  m-loose SURVIVED: loose label rule and p01's ledger exited $ml_rc reporting '$(bl_reported "$ml_out")'"; rc=1; fi ;;
+     record_arm m-loose eq:0 "$ml_rc" "$ml_out" "OK: validate-backlog-size -- B1 $(( BL_K + 1 ))/"
+     score m-loose "$B_P01" "m-loose -- with the loose label rule the lead-in bullet counts as an entry ($(( BL_K + 1 )) against $BL_K)" ;;
   *) note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1 ;;
 esac
 # m-heading-only -- bullets never labelled. The arm's own self-probe seeds a list entry, so it
 # refuses before the corpus (exit 2); this is the label rule's twin of d06's shape-rule mutant.
 seed "$TMP/mhead"
 case "$(mutate "$TMP/mhead/core/skills/ai-dlc-update/reconcile/lib.sh" 's/if (line !~ /if (1 || line !~ /'; echo $?)" in
-  0) selfprobe_check "m-heading-only bullets never labelled in lib.sh" "$TMP/mhead" ;;
+  0) selfprobe_world m-heading-only "$TMP/mhead"; score m-heading-only "$B_CTRL" "m-heading-only bullets never labelled in lib.sh: refused with exit 2 on the self-probe, before the corpus" ;;
   *) note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1 ;;
 esac
+
+for a in $MUT_IDS; do
+  tw="$(twin_of "$a")"
+  if arm_trips "$tw" "$a"; then bad "[twin] $a -- the twin arm $tw TRIPPED on $a's output, so the effect is not confined to $a's own arm"
+  else ok "[twin] $a -- twin $tw stays green on $a's output: the failure is confined to $a's own arm"; fi
+done
+if [ "$MATRIX" = 1 ]; then
+  for m in $MUT_IDS; do
+    for a in $MUT_IDS; do
+      if arm_trips "$a" "$m"; then matrix_row "$m" "$a" "$(cat "$AR/$m.rc")" TRIPPED yes
+      else matrix_row "$m" "$a" "$(cat "$AR/$m.rc")" GREEN no; fi
+      MROWS=$((MROWS + 1))
+    done
+  done
+  n_ids="$(printf '%s\n' $MUT_IDS | grep -c .)"
+  if [ "$n_ids" -eq 10 ] && [ "$MROWS" -eq 100 ]; then ok "[MX] the matrix run measured $MROWS cells for $n_ids mutants"; else bad "[MX] matrix rows=$MROWS for $n_ids mutants, 100 for 10 expected"; fi
+else
+  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
+fi
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-size-ceiling -- control green, every probe holds"

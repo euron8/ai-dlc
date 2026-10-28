@@ -61,7 +61,39 @@
 # are proven live by the CONTROL battery, which reproduces all eight arms from its own toolchain
 # dir — a copy that cannot resolve `../schemas` emits nothing, and "no output" would otherwise
 # score as a kill for every mutant at once.
+# ============================================================================
+# THE MUTANT x ARM MATRIX. Per push each mutant drives only its DECIDING arm and one TWIN: an arm
+# that stays GREEN under it, run to prove the kill stays confined to the deciding arm. A tripped
+# twin fails the fixture. `--matrix` drives every arm of every mutant and prints one MATRIX-ROW
+# per mutant (cell 1 = the arm is dead under the mutant, 0 = green). Re-measure it whenever an arm
+# or a mutant is added or changed, with the REMEASURE command below. mutate() and mutate2() READ
+# their decides/twins from these very lines, so the header is the behaviour, not a copy of it.
+# Arms of part 1 are the worlds a..h; arms of part 2 are the worlds carry..unresolved.
+#
+# THREE MUTANTS HAVE NO GREEN TWIN, measured: `deleted`, `carry-deleted` and `cut-from-tip` fall
+# every arm of their part (the subject emits nothing, or every world is cut from the wrong ref), so
+# each carries `twins=-` with its reason and per push drives its deciding arm only. The claim
+# "each mutant co-trips no other arm" is NOT made for this fixture.
+#
+# MUTANT-MATRIX deleted decides=b twins=- why=with the Check 7 block gone the subject emits no CHECK 7 line in any of the eight worlds, so every arm reads NONE and no arm stays green
+# MUTANT-MATRIX reversed decides=e twins=f
+# MUTANT-MATRIX silentskip decides=d twins=a
+# MUTANT-MATRIX nofetch decides=g twins=b
+# MUTANT-MATRIX localmain decides=f twins=b
+# MUTANT-MATRIX cutpoint decides=c twins=b
+# MUTANT-MATRIX carry-deleted decides=carry twins=- why=with the carry block gone no world prints a CARRY line, so all seven worlds read NONE and no world stays green
+# MUTANT-MATRIX cut-from-tip decides=carry twins=- why=cutting the retro branch from the sprint tip moves the token of all seven worlds (behind count, landed flag or HARD_BLOCK class), so no world stays green
+# MUTANT-MATRIX no-skip-guard decides=empty twins=carry
+# MUTANT-MATRIX no-abort decides=conflict twins=carry
+# MUTANT-MATRIX plain-range decides=synced twins=carry
+# MUTANT-MATRIX merge-base decides=carry twins=direct
+# MUTANT-MATRIX all-parents decides=synced twins=carry
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-branch-behind-main/run.sh --matrix
 set -uo pipefail
+
+MATRIX=0
+[ "${1:-}" = --matrix ] && MATRIX=1
+MCELLS=0   # matrix-only cells driven; a plain run must leave this at 0
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -124,6 +156,7 @@ ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
 
 echo "retro-branch-behind-main:"
+if [ "$MATRIX" = 1 ]; then echo "MODE: FULL (--matrix, every mutant x every arm)"; else echo "MODE: PUSH (each mutant drives its deciding arm and one twin)"; fi
 
 # ============================================================================
 # THE BASE REPOSITORY. One commit graph, shaped so the squash-merge defect is expressible:
@@ -327,20 +360,46 @@ toolchain() { # <dir> <script-to-install-as-validate-mandatory-rules.sh>
 
 D_SUMMARY="Sprint 900: $((8 - 1)) of 8 checks verified; 1 SKIPPED (check 7)."
 
-# battery <toolchain-dir> -> eight space-separated tokens, one per world.
+# battery <toolchain-dir> <tag> <mode> [worlds] -> space-separated tokens, one per world driven.
 #
 # TOKEN: <verdict>/<behind-count>/<refresh>/<remedy>/<summary-class>/<rc>
-#   verdict  PASS | FAIL | SKIP | NONE (no CHECK 7 line at all) | OTHER[<line>]
+#   verdict  PASS | FAIL | SKIP | NONE (no CHECK 7 line at all) | OTHER[<line>] | SERIES-RAN
 #   refresh  R refreshed | N NOT refreshed (fetch failed) | X no remote named origin | ? neither
 #   remedy   m if the run printed `git merge origin/main` anywhere, else -
 #   summary  all7 | skip7 (the check-7 skip sentence) | nosumm | other[<sentence>]
 # Every field is a fact the check emits, so a subject printing nothing scores NONE/-/-/-/…
 # and fails every arm rather than passing any.
+#
+# MODE `full` runs the whole 8-check series as a program. MODE `only` SOURCES the toolchain copy
+# of the validator and calls its check7() function: the main guard in the subject keeps the series
+# from running on a source, and check7() is the same function the series calls, so the code run is
+# the code shipped and no flag exists that could skip a check at the gate. Every mutant edits
+# Check 7 and nothing else, so `only` is the question each mutant is about. Each run's output and
+# rc are kept at $WORK/out-<tag>-<world>[.rc] so assertions 2-4 read the SAME runs as the battery.
+cat > "$WORK/c7-driver.sh" <<'DRIVER'
+. "$1/validate-mandatory-rules.sh" || exit 2
+check7
+rc=0
+if [ "$FAILURES" -ne 0 ]; then rc=1; echo "Failure details:" >&2; printf '%s' "$FAILURE_MSGS" >&2; fi
+echo "C7-DRIVER: failures=$FAILURES skipped=${SKIPPED_CHECKS# }"
+exit $rc
+DRIVER
+
+A_ORDER="a b c d e f g h"
 battery() {
-  local D="$1" out rc t=""
-  run()  { out="$( cd "$1" && bash "$D/validate-mandatory-rules.sh" 900 2>&1 )"; rc=$?; }
+  local D="$1" tag="$2" mode="$3" worlds="${4:-$A_ORDER}" out rc t="" cur="" w wp
+  run()  { if [ "$mode" = only ]; then out="$( cd "$1" && bash "$WORK/c7-driver.sh" "$D" 2>&1 )"; rc=$?
+           else out="$( cd "$1" && bash "$D/validate-mandatory-rules.sh" 900 2>&1 )"; rc=$?; fi
+           printf '%s\n' "$out" > "$WORK/out-$tag-$cur"; printf '%s' "$rc" > "$WORK/out-$tag-$cur.rc"; }
   c7()   { awk '/^  CHECK 7: /{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; }
-  summ() { awk '/checks (passed|verified)/{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; }
+  summ() {
+    if [ "$mode" = only ]; then
+      case "$out" in
+        *'C7-DRIVER: failures=0 skipped=7'*) printf '%s' "$D_SUMMARY" ;;
+        *'C7-DRIVER: failures=0 skipped='*)  printf 'Sprint 900: all 8 checks passed' ;;
+      esac
+    else awk '/checks (passed|verified)/{ sub(/^[ ]+/,""); print; exit }' <<<"$out"; fi
+  }
   tok() {
     local line vd n rf rmd sm
     line="$(c7)"
@@ -351,6 +410,8 @@ battery() {
       "")               vd=NONE ;;
       *)                vd="OTHER[$line]" ;;
     esac
+    # A source must define and run nothing else: the series banner means the guard did not hold.
+    if [ "$mode" = only ]; then case "$out" in *'[Check 1]'*) vd=SERIES-RAN ;; esac; fi
     n="$(sed -n 's/.*HEAD is \([0-9][0-9]*\) commit(s) behind.*/\1/p' <<<"$line")"
     [ -n "$n" ] || n="-"
     case "$line" in
@@ -371,37 +432,55 @@ battery() {
     printf '%s/%s/%s/%s/%s/%s' "$vd" "$n" "$rf" "$rmd" "$sm" "$rc"
   }
 
-  # A — trunk-cut retro branch, no remote: Check 7 passes without touching the network.
-  run "$WA"; t="a:$(tok)"
-  # B — THE DEFECT: cut from the ref the squash stranded.
-  run "$WB"; t="$t b:$(tok)"
-  # C — THE REMEDY the failure message names, applied. It must clear the check.
-  run "$WC"; t="$t c:$(tok)"
-  # D — no origin/main ref: SKIP loudly, exit 0, COUNTED as check 7 in the summary.
-  run "$WD"; t="$t d:$(tok)"
-  # E — ahead by two, behind by none. The predicate is behind-count, not divergence.
-  run "$WE"; t="$t e:$(tok)"
-  # F — local `main` ahead of origin/main, branch cut from origin/main. Still fresh.
-  run "$WF"; t="$t f:$(tok)"
-  # G — THE STALE CLONE. The pre-state is asserted in the same breath as the run: without a
-  #     stale ref going in, this arm is arm B with a remote and proves nothing about the fetch.
-  reset_g
-  if [ "$(git -C "$WG" rev-list --count HEAD..origin/main)" != "0" ]; then
-    t="$t g:PRESTATE-NOT-STALE"
-  else
-    run "$WG"; t="$t g:$(tok)"
-  fi
-  # H — the same clone, origin URL pointed nowhere: the fetch fails and the check still decides.
-  run "$WH"; t="$t h:$(tok)"
+  for w in $A_ORDER; do
+    case " $worlds " in *" $w "*) ;; *) continue ;; esac
+    case "$w" in a) wp="$WA" ;; b) wp="$WB" ;; c) wp="$WC" ;; d) wp="$WD" ;; e) wp="$WE" ;; f) wp="$WF" ;; g) wp="$WG" ;; h) wp="$WH" ;; esac
+    cur="$w"
+    # G — THE STALE CLONE. The pre-state is asserted in the same breath as the run: without a
+    #     stale ref going in, this arm is arm B with a remote and proves nothing about the fetch.
+    if [ "$w" = g ]; then
+      reset_g
+      if [ "$(git -C "$WG" rev-list --count HEAD..origin/main)" != "0" ]; then t="$t g:PRESTATE-NOT-STALE"; continue; fi
+    fi
+    run "$wp"; t="$t $w:$(tok)"
+  done
+  printf '%s' "${t# }"
+}
 
-  printf '%s' "$t"
+# tokof <tokens> <key> -> the one token keyed <key>; pick <tokens> <order> <keys> -> those, in order.
+tokof() { local x; for x in $1; do case "$x" in "$2:"*) printf '%s' "$x"; return ;; esac; done; }
+pick()  { local k o=""; for k in $2; do case " $3 " in *" $k "*) o="$o $(tokof "$1" "$k")" ;; esac; done; printf '%s' "${o# }"; }
+# header_spec <mutant> -> "<decides> <twins>" read from this file's own MUTANT-MATRIX lines.
+header_spec() {
+  local sp dc tw
+  sp="$(awk -v t="$1" '$1=="#" && $2=="MUTANT-MATRIX" && $3==t {print $4, $5; exit}' "$0")"
+  dc="${sp%% *}"; dc="${dc#decides=}"; tw="${sp##* }"; tw="${tw#twins=}"
+  if [ -z "$dc" ] || [ -z "$tw" ] || [ "$dc" = "$sp" ]; then
+    echo "FIXTURE ERROR: mutant '$1' has no '# MUTANT-MATRIX $1 decides=<arm> twins=<arm>' header line." >&2
+    exit 2
+  fi
+  HDR_DEC="${dc//,/ }"; HDR_TWN="${tw//,/ }"
+  # `twins=-` means the measured row is dead in every cell: no arm to drive, and "-" is never an arm.
+  [ "$HDR_TWN" = "-" ] && HDR_TWN=""
+}
+# matrix_row <mutant> <decides> <twins> <order> <got> <expected>
+matrix_row() {
+  local k row="" dead="" cell tw_state=GREEN
+  for k in $4; do
+    if [ "$(tokof "$5" "$k")" = "$(tokof "$6" "$k")" ]; then cell=0; else cell=1; dead="$dead $k"; fi
+    row="$row $k=$cell"
+  done
+  for k in $3; do case " $dead " in *" $k "*) tw_state=DEAD ;; esac; done
+  [ -n "$3" ] || tw_state="NONE(twins=-: dead in every cell: $([ "$(wc -w <<<"$dead")" -eq "$(wc -w <<<"$4")" ] && echo yes || echo NO))"
+  local twd="${3// /,}"; [ -n "$twd" ] || twd="-"
+  echo "MATRIX-ROW $1 decides=${2// /,} twins=$twd twin-state=$tw_state cells:$row dead-set:${dead:- none}"
 }
 
 EXPECTED="a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:PASS/-/X/-/all7/0 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:FAIL/${BEHIND}/R/m/nosumm/1 h:PASS/-/N/-/all7/0"
 
 # --- 1. the shipping validator answers every arm ------------------------------
 toolchain "$WORK/bin" "$VMR"
-GOT="$(battery "$WORK/bin")"
+GOT="$(battery "$WORK/bin" ship full)"
 if [ "$GOT" = "$EXPECTED" ]; then
   ok "all eight arms: a trunk-cut branch PASSes, the feature-cut branch FAILs naming ${BEHIND} commit(s) behind and the remedy, the remedy CLEARS it, a missing origin/main SKIPs and is counted as check 7, neither being ahead of origin/main nor trailing a local main that ran on moves the verdict, a clone whose stale ref hides the defect is REFRESHED and then fails at ${BEHIND}, and a clone that cannot reach its remote still decides and says the ref may be stale"
 else
@@ -411,7 +490,7 @@ fi
 # --- 2. the failure message is actionable, not just non-zero ------------------
 # retro.md reads this validator's OUTPUT as well as its exit code. A FAIL that does not name the
 # count and the command is a stop with no next step.
-OUT="$( cd "$WB" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"; RC=$?
+OUT="$(cat "$WORK/out-ship-b")"; RC="$(cat "$WORK/out-ship-b.rc")"
 if [ "$RC" -eq 1 ] \
    && grep -qF 'Check7_BRANCH_BEHIND_MAIN' <<<"$OUT" \
    && grep -qF "HEAD is ${BEHIND} commit(s) behind origin/main" <<<"$OUT" \
@@ -423,7 +502,7 @@ else
 fi
 
 # --- 3. the skip is a HEADLINE and a counted check, not a quiet line ----------
-OUT="$( cd "$WD" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"; RC=$?
+OUT="$(cat "$WORK/out-ship-d")"; RC="$(cat "$WORK/out-ship-d.rc")"
 if [ "$RC" -eq 0 ] \
    && grep -qx 'VALIDATE-MANDATORY-RULES: PASS WITH SKIPS' <<<"$OUT" \
    && grep -qF '1 SKIPPED (check 7).' <<<"$OUT" \
@@ -438,10 +517,7 @@ fi
 # where "a sandbox with no remote attempts no fetch" is stated as an observable rather than as a
 # claim about the code.
 line_of() { awk '/^  CHECK 7: /{ print; exit }' <<<"$1"; }
-OUT_A="$( cd "$WA" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"
-reset_g
-OUT_G="$( cd "$WG" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"
-OUT_H="$( cd "$WH" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"
+OUT_A="$(cat "$WORK/out-ship-a")"; OUT_G="$(cat "$WORK/out-ship-g")"; OUT_H="$(cat "$WORK/out-ship-h")"
 L_A='  CHECK 7: PASS — HEAD contains origin/main (origin/main not refreshed: no remote named origin)'
 L_G="  CHECK 7: FAIL — HEAD is ${BEHIND} commit(s) behind origin/main (origin/main refreshed)"
 L_H='  CHECK 7: PASS — HEAD contains origin/main (origin/main NOT refreshed: fetch failed, so the local ref may be stale)'
@@ -465,7 +541,7 @@ fi
 #   localmain {f,g}  cutpoint {c}           nofetch {g,h}
 # ============================================================================
 toolchain "$WORK/mut-control" "$VMR"
-CTL="$(battery "$WORK/mut-control")"
+CTL="$(battery "$WORK/mut-control" mut-control only)"
 if [ "$CTL" = "$EXPECTED" ]; then
   ok "CONTROL: an unmutated copy in its own toolchain dir reproduces every arm — including the three PASS rows, the two FAIL rows and the SKIP row, so a mutant's silence below is the mutation and not the copy"
 else
@@ -484,7 +560,7 @@ fi
 
 mutate() { # <tag> <fixed-anchor-that-must-occur-once> <sed-program> <expected-battery> <claim>
   local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5"
-  local D="$WORK/mut-$tag" M="$WORK/staged-$tag.sh" got n
+  local D="$WORK/mut-$tag" M="$WORK/staged-$tag.sh" got n dec twn ws
   n="$(grep -cF -- "$anchor" "$VMR")" || n=0
   if [ "$n" -ne 1 ]; then
     echo "FIXTURE ERROR: mutant '$tag' anchors on a line occurring ${n} time(s), not once. A LOST SUBJECT is repaired with a new anchor, never with a relaxed assertion." >&2
@@ -502,14 +578,27 @@ mutate() { # <tag> <fixed-anchor-that-must-occur-once> <sed-program> <expected-b
     echo "FIXTURE ERROR: mutant '$tag' does not parse. Every arm would fail for a syntax error rather than for the property removed." >&2
     exit 2
   fi
+  header_spec "$tag"; dec="$HDR_DEC"; twn="$HDR_TWN"
   toolchain "$D" "$M"
-  got="$(battery "$D")"
-  if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — every arm unchanged, so nothing here can catch it"
+  if [ "$MATRIX" = 1 ]; then
+    ws="$A_ORDER"
+    got="$(battery "$D" "mut-$tag" only "$ws")"
+    matrix_row "$tag" "$dec" "$twn" "$A_ORDER" "$got" "$EXPECTED"
+    MCELLS=$((MCELLS + 8 - $(wc -w <<<"$dec $twn")))
+    # the full vector is the claim in matrix mode
+    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+    elif [ "$got" = "$EXPECTED" ]; then bad "MUTANT $tag SURVIVED: $claim — every arm unchanged, so nothing here can catch it"
+    else bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"; fi
+    return
+  fi
+  ws="$dec $twn"
+  got="$(battery "$D" "mut-$tag" only "$ws")"
+  if [ "$got" = "$(pick "$want" "$A_ORDER" "$ws")" ]; then
+    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+  elif [ "$(pick "$got" "$A_ORDER" "$dec")" = "$(pick "$EXPECTED" "$A_ORDER" "$dec")" ]; then
+    bad "MUTANT $tag SURVIVED: $claim — the deciding arm is unchanged, so nothing here can catch it"
   else
-    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
+    bad "MUTANT $tag ($claim): expected arms [$(pick "$want" "$A_ORDER" "$ws")], got [$got]"
   fi
 }
 
@@ -522,7 +611,7 @@ mutate() { # <tag> <fixed-anchor-that-must-occur-once> <sed-program> <expected-b
 _NONE='NONE/-/-/-/all7/0'
 mutate deleted \
   'echo "[Check 7] Retro branch not behind origin/main..."' \
-  '/^echo "\[Check 7\] Retro branch not behind origin\/main\.\.\."$/,/^  esac$/{ /^  esac$/{N;d;}; d; }' \
+  '/^echo "\[Check 7\] Retro branch not behind origin\/main\.\.\."$/,/^  esac$/{ /^echo /s/.*/:/; /^  esac$/{N;d;}; /^:$/!d; }' \
   "a:$_NONE b:$_NONE c:$_NONE d:$_NONE e:$_NONE f:$_NONE g:$_NONE h:$_NONE" \
   "with the block gone every world reports rc 0 and no CHECK 7 line at all, the defect world included, and the skip world claims all 8 checks passed"
 
@@ -723,11 +812,14 @@ run_block() {
 }
 # battery2 <retro.md copy> <tag> -> seven tokens
 battery2() {
-  local f="$1" tag="$2" b t="" w
+  local f="$1" tag="$2" worlds="${3:-$WORLDS2}" b t="" w
   b="$P2/$tag.sh"
   extract_block "$f" | sed -e "s@<sprint-branch>@$SB@g" -e 's@<N>@900@g' > "$b"
   bash -n "$b" 2>/dev/null || { printf 'PARSE-ERROR'; return; }
-  for w in $WORLDS2; do t="$t $w:$(run_block "$b" "$w")"; done
+  for w in $WORLDS2; do
+    case " $worlds " in *" $w "*) ;; *) continue ;; esac
+    t="$t $w:$(run_block "$b" "$w")"
+  done
   printf '%s' "${t# }"
 }
 
@@ -740,18 +832,19 @@ else
   bad "part 2 battery: expected [$EXPECTED2], got [$GOT2]"
 fi
 
+# CONTROL, folded into the ship run: an unmutated copy of retro.md is byte-identical to the
+# subject, so it extracts the identical block and a second drive of it would only repeat GOT2.
 cp "$RETRO" "$P2/control.md"
-CTL2="$(battery2 "$P2/control.md" control)"
-if [ "$CTL2" = "$EXPECTED2" ]; then
+if cmp -s "$RETRO" "$P2/control.md" && [ "$(extract_block "$P2/control.md")" = "$BLOCK" ] && [ "$GOT2" = "$EXPECTED2" ]; then
   ok "part 2 CONTROL: an unmutated copy reproduces all seven worlds, so a mutant's token below is the mutation"
 else
-  echo "FIXTURE ERROR: the part 2 control does not reproduce the battery — expected [$EXPECTED2], got [$CTL2]." >&2
+  echo "FIXTURE ERROR: the part 2 control does not reproduce the battery — expected [$EXPECTED2], got [$GOT2]." >&2
   exit 2
 fi
 
 # mutate2 <tag> <anchor occurring once in retro.md> <sed-program> <expected> <claim>
 mutate2() {
-  local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5" m="$P2/m-$1.md" n got
+  local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5" m="$P2/m-$1.md" n got dec twn ws
   n="$(grep -cF -- "$anchor" "$RETRO")" || n=0
   if [ "$n" -ne 1 ]; then
     echo "FIXTURE ERROR: part 2 mutant '$tag' anchors on a line occurring ${n} time(s), not once." >&2
@@ -762,13 +855,24 @@ mutate2() {
     echo "FIXTURE ERROR: part 2 mutant '$tag' matched nothing." >&2
     exit 2
   fi
-  got="$(battery2 "$m" "m-$tag")"
-  if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
-  elif [ "$got" = "$EXPECTED2" ]; then
-    bad "MUTANT $tag SURVIVED: $claim — every world unchanged"
+  header_spec "$tag"; dec="$HDR_DEC"; twn="$HDR_TWN"
+  if [ "$MATRIX" = 1 ]; then
+    got="$(battery2 "$m" "m-$tag" "$WORLDS2")"
+    matrix_row "$tag" "$dec" "$twn" "$WORLDS2" "$got" "$EXPECTED2"
+    MCELLS=$((MCELLS + 7 - $(wc -w <<<"$dec $twn")))
+    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+    elif [ "$got" = "$EXPECTED2" ]; then bad "MUTANT $tag SURVIVED: $claim — every world unchanged"
+    else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
+    return
+  fi
+  ws="$dec $twn"
+  got="$(battery2 "$m" "m-$tag" "$ws")"
+  if [ "$got" = "$(pick "$want" "$WORLDS2" "$ws")" ]; then
+    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+  elif [ "$(pick "$got" "$WORLDS2" "$dec")" = "$(pick "$EXPECTED2" "$WORLDS2" "$dec")" ]; then
+    bad "MUTANT $tag SURVIVED: $claim — the deciding world is unchanged"
   else
-    bad "MUTANT $tag ($claim): expected [$want], got [$got]"
+    bad "MUTANT $tag ($claim): expected [$(pick "$want" "$WORLDS2" "$ws")], got [$got]"
   fi
 }
 
@@ -827,10 +931,17 @@ mutate2 all-parents \
   "carry:n2/0/y/2/n/y empty:none-empty/0/y/0/n/y synced:HB-underivable/0/y/0/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
   "a walk that follows every parent reads a synced sprint branch as underivable and carries nothing"
 
+# A plain (per-push) run must drive no matrix-only cell; a --matrix run must drive them.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MCELLS" -eq 0 ]; then ok "a plain run drove no matrix-only cell: every mutant ran its deciding arm and one twin"; else bad "a plain run drove $MCELLS matrix-only cell(s)"; fi
+else
+  if [ "$MCELLS" -gt 0 ]; then ok "the matrix run drove its matrix-only cells ($MCELLS)"; else bad "the matrix run drove no matrix-only cell"; fi
+fi
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 20 ]; then
-  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions, expected 20" >&2
+if [ "$asserted" -ne 21 ]; then
+  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions, expected 21" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

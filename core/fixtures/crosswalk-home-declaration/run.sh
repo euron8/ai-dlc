@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 # crosswalk-home-declaration — I69: prose naming where `consumer_crosswalk_file:` LIVES
+#
+# MUTANT-MATRIX m1 decides=I69 twins=I68
+# MUTANT-MATRIX m2 decides=I69 twins=I68
+# MUTANT-MATRIX m3 decides=I69 twins=I68
+# MUTANT-MATRIX-CONTROL m4 why=the knock-out disables I69's own err line, so the I69 count is 0 and no other layer refuses the violating tree, and survival is the pass
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/crosswalk-home-declaration/run.sh --matrix
+#
+# Per push each mirror runs `validate-enforcement-map.sh --arms I69` and the verdict is the
+# count of I69 lines only (the mirror carries no .githooks/, VERSION or CHANGELOG, so the exit
+# code says nothing). m4 is the knock-out: I69's own err line disabled, count 0. `--matrix` runs
+# every mirror through the WHOLE validator and prints one MATRIX row per world naming every arm
+# that reported FAIL; the control row is the baseline. The matrix is re-measured whenever an arm
+# or a mutant is added or changed. Measured (control subtracted): every mutant adds exactly I69
+# and nothing else, so I68 is green for each. The per-push run also selects I68 and fails any
+# mutant world on which it reports.
 # must name a file that carries it.
 #
 # THE DEFECT. The release that moved the crosswalk table to a consumer-owned path shipped
@@ -36,6 +51,13 @@
 # Exit:  0 = every assertion holds, 1 = the invariant regressed, 2 = fixture broken.
 set -uo pipefail
 
+# MATRIX MODE: `bash core/fixtures/crosswalk-home-declaration/run.sh --matrix` runs every mirror
+# through the WHOLE validator (no --arms) and prints one `MATRIX` row per world naming every arm
+# id that reported FAIL. The mirror carries no .githooks/, VERSION or CHANGELOG, so the control
+# row is the baseline and a mutant's own trips are its row minus the control's.
+MATRIX=""
+case "${1:-}" in "") : ;; --matrix) MATRIX=1 ;; *) echo "usage: run.sh [--matrix]" >&2; exit 2 ;; esac
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"       # .dist-only: this fixture is never installed, so there is one layout
 VEM="$ROOT/scripts/validate-enforcement-map.sh"
@@ -51,8 +73,16 @@ made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 
-# 1 premise + 1 control + 4 mutants.
-EXPECTED_ASSERTIONS=6
+# Kills route through mutant_killed behind B_ctl, set only by the passing unmutated control.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# 1 premise + 1 control + 4 mutants, plus (plain run only) 1 arm asserting no matrix-only cell ran.
+EXPECTED_ASSERTIONS=7
+[ -n "$MATRIX" ] && EXPECTED_ASSERTIONS=6
+MIRROR_RUNS=5   # control + m1..m4
 
 echo "crosswalk-home-declaration:"
 
@@ -134,8 +164,8 @@ mut m4 'scripts/validate-enforcement-map.sh' 's/      err "I69 \$_cf names/     
 # The zero guard: a registration grammar that stopped filling yields an empty list, and an
 # empty list passes every assertion it never made.
 N_RUNS="$(grep -c . "$RUNS" || true)"
-if [ "$N_RUNS" -ne $((EXPECTED_ASSERTIONS - 1)) ]; then
-  echo "FIXTURE ERROR: registered $N_RUNS run(s) for $((EXPECTED_ASSERTIONS - 1)) mirror-backed assertion(s) — the registry did not fill, so nothing below is evidence" >&2
+if [ "$N_RUNS" -ne "$MIRROR_RUNS" ]; then
+  echo "FIXTURE ERROR: registered $N_RUNS run(s) for $MIRROR_RUNS mirror-backed assertion(s) — the registry did not fill, so nothing below is evidence" >&2
   exit 2
 fi
 
@@ -154,7 +184,7 @@ fi
 # test — and M4, the knock-out, is what proves the count comes from I69 rather than from the
 # run having died before reaching it.
 CHD_JOBS=5
-CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT="$OUTD" \
+CHD_MATRIX="$MATRIX" CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT="$OUTD" \
   xargs -P "$CHD_JOBS" -I{} bash -c '
     l="$1"
     m="$CHD_WORK/mirror-$l"
@@ -168,11 +198,22 @@ CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT="$OUTD" \
     done < "$CHD_MUTS/$l.tsv"
     rm -f "$m/.before"
     if [ ! -f "$CHD_OUT/$l.state" ]; then
-      bash "$m/scripts/validate-enforcement-map.sh" 2>&1 | grep -c "I69" > "$CHD_OUT/$l.n" || true
+      if [ -n "$CHD_MATRIX" ]; then _arms=""; else _arms="--arms I69,I68"; fi
+      printf %s "$_arms" > "$CHD_OUT/$l.arms"
+      bash "$m/scripts/validate-enforcement-map.sh" $_arms > "$CHD_OUT/$l.full" 2>&1
+      grep -c "I69" "$CHD_OUT/$l.full" > "$CHD_OUT/$l.n" || true
     fi
     printf done > "$CHD_OUT/$l.done"
     rm -rf "$m"
   ' _ {} < <(cut -f1 "$RUNS")
+
+if [ -n "$MATRIX" ]; then
+  while IFS=$'\t' read -r _l _w; do
+    [ -n "$_l" ] || continue
+    _ids="$(grep -o '^FAIL: I[0-9]*[a-c]*' "$OUTD/$_l.full" 2>/dev/null | sed 's/^FAIL: //' | sort -u | tr '\n' ' ')"
+    echo "MATRIX $_l i69_lines=$(tr -d '[:space:]' < "$OUTD/$_l.n" 2>/dev/null) tripped=[${_ids}]"
+  done < "$RUNS"
+fi
 
 # ================= PHASE 3: evaluate, serially, in DECLARATION order =================
 while IFS=$'\t' read -r label want; do
@@ -202,29 +243,63 @@ while IFS=$'\t' read -r label want; do
   fi
 
   n="$(cat "$OUTD/$label.n" 2>/dev/null | tr -d '[:space:]')"
+  if grep -q '^FAIL: I68' "$OUTD/$label.full" 2>/dev/null; then
+    bad "$label: twin arm I68 tripped; the recorded matrix has it green for every world"
+    continue
+  fi
   case "$label" in
     control)
-      [ "$n" -eq 0 ] \
-        && ok "CONTROL: an unmutated mirror reports I69 zero times — the mutants below run against a tree the invariant accepts" \
-        || bad "CONTROL: the unmutated mirror already reports I69 $n time(s); every mutant verdict below is meaningless" ;;
+      if [ "$n" -eq 0 ]; then
+        ok "CONTROL: an unmutated mirror reports I69 zero times — the mutants below run against a tree the invariant accepts"
+        B_ctl=1
+      else
+        bad "CONTROL: the unmutated mirror already reports I69 $n time(s); every mutant verdict below is meaningless"
+      fi ;;
     m1)
-      [ "$n" -eq "$want" ] \
-        && ok "MUTANT killed: a README claiming the declaration lives in core-manifest.md is reported once" \
-        || bad "MUTANT m1: expected exactly $want I69 finding, got $n — the shipped grammar does not see a same-line home claim" ;;
+      if [ "$n" -eq "$want" ]; then
+        mutant_killed "${B_ctl:-0}" m1 "MUTANT killed: a README claiming the declaration lives in core-manifest.md is reported once"
+      else
+        bad "MUTANT m1: expected exactly $want I69 finding, got $n — the shipped grammar does not see a same-line home claim"
+      fi ;;
     m2)
-      [ "$n" -eq "$want" ] \
-        && ok "MUTANT killed: a home claim broken across a line break is still read, and still reported once" \
-        || bad "MUTANT m2: expected exactly $want I69 finding, got $n — a claim that wraps escapes the grammar, which is the shape the real defect had" ;;
+      if [ "$n" -eq "$want" ]; then
+        mutant_killed "${B_ctl:-0}" m2 "MUTANT killed: a home claim broken across a line break is still read, and still reported once"
+      else
+        bad "MUTANT m2: expected exactly $want I69 finding, got $n — a claim that wraps escapes the grammar, which is the shape the real defect had"
+      fi ;;
     m3)
-      [ "$n" -eq "$want" ] \
-        && ok "MUTANT killed: with every home claim reworded away the ZERO GUARD speaks — an empty subject set is reported, not accepted" \
-        || bad "MUTANT m3: expected exactly $want I69 finding (the zero guard), got $n — a grammar that stopped matching would read exactly like core having stopped restating the home" ;;
+      if [ "$n" -eq "$want" ]; then
+        mutant_killed "${B_ctl:-0}" m3 "MUTANT killed: with every home claim reworded away the ZERO GUARD speaks — an empty subject set is reported, not accepted"
+      else
+        bad "MUTANT m3: expected exactly $want I69 finding (the zero guard), got $n — a grammar that stopped matching would read exactly like core having stopped restating the home"
+      fi ;;
     m4)
-      [ "$n" -eq "$want" ] \
-        && ok "KNOCK-OUT: with I69's err disabled the same violating tree reports nothing — M1's kill is attributable to this invariant" \
-        || bad "KNOCK-OUT: expected $want I69 findings with the err disabled, got $n — the counts above are not measuring what this fixture claims" ;;
+      # The surviving state, named twice: the I69 count is $want (0), AND no other layer picked the
+      # violating README up -- the invariants that tripped are exactly the control's, so nothing but
+      # I69's own err line was reporting M1's finding. The name `m4` is the one reg/mut used above.
+      _t4="$(grep -o '^FAIL: I[0-9]*[a-c]*' "$OUTD/m4.full" 2>/dev/null | sort -u | tr '\n' ' ')"
+      _tc="$(grep -o '^FAIL: I[0-9]*[a-c]*' "$OUTD/control.full" 2>/dev/null | sort -u | tr '\n' ' ')"
+      if [ "$n" -eq "$want" ] && [ "$_t4" = "$_tc" ]; then
+        ok "CONTROL m4: with I69's err disabled the same violating tree reports I69 $n time(s) (want $want) and no other layer refuses it (tripped set equals the unmutated control's) — M1's kill is attributable to this invariant alone"
+      else
+        bad "CONTROL m4: expected $want I69 findings and the control's tripped set, got $n I69 and tripped [$_t4] vs control [$_tc] — the counts above are not measuring what this fixture claims"
+      fi ;;
   esac
 done < "$RUNS"
+
+# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL: every mirror must have run on the two-arm selection.
+if [ -z "$MATRIX" ]; then
+  _full=0
+  while IFS=$'\t' read -r _l _w; do
+    [ -n "$_l" ] || continue
+    [ "$(cat "$OUTD/$_l.arms" 2>/dev/null)" = "--arms I69,I68" ] || _full=$((_full+1))
+  done < "$RUNS"
+  if [ "$_full" -eq 0 ]; then
+    ok "a plain run executes no matrix-only cell — every mirror ran on --arms I69,I68 alone"
+  else
+    bad "a plain run executed $_full mirror(s) outside --arms I69,I68 — the matrix-only whole-validator path leaked into the per-push run"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
