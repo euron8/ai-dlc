@@ -81,7 +81,6 @@ postcompact-rulebook-recovery
 preclassify-mode-bucket
 preclassify-rename-row
 predicate-reclassification
-pregate-self-check
 prepush-pool-depth
 prepush-ssh-keepalive
 prepush-worktree-env-scrub

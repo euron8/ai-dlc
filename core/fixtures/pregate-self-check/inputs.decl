@@ -8,5 +8,5 @@ core/fixtures/procsub-staged-refusal/
 !core/fixtures/pregate-self-check/receipt-bl643.sh
 core/fixtures/lib/
 # run.sh and the self-check walk up for VERSION.
-# copy-only: core/fixtures/pregate-self-check/run.sh:29 run.sh tests for the marker beside the self-check; nothing reads its content
+# copy-only: core/fixtures/pregate-self-check/run.sh:53 run.sh tests for the marker beside the self-check; nothing reads its content
 VERSION
