@@ -46,15 +46,25 @@ ROOT="$(mktemp -d "${TMPDIR:-/tmp}/wfd-receipt.XXXXXX")" || exit 9
 trap 'rm -rf "$ROOT"' EXIT
 own() { bash -c '"$@"; exit $?' _ "$@"; }
 ENVB=(env AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent)
+# ORDERING, NOT CLOCK. Each receipt used to place one beat before another with a fixed `sleep`; a
+# loaded box reads that as red or, worse, as a different interleaving. `until_cond` polls a
+# condition on a 0.02s tick (bounded at 10s, then the receipt cannot measure: exit 9), and the
+# conditions are the subject's own records: a beat's lease marker, and the counter it charges
+# just before it enters its poll sleep.
+until_cond() { local n=500; while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.02; n=$((n - 1)); done; return 1; }
+has_marker() { [ -s _bmad-output/.beat-inflight ]; }
+key16() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+counter_eq() { [ "$(cat "_bmad-output/.wait-beats/$(key16 "$1")" 2>/dev/null)" = "$2" ]; }
 world() { local d; d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9; mkdir -p "$d/_bmad-output"; printf '%s' "$d"; }
 
 r549() {
   local d a b m e p alive holder_alive
   d="$(world)"; cd "$d" || exit 9
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=4 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" never.md >/dev/null 2>&1 & a=$!
-  sleep 0.5
+  until_cond has_marker || exit 9
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=10 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" y.md >/dev/null 2>&1 & b=$!
-  sleep 1; printf 'done\n' > y.md; wait "$b"; sleep 0.5
+  until_cond counter_eq y.md 1 || exit 9
+  printf 'done\n' > y.md; wait "$b"
   m="$(cat _bmad-output/.beat-inflight 2>/dev/null || echo '')"; e="${m%% *}"
   alive=0; kill -0 "$a" 2>/dev/null && alive=1
   p="${m#* }"; [ "$p" = "$m" ] && p=""
@@ -72,10 +82,10 @@ r566_one() {
   d="$(world)"; cd "$d" || exit 9
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=14 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete x.md > a.out 2>&1 & a=$!
-  sleep 1.2
+  until_cond counter_eq x.md 1 || return 1
   own "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=14 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete x.md > b.out 2>&1 & b=$!
-  sleep 1.2
+  until_cond counter_eq x.md 2 || return 1
   printf '# h\n### F-1\nx\nseat-complete: s 1 findings=1\n' > x.md
   wait "$a"; wait "$b"
   grep -q '^DELIVERED x.md' a.out && grep -q '^DELIVERED x.md' b.out || return 1
@@ -142,7 +152,7 @@ r548() {
   local d s0
   d="$(world)"; cd "$d" || exit 9; s0=$(( $(date +%s) - 30 ))
   printf 'h\nseat-complete: s\n' > rv.md; printf 'h\nseat-complete: s\n' > ok.md
-  ( sleep 1.5; printf 'h\n- edit\nseat-complete: s\n' > rv.md ) &
+  ( until_cond counter_eq rv.md 1; printf 'h\n- edit\nseat-complete: s\n' > rv.md ) &
   "${ENVB[@]}" AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_SETTLE_SECS=2 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete --since "$s0" rv.md ok.md > o.txt 2>&1; wait
   grep -q '^DELIVERED rv.md' o.txt && grep -q '^REVISED-AFTER-MARKER 1 rv.md' o.txt \
@@ -176,13 +186,13 @@ r576() {
   d="$(mktemp -d "$ROOT/w.XXXXXX")" || exit 9
   mkdir -p "$d/.git" "$d/scripts" "$d/shards/p1" || exit 9
   cp "$SUBJ" "$d/scripts/wait-for-deliverable.sh" || exit 9
-  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+  ( cd "$d/shards/p1" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
       AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
       bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
   [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
   [ -d "$d/_bmad-output/.wait-beats" ] || return 1
   rm -rf "$d/_bmad-output"
-  ( cd "$d" && own env AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+  ( cd "$d" && own env AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
       AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR=/nonexistent CLAUDE_PROJECT_DIR= \
       bash "$d/scripts/wait-for-deliverable.sh" never.md ) >/dev/null 2>&1
   [ -d "$d/_bmad-output/.wait-beats" ] && [ ! -e "$d/shards/p1/_bmad-output" ] || return 1
@@ -196,9 +206,9 @@ r576() {
   # The beat is a CHILD of the wrapper `$p` (the trailing `exit $?` keeps bash from exec-ing it),
   # so it is stopped by the pid its own lease names, then the wrapper is reaped.
   lease=0; m=""
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  for _ in $(seq 1 500); do
     [ -s "$d/_bmad-output/.beat-inflight" ] && { lease=1; m="$(cat "$d/_bmad-output/.beat-inflight")"; break; }
-    sleep 0.25
+    sleep 0.02
   done
   case "${m#* }" in ''|*[!0-9]*) : ;; *) kill "${m#* }" 2>/dev/null ;; esac
   kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
