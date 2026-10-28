@@ -75,7 +75,10 @@ CONSUMER="${4:?}"
 
 # The corpus is the SAME declaration its sibling reads — setup-sites.md's `rulebook:` list —
 # so a rulebook file added upstream is covered by both detectors without editing either.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 SITES="$SELF/setup-sites.md"
 rulebook_globs() {
   awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
