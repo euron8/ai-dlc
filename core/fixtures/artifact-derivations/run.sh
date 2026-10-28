@@ -10,6 +10,86 @@
 # green case whose ONLY difference is the recorded output, and the messages are asserted.
 #
 # The subject is a SHIPPED validator, so this fixture ships too (no .dist-only).
+#
+# THE MUTANT MATRIX. Each mutant below is a copy of the validator. PER PUSH it runs its DECIDING arm,
+# which must FAIL, and one named TWIN, an arm the measured matrix shows GREEN for that mutant, which
+# must PASS; a single-arm battery (the awk self-probe, the NEVER-set startup refusal) has no twin
+# because the refusal stops the whole run. The kill is emitted through mutant_killed (lib/mutant.sh)
+# behind the same-run base-pass flag of the unmutated arm and of the unmutated copy MX0. `--matrix`
+# scores every mutant on EVERY arm of its battery, prints one MATRIX row per mutant (from the sourced
+# matrix.sh, every cell `<arm>:killed=yes|no` plus `tripped=[...]`), and asserts the tripped set EQUALS
+# the set recorded in the bmut call, contains the deciding arm and excludes the twin. The recorded sets
+# plus the twin replace the old per-push exact-vector assertion. A plain run prints no MATRIX row.
+# THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root, with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not run through hermetic-run.sh, which forwards
+# no argument.
+#
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-derivations/run.sh --matrix
+# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
+# MUTANT-MATRIX k-m1 decides=k-allow twins=k-exec
+# MUTANT-MATRIX k-m2 decides=k-exec twins=k-allow
+# MUTANT-MATRIX l-m3 decides=l-reader twins=l-pipe
+# MUTANT-MATRIX l-m4 decides=l-reader twins=l-pipe
+# MUTANT-MATRIX m-m5 decides=m-kill-sub twins=m-control
+# MUTANT-MATRIX m-m6 decides=m-kill-cmd twins=m-kill-sub
+# MUTANT-MATRIX m-m7 decides=m-unbound-stale twins=m-arith
+# MUTANT-MATRIX n-m1 decides=n-diff-verdict twins=n-diff-ctl
+# MUTANT-MATRIX n-m2 decides=n-diff-verdict twins=n-diff-ctl
+# MUTANT-MATRIX n-m3 decides=n-sed twins=n-sed-ctl
+# MUTANT-MATRIX n-m3a decides=n-sed-rec twins=n-sed-act
+# MUTANT-MATRIX n-m3b decides=n-sed-act twins=n-sed-rec
+# MUTANT-MATRIX n-m4 decides=n-find twins=n-find-ctl
+# MUTANT-MATRIX n-m5 decides=n-diff-names twins=n-diff-verdict
+# MUTANT-MATRIX o-mutant decides=o-width-200 twins=o-stale
+# MUTANT-MATRIX p-m1 decides=p-frozen twins=p-file
+# MUTANT-MATRIX p-m2 decides=p-frozen twins=p-all
+# MUTANT-MATRIX p-m3 decides=p-all twins=p-file
+# MUTANT-MATRIX p-m4 decides=p-file twins=p-all
+# MUTANT-MATRIX p-m5 decides=p-count twins=p-live
+# MUTANT-MATRIX p-m6 decides=p-shardtarget twins=p-file
+# MUTANT-MATRIX q-nosup decides=q-sup twins=q-open
+# MUTANT-MATRIX q-anyfile decides=q-live twins=q-sup
+# MUTANT-MATRIX q-firstwins decides=q-sup twins=q-open
+# MUTANT-MATRIX q-quiet decides=q-sup twins=q-open
+# MUTANT-MATRIX q-rawscan decides=q-text twins=q-sup
+# MUTANT-MATRIX r-m1 decides=r-acc-sq twins=r-bt-uq-can
+# MUTANT-MATRIX r-m2 decides=r-bt-uq-can twins=r-acc-sq
+# MUTANT-MATRIX r-m3 decides=r-sym-rel-msg twins=r-acc-c
+# MUTANT-MATRIX r-m4 decides=r-nested-can twins=r-bare-can
+# MUTANT-MATRIX r-m5 decides=r-bare-can twins=r-acc-c
+# MUTANT-MATRIX r-m6 decides=r-abs-wt twins=r-acc-c
+# MUTANT-MATRIX r-m7 decides=r-abs-for-msg twins=r-abs-root
+# MUTANT-MATRIX r-m8 decides=r-sym-rel-can twins=r-dotdot-msg
+# MUTANT-MATRIX a-m1 decides=a-ctl twins=- why=the self-probe refuses at startup and stops the whole run, so the single a-ctl arm is the only arm and nothing is left green
+# MUTANT-MATRIX a-m2 decides=a-ctl twins=- why=the self-probe refuses at startup and stops the whole run, so the single a-ctl arm is the only arm and nothing is left green
+# MUTANT-MATRIX s-m-bracket decides=s-dl-bracket twins=s-dl-end
+# MUTANT-MATRIX s-m-prefix decides=s-exact-ref twins=s-exact-acc
+# MUTANT-MATRIX s-m-cluster decides=s-cluster-ref twins=s-cluster-acc
+# MUTANT-MATRIX s-m-novalue decides=s-value-ref twins=s-value-acc
+# MUTANT-MATRIX s-m-wsplit decides=s-brace twins=s-real-acc
+# MUTANT-MATRIX s-m-eo-global decides=s-eo-ref twins=s-eo-acc
+# MUTANT-MATRIX s-m-eo-blanket decides=s-eo-acc twins=s-eo-ref
+# MUTANT-MATRIX s-m-rowdrop decides=s-wc-acc twins=s-wc-ref
+# MUTANT-MATRIX s-m-rowadd decides=s-wc-ref twins=s-wc-acc
+# MUTANT-MATRIX s-m-permute decides=s-sedfirst-ref twins=s-sedfirst-acc
+# MUTANT-MATRIX s-m-optnext decides=s-optional-ref twins=s-optional-acc
+# MUTANT-MATRIX s-m-pendend decides=s-pendend-ref twins=s-pendend-acc
+# MUTANT-MATRIX s-m-uniqtwo decides=s-uniqtwo-ref twins=s-uniqtwo-acc
+# MUTANT-MATRIX s-m-numall decides=s-num-ref twins=s-num-acc
+# MUTANT-MATRIX s-m-never decides=s-never twins=- why=a table row that is also a NEVER row stops the validator at startup, so every S arm trips and none is left green
+# MUTANT-MATRIX t-m1 decides=t-two twins=t-near
+# MUTANT-MATRIX t-m2 decides=t-retro twins=t-near
+# MUTANT-MATRIX t-m3 decides=t-a1 twins=t-near
+# MUTANT-MATRIX t-m4 decides=t-canary twins=t-two
+# MUTANT-MATRIX t-m5 decides=t-nested-esc twins=t-failclosed
+# MUTANT-MATRIX t-m6 decides=t-ansi-esc twins=t-failclosed
+# MUTANT-MATRIX t-m7 decides=t-cd twins=t-cd-dyn
+# MUTANT-MATRIX t-m9 decides=t-cd-semi twins=t-cd-or
+# MUTANT-MATRIX t-m10 decides=t-cd-glob twins=t-cd-qglob
+# MUTANT-MATRIX t-m11 decides=t-cd-bg twins=t-cd-semi
+# MUTANT-MATRIX t-m13 decides=t-cd-sed twins=t-cd
+# MUTANT-MATRIX t-m14 decides=t-cd-orleft twins=t-cd-andleft
+# MUTANT-MATRIX t-m15 decides=t-cd-dash twins=t-cd-core
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking anything (I10).
@@ -30,6 +110,20 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found in $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/artifact-derivations/matrix.sh"
 
 # The tree the derivations are ABOUT. Self-contained: the fixture owns the facts it
 # asserts, so the case cannot go red because the repo around it changed.
@@ -642,76 +736,144 @@ mut_copy() { # $1 dest  $2..  sed expressions -> 0 mutated, 1 DID NOT APPLY
   return 0
 }
 
-# M1 — the blanket deny. Every `sed` segment is refused, whatever its script. The mutation
-# REPLACES the script grammar's verdict with a constant, so every sed segment is refused with
-# the write/exec message and the grammar's narrowness is gone. It anchors on the verdict line,
-# which the file carries once; the `if [ "$first" = "sed" ]` guard now opens two blocks.
-M1="$WORK/k/m1-$VBASE"
-if mut_copy "$M1" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why="blanket"|'; then
-  ok "k-m1 applied          (cmp -s: the blanket-deny mutation changed the file)"
-  # The must-ALLOW half must go RED, and name the allowlist refusal.
-  mkdir -p "$WORK/k/m1w"
-  { printf '```derived\n$ sed -n '"'"'/w/p'"'"' src/w-forms.txt | wc -l\n       2\n```\n'; } > "$WORK/k/m1w/story.md"
-  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M1" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
-  if [ "$rc" -eq 1 ] && grep -q 'FAIL (ALLOWLIST)' <<< "$out" \
-     && grep -q 'writes a file or runs a command' <<< "$out"; then
-    ok "k-m1 KILLED           the blanket deny refuses a legitimate \`sed -n '/w/p'\` as an ALLOWLIST failure"
-  else
-    bad "k-m1 SURVIVED: a blanket \`sed:*\` deny did not make the must-allow case fail as an ALLOWLIST refusal (rc=$rc): $out"
+
+# --- THE MATRIX HARNESS -----------------------------------------------------------------------
+# Every mutant battery below (K through T, and the awk self-probe) is an ARM FUNCTION
+# `<x>_arms <validator> <quiet>`. Run on the unmutated validator with quiet 0 it prints each arm's ok
+# line once. Run on a mutant with quiet 1 it records, in ARMS_RAN and ARMS_FAILED, which arms ran and
+# which failed. WANT (space-separated arm ids; empty = every arm) names the only arms worth running, so
+# a mutant is scored by its deciding arm and its twin without re-running the section's other arms.
+#   - PER PUSH, bmut runs a mutant's DECIDING arm, which must FAIL, and one named TWIN, an arm the
+#     measured matrix shows GREEN for that mutant, which must PASS. The kill is emitted through
+#     mutant_killed behind the same-run base-pass flag of the unmutated arm (B_<arm>) and of the
+#     unmutated copy (B_MX0). Both arms must have actually RUN: a twin that never executed would read
+#     green for that reason alone.
+#   - `--matrix`: every arm of the mutant's battery is scored against every mutant. Each mutant prints
+#     one MATRIX row (printed by matrix.sh, every cell `<arm>:killed=yes|no` plus `tripped=[...]`) and
+#     its tripped set must EQUAL the recorded set the call passes, contain the deciding arm and exclude
+#     the twin. The recorded sets plus the twin replace the old per-push exact-vector assertion.
+WANT=""; ARMS_RAN=""; ARMS_BAD=""; ARMS_FAILED=""; ARM_Q=0; BM_VERIFY=""
+BAT_FN=""; BAT_DIR=""; BAT_RAN=""; ALL_ARMS=""; P_ALL=""
+n_mut=0; n_kill=0
+want() { [ -z "$WANT" ] && return 0; local w_; for w_ in "$@"; do case " $WANT " in *" $w_ "*) return 0 ;; esac; done; return 1; }
+in_set() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }
+sorted_set() { printf '%s\n' $* | sed '/^$/d' | LC_ALL=C sort -u | tr '\n' ' '; }
+arm_begin() { ARMS_RAN=""; ARMS_BAD=""; ARM_Q="$1"; }
+arm() { # $1 id  $2 status (0 = the arm holds)  $3 message  [$4 label to print in place of the id]
+  ARMS_RAN="$ARMS_RAN $1"
+  printf -v "ARMOUT_${1//-/_}" '%s' "${out:-}"; printf -v "ARMRC_${1//-/_}" '%s' "${rc:-?}"
+  if [ "$2" -eq 0 ]; then [ "$ARM_Q" = 1 ] || ok "${4:-$1} $3"
+  else ARMS_BAD="$ARMS_BAD $1"; [ "$ARM_Q" = 1 ] || bad "${4:-$1} $3 (rc=${rc:-?}): ${out:-}"; fi
+}
+arm_end() { ARMS_FAILED="$(sorted_set $ARMS_BAD)"; }
+armout() { local v_="ARMOUT_${1//-/_}"; printf '%s' "${!v_:-}"; }
+armrc() { local v_="ARMRC_${1//-/_}"; printf '%s' "${!v_:-}"; }
+
+# bat_base <arm function> <mutant directory> <control label> <battery letter> -- called right after
+# `<fn> "$VALIDATOR" 0`. The unmutated validator must fail none of the battery's arms, and each arm it
+# passed in THIS run becomes the base-pass flag its kills are gated on.
+bat_base() {
+  local a_
+  BAT_FN="$1"; BAT_DIR="$2"; BAT_RAN="$(sorted_set $ARMS_RAN)"; P_ALL="$BAT_RAN"
+  ALL_ARMS="$ALL_ARMS $BAT_RAN"
+  if [ -z "$BAT_RAN" ]; then bad "$3 no $4 arm ran on the unmutated validator -- nothing below is readable"
+  elif [ -z "$ARMS_FAILED" ]; then ok "$3 the unmutated validator fails no $4 arm, so a mutant's failed set is its own"
+  else bad "$3 the unmutated validator failed $4 arm(s): $ARMS_FAILED -- no mutant verdict below is readable"; fi
+  for a_ in $BAT_RAN; do in_set "$a_" "$ARMS_FAILED" || printf -v "B_${a_//-/_}" '%s' 1; done
+}
+
+# bmut <mutant> <deciding arm> <twin arm | -> <recorded tripped set> <sed expression>...
+# BM_VERIFY, when set to a function name, is an extra presence check run on the arms' recorded output
+# for the mutant; it is consumed by this call.
+bmut() {
+  local name="$1" dec="$2" twin="$3" want_set="$4"; shift 4
+  local M="$BAT_DIR/$name-$VBASE" bv="B_${dec//-/_}" got ran vfy="$BM_VERIFY" vok=1
+  BM_VERIFY=""; [ "$want_set" = ALL ] && want_set="$BAT_RAN"
+  if ! mut_copy "$M" "$@"; then bad "mutant $name DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
+  if ! bash -n "$M" 2>/dev/null; then bad "mutant $name does not parse -- no verdict was scored"; return; fi
+  n_mut=$((n_mut+1))
+  if [ "$MATRIX" -eq 1 ]; then
+    WANT=""; "$BAT_FN" "$M" 1; ran="$(sorted_set $ARMS_RAN)"; got="$ARMS_FAILED"
+    matrix_row "$name" "$got"
+    [ -z "$vfy" ] || "$vfy" || vok=0
+    if [ "$ran" != "$BAT_RAN" ]; then bad "mutant $name: the arms that ran moved from the unmutated set -- the matrix cells are not comparable"
+    elif [ "$got" != "$(sorted_set $want_set)" ]; then bad "mutant $name tripped [$got], expected exactly [$want_set] -- update the recorded set and the header"
+    elif ! in_set "$dec" "$got"; then bad "mutant $name SURVIVED its deciding arm [$dec]"
+    elif [ "$twin" != "-" ] && in_set "$twin" "$got"; then bad "mutant $name: twin [$twin] is not green in the matrix"
+    elif [ "$vok" -eq 0 ]; then bad "mutant $name: its presence check failed on the copy"
+    else
+      n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want_set] (matrix); deciding [$dec], twin [$twin] green"
+    fi
+    return
   fi
-  # UNMUTATED CONTROL, same seed, same invocation shape: the real fix ALLOWS it. Without this
-  # the arm above passes against a validator that refuses everything for any reason at all.
-  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$VALIDATOR" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
-  [ "$rc" -eq 0 ] && ok "k-m1 CONTROL          the unmutated validator ALLOWS the same seed (so the kill is the mutation's)" \
-    || bad "k-m1 CONTROL: the unmutated validator also refused the must-allow seed (rc=$rc): $out"
-  # AND THE EXEC HALF MUST STAY GREEN UNDER M1. A mutant that broke the whole boundary would
-  # also pass the arm above; this says the blanket deny is over-broad, not simply broken.
-  mkdir -p "$WORK/k/m1e"
-  printf 'a\nb\nc\n' > "$WORK/k/m1e/data.txt"
-  rm -f "$WORK/k/m1e/canary"*
-  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m1e/story.md"
-  ( cd "$WORK/k/m1e" && AI_DLC_PROJECT_ROOT="$WORK/k/m1e" bash "$M1" "$WORK/k/m1e/story.md" ) >/dev/null 2>&1
-  if ls "$WORK/k/m1e/canary"* >/dev/null 2>&1; then
-    bad "k-m1 the blanket deny let the write EXECUTE -- the mutation broke the boundary instead of widening it"
+  WANT="$dec"; [ "$twin" = "-" ] || WANT="$dec $twin"
+  "$BAT_FN" "$M" 1; ran="$(sorted_set $ARMS_RAN)"; got="$ARMS_FAILED"; WANT=""
+  [ -z "$vfy" ] || "$vfy" || vok=0
+  if ! in_set "$dec" "$ran"; then bad "mutant $name: its deciding arm [$dec] did not run"
+  elif [ "$twin" != "-" ] && ! in_set "$twin" "$ran"; then bad "mutant $name: its twin [$twin] did not run, so its green says nothing"
+  elif ! in_set "$dec" "$got"; then bad "mutant $name SURVIVED its deciding arm [$dec] -- the kill moved; re-measure with --matrix"
+  elif [ "$twin" != "-" ] && in_set "$twin" "$got"; then bad "mutant $name: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
+  elif [ "$vok" -eq 0 ]; then bad "mutant $name: its presence check failed on the copy"
   else
-    ok "k-m1 exec half        still contained (the blanket deny is OVER-BROAD, not broken)"
+    n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
   fi
-  rm -f "$WORK/k/m1e/canary"*
+}
+
+# THE UNMUTATED COPY (MX0), built the way a mutant is: a copy in the mutant directory, byte-identical
+# to the shipped validator. It must reproduce the true differential pair (a-true exits 0, a-stale exits
+# 1 STALE), a POSITIVE conjunct a copy that never ran cannot print. Every kill below is gated on it.
+mkdir -p "$WORK/mx0"
+cp "$VALIDATOR" "$WORK/mx0/$VBASE"
+mx0_t="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$WORK/mx0/$VBASE" "$WORK/a-true/story.md" 2>&1)"; mx0_tr=$?
+mx0_s="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$WORK/mx0/$VBASE" "$WORK/a-stale/story.md" 2>&1)"; mx0_sr=$?
+if cmp -s "$VALIDATOR" "$WORK/mx0/$VBASE" && [ "$mx0_tr" -eq 0 ] && [ "$mx0_sr" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$mx0_s"; then
+  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the validator, a-true exits 0 and a-stale exits 1 STALE"; B_MX0=1
 else
-  bad "k-m1 DID NOT APPLY -- the blanket-deny mutation matched nothing, so no verdict was scored"
+  bad "unmutated copy is not the shipped validator or does not reproduce the differential (true=$mx0_tr stale=$mx0_sr) -- the harness, not a mutant, is what fails"
 fi
 
-# M2 — the predicate DELETED. The script grammar's verdict is forced empty, which is the shape
-# of "this fix was never written": the write must then execute through the validator.
-M2="$WORK/k/m2-$VBASE"
-if mut_copy "$M2" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why=""|'; then
-  ok "k-m2 applied          (cmp -s: the predicate-deleted mutation changed the file)"
-  mkdir -p "$WORK/k/m2e"
-  printf 'a\nb\nc\n' > "$WORK/k/m2e/data.txt"
-  rm -f "$WORK/k/m2e/canary"*
-  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m2e/story.md"
-  ( cd "$WORK/k/m2e" && AI_DLC_PROJECT_ROOT="$WORK/k/m2e" bash "$M2" "$WORK/k/m2e/story.md" ) >/dev/null 2>&1
-  if ls "$WORK/k/m2e/canary"* >/dev/null 2>&1; then
-    ok "k-m2 KILLED           with the predicate gone, \`sed -n 'w canary'\` EXECUTES through the validator"
-  else
-    bad "k-m2 SURVIVED: deleting the sed predicate did not re-open the write -- the exec arms are not keyed on it"
+mkdir -p "$WORK/k/m1w" "$WORK/k/m1e"
+{ printf '```derived\n$ sed -n '"'"'/w/p'"'"' src/w-forms.txt | wc -l\n       2\n```\n'; } > "$WORK/k/m1w/story.md"
+printf 'a\nb\nc\n' > "$WORK/k/m1e/data.txt"
+{ printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m1e/story.md"
+k_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" kx
+  arm_begin "$q"
+  # k-allow: THE MUST-ALLOW HALF. The unmutated validator ALLOWS the seed; without this the kill
+  # below passes against a validator that refuses everything for any reason at all.
+  if want k-allow; then
+    out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$V" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out"
+    arm k-allow $? "exit=0  the validator ALLOWS the must-allow \`sed -n '/w/p'\` (a blanket sed deny refuses it)"
   fi
-  rm -f "$WORK/k/m2e/canary"*
-  # UNMUTATED CONTROL on the identical seed, so "no canary" above cannot be a dead harness.
-  mkdir -p "$WORK/k/m2c"
-  printf 'a\nb\nc\n' > "$WORK/k/m2c/data.txt"
-  rm -f "$WORK/k/m2c/canary"*
-  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m2c/story.md"
-  ( cd "$WORK/k/m2c" && AI_DLC_PROJECT_ROOT="$WORK/k/m2c" bash "$VALIDATOR" "$WORK/k/m2c/story.md" ) >/dev/null 2>&1
-  if ls "$WORK/k/m2c/canary"* >/dev/null 2>&1; then
-    bad "k-m2 CONTROL: the UNMUTATED validator also executed the write -- the fix is not in the tree being tested"
-  else
-    ok "k-m2 CONTROL          the unmutated validator contains the same seed (so the kill is the mutation's)"
+  # k-exec: THE EXEC HALF. The write form of sed is contained: no canary file appears. A mutant that
+  # broke the whole boundary would fail the arm above too; this says a blanket deny is over-broad,
+  # not simply broken, and that deleting the predicate re-opens the write.
+  if want k-exec; then
+    rm -f "$WORK/k/m1e/canary"*
+    ( cd "$WORK/k/m1e" && AI_DLC_PROJECT_ROOT="$WORK/k/m1e" bash "$V" "$WORK/k/m1e/story.md" ) >/dev/null 2>&1
+    if ls "$WORK/k/m1e/canary"* >/dev/null 2>&1; then kx=1; else kx=0; fi
+    rm -f "$WORK/k/m1e/canary"*
+    out="canary-present=$kx"; rc=$kx
+    arm k-exec "$kx" "the write form \`sed -n 'w canary'\` is contained: no canary file appears"
   fi
-  rm -f "$WORK/k/m2c/canary"*
-else
-  bad "k-m2 DID NOT APPLY -- the predicate-deleted mutation matched nothing, so no verdict was scored"
-fi
+  arm_end
+}
+k_arms "$VALIDATOR" 0
+bat_base k_arms "$WORK/k" "k-control" K
+
+# k-m1's assertion is not merely a flipped exit. A flipped exit is produced by any breakage; the
+# presence check asserts the failure names the ALLOWLIST refusal, which is what an over-broad deny
+# produces and what a STALE or a crash does not.
+k_m1_reason() {
+  [ "$(armrc k-allow)" -eq 1 ] && grep -q 'FAIL (ALLOWLIST)' <<< "$(armout k-allow)" \
+    && grep -q 'writes a file or runs a command' <<< "$(armout k-allow)"
+}
+BM_VERIFY=k_m1_reason
+bmut k-m1 k-allow k-exec "k-allow" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why="blanket"|'
+# M2 -- the predicate DELETED. The script grammar's verdict is forced empty, which is the shape of
+# "this fix was never written": the write must then execute through the validator (k-exec fails).
+bmut k-m2 k-exec k-allow "k-exec" 's|^    sed_why="\$(sed_scripts_verdict)"$|    sed_why=""|'
 
 # --- L. A DERIVATION THAT READS STDIN DERIVES FROM NOTHING, AND MUST NOT SWALLOW THE REST ---
 # run_pair is called inside check_file's `while read … done < "$f"`, so an eval that inherits
@@ -738,65 +900,53 @@ lemit() { # $1 file  $2 first command  $3 its recorded output ("" = none)  $4 se
 lemit "$WORK/l/reader.md" "grep -c WRONG" 0 1
 lemit "$WORK/l/pipe.md"   "grep needle src/two-needles.txt | wc -l" "       2" 2
 lemit "$WORK/l/cat.md"    "cat" "" 2
-
-# l-reader: the stdin reader is refused BY NAME, and the stale block after it is still reported.
-out="$(run "$WORK/l/reader.md")"; rc=$?
-[ "$rc" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out" \
-  && ok "l-reader               exit=1  a first derivation reading stdin is refused as READS-STDIN" \
-  || bad "l-reader a stdin-reading derivation was not refused as READS-STDIN (rc=$rc) -- it derived from nothing and passed: $out"
-grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" \
-  && ok "l-reader-rest          the stale block AFTER the reader is still checked (2 checked, STALE reported)" \
-  || bad "l-reader-rest the reader swallowed the rest of the artifact -- the stale second block went unchecked: $out"
-
-# l-pipe: the NEAR-MISS. A pipeline whose first stage names a file reads no stdin of its own;
-# its later stages read the pipe. It must not be flagged, and both blocks must reproduce.
-out="$(run "$WORK/l/pipe.md")"; rc=$?
-[ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation(s)' <<< "$out" && ! grep -q 'READS-STDIN' <<< "$out" \
-  && ok "l-pipe                 exit=0  a pipeline whose first stage names a file is not flagged (2 reproduce)" \
-  || bad "l-pipe a pipeline reading a named file was flagged or failed (rc=$rc): $out"
-
-# l-cat: `cat` first, then a TRUE block. READS-STDIN is the ONLY finding -- not STALE, which is
-# what `cat` over an inherited artifact or over the sentinel produces instead.
-out="$(run "$WORK/l/cat.md")"; rc=$?
-nfail="$(grep -c '^FAIL (' <<< "$out")" || nfail=0
-[ "$rc" -eq 1 ] && [ "$nfail" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" \
-  && ok "l-cat                  exit=1  \`cat\` first is READS-STDIN and nothing else; the true block after it passes" \
-  || bad "l-cat expected exactly one finding, READS-STDIN, over 2 checked (rc=$rc, $nfail finding(s)): $out"
-
-# L's two mutants. Each is a copy, guarded by `cmp -s`, and each carries a presence-shaped
-# kill condition that only a copy which RAN can print.
-#
-#   M3  the sentinel check removed -- stdin is still the sentinel, so nothing is swallowed,
-#       but the reader PASSES: the bare-close non-fix.
-#   M4  stdin inherited from the loop again -- the defect as it shipped.
-M3="$WORK/l/m3-$VBASE"
-if mut_copy "$M3" 's|^  if \[ "\$sent_back" != "\$STDIN_SENTINEL" \]; then$|  if false; then|'; then
-  ok "l-m3 applied          (cmp -s: the sentinel-check-removed mutation changed the file)"
-  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M3" "$WORK/l/reader.md" 2>&1)"; rc=$?
-  # The kill: the reader is no longer refused, while the STALE block proves the copy ran and
-  # still checked both blocks -- so it is the refusal that moved, not the harness.
-  if ! grep -q 'READS-STDIN' <<< "$out" && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out"; then
-    ok "l-m3 KILLED           with the sentinel check gone the stdin reader passes; only l-reader's READS-STDIN conjunct sees it"
-  else
-    bad "l-m3 SURVIVED or did not run: removing the sentinel check did not let the reader pass (rc=$rc): $out"
+l_run() { AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$2" 2>&1; } # $1 validator  $2 artifact
+l_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" nfail
+  arm_begin "$q"
+  # l-reader: the stdin reader is refused BY NAME, and the stale block after it is still reported.
+  if want l-reader l-reader-rest; then
+    out="$(l_run "$V" "$WORK/l/reader.md")"; rc=$?
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out"
+    arm l-reader $? "exit=1  a first derivation reading stdin is refused as READS-STDIN"
+    grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out"
+    arm l-reader-rest $? "the stale block AFTER the reader is still checked (2 checked, STALE reported)"
   fi
-else
-  bad "l-m3 DID NOT APPLY -- the sentinel-check mutation matched nothing, so no verdict was scored"
-fi
-M4="$WORK/l/m4-$VBASE"
-if mut_copy "$M4" 's|eval "\$c" <&3 3<&-;|eval "$c" 3<\&-;|'; then
-  ok "l-m4 applied          (cmp -s: the stdin-inherited mutation changed the file)"
-  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M4" "$WORK/l/reader.md" 2>&1)"; rc=$?
-  # The kill is the SWALLOW itself, asserted as a presence: exit 0 and ONE derivation counted
-  # over a file holding two, with no READS-STDIN -- the reader consumed the artifact.
-  if [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out" && ! grep -q 'READS-STDIN' <<< "$out"; then
-    ok "l-m4 KILLED           with stdin inherited the reader swallows the second block (OK: 1 derivation, exit 0)"
-  else
-    bad "l-m4 SURVIVED or did not run: inheriting the loop's stdin did not swallow the second block (rc=$rc): $out"
+  # l-pipe: the NEAR-MISS. A pipeline whose first stage names a file reads no stdin of its own;
+  # its later stages read the pipe. It must not be flagged, and both blocks must reproduce.
+  if want l-pipe; then
+    out="$(l_run "$V" "$WORK/l/pipe.md")"; rc=$?
+    [ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation(s)' <<< "$out" && ! grep -q 'READS-STDIN' <<< "$out"
+    arm l-pipe $? "exit=0  a pipeline whose first stage names a file is not flagged (2 reproduce)"
   fi
-else
-  bad "l-m4 DID NOT APPLY -- the stdin-inherited mutation matched nothing, so no verdict was scored"
-fi
+  # l-cat: `cat` first, then a TRUE block. READS-STDIN is the ONLY finding -- not STALE, which is
+  # what `cat` over an inherited artifact or over the sentinel produces instead.
+  if want l-cat; then
+    out="$(l_run "$V" "$WORK/l/cat.md")"; rc=$?
+    nfail="$(grep -c '^FAIL (' <<< "$out")" || nfail=0
+    [ "$rc" -eq 1 ] && [ "$nfail" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out" && grep -q 'of 2 checked' <<< "$out"
+    arm l-cat $? "exit=1  \`cat\` first is READS-STDIN and nothing else; the true block after it passes"
+  fi
+  arm_end
+}
+l_arms "$VALIDATOR" 0
+bat_base l_arms "$WORK/l" "l-control" L
+
+# L's two mutants. Each is a copy, guarded by `cmp -s`, decided by a presence-shaped arm that only a
+# copy which RAN can fail.
+#   M3  the sentinel check removed -- stdin is still the sentinel, so nothing is swallowed, but the
+#       reader PASSES: the bare-close non-fix. The presence check: no READS-STDIN, while the STALE
+#       block proves the copy ran and still checked both blocks.
+#   M4  stdin inherited from the loop again -- the defect as it shipped. The presence check is the
+#       SWALLOW itself: exit 0 and ONE derivation counted over a file holding two, no READS-STDIN.
+l_m3_swallow() { ! grep -q 'READS-STDIN' <<< "$(armout l-reader)" && grep -q 'FAIL (STALE)' <<< "$(armout l-reader)" \
+                 && grep -q 'of 2 checked' <<< "$(armout l-reader)"; }
+l_m4_swallow() { [ "$(armrc l-reader)" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$(armout l-reader)" \
+                 && ! grep -q 'READS-STDIN' <<< "$(armout l-reader)"; }
+BM_VERIFY=l_m3_swallow
+bmut l-m3 l-reader l-pipe "l-cat l-reader" 's|^  if \[ "\$sent_back" != "\$STDIN_SENTINEL" \]; then$|  if false; then|'
+BM_VERIFY=l_m4_swallow
+bmut l-m4 l-reader l-pipe "l-cat l-reader l-reader-rest" 's|eval "\$c" <&3 3<&-;|eval "$c" 3<\&-;|'
 
 # --- M. A DERIVATION THAT NEVER RAN IS UNRUN, NEVER STALE ----------------------------------
 # The output file is empty both when a command printed nothing and when it never executed, and
@@ -821,7 +971,6 @@ fi
 # ran, both must be verdicts, and each has a twin that must come back STALE.
 mkdir -p "$WORK/m/bin"
 printf 'm-data\n' > "$WORK/src/m-data.txt"
-cp "$VALIDATOR" "$WORK/m/v.sh"
 mshim() { # $1 body of the shasum shim
   printf '#!/bin/sh\n%s\n' "$1" > "$WORK/m/bin/shasum"; chmod +x "$WORK/m/bin/shasum"
 }
@@ -830,35 +979,6 @@ mrun() { # $1 validator  $2 story -> sets out, rc
 }
 { printf '```derived\n$ shasum src/m-data.txt\nfeedface  src/m-data.txt\n```\n\n'
   printf '```derived\n$ grep -c needle src/two-needles.txt\n2\n```\n'; } > "$WORK/m/fault.md"
-m_unrun() { # $1 label  $2 validator
-  mrun "$2" "$WORK/m/fault.md"
-  if [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*fault.md:2 ' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" \
-     && ! grep -q 'FAIL (STALE)' <<< "$out"; then
-    ok "$1 exit=2  UNRUN names the derivation; no STALE was scored"
-  else
-    bad "$1 expected exit 2 with an UNRUN line naming fault.md:2 and no STALE, got $rc: $out"
-  fi
-}
-# POSITIVE CONTROL for the shim itself: with a shim that prints the recorded line, the SAME file
-# reproduces. Without it, UNRUN below could be the shim failing to be found at all.
-mshim 'echo "feedface  src/m-data.txt"'
-mrun "$WORK/m/v.sh" "$WORK/m/fault.md"
-[ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation' <<< "$out" \
-  && ok "m-control              exit=0  the shasum shim is on the eval's PATH and the file reproduces" \
-  || bad "m-control the shim was not reached, so no fault arm below is about the eval (rc=$rc): $out"
-mshim 'kill -9 $$'
-m_unrun "m-kill-cmd            " "$WORK/m/v.sh"
-mshim 'kill -9 $PPID'
-m_unrun "m-kill-sub            " "$WORK/m/v.sh"
-mshim 'echo "feedface  src/m-data.txt"'
-cp "$VALIDATOR" "$WORK/m/v-fork.sh"
-"${SED:-sed}" 's|&& { eval "\$c" <&3|\&\& { case "$c" in shasum*) ulimit -Su 1 ;; esac; eval "$c" <\&3|' \
-  "$VALIDATOR" > "$WORK/m/v-fork.sh" 2>/dev/null
-if cmp -s "$VALIDATOR" "$WORK/m/v-fork.sh"; then
-  bad "m-fork DID NOT APPLY -- the fork-fault injection matched nothing, so no verdict was scored"
-else
-  m_unrun "m-fork                " "$WORK/m/v-fork.sh"
-fi
 
 # The near-misses. git needs a repository for its fatal to be about the ref, not the cwd.
 #
@@ -882,48 +1002,6 @@ awk 'BEGIN { for (i = 0; i < 20000; i++) print "line-" i }' > "$WORK/m/repo/big.
 [ "$prc" -ne 0 ] \
   && ok "m-natural pipe         the pipe near-miss exits non-zero ($prc) on its own, so it is a status a derivation produced" \
   || bad "m-natural pipe the cat|head near-miss exited 0, so it no longer carries a non-zero status of its own"
-mnear() { # $1 label  $2 command  $3 true output ("" = none)  $4 wrong output
-  { printf '```derived\n$ %s\n' "$2"; [ -n "$3" ] && printf '%s\n' "$3"; printf '```\n'; } > "$WORK/m/repo/$1-true.md"
-  out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$VALIDATOR" "$WORK/m/repo/$1-true.md" 2>&1)"; rc=$?
-  [ "$rc" -eq 0 ] && ! grep -q 'UNRUN' <<< "$out" \
-    && ok "m-$1 (verdict)   exit=0  a status the command produced itself is not UNRUN" \
-    || bad "m-$1 a derivation that ran and exited on its own was refused (rc=$rc): $out"
-  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/m/repo/$1-stale.md"
-  out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$VALIDATOR" "$WORK/m/repo/$1-stale.md" 2>&1)"; rc=$?
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
-    && ok "m-$1 (twin)      exit=1  STALE, not UNRUN -- the verdict path is live" \
-    || bad "m-$1 twin must be STALE and not UNRUN, got $rc: $out"
-}
-mnear git-128  "git show ZZ_NO_SUCH_REF_ZZ"                          ""       "9"
-mnear awk-141  "awk 'BEGIN { print \"line-0\" } BEGIN { exit 141 }'" "line-0" "9"
-mnear pipe     "cat big.txt | head -1"                               "line-0" "9"
-
-# M5 -- the marker check DROPPED: the defect as it shipped. The fault must come back STALE,
-# exit 1, which is the false verdict this section exists to refuse.
-# M6 -- the signal arm DROPPED: only the marker-empty half survives, so m-kill-cmd's command
-# SIGKILL (marker 137) is scored STALE again while m-kill-sub stays UNRUN.
-M5="$WORK/m/m5-$VBASE"; M6="$WORK/m/m6-$VBASE"
-mshim 'kill -9 $PPID'
-if mut_copy "$M5" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ZZ_NEVER_MATCHES_ZZ)/"; then
-  ok "m-m5 applied          (cmp -s: the marker-check-dropped mutation changed the file)"
-  mrun "$M5" "$WORK/m/fault.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
-    && ok "m-m5 KILLED           with the marker unread a killed subshell scores STALE, exit 1" \
-    || bad "m-m5 SURVIVED or did not run (rc=$rc): $out"
-else
-  bad "m-m5 DID NOT APPLY -- the marker-check mutation matched nothing, so no verdict was scored"
-fi
-mshim 'kill -9 $$'
-if mut_copy "$M6" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ''|*[!0-9]*)/"; then
-  ok "m-m6 applied          (cmp -s: the signal-arm-dropped mutation changed the file)"
-  mrun "$M6" "$WORK/m/fault.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
-    && ok "m-m6 KILLED           with only the empty-marker arm a SIGKILLed command scores STALE, exit 1" \
-    || bad "m-m6 SURVIVED or did not run (rc=$rc): $out"
-else
-  bad "m-m6 DID NOT APPLY -- the signal-arm mutation matched nothing, so no verdict was scored"
-fi
-
 # M-UNBOUND. The validator's own `set -u` used to reach the eval subshell, abort it on an unbound
 # `$VAR` before the marker was written, and score an ordinary stale derivation UNRUN, exit 2. The
 # capture hook then read that 2 as infrastructure and hid every real STALE in the same write. The
@@ -941,28 +1019,91 @@ M_DOLLAR='it carries a $ that bash expands'
 printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n9\n```\n' > "$WORK/m/unbound-stale.md"
 printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n2\n```\n' > "$WORK/m/unbound-true.md"
 printf '```derived\n$ grep -c "needle$[1/0]" src/two-needles.txt\n2\n```\n' > "$WORK/m/arith.md"
-for mu in unbound-stale unbound-true arith; do
-  mrun "$VALIDATOR" "$WORK/m/$mu.md"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (ALLOWLIST): .*$mu.md:2 " <<< "$out" && grep -qF "$M_DOLLAR" <<< "$out" \
-    && ! grep -q 'UNRUN' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
-    && ok "m-$mu exit=1  an expanding \$ is an ALLOWLIST refusal, never UNRUN or STALE" \
-    || bad "m-$mu expected exit 1 FAIL (ALLOWLIST) naming the expanding-\$ refusal, got $rc: $out"
-done
-M7="$WORK/m/m7-$VBASE"
-if mut_copy "$M7" 's|DX = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789|DX = "0123456789|'; then
-  ok "m-m7 applied          (cmp -s: the name-class-dropped mutation changed the file)"
-  # MEASURED: with the name class gone the unbound name now dies one step EARLIER than the run
-  # eval -- the walker's own `eval "set -- <segment>"` runs under the validator's `set -u` too, so
-  # the segment is refused as one bash could not split. The kill is that the expanding-$ refusal
-  # no longer fires; the derivation is still refused, by the second layer.
-  mrun "$M7" "$WORK/m/unbound-stale.md"
-  [ "$rc" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*unbound-stale.md:2 ' <<< "$out" \
-    && grep -qF 'bash could not split it into words' <<< "$out" && ! grep -qF "$M_DOLLAR" <<< "$out" \
-    && ok "m-m7 KILLED           with the name class dropped the expanding-\$ refusal is gone; the argv eval's set -u refuses it instead" \
-    || bad "m-m7 SURVIVED or did not run (rc=$rc): $out"
-else
-  bad "m-m7 DID NOT APPLY -- the name-class mutation matched nothing, so no verdict was scored"
-fi
+# THE ARMS OF THIS SECTION ARE A FUNCTION OF THE VALIDATOR, so the mutants below drive the same arms
+# the unmutated validator just passed. Each arm sets the shim it needs itself, because the shim is one
+# file on the eval's PATH and the arms run in any subset.
+m_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" mu
+  arm_begin "$q"
+  munrun() { # $1 arm id  $2 validator
+    mrun "$2" "$WORK/m/fault.md"
+    [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*fault.md:2 ' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" \
+      && ! grep -q 'FAIL (STALE)' <<< "$out"
+    arm "$1" $? "exit=2  UNRUN names the derivation; no STALE was scored"
+  }
+  # POSITIVE CONTROL for the shim itself: with a shim that prints the recorded line, the SAME file
+  # reproduces. Without it, UNRUN below could be the shim failing to be found at all.
+  if want m-control; then
+    mshim 'echo "feedface  src/m-data.txt"'
+    mrun "$V" "$WORK/m/fault.md"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation' <<< "$out"
+    arm m-control $? "exit=0  the shasum shim is on the eval's PATH and the file reproduces"
+  fi
+  if want m-kill-cmd; then mshim 'kill -9 $$'; munrun m-kill-cmd "$V"; fi
+  if want m-kill-sub; then mshim 'kill -9 $PPID'; munrun m-kill-sub "$V"; fi
+  if want m-fork; then
+    mshim 'echo "feedface  src/m-data.txt"'
+    "${SED:-sed}" 's|&& { eval "\$c" <&3|\&\& { case "$c" in shasum*) ulimit -Su 1 ;; esac; eval "$c" <\&3|' \
+      "$V" > "$WORK/m/v-fork.sh" 2>/dev/null
+    if [ ! -s "$WORK/m/v-fork.sh" ] || cmp -s "$V" "$WORK/m/v-fork.sh"; then
+      rc=99; out="the fork-fault injection matched nothing"
+      arm m-fork 1 "DID NOT APPLY -- the fork-fault injection matched nothing, so no verdict was scored"
+    else
+      munrun m-fork "$WORK/m/v-fork.sh"
+    fi
+  fi
+  mnear_arm() { # $1 label  $2 command  $3 true output ("" = none)  $4 wrong output
+    if want "m-$1-verdict"; then
+      { printf '```derived\n$ %s\n' "$2"; [ -n "$3" ] && printf '%s\n' "$3"; printf '```\n'; } > "$WORK/m/repo/$1-true.md"
+      out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$V" "$WORK/m/repo/$1-true.md" 2>&1)"; rc=$?
+      [ "$rc" -eq 0 ] && ! grep -q 'UNRUN' <<< "$out"
+      arm "m-$1-verdict" $? "  exit=0  a status the command produced itself is not UNRUN" "m-$1 (verdict)"
+    fi
+    if want "m-$1-twin"; then
+      { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/m/repo/$1-stale.md"
+      out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$V" "$WORK/m/repo/$1-stale.md" 2>&1)"; rc=$?
+      [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out"
+      arm "m-$1-twin" $? "  exit=1  STALE, not UNRUN -- the verdict path is live" "m-$1 (twin)"
+    fi
+  }
+  mnear_arm git-128  "git show ZZ_NO_SUCH_REF_ZZ"                          ""       "9"
+  mnear_arm awk-141  "awk 'BEGIN { print \"line-0\" } BEGIN { exit 141 }'" "line-0" "9"
+  mnear_arm pipe     "cat big.txt | head -1"                               "line-0" "9"
+  for mu in unbound-stale unbound-true arith; do
+    want "m-$mu" || continue
+    mrun "$V" "$WORK/m/$mu.md"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (ALLOWLIST): .*$mu.md:2 " <<< "$out" && grep -qF "$M_DOLLAR" <<< "$out" \
+      && ! grep -q 'UNRUN' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out"
+    arm "m-$mu" $? "exit=1  an expanding \$ is an ALLOWLIST refusal, never UNRUN or STALE"
+  done
+  arm_end
+}
+m_arms "$VALIDATOR" 0
+bat_base m_arms "$WORK/m" "m-control-arms" M
+
+# M5 -- the marker check DROPPED: the defect as it shipped. The fault must come back STALE, exit 1,
+# which is the false verdict this section exists to refuse; the presence check reads STALE named over
+# 2 checked, and no UNRUN anywhere.
+# M6 -- the signal arm DROPPED: only the marker-empty half survives, so m-kill-cmd's command SIGKILL
+# (marker 137) is scored STALE again while m-kill-sub stays UNRUN.
+# M7 drops the name characters from the scan's class, so `$FILE_ZZ_UNSET` reaches the eval under the
+# validator's `set -u` again. MEASURED: the unbound name then dies one step EARLIER than the run eval --
+# the walker's own `eval "set -- <segment>"` runs under the validator's `set -u` too, so the segment is
+# refused as one bash could not split. What the mutant removes is the expanding-$ refusal; the
+# derivation is still refused, by the second layer, which the presence check reads.
+m_m5_stale() { [ "$(armrc m-kill-sub)" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$(armout m-kill-sub)" \
+               && grep -q 'of 2 checked' <<< "$(armout m-kill-sub)" && ! grep -q 'UNRUN' <<< "$(armout m-kill-sub)"; }
+m_m6_stale() { [ "$(armrc m-kill-cmd)" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$(armout m-kill-cmd)" \
+               && ! grep -q 'UNRUN' <<< "$(armout m-kill-cmd)"; }
+m_m7_second() { [ "$(armrc m-unbound-stale)" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*unbound-stale.md:2 ' <<< "$(armout m-unbound-stale)" \
+                && grep -qF 'bash could not split it into words' <<< "$(armout m-unbound-stale)" \
+                && ! grep -qF "$M_DOLLAR" <<< "$(armout m-unbound-stale)"; }
+BM_VERIFY=m_m5_stale
+bmut m-m5 m-kill-sub m-control "m-fork m-kill-cmd m-kill-sub" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ZZ_NEVER_MATCHES_ZZ)/"
+BM_VERIFY=m_m6_stale
+bmut m-m6 m-kill-cmd m-kill-sub "m-kill-cmd" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ''|*[!0-9]*)/"
+BM_VERIFY=m_m7_second
+bmut m-m7 m-unbound-stale m-arith "m-unbound-stale m-unbound-true" 's|DX = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789|DX = "0123456789|'
 
 # --- N. A COMPARISON OR A WALK THAT COULD NOT RUN IS A REFUSAL, NEVER A VERDICT ------------------
 # Three verdict-bearing steps AROUND the derivation used to discard their own status:
@@ -1056,72 +1197,92 @@ nrun() { # $1 validator  $2 stub dir  $3 target -> sets out, rc
   out="$(cd "$WORK" && PATH="$2:$PATH" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$3" 2>&1)"; rc=$?
 }
 sent() { [ -s "$1/SENT" ]; }
-
-# n_arms <validator> <quiet: 1|0> -> runs every N arm; sets N_FAILED to the sorted failed arm ids.
+# n_arms <validator> <quiet> -> ARMS_FAILED. Each group is one validator invocation and gates on the
+# arm ids it carries, so a mutant can be scored by its deciding arm and its twin alone.
 n_arms() {
-  local V="$1" q="$2" failed=""
-  narm() { # $1 id  $2 0=pass/1=fail  $3 message
-    if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-    else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi
-  }
+  local V="$1" q="$2"
+  arm_begin "$q"
   # CONTROL: the pass-through diff stub is reached by the comparison and the file reproduces.
-  nrun "$V" "$N/diff-pass" "$N/good.md"
-  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/diff-pass"
-  narm n-diff-ctl $? "      exit=0  a pass-through diff stub is reached by the comparison and the derivation reproduces"
+  if want n-diff-ctl; then
+    nrun "$V" "$N/diff-pass" "$N/good.md"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/diff-pass"
+    arm n-diff-ctl $? "      exit=0  a pass-through diff stub is reached by the comparison and the derivation reproduces"
+  fi
   # THE SUBJECT: diff exits 2 on a derivation that reproduces.
-  nrun "$V" "$N/diff-fail" "$N/good.md"
-  [ "$rc" -eq 2 ] && ! grep -q 'STALE' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" && sent "$N/diff-fail"
-  narm n-diff-verdict $? "  exit=2  diff exiting 2 on a TRUE derivation is a refusal, never STALE"
-  grep -q '^UNRUN: .*/n/good\.md:2 ' <<< "$out"
-  narm n-diff-names $? "    the UNRUN line names the derivation as <file>:<line>"
+  if want n-diff-verdict n-diff-names; then
+    nrun "$V" "$N/diff-fail" "$N/good.md"
+    [ "$rc" -eq 2 ] && ! grep -q 'STALE' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" && sent "$N/diff-fail"
+    arm n-diff-verdict $? "  exit=2  diff exiting 2 on a TRUE derivation is a refusal, never STALE"
+    grep -q '^UNRUN: .*/n/good\.md:2 ' <<< "$out"
+    arm n-diff-names $? "    the UNRUN line names the derivation as <file>:<line>"
+  fi
   # THE CONTROL THAT THE ARMS CAN SEE A STALE: the real diff on a genuinely stale derivation.
-  nrun "$V" "$N/nostub" "$N/stale.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 7' <<< "$out" \
-    && grep -q 'actual:   2' <<< "$out" && ! grep -q '^UNRUN' <<< "$out"
-  narm n-stale $? "         exit=1  a genuinely stale derivation is STALE under the real diff"
+  if want n-stale; then
+    nrun "$V" "$N/nostub" "$N/stale.md"
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 7' <<< "$out" \
+      && grep -q 'actual:   2' <<< "$out" && ! grep -q '^UNRUN' <<< "$out"
+    arm n-stale $? "         exit=1  a genuinely stale derivation is STALE under the real diff"
+  fi
   # CONTROL: the pass-through sed stub is reached by norm and the stale derivation is still STALE.
-  nrun "$V" "$N/sed-pass" "$N/stale.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && sent "$N/sed-pass"
-  narm n-sed-ctl $? "       exit=1  a pass-through sed stub is reached by norm and STALE still reads STALE"
+  if want n-sed-ctl; then
+    nrun "$V" "$N/sed-pass" "$N/stale.md"
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && sent "$N/sed-pass"
+    arm n-sed-ctl $? "       exit=1  a pass-through sed stub is reached by norm and STALE still reads STALE"
+  fi
   # THE SUBJECT: norm fails on a STALE derivation. Before, both sides were empty and compared equal.
-  nrun "$V" "$N/sed-fail" "$N/stale.md"
-  [ "$rc" -eq 2 ] && grep -q '^UNRUN: ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
-    && ! grep -q 'STALE' <<< "$out" && sent "$N/sed-fail"
-  narm n-sed $? "           exit=2  a failing norm is UNRUN, never OK and never STALE"
-  grep -q '^UNRUN: .*/n/stale\.md:2 ' <<< "$out"
-  narm n-sed-names $? "     the UNRUN line names the derivation as <file>:<line>"
+  if want n-sed n-sed-names; then
+    nrun "$V" "$N/sed-fail" "$N/stale.md"
+    [ "$rc" -eq 2 ] && grep -q '^UNRUN: ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
+      && ! grep -q 'STALE' <<< "$out" && sent "$N/sed-fail"
+    arm n-sed $? "           exit=2  a failing norm is UNRUN, never OK and never STALE"
+    grep -q '^UNRUN: .*/n/stale\.md:2 ' <<< "$out"
+    arm n-sed-names $? "     the UNRUN line names the derivation as <file>:<line>"
+  fi
   # CONTROL: the side-keyed pass-through stub sees the ACTUAL side (the only non-empty input).
-  nrun "$V" "$N/side-pass" "$N/act.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'actual:   2' <<< "$out" && sent "$N/side-pass"
-  narm n-sed-act-ctl $? "   exit=1  the side-keyed stub is reached by the ACTUAL side's norm and the empty record is STALE"
+  if want n-sed-act-ctl; then
+    nrun "$V" "$N/side-pass" "$N/act.md"
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'actual:   2' <<< "$out" && sent "$N/side-pass"
+    arm n-sed-act-ctl $? "   exit=1  the side-keyed stub is reached by the ACTUAL side's norm and the empty record is STALE"
+  fi
   # THE SUBJECT: only the actual side's norm fails, with the recorded output empty.
-  nrun "$V" "$N/side-fail" "$N/act.md"
-  [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*/n/act\.md:2 ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
-    && ! grep -q 'STALE' <<< "$out" && sent "$N/side-fail"
-  narm n-sed-act $? "       exit=2  the ACTUAL side's norm failing is UNRUN naming <file>:<line>, never OK"
+  if want n-sed-act; then
+    nrun "$V" "$N/side-fail" "$N/act.md"
+    [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*/n/act\.md:2 ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
+      && ! grep -q 'STALE' <<< "$out" && sent "$N/side-fail"
+    arm n-sed-act $? "       exit=2  the ACTUAL side's norm failing is UNRUN naming <file>:<line>, never OK"
+  fi
   # CONTROL, mirrored: the same stub sees only the RECORDED side when the actual output is empty.
-  nrun "$V" "$N/side-pass" "$N/rec.md"
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 2' <<< "$out" && sent "$N/side-pass"
-  narm n-sed-rec-ctl $? "   exit=1  the side-keyed stub is reached by the RECORDED side's norm and the empty actual is STALE"
-  nrun "$V" "$N/side-fail" "$N/rec.md"
-  [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*/n/rec\.md:2 ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
-    && ! grep -q 'STALE' <<< "$out" && sent "$N/side-fail"
-  narm n-sed-rec $? "       exit=2  the RECORDED side's norm failing is UNRUN naming <file>:<line>, never OK"
+  if want n-sed-rec-ctl; then
+    nrun "$V" "$N/side-pass" "$N/rec.md"
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 2' <<< "$out" && sent "$N/side-pass"
+    arm n-sed-rec-ctl $? "   exit=1  the side-keyed stub is reached by the RECORDED side's norm and the empty actual is STALE"
+  fi
+  if want n-sed-rec; then
+    nrun "$V" "$N/side-fail" "$N/rec.md"
+    [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*/n/rec\.md:2 ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
+      && ! grep -q 'STALE' <<< "$out" && sent "$N/side-fail"
+    arm n-sed-rec $? "       exit=2  the RECORDED side's norm failing is UNRUN naming <file>:<line>, never OK"
+  fi
   # CONTROL: the pass-through find stub walks the directory and finds its one derivation.
-  nrun "$V" "$N/find-pass" "$N/dir"
-  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/find-pass"
-  narm n-find-ctl $? "      exit=0  a pass-through find stub walks the directory and finds 1 derivation"
+  if want n-find-ctl; then
+    nrun "$V" "$N/find-pass" "$N/dir"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/find-pass"
+    arm n-find-ctl $? "      exit=0  a pass-through find stub walks the directory and finds 1 derivation"
+  fi
   # THE SUBJECT: the walk fails on a directory target. Before: `OK: 0 derivation(s)`, exit 0.
-  nrun "$V" "$N/find-fail" "$N/dir"
-  [ "$rc" -eq 2 ] && grep -q "^REFUSED: could not list the markdown files under $N/dir " <<< "$out" \
-    && ! grep -q '^OK:' <<< "$out" && sent "$N/find-fail"
-  narm n-find $? "          exit=2  a failed walk of a directory target is REFUSED naming it, never OK: 0"
-  N_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  if want n-find; then
+    nrun "$V" "$N/find-fail" "$N/dir"
+    [ "$rc" -eq 2 ] && grep -q "^REFUSED: could not list the markdown files under $N/dir " <<< "$out" \
+      && ! grep -q '^OK:' <<< "$out" && sent "$N/find-fail"
+    arm n-find $? "          exit=2  a failed walk of a directory target is REFUSED naming it, never OK: 0"
+  fi
+  arm_end
 }
 n_arms "$VALIDATOR" 0
 
-# N's mutants. Each is a COPY guarded by `cmp -s`, driven through the identical arm set, and must
-# fail EXACTLY its declared arms. The unmutated run above is the control: it failed none.
+# N's mutants. Each is a COPY guarded by `cmp -s`, driven through its deciding arm and one twin, and
+# the --matrix mode drives the identical arm set and records the exact set it fails. The unmutated run
+# above is the control: it failed none.
 #   n-m1  diff rc >= 2 treated as CLEAN
 #   n-m2  diff rc >= 2 routed through STALE -- the defect as it shipped
 #   n-m3  both norm statuses unchecked
@@ -1131,28 +1292,7 @@ n_arms "$VALIDATOR" 0
 #         check fires first, so only n-sed-act does)
 #   n-m4  the walk's status unchecked
 #   n-m5  the UNRUN line stops naming <file>:<line>
-[ -z "$N_FAILED" ] \
-  && ok "n-control              the unmutated validator fails no N arm, so a mutant's failed set is its own" \
-  || bad "n-control the unmutated validator failed N arm(s): $N_FAILED -- no mutant verdict below is readable"
-n_mutant() { # $1 label  $2 declared failed arms (space-separated, sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$N/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then
-    bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return
-  fi
-  n_arms "$M" 1
-  if [ -z "$N_FAILED" ]; then
-    bad "$label SURVIVED -- no N arm failed against it"
-  elif [ "$N_FAILED" = "$want " ]; then
-    ok "$label KILLED           by exactly its declared arm(s): $N_FAILED"
-  else
-    bad "$label killed by the WRONG arm set: failed [$N_FAILED], declared [$want]"
-  fi
-}
-n_mutant n-m1 "n-diff-names n-diff-verdict" \
-  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=0 ;;/'
-n_mutant n-m2 "n-diff-names n-diff-verdict" \
-  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=1 ;;/'
+bat_base n_arms "$N" "n-control" N
 N_REC_ANCHOR='  if ! norm < "$TMP_EXP" > "$TMP_NEXP"; then'
 N_ACT_ANCHOR='  elif ! norm < "$TMP_OUT" > "$TMP_NOUT"; then'
 N_REC_SED='s/^  if ! norm < "\$TMP_EXP" > "\$TMP_NEXP"; then$/  if ! { norm < "$TMP_EXP" > "$TMP_NEXP"; true; }; then/'
@@ -1166,12 +1306,16 @@ if [ "$(nlines "$N_REC_ANCHOR")" = 1 ] && [ "$(nlines "$N_ACT_ANCHOR")" = 1 ] \
 else
   bad "n-anchors the norm-check anchors are not each unique (rec=$(nlines "$N_REC_ANCHOR") act=$(nlines "$N_ACT_ANCHOR")) -- n-m3a/n-m3b are unreadable"
 fi
-n_mutant n-m3 "n-sed n-sed-act n-sed-names n-sed-rec" "$N_REC_SED" "$N_ACT_SED"
-n_mutant n-m3a "n-sed-rec" "$N_REC_SED"
-n_mutant n-m3b "n-sed-act" "$N_ACT_SED"
-n_mutant n-m4 "n-find" \
+bmut n-m1 n-diff-verdict n-diff-ctl "n-diff-names n-diff-verdict" \
+  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=0 ;;/'
+bmut n-m2 n-diff-verdict n-diff-ctl "n-diff-names n-diff-verdict" \
+  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=1 ;;/'
+bmut n-m3 n-sed n-sed-ctl "n-sed n-sed-act n-sed-names n-sed-rec" "$N_REC_SED" "$N_ACT_SED"
+bmut n-m3a n-sed-rec n-sed-act "n-sed-rec" "$N_REC_SED"
+bmut n-m3b n-sed-act n-sed-rec "n-sed-act" "$N_ACT_SED"
+bmut n-m4 n-find n-find-ctl "n-find" \
   's/^    walk_rc=\$?$/    walk_rc=0/'
-n_mutant n-m5 "n-diff-names n-sed-act n-sed-names n-sed-rec" \
+bmut n-m5 n-diff-names n-diff-verdict "n-diff-names n-sed-act n-sed-names n-sed-rec" \
   's/"\$f" "\$ln" "\$cmp_why" "\$c" >&2$/"a derivation" "?" "$cmp_why" "$c" >\&2/'
 
 # --- O. A `--stat` GRAPH IS A FACT ABOUT THE TREE, NOT ABOUT THE INVOKER'S TERMINAL ---------------
@@ -1205,43 +1349,41 @@ o_emit "$O/stale.md" "$(printf '%s\n' "$O80" | sed 's/ \([0-9][0-9]*\) insertion
 o_run() { # $1 validator  $2 artifact  $3 COLUMNS -- a width the block was NOT recorded at
   out="$(COLUMNS="$3" AI_DLC_PROJECT_ROOT="$O/w" bash "$1" "$2" 2>&1)"; rc=$?
 }
-for _w in 200 40; do
-  o_run "$VALIDATOR" "$O/true.md" "$_w"
-  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" \
-    && ok "o-width-$_w           exit=0  recorded at COLUMNS=80, validated at COLUMNS=$_w, reproduces" \
-    || bad "o-width-$_w a --stat block recorded at 80 columns must reproduce at COLUMNS=$_w (rc=$rc): $out"
-done
-# The twins: the same command with a record the pinned run cannot reproduce. Without them the arms
-# above pass against a validator that stopped comparing. One records a genuinely wrong insertion
-# count; the other was recorded at 60 columns, which the pin does not rescue -- the pin fixes the
-# width, it does not make the graph width-blind.
-if [ "$(cat "$O/stale.md")" != "$(cat "$O/true.md")" ]; then
-  o_run "$VALIDATOR" "$O/stale.md" 200
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
-    && ok "o-stale                exit=1  the same block with a wrong insertion count is still STALE" \
-    || bad "o-stale a --stat block with a wrong count must stay STALE under the pin (rc=$rc): $out"
-else
-  bad "o-stale the twin's count edit matched nothing -- no stale twin was seeded"
-fi
-o_run "$VALIDATOR" "$O/at60.md" 200
-[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
-  && ok "o-at60                 exit=1  a block recorded at COLUMNS=60 stays STALE under the pin" \
-  || bad "o-at60 a --stat block recorded at 60 columns must read STALE (rc=$rc): $out"
-# THE MUTANT: the pin removed. It must turn o-width red and leave the twin red, so the kill is the
-# pin's and not a broken copy's.
-OM="$O/om-$VBASE"
-if mut_copy "$OM" 's/ && export COLUMNS=80 && { eval / \&\& { eval /'; then
-  o_run "$OM" "$O/true.md" 200
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
-    && ok "o-mutant KILLED        without the pin the 80-column block reads STALE at COLUMNS=200" \
-    || bad "o-mutant SURVIVED: removing the COLUMNS pin did not make the 80-column block STALE (rc=$rc): $out"
-  o_run "$OM" "$O/stale.md" 200
-  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
-    && ok "o-mutant control       the unpinned copy still runs and still reports the wrong count STALE" \
-    || bad "o-mutant control: the unpinned copy did not report the stale twin (rc=$rc) -- the copy is broken, not unpinned: $out"
-else
-  bad "o-mutant DID NOT APPLY -- the pin-removal mutation matched nothing, so no verdict was scored"
-fi
+o_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" _w
+  arm_begin "$q"
+  for _w in 200 40; do
+    want "o-width-$_w" || continue
+    o_run "$V" "$O/true.md" "$_w"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out"
+    arm "o-width-$_w" $? "exit=0  recorded at COLUMNS=80, validated at COLUMNS=$_w, reproduces" "o-width-$_w          "
+  done
+  # The twins: the same command with a record the pinned run cannot reproduce. Without them the arms
+  # above pass against a validator that stopped comparing. One records a genuinely wrong insertion
+  # count; the other was recorded at 60 columns, which the pin does not rescue -- the pin fixes the
+  # width, it does not make the graph width-blind.
+  if want o-stale; then
+    if [ "$(cat "$O/stale.md")" != "$(cat "$O/true.md")" ]; then
+      o_run "$V" "$O/stale.md" 200
+      [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out"
+      arm o-stale $? "exit=1  the same block with a wrong insertion count is still STALE" "o-stale               "
+    else
+      rc=99; out="the twin's count edit matched nothing"; arm o-stale 1 "no stale twin was seeded"
+    fi
+  fi
+  if want o-at60; then
+    o_run "$V" "$O/at60.md" 200
+    [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out"
+    arm o-at60 $? "exit=1  a block recorded at COLUMNS=60 stays STALE under the pin" "o-at60                "
+  fi
+  arm_end
+}
+o_arms "$VALIDATOR" 0
+bat_base o_arms "$O" "o-control" O
+# THE MUTANT: the pin removed. It must turn o-width red and leave the twin (o-stale) green, so the
+# kill is the pin's and not a broken copy's: the unpinned copy still runs and still reports the wrong
+# count STALE.
+bmut o-mutant o-width-200 o-stale "o-width-200 o-width-40" 's/ && export COLUMNS=80 && { eval / \&\& { eval /'
 
 # --- P. A DIRECTORY TARGET WALKS THE LIVE SET; FROZEN RECORDS ARE SKIPPED, VISIBLY ------------
 # `_gate-procedures.md` used to re-run this validator over `s<N>/` after every repair join; it now
@@ -1278,71 +1420,73 @@ prun() { # $1 validator  $2.. args -> out, rc
   local v="$1"; shift
   out="$(cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$v" "$@" 2>&1)"; rc=$?
 }
-p_arms() { # <validator> <quiet> -> P_FAILED
-  local V="$1" q="$2" failed="" total seen exc
-  parm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+p_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" total seen exc
+  arm_begin "$q"
   # p-frozen: every stale fence is in a frozen record; the live set is clean -> exit 0, visibly.
-  prun "$V" "$PS/"
-  [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $P_NFROZEN frozen file(s) under $PS/ " <<< "$out" \
-    && grep -q '^OK: 3 derivation(s) in 3 block(s) across 3 file(s)' <<< "$out"
-  parm p-frozen $? "        exit=0  stale only in shards/ and records: $P_NFROZEN EXCLUDED, the 3 live files (a digest among them) reproduce"
-  # p-count: what was excluded plus what was walked is every .md under the target.
-  total="$(find "$P/$PS" -type f -name '*.md' | grep -c .)" || total=0
-  exc="$(sed -n 's/^EXCLUDED: \([0-9]*\) .*/\1/p' <<< "$out")"; seen="$(sed -n 's/.* across \([0-9]*\) file(s).*/\1/p' <<< "$out")"
-  [ -n "$exc" ] && [ -n "$seen" ] && [ "$((exc + seen))" -eq "$total" ] && [ "$total" -gt 3 ]
-  parm p-count $? "         EXCLUDED (${exc:-?}) + walked (${seen:-?}) = every .md under the slot ($total)"
+  # p-count reads the SAME run, so the two share one invocation.
+  if want p-frozen p-count; then
+    prun "$V" "$PS/"
+    [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $P_NFROZEN frozen file(s) under $PS/ " <<< "$out" \
+      && grep -q '^OK: 3 derivation(s) in 3 block(s) across 3 file(s)' <<< "$out"
+    arm p-frozen $? "        exit=0  stale only in shards/ and records: $P_NFROZEN EXCLUDED, the 3 live files (a digest among them) reproduce" "p-frozen"
+    # p-count: what was excluded plus what was walked is every .md under the target.
+    total="$(find "$P/$PS" -type f -name '*.md' | grep -c .)" || total=0
+    exc="$(sed -n 's/^EXCLUDED: \([0-9]*\) .*/\1/p' <<< "$out")"; seen="$(sed -n 's/.* across \([0-9]*\) file(s).*/\1/p' <<< "$out")"
+    [ -n "$exc" ] && [ -n "$seen" ] && [ "$((exc + seen))" -eq "$total" ] && [ "$total" -gt 3 ]
+    arm p-count $? "         EXCLUDED (${exc:-?}) + walked (${seen:-?}) = every .md under the slot ($total)" "p-count"
+  fi
   # p-all: --all walks the frozen records too -> every one of them is stale.
-  prun "$V" --all "$PS/"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL: $P_NFROZEN stale or unrunnable derivation(s) of $((P_NFROZEN + 3)) checked" <<< "$out" \
-    && ! grep -q '^EXCLUDED:' <<< "$out"
-  parm p-all $? "           exit=1  --all walks all $((P_NFROZEN + 3)) files and fails the $P_NFROZEN frozen ones"
+  if want p-all; then
+    prun "$V" --all "$PS/"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL: $P_NFROZEN stale or unrunnable derivation(s) of $((P_NFROZEN + 3)) checked" <<< "$out" \
+      && ! grep -q '^EXCLUDED:' <<< "$out"
+    arm p-all $? "           exit=1  --all walks all $((P_NFROZEN + 3)) files and fails the $P_NFROZEN frozen ones" "p-all"
+  fi
   # p-file: a frozen record named as a FILE is never excluded.
-  prun "$V" "$PS/shards/coe-p1/1.md"
-  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
-  parm p-file $? "          exit=1  a shard part named as a FILE target is checked, never excluded"
+  if want p-file; then
+    prun "$V" "$PS/shards/coe-p1/1.md"
+    [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+    arm p-file $? "          exit=1  a shard part named as a FILE target is checked, never excluded" "p-file"
+  fi
   # p-shardtarget: a target that IS a shard dir is walked; the component counts only BELOW it.
-  prun "$V" "$PS/shards/coe-p1/"
-  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
-  parm p-shardtarget $? "   exit=1  a shards/ dir named as the target is walked, never read as OK: 0"
+  if want p-shardtarget; then
+    prun "$V" "$PS/shards/coe-p1/"
+    [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+    arm p-shardtarget $? "   exit=1  a shards/ dir named as the target is walked, never read as OK: 0" "p-shardtarget"
+  fi
   # p-area: the AREA as target skips the same slot records and walks the area-root near-miss.
-  prun "$V" _bmad-output/planning-artifacts/
-  [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $P_NFROZEN frozen file(s)" <<< "$out" \
-    && grep -q '^OK: 4 derivation(s) in 4 block(s) across 4 file(s)' <<< "$out"
-  parm p-area $? "          exit=0  the area target skips the same $P_NFROZEN and walks the area-root prd-repair-p1.md"
+  if want p-area; then
+    prun "$V" _bmad-output/planning-artifacts/
+    [ "$rc" -eq 0 ] && grep -q "^EXCLUDED: $P_NFROZEN frozen file(s)" <<< "$out" \
+      && grep -q '^OK: 4 derivation(s) in 4 block(s) across 4 file(s)' <<< "$out"
+    arm p-area $? "          exit=0  the area target skips the same $P_NFROZEN and walks the area-root prd-repair-p1.md" "p-area"
+  fi
   # p-live: the SAME tree with the live document stale -> exit 1. Restored after.
-  pfence "$PS/architecture-impact.md" 3
-  prun "$V" "$PS/"
-  [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 3 checked' <<< "$out" \
-    && grep -q "FAIL (STALE): $PS/architecture-impact.md:4" <<< "$out"
-  parm p-live $? "          exit=1  a stale LIVE document in the slot still fails, named"
-  pfence "$PS/architecture-impact.md" 2
-  P_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  if want p-live; then
+    pfence "$PS/architecture-impact.md" 3
+    prun "$V" "$PS/"
+    [ "$rc" -eq 1 ] && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 3 checked' <<< "$out" \
+      && grep -q "FAIL (STALE): $PS/architecture-impact.md:4" <<< "$out"
+    arm p-live $? "          exit=1  a stale LIVE document in the slot still fails, named" "p-live"
+    pfence "$PS/architecture-impact.md" 2
+  fi
+  arm_end
 }
 p_arms "$VALIDATOR" 0
-[ -z "$P_FAILED" ] \
-  && ok "p-control              the unmutated validator fails no P arm, so a mutant's failed set is its own" \
-  || bad "p-control the unmutated validator failed P arm(s): $P_FAILED -- no mutant verdict below is readable"
+bat_base p_arms "$P" "p-control" P
 
-# P's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+# P's mutants, each a copy guarded by cmp -s, scored by a deciding arm and a twin; the full set each
+# trips is recorded and re-measured by --matrix.
 #   p-m1  the split excludes NOTHING           p-m2  the split excludes EVERYTHING
 #   p-m3  --all is a no-op                     p-m4  a FILE target under shards/ is skipped
 #   p-m5  the EXCLUDED count omits records     p-m6  shards/ matched on the whole path, not below the target
-p_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$P/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  p_arms "$M" 1
-  if [ -z "$P_FAILED" ]; then bad "$label SURVIVED -- no P arm failed against it"
-  elif [ "$P_FAILED" = "$want " ]; then ok "$label KILLED           by exactly its declared arm(s): $P_FAILED"
-  else bad "$label killed by the WRONG arm set: failed [$P_FAILED], declared [$want]"; fi
-}
-p_mutant p-m1 "p-area p-count p-frozen p-live" 's/^          if (why == "") print > keep; else D\[why\]++$/          print > keep/'
-p_mutant p-m2 "p-area p-frozen p-live p-shardtarget" 's/^          if (why == "") print > keep; else D\[why\]++$/          D[why == "" ? "shards" : why]++/'
-p_mutant p-m3 "p-all" 's/^    --all)  WALK_ALL=1; shift ;;$/    --all)  WALK_ALL=0; shift ;;/'
-p_mutant p-m4 "p-file" 's/^    check_file "\$target"$/    case "$target" in *\/shards\/*) continue ;; esac; check_file "$target"/'
-p_mutant p-m5 "p-area p-count p-frozen" 's/^          "\$((n_sh + n_rec))" "\$target" "\$n_sh" "\$n_rec"$/          "$n_sh" "$target" "$n_sh" "$n_rec"/'
-p_mutant p-m6 "p-shardtarget" 's/^        { rel = (index(\$0, pre) == 1) ? substr(\$0, length(pre) + 1) : \$0$/        { rel = $0/'
+bmut p-m1 p-frozen p-file "p-area p-count p-frozen p-live" 's/^          if (why == "") print > keep; else D\[why\]++$/          print > keep/'
+bmut p-m2 p-frozen p-all "p-area p-frozen p-live p-shardtarget" 's/^          if (why == "") print > keep; else D\[why\]++$/          D[why == "" ? "shards" : why]++/'
+bmut p-m3 p-all p-file "p-all" 's/^    --all)  WALK_ALL=1; shift ;;$/    --all)  WALK_ALL=0; shift ;;/'
+bmut p-m4 p-file p-all "p-file" 's/^    check_file "\$target"$/    case "$target" in *\/shards\/*) continue ;; esac; check_file "$target"/'
+bmut p-m5 p-count p-live "p-area p-count p-frozen" 's/^          "\$((n_sh + n_rec))" "\$target" "\$n_sh" "\$n_rec"$/          "$n_sh" "$target" "$n_sh" "$n_rec"/'
+bmut p-m6 p-shardtarget p-file "p-shardtarget" 's/^        { rel = (index(\$0, pre) == 1) ? substr(\$0, length(pre) + 1) : \$0$/        { rel = $0/'
 
 # --- Q. A RECORD'S LATER BYTE-IDENTICAL RE-DERIVATION SUPERSEDES ITS EARLIER FENCE --------------
 # A review or repair record is append-only, so a stale figure is re-derived by writing the same
@@ -1401,77 +1545,81 @@ qrun() { # $1 validator  $2.. args -> out, rc
   local v="$1"; shift
   out="$(cd "$Q" && AI_DLC_PROJECT_ROOT="$Q" bash "$v" "$@" 2>&1)"; rc=$?
 }
-q_arms() { # <validator> <quiet> -> Q_FAILED
-  local V="$1" q="$2" failed="" f nsup
-  qarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+q_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" f nsup
+  arm_begin "$q"
   # q-sup: the earlier stale copy is superseded by the later reproducing one -> exit 0, ONE
   # SUPERSEDED line keyed exactly as a FAIL line is, and only the later copy counted.
-  f="$QS/prd-repair-p1.md"; qrun "$V" "$f"
-  nsup="$(grep -c '^SUPERSEDED: ' <<< "$out")" || nsup=0
-  [ "$rc" -eq 0 ] && [ "$nsup" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
-    && grep -q '^OK: 1 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out"
-  qarm q-sup $? "           exit=0  the earlier stale copy is SUPERSEDED by its later byte-identical copy, which runs"
+  if want q-sup; then
+    f="$QS/prd-repair-p1.md"; qrun "$V" "$f"
+    nsup="$(grep -c '^SUPERSEDED: ' <<< "$out")" || nsup=0
+    [ "$rc" -eq 0 ] && [ "$nsup" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
+      && grep -q '^OK: 1 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out"
+    arm q-sup $? "           exit=0  the earlier stale copy is SUPERSEDED by its later byte-identical copy, which runs" "q-sup"
+  fi
   # q-laterstale: the later copy is stale too -> its FAIL stands; supersession hides no failure.
-  f="$QS/coe-adversarial-p1.md"; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
-    && grep -q "^FAIL (STALE): $f:11 " <<< "$out" && ! grep -q "^FAIL (STALE): $f:4 " <<< "$out" \
-    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
-  qarm q-laterstale $? "    exit=1  a stale LATER copy keeps its FAIL; the superseded one is named, not run"
+  if want q-laterstale; then
+    f="$QS/coe-adversarial-p1.md"; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -qxF "SUPERSEDED: $f:4 by $f:11" <<< "$out" \
+      && grep -q "^FAIL (STALE): $f:11 " <<< "$out" && ! grep -q "^FAIL (STALE): $f:4 " <<< "$out" \
+      && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 1 checked' <<< "$out"
+    arm q-laterstale $? "    exit=1  a stale LATER copy keeps its FAIL; the superseded one is named, not run" "q-laterstale"
+  fi
   # q-live: the identical text in a live document supersedes nothing.
-  f="$QS/prd.md"; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
-    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
-  qarm q-live $? "          exit=1  the same repeat in a LIVE document supersedes nothing"
+  if want q-live; then
+    f="$QS/prd.md"; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+      && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+    arm q-live $? "          exit=1  the same repeat in a LIVE document supersedes nothing" "q-live"
+  fi
   # q-outside: a record name outside s<digits>/ is not a record, matching the walk.
-  f=_bmad-output/planning-artifacts/prd-repair-p1.md; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
-  qarm q-outside $? "       exit=1  a record-named file outside a sprint slot supersedes nothing"
+  if want q-outside; then
+    f=_bmad-output/planning-artifacts/prd-repair-p1.md; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+    arm q-outside $? "       exit=1  a record-named file outside a sprint slot supersedes nothing" "q-outside"
+  fi
   # q-byte: a later command one byte different (its file operand) is not a copy.
-  f="$QS/architecture-repair-p1.md"; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
-    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
-  qarm q-byte $? "          exit=1  a later command differing by one byte supersedes nothing"
+  if want q-byte; then
+    f="$QS/architecture-repair-p1.md"; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+      && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+    arm q-byte $? "          exit=1  a later command differing by one byte supersedes nothing" "q-byte"
+  fi
   # q-open: STAYS OPEN -- a stale record fence with no later copy still fails, named.
-  f="$QS/stories-repair-p1.md"; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
-  qarm q-open $? "          exit=1  a stale record fence with no later copy stays open"
+  if want q-open; then
+    f="$QS/stories-repair-p1.md"; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+    arm q-open $? "          exit=1  a stale record fence with no later copy stays open" "q-open"
+  fi
   # q-text: the only later copies are in a text fence, in prose and as a deeper-indented output
   # line, none of which the block grammar reads as a command -> no supersession.
-  f="$QS/epics-repair-p1.md"; qrun "$V" "$f"
-  [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
-    && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
-  qarm q-text $? "          exit=1  a later \`\$ \` line in a text fence, in prose or as indented output is no copy"
+  if want q-text; then
+    f="$QS/epics-repair-p1.md"; qrun "$V" "$f"
+    [ "$rc" -eq 1 ] && grep -q "^FAIL (STALE): $f:4 " <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out" \
+      && grep -q '^FAIL: 1 stale or unrunnable derivation(s) of 2 checked' <<< "$out"
+    arm q-text $? "          exit=1  a later \`\$ \` line in a text fence, in prose or as indented output is no copy" "q-text"
+  fi
   # q-list: --list still lists every command, the superseded one included.
-  f="$QS/prd-repair-p1.md"; qrun "$V" --list "$f"
-  [ "$rc" -eq 0 ] && grep -q '^2 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out" \
-    && grep -qF "  $f:4  grep -c x src/two.txt" <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
-  qarm q-list $? "          exit=0  --list lists the superseded command too"
-  Q_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  if want q-list; then
+    f="$QS/prd-repair-p1.md"; qrun "$V" --list "$f"
+    [ "$rc" -eq 0 ] && grep -q '^2 derivation(s) in 2 block(s) across 1 file(s)' <<< "$out" \
+      && grep -qF "  $f:4  grep -c x src/two.txt" <<< "$out" && ! grep -q '^SUPERSEDED:' <<< "$out"
+    arm q-list $? "          exit=0  --list lists the superseded command too" "q-list"
+  fi
+  arm_end
 }
 q_arms "$VALIDATOR" 0
-[ -z "$Q_FAILED" ] \
-  && ok "q-control              the unmutated validator fails no Q arm, so a mutant's failed set is its own" \
-  || bad "q-control the unmutated validator failed Q arm(s): $Q_FAILED -- no mutant verdict below is readable"
+bat_base q_arms "$Q" "q-control" Q
 
-# Q's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+# Q's mutants, each a copy guarded by cmp -s, scored by a deciding arm and a twin.
 #   nosup      the skip disabled                     anyfile  the record scope dropped
 #   firstwins  the FIRST copy kept, not the last     quiet    the SUPERSEDED line removed
 #   rawscan    the pre-pass keyed on a raw `$ ` scan of the file instead of the block grammar
-q_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$Q/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  q_arms "$M" 1
-  if [ -z "$Q_FAILED" ]; then bad "$label SURVIVED -- no Q arm failed against it"
-  elif [ "$Q_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $Q_FAILED"
-  else bad "$label killed by the WRONG arm set: failed [$Q_FAILED], declared [$want]"; fi
-}
-q_mutant q-nosup "q-laterstale q-sup" 's|^  if \[ -n "\$sup" \]; then$|  if false; then|'
-q_mutant q-anyfile "q-live q-outside" 's|BEGIN { rec = is_record(par, bn) }|BEGIN { rec = 1 }|'
-q_mutant q-firstwins "q-laterstale q-sup" 's|c = substr(r, i + 3); last\[c\] = ln }; next }|c = substr(r, i + 3); if (!(c in last)) last[c] = ln }; next }|'
-q_mutant q-quiet "q-laterstale q-sup" '/printf .SUPERSEDED: %s:%s by /d'
-q_mutant q-rawscan "q-text" \
+bmut q-nosup q-sup q-open "q-laterstale q-sup" 's|^  if \[ -n "\$sup" \]; then$|  if false; then|'
+bmut q-anyfile q-live q-sup "q-live q-outside" 's|BEGIN { rec = is_record(par, bn) }|BEGIN { rec = 1 }|'
+bmut q-firstwins q-sup q-open "q-laterstale q-sup" 's|c = substr(r, i + 3); last\[c\] = ln }; next }|c = substr(r, i + 3); if (!(c in last)) last[c] = ln }; next }|'
+bmut q-quiet q-sup q-open "q-laterstale q-sup" '/printf .SUPERSEDED: %s:%s by /d'
+bmut q-rawscan q-text q-sup "q-text" \
   's|c = substr(r, i + 3); last\[c\] = ln }; next }|} if (match($0, /[$] /)) last[substr($0, RSTART + 2)] = FNR; next }|' \
   's|"\$sev" "\$TMP_EV" > "\$TMP_EV.sup"|"$sf" "$TMP_EV" > "$TMP_EV.sup"|'
 
@@ -1551,22 +1699,25 @@ r_run() { # $1 validator  $2 label  $3 command  $4 recorded output -> out, rc
   rm -f "$RP/canary" "$R/canary-nested" "$R/canary-bare" "$R/canary-sym"
   out="$(cd "$RP" && AI_DLC_PROJECT_ROOT="$RP" bash "$1" "$2.md" 2>&1)"; rc=$?
 }
-r_arms() { # <validator> <quiet> -> R_FAILED
-  local V="$1" q="$2" failed=""
-  rarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi; }
+r_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2"
+  arm_begin "$q"
   racc() { # $1 label  $2 command  $3 recorded
+    want "$1" || return 0
     r_run "$V" "$1" "$2" "$3"
     [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
-    rarm "$1" $? "exit=0  runs and reproduces: $2"
+    arm "$1" $? "exit=0  runs and reproduces: $2"
   }
   rref() { # $1 label  $2 command  $3 expected message  $4 canary path or ""
+    want "$1-msg" "$1-can" || return 0
     r_run "$V" "$1" "$2" ""
-    [ "$rc" -eq 1 ] && grep -qF "$3" <<< "$out"
-    rarm "$1-msg" $? "exit=1  refused naming the reason: $2"
-    if [ -n "$4" ]; then
+    if want "$1-msg"; then
+      [ "$rc" -eq 1 ] && grep -qF "$3" <<< "$out"
+      arm "$1-msg" $? "exit=1  refused naming the reason: $2"
+    fi
+    if [ -n "$4" ] && want "$1-can"; then
       ! [ -e "$4" ]
-      rarm "$1-can" $? "the refused command never ran (no canary): $2"
+      arm "$1-can" $? "the refused command never ran (no canary): $2"
     fi
   }
   racc r-acc-sq    "grep -c -F 'a\`b' d.txt" 1
@@ -1593,7 +1744,7 @@ r_arms() { # <validator> <quiet> -> R_FAILED
   rref r-bare      'git -C evil diff HEAD~1 HEAD'  "'git -C evil' is not a read-only git subcommand" "$R/canary-bare"
   rref r-nested    'git -C nested diff HEAD~1 HEAD' "'git -C nested' is not a read-only git subcommand" "$R/canary-nested"
   rref r-dashc     'git -C sub -c core.pager=x log' "'git -c' is not a read-only git subcommand" ""
-  R_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  arm_end
 }
 # The absolute rows put $R into the fence text, so $R must sit inside the -C character class, or an
 # admit row goes red for the class rather than for the common-dir logic.
@@ -1606,11 +1757,10 @@ esac
   && ok "r-world worktree        \$R/wt is a LINKED worktree of the root (a .git FILE), reached also by a symlink" \
   || bad "r-world worktree: \$R/wt is not a linked worktree or \$R/wtlink is not a symlink -- r-abs-wt/r-abs-link unreadable"
 r_arms "$VALIDATOR" 0
-[ -z "$R_FAILED" ] \
-  && ok "r-control              the unmutated validator fails no R arm, so a mutant's failed set is its own" \
-  || bad "r-control the unmutated validator failed R arm(s): $R_FAILED -- no mutant verdict below is readable"
+bat_base r_arms "$R" "r-control" R
 
-# R's mutants, each a copy guarded by cmp -s, each declared to fail EXACTLY its arm set.
+# R's mutants, each a copy guarded by cmp -s, scored by a deciding arm and a twin; the full set each
+# trips is recorded and re-measured by --matrix.
 #   r-m1  the substring backtick ban restored         r-m2  the in-scan backtick test deleted
 #   r-m3  `-C` skipped with none of its checks        r-m4  the common-dir check removed
 #   r-m5  r-m4 plus the eval's safe.bareRepository export removed
@@ -1620,62 +1770,60 @@ r_arms "$VALIDATOR" 0
 # cannot escape under any of these copies, and the arm proves which refusal fired. The eval
 # export alone has no subject: with the common-dir check present no bare repo reaches the eval,
 # so it is mutated only together with that check (r-m5).
-r_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$R/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  r_arms "$M" 1
-  if [ -z "$R_FAILED" ]; then bad "$label SURVIVED -- no R arm failed against it"
-  elif [ "$R_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $R_FAILED"
-  else bad "$label killed by the WRONG arm set: failed [$R_FAILED], declared [$want]"; fi
-}
-r_mutant r-m1 "r-acc-dq r-acc-sq r-bt-dq-msg r-bt-sqcat-msg r-bt-uq-msg" \
+bmut r-m1 r-acc-sq r-bt-uq-can "r-acc-dq r-acc-sq r-bt-dq-msg r-bt-sqcat-msg r-bt-uq-msg" \
   "s/|\\*'<'\\*|/|*'<'*|*'\`'*|/"
-r_mutant r-m2 "r-bt-dq-can r-bt-dq-msg r-bt-sqcat-can r-bt-sqcat-msg r-bt-uq-can r-bt-uq-msg" \
+bmut r-m2 r-bt-uq-can r-acc-sq "r-bt-dq-can r-bt-dq-msg r-bt-sqcat-can r-bt-sqcat-msg r-bt-uq-can r-bt-uq-msg" \
   '/if (ch == BT && sq == 0) exit 5/d'
-r_mutant r-m3 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-chain-msg r-dotdot-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
+bmut r-m3 r-sym-rel-msg r-acc-c "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-chain-msg r-dotdot-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
   's/^      if \[ "\$sub" = "-C" \]; then$/      if [ "$sub" = "-C" ]; then gdir="${3:-}"; sub="${4:-}"; fi; if false; then/'
-r_mutant r-m4 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
+bmut r-m4 r-nested-can r-bare-can "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
   's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/'
 # r-m5's second edit anchors on the `export GIT_CONFIG_COUNT=1` line alone, so section O's
 # ` && export COLUMNS=80 && { eval ` anchor on the next line still matches exactly once.
-r_mutant r-m5 "r-abs-bare-can r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-can r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
+bmut r-m5 r-bare-can r-acc-c "r-abs-bare-can r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-bare-can r-bare-msg r-nested-can r-nested-msg r-sym-abs-can r-sym-abs-msg" \
   's/if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then/if false; then/' \
   's/ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository \\$/ true \\/'
 # r-m6  an absolute <dir> routed back into the relative-only class (the pre-fix grammar)
 # r-m7  the common-dir comparison dropped for an absolute <dir> only
-r_mutant r-m6 "r-abs-bare-msg r-abs-for-msg r-abs-link r-abs-msg r-abs-nest-msg r-abs-root r-abs-wt r-sym-abs-msg" \
+bmut r-m6 r-abs-wt r-acc-c "r-abs-bare-msg r-abs-for-msg r-abs-link r-abs-msg r-abs-nest-msg r-abs-root r-abs-wt r-sym-abs-msg" \
   's#^          /\*) \# ABSOLUTE: canonicalised directly#          /nomatch/*) \# ABSOLUTE: canonicalised directly#'
-r_mutant r-m7 "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-sym-abs-can r-sym-abs-msg" \
+bmut r-m7 r-abs-for-msg r-abs-root "r-abs-bare-msg r-abs-for-msg r-abs-msg r-abs-nest-can r-abs-nest-msg r-sym-abs-can r-sym-abs-msg" \
   's#^        if \[ -z "\$gcom_root" \] || \[ "\$gcom_root" != "\$gcom_dir" \]; then$#        if case "$gdir" in /*) false ;; *) [ -z "$gcom_root" ] || [ "$gcom_root" != "$gcom_dir" ] ;; esac; then#'
-# r-m8  the admission's `cd -P` reverted to a logical `cd` (all three sites)
-r_mutant r-m8 "r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
+# r-m8  the admission's `cd -P` reverted to a logical `cd` (all three sites). It is the symlink-escape
+#       mutant: `git -C lnk/..` must be refused, and the arms that see it are the canary and message
+#       of the relative and absolute spellings. r-sym-rel-can is the one that fires per push.
+bmut r-m8 r-sym-rel-can r-dotdot-msg "r-sym-abs-can r-sym-abs-msg r-sym-rel-can r-sym-rel-msg" \
   's#(cd -P "\$#(cd "$#g'
 n_m8="$(grep -c '(cd -P "\$' "$R/r-m8-$VBASE")" || n_m8=0
 n_m8v="$(grep -c '(cd -P "\$' "$VALIDATOR")" || n_m8v=0
 [ "$n_m8" -eq 0 ] && [ "$n_m8v" -eq 3 ] && ok "r-m8 anchor            all 3 admission cd -P sites reverted in the copy (3 in the validator)" \
   || bad "r-m8 anchor: $n_m8 admission cd -P site(s) left in the copy, $n_m8v in the validator (want 0 and 3)"
+n_om="$(grep -c ' && export COLUMNS=80 && { eval ' "$R/r-m5-$VBASE")" || n_om=0
+[ "$n_om" -eq 1 ] && ok "r-m5 anchor            section O's COLUMNS anchor still matches once in the r-m5 copy" \
+  || bad "r-m5 anchor: section O's COLUMNS anchor matched $n_om times in the r-m5 copy, not 1"
+
 # THE AWK PROGRAM CHECK'S SELF-PROBE. The gawk directives it refuses load a program, so no fixture
 # seeds one (operator ruling, benign-only fixtures); the validator probes its own regexes at startup
 # instead. These mutants break the regex and assert the probe stops the run, on a benign derivation.
 #   a-m1  `load` dropped from AWK_DIR_RE            a-m2  AWK_DIR_RE's trailing boundary dropped
 A_PROBE="the awk program check failed its own self-probe"
-r_run "$VALIDATOR" a-ctl 'grep -c a d.txt' 1
-[ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out" \
-  && ok "a-control              the unmutated validator passes its self-probe and runs a benign derivation" \
-  || bad "a-control the unmutated validator did not run a benign derivation (rc=$rc): $out"
-a_mutant() { # $1 label  $2 sed expression
-  local M="$R/$1-$VBASE"
-  if ! mut_copy "$M" "$2"; then bad "$1 DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  r_run "$M" "$1" 'grep -c a d.txt' 1
-  if [ "$rc" -eq 2 ] && grep -qF "$A_PROBE" <<< "$out"; then ok "$1 KILLED        the self-probe stopped the run (exit 2, named)"
-  else bad "$1 SURVIVED -- rc=$rc, the self-probe did not stop the run: $out"; fi
+a_arms() { # <validator> <quiet> -> ARMS_FAILED
+  arm_begin "$2"
+  want a-ctl && {
+    r_run "$1" a-ctl 'grep -c a d.txt' 1
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
+    arm a-ctl $? "exit=0  the unmutated validator passes its self-probe and runs a benign derivation"; }
+  arm_end
 }
-a_mutant a-m1 "s/^AWK_DIR_RE='@(include|load|namespace)/AWK_DIR_RE='@(include|namespace)/"
-a_mutant a-m2 "s/^AWK_DIR_RE='@(include|load|namespace)(\\[^A-Za-z0-9_\\]|\\$)'\$/AWK_DIR_RE='@(include|load|namespace)'/"
-n_om="$(grep -c ' && export COLUMNS=80 && { eval ' "$R/r-m5-$VBASE")" || n_om=0
-[ "$n_om" -eq 1 ] && ok "r-m5 anchor            section O's COLUMNS anchor still matches once in the r-m5 copy" \
-  || bad "r-m5 anchor: section O's COLUMNS anchor matched $n_om times in the r-m5 copy, not 1"
+a_arms "$VALIDATOR" 0
+bat_base a_arms "$R" "a-control" A
+a_probe_named() { [ "$(armrc a-ctl)" -eq 2 ] && grep -qF "$A_PROBE" <<< "$(armout a-ctl)"; }
+# The self-probe stops the whole run at startup, so no arm of this one-arm battery can stay green:
+# there is no twin to name.
+BM_VERIFY=a_probe_named
+bmut a-m1 a-ctl - "a-ctl" "s/^AWK_DIR_RE='@(include|load|namespace)/AWK_DIR_RE='@(include|namespace)/"
+BM_VERIFY=a_probe_named
+bmut a-m2 a-ctl - "a-ctl" "s/^AWK_DIR_RE='@(include|load|namespace)(\\[^A-Za-z0-9_\\]|\\$)'\$/AWK_DIR_RE='@(include|load|namespace)'/"
 
 # --- S. ONLY A LISTED OPTION IS ADMITTED, READ FROM THE ARGV BASH BUILDS ------------------------
 # Every allowed command carries an exact table of the options it may use (OPT_TABLE, rows
@@ -1822,121 +1970,129 @@ s_run() { # $1 validator  $2 label  $3 command  $4 recorded -> out, rc
   { printf '# s\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$S/$2.md"
   out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$1" "$2.md" 2>&1)"; rc=$?
 }
-s_arms() { # <validator> <quiet> -> S_FAILED
-  local V="$1" q="$2" failed="" lbl exp line nv c
-  sarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3: ${4:-}"; fi; }
-  out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd - < "$S/cases.tsv" 2>&1)"; rc=$?
-  nv="$(grep -c '	VERDICT	' <<< "$out")" || nv=0
-  [ "$rc" -eq 0 ] && [ "$nv" -eq "$S_NCASES" ] && [ "$nv" -gt 0 ]
-  sarm s-batch $? "exit=0  --explain-cmd printed one VERDICT for each of the $S_NCASES cases" "rc=$rc verdicts=$nv"
-  while IFS=$'\t' read -r lbl exp; do
-    line="$(grep -m1 "^$lbl	VERDICT	" <<< "$out")" || line=""
-    if [ "$exp" = OK ]; then
-      [ "$line" = "$lbl	VERDICT	OK" ]
-      sarm "$lbl" $? "accepted: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)" "$line"
-    else
-      case "$line" in "$lbl	VERDICT	REFUSED	"*"$exp"*) true ;; *) false ;; esac
-      sarm "$lbl" $? "refused naming [$exp]: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)" "$line"
+s_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" lbl exp line nv c need=0 sdiff_bad=0
+  arm_begin "$q"
+  # THE ONE --explain-cmd BATCH answers every case arm. It runs once per validator copy, and only when
+  # some case arm (or s-batch) is among the arms wanted.
+  if [ -z "$WANT" ] || want s-batch; then need=1
+  else for lbl in $WANT; do grep -q "^$lbl	" "$S/expect.tsv" && need=1; done; fi
+  if [ "$need" -eq 1 ]; then
+    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd - < "$S/cases.tsv" 2>&1)"; rc=$?
+    nv="$(grep -c '	VERDICT	' <<< "$out")" || nv=0
+    if want s-batch; then
+      [ "$rc" -eq 0 ] && [ "$nv" -eq "$S_NCASES" ] && [ "$nv" -gt 0 ]
+      arm s-batch $? "exit=0  --explain-cmd printed one VERDICT for each of the $S_NCASES cases"
     fi
-  done < "$S/expect.tsv"
+    S_BATCH_OUT="$out"
+    while IFS=$'\t' read -r lbl exp; do
+      want "$lbl" || continue
+      line="$(grep -m1 "^$lbl	VERDICT	" <<< "$S_BATCH_OUT")" || line=""
+      out="$line"; rc=0
+      if [ "$exp" = OK ]; then
+        [ "$line" = "$lbl	VERDICT	OK" ]
+        arm "$lbl" $? "accepted: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)"
+      else
+        case "$line" in "$lbl	VERDICT	REFUSED	"*"$exp"*) true ;; *) false ;; esac
+        arm "$lbl" $? "refused naming [$exp]: $(grep -m1 "^$lbl	" "$S/cases.tsv" | cut -f2-)"
+      fi
+    done < "$S/expect.tsv"
+  fi
   # The real check path, one accepted and one refused.
-  s_run "$V" s-real-acc 'sort -r d.txt' "$(printf 'y\nx\nx')"
-  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
-  sarm s-real-acc $? "exit=0  a listed option runs and reproduces through the check path" "rc=$rc $out"
-  s_run "$V" s-real-ref 'sort --debug d.txt' x
-  [ "$rc" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*s-real-ref.md:4 ' <<< "$out" && grep -qF "'sort --debug' $S_OPT" <<< "$out"
-  sarm s-real-ref $? "exit=1  an unlisted option is an ALLOWLIST refusal naming it through the check path" "rc=$rc $out"
+  if want s-real-acc; then
+    s_run "$V" s-real-acc 'sort -r d.txt' "$(printf 'y\nx\nx')"
+    [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out"
+    arm s-real-acc $? "exit=0  a listed option runs and reproduces through the check path"
+  fi
+  if want s-real-ref; then
+    s_run "$V" s-real-ref 'sort --debug d.txt' x
+    [ "$rc" -eq 1 ] && grep -q '^FAIL (ALLOWLIST): .*s-real-ref.md:4 ' <<< "$out" && grep -qF "'sort --debug' $S_OPT" <<< "$out"
+    arm s-real-ref $? "exit=1  an unlisted option is an ALLOWLIST refusal naming it through the check path"
+  fi
   # The differential, on the real inputs: the walker's argv equals bash's for each.
-  for c in "sort '--debug' d.txt" "sort --{debug,} d.txt" "$S_DIFF_IN"; do
-    s_argv_bash "$c" > "$S/d.bash"
-    if s_argv_walker "$V" "$c" > "$S/d.walk" && [ -s "$S/d.walk" ] && cmp -s "$S/d.bash" "$S/d.walk"; then :; else
-      failed="$failed s-diff"; [ "$q" = 1 ] || bad "s-diff the walker's argv differs from bash's for: $c"; fi
-  done
-  case " $failed " in *" s-diff "*) ;; *) [ "$q" = 1 ] || ok "s-diff                 the walker's argv equals bash's printf '%s\\0' argv on quoted, brace and spaced inputs" ;; esac
-  S_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  if want s-diff; then
+    for c in "sort '--debug' d.txt" "sort --{debug,} d.txt" "$S_DIFF_IN"; do
+      s_argv_bash "$c" > "$S/d.bash"
+      if s_argv_walker "$V" "$c" > "$S/d.walk" && [ -s "$S/d.walk" ] && cmp -s "$S/d.bash" "$S/d.walk"; then :; else
+        sdiff_bad=1; out="the walker's argv differs from bash's for: $c"; fi
+    done
+    [ "$sdiff_bad" -eq 0 ] && out=""
+    rc=$sdiff_bad
+    arm s-diff "$sdiff_bad" "the walker's argv equals bash's printf '%s\\0' argv on quoted, brace and spaced inputs" "s-diff                "
+  fi
+  # THE STARTUP INTERSECTION. A copy whose table admits a NEVER-set row must refuse to run at all; the
+  # unmutated validator runs the same invocation clean. The row mutated in is the FIRST row of
+  # OPT_NEVER, read out of the script, so no NEVER token is typed here.
+  if want s-never; then
+    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
+    [ "$rc" -eq 0 ] && ! grep -q '^REFUSED: ' <<< "$out" && grep -q '	VERDICT	OK$' <<< "$out"
+    arm s-never $? "exit=0  the option table admits no NEVER-set option: the same invocation runs clean, VERDICT OK"
+  fi
+  arm_end
 }
 s_arms "$VALIDATOR" 0
-[ -z "$S_FAILED" ] \
-  && ok "s-control              the unmutated validator fails no S arm, so a mutant's failed set is its own" \
-  || bad "s-control the unmutated validator failed S arm(s): $S_FAILED -- no mutant verdict below is readable"
+bat_base s_arms "$S" "s-control" S
 
-# S's mutants, each a copy guarded by mut_copy, each declared to fail EXACTLY its arm set.
-s_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$S/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  s_arms "$M" 1
-  if [ -z "$S_FAILED" ]; then bad "$label SURVIVED -- no S arm failed against it"
-  elif [ "$S_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $S_FAILED"
-  else bad "$label killed by the WRONG arm set: failed [$S_FAILED], declared [$want]"; fi
-}
+# S's mutants, each a copy guarded by mut_copy, scored by a deciding arm and a twin; the full set each
+# trips is the one the base declared and the matrix re-measures.
 #   s-m-bracket  the `[` class dropped from the `$` scan
-s_mutant s-m-bracket "s-dl-bracket" \
+bmut s-m-bracket s-dl-bracket s-dl-end "s-dl-bracket" \
   's|0123456789@\*#?\$!-\[" }|0123456789@*#?$!-" }|'
 #   s-m-prefix   a token with no exact row resolved by the first row it is a PREFIX of. The
 #                fallback is line-scoped (awk per row): a case glob's `*` spans rows, and the
 #                first spelling of this mutant read `awk -F` as no-value off a later row.
-s_mutant s-m-prefix "s-exact-ref" \
+bmut s-m-prefix s-exact-ref s-exact-acc "s-exact-ref" \
   's#^    \*) OPT_AR="" ;;$#    *) OPT_AR="$(awk -F"|" -v c="$1" -v s="$2" -v t="$3" "\\$1 == c \&\& \\$2 == s \&\& index(\\$3, t) == 1 { print \\$4; exit }" <<< "$OPT_TABLE")" ;;#'
 #   s-m-cluster  only the first letter of a short cluster looked up
-s_mutant s-m-cluster "s-cluster-ref" \
+bmut s-m-cluster s-cluster-ref s-cluster-acc "s-cluster-ref" \
   's/^      j=\$((j + 1))  # the next letter of the cluster$/      break  # the next letter of the cluster/'
 #   s-m-novalue  a no-value option allowed to take `=x`
-s_mutant s-m-novalue "s-value-ref" \
+bmut s-m-novalue s-value-ref s-value-acc "s-value-ref" \
   's/if \[ "\$nm" != "\$w" \]; then seg_refuse UNLISTED/if false; then seg_refuse UNLISTED/'
 #   s-m-wsplit   the walker fed a whitespace split of the segment text instead of bash's argv
-s_mutant s-m-wsplit "s-brace s-diff s-quoted" \
+bmut s-m-wsplit s-brace s-real-acc "s-brace s-diff s-quoted" \
   's/ && eval "set -- \$seg" && / \&\& set -f \&\& set -- $seg \&\& /'
 #   s-m-eo-global   endopts made global: every command reads a word after `--` as an operand
-s_mutant s-m-eo-global "s-endop-ref s-eo-ref" \
+bmut s-m-eo-global s-eo-ref s-eo-acc "s-endop-ref s-eo-ref" \
   's/^  case "\$OPT_ENDOPTS" in .* esac$/  OPT_EO=1/'
 #   s-m-eo-blanket  the blanket refusal restored: no command reads a word after `--` as an operand
-s_mutant s-m-eo-blanket "s-eo-acc" \
+bmut s-m-eo-blanket s-eo-acc s-eo-ref "s-eo-acc" \
   's/^  case "\$OPT_ENDOPTS" in .* esac$/  OPT_EO=0/'
 #   s-m-rowdrop  one listed row removed from the table
-s_mutant s-m-rowdrop "s-wc-acc" \
+bmut s-m-rowdrop s-wc-acc s-wc-ref "s-wc-acc" \
   '/^wc||-l|/d'
 #   s-m-rowadd   one unlisted harmless option added as a table row
-s_mutant s-m-rowadd "s-wc-ref" \
+bmut s-m-rowadd s-wc-ref s-wc-acc "s-wc-ref" \
   $'/^OPT_TABLE_END$/i\\\nwc||--libxo|none|mutant row\n'
 #   s-m-permute  sed and uniq read with permutation again: a dash word after the first operand is
 #                walked as an option
-s_mutant s-m-permute "s-sedfirst-ref s-uniqfirst-ref" \
+bmut s-m-permute s-sedfirst-ref s-sedfirst-acc "s-sedfirst-ref s-uniqfirst-ref" \
   's/^    if \[ "\$nops" -gt 0 \] && \[ "\$endop" -eq 0 \] && /    if false \&\& /'
 #   s-m-optnext  a long `optional` option takes the next word as its value, when one follows
-s_mutant s-m-optnext "s-optional-ref" \
+bmut s-m-optnext s-optional-ref s-optional-acc "s-optional-ref" \
   's/^        optional) \[ "\$nm" = "\$w" \] || opt_take "\$nm" "\${w#\*=}" ;;$/        optional) if [ "$nm" != "$w" ]; then opt_take "$nm" "${w#*=}"; elif [ "$i" -lt "$n" ]; then pend="$nm"; fi ;;/'
 #   s-m-pendend  a value-taking option at the end of argv no longer refused
-s_mutant s-m-pendend "s-pendend-ref" \
+bmut s-m-pendend s-pendend-ref s-pendend-acc "s-pendend-ref" \
   's/^  if \[ -n "\$pend" \]; then$/  if false; then/'
 #   s-m-uniqtwo  uniq's second operand no longer refused
-s_mutant s-m-uniqtwo "s-uniqtwo-ref" \
+bmut s-m-uniqtwo s-uniqtwo-ref s-uniqtwo-acc "s-uniqtwo-ref" \
   's/^         if \[ "\$first" = "uniq" \] && \[ "\$nops" -gt 1 \]; then$/         if false; then/'
 #   s-m-numall   `-<digits>` accepted on every command, row or none
-s_mutant s-m-numall "s-num-ref" \
+bmut s-m-numall s-num-ref s-num-acc "s-num-ref" \
   's/if \[ "\$OPT_AR" = num \]; then explain_word num/if true; then explain_word num/'
 
-# THE STARTUP INTERSECTION. A copy whose table admits a NEVER-set row must refuse to run at all.
-# The row is the FIRST row of OPT_NEVER, read out of the script, so no NEVER token is typed here.
+# THE STARTUP INTERSECTION. The row is the FIRST row of OPT_NEVER, read out of the script, so no NEVER
+# token is typed here. A copy whose table admits it must refuse to run at all: the refusal stops the
+# whole validator, so EVERY S arm trips and no arm is left green to be a twin.
 NV_ROW="$(awk 'f { print; exit } /^read -r -d .. OPT_NEVER <<.OPT_NEVER_END. [|][|] true$/ { f = 1 }' "$VALIDATOR")"
 IFS='|' read -r nv_c nv_s nv_t _ <<< "$NV_ROW"
 if [ -n "$NV_ROW" ] && [ -n "$nv_c" ] && [ -n "$nv_t" ]; then
   ok "s-never-row            the first OPT_NEVER row was read out of the script"
-  MN="$S/s-m-never-$VBASE"
-  if mut_copy "$MN" $'/^OPT_TABLE_END$/i\\\n'"$nv_c|$nv_s|$nv_t|none|mutant row"$'\n'; then
-    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$MN" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
-    [ "$rc" -eq 2 ] && grep -qF "REFUSED: the option table admits a NEVER-set option ( $nv_c${nv_s:+ $nv_s} $nv_t; )" <<< "$out" \
-      && ! grep -q 'VERDICT' <<< "$out" \
-      && ok "s-m-never KILLED      a table row that is also a NEVER row stops the validator, exit 2, REFUSED named" \
-      || bad "s-m-never SURVIVED: expected exit 2 and the NEVER-set REFUSED line (rc=$rc): $out"
-    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$VALIDATOR" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
-    [ "$rc" -eq 0 ] && ! grep -q '^REFUSED: ' <<< "$out" && grep -q '	VERDICT	OK$' <<< "$out" \
-      && ok "s-m-never CONTROL     the unmutated validator runs the same invocation, exit 0, VERDICT OK" \
-      || bad "s-m-never CONTROL: the unmutated validator did not run the same invocation clean (rc=$rc): $out"
-  else
-    bad "s-m-never DID NOT APPLY -- the NEVER-row mutation matched nothing, so no verdict was scored"
-  fi
+  s_never_named() { [ "$(armrc s-never)" -eq 2 ] \
+    && grep -qF "REFUSED: the option table admits a NEVER-set option ( $nv_c${nv_s:+ $nv_s} $nv_t; )" <<< "$(armout s-never)" \
+    && ! grep -q 'VERDICT' <<< "$(armout s-never)"; }
+  BM_VERIFY=s_never_named
+  bmut s-m-never s-never - "ALL" $'/^OPT_TABLE_END$/i\\\n'"$nv_c|$nv_s|$nv_t|none|mutant row"$'\n'
 else
   bad "s-never-row could not read the first OPT_NEVER row out of the script -- the intersection arm is unscored"
 fi
@@ -2106,108 +2262,120 @@ grep -c x f.txt 2>&1; cat g.txt
 grep -c x f.txt |& cat
 $T_TWO
 $T_NEAR"
-t_arms() { # <validator> <quiet> -> T_FAILED
-  local V="$1" q="$2" failed="" o r i c ro rr tc
-  tarm() { if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
-           else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3: ${4:-}"; fi; }
+t_arms() { # <validator> <quiet> -> ARMS_FAILED
+  local V="$1" q="$2" o r i c ro rr tc lbl cmd want_v got gops st_all=0 fc_bad=0 t_wanted
+  arm_begin "$q"
   # t-two: a quoted `;` is not split on, so exactly two segments, both operands asked, base's verdict.
-  o="$(t_ex "$V" "$T" "$T_TWO")"
-  [ "$(t_argvs "$o")" = 2 ] && grep -qx -e '-	WORD	grep		operand		f.txt' <<< "$o" \
-    && grep -qx -e '-	WORD	grep		operand		g.txt' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
-  tarm t-two $? "two ARGV lines (operands f.txt, g.txt) and base's VERDICT for: $T_TWO" "$o"
+  if want t-two; then
+    o="$(t_ex "$V" "$T" "$T_TWO")"
+    [ "$(t_argvs "$o")" = 2 ] && grep -qx -e '-	WORD	grep		operand		f.txt' <<< "$o" \
+      && grep -qx -e '-	WORD	grep		operand		g.txt' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+    rr=$?; out="$o"; arm t-two $rr "two ARGV lines (operands f.txt, g.txt) and base's VERDICT for: $T_TWO"
+  fi
   # t-retro: the graph shape -- a `$?` segment contributes nothing, the grep is asked.
-  o="$(t_ex "$V" "$T" "$T_RETRO")"
-  [ "$(t_argvs "$o")" = 1 ] && grep -qx -e '-	ARGV	grep -n x .claude/skills/ai-dlc/steps/retro.md' <<< "$o" \
-    && grep -qx -e '-	WORD	grep		operand		.claude/skills/ai-dlc/steps/retro.md' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
-  tarm t-retro $? "exactly one ARGV line, the grep, operand asked, for: $T_RETRO" "$o"
+  if want t-retro; then
+    o="$(t_ex "$V" "$T" "$T_RETRO")"
+    [ "$(t_argvs "$o")" = 1 ] && grep -qx -e '-	ARGV	grep -n x .claude/skills/ai-dlc/steps/retro.md' <<< "$o" \
+      && grep -qx -e '-	WORD	grep		operand		.claude/skills/ai-dlc/steps/retro.md' <<< "$o" && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+    rr=$?; out="$o"; arm t-retro $rr "exactly one ARGV line, the grep, operand asked, for: $T_RETRO"
+  fi
   # t-near: no top-level operator, so base's bytes exactly.
-  o="$(t_ex "$V" "$T" "$T_NEAR")"; r="$(t_ex "$TREF" "$T" "$T_NEAR")"
-  [ -n "$r" ] && [ "$o" = "$r" ] && [ "$o" = "$T_REFUSED" ]
-  tarm t-near $? "a quoted ; alone prints the reference's bytes: $T_NEAR" "$o"
+  if want t-near; then
+    o="$(t_ex "$V" "$T" "$T_NEAR")"; r="$(t_ex "$TREF" "$T" "$T_NEAR")"
+    [ -n "$r" ] && [ "$o" = "$r" ] && [ "$o" = "$T_REFUSED" ]
+    rr=$?; out="$o"; arm t-near $rr "a quoted ; alone prints the reference's bytes: $T_NEAR"
+  fi
   # t-pipe: a segment's own pipe stages are walked, in source order.
-  o="$(t_ex "$V" "$T" "$T_PIPE")"
-  [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ' ')" = "a b c " ]
-  tarm t-pipe $? "ARGV lines a, b, c in order for: $T_PIPE" "$o"
+  if want t-pipe; then
+    o="$(t_ex "$V" "$T" "$T_PIPE")"
+    [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ' ')" = "a b c " ]
+    rr=$?; out="$o"; arm t-pipe $rr "ARGV lines a, b, c in order for: $T_PIPE"
+  fi
   # t-canary: no segment carrying a substitution or a redirection reaches the eval, and the safe
   # segment after them is still explained. WHAT IT DISCRIMINATES IS NARROWER THAN THE CANARY LIST:
   # under the ban-skip mutant (t-m4) only CANARY2 appears. `$(`, `<(` and `${` are stopped by the
   # segment's own scan status as well as by the ban, so for those three the arm cannot tell the two
   # gates apart; the BAN's only ban-alone subject here is the redirection. The status gate's own
   # subjects are the `$?` in t-retro and the backtick, which the ban does not carry.
-  tc="$(mktemp -d "$T/canary.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
-  o="$(t_ex "$V" "$tc" "$T_CAN")"
-  [ ! -e "$tc/CANARY1" ] && [ ! -e "$tc/CANARY2" ] && [ ! -e "$tc/CANARY3" ] \
-    && [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')" = "cat g.txt," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
-  tarm t-canary $? "no CANARY file created, the safe segment after the substitutions still explained" "$(ls "$tc" | tr '\n' ' ') $o"
+  if want t-canary; then
+    tc="$(mktemp -d "$T/canary.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+    o="$(t_ex "$V" "$tc" "$T_CAN")"
+    [ ! -e "$tc/CANARY1" ] && [ ! -e "$tc/CANARY2" ] && [ ! -e "$tc/CANARY3" ] \
+      && [ "$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')" = "cat g.txt," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+    rr=$?; out="$(ls "$tc" | tr '\n' ' ') $o"; arm t-canary $rr "no CANARY file created, the safe segment after the substitutions still explained"
+  fi
   # THE SPLIT TABLE, each row its own arm, all in ONE fresh scratch root. t-failclosed then asserts
   # that root holds exactly what was seeded: whatever a tracker mis-split, no substitution body ran.
-  # It is scored under every mutant too, so a mutant that mis-splits must still leave it green.
-  tc="$(mktemp -d "$T/split.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
-  local lbl cmd want got
-  while IFS='|' read -r lbl cmd want; do
-    o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
-    [ "$got" = "$want," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
-    tarm "$lbl" $? "ARGV [$want] for: $cmd" "got [$got] $o"
-  done <<< "$T_SPLIT"
-  [ "$(ls -A "$tc" | tr '\n' ' ')" = ".claude f.txt g.txt " ]
-  tarm t-failclosed $? "after every split row the scratch root holds only what was seeded (no substitution body ran)" "$(ls -A "$tc" | tr '\n' ' ')"
+  # It is scored under every mutant too, so a mutant that mis-splits must still leave it green. Every
+  # row runs when t-failclosed is wanted, because the root it inspects is what all the rows touched.
+  t_wanted=0
+  while IFS='|' read -r lbl cmd want_v; do want "$lbl" && t_wanted=1; done <<< "$T_SPLIT"
+  if [ "$t_wanted" -eq 1 ] || want t-failclosed; then
+    tc="$(mktemp -d "$T/split.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+    while IFS='|' read -r lbl cmd want_v; do
+      o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
+      [ "$got" = "$want_v," ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]; rr=$?
+      if want "$lbl"; then out="got [$got] $o"; arm "$lbl" "$rr" "ARGV [$want_v] for: $cmd"; fi
+    done <<< "$T_SPLIT"
+    if want t-failclosed; then
+      [ "$(ls -A "$tc" | tr '\n' ' ')" = ".claude f.txt g.txt " ]
+      rr=$?; out="$(ls -A "$tc" | tr '\n' ' ')"; arm t-failclosed $rr "after every split row the scratch root holds only what was seeded (no substitution body ran)"
+    fi
+  fi
   # THE cd TABLE: `<label>|<command>|<ARGV lines>|<operand-class words>`, both comma-joined in order. A
   # literal relative `cd` is carried: later operands read `<dir>/<word>`; anything else that changes
   # directory leaves every later segment unexplained (the ARGV column then stops at the cd).
-  while IFS='^' read -r lbl cmd want wops; do
-    o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
-    gops="$(awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { printf "%s,", $7 }' <<< "$o")"
-    [ "$got" = "${want:+$want,}" ] && [ "$gops" = "${wops:+$wops,}" ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
-    tarm "$lbl" $? "ARGV [$want] operands [$wops] for: $cmd" "got ARGV [$got] operands [$gops]"
-  done <<< "$T_CD"
+  t_wanted=0
+  while IFS='^' read -r lbl cmd want_v gops; do want "$lbl" && t_wanted=1; done <<< "$T_CD"
+  if [ "$t_wanted" -eq 1 ]; then
+    tc="$(mktemp -d "$T/cd.XXXXXX")"; mkdir -p "$tc/.claude"; printf 'x\n' > "$tc/f.txt"; printf 'b\n' > "$tc/g.txt"
+    while IFS='^' read -r lbl cmd want_v wops; do
+      want "$lbl" || continue
+      o="$(t_ex "$V" "$tc" "$cmd")"; got="$(grep '^-	ARGV	' <<< "$o" | cut -f3 | tr '\n' ',')"
+      gops="$(awk -F'\t' '$2 == "WORD" && ($5 == "operand" || ($5 == "val" && ($6 == "-f" || $6 == "--file"))) { printf "%s,", $7 }' <<< "$o")"
+      [ "$got" = "${want_v:+$want_v,}" ] && [ "$gops" = "${wops:+$wops,}" ] && [ "$(sed -n '$p' <<< "$o")" = "$T_REFUSED" ]
+      rr=$?; out="got ARGV [$got] operands [$gops]"; arm "$lbl" $rr "ARGV [$want_v] operands [$wops] for: $cmd"
+    done <<< "$T_CD"
+  fi
   # t-a1: the CHECK path's verdict and text equal the reference's for every chain, redirect and
   # substitution form, and each is the ALLOWLIST refusal (a presence, so silence cannot pass).
-  i=0
-  while IFS= read -r c; do
-    i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-$i.md"
-    ro="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$V" "a1-$i.md" 2>&1)"; rr=$?
-    r="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$TREF" "a1-$i.md" 2>&1)"
-    if [ "$rr|$ro" != "1|$r" ] || ! grep -q '^FAIL (ALLOWLIST): ' <<< "$r"; then
-      failed="$failed t-a1"; [ "$q" = 1 ] || bad "t-a1 the check path differs from the reference for: $c"
-    fi
-  done <<< "$T_A1_CMDS"
-  [ "$i" -ge 10 ] || failed="$failed t-a1"
-  case " $failed " in *" t-a1 "*) ;; *) [ "$q" = 1 ] || ok "t-a1                   the check path is the reference's, byte for byte, over $i chain/redirect/substitution commands" ;; esac
-  T_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+  if want t-a1; then
+    i=0; fc_bad=0; out=""
+    while IFS= read -r c; do
+      i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-$i.md"
+      ro="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$V" "a1-$i.md" 2>&1)"; rr=$?
+      r="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$TREF" "a1-$i.md" 2>&1)"
+      if [ "$rr|$ro" != "1|$r" ] || ! grep -q '^FAIL (ALLOWLIST): ' <<< "$r"; then
+        fc_bad=1; out="the check path differs from the reference for: $c"
+      fi
+    done <<< "$T_A1_CMDS"
+    [ "$i" -ge 10 ] || { fc_bad=1; out="only $i chain commands were driven"; }
+    arm t-a1 "$fc_bad" "the check path is the reference's, byte for byte, over $i chain/redirect/substitution commands" "t-a1                  "
+  fi
+  arm_end
 }
 t_arms "$VALIDATOR" 0
-[ -z "$T_FAILED" ] \
-  && ok "t-control              the unmutated validator fails no T arm, so a mutant's failed set is its own" \
-  || bad "t-control the unmutated validator failed T arm(s): $T_FAILED -- no mutant verdict below is readable"
-# T's mutants, each a copy guarded by mut_copy, parsed with bash -n, declared to fail EXACTLY its set.
+bat_base t_arms "$T" "t-control" T
+# T's mutants, each a copy guarded by mut_copy and parsed with bash -n, scored by a deciding arm and a
+# twin; the full set each trips is the one the base declared and the matrix re-measures.
 #   t-m1  the control-operator split made quote-blind     t-m2  the first segment dropped
 #   t-m3  the chain walk entered when EXPLAIN=0, a passing chain then returned safe
 #   t-m4  the per-segment substring ban skipped
-t_mutant() { # $1 label  $2 declared failed arms (sorted)  $3.. sed expressions
-  local label="$1" want="$2"; shift 2
-  local M="$T/$label-$VBASE"
-  if ! mut_copy "$M" "$@"; then bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
-  bash -n "$M" 2>/dev/null || { bad "$label does not parse -- no verdict was scored"; return; }
-  t_arms "$M" 1
-  if [ -z "$T_FAILED" ]; then bad "$label SURVIVED -- no T arm failed against it"
-  elif [ "$T_FAILED" = "$want " ]; then ok "$label KILLED        by exactly its declared arm(s): $T_FAILED"
-  else bad "$label killed by the WRONG arm set: failed [$T_FAILED], declared [$want]"; fi
-}
-t_mutant t-m1 "t-two" \
+bmut t-m1 t-two t-near "t-two" \
   's/^        if (chain \&\& sq == 0 \&\& dq == 0 \&\& (ch == ";" /        if (chain \&\& (ch == ";" /'
-t_mutant t-m2 "t-arith t-brace-semi t-bt-in-subst t-cd t-cd-abs t-cd-andleft t-cd-awk t-cd-before t-cd-bg t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-dash t-cd-diff t-cd-drec t-cd-dyn t-cd-echo t-cd-epat t-cd-file t-cd-gitc t-cd-gitgrep t-cd-glob t-cd-head t-cd-ls t-cd-mixed t-cd-nl t-cd-norm t-cd-or t-cd-orleft t-cd-orleft2 t-cd-orleft3 t-cd-orreset t-cd-pattern t-cd-pipe t-cd-pipeoff t-cd-printf t-cd-qglob t-cd-rg t-cd-sed t-cd-semi t-cd-sha256sum t-cd-sort t-cd-tail t-cd-test t-cd-tilde t-cd-up t-cd-wc t-dqparen t-nested t-nested-esc t-pipe t-procsub t-pushd t-retro t-sqparen t-subst-resume t-two" \
+bmut t-m2 t-retro t-near "t-arith t-brace-semi t-bt-in-subst t-cd t-cd-abs t-cd-andleft t-cd-awk t-cd-before t-cd-bg t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-dash t-cd-diff t-cd-drec t-cd-dyn t-cd-echo t-cd-epat t-cd-file t-cd-gitc t-cd-gitgrep t-cd-glob t-cd-head t-cd-ls t-cd-mixed t-cd-nl t-cd-norm t-cd-or t-cd-orleft t-cd-orleft2 t-cd-orleft3 t-cd-orreset t-cd-pattern t-cd-pipe t-cd-pipeoff t-cd-printf t-cd-qglob t-cd-rg t-cd-sed t-cd-semi t-cd-sha256sum t-cd-sort t-cd-tail t-cd-test t-cd-tilde t-cd-up t-cd-wc t-dqparen t-nested t-nested-esc t-pipe t-procsub t-pushd t-retro t-sqparen t-subst-resume t-two" \
   's/^    walked=1$/    [ "$walked" = 1 ] || { walked=1; continue; }/'
-t_mutant t-m3 "t-a1" \
+bmut t-m3 t-a1 t-near "t-a1" \
   's/^      \[ "\$EXPLAIN" = 1 \] && explain_chain "\$c"$/      if [ "$EXPLAIN" != 1 ]; then explain_chain "$c" \&\& return 0; fi; [ "$EXPLAIN" = 1 ] \&\& explain_chain "$c"/'
-t_mutant t-m4 "t-canary" \
+bmut t-m4 t-canary t-two "t-canary" \
   "s/^      \\*'<'\\*|\\*'>'\\*|\\*'\\\$('\\*|\\*'\\\${'\\*|\\*'&'\\*) all=1; ao_next; continue ;;\$/      ZZ-NEVER) all=1; ao_next; continue ;;/"
 #   t-m5  a closing `)` or `}` drops the tracker to depth 0 instead of popping one frame
 #   t-m6  an ANSI-C quote ends at the first `'`, a backslash before it notwithstanding
-# Neither may create a file: t-failclosed stays OUT of both declared sets, so each kill below is
-# also the evidence that the mis-split failed closed.
-t_mutant t-m5 "t-nested-esc" \
+# Neither may create a file: t-failclosed stays OUT of both declared sets, so each kill below is also
+# the evidence that the mis-split failed closed, and it is each one's TWIN.
+bmut t-m5 t-nested-esc t-failclosed "t-nested-esc" \
   's/ { dq = SV\[length(stk)\]; stk = substr(stk, 1, length(stk) - 1); out = out ch; prev = "x"; continue }$/ { dq = SV[length(stk)]; stk = ""; out = out ch; prev = "x"; continue }/'
-t_mutant t-m6 "t-ansi-esc t-ansi-trap" \
+bmut t-m6 t-ansi-esc t-failclosed "t-ansi-esc t-ansi-trap" \
   's/if (ch == BS) { i++; if (i <= n) out = out substr(\$0, i, 1) } else if (ch == SQ) aq = 0/if (ch == SQ) aq = 0/'
 #   t-m7   the carried prefix dropped: a later operand is printed root-relative again
 #   t-m9   the prefix carried across `;` (both the set and the stop): `cd x; cat y` prefixes y
@@ -2219,21 +2387,33 @@ t_mutant t-m6 "t-ansi-esc t-ansi-trap" \
 # t-m8 (pattern prefixed) and t-m12 (letter-matched option walk) are RETIRED: their subject, grep's
 # position-aware pattern rule (grep_pattern_given), was deleted when grep came off CD_LIST.
 T_PFX_SED='s/^    if \[ "\$pfx" = 1 \]; then$/    if false; then/'
-t_mutant t-m7 "t-cd t-cd-andleft t-cd-before t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-head t-cd-mixed t-cd-nl t-cd-norm t-cd-orreset t-cd-pipe t-cd-qglob t-cd-sha256sum t-cd-wc" "$T_PFX_SED"
-t_mutant t-m9 "t-cd-semi" \
+bmut t-m7 t-cd t-cd-dyn "t-cd t-cd-andleft t-cd-before t-cd-comm t-cd-compose t-cd-core t-cd-cut t-cd-head t-cd-mixed t-cd-nl t-cd-norm t-cd-orreset t-cd-pipe t-cd-qglob t-cd-sha256sum t-cd-wc" "$T_PFX_SED"
+bmut t-m9 t-cd-semi t-cd-or "t-cd-semi" \
   's/^      \[ "\$sop" = "&&" \] || \[ -z "\$sop" \] || cdstop=1$/      [ "$sop" = "\&\&" ] || [ "$sop" = ";" ] || [ -z "$sop" ] || cdstop=1/' \
   's/if \[ "\$sop" = "&&" \] && \[ "\$andok" = 1 \] && cd_norm/if { [ "$sop" = "\&\&" ] || [ "$sop" = ";" ]; } \&\& [ "$andok" = 1 ] \&\& cd_norm/'
-t_mutant t-m10 "t-cd-glob t-cd-tilde" \
+bmut t-m10 t-cd-glob t-cd-qglob "t-cd-glob t-cd-tilde" \
   '/^      \[ "\$sgl" = 0 \] || { all=1; break; }$/d'
-t_mutant t-m11 "t-cd-bg t-cd-mixed t-cd-or" \
+bmut t-m11 t-cd-bg t-cd-semi "t-cd-bg t-cd-mixed t-cd-or" \
   's/^      \[ "\$sop" = "&&" \] || \[ -z "\$sop" \] || cdstop=1$/      [ "$sop" = ";" ] \&\& cdstop=1/' \
   's/if \[ "\$sop" = "&&" \] && \[ "\$andok" = 1 \] && cd_norm/if [ "$sop" != ";" ] \&\& [ "$andok" = 1 ] \&\& cd_norm/'
-t_mutant t-m13 "t-cd-awk t-cd-diff t-cd-drec t-cd-echo t-cd-epat t-cd-file t-cd-gitgrep t-cd-ls t-cd-pattern t-cd-pipeoff t-cd-printf t-cd-rg t-cd-sed t-cd-sort t-cd-tail t-cd-test" \
+bmut t-m13 t-cd-sed t-cd "t-cd-awk t-cd-diff t-cd-drec t-cd-echo t-cd-epat t-cd-file t-cd-gitgrep t-cd-ls t-cd-pattern t-cd-pipeoff t-cd-printf t-cd-rg t-cd-sed t-cd-sort t-cd-tail t-cd-test" \
   's/^  case " \$CD_LIST " in \*" \$1 "\*) \[ -z "\$2" \] ;; \*) return 1 ;; esac$/  return 0/'
-t_mutant t-m14 "t-cd-orleft t-cd-orleft2 t-cd-orleft3" \
+bmut t-m14 t-cd-orleft t-cd-andleft "t-cd-orleft t-cd-orleft2 t-cd-orleft3" \
   's/ && \[ "\$andok" = 1 \] && cd_norm/ \&\& cd_norm/'
-t_mutant t-m15 "t-cd-dash" \
+bmut t-m15 t-cd-dash t-cd-core "t-cd-dash" \
   's/ && \[ "\$1" = operand \] && \[ "\$w" != - \]; then$/ \&\& [ "$1" = operand ]; then/'
+
+
+[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
+  && ok "$n_kill of $n_mut mutants scored dead" \
+  || bad "$n_kill of $n_mut mutants scored dead"
+
+# PLAIN-RUN: a plain invocation prints no matrix row; --matrix prints one per mutant.
+if [ "$MATRIX" -eq 0 ]; then
+  [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no matrix row printed" || bad "PLAIN-RUN printed $MATRIX_ROWS matrix row(s)"
+else
+  [ "$MATRIX_ROWS" -eq "$n_mut" ] && ok "MATRIX: $MATRIX_ROWS rows printed (one per mutant)" || bad "MATRIX printed $MATRIX_ROWS rows, expected $n_mut"
+fi
 
 echo
 if [ "$fails" -gt 0 ]; then
@@ -2242,3 +2422,4 @@ if [ "$fails" -gt 0 ]; then
 fi
 echo "PASS: all assertions correct."
 exit 0
+
