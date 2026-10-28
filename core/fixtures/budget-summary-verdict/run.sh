@@ -415,7 +415,16 @@ arm_vt_under() { late_world vtunder "$(vt_rows 5)"; local vw="$LW" d v
 # qualifier and its control; 6 the schema channel; 10 the struck row under retro's literal flags; 11 the
 # superseded marker under --warn-only.
 for _a in a1warn a3noflag a4clean a5cov a6schema a10struck a11marker; do
-  if "arm_$_a" "$VD" "$VW"; then ok "[$_a] the unmutated validator holds this arm"; eval "B_$_a=1"
+  case "$_a" in
+    a1warn)   _t="--warn-only over an unhardened breach exits 0 and closes with the WARN summary" ;;
+    a3noflag) _t="no flag over a breach exits 1 and reports FAIL, not WARN" ;;
+    a4clean)  _t="a clean run exits 0 and prints the historical PASS line byte for byte; and --warn-only over the same clean tree prints the same line and exits 0" ;;
+    a5cov)    _t="a coverage-only run exits 0, keeps the PASS line, and qualifies it; control: with the ungoverned artifact removed the PASS line carries no qualifier" ;;
+    a6schema) _t="--warn-only over an off-schema section exits 0 and names the section in the summary" ;;
+    a10struck) _t="a struck In-Flight row under retro's flags exits 0, names the row in the summary, and prints no PASS line" ;;
+    a11marker) _t="a superseded marker under --warn-only exits 0, names the marker in the summary, and prints no PASS line" ;;
+  esac
+  if "arm_$_a" "$VD" "$VW"; then ok "[$_a] $_t"; eval "B_$_a=1"
   else bad "[$_a] the unmutated validator tripped this arm: exit $(status_of "$AXL")"; sed 's/^/      /' "$OUT" >&2; fi
 done
 # The same seed under retro's flags is the hardened posture, and it must NOT move: a FAIL,
@@ -1092,7 +1101,7 @@ else bad "F-history the shipped arm refused a snapshot whose history file carrie
 mutdir CTRL
 ctl_bad=""
 for _a in a1warn a5cov; do "arm_$_a" "$MDIR" "$VW" || ctl_bad="$ctl_bad $_a"; done
-if [ -z "$ctl_bad" ]; then ok "CONTROL: an unmutated copy staged the same way reproduces both branches (a1warn breach, a5cov coverage) -- M1-M3 died of their edits"; B_ctrl=1
+if [ -z "$ctl_bad" ]; then ok "CONTROL: an unmutated copy staged the same way reproduces both branches -- M1-M3 died of their edits (driven over a1warn and a5cov)"; B_ctrl=1
 else bad "CONTROL: the unmutated copy did not reproduce the subject (tripped:$ctl_bad) -- every mutant verdict below is unattributable"; fi
 
 # --- M1. REVERT BOTH LAYERS: the summary block goes back to being RC-gated ------------
@@ -1235,7 +1244,7 @@ else bad "MUTANT MW6 (notice unconditional) SURVIVED"; fi
 lmut ML0
 ml0_bad=""
 for _a in l1b le_skip la_amb ls_same lh_clear; do "arm_$_a" "$MDIR" "$VW" || ml0_bad="$ml0_bad $_a"; done
-if [ -z "$ml0_bad" ]; then ok "CONTROL ML0: the probe-off copy beside its siblings is green on l1b, le_skip, la_amb, ls_same and lh_clear (no arm tripped)"; B_ml0=1
+if [ -z "$ml0_bad" ]; then ok "ML0 control: the probe-off copy beside its siblings passes L1, LE, LA, LS and LH (CONTROL ML0: arms l1b, le_skip, la_amb, ls_same, lh_clear, none tripped)"; B_ml0=1
 else bad "CONTROL ML0: the probe-off copy tripped these LATE arms:$ml0_bad -- every LATE mutant verdict below is void"; fi
 lmut ML1 '[ "$dc" = "$ts" ] || printf "LATE  ' '[[ ! "$dc" > "$ts" ]] || printf "LATE  '
 if score_mut ML1 "$MDIR" "$VW" l1b l0eq; then
@@ -1247,7 +1256,7 @@ if score_mut ML2 "$MDIR" "$VW" le_skip l0eq; then
 else bad "MUTANT ML2 (unresolvable rows silent) SURVIVED"; fi
 lmut ML4 '"$id" "$dc" "$ts"' '"$id" "$dc" "$dc"'
 if score_mut ML4 "$MDIR" "$VW" lh_clear l0eq; then
-  mutant_killed "${B_ml0:-0}" ML4 "MUTANT ML4 (LATE names the stamp, not the ts) killed by LH: after the printed rewrite, still LATE"
+  mutant_killed "${B_ml0:-0}" ML4 "MUTANT ML4 (LATE names the stamp, not the ts) killed by LH: after the printed rewrite, still 2 LATE"
 else bad "MUTANT ML4 (LATE names the stamp) SURVIVED"; fi
 lmut ML5 '{ id="$c"; ts="$t"; }' '{ id="$c"; ts="$t"; }; m=1; break'
 if score_mut ML5 "$MDIR" "$VW" la_amb l0eq; then
