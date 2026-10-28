@@ -849,7 +849,11 @@ fi
 # glob pathspec zero (BL-633), +187 bytes. A6 WAS OBSERVED FAILING AT 69584/69376 BEFORE THE CEILING
 # MOVED. 69584 is the measured total with no headroom, so the next byte fires this arm. NO
 # SUBTRACTION: the debt is nine raises old.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-69584}"
+#
+# RAISED A TWENTY-FIRST TIME, 69584 -> 71900, ON AN OPERATOR RULING, BATCH 245, 2026-10-28, TO CARRY THE
+# PUSH MACHINERY'S OPERATING PROCEDURES, WHICH LIVED ONLY IN A DISCHARGED PLAN. A6 WAS OBSERVED FAILING AT
+# 71628 AGAINST 69584 BEFORE THE CEILING MOVED. 71900 is the measured total rounded up to 71700, plus 200.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-71900}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

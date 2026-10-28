@@ -56,6 +56,35 @@ to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
 failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
+**Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.** List
+the entries, delete each named entry, and count them. A peer's gate may add entries between your
+listing and your delete, so a second listing is part of the clearing.
+
+**The pool width is `AI_DLC_FIXTURE_JOBS`, default 12**, read at the top of the hook's pool block
+(the variable the hook reads is `AI_DLC_FIXTURE_JOBS`, not `FIXTURE_JOBS`). It was measured on one
+machine; on a smaller box re-measure rather than inherit it. A nested pool (depth 1 or more) is capped
+at two workers whatever the variable says.
+
+**Two state files under `.git/` decide what a push skips, and they mean different things.**
+`.git/ai-dlc-fixture-verified` (with its `.format` sidecar, which must read `v2`) is the per-file
+verified-state record: the hook writes it only after a fully green run, as a copy of that run's
+file-content manifest, and the read-set skip reads it to decide which fixtures' inputs moved. A red
+run never writes it, and an unstamped record is read as "run everything". To an operator it says
+"every fixture's verdict was known good at these file contents"; deleting it forces a full run.
+`.git/ai-dlc-suite-key` is the whole-suite content key: when the key and the fixture count both match
+the last green, the push prints `SKIPPED -- this exact tree already passed the whole suite` and runs
+no fixtures. Each decision appends one line to `.git/ai-dlc-suite-key.log`
+(`<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>`); count them with
+`awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
+
+**`scripts/census-hermetic-coverage.sh` is the one-time census of what the sandbox hides.** It runs
+each declared fixture twice, once inside `hermetic-run.sh`'s sandbox and once plainly against the real
+tree, and reports every fixture whose sandboxed run asserted something different. It is a census, not
+a gate. Options: `--root R`, `--list "<names>"`, `--jobs N` (default 4), `--out PATH`, `--work DIR`,
+`--scratch BASE` and `--keep`. Exit 0 means every row read EQUAL, EQUIVALENT or LOW-RES, 1 means a
+MISMATCH, BOTH-FAIL, FLAKY, UNCOUNTABLE or REFUSED row, and 2 means it could not run. It needs a clean
+root and never writes to the real verdict store or the durations record.
+
 **A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, one tree, both ways:
 
 ```
