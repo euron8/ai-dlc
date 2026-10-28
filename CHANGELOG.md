@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.963.0] - 2026-10-28
+
+Batch b245, fixture optimisation part two. It lands the prevention mechanisms (BL-851) and a second set of narrowed fixtures under BL-850, which stays PARTIAL. The wait-stale-deliverable and review-shard-merge narrowings, the m1-ii matrix-only fixtures and BL-866 are not in this release and ride 0.964.0.
+
+Bootstrapping: the consumer-visible change is the reconcile engine under `core/skills/ai-dlc-update/reconcile/` (`apply.sh`, `emit-report.sh`, `hard-blockers.sh`, `layer-drift.sh`, `ledger-reverify.sh`, `preclassify.sh`, `predicate-differential.sh`, `relabel-extension-checks.sh`, the `retired-*.sh` detectors, `self-update-gate.sh`, `unregistered-drift.sh` and `warn-shadowed-local-validators.sh`), live from step 3 of the pull that delivers it. Read from `git diff 7deec27d9 f39d361c7 -- core/skills/ai-dlc-update/reconcile/`, the change replaces `dirname` and `basename` forks with parameter expansion, stages `emit-report.sh` temporary files inside its own staging directory, replaces `$(cat f)` with `$(<f)`, drops `sed` and `sort` passes whose input cannot carry what they removed, and batches `predicate-differential.sh` into one `ls-files` per side. None of it changes an exit code or a stdout line a consumer step reads. The one addition is a `--no-safe-stop-advice` first argument on `self-update-gate.sh`, a fixture seam that prints NOT-A-VERDICT on stderr and that no shipped caller passes. `core/git-hooks/pre-push` gains `range` rows for a fixture's `git.decl`, keyed into the read-set fold, and `core/scripts/hermetic-run.sh` parses those rows and arms the invocation counter only when its three environment variables are set, which nothing on a consumer sets.
+
+### BL-851 — the prevention mechanisms land
+
+- Invocation budget: `scripts/validate-fixture-invocations.sh`, armed once per push by `.githooks/pre-push`, judges `measured == declared` for every counted fixture, plus the provisional `<n>±<k> <target> why=<loop> provisional` row.
+- Static hygiene: `scripts/validate-fixture-hygiene.sh`, arms H1, H2, H3 and H5.
+- Runtime name join: J5 joins every name `mutant_killed` reports to a matrix row.
+- `invocations.decl` rows exist for every counted fixture. The provisional rows exist on exactly five fixtures (derived with `git grep -l '±'` over `core/fixtures/*/invocations.decl`, which returned 5): readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate and wait-beat-liveness. Each is owed a deterministic rewrite under BL-850.
+
+### BL-850 — fixtures narrowed in part two
+
+Counts are bash starts per push, counter-measured and armed, slot to tip, `before -> after`.
+
+- adversarial-shard-merge: 3369 -> 3092.
+- apply-restamp-worklist: 1883 -> 953. Its `-b` shard is a RISE, 1422 -> 2092, because the shards were rebalanced (`ar` and `arm` moved into b and `bl`, `t` left it); like-for-like the old tree with the same split measures 2258, so the change is 166 starts cheaper. Its `-c` shard: 1314 -> 436.
+- emit-report-refusal: 2747 -> 2687.
+- handoff-completion-assertion: 363 -> 519, a RISE, because each mutant now runs its deciding arm plus its twins.
+- postcompact-rulebook-recovery: 1859 -> 1869, a RISE in the count only, because the corrected counter now sees 10 gate starts under `ulimit -f` that it could not count before.
+- self-update-gate: 462 -> 428; `-b` 847 -> 638; `-c` 430 -> 223; `-d` 455 -> 375. self-update-fixture-log: 42 -> 43.
+- self-update-gate's 428 is the stable count. Its 9 early-exit `| awk … exit` pipe readers were replaced by a capture plus a here-string, so the gate always runs to completion. The old count varied with load (416 versus 428) because SIGPIPE cut the gate short.
+- self-update-join-gate: a new declaration, 76.
+- content-seal: a fall of 50, `*` 861 -> 811 and merge-adversarial-shards.sh 99 -> 49. content-seal itself was not edited: the fall is a side effect of the adversarial-shard-merge memo of `shard() --map` in that fixture's `lib.sh`, which content-seal sources.
+- procsub-staged-refusal: the RLC-SHAPES and RLC-TOKENS mutants are re-anchored on the rewritten `shapes_of` and `tokens_of` bodies. No count change.
+- shell-portability: 162 -> 155. spec-join-integrity: 445 -> 387.
+- sprint-status-lifecycle: 626 -> 188. story-corpus-sprint-slot: 178 -> 51. suppression-lifetime: 203 -> 131.
+- review-reroute: `mutant_killed` now receives the header row id, not the whole sentence, so J5 can join it.
+
+Fifteen earlier fixture units merged on the batch branch before this part ship here too: check-24, readset-sandbox-root-clause, path-mapping-render, backlog-receipt-binding, provenance-flagless-default, enforcement-map-derivations, readset-stage1-verdict, layer-contract-conformance, layer-qualifier-grain, layer-conforms-to, push-drain-refusals, budget-summary-verdict, artifact-derivations, gate-series-rung and layer-reference-resolution.
+
 ## [0.962.0] - 2026-10-28
 
 Batch b245, a release of one unit: the reconcile engine change and the reconcile-emit-report fixture that measures it. It retires BL-679 and BL-685 and records progress on BL-850, which stays PARTIAL. The other units collected on b245-fx2 are not in this release and ship in a later one. NET: entries closed 2 (BL-679, BL-685, both retired), filed 0, progress 1 (BL-850).
