@@ -44,6 +44,7 @@
 # MUTANT-MATRIX a12-waiver-window-crosses-entry decides=A12 twins=A11
 # MUTANT-MATRIX a13-a14-process-stays-in-invoking-dir decides=A13,A14 twins=A2
 # MUTANT-MATRIX a14-escalations-read-from-invoking-dir decides=A14 twins=A11
+# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/story-corpus-sprint-slot/run.sh --matrix
 set -uo pipefail
 

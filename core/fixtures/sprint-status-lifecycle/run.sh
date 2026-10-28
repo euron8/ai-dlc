@@ -58,6 +58,7 @@
 # MUTANT-MATRIX d10-d11-misindent-dropped-again decides=D10,D11 twins=D9
 # MUTANT-MATRIX d10-only-tab-caught decides=D10 twins=D11
 # MUTANT-MATRIX d11-only-deeper-spaces-caught decides=D11 twins=D10
+# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/sprint-status-lifecycle/run.sh --matrix
 set -uo pipefail
 

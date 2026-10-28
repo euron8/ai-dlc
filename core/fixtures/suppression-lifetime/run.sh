@@ -68,6 +68,7 @@
 # MUTANT-MATRIX w_resolve decides=w5 twins=w1
 # MUTANT-MATRIX w_lifetime decides=w4 twins=s2
 # MUTANT-MATRIX w_overridden decides=w3,w1 twins=w4
+# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
 
