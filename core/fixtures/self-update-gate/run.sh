@@ -469,6 +469,36 @@ open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/nu
   printf '%s' "$e/self-update-gate.sh"
 }
 if sg base; then
+# ---- shard-a mutant scoring helpers (base-pass flags B_*, per-push narrowing, matrix rows) ----
+# ss_assert_b is ss_assert plus its verdict, so a control sets its B_ flag in the passing branch.
+ss_assert_b() { ss_assert "$@"; [ "$2" = "$3" ]; }
+# mx_acc <cell> <base> <got> accumulates one matrix cell; values are made blank- and comma-free.
+mxv() { local v="${1// /_}"; printf '%s' "${v//,/;}"; }
+mx_acc() { MX_B="$MX_B $1=$(mxv "$2")"; MX_G="$MX_G $1=$(mxv "$3")"; }
+# cells_kill <flag> <name> <driver> <gate> <push-cells> <why> <cell> <want> [<cell> <want>]...
+# The driver leaves the cell's observation in DRV_OUT (called in this shell, never in a substitution, so a
+# state it builds stays built). A plain run drives only <push-cells>: the deciding cells and their one twin.
+# --matrix drives EVERY cell on the mutant AND on the unmutated gate and prints one MATRIX-ROW.
+cells_kill() {
+  local flag="$1" name="$2" drv="$3" gate="$4" push="$5" why="$6" c w got base key okc=1 badc=""
+  shift 6
+  ASSERTIONS=$((ASSERTIONS + 1)); MX_B=""; MX_G=""
+  while [ "$#" -ge 2 ]; do
+    c="$1"; w="$2"; shift 2
+    case "|$push|" in *"|$c|"*) ;; *) [ "$MATRIX" = 1 ] || continue ;; esac
+    if [ -z "$gate" ]; then got="DID-NOT-APPLY"; else "$drv" "$gate" "$c"; got="$DRV_OUT"; fi
+    if [ "$MATRIX" = 1 ]; then
+      key="${drv}_${c}"
+      if eval "[ -z \"\${MXBS_$key:-}\" ]"; then "$drv" "$GATE" "$c"; eval "MXB_$key=\$DRV_OUT; MXBS_$key=1"; fi
+      eval "base=\$MXB_$key"
+      mx_acc "$c" "$base" "$got"
+    fi
+    [ "$got" = "$w" ] || { okc=0; badc="$badc [$c got=[$got] want=[$w]]"; }
+  done
+  mx_row "$name" "$MX_B" "$MX_G"
+  if [ "$okc" = 1 ]; then mutant_killed "$flag" "$name" "$(printf '%-16s KILLED (%s)' "$name" "$why")"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY:%s\n' "$name" "$badc"; fi
+}
 OUT="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 RC=$?
 # $1 script  $2 expected STATUS (or ABSENT)  $3 why
@@ -744,6 +774,15 @@ cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SSM/ctl"/ 2>/dev/null
 # expression that actually mutates. Written apart they drift, and the arm then proves that some
 # OTHER expression is unique.
 SS_ANCHOR='^      if \[ -f "\$CONSUMER/\.claude/\.ai-dlc-applying" \]; then$'
+ssp_cell() { # <gate> <armA|armB|armC>
+  ss_stamp "$SS_R1"
+  case "$2" in
+    armA) ss_marker on;  DRV_OUT="$(ss_ack "$1" "$SS_R2")" ;;
+    armB) ss_marker off; DRV_OUT="$(ss_ack "$1" "$SS_R2")" ;;
+    armC) ss_marker on;  DRV_OUT="$(ss_ack "$1" "$SS_R4")" ;;
+  esac
+  ss_marker off
+}
 ss_assert "ss-partial-anchor" "$(grep -c "$SS_ANCHOR" "$GATE")" "1" \
   "the mutation's anchor matches exactly ONE line, so the sed below cannot move a second cell"
 # CONTROL, and it is what makes the 1 above mean something: a grammar that cannot spell its own
@@ -757,35 +796,25 @@ ss_assert "ss-partial-anchor-ctl" \
 # "nothing" is what the mutant is expected to stop producing. An rc-and-no-error control would
 # pass against `exit 0` here.
 ss_stamp "$SS_R1"; ss_marker on
-ss_assert "ss-partial-control" "$(ss_ack "$SSM/ctl/self-update-gate.sh" "$SS_R2")" \
+if ss_assert_b "ss-partial-control" "$(ss_ack "$SSM/ctl/self-update-gate.sh" "$SS_R2")" \
   "row=1 acq=0 wh=1 pf=0" \
-  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"
+  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; fi
 
 sed "s@${SS_ANCHOR}@      if false; then@" "$GATE" > "$SSM/mut/self-update-gate.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$SSM/mut/self-update-gate.sh"; then
-  FAILURES=$((FAILURES + 1))
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "ss-partial-mut"
 else
-  ss_stamp "$SS_R1"; ss_marker on
-  ssm_got="$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R2")"
-  if [ "$ssm_got" = "row=1 acq=1 wh=0 pf=0" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "ss-partial-mut" \
-      "with the marker guard gone the acquittal returns on the partial tree and the withheld row disappears"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "ss-partial-mut" "$ssm_got" "row=1 acq=1 wh=0 pf=0"
-  fi
+  # armA is the deciding cell; armC is the twin (marker on, so the likeliest to co-trip); armB runs in --matrix only.
+  cells_kill "${B_ssp:-0}" ss-partial-mut ssp_cell "$SSM/mut/self-update-gate.sh" "armA|armC" \
+    "with the marker guard gone the acquittal returns on the partial tree and the withheld row disappears" \
+    armA "row=1 acq=1 wh=0 pf=0" armB "row=1 acq=1 wh=0 pf=0" armC "row=1 acq=0 wh=0 pf=1"
 fi
-
-# THE MUTANT MOVES ONE CELL AND NO OTHER, which is how ss-partial-A is shown to OWN the case
-# rather than sharing it. Two arms moving under one mutation means one of them is vacuous.
+# THE MUTANT MOVES ONE CELL AND NO OTHER (armA), which is how ss-partial-A is shown to OWN the case.
 ss_marker off
-ss_assert "ss-partial-mut-B" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R2")" \
-  "row=1 acq=1 wh=0 pf=0" "the mutant leaves B where it was -- B never entered the guard"
-ss_stamp "$SS_R1"; ss_marker on
-ss_assert "ss-partial-mut-C" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R4")" \
-  "row=1 acq=0 wh=0 pf=1" "and C where it was -- C never reaches the acquittal branch at all"
+:
+ss_marker off
+
 
 ss_marker off
 ss_stamp -
@@ -889,18 +918,23 @@ NM_GREP='grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || conti
 # THE UNMUTATED CONTROL, PRESENCE-SHAPED: two of its three cells must NAME r1, which a copy that
 # cannot run never prints.
 NM_CTL="$(av_mut nm-ctl)"
-ss_assert "ss-nm-control" "$(nm_tuple "$NM_CTL")" "nomach=none cls=r1 hook=r1" \
-  "an UNMUTATED copy beside its siblings reproduces all three worlds, so a mutant's shift is the mutation"
+if ss_assert_b "ss-nm-control" "$(nm_tuple "$NM_CTL")" "nomach=none cls=r1 hook=r1" \
+  "an UNMUTATED copy beside its siblings reproduces all three worlds, so a mutant's shift is the mutation"; then B_nm=1; fi
+nm_cell() { # <gate> <nomach|cls|hook>
+  case "$2" in nomach) DRV_OUT="$(nm_ss "$1" "$NM_N")" ;; cls) DRV_OUT="$(nm_ss "$1" "$NM_C")" ;; hook) DRV_OUT="$(nm_ss "$1" "$NM_H")" ;; esac
+}
 
 # Every layer of the keep test removed: the walk is back to "did not defer".
 NM_M1="$(av_mut nm-revert "$NM_KEEP" '')" || NM_M1=""
-mp_killed "ss-nomach-mut" "$([ -n "$NM_M1" ] && nm_tuple "$NM_M1")" "nomach=r1 cls=r1 hook=r1" \
-  "without the keep test the VERSION-only r1 is named again; only ss-nomach moves"
+cells_kill "${B_nm:-0}" ss-nomach-mut nm_cell "$NM_M1" "nomach|cls" \
+  "without the keep test the VERSION-only r1 is named again; only ss-nomach moves" \
+  nomach r1 cls r1 hook r1
 
 # The keep test narrowed to core/scripts/ -- the population the :1315 OK row speaks for.
 NM_M2="$(av_mut nm-scripts "$NM_GREP" 'grep -q '"'"'^core/scripts/'"'"' <<<"$ss_diff" || continue')" || NM_M2=""
-mp_killed "ss-classifier-only-mut" "$([ -n "$NM_M2" ] && nm_tuple "$NM_M2")" "nomach=none cls=none hook=none" \
-  "a core/scripts/-only test drops the classifier-only and hook-only engine hops; ss-nomach stays put"
+cells_kill "${B_nm:-0}" ss-classifier-only-mut nm_cell "$NM_M2" "cls|hook|nomach" \
+  "a core/scripts/-only test drops the classifier-only and hook-only engine hops; ss-nomach stays put" \
+  nomach none cls none hook none
 
 fi
 if sg sc; then
@@ -1148,8 +1182,8 @@ cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SCM/ctl"/ 2>/dev/null
 # world's full tuple off a plain copy: a copy that died sourcing its siblings prints nothing, and
 # "nothing" is what two of the three mutants below are expected to stop producing.
 sc_cons carry
-ss_assert "sc-mut-control" "$(sc_ack "$SCM/ctl/self-update-gate.sh")" "row=1 acq=0 pf=1 carry=1" \
-  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"
+if ss_assert_b "sc-mut-control" "$(sc_ack "$SCM/ctl/self-update-gate.sh")" "row=1 acq=0 pf=1 carry=1" \
+  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"; then B_scm=1; fi
 
 # ONE STRING SERVES THE GREP AND THE SED for each anchor, so the uniqueness proved below is a
 # property of the expression that actually mutates.
@@ -1189,8 +1223,12 @@ ss_assert "sc-anchor-4-ctl" "$(grep -c '^\([[:blank:]]*\)GATE_CARRY_STATE=unknow
 # THE CARRIED-PRECLASSIFY WORLD IS A SEED, NOT A SECOND GUARD, so m1 and m2 move it in lockstep
 # with the carried world by construction and that is not entanglement. What would be entanglement
 # is either of them moving the CLEAN world, which is why that cell is in the tuple.
+sc_cell() { # <gate> <clean|carry|pre>
+  case "$2" in clean) sc_cons clean ;; carry) sc_cons carry ;; pre) sc_cons preclassify ;; esac
+  DRV_OUT="$(sc_ack "$1")"
+}
 sc_kill() {
-  local label="$1" expr="$2" wc="$3" wa="$4" wp="$5" why="$6" d="$SCM/$1" got want
+  local label="$1" expr="$2" wc="$3" wa="$4" wp="$5" push="$6" why="$7" d="$SCM/$1"
   rm -rf "$d"; mkdir -p "$d"
   cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
   if ! sed "$expr" "$GATE" > "$d/self-update-gate.sh"; then
@@ -1203,35 +1241,25 @@ sc_kill() {
     printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "$label"
     return
   fi
-  sc_cons clean;       got="clean[$(sc_ack "$d/self-update-gate.sh")]"
-  sc_cons carry;       got="$got carry[$(sc_ack "$d/self-update-gate.sh")]"
-  sc_cons preclassify; got="$got pre[$(sc_ack "$d/self-update-gate.sh")]"
-  want="clean[$wc] carry[$wa] pre[$wp]"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$got" = "$want" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$label" "$why"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$label" "$got" "$want" "$why"
-  fi
+  cells_kill "${B_scm:-0}" "$label" sc_cell "$d/self-update-gate.sh" "$push" "$why" clean "$wc" carry "$wa" pre "$wp"
 }
 
 # m1 -- the refusal itself is gone. The flag is still set; nothing reads it.
 sc_kill "sc-mut-return" "s@${SC_A1}@  :@" \
-  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" \
+  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" "carry|pre|clean" \
   "without the return the acquittal comes back on both carried worlds and the clean world is untouched"
 
 # m2 -- the state is never raised to `carried`. The reader survives and reads a `clean` the emit
 # can no longer downgrade, which is the shape a refusal sited on a value nobody writes takes.
 # `clean` keeps the mutation inside arm C rather than deleting a line `set -u` would report.
 sc_kill "sc-mut-noset" "s@${SC_A2}@        GATE_CARRY_STATE=clean@" \
-  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" \
+  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" "carry|pre|clean" \
   "a state the emit never raises leaves the acquittal firing beside a CARRY row"
 
 # m3 -- the acquittal branch is dead everywhere. This is the fix-by-deletion that satisfies every
 # withheld arm above for free, and only the CLEAN world can tell it from the shipped guard.
 sc_kill "sc-mut-iffalse" "s@${SC_A3}@    if false; then@" \
-  "row=1 acq=0 pf=1 carry=0" "row=1 acq=0 pf=1 carry=1" "row=1 acq=0 pf=1 carry=1" \
+  "row=1 acq=0 pf=1 carry=0" "row=1 acq=0 pf=1 carry=1" "row=1 acq=0 pf=1 carry=1" "clean|carry" \
   "killing the acquittal everywhere moves the CLEAN world, which the shipped guard leaves alone"
 
 # m4 -- THE UNDECIDED TERMINALS STOP RECORDING THEMSELVES, which is precisely the first cut of
@@ -1259,31 +1287,29 @@ elif [ "$(grep -c "$SC_A4" "$SCM4/self-update-gate.sh")" != 0 ]; then
   printf '  FAIL  %-16s mutation was PARTIAL -- %s undecided site(s) survive, so the defect was only half reproduced\n' \
     "sc-mut-undec" "$(grep -c "$SC_A4" "$SCM4/self-update-gate.sh")"
 else
+  ASSERTIONS=$((ASSERTIONS - 1))  # cells_kill counts the assertion this site already counted above
   # The three sabotaged engines are rebuilt around the MUTATED gate: sc_engine copies the shipped
-  # one, so the mutant has to be dropped in on top of each.
-  sc_m4_got=""
-  for sc_m4 in noman:nomanifest norow:norows nopre:nopre; do
-    sc_m4_e="$(sc_engine "m4-${sc_m4%%:*}" "${sc_m4#*:}")"
-    cp "$SCM4/self-update-gate.sh" "$sc_m4_e"
-    sc_cons carry
-    sc_m4_got="$sc_m4_got ${sc_m4%%:*}[$(sc_und "$sc_m4_e")]"
-  done
-  # ...and the consumer-world axis must be UNMOVED, which is what makes this m4's own assertion
-  # rather than a second copy of m1's.
-  sc_cons carry;  sc_m4_got="$sc_m4_got carried[$(sc_ack "$SCM4/self-update-gate.sh")]"
-  sc_cons clean;  sc_m4_got="$sc_m4_got clean[$(sc_ack "$SCM4/self-update-gate.sh")]"
-  # noman and nopre do not move under this mutant: their --safe-stop walk fails closed on the
-  # unresolvable machinery set before the acquittal is reachable (see sc-und-nomanifest). `norow`
-  # is the cell that discriminates, acq 0 -> 1.
-  sc_m4_want=" noman[row=1 acq=0 pf=0 und=1] norow[row=1 acq=1 pf=0 und=1] nopre[row=1 acq=0 pf=0 und=1]"
-  sc_m4_want="$sc_m4_want carried[row=1 acq=0 pf=1 carry=1] clean[row=1 acq=1 pf=0 carry=0]"
-  if [ "$sc_m4_got" = "$sc_m4_want" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "sc-mut-undec" \
-      "with the UNDECIDED terminals recording clean, the acquittal returns on norow -- printed beside the row saying the gate cannot tell"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "sc-mut-undec" "$sc_m4_got" "$sc_m4_want"
-  fi
+  # one, so the mutant has to be dropped in on top of each. noman and nopre do not move under this
+  # mutant (their --safe-stop walk fails closed on the unresolvable machinery set before the acquittal
+  # is reachable, see sc-und-nomanifest); norow is the cell that discriminates, acq 0 -> 1, and the
+  # consumer-world axis (carried, clean) must be UNMOVED.
+  scu_cell() { # <gate> <noman|norow|nopre|carried|clean>
+    local k e
+    case "$2" in
+      noman|norow|nopre)
+        case "$2" in noman) k=nomanifest ;; norow) k=norows ;; nopre) k=nopre ;; esac
+        e="$(sc_engine "m4-$2" "$k")"
+        [ "$1" = "$GATE" ] || cp "$1" "$e"
+        sc_cons carry; DRV_OUT="$(sc_und "$e")" ;;
+      carried) sc_cons carry; DRV_OUT="$(sc_ack "$1")" ;;
+      clean) sc_cons clean; DRV_OUT="$(sc_ack "$1")" ;;
+    esac
+  }
+  cells_kill "${B_scm:-0}" sc-mut-undec scu_cell "$SCM4/self-update-gate.sh" "norow|carried" \
+    "with the UNDECIDED terminals recording clean, the acquittal returns on norow -- printed beside the row saying the gate cannot tell" \
+    noman "row=1 acq=0 pf=0 und=1" norow "row=1 acq=1 pf=0 und=1" nopre "row=1 acq=0 pf=0 und=1" \
+    carried "row=1 acq=0 pf=1 carry=1" clean "row=1 acq=1 pf=0 carry=0"
+
 fi
 
 fi
@@ -1491,8 +1517,9 @@ ac_kill() { # ac_kill <label> <sed-expr> <want-carry-set> <why>
     return
   fi
   got="$(ac_carry "$g" "$AC/cons" "$AC/cwd")"
+  mx_row "$1" "$AC_ALL" "$got"
   if [ "$got" = "$3" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+    mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
@@ -1510,9 +1537,9 @@ ac_kill() { # ac_kill <label> <sed-expr> <want-carry-set> <why>
 # A control faked with a no-op substitution would trip exactly that guard.
 rm -rf "$AC/m-control"; mkdir -p "$AC/m-control"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$AC/m-control"/ 2>/dev/null
-ss_assert "armc-control" "$(ac_carry "$AC/m-control/self-update-gate.sh" "$AC/cons" "$AC/cwd")" \
+if ss_assert_b "armc-control" "$(ac_carry "$AC/m-control/self-update-gate.sh" "$AC/cons" "$AC/cwd")" \
   "$AC_ALL" \
-  "an unmutated copy reproduces the FULL carry set from the decoy CWD, so a mutant's shortfall is the mutation"
+  "an unmutated copy reproduces the FULL carry set from the decoy CWD, so a mutant's shortfall is the mutation"; then B_acc=1; fi
 
 ac_kill "armc-mut-bucket" \
   "s@^          \\*'->CLASSIFY'\\*|\\*consumer-edited\\*) ;;\$@          *'BOTH-CHANGED'*) ;;@" \
@@ -1556,8 +1583,9 @@ ac_kill_pre() { # ac_kill_pre <label> <sed-expr> <want-carry-set> <why>
     return
   fi
   got="$(ac_carry "$d/self-update-gate.sh" "$AC/cons" "$AC/cwd")"
+  mx_row "$1" "$AC_ALL" "$got"
   if [ "$got" = "$3" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+    mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
@@ -1599,9 +1627,13 @@ if cmp -s "$GATE" "$AC_M6"; then
 else
   ac_got6="$( AI_DLC_GATE_IN_SAFE_STOP=1; export AI_DLC_GATE_IN_SAFE_STOP
               ac_carry "$AC_M6" "$AC/cons" "$AC/cwd" )"
+  if [ "$MATRIX" = 1 ]; then
+    mx_row armc-mut-safestop "$( AI_DLC_GATE_IN_SAFE_STOP=1; export AI_DLC_GATE_IN_SAFE_STOP
+                                 ac_carry "$GATE" "$AC/cons" "$AC/cwd" )" "$ac_got6"
+  fi
   if [ "$ac_got6" = "$AC_ALL" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "armc-mut-safestop" \
-      "removing the re-entry guard emits the whole advisory inside a --safe-stop walk"
+    mutant_killed "${B_acc:-0}" armc-mut-safestop "$(printf '%-16s KILLED (%s)' armc-mut-safestop \
+      "removing the re-entry guard emits the whole advisory inside a --safe-stop walk")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "armc-mut-safestop" "$ac_got6" "$AC_ALL" \
@@ -1941,8 +1973,9 @@ su_kill() { # su_kill <label> <awk> <stamp> <want-set> <why>
   fi
   su_stamp "$3"
   got="$(su_buckets "$g" "$SU/cons")"
+  if [ "$MATRIX" = 1 ]; then mx_row "$1" "$(su_buckets "$SU_PC" "$SU/cons")" "$got"; fi
   if [ "$got" = "$4" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
+    mutant_killed "${B_su:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$5")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$4" "$5"
@@ -2001,8 +2034,8 @@ s>0 { s--; next }
 rm -rf "$SU/m-control"; mkdir -p "$SU/m-control"
 cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$SU/m-control"/ 2>/dev/null
 su_stamp "$SU_MID"
-ss_assert "su-mut-control" "$(su_buckets "$SU/m-control/preclassify.sh" "$SU/cons")" "$SU_LIVE" \
-  "an unmutated copy beside its siblings reproduces the FULL live set, so a mutant's shift is the mutation"
+if ss_assert_b "su-mut-control" "$(su_buckets "$SU/m-control/preclassify.sh" "$SU/cons")" "$SU_LIVE" \
+  "an unmutated copy beside its siblings reproduces the FULL live set, so a mutant's shift is the mutation"; then B_su=1; fi
 
 su_kill "su-mut-noarm-m" "$SU_M_NOARM_M" "$SU_MID" "$SU_NO_M" \
   "deleting the M-branch arm sends the carried path back to the semantic-merge obligation that was filed, and touches the added path not at all"
@@ -2033,7 +2066,7 @@ else
   su_stamp -
   su_layers_got="$(su_buckets "$SU_G_LAYERS" "$SU/nostamp")"
   if [ "$su_layers_got" = "$SU_INERT" ]; then
-    printf '  ok    %-16s HELD (the sentinel alone stops the index read once both layers above it are gone)\n' "su-mut-layers"
+    printf '  ok    CONTROL %-16s HELD (the sentinel alone stops the index read once both layers above it are gone)\n' "su-mut-layers"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s got=[%s] want=[%s] -- the layers mutant moved a bucket on its own, so su-mut-index credits the sentinel for something else\n' \
@@ -2055,7 +2088,7 @@ else
   su_stamp "$SU_BASE"
   su_eq_got="$(su_buckets "$SU_G_EQBASE" "$SU/cons")"
   if [ "$su_eq_got" = "$SU_INERT" ]; then
-    printf '  ok    %-16s INERT BY CONSTRUCTION (the base_h arm above already claims every state it could reach)\n' "su-mut-eqbase"
+    printf '  ok    CONTROL %-16s INERT BY CONSTRUCTION (the base_h arm above already claims every state it could reach)\n' "su-mut-eqbase"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s got=[%s] want=[%s] -- removing the equality guard MOVED a bucket, so it has a subject after all and needs an arm\n' \
@@ -2107,29 +2140,28 @@ ss_assert "su-gate-verdict" \
 # `C_PATHS` is EMPTY, the membership test rejects every path, and the arm reports no divergence
 # having compared nothing -- output byte-identical to a clean pull. Scored on the GATE, not on the
 # buckets, because the row it must emit is the gate's.
+if ss_assert_b "su-machfn-control" \
+  "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
+  "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"; then B_sumf=1; fi
+sumf_cell() { # <gate> <obs>
+  local o r
+  o="$(bash "$(dirname "$1")/self-update-gate.sh" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
+  r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {print $2; exit}')"
+  DRV_OUT="row=$r carry=$(su_carry "$o")"
+}
 SU_G_MACHFN="$(su_mut su-machfn 'index($0,"machinery_paths() {") { print " machinery_paths() {"; next } { print }')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$SU_PC" "$SU_G_MACHFN"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so the set-empty row is unproven\n' "su-mut-machfn"
 else
-  su_machfn_out="$(bash "$(dirname "$SU_G_MACHFN")/self-update-gate.sh" \
-                     "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
-  su_machfn_row="$(printf '%s\n' "$su_machfn_out" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {print $2; exit}')"
-  su_machfn_carry="$(su_carry "$su_machfn_out")"
-  if [ "$su_machfn_row" = "setup-sites.md" ] && [ -z "$su_machfn_carry" ]; then
-    printf '  ok    %-16s KILLED (a function the extraction cannot find yields an EMPTY population, and the gate says so instead of going quiet)\n' "su-mut-machfn"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: row=[%s] carry=[%s] -- an unreadable machinery set must report UNDECIDED, never an empty advisory\n' \
-      "su-mut-machfn" "${su_machfn_row:-<none>}" "$su_machfn_carry"
-  fi
+  ASSERTIONS=$((ASSERTIONS - 1))  # cells_kill counts the assertion this site already counted above
+  cells_kill "${B_sumf:-0}" su-mut-machfn sumf_cell "$SU_G_MACHFN" "obs" \
+    "a function the extraction cannot find yields an EMPTY population, and the gate says so instead of going quiet" \
+    obs "row=setup-sites.md carry="
 fi
-# CONTROL: the SHIPPED gate over the same tree carries rows and emits no such verdict, so the row
-# above is the mutation and not a property of this probe.
-ss_assert "su-machfn-control" \
-  "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
-  "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"
+# CONTROL (su-machfn-control, asserted above the mutant): the SHIPPED gate over the same tree carries rows and
+# emits no such verdict, so the row above is the mutation and not a property of this probe.
 
 fi
 if sg vr; then
@@ -3298,28 +3330,27 @@ PPE_MUT="$(dirname "$DIST")/ppemut"
 rm -rf "$PPE_MUT"; mkdir -p "$PPE_MUT/mut" "$PPE_MUT/ctl"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/mut"/ 2>/dev/null
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/ctl"/ 2>/dev/null
-ss_assert "pp-enclosed-mut-control" "$(pp_layout "$PPE_MUT/ctl/self-update-gate.sh" "$PP_ENC/sub")" "1" \
-  "an UNMUTATED copy beside its siblings reproduces the layout row, so a mutant's silence is the mutation"
+if ss_assert_b "pp-enclosed-mut-control" "$(pp_layout "$PPE_MUT/ctl/self-update-gate.sh" "$PP_ENC/sub")" "1" \
+  "an UNMUTATED copy beside its siblings reproduces the layout row, so a mutant's silence is the mutation"; then B_ppe=1; fi
+ppe_cell() { # <gate> <enclosed|green>
+  rm -f "$PP/sent/sentinel"
+  case "$2" in
+    enclosed) DRV_OUT="$(pp_scan "$1" "$PP_ENC/sub")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" ;;
+    green) DRV_OUT="$(pp_scan "$1" "$PP_GREEN")" ;;
+  esac
+  rm -f "$PP/sent/sentinel"
+}
 rm -f "$PP/sent/sentinel"
 sed "s@${PPE_ANCHOR}@if false; then@" "$GATE" > "$PPE_MUT/mut/self-update-gate.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$PPE_MUT/mut/self-update-gate.sh"; then
-  FAILURES=$((FAILURES + 1))
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so the enclosed-layout arm is unproven\n' "pp-enclosed-mut"
 else
-  ppe_got="$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_ENC/sub")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
-  if [ "$ppe_got" = "pp=none sum=1 ss=1 und=1|absent" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "pp-enclosed-mut" \
-      "with the layout block disabled the enclosed consumer reads round 2's silence again, and the enclosing hook still does not run"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED or moved elsewhere: got=[%s] want=[%s]\n' "pp-enclosed-mut" "$ppe_got" "pp=none sum=1 ss=1 und=1|absent"
-  fi
+  # enclosed decides; green is the twin: the mutant does not move the green world, so it owns only the enclosed case.
+  cells_kill "${B_ppe:-0}" pp-enclosed-mut ppe_cell "$PPE_MUT/mut/self-update-gate.sh" "enclosed|green" \
+    "with the layout block disabled the enclosed consumer reads round 2's silence again, and the enclosing hook still does not run" \
+    enclosed "pp=none sum=1 ss=1 und=1|absent" green "pp=none sum=1 ss=1 und=1"
 fi
-rm -f "$PP/sent/sentinel"
-# ...and the mutant leaves a real repository's answer where it was: the block never fires there.
-ss_assert "pp-enclosed-mut-green" "$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_GREEN")" \
-  "pp=none sum=1 ss=1 und=1" "the mutant does not move the green world, so it owns only the enclosed case"
 rm -f "$PP/sent/sentinel"
 # A HEALTHY CONSUMER REACHED BY A MISCASED PATH IS NOT ENCLOSED. On case-insensitive APFS bash's
 # `pwd -P` keeps the case the caller typed while git answers the on-disk case, so a layout decided by
@@ -3337,8 +3368,14 @@ else
   pp_case_typed="$(cd "$PP_GREEN_MIS" && pwd -P)"; pp_case_git="$(git -C "$PP_GREEN_MIS" rev-parse --show-toplevel 2>/dev/null)"
   ss_assert "pp-case-discriminates" "$([ "$pp_case_typed" != "$pp_case_git" ] && echo differ || echo same)" "differ" \
     "the miscased path's pwd -P [$pp_case_typed] differs from git's toplevel [$pp_case_git], so a string comparison WOULD misread it -- the input separates the two rules"
-  ss_assert "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=none sum=1 ss=1 und=1" \
-    "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"
+  if ss_assert_b "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=none sum=1 ss=1 und=1" \
+    "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"; then B_ppc=1; fi
+  ppc_cell() { # <gate> <miscased|canonical>
+    case "$2" in
+      miscased) DRV_OUT="$(pp_scan "$1" "$PP_GREEN_MIS")|$(pp_layout "$1" "$PP_GREEN_MIS")" ;;
+      canonical) DRV_OUT="$(pp_scan "$1" "$PP_GREEN")" ;;
+    esac
+  }
   # MUTANT: the decision restored to the string comparison of two `pwd -P` results. The `&`s are
   # escaped because sed reads a bare `&` in a replacement as the whole match.
   PPC_MUT="$(dirname "$DIST")/ppcmut"
@@ -3349,22 +3386,14 @@ else
     "the string-comparison mutation's anchor matches one line, and an impossible anchor of the same shape matches none"
   sed "s@${PPC_ANCHOR}@  [ \"\$(cd \"\$(git -C \"\$CONSUMER\" rev-parse --show-toplevel)\" \&\& pwd -P)\" != \"\$(cd \"\$CONSUMER\" \&\& pwd -P)\" ] \&\& pp_enclosed=1@" \
     "$GATE" > "$PPC_MUT/self-update-gate.sh"
-  ASSERTIONS=$((ASSERTIONS + 1))
   if cmp -s "$GATE" "$PPC_MUT/self-update-gate.sh"; then
-    FAILURES=$((FAILURES + 1))
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s mutation matched nothing, so the case arm is unproven\n' "pp-case-mut"
   else
-    ppc_got="$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN_MIS")"
-    if [ "$ppc_got" = "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1" ] && [ "$(pp_layout "$PPC_MUT/self-update-gate.sh" "$PP_GREEN_MIS")" = 1 ]; then
-      printf '  ok    %-16s KILLED (%s)\n' "pp-case-mut" \
-        "with the pwd -P string comparison restored the miscased healthy consumer reads UNSUPPORTED LAYOUT"
-    else
-      FAILURES=$((FAILURES + 1))
-      printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "pp-case-mut" "$ppc_got" "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1"
-    fi
-    # the mutant still answers the canonical spelling OK, so it owns only the miscased case
-    ss_assert "pp-case-mut-canonical" "$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN")" "pp=none sum=1 ss=1 und=1" \
-      "the string-comparison mutant still reads the canonically spelled green world as its own toplevel, so its kill above is the case and not a broken copy"
+    # miscased decides; canonical is the twin: the mutant still reads the canonically spelled green world as its own toplevel.
+    cells_kill "${B_ppc:-0}" pp-case-mut ppc_cell "$PPC_MUT/self-update-gate.sh" "miscased|canonical" \
+      "with the pwd -P string comparison restored the miscased healthy consumer reads UNSUPPORTED LAYOUT" \
+      miscased "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1|1" canonical "pp=none sum=1 ss=1 und=1"
   fi
 fi
 rm -f "$PP/sent/sentinel"
@@ -3387,21 +3416,22 @@ rm -f "$PP/sent/sentinel"
 # The rows must survive (the copy ran to its verdict) AND the sentinel must appear.
 PP_MH="$(vr_mut pphook 'index($0, "# Core scripts this pull changes, by basename.") == 1 && !d { print "( cd \"$CONSUMER\" && h=\"$(git rev-parse --git-path hooks/pre-push)\" && [ -x \"$h\" ] && \"$h\" origin x </dev/null >/dev/null 2>&1 ) || :"; d = 1 } { print }')"
 PP_MC="$(vr_mut pphookctl '{ print }')"
-ss_assert "pp-hook-mut-control" \
+if ss_assert_b "pp-hook-mut-control" \
   "$(cmp -s "$GATE" "$PP_MC" && echo identical || echo differ)|$(pp_scan "$PP_MC" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
   "identical|pp=none sum=1 ss=1 und=1|absent" \
-  "an unmutated copy beside its siblings reaches the verdict and runs no hook, so the kill below is the inserted call"
+  "an unmutated copy beside its siblings reaches the verdict and runs no hook, so the kill below is the inserted call"; then B_pph=1; fi
+pph_cell() { # <gate> <enc>
+  rm -f "$PP/sent/sentinel"
+  DRV_OUT="$(pp_scan "$1" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
+  rm -f "$PP/sent/sentinel"
+}
 rm -f "$PP/sent/sentinel"
-ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$PP_MH"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-gatehook"
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-gatehook"
 else
-  pp_mh_got="$(pp_scan "$PP_MH" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
-  if [ "$pp_mh_got" = "pp=none sum=1 ss=1 und=1|written" ]; then
-    printf '  ok    %-16s KILLED (a gate that calls the hook again writes the sentinel, and pp-gate-runs-no-hook reads it)\n' "pp-mut-gatehook"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-gatehook" "$pp_mh_got"
-  fi
+  cells_kill "${B_pph:-0}" pp-mut-gatehook pph_cell "$PP_MH" "enc" \
+    "a gate that calls the hook again writes the sentinel, and pp-gate-runs-no-hook reads it" \
+    enc "pp=none sum=1 ss=1 und=1|written"
 fi
 rm -f "$PP/sent/sentinel"
 # PP-ENC END
@@ -3433,31 +3463,31 @@ pp_lsrec_obs() { # pp_lsrec_obs <consumer> <log> -- install the observing gating
 }
 pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG"; : > "$PP_LSREC_LOG"
 bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_LSREC" >/dev/null 2>&1
-ss_assert "pp-record-out-of-tree" \
+if ss_assert_b "pp-record-out-of-tree" \
   "seen=$(sort -u "$PP_LSREC_LOG" | tr '\n' ',')|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
   "seen=0,|n=1|DEFER" \
-  "a gating script the gate runs from the consumer root sees no record file while it runs, and exactly one complete record is in the tree afterwards"
+  "a gating script the gate runs from the consumer root sees no record file while it runs, and exactly one complete record is in the tree afterwards"; then B_pprec1=1; fi
 # CONTROL: the same script, run by hand from the consumer root with a record-shaped file present,
 # logs 1 -- so the 0 above is the record's absence and not a script that cannot see the directory.
 : > "$PP_LSREC_LOG.ctl"
 pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG.ctl"
 ( cd "$PP_LSREC" && bash scripts/ai-dlc/gate-pass.sh )
-ss_assert "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
-  "...and the same script with a record-shaped file present logs 1, so it really can see that directory"
+if ss_assert_b "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
+  "...and the same script with a record-shaped file present logs 1, so it really can see that directory"; then B_pprec2=1; fi
+ppr_cell() { # <gate> <seen>
+  local c
+  c="$(vr_cons pplsrecm)"; pp_lsrec_obs "$c" "$PP_LSREC_LOG.m"; : > "$PP_LSREC_LOG.m"
+  bash "$1" "$DIST" "$BASE" "$THEIRS" "$c" >/dev/null 2>&1
+  DRV_OUT="seen=$(sort -u "$PP_LSREC_LOG.m" | tr '\n' ',')"
+}
 # MUTANT: the record assembled IN PLACE from the start of the run, as the earlier cut did.
 PP_MR="$(vr_mut pprecinplace 'index($0, "    GATE_REC=\"$TMP/record.md\"") == 1 { print "    GATE_REC=\"$_rec_p\""; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$PP_MR"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-recinplace"
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-recinplace"
 else
-  PP_LSREC_M="$(vr_cons pplsrecm)"; pp_lsrec_obs "$PP_LSREC_M" "$PP_LSREC_LOG.m"; : > "$PP_LSREC_LOG.m"
-  bash "$PP_MR" "$DIST" "$BASE" "$THEIRS" "$PP_LSREC_M" >/dev/null 2>&1
-  pp_mr_got="seen=$(sort -u "$PP_LSREC_LOG.m" | tr '\n' ',')"
-  if [ "$pp_mr_got" = "seen=1," ]; then
-    printf '  ok    %-16s KILLED (a record assembled in place is visible to every consumer process the gate runs)\n' "pp-mut-recinplace"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s] want=[seen=1,]\n' "pp-mut-recinplace" "$pp_mr_got"
-  fi
+  cells_kill "$(( ${B_pprec1:-0} && ${B_pprec2:-0} ))" pp-mut-recinplace ppr_cell "$PP_MR" "seen" \
+    "a record assembled in place is visible to every consumer process the gate runs" \
+    seen "seen=1,"
 fi
 
 fi
@@ -3941,21 +3971,17 @@ ss_assert "stage-gating-healthy" "$(sg_scan "$GATE" no)" "und=0 defer=1 fired=0"
   "the same seed unstubbed reaches the differential and defers on gate-defer.sh, so the refusal is the staging write"
 rm -rf "$SG/m"; mkdir -p "$SG/m"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SG/m"/ 2>/dev/null
-ss_assert "stage-mut-control" "$(sg_scan "$SG/m/self-update-gate.sh" yes)" "und=1 defer=0 fired=1" \
-  "an unmutated copy beside its siblings refuses the same way, so the kill below is the mutation"
+if ss_assert_b "stage-mut-control" "$(sg_scan "$SG/m/self-update-gate.sh" yes)" "und=1 defer=0 fired=1" \
+  "an unmutated copy beside its siblings refuses the same way, so the kill below is the mutation"; then B_stg=1; fi
+stg_cell() { DRV_OUT="$(sg_scan "$1" yes)"; }
 awk 'index($0,"  [ \"$_rc\" = 0 ] && return 0") == 1 { print "  return 0"; next } { print }' \
   "$GATE" > "$SG/m/self-update-gate.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$SG/m/self-update-gate.sh"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "stage-mut-status"
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "stage-mut-status"
 else
-  sg_m="$(sg_scan "$SG/m/self-update-gate.sh" yes)"
-  if [ "$sg_m" = "und=0 defer=0 fired=1" ]; then
-    printf '  ok    %-16s KILLED (with the staging status unread the loop reads nothing, and gate-defer.sh'\''s DEFER silently vanishes: %s)\n' "stage-mut-status" "$sg_m"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got [%s], want [und=0 defer=0 fired=1]\n' "stage-mut-status" "$sg_m"
-  fi
+  cells_kill "${B_stg:-0}" stage-mut-status stg_cell "$SG/m/self-update-gate.sh" "scan" \
+    "with the staging status unread the loop reads nothing, and gate-defer.sh's DEFER silently vanishes" \
+    scan "und=0 defer=0 fired=1"
 fi
 rm -rf "$SG"
 
