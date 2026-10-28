@@ -10,8 +10,8 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset AI_DLC_REVIEW_SHARD_MIN_FILES
-# THE WORLD TEMPLATES are the mutation battery's alone (tpl_* below). Plain shell variables, unset HERE
-# so no exported value can switch them on in the shipped arms; the battery sets them after sourcing.
+# THE WORLD TEMPLATES (tpl_* below). Plain shell variables, unset HERE so no exported value can point
+# them at another run's templates; this file sets RSM_TPL itself once WORK exists.
 unset RSM_TPL RSM_TPL_FILL RSM_TPL_HITS
 [ -n "${NAME:-}" ] || { echo "FIXTURE ERROR: lib.sh sourced without NAME set" >&2; exit 2; }
 
@@ -74,6 +74,7 @@ PAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE_MD" | head -1
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
+RSM_TPL="$WORK/tpl"; mkdir "$RSM_TPL" || exit 2
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -267,33 +268,50 @@ wdir() { # -> a fresh <tree>/docs/reviews/s1.XXXXXX/shards, the tree $WROOT (def
 # --------------------------------------------------------------------------------- worlds
 # A merge world: its own directory, the shard dir `1-code-review-<sha12>/` inside it holding the
 # manifest the REAL partition (the predicate's own sibling) wrote, and --out beside it.
-# WORLD TEMPLATES. With RSM_TPL unset (the shipped fixture, always) every builder runs its subject as
-# below and nothing else here is reached. The battery sets RSM_TPL to a directory the PARENT filled once
-# (RSM_TPL_FILL set: each builder publishes the world it just built, before any shard is written into
-# it), and then only for a scorer whose builder-run scripts are byte-identical to SRCDIR's; such a
-# scorer clones the world into its own fresh directory instead of re-running the partition. The key is
-# the builder's whole argument tuple; every other input -- the seeded repos, the environment, the
-# scripts -- is the same run's, which is what makes the key sufficient. No world records its own path.
+# WORLD TEMPLATES. A world is the partition's output for one argument tuple, and nothing else: the
+# builders below write the map, its stderr and the manifest, and no shard, before they return. So the
+# FIRST build of each tuple runs the real partition and publishes the world it wrote, and every later
+# build of the same tuple clones it into its own fresh directory instead of re-running the partition,
+# which the arms and the battery otherwise re-ran for the same tuple many times over. Two guards:
+#   - a builder runs the cache only when the scripts it would run (tpl_ok) are byte-identical to
+#     SRCDIR's, so a mutant copy of the partition or its siblings always builds its own world;
+#   - the key is the builder's whole argument tuple; every other input -- the seeded repos (no arm
+#     edits one in place; p_moved partitions a COPY), the environment, the scripts -- is this run's.
+#     No world records its own path: the manifest records the REPO, never the world directory.
+# TPL0 (seed_controls) builds one world twice, cached and uncached, and requires the two byte-equal and
+# the cache to have been read, so a cache that serves a wrong world, or none, is not silent.
+# TPL_BUILD counts the real partition runs a builder made, TPL_HITS the clones.
 tpl_key() { printf '%s\n' "$@" | shasum | cut -c1-16; }
-tpl_has() { [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -z "${RSM_TPL_FILL:-}" ] && [ -d "$RSM_TPL/$1" ]; }
-tpl_hit() { [ -z "${RSM_TPL_HITS:-}" ] || printf '%s\n' "$1" >> "$RSM_TPL_HITS"; }
-tpl_put() { # <key> <world dir>: fill mode only, and never over a published template
-  [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -n "${RSM_TPL_FILL:-}" ] || return 0
-  [ -d "$RSM_TPL/$1" ] && return 0
-  mkdir "$RSM_TPL/$1" && cp -R "$2/." "$RSM_TPL/$1/"
+tpl_ok() { # <script-dir> <script...> -> 0 when each named script is byte-identical to SRCDIR's, or absent from both
+  local sd="$1" f; shift
+  for f in "$@"; do
+    if [ -e "$SRCDIR/$f" ]; then cmp -s "$sd/$f" "$SRCDIR/$f" || return 1; else [ ! -e "$sd/$f" ] || return 1; fi
+  done
 }
+tpl_has() { [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] && [ -d "$RSM_TPL/$1" ]; }
+tpl_hit() { printf '%s\n' "$1" >> "$RSM_TPL.hits"; }
+tpl_build() { [ -z "${RSM_TPL:-}" ] || printf '%s\n' "$1" >> "$RSM_TPL.builds"; }
+tpl_n() { local n; n="$(grep -c . "$RSM_TPL.$1" 2>/dev/null)" || n=0; printf '%s' "$n"; } # <hits|builds>
+tpl_put() { # <key> <world dir>: never over a published template
+  [ -n "$1" ] && [ -n "${RSM_TPL:-}" ] || return 0
+  [ -d "$RSM_TPL/$1" ] && return 0
+  mkdir "$RSM_TPL/$1.part" && cp -R "$2/." "$RSM_TPL/$1.part/" && mv "$RSM_TPL/$1.part" "$RSM_TPL/$1"
+}
+# Every script a builder runs, and every sibling the partition resolves beside itself (sib_set's closure
+# rule, applied to partition-review-diff.sh: artifact-path-config.sh, validate-carried-findings.sh).
+WORLD_SCRIPTS="partition-review-diff.sh artifact-path-config.sh validate-carried-findings.sh partition-document.sh"
 # new_world <script-dir> [repo] -> prints the shard dir
 new_world() { # <script-dir> [repo] [dir-suffix] [pass-marker, e.g. -p2]
   local sd="$1" repo="${2:-$REPO_B}" sfx="${3:-code-review}" pm="${4:-}" w d tk=""
   w="$(wdir)" || return 1
   d="$w/1-$sfx-$B_SHA12$pm"
-  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
+  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" $WORLD_SCRIPTS || tk="$(tpl_key nw "$repo" "$B_BASE" "$B_SHA" 4 3 "$sfx" "$pm")"
   if tpl_has "$tk"; then
     cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
   else
     bash "$sd/partition-review-diff.sh" --map "$repo" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 3 \
       --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
-    tpl_put "$tk" "$w" || return 1
+    tpl_build nw; tpl_put "$tk" "$w" || return 1
   fi
   [ -f "$d/.manifest" ] || return 1
   printf '%s' "$d"
@@ -338,13 +356,14 @@ shard() {
 xshards() {
   local sd="$1" d="$2" v="$3" gate="${4:-code-review}" k n g gl first last key tk=""
   k="$(awk -F'\t' '$1 == "part" { n++ } END { print n + 0 }' "$d/.manifest")"
-  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key xs "$k")"
+  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" partition-document.sh || tk="$(tpl_key xs "$k")"
   if tpl_has "$tk"; then
     cp "$RSM_TPL/$tk/groups" "$d.groups" || return 1; tpl_hit "$tk"
   else
     bash "$sd/partition-document.sh" --cross-groups "$k" > "$d.groups" 2> /dev/null < /dev/null || return 1
-    if [ -n "$tk" ] && [ -n "${RSM_TPL_FILL:-}" ] && [ ! -d "$RSM_TPL/$tk" ]; then
-      mkdir "$RSM_TPL/$tk" && cp "$d.groups" "$RSM_TPL/$tk/groups" || return 1
+    tpl_build xs
+    if [ -n "$tk" ] && [ ! -d "$RSM_TPL/$tk" ]; then
+      mkdir "$RSM_TPL/$tk.part" && cp "$d.groups" "$RSM_TPL/$tk.part/groups" && mv "$RSM_TPL/$tk.part" "$RSM_TPL/$tk" || return 1
     fi
   fi
   n="$(grep -c . "$d.groups")" || n=0
@@ -369,13 +388,13 @@ kworld() {
   local sd="$1" repo="$2" base="$3" sha="$4" mp="$5" sfx="$6" v="$7" gate="${8:-code-review}" w d k tk=""
   w="$(wdir)" || return 1
   d="$w/1-$sfx-$(printf '%s' "$sha" | cut -c1-12)"
-  [ -z "${RSM_TPL:-}" ] || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx")"
+  [ -z "${RSM_TPL:-}" ] || ! tpl_ok "$sd" $WORLD_SCRIPTS || tk="$(tpl_key kw "$repo" "$base" "$sha" 4 "$mp" "$sfx")"
   if tpl_has "$tk"; then
     cp -R "$RSM_TPL/$tk/." "$w/" || return 1; tpl_hit "$tk"
   else
     bash "$sd/partition-review-diff.sh" --map "$repo" "$base" "$sha" --min-files 4 --max-parts "$mp" \
       --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
-    tpl_put "$tk" "$w" || return 1
+    tpl_build kw; tpl_put "$tk" "$w" || return 1
   fi
   [ -f "$d/.manifest" ] || return 1
   for k in $(cut -f1 "$w/map"); do
@@ -495,7 +514,8 @@ p_dmerge() { # a merge world partitioned with the threshold UNSET, merged end to
   mn="$(awk -F'\t' '$1 == "min-files" { print $2 }' "$d/.manifest")"
   [ "$mn" = "$((DFLT + 1))" ]
 }
-p_env() { # the key set to 4 in the environment, no flag -> partitions
+p_env_key() { # the key set to 4 in the environment, no flag -> partitions (named apart from EV1's p_env,
+  # which a second definition of the same name replaced, so arm P3 ran EV1 and this body never ran)
   local sd="$1" out n
   out="$(env "$KEY=4" bash "$sd/partition-review-diff.sh" --map "$REPO_B" "$B_BASE" "$B_SHA" < /dev/null 2>&1)" || return 1
   n="$(grep -cE '^[0-9]+	' <<<"$out")" || n=0
@@ -1544,11 +1564,16 @@ cs_run() { # <script-dir> <gate> <seeder> <clean copy>
   else WHY="$WHY ${3}{the seed did not apply}"; fi
   cs_reset "$CSD" "$4"
 }
-cs_sel() { [ -z "${CS_ONLY:-}" ] || [ "$1" = "$CS_ONLY" ]; }
+# CS_LIST (run.sh --matrix only): every cell gate answers "selected" so each group's setup runs, and
+# every `cell` appends its name to the file CS_LIST names and runs nothing -- the predicate's cell list.
+cs_sel() { [ -n "${CS_LIST:-}" ] || [ -z "${CS_ONLY:-}" ] || [ "$1" = "$CS_ONLY" ]; }
 # cell <name>: 0 when this cell runs (no CS_ONLY, or CS_ONLY names it), counting it in CS_RAN. Every
 # predicate a mutant drives gates each of its cells on it (BL-755), so a mutant runs the one cell its
 # kill token names and nothing else; run.sh's mut_run asserts exactly one cell ran.
-cell() { cs_sel "$1" || return 1; CS_RAN=$(( ${CS_RAN:-0} + 1 )); }
+cell() {
+  if [ -n "${CS_LIST:-}" ]; then printf '%s\n' "$1" >> "$CS_LIST"; return 1; fi
+  cs_sel "$1" || return 1; CS_RAN=$(( ${CS_RAN:-0} + 1 ))
+}
 p_cs() {
   local sd="$1" c n any=0
   WHY=""
@@ -2857,8 +2882,31 @@ p_xc_missing() { # a list file that does not exist -> REFUSED exit 2, nothing on
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.
-seed_controls() { # W0, W1, W2, W3, W4
-local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf
+seed_controls() { # TPL0, W0, W1, W2, W3, W4
+local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf tw1 tw2 tb0 th0 tb1 th1 tb2 th2 tp tpw
+# TPL0: the world cache. One tuple built twice: the first a real partition run (builds +1, hits +0),
+# the second a clone (builds +0, hits +1), byte-equal in map, map.err and manifest. And the bypass: a
+# script dir whose partition differs from SRCDIR's by one byte builds its own world, never the cache's.
+tb0="$(tpl_n builds)"; th0="$(tpl_n hits)"
+tw1="$(kworld "$SRCDIR" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"; tb1="$(tpl_n builds)"; th1="$(tpl_n hits)"
+tw2="$(kworld "$SRCDIR" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"; tb2="$(tpl_n builds)"; th2="$(tpl_n hits)"
+# The bypass copy: the world scripts and every sibling the partition resolves that SRCDIR holds.
+tp="$WORK/tpl-bypass"; mkdir "$tp" && for _f in $WORLD_SCRIPTS; do
+  [ ! -f "$SRCDIR/$_f" ] || cp "$SRCDIR/$_f" "$tp/$_f"; done
+printf '# one byte\n' >> "$tp/partition-review-diff.sh"
+tpw="$(kworld "$tp" "$REPO_B" "$B_BASE" "$B_SHA" 2 tplprobe APPROVED)"
+# The partition differs, so its world is rebuilt (builds +1); partition-document.sh does not, so the
+# cross-group table is still a clone (hits +1).
+if [ -n "$tw1" ] && [ -n "$tw2" ] && [ "$tw1" != "$tw2" ] && [ $((tb1 - tb0)) = 2 ] && [ $((th1 - th0)) = 0 ] \
+   && [ $((tb2 - tb1)) = 0 ] && [ $((th2 - th1)) = 2 ] \
+   && cmp -s "$tw1/.manifest" "$tw2/.manifest" && cmp -s "$(dirname "$tw1")/map" "$(dirname "$tw2")/map" \
+   && cmp -s "$(dirname "$tw1")/map.err" "$(dirname "$tw2")/map.err" && grep -q '^part	' "$tw2/.manifest" \
+   && [ -n "$tpw" ] && [ $(( $(tpl_n builds) - tb2 )) = 1 ] && [ $(( $(tpl_n hits) - th2 )) = 1 ] \
+   && ! tpl_ok "$tp" $WORLD_SCRIPTS && tpl_ok "$SRCDIR" $WORLD_SCRIPTS; then
+  ok "TPL0: the world cache serves a repeated world as a byte-equal clone (map, map.err, manifest), runs the partition for the first build only, and a script dir whose partition is one byte off SRCDIR's runs its own partition"
+else
+  bad "TPL0: FIXTURE BROKEN -- the world cache did not build once and clone after, or served a differing script dir (builds $tb0 $tb1 $tb2 $(tpl_n builds), hits $th0 $th1 $th2 $(tpl_n hits))"
+fi
 A_NAMES="$(G -C "$REPO_A" diff --name-only "$A_BASE..$A_SHA")"
 A_REV="$(grep -v '^docs/reviews/' <<<"$A_NAMES")"
 na="$(grep -c . <<<"$A_REV")" || na=0

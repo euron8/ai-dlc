@@ -40,12 +40,34 @@
 # The threshold key is named ONCE, in lib.sh's unset (fixtures scrub AI_DLC_*; I87). Everywhere
 # else it is DERIVED from the partition script's own dereference site. lib.sh sets the shell
 # options, scrubs AI_DLC_*, owns WORK and its one EXIT trap.
+#
+# THE MUTANT MATRIX. Measured once by the re-measure command below, and re-measured whenever an arm or
+# a mutant is added or changed: a mut_run line, a `cell` a mutant drive declares, or a file of the
+# derived sibling set. Its population is each mutant x the cells of its own drive (the predicate its
+# mut_run names), plus, for a drive declaring fewer than two cells, the deciding cell of every mutant of
+# the same file; cells outside that population are not measured. Each cell is scored over the mutant
+# copy and over the unmutated control copy, and reads RED (the cell failed), GREEN (it passed, exactly
+# one cell run) or SKIP (not exactly one cell run). decides= is the cell the mutant is scored on first,
+# then any other cell RED over the mutant and GREEN over the control. twins= is a GREEN-under-both cell
+# of the population outside decides=, the nearest to the deciding cell in declaration order. On each
+# push a mutant runs its deciding cell (the kill) and each twin, which must pass: the mutant fails only
+# its own assertion. An arm is <predicate>/<cell>.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/review-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="review-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
+# --matrix runs the mutant x cell matrix in place of the twins (MATRIX lines); a plain run never does.
+RSM_MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) RSM_MATRIX=1 ;;
+  *) echo "usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 # I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 . "$HERE/lib.sh"
+# The kill emitter (BL-828): a kill is scored only behind the same run's base-pass flag.
+. "$(cd "$HERE/../lib" && pwd)/mutant.sh"
 echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
@@ -78,7 +100,7 @@ arm prec "P2e: --min-files $((DFLT + 1)) with $KEY=4 on $DFLT files -> SERIAL na
          "P2e: the key overrode --min-files"
 arm dmerge "P2f: a repo of $((DFLT + 2)) files partitioned with the threshold UNSET records a NUMERIC min-files in its manifest and merges end to end (the merge hands it back as --min-files)" \
            "P2f: a default-built partition did not merge, or its manifest did not record the numeric threshold"
-arm env "P3: the key set to 4 in the environment, no flag -> repo B partitions to >= 2 parts" \
+arm env_key "P3: the key set to 4 in the environment, no flag -> repo B partitions to >= 2 parts" \
         "P3: the environment threshold did not partition"
 arm worst "V1: worst-of -- {B,A,A,xA} merges BLOCKED (cross, last and majority say APPROVED); {NR,B,NR,xA} merges BLOCKED (majority says NR); all-APPROVED merges APPROVED; each read back Check 1's way" \
           "V1: the merged verdict is not the worst shard verdict"
@@ -375,12 +397,25 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # and pass. A mutant run that runs no cell prints the sentinel `CS-UNSELECTED`, which the receipt counts.
   vb_ctl="$WORK/mut-VBCTL"; VB_CTL_N=0; VB_CTL_OK=1
   if sib_copy "$vb_ctl" && cmp -s "$SRCDIR/merge-review-shards.sh" "$vb_ctl/merge-review-shards.sh"; then :; else VB_CTL_OK=0; fi
+  # THE BASE-PASS FLAG (BL-828). B_rsm_ctl is reset at the top of every mut_run and set to 1 only in the
+  # passing branch of THAT mutant's own control, so its kill is emitted through mutant_killed only when
+  # its own cell passed unmutated in this run. Each control prints its own VBCTL <id> line.
+  # THE TWINS. A plain run reads the mutant's `# MUTANT-MATRIX` header line: its first decides= arm must
+  # be this mut_run's <predicate>/<cell> (a mutant added or changed without a re-measure is refused), and
+  # each twins= arm is run over the mutant copy and must PASS, one cell run. Its unmutated control is the
+  # arm above that runs the same predicate over SRCDIR. --matrix records the mutant (mx_rows) instead and
+  # matrix_score, after the last mut_run, scores the mutant x cell population the header describes.
+  mx_line() { awk -v id="$1" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == id { print; n++ } END { exit n != 1 }' "$HERE/run.sh"; }
+  mx_field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p"; } # <header line> <decides|twins>
+  TWIN_N=0; MX_CELLS=0; MX_ROWS="$WORK/mx-rows"; : > "$MX_ROWS"
   mut_run() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
-    local id="$1" md="$WORK/mut-$1"
+    local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc
+    B_rsm_ctl=0
     [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
     [ "$VB_CTL_OK" = 1 ] || { bad "$id: FIXTURE ERROR -- the unmutated control copy $vb_ctl was not built from the derived set"; return; }
     WHY=""; CS_RAN=0
-    if "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then VB_CTL_N=$((VB_CTL_N + 1))
+    if "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then
+      VB_CTL_N=$((VB_CTL_N + 1)); ok "VBCTL $id: cell '$CS_ONLY' of $5 passed over the unmutated copy, one cell run"; B_rsm_ctl=1
     else bad "$id: FIXTURE ERROR -- the unmutated copy failed cell '$CS_ONLY' of $5 (cells run: $CS_RAN):${WHY}"; return; fi
     sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
     [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
@@ -388,10 +423,59 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
     WHY=""; CS_RAN=0
     if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
-    elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then ok "$id: killed -- $7 ($5:${WHY})"
+    elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then mutant_killed "${B_rsm_ctl:-0}" "$id" "$id: killed -- $7 ($5:${WHY})"
     else bad "$id: died for another reason than '$6' -- $7 ($5:${WHY})"; fi
     [ "$CS_RAN" -le 1 ] || bad "$id: FIXTURE ERROR -- the mutant ran $CS_RAN cells of $5 under CS_ONLY=$CS_ONLY, not one"
     [ "$CS_RAN" -ge 1 ] || echo "CS-UNSELECTED: $id ran no cell of $5 for CS_ONLY=$CS_ONLY"
+    if [ "$RSM_MATRIX" = 1 ]; then printf '%s\t%s\t%s\t%s\n' "$id" "$2" "$5" "$CS_ONLY" >> "$MX_ROWS"; return; fi
+    hl="$(mx_line "$id")" || { bad "$id: FIXTURE STALE -- run.sh carries no single '# MUTANT-MATRIX $id' line; re-measure the matrix"; return; }
+    dec="$(mx_field "$hl" decides | cut -d, -f1)"; tw="$(mx_field "$hl" twins)"
+    [ "$dec" = "$5/$CS_ONLY" ] || { bad "$id: FIXTURE STALE -- its MUTANT-MATRIX line decides=$dec, but mut_run scores $5/$CS_ONLY; re-measure the matrix"; return; }
+    [ -n "$tw" ] || { bad "$id: FIXTURE STALE -- its MUTANT-MATRIX line names no twin"; return; }
+    for a in $(printf '%s\n' "$tw" | tr ',' ' '); do
+      tp="${a%%/*}"; tc="${a#*/}"; WHY=""; CS_RAN=0
+      if CS_ONLY="$tc" "p_$tp" "$md" && [ "$CS_RAN" = 1 ]; then TWIN_N=$((TWIN_N + 1)); ok "TWIN $id: $a passed over the mutant copy, one cell run"
+      else bad "$id: co-tripped its twin $a, or ran $CS_RAN cells of it, over the mutant copy:${WHY}"; fi
+    done
+  }
+  # matrix_score (--matrix only): for every recorded mutant, its population is the cells of its own drive
+  # (listed by running the predicate under CS_LIST, which runs no cell), plus, when that drive declares
+  # fewer than two cells, the deciding cell of every other mutant of the same file. Each cell is scored
+  # over the mutant copy and over the unmutated control copy (one control per cell, memoised).
+  mx_state() { # <predicate> <cell> <script-dir> -> RED|GREEN|SKIP; the predicate's own stdout is dropped
+    WHY=""; CS_RAN=0
+    if CS_ONLY="$2" "p_$1" "$3" > /dev/null 2>&1 < /dev/null; then [ "$CS_RAN" = 1 ] && echo GREEN || echo SKIP
+    else [ "$CS_RAN" = 1 ] && echo RED || echo SKIP; fi
+  }
+  matrix_score() {
+    local id f p c cl pop q pc ms cs key dec tw
+    mkdir -p "$WORK/mx-cells" "$WORK/mx-ctl"
+    while IFS='	' read -r id f p c <&3; do
+      cl="$WORK/mx-cells/$p"
+      [ -f "$cl" ] || { CS_LIST="$cl.tmp"; : > "$CS_LIST"; WHY=""; "p_$p" "$vb_ctl" > /dev/null 2>&1 < /dev/null || :; CS_LIST=""
+        awk '!s[$0]++' "$cl.tmp" > "$cl"; }
+      pop="$(sed "s|^|$p/|" "$cl")"
+      if [ "$(grep -c . "$cl")" -lt 2 ]; then
+        pop="$(printf '%s\n%s\n' "$pop" "$(awk -F'\t' -v id="$id" -v f="$f" '$1 != id && $2 == f { print $3 "/" $4 }' "$MX_ROWS")" | awk 'NF && !s[$0]++')"
+      fi
+      dec="$p/$c"; tw=""
+      for q in $pop; do
+        pc="${q#*/}"; key="$WORK/mx-ctl/$(printf '%s' "$q" | tr '/' '_')"
+        [ -f "$key" ] || mx_state "${q%%/*}" "$pc" "$vb_ctl" > "$key"
+        cs="$(cat "$key")"; ms="$(mx_state "${q%%/*}" "$pc" "$WORK/mut-$id")"; MX_CELLS=$((MX_CELLS + 1))
+        echo "MATRIX $id $q mutant=$ms control=$cs" | tee -a "$WORK/mx-log"
+        [ "$q" = "$p/$c" ] && continue
+        if [ "$ms" = RED ] && [ "$cs" = GREEN ]; then dec="$dec,$q"; fi
+      done
+      # The twin: the first GREEN-under-both cell of the population, outside decides=, after the deciding
+      # cell in declaration order, else before it.
+      tw="$(for q in $pop; do echo "$q"; done | awk -v d="$p/$c" '$0 == d { s = 1; next } { if (s) a[++na] = $0; else b[++nb] = $0 }
+        END { for (i = 1; i <= na; i++) print a[i]; for (i = 1; i <= nb; i++) print b[i] }' | while read -r q; do
+          case ",$dec," in *",$q,"*) continue ;; esac
+          grep -qx "MATRIX $id $q mutant=GREEN control=GREEN" "$WORK/mx-log" && { echo "$q"; break; }
+        done)"
+      echo "MATRIX-HEADER # MUTANT-MATRIX $id decides=$dec twins=${tw:-NONE}"
+    done 3< "$MX_ROWS"
   }
   CS_ONLY=partcite mut_run M1 merge-review-shards.sh '[ $# -eq 1 ] && [ "$1" = "$key" ]' \
     '{ [ -n "$CHECK" ] || { [ $# -eq 1 ] && [ "$1" = "$key" ]; }; }' cs "csc_partcite{" \
@@ -532,6 +616,19 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     x_lone "owed only at K=2" "the K=2-only lone-cross rule restored"
   CS_ONLY=x-mix mut_run m-nomix merge-review-shards.sh '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \' \
     x_mix "x-mix{" "the mixed cross.md + cross-<g>.md refusal dropped"
+  # The matrix, or the twins. A plain run scores no matrix cell and runs at least one twin per mutant; a
+  # --matrix run scores the matrix and runs no twin. Either way the count below is the mode's own.
+  _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
+  if [ "$RSM_MATRIX" = 1 ]; then
+    : > "$WORK/mx-log"; matrix_score
+    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 48 ]; then
+      ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
+    else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
+  else
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 48 ]; then
+      ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 48"; fi
+  fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
   if [ "$VB_CTL_N" = 48 ]; then ok "VBCTL: CONTROL -- each of M1-M46, m-k2only and m-nomix's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 48), the same copy every mutant is built from"
   else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 48 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
