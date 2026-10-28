@@ -6,3 +6,6 @@ core/fixtures/reconcile-emit-report/
 core/fixtures/reconcile-emit-report-b/run.sh
 core/fixtures/reconcile-emit-report-d/run.sh
 core/fixtures/layer-adjudication-tier/seed.sh
+# THEIRS validators for PC-V37's p2 world (phase pcvmut, this shard): the snapshot predicate, its floor edited in THEIRS.
+core/scripts/validate-snapshot-conservation.sh
+core/scripts/validate-hook-registration.sh

@@ -35,3 +35,5 @@ touch
 tr
 uniq
 wc
+sleep
+python3

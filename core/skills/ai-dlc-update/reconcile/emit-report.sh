@@ -175,6 +175,14 @@
 #   - any `assume-unchanged` or `skip-worktree` flag in `ls-files -v`, or `core.ignoreStat=true`:
 #     status hides an edit to the flagged file, and keying the flag cannot help, since it is set
 #     before the record and both sides match;
+#   - `core.checkStat` set to anything but `default` (any case), or `core.trustctime` a git false
+#     boolean: a `cr_run` predicate runs plain git under the consumer's config, so it trusts a stat
+#     entry a same-size, mtime-kept rewrite left looking current; a value git cannot parse for either
+#     key, or for `core.ignoreStat`, is refused too (`could not read <key>`), never read as unset;
+#   - `core.fsmonitor` set to anything but a git false boolean (`true`, or a hook path), or a
+#     non-empty `GIT_TEST_FSMONITOR` (which enables it with the config unset): git then
+#     trusts the monitor's report instead of the files, and forcing it off in er_cgit would not reach
+#     a `cr_run` predicate's plain git;
 #   - a NESTED REPOSITORY, untracked (`dir/` in the listing) or tracked (a gitlink): git lists none of
 #     its files;
 #   - an untracked SYMLINK, ignored or not, that fails B7's acceptance (the R2 bullet below names
@@ -251,12 +259,14 @@
 # Two absences are the exception, because the key itself needs the tool: an absent `cksum` and an
 # absent sha256 tool (neither `shasum` nor `sha256sum`) are refused by name, never keyed.
 # (4) What a fourth review found unkeyed is now keyed or refused: index flags and core.ignoreStat,
-# nested repositories, out-of-tree symlinks and an inherited memo are REFUSED (above); the
-# repo-local, global and system attributes files, info/grafts, alternates, every GIT_* variable and
-# the git/awk/sed/sort identities are KEYED; and the detectors' content diffs pass `--text
-# --no-ext-diff --no-textconv`, so an attribute or GIT_EXTERNAL_DIFF no longer moves them at all.
-# Still unkeyed: fsmonitor and untracked-cache daemon STATE (their config values are keyed), the
-# filesystem's case sensitivity and mount type, and, on git before 2.42 (no `git var
+# a relaxed core.checkStat, core.trustctime=false, an enabled core.fsmonitor (config or a non-empty
+# GIT_TEST_FSMONITOR), nested repositories, out-of-tree symlinks and an inherited memo are REFUSED
+# (above); the repo-local, global and system attributes files, info/grafts, alternates, every GIT_*
+# variable and the git/awk/sed/sort identities are KEYED; and the detectors' content diffs pass
+# `--text --no-ext-diff --no-textconv`, so an attribute or GIT_EXTERNAL_DIFF no longer moves them
+# at all.
+# Still unkeyed: untracked-cache STATE (its config value is keyed; an enabled fsmonitor is
+# refused), the filesystem's case sensitivity and mount type, and, on git before 2.42 (no `git var
 # GIT_ATTR_SYSTEM`), a system attributes file away from the exec-path-derived guess. The cache
 # ships OFF until a review of this key finds no BLOCKER.
 # (5) A dist that shares its ref store with active branches (a developer checkout, or any worktree
@@ -1270,11 +1280,11 @@ fi
 # empty `:(exclude)`: that excludes the WHOLE tree and reads as an empty one.
 # `core.fileMode=true` because the render reads the exec bit (the consumer's validator runs only if
 # `-x`; preclassify tests `-x`), and a consumer set to `false` would hide a chmod from status.
-# `core.trustctime=true` and `core.checkStat=default` for the same reason: a consumer that relaxes
-# either lets status trust a stat entry that a same-size rewrite left looking current.
+# A relaxed stat config (`core.checkStat` other than default, `core.trustctime=false`) is not forced
+# here: er_key refuses it, because `cr_run` predicates run plain git under the consumer's config.
 er_cgit() {
-  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"
-  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi
+  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"
+  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
 }
 # er_link_inside <abs-path> -- 0 when the symlink chain at <abs-path> ends at an existing path, EVERY
 # hop's directory resolving INSIDE the consumer root (physically, by `pwd -P`). The key hashes a
@@ -1889,6 +1899,20 @@ er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
 # er_refuse <cause> -- names why er_key refused, in a file the caller prints. er_key runs inside a
 # command substitution with stderr discarded, so the cause travels through $_er_tmp.
 er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1; }
+# er_cfg_read <key> [--bool] -- read one consumer config key as git itself resolves it (`--get` is
+# last-wins, as git is). Sets _er_cfg_rc to git's exit and _er_cfg_v to the value, lowercased (git
+# accepts any case). `--bool` takes git's own boolean parse, so a value-less key reads `true`, an
+# empty one `false`, and a non-zero integer `true`. Exit 0 compares and exit 1 (unset) allows; any
+# other exit is a value git cannot parse, refused by name rather than read as unset.
+er_cfg_read() {
+  _er_cfg_v=""; _er_cfg_rc=0
+  _er_cfg_v="$(cr_git "$CONSUMER" config ${2:+"$2"} --get "$1" 2>/dev/null)" || _er_cfg_rc=$?
+  case "$_er_cfg_rc" in
+    0) _er_cfg_v="$(printf '%s' "$_er_cfg_v" | LC_ALL=C tr '[:upper:]' '[:lower:]')" ;;
+    1) _er_cfg_v="" ;;
+    *) er_refuse "could not read $1 (git config exit $_er_cfg_rc)"; return 1 ;;
+  esac
+}
 # er_key -- prints the key: sha256 over the `name=value` lines, one per field, each value the sha256 of that
 # field's material. Non-zero, and nothing usable, when any field could not be computed.
 er_key() {
@@ -2024,7 +2048,28 @@ er_key() {
   # writer's EPIPE, which would read a flagged index as clean.
   LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.tags" | LC_ALL=C cut -c1 > "$_er_tmp/key.tag1" || return 1
   LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && { er_refuse "an assume-unchanged or skip-worktree flag hides work-tree edits from status"; return 1; }
-  case "$(cr_git "$CONSUMER" config --bool core.ignoreStat 2>/dev/null)" in true) er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1 ;; esac
+  # A RELAXED STAT CONFIG IS A MISS. `cr_run` predicates run plain git under the consumer's config, so
+  # er_cgit forcing defaults cannot reach them; a same-size rewrite that keeps its mtime then reads as
+  # current to the predicate while the key's fields saw nothing either. Each key is read by
+  # er_cfg_read, whose exit is captured: unset allows, an unreadable value refuses by name.
+  er_cfg_read core.ignoreStat --bool || return 1
+  [ "$_er_cfg_rc" -ne 0 ] || [ "$_er_cfg_v" != true ] || { er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1; }
+  er_cfg_read core.checkStat || return 1
+  if [ "$_er_cfg_rc" -eq 0 ] && [ "$_er_cfg_v" != default ]; then
+    er_refuse "core.checkStat=$_er_cfg_v lets a predicate's plain git trust a stat entry a same-size rewrite left looking current"; return 1
+  fi
+  er_cfg_read core.trustctime --bool || return 1
+  [ "$_er_cfg_rc" -ne 0 ] || [ "$_er_cfg_v" != false ] || { er_refuse "core.trustctime=false lets a predicate's plain git trust a stat entry a same-size rewrite left looking current"; return 1; }
+  # Not `--bool`: a hook path is a valid value that `--bool` cannot parse. A git false boolean allows;
+  # `true` or a hook path refuses, for the same reason: forcing it off here would reach only er_cgit.
+  er_cfg_read core.fsmonitor || return 1
+  if [ "$_er_cfg_rc" -eq 0 ]; then
+    case "$_er_cfg_v" in
+      false|no|off|0) ;;
+      *) er_refuse "core.fsmonitor lets git trust a monitor's report instead of the files, so status and a predicate's plain git can miss an edit"; return 1 ;;
+    esac
+  fi
+  [ -z "${GIT_TEST_FSMONITOR:-}" ] || { er_refuse "GIT_TEST_FSMONITOR turns on a monitor git trusts instead of the files, so status and a predicate's plain git can miss an edit"; return 1; }
   # AN INHERITED MEMO IS A MISS: a reconcile memo directory handed in by a caller holds answers no
   # field here can see, and a stale one feeds the render.
   [ -z "$_er_memo_in" ] || { er_refuse "an inherited AI_DLC_RECONCILE_MEMO holds answers another process cached"; return 1; }
