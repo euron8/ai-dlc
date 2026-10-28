@@ -340,10 +340,12 @@ vr_mut() { # vr_mut <name> <awk-program> -> path to the mutated gate, siblings b
   awk "$2" "$GATE" > "$d/self-update-gate.sh" 2>/dev/null
   printf '%s\n' "$d/self-update-gate.sh"
 }
-mp_killed() { # mp_killed <label> <got> <want> <why> -- a mutant whose engine could not be built is a FAIL
+# mp_killed <flag> <label> <got> <want> <why> -- the one scoring site of every signature mutant. A mutant whose engine
+# could not be built is a FAIL. <flag> is the same-run base-pass flag (B_<arm>) of the unmutated arm it guards.
+mp_killed() {
   ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$2" = "$3" ]; then printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$1" "$2" "$3"; fi
+  if [ "$3" = "$4" ]; then mutant_killed "$1" "$2" "$(printf '%-16s KILLED (%s)' "$2" "$5")"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$2" "$3" "$4"; fi
 }
 AV="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-av.XXXXXX")"
 av_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
