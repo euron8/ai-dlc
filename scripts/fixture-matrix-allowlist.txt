@@ -7,7 +7,6 @@
 # validate-fixture-invocations.sh's J5 exempts a listed fixture (a shard stub through its IMPL), printing that it did.
 # The rows below were derived over the b245-p1 branch tree; the real list is re-derived on the integrated tip.
 absorbed-specifics-survive	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-adversarial-shard-merge	no MUTANT-MATRIX block; floor: S1 mut_merge(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 answer-handoff-routing	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-drift-after-write	no MUTANT-MATRIX block; floor: S1 v2d_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-machinery-stamp	no MUTANT-MATRIX block; floor: S1 mutdir(),S2 cmp -s + mutant
