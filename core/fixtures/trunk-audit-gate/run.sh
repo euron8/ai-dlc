@@ -344,7 +344,7 @@ mx_cell() {
 }
 # score_mut <base-pass flag> <mutant> <sed> -- the deciding world and the twin per push, every world under --matrix.
 score_mut() {
-  local fl="$1" m="$2" dec tw mp d t a g=0 tot=0 u=""
+  local fl="$1" m="$2" dec tw mp d t a g=0 tot=0 u="" rd=""
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding world and twin"; return; fi
   mp="$(mkmut "$m" "$3")" || { bad "mutant $m did not apply"; return; }
@@ -358,11 +358,11 @@ score_mut() {
   if [ "$MODE" = matrix ]; then # mx-all-cells
     for a in $MX_WORLDS; do
       if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); mx_cell "$mp" "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); fi
+      tot=$((tot + 1)); mx_cell "$mp" "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
     done
     if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
     if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 score_mut "${B_finding:-0}" M1-exit1-is-pass 's/^case "\$RC" in$/case "$((RC==1?0:RC))" in/'

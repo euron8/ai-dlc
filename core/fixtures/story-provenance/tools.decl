@@ -16,3 +16,4 @@ sed
 tr
 mv
 tail
+awk

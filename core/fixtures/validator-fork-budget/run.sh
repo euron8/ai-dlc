@@ -454,7 +454,7 @@ mx_red() {
 # mx_score <mutant> <base-pass flag> <message> -- the mutated text is in $TMP/mx.<mutant>.txt. The deciding cells and
 # the twin per push; every other cell under --matrix.
 mx_score() {
-  local m="$1" fl="$2" msg="$3" f="$TMP/mx.$1.txt" dec tw c a r allred=1 shown="" t=GREEN g=0 tot=0 u=""
+  local m="$1" fl="$2" msg="$3" f="$TMP/mx.$1.txt" dec tw c a r allred=1 shown="" t=GREEN g=0 tot=0 u="" rd=""
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding cells and twin"; return; fi
   if [ ! -s "$f" ]; then bad "FIXTURE BROKEN: mutant $m produced no text to read its cells from"; return; fi
@@ -474,11 +474,11 @@ mx_score() {
     for a in $MX_CELLS; do
       case ",$dec,$tw," in *",$a,"*) continue ;; esac
       printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
-      tot=$((tot + 1)); if mx_red "$a" "$f"; then : ; else g=$((g + 1)); fi
+      tot=$((tot + 1)); if mx_red "$a" "$f"; then rd="$rd,$a"; else g=$((g + 1)); fi
     done
     if [ "$allred" != 1 ]; then u=" UNEXPECTED=$dec:GREEN"; fi
     if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; rc=1; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 # kill_j <mutant> <flag> <message> <judge args...> -- the judge's own output is the mutated text.

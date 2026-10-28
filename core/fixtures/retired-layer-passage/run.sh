@@ -523,14 +523,14 @@ if [ "$MODE" = matrix ]; then
       case "$r" in BROKEN*) echo "MATRIX BROKEN $m"; exit 2 ;; esac
       allf="$allf $r"
     done
-    g=0; tot=0; u=""
+    g=0; tot=0; u=""; rd=""
     for c in $all; do
       if [ "$c" = "$dec" ] || [ "$c" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); case " $allf " in *" $c "*) ;; *) g=$((g + 1)) ;; esac
+      tot=$((tot + 1)); case " $allf " in *" $c "*) rd="$rd,$c" ;; *) g=$((g + 1)) ;; esac
     done
     case " $allf " in *" $dec "*) d=RED ;; *) d=GREEN; u=" UNEXPECTED=$dec:GREEN" ;; esac
     case " $allf " in *" $tw "*) t=RED; u="$u UNEXPECTED=$tw:RED" ;; *) t=GREEN ;; esac
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   done < "$MXQ"
 fi
 

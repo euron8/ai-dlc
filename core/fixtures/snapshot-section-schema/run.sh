@@ -235,7 +235,7 @@ mx_run() {
           printf '## Deploy Baseline\n- 2026-09-12T06:00Z: the project owns this shape\n\n' >> "$SNAP" ;;
     *) return 2 ;;
   esac
-  cp "$SNAP" "$f.snap"
+  cat "$SNAP" > "$f.snap"
   case "$3" in
     r_warn)   bash "$2" --root "$WORK" --only pipeline-snapshot.md --warn-only >"$f.out" 2>&1 ;;
     r_e1fail) bash "$2" --root "$WORK" --only pipeline-snapshot.md --fail-on pipeline-snapshot.md >"$f.out" 2>&1 ;;
@@ -300,7 +300,7 @@ MX_CELLS="S1 S2 S2budget S3 S4 warn litter over Dun Dyes Doth E1 E1quiet E2 E2f 
 # mx_score <mutant> <base-pass flag> <message> <required deciding rc or empty> <required needle or empty>
 # MXVAL names the mutated validator. The deciding cell and the twin are read per push; every other cell under --matrix.
 mx_score() {
-  local m="$1" fl="$2" msg="$3" wrc="$4" needle="$5" dec tw d t a g=0 tot=0 u="" good=1
+  local m="$1" fl="$2" msg="$3" wrc="$4" needle="$5" dec tw d t a g=0 tot=0 u="" rd="" good=1
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"; return; fi
   mx_cell "$m" "$dec" dec; d="$MX_COLOR"
@@ -313,11 +313,11 @@ mx_score() {
   if [ "$MODE" = matrix ]; then # mx-all-cells
     for a in $MX_CELLS; do
       if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); fi
+      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
     done
     if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
     if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 

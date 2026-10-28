@@ -227,7 +227,7 @@ mx_cell() {
 # mx_score <mutant> <base-pass flag> -- every deciding cell must be RED and print the mutant's positive row, the
 # twin must stay GREEN; under --matrix every other cell of the family is read too.
 mx_score() {
-  local m="$1" fl="$2" dec tw d t a g=0 tot=0 u="" allred=1 c need dshown="" fam
+  local m="$1" fl="$2" dec tw d t a g=0 tot=0 u="" rd="" allred=1 c need dshown="" fam
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"; fam="$(mx_fam "$m")"
   if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding cells and twin"; return; fi
   for c in $(printf '%s' "$dec" | tr ',' ' '); do
@@ -247,11 +247,11 @@ mx_score() {
   if [ "$MODE" = matrix ]; then # mx-all-cells
     for a in $(mx_cells "$fam"); do
       case ",$dec,$tw," in *",$a,"*) continue ;; esac
-      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); fi
+      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
     done
     case "$dshown" in *GREEN*|*without*) u=" UNEXPECTED=$dec:GREEN" ;; esac
     if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 

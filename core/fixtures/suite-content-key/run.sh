@@ -318,7 +318,7 @@ mx_cell() { # <mutant> <cell> <role dec|mx> -> RED|GREEN, ledgered; a predicate 
 }
 # mx_score <mutant> <base-pass flag> <message> -- the deciding cell and the twin per push, every cell under --matrix.
 mx_score() {
-  local m="$1" fl="$2" msg="$3" dec tw d t a g=0 tot=0 u=""
+  local m="$1" fl="$2" msg="$3" dec tw d t a g=0 tot=0 u="" rd=""
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   [ -n "$dec" ] && [ -n "$tw" ] || broken "MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"
   mx_cell "$m" "$dec" dec; d="$MX_COLOR"
@@ -328,14 +328,14 @@ mx_score() {
   if [ "$MODE" = matrix ]; then # mx-all-cells
     for a in $(cells_of "$m"); do
       if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); fi
+      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
     done
     if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
     if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
-    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
-cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6hook" ;; M-docs) echo "k3plans k3backlog k4 k6key k7 sane" ;; esac; }
+cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6.hook" ;; M-docs) echo "k3.plans k3.backlog k4 k6.key k7 sane" ;; esac; }
 
 # M-plus cells, each read off the mutated span: RED when that arm's own predicate would FAIL (rc 0), GREEN when it holds (rc 1).
 cell_M-plus() {
@@ -349,7 +349,7 @@ cell_M-plus() {
     k5) krows "$WORK/span.mplus.sh" '+docs/' > /dev/null
         n="$(awk -F'\t' '$2 == "X" && $3 == "plusdir"' "$WORK/k.parse" | grep -c .)" || n=0
         [ "$n" -ne 1 ] ;;
-    k6hook) krows "$WORK/span.mplus.sh" '!+docs/backlog.md' > /dev/null
+    k6.hook) krows "$WORK/span.mplus.sh" '!+docs/backlog.md' > /dev/null
         n="$(awk -F'\t' '$2 == "X" && $3 == "plusbang"' "$WORK/k.parse" | grep -c .)" || n=0
         [ "$n" -ne 1 ] ;;
     *) return 2 ;;
@@ -375,12 +375,12 @@ GAMMA="$T/core/fixtures/gamma/inputs.decl"
 cell_M-docs() { # RED = that arm's predicate would FAIL on the mutated key script
   local k
   case "$1" in
-    k3plans)   k="$(mkedit docs/plans/p.md)"; [ -n "$MK" ] && [ "$k" != "$MK" ] ;;
-    k3backlog) k="$(mkedit docs/backlog.md)"; [ -z "$k" ] || [ "$k" = "$MK" ] ;;
+    k3.plans)   k="$(mkedit docs/plans/p.md)"; [ -n "$MK" ] && [ "$k" != "$MK" ] ;;
+    k3.backlog) k="$(mkedit docs/backlog.md)"; [ -z "$k" ] || [ "$k" = "$MK" ] ;;
     k4)  printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$GAMMA"
          if mkey > /dev/null; then k=0; else k=1; fi
          printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
-    k6key) printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$GAMMA"
+    k6.key) printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$GAMMA"
          if mkey > /dev/null; then k=0; else k=1; fi
          printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
     k7)  mv "$GAMMA" "$WORK/gamma.mdecl"; k="$(mkey)"; mv "$WORK/gamma.mdecl" "$GAMMA"
