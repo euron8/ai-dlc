@@ -34,10 +34,10 @@
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per push
 # each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix is
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
-# decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments beside it, not driven per push.
-# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed beside it.
+# decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
 # c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
+# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # MUTANT-MATRIX k_ts_dropped decides=t18a,t18b,t18d twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
