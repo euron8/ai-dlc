@@ -259,7 +259,7 @@ while IFS="$hr_tab" read -r f k a b c; do
          rabs) printf 'hermetic-run: %s: git.decl range path must be repo-relative with no .. and no leading -: %s\n' "$HR_FX" "$b" >&2 ;;
          rderive) printf 'hermetic-run: %s: git.decl range @file is not a bare file of the fixture dir, or it failed or printed nothing: %s\n' "$HR_FX" "$b" >&2 ;;
          rref) printf 'hermetic-run: %s: git.decl range ref-expr does not resolve to <commit>..<commit>: %s\n' "$HR_FX" "$b" >&2 ;;
-         rempty) printf 'hermetic-run: %s: git.decl range has no commit touching a declared path, so its key fold could never move: %s\n' "$HR_FX" "$b" >&2 ;;
+         rempty) printf 'hermetic-run: %s: git.decl literal range has no commit touching a declared path, so its key fold could never move: %s\n' "$HR_FX" "$b" >&2 ;;
          *) printf 'hermetic-run: %s: the declaration was refused (%s %s)\n' "$HR_FX" "$a" "$b" >&2 ;;
        esac ;;
   esac

@@ -85,8 +85,9 @@
 #   XR git.decl `range <ref-expr> <path>...`: the range is packed with its boundary, so a path-limited rev-list
 #      between the handed-in refs answers the project's count across a merge; the key's fold row moves on a commit
 #      touching a declared range path and the whole key is byte-equal on one touching only other paths; the
-#      literal form keys what the @file derivation keys; unresolvable, empty, path-less, absolute, `..` and a
-#      missing @file are exit 2 naming the line
+#      literal form keys what the @file derivation keys; unresolvable, empty-literal, path-less, absolute, `..` and
+#      a missing @file are exit 2 naming the line; an empty @file range is accepted, keys on the empty-list hash
+#      stably and moves once a declared-path commit enters it; the hook decision names a refused range as such
 #   Y  a declaration carrying bare `core/` copies the fixture's own directory once, never a nested
 #      `<fx>/<fx>/` (control: the own run.sh is listed; the count is exact)
 #   Z1 a project marker in the work dir's own parent (TMPDIR holds .claude/) is exit 2 naming it
@@ -1205,12 +1206,42 @@ arm_XR() {
     yes "refused [$cell]: the message names the line" "$OUT" "$msg: $cell"
   done <<'EOF'
 range nosuchref..HEAD hist|ref-expr does not resolve to <commit>..<commit>
-range rb..HEAD nothere|has no commit touching a declared path, so its key fold could never move
+range rb..HEAD nothere|literal range has no commit touching a declared path, so its key fold could never move
 range rb..HEAD|names no path
 range rb..HEAD /etc|must be repo-relative with no .. and no leading -
 range rb..HEAD ../hist|must be repo-relative with no .. and no leading -
 range @nope.sh hist|@file is not a bare file of the fixture dir, or it failed or printed nothing
 EOF
+  # AN EMPTY @file RANGE IS ACCEPTED, the ALLOW twin of `range rb..HEAD nothere` above (one property apart: the
+  # derived form). It keys on the sha256 of the empty list, stably, and the key moves once a commit on the declared
+  # path enters the range.
+  local e0 e1 e2 empty=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  printf 'range @range.sh later\n' > "$Q/$FXR/probe/git.decl"
+  run_hr "$Q" --key-only; e0="$OUT"
+  eq "empty @file range: exit 0" "$RC" 0
+  eq "empty @file range: the fold is the hash of the empty list" "$(grep '^git-range:1	' <<<"$e0" | cut -f2)" "$empty"
+  run_hr "$Q" --key-only; e1="$OUT"
+  eq "empty @file range: the key is stable across two runs" "$e1" "$e0"
+  ( cd "$Q" && mkdir -p later && printf 'l\n' > later/l.txt && git add -A && git -c user.name=t -c user.email=t@t commit -qm later ) >/dev/null 2>&1 \
+    || bad "$CUR: could not commit on the declared path later/"
+  run_hr "$Q" --key-only; e2="$(grep '^git-range:1	' <<<"$OUT" | cut -f2)"
+  [ -n "$e2" ] && [ "$e2" != "$empty" ] && ok "$CUR: empty @file range: a commit on the declared path moves the fold" \
+    || bad "$CUR: empty @file range: the fold did not move off the empty hash (got '$e2')"
+  # THE HOOK NAMES A REFUSED RANGE UNDER ITS OWN CAUSE. A record taken while the literal range resolves makes the
+  # decision a SKIP (control: the record matches, so any run reason below comes from the refusal); deleting the end
+  # tag refuses the line, and the decision must read the range refusal, never `tool unresolved`.
+  printf 'range rb..tipx later\n' > "$Q/$FXR/probe/git.decl"
+  ( cd "$Q" && git add -A && git -c user.name=t -c user.email=t@t commit -qm lit && git tag tipx ) >/dev/null 2>&1 || bad "$CUR: could not tag tipx"
+  hook_dump "$Q" "$Q/.githooks/pre-push" "$WK/XR3.o"
+  mkdir -p "$Q/.git/ai-dlc-fixture-keys" && cp "$WK/XR3.o/.k/probe" "$Q/.git/ai-dlc-fixture-keys/probe.key" 2>/dev/null \
+    || bad "$CUR: the hook wrote no key record for the probe"
+  hook_dump "$Q" "$Q/.githooks/pre-push" "$WK/XR4.o"
+  rowhas "control: with a matching record and a resolving range the hook SKIPS" "$(cat "$WK/XR4.o/.kdec" 2>/dev/null)" "probe${T}skip${T}${T}${T}ok"
+  ( cd "$Q" && git tag -d tipx ) >/dev/null 2>&1 || bad "$CUR: could not delete tag tipx"
+  hook_dump "$Q" "$Q/.githooks/pre-push" "$WK/XR5.o"
+  rowhas "a refused range: the decision names the range refusal as its cause" "$(cat "$WK/XR5.o/.kdec" 2>/dev/null)" \
+    "probe${T}run${T}git.decl range refused (rref): range rb..tipx later${T}k${T}ok"
+  no "a refused range: the decision is not 'tool unresolved'" "$(cat "$WK/XR5.o/.kdec" 2>/dev/null)" "tool unresolved" "git.decl range refused"
 }
 # Y: a fixture whose declaration carries bare `core/` has its own directory copied in TWICE -- once by
 # that population, once by the own-directory copy. The second must land on the first, never inside it.
