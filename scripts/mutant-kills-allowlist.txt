@@ -52,5 +52,4 @@ self-update-gate
 shell-portability
 spec-join-integrity
 suppression-lifetime
-validator-fork-budget
 wait-beat-liveness

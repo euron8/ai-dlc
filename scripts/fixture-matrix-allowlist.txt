@@ -114,7 +114,6 @@ stray-party-mode-provenance	no MUTANT-MATRIX block; floor: S1 mutate_py(),S2 cmp
 subagent-probe	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 suppression-lifetime	no MUTANT-MATRIX block; floor: S1 sl_mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 trunk-push-bound	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
-validator-fork-budget	no MUTANT-MATRIX block; floor: S1 asg_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 validator-path-resolution	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant
 verdict-pass-content	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 wait-beat-liveness	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
