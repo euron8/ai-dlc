@@ -57,7 +57,6 @@ handoff-completion-assertion
 inflight-row-shape
 invariant-index
 layer-absorption-retire
-layer-adjudication-tier
 layer-catalog-collision
 layer-conforms-to
 layer-crosswalk-home
