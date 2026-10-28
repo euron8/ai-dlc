@@ -26,3 +26,4 @@ pgrep
 sort
 chmod
 mv
+cp
