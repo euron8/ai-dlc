@@ -92,7 +92,6 @@ request-coverage	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 resume-whole-read	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 retired-contract-token	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 retired-fixture-orphan	no MUTANT-MATRIX block; floor: S1 mut_reds(),S2 cmp -s + mutant
-retired-layer-passage	no MUTANT-MATRIX block; floor: S1 n355_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 retired-layer-token	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 retro-compliance-workflow	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 review-shard-merge	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row

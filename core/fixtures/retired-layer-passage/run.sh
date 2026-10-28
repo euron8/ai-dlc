@@ -10,9 +10,40 @@
 # on the reference consumer, two extension entries reproduced deleted core lines VERBATIM
 # and no detector in the directory opened them. The sibling could not have: on that pull
 # its retired set was empty, so it exited before reading a layer file.
+#
+# THE MUTANT MATRIX. A CELL is one probe of the detector or of lib.sh run against a COPY of the reconcile
+# directory: X1 (the unreadable-free run still flags restates.md), X5 (a release deleting nothing says it
+# opened no layer file), X6 (a scanned-but-no-match run reports its denominator), X7b (an unreadable
+# setup-sites.md refuses with exit 2 and no row), N0-N3 (BL-355's four fold cells), K0-K1 (BL-403(c)'s two
+# SIGKILL cells) and F0-F1 (the fd-limit fold cells). PER PUSH a mutant is scored on its DECIDING cell, which
+# must fail on it, and its named TWIN, a different cell it could plausibly co-trip but must leave GREEN.
+# `run.sh --matrix` scores each mutant against every cell and prints one MATRIX line per mutant. The BL-355
+# mutants no-probe and no-awk decide N3 on a host whose `tr` folds a multibyte capital; on a host whose `tr`
+# does not, the deciding cell is N1 instead (the run derives it from the same host probe, and the header
+# names the host the matrix was measured on). The matrix is re-measured whenever an arm or a mutant is
+# added or changed, by the REMEASURE command below, run from the repo root.
+# MUTANT-MATRIX rlp-exit0 decides=X7b twins=X1
+# MUTANT-MATRIX c-fold decides=N1 twins=N0
+# MUTANT-MATRIX no-gate decides=N2 twins=N0
+# MUTANT-MATRIX no-probe decides=N3 twins=N0
+# MUTANT-MATRIX no-awk decides=N3 twins=N0
+# MUTANT-MATRIX late-rm decides=K1 twins=K0
+# MUTANT-MATRIX norm-fallthrough decides=F1 twins=F0
+# Every mutant reaches mutant_killed through one helper, as a variable:
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all seven mutants and every name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/retired-layer-passage/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "retired-layer-passage: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -24,6 +55,11 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/retired-layer-passag
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "retired-layer-passage:"
 
@@ -69,11 +105,12 @@ grep -q 'overrides/inert.md' <<<"$OUT" \
 # BOTH REFS ARE `BASE`, deliberately. This is the branch that produced the sibling's
 # false clean: it exits before opening any layer file, so its output must say so or it
 # reads exactly like a full scan that matched nothing.
-NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
+# ONE invocation feeds both streams: stdout and stderr of the same run, not two runs of the same arguments.
+bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" >"$WORK/noop.out" 2>"$WORK/noop.err"
+NOOP="$(cat "$WORK/noop.out")"; NOOPERR="$(cat "$WORK/noop.err")"
 [ -z "$NOOP" ] && ok "a release that deletes nothing reports no finding" \
   || bad "the detector reported a finding when base and theirs are identical"
 
-NOOPERR="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>&1 >/dev/null)"
 grep -q 'NO layer file was opened' <<<"$NOOPERR" \
   && ok "  and that zero SAYS it opened no layer file, so it cannot read as coverage" \
   || bad "  a release deleting nothing produced a silent zero — the sibling's exact defect"
@@ -85,11 +122,12 @@ grep -q 'refusing to report clean' <<<"$NOOPERR" \
 EMPTYC="$WORK/empty-consumer"
 mkdir -p "$EMPTYC/.claude/skills/ai-dlc/overrides"
 printf '# reproduces nothing core ever carried\n' > "$EMPTYC/.claude/skills/ai-dlc/overrides/x.md"
-DEN="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>&1 >/dev/null)"
+# ONE invocation again: the denominator is on stderr and the empty finding set is on stdout of the same run.
+bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" >"$WORK/den.out" 2>"$WORK/den.err"
+DEN="$(cat "$WORK/den.err")"; DENOUT="$(cat "$WORK/den.out")"
 grep -qE 'deleted rulebook line\(s\) checked against [1-9][0-9]* layer file\(s\)' <<<"$DEN" \
   && ok "a scanned-but-no-match run reports its denominator, so the zero has a control" \
   || bad "a scanned-but-no-match run reported no denominator — indistinguishable from opening nothing"
-DENOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>/dev/null)"
 [ -z "$DENOUT" ] \
   && ok "  and that run emits no finding row, so the denominator describes a genuine zero" \
   || bad "  the empty-consumer run emitted a finding — the denominator arm is not measuring a zero"
@@ -131,10 +169,52 @@ if ! rlp_copy "$UNR"; then
 elif ! grep -q 'extensions/restates.md' <<<"$(bash "$UNR/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
   bad "FIXTURE BROKEN — the unmutated directory copy does not flag restates.md, so a refusal below would be the copy failing, not the read"
 elif rlp_unreadable "$UNR"; then
-  ok "a setup-sites.md that exists and cannot be read refuses with exit 2 and no row ($RLP_WHY)"
+  ok "a setup-sites.md that exists and cannot be read refuses with exit 2 and no row ($RLP_WHY)"; B_x7b=1
 else
   bad "a setup-sites.md that cannot be read did not refuse with exit 2 and no row ($RLP_WHY) — apply.sh reads exit 0 as a clean run"
 fi
+
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
+# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
+MXL="$WORK/mx.ledger"; : > "$MXL"; MXQ="$WORK/mx.queue"; : > "$MXQ"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$HERE/run.sh"
+}
+mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
+# mx_score <mutant> <base-pass flag> <message> <failing cells of its family> <want exactly, or empty> <mutated file> <mutant dir>
+# The failing-cell string comes from the family's own score, which already ran once per push: the deciding
+# cell must be in it and the twin must not. Both are ledgered "dec".
+mx_score() {
+  local m="$1" fl="$2" msg="$3" fc="$4" want="$5" dec tw
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"; return; fi
+  printf 'dec %s %s\ndec %s %s\n' "$m" "$dec" "$m" "$tw" >> "$MXL"
+  printf '%s\t%s\t%s\n' "$m" "$6" "$7" >> "$MXQ"
+  case " $fc " in
+    *" $dec "*)
+      if [ -n "$want" ] && [ "$fc" != "$want" ]; then bad "MUTANT [$m] failed [$fc], expected exactly [$want]"
+      else mutant_killed "$fl" "$m" "$msg"; fi ;;
+    *) bad "MUTANT SURVIVED [$m]: its deciding cell $dec still passed (failing: [${fc:-none}])" ;;
+  esac
+  case " $fc " in *" $tw "*) bad "MUTANT [$m] is entangled: its twin $tw also failed" ;; esac
+}
+split2() { printf '%s' "${1%.}" | sed 's/\(..\)/\1 /g;s/ *$//'; } # "N1N3." -> "N1 N3"
+# fam_cells <family> <dir> -> the FAILING cells of that family on <dir>, space separated, or BROKEN.
+fam_cells() {
+  local fam="$1" d="$2" out="" c
+  case "$fam" in
+    x) grep -q 'extensions/restates.md' <<<"$(bash "$d/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)" || out="$out X1"
+       rlp_unreadable "$d" 2>/dev/null || out="$out X7b" ;;
+    n) out="$(split2 "$(score_355 "$d")")" ;;
+    k) c="$(k_score "$d")"; case "$c" in BROKEN*) echo BROKEN; return ;; esac; out="$(split2 "$c")" ;;
+    f) out="$(split2 "$(f_score "$d")")" ;;
+  esac
+  printf '%s' "$out" | sed 's/^ *//;s/ *$//'
+}
 
 # --- Mutant for 7/7b: the refusal's `exit 2` restored to the base `exit 0` -------
 # Both arms are EXIT-shaped, and the refusal line prints either way, so only a mutant shows the
@@ -154,10 +234,9 @@ elif ! bash -n "$MUT/retired-layer-passage.sh" 2>/dev/null; then
   bad "FIXTURE STALE [rlp-exit0]: the mutant does not parse"
 elif ! grep -q 'extensions/restates.md' <<<"$(bash "$MUT/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
   bad "MUTANT HARNESS BROKEN [rlp-exit0]: the mutant copy does not flag restates.md with a readable list, so it is not running"
-elif rlp_unreadable "$MUT"; then
-  bad "MUTANT SURVIVED [rlp-exit0]: restoring exit 0 after the refusal line still passed 7b ($RLP_WHY), so the arm does not read the exit"
 else
-  ok "mutant [rlp-exit0] KILLED by 7b: with the base exit 0 restored, the unreadable list reads as a clean run ($RLP_WHY)"
+  if rlp_unreadable "$MUT"; then fc=""; else fc="X7b"; fi
+  mx_score rlp-exit0 "${B_x7b:-0}" "mutant [rlp-exit0] scored by 7b: with the base exit 0 restored, the unreadable list reads as a clean run ($RLP_WHY)" "$fc" "" retired-layer-passage.sh "$MUT"
 fi
 
 # --- BL-355: an accented capital still folds to its lower-case form ----------------
@@ -252,7 +331,7 @@ if [ "$N_SKIP" = 0 ]; then
   # POSITIVE CONTROL for N3: the subject's fold reached the stub, or N3 compared two system-tr runs.
   [ -s "$NW/stub.hits" ] || bad "FIXTURE BROKEN -- the byte-wise tr stub was never invoked, so N3 compared two system-tr runs"
   case "$got" in
-    .) ok "BL-355 N0-N3: an accented capital folds under a UTF-8 caller, a same-case control matches under C, a Latin-1 layer file is still read (exit 0), and a byte-wise tr first on PATH changes no verdict" ;;
+    .) ok "BL-355 N0-N3: an accented capital folds under a UTF-8 caller, a same-case control matches under C, a Latin-1 layer file is still read (exit 0), and a byte-wise tr first on PATH changes no verdict"; B_n=1 ;;
     *.) bad "BL-355 cell(s) [${got%.}] failed: an accented reproduction is missed, a Latin-1 file refuses the run, or the verdict depends on which tr resolves" ;;
     *) bad "FIXTURE BROKEN -- the BL-355 cells did not complete" ;;
   esac
@@ -270,11 +349,7 @@ PY
     if cmp -s "$RLP_SRC/lib.sh" "$_d/lib.sh" || ! bash -n "$_d/lib.sh" 2>/dev/null; then
       bad "FIXTURE STALE [BL-355 $1]: the mutation did not apply or does not parse"; return; fi
     got="$(score_355 "$_d")"
-    case "$got" in
-      "$2.") ok "MUTANT (BL-355 $1) fails exactly [$2]" ;;
-      .)     bad "MUTANT SURVIVED [BL-355 $1]: every cell still passed" ;;
-      *)     bad "MUTANT [BL-355 $1] failed [${got%.}], expected exactly [$2]" ;;
-    esac
+    mx_score "$1" "${B_n:-0}" "MUTANT (BL-355 $1) scored by $2 alone: failing cells exactly [$2]" "$(split2 "$got")" "$(split2 "$2.")" lib.sh "$_d"
   }
   # THE HOST's `tr` DECIDES WHAT TWO OF THESE MUTANTS CAN EXPRESS, so their vectors are derived from
   # it, never hardcoded. Measured with GNU tr 9.11 first on PATH: it folds byte by byte (so trusting it
@@ -339,8 +414,8 @@ k_score() { # k_score <reconcile-dir> -> failing cells (K0, K1) then `.`, or BRO
 }
 got="$(k_score "$RLP_SRC")"
 case "$got" in
-  .)  ok "BL-403(c) K0-K1: norm_lines killed -9 mid-sed leaves 0 norm-lines.* files; unkilled it still normalises and leaves 0" ;;
-  *.) bad "BL-403(c) cell(s) [${got%.}] failed: a killed norm_lines left its staged file, or the healthy run broke" ;;
+  .)  ok "BL-403(c) K0-K1: norm_lines hit by SIGKILL mid-sed leaves 0 norm-lines.* files; undisturbed it still normalises and leaves 0"; B_k=1 ;;
+  *.) bad "BL-403(c) cell(s) [${got%.}] failed: a norm_lines hit by SIGKILL left its staged file, or the healthy run broke" ;;
   *)  bad "FIXTURE BROKEN -- BL-403(c): $got" ;;
 esac
 # MUTANT: the early unlink removed, so the name lives until the normal-path `rm` -- the base shape.
@@ -361,9 +436,8 @@ elif cmp -s "$RLP_SRC/lib.sh" "$KM/lib.sh" || ! bash -n "$KM/lib.sh" 2>/dev/null
 else
   got="$(k_score "$KM")"
   case "$got" in
-    K1.) ok "MUTANT (BL-403c late-rm) fails exactly [K1]: without the early unlink a SIGKILL leaves norm-lines.*" ;;
-    .)   bad "MUTANT SURVIVED [BL-403c late-rm]: K1 still read 0 files left -- the cell cannot see the leak" ;;
-    *)   bad "MUTANT [BL-403c late-rm] scored [$got], expected exactly [K1.]" ;;
+    BROKEN*) bad "FIXTURE BROKEN -- BL-403c late-rm: $got" ;;
+    *) mx_score late-rm "${B_k:-0}" "MUTANT (BL-403c late-rm) scored by K1 alone: without the early unlink a SIGKILL leaves norm-lines.*" "$(split2 "$got")" "K1" lib.sh "$KM" ;;
   esac
 fi
 
@@ -400,7 +474,7 @@ if ! grep -qx 'en_US.UTF-8' <<<"$N_LOCALES"; then
 else
   got="$(f_score "$RLP_SRC")"
   case "$got" in
-    .)  ok "norm_lines F0-F1: at ulimit -n 7 the unanswered fold probe refuses (125) or folds correctly, never a silent C fold; unlimited it folds" ;;
+    .)  ok "norm_lines F0-F1: at ulimit -n 7 the unanswered fold probe refuses (125) or folds correctly, never a silent C fold; unlimited it folds"; B_f=1 ;;
     *.) bad "norm_lines cell(s) [${got%.}] failed: an unanswered fold probe was taken as the C fold ($(f_drive "$RLP_SRC" 7))" ;;
   esac
   # MUTANT: the fallthrough restored -- the C fold is the `case` default again.
@@ -419,11 +493,7 @@ PY
     bad "FIXTURE STALE [norm-fallthrough]: the mutation did not apply or does not parse"
   else
     got="$(f_score "$FM")"
-    case "$got" in
-      F1.) ok "MUTANT (norm-fallthrough) fails exactly [F1]: the C-fold default returns rc 0 with the capital unfolded" ;;
-      .)   bad "MUTANT SURVIVED [norm-fallthrough]: F1 still passed -- the cell cannot see the silent fold" ;;
-      *)   bad "MUTANT [norm-fallthrough] scored [$got], expected exactly [F1.]" ;;
-    esac
+    mx_score norm-fallthrough "${B_f:-0}" "MUTANT (norm-fallthrough) scored by F1 alone: the C-fold default returns rc 0 with the capital unfolded" "$(split2 "$got")" "F1" lib.sh "$FM"
     # HELD FDS: the same two scores with fds 3-9 already open in the caller, as a pool hands them down.
     # Without the driver's close the mutant scores `.` here and survives; with it, the scores match above.
     held="$( exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null
@@ -433,6 +503,46 @@ PY
       *)     bad "norm_lines cells depend on inherited fds: with 3-9 held, real/mutant scored [$held], expected [./F1.]" ;;
     esac
   fi
+fi
+
+# ---- MATRIX-ONLY: every mutant scored against EVERY family of cells, on a fresh copy of the reconcile directory
+# carrying only that mutant's file. Per push this loop does not run, and the rule-9 arm below asserts it.
+if [ "$MODE" = matrix ]; then
+  while IFS="$(printf '\t')" read -r m mf md; do
+    dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+    fresh="$WORK/mxf.$RANDOM$RANDOM"
+    if ! rlp_copy "$fresh" || ! cp "$md/$mf" "$fresh/$mf"; then echo "MATRIX BROKEN $m"; exit 2; fi
+    allf=""; all="X1 X7b"
+    for fam in n k f x; do
+      if [ "$fam" = n ] && [ "$N_SKIP" != 0 ]; then continue; fi
+      if [ "$fam" = n ]; then all="$all N0 N1 N2 N3"; fi
+      if [ "$fam" = k ]; then all="$all K0 K1"; fi
+      if [ "$fam" = f ]; then all="$all F0 F1"; fi
+      printf 'mx %s %s\n' "$m" "$fam" >> "$MXL"
+      r="$(fam_cells "$fam" "$fresh")"
+      case "$r" in BROKEN*) echo "MATRIX BROKEN $m"; exit 2 ;; esac
+      allf="$allf $r"
+    done
+    g=0; tot=0; u=""
+    for c in $all; do
+      if [ "$c" = "$dec" ] || [ "$c" = "$tw" ]; then continue; fi
+      tot=$((tot + 1)); case " $allf " in *" $c "*) ;; *) g=$((g + 1)) ;; esac
+    done
+    case " $allf " in *" $dec "*) d=RED ;; *) d=GREEN; u=" UNEXPECTED=$dec:GREEN" ;; esac
+    case " $allf " in *" $tw "*) t=RED; u="$u UNEXPECTED=$tw:RED" ;; *) t=GREEN ;; esac
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+  done < "$MXQ"
+fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
+# empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
 fi
 
 echo

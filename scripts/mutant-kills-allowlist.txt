@@ -45,7 +45,6 @@ preclassify-rename-row
 process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
-retired-layer-passage
 review-shard-merge
 scope-confirmation
 self-update-fixture-log
