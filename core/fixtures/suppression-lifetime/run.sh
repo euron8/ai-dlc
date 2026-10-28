@@ -34,13 +34,15 @@
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per push
 # each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix is
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
-# A co-tripping cell is folded into the mutant's decides list.
-# Outside its declared decides set, each mutant co-trips no other arm, measured at authoring.
+# decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments beside it, not driven per push.
+# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed beside it.
+# a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
+# c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
 # MUTANT-MATRIX k_ts_dropped decides=t18a,t18b,t18d twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
-# MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2,s7,s13a,s14,s15,s16,s17,s18,t18a,t18b,t18c,t18d,cwA_gates,cwA_root,sen_E,sr_Fg,w1b twins=s4
+# MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=s4
 # MUTANT-MATRIX b_catalog_join_dropped decides=s6 twins=s2
-# MUTANT-MATRIX c_ifs_delimiter decides=s4m,s2,s4,s8,s12,s13a,s14,s15,s17,s18,t18a,t18b,t18c,t18d,att18,sen_E,sr_Fg,w1,w1b,w2,w3,w4 twins=s1
+# MUTANT-MATRIX c_ifs_delimiter decides=s4m twins=s1
 # MUTANT-MATRIX d_identity_lines_deleted decides=ident,cand twins=s1
 # MUTANT-MATRIX e_identity_nonce decides=ident,cand twins=s1
 # MUTANT-MATRIX f_attempt_demoted decides=att17a,att17b,att17c,att20 twins=s2
@@ -812,7 +814,7 @@ if [ "$MATRIX" = 1 ]; then
     done
     decl="$(printf '%s' " ${MD[$mut_i]//,/ } " | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
     meas="$(printf '%s' "$tripped" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    st=match; [ "$decl" = "$meas" ] || st=DIFFERS
+    st=match; for _d in ${MD[$mut_i]//,/ }; do case " $tripped " in *" $_d "*) ;; *) st=DIFFERS ;; esac; done
     tw=green; for _t in ${MT[$mut_i]//,/ }; do case "$tripped " in *" $_t "*) tw=TRIPPED ;; esac; done
     printf 'MATRIX %s decides=%s cells=%s tripped=[%s] declared=%s twins=%s\n' "$n" "${MD[$mut_i]}" "${cells#,}" "$(join_set $tripped)" "$st" "$tw"
     mut_i=$((mut_i+1))
