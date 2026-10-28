@@ -252,8 +252,8 @@ clauses; they bind every fixture, and clause 2 binds every mutant battery.
    literals), `twins=-` with a `why=` (a row dead in every cell), and one
    `MUTANT-MATRIX-REMEASURE` line. Their exact grammar is the header of
    `scripts/validate-fixture-hygiene.sh`. An arm token is one opaque id matching
-   `[A-Za-z0-9_.+-]+` (`+` admitted because matrix cell labels are built as `<dir>+<tag>`), no
-   escaping; a MUTANT NAME additionally admits `:`; whitespace and `=` are never in either;
+   `[A-Za-z0-9_.+-]+` (`+`: cell labels are `<dir>+<tag>`), no escaping, a dot only between
+   two other characters; a MUTANT NAME additionally admits `:`; whitespace and `=` are never in either;
    `<label>.<cell>` is the form where one ok label scores several cells (H5 does not split it).
 3. **No unmutated control is re-run per mutant.** Run the control once and compare each mutant
    against its output.

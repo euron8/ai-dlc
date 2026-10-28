@@ -91,10 +91,11 @@
 #       # MUTANT-MATRIX-CONTROL <name> why=<clause>
 #       # MUTANT-MATRIX-DYNAMIC <label> why=<clause>
 #       # MUTANT-MATRIX-REMEASURE bash core/fixtures/<this fixture>/run.sh --matrix      (exactly one)
-#     An arm token (decides, twins) is one opaque id matching ^[A-Za-z0-9_.+-]+$ (`+` admitted because matrix cell
-#     labels are built as `<dir>+<tag>`), no escaping; a mutant name or label additionally admits `:`
-#     (^[A-Za-z0-9_.:+-]+$), and the same class reads a literal mutant_killed name; whitespace and `=` are never in
-#     either, being the field delimiters. `<label>.<cell>` is the form where one ok label scores several cells (H5
+#     An arm token (decides, twins) is one opaque id matching ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$ (`+` admitted
+#     because matrix cell labels are built as `<dir>+<tag>`), no escaping, a dot only between two other characters
+#     (a leading, trailing or doubled dot refused); a mutant name or label additionally admits `:`
+#     (^[A-Za-z0-9_:+-]+(\.[A-Za-z0-9_:+-]+)*$), and the same class reads a literal mutant_killed name; whitespace
+#     and `=` are never in either, being the field delimiters. `<label>.<cell>` is the form where one ok label scores several cells (H5
 #     does not split it). Worlds match ^[A-Za-z0-9_.-]+$. decides and twins non-empty, no duplicates, no twin
 #     inside its decides. `twins=-` only with a non-blank why=; `-` mixed into a list refused; why= on a row with real
 #     twins refused; any other field (`log=`) refused. Each name carries exactly one MATRIX / FULL / CONTROL line. At
@@ -307,7 +308,7 @@ function loadtools(fx,   f, l) {
   while ((getline l < f) > 0) { sub(/\r$/, "", l); if (l ~ /^[[:space:]]*(#|$)/) continue; l = trim(l); sub(/^\?/, "", l); TOOLS[l] = 1 }
   close(f)
 }
-function literal(w) { if (w ~ /[$`]/) return ""; gsub(/["\047]/, "", w); return (w ~ /^[A-Za-z0-9_.:+-]+$/ && w !~ /^-/) ? w : "" }
+function literal(w) { if (w ~ /[$`]/) return ""; gsub(/["\047]/, "", w); return (w ~ /^[A-Za-z0-9_:+-]+(\.[A-Za-z0-9_:+-]+)*$/ && w !~ /^-/) ? w : "" }
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   for (i = 1; i <= NL; i++) {
     s = M[i]
@@ -433,7 +434,7 @@ FILENAME == ARGV[4] {
 }
 END {
   for (x in MKA) addtag(map(x), "MKA mutant-kills allowlist row")
-  TOK = "^[A-Za-z0-9_.+-]+$"; NAMERE = "^[A-Za-z0-9_.:+-]+$"; WORLDRE = "^[A-Za-z0-9_.-]+$"
+  TOK = "^[A-Za-z0-9_+-]+(\\.[A-Za-z0-9_+-]+)*$"; NAMERE = "^[A-Za-z0-9_:+-]+(\\.[A-Za-z0-9_:+-]+)*$"; WORLDRE = "^[A-Za-z0-9_.-]+$"
   for (f in NB) {
     nrem = 0; nmut = 0; dyn = 0
     for (k = 1; k <= NB[f]; k++) {
@@ -676,6 +677,12 @@ mutant_killed 1 NOROW "m"
 mutant_killed 1 "$m" "m"
 mutant_killed 1 KX "m"
 # MUTANT-MATRIX a=b decides=R1 twins=R2
+# MUTANT-MATRIX D21 decides=.x twins=R2
+# MUTANT-MATRIX D22 decides=R1 twins=a..b
+# MUTANT-MATRIX D23 decides=x. twins=R2
+# MUTANT-MATRIX .x decides=R1 twins=R2
+# MUTANT-MATRIX a..b decides=R1 twins=R2
+# MUTANT-MATRIX x. decides=R1 twins=R2
 EOF
 seed core/fixtures/m5e/run.sh <<'EOF'
 # MUTANT-MATRIX E1 decides=R1 twins=R2
@@ -769,7 +776,7 @@ want_rows() { case "$1" in
   H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
   H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10 ;;
   H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
-      printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15 20
+      printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15 20 21 22 23 24 25 26
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6
       printf 'ROW\tm5k:0\nROW\tm5f-c:4\nSTUB\tm5l\n'
       printf "JOIN\tcore/fixtures/m5d/run.sh:%s\n" 17 18 19
