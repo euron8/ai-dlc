@@ -389,6 +389,9 @@ ss_assert() { # ss_assert <label> <got> <want> <why>
   if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
 }
+# ss_assert_b is ss_assert plus its verdict, so a control sets its B_ flag in the passing branch. It sits beside ss_assert,
+# outside every unit guard, because the folded base arms in all four shards call it.
+ss_assert_b() { ss_assert "$@"; [ "$2" = "$3" ]; }
 ss_stamp() { # ss_stamp <skill_commit|-> ; `-` removes the stamp
   if [ "$1" = "-" ]; then rm -f "$SS/cons/.claude/.ai-dlc-version"
   else printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$SS_BASE" "$1" \
@@ -589,8 +592,6 @@ open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/nu
 }
 if sg base; then
 # ---- shard-a mutant scoring helpers (base-pass flags B_*, per-push narrowing, matrix rows) ----
-# ss_assert_b is ss_assert plus its verdict, so a control sets its B_ flag in the passing branch.
-ss_assert_b() { ss_assert "$@"; [ "$2" = "$3" ]; }
 # mx_acc <cell> <base> <got> accumulates one matrix cell; values are made blank- and comma-free.
 mxv() { local v="${1// /_}"; printf '%s' "${v//,/;}"; }
 mx_acc() { MX_B="$MX_B $1=$(mxv "$2")"; MX_G="$MX_G $1=$(mxv "$3")"; }
