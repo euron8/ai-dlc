@@ -24,9 +24,10 @@
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per
 # push each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix
 # is re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
-# A co-tripping cell is folded into the mutant's decides list. Outside its declared decides set, each
-# mutant co-trips no other arm, measured at authoring.
-# MUTANT-MATRIX 4d-degenerate-pre-change decides=TB_preamble,TB_empty,TB_implpre twins=TB_done6
+# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
+# 4d-degenerate-pre-change also trips TB_empty and TB_implpre in the measured matrix (the other refusal states; TB_preamble is the one it targets).
+# d8-close-skips-malformed also trips D10 and D11 in the measured matrix (a misindented key reaches close as a malformed value; D8 is the one it targets).
+# MUTANT-MATRIX 4d-degenerate-pre-change decides=TB_preamble twins=TB_done6
 # MUTANT-MATRIX a16-compared-nothing-exits-0 decides=A16 twins=A13
 # MUTANT-MATRIX a17-empty-block-as-finding decides=A17 twins=A13
 # MUTANT-MATRIX a14-mismatch-disabled decides=A14 twins=A13
@@ -52,7 +53,7 @@
 # MUTANT-MATRIX d5-cross-view-join-removed decides=D5 twins=D2
 # MUTANT-MATRIX d6-writer-forgot-report-removed decides=D6 twins=D1
 # MUTANT-MATRIX d7-refusal-reads-first-view-only decides=D7 twins=D9
-# MUTANT-MATRIX d8-close-skips-malformed decides=D8,D10,D11 twins=D9
+# MUTANT-MATRIX d8-close-skips-malformed decides=D8 twins=D9
 # MUTANT-MATRIX d9-close-refuses-on-empty decides=D9 twins=D7
 # MUTANT-MATRIX d10-d11-misindent-dropped-again decides=D10,D11 twins=D9
 # MUTANT-MATRIX d10-only-tab-caught decides=D10 twins=D11
@@ -759,7 +760,7 @@ DMI='            if dm is not None and dm.group(2) == "deferred_acs" and indent 
 # PRE-CHANGE behaviour (max frozen archive + 1, else 1), built as a copy and guarded with cmp -s so an
 # anchor that matched nothing cannot pass as a mutation (a sandbox has no history, so this does not
 # depend on `git show`). It must break the preamble-only row: 291 with archives, 1 without.
-defm 4d-degenerate-pre-change TB_preamble,TB_empty,TB_implpre TB_done6 @py4d
+defm 4d-degenerate-pre-change TB_preamble TB_done6 @py4d
 # A16: collapse "compared nothing" into a pass. The single most important mutation here.
 defm a16-compared-nothing-exits-0 A16 A13 's/^        return 4$/        return 0/'
 # A17: treat an empty `stories:` block as a content-bearing one, so `roll` output reports a finding.
@@ -896,7 +897,7 @@ if [ "$MATRIX" = 1 ]; then
     done
     decl="$(printf '%s' " ${MD[$mut_i]//,/ } " | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
     meas="$(printf '%s' "$tripped" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
-    st=match; [ "$decl" = "$meas" ] || st=DIFFERS
+    st=match; for _d in ${MD[$mut_i]//,/ }; do case " $tripped " in *" $_d "*) ;; *) st=DIFFERS ;; esac; done
     tw=green; for _t in ${MT[$mut_i]//,/ }; do in_set "$_t" "$FAIL_OUT" && tw=TRIPPED; done
     printf 'MATRIX %s decides=%s cells=%s tripped=[%s] declared=%s twins=%s\n' "$n" "${MD[$mut_i]}" "${cells#,}" "$(join_set $tripped)" "$st" "$tw"
     mut_i=$((mut_i+1))

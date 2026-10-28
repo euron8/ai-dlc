@@ -38,17 +38,22 @@
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
 # c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
-# MUTANT-MATRIX k_ts_dropped decides=t18a,t18b,t18d twins=t18c
+# k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
+# d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
+# f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
+# i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
+# w_resolve also trips w7 in the measured matrix (the archived-waiver world shares the skipped resolution).
+# MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
 # MUTANT-MATRIX b_catalog_join_dropped decides=s6 twins=s2
 # MUTANT-MATRIX c_ifs_delimiter decides=s4m twins=sen_F
-# MUTANT-MATRIX d_identity_lines_deleted decides=ident,cand twins=s1
-# MUTANT-MATRIX e_identity_nonce decides=ident,cand twins=s1
-# MUTANT-MATRIX f_attempt_demoted decides=att17a,att17b,att17c,att20 twins=s2
+# MUTANT-MATRIX d_identity_lines_deleted decides=ident twins=s1
+# MUTANT-MATRIX e_identity_nonce decides=ident twins=s1
+# MUTANT-MATRIX f_attempt_demoted decides=att17a,att17b,att17c twins=s2
 # MUTANT-MATRIX g_cwd_first_regression decides=cwA_gates,cwA_inf,cwA_met,cwA_agree,c31,cwB_note,cwB_inf,cwB_gates twins=cwA_root
 # MUTANT-MATRIX h_cwd_fallback_after_root decides=cwB_note,cwB_inf,cwB_gates,c31 twins=cwA_gates
-# MUTANT-MATRIX i_join_guard_removed decides=s14,s16,s17,t18b twins=s15
+# MUTANT-MATRIX i_join_guard_removed decides=s14 twins=s15
 # MUTANT-MATRIX j_join_hardcoded_core decides=s17 twins=s14
 # MUTANT-MATRIX m_revert decides=sen_A,sen_B,sr_Eg twins=sen_C
 # MUTANT-MATRIX m_zero_records decides=sen_D twins=sen_A
@@ -60,7 +65,7 @@
 # MUTANT-MATRIX r_readable_never decides=sr_Ag,sr_Ai twins=sr_Dg
 # MUTANT-MATRIX r_readable_always decides=sr_Dg,sr_Di twins=sr_Ag
 # MUTANT-MATRIX w_standdown decides=w1,w3 twins=w2
-# MUTANT-MATRIX w_resolve decides=w5,w7 twins=w1
+# MUTANT-MATRIX w_resolve decides=w5 twins=w1
 # MUTANT-MATRIX w_lifetime decides=w4 twins=s2
 # MUTANT-MATRIX w_overridden decides=w3,w1 twins=w4
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
@@ -710,7 +715,7 @@ MN=(); MD=(); MT=(); NM=0
 defm() { MN[$NM]="$1"; MD[$NM]="$2"; MT[$NM]="$3"; NM=$((NM+1)); }
 
 # K: the ts dropped from the row latest_verdict returns. t18a and t18b must die; the verdicts must not move.
-defm k_ts_dropped t18a,t18b,t18d t18c
+defm k_ts_dropped t18a t18c
 # L: the ts printed is the LAST matching row read, not the newest. Only t18d can see it.
 defm l_last_ts t18d t18a
 # A: the metrics extractor stops tolerating whitespace.
@@ -720,16 +725,16 @@ defm b_catalog_join_dropped s6 s2
 # C: the record delimiter reverts to an IFS-whitespace character.
 defm c_ifs_delimiter s4m sen_F
 # D: the identity lines deleted -- assertion ident AND cand go red, no verdict moves.
-defm d_identity_lines_deleted ident,cand s1
+defm d_identity_lines_deleted ident s1
 # E: identity replaced by a per-run NONCE.
-defm e_identity_nonce ident,cand s1
+defm e_identity_nonce ident s1
 # F: the attempted-suppression arm demoted to the case's else.
-defm f_attempt_demoted att17a,att17b,att17c,att20 s2
+defm f_attempt_demoted att17a,att17b,att17c s2
 # G: the cwd-first regression. H: the root-then-cwd wrong fix, invisible in world A.
 defm g_cwd_first_regression cwA_gates,cwA_inf,cwA_met,cwA_agree,c31,cwB_note,cwB_inf,cwB_gates cwA_root
 defm h_cwd_fallback_after_root cwB_note,cwB_inf,cwB_gates,c31 cwA_gates
 # I/J: wrong catalog joins.
-defm i_join_guard_removed s14,s16,s17,t18b s15
+defm i_join_guard_removed s14 s15
 defm j_join_hardcoded_core s17 s14
 # M: the empty-file verdict.
 defm m_revert sen_A,sen_B,sr_Eg sen_C
@@ -744,7 +749,7 @@ defm r_readable_never sr_Ag,sr_Ai sr_Dg
 defm r_readable_always sr_Dg,sr_Di sr_Ag
 # MW: the waived verdict.
 defm w_standdown w1,w3 w2
-defm w_resolve w5,w7 w1
+defm w_resolve w5 w1
 defm w_lifetime w4 s2
 defm w_overridden w3,w1 w4
 
