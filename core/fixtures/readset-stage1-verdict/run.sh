@@ -346,7 +346,7 @@ NWORLDS="$(grep -c . "$TABLE")" || NWORLDS=0
 # ------------------------------------------------------------------ the shipping scorer ----
 echo " the shipping scorer, every world:"
 sp="$(TMPDIR="$WORK/w" bash "$SCORER" --self-probe 2>&1)"; rc=$?
-case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
+case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") B_sp=1; ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
   eval "GOT_${name//-/_}=\$got"
@@ -520,27 +520,31 @@ smut "$(( ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-no-head rl-head met "$R
 
 # THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
 # scorer, self-probe live, `--self-probe` exits 2.
-pmut() { # pmut <name> <old> <new>
-  export MUT_OLD="$2" MUT_NEW="$3"
-  if mut "$SCORER" "$MD/probe-$1.sh"; then
-    sp="$(TMPDIR="$MD" bash "$MD/probe-$1.sh" --self-probe 2>&1)"; rc=$?
-    if [ "$rc" = 2 ]; then ok "the scorer's --self-probe refuses $1 (rc 2)"; else bad "the scorer's --self-probe passed $1 (rc $rc: $sp)"; fi
+pmut() { # pmut <flag> <name> <old> <new>: decides selfprobe, twin met (the mutated scorer still scores the ALL-MET world MET)
+  local flag="$1" name="$2" rc sp m
+  export MUT_OLD="$3" MUT_NEW="$4"
+  if mut "$SCORER" "$MD/$name.sh"; then
+    sp="$(TMPDIR="$MD" bash "$MD/$name.sh" --self-probe 2>&1)"; rc=$?
+    if [ "$rc" = 2 ]; then mutant_killed "$flag" "$name" "the scorer's --self-probe refuses $name (rc 2)"; else bad "the scorer's --self-probe passed $name (rc $rc: $sp)"; fi
+    m="$(world_hit "$MD/$name.sh" met)"
+    [ "$m" = 0 ] || bad "mutant $name is not confined: its twin world met answers differently under it"
+    if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX $name selfprobe:$([ "$rc" = 2 ] && echo 1 || echo 0) met:$m"; fi
   else
-    bad "self-probe mutant $1 DID NOT APPLY"
+    bad "self-probe mutant $name DID NOT APPLY"
   fi
 }
-pmut owntree '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
+pmut "${B_sp:-0}" probe-owntree '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
   '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
-pmut a2-ending "$A2_OLD" "$A2_NEW"
-pmut a4-open-end "$A4_OLD" "$A4_NEW"
-pmut a6-regular-file "$A6P_OLD" "$A6P_NEW"
-pmut r0-no-profile "$R0_OLD" "$R0_NEW"
-pmut r6-paths-only "$R6_OLD" "$R6_NEW"
-pmut r2-first-only "$R2_OLD" "$R2_NEW"
+pmut "${B_sp:-0}" probe-a2-ending "$A2_OLD" "$A2_NEW"
+pmut "${B_sp:-0}" probe-a4-open-end "$A4_OLD" "$A4_NEW"
+pmut "${B_sp:-0}" probe-a6-regular-file "$A6P_OLD" "$A6P_NEW"
+pmut "${B_sp:-0}" probe-r0-no-profile "$R0_OLD" "$R0_NEW"
+pmut "${B_sp:-0}" probe-r6-paths-only "$R6_OLD" "$R6_NEW"
+pmut "${B_sp:-0}" probe-r2-first-only "$R2_OLD" "$R2_NEW"
 # The pairing walk with no pair check at all: the self-probe's killed-run ledger must refuse.
-pmut rl-no-pairing '  for k in 3 2 1; do' '  for k in; do'
+pmut "${B_sp:-0}" probe-rl-no-pairing '  for k in 3 2 1; do' '  for k in; do'
 # The pair check unchecked: the self-probe's foreign-started ledger must refuse.
-pmut rl-pair-unchecked "$RLP_OLD" '    true \'
+pmut "${B_sp:-0}" probe-rl-pair-unchecked "$RLP_OLD" '    true \'
 
 # ------------------------------------------------------------------ the wrapper ----
 STUB="$WORK/stub.sh"
@@ -813,7 +817,8 @@ refusal run-dir-inside-checkout "is inside the checkout" "$R/repo/run" "$R/repo/
 # ------------------------------------------------------------------ wrapper mutants ----
 # wcell <script> <cell> <name>: 0 when the cell's run holds its properties under the script, else 1; the
 # why-lines land in $WORK/wr/m-<name>-<cell>.why. The cells are the three stub-deriver runs.
-wcell() { "wrap_$2" "$1" "m-$3-$2" > "$WORK/wr/m-$3-$2.why" 2>&1; }
+WCN=0
+wcell() { WCN=$((WCN + 1)); "wrap_$2" "$1" "m-$3-$2-$WCN" > "$WORK/wr/m-$3-$2.why" 2>&1; }
 # wmut <flag> <name> <decides csv> <twin cell | -> <old> <new> [<expected killed csv>]: KILLED iff a deciding
 # cell's properties fail under the mutant; the twin cell is GREEN under it. Matrix mode runs the remaining
 # cells and prints every one; <expected> overrides the deciding set for a row dead in every cell.
@@ -830,6 +835,7 @@ wmut() {
     for c in ok term kill9; do
       MCELLS=$((MCELLS + 1))
       if wcell "$dst" "$c" "$name"; then cells="$cells $c:0"; else cells="$cells $c:1"; ks="$ks,$c"; fi
+      reap
     done
     echo "MATRIX $name$cells"
     mx_judge "$name" "${7:-$decides}" "${ks#,}"
@@ -871,6 +877,8 @@ reap
 # pipeline before the pkill: `wait` on a pipeline job blocks until its left element ends, which is
 # the stub's whole sleep, after which both stubs are dead for a reason that is not the pkill.
 echo " the deriver reaps only its own fs_usage (BL-466):"
+CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
+cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }
 pk_lines() { # $1 deriver -> the uncommented lines carrying both `pkill` and `fs_usage`
   awk 'index($0, "pkill") && index($0, "fs_usage") { l = $0; sub(/^[ \t]+/, "", l); if (substr(l, 1, 1) != "#") print l }' "$1"
 }
@@ -883,12 +891,11 @@ pk_probe() {
   cat > "$d/deriver.sh" <<'PK_EOF'
 "$PKN" 60 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
 fs_pid=$!
-sleep 0.3
-child="$(pgrep -P $$ -x "$PKN")"
+n=0; until child="$(pgrep -P $$ -x "$PKN")"; do n=$((n + 1)); [ "$n" -gt 3000 ] && break; sleep 0.01; done
 [ -n "$child" ] || { echo "child=none"; exit 0; }
 echo "$child" >> "$ORPHANS"
 eval "$(cat "$PKD/line")"
-sleep 0.3
+n=0; while kill -0 "$child" 2>/dev/null && [ "$n" -lt 100 ]; do n=$((n + 1)); sleep 0.01; done
 if kill -0 "$child" 2>/dev/null; then printf 'child=alive '; else printf 'child=dead '; fi
 kill "$child" "$fs_pid" 2>/dev/null
 PK_EOF
@@ -899,20 +906,27 @@ PK_EOF
   kill "$dec" 2>/dev/null; wait "$dec" 2>/dev/null
 }
 # pk_score <deriver> -> one verdict per extracted line, joined by `;`
-pk_score() { local l; pk_lines "$1" | while IFS= read -r l; do pk_probe "$l"; done | tr '\n' ';'; }
+pk_score() { local l; pk_lines "$1" | { [ -z "${2:-}" ] && cat || sed -n "${2}p"; } | while IFS= read -r l; do pk_probe "$l"; done | tr '\n' ';'; }
 n="$(pk_lines "$DERIVER" | grep -c .)" || n=0
 [ "$n" = 2 ] || broken "the deriver carries $n uncommented pkill fs_usage line(s), not the 2 reaping sites"
 got="$(pk_score "$DERIVER")"
 case "$got" in *none*) broken "the stub pipeline left no child of the deriver-shaped shell: $got" ;; esac
-if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then ok "both reaping lines kill the deriver's own stub tracer and leave a decoy outside it alive ($got)"; else bad "the deriver's reaping lines: $got (want child=dead decoy=alive at both sites)"; fi
+if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then B_pk=1; ok "both reaping lines kill the deriver's own stub tracer and leave a decoy outside it alive ($got)"; else bad "the deriver's reaping lines: $got (want child=dead decoy=alive at both sites)"; fi
 # Mutants: every site edited (a fix layered on one site only reverts at both), on a COPY.
-pkmut() { # pkmut <name> <awk gsub from> <awk gsub to>
-  local dst="$MD/pk-$1.sh" c g
+# pkmut <name> <awk gsub from> <awk gsub to>: decides pk-site1 (the first reaping line, probed alone per push),
+# twin clause-count (the root-literal clause count on the same copy stays 3). Matrix mode scores both sites.
+pkmut() {
+  local dst="$MD/pk-$1.sh" c g g2 cc
   awk -v f="$2" -v t="$3" -v CF="$dst.count" '{ c += gsub(f, t) } { print } END { print c + 0 > CF }' "$DERIVER" > "$dst" || { bad "pkill mutant $1 DID NOT APPLY"; return; }
   c="$(cat "$dst.count")"
   if [ "$c" != 2 ] || cmp -s "$DERIVER" "$dst"; then bad "pkill mutant $1 DID NOT APPLY ($c site(s))"; return; fi
-  g="$(pk_score "$dst")"
-  if [ "$g" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else ok "pkill mutant $1 KILLED ($g)"; fi
+  g="$(pk_score "$dst" 1)"; cc="$(cl_count "$dst")"
+  if [ "$g" = 'child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else mutant_killed "${B_pk:-0}" "pk-$1" "pkill mutant $1 KILLED at the first reaping site ($g; twin clause-count $cc)"; fi
+  [ "$cc" = 3 ] || bad "pkill mutant $1 is not confined: the root-literal clause count is $cc under it, not 3"
+  if [ "$MATRIX" = 1 ]; then
+    MCELLS=$((MCELLS + 2)); g2="$(pk_score "$dst" 2)"
+    echo "MATRIX pk-$1 pk-site1:$([ "$g" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) pk-site2:$([ "$g2" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) clause-count:$([ "$cc" = 3 ] && echo 0 || echo 1)"
+  fi
 }
 pkmut bare 'pkill -P [$][$] -x fs_usage' 'pkill -x fs_usage'
 pkmut wrong-parent 'pkill -P [$][$] -x fs_usage' 'pkill -P $PPID -x fs_usage'
@@ -925,15 +939,16 @@ pkmut wrong-parent 'pkill -P [$][$] -x fs_usage' 'pkill -P $PPID -x fs_usage'
 # this fixture's verdict differ under the trace, and every trace discarded it. Nothing here execs
 # `log` or `sandbox-exec`.
 echo " the sandbox profile's root-literal clause (BL-470), text:"
-CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
-cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }
 n="$(cl_count "$DERIVER")"
-if [ "$n" = 3 ]; then ok "the root-literal clause is emitted by all three profile emitters (3 uncommented lines)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
+if [ "$n" = 3 ]; then B_cl=1; ok "the root-literal clause is emitted by all three profile emitters (3 uncommented lines)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
 OM="$MD/sb-one-emitter.sh"
 awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } index($0, k) && !index($0, "> \"$PROFILE\" \\") && substr(l, 1, 1) != "#" { print "      :"; c++; next } { print } END { exit c != 2 }' "$DERIVER" > "$OM" && ! cmp -s "$DERIVER" "$OM" \
   || bad "clause mutant one-emitter DID NOT APPLY"
 n="$(cl_count "$OM")"
-if [ "$n" != 3 ]; then ok "clause mutant one-emitter KILLED (the clause on $n emitter line(s))"; else bad "clause mutant one-emitter SURVIVED"; fi
+pkn="$(pk_lines "$OM" | grep -c .)" || pkn=0
+if [ "$n" != 3 ]; then mutant_killed "${B_cl:-0}" sb-one-emitter "clause mutant one-emitter KILLED (the clause on $n emitter line(s); twin pk-sites $pkn)"; else bad "clause mutant one-emitter SURVIVED"; fi
+[ "$pkn" = 2 ] || bad "clause mutant one-emitter is not confined: $pkn pkill fs_usage line(s) under it, not 2"
+if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX sb-one-emitter clause-count:$([ "$n" != 3 ] && echo 1 || echo 0) pk-sites:$([ "$pkn" = 2 ] && echo 0 || echo 1)"; fi
 
 # NO STUB PROCESS OUTLIVES THE FIXTURE, counted from the pid file every arm appended to -- never from
 # the process table. The control is that the file holds pids at all. The property is binary: every
@@ -961,7 +976,7 @@ orphans_gone() {
     [ -z "$live" ] && return 0
     if [ "$live" = "$last" ]; then still=$((still + 1)); else still=0; last="$live"; fi
     if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi
-    sleep 0.1
+    sleep 0.01
   done
 }
 # THE ARM'S OWN PROBE, BOTH DIRECTIONS, before it reads the corpus: a sleep that is never killed must
@@ -969,10 +984,10 @@ orphans_gone() {
 OGP="$WORK/og-probe"; sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
 bash -c 'exit 0' & ogd=$!; wait "$ogd"
 printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
-orphans_gone "$OGP.live" 5; ogr1=$?
-orphans_gone "$OGP.dead" 5; ogr2=$?
+orphans_gone "$OGP.live" 50; ogr1=$?
+orphans_gone "$OGP.dead" 50; ogr2=$?
 kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
-if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
+if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then B_og=1; ok "orphans_gone refuses on a pid that never dies (rc $ogr1) and passes a reaped pid (rc $ogr2)"; else bad "orphans_gone probe: live pid rc=$ogr1 (want 2), reaped pid rc=$ogr2 (want 0)"; fi
 # MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
 OGM="$MD/og-pass.sh"
 awk '/^orphans_gone\(\) \{$/,/^}$/' "$HERE/run.sh" > "$OGM.src" 2>/dev/null
@@ -982,15 +997,25 @@ mut "$OGM.src" "$OGM" \
   || broken "orphans_gone mutant og-pass DID NOT APPLY"
 sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
 printf '%s\n' "$ogl" > "$OGP.live"
-( . "$OGM"; orphans_gone "$OGP.live" 5 ); ogr1=$?
+( . "$OGM"; orphans_gone "$OGP.live" 50 ); ogr1=$?
+printf '%s\n' "$ogd" > "$OGP.dead"; ( . "$OGM"; orphans_gone "$OGP.dead" 50 ); ogr2=$?
 kill "$ogl" 2>/dev/null; wait "$ogl" 2>/dev/null
-if [ "$ogr1" != 2 ]; then ok "orphans_gone mutant og-pass KILLED (a never-dying pid read rc $ogr1)"; else bad "orphans_gone mutant og-pass SURVIVED"; fi
+if [ "$ogr1" != 2 ]; then mutant_killed "${B_og:-0}" og-pass "orphans_gone mutant og-pass KILLED (a never-dying pid read rc $ogr1; twin reaped-pid rc $ogr2)"; else bad "orphans_gone mutant og-pass SURVIVED"; fi
+[ "$ogr2" = 0 ] || bad "orphans_gone mutant og-pass is not confined: the reaped pid reads rc $ogr2, not 0"
+if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX og-pass og-stall:$([ "$ogr1" != 2 ] && echo 1 || echo 0) og-reaped:$([ "$ogr2" = 0 ] && echo 0 || echo 1)"; fi
 NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
 if [ "$NREC" -lt 1 ]; then
   bad "the pid file records no stub or sampler pid, so the orphan check reads nothing"
 else
-  orphans_gone "$ORPHANS" "$((STALL_IDLE * 10))" || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
+  orphans_gone "$ORPHANS" "$((STALL_IDLE * 100))" || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
   ok "no stub or sampler pid is alive: 0 of $NREC recorded in the pid file"
+fi
+
+# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL (the counter only moves under --matrix).
+if [ "$MATRIX" = 1 ]; then
+  if [ "$MCELLS" -gt 0 ]; then ok "matrix mode drove $MCELLS matrix-only cell(s)"; else bad "matrix mode drove no matrix-only cell"; fi
+else
+  if [ "$MCELLS" = 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MCELLS matrix-only cell(s)"; fi
 fi
 
 echo
