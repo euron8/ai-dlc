@@ -56,6 +56,53 @@ to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
 failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
+**The shared verdict store is cleared by EXACT LISTING before a gate, never by glob or `rm -rf`.** A
+peer's gate can add entries between the listing and the gate.
+
+**The pool width is `AI_DLC_FIXTURE_JOBS`, default 12**, read at the top of the hook's pool block
+(the variable the hook reads is `AI_DLC_FIXTURE_JOBS`, not `FIXTURE_JOBS`). It was measured on one
+machine; on a smaller box re-measure rather than inherit it. A nested pool (depth 1 or more) is capped
+at two workers whatever the variable says.
+
+**Two state files under `.git/` decide what a push skips, and they mean different things.**
+`.git/ai-dlc-fixture-verified` (with its `.format` sidecar, which must read `v2`) is the per-file
+verified-state record: the hook writes it only after a fully green run, as a copy of that run's
+file-content manifest, and the read-set skip reads it to decide which fixtures' inputs moved. A red
+run never writes it, and an unstamped record is read as "run everything". To an operator it says
+"every fixture's verdict was known good at these file contents"; deleting it forces a full run.
+`.git/ai-dlc-suite-key` is the whole-suite content key: when the key and the fixture count both match
+the last green, the push prints `SKIPPED -- this exact tree already passed the whole suite` and runs
+no fixtures. Each decision appends one line to `.git/ai-dlc-suite-key.log`
+(`<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>`); count them with
+`awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
+
+**A push is judged on the PUSHING worktree's working tree, never on the sha the push names.**
+`core.hooksPath` is an absolute path to the main checkout's `.githooks`, so every worktree's push runs the
+main checkout's hook, and that hook begins `cd "$(git rev-parse --show-toplevel)"` and never reads the
+`<local sha>` lines git hands it on stdin. Push from a clean worktree detached at the exact sha, with
+`git rev-parse HEAD` equal to it; pushing a merge sha from another checkout judges that checkout's tree.
+
+**`scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict**, as the
+names between its `# EXCLUDE_BEGIN` and `# EXCLUDE_END` markers. Both skips in `.githooks/pre-push`
+read it: the whole-suite key hashes everything except that set, and the per-fixture read-set skip
+resolves the same set in `readset_excluded_re`. A wrong edit there silently widens or narrows what a
+push skips, so every added line needs the two-tree mutation measurement its header describes.
+
+**`core/scripts/derive-fixture-readsets.sh --reconcile` traces every stale, changed and unmapped
+fixture, with no sudo**, and the hook prints that command when it finds stale fixtures. Its traces
+are recorded in `.git/ai-dlc-fixture-readsets.local`, the local map the hook passes as `--local-map`;
+the hook reads it beside the committed map `.ai-dlc-fixture-readsets.tsv`, and never writes the
+committed one. `AI_DLC_READSET_LIVE_TRACE=0` turns off the detached trace the hook starts after a
+green suite.
+
+**`scripts/census-hermetic-coverage.sh` is the one-time census of what the sandbox hides.** It runs
+each declared fixture twice, once inside `hermetic-run.sh`'s sandbox and once plainly against the real
+tree, and reports every fixture whose sandboxed run asserted something different. It is a census, not
+a gate. Options: `--root R`, `--list "<names>"`, `--jobs N` (default 4), `--out PATH`, `--work DIR`,
+`--scratch BASE` and `--keep`. Exit 0 means every row read EQUAL, EQUIVALENT or LOW-RES, 1 means a
+MISMATCH, BOTH-FAIL, FLAKY, UNCOUNTABLE or REFUSED row, and 2 means it could not run. It needs a clean
+root and never writes to the real verdict store or the durations record.
+
 **A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, one tree, both ways:
 
 ```
