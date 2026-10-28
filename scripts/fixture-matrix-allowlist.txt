@@ -105,7 +105,6 @@ settings-merge-documented-form	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 settings-merge-unparseable-template	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 setup-config-drift	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 setup-site-drift	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
-shadowed-local-validators	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 shell-portability	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 shipped-rule-version-floor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-conservation	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant

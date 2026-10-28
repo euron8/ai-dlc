@@ -18,7 +18,28 @@
 # sandbox is built by `new_sandbox()`, which carries both files, and an UNMUTATED CONTROL
 # runs through that same sandbox FIRST: if the harness is what died, the control says so
 # instead of a mutant scoring a phantom kill.
+#
+# THE MUTANT MATRIX. Every mutant is scored on ONE run of the mutated sandbox, read through the nine
+# baseline row cells (a cell is RED when its baseline expectation fails on that output). PER PUSH a mutant is
+# scored on its DECIDING cell and its named TWIN, a cell it could plausibly co-trip but must leave GREEN;
+# `run.sh --matrix` scores the same output against all nine cells and prints one MATRIX line per mutant. The
+# matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run
+# from the repo root. The two REFUSAL arms at the foot sabotage a sandbox and assert the subject refuses; they
+# score no mutant of the subject and carry no row.
+# also trips: mut-closed-gate -> mention
+# MUTANT-MATRIX mut-closed-gate decides=bar twins=foo
+# MUTANT-MATRIX mut-depth decides=sub twins=foo
+# MUTANT-MATRIX mut-close-anchor decides=mention twins=foo
+# MUTANT-MATRIX mut-fence-blind decides=fenced twins=foo
+# MUTANT-MATRIX-CONTROL CONTROL why=an unmutated copy in a mutant-shaped sandbox must reproduce the baseline rows so a mutant verdict is attributable to the mutation
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/shadowed-local-validators/run.sh --matrix
 set -uo pipefail
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "shadowed-local-validators: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT=""
@@ -119,10 +140,14 @@ new_sandbox() { # new_sandbox <name>  -> path on stdout
 }
 
 echo "HERMETIC-CONSUMED $SRC_DIR/$(basename "$SCRIPT")"
-OUT="$(run_warn "$SCRIPT")"
+OUT="$(run_warn "$SCRIPT")"; OUT_RC=$?
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+MUT_LIB="$DIR/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # The emitted path is the fork's REAL location, root-relative — here `local/…`, because
 # that is where --local-dir points. Until v0.194.0 the script fabricated the string
 # `scripts/ai-dlc-local/<basename>` no matter where --local-dir actually pointed or where
@@ -145,7 +170,7 @@ COUT="$(run_warn_2 "$CTRL_DIR/warn-shadowed-local-validators.sh" "$CTRL_ERR")"; 
 # Those assert a NON-ZERO exit when the close grammar cannot be lifted; that assertion means
 # nothing unless the resolving path in the SAME sandbox shape is known to exit 0.
 if [ "$CRC" -eq 0 ] && row "$COUT" "local/validate-foo.sh" && ! row "$COUT" "local/validate-bar.sh"; then
-  ok "CONTROL — an UNMUTATED copy in the mutant sandbox reproduces the baseline rows and exits 0 (the sandbox carries lib.sh + ledger-reverify.sh, so a mutant that emits nothing was killed rather than broken)"
+  ok "CONTROL — an UNMUTATED copy in the mutant sandbox reproduces the baseline rows and exits 0 (the sandbox carries lib.sh + ledger-reverify.sh, so a mutant that emits nothing was tripped rather than broken)"; B_ctl=1
 else
   bad "CONTROL — the unmutated copy does not reproduce the baseline in the mutant sandbox (rc=$CRC); every MUTATION verdict below is unreadable. stderr: $(tr '\n' ' ' < "$CTRL_ERR")"
 fi
@@ -154,8 +179,8 @@ fi
 has "validate-foo.sh" && ok "closed entry + fork + core shadow -> RETIRE-CANDIDATE (foo)" \
   || bad "validate-foo.sh not flagged — the one true positive is missing"
 # OPEN entry -> not flagged.
-has "validate-bar.sh" && bad "validate-bar.sh flagged despite an OPEN (not ADOPTED) entry" \
-  || ok "open entry -> not flagged (bar)"
+if has "validate-bar.sh"; then bad "validate-bar.sh flagged despite an OPEN (not ADOPTED) entry"
+else ok "open entry -> not flagged (bar)"; B_bar=1; fi
 # Closed but no fork -> nothing to retire.
 has "validate-nofork.sh" && bad "validate-nofork.sh flagged with no fork present" \
   || ok "closed entry but no fork -> not flagged (nofork)"
@@ -167,8 +192,8 @@ has "validate-orphan.sh" && bad "validate-orphan.sh flagged with no ledger entry
   || ok "fork with no ledger entry -> not flagged (orphan)"
 
 # A fork under a SUBDIRECTORY of the home -> flagged, at its real path.
-has "lib/validate-sub.sh" && ok "a fork in a subdirectory of the home -> RETIRE-CANDIDATE at its real path (sub)" \
-  || bad "validate-sub.sh not flagged — a fork filed below the home's top level is invisible, which reads exactly like a home with no forks in it"
+if has "lib/validate-sub.sh"; then ok "a fork in a subdirectory of the home -> RETIRE-CANDIDATE at its real path (sub)"; B_sub=1
+else bad "validate-sub.sh not flagged — a fork filed below the home's top level is invisible, which reads exactly like a home with no forks in it"; fi
 
 # THE CLOSE GRAMMAR, BOTH DIRECTIONS. A line-leading `**ADOPTED UPSTREAM (v…)` annotation
 # closes the entry; a mid-sentence MENTION of the phrase in an open entry's body does not.
@@ -176,8 +201,8 @@ has "lib/validate-sub.sh" && ok "a fork in a subdirectory of the home -> RETIRE-
 # `/ADOPTED UPSTREAM/` this script advised RETIRING a fork that is still needed.
 has "validate-bold.sh" && ok "a line-leading **ADOPTED UPSTREAM (v…) annotation closes the entry -> flagged (bold)" \
   || bad "validate-bold.sh not flagged — the lifted close grammar does not recognise the annotation form the operator is told to write, so no real close would ever be seen"
-has "validate-mention.sh" && bad "validate-mention.sh flagged — an OPEN entry whose body merely MENTIONS 'annotate it ADOPTED UPSTREAM once …' scored as closed, and the signal is advising the retirement of a fork that is still doing work" \
-  || ok "a mid-sentence MENTION of ADOPTED UPSTREAM does not close an open entry -> not flagged (mention)"
+if has "validate-mention.sh"; then bad "validate-mention.sh flagged — an OPEN entry whose body merely MENTIONS 'annotate it ADOPTED UPSTREAM once …' scored as closed, and the signal is advising the retirement of a fork that is still doing work"
+else ok "a mid-sentence MENTION of ADOPTED UPSTREAM does not close an open entry -> not flagged (mention)"; B_mention=1; fi
 
 # A CLOSED entry whose fence records a heading-shaped line -> flagged. The entry-boundary rule
 # this script loads from lib.sh used to open a new entry on the fenced `## <ts> -- EVENT` line
@@ -185,12 +210,69 @@ has "validate-mention.sh" && bad "validate-mention.sh flagged — an OPEN entry 
 # fence was flushed under an OPEN entry and the close annotation below the fence belonged to a
 # pseudo-entry naming nothing: a retired fork that was never reported. The mutant at the foot
 # of this file re-derives that silence.
-has "validate-fenced.sh" && ok "a closed entry whose fence records a heading-shaped line -> RETIRE-CANDIDATE (fenced): the fenced line did not split the entry" \
-  || bad "validate-fenced.sh not flagged — the fenced '## <ts> -- EVENT' line split the entry, so the .sh named above the fence was flushed as OPEN and the close below the fence closed a pseudo-entry naming nothing"
+if has "validate-fenced.sh"; then ok "a closed entry whose fence records a heading-shaped line -> RETIRE-CANDIDATE (fenced): the fenced line did not split the entry"; B_fenced=1
+else bad "validate-fenced.sh not flagged — the fenced '## <ts> -- EVENT' line split the entry, so the .sh named above the fence was flushed as OPEN and the close below the fence closed a pseudo-entry naming nothing"; fi
 
 # Never blocks.
-run_warn "$SCRIPT" >/dev/null 2>&1
-[ "$?" -eq 0 ] && ok "exit 0 (signal never blocks)" || bad "exit was not 0 — a signal must not block"
+# The status of the baseline run above: the same command on the same state, so it is not run a second time.
+[ "$OUT_RC" -eq 0 ] && ok "exit 0 (signal never blocks)" || bad "exit was not 0 — a signal must not block"
+
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
+MXL="$WORK/mx.ledger"; : > "$MXL"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$DIR/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
+}
+mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
+MX_CELLS="foo bar nofork some-tool orphan sub bold mention fenced"
+# mx_red <cell> <output> -> 0 when the baseline expectation of that cell FAILS on the output (RED), 1 when it holds (GREEN)
+mx_red() {
+  case "$1" in
+    foo) ! row "$2" "local/validate-foo.sh" ;;
+    sub) ! row "$2" "local/lib/validate-sub.sh" ;;
+    bold) ! row "$2" "local/validate-bold.sh" ;;
+    fenced) ! row "$2" "local/validate-fenced.sh" ;;
+    bar) row "$2" "local/validate-bar.sh" ;;
+    nofork) row "$2" "local/validate-nofork.sh" ;;
+    some-tool) row "$2" "local/some-tool.sh" ;;
+    orphan) row "$2" "local/validate-orphan.sh" ;;
+    mention) row "$2" "local/validate-mention.sh" ;;
+    *) echo "MATRIX BROKEN cell $1"; exit 2 ;;
+  esac
+}
+# mx_prep <mutant> <output> <stderr file> -> sets MX_D and MX_T (RED|GREEN) from the deciding cell and the twin.
+# A crashed mutant sandbox is BROKEN: it prints no row, which would otherwise read as every cell GREEN.
+mx_prep() {
+  local m="$1" o="$2" e="$3" dec tw a g=0 tot=0 u=""
+  case "$(cat "$e" 2>/dev/null)" in
+    *"unbound variable"*|*"command not found"*|*"syntax error"*)
+      if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $m"; exit 2; fi
+      bad "FIXTURE BROKEN: $m crashed its sandbox, which reads as no rows" ;;
+  esac
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: no single MUTANT-MATRIX row names the deciding cell and twin of $m"; MX_D=GREEN; MX_T=RED; return; fi
+  printf 'dec %s %s\n' "$m" "$dec" >> "$MXL"; printf 'dec %s %s\n' "$m" "$tw" >> "$MXL"
+  if mx_red "$dec" "$o"; then MX_D=RED; else MX_D=GREEN; fi
+  if mx_red "$tw" "$o"; then MX_T=RED; else MX_T=GREEN; fi
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    rd=""
+    for a in $MX_CELLS; do
+      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
+      printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
+      tot=$((tot + 1)); if mx_red "$a" "$o"; then rd="$rd,$a"; else g=$((g + 1)); fi
+    done
+    if [ "$MX_D" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
+    if [ "$MX_T" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$MX_D" "$tw" "$MX_T" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
+  fi
+}
 
 # MUTATION control: drop the CLOSED gate in flush() so EVERY entry emits its basenames.
 # The OPEN bar fork must then be flagged — proving the ADOPTED-UPSTREAM gate is what
@@ -209,11 +291,14 @@ PY
 if [ "$CHG" != "CHANGED" ]; then
   bad "MUTATION matched nothing — the closed-gate in flush() was renamed"
 else
-  MOUT="$(run_warn "$MUT")"
-  if row "$MOUT" "local/validate-bar.sh"; then
-    ok "MUTATION — dropping the CLOSED gate flags the OPEN bar fork too (the gate is load-bearing)"
+  MOUT="$(run_warn_2 "$MUT" "$WORK/mut-closed-gate.err")"
+  mx_prep mut-closed-gate "$MOUT" "$WORK/mut-closed-gate.err"
+  if [ "$MX_D" = RED ] && [ "$MX_T" = GREEN ]; then
+    mutant_killed "$(( ${B_ctl:-0} && ${B_bar:-0} ))" mut-closed-gate "MUTATION mut-closed-gate — dropping the CLOSED gate flags the OPEN bar fork too (the gate is load-bearing)"
+  elif [ "$MX_D" = GREEN ]; then
+    bad "MUTATION mut-closed-gate SURVIVED — bar still not flagged without the CLOSED gate; the closed-only assertions prove nothing"
   else
-    bad "MUTATION — bar still not flagged without the CLOSED gate; the closed-only assertions prove nothing"
+    bad "MUTATION mut-closed-gate — its twin foo also tripped; the mutant broke more than the gate and its verdict is entangled"
   fi
 fi
 
@@ -235,13 +320,14 @@ PY
 if [ "$CHG2" != "CHANGED" ]; then
   bad "MUTATION 2 matched nothing — the home walk is no longer a cr_walk over LOCAL_DIR's root and path"
 else
-  MOUT2="$(run_warn "$MUT2")"
-  if row "$MOUT2" "local/lib/validate-sub.sh"; then
-    bad "MUTATION 2 — the subdirectory fork is STILL reported with the walk bounded to depth 1; the assertion above proves nothing about recursion"
-  elif row "$MOUT2" "local/validate-foo.sh"; then
-    ok "MUTATION 2 — bounding the walk to the home's top level hides the subdirectory fork while the root-level one stays flagged (the recursion is load-bearing, and only it changed)"
+  MOUT2="$(run_warn_2 "$MUT2" "$WORK/mut-depth.err")"
+  mx_prep mut-depth "$MOUT2" "$WORK/mut-depth.err"
+  if [ "$MX_D" = GREEN ]; then
+    bad "MUTATION mut-depth SURVIVED — the subdirectory fork is STILL reported with the walk bounded to depth 1; the assertion above proves nothing about recursion"
+  elif [ "$MX_T" = GREEN ]; then
+    mutant_killed "$(( ${B_ctl:-0} && ${B_sub:-0} ))" mut-depth "MUTATION mut-depth — bounding the walk to the home's top level hides the subdirectory fork while the root-level one stays flagged (the recursion is load-bearing, and only it changed)"
   else
-    bad "MUTATION 2 — bounding the walk silenced the ROOT-LEVEL fork too; the mutant broke more than recursion and its verdict is entangled"
+    bad "MUTATION mut-depth — bounding the walk silenced the ROOT-LEVEL fork too; the mutant broke more than recursion and its verdict is entangled"
   fi
 fi
 
@@ -277,13 +363,14 @@ if [ "$CHG3" != "CHANGED" ]; then
 elif cmp -s "$SRC_DIR/ledger-reverify.sh" "$MUT3_DIR/ledger-reverify.sh"; then
   bad "MUTATION 3 — the mutated ledger-reverify.sh is byte-identical to the original; the mutation did not apply"
 else
-  MOUT3="$(run_warn "$MUT3")"
-  if ! row "$MOUT3" "local/validate-mention.sh"; then
-    bad "MUTATION 3 — de-anchoring the close rule IN ledger-reverify.sh did not change the subject's verdict, so the subject is not lifting that grammar; the mid-sentence-mention arm above is asserting a copy nobody joined"
-  elif ! row "$MOUT3" "local/validate-foo.sh"; then
-    bad "MUTATION 3 — widening the close rule LOST the foo row; the mutant did more than widen and its verdict is entangled"
+  MOUT3="$(run_warn_2 "$MUT3" "$WORK/mut-close-anchor.err")"
+  mx_prep mut-close-anchor "$MOUT3" "$WORK/mut-close-anchor.err"
+  if [ "$MX_D" = GREEN ]; then
+    bad "MUTATION mut-close-anchor SURVIVED — de-anchoring the close rule IN ledger-reverify.sh did not change the subject's verdict, so the subject is not lifting that grammar; the mid-sentence-mention arm above is asserting a copy nobody joined"
+  elif [ "$MX_T" = RED ]; then
+    bad "MUTATION mut-close-anchor — widening the close rule LOST the foo row; the mutant did more than widen and its verdict is entangled"
   else
-    ok "MUTATION 3 — de-anchoring the close rule in ledger-reverify.sh makes the mid-sentence MENTION close its entry (the lift is a live read, and the anchor is what keeps a still-needed fork off the retire list)"
+    mutant_killed "$(( ${B_ctl:-0} && ${B_mention:-0} ))" mut-close-anchor "MUTATION mut-close-anchor — de-anchoring the close rule in ledger-reverify.sh makes the mid-sentence MENTION close its entry (the lift is a live read, and the anchor is what keeps a still-needed fork off the retire list)"
   fi
 fi
 
@@ -299,13 +386,14 @@ sed 's@if (__lef_in && sh != "") {@if (0) {@' "$SRC_DIR/lib.sh" > "$MUT4_DIR/lib
 if cmp -s "$SRC_DIR/lib.sh" "$MUT4_DIR/lib.sh"; then
   bad "MUTATION 4 matched nothing — the in-fence branch of ledger_entry_shape() in lib.sh has moved; re-anchor this mutant"
 else
-  MOUT4="$(run_warn "$MUT4")"
-  if row "$MOUT4" "local/validate-fenced.sh"; then
-    bad "MUTATION 4 — validate-fenced.sh is STILL reported with the boundary rule fence-blind; the fenced-entry arm above proves nothing about fence tracking"
-  elif row "$MOUT4" "local/validate-foo.sh"; then
-    ok "MUTATION 4 — with the boundary rule fence-blind the fenced closed entry goes silent while foo stays flagged (the fence-aware boundary in lib.sh is load-bearing for this reader)"
+  MOUT4="$(run_warn_2 "$MUT4" "$WORK/mut-fence-blind.err")"
+  mx_prep mut-fence-blind "$MOUT4" "$WORK/mut-fence-blind.err"
+  if [ "$MX_D" = GREEN ]; then
+    bad "MUTATION mut-fence-blind SURVIVED — validate-fenced.sh is STILL reported with the boundary rule fence-blind; the fenced-entry arm above proves nothing about fence tracking"
+  elif [ "$MX_T" = GREEN ]; then
+    mutant_killed "$(( ${B_ctl:-0} && ${B_fenced:-0} ))" mut-fence-blind "MUTATION mut-fence-blind — with the boundary rule fence-blind the fenced closed entry goes silent while foo stays flagged (the fence-aware boundary in lib.sh is load-bearing for this reader)"
   else
-    bad "MUTATION 4 — blinding the fence silenced foo too; the mutant broke the parser and its verdict is entangled"
+    bad "MUTATION mut-fence-blind — blinding the fence silenced foo too; the mutant broke the parser and its verdict is entangled"
   fi
 fi
 
@@ -347,6 +435,17 @@ REF2_DIR="$(new_sandbox refuse-not-single-homed)" || { echo "FIXTURE ERROR: cann
 # this fixture restating one byte of lib.sh's finder grammar.
 cat "$SRC_DIR/ledger-reverify.sh" "$SRC_DIR/ledger-reverify.sh" > "$REF2_DIR/ledger-reverify.sh"
 refusal_arm not-single-homed "$REF2_DIR" "expected exactly 1" "two candidate close rules in the emitter"
+
+# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
+# an empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) — the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+fi
 
 echo
 [ "$fails" -eq 0 ] && { echo "shadowed-local-validators: PASS"; exit 0; }
