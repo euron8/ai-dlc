@@ -122,6 +122,54 @@
 # m14 (the S13 bash-3.2 oracle agreement) and n1-n9 (negative seeds that must stay silent) mutate
 # nothing and are not mutants, so they carry no row.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/shell-portability/run.sh --matrix
+# MUTANT-MATRIX m1 decides=S1 twins=S2
+# MUTANT-MATRIX m2 decides=S2 twins=S1
+# MUTANT-MATRIX m3 decides=S3 twins=S4
+# MUTANT-MATRIX m4 decides=S4 twins=S3
+# MUTANT-MATRIX m5 decides=S5 twins=S6
+# MUTANT-MATRIX m6 decides=S6 twins=S5
+# MUTANT-MATRIX m7 decides=S7 twins=S13
+# MUTANT-MATRIX m9 decides=S8 twins=S8b
+# MUTANT-MATRIX m11 decides=S10 twins=S12
+# MUTANT-MATRIX m8 decides=EMPTY_SHELL twins=EMPTY_CORE
+# MUTANT-MATRIX m10 decides=EMPTY_CORE twins=EMPTY_SHELL
+# MUTANT-MATRIX m10b decides=EMPTY_FIXTURE twins=EMPTY_SHELL
+# MUTANT-MATRIX x1 decides=S8 twins=S8b
+# MUTANT-MATRIX x2 decides=S8 twins=S8b
+# MUTANT-MATRIX x3 decides=S8 twins=S8b
+# MUTANT-MATRIX x4 decides=EMPTY_CORE twins=EMPTY_SHELL
+# MUTANT-MATRIX x5 decides=S10 twins=S12
+# MUTANT-MATRIX x6 decides=S10 twins=S12
+# MUTANT-MATRIX x7 decides=S10 twins=S12
+# MUTANT-MATRIX x8 decides=S10 twins=S12
+# MUTANT-MATRIX m12 decides=S11 twins=S10
+# MUTANT-MATRIX m12b decides=S11 twins=S10
+# MUTANT-MATRIX m12c decides=S11 twins=S10
+# MUTANT-MATRIX x9 decides=S11 twins=S10
+# MUTANT-MATRIX x10 decides=S11 twins=S10
+# MUTANT-MATRIX x11 decides=EMPTY_FIXTURE twins=EMPTY_SHELL
+# MUTANT-MATRIX x12 decides=S11 twins=S10
+# MUTANT-MATRIX x13 decides=S11 twins=S10
+# MUTANT-MATRIX m9b decides=S8 twins=S8b
+# MUTANT-MATRIX m9c decides=S8 twins=S8b
+# MUTANT-MATRIX m9d decides=S8b twins=S8
+# MUTANT-MATRIX m10c decides=EMPTY_DOC twins=EMPTY_SHELL
+# MUTANT-MATRIX x16 decides=S8b twins=S8
+# MUTANT-MATRIX x17 decides=S8b twins=S8
+# MUTANT-MATRIX x18 decides=S8b twins=S8
+# MUTANT-MATRIX x20 decides=EMPTY_DOC twins=EMPTY_SHELL
+# MUTANT-MATRIX m13 decides=S12 twins=S13
+# MUTANT-MATRIX x14 decides=S12 twins=S13
+# MUTANT-MATRIX x15 decides=S12 twins=S13
+# MUTANT-MATRIX x19 decides=S8b twins=S8
+# MUTANT-MATRIX x27 decides=S13 twins=S12
+# MUTANT-MATRIX x22 decides=S13 twins=S12
+# MUTANT-MATRIX x25 decides=S13 twins=S12
+# MUTANT-MATRIX m7b decides=S7 twins=S13
+# MUTANT-MATRIX x21 decides=S7 twins=S13
+# MUTANT-MATRIX x24 decides=S13 twins=S12
+# MUTANT-MATRIX m15 decides=S14 twins=S13
+# MUTANT-MATRIX x23 decides=S14 twins=S13
 # MUTANT-MATRIX-CONTROL n1 why=the portable sed -i pair must stay unreported (survives by design)
 # MUTANT-MATRIX-CONTROL n2 why=python re.sub backreference must stay unreported (survives by design)
 # MUTANT-MATRIX-CONTROL n3 why=braced, HEAD-literal and "${SHA}: rev-paths must stay unreported (survives by design)

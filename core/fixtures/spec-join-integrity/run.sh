@@ -32,6 +32,75 @@
 # measured matrix shows green. `--matrix` runs every mutant against every arm. The matrix is
 # re-measured whenever an arm or a mutant changes.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
+# MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass
+# MUTANT-MATRIX-FULL fold-hang worlds=fold-heavy-real,fold-heavy-hang why=the kill is read from the awk shim log (start/end/152), not from any arm verdict; no single argument list decides it
+# MUTANT-MATRIX-FULL lr-sibling-unchecked worlds=lr-no-anchor-mutant why=the mutant lives in a sibling-less directory, so no capture-keyed arm can drive it; one run names the misdiagnosis
+# MUTANT-MATRIX lr-off decides=spec=orphan-lr+prd=prd-ok.md twins=spec=orphan-lr+prd=prd-ok.md+baseline=nonexistent-baseline.txt
+# MUTANT-MATRIX cap-off decides=spec=ok+prd=prd-missing-cap.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX story-off decides=spec=ok+prd=prd-ok.md+story=story-dangling.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX tri-collapse decides=spec=ok+prd=prd-ok.md+story=story-empty.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX tri-rationale-off decides=spec=ok+prd=prd-ok.md+story=story-empty-declared.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX baseline-forever decides=spec=orphan-lr+prd=prd-ok.md+baseline=baseline-stale.txt twins=spec=orphan-lr+prd=prd-ok.md
+# MUTANT-MATRIX qual-narrow decides=spec=real-qualified+prd=prd-real.md+story=story-real.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX qual-typeless decides=spec=real-qualified-noncap+prd=prd-real.md+story=story-real.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX qual-hyphen decides=spec=real-hyphen-type+prd=prd-real.md+story=story-real.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX grammar-narrow decides=spec=real-suffixed+prd=prd-suffixed.md+story=story-suffixed.md+spine=spine-suffixed.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX grammar-narrow-silent decides=spec=real-suffixed+prd=prd-suffixed-nocap1a.md+story=story-suffixed-no1a.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX decl-malformed-off-emph decides=spec=cap-emph-underscore+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX cap-boundary-loose decides=spec=real-suffixed+prd=prd-suffixed-only1a.md+story=story-suffixed.md twins=spec=real-suffixed+prd=prd-suffixed.md+story=story-suffixed.md+spine=spine-suffixed.md
+# MUTANT-MATRIX story-cap-coarse-key decides=spec=ok+prd=prd-ok.md+story=story-dangling.md+baseline=baseline-story-coarse.txt twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX story-cap-unrouted decides=spec=ok+prd=prd-ok.md+story=story-dangling.md+baseline=baseline-story-cap.txt twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX binds-fold-off decides=spec=ok+prd=prd-ok.md+spine=spine-wrapped.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX binds-widen decides=spec=ok+prd=prd-ok.md+spine=spine-neighbour.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-reason-loose decides=spec=ok+prd=prd-ok.md+spine=spine-noad-emptyreason.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-malformed-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-malformed-bound.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-idsegment-loose decides=spec=ok+prd=prd-ok.md+spine=spine-noad-reasonmention.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-marker-loose decides=spec=ok+prd=prd-ok.md+spine=spine-noad-prose.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-fold-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-wrapped.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX disp-off decides=spec=disp-ok+prd=prd-ok.md+story=story-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-unknown-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-unknown.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-contradiction-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-stale.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-bindsall-blind decides=spec=ok+prd=prd-ok.md+spine=spine-noad-bindsall.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX decl-malformed-off-underscore decides=spec=cap-residue-underscore+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX fenced-strip-off decides=spec=cap-fenced+prd=prd-ok.md+story=story-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX mentions-none-collapse decides=spec=cap-mentions-none+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX binds-all-folded decides=spec=ok+prd=prd-ok.md+spine=spine-binds-all-prose.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-placeholder-loose decides=spec=ok+prd=prd-ok.md+spine=spine-noad-placeholder.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX bound-wins-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-stale.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX disp-placeholder-loose decides=spec=disp-placeholder+prd=prd-ok.md+story=story-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX disp-anchor-loose decides=spec=disp-notsubject+prd=prd-ok.md+story=story-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX disp-noreason-loose decides=spec=disp-noreason+prd=prd-ok.md+story=story-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-segment-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-mixedseg.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX noad-eaten-off decides=spec=ok+prd=prd-ok.md+spine=spine-noad-eaten.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX twoid-def-off-undefined decides=spec=cap-twoid-undefined+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX twoid-def-off decides=spec=cap-twoid+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX reason-strip-off decides=spec=ok+prd=prd-ok.md+spine=reason-reject-3.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX reason-wordlist-off decides=spec=ok+prd=prd-ok.md+spine=reason-reject-4.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX decl-malformed-off decides=spec=decl-table+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX unclosed-off decides=spec=unclosed-bold+prd=prd-unclosed.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX fold-off decides=spec=b31-wrapped+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX membership-gate-off decides=spec=mem-none-known+prd=prd-mixed.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX unindent-spine decides=spec=ok+prd=prd-ok.md+spine=spine-noad-wrapped.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX unindent-kernel decides=spec=b31-wrapped+prd=prd-ok.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX cont-reorder-quote decides=spec=ok+prd=prd-ok.md+spine=spine-cont-quote.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX cont-reorder-table decides=spec=ok+prd=prd-ok.md+spine=spine-cont-table.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX cont-reorder-thematic decides=spec=ok+prd=prd-ok.md+spine=spine-cont-thematic.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX cont-predicate-off decides=spec=ok+prd=prd-ok.md+spine=spine-cont-sibling.md twins=spec=ok+prd=prd-ok.md+story=story-ok.md
+# MUTANT-MATRIX lr-local-regex decides=spec=lr-decl-addenda+prd=prd-ok.md+locked-requirements=lr-end-sprint.md twins=spec=lr-decl-addenda+prd=prd-ok.md+locked-requirements=lr-below-marker.md
+# MUTANT-MATRIX lr-local-regex-eof decides=spec=lr-decl-addenda+prd=prd-ok.md+locked-requirements=lr-unclosed.md twins=spec=lr-decl-addenda+prd=prd-ok.md+locked-requirements=lr-below-marker.md
+# MUTANT-MATRIX lr-anchor-wide decides=spec=lr-decl-prior+prd=prd-ok.md+locked-requirements=lr-prose-mention.md twins=spec=lr-decl-prior+prd=prd-ok.md
+# MUTANT-MATRIX lr-anchor-bold decides=spec=lr-decl-orphan+prd=prd-ok.md+locked-requirements=lr-decl.md twins=spec=lr-decl-orphan+prd=prd-ok.md
+# MUTANT-MATRIX lr-flag-inert decides=spec=lr-decl-orphan+prd=prd-ok.md+locked-requirements=lr-decl.md twins=spec=lr-decl-orphan+prd=prd-ok.md
+# MUTANT-MATRIX lr-grammar-moved-collapsed decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-mentions-only.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-emptyblock-silent decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-nomarkers.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-unreadable-tolerated decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-no-such-file.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-note-fails decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl-never.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-note-silent decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl-never.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-formfeed-unsplit decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-twoblocks.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX lr-vacuity-tolerated decides=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-wrong-sprint.md twins=spec=lr-decl+prd=prd-ok.md+locked-requirements=lr-decl.md
+# MUTANT-MATRIX ident-drop decides=identity twins=spec=ok+prd=prd-missing-cap.md
+# MUTANT-MATRIX ident-nonce decides=identity twins=spec=ok+prd=prd-missing-cap.md
 set -u
 MATRIX=0
 case "${1:-}" in
@@ -2092,15 +2161,15 @@ cp "$V" "$R/lr-no-anchor/validate-spec-join.sh"
 p_want() { # <prog> <expected-rc> <label> <args...>
   local prog="$1" exp="$2" lab="$3"; shift 3
   LRJ_ARMS=$((LRJ_ARMS+1))
-  cap "$prog" "$@"
-  local g=$CAPRC
+  # NOT captured: the sibling is restored beside $prog between calls, so one argument list is two states.
+  bash "$prog" "$@" >/dev/null 2>&1
+  local g=$?
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
 }
 p_says() { # <prog> <label> <must-contain> <args...>
   local prog="$1" lab="$2" want_s="$3"; shift 3
   LRJ_ARMS=$((LRJ_ARMS+1))
-  cap "$prog" "$@"
-  local out="$CAPOUT"
+  local out; out="$(bash "$prog" "$@" 2>&1)"
   if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
   else bad "$lab (message missing: \"$want_s\")"; fi
 }
@@ -2163,11 +2232,24 @@ j_mut lr-local-regex-eof \
 # kills it did not earn. Against the BARE closer the local matcher is correct, and it must
 # stay green there — otherwise the three arms above are attributing a general breakage to a
 # specific closer spelling.
-j_mut lr-local-regex-baseform \
-  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  0 "MUTATION SCOPE: the same local matcher is still GREEN on the BARE closer — it dies by the sprint-closer arm, not by everything" \
-  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md"
+# A CONTROL, NOT A MUTANT: its correct outcome is to SURVIVE, so it is not routed through mutant_killed.
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_BF="$R/mutant-lr-local-regex-baseform.sh"
+cp "$V" "$LRJ_BF"
+FROM='bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  TO="awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_BF"
+if cmp -s "$V" "$LRJ_BF"; then
+  bad "FIXTURE ERROR: the lr-local-regex-baseform copy matched nothing -- its control proves nothing"
+else
+  bash "$LRJ_BF" --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md" >/dev/null 2>&1
+  LRJ_BFG=$?
+  if [ "$LRJ_BFG" -eq 0 ] && [ "$B_LRC" = 1 ]; then
+    ok "CONTROL lr-local-regex-baseform: the same local matcher stays GREEN (rc 0) on the BARE closer in lr-below-marker.md -- the survivor; it dies by the sprint-closer arm, not by everything"
+  else
+    bad "CONTROL lr-local-regex-baseform: expected the survivor rc 0 behind a passing control, got rc=$LRJ_BFG (control flag $B_LRC)"
+  fi
+fi
 
 # THE DECLARATION ANCHOR WIDENED TO A WHOLE-BLOCK SCAN. Its subject is the prose mention,
 # which no other guard here can see.
