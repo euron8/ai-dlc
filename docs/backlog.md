@@ -1189,6 +1189,8 @@ H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-i
 
 Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
 
+Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
+
 verify: sh bash scripts/validate-fixture-invocations.sh --self-probe && bash scripts/validate-fixture-hygiene.sh --derive
 
 ## Reopened by BL-817's re-audit (batch 243)
