@@ -185,9 +185,16 @@ drive() {                      # drive <tree> <outfile>  -> rc
 # ------------------------------------------------------------- 1. green baseline --
 # Asserted FIRST and positively. Every arm below reads the same output shape, so an
 # assertion that the shape is produced at all has to come before any of them.
+# ONE drive serves four questions about an all-green tree: the baseline, the report order (alpha
+# sleeps so it finishes LAST and must still render first), the green-run CONTROL of arm 2b (bravo
+# is noisy and green: a record naming its token would mean every unit is captured), and the
+# mutant battery's unmutated control. Each question keeps its own assertion.
 T="$WORK/green"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0; mkfx "$T" bravo 0; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/green.out")"
+mkdir -p "$T/tests/fixtures/alpha"
+printf '#!/usr/bin/env bash\nsleep 0.9\nexit 0\n' > "$T/tests/fixtures/alpha/run.sh"
+mkfx_noisy "$T" bravo 0 GREENTOKEN; mkfx "$T" charlie 0
+g_rc="$(drive "$T" "$WORK/green.out")"; rc="$g_rc"
+g_ret="$(retained_names "$T" | wc -l | tr -d ' ')"
 if [ "$rc" = 0 ] && grep -q 'ok    alpha' "$WORK/green.out" \
                  && grep -q 'ok    bravo' "$WORK/green.out" \
                  && grep -q 'ok    charlie' "$WORK/green.out" \
@@ -203,33 +210,58 @@ grep -q 'fixture suite (.*-way)' "$WORK/green.out" \
   && ok "the suite step names its pool width" \
   || bad "the suite step does not name its pool width — the schedule that produced these verdicts is unstated"
 
-# ------------------------------------------------- 2. a real failure is attributed --
-T="$WORK/red"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0; mkfx "$T" bravo 1; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/red.out")"
-if [ "$rc" = 1 ] && grep -q 'FAIL  bravo' "$WORK/red.out" \
-                 && grep -q 'ok    alpha' "$WORK/red.out" \
-                 && grep -q 'ok    charlie' "$WORK/red.out"; then
+# ------------------------------------------- 6. the report is in LIST order --------
+# Work completes out of order under a pool; the report must not. A non-deterministic
+# report cannot be diffed across runs, which is how a suite's own output stops being
+# evidence about what changed. Read off the green drive above, where alpha finishes last.
+# The `   done k/N  verdict unit` progress line also ends with the unit name but prints in
+# COMPLETION order, so it is excluded on purpose: this arm reads the report rows only.
+seen_order="$(grep -v '^   done ' "$WORK/green.out" | grep -oE '(alpha|bravo|charlie)$' | tr '\n' ' ')"
+if [ "$g_rc" = 0 ] && [ "$seen_order" = "alpha bravo charlie " ]; then
+  ok "verdicts render in list order even though 'alpha' finished last"
+else
+  bad "the report is not in list order (rc=$g_rc, got '$seen_order') — the output is not diffable across runs"
+fi
+
+# CONTROL, and it is the arm that stops the evidence arms below from passing on a hook that writes
+# the record unconditionally. A green run must leave no record naming this token: without this,
+# `grep CSPTOKEN` would be satisfied by a capture of every unit whether it failed or not, and
+# the selector could be `true`.
+if [ "$g_rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null \
+   && ! grep -q 'captured output for the failing unit' "$WORK/green.out" \
+   && [ "$g_ret" = 0 ]; then
+  ok "CONTROL: an all-green run records no failure, names no record and retains no copy — the selector is the verdict, not every unit"
+else
+  bad "a green run wrote a failure record, announced one, or retained $g_ret copies (rc=$g_rc) — the capture fires on units that passed"
+fi
+
+# ------------------- 2. a real failure is attributed; 2b/2c its record is kept ------
+# ONE red drive over the arm-2c world (twenty seeded copies, three decoys, one noisy red) serves the
+# attribution arm, the evidence arms and the retention arms: all of them ask about the same red run.
+# 2b's DEFECT. The worker used to run `bash "$d/run.sh" >/dev/null 2>&1`, so a red unit left
+# exactly one line of evidence — `FAIL <name>` — and the temp dir holding everything else was
+# `rm -rf`d on the way out. Filed by the graph consumer as
+# PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR.
+# 2c's DEFECT. The record is OVERWRITTEN by the next red run, so two reds in a row left only the
+# second. Measured at batch 179: one intermittent red's got-vector was the only evidence of its
+# cause, and it sat in a file the next red would replace. Seeded with twenty earlier copies and two
+# hand-saved records, then ONE red drive: that is the N+1 case without twenty-one drives of the hook.
+# TRACED BY TOKEN, NOT BY EXISTENCE, and both streams are asserted separately: a capture that
+# took stdout and dropped stderr would satisfy a file-exists check and lose the half a shell
+# fixture writes its diagnostics to.
+T="$WORK/retain"; seed "$T" "$HOOK" || broken "seed failed"
+seed_retained "$T" || broken "seeding retained copies failed"
+[ "$(retained_names "$T" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
+mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 CSPTOKEN; mkfx "$T" charlie 0
+rc="$(drive "$T" "$WORK/retain.out")"
+if [ "$rc" = 1 ] && grep -q 'FAIL  bravo' "$WORK/retain.out" \
+                 && grep -q 'ok    alpha' "$WORK/retain.out" \
+                 && grep -q 'ok    charlie' "$WORK/retain.out"; then
   ok "a failing fixture is named, and its neighbours still report their own verdicts"
 else
   bad "a failing fixture was not attributed (rc=$rc) — xargs collapses failures into one exit code, so the verdict has to come from the per-fixture files"
 fi
 
-# ------------------------------- 2b. a red unit's OUTPUT survives the run ------------
-# THE DEFECT. The worker used to run `bash "$d/run.sh" >/dev/null 2>&1`, so a red unit left
-# exactly one line of evidence — `FAIL <name>` — and the temp dir holding everything else was
-# `rm -rf`d on the way out. The honest local remedy became "push again", which is
-# indistinguishable from bypassing a real failure, and this repository has spent several
-# releases proposing and refuting causes for one intermittent because every investigation had
-# to re-run the fixture out of band. Filed by the graph consumer as
-# PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR.
-#
-# TRACED BY TOKEN, NOT BY EXISTENCE, and both streams are asserted separately: a capture that
-# took stdout and dropped stderr would satisfy a file-exists check and lose the half a shell
-# fixture writes its diagnostics to.
-T="$WORK/evidence"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 CSPTOKEN; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/evidence.out")"
 REC="$T/.git/ai-dlc-fixture-failures"
 if [ "$rc" = 1 ] && [ -s "$REC" ] \
    && grep -q 'CSPTOKEN-stdout' "$REC" && grep -q 'CSPTOKEN-stderr' "$REC"; then
@@ -241,40 +273,13 @@ fi
 # The record is useless if nobody is told it exists. The BLOCKED line sits OUTSIDE the
 # FIXTURE_POOL sentinels and is bound by no invariant, so the path is named from inside the
 # pool where I66 holds the two hooks to one program.
-grep -q 'captured output for the failing unit(s): .git/ai-dlc-fixture-failures' "$WORK/evidence.out" \
+grep -q 'captured output for the failing unit(s): .git/ai-dlc-fixture-failures' "$WORK/retain.out" \
   && ok "the run names the record's path, so the operator does not have to know it exists" \
   || bad "the failing run never named the record path — an artifact nobody is pointed at is one nobody reads"
 
-# CONTROL, and it is the arm that stops the one above from passing on a hook that writes the
-# record unconditionally. A green run must leave no record naming this token: without this,
-# `grep CSPTOKEN` would be satisfied by a capture of every unit whether it failed or not, and
-# the selector could be `true`.
-T="$WORK/evidence-green"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 0 GREENTOKEN; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/evidence-green.out")"
-g_ret="$(retained_names "$T" | wc -l | tr -d ' ')"
-if [ "$rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null \
-   && ! grep -q 'captured output for the failing unit' "$WORK/evidence-green.out" \
-   && [ "$g_ret" = 0 ]; then
-  ok "CONTROL: an all-green run records no failure, names no record and retains no copy — the selector is the verdict, not every unit"
-else
-  bad "a green run wrote a failure record, announced one, or retained $g_ret copies (rc=$rc) — the capture fires on units that passed"
-fi
-
-# ------------------------- 2c. every red run keeps its OWN record, pruned to twenty ----
-# THE DEFECT. The record above is OVERWRITTEN by the next red run, so two reds in a row left
-# only the second. Measured at batch 179: one intermittent red's got-vector was the only
-# evidence of its cause, and it sat in a file the next red would replace. Seeded with twenty
-# earlier copies and two hand-saved records, then ONE red drive: that is the N+1 case without
-# twenty-one drives of the hook.
-T="$WORK/retain"; seed "$T" "$HOOK" || broken "seed failed"
-seed_retained "$T" || broken "seeding retained copies failed"
-[ "$(retained_names "$T" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
-mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 RETAINTOKEN
-rc="$(drive "$T" "$WORK/retain.out")"
 R_NEW="$(new_retained "$T")"
 R_NEWN="$(printf '%s' "$R_NEW" | grep -c . )" || R_NEWN=0
-if [ "$rc" = 1 ] && [ "$R_NEWN" = 1 ] && grep -q 'RETAINTOKEN-stdout' "$T/.git/$R_NEW" \
+if [ "$rc" = 1 ] && [ "$R_NEWN" = 1 ] && grep -q 'CSPTOKEN-stdout' "$T/.git/$R_NEW" \
    && cmp -s "$T/.git/$R_NEW" "$T/.git/ai-dlc-fixture-failures"; then
   ok "a red run retains exactly one copy of its own record under a stamped name, byte-identical to the primary"
 else
@@ -371,24 +376,6 @@ else
 fi
 unset CSP_OBSERVE
 
-# ------------------------------------------- 6. the report is in LIST order --------
-# Work completes out of order under a pool; the report must not. A non-deterministic
-# report cannot be diffed across runs, which is how a suite's own output stops being
-# evidence about what changed.
-T="$WORK/order"; seed "$T" "$HOOK" || broken "seed failed"
-mkdir -p "$T/tests/fixtures/aaa" "$T/tests/fixtures/mmm" "$T/tests/fixtures/zzz"
-printf '#!/usr/bin/env bash\nsleep 0.9\nexit 0\n' > "$T/tests/fixtures/aaa/run.sh"
-printf '#!/usr/bin/env bash\nexit 0\n'            > "$T/tests/fixtures/mmm/run.sh"
-printf '#!/usr/bin/env bash\nexit 0\n'            > "$T/tests/fixtures/zzz/run.sh"
-rc="$(drive "$T" "$WORK/order.out")"
-# The `   done k/N  verdict unit` progress line also ends with the unit name but prints in
-# COMPLETION order, so it is excluded on purpose: this arm reads the report rows only.
-seen_order="$(grep -v '^   done ' "$WORK/order.out" | grep -oE '(aaa|mmm|zzz)$' | tr '\n' ' ')"
-if [ "$rc" = 0 ] && [ "$seen_order" = "aaa mmm zzz " ]; then
-  ok "verdicts render in list order even though 'aaa' finished last"
-else
-  bad "the report is not in list order (rc=$rc, got '$seen_order') — the output is not diffable across runs"
-fi
 
 # =================================================================== MUTANTS =======
 # Each is a COPY of the hook with one arm removed, guarded by `cmp -s` so a sed that
@@ -416,11 +403,11 @@ mut() {                        # mut <label> <sed-expr>  -> sets MUT, or returns
 # UNMUTATED CONTROL, and it runs FIRST. The hook is driven ten times above; if the
 # harness itself were what fails, every mutant below would go green and score a kill
 # it had not earned.
-T="$WORK/mctl"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0
-rc="$(drive "$T" "$WORK/mctl.out")"
-[ "$rc" = 0 ] && ok "mutant-battery control: the unmutated hook is green on a one-fixture tree" \
-              || bad "mutant-battery control is RED (rc=$rc) — no mutant verdict below is believable"
+# The control is read off the green drive in arm 1 (no second drive): an unmutated hook, green on
+# a tree whose report rows are there.
+[ "$g_rc" = 0 ] && grep -q 'ok    alpha' "$WORK/green.out" \
+              && ok "mutant-battery control: the unmutated hook is green on a drivable tree" \
+              || bad "mutant-battery control is RED (rc=$g_rc) — no mutant verdict below is believable"
 
 # M1 — the empty-suite guard removed. The two empty forms must go green.
 # The range takes the WHOLE `if`, not just its body: deleting a conditional's body
