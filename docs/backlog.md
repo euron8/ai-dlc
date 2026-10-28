@@ -1226,7 +1226,7 @@ Outcome, hygiene arm. Not shipped. A candidate grammar found 35 hits at the fixe
 
 Outcome, blind route B1. `core/fixtures/layer-adjudication-tier/run.sh:256` seeds a git textconv driver `sh -c`, which git forks during the `:262` run. It is `sh` and reads no `BASH_ENV`, so the counter cannot see it. That is the judge header's B1, and it is not a load dependence.
 
-verify: sh git grep -qF 'exit}'"'"' <<< "$sp_o"' -- core/fixtures/ledger-reverify-unfalsifiable/run.sh
+verify: sh bash scripts/check-sp-o-here-string-reader.sh
 
 ## Reopened by BL-817's re-audit (batch 243)
 
@@ -1876,7 +1876,7 @@ verify: manual
 
 ## BL-868 — no fixture verdict or invocation count may depend on load: the `±` rows, the polls and the watchdogs go
 
-**DEFECT (efficiency).** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
+**DEFECT.** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
 
 **Known instances, each with its owner session and state.**
 
@@ -1889,4 +1889,4 @@ verify: manual
 
 Close condition: every item above is closed, and the receipt below returns 0 matches. Its non-zero control is the same `git grep -c '±'` run at the PARENT of the commit that removes the last `±` row, which must be non-zero; it holds once the tip moves, where a control at today's tip would not. The receipt is a bare `! git grep -qF`, so it also reads closed if no `invocations.decl` is tracked at all; 255 are tracked today.
 
-verify: sh ! git grep -qF '±' -- 'core/fixtures/*/invocations.decl'
+verify: sh bash scripts/check-no-provisional-invocations.sh
