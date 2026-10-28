@@ -700,10 +700,10 @@ wrap_term() {
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map"; f=1; }
-  awk -F'\t' -v rd="$rd" 'NR == 1 && NF == 4 && $1 == rd && $2 == "started" { s = $3; n++ }
-      NR == 2 && NF == 5 && $1 == rd && $2 == "killed" && $3 == s { n++ } END { exit !(n == 2 && NR == 2) }' "$L" 2>/dev/null \
-    || { echo "    [$t] the ledger does not record the run as started then killed"; f=1; }
-  [ "$(cat "$rd/rc" 2>/dev/null)" = killed ] || { echo "    [$t] RUN_DIR/rc is not 'killed'"; f=1; }
+  awk -F'\t' -v rd="$rd" -v kt="$KILLTOK" 'NR == 1 && NF == 4 && $1 == rd && $2 == "started" { s = $3; n++ }
+      NR == 2 && NF == 5 && $1 == rd && $2 == kt && $3 == s { n++ } END { exit !(n == 2 && NR == 2) }' "$L" 2>/dev/null \
+    || { echo "    [$t] the ledger does not record the run as started then $KILLTOK"; f=1; }
+  [ "$(cat "$rd/rc" 2>/dev/null)" = "$KILLTOK" ] || { echo "    [$t] RUN_DIR/rc is not '$KILLTOK'"; f=1; }
   alive=""; n=0
   while IFS= read -r p; do n=$((n + 1)); kill -0 "$p" 2>/dev/null && alive="$alive $p"; done < "$R/pids"
   [ "$n" = 3 ] || { echo "    [$t] the stub recorded $n pids, not 3"; f=1; }
@@ -712,7 +712,7 @@ wrap_term() {
 }
 
 echo " the wrapper, against a stub deriver:"
-if wrap_ok "$WRAPPER" ok; then ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
+if wrap_ok "$WRAPPER" ok; then B_wr_ok=1; ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
 
 R="$WORK/wr/fail"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo fail"
 AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
@@ -724,7 +724,7 @@ else
   bad "exit 1 run: rc=$rc"
 fi
 
-if wrap_term "$WRAPPER" term; then ok "TERM: exit 143, map restored, ledger says killed, and every pid in the stub's tree is gone"; else bad "the TERM run"; fi
+if wrap_term "$WRAPPER" term; then B_wr_term=1; ok "TERM: exit 143, map restored, ledger says $KILLTOK, and every pid in the stub's tree is gone"; else bad "the TERM run"; fi
 
 R="$WORK/wr/default"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo default"
 STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
@@ -785,7 +785,7 @@ wrap_kill9() {
   [ "$rc2" = 0 ] || { echo "    [$t] (c) with the orphan gone and the map clean the next run did not proceed: rc=$rc2 $out"; f=1; }
   return "$f"
 }
-if wrap_kill9 "$WRAPPER" kill9; then ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
+if wrap_kill9 "$WRAPPER" kill9; then B_wr_kill9=1; ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
 
 # The refusals: exit 2, the reason, and NOTHING recorded or created.
 refusal() { # refusal <tag> <reason> <rundir> <wrapper> -- run with the ledger override
@@ -811,43 +811,52 @@ R="$WORK/wr/inside"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo inside"
 refusal run-dir-inside-checkout "is inside the checkout" "$R/repo/run" "$R/repo/scripts/readset-stage1-run.sh"
 
 # ------------------------------------------------------------------ wrapper mutants ----
-# wmut <name> <old> <new> <ok|term>: KILLED iff the named run's properties fail under the mutant.
+# wcell <script> <cell> <name>: 0 when the cell's run holds its properties under the script, else 1; the
+# why-lines land in $WORK/wr/m-<name>-<cell>.why. The cells are the three stub-deriver runs.
+wcell() { "wrap_$2" "$1" "m-$3-$2" > "$WORK/wr/m-$3-$2.why" 2>&1; }
+# wmut <flag> <name> <decides csv> <twin cell | -> <old> <new> [<expected killed csv>]: KILLED iff a deciding
+# cell's properties fail under the mutant; the twin cell is GREEN under it. Matrix mode runs the remaining
+# cells and prints every one; <expected> overrides the deciding set for a row dead in every cell.
 wmut() {
-  local name="$1" dst="$MD/w-$1.sh"
-  export MUT_OLD="$2" MUT_NEW="$3"
+  local flag="$1" name="$2" decides="$3" twin="$4" dst="$MD/w-$2.sh" c ks="" cells=""
+  export MUT_OLD="$5" MUT_NEW="$6"
   mut "$WRAPPER" "$dst" || { bad "wrapper mutant $name DID NOT APPLY"; return; }
-  if "wrap_$4" "$dst" "m-$name" > "$WORK/wr/m-$name.why" 2>&1; then
-    bad "wrapper mutant $name SURVIVED"
-  else
-    ok "wrapper mutant $name KILLED (applied; $(head -1 "$WORK/wr/m-$name.why" | sed 's/^ *//'))"
+  for c in ${decides//,/ }; do
+    if wcell "$dst" "$c" "$name"; then bad "wrapper mutant $name SURVIVED on $c"
+    else mutant_killed "$flag" "$name" "wrapper mutant $name KILLED on $c (applied; twin $twin; $(head -1 "$WORK/wr/m-$name-$c.why" | sed 's/^ *//'))"; fi
+  done
+  if [ "$twin" != - ]; then wcell "$dst" "$twin" "$name" && ok "wrapper mutant $name leaves its twin $twin green" || bad "wrapper mutant $name is not confined: its twin $twin fails under it"; fi
+  if [ "$MATRIX" = 1 ]; then
+    for c in ok term kill9; do
+      MCELLS=$((MCELLS + 1))
+      if wcell "$dst" "$c" "$name"; then cells="$cells $c:0"; else cells="$cells $c:1"; ks="$ks,$c"; fi
+    done
+    echo "MATRIX $name$cells"
+    mx_judge "$name" "${7:-$decides}" "${ks#,}"
   fi
 }
 echo " wrapper mutants:"
-wmut load-under-root \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }" \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/root/load.tsv\"; }" ok
-wmut load-5min \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }" \
-  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }" ok
-wmut profile-passed-through 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment' ok
-wmut no-started-line "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \' kill9
+S1="sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
+wmut "${B_wr_ok:-0}" load-under-root ok term "$S1" \
+  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/root/load.tsv\"; }"
+wmut "${B_wr_ok:-0}" load-5min ok term "$S1" \
+  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
+wmut "${B_wr_ok:-0}" profile-passed-through ok term 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment'
+wmut "${B_wr_kill9:-0}" no-started-line kill9 - "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \'
 reap
-# No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses.
-wmut no-orphan-check \
-  'if [ -n "$OPEN_PG" ] && kill -0 -- "-$OPEN_PG" 2>/dev/null; then refuse "the deriver of $OPEN_RD (process group $OPEN_PG) is still alive after its wrapper was killed; wait for it or kill -- -$OPEN_PG"; fi' \
-  ': orphan check removed' kill9
-grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check.why" 2>/dev/null \
-  && ok "the no-orphan-check mutant died on arm (a), the live-orphan refusal" \
-  || bad "the no-orphan-check mutant did not die on arm (a)"
+# No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses. The mutated line is
+# read from the wrapper itself, whole, so the fixture restates none of the wrapper's refusal vocabulary.
+OPEN_LINE="$(awk 'index($0, "if [ -n \"$OPEN_PG\" ] && kill -0 --") == 1 { print; exit }' "$WRAPPER")"
+[ -n "$OPEN_LINE" ] || broken "no orphan-check line in $WRAPPER"
+wmut "${B_wr_kill9:-0}" no-orphan-check kill9 ok "$OPEN_LINE" ': orphan check removed'
+if grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check-kill9.why" 2>/dev/null; then mutant_killed "${B_wr_kill9:-0}" no-orphan-check "the no-orphan-check mutant died on arm (a), the live-orphan refusal"; else bad "the no-orphan-check mutant did not die on arm (a)"; fi
 reap
-wmut no-restore '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' ok
-wmut no-restore-on-term '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' term
-wmut single-pid-kill \
+RESTORE='  cp -p "$SNAP" "$MAP" 2>/dev/null'
+wmut "$(( ${B_wr_ok:-0} && ${B_wr_term:-0} ))" no-restore ok,term kill9 "$RESTORE" '  :'
+wmut "${B_wr_term:-0}" single-pid-kill term ok \
   '  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi' \
-  '  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi' term
-grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill.why" 2>/dev/null \
-  && ok "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill.why" | sed 's/.*TERM://'))" \
-  || bad "the single-pid-kill mutant did not die on the process-tree arm"
+  '  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi'
+if grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill-term.why" 2>/dev/null; then mutant_killed "${B_wr_term:-0}" single-pid-kill "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill-term.why" | sed 's/.*TERM://'))"; else bad "the single-pid-kill mutant did not die on the process-tree arm"; fi
 reap
 
 # ------------------------------------------------------------------ the deriver's tracer reaping (BL-466) ----
