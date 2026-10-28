@@ -1226,7 +1226,7 @@ Outcome, hygiene arm. Not shipped. A candidate grammar found 35 hits at the fixe
 
 Outcome, blind route B1. `core/fixtures/layer-adjudication-tier/run.sh:256` seeds a git textconv driver `sh -c`, which git forks during the `:262` run. It is `sh` and reads no `BASH_ENV`, so the counter cannot see it. That is the judge header's B1, and it is not a load dependence.
 
-verify: sh git grep -qF 'exit}'"'"' <<< "$sp_o"' -- core/fixtures/ledger-reverify-unfalsifiable/run.sh
+verify: sh bash scripts/check-sp-o-here-string-reader.sh
 
 ## Reopened by BL-817's re-audit (batch 243)
 
