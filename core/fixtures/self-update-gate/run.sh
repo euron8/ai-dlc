@@ -946,7 +946,7 @@ ss_assert "ss-partial-anchor-ctl" \
 ss_stamp "$SS_R1"; ss_marker on
 if ss_assert_b "ss-partial-control" "$(ss_ack "$SSM/ctl/self-update-gate.sh" "$SS_R2")" \
   "row=1 acq=0 wh=1 pf=0" \
-  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; fi
+  "an UNMUTATED copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in ONE directory, the layout every mutant copy in this fixture uses) reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; fi
 
 sed "s@${SS_ANCHOR}@      if false; then@" "$GATE" > "$SSM/mut/self-update-gate.sh"
 if cmp -s "$GATE" "$SSM/mut/self-update-gate.sh"; then
@@ -1039,15 +1039,15 @@ ss_assert "ss-classifier-only-pre" \
   "the classifier-only r1's own verdict is the core/scripts/ OK row, so that row's text cannot be the keep test"
 
 nm_out="$(bash "$GATE" --safe-stop "$NM_N/dist" "$(cat "$NM_N/B")" "$(cat "$NM_N/R2")" "$NM_N/cons" 2>/dev/null)"; nm_rc=$?
-ss_assert "ss-nomach" "${nm_out}|${nm_rc}" "|1" \
-  "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"
+if ss_assert_b "ss-nomach" "${nm_out}|${nm_rc}" "|1" \
+  "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"; then B_nm1=1; fi
 ss_assert "ss-nomach-row" \
   "$(nm_cls "$GATE" "$NM_N" R2 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}')" "-" \
   "and the advisory says no safe stop exists, instead of sending the operator to a ref that lands nothing"
-ss_assert "ss-classifier-only" "$(nm_ss "$GATE" "$NM_C")" "r1" \
-  "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"
-ss_assert "ss-hook-only" "$(nm_ss "$GATE" "$NM_H")" "r1" \
-  "an r1 changing only core/git-hooks/pre-push IS the safe stop, though the changed-scripts set is empty"
+if ss_assert_b "ss-classifier-only" "$(nm_ss "$GATE" "$NM_C")" "r1" \
+  "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"; then B_nm2=1; fi
+if ss_assert_b "ss-hook-only" "$(nm_ss "$GATE" "$NM_H")" "r1" \
+  "an r1 changing only core/git-hooks/pre-push IS the safe stop, though the changed-scripts set is empty"; then B_nm3=1; fi
 
 # --- MUTANTS OF THE KEEP TEST -----------------------------------------------------------------
 # Built by av_mut: a copy of the WHOLE reconcile directory (machinery_paths reads setup-sites.md
@@ -1065,9 +1065,9 @@ NM_GREP='grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || conti
 
 # THE UNMUTATED CONTROL, PRESENCE-SHAPED: two of its three cells must NAME r1, which a copy that
 # cannot run never prints.
-NM_CTL="$(av_mut nm-ctl)"
-if ss_assert_b "ss-nm-control" "$(nm_tuple "$NM_CTL")" "nomach=none cls=r1 hook=r1" \
-  "an UNMUTATED copy beside its siblings reproduces all three worlds, so a mutant's shift is the mutation"; then B_nm=1; fi
+# That control is the three base arms above (ss-nomach, ss-classifier-only, ss-hook-only): the same three worlds, the same
+# argv, through $GATE. All three passing is the base-pass flag; the sibling-resolution layout is proved by ss-partial-control.
+if [ "${B_nm1:-0}" = 1 ] && [ "${B_nm2:-0}" = 1 ] && [ "${B_nm3:-0}" = 1 ]; then B_nm=1; fi
 nm_cell() { # <gate> <nomach|cls|hook>
   case "$2" in nomach) DRV_OUT="$(nm_ss "$1" "$NM_N")" ;; cls) DRV_OUT="$(nm_ss "$1" "$NM_C")" ;; hook) DRV_OUT="$(nm_ss "$1" "$NM_H")" ;; esac
 }
@@ -1205,8 +1205,8 @@ ss_assert "sc-nocarry" "$(sc_ack "$GATE")" "row=1 acq=1 pf=0 carry=0" \
 # A -- OFFENDER. One machinery path carried, same stamp, same range. The acquittal is withheld and
 # the original pull-first advice stands in its place.
 sc_cons carry
-ss_assert "sc-carried" "$(sc_ack "$GATE")" "row=1 acq=0 pf=1 carry=1" \
-  "a carried machinery path withholds the acquittal: the stamp is ahead of a path that did not land"
+if ss_assert_b "sc-carried" "$(sc_ack "$GATE")" "row=1 acq=0 pf=1 carry=1" \
+  "a carried machinery path withholds the acquittal: the stamp is ahead of a path that did not land"; then B_scm=1; fi
 
 # C -- THE SAME GUARD ON THE SEED WHERE THE ROW'S RATIONALE IS MOST FALSE. `preclassify.sh` IS the
 # classifier engine the acquittal claims has landed. Kept as its own world rather than folded into
@@ -1323,15 +1323,13 @@ ss_assert "sc-und-clean-control" "$(sc_und "$GATE")" "row=1 acq=1 pf=0 und=0" \
 # `dirname "$0"`; a lone copy resolves an EMPTY machinery set, emits no CARRY row for want of a
 # subject, and every mutant scores a kill it did not earn.
 SCM="$(dirname "$DIST")/scmut"
-rm -rf "$SCM"; mkdir -p "$SCM/ctl"
-cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SCM/ctl"/ 2>/dev/null
+rm -rf "$SCM"; mkdir -p "$SCM"
 
 # THE UNMUTATED CONTROL, PRESENCE-SHAPED, AND IT RUNS BEFORE ANY MUTANT. It asserts the carried
 # world's full tuple off a plain copy: a copy that died sourcing its siblings prints nothing, and
 # "nothing" is what two of the three mutants below are expected to stop producing.
-sc_cons carry
-if ss_assert_b "sc-mut-control" "$(sc_ack "$SCM/ctl/self-update-gate.sh")" "row=1 acq=0 pf=1 carry=1" \
-  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"; then B_scm=1; fi
+# (The unmutated copy that stood here drove the SAME world, sc_cons carry, with the SAME argv as sc-carried above, so
+# sc-carried is its base capture: B_scm is set there, and the sibling-resolution layout is proved once, by ss-partial-control.)
 
 # ONE STRING SERVES THE GREP AND THE SED for each anchor, so the uniqueness proved below is a
 # property of the expression that actually mutates.
@@ -3513,8 +3511,8 @@ pp_enc_row="$(pp_scan "$GATE" "$PP_ENC/sub")"; pp_enc_hit="$([ -e "$PP/sent/sent
 ss_assert "pp-enclosed-undecided" "$pp_enc_row|$pp_enc_hit" "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1|absent" \
   "a consumer that is a subdirectory of an enclosing repository is UNDECIDED on pre-push, which SKILL.md step 2 stops on, and the enclosing repository's hook is never run"
 rm -f "$PP/sent/sentinel"
-ss_assert "pp-enclosed-names-layout" "$(pp_layout "$GATE" "$PP_ENC/sub")" "1" \
-  "...and the row names the unsupported layout, so the operator reads the remedy and not just a status"
+if ss_assert_b "pp-enclosed-names-layout" "$(pp_layout "$GATE" "$PP_ENC/sub")" "1" \
+  "...and the row names the unsupported layout, so the operator reads the remedy and not just a status"; then B_ppe=1; fi
 rm -f "$PP/sent/sentinel"
 # MUTANT: the UNDECIDED block's guard made false restores round 2's silence. Built beside the gate's
 # siblings (machinery_paths reads setup-sites.md beside $0) with an unmutated control that must
@@ -3527,11 +3525,10 @@ ss_assert "pp-enclosed-anchor-ctl" \
   "$(grep -c '^if \[ -n "\$pp_enclosed_NOT_A_VAR" \]; then$' "$GATE")" "0" \
   "an impossible anchor of the same shape returns 0, so the 1 above is a match and not a grammar artefact"
 PPE_MUT="$(dirname "$DIST")/ppemut"
-rm -rf "$PPE_MUT"; mkdir -p "$PPE_MUT/mut" "$PPE_MUT/ctl"
+rm -rf "$PPE_MUT"; mkdir -p "$PPE_MUT/mut"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/mut"/ 2>/dev/null
-cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/ctl"/ 2>/dev/null
-if ss_assert_b "pp-enclosed-mut-control" "$(pp_layout "$PPE_MUT/ctl/self-update-gate.sh" "$PP_ENC/sub")" "1" \
-  "an UNMUTATED copy beside its siblings reproduces the layout row, so a mutant's silence is the mutation"; then B_ppe=1; fi
+# (The unmutated copy that stood here ran pp_layout on the SAME world with the SAME argv as pp-enclosed-names-layout above,
+# which is its base capture and sets B_ppe; the sibling-resolution layout is proved once, by ss-partial-control.)
 ppe_cell() { # <gate> <enclosed|green>
   rm -f "$PP/sent/sentinel"
   case "$2" in
