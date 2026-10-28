@@ -51,7 +51,6 @@ review-shard-merge
 scope-confirmation
 self-update-fixture-log
 self-update-gate
-settings-merge-unparseable-template
 shell-portability
 snapshot-section-schema
 spec-join-integrity
