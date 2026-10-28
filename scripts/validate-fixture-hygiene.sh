@@ -24,7 +24,8 @@
 #     bracket, or not) whose operand ends in `/.git` (or is `.git`), and whose ABSENT branch reaches `exit 0` (or a
 #     bare `exit`): in an `if`/`elif` condition, the then-body for a negated test and the else-body otherwise, through
 #     the matching `fi`; in a statement, the `||` branch (`&&` when negated), a `{ }` or `( )` group through its close.
-#     In a linked worktree `.git` is a FILE, so such a fixture skips green in normal use.
+#     In a linked worktree `.git` is a FILE, so such a fixture skips green in normal use. A trailing comment after the
+#     exit (`|| exit 0 # why`) is stripped from the branch before the exit test, in H1 and H2 alike.
 #     FP SET. Raw grammar, non-comment `-d …/.git` lines: 46 over the 450 tracked core/fixtures/**/*.sh (the
 #     contract's 47 included readset-skip:3240, `-d "$dst/.git/modules/lib/sub"`, which does not end in `.git` and is
 #     outside the population by construction). Narrowed by KEYING ON THE BRANCH, not the test: 45 of the 46 fail
@@ -46,16 +47,23 @@
 #     consumer-machinery-home, extension-check-adoption, derivation-capture and file-mtime carry no such site
 #     (derivation-capture:34 exits 2).
 # H3  a script started under `sh`: `sh`, `/bin/sh` or `/usr/bin/sh` in command position (line start, after `;`,
-#     `&`, `|`, `(`, a backtick, `{`, `!`, or `then`/`do`/`else`/`exec`/`time`/`nohup`/`xargs`), outside quotes,
-#     followed by an argument -- `-c`, a flag or an operand, never `==`, `!=`, `=`, `)` or a redirection. `/bin/sh`
-#     reads no BASH_ENV, so the invocation counter cannot see the start.
+#     `&`, `|`, `(`, a backtick, `{`, `!`, `then`/`do`/`else`/`exec`/`time`/`nohup`/`xargs`/`command`, or `env`
+#     with optional `-i` and `VAR=val` words), outside quotes, followed by an argument -- `-c`, a flag or an operand,
+#     never `==`, `!=`, `=`, `)` or a redirection. AND a STDIN start: after a `|`, `sh` followed by the end of the
+#     line or by `;`, `)`, `&`, `|`, `<` or `>` (`… | sh;`, `| sh`) -- never by `=`. `/bin/sh` reads no BASH_ENV, so
+#     the invocation counter cannot see the start.
 #     FP SET. Raw: 15 lines carrying `sh <word>` in a command-ish position. Narrowed by masking (the awk
 #     `sh == ""` / `sh != ""` programs in backlog-rotate-fence-guard, check-24, ledger-reverify, ledger-rotate,
 #     shadowed-local-validators; the `(sh false)` messages in backlog-ledger; ledger-reverify:5997's printf) and by
-#     the next-word rule. Final hits: 5, all OFFENDERS: readset-skip:1331 (`exec sh -c`), readset-skip:1827 and
-#     :2177 and readset-stage1-verdict:900 (`sh -c 'exit 0' &`), self-update-gate:3401 (`sh scripts/…`).
-#     STATED LIMITS: a variable-spelled interpreter (prepush-ssh-keepalive:46) and a written `#!/bin/sh` stub
-#     executed directly are not seen.
+#     the next-word rule. The stdin form, raw (non-comment lines with `|` then `sh` then end of line or one of
+#     `;)&|<>`): 8 lines; masking removes 7, all inside quoted regexes or strings -- ledger-reverify:4268, :4364 and
+#     :4528 (`'verify: (theirs_has|sh)'`) and procsub-staged-refusal-boot:291, :673, :1644 and :1670 (`(md|sh|json)`).
+#     The `env … sh` and `command sh` forms: 0 raw lines. Final hits: 6, all OFFENDERS: readset-skip:1331
+#     (`exec sh -c`), readset-skip:1827 and :2177 and readset-stage1-verdict:900 (`sh -c 'exit 0' &`),
+#     self-update-gate:3401 (`sh scripts/…`), self-update-gate:5025 (`git show … | sh;`).
+#     STATED LIMITS: a variable-spelled interpreter (prepush-ssh-keepalive:46), a written `#!/bin/sh` stub executed
+#     directly, and an `sh` start INSIDE a `bash -c "…"` (or `'…'`) string -- masked as data like every string, so
+#     `bash -c "sh -c true"` is not seen -- are not seen.
 # H4  DROPPED, with its numbers. The contract's form -- a bare `sed … IN > OUT` statement whose OUT is later compared
 #     with IN by `cmp -s` in the same file -- matched 857 raw sed-into-file lines, 400 bare statements, and 200 of
 #     them joined to a `cmp -s` on the same IN/OUT pair, across 78 fixtures (the contract adversary's naive form had
@@ -233,6 +241,14 @@ function grab(rest, j, open,   cl, d, k, c, body) {
     body = body c
   }
 }
+# stripc: drop a trailing MASKED comment from every line of a branch body. The masker turns `# ...` into X through
+# the end of its line, so `exit 0 # why` reads `exit 0 XXXXX`, which EXITRE cannot match. A run of X after a blank
+# (or filling the line) to its end is a comment: a masked string keeps its quote characters, so it never ends in X.
+function stripc(b,   a, n, k, r) {
+  n = split(b, a, "\n"); r = ""
+  for (k = 1; k <= n; k++) { sub(/(^|[[:space:]])X+$/, "", a[k]); r = r (k > 1 ? "\n" : "") a[k] }
+  return r
+}
 function branch_stmt(i, q, neg,   s, j, op, k, pre, rest, c, body) {
   s = substr(M[i], q); j = i; GI = i
   while (s ~ /(\\|\|\||&&)[[:space:]]*$/ && j < NL) { j++; s = s "\n" M[j] }
@@ -243,7 +259,7 @@ function branch_stmt(i, q, neg,   s, j, op, k, pre, rest, c, body) {
   c = substr(rest, 1, 1)
   if (c == "{" || c == "(") body = grab(rest, j, c)
   else { body = rest; sub(/(;|&&|\|\||\||\n).*/, "", body) }
-  return body ~ EXITRE
+  return stripc(body) ~ EXITRE
 }
 function branch_if(i, p, neg,   s, j, pos, depth, phase, bstart, kw, ks, ke, r, tb, eb) {
   s = substr(M[i], p); j = i; pos = 1; depth = 0; phase = "cond"; tb = ""; eb = ""
@@ -266,7 +282,7 @@ function branch_if(i, p, neg,   s, j, pos, depth, phase, bstart, kw, ks, ke, r, 
     }
     pos = ke
   }
-  return (neg ? tb : eb) ~ EXITRE
+  return stripc(neg ? tb : eb) ~ EXITRE
 }
 function fails_to_exit0(i, st, qe, neg, pre0) {
   return ifctx(pre0) ? branch_if(i, st, neg) : branch_stmt(i, qe, neg)
@@ -278,7 +294,7 @@ function loadtools(fx,   f, l) {
   close(f)
 }
 function literal(w) { if (w ~ /[$`]/) return ""; gsub(/["\047]/, "", w); return (w ~ /^[A-Za-z0-9_.-]+$/ && w !~ /^-/) ? w : "" }
-function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2) {
+function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   for (i = 1; i <= NL; i++) {
     s = M[i]
     # H1
@@ -313,13 +329,17 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
     }
     # H3
     off = 0
-    while (match(substr(s, off + 1), /(^|[^A-Za-z0-9_.\/-])(\/usr\/bin\/|\/bin\/)?sh[[:space:]]+/)) {
+    while (match(substr(s, off + 1), /(^|[^A-Za-z0-9_.\/-])(\/usr\/bin\/|\/bin\/)?sh([[:space:]]+|$|[;)&|<>])/)) {
       st = off + RSTART; ts = substr(s, st, 1); if (ts != "/" && ts != "s") st++
-      q = off + RSTART + RLENGTH; off = q - 1
+      q = off + RSTART + RLENGTH
+      # A match closed by `;`, `)`, `&`, `|`, `<` or `>` (not by blanks or the end of the line) gives that byte back.
+      if (substr(s, q - 1, 1) ~ /[;)&|<>]/) q--
+      off = q - 1
       pre = substr(s, 1, st - 1); sub(/[[:space:]]+$/, "", pre)
-      if (!(pre == "" || pre ~ /[;&|(`{!]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|do|else|exec|time|nohup|xargs)$/)) continue
+      pe = pre; while (sub(/[[:space:]]+(-i|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)$/, "", pe)) ;
+      if (!(pre == "" || pre ~ /[;&|(`{!]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|do|else|exec|time|nohup|xargs|command)$/ || pe ~ /(^|[[:space:];&|(`{!])env$/)) continue
       nw = substr(s, q)
-      if (nw == "" || nw ~ /^(==|!=|=|\)|;|&|\||>|<)/) continue
+      if (nw == "" || nw ~ /^(==|!=|=|\)|;|&|\||>|<)/) { if (!(pre ~ /\|$/ && nw !~ /^(==|!=|=)/)) continue }
       print "H3\t" REL ":" i "\t" trim(O[i])
     }
     if (FX == "" || FX == "lib") continue
@@ -485,7 +505,8 @@ run_all() {
   fi
   [ -f "$r/$MKA_REL" ] && cp "$r/$MKA_REL" "$o.mka" || : > "$o.mka"
   [ -f "$r/$ALLOW_REL" ] && cp "$r/$ALLOW_REL" "$o.allow" || : > "$o.allow"
-  awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" | LC_ALL=C sort -u > "$o.verdict"
+  awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" | LC_ALL=C sort -u > "$o.verdict" \
+    || { echo "BROKEN: the judge awk failed, so its verdict is empty rather than clean"; return 2; }
   return 0
 }
 
@@ -523,6 +544,10 @@ if [ ! -f "$GATE" ] || [ ! -d "$D_ROOT/.git" ]; then
   exit 0
 fi
 [ -d "$D_ROOT/.git" ] || { echo skip; exit 0; }
+[ -d "$R/.git" ] || exit 0 # no history
+if [ ! -d "$R/.git" ]; then
+  exit 0   # no repo, so nothing to check
+fi
 EOF
 seed core/fixtures/s1n/run.sh <<'EOF'
 #!/usr/bin/env bash
@@ -539,6 +564,8 @@ exit 0
 if [ -d "$R/.git" ]; then
   exit 0
 fi
+[ -d "$R/.git" ] || exit 2 # no repo; exit 0 would lie
+[ -d "$R/.git" ] || echo "exit 0 X" # a string, not an exit
 EOF
 seed core/fixtures/s2/tools.decl <<'EOF'
 # tools
@@ -552,6 +579,7 @@ if ! command -v node >/dev/null 2>&1; then
   echo "skip"
   exit 0
 fi
+command -v jq >/dev/null 2>&1 || exit 0 # no jq
 EOF
 seed core/fixtures/s2n/tools.decl <<'EOF'
 jq
@@ -566,6 +594,7 @@ if ! command -v jq >/dev/null 2>&1; then
 elif true; then
   exit 0
 fi
+command -v jq >/dev/null 2>&1 || exit 2 # no jq; exit 0 would lie
 EOF
 seed core/fixtures/s3/run.sh <<'EOF'
 #!/usr/bin/env bash
@@ -573,6 +602,10 @@ seed core/fixtures/s3/run.sh <<'EOF'
 P="$(exec sh -c 'printf %s "$PPID"')"
 sh -c 'exit 0' & p=$!
 /bin/sh "$X/b.sh"
+printf 'echo hi\n' | sh;
+env FOO=1 sh -c x
+cat "$X/s" | sh
+command sh "$X/c.sh"
 EOF
 seed core/fixtures/s3n/run.sh <<'EOF'
 #!/usr/bin/env bash
@@ -584,6 +617,12 @@ verify: sh scripts/x.sh
 END
 echo "run sh scripts/a.sh"
 k=$(( sh == 1 ))
+printf x | bash run.sh;
+echo x | ./b.sh
+awk -v sh=1 'BEGIN { print sh }' </dev/null | cat
+echo verify: sh scripts/x.sh
+myenv sh -c x
+x | sh=1
 EOF
 seed core/fixtures/m5a/run.sh <<'EOF'
 mkmut() { :; }
@@ -703,9 +742,9 @@ else
 fi
 cut -f1,2 "$WORK/p.verdict" | grep -v '^DERIVE' > "$WORK/p.got"
 want_rows() { case "$1" in
-  H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 ;;
-  H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 ;;
-  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 ;;
+  H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 8 9 ;;
+  H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
+  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 ;;
   H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6

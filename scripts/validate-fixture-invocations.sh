@@ -57,10 +57,13 @@
 #   B2  fixtures with no inputs.decl (the `.undeclarable` ones) never run through hermetic-run.sh: out of population,
 #       derived by listing `core/fixtures/*/.undeclarable`.
 #   B3  fixtures running a child under their own `env -i`: starts beneath it are uncounted, deterministically, so
-#       the declared count still binds what the fixture runs outside it.
+#       the declared count still binds what the fixture runs outside it. B3 BLINDS J5 TOO: mutant_killed under an
+#       inner `env -i` has no FXCOUNT_LOG, so the names it reports there are never appended to <log>.mutants.
 #   B4  a fixture setting its own BASH_ENV (snapshot-archive-rotate) replaces the counter for its children.
-#   B5  a nested hermetic-run.sh is inert (only FXCOUNT_LOG crosses its `env -i`, never the three arming variables);
-#       a nested copy of the distribution hook is inert by its PREPUSH_POOL_DEPTH gate.
+#   B5  a nested hermetic-run.sh is inert: only FXCOUNT_LOG (with BASH_ENV) crosses its `env -i`, never the three
+#       arming variables. An UNDECLARED fixture's direct run is not under that `env -i`, so FXCOUNT_RC, FXCOUNT_DIR and
+#       FXCOUNT_JUDGE all reach it from the hook's environment; a hermetic-run.sh it starts would then be armed. A
+#       nested copy of the distribution hook is inert by its PREPUSH_POOL_DEPTH gate.
 #   B6  a SOURCED subject is not a start. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
 #   B8  a start killed before its first command records nothing. A fixture that backgrounds `bash ... &` and kills
 #       it, or runs one under `timeout`, can therefore count fewer starts on a slow run; it makes the kill wait for the
@@ -150,8 +153,41 @@ fxc_mutant_rows() {
     f="$(dirname "$(dirname "$f")")/$impl/run.sh"
     [ -f "$f" ] || return 3
   fi
-  awk '$1 == "#" && ($2 == "MUTANT-MATRIX" || $2 == "MUTANT-MATRIX-FULL") && NF >= 3 { print "M\t" $3 }
-       $1 == "#" && $2 == "MUTANT-MATRIX-CONTROL" && NF >= 3 { print "C\t" $3 }' "$f"
+  # A heredoc body is data, never the header: a MUTANT-MATRIX line a battery SEEDS into a probe file (fixture-hygiene
+  # does) is not this fixture's row. validate-fixture-hygiene.sh's H5 skips heredoc bodies through its masker, which
+  # lives inside that script's `read -d ''` awk string behind a top-level self-probe and has no callable entry point,
+  # so this is a second, smaller tracker: a `<<` outside quotes on a non-comment line, not `<<<`, opens a body whose
+  # delimiter is the next word (quoted, backslashed or bare; `<<-` strips leading tabs); a word that cannot start a
+  # name (`$((1<<3))`) opens nothing. Several heredocs on one line are closed in order.
+  awk -v SQ="'" 'function qmask(s,   o, i, n, c, q) {
+      o = ""; q = ""; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (q == "") { if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|]/)) break
+                       if (c == SQ || c == "\"") q = c; o = o c; continue }
+        if (q == "\"" && c == "\\") { o = o "XX"; i++; continue }
+        if (c == q) { q = ""; o = o c } else o = o "X"
+      }
+      return o
+    }
+    function opens(s,   m, p, r, c, w, dash) {
+      m = qmask(s); p = 0
+      while ((r = index(substr(m, p + 1), "<<")) > 0) {
+        p += r + 1
+        if (substr(m, p + 1, 1) == "<") { while (substr(m, p + 1, 1) == "<") p++; continue }
+        dash = (substr(s, p + 1, 1) == "-"); r = s; r = substr(r, p + 1 + dash)
+        sub(/^[[:space:]]+/, "", r); c = substr(r, 1, 1); w = ""
+        if (c == SQ || c == "\"") { r = substr(r, 2); if (index(r, c)) w = substr(r, 1, index(r, c) - 1) }
+        else { if (c == "\\") r = substr(r, 2); if (match(r, /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(r, 1, RLENGTH) }
+        if (w != "") { HN++; HW[HN] = w; HD[HN] = dash }
+      }
+      if (HN > 0) HI = 1
+    }
+    { orig = $0 }
+    HN > 0 && HI > 0 { l = $0; if (HD[HI]) sub(/^\t+/, "", l); if (l == HW[HI]) { HI++; if (HI > HN) { HN = 0; HI = 0 } } next }
+    $1 == "#" && ($2 == "MUTANT-MATRIX" || $2 == "MUTANT-MATRIX-FULL") && NF >= 3 { print "M\t" $3 }
+    $1 == "#" && $2 == "MUTANT-MATRIX-CONTROL" && NF >= 3 { print "C\t" $3 }
+    { opens(orig) }' "$f"
 }
 
 # fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
@@ -182,6 +218,9 @@ fxc_judge() {
       { raw = $0
         if (NF != 2) { print "ERR\t" raw; next }
         cnt = $1; t = $2
+        # A count with a leading zero (`09`, `1+08x…`) is refused here: bash arithmetic reads it as octal and dies.
+        lz = cnt; sub(/x.*/, "", lz)
+        if (lz ~ /(^|\+)0[0-9]/) { print "ERR\t" raw; next }
         if (cnt ~ /^[0-9]+$/) { print cnt "\t0\t-\t" t "\t" raw; next }
         if (cnt ~ /^[0-9]+\+[0-9]+x[^[:blank:]]+$/) {
           p = index(cnt, "+"); x = index(cnt, "x"); g = substr(cnt, x + 1)
@@ -304,13 +343,18 @@ fxc_self_probe() {
   sp_cell "J3 a corpus glob matching nothing counts 0, not 1 (the literal pattern)" 0 j3d "$SPR/log" "ok"
   # J4 both directions
   for spec in "bad:five *" "nostar:2 core/scripts/sub.sh" "twostar:6 *|6 *" "dup:6 *|2 core/scripts/sub.sh|2 core/scripts/sub.sh" \
-              "notbang:6 *|0 core/scripts/two.sh" "dirbang:6 *|0 core/sub" "threecol:6 * extra" "absglob:1+1x/etc/* *"; do
+              "notbang:6 *|0 core/scripts/two.sh" "dirbang:6 *|0 core/sub" "threecol:6 * extra" "absglob:1+1x/etc/* *" \
+              "lz:06 *" "lzc:2+02xcore/scripts/*.sh *"; do
     SPN="j4${spec%%:*}"; mkdir -p "$SPR/$SPN"; cp "$fd/inputs.decl" "$SPR/$SPN/"
     printf '%s\n' "${spec#*:}" | tr '|' '\n' > "$SPR/$SPN/invocations.decl"
     sp_cell "J4 ${spec%%:*} FAILs" 1 "$SPN" "$SPR/log" "(J4)"
   done
   mkdir -p "$SPR/j4ok"; cp "$fd/inputs.decl" "$SPR/j4ok/"; printf '# c\n\n6 *\n2 core/scripts/sub.sh\n' > "$SPR/j4ok/invocations.decl"
   sp_cell "J4 comments, blanks, one * and one ! path row pass" 0 j4ok "$SPR/log" "ok"
+  # The leading-zero near-miss: a bare 0 count, a 0+ base and a glob carrying `+0`/`05` digits stay legal.
+  mkdir -p "$SPR/core/x+05" && printf ':\n' > "$SPR/core/x+05/a.sh"
+  mkdir -p "$SPR/j4z"; cp "$fd/inputs.decl" "$SPR/j4z/"; printf '0+6xcore/x+05/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j4z/invocations.decl"
+  sp_cell "J4 a 0+k base, and a glob carrying +05, pass (a leading zero is refused only in a count)" 0 j4z "$SPR/log" "ok"
   # J5 both directions, a header, a shard stub, a control
   mkdir -p "$SPR/j5" "$SPR/j5s" "$SPR/j5c"
   for d in j5 j5s j5c; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"; done
@@ -323,6 +367,10 @@ fxc_self_probe() {
   sp_cell "J5 a shard stub joins its IMPL's rows" 0 j5s "$SPR/logm" "ok"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-CONTROL Mb why=x\n' > "$SPR/j5c/run.sh"
   sp_cell "J5 a reported name with a CONTROL row FAILs" 1 j5c "$SPR/logm" "MUTANT-MATRIX-CONTROL row"
+  # A row inside a heredoc body is a seed, not the header: Mb rowed only there FAILs (its twin, rowed in code, passed above).
+  mkdir -p "$SPR/j5h"; cp "$fd/inputs.decl" "$SPR/j5h/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5h/invocations.decl"
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\n# MUTANT-MATRIX Mb decides=A twins=B\nEOF\n' > "$SPR/j5h/run.sh"
+  sp_cell "J5 a name rowed only inside a heredoc body FAILs" 1 j5h "$SPR/logm" "reported Mb, which has no"
   # A non-exec shard stub (`bash "$IMPL" --group x > out`, the ledger-reverify-b form) resolves to its IMPL too.
   mkdir -p "$SPR/j5n"; cp "$fd/inputs.decl" "$SPR/j5n/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5n/invocations.decl"
   printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nbash "$IMPL" --group b > "$HERE/o"\n' > "$SPR/j5n/run.sh"
@@ -370,7 +418,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 34 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 34
+  [ "$SP_N" -eq 38 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 38
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2

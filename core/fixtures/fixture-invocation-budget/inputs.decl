@@ -4,7 +4,8 @@
 !core/scripts/hermetic-run.sh
 # The runner's mapper, copied beside every runner copy (the runner resolves it from its own directory).
 core/scripts/core-paths.sh
-# The hook every probe carries: the runner sources its READSET_TOOLS, READSET_KEYROWS and READSET_VS spans.
+# The hook every probe carries: the runner sources its READSET_TOOLS, READSET_KEYROWS and READSET_VS spans. Arm A8
+# also extracts fxcount_arm and its call-site line from the copy in every subject tree, and MARM mutates that copy.
 .githooks/pre-push
 # The content-key declaration every probe carries (the hook's EXCLUDE span reader).
 scripts/suite-content-key.sh

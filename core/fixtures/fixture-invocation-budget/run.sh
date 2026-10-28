@@ -18,26 +18,36 @@
 #   A6  mis, two of the three arming variables -> inert exactly as A3
 #   A7  held, armed: a fixture with NO Mx row that is a row of the (seeded) scripts/fixture-matrix-allowlist.txt beside
 #       the judge -> rc 0, `J5 EXEMPT, not judged`, verdict recorded (the exemption twin of A4, one property apart)
+#   A8  the hook's ARMING: fxcount_arm extracted from the subject tree's .githooks/pre-push by its own boundaries
+#       (exactly one definition, else BROKEN) and driven under a stub `step` with the FXCOUNT variables unset and the
+#       store preset: (a) through the hook's own call-site line at depth 0, judge present -> FXCOUNT_RC (an rc under
+#       the run dir), FXCOUNT_DIR (= <run dir>/log) and FXCOUNT_JUDGE are in a child `env` with those values, and
+#       AI_DLC_VERDICT_STORE is <preset>/counted-<12 hex>; (b) no judge -> step rc non-zero, nothing exported, store
+#       unchanged; (c) the call-site line at POOL_DEPTH_IN=1 -> the step never runs, nothing exported. Also: exactly
+#       one non-comment line before `step "fixture suite` calls fxcount_arm as a command word.
 #   SP  the judge's --self-probe standalone -> rc 0, all cells green
 #   NM  a plain run executes no matrix-only cell (control: the per-push mutant drives ran)
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
-# MUTANT-MATRIX MJ3 decides=A2,SP twins=A3
+# MUTANT-MATRIX MJ3 decides=A2,A8,SP twins=A3
 # MUTANT-MATRIX MGATE decides=A1,A2,A4,A5,A7 twins=A3
 # MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7 twins=A3
-# MUTANT-MATRIX MEXEMPT decides=A7,SP twins=A4
-# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the four literals above
+# MUTANT-MATRIX MEXEMPT decides=A7,A8,SP twins=A4
+# MUTANT-MATRIX MARM decides=A8 twins=A1
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the five literals above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5, A6 and A7 green
-# under MJ3, A6 and SP green under MGATE and MPASS, and A1-A6 green under MEXEMPT; only the twin each mutant runs per
-# push is named. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer repeats the self-probe, so only
-# the J3 cells and the A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1 with twin A3; MEXEMPT runs A7
-# with twin A4 (the same unrowed Mx, judged rather than exempt).
+# under MJ3, A3, A6, A8 and SP green under MGATE and MPASS, A1-A6 green under MEXEMPT, and every arm but A8 green under
+# MARM; only the twin each mutant runs per push is named. A8 decides MJ3 and MEXEMPT because arming runs the subject
+# judge's self-probe, which is red under both. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer
+# repeats the self-probe, so only the J3 cells and the A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1
+# with twin A3; MEXEMPT runs A7 with twin A4 (the same unrowed Mx, judged rather than exempt); MARM runs A8 with twin A1.
 #   MJ3      the judge's J3 compare removed            -> SP names the J3 off-by-one cell
 #   MGATE    the runner's judge call disabled           -> A2 records a pass for a mismatching fixture
 #   MPASS    the runner's BASH_ENV passthrough dropped  -> A1 is J1 BROKEN: the counter never loaded
 #   MEXEMPT  the judge's J5 allowlist exemption removed -> A7 FAILs J5 on an allowlisted fixture
+#   MARM     the hook's arming export drops FXCOUNT_DIR -> A8 names FXCOUNT_DIR absent from a child env (twin A1)
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-invocation-budget: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -71,7 +81,8 @@ mk_subject() { # <dir>; the H5 allowlist beside the judge is SEEDED, listing onl
     && printf '# seeded\nheld\tS1 a mutation helper\n' > "$1/scripts/fixture-matrix-allowlist.txt" \
     && cp -p "$ROOT/$JREL" "$1/scripts/" \
     && cp -p "$ROOT/$RREL" "$ROOT/core/scripts/core-paths.sh" "$1/core/scripts/" \
-    && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$1/core/fixtures/lib/"
+    && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$1/core/fixtures/lib/" \
+    && mkdir -p "$1/.githooks" && cp -p "$ROOT/.githooks/pre-push" "$1/.githooks/"
 }
 SUBJ="$WORK/subj"
 mk_subject "$SUBJ" && cmp -s "$ROOT/$JREL" "$SUBJ/$JREL" && cmp -s "$ROOT/$RREL" "$SUBJ/$RREL" \
@@ -94,6 +105,72 @@ mk_mutant MPASS "$RREL" ' "BASH_ENV=$FXCOUNT_RC"' '' \
   || { echo "FIXTURE BROKEN: mutant MPASS DID NOT APPLY (the BASH_ENV passthrough moved in $RREL)" >&2; exit 2; }
 mk_mutant MEXEMPT "$JREL" 'if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then' 'if false; then' \
   || { echo "FIXTURE BROKEN: mutant MEXEMPT DID NOT APPLY (the J5 allowlist exemption moved in $JREL)" >&2; exit 2; }
+mk_mutant MARM .githooks/pre-push 'export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE' 'export FXCOUNT_RC FXCOUNT_JUDGE' \
+  || { echo "FIXTURE BROKEN: mutant MARM DID NOT APPLY (the arming export moved in .githooks/pre-push)" >&2; exit 2; }
+
+# --- A8's driver: fxcount_arm, extracted from the subject tree's hook by its own boundaries, under a stub `step` ---
+# a8.sh <subject dir> <scratch dir>. Three modes, each in a subshell with the FXCOUNT variables unset and the verdict
+# store preset: a (the judge present, depth 0, through the hook's own call-site line), b (no judge beside the cwd),
+# c (depth 1, through the call-site line). Every check prints CHECK-OK or CHECK-BAD; any BAD exits 1.
+cat > "$WORK/a8.sh" <<'A8'
+#!/usr/bin/env bash
+set -u
+s="$1"; w="$2"; H="$s/.githooks/pre-push"; bad=0
+mkdir -p "$w/nojudge" || exit 2
+ok8()  { echo "A8 CHECK-OK $1"; }
+bad8() { echo "A8 CHECK-BAD $1"; bad=1; }
+[ -f "$H" ] || { echo "A8 BROKEN: no hook at $H"; exit 2; }
+n="$(grep -c '^fxcount_arm() {$' "$H")" || n=0
+[ "$n" = 1 ] || { echo "A8 BROKEN: fxcount_arm() is defined $n time(s) in $H, want exactly 1"; exit 2; }
+awk '/^fxcount_arm\(\) \{$/ { on = 1 } on { print } on && /^}$/ { exit }' "$H" > "$w/a8.fn"
+[ "$(tail -1 "$w/a8.fn")" = "}" ] || { echo "A8 BROKEN: fxcount_arm has no closing brace at column 0"; exit 2; }
+# The call site: a non-comment line before the first `step "fixture suite` running fxcount_arm as a command word.
+awk '/^step "fixture suite/ { seen = 1; exit } /^[[:space:]]*#/ { next } /^fxcount_arm\(\) \{$/ { skip = 1 }
+  skip { if ($0 ~ /^}$/) skip = 0; next }
+  /(^|[[:space:];&|])fxcount_arm([[:space:];&|)]|$)/ { print } END { if (!seen) print "NO-SUITE-STEP" }' "$H" > "$w/a8.call"
+nc="$(grep -vc '^NO-SUITE-STEP$' "$w/a8.call")" || nc=0
+if grep -q '^NO-SUITE-STEP$' "$w/a8.call"; then bad8 "call: the hook has no step \"fixture suite line"
+elif [ "$nc" = 1 ]; then ok8 "call: the hook calls fxcount_arm on one non-comment line before the fixture suite"
+else bad8 "call: $nc non-comment line(s) before the fixture suite call fxcount_arm, want exactly 1"; fi
+mode() { # <label> <cwd> <POOL_DEPTH_IN>
+  mkdir -p "$w/tmp.$1"
+  ( cd "$2" || exit 2
+    unset FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE
+    export AI_DLC_VERDICT_STORE="$w/store.$1" TMPDIR="$w/tmp.$1"
+    POOL_DEPTH_IN="$3"
+    step() { shift; "$@"; echo "STEP_RC=$?"; }
+    . "$w/a8.fn"
+    eval "$(grep -v '^NO-SUITE-STEP$' "$w/a8.call")"
+    env > "$w/env.$1" ) > "$w/out.$1" 2>&1
+}
+ev() { awk -v k="$2" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); f = 1 } END { exit f ? 0 : 1 }' "$w/env.$1"; }
+mode a "$s" 0; mode b "$w/nojudge" 0; mode c "$s" 1
+# (a) armed: every variable exported, each with its value.
+abad=0
+for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE; do ev a "$v" > /dev/null || { bad8 "a-exported: $v is not in a child env"; abad=1; }; done
+grep -qx 'STEP_RC=0' "$w/out.a" || { bad8 "a-rc: the armed step did not return 0: $(tr '\n' ' ' < "$w/out.a" | cut -c1-300)"; abad=1; }
+rc="$(ev a FXCOUNT_RC)"; d="$(ev a FXCOUNT_DIR)"; j="$(ev a FXCOUNT_JUDGE)"; st="$(ev a AI_DLC_VERDICT_STORE)"
+case "$rc" in "$w/tmp.a/fxcount."*/fxcount.rc) [ -s "$rc" ] || { bad8 "a-rc-file: $rc is empty or absent"; abad=1; } ;;
+  *) bad8 "a-rc-path: FXCOUNT_RC=$rc is not an rc under the run dir in $w/tmp.a"; abad=1 ;; esac
+[ "$d" = "${rc%/*}/log" ] && [ -d "$d" ] || { bad8 "a-dir: FXCOUNT_DIR=$d, want the directory ${rc%/*}/log"; abad=1; }
+[ "$j" = "$s/scripts/validate-fixture-invocations.sh" ] || { bad8 "a-judge: FXCOUNT_JUDGE=$j"; abad=1; }
+printf '%s\n' "${st#"$w/store.a/"}" | grep -Eqx 'counted-[0-9a-f]{12}' && [ "${st%/*}" = "$w/store.a" ] \
+  || { bad8 "a-store: AI_DLC_VERDICT_STORE=$st, want $w/store.a/counted-<12 hex>"; abad=1; }
+[ "$abad" = 0 ] && ok8 "a-armed: RC, DIR, JUDGE and the counted-<12 hex> store are exported with their values"
+# (b) the judge absent: a non-zero step, nothing exported, the store untouched.
+bbad=0
+grep -Eqx 'STEP_RC=[1-9][0-9]*' "$w/out.b" || { bad8 "b-rc: the step without a judge did not return non-zero"; bbad=1; }
+for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE; do ev b "$v" > /dev/null && { bad8 "b-exported: $v reached a child env with no judge"; bbad=1; }; done
+[ "$(ev b AI_DLC_VERDICT_STORE)" = "$w/store.b" ] || { bad8 "b-store: the store moved with no judge"; bbad=1; }
+[ "$bbad" = 0 ] && ok8 "b-judge-absent: rc non-zero, nothing exported, the store unchanged"
+# (c) nested: the call-site line does not arm.
+cbad=0
+grep -q '^STEP_RC=' "$w/out.c" && { bad8 "c-step: the arming step ran at POOL_DEPTH_IN=1"; cbad=1; }
+for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE; do ev c "$v" > /dev/null && { bad8 "c-exported: $v reached a child env at depth 1"; cbad=1; }; done
+[ "$(ev c AI_DLC_VERDICT_STORE)" = "$w/store.c" ] || { bad8 "c-store: the store moved at depth 1"; cbad=1; }
+[ "$cbad" = 0 ] && ok8 "c-nested: at POOL_DEPTH_IN=1 nothing is armed"
+exit "$bad"
+A8
 
 # --- the probe worlds, each built once --------------------------------------------------------------------------
 mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0> [fixture name, default probe]
@@ -126,6 +203,9 @@ drive() {
   if [ "$2" = SP ]; then
     bash "$s/$JREL" --self-probe > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
+  if [ "$2" = A8 ]; then
+    bash "$WORK/a8.sh" "$s" "$WORK/a8.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
+  fi
   local fx=probe
   case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; A7) w=held; fx=held ;; esac
   rcf="$(bash "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
@@ -154,12 +234,14 @@ verdict() {
     A5) rcis "$t" 1 && has "$t" 'probe: FAIL (J2)' && has "$t" '  3 *' && has "$t" '  2 core/scripts/sub.sh' ;;
     A7) rcis "$t" 0 && has "$t" 'held: J5 EXEMPT, not judged: held is a row of scripts/fixture-matrix-allowlist.txt' \
           && has "$t" 'held: verdict recorded in' && ! has "$t" '(J5): mutant_killed reported' ;;
-    SP) rcis "$t" 0 && has "$t" 'self-probe: 34 cells, all green' ;;
+    SP) rcis "$t" 0 && has "$t" 'self-probe: 38 cells, all green' ;;
+    A8) rcis "$t" 0 && has "$t" 'A8 CHECK-OK call:' && has "$t" 'A8 CHECK-OK a-armed:' && has "$t" 'A8 CHECK-OK b-judge-absent:' \
+          && has "$t" 'A8 CHECK-OK c-nested:' && ! has "$t" 'A8 CHECK-BAD' ;;
     *) return 1 ;;
   esac
 }
-ARMS="A1 A2 A3 A4 A5 A6 A7 SP"
-MUTANTS="MJ3 MGATE MPASS MEXEMPT"
+ARMS="A1 A2 A3 A4 A5 A6 A7 A8 SP"
+MUTANTS="MJ3 MGATE MPASS MEXEMPT MARM"
 
 if [ "$MODE" = matrix ]; then
   # THE MATRIX: every mutant against every arm, never on a plain run (arm NM asserts that).
@@ -199,11 +281,13 @@ drive MJ3.SP SP "$WORK/mut-MJ3" & drive MJ3.A3 A3 "$WORK/mut-MJ3" &
 drive MGATE.A2 A2 "$WORK/mut-MGATE" & drive MGATE.A3 A3 "$WORK/mut-MGATE" &
 drive MPASS.A1 A1 "$WORK/mut-MPASS" & drive MPASS.A3 A3 "$WORK/mut-MPASS" &
 drive MEXEMPT.A7 A7 "$WORK/mut-MEXEMPT" & drive MEXEMPT.A4 A4 "$WORK/mut-MEXEMPT" &
+drive MARM.A8 A8 "$WORK/mut-MARM" & drive MARM.A1 A1 "$WORK/mut-MARM" &
 wait
 score MJ3 SP A3 'FAIL  self-probe J3 a * row off by one'
 score MGATE A2 A3 'probe: verdict recorded in'
 score MPASS A1 A3 'probe: FIXTURE BROKEN (J1)'
 score MEXEMPT A7 A4 'held: FAIL (J5): mutant_killed reported Mx, which has no'
+score MARM A8 A1 'A8 CHECK-BAD a-exported: FXCOUNT_DIR is not in a child env'
 
 # NM: a plain run reached no matrix-only cell, and its per-push mutant drives did run.
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
