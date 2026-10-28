@@ -26,7 +26,31 @@
 # states a POSITIVE outcome. A key script that crashed would print nothing and
 # compare empty-to-empty, so the first assertion is a sanity arm that must produce
 # a well-formed key before any comparison below is believed.
+#
+# THE MUTANT MATRIX. A CELL is one arm's predicate. PER PUSH a mutant is scored on its DECIDING cell, which
+# must fail on it, and its named TWIN, a different cell it could plausibly co-trip but must leave GREEN.
+# `run.sh --matrix` scores each mutant against every cell that READS the mutated file and prints one MATRIX
+# line per mutant: M-plus mutates the READSET_KEYROWS span, so its cells are the four arms driving that span
+# (k1, k2, k5, k6.hook); M-docs mutates the outer key script, so its cells are the arms driving it after the
+# `+` fixture is built (k3.plans, k3.backlog, k4, k6.key, k7, and a well-formed-key sanity cell). Arms 0-9
+# run against the unmutated key script and the unmutated span, so neither mutant reaches them. The matrix is
+# re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the
+# repo root.
+# MUTANT-MATRIX M-plus decides=k1 twins=k2
+# MUTANT-MATRIX M-docs decides=k3.plans twins=k3.backlog
+# Both mutants reach mutant_killed through one helper, as a variable:
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes each mutant name of the two M- batteries as a variable and each name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-content-key/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 set -uo pipefail
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "suite-content-key: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DIST="$(cd "$HERE/../../.." && pwd)"
@@ -35,6 +59,11 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "suite-content-key: FIXTURE BROKEN" >&2; exit 2; }
+
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "lib/mutant.sh not found beside $HERE"
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "suite-content-key:"
 
@@ -210,7 +239,7 @@ BSHA="$(shasum -a 256 "$T/docs/backlog.md" | cut -d' ' -f1)"
 [ "${#BSHA}" -eq 64 ] || broken "could not hash the seeded docs/backlog.md"
 
 k1="$(krows "$WORK/span.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md" { print $3 }')"
-if [ "$k1" = "$BSHA" ]; then ok "k1 a +docs/backlog.md declaration yields a docs/backlog.md key row carrying its sha256"
+if [ "$k1" = "$BSHA" ]; then ok "k1 a +docs/backlog.md declaration yields a docs/backlog.md key row carrying its sha256"; B_k1=1
 else bad "k1 a +docs/backlog.md declaration yielded the row value '$k1', want '$BSHA' -- the file under an excluded top is still unkeyed"; fi
 
 k2="$(krows "$WORK/span.sh" 'docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || k2=0
@@ -232,7 +261,7 @@ edit_key() { # edit_key <file> -> the key after appending one line, then the fil
 k3b="$(edit_key docs/backlog.md)"; k3p="$(edit_key docs/plans/p.md)"
 if [ -n "$k3b" ] && [ "$k3b" != "$KP" ]; then ok "k3 an EDIT of the +declared docs/backlog.md moves the outer key"
 else bad "k3 an edit of the +declared docs/backlog.md did NOT move the outer key ('$k3b') -- a backlog-only push still skips the suite"; fi
-if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (only the declared file is keyed, not its top)"
+if [ "$k3p" = "$KP" ]; then ok "k3 an EDIT of docs/plans/p.md does NOT move it (only the declared file is keyed, not its top)"; B_k3plans=1
 else bad "k3 an edit of docs/plans/p.md moved the outer key -- the + opt-in widened to the whole excluded top"; fi
 
 printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$T/core/fixtures/gamma/inputs.decl"
@@ -264,20 +293,116 @@ mp_n="$(grep -cF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh")" || mp_n=0
 [ "$mp_n" -eq 1 ] || broken "M-plus anchor found $mp_n time(s) in the span, want 1"
 grep -vF 'if (x && $0 != "") print $0 > pl' "$WORK/span.sh" > "$WORK/span.mplus.sh"
 cmp -s "$WORK/span.sh" "$WORK/span.mplus.sh" && broken "M-plus DID NOT APPLY"
-mp="$(krows "$WORK/span.mplus.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || mp=0
-mp_ctl="$(awk -F'\t' '$2 == "F" && $3 == "docs/backlog.md"' "$WORK/k.parse" | grep -c .)" || mp_ctl=0
-if [ "$mp" -eq 0 ] && [ "$mp_ctl" -eq 1 ]; then ok "M-plus KILLED by k1: a parse that drops + silently keys nothing, with the F row still parsed (it ran)"
-else bad "M-plus SURVIVED or did not run: rows=$mp, F rows=$mp_ctl"; fi
+
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
+# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
+MXL="$WORK/mx.ledger"; : > "$MXL"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$HERE/run.sh"
+}
+mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
+mx_cell() { # <mutant> <cell> <role dec|mx> -> RED|GREEN, ledgered; a predicate that crashes is BROKEN, never GREEN
+  local m="$1" c="$2" r="$3" e="$WORK/cell.err" rc
+  printf '%s %s %s\n' "$r" "$m" "$c" >> "$MXL"
+  "cell_$m" "$c" 2>"$e"; rc=$?
+  case "$(cat "$e")" in
+    *"unbound variable"*|*"command not found"*|*"syntax error"*)
+      if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $m"; exit 2; fi
+      broken "cell $c of $m crashed, which reads as GREEN" ;;
+  esac
+  case "$rc" in 0) MX_COLOR=RED ;; 1) MX_COLOR=GREEN ;; *) broken "cell $c of $m is not a cell of that mutant" ;; esac
+}
+# mx_score <mutant> <base-pass flag> <message> -- the deciding cell and the twin per push, every cell under --matrix.
+mx_score() {
+  local m="$1" fl="$2" msg="$3" dec tw d t a g=0 tot=0 u=""
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  [ -n "$dec" ] && [ -n "$tw" ] || broken "MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"
+  mx_cell "$m" "$dec" dec; d="$MX_COLOR"
+  if [ "$d" = RED ]; then mutant_killed "$fl" "$m" "$msg"; else bad "MUTANT $m SURVIVED: its deciding cell $dec held on the mutated copy"; fi
+  mx_cell "$m" "$tw" dec; t="$MX_COLOR"
+  if [ "$t" = RED ]; then bad "MUTANT $m is entangled: its twin $tw also failed"; fi
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    for a in $(cells_of "$m"); do
+      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
+      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); fi
+    done
+    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
+    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+  fi
+}
+cells_of() { case "$1" in M-plus) echo "k1 k2 k5 k6hook" ;; M-docs) echo "k3plans k3backlog k4 k6key k7 sane" ;; esac; }
+
+# M-plus cells, each read off the mutated span: RED when that arm's own predicate would FAIL (rc 0), GREEN when it holds (rc 1).
+cell_M-plus() {
+  local v n
+  case "$1" in
+    k1) v="$(krows "$WORK/span.mplus.sh" '+docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md" { print $3 }')"
+        MP_CTL="$(awk -F'\t' '$2 == "F" && $3 == "docs/backlog.md"' "$WORK/k.parse" | grep -c .)" || MP_CTL=0
+        [ "$v" != "$BSHA" ] ;;
+    k2) n="$(krows "$WORK/span.mplus.sh" 'docs/backlog.md' | awk -F'\t' '$2 == "docs/backlog.md"' | grep -c .)" || n=0
+        [ "$n" -ne 0 ] ;;
+    k5) krows "$WORK/span.mplus.sh" '+docs/' > /dev/null
+        n="$(awk -F'\t' '$2 == "X" && $3 == "plusdir"' "$WORK/k.parse" | grep -c .)" || n=0
+        [ "$n" -ne 1 ] ;;
+    k6hook) krows "$WORK/span.mplus.sh" '!+docs/backlog.md' > /dev/null
+        n="$(awk -F'\t' '$2 == "X" && $3 == "plusbang"' "$WORK/k.parse" | grep -c .)" || n=0
+        [ "$n" -ne 1 ] ;;
+    *) return 2 ;;
+  esac
+}
+MP_CTL=0
+mx_score M-plus "${B_k1:-0}" "M-plus scored by k1: a parse that drops + silently keys nothing, with the F row still parsed (it ran)"
+# k1 ran first in mx_score, so MP_CTL is the F-row count of the mutated parse. A copy that never ran has no F row.
+[ "$MP_CTL" -eq 1 ] || bad "M-plus control: the mutated parse produced $MP_CTL F row(s) for docs/backlog.md, want 1 -- the copy may not have run"
 
 # M-docs: docs removed from EXCLUDE in a copy of the key script, driven through k3's two edits only.
 sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^docs$/d;}' "$KEY" > "$WORK/key.mdocs.sh"
 cmp -s "$KEY" "$WORK/key.mdocs.sh" && broken "M-docs DID NOT APPLY"
 cp "$WORK/key.mdocs.sh" "$T/scripts/.key-mdocs.sh"
 mkey() { bash "$T/scripts/.key-mdocs.sh" 2>/dev/null; }
-MK="$(mkey)"; cp "$T/docs/plans/p.md" "$WORK/e.orig"; printf 'edited\n' >> "$T/docs/plans/p.md"; MKP="$(mkey)"; cp "$WORK/e.orig" "$T/docs/plans/p.md"
+mkedit() { # <file> -> the mutant key after appending one line, then the file restored
+  cp "$T/$1" "$WORK/e.orig"; printf 'edited\n' >> "$T/$1"
+  mkey; cp "$WORK/e.orig" "$T/$1"
+}
+MK="$(mkey)"
+[ -n "$MK" ] || bad "M-docs control: the mutated key script produced no key on the pristine tree, so it may not have run"
+GAMMA="$T/core/fixtures/gamma/inputs.decl"
+cell_M-docs() { # RED = that arm's predicate would FAIL on the mutated key script
+  local k
+  case "$1" in
+    k3plans)   k="$(mkedit docs/plans/p.md)"; [ -n "$MK" ] && [ "$k" != "$MK" ] ;;
+    k3backlog) k="$(mkedit docs/backlog.md)"; [ -z "$k" ] || [ "$k" = "$MK" ] ;;
+    k4)  printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n+docs/absent.md\n' > "$GAMMA"
+         if mkey > /dev/null; then k=0; else k=1; fi
+         printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
+    k6key) printf '!scripts/suite-content-key.sh\n+!docs/backlog.md\n' > "$GAMMA"
+         if mkey > /dev/null; then k=0; else k=1; fi
+         printf '!scripts/suite-content-key.sh\n+docs/backlog.md\n' > "$GAMMA"; [ "$k" -eq 0 ] ;;
+    k7)  mv "$GAMMA" "$WORK/gamma.mdecl"; k="$(mkey)"; mv "$WORK/gamma.mdecl" "$GAMMA"
+         case "$k" in ????????????????????????????????????????????????????????????????) return 1 ;; *) return 0 ;; esac ;;
+    sane) case "$MK" in ????????????????????????????????????????????????????????????????) return 1 ;; *) return 0 ;; esac ;;
+    *) return 2 ;;
+  esac
+}
+mx_score M-docs "${B_k3plans:-0}" "M-docs scored by k3: a key hashing all of docs/ moves on the plans edit k3 requires to be still"
 rm -f "$T/scripts/.key-mdocs.sh"
-if [ -n "$MK" ] && [ "$MKP" != "$MK" ]; then ok "M-docs KILLED by k3: a key hashing all of docs/ moves on the plans edit k3 requires to be still"
-else bad "M-docs SURVIVED: a key hashing all of docs/ did not move on a plans edit ('$MK' -> '$MKP')"; fi
+[ "$(key)" = "$KP" ] || broken "the tree did not return to its baseline key after the M-docs cells"
+
+# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
+# empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+fi
 
 echo
 if [ "$fails" -ne 0 ]; then

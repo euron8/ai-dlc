@@ -54,7 +54,6 @@ shell-portability
 snapshot-section-schema
 spec-join-integrity
 story-provenance
-suite-content-key
 suppression-lifetime
 trunk-audit-gate
 update-preflight-push
