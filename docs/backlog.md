@@ -1183,11 +1183,11 @@ Three mechanisms, each with a self-probe in both directions:
 - **Static hygiene.** `scripts/validate-fixture-hygiene.sh`, a standalone pre-suite step: H1 linked-worktree false skip, H2 declared-tool false skip, H3 a script started under `sh`, H5 the mutant matrix block, joined to a derived down-only allowlist `scripts/fixture-matrix-allowlist.txt`.
 - **Runtime name join.** `mutant_killed` in `core/fixtures/lib/mutant.sh` records each name it reports, and J5 joins every one to a block row.
 
-False-positive sets, measured over the b245-p1 tree: H1 judged 46 `-d …/.git` lines, 1 offender (fixed), 0 false positives. H2 judged 215 `command -v` sites, 6 offenders, 0 false positives. H3 judged 15 raw `sh <word>` lines, 5 offenders, 0 false positives. H5 population is 214 fixtures, of which 2 carry a block and 212 are the derived allowlist, which is the enumerated false-positive set because membership is a floor claim, not a defect claim. The budget's own false-positive set comes from the counting passes on the integrated tip and is recorded in the LANDED line.
+False-positive sets, measured over the b245-p1 tree: H1 judged 46 `-d …/.git` lines, 1 offender (fixed), 0 false positives. H2 judged 209 declared-tool `command -v` sites (the validator's printed count of sites judged after masking; its header records 215 raw non-comment lines), 6 offenders, 0 false positives. H3 judged 15 raw `sh <word>` lines, 5 offenders, 0 false positives. H5 population is 214 fixtures, of which 3 carry a block and 211 are the derived allowlist, which is the enumerated false-positive set because membership is a floor claim, not a defect claim. The budget's own false-positive set comes from the counting passes on the integrated tip and is recorded in the LANDED line.
 
 H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-into-file lines, 400 bare statements, and 200 joined to a `cmp -s` on the same pair across 78 fixtures. Whether one is an offender depends on what the mutant's kill asserts, which a line grammar cannot see, so the set is not enumerable and the arm is not shipped.
 
-Owed: the 212 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
+Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
 
 verify: sh bash scripts/validate-fixture-invocations.sh --self-probe >/dev/null 2>&1 && bash scripts/validate-fixture-hygiene.sh --derive >/dev/null 2>&1
 

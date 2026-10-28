@@ -2749,19 +2749,26 @@ step "shell syntax (every shipped script and hook)" syntax_all
 #     dir and judged by scripts/validate-fixture-invocations.sh inside hermetic-run.sh, before its verdict-store
 #     write, so a budget mismatch is that fixture's own FAIL. Armed at depth 0 only: a nested copy of this hook is
 #     inert. The judge's self-probe runs HERE, once per push, and a red one FAILs arming. Counted passes live in a
-#     store derived from the judge and rc bytes, ALWAYS, even under a preset AI_DLC_VERDICT_STORE: a changed J-arm or
-#     rc voids them, and counted and uncounted entries never share a store. The judge absent is a FAIL here, never an
+#     store derived from the judge, rc and scripts/fixture-matrix-allowlist.txt bytes, ALWAYS, even under a preset
+#     AI_DLC_VERDICT_STORE: a changed J-arm, rc or allowlist row voids them, and counted and uncounted entries never share a store. The judge absent is a FAIL here, never an
 #     uncounted pass. The run dir holds only the per-fixture start logs and is left in TMPDIR.
 fxcount_arm() {
-  local run sp vk
+  local run sp vk allow
   FXCOUNT_JUDGE="$PWD/scripts/validate-fixture-invocations.sh"
   [ -f "$FXCOUNT_JUDGE" ] || { printf '   the invocation judge %s is absent: the suite cannot be counted, and an uncounted suite is not a pass\n' "$FXCOUNT_JUDGE"; return 1; }
   sp="$(bash "$FXCOUNT_JUDGE" --self-probe 2>&1)" || { printf '%s\n   the invocation judge'"'"'s self-probe is red: no fixture is judged by a judge that cannot fire\n' "$sp"; return 1; }
   run="$(mktemp -d "${TMPDIR:-/tmp}/fxcount.XXXXXX")" && mkdir "$run/log" || return 1
   FXCOUNT_RC="$(bash "$FXCOUNT_JUDGE" --gen-rc "$run")" && [ -s "$FXCOUNT_RC" ] || { printf '   the invocation judge did not generate its rc file into %s\n' "$run"; return 1; }
   FXCOUNT_DIR="$run/log"
-  vk="$(cat "$FXCOUNT_JUDGE" "$FXCOUNT_RC" | shasum -a 256 | cut -c1-12)"
-  case "$vk" in *[!0-9a-f]*|'') printf '   could not hash the judge and rc into a counted-store key\n'; return 1 ;; esac
+  # The key's population is every file whose bytes change a judge verdict that no fixture's own content key holds:
+  # the judge, the rc, and the H5 allowlist beside the judge (J5 exempts its rows). An absent allowlist exempts
+  # nothing, so it hashes a framed sentinel distinct from an empty or present one, never an empty string.
+  allow="${FXCOUNT_JUDGE%/*}/fixture-matrix-allowlist.txt"
+  vk="$({ cat "$FXCOUNT_JUDGE" "$FXCOUNT_RC" || exit 1
+          if [ -f "$allow" ]; then printf '\n#fxcount-allowlist-present\n'; cat "$allow" || exit 1
+          else printf '\n#fxcount-allowlist-ABSENT\n'; fi; } | shasum -a 256 | cut -c1-12)" \
+    || { printf '   could not read the judge, the rc or %s into a counted-store key\n' "$allow"; return 1; }
+  case "$vk" in *[!0-9a-f]*|'') printf '   could not hash the judge, the rc and the allowlist into a counted-store key\n'; return 1 ;; esac
   [ "${#vk}" -eq 12 ] || return 1
   AI_DLC_VERDICT_STORE="${AI_DLC_VERDICT_STORE:-$HOME/.cache/ai-dlc/verdicts}/counted-$vk"
   export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE AI_DLC_VERDICT_STORE

@@ -22,7 +22,6 @@ apply-restamp-worklist	no MUTANT-MATRIX block; floor: S1 mut_apply(),S2 cmp -s +
 apply-self-overwrite	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-setup-sited-merge	no MUTANT-MATRIX block; floor: S1 mut_new(),S2 cmp -s + mutant
 apply-worklist-rows	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-architecture-index-cell-escaping	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 artifact-derivations	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 artifact-path-conformance	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 artifact-path-migration	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant

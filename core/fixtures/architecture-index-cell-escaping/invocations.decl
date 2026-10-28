@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), three times, identical.
+# The one bash start is run.sh itself; the subject and its mutant and control copies run under node, which the
+# counter does not see, so the REQUIRED gen-architecture-index.js carries no path row.
+1 *
