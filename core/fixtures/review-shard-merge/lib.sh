@@ -2241,8 +2241,9 @@ fr_x1() {
   } > "$1/cross-1.md"
 }
 fr_find2() { printf '### Important (seeded)\n\n#### Q-2-9 %s\nparts: 2\n\n%s' "$1" "$2"; } # <heading> <body>
-fr_merged() { # <script-dir> <dir> <case> <want verdict>
+fr_merged() { # <script-dir> <dir> <case> <want verdict>; FR_KEEP=<name> saves the answer, --out file included, before the rm
   local o; o="$(qout "$2")"; q_merge "$1" "$2"
+  [ -z "${FR_KEEP:-}" ] || hand_keep "$1" "$FR_KEEP" "$o" "$2"
   [ "$RC" -eq 0 ] && has "$MO" "verdict=$4 " || WHY="$WHY $3{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
   rm -f "$o"
 }
@@ -2325,7 +2326,7 @@ p_fr_graph() {
   fr_refused "$sd" "$d" fr-graph-pre-f2 "$FR_ORPH AC4"
   ! has "$MO" "$FR_VERD" || WHY="$WHY fr-graph-pre-f2-wrong-rule{$(reline "$MO")}"
   d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="$WHY the frozen-QL post-F2 world was not built"; return 1; }
-  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK
+  FR_KEEP=frg_post fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK
   has "$MO" "LEGACY: $d/cross-2.md $FR_BLEG $QL_SHA's .claude/team-roles/qa.md" || WHY="$WHY fr-graph-post-f2-legacy-line{$(head -2 "$MO" | tr '\n' ' ')}"
   [ -z "$WHY" ]
 }
@@ -2337,12 +2338,12 @@ p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
   if cell frb-legacy; then
-    # Its own merge, not FR4's post-F2 answer. A differential (f5b-diff.sh frb-legacy) found the same bytes in fr_graph's
-    # directory and in this arm's give EQUAL rc, stdout/stderr and --out file, so this is NOT shown to be class (a). The
-    # REUSE proof's DIFFER is unexplained; one hypothesis, not measured, is that fr_merged removes the --out file before
-    # the keep. The repeat is left as one extra merge for lack of a re-measure, not for a measured conflict.
-    d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
-    fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+    if hand_use "$sd" frg_post; then   # FR4's post-F2 world is this world (REUSE-proved EQUAL under --matrix)
+      [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK " || WHY="$WHY frb-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else
+      d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
+      fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+    fi
     has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
   fi
   if cell frb-severity; then
@@ -3135,6 +3136,7 @@ reuse_proof() {
   ru_row owner-check1-multi R9 own_a3 ru_mk_a3
   ru_row owner-set-level q_pm own_qpm_set ru_mk_qpmset
   ru_row owner-dup-merge x_owner x_owner_dup ru_mk_xdup
+  ru_row frb-legacy fr_graph frg_post ru_mk_frg
   ru_row session-control key key_ctl ru_mk_seal
   local p; p="$(ru_pair selfprobe-sha_dir worst3 worst3 ru_mk_shadir)"
   if [ "$p" = DIFFER ]; then ok "REUSE self-probe: a class-(a) sha_dir state against the all-APPROVED answer scores DIFFER"
