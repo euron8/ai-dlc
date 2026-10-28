@@ -37,9 +37,15 @@
 # on two worlds is byte-compared across three working directories, one a dirty decoy repo, and the
 # wrapper's ok run is driven from inside that decoy.
 #
-# Usage: run.sh
+# Usage: run.sh            the per-push run (mode PUSH)
+#        run.sh --matrix   the full mutant x cell matrix (mode FULL), measured at authoring
 # Exit:  0 = every arm and mutant holds, 1 = one regressed, 2 = fixture broken.
 set -u
+
+MATRIX=0
+[ "${1:-}" = --matrix ] && MATRIX=1
+MCELLS=0
+if [ "$MATRIX" = 1 ]; then echo "readset-stage1-verdict: mode FULL (--matrix)"; else echo "readset-stage1-verdict: mode PUSH"; fi
 
 # Every ambient AI_DLC_* key is cleared (I10/I87): the subjects read AI_DLC_READSET_STAGE1_LEDGER,
 # and an inherited one would point them at the operator's ledger. Each arm passes its own.
@@ -53,6 +59,10 @@ WRAPPER="$ROOT/scripts/readset-stage1-run.sh"
 [ -f "$SCORER" ] && [ -f "$WRAPPER" ] || { echo "FIXTURE BROKEN: no scripts/readset-stage1-{verdict,run}.sh above $HERE" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $SCORER"
 echo "HERMETIC-CONSUMED $WRAPPER"
+# The wrapper's own terminal word for a TERMed run, read from the wrapper rather than restated: the
+# arms below assert the ledger and RUN_DIR/rc carry exactly what the wrapper writes.
+KILLTOK="$(awk 'match($0, /; RC="[a-z]+";/) { print substr($0, RSTART + 6, RLENGTH - 8); exit }' "$WRAPPER")"
+[ -n "$KILLTOK" ] || { echo "FIXTURE BROKEN: no RC=\"<word>\" terminal assignment in $WRAPPER" >&2; exit 2; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-fx.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
@@ -64,6 +74,10 @@ FAILS=0; ASSERTS=0
 ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); ASSERTS=$((ASSERTS + 1)); }
 broken() { echo "readset-stage1-verdict: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "readset-stage1-verdict:"
 
 SUBJ="enforcement-map-sites enforcement-map-sites-b enforcement-map-sites-c validator-arm-selection validator-arm-selection-b"
@@ -223,8 +237,8 @@ W="$(mkworld rl-rcfile)" || broken seed; printf '1\n' > "$W/r2/rc"
 want rl-rcfile 2 "RL run 2: $W/r2/rc reads '1'"
 # THE DISCRIMINATING LEDGER for the skip mutant: FOUR lines, the first three good and the LAST bad.
 # A three-line ledger with one bad line refuses under both the scorer and the mutant.
-W="$(mkworld rl-skip)" || broken seed; seed_run "$W/r4" 4 || broken seed; printf 'killed\n' > "$W/r4/rc"; lline "$W/r4" 4 killed >> "$W/ledger"
-want rl-skip 2 "RL run 3: $W/r4 is recorded with rc 'killed'"
+W="$(mkworld rl-skip)" || broken seed; seed_run "$W/r4" 4 || broken seed; printf '%s\n' "$KILLTOK" > "$W/r4/rc"; lline "$W/r4" 4 "$KILLTOK" >> "$W/ledger"
+want rl-skip 2 "RL run 3: $W/r4 is recorded with rc '$KILLTOK'"
 
 # R0 -- a sandbox run.
 W="$(mkworld r0-log)" || broken seed; log_sub "$W/r2/deriver.log" 'sandbox tracer: fixtures run as' "[00:10:00] fs_usage runs as root; fixtures run as 'fx'"
