@@ -1218,12 +1218,15 @@ Census, at a26bea400, fixtures only. `git grep -P` over `core/fixtures/*/run.sh`
 
 Progress: self-update-gate is fixed on branch b245-a1-self-update-gate-det at core/fixtures/self-update-gate/run.sh:745,775,778,792,808,846,1035,1046 (nine pipes on eight lines; 778 and 808 were not in the census list). self-update-gate-b, -c, -d and self-update-fixture-log have no site of this shape.
 
-Owed:
-- Read each remaining candidate's writer and fix every real defect with capture-then-here-string.
-- Resolve and classify the 25 lib-defined writers.
-- A mechanism that refuses the shape in a fixture, with its false-positive set measured first.
+**Fixed in ae242a1a7, rides 0.964.0; the LANDED annotation is written when it lands.** One site was a count defect, and the hygiene arm is not shipped.
 
-verify: manual
+Outcome, criterion. A site moves the invocation count only if its writer can start a new `bash` (one that reads `BASH_ENV`) after its first matched line. The judge does not count subshells, `sed`, `awk` or `head` (judge header B6 and B7). Under that rule, of the 26 census sites outside self-update-gate, 1 was a count defect, 19 were SAFE-FOR-COUNT and 6 were NOT-A-SITE. The defect was `core/fixtures/ledger-reverify-unfalsifiable/run.sh:274`: `ledger-reverify.sh` starts `bash -c` per `sh` receipt (`:2942`), after the PC-BAD row. It is fixed in ae242a1a7, and its decl moves from 118 to 128, exact, with two armed readings agreeing. The 25 lib-defined writers were classified by the same reading.
+
+Outcome, hygiene arm. Not shipped. A candidate grammar found 35 hits at the fixed tree, and 0 of them were count defects: 19 SAFE-FOR-COUNT and 16 NOT-A-SITE. That is the enumerated false-positive set. Its control at a26bea400 found 45, including `:274` and the nine self-update-gate pipes. No line grammar can see this class, because whether a site is a defect depends on what the writer does after the match, and that is not on the line. The mechanism that catches it is the exact invocation count: J3 refuses the shortened start set, and BL-868's "no ±" end state keeps it exact.
+
+Outcome, blind route B1. `core/fixtures/layer-adjudication-tier/run.sh:256` seeds a git textconv driver `sh -c`, which git forks during the `:262` run. It is `sh` and reads no `BASH_ENV`, so the counter cannot see it. That is the judge header's B1, and it is not a load dependence.
+
+verify: sh git grep -qF 'exit}'"'"' <<< "$sp_o"' -- core/fixtures/ledger-reverify-unfalsifiable/run.sh
 
 ## Reopened by BL-817's re-audit (batch 243)
 
