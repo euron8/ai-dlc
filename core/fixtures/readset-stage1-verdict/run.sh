@@ -897,7 +897,7 @@ orphans_gone() {
 # THE ARM'S OWN PROBE, BOTH DIRECTIONS, before it reads the corpus: a sleep that is never killed must
 # refuse, and a reaped pid beside it in a second file must read gone.
 OGP="$WORK/og-probe"; sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
-sh -c 'exit 0' & ogd=$!; wait "$ogd"
+bash -c 'exit 0' & ogd=$!; wait "$ogd"
 printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
 orphans_gone "$OGP.live" 5; ogr1=$?
 orphans_gone "$OGP.dead" 5; ogr2=$?
