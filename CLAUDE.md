@@ -45,15 +45,18 @@ the general form.
 
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
-`.githooks/pre-push` is the runner. It dispatches through a worker pool
-(`xargs -P "$FIXTURE_JOBS"`, default 12), orders units by their own recorded costs so
-the longest starts first, content-keys the skip, and asserts that every dispatched
+`.githooks/pre-push` is the runner. It dispatches through a worker pool,
+content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
-across both pre-push hooks. Reach for it — `git push` is the cheapest way to run it —
-rather than writing `for d in core/fixtures/*/`.
+across both pre-push hooks. Before a release push, seed the verdict store
+(`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
+(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip, then the exact release commit,
+to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
+(`docs/plans/hermetic-pole.md`). A mktemp-store run caches nothing, and a green push's
+`verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
+failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
-**A hand-rolled loop is not merely slower, it FABRICATES FAILURES, and that is the
-reason this is a rule.** Measured on one branch, same tree, same fixtures, both ways:
+**A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, one tree, both ways:
 
 ```
 for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
@@ -65,15 +68,11 @@ the fixture dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`,
 exactly like a regression in the change under test. The serial loop was roughly ten times the
 pool's wall clock, and wrong.
 
-**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE, AND THE PASSAGE FORBIDDING THEM WAS ITSELF
-CARRYING TWO UNTIL THEY WERE CUT.** A total decays silently and reads exactly like a fresh one, and dating
-it is not available either — a date in resident rule prose is a tier-1 `audit-rule-files.sh`
-finding. **Derive the count, never quote one** —
-`ls core/fixtures/*/run.sh | wc -l` — and read the CHANGELOG for when a
-figure was taken. The suite is
+**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE.** **Derive the count, never quote one** —
+`ls core/fixtures/*/run.sh | wc -l`. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded
-there is a LOADED cost, measured under the pool; the same unit run alone gives a completely
+there is a LOADED cost, measured under the pool; the same unit run alone gives a
 different number — one shard, 442s loaded against 112s solo — and the two must never be
 compared.**
 
@@ -81,15 +80,13 @@ compared.**
 invariant added to `validate-enforcement-map.sh` as a nested loop over (subtree × fixture file)
 moved that validator from 13.0s to 18.1s — 39% — which the sharded mutation batteries multiply by
 roughly thirty, and the pole rose by a third. Reshaped to one recursive grep per subtree it is
-back to 13.2s. **Time the validator before and
-after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and exits in
-5ms, which reads as an enormous speed-up and is a broken measurement.
+back to 13.2s. **Count the validator's execs and invocations before and
+after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and counts
+almost nothing, which reads as an enormous reduction and is a broken measurement.
 
-The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
-carries it: a fixture that is green only from the repo root may be asserting nothing,
+The inverse hazard (`core/fixtures/check-3b-locked-anchor/run.sh:125`): a fixture that is green only from the repo root may be asserting nothing,
 because that is a cwd where its decoy files do not exist. A fixture that must hold from
-any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
-the suite is driven.
+any cwd asserts cwd-invariance in its own arms.
 
 ## Some authoring rules live in `.claude/rules/`, and load only on a Read
 
