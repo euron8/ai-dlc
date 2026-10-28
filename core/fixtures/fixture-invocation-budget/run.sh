@@ -23,7 +23,9 @@
 #       store preset: (a) through the hook's own call-site line at depth 0, judge present -> FXCOUNT_RC (an rc under
 #       the run dir), FXCOUNT_DIR (= <run dir>/log) and FXCOUNT_JUDGE are in a child `env` with those values, and
 #       AI_DLC_VERDICT_STORE is <preset>/counted-<12 hex>; (b) no judge -> step rc non-zero, nothing exported, store
-#       unchanged; (c) the call-site line at POOL_DEPTH_IN=1 -> the step never runs, nothing exported. Also: exactly
+#       unchanged; (c) the call-site line at POOL_DEPTH_IN=1 -> the step runs (it is unconditional, so steps equal
+#       verdicts at every depth) and returns 0 with the nested-pool line, and nothing is exported: no FXCOUNT variable
+#       in a child env and the store not rewritten to counted-*. Also: exactly
 #       one non-comment line before `step "fixture suite` calls fxcount_arm as a command word.
 #   SP  the judge's --self-probe standalone -> rc 0, all cells green
 #   NM  a plain run executes no matrix-only cell (control: the per-push mutant drives ran)
@@ -165,7 +167,9 @@ for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE; do ev b "$v" > /dev/null && { bad
 [ "$bbad" = 0 ] && ok8 "b-judge-absent: rc non-zero, nothing exported, the store unchanged"
 # (c) nested: the call-site line does not arm.
 cbad=0
-grep -q '^STEP_RC=' "$w/out.c" && { bad8 "c-step: the arming step ran at POOL_DEPTH_IN=1"; cbad=1; }
+grep -qx 'STEP_RC=0' "$w/out.c" || { bad8 "c-step: the unconditional arming step did not return 0 at POOL_DEPTH_IN=1: $(tr '\n' ' ' < "$w/out.c" | cut -c1-300)"; cbad=1; }
+grep -qF 'nested pool (depth 1): the outer hook arms the counter; this copy stays inert' "$w/out.c" \
+  || { bad8 "c-line: the step at POOL_DEPTH_IN=1 did not print the nested-pool line"; cbad=1; }
 for v in FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE; do ev c "$v" > /dev/null && { bad8 "c-exported: $v reached a child env at depth 1"; cbad=1; }; done
 [ "$(ev c AI_DLC_VERDICT_STORE)" = "$w/store.c" ] || { bad8 "c-store: the store moved at depth 1"; cbad=1; }
 [ "$cbad" = 0 ] && ok8 "c-nested: at POOL_DEPTH_IN=1 nothing is armed"
