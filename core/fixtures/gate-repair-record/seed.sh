@@ -208,5 +208,67 @@ write_record gate-repaired-resolution-off-label 1 "edit sites" \
 write_record gate-repaired-resolution-off-label 2 "edit sites" \
   "$ROOT/gate-repaired-resolution-off-label/_bmad-output/planning-artifacts/$SPRINT/gate-$GATE-resolution-p2.md"
 
-rm -rf "$SRC"
+# ---------------------------------------------------------------- the Check 22 repair pair
+# A SECOND differential, on the IMPLEMENTATION gate, kept apart from the story series above:
+# run.sh compares every case of $CASES against the story series byte for byte, so these two
+# cases have their own source and their own comparison. Check 22 FAILs at pass 1 and PASSes at
+# pass 2. Between them the lead repaired the ledger the operator-free way (gate-validation.md
+# Check 22, the remediable classes): a re-dispatch naming each violating row on a
+# `remediates: <tool_use_id>` line, then validate-spawn-ledger.sh exiting 0. No remediator
+# edited an artifact, so the record is the LEAD's resolution record,
+# `gate-implementation-resolution-p1.md`, carrying `disposition:`, `edit:` and `derivation:`
+# that name each R, its `remediates:` target and the validator's COUNTS line. The pair differs
+# ONLY in whether that record exists, so the record is the one thing the arm can be reading.
+SRC2="$ROOT/.series-source-c22"
+mkdir -p "$SRC2"
+emit_c22() {   # $1 nonce  $2 check-22 verdict
+  local ts="${1#implementation-}"
+  local stamp="${ts:0:4}-${ts:4:2}-${ts:6:2}T${ts:9:2}:${ts:11:2}:${ts:13:2}Z"
+  cat > "$SRC2/$1.verdict.json" <<C22EOF
+{
+  "schema_id": "GATE_ADJUDICATION_VERDICT v1",
+  "gate_type": "implementation",
+  "gate_series_id": "implementation-gate-20261010T2300Z",
+  "gate_nonce": "$1",
+  "generated_at": "$stamp",
+  "adjudicator_agent_id": "agent-$1",
+  "catalog": "core",
+  "verdicts": [
+    {"check_id": "22", "verdict": "$2", "evidence": "scripts/ai-dlc/validate-spawn-ledger.sh --sprint 317"},
+    {"check_id": "24", "verdict": "PASS", "evidence": "artifact.md:24"}
+  ]
+}
+C22EOF
+}
+emit_c22 implementation-20261010T230257Z FAIL
+emit_c22 implementation-20261010T234500Z PASS
+for case_dir in gate-c22-remediated-resolution gate-c22-remediated-no-record; do
+  mkdir -p "$ROOT/$case_dir/_bmad-output/gate-adjudication" \
+           "$ROOT/$case_dir/_bmad-output/planning-artifacts/s317"
+  cp "$SRC2"/*.verdict.json "$ROOT/$case_dir/_bmad-output/gate-adjudication/"
+done
+cat > "$ROOT/gate-c22-remediated-resolution/_bmad-output/planning-artifacts/s317/gate-implementation-resolution-p1.md" <<'RESEOF'
+# Gate resolution record — implementation gate, pass 1
+
+Check 22 FAILed at pass 1 on remediable-class rows only. Each was repaired by a re-dispatch of
+its role naming it on a `remediates:` line; no escalation entry and no operator line.
+
+## Check 22 — spawn ledger
+
+- disposition: remediated (classes cite, shard, cover); recorded PASS at pass 2
+- edit: _bmad-output/spawn-ledger.jsonl — R toolu_01REMR00000000000000001 remediates: toolu_01REMINV000000000000001 (shard); R toolu_01CITR000000000000000001 remediates: toolu_01CITV000000000000000001 (cite); R toolu_01COVR000000000000000001 remediates: toolu_01COVV000000000000000001 (cover)
+- derivation:
+  ```
+  $ scripts/ai-dlc/validate-spawn-ledger.sh --sprint 317
+  REMEDIATED: toolu_01REMINV000000000000001 by toolu_01REMR00000000000000001 (shard)
+  REMEDIATED: toolu_01CITV000000000000000001 by toolu_01CITR000000000000000001 (cite)
+  REMEDIATED: toolu_01COVV000000000000000001 by toolu_01COVR000000000000000001 (cover)
+  COUNTS: examined 7 S317 spawn row(s) of 7 in _bmad-output/spawn-ledger.jsonl;
+    remediation (classes: cite shard cover): remediated=3 pending-remedy=0
+  exit 0
+  ```
+RESEOF
+# gate-c22-remediated-no-record: planning-artifacts/s317/ exists and is EMPTY on purpose.
+
+rm -rf "$SRC" "$SRC2"
 echo "$ROOT"

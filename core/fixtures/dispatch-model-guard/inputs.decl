@@ -1,2 +1,10 @@
 core/hooks/
 !core/team-roles/gate-adjudicator.md
+# Section 15q-15t: the guard walks up to the ledger validator for --remediated-keys, and 15t runs it
+# and the gate validator's --series directly; the gate validator fails closed without the arm-H
+# sibling it runs for repair_field, its verdict schema and the enforcement map.
+!core/scripts/validate-spawn-ledger.sh
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml

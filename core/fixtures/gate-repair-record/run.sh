@@ -236,6 +236,48 @@ expect gate-repaired-record-off-label 1 'UNSTRUCTURED REPAIR RECORD' \
   its sibling finding also carries."
 
 # --------------------------------------------------------------------------
+# 1b. A CHECK 22 FAIL CLEARED BY REMEDIATION OWES A RESOLUTION RECORD (contract B2).
+#
+# The remediable Check 22 classes clear with no escalation entry and no operator line: a
+# re-dispatch names each violating row on `remediates:`, and validate-spawn-ledger.sh exits 0.
+# The gate series still shows 22 FAIL -> PASS, so the repair-record arm owes a record for pass
+# 1, and the lead writes `gate-implementation-resolution-p1.md` naming each R, its target and
+# the validator's COUNTS line. The pair carries byte-identical series (asserted first) and
+# differs only in that record, so an arm that cleared the series without reading the record
+# would pass both, and one that refused a resolution record for Check 22 would fail both.
+# --------------------------------------------------------------------------
+C22A="$ROOT/gate-c22-remediated-resolution/_bmad-output/gate-adjudication"
+C22B="$ROOT/gate-c22-remediated-no-record/_bmad-output/gate-adjudication"
+ASSERTIONS=$((ASSERTIONS + 1))
+n_c22="$(find "$C22A" -name '*.verdict.json' | wc -l | tr -d ' ')"
+if [ "$n_c22" -ne 2 ]; then
+  note_fail "the Check 22 pair seeded $n_c22 verdict(s); it needs exactly two passes (FAIL then PASS)."
+else
+  for f in "$C22A"/*.verdict.json; do
+    cmp -s "$f" "$C22B/$(basename "$f")" || note_fail "the Check 22 pair's series differ at
+  $(basename "$f"); the pair must differ ONLY in the resolution record."
+  done
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+recs_c22a="$(find "$ROOT/gate-c22-remediated-resolution/_bmad-output/planning-artifacts" -name 'gate-implementation-resolution-p1.md' | wc -l | tr -d ' ')"
+recs_c22b="$(find "$ROOT/gate-c22-remediated-no-record/_bmad-output/planning-artifacts" -name 'gate-*-p*.md' | wc -l | tr -d ' ')"
+[ "$recs_c22a" -eq 1 ] && [ "$recs_c22b" -eq 0 ] || note_fail "the Check 22 pair's records are
+  with=$recs_c22a, without=$recs_c22b; expected 1 and 0."
+
+expect gate-c22-remediated-resolution 0 '' \
+"Check 22 FAILed at pass 1 on remediable rows only and PASSed at pass 2, and the lead's
+  gate-implementation-resolution-p1.md names each remediating re-dispatch, its remediates:
+  target and the validator's COUNTS line in the three structured fields. Nothing is owed. If
+  this exits 1, the operator-free clear has no record the series arm accepts, and the lead is
+  pushed back onto an escalation entry the operator ruled unnecessary."
+
+expect gate-c22-remediated-no-record 1 'MISSING REPAIR RECORD' \
+"The same series with NO resolution record. A Check 22 FAIL that cleared by remediation is
+  still a repaired pass, and the record is the only place the remediating re-dispatches are
+  named against the series. If this exits 0, the arm has been exempted for Check 22 and the
+  operator-free clear leaves no trail at the gate."
+
+# --------------------------------------------------------------------------
 # 2. THE STALL RUNG MUST NOT BE WHAT MADE THE RED CASES RED.
 #
 # Check `7` holds FAIL for exactly two consecutive passes, one short of K=3. If the rung
