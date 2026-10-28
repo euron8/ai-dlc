@@ -233,7 +233,7 @@ S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not 
 # THE CORPUS IS `doc` -- `core/*` MINUS `*.sh` -- AND THAT SUBTRACTION IS THE WHOLE NARROWING.
 # Measured over `git ls-files 'core/*'` minus this validator's own battery: 37 lines in `.sh`
 # files carry this pattern (39 with the battery's two comment lines), every one of them in a
-# bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:536` -- and
+# bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:726` -- and
 # 0 lines in the non-`.sh` files. A `.sh` subject is run by bash; a `.md` subject is retyped by a
 # model or an operator into whatever shell they hold, and on this machine that is zsh. The
 # subtraction is a CORPUS rather than a SKIP because the self-probe below is `bad.sh`/`good.sh`:

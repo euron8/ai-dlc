@@ -336,7 +336,7 @@ file_hash() {
 # `WORKLIST settings-merge` row is present in both runs and is the control that this does not
 # silence work that is real.
 #
-# READ FROM THE STAMP, NOT PASSED IN, and guarded exactly as `unregistered-drift.sh:121-132`
+# READ FROM THE STAMP, NOT PASSED IN, and guarded exactly as `unregistered-drift.sh:204-214`
 # guards the same read — that script already reaches the same verdict on the same file in the
 # same run, and a second spelling of one fact is a second thing to drift. All three of its
 # guards are kept and each has a subject: no stamp at all; `skill_commit` equal to `commit`,

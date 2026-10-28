@@ -209,7 +209,7 @@ fi
 # other direction: reddening an accurate report is the wedge-live-work shape.
 #
 # STDERR IS THE RIGHT CHANNEL HERE AND THE WRONG ONE IN PRINT MODE, and the two are asserted
-# separately for that reason — check mode renders no region, while `emit-report.sh:474` invokes
+# separately for that reason — check mode renders no region, while `emit-report.sh:814` invokes
 # print mode with `2>/dev/null`, so a print-mode qualifier on stderr would never reach the
 # artifact the operator approves from. Assertion 3b reads stdout; this one reads stderr.
 git -C "$DIST" show "$THEIRS_ADV:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_REL"
