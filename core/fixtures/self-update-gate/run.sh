@@ -594,6 +594,35 @@ ss_assert_b() { ss_assert "$@"; [ "$2" = "$3" ]; }
 # mx_acc <cell> <base> <got> accumulates one matrix cell; values are made blank- and comma-free.
 mxv() { local v="${1// /_}"; printf '%s' "${v//,/;}"; }
 mx_acc() { MX_B="$MX_B $1=$(mxv "$2")"; MX_G="$MX_G $1=$(mxv "$3")"; }
+# narrow_cells <mutant> -> the mutant's decides-plus-twin cells, read from its MUTANT-MATRIX row. narrow_set cuts
+# a comma-terminated set to those cells in a plain run; --matrix keeps the whole set. The gate and the
+# preclassifier emit every cell in ONE process, so this cuts the cells compared, not the process count.
+narrow_cells() {
+  case "$1" in
+    armc-mut-bucket) printf "%s" "core_rules_doomed.md,core_schemas_fresh.json,core_scripts_reloc.sh,core_rules_edited.md" ;;
+    armc-mut-setf) printf "%s" "core_rules_doomed.md,core_rules_edited.md,core_schemas_fresh.json,core_scripts_reloc.sh,core_git-hooks_pre-push" ;;
+    armc-mut-base) printf "%s" "core_rules_doomed.md,core_rules_edited.md" ;;
+    armc-mut-uncond) printf "%s" "core_rules_steady.md,core_rules_doomed.md" ;;
+    armc-mut-member) printf "%s" "core_skills_ai-dlc_steps_gate-validation.md,core_rules_doomed.md" ;;
+    armc-mut-safestop) printf "%s" "core_git-hooks_pre-push,core_rules_doomed.md,core_rules_edited.md,core_schemas_fresh.json,core_scripts_reloc.sh" ;;
+    su-mut-noarm-m) printf "%s" "core_fixtures_fx-mod_run.sh,core_rules_carried.md,core_rules_added.md" ;;
+    su-mut-noarm-a) printf "%s" "core_fixtures_fx-add_run.sh,core_rules_added.md,core_rules_carried.md" ;;
+    su-mut-wide) printf "%s" "core_fixtures_fx-edit_run.sh,core_rules_edited.md,core_rules_indexed.md,core_rules_carried.md" ;;
+    su-mut-unscoped) printf "%s" "core_skills_ai-dlc_artifact-path-grammar.md,core_rules_edited.md" ;;
+    su-mut-nofixture) printf "%s" "core_fixtures_fx-add_run.sh,core_fixtures_fx-mod_run.sh,core_fixtures_fx-edit_run.sh" ;;
+    su-mut-order) printf "%s" "core_session-driver_modeflip.sh,core_session-driver_modeneed.sh" ;;
+    su-mut-unresolvable) printf "%s" "core_fixtures_fx-add_run.sh,core_fixtures_fx-mod_run.sh,core_rules_added.md,core_rules_carried.md,core_rules_edited.md" ;;
+    su-mut-index) printf "%s" "core_rules_indexed.md,core_rules_edited.md" ;;
+    su-mut-machfn) printf "%s" "obs" ;;
+    *) return 1 ;;
+  esac
+}
+narrow_set() {
+  local keep
+  if [ "$MATRIX" = 1 ] || ! keep="$(narrow_cells "$1")"; then printf '%s' "$2"; return 0; fi
+  printf '%s' "$2" | awk -v keep=",$keep," 'BEGIN { RS = ","; ORS = "," }
+    NF { k = $0; sub(/=.*/, "", k); gsub(/[^A-Za-z0-9_.-]/, "_", k); if (index(keep, "," k ",")) print $0 }'
+}
 # cells_kill <flag> <name> <driver> <gate> <push-cells> <why> <cell> <want> [<cell> <want>]...
 # The driver leaves the cell's observation in DRV_OUT (called in this shell, never in a substitution, so a
 # state it builds stays built). A plain run drives only <push-cells>: the deciding cells and their one twin.
@@ -1637,7 +1666,7 @@ ac_kill() { # ac_kill <label> <sed-expr> <want-carry-set> <why>
   fi
   got="$(ac_carry "$g" "$AC/cons" "$AC/cwd")"
   mx_row "$1" "$AC_ALL" "$got"
-  if [ "$got" = "$3" ]; then
+  if [ "$(narrow_set "$1" "$got")" = "$(narrow_set "$1" "$3")" ]; then
     mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
   else
     FAILURES=$((FAILURES + 1))
@@ -1703,7 +1732,7 @@ ac_kill_pre() { # ac_kill_pre <label> <sed-expr> <want-carry-set> <why>
   fi
   got="$(ac_carry "$d/self-update-gate.sh" "$AC/cons" "$AC/cwd")"
   mx_row "$1" "$AC_ALL" "$got"
-  if [ "$got" = "$3" ]; then
+  if [ "$(narrow_set "$1" "$got")" = "$(narrow_set "$1" "$3")" ]; then
     mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
   else
     FAILURES=$((FAILURES + 1))
@@ -2093,7 +2122,7 @@ su_kill() { # su_kill <label> <awk> <stamp> <want-set> <why>
   su_stamp "$3"
   got="$(su_buckets "$g" "$SU/cons")"
   if [ "$MATRIX" = 1 ]; then mx_row "$1" "$(su_buckets "$SU_PC" "$SU/cons")" "$got"; fi
-  if [ "$got" = "$4" ]; then
+  if [ "$(narrow_set "$1" "$got")" = "$(narrow_set "$1" "$4")" ]; then
     mutant_killed "${B_su:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$5")"
   else
     FAILURES=$((FAILURES + 1))
