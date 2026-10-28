@@ -597,10 +597,18 @@ TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
 # case; d is proven load-bearing by (ii), which moves d alone. Mutant (iii) also moves world
 # f, which is not in the scored vector: f records behaviour and owns no mutant.
 HOOKS_SRC="$(dirname "$HOOK")"
-mk_hooks_copy() { # mk_hooks_copy <tag> -> path of the guard inside a fresh copy of the hooks dir
-  local d; d="$(mktemp -d "$WORK/hooks-$1.XXXXXX")" || return 1
-  cp -R "$HOOKS_SRC/." "$d/" || return 1
-  printf '%s/%s' "$d" "$(basename "$HOOK")"
+# ONE copy of the hooks directory serves every mutant: the guard resolves exactly one sibling
+# (ai-dlc-context-provenance.sh, by `dirname "${BASH_SOURCE[0]}"`), and every mutant below is a
+# differently NAMED guard file inside that one directory, so each still finds its sibling beside
+# itself. The directory used to be copied once per mutant, which paid a whole-directory `cp -R` for
+# a sibling that is read, never written. Built at top level, not lazily: a lazy build inside the
+# `$( )` that calls mk_hooks_copy would be discarded with that subshell.
+HOOKS_SHARED="$(mktemp -d "$WORK/hooks-shared.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp -R "$HOOKS_SRC/." "$HOOKS_SHARED/" || { echo "FIXTURE ERROR: hooks copy failed" >&2; exit 2; }
+mk_hooks_copy() { # mk_hooks_copy <tag> -> path of a byte-identical guard copy beside the shared sibling
+  local g="$HOOKS_SHARED/$(basename "$HOOK").$1"
+  cp "$HOOKS_SHARED/$(basename "$HOOK")" "$g" || return 1
+  printf '%s' "$g"
 }
 CC_WANT="a=true/definition b=true/prompt c=false/null d=false/null e=false/null"
 
