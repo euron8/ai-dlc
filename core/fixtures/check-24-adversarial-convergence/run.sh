@@ -335,7 +335,6 @@ fi
 # mutant then scores every cell and every receipt world; each row must still equal its want row, which is
 # the proof every twin stayed green. A run WITHOUT --matrix scores no matrix-only cell: arm MX0 counts the
 # cells each mutant skipped and refuses a per-push run that skipped none.
-# MUTANT-MATRIX-BEGIN -- the matrix, measured by the MUTANT-MATRIX-REMEASURE command above: every shard printed
 # `MATRIX MODE: on`, every mutant row equalled its want row, 0 FAIL. A row is `<mutant> decides=<arm>.<cell>
 # twins=<arm>.<cell>`: the arm is the mutant's own `ok` label (slugged: any character outside [A-Za-z0-9_-]
 # becomes `-`), the deciding cells are the cells (1-based in the row) or receipt worlds whose verdict the
@@ -482,7 +481,6 @@ fi
 # MUTANT-MATRIX MUTATION-seam-reused-row decides=MUTATION-seam-reused-row.seamed-row twins=MUTATION-seam-reused-row.other-path-row
 # MUTANT-MATRIX MUTATION-arms-guard-removed decides=MUTATION-arms-guard-removed.cell1,MUTATION-arms-guard-removed.cell2,MUTATION-arms-guard-removed.cell3,MUTATION-arms-guard-removed.cell4 twins=MUTATION-arms-guard-removed.cell5
 # MUTANT-MATRIX-CONTROL ARMS-GUARD why=the shipped validator must refuse each malformed --arms value and a second --arms, and run J3 and J2,J3 as a subset at rc 0
-# MUTANT-MATRIX-END
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
 else echo "MATRIX MODE: off -- per push, each mutant scores its deciding cells plus one green twin (shard $GROUP)"; fi
