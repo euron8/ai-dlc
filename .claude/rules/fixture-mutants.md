@@ -3,10 +3,11 @@ paths:
   - "core/fixtures/**"
 ---
 
-<!-- no-stub: authoring or changing a mutation battery always begins by reading the
-     fixture's own run.sh, which is inside `core/fixtures/**`, so the trigger fires on
-     the first action of the work. A CLAUDE.md pointer would restate a trigger that
-     already fires. -->
+<!-- no-stub: by operator ruling there is no CLAUDE.md pointer, because the
+     compaction-durable channel is at its byte ceiling and a pointer would spend it.
+     The carrier of the "One run per distinct state" section is the push failure:
+     the invocation budget's J3 remedy text names that section by its title, so
+     the rule reaches whoever the budget refuses. -->
 
 # Mutants
 
@@ -231,3 +232,41 @@ paths:
   REMEDY: it names a durable artifact as scratch state to untrack, in the channel an
   operator is contracted to act on. Severity read off the message is a different figure
   from severity read off the action, and only the second one is the cost.
+
+## One run per distinct state
+
+A fixture pays for each run of its subject, so the number of runs is part of its design. Seven
+clauses; they bind every fixture, and clause 2 binds every mutant battery.
+
+1. **One subject run per distinct state.** Assertions about one state read one run's output; they
+   do not each re-run the subject. Measured: `reconcile-emit-report` rendered the full report
+   about 200 times where one or two renders carried every assertion.
+2. **A mutant runs only the world where its arm decides, plus its named twins.** The mutant by
+   arm matrix is measured once, from a real hermetic run, and recorded in the fixture's header,
+   with the command that re-measures it, which is re-run whenever an arm or a mutant is added
+   or changed. "Killed by its own arm alone" is a test-quality property established at
+   authoring and re-established on change, never re-checked per push. Measured: `readset-skip`
+   scored 15 mutants against 15 worlds on every push. The block forms are `MUTANT-MATRIX`,
+   `MUTANT-MATRIX-FULL` (a whole world vector, with its reason), `MUTANT-MATRIX-CONTROL` (a
+   knock-out control that must survive), `MUTANT-MATRIX-DYNAMIC` (a loop whose names are not
+   literals), `twins=-` with a `why=` (a row dead in every cell), and one
+   `MUTANT-MATRIX-REMEASURE` line. Their exact grammar is the header of
+   `scripts/validate-fixture-hygiene.sh`; it is not restated here.
+3. **No unmutated control is re-run per mutant.** Run the control once and compare each mutant
+   against its output.
+4. **Build each world once and copy it.** A world constructed per assertion is a world built
+   many times.
+5. **Use the subject's cheap mode.** Where none exists for a one-piece question, add a seam
+   that calls the SAME function the subject calls, never a copy of it.
+6. **One end-to-end run per distinct outcome proves the wiring.** The remaining cells exercise
+   the function directly.
+7. **A fixture never SKIPs with exit 0 on a condition true in normal use**, such as a
+   linked-worktree `.git` or a missing declared tool. The skip reads as a pass. Exit 2 with
+   FIXTURE BROKEN instead.
+
+Enforcement, stated honestly. Clauses 1 through 6 have ONE mechanism, the invocation budget
+(`scripts/validate-fixture-invocations.sh`, run inside `core/scripts/hermetic-run.sh`): it
+refuses the regrowth of a fixture's start count and does not attribute it to a clause. Clause
+2's header block is checked for shape, not truth, by `scripts/validate-fixture-hygiene.sh` arm
+H5; that the recorded matrix is the measured one is the integrator's check against the matrix
+run. Clause 7 is held by that validator's H1, H2 and H3.
