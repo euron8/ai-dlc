@@ -5,3 +5,4 @@
 !scripts/readset-stage1-run.sh
 core/scripts/derive-fixture-readsets.sh
 core/fixtures/lib/
+core/fixtures/lib/mutant.sh

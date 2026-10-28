@@ -52,7 +52,6 @@ process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
 provenance-flagless-default
-readset-stage1-verdict
 reconcile-emit-report
 requirements-step
 retired-layer-passage
