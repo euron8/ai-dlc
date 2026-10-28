@@ -21,11 +21,12 @@
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
-# MUTANT-MATRIX MJ3 decides=A1,A2,A4,A5,SP twins=A3,A6
-# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5 twins=A3,A6,SP
-# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5 twins=A3,A6,SP
+# MUTANT-MATRIX MJ3 decides=A1,A2,A4,A5,SP twins=A3
+# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5 twins=A3
+# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5 twins=A3
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
-# Re-measure it whenever an arm or a mutant is added or changed. Per push: MJ3 runs SP (the judge refuses its own
+# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A6 (and SP for MGATE and
+# MPASS) green under each mutant; only A3 is named as the twin, because only A3 runs per push. Per push: MJ3 runs SP (the judge refuses its own
 # J3 cells before judging anything, so every armed arm fails through SP) with twin A3; MGATE runs A2 with twin A3;
 # MPASS runs A1 with twin A3.
 #   MJ3    the judge's J3 compare removed            -> SP names the J3 off-by-one cell
@@ -135,7 +136,7 @@ verdict() {
   local t="$2"
   case "$1" in
     A1) rcis "$t" 0 && has "$t" 'probe: invocation budget ok: 3 start(s)' && has "$t" 'probe: verdict recorded in' ;;
-    A2) rcis "$t" 1 && has "$t" 'probe: FAIL (J3): row "2 *": measured 3, declared 2. If this change was meant to alter how often the fixture runs its subject, set the row to 3;' \
+    A2) rcis "$t" 1 && has "$t" 'probe: FAIL (J3): row "2 *": measured 3, declared 2 -- if this change was meant to alter how often the fixture runs its subject, set the row to 3; otherwise this is the regrowth fixture-mutants.md '"'"'One run per distinct state'"'"' forbids' \
           && has "$t" 'hermetic-run: probe: rc=1' && [ "$(nstore "$t")" = 0 ] ;;
     A3|A6) rcis "$t" 0 && has "$t" 'probe: verdict recorded in' && ! has "$t" 'invocation budget' && [ ! -e "$WORK/fxd.$t/probe" ] ;;
     A4) rcis "$t" 1 && has "$t" 'probe: FAIL (J5): mutant_killed reported Mx, which has no' ;;

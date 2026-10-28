@@ -58,7 +58,17 @@
 #   B8  a start killed before its first command records nothing. A fixture that backgrounds `bash ... &` and kills
 #       it, or runs one under `timeout`, can therefore count fewer starts on a slow run; it makes the kill wait for the
 #       child's first command or is listed with its reason. The two-pass counting slot catches only rates high
-#       enough to show in two passes.
+#       enough to show in two passes. Enumerated statically over the 263 tracked core/fixtures/*/run.sh, non-comment
+#       lines only: a backgrounded start `bash <args> &` in a run.sh that also carries a `kill`/`pkill`, or any
+#       `timeout`/`gtimeout` use (a seeded `bash x &` plus `kill` is flagged, `bash x && echo` is not). 9 flagged:
+#       consumer-suite-pool, readset-skip, readset-stage1-verdict, reconcile-emit-report, spec-join-integrity,
+#       wait-beat-liveness, wait-stale-deliverable (background and kill); foreground-budget-deny, retro-audit-scans
+#       (timeout); readset-skip carries both. Their per-fixture reasons are not yet read: the counting slot's two passes
+#       decide which of them move, and each one that moves is fixed or listed here with its reason.
+#   J5 ATTRIBUTION. FXCOUNT_LOG crosses into every child that is not under its own `env -i`, so a fixture that runs
+#   another fixture's run.sh directly has the inner fixture's mutant_killed names joined against the OUTER header.
+#   Today no other run.sh names one of the four mutant_killed users by path; a driver looping over a glob is not seen
+#   by that check.
 #   Also unseen: `bash --posix`, `bash -p` and `bash -n` (no BASH_ENV), a script whose first command is a bare
 #   subshell, and an empty script. `bash -s` and `bash < f` log an empty path, process substitution `/dev/fd/<n>`;
 #   both still count toward `*`.
@@ -178,7 +188,7 @@ EOF
       fi
       # J3
       if [ "$m" != "$dcl" ]; then
-        printf '%s: FAIL (J3): row "%s": measured %s, declared %s. If this change was meant to alter how often the fixture runs its subject, set the row to %s; %s.\n' \
+        printf '%s: FAIL (J3): row "%s": measured %s, declared %s -- if this change was meant to alter how often the fixture runs its subject, set the row to %s; %s\n' \
           "$fx" "$raw" "$m" "$dcl" "$m" "$FXC_REMEDY_TAIL"
         rc=1
       fi
@@ -245,7 +255,7 @@ fxc_self_probe() {
   # J3 both directions, `*`, path and corpus rows
   mkdir -p "$SPR/j3a" "$SPR/j3b" "$SPR/j3c" "$SPR/j3d"; for d in j3a j3b j3c j3d; do cp "$fd/inputs.decl" "$SPR/$d/"; done
   printf '4 *\n2 core/scripts/sub.sh\n' > "$SPR/j3a/invocations.decl"
-  sp_cell "J3 a * row off by one FAILs with measured, declared and the remedy" 1 j3a "$SPR/log" "measured 6, declared 4. If this change was meant to alter how often the fixture runs its subject, set the row to 6; $FXC_REMEDY_TAIL"
+  sp_cell "J3 a * row off by one FAILs with measured, declared and the remedy" 1 j3a "$SPR/log" "measured 6, declared 4 -- if this change was meant to alter how often the fixture runs its subject, set the row to 6; $FXC_REMEDY_TAIL"
   printf '6 *\n3 core/scripts/sub.sh\n' > "$SPR/j3b/invocations.decl"
   sp_cell "J3 a path row counting the near-miss xsub.sh FAILs" 1 j3b "$SPR/log" "measured 2, declared 3"
   printf '2+2xcore/scripts/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j3c/invocations.decl"
