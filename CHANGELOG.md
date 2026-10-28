@@ -43,6 +43,7 @@ Counts are bash starts per push, counter-measured and armed, slot to tip, `befor
 - postcompact-rulebook-recovery: 1859 -> 1869, a RISE in the count only, because the corrected counter now sees 10 gate starts under `ulimit -f` that it could not count before.
 - self-update-gate: 462 -> 428; `-b` 847 -> 638; `-c` 430 -> 223; `-d` 455 -> 375. self-update-fixture-log: 42 -> 43.
 - self-update-gate's 428 is the stable count. Its 9 early-exit `| awk … exit` pipe readers were replaced by a capture plus a here-string, so the gate always runs to completion. The old count varied with load (416 versus 428) because SIGPIPE cut the gate short.
+- backlog-real-ledger: 340 -> 339, with validate-backlog-receipts.sh 122 -> 121. This fixture runs against the live ledger, so the release's own docs/backlog.md edit (BL-851 moving to LANDED) takes one receipt out of the set it runs; the count follows the ledger, not the fixture.
 - self-update-join-gate: a new declaration, 76.
 - content-seal: a fall of 50, `*` 861 -> 811 and merge-adversarial-shards.sh 99 -> 49. content-seal itself was not edited: the fall is a side effect of the adversarial-shard-merge memo of `shard() --map` in that fixture's `lib.sh`, which content-seal sources.
 - procsub-staged-refusal: the RLC-SHAPES and RLC-TOKENS mutants are re-anchored on the rewritten `shapes_of` and `tokens_of` bodies. No count change.
