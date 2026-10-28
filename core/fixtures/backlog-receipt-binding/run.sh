@@ -272,6 +272,9 @@ class_check() { # class_check <name> <dir> <env> [<extra-args>...]
   local n="$1" d="$2" e="$3"; shift 3
   local out rc_v bad=""
   out="$(run_v "$e" "$d" $DEF "$@")"; rc_v=$?
+  # Handed back, so arms asking a question about the SAME world read this run instead of paying
+  # for an identical one (see the control below).
+  CC_OUT="$out"; CC_RC="$rc_v"
   if [ "$rc_v" -ne 0 ]; then
     note "FAIL  $n -- the subject exited $rc_v on a tree that must pass"
     printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
@@ -343,8 +346,21 @@ mut() { # mut <dir> <sed-expr>
 }
 
 # --- unmutated control ------------------------------------------------------
+# ONE RUN, FOUR MORE ARMS READ IT. m2a (AT the ceiling), m3b (BL-806's class), m7 (the caller's
+# tree unchanged) and m17c (BL-803's class) each used to seed this same tree and drive the same
+# unmutated subject with the same $DEF -- a byte-identical world, so a byte-identical answer, paid
+# for five times. Each still emits its own verdict by name, below, from this run's output (CTL_OUT)
+# and from m7's before/after snapshots taken around it.
 seed "$TMP/control"
+m7_porc_before="$(git -C "$TMP/control" status --porcelain | grep -c . )"
+m7_wt_before="$(git -C "$TMP/control" worktree list | grep -c . )"
+m7_sum_before="$(cksum "$TMP/control/probe/subject.txt" | awk '{print $1}')"
+CC_OUT=""; CC_RC=1
 class_check "control -- clean seed passes and every receipt is classified" "$TMP/control" ""
+CTL_OUT="$CC_OUT"; CTL_RC="$CC_RC"; CTL_OK="$rc"
+m7_porc_after="$(git -C "$TMP/control" status --porcelain | grep -c . )"
+m7_wt_after="$(git -C "$TMP/control" worktree list | grep -c . )"
+m7_sum_after="$(cksum "$TMP/control/probe/subject.txt" | awk '{print $1}')"
 
 # The control above is the harness's liveness proof. If it did not hold, every mutant below
 # would be scored against a subject that never ran, and two inert runs compare equal.
@@ -377,8 +393,12 @@ fi
 # ===== M2. THE CEILING COMPARISON IS `-ge`. ================================================
 # "exceeds the ceiling" means a corpus AT the ceiling is legal. Both directions are asserted in
 # the same probe: an off-by-one is green on the failing side alone.
-seed "$TMP/m2a"
-class_check "m2a exactly AT the ceiling ($BL_PC) passes" "$TMP/m2a" ""
+# m2a is the control's own world ($DEF pins the ceiling AT $BL_PC), so it reads the control's run.
+if [ "$CTL_OK" -eq 0 ] && [ "$CTL_RC" -eq 0 ]; then
+  note "ok    m2a exactly AT the ceiling ($BL_PC) passes -- the control's run: all six seeded receipts classified as the seed wrote them"
+else
+  note "FAIL  m2a exactly AT the ceiling ($BL_PC) -- the control's run did not pass"; rc=1
+fi
 seed "$TMP/m2b"
 kill_check "m2b one OVER the ceiling ($(( BL_PC - 1 ))) fails" "$TMP/m2b" "" 1 \
   "are satisfied by a COMMENT" --max-prose-closable "$(( BL_PC - 1 ))"
@@ -422,8 +442,8 @@ fi
 # m3b -- THE EXTRACTION IS FAITHFUL, asserted directly rather than inferred. A `git archive`
 # extraction has no `.git`, and BL-806's receipt would exit 9 there and be excluded -- the
 # population would be silently wrong and every count below it computed over the wrong set.
-seed "$TMP/m3b"
-m3b_out="$(run_v "" "$TMP/m3b" $DEF)"
+# The control's world and arguments, so the control's run is read rather than repeated.
+m3b_out="$CTL_OUT"
 m3b_806="$(cls "$m3b_out" BL-806)"
 if [ "$m3b_806" != "PROSE-CLOSABLE" ]; then
   note "FAIL  m3b the checkout is not a faithful repository -- the git-reading receipt was classified '${m3b_806:-NONE}', not PROSE-CLOSABLE. Its guard exits 9 where there is no .git, so the whole git-reading population would be silently excluded."
@@ -553,14 +573,8 @@ rm -f "$m6b_rev.orig"
 # Two assertions, because they fail differently: the caller's tree must be unchanged, and the
 # seed must not be visible in it afterwards. A subject that seeded in place would leave the
 # receipt's own literal in a probe file.
-seed "$TMP/m7"
-m7_porc_before="$(git -C "$TMP/m7" status --porcelain | grep -c . )"
-m7_wt_before="$(git -C "$TMP/m7" worktree list | grep -c . )"
-m7_sum_before="$(cksum "$TMP/m7/probe/subject.txt" | awk '{print $1}')"
-m7_out="$(run_v "" "$TMP/m7" $DEF)"; m7_rc=$?
-m7_porc_after="$(git -C "$TMP/m7" status --porcelain | grep -c . )"
-m7_wt_after="$(git -C "$TMP/m7" worktree list | grep -c . )"
-m7_sum_after="$(cksum "$TMP/m7/probe/subject.txt" | awk '{print $1}')"
+# The control's world, so its snapshots were taken around the control's run (see the control).
+m7_out="$CTL_OUT"; m7_rc="$CTL_RC"
 if [ "$m7_rc" -ne 0 ]; then
   note "FAIL  m7 -- the subject exited $m7_rc on a tree that must pass, so nothing about its writes is established"
   printf '%s\n' "$m7_out" | sed 's/^/      /' | head -4; rc=1
@@ -1058,8 +1072,8 @@ fi
 # m17c -- THE NEAR-MISS, and without it m17 proves nothing. A re-read that reported UNSTABLE
 # for any non-0/1 exit would take BL-803 -- which answers 9 EVERY time -- out of the
 # out-of-population class, which is where a genuinely unreachable precondition belongs.
-seed "$TMP/m17c"
-m17c_out="$(run_v "" "$TMP/m17c" $DEF)"
+# The control's world and arguments, so the control's run is read rather than repeated.
+m17c_out="$CTL_OUT"
 m17c_803="$(cls "$m17c_out" BL-803)"
 if [ "$m17c_803" != "OUT-OF-POPULATION" ]; then
   note "FAIL  m17c -- the receipt that exits 9 on EVERY reading was reported '${m17c_803:-NONE}', not OUT-OF-POPULATION. A stable exit 9 is a precondition that is genuinely unmet, and calling it unstable would empty the class the re-read is meant to protect."
