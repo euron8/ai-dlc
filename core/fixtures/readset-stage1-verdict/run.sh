@@ -37,6 +37,61 @@
 # on two worlds is byte-compared across three working directories, one a dirty decoy repo, and the
 # wrapper's ok run is driven from inside that decoy.
 #
+# MUTANT-MATRIX: each mutant co-trips no other arm, measured at authoring. Per push a mutant drives its
+# deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured whenever
+# an arm or a mutant is added or changed.
+#
+# MUTANT-MATRIX del-A1 decides=a1,a3u twins=met
+# MUTANT-MATRIX del-A2 decides=a2 twins=met
+# MUTANT-MATRIX del-A3 decides=a3,a3u twins=met
+# MUTANT-MATRIX del-A4 decides=a4,a4-after twins=met
+# MUTANT-MATRIX del-A5 decides=a5,a5n twins=met
+# MUTANT-MATRIX del-A6 decides=a6,a6-gitignore,a6-owntree,a6-p2,a6-dir twins=met
+# MUTANT-MATRIX a6-owntree decides=a6-owntree twins=met
+# MUTANT-MATRIX a6-caret-git decides=a6-gitignore twins=met
+# MUTANT-MATRIX a1-substring decides=a1,a3u twins=met
+# MUTANT-MATRIX a5-substring decides=a5 twins=met
+# MUTANT-MATRIX a2-reads-log decides=a2 twins=met
+# MUTANT-MATRIX a4-whole-file decides=a4,a4-after twins=met
+# MUTANT-MATRIX del-R0 decides=r0-log,r0-sb,r0-profile twins=met
+# MUTANT-MATRIX r2-string decides=r2-link twins=met
+# MUTANT-MATRIX rl-skip decides=rl-rc,rl-skip twins=met
+# MUTANT-MATRIX rl-skip-started decides=rl-started,rl-foreign twins=met
+# MUTANT-MATRIX a2-ending decides=a2 twins=met
+# MUTANT-MATRIX a4-open-end decides=a4-after twins=met
+# MUTANT-MATRIX a6-regular-file decides=a6-dir twins=met
+# MUTANT-MATRIX r0-no-profile decides=r0-profile twins=met
+# MUTANT-MATRIX r6-paths-only decides=r6-omitted twins=met
+# MUTANT-MATRIX r2-first-only decides=r2-one twins=met
+# MUTANT-MATRIX rl-pair-unchecked decides=rl-foreign,rl-epoch,rl-head twins=met
+# MUTANT-MATRIX rl-pair-no-epoch decides=rl-epoch twins=met
+# MUTANT-MATRIX rl-pair-no-head decides=rl-head twins=met
+# MUTANT-MATRIX probe-owntree decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-a2-ending decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-a4-open-end decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-a6-regular-file decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-r0-no-profile decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-r6-paths-only decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-r2-first-only decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-rl-no-pairing decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX probe-rl-pair-unchecked decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
+# MUTANT-MATRIX load-under-root decides=ok twins=term
+# MUTANT-MATRIX load-5min decides=ok twins=term
+# MUTANT-MATRIX profile-passed-through decides=ok twins=term
+# MUTANT-MATRIX no-started-line decides=kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
+# MUTANT-MATRIX no-orphan-check decides=kill9 twins=ok
+# MUTANT-MATRIX no-restore decides=ok,term twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
+# MUTANT-MATRIX single-pid-kill decides=term twins=ok
+# MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
+# MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
+# MUTANT-MATRIX sb-one-emitter decides=clause-count twins=pk-sites
+# MUTANT-MATRIX og-pass decides=og-stall twins=og-reaped
+# MUTANT-MATRIX-DYNAMIC smut why=every scorer-mutant name reaches mutant_killed as a variable; each name carries its own row above
+# MUTANT-MATRIX-DYNAMIC pmut why=every self-probe mutant name reaches mutant_killed as a variable; each carries its own row above
+# MUTANT-MATRIX-DYNAMIC wmut why=every wrapper-mutant name reaches mutant_killed as a variable; each carries its own row above
+# MUTANT-MATRIX-DYNAMIC pkmut why=each pkill-reaping mutant name reaches mutant_killed as a variable; each carries its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-stage1-verdict/run.sh --matrix
+#
 # Usage: run.sh            the per-push run (mode PUSH)
 #        run.sh --matrix   the full mutant x cell matrix (mode FULL), measured at authoring
 # Exit:  0 = every arm and mutant holds, 1 = one regressed, 2 = fixture broken.
