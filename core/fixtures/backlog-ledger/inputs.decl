@@ -6,3 +6,4 @@
 core/skills/ai-dlc-update/reconcile/lib.sh
 +VERSION
 core/fixtures/lib/preamble.sh
+scripts/backlog-receipt-lib.sh

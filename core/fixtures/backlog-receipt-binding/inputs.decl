@@ -10,3 +10,5 @@ scripts/backlog-reverify.sh
 core/skills/ai-dlc/steps/gate-validation.md
 core/fixtures/gate-verdict-grep-shape/
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
++docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py
+scripts/backlog-receipt-lib.sh

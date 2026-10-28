@@ -7,3 +7,4 @@ VERSION
 !scripts/backlog-rotate.sh
 scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
+scripts/backlog-receipt-lib.sh

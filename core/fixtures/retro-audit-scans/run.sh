@@ -106,6 +106,32 @@ out="$(audit)"; has 'INCOMPLETE_26C: CLEAN' "$out" \
   && ok "a complete triple wrapping across lines -> CLEAN (section-scoped)" \
   || bad "a complete Rule 26(c) triple was flagged incomplete"
 
+# --- Assertion 6a: a HEADED complete triple written with the PLURAL field -----
+# The shape retro.md carried. FC must accept `Failures caught:` or a complete
+# triple reads as missing its failure field.
+fresh
+cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
+
+**Minimum mechanism.** Failures caught: an unrecorded outcome reaching the gate,
+and a stale outcome re-read. False-positive cost: one redundant line per step.
+Removal condition: retire once the outcome is written structurally.
+EOF
+out="$(audit)"; has 'INCOMPLETE_26C: CLEAN' "$out" \
+  && ok "a headed complete triple with plural 'Failures caught:' -> CLEAN" \
+  || bad "a complete plural-field Rule 26(c) triple was flagged incomplete — FC is singular-only"
+
+# --- Assertion 6b: a HEADLESS block opened by the plural field is still seen --
+# No `Minimum mechanism` heading, so only FIELD_OPENER can open the block. It
+# supplies none of the other two fields and must be FLAGGED.
+fresh
+cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
+
+Failures caught: an unrecorded outcome reaching the gate.
+EOF
+out="$(audit)"; has 'INCOMPLETE_26C: FLAGGED' "$out" \
+  && ok "a headless plural 'Failures caught:' with no other two fields -> FLAGGED" \
+  || bad "a headless plural-opened incomplete block went undetected — FIELD_OPENER is singular-only"
+
 # --- Assertion 7: a dangling pointer is DETECTED ----------------------------
 # The live defect this scan found on its first real run.
 fresh
@@ -707,6 +733,41 @@ if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
     || bad "MUTANT m8 removed the adverb allowance and uc did not flip — 12u9d proves nothing"
 else
   bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
+fi
+
+# --- Assertion 12u19: mf, FC reverted to the singular-only form ---------------
+# Owns 6a alone: the headed plural triple is read as missing its failure field.
+# 6b is unmoved because FIELD_OPENER still opens the headless block, which is
+# FLAGGED either way.
+EX="$WORK/t/.claude/skills/ai-dlc/steps/example.md"
+fresh
+cat >> "$EX" <<'EOF'
+
+**Minimum mechanism.** Failures caught: an unrecorded outcome reaching the gate,
+and a stale outcome re-read. False-positive cost: one redundant line per step.
+Removal condition: retire once the outcome is written structurally.
+EOF
+if mkmut umf 's/failures?\\s+caught/failure\\s+caught/'; then
+  has 'INCOMPLETE_26C: CLEAN' "$(audit)" \
+    && has 'INCOMPLETE_26C: FLAGGED' "$(audit_at "$WORK/umf.sh")" \
+    && ok "MUTANT mf (FC singular-only) -> the headed plural triple flips CLEAN to FLAGGED; killed" \
+    || bad "MUTANT mf reverted FC and the headed plural arm did not move — 6a proves nothing"
+else
+  bad "MUTANT mf DID NOT APPLY — its anchor moved; 6a is unproven"
+fi
+
+# --- Assertion 12u20: mo, FIELD_OPENER reverted to the singular-only form -----
+# Owns 6b alone: with no heading and no opener the headless block is never seen,
+# so it scores CLEAN. 6a is unmoved because its heading opens the block.
+fresh
+printf '\nFailures caught: an unrecorded outcome reaching the gate.\n' >> "$EX"
+if mkmut umo 's/Failures? caught:/Failure caught:/'; then
+  has 'INCOMPLETE_26C: FLAGGED' "$(audit)" \
+    && has 'INCOMPLETE_26C: CLEAN' "$(audit_at "$WORK/umo.sh")" \
+    && ok "MUTANT mo (FIELD_OPENER singular-only) -> the headless plural block flips FLAGGED to CLEAN; killed" \
+    || bad "MUTANT mo reverted FIELD_OPENER and the headless plural arm did not move — 6b proves nothing"
+else
+  bad "MUTANT mo DID NOT APPLY — its anchor moved; 6b is unproven"
 fi
 
 # ========================= validate-gate-manifest.sh ========================

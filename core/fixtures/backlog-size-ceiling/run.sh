@@ -112,6 +112,7 @@ seed() { # seed <dir> [<n-entries>]
   cp "$VALIDATOR" "$d/scripts/validate-backlog-size.sh"
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   [ -n "$REVERIFY" ] && cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  [ -n "$REVERIFY" ] && cp "$(dirname "$REVERIFY")/backlog-receipt-lib.sh" "$d/scripts/backlog-receipt-lib.sh"
   bl_seed_entries "$d/docs/backlog.md" "$n"
 }
 

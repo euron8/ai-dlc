@@ -4,3 +4,4 @@
 !scripts/validate-backlog-size.sh
 !scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
+scripts/backlog-receipt-lib.sh
