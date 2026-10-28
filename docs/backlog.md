@@ -1171,6 +1171,8 @@ Renders per push (counter spliced into `render()`, one shard per run): before (0
 
 **Progress (0.962.0, batch b245).** reconcile-emit-report renders once per distinct render input: 1170 renders per push become 66 (base-world 7, conflicting-state 37, mutant-deciding 22), with 0 coverage losses (161 assertions retired with the BL-679 cache, 40 folded into their mutant kill lines). Solo hermetic runs at 66623ceb4: shard a 97s, b 71s, c 56s. The entry stays PARTIAL.
 
+**Progress (0.963.0, batch b245).** Part two narrows 25 declared fixtures, counter-measured in bash starts per push, slot to tip. Falls: apply-restamp-worklist 1883 -> 953 and its `-c` 1314 -> 436, sprint-status-lifecycle 626 -> 188, story-corpus-sprint-slot 178 -> 51, content-seal 861 -> 811 (a fall of 50, a side effect of the adversarial-shard-merge `shard() --map` memo in the `lib.sh` it sources), and the self-update-gate shards 462 -> 428 (the stable count: its early-exit pipe readers no longer let SIGPIPE cut the gate short), 847 -> 638, 430 -> 223, 455 -> 375. Rises: apply-restamp-worklist `-b` 1422 -> 2092 (the shards were rebalanced; like-for-like the old tree with the same split measures 2258, so the change is 166 starts cheaper), handoff-completion-assertion 363 -> 519 (each mutant now runs its deciding arm plus its twins), and postcompact-rulebook-recovery 1859 -> 1869 (the corrected counter now sees 10 gate starts under `ulimit -f` that it could not count before). Fifteen earlier fixture units merged on the batch branch ship in the same release. The entry stays PARTIAL. a1's self-update-gate W3 base repeats (a24, b3, d5) are owed.
+
 Three mechanisms, each with a self-probe in both directions:
 
 - **Invocation budget.** `scripts/validate-fixture-invocations.sh` judges each fixture's `invocations.decl` against the bash starts counted inside `core/scripts/hermetic-run.sh`, armed once per push in `.githooks/pre-push` at pool depth 0. `measured == declared`, binary. Its header states the blind routes and the arms J1 to J5; the list is not restated here.
@@ -1192,6 +1194,8 @@ verify: manual
 ## BL-851 — fixture prevention mechanisms: invocation budget, hygiene arms, H5
 
 **DEFECT (efficiency).** Nothing refused the regrowth of fixture cost: this entry files the three prevention mechanisms, the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the H5 mutant-matrix name join. BL-850 carries their detail. The decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**LANDED (v0.963.0, verified f39d361c7).** The three mechanisms ship: the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the runtime name join J5. `invocations.decl` rows exist for every counted fixture, and five provisional rows (readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate, wait-beat-liveness) are owed deterministic rewrites under BL-850.
 
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
