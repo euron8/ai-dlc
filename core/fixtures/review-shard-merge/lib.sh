@@ -2337,8 +2337,10 @@ p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
   if cell frb-legacy; then
-    # Its own merge, not FR4's post-F2 answer: the REUSE proof measured the two DIFFER (class (a)); the LEGACY line names
-    # the shard file path, which sits in a different shard directory in each arm.
+    # Its own merge, not FR4's post-F2 answer. A differential (f5b-diff.sh frb-legacy) found the same bytes in fr_graph's
+    # directory and in this arm's give EQUAL rc, stdout/stderr and --out file, so this is NOT shown to be class (a). The
+    # REUSE proof's DIFFER is unexplained; one hypothesis, not measured, is that fr_merged removes the --out file before
+    # the keep. The repeat is left as one extra merge for lack of a re-measure, not for a measured conflict.
     d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
     fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
     has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
