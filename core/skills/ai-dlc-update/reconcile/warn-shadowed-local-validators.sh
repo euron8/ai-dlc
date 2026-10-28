@@ -63,7 +63,8 @@ ai_dlc_resolve_root() {
   return 1
 }
 if [ -z "$ROOT" ]; then
-  SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  case "${BASH_SOURCE[0]}" in */*) SELF_DIR="${BASH_SOURCE[0]%/*}"; SELF_DIR="${SELF_DIR:-/}" ;; *) SELF_DIR=. ;; esac
+  SELF_DIR="$(cd "$SELF_DIR" && pwd)"
   ROOT="$(ai_dlc_resolve_root "$SELF_DIR" || true)"
   [ -n "$ROOT" ] || ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
 fi
@@ -78,7 +79,10 @@ fi
 [ -n "$LOCAL_DIR" ] || LOCAL_DIR="${ROOT}/scripts/ai-dlc-local"
 [ -n "$CORE_DIR" ]  || CORE_DIR="${ROOT}/scripts/ai-dlc"
 
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "warn-shadowed-local-validators: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # EVERY INPUT IS A (root, root-relative path) PAIR, read through consumer-read.sh. The defaults sit
