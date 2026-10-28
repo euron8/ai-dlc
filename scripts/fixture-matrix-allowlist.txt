@@ -100,7 +100,6 @@ review-shard-merge	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 scope-confirmation	no MUTANT-MATRIX block; floor: S1 build_field_of_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-fixture-log	no MUTANT-MATRIX block; floor: S1 j_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-gate	no MUTANT-MATRIX block; floor: S1 vr_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-self-update-reinvoke-liveness	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 settings-merge-documented-form	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 settings-merge-unparseable-template	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 setup-config-drift	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
