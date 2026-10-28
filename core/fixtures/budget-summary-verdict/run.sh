@@ -44,11 +44,11 @@
 # MUTANT-MATRIX M3 decides=a5cov twins=a4clean
 # MUTANT-MATRIX M4 decides=a10struck twins=a11marker
 # MUTANT-MATRIX M5 decides=a11marker twins=a10struck
-# MUTANT-MATRIX MF1 decides=f_five twins=- why=the mutated validator trips every arm that drives it, so every one of the 26 arms trips on it and none stays green
-# MUTANT-MATRIX MF2 decides=f_range twins=- why=the mutated validator trips every arm that drives it, so every one of the 26 arms trips on it and none stays green
+# MUTANT-MATRIX MF1 decides=f_five twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
+# MUTANT-MATRIX MF2 decides=f_range twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
 # MUTANT-MATRIX MF3 decides=f_history twins=f_five
-# MUTANT-MATRIX MF4 decides=f_spaced twins=- why=the mutated validator trips every arm that drives it, so every one of the 26 arms trips on it and none stays green
-# MUTANT-MATRIX MF5 decides=f_dash twins=- why=the mutated validator trips every arm that drives it, so every one of the 26 arms trips on it and none stays green
+# MUTANT-MATRIX MF4 decides=f_spaced twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
+# MUTANT-MATRIX MF5 decides=f_dash twins=- why=the mutated validator trips every arm that drives it, so every one of the 27 arms trips on it and none stays green
 # MUTANT-MATRIX MF6 decides=f8 twins=f9
 # MUTANT-MATRIX MP1 decides=p_basename twins=p_noitem
 # MUTANT-MATRIX MP2 decides=p_noitem twins=p_basename
