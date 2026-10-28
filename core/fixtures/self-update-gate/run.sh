@@ -2646,7 +2646,7 @@ cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$VR/m-control"/ 2>/dev/n
 VR_CTL_GOT="$(vr_score "$VR/m-control/self-update-gate.sh" ctl)"
 ss_assert "rec-mut-control" "$VR_CTL_GOT" \
   "n=1 rows=identical v=DEFER" \
-  "an unmutated copy beside its siblings records normally, so a mutant's shift is the mutation"
+  "an unmutated copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in one directory; kept, because no base arm drives vr_score on this consumer, so there is no identical world and argv to fold into) records normally, so a mutant's shift is the mutation"
 if [ "$VR_CTL_GOT" = "n=1 rows=identical v=DEFER" ]; then B_vrctl=1; fi
 
 vr_kill() { # vr_kill <label> <awk> <consumer-name> <want> <why>
