@@ -101,9 +101,9 @@
 #     row). Two states have no base and SKIP with the reason printed: origin/main does not resolve, and origin/main
 #     carries no list (the release that first ships it).
 #
-# ON THE BRANCH THAT SHIPS THIS, H1, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
-# rewriting, and H1-H3 carry NO allowlist. The owner fixes them on the integrated tip, where this list is also
-# re-derived.
+# ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
+# rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
+# integrated tip, where this list is also re-derived.
 #
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
 # one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos.
@@ -652,6 +652,35 @@ EOF
 seed core/fixtures/m5i/run.sh <<'EOF'
 cmp -s "$a" "$b" && bad "the mutant did not apply"
 EOF
+seed core/fixtures/m5j/run.sh <<'EOF'
+# MUTANT-MATRIX-CONTROL CJ why=x
+# MUTANT-MATRIX-DYNAMIC L why=x
+# MUTANT-MATRIX-DYNAMIC L why=y
+# MUTANT-MATRIX-FULL FJ worlds= why=x
+# MUTANT-MATRIX-FULL FK worlds=w1
+# MUTANT-MATRIX-CONTROL CK why=
+mkmut() { :; }
+mkmut NOROWJ x
+mkmut CJ x
+EOF
+seed core/fixtures/m5k/run.sh <<'EOF'
+# MUTANT-MATRIX K1 decides=R1 twins=R2
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/m5k/run.sh --matrix
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/m5k/run.sh --matrix
+EOF
+seed core/fixtures/m5f-c/run.sh <<'EOF'
+#!/usr/bin/env bash
+HERE="$(cd "$(dirname "$0")" && pwd)"
+IMPL="$HERE/../m5f/run.sh"
+# MUTANT-MATRIX X decides=R1 twins=R2
+exec bash "$IMPL" --group c
+EOF
+seed core/fixtures/m5l/run.sh <<'EOF'
+#!/usr/bin/env bash
+IMPL="$X/run.sh"
+cmp -s "$a" "$b" || echo "mutant differs"
+exec bash "$IMPL" --group b
+EOF
 seed core/fixtures/m5n/run.sh <<'EOF'
 # the copy differs; a comment only
 cmp -s "$a" "$b" && bad "the copy did not apply"
@@ -676,9 +705,12 @@ want_rows() { case "$1" in
   H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 ;;
   H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 ;;
   H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 ;;
-  H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i
+  H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15
+      printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6
+      printf 'ROW\tm5k:0\nROW\tm5f-c:4\nSTUB\tm5l\n'
       printf "JOIN\tcore/fixtures/m5d/run.sh:%s\n" 17 18 19
+      printf "JOIN\tcore/fixtures/m5j/run.sh:8\n"
       printf 'STALE\t%s\n' gone m5e m5x
       printf 'DUP\tm5b\nNOREASON\tm5x\n' ;;
   esac; }
@@ -693,8 +725,8 @@ for arm in H1 H2 H3 H5; do
   fi
 done
 der="$(awk -F'\t' '$1 == "DERIVE" { print $2 }' "$WORK/p.verdict" | LC_ALL=C sort | tr '\n' ' ')"
-if [ "$der" = "m5a m5b m5f m5g m5h m5i " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i; the stub m5f-b mapped to its IMPL)"
-else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i '"; fi
+if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l; the stubs m5f-b and m5f-c mapped to their IMPL)"
+else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i m5l '"; fi
 
 m4_case() {  # <label> <repo> <want-rc> <want-first-line> <rows...>
   local lab="$1" repo="$2" wrc="$3" want="$4" got rc
@@ -738,6 +770,7 @@ if [ "$MODE" = derive ]; then
 fi
 
 rc=0
+echo "validate-fixture-hygiene: $(awk 'END { print NR }' "$WORK/c.list") fixture .sh scanned; judged $t1 H1 \`-d …/.git\` test(s) and $t2 H2 declared-tool \`command -v\` site(s); H5 $nblk block(s), $nmem unblocked member(s)"
 for arm in H1 H2 H3; do
   if grep -q "^$arm	" "$WORK/c.verdict"; then
     rc=1; echo "FAIL $arm:"

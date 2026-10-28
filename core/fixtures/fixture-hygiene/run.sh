@@ -24,10 +24,10 @@
 # (exit 2) on any silenced arm, so no arm of this fixture can hold under it -- what a mutant proves is that the
 # validator's own self-probe catches the silenced arm, which is the defence a regression would meet first. Per push
 # each runs its own D arm only, and the kill is scored on the refusal line naming that arm.
-# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
-# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
-# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
-# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
+# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
+# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
+# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
+# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
@@ -151,10 +151,15 @@ REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH5; do drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & done; wait
+  for m in MH1 MH2 MH3 MH5; do
+    cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
+      || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
+    drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
+  done; wait
   for m in MH1 MH2 MH3 MH5; do
     dec=""; tw=""
     for a in D1 D2 D3 D5; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
+    for a in C R; do if verdict "$a" "$m.c"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     if verdict DV "$m.v"; then tw="$tw,DV"; else dec="$dec,DV"; fi
     printf 'MATRIX %s decides=%s twins=%s\n' "$m" "${dec#,}" "${tw#,}"
   done
