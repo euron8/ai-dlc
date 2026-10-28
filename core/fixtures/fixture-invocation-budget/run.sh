@@ -154,7 +154,7 @@ case "$rc" in "$w/tmp.a/fxcount."*/fxcount.rc) [ -s "$rc" ] || { bad8 "a-rc-file
   *) bad8 "a-rc-path: FXCOUNT_RC=$rc is not an rc under the run dir in $w/tmp.a"; abad=1 ;; esac
 [ "$d" = "${rc%/*}/log" ] && [ -d "$d" ] || { bad8 "a-dir: FXCOUNT_DIR=$d, want the directory ${rc%/*}/log"; abad=1; }
 [ "$j" = "$s/scripts/validate-fixture-invocations.sh" ] || { bad8 "a-judge: FXCOUNT_JUDGE=$j"; abad=1; }
-printf '%s\n' "${st#"$w/store.a/"}" | grep -Eqx 'counted-[0-9a-f]{12}' && [ "${st%/*}" = "$w/store.a" ] \
+grep -Eqx 'counted-[0-9a-f]{12}' <<< "${st#"$w/store.a/"}" && [ "${st%/*}" = "$w/store.a" ] \
   || { bad8 "a-store: AI_DLC_VERDICT_STORE=$st, want $w/store.a/counted-<12 hex>"; abad=1; }
 [ "$abad" = 0 ] && ok8 "a-armed: RC, DIR, JUDGE and the counted-<12 hex> store are exported with their values"
 # (b) the judge absent: a non-zero step, nothing exported, the store untouched.
