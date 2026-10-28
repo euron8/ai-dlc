@@ -78,7 +78,6 @@ post-write-gates
 postcompact-rulebook-recovery
 preclassify-mode-bucket
 preclassify-rename-row
-predicate-reclassification
 prepush-pool-depth
 prepush-worktree-env-scrub
 process-rule-pins
