@@ -1,8 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-5140 *
-552 core/scripts/partition-review-diff.sh
-464 core/scripts/merge-review-shards.sh
-1044 core/scripts/content-seal.sh
-41 core/scripts/wait-for-deliverable.sh
-50 core/hooks/ai-dlc-content-seal.sh
-424 core/scripts/record-only-diff.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), then held by an armed second run on the committed tip.
+3700 *
+389 core/scripts/partition-review-diff.sh
+423 core/scripts/merge-review-shards.sh
+700 core/scripts/content-seal.sh
+34 core/scripts/wait-for-deliverable.sh
+43 core/hooks/ai-dlc-content-seal.sh
+364 core/scripts/record-only-diff.sh
