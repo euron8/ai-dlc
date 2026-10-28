@@ -11,7 +11,6 @@
 # printed per cell; a plain run executes no matrix-only cell. RE-MEASURE whenever an arm or a mutant is added or
 # changed. hermetic-run.sh forwards no argument, so the matrix is run directly, from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-runner/run.sh --matrix
-# MUTANT-MATRIX-BEGIN
 # MUTANT-MATRIX M1 decides=B twins=D
 # MUTANT-MATRIX M2 decides=A,C,D,L twins=B
 # MUTANT-MATRIX M3 decides=F twins=B
@@ -44,7 +43,6 @@
 # MUTANT-MATRIX DC3 decides=DC.DC3 twins=- why=the copy cannot source its preamble and exits 2 before any arm
 # MUTANT-MATRIX DC4 decides=DC.DC4 twins=- why=the copy has no distribution hook and exits 2 before any arm
 # MUTANT-MATRIX-CONTROL DC0 why=the unmutated declared copy must pass arms A and L so a DC verdict is attributable
-# MUTANT-MATRIX-END
 # Only M27 routes its kill through mutant_killed (lib/mutant.sh), behind B_XR, the same-run pass of arm XR; the
 # others are scored by an exact failed-arm-set `eq`, which emits no kill token.
 #
@@ -1192,11 +1190,14 @@ arm_XR() {
   [ "$k2" != "$k0" ] && ok "$CUR: a commit on the declared path: the key moved" || bad "$CUR: a commit on the declared path left the key unchanged"
   [ -n "$r2" ] && [ "$r2" != "$r0" ] && ok "$CUR: a commit on the declared path: the fold row itself moved" || bad "$CUR: the fold row did not move ('$r0' -> '$r2')"
   # Refusals, each exit 2 naming its line, beside the literal-form ALLOW twin (one property apart: a valid line).
+  # The twin is taken on ONE probe: two probes built a second apart carry different commit shas, so their folds differ.
   mk_range_probe "$Q"
+  run_hr "$Q" --key-only; r0="$(grep '^git-range:1	' <<<"$OUT")"
   printf 'range rb..HEAD hist\n' > "$Q/$FXR/probe/git.decl"
   run_hr "$Q" --key-only
   eq "literal rb..HEAD form: exit 0" "$RC" 0
-  eq "literal form keys the same fold as the @range.sh derivation" "$(grep '^git-range:1	' <<<"$OUT")" "$r0"
+  [ -n "$r0" ] && eq "literal form keys the same fold as the @range.sh derivation" "$(grep '^git-range:1	' <<<"$OUT")" "$r0" \
+    || bad "$CUR: the @range.sh probe produced no fold row to compare the literal form with"
   while IFS='|' read -r cell msg; do
     printf '%s\n' "$cell" > "$Q/$FXR/probe/git.decl"
     run_hr "$Q" --key-only
