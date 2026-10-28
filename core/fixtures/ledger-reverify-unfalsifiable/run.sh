@@ -271,7 +271,8 @@ done
 bad_everywhere=1
 for spec in "$CONSUMER|" "$CONSUMER|$OUT_COPY"; do
   c="${spec%%|*}"; l="${spec#*|}"
-  v="$(bash "$RV" "$DIST" "$BASE" "$c" "$THEIRS" ${l:+"$l"} 2>/dev/null | awk -F'\t' '$2 ~ /PC-BAD/ {print $1; exit}')"
+  sp_o="$(bash "$RV" "$DIST" "$BASE" "$c" "$THEIRS" ${l:+"$l"} 2>/dev/null)"
+  v="$(awk -F'\t' '$2 ~ /PC-BAD/ {print $1; exit}' <<< "$sp_o")"
   [ "$v" = "NEEDS-REVIEW" ] || bad_everywhere=0
 done
 [ "$bad_everywhere" -eq 1 ] \
