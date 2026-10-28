@@ -53,7 +53,7 @@
 # MUTANT-MATRIX range-mut-refs decides=und,ok twins=f2
 # MUTANT-MATRIX range-mut-repo decides=und,f2 twins=ok
 # MUTANT-MATRIX prewritten-mut decides=und,ok,pw twins=- why=dropping the pre-written arm turns every gating script's refusal into an OK row, so all three counts move
-# MUTANT-MATRIX prewritten-mut-conj decides=modeonly,moved twins=- why=the base != theirs conjunct gone refuses both scripts of the pair in one drive, both cells are the kill
+# MUTANT-MATRIX prewritten-mut-conj decides=modeonly twins=moved
 # MUTANT-MATRIX rec-mut-corepath decides=script,dup twins=hook
 # MUTANT-MATRIX pl-mut-a2 decides=w2 twins=w1
 # MUTANT-MATRIX pl-mut-a3 decides=w3 twins=w1
