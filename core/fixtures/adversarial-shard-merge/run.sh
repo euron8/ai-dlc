@@ -55,6 +55,23 @@
 # not run through hermetic-run.sh, which forwards no argument. Worlds are per-use: the merge refuses a world
 # whose write-ledger rows name another root, so no world is shared across arms or mutants.
 #
+# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy of the merge's sibling set must trip no arm; it is the base pass every kill is gated on
+# MUTANT-MATRIX m-k2only decides=X1 twins=X4
+# MUTANT-MATRIX m-nomix decides=X4 twins=A1
+# MUTANT-MATRIX RM-A decides=RS1 twins=A1
+# MUTANT-MATRIX RM-B decides=CH2 twins=A1
+# MUTANT-MATRIX BM-1 decides=B726B twins=B726H
+# MUTANT-MATRIX BM-2 decides=B726C twins=B726H
+# MUTANT-MATRIX BM-3 decides=B726F twins=B726B
+# MUTANT-MATRIX BM-4 decides=B726H twins=B726B
+# MUTANT-MATRIX PM1 decides=P1 twins=PBARE
+# MUTANT-MATRIX-DYNAMIC KMb-KMc-KEM-by-layout why=one loop over the layouts inst and core names each of the six mutants below
+# MUTANT-MATRIX KMb-inst decides=K2ps_inst twins=K2vac_inst
+# MUTANT-MATRIX KMb-core decides=K2ps_core twins=K2vac_core
+# MUTANT-MATRIX KMc-inst decides=K2sch_inst twins=K2vac_inst
+# MUTANT-MATRIX KMc-core decides=K2sch_core twins=K2vac_core
+# MUTANT-MATRIX KEM-inst decides=KEps_inst twins=KEvac_inst
+# MUTANT-MATRIX KEM-core decides=KEps_core twins=KEvac_core
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
@@ -697,8 +714,23 @@ armlabel() { # <arm> -> the label of the ok line that records the arm passing on
 bflag() { case "$OKSET" in *"|$(armlabel "$1")|"*) echo 1 ;; *) echo 0 ;; esac; } # <arm> -> 1 iff its base ok line printed this run
 in_set() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; } # <arm> <space-separated set>
 sc_run() { # <merge file> <arm>... -> SC_DEAD, the arms that TRIPPED (did not hold), in the order given
-  local mf="$1" a; shift; SC_DEAD=""
-  for a in "$@"; do arm_run "$a" "$mf" || SC_DEAD="$SC_DEAD $a"; done
+  local mf="$1" a sd s ms; shift; SC_DEAD=""
+  # A lone mutated file (the K mutants) finds no siblings, so every non-K arm would trip for THAT reason.
+  # Non-K arms therefore run the mutated merge inside a copy of the whole sibling set.
+  ms="$mf"
+  if [ ! -f "$(dirname "$mf")/partition-document.sh" ]; then
+    sd="$(mktemp -d "$WORK/sib.XXXXXX")"
+    for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+      [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$sd/"
+    done
+    cp "$mf" "$sd/merge-adversarial-shards.sh"; ms="$sd/merge-adversarial-shards.sh"
+  fi
+  for a in "$@"; do
+    case "$a" in
+      K*) arm_run "$a" "$mf" || SC_DEAD="$SC_DEAD $a" ;;
+      *) arm_run "$a" "$ms" || SC_DEAD="$SC_DEAD $a" ;;
+    esac
+  done
   SC_DEAD="${SC_DEAD# }"
 }
 mrow() { matrix_row "$1" "$2" 0 "$3" "$4"; MATRIX_ROWS=$((MATRIX_ROWS + 1)); } # <id> <arm> <GREEN|TRIPPED> <yes|no>
