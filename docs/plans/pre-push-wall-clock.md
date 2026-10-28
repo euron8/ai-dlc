@@ -1108,8 +1108,8 @@ measurement is what deprioritised it.
 
 **The consumer rehearsal and the merge. DONE.** A tree built by running `scripts/install.sh`
 into an empty directory received both `layer-contract-conformance` and
-`layer-contract-conformance-b`, and both printed the sibling's SKIP at exit 0. The four
-`.dist-only` shards (`enforcement-map-derivations-b`, `validator-arm-selection`,
+`layer-contract-conformance-b`, and both printed the sibling's SKIP at exit 0. The three
+`.dist-only` shards (`validator-arm-selection`,
 `validator-arm-selection-b`, `validator-fork-budget`) were absent, with the shipped pair as the
 same-invocation positive control. `uninstall.sh --force` exited 0, removed `tests/fixtures/`
 including the `-b` shard, and left `_bmad/`. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`
