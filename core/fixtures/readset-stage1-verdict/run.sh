@@ -37,7 +37,8 @@
 # on two worlds is byte-compared across three working directories, one a dirty decoy repo, and the
 # wrapper's ok run is driven from inside that decoy.
 #
-# MUTANT-MATRIX: each mutant co-trips no other arm, measured at authoring. Per push a mutant drives its
+# MUTANT-MATRIX: outside its declared decides set, each mutant co-trips no other arm, measured at authoring; a
+# twins=- row is dead in every cell by construction, as its why= states. Per push a mutant drives its
 # deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured whenever
 # an arm or a mutant is added or changed.
 #
@@ -80,7 +81,7 @@
 # MUTANT-MATRIX profile-passed-through decides=ok twins=term
 # MUTANT-MATRIX no-started-line decides=kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
 # MUTANT-MATRIX no-orphan-check decides=kill9 twins=ok
-# MUTANT-MATRIX no-restore decides=ok,term twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
+# MUTANT-MATRIX no-restore decides=ok,term,kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
 # MUTANT-MATRIX single-pid-kill decides=term twins=ok
 # MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
