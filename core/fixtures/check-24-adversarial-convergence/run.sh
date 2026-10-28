@@ -479,6 +479,7 @@ fi
 # MUTANT-MATRIX-CONTROL SEAM-GUARD-J3-receipt why=the unmutated copy through the J3 seam must make the BL-814 receipt say fixed over every world
 # MUTANT-MATRIX-CONTROL SEAM-GUARD-J2T-receipt why=the unmutated copy through the J2 seam must make the BL-736 receipt say fixed over every world
 # MUTANT-MATRIX-CONTROL SEAM-GUARD-LD-receipt why=the unmutated copy through the L seam must make the BL-733 receipt say fixed over every world
+# MUTANT-MATRIX MUTATION-seam-reused-row decides=MUTATION-seam-reused-row.seamed-row twins=MUTATION-seam-reused-row.other-path-row
 # MUTANT-MATRIX-END
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
