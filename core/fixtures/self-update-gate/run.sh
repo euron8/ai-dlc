@@ -12,7 +12,7 @@
 # agreement and therefore no signal at all (OK, v0.297.0), 1 -> 2 is a real change nobody can
 # attribute (UNDECIDED).
 #
-# MUTANT BATTERY, MEASURED. Each mutant co-trips no other arm, measured at authoring: every cell outside its decides list reads 0 in the
+# MUTANT BATTERY, MEASURED. Outside its declared decides set, each mutant co-trips no other arm, measured at authoring: every cell outside its decides list reads 0 in the
 # --matrix run, a decides list holding several cells being one fault seen through each of them. A plain run drives a mutant's deciding
 # cells plus its named twin only. The matrix is re-measured whenever an arm or a mutant is added or changed.
 # MUTANT-MATRIX ss-partial-mut decides=armA twins=armC
