@@ -24,7 +24,6 @@ fanout-payload-channel
 gate-adjudication
 gate-remediation-deny
 h2-attest-scripts-dir
-handoff-completion-assertion
 inflight-row-shape
 layer-absorption-retire
 layer-catalog-collision

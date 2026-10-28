@@ -1,4 +1,6 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-363 *
-111 core/hooks/ai-dlc-continue.sh
-22 core/hooks/ai-dlc-recover.sh
+# Measured by an armed counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), repeated; the counts are the
+# bash starts of one real run: run.sh itself, seed.sh and the git/jq children are in the `*` total, and the two hooks the
+# mutant battery and the live pass drive are counted by path (a mutant copy ending in the same suffix counts too).
+519 *
+196 core/hooks/ai-dlc-continue.sh
+46 core/hooks/ai-dlc-recover.sh
