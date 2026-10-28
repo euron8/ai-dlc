@@ -64,6 +64,7 @@
 # MUTANT-MATRIX ML5 decides=la_amb twins=l0eq
 # MUTANT-MATRIX ML6 decides=ls_same twins=la_amb
 # MUTANT-MATRIX-CONTROL ML0 why=the probe-off copy of the LATE validator beside its siblings must stay green on every LATE arm; it survives by design
+# MUTANT-MATRIX-CONTROL CTRL why=an unmutated copy of the validator staged by the same helper must reproduce the shipped behaviour on a1warn and a5cov; it survives by design
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/budget-summary-verdict/run.sh --matrix
 set -u
 
@@ -1081,6 +1082,16 @@ score_mut() {
 # the unmutated arm f_history has no base block above, so it is asserted here and sets its own flag
 if arm_f_history "$VD" "$VW"; then ok "F-history a future stamp in the history file is not read by the shipped arm (rc 0)"; B_f_history=1
 else bad "F-history the shipped arm refused a snapshot whose history file carries a future stamp"; fi
+
+# --- CONTROL. An UNMUTATED copy, staged by the same helper as every mutant below, driven the same way.
+# A lone copy that dies for its own reasons emits nothing, and "no output" scores as a kill on every
+# mutant. This is what separates a mutation from a broken staging, and it establishes that the missing
+# sprint-status.sh sibling changes no verdict, rather than a reading of the subject's code.
+mutdir CTRL
+ctl_bad=""
+for _a in a1warn a5cov; do "arm_$_a" "$MDIR" "$VW" || ctl_bad="$ctl_bad $_a"; done
+if [ -z "$ctl_bad" ]; then ok "CONTROL: an unmutated copy staged the same way reproduces both branches (a1warn breach, a5cov coverage) -- M1-M3 died of their edits"; B_ctrl=1
+else bad "CONTROL: the unmutated copy did not reproduce the subject (tripped:$ctl_bad) -- every mutant verdict below is unattributable"; fi
 
 # --- M1. REVERT BOTH LAYERS: the summary block goes back to being RC-gated ------------
 # The historical form, restored whole: the flags stop being consulted and the only line a passing RC
