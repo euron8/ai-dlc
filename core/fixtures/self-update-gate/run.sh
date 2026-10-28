@@ -61,11 +61,27 @@ UNITS_a="base ss sc ac su pp stg"
 UNITS_b="vr pl hu1 sh"
 UNITS_c="pu hu2"
 UNITS_d="qw mp hk av"
-GROUP=a
-if [ "${1:-}" = "--group" ]; then
-  GROUP="${2:-}"
-  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+GROUP=""; MATRIX=0; SELF_PATH="$0"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --matrix) MATRIX=1; shift ;;
+    --group)
+      GROUP="${2:-}"
+      [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+      shift 2 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+# A plain run is shard a. The matrix run with no --group covers EVERY shard's units in one process, so one
+# log holds every mutant row.
+if [ -z "$GROUP" ] && [ "$MATRIX" = 1 ]; then
+  # The REMEASURE command: each shard is a separate process (units share variable names across shards only
+  # because a shard never ran another's), so the matrix is every shard's own --matrix run, in order.
+  _mrc=0
+  for _s in $SHARDS; do bash "$SELF_PATH" --group "$_s" --matrix || _mrc=1; done
+  exit "$_mrc"
 fi
+[ -n "$GROUP" ] || GROUP=a
 case " $SHARDS " in
   *" $GROUP "*) ;;
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
@@ -128,8 +144,33 @@ esac
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
 FAILURES=0
 ASSERTIONS=0
+# ok() and bad() print only: every assertion site keeps its own ASSERTIONS/FAILURES accounting, so the
+# closing count is the number of assertion sites and a routed kill is counted exactly where it was.
+ok() { printf '  ok    %s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+. "$DIR/../lib/mutant.sh"
 echo "self-update-gate fixture"
+if [ "$MATRIX" = 1 ]; then echo "MODE: FULL"; else echo "MODE: PUSH"; fi
 echo
+# mx_row <mutant> <base> <got> -- matrix mode only. One MATRIX-ROW per mutant in ONE format: every cell the drive
+# reads, 1 when the mutant moved it off the unmutated value and 0 when it left it. Tokens are split on blanks and
+# commas; a key=val token is a cell named by its key, a bare token is a set member (1 when exactly one side holds
+# it). A cell name is slugged to [A-Za-z0-9_.-]. A plain run prints nothing and counts nothing.
+MATRIX_CELLS=0
+mx_row() {
+  [ "$MATRIX" = 1 ] || return 0
+  MATRIX_CELLS=$((MATRIX_CELLS + 1))
+  printf 'MATRIX-ROW %s %s\n' "$1" "$(MX_B="$2" MX_G="$3" awk 'function load(s, arr, ord,   n, i, t, k, v, m) {
+      n = split(s, t, /[ ,]+/)
+      for (i = 1; i <= n; i++) { if (t[i] == "") continue
+        if (index(t[i], "=")) { k = substr(t[i], 1, index(t[i], "=") - 1); v = substr(t[i], index(t[i], "=") + 1) } else { k = t[i]; v = "#member" }
+        if (!(k in arr)) { ord[++cnt] = k } ; arr[k] = v } }
+    BEGIN { load(ENVIRON["MX_B"], b, ob); nb = cnt; cnt = 0; load(ENVIRON["MX_G"], g, og); ng = cnt
+      for (i = 1; i <= nb; i++) seen[ob[i]] = 1
+      for (i = 1; i <= ng; i++) if (!(og[i] in seen)) { seen[og[i]] = 1; ob[++nb] = og[i] }
+      for (i = 1; i <= nb; i++) { k = ob[i]; c = ((k in b) ? b[k] : "#absent") != ((k in g) ? g[k] : "#absent"); n = k; gsub(/[^A-Za-z0-9_.-]/, "_", n); printf "%s%s:%d", (i > 1 ? " " : ""), n, c }
+      printf "\n" }')"
+}
 # BL-827 MUTANT: a seed that exits 1 must read FIXTURE BROKEN: seed exited and exit 2, and not fall
 # through to assertions on four empty variables. It drives THIS fixture whole, with SG_SEED pointing at
 # a failing seed, so the run reaches the seed check past the real J0 join and the real sibling files;
@@ -3398,7 +3439,7 @@ ss_assert "pp-record-out-of-tree" \
 # logs 1 -- so the 0 above is the record's absence and not a script that cannot see the directory.
 : > "$PP_LSREC_LOG.ctl"
 pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG.ctl"
-( cd "$PP_LSREC" && sh scripts/ai-dlc/gate-pass.sh )
+( cd "$PP_LSREC" && bash scripts/ai-dlc/gate-pass.sh )
 ss_assert "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
   "...and the same script with a record-shaped file present logs 1, so it really can see that directory"
 # MUTANT: the record assembled IN PLACE from the start of the run, as the earlier cut did.
@@ -3448,7 +3489,7 @@ f="$D/run-$n"
 { printf "ARGV:%s|%s\n" "$1" "$2"; cat; } > "$f"
 if [ -f "$D/sigpipe" ]; then
   yes | head -1 >/dev/null
-  [ "${PIPESTATUS[0]}" -eq 141 ] && { echo "hook: SIGPIPE killed yes"; exit 1; }
+  [ "${PIPESTATUS[0]}" -eq 141 ] && { echo "hook: SIGPIPE ended yes"; exit 1; }
 fi
 [ -f "$D/refuse-all" ] && { printf "\n── artifact paths\n   FAIL\n\npre-push: BLOCKED.\n"; exit 1; }
 if [ -f "$D/refuse-stdin" ] && grep -qF "$(cat "$D/refuse-stdin")" "$f"; then echo "hook: refuse stdin"; exit 1; fi
@@ -5022,7 +5063,7 @@ SH_S3="$(grep -n -A2 -F -- 'sa-w229.sh --root' "$AV/s/cons/.githooks/pre-push" |
 ss_assert "sh-pre-229" "$([ -n "$SH_W" ] && [ "$SH_W" = "$SH_S3" ] && echo same)" "same" \
   "world S carries the real hook's write-mode capture and the two lines after it verbatim, only the script name differs"
 ss_assert "sh-pre-rc" \
-  "$(av_rc "$AV/s/cons" scripts/ai-dlc/sa-next.sh)$(git -C "$AV/s/dist" show "$(cat "$AV/s/T"):core/scripts/sa-next.sh" | sh; printf '%s' "$?")" \
+  "$(av_rc "$AV/s/cons" scripts/ai-dlc/sa-next.sh)$(git -C "$AV/s/dist" show "$(cat "$AV/s/T"):core/scripts/sa-next.sh" | bash; printf '%s' "$?")" \
   "01" "every stub exits 0 at base and 1 at theirs"
 SH_SIG_FIX="assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER"
 SH_S="$(av_run "$GATE" "$AV/s")"
@@ -5070,6 +5111,11 @@ sh_kill "sh-mut-steptrue" "$(av_mut sh-steptrue 'if (!stepped && match(tt,' 'if 
 fi
 rm -rf "$AV"
 
+if [ "$MATRIX" = 0 ]; then
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (0 MATRIX-ROW lines printed)"
+  else bad "a plain run printed $MATRIX_CELLS matrix-only cells"; fi
+fi
 echo "$NAME: shard $GROUP ran $ASSERTIONS assertions"
 echo
 if [ "$FAILURES" -gt 0 ]; then
