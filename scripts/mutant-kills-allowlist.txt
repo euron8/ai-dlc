@@ -55,7 +55,6 @@ self-update-gate
 self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shadowed-local-validators
-shell-portability
 snapshot-section-schema
 snapshot-update-stamps
 span-of-containment
