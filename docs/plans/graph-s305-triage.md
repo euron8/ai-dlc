@@ -176,8 +176,7 @@ comparison read **+1.9s (11%)** on the pole validator and would have justified a
 pass; it was invalid, because it ran `origin/main` from a `mktemp` extraction against the
 branch in the LIVE REPO — two different trees. Re-measured with both sides extracted alike and
 the runs INTERLEAVED to cancel drift, five reps each: main **17.29s**, branch **17.10s**. No
-regression. **Never compare a `mktemp` extraction against the working repo**, and interleave
-timing reps rather than running one side then the other.
+regression. **Never compare a `mktemp` extraction against the working repo.**
 
 **RC-2's THREE REMEDY ITEMS ALL SHIPPED, and the single-source clause cost more than the
 routing did.** Routing the answer channel made a second emitter of the pause branch text and
