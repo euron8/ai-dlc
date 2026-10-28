@@ -52,6 +52,54 @@
 # of the population outside decides=, the nearest to the deciding cell in declaration order. On each
 # push a mutant runs its deciding cell (the kill) and each twin, which must pass: the mutant fails only
 # its own assertion. An arm is <predicate>/<cell>.
+# MUTANT-MATRIX M1 decides=cs/partcite twins=cs/crossone
+# MUTANT-MATRIX M2 decides=owner/dup-merge,owner/dup-check-owner-sealed twins=owner/dup-check-owner-unsealed
+# MUTANT-MATRIX M3 decides=mark/shard-3 twins=mark/caller-key
+# MUTANT-MATRIX M4 decides=seal_rewrite/seal-rewrite twins=mark/shard-3
+# MUTANT-MATRIX M5 decides=legacy/sentinel twins=legacy/absent
+# MUTANT-MATRIX M6 decides=unmarked/unmarked-sentinel twins=unmarked/control-old-engine
+# MUTANT-MATRIX M7 decides=vb_qa/q-nr-empty,vb_qa/q-nr-sug twins=vb_qa/q-nr-imp
+# MUTANT-MATRIX M8 decides=vb_cr/cr-blocked-sug twins=vb_cr/cr-approved-crit
+# MUTANT-MATRIX M9 decides=vb_cr/cr-approved-crit twins=vb_cr/cr-approved-imp
+# MUTANT-MATRIX M10 decides=vb_cr/cr-nr-imp twins=vb_cr/cr-blocked-crit
+# MUTANT-MATRIX M11 decides=vb_r3/r3-graph-cross1 twins=cs/partcite
+# MUTANT-MATRIX M12 decides=vb_qmode/q-mode-sug,vb_qa/q-nr-empty,vb_r3/r3-graph-cross1,vb_qa/q-unclassed,fr_bound/frb-legacy twins=cs/partcite
+# MUTANT-MATRIX M13 decides=vb_qleg/q-leg-nr-one,vb_qleg/q-leg-pass-crit,vb_qleg/q-leg-nr-empty twins=vb_qleg/q-two-containers
+# MUTANT-MATRIX M14 decides=vb_qa/q-unclassed twins=vb_qa/q-nr-empty
+# MUTANT-MATRIX M15 decides=fr_verdict/fr-plain,fr_verdict/fr-bold,fr_verdict/fr-paren,fr_verdict/fr-reorder twins=fr_verdict/fr-expected-only
+# MUTANT-MATRIX M16 decides=fr_verdict/fr-reorder twins=fr_verdict/fr-expected-only
+# MUTANT-MATRIX M17 decides=fr_orphan/fr-ac10 twins=fr_orphan/fr-ac1
+# MUTANT-MATRIX M18 decides=serial/sr-q-set,serial/sr-q-suffix twins=serial/sr-cr-approved
+# MUTANT-MATRIX M19 decides=serial/sr-q-twosame twins=serial/sr-q-suffix
+# MUTANT-MATRIX M20 decides=fr_bound/frb-legacy twins=fr_bound/frb-severity
+# MUTANT-MATRIX M21 decides=x_dupall/two twins=x_dupall/one
+# MUTANT-MATRIX M22 decides=x_dupall/check twins=x_dupall/preca
+# MUTANT-MATRIX M23 decides=canon/cr-filter-k,canon/cr-filter-kglued,canon/cr-filter-kquoted,canon/cr-filter-keyword,canon/cr-deselect,canon/cr-file,canon/cr-node,canon/cr-path-noconv,canon/cr-m-other,canon/cr-path-other,canon/cr-filter-suffix,canon/cr-filter-gorun,canon/cr-filter-lf,canon/cr-filter-xff,canon/cr-filter-dd,canon/cr-path-sub twins=canon/cr-m-noconv
+# MUTANT-MATRIX M24 decides=canon/cr-exempt-code,canon/cr-exempt-evil,canon/cr-exempt-whole,canon/cr-norun-na,canon/cr-norun-nonebt,canon/cr-norun-other twins=canon/cr-exempt-norange
+# MUTANT-MATRIX M25 decides=canon_merge/crm-legacy,canon_merge/crm-disk-legacy twins=canon_merge/crm-disk-held
+# MUTANT-MATRIX M26 decides=canon/cr-nr-norun twins=canon/cr-exempt-rec
+# MUTANT-MATRIX M27 decides=canon_merge/crm-norun,canon_merge/crm-disk-held,canon_merge/crm-neither twins=canon_merge/crm-nr-norun
+# MUTANT-MATRIX M28 decides=canon/cr-exempt-narrow,canon/cr-exempt-empty twins=canon/cr-exempt-whole
+# MUTANT-MATRIX M29 decides=canon/cr-path-conv,canon/cr-m-other,canon/cr-filter-ff,canon/cr-path-super,canon/cr-conv-runner twins=canon/cr-path-other
+# MUTANT-MATRIX M30 decides=canon/cr-norun-na,canon/cr-conv-runner-none,canon/cr-norun-other,canon/cr-norun-rec twins=canon/cr-norun-nonebt
+# MUTANT-MATRIX M31 decides=canon/cr-exempt-evil twins=canon/cr-exempt-narrow
+# MUTANT-MATRIX M32 decides=canon/cr-serial-legacy twins=canon/cr-ok
+# MUTANT-MATRIX M33 decides=canon_merge/crm-disk-legacy twins=canon_merge/crm-disk-held
+# MUTANT-MATRIX M34 decides=canon/cr-filter-suffix twins=canon/cr-filter-gorun
+# MUTANT-MATRIX M35 decides=canon/cr-filter-gorun twins=canon/cr-filter-lf
+# MUTANT-MATRIX M36 decides=canon/cr-filter-lf twins=canon/cr-filter-xff
+# MUTANT-MATRIX M37 decides=canon/cr-filter-dd twins=canon/cr-path-super
+# MUTANT-MATRIX M38 decides=canon/cr-path-super twins=canon/cr-conv-runner
+# MUTANT-MATRIX M39 decides=canon/cr-norun-nonebt twins=canon/cr-norun-other
+# MUTANT-MATRIX M40 decides=canon/cr-conv-runner twins=canon/cr-conv-runner-none
+# MUTANT-MATRIX M41 decides=adv_qa/ad-q-present-absent,adv_qa/ad-q-unreadable-absent,adv_qa/ad-q-world-b,adv_qa/ad-q-untracked-new twins=adv_qa/ad-q-called
+# MUTANT-MATRIX M42 decides=adv_qa/ad-q-legacy-absent,adv_qa/ad-q-legacy-prose,adv_qa/ad-q-world-a,adv_qa/ad-q-untracked-old twins=adv_qa/ad-q-unreadable-absent
+# MUTANT-MATRIX M43 decides=xc_flip/xc-flip,xc_count/xc-count,xc_one/xc-one twins=xc_merge/xc-merge
+# MUTANT-MATRIX M44 decides=xc_merge/xc-merge twins=xc_flip/xc-flip
+# MUTANT-MATRIX M45 decides=xc_count/xc-count twins=xc_flip/xc-flip
+# MUTANT-MATRIX M46 decides=xc_one/xc-one twins=xc_flip/xc-flip
+# MUTANT-MATRIX m-k2only decides=x_lone/x-lone-k8,x_lone/x-lone-qa twins=x_lone/x-partial
+# MUTANT-MATRIX m-nomix decides=x_mix/x-mix twins=cs/partcite
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/review-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="review-shard-merge"
@@ -447,6 +495,20 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     if CS_ONLY="$2" "p_$1" "$3" > /dev/null 2>&1 < /dev/null; then [ "$CS_RAN" = 1 ] && echo GREEN || echo SKIP
     else [ "$CS_RAN" = 1 ] && echo RED || echo SKIP; fi
   }
+  # mx_twin <id> <deciding arm> <decides list> <population...> -> the twin: the first cell of the
+  # population, outside decides=, GREEN over the mutant and the control, after the deciding cell in
+  # declaration order, else before it. A function, not a $( ) body: bash 3.2 misparses a `case`
+  # pattern's unbalanced `)` inside a command substitution.
+  mx_twin() {
+    local id="$1" d="$2" dec="$3" q
+    shift 3
+    for q in $(printf '%s\n' "$@" | awk -v d="$d" '$0 == d { s = 1; next } { if (s) a[++na] = $0; else b[++nb] = $0 }
+      END { for (i = 1; i <= na; i++) print a[i]; for (i = 1; i <= nb; i++) print b[i] }'); do
+      if printf ',%s,' "$dec" | grep -qF ",$q,"; then continue; fi
+      if grep -qxF "MATRIX $id $q mutant=GREEN control=GREEN" "$WORK/mx-log"; then printf '%s' "$q"; return 0; fi
+    done
+    return 0
+  }
   matrix_score() {
     local id f p c cl pop q pc ms cs key dec tw
     mkdir -p "$WORK/mx-cells" "$WORK/mx-ctl"
@@ -467,13 +529,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
         [ "$q" = "$p/$c" ] && continue
         if [ "$ms" = RED ] && [ "$cs" = GREEN ]; then dec="$dec,$q"; fi
       done
-      # The twin: the first GREEN-under-both cell of the population, outside decides=, after the deciding
-      # cell in declaration order, else before it.
-      tw="$(for q in $pop; do echo "$q"; done | awk -v d="$p/$c" '$0 == d { s = 1; next } { if (s) a[++na] = $0; else b[++nb] = $0 }
-        END { for (i = 1; i <= na; i++) print a[i]; for (i = 1; i <= nb; i++) print b[i] }' | while read -r q; do
-          case ",$dec," in *",$q,"*) continue ;; esac
-          grep -qx "MATRIX $id $q mutant=GREEN control=GREEN" "$WORK/mx-log" && { echo "$q"; break; }
-        done)"
+      tw="$(mx_twin "$id" "$p/$c" "$dec" $pop)"
       echo "MATRIX-HEADER # MUTANT-MATRIX $id decides=$dec twins=${tw:-NONE}"
     done 3< "$MX_ROWS"
   }
