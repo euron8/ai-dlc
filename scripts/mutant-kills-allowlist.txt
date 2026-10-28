@@ -37,7 +37,6 @@ layer-crosswalk-home
 layer-debt-due-and-discharge
 layer-entry-unreadable
 layer-extends-grain
-layer-qualifier-grain
 layer-retired-id-crosswalk
 layer-title-join
 ledger-reverify-dist-only-reach

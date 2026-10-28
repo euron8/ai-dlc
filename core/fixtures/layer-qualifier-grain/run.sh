@@ -4,7 +4,7 @@
 # that declaring an anchor NARROWS pull-time drift to that anchor's span, that the
 # narrowing cannot invent silence, and that the authoring arms discriminate.
 #
-# Usage: run.sh [path-to-validate-layer-entries.sh] [path-to-layer-drift.sh]
+# Usage: run.sh [--matrix] [path-to-validate-layer-entries.sh] [path-to-layer-drift.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed.
 #
 # THE LOAD-BEARING ASSERTION IS PART 1a: a commit that changes the hooked file
@@ -14,6 +14,14 @@
 # stopped emitting anything at all would pass it. Together they say the narrowing
 # is a narrowing and not a relabelling.
 set -uo pipefail
+
+# `--matrix` is an ARGUMENT (never an env var), parsed and shifted before the positional paths. It adds
+# the mutant x arm MATRIX cells and nothing else. WANT_MATRIX is read off the raw argv independently of
+# the guard below, so the final arm can tell a plain run from a run whose guard was broken open.
+case " $* " in *" --matrix "*) WANT_MATRIX=1 ;; *) WANT_MATRIX=0 ;; esac
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
+MATRIX_EMITTED=0
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -38,6 +46,8 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "layer-qualifier-grain:"
+[ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
+. "$HERE/../lib/mutant.sh"
 
 # status_for <entry-substring>  -> the status column of that entry's row
 status_for() { printf '%s\n' "$DRIFT_OUT" | awk -v e="$1" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }
@@ -97,22 +107,55 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$LINTER")" && pwd)/$(basename "$LINTER"
 L_DIR="$(cd "$(dirname "$LINTER")" && pwd -P)"
 [ -f "$L_DIR/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED $L_DIR/artifact-path-config.sh"
 BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"
-assert_msg() { # assert_msg <label> <grep-pattern>
-  grep -q "$2" <<<"$BAD_OUT" && ok "$1" || bad "$1 — no message matching /$2/"
+
+# The linter arms are DATA: <arm> -> message fragment. The same table scores the shipped linter below and
+# every linter mutant's output, so a base arm and the cell a mutant is read against cannot drift.
+LARMS="e10 e11-nomatch e11-reverse e11-otherfile e11-two e11-second e11-noanchor e11-emptyparts e12-extends e12-position e12-nonqualifier e13 e14"
+lpat() {
+  case "$1" in
+    e10)              printf '%s' "kind 'qualifer' is not one of" ;;
+    e11-nomatch)      printf '%s' "anchor 'No Such Heading Anywhere' matches no heading" ;;
+    e11-reverse)      printf '%s' "CONTAINS the heading 'Beta'" ;;
+    e11-otherfile)    printf '%s' "but hooks: names" ;;
+    e11-two)          printf '%s' "declares 2 anchors ('#Alpha gate, #Gamma review') on kind 'qualifier'" ;;
+    e11-second)       printf '%s' "anchor 'Second Anchor Nowhere' matches no heading" ;;
+    e11-noanchor)     printf '%s' "carries no '#anchor'" ;;
+    e11-emptyparts)   printf '%s' "extends: ',' declares no anchor at all" ;;
+    e12-extends)      printf '%s' "requires 'extends:'" ;;
+    e12-position)     printf '%s' "requires 'position:'" ;;
+    e12-nonqualifier) printf '%s' "does not render inside a core section" ;;
+    e13)              printf '%s' "is not 'append' or 'prepend'" ;;
+    e14)              printf '%s' "Only a check is loaded from a GATE_MANIFEST row" ;;
+  esac
 }
-assert_msg "E10 rejects a kind the loader routes nowhere"        "kind 'qualifer' is not one of"
-assert_msg "E11 rejects an anchor matching no heading"           "anchor 'No Such Heading Anywhere' matches no heading"
-assert_msg "E11 rejects a reverse-only anchor, naming the real heading" "CONTAINS the heading 'Beta'"
-assert_msg "E11 rejects an anchor whose file is not the hooked file"    "but hooks: names"
-assert_msg "E11 rejects two anchors on a qualifier"              "declares 2 anchors ('#Alpha gate, #Gamma review') on kind 'qualifier'"
-assert_msg "E11 checks EVERY declared span, not the first"      "anchor 'Second Anchor Nowhere' matches no heading"
-assert_msg "E11 rejects an extends: with no anchor"              "carries no '#anchor'"
-assert_msg "E11 rejects an extends: whose every part is empty"   "extends: ',' declares no anchor at all"
-assert_msg "E12 rejects a qualifier missing extends:"            "requires 'extends:'"
-assert_msg "E12 rejects a qualifier missing position:"           "requires 'position:'"
-assert_msg "E12 rejects position: on a non-qualifier"            "does not render inside a core section"
-assert_msg "E13 rejects a position outside append|prepend"       "is not 'append' or 'prepend'"
-assert_msg "E14 rejects gate_types: on a kind no row loads"      "Only a check is loaded from a GATE_MANIFEST row"
+# lint_holds <arm> <linter-output> -- 0 when the arm's message is present
+lint_holds() { grep -qF -- "$(lpat "$1")" <<<"$2"; }
+
+assert_msg() { # assert_msg <label> <arm>
+  if lint_holds "$2" "$BAD_OUT"; then
+    ok "$1"
+    case "$2" in
+      e10) B_e10=1 ;; e11-nomatch) B_e11_nomatch=1 ;; e11-reverse) B_e11_reverse=1 ;; e11-two) B_e11_two=1 ;;
+      e11-second) B_e11_second=1 ;; e11-noanchor) B_e11_noanchor=1 ;; e11-emptyparts) B_e11_emptyparts=1 ;;
+      e12-extends) B_e12_extends=1 ;; e13) B_e13=1 ;;
+    esac
+  else
+    bad "$1 — no message matching /$(lpat "$2")/"
+  fi
+}
+assert_msg "E10 rejects a kind the loader routes nowhere"        e10
+assert_msg "E11 rejects an anchor matching no heading"           e11-nomatch
+assert_msg "E11 rejects a reverse-only anchor, naming the real heading" e11-reverse
+assert_msg "E11 rejects an anchor whose file is not the hooked file"    e11-otherfile
+assert_msg "E11 rejects two anchors on a qualifier"              e11-two
+assert_msg "E11 checks EVERY declared span, not the first"       e11-second
+assert_msg "E11 rejects an extends: with no anchor"              e11-noanchor
+assert_msg "E11 rejects an extends: whose every part is empty"   e11-emptyparts
+assert_msg "E12 rejects a qualifier missing extends:"            e12-extends
+assert_msg "E12 rejects a qualifier missing position:"           e12-position
+assert_msg "E12 rejects position: on a non-qualifier"            e12-nonqualifier
+assert_msg "E13 rejects a position outside append|prepend"       e13
+assert_msg "E14 rejects gate_types: on a kind no row loads"      e14
 
 # --- Part 3: THE DISCRIMINATION CONTROL ---------------------------------------
 # Every arm above is an "it fired" assertion, and all of them are satisfied by a
@@ -126,30 +169,49 @@ else
 fi
 
 # --- Part 4: mutants -----------------------------------------------------------
+# Mutant matrix block. Measured once by the --matrix run named on the REMEASURE line: every mutant is
+# run once and read against EVERY arm of its subject (the five drift arms d-*, or the thirteen linter
+# arms e*); FAIL = that arm's expectation no longer holds under the mutant, ok = it still holds. Per push
+# each mutant is scored only on its DECIDING arm (must FAIL) and its TWIN (an arm the matrix shows ok,
+# which must HOLD), both read off the ONE subject run the mutant already costs. The shipped subject keeps
+# every base arm and world above. Arms that ALSO fail under a mutant (entanglement) are in the --matrix log.
+# MUTANT-MATRIX m1-no-narrowing decides=d-elsewhere twins=d-noanchor
+# MUTANT-MATRIX m2-missing-is-ok decides=d-vanished twins=d-elsewhere
+# MUTANT-MATRIX m3-no-kind-enum decides=e10 twins=e11-nomatch
+# MUTANT-MATRIX m4-accept-reverse decides=e11-reverse twins=e11-nomatch
+# MUTANT-MATRIX m5-no-qualifier-keys decides=e12-extends twins=e13
+# MUTANT-MATRIX m6-any-position decides=e13 twins=e10
+# MUTANT-MATRIX m7-first-span-only decides=e11-second twins=e11-nomatch
+# MUTANT-MATRIX m8-qualifier-any-anchors decides=e11-two twins=e11-nomatch
+# MUTANT-MATRIX m9-missing-masks-drift decides=d-missmoved twins=d-vanished
+# MUTANT-MATRIX m10-empty-parts-accepted decides=e11-emptyparts twins=e11-noanchor
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-qualifier-grain/run.sh --matrix
+# Re-measured whenever an arm or a mutant is added or changed.
+#
 # COPIES, never in-place edits, each guarded by `cmp -s` so a sed that matched
-# nothing cannot pass as a mutation. Each mutant must fail ONLY its own assertion;
-# two failures would mean the assertions are entangled and one is vacuous.
+# nothing cannot pass as a mutation.
 #
 # The drift copies go into a copy of the WHOLE reconcile/ directory, not into a
 # scratch dir of their own. `layer-drift.sh` sources `lib.sh` from beside itself
 # and exits 1 when it cannot, so a lone copy emits NOTHING — and "no output" is
 # indistinguishable from "the mutated check went quiet", i.e. it scores as a kill
-# for every mutant at once. The unmutated control below is what detects that, and
-# on this fixture's first run it did exactly that.
+# for every mutant at once. The unmutated control below is what detects that.
 MDIR="$ROOT/mutants"; mkdir -p "$MDIR"
 cp -R "$(dirname "$DRIFT")" "$MDIR/reconcile"
 DRIFT_BN="$(basename "$DRIFT")"
 cp "$MDIR/reconcile/$DRIFT_BN" "$MDIR/reconcile/drift-control.sh"
 cp "$LINTER" "$MDIR/lint-control.sh"
 
-# The unmutated controls run FIRST. A copy that dies for an unrelated reason (a
-# sibling it can no longer source, a path it resolved by accident) emits nothing,
-# and "no output" otherwise scores as a kill for every mutant below it.
-dstat() { bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 | awk -v e="$2" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }
-if [ "$(dstat "$MDIR/reconcile/drift-control.sh" anchored-elsewhere)" = "$(status_for anchored-elsewhere)" ]; then
+# The unmutated controls run FIRST, ONE run per copy machinery. A copy that dies for an unrelated
+# reason (a sibling it can no longer source, a path it resolved by accident) emits nothing, and "no
+# output" otherwise scores as a kill for every mutant below it.
+drift_run() { bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1; }
+statuses() { printf '%s\n' "$1" | awk -v e="$2" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }
+CTRL_DRIFT_OUT="$(drift_run "$MDIR/reconcile/drift-control.sh")"
+if [ "$(statuses "$CTRL_DRIFT_OUT" anchored-elsewhere)" = "$(status_for anchored-elsewhere)" ]; then
   ok "CONTROL: an unmutated copy of layer-drift.sh reproduces the shipped verdict"
 else
-  bad "CONTROL FAILED: an unmutated COPY of layer-drift.sh does not reproduce the shipped verdict (copy='$(dstat "$MDIR/reconcile/drift-control.sh" anchored-elsewhere)' shipped='$(status_for anchored-elsewhere)'). Every drift mutant below would be scored against a harness that is not working."
+  bad "CONTROL FAILED: an unmutated COPY of layer-drift.sh does not reproduce the shipped verdict (copy='$(statuses "$CTRL_DRIFT_OUT" anchored-elsewhere)' shipped='$(status_for anchored-elsewhere)'). Every drift mutant below would be scored against a harness that is not working."
 fi
 if [ "$(bash "$MDIR/lint-control.sh" "$BAD" 2>&1 | grep -c '^ERROR')" -eq "$(printf '%s' "$BAD_OUT" | grep -c '^ERROR')" ]; then
   ok "CONTROL: an unmutated copy of validate-layer-entries.sh reproduces the shipped error count"
@@ -157,17 +219,34 @@ else
   bad "CONTROL FAILED: an unmutated COPY of the linter reports a different error count than the shipped one"
 fi
 
+# The drift arms, the same predicates as Part 1, over any drift output.
+DARMS="d-elsewhere d-noanchor d-atchange d-vanished d-missmoved"
+drift_holds() { # drift_holds <arm> <drift-output>
+  local s
+  case "$1" in
+    d-elsewhere) s=" $(statuses "$2" anchored-elsewhere) "; case "$s" in *" EXTENSION-OK "*) return 0 ;; esac ;;
+    d-noanchor)  s=" $(statuses "$2" no-anchor) ";          case "$s" in *" EXTENSION-HOOK-DRIFT "*) return 0 ;; esac ;;
+    d-atchange)  s=" $(statuses "$2" anchored-at-change) "; case "$s" in *" EXTENSION-ANCHOR-DRIFT "*) return 0 ;; esac ;;
+    d-vanished)  s=" $(statuses "$2" anchor-vanished) ";    case "$s" in *" EXTENSION-ANCHOR-MISSING "*) return 0 ;; esac ;;
+    d-missmoved) s=" $(statuses "$2" missing-and-moved) ";  case "$s" in *" EXTENSION-ANCHOR-MISSING "*) case "$s" in *" EXTENSION-ANCHOR-DRIFT "*) return 0 ;; esac ;; esac ;;
+  esac
+  return 1
+}
+# Flags: set from the SHIPPED run's verdict on the arm each mutant is scored against, in THIS run.
+if drift_holds d-elsewhere "$DRIFT_OUT"; then B_d_elsewhere=1; fi
+if drift_holds d-vanished "$DRIFT_OUT"; then B_d_vanished=1; fi
+if drift_holds d-missmoved "$DRIFT_OUT"; then B_d_missmoved=1; fi
+
+# Flags: set from the SHIPPED run's verdict on the arm each drift mutant is scored against, in THIS run.
+if drift_holds d-elsewhere "$DRIFT_OUT"; then B_d_elsewhere=1; fi
+if drift_holds d-vanished "$DRIFT_OUT"; then B_d_vanished=1; fi
+if drift_holds d-missmoved "$DRIFT_OUT"; then B_d_missmoved=1; fi
+
 # EVERY CALLER INVOKES THIS INSIDE `$( )` TO CAPTURE THE MUTANT'S PATH, so this
 # function cannot report anything by calling bad(): the diagnostic is captured as
 # its OUTPUT and becomes the mutant path, and the fails++ happens in a subshell
-# that dies at the closing paren. Measured -- `if m="$(helper)"` where the helper
-# calls bad() and returns 1 leaves fails at 0 in the parent and skips the `then`
-# branch, so the assertion simply VANISHES and the fixture still reports PASS.
-# That is §7's `RC=$?` trap one level up, and it is how a stale m3 expression went
-# unnoticed: v0.231.0's I54 sweep rewrote the line m3's sed anchors on, the
-# mutation stopped landing, and this fixture went from 27 assertions to 26 in
-# silence. The remedy is §7's: write it to a FILE, which no subshell can swallow,
-# and assert on that file at the end where the count is visible.
+# that dies at the closing paren. The remedy is to write it to a FILE, which no
+# subshell can swallow, and assert on that file at the end where the count is visible.
 MUT_UNLANDED="$MDIR/mutations-that-did-not-land"
 : > "$MUT_UNLANDED"
 mutate() { # mutate <name> <src> <sed-expr> [dest-dir]
@@ -181,122 +260,76 @@ mutate() { # mutate <name> <src> <sed-expr> [dest-dir]
   rm -f "$out.orig"; printf '%s' "$out"
 }
 
-# M1 — the narrowing itself. Force the anchor branch off, so a declared anchor
-# falls back to file grain. Kills ONLY the load-bearing assertion.
-if m="$(mutate m1-no-narrowing "$DRIFT" 's/^  elif \[ -n "\$ext_ancs" \]; then$/  elif false; then/' "$MDIR/reconcile")"; then
-  case " $(dstat "$m" anchored-elsewhere) " in
-    *" EXTENSION-OK "*) bad "MUTANT m1 (anchor branch disabled) still reports EXTENSION-OK for an entry anchored away from the change — the load-bearing assertion does not depend on the narrowing code and proves nothing" ;;
-    *) ok "MUTANT m1 killed: with the anchor branch off, anchored-elsewhere drifts at file grain again" ;;
-  esac
-fi
-
-# M2 — the anti-silence arm. Treat an unresolvable span as unchanged, which is
-# what a narrowing does when nobody guards it. Kills ONLY Part 1c.
-if m="$(mutate m2-missing-is-ok "$DRIFT" 's/^      if \[ -z "\$ext_new" \]; then$/      if false; then/' "$MDIR/reconcile")"; then
-  case " $(dstat "$m" anchor-vanished) " in
-    *" EXTENSION-ANCHOR-MISSING "*) bad "MUTANT m2 (unresolvable span no longer reported) still emits EXTENSION-ANCHOR-MISSING — the guard under test is not what produces that row" ;;
-    *) ok "MUTANT m2 killed: without the guard, a vanished anchor stops being reported" ;;
-  esac
-fi
-
+# cells <mutant> <d|e> <output> -- the --matrix cells: EVERY arm of the subject read against the mutant's
+# output. Emitted ONLY under --matrix; MATRIX_EMITTED counts them so a plain run can assert there were none.
+cells() {
+  [ "$MATRIX" = 1 ] || return 0
+  local arm holds
+  if [ "$2" = d ]; then
+    for arm in $DARMS; do
+      if drift_holds "$arm" "$3"; then holds=ok; else holds=FAIL; fi
+      printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$arm" "$holds"; MATRIX_EMITTED=$((MATRIX_EMITTED+1))
+    done
+  else
+    for arm in $LARMS; do
+      if lint_holds "$arm" "$3"; then holds=ok; else holds=FAIL; fi
+      printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$arm" "$holds"; MATRIX_EMITTED=$((MATRIX_EMITTED+1))
+    done
+  fi
+}
+# held <d|e> <arm> <output> -- 0 when the arm still holds on that output
+held() { if [ "$1" = d ]; then drift_holds "$2" "$3"; else lint_holds "$2" "$3"; fi; }
+# score <mutant> <d|e> <output> <deciding-arm> <twin-arm> <flag> <what-died> -- one decider that must
+# FAIL (a kill, through mutant_killed) and one twin that must HOLD, both read off the ONE run in $3.
+score() {
+  cells "$1" "$2" "$3"
+  if held "$2" "$4" "$3"; then
+    bad "$1 SURVIVED: arm $4 still holds under the mutant — the assertion does not depend on the code mutated"
+  else
+    mutant_killed "$6" "$1" "$1: killed on arm $4 — $7"
+  fi
+  if held "$2" "$5" "$3"; then
+    ok "$1: twin arm $5 holds (not entangled)"
+  else
+    bad "$1 also broke twin arm $5 — the two assertions are entangled and one of them is vacuous"
+  fi
+}
 lstat() { bash "$1" "$BAD" 2>&1; }
-# M3 — the kind enum.
+DMUT="$MDIR/reconcile"
+
+if m="$(mutate m1-no-narrowing "$DRIFT" 's/^  elif \[ -n "\$ext_ancs" \]; then$/  elif false; then/' "$DMUT")"; then
+  score m1-no-narrowing d "$(drift_run "$m")" d-elsewhere d-noanchor "${B_d_elsewhere:-0}" "with the anchor branch off, anchored-elsewhere drifts at file grain again"
+fi
+if m="$(mutate m2-missing-is-ok "$DRIFT" 's/^      if \[ -z "\$ext_new" \]; then$/      if false; then/' "$DMUT")"; then
+  score m2-missing-is-ok d "$(drift_run "$m")" d-vanished d-elsewhere "${B_d_vanished:-0}" "without the guard, a vanished anchor stops being reported"
+fi
 if m="$(mutate m3-no-kind-enum "$LINTER" "s/^  if \[ -n \"\\\$kind\" \] \&\& /  if false \&\& /")"; then
-  grep -q "kind 'qualifer' is not one of" <<<"$(lstat "$m")" \
-    && bad "MUTANT m3 (enum check disabled) still rejects the bad kind — E10's assertion is being satisfied by something else" \
-    || ok "MUTANT m3 killed: with the enum off, a typo'd kind is accepted in silence"
+  score m3-no-kind-enum e "$(lstat "$m")" e10 e11-nomatch "${B_e10:-0}" "with the enum off, a typo'd kind is accepted in silence"
 fi
-
-# M4 — the REVERSE arm only. Rename the pattern so a REVERSE result no longer
-# matches it and falls through to the no-match arm. A ONE-TOKEN edit on one line,
-# because the first version of this mutant inserted `\n` through BSD sed — which
-# emits a literal `n`, not a newline — and produced a syntactically broken script.
-# That script emitted nothing, both greps failed, and the fixture reported it as
-# entanglement between two assertions that were in fact fine. A mutant must leave
-# the program RUNNABLE or it tests the interpreter, not the check.
 if m="$(mutate m4-accept-reverse "$LINTER" 's/^            REVERSE:\*)$/            REVERSE_DISABLED:*)/')"; then
-  # CAPTURED, then matched with `case` — not `lstat "$m" | grep -q … && … || …`.
-  # Two greps in that form against the same producer gave a false ENTANGLEMENT
-  # report here: `grep -q` exits on its first match and closes the pipe, and what
-  # the `&&`/`||` chain then reads is the pipeline's last stage rather than the
-  # question asked. The repo's standing rule is never to read `$?` after a pipe;
-  # this is that rule inside a fixture, where the cost was a real assertion
-  # reporting a defect that did not exist.
-  m4out="$(lstat "$m")"
-  case "$m4out" in
-    *"CONTAINS the heading 'Beta'"*) bad "MUTANT m4 (reverse arm renamed) still reports the reverse-only anchor" ;;
-    *) ok "MUTANT m4 killed: with the reverse arm disabled, a silently-widened span lints clean" ;;
-  esac
-  case "$m4out" in
-    *"matches no heading"*) ok "MUTANT m4 leaves the no-match arm alive (the two E11 arms are not entangled)" ;;
-    *) bad "MUTANT m4 also killed the no-match arm — the two assertions are entangled and one of them is vacuous. Mutant emitted $(printf '%s' "$m4out" | grep -c '^ERROR') ERROR line(s)." ;;
-  esac
+  score m4-accept-reverse e "$(lstat "$m")" e11-reverse e11-nomatch "${B_e11_reverse:-0}" "with the reverse arm disabled, a silently-widened span lints clean"
 fi
-
-# M5 — the qualifier's required keys.
 if m="$(mutate m5-no-qualifier-keys "$LINTER" 's/^  if \[ "\$kind" = qualifier \]; then$/  if false; then/')"; then
-  grep -q "requires 'extends:'" <<<"$(lstat "$m")" \
-    && bad "MUTANT m5 (qualifier key requirement disabled) still demands extends:" \
-    || ok "MUTANT m5 killed: a qualifier with neither key lints clean"
+  score m5-no-qualifier-keys e "$(lstat "$m")" e12-extends e13 "${B_e12_extends:-0}" "a qualifier with neither key lints clean"
 fi
-
-# M6 — the position vocabulary.
 if m="$(mutate m6-any-position "$LINTER" "s/^      append|prepend) : ;;$/      append|prepend|middle) : ;;/")"; then
-  grep -q "is not 'append' or 'prepend'" <<<"$(lstat "$m")" \
-    && bad "MUTANT m6 (vocabulary widened to accept 'middle') still rejects it" \
-    || ok "MUTANT m6 killed: widening the vocabulary accepts the bad value"
+  score m6-any-position e "$(lstat "$m")" e13 e10 "${B_e13:-0}" "widening the vocabulary accepts the bad value"
 fi
-
-# M7 — the linter checks only the FIRST declared span (BL-085's regression on the authoring side).
-# extends-second-bad's first anchor resolves, so only its second can draw the error.
 if m="$(mutate m7-first-span-only "$LINTER" 's/^      done <<<"\$ext_pairs"$/      done <<<"$(printf "%s\\n" "$ext_pairs" | head -1)"/')"; then
-  m7out="$(lstat "$m")"
-  case "$m7out" in
-    *"anchor 'Second Anchor Nowhere' matches no heading"*) bad "MUTANT m7 (first span only) still reports the unresolvable SECOND anchor — the every-span assertion is satisfied by something else" ;;
-    *) ok "MUTANT m7 killed: checking only the first span lets a broken second anchor lint clean" ;;
-  esac
-  case "$m7out" in
-    *"anchor 'No Such Heading Anywhere' matches no heading"*) ok "MUTANT m7 leaves the single-anchor no-match arm alive (not entangled)" ;;
-    *) bad "MUTANT m7 also killed the single-anchor no-match arm — the two assertions are entangled" ;;
-  esac
+  score m7-first-span-only e "$(lstat "$m")" e11-second e11-nomatch "${B_e11_second:-0}" "checking only the first span lets a broken second anchor lint clean"
 fi
-
-# M8 — the qualifier's one-anchor limit removed. Only the two-anchor qualifier's message goes.
 if m="$(mutate m8-qualifier-any-anchors "$LINTER" 's/^    elif \[ "\$ext_n" -gt 1 \] && \[ "\$kind" = qualifier \]; then$/    elif false; then/')"; then
-  grep -q "on kind 'qualifier', which takes exactly one" <<<"$(lstat "$m")" \
-    && bad "MUTANT m8 (qualifier anchor limit removed) still rejects a two-anchor qualifier" \
-    || ok "MUTANT m8 killed: without the limit a qualifier with two sections to render into lints clean"
+  score m8-qualifier-any-anchors e "$(lstat "$m")" e11-two e11-nomatch "${B_e11_two:-0}" "without the limit a qualifier with two sections to render into lints clean"
 fi
-
-# M9 — an unresolved span MASKS a moved one again (MISSING and DRIFT made alternatives).
-# Only missing-and-moved's DRIFT row can go; anchor-vanished (one span, unresolved) keeps MISSING.
-if m="$(mutate m9-missing-masks-drift "$DRIFT" 's/^    if \[ -z "\$ext_moved" \]; then$/    if [ -z "$ext_moved" ] || [ -n "$ext_missing" ]; then/' "$MDIR/reconcile")"; then
-  case " $(dstat "$m" missing-and-moved) " in
-    *" EXTENSION-ANCHOR-DRIFT "*) bad "MUTANT m9 (MISSING masks DRIFT) still emits ANCHOR-DRIFT for missing-and-moved — Part 1d is satisfied by something else" ;;
-    *) ok "MUTANT m9 killed: with MISSING masking DRIFT, the rewritten span of missing-and-moved goes unreported" ;;
-  esac
-  case " $(dstat "$m" anchor-vanished) " in
-    *" EXTENSION-ANCHOR-MISSING "*) ok "MUTANT m9 leaves the single-span ANCHOR-MISSING arm alive (not entangled)" ;;
-    *) bad "MUTANT m9 also killed the single-span ANCHOR-MISSING row — entangled" ;;
-  esac
+if m="$(mutate m9-missing-masks-drift "$DRIFT" 's/^    if \[ -z "\$ext_moved" \]; then$/    if [ -z "$ext_moved" ] || [ -n "$ext_missing" ]; then/' "$DMUT")"; then
+  score m9-missing-masks-drift d "$(drift_run "$m")" d-missmoved d-vanished "${B_d_missmoved:-0}" "with MISSING masking DRIFT, the rewritten span of missing-and-moved goes unreported"
 fi
-
-# M10 — the empty-parts arm removed. An `extends: ','` then reaches the per-span loop with
-# no spans and lints clean; only the empty-parts assertion may move.
 if m="$(mutate m10-empty-parts-accepted "$LINTER" 's/^    if \[ "\$ext_n" -lt 1 \]; then$/    if false; then/')"; then
-  m10out="$(lstat "$m")"
-  case "$m10out" in
-    *"declares no anchor at all"*) bad "MUTANT m10 (empty-parts arm removed) still rejects extends: ','" ;;
-    *) ok "MUTANT m10 killed: without the arm, an extends: of only commas lints clean" ;;
-  esac
-  case "$m10out" in
-    *"carries no '#anchor'"*) ok "MUTANT m10 leaves the no-anchor arm alive (not entangled)" ;;
-    *) bad "MUTANT m10 also killed the no-anchor arm — entangled" ;;
-  esac
+  score m10-empty-parts-accepted e "$(lstat "$m")" e11-emptyparts e11-noanchor "${B_e11_emptyparts:-0}" "without the arm, an extends: of only commas lints clean"
 fi
 
 # --- CONTROL: every mutation above actually landed -----------------------------
-# The six assertions above are each guarded by `if m="$(mutate ...)"`, and a sed
+# The ten scored mutants above are each guarded by `if m="$(mutate ...)"`, and a sed
 # that matches nothing takes the false branch — no assertion, no diagnostic, and
 # a PASS one line shorter than the run before it. This is where mutate()'s file
 # is read, because this scope is the only one a `$( )` cannot swallow.
@@ -304,6 +337,16 @@ if [ ! -s "$MUT_UNLANDED" ]; then
   ok "control: all 10 mutations landed (a sed matching nothing cannot skip its assertion in silence)"
 else
   bad "mutation(s) matched nothing and their assertions were SKIPPED, not failed: $(tr '\n' ' ' < "$MUT_UNLANDED")— each one leaves a check scoring as proven when nothing proved it"
+fi
+
+# --- CONTROL: a plain run executed no matrix-only cell --------------------------
+# WANT_MATRIX is read off the raw argv, not off the guard, so a guard broken open is caught here.
+if [ "$WANT_MATRIX" = 0 ]; then
+  if [ "$MATRIX_EMITTED" -eq 0 ]; then
+    ok "a plain run executed no matrix-only cell (0 MATRIX cells emitted)"
+  else
+    bad "a plain run emitted $MATRIX_EMITTED matrix-only cell(s) — the --matrix guard is open and every push pays the full mutant x arm matrix"
+  fi
 fi
 
 echo
