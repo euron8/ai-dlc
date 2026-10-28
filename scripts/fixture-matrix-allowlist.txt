@@ -89,7 +89,6 @@ provenance-not-accessible	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 reconcile-blocking-list	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 relocation-preclassify	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 request-coverage	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-requirements-step	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 resume-whole-read	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 retired-contract-token	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 retired-fixture-orphan	no MUTANT-MATRIX block; floor: S1 mut_reds(),S2 cmp -s + mutant
