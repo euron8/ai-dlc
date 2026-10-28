@@ -7,7 +7,7 @@
 #   tripped  the cell's value differs from its base value
 #   decides  cells that must trip      -> the mutant is killed
 #   twins    cells that must NOT trip  -> the kill is confined to the deciding cells
-# Rows print as  MATRIX mutant=<m> arm=<cell> tripped=<yes|no> killed=<yes|no>  (killed is the
+# Rows print as  MATRIX mutant=<m> arm=<cell> tripped=<yes|no> killed=<yes|no>  (killed is the cell's own trip; the mutant's verdict is the MATRIX-MUTANT line
 # mutant's verdict, repeated on each of its rows).  `mx_cells` is what keeps the other cells out of
 # a plain run; MX_EXTRA counts the cells a run evaluated beyond decides+twins.
 MX_EXTRA=0
@@ -30,7 +30,7 @@ mx_vecof() { # mx_vecof <cellfn> <cells...> -> cell=value lines; the cell fn rea
   shift
   for c in "$@"; do printf '%s=%s\n' "$c" "$("$fn" "$c")"; done
 }
-mx_row() { printf 'MATRIX mutant=%s arm=%s tripped=%s killed=%s\n' "$1" "$2" "$3" "$4"; }
+mx_row() { printf 'MATRIX mutant=%s arm=%s tripped=%s killed=%s\n' "$1" "$2" "$3" "$3"; }  # killed is the CELL's own polarity: yes iff the cell tripped
 
 # mx_judge <mutant> <decides> <twins|-> <got-lines> <base-lines> [<expected-lines>]
 # Returns 0 when every deciding cell tripped, every twin stayed at its base value, and (when given)
@@ -61,7 +61,8 @@ mx_judge() {
   done
   [ "$dec_ok" = 1 ] && killed=yes || killed=no
   if [ "${MATRIX:-0}" = 1 ]; then
-    for pair in $rows; do mx_row "$name" "${pair%%:*}" "${pair##*:}" "$killed"; done
+    for pair in $rows; do mx_row "$name" "${pair%%:*}" "${pair##*:}"; done
+    printf 'MATRIX-MUTANT %s dead=%s\n' "$name" "$killed"   # the per-mutant verdict, on its own line
   fi
   [ "$dec_ok" = 1 ] && [ "$conf_ok" = 1 ] && [ -z "$MX_WHY" ]
 }
