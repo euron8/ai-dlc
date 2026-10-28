@@ -2165,6 +2165,34 @@ fi
 
 fi
 if sg vr; then
+# Narrowing helpers for the signature mutants of this shard (vr, hu1, sh). A signature is a blank-separated list of
+# key=value cells. mx_decides lists the cells a mutant is EXPECTED to move (want vs the unmutated base), sig_twin
+# names the first base cell it must NOT move, sig_pick extracts named cells. In a plain run a mutant is scored on its
+# deciding cells plus that one twin; with --matrix on every cell, and each cell is printed as a MATRIX-ROW.
+mx_decides() { MXB="$1" MXW="$2" awk 'BEGIN { nb = split(ENVIRON["MXB"], b, " "); nw = split(ENVIRON["MXW"], w, " ")
+    for (i = 1; i <= nw; i++) { k = w[i]; sub(/=.*/, "", k); wv[k] = w[i] }
+    for (i = 1; i <= nb; i++) { k = b[i]; sub(/=.*/, "", k); if (b[i] != wv[k]) printf "%s%s", (n++ ? " " : ""), k }
+    printf "\n" }'; }
+sig_twin() { MXB="$1" MXD="$2" awk 'BEGIN { nb = split(ENVIRON["MXB"], b, " "); nd = split(ENVIRON["MXD"], d, " ")
+    for (i = 1; i <= nd; i++) dd[d[i]] = 1
+    for (i = 1; i <= nb; i++) { k = b[i]; sub(/=.*/, "", k); if (!(k in dd)) { print k; exit } } }'; }
+sig_pick() { local s="$1"; shift; MXS="$s" MXN="$*" awk 'BEGIN { n = split(ENVIRON["MXS"], t, " ")
+    for (i = 1; i <= n; i++) { k = t[i]; sub(/=.*/, "", k); v[k] = t[i] }
+    m = split(ENVIRON["MXN"], a, " "); for (i = 1; i <= m; i++) printf "%s%s", (i > 1 ? " " : ""), v[a[i]]
+    printf "\n" }'; }
+# sig_judge <label> <flag> <base-sig> <want-sig> <got-sig> <why> -- the caller has counted the assertion.
+sig_judge() {
+  local d t gp wp
+  d="$(mx_decides "$3" "$4")"; t="$(sig_twin "$3" "$d")"
+  if [ "$MATRIX" = 1 ]; then
+    [ "$5" = DID-NOT-APPLY ] || mx_row "$1" "$3" "$5"
+    gp="$5"; wp="$4"
+  else
+    gp="$(sig_pick "$5" $d $t)"; wp="$(sig_pick "$4" $d $t)"
+  fi
+  if [ "$gp" = "$wp" ]; then mutant_killed "$2" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$6")"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$1" "$gp" "$wp"; fi
+}
 # --- THE VERDICT RECORD: an autonomous decision that leaves an artifact ------------------
 #
 # Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with no operator.
@@ -2359,6 +2387,22 @@ if cmp -s "$GATE" "$VR_MUT_D/self-update-gate.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so rec-skill-commit is unproven\n' "rec-skc-mutant"
 else
+  # THE UNMUTATED CONTROL, ON THE SAME SPLIT-STAMP WORLD, and it carries a POSITIVE conjunct: the
+  # shipped gate must record the `skill_commit` VALUE here, not merely something-that-is-not-the
+  # -mutant's. A control asserting only inequality passes against a gate that records nothing.
+  VR_CTL_C="$(vr_cons skcctl)"
+  mkdir -p "$VR_CTL_C/.claude"
+  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
+    "$THEIRS" "$BASE" > "$VR_CTL_C/.claude/.ai-dlc-version"
+  bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_CTL_C" > "$VR/skcctl.out" 2> "$VR/skcctl.err"
+  vr_ctl_rec="$(vr_newest "$VR_CTL_C")"
+  VR_CTL_SKC="$(sed -n 's/^# skill-commit: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)"
+  VR_CTL_V="$(sed -n 's/^# verdict: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)"
+  ss_assert "rec-skc-mutant-control" \
+    "$VR_CTL_SKC" \
+    "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
+    "the SHIPPED gate on that same split-stamp world records skill_commit, so the kill above is the mutation and not the world"
+  if [ "$VR_CTL_SKC" = "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" ]; then B_skc=1; fi
   VR_MUT_C="$(vr_cons skcmut)"
   mkdir -p "$VR_MUT_C/.claude"
   # `commit` and `skill_commit` DELIBERATELY DIFFER in this stamp, which is what makes the two
@@ -2371,26 +2415,15 @@ else
     > "$VR/skcmut.out" 2> "$VR/skcmut.err"
   vr_mut_rec="$(vr_newest "$VR_MUT_C")"
   vr_mut_got="$(sed -n 's/^# skill-commit: *//p' "${vr_mut_rec:-/dev/null}" | head -1)"
-  if [ "$vr_mut_got" = "$(git -C "$DIST" rev-parse "${THEIRS}^{commit}")" ]; then
-    printf '  ok    %-16s KILLED (a reader keyed on commit: records the wrong field, and the arm says so)\n' "rec-skc-mutant"
+  vr_mut_v="$(sed -n 's/^# verdict: *//p' "${vr_mut_rec:-/dev/null}" | head -1)"
+  if [ "$MATRIX" = 1 ]; then mx_row "rec-skc-mutant" "skc=${VR_CTL_SKC:-<none>} v=${VR_CTL_V:-<none>}" "skc=${vr_mut_got:-<none>} v=${vr_mut_v:-<none>}"; fi
+  if [ "$vr_mut_got" = "$(git -C "$DIST" rev-parse "${THEIRS}^{commit}")" ] && [ "$vr_mut_v" = "$VR_CTL_V" ]; then
+    mutant_killed "${B_skc:-0}" "rec-skc-mutant" "$(printf '%-16s KILLED (%s)' "rec-skc-mutant" "a reader keyed on commit: records the wrong field, and the arm says so")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: mutant recorded [%s] -- the arm cannot tell skill_commit from commit\n' \
       "rec-skc-mutant" "${vr_mut_got:-<none>}"
   fi
-  # THE UNMUTATED CONTROL, ON THE SAME SPLIT-STAMP WORLD, and it carries a POSITIVE conjunct: the
-  # shipped gate must record the `skill_commit` VALUE here, not merely something-that-is-not-the
-  # -mutant's. A control asserting only inequality passes against a gate that records nothing.
-  VR_CTL_C="$(vr_cons skcctl)"
-  mkdir -p "$VR_CTL_C/.claude"
-  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
-    "$THEIRS" "$BASE" > "$VR_CTL_C/.claude/.ai-dlc-version"
-  bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_CTL_C" > "$VR/skcctl.out" 2> "$VR/skcctl.err"
-  vr_ctl_rec="$(vr_newest "$VR_CTL_C")"
-  ss_assert "rec-skc-mutant-control" \
-    "$(sed -n 's/^# skill-commit: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)" \
-    "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
-    "the SHIPPED gate on that same split-stamp world records skill_commit, so the kill above is the mutation and not the world"
 fi
 
 # THE PATH REACHES THE CALLER ON STDERR, because stdout is the TSV contract and every caller of
@@ -2471,9 +2504,11 @@ vr_score() {
 # by `exit 0`, scores n=0 rows=identical (two empty files compare equal) v=<none> and fails this.
 rm -rf "$VR/m-control"; mkdir -p "$VR/m-control"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$VR/m-control"/ 2>/dev/null
-ss_assert "rec-mut-control" "$(vr_score "$VR/m-control/self-update-gate.sh" ctl)" \
+VR_CTL_GOT="$(vr_score "$VR/m-control/self-update-gate.sh" ctl)"
+ss_assert "rec-mut-control" "$VR_CTL_GOT" \
   "n=1 rows=identical v=DEFER" \
   "an unmutated copy beside its siblings records normally, so a mutant's shift is the mutation"
+if [ "$VR_CTL_GOT" = "n=1 rows=identical v=DEFER" ]; then B_vrctl=1; fi
 
 vr_kill() { # vr_kill <label> <awk> <consumer-name> <want> <why>
   local g got
@@ -2485,12 +2520,7 @@ vr_kill() { # vr_kill <label> <awk> <consumer-name> <want> <why>
     return
   fi
   got="$(vr_score "$g" "$3")"
-  if [ "$got" = "$4" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$4" "$5"
-  fi
+  sig_judge "$1" "${B_vrctl:-0}" "n=1 rows=identical v=DEFER" "$4" "$got" "$5"
 }
 
 # THE CALL, NOT THE DEFINITION. `gate_record_open` appears twice; the bare call is the one line
@@ -2535,9 +2565,10 @@ else
   VR_R7="$(vr_newest "$VR_C7")"
   vr_m7_got="$(vr_in_h "$VR_R7" '.githooks/pre-push')|$(vr_in "$VR_R7" | grep -c .)"
   vr_m7_want="CONSTANT|$(vr_in "$VR_REC1" | grep -c .)"
+  if [ "$MATRIX" = 1 ]; then mx_row "rec-mut-digest" "h=$(vr_in_h "$VR_REC1" '.githooks/pre-push') n=$(vr_in "$VR_REC1" | grep -c .)" "h=${vr_m7_got%|*} n=${vr_m7_got#*|}"; fi
   if [ "$vr_m7_got" = "$vr_m7_want" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-digest" \
-      "a constant digest leaves the record structurally identical -- same paths, same count -- and joins on nothing"
+    mutant_killed "${B_vrctl:-0}" "rec-mut-digest" "$(printf '%-16s KILLED (%s)' "rec-mut-digest" \
+      "a constant digest leaves the record structurally identical -- same paths, same count -- and joins on nothing")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-digest" "$vr_m7_got" "$vr_m7_want"
@@ -2557,9 +2588,10 @@ else
   VR_SS4="$VR/sscons4"; rm -rf "$VR_SS4"; cp -R "$SS/cons" "$VR_SS4"; rm -rf "$VR_SS4/_bmad-output"
   bash "$VR_M4" "$SS/dist" "$SS_BASE" "$SS_R2" "$VR_SS4" >/dev/null 2>&1
   vr_m4_got="$(vr_trailers "$VR_SS4")"
+  if [ "$MATRIX" = 1 ]; then mx_row "rec-mut-nested" "t=1 f=1" "t=${vr_m4_got:-0} f=$(vr_n "$VR_SS4")"; fi
   if [ "$vr_m4_got" -gt 1 ] 2>/dev/null; then
-    printf '  ok    %-16s KILLED (%s recorded verdicts; %s)\n' "rec-mut-nested" "$vr_m4_got" \
-      "without the EXPORT the nested classify records its OWN range, and the newest record the runner reads is a candidate's verdict"
+    mutant_killed "${B_vrctl:-0}" "rec-mut-nested" "$(printf '%-16s KILLED (%s recorded verdicts; %s)' "rec-mut-nested" "$vr_m4_got" \
+      "without the EXPORT the nested classify records its OWN range, and the newest record the runner reads is a candidate's verdict")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[>1]\n' "rec-mut-nested" "$vr_m4_got"
@@ -2617,9 +2649,11 @@ ss_assert "range-tree-theirs" "$(vr_range "$GATE" "$BASE" "$VR_TREE" "$DIST")" \
 # THE CONTROL, AND IT IS THE ARM THAT SEPARATES A REFUSAL FROM A GATE THAT REFUSES EVERYTHING.
 # The real range is the input the guard must NOT touch: it carries OK rows and exactly one
 # UNDECIDED, gate-agree.sh's, which the differential arms at the top of this fixture already own.
-ss_assert "range-control" "$(vr_range "$GATE" "$BASE" "$THEIRS" "$DIST")" \
+VR_RANGE_GOT="$(vr_range "$GATE" "$BASE" "$THEIRS" "$DIST")"
+ss_assert "range-control" "$VR_RANGE_GOT" \
   "und=1 f2=gate-agree.sh ok=2" \
   "the real range is untouched: two OK rows and the one UNDECIDED the differential produces"
+if [ "$VR_RANGE_GOT" = "und=1 f2=gate-agree.sh ok=2" ]; then B_range=1; fi
 
 # DIST IS NOT A REPOSITORY. Its own arm rather than a case of the ref check, because the two have
 # different SUBJECTS: naming two perfectly good refs as unresolvable sends the operator after the
@@ -2665,10 +2699,11 @@ else
   # so with the refusal defeated the whole verdict set, OK rows included, is computed off a range
   # endpoint that is not a commit.
   vr_m5_got="$(vr_range "$VR_M5" "$BASE" "$VR_TREE" "$DIST")"
+  if [ "$MATRIX" = 1 ]; then mx_row "range-mut-refs" "$(vr_range "$GATE" "$BASE" "$VR_TREE" "$DIST")" "$vr_m5_got"; fi
   case "$vr_m5_got" in
     "und="*" f2=$VR_TREE ok="[1-9]*)
-      printf '  ok    %-16s KILLED (%s)\n' "range-mut-refs" \
-        "with the refusal defeated a TREE endpoint draws OK rows beside the row ($vr_m5_got) -- and a caller reading the verdict, as step 2 does, proceeds" ;;
+      mutant_killed "${B_range:-0}" "range-mut-refs" "$(printf '%-16s KILLED (%s)' "range-mut-refs" \
+        "with the refusal defeated a TREE endpoint draws OK rows beside the row ($vr_m5_got) -- and a caller reading the verdict, as step 2 does, proceeds")" ;;
     *)
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=* f2=%s ok>=1]\n' "range-mut-refs" "$vr_m5_got" "$VR_TREE" ;;
@@ -2687,9 +2722,10 @@ if cmp -s "$GATE" "$VR_M6"; then
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-repo"
 else
   vr_m6_got="$(vr_range "$VR_M6" "$BASE" "$THEIRS" "$VR_NR")"
+  if [ "$MATRIX" = 1 ]; then mx_row "range-mut-repo" "und=1 f2=$VR_NR ok=0" "$vr_m6_got"; fi
   if [ "$vr_m6_got" = "und=2 f2=$BASE ok=0" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "range-mut-repo" \
-      "without its own arm the missing REPOSITORY is reported as two unresolvable refs, sending the operator after the range instead of the path"
+    mutant_killed "${B_range:-0}" "range-mut-repo" "$(printf '%-16s KILLED (%s)' "range-mut-repo" \
+      "without its own arm the missing REPOSITORY is reported as two unresolvable refs, sending the operator after the range instead of the path")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=2 f2=%s ok=0]\n' "range-mut-repo" "$vr_m6_got" "$BASE"
@@ -2742,8 +2778,10 @@ ss_assert "prewritten-refused" "$(vr_pw_scan "$GATE" "$VR_PW")" "und=4 ok=0 pw=4
 # THE CONTROL, ONE PROPERTY APART AND IN THE SAME RUN. The same gate, the same range, a consumer
 # whose copies are still at BASE: the ordinary verdicts return untouched. Without this the arm
 # above is satisfied by a gate that refuses everything.
-ss_assert "prewritten-control" "$(vr_pw_scan "$GATE" "$VR_RC")" "und=1 ok=2 pw=0" \
+VR_PWC_GOT="$(vr_pw_scan "$GATE" "$VR_RC")"
+ss_assert "prewritten-control" "$VR_PWC_GOT" "und=1 ok=2 pw=0" \
   "...while the un-written consumer keeps its two OK rows and its one differential UNDECIDED, so the refusal reads the tree"
+if [ "$VR_PWC_GOT" = "und=1 ok=2 pw=0" ]; then B_pw=1; fi
 
 # --- THE NEAR-MISS THAT SITES THE SECOND CONJUNCT, IN ITS OWN MINIATURE DISTRIBUTION -----
 #
@@ -2815,9 +2853,10 @@ if cmp -s "$GATE" "$VR_M8"; then
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "prewritten-mut"
 else
   vr_m8_got="$(vr_pw_scan "$VR_M8" "$VR_PW")"
+  if [ "$MATRIX" = 1 ]; then mx_row "prewritten-mut" "und=4 ok=0 pw=4" "$vr_m8_got"; fi
   if [ "$vr_m8_got" = "und=0 ok=4 pw=0" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "prewritten-mut" \
-      "with the arm gone the post-write tree reports OK for every gating script -- the verdict that was DEFER before the write"
+    mutant_killed "${B_pw:-0}" "prewritten-mut" "$(printf '%-16s KILLED (%s)' "prewritten-mut" \
+      "with the arm gone the post-write tree reports OK for every gating script -- the verdict that was DEFER before the write")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=0 ok=4 pw=0]\n' "prewritten-mut" "$vr_m8_got"
@@ -2836,9 +2875,10 @@ if cmp -s "$GATE" "$VR_M9"; then
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "prewritten-mut-conj"
 else
   vr_m9_got="$(pw_rows "$VR_M9" modeonly.sh)|$(pw_rows "$VR_M9" moved.sh)"
+  if [ "$MATRIX" = 1 ]; then mx_row "prewritten-mut-conj" "modeonly=$(pw_rows "$GATE" modeonly.sh) moved=$(pw_rows "$GATE" moved.sh)" "modeonly=$(printf '%s' "$vr_m9_got" | cut -d'|' -f1-2) moved=$(printf '%s' "$vr_m9_got" | cut -d'|' -f3-4)"; fi
   if [ "$vr_m9_got" = "SELF-UPDATE-UNDECIDED|pw|SELF-UPDATE-UNDECIDED|pw" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "prewritten-mut-conj" \
-      "without the base != theirs conjunct the mode-only script is refused too, on a consumer that is merely current"
+    mutant_killed "${B_pw:-0}" "prewritten-mut-conj" "$(printf '%-16s KILLED (%s)' "prewritten-mut-conj" \
+      "without the base != theirs conjunct the mode-only script is refused too, on a consumer that is merely current")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[SELF-UPDATE-UNDECIDED|pw|SELF-UPDATE-UNDECIDED|pw]\n' \
@@ -2910,9 +2950,10 @@ else
                 | grep -Fxf <(bash "$MACHD/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
                               | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
   vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
+  if [ "$MATRIX" = 1 ]; then mx_row "rec-mut-corepath" "script=$(vr_in_c "$VR_REC1" 'scripts/ai-dlc/gate-defer.sh') hook=$(vr_in_c "$VR_REC1" '.githooks/pre-push') dup=0" "script=${vr_m10_got%%|*} hook=$(printf '%s' "$vr_m10_got" | cut -d'|' -f2) dup=$vr_m10_dup"; fi
   if [ "$vr_m10_got" = "$vr_m10_want" ] && [ "$vr_m10_dup" -gt 0 ] 2>/dev/null; then
-    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-corepath" \
-      "a script row whose core path is - leaves the reader no theirs blob for the write, and breaks the dedup so every doubly-recorded path carries two contradictory rows"
+    mutant_killed "${B_vrctl:-0}" "rec-mut-corepath" "$(printf '%-16s KILLED (%s)' "rec-mut-corepath" \
+      "a script row whose core path is - leaves the reader no theirs blob for the write, and breaks the dedup so every doubly-recorded path carries two contradictory rows")"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-corepath" "$vr_m10_got" "$vr_m10_want"
@@ -3042,6 +3083,7 @@ ss_assert "pl-seed" \
 
 # W1 CARRIES ITS OWN CONTROL ROW: late.sh, at base and gating, gets the ordinary OK with NO marker,
 # so the two rows prove both scripts reached the differential side of the not-gating terminal.
+PL_F0="$FAILURES"
 ss_assert "pl-w1-landed" "$(pl_row "$GATE" "$PL_W1" moved.sh);$(pl_row "$GATE" "$PL_W1" late.sh)" \
   "SELF-UPDATE-OK|landed;SELF-UPDATE-OK|" \
   "a gating script the prior self-update at mid wrote, committed, stamp still at mid, is acquitted as landed -- while its unwritten sibling keeps the ordinary verdict"
@@ -3062,6 +3104,8 @@ ss_assert "pl-w8-notgating" "$(pl_row "$GATE" "$PL_W8" moved.sh)" "SELF-UPDATE-O
   "a pre-written script the hook only MENTIONS has no differential to refuse: OK, not gating, with no pre-written marker"
 ss_assert "pl-w9-behindbase" "$(pl_row "$GATE" "$PL_W9" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
   "a skill_commit BEHIND base carrying theirs' bytes is not a self-update inside base..theirs (A4, base <= SK)"
+# The nine world cells above are the unmutated arms every pl mutant below is scored against.
+if [ "$FAILURES" = "$PL_F0" ]; then B_pl=1; fi
 
 # --- MUTANTS on the acquittal and on the arm's position ----------------------------------
 # ANCHORS ARE COUNTED IN THE GATE, by `index`, never by an interactive grep: each must occur exactly
@@ -3088,7 +3132,9 @@ pl_lit_mut() { # pl_lit_mut <name> <anchor> <repl> [<anchor2> <repl2>] -> mutate
 # emits nothing and fails the control conjuncts, so silence cannot score as a kill. A copy identical
 # to the gate, or of a different length (every mutation here preserves the line count), DID NOT APPLY.
 pl_kill() { # pl_kill <label> <gate> <want> <why> <world> <script> <world> <script> <world> <script>
-  local got
+  # Cell 1 is the world the mutant must flip (deciding), cell 2 the twin it must not move, cell 3 a second green
+  # sibling. A plain run drives cells 1 and 2; --matrix drives all three and prints every one as a MATRIX-ROW.
+  local got want base="" w1 w2 w3
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ ! -s "$2" ] || cmp -s "$GATE" "$2"; then
     FAILURES=$((FAILURES + 1))
@@ -3100,12 +3146,18 @@ pl_kill() { # pl_kill <label> <gate> <want> <why> <world> <script> <world> <scri
     printf '  FAIL  %-16s DID NOT APPLY: the mutant has %s lines against %s\n' "$1" "$(wc -l < "$2" | tr -d ' ')" "$(wc -l < "$GATE" | tr -d ' ')"
     return
   fi
-  got="$(pl_row "$2" "$5" "$6");$(pl_row "$2" "$7" "$8");$(pl_row "$2" "$9" "${10}")"
-  if [ "$got" = "$3" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  w1="${5##*/w-}"; w2="${7##*/w-}"; w3="${9##*/w-}"
+  got="$(pl_row "$2" "$5" "$6");$(pl_row "$2" "$7" "$8")"; want="${3%;*}"
+  if [ "$MATRIX" = 1 ]; then
+    got="$got;$(pl_row "$2" "$9" "${10}")"; want="$3"
+    mx_row "$1" "$w1=$(pl_row "$GATE" "$5" "$6") $w2=$(pl_row "$GATE" "$7" "$8") $w3=$(pl_row "$GATE" "$9" "${10}")" \
+      "$w1=${got%%;*} $w2=$(printf '%s' "$got" | cut -d';' -f2) $w3=${got##*;}"
+  fi
+  if [ "$got" = "$want" ]; then
+    mutant_killed "${B_pl:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
   else
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$want" "$4"
   fi
 }
 
@@ -4920,9 +4972,9 @@ hu_post() { # hu_post <world> -> the post-write hook's exit
   done < "$c.slice"
   ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
 }
-hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names the absence
+hu_sig() { # hu_sig <gate> [<worlds>] -> one token per world, `+absent` when the row names the absence
   local n r out=""
-  for n in $HU_WORLDS; do
+  for n in ${2:-$HU_WORLDS}; do
     r="$(av_run "$1" "$AV/hu-$n")"
     out="$out${out:+ }$n=$(av_st "$r" validate-y.sh | sed 's/^SELF-UPDATE-//')"
     [ "$(av_has "$r" validate-y.sh '^ABSENT')" = yes ] && out="$out+absent"
@@ -4930,7 +4982,15 @@ hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names 
   printf '%s\n' "$out"
 }
 HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent"
-hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+hu_kill() { # hu_kill <label> <gate|""> <want-signature> <why>: a plain run drives only the deciding worlds and one twin world
+  local got d t
+  ASSERTIONS=$((ASSERTIONS + 1))
+  d="$(mx_decides "$HU_SIG_FIX" "$3")"; t="$(sig_twin "$HU_SIG_FIX" "$d")"
+  if [ -z "$2" ]; then got="DID-NOT-APPLY"
+  elif [ "$MATRIX" = 1 ]; then got="$(hu_sig "$2")"
+  else got="$(hu_sig "$2" "$d $t")"; fi
+  sig_judge "$1" "${B_hu:-0}" "$HU_SIG_FIX" "$3" "$got" "$4"
+}
 fi
 if sg hu1; then
 ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
@@ -4938,8 +4998,10 @@ ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$
   "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
 ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
   "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
-mp_killed "hu-mut-control" "$(hu_sig "$(av_mut hu-control)")" "$HU_SIG_FIX" \
+HU_CTL_GOT="$(hu_sig "$(av_mut hu-control)")"
+ss_assert "hu-mut-control" "$HU_CTL_GOT" "$HU_SIG_FIX" \
   "an unmutated copy reproduces all four verdicts, so a kill below is the mutation"
+if [ "$HU_CTL_GOT" = "$HU_SIG_FIX" ]; then B_hu=1; fi
 # KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
 hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
 ' '  :
@@ -5110,13 +5172,16 @@ ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)
   "a single-line step \"x\" bash … is a run step reads, with or without a trailing || true"
 # THE CONTROL: an unmutated copy reproduces world S's whole signature.
 SH_CTL="$(av_mut sh-control)"
-ss_assert "sh-mut-control" "$(sh_sig "$(av_run "$SH_CTL" "$AV/s")")" "$SH_SIG_FIX" \
+SH_CTL_GOT="$(sh_sig "$(av_run "$SH_CTL" "$AV/s")")"
+ss_assert "sh-mut-control" "$SH_CTL_GOT" "$SH_SIG_FIX" \
   "an unmutated copy reproduces every world-S verdict, so a kill below is the mutation"
+if [ "$SH_CTL_GOT" = "$SH_SIG_FIX" ]; then B_sh=1; fi
 # sh_kill <label> <gate|""> <want-signature> <why>
 sh_kill() {
   local got
+  ASSERTIONS=$((ASSERTIONS + 1))
   if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(sh_sig "$(av_run "$2" "$AV/s")")"; fi
-  mp_killed "$1" "$got" "$3" "$4"
+  sig_judge "$1" "${B_sh:-0}" "$SH_SIG_FIX" "$3" "$got" "$4"
 }
 sh_kill "sh-mut-assign" "$(av_mut sh-assign '{ printf "X\t%d\tthe path is assigned' '{ printf "M\t%d\tthe path is assigned')" \
   "assign=OK+ng next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
