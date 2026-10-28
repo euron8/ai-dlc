@@ -1541,15 +1541,15 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   # M11: the key subshell's exit lost again: an unhashable tree prints nothing at exit 0.
   run_mutant M11 "U G" ') > "$HR_WORK/krows"; hr_kr=$?' ') > "$HR_WORK/krows"; hr_kr=0' &
   # M12: the pin pack never reaches the sandbox: a pinned blob is unreadable there.
-  run_mutant M12 "X" 'pack-objects -q "$HR_SB/.git/objects/pack/pack"' 'pack-objects -q "$HR_WORK/pack"' &
+  run_mutant M12 "X A" 'pack-objects -q "$HR_SB/.git/objects/pack/pack"' 'pack-objects -q "$HR_WORK/pack"' &
   # M13: a required pin absent from the project is treated as optional: no exit 2.
-  run_mutant M13 "X" 'elif [ "${line%% *}" = pin ]; then' 'elif false; then' &
+  run_mutant M13 "X A" 'elif [ "${line%% *}" = pin ]; then' 'elif false; then' &
   # M14: the seed commit skipped: the sandbox repository has no HEAD.
-  run_mutant M14 "X" '  if [ "$hr_seed" = 1 ]; then' '  if false; then' &
+  run_mutant M14 "X A" '  if [ "$hr_seed" = 1 ]; then' '  if false; then' &
   # M15: an abbreviated pin accepted: the full-sha guard removed.
-  run_mutant M15 "X" '[ "${#hr_ps}" -eq 40 ] ||' 'true ||' &
+  run_mutant M15 "X A" '[ "${#hr_ps}" -eq 40 ] ||' 'true ||' &
   # M16: a pass with an optional pin skipped is recorded anyway, so a shallow clone's pass is reused by a full one.
-  run_mutant M16 "X" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
+  run_mutant M16 "X A" '[ "${hr_pin_skipped:-0}" = 0 ] || return 0' ':' &
   # M20: the own-directory copy restored to `cp -Rp <dir> <dest>`, which nests onto a dest `core/` already made.
   run_mutant M20 "Y Y2 Y3 A" 'mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' 'cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' &
   # M21: the copy skipped when the destination already exists. Harmless where the population already holds
