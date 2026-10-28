@@ -1160,14 +1160,23 @@ jq -nc '{v:1,sprint:900,name:"cp-shard-oos",role:"adversary",model_bound:"opus",
 # The sentence every FAIL route owes its reader. Spelled ONCE, here, and read by the class
 # verdict below -- a per-arm copy is a second chance to drift.
 DISP='four-arm disposition, never by re-running the gate.'
+# THE REMEDIATION PATH, split per class. A missing Rule 19(b) citation (class i), an invented
+# serial exception (class ii, arm S3) and an incomplete one-cross brief (arm S4) clear by REPAIR:
+# a later clean re-dispatch of V's role whose brief carries `remediates: <V's tool_use_id>`, which
+# the validator itself then accepts. Their FAIL texts must name that path AS WELL AS the four-arm
+# one, which stays the alternative. The tier, unreadable and effort texts name the four-arm path
+# alone, and a cell asserting the remediation phrase there would assert a remedy the operator did
+# not rule for them. Spelled ONCE, here.
+DISP_RM='Remediation path, no operator needed:'
 
-# cverdict <script> <ledger> <class-token> [probe] -> CLEAN-ish contract:
+# cverdict <script> <ledger> <class-token> [probe] [remedy] -> CLEAN-ish contract:
 #   DEAD(rc=N)   the route did not fail at all         -> the class was deleted or acquitted
 #   DEAD(token)  it failed without naming its class    -> a different route produced the 1
 #   LIVE+UNNAMED it failed, named its class, no remedy  -> the defect under test
-#   LIVE+NAMED   it failed, named its class AND the remedy
-cverdict() { # script ledger classtoken [probe]
-  local S="$1" L="$2" TOK="$3" P="${4:-}" o rc
+#   LIVE+NAMED   it failed, named its class AND the remedy -- the four-arm sentence, and for a
+#                class that clears by repair the remediation phrase too (the 5th argument)
+cverdict() { # script ledger classtoken [probe] [remedy]
+  local S="$1" L="$2" TOK="$3" P="${4:-}" RM="${5:-}" o rc
   if [ -n "$P" ]; then
     o="$(bash "$S" --ledger "$WORK/$L" --sprint 900 --settings "$WORK/settings.json" --probe "$WORK/$P" 2>&1)"; rc=$?
   else
@@ -1175,7 +1184,9 @@ cverdict() { # script ledger classtoken [probe]
   fi
   if [ "$rc" -ne 1 ]; then printf 'DEAD(rc=%s)' "$rc"; return; fi
   grep -qF -- "$TOK" <<<"$o" || { printf 'DEAD(token)'; return; }
-  if grep -qF -- "$DISP" <<<"$o"; then printf 'LIVE+NAMED'; else printf 'LIVE+UNNAMED'; fi
+  grep -qF -- "$DISP" <<<"$o" || { printf 'LIVE+UNNAMED'; return; }
+  if [ -n "$RM" ] && ! grep -qF -- "$RM" <<<"$o"; then printf 'LIVE+UNNAMED'; return; fi
+  printf 'LIVE+NAMED'
 }
 
 # The CLEAN control, and it carries a POSITIVE conjunct. Asserting only "rc=0 and no
@@ -1197,10 +1208,10 @@ cpvec() {
   printf '%s %s %s %s %s %s' \
     "$(cleanv "$1")" \
     "$(cverdict "$1" cp-tier.jsonl   'Rule 19(a) tier')" \
-    "$(cverdict "$1" cp-cite.jsonl   'role_contract_cited=false')" \
+    "$(cverdict "$1" cp-cite.jsonl   'role_contract_cited=false' '' "$DISP_RM")" \
     "$(cverdict "$1" cp-unread.jsonl 'role_file_readable=false')" \
     "$(cverdict "$1" cp-eff.jsonl    'records effort=' cp-eff.probe)" \
-    "$(cverdict "$1" cp-shard.jsonl  'shard: none (serial cross-file repair: a, b)')"
+    "$(cverdict "$1" cp-shard.jsonl  'shard: none (serial cross-file repair: a, b)' '' "$DISP_RM")"
 }
 CP_EXPECTED="CLEAN LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED"
 CP_NAMES="clean tier cite unread effort shard"
@@ -1469,7 +1480,7 @@ s3mut() { # name sed-expr -> path, or empty when it did not apply
   bash -n "$M" 2>/dev/null || return 1
   printf '%s' "$M"
 }
-S3A="$(s3mut a 's/^      X) SHARD_VIOL=\$((SHARD_VIOL + 1))$/      Xdisabled) SHARD_VIOL=$((SHARD_VIOL + 1))/')"
+S3A="$(s3mut a 's/^      X) remediated shard "\$sh_e" && continue$/      Xdisabled) remediated shard "$sh_e" \&\& continue/')"
 if [ -z "$S3A" ]; then
   bad "FIXTURE BROKEN: S3 mutant (a) did not apply -- the reader branch was renamed"
 elif ! need_base "$B_s3" "S3 (a)"; then :
@@ -1512,14 +1523,14 @@ s4v() { # script ledger -> REFUSE | OK | rc=N...
   local o rc
   o="$(bash "$1" --ledger "$WORK/$2" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -qF '(tool_use_id toolu_S4M)' <<<"$o" && grep -qF 'does not name every section' <<<"$o" \
-     && grep -qF 'shard: cross/4 g1/1 1,2,3' <<<"$o"; then printf 'REFUSE'
+     && grep -qF 'shard: cross/4 g1/1 1,2,3' <<<"$o" && grep -qF -- "$DISP_RM" <<<"$o"; then printf 'REFUSE'
   elif [ "$rc" -eq 0 ] && grep -q '2 shardable row(s) carry a shard line, 0 FAILED' <<<"$o" \
      && grep -qF 'cover (S4): 0 one-cross' <<<"$o"; then printf 'OK'
   else printf 'rc=%s' "$rc"; fi
 }
 B_s4=0
 [ "$(s4v "$VSL" cp-s4-miss.jsonl)" = REFUSE ] \
-  && { ok "S4 offender: a one-cross dispatch (cross/4 g1/1) whose brief omits section 4 exits 1, naming the row's tool_use_id, the missing coverage and the brief's own shard line"; B_s4=1; } \
+  && { ok "S4 offender: a one-cross dispatch (cross/4 g1/1) whose brief omits section 4 exits 1, naming the row's tool_use_id, the missing coverage, the brief's own shard line and the remediation path ($DISP_RM)"; B_s4=1; } \
   || bad "S4 offender: scored [$(s4v "$VSL" cp-s4-miss.jsonl)], expected REFUSE"
 [ "$(s4v "$VSL" cp-s4-ok.jsonl)" = OK ] \
   && ok "S4 near-miss: a complete out-of-order brief and a legacy per-group cross (G>1, a subset by design) both exit 0, counted as carrying a shard line, with S4 at zero" \
@@ -1528,7 +1539,7 @@ B_s4=0
 # S4 MUTANT: the coverage check dropped (the reader ignores the C record, so nothing can refuse).
 # Anchored OUTSIDE shard_scan on purpose, like the S3 mutants: the self-probe calls shard_scan, so a
 # mutation inside it exits 2 before the corpus. The offender must then pass, so the refusal cell dies.
-S4A="$(s3mut s4a 's/^      C) SHARD_COV=\$((SHARD_COV + 1))$/      Cdisabled) SHARD_COV=$((SHARD_COV + 1))/')"
+S4A="$(s3mut s4a 's/^      C) remediated cover "\$sh_e" && continue$/      Cdisabled) remediated cover "$sh_e" \&\& continue/')"
 if [ -z "$S4A" ]; then
   bad "FIXTURE BROKEN: S4 mutant did not apply -- the coverage branch was renamed"
 elif ! need_base "$B_s4" S4; then :
@@ -2129,6 +2140,263 @@ kmut nosettings 's/^        \[ "\$tier_resolved" = "__NONE__" \] && tier_resolve
 # <synthetic> read as a model.
 kmut synthetic "s/^      case \"\\\$tier_observed\" in __NOJOIN__|__NONE__|'<synthetic>') tier_observed=\"\" ;; esac\$/      case \"\$tier_observed\" in __NOJOIN__|__NONE__) tier_observed=\"\" ;; esac/" syn \
   "reading <synthetic> as a transcript model FAILS a row that has no ground truth"
+
+# ============================================================================
+# REMEDIATION BY REPAIR (BL-842; operator rulings: "remediation-only for those two", and S4 added).
+# A violating row V of a RULED class -- `cite` (Rule 19(b), role_contract_cited=false), `shard`
+# (arm S3, an invented serial exception) or `cover` (arm S4, a one-cross brief missing an ordinal)
+# -- stops being a violation when a LATER row R of the SAME sprint and the SAME role, whose brief
+# carried `remediates: <V's key>`, RAN (its tool_use_id joins subagent-context.jsonl) and is itself
+# CLEAN on V's class. The validator then exits 0, prints `REMEDIATED: <V> by <R> (<class>)` and
+# counts `remediated=<n>` on COUNTS -- the history the PASS carries.
+#
+# EVERY JOIN KEY HAS ITS OWN NEAR-MISS, and each near-miss is ONE property away from a REM world:
+# role, sprint, line order, ruled class, R's cleanliness per class, R having run, the guard's
+# `remediates_invalid` record, R carrying no tool_use_id, a V name that is ambiguous, `none (3)`
+# offered as a class (ii) remedy, and a same-role clean R that names nothing (laundering). Each
+# asserts exit 1 AND that V's own FAIL line is still printed and carries V's tool_use_id, and that
+# no REMEDIATED line names V -- so a validator that exits 1 for some OTHER reason (R's own dirt in
+# the dirty-R worlds) does not score the cell. The REM cells assert the EXACT line and the count,
+# so an `exit 0` stub fails all three.
+#
+# THE ORDER WORLD CONTRADICTS `ts`. R sits before V in the file but carries the later `ts`: a
+# validator ordering by `ts` remediates, one ordering by ledger line does not. Without the
+# contradiction the cell could not tell the two apart.
+#
+# SEEDS USE `row`, NOT `erow`. `erow` sets effort_bound, and with the context file on the command
+# line the effort arm would compare it against the context row and entangle these cells with the
+# E-series. Every world opens with an epoch row, so V is never the first row.
+# ============================================================================
+# The texts below are the validator's; spelled once.
+RM_CTX_FLAG='--context'
+RM_AMBIG='use the tool_use_id'
+RM_INVALID='remediates_invalid'
+mkdir -p "$WORK/rm"
+rmb() { # role -> the model the settings block pins it to (so no row here is a tier mismatch unless it says so)
+  case "$1" in dev) printf sonnet ;; *) printf opus ;; esac
+}
+rrow() { # sprint role name cited readable tool_use_id [jq-filter]
+  jq -nc --argjson s "$1" --arg r "$2" --arg n "$3" --argjson c "$4" --argjson k "$5" --arg t "$6" \
+    --arg b "$(rmb "$2")" \
+    '{v:1, sprint:$s, name:$n, role:$r, model_bound:$b, model_requested:$b,
+      role_contract_cited:$c, role_file_readable:$k,
+      tool_use_id:(if $t == "" then null else $t end)} | '"${7:-.}"
+}
+rctx() { # tool_use_id... -> context rows, as SubagentStop writes them
+  local t; for t in "$@"; do prow "$t" high claude-sonnet-5 2.1.269; done
+}
+# world <name> : the ledger is read from stdin; the context file is written by the caller.
+world() { cat > "$WORK/rm/$1.jsonl"; }
+RMEP() { rrow 900 dev r-epoch true true toolu_REPOCH; }
+RMS='. + {shard:"invalid-exception", shard_raw:"none (serial cross-file repair: a, b)"}'
+RMC='. + {shard:"cross/4 g1/1 1,2,3"}'
+
+# --- the three REMEDIATED worlds (one per ruled class) ---
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 dev r-r1 true  true toolu_R1 '. + {remediates:"toolu_V1"}'; } | world rem-cite
+rctx toolu_REPOCH toolu_V1 toolu_R1 > "$WORK/rm/rem-cite.ctx"
+{ RMEP; rrow 900 adversary r-v2 true true toolu_V2 "$RMS"
+        rrow 900 adversary r-r2 true true toolu_R2 '. + {shard:"1/1 3", remediates:"toolu_V2"}'; } | world rem-shard
+rctx toolu_REPOCH toolu_V2 toolu_R2 > "$WORK/rm/rem-shard.ctx"
+{ RMEP; rrow 900 adversary r-v3 true true toolu_V3 "$RMC"
+        rrow 900 adversary r-r3 true true toolu_R3 '. + {shard:"cross/4 g1/1 1,2,3,4", remediates:"toolu_V3"}'; } | world rem-cover
+rctx toolu_REPOCH toolu_V3 toolu_R3 > "$WORK/rm/rem-cover.ctx"
+
+# --- near-misses, each one property from rem-cite unless it says otherwise ---
+# R of a different role (protected-path-editor, clean, pinned and bound opus).
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 protected-path-editor r-r1 true true toolu_R1 '. + {remediates:"toolu_V1"}'; } | world nm-role
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-role.ctx"
+# R in a different sprint (and its context row says so).
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 901 dev r-r1 true  true toolu_R1 '. + {remediates:"toolu_V1"}'; } | world nm-sprint
+{ rctx toolu_REPOCH toolu_V1; rctx toolu_R1 | jq -c '.sprint = 901'; } > "$WORK/rm/nm-sprint.ctx"
+# R EARLIER than V in line order, with a LATER ts: line order and ts disagree on purpose.
+{ RMEP; rrow 900 dev r-r1 true  true toolu_R1 '. + {remediates:"toolu_V1", ts:"2026-10-02T00:00:00Z"}'
+        rrow 900 dev r-v1 false true toolu_V1 '. + {ts:"2026-10-01T00:00:00Z"}'; } | world nm-order
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-order.ctx"
+# V of a NON-ruled class: a Rule 19(a) tier mismatch (dev bound opus), otherwise clean.
+{ RMEP; rrow 900 dev r-vt true true toolu_VT '. + {model_bound:"opus", model_requested:"opus"}'
+        rrow 900 dev r-r1 true true toolu_R1 '. + {remediates:"toolu_VT"}'; } | world nm-tier
+rctx toolu_REPOCH toolu_VT toolu_R1 > "$WORK/rm/nm-tier.ctx"
+# R itself dirty on V's class: class (i), class (ii) (hand-seeded; a current guard never writes
+# an invalid-exception row) and arm S4 (R's brief still missing an ordinal).
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 dev r-r1 false true toolu_R1 '. + {remediates:"toolu_V1"}'; } | world nm-dirty-cite
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-dirty-cite.ctx"
+{ RMEP; rrow 900 adversary r-v2 true true toolu_V2 "$RMS"
+        rrow 900 adversary r-r2 true true toolu_R2 '. + {shard:"invalid-exception", shard_raw:"none (made up)", remediates:"toolu_V2"}'; } | world nm-dirty-shard
+cp "$WORK/rm/rem-shard.ctx" "$WORK/rm/nm-dirty-shard.ctx"
+{ RMEP; rrow 900 adversary r-v3 true true toolu_V3 "$RMC"
+        rrow 900 adversary r-r3 true true toolu_R3 '. + {shard:"cross/4 g1/1 1,2", remediates:"toolu_V3"}'; } | world nm-dirty-cover
+cp "$WORK/rm/rem-cover.ctx" "$WORK/rm/nm-dirty-cover.ctx"
+# R never RAN: the context file carries a row for a DIFFERENT dispatch, never an empty file.
+cp "$WORK/rm/rem-cite.jsonl" "$WORK/rm/nm-pending.jsonl"
+rctx toolu_REPOCH toolu_V1 toolu_SOMEONE_ELSE > "$WORK/rm/nm-pending.ctx"
+# The guard recorded TWO `remediates:` lines: `remediates_invalid` in place of `remediates`.
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 dev r-r1 true  true toolu_R1 '. + {remediates_invalid:"multiple"}'; } | world nm-invalid
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-invalid.ctx"
+# R carries no tool_use_id: it can neither be joined nor named, so a name is no key for R.
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 dev r-r1 true  true ''        '. + {remediates:"toolu_V1"}'; } | world nm-namekey
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-namekey.ctx"
+# V named by `name` (name != role), and two violating rows carry that name.
+{ RMEP; rrow 900 dev r-dup false true toolu_VD1
+        rrow 900 dev r-dup false true toolu_VD2
+        rrow 900 dev r-r1  true  true toolu_R1 '. + {remediates:"r-dup"}'; } | world nm-ambig
+rctx toolu_REPOCH toolu_VD1 toolu_VD2 toolu_R1 > "$WORK/rm/nm-ambig.ctx"
+# `none (3)` offered as a class (ii) remedy: a cited exception is a self-declaration, not a repair.
+{ RMEP; rrow 900 adversary r-v2 true true toolu_V2 "$RMS"
+        rrow 900 adversary r-r2 true true toolu_R2 '. + {shard:"none (3)", remediates:"toolu_V2"}'; } | world nm-none3
+cp "$WORK/rm/rem-shard.ctx" "$WORK/rm/nm-none3.ctx"
+# LAUNDERING: a later clean R of the same role that names nothing.
+{ RMEP; rrow 900 dev r-v1 false true toolu_V1
+        rrow 900 dev r-r1 true  true toolu_R1; } | world nm-launder
+cp "$WORK/rm/rem-cite.ctx" "$WORK/rm/nm-launder.ctx"
+# D2: V is uncited AND unreadable, R is clean. The cite increment is remediated; the unreadable
+# one is not, so the run still exits 1 -- naming the unreadable violation AND printing the pair.
+{ RMEP; rrow 900 dev r-vd false false toolu_VD
+        rrow 900 dev r-rd true  true  toolu_RD '. + {remediates:"toolu_VD"}'; } | world d2
+rctx toolu_REPOCH toolu_VD toolu_RD > "$WORK/rm/d2.ctx"
+
+rmrun() { # script world -> "<rc>\n<output>"
+  local o r
+  o="$(bash "$1" --ledger "$WORK/rm/$2.jsonl" --sprint 900 --settings "$WORK/settings.json" "$RM_CTX_FLAG" "$WORK/rm/$2.ctx" 2>&1)"; r=$?
+  printf '%s\n%s' "$r" "$o"
+}
+# rmrem <script> <world> <V> <R> <class> -> REM | <world>:<why>
+rmrem() {
+  local R rc; R="$(rmrun "$1" "$2")"; rc="$(ercv "$R")"
+  if [ "$rc" -eq 0 ] && grep -qxF "REMEDIATED: $3 by $4 ($5)" <<<"$R" && grep -qF 'remediated=1' <<<"$R"
+  then printf 'REM'; else printf '%s:rc=%s' "$2" "$rc"; fi
+}
+# rmref <script> <world> <V-name> <V-id> [extra literal] [fail token] -> REF | <world>:<why>
+# V's own FAIL block is still there and carries V's id, and no REMEDIATED line names V. The
+# tier FAIL text is unchanged by this release and prints `[<name>]` only, so the tier world passes
+# its own class phrase as the token its FAIL block must carry instead of the id.
+rmref() {
+  local R rc fl; R="$(rmrun "$1" "$2")"; rc="$(ercv "$R")"
+  # V's FAIL BLOCKS: each `FAIL: [<V>]` line and the indented continuation lines under it.
+  fl="$(awk -v h="FAIL: [$3]" 'index($0, h) == 1 { p = 1; print; next } p && /^      / { print; next } { p = 0 }' <<<"$R")"
+  if [ "$rc" -ne 1 ]; then printf '%s:rc=%s' "$2" "$rc"; return; fi
+  [ -n "$fl" ] && grep -qF -- "${6:-$4}" <<<"$fl" || { printf '%s:noVfail' "$2"; return; }
+  grep -qF "REMEDIATED: $4 " <<<"$R" && { printf '%s:remediated' "$2"; return; }
+  if [ -n "${5:-}" ] && ! grep -qF -- "$5" <<<"$R"; then printf '%s:noextra' "$2"; return; fi
+  printf 'REF'
+}
+# rmd2 <script> -> D2 | d2:<why>
+rmd2() {
+  local R rc; R="$(rmrun "$1" d2)"; rc="$(ercv "$R")"
+  if [ "$rc" -ne 1 ]; then printf 'd2:rc=%s' "$rc"; return; fi
+  grep -qF 'FAIL: [r-vd] role_file_readable=false' <<<"$R" || { printf 'd2:nounread'; return; }
+  grep -qF 'FAIL: [r-vd] role_contract_cited=false' <<<"$R" && { printf 'd2:citefail'; return; }
+  grep -qxF 'REMEDIATED: toolu_VD by toolu_RD (cite)' <<<"$R" && grep -qF 'remediated=1' <<<"$R" \
+    || { printf 'd2:nopair'; return; }
+  printf 'D2'
+}
+rvec() { # script -> one cell per world, in RM_NAMES order
+  local S="$1"
+  printf '%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s' \
+    "$(rmrem "$S" rem-cite  toolu_V1 toolu_R1 cite)" \
+    "$(rmrem "$S" rem-shard toolu_V2 toolu_R2 shard)" \
+    "$(rmrem "$S" rem-cover toolu_V3 toolu_R3 cover)" \
+    "$(rmref "$S" nm-role        r-v1 toolu_V1)" \
+    "$(rmref "$S" nm-sprint      r-v1 toolu_V1)" \
+    "$(rmref "$S" nm-order       r-v1 toolu_V1)" \
+    "$(rmref "$S" nm-tier        r-vt toolu_VT 'Rule 19(a) tier' 'Rule 19(a) tier')" \
+    "$(rmref "$S" nm-dirty-cite  r-v1 toolu_V1)" \
+    "$(rmref "$S" nm-dirty-shard r-v2 toolu_V2)" \
+    "$(rmref "$S" nm-dirty-cover r-v3 toolu_V3)" \
+    "$(rmref "$S" nm-pending     r-v1 toolu_V1 'pending-remedy=1')" \
+    "$(rmref "$S" nm-invalid     r-v1 toolu_V1 "$RM_INVALID")" \
+    "$(rmref "$S" nm-namekey     r-v1 toolu_V1 'pending-remedy=0')" \
+    "$(rmref "$S" nm-ambig       r-dup toolu_VD1 "$RM_AMBIG")" \
+    "$(rmref "$S" nm-none3       r-v2 toolu_V2)" \
+    "$(rmref "$S" nm-launder     r-v1 toolu_V1)" \
+    "$(rmd2 "$S")"
+}
+R_EXPECTED="REM REM REM REF REF REF REF REF REF REF REF REF REF REF REF REF D2"
+R_NAMES="rem-cite rem-shard rem-cover nm-role nm-sprint nm-order nm-tier nm-dirty-cite nm-dirty-shard nm-dirty-cover nm-pending nm-invalid nm-namekey nm-ambig nm-none3 nm-launder d2"
+rmoved() { local got="$1" i=1 e m n out=""
+  for e in $R_EXPECTED; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"; n="$(printf '%s' "$R_NAMES" | cut -d' ' -f$i)"
+    [ "$e" != "$m" ] && out="$out $n"; i=$((i+1)); done
+  printf '%s' "${out# }"; }
+RGOT="$(rvec "$VSL")"
+if [ "$RGOT" = "$R_EXPECTED" ]; then
+  ok "R1-R17 remediation by repair: a later clean re-dispatch naming V clears V for class cite, shard and cover (exit 0, the exact REMEDIATED line, remediated=1); V still FAILS, by its own tool_use_id, when R is of another role, another sprint, EARLIER in line order (with a later ts), names a tier-mismatch V, is itself dirty on V's class (cite, shard, cover), never ran (pending-remedy=1), carries remediates_invalid, has no tool_use_id, names an ambiguous V name, offers none (3), or names nothing; and remediation clears only V's cite increment, never its unreadable one"
+else
+  bad "R1-R17: expected [$R_EXPECTED], got [$RGOT] (differing: $(rmoved "$RGOT"))"
+fi
+RCTL="$(rvec "$WORK/mut/control.sh")"
+[ "$RCTL" = "$R_EXPECTED" ] && ok "R CONTROL: the unmutated copy in the mutant directory reproduces all seventeen R cells" \
+  || bad "R CONTROL copy did not reproduce the R cells: expected [$R_EXPECTED], got [$RCTL]"
+# rmut <name> <sed-expression> <expected-moved-cells> <description>
+rmut() {
+  local n="$1" M="$WORK/mut/r-$1.sh" mv
+  sed "$2" "$WORK/mut/control.sh" > "$M" || { bad "FIXTURE BROKEN: R mutation '$n' did not apply (sed failed)"; return; }
+  if cmp -s "$WORK/mut/control.sh" "$M"; then bad "FIXTURE BROKEN: R mutation '$n' matched nothing"; return; fi
+  # A mutant that ALSO disables the self-probe must still differ from the probe-only copy, or its
+  # predicate edit matched nothing and the probe edit alone made it "apply".
+  if [ -f "${RNP:-}" ] && cmp -s "$RNP" "$M"; then bad "FIXTURE BROKEN: R mutation '$n' changed only the self-probe call -- its predicate edit matched nothing"; return; fi
+  bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: R mutant '$n' does not parse"; return; }
+  need_base "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" || return
+  mv="$(rmoved "$(rvec "$M")")"
+  [ "$mv" = "$3" ] && mutant_killed "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" "MUTANT r-$n killed: $4 -- moves only [$3]" \
+    || bad "MUTANT r-$n: moved [$mv], expected only [$3]"
+}
+# r-m1: THE CLASS SET WIDENED TO TIER. `tier` joins the one class-list line, WITH an eligibility
+# line (a cited row carrying no shard -- the tier-mismatch V) and a cleanliness line (R cited and
+# readable), because a list entry with no cleanliness test makes the validator refuse the whole
+# run (exit 2, its fail-closed Z guard), which would move every cell and prove nothing about the
+# class key. Built this way the mutant runs and remediates the tier V, which only nm-tier sees.
+rmut m1 's/^REMEDIABLE_CLASSES="cite shard cover"$/REMEDIABLE_CLASSES="cite shard cover tier"/
+s/^      return -1$/      if (c == "tier") return (mct[j] == "true" \&\& mrd[j] != "false"); return -1/
+s/^      return 0$/      if (c == "tier") return (mct[i] == "true" \&\& msh[i] == "__NONE__"); return 0/' nm-tier \
+  "a remedy naming a Rule 19(a) tier mismatch clears it once tier is in the remediable class list"
+# r-m2: R's cleanliness dropped for class (i). The class (ii) dirty-R world is hand-seeded and
+# r-cover owns S4's; this one moves only the dirty-cite world.
+rmut m2 's/^      if (c == "cite") return (mct\[j\] == "true" && mrd\[j\] != "false")$/      if (c == "cite") return 1/' nm-dirty-cite \
+  "an R that is itself uncited remediates an uncited V"
+# THE VALIDATOR'S OWN SHARD SELF-PROBE SEES THREE OF THESE MUTANTS FIRST. r-cover, r-m3 and r-m4
+# edit shard_scan's join, which shard_self_probe drives before the corpus, so each exits 2 on
+# every world and would move all seventeen cells -- a kill by the probe, not by the cell the
+# mutant is about. Those three therefore ALSO disable the self-probe's call site (RM_NOPROBE),
+# and the control below proves that disabling it ALONE moves no R cell, so the one cell each of
+# them moves is moved by its predicate edit. (The self-probe catching them is the first line of
+# defence; these cells are the second, and the one a probe change could not silently remove.)
+RM_NOPROBE='s/^shard_self_probe || {$/true || {/'
+RNP="$WORK/mut/r-noprobe.sh"
+sed "$RM_NOPROBE" "$WORK/mut/control.sh" > "$RNP"
+if cmp -s "$WORK/mut/control.sh" "$RNP"; then
+  bad "FIXTURE BROKEN: the self-probe call site matched nothing, so r-cover, r-m3 and r-m4 would be scored by the probe's exit 2"
+else
+  RNPGOT="$(rvec "$RNP")"
+  [ "$RNPGOT" = "$R_EXPECTED" ] && ok "R NOPROBE CONTROL: the validator with only its shard self-probe call disabled reproduces all seventeen R cells, so a mutant that also disables it is scored by its own edit" \
+    || bad "R NOPROBE CONTROL: disabling the self-probe call alone moved [$(rmoved "$RNPGOT")]"
+fi
+# r-cover: R's cleanliness dropped for arm S4.
+rmut cover "$RM_NOPROBE"'
+s/^      if (c == "cover") return (msh\[j\] ~ .*$/      if (c == "cover") return 1/' nm-dirty-cover \
+  "an R whose own one-cross brief still omits an ordinal remediates the S4 V"
+# r-m3: THE KEY JOIN REPLACED BY ROLE ONLY. R no longer needs a `remediates` field, and V is the
+# first earlier eligible row of R's role whatever R names. It moves TWO key cells, and both are
+# genuinely that key: the laundering world (a clean same-role R naming nothing) and the ambiguous
+# name (a key that resolves to two rows now picks the first). The other key worlds keep their
+# refusal through an earlier conjunct the mutant leaves standing (sprint, line order, role,
+# remediates_invalid, no tool_use_id), each of which is its own cell above.
+rmut m3 "$RM_NOPROBE"'
+s/^        if (mre\[j\] == "__NONE__" && mri\[j\] == "__NONE__") continue$/        if (0) continue/
+s/^        if ((mre\[j\] in bytui) && msp\[bytui\[mre\[j\]\]\] == sprint) v = bytui\[mre\[j\]\]$/        if (0) v = ""/
+s/mnm\[i\] == mre\[j\] && v_any(i)/mrl[i] == mrl[j] \&\& v_any(i) \&\& nv < 1/' "nm-ambig nm-launder" \
+  "a role-only join remediates V by any later clean row of its role, named or not"
+# r-m4: the subagent-context join dropped -- an R that never ran remediates.
+rmut m4 "$RM_NOPROBE"'
+s/^        if (mjn\[j\] != "1") {/        if (0) {/' nm-pending \
+  "an R with no row in the subagent context (never shown to have RUN) remediates"
+# r-m5: WHOLE-ROW suppression. The cite remediation also silences the same row's unreadable FAIL.
+rmut m5 's/^  if \[ "\$readable" = "false" \]; then$/  if [ "$readable" = "false" ] \&\& ! remediated cite "$rix"; then/' d2 \
+  "remediating V's cite increment also clears its unreadable role file"
 
 echo
 if [ "$fails" -eq 0 ]; then
