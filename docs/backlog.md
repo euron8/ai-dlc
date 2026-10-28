@@ -1889,4 +1889,4 @@ verify: manual
 
 Close condition: every item above is closed, and the receipt below returns 0 matches. Its non-zero control is the same `git grep -c '±'` run at the PARENT of the commit that removes the last `±` row, which must be non-zero; it holds once the tip moves, where a control at today's tip would not. The receipt is a bare `! git grep -qF`, so it also reads closed if no `invocations.decl` is tracked at all; 255 are tracked today.
 
-verify: sh ! git grep -qF '±' -- 'core/fixtures/*/invocations.decl'
+verify: sh bash scripts/check-no-provisional-invocations.sh
