@@ -11,3 +11,6 @@
 !core/scripts/wait-for-deliverable.sh
 !core/scripts/validate-adversarial-convergence.sh
 core/scripts/wfd-start-of.sh
+# The mutation helpers run.sh sources.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh
