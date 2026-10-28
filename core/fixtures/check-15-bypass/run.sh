@@ -55,6 +55,7 @@
 # MUTANT-MATRIX vocab-window-widened decides=V33 twins=V34
 # MUTANT-MATRIX element2-unbounded decides=V36 twins=V37
 # MUTANT-MATRIX element2-token-blacklist decides=V35 twins=V37
+# MUTANT-MATRIX-DYNAMIC mut-name-table why=the loop over i in 0..16 sets label from the MUT_NAME table and the loop body passes "$label" to mutant_killed; every MUT_NAME entry carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/check-15-bypass/run.sh --matrix
 set -uo pipefail
 

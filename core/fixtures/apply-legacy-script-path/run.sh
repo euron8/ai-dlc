@@ -48,6 +48,7 @@
 # MUTANT-MATRIX XE-M3 decides=i twins=ii,iii,r
 # MUTANT-MATRIX XE-M4 decides=iii twins=i,ii,r
 # MUTANT-MATRIX XE-M5 decides=r twins=i,ii,iii
+# MUTANT-MATRIX-DYNAMIC x_mut-name why=x_mut() passes its first argument "$1" to mutant_killed; each x_mut call (XE-M1, XE-M2, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-legacy-script-path/run.sh --matrix
 set -uo pipefail
 MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1

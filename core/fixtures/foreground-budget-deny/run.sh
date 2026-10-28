@@ -107,6 +107,7 @@
 # by the command on the MUTANT-MATRIX-REMEASURE line, with AI_DLC_VERDICT_STORE set to a fresh
 # mktemp dir. It is not run through hermetic-run.sh, which forwards no argument.
 #
+# MUTANT-MATRIX-DYNAMIC mut-name why=mut() passes its first argument "$name" to mutant_killed; each mut call (warn-only, denies-background, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/foreground-budget-deny/run.sh --matrix
 # MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
 # MUTANT-MATRIX warn-only decides=OVER twins=BG

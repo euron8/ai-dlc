@@ -335,7 +335,7 @@ fi
 # mutant then scores every cell and every receipt world; each row must still equal its want row, which is
 # the proof every twin stayed green. A run WITHOUT --matrix scores no matrix-only cell: arm MX0 counts the
 # cells each mutant skipped and refuses a per-push run that skipped none.
-# MUTANT-MATRIX-BEGIN -- the matrix, measured by the MUTANT-MATRIX-REMEASURE command above: every shard printed
+# The matrix, measured by the MUTANT-MATRIX-REMEASURE command above: every shard printed
 # `MATRIX MODE: on`, every mutant row equalled its want row, 0 FAIL. A row is `<mutant> decides=<arm>.<cell>
 # twins=<arm>.<cell>`: the arm is the mutant's own `ok` label (slugged: any character outside [A-Za-z0-9_-]
 # becomes `-`), the deciding cells are the cells (1-based in the row) or receipt worlds whose verdict the
@@ -470,7 +470,6 @@ fi
 # MUTANT-MATRIX-CONTROL live-series-control-shipped why=the shipped derivation on the no-decoy world, the baseline both live-series mutants are read against
 # MUTANT-MATRIX-DYNAMIC rcpt_mut why=the receipt battery passes each mutant label and its exact NOT FIXED line as arguments; every label it produces has its own row above
 # MUTANT-MATRIX-DYNAMIC _sp-loop why=the adjudication-unlocked-<spelling> loop passes six spellings as a variable; these are seeded cases, not mutants, so it produces no mutant row
-# MUTANT-MATRIX-END
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
 else echo "MATRIX MODE: off -- per push, each mutant scores its deciding cells plus one green twin (shard $GROUP)"; fi

@@ -38,6 +38,7 @@
 # MUTANT-MATRIX evidence-off decides=dangling-evidence twins=dangling-anchor
 # MUTANT-MATRIX ident-drop decides=identity twins=good-bounded
 # MUTANT-MATRIX ident-nonce decides=identity twins=good-bounded
+# MUTANT-MATRIX-DYNAMIC muts-loop why=the loop for m in $MUTS passes "$m" to mutant_killed; every MUTS member carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/check-31-ac-falsifiability/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"

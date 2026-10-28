@@ -24,6 +24,7 @@
 # MUTANT-MATRIX scan-list decides=P3 twins=P4
 # MUTANT-MATRIX no-disk-check decides=P2 twins=P1
 # MUTANT-MATRIX cwd-root decides=P6 twins=P1
+# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (whole-string, no-token, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/askuserquestion-citation/run.sh --matrix
 #
 # Usage: run.sh [--matrix]

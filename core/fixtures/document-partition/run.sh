@@ -50,6 +50,7 @@
 #   MX26 cross_owner | MX27 cross_owner | MX0 (the unmutated copy, a CONTROL) none
 # Each twin is the green arm nearest the deciding arm in subject: the sibling refusal, the sibling
 # fence/comment world, or the sibling --scope-ref / --cross-* arm.
+# MUTANT-MATRIX-DYNAMIC mutant-id why=mutant() passes its id argument "$mt_id" to mutant_killed; each mutant call (MX1, MX2, ...) names a literal id that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/document-partition/run.sh --matrix
 # MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no predicate; it is the base pass every kill is gated on
 # MUTANT-MATRIX MX1 decides=sha_moved twins=missing

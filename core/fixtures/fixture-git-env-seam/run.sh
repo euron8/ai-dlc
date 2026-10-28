@@ -54,6 +54,7 @@
 # MUTANT-MATRIX m3 decides=A twins=U
 # MUTANT-MATRIX m4 decides=A twins=U
 # MUTANT-MATRIX b2 decides=B twins=U
+# MUTANT-MATRIX-DYNAMIC m-loop why=the loop for _m in m1 m2 m3 m4 b2 passes "$_m" to mutant_killed; each of the five carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
 set -u
 
