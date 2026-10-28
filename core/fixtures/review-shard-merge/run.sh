@@ -100,7 +100,7 @@
 # MUTANT-MATRIX M46 decides=xc_one/xc-one twins=xc_flip/xc-flip
 # MUTANT-MATRIX m-k2only decides=x_lone/x-lone-k8,x_lone/x-lone-qa twins=x_lone/x-partial
 # MUTANT-MATRIX m-nomix decides=x_mix/x-mix twins=cs/partcite
-# MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed
+# MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed or under --matrix
 # MUTANT-MATRIX-DYNAMIC mut_run why=mut_run hands its <id> argument to mutant_killed; every id it is called with has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/review-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -693,7 +693,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 48"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 48 ]; then ok "VBCTL: CONTROL -- each of M1-M46, m-k2only and m-nomix's selected cells passed over the unmutated copy of the derived sibling set ($VB_CTL_N of 48), the same copy every mutant is built from"
+  if [ "$VB_CTL_N" = 48 ]; then ok "VBCTL: CONTROL -- each of M1-M46, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 48): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
   else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 48 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
