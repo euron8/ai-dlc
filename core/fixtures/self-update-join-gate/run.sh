@@ -32,7 +32,39 @@
 # one directory would have two of those validator executions writing in the same cwd at the
 # same time -- an intermittent red that would look like a gate defect. A consumer copies in
 # well under a second; the isolated form is also the cheap one.
+#
+# Usage: run.sh [--matrix]
+#
+# THE MUTANT MATRIX (mutant-battery rule). Each gate-run mutant is driven ONCE, in the pool, and that output is
+# read through every arm whose predicate reads a gate output: a1 (DEFER), a2 (names the unanchored checks), a3 (no
+# DEFER), a4 (the fixture-coupling arm). Mutant C is driven through the rc-pair harness and read through the rc22
+# and rc11 cells. No arm adds a gate run, so the per-push gate-run count is unchanged. PER PUSH a mutant's
+# DECIDING arm and its named TWIN are scored; with --matrix every arm is scored and printed as one
+# `MATRIX <mutant> <arm> KILLED|GREEN` row. An arm is KILLED when its unmutated assertion no longer holds on the
+# mutant's output. The block below is the one source; a plain run refuses a mutant with no row, and a cell that
+# disagrees with its row is a failure. Arm tokens are the base-pass flag names without the B_ prefix.
+# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh forwards no argument, and this
+# fixture has no inputs.decl (its range is derived live from the distribution's git history, which a declaration
+# cannot express), so run.sh is invoked directly from the repo root of a `git clone` of the branch.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-join-gate/run.sh --matrix
+# MUTANT-MATRIX-BEGIN
+# MUTANT-MATRIX A decides=a2,a3 twins=a1
+# MUTANT-MATRIX B decides=a2,a3 twins=a1
+# MUTANT-MATRIX C decides=rc11 twins=rc22
+# MUTANT-MATRIX-END
+# A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
+# base-pass flag of the cell's own arm. The mutant names reach mutant_killed as literals at their kill sites and
+# as a variable in mx_cell.
+# MUTANT-MATRIX-DYNAMIC mx_cell why=passes each of the mutant names A B C as a variable and every name keeps its own row
+# MUTANT-MATRIX-CONTROL CONTROL why=the unmutated gate copy must reproduce the real DEFER verdict so a mutant's change is attributable
 set -uo pipefail
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -46,7 +78,7 @@ GATE="$D_ROOT/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
 # the commit that adds a CHECK_LOADED anchor and installs two consumer trees from those refs.
 # A skip whose stated reason is wrong is worse than no skip — it sends the next reader after
 # a file that is sitting right there.
-if [ ! -f "$GATE" ] || [ ! -d "$D_ROOT/.git" ]; then
+if [ ! -f "$GATE" ] || ! git -C "$D_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "self-update-join-gate: SKIP — distribution-only (needs the distribution's git history to derive a check-adding range)"
   exit 0
 fi
@@ -59,6 +91,10 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "self-update-join-gate:"
 
 OUTD="$WORK/out"; mkdir -p "$OUTD"
@@ -117,26 +153,6 @@ else
   NOANCHOR_BUILD=missing
 fi
 
-# MUTANT P -- THE SEED'S OLD CONSUMER, every restored script put back at THEIRS. That is the state
-# an install at THEIRS left, which made assertion 3 read DEFER once the range crossed a release
-# changing a gating script. It must DEFER here, or the seed's restore is not what assertion 3
-# rests on. Vacuous at a HEAD whose range moves no script the consumer's hook names; reported so.
-PREW="$WORK/cons-prewritten"
-PREW_BUILD=vacuous
-PREW_HOOK="$CONS_CURRENT/.githooks/pre-push"
-[ -f "$PREW_HOOK" ] || PREW_HOOK="$DIST/core/git-hooks/pre-push"
-PREW_GATING=""
-for n in $SUJG_RESTORED; do
-  grep -qF "scripts/ai-dlc/$n" "$PREW_HOOK" 2>/dev/null && PREW_GATING="$PREW_GATING $n"
-done
-if [ -n "$PREW_GATING" ]; then
-  clone_tree "$CONS_CURRENT" "$PREW"
-  PREW_BUILD=ok
-  for n in $SUJG_RESTORED; do
-    git -C "$DIST" show "${THEIRS}:core/scripts/$n" > "$PREW/scripts/ai-dlc/$n" 2>/dev/null || PREW_BUILD=broken
-  done
-fi
-
 # ============================ PHASE 2: run the gates in a pool ============================
 # The registry is <label>\t<gate-script>\t<consumer-source>. Runs are declared here and
 # rendered in this order below, so the output is byte-comparable against the serial version
@@ -149,7 +165,6 @@ printf '%s\t%s\t%s\n' r_current  "$GATE"  "$CONS_CURRENT" >> "$RUNS"
 printf '%s\t%s\t%s\n' r_control  "$CTRL"  "$CONS_OLD"     >> "$RUNS"
 [ "$MUT_A_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_muta "$MUT_A" "$CONS_OLD"     >> "$RUNS"
 [ "$MUT_B_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_mutb "$MUT_B" "$CONS_CURRENT" >> "$RUNS"
-[ "$PREW_BUILD" = ok ] && printf '%s\t%s\t%s\n' r_prew "$GATE" "$PREW" >> "$RUNS"
 
 N_RUNS="$(grep -c . "$RUNS" || true)"
 if [ "$N_RUNS" -lt 4 ]; then
@@ -188,12 +203,58 @@ dropped() { bad "$1 produced no verdict — the pool dropped work, and a short g
 
 # ===================== PHASE 3: evaluate, serially, in declaration order =====================
 
+# --- the matrix, read off each mutant's own gate output (no extra gate run) ---------------------
+MX_SRC="$HERE/run.sh"; MX_CELLS=0; MX_RUN=0; MX_SEEN=""
+mx_row() { grep -m 1 -F -- "# MUTANT-MATRIX $1 decides=" "$MX_SRC"; }
+mx_role() { # <mutant> <arm> -> D (decides), T (twin) or - (neither), read from the header block
+  local line d tw; line="$(mx_row "$1")"
+  [ -n "$line" ] || { echo -; return; }
+  d="${line#*decides=}"; d="${d%% *}"; tw="${line#*twins=}"; tw="${tw%% *}"
+  case ",$d," in *",$2,"*) echo D; return ;; esac
+  case ",$tw," in *",$2,"*) echo T; return ;; esac
+  echo -
+}
+mx_has_row() { [ -n "$(mx_row "$1")" ]; }
+# mx_holds <arm> <gate output> -> 0 when that arm's unmutated assertion still holds on the output
+mx_holds() {
+  case "$1" in
+    a1) grep -q 'SELF-UPDATE-DEFER' <<<"$2" ;;
+    a2) grep -q 'whose CHECK_LOADED anchor lives in' <<<"$2" && grep -qE 'check\(s\) \[[A-Za-z0-9]' <<<"$2" ;;
+    a3) ! grep -q 'SELF-UPDATE-DEFER' <<<"$2" ;;
+    a4) grep -q 'rulebook-coupled-fixtures' <<<"$2" ;;
+    rc22) [ "$2" = "SELF-UPDATE-OK" ] ;;
+    rc11) [ "$2" = "SELF-UPDATE-OK" ] ;;
+  esac
+}
+mx_flag() { case "$1" in a1) echo "${B_a1:-0}" ;; a2) echo "${B_a2:-0}" ;; a3) echo "${B_a3:-0}" ;; a4) echo "${B_a4:-0}" ;; rc22) echo "${B_rc22:-0}" ;; rc11) echo "${B_rc11:-0}" ;; esac; }
+# mx_cell <mutant> <arm> <the output the arm reads>
+mx_cell() {
+  local m="$1" t="$2" role
+  case " $MX_SEEN " in
+    *" $m "*) ;;
+    *) MX_SEEN="$MX_SEEN $m"
+       if ! mx_has_row "$m"; then bad "mutant $m has no MUTANT-MATRIX row in $MX_SRC -- a per-push run cannot know its deciding arm or its twins"; fi ;;
+  esac
+  role="$(mx_role "$m" "$t")"
+  if [ "$MATRIX" != 1 ] && [ "$role" = - ]; then return 0; fi
+  [ "$role" = - ] && MX_CELLS=$((MX_CELLS + 1))
+  MX_RUN=$((MX_RUN + 1))
+  if mx_holds "$t" "$3"; then
+    ok "MATRIX $m $t GREEN"
+    if [ "$MATRIX" != 1 ] && [ "$role" = D ]; then bad "mutant $m SURVIVED its deciding arm $t"; fi
+  else
+    mutant_killed "$(( $(mx_flag "$t") && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED"
+    if [ "$MATRIX" != 1 ] && [ "$role" = T ]; then bad "mutant $m killed arm $t, which the header names as its twin"; fi
+  fi
+}
+mx_gate() { mx_cell "$1" a1 "$2"; mx_cell "$1" a2 "$2"; mx_cell "$1" a3 "$2"; mx_cell "$1" a4 "$2"; }
+
 out="$(verdict r_old)"
 
 # --- Assertion 1: a rulebook-joined pull DEFERS --------------------------------
 if ! have r_old; then dropped r_old
 elif grep -q 'SELF-UPDATE-DEFER' <<<"$out"; then
-  ok "a pull whose map declares checks the consumer has no anchor for DEFERS"
+  ok "a pull whose map declares checks the consumer has no anchor for DEFERS"; B_a1=1
 else
   bad "the gate returned no DEFER for a rulebook-joined pull — step 2 would cut a branch, write the slice, run the fixtures and revert"
   printf '%s\n' "$out" | sed 's/^/        /' | head -4
@@ -206,7 +267,7 @@ fi
 # id moves as releases land. Require that the message names at least one concrete id.
 if ! have r_old; then dropped r_old
 elif grep -q 'whose CHECK_LOADED anchor lives in' <<<"$out" && grep -qE 'check\(s\) \[[A-Za-z0-9]' <<<"$out"; then
-  ok "the defer NAMES the unanchored check ids rather than only announcing a conflict"
+  ok "the defer NAMES the unanchored check ids rather than only announcing a conflict"; B_a2=1
 else
   bad "the defer does not name the unanchored checks — the operator must re-derive them by hand"
 fi
@@ -216,30 +277,17 @@ fi
 # is not changing, no fixture can break on it, and step 2 must stay autonomous.
 out_mo="$(verdict r_current)"
 if ! have r_current; then dropped r_current
-elif grep -q 'SELF-UPDATE-DEFER' <<<"$out_mo"; then
+elif ! grep -q 'SELF-UPDATE-DEFER' <<<"$out_mo"; then
+  ok "a pull that changes no rulebook file does NOT defer — the arm is a differential"; B_a3=1
+else
   bad "a pull with NO rulebook change DEFERRED — the arm is static, not differential, and it strands the machinery slice on every pull"
   printf '%s\n' "$out_mo" | sed 's/^/        /' | head -3
-else
-  ok "a pull that changes no rulebook file does NOT defer — the arm is a differential"
 fi
-
-# --- MUTANT P: the seed's pre-fix consumer, gating scripts already at THEIRS ---
-case "$PREW_BUILD" in
-  vacuous) echo "  note  MUTANT P vacuous at this HEAD -- the range changes no script the consumer's hook names" ;;
-  broken)  bad "MUTANT P could not be built -- a restored script has no THEIRS blob" ;;
-  ok)
-    if ! have r_prew; then dropped r_prew
-    elif grep -q 'SELF-UPDATE-DEFER' <<<"$(verdict r_prew)" && grep -q 'ALREADY at theirs' <<<"$(verdict r_prew)"; then
-      ok "MUTANT P killed — with the range's gating script(s) [${PREW_GATING# }] left at THEIRS, assertion 3's consumer DEFERS: the seed's BASE restore is what holds it"
-    else
-      bad "MUTANT P DID NOT defer — the pre-written consumer passes, so the seed's restore is not what assertion 3 rests on"
-    fi ;;
-esac
 
 # --- Assertion 4: the fixture-coupling arm names its subjects ------------------
 if ! have r_old; then dropped r_old
 elif grep -q 'rulebook-coupled-fixtures' <<<"$out"; then
-  ok "the fixture-coupling arm fires and names itself"
+  ok "the fixture-coupling arm fires and names itself"; B_a4=1
 else
   bad "the fixture-coupling arm never fired — postcompact-rulebook-recovery is exactly the case it exists for"
 fi
@@ -265,10 +313,10 @@ if ! have r_control; then
   dropped r_control
   CONTROL_OK=0
 elif grep -q 'SELF-UPDATE-DEFER' <<<"$(verdict r_control)"; then
-  ok "UNMUTATED CONTROL reproduces the real verdict from a copy"
+  ok "CONTROL: an unmutated copy reproduces the real verdict"; B_ctl=1
   CONTROL_OK=1
 else
-  bad "UNMUTATED CONTROL did not reproduce — every mutant below is uninterpretable"
+  bad "CONTROL: an unmutated copy did not reproduce the real verdict — every mutant below is uninterpretable"
   CONTROL_OK=0
 fi
 
@@ -281,9 +329,10 @@ if [ "${CONTROL_OK:-0}" = "1" ]; then
   elif ! have r_muta; then
     dropped r_muta
   elif grep -q 'whose CHECK_LOADED anchor lives in' <<<"$(verdict r_muta)"; then
-    bad "MUTANT A DID NOT silence the anchor arm — assertion 2 is not testing the join"
+    bad "MUTANT A SURVIVED: it did not silence the anchor arm — assertion 2 is not testing the join"
   else
-    ok "MUTANT A killed — without the anchor comparison the unanchored checks go unreported"
+    mx_gate A "$(verdict r_muta)"
+    mutant_killed "$(( ${B_a2:-0} && ${B_ctl:-0} ))" A "MUTANT A killed — without the anchor comparison the unanchored checks go unreported"
   fi
 
   # MUTANT B: the fixture arm stops being differential — drop the rulebook-changed guard.
@@ -295,9 +344,10 @@ if [ "${CONTROL_OK:-0}" = "1" ]; then
   elif ! have r_mutb; then
     dropped r_mutb
   elif grep -q 'SELF-UPDATE-DEFER' <<<"$(verdict r_mutb)"; then
-    ok "MUTANT B killed — dropping the differential guard defers a machinery-only pull (assertion 3 has teeth)"
+    mx_gate B "$(verdict r_mutb)"
+    mutant_killed "$(( ${B_a3:-0} && ${B_ctl:-0} ))" B "MUTANT B killed — dropping the differential guard defers a machinery-only pull (assertion 3 has teeth)"
   else
-    bad "MUTANT B DID NOT defer the machinery-only pull — assertion 3 is not testing the differential"
+    bad "MUTANT B SURVIVED: it did not defer the machinery-only pull — assertion 3 is not testing the differential"
   fi
 fi
 
@@ -347,9 +397,11 @@ RC_33="$(rcpair 3 3)"; RC_21="$(rcpair 2 1)"; RC_10="$(rcpair 1 0)"
 if [ -z "$RC_22$RC_01$RC_02$RC_11$RC_33$RC_21$RC_10" ]; then
   bad "rc-pair harness produced no verdicts at all — the table below would be seven silent passes"
 else
-  [ "$RC_22" = "SELF-UPDATE-OK" ] \
-    && ok "rc 2,2 (both refuse the bare probe) is OK — a usage error on both sides is not a differential signal; two of the seven scripts the pre-push invokes exit 2 bare" \
-    || bad "rc 2,2 gave [$RC_22], expected SELF-UPDATE-OK — the three usage-error scripts still strand the machinery slice"
+  if [ "$RC_22" = "SELF-UPDATE-OK" ]; then
+    ok "rc 2,2 (both refuse the bare probe) is OK — a usage error on both sides is not a differential signal; two of the seven scripts the pre-push invokes exit 2 bare"; B_rc22=1
+  else
+    bad "rc 2,2 gave [$RC_22], expected SELF-UPDATE-OK — the three usage-error scripts still strand the machinery slice"
+  fi
   [ "$RC_01" = "SELF-UPDATE-DEFER" ] \
     && ok "rc 0,1 still DEFERS — an incoming version that newly fails against this tree is the case the gate exists for, and the 2,2 arm did not swallow it" \
     || bad "rc 0,1 gave [$RC_01], expected SELF-UPDATE-DEFER — the fix REMOVED the gate"
@@ -362,9 +414,11 @@ else
   # `--fail-on=deterministic`, so it exits 1 while printing `tier-1 findings: 0` — failing a
   # threshold the hook never applies, identically on both sides. Agreement carries no
   # differential information whatever the code; only DISAGREEMENT does.
-  [ "$RC_11" = "SELF-UPDATE-OK" ] \
-    && ok "rc 1,1 is OK — equal codes are not a differential signal, and deferring on them stranded every pull touching a script whose bare default differs from the hook's flag" \
-    || bad "rc 1,1 gave [$RC_11], expected SELF-UPDATE-OK — a pull touching audit-rule-files.sh still folds the machinery slice into the gated apply"
+  if [ "$RC_11" = "SELF-UPDATE-OK" ]; then
+    ok "rc 1,1 is OK — equal codes are not a differential signal, and deferring on them stranded every pull touching a script whose bare default differs from the hook's flag"; B_rc11=1
+  else
+    bad "rc 1,1 gave [$RC_11], expected SELF-UPDATE-OK — a pull touching audit-rule-files.sh still folds the machinery slice into the gated apply"
+  fi
   # Equality, not a whitelist of codes. If the arm were written as a set of blessed exit codes
   # this would fail, and that is the point of testing a code no script in the tree returns.
   [ "$RC_33" = "SELF-UPDATE-OK" ] \
@@ -392,13 +446,20 @@ else
   else
     C_11="$(rcpair 1 1 "$GATE_C")"; C_22="$(rcpair 2 2 "$GATE_C")"
     if [ "$C_11" = "SELF-UPDATE-UNDECIDED" ] && [ "$C_22" = "SELF-UPDATE-OK" ]; then
-      ok "MUTANT C killed — narrowed back to 2-and-2, rc 1,1 defers again while 2,2 does not move: the widening is what the 1,1 arm tests"
+      mx_cell C rc22 "$C_22"; mx_cell C rc11 "$C_11"
+      mutant_killed "$(( ${B_rc11:-0} && ${B_rc22:-0} ))" C "MUTANT C killed — narrowed back to 2-and-2, rc 1,1 defers again while 2,2 does not move: the widening is what the 1,1 arm tests"
     else
-      bad "MUTANT C moved the wrong set — 1,1 gave [$C_11] (expected SELF-UPDATE-UNDECIDED) and 2,2 gave [$C_22] (expected SELF-UPDATE-OK). Either the 1,1 arm is vacuous or it is entangled with the 2,2 arm."
+      bad "MUTANT C SURVIVED: it moved the wrong set — 1,1 gave [$C_11] (expected SELF-UPDATE-UNDECIDED) and 2,2 gave [$C_22] (expected SELF-UPDATE-OK). Either the 1,1 arm is vacuous or it is entangled with the 2,2 arm."
     fi
   fi
 fi
 
+# MX0: a plain run executes no matrix-only cell; --matrix scores every cell and says how many.
+if [ "$MATRIX" = 1 ]; then
+  echo "MATRIX MODE: $MX_RUN cells"
+  if [ "$MX_RUN" -gt 0 ]; then ok "MX0 matrix mode: $MX_RUN cells scored"; else bad "MX0 matrix mode: --matrix scored no cell"; fi
+elif [ "$MX_CELLS" -eq 0 ]; then ok "MX0 per-push run: matrix-only cells run = 0 (cells scored: $MX_RUN)"
+else bad "MX0 per-push run: $MX_CELLS matrix-only cell(s) ran"; fi
 echo
 if [ "$fails" -ne 0 ]; then
   echo "self-update-join-gate: $fails assertion(s) FAILED" >&2

@@ -3,5 +3,6 @@
 !scripts/render-invariant-index.sh
 scripts/validate-enforcement-map.sh
 +docs/invariant-index.md
-# copy-only: core/fixtures/invariant-index/run.sh:45 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/invariant-index/run.sh:78 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
+core/fixtures/lib/mutant.sh
