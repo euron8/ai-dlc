@@ -57,6 +57,7 @@
 # not run through hermetic-run.sh, which forwards no argument.
 # also trips beyond decides= (measured, --matrix at the committed tip): m-diff-rc A6; m-samp-rc A4b; a8-stable-filter A0; a9-counts-in-projection A0 A8
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/emit-report-refusal/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC mutant-table-loop why=one loop over the MT table passes each mutant name to mutant_killed as a variable, and every name it produces has its own MUTANT-MATRIX row below
 # MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy of the reconcile engine must trip no arm; it is the base pass every kill is gated on
 # MUTANT-MATRIX m-diff-rc decides=A3 twins=A4a
 # MUTANT-MATRIX m-diff-indent decides=A6 twins=A3
