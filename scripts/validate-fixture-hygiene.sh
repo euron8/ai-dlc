@@ -55,10 +55,15 @@
 #     FP SET. Raw: 15 lines carrying `sh <word>` in a command-ish position. Narrowed by masking (the awk
 #     `sh == ""` / `sh != ""` programs in backlog-rotate-fence-guard, check-24, ledger-reverify, ledger-rotate,
 #     shadowed-local-validators; the `(sh false)` messages in backlog-ledger; ledger-reverify:5997's printf) and by
-#     the next-word rule. The stdin form, raw (non-comment lines with `|` then `sh` then end of line or one of
+#     the next-word rule. Re-derived on the b245-p1-fold tree with a stricter raw grep (command position, a next
+#     word that is not `=`, `!`, `)` or an operator), which already excludes the awk `sh ==` forms: 9 lines -- the 5
+#     word-form offenders below, backlog-ledger:401 and :402 and ledger-reverify:5997 (strings), and
+#     fixture-hygiene:77 (a heredoc seed). A `case` alternation `bash|sh)` would fire under the stdin rule's `)`;
+#     0 such lines in code (the 3 in check-24 are inside awk strings). The stdin form, raw (non-comment lines with `|` then `sh` then end of line or one of
 #     `;)&|<>`): 8 lines; masking removes 7, all inside quoted regexes or strings -- ledger-reverify:4268, :4364 and
 #     :4528 (`'verify: (theirs_has|sh)'`) and procsub-staged-refusal-boot:291, :673, :1644 and :1670 (`(md|sh|json)`).
-#     The `env … sh` and `command sh` forms: 0 raw lines. Final hits: 6, all OFFENDERS: readset-skip:1331
+#     The `env … sh` and `command sh` forms: 0 raw lines, also under a wider grep taking ANY words between `env`
+#     and a bare `sh` (control: 116 `env -u` lines in the same corpus). `env -u NAME sh` is not parsed as a start. Final hits: 6, all OFFENDERS: readset-skip:1331
 #     (`exec sh -c`), readset-skip:1827 and :2177 and readset-stage1-verdict:900 (`sh -c 'exit 0' &`),
 #     self-update-gate:3401 (`sh scripts/…`), self-update-gate:5025 (`git show … | sh;`).
 #     STATED LIMITS: a variable-spelled interpreter (prepush-ssh-keepalive:46), a written `#!/bin/sh` stub executed
@@ -606,6 +611,7 @@ printf 'echo hi\n' | sh;
 env FOO=1 sh -c x
 cat "$X/s" | sh
 command sh "$X/c.sh"
+env sh -c x
 EOF
 seed core/fixtures/s3n/run.sh <<'EOF'
 #!/usr/bin/env bash
@@ -623,6 +629,7 @@ awk -v sh=1 'BEGIN { print sh }' </dev/null | cat
 echo verify: sh scripts/x.sh
 myenv sh -c x
 x | sh=1
+command -v sh >/dev/null
 EOF
 seed core/fixtures/m5a/run.sh <<'EOF'
 mkmut() { :; }
@@ -744,7 +751,7 @@ cut -f1,2 "$WORK/p.verdict" | grep -v '^DERIVE' > "$WORK/p.got"
 want_rows() { case "$1" in
   H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 8 9 ;;
   H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
-  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 ;;
+  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10 ;;
   H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6

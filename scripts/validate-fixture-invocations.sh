@@ -371,6 +371,9 @@ fxc_self_probe() {
   mkdir -p "$SPR/j5h"; cp "$fd/inputs.decl" "$SPR/j5h/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5h/invocations.decl"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\n# MUTANT-MATRIX Mb decides=A twins=B\nEOF\n' > "$SPR/j5h/run.sh"
   sp_cell "J5 a name rowed only inside a heredoc body FAILs" 1 j5h "$SPR/logm" "reported Mb, which has no"
+  # Its twin: the heredoc CLOSES, and `$((1<<3))` and `<<<` open nothing, so Mb rowed after all three counts.
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\nseed\nEOF\nx=$((1<<3))\ncat <<<"x"\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5h/run.sh"
+  sp_cell "J5 a name rowed after a closed heredoc, a shift and a here-string passes" 0 j5h "$SPR/logm" "ok"
   # A non-exec shard stub (`bash "$IMPL" --group x > out`, the ledger-reverify-b form) resolves to its IMPL too.
   mkdir -p "$SPR/j5n"; cp "$fd/inputs.decl" "$SPR/j5n/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5n/invocations.decl"
   printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nbash "$IMPL" --group b > "$HERE/o"\n' > "$SPR/j5n/run.sh"
@@ -418,7 +421,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 38 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 38
+  [ "$SP_N" -eq 39 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 39
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2
