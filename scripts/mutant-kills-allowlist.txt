@@ -81,7 +81,6 @@ prepush-pool-depth
 process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
-provenance-flagless-default
 readset-skip
 readset-stage1-verdict
 reconcile-emit-report

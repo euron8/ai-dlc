@@ -42,10 +42,37 @@
 # whole file read as agreement. The block it uses is the one check-17-bypass's seed emits,
 # extended with tool_use_id and the three findings_* counts, so it is not derived from this
 # fixture's own idea of the format.
+#
+# THE MUTANT MATRIX. A cell is one arm's drive: the arm's artifact and flags handed to a validator copy, RED on a
+# mutant when the exit code read there is not the one the unmutated validator gives (a, a2, a3, a4, a5, c, d, g and
+# h read 1; b and f read 0; e reads 2 in both orders). A mutant's row names the cells that kill it (decides) and the
+# cells it could plausibly co-trip but must leave GREEN (twins): the arms whose behaviour sits one rung away from the
+# mutated line. A plain run scores each mutant on its deciding cells and its twins only. The matrix is re-measured
+# whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. It scores
+# every mutant on every cell and prints one MATRIX line each. No validator unit is selected here, so there is no
+# outside-unit diff.
+# Twins for M4 (a, g, a4) and M5 (a, a2, a5) are several because each mutant adds an acquittal beside the absent rung
+# and the sibling arms of that rung are exactly the cells a mis-scoped acquittal would also move.
+# MUTANT-MATRIX M1 decides=a,g twins=c
+# MUTANT-MATRIX M2 decides=c,d,h twins=a,g
+# MUTANT-MATRIX M3 decides=g twins=a
+# MUTANT-MATRIX M4 decides=a2,a3 twins=a,g,a4
+# MUTANT-MATRIX M5 decides=a4 twins=a,a2,a5
+# MUTANT-MATRIX-CONTROL M0 why=an unmutated copy in the mutant tree must reproduce the baseline so a mutant verdict reads a subject that ran; nothing is mutated and there is no deciding cell
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/provenance-flagless-default/run.sh --matrix
 
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Any other
+# argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "provenance-flagless-default: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 
 # --- subject: WALK UP for a marker, never count `..` hops ---------------------
 # The marker is this fixture's OWN home, which names the layout it is running in:
@@ -126,6 +153,11 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+# A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*).
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 # ---------------------------------------------------------------------------
 # SEEDS
@@ -306,7 +338,7 @@ elif grep -qE 'MALFORMED|CANNOT PARSE' <<<"$a_out"; then
   bad "a  the deny reports the ABSENT case with the MALFORMED wording — the caller is sent to re-wrap a block that is not there"
   sed 's/^/        /' <<<"$a_out" >&2
 else
-  ok "a  an ordinary .md with no block and no flag is DENIED (rc=1), naming --allow-missing and NOT as MALFORMED (control: that grammar matches on the fenced file in this same run)"
+  ok "a  an ordinary .md with no block and no flag is DENIED (rc=1), naming --allow-missing and NOT as MALFORMED (control: that grammar matches on the fenced file in this same run)"; B_a=1
 fi
 
 # The ABSENT verdict, in one place, so (a2)–(a5) score the same three properties (a) does: the
@@ -334,7 +366,7 @@ absent_verdict() {  # absent_verdict <rc> <output> -> 0 if the ABSENT deny, else
 rc_a2="$(drive_rel "$ART" "$VALIDATOR" docs/prd.md)"
 a2_out="$(cat "$OUTF")"
 if why="$(absent_verdict "$rc_a2" "$a2_out")"; then
-  ok "a2 the same block-less .md named RELATIVELY (docs/prd.md, from a cd'd cwd) is DENIED (rc=1) with the ABSENT verdict — the rung is keyed on the DECLARATION, not on how the caller spelled the path"
+  ok "a2 the same block-less .md named RELATIVELY (docs/prd.md, from a cd'd cwd) is DENIED (rc=1) with the ABSENT verdict — the rung is keyed on the DECLARATION, not on how the caller spelled the path"; B_a2=1
 else
   bad "a2 the block-less .md named relatively as docs/prd.md $why — the deny is keyed on an ABSOLUTE path, and the consumer's only flagless call site (ci-local.sh's retro-compliance check) passes a relative one"
   sed 's/^/        /' <<<"$a2_out" >&2
@@ -343,7 +375,7 @@ fi
 rc_a3="$(drive_rel "$ART" "$VALIDATOR" ./docs/prd.md)"
 a3_out="$(cat "$OUTF")"
 if why="$(absent_verdict "$rc_a3" "$a3_out")"; then
-  ok "a3 the same file named ./docs/prd.md is DENIED (rc=1) with the ABSENT verdict — the two relative spellings agree, so the arm cannot be satisfied by a guard that only special-cases one of them"
+  ok "a3 the same file named ./docs/prd.md is DENIED (rc=1) with the ABSENT verdict — the two relative spellings agree, so the arm cannot be satisfied by a guard that only special-cases one of them"; B_a3=1
 else
   bad "a3 the block-less .md named relatively as ./docs/prd.md $why — a path grammar that handles one relative spelling and not the other is denying by accident"
   sed 's/^/        /' <<<"$a3_out" >&2
@@ -370,7 +402,7 @@ fi
 rc_a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$VALIDATOR" "$ART/docs/prd.md")"
 a4_out="$(cat "$OUTF")"
 if why="$(absent_verdict "$rc_a4" "$a4_out")"; then
-  ok "a4 a block-less .md with AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the invocation's environment is still DENIED (rc=1) with the ABSENT verdict — the acquittal is an ARGUMENT, and no exported name waives it"
+  ok "a4 a block-less .md with AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the invocation's environment is still DENIED (rc=1) with the ABSENT verdict — the acquittal is an ARGUMENT, and no exported name waives it"; B_a4=1
 else
   bad "a4 AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the environment $why — the acquittal has an environment back door, and a consumer that exports the name in settings.json waives this rung for every artifact in every session"
   sed 's/^/        /' <<<"$a4_out" >&2
@@ -381,6 +413,11 @@ for _e in PROVENANCE_ALLOW_MISSING=1 ALLOW_MISSING=1; do
   a5_out="$(cat "$OUTF")"
   if why="$(absent_verdict "$rc_a5" "$a5_out")"; then
     ok "a5 a block-less .md with $_e in the invocation's environment is still DENIED (rc=1) with the ABSENT verdict"
+    # A flag set inside a per-case loop is bound per case, through literal names.
+    case "$_e" in
+      PROVENANCE_ALLOW_MISSING=1) B_a5_1=1 ;;
+      ALLOW_MISSING=1) B_a5_2=1 ;;
+    esac
   else
     bad "a5 $_e in the environment $why — the acquittal reads an environment name, and the caller that made no declaration gets a pass over a file nothing examined"
     sed 's/^/        /' <<<"$a5_out" >&2
@@ -404,7 +441,7 @@ fi
 # ---------------------------------------------------------------------------
 rc_c="$(drive "$VALIDATOR" "$ART/docs/retro/s301/retro.md" --allow-missing)"
 if [ "$rc_c" = 1 ]; then
-  ok "c  a RETRO with no block is still DENIED under --allow-missing (rc=1) — the flag does not reach the retro rung"
+  ok "c  a RETRO with no block is still DENIED under --allow-missing (rc=1) — the flag does not reach the retro rung"; B_c=1
 else
   bad "c  --allow-missing acquitted a blockless RETRO (rc=$rc_c) — the flag is a blanket pass, and Rule 20's party-mode floor is waivable by any caller that types it"
   sed 's/^/        /' "$OUTF" >&2
@@ -418,12 +455,12 @@ if [ "$rc_d" != 1 ]; then
 elif ! grep -qE 'MALFORMED|CANNOT PARSE' <<<"$d_out"; then
   bad "d  a malformed marker under --allow-missing failed, but not AS malformed — the two verdicts have different fixes and this one is reporting the wrong one: $(head -n 1 <<<"$d_out")"
 else
-  ok "d  a MALFORMED marker under --allow-missing is still DENIED as MALFORMED (rc=1) — absent and unparseable stay two verdicts"
+  ok "d  a MALFORMED marker under --allow-missing is still DENIED as MALFORMED (rc=1) — absent and unparseable stay two verdicts"; B_d=1
 fi
 
 rc_h="$(drive "$VALIDATOR" "$ART/docs/solo.md" --allow-missing)"
 if [ "$rc_h" = 1 ]; then
-  ok "h  a block PRESENT and violating a rule (mode: solo) is still DENIED under --allow-missing (rc=1) — the flag acquits an absence, never a violation"
+  ok "h  a block PRESENT and violating a rule (mode: solo) is still DENIED under --allow-missing (rc=1) — the flag acquits an absence, never a violation"; B_h=1
 else
   bad "h  --allow-missing acquitted a mode: solo block (rc=$rc_h) — v0.58.0's only teeth are waivable by a flag about absence"
   sed 's/^/        /' "$OUTF" >&2
@@ -462,7 +499,7 @@ elif ! grep -q -- '--allow-missing' <<<"$g_out"; then
   bad "g  the no-extension file was denied but the message never names --allow-missing, so the two file classes are being denied by two different rungs"
   sed 's/^/        /' <<<"$g_out" >&2
 else
-  ok "g  an artifact with NO .md extension and no block is DENIED flagless (rc=1), naming --allow-missing — the rung is keyed on the declaration, not on the filename"
+  ok "g  an artifact with NO .md extension and no block is DENIED flagless (rc=1), naming --allow-missing — the rung is keyed on the declaration, not on the filename"; B_g=1
 fi
 
 # ---------------------------------------------------------------------------
@@ -495,6 +532,128 @@ mut_tree() {  # mut_tree <name> -> prints the path of the validator copy inside 
   printf '%s\n' "$dir/scripts/ai-dlc/validate-provenance-block.sh"
 }
 
+# --- THE MATRIX CELLS, single-sourced. A cell is one arm's drive of a validator copy; cell_red <cell> <validator> is
+# 0 RED (the exit code read is not the unmutated one), 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as
+# GREEN). cell_flip is the reading a mutant that KILLS the cell gives (the flag-and-extension arms flip 1 to 0).
+MX_CELLS='a a2 a3 a4 a5 b c d e f g h'
+BRK="$WORK/cell.broken"
+_cr() { # run one drive; a rc outside 0/1/2 or a crash word in its output marks the run BROKEN (a crash prints no FAIL)
+  local r
+  r="$("$@")"
+  case "$r" in 0|1|2) ;; *) : > "$BRK" ;; esac
+  if grep -qE 'unbound variable|command not found|syntax error' "$OUTF"; then : > "$BRK"; fi
+  printf '%s' "$r"
+}
+cell_exp() {
+  case "$1" in
+    b|f) printf 0 ;;
+    e) printf 2/2 ;;
+    a5) printf 1/1 ;;
+    a|a2|a3|a4|c|d|g|h) printf 1 ;;
+    *) return 2 ;;
+  esac
+}
+cell_flip() {
+  case "$1" in
+    b|f) printf 1 ;;
+    e) printf 0/0 ;;
+    a5) printf 0/0 ;;
+    a|a2|a3|a4|c|d|g|h) printf 0 ;;
+    *) return 2 ;;
+  esac
+}
+cell_read() { # cell_read <cell> <validator> -> the reading
+  local r1
+  local r2
+  case "$1" in
+    a)  _cr drive "$2" "$ART/docs/prd.md" ;;
+    a2) _cr drive_rel "$ART" "$2" docs/prd.md ;;
+    a3) _cr drive_rel "$ART" "$2" ./docs/prd.md ;;
+    a4) _cr drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$2" "$ART/docs/prd.md" ;;
+    a5) r1="$(_cr drive_env PROVENANCE_ALLOW_MISSING=1 "$2" "$ART/docs/prd.md")"
+        r2="$(_cr drive_env ALLOW_MISSING=1 "$2" "$ART/docs/prd.md")"
+        printf '%s/%s' "$r1" "$r2" ;;
+    b)  _cr drive "$2" "$ART/docs/prd.md" --allow-missing ;;
+    c)  _cr drive "$2" "$ART/docs/retro/s301/retro.md" --allow-missing ;;
+    d)  _cr drive "$2" "$ART/docs/fenced.md" --allow-missing ;;
+    e)  r1="$(_cr drive "$2" "$ART/docs/prd.md" --allow-missing --require-skill bmad-prd)"
+        r2="$(_cr drive "$2" "$ART/docs/prd.md" --require-skill bmad-prd --allow-missing)"
+        printf '%s/%s' "$r1" "$r2" ;;
+    f)  _cr drive "$2" "$ART/docs/valid.md" --allow-missing ;;
+    g)  _cr drive "$2" "$ART/docs/report.txt" ;;
+    h)  _cr drive "$2" "$ART/docs/solo.md" --allow-missing ;;
+    *)  return 2 ;;
+  esac
+}
+cell_red() { # cell_red <cell> <validator>
+  local got
+  local want
+  want="$(cell_exp "$1")" || return 2
+  got="$(cell_read "$1" "$2")"
+  [ "$got" != "$want" ]
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$WORK/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# kill_cells <mutant> <validator>: 0 when EVERY deciding cell reads the flipped value. KC_READ carries the readings.
+kill_cells() {
+  local m="$1" v="$2" dec c got ok=1
+  dec="$(mx_row "$m" decides)"
+  KC_READ=""
+  if [ -z "$dec" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its deciding cells\n' "$m" >&2; return 1; fi
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    got="$(cell_read "$c" "$v")"
+    KC_READ="$KC_READ $c=$got"
+    [ "$got" = "$(cell_flip "$c")" ] || ok=0
+  done
+  [ -e "$BRK" ] && { BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: a drive crashed or read a code outside 0/1/2\n' "$m" >&2; rm -f "$BRK"; return 1; }
+  [ "$ok" = 1 ]
+}
+# mx_twins <mutant> <validator>: per-push, every twin cell must stay GREEN under the mutant.
+mx_twins() {
+  local m="$1" v="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m" >&2; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$v"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t" >&2
+    elif [ "$r" -eq 0 ]; then mut_bad "$m: its twin $t also went RED on this mutant, so the kill is not confined to its own cells"; fi
+  done
+  [ -e "$BRK" ] && { BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: a twin drive crashed\n' "$m" >&2; rm -f "$BRK"; }
+}
+# mx_score <mutant> <validator>: MATRIX-ONLY. Scores the mutant's validator on EVERY cell. It records itself in the
+# ledger first (rule 9).
+mx_score() {
+  local m="$1" v="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$v"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$v"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$v" || g=$((g + 1))
+  done
+  if [ -e "$BRK" ]; then rm -f "$BRK"; BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return; fi
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+
 # --- M0: the UNMUTATED copy, in the mutant tree, must reproduce the baseline -------------
 # Two inert runs compare equal: a tree where the driven subject bails at its own startup
 # check makes every mutant "survive" AND the control "pass". The conjunct is POSITIVE — the
@@ -513,7 +672,7 @@ if [ "$rc_m0a" != 1 ] || ! grep -q -- '--allow-missing' <<<"$m0_out" || [ "$rc_m
 fi
 ok "M0 control: the UNMUTATED copy in the mutant tree reproduces the baseline (a=1 with the remedy text, f-ctl=0) — the mutants below run a subject that loaded its schema"
 
-killed_by=""
+scored_by=""
 mutant_fails=0
 mut_bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); mutant_fails=$((mutant_fails+1)); }
 
@@ -539,15 +698,15 @@ if cmp -s "$VALIDATOR" "$M1"; then
   echo "  Re-anchor M1 on whatever the rung emits now; do not relax the assertions." >&2
   exit 2
 fi
-rc_m1a="$(drive "$M1" "$ART/docs/prd.md")"
-rc_m1g="$(drive "$M1" "$ART/docs/report.txt")"
-if [ "$rc_m1a" = 0 ] && [ "$rc_m1g" = 0 ]; then
-  ok "M1 mutant KILLED by (a) and (g): reverting the absent rung to sys.exit(0) flips both to 0"
-  killed_by="${killed_by}
-    M1 absent rung -> sys.exit(0)          killed by (a) and (g)"
+if kill_cells M1 "$M1"; then
+  mutant_killed "$(( ${B_a:-0} && ${B_g:-0} ))" M1 "M1 mutant KILLED by (a) and (g): reverting the absent rung to sys.exit(0) flips both to 0" \
+    && scored_by="${scored_by}
+    M1 absent rung -> sys.exit(0)          scored by (a) and (g)"
 else
-  mut_bad "M1 mutant SURVIVED: with the absent rung reverted to sys.exit(0), (a) read $rc_m1a and (g) read $rc_m1g — expected both 0. Whichever is still 1 is being denied by some other rung, and the arm that claims to own this behaviour is watching something else"
+  mut_bad "M1 mutant SURVIVED: with the absent rung reverted to sys.exit(0), the deciding cells read [${KC_READ# }] — expected a=0 g=0. Whichever is still 1 is being denied by some other rung, and the arm that claims to own this behaviour is watching something else"
 fi
+mx_twins M1 "$M1"
+if [ "$MODE" = matrix ]; then mx_score M1 "$M1"; fi
 
 # --- M2: the blanket acquittal ------------------------------------------------------------
 # The wrong fix that passes an (a)/(b) pair read alone: `--allow-missing` short-circuits
@@ -569,21 +728,18 @@ if cmp -s "$VALIDATOR" "$M2"; then
   echo "FIXTURE BROKEN: M2 matched nothing — the malformed rung this mutation inserts above was renamed, so the blanket-acquittal mutant does not exist" >&2
   exit 2
 fi
-rc_m2c="$(drive "$M2" "$ART/docs/retro/s301/retro.md" --allow-missing)"
-rc_m2d="$(drive "$M2" "$ART/docs/fenced.md" --allow-missing)"
-rc_m2h="$(drive "$M2" "$ART/docs/solo.md" --allow-missing)"
-# NEAR-MISS CONJUNCT. M2 does not touch the absent rung, so (a) and (g) must hold their
+# NEAR-MISS CONJUNCT. M2 does not touch the absent rung, so its twins (a) and (g) must hold their
 # verdicts. A mutant that moved every cell would mean the arms are entangled and the kill
 # below says nothing about the flag's SCOPE.
-rc_m2a="$(drive "$M2" "$ART/docs/prd.md")"
-rc_m2g="$(drive "$M2" "$ART/docs/report.txt")"
-if [ "$rc_m2c" = 0 ] && [ "$rc_m2d" = 0 ] && [ "$rc_m2h" = 0 ] && [ "$rc_m2a" = 1 ] && [ "$rc_m2g" = 1 ]; then
-  ok "M2 mutant KILLED by (c), (d) and (h): a blanket --allow-missing flips all three to 0 while (a) and (g) hold at 1"
-  killed_by="${killed_by}
-    M2 --allow-missing short-circuits all   killed by (c), (d) and (h)"
+if kill_cells M2 "$M2"; then
+  mutant_killed "$(( ${B_c:-0} && ${B_d:-0} && ${B_h:-0} ))" M2 "M2 mutant KILLED by (c), (d) and (h): a blanket --allow-missing flips all three to 0 while (a) and (g) hold at 1" \
+    && scored_by="${scored_by}
+    M2 --allow-missing short-circuits all   scored by (c), (d) and (h)"
 else
-  mut_bad "M2 mutant SURVIVED or is entangled: blanket acquittal gave (c)=$rc_m2c (d)=$rc_m2d (h)=$rc_m2h (expected 0 0 0) with (a)=$rc_m2a (g)=$rc_m2g (expected 1 1). An arm reading non-zero for (c)(d)(h) cannot tell a scoped acquittal from a blanket one"
+  mut_bad "M2 mutant SURVIVED: blanket acquittal gave the deciding cells [${KC_READ# }] (expected c=0 d=0 h=0). An arm reading non-zero for (c)(d)(h) cannot tell a scoped acquittal from a blanket one"
 fi
+mx_twins M2 "$M2"
+if [ "$MODE" = matrix ]; then mx_score M2 "$M2"; fi
 
 # --- M3: deny only when the path ends `.md` -----------------------------------------------
 # The extension-keyed non-fix. (g) owns it, and the arm is scored WITH (a) holding: a mutant
@@ -608,15 +764,15 @@ if cmp -s "$VALIDATOR" "$M3"; then
   echo "FIXTURE BROKEN: M3 matched nothing — the flagless-absent rung's emitter moved, so the extension-keyed mutant does not exist" >&2
   exit 2
 fi
-rc_m3g="$(drive "$M3" "$ART/docs/report.txt")"
-rc_m3a="$(drive "$M3" "$ART/docs/prd.md")"
-if [ "$rc_m3g" = 0 ] && [ "$rc_m3a" = 1 ]; then
-  ok "M3 mutant KILLED by (g): keying the deny on a .md extension flips report.txt to 0 while the .md file holds at 1 — (g) is what makes the rung extension-independent"
-  killed_by="${killed_by}
-    M3 deny only when path ends .md         killed by (g)"
+if kill_cells M3 "$M3"; then
+  mutant_killed "$(( ${B_g:-0} && ${B_a:-0} ))" M3 "M3 mutant KILLED by (g): keying the deny on a .md extension flips report.txt to 0 while the .md file holds at 1 — (g) is what makes the rung extension-independent" \
+    && scored_by="${scored_by}
+    M3 deny only when path ends .md         scored by (g)"
 else
-  mut_bad "M3 mutant SURVIVED or is not discriminating: with the deny keyed on .md, (g) read $rc_m3g and (a) read $rc_m3a — expected 0 and 1. If (a) also moved this is M1 over again and (g) owns nothing"
+  mut_bad "M3 mutant SURVIVED: with the deny keyed on .md, the deciding cell read [${KC_READ# }] — expected g=0. (a) is its twin: if (a) also moved this is M1 over again and (g) owns nothing"
 fi
+mx_twins M3 "$M3"
+if [ "$MODE" = matrix ]; then mx_score M3 "$M3"; fi
 
 # --- M4: acquit any artifact named by a RELATIVE path --------------------------------------
 # The path-shape non-fix. It passes every arm this fixture had before (a2)/(a3) existed, because
@@ -645,18 +801,15 @@ if cmp -s "$VALIDATOR" "$M4"; then
   echo "FIXTURE BROKEN: M4 matched nothing — the flagless-absent rung's emitter moved, so the relative-path-acquittal mutant does not exist and (a2)/(a3) would score a kill nobody earned" >&2
   exit 2
 fi
-rc_m4a2="$(drive_rel "$ART" "$M4" docs/prd.md)"
-rc_m4a3="$(drive_rel "$ART" "$M4" ./docs/prd.md)"
-rc_m4a="$(drive "$M4" "$ART/docs/prd.md")"
-rc_m4g="$(drive "$M4" "$ART/docs/report.txt")"
-rc_m4a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$M4" "$ART/docs/prd.md")"
-if [ "$rc_m4a2" = 0 ] && [ "$rc_m4a3" = 0 ] && [ "$rc_m4a" = 1 ] && [ "$rc_m4g" = 1 ] && [ "$rc_m4a4" = 1 ]; then
-  ok "M4 mutant KILLED by (a2) and (a3): acquitting a relative artifact path flips both to 0 while (a), (g) and (a4) hold at 1 — the absolute-path arms structurally cannot see this one"
-  killed_by="${killed_by}
-    M4 acquit a RELATIVE artifact path       killed by (a2) and (a3)"
+if kill_cells M4 "$M4"; then
+  mutant_killed "$(( ${B_a2:-0} && ${B_a3:-0} && ${B_a:-0} && ${B_g:-0} && ${B_a4:-0} ))" M4 "M4 mutant KILLED by (a2) and (a3): acquitting a relative artifact path flips both to 0 while (a), (g) and (a4) hold at 1 — the absolute-path arms structurally cannot see this one" \
+    && scored_by="${scored_by}
+    M4 acquit a RELATIVE artifact path       scored by (a2) and (a3)"
 else
-  mut_bad "M4 mutant SURVIVED or is entangled: the relative-path acquittal gave (a2)=$rc_m4a2 (a3)=$rc_m4a3 (expected 0 0) with (a)=$rc_m4a (g)=$rc_m4g (a4)=$rc_m4a4 (expected 1 1 1). If (a2)/(a3) held at 1 they are driving an absolute path after all; if (a) moved, this is M1 again and the relative arms own nothing"
+  mut_bad "M4 mutant SURVIVED: the relative-path acquittal gave the deciding cells [${KC_READ# }] (expected a2=0 a3=0). If (a2)/(a3) held at 1 they are driving an absolute path after all"
 fi
+mx_twins M4 "$M4"
+if [ "$MODE" = matrix ]; then mx_score M4 "$M4"; fi
 
 # --- M5: an environment back door into the acquittal ---------------------------------------
 # `--allow-missing` is an argument because a declaration is made per call site by the caller that
@@ -681,22 +834,36 @@ if cmp -s "$VALIDATOR" "$M5"; then
   echo "FIXTURE BROKEN: M5 matched nothing — the line that reads the --allow-missing argument in the artifact-mode python block moved or was respelled, so the environment-back-door mutant does not exist and (a4) would score a kill nobody earned" >&2
   exit 2
 fi
-rc_m5a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
-rc_m5a="$(drive "$M5" "$ART/docs/prd.md")"
-rc_m5a2="$(drive_rel "$ART" "$M5" docs/prd.md)"
-rc_m5n1="$(drive_env PROVENANCE_ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
-rc_m5n2="$(drive_env ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
-if [ "$rc_m5a4" = 0 ] && [ "$rc_m5a" = 1 ] && [ "$rc_m5a2" = 1 ] && [ "$rc_m5n1" = 1 ] && [ "$rc_m5n2" = 1 ]; then
-  ok "M5 mutant KILLED by (a4): honouring AI_DLC_PROVENANCE_ALLOW_MISSING flips it to 0 while (a), (a2) and both unprefixed names in (a5) hold at 1 — the scrub makes this invisible to every arm that does not set the name in its own invocation"
-  killed_by="${killed_by}
-    M5 env back door into --allow-missing    killed by (a4)"
+if kill_cells M5 "$M5"; then
+  mutant_killed "$(( ${B_a4:-0} && ${B_a:-0} && ${B_a2:-0} && ${B_a5_1:-0} && ${B_a5_2:-0} ))" M5 "M5 mutant KILLED by (a4): honouring AI_DLC_PROVENANCE_ALLOW_MISSING flips it to 0 while (a), (a2) and both unprefixed names in (a5) hold at 1 — the scrub makes this invisible to every arm that does not set the name in its own invocation" \
+    && scored_by="${scored_by}
+    M5 env back door into --allow-missing    scored by (a4)"
 else
-  mut_bad "M5 mutant SURVIVED or is entangled: the environment back door gave (a4)=$rc_m5a4 (expected 0) with (a)=$rc_m5a (a2)=$rc_m5a2 (a5:PROVENANCE_ALLOW_MISSING)=$rc_m5n1 (a5:ALLOW_MISSING)=$rc_m5n2 (expected 1 1 1 1). (a4) reading 1 means the variable never reached the child — the scrub runs in THIS process, so the name must be set in the invocation, not exported here"
+  mut_bad "M5 mutant SURVIVED: the environment back door gave the deciding cell [${KC_READ# }] (expected a4=0). (a4) reading 1 means the variable never reached the child — the scrub runs in THIS process, so the name must be set in the invocation, not exported here"
 fi
+mx_twins M5 "$M5"
+if [ "$MODE" = matrix ]; then mx_score M5 "$M5"; fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL: it
+# must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9 the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9 a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "M1 M2 M3 M4 M5 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  fails=$((fails + MX_FAILS))
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "provenance-flagless-default: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
 if [ "$mutant_fails" -eq 0 ]; then
-  echo "  mutants and the arms that kill them:${killed_by}"
+  echo "  mutants and the arms that score them:${scored_by}"
   echo
 fi
 if [ "$fails" -eq 0 ]; then
