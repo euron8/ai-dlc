@@ -24,19 +24,15 @@ dist-clone
 divergence-hard-block
 emit-report-refusal
 enforcement-map-yaml-plain
-escalation-delivery
 escalation-status-vocabulary
 fanout-payload-channel
-file-mtime
 gate-adjudication
 gate-remediation-deny
 h2-attest-scripts-dir
 handoff-completion-assertion
 inflight-row-shape
-invariant-index
 layer-absorption-retire
 layer-catalog-collision
-layer-conforms-to
 layer-crosswalk-home
 layer-debt-due-and-discharge
 layer-entry-unreadable
@@ -66,7 +62,6 @@ review-shard-merge
 scope-confirmation
 self-update-fixture-log
 self-update-gate
-self-update-join-gate
 self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shadowed-local-validators

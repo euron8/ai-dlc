@@ -1,2 +1,3 @@
 # reason: subject under test; run.sh executes it and reads no other repo path.
 !core/scripts/file-mtime.sh
+core/fixtures/lib/mutant.sh
