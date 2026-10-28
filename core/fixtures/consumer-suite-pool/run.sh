@@ -43,6 +43,35 @@
 # EVERY MUTANT IS A COPY GUARDED BY `cmp -s`, and an UNMUTATED control copy runs in
 # the same battery: the hook is driven ten times here, so a harness that broke would
 # otherwise let every mutant score a kill it had not earned.
+#
+# MUTANT MATRIX. Every mutant is driven once, on the world its base arm drives, and judged on named
+# cells of that drive against the base values the unmutated hook gave in the same run. Per push a
+# mutant runs its DECIDING cells (which must trip) and its TWIN cells (which the measured matrix
+# shows stay green, so the kill is confined to the deciding cells). `--matrix` evaluates every cell
+# and prints MATRIX rows (from matrix.sh) with the column names used below. This matrix replaces the
+# earlier exact-vector assertions. It is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/consumer-suite-pool/run.sh --matrix
+# MUTANT-MATRIX m1 decides=rc,nofix twins=- why=the guard's removal moves every cell of its drive (rc 1 to 0 and the message gone), so no cell stays green
+# MUTANT-MATRIX-CONTROL m2 why=the per-fixture 'no verdict recorded' line still detects the dropped worker (rc 1, line present, count line absent), so the mutation survives by design
+# MUTANT-MATRIX m2b decides=noverdict,countline twins=rc
+# MUTANT-MATRIX m3 decides=maxpar_ge2 twins=rc
+# MUTANT-MATRIX m4 decides=rec twins=rc
+# MUTANT-MATRIX retain-off decides=copies twins=rec,shaped
+# MUTANT-MATRIX retain-fixed-name decides=copies,seed19 twins=rec,h179
+# MUTANT-MATRIX prune-off decides=shaped,oldest twins=copies,rec
+# MUTANT-MATRIX prune-glob-wide decides=h179 twins=cleanc,rec
+# MUTANT-MATRIX prune-suffix-unanchored decides=keepc twins=h179,cleanc
+# MUTANT-MATRIX st-a decides=v_s twins=v_alpha
+# MUTANT-MATRIX st-w decides=v_w twins=v_alpha
+# MUTANT-MATRIX st-cpu decides=v_p twins=v_alpha
+# MUTANT-MATRIX st-b decides=v_h,rc twins=v_alpha
+# MUTANT-MATRIX st-c decides=live_h twins=v_h,v_alpha
+# MUTANT-MATRIX st-d decides=live_gh twins=v_gh,v_alpha
+# MUTANT-MATRIX st-e decides=wl,ul twins=- why=removing the liveness check makes the watcher outlive the worker and the unit's tree, so both cells of its drive trip
+# MUTANT-MATRIX st-g decides=ul twins=wl
+# MUTANT-MATRIX st-x decides=tv twins=rv
+# MUTANT-MATRIX st-r decides=rv twins=tv
+# st-c is built from two anchors (the helper calls st-c1 then st-c); st-c1 is the first layer of st-c and is not a mutant of its own.
 set -uo pipefail
 
 # HERMETICITY, and I10 is what required it rather than my remembering to. This fixture
@@ -62,6 +91,19 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); 
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "consumer-suite-pool: FIXTURE BROKEN" >&2; exit 2; }
 
 echo "consumer-suite-pool:"
+
+# `--matrix` (argv only) makes the mutant batteries evaluate EVERY cell of their own drive and
+# print one MATRIX row per cell; a plain run evaluates only each mutant's deciding and twin cells.
+MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
+
+# lib/mutant.sh needs ok() and bad(); matrix.sh owns the cell judge and prints every MATRIX row.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "lib/mutant.sh not found beside $HERE"
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || broken "matrix.sh not found beside $HERE"
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/consumer-suite-pool/matrix.sh"
 
 # Both layouts, named rather than derived from one another.
 HOOK=""
@@ -182,18 +224,96 @@ drive() {                      # drive <tree> <outfile>  -> rc
   ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
+# ------------------------------------------------- world cells, builders and the drive ---
+# A CELL is one named observable of one driven world. A mutant is scored on cells of ITS OWN drive
+# (matrix.sh judges them against the base values the UNMUTATED hook gave on the same world in this
+# run); the worlds are built by the same cw_* functions for the base arms and for the mutants, so a
+# base value and a mutant value are never taken from two different trees.
+C_T=""; C_RC=""; C_O=""; C_LH=""; C_LGH=""; C_WL=""; C_UL=""; C_HOOK=""; C_TAG=""
+yn() { if "$@"; then echo yes; else echo no; fi; }
+csp_cell() {                   # csp_cell <cell> -> the value of one named observable of the loaded state
+  local m
+  case "$1" in
+    rc) printf '%s' "$C_RC" ;;
+    nofix) yn grep -q 'no fixtures found' "$C_O" ;;
+    noverdict) yn grep -q 'no verdict recorded' "$C_O" ;;
+    countline) yn grep -q 'fixtures produced a verdict' "$C_O" ;;
+    maxpar_ge2) m="$(sort -n "$C_T/seen" 2>/dev/null | tail -1)"; yn [ "${m:-0}" -ge 2 ] ;;
+    rec) yn [ -s "$C_T/.git/ai-dlc-fixture-failures" ] ;;
+    copies) m="$(new_retained "$C_T" 2>/dev/null | grep -c .)" || m=0; printf '%s' "$m" ;;
+    shaped) retained_names "$C_T" 2>/dev/null | wc -l | tr -d ' ' ;;
+    oldest) yn [ -e "$C_T/.git/ai-dlc-fixture-failures.20000101T000000Z.1" ] ;;
+    h179) yn [ -e "$C_T/.git/ai-dlc-fixture-failures.179.1" ] ;;
+    keepc) yn [ -e "$C_T/.git/ai-dlc-fixture-failures.20000101T000000Z.1.keep" ] ;;
+    cleanc) yn [ "$(cat "$C_T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ] ;;
+    seed19) yn [ "$(cat "$C_T/.git/ai-dlc-fixture-failures.20000101T000019Z.1" 2>/dev/null)" = SEED-19-CONTENT ] ;;
+    v_*) stv "$C_O" "${1#v_}" ;;
+    live_h) printf '%s' "$C_LH" ;;
+    live_gh) printf '%s' "$C_LGH" ;;
+    wl) printf '%s' "$C_WL" ;;
+    ul) printf '%s' "$C_UL" ;;
+    tv) st_trace "$C_HOOK" "$C_TAG-t" t ;;
+    rv) st_trace "$C_HOOK" "$C_TAG-r" r ;;
+    *) echo "<unknown cell $1>" ;;
+  esac
+}
+csp_vec() { local c; for c in "$@"; do printf '%s=%s\n' "$c" "$(csp_cell "$c")"; done; }
+csp_load() { C_T="$1"; C_RC="$2"; C_O="$3"; }
+cw_green() {                   # alpha sleeps so it finishes LAST; bravo is noisy and green
+  seed "$1" "$2" || broken "seed failed"
+  mkdir -p "$1/tests/fixtures/alpha"
+  printf '#!/usr/bin/env bash\nsleep 0.9\nexit 0\n' > "$1/tests/fixtures/alpha/run.sh"
+  mkfx_noisy "$1" bravo 0 GREENTOKEN; mkfx "$1" charlie 0
+}
+cw_retain() {                  # the arm-2c world: twenty seeds, three decoys, one noisy red
+  seed "$1" "$2" || broken "seed failed"
+  seed_retained "$1" || broken "seeding retained copies failed"
+  [ "$(retained_names "$1" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
+  mkfx "$1" alpha 0; mkfx_noisy "$1" bravo 1 CSPTOKEN; mkfx "$1" charlie 0
+}
+cw_empty() {                   # directories exist, none carries a run.sh
+  seed "$1" "$2" || broken "seed failed"
+  mkdir -p "$1/tests/fixtures/alpha" "$1/tests/fixtures/bravo"
+  printf 'data\n' > "$1/tests/fixtures/alpha/seed.txt"
+}
+cw_drop() {                    # one fixture kills its own worker before it records a verdict
+  seed "$1" "$2" || broken "seed failed"
+  mkfx "$1" alpha 0; mkfx_kill "$1" bravo; mkfx "$1" charlie 0
+}
+cw_pool() {
+  seed "$1" "$2" || broken "seed failed"
+  export CSP_OBSERVE="$1/observe"; mkdir -p "$CSP_OBSERVE"
+  for n in alpha bravo charlie delta; do mkfx_observe "$1" "$n"; done
+}
+cw_run() {                     # cw_run <world> <tree> <hook> -> builds, drives and loads the world's state
+  "cw_$1" "$2" "$3"
+  csp_load "$2" "$(drive "$2" "$2.out")" "$2.out"
+  unset CSP_OBSERVE
+}
+# csp_score <mutant> <base-flag> <decides> <twins|-> <expected-lines> <all-cells> <base-vector> <message>
+csp_score() {
+  local cells got c
+  cells="$(mx_cells "$6" "$3" "$4")"
+  got="$(for c in $cells; do printf '%s=%s\n' "$c" "$(csp_cell "$c")"; done)"
+  if mx_judge "$1" "$3" "$4" "$got" "$7" "$5"; then
+    mutant_killed "$2" "$1" "$8"
+  else
+    bad "MUTANT $1: deciding [$3] twins [$4] did not behave as recorded:$MX_WHY"
+  fi
+}
+
 # ------------------------------------------------------------- 1. green baseline --
 # Asserted FIRST and positively. Every arm below reads the same output shape, so an
 # assertion that the shape is produced at all has to come before any of them.
 # ONE drive serves four questions about an all-green tree: the baseline, the report order (alpha
 # sleeps so it finishes LAST and must still render first), the green-run CONTROL of arm 2b (bravo
 # is noisy and green: a record naming its token would mean every unit is captured), and the
-# mutant battery's unmutated control. Each question keeps its own assertion.
-T="$WORK/green"; seed "$T" "$HOOK" || broken "seed failed"
-mkdir -p "$T/tests/fixtures/alpha"
-printf '#!/usr/bin/env bash\nsleep 0.9\nexit 0\n' > "$T/tests/fixtures/alpha/run.sh"
-mkfx_noisy "$T" bravo 0 GREENTOKEN; mkfx "$T" charlie 0
-g_rc="$(drive "$T" "$WORK/green.out")"; rc="$g_rc"
+# mutant battery's base vector. Each question keeps its own assertion.
+_f0=$fails
+T="$WORK/green"
+cw_run green "$T" "$HOOK"
+g_rc="$C_RC"; rc="$g_rc"
+BASE_green="$(csp_vec rc rec)"
 g_ret="$(retained_names "$T" | wc -l | tr -d ' ')"
 if [ "$rc" = 0 ] && grep -q 'ok    alpha' "$WORK/green.out" \
                  && grep -q 'ok    bravo' "$WORK/green.out" \
@@ -226,7 +346,10 @@ fi
 # CONTROL, and it is the arm that stops the evidence arms below from passing on a hook that writes
 # the record unconditionally. A green run must leave no record naming this token: without this,
 # `grep CSPTOKEN` would be satisfied by a capture of every unit whether it failed or not, and
-# the selector could be `true`.
+# the selector could be `true`. THE DISCRIMINATING INPUT is the noisy GREEN unit: it prints
+# GREENTOKEN on both streams and exits 0, so a hook that captured every unit (mutant m4) writes
+# the record and names GREENTOKEN, and this arm reads it. alpha's 0.9s sleep only orders the
+# report; it adds no output and no failure, so it cannot make the record appear or vanish.
 if [ "$g_rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null \
    && ! grep -q 'captured output for the failing unit' "$WORK/green.out" \
    && [ "$g_ret" = 0 ]; then
@@ -234,6 +357,7 @@ if [ "$g_rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2
 else
   bad "a green run wrote a failure record, announced one, or retained $g_ret copies (rc=$g_rc) — the capture fires on units that passed"
 fi
+B_green=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # ------------------- 2. a real failure is attributed; 2b/2c its record is kept ------
 # ONE red drive over the arm-2c world (twenty seeded copies, three decoys, one noisy red) serves the
@@ -249,11 +373,11 @@ fi
 # TRACED BY TOKEN, NOT BY EXISTENCE, and both streams are asserted separately: a capture that
 # took stdout and dropped stderr would satisfy a file-exists check and lose the half a shell
 # fixture writes its diagnostics to.
-T="$WORK/retain"; seed "$T" "$HOOK" || broken "seed failed"
-seed_retained "$T" || broken "seeding retained copies failed"
-[ "$(retained_names "$T" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
-mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 CSPTOKEN; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/retain.out")"
+_f0=$fails
+T="$WORK/retain"
+cw_run retain "$T" "$HOOK"
+rc="$C_RC"
+BASE_retain="$(csp_vec rc rec copies shaped oldest h179 keepc cleanc seed19)"
 if [ "$rc" = 1 ] && grep -q 'FAIL  bravo' "$WORK/retain.out" \
                  && grep -q 'ok    alpha' "$WORK/retain.out" \
                  && grep -q 'ok    charlie' "$WORK/retain.out"; then
@@ -309,6 +433,7 @@ fi
 grep -q "retained copy of this run: .git/$R_NEW" "$WORK/retain.out" \
   && ok "the run names its retained copy, so the operator knows which file is this run's" \
   || bad "the red run never named its retained copy"
+B_retain=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # ------------------------------------------------- 3. the empty-suite guard, twice --
 # FORM 1: tests/fixtures exists and the glob matches no directory.
@@ -323,42 +448,47 @@ fi
 # FORM 2: directories exist, none carries a run.sh. This is the form the old loop
 # returned 0 on with no output at all, and it is the likelier one in practice: a
 # half-applied pull, or a fixture set whose drivers were never written.
-T="$WORK/empty2"; seed "$T" "$HOOK" || broken "seed failed"
-mkdir -p "$T/tests/fixtures/alpha" "$T/tests/fixtures/bravo"
-printf 'data\n' > "$T/tests/fixtures/alpha/seed.txt"
-rc="$(drive "$T" "$WORK/empty2.out")"
+_f0=$fails
+cw_run empty "$WORK/empty2" "$HOOK"
+rc="$C_RC"
+BASE_empty="$(csp_vec rc nofix)"
 if [ "$rc" = 1 ] && grep -q 'no fixtures found' "$WORK/empty2.out"; then
   ok "fixture directories with no run.sh FAIL the push (the form that returned 0)"
 else
   bad "driverless fixture directories did not fail (rc=$rc) — a directory nothing drives read exactly like one that passed"
 fi
+B_empty=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # --------------------------------------------- 4. a dropped worker is a FAILURE ----
 # The completeness assertion. Without it the report simply gets SHORTER, and a
 # suite printing two greens where three were expected reads exactly like one that
 # passed — the check-that-cannot-fire class one layer out.
-T="$WORK/drop"; seed "$T" "$HOOK" || broken "seed failed"
-mkfx "$T" alpha 0; mkfx_kill "$T" bravo; mkfx "$T" charlie 0
-rc="$(drive "$T" "$WORK/drop.out")"
+_f0=$fails
+cw_run drop "$WORK/drop" "$HOOK"
+rc="$C_RC"
+BASE_drop="$(csp_vec rc noverdict countline)"
 if [ "$rc" = 1 ] && grep -q 'bravo  (no verdict recorded)' "$WORK/drop.out" \
                  && grep -q 'fixtures produced a verdict' "$WORK/drop.out"; then
-  ok "a worker killed before it records its verdict FAILS as a missing verdict"
+  ok "a worker that dies before it records its verdict FAILS as a missing verdict"
 else
   bad "a dropped worker did not fail (rc=$rc) — the pool lost a job and the suite reported a shorter green"
 fi
+B_drop=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # -------------------------------------------------- 5. the pool really is a pool ---
 # Positive arm: through the shipping default the fixtures observe each other.
-T="$WORK/pool"; seed "$T" "$HOOK" || broken "seed failed"
-export CSP_OBSERVE="$T/observe"; mkdir -p "$CSP_OBSERVE"
-for n in alpha bravo charlie delta; do mkfx_observe "$T" "$n"; done
-rc="$(drive "$T" "$WORK/pool.out")"
+_f0=$fails
+T="$WORK/pool"
+cw_run pool "$T" "$HOOK"
+rc="$C_RC"
+BASE_pool="$(CSP_OBSERVE="$T/observe" csp_vec rc maxpar_ge2)"
 max_par="$(sort -n "$T/observe/../seen" 2>/dev/null | tail -1)"
 if [ "$rc" = 0 ] && [ "${max_par:-0}" -ge 2 ]; then
   ok "four fixtures ran concurrently (max observed in flight: ${max_par:-0})"
 else
   bad "the suite did not run concurrently (rc=$rc, max in flight ${max_par:-0}) — the pool is the whole speed half"
 fi
+B_pool=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 
 # CONTROL for that arm, and it is the one that makes the number above mean something.
 # At AI_DLC_FIXTURE_JOBS=1 the SAME fixtures must observe exactly one in flight. If
@@ -376,11 +506,12 @@ else
 fi
 unset CSP_OBSERVE
 
-
 # =================================================================== MUTANTS =======
 # Each is a COPY of the hook with one arm removed, guarded by `cmp -s` so a sed that
-# matched nothing cannot pass as a mutation. Each asserts a POSITIVE outcome: the
-# mutant goes GREEN on the tree the real hook goes RED on.
+# matched nothing cannot pass as a mutation. Each mutant is driven ONCE on the world its base arm
+# drove, and scored on cells of that drive through matrix.sh: its DECIDING cells must move, its TWIN
+# cells (green under the mutant in the measured matrix) must not, and the kill is emitted only
+# through mutant_killed behind the base arm's same-run pass flag.
 # THE GUARD SETS `MUT` RATHER THAN PRINTING THE PATH, and v0.229.0's knock-out battery
 # is what forced that. Written as `M="$(mut ...)"` the helper ran inside a command
 # SUBSTITUTION, so its `cmp -s` failure message went into `$M` instead of to the report
@@ -400,37 +531,35 @@ mut() {                        # mut <label> <sed-expr>  -> sets MUT, or returns
   MUT="$m"
 }
 
-# UNMUTATED CONTROL, and it runs FIRST. The hook is driven ten times above; if the
-# harness itself were what fails, every mutant below would go green and score a kill
-# it had not earned.
-# The control is read off the green drive in arm 1 (no second drive): an unmutated hook, green on
-# a tree whose report rows are there.
-[ "$g_rc" = 0 ] && grep -q 'ok    alpha' "$WORK/green.out" \
-              && ok "mutant-battery control: the unmutated hook is green on a drivable tree" \
-              || bad "mutant-battery control is RED (rc=$g_rc) — no mutant verdict below is believable"
-
-# M1 — the empty-suite guard removed. The two empty forms must go green.
-# The range takes the WHOLE `if`, not just its body: deleting a conditional's body
-# and leaving the `if`/`fi` produces a syntax error, and a mutant that cannot parse
-# fails for a reason that has nothing to do with the arm under test. Both of this
-# battery's structural mutants were written that way first and both exited 2.
-if mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d'; then M="$MUT"
-  T="$WORK/m1"; seed "$T" "$M" || broken "seed failed"
-  mkdir -p "$T/tests/fixtures/alpha"
-  rc="$(drive "$T" "$WORK/m1.out")"
-  [ "$rc" = 0 ] && ok "M1 without the empty-suite guard a driverless tree PASSES — the guard is what fails it" \
-                || bad "M1 still red (rc=$rc): the empty-suite arm is not what produces that verdict"
+# UNMUTATED CONTROL, and it runs FIRST: an UNMUTATED COPY of the hook, driven on the green world,
+# must reproduce the base vector. If the harness itself were what fails, every mutant below would
+# score a kill it had not earned.
+cp "$HOOK" "$WORK/hook.control" || broken "cannot copy the hook for the unmutated control"
+cw_run green "$WORK/mctl" "$WORK/hook.control"
+if [ "$B_green" = 1 ] && [ "$(csp_vec rc rec)" = "$BASE_green" ] && grep -q 'ok    alpha' "$WORK/mctl.out"; then
+  ok "mutant-battery control: an unmutated copy of the hook, driven on the green world, reproduces the base vector (rc 0, no record) and reports ok alpha"
+else
+  bad "mutant-battery control is RED (rc=$C_RC) — no mutant verdict below is believable"
 fi
 
-# M2 — the completeness assertion removed. The dropped worker must go green.
-if mut m2 '/n_actual" -ne "\$n_expected/,+4d'; then M="$MUT"
-  T="$WORK/m2"; seed "$T" "$M" || broken "seed failed"
-  mkfx "$T" alpha 0; mkfx_kill "$T" bravo
-  rc="$(drive "$T" "$WORK/m2.out")"
-  if [ "$rc" = 1 ] && grep -q 'no verdict recorded' "$WORK/m2.out"; then
-    ok "M2 the per-fixture 'no verdict recorded' line is a SECOND, independent arm on the same failure"
+# M1 — the empty-suite guard removed. The driverless tree must go green.
+# The range takes the WHOLE `if`, not just its body: deleting a conditional's body
+# and leaving the `if`/`fi` produces a syntax error, and a mutant that cannot parse
+# fails for a reason that has nothing to do with the arm under test.
+if mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d'; then
+  cw_run empty "$WORK/m1" "$MUT"
+  csp_score m1 "$B_empty" "rc,nofix" "-" $'rc=0\nnofix=no' "rc,nofix" "$BASE_empty" \
+    "M1 without the empty-suite guard a driverless tree PASSES and the message is gone — the guard is what fails it"
+fi
+
+# m2 — the completeness assertion removed. THIS IS A CONTROL, NOT A MUTANT: the dropped worker still
+# FAILS, because the per-fixture line detects it first. Its surviving state is the point.
+if mut m2 '/n_actual" -ne "\$n_expected/,+4d'; then
+  cw_run drop "$WORK/m2" "$MUT"
+  if [ "$B_drop" = 1 ] && [ "$C_RC" = 1 ] && [ "$(csp_cell noverdict)" = yes ] && [ "$(csp_cell countline)" = no ]; then
+    ok "CONTROL m2 with the count assertion removed the dropped worker still FAILS at rc=1 and the per-fixture 'no verdict recorded' line is still present while the 'fixtures produced a verdict' count line is absent — the count is a magnitude statement and the per-fixture line is the second, independent detector"
   else
-    bad "M2 dropped-worker detection collapsed to a single arm (rc=$rc) — removing the count assertion should leave the per-fixture line"
+    bad "CONTROL m2 dropped-worker detection collapsed (rc=$C_RC, noverdict $(csp_cell noverdict), countline $(csp_cell countline)) — removing the count assertion should leave the per-fixture line"
   fi
 fi
 
@@ -453,28 +582,17 @@ fi
 #      magnitude statement, not an independent detector — and the hook's comment
 #      claiming "the count is asserted rather than assumed" is corrected in both
 #      hooks to say which of the two does the detecting.
-if mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d'; then M="$MUT"
-  T="$WORK/m2b"; seed "$T" "$M" || broken "seed failed"
-  mkfx "$T" alpha 0; mkfx_kill "$T" bravo
-  rc="$(drive "$T" "$WORK/m2b.out")"
-  if [ "$rc" = 1 ] && ! grep -q 'no verdict recorded' "$WORK/m2b.out" \
-                   && ! grep -q 'fixtures produced a verdict' "$WORK/m2b.out"; then
-    ok "M2b without the per-fixture arm a lost worker is MISREPORTED as a failing fixture, and the count assertion stays silent — so the count cannot fire alone"
-  else
-    bad "M2b did not behave as measured (rc=$rc) — re-derive which arm detects a dropped worker before trusting either comment"
-  fi
+if mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d'; then
+  cw_run drop "$WORK/m2b" "$MUT"
+  csp_score m2b "$B_drop" "noverdict,countline" "rc" $'rc=1\nnoverdict=no\ncountline=no' "rc,noverdict,countline" "$BASE_drop" \
+    "M2b without the per-fixture arm a lost worker is MISREPORTED as a failing fixture and the count assertion stays silent — so the count cannot fire alone"
 fi
 
 # M3 — the pool removed. The concurrency observation must collapse to 1.
-if mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|'; then M="$MUT"
-  T="$WORK/m3"; seed "$T" "$M" || broken "seed failed"
-  export CSP_OBSERVE="$T/observe"; mkdir -p "$CSP_OBSERVE"
-  for n in alpha bravo charlie delta; do mkfx_observe "$T" "$n"; done
-  rc="$(drive "$T" "$WORK/m3.out")"
-  m3max="$(sort -n "$T/observe/../seen" 2>/dev/null | tail -1)"
-  [ "${m3max:-0}" = 1 ] && ok "M3 with the pool width pinned to 1 the fixtures no longer overlap — the pool is what produces the overlap" \
-                        || bad "M3 still overlapped (max ${m3max:-0}) — the concurrency arm is not measuring the pool"
-  unset CSP_OBSERVE
+if mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|'; then
+  cw_run pool "$WORK/m3" "$MUT"
+  csp_score m3 "$B_pool" "maxpar_ge2" "rc" $'maxpar_ge2=no' "rc,maxpar_ge2" "$BASE_pool" \
+    "M3 with the pool width pinned to 1 the fixtures no longer overlap — the pool is what produces the overlap"
 fi
 
 # M4 — the failure record's SELECTOR removed, so every unit is written out whether it
@@ -482,97 +600,57 @@ fi
 # absence passes against a hook that wrote no record at all — the same shape assertion 2's
 # mutant exists for in `layer-debt-ledger`. This is the arm that makes that control mean
 # "only red units are captured" rather than "something did not happen".
-if mut m4 '/= ok \] && continue/d'; then M="$MUT"
-  T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 0 M4TOKEN
-  rc="$(drive "$T" "$WORK/m4.out")"
-  if [ "$rc" = 0 ] && grep -q 'M4TOKEN-stdout' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null; then
-    ok "M4 without the verdict selector a GREEN unit is captured too — so the control is what proves only red units are"
-  else
-    bad "M4 the green unit was still not captured (rc=$rc) — arm 2b's green-run control passes whatever the selector does, and proves nothing"
-  fi
+if mut m4 '/= ok \] && continue/d'; then
+  cw_run green "$WORK/m4" "$MUT"
+  csp_score m4 "$B_green" "rec" "rc" $'rec=yes' "rc,rec" "$BASE_green" \
+    "M4 without the verdict selector a GREEN unit is captured too — so the control is what proves only red units are"
 fi
 
 # RETENTION MUTANTS. Each drives the arm-2c world -- twenty seeds, two decoys, one red -- and
-# asserts the observable its own removal PRODUCES, never the absence of arm 2c's message.
+# is scored on the observable its own removal PRODUCES, never the absence of arm 2c's message.
 #
 # retain-off — the copy statement deleted. The primary record must still carry the token (so
 # the run did go red and record) while no stamped copy appears.
-if mut retain-off '/cp "\$FAILLOG_RECORD" "\$fl_copy"/d'; then M="$MUT"
-  T="$WORK/retain-off"; seed "$T" "$M" || broken "seed failed"
-  seed_retained "$T" || broken "seeding retained copies failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 ROFFTOKEN
-  rc="$(drive "$T" "$WORK/retain-off.out")"
-  n="$(new_retained "$T" | grep -c .)" || n=0
-  if [ "$rc" = 1 ] && grep -q 'ROFFTOKEN-stdout' "$T/.git/ai-dlc-fixture-failures" && [ "$n" = 0 ]; then
-    ok "retain-off without the copy a red run records only the overwritable primary — the copy statement is what retains"
-  else
-    bad "retain-off did not behave as a removed copy (rc=$rc, new copies $n)"
-  fi
+if mut retain-off '/cp "\$FAILLOG_RECORD" "\$fl_copy"/d'; then
+  cw_run retain "$WORK/retain-off" "$MUT"
+  csp_score retain-off "$B_retain" "copies" "rec,shaped" $'copies=0' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+    "retain-off without the copy a red run records only the overwritable primary — the copy statement is what retains"
 fi
 
 # retain-fixed-name — every run copies to ONE name, the overwrite this release exists to stop.
 # The fixed name is a seed's, so the overwrite is visible as that seed's content changing.
-if mut retain-fixed-name 's|fl_copy="\$GITDIR/ai-dlc-fixture-failures\.\$fl_stamp\.\$\$"|fl_copy="$GITDIR/ai-dlc-fixture-failures.20000101T000019Z.1"|'; then M="$MUT"
-  T="$WORK/retain-fixed"; seed "$T" "$M" || broken "seed failed"
-  seed_retained "$T" || broken "seeding retained copies failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 RFIXTOKEN
-  rc="$(drive "$T" "$WORK/retain-fixed.out")"
-  n="$(new_retained "$T" | grep -c .)" || n=0
-  if [ "$rc" = 1 ] && grep -q 'RFIXTOKEN-stdout' "$T/.git/ai-dlc-fixture-failures.20000101T000019Z.1" && [ "$n" = 0 ]; then
-    ok "retain-fixed-name with one fixed copy name the earlier record is OVERWRITTEN — the per-run stamp is what keeps both"
-  else
-    bad "retain-fixed-name did not overwrite the earlier record (rc=$rc, new copies $n)"
-  fi
+if mut retain-fixed-name 's|fl_copy="\$GITDIR/ai-dlc-fixture-failures\.\$fl_stamp\.\$\$"|fl_copy="$GITDIR/ai-dlc-fixture-failures.20000101T000019Z.1"|'; then
+  cw_run retain "$WORK/retain-fixed" "$MUT"
+  csp_score retain-fixed-name "$B_retain" "copies,seed19" "rec,h179" $'copies=0\nseed19=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+    "retain-fixed-name with one fixed copy name the earlier record is OVERWRITTEN — the per-run stamp is what keeps both"
 fi
 
 # prune-off — the prune loop deleted whole (six lines, so the body still parses). Twenty-one
 # shaped copies must remain, the oldest seed among them.
-if mut prune-off '/^    for fl_f in "\$GITDIR"/,+5d'; then M="$MUT"
-  T="$WORK/prune-off"; seed "$T" "$M" || broken "seed failed"
-  seed_retained "$T" || broken "seeding retained copies failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 POFFTOKEN
-  rc="$(drive "$T" "$WORK/prune-off.out")"
-  n="$(retained_names "$T" | wc -l | tr -d ' ')"
-  if [ "$rc" = 1 ] && [ "$n" = 21 ] && [ -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1" ]; then
-    ok "prune-off without the prune the twenty-first copy is kept too — the prune is what bounds retention"
-  else
-    bad "prune-off did not leave 21 shaped copies (rc=$rc, shaped $n)"
-  fi
+if mut prune-off '/^    for fl_f in "\$GITDIR"/,+5d'; then
+  cw_run retain "$WORK/prune-off" "$MUT"
+  csp_score prune-off "$B_retain" "shaped,oldest" "copies,rec" $'shaped=21\noldest=yes' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+    "prune-off without the prune the twenty-first copy is kept too — the prune is what bounds retention"
 fi
 
 # prune-glob-wide — the anchored pattern widened to `ai-dlc-fixture-failures.*`. Under name
 # order the hand-saved `.179.1` sorts below every stamped copy and is the first thing a
 # wide prune deletes; that deletion is this mutant's observable. `.clean` sorts above them and
 # survives even here, which is why it cannot be the arm that kills this mutant.
-if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\[0-9\]\*Z\.\*|ai-dlc-fixture-failures.*|'; then M="$MUT"
-  T="$WORK/prune-wide"; seed "$T" "$M" || broken "seed failed"
-  seed_retained "$T" || broken "seeding retained copies failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 PWIDETOKEN
-  rc="$(drive "$T" "$WORK/prune-wide.out")"
-  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.179.1" ] \
-     && [ "$(cat "$T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ]; then
-    ok "prune-glob-wide with the pattern widened a hand-saved record is DELETED — the anchor is what protects it"
-  else
-    bad "prune-glob-wide did not delete the low-sorting hand-saved record (rc=$rc)"
-  fi
+if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\[0-9\]\*Z\.\*|ai-dlc-fixture-failures.*|'; then
+  cw_run retain "$WORK/prune-wide" "$MUT"
+  csp_score prune-glob-wide "$B_retain" "h179" "cleanc,rec" $'h179=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+    "prune-glob-wide with the pattern widened a hand-saved record is DELETED — the anchor is what protects it"
 fi
 
 # prune-suffix-unanchored — the end anchor (the all-digit last-field `case`) deleted. The
 # `.1.keep` decoy then passes the glob, sorts between the two oldest seeds, and is pruned
 # with the oldest one.
 # `.179.1` still survives here, which is why it cannot be the arm that kills this mutant.
-if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then M="$MUT"
-  T="$WORK/prune-suffix"; seed "$T" "$M" || broken "seed failed"
-  seed_retained "$T" || broken "seeding retained copies failed"
-  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 PSUFTOKEN
-  rc="$(drive "$T" "$WORK/prune-suffix.out")"
-  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1.keep" ] \
-     && [ "$(cat "$T/.git/ai-dlc-fixture-failures.179.1" 2>/dev/null)" = OPERATOR-179 ]; then
-    ok "prune-suffix-unanchored without the end anchor a .keep copy is DELETED — the all-digit last field is what protects it"
-  else
-    bad "prune-suffix-unanchored did not delete the .1.keep decoy (rc=$rc)"
-  fi
+if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then
+  cw_run retain "$WORK/prune-suffix" "$MUT"
+  csp_score prune-suffix-unanchored "$B_retain" "keepc" "h179,cleanc" $'keepc=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+    "prune-suffix-unanchored without the end anchor a .keep copy is DELETED — the all-digit last field is what protects it"
 fi
 
 # ================================================ 7. NO-PROGRESS REFUSAL (BL-606) ===
@@ -678,6 +756,7 @@ st_alive() {
 }
 st_refused() { grep -q "REFUSED  $2  (no progress for $ST polls; a refusal costs a re-run, never a verdict)" "$1"; }
 
+_fs=$fails
 T="$WORK/stall"; st_world "$T" "$HOOK" h p s w g gh f
 rc="$(st_drive "$T" "$WORK/stall.out")"
 # SEED VALIDITY FIRST: (gh)'s grandchild must really sit in another group, or the kill arm below
@@ -689,7 +768,7 @@ h_live="$(st_alive "$T" h)"; gh_live="$(st_alive "$T" gh)"; p_live="$(st_alive "
 if st_refused "$WORK/stall.out" h && [ "$h_live" = 0 ]; then
   ok "(h) a hung unit is REFUSED and every member of its tree it recorded, the grandchild sleep included, is gone"
 else
-  bad "(h) a hung unit was not refused with its whole tree killed (rc=$rc, live recorded members $h_live): $(grep ' h' "$WORK/stall.out" | tr '\n' ' ')"
+  bad "(h) a hung unit was not refused with its whole tree reaped (rc=$rc, live recorded members $h_live): $(grep ' h' "$WORK/stall.out" | tr '\n' ' ')"
 fi
 if st_refused "$WORK/stall.out" p && [ "$p_live" = 0 ]; then
   ok "(p) a polling loop that writes nothing is REFUSED -- fresh pids and CPU ticks are not progress"
@@ -707,14 +786,14 @@ else
   bad "(w) a unit whose only progress is under its watched root was not ok: $(grep ' w' "$WORK/stall.out" | tr '\n' ' ')"
 fi
 if st_refused "$WORK/stall.out" g && [ "$g_live" = 0 ]; then
-  ok "(g) silent computation in a cross-group grandchild is REFUSED, by design, and its tree is killed"
+  ok "(g) silent computation in a cross-group grandchild is REFUSED, by design, and its tree is reaped"
 else
-  bad "(g) a silent CPU-only unit was not refused and killed (live recorded members $g_live)"
+  bad "(g) a silent CPU-only unit was not refused and reaped (live recorded members $g_live)"
 fi
 if st_refused "$WORK/stall.out" gh && [ "$gh_live" = 0 ]; then
-  ok "(gh) an idle cross-group grandchild is REFUSED and its group is killed"
+  ok "(gh) an idle cross-group grandchild is REFUSED and its group is reaped"
 else
-  bad "(gh) a hung cross-group grandchild was not refused and killed (live recorded members $gh_live)"
+  bad "(gh) a hung cross-group grandchild was not refused and reaped (live recorded members $gh_live)"
 fi
 if [ "$rc" = 1 ] && grep -q '^   FAIL  f$' "$WORK/stall.out" && ! st_refused "$WORK/stall.out" f; then
   ok "(f) a unit that exits 1 is FAIL, not REFUSED, and a real FAIL beside a refusal exits 1"
@@ -733,8 +812,30 @@ else
   bad "a lone refusal did not exit 2 (rc=$rc, live recorded members $h2_live)"
 fi
 
+# THE STALL DRIVE'S BASE VECTOR, read off the drives above in THIS run: every stall mutant is scored
+# against these values, never against constants. `alpha` is a plain green unit each mutant world
+# also carries; it is the twin cell that stays at `ok` under every stall mutant.
+B_stall=$([ "$fails" = "$_fs" ] && echo 1 || echo 0)
+S2_RC="$rc"
+stv() { awk -v u="$2" '$1 ~ /^(ok|FAIL|REFUSED)$/ && $2 == u { print $1; f = 1; exit } END { if (!f) print "none" }' "$1"; }
+BASE_stall="v_h=$(stv "$WORK/stall.out" h)
+v_p=$(stv "$WORK/stall.out" p)
+v_s=$(stv "$WORK/stall.out" s)
+v_w=$(stv "$WORK/stall.out" w)
+v_gh=$(stv "$WORK/stall.out" gh)
+v_alpha=$(stv "$WORK/stall2.out" alpha)
+rc=$S2_RC
+live_h=$h_live
+live_gh=$gh_live"
+st_mrun() {                    # st_mrun <tag> <hook> <stubs...> : the stub world plus a green alpha, driven once
+  local t="$WORK/$1" h="$2"; shift 2
+  st_world "$t" "$h" "$@"
+  mkfx "$t" alpha 0
+  csp_load "$t" "$(st_drive "$t" "$t.out")" "$t.out"
+}
+
 # MUTANTS of the refusal, each a copy of the RESOLVED hook, applied by exact-string replacement and
-# guarded by `cmp -s`; each asserts the observable its own removal produces.
+# guarded by `cmp -s`; each is driven once on its own stub world and scored on that drive's cells.
 mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT, or returns 1
   local m="$WORK/hook.$1" src="${4:-$HOOK}"
   OLD="$2" NEW="$3" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$src" > "$m.t" \
@@ -744,55 +845,45 @@ mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT
 }
 # st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
 if mutx st-a 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$wr" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
-  T="$WORK/st-a"; st_world "$T" "$MUT" s
-  rc="$(st_drive "$T" "$WORK/st-a.out")"; st_alive "$T" s >/dev/null
-  st_refused "$WORK/st-a.out" s && ok "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive" \
-                                || bad "st-a (s) was not refused with the log dropped from the signature (rc=$rc)"
+  st_mrun st-a "$MUT" s
+  csp_score st-a "$B_stall" "v_s" "v_alpha" $'v_s=REFUSED' "v_s,v_alpha" "$BASE_stall" \
+    "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive"
 fi
 # st-w: the signature ignores the watched root, so (w), whose only progress is under it, is refused.
 if mutx st-w 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
-  T="$WORK/st-w"; st_world "$T" "$MUT" w
-  rc="$(st_drive "$T" "$WORK/st-w.out")"; st_alive "$T" w >/dev/null
-  st_refused "$WORK/st-w.out" w && ok "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive" \
-                                || bad "st-w (w) was not refused with the watched root dropped from the signature (rc=$rc)"
+  st_mrun st-w "$MUT" w
+  csp_score st-w "$B_stall" "v_w" "v_alpha" $'v_w=REFUSED' "v_w,v_alpha" "$BASE_stall" \
+    "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive"
 fi
 # st-cpu: the signature counts the tree's CPU and membership again, so (p) is never still and runs
 # to its own exit 0 -- ok, not refused.
 if mutx st-cpu '          if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi' '          cur="$cur;$wsig"; if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi'; then
-  T="$WORK/st-cpu"; st_world "$T" "$MUT" p
-  rc="$(st_drive "$T" "$WORK/st-cpu.out")"; st_alive "$T" p >/dev/null
-  grep -q '^   ok    p$' "$WORK/st-cpu.out" && ok "st-cpu with CPU and membership back in the signature a polling loop is never refused -- bytes alone are what refuse (p)" \
-                                         || bad "st-cpu (p) was still refused with CPU in the signature (rc=$rc)"
+  st_mrun st-cpu "$MUT" p
+  csp_score st-cpu "$B_stall" "v_p" "v_alpha" $'v_p=ok' "v_p,v_alpha" "$BASE_stall" \
+    "st-cpu with CPU and membership back in the signature a polling loop is never refused -- bytes alone are what refuse (p)"
 fi
 # st-b: the refusal writes FAIL, so (h) reads FAIL and the push exits 1, not 2.
 if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_OUT/$b"'; then
-  T="$WORK/st-b"; st_world "$T" "$MUT" h
-  rc="$(st_drive "$T" "$WORK/st-b.out")"; st_alive "$T" h >/dev/null
-  if [ "$rc" = 1 ] && grep -q '^   FAIL  h$' "$WORK/st-b.out" && ! st_refused "$WORK/st-b.out" h; then
-    ok "st-b a refusal written as FAIL reads as a red verdict at exit 1 -- the REFUSED record is what keeps it out of the verdicts"
-  else
-    bad "st-b the refusal-as-FAIL mutant did not read FAIL at 1 (rc=$rc)"
-  fi
+  st_mrun st-b "$MUT" h
+  csp_score st-b "$B_stall" "v_h,rc" "v_alpha" $'v_h=FAIL\nrc=1' "v_h,v_alpha,rc" "$BASE_stall" \
+    "st-b a refusal written as FAIL reads as a red verdict at exit 1 -- the REFUSED record is what keeps it out of the verdicts"
 fi
 # st-c: the kill covers the leader pid only (both the tree kill and the unit's own group kill go), so
 # (h)'s grandchild sleep survives. Two anchors on two lines, each guarded.
 if mutx st-c1 '            pool_kill "$pid" "$self" "$kp" "$kg"' '            kill -KILL "$pid"' \
    && mutx st-c '            kill -KILL -- "-$pid" 2>/dev/null' '            :' "$MUT"; then
-  T="$WORK/st-c"; st_world "$T" "$MUT" h
-  rc="$(st_drive "$T" "$WORK/st-c.out")"; c_live="$(st_alive "$T" h)"
-  [ "${c_live:-0}" != none ] && [ "${c_live:-0}" -ge 1 ] \
-    && ok "st-c killing the leader pid alone leaves $c_live recorded member(s) of (h)'s tree alive -- the tree kill is what reaps them" \
-    || bad "st-c with the leader-only kill no recorded member of (h) survived ($c_live) -- the arm cannot see a partial kill"
+  st_mrun st-c "$MUT" h
+  csp_score st-c "$B_stall" "live_h" "v_h,v_alpha" "" "v_h,v_alpha,live_h" "$BASE_stall" \
+    "st-c killing the leader pid alone leaves recorded member(s) of (h)'s tree alive -- the tree kill is what reaps them"
 fi
 # st-d: the walk stays in the leader's group, so (gh)'s grandchild, in a group of its own, is never
 # reached by the kill and survives the refusal.
 if mutx st-d '} else if ((pp[i] in T) || (pg[i] in G)) { T[pid[i]] = 1; c = 1 }' '} else if (pg[i] == root) { T[pid[i]] = 1; c = 1 }'; then
-  T="$WORK/st-d"; st_world "$T" "$MUT" gh
-  rc="$(st_drive "$T" "$WORK/st-d.out")"; d_live="$(st_alive "$T" gh)"
-  st_refused "$WORK/st-d.out" gh && [ "${d_live:-0}" != none ] && [ "${d_live:-0}" -ge 1 ] \
-    && ok "st-d a walk confined to the leader's group leaves (gh)'s cross-group grandchild alive -- the cross-group walk is what kills it" \
-    || bad "st-d (gh) was not refused with its grandchild surviving under a leader-group walk (rc=$rc, live $d_live)"
+  st_mrun st-d "$MUT" gh
+  csp_score st-d "$B_stall" "live_gh" "v_gh,v_alpha" $'v_gh=REFUSED' "v_gh,v_alpha,live_gh" "$BASE_stall" \
+    "st-d a walk confined to the leader's group leaves (gh)'s cross-group grandchild alive -- the cross-group walk is what reaps it"
 fi
+
 # THE WATCHER DIES WITH ITS WORKER. The hook's worker body is extracted and run as a lone worker over
 # one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
 # (`.pr/<unit>.w`) must be gone within POOL_STALL polls, and so must every pid the stub recorded: a
@@ -830,19 +921,27 @@ st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> 
   [ -z "$SB" ] || [ -s "$SB/refused" ] || { echo BROKEN; return; }
   echo "$wl $ul"
 }
+
+orph_m() {                     # orph_m <tag> <hook> [<stub-dir> [alive]] -> loads C_WL C_UL, or refuses a BROKEN extraction
+  local o
+  o="$(st_orphan "$2" "$1" "${3-}" "${4-}")"
+  case "$o" in BROKEN|"") bad "MUTANT $1: the extracted worker did not run ($o) -- no verdict below is believable"; return 1 ;; esac
+  read -r C_WL C_UL <<<"$o"
+}
+_f0=$fails
 o="$(st_orphan "$HOOK" fix)"
 case "$o" in
   BROKEN) bad "orphan arm: the extracted worker recorded no live watcher pid -- the arm cannot read its subject" ;;
   "0 0") ok "a SIGKILLed worker's watcher exits within POOL_STALL polls and takes the unit's tree with it" ;;
   *) bad "a SIGKILLed worker left its watcher or unit alive (watcher-left unit-left: $o)" ;;
 esac
+B_orph=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+BASE_orph="wl=${o%% *}
+ul=${o##* }"
 # st-e: the watcher's worker-liveness check removed, so it outlives the worker.
-if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :'; then
-  o="$(st_orphan "$MUT" st-e "" alive)"
-  case "$o" in
-    "1 "*) ok "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it" ;;
-    *) bad "st-e the watcher did not outlive its worker with the liveness check removed ($o)" ;;
-  esac
+if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :' && orph_m st-e "$MUT" "" alive; then
+  csp_score st-e "$B_orph" "wl,ul" "-" $'wl=1' "wl,ul" "$BASE_orph" \
+    "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it"
 fi
 # THE EMPTY-SELF PATH KILLS THE UNIT'S GROUP TOO (BL-677). A stub `ps` that FAILS on `-p` (and records that
 # it did) leaves the worker's `self` empty, so the watcher's worker-death `pool_kill` takes its guard path,
@@ -853,21 +952,25 @@ SP="$WORK/ps-stub"; mkdir -p "$SP"
 PS_REAL="$(command -v ps)" || broken "no ps on PATH to wrap"
 printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = -p ] && { printf "%%s\\n" "$*" >> "%s/refused"; exit 1; }; done\nexec "%s" "$@"\n' "$SP" "$PS_REAL" > "$SP/ps"
 chmod +x "$SP/ps"
+_f0=$fails
 o="$(st_orphan "$HOOK" eself "$SP")"
 case "$o" in
   BROKEN) bad "empty-self arm: the stubbed worker recorded no watcher, or the stub never refused a -p lookup -- self was not shown empty" ;;
   "0 0") ok "with self empty (ps fails on -p) a SIGKILLed worker's watcher still kills the unit's whole group, its child included" ;;
   *) bad "with self empty a SIGKILLed worker left its watcher or a unit group member alive (watcher-left unit-left: $o)" ;;
 esac
+B_eself=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+BASE_eself="wl=${o%% *}
+ul=${o##* }"
 # st-g: the empty-self guard kills the recorded pid alone, so the unit's child survives the worker's death.
 if mutx st-g '[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
   : > "$SP/refused"
-  o="$(st_orphan "$MUT" st-g "$SP" alive)"
-  case "$o" in
-    "0 "[1-9]*) ok "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it" ;;
-    *) bad "st-g the unit's child did not survive with the empty-self guard's group kill removed ($o)" ;;
-  esac
+  if orph_m st-g "$MUT" "$SP" alive; then
+    csp_score st-g "$B_eself" "ul" "wl" "" "wl,ul" "$BASE_eself" \
+      "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it"
+  fi
 fi
+
 # THE IN-POOL TRACE SITE WATCHES THE TRACED FIXTURE'S OWN OUTPUT, AND NOT THE STREAM CAPTURE BESIDE IT.
 # There the unit is the deriver, which writes the fixture's output to `$WORK/<fx>.log` under the trace root
 # (outside the watched root; the pool log gets only say-lines) and its `log stream` capture to
@@ -912,32 +1015,49 @@ FX
   [ -s "$R/pids" ] || { echo BROKEN; return; }
   cat "$R/out/u" 2>/dev/null || echo none
 }
-v="$(st_trace "$HOOK" t t)"
-[ "$v" = ok ] && ok "(t) a traced unit whose only progress is the fixture's output under the trace root is ok, not refused" \
-              || bad "(t) a traced unit progressing only through its output was not ok (verdict $v)"
-v="$(st_trace "$HOOK" r r)"
-[ "$v" = REFUSED ] && ok "(r) a traced unit whose only growth is the stream capture (.raw) is REFUSED -- stream reports are not progress" \
-                   || bad "(r) a traced unit growing only its .raw was not refused (verdict $v) -- a hung traced unit would never be refused"
+_f0=$fails
+v_t="$(st_trace "$HOOK" t t)"
+[ "$v_t" = ok ] && ok "(t) a traced unit whose only progress is the fixture's output under the trace root is ok, not refused" \
+              || bad "(t) a traced unit progressing only through its output was not ok (verdict $v_t)"
+v_r="$(st_trace "$HOOK" r r)"
+[ "$v_r" = REFUSED ] && ok "(r) a traced unit whose only growth is the stream capture (.raw) is REFUSED -- stream reports are not progress" \
+                   || bad "(r) a traced unit growing only its .raw was not refused (verdict $v_r) -- a hung traced unit would never be refused"
+B_trace=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
+BASE_trace="tv=$v_t
+rv=$v_r"
 # st-x: the trace site does not watch the fixture's output, so (t) is REFUSED -- the defect itself.
 if mutx st-x '; wx="$tr/w/$b.log"' ''; then
-  v="$(st_trace "$MUT" st-x t)"
-  [ "$v" = REFUSED ] && ok "st-x without the fixture's output watched a traced output-only unit is REFUSED -- the watch is what keeps (t) alive" \
-                     || bad "st-x (t) was not refused with the trace-site watch removed (verdict $v)"
+  C_HOOK="$MUT"; C_TAG=st-x
+  csp_score st-x "$B_trace" "tv" "rv" $'tv=REFUSED' "tv,rv" "$BASE_trace" \
+    "st-x without the fixture's output watched a traced output-only unit is REFUSED -- the watch is what keeps (t) alive"
 fi
 # st-r: the watch widened to the whole work dir takes in the .raw, so (r) is never refused.
 if mutx st-r 'wx="$tr/w/$b.log"' 'wx="$tr/w"'; then
-  v="$(st_trace "$MUT" st-r r)"
-  [ "$v" = ok ] && ok "st-r with the whole work dir watched a .raw-only unit is never refused -- watching the .log alone is what refuses (r)" \
-                || bad "st-r (r) was still refused with the work dir watched (verdict $v)"
+  C_HOOK="$MUT"; C_TAG=st-r
+  csp_score st-r "$B_trace" "rv" "tv" $'rv=ok' "tv,rv" "$BASE_trace" \
+    "st-r with the whole work dir watched a .raw-only unit is never refused -- watching the .log alone is what refuses (r)"
 fi
 unset CSP_PIDS CSP_FIFO CSP_STALL
+
+# ------------------------------------------------------- the matrix machinery itself ---
+mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \
+         || bad "matrix machinery probe FAILED: the judge cannot tell a kill from a survivor, so no mutant verdict above is believable"
+# A PLAIN run executes no matrix-only cell: only a --matrix run evaluates cells beyond decides+twins.
+if [ "$MATRIX" = 1 ]; then
+  [ "$MX_EXTRA" -gt 0 ] && ok "matrix mode evaluated $MX_EXTRA cells beyond the deciding and twin cells" \
+                        || bad "matrix mode evaluated no extra cell -- the matrix flag is not reaching the judge"
+else
+  [ "$MX_EXTRA" = 0 ] && ok "a plain run executes no matrix-only cell (0 cells beyond decides+twins) -- only --matrix measures the full matrix" \
+                      || bad "a plain run evaluated $MX_EXTRA matrix-only cells -- the matrix is running on every push"
+fi
+
 
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=50
+EXPECTED_ASSERTIONS=52
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

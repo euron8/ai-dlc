@@ -17,7 +17,6 @@ backlog-rotate-fence-guard
 budget-summary-verdict
 ci-gates-resolution
 claude-rules-joins
-consumer-suite-pool
 context-mode-protect
 core-paths-audit-diff
 decl-reasons
