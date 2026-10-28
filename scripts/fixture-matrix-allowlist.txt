@@ -12,16 +12,10 @@ answer-handoff-routing	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-drift-after-write	no MUTANT-MATRIX block; floor: S1 v2d_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-machinery-stamp	no MUTANT-MATRIX block; floor: S1 mutdir(),S2 cmp -s + mutant
 apply-relabel-noop-row	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-apply-restamp-theirs	no MUTANT-MATRIX block; floor: S1 ss_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-restamp-worklist	no MUTANT-MATRIX block; floor: S1 mut_apply(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 apply-self-overwrite	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 apply-setup-sited-merge	no MUTANT-MATRIX block; floor: S1 mut_new(),S2 cmp -s + mutant
-artifact-derivations	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-artifact-section-heading-level	no MUTANT-MATRIX block; floor: S1 ss_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-backlog-receipt-binding	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-backlog-rotate-fence-guard	no MUTANT-MATRIX block; floor: S1 mutate_either(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 bmad-invocation-resolve	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-budget-summary-verdict	no MUTANT-MATRIX block; floor: S1 mut_flag(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 changelog-sprint-slot	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 check-17-bypass	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 check-22-spawn-ledger	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKC mutant_killed caller
@@ -32,7 +26,6 @@ claude-rules-joins	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 command-args-citation	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 consolidation-residue	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 consumer-machinery-inventory	no MUTANT-MATRIX block; floor: S1 mut_reds(),S2 cmp -s + mutant
-consumer-suite-pool	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 context-mode-protect	no MUTANT-MATRIX block; floor: S1 mkmut9d(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 context-provenance	no MUTANT-MATRIX block; floor: S1 mutlib(),S2 cmp -s + mutant
 context-sensor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
@@ -43,25 +36,20 @@ decl-reasons	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA muta
 deploy-validate-smoke-classification	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 derivation-capture	no MUTANT-MATRIX block; floor: S1 sup_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 derivation-capture-worktree-root	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-dispatch-model-guard	no MUTANT-MATRIX block; floor: S1 cc_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-dist-clone	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
+dist-clone	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKC mutant_killed caller
 divergence-hard-block	no MUTANT-MATRIX block; floor: S1 pend_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 emit-report-refusal	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-enforcement-map-derivations	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 enforcement-map-yaml-plain	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 escalation-citation	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
-escalation-delivery	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 escalation-status-vocabulary	no MUTANT-MATRIX block; floor: S1 mut_prog(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 extension-check-adoption	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 extract-push-flag-decision	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 fanout-payload-channel	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-file-mtime	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 fixture-drivability	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 gate-adjudication	no MUTANT-MATRIX block; floor: S1 cv_mutdir(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 gate-adjudication-rotate	no MUTANT-MATRIX block; floor: S1 mut_replace(),S2 cmp -s + mutant
 gate-remediation-deny	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 gate-repair-record	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-gate-series-rung	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKC mutant_killed caller
 gate-verdict-grep-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 h2-attest-scripts-dir	no MUTANT-MATRIX block; floor: S1 mut_sub(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 handoff-completion-assertion	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
@@ -70,30 +58,23 @@ hermetic-consumption	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant
 hook-registration-join	no MUTANT-MATRIX block; floor: S1 apply_mut(),S2 cmp -s + mutant
 implementation-join-yield	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant
 inflight-row-shape	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-invariant-index	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-absorption-retire	no MUTANT-MATRIX block; floor: S1 b376_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-anchor-declaration	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 layer-artifact-path-prescriptions	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 layer-catalog-collision	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-layer-conforms-to	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-layer-contract-conformance	no MUTANT-MATRIX block; floor: S1 mutant_fires(),S2 cmp -s + mutant
 layer-crosswalk-home	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-debt-due-and-discharge	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-debt-ledger	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 layer-entry-unreadable	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-extends-grain	no MUTANT-MATRIX block; floor: S1 mk_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-layer-qualifier-grain	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-layer-reference-resolution	no MUTANT-MATRIX block; floor: S1 mk_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-retired-id-crosswalk	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 layer-title-join	no MUTANT-MATRIX block; floor: S1 e20mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-ledger-reverify-dist-only-reach	no MUTANT-MATRIX block; floor: S1 mut_line(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 ledger-reverify-unfalsifiable	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 ledger-rotate	no MUTANT-MATRIX block; floor: S1 mk_hist_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 mandatory-rules-skip-accounting	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 mandatory-rules-snapshot-position	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 mutation-red-replay	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 operator-request-capture	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-path-mapping-render	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 pause-hook-origin	no MUTANT-MATRIX block; floor: S1 b_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 plan-rotate	no MUTANT-MATRIX block; floor: S1 mutant_root(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 plan-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
@@ -101,18 +82,10 @@ post-write-gates	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MK
 postcompact-rulebook-recovery	no MUTANT-MATRIX block; floor: S1 mutant_arm(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 preclassify-mode-bucket	no MUTANT-MATRIX block; floor: S1 run_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 preclassify-rename-row	no MUTANT-MATRIX block; floor: S1 b308_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-predicate-reclassification	no MUTANT-MATRIX block; floor: S1 mut11(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-pregate-self-check	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-prepush-ssh-keepalive	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-prepush-worktree-env-scrub	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 process-rule-pins	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 procsub-staged-refusal	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 procsub-staged-refusal-boot	no MUTANT-MATRIX block; floor: S1 mutbad(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-provenance-flagless-default	no MUTANT-MATRIX block; floor: S1 mut_tree(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 provenance-not-accessible	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-push-drain-refusals	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-readset-sandbox-root-clause	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-readset-stage1-verdict	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 reconcile-blocking-list	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 relocation-preclassify	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 request-coverage	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
@@ -128,7 +101,6 @@ review-shard-merge	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 scope-confirmation	no MUTANT-MATRIX block; floor: S1 build_field_of_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-fixture-log	no MUTANT-MATRIX block; floor: S1 j_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-gate	no MUTANT-MATRIX block; floor: S1 vr_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-self-update-join-gate	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-reinvoke-liveness	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 settings-merge-documented-form	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 settings-merge-unparseable-template	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row

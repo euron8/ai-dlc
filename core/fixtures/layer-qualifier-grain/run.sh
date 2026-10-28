@@ -185,6 +185,7 @@ fi
 # MUTANT-MATRIX m8-qualifier-any-anchors decides=e11-two twins=e11-nomatch
 # MUTANT-MATRIX m9-missing-masks-drift decides=d-missmoved twins=d-vanished
 # MUTANT-MATRIX m10-empty-parts-accepted decides=e11-emptyparts twins=e11-noanchor
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-qualifier-grain/run.sh --matrix
 # Re-measured whenever an arm or a mutant is added or changed.
 #

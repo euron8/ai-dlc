@@ -37,7 +37,7 @@
 # on two worlds is byte-compared across three working directories, one a dirty decoy repo, and the
 # wrapper's ok run is driven from inside that decoy.
 #
-# MUTANT-MATRIX: outside its declared decides set, each mutant co-trips no other arm, measured at authoring; a
+# The mutant matrix: outside its declared decides set, each mutant co-trips no other arm, measured at authoring; a
 # twins=- row is dead in every cell by construction, as its why= states. Per push a mutant drives its
 # deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured whenever
 # an arm or a mutant is added or changed.

@@ -24,6 +24,7 @@
 # AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not run through hermetic-run.sh, which forwards
 # no argument.
 #
+# MUTANT-MATRIX-DYNAMIC bmut why=bmut passes its first argument to mutant_killed in both its matrix and its per-push branch; every bmut call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-derivations/run.sh --matrix
 # MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
 # MUTANT-MATRIX k-m1 decides=k-allow twins=k-exec

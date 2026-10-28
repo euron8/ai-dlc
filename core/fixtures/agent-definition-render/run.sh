@@ -119,9 +119,9 @@ if [ -z "$SUBJECT" ]; then
   exit 0
 fi
 if ! command -v jq >/dev/null 2>&1; then
-  echo "  skip  jq is absent, so the expected role set cannot be derived from the declaration"
-  echo "  0 failed, 1 skipped"
-  exit 0
+  echo "  FIXTURE BROKEN: jq is absent, so the expected role set cannot be derived from the declaration"
+  echo "  0 failed, 1 broken"
+  exit 2
 fi
 # PRINT THE RESOLVED PATH. A mutant applied to the copy the run never loads leaves every arm
 # green, which reads exactly like an arm that cannot fire.

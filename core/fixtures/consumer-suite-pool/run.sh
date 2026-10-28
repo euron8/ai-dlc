@@ -50,6 +50,7 @@
 # shows stay green, so the kill is confined to the deciding cells). `--matrix` evaluates every cell
 # and prints MATRIX rows (from matrix.sh) with the column names used below. This matrix replaces the
 # earlier exact-vector assertions. It is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX-DYNAMIC csp_score why=csp_score passes its first argument to mutant_killed; every csp_score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/consumer-suite-pool/run.sh --matrix
 # MUTANT-MATRIX m1 decides=rc,nofix twins=- why=the guard's removal moves every cell of its drive (rc 1 to 0 and the message gone), so no cell stays green
 # MUTANT-MATRIX-CONTROL m2 why=the per-fixture 'no verdict recorded' line still detects the dropped worker (rc 1, line present, count line absent), so the mutation survives by design

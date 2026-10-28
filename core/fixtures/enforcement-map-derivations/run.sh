@@ -18,6 +18,7 @@
 # MUTANT-MATRIX i85-heredoc-unnarrowed decides=I85 twins=I86
 # MUTANT-MATRIX i33b-blinded-predicate decides=I33b twins=I86
 # MUTANT-MATRIX i54-unpruned-find decides=I54 twins=I86
+# MUTANT-MATRIX-DYNAMIC mutant_case why=mutant_case passes its first argument to mutant_killed; every mutant_case call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/enforcement-map-derivations/run.sh --matrix
 #
 # THE DEFECT THIS EXISTS TO CATCH, and why it is a separate fixture from

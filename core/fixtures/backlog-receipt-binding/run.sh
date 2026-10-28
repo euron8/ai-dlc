@@ -36,7 +36,7 @@
 # a receipt that drives a script and reads its output, a precondition guard that exits 9, a
 # predicate built from a variable.
 #
-# MUTANT-MATRIX. Each mutant is scored on its DECIDING ARM plus ONE named TWIN, an arm the measured matrix shows GREEN under
+# The mutant matrix: each mutant is scored on its DECIDING ARM plus ONE named TWIN, an arm the measured matrix shows GREEN under
 # it, read off the same capture. `--matrix` captures every mutant once and scores it on EVERY arm. The recorded matrix plus the twin
 # replaces the exact-vector assertion that a mutant fails only its own assertion. The matrix is re-measured whenever an arm or a mutant
 # is added or changed. c5-m4-open is the same mutation as c5-m4 over an OPEN receipt and is its own mutant, run per push.
@@ -89,6 +89,7 @@
 # MUTANT-MATRIX c5-m12 decides=c5_m12 twins=c5_m10
 # MUTANT-MATRIX c5-m10 decides=c5_m10 twins=c5_m9
 # MUTANT-MATRIX c5-m4-open decides=c5_open twins=c5_m4
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
 # Usage: run.sh
 # Exit:  0 = every probe holds, 1 = one regressed, 2 = fixture broken.
