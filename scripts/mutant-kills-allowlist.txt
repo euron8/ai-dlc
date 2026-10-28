@@ -83,7 +83,6 @@ process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
 provenance-flagless-default
-push-drain-refusals
 readset-skip
 readset-stage1-verdict
 reconcile-emit-report

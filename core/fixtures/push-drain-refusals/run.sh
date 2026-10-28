@@ -24,7 +24,39 @@
 # WHEN THE READER IS ABSENT this prints a PENDING verdict line and exits 0. A core fixture ships
 # ahead of its subject on a consumer pull, so absence is expected for one pull; the line says in
 # words that nothing was checked, because exit 0 alone reads exactly like a pass.
+#
+# THE MUTANT MATRIX. A cell is one arm of the drive (A0-A19), RED on a mutant when that arm prints FAIL in the
+# mutant's own world and GREEN when it prints ok. A mutant's row names the arm that kills it (decides) and the arm it
+# could plausibly co-trip but must leave GREEN (twins). Every twin here is A11, the exit-2 arm: it sits before every
+# mutation site, so it is also the guard that a mutant copy ran at all, and a mutant that turned it RED would be a
+# broken copy rather than a wrong keying. Every mutant is driven through ALL arms by the one world build it already
+# costs (a world is a full 21-arm drive and has no cheaper form), so a plain run scores each mutant on its deciding
+# arm and its twin off that same arms file, and the matrix adds only the scoring of the other arms. Where a mutant
+# also turns a second arm RED, that arm is a second killer and not a twin; it shows in the others= figure of the
+# REMEASURE command. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
+# command below, run from the repo root.
+# MUTANT-MATRIX M1 decides=A3b twins=A11
+# MUTANT-MATRIX M2 decides=A2 twins=A11
+# MUTANT-MATRIX M3 decides=A12 twins=A11
+# MUTANT-MATRIX M4 decides=A10 twins=A11
+# MUTANT-MATRIX M5 decides=A2 twins=A11
+# MUTANT-MATRIX M6 decides=A3 twins=A11
+# MUTANT-MATRIX M7 decides=A4 twins=A11
+# MUTANT-MATRIX M8 decides=A6 twins=A11
+# MUTANT-MATRIX M9 decides=A7 twins=A11
+# MUTANT-MATRIX M10 decides=A5 twins=A11
+# MUTANT-MATRIX M11 decides=A19 twins=A11
+# MUTANT-MATRIX-CONTROL CTL why=an unmutated copy of the reader must pass all 21 arms so a mutant fire is attributable; nothing is mutated and there is no deciding arm
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/push-drain-refusals/run.sh --matrix
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
+# as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "push-drain-refusals: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 # THE ROOT IS READ BEFORE THE SCRUB. Under the hermetic runner the project root is the sandbox,
 # handed over as AI_DLC_PROJECT_ROOT; the walk below, started from this file's own location,
@@ -41,6 +73,16 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 broken() { echo "FIXTURE BROKEN: push-drain-refusals -- $1" >&2; echo "FAIL  push-drain-refusals -- fixture broken: $1"; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)" || broken "cannot resolve the fixture directory"
+SELF_FILE="$HERE/${0##*/}"
+fails=0
+# ok/bad for lib/mutant.sh: a kill is emitted only through mutant_killed, behind a same-run base-pass flag. `bad`
+# counts into the variable this file exits on.
+ok()  { echo "ok    ${1-}"; }
+bad() { echo "FAIL  ${1-}"; fails=$((fails + 1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "no lib/mutant.sh beside $HERE"
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 # Root by walking up for a marker, never by counting hops (both layouts, and a worktree).
 pdr_root() {
@@ -235,7 +277,6 @@ drive() {
   return 0
 }
 
-fails=0
 # ============================================================================
 # THE SHIPPED READER
 # ============================================================================
@@ -246,6 +287,18 @@ n_arms="$(grep -c . "$WORK/real/arms" || true)"
 [ "$n_arms" -eq 21 ] || broken "expected 21 arm lines from the shipped reader, got $n_arms"
 n_bad="$(grep -c '^FAIL' "$WORK/real/arms" || true)"
 fails=$((fails + n_bad))
+# The base-pass flags: one per owner arm, set only in the passing branch of that arm in the SHIPPED reader's drive.
+# A mutant's kill reads its owner's flag, so a kill is refused when the unmutated arm it guards did not pass here.
+if grep -q '^ok    A2 ' "$WORK/real/arms"; then B_A2=1; fi
+if grep -q '^ok    A3 ' "$WORK/real/arms"; then B_A3=1; fi
+if grep -q '^ok    A3b ' "$WORK/real/arms"; then B_A3b=1; fi
+if grep -q '^ok    A4 ' "$WORK/real/arms"; then B_A4=1; fi
+if grep -q '^ok    A5 ' "$WORK/real/arms"; then B_A5=1; fi
+if grep -q '^ok    A6 ' "$WORK/real/arms"; then B_A6=1; fi
+if grep -q '^ok    A7 ' "$WORK/real/arms"; then B_A7=1; fi
+if grep -q '^ok    A10 ' "$WORK/real/arms"; then B_A10=1; fi
+if grep -q '^ok    A12 ' "$WORK/real/arms"; then B_A12=1; fi
+if grep -q '^ok    A19 ' "$WORK/real/arms"; then B_A19=1; fi
 
 # ============================================================================
 # MUTANTS. Each is a COPY of the resolved reader, edited by awk keyed on exactly one line
@@ -311,7 +364,70 @@ else
   echo "ok    CTL  an unmutated copy of the reader passes all 21 arms"
 fi
 
-killed=0; n_mut=0
+# --- THE MATRIX CELLS, single-sourced. A cell is one arm of the drive; cell_red <arm> <arms-file> returns 0 RED
+# (the arm printed FAIL in that world), 1 GREEN (it printed ok), 2 UNKNOWN CELL (the arm printed nothing, so an
+# unknown name can never read as GREEN).
+MX_CELLS='A0 A1 A2 A3 A3b A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19'
+cell_red() {
+  if grep -q "^FAIL  $1 " "$2"; then return 0; fi
+  if grep -q "^ok    $1 " "$2"; then return 1; fi
+  return 2
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$WORK/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# mx_twins <mutant> <arms-file>: per-push, every twin arm must stay GREEN in the mutant's own world.
+mx_twins() {
+  local m="$1" a="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); echo "FIXTURE BROKEN $m: no single MUTANT-MATRIX row names its twins"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$a"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); echo "FIXTURE BROKEN $m: twin $t names no arm"
+    elif [ "$r" -eq 0 ]; then bad "$m  its twin $t also went RED in this mutant's world, so the kill is not confined to its own arm"; fi
+  done
+}
+# mx_score <mutant> <arms-file>: MATRIX-ONLY. Scores the mutant's world on EVERY arm. It records itself in the
+# ledger first (rule 9).
+mx_score() {
+  local m="$1" a="$2" dec tw c r dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  if grep -qE 'unbound variable|command not found|syntax error' "$a" "${a%/arms}/err"; then
+    BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN $m"; return
+  fi
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $MX_CELLS; do
+    cell_red "$c" "$a"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN $m"; return; fi
+  done
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$a"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$a"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$a" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+
+# MUTANT-MATRIX-DYNAMIC mutant-loop why=the eleven mutants are one loop body over the MUTANTS table, so the mutant id reaches mutant_killed as $mid; every id it produces (M1-M11) has its own MUTANT-MATRIX row in the header
+n_scored=0; n_mut=0
 while IFS='|' read -r mid owner what; do
   [ -n "$mid" ] || continue
   n_mut=$((n_mut + 1))
@@ -323,17 +439,50 @@ while IFS='|' read -r mid owner what; do
     echo "FAIL  $mid  its world could not be built -- $what"; fails=$((fails + 1)); continue
   fi
   fset="$(LC_ALL=C awk '$1 == "FAIL" { printf "%s ", $2 }' "$WORK/w-$mid/arms")"
+  mmsg="$mid  by $owner (fail set: ${fset% }) -- $what"
   if grep -q '^ok    A11 ' "$WORK/w-$mid/arms" && grep -q "^FAIL  $owner " "$WORK/w-$mid/arms"; then
-    echo "ok    $mid  KILLED by $owner (fail set: ${fset% }) -- $what"; killed=$((killed + 1))
+    # The flag is the owner arm's own pass in the SHIPPED reader's drive above; each owner has its own literal flag.
+    case "$owner" in
+      A2)  mutant_killed "${B_A2:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A3)  mutant_killed "${B_A3:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A3b) mutant_killed "${B_A3b:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A4)  mutant_killed "${B_A4:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A5)  mutant_killed "${B_A5:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A6)  mutant_killed "${B_A6:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A7)  mutant_killed "${B_A7:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A10) mutant_killed "${B_A10:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A12) mutant_killed "${B_A12:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A19) mutant_killed "${B_A19:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      *)   broken "mutant $mid names owner arm $owner, which has no base-pass flag" ;;
+    esac
   else
     echo "FAIL  $mid  SURVIVED its owner arm $owner (fail set: ${fset:-none}) -- $what"; fails=$((fails + 1))
   fi
+  mx_twins "$mid" "$WORK/w-$mid/arms"
+  if [ "$MODE" = matrix ]; then mx_score "$mid" "$WORK/w-$mid/arms"; fi
 done <<<"$MUTANTS"
 [ "$n_mut" -eq 11 ] || broken "expected 11 mutants, iterated $n_mut"
 
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9  the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9  a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9  a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "M1 M10 M11 M2 M3 M4 M5 M6 M7 M8 M9 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  fails=$((fails + MX_FAILS))
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "push-drain-refusals: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
+
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  push-drain-refusals -- 21 arms green, $killed/$n_mut mutants killed"
+  echo "PASS  push-drain-refusals -- 21 arms green, $n_scored/$n_mut mutants scored on their owner arm"
   exit 0
 fi
-echo "FAIL  push-drain-refusals -- $fails failure(s); $killed/$n_mut mutants killed"
+echo "FAIL  push-drain-refusals -- $fails failure(s); $n_scored/$n_mut mutants scored on their owner arm"
 exit 1
