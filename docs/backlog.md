@@ -1189,6 +1189,8 @@ H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-i
 
 Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
 
+Found while building it (lead filing, DEFECT, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
+
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
 verify: sh bash scripts/validate-fixture-invocations.sh --self-probe && bash scripts/validate-fixture-hygiene.sh --derive
