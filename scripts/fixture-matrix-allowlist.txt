@@ -93,7 +93,6 @@ retired-layer-passage	no MUTANT-MATRIX block; floor: S1 n355_mut(),S2 cmp -s + m
 retired-layer-token	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 retro-compliance-workflow	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 review-carry-over-clauses	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-review-shard-merge	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 scope-confirmation	no MUTANT-MATRIX block; floor: S1 build_field_of_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-reinvoke-liveness	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 settings-merge-documented-form	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
@@ -121,6 +120,5 @@ validator-fork-budget	no MUTANT-MATRIX block; floor: S1 asg_mut(),S2 cmp -s + mu
 validator-path-resolution	no MUTANT-MATRIX block; floor: S1 mut_copy(),S2 cmp -s + mutant
 verdict-pass-content	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 wait-beat-liveness	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-wait-stale-deliverable	no MUTANT-MATRIX block; floor: S1 mutant_expr(),S2 cmp -s + mutant
 whole-read-pool	no MUTANT-MATRIX block; floor: S1 libmut(),S2 cmp -s + mutant
 write-format-steering-multiformat	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant

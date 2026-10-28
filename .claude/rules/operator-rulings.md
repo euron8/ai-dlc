@@ -2,25 +2,25 @@
 
 # Operator standing rulings
 
-Decisions the operator has already made. They hold across sessions and do not need restating
-in a prompt; treat a repeated instruction as confirmation, not as the moment they became true.
+Decisions the operator has already made. They hold across sessions; treat a repeated
+instruction as confirmation, not as the moment they became true.
 
 ## Merges are preapproved
 
 No plan and no task stops to ask for merge authorization. Cut the branch, run the gate, merge
 it. Where a branch carries more than one release the release-version validator will say so —
-that is a mechanical constraint on branch shape, not a request for approval.
+that is a constraint on branch shape, not a request for approval.
 
 ## A consumer pull is NOT preapproved, and being ready is not being told
 
-The mirror of the ruling above, and the one place the two differ. Measure the delivery gap,
+Measure the delivery gap,
 write the runbook, rehearse it, report the number — then STOP. A runbook that is written,
 rehearsed and green is READY, never AUTHORIZED, and neither a `PENDING` count nor an earlier
 answer about WHETHER a pull should happen is a decision about WHEN. Never dispatch one, and
 never hand one to a peer session.
 
 Before sending any peer work at all, check what it is DOING and put that state into the
-QUESTION you ask the operator rather than keeping it in your own head. `busy` in `ListAgents`
+QUESTION you ask the operator. `busy` in `ListAgents`
 is a reason to look further, never a green light.
 
 ## Everything is sourced and validated with ground truth
@@ -35,7 +35,7 @@ Where a claim cannot be checked, say that instead of stating it.
 A measurement may choose the MECHANISM. Only the operator chooses whether the GOAL survives.
 Never narrow a goal, drop an item, or scale work down on your own authority — deliver the
 whole scope and say clearly what was blocked and why. Partial delivery reported as completion
-is the failure mode this exists to prevent.
+is the failure this prevents.
 
 ## The scope boundary is a release, not a batch
 
@@ -63,13 +63,24 @@ probe, the one unit it edited. The gate runs everything else; a hand re-running 
 
 Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
 control. No fixture, mutant battery or corpus sweep runs without the lead's slot; slotted runs are serial;
-between "GATE OPEN" and "GATE CLOSED" nothing heavy starts. Measure `uptime` before a gate.
+between "GATE OPEN" and "GATE CLOSED" nothing heavy starts.
+
+## No timing runs
+
+None are taken. Cost evidence is the counts the gate records: invocations.decl, exec, fork and
+render counts. Reading a duration off a pre-push log stays allowed.
+
+## Zero tests depend on load (BL-868)
+
+"There should be ZERO tests that depend on load. If they exist, they are defects." A test whose
+verdict or count moves with load is fixed in the test, never tolerated with a ± row, a widened
+bound, a retry or fewer jobs (BL-868).
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 
 Every read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --list "<names>"
 --tracer sandbox`, from a normal account with no `sudo`, in the main checkout detached at the
-commit to trace. It needs no root, so a session owing a trace runs it and commits the map rather
+commit to trace. A session owing a trace runs it and commits the map rather
 than handing the operator a command. `fs_usage` and `--tracer both` are for the operator alone.
 
 ## A command handed to the operator states its runtime and its odds
@@ -102,9 +113,8 @@ exclusion once in the method.
 
 ## A local-model lead is a goal
 
-Running the lead on a local model is an operator goal. A defect exposed under a local lead is an
-opportunity to fix the pipeline, never a finding against the model or a reason to recommend a hosted
-lead.
+Running the lead on a local model is an operator goal. A defect exposed under a local lead is a
+pipeline fix, never a finding against the model or a reason to recommend a hosted lead.
 
 ## Reaching the operator
 
@@ -114,14 +124,13 @@ CHOICES WITH A MARKED RECOMMENDATION, not as an open question — they are decid
 designing.
 
 Report on any question, on any decision, and on completion including an early stop. Silence
-and progress are indistinguishable from outside, and the only way to tell them apart is for
-the operator to ask.
+and progress are indistinguishable from outside.
 
 ## Tier findings on consequence
 
 **BLOCKER**, **DEFECT**, **NOTE**. A NOTE gets no lineage sentence and no paragraph of
-justification. Keep locked decisions to BLOCKER and DEFECT. The failure here is elevation:
-presenting a dozen findings in one register makes the two that matter unfindable.
+justification. Keep locked decisions to BLOCKER and DEFECT. Never present a dozen findings in
+one register: the two that matter become unfindable.
 
 ## A closable session is stated plainly
 

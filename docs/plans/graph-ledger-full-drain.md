@@ -940,6 +940,13 @@ candidate's surviving half is upstream's to file and build, never a question for
    skipped own-fixture run cost batch 243 a whole second dress on three 5-19s fixtures. Killing and the verdict store:
    `.claude/rules/tool-hazards.md`.
 
+   **Verification step, every unit.** A unit's verification run is a push of its tip to a throwaway
+   ref, `git push origin HEAD:refs/heads/<throwaway>` (for example `<batch>-warm-<unit>`), whose pass
+   the hook records in the shared verdict cache for the release push to reuse. A run in a `mktemp`
+   store caches nothing. A green push's `verdict store: N fixture(s) skipped` line is the evidence
+   the seed worked. Order the pushes longest-first from `.git/ai-dlc-fixture-durations`, as `docs/plans/hermetic-pole.md` records. **Integrator rule:** merge checks
+   are VALIDATORS ONLY, with no fixture re-run.
+
    **Owners build through hands.** You make NO edits. Every edit (code, fixture, receipt, entry
    prose, comment, script) goes to a hand; independent edits go to parallel hands at once. Your own
    tool calls are only: reading to diagnose, writing briefs, folding by content, correctness runs,

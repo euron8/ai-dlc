@@ -146,9 +146,8 @@ path; no load generator. Builders never run the suite or a heavy fixture while a
 holds a gate; the lead asks that session for its window first. Remove every worktree a hand leaves
 before reporting the batch closed, checking the lock pid is not a live hand.
 
-**Every timing in this plan is taken on a machine where another gate may be running.** Record
-`uptime`'s 1-minute load beside every number, interleave reps across the two sides being compared,
-and never compare a loaded figure with a solo one.
+**Every figure in this plan is a count the gate records** (execs, invocations, forks). Never
+compare a count taken in one tree with a count taken in another.
 
 ### Derive the state; do not trust the numbers below
 
@@ -183,7 +182,6 @@ grep -l mktemp core/fixtures/*/run.sh | wc -l                      # 190
 grep -L mktemp core/fixtures/*/run.sh | wc -l                      # 56
 grep -l 'env -i' core/fixtures/*/run.sh | wc -l                    # 5
 grep -lE 'validate-enforcement-map.sh|validate-shell-portability.sh|validate-claude-rules.sh|validate-fork-budget' core/fixtures/*/run.sh | wc -l   # 34
-uptime
 ```
 
 The key-record BASELINE is read from the main checkout's `$GITDIR` with `cat` only (action 2b).

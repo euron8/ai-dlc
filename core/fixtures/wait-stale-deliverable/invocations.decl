@@ -1,2 +1,4 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-282 *
+# Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J3 output: measured 350), twice, identical.
+# History: p1 declared `282 *` before the per-push mutant cells replaced the mutant case functions and the flagless loop;
+# that rewrite measured 347; giving the lease-handoff arm's B beat its own sleep stub (so B is parked, not racing a 3s lease) added 3.
+350 *
