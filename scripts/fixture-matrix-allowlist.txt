@@ -96,7 +96,6 @@ retired-fixture-orphan	no MUTANT-MATRIX block; floor: S1 mut_reds(),S2 cmp -s + 
 retired-layer-passage	no MUTANT-MATRIX block; floor: S1 n355_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 retired-layer-token	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 retro-compliance-workflow	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-review-carry-over-clauses	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 review-shard-merge	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 scope-confirmation	no MUTANT-MATRIX block; floor: S1 build_field_of_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 self-update-fixture-log	no MUTANT-MATRIX block; floor: S1 j_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
