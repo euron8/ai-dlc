@@ -51,7 +51,6 @@ self-update-fixture-log
 self-update-gate
 shell-portability
 spec-join-integrity
-story-provenance
 suppression-lifetime
 validator-fork-budget
 wait-beat-liveness

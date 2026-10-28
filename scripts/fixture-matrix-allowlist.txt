@@ -110,7 +110,6 @@ sprint-status-lifecycle	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + m
 story-corpus-sprint-slot	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant
 story-evidence-scaffold	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKC mutant_killed caller
 story-fields-derive	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-story-provenance	no MUTANT-MATRIX block; floor: S1 mut_writer(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 stray-party-mode-provenance	no MUTANT-MATRIX block; floor: S1 mutate_py(),S2 cmp -s + mutant
 subagent-probe	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 suppression-lifetime	no MUTANT-MATRIX block; floor: S1 sl_mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
