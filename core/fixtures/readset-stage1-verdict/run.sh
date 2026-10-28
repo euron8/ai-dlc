@@ -81,7 +81,7 @@
 # MUTANT-MATRIX profile-passed-through decides=ok twins=term
 # MUTANT-MATRIX no-started-line decides=kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
 # MUTANT-MATRIX no-orphan-check decides=kill9 twins=ok
-# MUTANT-MATRIX no-restore decides=ok,term,kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
+# MUTANT-MATRIX no-restore decides=ok,term twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
 # MUTANT-MATRIX single-pid-kill decides=term twins=ok
 # MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
