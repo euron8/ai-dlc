@@ -173,6 +173,7 @@ log_del_paths() { awk -v f="$2" '!($1 == f && $3 == "paths")' "$1" > "$1.new" &&
 verdict() {
   local s="$1" w="$2" cwd="${3:-$WORK}" out rc
   out="$(cd "$cwd" && TMPDIR="$w/tmp" AI_DLC_READSET_STAGE1_LEDGER="$w/ledger" bash "$s" 2>&1)"; rc=$?
+  printf '%s\n' "$out" > "$w/raw.$(basename "$s")"
   case "$rc" in
     0) case "$out" in MET:*) printf '0|MET\n' ;; *) printf '0|?%s\n' "$out" ;; esac ;;
     1) printf '1|%s\n' "$(printf '%s\n' "$out" | awk '$1 == "NOT-MET" {
@@ -348,16 +349,17 @@ sp="$(TMPDIR="$WORK/w" bash "$SCORER" --self-probe 2>&1)"; rc=$?
 case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
-  if matches "$got" "$wrc" "$wspec"; then ok "$name -> $got"; else bad "$name -> $got (want $wrc|$wspec)"; fi
+  eval "GOT_${name//-/_}=\$got"
+  if matches "$got" "$wrc" "$wspec"; then ok "$name -> $got"; eval "B_w_${name//-/_}=1"; else bad "$name -> $got (want $wrc|$wspec)"; fi
 done < "$TABLE"
 
 # THE MET LINE NAMES THE SEEDED RUN DIRS -- the ledger override was delivered, not the default.
 W="$(w_of met)"
-out="$(TMPDIR="$W/tmp" AI_DLC_READSET_STAGE1_LEDGER="$W/ledger" bash "$SCORER" 2>&1)"
+out="$(cat "$W/raw.$(basename "$SCORER")")"
 case "$out" in *"($W/r1, $W/r2, $W/r3)"*) ok "the MET line names the three seeded runs" ;; *) bad "the MET line does not name the seeded runs: $out" ;; esac
 # THE A4 WINDOW ROUND-TRIPS the local-time .raw stamps to the seeded epochs.
 W="$(w_of a4)"
-out="$(TMPDIR="$W/tmp" AI_DLC_READSET_STAGE1_LEDGER="$W/ledger" bash "$SCORER" 2>&1)"
+out="$(cat "$W/raw.$(basename "$SCORER")")"
 case "$out" in *"peak 1-min load 3.00 inside the window $((T0 + 2010))-$((T0 + 2051)) "*) ok "A4 reads the seeded window $((T0 + 2010))-$((T0 + 2051)) off local-time .raw stamps" ;; *) bad "A4 window did not round-trip: $out" ;; esac
 # THE SCORER LEAVES NO SCRATCH DIRECTORY BEHIND.
 left="$(find "$WORK/w/met/tmp" "$WORK/w/a4/tmp" -mindepth 1 -maxdepth 1 -name 'readset-stage1-verdict.*' 2>/dev/null | grep -c .)" || left=0
@@ -369,7 +371,7 @@ if [ "$left" -eq 0 ] && [ "$ctl" -eq 1 ]; then ok "no readset-stage1-verdict.* s
 DECOY="$WORK/decoy"; mkdir -p "$DECOY" && ( cd "$DECOY" && git init -q . ) || broken "decoy repo"
 printf 'garbage\tledger\n' > "$DECOY/.git/ai-dlc-readset-stage1.ledger"; printf 'dirt\n' > "$DECOY/untracked"
 for name in met a4; do
-  a="$(verdict "$SCORER" "$(w_of "$name")" "$WORK")"; b="$(verdict "$SCORER" "$(w_of "$name")" /)"; c="$(verdict "$SCORER" "$(w_of "$name")" "$DECOY")"
+  eval "a=\$GOT_$name"; b="$(verdict "$SCORER" "$(w_of "$name")" /)"; c="$(verdict "$SCORER" "$(w_of "$name")" "$DECOY")"
   if [ "$a" = "$b" ] && [ "$b" = "$c" ] && [ -n "$a" ]; then ok "cwd-invariant on $name ($a)"; else bad "cwd changes $name: [$a] [$b] [$c]"; fi
 done
 
@@ -386,90 +388,135 @@ MD="$WORK/mut"; mkdir -p "$MD"
 CTL="$MD/control.sh"
 export MUT_OLD='self_probe' MUT_NEW=': self_probe disabled in the control copy'
 mut "$SCORER" "$CTL" || broken "the control copy did not apply (self_probe call line not found exactly once)"
-echo " the probe-disabled control copy agrees with the shipping scorer:"
-while IFS="$(printf '\t')" read -r name wrc wspec; do
-  a="$(verdict "$SCORER" "$(w_of "$name")")"; b="$(verdict "$CTL" "$(w_of "$name")")"
-  [ "$a" = "$b" ] || bad "control copy disagrees on $name: [$a] vs [$b]"
-done < "$TABLE"
-ok "control copy = shipping scorer on all $NWORLDS worlds"
+WORLDS="$WORK/worlds"; cut -f1 "$TABLE" > "$WORLDS"
 
-# smut <name> <target-world> <old line> <new line> [probe]: a scorer mutant from the CONTROL copy
-# (or, with `probe`, from the shipping scorer with its self-probe live). KILLED iff the target world
-# answers differently from the table; it must still score the ALL-MET world MET (liveness).
+# THE CONTROL COPY IS A DIFFERENT PROGRAM FROM THE SHIPPING SCORER, so its differences are counted, not
+# read: `diff` lines of the copy against the shipping scorer must be exactly one removed and one added,
+# and the same count of the scorer against itself is the control that the count can read zero.
+dn_same="$(diff "$SCORER" "$SCORER" | grep -c '^[<>]')" || dn_same=0
+dn_ctl="$(diff "$SCORER" "$CTL" | grep -c '^[<>]')" || dn_ctl=0
+if [ "$dn_same" = 0 ] && [ "$dn_ctl" = 2 ]; then ok "the control copy differs from the shipping scorer in exactly one line (diff: $dn_ctl changed lines; the scorer against itself: $dn_same)"; else bad "the control copy differs from the shipping scorer in $dn_ctl diff line(s) (want 2); self-diff $dn_same (want 0)"; fi
+
+# world_hit <script> <world>: 1 when the script answers the world differently from the table, else 0.
+world_hit() {
+  local wrc wspec got
+  wrc="$(awk -F'\t' -v n="$2" '$1 == n { print $2 }' "$TABLE")"; wspec="$(awk -F'\t' -v n="$2" '$1 == n { print $3 }' "$TABLE")"
+  got="$(verdict "$1" "$(w_of "$2")")"
+  if matches "$got" "$wrc" "$wspec"; then echo 0; else echo 1; fi
+}
+# mx_judge <name> <decides csv> <killed csv>: the measured killed set equals the declared deciding set.
+mx_judge() {
+  local d k
+  d="$(printf '%s\n' ${2//,/ } | LC_ALL=C sort | tr '\n' ',')"; k="$(printf '%s\n' ${3//,/ } | LC_ALL=C sort | tr '\n' ',')"
+  if [ "$d" = "$k" ]; then ok "MATRIX $1: the killed cells are exactly the deciding set ($2)"; else bad "MATRIX $1: killed cells [$3] differ from the deciding set [$2]"; fi
+}
+# matrix_row <name> <script> <decides csv>: every world scored against the mutant, one row, matrix mode only.
+matrix_row() {
+  local w h cells="" ks=""
+  while IFS= read -r w; do
+    MCELLS=$((MCELLS + 1))
+    h="$(world_hit "$2" "$w")"
+    cells="$cells $w:$h"
+    [ "$h" = 1 ] && ks="$ks,$w"
+  done < "$WORLDS"
+  echo "MATRIX $1$cells"
+  mx_judge "$1" "$3" "${ks#,}"
+}
+
+echo " the probe-disabled control copy agrees with the shipping scorer (one world per outcome class):"
+for name in met a1 r1; do
+  eval "a=\$GOT_${name//-/_}"; b="$(verdict "$CTL" "$(w_of "$name")")"
+  case "$name" in met) cls=MET ;; a1) cls=NOT-MET ;; *) cls=REFUSED ;; esac
+  if [ "$a" = "$b" ]; then ok "control copy = shipping scorer on $name ($cls: $a)"; else bad "control copy disagrees with the shipping scorer on $name ($cls): [$a] vs [$b]"; fi
+done
+if [ "$MATRIX" = 1 ]; then
+  echo " matrix: the control copy on every other world:"
+  while IFS= read -r name; do
+    case "$name" in met|a1|r1) continue ;; esac
+    MCELLS=$((MCELLS + 1))
+    eval "a=\$GOT_${name//-/_}"; b="$(verdict "$CTL" "$(w_of "$name")")"
+    if [ "$a" = "$b" ]; then ok "matrix: control copy = shipping scorer on $name"; else bad "matrix: control copy disagrees with the shipping scorer on $name: [$a] vs [$b]"; fi
+  done < "$WORLDS"
+fi
+
+# smut <flag> <name> <decides csv> <twin world> <old line> <new line>: a scorer mutant from the CONTROL
+# copy. KILLED on each deciding world (the verdict differs from the table); the twin world must stay
+# GREEN under it, which is also the liveness check that the mutant still scores the ALL-MET world.
+# The flag is the conjunction of the base-pass flags of the worlds it reads, set by the shipping loop.
 smut() {
-  local name="$1" world="$2" dst="$MD/$1.sh" wrc wspec got live
-  export MUT_OLD="$3" MUT_NEW="$4"
+  local flag="$1" name="$2" decides="$3" twin="$4" dst="$MD/$2.sh" w
+  export MUT_OLD="$5" MUT_NEW="$6"
   mut "$CTL" "$dst" || { bad "mutant $name DID NOT APPLY"; return; }
-  live="$(verdict "$dst" "$(w_of met)")"
-  [ "$live" = "0|MET" ] || { bad "mutant $name is not live: it scores the ALL-MET world $live"; return; }
-  wrc="$(awk -F'\t' -v n="$world" '$1 == n { print $2 }' "$TABLE")"; wspec="$(awk -F'\t' -v n="$world" '$1 == n { print $3 }' "$TABLE")"
-  got="$(verdict "$dst" "$(w_of "$world")")"
-  if matches "$got" "$wrc" "$wspec"; then bad "mutant $name SURVIVED on $world ($got)"; else ok "mutant $name KILLED on $world (applied, live; mutant says $got)"; fi
+  [ "$(world_hit "$dst" "$twin")" = 0 ] || { bad "mutant $name is not confined: its twin world $twin answers differently under it"; return; }
+  for w in ${decides//,/ }; do
+    if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi
+  done
+  if [ "$MATRIX" = 1 ]; then matrix_row "$name" "$dst" "$decides"; fi
 }
 echo " scorer mutants:"
-smut del-A1 a1 '    a1_omitted "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
-smut del-A2 a2 '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    :'
-smut del-A3 a3 '    a3_canary "$rd/root/w/$fx.canary" "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
-smut del-A4 a4 '  a4_load "$rd/load.tsv" "$ws" "$we" "$label" || FAILED=1' '  :'
-smut del-A5 a5 '    a5_paths "$rd/deriver.log" "$rd/root/w/$fx.set" "$fx" "$label" || FAILED=1' '    :'
-smut del-A6 a6 '  a6_compare "$RD1" "$RD2" "$RD3" "$fx" "$SCRATCH" || FAILED=1' '  :'
-smut a6-owntree a6-owntree \
+smut "$(( ${B_w_a1:-0} && ${B_w_met:-0} ))" del-A1 a1 met '    a1_omitted "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" del-A2 a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a3:-0} && ${B_w_met:-0} ))" del-A3 a3 met '    a3_canary "$rd/root/w/$fx.canary" "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a4:-0} && ${B_w_met:-0} ))" del-A4 a4 met '  a4_load "$rd/load.tsv" "$ws" "$we" "$label" || FAILED=1' '  :'
+smut "$(( ${B_w_a5:-0} && ${B_w_met:-0} ))" del-A5 a5 met '    a5_paths "$rd/deriver.log" "$rd/root/w/$fx.set" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a6:-0} && ${B_w_met:-0} ))" del-A6 a6 met '  a6_compare "$RD1" "$RD2" "$RD3" "$fx" "$SCRATCH" || FAILED=1' '  :'
+smut "$(( ${B_w_a6_owntree:-0} && ${B_w_met:-0} ))" a6-owntree a6-owntree met \
   '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
   '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
-smut a6-caret-git a6-gitignore \
+smut "$(( ${B_w_a6_gitignore:-0} && ${B_w_met:-0} ))" a6-caret-git a6-gitignore met \
   "    awk '\$0 != \"\" && \$0 != \".git\" && index(\$0, \".git/\") != 1' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\" \
   "    awk '\$0 != \"\" && \$0 !~ /^\\.git/' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\"
-smut a1-substring a1 \
+smut "$(( ${B_w_a1:-0} && ${B_w_met:-0} ))" a1-substring a1 met \
   "  hit=\"\$(awk -v f=\"\$2\" '\$1 == f && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\"" \
   "  hit=\"\$(awk -v f=\"\$2\" 'index(\$1, f) == 1 && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\""
-smut a5-substring a5 \
+smut "$(( ${B_w_a5:-0} && ${B_w_met:-0} ))" a5-substring a5 met \
   "  logged=\"\$(awk -v f=\"\$3\" '\$1 == f && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\"" \
   "  logged=\"\$(awk -v f=\"\$3\" 'index(\$1, f) == 1 && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\""
-smut a2-reads-log a2 '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    a2_dropped "$rd/deriver.log" "$fx" "$label" || FAILED=1'
-smut a4-whole-file a4 '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
-smut del-R0 r0-log '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
-smut r2-string r2-link \
+smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" a2-reads-log a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    a2_dropped "$rd/deriver.log" "$fx" "$label" || FAILED=1'
+smut "$(( ${B_w_a4:-0} && ${B_w_met:-0} ))" a4-whole-file a4 met '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
+smut "$(( ${B_w_r0_log:-0} && ${B_w_met:-0} ))" del-R0 r0-log met '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
+smut "$(( ${B_w_r2_link:-0} && ${B_w_met:-0} ))" r2-string r2-link met \
   '  a="$(cd "$1/root" 2>/dev/null && pwd -P)"; b="$(cd "$2/root" 2>/dev/null && pwd -P)"; c="$(cd "$3/root" 2>/dev/null && pwd -P)"' \
   '  a="$1/root"; b="$2/root"; c="$3/root"'
 # The ledger read, two skip mutants. Each drops the bad run's lines BOTH (started and terminal), so
 # what is left is three well-formed pairs and the mutant scores MET: a skip, not a different refusal.
 L6_OLD="awk 'NF > 0' \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut rl-skip rl-skip "$L6_OLD" \
+smut "$(( ${B_w_rl_skip:-0} && ${B_w_met:-0} ))" rl-skip rl-skip met "$L6_OLD" \
   "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\" && \$2 != \"0\") b[\$1] = 1; next } NF > 0 && !(\$1 in b)' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut rl-skip-started rl-started "$L6_OLD" \
+smut "$(( ${B_w_rl_started:-0} && ${B_w_met:-0} ))" rl-skip-started rl-started met "$L6_OLD" \
   "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\") t[\$1] = 1; next } NF > 0 && !(\$2 == \"started\" && !(\$1 in t))' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
 # A2 keyed on an ending `log stream` never writes: dies on the producer's verbatim line.
 A2_OLD="  n=\"\$(grep -c 'dropped during' \"\$1\" 2>/dev/null)\""
 A2_NEW="  n=\"\$(grep -c 'dropped during live streaming ===\$' \"\$1\" 2>/dev/null)\""
-smut a2-ending a2 "$A2_OLD" "$A2_NEW"
+smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" a2-ending a2 met "$A2_OLD" "$A2_NEW"
 # A4 bounded at the start only (15 s of slack past the end): dies on 6.00 sampled after the window.
 A4_OLD='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 0 {'
 A4_NEW='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 15 {'
-smut a4-open-end a4-after "$A4_OLD" "$A4_NEW"
+smut "$(( ${B_w_a4_after:-0} && ${B_w_met:-0} ))" a4-open-end a4-after met "$A4_OLD" "$A4_NEW"
 # A6 with a regular-file-only existence filter: dies on the directory row.
 A6P_OLD='a6_present() { [ -e "$1" ] || [ -L "$1" ]; }'
 A6P_NEW='a6_present() { [ -f "$1" ]; }'
-smut a6-regular-file a6-dir "$A6P_OLD" "$A6P_NEW"
+smut "$(( ${B_w_a6_dir:-0} && ${B_w_met:-0} ))" a6-regular-file a6-dir met "$A6P_OLD" "$A6P_NEW"
 # R0 without the profile comparison: dies on the narrowed profile.
 R0_OLD='  cmp -s "$2/r0.sb" "$1/root/w/sandbox.sb" \'
 R0_NEW='  true \'
-smut r0-no-profile r0-profile "$R0_OLD" "$R0_NEW"
+smut "$(( ${B_w_r0_profile:-0} && ${B_w_met:-0} ))" r0-no-profile r0-profile met "$R0_OLD" "$R0_NEW"
 # R6 reading only `paths` lines: dies on a foreign OMITTED line.
 R6_OLD="    substr(\$0, 1, 2) == \"  \" && (\$2 == \"OMITTED\" || \$3 == \"paths\") && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
 R6_NEW="    substr(\$0, 1, 2) == \"  \" && \$3 == \"paths\" && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
-smut r6-paths-only r6-omitted "$R6_OLD" "$R6_NEW"
+smut "$(( ${B_w_r6_omitted:-0} && ${B_w_met:-0} ))" r6-paths-only r6-omitted met "$R6_OLD" "$R6_NEW"
 # R2 comparing run 1 with run 2 for the FIRST subject only (1-3 and 2-3 for all): dies on the one
 # middle subject copied from run 1 to run 2, while r2-copy, which copies all five, cannot tell it
 # from the scorer.
 R2_OLD='    if cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
 R2_NEW='    if [ "$fx" = "$FIRST_SUBJECT" ] && cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
-smut r2-first-only r2-one "$R2_OLD" "$R2_NEW"
+smut "$(( ${B_w_r2_one:-0} && ${B_w_met:-0} ))" r2-first-only r2-one met "$R2_OLD" "$R2_NEW"
 # The pair check itself: unchecked, and with either the epoch or the HEAD conjunct dropped. Each
 # dies on the one world whose started line differs from its terminal in that field alone.
 RLP_OLD='    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] && [ "$sh" = "$th" ] \'
-smut rl-pair-unchecked rl-foreign "$RLP_OLD" '    true \'
-smut rl-pair-no-epoch rl-epoch "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$sh" = "$th" ] \'
-smut rl-pair-no-head rl-head "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] \'
+smut "$(( ${B_w_rl_foreign:-0} && ${B_w_met:-0} ))" rl-pair-unchecked rl-foreign met "$RLP_OLD" '    true \'
+smut "$(( ${B_w_rl_epoch:-0} && ${B_w_met:-0} ))" rl-pair-no-epoch rl-epoch met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$sh" = "$th" ] \'
+smut "$(( ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-no-head rl-head met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] \'
 
 # THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
 # scorer, self-probe live, `--self-probe` exits 2.
