@@ -1126,7 +1126,7 @@ verify: manual
 
 **DEFECT.** An umbrella entry for fixture optimisation: a fixture whose wall clock exceeds what its checks need. Typical causes are a subject run once per assertion, mutant or world instead of once per distinct question, and a full mutant × arm matrix re-scored on every push. Each fixture gets its section in the release that changes it.
 
-**PARTIAL (0.961.0, batch b245 part one).** 54 fixtures are narrowed. Each measures its mutant × arm matrix once by `bash core/fixtures/<fx>/run.sh --matrix`, records it in the header, and on each push runs each mutant's deciding arm plus one green twin. Counts below are before → after per push, from the owners' instrumented runs; "not recorded" means no count was taken. Loaded costs come from the dress.
+**PARTIAL (0.961.0, batch b245 part one).** 54 fixtures are narrowed. Each measures its mutant × arm matrix once by `bash core/fixtures/<fx>/run.sh --matrix`, records it in the header, and on each push runs each mutant's deciding arm plus one green twin. Counts below are before → after per push, from the owners' instrumented runs; "not recorded" means no count was taken. Loaded costs come from the dress. The prevention mechanisms are filed as BL-851, which carries their receipt.
 
 - check-24-adversarial-convergence: validator executions 1357 → 747; receipt world builds 474 → 43. NOT FINAL: its validator seam follows.
 - readset-skip: hook drives 740 → 221; direct apply calls 228 → 148; deriver runs 339 → 170; git inits 449 → 63; world builds 943 → 348.
@@ -1161,7 +1161,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam, layer-reference-resolution, and the prevention mechanism that refuses regrowth.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution.
 
 ### reconcile-emit-report (q5)
 
@@ -1170,12 +1170,6 @@ The fixture renders the full mechanical region about 200 times across its shards
 Renders per push (counter spliced into `render()`, one shard per run): before (011853d19) shard a 694, b 171, c 280, d 25, total 1170; after shard a 15, b 22, c 29, total 66 (shard d is deleted). Per tag, read off each render's program and consumer in the after logs: base-world a 2, b 3, c 2 (7); conflicting-state a 8, b 17, c 12 (37); mutant-deciding a 5, b 2, c 15 (22). Per-shard floor (base-world renders each shard pays): a 2 (the seed render and the one plain `--verify`), b 3 (the seed render, V-R's real approval and the ctl-V control), c 2 (the seed render and the ctl-SB control). Narrowing: each mutant runs its deciding arm and its named twins, and the matrix is re-measured by `bash core/fixtures/reconcile-emit-report/run.sh --matrix`.
 
 **Progress (0.962.0, batch b245).** reconcile-emit-report renders once per distinct render input: 1170 renders per push become 66 (base-world 7, conflicting-state 37, mutant-deciding 22), with 0 coverage losses (161 assertions retired with the BL-679 cache, 40 folded into their mutant kill lines). Solo hermetic runs at 66623ceb4: shard a 97s, b 71s, c 56s. The entry stays PARTIAL.
-
-verify: manual
-
-## BL-850 — fixtures run their subject once per assertion, mutant or world, and some skip with exit 0 on a condition true in normal use; nothing refuses the regrowth
-
-**DEFECT (efficiency).** Prevention half of the fixture-optimization feature. Fixtures ran their subject once per assertion, once per mutant, and once per world: `reconcile-emit-report` rendered the full report about 200 times where one or two renders suffice, and `readset-skip` scored 15 mutants against 15 worlds on every push. Separately, fixtures SKIPped with exit 0 on conditions true in normal use (a linked-worktree `.git`, a missing declared tool), which reads as a pass. Nothing bound either, so the cost grew back after every fix. The convention is `.claude/rules/fixture-mutants.md`, "One run per distinct state"; the decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 Three mechanisms, each with a self-probe in both directions:
 
@@ -1190,6 +1184,14 @@ H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-i
 Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
 
 Found while building it (lead filing, DEFECT, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
+
+Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
+
+verify: manual
+
+## BL-851 — fixture prevention mechanisms: invocation budget, hygiene arms, H5
+
+**DEFECT (efficiency).** Nothing refused the regrowth of fixture cost: this entry files the three prevention mechanisms, the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the H5 mutant-matrix name join. BL-850 carries their detail. The decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 

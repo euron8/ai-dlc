@@ -9,7 +9,6 @@ adversarial-shard-merge
 apply-drift-after-write
 apply-restamp-theirs
 apply-restamp-worklist
-architecture-index-cell-escaping
 artifact-derivations
 artifact-section-heading-level
 backlog-receipt-binding
