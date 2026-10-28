@@ -5,3 +5,5 @@
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
+# The same-run kill helper, sourced by run.sh.
+core/fixtures/lib/mutant.sh
