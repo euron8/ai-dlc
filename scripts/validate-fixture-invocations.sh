@@ -25,6 +25,17 @@
 # THE COUNTER. BASH_ENV names an rc whose self-removing DEBUG trap appends one row `<BASH_SOURCE[0] or -c>\t<pid>`
 # to $FXCOUNT_LOG at the first command of every bash start: nested, inside `$( )`, and `bash -c` included. The
 # whole trap is wrapped in `{ } 2>/dev/null`, so xtrace output is unchanged and an unwritable log writes nothing.
+# A START UNDER A FILE-SIZE LIMIT (`ulimit -f 0`) MUST BEHAVE AS IT WOULD UNCOUNTED, and it is still counted. The plain
+# append there raises SIGXFSZ, which under the default disposition KILLED the bash before its first command (rc 153,
+# the subject never ran), and under `trap '' XFSZ` failed and left the row in the printf buffer, flushed onto the
+# subject's own stdout by its next builtin print. Measured on postcompact-rulebook-recovery's s_killed arm: the killed
+# gate write never happened, so its M9-inplace and M-unlink flips vanished armed only. So the trap ignores XFSZ for the
+# append, drops the stale buffer with an `echo` to /dev/null, and on a refused append records the start as a SYMLINK
+# `<log>.lim.<random>` whose target is the row: a symlink is not a regular-file write and no file-size limit binds it.
+# It then restores the default XFSZ action (a disposition ignored on entry stays ignored; bash cannot reset it). The
+# judge reads the log plus one row per marker. The markers are not truncated by hermetic-run.sh with the log, so a
+# start log is judged once per FXCOUNT_DIR: the hook makes a fresh `mktemp -d` run dir per push. Still unseen there: a
+# mutant_killed name appended to `<log>.mutants` under the limit is lost (J5 sees fewer names, never a false FAIL).
 #
 # THE DECLARATION: core/fixtures/<f>/invocations.decl. `#` comments and blank lines ignored. Rows:
 #   <count> *              every bash start of the run, run.sh included. REQUIRED, exactly one.
@@ -102,7 +113,7 @@ FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per 
 fxc_gen_rc() { # <dir>: write <dir>/fxcount.rc, print its path
   mkdir -p "$1" || return 2
   cat > "$1/fxcount.rc" <<'RC' || return 2
-{ trap '{ trap - DEBUG; printf "%s\t%s\n" "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}" "$$" >> "$FXCOUNT_LOG"; } 2>/dev/null' DEBUG; } 2>/dev/null
+{ trap '{ trap - DEBUG; trap "" XFSZ; printf "%s\t%s\n" "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}" "$$" >> "$FXCOUNT_LOG" || { echo > /dev/null; /bin/ln -s "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}	$$" "$(/usr/bin/mktemp -u "$FXCOUNT_LOG.lim.XXXXXXXX")"; }; trap - XFSZ; } 2>/dev/null' DEBUG; } 2>/dev/null
 RC
   printf '%s\n' "$1/fxcount.rc"
 }
@@ -192,24 +203,28 @@ fxc_mutant_rows() {
 
 # fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
 fxc_judge() {
-  local fx="$1" decl="$2" log="$3" root="$4" fd inp w rc=0 tot kind c k g tgt raw dcl m n rows
+  local fx="$1" decl="$2" log="$3" root="$4" jl fd inp w rc=0 tot kind c k g tgt raw dcl m n rows
   fd="$(dirname "$decl")"; inp="$fd/inputs.decl"
-  if [ ! -s "$log" ]; then
+  w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-judge.XXXXXX")" || return 2
+  # The start log the judge reads is the appended rows plus one row per `<log>.lim.*` marker, the symlink a start under
+  # a file-size limit leaves when its append is refused (see THE COUNTER). Every row below is read from this merge.
+  { cat "$log" 2>/dev/null; for m in "$log".lim.*; do [ -L "$m" ] && printf '%s\n' "$(readlink "$m")"; done; } > "$w/log"
+  if [ ! -s "$w/log" ]; then
     printf '%s: FIXTURE BROKEN (J1): the invocation log %s is %s -- run.sh is itself a bash start, so a counted run logs at least one row; the counter never loaded\n' \
       "$fx" "$log" "$([ -e "$log" ] && echo empty || echo absent)"
-    return 2
+    rm -rf "$w"; return 2
   fi
-  w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-judge.XXXXXX")" || return 2
+  jl="$w/log"
   : > "$w/req"
   [ -f "$inp" ] && awk '{ sub(/\r$/, "") } $0 == "" || /^#/ { next }
       { r = 0; while ((ch = substr($0, 1, 1)) == "!" || ch == "+") { if (ch == "!") r = 1; $0 = substr($0, 2) }
         if (r && $0 !~ /\/$/) print }' "$inp" > "$w/req"
-  tot="$(awk 'END { print NR }' "$log")"
+  tot="$(awk 'END { print NR }' "$jl")"
   if [ ! -f "$decl" ]; then
     printf '%s: FAIL (J2): no invocations.decl in the fixture directory. Measured on this run -- write this as %s/invocations.decl:\n' "$fx" "${fd#"$root"/}"
     printf '  %s *\n' "$tot"
     while IFS= read -r p; do
-      n="$(fxc_count "$log" "$p")"; [ "$n" -gt 0 ] && printf '  %s %s\n' "$n" "$p"
+      n="$(fxc_count "$jl" "$p")"; [ "$n" -gt 0 ] && printf '  %s %s\n' "$n" "$p"
     done < "$w/req"
     rc=1
   else
@@ -247,7 +262,7 @@ EOF
         if ! grep -qxF -- "$tgt" "$w/req"; then
           printf '%s: FAIL (J4): row "%s" names %s, which is not a `!` (REQUIRED) file line of %s -- a path row binds to the declaration, never a second list\n' "$fx" "$raw" "$tgt" "${inp#"$root"/}"; rc=1; continue
         fi
-        m="$(fxc_count "$log" "$tgt")"
+        m="$(fxc_count "$jl" "$tgt")"
       else
         m="$tot"
       fi
@@ -407,6 +422,26 @@ fxc_self_probe() {
   env -i PATH="/usr/bin:/bin" "$bash_bin" -x "$S/known.sh" > /dev/null 2> "$S/off.err"
   if [ -s "$S/e3.log" ] && [ -s "$S/off.err" ] && cmp -s "$S/on.err" "$S/off.err"; then sp_ok "E2E xtrace stderr is byte-identical with the counter on and off, and the counter-on run logged"
   else sp_bad "E2E xtrace: stderr differs with the counter on, or the counter-on run logged nothing"; fi
+  # A start under `ulimit -f 0` that writes a file: the same stdout and exit with the counter on and off, under both XFSZ
+  # dispositions (default: the write kills it, rc 153; ignored: the write fails rc 1), and the counter-on start counted.
+  # Stdout goes to a pipe, which no file-size limit binds, so the comparison sees a row the old trap flushed onto it.
+  printf 'echo first\nprintf "x\\n" > "$1"\necho "write rc=$?"\n' > "$S/lim.sh"
+  local lim_ok=1 lim_n=0 dsp tag
+  for dsp in dfl ign; do
+    for tag in off on; do
+      if [ "$tag" = on ]; then set -- BASH_ENV="$rcf" FXCOUNT_LOG="$S/lim-$dsp.log"; else set --; fi
+      ( [ "$dsp" = ign ] && trap '' XFSZ; ulimit -f 0
+        env -i PATH="/usr/bin:/bin" "$@" "$bash_bin" "$S/lim.sh" "$S/lim-$dsp-$tag.t" 2>/dev/null; echo "exit=$?" ) 2>/dev/null | cat > "$S/lim-$dsp-$tag.out"
+    done
+    grep -qx first "$S/lim-$dsp-off.out" || lim_ok=0
+    cmp -s "$S/lim-$dsp-off.out" "$S/lim-$dsp-on.out" || lim_ok=0
+  done
+  grep -qx 'exit=153' "$S/lim-dfl-off.out" && grep -qx 'write rc=1' "$S/lim-ign-off.out" || lim_ok=0
+  [ "$lim_ok" = 1 ] && sp_ok "E2E a start under ulimit -f 0 writing a file is killed (default XFSZ) or refused (ignored) identically with the counter on and off" \
+    || sp_bad "E2E under ulimit -f 0 the counter changed what the start observes: off [$(tr '\n' ' ' < "$S/lim-dfl-off.out")| $(tr '\n' ' ' < "$S/lim-ign-off.out")] on [$(tr '\n' ' ' < "$S/lim-dfl-on.out")| $(tr '\n' ' ' < "$S/lim-ign-on.out")]"
+  mkdir -p "$SPR/lim"; cp "$fd/inputs.decl" "$SPR/lim/"; printf '1 *\n' > "$SPR/lim/invocations.decl"
+  sp_cell "E2E a start under ulimit -f 0, default XFSZ, is counted (1 start)" 0 lim "$S/lim-dfl.log" "1 start(s)"
+  sp_cell "E2E a start under ulimit -f 0, XFSZ ignored, is counted (1 start)" 0 lim "$S/lim-ign.log" "1 start(s)"
   # The seeded loop through the REAL mutant.sh: an unrowed name FAILs J5, the same loop rowed passes.
   local mlib="${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh"
   if [ ! -f "$mlib" ]; then sp_bad "E2E the real core/fixtures/lib/mutant.sh is absent beside this script ($mlib)"
@@ -421,7 +456,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 39 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 39
+  [ "$SP_N" -eq 42 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 42
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2
