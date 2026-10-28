@@ -12,7 +12,6 @@ apply-restamp-worklist
 architecture-index-cell-escaping
 artifact-derivations
 artifact-section-heading-level
-backlog-receipt-binding
 backlog-rotate-fence-guard
 budget-summary-verdict
 ci-gates-resolution
