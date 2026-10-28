@@ -197,13 +197,34 @@ fi
 _er_tmp="$(mktemp -d "${TMPDIR:-/tmp}/emit-report.XXXXXX" 2>/dev/null)" || _er_tmp=""
 trap '[ -n "${_er_memo_owned:-}" ] && rm -rf "$_er_memo_owned"; [ -n "${_er_tmp:-}" ] && rm -rf "$_er_tmp"; :' EXIT
 # er_tmpf <var> <name> -- sets <var> to a fresh, empty `$_er_tmp/<name>`, so the EXIT trap above
-# owns it and no site forks a `mktemp` or an `rm` for it. Sets <var> empty and returns 1 when there
-# is no staging directory or the file cannot be created: the value a failed `mktemp` gave.
+# owns it and no site forks a `mktemp` or an `rm` for it.
+#
+# WITH NO STAGING DIRECTORY IT FALLS BACK TO ITS OWN `mktemp`, AND THAT IS WHAT KEEPS IT IDENTICAL.
+# Every site this helper serves used to call `mktemp` itself, and a failed `mktemp -d` above does not
+# imply a failed `mktemp`: those sites then still got a file and ran their detector. Returning empty
+# there instead would make `>"$ld_raw"` a redirect to nothing, and the section would read
+# DETECTOR-REFUSED where it used to render. The `mktemp`'s stderr is the caller's, as it was. Sets
+# <var> empty and returns 1 only when that `mktemp` fails too: the value the failed `mktemp` gave.
 er_tmpf() {
   printf -v "$1" '%s' ""
-  [ -n "$_er_tmp" ] || return 1
-  : > "$_er_tmp/$2" 2>/dev/null || return 1
-  printf -v "$1" '%s' "$_er_tmp/$2"
+  if [ -n "$_er_tmp" ] && : > "$_er_tmp/$2" 2>/dev/null; then
+    printf -v "$1" '%s' "$_er_tmp/$2"; return 0
+  fi
+  local _t
+  _t="$(mktemp)" || return 1
+  printf -v "$1" '%s' "$_t"
+}
+# er_tmprm <file>... -- removes each FALLBACK file at the site that used to `rm -f` it, and forks
+# nothing for a file inside `$_er_tmp`, which the EXIT trap owns. Not left to the trap: `--verify`
+# renders inside `$( )`, a subshell where this process's EXIT trap does not run, so a fallback file
+# made there would outlive the render where the old per-site `rm -f` removed it.
+er_tmprm() {
+  local _f
+  for _f in "$@"; do
+    [ -n "$_f" ] || continue
+    if [ -n "$_er_tmp" ]; then case "$_f" in "$_er_tmp"/*) continue ;; esac; fi
+    rm -f "$_f"
+  done
 }
 # er_pdiff <staged-file> <other> — `diff - <other>` with the staged file PIPED in, never passed as a
 # path: Apple diff hunks two REGULAR files differently from a pipe and a file (measured on a graph
@@ -427,7 +448,7 @@ render() {
     # Through a pipe, for `er_stage`'s reason: a failed builtin write into the file would carry its
     # unflushed bytes into the region on the next stdout write.
     if [ -n "$rt_pc" ]; then
-      printf '%s\n' "$pc" | cat > "$rt_pc" 2>/dev/null || rt_pc=""
+      printf '%s\n' "$pc" | cat > "$rt_pc" 2>/dev/null || { er_tmprm "$rt_pc"; rt_pc=""; }
     fi
     sub "Semantic worklist orientation — OURS = consumer, THEIRS = upstream at theirs. Every ours/theirs claim in the resolution prose MUST be derived from this block, never from recall:"
     printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
@@ -613,6 +634,7 @@ render() {
           fi
         fi
       done
+    er_tmprm "$rt_pc"
   elif [ -n "$pc_refused" ]; then
     # The orientation block renders only when there is a worklist, so on a refusal it would simply
     # be ABSENT -- which is also what a pull with no CLASSIFY file looks like. It says why instead.
@@ -718,6 +740,7 @@ render() {
   else
     hro="  validator absent at ${THEIRS}:core/scripts/validate-hook-registration.sh and on the consumer — NOT CHECKED (this is not a pass)"
   fi
+  er_tmprm "$hrv"
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
   # EACH DETECTOR RUNS ONCE PER RENDER, AND THE WRAPPER IS HANDED THE ROWS.
@@ -770,12 +793,13 @@ render() {
   # The write's status is READ (BL-360): a partial bucket file handed down as the flag would be
   # read as the whole classification. A failed write passes no flag, the re-deriving path above.
   if [ -n "$ud_pc" ] && ! printf '%s\n' "$pc" | cat > "$ud_pc" 2>/dev/null; then
-    ud_pc=""
+    er_tmprm "$ud_pc"; ud_pc=""
   fi
   if [ -n "$ud_pc" ]; then
     bash "$SELF/unregistered-drift.sh" --bucket-rows "$ud_pc" \
          "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
     ud_rc=$?
+    er_tmprm "$ud_pc"
   else
     bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
     ud_rc=$?
@@ -808,6 +832,7 @@ render() {
   if [ "$ld_rc" -eq 0 ]; then none_or "$ld"; else
     echo "DETECTOR-REFUSED  layer-drift.sh exited ${ld_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>"
   fi
+  er_tmprm "$ld_raw" "$ud_raw"
 
   sub "Catalog relabel (extension check-number collisions, incl. NEW-THIS-PULL from theirs):"
   # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
@@ -831,6 +856,7 @@ render() {
   # `###?#? ` is `#{2,4} ` spelled without an interval expression, which not every awk honours.
   rl="$(awk '/^[[:space:]]+\+[[:space:]]+###?#? / { sub(/^[[:space:]]*\+[[:space:]]*/, "  "); print }' "$rl_raw" | sort -u)"
   rl_f_rc=$?
+  er_tmprm "$rl_raw"
   [ "$rl_rc" -le 1 ] && [ "$rl_f_rc" -ne 0 ] && rl_rc="filter-${rl_f_rc}"
   if [ "$rl_rc" = 0 ] || [ "$rl_rc" = 1 ]; then none_or "$rl"; else
     echo "DETECTOR-REFUSED  relabel-extension-checks.sh exited ${rl_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/relabel-extension-checks.sh <consumer> --dist <dist> --theirs <theirs>"
@@ -861,6 +887,7 @@ render() {
   bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$lr_raw" 2>/dev/null
   lr_rc=$?
   lr="$(awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' "$lr_raw" | sort -u)"
+  er_tmprm "$lr_raw"
   if [ "$lr_rc" -eq 0 ]; then none_or "$lr"; else
     echo "DETECTOR-REFUSED  ledger-reverify.sh exited ${lr_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/ledger-reverify.sh <dist> <base> <consumer> <theirs>"
   fi
@@ -913,6 +940,7 @@ render() {
     if [ "$a0_rc" -eq 0 ]; then
       a0_rows="$(awk -F'\t' "$a0_prog" "$a0_raw" | sort -u)" || a0_rc="projection-$?"
     fi
+    er_tmprm "$a0_raw"
     if [ "$a0_rc" = 0 ]; then none_or "$a0_rows"; else
       echo "DETECTOR-REFUSED  ${a0_what%% *} exited ${a0_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/${a0_what}"
     fi
