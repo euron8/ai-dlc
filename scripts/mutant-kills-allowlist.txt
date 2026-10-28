@@ -9,7 +9,6 @@ adversarial-shard-merge
 apply-drift-after-write
 apply-restamp-worklist
 architecture-index-cell-escaping
-backlog-receipt-binding
 ci-gates-resolution
 claude-rules-joins
 context-mode-protect
