@@ -82,7 +82,6 @@ preclassify-mode-bucket
 preclassify-rename-row
 predicate-reclassification
 prepush-pool-depth
-prepush-ssh-keepalive
 prepush-worktree-env-scrub
 process-rule-pins
 procsub-staged-refusal
