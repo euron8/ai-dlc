@@ -69,6 +69,7 @@
 # MUTANT-MATRIX m6 decides=src-gone twins=no-loader
 # MUTANT-MATRIX-CONTROL controlD why=a probe arm added to the sandbox's own map_consumer() must render above the catch-all, proving the sandbox is the tree read; its correct outcome is that the row APPEARS
 # MUTANT-MATRIX-CONTROL n1 why=a near-miss change outside map_consumer() whose correct outcome is that --check stays quiet, so it has no deciding cell
+# MUTANT-MATRIX-DYNAMIC kill_check why=kill_check is one body called once per mutant, so the mutant id reaches mutant_killed as $id; every name it produces has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/path-mapping-render/run.sh --matrix
 set -u
 # MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Anything

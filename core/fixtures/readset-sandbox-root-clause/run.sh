@@ -34,6 +34,7 @@
 # MUTANT-MATRIX markdir-ov-lm decides=lm,ov twins=def
 # MUTANT-MATRIX report-default decides=def twins=ov
 # MUTANT-MATRIX report-lm decides=lm twins=ov
+# MUTANT-MATRIX-DYNAMIC score_mutant why=score_mutant is one body called once per mutant, so the mutant id reaches mutant_killed as $m; every name it produces has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-sandbox-root-clause/run.sh --matrix
 set -u
 # MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
