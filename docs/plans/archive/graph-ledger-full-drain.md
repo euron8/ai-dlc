@@ -16439,7 +16439,7 @@ subject every time. A green gate with exit 141 and no remote ref was re-pushed `
 `ledger-reverify-c` and `ledger-reverify-shard-mutants`. The sandbox tracer drops its stream under load and a trace that
 drops a fixture also deletes that fixture's old rows, so a map diff with deletions is discarded and never committed.
 Nine fixtures that invoke `validate-enforcement-map.sh` dropped on the last try and keep rows that predate its fixture-file
-read (`I118`); re-trace them when `uptime` reads under 10.
+read (`I118`); re-trace them.
 
 **THE DELIVERY GAP IS WIDE.** At batch 179's last look the consumer was at 0.674.0 and `VERSION` read 0.691.0; re-derive
 it. PENDING was 2: the S316 acknowledge-hook candidate and the step-8 ordering candidate. Seven of the eight releases
@@ -16545,7 +16545,7 @@ code. Nothing was deleted; removing them is the operator's call.
 
 **READ-SET TRACE OWED, AND THE ONE TAKEN WAS DISCARDED.** The sandbox tracer at `09691a05`, under load 17-31, dropped
 `apply-drift-after-write`, `enforcement-map-sites` and `validator-fork-budget` and deleted their 2216 rows, so the map
-was not committed. Re-run when `uptime` reads under 10: `bash core/scripts/derive-fixture-readsets.sh --list
+was not committed. Re-run: `bash core/scripts/derive-fixture-readsets.sh --list
 "apply-drift-after-write apply-drift-refile apply-restamp-theirs apply-worklist-rows check-24-adversarial-convergence
 document-partition enforcement-map-sites procsub-staged-refusal self-update-fixture-log self-update-gate
 validator-fork-budget ledger-reverify-shard-mutants" --tracer sandbox`, and commit only a diff with no OMITTED line.
@@ -17303,8 +17303,8 @@ report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** the dev 
 > Mutants for each. New BL entry with a behavioural receipt scored against base and at least three wrong builds. Read set
 > of readset-skip owes a re-trace — which this mechanism now performs on the next push.
 >
-> **L6. Measurement.** Wall clock of a push with one unmapped fixture, base vs tip, interleaved, in clean worktrees; the
-> pole must not move. Consumer: rehearse on an `install.sh` scratch tree in both layouts; a consumer without sandbox-exec
+> **L6. Measurement.** Exec and invocation counts of a push with one unmapped fixture, base vs tip, in clean worktrees; the
+> counts must not rise. Consumer: rehearse on an `install.sh` scratch tree in both layouts; a consumer without sandbox-exec
 > gets today's behaviour.
 >
 > **M1 (B1).** NO pool unit. After the suite is GREEN, the hook starts ONE DETACHED run of
@@ -17427,8 +17427,8 @@ ADVERSARY ON THEIR CURRENT TIP.** The operator ended this batch before they ship
 - `b201-r2` at `c6eb707b`: `scripts/validate-backlog-receipts.sh` arm R2. A receipt counts as behavioural only when every
   existing file it names is a script whose inserted sentinel fired; a receipt that also reads a named text file is
   `UNSCORABLE reads-named-text`, which blocks the all-behavioural zero. Per-receipt process-group timeout. Four build
-  rounds; **round 4 has had no tip adversary.** Its fixture measured 252-297s only under load 19-64; time it once on a
-  quiet box before deciding whether to split it.
+  rounds; **round 4 has had no tip adversary.** Its fixture measured 252-297s only under load 19-64; read its recorded exec count
+  before deciding whether to split it.
 - `b201-bl456-fix` at `389e0f3a`: `BL-456`. Ship it IN THE SAME RELEASE as `b201-r2`. On that branch BL-456's receipt
   exits 0 at base, and R2 scores a base-0 receipt `ALREADY-PASSING` before the execution test, so it does not depend on
   R2 landing first. `git merge-tree` of `b201-nest` against it is clean.
@@ -19013,8 +19013,7 @@ the close checklist is `docs/analysis/b238-close-list.md`. Its scratch-path cita
      origin, push it `--no-verify` before the gate): BL-678, 708, 712, 714, 720, 724.
      Archive must move by six. Its dress runs fixtures (it touches `adversarial-shard-merge/lib.sh` and `readset-skip`).
   2. `238-r3` at `717e0d856`: BL-674, BL-697, both in `scripts/validate-enforcement-map.sh` on the suite pole. OWED BEFORE
-     IT GATES: one CPU-seconds differential, base vs tip, clean worktrees at one path, 2 interleaved reps, with no fixture
-     run live. BL-707 rides here once folded (item 6).
+     IT GATES: one exec and invocation count differential, base vs tip, clean worktrees at one path. BL-707 rides here once folded (item 6).
   3. `238-s-715` at `4c223690a`: BL-715, alone (rulebook file `core/team-roles/remediator.md`).
   4. `238-d-721` at `f460240a5`: BL-721. Its release text says it supersedes archived BL-717's "past IDLE_SECS the remedy
      is today's": a resolved dispatch with the path absent now prints STOPPED at the cap.

@@ -1806,3 +1806,11 @@ Owed: the step's per-story cost on a measured graph sprint, or the step-value ev
 
 verify: manual
 
+
+## BL-866 — timing runs are retired; cost evidence is the counts the gate records
+
+**NOTE.** Operator ruling, 2026-10-28 17:16 EDT: "Timing runs are pointless and unwarranted. I don't want them, they add unnecessary ceremony to collect data that will never be used and become irrelevant quickly." A ruling at 17:15 stands beside it: no work needs a quiet box. Cost evidence is the counts the gate records (invocations.decl, exec, fork and render counts), and reading a duration off a pre-push log stays allowed.
+
+**Changed (batch b245).** The durable rules carry it: `.claude/rules/operator-rulings.md` gains the section "No timing runs" and drops the "Measure `uptime` before a gate" clause; `CLAUDE.md` restates the validator rule as counting execs and invocations before and after; `.claude/rules/verification-discipline.md` recasts "Time both sides the same way" as "Count both sides the same way" and keeps the trees-versus-revisions hazard; `.claude/rules/tool-hazards.md` ends the PS4 paragraph at counting invocations. The live timing instructions in `docs/plans` are recast as counts or deleted: `graph-ledger-full-drain.md` (archive), `pre-push-wall-clock.md` (archive), `hermetic-fixtures-poc.md`, `graph-s305-triage.md` and `graph-pull-0891-to-0901.md`. Historical quotes and recorded wall clocks are untouched.
+
+verify: manual
