@@ -77,14 +77,18 @@ setup_tmp() {
   MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
   trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
 }
-# BW_Q / BW_PATH: the quantum and the PATH one beat runs with. Unset, a beat runs exactly as it
-# always has (quantum 4, the fixture's own PATH); a case that needs the sleep record or a
+# BW_Q / BW_PATH: the quantum and the PATH one beat runs with. Unset, a beat runs with quantum 1
+# against MARGIN 1, so its deadline is `now` and it leaves the poll loop at the first check
+# WITHOUT sleeping. Every verdict a default beat is asked for (WAITING, NON-DELIVERY, PROGRESS,
+# the counter, the .bound, the mark) is decided outside the loop, and a beat is charged because
+# the invocation MAY sleep, not because the loop ran, so no default-beat arm reads the clock. A
+# case that asserts WHETHER a beat slept sets BW_Q itself and runs under the recording stub; a case that needs the sleep record or a
 # quantum no scheduling delay can cross sets them for its own beat and unsets them after.
 BW_Q=""; BW_PATH=""
 beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
   local subj="$1" w="$2"; shift 2
   ( cd "$w" && env PATH="${BW_PATH:-$PATH}" \
-                   AI_DLC_WAIT_BEAT_SECS="${BW_Q:-4}" \
+                   AI_DLC_WAIT_BEAT_SECS="${BW_Q:-1}" \
                    AI_DLC_WAIT_POLL_SECS=1 \
                    AI_DLC_WAIT_MARGIN_SECS=1 \
                    AI_DLC_MAX_WAIT_BEATS=6 \
@@ -106,13 +110,24 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
 # otherwise a stub that was never on the beat's PATH (or never executable) reads exactly like a
 # beat that never slept.
 STUB_PATH=""; STUB_LOG=""
-sleep_stub() { # <dir>
-  local real_sleep real_bash
+# MODES. `real` (default) execs the real sleep with its own argument, for the cases whose subject
+# IS a beat parked in a long poll (frozen, killed, woken on purpose). `fast` records the call and
+# sleeps 0.05s whatever the argument, for a case that only needs the beat to ENTER a poll sleep
+# and then see a write. `gate` records and then blocks until `<dir>/release` exists, so the case
+# decides the moment the beat wakes and no clock does.
+sleep_stub() { # <dir> [real|fast|gate]
+  local real_sleep real_bash mode="${2:-real}" body
   real_sleep="$(command -v sleep)"; real_bash="$(command -v bash)"
   [ -n "$real_sleep" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve sleep/bash for the sleep stub" >&2; exit 2; }
   mkdir -p "$1/bin" || { echo "FIXTURE ERROR: cannot create the sleep stub dir" >&2; exit 2; }
   STUB_LOG="$1/sleep.log"; : > "$STUB_LOG"
-  printf '#!%s\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$real_bash" "$STUB_LOG" "$real_sleep" > "$1/bin/sleep"
+  case "$mode" in
+    real) body="$(printf 'exec "%s" "$@"' "$real_sleep")" ;;
+    fast) body="$(printf 'exec "%s" 0.05' "$real_sleep")" ;;
+    gate) body="$(printf 'while [ ! -e "%s/release" ]; do "%s" 0.02; done' "$1" "$real_sleep")" ;;
+    *) echo "FIXTURE ERROR: unknown sleep stub mode '$mode'" >&2; exit 2 ;;
+  esac
+  printf '#!%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$STUB_LOG" "$body" > "$1/bin/sleep"
   chmod +x "$1/bin/sleep" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
   STUB_PATH="$1/bin:$PATH"
 }
@@ -132,7 +147,7 @@ stub_works() { # -> 0 when one `sleep 0` through STUB_PATH adds exactly one reco
 # the writer looping. Sets DW to the writer's pid.
 DW=""
 deliver_on_sleep() { # <file> <stop>
-  ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ]; do sleep 0.1; done
+  ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ]; do sleep 0.02; done
     [ -s "$STUB_LOG" ] && printf 'the actual answer for this sprint\n' > "$1" ) &
   DW=$!
 }
@@ -392,15 +407,21 @@ rm -rf "$W"
 # precisely the pre-fix behaviour.
 C02_stale_marker() {
 W="$( bash "$SEED" stale-marker )"
-( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
+# The beat is HELD in its first poll sleep (gate stub) until the marker has been observed, then the
+# real write is made and the gate opened, so it delivers and leaves through its normal EXIT trap.
+# No quantum is waited out and no clock decides either moment.
+sleep_stub "$W/.stub" gate
+( cd "$W" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 seen=0
-for _ in $(seq 1 80); do
+for _ in $(seq 1 3000); do
   [ -f "$W/_bmad-output/.beat-inflight" ] && { seen=1; break; }
   kill -0 "$PID" 2>/dev/null || break
-  sleep 0.1
+  sleep 0.02
 done
+printf 'the actual answer for this sprint\n' > "$W/deliv.md"
+: > "$W/.stub/release"
 wait "$PID" 2>/dev/null || true
 if [ "$seen" -eq 1 ]; then ok "stale-marker: .beat-inflight live during the beat (lead may yield)"
 else bad "stale-marker: no .beat-inflight — the lead cannot yield and will poll in foreground"; fi
@@ -417,7 +438,7 @@ rm -rf "$W"
 # write past the beat's deadline -- which at quantum 4 it could, and read as a missed delivery.
 C03_arrives_mid_beat() {
 W="$( bash "$SEED" arrives-mid-beat )"
-sleep_stub "$W/.stub"
+sleep_stub "$W/.stub" fast
 deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
 BW_Q=60; BW_PATH="$STUB_PATH"
 beat "$W"
@@ -442,10 +463,14 @@ rm -rf "$W"
 C04_since_clamp() {
 W="$( bash "$SEED" since-clamp )"
 FUT=$(( $(date +%s) + 600 ))
-( sleep 2; printf 'the actual answer for this sprint\n' > "$W/deliv.md" ) &
-WRITER=$!
+# The write is gated on the beat's first poll sleep (deliver_on_sleep), not on `sleep 2`: it lands
+# strictly inside the poll loop whatever the load, and no second of clock is spent waiting for it.
+sleep_stub "$W/.stub" fast
+deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
+BW_Q=20; BW_PATH="$STUB_PATH"
 beat "$W" --since "$FUT"
-wait "$WRITER" 2>/dev/null || true
+BW_Q=""; BW_PATH=""
+end_writer "$W/.stub/stop"
 if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-clamp: a 10-minute-future --since still accepts the real write"
 else bad "since-clamp: no DELIVERED line — --since was trusted past now, threshold unsatisfiable"; fi
@@ -459,7 +484,7 @@ rm -rf "$W"
 # then means that beat really did not sleep.
 C05_since_earlier() {
 W="$( bash "$SEED" since-earlier )"
-sleep_stub "$W/.stub"
+sleep_stub "$W/.stub" fast
 beat "$W"
 if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT" && ! grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-earlier: bare call waits — a pre-join file is not proof, and waiting is not a failure"
@@ -467,9 +492,12 @@ else bad "since-earlier: rc $RC — expected a WAITING beat with no DELIVERED li
 if stub_works; then ok "since-earlier: CONTROL — the sleep stub records a sleep run through its PATH"
 else bad "since-earlier: the sleep stub recorded nothing — 'did not sleep' below would be unmeasured"; fi
 : > "$STUB_LOG"
-BW_PATH="$STUB_PATH"
+# Quantum 4, not the default 1: an undelivered beat must be ABLE to enter its poll sleep here, or
+# the empty record below could not fail. The stub is `fast`, so that failing direction costs a few
+# 0.05s sleeps and the passing direction costs nothing.
+BW_Q=4; BW_PATH="$STUB_PATH"
 beat "$W" --since "$(( $(date +%s) - 60 ))"
-BW_PATH=""
+BW_Q=""; BW_PATH=""
 if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-earlier: --since in the past recovers the early delivery"
 else bad "since-earlier: no DELIVERED line — --since could not move the threshold earlier"; fi
@@ -546,7 +574,7 @@ knob_beat() { # <work> <quantum> <steering budget>
 }
 C08_knob_split_forward() {
 W="$( bash "$SEED" knob-split-forward )"
-sleep_stub "$W/.stub"
+sleep_stub "$W/.stub" fast
 # The control runs first and its record is cleared: the beat's own record must start empty.
 if stub_works; then ok "knob-split-forward: CONTROL — the sleep stub records a sleep run through its PATH"
 else bad "knob-split-forward: the sleep stub recorded nothing — 'the beat did not sleep' below would be unmeasured"; fi
@@ -565,7 +593,7 @@ rm -rf "$W"
 # passes the forward case whenever the budget happens to be the smaller number.
 C09_knob_split_reverse() {
 W="$( bash "$SEED" knob-split-reverse )"
-sleep_stub "$W/.stub"
+sleep_stub "$W/.stub" fast
 deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
 knob_beat "$W" 60 3
 end_writer "$W/.stub/stop"
@@ -614,10 +642,10 @@ run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
   ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" \
                    AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md >/dev/null 2>&1 ) & pid=$!
-  for i in $(seq 1 600); do
+  for i in $(seq 1 3000); do
     [ -s "$W/_bmad-output/.beat-inflight" ] && break
     kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1
+    sleep 0.02
   done
   reap_tree "$pid"
   MS_KILL_T="$(date +%s)"
@@ -1141,7 +1169,8 @@ bg_beat() {
 }
 until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on timeout
   local n="$1"; shift
-  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.1; n=$((n - 1)); done
+  n=$(( n * 5 ))   # callers count 0.1s ticks; the tick is 0.02s, so the bound in seconds is unchanged
+  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.02; n=$((n - 1)); done
   return 1
 }
 now_at_least() { [ "$(date +%s)" -ge "$1" ]; }   # re-reads the clock on every call
@@ -1628,7 +1657,7 @@ run_bare_epoch() { # <subject> -> BE_* ; leaves W
   while kill -0 "$p" 2>/dev/null; do
     cur="$(marker_of "$W")"
     [ "$cur" = "$BE_M0" ] || BE_SEEN="${cur:-<absent>}"
-    sleep 0.1
+    sleep 0.02
   done
   wait "$p"; BE_RC=$?
   BE_AFTER="$(marker_of "$W")"
