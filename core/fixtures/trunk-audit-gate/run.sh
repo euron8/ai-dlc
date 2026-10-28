@@ -350,7 +350,7 @@ score_mut() {
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding world and twin"; return; fi
   mp="$(mkmut "$m" "$3")" || { bad "mutant $m did not apply"; return; }
-  mx_cell "$mp" "$m" "$dec" dec; d="$MX_COLOR"; LAST_DEC="$LAST"
+  mx_cell "$mp" "$m" "$dec" dec; d="$MX_COLOR"; LAST_DEC="${LAST:-}"
   if [ "$d" = RED ]; then mutant_killed "$fl" "$m" "mutant $m scored by world $dec ($LAST_DEC)"
   else bad "mutant $m SURVIVED: world $dec still read exit $WRC with '$WTX'"; fi
   if [ "$tw" != - ]; then
