@@ -203,6 +203,17 @@ set -u
 HR_ROOT_IN="${AI_DLC_PROJECT_ROOT:-}"   # read BEFORE the scrub below: the hermetic runner exports it as the sandbox root
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# NO WORLD HERE IS DECIDED BY THE POOL'S NO-PROGRESS WATCHDOG. Every run_fixtures this file drives (the ck, tk,
+# trace and report worlds) runs seeded units whose run.sh is a printf and an exit, through the real pool_run, whose
+# watcher refuses a unit after POOL_STALL consecutive one-second polls with no new bytes. The scrub above leaves the
+# default, 600, so a unit left unreaped for 600 polls was REFUSED, went unrecorded, and re-ran on the next push --
+# measured at load ~119, the fileentries mutant's world (c) read p2=delta|0 beside `REFUSED delta` in its push 1.
+# A test whose verdict moves with load is a defect, so the window is pinned to the block's own ceiling (99999 is the
+# largest value :527 of the hook accepts; a six-digit value is rejected to stderr, which these drives discard, and
+# falls back to 600). ck_push and tk_push record the value their block computed, and the (no-refusal) arm after the
+# tk worlds asserts every push saw this pin and none rendered a REFUSED verdict. The watchdog itself is tested by
+# core/fixtures/consumer-suite-pool (worlds p, s, w, t, ST=3) and core/fixtures/prepush-pool-depth (PN_STALL).
+AI_DLC_POOL_STALL=99999; export AI_DLC_POOL_STALL
 
 asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
@@ -5403,7 +5414,7 @@ ck_push() { # <pool> <t> <tag>: one push's suite. Leaves <t>.o.<tag>/{out,rc,ran
     . "$1" 2>/dev/null
     # THE TOOL DIRS ARE THE BLOCK'S OWN FIXED LIST, NEVER PATH: the shim dir stands in for it, and an
     # exec-path stand-in that does not exist keeps the real git out of these worlds.
-    READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"
+    READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"; printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
     run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
   LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
 }
@@ -6085,6 +6096,7 @@ tk_push() { # <pool> <t> <tag> <canon|fixed>: ck_push with NO shim dir on PATH. 
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
     if [ "$4" = fixed ]; then READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"; fi
+    printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
     run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
   LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
 }
@@ -7421,6 +7433,34 @@ slot_mut nobrksleep '/^      sleep 0\.2$/d' 'rebreak' stale
 slot_mut noline  '/^    say "slot: UNSLOTTED -- /d' 'file noparent rebreak stray' oldempty
 slot_mut late    'awk:/^  rs_slot_acquire$/ {next} /^  # Run it the way the pre-push runner runs it/ {print "  rs_slot_acquire"} {print}' 'foreign order stalemark' nested
 slot_mut early   'awk:/^    rs_slot_release$/ {next} /^  flushed=1$/ {print "  rs_slot_release"} {print}' 'foreign order stalemark' nested
+fi
+
+# (no-refusal) NO CK OR TK PUSH WAS DECIDED BY THE WATCHDOG (the pin is at the scrub, at the top of this file). Every
+# push directory this shard wrote must have recorded the pinned window, and no push may have rendered a REFUSED verdict
+# line. Presence-shaped: a shard that drove pushes must find at least one, and the scan is self-probed both ways first.
+ck_norefuse() { # <dir>: "<pushes>|<pushes whose block did not take the pin>|<REFUSED verdict lines>"
+  local f n=0 np=0 nr=0 c
+  for f in "$1"/*.o.*/out; do
+    [ -f "$f" ] || continue
+    n=$((n+1)); [ "$(cat "${f%/out}/stall" 2>/dev/null)" = 99999 ] || np=$((np+1))
+    c="$(grep -c '^   REFUSED  ' "$f")" || c=0; nr=$((nr+c))
+  done
+  printf '%s|%s|%s' "$n" "$np" "$nr"
+}
+NR_P="$(mktemp -d "$WORK/nr.XXXXXX")" || broken "mktemp failed for the no-refusal self-probe"
+mkdir -p "$NR_P/r/w.o.1" "$NR_P/c/w.o.1" "$NR_P/u/w.o.1"
+printf '   done 3/3  REFUSED delta\n   REFUSED  delta  (no progress for 600 polls; a refusal costs a re-run, never a verdict)\n' > "$NR_P/r/w.o.1/out"
+printf '   done 3/3  ok delta\n   ok    delta\n' > "$NR_P/c/w.o.1/out"; cp "$NR_P/c/w.o.1/out" "$NR_P/u/w.o.1/out"
+printf '99999\n' > "$NR_P/r/w.o.1/stall"; printf '99999\n' > "$NR_P/c/w.o.1/stall"; printf '600\n' > "$NR_P/u/w.o.1/stall"
+[ "$(ck_norefuse "$NR_P/r")|$(ck_norefuse "$NR_P/c")|$(ck_norefuse "$NR_P/u")" = '1|0|1|1|0|0|1|1|0' ] \
+  || broken "the no-refusal scan did not discriminate a seeded REFUSED push, a clean one and an unpinned one"
+_nr="$(ck_norefuse "$CK_W")"
+if [ "${_nr%%|*}" -gt 0 ]; then
+  CK_ARMS=$((CK_ARMS+1))
+  if [ "${_nr#*|}" = '0|0' ]; then ok "(no-refusal) all ${_nr%%|*} ck/tk push(es) ran under the pinned window 99999 and none was REFUSED by the pool watchdog"
+  else bad "(no-refusal) ck/tk pushes|unpinned|REFUSED verdict lines = $_nr; a push decided by the load-bound watchdog is no verdict on the subject"; fi
+elif sg ckw || sg ckm1 || sg ckm2 || sg ckm3 || sg tk; then
+  CK_ARMS=$((CK_ARMS+1)); bad "(no-refusal) this shard runs ck/tk worlds and the scan found no push directory under $CK_W"
 fi
 
 # A NO-PROGRESS NET THAT FIRED ANYWHERE IS A REFUSAL, NOT A VERDICT: the run is FIXTURE BROKEN, exit 2.
