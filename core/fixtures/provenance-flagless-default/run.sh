@@ -593,12 +593,18 @@ cell_red() { # cell_red <cell> <validator>
   [ "$got" != "$want" ]
 }
 # The header IS the decides/twins list: nothing else in this file restates it.
-mx_row() { # mx_row <mutant> <decides|twins>
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$SELF_FILE"
+mx_row() { # mx_row <mutant> <decides|twins>  -- shell builtins only: the hermetic sandbox has no awk
+  local n="$1" f="$2" line tok v="" c=0
+  while IFS= read -r line; do
+    case "$line" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for tok in $line; do
+          case "$tok" in "$f="*) v="${tok#"$f="}" ;; esac
+        done ;;
+    esac
+  done < "$SELF_FILE"
+  if [ "$c" -eq 1 ]; then printf '%s' "$v"; fi
 }
 MXL="$WORK/mx.ledger"; : > "$MXL"
 BROKEN=0; MX_FAILS=0
@@ -608,7 +614,7 @@ kill_cells() {
   dec="$(mx_row "$m" decides)"
   KC_READ=""
   if [ -z "$dec" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its deciding cells\n' "$m" >&2; return 1; fi
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+  for c in ${dec//,/ }; do
     got="$(cell_read "$c" "$v")"
     KC_READ="$KC_READ $c=$got"
     [ "$got" = "$(cell_flip "$c")" ] || ok=0
@@ -622,7 +628,7 @@ mx_twins() {
   tw="$(mx_row "$m" twins)"
   if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m" >&2; return; fi
   printf 'plain-twins %s\n' "$m" >> "$MXL"
-  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+  for t in ${tw//,/ }; do
     cell_red "$t" "$v"; r=$?
     if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t" >&2
     elif [ "$r" -eq 0 ]; then mut_bad "$m: its twin $t also went RED on this mutant, so the kill is not confined to its own cells"; fi
@@ -635,10 +641,10 @@ mx_score() {
   local m="$1" v="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
   printf 'mx-score %s\n' "$m" >> "$MXL"
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
-  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+  for c in ${dec//,/ }; do
     if cell_red "$c" "$v"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
   done
-  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+  for c in ${tw//,/ }; do
     if cell_red "$c" "$v"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
   done
   for c in $MX_CELLS; do
