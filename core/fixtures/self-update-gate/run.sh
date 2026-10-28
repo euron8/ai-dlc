@@ -743,7 +743,7 @@ CTL="$(dirname "$DIST")/ctl"; rm -rf "$CTL"; mkdir -p "$CTL"; cp "$GATE" "$CTL/g
 ASSERTIONS=$((ASSERTIONS + 1))
 c_broken="$(bash "$CTL/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 | awk -F'\t' '$2 == "gate-agree.sh" {print $1; exit}')"
 if [ "$c_broken" = SELF-UPDATE-UNDECIDED ]; then
-  printf '  ok    %-16s unmutated copy reproduces UNDECIDED (harness is sound)\n' "mutation-control"
+  printf '  ok    %-16s unmutated copy reproduces UNDECIDED (harness is sound; kept: LAYOUT is a LONE gate.sh in a directory of its own, which no other copy here uses)\n' "mutation-control"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s unmutated copy gave %s — a copy that cannot run scores as a kill\n' "mutation-control" "${c_broken:-<none>}"
@@ -2267,11 +2267,11 @@ ss_assert "su-gate-differential" "$(su_carry "$SU_GATE_NO")" \
   "...and the SAME gate on a consumer with no stamp still carries both, so the quiet above is the stamp read and not a gate that went silent"
 
 # THE ZERO CARRIES ITS CONTROL. A gate emitting nothing satisfies the absence above identically.
-ss_assert "su-gate-verdict" \
+if ss_assert_b "su-gate-verdict" \
   "$(printf '%s\n' "$SU_GATE_MID" | awk -F'\t' \
       '$1 == "SELF-UPDATE-OK" || $1 == "SELF-UPDATE-DEFER" || $1 == "SELF-UPDATE-UNDECIDED" {print $1}' \
       | sort -u | tr '\n' ',')" \
-  "SELF-UPDATE-OK," "...and it still emits its own verdict, so the missing CARRY rows are a decision rather than a dead gate"
+  "SELF-UPDATE-OK," "...and it still emits its own verdict, so the missing CARRY rows are a decision rather than a dead gate"; then B_sumf=1; fi
 
 # --- THE JOIN ITSELF: arm C now EVALS machinery_paths() out of preclassify.sh ----------
 # The population and the suppression scope are one derivation with one owner, loaded across a file
@@ -2280,9 +2280,8 @@ ss_assert "su-gate-verdict" \
 # `C_PATHS` is EMPTY, the membership test rejects every path, and the arm reports no divergence
 # having compared nothing -- output byte-identical to a clean pull. Scored on the GATE, not on the
 # buckets, because the row it must emit is the gate's.
-if ss_assert_b "su-machfn-control" \
-  "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
-  "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"; then B_sumf=1; fi
+# (su-machfn-control read the SAME capture, $SU_GATE_MID, as su-gate-verdict above: an OK-only verdict set holds no UNDECIDED row,
+# so su-gate-verdict is its base arm and sets B_sumf.)
 sumf_cell() { # <gate> <obs>
   local o r
   o="$(bash "$(dirname "$1")/self-update-gate.sh" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
@@ -3953,7 +3952,7 @@ fi
 # copy that cannot run does not score as a kill.
 PU_M="$(pu_mut control '{ print }')"
 ss_assert "pu-mut-control" "$(cmp -s "$PU_SRC" "$PU_M" && echo identical || echo differ)|$(pu_sc_pass "$PU_M" control)" \
-  "identical|rc=0 ref=landed n=1" "an unmutated copy of the wrapper, alone in its own directory, pushes and runs the hook once"
+  "identical|rc=0 ref=landed n=1" "an unmutated copy of the wrapper (LAYOUT: self-update-push.sh plus the checker, lib.sh and preclassify.sh in one directory, which no other copy here uses; kept) alone in its own directory, pushes and runs the hook once"
 PU_M="$(pu_mut noverify 'index($0, "push --no-verify --no-follow-tags") { sub(/push --no-verify --no-follow-tags/, "push --no-follow-tags") } { print }')"
 pu_kill "${B_pupass:-0}" "pu-mut-noverify" "$PU_M" "$(pu_sc_pass "$PU_M" noverify)" "rc=0 ref=landed n=2" \
   "a push without --no-verify after the hook ran runs the hook a second time" "$PU_PASS" "n" "rc"
@@ -4348,8 +4347,10 @@ qr_scan() {
     "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)"
 }
 for qloc in utf8 c; do
-  ss_assert "quote-script-$qloc" "$(qs_scan "$GATE" "$qloc")" "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" \
-    "($qloc) a changed gating script named café.sh is invoked, changed and deferred on, beside a plain one that passes"
+  if ss_assert_b "quote-script-$qloc" "$(qs_scan "$GATE" "$qloc")" "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" \
+    "($qloc) a changed gating script named café.sh is invoked, changed and deferred on, beside a plain one that passes"; then
+    case "$qloc" in utf8) B_qs=1 ;; esac
+  fi
   if sd_assert "quote-names-$qloc" "$(qn_scan "$GATE" "$qloc")" "a1.sh,a2.sh,ca.sh,$QU.sh,dq.sh,ea.sh,ha.sh,ka.sh,plain.sh,semi.sh,sq.sh," \
     "($qloc) every delimited hook name yields exactly its own row, two on one line yield two, and , : = # end a name"; then
     case "$qloc" in c) B_qn_c=1 ;; esac
@@ -4369,10 +4370,8 @@ mv "$QW/r/held.md" "$QW/r/cons/.claude/skills/ai-dlc/steps/$QU.md"
 # --- MUTANTS on the quoting cells: each restores ONE site to its pre-fix spelling --------------
 mkdir -p "$QW/m"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$QW/m"/ 2>/dev/null
-if sd_assert "quote-mut-control" "$(qs_scan "$QW/m/self-update-gate.sh" utf8)" \
-  "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" "an unmutated copy beside its siblings defers on café.sh, so a kill below is the mutation"; then
-  B_qs=1
-fi
+# (The unmutated copy that stood here drove qs_scan with the SAME world and argv as quote-script-utf8 above, which is its base capture
+# and sets B_qs; the copy layout is proved once, by ss-partial-control.)
 # qw_mut <label> <line-prefix> <replacement-line> <scanner> <want> <why>
 # Replaces the ONE line opening with <line-prefix> (leading blanks ignored) by <replacement-line>;
 # a prefix matching zero or several lines is refused as an anchor that moved.
@@ -4843,13 +4842,13 @@ AV_A="$(av_run "$GATE" "$AV/a")"
 AV_B="$(av_run "$GATE" "$AV/b")"
 AV_D="$(av_run "$GATE" "$AV/d")"
 AV_SIG_FIX="render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same"
-ss_assert "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"
+if ss_assert_b "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"; then B_av1=1; fi
 ss_assert "av-render-body" "$(av_st "$AV_A" render-agent-definitions.sh)" SELF-UPDATE-DEFER \
   "a renderer whose rendered body changes is refused: under --check --root . it goes 0 to 1, though a bare run exits 2 on both sides"
 ss_assert "av-render-comment" "$(av_st "$AV_B" render-agent-definitions.sh) refusals=$(av_ref "$AV_B")" "SELF-UPDATE-OK refusals=0" \
   "a renderer whose only change is a comment is OK and the pull carries no refusal at all"
-ss_assert "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusals=$(av_ref "$AV_D")" "SELF-UPDATE-OK refusals=0" \
-  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"
+if ss_assert_b "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusals=$(av_ref "$AV_D")" "SELF-UPDATE-OK refusals=0" \
+  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"; then B_av2=1; fi
 ss_assert "av-second-argv" "$(av_st "$AV_A" audit-rule-files.sh)" SELF-UPDATE-DEFER \
   "a SECOND argv-dependent script: --fail-on=deterministic goes 0 to 1 where its bare default exits 1 on both sides"
 ss_assert "av-not-gating" "$(av_st "$AV_A" derive-fixture-readsets.sh) $(av_has "$AV_A" derive-fixture-readsets.sh '^not gating')" "SELF-UPDATE-OK yes" \
@@ -4868,11 +4867,9 @@ ss_assert "av-dollar-nearmiss" "$(av_st "$AV_A" validate-quiet.sh)" SELF-UPDATE-
 # --- MUTANTS, each a copy of the WHOLE reconcile directory so the gate finds its siblings --------
 # THE CONTROL: an unmutated copy beside its siblings reproduces world A's whole signature and the
 # drifted world's OK, so every kill below is its mutation and not a copy that could not run.
-AV_CTL="$(av_mut control)"
-if sd_assert "av-mut-control" "$(av_sig "$(av_run "$AV_CTL" "$AV/a")") drift=$(av_st "$(av_run "$AV_CTL" "$AV/d")" render-agent-definitions.sh)" \
-  "$AV_SIG_FIX drift=SELF-UPDATE-OK" "an unmutated copy reproduces every verdict, so a kill below is the mutation"; then
-  B_avctl=1
-fi
+# (av-mut-control ran world A and the drifted world D through a copy: the SAME worlds and argv as av-signature and av-render-drift
+# above, which are its base captures. Both passing is the base-pass flag; the copy layout is proved once, by ss-partial-control.)
+if [ "${B_av1:-0}" = 1 ] && [ "${B_av2:-0}" = 1 ]; then B_avctl=1; fi
 # av_kill <label> <gate|""> <world> <want-signature> <why> -- the mutant's whole world signature
 av_kill() { # av_kill <flag> <label> <gate|""> <world> <want-signature> <decides> <twins|-> <why>
   local got
@@ -4994,7 +4991,7 @@ c3_kill() { # c3_kill <flag> <label> <apply|""> <want> <decides> <twins|-> <why>
 C3_CTLA="$(c3_apply_mut control '')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ -n "$C3_CTLA" ] && [ "$(c3_cycle "$GATE" "$C3_CTLA" "$AV/a")" = "$C3_WANT" ]; then
-  ok "c3-mut-control   an unmutated apply.sh copy beside its siblings reaches the same cycle, so the kill below is its mutation"
+  ok "c3-mut-control   an unmutated apply.sh copy beside its siblings (LAYOUT: apply.sh plus reconcile/*.sh, *.md and *.tsv in one directory, which no other copy here uses; kept) reaches the same cycle, so the kill below is its mutation"
   B_c3ctl=1
 else
   bad "c3-mut-control   the unmutated apply.sh copy did not reach the same cycle"
@@ -5086,18 +5083,10 @@ hk_sig() { # hk_sig <gate> [worlds] -> one token per world (default: all five)
   printf '%s\n' "$out"
 }
 HK_SIG_FIX="adds=DEFER reads=DEFER absent=DEFER same=OK deleted=OK+carried"
-ss_assert "hk-signature" "$(hk_sig "$GATE")" "$HK_SIG_FIX" \
-  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"
-HK_CTL="$(av_mut hk-control)"
-# A plain run drives the control on two worlds (a DEFER one and the OK+carried one); the matrix run drives all five.
-HK_CW="adds deleted"; [ "$MATRIX" = 1 ] && HK_CW="adds reads absent same deleted"
-ASSERTIONS=$((ASSERTIONS + 1))
-if [ "$(sd_pick "$(hk_sig "$HK_CTL" "$HK_CW")" "${HK_CW// /,}")" = "$(sd_pick "$HK_SIG_FIX" "${HK_CW// /,}")" ]; then
-  ok "hk-mut-control   an unmutated copy reproduces every hook-world verdict, so a kill below is the mutation"
-  B_hkctl=1
-else
-  bad "hk-mut-control   the unmutated copy did not reproduce the hook-world verdicts ($HK_CW)"
-fi
+if ss_assert_b "hk-signature" "$(hk_sig "$GATE")" "$HK_SIG_FIX" \
+  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"; then B_hkctl=1; fi
+# (The unmutated copy that stood here drove hk_sig with the SAME world and argv as hk-signature above, which is its base capture
+# and sets B_hkctl; the copy layout is proved once, by ss-partial-control.)
 hk_kill() { # hk_kill <flag> <label> <gate|""> <want> <decides> <twin> <why> -- a plain run drives only the decides worlds and the twin
   local got hw="adds reads absent same deleted"
   [ "$MATRIX" = 1 ] || hw="${5//,/ } $6"
@@ -5244,12 +5233,10 @@ if sg hu1; then
 ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
   "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
   "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
-ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
-  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
-HU_CTL_GOT="$(hu_sig "$(av_mut hu-control)")"
-ss_assert "hu-mut-control" "$HU_CTL_GOT" "$HU_SIG_FIX" \
-  "an unmutated copy reproduces all four verdicts, so a kill below is the mutation"
-if [ "$HU_CTL_GOT" = "$HU_SIG_FIX" ]; then B_hu=1; fi
+if ss_assert_b "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
+  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"; then B_hu=1; fi
+# (The unmutated copy that stood here drove hu_sig with the SAME world and argv as hu-signature above, which is its base capture
+# and sets B_hu; the copy layout is proved once, by ss-partial-control.)
 # KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
 hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
 ' '  :
@@ -5434,7 +5421,7 @@ ss_assert "sh-pre-rc" \
   "01" "every stub exits 0 at base and 1 at theirs"
 SH_SIG_FIX="assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER"
 SH_S="$(av_run "$GATE" "$AV/s")"
-ss_assert "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"
+if ss_assert_b "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"; then B_sh=1; fi
 ss_assert "sh-assign" "$(av_st "$SH_S" sa-assign.sh) $(av_has "$SH_S" sa-assign.sh 'through a variable')" "SELF-UPDATE-UNDECIDED yes" \
   "a path assigned to a variable and run through it is UNDECIDED, never a mention read as not gating"
 ss_assert "sh-next-line" "$(av_st "$SH_S" sa-next.sh)" SELF-UPDATE-DEFER \
@@ -5447,12 +5434,8 @@ ss_assert "sh-true-tail" "$(av_st "$SH_S" sa-true.sh) $(av_has "$SH_S" sa-true.s
   "a trailing || true discards the status; || exit 1, one word apart, reads it"
 ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
   "a single-line step \"x\" bash … is a run step reads, with or without a trailing || true"
-# THE CONTROL: an unmutated copy reproduces world S's whole signature.
-SH_CTL="$(av_mut sh-control)"
-SH_CTL_GOT="$(sh_sig "$(av_run "$SH_CTL" "$AV/s")")"
-ss_assert "sh-mut-control" "$SH_CTL_GOT" "$SH_SIG_FIX" \
-  "an unmutated copy reproduces every world-S verdict, so a kill below is the mutation"
-if [ "$SH_CTL_GOT" = "$SH_SIG_FIX" ]; then B_sh=1; fi
+# (The unmutated copy that stood here drove sh_sig with the SAME world and argv as sh-signature above, which is its base capture
+# and sets B_sh; the copy layout is proved once, by ss-partial-control.)
 # sh_kill <label> <gate|""> <want-signature> <why>
 sh_kill() {
   local got
