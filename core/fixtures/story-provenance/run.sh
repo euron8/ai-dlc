@@ -112,11 +112,15 @@ expect() {
 
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
 mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
-  awk -v n="$1" -v f="$2" '
-    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
-      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
-    }
-    END { if (c == 1) print v }' "$DIR/run.sh"
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$DIR/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
 }
 mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
 mx_fam() { # <mutant> -> its cell family
