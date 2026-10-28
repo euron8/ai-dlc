@@ -1616,7 +1616,7 @@ fi
 # the operator's own work, so waving it through looks like removing a wedge — and it authorises a
 # write against a region nobody re-approved, where a resolution can leave rows the operator has
 # not seen. U1 must stay green under it, or the arm is measuring the gate rather than the carve-out.
-if sed 's/^    elif \[ "$_ug_rc" -eq 0 \]; then$/    elif [ "$_ug_rc" -eq 0 ] || [ "$_ug_rc" -eq 3 ]; then/' "$REC/apply.sh" \
+if sed 's/^    if \[ "$_ug_rc" -eq 0 \]; then$/    if [ "$_ug_rc" -eq 0 ] || [ "$_ug_rc" -eq 3 ]; then/' "$REC/apply.sh" \
    | mut_apply "$WORK/a2"; then
   A2="$(u5_score "$WORK/a2/apply.sh")"
   case "$A2" in
@@ -1635,7 +1635,7 @@ if sed 's/^    elif \[ "$_ug_rc" -eq 0 \]; then$/    elif [ "$_ug_rc" -eq 0 ] ||
     fi
   fi
 else
-  bad "A2 did not apply — apply.sh no longer passes the union gate on \`elif [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+  bad "A2 did not apply — apply.sh no longer passes the union gate on \`if [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
 # A3: the forward deleted. THE MESSAGE SURVIVES IT INTACT, which is the whole reason this needs
@@ -3567,7 +3567,7 @@ fi  # ---- end of unit vf
 # arm through a mutated whole-directory copy and must flip its own token while a positive sibling
 # token of the same flow holds (a mutant whose copy never ran holds nothing).
 AR_RPT="_bmad-output/ai-dlc-update/reconcile-report.md"
-# Copied from emit-report.sh's hand-edit refusal, never composed: cells n, n2 and n5 require it.
+# Copied from emit-report.sh's hand-edit refusal, never composed: cells n and n2 require it.
 AR_N_CAUSE="cause: UNDECIDED — the report's region was hand-edited after the first --verify"
 AR_SKIP=""
 if [ "$IS_DIST" = 0 ] && { ! grep -q '^ar_record() {' "$EMIT" || [ -n "$RA_SKIP" ]; }; then
@@ -3577,9 +3577,8 @@ av()  { AR_V="$AR_V $1"; }
 avc() { if "$@"; then :; fi; }
 tk()  { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
 ar_B() { sed -n 1p "$1/.B"; }
-# ar_D <world> -> the dist this world reads: `.D` beside it when set (cell n5 needs a BARE dist, the
-# only kind the recorded-PASS cache keys), else the fixture's own. Same commits either way.
-ar_D() { if [ -s "$1/.D" ]; then sed -n 1p "$1/.D"; else printf '%s\n' "$DIST"; fi; }
+# ar_D <world> -> the dist this world reads: the fixture's own, for every world.
+ar_D() { printf '%s\n' "$DIST"; }
 ar_T() { sed -n 1p "$1/.T"; }
 # ar_w <tag> <green|worklist> <theirs> [nogit] -> the world dir on stdout; the caller checks it is a dir
 ar_w() {
@@ -3898,30 +3897,6 @@ ar_flowN() {
   ar_app "$r" "$w"; rc=$?
   ar_flowN_score "$w" "$rc" "$2"
 }
-# FLOW N5 -- (n)'s world reached through the recorded-PASS cache: EMIT_REPORT_VERIFY_CACHE=1, a bare
-# dist (R1 of the cache refuses any other), a recorded PASS proved present AND proved to hit before the
-# edit, then the hand edit and apply. The cache keys `got`, which apply mode sets to the record's region,
-# and excludes the report file, so only the report-equals-record condition keeps the edit off it.
-ar_flowN5() {
-  local r="$1" w rc
-  AR_V=""; AR_W=""
-  w="$(ar_w N5 green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
-  AR_W="$w"
-  git clone -q --bare "$DIST" "$w/dist.git" 2>/dev/null && printf '%s\n' "$w/dist.git" > "$w/.D" || { AR_V=BROKEN; return; }
-  ar_render "$w"
-  EMIT_REPORT_VERIFY_CACHE=1 ar_ver "$r" "$w"; rc=$?
-  [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && [ -s "$w/c/.git/ai-dlc-verify-pass" ] && av N5R || av N5R!
-  EMIT_REPORT_VERIFY_CACHE=1 ar_ver "$r" "$w"; rc=$?
-  [ "$rc" -eq 0 ] && grep -qF 'accepted a recorded PASS' "$w/v.out" && av N5C || av N5C!
-  ar_hand_edit "$w" || { av BROKEN; return; }
-  EMIT_REPORT_VERIFY_CACHE=1 ar_app "$r" "$w"; rc=$?
-  if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
-     && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then
-    av N5
-  else
-    av N5!
-  fi
-}
 # ar_flowN2 <rec-dir> <n2|n3>
 #   n2: record R1 WITH a HARD blocker, resolve it leaving NO unseen row, re-render to R2 with the
 #       shipped renderer, then hand-edit R2 to R2' (one row changed). UNSEEN=0 IS THE DISCRIMINATING
@@ -4132,7 +4107,7 @@ else
                   || bad "AR-m a malformed approved-region line did not refuse [$FMB]"
   tk "$FMA" M-absent && ok "AR-m an absent approved-region line REFUSES (found 0), tree unwritten" \
                      || bad "AR-m an absent approved-region line did not refuse [$FMA]"
-  # (n)-(n5): THE REPORT IS STILL COMPARED, FOR HAND EDITS. Every flow above re-renders with the
+  # (n)-(n4): THE REPORT IS STILL COMPARED, FOR HAND EDITS. Every flow above re-renders with the
   # shipped renderer, so none can see a region no renderer produced.
   ar_flowN "$REC" edit; FN="$AR_V"
   tk "$FN" N0 && tk "$FN" N1 && ok "AR-n a report hand-edited after the record was written (rows deleted, a bogus row added, no re-render) REFUSES with the edited-after-first-verify cause and NOTHING HAS BEEN WRITTEN, tree unwritten, no report-verified NOTE" \
@@ -4146,9 +4121,6 @@ else
   ar_flowN2 "$REC" n3; FN3="$AR_V"
   tk "$FN3" N3 && ok "AR-n3 a report spliced by awk to EQUAL the fresh render byte for byte keeps the re-render verdict: RE-RENDERED-SINCE-APPROVAL, RE-APPROVAL OWED, not acquitted as report-verified, not called edited" \
                || bad "AR-n3 a byte-equal hand splice did not keep the re-render verdict [$FN3]"
-  ar_flowN5 "$REC"; FN5="$AR_V"
-  tk "$FN5" N5R && tk "$FN5" N5C && tk "$FN5" N5 && ok "AR-n5 with EMIT_REPORT_VERIFY_CACHE=1 and a recorded PASS proved to hit, the hand-edited report is kept off the cache and REFUSES with the same cause" \
-                                               || bad "AR-n5 the recorded-PASS cache let a hand-edited report through, or its premise did not build [$FN5]"
 fi
 fi  # ---- end of unit ar
 
@@ -4219,33 +4191,21 @@ else
     ar_flowK "$WORK/arm9"; ar_score M9 "$AR_V" KF2 KA3 "a failed tool conflated with no tool"
     tk "$AR_V" KV! && tk "$AR_V" KF1! || bad "M9 the record write or the apply-mode state did not move with the conflation [$AR_V]"
   else bad "M9 DID NOT APPLY — the FAILED-<tool> branch is not in emit-report.sh exactly once"; fi
-  # M10: the edited-report comparison deleted. ONE CASE IN THREE SHAPES: (n), n2 and n5 all go red,
-  # and that is the property, not an entanglement -- n2 is the case after a legitimate re-render (its
-  # unseen=0 seed is measured to PROCEED here, N2P), and n5 is the case reached through the cache, whose
-  # condition only routes to this comparison. n3 and n4 must hold: the splice keeps its re-render
-  # verdict and the unedited world still writes.
+  # M10: the edited-report comparison deleted. ONE CASE IN TWO SHAPES: (n) and n2 both go red, and
+  # that is the property, not an entanglement -- n2 is the case after a legitimate re-render (its
+  # unseen=0 seed is measured to PROCEED here, N2P). n3 and n4 must hold: the splice keeps its
+  # re-render verdict and the unedited world still writes.
   if ar_mut "$WORK/arm10" emit-report.sh 'if [ "$_ar_sub" = 1 ] && [ "$_ar_report_got" != "$got" ] && [ "$_ar_report_got" != "$want" ]; then' 'if false; then'; then
     ar_flowN "$WORK/arm10" edit; M10N="$AR_V"
     ar_flowN2 "$WORK/arm10" n2; M10N2="$AR_V"
     ar_flowN2 "$WORK/arm10" n3; M10N3="$AR_V"
     ar_flowN "$WORK/arm10" plain; M10N4="$AR_V"
-    ar_flowN5 "$WORK/arm10"; M10N5="$AR_V"
     ar_score M10 "$M10N" N1 N0 "the edited-report comparison deleted: (n)"
     tk "$M10N2" N2E! && tk "$M10N2" N2P && ok "M10 and n2 goes red the same way: its unseen=0 world PROCEEDS (exit 0, written, blockers-resolved NOTE) [$M10N2]" \
                                        || bad "M10 n2 did not proceed under the deleted comparison [$M10N2] — n2 is not a cell only that comparison refuses"
-    tk "$M10N5" N5! && tk "$M10N5" N5C && ok "M10 and n5 goes red too, with its cache premise holding [$M10N5]" \
-                                       || bad "M10 n5 did not move, or its premise broke [$M10N5]"
     tk "$M10N3" N3 && tk "$M10N4" NT && tk "$M10N4" N4S && ok "M10 and n3 and n4 HOLD — the splice keeps its re-render verdict and the unedited world writes" \
                                                        || bad "M10 moved n3 or n4 [$M10N3 | $M10N4]"
   else bad "M10 DID NOT APPLY — the edited-report comparison is not in emit-report.sh exactly once"; fi
-  # M11: the recorded-PASS cache accepted in apply mode whatever the report holds. n5 must go red with
-  # its premise (N5C, the cache hits) holding; (n), which never sets the cache, must hold.
-  if ar_mut "$WORK/arm11" emit-report.sh '   && [ -f "$_er_rec" ] && [ "$_ar_report_got" = "$got" ]; then' '   && [ -f "$_er_rec" ]; then'; then
-    ar_flowN5 "$WORK/arm11"; ar_score M11 "$AR_V" N5 N5C "the cache's report-equals-record condition removed: n5"
-    ar_flowN "$WORK/arm11" edit
-    tk "$AR_V" N1 && ok "M11 and (n) holds — without the cache set, the comparison still refuses [$AR_V]" \
-                  || bad "M11 also moved (n) [$AR_V]: the cache condition is not confined to the cache path"
-  else bad "M11 DID NOT APPLY — the cache's report-equals-record condition is not in emit-report.sh exactly once"; fi
 fi
 fi  # ---- end of unit arm
 

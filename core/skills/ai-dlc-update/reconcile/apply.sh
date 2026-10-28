@@ -296,15 +296,12 @@ if [ "$FINISH" = 0 ]; then
     # (3 = the approved region lists HARD-* rows that no longer render, refs unchanged, nothing
     # HARD new) and prints the rows it decided from. The refusal below quotes that line rather
     # than restating the grammar, so the two programs cannot disagree about what was decided.
-    # STDOUT IS KEPT IN A FILE for one reason: a --verify that accepted a recorded PASS says so on
-    # stdout (emit-report.sh's header owns the key), and the NOTE row below must not claim the
-    # detectors rendered when they did not. A file that could not be made reads as a fresh render.
-    _ug_vo="$(mktemp "${TMPDIR:-/tmp}/apply-ug-verify.XXXXXX" 2>/dev/null)" || _ug_vo=""
+    # STDOUT IS DISCARDED: --verify always renders, so nothing on it changes what is decided here.
     # `--for-apply`: the APPROVED side is the region the FIRST plain --verify of this pull recorded in
     # the consumer's git-dir (step 5's), not whatever region the report file holds now, so a region
     # spliced into the report after that verify is compared, not trusted. emit-report.sh's header owns
     # the record's contract; this gate reads one line of it, `approved-region: first=<digest|NONE>`.
-    _ug_verr="$(bash "$SELF/emit-report.sh" --for-apply --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >"${_ug_vo:-/dev/null}")"
+    _ug_verr="$(bash "$SELF/emit-report.sh" --for-apply --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >/dev/null)"
     _ug_rc=$?
     # THE `approved-region:` LINE IS PARSED ANCHORED AND MUST APPEAR EXACTLY ONCE. Absent, doubled or
     # malformed refuses before anything else is decided: it is never read as NONE, because NONE means
@@ -322,12 +319,10 @@ if [ "$FINISH" = 0 ]; then
     esac
     [ "$_ar_n" = 1 ] || _ar_ok=0
     if [ "$_ar_ok" = 0 ]; then
-      [ -n "$_ug_vo" ] && rm -f "$_ug_vo"
       printf '%s\n' "$_ug_verr" >&2
       err "the union gate ran emit-report.sh --for-apply --verify beside this script and it did not print exactly one well-formed 'approved-region: first=<digest|UNAVAILABLE|FAILED-<tool>|NONE>' line (found ${_ar_n}), so which region the operator was shown cannot be decided. Re-run apply with the same four arguments once emit-report.sh beside this script is the one shipped with it. Do not re-render the report. NOTHING HAS BEEN WRITTEN."
     fi
     case "$_ar_first" in FAILED-*)
-      [ -n "$_ug_vo" ] && rm -f "$_ug_vo"
       err "the union gate could not digest the approved region: ${_ar_first#FAILED-} exists on this box but exited non-zero or printed no 64-hex sha256, so the region the operator approved has no identity this run can trust. Repair or remove ${_ar_first#FAILED-} (a working shasum or sha256sum is required), then re-run apply with the same four arguments. Do not re-render the report. NOTHING HAS BEEN WRITTEN." ;;
     esac
     _ar_note=""
@@ -335,14 +330,7 @@ if [ "$FINISH" = 0 ]; then
     # The line is this gate's input, not the operator's diagnosis: it is dropped before stderr is
     # forwarded, so a refusal reads as it did before the record existed.
     _ug_verr="$(printf '%s\n' "$_ug_verr" | sed '/^approved-region: /d')"
-    _ug_hit=0
-    if [ -n "$_ug_vo" ]; then
-      grep -q '^emit-report: accepted a recorded PASS (' "$_ug_vo" 2>/dev/null && _ug_hit=1
-      rm -f "$_ug_vo"
-    fi
-    if [ "$_ug_rc" -eq 0 ] && [ "$_ug_hit" = 1 ]; then
-      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): a recorded --verify PASS was accepted for this report (opt-in EMIT_REPORT_VERIFY_CACHE=1; the key and its known gaps are in emit-report.sh's header); nothing was re-rendered.${_ar_note}"
-    elif [ "$_ug_rc" -eq 0 ]; then
+    if [ "$_ug_rc" -eq 0 ]; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS).${_ar_note}"
     else
       # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply

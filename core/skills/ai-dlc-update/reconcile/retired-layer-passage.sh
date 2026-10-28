@@ -91,7 +91,7 @@ if [ -z "$GLOBS" ]; then
   exit 2
 fi
 
-# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 # SOURCED AFTER the rulebook-list refusal above, which reads only this script's own sibling
 # setup-sites.md: a copy standing alone keeps naming THAT cause rather than the missing helper.
 . "$SELF/consumer-read.sh" || { echo "retired-layer-passage: cannot source $SELF/consumer-read.sh" >&2; exit 2; }

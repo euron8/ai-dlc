@@ -20,7 +20,6 @@ decl-reasons
 deploy-validate-smoke-classification
 derivation-capture
 derivation-capture-worktree-root
-dist-clone
 divergence-hard-block
 emit-report-refusal
 enforcement-map-yaml-plain
@@ -52,7 +51,6 @@ process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
 provenance-flagless-default
-reconcile-emit-report
 requirements-step
 retired-layer-passage
 review-carry-over-clauses

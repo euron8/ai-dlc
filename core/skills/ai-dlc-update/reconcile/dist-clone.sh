@@ -14,10 +14,15 @@
 # Exit: 0 = the clone is current and every ref resolves; 1 = STOP, one `dist-clone: STOP -- <cause>`
 #       line on stderr naming the cause and its remedy; 2 = usage.
 #
-# WHY IT EXISTS. emit-report.sh's recorded `--verify` PASS keys on the dist's refs. A dist that shares
-# its ref store with live branches (the operator's own checkout, a worktree of it) moves those refs
-# between any two verifies and never records. This clone carries `main`, the refs a pull names, and
-# nothing else, and nothing but this script writes it.
+# WHY IT EXISTS. Every reconcile reader takes `<dist>` from here, and `--verify` needs that ref set to
+# hold still. This clone carries `main`, the refs a pull names (pinned when off main), and nothing
+# else, and nothing but this script writes it. On a shared checkout (the operator's own, or any
+# worktree of it) the region moves with ref churn unrelated to the pull: retired-fixtures.sh runs
+# `git log --all`, which walks every live branch and worktree HEAD, and ledger-reverify.sh prints
+# `%h` abbreviations whose length depends on every object in the store. Step 5's render and apply's
+# `--verify` are byte-compared, so a region that moved between them fails the gate on nothing the
+# pull changed. On this clone they walk main and the pins alone. The clone's original reason, the
+# recorded `--verify` PASS keyed on the dist's refs, is retired.
 #
 # WHAT IT NEVER DOES. It never falls back: no consumer repo, an unwritable git-dir, a clone or fetch
 # error, a held lock, a dir that is not this clone, or a ref that does not resolve is a STOP, never

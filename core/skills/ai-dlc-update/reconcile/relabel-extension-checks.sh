@@ -39,7 +39,7 @@ set -uo pipefail
 set -f
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
-# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 . "$SELF/consumer-read.sh" || { echo "relabel-extension-checks: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 CONSUMER=""
@@ -142,8 +142,8 @@ while IFS= read -r ext; do
   # pull-introduced collision visible during the dry-run instead of only after the write.
   #
   # THE INSTALLED SIDE IS READ THROUGH consumer-read.sh, AND A `hooks:` VALUE IT REFUSES REFUSES THE
-  # RUN. A value carrying a `..` component resolved OUTSIDE the skill tree -- a read no key field
-  # covered, so a recorded PASS survived an edit there. cr_test returns 2 for it, and 2 is never
+  # RUN. A value carrying a `..` component resolved OUTSIDE the skill tree, reading a file the
+  # anchor set must not come from. cr_test returns 2 for it, and 2 is never
   # "the core file is absent": that would drop the installed anchor set and report fewer collisions.
   core_rel="$SKILL_REL/$hooks"
   _rx_rc=0

@@ -21,7 +21,6 @@
 # did not hold (the receipt cannot discriminate). Exit 9 = the subject cannot be found.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-unset EMIT_REPORT_VERIFY_CACHE
 R="$(cd "$(dirname "$0")/../../.." && pwd)"
 REC="$R/core/skills/ai-dlc-update/reconcile"; [ -f "$REC/apply.sh" ] || REC="$R/.claude/skills/ai-dlc-update/reconcile"
 HOOK="$R/core/hooks/ai-dlc-answer-capture.sh"; [ -f "$HOOK" ] || HOOK="$R/.claude/hooks/ai-dlc-answer-capture.sh"

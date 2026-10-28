@@ -221,7 +221,7 @@ if [ -z "$(rulebook_globs)" ]; then
   exit 2
 fi
 
-# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 # SOURCED AFTER the rulebook-list refusal above, which reads only this script's own sibling
 # setup-sites.md: a copy standing alone keeps naming THAT cause rather than the missing helper.
 # Nothing above this line calls a cr_* function; the definitions above only name them.
@@ -384,8 +384,7 @@ printf '%s\n' "$RETIRED" > "$NEEDLES" || rlt_refuse "staging the retired token s
 # reported consumer-relative and the line number is the file's own. Paths travel NUL-delimited
 # so a layer file name carrying a space cannot split into two.
 #
-# EVERY LAYER FILE IS READ THROUGH consumer-read.sh, so emit-report.sh's recorded PASS keys its
-# bytes: the walk lists root-relative names through cr_walk, each file is copied by cr_read into
+# EVERY LAYER FILE IS READ THROUGH consumer-read.sh: the walk lists root-relative names through cr_walk, each file is copied by cr_read into
 # `layers/<n>` with its consumer-relative name recorded beside it in `layer-names`, and the awk
 # reads the copies and prints the recorded name. A listed file that cannot be read refuses (exit
 # 2); before this, `xargs awk` skipped one with a warning on a stderr the driver discards.
