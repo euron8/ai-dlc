@@ -10,7 +10,6 @@ agent-definition-render
 apply-drift-after-write
 apply-drift-refile
 apply-legacy-script-path
-apply-restamp-theirs
 apply-restamp-worklist
 apply-worklist-rows
 architecture-index-cell-escaping

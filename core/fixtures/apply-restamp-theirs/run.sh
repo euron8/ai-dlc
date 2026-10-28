@@ -28,10 +28,34 @@
 # reverted fix would still pass. So the dist repo below is built with THREE different
 # versions (base 1.0.0, theirs 2.0.0, working tree 9.9.9) and assertion 0 FAILS THE
 # FIXTURE if that separation ever collapses.
+#
+# THE MUTANT MATRIX. A cell is one drive of the setup-sited cluster, RED on a mutant when its reading is not the
+# unmutated engine's: ss-apply (an ordinary apply whose second sited-set read fails), ss-finish (a --finish over a
+# tree at theirs, same failure) and old-extract (the pre-R1 apply.sh extractor evaluated against the mutated
+# reconcile directory). A mutant's row names the cell that kills it (decides) and the cell it could plausibly co-trip
+# but must leave GREEN (twins): the two status-read mutants are each other's sibling cell, and the shim mutant
+# touches only preclassify.sh, so the ordinary apply must stay green under it. A plain run scores each mutant on its
+# deciding cell and its twin only. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
+# REMEASURE command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX line
+# each. No validator unit is selected here, so there is no outside-unit diff. The assertions ahead of the cluster
+# (stamp, ordering, marker, pre-push) drive apply.sh against a synthetic dist and are not mutant cells.
+# MUTANT-MATRIX sited-marker decides=ss-apply twins=ss-finish
+# MUTANT-MATRIX sited-finish decides=ss-finish twins=ss-apply
+# MUTANT-MATRIX shim-removed decides=old-extract twins=ss-apply
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-restamp-theirs/run.sh --matrix
 
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Any other
+# argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "apply-restamp-theirs: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 # Two layouts, both derived from install.sh's mapping: core/skills/<x> lands under
@@ -103,6 +127,11 @@ printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$STAMP"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*).
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer receives this file on the pull
 # that carries it, and the assertion's subject may land later in the same pull -- or in the
 # gated reconcile after it. "Subject not installed" is NOT "subject regressed", and
@@ -335,14 +364,20 @@ ss_finish() { # ss_finish <apply.sh> -> "calls=<n> unverified=<n> stamp=<v>" for
     "$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"setup_sited_paths")' | grep -c .)" \
     "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
 }
+WANT_SS_APPLY="calls=2 unwritten=1 stamp=1.0.0"
+WANT_SS_FINISH="calls=2 unverified=1 stamp=1.0.0"
 r="$(ss_apply "$APPLY")"
-[ "$r" = "calls=2 unwritten=1 stamp=1.0.0" ] \
-  && ok "a sited set apply.sh cannot load withholds the in-flight marker and the stamp ($r)" \
-  || bad "a failed sited-set load in the marker was read as an empty set: got [$r], want [calls=2 unwritten=1 stamp=1.0.0]"
+if [ "$r" = "$WANT_SS_APPLY" ]; then
+  ok "a sited set apply.sh cannot load withholds the in-flight marker and the stamp ($r)"; B_ss_apply=1
+else
+  bad "a failed sited-set load in the marker was read as an empty set: got [$r], want [$WANT_SS_APPLY]"
+fi
 r="$(ss_finish "$APPLY")"
-[ "$r" = "calls=2 unverified=1 stamp=1.0.0" ] \
-  && ok "--finish over a tree at theirs withholds the stamp when its sited set cannot be loaded ($r)" \
-  || bad "--finish advanced or verified nothing with no sited set: got [$r], want [calls=2 unverified=1 stamp=1.0.0]"
+if [ "$r" = "$WANT_SS_FINISH" ]; then
+  ok "--finish over a tree at theirs withholds the stamp when its sited set cannot be loaded ($r)"; B_ss_finish=1
+else
+  bad "--finish advanced or verified nothing with no sited set: got [$r], want [$WANT_SS_FINISH]"
+fi
 # MUTANTS, each a whole copy of reconcile/ with ONE status read dropped; an anchor that moved refuses.
 ss_mut() { # ss_mut <name> <old> <new> -> apply.sh path in a mutated copy, or nothing
   local d="$SS/m-$1"
@@ -355,30 +390,7 @@ open(sys.argv[2], "w").write(s.replace(sys.argv[3], sys.argv[4], 1))' "$APPLY" "
   bash -n "$d/apply.sh" 2>/dev/null || return 1
   printf '%s' "$d/apply.sh"
 }
-if m="$(ss_mut marker '_sited="$(setup_sited_paths)" || _rc=$?' '_sited="$(setup_sited_paths)" || :')"; then
-  r="$(ss_apply "$m")"
-  [ "$r" = "calls=2 unwritten=0 stamp=2.0.0" ] \
-    && ok "mutant (marker's sited status unread) killed: the marker is written over an empty sited set and the stamp advances ($r)" \
-    || bad "mutant (marker's sited status unread) SURVIVED: got [$r], want [calls=2 unwritten=0 stamp=2.0.0]"
-else
-  bad "mutant (marker's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
-fi
-if m="$(ss_mut finish '_fv_sited="$(setup_sited_paths)" || _fv_rc=$?' '_fv_sited="$(setup_sited_paths)" || :')"; then
-  r="$(ss_finish "$m")"
-  [ "$r" = "calls=2 unverified=0 stamp=2.0.0" ] \
-    && ok "mutant (--finish's sited status unread) killed: the stamp advances having verified no sited file ($r)" \
-    || bad "mutant (--finish's sited status unread) SURVIVED: got [$r], want [calls=2 unverified=0 stamp=2.0.0]"
-else
-  bad "mutant (--finish's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
-fi
-
-# --- Assertions 11/12: A MIXED PULL, IN BOTH DIRECTIONS ------------------------------------------
-# A consumer runs its OWN installed engine, so one pull can pair an apply.sh and a preclassify.sh
-# from different releases. OLD apply.sh + NEW preclassify.sh: the old engine loads the sited set with
-# the literal range below and evals it under its own `set -u`; without a one-line assignment that
-# closes that range, the range ran to EOF, evaluated preclassify's top level and aborted the apply on
-# an unbound variable. The cell evals exactly that range in a foreign shell carrying none of
-# preclassify's variables, and demands rc 0, a statement AFTER the eval, and the real sited set.
+# The pre-R1 extractor drive, hoisted above the matrix cells that read it.
 OLD_RANGE='/^SETUP_SITED_PATHS=/,/sort -u\)"$/'
 ss_old_extract() { # ss_old_extract <reconcile-dir> -> "rc=<n> after=<0|1> lines=<n> match=<0|1>"
   local want
@@ -392,10 +404,110 @@ ss_old_extract() { # ss_old_extract <reconcile-dir> -> "rc=<n> after=<0|1> lines
       "$([ -n "$WANT" ] && [ "$SETUP_SITED_PATHS" = "$WANT" ] && echo 1 || echo 0)"' "$1/apply.sh" 2>/dev/null \
     || printf ' aborted'
 }
+# --- THE MATRIX CELLS, single-sourced. A cell is one drive's reading; cell_red <cell> <mutant-dir> returns 0 RED (the
+# reading is not the unmutated engine's), 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+#   ss-apply     ss_apply over the mutant's apply.sh must read the unmutated "$WANT_SS_APPLY"
+#   ss-finish    ss_finish over the mutant's apply.sh must read the unmutated "$WANT_SS_FINISH"
+#   old-extract  the pre-R1 extractor over the mutant's preclassify.sh must read the real, non-empty sited set cleanly
+MX_CELLS='ss-apply ss-finish old-extract'
+old_extract_ok() { # <reading> -> 0 when the extractor evaluated cleanly and read a non-empty set that matches
+  case "$1" in
+    "rc=0 after=1 lines="*" match=1") case "$1" in *"lines=0 "*) return 1 ;; esac; return 0 ;;
+  esac
+  return 1
+}
+cell_red() {
+  case "$1" in
+    ss-apply)    [ "$(ss_apply "$2/apply.sh")" != "$WANT_SS_APPLY" ] ;;
+    ss-finish)   [ "$(ss_finish "$2/apply.sh")" != "$WANT_SS_FINISH" ] ;;
+    old-extract) ! old_extract_ok "$(ss_old_extract "$2")" ;;
+    *) return 2 ;;
+  esac
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$WORK/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# mx_twins <mutant> <mutant-dir>: per-push, every twin cell must stay GREEN under the mutant.
+mx_twins() {
+  local m="$1" d="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$d"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
+    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also went RED on this mutant, so the kill is not confined to its own cell"; fi
+  done
+}
+# mx_score <mutant> <mutant-dir>: MATRIX-ONLY. Scores the mutant on EVERY cell. It records itself in the ledger first
+# (rule 9). The only drive that can crash visibly is the extractor, which prints " aborted"; that reads BROKEN.
+mx_score() {
+  local m="$1" d="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  case "$(ss_old_extract "$d")" in
+    *aborted*) BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return ;;
+  esac
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$d"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$d"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$d" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+if m="$(ss_mut marker '_sited="$(setup_sited_paths)" || _rc=$?' '_sited="$(setup_sited_paths)" || :')"; then
+  r="$(ss_apply "$m")"
+  if [ "$r" = "calls=2 unwritten=0 stamp=2.0.0" ]; then
+    mutant_killed "${B_ss_apply:-0}" sited-marker "mutant sited-marker (marker's sited status unread) killed: the marker is written over an empty sited set and the stamp advances ($r)"
+  else
+    bad "mutant sited-marker (marker's sited status unread) SURVIVED: got [$r], want [calls=2 unwritten=0 stamp=2.0.0]"
+  fi
+  mx_twins sited-marker "${m%/apply.sh}"
+  if [ "$MODE" = matrix ]; then mx_score sited-marker "${m%/apply.sh}"; fi
+else
+  bad "mutant sited-marker (marker's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
+fi
+if m="$(ss_mut finish '_fv_sited="$(setup_sited_paths)" || _fv_rc=$?' '_fv_sited="$(setup_sited_paths)" || :')"; then
+  r="$(ss_finish "$m")"
+  if [ "$r" = "calls=2 unverified=0 stamp=2.0.0" ]; then
+    mutant_killed "${B_ss_finish:-0}" sited-finish "mutant sited-finish (--finish's sited status unread) killed: the stamp advances having verified no sited file ($r)"
+  else
+    bad "mutant sited-finish (--finish's sited status unread) SURVIVED: got [$r], want [calls=2 unverified=0 stamp=2.0.0]"
+  fi
+  mx_twins sited-finish "${m%/apply.sh}"
+  if [ "$MODE" = matrix ]; then mx_score sited-finish "${m%/apply.sh}"; fi
+else
+  bad "mutant sited-finish (--finish's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
+fi
+
+# --- Assertions 11/12: A MIXED PULL, IN BOTH DIRECTIONS ------------------------------------------
+# A consumer runs its OWN installed engine, so one pull can pair an apply.sh and a preclassify.sh
+# from different releases. OLD apply.sh + NEW preclassify.sh: the old engine loads the sited set with
+# the literal range below and evals it under its own `set -u`; without a one-line assignment that
+# closes that range, the range ran to EOF, evaluated preclassify's top level and aborted the apply on
+# an unbound variable. The cell evals exactly that range in a foreign shell carrying none of
+# preclassify's variables, and demands rc 0, a statement AFTER the eval, and the real sited set.
 r="$(ss_old_extract "$(dirname "$APPLY")")"
 case "$r" in
   "rc=0 after=1 lines="*" match=1") case "$r" in *"lines=0 "*) bad "the pre-R1 apply.sh extractor read an EMPTY sited set from this preclassify.sh ($r)" ;;
-                                      *) ok "a pre-R1 apply.sh extractor evals this preclassify.sh's range cleanly and reads the real sited set ($r)" ;; esac ;;
+                                      *) ok "a pre-R1 apply.sh extractor evals this preclassify.sh's range cleanly and reads the real sited set ($r)"; B_old_extract=1 ;; esac ;;
   *) bad "a pre-R1 apply.sh extractor against this preclassify.sh did not close its range cleanly: [$r] -- a mixed pull aborts the apply" ;;
 esac
 # MUTANT: the shim gone, the set assigned only by the status-checked call -- the shape that aborted.
@@ -409,11 +521,13 @@ open(sys.argv[2], "w").write(s[:a] + new + s[b + 3:])' "$(dirname "$APPLY")/prec
    && ! cmp -s "$(dirname "$APPLY")/preclassify.sh" "$SHIMD/preclassify.sh" && bash -n "$SHIMD/preclassify.sh" 2>/dev/null; then
   r="$(ss_old_extract "$SHIMD")"
   case "$r" in
-    "rc=0 after=1 "*" match=1") bad "mutant (compatibility shim removed) SURVIVED: the old extractor still read the set ($r)" ;;
-    *) ok "mutant (compatibility shim removed) killed: the old extractor's range runs past its assignment [$r]" ;;
+    "rc=0 after=1 "*" match=1") bad "mutant shim-removed (compatibility shim removed) SURVIVED: the old extractor still read the set ($r)" ;;
+    *) mutant_killed "${B_old_extract:-0}" shim-removed "mutant shim-removed (compatibility shim removed) killed: the old extractor's range runs past its assignment [$r]" ;;
   esac
+  mx_twins shim-removed "$SHIMD"
+  if [ "$MODE" = matrix ]; then mx_score shim-removed "$SHIMD"; fi
 else
-  bad "mutant (compatibility shim removed) DID NOT APPLY -- the shim line or its if-block moved"
+  bad "mutant shim-removed (compatibility shim removed) DID NOT APPLY -- the shim line or its if-block moved"
 fi
 # NEW apply.sh + OLD preclassify.sh: no `setup_sited_paths()` to load. Failing closed is right; the
 # remedy must name the version skew, not "present and readable". The old preclassify is synthesised
@@ -443,6 +557,28 @@ else
     || bad "--finish with a pre-R1 preclassify.sh did not name the version skew: $(printf '%s\n' "$o" | awk -F'\t' '$2=="finish-unverified-tree" {print $4}' | cut -c1-200)"
 fi
 fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL: it
+# must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes. The ledger exists
+# only once the setup-sited cluster ran, which a consumer layout may skip.
+if [ -n "${MXL:-}" ] && [ -f "$MXL" ]; then
+  mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+  mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+  if [ "$MODE" = plain ]; then
+    if [ "$mx_ctl" -eq 0 ]; then bad "rule-9 the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+    elif [ "$mx_only" -ne 0 ]; then bad "rule-9 a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+    else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+  else
+    mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+    [ "$mx_hdr" = "shim-removed sited-finish sited-marker " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+    echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+    fails=$((fails + MX_FAILS))
+  fi
+elif [ "$IS_DIST" = 1 ]; then
+  bad "rule-9 the setup-sited cluster did not run in the distribution, so no mutant was scored"
+fi
+if [ "${BROKEN:-0}" -ne 0 ]; then echo "apply-restamp-theirs: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
 if [ "$fails" -eq 0 ]; then
