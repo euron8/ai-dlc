@@ -50,8 +50,9 @@ the general form.
 the longest starts first, content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
 across both pre-push hooks. Before a release push, seed the shared verdict store by pushing each unit's tip and then
-the exact release commit to a throwaway ref, longest-first (`docs/plans/hermetic-pole.md`); an
-integrator re-run in a mktemp store caches nothing.
+the exact release commit to a throwaway ref, longest-first (`docs/plans/hermetic-pole.md`); a run
+in a mktemp store caches nothing, and a green push's `verdict store: N fixture(s) skipped` line is the
+evidence the seed worked.
 
 **A hand-rolled loop is not merely slower, it FABRICATES FAILURES, and that is the
 reason this is a rule.** Measured on one branch, same tree, same fixtures, both ways:
@@ -66,11 +67,9 @@ the fixture dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`,
 exactly like a regression in the change under test. The serial loop was roughly ten times the
 pool's wall clock, and wrong.
 
-**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE, AND THE PASSAGE FORBIDDING THEM WAS ITSELF
-CARRYING TWO UNTIL THEY WERE CUT.** A total decays silently and reads exactly like a fresh one.
+**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE.** A total decays silently and reads exactly like a fresh one.
 **Derive the count, never quote one** —
-`ls core/fixtures/*/run.sh | wc -l` — and read the CHANGELOG for when a
-figure was taken. The suite is
+`ls core/fixtures/*/run.sh | wc -l`. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded
 there is a LOADED cost, measured under the pool; the same unit run alone gives a
