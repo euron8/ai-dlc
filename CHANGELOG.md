@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.959.0] - 2026-10-27
+
+Batch b245, cluster c1. It carries BL-685 D-r9b-1, which stays PARTIAL with `verify: manual`. No `PC-` id is closed. NET: entries closed 0 minus filed 0 = 0.
+
+Bootstrapping: the engine change is `core/skills/ai-dlc-update/reconcile/emit-report.sh`, live from step 3 of the pull that delivers it unless that pull DEFERs the engine, because steps 1-2 run the consumer's old engine. Packaging: none. The changed fixtures `reconcile-emit-report` and `reconcile-emit-report-c` already ship (neither carries a `.dist-only` file), no fixture directory is added, and `install.sh` and `uninstall.sh` are untouched. The shard c driver decls changed: `core/fixtures/reconcile-emit-report-c/inputs.decl` gains the two THEIRS validators `validate-snapshot-conservation.sh` and `validate-hook-registration.sh`, and `tools.decl` gains `sleep` and `python3`.
+
+### BL-685 D-r9b-1 — the reconcile cache key refuses a relaxed stat config
+
+- The defect. A predicate run through `cr_run` runs plain git under the consumer's config and reads the index stat cache, which the key does not hash. Round 5 F3 forced `core.trustctime=true` and `core.checkStat=default` only on the key's own status (`er_cgit`), so under a relaxed stat config a same-size, mtime-kept rewrite made the predicate read the stale index blob while no key field or logged read moved. The armed run then accepted a stale PASS where a fresh render exits 1. The example is `validate-snapshot-conservation.sh:263`.
+- The fix. `er_key` in `emit-report.sh` refuses `core.checkStat` other than `default` (compared case-insensitively) and `core.trustctime` set to a false boolean. Both are read through a new helper, `er_cfg_read`, with git's exit captured: unset allows, and a value git cannot parse is refused by name (`could not read <key>`) rather than read as unset. `core.ignoreStat` moved onto the same helper.
+- fsmonitor. `er_key` also refuses `core.fsmonitor` set to anything other than a git false boolean (`true` or a hook path; unset allows), and refuses a non-empty `GIT_TEST_FSMONITOR`, which turns a monitor on with the config unset. It is a refusal and not a forced `-c core.fsmonitor=false`, because forcing would reach only the key's own git calls and not a `cr_run` predicate's plain git.
+- Removed. The forced `-c core.trustctime=true -c core.checkStat=default` options in `er_cgit` are deleted as vacuous, since every admitted config is now default.
+- Arms and mutants. Arm PC-V37 was rebuilt in a world where the snapshot validator runs through `cr_run`, with the pre-fix two-layer revert as mutant M-v37. The single-refusal arms are PC-V97 through PC-V110, covering `checkStat` (`minimal` and `MINIMAL` refuse, `default` and `Default` allow, and a refusal at hit time), `trustctime` (`false` and `no` refuse, `true` allows), `core.fsmonitor` (a hook path and `true` refuse, `false` allows, injection through `GIT_CONFIG_COUNT` refuses) and `GIT_TEST_FSMONITOR`. The mutants are M-v37, M-v37a (deletes the checkStat refusal), M-v37b (deletes the trustctime refusal), M-v37f (deletes the fsmonitor refusal) and M-v37g (deletes the `GIT_TEST_FSMONITOR` refusal). There is no M-v37c: an invalid `core.ignoreStat` makes git itself exit 128 on `ls-files` and `status` before the read is reached, so there is nothing for such a mutant to delete. The single-key mutants are killed in a raw-bytes world (a ledger `verify: sh grep` receipt over a tracked file rewritten same-size, mtime kept), because the snapshot-validator world cannot kill them once the forced `-c` is gone and the key and the predicate run the same config.
+- Still PARTIAL. D-r9b-1 was a precondition for flipping the recorded-PASS default; the flip is not made. `EMIT_REPORT_VERIFY_CACHE=1` still opts in, the entry stays `verify: manual`, and flipping the default is a later lead ruling that also needs the A2b mutant.
+
 ## [0.958.0] - 2026-10-27
 
 Batch b244, lead ai-dlc-45, cluster c6. It closes two entries, BL-825 and BL-594 (reverted), both filed before this release. No `PC-` id is closed. NET: entries closed 2 minus filed 0 = -2.

@@ -376,11 +376,54 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
   - **Cost:** the R2 per-root `find` walk is removed (one fewer `find` per read root on every key take). Per link: 2 forks, or 3 for a directory link.
   - The BL-360 here-string fix from 0.939.0 is preserved, with 0 non-comment `<<<`.
   - **Still PARTIAL (named, not fixed):** the hardlink, firmlink and bind mount; limit (6); the receipt's clock and network; the rest of the key's fields, not re-reviewed in round 9.
-- **Round 9 D-r9b-1 (DEFECT, NOT FIXED, a precondition for the flip):** a predicate run through `cr_run` reads the index stat cache, which the key does not hash. Round 5 F3 forces `core.trustctime=true` and `core.checkStat=default` only on the KEY's own status (`er_cgit`), while the predicates `predicate-differential.sh` runs through `cr_run` run plain git under the consumer's config. The example is `validate-snapshot-conservation.sh:263`, `git -C "$ROOT" diff "$BASE" -- "$SNAPSHOT"`. Under a relaxed stat config, a same-size, mtime-kept rewrite makes that diff read the stale index blob. The key hashes the same bytes at record and hit time, so a later `touch` changes what the predicate reads while no key field or logged read moves, and the armed run accepts a stale PASS where a fresh render exits 1.
+- **Round 9 D-r9b-1 (DEFECT, BUILT in the release that carries this line, a precondition for the flip):** a predicate run through `cr_run` reads the index stat cache, which the key does not hash. Round 5 F3 forces `core.trustctime=true` and `core.checkStat=default` only on the KEY's own status (`er_cgit`), while the predicates `predicate-differential.sh` runs through `cr_run` run plain git under the consumer's config. The example is `validate-snapshot-conservation.sh:263`, `git -C "$ROOT" diff "$BASE" -- "$SNAPSHOT"`. Under a relaxed stat config, a same-size, mtime-kept rewrite makes that diff read the stale index blob. The key hashes the same bytes at record and hit time, so a later `touch` changes what the predicate reads while no key field or logged read moves, and the armed run accepts a stale PASS where a fresh render exits 1.
   - **Probe** `p2-snapstat.sh`: under `checkStat=minimal` plus `trustctime=false`, `checkStat=minimal` alone and `trustctime=false` alone, the armed run was rc 0 (accepted) and the fresh run rc 1 (STABLE -> RECLASSIFIES). The default-config control was correctly accepted. Each single setting exposes it, which is wider than F3's measured conjunction.
   - **Exposure** needs the cache armed, either relaxed setting, a pull whose predicate read-set differs between BASE and THEIRS, a same-size mtime-kept rewrite of a corpus file, and an mtime change between verifies. The reference consumer is not exposed (all three settings unset): `git -C /Users/n8/git/graph config --get core.checkStat`, `core.trustctime` and `core.ignoreStat` each printed nothing (rc 1), and the control `git -C /Users/n8/git/graph config --get core.repositoryformatversion` printed 0.
-  - **OWED, the precondition for the flip:** a later batch builds this; this release does not, and part (b) is a review only.
-  - **Owed fix:** `er_key` in `core/skills/ai-dlc-update/reconcile/emit-report.sh` refuses by name, beside the existing `core.ignoreStat=true` refusal, when the effective `core.checkStat` is anything other than `default` or `core.trustctime=false`. Do not force the settings into `cr_run`, which would change the render.
+  - **Built:** `er_key` in `core/skills/ai-dlc-update/reconcile/emit-report.sh` refuses `core.checkStat` other than `default` (compared case-insensitively) and `core.trustctime` set to a false boolean. Each is read with the exit code captured: unset allows, an unreadable value refuses. The `core.ignoreStat` read moved onto the same helper. The forced `trustctime` and `checkStat` options in `er_cgit` were deleted as vacuous, since every admitted config is now default. Arm PC-V37 was rebuilt in the p2 world (the snapshot validator through `cr_run`, cause checkStat), with the pre-fix two-layer revert as mutant M-v37 (it stale-hits PC-V37). The single-refusal arms are PC-V97 and PC-V99 (`checkStat=minimal` and `MINIMAL` refuse), PC-V98 and PC-V100 (`default` and `Default` allow), PC-V101 and PC-V103 (`trustctime=false` and `no` refuse), PC-V102 (`trustctime=true` allows) and PC-V108 (a checkStat refusal at hit time). Mutants: M-v37a deletes the checkStat refusal and fails PC-V97, PC-V99 and PC-V108; M-v37b deletes the trustctime refusal and fails PC-V101 and PC-V103. The p2 world cannot kill a single-refusal mutant, because with er_cgit's forced `-c` gone the key and the predicate run the same config and agree; the single-key mutants are killed in a raw-bytes world (a ledger `verify: sh grep` receipt over a tracked file rewritten same-size, mtime kept).
+  - **Progress:** D-r9b-1, the flip's precondition, is built. The cache default is NOT flipped. Flipping it is a later lead ruling and still needs mutant A2b.
+  - **fsmonitor, also built:** `er_key` also refuses `core.fsmonitor` when it is set to anything other than a false boolean (unset allows). Arms: PC-V104 (a lying hook path refuses), PC-V105 (`false` allows), PC-V106 (`true` refuses) and PC-V107 (fsmonitor injected through GIT_CONFIG_COUNT/KEY/VALUE refuses). It also refuses a non-empty `GIT_TEST_FSMONITOR`, which turns fsmonitor on with `core.fsmonitor` unset (arm PC-V109; PC-V110 is its ALLOW twin, where `GIT_TEST_FSMONITOR` is set empty and the run records and hits; mutant M-v37g deletes that refusal and fails exactly PC-V109, by a stale hit, with PC-V104 in scope as its control). Mutant M-v37f deletes the refusal and fails PC-V104, PC-V106 and PC-V107. There is no M-v37c: an invalid `core.ignoreStat` makes git itself exit 128 on ls-files and status before the read is reached. It is a refusal and not a forced `-c core.fsmonitor=false` because forcing would reach only the key's own git calls, while `cr_run` predicates run plain git under the consumer's config.
+  - **Scored receipt (held as text, not installed as `verify:`; the entry stays `verify: manual`).** The snippet runs under `set -uo pipefail` with the engine path as `$1`. It cuts `er_cfg_read` and the refusal lines out of the engine (never retyped), runs them against fresh `git init` consumers, and exits 0 only if `checkStat=minimal` and `MINIMAL` refuse, unset and `Default` allow, `trustctime=no` refuses, `fsmonitor=true` refuses, `fsmonitor=false` allows, a non-empty `GIT_TEST_FSMONITOR` in the environment of the extracted block refuses and an empty one allows. The receipt unsets `GIT_TEST_FSMONITOR` at its top, so it does not depend on the caller's environment.
+
+  ```sh
+  set -uo pipefail
+  unset GIT_TEST_FSMONITOR
+  E="${1:?engine path}"
+  T="$(mktemp -d)"; _er_tmp="$T"
+  cr_git() { local r="$1"; shift; git -C "$r" "$@"; }
+  er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused"; return 1; }
+  awk '/^er_cfg_read\(\) \{/{p=1} p{print} p&&/^}/{exit}' "$E" > "$T/read.sh"
+  awk '/^  er_cfg_read core\.ignoreStat --bool/{p=1} /AN INHERITED MEMO/{p=0} p{print}' "$E" > "$T/block.sh"
+  [ -s "$T/read.sh" ] && [ -s "$T/block.sh" ] || { echo "extract empty"; exit 2; }
+  { cat "$T/read.sh"; echo 'chk() {'; cat "$T/block.sh"; echo '  return 0; }'; } > "$T/fn.sh"
+  bash -n "$T/fn.sh" || exit 2
+  . "$T/fn.sh"
+  fail=0
+  try() {
+    CONSUMER="$(mktemp -d "$T/c.XXXXXX")"; git init -q "$CONSUMER"
+    [ -z "$2" ] || git -C "$CONSUMER" config "$1" "$2"
+    if chk 2>/dev/null; then got=allow; else got=refuse; fi
+    [ "$got" = "$3" ] || { echo "WRONG $1=$2 want $3 got $got"; fail=1; }
+  }
+  tryenv() {
+    CONSUMER="$(mktemp -d "$T/c.XXXXXX")"; git init -q "$CONSUMER"
+    if GIT_TEST_FSMONITOR="$1" chk 2>/dev/null; then got=allow; else got=refuse; fi
+    [ "$got" = "$2" ] || { echo "WRONG GIT_TEST_FSMONITOR=$1 want $2 got $got"; fail=1; }
+  }
+  try core.checkStat minimal refuse
+  try core.checkStat MINIMAL refuse
+  try core.checkStat "" allow
+  try core.checkStat Default allow
+  try core.trustctime no refuse
+  try core.fsmonitor true refuse
+  try core.fsmonitor false allow
+  tryenv /nonexistent refuse
+  tryenv "" allow
+  [ "$fail" -eq 0 ] && echo OK
+  exit "$fail"
+  ```
+
+    Scores, each copy proven different from the tip by `cmp -s`: the fix (tip engine) scores 0. Regression r1 (the trustctime refusal line deleted) scores 1, failing on `trustctime=no`. Regression r2 (the lowercasing removed from `er_cfg_read`, so the compare is case-sensitive) scores 1, failing on `Default`, which it wrongly refuses. Regression r3 (the `GIT_TEST_FSMONITOR` refusal line deleted) scores 1, failing on `GIT_TEST_FSMONITOR=/nonexistent`, which it wrongly allows. A second correct spelling (`er_cfg_read` reading `config --get-regexp` and taking the last line per lowercased key) scores 0. N2 control: the tip scored with `GIT_TEST_FSMONITOR=/nonexistent` exported in the caller's environment still scores 0. Measured exits: tip 0, r1 1, r2 1, r3 1, second spelling 0, tip with the variable exported 0.
+  - **Original owed fix (now built, kept for the record):** `er_key` in `core/skills/ai-dlc-update/reconcile/emit-report.sh` refuses by name, beside the existing `core.ignoreStat=true` refusal, when the effective `core.checkStat` is anything other than `default` or `core.trustctime=false`. Do not force the settings into `cr_run`, which would change the render.
   - **Owed arm:** the p2 world under each single setting is refused with no record formed. Its ALLOW twin: the default config records and hits. Its mutant: deleting the refusal makes the run accept stale.
 - **Round 9 checked, no finding** (recorded so round 10 does not repeat them):
   - `layer-drift.sh:1341` `diff --quiet` in `adj_spent_note`: same mechanism, but only the detail column is fed, and no region prints it.

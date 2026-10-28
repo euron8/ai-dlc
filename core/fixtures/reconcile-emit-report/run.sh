@@ -3620,7 +3620,7 @@ pcv_latgrp() {
 if rer_phase pcache; then
 # PC-V96 is TAKEN: it is the shared adjudication world's mode-400 arm (PCV_GRP_IDS), run by phase
 # pcvmut in shard c. Never reuse it here.
-PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V37 PC-V26 PC-V10 PC-V63"
+PCV_IDS="PC-V0 PC-V1 PC-V14 PC-V2 PC-V3 PC-V9 PC-V4 PC-V11 PC-V12 PC-V13 PC-V5 PC-V6 PC-V7 PC-V8 PC-V15 PC-V16 PC-V27 PC-V28 PC-V29 PC-V30 PC-V31 PC-V35 PC-V36 PC-V33 PC-V34 PC-V26 PC-V10 PC-V63"
 # THE ROUND-6 PARTITION ARMS (R1..R4 refusals, the B2 detector arm, and V32 rewritten to assert the
 # tracked-symlink refusal) need an engine that carries the named refusal line. An engine without it
 # (a consumer whose fixture arrived before its engine) prints SKIP for them and no ok line.
@@ -4099,32 +4099,9 @@ pcv_k3world() {
   fi
   return 0
 }
-# V37 (F3), its own world: the consumer sets core.checkStat=minimal and core.trustctime=false before the
-# record, then rewrites steps/demo.md in place at the same size and puts its mtime back. Plain status
-# trusts the stat entry; the key's forced options do not. Near miss: the same config, no file touched,
-# which is the HIT control itself.
-pcv_k5world() {
-  local stp=".claude/skills/ai-dlc/steps/demo.md"
-  pcv_lat k5 || { pcv_x PC-V37 "FIXTURE BROKEN: layer-adjudication-tier/seed.sh did not build its world"; return 0; }
-  git -C "$L_C" config core.checkStat minimal && git -C "$L_C" config core.trustctime false \
-    || { pcv_x PC-V37 "FIXTURE BROKEN: could not set core.checkStat and core.trustctime"; return 0; }
-  pcv_lat_approve k5 || { pcv_x PC-V37 "FIXTURE BROKEN: the world rendered no region"; return 0; }
-  pcv_run k5.r "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"
-  if ! { pcv_is_miss 0 && [ -f "$L_REC" ]; }; then
-    pcv_x PC-V37 "control: the world's first --verify did not render and record ($(pcv_why))"; return 0
-  fi
-  pcv_kctl PC-V37 || return 0
-  touch -r "$L_C/$stp" "$PS_D/k37-stamp"
-  sed 's/Alpha/Alphx/' "$L_C/$stp" > "$PS_D/k37-edit"
-  if cmp -s "$PS_D/k37-edit" "$L_C/$stp" || [ "$(wc -c < "$PS_D/k37-edit")" -ne "$(wc -c < "$L_C/$stp")" ]; then
-    pcv_x PC-V37 "FIXTURE BROKEN: the in-place rewrite changed nothing, or changed the size"; return 0
-  fi
-  cat "$PS_D/k37-edit" > "$L_C/$stp" && touch -r "$PS_D/k37-stamp" "$L_C/$stp"
-  if pcv_k2miss PC-V37 k37 "a same-size, mtime-kept rewrite of steps/demo.md under core.checkStat=minimal and core.trustctime=false"; then
-    pcv_v PC-V37 "a same-size, mtime-kept rewrite under core.checkStat=minimal and core.trustctime=false MISSES with the opt-out render's exit $K_NC, and the near miss (the same config, no file touched) HIT as the control"
-  fi
-  return 0
-}
+# V37 is NOT HERE. Its old world (relaxed stat config set before the record, a same-size rewrite of
+# steps/demo.md that the key's forced options saw) is unreachable since er_key REFUSES that config:
+# no record forms. V37 and its siblings V97..V110 run in phase pcvmut (shard c), beside their mutants.
 # V34 (F4), its own world: two dist commits move core/git-hooks/pre-push, which map_consumer sends to
 # .githooks/, and the consumer IGNORES .githooks/ and build/. The ignored hook is edited after the
 # record. Near miss: an ignored build/x, under no read root.
@@ -6392,7 +6369,6 @@ pcv_suite() {
   if pcv_in PC-V32 PC-V35 PC-V36; then pcv_k2world; fi
   if pcv_in PC-V33; then pcv_k3world; fi
   if pcv_in PC-V34; then pcv_k4world; fi
-  if pcv_in PC-V37; then pcv_k5world; fi
   # ---- V55, V59..V63: the round-9 BLOCKERs (BL-685) and M-direxcl's subject ----
   if [ "$PCV_R10" -eq 1 ]; then
     if pcv_in PC-V55; then pcv_v55world; fi
@@ -6715,7 +6691,7 @@ pcv_bl() {
 # V17..V20 ordering hazard noted in pcv_latarm) is not caught by the scoring; no declared kill is lost.
 # V17..V25 are outside every mutant's reach entirely: they run in phase pcvlat (shard d), against the
 # shipping engine only.
-# The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, k5, r6, b2 and r7 worlds) hold
+# The later groups (V40/V41 inside the V4..V31 group; the k2, k3, k4, r6, b2 and r7 worlds) hold
 # no declared kill, so no mutant runs them; the shipping suite still runs every one.
 pcv_scope() {
   case "$1" in
@@ -6921,6 +6897,10 @@ pcv_setup
 # when M-v25wr scored KILL in the same run, because that STALE-HIT is the one observation that no other
 # refuser fires before the key compare in this world.
 PCV_LMUTS="M-v17 M-v18 M-v19 M-v20 M-v21 M-v22 M-v23 M-v24 M-v25 M-v25wr"
+# er_cgit's two lines (BL-685 D-r9b-1 deleted its forced trustctime/checkStat `-c`s: er_key refuses a
+# relaxed config instead). M-v19 drops fileMode from both; M-v37 restores the deleted pair.
+PCV_CGITA='  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"'
+PCV_CGITB='  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi'
 # pcv_lscope <name> -- the one arm the mutant runs.
 pcv_lscope() {
   case "$1" in
@@ -6957,8 +6937,7 @@ pcv_lwant() {
 pcv_lmk() {
   local d="$PCV_ROOT/lmut/$1"
   local a18="    if cr_test \"\$CONSUMER\" -x \"\$p\"; then printf 'x %s\\0' \"\$p\"; else printf -- '- %s\\0' \"\$p\"; fi"
-  local a19a='  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- . ":(exclude,literal)$_er_ex"'
-  local a19b='  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default "$@" -- .; fi'
+  local a19a="$PCV_CGITA" a19b="$PCV_CGITB"
   local a25='  [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }'
   mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
   case "$1" in
@@ -7054,10 +7033,387 @@ pcv_lscore() {
     bad "MUTANT SURVIVED [BL-795 $m]: declared [$want], but $id rendered fresh [$obs] -- another field covers the subject"
   fi
 }
+
+# --- BL-685 D-r9b-1: V37 AND V97..V110, A RELAXED STAT CONFIG OR AN ENABLED FSMONITOR, phase pcvmut ---
+# er_key REFUSES core.checkStat other than `default`, core.trustctime a git false, and core.fsmonitor
+# other than a git false, each read through the consumer's EFFECTIVE config. The reason is what runs
+# OUTSIDE the key: a `cr_run` predicate or a ledger `sh` receipt reads under the consumer's own config
+# (plain git) or reads raw bytes, while the key's status trusts the stat entry the same config trusts.
+# Every arm is its own world, built fresh, so no arm reads another's undo. Shapes:
+#   refuse  the relaxed world's first two cached runs render fresh at exit 0, write NO record and name
+#           the cause on the PCV_R6MARK line; then the change, after which the cached run renders fresh
+#           at the opt-out's NON-ZERO exit, still naming the cause. A key without the refusal records on
+#           the first run, HITS the second, and after the change answers a STALE PASS (pcv_lobs writes
+#           STALE-HIT): the kill a mutant must earn, read by pcv_sclass under pcv_lclass's rule.
+#   allow   the ALLOW twin, one property apart (the same key set to an allowed spelling): records, HITS,
+#           and after the change renders fresh at the opt-out's exit, because the key's status sees it.
+#   only    the refusal alone (cause named, no record, exit 0 like the opt-out); no change step.
+#   hittime records under the default config, HITS, then sets core.checkStat=minimal: the next cached
+#           run renders fresh at exit 0, leaves the record byte-identical and names the checkStat cause
+#           (config --list moves the consobjects field anyway, so only the NAMED cause is the subject).
+# Two worlds carry the change:
+#   raw  a tracked notes/f.md read ONLY by a ledger `verify: sh grep -q x "$CONSUMER/notes/f.md"` receipt
+#        (notes/ is outside the receipt-subject prefixes, so no read-log entry keys it). The change is a
+#        same-size rewrite with the mtime put back AFTER the record: the relaxed config's status reads it
+#        clean, the receipt reads the new bytes.
+#   p2   validate-snapshot-conservation.sh run by predicate-differential.sh through cr_run, reading
+#        `git diff BASE -- snapshot`. A same-size, mtime-kept rewrite BEFORE the record (the consumer's
+#        diff reads the stale index blob), then a `touch`, after which the diff reads the work tree.
+#        This world needs BOTH layers of the pre-fix engine to answer stale (the refusal gone AND er_cgit
+#        forcing trustctime/checkStat, so the key saw the pre-record rewrite and the touch moves no
+#        field); M-v37 reverts both. With only the refusal gone the key and the predicate run the same
+#        config and agree, and it renders fresh: measured on a scratch copy, so the raw world is where
+#        the single-refusal mutants are scored.
+# NO M-v37c (ignoreStat read reverted to `--bool`): unconstructible. An invalid core.ignoreStat makes
+# git itself exit 128 (`git -c core.ignoreStat=bogus ls-files`, measured), so er_key's first listing
+# (`ls-files -s`, R2) refuses before the ignoreStat read is reached, under the fix and the revert alike.
+PCV_SCS="lets a predicate's plain git trust a stat entry a same-size rewrite left looking current"
+PCV_SCK="core.checkStat=minimal $PCV_SCS"
+PCV_STC="core.trustctime=false $PCV_SCS"
+PCV_SFM="core.fsmonitor lets git trust a monitor's report instead of the files, so status and a predicate's plain git can miss an edit"
+# GIT_TEST_FSMONITOR=<hook> enables the monitor with core.fsmonitor UNSET, so the config read above
+# never sees it. PC-V109 sets it to the lying hook in the environment of the status that lays the index
+# down, the approve, and every --verify run; PC-V110 is its ALLOW twin, one property apart: the same
+# variable set EMPTY, which git reads as no monitor (measured: an empty value sees a same-size,
+# mtime-kept rewrite as ` M`, the hook value lists nothing).
+PCV_SFE="GIT_TEST_FSMONITOR turns on a monitor git trusts instead of the files, so status and a predicate's plain git can miss an edit"
+PCV_SFAM="PC-V37 PC-V97 PC-V98 PC-V99 PC-V100 PC-V101 PC-V102 PC-V103 PC-V104 PC-V105 PC-V106 PC-V107 PC-V108 PC-V109 PC-V110"
+PCV_SMUTS="M-v37 M-v37a M-v37b M-v37f M-v37g"
+# The p2 world's two validators, found beside this fixture in either layout.
+PCV_SNV=""; PCV_SHRV=""
+for _h in "$HERE/../../scripts" "$HERE/../../../scripts/ai-dlc"; do
+  if [ -f "$_h/validate-snapshot-conservation.sh" ] && [ -f "$_h/validate-hook-registration.sh" ]; then
+    PCV_SNV="$(cd "$_h" && pwd)/validate-snapshot-conservation.sh"; PCV_SHRV="$(cd "$_h" && pwd)/validate-hook-registration.sh"; break
+  fi
+done
+# pcv_sraw <tag> -- the raw world: a layer-adjudication-tier seed plus notes/f.md and its ledger receipt.
+pcv_sraw() {
+  pcv_lat "$1" || return 1
+  mkdir -p "$L_C/notes" "$L_C/_bmad-output/ai-dlc-update" && printf 'x\n' > "$L_C/notes/f.md" \
+    && touch -t 202001010000 "$L_C/notes/f.md" \
+    && printf '%s\n' '# ledger' '' '## PC-R37RAW — a consumer invariant read as raw bytes' '' \
+         'verify: sh grep -q x "$CONSUMER/notes/f.md"' > "$L_C/_bmad-output/ai-dlc-update/push-candidate-ledger.md" \
+    && { git -C "$L_C" add -A && git -C "$L_C" -c user.email=f@f -c user.name=fixture commit -qm s37raw; } >/dev/null 2>&1
+}
+# pcv_sp2 <tag> -- the p2 world (scratch builder p2-snapstat.sh's shape): THEIRS tightens the snapshot
+# validator's floor from 40 to 1, so a destroyed record line flips its verdict. Sets the L_* globals.
+pcv_sp2() {
+  local w="$PS_D/$1" dw d c
+  dw="$w/dist-work"; d="$w/dist.git"; c="$w/consumer"
+  [ -n "$PCV_SNV" ] || return 1
+  mkdir -p "$dw/core/schemas" "$dw/core/scripts" "$c/.claude/schemas" "$c/.claude/hooks" \
+    "$c/_bmad-output/ai-dlc-update" "$c/_bmad-output/implementation-artifacts" "$c/core/skills/ai-dlc-update/reconcile" || return 1
+  printf '{\n  "rule": "original"\n}\n' > "$dw/core/schemas/thing.json" && cp "$PCV_SNV" "$dw/core/scripts/validate-snapshot-conservation.sh" \
+    && { git -C "$dw" init -q && git -C "$dw" add -A && git -C "$dw" -c user.email=f@f -c user.name=fixture commit -qm base; } >/dev/null 2>&1 || return 1
+  L_B="$(git -C "$dw" rev-parse HEAD)" || return 1
+  printf '{\n  "rule": "original", "theirs": 1\n}\n' > "$dw/core/schemas/thing.json" && cp "$PCV_SHRV" "$dw/core/scripts/validate-hook-registration.sh" \
+    && sed 's/AI_DLC_SNAPSHOT_CONSERVATION_FLOOR:-40/AI_DLC_SNAPSHOT_CONSERVATION_FLOOR:-1/' "$PCV_SNV" > "$dw/core/scripts/validate-snapshot-conservation.sh" || return 1
+  ! cmp -s "$PCV_SNV" "$dw/core/scripts/validate-snapshot-conservation.sh" || return 1
+  { git -C "$dw" add -A && git -C "$dw" -c user.email=f@f -c user.name=fixture commit -qm theirs && git clone -q --mirror "$dw" "$d"; } >/dev/null 2>&1 || return 1
+  L_T="$(git -C "$d" rev-parse HEAD)" && L_D="$d" && L_C="$c" || return 1
+  printf '{\n  "rule": "original"\n}\n' > "$c/.claude/schemas/thing.json"
+  printf 'version: 1.0.0\ncommit: %s\n' "$L_B" > "$c/.claude/.ai-dlc-version"
+  printf '{"hooks": {}}\n' > "$c/.claude/settings.json"
+  # A consumer hook file that nothing runs (named off the `ai-dlc-` prefix, which I10 reads as an invoker).
+  printf '#!/bin/bash\n# p2 hook\n' > "$c/.claude/hooks/local-p2.sh"
+  printf '.claude/settings.local.json\n/core/\n' > "$c/.gitignore"
+  P2_SNAP="$c/_bmad-output/pipeline-snapshot.md"
+  for _i in 01 02 03 04 05 06 07 08; do printf 'snapshot record line %s carrying enough text\n' "$_i"; done > "$P2_SNAP"
+  cp "$(dirname "$PS_E")/settings-merge.sh" "$c/core/skills/ai-dlc-update/reconcile/settings-merge.sh" || return 1
+  # An OLD mtime, so the index entry is never racily clean.
+  touch -t 202001010000 "$P2_SNAP"
+  { git -C "$c" init -q && git -C "$c" add -A && git -C "$c" -c user.email=f@f -c user.name=fixture commit -qm consumer; } >/dev/null 2>&1 || return 1
+  P2_H="$(git -C "$c" rev-parse HEAD)" || return 1
+  printf '{"sha": "%s"}\n' "$P2_H" > "$c/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+  { git -C "$c" add -A && git -C "$c" -c user.email=f@f -c user.name=fixture commit -qm metrics; } >/dev/null 2>&1 || return 1
+  L_R="$c/_bmad-output/ai-dlc-update/reconcile-report.md"
+  L_REC="$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)/ai-dlc-verify-pass"
+}
+# pcv_sp2pre <tag> -- the p2 world's pre-record rewrite: record line 03 destroyed at the same size, its
+# mtime put back, two seconds after the index entry so a forced-default status sees the new ctime. 0 when
+# the consumer's own diff lists the snapshot 0 times and a forced-default diff lists it once: the world
+# expresses the gap, or it is FIXTURE BROKEN.
+pcv_sp2pre() {
+  local n1 n2
+  sleep 2
+  touch -r "$P2_SNAP" "$PS_D/$1-mref" \
+    && sed 's/record line 03 carrying/RECORD LINE 03 CARRYING/' "$P2_SNAP" > "$PS_D/$1-snap.new" \
+    && ! cmp -s "$PS_D/$1-snap.new" "$P2_SNAP" && [ "$(wc -c < "$PS_D/$1-snap.new")" -eq "$(wc -c < "$P2_SNAP")" ] \
+    && cat "$PS_D/$1-snap.new" > "$P2_SNAP" && touch -r "$PS_D/$1-mref" "$P2_SNAP" || return 1
+  n1="$(git -C "$L_C" diff --name-only "$P2_H" -- _bmad-output/pipeline-snapshot.md | grep -c .)" || n1=0
+  n2="$(git -C "$L_C" -c core.trustctime=true -c core.checkStat=default diff --name-only "$P2_H" -- _bmad-output/pipeline-snapshot.md | grep -c .)" || n2=0
+  [ "$n1" -eq 0 ] && [ "$n2" -eq 1 ]
+}
+# pcv_scfg <mode> <tag> -- the one config property the arm varies (envfsm and none set nothing).
+pcv_scfg() {
+  case "$1" in
+    both)     git -C "$L_C" config core.checkStat minimal && git -C "$L_C" config core.trustctime false ;;
+    minimal)  git -C "$L_C" config core.checkStat minimal ;;
+    MINIMAL)  git -C "$L_C" config core.checkStat MINIMAL ;;
+    default)  git -C "$L_C" config core.checkStat default ;;
+    Default)  git -C "$L_C" config core.checkStat Default ;;
+    noctime)  git -C "$L_C" config core.trustctime false ;;
+    ctrue)    git -C "$L_C" config core.trustctime true ;;
+    cno)      git -C "$L_C" config core.trustctime no ;;
+    fsmhook)  git -C "$L_C" config core.fsmonitor "$PS_D/$2-fsm-hook" && git -C "$L_C" config core.fsmonitorHookVersion 2 ;;
+    fsmfalse) git -C "$L_C" config core.fsmonitor false ;;
+    fsmtrue)  git -C "$L_C" config core.fsmonitor true ;;
+    envfsm|envtfsm|envtempty|none) : ;;
+    *) return 1 ;;
+  esac
+}
+pcv_scause() { grep -qxF "${PCV_R6MARK}$2" "$PS_D/$1.err" 2>/dev/null; }
+pcv_snamed() { grep -F "$PCV_R6MARK" "$PS_D/$1.err" 2>/dev/null | sed -n 1p; }
+# pcv_sarm <id> -- one arm, one fresh world, one verdict (and an obs line once its control holds).
+pcv_sarm() {
+  local id="$1" w k m cz="" t rs=other cs=other rw cw c_rc c_hit c_n nc rec
+  case "$id" in
+    PC-V37)  w=p2;  k=refuse;  m=both;     cz="$PCV_SCK" ;;
+    PC-V97)  w=raw; k=refuse;  m=minimal;  cz="$PCV_SCK" ;;
+    PC-V98)  w=raw; k=allow;   m=default ;;
+    PC-V99)  w=raw; k=refuse;  m=MINIMAL;  cz="$PCV_SCK" ;;
+    PC-V100) w=raw; k=allow;   m=Default ;;
+    PC-V101) w=raw; k=refuse;  m=noctime;  cz="$PCV_STC" ;;
+    PC-V102) w=raw; k=allow;   m=ctrue ;;
+    PC-V103) w=raw; k=refuse;  m=cno;      cz="$PCV_STC" ;;
+    PC-V104) w=raw; k=refuse;  m=fsmhook;  cz="$PCV_SFM" ;;
+    PC-V105) w=raw; k=allow;   m=fsmfalse ;;
+    PC-V106) w=raw; k=only;    m=fsmtrue;  cz="$PCV_SFM" ;;
+    PC-V107) w=raw; k=only;    m=envfsm;   cz="$PCV_SFM" ;;
+    PC-V108) w=raw; k=hittime; m=none;     cz="$PCV_SCK" ;;
+    PC-V109) w=raw; k=refuse;  m=envtfsm;  cz="$PCV_SFE" ;;
+    PC-V110) w=raw; k=allow;   m=envtempty ;;
+    *) pcv_x "$id" "FIXTURE BROKEN: pcv_sarm carries no spec for this id"; return 0 ;;
+  esac
+  t="s${id#PC-V}"; PCV_ENVPRE=""
+  case "$PS_D" in *[[:space:]]*) pcv_x "$id" "FIXTURE BROKEN: the suite dir [$PS_D] carries whitespace, which PCV_ENVPRE cannot pass"; return 0 ;; esac
+  printf '#!/bin/sh\nprintf "tok1\\0"\n' > "$PS_D/$t-fsm-hook" && chmod +x "$PS_D/$t-fsm-hook" \
+    || { pcv_x "$id" "FIXTURE BROKEN: could not write the fsmonitor hook"; return 0; }
+  if [ "$w" = p2 ]; then
+    pcv_sp2 "$t" || { pcv_x "$id" "FIXTURE BROKEN: the p2 world (the snapshot validator, its floor edited in THEIRS) did not build"; return 0; }
+  else
+    pcv_sraw "$t" || { pcv_x "$id" "FIXTURE BROKEN: the raw world (notes/f.md and its ledger sh receipt) did not build"; return 0; }
+  fi
+  pcv_scfg "$m" "$t" || { pcv_x "$id" "FIXTURE BROKEN: could not set the consumer config ($m)"; return 0; }
+  # PC-V109/PC-V110 carry GIT_TEST_FSMONITOR from here on: the status below, the approve and every run.
+  case "$m" in
+    envtfsm)   PCV_ENVPRE="GIT_TEST_FSMONITOR=$PS_D/$t-fsm-hook" ;;
+    envtempty) PCV_ENVPRE="GIT_TEST_FSMONITOR=" ;;
+  esac
+  # The fsmonitor hook's token and the index's fsmonitor-valid bits are laid down by one plain status;
+  # never under core.fsmonitor=true, which would start the built-in daemon.
+  if [ "$w" = raw ] && [ "$m" != fsmtrue ]; then env ${PCV_ENVPRE:-} git -C "$L_C" status --porcelain >/dev/null 2>&1; fi
+  if [ "$w" = p2 ] && ! pcv_sp2pre "$t"; then
+    pcv_x "$id" "FIXTURE BROKEN: the pre-record same-size rewrite did not leave the consumer's diff blind (0) and a forced-default diff seeing it (1)"; return 0
+  fi
+  pcv_lat_approve "$t" || { pcv_x "$id" "FIXTURE BROKEN: the world rendered no region"; return 0; }
+  [ "$m" = envfsm ] && PCV_ENVPRE="GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=$PS_D/$t-fsm-hook"
+  rm -f "$L_REC"
+  pcv_run "$t.r" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; rw="$(pcv_why)"
+  if pcv_is_miss 0 && [ ! -e "$L_REC" ] && [ -n "$cz" ] && pcv_scause "$t.r" "$cz"; then rs=refused
+  elif pcv_is_miss 0 && [ -f "$L_REC" ]; then rs=recorded; fi
+  if [ "$k" = only ]; then
+    pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; nc="$PRC"
+    if [ "$rs" = refused ] && [ "$nc" -eq 0 ]; then
+      pcv_v "$id" "$m: the cached run renders fresh at exit 0 like the opt-out, writes no record, and names [$cz]"
+    else
+      pcv_x "$id" "$m: cached [$rw, record $([ -e "$L_REC" ] && echo WRITTEN || echo absent)], opt-out $nc, named [$(pcv_snamed "$t.r")] (want a fresh exit-0 render, no record, [$cz] named)"
+    fi
+    PCV_ENVPRE=""; return 0
+  fi
+  pcv_run "$t.c" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; cw="$(pcv_why)"
+  if pcv_is_miss 0 && [ ! -e "$L_REC" ] && [ -n "$cz" ] && pcv_scause "$t.c" "$cz"; then cs=refused
+  elif pcv_is_hit "$t.c" "$L_REC"; then cs=hit; fi
+  case "$k:$rs:$cs" in
+    refuse:refused:refused|refuse:recorded:hit|allow:recorded:hit|hittime:recorded:hit) ;;
+    *) pcv_x "$id" "control: $m before the change gave first [$rw] $rs, second [$cw] $cs (want refused twice, or recorded then HIT); first run's stderr: [$(grep -v '^[[:space:]]*$' "$PS_D/$t.r.err" 2>/dev/null | sed -n '2,12p' | cut -c1-200 | tr '\n' '|')]"; return 0 ;;
+  esac
+  if [ "$k" = hittime ]; then
+    cp "$L_REC" "$PS_D/$t.rec.keep"
+    git -C "$L_C" config core.checkStat minimal || { pcv_x "$id" "FIXTURE BROKEN: could not set core.checkStat after the record"; return 0; }
+    pcv_run "$t" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; c_rc="$PRC"; c_hit="$PHIT"; c_n="$PN"
+    pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; nc="$PRC"; PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
+    rec=REWRITTEN; cmp -s "$L_REC" "$PS_D/$t.rec.keep" && rec=unchanged
+    if pcv_is_miss 0 && [ "$nc" -eq 0 ] && [ "$rec" = unchanged ] && pcv_scause "$t" "$cz"; then
+      pcv_v "$id" "a PASS recorded under the default config, then core.checkStat=minimal: the cached run renders fresh at exit 0, the record is byte-identical, and the checkStat cause is named"
+    else
+      pcv_x "$id" "core.checkStat=minimal set after the record: [$(pcv_why)], opt-out $nc, record $rec, named [$(pcv_snamed "$t")] (want a fresh exit-0 render, the record untouched, [$cz] named)"
+    fi
+    return 0
+  fi
+  # The change: the raw world rewrites notes/f.md at the same size with its mtime put back; the p2
+  # world touches the snapshot it rewrote before the record.
+  if [ "$w" = p2 ]; then
+    touch "$P2_SNAP"
+  else
+    touch -r "$L_C/notes/f.md" "$PS_D/$t-mref" && printf 'y\n' > "$PS_D/$t-new" && cat "$PS_D/$t-new" > "$L_C/notes/f.md" \
+      && touch -r "$PS_D/$t-mref" "$L_C/notes/f.md" || { pcv_x "$id" "FIXTURE BROKEN: the same-size rewrite of notes/f.md failed"; return 0; }
+  fi
+  # The cached run goes FIRST, so an opt-out render cannot record the changed tree before it.
+  pcv_run "$t" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T"; c_rc="$PRC"; c_hit="$PHIT"; c_n="$PN"
+  pcv_run "$t.n" "$L_C" "$L_R" "$L_D" "$L_B" "$L_T" nocache; nc="$PRC"; PRC="$c_rc"; PHIT="$c_hit"; PN="$c_n"
+  PCV_ENVPRE=""
+  if [ "$nc" -eq 0 ]; then
+    pcv_x "$id" "FIXTURE BROKEN: the opt-out render after the change still exits 0, so the change is not one the render sees"; return 0
+  fi
+  pcv_lobs "$id" "$nc"
+  if [ "$k" = allow ]; then
+    if pcv_is_miss "$nc"; then
+      pcv_v "$id" "the ALLOW twin ($m) records and HITS, and after the same-size rewrite the cached run renders fresh at the opt-out's exit $nc: the key's own status sees it"
+    else
+      pcv_x "$id" "the ALLOW twin ($m) after the same-size rewrite: [$(pcv_why)], opt-out $nc -- a recorded PASS answered for a tree it never rendered"
+    fi
+  elif [ "$rs" = refused ] && pcv_is_miss "$nc" && [ ! -e "$L_REC" ] && pcv_scause "$t" "$cz"; then
+    pcv_v "$id" "$m ($w world): two cached runs render fresh at exit 0 with no record and [$cz] named, and after the change the cached run renders fresh at the opt-out's exit $nc, still naming it"
+  else
+    pcv_x "$id" "$m ($w world): before the change $rs/$cs, after it [$(pcv_why)], opt-out $nc, named [$(pcv_snamed "$t")] (want no record ever formed, [$cz] named, a fresh render at the opt-out's exit) -- a hit there is a stale PASS"
+  fi
+  return 0
+}
+# pcv_sjob <dir> <emit> <id> -- one arm in a suite dir of its own, against <emit>.
+pcv_sjob() {
+  PS_E="$2"; PS_D="$1/$3"; PS_SHIM="$PS_D/shim"; PCV_ENG=""
+  mkdir -p "$PS_D" && : > "$PS_D/verdicts" && : > "$PS_D/obs" && pcv_shim || { echo "could not create $PS_D or its shim"; return 1; }
+  L_C=""
+  pcv_sarm "$3"
+  # core.fsmonitor=true starts git's built-in daemon on the first status; none outlives its world.
+  if [ "$3" = PC-V106 ] && [ -n "$L_C" ] && [ -d "$L_C/.git" ]; then git -C "$L_C" fsmonitor--daemon stop >/dev/null 2>&1; fi
+  return 0
+}
+# pcv_slaunch <dir> <emit> <ids> -- every arm in parallel; then <dir>/verdicts and <dir>/obs gather them.
+pcv_slaunch() {
+  local i
+  mkdir -p "$1" || return 1
+  for i in $3; do ( pcv_sjob "$1" "$2" "$i" ) > "$1/$i.log" 2>&1 & done
+}
+pcv_sgather() {
+  local i
+  : > "$1/verdicts"; : > "$1/obs"
+  for i in $2; do cat "$1/$i/verdicts" >> "$1/verdicts" 2>/dev/null; cat "$1/$i/obs" >> "$1/obs" 2>/dev/null; done
+}
+# The mutants: each its own engine copy, the arms it runs, and the arms it must fail. The STALE set is the
+# subset whose kill must be a STALE-HIT (pcv_sclass KILL); the rest of the kill set dies by its named cause.
+pcv_sscope() {
+  case "$1" in
+    # PC-V104 (the fsmonitor refusal, which M-v37 keeps) is M-v37's same-run control.
+    M-v37)  echo "PC-V37 PC-V104" ;;
+    M-v37a) echo "PC-V97 PC-V98 PC-V99 PC-V100 PC-V108" ;;
+    M-v37b) echo "PC-V101 PC-V102 PC-V103" ;;
+    M-v37f) echo "PC-V104 PC-V105 PC-V106 PC-V107" ;;
+    # PC-V104 (the core.fsmonitor refusal, which M-v37g keeps) is M-v37g's same-run control.
+    M-v37g) echo "PC-V104 PC-V109 PC-V110" ;;
+  esac
+}
+pcv_swant() {
+  case "$1" in
+    M-v37) echo "PC-V37" ;; M-v37a) echo "PC-V97 PC-V99 PC-V108" ;; M-v37b) echo "PC-V101 PC-V103" ;; M-v37f) echo "PC-V104 PC-V106 PC-V107" ;; M-v37g) echo "PC-V109" ;;
+  esac
+}
+pcv_sstale() {
+  case "$1" in
+    M-v37) echo "PC-V37" ;; M-v37a) echo "PC-V97 PC-V99" ;; M-v37b) echo "PC-V101 PC-V103" ;; M-v37f) echo "PC-V104" ;; M-v37g) echo "PC-V109" ;;
+  esac
+}
+#   M-v37   BOTH layers of the fix reverted: the checkStat and trustctime refusals deleted AND er_cgit's
+#           forced `-c core.trustctime=true -c core.checkStat=default` restored (the pre-fix engine)
+#   M-v37a  the checkStat refusal deleted
+#   M-v37b  the trustctime refusal deleted
+#   M-v37f  the fsmonitor refusal deleted (its case arm allows every value)
+#   M-v37g  the GIT_TEST_FSMONITOR refusal deleted (the line becomes `:`)
+PCV_SCKL="    er_refuse \"core.checkStat=\$_er_cfg_v $PCV_SCS\"; return 1"
+PCV_STCL="  [ \"\$_er_cfg_rc\" -ne 0 ] || [ \"\$_er_cfg_v\" != false ] || { er_refuse \"$PCV_STC\"; return 1; }"
+PCV_SFML="      *) er_refuse \"$PCV_SFM\"; return 1 ;;"
+PCV_SFEL="  [ -z \"\${GIT_TEST_FSMONITOR:-}\" ] || { er_refuse \"$PCV_SFE\"; return 1; }"
+pcv_smk() {
+  local d="$PCV_ROOT/smut/$1" fa fb
+  fa="${PCV_CGITA/ -c core.fileMode=true/ -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default}"
+  fb="${PCV_CGITB/ -c core.fileMode=true/ -c core.fileMode=true -c core.trustctime=true -c core.checkStat=default}"
+  mkdir -p "$d" && cp -R "$(dirname "$EMIT")" "$d/eng" && : > "$d/anchor-count" || return 1
+  case "$1" in
+    M-v37)  pcv_ed "$d" replace "$PCV_SCKL" '    :' && pcv_ed "$d" replace "$PCV_STCL" '  :' \
+              && pcv_ed "$d" replace "$PCV_CGITA" "$fa" && pcv_ed "$d" replace "$PCV_CGITB" "$fb" ;;
+    M-v37a) pcv_ed "$d" replace "$PCV_SCKL" '    :' ;;
+    M-v37b) pcv_ed "$d" replace "$PCV_STCL" '  :' ;;
+    M-v37f) pcv_ed "$d" replace "$PCV_SFML" '      *) ;;' ;;
+    M-v37g) pcv_ed "$d" replace "$PCV_SFEL" '  :' ;;
+    *) return 1 ;;
+  esac || return 1
+  bash -n "$d/eng/emit-report.sh" 2>/dev/null || return 1
+  ! cmp -s "$EMIT" "$d/eng/emit-report.sh"
+}
+# pcv_sclass <dir> <id> -- pcv_lclass's rule over one arm of a family run: a STALE-HIT observation with the
+# arm's FAIL is KILL, FRESH with its ok is SURVIVE, a FAIL that is the harness's (control:, FIXTURE BROKEN)
+# is HARNESS, any other FAIL is FAIL, an ok without a stale observation is OK, and no verdict is HARNESS.
+pcv_sclass() {
+  local vl obs
+  vl="$(grep -m1 -E "^(ok|FAIL) $2 " "$1/verdicts" 2>/dev/null)"
+  obs="$(grep -m1 "^$2 " "$1/obs" 2>/dev/null)"
+  case "$vl" in
+    "FAIL $2 control:"*|"FAIL $2 FIXTURE BROKEN"*|"") echo HARNESS; return 0 ;;
+  esac
+  case "$obs:$vl" in
+    "$2 STALE-HIT "*":FAIL $2 "*) echo KILL ;;
+    "$2 FRESH "*":ok $2 "*) echo SURVIVE ;;
+    *":FAIL $2 "*) echo FAIL ;;
+    *) echo OK ;;
+  esac
+}
+# pcv_sscore <name> -- the mutant fails EXACTLY its declared set within its scope, every STALE id by a
+# STALE-HIT, and nothing in the scope is the harness.
+pcv_sscore() {
+  local m="$1" d="$PCV_ROOT/smut/$1/s" id c got="" hs="" ns="" want stale obs=""
+  want="$(pcv_swant "$m")"; stale="$(pcv_sstale "$m")"
+  [ -z "$(pcv_unexpected "$d/verdicts" "$(pcv_sscope "$m")")" ] || hs="strays[$(pcv_unexpected "$d/verdicts" "$(pcv_sscope "$m")")]"
+  for id in $(pcv_sscope "$m"); do
+    c="$(pcv_sclass "$d" "$id")"
+    case "$c" in
+      HARNESS) hs="$hs $id" ;;
+      KILL|FAIL) got="$got $id" ;;
+    esac
+    case " $stale " in *" $id "*) [ "$c" = KILL ] || ns="$ns $id=$c"; obs="$obs [$(grep -m1 "^$id " "$d/obs" 2>/dev/null)]" ;; esac
+  done
+  got="${got# }"
+  if [ -n "$hs" ]; then
+    bad "MUTANT HARNESS [BL-685 $m]: [${hs# }] produced no verdict, a control-red or FIXTURE BROKEN one, or a stray -- never a kill"
+  elif [ "$got" != "$want" ]; then
+    bad "MUTANT [BL-685 $m] failed [$got], expected exactly [$want] within [$(pcv_sscope "$m")] -- entangled, vacuous, or the refusal is not this arm's subject"
+  elif [ -n "$ns" ]; then
+    bad "MUTANT [BL-685 $m] failed [$got] but not by a stale PASS where one is owed: [${ns# }]$obs"
+  else
+    ok "mutant BL-685 $m fails exactly [$want] within its scope, and [$stale] answered a stale PASS:$obs"
+  fi
+}
+# THE GATE. An INSTALLED engine without the three refusals is a pre-migration state (PENDING, not run);
+# in the distribution the arms always run, so an engine without them FAILS them by name.
+PCV_SGATE=0
+if { grep -qF "$PCV_SCS" "$EMIT" && grep -qF "$PCV_SFM" "$EMIT" && grep -qF "$PCV_SFE" "$EMIT"; } || ! pcv_installed "$EMIT"; then
+  PCV_SGATE=1
+else
+  printf 'PENDING: PC-V37 PC-V97..PC-V110 and mutants M-v37 M-v37a M-v37b M-v37f M-v37g not run, engine lacks the stat-config and fsmonitor refusals\n'
+fi
+
 if pcv_cache_engine "BL-795 mutants M-v17..M-v25wr and PC-V96"; then
   mkdir -p "$PCV_ROOT/lmut"
   _lbuilt=""
   ( pcv_ship96 ) > "$PCV_ROOT/ship96.log" 2>&1 &
+  _sbuilt=""
+  if [ "$PCV_SGATE" -eq 1 ]; then
+    if [ -z "$PCV_SNV" ]; then
+      bad "FIXTURE BROKEN: [pcvmut] validate-snapshot-conservation.sh and validate-hook-registration.sh were found in neither layout beside $HERE, so PC-V37's p2 world cannot be built"
+    fi
+    pcv_slaunch "$PCV_ROOT/sship" "$EMIT" "$PCV_SFAM"
+    for _m in $PCV_SMUTS; do
+      if pcv_smk "$_m"; then
+        _sbuilt="$_sbuilt $_m"
+        pcv_slaunch "$PCV_ROOT/smut/$_m/s" "$PCV_ROOT/smut/$_m/eng/emit-report.sh" "$(pcv_sscope "$_m")"
+      else
+        case "$EMIT" in
+          */.claude/skills/ai-dlc-update/reconcile/emit-report.sh) printf 'PENDING: mutant %s not scored, engine lacks its anchor\n' "$_m" ;;
+          *) bad "MUTANT NOT BUILT [BL-685 $_m]: its anchor(s) occur [$(tr '\n' ' ' < "$PCV_ROOT/smut/$_m/anchor-count" 2>/dev/null || echo '?')] time(s) in emit-report.sh (want 1), or the edit changed nothing or does not parse" ;;
+        esac
+      fi
+    done
+  fi
   for _m in $PCV_LMUTS; do
     if [ -z "$(pcv_lscope "$_m")" ] || [ -z "$(pcv_lwant "$_m")" ]; then
       bad "MUTANT NOT SCOPED [BL-795 $_m]: pcv_lscope or pcv_lwant names nothing for it, so it would score nothing"
@@ -7082,6 +7438,26 @@ if pcv_cache_engine "BL-795 mutants M-v17..M-v25wr and PC-V96"; then
     pcv_lscore "$_m"
     if [ -s "$PCV_ROOT/lmut/$_m.log" ]; then awk -v p="  DIAG  pcvmut $_m.log | " 'NR <= 10 { print p $0 }' "$PCV_ROOT/lmut/$_m.log"; fi
   done
+  # V37 and V97..V110 on the shipping engine, then their mutants. THE CONTROL GATES THE SCORE: a mutant's
+  # failures are read only when every one of the family's arms passed on the shipping engine.
+  if [ "$PCV_SGATE" -eq 1 ]; then
+    pcv_sgather "$PCV_ROOT/sship" "$PCV_SFAM"
+    pcv_read_ids "$PCV_ROOT/sship/verdicts" "$PCV_SFAM" pcvmut
+    _sctl="$(grep -E '^FAIL ' "$PCV_ROOT/sship/verdicts" 2>/dev/null | awk '{ print $2 }' | tr '\n' ' ')"
+    for _i in $PCV_SFAM; do
+      if grep -qE "^FAIL $_i " "$PCV_ROOT/sship/verdicts" 2>/dev/null || [ -s "$PCV_ROOT/sship/$_i.log" ]; then
+        awk -v p="  DIAG  pcvmut sship $_i.log | " 'NR <= 10 { print p $0 }' "$PCV_ROOT/sship/$_i.log"
+      fi
+    done
+    for _m in $_sbuilt; do
+      pcv_sgather "$PCV_ROOT/smut/$_m/s" "$(pcv_sscope "$_m")"
+      if [ -n "$_sctl" ]; then
+        bad "MUTANT UNSCORED [BL-685 $_m]: the unmutated family did not pass [${_sctl% }], so a kill read against it would credit the control's failures"
+      else
+        pcv_sscore "$_m"
+      fi
+    done
+  fi
 fi
 fi # end rer_phase pcvmut
 
