@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output) at the rebased tip of the f3 rework, then verified by a second armed run.
+2092 *
+20 core/skills/ai-dlc-update/reconcile/apply.sh
+9 core/hooks/ai-dlc-answer-capture.sh

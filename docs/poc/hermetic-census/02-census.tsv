@@ -79,7 +79,6 @@ document-partition	u	own	9	no	none found by scan	none	subject path resolution no
 early-exit-reader	a	none	2	no	none	none	self-contained, no subject files, mktemp WORK only (L47)
 emit-report-refusal	a	own	36	yes	HERE; EMIT located via seed env.sh (L56)	CONSUMER tree; reconcile/ dir (L142)	scratch DIST git repo (L108), cp -R reconcile/ for mutants (L142); SKIP exists
 enforcement-map-derivations	c	none	753	yes	D_ROOT=HERE/../../.. (L54)	core, scripts, .githooks, templates (whole)	whole-tree copy (seed.sh L31-34), runs validate-enforcement-map.sh (L164); SKIP L60
-enforcement-map-derivations-b	c	none	753	yes	HERE sibling	none	execs sibling enforcement-map-derivations/run.sh --group b (L30)
 enforcement-map-sites	c	none	754	yes	HERE/../../.. (seed.sh DIST)	core, scripts, .githooks, templates (whole tree)	seed.sh:cp -RX of whole tree then runs validate-enforcement-map.sh per cell (run.sh:105) ;; SKIP at :49 when the validator is absent
 enforcement-map-sites-b	c	none	754	yes	HERE sibling	none	execs sibling enforcement-map-sites/run.sh --group b (L30); impl SKIPs when validator absent (L49)
 enforcement-map-sites-c	c	none	754	yes	HERE sibling	none	execs sibling enforcement-map-sites/run.sh --group c (L30)

@@ -38,7 +38,73 @@
 # with the resume block stripped, which must BLOCK; and a recover negative REQUIRES the
 # mandate to name the snapshot's own step file, which an empty block cannot do.
 #
-# Usage: run.sh [path-to-hooks-directory-or-ai-dlc-continue.sh]
+# Usage: run.sh [--matrix] [path-to-hooks-directory-or-ai-dlc-continue.sh]
+#
+# MUTANT BATTERY, NARROWED PER PUSH. Each mutant is a copy of the hooks directory with one file edited
+# (or, for m25, a copy of the declaration). Per push it is scored on its DECIDING arm, which must FAIL
+# under it, and on its TWIN arm(s), which must HOLD; the kill is emitted through mutant_killed behind
+# the same-run base-pass flag of the deciding arm, and the arm is also replayed against the shipped hooks
+# first. The live pass keeps every base arm and world. `bash core/fixtures/handoff-completion-assertion/run.sh
+# --matrix` measures every mutant against every arm and prints one MATRIX line per cell. A twin is an arm
+# the matrix shows green under the mutant. Re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX m1 decides=b twins=k
+# MUTANT-MATRIX m2a decides=d twins=k
+# MUTANT-MATRIX m2b decides=e twins=k
+# MUTANT-MATRIX m36 decides=s2a twins=k
+# MUTANT-MATRIX m37 decides=s2d twins=k
+# MUTANT-MATRIX m38 decides=s2e twins=k
+# MUTANT-MATRIX m3 decides=k twins=e
+# MUTANT-MATRIX m39 decides=t1push twins=k
+# MUTANT-MATRIX m40 decides=t1commit twins=k
+# MUTANT-MATRIX m41 decides=pb1 twins=k
+# MUTANT-MATRIX m42 decides=pb4 twins=pb3
+# MUTANT-MATRIX m44 decides=pb7 twins=k
+# MUTANT-MATRIX m45 decides=pb6 twins=k
+# MUTANT-MATRIX m46 decides=pb5 twins=k
+# MUTANT-MATRIX m47 decides=pb3b twins=k
+# MUTANT-MATRIX m48 decides=pb10 twins=k
+# MUTANT-MATRIX m43 decides=pb3 twins=k
+# MUTANT-MATRIX m4 decides=p twins=l
+# MUTANT-MATRIX m5 decides=r twins=l
+# MUTANT-MATRIX m6 decides=n twins=l
+# MUTANT-MATRIX m7 decides=osynth twins=l
+# MUTANT-MATRIX m8 decides=p twins=l
+# MUTANT-MATRIX m9 decides=o2 twins=l
+# MUTANT-MATRIX m9b decides=o twins=osynth
+# MUTANT-MATRIX m9c decides=c2 twins=c1
+# MUTANT-MATRIX m9d decides=c3 twins=c1
+# MUTANT-MATRIX m9e decides=c5b twins=c1
+# MUTANT-MATRIX m9f decides=c5k twins=c5b
+# MUTANT-MATRIX m10 decides=q twins=l
+# MUTANT-MATRIX m11 decides=j twins=gphrase
+# MUTANT-MATRIX m12 decides=i twins=gphrase
+# MUTANT-MATRIX m20 decides=g3 twins=g2
+# MUTANT-MATRIX m21 decides=d1 twins=d2
+# MUTANT-MATRIX m23 decides=d4 twins=d1
+# MUTANT-MATRIX m24 decides=d5 twins=d5first
+# MUTANT-MATRIX m31 decides=nt1 twins=k
+# MUTANT-MATRIX m32 decides=nt3 twins=k
+# MUTANT-MATRIX m33 decides=nt3s twins=k
+# MUTANT-MATRIX m34 decides=nt5 twins=k
+# MUTANT-MATRIX m35 decides=nt6 twins=k
+# MUTANT-MATRIX m22 decides=d2 twins=d1
+# MUTANT-MATRIX m13 decides=g2 twins=gphrase
+# MUTANT-MATRIX m25 decides=g4 twins=gphrase
+# MUTANT-MATRIX m26 decides=g5 twins=g5last
+# MUTANT-MATRIX m14 decides=s twins=l
+# MUTANT-MATRIX m15 decides=e2b twins=e1
+# MUTANT-MATRIX m16 decides=e2 twins=e1
+# MUTANT-MATRIX m17 decides=e3 twins=e1
+# MUTANT-MATRIX m27 decides=e6 twins=e7
+# MUTANT-MATRIX m28 decides=e6 twins=e7
+# MUTANT-MATRIX m29 decides=e6 twins=e7
+# MUTANT-MATRIX m30 decides=e10 twins=e6
+# MUTANT-MATRIX m-e8g decides=e8g twins=e7
+# MUTANT-MATRIX m-lead1 decides=A1 twins=A2,A2b
+# MUTANT-MATRIX m-lead2 decides=A3 twins=A1,A2
+# MUTANT-MATRIX m-lead3 decides=A2b twins=A1,A2
+# MUTANT-MATRIX-DYNAMIC mscore why=every mutant is passed to mutant_killed by name from the one mscore() driver, and each name keeps its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/handoff-completion-assertion/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking any hook. A fixture that INHERITS
@@ -66,6 +132,14 @@ pick()  { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; re
 # ai-dlc-handoff-pending.sh as a SIBLING of themselves, so a mutant copy of either one placed
 # on its own finds no library, fails open, and reads exactly like a guard that stood down. The
 # mutant battery copies this directory and edits one file inside the copy.
+# --matrix is the ONLY way into matrix mode (see the MUTANT-MATRIX block in the header): it is parsed
+# and shifted before any other argument. RAW_ARGV keeps the argument vector as the caller wrote it,
+# so the last arm can assert a plain run executed no matrix-only cell.
+RAW_ARGV=" $* "
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
+MATRIX_CELLS=0
+
 _arg="${1:-}"
 [ -n "$_arg" ] && [ -f "$_arg" ] && _arg="$(cd "$(dirname "$_arg")" && pwd)"
 HOOKS_DIR="$(pickd "$_arg" "$HERE/../../hooks" "$HERE/../../../core/hooks" "$HERE/../../../.claude/hooks")"
@@ -82,6 +156,10 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FAIL  %s\n' "$1"; echo ""; echo "handoff-completion-assertion: FIXTURE BROKEN" >&2; exit 2; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 for _f in ai-dlc-continue.sh ai-dlc-recover.sh ai-dlc-handoff-pending.sh; do
   [ -f "$HOOKS_DIR/$_f" ] || broken "$_f is not in the resolved hooks directory ($HOOKS_DIR) — this fixture drives all three and cannot report on any of them"
@@ -376,7 +454,7 @@ ismech() { grep -qiE "$EXCL_RE"   <<<"$1"; }
 ! isreq "$P_NOINTENT" || \
   broken "seed premise dead: '$P_NOINTENT' now reads as a handoff request"
 ! isreq "$P_AFTER" || \
-  broken "seed premise dead: '$P_AFTER' now reads as a handoff REQUEST — it is the SECOND row of the two-row log, and if it is a request then a reader that keeps only the last block scores the same as one that flushes, and the flush mutant cannot be killed"
+  broken "seed premise dead: '$P_AFTER' now reads as a handoff REQUEST — it is the SECOND row of the two-row log, and if it is a request then a reader that keeps only the last block scores the same as one that flushes, and the flush mutant cannot be told apart from the shipped hook"
 ! ismech "$P_AFTER" || \
   broken "seed premise dead: '$P_AFTER' now matches the mention EXCLUSION — the exclusion is applied to the whole extracted prose, so the second row would veto the first and the two-row log would report NOT pending for the wrong reason"
 { isreq "$Q_INTENT" && ! ismech "$Q_INTENT"; } || \
@@ -418,7 +496,15 @@ push_case() { # push_case <label> <projdir> <expected> <why> <control-why>
   local label="$1" proj="$2" want="$3" why="$4" cwhy="$5" r
   reset_state "$proj"
   r="$(verdict "$(drive "$proj" "$SESS_A" "$T_REQ_OK")")"
-  [ "$r" = "$want" ] && ok "$label" || bad "$why (got $r)"
+  if [ "$r" = "$want" ]; then
+    ok "$label"
+    case "$label" in
+      "(b) "*) B_b=1 ;; "(d) "*) B_d=1 ;; "(e) "*) B_e=1 ;;
+      "(s2a) "*) B_s2a=1 ;; "(s2d) "*) B_s2d=1 ;; "(s2e) "*) B_s2e=1 ;;
+    esac
+  else
+    bad "$why (got $r)"
+  fi
   if [ "$want" = allow ]; then
     reset_state "$proj"
     r="$(verdict "$(drive "$proj" "$SESS_A" "$T_REQ_NOBLK")")"
@@ -604,6 +690,7 @@ reason_case() { # reason_case <label> <projdir>
     bad "(k) $label: the emitted reason names step 3 AND another step — the dispatch is not exclusive"
   else
     ok "(k) $label: only the push arm failed, and the emitted reason is the STEP 3 text (not the teammate or resume-line text)"
+    B_k=1
   fi
 }
 # ONE TREE, DELIBERATELY. The ahead-of-upstream tree reaches the identical dispatch through the
@@ -638,6 +725,10 @@ t1_case() { # t1_case <label> <projdir> <want-mark> <failmsg> [extra-mark]
     bad "(t1) $1: the reason lacks '$5'"
   else
     ok "(t1) $1"
+    case "$1" in
+      "push not landed, NO resume block"*) B_t1push=1 ;;
+      "commit not landed, NO resume block"*) B_t1commit=1 ;;
+    esac
   fi
 }
 t1_case "push not landed, NO resume block -> the PUSH text, not RESUME" "$P_UNPUSHED" "$PUSH_MARK" \
@@ -700,6 +791,7 @@ elif ! grep -qF -- "-- ALLOWED_BY_PAUSE" "$(pb_log)"; then
   bad "(pb1) deferred, but the Stop did not fall through to Check 1 (no ALLOWED_BY_PAUSE row)"
 else
   ok "(pb1) background push, no exit record -> ALLOW, a $PB_DEF row naming the task, then ALLOWED_BY_PAUSE (the fall-through reaches Check 1)"
+  B_pb1=1
 fi
 o="$(pb_drive "$T_PB_ENQ")"
 if ! has "$(reason "$o")" "$PUSH_MARK"; then
@@ -714,6 +806,7 @@ if ! has "$(reason "$o")" "$PUSH_MARK"; then
   bad "(pb3) a background push past the ceiling was not answered with the PUSH text — a lost exit record defers the guard forever. It reads: $(reason "$o" | head -c 120)"
 else
   ok "(pb3) background push with no exit record, PAST the ceiling -> the PUSH text, never silence"
+  B_pb3=1
 fi
 # (pb3b) PAST THE CEILING THE TEXT MUST NOT SAY "WAIT". A lead told to wait there waits; each
 #        wait is a counted block, and BACKOFF then allows the unpushed handoff. Driven three
@@ -729,9 +822,11 @@ for _i in 1 2 3; do
   rr="$(reason "$o")"
   if has "$rr" "$OVERRUN_MARK" && ! has "$rr" "$WAIT_MARK"; then _pb3b="${_pb3b}o"; else _pb3b="${_pb3b}x"; fi
 done
-[ "$_pb3b" = ooo ] \
-  && ok "(pb3b) past the ceiling, three Stops in the BACKOFF window -> each the overrun clause, none the wait clause" \
-  || bad "(pb3b) past the ceiling the PUSH text told the lead to wait, or lacked the overrun clause ($_pb3b) — the lead waits into BACKOFF, which allows the unpushed handoff"
+if [ "$_pb3b" = ooo ]; then
+  ok "(pb3b) past the ceiling, three Stops in the BACKOFF window -> each the overrun clause, none the wait clause"; B_pb3b=1
+else
+  bad "(pb3b) past the ceiling the PUSH text told the lead to wait, or lacked the overrun clause ($_pb3b) — the lead waits into BACKOFF, which allows the unpushed handoff"
+fi
 rm -f "$P_UNPUSHED/_bmad-output/handoff-guard-state.txt"
 # (pb3c) and with NO background push the PUSH text carries neither clause.
 o="$(pb_drive "$T_REQ_NOBLK")"; rr="$(reason "$o")"
@@ -749,29 +844,36 @@ T_PB_NOID="$ROOT/pb-noid.jsonl"
   jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"The push is still running in the background."}]}}'
 } > "$T_PB_NOID"
 o="$(pb_drive "$T_PB_NOID")"
-{ has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-  && ok "(pb10) a backgrounded push with NO tool_use id and NO tool_result id -> the PUSH text, no deferral (an empty id joins nothing)" \
-  || bad "(pb10) two ABSENT ids joined as equal and deferred the guard. It reads: $(reason "$o" | head -c 120)"
+if { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; }; then
+  ok "(pb10) a backgrounded push with NO tool_use id and NO tool_result id -> the PUSH text, no deferral (an empty id joins nothing)"; B_pb10=1
+else
+  bad "(pb10) two ABSENT ids joined as equal and deferred the guard. It reads: $(reason "$o" | head -c 120)"
+fi
 o="$(pb_drive "$T_REQ_NOBLK")"
 if ! has "$(reason "$o")" "$PUSH_MARK" || grep -qF -- "-- $PB_DEF" "$(pb_log)"; then
   bad "(pb4) a transcript with NO background push was not answered with the PUSH text alone (pause flag up)"
 else
   ok "(pb4) no background push in the transcript, pause flag up -> the PUSH text, no deferral row (the id is required)"
+  B_pb4=1
 fi
 
 # (pb5) THE CEILING IS THE LONGEST RECORDED GATE, NOT ONE SAMPLE. A push backgrounded 1800 s ago
 #       is past the motivating push's 729 s and inside the derived 3004 s: it still DEFERS.
 o="$(pb_drive "$T_PB_MID")"
-{ [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-  && ok "(pb5) background push 1800 s old, no exit record -> still DEFERRED (the ceiling covers a gate longer than one sample)" \
-  || bad "(pb5) a push backgrounded 1800 s ago was not deferred — a recorded consumer gate ran 3604 s, so the guard would start a second concurrent suite under it. It reads: $(reason "$o" | head -c 120)"
+if { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; }; then
+  ok "(pb5) background push 1800 s old, no exit record -> still DEFERRED (the ceiling covers a gate longer than one sample)"; B_pb5=1
+else
+  bad "(pb5) a push backgrounded 1800 s ago was not deferred — a recorded consumer gate ran 3604 s, so the guard would start a second concurrent suite under it. It reads: $(reason "$o" | head -c 120)"
+fi
 
 # (pb6) A WATCHER IS NOT A PUSH. A backgrounded Bash command that carries `git push` only as
 #       TEXT (a grep pattern, an echo) defers nothing: the PUSH text is the answer.
 o="$(pb_drive "$T_PB_WATCH")"
-{ has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-  && ok "(pb6) a backgrounded watcher carrying 'git push' as text, no exit record -> the PUSH text, no deferral (git push must be the program)" \
-  || bad "(pb6) a backgrounded watcher that only MENTIONS git push deferred the guard — a substring match. It reads: $(reason "$o" | head -c 120)"
+if { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; }; then
+  ok "(pb6) a backgrounded watcher carrying 'git push' as text, no exit record -> the PUSH text, no deferral (git push must be the program)"; B_pb6=1
+else
+  bad "(pb6) a backgrounded watcher that only MENTIONS git push deferred the guard — a substring match. It reads: $(reason "$o" | head -c 120)"
+fi
 
 # (pb7)-(pb9) THE DEFERRAL REPLACES THE PUSH ANSWER ONLY. With a push in flight, each earlier
 #       step keeps its own text, and no deferral row is written. One world per arm, each in a
@@ -795,6 +897,7 @@ o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT")"
 rr="$(reason "$o")"
 if has "$rr" "$INFL_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then
   ok "(pb7) push in flight AND an empty In-Flight table with a dispatch outstanding -> the INFLIGHT text, no deferral"
+  B_pb7=1
 else
   bad "(pb7) with a push in flight, an unrecorded teammate was not answered with the INFLIGHT text (or a deferral row was written) — the deferral swallowed step 1. It reads: $(printf '%s' "$rr" | head -c 120)"
 fi
@@ -842,6 +945,7 @@ elif has "$rr" "$PUSH_MARK" || has "$rr" "$TEAM_MARK" || has "$rr" "$RESUME_MARK
   bad "(d1) the reason names step 4's touch AND another step — the dispatch is not exclusive"
 else
   ok "(d1) pushed tree, resume block present, driver signal ABSENT -> BLOCK, and the reason is the STEP 4 touch text alone"
+  B_d1=1
 fi
 reset_state "$P_PUSHED"
 r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK")")"
@@ -864,6 +968,7 @@ elif has "$rr" "$PUSH_MARK" || has "$rr" "$TEAM_MARK" || has "$rr" "$RESUME_MARK
   bad "(d2) the reason names step 5's marker AND another step — the dispatch is not exclusive"
 else
   ok "(d2) everything recorded but the entry marker still present -> BLOCK, and the reason is the STEP 5 text alone"
+  B_d2=1
 fi
 reset_state "$P_DISK"
 r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
@@ -888,6 +993,7 @@ elif ! has "$rr" "$DRIVER_MARK"; then
   bad "(d4) blocked, but not on the driver arm. It reads: $(printf '%s' "$rr" | head -c 120)"
 else
   ok "(d4) a driver signal OLDER than the finalized snapshot -> BLOCK on the step-4 arm (presence is not this turn's touch)"
+  B_d4=1
 fi
 : > "$P_PUSHED/_bmad-output/.driver/handoff"
 rm -f "$P_PUSHED/_bmad-output/handoff-guard-state.txt"
@@ -927,6 +1033,7 @@ if [ -z "$rr" ]; then
   bad "(d5) marker cleared first, driver signal still untouched -> ALLOW — clearing the marker disarmed the guard, so step 5 before step 4 escapes both new arms"
 elif has "$rr" "$DRIVER_MARK"; then
   ok "(d5) marker cleared first, driver signal still untouched -> still BLOCKS on step 4 (the earlier armed Stop keeps the guard armed for this session)"
+  B_d5=1
 else
   bad "(d5) blocked, but not on the driver arm. It reads: $(printf '%s' "$rr" | head -c 120)"
 fi
@@ -1024,8 +1131,11 @@ fi
 log_prompt "$LG" "$SESS_A" "$P_BARE"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
-[ "$r" = block ] && ok "(g2) the bare word '$P_BARE' as the field VALUE -> BLOCK (the pattern is applied to the value, not the line)" \
-                 || bad "(g2) the bare word '$P_BARE' was ALLOWED ($r) — the intent pattern is being applied to the whole log line, where its anchored alternative can never match"
+if [ "$r" = block ]; then
+  ok "(g2) the bare word '$P_BARE' as the field VALUE -> BLOCK (the pattern is applied to the value, not the line)"; B_g2=1
+else
+  bad "(g2) the bare word '$P_BARE' was ALLOWED ($r) — the intent pattern is being applied to the whole log line, where its anchored alternative can never match"
+fi
 
 # (g3) KEY 3 IS SCORED PER ROW, AND THIS IS THE EPISODE'S OWN LOG SHAPE. The session was
 #      started by `/ai-dlc resume`, which ai-dlc-pause.sh records as its first row, and the
@@ -1036,8 +1146,11 @@ r="$(disk "$SESS_A")"
 log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_BARE"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
-[ "$r" = block ] && ok "(g3) key 3: a '$P_RESUME' row FOLLOWED by a '$P_BARE' row, same session -> BLOCK (the exclusion vetoes its own row, not the session)" \
-                 || bad "(g3) the request was ALLOWED ($r) — the mention exclusion is being applied to the whole session's prose, so every session started by the slash command has key 3 disarmed for its whole life; this is the filed incident exactly"
+if [ "$r" = block ]; then
+  ok "(g3) key 3: a '$P_RESUME' row FOLLOWED by a '$P_BARE' row, same session -> BLOCK (the exclusion vetoes its own row, not the session)"; B_g3=1
+else
+  bad "(g3) the request was ALLOWED ($r) — the mention exclusion is being applied to the whole session's prose, so every session started by the slash command has key 3 disarmed for its whole life; this is the filed incident exactly"
+fi
 log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_NOINTENT"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
@@ -1054,8 +1167,11 @@ r="$(disk "$SESS_A")"
 log_prompt "$LG" "$SESS_A" "$P_TERSE"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
-[ "$r" = block ] && ok "(g4) key 3: '$P_TERSE' -> BLOCK (a terse request trailing unrelated context is a request)" \
-                 || bad "(g4) the trailing terse request was ALLOWED ($r) — the incident PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING exactly: the lead improvises the procedure and no Stop is examined"
+if [ "$r" = block ]; then
+  ok "(g4) key 3: '$P_TERSE' -> BLOCK (a terse request trailing unrelated context is a request)"; B_g4=1
+else
+  bad "(g4) the trailing terse request was ALLOWED ($r) — the incident PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING exactly: the lead improvises the procedure and no Stop is examined"
+fi
 log_prompt "$LG" "$SESS_A" "$P_TERSE_NEAR"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
@@ -1108,8 +1224,11 @@ jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{me
 [ "$(printf '%s' "$P_PASTED" | wc -l | tr -d ' ')" = "2" ] || broken "seed premise dead: the pasted-filing seed is not three lines, so (g5) cannot tell a per-line reader from a per-field one"
 dsetup
 r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PASTED_NOBLK")")"
-[ "$r" = allow ] && ok "(g5) a three-line message whose MIDDLE line ends in the terse form -> ALLOW (the transcript is one field, not a set of lines)" \
-                 || bad "(g5) a pasted filing quoting the incident row BLOCKED ($r) — the transcript reader matches per line, so any message that quotes a request on its own line arms the guard"
+if [ "$r" = allow ]; then
+  ok "(g5) a three-line message whose MIDDLE line ends in the terse form -> ALLOW (the transcript is one field, not a set of lines)"; B_g5=1
+else
+  bad "(g5) a pasted filing quoting the incident row BLOCKED ($r) — the transcript reader matches per line, so any message that quotes a request on its own line arms the guard"
+fi
 dsetup
 r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_LASTLINE_NOBLK")")"
 [ "$r" = block ] && ok "  control: the same shape with the terse form on the LAST line -> BLOCK (collapsing did not disarm the final-sentence alternative)" \
@@ -1134,8 +1253,11 @@ r="$(disk "$SESS_A")"
 log_prompt "$LG" "$SESS_A" "$P_DISCUSS"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
-[ "$r" = allow ] && ok "(i) prose that DISCUSSES the guard while quoting the request -> ALLOW (the exclusion pattern vetoes it)" \
-                 || bad "(i) a question ABOUT the handoff guard BLOCKED ($r) — the exclusion conjunct is not being applied, and the guard now fires on its own subject"
+if [ "$r" = allow ]; then
+  ok "(i) prose that DISCUSSES the guard while quoting the request -> ALLOW (the exclusion pattern vetoes it)"; B_i=1
+else
+  bad "(i) a question ABOUT the handoff guard BLOCKED ($r) — the exclusion conjunct is not being applied, and the guard now fires on its own subject"
+fi
 log_prompt "$LG" "$SESS_A" "$P_INTENT"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
@@ -1148,8 +1270,11 @@ r="$(disk "$SESS_A")"
 log_answer "$LG" "$SESS_A" "$Q_INTENT" "$P_NOINTENT"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
-[ "$r" = allow ] && ok "(j) handoff words in the lead-authored '- Question' line only -> ALLOW (the lead cannot route its own guard)" \
-                 || bad "(j) the lead-authored question BLOCKED ($r) — a lead can now trigger the handoff guard by phrasing its own AskUserQuestion, and the operator's answer is not what is read"
+if [ "$r" = allow ]; then
+  ok "(j) handoff words in the lead-authored '- Question' line only -> ALLOW (the lead cannot route its own guard)"; B_j=1
+else
+  bad "(j) the lead-authored question BLOCKED ($r) — a lead can now trigger the handoff guard by phrasing its own AskUserQuestion, and the operator's answer is not what is read"
+fi
 log_answer "$LG" "$SESS_A" "$Q_NOINTENT" "$P_INTENT"
 dsetup "$LG"
 r="$(disk "$SESS_A")"
@@ -1187,8 +1312,11 @@ fi
 log_prompt "$LG" "$SESS_A" "$P_INTENT"
 dsetup "$LG"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
 rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
-has "$rr" "$DRIVER_MARK" && ok "(nt1) key 3, NO transcript, driver signal absent -> BLOCK with the step-4 text (the on-disk key enters the guard on its own)" \
-                         || bad "(nt1) a handoff recorded on disk with no transcript did not block on step 4 ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — the guard still requires a transcript to run any arm"
+if has "$rr" "$DRIVER_MARK"; then
+  ok "(nt1) key 3, NO transcript, driver signal absent -> BLOCK with the step-4 text (the on-disk key enters the guard on its own)"; B_nt1=1
+else
+  bad "(nt1) a handoff recorded on disk with no transcript did not block on step 4 ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — the guard still requires a transcript to run any arm"
+fi
 grep -qF -- "$NT_ANN" "$(disk_log)" 2>/dev/null \
   && ok "  the HANDOFF_GUARD_BLOCK row records that the transcript was not read" \
   || bad "  the block row does not say the transcript was absent — a retro reads the resume clause of the block text as checked"
@@ -1196,18 +1324,27 @@ grep -qF -- "$NT_ANN" "$(disk_log)" 2>/dev/null \
 # (nt2) key 1, the entry marker, no transcript -> BLOCK on the marker arm.
 dsetup "" yes
 rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
-has "$rr" "$MARKER_MARK" && ok "(nt2) key 1, NO transcript -> BLOCK with the step-5 text" \
-                         || bad "(nt2) the entry marker with no transcript did not block on step 5 ($([ -n "$rr" ] && echo "different text" || echo "allowed"))"
+if has "$rr" "$MARKER_MARK"; then
+  ok "(nt2) key 1, NO transcript -> BLOCK with the step-5 text"; B_nt2=1
+else
+  bad "(nt2) the entry marker with no transcript did not block on step 5 ($([ -n "$rr" ] && echo "different text" || echo "allowed"))"
+fi
 
 # (nt3) key 3, every disk arm satisfied, no transcript -> ALLOW, and NO completion stamp: the
 #       resume arm was not read, so the completion is not verified and key 2 must not discharge.
 log_prompt "$LG" "$SESS_A" "$P_INTENT"
 dsetup "$LG"
 r="$(ntdisk)"
-[ "$r" = allow ] && ok "(nt3) key 3, NO transcript, every disk arm satisfied -> ALLOW (the unread resume arm reads unknown, not missing)" \
-                 || bad "(nt3) BLOCKED with no transcript and every disk arm satisfied ($r) — the resume arm is convicting from a transcript it never read"
-[ ! -f "$(HC "$P_DISK")" ] && ok "  and writes NO completion stamp (an unverified resume does not discharge key 2)" \
-                           || bad "  the no-transcript ALLOW wrote .handoff-complete — key 2 is discharged on a completion nobody verified"
+if [ "$r" = allow ]; then
+  ok "(nt3) key 3, NO transcript, every disk arm satisfied -> ALLOW (the unread resume arm reads unknown, not missing)"; B_nt3=1
+else
+  bad "(nt3) BLOCKED with no transcript and every disk arm satisfied ($r) — the resume arm is convicting from a transcript it never read"
+fi
+if [ ! -f "$(HC "$P_DISK")" ]; then
+  ok "  and writes NO completion stamp (an unverified resume does not discharge key 2)"; B_nt3s=1
+else
+  bad "  the no-transcript ALLOW wrote .handoff-complete — key 2 is discharged on a completion nobody verified"
+fi
 # CONTROL: the same tree with a compliant transcript allows AND stamps, so the absence above
 # is the transcript condition and not a writer that never runs.
 log_prompt "$LG" "$SESS_A" "$P_INTENT"
@@ -1238,8 +1375,11 @@ r="$(ntdisk)"
 #       record an earlier Stop of this session wrote is what arms the guard, transcript or not.
 dsetup; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
 rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
-has "$rr" "$DRIVER_MARK" && ok "(nt5) sticky record for THIS session, no key, no transcript -> BLOCK with the step-4 text" \
-                         || bad "(nt5) the sticky record did not arm a transcript-less Stop ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — clearing key 1 early escapes the guard whenever the transcript is absent"
+if has "$rr" "$DRIVER_MARK"; then
+  ok "(nt5) sticky record for THIS session, no key, no transcript -> BLOCK with the step-4 text"; B_nt5=1
+else
+  bad "(nt5) the sticky record did not arm a transcript-less Stop ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — clearing key 1 early escapes the guard whenever the transcript is absent"
+fi
 dsetup
 
 # (nt6) AN UNREAD RESUME ARM DOES NOT DISCHARGE THE STICKY RECORD. Two Stops of one session.
@@ -1250,9 +1390,11 @@ dsetup
 #       record on the unverified ALLOW lets the second Stop end the session.
 dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
 r="$(ntdisk)"
-{ [ "$r" = allow ] && [ -f "$ARMED" ]; } \
-  && ok "(nt6) sticky record, every disk arm satisfied, NO transcript -> ALLOW with the record still on disk" \
-  || bad "(nt6) the transcript-less satisfied Stop produced $r with the record $([ -f "$ARMED" ] && echo present || echo absent) — an unread resume arm discharged the arming"
+if { [ "$r" = allow ] && [ -f "$ARMED" ]; }; then
+  ok "(nt6) sticky record, every disk arm satisfied, NO transcript -> ALLOW with the record still on disk"; B_nt6=1
+else
+  bad "(nt6) the transcript-less satisfied Stop produced $r with the record $([ -f "$ARMED" ] && echo present || echo absent) — an unread resume arm discharged the arming"
+fi
 rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
 has "$rr" "$RESUME_MARK" && ok "  then a Stop WITH a transcript lacking the resume block -> BLOCK on the resume text (the record carried the arming across)" \
                          || bad "  the second Stop, transcript present and no resume block, $([ -n "$rr" ] && echo "blocked on different text" || echo "was ALLOWED") — the handoff escaped its resume check"
@@ -1450,17 +1592,20 @@ r="$(disk "$SESS_A")"
 # (c2) THE DISCHARGE. The same bytes on disk, one file apart: a stamp NEWER than the record.
 dsetup
 snap_at "$P_DISK"
-sleep 1
+touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"   # the record is OLDER than the stamp; backdated, never slept for
 : > "$(HC "$P_DISK")"
 r="$(disk "$SESS_A")"
-[ "$r" = allow ] && ok "(c2) the SAME record with a completion stamp newer than it -> ALLOW (the record's own completion clears the key)" \
-                 || bad "(c2) a COMPLETED handoff still armed the guard ($r) — key 2 has no lifecycle, so the record arms every later paused Stop forever; this is the reference consumer's five blocks in one session"
+if [ "$r" = allow ]; then
+  ok "(c2) the SAME record with a completion stamp newer than it -> ALLOW (the record's own completion clears the key)"; B_c2=1
+else
+  bad "(c2) a COMPLETED handoff still armed the guard ($r) — key 2 has no lifecycle, so the record arms every later paused Stop forever; this is the reference consumer's five blocks in one session"
+fi
 # AND THE STAMP DISCHARGES THE KEY, NOT THE GUARD. Same stamped tree, a transcript-visible
 # request: Check 0 must still block. Without this the ALLOW above is equally consistent with
 # a stamp that switches Check 0 off.
 dsetup
 snap_at "$P_DISK"
-sleep 1
+touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"   # the record is OLDER than the stamp; backdated, never slept for
 : > "$(HC "$P_DISK")"
 r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_NOBLK")")"
 [ "$r" = block ] && ok "  control: the stamped tree still BLOCKS a transcript-visible request — the stamp discharges KEY 2, not Check 0" \
@@ -1473,11 +1618,14 @@ r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_NOBLK")")"
 #      `-nt` in NEITHER direction, and the inverse form would disarm it.
 dsetup
 : > "$(HC "$P_DISK")"
-sleep 1
+touch -t 202001010000 "$(HC "$P_DISK")"   # the stamp is OLDER than the record
 snap_at "$P_DISK"
 r="$(disk "$SESS_A")"
-[ "$r" = block ] && ok "(c3) a NEW record written AFTER an old stamp -> BLOCK (the exemption does not acquit the next handoff)" \
-                 || bad "(c3) the next handoff's record was acquitted by the PREVIOUS handoff's stamp ($r) — one completed handoff disarms key 2 for the rest of the consumer's life"
+if [ "$r" = block ]; then
+  ok "(c3) a NEW record written AFTER an old stamp -> BLOCK (the exemption does not acquit the next handoff)"; B_c3=1
+else
+  bad "(c3) the next handoff's record was acquitted by the PREVIOUS handoff's stamp ($r) — one completed handoff disarms key 2 for the rest of the consumer's life"
+fi
 
 # (c4) KEY 1 IS UNAFFECTED BY THE STAMP. The two keys must stay separable: a lead INSIDE the
 #      procedure arms the guard whatever the last handoff recorded.
@@ -1498,17 +1646,21 @@ snap_at "$P_DISK"
 rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
 r="$(disk "$SESS_A")"
 _c5a=absent; [ -f "$(HC "$P_DISK")" ] && _c5a=present
-[ "$r" = block ] && [ "$_c5a" = absent ] \
-  && ok "(c5) an UNSATISFIED Stop blocks and writes NO stamp — an unverified handoff does not discharge its own key" \
-  || bad "(c5) an unsatisfied Stop verdict=$r stamp=$_c5a — a handoff that failed its own arms is recording itself complete, and the next Stop is not examined"
-sleep 1
+if [ "$r" = block ] && [ "$_c5a" = absent ]; then
+  ok "(c5) an UNSATISFIED Stop blocks and writes NO stamp — an unverified handoff does not discharge its own key"; B_c5a=1
+else
+  bad "(c5) an unsatisfied Stop verdict=$r stamp=$_c5a — a handoff that failed its own arms is recording itself complete, and the next Stop is not examined"
+fi
+touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"   # the driver signal must be NEWER than the snapshot
 : > "$P_DISK/_bmad-output/.driver/handoff"
 rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
 r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
 _c5b=absent; [ -f "$(HC "$P_DISK")" ] && _c5b=present
-[ "$r" = allow ] && [ "$_c5b" = present ] \
-  && ok "  and the SATISFIED Stop allows and writes the stamp — the completion record has a producer in the shipped machinery" \
-  || bad "  the satisfied Stop verdict=$r stamp=$_c5b — key 2's discharge has no writer, so the reader above can never fire on a real tree"
+if [ "$r" = allow ] && [ "$_c5b" = present ]; then
+  ok "  and the SATISFIED Stop allows and writes the stamp — the completion record has a producer in the shipped machinery"; B_c5b=1
+else
+  bad "  the satisfied Stop verdict=$r stamp=$_c5b — key 2's discharge has no writer, so the reader above can never fire on a real tree"
+fi
 rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt" "$P_DISK/_bmad-output/.handoff-guard-armed"
 r="$(disk "$SESS_A")"
 [ "$r" = allow ] && ok "  and the NEXT paused Stop of that same tree ALLOWS — the two halves agree, which is the whole defect" \
@@ -1547,7 +1699,15 @@ rassert() { # rassert <label> <projdir> <session> <expected-relpath> <failmsg> [
     bad "$1: the mandate names '$sp' but .recover-fired records '$mk' — the lead and the gate are being pointed at different files"
     return
   fi
-  [ "$sp" = "$4" ] && ok "$1" || bad "$5 (the mandate named '$sp', expected '$4')"
+  if [ "$sp" = "$4" ]; then
+    ok "$1"
+    case "$1" in
+      "(n) "*) B_n=1 ;; "(o) "*) B_o=1 ;; "(o-synth) "*) B_osynth=1 ;; "(o2) "*) B_o2=1 ;; "(p) "*) B_p=1 ;;
+      "(q) "*) B_q=1 ;; "(r) "*) B_r=1 ;; "(s) "*) B_s=1 ;;
+    esac
+  else
+    bad "$5 (the mandate named '$sp', expected '$4')"
+  fi
 }
 
 SNAP_PLAIN="$ROOT/snap-plain.md"
@@ -1623,14 +1783,14 @@ rassert "(o2) the same words as a MENTION mid-line -> the snapshot's own step fi
 #      the exact drift the shared predicate exists to prevent. Paired in the same tree with
 #      (o), which must still route: the discharge is one file apart from it.
 rsetup "$P_REC" "$SNAP_BOLD" yes no
-sleep 1
+touch -t 202001010000 "$P_REC/_bmad-output/pipeline-snapshot.md"
 : > "$(HC "$P_REC")"
 rassert "(o3) key 2 with a completion stamp newer than the record -> the snapshot's own step file" \
   "$P_REC" "$SESS_A" "$STEP_IMPL" \
   "(o3) a COMPLETED handoff still routed a post-compact recovery into handoff.md — key 2's discharge does not reach ai-dlc-recover.sh, so the two callers answer one question differently"
 rsetup "$P_REC" "$SNAP_BOLD" yes no
 : > "$(HC "$P_REC")"
-sleep 1
+touch -t 202001010000 "$(HC "$P_REC")"
 cp "$SNAP_BOLD" "$P_REC/_bmad-output/pipeline-snapshot.md"
 rassert "  control: a record NEWER than the stamp still routes to handoff.md — the discharge is the ordering, not the file's presence" \
   "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
@@ -1696,9 +1856,16 @@ eassert() { # eassert <label> <tool> <path> <want: marker|no-marker> <failmsg>
     return
   fi
   if [ "$4" = marker ]; then
-    marker_at "$P_ENTRY" && ok "$1" || bad "$5"
+    if marker_at "$P_ENTRY"; then ok "$1"; else bad "$5"; fi
   else
-    marker_at "$P_ENTRY" && bad "$5" || ok "$1"
+    if marker_at "$P_ENTRY"; then
+      bad "$5"
+    else
+      ok "$1"
+      case "$1" in
+        "(e2) "*) B_e2=1 ;; "(e2b) "*) B_e2b=1 ;; "(e3) "*) B_e3=1 ;;
+      esac
+    fi
   fi
 }
 econtrol() { # econtrol — the positive, in the same tree, after a negative
@@ -1878,6 +2045,7 @@ else
   mkmarker "$P_REC"; arm_to_step "$P_REC" "$SESS_A"
   if [ "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")" = no-marker ]; then
     ok "(e6) driven in SHIPPED ORDER (gate -> Read -> entry), a recovery-mandated Read does NOT write the entry marker"
+    B_e6=1
   else
     bad "(e6) a recovery-mandated Read wrote the entry marker when the two hooks are driven in shipped order. The gate deletes .recover-fired on this very call, one hook before the entry hook runs, so a suppression keyed on that marker is UNREACHABLE on a consumer — it tests a file that is already gone"
   fi
@@ -1943,7 +2111,7 @@ e8g_run() { # e8g_run <projdir> [hooksdir] -> pre:<why> | <deny|allow> <marker|n
 _E8G="$(e8g_run "$P_REC")"
 case "$_E8G" in
   pre:*) bad "(e8g-pre) not a first-call recovery toward handoff.md (${_E8G#pre:}), so (e8g) would measure nothing" ;;
-  *' no-marker') ok "(e8g) driven gate-then-entry only when the gate allows, a first-call handoff.md Read during a recovery does not arm key 1 (gate: ${_E8G% *})" ;;
+  *' no-marker') ok "(e8g) driven gate-then-entry only when the gate allows, a first-call handoff.md Read during a recovery does not arm key 1 (gate: ${_E8G% *})"; B_e8g=1 ;;
   *) bad "(e8g) the gate ALLOWED a full Read of handoff.md before the snapshot Read, and the entry hook then armed key 1 from a Read the recovery compelled — the snapshot stage's step-Read allow writes no breadcrumb, so it must not cover handoff.md" ;;
 esac
 
@@ -1973,6 +2141,7 @@ _E10_FIRST="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
 _E10_SECOND="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
 if [ "$_E10_FIRST" = no-marker ] && [ "$_E10_SECOND" = marker ]; then
   ok "(e10) the breadcrumb is CONSUMED: the mandated Read is suppressed and an immediate re-open of the same file arms"
+  B_e10=1
 else
   bad "(e10) the two Reads scored '$_E10_FIRST' then '$_E10_SECOND', expected no-marker then marker. A breadcrumb left on disk answers for a later call, so a voluntary re-open right after the mandated one is read as the mandated one and silently fails to arm"
 fi
@@ -2073,18 +2242,26 @@ _a1="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$HOOKS_DIR" no)"
 _a2="$(tcase "$P_ENTRY" - - "$HOOKS_DIR" no)"
 _a2b="$(tcase "$P_ENTRY" - general-purpose "$HOOKS_DIR" no)"
 _a3="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$HOOKS_DIR" yes)"
-[ "$_a1" = "no-marker no-crumb 0" ] \
-  && ok "(A1) a TEAMMATE's Read (agent_id set) of steps/handoff.md -> no marker" \
-  || bad "(A1) a teammate's Read of steps/handoff.md gave '$_a1' — the lead's project-wide marker is armed by a dispatched subagent"
-[ "$_a2" = "marker no-crumb 0" ] \
-  && ok "(A2) the LEAD twin (no agent_id), same run, one property apart -> the marker EXISTS" \
-  || bad "(A2) the lead's Read gave '$_a2' — the hook no longer arms at all, so A1's absence is a dead hook rather than a guard"
-[ "$_a2b" = "marker no-crumb 0" ] \
-  && ok "(A2b) agent_type set and NO agent_id (a claude --agent lead) -> the marker EXISTS" \
-  || bad "(A2b) a Read carrying agent_type and no agent_id gave '$_a2b' — the exit is keyed on agent_type, which a claude --agent LEAD also carries"
-[ "$_a3" = "no-marker crumb 0" ] \
-  && ok "(A3) a teammate's Read leaves the lead's .recover-satisfied breadcrumb ON DISK" \
-  || bad "(A3) a teammate's Read with a breadcrumb present gave '$_a3' — the exit sits after the breadcrumb block, so the teammate consumed the breadcrumb the lead's compelled Read still needs"
+if [ "$_a1" = "no-marker no-crumb 0" ]; then
+  ok "(A1) a TEAMMATE's Read (agent_id set) of steps/handoff.md -> no marker"; B_A1=1
+else
+  bad "(A1) a teammate's Read of steps/handoff.md gave '$_a1' — the lead's project-wide marker is armed by a dispatched subagent"
+fi
+if [ "$_a2" = "marker no-crumb 0" ]; then
+  ok "(A2) the LEAD twin (no agent_id), same run, one property apart -> the marker EXISTS"; B_A2=1
+else
+  bad "(A2) the lead's Read gave '$_a2' — the hook no longer arms at all, so A1's absence is a dead hook rather than a guard"
+fi
+if [ "$_a2b" = "marker no-crumb 0" ]; then
+  ok "(A2b) agent_type set and NO agent_id (a claude --agent lead) -> the marker EXISTS"; B_A2b=1
+else
+  bad "(A2b) a Read carrying agent_type and no agent_id gave '$_a2b' — the exit is keyed on agent_type, which a claude --agent LEAD also carries"
+fi
+if [ "$_a3" = "no-marker crumb 0" ]; then
+  ok "(A3) a teammate's Read leaves the lead's .recover-satisfied breadcrumb ON DISK"; B_A3=1
+else
+  bad "(A3) a teammate's Read with a breadcrumb present gave '$_a3' — the exit sits after the breadcrumb block, so the teammate consumed the breadcrumb the lead's compelled Read still needs"
+fi
 
 # =============================================================================
 # MUTANTS
@@ -2099,6 +2276,213 @@ _a3="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$HOOKS_DIR" yes)
 # cannot be a syntax error. Every one is driven with a control -- a case it does not touch,
 # which must still produce its baseline output -- because several kills are ALLOW-shaped and a
 # copy that died on load also emits nothing.
+# Rebuilds the suppressed world (recovery in flight, gate at its SECOND mandate) using the
+# MUTANT's hooks, so a mutation to the gate's breadcrumb write is exercised where it lives.
+mseq_arm() { # mseq_arm <projdir> <mutdir>
+  reset_state "$1"; rclean "$1"
+  cp "$SNAP_PLAIN" "$1/_bmad-output/pipeline-snapshot.md"
+  touch "$1/_bmad-output/pipeline-paused.flag"
+  mkmarker "$1" "$2"
+  rdrive "$1" "$SESS_A" "$2" >/dev/null
+  local _sn; _sn="$(sed -n 's/^snapshot_path=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  [ -n "$_sn" ] && gdrive "$1" Read "$1/$_sn" "$2" >/dev/null
+  return 0
+}
+
+# =============================================================================
+# THE MUTANT ARMS: one function per base arm a mutant is scored on
+# =============================================================================
+# Each a_<arm> <hooksdir> rebuilds that arm's world and prints 1 when the arm HOLDS against the
+# hooks directory it is handed and 0 when it FAILS. The live pass above asserts the same cells
+# against the shipped hooks and sets the B_<arm> flag beside its own ok; here the cell is replayed
+# against a mutant copy. Every arm is PRESENCE-shaped (a block carrying a named text, a mandate
+# naming a named path, a marker or stamp that exists), so a copy that died on load fails them.
+_v() { if [ "$1" = "$2" ]; then echo 1; else echo 0; fi; }
+_h() { if has "$1" "$2"; then echo 1; else echo 0; fi; }
+mand() { printf '%s' "$(rdrive "$1" "$2" "$3")" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full.*/\1/p' | head -1; }
+stopv() { verdict "$(drive "$1" "$2" "$3" "$4")"; }  # stopv <proj> <sess> <transcript> <hd>
+stamp_at() { if [ -f "$(HC "$P_DISK")" ]; then echo present; else echo absent; fi; }
+ARMED="$P_DISK/_bmad-output/.handoff-guard-armed"
+
+a_b()  { reset_state "$P_NOREMOTE"; _v "$(stopv "$P_NOREMOTE" "$SESS_A" "$T_REQ_OK" "$1")" allow; }
+a_d()  { reset_state "$P_PUSHED"; _v "$(stopv "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$1")" allow; }
+a_e()  { reset_state "$P_AHEAD"; _v "$(stopv "$P_AHEAD" "$SESS_A" "$T_REQ_OK" "$1")" block; }
+a_s2a(){ reset_state "$P_DIRTY"; _v "$(stopv "$P_DIRTY" "$SESS_A" "$T_REQ_OK" "$1")" block; }
+a_s2d(){ reset_state "$P_CL_LOCAL"; _v "$(stopv "$P_CL_LOCAL" "$SESS_A" "$T_REQ_OK" "$1")" allow; }
+a_s2e(){ reset_state "$P_CL_WT"; _v "$(stopv "$P_CL_WT" "$SESS_A" "$T_REQ_OK" "$1")" allow; }
+a_k()  { local rr; reset_state "$P_UNPUSHED"; rr="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_OK" "$1")")"
+         if [ -n "$rr" ] && has "$rr" "$PUSH_MARK" && ! has "$rr" "$RESUME_MARK" && ! has "$rr" "$TEAM_MARK"; then echo 1; else echo 0; fi; }
+a_t1push()  { local rr; reset_state "$P_UNPUSHED"; rr="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_NOBLK" "$1")")"
+         if [ -n "$rr" ] && has "$rr" "$PUSH_MARK" && ! has "$rr" "$RESUME_MARK"; then echo 1; else echo 0; fi; }
+a_t1commit(){ local rr; reset_state "$P_DIRTY"; rr="$(reason "$(drive "$P_DIRTY" "$SESS_A" "$T_REQ_NOBLK" "$1")")"
+         if [ -n "$rr" ] && has "$rr" "$COMMIT_MARK" && ! has "$rr" "$RESUME_MARK"; then echo 1; else echo 0; fi; }
+a_pb1() { local o; o="$(pb_drive "$T_PB_RUN" "$1")"
+         if [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)" && grep -qF -- "bPBtask01" "$(pb_log)"; then echo 1; else echo 0; fi; }
+a_pb3() { local o; o="$(pb_drive "$T_PB_OLD" "$1")"; _h "$(reason "$o")" "$PUSH_MARK"; }
+a_pb3b(){ local i o rr n=""; reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+         for i in 1 2 3; do
+           o="$(jq -nc --arg t "$T_PB_OLD" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+                | CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$1/ai-dlc-continue.sh" 2>/dev/null)"
+           rr="$(reason "$o")"
+           if has "$rr" "$OVERRUN_MARK" && ! has "$rr" "$WAIT_MARK"; then n="${n}o"; else n="${n}x"; fi
+         done
+         rm -f "$P_UNPUSHED/_bmad-output/handoff-guard-state.txt"
+         _v "$n" ooo; }
+a_pb4() { local o; o="$(pb_drive "$T_REQ_NOBLK" "$1")"
+         if has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; then echo 1; else echo 0; fi; }
+a_pb5() { local o; o="$(pb_drive "$T_PB_MID" "$1")"
+         if [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; then echo 1; else echo 0; fi; }
+a_pb6() { local o; o="$(pb_drive "$T_PB_WATCH" "$1")"
+         if has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; then echo 1; else echo 0; fi; }
+a_pb7() { local o rr; reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
+         o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT" "$1")"; rr="$(reason "$o")"
+         rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
+         if has "$rr" "$INFL_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then echo 1; else echo 0; fi; }
+a_pb10(){ local o; o="$(pb_drive "$T_PB_NOID" "$1")"
+         if has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; then echo 1; else echo 0; fi; }
+
+a_l()    { rsetup "$P_REC" "$SNAP_PLAIN" no no; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_IMPL"; }
+a_n()    { rsetup "$P_REC" "$SNAP_PLAIN" yes yes; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_HANDOFF"; }
+a_osynth(){ rsetup "$P_REC" "$SNAP_HEADING" yes no; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_HANDOFF"; }
+a_o()    { rsetup "$P_REC" "$SNAP_BOLD" yes no; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_HANDOFF"; }
+a_o2()   { rsetup "$P_REC" "$SNAP_MENTION" yes no; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_IMPL"; }
+a_p()    { log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"; rsetup "$P_REC" "$SNAP_PLAIN" yes no "$LG"; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_HANDOFF"; }
+a_q()    { log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"; rsetup "$P_REC" "$SNAP_PLAIN" yes no "$LG"; _v "$(mand "$P_REC" "$SESS_B" "$1")" "$STEP_IMPL"; }
+a_r()    { log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"; rsetup "$P_REC" "$SNAP_HEADING" no yes "$LG"; _v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_IMPL"; }
+a_s()    { local v; rsetup "$P_REC" "$SNAP_PLAIN" yes yes; mv "$P_REC/$STEP_HANDOFF" "$P_REC/${STEP_HANDOFF}.hidden"
+           v="$(_v "$(mand "$P_REC" "$SESS_A" "$1")" "$STEP_IMPL")"; mv "$P_REC/${STEP_HANDOFF}.hidden" "$P_REC/$STEP_HANDOFF"; echo "$v"; }
+
+a_j()    { log_answer "$LG" "$SESS_A" "$Q_INTENT" "$P_NOINTENT"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" allow; }
+a_i()    { log_prompt "$LG" "$SESS_A" "$P_DISCUSS"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" allow; }
+a_g2()   { log_prompt "$LG" "$SESS_A" "$P_BARE"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" block; }
+a_gphrase(){ log_prompt "$LG" "$SESS_A" "$P_INTENT"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" block; }
+a_g3()   { log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_BARE"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" block; }
+a_g4()   { log_prompt "$LG" "$SESS_A" "$P_TERSE"; dsetup "$LG"; _v "$(disk "$SESS_A" "$1")" block; }
+a_g5()   { dsetup; _v "$(stopv "$P_DISK" "$SESS_A" "$T_PASTED_NOBLK" "$1")" allow; }
+a_g5last(){ dsetup; _v "$(stopv "$P_DISK" "$SESS_A" "$T_LASTLINE_NOBLK" "$1")" block; }
+
+a_c1()   { dsetup; snap_at "$P_DISK"; rm -f "$(HC "$P_DISK")"; _v "$(disk "$SESS_A" "$1")" block; }
+a_c2()   { dsetup; snap_at "$P_DISK"; touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"; : > "$(HC "$P_DISK")"; _v "$(disk "$SESS_A" "$1")" allow; }
+a_c3()   { dsetup; : > "$(HC "$P_DISK")"; touch -t 202001010000 "$(HC "$P_DISK")"; snap_at "$P_DISK"; _v "$(disk "$SESS_A" "$1")" block; }
+a_c5b()  { local r; dsetup; snap_at "$P_DISK"; rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
+           drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$1" >/dev/null
+           touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"; : > "$P_DISK/_bmad-output/.driver/handoff"
+           rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
+           r="$(stopv "$P_DISK" "$SESS_A" "$T_REQ_OK" "$1")"
+           if [ "$r" = allow ] && [ "$(stamp_at)" = present ]; then echo 1; else echo 0; fi; }
+# arm_c5k: five consecutive blocks inside the rapid window release the BACKOFF; the stamp must stay
+# ABSENT because the backoff allows a Stop it could not verify. `drive` clears the counter, so the
+# hook is driven raw here: the counter is the subject.
+arm_c5k() { local i=0; dsetup; snap_at "$P_DISK"; rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
+           while [ "$i" -lt 5 ]; do
+             jq -nc --arg t "$T_REQ_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+               | CLAUDE_PROJECT_DIR="$P_DISK" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$1/ai-dlc-continue.sh" >/dev/null 2>&1
+             i=$((i + 1))
+           done
+           [ "$(stamp_at)" = absent ]; }
+a_c5k()  { if arm_c5k "$1"; then echo 1; else echo 0; fi; }
+
+a_d1()   { local rr; reset_state "$P_PUSHED"; rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
+           rr="$(reason "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$1")")"; _h "$rr" "$DRIVER_MARK"; }
+a_d2()   { local rr; reset_state "$P_DISK"; mkmarker "$P_DISK"; rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$1")")"; _h "$rr" "$MARKER_MARK"; }
+a_d4()   { reset_state "$P_PUSHED"; touch -t 202001010000 "$P_PUSHED/_bmad-output/.driver/handoff"
+           printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\n' > "$P_PUSHED/_bmad-output/pipeline-snapshot.md"
+           touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
+           _v "$(stopv "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$1")" block; }
+a_d5first(){ reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"; mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+           _v "$(stopv "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$1")" block; }
+a_d5()   { local rr; reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"; mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+           drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$1" >/dev/null
+           rm -f "$P_DISK/_bmad-output/.handoff-in-progress" "$P_DISK/_bmad-output/handoff-guard-state.txt"
+           rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$1")")"; _h "$rr" "$DRIVER_MARK"; }
+
+a_nt1()  { local rr; log_prompt "$LG" "$SESS_A" "$P_INTENT"; dsetup "$LG"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+           rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "$1")")"; _h "$rr" "$DRIVER_MARK"; }
+a_nt2()  { local rr; dsetup "" yes
+           rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "$1")")"; _h "$rr" "$MARKER_MARK"; }
+a_nt3()  { log_prompt "$LG" "$SESS_A" "$P_INTENT"; dsetup "$LG"; _v "$(stopv "$P_DISK" "$SESS_A" "$T_NONE" "$1")" allow; }
+a_nt3s() { local r; log_prompt "$LG" "$SESS_A" "$P_INTENT"; dsetup "$LG"; r="$(stopv "$P_DISK" "$SESS_A" "$T_NONE" "$1")"
+           if [ "$r" = allow ] && [ "$(stamp_at)" = absent ]; then echo 1; else echo 0; fi; }
+a_nt5()  { local rr; dsetup; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+           rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "$1")")"; dsetup; _h "$rr" "$DRIVER_MARK"; }
+a_nt6()  { local r1 rr; dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
+           r1="$(stopv "$P_DISK" "$SESS_A" "$T_NONE" "$1")"
+           rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET" "$1")")"; dsetup
+           if [ "$r1" = allow ] && has "$rr" "$RESUME_MARK"; then echo 1; else echo 0; fi; }
+
+_ea() { # _ea <hd> <tool> <path> <want>
+  rm -f "$P_ENTRY/_bmad-output/.handoff-in-progress"
+  edrive "$P_ENTRY" "$2" "$3" "$1" >/dev/null
+  if marker_at "$P_ENTRY"; then _v marker "$4"; else _v no-marker "$4"; fi; }
+a_e1()  { _ea "$1" Read "$P_ENTRY/core/skills/ai-dlc/steps/handoff.md" marker; }
+a_e2()  { _ea "$1" Read "$P_ENTRY/core/skills/ai-dlc/steps/implementation.md" no-marker; }
+a_e2b() { _ea "$1" Read "$P_ENTRY/docs/handoff.md" no-marker; }
+a_e3()  { _ea "$1" Edit "$P_ENTRY/core/skills/ai-dlc/steps/handoff.md" no-marker; }
+a_e6()  { mseq_arm "$P_REC" "$1"; _v "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$1")" no-marker; }
+a_e7()  { reset_state "$P_REC"; rclean "$P_REC"; cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+          touch "$P_REC/_bmad-output/pipeline-paused.flag"; _v "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$1")" marker; }
+a_e10() { local a b; mseq_arm "$P_REC" "$1"
+          a="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$1")"; b="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$1")"
+          if [ "$a" = no-marker ] && [ "$b" = marker ]; then echo 1; else echo 0; fi; }
+a_e8g() { case "$(e8g_run "$P_REC" "$1")" in *' no-marker') echo 1 ;; *) echo 0 ;; esac; }
+a_A1()  { _v "$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$1" no)" "no-marker no-crumb 0"; }
+a_A2()  { _v "$(tcase "$P_ENTRY" - - "$1" no)" "marker no-crumb 0"; }
+a_A2b() { _v "$(tcase "$P_ENTRY" - general-purpose "$1" no)" "marker no-crumb 0"; }
+a_A3()  { _v "$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$1" yes)" "no-marker crumb 0"; }
+
+for _f in mseq_arm seq_read e8g_run tcase gdrive edrive rdrive rsetup mkmarker rclean dsetup snap_at disk pb_drive pb7_world log_two_row log_prompt log_answer; do
+  declare -F "$_f" >/dev/null 2>&1 || broken "arm helper $_f is not defined before the first mutant is scored -- an arm calling it would read command-not-found as a FAIL and score a kill it did not earn"
+done
+ARMS_ALL="b d e s2a s2d s2e k t1push t1commit pb1 pb3 pb3b pb4 pb5 pb6 pb7 pb10 l n o osynth o2 p q r s j i g2 g3 gphrase g4 g5 g5last c1 c2 c3 c5b c5k d1 d2 d4 d5 d5first nt1 nt2 nt3 nt3s nt5 nt6 e1 e2 e2b e3 e6 e7 e10 e8g A1 A2 A2b A3"
+SCHEMA_SHIPPED="$SCHEMA"
+armv() { # armv <arm> <hooksdir> -> 1 when the arm holds, 0 when it fails
+  declare -F "a_$1" >/dev/null 2>&1 || broken "arm '$1' has no function a_$1"
+  "a_$1" "$2"
+}
+# armbase <arm>: the arm against the SHIPPED hooks and the shipped declaration, cached. A mutant
+# kill is only readable if the arm it is scored on holds here.
+armbase() {
+  local v; eval "v=\${ARMBASE_$1:-}"
+  if [ -z "$v" ]; then
+    local sv="$SCHEMA"; SCHEMA="$SCHEMA_SHIPPED"; v="$(armv "$1" "$HOOKS_DIR")"; SCHEMA="$sv"
+    eval "ARMBASE_$1=\$v"
+    [ "$v" = 1 ] || bad "FIXTURE BROKEN: arm $1 does not hold against the shipped hooks, so no mutant can be scored on it"
+  fi
+  printf '%s' "$v"
+}
+# mscore <flag> <mutant> <deciding-arm> <twin>... : the deciding arm must FAIL under the mutant copy
+# at MUT_DIR and every twin must HOLD. In --matrix mode every arm is run and one MATRIX line is
+# printed per cell; the plain run executes no matrix-only cell.
+mscore() {
+  local flag="$1" m="$2" dec="$3" t a v dv tv held=1 tl="" bv; shift 3
+  for t in "$dec" "$@"; do bv="$(armbase "$t")"; [ "$bv" = 1 ] || flag=0; done
+  if [ "$MATRIX" = 1 ]; then
+    for a in $ARMS_ALL; do
+      v="$(armv "$a" "$MUT_DIR")"; eval "CELL_$a=\$v"
+      printf 'MATRIX\t%s\t%s\t%s\n' "$m" "$a" "$([ "$v" = 1 ] && echo ok || echo FAIL)"
+      MATRIX_CELLS=$((MATRIX_CELLS + 1))
+    done
+    eval "dv=\$CELL_$dec"
+    for t in "$@"; do eval "tv=\$CELL_$t"; [ "$tv" = 1 ] || held=0; tl="$tl $t"; done
+  else
+    dv="$(armv "$dec" "$MUT_DIR")"
+    for t in "$@"; do tv="$(armv "$t" "$MUT_DIR")"; [ "$tv" = 1 ] || held=0; tl="$tl $t"; done
+  fi
+  if [ "$dv" = 0 ] && [ "$held" = 1 ]; then
+    mutant_killed "$flag" "$m" "$m: killed by arm $dec (FAIL under it), twin(s)${tl} hold"
+  else
+    bad "$m SURVIVED: arm $dec read $dv under the mutant (want 0) and the twin(s)${tl} held=$held (want 1) -- $dec does not depend on the mutated code, or the mutation moved a twin too"
+  fi
+}
+
+# (c5k) THE BACKOFF BRANCH DOES NOT STAMP, on the shipped hook: five consecutive blocks inside the
+#       rapid window release the backoff, and the Stop it allows is one it could not verify. It sits
+#       here, after arm_c5k is defined, and before the first mutant that reads B_c5k.
+if arm_c5k "$HOOKS_DIR"; then
+  ok "(c5k) five consecutive Stops inside the rapid window release the BACKOFF and still write NO stamp -- the backoff allows a Stop it could not verify"; B_c5k=1
+else
+  bad "(c5k) the BACKOFF branch wrote a completion stamp -- a handoff that failed every arm recorded itself complete"
+fi
 echo ""
 echo "  --- mutants (hooks resolved from: $HOOKS_DIR) ---"
 
@@ -2132,28 +2516,9 @@ mkmut() { # mkmut <name> <target-basename> <sed-arg>... -> sets MUT_DIR
 
 # Every mutant's control: the unpushed-branch Stop case, which no mutation below touches. It is
 # PRESENCE-shaped (a block carrying the step-3 text), so a copy that died on load fails it.
-mut_ctl() { # mut_ctl <name> <mutdir>
-  reset_state "$P_UNPUSHED"
-  local rr; rr="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_OK" "$2")")"
-  { [ -n "$rr" ] && has "$rr" "$PUSH_MARK"; } \
-    && ok "  control [$1]: the copy still BLOCKS the unpushed case with the step-3 text — it loads and runs" \
-    || bad "MUTANT HARNESS BROKEN [$1]: the copy no longer produces the step-3 block ($([ -n "$rr" ] && echo "different text" || echo "no output")); it is not running and the kill above is unreadable"
-}
 
 # A Stop-seam kill: expect a verdict from the mutated copy.
-kill_stop() { # kill_stop <name> <mutdir> <want> <killmsg>
-  local r; r="$(disk "$SESS_A" "$2")"
-  [ "$r" = "$3" ] && ok "  mutant [$1] KILLED by $4" \
-                  || bad "MUTANT SURVIVED [$1]: expected $3, got $r — $4 does not depend on the mutated code, so that assertion proves nothing"
-}
 # A recover-seam kill: expect a named path from the mutated copy.
-kill_rec() { # kill_rec <name> <mutdir> <projdir> <session> <want-relpath> <killmsg>
-  local ctx sp
-  ctx="$(rdrive "$3" "$4" "$2")"
-  sp="$(printf '%s' "$ctx" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full.*/\1/p' | head -1)"
-  [ "$sp" = "$5" ] && ok "  mutant [$1] KILLED by $6" \
-                   || bad "MUTANT SURVIVED [$1]: the mandate named '${sp:-<nothing>}', expected '$5' — $6 does not depend on the mutated code"
-}
 
 LIBF="ai-dlc-handoff-pending.sh"
 CONF="ai-dlc-continue.sh"
@@ -2164,60 +2529,36 @@ RECF="ai-dlc-recover.sh"
 #      the false positive the narrowing exists to prevent. Killed by (b).
 if mkmut m1-no-remote-conjunct "$CONF" \
      -e 's|^      if \[ -n "$(git -C "$PROJECT_DIR" remote 2>/dev/null)" \]; then$|      if true; then|'; then
-  reset_state "$P_NOREMOTE"
-  r="$(verdict "$(drive "$P_NOREMOTE" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  mutant [m1] KILLED by assertion (b): with the remote conjunct gone, a local-only repo now BLOCKS" \
-                   || bad "MUTANT SURVIVED [m1]: the local-only repo still returned $r"
-  mut_ctl m1 "$MUT_DIR"
+  mscore "${B_b:-0}" m1 b k
 fi
 
 # M2a — the ahead test inverted, first half: a branch that is up to date now blocks. Killed by
 #       (d). Split from M2b so each half fails exactly one assertion; a single inverting mutant
 #       would move two cells and neither would own the case.
 if mkmut m2a-zero-ahead-blocks "$CONF" -e 's|^            0) : ;;$|            0) PUSH_OK=0 ;;|'; then
-  reset_state "$P_PUSHED"
-  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  mutant [m2a] KILLED by assertion (d): a published, up-to-date branch now BLOCKS" \
-                   || bad "MUTANT SURVIVED [m2a]: the up-to-date branch still returned $r"
-  mut_ctl m2a "$MUT_DIR"
+  mscore "${B_d:-0}" m2a d k
 fi
 
 # M2b — the ahead test inverted, second half: unpushed commits now pass. Killed by (e). This
 #       kill is ALLOW-shaped, which is exactly why the control beside it is not optional.
 if mkmut m2b-ahead-allowed "$CONF" -e 's|^            \*) PUSH_OK=0 ;;$|            *) : ;;|'; then
-  reset_state "$P_AHEAD"
-  r="$(verdict "$(drive "$P_AHEAD" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m2b] KILLED by assertion (e): a branch 1 commit ahead is now ALLOWED" \
-                   || bad "MUTANT SURVIVED [m2b]: the branch 1 ahead still returned $r"
-  mut_ctl m2b "$MUT_DIR"
+  mscore "${B_e:-0}" m2b e k
 fi
 
 # M36 — the commit arm's working-tree test removed, which is BL-159 claim 1's state: a tree 0
 #       ahead with an uncommitted tracked edit passes. Killed by (s2a); ALLOW-shaped, so the
 #       control is not optional.
 if mkmut m36-no-commit-test "$CONF" -e 's|^      \[ -n "$COMMIT_DIRTY" \] && COMMIT_OK=0$|      :|'; then
-  reset_state "$P_DIRTY"
-  r="$(verdict "$(drive "$P_DIRTY" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m36] KILLED by assertion (s2a): with the working-tree test gone, an uncommitted tracked edit 0 ahead is ALLOWED" \
-                   || bad "MUTANT SURVIVED [m36]: the dirty tree still returned $r — (s2a) does not depend on the working-tree test"
-  mut_ctl m36 "$MUT_DIR"
+  mscore "${B_s2a:-0}" m36 s2a k
 fi
 
 # M37 / M38 — each .claude/ exclusion removed on its own. Each kill is BLOCK-shaped on the one
 #       tree whose only dirt that exclusion covers, and touches no other tree.
 if mkmut m37-no-settings-local-exclusion "$CONF" -e '/(exclude)\.claude\/settings\.local\.json/d'; then
-  reset_state "$P_CL_LOCAL"
-  r="$(verdict "$(drive "$P_CL_LOCAL" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  mutant [m37] KILLED by assertion (s2d): without the exclusion, settings.local.json BLOCKS a compliant handoff" \
-                   || bad "MUTANT SURVIVED [m37]: the settings.local.json tree still returned $r — (s2d) does not depend on the exclusion"
-  mut_ctl m37 "$MUT_DIR"
+  mscore "${B_s2d:-0}" m37 s2d k
 fi
 if mkmut m38-no-worktrees-exclusion "$CONF" -e '/(exclude)\.claude\/worktrees/d'; then
-  reset_state "$P_CL_WT"
-  r="$(verdict "$(drive "$P_CL_WT" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  mutant [m38] KILLED by assertion (s2e): without the exclusion, an agent worktree BLOCKS a compliant handoff" \
-                   || bad "MUTANT SURVIVED [m38]: the worktrees tree still returned $r — (s2e) does not depend on the exclusion"
-  mut_ctl m38 "$MUT_DIR"
+  mscore "${B_s2e:-0}" m38 s2e k
 fi
 
 # M3 — restore the OLD two-arm dispatch, which inferred the cause from RESUME_OK. The verdict
@@ -2228,43 +2569,19 @@ fi
 if mkmut m3-old-dispatch "$CONF" \
      -e 's|^        if \[ "$PUSH_OK" != "1" \] && \(.*\); then$|        if false \&\& \1; then|' \
      -e 's|^        if \[ "$TEAMMATES_OK" != "1" \]; then$|        if [ "$RESUME_OK" = "1" ]; then|'; then
-  reset_state "$P_UNPUSHED"
-  _m3="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  if [ -n "$_m3" ] && has "$_m3" "$TEAM_MARK" && ! has "$_m3" "$PUSH_MARK"; then
-    ok "  mutant [m3] KILLED by assertion (k): the old dispatch answers a missing PUSH with the TEAMMATE text, and the verdict never changes"
-  else
-    bad "MUTANT SURVIVED [m3]: the old two-arm dispatch still emitted the step-3 text (or nothing) — assertion (k) is not reading the dispatch"
-  fi
-  # This mutant's own control cannot be mut_ctl, which reads the step-3 text it deliberately
-  # removes. The teammate text above IS the presence conjunct.
-  ok "  control [m3]: the kill is PRESENCE-shaped — it required the teammate text to appear, which a copy emitting nothing cannot do"
+  mscore "${B_k:-0}" m3 k e
 fi
 
 # M39 / M40 — restore the `RESUME_OK` conjunct on the PUSH arm, then on the COMMIT arm (BL-698).
 #       The verdict is unchanged (the RESUME arm still blocks), so only the (t1) TEXT arms see
 #       them. Each is anchored on its own arm's opening test, which the other does not carry.
-t1_kill() { # t1_kill <name> <mutdir> <projdir> <want-mark> <killmsg>
-  local rr
-  reset_state "$3"
-  rr="$(reason "$(drive "$3" "$SESS_A" "$T_REQ_NOBLK" "$2")")"
-  if [ -n "$rr" ] && has "$rr" "$RESUME_MARK" && ! has "$rr" "$4"; then
-    ok "  mutant [$1] KILLED by $5"
-  else
-    bad "MUTANT SURVIVED [$1]: the copy still answered with the expected step text (or nothing) — $5 does not depend on the dropped conjunct"
-  fi
-}
 if mkmut m39-push-needs-resume "$CONF" \
      -e 's|^        if \[ "$PUSH_OK" != "1" \] && \(.*\); then$|        if [ "$PUSH_OK" != "1" ] \&\& \1 \&\& [ "$RESUME_OK" = "1" ]; then|'; then
-  t1_kill m39 "$MUT_DIR" "$P_UNPUSHED" "$PUSH_MARK" \
-    "assertion (t1) push-not-landed: with the conjunct back, an unpublished branch and no resume block is answered with the RESUME text"
-  # Own control: mut_ctl drives the resume-OK transcript, which this mutation does not touch.
-  mut_ctl m39 "$MUT_DIR"
+  mscore "${B_t1push:-0}" m39 t1push k
 fi
 if mkmut m40-commit-needs-resume "$CONF" \
      -e 's|^        if \[ "$COMMIT_OK" != "1" \] && \(.*\); then$|        if [ "$COMMIT_OK" != "1" ] \&\& \1 \&\& [ "$RESUME_OK" = "1" ]; then|'; then
-  t1_kill m40 "$MUT_DIR" "$P_DIRTY" "$COMMIT_MARK" \
-    "assertion (t1) commit-not-landed: with the conjunct back, a dirty tree and no resume block is answered with the RESUME text"
-  mut_ctl m40 "$MUT_DIR"
+  mscore "${B_t1commit:-0}" m40 t1commit k
 fi
 
 # M41 — the push deferral disabled. Killed by (pb1): the background push with no exit record is
@@ -2272,11 +2589,7 @@ fi
 #       step-3 text), so a copy that died on load cannot score it.
 if mkmut m41-no-push-deferral "$CONF" \
      -e 's|^      elif \[ "$PUSH_OK" != "1" \] && \[ "$COMMIT_OK" = "1" \]|      elif false \&\& [ "$COMMIT_OK" = "1" ]|'; then
-  o="$(pb_drive "$T_PB_RUN" "$MUT_DIR")"
-  { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m41] KILLED by assertion (pb1): with the deferral gone, a push still running in the background is answered with the PUSH text" \
-    || bad "MUTANT SURVIVED [m41]: the background push still deferred (or emitted nothing) — (pb1) does not depend on the deferral"
-  mut_ctl m41 "$MUT_DIR"
+  mscore "${B_pb1:-0}" m41 pb1 k
 fi
 
 # M42 — the id-present check dropped, so the deferral no longer requires a background push in
@@ -2286,11 +2599,7 @@ fi
 #       Stop defers; the row IS the control.
 if mkmut m42-no-push-id-check "$CONF" \
      -e 's|push_bg_read && \[ -n "$PUSH_BG_ID" \] &&|push_bg_read \&\& true \&\&|'; then
-  o="$(pb_drive "$T_REQ_NOBLK" "$MUT_DIR")"
-  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m42] KILLED by assertion (pb4): without the id check, a transcript with no background push DEFERS and writes the $PB_DEF row" \
-    || bad "MUTANT SURVIVED [m42]: the no-background-push transcript was not deferred under the mutant — (pb4) does not depend on the id check"
-  ok "  control [m42]: the kill is PRESENCE-shaped — it required the $PB_DEF row to appear, which a copy emitting nothing cannot write"
+  mscore "${B_pb4:-0}" m42 pb4 pb3
 fi
 
 # M44 — the deferral re-widened to every unsatisfied arm while a push runs (the step-1 and
@@ -2298,34 +2607,20 @@ fi
 #       kill is presence-shaped -- it requires the deferral ROW -- and mut_ctl is its control.
 if mkmut m44-deferral-wide-scope "$CONF" \
      -e 's|^      elif \[ "$PUSH_OK" != "1" \] && \[ "$COMMIT_OK" = "1" \] && \[ "$TEAMMATES_OK" = "1" \] && \[ "$INFLIGHT_OK" = "1" \] && push_bg_read|      elif [ "$PUSH_OK" != "1" ] \&\& push_bg_read|'; then
-  reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
-  o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT" "$MUT_DIR")"
-  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; } \
-    && ok "  mutant [m44] KILLED by assertion (pb7): re-widened, a push in flight swallows the INFLIGHT text and writes the $PB_DEF row" \
-    || bad "MUTANT SURVIVED [m44]: the unrecorded-teammate world was not deferred under the mutant — (pb7) does not depend on the scope conjuncts"
-  rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
-  mut_ctl m44 "$MUT_DIR"
+  mscore "${B_pb7:-0}" m44 pb7 k
 fi
 
 # M45 — the command match reverted to a substring test. Killed by (pb6): the watcher that only
 #       mentions `git push` now DEFERS. Presence-shaped (the row); mut_ctl is its control.
 if mkmut m45-push-substring-match "$CONF" \
      -e 's@(.input.command // "") | push_cmd@(.input.command // "") | contains("git push")@'; then
-  o="$(pb_drive "$T_PB_WATCH" "$MUT_DIR")"
-  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m45] KILLED by assertion (pb6): as a substring match, a watcher mentioning git push defers the guard" \
-    || bad "MUTANT SURVIVED [m45]: the watcher was not deferred under the substring mutant — (pb6) does not depend on the program-position match"
-  mut_ctl m45 "$MUT_DIR"
+  mscore "${B_pb6:-0}" m45 pb6 k
 fi
 
 # M46 — the ceiling put back to the one-sample 729 s. Killed by (pb5): the 1800 s push is no
 #       longer deferred and the PUSH text (a second suite) comes back.
 if mkmut m46-one-sample-ceiling "$CONF" -e 's|^PUSH_BG_CEIL=3004$|PUSH_BG_CEIL=729|'; then
-  o="$(pb_drive "$T_PB_MID" "$MUT_DIR")"
-  { has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m46] KILLED by assertion (pb5): at 729 s, a push 1800 s into a recorded-length gate gets the PUSH text" \
-    || bad "MUTANT SURVIVED [m46]: the 1800 s push was still deferred at a 729 s ceiling — (pb5) does not read the ceiling"
-  mut_ctl m46 "$MUT_DIR"
+  mscore "${B_pb5:-0}" m46 pb5 k
 fi
 
 # M47 — the wait clause made unconditional again (02b16ee93's shape). Killed by (pb3b): past the
@@ -2333,12 +2628,7 @@ fi
 if mkmut m47-unconditional-wait "$CONF" \
      -e 's|^          if \[ -n "$PUSH_BG_ID" \]; then$|          if false; then|' \
      -e 's|^          H_PUSH_BG=""$|          H_PUSH_BG=" If the push was moved to the background, do not issue another; end the turn and wait for its notification."|'; then
-  reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
-  rr="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_OLD" "$MUT_DIR")")"
-  { has "$rr" "$WAIT_MARK" && ! has "$rr" "$OVERRUN_MARK"; } \
-    && ok "  mutant [m47] KILLED by assertion (pb3b): with the clause unconditional, a push past its ceiling is answered with 'wait'" \
-    || bad "MUTANT SURVIVED [m47]: the past-ceiling text did not carry the wait clause under the mutant — (pb3b) does not read the condition"
-  mut_ctl m47 "$MUT_DIR"
+  mscore "${B_pb3b:-0}" m47 pb3b k
 fi
 
 # M48 — the empty-id rejection removed on BOTH sides of the join (tool_use id and tool_result
@@ -2346,21 +2636,13 @@ fi
 if mkmut m48-empty-id-joins "$CONF" \
      -e 's|(.; if (($u.id // "") \| type) == "string" and ($u.id // "") != "" then .push\[$u.id\] = true else . end)|(.; .push[($u.id // "")] = true)|' \
      -e 's/^                   | select(type == "string" and . != "")) as \$t$/                   ) as $t/'; then
-  o="$(pb_drive "$T_PB_NOID" "$MUT_DIR")"
-  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m48] KILLED by assertion (pb10): without the empty-id rejection, two absent ids join and the guard defers" \
-    || bad "MUTANT SURVIVED [m48]: the no-id push was not deferred under the mutant — (pb10) does not depend on the empty-id rejection"
-  mut_ctl m48 "$MUT_DIR"
+  mscore "${B_pb10:-0}" m48 pb10 k
 fi
 
 # M43 — the ceiling dropped. Killed by (pb3): a background push past the ceiling DEFERS forever.
 if mkmut m43-no-push-ceiling "$CONF" \
      -e 's|\[ "${PUSH_BG_AGE:-0}" -le "$PUSH_BG_CEIL" \]; then$|true; then|'; then
-  o="$(pb_drive "$T_PB_OLD" "$MUT_DIR")"
-  { [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; } \
-    && ok "  mutant [m43] KILLED by assertion (pb3): without the ceiling, a push backgrounded years ago still defers the guard" \
-    || bad "MUTANT SURVIVED [m43]: the past-ceiling push was not deferred under the mutant — (pb3) does not depend on the ceiling"
-  mut_ctl m43 "$MUT_DIR"
+  mscore "${B_pb3:-0}" m43 pb3 k
 fi
 
 # --- ai-dlc-handoff-pending.sh: the shared predicate -------------------------------------
@@ -2370,48 +2652,30 @@ fi
 #      Killed by (p) alone: (p) is the only arm whose log carries two rows.
 if mkmut m4-no-flush "$LIBF" \
      -e 's|USER_PAUSE\[\[:space:\]\]\*$/ { if (inb && mine) out = out buf; inb=1|USER_PAUSE[[:space:]]*$/ { inb=1|'; then
-  log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"
-  rsetup "$P_REC" "$SNAP_PLAIN" yes no "$LG"
-  kill_rec m4 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_IMPL" \
-    "assertion (p): with the flush gone only the LAST row survives, and the request in the FIRST row is lost"
-  mut_ctl m4 "$MUT_DIR"
+  mscore "${B_p:-0}" m4 p l
 fi
 
 # M5 — drop the pause-flag conjunct. Killed by (r): a stale key with the pipeline unpaused.
 if mkmut m5-no-pause-flag "$LIBF" \
      -e 's@^  \[ -f "${_sd}/pipeline-paused.flag" \] || return 1$@  : # pause-flag conjunct removed@'; then
-  log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"
-  rsetup "$P_REC" "$SNAP_HEADING" no yes "$LG"
-  kill_rec m5 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
-    "assertion (r): keys now fire with the pipeline unpaused, so a resumed session is dragged back into the handoff"
-  mut_ctl m5 "$MUT_DIR"
+  mscore "${B_r:-0}" m5 r l
 fi
 
 # M6 — disable key 1. Killed by (n), whose seed carries no snapshot heading and no log, so
 #      neither of the other two keys can cover it.
 if mkmut m6-no-key1 "$LIBF" -e 's|^  if \[ -f "${_sd}/.handoff-in-progress" \]; then$|  if false; then|'; then
-  rsetup "$P_REC" "$SNAP_PLAIN" yes yes
-  kill_rec m6 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_IMPL" \
-    "assertion (n): the entry marker no longer routes a compaction landing inside the procedure"
-  mut_ctl m6 "$MUT_DIR"
+  mscore "${B_n:-0}" m6 n l
 fi
 
 # M7 — disable key 2. Killed by (o), whose seed carries no entry marker and no log.
 if mkmut m7-no-key2 "$LIBF" \
      -e 's|^  if \[ -r "${_sd}/pipeline-snapshot.md" \] \\$|  if false \&\& [ -r "${_sd}/pipeline-snapshot.md" ] \\|'; then
-  rsetup "$P_REC" "$SNAP_HEADING" yes no
-  kill_rec m7 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_IMPL" \
-    "assertion (o): the snapshot's own handoff record no longer routes the recovery"
-  mut_ctl m7 "$MUT_DIR"
+  mscore "${B_osynth:-0}" m7 osynth l
 fi
 
 # M8 — disable key 3. Killed by (p), whose seed carries no entry marker and no snapshot heading.
 if mkmut m8-no-key3 "$LIBF" -e 's|^  \[ -n "$_sess" \] && \[ -r "$_log" \].*|  return 1|'; then
-  log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"
-  rsetup "$P_REC" "$SNAP_PLAIN" yes no "$LG"
-  kill_rec m8 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_IMPL" \
-    "assertion (p): the continuation log is no longer read, so the key that needs no lead cooperation is gone"
-  mut_ctl m8 "$MUT_DIR"
+  mscore "${B_p:-0}" m8 p l
 fi
 
 # M9 — key 2 loses its line anchor and matches the words ANYWHERE. Killed by (o2).
@@ -2424,10 +2688,7 @@ fi
 # Any mutation whose replacement text mentions a reader belongs on a non-pipe delimiter.
 if mkmut m9-key2-mention "$LIBF" \
      -e "s@grep -qiE '\^\[\[:space:\]\]\*(#{1,6}\[\[:space:\]\]\*)?(\\\\\*\\\\\*)?HANDOFF POINT'@grep -qiE 'HANDOFF POINT'@"; then
-  rsetup "$P_REC" "$SNAP_MENTION" yes no
-  kill_rec m9 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
-    "assertion (o2): a snapshot merely DISCUSSING the record is now treated as carrying one"
-  mut_ctl m9 "$MUT_DIR"
+  mscore "${B_o2:-0}" m9 o2 l
 fi
 
 # M9b — THE REGRESSION MUTANT FOR THE DEFECT THIS FIXTURE FOUND. Make the heading group
@@ -2437,17 +2698,7 @@ fi
 #       argument for keeping a producer-derived seed rather than an invented one.
 if mkmut m9b-key2-requires-heading "$LIBF" \
      -e "s|(#{1,6}\[\[:space:\]\]\*)?(|#{1,6}[[:space:]]*(|"; then
-  rsetup "$P_REC" "$SNAP_BOLD" yes no
-  kill_rec m9b "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_IMPL" \
-    "assertion (o): requiring a markdown heading again loses the reference consumer's real record"
-  # And the READER-DERIVED shape must be UNAFFECTED. This arm demonstrates the seeding lesson
-  # mechanically: under this mutant (o-synth) still passes, so a battery seeded only from the
-  # reader would have reported the grammar that shipped broken as correct.
-  rsetup "$P_REC" "$SNAP_HEADING" yes no
-  _m9b="$(printf '%s' "$(rdrive "$P_REC" "$SESS_A" "$MUT_DIR")" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full.*/\1/p' | head -1)"
-  [ "$_m9b" = "$STEP_HANDOFF" ] && ok "  control [m9b]: the reader-derived HEADING seed still passes under the same mutant — a battery seeded only from the reader would have called the broken grammar correct" \
-                               || bad "MUTANT TOO BROAD [m9b]: the heading seed stopped routing too ('${_m9b:-<nothing>}') — key 2 is off entirely and (o)'s kill is unattributable"
-  mut_ctl m9b "$MUT_DIR"
+  mscore "${B_o:-0}" m9b o osynth
 fi
 
 # M9c — KEY 2 LOSES ITS DISCHARGE, which is the shipped predicate before this release: the
@@ -2461,20 +2712,7 @@ fi
 # pipeline feeding a reader.
 if mkmut m9c-key2-no-discharge "$LIBF" \
      -e 's@^     && { \[ ! -f "${_sd}/.handoff-complete" \] \\$@     \&\& { true \\@'; then
-  dsetup
-  snap_at "$P_DISK"
-  sleep 1
-  : > "$(HC "$P_DISK")"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  mutant [m9c] KILLED by assertion (c2): with the discharge gone a COMPLETED handoff arms the guard again, permanently" \
-                   || bad "MUTANT SURVIVED [m9c]: expected block, got $r — (c2) does not depend on the discharge conjunct, so that assertion proves nothing"
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  control [m9c]: the UNSTAMPED record still BLOCKS under the same mutant — it removed the discharge, not key 2" \
-                   || bad "MUTANT TOO BROAD [m9c]: the unstamped record stopped blocking too ($r) — the mutation disabled key 2 outright and (c2)'s kill is unattributable"
-  mut_ctl m9c "$MUT_DIR"
+  mscore "${B_c2:-0}" m9c c2 c1
 fi
 
 # M9d — THE COMPARISON INVERTED, stamp-newer-than-snapshot rather than snapshot-newer-than-
@@ -2485,20 +2723,7 @@ fi
 #       which must still ALLOW, proving the mutation inverted the test rather than deleting it.
 if mkmut m9d-discharge-inverted "$LIBF" \
      -e 's@|| \[ "${_sd}/pipeline-snapshot.md" -nt "${_sd}/.handoff-complete" \]; }; then@|| [ "${_sd}/.handoff-complete" -nt "${_sd}/pipeline-snapshot.md" ]; }; then@'; then
-  dsetup
-  : > "$(HC "$P_DISK")"
-  sleep 1
-  snap_at "$P_DISK"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = allow ] && ok "  mutant [m9d] KILLED by assertion (c3): inverted, one completed handoff's stamp acquits every record written after it" \
-                   || bad "MUTANT SURVIVED [m9d]: expected allow, got $r — (c3) does not depend on the comparison's direction, so that assertion proves nothing"
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  control [m9d]: the UNSTAMPED record still BLOCKS under the same mutant — it inverted the comparison, it did not delete the key" \
-                   || bad "MUTANT TOO BROAD [m9d]: the unstamped record stopped blocking too ($r) — (c3)'s kill is unattributable"
-  mut_ctl m9d "$MUT_DIR"
+  mscore "${B_c3:-0}" m9d c3 c1
 fi
 
 # M9e — THE WRITER NEVER WRITES. The reader is intact and the stamp is never produced, which
@@ -2508,25 +2733,7 @@ fi
 #       removed the producer, not the guard.
 if mkmut m9e-no-stamp-writer "$CONF" \
      -e 's@^      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true$@      : # stamp writer removed@'; then
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
-  drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR" >/dev/null
-  sleep 1
-  : > "$P_DISK/_bmad-output/.driver/handoff"
-  rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
-  { [ "$r" = allow ] && [ "$_st" = absent ]; } \
-    && ok "  mutant [m9e] KILLED by assertion (c5): the satisfied Stop allows and leaves NO stamp — key 2's reader has no producer and can never fire" \
-    || bad "MUTANT SURVIVED [m9e]: satisfied Stop verdict=$r stamp=$_st — (c5) does not read the writer, so that assertion proves nothing"
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  control [m9e]: the pending record still BLOCKS under the same mutant — it removed the writer, not the guard" \
-                   || bad "MUTANT TOO BROAD [m9e]: the pending record stopped blocking too ($r) — the mutation reached Check 0 itself"
-  mut_ctl m9e "$MUT_DIR"
+  mscore "${B_c5b:-0}" m9e c5b c1
 fi
 
 # M9f — THE STAMP MOVES TO THE BACKOFF BRANCH, where the guard ALLOWS a Stop it could not
@@ -2537,63 +2744,24 @@ fi
 #       deleting it -- which is what separates this mutant from m9e.
 if mkmut m9f-stamp-on-backoff "$CONF" \
      -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@'; then
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
-  # MAX_RAPID_BLOCKS consecutive blocks inside the rapid window, so the backoff releases.
-  #
-  # `drive` CANNOT REACH THIS BRANCH AND THAT IS DELIBERATE ON ITS PART: it clears
-  # handoff-guard-state.txt before every call, because a tree driven four times by the ordinary
-  # cases would start ALLOWING and read exactly like an arm standing down. Here the counter IS
-  # the subject, so this one mutant drives the hook raw. Without the raw form the mutant
-  # survives against a correct fixture -- measured -- which reads as an arm that cannot fire.
-  _i=0
-  while [ "$_i" -lt 5 ]; do
-    jq -nc --arg t "$T_REQ_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
-    | CLAUDE_PROJECT_DIR="$P_DISK" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-      bash "$MUT_DIR/ai-dlc-continue.sh" >/dev/null 2>&1
-    _i=$((_i + 1))
-  done
-  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
-  [ "$_st" = present ] && ok "  mutant [m9f] KILLED by assertion (c5): the BACKOFF branch now stamps, so a handoff that failed every arm records itself complete" \
-                       || bad "MUTANT SURVIVED [m9f]: the backoff branch left no stamp — (c5)'s unsatisfied cell does not read the writer's siting, so that assertion proves nothing"
-  dsetup
-  snap_at "$P_DISK"
-  rm -f "$(HC "$P_DISK")"
-  sleep 1
-  : > "$P_DISK/_bmad-output/.driver/handoff"
-  drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR" >/dev/null
-  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
-  [ "$_st" = present ] && ok "  control [m9f]: the SATISFIED branch still stamps under the same mutant — the writer was moved, not duplicated away" \
-                       || bad "MUTANT TOO BROAD [m9f]: the satisfied branch stopped stamping too — the mutation removed the writer and the kill above is m9e's, not this one's"
-  mut_ctl m9f "$MUT_DIR"
+  mscore "${B_c5k:-0}" m9f c5k c5b
 fi
 
 # M10 — drop the session-id conjunct in the awk. Killed by (q).
 if mkmut m10-any-session "$LIBF" -e 's|if (index(.0, sess) > 0) mine=1|mine=1|'; then
-  log_two_row "$LG" "$SESS_A" "$P_INTENT" "$P_AFTER"
-  rsetup "$P_REC" "$SNAP_PLAIN" yes no "$LG"
-  kill_rec m10 "$MUT_DIR" "$P_REC" "$SESS_B" "$STEP_HANDOFF" \
-    "assertion (q): another session's rows now reroute this recovery"
-  mut_ctl m10 "$MUT_DIR"
+  mscore "${B_q:-0}" m10 q l
 fi
 
 # M11 — let the lead-authored `- Question` line feed the intent text. Killed by (j).
 if mkmut m11-question-feeds-intent "$LIBF" \
      -e 's|^    inb && /\^-.*(Prompt.*{$|    inb \&\& /^-[[:space:]]+(Prompt\|Answer\|Question)[^:]*:/ {|'; then
-  log_answer "$LG" "$SESS_A" "$Q_INTENT" "$P_NOINTENT"
-  dsetup "$LG"
-  kill_stop m11 "$MUT_DIR" block "assertion (j): the lead's own question now routes the guard"
-  mut_ctl m11 "$MUT_DIR"
+  mscore "${B_j:-0}" m11 j gphrase
 fi
 
 # M12 — drop the exclusion-pattern conjunct. Killed by (i).
 if mkmut m12-no-exclusion "$LIBF" \
      -e 's|&& ! grep -qiE "$_hm" <<<"$_row"; then$|\&\& true; then|'; then
-  log_prompt "$LG" "$SESS_A" "$P_DISCUSS"
-  dsetup "$LG"
-  kill_stop m12 "$MUT_DIR" block "assertion (i): mechanism discussion now BLOCKS"
-  mut_ctl m12 "$MUT_DIR"
+  mscore "${B_i:-0}" m12 i gphrase
 fi
 
 # M20 — THE REGRESSION MUTANT FOR THE INCIDENT THIS RELEASE FIXES. Apply the exclusion to the
@@ -2605,15 +2773,7 @@ fi
 #       scope and did not disable the key.
 if mkmut m20-session-wide-exclusion "$LIBF" \
      -e 's|&& ! grep -qiE "$_hm" <<<"$_row"; then$|\&\& ! grep -qiE "$_hm" <<<"$_prose"; then|'; then
-  log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_BARE"
-  dsetup "$LG"
-  kill_stop m20 "$MUT_DIR" allow "assertion (g3): the slash-command row vetoes the request row again, and the resumed session's handoff is ALLOWED to end incomplete"
-  log_prompt "$LG" "$SESS_A" "$P_BARE"
-  dsetup "$LG"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  control [m20]: the single-row request still BLOCKS under the same mutant — it widened the veto's scope, it did not disable key 3" \
-                   || bad "MUTANT TOO BROAD [m20]: the single-row request stopped blocking too ($r) — the mutation disabled key 3 outright and (g3)'s kill is unattributable"
-  mut_ctl m20 "$MUT_DIR"
+  mscore "${B_g3:-0}" m20 g3 g2
 fi
 
 # --- ai-dlc-continue.sh: the driver-signal and marker arms -------------------------------
@@ -2621,153 +2781,67 @@ fi
 #       removed must BLOCK with the step-4 text, and under this mutant it ALLOWS.
 if mkmut m21-no-driver-arm "$CONF" \
      -e 's|^    if \[ ! -f "$_drv" \]; then$|    if false; then|'; then
-  reset_state "$P_PUSHED"
-  rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
-  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m21] KILLED by assertion (d1): with the driver arm gone a handoff that skipped step 4's touch ends the session" \
-                   || bad "MUTANT SURVIVED [m21]: expected allow, got $r — (d1) does not depend on the driver arm, so that assertion proves nothing"
-  # The marker arm must be UNAFFECTED, or the two new arms are one arm wearing two names.
-  reset_state "$P_DISK"; mkmarker "$P_DISK"
-  rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  has "$rr" "$MARKER_MARK" && ok "  control [m21]: the marker arm still BLOCKS with the step-5 text under the same mutant — the two arms are separable" \
-                           || bad "MUTANT TOO BROAD [m21]: the marker case no longer blocks on step 5 either — removing the driver arm took the marker arm with it, so (d2) is entangled with (d1)"
-  mut_ctl m21 "$MUT_DIR"
+  mscore "${B_d1:-0}" m21 d1 d2
 fi
 
 # M23 — the driver arm accepts a STALE signal (the `-nt` clause removed). Killed by (d4) alone:
 #       every other driver case removes or creates the file, so only the back-dated one sees it.
 if mkmut m23-driver-presence-only "$CONF" \
      -e 's|^    elif \[ -f "$SNAPSHOT_FILE" \] && \[ "$SNAPSHOT_FILE" -nt "$_drv" \]; then$|    elif false; then|'; then
-  reset_state "$P_PUSHED"
-  touch -t 202001010000 "$P_PUSHED/_bmad-output/.driver/handoff"
-  printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\n' > "$P_PUSHED/_bmad-output/pipeline-snapshot.md"
-  touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
-  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m23] KILLED by assertion (d4): a presence-only arm accepts the previous handoff's stale signal" \
-                   || bad "MUTANT SURVIVED [m23]: expected allow, got $r — (d4) does not depend on the freshness clause, so that assertion proves nothing"
-  reset_state "$P_PUSHED"; rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
-  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  control [m23]: the ABSENT signal still BLOCKS under the same mutant — it removed freshness, not presence" \
-                   || bad "MUTANT TOO BROAD [m23]: the absent signal stopped blocking too ($r) — the mutation disabled the whole driver arm and (d4)'s kill is unattributable"
-  reset_state "$P_PUSHED"
-  mut_ctl m23 "$MUT_DIR"
+  mscore "${B_d4:-0}" m23 d4 d1
 fi
 
 # M24 — the sticky arming never reads its record. Killed by (d5) alone: (d3)'s state, then the
 #       marker cleared with the driver signal untouched, must still block, and under this mutant
 #       nothing arms the second Stop.
 if mkmut m24-no-sticky-arm "$CONF" -e 's|^      HANDOFF_STICKY=1$|      HANDOFF_STICKY=0|'; then
-  reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"
-  mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
-  drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR" >/dev/null       # the first, key-1-armed Stop
-  rm -f "$P_DISK/_bmad-output/.handoff-in-progress" "$P_DISK/_bmad-output/handoff-guard-state.txt"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m24] KILLED by assertion (d5): with the record unread, clearing the marker first escapes both new arms" \
-                   || bad "MUTANT SURVIVED [m24]: expected allow, got $r — (d5) does not depend on the sticky arming, so that assertion proves nothing"
-  reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"
-  mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  control [m24]: the key-1-armed first Stop still BLOCKS under the same mutant — it removed the sticky arming, not the keys" \
-                   || bad "MUTANT TOO BROAD [m24]: the key-1 Stop stopped blocking too ($r)"
-  reset_state "$P_DISK"
-  mut_ctl m24 "$MUT_DIR"
+  mscore "${B_d5:-0}" m24 d5 d5first
 fi
 
 # M31 — THE TRANSCRIPT GATE RESTORED, which is the pre-fix hook. Killed by (nt1) and (nt2):
 #       a transcript-less Stop with an on-disk key never enters the guard.
 if mkmut m31-transcript-gate "$CONF" \
      -e 's@^if \[ "$HANDOFF_VOCAB_OK" = "1" \] && { @if [ "$HANDOFF_VOCAB_OK" = "1" ] \&\& [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] \&\& { @'; then
-  log_prompt "$LG" "$SESS_A" "$P_INTENT"
-  dsetup "$LG"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
-  r="$(ntdisk "$MUT_DIR")"
-  [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt1): with the transcript gate back, key 3 with no transcript ends the session" \
-                   || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt1) does not depend on the entry test"
-  # The driver signal is removed: with it fresh and no transcript, Check 0f's fail-closed block
-  # (BL-700) would answer this Stop whatever Check 0's entry test says.
-  dsetup "" yes; rm -f "$P_DISK/_bmad-output/.driver/handoff"
-  r="$(ntdisk "$MUT_DIR")"
-  [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt2): key 1 with no transcript is skipped too" \
-                   || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt2) does not depend on the entry test"
-  mut_ctl m31 "$MUT_DIR"
+  mscore "${B_nt1:-0}" m31 nt1 k
 fi
 
 # M32 — THE NAIVE HOIST: the gate opened, but the resume arm still parsed from an unread
 #       transcript. Killed by (nt3) alone, which is what makes the unknown reading load-bearing.
 if mkmut m32-resume-from-unread "$CONF" \
      -e 's@^    \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \] || RESUME_OK=1$@    : # resume computed from the unread transcript@'; then
-  log_prompt "$LG" "$SESS_A" "$P_INTENT"
-  dsetup "$LG"
-  rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "$MUT_DIR")")"
-  has "$rr" "$RESUME_MARK" && ok "  mutant [m32] KILLED by assertion (nt3): every transcript-less Stop with a key blocks for a resume block nobody read" \
-                           || bad "MUTANT SURVIVED [m32]: expected the resume block text, got $([ -n "$rr" ] && echo "different text" || echo "allow") — (nt3) does not depend on the unknown reading"
-  mut_ctl m32 "$MUT_DIR"
+  mscore "${B_nt3:-0}" m32 nt3 k
 fi
 
 # M33 — THE STAMP WRITTEN WITH NO TRANSCRIPT. Killed by (nt3)'s stamp arm alone.
 if mkmut m33-stamp-without-transcript "$CONF" \
      -e 's@^      if \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \]; then$@      if true; then@'; then
-  log_prompt "$LG" "$SESS_A" "$P_INTENT"
-  dsetup "$LG"
-  r="$(ntdisk "$MUT_DIR")"
-  { [ "$r" = allow ] && [ -f "$(HC "$P_DISK")" ]; } \
-    && ok "  mutant [m33] KILLED by assertion (nt3): the unverified ALLOW now discharges key 2" \
-    || bad "MUTANT SURVIVED [m33]: $r with stamp $([ -f "$(HC "$P_DISK")" ] && echo present || echo absent) — (nt3)'s stamp arm does not depend on the transcript condition"
-  mut_ctl m33 "$MUT_DIR"
+  mscore "${B_nt3s:-0}" m33 nt3s k
 fi
 
 # M34 — THE STICKY RECORD NO LONGER ENTERS. Killed by (nt5) alone.
 if mkmut m34-sticky-not-entry "$CONF" \
      -e 's@^     || \[ -f "${LOG_DIR}/.handoff-guard-armed" \]; }; then$@     || false; }; then@'; then
-  dsetup; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
-  r="$(ntdisk "$MUT_DIR")"
-  [ "$r" = allow ] && ok "  mutant [m34] KILLED by assertion (nt5): with the record not an entry condition, a transcript-less sticky Stop escapes" \
-                   || bad "MUTANT SURVIVED [m34]: expected allow, got $r — (nt5) does not depend on the sticky entry conjunct"
-  dsetup
-  mut_ctl m34 "$MUT_DIR"
+  mscore "${B_nt5:-0}" m34 nt5 k
 fi
 
 # M35 — THE ARMING RECORD REMOVED ON AN UNVERIFIED ALLOW. Killed by (nt6) alone: the
 #       transcript-less satisfied Stop deletes the record, and the next Stop is unarmed.
 if mkmut m35-unconditional-disarm "$CONF" \
      -e 's@^      \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \] && rm -f "$HANDOFF_ARMED_FILE"$@      rm -f "$HANDOFF_ARMED_FILE"@'; then
-  dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
-  ntdisk "$MUT_DIR" >/dev/null
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m35] KILLED by assertion (nt6): with the removal unconditional, the no-transcript ALLOW disarms and the resume-less Stop escapes" \
-                   || bad "MUTANT SURVIVED [m35]: expected allow, got $r — (nt6) does not depend on the transcript condition on the record's removal"
-  dsetup
-  mut_ctl m35 "$MUT_DIR"
+  mscore "${B_nt6:-0}" m35 nt6 k
 fi
 
 # M22 — the marker arm never fires. Killed by (d2) alone.
 if mkmut m22-no-marker-arm "$CONF" \
      -e 's|^    \[ -f "${LOG_DIR}/.handoff-in-progress" \] && MARKER_OK=0$|    : # marker arm removed|'; then
-  reset_state "$P_DISK"; mkmarker "$P_DISK"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  [ "$r" = allow ] && ok "  mutant [m22] KILLED by assertion (d2): with the marker arm gone a handoff that never cleared its entry marker ends the session" \
-                   || bad "MUTANT SURVIVED [m22]: expected allow, got $r — (d2) does not depend on the marker arm, so that assertion proves nothing"
-  reset_state "$P_PUSHED"; rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
-  rr="$(reason "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
-  has "$rr" "$DRIVER_MARK" && ok "  control [m22]: the driver arm still BLOCKS with the step-4 text under the same mutant — the two arms are separable" \
-                           || bad "MUTANT TOO BROAD [m22]: the driver case no longer blocks on step 4 either — removing the marker arm took the driver arm with it"
-  mut_ctl m22 "$MUT_DIR"
+  mscore "${B_d2:-0}" m22 d2 d1
 fi
 
 # M13 — apply the intent regex to the whole log LINE rather than the extracted field VALUE.
 #       Killed by (g2) alone: every other seed's prose matches as a substring anywhere in the
 #       line, so only the anchored bare word can see this. ALLOW-shaped kill.
 if mkmut m13-line-not-value "$LIBF" -e 's|^      line=.0; sub(.*$|      line=$0; buf = buf line "\\n"|'; then
-  log_prompt "$LG" "$SESS_A" "$P_BARE"
-  dsetup "$LG"
-  kill_stop m13 "$MUT_DIR" allow "assertion (g2): the bare-word request is now read as a non-instance"
-  # AND THE SAME MUTANT ON THE PHRASE SEED, which it does NOT change. Without this the kill
-  # above is equally consistent with a mutant that disabled key 3 outright.
-  log_prompt "$LG" "$SESS_A" "$P_INTENT"
-  dsetup "$LG"
-  r="$(disk "$SESS_A" "$MUT_DIR")"
-  [ "$r" = block ] && ok "  control [m13]: the phrase seed still BLOCKS under the same mutant — it broke the ANCHORED alternative specifically, not the key" \
-                   || bad "MUTANT TOO BROAD [m13]: the phrase seed stopped blocking too ($r) — the mutation disabled key 3 outright and (g2)'s kill is unattributable"
-  mut_ctl m13 "$MUT_DIR"
+  mscore "${B_g2:-0}" m13 g2 gphrase
 fi
 
 # M25 — THE REGRESSION MUTANT FOR PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING.
@@ -2788,60 +2862,24 @@ MUT_SCHEMA="$ROOT/mut-m25-pause-routing.json"
 jq --arg alt "|$ALT_TERSE" '.handoff_intent_pattern |= rtrimstr($alt)' "$SCHEMA" > "$MUT_SCHEMA" 2>/dev/null
 _m25_re="$(jq -rj '.handoff_intent_pattern // ""' "$MUT_SCHEMA" 2>/dev/null)"
 if [ -z "$_m25_re" ]; then
-  bad "MUTANT HARNESS BROKEN [m25]: the declaration copy did not parse or carries no pattern — the kill below is unreadable"
+  bad "MUTANT HARNESS BROKEN [m25]: the declaration copy did not parse or carries no pattern — the score below is unreadable"
 elif cmp -s "$SCHEMA" "$MUT_SCHEMA"; then
   bad "FIXTURE STALE: mutation m25 matched nothing — handoff_intent_pattern no longer ENDS with the byte-exact alternative ALT_TERSE names (it was respelled, moved, or followed by another alternative). This is a byte-lock on the shipped spelling, not a claim that the fix is wrong: re-anchor ALT_TERSE on the declaration as shipped and re-run the seed-premise arms, never relax this assertion"
 else
   ok "  mutant [m25] built: the declaration copy differs from the shipped one and still parses"
-  log_prompt "$LG" "$SESS_A" "$P_TERSE"
-  dsetup "$LG"
-  _m25_saved="$SCHEMA"; SCHEMA="$MUT_SCHEMA"
-  r="$(disk "$SESS_A")"
+  _m25_saved="$SCHEMA"; SCHEMA="$MUT_SCHEMA"; MUT_DIR="$HOOKS_DIR"
+  mscore "${B_g4:-0}" m25 g4 gphrase
+  # The bare word is a non-instance under this copy BY CONSTRUCTION (arm g2 reads BLOCK on the
+  # shipped declaration): its only carrier is the start-of-field branch of the alternative the copy
+  # strips. Asserted so that a later reinstatement of a separate whole-field alternative is noticed
+  # here rather than silently doubling the grammar. The transcript reader (arm g4t) moves with it
+  # for the same reason: one declaration, two readers.
+  if [ "$(armv g2 "$MUT_DIR")" = 0 ]; then
+    ok "  the bare word is ALLOWED under the copy — the final-sentence alternative is the bare word's only carrier, so the two forms are one alternative"
+  else
+    bad "  the bare word still BLOCKED under the copy — a second whole-field alternative has been reinstated beside the final-sentence one, and the grammar now spells the terse form twice"
+  fi
   SCHEMA="$_m25_saved"
-  [ "$r" = allow ] && ok "  mutant [m25] KILLED by assertion (g4): with the final-sentence alternative gone the trailing terse request is a non-instance again" \
-                   || bad "MUTANT SURVIVED [m25]: expected allow, got $r — (g4) does not depend on the final-sentence alternative, so that assertion proves nothing"
-  dsetup
-  SCHEMA="$MUT_SCHEMA"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_TERSE_NOBLK")")"
-  SCHEMA="$_m25_saved"
-  [ "$r" = allow ] && ok "  and the transcript reader moves with it (ALLOW) — one declaration, two readers, one mutation" \
-                   || bad "MUTANT SURVIVED [m25] on the transcript reader: expected allow, got $r — the transcript arm is matching on something other than the declaration"
-  # THE SAME COPY ON THE VERB-PHRASE SEED, which it does NOT change. Without this the kills
-  # above are equally consistent with a copy that disabled key 3 or the vocabulary outright.
-  log_prompt "$LG" "$SESS_A" "$P_INTENT"
-  dsetup "$LG"
-  SCHEMA="$MUT_SCHEMA"
-  r="$(disk "$SESS_A")"
-  SCHEMA="$_m25_saved"
-  [ "$r" = block ] && ok "  control [m25]: the verb phrase '$P_INTENT' still BLOCKS under the same copy — it removed one alternative, not key 3" \
-                   || bad "MUTANT TOO BROAD [m25]: the verb phrase stopped blocking too ($r) — the copy disabled the vocabulary outright and (g4)'s kill is unattributable"
-  # AND THE BARE WORD IS A NON-INSTANCE UNDER THIS COPY, BY CONSTRUCTION: its only carrier is
-  # the start-of-field branch of the alternative the copy strips. Asserted so that a later
-  # reinstatement of a separate whole-field alternative is noticed here rather than silently
-  # doubling the grammar.
-  log_prompt "$LG" "$SESS_A" "$P_BARE"
-  dsetup "$LG"
-  SCHEMA="$MUT_SCHEMA"
-  r="$(disk "$SESS_A")"
-  SCHEMA="$_m25_saved"
-  [ "$r" = allow ] && ok "  and the bare word is ALLOWED under the copy — the final-sentence alternative is the bare word's only carrier, so the two forms are one alternative" \
-                   || bad "  the bare word still BLOCKED under the copy ($r) — a second whole-field alternative has been reinstated beside the final-sentence one, and the grammar now spells the terse form twice"
-  # AND THE SAME COPY THROUGH THE TRANSCRIPT CHANNEL. The control above drives KEY 3 and is
-  # blind to the other reader, while the transcript kill is ALLOW-shaped -- so a hook whose
-  # transcript arm is dead satisfies that cell and the fixture prints "one declaration, two
-  # readers" over a single reader. MEASURED: with the transcript arm's intent grep replaced by
-  # `false` in a copy of ai-dlc-continue.sh, the on-disk control still passed and the
-  # transcript cell still scored a kill. This arm is PRESENCE-shaped in that channel, on the
-  # verb phrase the mutation does not touch, so the ALLOW above can only be the mutation.
-  T_PHRASE_NOBLK="$ROOT/t_phrase_noblk.jsonl"
-  jq -nc --arg u "$P_INTENT" '{message:{role:"user",content:$u}}' > "$T_PHRASE_NOBLK"
-  jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_PHRASE_NOBLK"
-  dsetup
-  SCHEMA="$MUT_SCHEMA"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PHRASE_NOBLK")")"
-  SCHEMA="$_m25_saved"
-  [ "$r" = block ] && ok "  control [m25] through the TRANSCRIPT: the verb phrase as the last user turn still BLOCKS under the same copy — that reader is alive, so its ALLOW above is the mutation and not a dead channel" \
-                   || bad "MUTANT HARNESS BROKEN [m25]: the transcript reader did not block the verb phrase either ($r) — it is not reading, and the transcript kill above is unreadable"
 fi
 
 # M26 — the transcript reader matches PER LINE again: strip the newline collapse from
@@ -2849,15 +2887,7 @@ fi
 #       middle line ends in the terse form BLOCKS under the copy. Control: (g5)'s last-line
 #       sibling still BLOCKS, so the copy reads the transcript and the kill is the anchor's.
 if mkmut m26-per-line-transcript "$CONF" -e "s/; } | tr '\\\\n' ' ')\$/; })/"; then
-  dsetup
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PASTED_NOBLK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  mutant [m26] KILLED by assertion (g5): with the collapse gone the middle line matches on its own and the pasted filing BLOCKS" \
-                   || bad "MUTANT SURVIVED [m26]: expected block, got $r — (g5) does not depend on the newline collapse, so that assertion proves nothing"
-  dsetup
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_LASTLINE_NOBLK" "$MUT_DIR")")"
-  [ "$r" = block ] && ok "  control [m26]: the last-line request still BLOCKS under the same copy — the copy runs and reads the transcript" \
-                   || bad "MUTANT HARNESS BROKEN [m26]: the last-line request stopped blocking ($r) — the copy is not reading the transcript, and the kill above is unreadable"
-  mut_ctl m26 "$MUT_DIR"
+  mscore "${B_g5:-0}" m26 g5 g5last
 fi
 
 # --- ai-dlc-recover.sh: the override ------------------------------------------------------
@@ -2872,55 +2902,30 @@ fi
 #       property (s) is about.
 if mkmut m14-override-dir-not-file "$RECF" \
      -e 's|^      if \[ -r "${PROJECT_DIR}/${_hcand}/handoff.md" \]; then$|      if [ -d "${PROJECT_DIR}/${_hcand}" ]; then|'; then
-  rsetup "$P_REC" "$SNAP_PLAIN" yes yes
-  mv "$P_REC/$STEP_HANDOFF" "$P_REC/${STEP_HANDOFF}.hidden"
-  kill_rec m14 "$MUT_DIR" "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
-    "assertion (s): the mandate now names a handoff.md that is not on disk"
-  mv "$P_REC/${STEP_HANDOFF}.hidden" "$P_REC/$STEP_HANDOFF"
-  mut_ctl m14 "$MUT_DIR"
+  mscore "${B_s:-0}" m14 s l
 fi
 
 # --- ai-dlc-handoff-entry.sh: the producer of key 1 ---------------------------------------
 # Each of these is driven with the mutated copy and then, in the same tree, with a Read of
 # steps/handoff.md that must still create the marker -- so a copy that died on load cannot
 # score a kill on an absence.
-ment() { # ment <name> <mutdir> <tool> <path> <want: marker|no-marker> <killmsg>
-  rm -f "$P_ENTRY/_bmad-output/.handoff-in-progress"
-  local rc; rc="$(edrive "$P_ENTRY" "$3" "$4" "$2")"
-  local got=no-marker; marker_at "$P_ENTRY" && got=marker
-  if [ "$rc" != "0" ]; then
-    bad "MUTANT HARNESS BROKEN [$1]: the copy exited $rc — it is not running and the kill is unreadable"
-  elif [ "$got" = "$5" ]; then
-    ok "  mutant [$1] KILLED by $6"
-  else
-    bad "MUTANT SURVIVED [$1]: expected $5, got $got — $6 does not depend on the mutated code"
-  fi
-  rm -f "$P_ENTRY/_bmad-output/.handoff-in-progress"
-  rc="$(edrive "$P_ENTRY" Read "$P_ENTRY/core/skills/ai-dlc/steps/handoff.md" "$2")"
-  { [ "$rc" = 0 ] && marker_at "$P_ENTRY"; } \
-    && ok "  control [$1]: the same copy still marks a Read of steps/handoff.md — it loads and runs" \
-    || bad "MUTANT HARNESS BROKEN [$1]: the copy no longer marks its own subject either (exit $rc)"
-}
 ENTF="ai-dlc-handoff-entry.sh"
 
 # M15 — the path match loses its `steps/` segment, so any file NAMED handoff.md arms the guard.
 #       Killed by (e2b). Anchored on the basename rather than widened to `*)`, which would move
 #       (e2) as well and leave neither arm owning the case.
 if mkmut m15-any-handoff-basename "$ENTF" -e 's|^  \*/steps/handoff.md) : ;;$|  *handoff.md) : ;;|'; then
-  ment m15 "$MUT_DIR" Read "$P_ENTRY/docs/handoff.md" marker \
-    "assertion (e2b): a consumer's own docs/handoff.md now arms the handoff guard"
+  mscore "${B_e2b:-0}" m15 e2b e1
 fi
 
 # M16 — the path match loses its BASENAME, so any step file arms the guard. Killed by (e2).
 if mkmut m16-any-step-file "$ENTF" -e 's|^  \*/steps/handoff.md) : ;;$|  */steps/*) : ;;|'; then
-  ment m16 "$MUT_DIR" Read "$P_ENTRY/core/skills/ai-dlc/steps/implementation.md" marker \
-    "assertion (e2): reading an ordinary step file now writes the handoff marker"
+  mscore "${B_e2:-0}" m16 e2 e1
 fi
 
 # M17 — drop the tool-name check, so an Edit counts as entering the procedure. Killed by (e3).
 if mkmut m17-any-tool "$ENTF" -e 's@^\[ "$TOOL" = "Read" \] || exit 0$@: # tool check removed@'; then
-  ment m17 "$MUT_DIR" Edit "$P_ENTRY/core/skills/ai-dlc/steps/handoff.md" marker \
-    "assertion (e3): editing the step file now writes the marker"
+  mscore "${B_e3:-0}" m17 e3 e1
 fi
 
 # --- THE RECOVERY SUPPRESSION (e6)-(e13) --------------------------------------------------
@@ -2938,49 +2943,13 @@ fi
 # with a PRESENCE-shaped control in the same tree: a copy that died on load, or one that
 # simply stopped writing markers, produces the identical absence and would score every
 # no-marker expectation for free.
-mseq() { # mseq <name> <mutdir> <projdir> <read-path> <want> <killmsg>
-  local got
-  got="$(seq_read "$3" "$4" "$2")"
-  if [ "$got" = "$5" ]; then
-    ok "  mutant [$1] KILLED by $6"
-  else
-    bad "MUTANT SURVIVED [$1]: expected $5, got $got — $6 does not depend on the mutated code"
-  fi
-  # The control: same copy, same tree, NO recovery state at all, which must arm.
-  #
-  # `rclean` IS LOAD-BEARING HERE AND m30 IS WHY. That mutant's whole defect is that it does
-  # NOT consume the breadcrumb, so the file its own verdict was scored against is still on
-  # disk when the control runs — and the control then reads a suppressed state and reports
-  # MUTANT HARNESS BROKEN over a mutant that had just been killed correctly. A control that
-  # inherits the residue of the case it is controlling for is not a control.
-  reset_state "$3"; rclean "$3"
-  cp "$SNAP_PLAIN" "$3/_bmad-output/pipeline-snapshot.md"
-  touch "$3/_bmad-output/pipeline-paused.flag"
-  [ "$(seq_read "$3" "$3/$STEP_HANDOFF" "$2")" = marker ] \
-    && ok "  control [$1]: the same copy still marks an unsuppressed Read — it loads and runs" \
-    || bad "MUTANT HARNESS BROKEN [$1]: the copy marks nothing at all; the verdict above is a property of the copy rather than of the mutation"
-}
-# Rebuilds the suppressed world (recovery in flight, gate at its SECOND mandate) using the
-# MUTANT's hooks, so a mutation to the gate's breadcrumb write is exercised where it lives.
-mseq_arm() { # mseq_arm <projdir> <mutdir>
-  reset_state "$1"
-  cp "$SNAP_PLAIN" "$1/_bmad-output/pipeline-snapshot.md"
-  touch "$1/_bmad-output/pipeline-paused.flag"
-  mkmarker "$1" "$2"
-  rdrive "$1" "$SESS_A" "$2" >/dev/null
-  local _sn; _sn="$(sed -n 's/^snapshot_path=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
-  [ -n "$_sn" ] && gdrive "$1" Read "$1/$_sn" "$2" >/dev/null
-  return 0
-}
 GATEF="ai-dlc-recover-gate.sh"
 
 # M27 — THE SUPPRESSION IS REMOVED, which is the pre-fix hook. Killed by (e6): a
 #       recovery-mandated Read arms again. ANCHORED ON THE `case` ARM'S EXIT, because that
 #       exit IS the suppression and it survives any rewording of the breadcrumb's name.
 if mkmut m27-no-recovery-suppression "$ENTF" -e 's@^        exit 0 ;;$@        : ;;@'; then
-  _M27="$MUT_DIR"; mseq_arm "$P_REC" "$_M27"
-  mseq m27 "$_M27" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
-    "assertion (e6): with the suppression gone a Read the recovery COMPELLED writes the entry marker again, so a session that merely compacted while paused arms the Stop guard over a procedure it never began"
+  mscore "${B_e6:-0}" m27 e6 e7
 fi
 
 # M28 — THE KEY GOES BACK TO `.recover-fired`, WHICH IS THE FIRST CUT'S DEFECT IN FULL and
@@ -2990,9 +2959,7 @@ fi
 #       in shipped order, which is what makes this mutant the receipt for `seq_read`.
 if mkmut m28-key-on-the-deleted-marker "$ENTF" \
      -e 's@^_RS="${STATE_DIR}/\.recover-satisfied"$@_RS="${STATE_DIR}/.recover-fired"@'; then
-  _M28="$MUT_DIR"; mseq_arm "$P_REC" "$_M28"
-  mseq m28 "$_M28" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
-    "assertion (e6): keyed on .recover-fired the suppression is UNREACHABLE — the gate removed that file one PreToolUse earlier, so on a real consumer the test reads a file that is already gone"
+  mscore "${B_e6:-0}" m28 e6 e7
 fi
 
 # M29 — THE GATE STOPS WRITING THE BREADCRUMB. The entry hook is untouched; the state it
@@ -3001,9 +2968,7 @@ fi
 #       is why `mseq_arm` rebuilds the world with the mutant's own hooks.
 if mkmut m29-gate-writes-no-breadcrumb "$GATEF" \
      -e 's@^        printf .step_file=%s\\n. "\$STEP_REL" > "\${STATE_DIR}/\.recover-satisfied" 2>/dev/null || true$@        : # breadcrumb not written@'; then
-  _M29="$MUT_DIR"; mseq_arm "$P_REC" "$_M29"
-  mseq m29 "$_M29" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
-    "assertion (e6): with the gate no longer handing the satisfying call forward, the entry hook has nothing to decide from and arms on a compelled Read"
+  mscore "${B_e6:-0}" m29 e6 e7
 fi
 
 # M30 — THE BREADCRUMB IS NOT CONSUMED. It stays on disk and answers for a LATER Read of the
@@ -3012,10 +2977,7 @@ fi
 #       only arm that reads the file twice.
 if mkmut m30-breadcrumb-not-consumed "$ENTF" \
      -e 's@^  rm -f "\$_RS" 2>/dev/null || true$@  : # breadcrumb left on disk@'; then
-  _M30="$MUT_DIR"; mseq_arm "$P_REC" "$_M30"
-  seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$_M30" >/dev/null   # the mandated Read
-  mseq m30 "$_M30" "$P_REC" "$P_REC/$STEP_HANDOFF" no-marker \
-    "assertion (e10): the breadcrumb survives its own read, so an immediate voluntary re-open is taken for the mandated call and the lead's real initiation is silently unmarked"
+  mscore "${B_e10:-0}" m30 e10 e6
 fi
 
 # M-E8G — THE GATE'S handoff.md CARVE-OUT IS REMOVED, so its snapshot-stage step-Read allow (BL-687)
@@ -3025,34 +2987,16 @@ fi
 if grep -qxF '        */steps/handoff.md|steps/handoff.md) : ;;' "$HOOKS_DIR/$GATEF" 2>/dev/null \
    && mkmut m-e8g-gate-handoff-carve-out-removed "$GATEF" \
      -e 's@^        \*/steps/handoff\.md|steps/handoff\.md) : ;;$@        */steps/handoff.md|steps/handoff.md) exit 0 ;;@'; then
-  _ME8G="$(e8g_run "$P_REC" "$MUT_DIR")"
-  if [ "$_ME8G" = "allow marker" ]; then
-    ok "  mutant [m-e8g] KILLED by assertion (e8g): with the carve-out gone the gate allows a first-call handoff.md Read and the entry hook arms key 1 from it"
-  else
-    bad "MUTANT SURVIVED [m-e8g]: expected 'allow marker', got '${_ME8G}' — (e8g) does not depend on the gate's handoff.md carve-out"
-  fi
+  mscore "${B_e8g:-0}" m-e8g e8g e7
 fi
 
 
 # LEAD-ONLY EXIT (A1, A2, A2b, A3). Each mutant is driven through `tcase` with all four cells and
 # must flip EXACTLY the cell it owns; the twin cells it does not own are the positive controls.
-mlead() { # mlead <name> <mutdir> <a1> <a2> <a2b> <a3> <killmsg> — expected tcase result per cell
-  local d="$2" r1 r2 r2b r3 want_ok=1
-  r1="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$d" no)"
-  r2="$(tcase "$P_ENTRY" - - "$d" no)"
-  r2b="$(tcase "$P_ENTRY" - general-purpose "$d" no)"
-  r3="$(tcase "$P_ENTRY" agent-0123456789abcdef general-purpose "$d" yes)"
-  if [ "$r1" = "$3" ] && [ "$r2" = "$4" ] && [ "$r2b" = "$5" ] && [ "$r3" = "$6" ]; then
-    ok "  mutant [$1] KILLED by $7"
-  else
-    bad "MUTANT [$1] cells A1='$r1' A2='$r2' A2b='$r2b' A3='$r3' — wanted A1='$3' A2='$4' A2b='$5' A3='$6': $7 does not depend on the mutated code, or the mutation touched more than its own cell"
-  fi
-}
 # M-LEAD1 — THE agent_id EXIT IS GONE, which is the pre-fix hook. Killed by A1 (and A3, which
 #           reads the same teammate world). A2 and A2b are the lead worlds and must still arm.
 if mkmut m-lead1-no-agent-exit "$ENTF" -e 's@^\[ -z "$AID" \] || exit 0$@: # agent_id exit removed@'; then
-  mlead m-lead1 "$MUT_DIR" "marker no-crumb 0" "marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" \
-    "assertion (A1): with the exit gone a dispatched teammate's Read arms the lead's project-wide marker again"
+  mscore "${B_A1:-0}" m-lead1 A1 A2 A2b
 fi
 # M-LEAD2 — THE EXIT MOVES BELOW THE BREADCRUMB BLOCK. A teammate still writes no marker (A1
 #           holds) but the block above it has already deleted the lead's breadcrumb. Killed by A3
@@ -3060,14 +3004,12 @@ fi
 if mkmut m-lead2-exit-below-breadcrumb "$ENTF" \
      -e 's@^\[ -z "$AID" \] || exit 0$@: # exit moved below the breadcrumb block@' \
      -e 's@^\[ -d "$STATE_DIR" \] || exit 0$@[ -z "$AID" ] || exit 0; [ -d "$STATE_DIR" ] || exit 0@'; then
-  mlead m-lead2 "$MUT_DIR" "no-marker no-crumb 0" "marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" \
-    "assertion (A3): with the exit below the breadcrumb block a teammate's Read consumes the lead's .recover-satisfied"
+  mscore "${B_A3:-0}" m-lead2 A3 A1 A2
 fi
 # M-LEAD3 — THE EXIT IS KEYED ON agent_id OR agent_type. A claude --agent lead carries agent_type
 #           and no agent_id, so it is silently unmarked. Killed by A2b alone.
 if mkmut m-lead3-keyed-on-agent-type "$ENTF" -e 's@\.agent_id // empty@.agent_id // .agent_type // empty@'; then
-  mlead m-lead3 "$MUT_DIR" "no-marker no-crumb 0" "marker no-crumb 0" "no-marker no-crumb 0" "no-marker crumb 0" \
-    "assertion (A2b): keyed on agent_type a claude --agent lead's Read no longer arms the marker"
+  mscore "${B_A2b:-0}" m-lead3 A2b A1 A2
 fi
 
 # THE UNMUTATED CONTROL, built by the same copy-the-directory machinery as every mutant. A copy
@@ -3084,6 +3026,17 @@ rsetup "$P_REC" "$SNAP_PLAIN" yes yes
 _cs="$(printf '%s' "$(rdrive "$P_REC" "$SESS_A" "$CTLD")" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full.*/\1/p' | head -1)"
 [ "$_cs" = "$STEP_HANDOFF" ] && ok "  control [unmutated]: the same copy still routes a pending recovery to handoff.md" \
                              || bad "MUTANT HARNESS BROKEN: an UNEDITED copy routes a pending recovery to '${_cs:-<nothing>}' — every recover kill above is a property of the copy"
+
+# THE PLAIN-RUN ARM: keyed on the RAW argument vector, not on the parsed flag, so a guard broken open
+# (MATRIX forced on) cannot hide itself. A plain run must have executed no matrix-only cell, and a
+# --matrix run must have executed some.
+case "$RAW_ARGV" in
+  *" --matrix "*)
+    if [ "$MATRIX_CELLS" -gt 0 ]; then ok "matrix mode measured $MATRIX_CELLS cells"; else bad "matrix mode measured no cell"; fi ;;
+  *)
+    if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cells — the matrix guard is open"; fi ;;
+esac
+[ "$MATRIX" = 1 ] && echo "MATRIX cells=$MATRIX_CELLS"
 
 rm -rf "$ROOT"
 echo ""

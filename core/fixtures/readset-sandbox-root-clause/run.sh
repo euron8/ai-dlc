@@ -20,9 +20,31 @@
 # fixture's traced verdict differ from its untraced one, and every trace discarded it. Here the SKIP
 # costs only this small fixture.
 #
-# Usage: run.sh
+# Usage: run.sh [--matrix]
 # Exit:  0 = every arm and mutant holds (or SKIP, stated), 1 = one regressed, 2 = fixture broken.
+#
+# THE MUTANT MATRIX. A cell is one EMITTER of the deriver (def = the default profile, lm = the `--local-map`
+# profile, ov = the AI_DLC_READSET_SANDBOX_PROFILE override), RED on a mutant when that emitter, rendered from the
+# mutated deriver and run under the sandbox, reports root metadata/existence. A mutant's row lists the emitters it
+# breaks (decides) and the emitter it could plausibly co-trip but must leave GREEN (twins). One shared stream window
+# scores every mutant at once, so a twin costs no extra render and no extra stream. The matrix is re-measured
+# whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. It
+# scores every mutant against every emitter and prints one MATRIX line each.
+# MUTANT-MATRIX markdir-default decides=def twins=lm
+# MUTANT-MATRIX markdir-ov-lm decides=lm,ov twins=def
+# MUTANT-MATRIX report-default decides=def twins=ov
+# MUTANT-MATRIX report-lm decides=lm twins=ov
+# MUTANT-MATRIX-DYNAMIC score_mutant why=score_mutant is one body called once per mutant, so the mutant id reaches mutant_killed as $m; every name it produces has its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/readset-sandbox-root-clause/run.sh --matrix
 set -u
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
+# as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "readset-sandbox-root-clause: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
@@ -43,6 +65,11 @@ bad()    { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); ASSERTS=$((ASSERTS 
 broken() { echo "readset-sandbox-root-clause: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
 echo "readset-sandbox-root-clause:"
 echo "HERMETIC-CONSUMED core/scripts/derive-fixture-readsets.sh"
+SELF_FILE="$HERE/$(basename "$0")"
+# The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "readset-sandbox-root-clause: FIXTURE BROKEN: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
 
 CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
 cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }
@@ -95,6 +122,7 @@ else
 fi
 if [ -n "$LS_WHY" ]; then
   printf '  SKIP  rendered sandbox arms: %s\n' "$LS_WHY"
+  if [ "$MODE" = matrix ]; then echo "readset-sandbox-root-clause: MATRIX BROKEN: the rendered arms are SKIPPED here ($LS_WHY), so nothing was measured" >&2; exit 2; fi
   echo
   if [ "$FAILS" -ne 0 ]; then echo "readset-sandbox-root-clause: $FAILS of $ASSERTS FAILED (work kept at $WORK)"; exit 1; fi
   case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac
@@ -167,27 +195,107 @@ OPS='file-read-metadata|file-test-existence'
 
 echo " the deriver's three emitters, rendered and run:"
 b="$(cnt base def "$OPS" '')"
-if [ "$b" -gt 0 ]; then ok "control: the clause-less default profile reports root metadata/existence ($b)"; else bad "control: the clause-less profile reported no root metadata/existence, so a 0 below proves nothing"; fi
+if [ "$b" -gt 0 ]; then ok "control: the clause-less default profile reports root metadata/existence ($b)"; B_ctl=1; else bad "control: the clause-less profile reported no root metadata/existence, so a 0 below proves nothing"; fi
 for e in def lm ov; do
   rm="$(cnt fix "$e" "$OPS" '')"; rd="$(cnt fix "$e" file-read-data '')"; brd="$(cnt fix "$e" file-read-data '/.+')"; bmd="$(cnt fix "$e" "$OPS" '/.+')"
   if [ "$rm" = 0 ] && [ "$rd" -gt 0 ] && [ "$brd" -gt 0 ] && [ "$bmd" -gt 0 ]; then
     ok "$e emitter: root metadata/existence 0, root file-read-data $rd, below-root reads $brd, below-root metadata $bmd"
+    case "$e" in def) B_def=1 ;; lm) B_lm=1 ;; ov) B_ov=1 ;; esac
   else
     bad "$e emitter: root metadata/existence $rm (want 0), root file-read-data $rd, below-root reads $brd, below-root metadata $bmd (each want >0)"
   fi
 done
 
 echo " mutants:"
-for m in markdir-default markdir-ov-lm report-default report-lm; do
-  why=""; ran=1
-  for e in def lm ov; do
-    brd="$(cnt "$m" "$e" file-read-data '/.+')"; [ "$brd" -gt 0 ] || ran=0
-    rm="$(cnt "$m" "$e" "$OPS" '')"; [ "$rm" = 0 ] || why="$why $e:$rm"
+# cell_red <emitter> <mutant>: RED when the emitter rendered from the mutated deriver reports root
+# metadata/existence. Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+cell_red() {
+  case "$1" in def|lm|ov) ;; *) return 2 ;; esac
+  [ "$(cnt "$2" "$1" "$OPS" '')" != 0 ]
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$WORK/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# mx_twins <mutant>: per-push, every twin emitter must be GREEN on the SAME stream window, which costs no render.
+mx_twins() {
+  local m="$1" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$m"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
+    elif [ "$r" -eq 0 ]; then bad "mutant $m: its twin $t also reported root metadata/existence, so the kill is not confined to its own emitter"; fi
   done
+}
+# mx_score <mutant>: MATRIX-ONLY. Scores the mutant against every emitter. It records itself in the ledger first (rule 9).
+mx_score() {
+  local m="$1" dec tw c r uex="" dl="" tl="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    cell_red "$c" "$m"; r=$?
+    if [ "$r" -eq 0 ]; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$c" "$m"; r=$?
+    if [ "$r" -eq 0 ]; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in def lm ov; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$m" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+# score_mutant <flag> <mutant>: the flag is the same-run base pass of the control and of every deciding emitter.
+# The mutant is killed when every deciding emitter reports root metadata/existence. Its twins are checked on the
+# same window. Only the passing branch of the unmutated arms ever sets a flag.
+score_mutant() {
+  local flag="$1" m="$2" dec c ran=1 miss=""
+  for c in def lm ov; do
+    [ "$(cnt "$m" "$c" file-read-data '/.+')" -gt 0 ] || ran=0
+  done
+  dec="$(mx_row "$m" decides)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do cell_red "$c" "$m" || miss="$miss $c"; done
   if [ "$ran" = 0 ]; then bad "mutant $m did not run: an emitter shows no below-root reads"
-  elif [ -n "$why" ]; then ok "mutant $m KILLED (root metadata/existence reported by emitter(s)$why)"
-  else bad "mutant $m SURVIVED"; fi
-done
+  elif [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (root metadata/existence reported by emitter(s) $dec)"
+  else bad "mutant $m SURVIVED (emitter(s)$miss reported no root metadata/existence)"; fi
+  mx_twins "$m"
+  if [ "$MODE" = matrix ]; then mx_score "$m"; fi
+}
+score_mutant "$(( ${B_ctl:-0} && ${B_def:-0} ))" markdir-default
+score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} && ${B_ov:-0} ))" markdir-ov-lm
+score_mutant "$(( ${B_ctl:-0} && ${B_def:-0} ))" report-default
+score_mutant "$(( ${B_ctl:-0} && ${B_lm:-0} ))" report-lm
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "markdir-default markdir-ov-lm report-default report-lm " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  FAILS=$((FAILS + MX_FAILS))
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "readset-sandbox-root-clause: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 echo
 if [ "$FAILS" -ne 0 ]; then

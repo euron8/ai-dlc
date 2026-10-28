@@ -561,8 +561,8 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    buy.
    **`docs/suite-pole-baseline.tsv` was deliberately NOT re-pointed at that release**: the seam
    fixture collapsed 498 -> 57 loaded, but untouched units moved +7%, +13%, +53% and -55% across
-   the same two runs, so no cross-run figure was comparable and the row moves only on a quiet-box
-   calibration. Take three runs and the MAX, as its own header requires.
+   the same two runs, so no cross-run figure was comparable. The baseline row is no longer
+   re-calibrated by timing runs (operator ruling 2026-10-28 17:16 EDT, BL-866).
 
    The calibration below is `v0.583.0`'s and is the row the guard still compares against.
    Calibrated on an unchanged tree by three serial full `AI_DLC_FIXTURE_NO_SKIP=1 bash
@@ -1108,8 +1108,8 @@ measurement is what deprioritised it.
 
 **The consumer rehearsal and the merge. DONE.** A tree built by running `scripts/install.sh`
 into an empty directory received both `layer-contract-conformance` and
-`layer-contract-conformance-b`, and both printed the sibling's SKIP at exit 0. The four
-`.dist-only` shards (`enforcement-map-derivations-b`, `validator-arm-selection`,
+`layer-contract-conformance-b`, and both printed the sibling's SKIP at exit 0. The three
+`.dist-only` shards (`validator-arm-selection`,
 `validator-arm-selection-b`, `validator-fork-budget`) were absent, with the shipped pair as the
 same-invocation positive control. `uninstall.sh --force` exited 0, removed `tests/fixtures/`
 including the `-b` shard, and left `_bmad/`. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`

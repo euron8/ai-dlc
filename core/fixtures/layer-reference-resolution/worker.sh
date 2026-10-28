@@ -2,7 +2,9 @@
 # worker.sh — score ONE mutant, under the inner pool. Invoked by run.sh's Part 5 through
 # `xargs -P`, once per mutant, never by hand.
 #
-# Usage: worker.sh <label> <exprfile> <wantfile> <linter> <cons> <domain> <outdir>
+# Usage: worker.sh <label> <exprfile> <wantfile> <linter> <cons> <domain> <outdir> <cellsfile>
+#   <cellsfile> holds "ALL" (the --matrix measurement: the full vector, one `cell` line per cell) or the
+#   space-separated deciding cell plus twin (per push: only those cells are scored).
 # Writes: "$outdir/$label" — ALWAYS, on every exit path. Prints nothing.
 #
 # WHY A FILE AND NOT STDOUT. `made=$((made+1))` inside a pooled child is lost to the
@@ -32,6 +34,7 @@ LINTER="${4:?worker: missing linter}"
 CONS="${5:?worker: missing consumer root}"
 DOMAIN="${6:?worker: missing domain path}"
 outdir="${7:?worker: missing outdir}"
+cells="$(cat "${8:?worker: missing cells file}")"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/vector.sh"
@@ -85,6 +88,7 @@ report() {
   rm -f "$inflight_dir/$$"
   { printf '%s\n' "$1"
     printf 'inflight %s\n' "$peers"
+    [ -f "$work/cells" ] && cat "$work/cells"
   } > "$outdir/$label"
   exit 0
 }
@@ -104,9 +108,36 @@ if cmp -s "$LINTER" "$m"; then
 fi
 
 want="$(cat "$wantfile")"
-got="$(vector "$m" "$CONS")"
+pristine="$(cat "$outdir/pristine")"
+if [ "$cells" = ALL ]; then
+  got="$(vector "$m" "$CONS")"
+  cmpwant="$want"
+else
+  # The first cell is the DECIDER and must differ from pristine in the want vector, the second
+  # is the TWIN and must equal it: otherwise the pair scores nothing.
+  set -- $cells
+  cell_of "$want" "$1"; _wd="$_R"; cell_of "$pristine" "$1" || report "BROKEN no pristine cell $1"
+  [ "$_wd" != "$_R" ] || report "BROKEN decider $1 does not move under this mutant, so the kill proves nothing"
+  cell_of "$want" "$2"; _wt="$_R"; cell_of "$pristine" "$2" || report "BROKEN no pristine cell $2"
+  [ "$_wt" = "$_R" ] || report "BROKEN twin $2 moves under this mutant, so it is not a green twin"
+  # shellcheck disable=SC2086
+  got="$(vector_cells "$m" "$CONS" $cells)"
+  cmpwant=''
+  for _c in $cells; do
+    cell_of "$want" "$_c" || report "BROKEN the want vector carries no cell $_c"
+    cmpwant="${cmpwant:+$cmpwant }$_c=$_R"
+  done
+fi
 
-if [ "$got" = "$want" ]; then
+if [ "$cells" = ALL ]; then
+  # One line per cell, FAIL when the cell moved off the pristine value under this mutant.
+  for _c in $VECTOR_CELLS; do
+    cell_of "$got" "$_c"; _g="$_R"; cell_of "$pristine" "$_c"
+    if [ "$_g" = "$_R" ]; then printf 'cell %s ok\n' "$_c"; else printf 'cell %s FAIL\n' "$_c"; fi
+  done > "$work/cells"
+fi
+
+if [ "$got" = "$cmpwant" ]; then
   report "KILL $got"
 fi
-report "SURVIVED got [$got] want [$want]"
+report "SURVIVED got [$got] want [$cmpwant]"

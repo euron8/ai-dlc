@@ -55,6 +55,7 @@
 # MUTANT-MATRIX-CONTROL ctl why=the unmutated discovery copy must agree with the shipped program in all 11 worlds and emit a PASS/5881 row
 # MUTANT-MATRIX-CONTROL enoop why=a selector transformation that matches nothing; the hit counter's own probe, it must report DID NOT APPLY
 # MUTANT-MATRIX-CONTROL ectl why=the unmutated selector copy must agree with the shipped program in all 20 worlds and emit a PASS/5492 row
+# MUTANT-MATRIX-DYNAMIC score-name why=d_score() and e_score() pass their first argument "$name" to mutant_killed; each call (base, pfirst, ...) names a literal mutant that carries its own row in this block; the controls ctl and ectl return before mutant_killed
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/snapshot-evidence-cell/run.sh --matrix
 # Measured rows (worlds each mutant TRIPS, of the 11 discovery / 20 selection worlds):
 #   base [W10]  sort [W2 W2h W3 W3b W5 W8 W9 W10]  tail [W2 W2h W9]  hard [W2c]  uncond [W2c W3b W5 W9]

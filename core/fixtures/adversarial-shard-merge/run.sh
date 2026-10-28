@@ -46,11 +46,53 @@
 #
 # Every arm that scores a merge calls its predicate as `p_<name> "$MERGE"` at the start of a
 # line.
+#
+# MUTANTS. Each is a copy of the merge's whole sibling set (or of the provenance schema) with one anchor
+# changed. PER PUSH a mutant runs its DECIDING arm, which must FAIL, and one TWIN, an arm the measured matrix
+# shows GREEN for it, which must PASS; the kill is emitted through mutant_killed behind the same-run base pass
+# of both arms and of the unmutated copy (MX0). `--matrix` scores MX0 and every mutant against EVERY arm and
+# prints one MATRIX row per cell; the matrix is re-measured whenever an arm or a mutant changes. The matrix is
+# not run through hermetic-run.sh, which forwards no argument. Worlds are per-use: the merge refuses a world
+# whose write-ledger rows name another root, so no world is shared across arms or mutants.
+#
+# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy of the merge's sibling set must trip no arm; it is the base pass every kill is gated on
+# MUTANT-MATRIX m-k2only decides=X1 twins=X4
+# MUTANT-MATRIX m-nomix decides=X4 twins=A1
+# MUTANT-MATRIX RM-A decides=RS1 twins=A1
+# MUTANT-MATRIX RM-B decides=CH2 twins=A1
+# MUTANT-MATRIX BM-1 decides=B726B twins=B726H
+# MUTANT-MATRIX BM-2 decides=B726C twins=B726H
+# MUTANT-MATRIX BM-3 decides=B726F twins=B726B
+# MUTANT-MATRIX BM-4 decides=B726H twins=B726B
+# MUTANT-MATRIX PM1 decides=P1 twins=PBARE
+# MUTANT-MATRIX-DYNAMIC KMb-KMc-KEM-by-layout why=one loop over the layouts inst and core names each of the six mutants below
+# MUTANT-MATRIX KMb-inst decides=K2ps_inst twins=K2vac_inst
+# MUTANT-MATRIX KMb-core decides=K2ps_core twins=K2vac_core
+# MUTANT-MATRIX KMc-inst decides=K2sch_inst twins=K2vac_inst
+# MUTANT-MATRIX KMc-core decides=K2sch_core twins=K2vac_core
+# MUTANT-MATRIX KEM-inst decides=KEps_inst twins=KEvac_inst
+# MUTANT-MATRIX KEM-core decides=KEps_core twins=KEvac_core
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
+MATRIX=0; MATRIX_ROWS=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+  esac
+done
 . "$HERE/lib.sh"
+for _l in matrix.sh mutant.sh; do
+  [ -f "$HERE/../lib/$_l" ] || { echo "FIXTURE ERROR: $HERE/../lib/$_l is absent; nothing was asserted" >&2; exit 2; }
+  . "$HERE/../lib/$_l"
+done
+KOK=0; OKSET="|"
+ok() { printf '  ok    %s\n' "$1"; OKSET="$OKSET${1%%:*}|"; } # records each passing arm label, so a mutant is gated on the same-run base pass
 echo "HERMETIC-CONSUMED $MERGE"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # Every marked shard the arms merge is admitted by the merge's sibling content-seal.sh --admit-marker (BL-750).
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
 
@@ -245,19 +287,8 @@ p_rerun_bind "$MERGE" && ok "RB1: --rerun 2.md@1999-01-01T00:00:00Z on a normal 
 # header check, owned by the merge, callable on one file as --check-header. These arms are INLINE,
 # not `p_<name> "$MERGE"` predicates. RM-A and RM-B below are this
 # fixture's own mutants, built PM1's way in a copy of the merge's whole sibling set.
-mk_markers() { # <shard dir>: every shard ends in its seat-complete marker, n = its `### M<n>` findings
-  local f n
-  for f in "$1"/*.md; do
-    n="$(grep -c '^### M[0-9]' "$f")" || n=0
-    printf '\nseat-complete: stories adversary %s findings=%s\n' "$(basename "$f" .md)" "$n" >> "$f"
-  done
-}
-set_major() { sed "s/^findings_major: .*/findings_major: $2/" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; } # <shard file> <n>
-PROBES='### Probes run (no finding)\n\nProbed the ordinal citation of every AC; each holds.'
-RESERVED='is a `### ` heading under `## Findings` with no severity word'
 # RS1: the filed incident -- graph s319 requirements-p1/2.md, findings=0, a probes subsection.
-d="$(hdr_world "## Findings\n\n$PROBES")"; mk_markers "$d"; run_merge "$MERGE" "$d"
-refused_clean "$RESERVED" "$d" && has "$MO" "move it under its own \`## \` section, or demote it to \`#### \`" && has "$MO" "2.md:5 is" \
+p_rs1 "$MERGE" \
   && ok "RS1: '### Probes run (no finding)' under ## Findings, findings=0 -> REFUSED naming the reserved form and the fix (line 5), nothing written" \
   || bad "RS1: a severity-less ### under ## Findings was not refused with the reserved-form message (rc=$RC): $(cat "$MO")"
 d="$(hdr_world "## Findings\n\n## Probes\n\n$PROBES")"; mk_markers "$d"; run_merge "$MERGE" "$d"
@@ -310,18 +341,9 @@ d="$(b3_world)"; c="$WORK/ch"; mkdir -p "$c"
 ch "$d/1.md" convergence
 [ "$RC" -eq 0 ] && [ ! -s "$MO" ] && ok "CH1: --check-header on a complete shard (verdict: EXIT_CONDITION_MET) -> exit 0, nothing printed" \
   || bad "CH1: a complete shard did not pass --check-header silently (rc=$RC): $(cat "$MO")"
-chv "$d/1.md" '/^verdict:/d' "$c/nov.md"; ch "$c/nov.md" convergence; ch_out="$(cat "$MO")"; ch_rc=$RC
-# The merge's own refusal of the SAME bytes, in a world where that shard is the only defect.
-dm="$(b3_world)"; sed '/^verdict:/d' "$dm/1.md" > "$dm/1.tmp" && mv "$dm/1.tmp" "$dm/1.md"; run_merge "$MERGE" "$dm"
-m_line="$(grep '^REFUSED:' "$MO")"
-ch_tail="${ch_out#* declares }"; m_tail="${m_line#* declares }"
-if [ "$ch_rc" -eq 1 ] && [ "$RC" -eq 2 ] && [ "$ch_tail" != "$ch_out" ] && [ "$ch_tail" = "$m_tail" ] \
-   && has "$WORK/ch/nov.md" "findings_major:" && [ "${ch_out#REFUSED: }" != "$ch_out" ] \
-   && case "$ch_tail" in "verdict '<none>', not one of"*) true ;; *) false ;; esac; then
-  ok "CH2: no verdict: line -> --check-header exit 1 with the merge's own refusal text (the same line the merge prints for that shard, path aside)"
-else
-  bad "CH2: no-verdict shard: --check-header rc=$ch_rc [$ch_out], merge rc=$RC [$m_line]"
-fi
+p_chv "$MERGE" \
+  && ok "CH2: no verdict: line -> --check-header exit 1 with the merge's own refusal text (the same line the merge prints for that shard, path aside)" \
+  || bad "CH2: the no-verdict shard: --check-header and the merge did not refuse with one text (rc=$RC): $(cat "$MO")"
 for cell in "CH3|s/^verdict: .*/verdict: PENDING-LEAD/|declares verdict 'PENDING_LEAD'" \
             "CH4|/^lead_role:/d|declares no lead_role" \
             "CH5|s/^lead_role: .*/lead_role: <the step file that invoked or dispatched the evaluation>/|an unfilled template placeholder" \
@@ -357,7 +379,7 @@ chv "$d/1.md" "s/^## Findings$/## Findings\\
 mut_merge() { # <old> <new> -> prints the mutated merge's path; empty when the anchor is not there once
   local md s
   md="$(mktemp -d "$WORK/rm.XXXXXX")" || return 1
-  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh content-seal.sh; do
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
   done
   M_OLD="$1" M_NEW="$2" python3 - "$md/merge-adversarial-shards.sh" <<'PY' || return 0
@@ -370,75 +392,30 @@ PY
   [ -f "$md/partition-document.sh" ] && [ -f "$md/validate-adversarial-convergence.sh" ] && bash -n "$md/merge-adversarial-shards.sh" || return 0
   printf '%s' "$md/merge-adversarial-shards.sh"
 }
-# m-k2only (BL-811): the K=2-only lone-cross rule restored. X1's files-mode world then refuses the
-# lone cross.md at K=8 on that rule's own text, and the grouped set (its control) still merges.
-mk2="$(mut_merge 'if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
-  '[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] && collect "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $XTABLE_KEYS; a single cross shard is owed only at K=2"; if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi')"
-if [ -z "$mk2" ]; then bad "m-k2only: FIXTURE STALE -- the lone-cross anchor is not in the merge exactly once; re-anchor it, never relax X1"
-else
-  p_xfiles "$MERGE" || bad "m-k2only: CONTROL -- X1 over the unmutated merge failed (rc=$RC), so the mutant verdict is not evidence"
-  p_xfiles "$mk2"; mrc=$RC
-  if [ "$mrc" -eq 2 ] && has "$MO" "a single cross shard is owed only at K=2"; then
-    ok "m-k2only: with the K=2-only rule restored, X1 goes red on that rule's refusal of the lone cross.md at K=8"
-  else bad "m-k2only: SURVIVED or died for another reason (rc=$mrc): $(head -2 "$MO")"; fi
-fi
-# m-nomix (BL-811): the mixed-shape refusal dropped. X4 then merges cross.md beside cross-1..3.
-mnm="$(mut_merge '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \')"
-if [ -z "$mnm" ]; then bad "m-nomix: FIXTURE STALE -- the mixed-refusal anchor is not in the merge exactly once"
-elif p_xmix "$mnm"; then bad "m-nomix: SURVIVED -- X4 still refuses the mix with the mixed refusal dropped"
-else ok "m-nomix: with the mixed refusal dropped, X4 no longer refuses cross.md beside cross-1..3 (rc=$RC)"; fi
-# RM-A: "any ### opens a finding" restored. RS1's world then reads the probes heading as a finding, so
-# the reserved-form refusal is gone and the count it inflates is what refuses (--dry-run prints every
-# refusal of that phase, so the marker-count mismatch is visible beside the citation refusal).
-ma="$(mut_merge 'if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } ' '')"
-if [ -z "$ma" ]; then bad "RM-A: FIXTURE STALE -- the reservation anchor is not in the merge exactly once; re-anchor it, never relax RS1"
-else
-  d="$(hdr_world "## Findings\n\n$PROBES")"; mk_markers "$d"
-  bash "$ma" --dry-run "$d" > "$MO" 2>&1; RC=$?
-  [ "$RC" -eq 2 ] && has "$MO" "findings=0' but its ## Findings section heads 1 finding(s)" && ! has "$MO" "$RESERVED" \
-    && ok "RM-A: with every ### opening a finding, RS1's world reports the marker-count mismatch (findings=0 vs 1) and no reserved-form refusal -- RS1 watches the reservation" \
-    || bad "RM-A: the restored any-### parse gave rc=$RC: $(cat "$MO")"
-fi
-# RM-B: the verdict enum weakened in THE ONE header check. Both --check-header AND a full merge then
-# accept the verdict-less shard, which proves they read one source.
-mb="$(mut_merge '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|"") ;;')"
-if [ -z "$mb" ]; then bad "RM-B: FIXTURE STALE -- the verdict-enum anchor is not in the merge exactly once; re-anchor it, never relax CH2"
-else
-  bash "$mb" --check-header "$c/nov.md" --axis convergence > "$MO" 2>&1; r_ch=$?
-  dm="$(b3_world)"; sed '/^verdict:/d' "$dm/1.md" > "$dm/1.tmp" && mv "$dm/1.tmp" "$dm/1.md"; run_merge "$mb" "$dm"
-  [ "$r_ch" -eq 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:" \
-    && ok "RM-B: with the verdict enum weakened in check_header_core, --check-header (exit 0) AND the full merge (MERGED) both accept the verdict-less shard -- one source" \
-    || bad "RM-B: weakened enum gave --check-header rc=$r_ch and merge rc=$RC: $(cat "$MO")"
-fi
-
 # ---- BL726: a shard's invoked_at sits between its dispatch's spawn-ledger ts and its last write row,
 # within BACKDATE_TOL_S, REFUSED only for a dispatch whose spawn row carries invoked_bound (LEGACY: WARN).
 bl726_clean "$MERGE"
 bl726_merged && grep -qx 'invoked_at: 2026-08-24T15:01:19Z' "$(out_of "$BL_D")" \
   && ok "BL726a: the B3 world, spawn ts 15:00:00Z and every shard stamped after it -> MERGED, invoked_at 15:01:19Z" \
   || bad "BL726a: (rc=$RC) $(cat "$MO")"
-bl726_early "$MERGE"
-bl726_refused "1.md claims invoked_at 2026-08-24T13:00:00Z" "7200 s before its dispatch" "recorded at 2026-08-24T15:00:00Z" "BACKDATE_TOL_S=60" "--rerun 1.md@" \
+p_bl726b "$MERGE" \
   && ok "BL726b: shard 1 stamped 13:00:00Z, two hours before its bound dispatch -> REFUSED naming 1.md, both times, the tolerance and the --rerun remedy; nothing written" \
   || bad "BL726b: (rc=$RC) $(cat "$MO")"
-bl726_late "$MERGE"
-bl726_refused "2.md claims invoked_at 2026-08-24T15:02:19Z" "s after its dispatch" "last wrote it at 2026-08-24T14:00:00Z" "--rerun 2.md@" \
+p_bl726c "$MERGE" \
   && ok "BL726c: shard 2's only write row at 14:00:00Z, its stamp 15:02:19Z -> REFUSED naming 2.md and both times; nothing written" \
   || bad "BL726c: (rc=$RC) $(cat "$MO")"
 bl726_near "$MERGE"
 bl726_merged && ok "BL726d: shard 1 stamped 59 s before its dispatch (inside BACKDATE_TOL_S) -> MERGED" || bad "BL726d: (rc=$RC) $(cat "$MO")"
 bl726_frac "$MERGE"
 bl726_merged && ok "BL726e: shard 1 stamped 14:59:30.750Z, fractional and inside the tolerance -> MERGED (the fraction is stripped before the epoch)" || bad "BL726e: (rc=$RC) $(cat "$MO")"
-HR_BOUND=0 bl726_early "$MERGE"
-bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md claims invoked_at 2026-08-24T13:00:00Z" && has "$MO.err" "recorded at 2026-08-24T15:00:00Z" && has "$MO.err" "LEGACY" \
+p_bl726f "$MERGE" \
   && ok "BL726f: the 13:00:00Z shard under a dispatch with no invoked_bound key (an older guard's row) -> MERGED, stderr WARN naming 1.md, both times and LEGACY" \
   || bad "BL726f: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
 HR_BOUND=0 bl726_late "$MERGE"
 bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "last wrote it at 2026-08-24T14:00:00Z" && has "$MO.err" "LEGACY" \
   && ok "BL726g: the LATE shard under a dispatch with no invoked_bound key -> MERGED, stderr WARN naming the write time and LEGACY" \
   || bad "BL726g: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
-bl726_lastrow "$MERGE"
-bl726_merged && ! has "$MO.err" "WARN: " \
+p_bl726h "$MERGE" \
   && ok "BL726h: shard 2 written at 14:00:00Z and 15:30:00Z, stamped 15:02:19Z between them -> MERGED (bounded by its LAST write row, never its first)" \
   || bad "BL726h: (rc=$RC) $(cat "$MO") $(cat "$MO.err")"
 bl726_nocal "$MERGE"
@@ -455,22 +432,6 @@ for _bv in false '"true"'; do
     && ok "BL726k: invoked_bound:$_bv on the spawn row (only the JSON boolean true binds) with the 13:00:00Z shard -> MERGED, LEGACY WARN" \
     || bad "BL726k: invoked_bound:$_bv gave rc=$RC: $(cat "$MO") $(cat "$MO.err")"
 done
-# BM-1..BM-4: mutants of the bound, each a copy of the whole sibling set with one anchor applied once.
-bl726_mut() { # <label> <old> <new> <killing world fn> <kill predicate...>
-  local lab="$1" mm w; mm="$(mut_merge "$2" "$3")"; w="$4"; shift 4
-  if [ -z "$mm" ]; then bad "$lab: FIXTURE STALE -- its anchor is not in the merge exactly once; re-anchor it, never relax BL726"; return; fi
-  "$w" "$mm"
-  if "$@"; then bad "$lab: SURVIVED -- the mutated merge still satisfied the BL726 arm ($w rc=$RC): $(cat "$MO")"
-  else ok "$lab: killed by $w (rc=$RC)"; fi
-}
-bl726_b_holds() { bl726_refused "1.md claims invoked_at 2026-08-24T13:00:00Z"; }
-bl726_c_holds() { bl726_refused "2.md claims invoked_at 2026-08-24T15:02:19Z"; }
-bl726_f_holds() { bl726_merged && has "$MO.err" "LEGACY"; }
-bl726_early_legacy() { HR_BOUND=0 bl726_early "$1"; }
-bl726_mut "BM-1 (EARLY comparison deleted)" '| if ($s.e - $ae) > $tol then' '| if false then' bl726_early bl726_b_holds
-bl726_mut "BM-2 (LATE comparison deleted)" '| if ($ae - $w.e) > $tol then' '| if false then' bl726_late bl726_c_holds
-bl726_mut "BM-3 (LEGACY dropped: every dispatch refuses)" 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";' bl726_early_legacy bl726_f_holds
-bl726_mut "BM-4 (LATE reads the EARLIEST write row)" '| max_by(.e)) as $w' '| min_by(.e)) as $w' bl726_lastrow bl726_merged
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
@@ -489,69 +450,14 @@ refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d" \
 # failed validate-provenance-block.sh while the convergence validator passed it. The two
 # near-misses keep the widening honest: a list of ONE (a merge always has two or more stories)
 # and a list carrying a short sha are both refused, and a bare sha is the control that still passes.
-PB="$SRCDIR/validate-provenance-block.sh"
-if [ ! -f "$PB" ]; then
-  bad "P1: FIXTURE BROKEN -- validate-provenance-block.sh is not beside the merge at $SRCDIR"
-else
-  d="$(b3_world)"; o="$(out_of "$d")"; run_merge "$MERGE" "$d"
-  pb() { bash "$PB" "$1" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; }
-  sha_line="$(grep '^artifact_sha:' "$o" 2>/dev/null)"
-  n_pairs="$(printf '%s' "${sha_line#artifact_sha:}" | wc -w | tr -d ' ')"
-  if [ "$RC" -ne 0 ] || [ "${n_pairs:-0}" -lt 2 ]; then
-    bad "P1: FIXTURE BROKEN -- the B3 merge did not write a multi-file artifact_sha (rc=$RC, pairs=${n_pairs:-0})"
-  else
-    one="$WORK/pb-one.md"; short="$WORK/pb-short.md"; bare="$WORK/pb-bare.md"
-    first="$(printf '%s' "${sha_line#artifact_sha: }" | cut -d' ' -f1)"
-    sed "s/^artifact_sha:.*/artifact_sha: $first/" "$o" > "$one"
-    sed -E 's/^(artifact_sha: [^ ]+@)[a-f0-9]{64}/\1abc123/' "$o" > "$short"
-    sed "s/^artifact_sha:.*/artifact_sha: ${first#*@}/" "$o" > "$bare"
-    # The merge in this tree emits `@`; a list that is not, or a near-miss sed that matched
-    # nothing, would score the one-pair and short-sha refusals for the wrong reason.
-    case "$first" in *@*) ;; *) bad "P1: FIXTURE BROKEN -- the B3 merge emitted '$first', not a <stem>@<sha> pair" ;; esac
-    cmp -s "$o" "$short" && bad "P1: FIXTURE BROKEN -- the short-sha near-miss did not apply to the @ list"
-    pb "$o"; r_m=$?; pb "$one"; r_1=$?; pb "$short"; r_s=$?; pb "$bare"; r_b=$?
-    if [ "$r_m" -eq 0 ] && [ "$r_1" -ne 0 ] && [ "$r_s" -ne 0 ] && [ "$r_b" -eq 0 ]; then
-      ok "P1: the merged pass ($n_pairs <stem>@<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes"
-    else
-      bad "P1: provenance reader on the merged forms gave merged=$r_m one-pair=$r_1 short-sha=$r_s bare=$r_b (want 0 non-0 non-0 0)"
-    fi
-    # PM1: the schema reverted to the single-sha pattern -- the shipped defect on demand. Driven
-    # through AI_DLC_PROJECT_ROOT, whose core/schemas/ the reader tries FIRST, so the validator
-    # is the shipped one and only the schema differs. The bare-sha control must stay at 0, or the
-    # mutant tree failed for a reason of its own.
-    SCH=""
-    _d="$SRCDIR"
-    while [ -n "$_d" ] && [ "$_d" != "/" ]; do
-      for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
-        [ -f "$_c" ] && { SCH="$_c"; break 2; }
-      done
-      _d="$(dirname "$_d")"
-    done
-    mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$mt/core/schemas"
-    if [ -z "$SCH" ]; then
-      bad "PM1: FIXTURE BROKEN -- provenance-block.json not found above $SRCDIR"
-    else
-      cp "$SCH" "$mt/core/schemas/provenance-block.json"
-      M_OLD='"pattern_ref": "artifact_sha"' M_NEW='"pattern_ref": "sha256"' python3 - "$mt/core/schemas/provenance-block.json" <<'PY'
-import os, sys
-p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
-if t.count(o) != 1: sys.exit(3)
-open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
-PY
-      if cmp -s "$SCH" "$mt/core/schemas/provenance-block.json"; then
-        bad "PM1: FIXTURE STALE -- the pattern_ref anchor is not in the schema exactly once; re-anchor it, never relax P1"
-      else
-        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$o" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_m=$?
-        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$bare" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_b=$?
-        if [ "$m_m" -ne 0 ] && [ "$m_b" -eq 0 ]; then
-          ok "PM1: the schema reverted to the single-sha pattern refuses the merged pass (rc=$m_m) while the bare-sha control holds at 0 -- P1 watches the pattern"
-        else
-          bad "PM1: with the single-sha pattern the merged pass gave rc=$m_m and the bare control rc=$m_b (want non-0 and 0)"
-        fi
-      fi
-    fi
-  fi
-fi
+p_pb "$MERGE"; r_p1=$?
+case "$r_p1" in
+  0) ok "P1: the merged pass ($PB_NPAIRS <stem>@<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes" ;;
+  2) bad "P1: FIXTURE BROKEN -- validate-provenance-block.sh is not beside the merge at $SRCDIR" ;;
+  3) bad "P1: FIXTURE BROKEN -- the B3 merge did not write a multi-file <stem>@<sha> artifact_sha (rc=$RC, pairs=${PB_NPAIRS:-0}, first='${PB_FIRST:-}')" ;;
+  4) bad "P1: FIXTURE BROKEN -- the short-sha near-miss did not apply to the @ list" ;;
+  *) bad "P1: provenance reader on the merged forms gave ${PB_RS:-?} (want 0 non-0 non-0 0)" ;;
+esac
 
 # ---- K: the separator the merge EMITS (--pair-sep). `@` only when every reader installed beside
 # the merge accepts it: (a) validate-adversarial-convergence.sh and (b) partition-subject.sh each
@@ -627,8 +533,8 @@ if [ -z "$k_broken" ]; then
   k_drop_sep "$SRCDIR/partition-subject.sh" "$K_OLD_PS" old-partition-subject
   k_old_schema "$KSCH" "$K_OLD_SCH"
 fi
-# k_world <layout inst|core> <swap none|vac|ps|sch> <merge file> -> prints the world root
-k_world() {
+# kl_world <layout inst|core> <swap none|vac|ps|sch> <merge file> -> prints the world root
+kl_world() {
   local w s c
   w="$(mktemp -d "$WORK/kw-$1-$2.XXXXXX")" || return 1
   if [ "$1" = inst ]; then s="$w/scripts/ai-dlc"; c="$w/.claude/schemas"
@@ -692,35 +598,25 @@ if [ -n "$k_stale" ] || [ -n "$k_broken" ]; then
   [ -z "$k_broken" ] || bad "K0: FIXTURE BROKEN -- missing or unbuildable:$k_broken; no K arm was asserted"
 else
   ok "K0: three old readers derived from the current files -- VAC and partition-subject each with its one PAIR_SEP='[=@]' line deleted (differ by cmp), the schema's artifact_sha pattern turned back to '='; validate-provenance-block.sh --accepts-at-pair exits $K_A1 on the derived schema and $K_A0 on its source"
+  KOK=1
   for L in inst core; do
     # K1: current readers -> `@`.
-    w="$(k_world "$L" none "$MERGE")" && a="$(k_ps "$w" "$L")" || a="BUILD"
+    w="$(kl_world "$L" none "$MERGE")" && a="$(k_ps "$w" "$L")" || a="BUILD"
     [ "$a" = "@" ] && ok "K1-$L: $L layout, every reader current -> --pair-sep prints exactly one byte '@', exit 0" \
       || bad "K1-$L: $L layout with current readers gave '$a' (want @)"
     # K2: ONE old reader, derived from the current file (K0) -> `=`, each world first proven to differ from the current one.
     for S in vac ps sch; do
-      w="$(k_world "$L" "$S" "$MERGE")" || { bad "K2$S-$L: FIXTURE BROKEN -- world did not build"; continue; }
+      w="$(kl_world "$L" "$S" "$MERGE")" || { bad "K2$S-$L: FIXTURE BROKEN -- world did not build"; continue; }
       if ! k_differs "$w" "$L" "$S"; then bad "K2$S-$L: FIXTURE BROKEN -- the old-$S world is byte-identical to the current one"; continue; fi
       a="$(k_ps "$w" "$L")"
       [ "$a" = "=" ] && ok "K2$S-$L: $L layout, the old $S reader (derived from the current file, differs by cmp) -> --pair-sep prints '='" \
         || bad "K2$S-$L: $L layout with the old $S reader gave '$a' (want =)"
     done
-    # KM: each mutant prints `@` in exactly its own old world, and the same as the fix everywhere else.
-    for MU in b c; do
-      [ "$MU" = b ] && { mf="$KMB"; own=ps; } || { mf="$KMC"; own=sch; }
-      row=""
-      for S in none vac ps sch; do
-        w="$(k_world "$L" "$S" "$mf")" && row="$row $S=$(k_ps "$w" "$L")" || row="$row $S=BUILD"
-      done
-      if [ "$own" = ps ]; then want=" none=@ vac== ps=@ sch=="; else want=" none=@ vac== ps== sch=@"; fi
-      [ "$row" = "$want" ] && ok "KM$MU-$L: mutant drop-($MU) prints '@' in the old-$own world only (killed by K2$own-$L, no other arm moves):$row" \
-        || bad "KM$MU-$L: mutant drop-($MU) gave$row (want$want)"
-    done
   done
   # K3: an override root carrying the OLD schema in core/schemas, the install carrying the new ->
   # the validator's chain takes the override's first, so `=`. Its twin, an override root with NO
   # schema, falls through to the install's and prints `@`: the override is what moved the answer.
-  w="$(k_world inst none "$MERGE")"; ov="$(mktemp -d "$WORK/kov.XXXXXX")"; ov0="$(mktemp -d "$WORK/kov0.XXXXXX")"
+  w="$(kl_world inst none "$MERGE")"; ov="$(mktemp -d "$WORK/kov.XXXXXX")"; ov0="$(mktemp -d "$WORK/kov0.XXXXXX")"
   mkdir -p "$ov/core/schemas" && cp "$K_OLD_SCH" "$ov/core/schemas/provenance-block.json"
   a="$(k_ps "$w" inst "$ov")"; a0="$(k_ps "$w" inst "$ov0")"
   [ "$a" = "=" ] && [ "$a0" = "@" ] && ok "K3: AI_DLC_PROJECT_ROOT with the old schema in core/schemas over a current install -> '='; the same override with no schema -> '@'" \
@@ -753,21 +649,168 @@ else
     for L in inst core; do
       row=""
       for S in none vac ps sch; do
-        w="$(k_world "$L" "$S" "$MERGE")" && row="$row $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || row="$row $S=BUILD"
+        w="$(kl_world "$L" "$S" "$MERGE")" && row="$row $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || row="$row $S=BUILD"
       done
       want=" none=@ vac== ps== sch=="
       [ "$row" = "$want" ] && ok "KE-$L: $L layout, the merge itself (subject mode) writes every artifact_sha pair with '@' when every reader is current and '=' in each old-reader world:$row" \
         || bad "KE-$L: the merge's emitted separators were$row (want$want)"
-      # KEM: the line-593 mutant (separator keyed on the VAC sibling alone) emits `@` in the
-      # old partition-subject and old schema worlds, so KE-$L kills it there.
-      mrow=""
-      for S in ps sch; do
-        w="$(k_world "$L" "$S" "$KM593")" && mrow="$mrow $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || mrow="$mrow $S=BUILD"
-      done
-      [ "$mrow" = " ps=@ sch=@" ] && ok "KEM-$L: the line-593 mutant emits '@' in the old partition-subject and old schema worlds (killed by KE-$L, which wants '=' there):$mrow" \
-        || bad "KEM-$L: the line-593 mutant gave$mrow (want ps=@ sch=@); KE-$L does not kill it"
     done
   fi
+fi
+
+# ---- THE MUTANTS. Each is a COPY of the merge's whole sibling set (or of the provenance schema) with one
+# anchor changed, built by mut_merge, which refuses a lost or repeated anchor. PER PUSH a mutant runs its
+# DECIDING arm, which must FAIL, and one TWIN, an arm the measured matrix shows GREEN for it, which must
+# PASS; the kill is emitted through mutant_killed behind the same-run base-pass flags of both arms and of
+# the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
+# prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
+n_mut=0; n_kill=0
+ARMS_ALL="A1 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE"
+[ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2ps_inst K2sch_inst K2vac_core K2ps_core K2sch_core KEnone_inst KEvac_inst KEps_inst KEsch_inst KEnone_core KEvac_core KEps_core KEsch_core"
+karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
+  local w a
+  w="$(kl_world "$3" "$2" "$1")" && a="$(k_ps "$w" "$3")" || return 1
+  [ "$a" = "$4" ]
+}
+kearm() { # <merge file> <swap> <layout> <want> -- the separator the merge itself writes in that world
+  local w a
+  w="$(kl_world "$3" "$2" "$1")" || return 1
+  a="$(k_drive "$w" "$w/$(k_dir "$3")/merge-adversarial-shards.sh")"
+  [ "$a" = "$4" ]
+}
+arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
+  case "$1" in
+    A1) p_b3 "$2" ;;
+    X1) p_xfiles "$2" ;;
+    X4) p_xmix "$2" ;;
+    RS1) p_rs1 "$2" ;;
+    CH2) p_chv "$2" ;;
+    B726B) p_bl726b "$2" ;;
+    B726C) p_bl726c "$2" ;;
+    B726F) p_bl726f "$2" ;;
+    B726H) p_bl726h "$2" ;;
+    P1) p_pb "$2" ;;
+    PBARE) p_pbbare "$2" ;;
+    K1_*) karm "$2" none "${1#K1_}" "@" ;;
+    K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
+    K2ps_*) karm "$2" ps "${1#K2ps_}" "=" ;;
+    K2sch_*) karm "$2" sch "${1#K2sch_}" "=" ;;
+    KEnone_*) kearm "$2" none "${1#KEnone_}" "@" ;;
+    KEvac_*) kearm "$2" vac "${1#KEvac_}" "=" ;;
+    KEps_*) kearm "$2" ps "${1#KEps_}" "=" ;;
+    KEsch_*) kearm "$2" sch "${1#KEsch_}" "=" ;;
+    *) return 1 ;;
+  esac
+}
+armlabel() { # <arm> -> the label of the ok line that records the arm passing on the SHIPPED merge in this run
+  case "$1" in
+    B726B) echo BL726b ;; B726C) echo BL726c ;; B726F) echo BL726f ;; B726H) echo BL726h ;; PBARE) echo P1 ;;
+    K2vac_*|K2ps_*|K2sch_*) echo "${1%%_*}-${1#*_}" ;;
+    KE*_*) echo "KE-${1#*_}" ;;
+    K1_*) echo "K1-${1#K1_}" ;;
+    *) echo "$1" ;;
+  esac
+}
+bflag() { case "$OKSET" in *"|$(armlabel "$1")|"*) echo 1 ;; *) echo 0 ;; esac; } # <arm> -> 1 iff its base ok line printed this run
+in_set() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; } # <arm> <space-separated set>
+sc_run() { # <merge file> <arm>... -> SC_DEAD, the arms that TRIPPED (did not hold), in the order given
+  local mf="$1" a sd s ms; shift; SC_DEAD=""
+  # A lone mutated file (the K mutants) finds no siblings, so every non-K arm would trip for THAT reason.
+  # Non-K arms therefore run the mutated merge inside a copy of the whole sibling set.
+  ms="$mf"
+  if [ ! -f "$(dirname "$mf")/partition-document.sh" ]; then
+    sd="$(mktemp -d "$WORK/sib.XXXXXX")"
+    for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+      [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$sd/"
+    done
+    cp "$mf" "$sd/merge-adversarial-shards.sh"; ms="$sd/merge-adversarial-shards.sh"
+  fi
+  for a in "$@"; do
+    case "$a" in
+      K*) arm_run "$a" "$mf" || SC_DEAD="$SC_DEAD $a" ;;
+      *) arm_run "$a" "$ms" || SC_DEAD="$SC_DEAD $a" ;;
+    esac
+  done
+  SC_DEAD="${SC_DEAD# }"
+}
+mrow() { matrix_row "$1" "$2" 0 "$3" "$4"; MATRIX_ROWS=$((MATRIX_ROWS + 1)); } # <id> <arm> <GREEN|TRIPPED> <yes|no>
+mx_cells() { # <id> -> one MATRIX row per arm of ARMS_ALL, from SC_DEAD
+  local a
+  for a in $ARMS_ALL; do
+    if in_set "$a" "$SC_DEAD"; then mrow "$1" "$a" TRIPPED yes; else mrow "$1" "$a" GREEN no; fi
+  done
+}
+mut() { # <name> <deciding arm> <twin arm> <merge file>
+  local name="$1" dec="$2" twin="$3" mf="$4" fl
+  fl="$(( $(bflag "$dec") && $(bflag "$twin") && ${B_MX0:-0} ))"
+  n_mut=$((n_mut + 1))
+  if [ "$MATRIX" -eq 1 ]; then sc_run "$mf" $ARMS_ALL; mx_cells "$name"; else sc_run "$mf" "$dec" "$twin"; fi
+  if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] (tripped: [$SC_DEAD]) -- the kill moved; re-measure with --matrix"
+  elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too (tripped: [$SC_DEAD]) -- the kill spread past the recorded matrix; re-measure with --matrix"
+  else n_kill=$((n_kill + 1)); mutant_killed "$fl" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+  fi
+}
+mutm() { # <name> <deciding arm> <twin arm> <old> <new>
+  local mm; mm="$(mut_merge "$4" "$5")"
+  if [ -z "$mm" ]; then bad "$1: FIXTURE STALE -- its anchor is not in the merge exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
+  mut "$1" "$2" "$3" "$mm"
+}
+# MX0: the UNMUTATED copy, built as a mutant is (the whole sibling set, cmp'd identical). Per push it must hold
+# the arms below; --matrix scores it on every arm. A1 gives it a positive conjunct (a merge that ran).
+mx0d="$(mktemp -d "$WORK/mx0.XXXXXX")"
+for _s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+  [ -f "$SRCDIR/$_s" ] && cp "$SRCDIR/$_s" "$mx0d/"
+done
+MX0F="$mx0d/merge-adversarial-shards.sh"
+if ! cmp -s "$MERGE" "$MX0F"; then bad "MX0: FIXTURE BROKEN -- the unmutated copy is not byte-identical to the merge"
+elif [ "$MATRIX" -eq 1 ]; then
+  sc_run "$MX0F" $ARMS_ALL; mx_cells MX0
+  if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy of the merge's sibling set): every arm HOLDS on it, tripped=[] (matrix)"; B_MX0=1
+  else bad "unmutated copy fails [$SC_DEAD] -- the harness, not a mutant, is what fails"; fi
+else
+  sc_run "$MX0F" A1 RS1
+  if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy of the merge's sibling set): B3 merges NOT_MET and RS1 refuses the reserved form, tripped=[]"; B_MX0=1
+  else bad "unmutated copy fails [$SC_DEAD] -- the harness, not a mutant, is what fails"; fi
+fi
+mutm m-k2only X1 X4 'if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
+  '[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] && collect "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $XTABLE_KEYS; a single cross shard is owed only at K=2"; if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi'
+mutm m-nomix X4 A1 '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \'
+mutm RM-A RS1 A1 'if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } ' ''
+mutm RM-B CH2 A1 '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|"") ;;'
+mutm BM-1 B726B B726H '| if ($s.e - $ae) > $tol then' '| if false then'
+mutm BM-2 B726C B726H '| if ($ae - $w.e) > $tol then' '| if false then'
+mutm BM-3 B726F B726B 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";'
+mutm BM-4 B726H B726B '| max_by(.e)) as $w' '| min_by(.e)) as $w'
+# PM1: the schema reverted to the single-sha pattern, driven through AI_DLC_PROJECT_ROOT (whose core/schemas/ the
+# reader tries FIRST), so the validator is the shipped one and only the schema differs. PBARE is its twin.
+pm1_mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$pm1_mt/core/schemas"
+if [ -z "$KSCH" ] || [ ! -s "$KSCH" ]; then bad "PM1: FIXTURE BROKEN -- provenance-block.json not found above $SRCDIR"; n_mut=$((n_mut + 1))
+else
+  cp "$KSCH" "$pm1_mt/core/schemas/provenance-block.json"
+  M_OLD='"pattern_ref": "artifact_sha"' M_NEW='"pattern_ref": "sha256"' python3 - "$pm1_mt/core/schemas/provenance-block.json" <<'PY'
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  if cmp -s "$KSCH" "$pm1_mt/core/schemas/provenance-block.json"; then bad "PM1: FIXTURE STALE -- the pattern_ref anchor is not in the schema exactly once"; n_mut=$((n_mut + 1))
+  else PBROOT="$pm1_mt" mut PM1 P1 PBARE "$MERGE"; fi
+fi
+if [ "$KOK" = 1 ]; then
+  for _L in inst core; do
+    mut "KMb-$_L" "K2ps_$_L" "K2vac_$_L" "$KMB"
+    mut "KMc-$_L" "K2sch_$_L" "K2vac_$_L" "$KMC"
+    mut "KEM-$_L" "KEps_$_L" "KEvac_$_L" "$KM593"
+  done
+else
+  bad "KMb/KMc/KEM: not scored -- the K section did not build (see K0)"
+fi
+[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
+if [ "$MATRIX" -eq 0 ]; then
+  [ "$MATRIX_ROWS" -eq 0 ] && ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix" || bad "PLAIN-RUN printed $MATRIX_ROWS MATRIX row(s)"
+else
+  n_arm=0; for _a in $ARMS_ALL; do n_arm=$((n_arm + 1)); done
+  [ "$MATRIX_ROWS" -eq $(( (n_mut + 1) * n_arm )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($n_arm arms x (every mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_mut + 1) * n_arm ))"
 fi
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

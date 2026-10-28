@@ -37,9 +37,23 @@
 #   6  MUTANT: the same seed through the pre-fix escaping is 7 / 6 — the arm can fire
 #   7  CONTROL: an unmutated copy in the same directory is 5 / 4 — the harness is alive
 #   8  the NON-ADJACENT seed scores 5 under both — the obvious input discriminates nothing
+#   9  a four-backtick fence hides its fenced heading and indexes the heading after its closer
+#   NM a plain run executes no matrix-only cell (control: the mutant's per-push drive ran)
+#
+# THE MATRIX. One mutant, MCELL (the cell helper reverted to pipes-only escaping, arm 6). Arm tokens An are the
+# arms above, each read on the MUTANT's own drive of its seed. Per push MCELL runs its deciding arm A4 (arm 6
+# reads A4's #bothhere row on the mutant's index) and its twin A8 (arm 8 reads the mutant's non-adjacent row);
+# the full mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
+# MUTANT-MATRIX MCELL decides=A4 twins=A8
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/architecture-index-cell-escaping/run.sh --matrix
+# Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A3, A5 and A9 green under
+# MCELL; only the twin it runs per push is named.
+#
+# Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+MODE=plain; [ "${1:-}" = --matrix ] && MODE=matrix
 
 fails=0
 asserts=0
@@ -47,14 +61,19 @@ ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
 
+B_A4=0   # set to 1 beside arm 4's ok: the unmutated subject's adjacent-pair row was intact in THIS run
+# shellcheck source=../lib/mutant.sh
+. "$HERE/../lib/mutant.sh" || { echo "architecture-index-cell-escaping: FIXTURE BROKEN" >&2; exit 2; }
+
 echo "architecture-index-cell-escaping:"
 
-# The subject is a node program. Without an interpreter nothing below can run, and a fixture
-# that silently exits 0 here would be a green light nobody earned — so say so out loud.
-# Same posture as check-25-steering-conduct, which has the same dependency.
+# The subject is a node program, and node is a declared tool (tools.decl). Without it nothing
+# below can run, and an exit 0 here would be a green light nobody earned, so a missing node is
+# FIXTURE BROKEN (exit 2), never a skip.
 command -v node >/dev/null 2>&1 || {
-  echo "  SKIP  node is not on PATH; architecture-index-cell-escaping cannot exercise a node subject"
-  exit 0
+  echo "  FAIL  node is not on PATH; architecture-index-cell-escaping cannot exercise a node subject"
+  echo "architecture-index-cell-escaping: FIXTURE BROKEN"
+  exit 2
 }
 
 # Both install layouts, NAMED rather than derived from one another (I33). In the
@@ -199,6 +218,7 @@ node "$WORK/count.js" --file "$WORK/out-subject.md" $KEYS > "$WORK/subject.tsv" 
 p_adj="$(field "$WORK/subject.tsv" '#bothhere' 1)"; c_adj="$(field "$WORK/subject.tsv" '#bothhere' 2)"
 if [ "$p_adj" = 5 ] && [ "$c_adj" = 4 ]; then
   ok "a title and summary carrying an adjacent backslash-pipe pair emit an intact 4-column row (5 unescaped pipes)"
+  B_A4=1
 else
   bad "the adjacent-pair row emitted ${p_adj} unescaped pipes / ${c_adj} cells, expected 5 / 4 — the cell escaping has regressed to the pre-fix order"
 fi
@@ -248,7 +268,7 @@ node "$WORK/count.js" --file "$WORK/out-control.md" $KEYS > "$WORK/control.tsv" 
 
 p_mut="$(field "$WORK/mutant.tsv" '#bothhere' 1)"; c_mut="$(field "$WORK/mutant.tsv" '#bothhere' 2)"
 if [ "$p_mut" = 7 ] && [ "$c_mut" = 6 ]; then
-  ok "MUTANT KILLED: with the escaping reverted the same seed emits 7 unescaped pipes / 6 cells — arm 4 can fire"
+  mutant_killed "$B_A4" MCELL "MUTANT KILLED: with the escaping reverted the same seed emits 7 unescaped pipes / 6 cells — arm 4 can fire"
 else
   bad "the mutant emitted ${p_mut} unescaped pipes / ${c_mut} cells, expected 7 / 6. Arm 4 is passing against a subject whose corruption this fixture cannot produce, which reads exactly like a guard that works"
 fi
@@ -287,10 +307,40 @@ else
   bad "the fence seed (exit ${rc_f}) indexed the fenced heading or lost the one after the closer: $(grep -c '^|' "$WORK/out-fence.md" 2>/dev/null) rows"
 fi
 
+# ------------------------------------------- the matrix: --matrix only -------------
+# Every arm that reads a script's output (A3, A4, A5, A8, A9), each scored on the MUTANT's own drive of its seed.
+# A1-A2 read no script; A6-A7 are the mutant's kill and its unmutated copy. A plain run never reaches this (arm NM).
+if [ "$MODE" = matrix ]; then
+  : > "$WORK/mx.ran"
+  node "$WORK/battery/mutant.js" --doc "$WORK/fdoc/architecture.md" --out "$WORK/out-mfence.md" >/dev/null 2>>"$WORK/gen.err"; rc_mf=$?
+  mx_row() { [ "$(field "$WORK/mutant.tsv" "$1" 1)" = 5 ] && [ "$(field "$WORK/mutant.tsv" "$1" 2)" = 4 ]; }
+  dec=""; tw=""
+  for a in A3 A4 A5 A8 A9; do
+    case "$a" in
+      A3) [ "$rc_mut" = 0 ] && [ -s "$WORK/out-mutant.md" ] ;;
+      A4) mx_row '#bothhere' ;;
+      A5) mx_row '#nonadjacent-slash' && mx_row '#pipe-only' && mx_row '#backslash-only-cpath' && mx_row '#plain-heading' ;;
+      A8) [ "$(field "$WORK/mutant.tsv" '#nonadjacent-slash' 1)" = 5 ] ;;
+      A9) [ "$rc_mf" = 0 ] && grep -qF '#real-after' "$WORK/out-mfence.md" && grep -qF '#real-before' "$WORK/out-mfence.md" \
+            && ! grep -qF '#fenced-heading' "$WORK/out-mfence.md" ;;
+    esac && tw="$tw,$a" || dec="$dec,$a"
+  done
+  printf 'MATRIX MCELL decides=%s twins=%s\n' "${dec#,}" "${tw#,}"
+fi
+# A SEPARATE exit, keyed on MODE: a matrix guard that wrongly opened on a plain run falls through to NM and FAILs.
+[ "$MODE" = matrix ] && exit 0
+
+# NM: a plain run reached no matrix-only cell, and the mutant's per-push drive did run.
+if [ ! -e "$WORK/mx.ran" ] && [ -s "$WORK/mutant.tsv" ]; then
+  ok "NM a plain run executes no matrix-only cell, and the mutant's per-push drive ran"
+else
+  bad "NM a plain run reached the matrix, or the mutant's per-push drive produced no rows"
+fi
+
 # ------------------------------------------------------------------- floor --------
 # EXPECTED_ASSERTIONS: several arms sit behind `broken` guards, and an assertion that never
 # executed prints nothing — a short green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=9
+EXPECTED_ASSERTIONS=10
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

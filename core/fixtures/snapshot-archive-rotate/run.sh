@@ -23,6 +23,7 @@
 # stays confined to the deciding arm. This recorded matrix plus the per-push twin replaces the
 # exact-vector rule ("a mutant must fail only its own assertion") that driving every arm per mutant
 # used to assert. Names are the column names the MATRIX rows print.
+# MUTANT-MATRIX-DYNAMIC score-name why=score() passes its first argument "$1" to mutant_killed; each score call (m1, m2, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/snapshot-archive-rotate/run.sh --matrix
 # MUTANT-MATRIX-CONTROL MUT why=a splitter that drops one line must be REFUSED by the subject itself (rc 1, accounting does not balance, history byte-identical); survival as a refusal is the pass
 # The CONTROL: lines of assertions 11, 13 and 14 are seed near-misses beside a refusal, not mutants,

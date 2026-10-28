@@ -175,7 +175,7 @@ q_world() { # q_world <W|H|X> -> sets Q_* from a clone of the q_base world (env.
   return 0
 }
 # ------------------------------------------------------------------ the matrix machinery ----
-# MUTANT-MATRIX MODE. `run.sh --matrix` scores EVERY world of each mutant's unit (and each named cross-unit twin)
+# Mutant matrix mode. `run.sh --matrix` scores EVERY world of each mutant's unit (and each named cross-unit twin)
 # and prints one `MATRIX <mutant> | <arm> | PASS|FAIL | <cell>` row per arm: PASS is green (equal to the unmutated
 # arm's cell), FAIL is tripped. A plain run scores only the DECIDING arm and its measured-green TWIN, and asserts
 # deciding FAILS and twin stays PASS. mx_row is called only under --matrix; the closing arm asserts that.

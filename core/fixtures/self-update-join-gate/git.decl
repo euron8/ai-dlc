@@ -1,0 +1,7 @@
+# The range the fixture drives the self-update gate over, derived by range.sh (the seed runs the same file outside a
+# sandbox). The paths are what the fixture reads at BASE and THEIRS, derived from install.sh at both ends and from
+# the gate and seed: install.sh is run from each end and reads only through $SCRIPT_DIR/.. -- core/ (35 sites),
+# patterns/, templates/ and VERSION -- plus its own file; the gate and seed read core/ (scripts, git-hooks,
+# fixtures, skills) and VERSION (the safe-stop walk's release commits). A commit touching none of them cannot move
+# what the fixture sees, so it does not move the key.
+range @range.sh core patterns templates VERSION scripts/install.sh

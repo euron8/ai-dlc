@@ -49,6 +49,7 @@ else
   B="$(mktemp -d "${TMPDIR:-/tmp}/bl733-receipt-XXXXXX")" || exit 9
 fi
 B="$(cd "$B" && pwd -P)"
+# RCPT_ARMS (optional): passed to the validator as --arms, its fixture seam (the named gate-only arms only).
 # RCPT_WORLDS (optional): judge only the named worlds; a name this receipt does not judge is exit 9. A world
 # left out never runs the subject, reads rc=99, and is dropped from the verdict.
 want() { [ -z "${RCPT_WORLDS:-}" ] && { RAN="$RAN $1 "; return 0; }; case " $RCPT_WORLDS " in *" $1 "*) RAN="$RAN $1 "; return 0 ;; esac; return 1; }
@@ -142,7 +143,7 @@ idiff="$(awk -F'\t' 'FNR == NR { o[$1] = $2; next } o[$1] != $2 { printf "%s ", 
 [ "$idiff" = "3 5 6 " ] || { echo "receipt: the index-diff control is '$idiff', not '3 5 6 '" >&2; exit 9; }
 
 run() { want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" ${RCPT_ARMS:+--arms "$RCPT_ARMS"} --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
 bad=""
 run nodelta
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] \

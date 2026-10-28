@@ -1,0 +1,8 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+# The `*` row is PROVISIONAL: two counting sweeps on one tree read 1357 and 1363, all of it in the mutant copies mCH/mCF/
+# mA2/mT/mX/mX2/mH/mZ3 and one `-c`. n = 1364 was re-taken on the rc that counts limited starts (0 limit markers), and
+# k = max(2, 3 x the old sweeps' spread). Owed: a deterministic loop (BL-850, a2).
+1364±18 * why=the-kill-point-sweep-(sweep_pass/sweep_worker,-KPAR-12):-each-point's-first-run-is-B4-(its-own-BASH_ENV,-uncounted)-and-its-counted-re-run-happens-only-until-the-first-worker-drops-the-stop-file provisional
+386 core/scripts/rotate-snapshot-archive.sh
+3 core/hooks/ai-dlc-continue.sh
+3 core/hooks/ai-dlc-pause.sh

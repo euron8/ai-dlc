@@ -8,3 +8,4 @@ core/hooks/
 core/scripts/validate-adversarial-convergence.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
+core/fixtures/lib/

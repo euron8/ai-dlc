@@ -54,54 +54,38 @@ mkdir -p "$TMPDIR" || exit 2
 # they install `objects/info/alternates` instead of copying, so a prune or a repack in the
 # SOURCE repository can delete objects this clone still needs, and the failure surfaces later
 # as a corrupt clone rather than at clone time.
+# BASE AND THEIRS HAVE ONE DERIVATION, range.sh. It names the parent of the newest commit that adds a
+# CHECK_LOADED anchor and the fourth VERSION-touching commit after that commit, and its header says why the bound
+# is the cost of advise_safe_stop's walk. git.decl's `range @range.sh <paths>` line runs the same file once per
+# push, keys the fixture on the range's commits that touch what the seed reads at either end, and in a hermetic
+# sandbox packs that range and writes its ends as refs/hermetic/range-1/{base,theirs} in the sandbox ROOT
+# repository. So: those refs when they exist, and range.sh run from the root otherwise. The sandbox repository has
+# no branch, and a clone of a branchless repository carries nothing, so its HEAD branch is pointed at THEIRS there,
+# and only there; a real checkout always has a branch and is never written.
+if b="$(git -C "$D_ROOT" rev-parse -q --verify refs/hermetic/range-1/base 2>/dev/null)" \
+   && t="$(git -C "$D_ROOT" rev-parse -q --verify refs/hermetic/range-1/theirs 2>/dev/null)"; then
+  BASE="$b"; THEIRS="$t"
+  if [ -z "$(git -C "$D_ROOT" for-each-ref --count=1 refs/heads)" ]; then
+    hb="$(git -C "$D_ROOT" symbolic-ref -q HEAD)" && git -C "$D_ROOT" update-ref "$hb" "$THEIRS" || {
+      echo "FIXTURE ERROR: could not give the branchless sandbox repository a HEAD branch at THEIRS" >&2; exit 2; }
+  fi
+else
+  rng="$(cd "$D_ROOT" && bash "$HERE/range.sh")" || rng=""
+  BASE="${rng%%..*}"; THEIRS="${rng#*..}"
+  case "$rng" in ?*..?*) ;; *)
+    echo "FIXTURE ERROR: range.sh derived no <base>..<theirs> (no commit adds a CHECK_LOADED anchor, or git failed)," >&2
+    echo "  so there is no check-adding range to test and every assertion would pass vacuously." >&2
+    exit 2 ;;
+  esac
+fi
+
 DIST="$WORK/dist"
 git clone -q "$D_ROOT" "$DIST" 2>/dev/null || {
   echo "FIXTURE ERROR: could not clone the distribution" >&2; exit 2; }
-
-# BASE/THEIRS are DERIVED from the range that actually adds a check, never hardcoded to a
-# release number. The subject is "a pull that crosses a check-adding commit", so the seed
-# finds one: the newest commit that adds a CHECK_LOADED anchor, and its parent.
-ADDED="$(git -C "$DIST" log --format=%H -S'<!-- CHECK_LOADED:' --pickaxe-regex \
-           -- core/skills/ai-dlc/steps/gate-validation.md | head -1)"
-if [ -z "$ADDED" ]; then
-  echo "FIXTURE ERROR: no commit in history adds a CHECK_LOADED anchor, so there is no" >&2
-  echo "  check-adding range to test and every assertion would pass vacuously." >&2
-  exit 2
-fi
-BASE="$(git -C "$DIST" rev-parse "${ADDED}^")"
-
-# THEIRS IS BOUNDED A FEW RELEASES PAST THE ANCHOR-ADDER, NOT HEAD, AND THE COST IS THE REASON.
-#
-# The subject is "a pull that crosses a check-adding commit", which needs $ADDED inside the
-# range and nothing else. Taking HEAD made the range everything since $ADDED, and
-# `self-update-gate.sh`'s `advise_safe_stop` spawns ONE NESTED FULL GATE INVOCATION per
-# VERSION-touching commit in it (`:120-122`). Measured on this history: 111 VERSION commits in
-# the range, ~1.4s per nested invocation, 153.7s of a 155.07s gate call -- 99.1% of the cost,
-# for a term no assertion here reads. The range grew by one invocation per release that added
-# no anchor, so this fixture got slower on its own and became the suite's longest pole.
-#
-# STILL DERIVED, NEVER A HARDCODED REF. The bound is "the Nth VERSION-touching commit after
-# $ADDED", walked forward from the derived anchor commit, so it moves with history exactly as
-# the old form did. A literal sha here would be the thing the block above exists to avoid.
-#
-# THE FLOOR KEEPS SAFE-STOP EXERCISED. Bounding to $ADDED itself would leave the safe-stop loop
-# with zero candidates, and a fixture that runs the gate without ever entering that loop passes
-# having tested less than it did before. The floor below asserts the loop still has work.
-SUJG_SS_FLOOR=4
-ss_after="$(git -C "$DIST" rev-list --reverse "${ADDED}..HEAD" -- VERSION)"
-n_after="$(grep -c . <<<"$ss_after")"
-if [ "${n_after:-0}" -ge "$SUJG_SS_FLOOR" ]; then
-  THEIRS="$(sed -n "${SUJG_SS_FLOOR}p" <<<"$ss_after")"
-  SUJG_BOUNDED=yes
-else
-  # Not enough history after the anchor-adder to bound against -- e.g. the anchor landed in the
-  # last few releases. Fall back to the old unbounded end. This is the pre-existing behaviour,
-  # so the fallback cannot be a regression, and it is why the floor below is asserted only in
-  # the bounded case: failing here would wedge a push on a tree whose only fault is a recent
-  # anchor commit.
-  THEIRS="$(git -C "$DIST" rev-parse HEAD)"
-  SUJG_BOUNDED=no
-fi
+for _r in "$BASE" "$THEIRS"; do
+  git -C "$DIST" cat-file -e "${_r}^{commit}" 2>/dev/null || {
+    echo "FIXTURE ERROR: range end $_r is not a commit in the distribution clone" >&2; exit 2; }
+done
 
 # The candidate count the safe-stop loop will actually iterate: VERSION-touching commits in the
 # range, minus THEIRS itself, which `:121` skips. Read into a variable and matched with a
@@ -111,10 +95,9 @@ ss_list="$(git -C "$DIST" rev-list "${BASE}..${THEIRS}" -- VERSION)"
 ss_n="$(grep -c . <<<"$ss_list")"
 ss_eff="${ss_n:-0}"
 grep -qx "$THEIRS" <<<"$ss_list" && ss_eff=$((ss_n - 1))
-if [ "$SUJG_BOUNDED" = yes ] && [ "$ss_eff" -lt 1 ]; then
-  echo "FIXTURE ERROR: the bounded range leaves the safe-stop loop $ss_eff candidate(s)," >&2
-  echo "  so advise_safe_stop would never enter its loop and the gate would be exercised" >&2
-  echo "  less than it was before the range was bounded (target floor: $SUJG_SS_FLOOR)." >&2
+if [ "$ss_eff" -lt 1 ]; then
+  echo "FIXTURE ERROR: the range leaves the safe-stop loop $ss_eff candidate(s), so r_old's one real" >&2
+  echo "  advise_safe_stop walk would never enter its loop (range.sh bounds THEIRS four releases past the anchor)." >&2
   exit 2
 fi
 

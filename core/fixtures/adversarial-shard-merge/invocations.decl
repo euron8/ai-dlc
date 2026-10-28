@@ -1,0 +1,4 @@
+# Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J2/J3 output) at the tip carrying the mutant_killed/--matrix rewrite, then verified by two more armed runs at the committed tip.
+3092 *
+420 core/scripts/merge-adversarial-shards.sh
+375 core/scripts/content-seal.sh

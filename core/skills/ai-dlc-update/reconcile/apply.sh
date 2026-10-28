@@ -1148,7 +1148,7 @@ if [ "$FINISH" = 0 ]; then
 # Every detector this file consults answers a question about the CONSUMER'S OWN STATE:
 # preclassify buckets a file by how consumer, base and theirs relate; unregistered-drift
 # asks whether a core file was edited in place, which it decides with
-# `git show "${BASE}:${cp}" | cmp -s - "$cons"` (unregistered-drift.sh:187). Both are only
+# a `cmp -s` of the staged base blob against "$cons" (unregistered-drift.sh:737). Both are only
 # meaningful BEFORE this script starts overwriting that state.
 #
 # The drift capture used to sit down in phase 2, AFTER phase 1 had already overwritten every

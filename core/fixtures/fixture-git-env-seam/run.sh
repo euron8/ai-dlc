@@ -54,6 +54,7 @@
 # MUTANT-MATRIX m3 decides=A twins=U
 # MUTANT-MATRIX m4 decides=A twins=U
 # MUTANT-MATRIX b2 decides=B twins=U
+# MUTANT-MATRIX-DYNAMIC m-loop why=the loop for _m in m1 m2 m3 m4 b2 passes "$_m" to mutant_killed; each of the five carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
 set -u
 
@@ -182,7 +183,7 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
 # STATE AND NOT ANY PROJECT'S. It is gitignored under `.claude/*`, it appears in whatever
 # number of concurrent sessions happen to be running, and this repo's own code names it only
 # to record that `git ls-files` correctly drops it
-# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1205`). Copying it made this
+# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1992`). Copying it made this
 # fixture's cost a function of ambient harness activity: measured on one tree, 34 agent
 # checkouts, 871M of a 1.0G copy, 15x the file count, 8 copies per run -- ~10s each against
 # ~0s with it excluded, three interleaved reps, sides asserted to differ first.

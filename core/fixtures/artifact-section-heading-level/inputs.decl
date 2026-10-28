@@ -2,3 +2,4 @@
 # steps/retro.md (the subject). Both are consumed at the point run.sh sources and materialises them.
 !core/skills/ai-dlc-update/reconcile/lib.sh
 !core/skills/ai-dlc/steps/retro.md
+core/fixtures/lib/mutant.sh

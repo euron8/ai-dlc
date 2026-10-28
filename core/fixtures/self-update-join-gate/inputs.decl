@@ -1,0 +1,8 @@
+# Everything the fixture reads from the tree. The gate is REQUIRED: run.sh prints its sentinel only after r_old, a
+# real gate run, produced a verdict. The whole skill directory is declared because every gate copy is a copy of it
+# (the gate loads preclassify.sh beside itself, and preclassify.sh reads ../fixture-manifest.md) and arm cs scans it
+# for a shipped caller passing --no-safe-stop-advice. The distribution the seed clones, installs consumers from and
+# diffs is the range git.decl packs, not files named here.
+!core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+core/skills/ai-dlc-update/
+core/fixtures/lib/

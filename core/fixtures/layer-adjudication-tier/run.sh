@@ -150,7 +150,7 @@ record() { # $1 digest, $2 verdict, [$3 supersedes]
 
 echo "layer-adjudication-tier:"
 
-command -v jq >/dev/null 2>&1 || { echo "  SKIP  jq is not on PATH; the register cannot be read and every assertion below would be vacuous" >&2; exit 0; }
+command -v jq >/dev/null 2>&1 || { echo "  FIXTURE BROKEN: jq is not on PATH; the register cannot be read and every assertion below would be vacuous" >&2; exit 2; }
 
 # --- Part 0: the seed is a real range and the classifier ran ------------------
 # Parts 2 and 5 assert a blocking row is ABSENT. A run that emitted nothing at all satisfies

@@ -54,7 +54,10 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 # mapping I8 binds to install.sh, exactly as unregistered-drift.sh and apply.sh do. A
 # private copy here would be a second home for the same list, and this repo has already
 # paid for that twice — `unregistered-drift.sh`'s own header records its copy going wrong.
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "retired-fixtures: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" 2>/dev/null || true
