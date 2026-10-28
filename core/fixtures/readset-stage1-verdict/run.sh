@@ -454,36 +454,36 @@ smut() {
   if [ "$MATRIX" = 1 ]; then matrix_row "$name" "$dst" "$decides"; fi
 }
 echo " scorer mutants:"
-smut "$(( ${B_w_a1:-0} && ${B_w_met:-0} ))" del-A1 a1 met '    a1_omitted "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a1:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" del-A1 a1,a3u met '    a1_omitted "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
 smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" del-A2 a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a3:-0} && ${B_w_met:-0} ))" del-A3 a3 met '    a3_canary "$rd/root/w/$fx.canary" "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a4:-0} && ${B_w_met:-0} ))" del-A4 a4 met '  a4_load "$rd/load.tsv" "$ws" "$we" "$label" || FAILED=1' '  :'
-smut "$(( ${B_w_a5:-0} && ${B_w_met:-0} ))" del-A5 a5 met '    a5_paths "$rd/deriver.log" "$rd/root/w/$fx.set" "$fx" "$label" || FAILED=1' '    :'
-smut "$(( ${B_w_a6:-0} && ${B_w_met:-0} ))" del-A6 a6 met '  a6_compare "$RD1" "$RD2" "$RD3" "$fx" "$SCRATCH" || FAILED=1' '  :'
+smut "$(( ${B_w_a3:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" del-A3 a3,a3u met '    a3_canary "$rd/root/w/$fx.canary" "$rd/deriver.log" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a4:-0} && ${B_w_a4_after:-0} && ${B_w_met:-0} ))" del-A4 a4,a4-after met '  a4_load "$rd/load.tsv" "$ws" "$we" "$label" || FAILED=1' '  :'
+smut "$(( ${B_w_a5:-0} && ${B_w_a5n:-0} && ${B_w_met:-0} ))" del-A5 a5,a5n met '    a5_paths "$rd/deriver.log" "$rd/root/w/$fx.set" "$fx" "$label" || FAILED=1' '    :'
+smut "$(( ${B_w_a6:-0} && ${B_w_a6_gitignore:-0} && ${B_w_a6_owntree:-0} && ${B_w_a6_p2:-0} && ${B_w_a6_dir:-0} && ${B_w_met:-0} ))" del-A6 a6,a6-gitignore,a6-owntree,a6-p2,a6-dir met '  a6_compare "$RD1" "$RD2" "$RD3" "$fx" "$SCRATCH" || FAILED=1' '  :'
 smut "$(( ${B_w_a6_owntree:-0} && ${B_w_met:-0} ))" a6-owntree a6-owntree met \
   '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
   '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
 smut "$(( ${B_w_a6_gitignore:-0} && ${B_w_met:-0} ))" a6-caret-git a6-gitignore met \
   "    awk '\$0 != \"\" && \$0 != \".git\" && index(\$0, \".git/\") != 1' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\" \
   "    awk '\$0 != \"\" && \$0 !~ /^\\.git/' \"\$rd/root/w/\$fx.set\" | LC_ALL=C sort -u > \"\$s/a6.\$i\" \\"
-smut "$(( ${B_w_a1:-0} && ${B_w_met:-0} ))" a1-substring a1 met \
+smut "$(( ${B_w_a1:-0} && ${B_w_a3u:-0} && ${B_w_met:-0} ))" a1-substring a1,a3u met \
   "  hit=\"\$(awk -v f=\"\$2\" '\$1 == f && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\"" \
   "  hit=\"\$(awk -v f=\"\$2\" 'index(\$1, f) == 1 && \$2 == \"OMITTED\" { print; exit }' \"\$1\")\""
 smut "$(( ${B_w_a5:-0} && ${B_w_met:-0} ))" a5-substring a5 met \
   "  logged=\"\$(awk -v f=\"\$3\" '\$1 == f && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\"" \
   "  logged=\"\$(awk -v f=\"\$3\" 'index(\$1, f) == 1 && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\""
 smut "$(( ${B_w_a2:-0} && ${B_w_met:-0} ))" a2-reads-log a2 met '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    a2_dropped "$rd/deriver.log" "$fx" "$label" || FAILED=1'
-smut "$(( ${B_w_a4:-0} && ${B_w_met:-0} ))" a4-whole-file a4 met '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
-smut "$(( ${B_w_r0_log:-0} && ${B_w_met:-0} ))" del-R0 r0-log met '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
+smut "$(( ${B_w_a4:-0} && ${B_w_a4_after:-0} && ${B_w_met:-0} ))" a4-whole-file a4,a4-after met '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
+smut "$(( ${B_w_r0_log:-0} && ${B_w_r0_sb:-0} && ${B_w_r0_profile:-0} && ${B_w_met:-0} ))" del-R0 r0-log,r0-sb,r0-profile met '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
 smut "$(( ${B_w_r2_link:-0} && ${B_w_met:-0} ))" r2-string r2-link met \
   '  a="$(cd "$1/root" 2>/dev/null && pwd -P)"; b="$(cd "$2/root" 2>/dev/null && pwd -P)"; c="$(cd "$3/root" 2>/dev/null && pwd -P)"' \
   '  a="$1/root"; b="$2/root"; c="$3/root"'
 # The ledger read, two skip mutants. Each drops the bad run's lines BOTH (started and terminal), so
 # what is left is three well-formed pairs and the mutant scores MET: a skip, not a different refusal.
 L6_OLD="awk 'NF > 0' \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut "$(( ${B_w_rl_skip:-0} && ${B_w_met:-0} ))" rl-skip rl-skip met "$L6_OLD" \
+smut "$(( ${B_w_rl_rc:-0} && ${B_w_rl_skip:-0} && ${B_w_met:-0} ))" rl-skip rl-rc,rl-skip met "$L6_OLD" \
   "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\" && \$2 != \"0\") b[\$1] = 1; next } NF > 0 && !(\$1 in b)' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
-smut "$(( ${B_w_rl_started:-0} && ${B_w_met:-0} ))" rl-skip-started rl-started met "$L6_OLD" \
+smut "$(( ${B_w_rl_started:-0} && ${B_w_rl_foreign:-0} && ${B_w_met:-0} ))" rl-skip-started rl-started,rl-foreign met "$L6_OLD" \
   "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\") t[\$1] = 1; next } NF > 0 && !(\$2 == \"started\" && !(\$1 in t))' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
 # A2 keyed on an ending `log stream` never writes: dies on the producer's verbatim line.
 A2_OLD="  n=\"\$(grep -c 'dropped during' \"\$1\" 2>/dev/null)\""
@@ -514,21 +514,22 @@ smut "$(( ${B_w_r2_one:-0} && ${B_w_met:-0} ))" r2-first-only r2-one met "$R2_OL
 # The pair check itself: unchecked, and with either the epoch or the HEAD conjunct dropped. Each
 # dies on the one world whose started line differs from its terminal in that field alone.
 RLP_OLD='    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] && [ "$sh" = "$th" ] \'
-smut "$(( ${B_w_rl_foreign:-0} && ${B_w_met:-0} ))" rl-pair-unchecked rl-foreign met "$RLP_OLD" '    true \'
+smut "$(( ${B_w_rl_foreign:-0} && ${B_w_rl_epoch:-0} && ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-unchecked rl-foreign,rl-epoch,rl-head met "$RLP_OLD" '    true \'
 smut "$(( ${B_w_rl_epoch:-0} && ${B_w_met:-0} ))" rl-pair-no-epoch rl-epoch met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$sh" = "$th" ] \'
 smut "$(( ${B_w_rl_head:-0} && ${B_w_met:-0} ))" rl-pair-no-head rl-head met "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] \'
 
 # THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
 # scorer, self-probe live, `--self-probe` exits 2.
-pmut() { # pmut <flag> <name> <old> <new>: decides selfprobe, twin met (the mutated scorer still scores the ALL-MET world MET)
-  local flag="$1" name="$2" rc sp m
+pmut() { # pmut <flag> <name> <old> <new>: decides selfprobe alone (the self-probe runs before any world, so every world refuses: dead in every cell)
+  local flag="$1" name="$2" rc sp m w
   export MUT_OLD="$3" MUT_NEW="$4"
   if mut "$SCORER" "$MD/$name.sh"; then
     sp="$(TMPDIR="$MD" bash "$MD/$name.sh" --self-probe 2>&1)"; rc=$?
     if [ "$rc" = 2 ]; then mutant_killed "$flag" "$name" "the scorer's --self-probe refuses $name (rc 2)"; else bad "the scorer's --self-probe passed $name (rc $rc: $sp)"; fi
-    m="$(world_hit "$MD/$name.sh" met)"
-    [ "$m" = 0 ] || bad "mutant $name is not confined: its twin world met answers differently under it"
-    if [ "$MATRIX" = 1 ]; then MCELLS=$((MCELLS + 2)); echo "MATRIX $name selfprobe:$([ "$rc" = 2 ] && echo 1 || echo 0) met:$m"; fi
+    if [ "$MATRIX" = 1 ]; then
+      m=""; while IFS= read -r w; do MCELLS=$((MCELLS + 1)); m="$m $w:$(world_hit "$MD/$name.sh" "$w")"; done < "$WORLDS"
+      echo "MATRIX $name selfprobe:$([ "$rc" = 2 ] && echo 1 || echo 0)$m"
+    fi
   else
     bad "self-probe mutant $name DID NOT APPLY"
   fi
@@ -838,7 +839,7 @@ wmut() {
       reap
     done
     echo "MATRIX $name$cells"
-    mx_judge "$name" "${7:-$decides}" "${ks#,}"
+    mx_judge "$name" "${7:-${ks#,}}" "${ks#,}"
   fi
 }
 echo " wrapper mutants:"
@@ -848,7 +849,7 @@ wmut "${B_wr_ok:-0}" load-under-root ok term "$S1" \
 wmut "${B_wr_ok:-0}" load-5min ok term "$S1" \
   "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
 wmut "${B_wr_ok:-0}" profile-passed-through ok term 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment'
-wmut "${B_wr_kill9:-0}" no-started-line kill9 - "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \'
+wmut "${B_wr_kill9:-0}" no-started-line kill9 - "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \' ok,term,kill9
 reap
 # No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses. The mutated line is
 # read from the wrapper itself, whole, so the fixture restates none of the wrapper's refusal vocabulary.
@@ -858,7 +859,7 @@ wmut "${B_wr_kill9:-0}" no-orphan-check kill9 ok "$OPEN_LINE" ': orphan check re
 if grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check-kill9.why" 2>/dev/null; then mutant_killed "${B_wr_kill9:-0}" no-orphan-check "the no-orphan-check mutant died on arm (a), the live-orphan refusal"; else bad "the no-orphan-check mutant did not die on arm (a)"; fi
 reap
 RESTORE='  cp -p "$SNAP" "$MAP" 2>/dev/null'
-wmut "$(( ${B_wr_ok:-0} && ${B_wr_term:-0} ))" no-restore ok,term kill9 "$RESTORE" '  :'
+wmut "$(( ${B_wr_ok:-0} && ${B_wr_term:-0} ))" no-restore ok,term - "$RESTORE" '  :' ok,term,kill9
 wmut "${B_wr_term:-0}" single-pid-kill term ok \
   '  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi' \
   '  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi'
@@ -916,16 +917,16 @@ if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then B_pk=1; o
 # pkmut <name> <awk gsub from> <awk gsub to>: decides pk-site1 (the first reaping line, probed alone per push),
 # twin clause-count (the root-literal clause count on the same copy stays 3). Matrix mode scores both sites.
 pkmut() {
-  local dst="$MD/pk-$1.sh" c g g2 cc
+  local dst="$MD/pk-$1.sh" c g cc
   awk -v f="$2" -v t="$3" -v CF="$dst.count" '{ c += gsub(f, t) } { print } END { print c + 0 > CF }' "$DERIVER" > "$dst" || { bad "pkill mutant $1 DID NOT APPLY"; return; }
   c="$(cat "$dst.count")"
   if [ "$c" != 2 ] || cmp -s "$DERIVER" "$dst"; then bad "pkill mutant $1 DID NOT APPLY ($c site(s))"; return; fi
-  g="$(pk_score "$dst" 1)"; cc="$(cl_count "$dst")"
-  if [ "$g" = 'child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else mutant_killed "${B_pk:-0}" "pk-$1" "pkill mutant $1 KILLED at the first reaping site ($g; twin clause-count $cc)"; fi
+  g="$(pk_score "$dst")"; cc="$(cl_count "$dst")"
+  if [ "$g" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else mutant_killed "${B_pk:-0}" "pk-$1" "pkill mutant $1 KILLED ($g; twin clause-count $cc)"; fi
   [ "$cc" = 3 ] || bad "pkill mutant $1 is not confined: the root-literal clause count is $cc under it, not 3"
   if [ "$MATRIX" = 1 ]; then
-    MCELLS=$((MCELLS + 2)); g2="$(pk_score "$dst" 2)"
-    echo "MATRIX pk-$1 pk-site1:$([ "$g" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) pk-site2:$([ "$g2" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) clause-count:$([ "$cc" = 3 ] && echo 0 || echo 1)"
+    MCELLS=$((MCELLS + 3))
+    echo "MATRIX pk-$1 pk-site1:$([ "${g%%;*}" = 'child=dead decoy=alive' ] && echo 0 || echo 1) pk-site2:$([ "${g#*;}" = 'child=dead decoy=alive;' ] && echo 0 || echo 1) clause-count:$([ "$cc" = 3 ] && echo 0 || echo 1)"
   fi
 }
 pkmut bare 'pkill -P [$][$] -x fs_usage' 'pkill -x fs_usage'
