@@ -50,7 +50,6 @@ scope-confirmation
 self-update-fixture-log
 self-update-gate
 shell-portability
-snapshot-section-schema
 spec-join-integrity
 story-provenance
 suppression-lifetime
