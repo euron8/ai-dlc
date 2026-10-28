@@ -1871,7 +1871,7 @@ I56 binds them, so the gate cannot classify a binding differently from the hook
 that made it.
 
 **Exit 0 = clean. Exit 1 FAILS**, clearable only by the disposition
-below — repair for a missing Rule 19(b) citation or an invalid serial exception,
+below — repair for a missing Rule 19(b) citation, an invalid serial exception or an S4 cover miss,
 the four-arm path for every class — which covers every class of recorded violation that reaches this exit
 code: a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract citation,
 an unreadable role file, an effort mismatch, and an **invalid serial
@@ -1924,7 +1924,7 @@ teammate (R) must RUN: R counts only when its `tool_use_id` joins a row in
 sprint, LATER than V in ledger order, itself clean on V's class, and name exactly
 one V with one `remediates:` line. When the validator then exits 0 it prints
 `REMEDIATED: <V> by <R> (<class>)` for each pair and `remediated=<n>` on
-`COUNTS:`. Remediation suppresses only the class (i) or (ii) increment on V; any
+`COUNTS:`. Remediation suppresses only the class (i), (ii) or S4 cover increment on V; any
 other violation on the same row still fails.
 
 The lead then writes the resolution record the series validator requires for a

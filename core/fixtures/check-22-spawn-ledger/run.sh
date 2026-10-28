@@ -1480,7 +1480,7 @@ s3mut() { # name sed-expr -> path, or empty when it did not apply
   bash -n "$M" 2>/dev/null || return 1
   printf '%s' "$M"
 }
-S3A="$(s3mut a 's/^      X) remediated shard "\$sh_e" && continue$/      Xdisabled) remediated shard "$sh_e" \&\& continue/')"
+S3A="$(s3mut a 's/^         if remediated shard "\$sh_e"; then SHARD_VIOL=\$((SHARD_VIOL - 1)); continue; fi$/         if false; then SHARD_VIOL=\$((SHARD_VIOL - 1)); continue; fi/')"
 if [ -z "$S3A" ]; then
   bad "FIXTURE BROKEN: S3 mutant (a) did not apply -- the reader branch was renamed"
 elif ! need_base "$B_s3" "S3 (a)"; then :
@@ -1539,7 +1539,7 @@ B_s4=0
 # S4 MUTANT: the coverage check dropped (the reader ignores the C record, so nothing can refuse).
 # Anchored OUTSIDE shard_scan on purpose, like the S3 mutants: the self-probe calls shard_scan, so a
 # mutation inside it exits 2 before the corpus. The offender must then pass, so the refusal cell dies.
-S4A="$(s3mut s4a 's/^      C) remediated cover "\$sh_e" && continue$/      Cdisabled) remediated cover "$sh_e" \&\& continue/')"
+S4A="$(s3mut s4a 's/^         if remediated cover "\$sh_e"; then SHARD_COV=\$((SHARD_COV - 1)); continue; fi$/         if false; then SHARD_COV=\$((SHARD_COV - 1)); continue; fi/')"
 if [ -z "$S4A" ]; then
   bad "FIXTURE BROKEN: S4 mutant did not apply -- the coverage branch was renamed"
 elif ! need_base "$B_s4" S4; then :
