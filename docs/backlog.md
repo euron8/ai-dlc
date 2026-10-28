@@ -1173,6 +1173,24 @@ Renders per push (counter spliced into `render()`, one shard per run): before (0
 
 verify: manual
 
+## BL-850 — fixtures run their subject once per assertion, mutant or world, and some skip with exit 0 on a condition true in normal use; nothing refuses the regrowth
+
+**DEFECT (efficiency).** Prevention half of the fixture-optimization feature. Fixtures ran their subject once per assertion, once per mutant, and once per world: `reconcile-emit-report` rendered the full report about 200 times where one or two renders suffice, and `readset-skip` scored 15 mutants against 15 worlds on every push. Separately, fixtures SKIPped with exit 0 on conditions true in normal use (a linked-worktree `.git`, a missing declared tool), which reads as a pass. Nothing bound either, so the cost grew back after every fix. The convention is `.claude/rules/fixture-mutants.md`, "One run per distinct state"; the decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Three mechanisms, each with a self-probe in both directions:
+
+- **Invocation budget.** `scripts/validate-fixture-invocations.sh` judges each fixture's `invocations.decl` against the bash starts counted inside `core/scripts/hermetic-run.sh`, armed once per push in `.githooks/pre-push` at pool depth 0. `measured == declared`, binary. Its header states the blind routes and the arms J1 to J5; the list is not restated here.
+- **Static hygiene.** `scripts/validate-fixture-hygiene.sh`, a standalone pre-suite step: H1 linked-worktree false skip, H2 declared-tool false skip, H3 a script started under `sh`, H5 the mutant matrix block, joined to a derived down-only allowlist `scripts/fixture-matrix-allowlist.txt`.
+- **Runtime name join.** `mutant_killed` in `core/fixtures/lib/mutant.sh` records each name it reports, and J5 joins every one to a block row.
+
+False-positive sets, measured over the b245-p1 tree: H1 judged 46 `-d …/.git` lines, 1 offender (fixed), 0 false positives. H2 judged 215 `command -v` sites, 6 offenders, 0 false positives. H3 judged 15 raw `sh <word>` lines, 5 offenders, 0 false positives. H5 population is 214 fixtures, of which 2 carry a block and 212 are the derived allowlist, which is the enumerated false-positive set because membership is a floor claim, not a defect claim. The budget's own false-positive set comes from the counting passes on the integrated tip and is recorded in the LANDED line.
+
+H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-into-file lines, 400 bare statements, and 200 joined to a `cmp -s` on the same pair across 78 fixtures. Whether one is an offender depends on what the mutant's kill asserts, which a line grammar cannot see, so the set is not enumerable and the arm is not shipped.
+
+Owed: the 212 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
+
+verify: sh bash scripts/validate-fixture-invocations.sh --self-probe >/dev/null 2>&1 && bash scripts/validate-fixture-hygiene.sh --derive >/dev/null 2>&1
+
 ## Reopened by BL-817's re-audit (batch 243)
 
 Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
