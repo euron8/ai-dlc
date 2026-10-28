@@ -72,7 +72,6 @@ ledger-rotate
 mutation-red-replay
 owed-derivations
 party-wave-barrier
-path-mapping-render
 pause-hook-origin
 plan-rotate
 post-write-gates
