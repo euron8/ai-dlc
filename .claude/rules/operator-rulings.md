@@ -47,7 +47,7 @@ the batch keeps taking scope and assigns new entries to free builders.
 
 When the process that produced an artifact turns out to be broken, the artifact is not
 salvaged by inspection. Archive it and rerun. Do not disposition it green on the grounds that
-it looks fine.
+it looks fine — the whole point is that looking fine was never the signal.
 
 ## Optimize wall clock where something waits, dollars where nothing does
 
