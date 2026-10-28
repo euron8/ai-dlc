@@ -39,7 +39,7 @@
 # MUTANT-MATRIX. Each mutant is scored on its DECIDING ARM plus ONE named TWIN, an arm the measured matrix shows GREEN under
 # it, read off the same capture. `--matrix` captures every mutant once and scores it on EVERY arm. The recorded matrix plus the twin
 # replaces the exact-vector assertion that a mutant fails only its own assertion. The matrix is re-measured whenever an arm or a mutant
-# is added or changed. c5-m4-open is the same mutation as c5-m4 over an OPEN receipt: a matrix-only cell, not run per push.
+# is added or changed. c5-m4-open is the same mutation as c5-m4 over an OPEN receipt and is its own mutant, run per push.
 # MUTANT-MATRIX m1 decides=m1 twins=m6
 # MUTANT-MATRIX m3 decides=m3 twins=m6
 # MUTANT-MATRIX m2c decides=m2c twins=m3
@@ -290,7 +290,7 @@ done
 # c5-m4: the sentinel ignored on entry. The bounded seed (depth cap 1) runs the receipt once under
 # the control and twice when the inner run re-executes it instead of skipping.
 arm_c5_m4() { r_line "$1" "SIDE rows=R8:BL-864, R7:" && r_line "$1" "SIDE runs=2"; }
-# The same mutation over an OPEN receipt, a matrix-only cell (see c5-m4-open below).
+# The same mutation over an OPEN receipt (see c5-m4-open below).
 arm_c5_open() {
   local c="$1" runs ctl row
   runs="$(sed -n 's/^SIDE runs=//p' "$REC/$c.out" | sed -n '1p')"
@@ -1996,11 +1996,10 @@ if c5r_case c5r-open-ctl open ""; then
     esac
   fi
 fi
-# c5-m4-open is the SAME mutation over an OPEN receipt. It is a second world for one mutant, not a
-# second mutant: the closed world above decides c5-m4 on every push, and this cell is measured only
-# under --matrix (the open scorer's export of the sentinel is held on every push by c5r-open-control
-# and by c5-m5).
-if [ "$MATRIX" = 1 ] && c5r_case c5-m4-open open "$C5R_M4"; then
+# c5-m4-open is the SAME mutation over an OPEN receipt, and it is its own mutant: no other mutant
+# decides c5_open, so the open scorer's re-entry kill is proved on every push. Its twin c5_m4 is read
+# off this same capture.
+if c5r_case c5-m4-open open "$C5R_M4"; then
   c5r_r="$(c5r_row BL-865)"
   record c5-m4-open "$(tail -1 <<<"$C5R_OUT" | sed 's/^rc=//')" "$C5R_OUT"
   side c5-m4-open "runs=$C5R_RUNS"
@@ -2113,7 +2112,7 @@ if [ "$MATRIX" = 1 ]; then
   if [ "$MROWS" -eq $((mx_nc * mx_na)) ] && [ "$MROWS" -gt 0 ]; then ok "[MX] the matrix run measured $MROWS cells for $mx_nc captures x $mx_na arms"
   else bad "[MX] matrix rows=$MROWS for $mx_nc captures x $mx_na arms"; fi
 else
-  if [ "$MROWS" -eq 0 ] && [ ! -f "$REC/c5-m4-open.rc" ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0, no c5-m4-open capture)"
+  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"
   else bad "[MX] a plain run executed matrix-only work (rows=$MROWS)"; fi
 fi
 
