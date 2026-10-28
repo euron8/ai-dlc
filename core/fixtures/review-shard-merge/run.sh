@@ -100,7 +100,7 @@
 # MUTANT-MATRIX M46 decides=xc_one/xc-one twins=xc_flip/xc-flip
 # MUTANT-MATRIX m-k2only decides=x_lone/x-lone-k8,x_lone/x-lone-qa twins=x_lone/x-partial
 # MUTANT-MATRIX m-nomix decides=x_mix/x-mix twins=cs/partcite
-# MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell over the unmutated sibling copy, the base-pass flag its kill needs
+# MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed
 # MUTANT-MATRIX-DYNAMIC mut_run why=mut_run hands its <id> argument to mutant_killed; every id it is called with has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/review-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
