@@ -71,6 +71,10 @@
 # repo root.
 # m7-field-1 decides two cells because its one fault, a classifier that reads field 1 only, is aimed at both the
 # profiler's splice probe and the A2 gap clause.
+# also trips: m1-marker-neutered -> Pbase
+# also trips: m7-field-1 -> Jfloor,Mpipe
+# also trips: m13-marker-widened -> Mpipe
+# also trips: m10-asg-preBL417, m11-asg-no-plus and m12-asg-widened -> Mpipe
 # MUTANT-MATRIX m0-empty-subject decides=Jfloor twins=Jstale
 # MUTANT-MATRIX m1-marker-neutered decides=Mpipe twins=Jstale
 # MUTANT-MATRIX m2-ceiling decides=Jceil twins=Jhead

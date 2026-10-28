@@ -22,6 +22,7 @@
 # does not, the deciding cell is N1 instead (the run derives it from the same host probe, and the header
 # names the host the matrix was measured on). The matrix is re-measured whenever an arm or a mutant is
 # added or changed, by the REMEASURE command below, run from the repo root.
+# also trips: c-fold -> F0,F1
 # MUTANT-MATRIX rlp-exit0 decides=X7b twins=X1
 # MUTANT-MATRIX c-fold decides=N1 twins=N0
 # MUTANT-MATRIX no-gate decides=N2 twins=N0

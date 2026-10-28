@@ -31,6 +31,7 @@
 # MC decides two cells because its one fault, a content check that compares nothing, is aimed at both comparisons.
 # B729-b decides S1 and S2 because its one fault, the exclusion list removed, is aimed at both short spellings.
 # B729-c decides all three spellings because the last-in-glob-order resolver is wrong under every spelling.
+# also trips: WR -> DS
 # MUTANT-MATRIX SV decides=V twins=P1
 # MUTANT-MATRIX MB decides=E twins=C
 # MUTANT-MATRIX MC decides=C,D twins=E

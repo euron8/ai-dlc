@@ -41,6 +41,8 @@
 # must leave GREEN. `run.sh --matrix` drives each mutant over all twelve worlds and prints one MATRIX line per
 # mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
 # command below, run from the repo root.
+# also trips: M1-exit1-is-pass -> wedge-noexit,wedge-othersha
+# also trips: M2-exit2-is-pass -> shallow
 # MUTANT-MATRIX M1-exit1-is-pass decides=finding twins=nogenesis
 # MUTANT-MATRIX M2-exit2-is-pass decides=nogenesis twins=finding
 # MUTANT-MATRIX M3-worklist-fails decides=worklist twins=clean
