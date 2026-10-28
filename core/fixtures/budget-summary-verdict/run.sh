@@ -195,23 +195,9 @@ echo "budget-summary-verdict"
 # about a run that reported a breach. If the seed does not appear as an OVER row -- a
 # budget retuned, a divisor changed, a find path moved -- everything after this is
 # vacuously green, so this is a FIXTURE BROKEN, not a failed assertion.
-A0="$(arm_dir seed)"; seed_breach "$A0"
-drive seed-proof "$V" "$A0" --warn-only
-if ! grep -q '^OVER  _bmad-output/gate-log\.md' "$OUT"; then
-  echo "FIXTURE ERROR: the seeded 200000-byte gate-log.md was not reported as a breach" >&2
-  echo "  the budget, the divisor or the search path moved; re-derive the seed size" >&2
-  sed 's/^/  /' "$OUT" >&2
-  exit 2
-fi
-# The other direction, in the same invocation: the clean seed must NOT produce one, or
-# the arm above is satisfied by a validator that reports everything.
-A0C="$(arm_dir seed-clean)"; seed_clean "$A0C"
-drive seed-control "$V" "$A0C" --warn-only
-if grep -q '^OVER  ' "$OUT"; then
-  echo "FIXTURE ERROR: a 5-byte gate-log.md was ALSO reported as a breach" >&2
-  exit 2
-fi
-ok "SEED: 200000 bytes of gate-log.md is an OVER row and 5 bytes is not"
+# THE TWO SEED DRIVES ARE THE a1warn AND a4warn ARM DRIVES (--warn-only over the 200000-byte seed and over
+# the 5-byte seed): the check runs on their captured output right after the base loop below, so each
+# state is driven once.
 # --- 2. --warn-only --fail-on <the breacher>: the exit code moves, the contract holds -
 # The hardened artifact makes THIS run block while --warn-only still governs the rest.
 # RC is 1, so the summary block does not run at all -- the arm's own message is the
@@ -292,6 +278,7 @@ vtool() { printf '%s/validate-artifact-budget.sh' "$1"; }
 
 # --- the arms (each: $1 = validator dir, $2 = verdict wrapper) --------------------------
 arm_a1warn() { axw warnonly-unhardened; seed_breach "$AXD"; axl a1warn; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
+  [ "$1" = "$VD" ] && SEED_BREACH_OUT="$OUT"
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN  this run reported over-budget artifact(s) and is NOT a clean result.' \
     && has '      Exit status is 0 because --warn-only was passed and no reported artifact was' && ! has "$PASS_LINE"; }
 arm_a3noflag() { axw warnonly-unhardened; seed_breach "$AXD"; axl a3noflag; drive "$AXL" "$(vtool "$1")" "$AXD"
@@ -299,6 +286,7 @@ arm_a3noflag() { axw warnonly-unhardened; seed_breach "$AXD"; axl a3noflag; driv
 arm_a4clean() { axw clean; seed_clean "$AXD"; axl a4clean; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && ! grep -q '^WARN' "$OUT" || return 1
   axl a4warn; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
+  [ "$1" = "$VD" ] && SEED_CLEAN_OUT="$OUT"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && ! grep -q '^WARN' "$OUT"; }
 arm_a5cov() { axw coverage; seed_clean "$AXD"; seed_ungoverned "$AXD"; axl a5cov; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && has "$QUALIFIER" && hasl 'WARN: read-path artifact(s) over 2000 tok that NO budget governs.' || return 1
@@ -427,6 +415,17 @@ for _a in a1warn a3noflag a4clean a5cov a6schema a10struck a11marker; do
   if "arm_$_a" "$VD" "$VW"; then ok "[$_a] $_t"; eval "B_$_a=1"
   else bad "[$_a] the unmutated validator tripped this arm: exit $(status_of "$AXL")"; sed 's/^/      /' "$OUT" >&2; fi
 done
+# --- 0. THE SEED IS ACTUALLY MEASURED, read from the a1warn and a4warn drives above ----------------
+if ! grep -q '^OVER  _bmad-output/gate-log\.md' "${SEED_BREACH_OUT:-/dev/null}"; then
+  echo "FIXTURE ERROR: the seeded 200000-byte gate-log.md was not reported as a breach" >&2
+  echo "  the budget, the divisor or the search path moved; re-derive the seed size" >&2
+  exit 2
+fi
+if [ -z "${SEED_CLEAN_OUT:-}" ] || grep -q '^OVER  ' "$SEED_CLEAN_OUT"; then
+  echo "FIXTURE ERROR: a 5-byte gate-log.md was ALSO reported as a breach (or its run was never captured)" >&2
+  exit 2
+fi
+ok "SEED: 200000 bytes of gate-log.md is an OVER row and 5 bytes is not"
 # The same seed under retro's flags is the hardened posture, and it must NOT move: a FAIL,
 A11="$(arm_dir marker)"; seed_clean "$A11"
 seed_snapshot "$A11" "$INFLIGHT_CLEAN"; seed_marker "$A11"
