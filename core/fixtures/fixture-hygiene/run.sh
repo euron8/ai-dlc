@@ -28,12 +28,16 @@
 # MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
 # MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
 # MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
+# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
 #   MH2  H2's branch verdict made false        -> D2 reads the self-probe refusal naming H2
 #   MH3  H3's offender print removed           -> D3 reads the self-probe refusal naming H3
 #   MH5  H5's FLOOR verdict made false         -> D5 reads the self-probe refusal naming H5
+#   MH5N H5's join re-reads the 1st argument of the fixture's mutation helper as a mutant name (the extraction the
+#        emission-site join removed) -> D5 reads the self-probe refusal naming H5 AND its got-only JOIN row on the
+#        seeded world-letter call `ck_mut A mutant-x` (m5m:5), so the kill is the world-letter cell, not MH5's
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-hygiene: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -124,6 +128,9 @@ mk_mutant MH3 'print "H3\t" REL ":" i "\t" trim(O[i])' 'H3N++' \
   || { echo "FIXTURE BROKEN: mutant MH3 DID NOT APPLY" >&2; exit 2; }
 mk_mutant MH5 'if (!(f in LISTED)) print "FLOOR\t"' 'if (0) print "FLOOR\t"' \
   || { echo "FIXTURE BROKEN: mutant MH5 DID NOT APPLY" >&2; exit 2; }
+mk_mutant MH5N 'if (ISRUN && !HDL[i] && O[i] ~' 'if (S1[FX] != "" && match(s, "(^|[[:space:];&|(!])" S1[FX] "[[:space:]]+")) { k = literal(wordat(O[i], RSTART + RLENGTH)); if (k != "") print "K\t" FX "\t" REL ":" i "\t" k }
+    if (ISRUN && !HDL[i] && O[i] ~' \
+  || { echo "FIXTURE BROKEN: mutant MH5N DID NOT APPLY" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
 drive() { # <tag> <world dir> [--derive]
@@ -151,12 +158,12 @@ REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH5; do
+  for m in MH1 MH2 MH3 MH5 MH5N; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
     drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
   done; wait
-  for m in MH1 MH2 MH3 MH5; do
+  for m in MH1 MH2 MH3 MH5 MH5N; do
     dec=""; tw=""
     for a in D1 D2 D3 D5; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     for a in C R; do if verdict "$a" "$m.c"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
@@ -167,7 +174,7 @@ if [ "$MODE" = matrix ]; then
 fi
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
-for m in MH1 MH2 MH3 MH5; do drive "$m" "$WORK/mut-$m" & done
+for m in MH1 MH2 MH3 MH5 MH5N; do drive "$m" "$WORK/mut-$m" & done
 wait
 B_DIRTY=0
 for a in D1 D2 D3 D5; do
@@ -195,6 +202,12 @@ score MH1 D1 H1 && mutant_killed "$(flag D1)" MH1 "MH1: arm D1 fails by the self
 score MH2 D2 H2 && mutant_killed "$(flag D2)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
 score MH3 D3 H3 && mutant_killed "$(flag D3)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"
 score MH5 D5 H5 && mutant_killed "$(flag D5)" MH5 "MH5: arm D5 fails by the self-probe refusal naming H5"
+# MH5N must die on the world-letter cell itself: the refusal alone is MH5's signal too.
+WL_ROW="$(printf 'got-only  JOIN\tcore/fixtures/m5m/run.sh:5')"
+if score MH5N D5 H5; then
+  if has MH5N "$WL_ROW"; then mutant_killed "$(flag D5)" MH5N "MH5N: arm D5 fails by the self-probe refusal naming H5, on the world-letter JOIN row m5m:5"
+  else bad "MH5N: the self-probe refused, but not on the world-letter JOIN row m5m:5"; fi
+fi
 
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MH5.out" ] && [ -e "$WORK/c.MH1.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
 else bad "NM a plain run reached the matrix, or its per-push mutant drives did not run"; fi

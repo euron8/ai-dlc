@@ -97,10 +97,16 @@
 #     twins refused; any other field (`log=`) refused. Each name carries exactly one MATRIX / FULL / CONTROL line. At
 #     least one MATRIX or FULL line. H5 does NOT check that the REMEASURE mode is implemented: no static test
 #     separates a real `--matrix` handler from an echo or a usage string; the integrator's run is the proof.
-#     THE JOIN: every literal name passed to `mutant_killed` (its 2nd argument) or as the 1st argument of a mutation
-#     helper the fixture defines (S1) carries a MATRIX/FULL/CONTROL line; a mutant_killed name on a CONTROL line
-#     FAILs; a non-literal mutant_killed name FAILs unless the block carries a MUTANT-MATRIX-DYNAMIC line (a
-#     declaration, never the proof: the runtime join is validate-fixture-invocations.sh's J5).
+#     THE JOIN is keyed on the EMISSION SITE, `mutant_killed <flag> <name> <message>`, and on nothing else: every
+#     literal name in its 2nd argument carries a MATRIX or FULL line; a mutant_killed name on a CONTROL line FAILs;
+#     a non-literal mutant_killed name FAILs unless the block carries a MUTANT-MATRIX-DYNAMIC line (a declaration,
+#     never the proof: the runtime join is validate-fixture-invocations.sh's J5). No argument of a mutation helper
+#     is read as a name: helpers put other things first (readset-skip's `ck_mut` and `vs_hmut` take a WORLD letter
+#     there), so a helper call needs neither a row nor a DYNAMIC line.
+#     THE LIMIT, a property of joining at the emission site: a name that never reaches `mutant_killed` statically is
+#     covered only by J5, which reads the names mutant_killed actually reports at runtime. A battery still on
+#     scripts/mutant-kills-allowlist.txt (MKA) does not route through mutant_killed yet, so for it H5 checks block
+#     PRESENCE and row SHAPE only, and no name of it is joined; BL-828's migration to mutant_killed closes that.
 #     FP SET. The union over the b245-p1 tree is 214 fixtures after shard stubs map to their IMPL (rule 7's estimate
 #     was 210; the gap is this branch's two new batteries plus the census counting every fixture .sh, not run.sh
 #     only): S1 158, S2 212, MKA 124, MKC 4 at base. `_kill`/`kill_by` are NOT S1 tokens (they match process
@@ -357,10 +363,6 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       w2 = wordat(O[i], q); k = literal(w2)
       print "K\t" FX "\t" REL ":" i "\t" (k == "" ? "$" : k)
     }
-    if (HN[FX] > 0 && match(s, "(^|[[:space:];&|(!])(" HRE[FX] ")[[:space:]]+")) {
-      re = substr(s, RSTART, RLENGTH); sub(/^[[:space:];&|(!]/, "", re); sub(/[[:space:]]+$/, "", re)
-      if ((FX, re) in HSEEN) { k = literal(wordat(O[i], RSTART + RLENGTH)); if (k != "") print "N\t" FX "\t" REL ":" i "\t" k }
-    }
     if (ISRUN && !HDL[i] && O[i] ~ /^[[:space:]]*#[[:space:]]*MUTANT-MATRIX/) print "B\t" FX "\t" i "\t" O[i]
   }
   if (STK != "c" || HDN > 0) print "Q\t" REL "\t" (HDN > 0 ? "inside a heredoc body" : "inside a quoted string (" STK ")")
@@ -369,7 +371,6 @@ pass == 1 {
   if (FNR == 1) FX = fxof(relof(FILENAME))
   if (FX != "" && FX != "lib" && match($0, /^[[:space:]]*(function[[:space:]]+)?[A-Za-z0-9_]*[mM][uU][tT][A-Za-z0-9_]*[[:space:]]*\(\)/)) {
     nm = $0; sub(/^[[:space:]]*(function[[:space:]]+)?/, "", nm); sub(/[[:space:]]*\(\).*/, "", nm)
-    if (!((FX, nm) in HSEEN)) { HSEEN[FX, nm] = 1; HN[FX]++; HRE[FX] = (HN[FX] == 1 ? "" : HRE[FX] "|") nm }
     if (!(FX in S1)) S1[FX] = nm
   }
   next
@@ -417,7 +418,6 @@ FILENAME == ARGV[3] {
   if ($1 == "B") { if ($2 in IMPL) { print "ROW\t" $2 ":" $3 "\ta MUTANT-MATRIX block line in a shard stub; the block lives in its IMPL"; next }
                    NB[$2]++; BL[$2, NB[$2]] = $3; BR[$2, NB[$2]] = $4; next }
   if ($1 == "K") { f = map($2); NK[f]++; KL[f, NK[f]] = $3; KN[f, NK[f]] = $4; next }
-  if ($1 == "N") { f = map($2); NN[f]++; NL_[f, NN[f]] = $3; NNm[f, NN[f]] = $4; next }
   next
 }
 FILENAME == ARGV[4] {
@@ -478,7 +478,6 @@ END {
       else if (!((f, nm) in FORM)) print "JOIN\t" KL[f, k] "\tmutant_killed name " nm " carries no MUTANT-MATRIX or MUTANT-MATRIX-FULL line"
       else if (FORM[f, nm] == "MUTANT-MATRIX-CONTROL") print "JOIN\t" KL[f, k] "\tmutant_killed name " nm " carries a MUTANT-MATRIX-CONTROL line; a control never routes through mutant_killed"
     }
-    for (k = 1; k <= NN[f]; k++) if (!((f, NNm[f, k]) in FORM)) print "JOIN\t" NL_[f, k] "\tmutation helper name " NNm[f, k] " carries no MUTANT-MATRIX, -FULL or -CONTROL line"
   }
   for (f in MEM) if (!(f in NB)) { DER[f] = 1; print "DERIVE\t" f "\tno MUTANT-MATRIX block; floor: " TAG[f]; if (!(f in LISTED)) print "FLOOR\t" f "\t" TAG[f] }
   for (x in LISTED) if (!(x in DER)) print "STALE\t" x
@@ -728,6 +727,15 @@ IMPL="$X/run.sh"
 cmp -s "$a" "$b" || echo "mutant differs"
 exec bash "$IMPL" --group b
 EOF
+seed core/fixtures/m5m/run.sh <<'EOF'
+#!/usr/bin/env bash
+# MUTANT-MATRIX m-rowed decides=R1 twins=R2
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/m5m/run.sh --matrix
+ck_mut() { :; }
+ck_mut A mutant-x
+mutant_killed "$B" m-unrowed "m"
+mutant_killed "$B" m-rowed "m"
+EOF
 seed core/fixtures/m5n/run.sh <<'EOF'
 # the copy differs; a comment only
 cmp -s "$a" "$b" && bad "the copy did not apply"
@@ -757,7 +765,7 @@ want_rows() { case "$1" in
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6
       printf 'ROW\tm5k:0\nROW\tm5f-c:4\nSTUB\tm5l\n'
       printf "JOIN\tcore/fixtures/m5d/run.sh:%s\n" 17 18 19
-      printf "JOIN\tcore/fixtures/m5j/run.sh:8\n"
+      printf "JOIN\tcore/fixtures/m5m/run.sh:6\n"
       printf 'STALE\t%s\n' gone m5e m5x
       printf 'DUP\tm5b\nNOREASON\tm5x\n' ;;
   esac; }
