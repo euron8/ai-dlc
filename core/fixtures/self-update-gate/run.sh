@@ -742,7 +742,7 @@ fi
 # would score as a kill above.
 CTL="$(dirname "$DIST")/ctl"; rm -rf "$CTL"; mkdir -p "$CTL"; cp "$GATE" "$CTL/gate.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
-c_broken="$(bash "$CTL/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 | awk -F'\t' '$2 == "gate-agree.sh" {print $1; exit}')"
+c_broken="$(o="$(bash "$CTL/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"; awk -F'\t' '$2 == "gate-agree.sh" {print $1; exit}' <<< "$o")"
 if [ "$c_broken" = SELF-UPDATE-UNDECIDED ]; then
   printf '  ok    %-16s unmutated copy reproduces UNDECIDED (harness is sound; kept: LAYOUT is a LONE gate.sh in a directory of its own, which no other copy here uses)\n' "mutation-control"
 else
@@ -772,10 +772,10 @@ ss_assert "ss-machinery-set" \
 
 # PRECONDITION, or every arm below is vacuous: r2 must actually defer and r1 must not.
 ss_assert "safe-stop-pre" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}')" \
+  "$(o="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1)"; awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}' <<< "$o")" \
   "defer" "the seeded r2 really does defer (without this the walk has nothing to stop at)"
 ss_assert "safe-stop-pre2" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+  "$(o="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$SS/cons" 2>&1)"; awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}' <<< "$o")" \
   "" "and the seeded r1 does not — so a walk that returns r1 returned the CLEAN one"
 
 ss_assert "safe-stop" "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>/dev/null)" \
@@ -789,7 +789,7 @@ ss_assert "safe-stop-none" "${ss_out}|${ss_rc}" "|1" \
 
 # The advisory reaches the caller on a DEFER, and names the ref rather than restating the problem.
 ss_assert "safe-stop-row" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}')" \
+  "$(o="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1)"; awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}' <<< "$o")" \
   "$SS_R1" "a DEFER carries a SELF-UPDATE-SAFE-STOP row naming the ref"
 
 # CONTROL: a clean verdict must NOT carry one. Advice attached to every run is noise, and it
@@ -805,7 +805,7 @@ ss_assert "safe-stop-quiet" \
 ss_assert "safe-stop-latest" "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R4" "$SS/cons" 2>/dev/null)" \
   "$SS_R3" "the LATEST clean release wins, even with a deferring release before it"
 ss_assert "safe-stop-latest-pre" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R3" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+  "$(o="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R3" "$SS/cons" 2>&1)"; awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}' <<< "$o")" \
   "" "and r3 really is clean from base — without this the arm above proves nothing"
 
 # --safe-stop's stdout is a REF AND NOTHING ELSE, because the caller substitutes it into a
@@ -843,7 +843,7 @@ ss_stamp "$SS_R1"
 ss_assert "ss-at" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "1" \
   "skill_commit AT the named ref: the row says the split buys nothing"
 ss_assert "ss-at-ref" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP"{print $2; exit}')" \
+  "$(o="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1)"; awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP"{print $2; exit}' <<< "$o")" \
   "$SS_R1" "and it still NAMES the ref — annotated, never suppressed, so the DEFER keeps a next step"
 
 # PAST it — the reference consumer's actual shape: `skill_commit` was one commit beyond the
@@ -1032,7 +1032,7 @@ NM_N="$(nm_world nomach)"; NM_C="$(nm_world classifier)"; NM_H="$(nm_world hook)
 for nm_w in "$NM_N" "$NM_C" "$NM_H"; do
   nm_k="$(basename "$nm_w")"
   ss_assert "ss-nm-pre-$nm_k" \
-    "$(nm_cls "$GATE" "$nm_w" R2 | awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}')|$(nm_cls "$GATE" "$nm_w" R1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+    "$(o="$(nm_cls "$GATE" "$nm_w" R2)"; awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}' <<< "$o")|$(o="$(nm_cls "$GATE" "$nm_w" R1)"; awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}' <<< "$o")" \
     "defer|" "$nm_k world: r2 defers and r1 is clean from base"
 done
 ss_assert "ss-classifier-only-pre" \
@@ -1043,7 +1043,7 @@ nm_out="$(bash "$GATE" --safe-stop "$NM_N/dist" "$(cat "$NM_N/B")" "$(cat "$NM_N
 if ss_assert_b "ss-nomach" "${nm_out}|${nm_rc}" "|1" \
   "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"; then B_nm1=1; fi
 ss_assert "ss-nomach-row" \
-  "$(nm_cls "$GATE" "$NM_N" R2 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}')" "-" \
+  "$(o="$(nm_cls "$GATE" "$NM_N" R2)"; awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}' <<< "$o")" "-" \
   "and the advisory says no safe stop exists, instead of sending the operator to a ref that lands nothing"
 if ss_assert_b "ss-classifier-only" "$(nm_ss "$GATE" "$NM_C")" "r1" \
   "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"; then B_nm2=1; fi
