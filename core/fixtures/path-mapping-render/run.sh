@@ -54,8 +54,34 @@
 #
 # A mutant must fail ONLY its own assertion, so each verdict asserts the expected message
 # rather than merely a non-zero exit -- "it failed" is satisfied by a broken harness too.
+#
+# THE MUTANT MATRIX. A cell is one expected --check message, RED on a mutant when that message is in its --check
+# output and GREEN when it is absent. A mutant's row names the cell that kills it (decides) and the cell it could
+# plausibly co-trip but must leave GREEN (twins). A plain run scores each mutant on its deciding cell and its twin
+# only, off the one --check run it already makes. m1 and m2 are both decided by the drift message, since both leave
+# a stale region. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
+# command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX line each.
+# MUTANT-MATRIX m1 decides=drift twins=grammar
+# MUTANT-MATRIX m2 decides=drift twins=no-region
+# MUTANT-MATRIX m3 decides=no-region twins=drift
+# MUTANT-MATRIX m4 decides=grammar twins=drift
+# MUTANT-MATRIX m5 decides=no-loader twins=grammar
+# MUTANT-MATRIX m6 decides=src-gone twins=no-loader
+# MUTANT-MATRIX-CONTROL controlD why=a probe arm added to the sandbox's own map_consumer() must render above the catch-all, proving the sandbox is the tree read; its correct outcome is that the row APPEARS
+# MUTANT-MATRIX-CONTROL n1 why=a near-miss change outside map_consumer() whose correct outcome is that --check stays quiet, so it has no deciding cell
+# MUTANT-MATRIX-DYNAMIC kill_check why=kill_check is one body called once per mutant, so the mutant id reaches mutant_killed as $id; every name it produces has its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/path-mapping-render/run.sh --matrix
 set -u
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Anything
+# else as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "path-mapping-render: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$DIR/${0##*/}"
 
 # BOTH LAYOUTS NAMED, never a single walk-up (I33c). In this repo the fixture sits at
 # core/fixtures/<name>/; the consumer layout puts it at tests/fixtures/<name>/. This unit is
@@ -84,6 +110,14 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+# ok/bad for lib/mutant.sh: a kill is emitted only through mutant_killed, behind a same-run base-pass flag. `bad`
+# sets the variable this file exits on (rc).
+ok()  { note "ok    ${1-}"; }
+bad() { note "FAIL  ${1-}"; rc=1; }
+MUT_LIB="$DIR/../lib/mutant.sh"
+if [ ! -f "$MUT_LIB" ]; then echo "run.sh: no lib/mutant.sh beside $DIR" >&2; exit 2; fi
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 HEADING='## Path mapping (core/ → consumer)'
 OK_MSG='render-path-mapping: OK'
@@ -157,17 +191,86 @@ mutate_awk() { # mutate_awk <file> <awk-prog> ; same guard, for edits sed cannot
   rm -f "$f.orig"; return 0
 }
 
-kill_check() { # kill_check <name> <dir> <expected-substring>
-  local n="$1" d="$2" pat="$3" out rc_v
+# --- THE MATRIX CELLS, single-sourced. A cell is one expected --check message; it is RED on an output when the
+# message is present. Both the per-push twin check and the --matrix score read the predicate here.
+# Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+MX_CELLS='drift grammar no-region no-loader src-gone'
+cell_red() {
+  local c="$1" o="$2" w
+  case "$c" in
+    drift)     w='does not match what map_consumer() renders today' ;;
+    grammar)   w='case arm(s) from map_consumer()' ;;
+    no-region) w='no generated path-mapping region in' ;;
+    no-loader) w='could not load map_consumer() from' ;;
+    src-gone)  w='source missing:' ;;
+    *) return 2 ;;
+  esac
+  grep -qF -- "$w" <<<"$o"
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$TMP/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# mx_twins <mutant> <output>: per-push, every twin cell must stay GREEN on the SAME --check output the kill read.
+mx_twins() {
+  local m="$1" o="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$o"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
+    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also fired on this mutant's output, so the kill is not confined to its own cell"; fi
+  done
+}
+# mx_score <mutant> <output> <rc>: MATRIX-ONLY. Scores the mutant's --check output against EVERY cell. It records
+# itself in the ledger first (rule 9).
+mx_score() {
+  local m="$1" o="$2" r="$3" dec tw c dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  if grep -qE 'unbound variable|command not found|syntax error' <<<"$o" || { [ "$r" != 0 ] && [ "$r" != 1 ]; }; then
+    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return
+  fi
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$o"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$o"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$o" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+
+# kill_check scores ONE mutant. The base-pass flag is passed at each call site as "${B_ctlB:-0}" -- controlB is
+# the unmutated round trip (--write, then --check green) that every mutant here is a one-edit copy of.
+kill_check() { # kill_check <flag> <id> <name> <dir> <expected-cell>
+  local id="$2" n="$3" d="$4" cell="$5" out rc_v
   out="$(check_in "$d")"; rc_v=$?
   if [ "$rc_v" -eq 0 ]; then
     note "FAIL  $n -- mutant SURVIVED (--check exited 0)"; rc=1; return
   fi
-  if ! grep -qF "$pat" <<<"$out"; then
-    note "FAIL  $n -- --check failed, but not on its own assertion (wanted: $pat)"
+  if ! cell_red "$cell" "$out"; then
+    note "FAIL  $n -- --check failed, but not on its own assertion (wanted the $cell message)"
     printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
   fi
-  note "ok    $n -- killed by its own arm"
+  mutant_killed "$1" "$id" "$n -- killed by its own arm"
+  mx_twins "$id" "$out"
+  if [ "$MODE" = matrix ]; then mx_score "$id" "$out" "$rc_v"; fi
 }
 
 quiet_check() { # quiet_check <name> <dir>
@@ -225,7 +328,7 @@ if [ -n "$b_bad" ]; then
   exit 1
 fi
 if outB="$(check_in "$TMP/controlB")" && grep -qF "$OK_TAIL" <<<"$outB"; then
-  note "ok    controlB   hand-written section repaired by --write and round-trips through --check"
+  note "ok    controlB   hand-written section repaired by --write and round-trips through --check"; B_ctlB=1
 else
   note "FIXTURE BROKEN: a freshly written region did not survive its own --check."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
@@ -314,8 +417,7 @@ fi
 # scope by name.
 prep "$TMP/m1"
 if mutate "$(preclass_of "$TMP/m1")" '/core\/git-hooks\/\*)/d'; then
-  kill_check "m1 arm-deleted  core/git-hooks/* removed from map_consumer()" "$TMP/m1" \
-    "does not match what map_consumer() renders today"
+  kill_check "${B_ctlB:-0}" m1 "m1 arm-deleted  core/git-hooks/* removed from map_consumer()" "$TMP/m1" drift
 else
   no_mutation "m1 arm-deleted"
 fi
@@ -324,8 +426,7 @@ fi
 # The destination the pre-fix section actually sent readers to.
 prep "$TMP/m2"
 if mutate "$(skill_of "$TMP/m2")" 's|`\.githooks/<x>`|`.claude/git-hooks/<x>`|'; then
-  kill_check "m2 hand-edited  destination retyped in SKILL.md" "$TMP/m2" \
-    "does not match what map_consumer() renders today"
+  kill_check "${B_ctlB:-0}" m2 "m2 hand-edited  destination retyped in SKILL.md" "$TMP/m2" drift
 else
   no_mutation "m2 hand-edited"
 fi
@@ -333,8 +434,7 @@ fi
 # --- m3: the section removed outright ----------------------------------------
 prep "$TMP/m3"
 if mutate "$(skill_of "$TMP/m3")" '/^## Path mapping/d'; then
-  kill_check "m3 region-gone  the section heading deleted" "$TMP/m3" \
-    "no generated path-mapping region in"
+  kill_check "${B_ctlB:-0}" m3 "m3 region-gone  the section heading deleted" "$TMP/m3" no-region
 else
   no_mutation "m3 region-gone"
 fi
@@ -354,8 +454,7 @@ if mutate_awk "$(preclass_of "$TMP/m4")" '
   }
   { print }
 '; then
-  kill_check "m4 grammar      case arms reformatted past the extractor" "$TMP/m4" \
-    "case arm(s) from map_consumer()"
+  kill_check "${B_ctlB:-0}" m4 "m4 grammar      case arms reformatted past the extractor" "$TMP/m4" grammar
 else
   no_mutation "m4 grammar"
 fi
@@ -365,8 +464,7 @@ fi
 # bug the renderer removes, so an unloadable source must be a FAILURE and never a skipped row.
 prep "$TMP/m5"
 if mutate "$(preclass_of "$TMP/m5")" 's|^map_consumer() {|map_consumer_renamed() {|'; then
-  kill_check "m5 no-loader    map_consumer() renamed out of the scrape" "$TMP/m5" \
-    "could not load map_consumer() from"
+  kill_check "${B_ctlB:-0}" m5 "m5 no-loader    map_consumer() renamed out of the scrape" "$TMP/m5" no-loader
 else
   no_mutation "m5 no-loader"
 fi
@@ -375,7 +473,7 @@ fi
 prep "$TMP/m6"
 rm -f "$(preclass_of "$TMP/m6")"
 if [ ! -f "$(preclass_of "$TMP/m6")" ]; then
-  kill_check "m6 source-gone  preclassify.sh absent" "$TMP/m6" "source missing:"
+  kill_check "${B_ctlB:-0}" m6 "m6 source-gone  preclassify.sh absent" "$TMP/m6" src-gone
 else
   no_mutation "m6 source-gone"
 fi
@@ -404,7 +502,24 @@ else
   quiet_check "n1 near-miss   a change to preclassify.sh outside map_consumer()" "$TMP/n1"
 fi
 
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "m1 m2 m3 m4 m5 m6 " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  [ "$MX_FAILS" -eq 0 ] || rc=1
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "path-mapping-render: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  path-mapping-render -- 5 controls green, 6/6 mutants killed by their own arm, near-miss quiet"
+  note "PASS  path-mapping-render -- 5 controls green, 6/6 mutants scored on their own arm, near-miss quiet"
 fi
 exit "$rc"

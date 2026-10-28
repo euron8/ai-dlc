@@ -10,19 +10,66 @@
 # THE MECHANISM IS THE LICENCE, NOT THE RE-RUN, AND THAT WAS MEASURED. The first
 # specification said the check "goes silent and nothing re-runs it". False: both affected
 # checks were emitted at all three of that sprint's gates and read FAIL, FAIL, PASS. So
-# assertion 3 is the one that carries the release — a suppression whose cause was fixed
+# arm s3 is the one that carries the release — a suppression whose cause was fixed
 # must cost NOTHING, because a check that nags after the failure is gone is the unmeasured
 # lint the operator turns off.
 #
-# THE ASSERTIONS WHERE THE COMFORTABLE READING FAILS OPEN:
-#   2. Past expiry with the check STILL failing must FAIL. If this passes, the lifetime is
+# THE ARMS WHERE THE COMFORTABLE READING FAILS OPEN:
+#   s2. Past expiry with the check STILL failing must FAIL. If this passes, the lifetime is
 #      decoration and the release delivers nothing.
-#   4. A SUPPRESSED entry missing its target must be reported MALFORMED. This is the
+#   s4. A SUPPRESSED entry missing its target must be reported MALFORMED. This is the
 #      delimiter regression: with an IFS-whitespace delimiter `read` collapses the empty
 #      field, every later field shifts left, and malformed input scores as clean.
-#   10. The metrics must be read in BOTH JSON spacings. The real corpus is 47% one form
+#   s2 (again). The metrics must be read in BOTH JSON spacings. The real corpus is 47% one form
 #      and 53% the other; an extractor anchored to one reads half the file and reports
 #      clean over the rest.
+#
+# SHAPE. A DRIVE is one validator run on one state, captured once per validator copy (stdout, stderr,
+# exit status, rows). An ARM is a predicate over captured drives, so two arms asking about the same
+# state share one run. The shipping validator evaluates every arm; a mutant is a LONE COPY of the
+# validator (it resolves no sibling beside itself, which the unmutated control proves by reproducing
+# every verdict from a copy) and per push drives only its DECIDING arm(s) plus one named TWIN.
+#
+# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
+# test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per push
+# each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix is
+# re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
+# decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
+# a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
+# c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
+# Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
+# k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
+# d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
+# f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
+# i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
+# w_resolve also trips w7 in the measured matrix (the archived-waiver world shares the skipped resolution).
+# MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
+# MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
+# MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
+# MUTANT-MATRIX b_catalog_join_dropped decides=s6 twins=s2
+# MUTANT-MATRIX c_ifs_delimiter decides=s4m twins=sen_F
+# MUTANT-MATRIX d_identity_lines_deleted decides=ident twins=s1
+# MUTANT-MATRIX e_identity_nonce decides=ident twins=s1
+# MUTANT-MATRIX f_attempt_demoted decides=att17a,att17b,att17c twins=s2
+# MUTANT-MATRIX g_cwd_first_regression decides=cwA_gates,cwA_inf,cwA_met,cwA_agree,c31,cwB_note,cwB_inf,cwB_gates twins=cwA_root
+# MUTANT-MATRIX h_cwd_fallback_after_root decides=cwB_note,cwB_inf,cwB_gates,c31 twins=cwA_gates
+# MUTANT-MATRIX i_join_guard_removed decides=s14 twins=s15
+# MUTANT-MATRIX j_join_hardcoded_core decides=s17 twins=s14
+# MUTANT-MATRIX m_revert decides=sen_A,sen_B,sr_Eg twins=sen_C
+# MUTANT-MATRIX m_zero_records decides=sen_D twins=sen_A
+# MUTANT-MATRIX m_hoist decides=sen_F,sr_Ei twins=sen_A
+# MUTANT-MATRIX r_revert_all decides=sr_Ag,sr_Ai,sr_Bg,sr_Bi,sr_Cg,sr_Dg,sr_Di twins=sr_Fg
+# MUTANT-MATRIX r_nonregular decides=sr_Bg,sr_Bi,sr_Cg twins=sr_Ag
+# MUTANT-MATRIX r_no_symlink decides=sr_Cg twins=sr_Bg
+# MUTANT-MATRIX r_rc decides=sr_Ag,sr_Ai,sr_Dg,sr_Di twins=sr_Eg
+# MUTANT-MATRIX r_readable_never decides=sr_Ag,sr_Ai twins=sr_Dg
+# MUTANT-MATRIX r_readable_always decides=sr_Dg,sr_Di twins=sr_Ag
+# MUTANT-MATRIX w_standdown decides=w1,w3 twins=w2
+# MUTANT-MATRIX w_resolve decides=w5 twins=w1
+# MUTANT-MATRIX w_lifetime decides=w4 twins=s2
+# MUTANT-MATRIX w_overridden decides=w3,w1 twins=w4
+# MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
 
 # The pre-push gate inherits every AI_DLC_* tunable a consumer set in settings.json. A
@@ -31,7 +78,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
+trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -41,519 +88,43 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-LAST_OUT=""
-LAST_RC=""
-# drive <validator> <case> <gate-metrics> [extra args...]
-# Sets LAST_RC and LAST_OUT. Deliberately NOT used via `drive ...; rc="$LAST_RC"`: a command
-# substitution runs in a SUBSHELL, so every global the function set is discarded and the
-# message assertions grep an empty string — which passes or fails for reasons unrelated
-# to the validator. That mistake is why this helper assigns instead of printing.
-drive() {
-  local v="$1" c="$2" gm="$3"; shift 3
-  LAST_OUT="$(bash "$v" --escalations "$CASES/$c/pending.md" \
-                        --gate-metrics "$gm" \
-                        --enforcement-map "$MAP" "$@" 2>&1)"
-  LAST_RC=$?
-}
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
-# --- Assertion 1: a suppression inside its lifetime is honoured ------------------
-drive "$VALIDATOR" in-force "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "0" ]; then
-  ok "a SUPPRESSED entry inside its lifetime does not fire (exit 0)"
-else
-  bad "in-force suppression FAILED (rc=$rc) — the arm has no green state and would wedge every gate"
-  printf '%s\n' "$LAST_OUT" | sed 's/^/        /'
-fi
+# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh): it replaces the per-push
+# mutant stage with the full mutant x arm matrix. A plain run executes no matrix-only cell.
+MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
+MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
+DRIVES=0           # validator runs actually executed (the cost this fixture is held to)
+if [ "$MATRIX" = 1 ]; then echo "MODE FULL (--matrix)"; else echo "MODE PUSH"; fi
 
-# --- Assertion 2: past expiry, check still failing -> FAIL ----------------------
-drive "$VALIDATOR" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "past its lifetime with the check STILL failing, the suppression FAILS"
-else
-  bad "expired suppression did NOT fail (rc=$rc) — the lifetime is decoration"
-fi
-if grep -q 'past its lifetime' <<<"$LAST_OUT"; then
-  ok "the expiry message names the lifetime as the reason"
-else
-  bad "the expiry FAIL did not explain itself"
-fi
-
-# --- Assertion 3: past expiry but the cause was FIXED -> silent -----------------
-drive "$VALIDATOR" expired-but-fixed "$GM_FIXED"; rc="$LAST_RC"
-if [ "$rc" = "0" ]; then
-  ok "past its lifetime but the check now PASSes — reports nothing"
-else
-  bad "expired-but-fixed FAILED (rc=$rc) — the check nags after the failure is gone"
-fi
-
-# --- Assertion 4: malformed SUPPRESSED (no target) — the delimiter regression ---
-drive "$VALIDATOR" malformed-no-target "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "a SUPPRESSED entry with no **Suppresses:** is MALFORMED"
-else
-  bad "missing **Suppresses:** was accepted (rc=$rc) — an empty field collapsed and the later fields shifted left"
-fi
-if grep -q 'Suppresses' <<<"$LAST_OUT"; then
-  ok "the malformed message names the missing field"
-else
-  bad "malformed FAIL did not name which field was missing"
-fi
-
-# --- Assertion 5: expiry outside 1..3 -------------------------------------------
-drive "$VALIDATOR" expiry-out-of-range "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "**Expires after:** outside 1..3 is rejected"
-else
-  bad "an out-of-range expiry was accepted (rc=$rc) — a suppression could be written to outlive anything"
-fi
-
-# --- Assertion 6: a target that is not in the catalog ---------------------------
-drive "$VALIDATOR" unknown-check-id "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "a **Suppresses:** id absent from the catalog is rejected"
-else
-  bad "an unknown check id was accepted (rc=$rc) — 'Check 924' is a real prose token in the corpus"
-fi
-
-# --- Assertion 7: RESOLVED closing a still-failing check ------------------------
-drive "$VALIDATOR" terminal-names-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "a RESOLVED entry naming a still-failing check FAILS — the loophole is shut"
-else
-  bad "RESOLVED closed a still-failing check (rc=$rc) — this is the measured defect, unfixed"
-fi
-
-# --- Assertion 8: RESOLVED naming only a passing check must NOT fire ------------
-drive "$VALIDATOR" terminal-names-passing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "0" ]; then
-  ok "a RESOLVED entry naming only a PASSING check does not fire"
-else
-  bad "a terminal entry naming a green check FAILED (rc=$rc) — every closed entry mentioning a check would trip"
-fi
-
-# --- Assertion 9: the zero-control ---------------------------------------------
-drive "$VALIDATOR" empty "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "0" ] && grep -q 'entries_scanned=' <<<"$LAST_OUT"; then
-  ok "a clean run reports the counts it was computed over"
-else
-  bad "the clean verdict carries no counts — a regex matching nothing reads like full coverage"
-fi
-if grep -q 'suppressed=0' <<<"$LAST_OUT"; then
-  ok "the zero-control distinguishes 'no suppressions' from 'all suppressions valid'"
-else
-  bad "no suppressed= count in the verdict line"
-fi
-
-# --- Assertion 10: BOTH JSON spacings are read ---------------------------------
-# Check 32's rows in the seed are written ONLY in the spaced form. If the extractor
-# anchors to the unspaced form it cannot see check 32 at all, its verdict comes back
-# empty, and assertion 2's expired-still-failing case silently passes.
-drive "$VALIDATOR" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "spaced-form metrics rows are read (check 32 is seeded spaced-only)"
-else
-  bad "the spaced JSON form was not read (rc=$rc) — 53% of the real corpus is invisible"
-fi
-
-# --- Assertion 11: a missing catalog is a REFUSAL, not a pass -------------------
-out="$(bash "$VALIDATOR" --escalations "$CASES/expired-still-failing/pending.md" \
-        --gate-metrics "$GM_FAILING" --enforcement-map "$WORK/nope.yaml" 2>&1)"; rc=$?
-if [ "$rc" = "2" ]; then
-  ok "an unreadable catalog exits 2 — a refusal, never a clean pass"
-else
-  bad "missing catalog did not refuse (rc=$rc) — it would act on prose tokens that are not checks"
-fi
-
-# --- Assertion 12: no metrics -> shape still checked, lifetime NOT-APPLICABLE ---
-out="$(bash "$VALIDATOR" --escalations "$CASES/malformed-no-target/pending.md" \
-        --enforcement-map "$MAP" --gate-metrics "$WORK/absent.jsonl" 2>&1)"; rc=$?
-if [ "$rc" = "1" ]; then
-  ok "with no metrics the SHAPE arm still fires on a malformed entry"
-else
-  bad "no-metrics run did not check shape (rc=$rc) — the whole script went quiet on a missing optional input"
-fi
-
-# --- Assertion 13: a baseline suppresses, and may not outlive its cause ---------
-drive "$VALIDATOR" terminal-names-failing "$GM_FAILING" --baseline "$BASELINE_GOOD"; rc="$LAST_RC"
-if [ "$rc" = "0" ]; then
-  ok "a baselined violation is suppressed"
-else
-  bad "the baseline did not suppress its own entry (rc=$rc)"
-fi
-drive "$VALIDATOR" terminal-names-failing "$GM_FAILING" --baseline "$BASELINE_STALE"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q 'no longer reproduces' <<<"$LAST_OUT"; then
-  ok "a baselined key that stops reproducing is itself a FAIL — the baseline cannot outlive its cause"
-else
-  bad "a stale baseline line was tolerated (rc=$rc) — a baseline would silently suppress a check that started passing"
-fi
-
-# --- Assertions 14-18: the verdict is joined on (catalog, check), not on check --
-# A check NUMBER is not unique across catalogs — `gate-validation.md` says so in as many
-# words and forbids attributing across them by number. The reference consumer carries 34
-# such ids. Every arm here is paired with the single-catalog control (check 33) in the SAME
-# timeline, because an arm that stops firing everywhere is a refusal wearing a fix's clothes.
-
-# 14. THE DEFECT, in its fail-open direction. `[core] 32` is expired and core's own newest
-#     verdict is FAIL, so this must fire — even though a NEWER extension row says PASS.
-drive "$VALIDATOR" collide-core "$GM_COLLIDE"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT"; then
-  ok "an expired suppression on a still-failing CORE check fires, though a newer extension row PASSes"
-else
-  bad "the extension row ACQUITTED a core check that is still failing (rc=$rc) — the fail-open direction of the collision"
-fi
-
-# 15. The control, same timeline: a single-catalog check must be unaffected.
-drive "$VALIDATOR" collide-control "$GM_COLLIDE"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "the single-catalog control still fires in the colliding timeline (assertion 14 discriminates)"
-else
-  bad "the single-catalog control stopped firing (rc=$rc) — assertion 14 proves nothing, the arm just refuses"
-fi
-
-# 16. A bare id carries no bracket and must resolve as `core`, exactly as `[core]` does.
-#     An author error that drops the required field must not buy WIDER coverage.
-drive "$VALIDATOR" collide-bare "$GM_COLLIDE"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "a bare id resolves as core and fires identically to the bracketed form"
-else
-  bad "a bare id stopped resolving (rc=$rc) — dropping the bracket now buys silence"
-fi
-
-# 17. THE MIRROR, and the only input that separates a real join from a hard-coded `core`.
-#     Here the EXTENSION check is the failing one and core's newest row PASSes.
-drive "$VALIDATOR" collide-ext "$GM_COLLIDE_EXT"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT"; then
-  ok "an expired suppression on a still-failing EXTENSION check fires, though core's newer row PASSes"
-else
-  bad "hard-coding the core catalog acquitted a failing extension check (rc=$rc) — every corpus-drawn seed passes this, only this one separates them"
-fi
-
-# 18. And the mirror's own control: core 33 still fires in the mirrored timeline.
-drive "$VALIDATOR" collide-control "$GM_COLLIDE_EXT"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "the single-catalog control fires in the mirrored timeline too (assertion 17 discriminates)"
-else
-  bad "the control stopped firing in the mirrored timeline (rc=$rc)"
-fi
-
-# --- Assertions 18a-18c: the expiry FAIL names the ts of the row it read (BL-195) ------
-# Check 2 reads gate-metrics.jsonl before Check 12 writes this gate's rows, so the verdict is
-# always the PREVIOUS gate's. The message must say so and name the row, or a stale FAIL is
-# indistinguishable from a live one. The ts is asserted EXACTLY, and 18b is the input that
-# separates "the ts of the row the (catalog, check) join selected" from "the newest ts in the
-# file": in GM_COLLIDE the newest row for check 32 is the EXTENSION row at G3, and core's
-# newest FAIL is at G2.
-SL_TS_WHY=""
-sl_names_ts() { # <want-ts> <unwanted-ts> -- reads LAST_OUT
-  SL_TS_WHY=""
-  grep -qF "ts $1 in " <<<"$LAST_OUT" || { SL_TS_WHY="no 'ts $1 in' in the message"; return 1; }
-  if [ -n "$2" ] && grep -qF "ts $2 in " <<<"$LAST_OUT"; then SL_TS_WHY="names $2 too"; return 1; fi
-  grep -qF "PREVIOUS" <<<"$LAST_OUT" || { SL_TS_WHY="does not say the source is the PREVIOUS gate"; return 1; }
-  return 0
-}
-drive "$VALIDATOR" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G2"; then
-  ok "18a: the expiry FAIL names the ts of the row it read ($G3) and that it is the PREVIOUS gate's verdict"
-else
-  bad "18a: the expiry FAIL does not name the verdict row's ts (rc=$rc, $SL_TS_WHY) — a stale read is illegible"
-fi
-drive "$VALIDATOR" collide-core "$GM_COLLIDE"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && sl_names_ts "$G2" "$G3"; then
-  ok "18b: in the colliding timeline the named ts is core's row ($G2), not the newer extension row"
-else
-  bad "18b: the named ts is not the row the catalog join selected (rc=$rc, $SL_TS_WHY)"
-fi
-# 18c: the RESOLVED arm shares latest_verdict, whose output shape changed; it must still fire.
-drive "$VALIDATOR" terminal-names-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT"; then
-  ok "18c: the terminal-entry arm still reads the verdict out of the widened row"
-else
-  bad "18c: the terminal-entry arm stopped firing (rc=$rc) — it compares the whole row to FAIL"
-fi
-
-# 18d: every seeded timeline above is written in ASCENDING ts order, so "the newest row" and
-# "the last row read" are the same row there and a reader printing the last-seen ts passes 18a
-# and 18b. The real file is appended by a lead per gate but nothing orders it. Reversed, the two
-# readings name different rows; MUTANT L below is that reader.
+# ---- fixed inputs the drives share ------------------------------------------------------------
+# 18d: every seeded timeline above is written in ASCENDING ts order, so "the newest row" and "the
+# last row read" are the same row there and a reader printing the last-seen ts passes 18a and 18b. The
+# real file is appended by a lead per gate but nothing orders it. Reversed, the two readings name
+# different rows; MUTANT l-last-ts is that reader.
 GM_REV="$WORK/gm-failing-reversed.jsonl"
 awk '{ l[NR] = $0 } END { for (i = NR; i >= 1; i--) print l[i] }' "$GM_FAILING" > "$GM_REV"
-if cmp -s "$GM_FAILING" "$GM_REV"; then
-  bad "18d: the reversed timeline is byte-identical to the original — the arm cannot discriminate"
-else
-  drive "$VALIDATOR" expired-still-failing "$GM_REV"; rc="$LAST_RC"
-  if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G1"; then
-    ok "18d: with the newest row written FIRST the named ts is still the newest ($G3), not the last read"
-  else
-    bad "18d: the named ts follows file order, not recency (rc=$rc, $SL_TS_WHY)"
-  fi
-fi
+if cmp -s "$GM_FAILING" "$GM_REV"; then bad "FIXTURE BROKEN: the reversed timeline is byte-identical to the original — 18d cannot discriminate"; fi
 
-# MUTANT K: the ts dropped from the row latest_verdict returns. 18a and 18b must die; the
-# verdicts (rc of 2 and 7) must not move, or the ts channel is entangled with the verdict.
-SL_MUT_K="$WORK/mutant-k-no-ts.sh"
-# The row is <verdict>\t<ts>\t<waiver_id>; the mutant empties the middle field and keeps the
-# third, so only the ts channel moves.
-SL_K_A='END { print bestv "\t" bestt "\t" bestw }'
-SL_K_N="$(grep -cF -- "$SL_K_A" "$VALIDATOR")" || SL_K_N=0
-A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" \"\\t\" bestw }" substr($0, i + length(ENVIRON["A"])); print }' \
-  "$VALIDATOR" > "$SL_MUT_K"
-if [ "$SL_K_N" -ne 1 ]; then
-  bad "MUTANT K anchor matches $SL_K_N line(s), not 1 — re-anchor it"
-elif cmp -s "$VALIDATOR" "$SL_MUT_K"; then
-  bad "MUTANT K did not change the file — its silence would score as a kill"
-elif ! bash -n "$SL_MUT_K" 2>/dev/null; then
-  bad "MUTANT K is not a valid program"
-else
-  drive "$SL_MUT_K" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-  if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT" && ! sl_names_ts "$G3" ""; then
-    ok "MUTANT K killed — with the ts dropped the FAIL still fires and 18a sees no ts ($SL_TS_WHY)"
-  else
-    bad "MUTANT K SURVIVED 18a (rc=$rc) — the assertion is not reading the ts"
-  fi
-  drive "$SL_MUT_K" terminal-names-failing "$GM_FAILING"; rc="$LAST_RC"
-  if [ "$rc" = "1" ]; then
-    ok "MUTANT K leaves the verdict arms intact — the ts channel is additive"
-  else
-    bad "MUTANT K ALSO moved a verdict (rc=$rc) — ts and verdict are entangled"
-  fi
-fi
-
-# MUTANT L: the ts printed is the LAST matching row read, not the newest. Only 18d can see it.
-SL_MUT_L="$WORK/mutant-l-last-ts.sh"
-A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" t \"\\t\" bestw }" substr($0, i + length(ENVIRON["A"])); print }' \
-  "$VALIDATOR" > "$SL_MUT_L"
-if [ "$SL_K_N" -ne 1 ] || cmp -s "$VALIDATOR" "$SL_MUT_L"; then
-  bad "MUTANT L did not apply — anchor count $SL_K_N"
-elif ! bash -n "$SL_MUT_L" 2>/dev/null; then
-  bad "MUTANT L is not a valid program"
-else
-  drive "$SL_MUT_L" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-  if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G2"; then
-    ok "MUTANT L passes 18a on the ascending timeline — the reason 18d exists"
-  else
-    bad "MUTANT L already fails 18a (rc=$rc, $SL_TS_WHY) — 18d is not the arm that kills it"
-  fi
-  drive "$SL_MUT_L" expired-still-failing "$GM_REV"; rc="$LAST_RC"
-  if [ "$rc" = "1" ] && ! sl_names_ts "$G3" "$G1"; then
-    ok "MUTANT L killed by 18d — a last-read ts names the wrong row once the file is not in order ($SL_TS_WHY)"
-  else
-    bad "MUTANT L SURVIVED 18d (rc=$rc) — the reversed timeline does not separate newest from last-read"
-  fi
-fi
-
-# ------------------------------------------------------------------------------
-# MUTANTS. Copies, never in-place edits. `cmp -s` proves the mutation landed and
-# `bash -n` proves the result is still a program — a copy that dies on a syntax error
-# emits nothing, and "no output" otherwise scores as a kill.
-# Anchors are chosen on backslash-free, grep-unique lines: `awk -v` processes escape
-# sequences in the assigned value, so an anchor carrying a backslash arrives at index()
-# stripped and the mutation is a silent no-op that comes out GREEN.
-# ------------------------------------------------------------------------------
-
-# The unmutated control. This validator resolves its own root by walking up for a marker;
-# a lone copy in a temp dir that cannot resolve it would emit nothing, and that silence
-# would score as a kill for every mutant below.
-CTRL="$WORK/validator-control.sh"
-cp "$VALIDATOR" "$CTRL"
-drive "$CTRL" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "UNMUTATED CONTROL reproduces the real verdict from a copy — mutant silence means mutation, not breakage"
-  CONTROL_OK=1
-else
-  bad "UNMUTATED CONTROL did not reproduce (rc=$rc) — every mutant result below is uninterpretable"
-  CONTROL_OK=0
-fi
-
-if [ "${CONTROL_OK:-0}" = "1" ]; then
-
-  # --- MUTANT A: the metrics extractor stops tolerating whitespace --------------
-  MUT_A="$WORK/mutant-a.sh"
-  awk '
-    index($0, "re = \"\\\"\" key \"\\\"[[:space:]]*:[[:space:]]*\\\"[^\\\"]*\\\"\"") {
-      print "    re = \"\\\"\" key \"\\\":\\\"[^\\\"]*\\\"\""; next
-    }
-    { print }
-  ' "$CTRL" > "$MUT_A"
-  if cmp -s "$CTRL" "$MUT_A"; then
-    bad "MUTANT A did not change the file — the anchor matched nothing and the mutant is a no-op"
-  elif ! bash -n "$MUT_A" 2>/dev/null; then
-    bad "MUTANT A is not a valid program — its absence would have scored as a kill"
-  else
-    drive "$MUT_A" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-    if [ "$rc" = "0" ]; then
-      ok "MUTANT A killed — dropping whitespace tolerance blinds it to the spaced rows (assertion 10 has teeth)"
-    else
-      bad "MUTANT A DID NOT change the verdict (rc=$rc) — assertion 10 is not testing the spacing tolerance"
-    fi
-    # and it must not break the shape arm — the assertions are not entangled
-    drive "$MUT_A" malformed-no-target "$GM_FAILING"; rc="$LAST_RC"
-    if [ "$rc" = "1" ]; then
-      ok "MUTANT A leaves the shape arm intact — assertions 4 and 10 are independent"
-    else
-      bad "MUTANT A ALSO broke the shape arm (rc=$rc) — the assertions are entangled and one is vacuous"
-    fi
-  fi
-
-  # --- MUTANT B: the catalog join is dropped -----------------------------------
-  MUT_B="$WORK/mutant-b.sh"
-  awk '
-    index($0, "if ! grep -qxF \"$supp\" <<<\"$CATALOG\"; then") {
-      print "      if false; then"; next
-    }
-    { print }
-  ' "$CTRL" > "$MUT_B"
-  if cmp -s "$CTRL" "$MUT_B"; then
-    bad "MUTANT B did not change the file — anchor matched nothing"
-  elif ! bash -n "$MUT_B" 2>/dev/null; then
-    bad "MUTANT B is not a valid program"
-  else
-    drive "$MUT_B" unknown-check-id "$GM_FAILING"; rc="$LAST_RC"
-    if [ "$rc" = "0" ]; then
-      ok "MUTANT B killed — without the catalog join a non-check id is accepted (assertion 6 has teeth)"
-    else
-      bad "MUTANT B DID NOT change the verdict (rc=$rc) — assertion 6 is not testing the catalog join"
-    fi
-    drive "$MUT_B" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-    if [ "$rc" = "1" ]; then
-      ok "MUTANT B leaves the lifetime arm intact — assertions 2 and 6 are independent"
-    else
-      bad "MUTANT B ALSO broke the lifetime arm (rc=$rc) — the assertions are entangled"
-    fi
-  fi
-
-  # --- MUTANT C: the record delimiter reverts to an IFS-whitespace character ----
-  # This is the regression that shipped nothing but nearly did: with a tab delimiter
-  # `read` collapses the run of empty fields, `named` and `supp` shift, and a malformed
-  # entry parses as a well-formed one naming nothing.
-  MUT_C="$WORK/mutant-c.sh"
-  sed -e "s/037%s/011%s/g" -e "s/printf '\\\\037'/printf '\\\\011'/" "$CTRL" > "$MUT_C"
-  if cmp -s "$CTRL" "$MUT_C"; then
-    bad "MUTANT C did not change the file — anchor matched nothing"
-  elif ! bash -n "$MUT_C" 2>/dev/null; then
-    bad "MUTANT C is not a valid program"
-  else
-    drive "$MUT_C" malformed-no-target "$GM_FAILING"; rc="$LAST_RC"
-    # The mutant still exits 1 here, but for the WRONG REASON: with the empty
-    # **Suppresses:** field collapsed away, every later field shifts left, the expiry
-    # value lands in `supp` and the timestamp in `expires`, and what the mutant reports
-    # missing is **Operator authorization:** — a field the entry actually carries. An
-    # rc-only assertion cannot tell those two apart, which is exactly how a collapsed
-    # delimiter ships green.
-    if grep -q 'Suppresses' <<<"$LAST_OUT"; then
-      bad "MUTANT C DID NOT shift the fields — assertion 4 is not testing the delimiter"
-    else
-      ok "MUTANT C killed — an IFS-whitespace delimiter collapses the empty field and misreports which one is missing"
-    fi
-  fi
-fi
-
-# ------------------------------------------------------------------------------
-# ASSERTIONS 14-17: CORPUS IDENTITY on the OK path.
-# ------------------------------------------------------------------------------
-# THE DEFECT. `--escalations` and `--enforcement-map` are both caller-supplied, and the
-# catalog additionally FALLS BACK to a candidate search when the flag is omitted — so
-# which file was adjudicated and which catalog the ids were joined against are two
-# separate open questions on every green run. Before the identity lines, the whole of a
-# clean verdict was `OK: entries_scanned=N suppressed=M ...`, which is a COUNT: two runs
-# over two different pending files holding identical bytes were BYTE-IDENTICAL. A gate
-# that adjudicated last sprint's escalations against this sprint's catalog reported the
-# same green line as one that got both right.
-#
-# THE ARM IS KEYED ON DISCRIMINATION, NOT ON A SPELLING. The pair is driven twice over two
-# mktemp corpora holding the same bytes; the outputs must DIFFER **and** each must carry
-# ITS OWN two paths. The second half is what the first cannot do: a nonce or a PID makes
-# two runs differ and names nothing, and mutant E below is that fix. No label text is
-# grepped, so re-wording `escalations:` leaves the arm working; what it demands is the
-# resolved path, and the roots are mktemp names, so no implementation can hardcode them.
-#
-# IT IS PRESENCE-SHAPED — two paths must APPEAR in a run that reached the OK line — so a
-# subject replaced by `exit 0` fails it by construction.
-SL_IDENT_WHY=""
-sl_ident_corpus() {   # -> prints a fresh corpus root holding all FOUR inputs
+# THE IDENTITY CORPORA (arm ident): two mktemp trees holding the same bytes, all FOUR inputs each.
+sl_ident_corpus() {
   local d
   d="$(mktemp -d "$WORK/ident.XXXXXX")" || return 1
   cp "$CASES/in-force/pending.md" "$d/pending.md"    || return 1
   cp "$MAP"                       "$d/catalog.yaml"  || return 1
   cp "$GM_FAILING"                "$d/gm.jsonl"      || return 1
-  # THE BASELINE IS DELIBERATELY VERDICT-NEUTRAL, and that is not laziness. `$BASELINE_GOOD`
-  # baselines the terminal-names-failing key; against the in-force case that key does not
-  # reproduce, and assertion 13 is the arm that makes a non-reproducing baseline a FAIL — so
-  # copying it here turned rc 0 into rc 1 and this arm went red for a reason that has nothing
-  # to do with corpus identity. Measured, not reasoned: rc=1/1 on the first cut. A baseline
-  # with no rows is still OPENED, still resolved, and still named, which is the whole of what
-  # this arm asserts.
+  # THE BASELINE IS DELIBERATELY VERDICT-NEUTRAL: `$BASELINE_GOOD` baselines the terminal-names-failing
+  # key; against the in-force case that key does not reproduce, and arm s13b is the one that makes a
+  # non-reproducing baseline a FAIL. A baseline with no rows is still OPENED, resolved and named.
   printf '# no baselined violations\n' > "$d/baseline.txt"
   printf '%s\n' "$d"
 }
-# sl_ident_holds <validator> — 0 iff the run reached the OK emitter, the two runs are
-# distinguishable, and each names ALL FOUR inputs it actually read.
-#
-# ALL FOUR, NOT THE TWO THIS RELEASE STARTED WITH. `--gate-metrics` is the input that decides
-# whether a suppressed check is still failing, and `--baseline` is itself a suppression list;
-# a green run that names neither is a verdict whose two most consequential corpora are
-# unidentified. The tallies `gates_recorded=N catalog=N` in the OK line are counts, which is
-# precisely the thing a count cannot do.
-sl_ident_holds() {
-  local v="$1" a b oa ob ra rb
-  SL_IDENT_WHY=""
-  a="$(sl_ident_corpus)" || { SL_IDENT_WHY="could not build corpus A"; return 1; }
-  b="$(sl_ident_corpus)" || { SL_IDENT_WHY="could not build corpus B"; return 1; }
-  oa="$(bash "$v" --escalations "$a/pending.md" --gate-metrics "$a/gm.jsonl" \
-                  --enforcement-map "$a/catalog.yaml" --baseline "$a/baseline.txt" 2>&1)"; ra=$?
-  ob="$(bash "$v" --escalations "$b/pending.md" --gate-metrics "$b/gm.jsonl" \
-                  --enforcement-map "$b/catalog.yaml" --baseline "$b/baseline.txt" 2>&1)"; rb=$?
-  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
-    SL_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the OK emitter"; return 1
-  fi
-  # THE EMITTER TOKEN IS THE ONE UNIQUE TO THIS LINE, NOT `OK: entries_scanned=`. There are
-  # two `OK:` emitters — this one at the end and the no-escalations early exit — and their
-  # shared prefix cannot tell them apart, so an arm keyed on it would pass having reached
-  # the wrong one. BL-078 then inserted `EXAMINED NOTHING — ` into the early exit's line,
-  # between `OK: ` and `entries_scanned=`, which is exactly the junction the old literal
-  # spanned. Keying on the sentence only this emitter writes fixes both at once.
-  if ! grep -qF 'no suppression is past its lifetime' <<<"$oa"; then
-    SL_IDENT_WHY="no final OK line — this arm did not reach the emitter it claims to guard"; return 1
-  fi
-  if [ "$oa" = "$ob" ]; then
-    SL_IDENT_WHY="two different trees holding identical bytes produced byte-identical output"
-    return 1
-  fi
-  if ! grep -qF "$a/pending.md" <<<"$oa" || ! grep -qF "$a/catalog.yaml" <<<"$oa" \
-     || ! grep -qF "$a/gm.jsonl" <<<"$oa" || ! grep -qF "$a/baseline.txt" <<<"$oa"; then
-    SL_IDENT_WHY="run A does not name all four of the escalations file, the catalog, the gate metrics and the baseline"
-    return 1
-  fi
-  if ! grep -qF "$b/pending.md" <<<"$ob" || ! grep -qF "$b/catalog.yaml" <<<"$ob" \
-     || ! grep -qF "$b/gm.jsonl" <<<"$ob" || ! grep -qF "$b/baseline.txt" <<<"$ob"; then
-    SL_IDENT_WHY="run B does not name all four of the escalations file, the catalog, the gate metrics and the baseline"
-    return 1
-  fi
-  if grep -qF "$b" <<<"$oa"; then
-    SL_IDENT_WHY="run A's output carries run B's root — the paths are not the ones it resolved"
-    return 1
-  fi
-  return 0
-}
-
-# --- Assertion 14: the clean verdict names both corpora -------------------------
-if sl_ident_holds "$VALIDATOR"; then
-  ok "the OK verdict names all four inputs — escalations, catalog, gate metrics and baseline — and two identical corpora in different trees are distinguishable"
-else
-  bad "the OK verdict carries no corpus identity — $SL_IDENT_WHY. A run against last sprint's pending file reports the same green line as one against this sprint's"
-fi
-
-# --- Assertion 15: the RESOLVED catalog, not the one an argument named -----------
-# THE ATTACK THIS CLOSES, and it is the one an earlier pass of this fixture could not.
-# Assertion 14 supplies all four inputs as flags, so a "fix" that dumped the argument vector
-# into the success line — `echo "$@"` on the way out — satisfies it completely while proving
-# nothing about a value the script RESOLVED for itself. The catalog is the one input here
-# with a resolution path of its own: omit `--enforcement-map` and it is found by walking a
-# candidate list under the project root. Nothing names it on the command line, so an argv
-# echo prints nothing here and this arm fires.
-#
-# It is the same two-corpora shape, so it also carries the discrimination half: two roots
-# holding identical catalogs must not produce the same verdict text.
-sl_cand_corpus() {   # -> prints a root whose catalog is DISCOVERABLE, never passed
+# THE CANDIDATE-WALK CORPORA (arm cand): a root whose catalog is DISCOVERABLE, never passed.
+sl_cand_corpus() {
   local d
   d="$(mktemp -d "$WORK/cand.XXXXXX")" || return 1
   mkdir -p "$d/core/skills/ai-dlc" || return 1
@@ -561,350 +132,157 @@ sl_cand_corpus() {   # -> prints a root whose catalog is DISCOVERABLE, never pas
   cp "$CASES/in-force/pending.md" "$d/pending.md" || return 1
   printf '%s\n' "$d"
 }
-SL_CAND_WHY=""
-sl_cand_holds() {
-  local v="$1" a b oa ob ra rb
-  SL_CAND_WHY=""
-  a="$(sl_cand_corpus)" || { SL_CAND_WHY="could not build corpus A"; return 1; }
-  b="$(sl_cand_corpus)" || { SL_CAND_WHY="could not build corpus B"; return 1; }
-  oa="$(AI_DLC_PROJECT_ROOT="$a" bash "$v" --escalations "$a/pending.md" \
-          --gate-metrics "$GM_FAILING" 2>&1)"; ra=$?
-  ob="$(AI_DLC_PROJECT_ROOT="$b" bash "$v" --escalations "$b/pending.md" \
-          --gate-metrics "$GM_FAILING" 2>&1)"; rb=$?
-  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
-    SL_CAND_WHY="rc=$ra/$rb, expected 0/0 — the candidate walk did not find a catalog"; return 1
-  fi
-  if ! grep -qF 'no suppression is past its lifetime' <<<"$oa"; then
-    SL_CAND_WHY="no final OK line — this arm did not reach the emitter it claims"; return 1
-  fi
-  if [ "$oa" = "$ob" ]; then
-    SL_CAND_WHY="two roots holding identical catalogs produced byte-identical output"; return 1
-  fi
-  if ! grep -qF "$a/core/skills/ai-dlc/enforcement-map.yaml" <<<"$oa" \
-     || ! grep -qF "$b/core/skills/ai-dlc/enforcement-map.yaml" <<<"$ob"; then
-    SL_CAND_WHY="the DISCOVERED catalog path is absent from the verdict — an argv echo would satisfy assertion 14 and fail here, which is why this arm exists"
-    return 1
-  fi
-  return 0
-}
-if sl_cand_holds "$VALIDATOR"; then
-  ok "a catalog found by the CANDIDATE WALK is named in the verdict — the identity is a value the script resolved, not an echo of the arguments it was given"
-else
-  bad "the discovered catalog is not named — $SL_CAND_WHY"
-fi
-
-# --- Assertion 16: UNMUTATED CONTROL for the identity mutants -------------------
-SL_CTL="$WORK/ident-control.sh"; cp "$VALIDATOR" "$SL_CTL"
-SL_CTL_OK=0
-if sl_ident_holds "$SL_CTL"; then
-  ok "IDENTITY CONTROL — an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
-  SL_CTL_OK=1
-else
-  bad "IDENTITY CONTROL FAILED ($SL_IDENT_WHY) — the two mutants below are uninterpretable"
-fi
-
-if [ "$SL_CTL_OK" = "1" ]; then
-  # --- MUTANT D: the identity lines deleted ------------------------------------
-  # The state this release replaced. Assertion 14 MUST go red and no verdict may move.
-  #
-  # ANCHORED ON THE VERDICT LINE, NOT ON THE FOUR LABELS. The labels are the thing most
-  # likely to be reworded, and an anchor that goes stale produces a mutant identical to the
-  # original — which `cmp -s` catches, but only after someone reads the failure. The verdict
-  # sentence is the emitter's own text and it is unique to this site, so the mutation follows
-  # the block however the labels are respaced. It also scales: when the block went from two
-  # lines to four, this form needed no edit.
-  MUT_D="$WORK/mutant-d.sh"
-  sl_anchor_v='no suppression is past its lifetime on a still-failing check."'
-  if [ "$(grep -cF "$sl_anchor_v" "$VALIDATOR")" != "1" ]; then
-    bad "MUTANT D anchor is not unique in the validator — the deletion could land on another emitter"
-  elif [ "$(grep -cE '^echo "  ' "$VALIDATOR")" -lt 4 ]; then
-    bad "MUTANT D: fewer than four identity lines follow the verdict — the block this fixture guards has shrunk and the arms above may be asserting a subset"
-  else
-    awk -v A="$sl_anchor_v" '
-      index($0, A)               { print; hit=1; next }
-      hit && /^echo "  /         { next }
-                                 { hit=0; print }
-    ' "$VALIDATOR" > "$MUT_D"
-    if cmp -s "$VALIDATOR" "$MUT_D"; then
-      bad "MUTANT D did not change the file — the identity lines were reworded and the anchor matched nothing"
-    elif ! bash -n "$MUT_D" 2>/dev/null; then
-      bad "MUTANT D is not a valid program — its absence would have scored as a kill"
-    else
-      if sl_ident_holds "$MUT_D"; then
-        bad "MUTANT D SURVIVED — a validator naming neither corpus still satisfies assertion 14, so that assertion is not testing the identity lines"
-      else
-        ok "MUTANT D killed — deleting the identity lines makes two different trees indistinguishable ($SL_IDENT_WHY)"
-      fi
-      # The identity lines are additive: every verdict arm above must survive their
-      # removal, or assertion 14 is entangled with the arms that carry the release.
-      drive "$MUT_D" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-      drive "$MUT_D" in-force "$GM_FAILING"; rc2="$LAST_RC"
-      if [ "$rc" = "1" ] && [ "$rc2" = "0" ]; then
-        ok "MUTANT D leaves assertions 1 and 2 intact — corpus identity is asserted by an arm no verdict arm covers"
-      else
-        bad "MUTANT D ALSO moved a verdict (rc=$rc/$rc2) — the identity lines are not additive and assertion 14 is entangled"
-      fi
-      # Assertion 15 gets its teeth from the same mutant. Without this cell the
-      # candidate-walk arm is never driven against a subject that fails it, and an arm
-      # nothing can falsify reads exactly like one that passed.
-      if sl_cand_holds "$MUT_D"; then
-        bad "MUTANT D SURVIVED assertion 15 — the discovered catalog is still named with the identity block deleted, so assertion 15 reads a path emitted somewhere else"
-      else
-        ok "MUTANT D also kills assertion 15 — the discovered catalog path comes from the identity block and nowhere else ($SL_CAND_WHY)"
-      fi
-    fi
-  fi
-
-  # --- MUTANT E: identity replaced by a per-run NONCE --------------------------
-  # THE FIX THAT DISCRIMINATES WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at
-  # run time, so its two runs differ exactly as the real validator's do while naming no
-  # file at all. An arm keyed only on "the outputs differ" passes against it.
-  MUT_E="$WORK/mutant-e.sh"
-  awk -v A="$sl_anchor_v" '
-    index($0, A)       { print; hit=1; next }
-    hit && /^echo "  / { print "echo \"  nonce: $$-$RANDOM\""; next }
-                       { hit=0; print }
-  ' "$VALIDATOR" > "$MUT_E"
-  if cmp -s "$VALIDATOR" "$MUT_E"; then
-    bad "MUTANT E did not change the file — the nonce substitution matched nothing and assertion 14's nonce-resistance is unproved"
-  elif ! bash -n "$MUT_E" 2>/dev/null; then
-    bad "MUTANT E is not a valid program — its absence would have scored as a kill"
-  else
-    if sl_ident_holds "$MUT_E"; then
-      bad "MUTANT E SURVIVED — a per-run nonce naming no corpus satisfies assertion 14, so that assertion is a differ-check and not a naming check"
-    else
-      ok "MUTANT E killed — a per-run nonce varies the output exactly as the real paths do and still fails assertion 14 ($SL_IDENT_WHY)"
-    fi
-  fi
-fi
-
-# --- Assertion 17: suppression FIELDS under a non-SUPPRESSED status ------------
-# The reproduced defect: the authorization is discarded and the tool's own output cannot
-# distinguish that from no attempt at all. PRESENCE-shaped — it demands the diagnostic and
-# demands the counter, so a subject that emits nothing fails it by construction.
-drive "$VALIDATOR" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ]; then
-  ok "suppression fields under a status that classifies as something else are REPORTED"
-else
-  bad "a discarded suppression scored clean (rc=$rc) — the target, expiry and citation were never examined and nothing said so"
-fi
-if grep -q "Parsed \*\*Status:\*\* as 'DECIDED_AUTONOMOUSLY'" <<<"$LAST_OUT"; then
-  ok "the diagnostic names the token the entry actually classified as"
-else
-  bad "the diagnostic does not name the parsed status — the author cannot tell which token won"
-fi
-if grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
-  ok "the verdict line carries malformed_attempt=1 — an attempted-and-dropped suppression is no longer indistinguishable from none"
-else
-  bad "no malformed_attempt count in the verdict line — 'one attempted and dropped' still prints what 'none attempted' prints"
-fi
-
-# --- Assertion 18: the NEAR-MISS the rejected rule would have flagged ----------
-# Four of the five reference-consumer false positives are this exact sentence.
-drive "$VALIDATOR" attempt-word-only "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "0" ] && grep -q 'malformed_attempt=0' <<<"$LAST_OUT"; then
-  ok "a status line NAMING another disposition in prose, with no suppression fields, stays silent"
-else
-  bad "the arm fired on a status line's prose (rc=$rc) — it is keyed on the line, not on the fields, and the corpus is full of 'not a HARD_BLOCK'"
-fi
-
-# --- Assertion 19: the corrected form of assertion 17's entry ------------------
-drive "$VALIDATOR" attempt-corrected "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "0" ] && grep -q 'suppressed=1' <<<"$LAST_OUT" \
-   && grep -q 'malformed_attempt=0' <<<"$LAST_OUT"; then
-  ok "the same fields under a status that DOES classify SUPPRESSED are adjudicated, not flagged"
-else
-  bad "a well-formed suppression was flagged (rc=$rc) — the arm is keyed on the fields alone and every real suppression trips it"
-fi
-
-# --- Assertion 20: the discard reached through a TERMINAL branch ---------------
-# The reason the arm is sited ABOVE the case rather than as its else. RESOLVED has its own
-# branch, so an else-shaped arm cannot see this entry at all.
-drive "$VALIDATOR" attempt-under-terminal "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
-  ok "suppression fields under RESOLVED are reported — the arm is not the case's else"
-else
-  bad "a discard under a status WITH its own branch went unreported (rc=$rc) — the arm sits inside the case and cannot reach it"
-fi
-
-# --- Assertion 21: UNMUTATED CONTROL for MUTANT F ------------------------------
-SL_F_CTL="$WORK/attempt-control.sh"; cp "$VALIDATOR" "$SL_F_CTL"
-SL_F_CTL_OK=0
-drive "$SL_F_CTL" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
-if [ "$rc" = "1" ] && grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
-  ok "ATTEMPT CONTROL — an unmutated copy reproduces the finding, so MUTANT F's silence means mutation and not breakage"
-  SL_F_CTL_OK=1
-else
-  bad "ATTEMPT CONTROL FAILED (rc=$rc) — MUTANT F below is uninterpretable"
-fi
-
-if [ "$SL_F_CTL_OK" = "1" ]; then
-  # --- MUTANT F: the arm demoted to the case's else ----------------------------
-  # The plausible regression, not a deletion: an author siting the same test inside the
-  # `case` writes it as a `*)` branch. It reaches case 10 and NOT case 13, because
-  # RESOLVED matches an earlier branch. Anchored on the `if` line's own condition, which
-  # is unique to this site — the `case` line below it is shared with three other files.
-  MUT_F="$WORK/mutant-f.sh"
-  sl_anchor_f='if [ "${status:-}" != "SUPPRESSED" ] && { [ -n "$supp" ] || [ -n "$expires" ]; }; then'
-  if [ "$(grep -cF "$sl_anchor_f" "$VALIDATOR")" != "1" ]; then
-    bad "MUTANT F anchor is not unique in the validator — the mutation could land elsewhere"
-  else
-    awk -v A="$sl_anchor_f" '
-      index($0, A) { sub(/!= "SUPPRESSED"/, "= \"__never__\"", $0); print; next }
-                   { print }
-    ' "$VALIDATOR" > "$MUT_F"
-    if cmp -s "$VALIDATOR" "$MUT_F"; then
-      bad "MUTANT F did not change the file — the condition was reworded and the anchor matched nothing"
-    elif ! bash -n "$MUT_F" 2>/dev/null; then
-      bad "MUTANT F is not a valid program — its absence would have scored as a kill"
-    else
-      drive "$MUT_F" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
-      if [ "$rc" = "0" ]; then
-        ok "MUTANT F killed — a condition that can never hold restores the silent discard, so assertion 17 is testing the predicate and not the counter"
-      else
-        bad "MUTANT F SURVIVED (rc=$rc) — assertion 17 fires without the predicate, so something else is reporting this entry"
-      fi
-      drive "$MUT_F" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
-      drive "$MUT_F" in-force "$GM_FAILING"; rc2="$LAST_RC"
-      if [ "$rc" = "1" ] && [ "$rc2" = "0" ]; then
-        ok "MUTANT F leaves assertions 1 and 2 intact — the new arm is additive and not entangled with the lifetime arms"
-      else
-        bad "MUTANT F ALSO moved a lifetime verdict (rc=$rc/$rc2) — the arms are entangled and one of them is vacuous"
-      fi
-    fi
-  fi
-fi
-
-# ==============================================================================
-# ASSERTIONS 22-33: THE TIMELINE IS RESOLVED FROM THE PROJECT ROOT, NOT FROM THE CWD.
-# ==============================================================================
-# THE DEFECT. Section 2 locates gate-metrics.jsonl for itself when no `--gate-metrics` was
-# given, and it did so by trying CWD-RELATIVE candidates first. Both callers that omit the
-# flag — `ai-dlc-gate-remediation-guard.sh` arm 7b and `validate-gate-adjudication.sh` — hand
-# this script a project root and then run it from whatever directory the session is in. When
-# that directory is a DIFFERENT project carrying its own `_bmad-output/`, a suppression's
-# lifetime is counted against a stranger's gate history: the licence expires, or does not,
-# for reasons no output names.
-#
-# EVERY ASSERTION ABOVE PASSES `--gate-metrics` EXPLICITLY, so none of them can express this.
-# That is the shape `CLAUDE.md` warns about — a unit green only from the repo root may be
-# green because the repo root is a cwd where the decoy does not exist. These arms carry their
-# own cwd, so the world the consumer's pre-push runs in is the world this fixture runs in.
-#
-# THE PAIR IS THE ASSERTION. Each world drives the same invocation twice, once from the decoy
-# cwd and once from the root itself, and demands they AGREE — with a precondition arm proving
-# the two timelines DIFFER, so a differential whose sides are identical cannot read as
-# agreement.
-SL_ROWS="$WORK/inforce.rows"
-SL_OUT=""; SL_RC=""
-sl_inforce() { # <validator> <root> <cwd> <escalations> — stderr to $SL_OUT, rows to $SL_ROWS
-  # No --gate-metrics and no --enforcement-map: the resolution under test is the one the two
-  # real callers use. The catalog is seeded at the ROOT-anchored candidate, so a run that
-  # never received AI_DLC_PROJECT_ROOT refuses rather than answering from somewhere else.
-  SL_OUT="$( cd "$3" && AI_DLC_PROJECT_ROOT="$2" bash "$1" --in-force --escalations "$4" 2>&1 >"$SL_ROWS" )"
-  SL_RC=$?
-}
-sl_field() { # <name> -> the value of `<name>=…` on the IN-FORCE line
-  printf '%s\n' "$SL_OUT" | sed -n "s/.*[[:space:]]$1=\([^[:space:]]*\).*/\1/p" | tail -1
-}
-sl_rows_n() { local n; n="$(grep -c . "$SL_ROWS")" || n=0; printf '%s' "$n"; }
+IDA="$(sl_ident_corpus)" || { echo "FIXTURE ERROR: could not build identity corpus A" >&2; exit 2; }
+IDB="$(sl_ident_corpus)" || { echo "FIXTURE ERROR: could not build identity corpus B" >&2; exit 2; }
+CDA="$(sl_cand_corpus)"  || { echo "FIXTURE ERROR: could not build candidate corpus A" >&2; exit 2; }
+CDB="$(sl_cand_corpus)"  || { echo "FIXTURE ERROR: could not build candidate corpus B" >&2; exit 2; }
 
 SL_A_GM="$SL_CWD_A_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
 SL_A_DECOY_GM="$SL_CWD_A_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
 
-# --- Assertion 22: the two sides of the differential DIFFER ---------------------
-# Without this, a seed that wrote one timeline twice would make every arm below agree for a
-# reason that has nothing to do with the resolver.
-if [ -f "$SL_A_GM" ] && [ -f "$SL_A_DECOY_GM" ] && ! cmp -s "$SL_A_GM" "$SL_A_DECOY_GM"; then
-  ok "world A: the root timeline and the decoy-cwd timeline both exist and DIFFER — the pair below can discriminate"
-else
-  bad "world A: FIXTURE BROKEN — the root and decoy timelines are missing or identical, so every arm below agrees for free"
-fi
+# THE REFUSAL SEEDS (arms sr_*): an UNREADABLE or NON-REGULAR escalations path refuses in BOTH modes.
+SR="$WORK/refusal"; mkdir -p "$SR"
+SR_LOCKED="$SR/pending-locked.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_LOCKED"; chmod 000 "$SR_LOCKED"
+SR_DIR="$SR/pending-dir.md"; mkdir -p "$SR_DIR"
+SR_LINK="$SR/pending-dangling.md"; ln -s "$SR/pending-target-never-written.md" "$SR_LINK"
+SR_IO="$SR/pending-io.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_IO"
+SR_SKIP_A=""
+if [ "$(id -u)" -eq 0 ]; then SR_SKIP_A="running as root, which reads a mode-000 file"
+elif cat "$SR_LOCKED" >/dev/null 2>&1; then SR_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
+[ -n "$SR_SKIP_A" ] && printf '  SKIP  refusal arms sr_Ag/sr_Ai (mode-000 file) -- %s\n' "$SR_SKIP_A"
+if ! { [ -L "$SR_LINK" ] && [ ! -e "$SR_LINK" ]; }; then bad "FIXTURE BROKEN: the dangling-symlink seed is not a link to a missing target"; fi
+SR_STUB="$SR/stub"; mkdir -p "$SR_STUB"
+SR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$SR_STUB"
+  printf 'esac\nexec "%s" "$@"\n' "$SR_REALGREP"
+} > "$SR_STUB/grep"
+chmod +x "$SR_STUB/grep"
 
-# --- Assertion 23: world B's root carries NO timeline, at any candidate ---------
-# A zero with its control: world A's root DOES carry one, asserted in the same arm.
-SL_B_ANY="$(find "$SL_CWD_B_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_B_ANY=0
-SL_A_ANY="$(find "$SL_CWD_A_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_A_ANY=0
-if [ "$SL_B_ANY" -eq 0 ] && [ "$SL_A_ANY" -gt 0 ]; then
-  ok "world B: no gate-metrics.jsonl anywhere under its root (control: world A's root has $SL_A_ANY)"
-else
-  bad "world B: FIXTURE BROKEN — found $SL_B_ANY metrics files under its root against a control of $SL_A_ANY; the 'nothing to count' world does not exist"
-fi
+# ---- the drive cache --------------------------------------------------------------------------
+VP=()   # validator key -> path
+O=""; E=""; RC=""; X=""
+sl_field() { printf '%s\n' "$DV_O" | sed -n "s/.*[[:space:]]$1=\([^[:space:]]*\).*/\1/p" | tail -1; }
+drive_run() { # <validator path> <drive> -> O E RC X
+  local v="$1" d="$2" c="" gm="" ex="" m="" p="$PATH" f="" root="" cwd="" esc="" rows
+  O=""; E=""; RC=""; X=""
+  DRIVES=$((DRIVES+1))
+  case "$d" in
+    inforce) c=in-force; gm="$GM_FAILING" ;;
+    exp)     c=expired-still-failing; gm="$GM_FAILING" ;;
+    fixed)   c=expired-but-fixed; gm="$GM_FIXED" ;;
+    mal)     c=malformed-no-target; gm="$GM_FAILING" ;;
+    range)   c=expiry-out-of-range; gm="$GM_FAILING" ;;
+    unk)     c=unknown-check-id; gm="$GM_FAILING" ;;
+    tnf)     c=terminal-names-failing; gm="$GM_FAILING" ;;
+    tnp)     c=terminal-names-passing; gm="$GM_FAILING" ;;
+    empty)   c=empty; gm="$GM_FAILING" ;;
+    bgood)   c=terminal-names-failing; gm="$GM_FAILING"; ex="--baseline $BASELINE_GOOD" ;;
+    bstale)  c=terminal-names-failing; gm="$GM_FAILING"; ex="--baseline $BASELINE_STALE" ;;
+    cc)      c=collide-core; gm="$GM_COLLIDE" ;;
+    ccon)    c=collide-control; gm="$GM_COLLIDE" ;;
+    cb)      c=collide-bare; gm="$GM_COLLIDE" ;;
+    ce)      c=collide-ext; gm="$GM_COLLIDE_EXT" ;;
+    ccone)   c=collide-control; gm="$GM_COLLIDE_EXT" ;;
+    rev)     c=expired-still-failing; gm="$GM_REV" ;;
+    att1)    c=attempt-first-token; gm="$GM_FAILING" ;;
+    attw)    c=attempt-word-only; gm="$GM_FAILING" ;;
+    attc)    c=attempt-corrected; gm="$GM_FAILING" ;;
+    attu)    c=attempt-under-terminal; gm="$GM_FAILING" ;;
+    wm_ovr)  c=waiver-match; gm="$GM_W_OVR" ;;
+    wm_fail) c=waiver-match; gm="$GM_FAILING" ;;
+    wo)      c=waiver-other-entry; gm="$GM_W_OTHER" ;;
+    wsup1)   c=waiver-suppressed-expired; gm="$GM_W_SUP1" ;;
+    wsup3)   c=waiver-suppressed-inforce; gm="$GM_W_SUP3" ;;
+    wnone)   c=waiver-wrong-status; gm="$GM_W_NONE" ;;
+    wdec)    c=waiver-wrong-status; gm="$GM_W_DEC" ;;
+    warch)   c=waiver-archived; gm="$GM_W_ARCH" ;;
+    wempty)  c=waiver-match; gm="$GM_W_EMPTY" ;;
+  esac
+  case "$d" in
+    nocat)
+      O="$(bash "$v" --escalations "$CASES/expired-still-failing/pending.md" \
+            --gate-metrics "$GM_FAILING" --enforcement-map "$WORK/nope.yaml" 2>&1)"; RC=$? ;;
+    nomet)
+      O="$(bash "$v" --escalations "$CASES/malformed-no-target/pending.md" \
+            --enforcement-map "$MAP" --gate-metrics "$WORK/absent.jsonl" 2>&1)"; RC=$? ;;
+    ident_a|ident_b)
+      f="$IDA"; [ "$d" = ident_b ] && f="$IDB"
+      O="$(bash "$v" --escalations "$f/pending.md" --gate-metrics "$f/gm.jsonl" \
+            --enforcement-map "$f/catalog.yaml" --baseline "$f/baseline.txt" 2>&1)"; RC=$? ;;
+    cand_a|cand_b)
+      f="$CDA"; [ "$d" = cand_b ] && f="$CDB"
+      O="$(AI_DLC_PROJECT_ROOT="$f" bash "$v" --escalations "$f/pending.md" --gate-metrics "$GM_FAILING" 2>&1)"; RC=$? ;;
+    cwA_decoy|cwA_root|cwB_decoy)
+      case "$d" in
+        cwA_decoy) root="$SL_CWD_A_ROOT"; cwd="$SL_CWD_A_DECOY" ;;
+        cwA_root)  root="$SL_CWD_A_ROOT"; cwd="$SL_CWD_A_ROOT" ;;
+        cwB_decoy) root="$SL_CWD_B_ROOT"; cwd="$SL_CWD_B_DECOY" ;;
+      esac
+      # No --gate-metrics and no --enforcement-map: the resolution under test is the one the two real
+      # callers use. The catalog is seeded at the ROOT-anchored candidate, so a run that never
+      # received AI_DLC_PROJECT_ROOT refuses rather than answering from somewhere else.
+      rows="$WORK/inforce.rows"
+      O="$( cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" bash "$v" --in-force --escalations "$root/pending.md" 2>&1 >"$rows" )"; RC=$?
+      X="$(grep -c . "$rows")" || X=0 ;;
+    sen_empty|sen_blank|sen_never|sen_head|sen_l4|sen_exp)
+      case "$d" in
+        sen_empty) f=empty-file ;; sen_blank) f=blank-file ;; sen_never) f=never-written ;;
+        sen_head) f=heading-only ;; sen_l4) f=level4-entry ;; sen_exp) f=expired-still-failing ;;
+      esac
+      O="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --escalations "$CASES/$f/pending.md" \
+             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>/dev/null)"; RC=$? ;;
+    sen_if)
+      E="$( AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --in-force --escalations "$CASES/empty-file/pending.md" \
+              --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>&1 >"$WORK/sen-inforce.out" )"; RC=$?
+      O="$(cat "$WORK/sen-inforce.out")" ;;
+    sr_lock_g|sr_lock_i|sr_dir_g|sr_dir_i|sr_link_g|sr_io_g|sr_io_i|sr_blank_g|sr_blank_i|sr_exp_g)
+      case "$d" in
+        sr_lock_g)  f="$SR_LOCKED" ;;
+        sr_lock_i)  f="$SR_LOCKED"; m="--in-force" ;;
+        sr_dir_g)   f="$SR_DIR" ;;
+        sr_dir_i)   f="$SR_DIR"; m="--in-force" ;;
+        sr_link_g)  f="$SR_LINK" ;;
+        sr_io_g)    f="$SR_IO"; p="$SR_STUB:$PATH" ;;
+        sr_io_i)    f="$SR_IO"; m="--in-force"; p="$SR_STUB:$PATH" ;;
+        sr_blank_g) f="$CASES/blank-file/pending.md" ;;
+        sr_blank_i) f="$CASES/blank-file/pending.md"; m="--in-force" ;;
+        sr_exp_g)   f="$CASES/expired-still-failing/pending.md" ;;
+      esac
+      : > "$SR_STUB/LOG"
+      O="$(PATH="$p" AI_DLC_PROJECT_ROOT="$WORK" bash "$v" $m --escalations "$f" \
+            --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; RC=$?
+      E="$(cat "$SR/err")"
+      X=0; [ -s "$SR_STUB/LOG" ] && X=1 ;;
+    *)
+      O="$(bash "$v" --escalations "$CASES/$c/pending.md" --gate-metrics "$gm" \
+            --enforcement-map "$MAP" $ex 2>&1)"; RC=$? ;;
+  esac
+}
+DV_O=""; DV_E=""; DV_RC=""; DV_X=""
+dv() { # <validator key> <drive> -> DV_O DV_E DV_RC DV_X, running the validator at most once per (key, drive)
+  local rn="C_${1}_${2}_R" on="C_${1}_${2}_O" en="C_${1}_${2}_E" xn="C_${1}_${2}_X"
+  if [ -z "${!rn+x}" ]; then
+    drive_run "${VP[$1]}" "$2"
+    printf -v "$on" '%s' "$O"; printf -v "$en" '%s' "$E"; printf -v "$xn" '%s' "$X"; printf -v "$rn" '%s' "$RC"
+  fi
+  DV_O="${!on}"; DV_E="${!en}"; DV_X="${!xn}"; DV_RC="${!rn}"
+}
+has()  { grep -q  -- "$1" <<<"$DV_O"; }
+hasF() { grep -qF -- "$1" <<<"$DV_O"; }
+SL_TS_WHY=""
+sl_names_ts() { # <want-ts> <unwanted-ts> -- reads DV_O
+  SL_TS_WHY=""
+  grep -qF "ts $1 in " <<<"$DV_O" || { SL_TS_WHY="no 'ts $1 in' in the message"; return 1; }
+  if [ -n "$2" ] && grep -qF "ts $2 in " <<<"$DV_O"; then SL_TS_WHY="names $2 too"; return 1; fi
+  grep -qF "PREVIOUS" <<<"$DV_O" || { SL_TS_WHY="does not say the source is the PREVIOUS gate"; return 1; }
+  return 0
+}
+w_quiet() { [ "$DV_RC" = "0" ] && grep -qF "waived_rows=$1 " <<<"$DV_O"; }
 
-# --- Assertions 24-27: WORLD A, the shipped validator --------------------------
-sl_inforce "$VALIDATOR" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
-SL_A_DECOY_GATES="$(sl_field gates_recorded)"; SL_A_DECOY_INF="$(sl_field in_force)"
-SL_A_DECOY_METRICS="$(sl_field metrics)"; SL_A_DECOY_ROWS="$(sl_rows_n)"
-sl_inforce "$VALIDATOR" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT/pending.md"
-SL_A_ROOT_GATES="$(sl_field gates_recorded)"; SL_A_ROOT_INF="$(sl_field in_force)"
-
-if [ "$SL_A_DECOY_GATES" = "2" ]; then
-  ok "world A: from a cwd whose own timeline records 9 gates, gates_recorded=2 — the ROOT's timeline was counted"
-else
-  bad "world A: gates_recorded='$SL_A_DECOY_GATES' from the decoy cwd, expected 2 — the lifetime was counted against the cwd project's gate history"
-fi
-if [ "$SL_A_DECOY_INF" = "1" ] && [ "$SL_A_DECOY_ROWS" = "1" ]; then
-  ok "world A: the entry is listed in force from the decoy cwd (in_force=1, one row on stdout)"
-else
-  bad "world A: in_force='$SL_A_DECOY_INF' with $SL_A_DECOY_ROWS row(s) from the decoy cwd — a live licence was expired by a stranger's timeline"
-fi
-if [ "$SL_A_DECOY_METRICS" = "$SL_A_GM" ]; then
-  ok "world A: the verdict NAMES the root's metrics file as the one it read"
-else
-  bad "world A: the verdict names metrics='$SL_A_DECOY_METRICS', not '$SL_A_GM' — the resolved timeline is not the root's"
-fi
-if [ "$SL_A_DECOY_GATES" = "$SL_A_ROOT_GATES" ] && [ "$SL_A_DECOY_INF" = "$SL_A_ROOT_INF" ]; then
-  ok "world A: the decoy-cwd run and the root-cwd control AGREE (gates_recorded=$SL_A_ROOT_GATES in_force=$SL_A_ROOT_INF) — the answer does not depend on the cwd"
-else
-  bad "world A: cwd-dependent answer — decoy gave $SL_A_DECOY_GATES/$SL_A_DECOY_INF and the root gave $SL_A_ROOT_GATES/$SL_A_ROOT_INF"
-fi
-
-# --- Assertions 28-30: WORLD B, the wrong fix's world --------------------------
-# "Root first, then fall back to the cwd" is invisible in world A. Here the root answers
-# NOTHING, and a fallback finds the decoy's 1-gate timeline and re-licenses the entry.
-sl_inforce "$VALIDATOR" "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY" "$SL_CWD_B_ROOT/pending.md"
-SL_B_GATES="$(sl_field gates_recorded)"; SL_B_INF="$(sl_field in_force)"; SL_B_ROWS="$(sl_rows_n)"
-if grep -q 'no gate-metrics.jsonl was found' <<<"$SL_OUT"; then
-  ok "world B: a root with no timeline DECLINES to count a lifetime, and says so"
-else
-  bad "world B: no 'no gate-metrics.jsonl was found' NOTE — the resolver reached past its root and counted somebody else's gates"
-fi
-if [ "$SL_B_INF" = "0" ] && [ "$SL_B_ROWS" = "0" ]; then
-  ok "world B: nothing is listed in force (in_force=0, no rows) — a lifetime that cannot be counted is not a licence"
-else
-  bad "world B: in_force='$SL_B_INF' with $SL_B_ROWS row(s) — the decoy cwd's timeline became this project's licence"
-fi
-if [ "$SL_B_GATES" = "NONE" ]; then
-  ok "world B: gates_recorded=NONE, so the count the verdict was computed over is visible"
-else
-  bad "world B: gates_recorded='$SL_B_GATES', not NONE — the verdict reports a timeline it should not have found"
-fi
-
-# ------------------------------------------------------------------------------
-# THE CWD MUTANTS. Both wrong fixes, built as COPIES.
-#
-# The mutation REPLACES the whole resolution block rather than editing candidate lines,
-# because a mutation keyed on the shipped spelling of a candidate is a no-op the day that
-# spelling changes, and `cmp -s` cannot see the difference between "the wrong fix" and "the
-# anchor moved". The block is delimited by its own section header and the `fi` that closes
-# it; the header is asserted UNIQUE first, and each mutant carries a marker line no copy of
-# the shipped file can contain.
-#
-# This validator resolves no sibling beside itself — the control at assertion 16 is already a
-# lone copy and reproduces the real verdict — so the mutants are lone copies too. Each is
-# scored on a PRESENCE-shaped observable (a specific gates_recorded value, a specific row
-# count), so a copy that died on startup and printed nothing fails rather than scoring a kill.
-# ------------------------------------------------------------------------------
+# ---- the metrics-resolution block (arm c31 and mutants g, h) ------------------------------------
 SL_SEC2='# ---- 2. Locate gate-metrics'
-SL_SEC2_N="$(grep -cF "$SL_SEC2" "$VALIDATOR")" || SL_SEC2_N=0
-SL_SEC2_MISS="$(grep -cF '# ---- 2. Locate the impossible section' "$VALIDATOR")" || SL_SEC2_MISS=0
-if [ "$SL_SEC2_N" = "1" ] && [ "$SL_SEC2_MISS" = "0" ]; then
-  ok "the metrics-resolution block has exactly one section header to anchor on (control: an impossible anchor matches 0)"
-else
-  bad "the metrics-resolution anchor matched $SL_SEC2_N times (control $SL_SEC2_MISS) — the mutants below would land somewhere else or nowhere"
-fi
-
-# The block's own text, extracted so an arm can COUNT what kind of candidates it holds.
 sl_sec2_block() { # <file> -> the section-2 resolution block, header through its closing `fi`
   awk -v A="$SL_SEC2" '
     st==0 && index($0, A) { st=1; next }
@@ -916,15 +294,341 @@ sl_cwd_cands() { # <file> -> how many candidates in that block are CWD-RELATIVE
   local n; n="$(sl_sec2_block "$1" | grep -c '^ *"\(_bmad-output\|docs/_bmad-output\)/')" || n=0
   printf '%s' "$n"
 }
-sl_mkmut() { # <src> <body-file> <out> — replace the block with <body-file>'s contents
+
+# ===== THE ARMS ===================================================================================
+# Each arm is `ar_<id> <validator key>`: 0 = holds, 1 = does not hold. They read cached drives.
+ar_s1()  { dv "$1" inforce; [ "$DV_RC" = 0 ]; }
+ar_s2()  { dv "$1" exp; [ "$DV_RC" = 1 ]; }
+ar_s2m() { dv "$1" exp; has 'past its lifetime'; }
+ar_s3()  { dv "$1" fixed; [ "$DV_RC" = 0 ]; }
+ar_s4()  { dv "$1" mal; [ "$DV_RC" = 1 ]; }
+ar_s4m() { dv "$1" mal; has 'Suppresses'; }
+ar_s5()  { dv "$1" range; [ "$DV_RC" = 1 ]; }
+ar_s6()  { dv "$1" unk; [ "$DV_RC" = 1 ]; }
+ar_s7()  { dv "$1" tnf; [ "$DV_RC" = 1 ]; }
+ar_s8()  { dv "$1" tnp; [ "$DV_RC" = 0 ]; }
+ar_s9()  { dv "$1" empty; [ "$DV_RC" = 0 ] && has 'entries_scanned='; }
+ar_s9z() { dv "$1" empty; has 'suppressed=0'; }
+ar_s11() { dv "$1" nocat; [ "$DV_RC" = 2 ]; }
+ar_s12() { dv "$1" nomet; [ "$DV_RC" = 1 ]; }
+ar_s13a() { dv "$1" bgood; [ "$DV_RC" = 0 ]; }
+ar_s13b() { dv "$1" bstale; [ "$DV_RC" = 1 ] && has 'no longer reproduces'; }
+ar_s14() { dv "$1" cc; [ "$DV_RC" = 1 ] && has "STILL FAILING"; }
+ar_s15() { dv "$1" ccon; [ "$DV_RC" = 1 ]; }
+ar_s16() { dv "$1" cb; [ "$DV_RC" = 1 ]; }
+ar_s17() { dv "$1" ce; [ "$DV_RC" = 1 ] && has "STILL FAILING"; }
+ar_s18() { dv "$1" ccone; [ "$DV_RC" = 1 ]; }
+ar_t18a() { dv "$1" exp; [ "$DV_RC" = 1 ] && sl_names_ts "$G3" "$G2"; }
+ar_t18b() { dv "$1" cc; [ "$DV_RC" = 1 ] && sl_names_ts "$G2" "$G3"; }
+ar_t18c() { dv "$1" tnf; [ "$DV_RC" = 1 ] && has "recorded FAILING"; }
+ar_t18d() { dv "$1" rev; [ "$DV_RC" = 1 ] && sl_names_ts "$G3" "$G1"; }
+ar_ident() { # the OK verdict names all four inputs and two identical corpora are distinguishable
+  local oa ob
+  dv "$1" ident_a; oa="$DV_O"; [ "$DV_RC" = 0 ] || return 1
+  dv "$1" ident_b; ob="$DV_O"; [ "$DV_RC" = 0 ] || return 1
+  # THE EMITTER TOKEN IS THE ONE UNIQUE TO THIS LINE, NOT `OK: entries_scanned=`: two `OK:` emitters
+  # share that prefix and BL-078 inserted `EXAMINED NOTHING — ` between `OK: ` and `entries_scanned=`.
+  grep -qF 'no suppression is past its lifetime' <<<"$oa" || return 1
+  [ "$oa" != "$ob" ] || return 1
+  grep -qF "$IDA/pending.md" <<<"$oa" && grep -qF "$IDA/catalog.yaml" <<<"$oa" \
+    && grep -qF "$IDA/gm.jsonl" <<<"$oa" && grep -qF "$IDA/baseline.txt" <<<"$oa" || return 1
+  grep -qF "$IDB/pending.md" <<<"$ob" && grep -qF "$IDB/catalog.yaml" <<<"$ob" \
+    && grep -qF "$IDB/gm.jsonl" <<<"$ob" && grep -qF "$IDB/baseline.txt" <<<"$ob" || return 1
+  ! grep -qF "$IDB" <<<"$oa"
+}
+ar_cand() { # the RESOLVED catalog, not the one an argument named
+  local oa ob
+  dv "$1" cand_a; oa="$DV_O"; [ "$DV_RC" = 0 ] || return 1
+  dv "$1" cand_b; ob="$DV_O"; [ "$DV_RC" = 0 ] || return 1
+  grep -qF 'no suppression is past its lifetime' <<<"$oa" || return 1
+  [ "$oa" != "$ob" ] || return 1
+  grep -qF "$CDA/core/skills/ai-dlc/enforcement-map.yaml" <<<"$oa" \
+    && grep -qF "$CDB/core/skills/ai-dlc/enforcement-map.yaml" <<<"$ob"
+}
+ar_att17a() { dv "$1" att1; [ "$DV_RC" = 1 ]; }
+ar_att17b() { dv "$1" att1; has "Parsed \*\*Status:\*\* as 'DECIDED_AUTONOMOUSLY'"; }
+ar_att17c() { dv "$1" att1; has 'malformed_attempt=1'; }
+ar_att18()  { dv "$1" attw; [ "$DV_RC" = 0 ] && has 'malformed_attempt=0'; }
+ar_att19()  { dv "$1" attc; [ "$DV_RC" = 0 ] && has 'suppressed=1' && has 'malformed_attempt=0'; }
+ar_att20()  { dv "$1" attu; [ "$DV_RC" = 1 ] && has 'malformed_attempt=1'; }
+ar_cwA_gates() { dv "$1" cwA_decoy; [ "$(sl_field gates_recorded)" = "2" ]; }
+ar_cwA_inf()   { dv "$1" cwA_decoy; [ "$(sl_field in_force)" = "1" ] && [ "$DV_X" = "1" ]; }
+ar_cwA_met()   { dv "$1" cwA_decoy; [ "$(sl_field metrics)" = "$SL_A_GM" ]; }
+ar_cwA_agree() {
+  local g i
+  dv "$1" cwA_decoy; g="$(sl_field gates_recorded)"; i="$(sl_field in_force)"
+  dv "$1" cwA_root;  [ "$g" = "$(sl_field gates_recorded)" ] && [ "$i" = "$(sl_field in_force)" ]
+}
+ar_cwA_root()  { dv "$1" cwA_root; [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; }
+ar_cwB_note()  { dv "$1" cwB_decoy; has 'no gate-metrics.jsonl was found'; }
+ar_cwB_inf()   { dv "$1" cwB_decoy; [ "$(sl_field in_force)" = "0" ] && [ "$DV_X" = "0" ]; }
+ar_cwB_gates() { dv "$1" cwB_decoy; [ "$(sl_field gates_recorded)" = "NONE" ]; }
+ar_c31() { [ "$(sl_cwd_cands "${VP[$1]}")" = "0" ]; }
+# ---- the empty-file cells (A..F) ----------------------------------------------------------------
+ar_sen_A() { dv "$1" sen_empty; [ "$DV_RC" -eq 0 ] && hasF "EXAMINED NOTHING" && hasF "present but empty"; }
+ar_sen_B() { dv "$1" sen_blank; [ "$DV_RC" -eq 0 ] && hasF "EXAMINED NOTHING" && hasF "present but empty"; }
+ar_sen_C() { dv "$1" sen_never; [ "$DV_RC" -eq 0 ] && hasF "EXAMINED NOTHING" && hasF "no escalations file" && ! hasF "present but empty"; }
+ar_sen_D() {
+  local o1 r1
+  dv "$1" sen_head; o1="$DV_O"; r1="$DV_RC"
+  dv "$1" sen_l4
+  [ "$r1" -eq 0 ] && [ "$DV_RC" -eq 0 ] && ! hasF "EXAMINED NOTHING" && ! grep -qF "EXAMINED NOTHING" <<<"$o1" \
+    && grep -qF "OK: entries_scanned=0 " <<<"$o1" && hasF "OK: entries_scanned=0 "
+}
+ar_sen_E() { dv "$1" sen_exp; [ "$DV_RC" -eq 1 ]; }
+ar_sen_F() { dv "$1" sen_if; [ "$DV_RC" -eq 0 ] && [ -z "$DV_O" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$DV_E" \
+              && ! grep -qF "EXAMINED NOTHING" <<<"$DV_O$DV_E"; }
+# ---- the refusal cells --------------------------------------------------------------------------
+sr_refused() { [ "$DV_RC" -eq 2 ] && [ -z "$DV_O" ] && grep -qE "^REFUSED: .*$1" <<<"$DV_E"; }
+ar_sr_Ag() { dv "$1" sr_lock_g; sr_refused 'could not be read'; }
+ar_sr_Ai() { dv "$1" sr_lock_i; sr_refused 'could not be read'; }
+ar_sr_Bg() { dv "$1" sr_dir_g; sr_refused 'is not a regular file'; }
+ar_sr_Bi() { dv "$1" sr_dir_i; sr_refused 'is not a regular file'; }
+ar_sr_Cg() { dv "$1" sr_link_g; sr_refused 'is not a regular file'; }
+ar_sr_Dg() { dv "$1" sr_io_g; [ "$DV_X" = 1 ] && sr_refused 'failed \(grep exited 2\)'; }
+ar_sr_Di() { dv "$1" sr_io_i; [ "$DV_X" = 1 ] && sr_refused 'failed \(grep exited 2\)'; }
+ar_sr_Eg() { dv "$1" sr_blank_g; [ "$DV_RC" -eq 0 ] && hasF 'present but empty' && ! grep -qF REFUSED <<<"$DV_O$DV_E"; }
+ar_sr_Ei() { dv "$1" sr_blank_i; [ "$DV_RC" -eq 0 ] && [ -z "$DV_O" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$DV_E" && ! grep -qF REFUSED <<<"$DV_E"; }
+ar_sr_Fg() { dv "$1" sr_exp_g; [ "$DV_RC" -eq 1 ] && ! grep -qF REFUSED <<<"$DV_O$DV_E"; }
+# ---- the waived verdict (W1..W8) ----------------------------------------------------------------
+ar_w1()  { dv "$1" wm_ovr; w_quiet 1; }
+ar_w1b() { dv "$1" wm_fail; [ "$DV_RC" = "1" ] && has "recorded FAILING"; }
+ar_w2()  { dv "$1" wo; [ "$DV_RC" = "1" ] && has "recorded FAILING" && ! has "names NO entry"; }
+ar_w3()  { dv "$1" wm_ovr; w_quiet 1 && [ "$(grep -oE '"ts": *"[^"]*"' "$GM_W_OVR" | sed 's/.*"\([^"]*\)"$/\1/' | sort -u | grep -c .)" -eq 3 ]; }
+ar_w4()  {
+  local w4a=0
+  dv "$1" wsup1; [ "$DV_RC" = "1" ] && has "latest recorded verdict is FAIL_WAIVED" && w4a=1
+  dv "$1" wsup3; [ "$w4a" -eq 1 ] && w_quiet 1
+}
+ar_w5()  { dv "$1" wnone; [ "$DV_RC" = "1" ] && has "which names NO entry"; }
+ar_w6()  { dv "$1" wdec; [ "$DV_RC" = "1" ] && has "neither OVERRIDDEN nor SUPPRESSED"; }
+ar_w7()  { dv "$1" warch; w_quiet 1 && has "names an entry archived"; }
+ar_w8()  { dv "$1" wempty; [ "$DV_RC" = "1" ] && has "with NO waiver_id"; }
+
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8"
+
+reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
+reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
+reg s2 "past its lifetime with the check STILL failing, the suppression FAILS
+spaced-form metrics rows are read (check 32 is seeded spaced-only)" "expired suppression did NOT fail — the lifetime is decoration, and the spaced JSON form was not read (53% of the real corpus is invisible)"
+reg s2m "the expiry message names the lifetime as the reason" "the expiry FAIL did not explain itself"
+reg s3 "past its lifetime but the check now PASSes — reports nothing" "expired-but-fixed FAILED — the check nags after the failure is gone"
+reg s4 "a SUPPRESSED entry with no **Suppresses:** is MALFORMED" "missing **Suppresses:** was accepted — an empty field collapsed and the later fields shifted left"
+reg s4m "the malformed message names the missing field" "malformed FAIL did not name which field was missing"
+reg s5 "**Expires after:** outside 1..3 is rejected" "an out-of-range expiry was accepted — a suppression could be written to outlive anything"
+reg s6 "a **Suppresses:** id absent from the catalog is rejected" "an unknown check id was accepted — 'Check 924' is a real prose token in the corpus"
+reg s7 "a RESOLVED entry naming a still-failing check FAILS — the loophole is shut
+18c: the terminal-entry arm still reads the verdict out of the widened row" "RESOLVED closed a still-failing check — this is the measured defect, unfixed (and the terminal-entry arm no longer reads the widened row)"
+reg s8 "a RESOLVED entry naming only a PASSING check does not fire" "a terminal entry naming a green check FAILED — every closed entry mentioning a check would trip"
+reg s9 "a clean run reports the counts it was computed over" "the clean verdict carries no counts — a regex matching nothing reads like full coverage"
+reg s9z "the zero-control distinguishes 'no suppressions' from 'all suppressions valid'" "no suppressed= count in the verdict line"
+reg s11 "an unreadable catalog exits 2 — a refusal, never a clean pass" "missing catalog did not refuse — it would act on prose tokens that are not checks"
+reg s12 "with no metrics the SHAPE arm still fires on a malformed entry" "no-metrics run did not check shape — the whole script went quiet on a missing optional input"
+reg s13a "a baselined violation is suppressed" "the baseline did not suppress its own entry"
+reg s13b "a baselined key that stops reproducing is itself a FAIL — the baseline cannot outlive its cause" "a stale baseline line was tolerated — a baseline would silently suppress a check that started passing"
+reg s14 "an expired suppression on a still-failing CORE check fires, though a newer extension row PASSes" "the extension row ACQUITTED a core check that is still failing — the fail-open direction of the collision"
+reg s15 "the single-catalog control still fires in the colliding timeline (assertion 14 discriminates)" "the single-catalog control stopped firing — assertion 14 proves nothing, the arm just refuses"
+reg s16 "a bare id resolves as core and fires identically to the bracketed form" "a bare id stopped resolving — dropping the bracket now buys silence"
+reg s17 "an expired suppression on a still-failing EXTENSION check fires, though core's newer row PASSes" "hard-coding the core catalog acquitted a failing extension check — every corpus-drawn seed passes this, only this one separates them"
+reg s18 "the single-catalog control fires in the mirrored timeline too (assertion 17 discriminates)" "the control stopped firing in the mirrored timeline"
+reg t18a "18a: the expiry FAIL names the ts of the row it read ($G3) and that it is the PREVIOUS gate's verdict" "18a: the expiry FAIL does not name the verdict row's ts — a stale read is illegible"
+reg t18b "18b: in the colliding timeline the named ts is core's row ($G2), not the newer extension row" "18b: the named ts is not the row the catalog join selected"
+reg t18c "18c: the terminal-entry arm still reads the verdict out of the widened row" "18c: the terminal-entry arm stopped firing — it compares the whole row to FAIL"
+reg t18d "18d: with the newest row written FIRST the named ts is still the newest ($G3), not the last read" "18d: the named ts follows file order, not recency"
+reg ident "the OK verdict names all four inputs — escalations, catalog, gate metrics and baseline — and two identical corpora in different trees are distinguishable" "the OK verdict carries no corpus identity. A run against last sprint's pending file reports the same green line as one against this sprint's"
+reg cand "a catalog found by the CANDIDATE WALK is named in the verdict — the identity is a value the script resolved, not an echo of the arguments it was given" "the discovered catalog is not named"
+reg att17a "suppression fields under a status that classifies as something else are REPORTED" "a discarded suppression scored clean — the target, expiry and citation were never examined and nothing said so"
+reg att17b "the diagnostic names the token the entry actually classified as" "the diagnostic does not name the parsed status — the author cannot tell which token won"
+reg att17c "the verdict line carries malformed_attempt=1 — an attempted-and-dropped suppression is no longer indistinguishable from none" "no malformed_attempt count in the verdict line — 'one attempted and dropped' still prints what 'none attempted' prints"
+reg att18 "a status line NAMING another disposition in prose, with no suppression fields, stays silent" "the arm fired on a status line's prose — it is keyed on the line, not on the fields, and the corpus is full of 'not a HARD_BLOCK'"
+reg att19 "the same fields under a status that DOES classify SUPPRESSED are adjudicated, not flagged" "a well-formed suppression was flagged — the arm is keyed on the fields alone and every real suppression trips it"
+reg att20 "suppression fields under RESOLVED are reported — the arm is not the case's else" "a discard under a status WITH its own branch went unreported — the arm sits inside the case and cannot reach it"
+reg cwA_gates "world A: from a cwd whose own timeline records 9 gates, gates_recorded=2 — the ROOT's timeline was counted" "world A: gates_recorded is not 2 from the decoy cwd — the lifetime was counted against the cwd project's gate history"
+reg cwA_inf "world A: the entry is listed in force from the decoy cwd (in_force=1, one row on stdout)" "world A: the entry is not in force with one row from the decoy cwd — a live licence was expired by a stranger's timeline"
+reg cwA_met "world A: the verdict NAMES the root's metrics file as the one it read" "world A: the verdict does not name the root's metrics file — the resolved timeline is not the root's"
+reg cwA_agree "world A: the decoy-cwd run and the root-cwd control AGREE — the answer does not depend on the cwd" "world A: cwd-dependent answer — the decoy and the root gave different gates_recorded/in_force"
+reg cwA_root "world A: the root-cwd run answers gates_recorded=2 in_force=1 — the near-miss a unit run only from the repo root could never separate from the fix" "world A: the root-cwd run did not answer gates_recorded=2 in_force=1"
+reg cwB_note "world B: a root with no timeline DECLINES to count a lifetime, and says so" "world B: no 'no gate-metrics.jsonl was found' NOTE — the resolver reached past its root and counted somebody else's gates"
+reg cwB_inf "world B: nothing is listed in force (in_force=0, no rows) — a lifetime that cannot be counted is not a licence" "world B: an entry is in force or a row was listed — the decoy cwd's timeline became this project's licence"
+reg cwB_gates "world B: gates_recorded=NONE, so the count the verdict was computed over is visible" "world B: gates_recorded is not NONE — the verdict reports a timeline it should not have found"
+reg c31 "no candidate in the metrics-resolution block is CWD-relative" "the metrics-resolution block offers CWD-relative candidate(s) — the timeline is located from wherever the caller happened to be"
+reg sen_A "empty-file cell A empty file" "empty-file cell A empty file does not hold"
+reg sen_B "empty-file cell B whitespace-only file" "empty-file cell B whitespace-only file does not hold"
+reg sen_C "empty-file cell C absent file (unchanged)" "empty-file cell C absent file (unchanged) does not hold"
+reg sen_D "empty-file cell D populated file parsing to zero records carries NO token" "empty-file cell D populated file parsing to zero records carries NO token does not hold"
+reg sen_E "empty-file cell E a real finding still exits 1" "empty-file cell E a real finding still exits 1 does not hold"
+reg sen_F "empty-file cell F --in-force on an empty file: exit 0, empty stdout, IN-FORCE: on stderr" "empty-file cell F --in-force on an empty file: exit 0, empty stdout, IN-FORCE: on stderr does not hold"
+reg sr_Ag "refusal cell Ag mode-000 file, gate: exit 2, REFUSED could not be read, stdout empty" "refusal cell Ag mode-000 file, gate does not hold"
+reg sr_Ai "refusal cell Ai mode-000 file, --in-force: exit 2, REFUSED, stdout (the caller's rows) empty" "refusal cell Ai mode-000 file, --in-force does not hold"
+reg sr_Bg "refusal cell Bg a directory at the path, gate: exit 2, REFUSED is not a regular file" "refusal cell Bg a directory at the path, gate does not hold"
+reg sr_Bi "refusal cell Bi a directory at the path, --in-force: exit 2, REFUSED, stdout empty" "refusal cell Bi a directory at the path, --in-force does not hold"
+reg sr_Cg "refusal cell Cg a dangling symlink at the path: exit 2, REFUSED is not a regular file" "refusal cell Cg a dangling symlink at the path does not hold"
+reg sr_Dg "refusal cell Dg a readable file whose blank probe exits 2, gate: REFUSED grep exited 2 (stub fired)" "refusal cell Dg a readable file whose blank probe exits 2, gate does not hold"
+reg sr_Di "refusal cell Di the same under --in-force: REFUSED, stdout empty (stub fired)" "refusal cell Di the same under --in-force does not hold"
+reg sr_Eg "refusal cell Eg near-miss: whitespace-only file, gate: still OK EXAMINED NOTHING, exit 0" "refusal cell Eg near-miss: whitespace-only file, gate does not hold"
+reg sr_Ei "refusal cell Ei near-miss: whitespace-only file, --in-force: exit 0, empty stdout, IN-FORCE: on stderr" "refusal cell Ei near-miss: whitespace-only file, --in-force does not hold"
+reg sr_Fg "refusal cell Fg near-miss: a readable expired-still-failing suppression still exits 1" "refusal cell Fg near-miss: a readable expired-still-failing suppression no longer exits 1"
+reg w1 "W1: an OVERRIDDEN entry naming Check 32 is NOT failed when 32's latest row is FAIL_WAIVED under that entry's own header (trailing whitespace stripped), 1 waived row counted" "W1: the matching waiver was not quiet"
+reg w1b "W1b: the same OVERRIDDEN entry over a plain FAIL timeline still fires — only the named waiver stands it down" "W1b: the OVERRIDDEN entry over a FAIL timeline did not fire"
+reg w2 "W2: a RESOLVED entry naming Check 32 FIRES when 32 is FAIL_WAIVED under a different entry, and that waiver itself resolves" "W2: a FAIL_WAIVED under another entry acquitted a RESOLVED entry naming the check"
+reg w3 "W3: an OVERRIDDEN waiver over 3 recorded gates is quiet — it carries no gate-count lifetime" "W3: an OVERRIDDEN waiver expired by count, or the timeline does not hold 3 gates"
+reg w4 "W4: a SUPPRESSED waiver past its lifetime FIRES on a FAIL_WAIVED row; the 3-gate twin over the same gates is quiet" "W4: SUPPRESSED waiver lifetime did not fire expired or did not stay quiet in force"
+reg w5 "W5: a FAIL_WAIVED whose waiver_id names no pending.md entry FIRES with its own message" "W5: an unresolvable waiver_id did not fire"
+reg w6 "W6: a waiver_id resolving to a DECIDED_AUTONOMOUSLY entry FIRES" "W6: a waiver resolving to a non-waiving status did not fire"
+reg w7 "W7: a waiver_id resolving only in pending-archive.md is acquitted with a NOTE, not silently" "W7: the archived waiver was not acquitted with its NOTE"
+reg w8 "W8: a FAIL_WAIVED row with an empty waiver_id FIRES" "W8: an empty waiver_id did not fire"
+
+in_set() { case "$2" in *" $1 "*) return 0 ;; esac; return 1; }
+arm_eval() { # <key> <arm> -> 0 holds, 1 does not
+  "ar_$2" "$1"
+}
+VP[0]="$VALIDATOR"
+
+echo "suppression-lifetime:"
+
+# ===== the sandbox facts that are about the fixture, not the validator ===========================
+if [ -f "$SL_A_GM" ] && [ -f "$SL_A_DECOY_GM" ] && ! cmp -s "$SL_A_GM" "$SL_A_DECOY_GM"; then
+  ok "world A: the root timeline and the decoy-cwd timeline both exist and DIFFER — the pair below can discriminate"
+else
+  bad "world A: FIXTURE BROKEN — the root and decoy timelines are missing or identical, so every arm below agrees for free"
+fi
+SL_B_ANY="$(find "$SL_CWD_B_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_B_ANY=0
+SL_A_ANY="$(find "$SL_CWD_A_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_A_ANY=0
+if [ "$SL_B_ANY" -eq 0 ] && [ "$SL_A_ANY" -gt 0 ]; then
+  ok "world B: no gate-metrics.jsonl anywhere under its root (control: world A's root has $SL_A_ANY)"
+else
+  bad "world B: FIXTURE BROKEN — found $SL_B_ANY metrics files under its root against a control of $SL_A_ANY; the 'nothing to count' world does not exist"
+fi
+SL_SEC2_N="$(grep -cF "$SL_SEC2" "$VALIDATOR")" || SL_SEC2_N=0
+SL_SEC2_MISS="$(grep -cF '# ---- 2. Locate the impossible section' "$VALIDATOR")" || SL_SEC2_MISS=0
+if [ "$SL_SEC2_N" = "1" ] && [ "$SL_SEC2_MISS" = "0" ]; then
+  ok "the metrics-resolution block has exactly one section header to anchor on (control: an impossible anchor matches 0)"
+else
+  bad "the metrics-resolution anchor matched $SL_SEC2_N times (control $SL_SEC2_MISS) — the mutants below would land somewhere else or nowhere"
+fi
+
+# ===== the shipping validator: every arm ===========================================================
+SHIP_PASS=" "; SHIP_FAIL=" "
+for a in $ARMS; do
+  if arm_eval 0 "$a"; then SHIP_PASS="$SHIP_PASS$a "; else SHIP_FAIL="$SHIP_FAIL$a "; fi
+done
+# A SUBJECT THAT PREDATES THE FIX. This fixture ships and can reach a consumer one pull ahead of the
+# validator: sen_A and sen_B read 0 and nothing else moves (SKIP there; FAIL in the distribution). The
+# refusal arms likewise: sr_Bg sr_Bi sr_Cg sr_Dg sr_Di read 0 and the near-misses hold.
+SEN_IS_DIST=0
+case "$(cd "$(dirname "$VALIDATOR")" && pwd)" in */core/scripts) SEN_IS_DIST=1 ;; esac
+SKIPPED=" "
+if in_set sen_A "$SHIP_FAIL" && in_set sen_B "$SHIP_FAIL" && in_set sen_C "$SHIP_PASS" && in_set sen_D "$SHIP_PASS" \
+   && in_set sen_E "$SHIP_PASS" && in_set sen_F "$SHIP_PASS" && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the empty-file arms -- the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n'
+  SKIPPED="$SKIPPED sen_A sen_B sen_C sen_D sen_E sen_F "
+fi
+SR_PRE=1
+for a in sr_Bg sr_Bi sr_Cg sr_Dg sr_Di; do in_set "$a" "$SHIP_FAIL" || SR_PRE=0; done
+for a in sr_Eg sr_Ei sr_Fg; do in_set "$a" "$SHIP_PASS" || SR_PRE=0; done
+if [ "$SR_PRE" = 1 ] && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the refusal arms -- the installed validator predates the unreadable-file refusal; this fixture ships one pull ahead of it\n'
+  SKIPPED="$SKIPPED sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg "
+elif [ -n "$SR_SKIP_A" ]; then
+  SKIPPED="$SKIPPED sr_Ag sr_Ai "
+fi
+for a in $ARMS; do
+  in_set "$a" "$SKIPPED" && continue
+  if in_set "$a" "$SHIP_PASS"; then
+    _m="OK_$a"; while IFS= read -r _l; do ok "$_l"; done <<<"${!_m}"
+  else
+    _m="BAD_$a"; bad "${!_m}"
+  fi
+done
+# ===== mutant builders =============================================================================
+# Every builder writes ONE lone copy of the validator and returns 1 (with BUILD_WHY) when its anchor
+# does not match exactly one line, changed no bytes, or does not parse. Strings reach awk through
+# ENVIRON, never `-v`, which strips a level of backslash escaping.
+BUILD_WHY=""
+mk_sub() { # <out> <anchor> <replacement> [<anchor> <replacement> ...] -- each anchor on exactly one line
+  local out="$1" n; shift
+  cp "$VALIDATOR" "$out.work" || { BUILD_WHY="could not copy"; return 1; }
+  while [ "$#" -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$out.work")" || n=0
+    [ "$n" -eq 1 ] || { BUILD_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
+    A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$out.work" > "$out.next" || { BUILD_WHY="awk died applying: $1"; return 1; }
+    mv "$out.next" "$out.work"
+    shift 2
+  done
+  if cmp -s "$VALIDATOR" "$out.work"; then BUILD_WHY="changed no bytes -- it would score as a kill"; return 1; fi
+  bash -n "$out.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$out.work" "$out"
+}
+SL_K_A='END { print bestv "\t" bestt "\t" bestw }'
+build_k_ts_dropped() { mk_sub "$1" "$SL_K_A" 'END { print bestv "\t" "\t" bestw }'; }
+build_l_last_ts() { mk_sub "$1" "$SL_K_A" 'END { print bestv "\t" t "\t" bestw }'; }
+build_a_whitespace_tolerance_dropped() {
+  mk_sub "$1" 're = "\"" key "\"[[:space:]]*:[[:space:]]*\"[^\"]*\""' 're = "\"" key "\":\"[^\"]*\""'
+}
+build_b_catalog_join_dropped() { mk_sub "$1" 'if ! grep -qxF "$supp" <<<"$CATALOG"; then' 'if false; then'; }
+build_c_ifs_delimiter() {
+  local sf="$1.sed"
+  cat > "$sf" <<'SED'
+s/037%s/011%s/g
+s/printf '\\037'/printf '\\011'/
+SED
+  sed -f "$sf" "$VALIDATOR" > "$1.work"
+  if cmp -s "$VALIDATOR" "$1.work"; then BUILD_WHY="anchor matched nothing"; return 1; fi
+  bash -n "$1.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$1.work" "$1"
+}
+# D/E anchor on the VERDICT LINE, NOT ON THE FOUR LABELS. The labels are the thing most likely to be
+# reworded; the verdict sentence is the emitter's own text and unique to this site, so the mutation
+# follows the block however the labels are respaced.
+sl_anchor_v='no suppression is past its lifetime on a still-failing check."'
+build_d_identity_lines_deleted() {
+  local out="$1"
+  [ "$(grep -cF "$sl_anchor_v" "$VALIDATOR")" = "1" ] || { BUILD_WHY="anchor is not unique in the validator"; return 1; }
+  [ "$(grep -cE '^echo "  ' "$VALIDATOR")" -ge 4 ] || { BUILD_WHY="fewer than four identity lines follow the verdict -- the block this fixture guards has shrunk"; return 1; }
+  A="$sl_anchor_v" awk '
+    index($0, ENVIRON["A"])    { print; hit=1; next }
+    hit && /^echo "  /         { next }
+                               { hit=0; print }
+  ' "$VALIDATOR" > "$out.work"
+  cmp -s "$VALIDATOR" "$out.work" && { BUILD_WHY="changed no bytes"; return 1; }
+  bash -n "$out.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$out.work" "$out"
+}
+# THE FIX THAT DISCRIMINATES WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at run time, so its
+# two runs differ exactly as the real validator's do while naming no file at all.
+build_e_identity_nonce() {
+  local out="$1"
+  [ "$(grep -cF "$sl_anchor_v" "$VALIDATOR")" = "1" ] || { BUILD_WHY="anchor is not unique in the validator"; return 1; }
+  A="$sl_anchor_v" awk '
+    index($0, ENVIRON["A"])    { print; hit=1; next }
+    hit && /^echo "  /         { print "echo \"  nonce: $$-$RANDOM\""; next }
+                               { hit=0; print }
+  ' "$VALIDATOR" > "$out.work"
+  cmp -s "$VALIDATOR" "$out.work" && { BUILD_WHY="changed no bytes"; return 1; }
+  bash -n "$out.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$out.work" "$out"
+}
+# F: the arm demoted to the case's else. The plausible regression, not a deletion: an author siting the
+# same test inside the `case` writes it as a `*)` branch. It reaches case 10 and NOT case 13, because
+# RESOLVED matches an earlier branch. Anchored on the `if` line's own condition, which is unique to this
+# site -- the `case` line below it is shared with three other files.
+sl_anchor_f='if [ "${status:-}" != "SUPPRESSED" ] && { [ -n "$supp" ] || [ -n "$expires" ]; }; then'
+build_f_attempt_demoted() {
+  mk_sub "$1" "$sl_anchor_f" 'if [ "${status:-}" = "__never__" ] && { [ -n "$supp" ] || [ -n "$expires" ]; }; then'
+}
+# G/H replace the whole metrics-resolution block rather than editing candidate lines, because a mutation
+# keyed on the shipped spelling of a candidate is a no-op the day that spelling changes.
+sl_mkblock() { # <out> <body-file>
   awk -v A="$SL_SEC2" -v B="$2" '
     st==0 && index($0, A) { print; st=1; next }
     st==1 && $0 == "fi"   { while ((getline l < B) > 0) print l; close(B); st=2; next }
     st==1                 { next }
                           { print }
-  ' "$1" > "$3"
+  ' "$VALIDATOR" > "$1"
+  if cmp -s "$VALIDATOR" "$1"; then BUILD_WHY="the block was not replaced"; return 1; fi
+  bash -n "$1" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
 }
-
 cat > "$WORK/mut-body-regress.sh" <<'SLBODY'
 # mutant: THE REGRESSION — cwd-relative candidates first, exactly as this shipped.
 if [ -z "$GATE_METRICS" ]; then
@@ -951,508 +655,206 @@ if [ -z "$GATE_METRICS" ]; then
   done
 fi
 SLBODY
+build_g_cwd_first_regression() {
+  sl_mkblock "$1" "$WORK/mut-body-regress.sh" || return 1
+  grep -q 'mutant: THE REGRESSION' "$1" || { BUILD_WHY="carries no marker line -- the replacement body never landed"; return 1; }
+}
+build_h_cwd_fallback_after_root() {
+  sl_mkblock "$1" "$WORK/mut-body-w1.sh" || return 1
+  grep -q 'mutant: THE WRONG FIX' "$1" || { BUILD_WHY="carries no marker line -- the replacement body never landed"; return 1; }
+}
+# I/J: each replaces latest_verdict()'s catalog join with a WRONG one. Keyed on BEHAVIOUR -- the verdict
+# each returns -- never on the spelling of the condition line. J hard-codes `core`: every seed drawn from
+# the real corpus passes it, because all 18 live suppressions on the reference consumer are `[core]` and
+# the non-core control is 0. Only the mirrored world (s17) separates it from the fix.
+build_i_join_guard_removed() {
+  A='if (g != wantcat) next' R='      # join guard removed' awk '
+    index($0, ENVIRON["A"]) { print ENVIRON["R"]; next }
+                            { print }
+  ' "$VALIDATOR" > "$1.work"
+  cmp -s "$VALIDATOR" "$1.work" && { BUILD_WHY="the catalog guard line was not found"; return 1; }
+  bash -n "$1.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$1.work" "$1"
+}
+build_j_join_hardcoded_core() {
+  sed 's/^  \[ -n "\$cat" \] || cat="core"$/  cat="core"/' "$VALIDATOR" > "$1.work"
+  cmp -s "$VALIDATOR" "$1.work" && { BUILD_WHY="the bare-id default line was not found"; return 1; }
+  bash -n "$1.work" 2>/dev/null || { BUILD_WHY="does not parse"; return 1; }
+  mv "$1.work" "$1"
+}
+# M-*: the empty-file verdict.
+SEN_ANCHOR='if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then'
+build_m_revert() { mk_sub "$1" "$SEN_ANCHOR" 'if false; then'; }
+build_m_zero_records() {
+  mk_sub "$1" '[ -n "$RECORDS" ] || ENTRIES_N=0' $'[ -n "$RECORDS" ] || ENTRIES_N=0\nif [ "$IN_FORCE" -ne 1 ] && [ "$ENTRIES_N" -eq 0 ]; then echo "OK: EXAMINED NOTHING — entries_scanned=0 -- zero parsed records ($ESCALATIONS)."; exit 0; fi'
+}
+build_m_hoist() { mk_sub "$1" "$SEN_ANCHOR" 'if [ "$SL_BLANK_RC" -eq 1 ]; then'; }
+# R-*: one per layer of the refusal guard, and one reverting EVERY layer.
+SR_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
+SR_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
+SR_G2='if [ "$SL_BLANK_RC" -gt 1 ]; then'
+SR_G3='if [ ! -r "$ESCALATIONS" ]; then'
+build_r_revert_all() { mk_sub "$1" "$SR_G1" 'if false; then' "$SR_G2" 'if false; then'; }
+build_r_nonregular() { mk_sub "$1" "$SR_G1" 'if false; then'; }
+build_r_no_symlink() { mk_sub "$1" "$SR_G1L" '[ -e "$ESCALATIONS" ]'; }
+build_r_rc() { mk_sub "$1" "$SR_G2" 'if false; then'; }
+build_r_readable_never() { mk_sub "$1" "$SR_G3" 'if false; then'; }
+build_r_readable_always() { mk_sub "$1" "$SR_G3" 'if true; then'; }
+# MW-*: the waived verdict. Each is scored only after the arm it targets PASSED unmutated in this same run.
+build_w_standdown() { mk_sub "$1" 'if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'"'"'\t'"'"'}" = "$wkey" ]; then' 'if false; then'; }
+build_w_resolve() { mk_sub "$1" '  if [ -z "$wrec" ]; then' '  if [ -z "$wrec" ]; then continue; fi; if false; then'; }
+build_w_lifetime() { mk_sub "$1" 'if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then' 'if [ "$verdict" = "FAIL" ]; then'; }
+build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
 
-# --- Assertion 31: no candidate the shipped file offers is CWD-relative --------
+# ===== mutants =====================================================================================
+# Name | decides arms | twin arm | builder. Copies, never in-place edits. `cmp -s` proves the mutation
+# landed and `bash -n` proves the result is still a program — a copy that dies on a syntax error emits
+# nothing, and "no output" otherwise scores as a kill. Anchors are chosen on backslash-free, grep-unique
+# lines: `awk -v` processes escape sequences in the assigned value, so an anchor carrying a backslash
+# arrives at index() stripped and the mutation is a silent no-op that comes out GREEN.
+MN=(); MD=(); MT=(); NM=0
+defm() { MN[$NM]="$1"; MD[$NM]="$2"; MT[$NM]="$3"; NM=$((NM+1)); }
+
+# K: the ts dropped from the row latest_verdict returns. t18a and t18b must die; the verdicts must not move.
+defm k_ts_dropped t18a t18c
+# L: the ts printed is the LAST matching row read, not the newest. Only t18d can see it.
+defm l_last_ts t18d t18a
+# A: the metrics extractor stops tolerating whitespace.
+defm a_whitespace_tolerance_dropped s2 cwA_inf
+# B: the catalog join is dropped.
+defm b_catalog_join_dropped s6 s2
+# C: the record delimiter reverts to an IFS-whitespace character.
+defm c_ifs_delimiter s4m sen_F
+# D: the identity lines deleted -- assertion ident AND cand go red, no verdict moves.
+defm d_identity_lines_deleted ident s1
+# E: identity replaced by a per-run NONCE.
+defm e_identity_nonce ident s1
+# F: the attempted-suppression arm demoted to the case's else.
+defm f_attempt_demoted att17a,att17b,att17c s2
+# G: the cwd-first regression. H: the root-then-cwd wrong fix, invisible in world A.
+defm g_cwd_first_regression cwA_gates,cwA_inf,cwA_met,cwA_agree,c31,cwB_note,cwB_inf,cwB_gates cwA_root
+defm h_cwd_fallback_after_root cwB_note,cwB_inf,cwB_gates,c31 cwA_gates
+# I/J: wrong catalog joins.
+defm i_join_guard_removed s14 s15
+defm j_join_hardcoded_core s17 s14
+# M: the empty-file verdict.
+defm m_revert sen_A,sen_B,sr_Eg sen_C
+defm m_zero_records sen_D sen_A
+defm m_hoist sen_F,sr_Ei sen_A
+# R: the refusal guard, one per layer.
+defm r_revert_all sr_Ag,sr_Ai,sr_Bg,sr_Bi,sr_Cg,sr_Dg,sr_Di sr_Fg
+defm r_nonregular sr_Bg,sr_Bi,sr_Cg sr_Ag
+defm r_no_symlink sr_Cg sr_Bg
+defm r_rc sr_Ag,sr_Ai,sr_Dg,sr_Di sr_Eg
+defm r_readable_never sr_Ag,sr_Ai sr_Dg
+defm r_readable_always sr_Dg,sr_Di sr_Ag
+# MW: the waived verdict.
+defm w_standdown w1,w3 w2
+defm w_resolve w5 w1
+defm w_lifetime w4 s2
+defm w_overridden w3,w1 w4
+
+MUT="$WORK/mut"; mkdir -p "$MUT"
+# The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by
+# walking up for a marker; a lone copy that could not resolve it would emit nothing, and that silence
+# would score as a kill for every mutant below.
+cp "$VALIDATOR" "$MUT/control.sh"
+VP[1]="$MUT/control.sh"
+MUT_OK=" "
+mut_i=0
+while [ "$mut_i" -lt "$NM" ]; do
+  n="${MN[$mut_i]}"
+  if "build_$(printf '%s' "$n" | tr '.:-' '___')" "$MUT/$n.sh"; then
+    VP[$((mut_i+2))]="$MUT/$n.sh"; MUT_OK="$MUT_OK$n "
+  else
+    bad "MUTANT $n DID NOT APPLY: $BUILD_WHY"
+  fi
+  mut_i=$((mut_i+1))
+done
+
+# --- the control: ONE drive of a lone copy, asserting the one property a copy can lose ------------------
+# This validator resolves no sibling beside itself and finds its root by walking up for a marker; a lone
+# copy that could not resolve it would emit nothing, and that silence would score as a kill for every
+# mutant below. So ONE drive (the expired-still-failing case, arm s2) of the unmutated copy must
+# reproduce the shipping verdict. Everything else a control battery would prove is the shipping run's.
+CTRL_OK=0
+if arm_eval 1 s2; then
+  ok "UNMUTATED CONTROL: a lone copy of the validator resolves its root and reproduces the real expired-suppression verdict (s2) — mutant silence means mutation, not breakage"; CTRL_OK=1
+else
+  bad "UNMUTATED CONTROL: a lone copy did not reproduce the expired-suppression verdict — every mutant result below is uninterpretable"
+fi
+base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; }
+
+# --- the c31 control: the regression mutant's block really does offer cwd-relative candidates ------
 SL_SHIP_CWD="$(sl_cwd_cands "$VALIDATOR")"
-SL_MUT_REGRESS="$WORK/mutant-cwd-regress.sh"
-sl_mkmut "$VALIDATOR" "$WORK/mut-body-regress.sh" "$SL_MUT_REGRESS"
-SL_REGRESS_CWD="$(sl_cwd_cands "$SL_MUT_REGRESS")"
+SL_REGRESS_CWD="$(sl_cwd_cands "$MUT/g_cwd_first_regression.sh")"
 if [ "$SL_SHIP_CWD" = "0" ] && [ "$SL_REGRESS_CWD" -gt 0 ]; then
-  ok "no candidate in the metrics-resolution block is CWD-relative (control: the regression mutant's block has $SL_REGRESS_CWD)"
+  ok "the regression mutant's resolution block offers $SL_REGRESS_CWD CWD-relative candidate(s) against the shipped file's 0 — c31 can fire"
 else
-  bad "the metrics-resolution block offers $SL_SHIP_CWD CWD-relative candidate(s), against $SL_REGRESS_CWD in the regression mutant — the timeline is located from wherever the caller happened to be"
+  bad "c31 control: shipped=$SL_SHIP_CWD regression-mutant=$SL_REGRESS_CWD — the cwd-candidate count cannot tell the regression from the fix"
 fi
 
-# --- Assertion 32: the UNMUTATED CONTROL, from the decoy cwd -------------------
-# PRESENCE-shaped on purpose: it demands the root's own gate count, so a copy that could not
-# start and printed nothing fails here instead of making every mutant below look killed.
-SL_CWD_CTRL="$WORK/cwd-control.sh"; cp "$VALIDATOR" "$SL_CWD_CTRL"
-sl_inforce "$SL_CWD_CTRL" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
-SL_CWD_CTRL_OK=0
-if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
-  ok "CWD CONTROL — an unmutated copy reproduces gates_recorded=2 / in_force=1 from the decoy cwd"
-  SL_CWD_CTRL_OK=1
-else
-  bad "CWD CONTROL FAILED — the copy answered gates_recorded='$(sl_field gates_recorded)' in_force='$(sl_field in_force)'; every mutant below is uninterpretable"
-fi
-
-if [ "$SL_CWD_CTRL_OK" = "1" ]; then
-  # --- MUTANT G: the regression -----------------------------------------------
-  if cmp -s "$VALIDATOR" "$SL_MUT_REGRESS"; then
-    bad "MUTANT G did not change the file — the block was not replaced and its silence would score as a kill"
-  elif ! bash -n "$SL_MUT_REGRESS" 2>/dev/null; then
-    bad "MUTANT G is not a valid program — its absence would have scored as a kill"
-  elif ! grep -q 'mutant: THE REGRESSION' "$SL_MUT_REGRESS"; then
-    bad "MUTANT G carries no marker line — the replacement body never landed"
-  else
-    sl_inforce "$SL_MUT_REGRESS" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
-    if [ "$(sl_field gates_recorded)" = "9" ] && [ "$(sl_field in_force)" = "0" ]; then
-      ok "MUTANT G killed — cwd-first counts the decoy's 9 gates and expires a live licence (assertions 24-27 have teeth)"
-    else
-      bad "MUTANT G SURVIVED (gates_recorded='$(sl_field gates_recorded)' in_force='$(sl_field in_force)') — the cwd arms are not testing the candidate order"
-    fi
-    # ...and from the ROOT cwd it is INDISTINGUISHABLE from the fix. This is why a unit run
-    # only from the repo root could never have caught the defect.
-    sl_inforce "$SL_MUT_REGRESS" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT/pending.md"
-    if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
-      ok "MUTANT G is invisible from the ROOT cwd — the cwd is the property under test, and no root-only arm can see it"
-    else
-      bad "MUTANT G also moved the root-cwd answer (gates_recorded='$(sl_field gates_recorded)') — the mutation is broader than the candidate order and the kill above is unearned"
-    fi
-  fi
-
-  # --- MUTANT H: the wrong fix (root first, cwd fallback) ----------------------
-  SL_MUT_W1="$WORK/mutant-cwd-fallback.sh"
-  sl_mkmut "$VALIDATOR" "$WORK/mut-body-w1.sh" "$SL_MUT_W1"
-  if cmp -s "$VALIDATOR" "$SL_MUT_W1"; then
-    bad "MUTANT H did not change the file — the block was not replaced"
-  elif ! bash -n "$SL_MUT_W1" 2>/dev/null; then
-    bad "MUTANT H is not a valid program"
-  elif ! grep -q 'mutant: THE WRONG FIX' "$SL_MUT_W1"; then
-    bad "MUTANT H carries no marker line — the replacement body never landed"
-  else
-    sl_inforce "$SL_MUT_W1" "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY" "$SL_CWD_B_ROOT/pending.md"
-    if [ "$(sl_field in_force)" = "1" ] && [ "$(sl_rows_n)" = "1" ]; then
-      ok "MUTANT H killed by WORLD B — a cwd fallback re-licenses an entry whose own project records no gate at all (assertions 28-30 have teeth)"
-    else
-      bad "MUTANT H SURVIVED world B (in_force='$(sl_field in_force)' rows=$(sl_rows_n)) — world B does not separate the fix from 'root first, then the cwd'"
-    fi
-    sl_inforce "$SL_MUT_W1" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
-    if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
-      ok "MUTANT H is INVISIBLE in world A — which is why world B exists, and why a one-world battery would have shipped it"
-    else
-      bad "MUTANT H also moved world A (gates_recorded='$(sl_field gates_recorded)') — the two worlds are entangled and one of them is redundant"
-    fi
-  fi
-fi
-
-# ------------------------------------------------------------------------------
-# CATALOG-JOIN MUTANTS. Each replaces latest_verdict()'s body with a WRONG join and must
-# be killed by the assertions above. Keyed on BEHAVIOUR — the verdict each returns — never
-# on the spelling of the condition line, so a second correct spelling is not a false kill.
-#
-# MUTANT J is the one that matters: it hard-codes `core`. Every seed drawn from the real
-# corpus passes it, because all 18 live suppressions on the reference consumer are `[core]`
-# and the non-core control is 0. Only assertion 17's mirrored world separates it from the
-# fix, which is why that world exists.
-# ------------------------------------------------------------------------------
-sl_mkjoin() { # <src> <out> <awk-guard-line> — swap the catalog guard for a wrong one
-  awk -v G="$3" '
-    index($0, "if (g != wantcat) next") { print "      " G; next }
-                                        { print }
-  ' "$1" > "$2"
+mut_witness() { # <mutant> <vk> -> 0 when the mutant's extra observable holds (checked on cached drives)
+  case "$1" in
+    k_ts_dropped)    dv "$2" exp; [ "$DV_RC" = 1 ] && hasF "STILL FAILING" ;;                 # the FAIL still fires; only the ts channel moved
+    w_standdown)     dv "$2" wm_ovr; [ "$DV_RC" = 1 ] && has "recorded FAILING" ;;            # W1 dies by the terminal arm's own line
+    w_resolve)       dv "$2" wnone; [ "$DV_RC" = 0 ] && ! has "which names NO entry" && w_quiet 1 ;;   # the acquittal is the skipped resolution's
+    w_lifetime)      dv "$2" wsup1; [ "$DV_RC" = 0 ] ;;
+    w_overridden)    dv "$2" wm_ovr; has "^FAIL: 1 suppression-lifetime violation(s)" && [ "$(grep -c '^FAIL: ' <<<"$DV_O")" = "1" ] ;;
+    c_ifs_delimiter) dv "$2" mal; ! has 'Suppresses' ;;
+    *) return 0 ;;
+  esac
 }
 
-SL_MUT_I="$WORK/mutant-join-blind.sh"
-sl_mkjoin "$VALIDATOR" "$SL_MUT_I" "# join guard removed"
-SL_MUT_J="$WORK/mutant-join-hardcoded.sh"
-sed 's/^  \[ -n "\$cat" \] || cat="core"$/  cat="core"/' "$VALIDATOR" > "$SL_MUT_J"
-
-if cmp -s "$VALIDATOR" "$SL_MUT_I"; then
-  bad "MUTANT I did not apply — the catalog guard line was not found, so this arm proves nothing"
-elif ! bash -n "$SL_MUT_I" 2>/dev/null; then
-  bad "MUTANT I is not a valid program"
-else
-  drive "$SL_MUT_I" collide-core "$GM_COLLIDE"; rc_i="$LAST_RC"
-  drive "$SL_MUT_I" collide-control "$GM_COLLIDE"; rc_ic="$LAST_RC"
-  if [ "$rc_i" = "0" ] && [ "$rc_ic" = "1" ]; then
-    ok "MUTANT I killed — dropping the catalog guard acquits the failing core check while the control still fires (assertion 14 has teeth)"
-  else
-    bad "MUTANT I SURVIVED (collide=$rc_i control=$rc_ic) — assertion 14 does not depend on the join"
-  fi
-fi
-
-if cmp -s "$VALIDATOR" "$SL_MUT_J"; then
-  bad "MUTANT J did not apply — the bare-id default line was not found, so this arm proves nothing"
-elif ! bash -n "$SL_MUT_J" 2>/dev/null; then
-  bad "MUTANT J is not a valid program"
-else
-  drive "$SL_MUT_J" collide-core "$GM_COLLIDE"; rc_ja="$LAST_RC"
-  drive "$SL_MUT_J" collide-bare "$GM_COLLIDE"; rc_jb="$LAST_RC"
-  drive "$SL_MUT_J" collide-ext "$GM_COLLIDE_EXT"; rc_je="$LAST_RC"
-  if [ "$rc_je" = "0" ] && [ "$rc_ja" = "1" ] && [ "$rc_jb" = "1" ]; then
-    ok "MUTANT J killed by assertion 17 ALONE — hard-coding core passes the core and bare-id arms and acquits a failing extension check"
-  else
-    bad "MUTANT J scored core=$rc_ja bare=$rc_jb ext=$rc_je — expected 1/1/0; assertion 17 is not the discriminator it claims to be"
-  fi
-fi
-
-# ------------------------------------------------------------------------------
-# EMPTY-FILE ARMS. A file that exists and holds no non-whitespace byte is the ABSENT state and
-# the gate mode prints the absent-file `EXAMINED NOTHING` line for it. It used to fall through
-# and print `OK: entries_scanned=0 ...` -- the line a POPULATED file whose entries this parser
-# cannot read also prints. Only the empty one may say EXAMINED NOTHING.
-#
-# SIX CELLS, SCORED AS ONE STRING, so a mutant can be held to moving ONLY its own cell:
-#   A empty            rc 0, the token, and the "present but empty" reason
-#   B whitespace       the same -- a `[ -s ]` fix calls this file populated and fails here
-#   C absent           rc 0, the token, the absent-file reason, NOT the empty one (unchanged)
-#   D zero-record      heading-only AND a level-4 entry carrying **Suppresses:**: rc 0,
-#                      entries_scanned=0 on the final OK line, NO token. One cell, because no
-#                      zero-record predicate can move one of the two without the other.
-#   E finding          expired-still-failing: rc 1 (unchanged)
-#   F --in-force       an empty file: rc 0, EMPTY stdout, the IN-FORCE: counts on stderr and
-#                      no token anywhere. Its callers parse stdout as rows.
-# Every cell is presence-shaped on at least one conjunct, so a subject that prints nothing
-# fails every one of them.
-# ------------------------------------------------------------------------------
-SEN_CELLS=""
-sen_gate() { # <validator> <case> -> SEN_O / SEN_RC
-  SEN_O="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$1" --escalations "$CASES/$2/pending.md" \
-             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>/dev/null)"
-  SEN_RC=$?
-}
-sen_cells() { # <validator> -> sets SEN_CELLS
-  local v="$1" c="" o1 r1 err out
-  sen_gate "$v" empty-file
-  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
-  sen_gate "$v" blank-file
-  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
-  sen_gate "$v" never-written
-  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "no escalations file" <<<"$SEN_O" \
-     && ! grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
-  sen_gate "$v" heading-only; o1="$SEN_O"; r1="$SEN_RC"
-  sen_gate "$v" level4-entry
-  if [ "$r1" -eq 0 ] && [ "$SEN_RC" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o1$SEN_O" \
-     && grep -qF "OK: entries_scanned=0 " <<<"$o1" && grep -qF "OK: entries_scanned=0 " <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
-  sen_gate "$v" expired-still-failing
-  if [ "$SEN_RC" -eq 1 ]; then c="${c}1"; else c="${c}0"; fi
-  err="$( AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --in-force --escalations "$CASES/empty-file/pending.md" \
-            --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>&1 >"$WORK/sen-inforce.out" )"; r1=$?
-  out="$(cat "$WORK/sen-inforce.out")"
-  if [ "$r1" -eq 0 ] && [ -z "$out" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$err" \
-     && ! grep -qF "EXAMINED NOTHING" <<<"$out$err"; then c="${c}1"; else c="${c}0"; fi
-  SEN_CELLS="$c"
-}
-SEN_IS_DIST=0
-case "$(cd "$(dirname "$VALIDATOR")" && pwd)" in */core/scripts) SEN_IS_DIST=1 ;; esac
-sen_cells "$VALIDATOR"
-# A SUBJECT THAT PREDATES THE FIX. This fixture ships and can reach a consumer one pull ahead of
-# the validator: cells A and B read 0 and nothing else moves. SKIP there; FAIL here.
-if [ "$(printf '%s' "$SEN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$SEN_CELLS" | cut -c3-6)" = "1111" ] \
-   && [ "$SEN_IS_DIST" -ne 1 ]; then
-  printf '  SKIP  the empty-file arms -- the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n'
-else
-  i=0
-  for nm in "A empty file" "B whitespace-only file" "C absent file (unchanged)" \
-            "D populated file parsing to zero records carries NO token" "E a real finding still exits 1" \
-            "F --in-force on an empty file: exit 0, empty stdout, IN-FORCE: on stderr"; do
-    i=$((i + 1))
-    if [ "$(printf '%s' "$SEN_CELLS" | cut -c"$i")" = "1" ]; then ok "empty-file cell $nm"
-    else bad "empty-file cell $nm does not hold (cells=$SEN_CELLS)"; fi
-  done
-
-  # --- the mutants, each in a copy of the WHOLE scripts dir, with an unmutated control ------
-  SEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
-  SEN_BASE="$(basename "$VALIDATOR")"
-  SEN_MW="$WORK/empty-mut"; mkdir -p "$SEN_MW"
-  # sen_mk RUNS INSIDE `$( )`, so it cannot call `bad`: the failure count it bumped would die
-  # with the subshell and a mutant that never built would score nothing at all. It writes its
-  # reason to SEN_MW/<name>.why and prints no path; sen_score reads the empty path and fails.
-  sen_mk() {  # <name> <literal anchor, exactly one line, or empty for the control> <replacement file>
-    local d="$SEN_MW/$1" n
-    cp -R "$SEN_SRC_DIR" "$d" || { echo "could not copy $SEN_SRC_DIR" > "$SEN_MW/$1.why"; return 1; }
-    [ -n "$2" ] || { printf '%s\n' "$d/$SEN_BASE"; return 0; }
-    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-    [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$SEN_MW/$1.why"; return 1; }
-    awk -v A="$2" -v R="$3" '
-      index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
-      { print }' "$VALIDATOR" > "$d/$SEN_BASE"
-    if cmp -s "$VALIDATOR" "$d/$SEN_BASE"; then echo "changed no bytes -- it would score as a kill" > "$SEN_MW/$1.why"; return 1; fi
-    bash -n "$d/$SEN_BASE" 2>/dev/null || { echo "does not parse" > "$SEN_MW/$1.why"; return 1; }
-    printf '%s\n' "$d/$SEN_BASE"
-  }
-  sen_score() {  # <name> <path-or-empty> <want> <why> <mk-name>
-    if [ -z "$2" ]; then bad "$1 was never built: $(cat "$SEN_MW/$5.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
-    sen_cells "$2"
-    if [ "$SEN_CELLS" = "$3" ]; then ok "$1 scored $SEN_CELLS -- $4"
-    else bad "$1 scored $SEN_CELLS, wanted $3 -- $4"; fi
-  }
-  SEN_ANCHOR='if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then'
-  printf '%s\n' 'if false; then' > "$SEN_MW/r-revert"
-  printf '%s\n' '[ -n "$RECORDS" ] || ENTRIES_N=0' \
-    'if [ "$IN_FORCE" -ne 1 ] && [ "$ENTRIES_N" -eq 0 ]; then echo "OK: EXAMINED NOTHING — entries_scanned=0 -- zero parsed records ($ESCALATIONS)."; exit 0; fi' \
-    > "$SEN_MW/r-zero"
-  printf '%s\n' 'if [ "$SL_BLANK_RC" -eq 1 ]; then' > "$SEN_MW/r-hoist"
-  SEN_CTL="$(sen_mk control "" "")" || SEN_CTL=""
-  sen_score "MUTANT control (unmutated whole-dir copy)" "$SEN_CTL" 111111 "every cell holds, so a mutant's red cell is the mutation's" control
-  SEN_M1="$(sen_mk revert "$SEN_ANCHOR" "$SEN_MW/r-revert")" || SEN_M1=""
-  sen_score "MUTANT M-revert" "$SEN_M1" 001111 "the fix removed: ONLY the empty and whitespace cells go red" revert
-  SEN_M2="$(sen_mk zero-records '[ -n "$RECORDS" ] || ENTRIES_N=0' "$SEN_MW/r-zero")" || SEN_M2=""
-  sen_score "MUTANT M-zero-records" "$SEN_M2" 111011 "entries_scanned=0 read as empty: ONLY the populated-zero-record cell goes red" zero-records
-  SEN_M3="$(sen_mk hoist "$SEN_ANCHOR" "$SEN_MW/r-hoist")" || SEN_M3=""
-  sen_score "MUTANT M-hoist" "$SEN_M3" 111110 "the check applied to --in-force too: ONLY the --in-force cell goes red" hoist
-fi
-
-# ------------------------------------------------------------------------------
-# REFUSAL ARMS. An UNREADABLE or NON-REGULAR escalations path refuses in BOTH modes: `REFUSED:` on
-# stderr, exit 2, stdout empty. The blank probe's grep exits 2 on a file it cannot read, and the
-# validator branched on `-eq 1` alone, so the status fell through and every later read of the file
-# failed and was swallowed: the gate printed an ordinary OK line, and `--in-force` handed its callers
-# an EMPTY row set -- "nothing is suppressed" over a file nobody read. A directory at the path took
-# the absent branch in both modes.
-#
-# TEN CELLS, ONE STRING (g = gate mode, i = --in-force):
-#   Ag Ai  mode-000 file carrying an expired, still-failing suppression -> exit 2, `could not be read`
-#   Bg Bi  a DIRECTORY at the path                                  -> exit 2, `is not a regular file`
-#   Cg     a DANGLING SYMLINK at the path                           -> exit 2, `is not a regular file`
-#   Dg Di  a READABLE file whose blank probe grep exits 2 (PATH stub; must FIRE) -> exit 2, `grep exited 2`
-#   Eg     near-miss: whitespace-only file, gate -> exit 0, "present but empty"
-#   Ei     near-miss: whitespace-only file, --in-force -> exit 0, EMPTY stdout, IN-FORCE: on stderr
-#   Fg     near-miss: expired-still-failing, readable -> exit 1, unchanged
-# Every refusal cell also requires EMPTY stdout, which is what --in-force's callers parse as rows.
-# The directory arm calls the script directly: both callers test `[ ! -f ]` first, so a directory
-# never reaches the script through them. Ag/Ai are `S` where mode 000 does not stop this process.
-# ------------------------------------------------------------------------------
-SR="$WORK/refusal"; mkdir -p "$SR"
-SR_LOCKED="$SR/pending-locked.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_LOCKED"; chmod 000 "$SR_LOCKED"
-SR_DIR="$SR/pending-dir.md"; mkdir -p "$SR_DIR"
-SR_LINK="$SR/pending-dangling.md"; ln -s "$SR/pending-target-never-written.md" "$SR_LINK"
-SR_IO="$SR/pending-io.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_IO"
-trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
-SR_SKIP_A=""
-if [ "$(id -u)" -eq 0 ]; then SR_SKIP_A="running as root, which reads a mode-000 file"
-elif cat "$SR_LOCKED" >/dev/null 2>&1; then SR_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
-[ -n "$SR_SKIP_A" ] && printf '  SKIP  refusal cells Ag/Ai (mode-000 file) -- %s\n' "$SR_SKIP_A"
-if ! { [ -L "$SR_LINK" ] && [ ! -e "$SR_LINK" ]; }; then bad "FIXTURE BROKEN: the dangling-symlink seed is not a link to a missing target"; fi
-SR_STUB="$SR/stub"; mkdir -p "$SR_STUB"
-SR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
-{
-  printf '#!/bin/sh\ncase "$*" in\n'
-  printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$SR_STUB"
-  printf 'esac\nexec "%s" "$@"\n' "$SR_REALGREP"
-} > "$SR_STUB/grep"
-chmod +x "$SR_STUB/grep"
-SR_RC=0; SR_O=""; SR_E=""
-sr_run() {  # <validator> <gate|in-force> <file> [stub-dir] -> SR_RC SR_O SR_E
-  local p="$PATH" m=""
-  [ -n "${4:-}" ] && p="$4:$PATH"
-  [ "$2" = in-force ] && m="--in-force"
-  : > "$SR_STUB/LOG"
-  SR_O="$(PATH="$p" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" $m --escalations "$3" \
-            --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; SR_RC=$?
-  SR_E="$(cat "$SR/err")"
-}
-sr_refused() { [ "$SR_RC" -eq 2 ] && [ -z "$SR_O" ] && grep -qE "^REFUSED: .*$1" <<<"$SR_E"; }
-sr_bit() { if "$@"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi; }
-SR_CELLS=""; SR_C=""
-sr_cells() {  # <validator> -> SR_CELLS
-  local v="$1" mode
-  SR_C=""
-  for mode in gate in-force; do
-    if [ -n "$SR_SKIP_A" ]; then SR_C="${SR_C}S"
-    else sr_run "$v" "$mode" "$SR_LOCKED"; sr_bit sr_refused 'could not be read'; fi
-  done
-  for mode in gate in-force; do sr_run "$v" "$mode" "$SR_DIR"; sr_bit sr_refused 'is not a regular file'; done
-  sr_run "$v" gate "$SR_LINK"; sr_bit sr_refused 'is not a regular file'
-  for mode in gate in-force; do
-    sr_run "$v" "$mode" "$SR_IO" "$SR_STUB"
-    if [ -s "$SR_STUB/LOG" ] && sr_refused 'failed \(grep exited 2\)'; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
-  done
-  sr_run "$v" gate "$CASES/blank-file/pending.md"
-  if [ "$SR_RC" -eq 0 ] && grep -qF 'present but empty' <<<"$SR_O" && ! grep -qF REFUSED <<<"$SR_O$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
-  sr_run "$v" in-force "$CASES/blank-file/pending.md"
-  if [ "$SR_RC" -eq 0 ] && [ -z "$SR_O" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$SR_E" && ! grep -qF REFUSED <<<"$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
-  sr_run "$v" gate "$CASES/expired-still-failing/pending.md"
-  if [ "$SR_RC" -eq 1 ] && ! grep -qF REFUSED <<<"$SR_O$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
-  SR_CELLS="$SR_C"
-}
-sr_want() { if [ -n "$SR_SKIP_A" ]; then printf 'SS%s' "$(printf '%s' "$1" | cut -c3-)"; else printf '%s' "$1"; fi; }
-sr_cells "$VALIDATOR"
-# A SUBJECT THAT PREDATES THE REFUSAL: Bg Bi Cg Dg Di read 0 and the near-misses hold. SKIP on a
-# consumer; FAIL here.
-if [ "$(printf '%s' "$SR_CELLS" | cut -c3-7)" = "00000" ] && [ "$(printf '%s' "$SR_CELLS" | cut -c8-10)" = "111" ] \
-   && [ "$SEN_IS_DIST" -ne 1 ]; then
-  printf '  SKIP  the refusal arms -- the installed validator predates the unreadable-file refusal; this fixture ships one pull ahead of it\n'
-else
-  i=0
-  for nm in "Ag mode-000 file, gate: exit 2, REFUSED could not be read, stdout empty" \
-            "Ai mode-000 file, --in-force: exit 2, REFUSED, stdout (the caller's rows) empty" \
-            "Bg a directory at the path, gate: exit 2, REFUSED is not a regular file" \
-            "Bi a directory at the path, --in-force: exit 2, REFUSED, stdout empty" \
-            "Cg a dangling symlink at the path: exit 2, REFUSED is not a regular file" \
-            "Dg a readable file whose blank probe exits 2, gate: REFUSED grep exited 2 (stub fired)" \
-            "Di the same under --in-force: REFUSED, stdout empty (stub fired)" \
-            "Eg near-miss: whitespace-only file, gate: still OK EXAMINED NOTHING, exit 0" \
-            "Ei near-miss: whitespace-only file, --in-force: exit 0, empty stdout, IN-FORCE: on stderr" \
-            "Fg near-miss: a readable expired-still-failing suppression still exits 1"; do
-    i=$((i + 1))
-    case "$(printf '%s' "$SR_CELLS" | cut -c"$i")" in
-      1) ok "refusal cell $nm" ;;
-      S) ;;
-      *) bad "refusal cell $nm does not hold (cells=$SR_CELLS)" ;;
-    esac
-  done
-
-  # --- the mutants: one per layer of the guard, and one reverting EVERY layer ----------------------
-  SR_MD="$SR/mut"
-  cp -R "$(cd "$(dirname "$VALIDATOR")" && pwd)" "$SR_MD" || bad "refusal mutants: could not copy the scripts directory"
-  SR_SRC="$SR_MD/$(basename "$VALIDATOR")"
-  # sr_sub <out> <anchor> <replacement> [...] -- a COPY of SR_SRC, each anchor on exactly one line.
-  # Strings reach awk through ENVIRON, never `-v`, which strips a level of backslash escaping.
-  SR_WHY=""
-  sr_sub() {
-    local out="$1" n
-    shift
-    cp "$SR_SRC" "$out.work" || { SR_WHY="could not copy"; return 1; }
-    while [ "$#" -ge 2 ]; do
-      n="$(grep -cF -- "$1" "$out.work")" || n=0
-      [ "$n" -eq 1 ] || { SR_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
-      A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
-        "$out.work" > "$out.next" || { SR_WHY="awk died applying: $1"; return 1; }
-      mv "$out.next" "$out.work"
-      shift 2
+join_set() { local o="" x; for x in "$@"; do o="$o,$x"; done; printf '%s' "${o#,}"; }
+if [ "$MATRIX" = 1 ]; then
+  # FULL MATRIX: every mutant driven against EVERY arm; every cell printed, 1 = the arm FAILS under the mutant.
+  mut_i=0
+  while [ "$mut_i" -lt "$NM" ]; do
+    n="${MN[$mut_i]}"
+    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
+    MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
+    cells=""; tripped=""
+    for a in $ARMS; do
+      if arm_eval $((mut_i+2)) "$a"; then cells="$cells,$a:0"; else cells="$cells,$a:1"; tripped="$tripped $a"; fi
     done
-    if cmp -s "$SR_SRC" "$out.work"; then SR_WHY="changed no bytes -- it would score as a kill"; return 1; fi
-    mv "$out.work" "$out"
-  }
-  SR_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
-  SR_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
-  SR_G2='if [ "$SL_BLANK_RC" -gt 1 ]; then'
-  SR_G3='if [ ! -r "$ESCALATIONS" ]; then'
-  sr_score() {  # <label> <name> <want> <anchor> <replacement> [...]
-    local label="$1" name="$2" want out
-    want="$(sr_want "$3")"
-    shift 3
-    out="$SR_MD/_sr_$name.sh"
-    if [ "$#" -eq 0 ]; then cp "$SR_SRC" "$out"
-    elif ! sr_sub "$out" "$@"; then bad "$label DID NOT APPLY: $SR_WHY"; return 0
-    elif ! bash -n "$out" 2>/dev/null; then bad "$label DID NOT APPLY: the mutated copy does not parse"; return 0; fi
-    sr_cells "$out"
-    if [ "$SR_CELLS" = "$want" ]; then ok "$label scored $SR_CELLS"
-    else bad "$label scored $SR_CELLS, wanted $want"; fi
-  }
-  sr_score "MUTANT refusal-control (unmutated sibling copy): every cell holds" ctl 1111111111
-  sr_score "MUTANT R-revert-all (every layer removed): every refusal cell red in BOTH modes, the near-misses hold" \
-    revert-all 0000000111 "$SR_G1" 'if false; then' "$SR_G2" 'if false; then'
-  sr_score "MUTANT R-nonregular (the -e/-L guard removed): ONLY the directory and symlink cells go red" \
-    nonregular 1100011111 "$SR_G1" 'if false; then'
-  sr_score "MUTANT R-no-symlink (-L dropped beside -e): ONLY the dangling-symlink cell goes red" \
-    no-symlink 1111011111 "$SR_G1L" '[ -e "$ESCALATIONS" ]'
-  sr_score "MUTANT R-rc (the status > 1 guard removed): the mode-000 and I/O cells go red in both modes" \
-    rc 0011100111 "$SR_G2" 'if false; then'
-  sr_score "MUTANT R-readable-never (the -r test never true): ONLY the mode-000 cells' reason goes red" \
-    readable-never 0011111111 "$SR_G3" 'if false; then'
-  sr_score "MUTANT R-readable-always (the -r test always true): ONLY the I/O cells' reason goes red" \
-    readable-always 1111100111 "$SR_G3" 'if true; then'
-fi
-
-# ==============================================================================
-# W1-W8: THE WAIVED VERDICT. A gate-metrics row recording FAIL_WAIVED with a waiver_id.
-# Each arm is PRESENCE-shaped on its message or on the OK summary's `waived_rows=` count, so a
-# subject that prints nothing fails every one. Each mutant below is scored only after the arm
-# it targets PASSED unmutated in this same run (`w_base`), so a red mutant is never the base.
-# ==============================================================================
-W_PASSED=" "
-w_ok()   { ok "$2"; W_PASSED="$W_PASSED$1 "; }
-w_base() { case "$W_PASSED" in *" $1 "*) return 0 ;; esac; return 1; }
-w_quiet() { [ "$LAST_RC" = "0" ] && grep -qF "waived_rows=$1 " <<<"$LAST_OUT"; }
-
-# W1 (BLOCKER 2): the OVERRIDDEN entry naming Check 32 IS the waiver the latest row names,
-# its header carrying trailing whitespace the join strips. Quiet, and the row was counted.
-drive "$VALIDATOR" waiver-match "$GM_W_OVR"
-if w_quiet 1; then w_ok W1 "W1: an OVERRIDDEN entry naming Check 32 is NOT failed when 32's latest row is FAIL_WAIVED under that entry's own header (trailing whitespace stripped), 1 waived row counted"
-else bad "W1: the matching waiver was not quiet (rc=$LAST_RC): $(printf '%s' "$LAST_OUT" | head -3)"; fi
-# W1b: the same entry over a plain FAIL timeline still fires — the stand-down is the waiver's.
-drive "$VALIDATOR" waiver-match "$GM_FAILING"
-if [ "$LAST_RC" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT"; then w_ok W1b "W1b: the same OVERRIDDEN entry over a plain FAIL timeline still fires — only the named waiver stands it down"
-else bad "W1b: the OVERRIDDEN entry over a FAIL timeline did not fire (rc=$LAST_RC)"; fi
-# W2 (BLOCKER 2): a DIFFERENT entry, RESOLVED and naming Check 32, fires while the rows name an
-# OVERRIDDEN entry that resolves. Any other FAIL_WAIVED is FAIL to the terminal arm.
-drive "$VALIDATOR" waiver-other-entry "$GM_W_OTHER"
-if [ "$LAST_RC" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT" && ! grep -q "names NO entry" <<<"$LAST_OUT"; then
-  w_ok W2 "W2: a RESOLVED entry naming Check 32 FIRES when 32 is FAIL_WAIVED under a different entry, and that waiver itself resolves"
-else bad "W2: a FAIL_WAIVED under another entry acquitted a RESOLVED entry naming the check (rc=$LAST_RC)"; fi
-# W3 (BLOCKER 1): an OVERRIDDEN waiver does not expire by gate count: three gates, quiet.
-drive "$VALIDATOR" waiver-match "$GM_W_OVR"
-if w_quiet 1 && [ "$(grep -oE '"ts": *"[^"]*"' "$GM_W_OVR" | sed 's/.*"\([^"]*\)"$/\1/' | sort -u | grep -c .)" -eq 3 ]; then
-  w_ok W3 "W3: an OVERRIDDEN waiver over 3 recorded gates is quiet — it carries no gate-count lifetime"
-else bad "W3: an OVERRIDDEN waiver expired by count, or the timeline does not hold 3 gates (rc=$LAST_RC)"; fi
-# W4 (BLOCKER 1): a SUPPRESSED waiver past its 1-gate lifetime, still FAIL_WAIVED, fires; its
-# 3-gate twin over the same three gates is quiet.
-drive "$VALIDATOR" waiver-suppressed-expired "$GM_W_SUP1"
-w4a=0; [ "$LAST_RC" = "1" ] && grep -q "latest recorded verdict is FAIL_WAIVED" <<<"$LAST_OUT" && w4a=1
-drive "$VALIDATOR" waiver-suppressed-inforce "$GM_W_SUP3"
-if [ "$w4a" -eq 1 ] && w_quiet 1; then w_ok W4 "W4: a SUPPRESSED waiver past its lifetime FIRES on a FAIL_WAIVED row; the 3-gate twin over the same gates is quiet"
-else bad "W4: SUPPRESSED waiver lifetime: expired-fired=$w4a in-force rc=$LAST_RC"; fi
-# W5 (BLOCKER 1): an unresolvable waiver_id fires with its own message. The escalations file
-# names no check, so no terminal arm can fire beside it and the waiver arm owns the rc.
-drive "$VALIDATOR" waiver-wrong-status "$GM_W_NONE"
-if [ "$LAST_RC" = "1" ] && grep -q "which names NO entry" <<<"$LAST_OUT"; then w_ok W5 "W5: a FAIL_WAIVED whose waiver_id names no pending.md entry FIRES with its own message"
-else bad "W5: an unresolvable waiver_id did not fire (rc=$LAST_RC)"; fi
-# W6: the id resolves to an entry neither OVERRIDDEN nor SUPPRESSED.
-drive "$VALIDATOR" waiver-wrong-status "$GM_W_DEC"
-if [ "$LAST_RC" = "1" ] && grep -q "neither OVERRIDDEN nor SUPPRESSED" <<<"$LAST_OUT"; then w_ok W6 "W6: a waiver_id resolving to a DECIDED_AUTONOMOUSLY entry FIRES"
-else bad "W6: a waiver resolving to a non-waiving status did not fire (rc=$LAST_RC)"; fi
-# W7: an id found only in the archive beside pending.md is acquitted, with a NOTE — the
-# boundary world after a retro moved the entry. Without it, every next sprint's first gate wedges.
-drive "$VALIDATOR" waiver-archived "$GM_W_ARCH"
-if w_quiet 1 && grep -q "names an entry archived" <<<"$LAST_OUT"; then w_ok W7 "W7: a waiver_id resolving only in pending-archive.md is acquitted with a NOTE, not silently"
-else bad "W7: the archived waiver was not acquitted with its NOTE (rc=$LAST_RC)"; fi
-# W8: a FAIL_WAIVED row with an empty waiver_id fires.
-drive "$VALIDATOR" waiver-match "$GM_W_EMPTY"
-if [ "$LAST_RC" = "1" ] && grep -q "with NO waiver_id" <<<"$LAST_OUT"; then w_ok W8 "W8: a FAIL_WAIVED row with an empty waiver_id FIRES"
-else bad "W8: an empty waiver_id did not fire (rc=$LAST_RC)"; fi
-
-# --- the waiver mutants: copies, one anchor each, counted at 1 and cmp-guarded ----------------
-w_mut() { # <out> <anchor> <replacement>
-  local n; n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
-  [ "$n" -eq 1 ] || { W_WHY="anchor matches $n line(s), not 1: $2"; return 1; }
-  A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' "$VALIDATOR" > "$1"
-  if cmp -s "$VALIDATOR" "$1"; then W_WHY="changed no bytes"; return 1; fi
-  bash -n "$1" 2>/dev/null || { W_WHY="does not parse"; return 1; }
-}
-# MW-standdown (BLOCKER 2): the terminal arm's stand-down removed. W1 must die; W2 holds.
-SL_MW_SD="$WORK/mutant-w-standdown.sh"
-if ! w_base W1 || ! w_base W2; then bad "MW-standdown: W1/W2 did not pass unmutated in this run, so this mutant's verdict would be about the base"
-elif ! w_mut "$SL_MW_SD" 'if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'"'"'\t'"'"'}" = "$wkey" ]; then' 'if false; then'; then bad "MW-standdown DID NOT APPLY: $W_WHY"
+    decl="$(printf '%s' " ${MD[$mut_i]//,/ } " | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
+    meas="$(printf '%s' "$tripped" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')"
+    st=match; for _d in ${MD[$mut_i]//,/ }; do case " $tripped " in *" $_d "*) ;; *) st=DIFFERS ;; esac; done
+    tw=green; for _t in ${MT[$mut_i]//,/ }; do case "$tripped " in *" $_t "*) tw=TRIPPED ;; esac; done
+    printf 'MATRIX %s decides=%s cells=%s tripped=[%s] declared=%s twins=%s\n' "$n" "${MD[$mut_i]}" "${cells#,}" "$(join_set $tripped)" "$st" "$tw"
+    mut_i=$((mut_i+1))
+  done
 else
-  # Scored on the MESSAGE, not rc alone: W1 must die by the terminal arm's own "recorded
-  # FAILING" line (the stand-down's subject), and W2 must still fire by that same line.
-  drive "$SL_MW_SD" waiver-match "$GM_W_OVR"; mw1="$LAST_RC"; mw1m=0; grep -q "recorded FAILING" <<<"$LAST_OUT" && mw1m=1
-  drive "$SL_MW_SD" waiver-other-entry "$GM_W_OTHER"; mw2="$LAST_RC"; mw2m=0; grep -q "recorded FAILING" <<<"$LAST_OUT" && mw2m=1
-  [ "$mw1" = "1" ] && [ "$mw1m" = "1" ] && [ "$mw2" = "1" ] && [ "$mw2m" = "1" ] && ok "MW-standdown killed by W1 alone — without the stand-down the matching waiver fires, W2 unchanged" \
-    || bad "MW-standdown scored W1=$mw1/recorded-FAILING=$mw1m W2=$mw2/recorded-FAILING=$mw2m, wanted 1/1 1/1"
+  # PER PUSH: each mutant drives its DECIDING arm(s) and its measured-green TWIN only.
+  mut_i=0
+  while [ "$mut_i" -lt "$NM" ]; do
+    n="${MN[$mut_i]}"
+    case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
+    dec=" "; for a in ${MD[$mut_i]//,/ }; do in_set "$a" "$SKIPPED" || dec="$dec$a "; done
+    twn=" "; for a in ${MT[$mut_i]//,/ }; do in_set "$a" "$SKIPPED" || twn="$twn$a "; done
+    if [ "$dec" = " " ]; then
+      printf '  SKIP  MUTANT %s -- every deciding arm is skipped on this host or against this installed validator\n' "$n"
+      mut_i=$((mut_i+1)); continue
+    fi
+    flag=1
+    for a in $dec $twn; do base_ok "$a" || flag=0; done
+    wrong=""
+    for a in $dec; do if arm_eval $((mut_i+2)) "$a"; then wrong="$wrong $a-did-not-flip"; fi; done
+    for a in $twn; do arm_eval $((mut_i+2)) "$a" || wrong="$wrong $a-twin-not-green"; done
+    if [ -n "$wrong" ]; then
+      if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] flipped and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
+    elif ! mut_witness "$n" $((mut_i+2)); then
+      bad "MUTANT $n flipped its arm but its witness did not hold — it died for a reason other than its mutation"
+    else
+      mutant_killed "$flag" "$n" "MUTANT $n killed on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+    fi
+    mut_i=$((mut_i+1))
+  done
+  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
+  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
 fi
-# MW-resolve (BLOCKER 1): an unresolvable id passes silently. W5 must die; W1 holds.
-SL_MW_RS="$WORK/mutant-w-resolve.sh"
-if ! w_base W5 || ! w_base W1; then bad "MW-resolve: W5/W1 did not pass unmutated in this run"
-elif ! w_mut "$SL_MW_RS" '  if [ -z "$wrec" ]; then' '  if [ -z "$wrec" ]; then continue; fi; if false; then'; then bad "MW-resolve DID NOT APPLY: $W_WHY"
-else
-  # Scored on the MESSAGE: W5 dies when its own "which names NO entry" line is GONE and the OK
-  # summary counts the row (waived_rows=1), so the acquittal is the skipped resolution's and not
-  # a subject that ran nothing; W1 holds by the same quiet summary.
-  drive "$SL_MW_RS" waiver-wrong-status "$GM_W_NONE"; mr5="$LAST_RC"; mr5m=0
-  grep -q "which names NO entry" <<<"$LAST_OUT" || { w_quiet 1 && mr5m=1; }
-  drive "$SL_MW_RS" waiver-match "$GM_W_OVR"; mr1="$LAST_RC"; mr1m=0; w_quiet 1 && mr1m=1
-  [ "$mr5" = "0" ] && [ "$mr5m" = "1" ] && [ "$mr1" = "0" ] && [ "$mr1m" = "1" ] && ok "MW-resolve killed by W5 alone — skipping resolution acquits an id naming nothing, W1 unchanged" \
-    || bad "MW-resolve scored W5=$mr5/no-message-and-counted=$mr5m W1=$mr1/quiet=$mr1m, wanted 0/1 0/1"
-fi
-# MW-lifetime (BLOCKER 1): the expiry arm reads FAIL_WAIVED as clean. W4's expired half dies.
-SL_MW_LT="$WORK/mutant-w-lifetime.sh"
-if ! w_base W4; then bad "MW-lifetime: W4 did not pass unmutated in this run"
-elif ! w_mut "$SL_MW_LT" 'if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then' 'if [ "$verdict" = "FAIL" ]; then'; then bad "MW-lifetime DID NOT APPLY: $W_WHY"
-else
-  drive "$SL_MW_LT" waiver-suppressed-expired "$GM_W_SUP1"; ml="$LAST_RC"
-  drive "$SL_MW_LT" expired-still-failing "$GM_FAILING"; mlc="$LAST_RC"
-  [ "$ml" = "0" ] && [ "$mlc" = "1" ] && ok "MW-lifetime killed by W4 — a SUPPRESSED waiver past its lifetime goes quiet when FAIL_WAIVED reads clean; the plain-FAIL expiry still fires" \
-    || bad "MW-lifetime scored waived=$ml plain=$mlc, wanted 0/1"
-fi
-# MW-overridden (BLOCKER 1): OVERRIDDEN refused as a waiver. W3 dies — the quiet is that branch's.
-SL_MW_OV="$WORK/mutant-w-overridden.sh"
-if ! w_base W3; then bad "MW-overridden: W3 did not pass unmutated in this run"
-elif ! w_mut "$SL_MW_OV" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; then bad "MW-overridden DID NOT APPLY: $W_WHY"
-else
-  # Scored on the MESSAGE: the mutant's only observable is the violation COUNT with no per-arm
-  # line, so W3 dies when the summary reads exactly one violation and no other arm printed a
-  # FAIL line -- the failure is the OVERRIDDEN branch's and nothing else's. The twin stays quiet.
-  drive "$SL_MW_OV" waiver-match "$GM_W_OVR"; mo="$LAST_RC"; mom=0
-  grep -q "^FAIL: 1 suppression-lifetime violation(s)" <<<"$LAST_OUT" \
-    && [ "$(grep -c '^FAIL: ' <<<"$LAST_OUT")" = "1" ] && mom=1
-  drive "$SL_MW_OV" waiver-suppressed-inforce "$GM_W_SUP3"; moc="$LAST_RC"; mocm=0; w_quiet 1 && mocm=1
-  [ "$mo" = "1" ] && [ "$mom" = "1" ] && [ "$moc" = "0" ] && [ "$mocm" = "1" ] && ok "MW-overridden killed by W3 — W3's quiet is the OVERRIDDEN branch's, the SUPPRESSED twin unchanged" \
-    || bad "MW-overridden scored ovr=$mo/count-only=$mom sup=$moc/quiet=$mocm, wanted 1/1 0/1"
-fi
+echo "DRIVE-COUNT validator runs=$DRIVES mutants=$NM"
 
 echo
 if [ "$fails" -ne 0 ]; then

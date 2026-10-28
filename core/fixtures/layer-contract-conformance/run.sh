@@ -48,6 +48,49 @@
 # whose job was dropped produces no output file, which adds nothing to the count. That is exactly
 # what a passing arm adds. So the absence is asserted, not assumed — this fixture's own
 # EXPECTED_ASSERTIONS floor, one layer out.
+# Mutant matrix block. Measured once by the --matrix run named on the REMEASURE line (every fires and nofire
+# arm read against the validator output of every mutant; FAIL = that arm's `want` is PRESENT in the mutant's
+# output, ok = absent). Per push each mutant asserts only its DECIDING arm (its own `fires` arm, which must
+# fire) and its TWIN (a different arm the matrix shows ok, which must stay absent), read from the SAME
+# validator run. The rows below are the rows the code reads, so the matrix and the cells driven cannot drift.
+# Arms that ALSO fail under a mutant (entanglement measured, not a twin): i36-forward fails i36-reverse,
+# i64-control, i65-control; i36-reverse-gm fails i36-reverse; i61-vocabulary fails i37-no-mechanism;
+# i61-zero-bullets fails i63-home-empty, i63-reverse; i62-home and i62-pointer fail i65-control;
+# i62-zero-vocab fails i61-zero-bullets, i63-home-empty; i64-unemitted fails i36-reverse, i64-control,
+# i65-control; i64-vacuity fails i36-forward, i36-reverse, i64-vs-i36, i64-control, i65-control; every
+# i65-* mutant fails i65-control.
+# MUTANT-MATRIX i36-forward decides=i36-forward twins=i36-reverse-gm
+# MUTANT-MATRIX i36-reverse decides=i36-reverse twins=i36-forward
+# MUTANT-MATRIX i36-reverse-gm decides=i36-reverse-gm twins=i36-forward
+# MUTANT-MATRIX i37-no-mechanism decides=i37-no-mechanism twins=i36-forward
+# MUTANT-MATRIX i38-prose-home decides=i38-prose-home twins=i41-duplicate-id
+# MUTANT-MATRIX i41-duplicate-id decides=i41-duplicate-id twins=i38-prose-home
+# MUTANT-MATRIX i42-above-version decides=i42-above-version twins=i42-missing-since
+# MUTANT-MATRIX i42-missing-since decides=i42-missing-since twins=i42-above-version
+# MUTANT-MATRIX i42-unparseable decides=i42-unparseable twins=i42-above-version
+# MUTANT-MATRIX i61-severity decides=i61-severity twins=i61-vocabulary
+# MUTANT-MATRIX i61-vocabulary decides=i61-vocabulary twins=i61-severity
+# MUTANT-MATRIX i61-zero-bullets decides=i61-zero-bullets twins=i61-severity
+# MUTANT-MATRIX i62-home decides=i62-home twins=i62-pointer
+# MUTANT-MATRIX i62-pointer decides=i62-pointer twins=i62-home
+# MUTANT-MATRIX i62-zero-vocab decides=i62-zero-vocab twins=i62-home
+# MUTANT-MATRIX i63-home-empty decides=i63-home-empty twins=i63-pointer-empty
+# MUTANT-MATRIX i63-pointer-empty decides=i63-pointer-empty twins=i63-home-empty
+# MUTANT-MATRIX i63-none-grew decides=i63-none-grew twins=i63-bad-role
+# MUTANT-MATRIX i63-bad-path decides=i63-bad-path twins=i63-bad-role
+# MUTANT-MATRIX i63-bad-role decides=i63-bad-role twins=i63-bad-path
+# MUTANT-MATRIX i63-reverse decides=i63-reverse twins=i63-bad-path
+# MUTANT-MATRIX i63-zero-pins decides=i63-zero-pins twins=i63-bad-path
+# MUTANT-MATRIX i64-unemitted decides=i64-unemitted twins=i64-vacuity
+# MUTANT-MATRIX i64-vacuity decides=i64-vacuity twins=i64-unemitted
+# MUTANT-MATRIX i65-missing decides=i65-missing twins=i65-nodriver
+# MUTANT-MATRIX i65-nodriver decides=i65-nodriver twins=i65-wrongenf
+# MUTANT-MATRIX i65-wrongenf decides=i65-wrongenf twins=i65-unattributed
+# MUTANT-MATRIX i65-unattributed decides=i65-unattributed twins=i65-noneforged
+# MUTANT-MATRIX i65-noneforged decides=i65-noneforged twins=i65-missing
+# MUTANT-MATRIX skip-name-mut decides=skip-name twins=skip-name-a
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-contract-conformance/run.sh --matrix
+# Re-measured whenever an arm or a mutant is added or changed. The block and the REMEASURE line live in this parent file for the whole shard family.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -72,11 +115,19 @@ done
 # naming this directory, so on a consumer both directories emitted the same SKIP line and the
 # suite log could not be read by name. The argument is only CAPTURED here; its validation and
 # the coverage join stay below the SKIP, for the reason stated at the shard split.
+RAW_ARGS=" $* "
 GROUP=a
-if [ "${1:-}" = "--group" ]; then
-  GROUP="${2:-}"
-  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
-fi
+MATRIX=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --matrix) MATRIX=1; shift ;;
+    --group)
+      GROUP="${2:-}"
+      [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+      shift; [ $# -gt 0 ] && shift ;;
+    *) echo "FIXTURE ERROR: unknown argument '$1' (known: --matrix, --group <shard>)" >&2; exit 2 ;;
+  esac
+done
 NAME="layer-contract-conformance"
 [ "$GROUP" = a ] || NAME="layer-contract-conformance-$GROUP"
 SKIP_MSG="SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
@@ -86,6 +137,7 @@ if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+[ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
 
 # ---------------------------------------------------------------------------
 # THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE
@@ -159,6 +211,8 @@ OUTD="$TMP/out"; mkdir -p "$OUTD"
 # shift every field after it.
 RUNS="$TMP/runs"; : > "$RUNS"
 ARMS="$TMP/arms"; : > "$ARMS"
+TWINS="$TMP/twins"; : > "$TWINS"
+MUTANTS="$TMP/mutants"; : > "$MUTANTS"
 
 # reg_run <run-label> <contract-file> — deduped, because several arms read one run's output and
 # running the validator twice to learn the same thing costs 6.5s.
@@ -179,13 +233,27 @@ reg_arm() {
 # the job rather than running it. The `cmp -s` guard stays HERE, in the serial phase, because a
 # mutation that matched nothing is a fact about the build and must not consume a pool slot.
 mutant_fires() {
-  local file="$1" want="$2" label="$3" why="$4"
+  local file="$1" want="$2" label="$3" why="$4" row dec tw
   if cmp -s "$CONTRACT" "$file"; then
     reg_arm unmutated "$label" - - "$why" -
     return
   fi
   reg_run "$label" "$file"
   reg_arm fires "$label" "$label" "$want" "$why" -
+  # The deciding arm and the twin come from THIS file's own MUTANT-MATRIX header row, so the
+  # recorded matrix and the cells actually driven cannot drift apart. The twin is expanded into
+  # an arm after every registration exists (it may name an arm registered further down).
+  row="$(grep -E "^# MUTANT-MATRIX $label decides=" "$DIR/run.sh")"
+  dec="$(sed -n 's/.* decides=\([A-Za-z0-9_.-]*\) .*/\1/p' <<<"$row")"
+  tw="$(sed -n 's/.* twins=\([A-Za-z0-9_.-]*\).*/\1/p' <<<"$row")"
+  printf '%s\n' "$label" >> "$MUTANTS"
+  # MATRIX MODE MEASURES THE ROW, so it needs none: the header is written FROM that measurement.
+  [ "$MATRIX" = 1 ] && return
+  if [ "$dec" != "$label" ] || [ -z "$tw" ]; then
+    echo "FIXTURE ERROR: no usable MUTANT-MATRIX row for $label (decides=[$dec] twins=[$tw])" >&2
+    exit 2
+  fi
+  printf '%s\t%s\n' "$label" "$tw" >> "$TWINS"
 }
 
 echo "$NAME fixture"
@@ -565,7 +633,38 @@ reg_arm nofire i65-control control '^FAIL: I65' \
 #
 # IT IS CHECKED HERE, BEFORE THE POOL, because that is now the earliest point at which it is
 # knowable and because a pool sized from a short registry would go on to report a short green run.
-EXPECTED_ASSERTIONS=33
+#
+# EACH MUTANT CARRIES ONE TWIN: an arm that stays GREEN under it, read from the mutant's own run
+# (the twin's `want` must be ABSENT from that output). The twin rows are built from the twin
+# arm's own registration, so its text is never restated, and the header rows are joined to the
+# registered mutants in BOTH directions below.
+if [ "$MATRIX" != 1 ]; then
+hdr_names="$(sed -n 's/^# MUTANT-MATRIX \([A-Za-z0-9_-]*\) decides=.*/\1/p' "$DIR/run.sh" | grep -vx 'skip-name-mut' | sort)"
+reg_names="$(sort "$MUTANTS")"
+if [ -z "$reg_names" ] || [ "$hdr_names" != "$reg_names" ]; then
+  echo "FIXTURE ERROR: the MUTANT-MATRIX header rows and the registered mutants disagree:" >&2
+  diff <(printf '%s\n' "$hdr_names") <(printf '%s\n' "$reg_names") >&2
+  exit 2
+fi
+twin_bad="$(awk -F'\t' -v out="$ARMS" '
+  FILENAME == ARGV[1] { if ($1 == "fires" || $1 == "nofire") { want[$2] = $4 }; next }
+  {
+    if (!($2 in want)) { print "    twin arm " $2 " of mutant " $1 " is not a registered fires/nofire arm"; next }
+    if ($2 == $1) { print "    mutant " $1 " names its own arm as its twin"; next }
+    printf "twin\t%s~%s\t%s\t%s\t%s\t-\n", $1, $2, $1, want[$2], $2 >> out
+    n++
+  }
+  END { printf "%d\n", n > "/dev/stderr" }
+' "$ARMS" "$TWINS" 2>"$TMP/ntwin")"
+if [ -n "$twin_bad" ]; then
+  echo "FIXTURE ERROR: a twin names something that cannot hold the role:" >&2
+  printf '%s\n' "$twin_bad" >&2
+  exit 2
+fi
+ASSERTIONS=$((ASSERTIONS + $(cat "$TMP/ntwin")))
+fi
+EXPECTED_ASSERTIONS=62
+[ "$MATRIX" = 1 ] && EXPECTED_ASSERTIONS=33
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   echo "FAIL: $ASSERTIONS assertions registered, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."
   exit 1
@@ -663,7 +762,7 @@ fi
 # that selection had stopped happening — a mechanism that cannot fire, reading exactly like
 # one that did.
 SEL="$TMP/sel"; : > "$SEL"
-sel_bad="$(awk -F'\t' -v out="$SEL" '
+sel_bad="$(awk -F'\t' -v out="$SEL" -v g="$GROUP" -v mx="$MATRIX" '
   function idsfrom(s,   acc) {
     acc = ""
     while (match(s, /I[0-9]+[a-c]?/)) { acc = acc " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
@@ -683,12 +782,23 @@ sel_bad="$(awk -F'\t' -v out="$SEL" '
     if ($1 == "clean") full[arun] = 1
     lid = ""
     if (match($2, /^i[0-9]+[a-c]?/)) { lid = substr($2, RSTART, RLENGTH); sub(/^i/, "I", lid) }
+    # A TWIN ROW IS READ FROM THE OWN RUN OF ITS MUTANT, so the ids of the twin ARM (its label,
+    # field 5) join that selector: a twin whose invariant never executed would hold for that
+    # reason alone, which reads exactly like a twin that held.
+    if ($1 == "twin") {
+      lid = ""
+      if (match($5, /^i[0-9]+[a-c]?/)) { lid = substr($5, RSTART, RLENGTH); sub(/^i/, "I", lid) }
+    }
     addids(arun, lid)
     wid = idsfrom($4)
     addids(arun, wid)
-    if ($1 == "nofire" && wid == "") noid[arun] = noid[arun] " " $2
+    addids("__ALL__", lid " " wid)
+    if (($1 == "nofire" || $1 == "twin") && wid == "" && lid == "") noid[arun] = noid[arun] " " $2
   }
   END {
+    # MATRIX MODE measures every arm against every mutant, so every non-FULL run selects the union
+    # of all ids. They share one validator unit, so the union costs nothing extra.
+    if (mx == 1) for (i = 1; i <= nr; i++) if (!(order[i] in full)) sel[order[i]] = sel["__ALL__"]
     if (nr == 0) { print "    the run registry is empty, so no selector can be derived from it"; exit }
     for (i = 1; i <= nr; i++) {
       r = order[i]
@@ -761,8 +871,13 @@ exit 0
 LCC_RUNNER
 
 # The control is settled FIRST and SERIALLY — see its arm above.
-AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_SEL="$SEL" \
-  bash "$RUNNER" control
+# THE UNMUTATED BASELINE RUNS ONCE PER FAMILY, IN SHARD 'a' ONLY. Every arm reading it (clean, i64-control,
+# i65-control) is evaluated in shard 'a' alone below; shard 'b' is dealt only mutant runs, each scored by
+# its own deciding arm and twin. Running the same full validator in 'b' asserted the same baseline twice.
+if [ "$GROUP" = a ]; then
+  AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_SEL="$SEL" \
+    bash "$RUNNER" control
+fi
 
 # FOUR, AND FIXED RATHER THAN TUNABLE — the same reasoning as enforcement-map-sites, which
 # states it in place: this pool nests inside the pre-push suite's own, so a knob here
@@ -791,9 +906,9 @@ LCC_JOBS=4
 # them out in turn spreads that without anyone maintaining a cost table that would go stale the
 # first time a mutant changed.
 awk -F'\t' '$1!="control"{print $1}' "$RUNS" \
-  | awk -v g="$GROUP" -v shards="$SHARDS" '
+  | awk -v g="$GROUP" -v shards="$SHARDS" -v mx="$MATRIX" '
       BEGIN { n = split(shards, S, " ") }
-      { if (S[((NR - 1) % n) + 1] == g) print }
+      { if (mx == 1 || S[((NR - 1) % n) + 1] == g) print }
     ' > "$TMP/pool"
 
 # THE EMPTY-SHARD GUARD, AND THE FLOOR ABOVE DOES NOT COVER IT. `N_RUNS -lt 25` is a statement
@@ -813,7 +928,7 @@ fi
 ARMS_MINE="$TMP/arms.mine"
 awk -F'\t' -v g="$GROUP" '
   FNR == NR       { mine[$1] = 1; next }
-  $3 == "control" { print; next }
+  $3 == "control" { if (g == "a") print; next }
   $3 == "-"       { if (g == "a") print; next }
   ($3 in mine)    { print }
 ' "$TMP/pool" "$ARMS" > "$ARMS_MINE"
@@ -847,7 +962,7 @@ if [ "$GROUP" = a ]; then
   _sk_build "$_SK/good" "$DIR/run.sh" || { echo "$NAME: FIXTURE ERROR — could not build the consumer-shaped SKIP tree" >&2; exit 2; }
   _sk_a="$(bash "$_SK/good/x/y/core/fixtures/layer-contract-conformance/run.sh" 2>&1)"
   _sk_b="$(bash "$_SK/good/x/y/core/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
-  ASSERTIONS=$((ASSERTIONS + 2))
+  ASSERTIONS=$((ASSERTIONS + 3))
   if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_a" \
      && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_b" \
      && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_b"; then
@@ -859,15 +974,30 @@ if [ "$GROUP" = a ]; then
   sed 's/^  echo "\$NAME: \$SKIP_MSG"$/  echo "layer-contract-conformance: $SKIP_MSG"/' "$DIR/run.sh" > "$_SK/mut.sh"
   if cmp -s "$DIR/run.sh" "$_SK/mut.sh"; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-18s %s\n' skip-name-mut "the mutation matched nothing, so the skip-name arm is unproven"
+    printf '  FAIL  skip-name-mut: the mutation matched nothing, so the skip-name arm is unproven\n'
   else
     _sk_build "$_SK/mut" "$_SK/mut.sh" || { echo "$NAME: FIXTURE ERROR — could not build the mutant SKIP tree" >&2; exit 2; }
     _sk_m="$(bash "$_SK/mut/x/y/core/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
+    _sk_ma="$(bash "$_SK/mut/x/y/core/fixtures/layer-contract-conformance/run.sh" 2>&1)"
+    # DECIDER cell: the skip-name predicate evaluated on the mutant tree. TWIN cell: skip-name-a,
+    # shard 'a' still names itself under the mutant (its literal IS its own name), so it stays green.
+    SK_CELL_DECIDER=ok
+    if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_ma" \
+       && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_m" \
+       && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_m"; then :; else SK_CELL_DECIDER=FAIL; fi
+    SK_CELL_TWIN=FAIL
+    grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_ma" && SK_CELL_TWIN=ok
     if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_m" && ! grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_m"; then
-      printf '  ok    %-18s %s\n' skip-name-mut "MUTANT (literal SKIP name restored): shard 'b' prints its sibling's name again, so skip-name can fire"
+      printf '  ok    skip-name-mut: MUTANT (literal SKIP name restored): shard '"'"'b'"'"' prints its sibling'"'"'s name again, so skip-name can fire\n'
     else
       FAILURES=$((FAILURES + 1))
-      printf '  FAIL  %-18s %s\n' skip-name-mut "MUTANT SURVIVED: with the literal restored shard 'b' printed [${_sk_m}]"
+      printf '  FAIL  skip-name-mut: MUTANT SURVIVED: with the literal restored shard '"'"'b'"'"' printed [%s]\n' "${_sk_m}"
+    fi
+    if [ "$SK_CELL_TWIN" = ok ]; then
+      printf '  ok    skip-name-mut: twin skip-name-a holds (shard '"'"'a'"'"' still prints its own name under this mutant)\n'
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  skip-name-mut: twin skip-name-a did NOT hold — shard '"'"'a'"'"' lost its own name [%s]\n' "${_sk_ma}"
     fi
   fi
 fi
@@ -878,7 +1008,7 @@ AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_
 # THE RUNS THIS SHARD ACTUALLY EXECUTED: the serial control plus whatever it was dealt. Both
 # guards below are scoped to it, because a shard must not report on a run it never started.
 MINE_RUNS="$TMP/mine.runs"
-{ echo control; cat "$TMP/pool"; } > "$MINE_RUNS"
+{ [ "$GROUP" = a ] && echo control; cat "$TMP/pool"; } > "$MINE_RUNS"
 
 # ---------------------------------------------------------------------------
 # EXIT 2 IS A BROKEN FIXTURE, AND IT IS NEITHER A KILL NOR A SURVIVAL
@@ -926,13 +1056,14 @@ while read -r _l; do
     sel)  got_sel=$((got_sel + 1)) ;;
   esac
 done < "$MINE_RUNS"
-POP=$((N_MINE + 1))
+NCTL=0; [ "$GROUP" = a ] && NCTL=1
+POP=$((N_MINE + NCTL))
 if [ "$exp_sel" -eq 0 ] || [ "$got_sel" -ne "$exp_sel" ] || [ "$got_full" -ne "$exp_full" ] \
    || [ $((exp_sel + exp_full)) -ne "$POP" ] || [ $((got_sel + got_full)) -ne "$POP" ]; then
   echo "$NAME: FIXTURE ERROR — the selection control does not close in shard '$GROUP'." >&2
   echo "  declared by the registries : $exp_sel selected + $exp_full full" >&2
   echo "  observed from the runner    : $got_sel selected + $got_full full" >&2
-  echo "  runs this shard dispatched  : $POP (1 serial control + $N_MINE dealt)" >&2
+  echo "  runs this shard dispatched  : $POP ($NCTL serial control + $N_MINE dealt)" >&2
   echo "  A run that stopped passing --arms executes every arm in the validator and prints exactly the same report, only slower — which is why this is asserted rather than assumed." >&2
   exit 2
 fi
@@ -959,11 +1090,18 @@ while IFS=$'\t' read -r kind label run want a b; do
   case "$kind" in
     fires)
       if grep -q "$want" "$OUTD/$run.txt"; then
-        printf '  ok    %-18s %s fires  (%s)\n' "$label" "$want" "$a"
+        printf '  ok    %s: %s fires  (%s)\n' "$label" "$want" "$a"
       else
         FAILURES=$((FAILURES + 1))
-        printf '  FAIL  %-18s %s did NOT fire  (%s)\n' "$label" "$want" "$a"
+        printf '  FAIL  %s: %s did NOT fire  (%s)\n' "$label" "$want" "$a"
         sed 's/^/          | /' "$OUTD/$run.txt" | head -5
+      fi ;;
+    twin)
+      if grep -q "$want" "$OUTD/$run.txt"; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %s: twin %s did NOT hold — %s co-fired on this mutant, so the mutant is entangled\n' "${label%%~*}" "$a" "$want"
+      else
+        printf '  ok    %s: twin %s holds (stays green under this mutant)\n' "${label%%~*}" "$a"
       fi ;;
     nofire)
       if grep -q "$want" "$OUTD/$run.txt"; then
@@ -985,6 +1123,47 @@ while IFS=$'\t' read -r kind label run want a b; do
       printf '  FAIL  %-18s unknown arm kind %s — an arm registered a shape this loop cannot evaluate\n' "$label" "$kind" ;;
   esac
 done < "$ARMS_MINE"
+
+# THE MATRIX. One line per (mutant, arm) cell for every `fires` and `nofire` arm read against every mutant's
+# own run: FAIL when that arm's `want` is PRESENT in the mutant's output (the arm detects
+# the mutation), ok when absent. The deciding arm is the FAIL on the mutant's own row; a twin
+# is a different arm whose cell is ok. Every run was executed in this one invocation with the
+# union selector, so this costs greps and no validator run.
+: > "$TMP/matrix.out"
+if [ "$MATRIX" = 1 ]; then
+  while IFS=$'\t' read -r _k _la _r _w _a _b; do
+    case "$_k" in fires|nofire) ;; *) continue ;; esac
+    printf '%s\t%s\t%s\n' "$_la" "$_w" "$_r" >> "$TMP/fires.tsv"
+  done < "$ARMS"
+  while read -r _m; do
+    [ -n "$_m" ] || continue
+    while IFS=$'\t' read -r _la _w _r; do
+      if grep -q "$_w" "$OUTD/$_m.txt"; then _c=FAIL; else _c=ok; fi
+      printf 'MATRIX\t%s\t%s\t%s\n' "$_m" "$_la" "$_c"
+    done < "$TMP/fires.tsv"
+  done < "$MUTANTS"
+  [ "$GROUP" = a ] && printf 'MATRIX\tskip-name-mut\tskip-name\t%s\nMATRIX\tskip-name-mut\tskip-name-a\t%s\n' "$SK_CELL_DECIDER" "$SK_CELL_TWIN"
+  echo "MATRIX-CELLS $(grep -c . "$TMP/fires.tsv") arms x $(grep -c . "$MUTANTS") mutants"
+fi > "$TMP/matrix.out"
+cat "$TMP/matrix.out"
+
+# PLAIN-RUN ARM, KEYED ON THE RAW ARGV AND NOT ON THE GUARD ABOVE. RAW_ARGS was captured before any
+# parsing, so a guard broken open (or a MATRIX flag set wrongly) cannot also excuse itself: a run
+# whose argv carries no --matrix must have emitted ZERO matrix cells. Counted from the emitted
+# lines, a fact about what the run printed. Counted after the guard, before the tally.
+ASSERTIONS=$((ASSERTIONS + 1))
+_nmx="$(grep -c "^MATRIX$(printf '\t')" "$TMP/matrix.out")" || _nmx=0
+case "$RAW_ARGS" in
+  *" --matrix "*)
+    printf '  ok    plain-run-no-matrix: matrix run (argv carries --matrix), %s cell(s) emitted, not applicable\n' "$_nmx" ;;
+  *)
+    if [ "$_nmx" -eq 0 ]; then
+      printf '  ok    plain-run-no-matrix: a plain run (no --matrix on argv) executed no matrix-only cell\n'
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  plain-run-no-matrix: a plain run (no --matrix on argv) emitted %s matrix cell(s)\n' "$_nmx"
+    fi ;;
+esac
 
 echo
 # BOTH LINES READ THE SHARD-LOCAL COUNT, and both name the shard. A reader comparing this

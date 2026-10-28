@@ -255,6 +255,11 @@ while IFS="$hr_tab" read -r f k a b c; do
          plusdir) printf 'hermetic-run: %s: inputs.decl marks a directory with + (KEYED outside the universe); only a file may carry it: %s/\n' "$HR_FX" "$b" >&2 ;;
          plusbang) printf 'hermetic-run: %s: inputs.decl carries + and ! on one line; a line carries one marker: %s\n' "$HR_FX" "$b" >&2 ;;
          plushash) printf 'hermetic-run: %s: the + file %s could not be hashed, so it has no key value\n' "$HR_FX" "$b" >&2 ;;
+         rnopath) printf 'hermetic-run: %s: git.decl range names no path: %s\n' "$HR_FX" "$b" >&2 ;;
+         rabs) printf 'hermetic-run: %s: git.decl range path must be repo-relative with no .. and no leading -: %s\n' "$HR_FX" "$b" >&2 ;;
+         rderive) printf 'hermetic-run: %s: git.decl range @file is not a bare file of the fixture dir, or it failed or printed nothing: %s\n' "$HR_FX" "$b" >&2 ;;
+         rref) printf 'hermetic-run: %s: git.decl range ref-expr does not resolve to <commit>..<commit>: %s\n' "$HR_FX" "$b" >&2 ;;
+         rempty) printf 'hermetic-run: %s: git.decl literal range has no commit touching a declared path, so its key fold could never move: %s\n' "$HR_FX" "$b" >&2 ;;
          *) printf 'hermetic-run: %s: the declaration was refused (%s %s)\n' "$HR_FX" "$a" "$b" >&2 ;;
        esac ;;
   esac
@@ -494,9 +499,25 @@ if [ -f "$HR_FXDIR/git.decl" ]; then
           printf 'hermetic-run: %s: optional pin %s is not in this project'"'"'s history -- not imported\n' "$HR_FX" "$hr_ps"
           hr_pin_skipped=1
         fi ;;
-      *) printf 'hermetic-run: %s: git.decl line is neither seed, pin <sha> nor pin? <sha>: %s\n' "$HR_FX" "$line" >&2; exit 2 ;;
+      range|'range '*)
+        [ "$HR_KR" = 1 ] || { printf 'hermetic-run: %s: git.decl range needs the hook READSET_KEYROWS span to derive and key it, and %s carries none: %s\n' "$HR_FX" "$HR_HOOK" "$line" >&2; exit 2; } ;;
+      *) printf 'hermetic-run: %s: git.decl line is neither seed, pin <sha>, pin? <sha> nor range <ref-expr> <path>...: %s\n' "$HR_FX" "$line" >&2; exit 2 ;;
     esac
   done < "$HR_FXDIR/git.decl"
+  # A RANGE IS THE SPAN'S G ROW, never re-derived here: the parse above already resolved its ends (and refused the
+  # line exit 2 if it could not). Packed as pins, `--no-walk` kept: every commit of the range, both ends, and the
+  # BOUNDARY (the out-of-range parents of in-range commits, merges included), each with its whole tree. Without the
+  # boundary a path-limited `rev-list` cannot simplify an in-range commit whose parent is absent; walking the pins
+  # instead would pack all history. The ends are written as refs/hermetic/range-<n>/base and .../theirs in the
+  # SANDBOX ROOT repository (a `git clone` of it carries heads and tags only, so the fixture reads them there).
+  awk -F'\t' '$2 == "G" { n = $3; sub(/^git-range:/, "", n); print n "\t" $5 "\t" $6 }' "$HR_WORK/parse" > "$HR_WORK/ranges"
+  while IFS="$(printf '\t')" read -r hr_rn hr_rb hr_rt; do
+    [ -n "$hr_rn" ] || continue
+    { printf '%s\n%s\n' "$hr_rb" "$hr_rt"
+      git -C "$HR_ROOT" rev-list --boundary "${hr_rb}..${hr_rt}" < /dev/null | sed 's/^-//'
+    } >> "$HR_WORK/pins" || { printf 'hermetic-run: %s: could not list git.decl range %s of %s\n' "$HR_FX" "$hr_rn" "$HR_ROOT" >&2; exit 2; }
+  done < "$HR_WORK/ranges"
+  LC_ALL=C sort -u "$HR_WORK/pins" > "$HR_WORK/pins.u" && mv "$HR_WORK/pins.u" "$HR_WORK/pins" || exit 2
   hr_sbgit() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
                  git -C "$HR_SB" -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@" ); }
   hr_sbgit init -q --template= . || { printf 'hermetic-run: %s: git init in the sandbox failed\n' "$HR_FX" >&2; exit 2; }
@@ -509,6 +530,11 @@ if [ -f "$HR_FXDIR/git.decl" ]; then
         || { printf 'hermetic-run: %s: pin %s did not arrive in the sandbox repository\n' "$HR_FX" "$hr_ps" >&2; exit 2; }
     done < "$HR_WORK/pins"
   fi
+  while IFS="$(printf '\t')" read -r hr_rn hr_rb hr_rt; do
+    [ -n "$hr_rn" ] || continue
+    hr_sbgit update-ref "refs/hermetic/range-$hr_rn/base" "$hr_rb" && hr_sbgit update-ref "refs/hermetic/range-$hr_rn/theirs" "$hr_rt" \
+      || { printf 'hermetic-run: %s: could not write the refs of git.decl range %s in the sandbox repository\n' "$HR_FX" "$hr_rn" >&2; exit 2; }
+  done < "$HR_WORK/ranges"
   if [ "$hr_seed" = 1 ]; then
     hr_sbgit add -A \
       && GIT_AUTHOR_DATE='1970-01-01T00:00:00Z' GIT_COMMITTER_DATE='1970-01-01T00:00:00Z' \
@@ -562,9 +588,21 @@ if [ -L "$HR_BIN/git" ]; then
   [ -n "$hr_gxp" ] && [ -d "$hr_gxp" ] || { printf 'hermetic-run: %s: the declared git %s reports no usable --exec-path\n' "$HR_FX" "$hr_g" >&2; exit 2; }
   case "$hr_gxp" in */libexec/git-core) [ -d "${hr_gxp%/libexec/git-core}/share/git-core/templates" ] && hr_gtd="${hr_gxp%/libexec/git-core}/share/git-core/templates" ;; esac
 fi
+# THE INVOCATION COUNTER, armed only when FXCOUNT_RC, FXCOUNT_DIR and FXCOUNT_JUDGE are ALL set (the distribution
+# pre-push sets them at depth 0; nothing on a consumer does). Any of the three unset: nothing below changes the run.
+# All three set but unusable is exit 2, never an uncounted pass. Armed, the fixture gets BASH_ENV naming the rc
+# and FXCOUNT_LOG naming its start log through the same list as the git variables, and the judge runs after it.
+hr_fxc=0
+if [ -n "${FXCOUNT_RC:-}" ] && [ -n "${FXCOUNT_DIR:-}" ] && [ -n "${FXCOUNT_JUDGE:-}" ]; then
+  [ -f "$FXCOUNT_RC" ] && [ -r "$FXCOUNT_RC" ] && [ -d "$FXCOUNT_DIR" ] && [ -f "$FXCOUNT_JUDGE" ] && [ -r "$FXCOUNT_JUDGE" ] \
+    || { printf 'hermetic-run: %s: invocation counter armed but unusable: FXCOUNT_RC and FXCOUNT_JUDGE must be readable files, FXCOUNT_DIR a directory\n' "$HR_FX" >&2; exit 2; }
+  : > "$FXCOUNT_DIR/$HR_FX" && : > "$FXCOUNT_DIR/$HR_FX.mutants" || exit 2
+  hr_fxc=1
+fi
 set --
 [ -z "$hr_gxp" ] || set -- "$@" "GIT_EXEC_PATH=$hr_gxp"
 [ -z "$hr_gtd" ] || set -- "$@" "GIT_TEMPLATE_DIR=$hr_gtd"
+[ "$hr_fxc" = 0 ] || set -- "$@" "BASH_ENV=$FXCOUNT_RC" "FXCOUNT_LOG=$FXCOUNT_DIR/$HR_FX"
 HR_LOG="$HR_WORK/log"
 ( cd "$HR_SB" && env -i PATH="$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
     AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-}" ${1+"$@"} \
@@ -585,6 +623,11 @@ while IFS="$(printf '\t')" read -r r rdecl; do
     hr_missing=1
   fi
 done < "$HR_WORK/required"
+# THE INVOCATION JUDGE, on a clean exit only and BEFORE the verdict store below: a budget mismatch is this
+# fixture's FAIL, so it records no pass and cannot be skipped green on the next push.
+if [ "$hr_fxc" = 1 ] && [ "$hr_rc" -eq 0 ]; then
+  bash "$FXCOUNT_JUDGE" --fixture "$HR_FX" --decl "$HR_SB/$HR_FXROOT/$HR_FX/invocations.decl" --log "$FXCOUNT_DIR/$HR_FX" --root "$HR_SB" 2>&1 || hr_rc=1
+fi
 # HR_SANDBOX_END
 
 printf 'hermetic-run: %s: rc=%s sandbox_files=%s required_missing=%s\n' \

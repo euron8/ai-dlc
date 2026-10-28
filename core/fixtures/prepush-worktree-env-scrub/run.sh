@@ -49,7 +49,32 @@
 # absolute from there; nothing below reads the process working directory. The
 # suite runs this from the repository root; it behaves identically from its own
 # directory.
+#
+# THE MUTANT MATRIX. A cell is one reading of a finished drive: A1 (the dispatched worker saw no GIT_DIR), A2 (the
+# real repository was not corrupted) or ran (the probe fixture was dispatched), RED on a drive when that reading
+# fails. A mutant's row names the cell that kills it (decides) and the cell it could plausibly co-trip but must
+# leave GREEN (twins). A1 also goes RED on every mutant, since each lets GIT_DIR reach the worker; it is a second
+# killer, not a twin, and shows in the others= figure of the REMEASURE command. A plain run scores each mutant on its
+# deciding cell and its twin only, off the one drive it already makes; every mutant is named <subject>-<variant>
+# (s1 the distribution runner, s2 the consumer hook). The matrix is re-measured whenever an arm or a mutant is added
+# or changed, by the REMEASURE command below, run from the repo root. It scores every mutant on every cell.
+# MUTANT-MATRIX s1-no-scrub decides=A2 twins=ran
+# MUTANT-MATRIX s1-comment-only decides=A2 twins=ran
+# MUTANT-MATRIX s1-scrub-after-dispatch decides=A2 twins=ran
+# MUTANT-MATRIX s2-no-scrub decides=A2 twins=ran
+# MUTANT-MATRIX s2-comment-only decides=A2 twins=ran
+# MUTANT-MATRIX s2-scrub-after-dispatch decides=A2 twins=ran
+# MUTANT-MATRIX-DYNAMIC variant-loop why=the three variants are one loop body driven once per subject, so each mutant id is built as <slug>-<variant>; every name it produces has its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-worktree-env-scrub/run.sh --matrix
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
+# as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "prepush-worktree-env-scrub: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 # HERMETICITY, in both of the directions that can lie here.
 #
@@ -66,6 +91,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 
 fails=0
 asserts=0
@@ -76,6 +102,11 @@ broken() {
   echo "prepush-worktree-env-scrub: FIXTURE BROKEN" >&2
   exit 2
 }
+# The shared mutant-kill helper: a kill is emitted only through mutant_killed, behind a same-run base-pass flag.
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "no lib/mutant.sh beside $HERE"
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 echo "prepush-worktree-env-scrub:"
 
@@ -199,6 +230,67 @@ corrupted() {
 
 probe_ran() { [ -f "$WORK/$1/probe.ran" ]; }
 
+# --- THE MATRIX CELLS, single-sourced. A cell is one reading of a finished drive <tag>; it is RED when the reading
+# fails. cell_red <cell> <tag> returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+#   A1   the dispatched worker saw no GIT_DIR      (RED: it inherited one)
+#   A2   the real repository is untouched          (RED: the probe's sandbox commit landed on it)
+#   ran  the probe fixture was dispatched          (RED: it never ran)
+MX_CELLS='A1 A2 ran'
+cell_red() {
+  case "$1" in
+    A1)  [ "$(cat "$WORK/$2/probe.gitdir" 2>/dev/null)" != "<unset>" ] ;;
+    A2)  corrupted "$2" ;;
+    ran) ! probe_ran "$2" ;;
+    *)   return 2 ;;
+  esac
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$WORK/mx.ledger"; : > "$MXL"
+MX_SEEN=""; MX_FAILS=0
+# mx_twins <mutant> <tag>: per-push, every twin cell must stay GREEN on the SAME drive the kill read.
+mx_twins() {
+  local m="$1" tag="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  [ -n "$tw" ] || broken "$m: no single MUTANT-MATRIX row names its twins"
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$tag"; r=$?
+    if [ "$r" -eq 2 ]; then broken "$m: twin $t names no cell"
+    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also went RED on this mutant's drive, so the kill is not confined to its own cell"; fi
+  done
+}
+# mx_score <mutant> <tag>: MATRIX-ONLY. Scores the finished drive against EVERY cell. It records itself in the
+# ledger first (rule 9).
+mx_score() {
+  local m="$1" tag="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  MX_SEEN="$MX_SEEN $m"
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$tag"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$tag"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$tag" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+
 # ------------------------------------------------------------------ the battery --
 exercised=0
 resolved_paths=""
@@ -255,6 +347,11 @@ run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
     bad "$label: the probe's sandbox commit landed on the REAL repository under an UNMUTATED hook"
   else
     ok "$label: the real repository is untouched — HEAD $(cut -c1-8 < "$WORK/$slug-pristine/head.before") still at subject '$(cat "$WORK/$slug-pristine/subj.after")'"
+    # The base-pass flag for this subject's mutants, bound per subject and set only here, in the passing branch.
+    case "$slug" in
+      s1) B_a2_s1=1 ;;
+      s2) B_a2_s2=1 ;;
+    esac
   fi
 
   # AND IF THE SUBJECT IS ALREADY BROKEN, THE MUTANTS ARE MOOT AND SAYING SO IS NOT
@@ -305,12 +402,17 @@ run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
       fi
     fi
 
+    kmsg="$label/$variant: the probe's sandbox commit landed on the REAL repository (worktree HEAD moved to 'PROBE-SANDBOX-COMMIT') — scored"
     if corrupted "$slug-$variant"; then
-      kills=$((kills + 1))
-      ok "$label/$variant: KILLED — the probe's sandbox commit landed on the REAL repository (worktree HEAD moved to 'PROBE-SANDBOX-COMMIT')"
+      case "$slug" in
+        s1) mutant_killed "${B_a2_s1:-0}" "$slug-$variant" "$kmsg" && kills=$((kills + 1)) ;;
+        s2) mutant_killed "${B_a2_s2:-0}" "$slug-$variant" "$kmsg" && kills=$((kills + 1)) ;;
+      esac
     else
       bad "$label/$variant: SURVIVED. With the scrub $variant the sandbox commit should have been redirected onto the repository under test and it was not. This arm cannot distinguish a fixed hook from a broken one, so it is asserting nothing."
     fi
+    mx_twins "$slug-$variant" "$slug-$variant"
+    if [ "$MODE" = matrix ]; then mx_score "$slug-$variant" "$slug-$variant"; fi
   done
 
   # THE KILL COUNT IS THE ARM THAT WATCHES THE OTHER ARMS. Three mutants that all
@@ -349,6 +451,24 @@ fi
   || broken "neither pre-push hook was found from $HERE (looked for ../../../.githooks/pre-push and ../../git-hooks/pre-push) — nothing was exercised"
 
 printf '  ..    subjects exercised: %s\n' "$exercised"
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  # The header must name exactly the mutants this layout scored (a consumer layout scores one subject only).
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  mx_all="s1-comment-only s1-no-scrub s1-scrub-after-dispatch s2-comment-only s2-no-scrub s2-scrub-after-dispatch "
+  [ "$mx_hdr" = "$mx_all" ] || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  fails=$((fails + MX_FAILS))
+fi
 
 if [ "$fails" -ne 0 ]; then
   printf 'prepush-worktree-env-scrub: FAIL (%s of %s assertions)\n' "$fails" "$asserts"

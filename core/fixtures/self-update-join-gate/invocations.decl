@@ -1,0 +1,9 @@
+# Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J2 output), then confirmed twice
+# armed, identical. Gate starts, 22: the registry's 6 classify runs, the rc-pair table's 9 (7 pairs plus mutant C's
+# 2), r_old's one real SAFE-STOP walk (the --safe-stop start plus its 4 nested classify runs), and the 2 enclosed-
+# layout runs of the rec/lay arms (the unmutated gate and mutant F). Every gate copy is a copy of the whole skill
+# tree, so each counts by the path suffix below.
+# RE-MEASURE when an arm, a mutant or a gate run is added or removed, AND when range.sh's range moves: a newer
+# anchor-adding commit changes the walk's candidate count, so its nested-run count can move with history.
+76 *
+22 core/skills/ai-dlc-update/reconcile/self-update-gate.sh

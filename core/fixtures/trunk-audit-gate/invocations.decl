@@ -1,0 +1,6 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+67 *
+12 core/scripts/validate-trunk-audit-gate.sh
+11 core/scripts/validate-cycle-commits.sh
+3 core/scripts/validate-audit-anchors.sh
+2 core/scripts/validate-escalation-resolution.sh

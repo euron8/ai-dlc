@@ -21,6 +21,33 @@
 # named fixtures; `ck` drops those names, and BH is the arm that asserts what passing them does.
 # Usage: run.sh [path-to-self-update-fixtures.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
+#
+# Mutant-matrix battery. Measured with `--matrix` (every mutant driven against EVERY cell, every cell printed as
+# a MATRIX-ROW); a plain run drives each mutant's deciding cells plus the named twin only. Each mutant co-trips no
+# other arm, measured at authoring. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# Cells: J mutants score the verdict cells DEFER/OK/UNDECIDED/STRANDED (1 = the reader reports that verdict
+# unclaimed), WM mutants score W1-W7 (1 = that cell moved off 1), BH-mut scores BH (1 = the 5-argument drive
+# differs from the shipped refusal) and BH-ctl (1 = the 4-argument drive differs from the shipped verdict).
+# MUTANT-MATRIX J5 decides=DEFER,UNDECIDED twins=OK
+# MUTANT-MATRIX J6 decides=STRANDED twins=DEFER
+# MUTANT-MATRIX J7 decides=DEFER,UNDECIDED twins=OK
+# MUTANT-MATRIX J8 decides=OK twins=DEFER
+# MUTANT-MATRIX J9 decides=DEFER,UNDECIDED twins=OK
+# MUTANT-MATRIX J10 decides=DEFER,UNDECIDED twins=OK
+# MUTANT-MATRIX J11 decides=DEFER,UNDECIDED twins=OK
+# MUTANT-MATRIX WM1 decides=W1,W7 twins=W2
+# MUTANT-MATRIX WM2 decides=W2 twins=W1
+# MUTANT-MATRIX WM3 decides=W3 twins=W4
+# MUTANT-MATRIX WM4 decides=W4 twins=W5
+# MUTANT-MATRIX WM5 decides=W5 twins=W4
+# MUTANT-MATRIX WM6 decides=W6 twins=W5
+# MUTANT-MATRIX WM7 decides=W1,W7 twins=W2
+# MUTANT-MATRIX BH-mut decides=BH twins=BH-ctl
+# MUTANT-MATRIX-CONTROL J12 why=an alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
+# MUTANT-MATRIX-CONTROL J13 why=a second alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
+# MUTANT-MATRIX-DYNAMIC j_mut why=one helper scores J5 J7 J8 J9 J10 J11 and each name has its own row above
+# MUTANT-MATRIX-DYNAMIC w_mut why=one helper scores WM1-WM7 and each name has its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-fixture-log/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before reading anything (I10). Part 14 names
@@ -30,11 +57,17 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="self-update-fixture-log"
+MATRIX=0
+MATRIX_CELLS=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; fi
 SUFL_RUNNER_ARG="${1:-}"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; no world exists to assert against" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
+. "$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"
+if [ "$MATRIX" = 1 ]; then echo "MODE: FULL"; else echo "MODE: PUSH"; fi
+mrow() { MATRIX_CELLS=$((MATRIX_CELLS + 1)); printf 'MATRIX-ROW %s %s\n' "$1" "$2"; }
 
 # --- Parts G1 to G5: the RECORDED GATE VERDICT is what authorises the cycle ------------------
 # Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with NO operator
@@ -833,7 +866,7 @@ sufl_tmp "$JW"
 # The reader, in one place so the probe, the corpus and every mutant below score under the
 # identical grammar. It prints one line per verdict the gate can write whose SKILL.md region
 # does NOT claim the record, and nothing at all when every verdict is claimed.
-j_unclaimed() { # $1=a SKILL.md  $2=a gate script -> one unclaimed verdict per line
+j_unclaimed() { # $1=a SKILL.md  $2=a gate script  [$3=space-separated verdict cells to score; empty = all] -> one unclaimed verdict per line
   j_s="$JW/stripped.$$"
   # Fenced blocks and HTML comments blanked, LINE NUMBERING PRESERVED -- deleting the lines
   # instead would shift every region boundary below a fence and the offsets would be about a
@@ -851,6 +884,7 @@ j_unclaimed() { # $1=a SKILL.md  $2=a gate script -> one unclaimed verdict per l
   j_end="$(grep -nE '^[0-9]+\. ' "$j_s" | awk -F: -v f="$j_first" '$1 > f { print $1 - 1; exit }')"
   [ -n "$j_end" ] || j_end="$(wc -l < "$j_s")"
   for j_v in $j_verdicts; do
+    case " ${3:-} " in "  ") ;; *" $j_v "*) ;; *) continue ;; esac
     j_bl="$(grep -nE "^   - On \`SELF-UPDATE-${j_v}\`|^   - On \`SELF-UPDATE-[A-Z-]+\`( or \`SELF-UPDATE-[A-Z-]+\`)* or \`SELF-UPDATE-${j_v}\`" \
             "$j_s" | head -1 | cut -d: -f1)"
     [ -n "$j_bl" ] || { printf '%s\n' "$j_v"; continue; }
@@ -864,7 +898,14 @@ j_unclaimed() { # $1=a SKILL.md  $2=a gate script -> one unclaimed verdict per l
   done
   rm -f "$j_s"
 }
-j_flat() { j_unclaimed "$1" "$2" | sort | tr '\n' ',' ; }
+j_flat() { j_unclaimed "$1" "$2" "${3:-}" | sort | tr '\n' ',' ; }
+j_row() { # $1=flat reader answer -> every verdict cell, 1 = reported unclaimed
+  local v out=""
+  for v in DEFER OK STRANDED UNDECIDED; do
+    case ",$1" in *",$v,"*) out="$out $v:1" ;; *) out="$out $v:0" ;; esac
+  done
+  printf '%s' "${out# }"
+}
 
 if [ -z "$J_SKILL" ] || [ -z "$J_GATE" ]; then
   # DISTINGUISHABLE, AND DELIBERATELY NOT AN `ok`. This is the mid-pull state: the fixture has
@@ -898,6 +939,7 @@ else
     bad "FIXTURE ERROR: the J probe trees did not build (offender identical to the subject, or the near-miss identical to the offender). Neither direction of this reader was proven this run, so its verdict on the real corpus says only that it ran"
   elif [ -n "$j_off_flat" ] && [ -z "$j_near_flat" ]; then
     ok "the verdict/record reader REPORTS a seeded offender (a DEFER region naming no record: ${j_off_flat}) and stays QUIET on a seeded near-miss written in a phrasing it was not built around — both directions, on trees under mktemp and never the real corpus"
+    B_jprobe=1
   else
     bad "the verdict/record reader did not discriminate on its own probe trees (offender read '${j_off_flat:-empty}' and must be non-empty; near-miss read '${j_near_flat:-empty}' and must be empty). An empty offender reading is a reader that cannot spell its own subject; a non-empty near-miss reading is one that rejects a correct fix, which is the defect one row above this one in the same worklist"
   fi
@@ -918,6 +960,7 @@ else
   j_live="$(j_flat "$J_SKILL" "$J_GATE")"
   if [ -z "$j_live" ]; then
     ok "every verdict \`self-update-gate.sh\` can write has a step-2 disposition region instructing that the record it wrote be committed — the gate records on every verdict, so a verdict whose bullet names no record leaves an approval artifact no step claims"
+    B_jcorp=1
   else
     bad "these verdicts the gate CAN write have no disposition region instructing that the record be committed: ${j_live}. \`gate_record_open()\` is guarded by AI_DLC_GATE_IN_SAFE_STOP and by nothing else, so the record exists on every one of them; the operator then either loses it or commits it by hand. Name the record ALONE in that verdict's bullet — not as the 'approval artifact', which SKILL.md defines as a PAIR — and name the step-7 gated apply as its destination, never the self-update commit, which the DEFER path never creates"
   fi
@@ -926,16 +969,21 @@ else
   # Every mutant is a COPY under mktemp, `cmp -s` asserts it applied before its score is read,
   # and each is keyed on a LOCATION and an observable rather than on a spelling. A mutation that
   # did not apply reads exactly like one that survived.
-  j_mut() { # $1=label $2=mutant path $3=original it was built from $4=want-flat $5=why
-    if [ ! -s "$2" ] || cmp -s "$3" "$2"; then
-      bad "MUTATION $1 DID NOT APPLY (the anchor no longer occurs in ${3##*/}), so it scores nothing. Re-anchor it on the subject's own predicate; a lost anchor must never be repaired by relaxing an assertion"
+  j_mut() { # $1=base-pass flag $2=name $3=deciding verdicts (csv) $4=twin verdicts (space) $5=mutant path $6=original it was built from $7=why
+    local jm_want jm_filt jm_why="$7"
+    if [ ! -s "$5" ] || cmp -s "$6" "$5"; then
+      bad "MUTATION $2 DID NOT APPLY (the anchor no longer occurs in ${6##*/}), so it scores nothing. Re-anchor it on the subject's own predicate; a lost anchor must never be repaired by relaxing an assertion"
       return
     fi
-    j_got="$(j_flat "$2" "$J_GATE")"
-    if [ "$j_got" = "$4" ]; then
-      ok "MUTATION $1 — $5"
+    jm_want="$(printf '%s' "$3" | tr ',' '\n' | sort | tr '\n' ',')"
+    jm_filt="${3//,/ } $4"
+    if [ "$MATRIX" = 1 ]; then jm_filt=""; fi
+    j_got="$(j_flat "$5" "$J_GATE" "$jm_filt")"
+    if [ "$MATRIX" = 1 ]; then mrow "$2" "$(j_row "$j_got")"; fi
+    if [ "$j_got" = "$jm_want" ]; then
+      mutant_killed "$1" "$2" "MUTATION $2 — $jm_why"
     else
-      bad "MUTATION $1 SURVIVED or fired wrongly: the reader returned '${j_got:-empty}' and must return '${4:-empty}'. $5"
+      bad "MUTATION $2 SURVIVED or fired wrongly: the reader returned '${j_got:-empty}' and must return '${jm_want:-empty}'. $jm_why"
     fi
   }
 
@@ -944,7 +992,7 @@ else
   J_M1="$J_OFF"
   j_m1_tok="$(grep -cF 'self-update-gate-' "$J_M1")" || j_m1_tok=0
   if [ "$j_m1_tok" -lt "$j_tok" ]; then
-    j_mut "J5 fix reverted" "$J_M1" "$J_SKILL" "DEFER,UNDECIDED," \
+    j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J5 DEFER,UNDECIDED OK "$J_M1" "$J_SKILL" \
       "reverting the whole insertion leaves the two verdicts that bullet covers claiming no record, which is the state this arm exists to refuse (token count fell $j_tok -> $j_m1_tok, so the revert was not partial)"
   else
     bad "MUTATION J5's revert was PARTIAL: the record token still scores $j_m1_tok against an unmutated $j_tok. A partial revert proves the layer left in place and comes out green"
@@ -957,9 +1005,13 @@ else
        /^      _rec_v=UNDECIDED$/ { print "    elif false; then"; print "      _rec_v=STRANDED" }' \
     "$J_GATE" > "$J_M2"
   if [ -s "$J_M2" ] && ! cmp -s "$J_GATE" "$J_M2" && bash -n "$J_M2" 2>/dev/null; then
-    j_got4="$(j_flat "$J_SKILL" "$J_M2")"
+    if [ "$MATRIX" = 1 ]; then
+      j_got4="$(j_flat "$J_SKILL" "$J_M2")"; mrow J6 "$(j_row "$j_got4")"
+    else
+      j_got4="$(j_flat "$J_SKILL" "$J_M2" "STRANDED DEFER")"
+    fi
     if [ "$j_got4" = "STRANDED," ]; then
-      ok "MUTATION J6 — a FOURTH verdict added to the gate with no bullet for it is reported, and the three that DO have one are not: the verdict set is read out of the script rather than hand-listed here, so this arm fires the day somebody adds a verdict"
+      mutant_killed "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J6 "MUTATION J6 — a FOURTH verdict added to the gate with no bullet for it is reported, and the three that DO have one are not: the verdict set is read out of the script rather than hand-listed here, so this arm fires the day somebody adds a verdict"
     else
       bad "MUTATION J6 SURVIVED or over-fired: the reader returned '${j_got4:-empty}' and must return 'STRANDED,'. Empty means side A is not derived from the gate at all; anything extra means the addition perturbed a verdict it should not have touched"
     fi
@@ -978,7 +1030,7 @@ else
     "$J_SKILL" > "$J_M3"
   j_m3_tok="$(grep -cF 'self-update-gate-' "$J_M3")" || j_m3_tok=0
   if [ "$j_m3_tok" -eq "$j_tok" ]; then
-    j_mut "J7 instruction relocated" "$J_M3" "$J_SKILL" "DEFER,UNDECIDED," \
+    j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J7 DEFER,UNDECIDED OK "$J_M3" "$J_SKILL" \
       "moving the instruction out of the DEFER region and into the CARRY bullet's leaves the whole-file token count UNCHANGED at $j_tok, so a file-wide grep reads the tree as fixed and only a region-keyed reader refuses it"
   else
     bad "FIXTURE ERROR: MUTATION J7 changed the whole-file token count ($j_tok -> $j_m3_tok), so it is not the relocation it claims to be and a kill would be scored on a deletion instead"
@@ -990,7 +1042,7 @@ else
   J_M4="$JW/m-ok-deleted.md"
   awk '!/^   \*\*Commit BOTH files in the self-update commit\*\*/ &&
        !/^   `_bmad-output\/ai-dlc-update\/self-update-gate-<ts>\.md` — its verdict/' "$J_SKILL" > "$J_M4"
-  j_mut "J8 OK instruction deleted" "$J_M4" "$J_SKILL" "OK," \
+  j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J8 OK DEFER "$J_M4" "$J_SKILL" \
     "deleting the OK path's own record instruction while DEFER's stands is reported as OK alone — the join is over every verdict the gate can write, not over the one this batch fixed"
 
   # J9: an inert HTML COMMENT carrying the whole instruction. A comment is not an instruction,
@@ -1002,7 +1054,7 @@ else
        { print }' "$J_SKILL" > "$J_M5"
   j_m5_tok="$(grep -cF 'self-update-gate-' "$J_M5")" || j_m5_tok=0
   if [ "$j_m5_tok" -eq "$j_tok" ]; then
-    j_mut "J9 HTML-comment only" "$J_M5" "$J_SKILL" "DEFER,UNDECIDED," \
+    j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J9 DEFER,UNDECIDED OK "$J_M5" "$J_SKILL" \
       "an instruction that survives only inside an HTML comment is refused, with the raw token count unchanged at $j_tok — the comment strip is what the kill is scored on"
   else
     bad "FIXTURE ERROR: MUTATION J9 changed the raw token count ($j_tok -> $j_m5_tok), so it deleted the passage rather than commenting it out and J5 already owns that case"
@@ -1017,7 +1069,7 @@ else
          print "```"
          print "commit _bmad-output/ai-dlc-update/self-update-gate-<ts>.md"
          print "```" }' "$J_OFF" > "$J_M6"
-  j_mut "J10 fenced block only" "$J_M6" "$J_OFF" "DEFER,UNDECIDED," \
+  j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J10 DEFER,UNDECIDED OK "$J_M6" "$J_OFF" \
     "an instruction present only inside a fenced code block is refused too — the fence strip and the comment strip are separate properties and neither covers the other"
 
   # J11: a NEGATED instruction naming the record. The near-miss that carries every property the
@@ -1028,7 +1080,7 @@ else
        /^     runs and the flag is what tells them apart/ {
          print "     The gate wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on this verdict."
          print "     Do not commit it; the operator disposes of it by hand." }' "$J_OFF" > "$J_M7"
-  j_mut "J11 negated instruction" "$J_M7" "$J_OFF" "DEFER,UNDECIDED," \
+  j_mut "$(( ${B_jprobe:-0} && ${B_jcorp:-0} ))" J11 DEFER,UNDECIDED OK "$J_M7" "$J_OFF" \
     "a region that NAMES the record while forbidding the commit is still unclaimed — the record token alone does not satisfy this arm, and the disclaimer clause the correct fix carries (nothing in reconcile/ stages or commits anything) is excised rather than read as that negation"
 
   # J12 and J13: TWO COMPETENT ALTERNATE PHRASINGS of the same correct fix, each in its own
@@ -1045,15 +1097,15 @@ else
     fi
     j_pg="$(j_flat "$j_p" "$J_GATE")"
     if [ -z "$j_pg" ]; then
-      ok "MUTATION $1 — a competent author's alternate phrasing of the SAME correct fix is ACCEPTED. An arm that rejects a correct fix wedges the work it exists to protect, and its false-REJECT set is the half that goes unmeasured"
+      ok "CONTROL $1 — a competent author's alternate phrasing of the SAME correct fix is ACCEPTED. An arm that rejects a correct fix wedges the work it exists to protect, and its false-REJECT set is the half that goes unmeasured"
     else
       bad "MUTATION $1 was REJECTED: the reader returned '${j_pg}' against a correctly-fixed region written in another wording. That is a false REJECT, and it is the defect filed one row above this one in the same worklist"
     fi
   }
-  j_phrasing "J12 rephrasing (include-in)" \
+  j_phrasing "J12" \
     "     Include \`_bmad-output/ai-dlc-update/self-update-gate-<ts>.md\`, which the gate wrote here," \
     "     in the commit the step-7 gated apply makes."
-  j_phrasing "J13 rephrasing (record-exists)" \
+  j_phrasing "J13" \
     "     A record exists at \`_bmad-output/ai-dlc-update/self-update-gate-<ts>.md\` even on this path," \
     "     and the operating agent commits it with the step-7 gated apply."
 
@@ -1101,7 +1153,10 @@ w_flat() {
     }
     print s }'
 }
-wsig() { # <skill.md> -> seven cells
+wmask() { # <vector> <cells> -> the vector with every cell not named replaced by x
+  printf '%s' "$1" | awk -F- -v c=" $2 " '{ o = ""; for (i = 1; i <= NF; i++) { v = (index(c, " " i " ") ? $i : "x"); o = o (i > 1 ? "-" : "") v } print o }'
+}
+wsig() { # <skill.md> [cells] -> seven cells, x for a cell not asked for
   local t w1=0 w2=0 w3=0 w4=0 w5=0 w6=0 w7=0
   t="$(w_flat "$1")"
   case "$t" in *"A derived fixture is a consumer edit when"*"A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held back as a consumer edit, write NONE of that directory and carry ALL of it"*"DO NOT DERIVE THE VERDICT BY COMPARING REFS"*) w1=1 ;; esac
@@ -1111,7 +1166,7 @@ wsig() { # <skill.md> -> seven cells
   case "$t" in *"THE ORDER IS GATE, THEN WRITE, THEN RUNNER"*) ;; *"THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE"*) w5=1 ;; esac
   case "$t" in *"HARD-STOPS"*) ;; *"a red derived fixture DEFERS the cycle"*) w6=1 ;; esac
   case "$(tr '\n' ' ' < "$1" | tr -s ' \t' '  ')" in *"A FIXTURE DIRECTORY IS ONE UNIT"*) [ "$w1" = 1 ] && w7=1 ;; esac
-  printf '%s-%s-%s-%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4" "$w5" "$w6" "$w7"
+  wmask "$(printf '%s-%s-%s-%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4" "$w5" "$w6" "$w7")" "${2:-1 2 3 4 5 6 7}"
 }
 W_OK="1-1-1-1-1-1-1"
 W_SKILL="$(pick "$HERE/../../skills/ai-dlc-update/SKILL.md" \
@@ -1125,6 +1180,7 @@ else
   w_got="$(wsig "$W_SKILL")"
   if [ "$w_got" = "$W_OK" ]; then
     ok "Parts W1-W7: the shipped SKILL.md carries a fixture directory as one unit inside the fixture-write rule, scopes the gate-set stop to machinery, spells the RED-PUSH paragraph, requires no pre-commit fixture run, orders gate-write-commit-push, and keeps the HARD-STOPS clause out"
+    B_w=1
   elif [ "$W_DIST" = 0 ] && { [ "$w_got" = "1-1-0-0-0-1-1" ] || [ "$w_got" = "0-0-0-0-0-0-0" ]; }; then
     echo "  SKIP  Parts W1-W7 -- the installed SKILL.md predates the gate-write-commit-push order ($w_got); they land with the pull that carries it"
   else
@@ -1132,32 +1188,38 @@ else
   fi
   # MUTANT TWINS: one change per cell on a COPY, and the vector must move in that cell only.
   W_CP="$(mktemp -d)"; sufl_tmp "$W_CP"
-  w_mut() { # <label> <old> <new> <expected>
-    local m="$W_CP/$1.md" got
-    aw_replace_once "$W_SKILL" "$m" "$2" "$3" 2>/dev/null \
-      || { bad "FIXTURE ERROR: W mutant $1 DID NOT APPLY (anchor not exactly once)"; return; }
-    cmp -s "$W_SKILL" "$m" && { bad "FIXTURE ERROR: W mutant $1 produced an identical copy"; return; }
-    got="$(wsig "$m")"
-    if [ "$got" = "$4" ]; then ok "W mutant $1 killed: vector $got"
-    else bad "W mutant $1 scored $got, want $4"; fi
+  w_mut() { # <flag> <name> <old> <new> <expected full vector> <deciding cells> <twin cells>
+    local m="$W_CP/$2.md" got want cells="$6 $7"
+    aw_replace_once "$W_SKILL" "$m" "$3" "$4" 2>/dev/null \
+      || { bad "FIXTURE ERROR: W mutant $2 DID NOT APPLY (anchor not exactly once)"; return; }
+    cmp -s "$W_SKILL" "$m" && { bad "FIXTURE ERROR: W mutant $2 produced an identical copy"; return; }
+    if [ "$MATRIX" = 1 ]; then
+      cells="1 2 3 4 5 6 7"
+      got="$(wsig "$m" "$cells")"; want="$5"
+      mrow "$2" "$(printf '%s' "$got" | awk -F- '{ o = ""; for (i = 1; i <= NF; i++) o = o (i > 1 ? " " : "") "W" i ":" ($i == 1 ? 0 : 1); print o }')"
+    else
+      got="$(wsig "$m" "$cells")"; want="$(wmask "$5" "$cells")"
+    fi
+    if [ "$got" = "$want" ]; then mutant_killed "$1" "$2" "W mutant $2 killed: vector $got"
+    else bad "W mutant $2 scored $got, want $want"; fi
   }
   if [ "$W_DIST" = 1 ] || [ "$w_got" = "$W_OK" ]; then
-    w_mut WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1-1-1-0"
-    w_mut WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1-1-1-1"
-    w_mut WM3 'A RED PUSH LEAVES AN UNPUSHED LOCAL COMMIT, AND THAT IS RECOVERABLE.' 'A RED PUSH IS HANDLED LATER.' "1-1-0-1-1-1-1"
+    w_mut "${B_w:-0}" WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1-1-1-0" "1 7" "2"
+    w_mut "${B_w:-0}" WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1-1-1-1" "2" "1"
+    w_mut "${B_w:-0}" WM3 'A RED PUSH LEAVES AN UNPUSHED LOCAL COMMIT, AND THAT IS RECOVERABLE.' 'A RED PUSH IS HANDLED LATER.' "1-1-0-1-1-1-1" "3" "4"
     # WM4 puts the REQUIRED pre-commit run back beside the sentence that denies it: the absence half
     # must catch it.
-    w_mut WM4 'There is
+    w_mut "${B_w:-0}" WM4 'There is
    no separate covering-fixture run before the commit.' 'There is
-   no separate covering-fixture run before the commit. Run the derived fixtures and require green BEFORE the commit and the push.' "1-1-1-0-1-1-1"
+   no separate covering-fixture run before the commit. Run the derived fixtures and require green BEFORE the commit and the push.' "1-1-1-0-1-1-1" "4" "5"
     # WM5 re-inserts the OLD order beside the new one: the absence half must catch it.
-    w_mut WM5 '   **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.** **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' "1-1-1-1-0-1-1"
-    w_mut WM6 'a red derived fixture DEFERS the' 'a red derived fixture HARD-STOPS the' "1-1-1-1-1-0-1"
+    w_mut "${B_w:-0}" WM5 '   **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.** **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' "1-1-1-1-0-1-1" "5" "4"
+    w_mut "${B_w:-0}" WM6 'a red derived fixture DEFERS the' 'a red derived fixture HARD-STOPS the' "1-1-1-1-1-0-1" "6" "5"
     # WM7 wraps the W1 sentence, in place, in a CLOSED HTML comment: the adversary's stub shape. The
     # phrase is still in the file, so only the comment-stripping read can tell it was never instruction.
-    w_mut WM7 '     **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
+    w_mut "${B_w:-0}" WM7 '     **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
      back as a consumer edit, write NONE of that directory and carry ALL of it**' '     <!-- **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
-     back as a consumer edit, write NONE of that directory and carry ALL of it** -->' "0-1-1-1-1-1-0"
+     back as a consumer edit, write NONE of that directory and carry ALL of it** -->' "0-1-1-1-1-1-0" "1 7" "2"
   fi
 fi
 
@@ -1191,12 +1253,14 @@ bh_run() { # bh_run <checker> [names...] -> "rc=<n> runs=<n>"
 }
 bh_got="$(bh_run "$RUNNER" bh-fx)"
 if [ "$bh_got" = "rc=2 runs=0" ] && grep -qF 'runs NO fixture' "$BH_C.out"; then
+  B_bh=1
   ok "Part BH: handed a fixture name on a consumer whose hook dispatches it to hermetic-run.sh, the checker REFUSES (exit 2) and makes 0 hermetic-run invocations"
 else
   bad "Part BH: handed a fixture name, the checker read '$bh_got', want 'rc=2 runs=0' with its refusal line. The pre-commit covering run BL-713 removed is back"
 fi
 bh_got="$(bh_run "$RUNNER")"
 if [ "$bh_got" = "rc=0 runs=0" ] && grep -qF 'GATE-RECORD: NOT-REQUIRED' "$BH_C.out"; then
+  B_bhctl=1
   ok "Part BH-ctl: the same checker with its four arguments reaches the gate-record verdict (NOT-REQUIRED) and still makes 0 invocations"
 else
   bad "Part BH-ctl: four arguments read '$bh_got', want 'rc=0 runs=0' and a NOT-REQUIRED line"
@@ -1207,8 +1271,12 @@ if aw_replace_once "$RUNNER" "$BH_M/self-update-fixtures.sh" 'if [ "$#" -ne 4 ];
      'if [ "$#" -gt 4 ]; then _bh5="$5"; ( cd "$4" && bash scripts/ai-dlc/hermetic-run.sh --root "$4" "$_bh5" ); set -- "$1" "$2" "$3" "$4"; fi
 if [ "$#" -ne 4 ]; then' 2>/dev/null && ! cmp -s "$RUNNER" "$BH_M/self-update-fixtures.sh"; then
   bh_got="$(bh_run "$BH_M/self-update-fixtures.sh" bh-fx)"
-  if [ "$bh_got" = "rc=0 runs=1" ]; then
-    ok "Part BH-mut killed: a checker that runs the named fixture again counts 1 on the same seed, so the 0 above is the checker and not a blind counter"
+  bh_gotc="$(bh_run "$BH_M/self-update-fixtures.sh")"
+  if [ "$MATRIX" = 1 ]; then
+    mrow BH-mut "BH:$([ "$bh_got" = "rc=2 runs=0" ] && echo 0 || echo 1) BH-ctl:$([ "$bh_gotc" = "rc=0 runs=0" ] && echo 0 || echo 1)"
+  fi
+  if [ "$bh_got" = "rc=0 runs=1" ] && [ "$bh_gotc" = "rc=0 runs=0" ]; then
+    mutant_killed "$(( ${B_bh:-0} && ${B_bhctl:-0} ))" BH-mut "Part BH-mut killed: a checker that runs the named fixture again counts 1 on the same seed, so the 0 above is the checker and not a blind counter"
   else
     bad "Part BH-mut: the fixture-running mutant read '$bh_got', want 'rc=0 runs=1'"
   fi
@@ -1256,6 +1324,11 @@ else
   bad "FIXTURE ERROR: the D9/D12 consumers did not build, so neither slice duty was asserted"
 fi
 
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (0 MATRIX-ROW lines printed)"
+  else bad "a plain run printed $MATRIX_CELLS matrix-only cells"; fi
+elif [ "$MATRIX_CELLS" -gt 0 ]; then ok "the matrix run printed $MATRIX_CELLS mutant rows"
+else bad "the matrix run printed no mutant row"; fi
 echo
 if [ "$fails" -eq 0 ]; then
   echo "self-update-fixture-log: PASS"

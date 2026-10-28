@@ -12,3 +12,6 @@ core/fixtures/gate-verdict-grep-shape/
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 +docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py
 scripts/backlog-receipt-lib.sh
+# The mutation and matrix helpers run.sh sources.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

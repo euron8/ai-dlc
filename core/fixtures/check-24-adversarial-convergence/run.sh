@@ -335,7 +335,6 @@ fi
 # mutant then scores every cell and every receipt world; each row must still equal its want row, which is
 # the proof every twin stayed green. A run WITHOUT --matrix scores no matrix-only cell: arm MX0 counts the
 # cells each mutant skipped and refuses a per-push run that skipped none.
-# MUTANT-MATRIX-BEGIN -- the matrix, measured by the MUTANT-MATRIX-REMEASURE command above: every shard printed
 # `MATRIX MODE: on`, every mutant row equalled its want row, 0 FAIL. A row is `<mutant> decides=<arm>.<cell>
 # twins=<arm>.<cell>`: the arm is the mutant's own `ok` label (slugged: any character outside [A-Za-z0-9_-]
 # becomes `-`), the deciding cells are the cells (1-based in the row) or receipt worlds whose verdict the
@@ -470,7 +469,18 @@ fi
 # MUTANT-MATRIX-CONTROL live-series-control-shipped why=the shipped derivation on the no-decoy world, the baseline both live-series mutants are read against
 # MUTANT-MATRIX-DYNAMIC rcpt_mut why=the receipt battery passes each mutant label and its exact NOT FIXED line as arguments; every label it produces has its own row above
 # MUTANT-MATRIX-DYNAMIC _sp-loop why=the adjudication-unlocked-<spelling> loop passes six spellings as a variable; these are seeded cases, not mutants, so it produces no mutant row
-# MUTANT-MATRIX-END
+# MUTANT-MATRIX MUTATION-seam-constant decides=MUTATION-seam-constant.seam-row twins=MUTATION-seam-constant.full-row
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2 why=the J2 battery's control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-H why=the H battery's control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-K3 why=the K3-widened control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2S why=the J2-per-stem control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-L why=the arm-L control row through the seam must equal the full entry's, two or more distinct verdicts
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J3-receipt why=the unmutated copy through the J3 seam must make the BL-814 receipt say fixed over every world
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-J2T-receipt why=the unmutated copy through the J2 seam must make the BL-736 receipt say fixed over every world
+# MUTANT-MATRIX-CONTROL SEAM-GUARD-LD-receipt why=the unmutated copy through the L seam must make the BL-733 receipt say fixed over every world
+# MUTANT-MATRIX MUTATION-seam-reused-row decides=MUTATION-seam-reused-row.seamed-row twins=MUTATION-seam-reused-row.other-path-row
+# MUTANT-MATRIX MUTATION-arms-guard-removed decides=MUTATION-arms-guard-removed.cell1,MUTATION-arms-guard-removed.cell2,MUTATION-arms-guard-removed.cell3,MUTATION-arms-guard-removed.cell4 twins=MUTATION-arms-guard-removed.cell5
+# MUTANT-MATRIX-CONTROL ARMS-GUARD why=the shipped validator must refuse each malformed --arms value and a second --arms, and run J3 and J2,J3 as a subset at rc 0
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
 else echo "MATRIX MODE: off -- per push, each mutant scores its deciding cells plus one green twin (shard $GROUP)"; fi
@@ -511,6 +521,50 @@ rsel() {
   fi
 }
 MX_ROWS=0; MX_SKIPPED=0
+# THE SEAM (validate-adversarial-convergence.sh --arms). The mutant batteries of units k3, j2h, elic and
+# j3 run each mutant through the seam, which executes only the named gate-only arms of the SAME file the
+# mutant edits, so a mutant can never read an unmutated answer. Per-case cells, the shipped validator and
+# every receipt's shipped/control run stay on the FULL entry: those are the end-to-end runs. seam_guard
+# proves, per seamed arm set, that the seam's control row equals the full entry's row over the same worlds.
+SEAM_ARMS=""
+row_prov() { # <script> -> "<SEAM_ARMS in force>|<script>|<sha256 of its bytes>": how a row computed NOW is being asked
+  printf '%s|%s|%s' "${SEAM_ARMS:-}" "$1" "$(shasum -a 256 < "$1" | cut -d' ' -f1)"
+}
+# seam_guard_eval <arm set> <row fn> <script> [<full row> <that row's row_prov>] -> SG_VERDICT ok|differ|refused, SG_MSG, SG_SROW.
+# With a precomputed full row the guard REUSES it instead of running the full entry again, and only when the row was
+# computed with no --arms, at this script's path, over these bytes. Anything else is refused BEFORE the seam runs:
+# a guard must never compare the seam against a row that was itself seamed.
+seam_guard_eval() {
+  local srow frow nd src="full side run"
+  SG_VERDICT=""; SG_MSG=""; SG_SROW=""
+  if [ $# -ge 5 ]; then
+    if [ "$5" != "|$3|$(shasum -a 256 < "$3" | cut -d' ' -f1)" ]; then
+      SG_VERDICT=refused
+      SG_MSG="FIXTURE BROKEN -- the reused full row was computed as [$5], want [|$3|<sha256 of $3>] (no --arms, this path, these bytes)"
+      return 0
+    fi
+    frow="$4"; src="full side reused from its baseline"
+  else
+    frow="$(SEAM_ARMS=""; "$2" "$3")"
+  fi
+  srow="$(SEAM_ARMS="$1"; "$2" "$3")"; SG_SROW="$srow"
+  nd="$(printf '%s\n' $srow | sort -u | grep -c .)" || nd=0
+  if [ -n "$srow" ] && [ "$srow" = "$frow" ] && [ "$nd" -ge 2 ]; then
+    SG_VERDICT=ok; SG_MSG="seam --arms $1 [$srow] = full entry ($src)"
+  else
+    SG_VERDICT=differ; SG_MSG="seam --arms $1 [$srow], full entry [$frow], $nd distinct verdicts (want equal, >= 2)"
+  fi
+}
+seam_guard() { # <label> <arm set> <row fn> <script> [<full row> <its row_prov>]
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ $# -ge 6 ]; then seam_guard_eval "$2" "$3" "$4" "$5" "$6"; else seam_guard_eval "$2" "$3" "$4"; fi
+  if [ "$SG_VERDICT" = ok ]; then
+    printf '  ok    %-28s %s\n' "$1" "$SG_MSG"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s\n' "$1" "$SG_MSG"
+  fi
+}
 # MX0, read once at the end of the shard: a per-push run must have SKIPPED matrix-only cells (else the
 # subset never applied and the cut is fiction), and a --matrix run must have skipped NONE.
 mx_arm() {
@@ -540,13 +594,19 @@ rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1> [<the exact NOT FIXE
     case " $worlds " in *" $RM_TWIN "*) broken "$1: the twin $RM_TWIN is one of its own deciding worlds" ;; esac
     worlds="${worlds# } $RM_TWIN"
   fi
+  local arms=""
+  if [ -n "${RM_TWIN:-}" ] || [ "${RCPT_SEAM:-}" = 1 ]; then
+    case "${2##*/}" in receipt-bl814.sh) arms=J3 ;; receipt-bl736.sh) arms=J2 ;; receipt-bl733.sh) arms=L ;; *) broken "$1: no seam arm for ${2##*/}" ;; esac
+  fi
   ASSERTIONS=$((ASSERTIONS + 1))
   out="$(TMPDIR="$ROOT" RCPT_WORLD_DIR="$RCPT_WD/${2##*/}" RCPT_WORLDS="$worlds" RCPT_REPORT="$([ "$MATRIX" = 1 ] && echo 1)" \
-         bash "$2" "$3" 2>&1)"; rc=$?
+         RCPT_ARMS="$arms" bash "$2" "$3" 2>&1)"; rc=$?
   [ "$MATRIX" != 1 ] || printf '  matrix %-27s %s\n' "$1" "$(grep -m1 '^receipt worlds judged:' <<<"$out")"
   [ -z "$worlds" ] || printf '  per-push %-25s judged {%s} (deciding + twin %s)\n' "$1" "$worlds" "$RM_TWIN"
   if [ "$rc" -eq "$4" ] && { if [ -n "${5:-}" ]; then grep -qxF -- "$want_say" <<<"$out"; else grep -qF -- "$want_say" <<<"$out" && ! grep -q '^receipt: ' <<<"$out"; fi; }; then
-    printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1 | cut -c1-110)"
+    # --matrix prints the receipt's whole verdict line, so every deciding world is in the log by name.
+    if [ "$MATRIX" = 1 ]; then printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1)"
+    else printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1 | cut -c1-110)"; fi
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s exit=%s want=%s (%s)\n' "$1" "$rc" "$4" "$want_say"
@@ -2439,6 +2499,63 @@ else
   printf '  FAIL  %-28s exit=%s -- a --series over an empty sprint dir must exit 1 naming the empty match\n' "drift-empty-sprint" "$es_rc"
 fi
 
+# --- ARMS-GUARD: an --arms value that is not a clean comma list is refused, never a silent subset ----------
+# The seam once split the value with an unquoted word split, so " J3", "J2, J3", "," and a glob like 'J?'
+# (with a file named J3 in the cwd) selected fewer arms than named, or none, and exited 0 with PASS.
+# Presence-shaped both ways: each bad value must exit 1 AND print its refusal; J3 and J2,J3 on a world whose
+# full verdict is 0 must exit 0 AND print the SUBSET RUN line on stderr. A second --arms is refused too.
+# MUTANT arms-guard-removed: the shape guard deleted in a copy; the bad-value cells must then fail.
+ag_cell() { # <validator> <cwd> <args...> -> "<rc>|<refusal or SUBSET or none>"
+  local v="$1" cwd="$2" err rc; shift 2
+  err="$( cd "$cwd" && bash "$v" --series "$ROOT/drift-repair-linked/$J2P" --transcript-dir "$ROOT" "$@" 2>&1 >/dev/null )"; rc=$?
+  case "$err" in
+    *"is not a comma list of K,K2,K3,L,H,J2,J3"*) printf '%s|shape' "$rc" ;;
+    *"--arms needs a list of"*)                   printf '%s|empty' "$rc" ;;
+    *"--arms given twice"*)                       printf '%s|twice' "$rc" ;;
+    *"SUBSET RUN (--arms "*"not a gate verdict"*) printf '%s|subset' "$rc" ;;
+    *)                                            printf '%s|none' "$rc" ;;
+  esac
+}
+AG_CWD="$(mktemp -d "$ROOT/arms-guard-cwd.XXXXXX")" || broken "cannot create the arms-guard cwd under $ROOT"
+: > "$AG_CWD/J3"
+ag_row() { # <validator> -> the eight cells, space separated
+  printf '%s %s %s %s %s %s %s %s' "$(ag_cell "$1" "$ROOT" --arms ' J3')" "$(ag_cell "$1" "$ROOT" --arms 'J2, J3')" \
+    "$(ag_cell "$1" "$ROOT" --arms ',')" "$(ag_cell "$1" "$AG_CWD" --arms 'J?')" "$(ag_cell "$1" "$ROOT" --arms '')" \
+    "$(ag_cell "$1" "$ROOT" --arms J2 --arms J3)" "$(ag_cell "$1" "$ROOT" --arms J3)" "$(ag_cell "$1" "$ROOT" --arms J2,J3)"
+}
+AG_WANT="1|shape 1|shape 1|shape 1|shape 1|empty 1|twice 0|subset 0|subset"
+ASSERTIONS=$((ASSERTIONS + 1))
+ag_got="$(ag_row "$VALIDATOR")"
+if [ "$ag_got" = "$AG_WANT" ]; then
+  printf '  ok    %-28s [%s]\n' "ARMS-GUARD" "$ag_got"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s got [%s] want [%s]\n' "ARMS-GUARD" "$ag_got" "$AG_WANT"
+fi
+AG_DIR="$(mktemp -d "$ROOT/arms-guard-mut.XXXXXX")" || broken "cannot create the arms-guard mutant dir under $ROOT"
+for s in $RCPT_SIBS; do cp "$(dirname "$VALIDATOR")/$s" "$AG_DIR/" 2>/dev/null; done
+AG_MUT="$AG_DIR/validate-adversarial-convergence.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ ! -f "$AG_DIR/partition-document.sh" ] || ! python3 - "$VALIDATOR" "$AG_MUT" <<'PY' || cmp -s "$VALIDATOR" "$AG_MUT" || ! bash -n "$AG_MUT" 2>/dev/null
+import sys
+s = open(sys.argv[1]).read()
+a = '      case "$AC_ARMS" in *[!A-Z0-9,]*|,*|*,|*,,*) echo "--arms: \'$AC_ARMS\' is not a comma list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac\n'
+if s.count(a) != 1: sys.exit(1)
+open(sys.argv[2], "w").write(s.replace(a, ""))
+PY
+then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s the shape-guard anchor is not in the validator exactly once -- FIXTURE STALE\n' "MUTATION arms-guard-removed"
+else
+  ag_mut="$(ag_row "$AG_MUT")"
+  # Deciding cells 1-4 must leave the refusal; the twins (cells 5-8) must keep theirs.
+  set -f; ag_m=($ag_mut); ag_w=($AG_WANT); set +f
+  if [ "${ag_m[0]}${ag_m[1]}${ag_m[2]}${ag_m[3]}" != "1|shape1|shape1|shape1|shape" ] && [ "${ag_m[0]%|*}" = 0 ] \
+     && [ "${ag_m[4]} ${ag_m[5]} ${ag_m[6]} ${ag_m[7]}" = "${ag_w[4]} ${ag_w[5]} ${ag_w[6]} ${ag_w[7]}" ]; then
+    printf '  ok    %-28s ARMS-GUARD fails on it: [%s]\n' "MUTATION arms-guard-removed" "$ag_mut"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s [%s] -- ARMS-GUARD would pass without the shape guard\n' "MUTATION arms-guard-removed" "$ag_mut"
+  fi
+fi
+
 # --- MUTATION: J2's walk, fork check, subject, stamp rebinding; J's door ------------------
 #                         unrec  pre      linked  chain2  fork   cumul   reopen-ver
 #   shipped               FAIL   PENDING  SILENT  SILENT  FAIL   SILENT  SILENT
@@ -2454,19 +2571,21 @@ cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$J2_MUT/validate-steer
 cp "$(dirname "$VALIDATOR")/partition-document.sh" "$J2_MUT/partition-document.sh"
 j2_cell() {  # $1 script  $2 case -> FAIL | PENDING | SILENT
   local out
-  out="$(bash "$1" --series "$ROOT/$2/$J2P" --transcript-dir "$ROOT" 2>&1)"
+  out="$(bash "$1" --series "$ROOT/$2/$J2P" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} 2>&1)"
   case "$out" in
     *"FAIL (J2 -- DRIFT)"*)    printf 'FAIL\n' ;;
     *"PENDING (J2 -- DRIFT)"*) printf 'PENDING\n' ;;
     *)                         printf 'SILENT\n' ;;
   esac
 }
+j2_row() { local c r=""; for c in $J2_CASES; do r="$r $(j2_cell "$1" "$c")"; done; echo $r; }
 j2_score() {  # $1 label  $2 script  $3 expected row
   local got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
   local i=0 wm; rsel "$3" "$J2_REAL"; wm="$(rmask "$3")"
   for c in $J2_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(j2_cell "$2" "$c")"; else got="$got ."; fi; done
   RSEL=""
+  J2_SCORE_ROW="$(echo $got)"; J2_SCORE_PROV="$(row_prov "$2")"
   if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
@@ -2476,6 +2595,23 @@ j2_score() {  # $1 label  $2 script  $3 expected row
 }
 cp "$VALIDATOR" "$J2_MUT/control.sh"
 j2_score "CONTROL j2 copy" "$J2_MUT/control.sh" "$J2_REAL"
+J2_CTL_ROW="$J2_SCORE_ROW"; J2_CTL_PROV="$J2_SCORE_PROV"
+# The j2 battery's mutants run in this directory, which has no merge beside them, so the guard reads
+# the same copy they do. Its full side is the control row just scored, at this path with no --arms.
+seam_guard "SEAM-GUARD J2" J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$J2_CTL_PROV"
+# MUTANT seam-reused-row: the guard is handed a SEAMED row as its full side. The row is the seam's own answer
+# (so it EQUALS the real full row and a bare comparison would pass) with the provenance of how it was made.
+# The reuse assertion alone must refuse it, before the seam runs -- and must also refuse the right row at
+# another path. The unseamed control row was accepted just above, by the guard itself.
+ASSERTIONS=$((ASSERTIONS + 1))
+sr_prov="$(SEAM_ARMS=J2; row_prov "$J2_MUT/control.sh")"
+seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$SG_SROW" "$sr_prov"; sr_seamed="$SG_VERDICT"
+seam_guard_eval J2 j2_row "$J2_MUT/control.sh" "$J2_CTL_ROW" "$(row_prov "$VALIDATOR")"; sr_path="$SG_VERDICT"
+if [ "$sr_seamed" = refused ] && [ "$sr_path" = refused ] && [ -n "$J2_CTL_ROW" ] && [ "$J2_CTL_PROV" = "|$J2_MUT/control.sh|$(shasum -a 256 < "$J2_MUT/control.sh" | cut -d' ' -f1)" ]; then
+  printf '  ok    %-28s the reuse assertion refuses a seamed row [%s] and a row from another path\n' "MUTATION seam-reused-row" "$sr_prov"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s seamed row: %s, other path: %s, control prov [%s] -- the guard would compare against a seamed row\n' "MUTATION seam-reused-row" "$sr_seamed" "$sr_path" "$J2_CTL_PROV"
+fi
 
 # $1 label  $2 expected row  $3.. old/new pairs, EACH anchor exactly once in the validator.
 # Every layer of a layered subject is reverted. The fork mutant removes the fork verdict AND the
@@ -2495,7 +2631,7 @@ open(sys.argv[2], "w").write(s)
 PY
 }
 j2_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
-  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; shift 2
+  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; local SEAM_ARMS="J2"; shift 2
   if ! j2_mut_build "$mut" "$@" || cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
     ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s an anchor is not unique, the mutation DID NOT APPLY, or the mutant is not valid shell\n' "MUTATION $label"
@@ -2503,6 +2639,21 @@ j2_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
   fi
   j2_score "MUTATION $label" "$mut" "$want"
 }
+# MUTANT seam-constant: the seam answers a CONSTANT -- with --arms set, no arm runs at all; the full entry is
+# untouched. SEAM-GUARD's own comparison is run on that copy and must REFUSE it (seam row != full row).
+SC_MUT="$J2_MUT/mutant-seam-constant.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if ! j2_mut_build "$SC_MUT" 'case ",$AC_ARMS," in *",$1,"*) return 0 ;; esac; return 1; }' 'return 1; }' \
+   || cmp -s "$VALIDATOR" "$SC_MUT" || ! bash -n "$SC_MUT" 2>/dev/null; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s the seam anchor is not in the validator exactly once -- FIXTURE STALE\n' "MUTATION seam-constant"
+else
+  sc_s="$(SEAM_ARMS=J2; j2_row "$SC_MUT")"; sc_f="$(SEAM_ARMS=""; j2_row "$SC_MUT")"
+  if [ "$sc_f" = "$(echo $J2_REAL)" ] && [ "$sc_s" != "$sc_f" ]; then
+    printf '  ok    %-28s SEAM-GUARD refuses it: seam [%s] != full [%s]\n' "MUTATION seam-constant" "$sc_s" "$sc_f"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s seam [%s] full [%s] -- the guard would pass a constant seam\n' "MUTATION seam-constant" "$sc_s" "$sc_f"
+  fi
+fi
 j2_mutate j2-chain-walk "FAIL PENDING FAIL FAIL FAIL SILENT SILENT" \
   '      j2_walk "$j2_sha" "$j2_disk" "$AC_T/j2-links"' '      J2_END=incomplete'
 j2_mutate j2-fork-check "FAIL PENDING SILENT SILENT SILENT SILENT SILENT" \
@@ -2528,6 +2679,7 @@ R736="$DIR/receipt-bl736.sh"
 [ -f "$R736" ] || broken "receipt-bl736.sh is not beside run.sh"
 rcpt_cell "J2T shipped validator"     "$R736" "$VALIDATOR" 0
 rcpt_mut  "J2T0 control (unmutated)"  "$R736" 0
+RCPT_SEAM=1 rcpt_mut "SEAM-GUARD J2T receipt" "$R736" 0
 RM_TWIN=reword rcpt_mut  "J2T1 whole-file id scan"   "$R736" "1|receipt BL-736: NOT FIXED -- split(rc=1) merge(rc=0) norows(rc=1)" \
   $'  awk \'/^\\|[ \\t]*ST[0-9]+-[^|]*\\|[ \\t]*[0-9]+\\.[0-9]+[a-z]?[ \\t]*\\|/ {\n         v = $0; sub(/^\\|[^|]*\\|[ \\t]*/, "", v); sub(/[ \\t]*\\|.*$/, "", v); print v }\' "$1" | sort -u' \
   $'  grep -oE \'[0-9]+\\.[0-9]+[a-z]?\' "$1" | sort -u' \
@@ -2668,7 +2820,7 @@ else
 fi
 h_cell() {  # $1 script  $2 world -> <class>/<exit>
   local out rc v
-  out="$(bash "$1" --series "$HW/$2/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
+  out="$(bash "$1" --series "$HW/$2/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} 2>&1)"; rc=$?
   case "$out" in
     *"The only structured record for pass"*)  v=FOREIGN ;;
     *"PENDING (H -- REPAIR-RECORD)"*)         v=PENDING ;;
@@ -2679,12 +2831,14 @@ h_cell() {  # $1 script  $2 world -> <class>/<exit>
   esac
   printf '%s/%s\n' "$v" "$rc"
 }
+h_row() { local w r=""; for w in $H_WORLDS; do r="$r $(h_cell "$1" "$w")"; done; echo $r; }
 h_score() {  # $1 label  $2 script  $3 expected row
   local got="" w
   ASSERTIONS=$((ASSERTIONS + 1))
   local i=0 wm; rsel "$3" "$H_REAL"; wm="$(rmask "$3")"
   for w in $H_WORLDS; do i=$((i + 1)); if ron "$i"; then got="$got $(h_cell "$2" "$w")"; else got="$got ."; fi; done
   RSEL=""
+  H_SCORE_ROW="$(echo $got)"; H_SCORE_PROV="$(row_prov "$2")"
   if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
@@ -2696,6 +2850,8 @@ h_score "H series-named record" "$VALIDATOR" "$H_REAL"
 # The unmutated copy in the mutant directory, siblings beside it. SILENT is a positive cell: it
 # requires the validator's own header line, so a copy that never ran reads NORUN, not SILENT.
 h_score "CONTROL h copy" "$J2_MUT/control.sh" "$H_REAL"
+# Its full side is the control row just scored, at this path with no --arms.
+seam_guard "SEAM-GUARD H" H h_row "$J2_MUT/control.sh" "$H_SCORE_ROW" "$H_SCORE_PROV"
 expect_says_h() {  # $1 world  $2 label  $3... required substrings
   local w="$1" label="$2" out missing="" want; shift 2
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -2725,7 +2881,7 @@ expect_silent_h lane-post "rename it to the owed path" misnamed-post
 expect_says_h foreign-pre  "H-foreign-legacy" "is satisfied only by arch-repair-p1.md, not by" "prd-repair-p1.md" "Legacy series."
 expect_says_h pred-stamp   "H-foreign-not-owed" "at ${H_REL} or later -- not owed yet."
 h_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
-  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; shift 2
+  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; local SEAM_ARMS="H"; shift 2
   if ! j2_mut_build "$mut" "$@" || cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
     ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s an anchor is not unique, the mutation DID NOT APPLY, or the mutant is not valid shell\n' "MUTATION $label"
@@ -2773,6 +2929,7 @@ R814="$DIR/receipt-bl814.sh"
 J3NF="receipt BL-814: NOT FIXED --"
 rcpt_cell "J3 shipped validator"     "$R814" "$VALIDATOR" 0
 rcpt_mut  "J3-0 control (unmutated)" "$R814" 0
+RCPT_SEAM=1 rcpt_mut "SEAM-GUARD J3 receipt" "$R814" 0
 RM_TWIN=undeferred rcpt_mut  "J3-1 keyed on blocking"   "$R814" "1|$J3NF underonly(rc=0)" \
   '  && [ "${LAST_MAJOR:-0}" -gt 0 ] 2>/dev/null && J3_OPEN=1' \
   '  && [ "$(( ${LAST_MAJOR:-0} - $(block_field "$LAST_FILE" findings_major_underived | tr -cd 0-9) ))" -gt 0 ] 2>/dev/null && J3_OPEN=1'
@@ -2797,7 +2954,7 @@ RM_TWIN=ptxt rcpt_mut  "J3-7 dispatch widened, digits guard gone" "$R814" "1|$J3
   '    case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;' '    J3_ARM=1 ;;'
 RM_TWIN=subok rcpt_mut  "J3-8 successor substring" "$R814" "1|$J3NF substr(rc=0)" \
   '          if ((p == 1 || pre !~ pc) && (post == "" || post !~ nc)) { hit = 1; break }' '          if (1) { hit = 1; break }'
-RM_TWIN=repaired rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=1)" \
+RM_TWIN=repaired rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=0)" \
   '      $1 == "T" && $3 != $4 { m = split' '      $1 == "T" { m = split'
 RM_TWIN=unlinked rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink(rc=0) seriallink(rc=0)" \
   '      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }'"'" \
@@ -3004,7 +3161,7 @@ k3_other_pass() {
 }
 K3_OUT="$K3W/out"
 k3_run() { # <validator> <world> -> K3_RC, $K3_OUT
-  bash "$1" --series "$2/$K3PA/s9/requirements-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
+  bash "$1" --series "$2/$K3PA/s9/requirements-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} > "$K3_OUT" 2>&1; K3_RC=$?
 }
 k3_cell() { # <label> <validator> <world> <want rc> <must-say | -> <must-not-say | ->
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -3203,7 +3360,7 @@ else
   k3_mut_row() { # <validator> -> "<subject> <document> <wrongset> <pre>" rc's (`.` for a cell RSEL skips)
     local r="" c i=0; for c in k3-subject k3-document k3-wrongset k3-pre; do i=$((i + 1)); if ron "$i"; then k3_run "$1" "$K3W/$c"; r="$r $K3_RC"; else r="$r ."; fi; done; printf '%s' "${r# }"; }
   k3_mut() { # <label> <expected row> <old> <new>
-    local d; d="$(mktemp -d "$K3W/mut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
+    local d; local SEAM_ARMS="K3"; d="$(mktemp -d "$K3W/mut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
     ASSERTIONS=$((ASSERTIONS + 1))
     if [ -n "$3" ]; then
       M_OLD="$3" M_NEW="$4" python3 - "$d/validate-adversarial-convergence.sh" <<'PY' || { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- anchor not unique\n' "$1"; return; }
@@ -3237,6 +3394,22 @@ else
   # --- K3 widened, J2 per stem: the cells ---------------------------------------------------
   # k3w_run <validator> <world> <series stem> -- the series is named by its own stem, as the
   # post-planning sweep names every `*-adversarial-p*` series in the sprint.
+  # k3w_classify <arm token> -> FAIL | PENDING | SILENT, read off the output file the last run wrote (K3_OUT).
+  k3w_classify() {
+    if grep -qF "FAIL ($1" "$K3_OUT"; then printf 'FAIL'
+    elif grep -qF "PENDING ($1" "$K3_OUT"; then printf 'PENDING'
+    else printf 'SILENT'; fi
+  }
+  # k3w_base <slot> <arm token> <k3w_cell args...> -- a baseline cell that ALSO records its guard class and the
+  # provenance of the run that produced it. The cell runs the full entry (no --arms), so the recorded class is
+  # exactly what k3w_class would compute for the same series with SEAM_ARMS unset; the guards reuse it instead
+  # of running that world a second time.
+  k3w_base() {
+    local slot="$1" tok="$2"; shift 2
+    k3w_cell "$@"
+    printf -v "KBC_$slot" '%s' "$(k3w_classify "$tok")"
+    printf -v "KBP_$slot" '%s' "$(row_prov "$2")"
+  }
   k3w_cell() { # <label> <validator> <world> <stem> <want rc> <must-say | -> <must-not-say | ->
     ASSERTIONS=$((ASSERTIONS + 1))
     bash "$2" --series "$3/$K3PA/s9/$4-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
@@ -3248,32 +3421,30 @@ else
       sed 's/^/          | /' "$K3_OUT"
     fi
   }
-  k3w_cell k3w-post  "$VALIDATOR" "$K3W/k3w-post"  prd 1 "FAIL (K3 -- SUBJECT): prd-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
-  k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
-  k3w_cell k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
-  k3w_cell k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
+  k3w_base k3_post 'K3 -- SUBJECT' k3w-post  "$VALIDATOR" "$K3W/k3w-post"  prd 1 "FAIL (K3 -- SUBJECT): prd-adversarial-p1.md: it reviews" -
+  k3w_base k3_brief 'K3 -- SUBJECT' k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
+  k3w_base k3_arch 'K3 -- SUBJECT' k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
+  k3w_base k3_pre 'K3 -- SUBJECT' k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
+  k3w_base k3_pred 'K3 -- SUBJECT' k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
+  k3w_base k3_nomf 'K3 -- SUBJECT' k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
+  k3w_base k3_other 'K3 -- SUBJECT' k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
   k3w_cell k3w-subj  "$VALIDATOR" "$K3W/k3w-subj"  prd 0 "at ${K3W_B} or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-subj-b "$VALIDATOR" "$K3W/k3w-subj" prd 0 "is not the subject map's ordinals plus cross groups" "FAIL (K3"
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
-  k3w_cell j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
+  k3w_base j2_nochain 'J2 -- DRIFT' j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
   k3w_cell j2s-nochain-j2 "$VALIDATOR" "$K3W/j2s-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"
-  k3w_cell j2s-chain    "$VALIDATOR" "$K3W/j2s-chain"    requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-subjlink "$VALIDATOR" "$K3W/j2s-subjlink" requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-pre      "$VALIDATOR" "$K3W/j2s-pre"      requirements 0 "architecture-impact (_bmad-output/planning-artifacts/s9/architecture-impact.md): notarized" "FAIL (J2"
+  k3w_base j2_chain 'J2 -- DRIFT' j2s-chain    "$VALIDATOR" "$K3W/j2s-chain"    requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_subjlink 'J2 -- DRIFT' j2s-subjlink "$VALIDATOR" "$K3W/j2s-subjlink" requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_prd 'J2 -- DRIFT' j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_pre 'J2 -- DRIFT' j2s-pre      "$VALIDATOR" "$K3W/j2s-pre"      requirements 0 "architecture-impact (_bmad-output/planning-artifacts/s9/architecture-impact.md): notarized" "FAIL (J2"
   k3w_cell j2s-pre-legacy "$VALIDATOR" "$K3W/j2s-pre"    requirements 0 "Legacy series." "FAIL ("
-  k3w_cell j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.738.0 or later -- not owed yet." "FAIL (J2"
+  k3w_base j2_pred 'J2 -- DRIFT' j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.738.0 or later -- not owed yet." "FAIL (J2"
 
   # --- the mutants: one row per battery, each cell FAIL | PENDING | SILENT, a copy of the validator's
   # directory (partition-subject.sh beside it, or K3 itself reads no map), an unmutated control first.
   k3w_class() { # <validator> <world> <stem> <arm token> -> FAIL | PENDING | SILENT
-    bash "$1" --series "$K3W/$2/$K3PA/s9/$3-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1
-    if grep -qF "FAIL ($4" "$K3_OUT"; then printf 'FAIL'
-    elif grep -qF "PENDING ($4" "$K3_OUT"; then printf 'PENDING'
-    else printf 'SILENT'; fi
+    bash "$1" --series "$K3W/$2/$K3PA/s9/$3-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} > "$K3_OUT" 2>&1
+    k3w_classify "$4"
   }
   rcell() { local i="$1"; shift; if ron "$i"; then "$@"; else printf '.'; fi; }
   k3w_row() { # <validator> -> the seven K3-widened cells
@@ -3290,7 +3461,7 @@ else
     printf '%s' "${r# }"
   }
   rowmut() { # <label> <row fn> <expected row> [<old> <new>]...
-    local label="$1" fn="$2" want="$3" d got; shift 3
+    local label="$1" fn="$2" want="$3" d got; local SEAM_ARMS="K3,J2"; shift 3
     d="$(mktemp -d "$K3W/rowmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"; ROWMUT_D="$d"
     ASSERTIONS=$((ASSERTIONS + 1))
     if [ ! -f "$d/partition-subject.sh" ]; then
@@ -3320,6 +3491,25 @@ PY
   #                       post    pre     pred    nomf   other  brief  arch
   K3W_REAL="FAIL PENDING PENDING SILENT SILENT FAIL FAIL"
   rowmut "K3WX0 control (unmutated)" k3w_row "$K3W_REAL"
+  # The guards compare the seam against the BASELINE cells' own class row (full entry, no --arms, $VALIDATOR),
+  # not against a second full run and not against the rowmut control's copy (which only happened to be byte-equal).
+  KBR_K3="$KBC_k3_post $KBC_k3_pre $KBC_k3_pred $KBC_k3_nomf $KBC_k3_other $KBC_k3_brief $KBC_k3_arch"
+  KBR_K3_PROV="$KBP_k3_post"
+  for kbp in "$KBP_k3_pre" "$KBP_k3_pred" "$KBP_k3_nomf" "$KBP_k3_other" "$KBP_k3_brief" "$KBP_k3_arch"; do
+    [ "$kbp" = "$KBR_K3_PROV" ] || KBR_K3_PROV="mixed baseline provenance [$kbp] vs [$KBR_K3_PROV]"
+  done
+  seam_guard "SEAM-GUARD K3" "K3,J2" k3w_row "$VALIDATOR" "$KBR_K3" "$KBR_K3_PROV"
+  # MUTANT: the same guard handed a baseline row that was itself computed WITH --arms K3,J2. The reuse assertion
+  # must REFUSE it before the seam runs (a seamed row on both sides would agree whatever the seam dropped).
+  ASSERTIONS=$((ASSERTIONS + 1))
+  kb_row="$(SEAM_ARMS="K3,J2"; k3w_row "$VALIDATOR")"; kb_prov="$(SEAM_ARMS="K3,J2"; row_prov "$VALIDATOR")"
+  seam_guard_eval "K3,J2" k3w_row "$VALIDATOR" "$kb_row" "$kb_prov"
+  if [ "$SG_VERDICT" = refused ] && [ "$kb_prov" != "$KBR_K3_PROV" ]; then
+    printf '  ok    %-28s reuse refuses a baseline row computed with --arms K3,J2 (%s)\n' "SEAM-GUARD K3 seamed-baseline" "${kb_prov%%|*}"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s want refused, got %s [%s]\n' "SEAM-GUARD K3 seamed-baseline" "$SG_VERDICT" "$SG_MSG"
+  fi
   # The widened case arm matching nothing: every widened series escapes K3 by its name again.
   rowmut "K3WX1 widened case arm gone" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \
     '  *-adversarial-p[0-9]*.md)' '  *-adversarial-pNEVER.md)'
@@ -3362,6 +3552,12 @@ PY
   #                       nochain chain   subjlink prd    pre     pred
   J2S_REAL="FAIL SILENT SILENT SILENT PENDING PENDING"
   rowmut "J2SX0 control (unmutated)" j2s_row "$J2S_REAL"
+  KBR_J2="$KBC_j2_nochain $KBC_j2_chain $KBC_j2_subjlink $KBC_j2_prd $KBC_j2_pre $KBC_j2_pred"
+  KBR_J2_PROV="$KBP_j2_nochain"
+  for kbp in "$KBP_j2_chain" "$KBP_j2_subjlink" "$KBP_j2_prd" "$KBP_j2_pre" "$KBP_j2_pred"; do
+    [ "$kbp" = "$KBR_J2_PROV" ] || KBR_J2_PROV="mixed baseline provenance [$kbp] vs [$KBR_J2_PROV]"
+  done
+  seam_guard "SEAM-GUARD J2S" "K3,J2" j2s_row "$VALIDATOR" "$KBR_J2" "$KBR_J2_PROV"
   # The per-stem branch gone: the subject manifest's terminal pass is judged by nothing (BL-460).
   rowmut "J2SX1 per-stem branch gone" j2s_row "SILENT SILENT SILENT SILENT SILENT SILENT" \
     '  elif [ -n "$j2_file" ] && [ "${j2_file##*/}" = "requirements-subject.md" ]; then' '  elif false; then'
@@ -3473,7 +3669,7 @@ else
   # k3c_mut <label> <expected row> [<old> <new>]... -- a copy of the scripts dir with the edits applied
   # to the validator, and the SAME copy dropped over k3c-pinold's working validator (its pin is git).
   k3c_mut() {
-    local label="$1" want="$2" d got pv; shift 2
+    local label="$1" want="$2" d got pv; local SEAM_ARMS="K3"; shift 2
     d="$(mktemp -d "$K3W/k3cmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
     ASSERTIONS=$((ASSERTIONS + 1))
     if [ $# -gt 0 ]; then
@@ -3574,7 +3770,7 @@ else
     printf '%s %s %s %s' "$(rcell 1 k3c_class "$1" k3d-lone)" "$(rcell 2 k3c_class "$1" k3d-lonepred)" "$(rcell 3 k3c_class "$1" k3d-lonepre)" "$(rcell 4 k3c_class "$1" k3-subject)"
   }
   k3d_mut() { # <label> <expected row> [<old> <new>]...
-    local label="$1" want="$2" d got; shift 2
+    local label="$1" want="$2" d got; local SEAM_ARMS="K3"; shift 2
     d="$(mktemp -d "$K3W/k3dmut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
     ASSERTIONS=$((ASSERTIONS + 1))
     if [ $# -gt 0 ]; then
@@ -3841,7 +4037,7 @@ fi
 L_OUT="$LW/out"
 l_run() { # <validator> <world> -> L_RC, $L_OUT. The ceiling keeps git from answering for an ancestor.
   GIT_CEILING_DIRECTORIES="$LWP" bash "$1" --series "$LW/$2/s9/stories-adversarial-p" \
-    --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$L_OUT" 2>&1; L_RC=$?
+    --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} > "$L_OUT" 2>&1; L_RC=$?
 }
 l_cell() { # <world> <want rc> <must-not-say | -> <must-say>...
   local w="$1" want="$2" not="$3" s miss=""; shift 3
@@ -3926,7 +4122,7 @@ else
     else printf 'SILENT'; fi
   }
   l_mut() { # <label> <expected row: pass legacy moved under grow replace eqshort match foreign> [<old> <new>]...
-    local label="$1" want="$2" d got c; shift 2
+    local label="$1" want="$2" d got c; local SEAM_ARMS="L"; shift 2
     d="$(mktemp -d "$LW/mut.XXXXXX")"
     cp "$LS/validate-adversarial-convergence.sh" "$LS/validate-steering-budget.sh" "$LS/partition-document.sh" \
        "$LS/partition-subject.sh" "$LS/merge-adversarial-shards.sh" "$d/" 2>/dev/null
@@ -3958,6 +4154,8 @@ PY
   L_REAL="OK OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
   #                                       pass legacy moved   under  grow replace eqshort match foreign
   l_mut "LX0 control (unmutated)"        "OK OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
+  l_row() { local c r=""; for c in $L_MW; do r="$r $(l_class "$1" "$c")"; done; echo $r; }
+  seam_guard "SEAM-GUARD L" L l_row "$LS/validate-adversarial-convergence.sh"
   # The staging symlink pointed at an empty dir: --map reads no stories and every judged world stops
   # judging. The end-to-end FAIL depends on the staged map, not on a listing of the shard dir.
   l_mut "LX1 --map staged on nothing"    "PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING PENDING" \
@@ -4029,6 +4227,7 @@ R733="$DIR/receipt-bl733.sh"
 [ -f "$R733" ] || broken "receipt-bl733.sh is not beside run.sh"
 rcpt_cell "LD shipped validator"      "$R733" "$VALIDATOR" 0
 rcpt_mut  "LD0 control (unmutated)"   "$R733" 0
+RCPT_SEAM=1 rcpt_mut "SEAM-GUARD LD receipt" "$R733" 0
 RM_TWIN=full rcpt_mut  "LD1 owed groups by index diff" "$R733" "1|receipt BL-733: NOT FIXED -- nodelta(rc=1) fullg(rc=1) nocross(rc=1) xnamed(rc=1)" \
   '    END { for (i = 1; i <= r; i++) if (own[i]) printf "G %s\n", (r == 1 ? "cross" : "cross-" i) }'"'"' "$3" "$4")" \' \
   '    END { }'"'"' "$3" "$4")" \' \

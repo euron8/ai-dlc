@@ -67,6 +67,7 @@ else
   B="$(mktemp -d "${TMPDIR:-/tmp}/bl814-receipt-XXXXXX")" || exit 9
 fi
 B="$(cd "$B" && pwd -P)"
+# RCPT_ARMS (optional): passed to the validator as --arms, its fixture seam (the named gate-only arms only).
 # RCPT_WORLDS (optional): judge only the named worlds. Every name must be one this receipt judges, or
 # the call is refused (exit 9) -- a filter naming nothing real would otherwise report `fixed`.
 # A world left out never runs the subject; its check line reads rc=99 and is dropped from the verdict, so
@@ -252,14 +253,14 @@ fi
   || { echo "receipt: twof1/stalepass shape wrong" >&2; exit 9; }
 
 run() { # world stem -> RC, OUT
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" ${RCPT_ARMS:+--arms "$RCPT_ARMS"} --series "$B/$1/$D/$2-adversarial-p" \
          --transcript "$B/transcript.jsonl" --transcript-dir "$B" 2>&1)"; RC=$?
 }
 bad=""
 # A failing world's output goes to stderr, so a NOT FIXED line can be read without rebuilding the world.
 run_() { run "$@"; }
 run() { want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" ${RCPT_ARMS:+--arms "$RCPT_ARMS"} --series "$B/$1/$D/$2-adversarial-p" \
          --transcript "$B/transcript.jsonl" --transcript-dir "$B" 2>&1)"; RC=$?
   [ -z "${RCPT_VERBOSE:-}" ] || printf '== %s rc=%s\n%s\n' "$1" "$RC" "$OUT" >&2; }
 nj() { [[ "$OUT" != *"(J3 -- "* ]]; }

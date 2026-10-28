@@ -1,2 +1,3 @@
 !core/skills/ai-dlc-update/reconcile/push-drain.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

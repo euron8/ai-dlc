@@ -50,6 +50,7 @@
 # MUTANT-MATRIX mutation-sha-greedy decides=sha twins=census
 # MUTANT-MATRIX mutation-loose decides=phantom twins=parse
 # MUTANT-MATRIX mutation-heading-only decides=phantom twins=route
+# MUTANT-MATRIX-DYNAMIC score-mut-name why=score_route_mut() and score_leak_mut() pass their first argument "$1" to mutant_killed; each call (mutation-9-close, mutation-memo-export, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-ledger/run.sh --matrix
 set -uo pipefail
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "backlog-ledger: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }

@@ -2427,11 +2427,11 @@ mutant RLT-CODETOKS reconcile retired-layer-token.sh arm_rlt_healthy "arm_rlt_cm
   $'  grep -vE \'^[[:space:]]*#\' | toks\n'
 # retired-layer-contract: each harvest's status is discarded again (v0.650.0's `|| true`).
 mutant RLC-SHAPES reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_shapes" \
-  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sed -E' \
-  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sed -E'
+  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  for _l in $_h; do' \
+  $'  [ -n "$_h" ] || return 0\n  for _l in $_h; do'
 mutant RLC-TOKENS reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_tokens" \
-  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u' \
-  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u'
+  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h"\n}' \
+  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h"\n}'
 # retired-tokens' blob reads, one mutant per layer of the fix, and one reverting EVERY layer to the
 # base `$(git show … || true)` spelling. Each layer is killed by its own arm.
 mutant RT-VERIFY reconcile retired-tokens.sh arm_ta_healthy "arm_ta_verify" \

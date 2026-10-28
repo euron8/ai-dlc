@@ -114,7 +114,10 @@ BASE="${2:?}"
 CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 # Every consumer read goes through consumer-read.sh. This file reads none itself (it runs the two
 # detectors below), and sources it so any read added here has the one door to go through.
 . "$SELF/consumer-read.sh" || { echo "hard-blockers: cannot source $SELF/consumer-read.sh" >&2; exit 2; }

@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+44 *
+21 scripts/pregate-self-check.sh
+3 core/fixtures/pregate-self-check/receipt-bl643.sh

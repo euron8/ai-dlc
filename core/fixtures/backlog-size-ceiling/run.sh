@@ -56,6 +56,7 @@
 # MUTANT-MATRIX mp-d04 decides=mp-d04 twins=mb
 # MUTANT-MATRIX mp-d03n decides=mp-d03n twins=mc
 # MUTANT-MATRIX m-loose decides=m-loose twins=mb
+# MUTANT-MATRIX-DYNAMIC score-id why=score() passes its first argument "$1" to mutant_killed; each score call (b13, mc, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-size-ceiling/run.sh --matrix
 set -u
 

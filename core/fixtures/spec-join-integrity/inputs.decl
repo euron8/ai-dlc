@@ -2,3 +2,5 @@
 # (--locked-requirements leg). run.sh resolves the subject from $DIR/../../scripts.
 !core/scripts/validate-spec-join.sh
 core/scripts/validate-locked-anchor.sh
+# run.sh sources lib/mutant.sh and lib/matrix.sh (a kill is emitted only through mutant_killed; MATRIX rows are printed by lib/matrix.sh)
+core/fixtures/lib/

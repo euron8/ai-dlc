@@ -32,7 +32,11 @@ need_base() {
 
 # mutant_killed <flag> <mutant-name> <message> -- the ONLY sanctioned emission of a kill.
 # Refuses through need_base unless the flag is 1; otherwise emits ok "<message>".
+# Under the distribution pre-push's invocation counter (FXCOUNT_LOG set by hermetic-run.sh), the name is also
+# appended to ${FXCOUNT_LOG}.mutants for the judge's J5 join against the fixture's MUTANT-MATRIX rows.
+# Unset, or unwritable: nothing happens and the caller is never failed.
 mutant_killed() {
+  [ -z "${FXCOUNT_LOG:-}" ] || { printf '%s\n' "$2" >> "${FXCOUNT_LOG}.mutants"; } 2>/dev/null || :
   need_base "$1" "$2" || return 2
   ok "$3"
 }

@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+134 *
+6 core/scripts/stamp-story-provenance.sh
+2 core/scripts/validate-provenance-block.sh

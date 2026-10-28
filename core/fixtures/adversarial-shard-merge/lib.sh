@@ -43,6 +43,15 @@ while [ -n "$_d" ] && [ "$_d" != "/" ]; do
 done
 [ -n "$HOOK" ] || { echo "FIXTURE ERROR: ai-dlc-gate-remediation-guard.sh not found above $LIB_DIR in either layout; no shard can carry a harness record" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is not on PATH; the hook records nothing and the merge derives nothing without it" >&2; exit 2; }
+# The provenance schema, found by walking UP in either layout. pb_merged pins every merge copy to it.
+KSCH=""
+_d="$LIB_DIR"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
+    [ -f "$_c" ] && { KSCH="$_c"; break 2; }
+  done
+  _d="$(dirname "$_d")"
+done
 CONV="$SRCDIR/validate-adversarial-convergence.sh"
 [ -f "$CONV" ] || { echo "FIXTURE ERROR: $CONV is not beside the merge; it reads its ceilings from there" >&2; exit 2; }
 # Section mode reads its ordinal set from this sibling. Absent, the D arms would all refuse for
@@ -189,7 +198,9 @@ self_line() { [ "${SELF_ID:-NOT_ACCESSIBLE}" = ABSENT ] || printf 'tool_use_id: 
 shard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
   if ! is_cross "$k" && [ -z "$sha" ]; then
-    b="$(bash "$MERGE" --map "$d" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
+    # ONE --map per world, not one per shard: a world's stories never change once its first shard is written.
+    if [ "${OMAP_D:-}" != "$d" ]; then OMAP_V="$(bash "$MERGE" --map "$d")"; OMAP_D="$d"; fi
+    b="$(printf '%s\n' "$OMAP_V" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
     sha="$(sha_of "$(stories_of "$d")/$b")"
   fi
   case "$k" in cross) at="2026-08-24T15:09:19Z" ;; cross-*) at="2026-08-24T15:09:1${k#cross-}Z" ;; *) at="2026-08-24T15:0${k}:19Z" ;; esac
@@ -1483,3 +1494,87 @@ bl726_refused() { # <token>... -> rc 2, every token in stdout, nothing written
 bl726_merged() { [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && bl726_written; }
 
 
+
+# ------------------------------------------------------------------ arms that were inline in run.sh
+# Moved here so a mutant of the merge is scored by the arm's OWN body: p_<name> <merge> -> 0 iff the arm
+# HOLDS. Every one builds its own worlds under a fresh mktemp (a merge writes its pass file into the world
+# and refuses on write-ledger rows keyed to the world's absolute root, so a world is per-use).
+mk_markers() { # <shard dir>: every shard ends in its seat-complete marker, n = its `### M<n>` findings
+  local f n
+  for f in "$1"/*.md; do
+    n="$(grep -c '^### M[0-9]' "$f")" || n=0
+    printf '\nseat-complete: stories adversary %s findings=%s\n' "$(basename "$f" .md)" "$n" >> "$f"
+  done
+}
+set_major() { sed "s/^findings_major: .*/findings_major: $2/" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; } # <shard file> <n>
+PROBES='### Probes run (no finding)\n\nProbed the ordinal citation of every AC; each holds.'
+RESERVED='is a `### ` heading under `## Findings` with no severity word'
+# RS1: the filed incident -- graph s319 requirements-p1/2.md, findings=0, a probes subsection.
+p_rs1() {
+  local d; d="$(hdr_world "## Findings\n\n$PROBES")" || return 1; mk_markers "$d"; run_merge "$1" "$d"
+  refused_clean "$RESERVED" "$d" && has "$MO" "move it under its own \`## \` section, or demote it to \`#### \`" && has "$MO" "2.md:5 is"
+}
+# CH2: the merge's own refusal of a verdict-less shard, and --check-header's, say the same thing.
+chm() { bash "$1" --check-header "$2" --axis "$3" > "$MO" 2>&1; RC=$?; } # <merge> <shard file> <axis>
+p_chv() {
+  local m="$1" d dm c ch_out ch_rc m_line ch_tail m_tail
+  d="$(b3_world)" || return 1; c="$(mktemp -d "$WORK/chv.XXXXXX")" || return 1
+  sed '/^verdict:/d' "$d/1.md" > "$c/nov.md"; chm "$m" "$c/nov.md" convergence; ch_out="$(cat "$MO")"; ch_rc=$RC
+  dm="$(b3_world)" || return 1; sed '/^verdict:/d' "$dm/1.md" > "$dm/1.tmp" && mv "$dm/1.tmp" "$dm/1.md"; run_merge "$m" "$dm"
+  m_line="$(grep '^REFUSED:' "$MO")"
+  ch_tail="${ch_out#* declares }"; m_tail="${m_line#* declares }"
+  [ "$ch_rc" -eq 1 ] && [ "$RC" -eq 2 ] && [ "$ch_tail" != "$ch_out" ] && [ "$ch_tail" = "$m_tail" ] \
+    && has "$c/nov.md" "findings_major:" && [ "${ch_out#REFUSED: }" != "$ch_out" ] \
+    && case "$ch_tail" in "verdict '<none>', not one of"*) true ;; *) false ;; esac
+}
+# BL726 b/c/f/h: the four cells the bound's mutants are scored on.
+p_bl726b() { bl726_early "$1"; bl726_refused "1.md claims invoked_at 2026-08-24T13:00:00Z" "7200 s before its dispatch" "recorded at 2026-08-24T15:00:00Z" "BACKDATE_TOL_S=60" "--rerun 1.md@"; }
+p_bl726c() { bl726_late "$1"; bl726_refused "2.md claims invoked_at 2026-08-24T15:02:19Z" "s after its dispatch" "last wrote it at 2026-08-24T14:00:00Z" "--rerun 2.md@"; }
+p_bl726f() {
+  HR_BOUND=0 bl726_early "$1"
+  bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md claims invoked_at 2026-08-24T13:00:00Z" && has "$MO.err" "recorded at 2026-08-24T15:00:00Z" && has "$MO.err" "LEGACY"
+}
+p_bl726h() { bl726_lastrow "$1"; bl726_merged && ! has "$MO.err" "WARN: "; }
+# P1: the merged pass is a provenance block the READER accepts. Its artifact_sha is the files-mode
+# list `<stem>@<sha> ...`; a list of ONE and a short sha are refused, a bare sha still passes. PBROOT,
+# when set, is the AI_DLC_PROJECT_ROOT whose core/schemas/ the reader tries first (the schema mutant).
+pb_validate() { # <file> -> the reader's rc
+  if [ -n "${PBROOT:-}" ]; then
+    AI_DLC_PROJECT_ROOT="$PBROOT" bash "$SRCDIR/validate-provenance-block.sh" "$1" --require-skill ai-dlc-adversary-review > "$MO.pb" 2>&1
+  else
+    bash "$SRCDIR/validate-provenance-block.sh" "$1" --require-skill ai-dlc-adversary-review > "$MO.pb" 2>&1
+  fi
+}
+pb_merged() { # <merge> -> PB_O (the merged pass), PB_FIRST, PB_NPAIRS, PB_T; rc 0 when the pass is multi-file @-form
+  local d sha_line
+  PB_T="$(mktemp -d "$WORK/pb.XXXXXX")" || return 1
+  # A mutated or control COPY lives outside the install layout, so its pair_sep() finds no schema beside it
+  # and would emit `=`; AI_DLC_PROJECT_ROOT pins the shipped schema for every copy alike (K does the same).
+  mkdir -p "$PB_T/root/core/schemas" && cp "${PBSCH:-$KSCH}" "$PB_T/root/core/schemas/provenance-block.json" || return 1
+  d="$(b3_world)" || return 1; PB_O="$(out_of "$d")"; AI_DLC_PROJECT_ROOT="$PB_T/root" run_merge "$1" "$d"
+  sha_line="$(grep '^artifact_sha:' "$PB_O" 2>/dev/null)"
+  PB_NPAIRS="$(printf '%s' "${sha_line#artifact_sha:}" | wc -w | tr -d ' ')"
+  PB_FIRST="$(printf '%s' "${sha_line#artifact_sha: }" | cut -d' ' -f1)"
+  { [ "$RC" -eq 0 ] && [ "${PB_NPAIRS:-0}" -ge 2 ]; } || return 1
+  case "$PB_FIRST" in *@*) return 0 ;; *) return 1 ;; esac
+}
+p_pb() {
+  local one short bare r_m r_1 r_s r_b
+  [ -f "$SRCDIR/validate-provenance-block.sh" ] || return 2
+  pb_merged "$1" || return 3
+  one="$PB_T/one.md"; short="$PB_T/short.md"; bare="$PB_T/bare.md"
+  sed "s/^artifact_sha:.*/artifact_sha: $PB_FIRST/" "$PB_O" > "$one"
+  sed -E 's/^(artifact_sha: [^ ]+@)[a-f0-9]{64}/\1abc123/' "$PB_O" > "$short"
+  sed "s/^artifact_sha:.*/artifact_sha: ${PB_FIRST#*@}/" "$PB_O" > "$bare"
+  cmp -s "$PB_O" "$short" && return 4
+  pb_validate "$PB_O"; r_m=$?; pb_validate "$one"; r_1=$?; pb_validate "$short"; r_s=$?; pb_validate "$bare"; r_b=$?
+  PB_RS="merged=$r_m one-pair=$r_1 short-sha=$r_s bare=$r_b"
+  [ "$r_m" -eq 0 ] && [ "$r_1" -ne 0 ] && [ "$r_s" -ne 0 ] && [ "$r_b" -eq 0 ]
+}
+p_pbbare() { # the bare-sha control alone: a bare sha is accepted whatever the list pattern says
+  local bare
+  [ -f "$SRCDIR/validate-provenance-block.sh" ] || return 2
+  pb_merged "$1" || return 3
+  bare="$PB_T/bare.md"; sed "s/^artifact_sha:.*/artifact_sha: ${PB_FIRST#*@}/" "$PB_O" > "$bare"
+  pb_validate "$bare"
+}
