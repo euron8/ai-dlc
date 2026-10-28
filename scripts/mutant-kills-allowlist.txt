@@ -62,7 +62,6 @@ span-of-containment
 spec-join-integrity
 story-provenance
 suite-content-key
-suite-pole-info
 suppression-lifetime
 trunk-audit-gate
 update-preflight-push

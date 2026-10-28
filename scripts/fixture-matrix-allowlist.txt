@@ -123,7 +123,6 @@ story-provenance	no MUTANT-MATRIX block; floor: S1 mut_writer(),S2 cmp -s + muta
 stray-party-mode-provenance	no MUTANT-MATRIX block; floor: S1 mutate_py(),S2 cmp -s + mutant
 subagent-probe	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 suite-content-key	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-suite-pole-info	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 suppression-lifetime	no MUTANT-MATRIX block; floor: S1 sl_mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 trunk-audit-gate	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 trunk-push-bound	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
