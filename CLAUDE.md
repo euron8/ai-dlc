@@ -76,6 +76,12 @@ no fixtures. Each decision appends one line to `.git/ai-dlc-suite-key.log`
 (`<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>`); count them with
 `awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
 
+**A push is judged on the PUSHING worktree's working tree, never on the sha the push names.**
+`core.hooksPath` is the absolute `/Users/n8/git/ai-dlc/.githooks`, so every worktree's push runs the
+main checkout's hook, and that hook begins `cd "$(git rev-parse --show-toplevel)"` and never reads the
+`<local sha>` lines git hands it on stdin. Push from a clean worktree detached at the exact sha, with
+`git rev-parse HEAD` equal to it; pushing a merge sha from another checkout judges that checkout's tree.
+
 **`scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict**, as the
 names between its `# EXCLUDE_BEGIN` and `# EXCLUDE_END` markers. Both skips in `.githooks/pre-push`
 read it: the whole-suite key hashes everything except that set, and the per-fixture read-set skip
