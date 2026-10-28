@@ -52,6 +52,60 @@
 
 set -u
 
+# ---- Source-able seam ------------------------------------------------------
+# Everything above the main guard below is DEFINITION ONLY: sourcing this file defines the
+# check state, fail() and check7() and runs nothing. Executing it runs the whole series, exactly
+# as before. The guard is the repo idiom (core/scripts/content-seal.sh). A caller that sources
+# the file and calls check7() runs the SAME code the series runs; there is no flag that skips
+# a check, so nothing at the gate can opt out of one.
+FAILURES=0
+SKIPPED_CHECKS=""
+FAILURE_MSGS=""
+
+# Helper: append a failure message
+fail() {
+  local check_name="$1"
+  local msg="$2"
+  FAILURES=$((FAILURES + 1))
+  FAILURE_MSGS="${FAILURE_MSGS}[${check_name}] ${msg}
+"
+}
+
+# Check 7 body. The comment block that explains it sits at the call site in the series below.
+check7() {
+echo "[Check 7] Retro branch not behind origin/main..."
+C7_REFRESH="origin/main not refreshed: no remote named origin"
+if git remote get-url origin >/dev/null 2>&1; then
+  if GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 \
+       fetch -q --no-tags origin main >/dev/null 2>&1; then
+    C7_REFRESH="origin/main refreshed"
+  else
+    C7_REFRESH="origin/main NOT refreshed: fetch failed, so the local ref may be stale"
+  fi
+fi
+if ! git rev-parse -q --verify 'refs/remotes/origin/main^{commit}' >/dev/null 2>&1; then
+  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here; ${C7_REFRESH})"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 7"
+else
+  C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)" || C7_BEHIND=""
+  case "$C7_BEHIND" in
+    ''|*[!0-9]*)
+      fail "Check7_BRANCH_BEHIND_MAIN" "git rev-list --count HEAD..origin/main produced no count (got: '${C7_BEHIND}'). The branch's relation to origin/main is undeterminable, which is not a fresh branch."
+      echo "  CHECK 7: FAIL — behind-count undeterminable (${C7_REFRESH})"
+      ;;
+    0)
+      echo "  CHECK 7: PASS — HEAD contains origin/main (${C7_REFRESH})"
+      ;;
+    *)
+      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy, cheapest first: re-cut the branch from the trunk ('git checkout main && git merge --ff-only origin/main && git checkout -b <retro-branch>-fresh' then cherry-pick this branch's own retro commits onto it); or 'git merge origin/main' on this branch, resolving in origin/main's favour for every file the retro did not touch -- that merge is clean unless the trunk moved on a file the retro also touched. Then re-run this validator."
+      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH})"
+      ;;
+  esac
+fi
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+
 # ---- Subset mode: --check-clean-tree ---------------------------------------
 # A tree-state-agnostic entrypoint (no sprint number, no in-flight retro): assert
 # only that the delegated toolchain is present, so a pre-push on any commit can
@@ -127,19 +181,6 @@ done
 if [ -n "$VMR_ROOT" ] && [ "$VMR_ROOT" != "$VMR_CALLER_CWD" ]; then
   cd "$VMR_ROOT" || { echo "validate-mandatory-rules.sh: cannot enter the project root $VMR_ROOT" >&2; exit 2; }
 fi
-
-FAILURES=0
-SKIPPED_CHECKS=""
-FAILURE_MSGS=""
-
-# Helper: append a failure message
-fail() {
-  local check_name="$1"
-  local msg="$2"
-  FAILURES=$((FAILURES + 1))
-  FAILURE_MSGS="${FAILURE_MSGS}[${check_name}] ${msg}
-"
-}
 
 echo "validate-mandatory-rules.sh: Sprint ${SPRINT_N}"
 echo "  retro branch: ${RETRO_BRANCH}"
@@ -782,35 +823,7 @@ fi
 #   A predicate that separated the two classes would need the sprint's squash
 #   commit, which no artifact this validator reads records.
 # ============================================================================
-echo "[Check 7] Retro branch not behind origin/main..."
-C7_REFRESH="origin/main not refreshed: no remote named origin"
-if git remote get-url origin >/dev/null 2>&1; then
-  if GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 \
-       fetch -q --no-tags origin main >/dev/null 2>&1; then
-    C7_REFRESH="origin/main refreshed"
-  else
-    C7_REFRESH="origin/main NOT refreshed: fetch failed, so the local ref may be stale"
-  fi
-fi
-if ! git rev-parse -q --verify 'refs/remotes/origin/main^{commit}' >/dev/null 2>&1; then
-  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here; ${C7_REFRESH})"
-  SKIPPED_CHECKS="$SKIPPED_CHECKS 7"
-else
-  C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)" || C7_BEHIND=""
-  case "$C7_BEHIND" in
-    ''|*[!0-9]*)
-      fail "Check7_BRANCH_BEHIND_MAIN" "git rev-list --count HEAD..origin/main produced no count (got: '${C7_BEHIND}'). The branch's relation to origin/main is undeterminable, which is not a fresh branch."
-      echo "  CHECK 7: FAIL — behind-count undeterminable (${C7_REFRESH})"
-      ;;
-    0)
-      echo "  CHECK 7: PASS — HEAD contains origin/main (${C7_REFRESH})"
-      ;;
-    *)
-      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy, cheapest first: re-cut the branch from the trunk ('git checkout main && git merge --ff-only origin/main && git checkout -b <retro-branch>-fresh' then cherry-pick this branch's own retro commits onto it); or 'git merge origin/main' on this branch, resolving in origin/main's favour for every file the retro did not touch -- that merge is clean unless the trunk moved on a file the retro also touched. Then re-run this validator."
-      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH})"
-      ;;
-  esac
-fi
+check7
 
 # ============================================================================
 # Check 8: the pipeline snapshot's position is at retro
@@ -1038,4 +1051,5 @@ else
   echo "Failure details:" >&2
   printf '%s' "$FAILURE_MSGS" >&2
   exit 1
+fi
 fi

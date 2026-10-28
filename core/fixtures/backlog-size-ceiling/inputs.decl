@@ -5,3 +5,6 @@
 !scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 scripts/backlog-receipt-lib.sh
+# The mutation helpers run.sh sources.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

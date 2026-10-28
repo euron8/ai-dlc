@@ -19,8 +19,10 @@ mktemp
 mv
 rm
 sed
+sh
 sort
 tail
+tar
 touch
 tr
 uniq

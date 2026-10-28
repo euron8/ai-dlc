@@ -906,6 +906,11 @@ score() {
   : > "$log"
   local tgt add dly rrk apid cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
+    # SCORE_ARMS (space-separated arm names) restricts a score to those arms' cells; unset scores every
+    # cell. A pass whose subject differs from the shipped hook in one property only (its path, or one
+    # default constant) is scored over the cells that read that property, not over all of them. netdef
+    # below is not a cell and always runs.
+    if [ -n "${SCORE_ARMS:-}" ]; then case " $SCORE_ARMS " in *" $arm "*) ;; *) continue ;; esac; fi
     # A NET cell pays its whole (shortened) safety net by construction; it is scored only while NET_CELLS=1.
     if [ -f "$CELLS/$n.net" ] && [ "${NET_CELLS:-0}" != 1 ]; then continue; fi
     cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"

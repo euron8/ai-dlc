@@ -187,28 +187,44 @@ cons_edit() { # <variant> <consumer> -- consumer copies start at base
   case "$1" in d6a) fill_im "$c/$IM" && edit "$c/$IM" '  Unit tests alone are not sufficient.' '  Unit tests alone are not sufficient (consumer note).' ;; esac
 }
 
-# build <world-dir> <variant> -> a dist with base and theirs, a consumer at base plus the variant's
-# edits, `.B`/`.T` beside them. Theirs commits deploy-validate.md at 100755 (D5): the mode an apply
-# must carry is read from theirs' TREE, so the bit is set before `git add`.
-build() {
-  local w="$1" v="$2" d="$1/dist" c="$1/cons" B T p
+# build_base <world-dir> <variant> -> a dist holding the BASE commit and a consumer at base, `.Bbase`
+# beside them. Nothing here depends on the variant except d8add, whose subject is absent at base
+# (qa.md is removed BEFORE the base commit, and the consumer loop then skips it). Every other
+# variant's base is byte-identical, so run.sh builds it ONCE (BASE_W) and build() copies it.
+build_base() {
+  local w="$1" v="$2" d="$1/dist" c="$1/cons" B p
   mkdir -p "$d" "$c/.claude/skills/ai-dlc/steps" "$c/.claude/team-roles" "$c/scripts/ai-dlc" || return 1
   git -C "$d" init -q 2>/dev/null || return 1
   seed_base "$d" || return 1
   [ "$v" = d8add ] && rm -f "$d/core/$QA"
   git -C "$d" add -A && git -C "$d" -c user.email=f@f -c user.name=fx -c commit.gpgsign=false commit -qm base || return 1
   B="$(git -C "$d" rev-parse HEAD)"
-  theirs_edit "$v" "$d" || return 1
-  chmod 755 "$d/core/$DV"
-  git -C "$d" add -A && git -C "$d" -c user.email=f@f -c user.name=fx -c commit.gpgsign=false commit -qm theirs || return 1
-  T="$(git -C "$d" rev-parse HEAD)"
   for p in "$DV" "$IM" team-roles/dev.md "$QA"; do
     git -C "$d" cat-file -e "${B}:core/${p}" 2>/dev/null || continue
     git -C "$d" show "${B}:core/${p}" > "$c/.claude/$p" || return 1
   done
-  [ "$v" = d8add ] && { git -C "$d" show "${T}:core/${QA}" > "$c/theirs-qa" || return 1; }
   printf '#!/usr/bin/env bash\necho v\n' > "$c/scripts/ai-dlc/validate-synthetic.sh"
   printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"
+  printf '%s\n' "$B" > "$w/.Bbase"
+}
+
+# build <world-dir> <variant> -> a dist with base and theirs, a consumer at base plus the variant's
+# edits, `.B`/`.T` beside them. Theirs commits deploy-validate.md at 100755 (D5): the mode an apply
+# must carry is read from theirs' TREE, so the bit is set before `git add`. The base is COPIED from
+# BASE_W when run.sh built one and the variant is not d8add; otherwise it is built here.
+build() {
+  local w="$1" v="$2" d="$1/dist" c="$1/cons" B T p
+  if [ "$v" != d8add ] && [ -d "${BASE_W:-}/dist" ]; then
+    mkdir -p "$w" && cp -Rp "$BASE_W/dist" "$d" && cp -Rp "$BASE_W/cons" "$c" && cp "$BASE_W/.Bbase" "$w/.Bbase" || return 1
+  else
+    build_base "$w" "$v" || return 1
+  fi
+  B="$(cat "$w/.Bbase")"
+  theirs_edit "$v" "$d" || return 1
+  chmod 755 "$d/core/$DV"
+  git -C "$d" add -A && git -C "$d" -c user.email=f@f -c user.name=fx -c commit.gpgsign=false commit -qm theirs || return 1
+  T="$(git -C "$d" rev-parse HEAD)"
+  [ "$v" = d8add ] && { git -C "$d" show "${T}:core/${QA}" > "$c/theirs-qa" || return 1; }
   cons_edit "$v" "$c" || return 1
   rm -f "$c/theirs-qa"
   printf '%s\n' "$B" > "$w/.B"; printf '%s\n' "$T" > "$w/.T"

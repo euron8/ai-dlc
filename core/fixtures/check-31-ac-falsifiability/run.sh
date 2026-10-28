@@ -27,6 +27,18 @@
 #                                          must turn its own red case green. Two
 #                                          guards need two mutants; one mutant
 #                                          licenses only one FAIL.
+#
+# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
+# test-quality property, measured ONCE for every mutant x arm and recorded here; per push each
+# mutant runs its deciding arm (must fail) and a twin arm the measured matrix shows green (must
+# stay green). The recorded matrix plus the twin replaces a per-push exact-vector assertion.
+# Measured: term-off also trips bad-continuation (same term check); every other mutant trips
+# only its deciding arm. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX term-off decides=bad-unbounded twins=dangling-evidence
+# MUTANT-MATRIX evidence-off decides=dangling-evidence twins=dangling-anchor
+# MUTANT-MATRIX ident-drop decides=identity twins=good-bounded
+# MUTANT-MATRIX ident-nonce decides=identity twins=good-bounded
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/check-31-ac-falsifiability/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -56,6 +68,18 @@ rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
 
+# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh, which forwards no argument):
+# it replaces the per-push mutant stage with the full mutant x arm matrix and prints MATRIX rows.
+MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
+MX_FULL_RUNS=0     # incremented ONLY by the matrix-only cells; a plain run must leave it at 0
+MUT_LIB="$DIR/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$DIR/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/check-31-ac-falsifiability/matrix.sh"
+
 echo "check-31-ac-falsifiability:"
 
 # Never `out=$(...)` for the verdict: command substitution moves the validator's
@@ -73,7 +97,6 @@ expect 1 dangling-evidence.md "an unresolvable prior_evidence path is rejected"
 expect 1 dangling-anchor.md   "a resolvable path with an absent anchor is rejected"
 expect 0 good-bounded.md      "OVER-FIRE CONTROL: a correctly-bounded set-covering AC passes"
 expect 0 good-evidence.md     "OVER-FIRE CONTROL: a resolvable prior_evidence citation passes"
-expect 0 waiver.md            "a declared falsifiability_waiver suppresses the FAIL"
 expect 2 undeclared-form.md   "a story declaring ACs in an undeclared form DISARMS (never exits 0)"
 
 # REAL bmad-create-epics-and-stories OUTPUT FORM. Its stories carry a BOLD INLINE
@@ -86,7 +109,13 @@ expect 2 bmad-gwt-form.md      "PIN: BMAD's real Given/When/Then AC form DISARMS
 
 # The waiver must still be REPORTED. A waiver that silences the report is a hole
 # nobody can audit.
-if ( cd "$DIR" && bash "$V" --lexicon-from "$LEX" "$DIR/waiver.md" ) 2>/dev/null | grep -q 'waiver'; then
+# ONE run of waiver.md answers both questions: it used to be run twice, once for the exit code
+# (`expect 0`) and once for the stdout line. The exit code and the stdout are captured together
+# (never `cmd | grep`, which would take grep's status).
+W_OUT="$( cd "$DIR" && bash "$V" --lexicon-from "$LEX" "$DIR/waiver.md" 2>/dev/null )"; W_RC=$?
+if [ "$W_RC" -eq 0 ]; then ok "a declared falsifiability_waiver suppresses the FAIL"
+else bad "a declared falsifiability_waiver suppresses the FAIL (expected rc=0, got rc=$W_RC)"; fi
+if grep -q 'waiver' <<<"$W_OUT"; then
   ok "the waiver is printed, not silently honoured"
 else
   bad "waiver.md passed but printed no waiver line — a suppressed FAIL with no record"
@@ -107,37 +136,6 @@ if [ $? -eq 2 ]; then
 else
   bad "an unreadable lexicon did not exit 2"
 fi
-
-# --- MUTATION controls -------------------------------------------------------
-# Build each mutant as a COPY and assert `cmp -s` that the edit matched something.
-# A sed that matches nothing yields a mutant identical to the subject, which then
-# "fails as expected" for the wrong reason — a vacuous proof.
-mutate() { # <name> <sed-expr> <payload> <label>
-  local m="$WORK/$1.sh"
-  cp "$V" "$m"
-  sed -i.bak "$2" "$m" 2>/dev/null || sed -i '' "$2" "$m" 2>/dev/null
-  rm -f "$m.bak"
-  if cmp -s "$V" "$m"; then
-    bad "FIXTURE ERROR: mutation '$1' matched nothing — the assertion below would prove nothing"
-    return
-  fi
-  ( cd "$DIR" && bash "$m" --lexicon-from "$LEX" "$DIR/$3" ) >/dev/null 2>&1
-  if [ $? -eq 0 ]; then
-    ok "$4"
-  else
-    bad "$4 — the mutant still rejected it, so the guard under test is not what produced the FAIL"
-  fi
-}
-
-mutate term-off 's/if grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]_\]|\\\$)" <<<"\$body"; then/if false; then/' \
-  bad-unbounded.md "MUTATION: neutering the term check turns bad-unbounded green (the term ban is what fails it)"
-
-# Neuter the EXISTENCE TEST, not the loop that drives it. Emptying the candidate
-# list leaves `resolved` unset, which is the same state a real miss produces, so
-# the mutant fails for the guard's own reason and demonstrates nothing. The guard
-# is `[ -f ... ]`; that is what has to go.
-mutate evidence-off 's/\[ -f "\$base\/\$cpath" \] \&\&/true \&\&/' \
-  dangling-evidence.md "MUTATION: neutering the -f existence test turns dangling-evidence green (that test is what fails it)"
 
 # THE `echo "$@"` ATTACK IS OPEN HERE AND THAT IS RECORDED RATHER THAN PAPERED OVER. The
 # lexicon arrives through `--lexicon-from` and the stories are positionals, so a fix echoing
@@ -224,71 +222,122 @@ else
   bad "IDENTITY CONTROL FAILED ($AC_IDENT_WHY) — the two identity mutants below are uninterpretable"
 fi
 
-if [ "$AC_CTL_OK" = "1" ]; then
-  # MUTANT ident-drop: the identity block deleted — the state this release replaced.
-  # Anchored on the PASS verdict line rather than on the two labels, so the mutation follows
-  # the block through a respacing, and guarded on the line count so the block cannot shrink
-  # under the arm that asserts both paths.
-  AC_MD="$WORK/ident-mutant-drop.sh"
-  ac_av=': PASS (${#FILES[@]} story file(s)'
-  ac_nid="$(grep -cE '^ *echo "  ' "$V")"
-  if [ "$(grep -cF "$ac_av" "$V")" != "1" ]; then
-    bad "FIXTURE ERROR: mutation 'ident-drop' has a non-unique anchor — the deletion could land on another emitter"
-  elif [ "$ac_nid" -lt 2 ]; then
-    bad "FIXTURE ERROR: only $ac_nid identity lines follow the PASS verdict, expected 2 — the block this fixture guards has shrunk"
-  else
-    awk -v A="$ac_av" '
-      index($0, A)          { print; hit=1; next }
-      hit && /^ *echo "  /  { next }
-                            { hit=0; print }
-    ' "$V" > "$AC_MD"
-    if cmp -s "$V" "$AC_MD"; then
-      bad "FIXTURE ERROR: mutation 'ident-drop' matched nothing — its assertion would prove nothing"
-    elif ! bash -n "$AC_MD" 2>/dev/null; then
-      bad "FIXTURE ERROR: mutant 'ident-drop' is not a valid shell script — its silence is not a kill"
-    else
-      if ac_ident_holds "$AC_MD"; then
-        bad "MUTATION 'ident-drop' SURVIVED — a validator naming no corpus still satisfies the IDENTITY arm, so that arm is not testing the identity lines"
-      else
-        ok "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($AC_IDENT_WHY) — the IDENTITY arm has teeth"
-      fi
-      # The lines are additive. Every verdict arm above must survive their removal, or the
-      # IDENTITY arm is entangled with the arms that carry this check.
-      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/good-bounded.md" ) >/dev/null 2>&1
-      ac_g1=$?
-      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/bad-unbounded.md" ) >/dev/null 2>&1
-      ac_g2=$?
-      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/undeclared-form.md" ) >/dev/null 2>&1
-      ac_g3=$?
-      if [ "$ac_g1" -eq 0 ] && [ "$ac_g2" -eq 1 ] && [ "$ac_g3" -eq 2 ]; then
-        ok "MUTATION 'ident-drop' leaves the PASS, FAIL and DISARM verdicts intact — corpus identity is asserted by an arm no verdict arm covers"
-      else
-        bad "MUTATION 'ident-drop' ALSO moved a verdict (rc=$ac_g1/$ac_g2/$ac_g3) — the identity lines are not additive and the IDENTITY arm is entangled"
-      fi
-    fi
-  fi
+# ===========================================================================
+# THE MUTANTS, table-driven. Every mutant is a COPY of the validator (cmp -s guarded, bash -n
+# guarded). On every push a mutant runs its DECIDING arm (which must FAIL, at the recorded
+# token) and its measured-green TWIN arm(s) (which must stay green, proving the kill is
+# confined to the deciding arm). The full mutant x arm matrix runs only under --matrix.
+#
+# The per-mutant assertion that "a mutant fails ONLY its own assertion"
+# (.claude/rules/fixture-mutants.md) is established at authoring by the MUTANT-MATRIX header
+# rows and re-established by `--matrix`; the twin replaces it per push.
+ARMS="bad-unbounded bad-continuation dangling-evidence dangling-anchor good-bounded good-evidence waiver undeclared-form bmad-gwt-form identity"
+MUTS="term-off evidence-off ident-drop ident-nonce"
 
-  # MUTANT ident-nonce: identity replaced by a per-run nonce — THE FIX THAT DISCRIMINATES
-  # WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at run time, so its two runs
-  # differ exactly as the real validator's do while naming no file at all. An arm keyed only
-  # on "the outputs differ" passes against it; this one must not.
-  AC_MN="$WORK/ident-mutant-nonce.sh"
-  awk -v A="$ac_av" '
-    index($0, A)          { print; hit=1; next }
-    hit && /^ *echo "  /  { print "  echo \"  nonce: $$-$RANDOM\""; next }
-                          { hit=0; print }
-  ' "$V" > "$AC_MN"
-  if cmp -s "$V" "$AC_MN"; then
-    bad "FIXTURE ERROR: mutation 'ident-nonce' matched nothing — the IDENTITY arm's nonce-resistance is unproved"
-  elif ! bash -n "$AC_MN" 2>/dev/null; then
-    bad "FIXTURE ERROR: mutant 'ident-nonce' is not a valid shell script — its silence is not a kill"
-  else
-    if ac_ident_holds "$AC_MN"; then
-      bad "MUTATION 'ident-nonce' SURVIVED — a per-run nonce naming no corpus satisfies the IDENTITY arm, so that arm is a differ-check and not a naming check"
-    else
-      ok "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($AC_IDENT_WHY) — the arm demands the corpus be NAMED"
-    fi
+arm_want() { case "$1" in
+  bad-unbounded|bad-continuation|dangling-evidence|dangling-anchor) printf 1 ;;
+  good-bounded|good-evidence|waiver) printf 0 ;;
+  undeclared-form|bmad-gwt-form) printf 2 ;;
+  identity) printf holds ;;
+esac; }
+# arm <validator> <arm> -> the arm's verdict token for that program
+arm() {
+  case "$2" in
+    identity) if ac_ident_holds "$1"; then printf holds; else printf broken; fi ;;
+    *) ( cd "$DIR" && bash "$1" --lexicon-from "$LEX" "$DIR/$2.md" ) >/dev/null 2>&1; printf '%s' "$?" ;;
+  esac
+}
+mut_decides() { case "$1" in term-off) printf bad-unbounded ;; evidence-off) printf dangling-evidence ;; *) printf identity ;; esac; }
+mut_killtok() { case "$1" in term-off|evidence-off) printf 0 ;; *) printf broken ;; esac; }
+mut_twins()   { case "$1" in
+  term-off)     printf 'dangling-evidence' ;;
+  evidence-off) printf 'dangling-anchor' ;;
+  ident-drop)   printf 'good-bounded' ;;
+  ident-nonce)  printf 'good-bounded' ;;
+esac; }
+
+# build_mutant <name> -> sets MCOPY; returns 1 (already reported) when it cannot be built.
+ac_av=': PASS (${#FILES[@]} story file(s)'
+build_mutant() {
+  MCOPY="$WORK/mut-$1.sh"
+  case "$1" in
+    term-off)
+      sed 's/if grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]_\]|\\\$)" <<<"\$body"; then/if false; then/' "$V" > "$MCOPY" 2>/dev/null ;;
+    # Neuter the EXISTENCE TEST, not the loop that drives it: emptying the candidate list leaves
+    # `resolved` unset, the same state a real miss produces, so the mutant would fail for the
+    # guard's own reason and demonstrate nothing. The guard is `[ -f ... ]`; that has to go.
+    evidence-off)
+      sed 's/\[ -f "\$base\/\$cpath" \] \&\&/true \&\&/' "$V" > "$MCOPY" 2>/dev/null ;;
+    ident-drop)
+      # The identity block deleted -- the state this release replaced. Anchored on the PASS
+      # verdict line, and guarded on the line count so the block cannot shrink under the arm.
+      if [ "$(grep -cF "$ac_av" "$V")" != "1" ]; then
+        bad "FIXTURE ERROR: mutation 'ident-drop' has a non-unique anchor -- the deletion could land on another emitter"; return 1
+      elif [ "$(grep -cE '^ *echo "  ' "$V")" -lt 2 ]; then
+        bad "FIXTURE ERROR: fewer than 2 identity lines follow the PASS verdict -- the block this fixture guards has shrunk"; return 1
+      fi
+      awk -v A="$ac_av" '
+        index($0, A)          { print; hit=1; next }
+        hit && /^ *echo "  /  { next }
+                              { hit=0; print }
+      ' "$V" > "$MCOPY" ;;
+    # Identity replaced by a per-run nonce -- THE FIX THAT DISCRIMINATES WITHOUT NAMING.
+    ident-nonce)
+      awk -v A="$ac_av" '
+        index($0, A)          { print; hit=1; next }
+        hit && /^ *echo "  /  { print "  echo \"  nonce: $$-$RANDOM\""; next }
+                              { hit=0; print }
+      ' "$V" > "$MCOPY" ;;
+  esac
+  if cmp -s "$V" "$MCOPY"; then
+    bad "FIXTURE ERROR: mutation '$1' matched nothing -- its assertion would prove nothing"; return 1
+  elif ! bash -n "$MCOPY" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant '$1' is not a valid shell script -- its silence is not a kill"; return 1
   fi
+  return 0
+}
+
+if [ "$AC_CTL_OK" = "1" ]; then
+  if [ "$MATRIX" = "1" ]; then
+    for m in $MUTS; do
+      build_mutant "$m" || continue
+      d="$(mut_decides "$m")"; tr=""; gr=""
+      for a in $ARMS; do
+        MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
+        got="$(arm "$MCOPY" "$a")"
+        if [ "$got" = "$(arm_want "$a")" ]; then gr="$gr,$a"; else tr="$tr,$a"; fi
+      done
+      k=no; case "$tr," in *",$d,"*|",$d,"*) k=yes ;; esac
+      case ",$tr," in *",$d,"*) k=yes ;; esac
+      mx_row "$m" "$d" "$k" "${tr#,}" "${gr#,}"
+    done
+  else
+    for m in $MUTS; do
+      build_mutant "$m" || continue
+      d="$(mut_decides "$m")"; kt="$(mut_killtok "$m")"
+      # SAME-RUN BASE PASS: the unmutated validator must pass the deciding arm in THIS run.
+      bflag=0; if [ "$(arm "$V" "$d")" = "$(arm_want "$d")" ]; then bflag=1; fi
+      got="$(arm "$MCOPY" "$d")"
+      if [ "$got" = "$kt" ]; then
+        mutant_killed "$bflag" "$m" "MUTANT $m: deciding arm $d fails ($got) -- the guard under test is what produced the verdict"
+      else
+        bad "MUTANT $m SURVIVED: arm $d answered '$got', wanted '$kt' -- the guard under test is not what produced the verdict"
+      fi
+      for t in $(mut_twins "$m"); do
+        [ "$t" = "-" ] && continue
+        got="$(arm "$MCOPY" "$t")"
+        if [ "$got" = "$(arm_want "$t")" ]; then ok "MUTANT $m: twin arm $t stays green ($got) -- the kill is confined to $d"
+        else bad "MUTANT $m moved its twin arm $t to '$got' -- the arms overlap, re-measure with --matrix"; fi
+      done
+    done
+  fi
+else
+  bad "IDENTITY CONTROL FAILED -- the mutants below are uninterpretable"
+fi
+
+if [ "$MATRIX" = "0" ]; then
+  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
+  else bad "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
 fi
 
 echo

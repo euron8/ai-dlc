@@ -24,10 +24,56 @@
 # before that gate and 212% at the commit after; the validator exits 1 at both.
 #
 # Assertion 3 uses that literal string. Assertion 6 is the control.
+#
+# THE MUTANT MATRIX. Each mutant is run per push on its DECIDING world(s) plus ONE TWIN, a world the
+# measured matrix shows GREEN for that mutant. The deciding world must differ from the shipped
+# program and the twin must not, so the kill stays CONFINED to its own world and a change in
+# co-tripping is caught. The full mutant x world matrix was measured once with the command below,
+# and the recorded matrix plus the twin replaces any per-push exact-vector assertion (only the two
+# unmutated controls still assert a full vector). The matrix is re-measured whenever an arm (a
+# world) or a mutant is added or changed. A "world" is the arm here: each is one seeded tree.
+# MUTANT-MATRIX base decides=W10 twins=W3
+# MUTANT-MATRIX sort decides=W3 twins=W7
+# MUTANT-MATRIX tail decides=W2,W2h,W9 twins=W3
+# MUTANT-MATRIX hard decides=W2c twins=W3
+# MUTANT-MATRIX uncond decides=W3b twins=W3
+# MUTANT-MATRIX pfirst decides=W-A,W-C twins=W-B
+# MUTANT-MATRIX plast decides=W-B,W-C twins=W-A
+# MUTANT-MATRIX noxcheck decides=W-D,W-D2 twins=W-F2
+# MUTANT-MATRIX body decides=W-E twins=W-D
+# MUTANT-MATRIX oneline decides=W-F twins=W-F2
+# MUTANT-MATRIX noprec decides=W-G twins=W-A
+# MUTANT-MATRIX tie decides=W-I twins=W-J
+# MUTANT-MATRIX skipnots decides=W-J twins=W-I
+# MUTANT-MATRIX xcanon decides=W-K2 twins=W-K
+# MUTANT-MATRIX nohit decides=W-L,W-M twins=W-N
+# MUTANT-MATRIX dateabsent decides=W-N twins=W-O
+# MUTANT-MATRIX noprior decides=W-F3 twins=W-F2
+# MUTANT-MATRIX lasthit decides=W-M twins=W-L
+# MUTANT-MATRIX-CONTROL noop why=a transformation that matches nothing; the applied-assertion's own probe, so it must report DID NOT APPLY and survive
+# MUTANT-MATRIX-CONTROL broken why=applies but does not parse; bash -n must refuse it, so it never scores
+# MUTANT-MATRIX-CONTROL ctl why=the unmutated discovery copy must agree with the shipped program in all 11 worlds and emit a PASS/5881 row
+# MUTANT-MATRIX-CONTROL enoop why=a selector transformation that matches nothing; the hit counter's own probe, it must report DID NOT APPLY
+# MUTANT-MATRIX-CONTROL ectl why=the unmutated selector copy must agree with the shipped program in all 20 worlds and emit a PASS/5492 row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/snapshot-evidence-cell/run.sh --matrix
+# Measured rows (worlds each mutant TRIPS, of the 11 discovery / 20 selection worlds):
+#   base [W10]  sort [W2 W2h W3 W3b W5 W8 W9 W10]  tail [W2 W2h W9]  hard [W2c]  uncond [W2c W3b W5 W9]
+#   pfirst [W-A W-C W-D W-D2 W-E W-E2 W-F W-F2 W-F3 W-G W-I W-J W-K2 W-L W-M W-N W-O]
+#   plast [W-B W-C W-D W-D2 W-E W-F W-H W-I W-J W-L W-M W-N]  noxcheck [W-D W-D2 W-E W-F W-L W-M W-N]
+#   body [W-E W-E2]  oneline [W-F]  noprec [W-G]  tie [W-I]  skipnots [W-J]  xcanon [W-K2]
+#   nohit [W-L W-M]  dateabsent [W-M W-N]  noprior [W-F3]  lasthit [W-M]
 
 set -uo pipefail
 
+# `--matrix` is an ARGV flag: it re-measures the full mutant x world matrix (every mutant against every
+# world) and prints one MATRIX row each. A plain run never executes a matrix-only cell.
+MATRIX=0
+[ "${1:-}" = "--matrix" ] && MATRIX=1
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/snapshot-evidence-cell/matrix.sh"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-artifact-budget.sh" ]; then
@@ -81,6 +127,13 @@ GATELOG="$WORK/_bmad-output/implementation-artifacts/gate-log.md"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# A mutant kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_D for the
+# discovery battery, B_E for the selection battery), set when that battery's unmutated control ran.
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_D=0; B_E=0
 
 # Seed a gate log whose NEWEST gate section's Check 14 row is the argument. The
 # older section's rows are deliberately older-format `-` cells: they were written
@@ -572,11 +625,11 @@ d_build() { # d_build <name> <want-applied:1|0|same> <post-canon> <post-find>
   d_mut "$name" "$out" || { bad "MUTANT $name: builder FAILED -- no mutant was scored"; return 1; }
   if cmp -s "$VALIDATOR" "$out"; then
     if [ "$want" = "0" ]; then
-      ok "MUTANT $name: DID NOT APPLY, and that is what this probe asserts"
+      ok "CONTROL $name: DID NOT APPLY, and that is what this probe asserts"
       return 1
     fi
     if [ "$want" != "same" ]; then
-      bad "MUTANT $name: DID NOT APPLY -- 'matched nothing' reads exactly like 'was killed'"
+      bad "MUTANT $name: DID NOT APPLY -- 'matched nothing' reads exactly like a scored kill"
       return 1
     fi
   elif [ "$want" = "same" ]; then
@@ -588,10 +641,10 @@ d_build() { # d_build <name> <want-applied:1|0|same> <post-canon> <post-find>
   fi
   if ! bash -n "$out" 2>"$D/$name.syn"; then
     if [ "$name" = "broken" ]; then
-      ok "MUTANT broken: refused by bash -n, so an unparseable mutant cannot score a kill"
+      ok "CONTROL broken: refused by bash -n, so an unparseable mutant cannot score a kill"
       return 1
     fi
-    bad "MUTANT $name: does not parse -- a dead mutant is not a killed one"
+    bad "MUTANT $name: does not parse -- a dead mutant is not a scored kill"
     sed 's/^/        /' "$D/$name.syn"
     return 1
   fi
@@ -650,6 +703,14 @@ d_vector() { # d_vector <script>
 }
 
 D_WORLDS="W1 W2 W2c W2h W3 W3b W5 W7 W8 W9 W10"
+d_verdict_world() { # d_verdict_world <script> <world-name>  -> the one cell d_vector would print for it
+  case "$2" in
+    W1) d_verdict "$1" "$W1" ;;   W2) d_verdict "$1" "$W2" ;;   W2c) d_verdict "$1" "$W2C" ;;
+    W2h) d_verdict "$1" "$W2H" ;; W3) d_verdict "$1" "$W3" ;;   W3b) d_verdict "$1" "$W3B" ;;
+    W5) d_verdict "$1" "$W5" ;;   W7) d_verdict "$1" "$W7" --gate-log "$W7/_bmad-output/implementation-artifacts/gate-log.md" ;;
+    W8) d_verdict "$1" "$W8" ;;   W9) d_verdict "$1" "$W9" ;;   W10) d_verdict "$1" "$W10" ;;
+  esac
+}
 SHIPPED_VEC="$(d_vector "$VALIDATOR")"
 printf '  %-8s %s\n' "SHIPPED" "$SHIPPED_VEC"
 
@@ -669,31 +730,43 @@ d_diff_worlds() { # d_diff_worlds <vec-a> <vec-b>  -> space-separated world name
   printf '%s\n' "${out# }"
 }
 
-d_score() { # d_score <name> <must-differ:1|0> [sole-killing-world]
-  local name="$1" must="$2" sole="${3:-}" vec diff
+# MUTANT MATRIX (measured; see the header table). Per push each mutant runs on its DECIDING world(s)
+# plus ONE named TWIN: a world the measured matrix shows GREEN for that mutant (the mutant agrees with
+# the shipped program there). The deciding world must differ, the twin must NOT -- so a mutant that
+# starts co-tripping its twin, or stops tripping its deciding world, is caught. The control keeps the
+# full vector. --matrix drives every mutant against every world and prints one MATRIX row each.
+d_score() { # d_score <name> <must-differ:1|0> [deciding-worlds] [twin-world]
+  local name="$1" must="$2" dec="${3:-}" twin="${4:-}" vec="" diff="" ws w i r a b
   [ -f "$D_BIN/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
-  vec="$(d_vector "$D_BIN/$name.sh")"
+  ws="$D_WORLDS"
+  if [ "$MATRIX" != 1 ] && [ "$must" = "1" ]; then ws="$dec $twin"; fi
+  for w in $ws; do
+    i=0; for r in $D_WORLDS; do i=$((i+1)); [ "$r" = "$w" ] && break; done
+    b="$(d_verdict_world "$D_BIN/$name.sh" "$w")"
+    a="$(d_field "$SHIPPED_VEC" "$i")"
+    vec="$vec $w=$b"
+    [ "$a" = "$b" ] || diff="$diff $w"
+  done
+  vec="${vec# }"; diff="${diff# }"
   printf '  %-8s %s\n' "$name" "$vec"
-  diff="$(d_diff_worlds "$SHIPPED_VEC" "$vec")"
+  if [ "$MATRIX" = 1 ] && [ "$must" = "1" ]; then mx_row "$name" "$diff" "$D_WORLDS" "$dec" "$twin"; fi
   if [ "$must" = "1" ]; then
-    if [ -n "$diff" ]; then
-      ok "KILL $name: differs from the shipped program at [$diff]"
-    else
-      bad "KILL $name: SURVIVED every world -- no seed here separates it from the fix"
-    fi
-    if [ -n "$sole" ]; then
-      if [ "$diff" = "$sole" ]; then
-        ok "  and $sole is the ONLY world that kills it -- deleting $sole would lose this kill"
-      else
-        bad "  $sole was recorded as $name's only killer; it now dies at [$diff]. Re-derive which world is load-bearing before trusting either."
-      fi
-    fi
+    for w in $dec; do
+      case " $diff " in
+        *" $w "*) mutant_killed "$B_D" "$name" "KILL $name: deciding world $w differs from the shipped program (all tripped: [$diff])" ;;
+        *) bad "KILL $name: deciding world $w did NOT differ -- the mutant survives the world recorded as its killer" ;;
+      esac
+    done
+    case " $diff " in
+      *" $twin "*) bad "TWIN $name: twin world $twin tripped, but the measured matrix has it GREEN -- the co-tripping changed" ;;
+      *) ok "TWIN $name: twin world $twin agrees with the shipped program, as the measured matrix records" ;;
+    esac
   else
     if [ -n "$diff" ]; then
       bad "CONTROL $name: an UNMUTATED copy disagreed at $diff -- the harness is what moved"
     else
       case "$vec" in
-        *PASS/5881*) ok "CONTROL $name: unmutated copy agrees, and DID run (a PASS/5881 row is present)" ;;
+        *PASS/5881*) ok "CONTROL $name: unmutated copy agrees, and DID run (a PASS/5881 row is present)"; B_D=1 ;;
         *) bad "CONTROL $name: agrees but emitted no PASS/5881 row -- two inert runs compare equal" ;;
       esac
     fi
@@ -701,16 +774,15 @@ d_score() { # d_score <name> <must-differ:1|0> [sole-killing-world]
 }
 
 d_score ctl    0
-d_score base   1
-d_score sort   1
-# W2 W2h W9 ARE THE ONLY WORLDS THAT KILL `tail`, AND THAT IS ASSERTED, NOT OBSERVED.
-# In every other two-log world here the canonical copy is readdir-LAST, so `tail -1`
-# picks the live log by accident and scores identically to the fix. W9 has a decoy on
-# each side; W2 and W2h (BL-631's current-sprint scope) hold only a log the classifier
-# refuses, which `tail -1` reads without asking.
-d_score tail   1 "W2 W2h W9"
-d_score hard   1
-d_score uncond 1
+d_score base   1 "W10" "W3"
+d_score sort   1 "W3" "W7"
+# `tail` is decided by W2, W2h and W9 (the measured matrix: the only worlds that trip it). In every
+# other two-log world here the canonical copy is readdir-LAST, so `tail -1` picks the live log by
+# accident and scores identically to the fix. W9 has a decoy on each side; W2 and W2h (BL-631's
+# current-sprint scope) hold only a log the classifier refuses, which `tail -1` reads without asking.
+d_score tail   1 "W2 W2h W9" "W3"
+d_score hard   1 "W2c" "W3"
+d_score uncond 1 "W3b" "W3"
 
 # --- 12. THE MUTATION ANCHOR OF ASSERTION 6 IS STILL UNIQUE --------------------
 # Assertion 6 anchors a sed on the arm's dispatch line. That line is the one
@@ -1105,7 +1177,7 @@ e_mut() { # e_mut <name> <line|sub> <anchor> <replacement> <want-hits>
     END { close(out); print h }' "$VALIDATOR")" || hits="awk-failed"
   if [ "$5" = "0" ]; then
     if [ "$hits" = "0" ] && cmp -s "$VALIDATOR" "$out"; then
-      ok "MUTANT $name: DID NOT APPLY, and that is what this probe asserts"
+      ok "CONTROL $name: DID NOT APPLY, and that is what this probe asserts"
     else
       bad "MUTANT $name: the no-op probe hit $hits line(s) -- the hit counter cannot be trusted"
     fi
@@ -1118,7 +1190,7 @@ e_mut() { # e_mut <name> <line|sub> <anchor> <replacement> <want-hits>
     bad "MUTANT $name: DID NOT APPLY -- copy is byte-identical to the subject"; return 1
   fi
   if ! bash -n "$out" 2>"$E/$name.syn"; then
-    bad "MUTANT $name: does not parse -- a dead mutant is not a killed one"
+    bad "MUTANT $name: does not parse -- a dead mutant is not a scored kill"
     sed 's/^/        /' "$E/$name.syn"; return 1
   fi
   e_applied=$((e_applied+1))
@@ -1186,48 +1258,71 @@ e_diff() { # e_diff <vec-a> <vec-b> -> names of the worlds where they differ
   done
   printf '%s\n' "${out# }"
 }
-e_score() { # e_score <name> <world-that-must-kill>...
-  local name="$1" vec diff w; shift
+e_score() { # e_score <name> <deciding-worlds> <twin-world>   (ectl takes no worlds: it is the control)
+  local name="$1" dec="${2:-}" twin="${3:-}" vec="" diff="" w i r ws
   [ -f "$E_BIN/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
-  vec="$(e_vector "$E_BIN/$name.sh")"
+  if [ "$name" = "ectl" ]; then
+    vec="$(e_vector "$E_BIN/$name.sh")"
+    diff="$(e_diff "$E_SHIPPED" "$vec")"
+  else
+    # DECIDING worlds plus ONE twin that the measured matrix shows GREEN for this mutant. The full
+    # 20-world vector is taken only for the control (and for every mutant under --matrix).
+    ws="$dec $twin"; [ "$MATRIX" = 1 ] && ws="$E_NAMES"
+    for w in $ws; do
+      i=0; for r in $E_NAMES; do i=$((i+1)); [ "$r" = "$w" ] && break; done
+      r="$(e_verdict "$E_BIN/$name.sh" "$(printf '%s\n' "$E_ROOTS" | cut -d' ' -f"$i")")"
+      vec="$vec $w=$r"
+      [ "$r" = "$(printf '%s\n' "$E_SHIPPED" | cut -d' ' -f"$i")" ] || diff="$diff $w"
+    done
+    vec="${vec# }"; diff="${diff# }"
+  fi
   printf '  %-10s %s\n' "$name" "$vec"
-  diff="$(e_diff "$E_SHIPPED" "$vec")"
+  if [ "$MATRIX" = 1 ] && [ "$name" != "ectl" ]; then mx_row "$name" "$diff" "$E_NAMES" "$dec" "$twin"; fi
   if [ "$name" = "ectl" ]; then
     if [ -n "$diff" ]; then
       bad "CONTROL ectl: an UNMUTATED copy disagreed at [$diff] -- the harness is what moved"
     else
       case "$vec" in
-        *PASS/5492/-*) ok "CONTROL ectl: unmutated copy agrees, and DID run (a PASS/5492 row is present)" ;;
+        *PASS/5492/-*) ok "CONTROL ectl: unmutated copy agrees, and DID run (a PASS/5492 row is present)"; B_E=1 ;;
         *) bad "CONTROL ectl: agrees but emitted no PASS/5492 row -- two inert runs compare equal" ;;
       esac
     fi
     return
   fi
-  for w in "$@"; do
+  for w in $dec; do
     case " $diff " in
-      *" $w "*) ok "KILL $name: killed by $w (all killing worlds: [$diff])" ;;
-      *) if [ -n "$diff" ]; then
-           bad "KILL $name: $w does not kill it -- killed only at [$diff]"
-         else
-           bad "KILL $name: SURVIVED every world -- no seed separates it from the shipped selector"
-         fi ;;
+      *" $w "*) mutant_killed "$B_E" "$name" "KILL $name: killed by $w (all tripped: [$diff])" ;;
+      *) bad "KILL $name: deciding world $w does not kill it -- tripped only [${diff:-none}]" ;;
     esac
   done
+  case " $diff " in
+    *" $twin "*) bad "TWIN $name: twin world $twin tripped, but the measured matrix has it GREEN -- the co-tripping changed" ;;
+    *) ok "TWIN $name: twin world $twin agrees with the shipped selector, as the measured matrix records" ;;
+  esac
 }
 e_score ectl
-e_score pfirst     W-A W-C
-e_score plast      W-B W-C
-e_score noxcheck   W-D W-D2
-e_score body       W-E
-e_score oneline    W-F
-e_score noprec     W-G
-e_score tie        W-I
-e_score skipnots   W-J
-e_score xcanon     W-K2
-e_score nohit      W-L W-M
-e_score dateabsent W-N
-e_score noprior    W-F3
-e_score lasthit    W-M
+e_score pfirst     "W-A W-C" W-B
+e_score plast      "W-B W-C" W-A
+e_score noxcheck   "W-D W-D2" W-F2
+e_score body       "W-E" W-D
+e_score oneline    "W-F" W-F2
+e_score noprec     "W-G" W-A
+e_score tie        "W-I" W-J
+e_score skipnots   "W-J" W-I
+e_score xcanon     "W-K2" W-K
+e_score nohit      "W-L W-M" W-N
+e_score dateabsent "W-N" W-O
+e_score noprior    "W-F3" W-F2
+e_score lasthit    "W-M" W-L
+
+# --- 17. A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL, AND --matrix EXECUTES ALL OF THEM ---------------
+if [ "$MATRIX" = 1 ]; then
+  if [ "$MX_ROWS" -eq 18 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 18)"
+  else bad "--matrix printed $MX_ROWS MATRIX rows, want 18 (5 discovery + 13 selector mutants)"; fi
+else
+  if [ "$MX_ROWS" -eq 0 ]; then ok "a plain run printed no MATRIX row ($MX_ROWS), so the matrix-only cells did not run"
+  else bad "a plain run printed $MX_ROWS MATRIX rows -- the matrix path is running on every push"; fi
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then

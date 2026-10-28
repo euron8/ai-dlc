@@ -14,7 +14,42 @@
 # carries a clause at WARN, and Part 5 flips the adjudicable clause's LEVEL and re-runs. Without
 # that, a classifier that had started emitting the blocking row unconditionally would score as a
 # pass on all of Parts 1-4.
+# MUTANT BATTERY. Per push each mutant runs only its DECIDING arm plus one TWIN that stays green; the
+# matrix below is re-measured whenever an arm or a mutant is added or changed. Every drive of the shipped
+# subject (the live pass) keeps all base parts and worlds.
+# MUTANT-MATRIX m3c-clause-conj decides=P3c-c3 twins=P3c-rows
+# MUTANT-MATRIX m3c-cur-digest decides=P3c-c4 twins=P3c-rows
+# MUTANT-MATRIX m3c-clause-column decides=P3c-c7 twins=P3c-c7-row
+# MUTANT-MATRIX m3c-clause-guard decides=P3c-c6 twins=P3c-rows
+# MUTANT-MATRIX m3c-call decides=P3c-b twins=P3c-rows
+# MUTANT-MATRIX m8-string-compare decides=P8-ref twins=P8-sha
+# MUTANT-MATRIX m9-listing decides=P9-open twins=P9-classify
+# MUTANT-MATRIX m10a-hardcoded-map decides=P10-col6-e14 twins=P10-col6-e4
+# MUTANT-MATRIX m10b-prepended decides=P10-shape twins=P10-rows
+# MUTANT-MATRIX m10d-wholeline decides=P10-count twins=P10-rows
+# MUTANT-MATRIX-DYNAMIC part11-loop why=the ten Part 11 mutants are one table driven by a loop variable; each name keeps its own row
+# MUTANT-MATRIX p11-m1 decides=A twins=E
+# MUTANT-MATRIX p11-m13 decides=E twins=G
+# MUTANT-MATRIX p11-m2 decides=C twins=A
+# MUTANT-MATRIX p11-m3 decides=E twins=A
+# MUTANT-MATRIX p11-m5 decides=A twins=E
+# MUTANT-MATRIX p11-m6 decides=D twins=A
+# MUTANT-MATRIX p11-m7 decides=G twins=H
+# MUTANT-MATRIX p11-m10 decides=A twins=C
+# MUTANT-MATRIX p11-m8 decides=I twins=J
+# MUTANT-MATRIX p11-m9 decides=J twins=I
+# MUTANT-MATRIX m12-seed-no-maintenance decides=P12-fix twins=P12-force
+# MUTANT-MATRIX p13-mv1 decides=P13-R1 twins=P13-R3
+# MUTANT-MATRIX p13-mv2 decides=P13-R3 twins=P13-R1
+# MUTANT-MATRIX p14-ifs-tab-read decides=P14-anchor twins=P14-file
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-adjudication-tier/run.sh --matrix
 set -uo pipefail
+
+# MATRIX MODE is a `--matrix` ARGUMENT, parsed and shifted before the positional engine path. A plain
+# run never takes it: it measures every mutant against every arm of its own drive and prints one
+# `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell.
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -38,11 +73,47 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-run()    { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+. "$HERE/../lib/mutant.sh"
+
+# ONE DRIFT RUN PER DISTINCT STATE. blocks/drifts/digest/hookdetail/spentnote each re-ran the whole
+# drift computation over a state a neighbour had just run. `dcf` keys a run on everything the engine
+# reads from the world -- its argument vector, the consumer's HEAD, its working-tree status, the bytes
+# of every extension, override and register file, and the distribution's HEAD -- and runs the SAME
+# program (never a copy) only on a miss. A run whose state is changed by something outside that key
+# (the textconv drive, a mutant engine, the non-git consumer) bypasses it and calls the engine directly.
+MEMO="$ROOT/memo"; mkdir -p "$MEMO"
+dcf() { # <cons> <reg> <engine> args... -> prints the file holding the run's stdout ($f.err holds stderr)
+  local cons="$1" reg="$2"; shift 2
+  local k f
+  k="$*|$(git -C "$cons" rev-parse HEAD 2>/dev/null)|$(git -C "$cons" status --porcelain 2>/dev/null)|$(cat "$cons"/.claude/skills/ai-dlc/extensions/* "$cons"/.claude/skills/ai-dlc/overrides/* "$reg" 2>/dev/null)|$([ -e "$reg" ] && echo reg-present)|$(git -C "$DIST" rev-parse HEAD 2>/dev/null)"
+  f="$MEMO/$(printf '%s' "$k" | cksum | tr ' ' _)"
+  if [ ! -f "$f" ]; then bash "$@" > "$f.tmp" 2> "$f.err"; mv "$f.tmp" "$f"; echo x >> "$MEMO/.misses"; fi
+  printf '%s' "$f"
+}
+dcat() { cat "$(dcf "$@")"; }
+
+# MATRIX CELLS AND THE SCORING HELPER. A mutant is scored by its DECIDING arm (which must FAIL under it)
+# and its TWIN (an arm that must stay green). The same drive yields both, so the pair costs one run.
+mx_extra=0   # matrix-only drives executed; a plain run must leave this at 0
+mx_quiet=0
+mx_cell() { [ "$mx_quiet" = 1 ] && return 0; [ "$MATRIX" = 1 ] && printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$3"; return 0; }
+mx_score() { # $1 mutant $2 base-pass flag $3 decider arm $4 FAIL|ok $5 twin arm $6 ok|FAIL $7 message
+  mx_cell "$1" "$3" "$4"; mx_cell "$1" "$5" "$6"
+  if [ "$6" != ok ]; then
+    bad "$1: twin arm $5 did not hold ($6), so the copy is a dead or entangled harness and its verdict is not attributable"
+  elif [ "$4" = FAIL ]; then
+    mutant_killed "$2" "$1" "$1: $7"
+  else
+    bad "$1 SURVIVED: its deciding arm $3 stayed ok — $7"
+  fi
+}
+
+run()    { dcat "$CONS" "$REG" "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS"; }
+run_raw(){ bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
 # Same drive against a consumer root given as an argument. Part 3b's third control needs a world
 # that is NOT a git repo, and a helper hard-coding $CONS cannot express one.
 run_at() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$1" 2>/dev/null; }
-blocks() { run | grep -c '^HARD-LAYER-ADJUDICATION-MISSING'; }
+blocks() { run | grep -c '^HARD-LAYER-ADJUDICATION-MISSING' || true; }
 drifts() { run | grep -c '^EXTENSION-HOOK-DRIFT'; }
 digest() { run | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' \
                  | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1; }
@@ -186,7 +257,9 @@ git -C "$CONS" config diff.same.textconv 'sh -c "echo same" --'
 mkdir -p "$CONS/.git/info"; echo '* diff=same' >> "$TC_ATTR"
 tc_plain=0; git -C "$CONS" diff --quiet -- "$ENTRY" 2>/dev/null || tc_plain=$?
 tc_raw=0;   git -C "$CONS" diff --quiet --no-textconv -- "$ENTRY" 2>/dev/null || tc_raw=$?
-tc_note="$(spentnote)"
+# Driven RAW: the textconv driver lives in the consumer's .git/info/attributes, which the memo key does
+# not read, so a memoized answer here would be the earlier driver-less run's and test nothing.
+tc_note="$(run_raw | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING" {print $4; exit}')"
 git -C "$CONS" config --unset diff.same.textconv
 if [ "$TC_HAD" = 1 ]; then mv "$TC_ATTR.tchold" "$TC_ATTR"; else rm -f "$TC_ATTR"; fi
 if [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
@@ -295,7 +368,7 @@ TMEOF
 git -C "$TMCONS" add -A >/dev/null 2>&1
 git -C "$TMCONS" commit -qm "seed the title-join entry" >/dev/null 2>&1
 
-tm_run()    { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null; }
+tm_run()    { dcat "$TMCONS" "$TMREG" "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$TMCONS"; }
 tm_detail() { tm_run "${1:-$DRIFT}" | awk -F'\t' -v e="$TMENTRY" \
                 '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
 tm_rows()   { tm_run | awk -F'\t' -v e="$TMENTRY" \
@@ -335,7 +408,7 @@ else
 fi
 case "$(tm_detail)" in
   *"SPENT verdict rather than an unanswered one"*)
-    ok "Part 3c: the re-fired LC-E19 row names the prior verdict as SPENT — the note reaches the WARN row that prescribes the edit, not only the HARD row" ;;
+    ok "Part 3c: the re-fired LC-E19 row names the prior verdict as SPENT — the note reaches the WARN row that prescribes the edit, not only the HARD row"; B_b=1 ;;
   *)
     bad "Part 3c: the re-fired LC-E19 row is byte-indistinguishable from one that was never adjudicated. An operator who followed this row's own instruction in order spent their verdict and is told only to record another: $(tm_detail | tail -c 120)" ;;
 esac
@@ -382,11 +455,24 @@ if [ "$(tm_rows)" -eq 1 ] && ! git -C "$TMCONS" diff --quiet -- "$TMENTRY"; then
     *"SPENT verdict rather than an unanswered one"*)
       bad "Part 3c control 3: the entry's ONLY prior record is an LC-E4 verdict and the LC-E19 row reports it as a spent verdict for THIS clause. Measured on the reference consumer that is 3 of 8 LC-E19 entries, each told to re-record a ruling made about a different question" ;;
     *)
-      ok "Part 3c control 3: a prior record under a DIFFERENT clause only, same dirty entry — no note, so the lookup is keyed on the clause and not on the entry alone" ;;
+      ok "Part 3c control 3: a prior record under a DIFFERENT clause only, same dirty entry — no note, so the lookup is keyed on the clause and not on the entry alone"; B_c3=1 ;;
   esac
 else
   bad "Part 3c control 3 could not reach its state: $(tm_rows) title-join row(s) with the entry dirty=$(git -C "$TMCONS" diff --quiet -- "$TMENTRY"; echo $?), so the arm would not be measuring a cross-clause record at all"
 fi
+
+# tm_score <mutant> <flag> <decider arm> <twin arm> <mutant's tm_run output> <message>: the mutant is
+# decided by the SPENT note appearing on the title-join row (the live arm named asserts it absent) and
+# its twin is that the copy still emits exactly 1 title-join row (a dead harness cannot hold it).
+tm_score() {
+  local out="$5" rows note=ok twin=ok
+  rows="$(printf '%s\n' "$out" | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+  [ "$rows" -eq 1 ] || twin=FAIL
+  case "$(printf '%s\n' "$out" | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}')" in
+    *"SPENT verdict rather than an unanswered one"*) note=FAIL ;;
+  esac
+  mx_score "$1" "$2" "$3" "$note" "$4" "$twin" "$6"
+}
 
 # MUTANT FOR CONTROL 3 — the clause conjunct dropped from the jq select, nothing else. Scored HERE,
 # while the cross-clause state is live. Without it control 3 is an absence assertion that passes
@@ -404,17 +490,9 @@ if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
 if [ ! -s "$MCL" ] || cmp -s "$DRIFT" "$MCL"; then
   bad "FIXTURE ERROR: the clause-conjunct mutation matched nothing, or matched more than once, so Part 3c control 3 is an absence assertion nothing can falsify. Update MCL_OLD to match adj_spent_note's real jq select"
 else
-  mcl_rows="$(bash "$MCL" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
-  if [ "$mcl_rows" -ne 1 ]; then
-    bad "Part 3c MUTANT (clause) — the copy emitted $mcl_rows title-join row(s), want 1, so its verdict is a dead harness rather than a widened lookup"
-  else
-    case "$(tm_detail "$MCL")" in
-      *"SPENT verdict rather than an unanswered one"*)
-        ok "Part 3c MUTANT (clause) — without the clause conjunct the LC-E4-only record IS reported as this row's spent verdict: control 3 discriminates, and the narrowing is what stops the cross-clause quote" ;;
-      *)
-        bad "Part 3c MUTANT (clause) — dropping the clause conjunct changed nothing, so control 3 passes against a lookup keyed on the entry alone and asserts nothing" ;;
-    esac
-  fi
+  # ONE drive of the mutant answers both the row count (the twin) and the note (the decider).
+  mcl_out="$(tm_run "$MCL")"
+  tm_score m3c-clause-conj "${B_c3:-0}" P3c-c3 P3c-rows "$mcl_out" "without the clause conjunct the LC-E4-only record IS reported as this row's spent verdict: control 3 discriminates, and the narrowing is what stops the cross-clause quote"
 fi
 rm -rf "$MCLDIR"
 
@@ -434,7 +512,7 @@ if [ ${#TMDIG3} -eq 40 ] && [ "$(tm_rows)" -eq 1 ] && ! git -C "$TMCONS" diff --
     *"SPENT verdict rather than an unanswered one"*)
       bad "Part 3c control 4: the entry's ONLY record is under THIS row's CURRENT digest and the row reports it as a SPENT verdict. Nothing was spent — the operator is being accused over the record they are looking at" ;;
     *)
-      ok "Part 3c control 4: the only record is under the row's own current digest — no note, so the lookup excludes the CURRENT key and quotes only a superseded one" ;;
+      ok "Part 3c control 4: the only record is under the row's own current digest — no note, so the lookup excludes the CURRENT key and quotes only a superseded one"; B_c4=1 ;;
   esac
 
   # MUTANT FOR CONTROL 4 — the current-digest exclusion dropped, nothing else. Scored here, while
@@ -452,17 +530,7 @@ if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
   if [ ! -s "$MDG" ] || cmp -s "$DRIFT" "$MDG"; then
     bad "FIXTURE ERROR: the current-digest mutation matched nothing, or matched more than once, so control 4 is an absence assertion nothing can falsify. Update MDG_OLD to match adj_spent_note's real jq select"
   else
-    mdg_rows="$(bash "$MDG" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
-    if [ "$mdg_rows" -ne 1 ]; then
-      bad "Part 3c MUTANT (current digest) — the copy emitted $mdg_rows title-join row(s), want 1, so its verdict is a dead harness rather than a widened lookup"
-    else
-      case "$(tm_detail "$MDG")" in
-        *"SPENT verdict rather than an unanswered one"*)
-          ok "Part 3c MUTANT (current digest) — without the exclusion the row's OWN record IS reported as a spent verdict: control 4 discriminates, and the conjunct is what stops the false accusation" ;;
-        *)
-          bad "Part 3c MUTANT (current digest) — dropping the .subject_digest != \$d conjunct changed nothing, so control 4 passes against a lookup that cannot tell the current key from a superseded one" ;;
-      esac
-    fi
+    tm_score m3c-cur-digest "${B_c4:-0}" P3c-c4 P3c-rows "$(tm_run "$MDG")" "without the exclusion the row's OWN record IS reported as a spent verdict: control 4 discriminates, and the conjunct is what stops the false accusation"
   fi
   rm -rf "$MDGDIR"
 else
@@ -493,7 +561,7 @@ else
   git -C "$NOC" add -A >/dev/null 2>&1
   git -C "$NOC" commit -qm "strip LC-E19 from the contract" >/dev/null 2>&1
   NOCT="$(git -C "$NOC" rev-parse --short HEAD)"
-  noc_detail() { bash "${1:-$DRIFT}" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+  noc_detail() { dcat "$TMCONS" "$TMREG" "${1:-$DRIFT}" "$NOC" "$BASE" "$NOCT" "$TMCONS" \
                  | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
   NOCDIG="$(noc_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
   tm_record "${NOCDIG:-nodigest}0" > "$TMREG"   # a SUPERSEDED key, so only the clause can silence it
@@ -518,7 +586,7 @@ else
     # degraded to printing the absence sentence unconditionally would satisfy the precondition
     # too, so the HARD row in the SAME run — whose clause the stripped contract still declares —
     # is read for a resolved id.
-    noc_hard="$(bash "$DRIFT" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+    noc_hard="$(dcat "$TMCONS" "$TMREG" "$DRIFT" "$NOC" "$BASE" "$NOCT" "$TMCONS" \
                 | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING" {print $4; exit}')"
     case "$noc_hard" in
       *"with clause LC-"*|*"is clause LC-"*)
@@ -532,7 +600,7 @@ else
       *"SPENT verdict rather than an unanswered one"*)
         bad "Part 3c control 5: with the clause unresolvable the row STILL quotes a prior verdict. An empty clause must match no record rather than every one — this is the cross-clause quote arriving through the unmapped door" ;;
       *)
-        ok "Part 3c control 5: an unresolvable clause silences the note — the empty argument matches no record rather than acting as a wildcard" ;;
+        ok "Part 3c control 5: an unresolvable clause silences the note — the empty argument matches no record rather than acting as a wildcard"; B_c5=1 ;;
     esac
     # THE PAIRED DIRECTION, IN THE SAME BLOCK AND ONE PROPERTY APART. Control 5 is absence-shaped,
     # so on its own it passes against a build whose clause map is EMPTY at this call site — every
@@ -564,7 +632,7 @@ else
       *"SPENT verdict rather than an unanswered one"*)
         bad "Part 3c control 6: the register's only record carries an EMPTY clause and the unresolvable-clause row quotes it back. An empty clause argument is matching an empty clause FIELD, so a malformed row is reported as this row's spent verdict" ;;
       *)
-        ok "Part 3c control 6: a record whose clause is the EMPTY STRING is not quoted on a row whose clause is unresolvable — the guard refuses the lookup rather than letting empty match empty" ;;
+        ok "Part 3c control 6: a record whose clause is the EMPTY STRING is not quoted on a row whose clause is unresolvable — the guard refuses the lookup rather than letting empty match empty"; B_c6=1 ;;
     esac
 
     # (d6) THE LISTING'S CLAUSE COLUMN IS EMPTY HERE AND MUST NOT SHIFT THE STATUS INTO IT. The
@@ -573,14 +641,14 @@ else
     # `IFS=<tab> read` collapses the empty clause and lands the STATUS in the clause variable: the
     # printed sixth column then reads the status where it must read (unmapped). The healthy
     # listing over the unstripped contract is the control that the column otherwise carries an id.
-    noc_col6() { bash "${1:-$DRIFT}" --list-adjudications "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+    noc_col6() { dcat "$TMCONS" "$TMREG" "${1:-$DRIFT}" --list-adjudications "$NOC" "$BASE" "$NOCT" "$TMCONS" \
                  | awk -F'\t' -v e="$TMENTRY" '$1=="ADJUDICABLE" && $2==e {print $6; exit}'; }
     case "$(noc_col6)" in
-      "(unmapped)") ok "Part 3c control 7: a listing row whose clause is unresolvable prints (unmapped) in column 6 -- the empty clause field did not swallow the status" ;;
+      "(unmapped)") ok "Part 3c control 7: a listing row whose clause is unresolvable prints (unmapped) in column 6 -- the empty clause field did not swallow the status"; B_c7=1 ;;
       "") bad "Part 3c control 7: the listing produced no row for the entry, so the empty-clause read is not exercised" ;;
       *) bad "Part 3c control 7: the unresolvable-clause listing row reads '$(noc_col6)' in column 6, want (unmapped) -- the status shifted into the clause field" ;;
     esac
-    case "$(bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="ADJUDICABLE" && $2==e {print $6; exit}')" in
+    case "$(dcat "$TMCONS" "$TMREG" "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$TMCONS" | awk -F'\t' -v e="$TMENTRY" '$1=="ADJUDICABLE" && $2==e {print $6; exit}')" in
       LC-E19) ok "Part 3c control 7 CONTROL: the same entry over the unstripped contract lists its clause LC-E19, so (unmapped) above is the stripped contract" ;;
       *) bad "Part 3c control 7 CONTROL: the unstripped listing does not carry LC-E19 for the entry, so the arm above cannot discriminate" ;;
     esac
@@ -601,11 +669,12 @@ NCPY
     if [ ! -s "$NCDIR/layer-drift.sh" ] || cmp -s "$DRIFT" "$NCDIR/layer-drift.sh" || ! grep -qF 'read -r _e _t _d _c _s' "$NCDIR/layer-drift.sh"; then
       bad "FIXTURE ERROR: the clause-column IFS mutation did not apply, so control 7 is unproven"
     else
-      case "$(noc_col6 "$NCDIR/layer-drift.sh")" in
-        "(unmapped)") bad "Part 3c MUTANT (clause column): with the IFS read restored the row still prints (unmapped), so control 7 cannot see the collapse" ;;
-        "") bad "Part 3c MUTANT (clause column): the mutant emitted no row, so it broke the harness rather than the read" ;;
-        *) ok "Part 3c MUTANT (clause column): with the IFS read restored the status lands in the clause column, so control 7 is load-bearing" ;;
-      esac
+      # Decider P3c-c7 = column 6 reads (unmapped); the twin P3c-c7ctl = the mutant still emits a listing row at all.
+      mcc_v="$(noc_col6 "$NCDIR/layer-drift.sh")"
+      mcc_dec=FAIL; mcc_twin=ok
+      [ "$mcc_v" = "(unmapped)" ] && mcc_dec=ok
+      [ -n "$mcc_v" ] || mcc_twin=FAIL
+      mx_score m3c-clause-column "${B_c7:-0}" P3c-c7 "$mcc_dec" P3c-c7-row "$mcc_twin" "with the IFS read restored the status lands in the clause column, so control 7 is load-bearing"
     fi
 
     # MUTANT — delete the empty-clause guard, against control 6's world. Control 5's world cannot
@@ -627,17 +696,8 @@ if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
     if [ ! -s "$MG" ] || cmp -s "$DRIFT" "$MG"; then
       bad "FIXTURE ERROR: the empty-clause-guard mutation matched nothing, or matched more than once, so control 5 does not establish that the guard is what produces the silence. Update MG_OLD to match adj_spent_note's real guard line"
     else
-      mg_rows="$(bash "$MG" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
-      if [ "$mg_rows" -ne 1 ]; then
-        bad "Part 3c MUTANT (clause guard) — the copy emitted $mg_rows title-join row(s), want 1, so its verdict is a dead harness rather than a removed guard"
-      else
-        case "$(noc_detail "$MG")" in
-          *"SPENT verdict rather than an unanswered one"*)
-            ok "Part 3c MUTANT (clause guard) — with the guard deleted the unresolvable-clause row DOES quote control 6's empty-clause record: the guard is load-bearing, and it can fire at all only because the call site passes adj_clause_of" ;;
-          *)
-            bad "Part 3c MUTANT (clause guard) — deleting the empty-clause guard changed nothing. Then the guard is vacuous and control 5's silence comes from somewhere else — check that the call site passes adj_clause_of rather than adj_clause_cell, whose unresolvable branch prints a sentence and is never empty" ;;
-        esac
-      fi
+      mg_out="$(bash "$MG" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null)"
+      tm_score m3c-clause-guard "${B_c6:-0}" P3c-c6 P3c-rows "$mg_out" "with the guard deleted the unresolvable-clause row DOES quote control 6's empty-clause record: the guard is load-bearing, and it can fire at all only because the call site passes adj_clause_of"
     fi
     rm -rf "$MGDIR"
   fi
@@ -672,19 +732,17 @@ if [ ! -s "$M3C" ] || cmp -s "$DRIFT" "$M3C"; then
 elif [ "$ctl3c" != ok ]; then
   bad "FIXTURE ERROR: the UNMUTATED copy in $M3CDIR does not print the spent-verdict note in the state (b) established above, so the copied directory is not a working harness and the mutant verdict is not attributable"
 else
-  ok "Part 3c CONTROL: an unmutated copy in the same directory still prints the note — the mutant verdict below is its edit, not the copy"
-  m3c_note="$(tm_detail "$M3C")"
-  m3c_rows="$(bash "$M3C" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
-  if [ "$m3c_rows" -ne 1 ]; then
-    bad "Part 3c MUTANT — the copy with the call removed emitted $m3c_rows title-join row(s), want 1, so its silence is a dead harness rather than the missing note"
-  else
-    case "$m3c_note" in
-      *"SPENT verdict rather than an unanswered one"*)
-        bad "Part 3c MUTANT — removing the appended adj_spent_note call left the note on the row, so arm (b) is satisfied by something other than that call and is vacuous" ;;
-      *)
-        ok "Part 3c MUTANT — with the appended call removed the same state prints no note while the row still fires: arm (b) is testing that call and nothing else" ;;
-    esac
-  fi
+  ok "Part 3c BASELINE: an unmutated copy in the same directory still prints the note — the mutant verdict below is its edit, not the copy"
+  # Decider P3c-b asserts the note PRESENT; the mutant drops it, so the arm fails. Twin: the row still fires.
+  m3c_out="$(tm_run "$M3C")"
+  m3c_rows="$(printf '%s\n' "$m3c_out" | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+  m3c_dec=ok; m3c_twin=ok
+  case "$(printf '%s\n' "$m3c_out" | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}')" in
+    *"SPENT verdict rather than an unanswered one"*) ;;
+    *) m3c_dec=FAIL ;;
+  esac
+  [ "$m3c_rows" -eq 1 ] || m3c_twin=FAIL
+  mx_score m3c-call "${B_b:-0}" P3c-b "$m3c_dec" P3c-rows "$m3c_twin" "with the appended call removed the same state prints no note while the row still fires: arm (b) is testing that call and nothing else"
 fi
 rm -rf "$M3CDIR" "$TMCONS"
 
@@ -733,8 +791,9 @@ else
   mv "$CONTRACT.mut" "$CONTRACT"
   git -C "$DIST" add -A && git -C "$DIST" commit -qm "flip LC-E4 to WARN"
   THEIRS_W="$(git -C "$DIST" rev-parse --short HEAD)"
-  n="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS_W" "$CONS" 2>/dev/null | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')"
-  d="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS_W" "$CONS" 2>/dev/null | grep -c '^EXTENSION-HOOK-DRIFT')"
+  w_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS_W" "$CONS" 2>/dev/null)"
+  n="$(printf '%s\n' "$w_out" | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')" || n=0
+  d="$(printf '%s\n' "$w_out" | grep -c '^EXTENSION-HOOK-DRIFT')" || d=0
   if [ "$n" -eq 0 ] && [ "$d" -eq 1 ]; then
     ok "clause flipped to WARN: 0 blocking rows and the candidate row unchanged — the CONTRACT's level decides, so migrating a clause needs no edit to the classifier"
   else
@@ -774,10 +833,11 @@ fi
 # actionable AND the count must not move, because a fix that changed the count would be
 # suppressing rows rather than keying them.
 : > "$REG"
-abs_deg="$(run | grep -c 'could not be computed')"
-abs_hard="$(run | grep -c '^HARD-')"
-rel_deg="$( (cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c 'could not be computed')"
-rel_hard="$((cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c '^HARD-')"
+abs_deg="$(run | grep -c 'could not be computed')" || abs_deg=0
+abs_hard="$(run | grep -c '^HARD-')" || abs_hard=0
+rel_out="$(cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null)"
+rel_deg="$(printf '%s\n' "$rel_out" | grep -c 'could not be computed')" || rel_deg=0
+rel_hard="$(printf '%s\n' "$rel_out" | grep -c '^HARD-')" || rel_hard=0
 if [ "$rel_deg" -eq "$abs_deg" ] && [ "$rel_hard" -eq "$abs_hard" ]; then
   ok "a RELATIVE consumer root yields the same digests and the same $abs_hard HARD- row(s) as an absolute one"
 else
@@ -812,8 +872,8 @@ fi
 echo
 echo "Part 8 — a degenerate base..theirs range announces the arms it cannot fire"
 
-deg_out="$(bash "$DRIFT" "$DIST" "$THEIRS" "$THEIRS" "$CONS" 2>/dev/null)"
-real_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+deg_out="$(dcat "$CONS" "$REG" "$DRIFT" "$DIST" "$THEIRS" "$THEIRS" "$CONS")"
+real_out="$(run)"
 
 deg_row="$(printf '%s\n' "$deg_out"  | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
 real_row="$(printf '%s\n' "$real_out" | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
@@ -830,7 +890,7 @@ else
 fi
 
 if [ "$deg_row" -eq 1 ]; then
-  ok "the degenerate run emits exactly one DRIFT-RANGE-DEGENERATE row"
+  ok "the degenerate run emits exactly one DRIFT-RANGE-DEGENERATE row"; B_p8deg=1
 else
   bad "the degenerate run emitted $deg_row DRIFT-RANGE-DEGENERATE row(s), want 1 — a silent disarm reads exactly like a clean layer"
 fi
@@ -844,9 +904,9 @@ fi
 # RESOLVED COMMIT IDS, NOT ARGUMENT STRINGS. In every real invocation `theirs` is a ref name and
 # `base` a sha, so a string comparison would never fire on the one case this exists for.
 git -C "$DIST" branch -f fixture-tip "$THEIRS" >/dev/null 2>&1
-ref_row="$(bash "$DRIFT" "$DIST" "$THEIRS" fixture-tip "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+ref_row="$(dcat "$CONS" "$REG" "$DRIFT" "$DIST" "$THEIRS" fixture-tip "$CONS" | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
 if [ "$ref_row" -eq 1 ]; then
-  ok "fires when the same commit is named as a sha on one side and a REF on the other"
+  ok "fires when the same commit is named as a sha on one side and a REF on the other"; B_p8ref=1
 else
   bad "did not fire on sha-vs-ref ($ref_row rows) — a string compare would miss every real invocation"
 fi
@@ -861,15 +921,13 @@ sed 's@^  if \[ "\$BASE_SHA" = "\$THEIRS_SHA" \]; then@  if [ "$BASE" = "$THEIRS
 if cmp -s "$DRIFT" "$MUT8"; then
   bad "FIXTURE ERROR: the resolved-id mutation matched nothing, so the sha-vs-ref assertion is unproven"
 else
+  # Decider P8-ref (sha-vs-ref fires); twin P8-sha (sha-vs-sha, the degenerate-row arm, still fires once).
   m8_ref="$(bash "$MUT8" "$DIST" "$THEIRS" fixture-tip "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
   m8_sha="$(bash "$MUT8" "$DIST" "$THEIRS" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
-  if [ "$m8_ref" -ne 0 ]; then
-    bad "MUTATION — the string compare still fired on sha-vs-ref, so the resolved-id assertion is vacuous"
-  elif [ "$m8_sha" -ne 1 ]; then
-    bad "MUTATION — the string compare also lost the sha-vs-sha case ($m8_sha), so it is not a clean mutation of the resolution alone"
-  else
-    ok "MUTATION — comparing the argument strings loses sha-vs-ref and keeps sha-vs-sha: resolving the ids is load-bearing"
-  fi
+  m8_dec=ok; m8_twin=ok
+  [ "$m8_ref" -eq 1 ] || m8_dec=FAIL
+  [ "$m8_sha" -eq 1 ] || m8_twin=FAIL
+  mx_score m8-string-compare "${B_p8ref:-0}" P8-ref "$m8_dec" P8-sha "$m8_twin" "comparing the argument strings loses sha-vs-ref and keeps sha-vs-sha: resolving the ids is load-bearing"
 fi
 
 # --- Part 9: the digest is readable WITHOUT the row still blocking ---------------------------
@@ -890,16 +948,15 @@ fi
 echo
 echo "Part 9 — --list-adjudications reads the key without gate state"
 
-list()      { bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
-list_count(){ bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 >/dev/null \
-              | sed -n 's/.*: \([0-9][0-9]*\) keyed subject(s).*/\1/p' | head -1; }
+list()      { dcat "$CONS" "$REG" "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS"; }
+list_count(){ sed -n 's/.*: \([0-9][0-9]*\) keyed subject(s).*/\1/p' "$(dcf "$CONS" "$REG" "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS").err" | head -1; }
 list_digs() { list | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | sort -u; }
 
 rm -f "$REG"
 open_digs="$(list_digs)"
 open_n="$(printf '%s\n' "$open_digs" | grep -c .)"
 if [ "$open_n" -ge 1 ]; then
-  ok "the listing names $open_n keyed subject(s) with no register at all — every assertion below is measured against a non-empty set"
+  ok "the listing names $open_n keyed subject(s) with no register at all — every assertion below is measured against a non-empty set"; B_p9=1
 else
   bad "the listing named no keyed subject with the register cleared, so Part 9's remaining assertions would pass vacuously against a mode that prints nothing"
 fi
@@ -965,22 +1022,16 @@ ctl9_rows="$(bash "$CTL9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS"
 if [ ! -s "$MUT9" ] || cmp -s "$DRIFT" "$MUT9"; then
   bad "FIXTURE ERROR: the listing-recording mutation matched nothing — Part 9's mutation proves nothing. Update MUT9_OLD to match adj_digest's real recording line"
 elif [ "$ctl9_rows" -ne "$open_n" ]; then
-  bad "FIXTURE ERROR: the UNMUTATED copy in $MUT9DIR lists $ctl9_rows subject(s) against $open_n in place — the copied directory is not a working harness, so the mutant verdict below is not attributable"
+  bad "FIXTURE ERROR: the UNMUTATED copy in $MUT9DIR lists $ctl9_rows subject(s) against $open_n in place — the copied directory is not a working harness, so the verdict below is not attributable"
 else
-  ok "CONTROL: an unmutated copy in the same directory lists the same $ctl9_rows subject(s) — the mutant verdict below is its edit, not the copy"
-  mut9_rows="$(bash "$MUT9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
-  mut9_cls="$(bash "$MUT9" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c .)"
-  cls_rows="$(run | grep -c .)"
-  if [ "$mut9_rows" -eq 0 ]; then
-    ok "MUTATION — without adj_digest's recording the listing is empty: the subject set really is collected at the one place every keyed row asks for its key"
-  else
-    bad "MUTATION — the listing still named $mut9_rows subject(s) with adj_digest's recording removed, so it is being derived somewhere else and Part 9's assertions are about a second implementation"
-  fi
-  if [ "$mut9_cls" -eq "$cls_rows" ]; then
-    ok "MUTATION PAIRING — the same mutant's CLASSIFY output is unchanged ($cls_rows rows): it died of the listing edit, not of a broken harness"
-  else
-    bad "MUTATION PAIRING — the mutant's classify output moved ($mut9_cls vs $cls_rows), so its empty listing cannot be attributed to the recording line"
-  fi
+  ok "BASELINE: an unmutated copy in the same directory lists the same $ctl9_rows subject(s) — the verdict below is its edit, not the copy"
+  mut9_rows="$(dcat "$CONS" "$REG" "$MUT9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" | grep -c '^ADJUDICABLE')" || mut9_rows=0
+  mut9_cls="$(dcat "$CONS" "$REG" "$MUT9" "$DIST" "$BASE" "$THEIRS" "$CONS" | grep -c .)" || mut9_cls=0
+  cls_rows="$(run | grep -c .)" || cls_rows=0
+  m9_dec=ok; m9_twin=ok
+  [ "$mut9_rows" -eq 0 ] && m9_dec=FAIL
+  [ "$mut9_cls" -eq "$cls_rows" ] || m9_twin=FAIL
+  mx_score m9-listing "${B_p9:-0}" P9-open "$m9_dec" P9-classify "$m9_twin" "without adj_digest's recording the listing is empty ($mut9_rows rows) while its classify output is unchanged ($cls_rows rows): the subject set is collected at the one place every keyed row asks for its key"
 fi
 
 # --- Part 10: the row and the listing carry the CLAUSE the record requires -------------------
@@ -1025,8 +1076,8 @@ E14EOF
 git -C "$E14CONS" add -A >/dev/null 2>&1
 git -C "$E14CONS" commit -qm "seed the anchor-grain entry" >/dev/null 2>&1
 
-e14_run()  { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null; }
-e14_list() { bash "${1:-$DRIFT}" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null; }
+e14_run()  { dcat "$E14CONS" "$E14REG" "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$E14CONS"; }
+e14_list() { dcat "$E14CONS" "$E14REG" "${1:-$DRIFT}" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS"; }
 # The blocking row belonging to ONE entry, by its detail field. Keyed on the entry rather than on
 # the status, because the two blocking rows in this world are byte-identical apart from the
 # quoted status and the two values this part is about — which is the defect stated as a selector.
@@ -1061,12 +1112,12 @@ esac
 # The digest is still field 4 and the verdict still field 5 — every reader of this stream in the
 # suite reads one of those two positions, so the clause is APPENDED and never inserted.
 if e14_list | awk -F'\t' '$1=="ADJUDICABLE" && (NF!=6 || $4 !~ /^[0-9a-f]{40}$/ || $5=="") {bad=1} END{exit bad+0}'; then
-  ok "every listing row is 6 fields with a 40-hex digest still in field 4 and a non-empty verdict cell in field 5 — columns 1-5 are where they were"
+  ok "every listing row is 6 fields with a 40-hex digest still in field 4 and a non-empty verdict cell in field 5 — columns 1-5 are where they were"; B_p10shape=1
 else
   bad "a listing row is not 6 fields, or its field 4 is not the digest / field 5 not the verdict. The clause was inserted rather than appended and every reader keyed on \$4 or \$5 is now reading the wrong column"
 fi
 if [ "$(e14_col6 "$E14ENTRY")" = "LC-E14" ] && [ "$(e14_col6 "$ENTRY")" = "LC-E4" ]; then
-  ok "listing column 6 is LC-E14 for the anchor-grain subject and LC-E4 for the file-grain one — the documented way to re-read a key now supplies every field the record requires"
+  ok "listing column 6 is LC-E14 for the anchor-grain subject and LC-E4 for the file-grain one — the documented way to re-read a key now supplies every field the record requires"; B_p10col=1
 else
   bad "listing column 6 reads '$(e14_col6 "$E14ENTRY")' and '$(e14_col6 "$ENTRY")', want LC-E14 and LC-E4. An operator re-reading a key after the block cleared still cannot obtain the clause"
 fi
@@ -1106,7 +1157,7 @@ fi
 e14_rows="$(e14_list | grep -c '^ADJUDICABLE')"
 e14_subj="$(e14_list | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
 if [ "$e14_rows" -eq "$e14_subj" ] && [ "$e14_rows" -ge 3 ]; then
-  ok "the listing names $e14_rows row(s) over $e14_subj distinct subject(s) — a subject keyed by two clauses is still ONE line, so the count line counts subjects and not rows"
+  ok "the listing names $e14_rows row(s) over $e14_subj distinct subject(s) — a subject keyed by two clauses is still ONE line, so the count line counts subjects and not rows"; B_p10count=1
 else
   bad "the listing prints $e14_rows row(s) over $e14_subj distinct subject(s). The dedupe key includes the clause, so a subject keyed by two clauses is listed twice and the mode's own count line is reporting rows while calling them subjects"
 fi
@@ -1158,7 +1209,7 @@ CTL10="$M10DIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL10" 2>/dev/null
 if [ "$(e14_col6 "$E14ENTRY" "$CTL10")" != "LC-E14" ]; then
   bad "FIXTURE ERROR: the UNMUTATED copy in $M10DIR does not report LC-E14 in the copied tree, so no mutant verdict below is attributable to its edit"
 else
-  ok "CONTROL: an unmutated copy in the same directory still reports LC-E14 in column 6 — the mutant verdicts below are their edits, not the copy"
+  ok "BASELINE: an unmutated copy in the same directory still reports LC-E14 in column 6 — the verdicts below are their edits, not the copy"
 
   # MUTANT (a): the map is HARDCODED to LC-E4 rather than derived from the contract. This is the
   # implementation an LC-E4-only seed cannot tell from the real one.
@@ -1173,13 +1224,10 @@ else
   else
     m10a_e14="$(e14_col6 "$E14ENTRY" "$M10A")"
     m10a_e4="$(e14_col6 "$ENTRY" "$M10A")"
-    if [ "$m10a_e14" = "LC-E14" ]; then
-      bad "MUTANT (a) — a map hardcoded to LC-E4 still printed LC-E14, so the clause is not coming from the map this fixture mutated"
-    elif [ "$m10a_e4" != "LC-E4" ]; then
-      bad "MUTANT (a) — the hardcoded map also lost the LC-E4 row ('$m10a_e4'), so it broke the harness rather than the derivation and its LC-E14 verdict is not attributable"
-    else
-      ok "MUTANT (a) — hardcoding the map to LC-E4 kills the LC-E14 assertion and leaves the LC-E4 control alive: the id is DERIVED from the contract, and an LC-E4-only seed could not have shown it"
-    fi
+    m10a_dec=ok; m10a_twin=ok
+    [ "$m10a_e14" = "LC-E14" ] || m10a_dec=FAIL
+    [ "$m10a_e4" = "LC-E4" ] || m10a_twin=FAIL
+    mx_score m10a-hardcoded-map "${B_p10col:-0}" P10-col6-e14 "$m10a_dec" P10-col6-e4 "$m10a_twin" "hardcoding the map to LC-E4 kills the LC-E14 assertion and leaves the LC-E4 control alive: the id is DERIVED from the contract, and an LC-E4-only seed could not have shown it"
   fi
 
   # MUTANT (b): the clause PREPENDED as column 2 instead of appended. Every reader of this stream
@@ -1197,16 +1245,12 @@ M10BPY
   if [ ! -s "$M10B" ] || cmp -s "$DRIFT" "$M10B"; then
     bad "FIXTURE ERROR: the prepended-column mutation matched nothing, so nothing here proves the clause column has to be LAST. Update the keyed printf in the M10B block"
   else
-    m10b_shape="$(bash "$M10B" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null \
-                  | awk -F'\t' '$1=="ADJUDICABLE" && $4 ~ /^[0-9a-f]{40}$/ {c++} END{print c+0}')"
-    m10b_rows="$(bash "$M10B" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
-    if [ "$m10b_rows" -lt 1 ]; then
-      bad "MUTANT (b) — the prepended copy emitted no listing rows at all, so its verdict is a dead harness rather than a moved column"
-    elif [ "$m10b_shape" -ne 0 ]; then
-      bad "MUTANT (b) — with the clause prepended, field 4 still reads as a digest on $m10b_shape row(s). Then the position assertion above is vacuous and a reader keyed on \$4 would not have noticed the shift either"
-    else
-      ok "MUTANT (b) — prepending the clause moves the digest out of field 4 and the shape assertion dies: appending is load-bearing for every reader that keys on \$4 or \$5"
-    fi
+    m10b_shape="$(e14_list "$M10B" | awk -F'\t' '$1=="ADJUDICABLE" && $4 ~ /^[0-9a-f]{40}$/ {c++} END{print c+0}')"
+    m10b_rows="$(e14_list "$M10B" | grep -c '^ADJUDICABLE')" || m10b_rows=0
+    m10b_dec=ok; m10b_twin=ok
+    [ "$m10b_shape" -eq 0 ] && m10b_dec=FAIL
+    [ "$m10b_rows" -ge 1 ] || m10b_twin=FAIL
+    mx_score m10b-prepended "${B_p10shape:-0}" P10-shape "$m10b_dec" P10-rows "$m10b_twin" "prepending the clause moves the digest out of field 4 and the shape assertion dies: appending is load-bearing for every reader that keys on field 4 or 5"
   fi
 
   # MUTANT (d): the accumulated rows deduped by WHOLE LINE, which is what `sort -u` alone does
@@ -1227,15 +1271,12 @@ M10DPY
   if [ ! -s "$M10D" ] || cmp -s "$DRIFT" "$M10D"; then
     bad "FIXTURE ERROR: the whole-line-dedupe mutation matched nothing, so nothing here proves the subject dedupe is load-bearing. Update the M10D block to match the listing's real dedupe pipeline"
   else
-    m10d_rows="$(e14_list "$M10D" | grep -c '^ADJUDICABLE')"
-    m10d_subj="$(e14_list "$M10D" | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
-    if [ "$m10d_rows" -lt 1 ]; then
-      bad "MUTANT (d) — the whole-line-dedupe copy emitted no listing rows, so its verdict is a dead harness rather than a split subject"
-    elif [ "$m10d_rows" -le "$m10d_subj" ]; then
-      bad "MUTANT (d) — deduping by whole line still gave $m10d_rows row(s) over $m10d_subj subject(s), so the count arm above is vacuous and would not have seen the subject that carries two clauses split in two"
-    else
-      ok "MUTANT (d) — deduping by whole line splits the dual-keyed subject ($m10d_rows rows over $m10d_subj subjects): keying the dedupe on the subject rather than the line is load-bearing"
-    fi
+    m10d_rows="$(e14_list "$M10D" | grep -c '^ADJUDICABLE')" || m10d_rows=0
+    m10d_subj="$(e14_list "$M10D" | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)" || m10d_subj=0
+    m10d_dec=ok; m10d_twin=ok
+    [ "$m10d_rows" -gt "$m10d_subj" ] && m10d_dec=FAIL
+    [ "$m10d_rows" -ge 1 ] || m10d_twin=FAIL
+    mx_score m10d-wholeline "${B_p10count:-0}" P10-count "$m10d_dec" P10-rows "$m10d_twin" "deduping by whole line splits the dual-keyed subject ($m10d_rows rows over $m10d_subj subjects): keying the dedupe on the subject rather than the line is load-bearing"
   fi
 fi
 
@@ -1273,14 +1314,14 @@ else
     *)                 swap_h=no ;;
   esac
   if [ "$swap_a" = ok ] && [ "$swap_h" = ok ]; then
-    ok "MUTANT (c) — with the two codes SWAPPED in the contract at theirs, the anchor row prints LC-E4 and the hook row LC-E14: the printed id follows the contract the consumer is being held to, and is a literal nowhere"
+    ok "SWAP (c) — with the two codes SWAPPED in the contract at theirs, the anchor row prints LC-E4 and the hook row LC-E14: the printed id follows the contract the consumer is being held to, and is a literal nowhere"
   else
-    bad "MUTANT (c) — after swapping the codes the anchor row reads '$(printf '%s' "$swap_anchor" | grep -o 'clause [^ ]*' | head -1)' and the hook row '$(printf '%s' "$swap_hook" | grep -o 'clause [^ ]*' | head -1)', want LC-E4 and LC-E14. The id is baked into the script rather than read from layer-contract.yaml at theirs"
+    bad "SWAP (c) — after swapping the codes the anchor row reads '$(printf '%s' "$swap_anchor" | grep -o 'clause [^ ]*' | head -1)' and the hook row '$(printf '%s' "$swap_hook" | grep -o 'clause [^ ]*' | head -1)', want LC-E4 and LC-E14. The id is baked into the script rather than read from layer-contract.yaml at theirs"
   fi
   # CONTROL: the unrenamed dist prints LC-E14 for the anchor row, so the swap above is what moved
   # it. Without this arm a script that printed nothing at all would pass both cases.
   case "$(e14_detail "$E14ENTRY")" in
-    *"clause LC-E14"*) ok "CONTROL: the UNSWAPPED dist prints LC-E14 for the same entry, so mutant (c)'s verdict is the contract edit and not a script that stopped resolving anything" ;;
+    *"clause LC-E14"*) ok "CONTROL: the UNSWAPPED dist prints LC-E14 for the same entry, so the swap verdict is the contract edit and not a script that stopped resolving anything" ;;
     *) bad "CONTROL FAILED: the unswapped dist does not print LC-E14 for the anchor entry, so mutant (c) compared two broken states" ;;
   esac
 fi
@@ -1482,43 +1523,43 @@ P11START="does not resolve to a commit"
 p11_hookmiss() { printf '%s\n' "$p11_out" | awk -F'\t' -v e="$P11XENTRY" '$1=="EXTENSION-HOOK-MISSING" && $2==e {c++} END {exit !(c==1)}'; }
 
 # p11_score <engine> -> sets p11_v, the whole arm vector ("A=ok B=no ..."), and p11_d, the details.
+p11_one() { # <engine> <arm> -> appends <arm>=ok|no to p11_v
+  local e="$1" r=no
+  case "$2" in
+    A)  p11_drive "$e" A --adjudicated-codes "$DIST" "$P11BAD"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    B)  p11_drive "$e" B "$DIST" "$P11B" "$P11BAD" "$CONS"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    C)  p11_drive "$e" C "$DIST" "$P11BAD" "$P11T" "$CONS"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    D)  p11_drive "$e" D --list-adjudications "$DIST" "$P11BAD" "$P11BAD" "$CONS"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; fi ;;
+    D2) p11_drive "$e" D2 --list-adjudications "$DIST" "$P11BAD" "$P11T" "$CONS"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; fi ;;
+    E)  p11_drive "$e" E --adjudicated-codes "$P11E" "$P11T"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    F)  p11_drive "$e" F --adjudicated-codes "$P11F" "$P11T"
+        if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    G)  p11_drive "$e" G --adjudicated-codes "$P11G" "$P11GT"
+        if [ "$p11_rc" -eq 0 ] && ! p11_anyref && [ "$(p11_rows)" -eq 0 ]; then r=ok; fi ;;
+    H)  p11_drive "$e" H --adjudicated-codes "$DIST" "$P11T"
+        if [ "$p11_rc" -eq 0 ] && ! p11_anyref && printf '%s\n' "$p11_out" | awk '$0 == "EXTENSION-HOOK-DRIFT" { f = 1 } END { exit !f }'; then r=ok; fi ;;
+    I)  p11_drive "$e" I "$DIST" "$P11B" "$P11T" "$P11CI"
+        if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; fi ;;
+    J)  p11_drive "$e" J "$DIST" "$P11B" "$P11T" "$P11CJ"
+        if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; fi ;;
+  esac
+  p11_arm "$2" "$r" "$(p11_state)"
+}
+# p11_score <engine> -> sets p11_v, the whole arm vector ("A=ok B=no ..."), and p11_d, the details.
 p11_score() {
-  local e="$1" r
+  local a
   p11_v=""; p11_d=""
-  p11_drive "$e" A --adjudicated-codes "$DIST" "$P11BAD"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm A "$r" "$(p11_state)"
-  p11_drive "$e" B "$DIST" "$P11B" "$P11BAD" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm B "$r" "$(p11_state)"
-  p11_drive "$e" C "$DIST" "$P11BAD" "$P11T" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm C "$r" "$(p11_state)"
-  p11_drive "$e" D --list-adjudications "$DIST" "$P11BAD" "$P11BAD" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm D "$r" "$(p11_state)"
-  p11_drive "$e" D2 --list-adjudications "$DIST" "$P11BAD" "$P11T" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm D2 "$r" "$(p11_state)"
-  p11_drive "$e" E --adjudicated-codes "$P11E" "$P11T"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm E "$r" "$(p11_state)"
-  p11_drive "$e" F --adjudicated-codes "$P11F" "$P11T"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm F "$r" "$(p11_state)"
-  p11_drive "$e" G --adjudicated-codes "$P11G" "$P11GT"
-  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
-  p11_arm G "$r" "$(p11_state)"
-  p11_drive "$e" H --adjudicated-codes "$DIST" "$P11T"
-  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && printf '%s\n' "$p11_out" | awk '$0 == "EXTENSION-HOOK-DRIFT" { f = 1 } END { exit !f }'; then r=ok; else r=no; fi
-  p11_arm H "$r" "$(p11_state)"
-  p11_drive "$e" I "$DIST" "$P11B" "$P11T" "$P11CI"
-  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; else r=no; fi
-  p11_arm I "$r" "$(p11_state)"
-  p11_drive "$e" J "$DIST" "$P11B" "$P11T" "$P11CJ"
-  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; else r=no; fi
-  p11_arm J "$r" "$(p11_state)"
+  for a in A B C D D2 E F G H I J; do p11_one "$1" "$a"; done
   p11_v="${p11_v# }"
+}
+p11_cell() { # <arm> -> ok|FAIL from the vector in p11_v
+  case " $p11_v " in *" $1=ok "*) printf ok ;; *) printf FAIL ;; esac
 }
 P11ALLOK="A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=ok"
 
@@ -1537,6 +1578,7 @@ if [ "$p11_ready" = yes ]; then
 fi
 if [ "$p11_ready" = yes ]; then
   p11_score "$DRIFT"
+  [ "$p11_v" = "$P11ALLOK" ] && B_p11=1
   for p11_a in $p11_v; do
     case "$p11_a" in
       A=ok)  ok "Part 11 A: --adjudicated-codes with an unresolvable THEIRS exits 1 with a REFUSED line naming the ref, and prints no code" ;;
@@ -1556,11 +1598,12 @@ if [ "$p11_ready" = yes ]; then
 fi
 
 # MUTANTS. Each is ONE layer of the fix undone in a copy of the whole reconcile/ directory (lib.sh
-# is sourced beside the engine; a lone copy dies at the source line and emits nothing), and each is
-# asserted by its EXACT failing arm set -- a mutant failing an arm it does not own means two arms
-# are entangled, and H staying ok on every mutant is the presence-shaped proof the copy ran. Every
-# anchor is counted before it is applied: zero is `FIXTURE STALE` (the fix moved and the mutant
-# must be re-anchored on the new site, never dropped), more than one is ambiguous.
+# is sourced beside the engine; a lone copy dies at the source line and emits nothing). Every anchor is
+# counted before it is applied: zero is `FIXTURE STALE` (the fix moved and the mutant must be
+# re-anchored on the new site, never dropped), more than one is ambiguous. Each mutant is scored on ONE
+# deciding arm plus ONE twin per push; the full arm vector per mutant is the --matrix run. The vectors
+# below were the whole-vector scoring before that narrowing (a mutant failing an arm it does not own is
+# entanglement), kept as the description of what each mutant undoes:
 #
 #   M1  ld_resolve_ref never refuses                         -> A B C D D2. On THEIRS and on BASE
 #       the two layers still both REFUSE: `have`'s ls-tree exits 128 on an unresolvable ref, so the
@@ -1656,22 +1699,24 @@ P11PY
 }
 if [ "$p11_ready" = yes ]; then
   cp "$DRIFT" "$P11MD/layer-drift-unmutated.sh"
-  p11_score "$P11MD/layer-drift-unmutated.sh"
-  if [ "$p11_v" != "$P11ALLOK" ]; then
-    bad "FIXTURE ERROR: the UNMUTATED copy in $P11MD scores '$p11_v', not all-ok, so the copied directory is not a working harness and no mutant verdict below is attributable —$p11_d"
+  p11_v=""; p11_d=""; p11_one "$P11MD/layer-drift-unmutated.sh" H
+  if [ "${p11_v# }" != "H=ok" ]; then
+    bad "FIXTURE ERROR: the UNMUTATED copy in $P11MD scores '$p11_v' on H, so the copied directory is not a working harness and no verdict below is attributable —$p11_d"
   else
-    ok "Part 11 CONTROL: an unmutated copy in the mutant directory scores every arm ok — the verdicts below are their edits, not the copy"
-    for p11_m in "m1:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup ref refusal removed (an unresolvable THEIRS or BASE is still refused by have, whose ls-tree exits 128 there, but without the startup words and only AFTER the listing's mktemp)" \
-                 "m13:A=no B=no C=no D=no D2=no E=no F=no G=ok H=ok I=ok J=ok:BOTH layers removed, the pre-fix engine's shape" \
-                 "m2:A=ok B=ok C=no D=ok D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal checking THEIRS only" \
-                 "m3:A=ok B=ok C=ok D=ok D2=ok E=no F=no G=ok H=ok I=ok J=ok:have() reduced to memo_has_path" \
-                 "m5:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal exiting 2" \
-                 "m6:A=ok B=ok C=ok D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal moved below the listing mktemp" \
-                 "m7:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=no H=ok I=no J=no:have() refusing every memo miss" \
-                 "m10:A=no B=no C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=ok:the THEIRS startup check alone removed (BASE still checked)" \
-                 "m8:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=no J=ok:have() trusting ls-tree's line without comparing the path it prints" \
-                 "m9:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=no:have() refusing a .. spelling that climbs out of the tree"; do
-      p11_id="${p11_m%%:*}"; p11_rest="${p11_m#*:}"; p11_want="${p11_rest%%:*}"; p11_what="${p11_rest#*:}"
+    ok "Part 11 BASELINE: an unmutated copy in the mutation directory prints the code set (H) — the verdicts below are their edits, not the copy"
+    # id : deciding arm : twin arm : what. The decider is the arm that kills it; the twin is an arm it could co-trip and must not.
+    for p11_m in "m1:A:E:the startup ref refusal removed (an unresolvable THEIRS or BASE is still refused by have, but without the startup words and only AFTER the listing's mktemp)" \
+                 "m13:E:G:BOTH layers removed, the pre-fix engine's shape" \
+                 "m2:C:A:the startup refusal checking THEIRS only" \
+                 "m3:E:A:have() reduced to memo_has_path" \
+                 "m5:A:E:the startup refusal exiting 2" \
+                 "m6:D:A:the startup refusal moved below the listing mktemp" \
+                 "m7:G:H:have() refusing every memo miss" \
+                 "m10:A:C:the THEIRS startup check alone removed (BASE still checked)" \
+                 "m8:I:J:have() trusting ls-tree's line without comparing the path it prints" \
+                 "m9:J:I:have() refusing a .. spelling that climbs out of the tree"; do
+      p11_id="${p11_m%%:*}"; p11_rest="${p11_m#*:}"; p11_dec="${p11_rest%%:*}"; p11_rest="${p11_rest#*:}"
+      p11_twin="${p11_rest%%:*}"; p11_what="${p11_rest#*:}"
       p11_ap="$(p11_mut "$p11_id")"
       p11_f="$P11MD/layer-drift-$p11_id.sh"
       if [ "$p11_ap" = STALE ]; then
@@ -1681,12 +1726,17 @@ if [ "$p11_ready" = yes ]; then
       elif ! bash -n "$p11_f" 2>/dev/null; then
         bad "FIXTURE ERROR: mutant $p11_id ($p11_what) does not parse, so any verdict would be a dead copy's"
       else
-        p11_score "$p11_f"
-        if [ "$p11_v" = "$p11_want" ]; then
-          ok "Part 11 MUTANT $p11_id — $p11_what: KILLED by exactly the arms it owns ($(printf '%s' "$p11_v" | tr ' ' '\n' | grep '=no' | cut -d= -f1 | tr '\n' ' '| sed 's/ $//')), every other arm still ok"
+        mx_quiet=0
+        if [ "$MATRIX" = 1 ]; then
+          mx_extra=$((mx_extra+1))
+          p11_score "$p11_f"
+          for p11_c in A B C D D2 E F G H I J; do mx_cell "p11-$p11_id" "$p11_c" "$(p11_cell "$p11_c")"; done
+          mx_quiet=1
         else
-          bad "Part 11 MUTANT $p11_id — $p11_what: scored '$p11_v', want '$p11_want'. An owned arm left ok is a survivor; an extra failing arm is entanglement —$p11_d"
+          p11_v=""; p11_d=""; p11_one "$p11_f" "$p11_dec"; p11_one "$p11_f" "$p11_twin"
         fi
+        mx_score "p11-$p11_id" "${B_p11:-0}" "$p11_dec" "$(p11_cell "$p11_dec")" "$p11_twin" "$(p11_cell "$p11_twin")" "$p11_what: decided by arm $p11_dec while arm $p11_twin holds"
+        mx_quiet=0
       fi
     done
   fi
@@ -1763,7 +1813,7 @@ if [ "$p12_live" = yes ]; then
     p12_n17after="$(ls "$P12F/.git/objects/17" 2>/dev/null | wc -l | tr -d ' ')"
     p11_build_e "$P12F" "$P12T"
     if [ -z "$p11_ewhy" ] && [ "$(p12_inpack "$P12F")" -eq 0 ] && [ "$p12_n17after" -ge 2 ]; then
-      ok "Part 12 fix: with the trigger forced the store stays loose ($p12_n17after in objects/17, 0 in-pack) and world E builds — the seed's maintenance.auto line holds"
+      ok "Part 12 fix: with the trigger forced the store stays loose ($p12_n17after in objects/17, 0 in-pack) and world E builds — the seed's maintenance.auto line holds"; B_p12=1
     else
       bad "Part 12 fix: with the trigger forced, world E refused — ${p11_ewhy:-built, but $(p12_inpack "$P12F") in-pack and $p12_n17after in objects/17} — so the distribution store is being packed and Part 11 will flake"
     fi
@@ -1791,12 +1841,10 @@ if [ "$p12_live" = yes ]; then
         bad "FIXTURE ERROR: Part 12 could not force the trigger on the mutant copy — $p12_why"
       else
         p11_build_e "$P12MD" "$P12MT"
-        case "$p11_ewhy" in
-          *"readable but not loose"*)
-            ok "Part 12 MUTANT — seed without maintenance.auto: KILLED, world E refuses as the flake did ($p11_ewhy)" ;;
-          *)
-            bad "Part 12 MUTANT — seed without maintenance.auto: SURVIVED, world E answered '${p11_ewhy:-built}' where the packed store should refuse, so Part 12's fix arm is not what holds the line" ;;
-        esac
+        # Decider P12-fix (world E builds on a forced store); twin P12-force (the trigger was forced on the copy).
+        p12_dec=ok
+        case "$p11_ewhy" in *"readable but not loose"*) p12_dec=FAIL ;; esac
+        mx_score m12-seed-no-maintenance "${B_p12:-0}" P12-fix "$p12_dec" P12-force ok "world E refuses as the flake did ($p11_ewhy)"
       fi
     fi
   fi
@@ -1831,8 +1879,20 @@ P13_FM="reason: seeded entry whose hooked core file moves across the range"
 P13_SEP="|----------|----------|"
 P13_CL="Gamma's body at THEIRS — REWRITTEN. This is the change the re-read duty fires on."
 P13_OFFDIFF="Alpha's body, unchanged across the range."
-p13_hard() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"'; }
-p13_n()    { p13_hard "${1:-}" | grep -c .; }
+p13_hard() { dcat "$CONS" "$REG" "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$CONS" | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"'; }
+p13_n()    { p13_hard "${1:-}" | grep -c . || true; }
+# p13_arm <drift> <R1|R2|R3|R4> -> 1 when that record still blocks, 0 when it clears. ONE record, ONE drive.
+p13_arm() {
+  local d s="${1:-$DRIFT}"
+  d="$(need_digest 'Part 13')" || { printf 'x'; return; }
+  case "$2" in
+    R1) p13_rec "$d" - > "$REG" ;;
+    R2) p13_rec "$d" "$P13_EL" "$P13_CL" > "$REG" ;;
+    R3) p13_rec "$d" "$P13_CL" "$P13_CL" > "$REG" ;;
+    R4) p13_rec "$d" "$P13_EL" "$P13_OFFDIFF" > "$REG" ;;
+  esac
+  p13_n "$s"
+}
 # p13_vec <drift> -> "R1 R2 R3 R4" as 1 = the row blocks, 0 = it clears
 p13_vec() {
   local v="" d s="${1:-$DRIFT}"
@@ -1980,25 +2040,35 @@ P13_CTL="$(p13_mut control 'ADJ_ROW_TOKEN="adjudicated"' 'ADJ_ROW_TOKEN="adjudic
 p13_base="$(p13_vec)"
 if [ "$p13_base" != "1 0 1 1" ]; then
   bad "Part 13 MUTANTS: the unmutated vector is '$p13_base', want '1 0 1 1', so no mutant below is attributable"
-elif [ -z "$P13_CTL" ] || [ "$(p13_vec "$P13_CTL")" != "1 0 1 1" ]; then
-  bad "FIXTURE ERROR: an inert copy in a mutant directory does not score '1 0 1 1', so the copied directory is not a working harness"
+elif [ -z "$P13_CTL" ] || [ "$(p13_arm "$P13_CTL" R1)" != "1" ]; then
+  bad "FIXTURE ERROR: an inert copy in a mutant directory does not block R1, so the copied directory is not a working harness"
 else
-  ok "Part 13 CONTROL: an inert copy in a mutant directory scores the unmutated vector '1 0 1 1' (R1 R2 R3 R4)"
+  ok "Part 13 BASELINE: an inert copy in a mutant directory blocks R1 as the shipped engine does (a copy that never ran cannot print the blocking row)"
+  B_p13=1
   P13_MV1="$(p13_mut mv1 '      st=no-read' '      st=clears')"
   P13_MV2="$(p13_mut mv2 $'      st=no-read\n    else' $'      st=no-read\n    elif :; then\n      st=clears\n    else')"
   if [ -z "$P13_MV1" ]; then bad "FIXTURE ERROR: MV1's anchor is not exactly once in layer-drift.sh, so the mutant does not exist"
   else
-    case "$(p13_vec "$P13_MV1")" in
-      "0 0 1 1") ok "MV1 (the read check dropped) KILLED: R1 moves to clearing, R2 does not" ;;
-      *) bad "MV1 (the read check dropped) scored '$(p13_vec "$P13_MV1")', want '0 0 1 1' — R1 does not see a verdict clearing without evidence" ;;
-    esac
+    if [ "$MATRIX" = 1 ]; then
+      mx_extra=$((mx_extra+1))
+      for p13_r in R1 R2 R3 R4; do
+        p13_x="$(p13_arm "$P13_MV1" $p13_r)"; mx_cell p13-mv1 P13-$p13_r "$([ "$p13_x" = 1 ] && echo ok || echo FAIL)"
+        p13_x="$(p13_arm "$P13_MV2" $p13_r)"; mx_cell p13-mv2 P13-$p13_r "$([ "$p13_x" = 1 ] && echo ok || echo FAIL)"
+      done
+      mx_quiet=1
+    fi
+    # MV1 drops the read check: R1 (no read) moves to clearing (0) while R3 (a wrong read) keeps blocking (twin).
+    p13_a="$(p13_arm "$P13_MV1" R1)"; p13_t="$(p13_arm "$P13_MV1" R3)"
+    mx_score p13-mv1 "${B_p13:-0}" P13-R1 "$([ "$p13_a" = 0 ] && echo FAIL || echo ok)" P13-R3 "$([ "$p13_t" = 1 ] && echo ok || echo FAIL)" "the read check dropped: R1 moves to clearing, R3 still blocks"
+    mx_quiet=0
   fi
   if [ -z "$P13_MV2" ]; then bad "FIXTURE ERROR: MV2's anchor is not exactly once in layer-drift.sh, so the mutant does not exist"
   else
-    case "$(p13_vec "$P13_MV2")" in
-      "1 0 0 0") ok "MV2 (presence-only check) KILLED: R3 and R4 move to clearing, R1 and R2 do not" ;;
-      *) bad "MV2 (presence-only check) scored '$(p13_vec "$P13_MV2")', want '1 0 0 0' — R3/R4 do not see a \`read\` that is present and wrong" ;;
-    esac
+    if [ "$MATRIX" = 1 ]; then mx_quiet=1; fi
+    # MV2 is presence-only: R3 (a wrong entry line) moves to clearing while R1 (no read at all) keeps blocking (twin).
+    p13_a="$(p13_arm "$P13_MV2" R3)"; p13_t="$(p13_arm "$P13_MV2" R1)"
+    mx_score p13-mv2 "${B_p13:-0}" P13-R3 "$([ "$p13_a" = 0 ] && echo FAIL || echo ok)" P13-R1 "$([ "$p13_t" = 1 ] && echo ok || echo FAIL)" "presence-only check: R3 moves to clearing, R1 still blocks"
+    mx_quiet=0
   fi
 fi
 rm -rf "$ROOT/reconcile-mutant-control" "$ROOT/reconcile-mutant-mv1" "$ROOT/reconcile-mutant-mv2" "$P13W"
@@ -2067,23 +2137,29 @@ if [ "$p14_rows" -ne 2 ] || [ ${#P14AD} -ne 40 ] || [ ${#P14BD} -ne 40 ] || [ "$
 else
   ok "Part 14 precondition: both spellings fire EXTENSION-ANCHOR-DRIFT with distinct digests, and the quoted core line IS in core's Gamma review span at THEIRS"
   case "$(p14_vec)" in
-    "0 0") ok "B1: an anchor-only extends: '#Gamma review' record quoting a line of that span CLEARS, and the 'steps/demo.md#Gamma review' control clears beside it" ;;
+    "0 0") ok "B1: an anchor-only extends: '#Gamma review' record quoting a line of that span CLEARS, and the 'steps/demo.md#Gamma review' control clears beside it"; B_p14=1 ;;
     *) bad "B1: records quoting a line of the declared span scored '$(p14_vec)' (anchor-only, control), want '0 0'. A '1 0' is BL-711: the anchor-only part never reached the core text: $(p14_detail | cut -c1-140)" ;;
   esac
   P14_MUT="$(p13_mut bl711 $'      _x="$(unquote "$(fm "$f" extends)")"\n      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3\n      while IFS= read -r _pl; do\n        _fl="${_pl%%"$TAB"*}"; _an="${_pl#*"$TAB"}"\n' $'      _x="$(unquote "$(fm "$f" extends)")"\n      shadow_parts "$_x" > "$LD_T/adj-parts" || return 3\n      while IFS="$TAB" read -r _fl _an; do\n')"
   if [ -z "$P14_MUT" ]; then
     bad "FIXTURE ERROR: the BL-711 mutant's anchor is not exactly once in layer-drift.sh, so the old read cannot be restored and B1 is unproven"
   else
+    # ONE drive of the mutant: the anchor-only row (decider P14-anchor) must block naming the core half, the
+    # file#anchor control (twin P14-file) must still clear. p14_vec runs the engine once for both columns.
     p14_m="$(p14_vec "$P14_MUT")"
-    case "$p14_m:$(p14_detail "$P14_MUT")" in
-      "1 0:"*"[read.core_line not in the LC-E14 core text]"*)
-        ok "MB1 (the 0.877 IFS=<tab> read restored) KILLED: the anchor-only row blocks naming the LC-E14 core half, and the file#anchor control still clears" ;;
-      *) bad "MB1 (the 0.877 IFS=<tab> read restored) scored '$p14_m', want '1 0' with the anchor-only row naming the LC-E14 core half — B1 cannot tell the old read from the fix" ;;
-    esac
+    p14_dec=ok; p14_twin=ok
+    [ "${p14_m%% *}" = 1 ] && p14_dec=FAIL
+    [ "${p14_m#* }" = 0 ] || p14_twin=FAIL
+    case "$(p14_detail "$P14_MUT")" in *"[read.core_line not in the LC-E14 core text]"*) ;; *) p14_dec=ok ;; esac
+    mx_score p14-ifs-tab-read "${B_p14:-0}" P14-anchor "$p14_dec" P14-file "$p14_twin" "the 0.877 IFS=<tab> read restored: the anchor-only row blocks naming the LC-E14 core half, and the file#anchor control still clears"
   fi
 fi
 rm -rf "$ROOT/reconcile-mutant-bl711" "$P14CONS"
 
+if [ "$MATRIX" = 0 ]; then
+  if [ "$mx_extra" -eq 0 ]; then ok "a plain run executed no matrix-only drive (the full mutant x arm vectors are --matrix only)"
+  else bad "a plain run executed $mx_extra matrix-only drive(s)"; fi
+fi
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"

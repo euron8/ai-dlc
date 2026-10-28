@@ -11,3 +11,5 @@
 !core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/scripts/core-paths.sh
 core/hooks/
+# The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
+core/fixtures/lib/

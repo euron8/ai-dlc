@@ -11,6 +11,50 @@
 # "any long call is starvation" implementation fails it, and would flag the exact
 # background-dispatch shape Rule 29 prescribes -- an unpassable check, and an
 # unpassable check gets turned off.
+#
+# MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
+# test-quality property, measured ONCE for every mutant x cell and recorded as the rows below; per push
+# each mutant runs its deciding cell (the token must change) and a twin cell the measured matrix shows
+# green (the token must not change). The recorded matrix plus the twin REPLACES the per-push exact-vector
+# assertion the exact-vector families (derivation G-J, siblings K-R, pause-legal PB, Explore EX) carried.
+# Measured co-trips: no-ismeta also trips b-meta (Check B shares the isMeta arm); exact-ts-compare trips
+# c-offset and tol-auth; bound-not-applied trips c-old c-offset-bounds tol-later; derive-removed trips
+# d-N d-S; derive-one-mode trips d-C; sib-bash-exempt trips d-N sib-c sib-d sib-h; sib-record-key trips
+# sib-e sib-f sib-g; sib-ts-window trips sib-b; the pause-legal and Explore mutants trip their sibling
+# cells. Every other mutant trips only its deciding cell. The matrix is re-measured whenever an arm or
+# a mutant is added or changed.
+# MUTANT-MATRIX-DYNAMIC mutant-stage why=the stage loops over the M_NAME table; every name it produces has its own row below
+# MUTANT-MATRIX no-ismeta decides=c-meta twins=c-typed
+# MUTANT-MATRIX exact-ts-compare decides=c-auth twins=c-later
+# MUTANT-MATRIX bound-not-applied decides=c-later twins=c-auth
+# MUTANT-MATRIX bad-bound-ignored decides=badbound twins=c-later
+# MUTANT-MATRIX clear-ignores-deny decides=b-clrdeny twins=b-clrran
+# MUTANT-MATRIX env-overridable-tolerance decides=tol-later twins=tol-auth
+# MUTANT-MATRIX window-one-sided decides=c-old twins=c-later
+# MUTANT-MATRIX derive-removed decides=d-C twins=d-Z
+# MUTANT-MATRIX derive-multi decides=d-T twins=d-Z
+# MUTANT-MATRIX derive-one-mode decides=d-S twins=d-N
+# MUTANT-MATRIX derive-id-unguarded decides=d-E twins=d-Z
+# MUTANT-MATRIX sib-bash-exempt decides=sib-b twins=sib-a
+# MUTANT-MATRIX sib-record-key decides=sib-a twins=sib-b
+# MUTANT-MATRIX sib-unbounded decides=sib-c twins=sib-a
+# MUTANT-MATRIX sib-ts-window decides=sib-d twins=sib-a
+# MUTANT-MATRIX sib-first-answer decides=sib-e twins=sib-a
+# MUTANT-MATRIX sib-bash-only decides=sib-f twins=sib-a
+# MUTANT-MATRIX sib-one-pass decides=sib-g twins=sib-a
+# MUTANT-MATRIX sib-unanswered-acquits decides=sib-h twins=sib-a
+# MUTANT-MATRIX srv-exempt-removed decides=srv-adv twins=srv-search
+# MUTANT-MATRIX srv-reader-reverted decides=srv-search twins=srv-adv
+# MUTANT-MATRIX star-no-slash decides=pb-snapshot twins=pb-archive
+# MUTANT-MATRIX snapshot-dropped decides=pb-wait twins=pb-control
+# MUTANT-MATRIX updater-rule-removed decides=pb-skillupd twins=pb-control
+# MUTANT-MATRIX first-marker-wins decides=pb-recency twins=pb-archive
+# MUTANT-MATRIX explore-acquittal-dropped decides=ex-agent twins=ex-gp
+# MUTANT-MATRIX explore-key-by-truthiness decides=ex-namenull twins=ex-agent
+# MUTANT-MATRIX explore-role-ere-dead decides=ex-role twins=ex-agent
+# MUTANT-MATRIX explore-case-folded decides=ex-lower twins=ex-agent
+# MUTANT-MATRIX explore-prompt-string-coerced decides=ex-objrole twins=ex-agent
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/check-25-steering-conduct/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -32,7 +76,12 @@ fi
 # actually loaded, so a battery can read it back.
 printf 'subject: %s\n' "$VALIDATOR"
 
-command -v node >/dev/null 2>&1 || { echo "SKIP: node is required for check-25"; exit 0; }
+command -v node >/dev/null 2>&1 || { echo "FIXTURE BROKEN: node is required for check-25"; exit 2; }
+
+# --matrix is an ARGV flag (never an env var, never via hermetic-run.sh, which forwards no argument):
+# it replaces the per-push mutant stage with the full mutant x cell matrix and prints MATRIX rows.
+MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
+MX_FULL_RUNS=0     # incremented ONLY by matrix-only cells; a plain run must leave it at 0
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
@@ -42,9 +91,9 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$V
 
 FAILURES=0
 
-expect_count() { # $1 case-dir  $2 expected count  $3 why
+expect_count() { # $1 case-dir  $2 expected count  $3 why  [$4 a count already read from one run]
   local got
-  got="$(bash "$VALIDATOR" --transcript "$ROOT/$1/session.jsonl" --count 2>/dev/null)"
+  got="${4-$(bash "$VALIDATOR" --transcript "$ROOT/$1/session.jsonl" --count 2>/dev/null)}"
   if [ "$got" != "$2" ]; then
     echo "FAIL [$1]: --count returned '$got', expected '$2' -- $3"
     FAILURES=$((FAILURES + 1))
@@ -64,7 +113,13 @@ expect_status() { # $1 case-dir  $2 expected exit  $3 why
   fi
 }
 
-expect_count starves      1 "an unbounded foreground poll loop is one Check A starvation"
+# ONE `--count` run over `starves` feeds BOTH the count arm and the contract arm below: they
+# were two identical invocations of the same command on the same transcript, the contract arm
+# merely adding the exit status. `rc=$?` is appended inside the substitution so the status
+# survives, which is the only thing the second run bought.
+raw="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --count 2>/dev/null; echo "rc=$?")"
+rawcount="${raw%%rc=*}"; rawcount="${rawcount%$'\n'}"
+expect_count starves      1 "an unbounded foreground poll loop is one Check A starvation" "$rawcount"
 expect_count clean        0 "a bounded beat through wait-for-deliverable.sh starves nobody"
 expect_count backgrounded 0 "DECOY: run_in_background yields a tool boundary at once -- not starvation"
 
@@ -74,7 +129,6 @@ expect_status backgrounded 0 "and PASS on the backgrounded decoy"
 
 # --count must be a pure integer on stdout and exit 0 even when violations exist --
 # Check 25 reads it directly, and a `cmd | grep` would take grep's exit status.
-raw="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --count 2>/dev/null; echo "rc=$?")"
 case "$raw" in
   "1"*"rc=0") echo "ok   [contract]: --count prints a bare integer and exits 0 despite violations" ;;
   *) echo "FAIL [contract]: --count must print a bare integer and exit 0; got: $raw"
@@ -245,8 +299,9 @@ fi
 # --quiet suppresses the LOG block, and the new identity line lives in it. The
 # FAIL diagnostics are console.error and are NOT suppressed, so the positive
 # conjunct is that the STARVATION row is still there.
-QO="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --quiet 2>/dev/null)"; qrc=$?
-QE="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --quiet 2>&1 >/dev/null)"
+# ONE run, the two streams kept apart: stdout in QO, stderr in a file read back as QE.
+QO="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --quiet 2>"$ROOT/quiet.err")"; qrc=$?
+QE="$(cat "$ROOT/quiet.err")"
 if [ "$qrc" != 1 ]; then
   bad_ quiet-suppresses-identity "the starving session must still exit 1 under --quiet; got $qrc"
 elif ! has "FAIL (A -- STARVATION)" "$QE"; then
@@ -385,7 +440,10 @@ w two-file-rounded "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS")" "MATCH 2026-0
   "a genuine turn 41s after a minute-rounded authorization time still verifies, and it is in the corpus's SECOND file"
 
 # --- W2: the same corpus, a phrase said a WEEK from the cited moment ----------
-w said-elsewhere "$(acite "$VALIDATOR" "$CITE_LATER" "$AUTH_TS")" "NOMATCH/2" \
+# ONE run feeds this arm and the diagnostic arm (W2d) below: the same command and arguments,
+# the diagnostic arm having only wanted stderr as well. stdout -> W2O, stderr -> a file.
+W2O="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>"$AWORK/w2.err")"; W2RC=$?
+w said-elsewhere "${W2O:-EMPTY}/$W2RC" "NOMATCH/2" \
   "words the operator really said, seven days from the moment this citation claims, do not verify it"
 
 # --- W2c: THE DISCRIMINATOR for W2. Same quote, same corpus, no bound ---------
@@ -397,7 +455,7 @@ w said-elsewhere-unbounded "$(acite "$VALIDATOR" "$CITE_LATER")" "MATCH 2026-07-
 # --- W2d: the NOMATCH says WHICH of the two findings it is -------------------
 # "nothing carried these words" and "the operator said them at another moment" are different
 # facts and a reader cannot act on them alike. The exit code is 2 either way.
-W2D="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>&1)"
+W2D="$(cat "$AWORK/w2.err")$W2O"
 if has "carried it outside the" "$W2D" && has "$AUTH_TS" "$W2D"; then
   ok_ nomatch-names-the-window "the out-of-window NOMATCH says the words WERE said, and names the cited authorization time"
 else
@@ -519,90 +577,6 @@ mut() { # mut <name> <sed-expr> -> 0 and MUTP set, or 1 with the refusal already
   bash -n "$p" 2>/dev/null || { bad_ "mutant-$name" "does not parse; its silence would score as a kill"; return 1; }
   MUTP="$p"
 }
-kill_() { KILLS=$((KILLS + 1)); ok_ "$1" "$2"; }
-mw() { # mw <name> <mutant> <quote> <at-or-empty> <want> <kill|hold> <why>
-  local got; got="$(acite "$2" "$3" "$4")"
-  if [ "$got" = "$5" ]; then
-    case "$6" in kill) kill_ "$1" "$7" ;; *) ok_ "$1" "$7" ;; esac
-  else
-    bad_ "$1" "got '$got', want '$5' -- $7"
-  fi
-}
-
-# CONTROL. An unmutated copy in the same directory must reproduce the baseline, or neither
-# mutant result means anything -- and it must reproduce it POSITIVELY, because a copy that
-# died before reaching node emits nothing and every NOMATCH expectation would accept that.
-MCTL="$MWORK/control.sh"
-cp "$VALIDATOR" "$MCTL"
-mw control-match "$MCTL" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold \
-  "control: an unmutated copy still MATCHes the bounded citation, so the copies below can run"
-mw control-meta "$MCTL" "$CITE_META" "" "NOMATCH/2" hold \
-  "control: the unmutated copy still refuses the harness injection"
-
-# MUTANT A -- the isMeta arm removed. Kill set: {ismeta-not-citable, checkb-ignores-ismeta}.
-mut no-ismeta 's|^  if (r.isMeta === true) return "";$||'
-MA="$MUTP"
-if [ -n "$MA" ]; then
-  mw A-meta-cites "$MA" "$CITE_META" "" "MATCH 2026-07-02T14:38:00Z/0" kill \
-    "A: without the isMeta arm a harness injection cites -- W3 has teeth"
-  if [ "$(acount "$MA" "$AWORK/bmeta/session.jsonl")" = "1" ]; then
-    kill_ A-checkb-counts-meta "A: Check B counts the injection as a steamroll too -- the arm is shared, as W6 asserts"
-  else
-    bad_ A-checkb-counts-meta "A: Check B did not move, so W6 is not testing the shared arm"
-  fi
-  mw A-window-holds "$MA" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold "A: the window arm is unmoved -- the two subjects are not entangled"
-  mw A-typed-holds  "$MA" "$CITE_TYPED" "" "MATCH 2026-07-02T14:39:00Z/0" hold "A: the typed twin is unmoved"
-fi
-
-# MUTANT B -- THE WRONG FIX: an EXACT timestamp compare instead of a window. It repairs
-# `said-elsewhere` (which is why it reads as a fix) and destroys every rounded citation, which
-# on the reference consumer is 22 of the 24 rows that verify today.
-mut exact-ts-compare 's|Math.abs(ts - authMs) > authTolMs|ts !== authMs|'
-MB="$MUTP"
-if [ -n "$MB" ]; then
-  mw B-rounded-dies "$MB" "$CITE_AUTH" "$AUTH_TS" "NOMATCH/2" kill \
-    "B: an exact compare NOMATCHes a genuine citation whose timestamp was rounded to the minute -- W1 has teeth"
-  mw B-window-holds "$MB" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
-    "B: said-elsewhere is unmoved, which is exactly why this wrong fix reads as a fix"
-  mw B-meta-holds "$MB" "$CITE_META" "" "NOMATCH/2" hold "B: the isMeta arm is unmoved"
-fi
-
-# MUTANT C -- the bound is computed and never applied. Kill set: {said-elsewhere}.
-mut bound-not-applied 's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (false) {|'
-MC="$MUTP"
-if [ -n "$MC" ]; then
-  mw C-elsewhere-cites "$MC" "$CITE_LATER" "$AUTH_TS" "MATCH 2026-07-09T11:02:13Z/0" kill \
-    "C: with the window never applied, a phrase from another week verifies -- W2 has teeth"
-  mw C-rounded-holds "$MC" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold "C: W1 is unmoved"
-  mw C-meta-holds "$MC" "$CITE_META" "" "NOMATCH/2" hold "C: the isMeta arm is unmoved"
-fi
-
-# MUTANT D -- an unparseable bound is DROPPED instead of refused. Kill set: {bad-bound-refused}.
-# The shape a hurried fix takes, and the one that cannot be seen from an exit code: the scan
-# runs unbounded and answers 0 or 2 exactly as a bounded one would.
-mut bad-bound-ignored 's|^    if (Number.isNaN(authMs)) {$|    if (false) {|'
-MD="$MUTP"
-if [ -n "$MD" ]; then
-  MDO="$(bash "$MD" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; MDRC=$?
-  if [ "$MDRC" -eq 0 ] || [ "$MDRC" -eq 2 ]; then
-    kill_ D-bad-bound-verdict "D: a bound that will not parse now answers with a VERDICT (rc=$MDRC) -- W4 has teeth"
-  else
-    bad_ D-bad-bound-verdict "D: rc=$MDRC, so W4 is not testing the refusal: $MDO"
-  fi
-  mw D-window-holds "$MD" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold "D: a parseable bound still binds"
-fi
-
-# MUTANT U -- the deny exclusion dropped from the clear. Kill set: {checkb-denied-clear-not-cleared}.
-mut clear-ignores-deny 's| \&\& !hookDenied.has(b.id));$|);|'
-if [ -n "$MUTP" ]; then
-  if [ "$(acount "$MUTP" "$AWORK/bclrdeny/session.jsonl")" = "0" ]; then
-    kill_ U-denied-clear-counts "U: without the deny exclusion a refused rm reads as a clear and the steamroll after it is hidden -- W8 has teeth"
-  else
-    bad_ U-denied-clear-counts "U: got '$(acount "$MUTP" "$AWORK/bclrdeny/session.jsonl")', want '0' -- the exclusion is not what makes W8 read 1"
-  fi
-  w U-run-clear-holds "$(acount "$MUTP" "$AWORK/bclrran/session.jsonl")" "0" "U: the run twin is unmoved"
-fi
-
 # --- W7: THE TOLERANCE IS A CONSTANT, AND NO ENVIRONMENT REACHES IT ------------
 # Every other tunable in this validator is a BUDGET -- widen it and the check reports
 # differently about the same facts. This one is a PROVENANCE bound: widen it and the check
@@ -621,45 +595,6 @@ w tolerance-not-overridable "${W7O:-EMPTY}/$W7RC" "NOMATCH/2" \
 W7B="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7BRC=$?
 w tolerance-env-harmless "${W7B:-EMPTY}/$W7BRC" "MATCH 2026-07-02T14:37:41Z/0" \
   "the same environment leaves a genuine in-window citation verifying -- W7 discriminates on the window, not on the run failing"
-
-# MUTANT E -- THE OVERRIDE RESTORED, exactly as it was written for one revision: the constant
-# read from the environment with 7200 as a default. Kill set: {tolerance-not-overridable}.
-# Nothing else moves, because with the variable unset the mutant and the shipping program are
-# the same program -- which is precisely why an overridable bound is invisible to every arm
-# that does not export it, and why this mutant has to.
-mut env-overridable-tolerance 's|^const CITE_AUTH_TOLERANCE_S = 7200;$|const CITE_AUTH_TOLERANCE_S = +(process.env.AI_DLC_CITE_AUTH_TOLERANCE_S \|\| 7200);|'
-ME="$MUTP"
-if [ -n "$ME" ]; then
-  MEO="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$ME" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; MERC=$?
-  if [ "${MEO:-EMPTY}/$MERC" = "MATCH 2026-07-09T11:02:13Z/0" ]; then
-    kill_ E-env-widens-window "E: with the override restored, one exported variable makes a week-away phrase verify -- W7 has teeth"
-  else
-    bad_ E-env-widens-window "E: got '${MEO:-EMPTY}/$MERC', want 'MATCH 2026-07-09T11:02:13Z/0' -- W7 is not testing the override"
-  fi
-  # And the mutant is INDISTINGUISHABLE from the shipping program without the variable, which
-  # is the whole hazard: no other arm in this file can see it.
-  mw E-unset-holds "$ME" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
-    "E: with the variable unset the mutant behaves identically -- an overridable bound is invisible to every arm that does not export it"
-  mw E-meta-holds "$ME" "$CITE_META" "" "NOMATCH/2" hold "E: the isMeta arm is unmoved"
-fi
-
-# MUTANT F -- THE WINDOW MADE ONE-SIDED: a record EARLIER than the cited authorization always
-# verifies. Kill set: {said-weeks-before} exactly. This is the shape that survived every
-# evidence channel this change had -- the receipt, this fixture, the reader fixture and its
-# whole 21-mutant battery all exited 0 against it -- because every out-of-window seed anywhere
-# placed the record AFTER the bound. It is also the direction a lead forges in: nobody writes
-# an entry and then waits for the operator to say something, they write the entry today and
-# reach back for a phrase that already exists.
-mut window-one-sided 's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (authMs !== null \&\& ts - authMs > authTolMs) {|'
-MF="$MUTP"
-if [ -n "$MF" ]; then
-  mw F-before-cites "$MF" "$CITE_OLD" "$AUTH_TS" "MATCH 2026-06-10T08:12:44Z/0" kill \
-    "F: with only the later side refused, a phrase from three weeks before the cited moment verifies -- W2e has teeth"
-  mw F-after-holds "$MF" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
-    "F: the AFTER side is unmoved, which is why every seed that only looks forward passes this mutant"
-  mw F-rounded-holds "$MF" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold "F: W1 is unmoved"
-  mw F-meta-holds "$MF" "$CITE_META" "" "NOMATCH/2" hold "F: the isMeta arm is unmoved"
-fi
 
 # ===========================================================================
 # NO CORPUS FLAG: THE SESSION'S CORPUS IS DERIVED, OR THE RUN REFUSES EXACTLY AS BEFORE.
@@ -710,6 +645,14 @@ drive() {
   fi
   printf '%s|%s' "$r" "$o"
 }
+# DREF: the unset-id reference for each refusal world, driven ONCE with the shipping program.
+# Every derivation mutant (G-J) edits only code reached when an id IS set, so its unset-id answer
+# is the shipping answer by construction, and it used to be re-driven for each of five programs
+# (12 refusal runs each, half of them these). A mutant whose set-id run differs from the shipping
+# unset-id answer still fails `refuse`, which compares against this and against the literal.
+DREF0C="$(drive "$VALIDATOR" "$DH0" UNSET --cite "$DPHRASE")"; DREF0N="$(drive "$VALIDATOR" "$DH0" UNSET --count)"
+DREF2C="$(drive "$VALIDATOR" "$DH2" UNSET --cite "$DPHRASE")"; DREF2N="$(drive "$VALIDATOR" "$DH2" UNSET --count)"
+DREFEC="$(drive "$VALIDATOR" "$DWORK/esc" UNSET --cite "$DPHRASE")"; DREFEN="$(drive "$VALIDATOR" "$DWORK/esc" UNSET --count)"
 # The verdict for one validator over the derivation worlds, one token per world, so a mutant's
 # vector reads beside the shipping one.
 #   C  flagless --cite, single match: MATCH, and the diagnostic names the slug DIRECTORY
@@ -731,15 +674,17 @@ MATCH 2026-07-13T12:05:00.000Z" ]; then c=C; else c=c; fi
   s="$(drive "$v" "$DH1" "$DSID" --since 2020-01-01T00:00:00Z)"
   case "$s" in *"corpus              : $DSLUG
 "*) s=S ;; *) s=s ;; esac
-  # refuse <home> <sid> -> R when both flagless shapes refuse exactly as an unset id does
+  # refuse <home> <sid> <yc> <yn> -> R when both flagless shapes refuse exactly as an unset id
+  # does. <yc>/<yn> are that unset-id reference, read ONCE per world from the shipping program
+  # (see DREF below) rather than re-driven for every program in the battery.
   refuse() {
-    x="$(drive "$v" "$1" "$2" --cite "$DPHRASE")"; y="$(drive "$v" "$1" UNSET --cite "$DPHRASE")"
-    [ "$x" = "$y" ] && [ "$x" = "1|$REF_CITE" ] || { printf r; return; }
-    x="$(drive "$v" "$1" "$2" --count)"; y="$(drive "$v" "$1" UNSET --count)"
-    [ "$x" = "$y" ] && [ "$x" = "1|$REF_ANY" ] || { printf r; return; }
+    x="$(drive "$v" "$1" "$2" --cite "$DPHRASE")"
+    [ "$x" = "$3" ] && [ "$x" = "1|$REF_CITE" ] || { printf r; return; }
+    x="$(drive "$v" "$1" "$2" --count)"
+    [ "$x" = "$4" ] && [ "$x" = "1|$REF_ANY" ] || { printf r; return; }
     printf R
   }
-  z="$(refuse "$DH0" "$DSID")"; t="$(refuse "$DH2" "$DSID")"; e="$(refuse "$DWORK/esc" "$DESC")"
+  z="$(refuse "$DH0" "$DSID" "$DREF0C" "$DREF0N")"; t="$(refuse "$DH2" "$DSID" "$DREF2C" "$DREF2N")"; e="$(refuse "$DWORK/esc" "$DESC" "$DREFEC" "$DREFEN")"
   z="${z/R/Z}"; z="${z/r/z}"; t="${t/R/T}"; t="${t/r/t}"; e="${e/R/E}"; e="${e/r/e}"
   printf '%s%s%s%s%s%s' "$c" "$n" "$s" "$z" "$t" "$e"
 }
@@ -750,40 +695,6 @@ w derive-shipping "$DV" "CNSZTE" \
 # the same file read through an explicit --dir must MATCH the phrase.
 w derive-escape-reachable "$(drive "$VALIDATOR" "$DWORK/esc" UNSET --dir "$DWORK/esc/.claude/projects" --cite "$DPHRASE" | sed -n '$p')" \
   "MATCH 2026-07-13T12:05:00.000Z" "the ../ world's file carries the phrase, so E refuses because of the id guard and not an empty world"
-
-# MUTANT G -- the derivation removed. Every flagless run refuses: C, N and S die, the refusal
-# worlds are unmoved -- which is exactly what the pre-fix program did.
-mut derive-removed '/^# >>> DERIVE-SESSION-CORPUS >>>$/,/^# <<< DERIVE-SESSION-CORPUS <<<$/d'
-if [ -n "$MUTP" ]; then
-  GV="$(dvec "$MUTP")"
-  if [ "$GV" = "cnsZTE" ]; then kill_ G-derive-removed "G: with no derivation every flagless run refuses (cnsZTE) -- the arm sees the fix"
-  else bad_ G-derive-removed "got '$GV', want 'cnsZTE'"; fi
-fi
-# MUTANT H -- ANY number of matches accepted. The two-slug world now derives one of them.
-mut derive-multi 's|^      if \[ "\$DERIVED_N" -eq 1 \]; then$|      if [ "$DERIVED_N" -ge 1 ]; then|'
-if [ -n "$MUTP" ]; then
-  HV="$(dvec "$MUTP")"
-  if [ "$HV" = "CNSZtE" ]; then kill_ H-derive-multi "H: an ambiguous id under two slugs derives a corpus (CNSZtE) -- T has teeth"
-  else bad_ H-derive-multi "got '$HV', want 'CNSZtE'"; fi
-fi
-# MUTANT I -- ONE MODE FOR ALL: --cite and --since derive the FILE. The cited phrase lives in
-# the other session, so --cite NOMATCHes; --since names the file.
-# Anchored on the cite-mode test as `--cite` was PASSED (`CITE_SET`), not on its text: an empty
-# needle is still cite mode, so the owner keys this branch on the flag.
-mut derive-one-mode 's|^        if \[ "\$CITE_SET" -eq 1 \] [|][|] \[ -n "\$SINCE" \]; then$|        if false; then|'
-if [ -n "$MUTP" ]; then
-  IV="$(dvec "$MUTP")"
-  if [ "$IV" = "cNsZTE" ]; then kill_ I-derive-one-mode "I: a file-only default loses a cross-session citation and the sprint window (cNsZTE) -- C and S have teeth"
-  else bad_ I-derive-one-mode "got '$IV', want 'cNsZTE'"; fi
-fi
-# MUTANT J -- the id guard widened to admit `.` and `/`. The ../ id splices a path out of the
-# slug directory and derives it.
-mut derive-id-unguarded 's|^    \*\[!A-Za-z0-9-\]\*) ;;$|    *[!A-Za-z0-9./-]*) ;;|'
-if [ -n "$MUTP" ]; then
-  JV="$(dvec "$MUTP")"
-  if [ "$JV" = "CNSZTe" ]; then kill_ J-derive-id-unguarded "J: an id carrying ../ reaches outside the slug directory (CNSZTe) -- E has teeth"
-  else bad_ J-derive-id-unguarded "got '$JV', want 'CNSZTe'"; fi
-fi
 
 # ===========================================================================
 # THE SIBLINGS OF AN AskUserQuestion. Calls issued in one assistant turn return together, so a
@@ -809,21 +720,20 @@ fi
 # a bare integer, so a subject that emits nothing reads EMPTY and matches no token.
 echo
 echo "  -- AskUserQuestion siblings --"
+# ONE run per (program, case). This used to run `--count` AND the full report, and both read
+# the same `starv` array: the count is the number in the STARVATION row's first line. A
+# sibling case has no operator turn, wait run or TaskOutput, so the count IS the starvation
+# count. `0` still needs a positive witness -- the report's last line, `PASS  (D)` -- so a
+# program that emitted nothing reads EMPTY and matches no expected token.
 sib() { # sib <validator> <case> -> "<count>/<yes|no>"
   local c o st=no
-  c="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" --count 2>/dev/null)"
   o="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" 2>&1)"
-  case "$o" in *"FAIL (A -- STARVATION)"*) st=yes ;; esac
-  printf '%s/%s' "${c:-EMPTY}" "$st"
-}
-svec() {
-  local v="$1" k want got out=""
-  for k in a b c d e f g h; do
-    case "$k" in a|e|f|g) want="0/no" ;; *) want="1/yes" ;; esac
-    got="$(sib "$v" "sib-$k")"
-    if [ "$got" = "$want" ]; then out="$out$(printf '%s' "$k" | tr a-h A-H)"; else out="$out$k"; fi
-  done
-  printf '%s' "$out"
+  case "$o" in
+    *"FAIL (A -- STARVATION): "*) st=yes; c="${o#*FAIL (A -- STARVATION): }"; c="${c%% *}" ;;
+    *"PASS  (D)"*) c=0 ;;
+    *) c=EMPTY ;;
+  esac
+  printf '%s/%s' "$c" "$st"
 }
 w sib-a-same-message-acquitted "$(sib "$VALIDATOR" sib-a)" "0/no" \
   "a Bash sharing an AskUserQuestion's message.id and ending at the answer is think-time, not starvation"
@@ -841,46 +751,6 @@ w sib-g-sibling-written-first "$(sib "$VALIDATOR" sib-g)" "0/no" \
   "a sibling whose record precedes the AskUserQuestion's in the same message still joins"
 w sib-h-unanswered-charged "$(sib "$VALIDATOR" sib-h)" "1/yes" \
   "an AskUserQuestion with no answer acquits nothing: its Bash sibling is charged in full"
-# CONTROL: the unmutated copy in the mutant directory reads the shipping vector, so a mutant
-# vector below differs because of its edit and not because a copy cannot run there.
-w sib-control "$(svec "$MCTL")" "ABCDEFGH" \
-  "control: an unmutated copy beside the mutants reads all eight sibling cases as shipped"
-
-# smut <name> <sed-expr> <want-vector> <why>: each mutant asserted as an EXACT vector, so a
-# mutant that moves a case it should not reads as a failure rather than as an extra kill.
-smut() {
-  mut "$1" "$2" || return 0
-  local got; got="$(svec "$MUTP")"
-  if [ "$got" = "$3" ]; then kill_ "S-$1" "$4 ($got)"; else bad_ "S-$1" "got '$got', want '$3' -- $4"; fi
-}
-# MUTANT K -- Bash added to EXEMPT. Every Bash is acquitted: B, C, D and H die.
-smut sib-bash-exempt 's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion", "advisor", "Bash"]);#' \
-  AbcdEFGh "with Bash exempt, a starving Bash in another message, past the answer or unjoined all pass"
-# MUTANT L -- keyed on the RECORD (its uuid) rather than message.id. The harness writes each
-# block as its own record, so nothing ever joins: A, E, F and G die, exactly as before the fix.
-smut sib-record-key 's#mid: r.message?.id || ""#mid: r.uuid || ""#' \
-  aBCDefgH "keyed on the record, separate-record siblings never join and a real sibling is charged its think-time"
-# MUTANT M -- the sibling exempted UNBOUNDEDLY. C dies: a Bash blocking past the answer passes.
-smut sib-unbounded 's#^    const s = (res\[id\] - (ans === undefined ? u.t : Math.max(u.t, ans))) / 1000;$#    const s = ans === undefined ? (res[id] - u.t) / 1000 : 0;#' \
-  ABcDEFGH "an unbounded sibling exemption acquits a Bash that kept blocking 600s after the answer"
-# MUTANT N -- a TIMESTAMP WINDOW instead of message.id: a call whose result lands within 2s of
-# any answer is charged from that answer. B and D die; C and H hold, no answer being within 2s.
-smut sib-ts-window 's#^    const ans = u.mid ? answeredAt\[u.mid\] : undefined;$#    const ans = Object.entries(use).filter(([k, v]) => v.n === "AskUserQuestion" \&\& res[k] \&\& Math.abs(res[id] - res[k]) <= 2000).map(([k]) => res[k]).sort((x, y) => y - x)[0];#' \
-  AbCdEFGH "a 2s result-proximity key acquits a Bash in another message and one with no message.id"
-# MUTANT O -- the FIRST answer instead of the latest. E dies: the sibling is charged 300.5s.
-smut sib-first-answer 's#^    if (!(answeredAt\[u.mid\] >= res\[id\])) answeredAt\[u.mid\] = res\[id\];$#    if (!(answeredAt[u.mid] <= res[id])) answeredAt[u.mid] = res[id];#' \
-  ABCDeFGH "charged from the first of two answers, a sibling that waited for the second reads as starvation"
-# MUTANT P -- only a Bash sibling joins. F dies: the motivating transcript's sibling is a Read.
-smut sib-bash-only 's#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#& if (u.n !== "Bash") u.mid = "";#' \
-  ABCDEfGH "a join admitting only a Bash sibling charges a Read sibling its think-time"
-# MUTANT Q -- ONE pass: an answer registers only when the loop reaches the AskUserQuestion, so a
-# sibling whose record comes first never joins. G dies.
-smut sib-one-pass 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    continue;#;s#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#    if (u.n === "AskUserQuestion" \&\& u.mid \&\& res[id] \&\& !(answeredAt[u.mid] >= res[id])) answeredAt[u.mid] = res[id]; &#' \
-  ABCDEFgH "a single pass joins only siblings written after the AskUserQuestion"
-# MUTANT R -- an UNANSWERED AskUserQuestion acquits its siblings. H dies.
-smut sib-unanswered-acquits 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    if (u.n !== "AskUserQuestion" || !u.mid) continue; if (!res[id]) { answeredAt[u.mid] = Infinity; continue; }#' \
-  ABCDEFGh "an unanswered question acquits a Bash sibling that blocked 600s"
-
 # ===========================================================================
 # SERVER-SIDE TOOLS. Two layers, and they cover each other on the advisor seed, which is why
 # a second seed exists. The READER must see a server_tool_use / *_tool_result pair at all; the
@@ -897,24 +767,6 @@ w srv-advisor-exempt "$(srvc "$VALIDATOR" srv-advisor)" "0" \
   "an advisor call over 150s, in the shape the harness writes it, is exempt by name"
 w srv-search-charged "$(srvc "$VALIDATOR" srv-search)" "1" \
   "CONTROL: a non-advisor server tool over 150s is still charged -- the exemption is the name, not the shape"
-w srv-control "$(srvc "$MCTL" srv-advisor)/$(srvc "$MCTL" srv-search)" "0/1" \
-  "control: an unmutated copy beside the mutants reads both server seeds as shipped"
-# MUTANT S -- the advisor EXEMPTION removed; the reader still widened.
-mut srv-exempt-removed 's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion"]);#'
-if [ -n "$MUTP" ]; then
-  if [ "$(srvc "$MUTP" srv-advisor)" = "1" ]; then kill_ S-srv-exempt-removed "S: without the exemption the 176s advisor call is a STARVATION row"
-  else bad_ S-srv-exempt-removed "got '$(srvc "$MUTP" srv-advisor)', want '1' -- the exemption is not what acquits the advisor seed"; fi
-  w S-search-holds "$(srvc "$MUTP" srv-search)" "1" "S: the non-advisor server tool is charged either way"
-fi
-# MUTANT T -- the READER reverted to client tools only: both predicates back to the old literals.
-mut srv-reader-reverted 's#^  const isUse = (b) => /^(server_)?tool_use\$/.test(b.type || "");$#  const isUse = (b) => b.type === "tool_use";#;s#^  const isRes = (b) => /^(\[a-z_\]+_)?tool_result\$/.test(b.type || "");$#  const isRes = (b) => b.type === "tool_result";#'
-if [ -n "$MUTP" ]; then
-  if [ "$(srvc "$MUTP" srv-search)" = "0" ]; then kill_ T-srv-reader-reverted "T: with the reader reverted a 176s server tool charges nothing -- srv-search has teeth"
-  else bad_ T-srv-reader-reverted "got '$(srvc "$MUTP" srv-search)', want '0' -- the reader is not what charges the server seed"; fi
-  w T-advisor-holds "$(srvc "$MUTP" srv-advisor)" "0" \
-    "T: the advisor seed reads 0 BYTE-IDENTICALLY to the shipping program -- the two layers cover each other there, and only srv-search separates them"
-fi
-
 # ===========================================================================
 # PAUSE-LEGAL CALLS ARE NOT STEAMROLLS (BL-783). Check B must not score a call the pause hook
 # (ai-dlc-acknowledge.sh) allows: a write matching one of its allow arms, or any advancing call
@@ -957,26 +809,6 @@ pbv() { local v="$1" o="" c n; for c in $PB_CELLS; do n="$(acount "$v" "$PB/$c.j
 PB_WANT=00110011
 w pb-shipped "$(pbv "$VALIDATOR")" "$PB_WANT" \
   "snapshot 0, nested resolution 0, archive 1, control 1, Skill(ai-dlc-update) 0, updater Edit 0, recency 1, Check C wait run across a snapshot Edit 1"
-w pb-mutant-control "$(pbv "$MCTL")" "$PB_WANT" "control: an unmutated copy beside the mutants reads all eight cells as shipped"
-pbmut() { # pbmut <name> <sed> <want> <why>
-  mut "$1" "$2" || return 0
-  local got; got="$(pbv "$MUTP")"
-  if [ "$got" = "$3" ]; then kill_ "PB-$1" "$4 (cells $got)"
-  else bad_ "PB-$1" "got '$got', want '$3' -- $4"; fi
-}
-# MUTANT PB1 -- `*` converted to `[^/]*`: an ABSOLUTE path no longer matches `*/_bmad-output/...`.
-pbmut star-no-slash 's#\.join("\.\*") + "\$");$#.join("[^/]*") + "$");#' \
-  11110010 "with * unable to cross /, the absolute snapshot and nested resolution Edits are counted and the snapshot Edit resets the wait run"
-# MUTANT PB2 -- the snapshot glob dropped from the validator's list.
-pbmut snapshot-dropped '/^  "\*\/_bmad-output\/pipeline-snapshot.md|_bmad-output\/pipeline-snapshot.md",$/d' \
-  10110010 "without the snapshot member, the snapshot Edit is counted and resets the wait run"
-# MUTANT PB3 -- the updater-session rule removed.
-pbmut updater-rule-removed 's#^        .find(b => !denied.has(b.id) \&\& !inUpdaterSession(b, updBefore.get(rr)) \&\&$#        .find(b => !denied.has(b.id) \&\&#' \
-  00111111 "without the updater rule, Skill(ai-dlc-update) and the updater-session Edit are counted"
-# MUTANT PB4 -- the recency rule removed: the FIRST marker decides.
-pbmut first-marker-wins 's#^      if (v !== null) upd = v;$#      if (v !== null \&\& upd === null) upd = v;#' \
-  00110001 "with the first marker deciding, /ai-dlc-update then /ai-dlc stays an updater session"
-
 # ===========================================================================
 # A LEAD'S Explore DISPATCH WHILE PAUSED IS NOT A STEAMROLL (BL-784). acknowledge.sh allows a lead
 # Agent/Task call whose subagent_type is exactly "Explore", that carries no `name` and no
@@ -1014,39 +846,243 @@ exv() { local v="$1" o="" c n; for c in $EX_CELLS; do n="$(acount "$v" "$EX/$c.j
 EX_WANT=0001111111
 w ex-shipped "$(exv "$VALIDATOR")" "$EX_WANT" \
   "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1, an object prompt citing a role 1, team-roles/a-b.md 1"
-w ex-mutant-control "$(exv "$MCTL")" "$EX_WANT" "control: an unmutated copy beside the mutants reads all ten Explore cells as shipped"
-exmut() { # exmut <name> <sed> <want> <why>
-  mut "$1" "$2" || return 0
-  local got; got="$(exv "$MUTP")"
-  if [ "$got" = "$3" ]; then kill_ "EX-$1" "$4 (cells $got)"
-  else bad_ "EX-$1" "got '$got', want '$3' -- $4"; fi
-}
-# MUTANT EX1 -- the acquittal dropped from Check B's filter: every Explore cell counts.
-exmut explore-acquittal-dropped 's#^                   !isPausedExploreAllowed(b));$#                   true);#' \
-  1111111111 "without the acquittal, the allowed Explore dispatches are steamrolls again"
-# MUTANT EX2 -- the key test done by truthiness: "name": null reads as no name and is acquitted.
-exmut explore-key-by-truthiness 's#^  if ("name" in input || "team_name" in input) return false;$#  if (input.name || input.team_name) return false;#' \
-  0000111111 "with the key tested by truthiness, a name:null dispatch the hook routes to the teammate runner is acquitted"
-# MUTANT EX3 -- the role ERE never matches: a team-roles citation is acquitted.
-exmut explore-role-ere-dead 's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return true;#' \
-  0001011100 "without the role test, a prompt the dispatch guard rewrites to a role is acquitted"
-# MUTANT EX4 -- subagent_type compared case-insensitively.
-exmut explore-case-folded 's#^  if (input.subagent_type !== "Explore") return false;$#  if (String(input.subagent_type).toLowerCase() !== "explore") return false;#' \
-  0001101111 "with the type compared case-insensitively, lower-case explore is acquitted"
-# MUTANT EX5 -- the prompt coerced with String(): an object prompt reads "[object Object]".
-exmut explore-prompt-string-coerced 's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return !EXPLORE_ROLE_RE.test(String(p ?? ""));#' \
-  0001111101 "with String() coercion, an object prompt citing a role (which jq -r emits as JSON text the hook greps) is acquitted"
 
-# KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
-# like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 30 ]; then
-  ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
-else
-  bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
+# ===========================================================================
+# THE MUTANTS, table-driven over named CELLS. A cell is one observation of one program: it prints a
+# token, and `cell_want` is the token the UNMUTATED validator must print. Per push each mutant runs
+# its DECIDING cell (the token must change, to a real verdict) and its measured-green TWIN cell (the
+# token must not change). The full mutant x cell matrix runs only under `--matrix` and prints MATRIX
+# rows from matrix.sh. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is
+# established by that recorded matrix, and the twin replaces the per-push exact-vector assertion.
+echo
+echo "  -- mutants --"
+ok()  { echo "ok   [mutant]: $1"; }
+bad() { bad_ "FIXTURE" "$1"; }
+MUT_LIB="$DIR/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$DIR/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/check-25-steering-conduct/matrix.sh"
+
+M_NAME=(no-ismeta exact-ts-compare bound-not-applied bad-bound-ignored clear-ignores-deny env-overridable-tolerance window-one-sided derive-removed derive-multi derive-one-mode derive-id-unguarded sib-bash-exempt sib-record-key sib-unbounded sib-ts-window sib-first-answer sib-bash-only sib-one-pass sib-unanswered-acquits srv-exempt-removed srv-reader-reverted star-no-slash snapshot-dropped updater-rule-removed first-marker-wins explore-acquittal-dropped explore-key-by-truthiness explore-role-ere-dead explore-case-folded explore-prompt-string-coerced)
+M_DEC=(c-meta c-auth c-later badbound b-clrdeny tol-later c-old d-C d-T d-S d-E sib-b sib-a sib-c sib-d sib-e sib-f sib-g sib-h srv-adv srv-search pb-snapshot pb-wait pb-skillupd pb-recency ex-agent ex-namenull ex-role ex-lower ex-objrole)
+M_SED=(
+  's|^  if (r.isMeta === true) return "";$||'
+  's|Math.abs(ts - authMs) > authTolMs|ts !== authMs|'
+  's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (false) {|'
+  's|^    if (Number.isNaN(authMs)) {$|    if (false) {|'
+  's| \&\& !hookDenied.has(b.id));$|);|'
+  's|^const CITE_AUTH_TOLERANCE_S = 7200;$|const CITE_AUTH_TOLERANCE_S = +(process.env.AI_DLC_CITE_AUTH_TOLERANCE_S \|\| 7200);|'
+  's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (authMs !== null \&\& ts - authMs > authTolMs) {|'
+  '/^# >>> DERIVE-SESSION-CORPUS >>>$/,/^# <<< DERIVE-SESSION-CORPUS <<<$/d'
+  's|^      if \[ "\$DERIVED_N" -eq 1 \]; then$|      if [ "$DERIVED_N" -ge 1 ]; then|'
+  's|^        if \[ "\$CITE_SET" -eq 1 \] [|][|] \[ -n "\$SINCE" \]; then$|        if false; then|'
+  's|^    \*\[!A-Za-z0-9-\]\*) ;;$|    *[!A-Za-z0-9./-]*) ;;|'
+  's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion", "advisor", "Bash"]);#'
+  's#mid: r.message?.id || ""#mid: r.uuid || ""#'
+  's#^    const s = (res\[id\] - (ans === undefined ? u.t : Math.max(u.t, ans))) / 1000;$#    const s = ans === undefined ? (res[id] - u.t) / 1000 : 0;#'
+  's#^    const ans = u.mid ? answeredAt\[u.mid\] : undefined;$#    const ans = Object.entries(use).filter(([k, v]) => v.n === "AskUserQuestion" \&\& res[k] \&\& Math.abs(res[id] - res[k]) <= 2000).map(([k]) => res[k]).sort((x, y) => y - x)[0];#'
+  's#^    if (!(answeredAt\[u.mid\] >= res\[id\])) answeredAt\[u.mid\] = res\[id\];$#    if (!(answeredAt[u.mid] <= res[id])) answeredAt[u.mid] = res[id];#'
+  's#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#& if (u.n !== "Bash") u.mid = "";#'
+  's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    continue;#;s#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#    if (u.n === "AskUserQuestion" \&\& u.mid \&\& res[id] \&\& !(answeredAt[u.mid] >= res[id])) answeredAt[u.mid] = res[id]; &#'
+  's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    if (u.n !== "AskUserQuestion" || !u.mid) continue; if (!res[id]) { answeredAt[u.mid] = Infinity; continue; }#'
+  's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion"]);#'
+  's#^  const isUse = (b) => /^(server_)?tool_use\$/.test(b.type || "");$#  const isUse = (b) => b.type === "tool_use";#;s#^  const isRes = (b) => /^(\[a-z_\]+_)?tool_result\$/.test(b.type || "");$#  const isRes = (b) => b.type === "tool_result";#'
+  's#\.join("\.\*") + "\$");$#.join("[^/]*") + "$");#'
+  '/^  "\*\/_bmad-output\/pipeline-snapshot.md|_bmad-output\/pipeline-snapshot.md",$/d'
+  's#^        .find(b => !denied.has(b.id) \&\& !inUpdaterSession(b, updBefore.get(rr)) \&\&$#        .find(b => !denied.has(b.id) \&\&#'
+  's#^      if (v !== null) upd = v;$#      if (v !== null \&\& upd === null) upd = v;#'
+  's#^                   !isPausedExploreAllowed(b));$#                   true);#'
+  's#^  if ("name" in input || "team_name" in input) return false;$#  if (input.name || input.team_name) return false;#'
+  's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return true;#'
+  's#^  if (input.subagent_type !== "Explore") return false;$#  if (String(input.subagent_type).toLowerCase() !== "explore") return false;#'
+  's#^  return !EXPLORE_ROLE_RE.test(p == null .*$#  return !EXPLORE_ROLE_RE.test(String(p ?? ""));#'
+)
+
+ALLCELLS="c-auth c-later c-later-unb c-old c-old-unb c-offset c-offset-bounds c-meta c-typed badbound b-meta b-typed b-clrdeny b-clrran tol-later tol-auth d-C d-N d-S d-Z d-T d-E sib-a sib-b sib-c sib-d sib-e sib-f sib-g sib-h srv-adv srv-search pb-snapshot pb-resolution pb-archive pb-control pb-skillupd pb-updater pb-recency pb-wait ex-agent ex-task ex-noprompt ex-namenull ex-role ex-lower ex-team ex-gp ex-objrole ex-hyphen"
+
+cell_want() { case "$1" in
+  c-auth|c-offset) printf 'MATCH 2026-07-02T14:37:41Z/0' ;;
+  c-later|c-old|c-offset-bounds|c-meta|tol-later) printf 'NOMATCH/2' ;;
+  c-later-unb) printf 'MATCH 2026-07-09T11:02:13Z/0' ;;
+  c-old-unb) printf 'MATCH 2026-06-10T08:12:44Z/0' ;;
+  c-typed) printf 'MATCH 2026-07-02T14:39:00Z/0' ;;
+  tol-auth) printf 'MATCH 2026-07-02T14:37:41Z/0' ;;
+  badbound) printf 'refused' ;;
+  b-meta|b-clrran) printf 0 ;;
+  b-typed|b-clrdeny) printf 1 ;;
+  d-C) printf C ;; d-N) printf N ;; d-S) printf S ;; d-Z) printf Z ;; d-T) printf T ;; d-E) printf E ;;
+  sib-a|sib-e|sib-f|sib-g) printf '0/no' ;;
+  sib-b|sib-c|sib-d|sib-h) printf '1/yes' ;;
+  srv-adv) printf 0 ;; srv-search) printf 1 ;;
+  pb-snapshot|pb-resolution|pb-skillupd|pb-updater) printf 0 ;;
+  pb-archive|pb-control|pb-recency|pb-wait) printf 1 ;;
+  ex-agent|ex-task|ex-noprompt) printf 0 ;;
+  ex-*) printf 1 ;;
+esac; }
+
+# drefuse <program> <home> <sid> <ref-cite> <ref-count> -> R when both flagless shapes refuse exactly
+# as an unset id does, r otherwise (the reference answers are read once from the shipping program).
+drefuse() {
+  local v="$1" h="$2" sid="$3" x
+  x="$(drive "$v" "$h" "$sid" --cite "$DPHRASE")"
+  { [ "$x" = "$4" ] && [ "$x" = "1|$REF_CITE" ]; } || { printf r; return; }
+  x="$(drive "$v" "$h" "$sid" --count)"
+  { [ "$x" = "$5" ] && [ "$x" = "1|$REF_ANY" ]; } || { printf r; return; }
+  printf R
+}
+# dcell <program> <letter> -> the derivation world's letter, upper case when it reads as shipped.
+dcell() {
+  local v="$1" x r
+  case "$2" in
+    C) x="$(drive "$v" "$DH1" "$DSID" --cite "$DPHRASE")"
+       if [ "$x" = "0|cite: scanned 2 transcript(s) from $DSLUG
+MATCH 2026-07-13T12:05:00.000Z" ]; then printf C; else printf c; fi ;;
+    N) x="$(drive "$v" "$DH1" "$DSID" --count)"
+       if [ "$x" = "0|1" ]; then
+         x="$(drive "$v" "$DH1" "$DSID")"
+         case "$x" in *"corpus              : $DSLUG/$DSID.jsonl"*) printf N ;; *) printf n ;; esac
+       else printf n; fi ;;
+    S) x="$(drive "$v" "$DH1" "$DSID" --since 2020-01-01T00:00:00Z)"
+       case "$x" in *"corpus              : $DSLUG
+"*) printf S ;; *) printf s ;; esac ;;
+    Z) r="$(drefuse "$v" "$DH0" "$DSID" "$DREF0C" "$DREF0N")"; [ "$r" = R ] && printf Z || printf z ;;
+    T) r="$(drefuse "$v" "$DH2" "$DSID" "$DREF2C" "$DREF2N")"; [ "$r" = R ] && printf T || printf t ;;
+    E) r="$(drefuse "$v" "$DWORK/esc" "$DESC" "$DREFEC" "$DREFEN")"; [ "$r" = R ] && printf E || printf e ;;
+  esac
+}
+# cell <program> <cell-name> -> the token
+cell() {
+  local v="$1" c="$2" o r
+  case "$c" in
+    c-auth)         acite "$v" "$CITE_AUTH" "$AUTH_TS" ;;
+    c-later)        acite "$v" "$CITE_LATER" "$AUTH_TS" ;;
+    c-later-unb)    acite "$v" "$CITE_LATER" ;;
+    c-old)          acite "$v" "$CITE_OLD" "$AUTH_TS" ;;
+    c-old-unb)      acite "$v" "$CITE_OLD" ;;
+    c-offset)       acite "$v" "$CITE_AUTH" "$AUTH_TS_OFFSET" ;;
+    c-offset-bounds) acite "$v" "$CITE_OLD" "$AUTH_TS_OFFSET" ;;
+    c-meta)         acite "$v" "$CITE_META" ;;
+    c-typed)        acite "$v" "$CITE_TYPED" ;;
+    badbound)
+      o="$(bash "$v" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; r=$?
+      if [ "$r" -ne 0 ] && [ "$r" -ne 2 ] && has "authorized-at" "$o"; then printf refused; else printf 'verdict-%s' "$r"; fi ;;
+    b-meta)    r="$(acount "$v" "$AWORK/bmeta/session.jsonl")"; printf '%s' "${r:-E}" ;;
+    b-typed)   r="$(acount "$v" "$AWORK/btyped/session.jsonl")"; printf '%s' "${r:-E}" ;;
+    b-clrdeny) r="$(acount "$v" "$AWORK/bclrdeny/session.jsonl")"; printf '%s' "${r:-E}" ;;
+    b-clrran)  r="$(acount "$v" "$AWORK/bclrran/session.jsonl")"; printf '%s' "${r:-E}" ;;
+    tol-later)
+      o="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$v" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; r=$?
+      printf '%s/%s' "${o:-EMPTY}" "$r" ;;
+    tol-auth)
+      o="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$v" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; r=$?
+      printf '%s/%s' "${o:-EMPTY}" "$r" ;;
+    d-?)       dcell "$v" "${c#d-}" ;;
+    sib-?)     sib "$v" "$c" ;;
+    srv-adv)   srvc "$v" srv-advisor ;;
+    srv-search) srvc "$v" srv-search ;;
+    pb-*)      r="$(acount "$v" "$PB/${c#pb-}.jsonl")"; printf '%s' "${r:-E}" ;;
+    ex-*)      r="$(acount "$v" "$EX/${c#ex-}.jsonl")"; printf '%s' "${r:-E}" ;;
+    *)         printf 'NOCELL' ;;
+  esac
+}
+
+mut_twin() { case "$1" in
+  no-ismeta) printf c-typed ;;
+  exact-ts-compare) printf c-later ;;
+  bound-not-applied) printf c-auth ;;
+  bad-bound-ignored) printf c-later ;;
+  clear-ignores-deny) printf b-clrran ;;
+  env-overridable-tolerance) printf tol-auth ;;
+  window-one-sided) printf c-later ;;
+  derive-removed) printf d-Z ;;
+  derive-multi) printf d-Z ;;
+  derive-one-mode) printf d-N ;;
+  derive-id-unguarded) printf d-Z ;;
+  sib-bash-exempt) printf sib-a ;;
+  sib-record-key) printf sib-b ;;
+  sib-unbounded) printf sib-a ;;
+  sib-ts-window) printf sib-a ;;
+  sib-first-answer) printf sib-a ;;
+  sib-bash-only) printf sib-a ;;
+  sib-one-pass) printf sib-a ;;
+  sib-unanswered-acquits) printf sib-a ;;
+  srv-exempt-removed) printf srv-search ;;
+  srv-reader-reverted) printf srv-adv ;;
+  star-no-slash) printf pb-archive ;;
+  snapshot-dropped) printf pb-control ;;
+  updater-rule-removed) printf pb-control ;;
+  first-marker-wins) printf pb-archive ;;
+  explore-acquittal-dropped) printf ex-gp ;;
+  explore-key-by-truthiness) printf ex-agent ;;
+  explore-role-ere-dead) printf ex-agent ;;
+  explore-case-folded) printf ex-agent ;;
+  explore-prompt-string-coerced) printf ex-agent ;;
+  *) printf -- "-" ;;
+esac; }
+
+# build_mutant <index> -> sets MUTP; the sed is applied by the shared mut() (cmp -s + bash -n guarded).
+build_mutant() { mut "${M_NAME[$1]}" "${M_SED[$1]}"; }
+nm=${#M_NAME[@]}
+
+# THE UNMUTATED CONTROL, in the mutants' own directory and positive: it must print the SHIPPED token
+# on every deciding and twin cell. A copy that could not run prints EMPTY or NOCELL and fails here, and
+# each cell's pass is the same-run base pass behind the kills below.
+MCTL="$MWORK/control.sh"; cp "$VALIDATOR" "$MCTL"
+cell_key() { printf 'BASE_%s' "${1//-/_}"; }
+need_cells=""
+for ((i = 0; i < nm; i++)); do need_cells="$need_cells ${M_DEC[$i]}"; for t in $(mut_twin "${M_NAME[$i]}"); do [ "$t" = "-" ] || need_cells="$need_cells $t"; done; done
+ctl_n=0; ctl_bad=0
+if [ "$MATRIX" = "0" ]; then
+  for c in $(printf '%s\n' $need_cells | sort -u); do
+    got="$(cell "$MCTL" "$c")"; ctl_n=$((ctl_n + 1))
+    if [ "$got" = "$(cell_want "$c")" ]; then printf -v "$(cell_key "$c")" '%s' 1
+    else printf -v "$(cell_key "$c")" '%s' 0; ctl_bad=$((ctl_bad + 1)); bad_ "control-$c" "an unmutated copy printed '$got', wanted '$(cell_want "$c")' -- the mutants below would be scoring the harness"; fi
+  done
+  [ "$ctl_bad" -eq 0 ] && ok_ mutant-control "an unmutated copy prints the shipped token on all $ctl_n deciding and twin cells, so the copies below can run"
+fi
+
+KILLS=0
+for ((i = 0; i < nm; i++)); do
+  n="${M_NAME[$i]}"; d="${M_DEC[$i]}"
+  build_mutant "$i" || continue
+  if [ "$MATRIX" = "1" ]; then
+    tr=""; gr=""
+    for c in $ALLCELLS; do
+      MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
+      if [ "$(cell "$MUTP" "$c")" = "$(cell_want "$c")" ]; then gr="$gr,$c"; else tr="$tr,$c"; fi
+    done
+    mk=no; case "$tr," in *",$d,"*) mk=yes ;; esac
+    mx_row "$n" "$d" "$mk" "${tr#,}" "${gr#,}"
+    continue
+  fi
+  bflag="$(cell_key "$d")"; bflag="${!bflag:-0}"
+  got="$(cell "$MUTP" "$d")"
+  case "$got" in ""|*EMPTY*|NOCELL|E) got_real=0 ;; *) got_real=1 ;; esac
+  if [ "$got" != "$(cell_want "$d")" ] && [ "$got_real" = 1 ]; then
+    mutant_killed "$bflag" "$n" "MUTANT $n: deciding cell $d reads '$got', not the shipped '$(cell_want "$d")'" && KILLS=$((KILLS + 1))
+  else
+    bad_ "mutant-$n" "SURVIVED -- cell $d printed '$got' (shipped '$(cell_want "$d")'); a dead copy prints EMPTY and is refused"
+  fi
+  for t in $(mut_twin "$n"); do
+    [ "$t" = "-" ] && continue
+    tg="$(cell "$MUTP" "$t")"
+    if [ "$tg" = "$(cell_want "$t")" ]; then ok_ "mutant-$n" "twin cell $t stays green ('$tg') -- the effect is confined to $d"
+    else bad_ "mutant-$n" "moved its twin cell $t to '$tg' -- the cells overlap; re-measure with --matrix"; fi
+  done
+done
+
+if [ "$MATRIX" = "0" ]; then
+  if [ "$KILLS" -eq "$nm" ]; then ok_ KILL-COUNT "$KILLS of $nm mutants flipped their deciding cell -- the arms above can fire"
+  else bad_ KILL-COUNT "$KILLS of $nm mutants flipped their deciding cell; the mutants changed bytes in a file these arms never loaded"; fi
+  if [ "$MX_FULL_RUNS" -eq 0 ]; then ok_ plain-run-no-matrix "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"
+  else bad_ plain-run-no-matrix "a plain run executed $MX_FULL_RUNS matrix-only cell(s)"; fi
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + denied-clear arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 2 server-tool arms + 2 pause-legal arms + 2 paused-Explore arms + 29 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (shipped arms + 30 mutants, each on its deciding cell and a measured-green twin)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

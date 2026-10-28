@@ -6,3 +6,5 @@
 !core/scripts/check-owed-derivations.sh
 !core/scripts/sprint-status.sh
 !core/schemas/sprint-status.json
+# The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
+core/fixtures/lib/

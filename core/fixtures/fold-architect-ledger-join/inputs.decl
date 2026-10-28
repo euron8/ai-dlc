@@ -22,3 +22,6 @@ core/skills/ai-dlc/steps/route.md
 # what the tree holds there. Each is a README.md today.
 core/skills/ai-dlc/overrides/
 core/skills/ai-dlc/extensions/
+# The mutation helpers both fixtures source.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

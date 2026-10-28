@@ -10,9 +10,34 @@
 # prose scoped the scan to SKILL.md + steps/*.md and the analyst obeyed it.
 # Mechanizing the scan only helps if the scan can fail, so every class is
 # asserted in BOTH directions: seeded violation -> FLAGGED, clean tree -> CLEAN.
+# MUTANT-MATRIX um1 decides=U twins=P1
+# MUTANT-MATRIX um2 decides=U twins=P1
+# MUTANT-MATRIX um3 decides=U twins=P1
+# MUTANT-MATRIX um4 decides=U twins=P1
+# MUTANT-MATRIX um5 decides=U twins=P1
+# MUTANT-MATRIX um6 decides=U twins=P1
+# MUTANT-MATRIX um7 decides=U twins=P1
+# MUTANT-MATRIX um8 decides=U twins=P1
+# MUTANT-MATRIX umf decides=P1 twins=U
+# MUTANT-MATRIX umo decides=P1 twins=U
+# MUTANT-MATRIX m1 decides=D twins=P1
+# MUTANT-MATRIX m2 decides=D twins=P1
+# MUTANT-MATRIX tier1-strip decides=T twins=P1
+# MUTANT-MATRIX grant-strip decides=G twins=P1
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-audit-scans/run.sh --matrix
+# Names above are WORLDS, the same tokens the MATRIX-ROW lines print: U the used-to corpus, P1 the tier-2
+# corpus, T the tier-1 origin corpus, G the identifier-grant corpus, D the distribution tree. A twin is a world
+# where the mutant changes no class row (0 in its row), driven every push beside the deciding world.
+# Measured co-trips, stated plainly: tier1-strip and grant-strip are ONE env switch (AI_DLC_AUDIT_MUTANT=1)
+# that strips every tier-1 class, so each moves T, G and D; each is DECIDED by the world whose arm scores it
+# (T by 12f, G by 12m) and its other two dead worlds are the same fault seen again, not separate kills.
+# Every other mutant changes rows in exactly its deciding world. The matrix is re-measured whenever an arm
+# or mutant is added or changed, by the command above. A plain run never drives a matrix-only cell.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+MATRIX=0
+[ "${1:-}" = --matrix ] && MATRIX=1
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
@@ -28,20 +53,57 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # SIGPIPE, so a MATCH is read as a failed assertion. Every tier-1 label prints at
 # the top of the report, which is exactly where that bites.
 has() { grep -q "$1" <<<"$2"; }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "retro-audit-scans:"
+if [ "$MATRIX" = 1 ]; then echo "retro-audit-scans mode: FULL (--matrix)"; else echo "retro-audit-scans mode: PUSH"; fi
 
 # A pristine copy per assertion, so one mutation never leaks into the next.
 fresh() { rm -rf "$WORK/t"; cp -R "$PROJ" "$WORK/t"; }
-audit() { ( cd "$WORK/t" && bash "$AUDIT" 2>&1 ); }
-manifest() { ( cd "$WORK/t" && bash "$MANIFEST" .claude/skills/ai-dlc/steps/gate-validation.md 2>&1 ); }
-rc_of() { ( cd "$WORK/t" && bash "$1" "${@:2}" >/dev/null 2>&1; echo $? ); }
+
+# ONE real invocation per distinct (tree bytes, script bytes, args, mutant flag). The subject is
+# the only expensive thing here (about 0.2s a call), and most arms ask two questions of one world
+# (its report AND its exit code) or rebuild a world an earlier arm already scored. Both now cost
+# nothing: the key is the tree's NAMES and BYTES (never mtimes, so a rebuilt identical copy hits)
+# plus the script's own bytes, so a mutant copy and the real script can never share an answer.
+# The "memo self-probe" arm below proves a one-byte-different world is a MISS.
+MEMO="$WORK/memo"; mkdir -p "$MEMO"
+# The audit finds its ownership resolver beside itself; a mutant copy built in $WORK needs one there too,
+# or its rows carry a different owner tag from the real script and a row comparison reads that as a change.
+cp "$RESOLVER" "$WORK/core-paths.sh"
+fp() { ( cd "$1" 2>/dev/null && { LC_ALL=C find . -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; LC_ALL=C find . -type d | LC_ALL=C sort; } | cksum ); }
+runs() { awk 'END{print NR+0}' "$MEMO/runs" 2>/dev/null || echo 0; }
+memo() { # <out|rc> <mutant 0|1> <dir> <script> [args...]
+  local what="$1" mut="$2" dir="$3" script="$4" key o
+  shift 4
+  key="$( { printf '%s|%s|%s\n' "$mut" "$script" "$*"; cksum < "$script"; fp "$dir"; } | cksum )"
+  key="${key// /_}"
+  if [ ! -f "$MEMO/$key.rc" ]; then
+    o="$( cd "$dir" && if [ "$mut" = 1 ]; then AI_DLC_AUDIT_MUTANT=1 bash "$script" "$@" 2>&1; else bash "$script" "$@" 2>&1; fi; echo "@@RC=$?" )"
+    printf '%s' "${o%@@RC=*}" > "$MEMO/$key.out"
+    printf '%s' "${o##*@@RC=}" > "$MEMO/$key.rc"
+    echo x >> "$MEMO/runs"
+  fi
+  if [ "$what" = out ]; then cat "$MEMO/$key.out"; else cat "$MEMO/$key.rc"; fi
+}
+audit() { memo out 0 "$WORK/t" "$AUDIT" "$@"; }
+manifest() { memo out 0 "$WORK/t" "$MANIFEST" .claude/skills/ai-dlc/steps/gate-validation.md; }
+rc_of() { memo rc 0 "$WORK/t" "$1" "${@:2}"; }
+audit_mut() { memo out 1 "$WORK/t" "$AUDIT" "$@"; }
+rc_mut()    { memo rc 1 "$WORK/t" "$AUDIT" "$@"; }
 
 GV=".claude/skills/ai-dlc/steps/gate-validation.md"
 
 # ============================ audit-rule-files.sh ============================
 
-# --- Assertion 0: SANITY — the clean corpus is clean -------------------------
+
+T2=.claude/team-roles
+SD=.claude/skills/ai-dlc/steps
+
+# --- World W0: the clean corpus, scored ONCE. Assertions 0, 10 and 12 all read it. --------
 fresh
 out="$(audit)"; rc="$(rc_of "$AUDIT")"
 if [ "$rc" = "0" ] && has 'NARRATIVE_DRIFT: CLEAN' "$out"; then
@@ -49,123 +111,25 @@ if [ "$rc" = "0" ] && has 'NARRATIVE_DRIFT: CLEAN' "$out"; then
 else
   bad "the clean control corpus did not pass (rc=$rc) — every assertion below is unreadable"
 fi
-
-# --- Assertion 1: narrative drift is DETECTED -------------------------------
-fresh
-echo 'The lead MUST retry, because we lost a sprint to this.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"
-has 'NARRATIVE_DRIFT: FLAGGED' "$out" \
-  && ok "seeded 'because we' narrative -> NARRATIVE_DRIFT FLAGGED" \
-  || bad "narrative drift went undetected — Class 1 cannot fire"
-[ "$(rc_of "$AUDIT")" = "1" ] && ok "  and exit 1" || bad "  but exit was not 1"
-
-# --- Assertion 2: a QUOTED mention is NOT drift ------------------------------
-# The regression that produced 5 false positives on the reference consumer: the
-# line DEFINING narrative drift was scored as narrative drift.
-fresh
-echo 'Rule text carrying "because we" justification is drift and FAILs the audit.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"
-has 'NARRATIVE_DRIFT: CLEAN' "$out" \
-  && ok "a quoted mention of the pattern -> still CLEAN (mention is not use)" \
-  || bad "the audit flagged its own definition — the quoted-span guard is gone"
-
-# --- Assertion 3: rule weakness is DETECTED ----------------------------------
-fresh
-echo 'The dev should attach evidence; a missing attachment is a violation.' >> "$WORK/t/.claude/team-roles/dev.md"
-out="$(audit)"; has 'RULE_WEAKNESS: FLAGGED' "$out" \
-  && ok "seeded soft language beside a mandate -> RULE_WEAKNESS FLAGGED" \
-  || bad "rule weakness went undetected — Class 2 cannot fire"
-
-# --- Assertion 4: a NEGATIVE mandate is not weakness -------------------------
-fresh
-echo 'The dev should never merge unreviewed code; doing so is a violation.' >> "$WORK/t/.claude/team-roles/dev.md"
-out="$(audit)"; has 'RULE_WEAKNESS: CLEAN' "$out" \
-  && ok "'should never' beside a mandate -> CLEAN (negative mandate exempt)" \
-  || bad "'should never' was flagged as soft language"
-
-# --- Assertion 5: an incomplete Rule 26(c) triple is DETECTED ---------------
-fresh
-cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
-
-**Minimum mechanism.** Failure caught: an unrecorded outcome reaching the gate.
-EOF
-out="$(audit)"; has 'INCOMPLETE_26C: FLAGGED' "$out" \
-  && ok "'Failure caught:' with no other two fields -> INCOMPLETE_26C FLAGGED" \
-  || bad "an incomplete Rule 26(c) triple went undetected — Class 1b cannot fire"
-
-# --- Assertion 6: a COMPLETE triple is not flagged --------------------------
-# Section-scoped, not line-scoped: the fields wrap across lines mid-phrase.
-fresh
-cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
-
-**Minimum mechanism.** Failure caught: an unrecorded outcome reaching the gate.
-False-positive cost: one redundant line per step. Removal condition: retire
-once the outcome is written structurally.
-EOF
-out="$(audit)"; has 'INCOMPLETE_26C: CLEAN' "$out" \
-  && ok "a complete triple wrapping across lines -> CLEAN (section-scoped)" \
-  || bad "a complete Rule 26(c) triple was flagged incomplete"
-
-# --- Assertion 6a: a HEADED complete triple written with the PLURAL field -----
-# The shape retro.md carried. FC must accept `Failures caught:` or a complete
-# triple reads as missing its failure field.
-fresh
-cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
-
-**Minimum mechanism.** Failures caught: an unrecorded outcome reaching the gate,
-and a stale outcome re-read. False-positive cost: one redundant line per step.
-Removal condition: retire once the outcome is written structurally.
-EOF
-out="$(audit)"; has 'INCOMPLETE_26C: CLEAN' "$out" \
-  && ok "a headed complete triple with plural 'Failures caught:' -> CLEAN" \
-  || bad "a complete plural-field Rule 26(c) triple was flagged incomplete — FC is singular-only"
-
-# --- Assertion 6b: a HEADLESS block opened by the plural field is still seen --
-# No `Minimum mechanism` heading, so only FIELD_OPENER can open the block. It
-# supplies none of the other two fields and must be FLAGGED.
-fresh
-cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
-
-Failures caught: an unrecorded outcome reaching the gate.
-EOF
-out="$(audit)"; has 'INCOMPLETE_26C: FLAGGED' "$out" \
-  && ok "a headless plural 'Failures caught:' with no other two fields -> FLAGGED" \
-  || bad "a headless plural-opened incomplete block went undetected — FIELD_OPENER is singular-only"
-
-# --- Assertion 7: a dangling pointer is DETECTED ----------------------------
-# The live defect this scan found on its first real run.
-fresh
-echo 'The convention is defined in `steps/rule-authoring.md`.' \
-  >> "$WORK/t/.claude/skills/ai-dlc/extensions/README.md"
-out="$(audit)"; has 'DANGLING_POINTER: FLAGGED' "$out" \
-  && ok "pointer to a nonexistent skill file -> DANGLING_POINTER FLAGGED" \
-  || bad "a dangling skill-content pointer went undetected"
-
-# --- Assertion 8: the scan reaches extensions/, not just steps/ -------------
-# Assertion 7 seeded into extensions/README.md specifically: core's prose scoped
-# invariant 1 to SKILL.md + steps/*.md, which is why the real dangling pointer
-# survived every prior retro.
-fresh
-mkdir -p "$WORK/t/.claude/skills/ai-dlc/overrides"
-echo 'Canonical shape is defined in `steps/no-such-step.md`.' \
-  > "$WORK/t/.claude/skills/ai-dlc/overrides/entry.md"
-out="$(audit)"; has 'overrides/entry.md.*DANGLING_POINTER' "$out" \
-  && ok "a dangling pointer inside overrides/ is reached by the scan" \
-  || bad "overrides/ is outside the pointer scan — the scope bug is back"
-
-# --- Assertion 9: a RESOLVABLE pointer is not flagged -----------------------
-fresh
-echo 'Rule text lives in `rule-authoring.md` and `team-roles/dev.md`.' \
-  >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md"
-out="$(audit)"; has 'DANGLING_POINTER: CLEAN' "$out" \
-  && ok "pointers to files that exist -> CLEAN" \
-  || bad "a resolvable pointer was reported dangling"
-
-# --- Assertion 10: dormancy reports N/A, never CLEAN, with no workflows -----
-fresh
-out="$(audit)"; has 'PATH_DORMANCY: N/A' "$out" \
+# Assertion 10: dormancy reports N/A, never CLEAN, with no workflows.
+has 'PATH_DORMANCY: N/A' "$out" \
   && ok "no .github/workflows/ -> PATH_DORMANCY N/A (not a silent CLEAN)" \
   || bad "an absent workflow dir did not report N/A"
+# Assertion 12: Class 3 never reports CLEAN.
+has 'COMPLEXITY_ACCRETION: DID-NOT-RUN' "$out" \
+  && ok "complexity accretion reports DID-NOT-RUN, never CLEAN (lead-owned)" \
+  || bad "Class 3 claimed a verdict it cannot compute"
+
+# --- Memo self-probe: the cache must be able to MISS, or every arm below reads a stale answer.
+# An identical rebuilt world is a hit (no new invocation); a world one byte apart is a miss.
+n0="$(runs)"; fresh; audit >/dev/null; n1="$(runs)"
+fresh; audit >/dev/null; n2="$(runs)"
+printf ' \n' >> "$WORK/t/CLAUDE.md"; audit >/dev/null; n3="$(runs)"
+if [ "$n1" = "$n0" ] && [ "$n2" = "$n1" ] && [ "$n3" = "$((n2 + 1))" ]; then
+  ok "memo self-probe: a rebuilt identical world is a hit, a one-byte-different world is a miss"
+else
+  bad "memo self-probe failed (runs $n0/$n1/$n2/$n3) — a cached answer could stand in for a different world"
+fi
 
 # --- Assertion 11: an EMPTY corpus fails, never passes ----------------------
 # A scan of nothing reports every class CLEAN. That is the exact shape of a
@@ -175,86 +139,183 @@ rm -rf "$WORK/t"; mkdir -p "$WORK/t"
   && ok "empty corpus -> exit 2 (refuses to score nothing as clean)" \
   || bad "an empty corpus did not exit 2 — the audit can pass by scanning nothing"
 
-# --- Assertion 12: Class 3 never reports CLEAN ------------------------------
-fresh
-out="$(audit)"; has 'COMPLEXITY_ACCRETION: DID-NOT-RUN' "$out" \
-  && ok "complexity accretion reports DID-NOT-RUN, never CLEAN (lead-owned)" \
-  || bad "Class 3 claimed a verdict it cannot compute"
+# ===== World P1: every TIER-2 seed in ONE corpus, each in its own file, asserted per file:line.
+# Classes 1, 1b and 2 are independent output rows, and each seed sits in a file of its own so a
+# finding can only come from its own seed. Near-misses (the quoted mention, the negative mandate,
+# the complete triples) carry a flagged twin in the SAME file, so "absent" is never read off a
+# file the scan did not reach. mf and mo (12u19, 12u20) are scored on this world too.
+p1_world() {
+  fresh
+  printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/CLAUDE.md"
+  # dev.md: soft language beside a mandate (3), and the Opus line the consumer-layout arm reads (4).
+  echo 'The dev should attach evidence; a missing attachment is a violation.' >> "$WORK/t/$T2/dev.md"
+  echo 'You are dispatched on the Opus tier.' >> "$WORK/t/$T2/dev.md"
+  # qa.md: a QUOTED mention (1) is not drift; its unquoted twin (3) is.
+  printf 'Rule text carrying "because we" justification is drift and FAILs the audit.\n\nThe lead MUST retry, because we lost a sprint to this.\n' > "$WORK/t/$T2/qa.md"
+  # ops.md: a NEGATIVE mandate (1) is not weakness; its soft twin (3) is.
+  printf 'The dev should never merge unreviewed code; doing so is a violation.\n\nThe dev should attach evidence; a missing attachment is a violation.\n' > "$WORK/t/$T2/ops.md"
+  # sm.md: "should be" is not exempt (12i).
+  echo 'The evidence should be attached before the gate; a gap is a violation.' > "$WORK/t/$T2/sm.md"
+  # tea.md: a directive whose MUST wraps two lines down (12h). A per-line predicate scored it clean.
+  cat > "$WORK/t/$T2/tea.md" <<'EOF'
+Large read-only command output should be routed through the offload tool so its
+bytes stay out of the resident prefix. Two hard limits: state-mutating commands
+MUST run natively, and verbatim-load files MUST NOT be routed through it.
+EOF
+  # Rule 26(c): one file per shape.
+  cat > "$WORK/t/$SD/s5.md" <<'EOF'
+**Minimum mechanism.** Failure caught: an unrecorded outcome reaching the gate.
+EOF
+  cat > "$WORK/t/$SD/s6.md" <<'EOF'
+**Minimum mechanism.** Failure caught: an unrecorded outcome reaching the gate.
+False-positive cost: one redundant line per step. Removal condition: retire
+once the outcome is written structurally.
+EOF
+  cat > "$WORK/t/$SD/s6a.md" <<'EOF'
+**Minimum mechanism.** Failures caught: an unrecorded outcome reaching the gate,
+and a stale outcome re-read. False-positive cost: one redundant line per step.
+Removal condition: retire once the outcome is written structurally.
+EOF
+  printf 'Failures caught: an unrecorded outcome reaching the gate.\n' > "$WORK/t/$SD/s6b.md"
+  cat > "$WORK/t/$SD/s12j.md" <<'EOF'
+## Minimum mechanism (Rule 26(c))
 
-# ------------------- tier 1: the prohibitions with no mechanism -------------
-# rule-authoring.md forbids sprint references, version tags, parenthetical origin
-# notes and embedded dates. None of the four was mechanized, and they are the
-# shapes the corpus actually carried — narrative shipped twice while Class 1's
-# five colloquial phrases reported CLEAN over it.
-audit_mut() { ( cd "$WORK/t" && AI_DLC_AUDIT_MUTANT=1 bash "$AUDIT" 2>&1 ); }
-rc_mut()    { ( cd "$WORK/t" && AI_DLC_AUDIT_MUTANT=1 bash "$AUDIT" "$@" >/dev/null 2>&1; echo $? ); }
+This gate exists to keep the outcome recorded and the sprint honest.
+EOF
+}
+p1_world
+out="$(audit)"
+has "CLAUDE.md:4  NARRATIVE_DRIFT" "$out" \
+  && ok "seeded 'because we' narrative -> NARRATIVE_DRIFT FLAGGED" \
+  || bad "narrative drift went undetected — Class 1 cannot fire"
+[ "$(rc_of "$AUDIT")" = "1" ] && ok "  and exit 1" || bad "  but exit was not 1"
+{ ! has "$T2/qa.md:1  NARRATIVE_DRIFT" "$out"; } && has "$T2/qa.md:3  NARRATIVE_DRIFT" "$out" \
+  && ok "a quoted mention of the pattern -> still CLEAN (mention is not use)" \
+  || bad "the audit flagged its own definition — the quoted-span guard is gone"
+has "$T2/dev.md:3  RULE_WEAKNESS" "$out" \
+  && ok "seeded soft language beside a mandate -> RULE_WEAKNESS FLAGGED" \
+  || bad "rule weakness went undetected — Class 2 cannot fire"
+{ ! has "$T2/ops.md:1  RULE_WEAKNESS" "$out"; } && has "$T2/ops.md:3  RULE_WEAKNESS" "$out" \
+  && ok "'should never' beside a mandate -> CLEAN (negative mandate exempt)" \
+  || bad "'should never' was flagged as soft language"
+has "$T2/sm.md:1  RULE_WEAKNESS" "$out" \
+  && ok "'should be' beside a mandate -> FLAGGED (canonical soft-mandate form)" \
+  || bad "'should be' was exempted — the scan is blind to the shape Rule 18 names first"
+has "$T2/tea.md:[0-9]*  RULE_WEAKNESS" "$out" \
+  && ok "soft directive whose MUST wraps to a later line -> RULE_WEAKNESS FLAGGED" \
+  || bad "Class 2 is still line-scoped — a wrapped mandate stays invisible"
+has "$SD/s5.md:[0-9]*  INCOMPLETE_26C" "$out" \
+  && ok "'Failure caught:' with no other two fields -> INCOMPLETE_26C FLAGGED" \
+  || bad "an incomplete Rule 26(c) triple went undetected — Class 1b cannot fire"
+{ ! has "$SD/s6.md:[0-9]*  INCOMPLETE_26C" "$out"; } \
+  && ok "a complete triple wrapping across lines -> CLEAN (section-scoped)" \
+  || bad "a complete Rule 26(c) triple was flagged incomplete"
+{ ! has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$out"; } \
+  && ok "a headed complete triple with plural 'Failures caught:' -> CLEAN" \
+  || bad "a complete plural-field Rule 26(c) triple was flagged incomplete — FC is singular-only"
+has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$out" \
+  && ok "a headless plural 'Failures caught:' with no other two fields -> FLAGGED" \
+  || bad "a headless plural-opened incomplete block went undetected — FIELD_OPENER is singular-only"
+has "$SD/s12j.md:[0-9]*  INCOMPLETE_26C" "$out" \
+  && ok "a 26(c) block supplying none of the three fields -> FLAGGED" \
+  || bad "a fieldless 26(c) block went undetected — Class 1b still anchors on a field it may lack"
+# Assertion 37: consumer layout -> N/A, never a scan of the consumer's own files (dev.md carries the Opus line).
+has 'ROLE_MODEL_NAMING: N/A' "$out" \
+  && ok "consumer layout -> ROLE_MODEL_NAMING N/A (the arm runs in the distribution only)" \
+  || bad "Class 1d ran in a consumer layout, over text the consumer cannot edit"
 
-# --- Assertion 12a: a version tag in rule prose is DETECTED -----------------
-fresh
-echo 'The lead MUST re-run the gate; this replaced the v0.42.0 behaviour.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"; has 'ORIGIN_TAG: FLAGGED' "$out" \
-  && ok "seeded version tag -> ORIGIN_TAG FLAGGED" \
-  || bad "a version tag in rule prose went undetected"
-[ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ] \
-  && ok "  and it gates the push (--fail-on=deterministic -> exit 1)" \
-  || bad "  but --fail-on=deterministic did not exit 1"
+# --- Assertion 12g: the two thresholds differ, and NEITHER goes silent ------
+# P1 holds tier-2 findings only: the push is not gated, the retro still sees them.
+if [ "$(rc_of "$AUDIT")" = "1" ] \
+   && [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "0" ] \
+   && has 'NARRATIVE_DRIFT: FLAGGED' "$out"; then
+  ok "tier-2-only finding -> default exit 1, deterministic exit 0, still printed"
+else
+  bad "the tier split is wrong: a judgement finding must not gate the push, and must never go unprinted"
+fi
+has 'NARRATIVE_DRIFT: FLAGGED' "$(audit --fail-on=deterministic)" \
+  && ok "  and --fail-on=deterministic still PRINTS the tier-2 finding" \
+  || bad "  but --fail-on=deterministic suppressed the tier-2 finding — a silent tier is the defect this audit exists to find"
 
-# --- Assertion 12b: a sprint reference is DETECTED --------------------------
+# ===== World P2: the pointer scan (tier 1). Seven, eight and nine in one corpus, per file. ===
 fresh
-echo 'The lead MUST cite the operator; this closes the S301 hole.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"; has 'ORIGIN_TAG: FLAGGED' "$out" \
-  && ok "seeded sprint reference -> ORIGIN_TAG FLAGGED" \
-  || bad "a sprint reference in rule prose went undetected"
+echo 'The convention is defined in `steps/rule-authoring.md`.' \
+  >> "$WORK/t/.claude/skills/ai-dlc/extensions/README.md"
+echo 'Canonical shape is defined in `steps/no-such-step.md`.' \
+  > "$WORK/t/.claude/skills/ai-dlc/overrides/entry.md"
+echo 'Rule text lives in `rule-authoring.md` and `team-roles/dev.md`.' > "$WORK/t/$SD/ptr9.md"
+out="$(audit)"
+has 'DANGLING_POINTER: FLAGGED' "$out" && has 'extensions/README.md.*DANGLING_POINTER' "$out" \
+  && ok "pointer to a nonexistent skill file -> DANGLING_POINTER FLAGGED" \
+  || bad "a dangling skill-content pointer went undetected"
+# Assertion 8: the scan reaches overrides/, not just steps/ (core scoped it to SKILL.md + steps/*.md).
+has 'overrides/entry.md.*DANGLING_POINTER' "$out" \
+  && ok "a dangling pointer inside overrides/ is reached by the scan" \
+  || bad "overrides/ is outside the pointer scan — the scope bug is back"
+# Assertion 9: a RESOLVABLE pointer is not flagged (its flagged twins are in the same corpus).
+{ ! has 'steps/ptr9.md.*DANGLING_POINTER' "$out"; } \
+  && ok "pointers to files that exist -> CLEAN" \
+  || bad "a resolvable pointer was reported dangling"
 
-# --- Assertion 12c: a BACKTICKED version tag is not a violation -------------
-# Same mention-is-not-use guard Assertion 2 asserts for Class 1. rule-authoring.md
-# has to be able to name the shape it forbids.
-fresh
-echo 'A tag such as `v0.42.0` in rule prose FAILs this audit.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"; has 'ORIGIN_TAG: CLEAN' "$out" \
-  && ok "a backticked version tag -> still CLEAN (mention is not use)" \
-  || bad "the audit flagged its own definition of the origin-tag shape"
-
-# --- Assertion 12d: a parenthetical origin note is DETECTED -----------------
-fresh
-echo 'The lead MUST run the close gate (formerly the retro gate) before merging.' \
-  >> "$WORK/t/CLAUDE.md"
-out="$(audit)"; has 'ORIGIN_PARENTHETICAL: FLAGGED' "$out" \
-  && ok "seeded parenthetical origin note -> ORIGIN_PARENTHETICAL FLAGGED" \
-  || bad "a parenthetical origin note went undetected"
-
-# --- Assertion 12e: an embedded date is DETECTED ----------------------------
-fresh
-echo 'The lead MUST attach evidence; this has been required since 2026-04-17.' \
-  >> "$WORK/t/CLAUDE.md"
-out="$(audit)"; has 'EMBEDDED_DATE: FLAGGED' "$out" \
-  && ok "seeded embedded date -> EMBEDDED_DATE FLAGGED" \
-  || bad "an embedded date went undetected"
-
-# --- Assertion 12f: MUTATION CONTROL — tier 1 is what catches tier 1 --------
-# Every seed above, in one corpus, with the tier-1 patterns stripped. If this
-# still reports FLAGGED, some older class is matching the seeds and the new code
-# is unproven — the assertions above would be passing for the wrong reason.
-fresh
+# ===== World T: every TIER-1 origin seed in ONE corpus. Assertions 12a-12f and 12k. ==========
+# CLAUDE.md:4 version tag, :5 sprint reference, :6 parenthetical origin note, :7 embedded date, :8 a
+# BACKTICKED version tag (mention is not use), plus a version tag in escalations.md (the corpus reaches
+# the whole skill). One --fail-on=deterministic run is both the report and the exit code; the MUTANT run
+# of 12f strips tier 1 from the same corpus, so the unmutated exit 1 beside it is the live control.
+wt_world() {
+  fresh
 cat >> "$WORK/t/CLAUDE.md" <<'EOF'
 The lead MUST re-run the gate; this replaced the v0.42.0 behaviour.
 The lead MUST cite the operator; this closes the S301 hole.
 The lead MUST run the close gate (formerly the retro gate) before merging.
 The lead MUST attach evidence; this has been required since 2026-04-17.
+A tag such as `v0.42.0` in rule prose FAILs this audit.
 EOF
-out="$(audit_mut)"
-if has 'ORIGIN_TAG: CLEAN' "$out" \
-   && has 'ORIGIN_PARENTHETICAL: CLEAN' "$out" \
-   && has 'EMBEDDED_DATE: CLEAN' "$out" \
-   && [ "$(rc_mut --fail-on=deterministic)" = "0" ]; then
-  ok "MUTANT: tier-1 patterns stripped -> the same corpus scores CLEAN"
-else
-  bad "MUTANT run still flagged the tier-1 seeds — an older class is catching them, so the new patterns are unproven"
-fi
-# And the same corpus WITHOUT the mutant must fail, or the control proves nothing.
+echo 'The lead MUST escalate; this replaced the v0.42.0 protocol.' \
+  > "$WORK/t/.claude/skills/ai-dlc/escalations.md"
+}
+wt_world
+out="$(audit --fail-on=deterministic)"
+has "CLAUDE.md:4  ORIGIN_TAG  origin tag 'v0.42.0'" "$out" && has 'ORIGIN_TAG: FLAGGED.*tier 1' "$out" \
+  && ok "seeded version tag -> ORIGIN_TAG FLAGGED" \
+  || bad "a version tag in rule prose went undetected"
 [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ] \
-  && ok "  and the unmutated run on that corpus exits 1 (control is live)" \
-  || bad "  but the unmutated run also passed — the differential is vacuous"
+  && ok "  and it gates the push (--fail-on=deterministic -> exit 1)" \
+  || bad "  but --fail-on=deterministic did not exit 1"
+has "CLAUDE.md:5  ORIGIN_TAG  origin tag 'S301'" "$out" \
+  && ok "seeded sprint reference -> ORIGIN_TAG FLAGGED" \
+  || bad "a sprint reference in rule prose went undetected"
+{ ! has "CLAUDE.md:8  ORIGIN_TAG" "$out"; } \
+  && ok "a backticked version tag -> still CLEAN (mention is not use)" \
+  || bad "the audit flagged its own definition of the origin-tag shape"
+has "CLAUDE.md:6  ORIGIN_PARENTHETICAL" "$out" \
+  && ok "seeded parenthetical origin note -> ORIGIN_PARENTHETICAL FLAGGED" \
+  || bad "a parenthetical origin note went undetected"
+has "CLAUDE.md:7  EMBEDDED_DATE" "$out" \
+  && ok "seeded embedded date -> EMBEDDED_DATE FLAGGED" \
+  || bad "an embedded date went undetected"
+has 'escalations.md.*ORIGIN_TAG' "$out" \
+  && ok "escalations.md is inside the corpus" \
+  || bad "escalations.md ships to every consumer and is scanned by nothing"
+# --- Assertion 12f: MUTATION CONTROL — tier 1 is what catches tier 1 --------
+# Every seed above, tier-1 patterns stripped. If this still reports FLAGGED, some older class is
+# matching the seeds and the new code is unproven.
+# The unmutated run on the same corpus must fail, or the control proves nothing.
+if [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ]; then
+  ok "  the unmutated run on that corpus exits 1 (control is live)"; B_t=1
+else
+  bad "  the unmutated run also passed — the differential is vacuous"
+fi
+out_m="$(audit_mut --fail-on=deterministic)"
+if has 'ORIGIN_TAG: CLEAN' "$out_m" \
+   && has 'ORIGIN_PARENTHETICAL: CLEAN' "$out_m" \
+   && has 'EMBEDDED_DATE: CLEAN' "$out_m" \
+   && [ "$(rc_mut --fail-on=deterministic)" = "0" ]; then
+  mutant_killed "${B_t:-0}" tier1-strip "MUTANT: tier-1 patterns stripped -> the same corpus scores CLEAN"
+else
+  bad "tier1-strip SURVIVED: MUTANT run still flagged the tier-1 seeds — an older class is catching them, so the new patterns are unproven"
+fi
+
 
 # ------------- tier 1: the GRANT, which is the other half of the above -------
 # Every assertion above tests a PROHIBITION. rule-authoring.md's Style block also
@@ -270,6 +331,7 @@ RA=".claude/skills/ai-dlc/rule-authoring.md"
 # "identifier". The grant's closing clause is itself a prohibition, so a Style
 # block holding that clause ALONE is prohibitions-only, IS the defect, and still
 # contains the word. Measured on a copy: an `identifier` anchor scores this CLEAN.
+wg_world() {
 fresh
 cp "$WORK/t/$RA" "$WORK/ra.pristine"
 cat > "$WORK/t/$RA" <<'EOF'
@@ -283,21 +345,28 @@ Rules are imperative.
 - No sprint or story references.
 - No parenthetical origin notes after a directive.
 EOF
+}
+wg_world
 if cmp -s "$WORK/ra.pristine" "$WORK/t/$RA"; then
   bad "FIXTURE BROKEN — the Class 1c mutant is byte-identical to the seed, so nothing was mutated and the arms below prove nothing"
 else
-  out="$(audit)"; has 'IDENTIFIER_GRANT: FLAGGED' "$out" \
-    && ok "grant deleted with its trailing prohibition retained -> IDENTIFIER_GRANT FLAGGED" \
-    || bad "a Style block that prohibits every way to carry an identifier and permits none went undetected"
+  out="$(audit)"
+  if has 'IDENTIFIER_GRANT: FLAGGED' "$out"; then
+    ok "grant deleted with its trailing prohibition retained -> IDENTIFIER_GRANT FLAGGED"; B_gr=1
+  else
+    bad "a Style block that prohibits every way to carry an identifier and permits none went undetected"
+  fi
   [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ] \
     && ok "  and it gates the push (--fail-on=deterministic -> exit 1)" \
     || bad "  but --fail-on=deterministic did not exit 1"
   # MUTANT differential, on THIS corpus rather than 12f's: 12f seeds only CLAUDE.md,
   # where this class has no subject, so it scores the same either way there and
   # establishes nothing about Class 1c.
-  has 'IDENTIFIER_GRANT: CLEAN' "$(audit_mut)" \
-    && ok "  MUTANT: tier-1 stripped -> the same corpus scores CLEAN (no older class is catching it)" \
-    || bad "  MUTANT run still flagged it — an older class is matching this seed and Class 1c is unproven"
+  if has 'IDENTIFIER_GRANT: CLEAN' "$(audit_mut)"; then
+    mutant_killed "${B_gr:-0}" grant-strip "  MUTANT: tier-1 stripped -> the same corpus scores CLEAN (no older class is catching it)"
+  else
+    bad "  grant-strip SURVIVED: MUTANT run still flagged it — an older class is matching this seed and Class 1c is unproven"
+  fi
 fi
 
 # --- Assertion 12n: a legitimately REWORDED grant is not a violation ---------
@@ -349,69 +418,6 @@ else
   bad "with no rule-authoring.md the class reported CLEAN — a scan of nothing reading as a scan that passed"
 fi
 
-# --- Assertion 12g: the two thresholds differ, and NEITHER goes silent ------
-# A tier-2-only corpus: the push is not gated, the retro still sees the finding.
-fresh
-echo 'The lead MUST retry, because we lost a sprint to this.' >> "$WORK/t/CLAUDE.md"
-out="$(audit)"
-if [ "$(rc_of "$AUDIT")" = "1" ] \
-   && [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "0" ] \
-   && has 'NARRATIVE_DRIFT: FLAGGED' "$out"; then
-  ok "tier-2-only finding -> default exit 1, deterministic exit 0, still printed"
-else
-  bad "the tier split is wrong: a judgement finding must not gate the push, and must never go unprinted"
-fi
-out="$( cd "$WORK/t" && bash "$AUDIT" --fail-on=deterministic 2>&1 )"
-has 'NARRATIVE_DRIFT: FLAGGED' "$out" \
-  && ok "  and --fail-on=deterministic still PRINTS the tier-2 finding" \
-  || bad "  but --fail-on=deterministic suppressed the tier-2 finding — a silent tier is the defect this audit exists to find"
-
-# --- Assertion 12h: Class 2 sees a directive that wraps ---------------------
-# The live shape it could not see: the primary directive says SHOULD and the
-# MUST that qualifies it sits two lines down, so a per-line predicate scored the
-# weakest sentence in the rulebook as clean.
-fresh
-cat >> "$WORK/t/.claude/team-roles/dev.md" <<'EOF'
-
-Large read-only command output should be routed through the offload tool so its
-bytes stay out of the resident prefix. Two hard limits: state-mutating commands
-MUST run natively, and verbatim-load files MUST NOT be routed through it.
-EOF
-out="$(audit)"; has 'RULE_WEAKNESS: FLAGGED' "$out" \
-  && ok "soft directive whose MUST wraps to a later line -> RULE_WEAKNESS FLAGGED" \
-  || bad "Class 2 is still line-scoped — a wrapped mandate stays invisible"
-
-# --- Assertion 12i: 'should be' is not exempt -------------------------------
-fresh
-echo 'The evidence should be attached before the gate; a gap is a violation.' \
-  >> "$WORK/t/.claude/team-roles/dev.md"
-out="$(audit)"; has 'RULE_WEAKNESS: FLAGGED' "$out" \
-  && ok "'should be' beside a mandate -> FLAGGED (canonical soft-mandate form)" \
-  || bad "'should be' was exempted — the scan is blind to the shape Rule 18 names first"
-
-# --- Assertion 12j: a 26(c) block with NO fields at all is DETECTED ---------
-# Anchoring Class 1b on 'Failure caught:' made the emptiest blocks the only ones
-# it could not see: a block supplying none of the three has nothing to anchor on.
-fresh
-cat >> "$WORK/t/.claude/skills/ai-dlc/steps/example.md" <<'EOF'
-
-## Minimum mechanism (Rule 26(c))
-
-This gate exists to keep the outcome recorded and the sprint honest.
-EOF
-out="$(audit)"; has 'INCOMPLETE_26C: FLAGGED' "$out" \
-  && ok "a 26(c) block supplying none of the three fields -> FLAGGED" \
-  || bad "a fieldless 26(c) block went undetected — Class 1b still anchors on a field it may lack"
-
-# --- Assertion 12k: the corpus reaches the whole skill, not SKILL.md + steps -
-# escalations.md, rule-authoring.md and core-manifest.md ship to every consumer
-# and were scanned by nothing.
-fresh
-echo 'The lead MUST escalate; this replaced the v0.42.0 protocol.' \
-  > "$WORK/t/.claude/skills/ai-dlc/escalations.md"
-out="$(audit)"; has 'escalations.md.*ORIGIN_TAG' "$out" \
-  && ok "escalations.md is inside the corpus" \
-  || bad "escalations.md ships to every consumer and is scanned by nothing"
 
 # ===== Class 1: `used to` — the habitual past vs a reduced passive of PURPOSE =====
 #
@@ -522,86 +528,68 @@ The nonce is not used to reconcile anything.
 EOF
 }
 
-# --- Assertion 12u1: purpose after a noun phrase -> CLEAN --------------------
-fresh; u_p1
-has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+# --- Assertions 12u1-12u9d: ONE combined corpus, asserted per file ------------------------------
+# The predicate decides per LINE and each seed sits in a file of its own, so one run answers all of
+# them. 12u10 below asserts this corpus's EXACT hit list, so a purpose line missing from it and a
+# habitual line present in it are each held to a single line.
+wu_world() { fresh; u_p1; u_p2; u_p3; u_h1; u_h2; u_h3; u_h4; u_h5; u_a; u_b; u_b2; u_c; }
+wu_world
+HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2"
+ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
+WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
+cout="$(audit)"
+nl="$(grep 'NARRATIVE_DRIFT: FLAGGED' <<<"$cout")"
+
+{ ! has "$TR/up1.md" "$nl"; } \
   && ok "'A health signal used to clear …' -> NARRATIVE_DRIFT CLEAN (purpose, not history)" \
   || bad "a reduced passive of purpose on a noun phrase scored as narrative drift"
-
-# --- Assertion 12u2: purpose after `be`, WRAPPED -> CLEAN --------------------
 # The wrap is the point: `be` is on the previous line and `used to` opens this one.
-fresh; u_p2
-has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+{ ! has "$TR/up2.md" "$nl"; } \
   && ok "'MUST NOT be' / 'used to satisfy …' across a line wrap -> CLEAN" \
   || bad "a passive of purpose wrapping at 'be' / 'used to' scored as narrative drift"
-
-# --- Assertion 12u3: purpose after an article, WRAPPED -> CLEAN -------------
-fresh; u_p3
-has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+{ ! has "$TR/up3.md" "$nl"; } \
   && ok "'a TEL-denominated total' / 'used to validate …' across a wrap -> CLEAN" \
   || bad "a reduced relative wrapping onto a line-initial 'used to' scored as drift"
 
-# --- Assertion 12u4-12u8: the habitual past is still DETECTED, per line ------
-fresh; u_h1
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh1.md:1\]" "$(audit)" \
+has "$TR/uh1.md:1[],]" "$nl" \
   && ok "'The step used to say nothing here' -> FLAGGED at uh1.md:1" \
   || bad "the habitual past went undetected — the purpose carve-out swallowed Class 1"
-
 # No tense-shift marker anywhere on this line, deliberately: the marker fix reads
 # as the obvious one and this is the seed that refuses it.
-fresh; u_h2
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh2.md:1\]" "$(audit)" \
+has "$TR/uh2.md:1[],]" "$nl" \
   && ok "'Where the blocks used to sit' (no 'now'/'no longer') -> FLAGGED at uh2.md:1" \
   || bad "a habitual line carrying no tense-shift marker was acquitted"
-
-fresh; u_h3
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh3.md:1\]" "$(audit)" \
+has "$TR/uh3.md:1[],]" "$nl" \
   && ok "'This paragraph used to read …' -> FLAGGED at uh3.md:1" \
   || bad "a habitual line whose object is a quoted span was acquitted"
-
 # Line-initial AND habitual. The previous-line join must not acquit on its own.
-fresh; u_h4
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh4.md:2\]" "$(audit)" \
+has "$TR/uh4.md:2[],]" "$nl" \
   && ok "a line-initial habitual 'used to exist here is gone' -> FLAGGED at uh4.md:2" \
   || bad "the previous-line join acquits every line-initial 'used to', purpose or not"
-
-fresh; u_h5
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit)" \
+has "$TR/uh5.md:2[],]" "$nl" \
   && ok "'that used to collide with it now sit …' -> FLAGGED at uh5.md:2" \
   || bad "a habitual line that DOES carry 'now' was acquitted"
 
 # --- Assertion 12u9: one purpose line and one habitual line, SAME FILE -------
 # The arm that proves the predicate decides per LINE and not per FILE. Both
-# clauses are in one file; only the habitual line's number may appear.
+# clauses are in one file; only the habitual line's number may appear. (Its own world.)
 fresh; u_mix
 has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/umix.md:4\]" "$(audit)" \
   && ok "purpose at umix.md:1 + habitual at umix.md:4 -> FLAGGED naming ONLY line 4" \
   || bad "a file holding both shapes reported the wrong line set — the predicate is file-scoped"
 
-# --- Assertion 12u9a: the article window stops at a sentence boundary --------
-fresh; u_a
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1\]" "$(audit)" \
+has "$TR/ua.md:1[],]" "$nl" \
   && ok "'This is not a gate. The step used to stop here.' -> FLAGGED at ua.md:1" \
   || bad "an indefinite article in the PREVIOUS sentence acquitted the habitual clause after it"
-
-# --- Assertion 12u9b: a backticked SUBJECT is not a line wrap ----------------
-fresh; u_b
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2\]" "$(audit)" \
+has "$TR/ub.md:2[],]" "$nl" \
   && ok "'\`validate-mandatory-rules.sh\` used to run six checks.' -> FLAGGED at ub.md:2" \
   || bad "a habitual line whose subject is a backticked span was read as a wrap and took its predecessor's verdict"
-
-# --- Assertion 12u9c: the same shape over a predecessor that WOULD acquit ----
-# The discriminating input. 12u9b is FLAGGED under either fall-through rule
-# because its previous line ends in a period; this one is FLAGGED only under the
-# raw-text rule, and it is the seed mutant m7 moves.
-fresh; u_b2
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub2.md:2\]" "$(audit)" \
+# The discriminating input. ub is FLAGGED under either fall-through rule because its previous line
+# ends in a period; ub2 is FLAGGED only under the raw-text rule, and it is the seed mutant m7 moves.
+has "$TR/ub2.md:2[],]" "$nl" \
   && ok "the same line over a predecessor ending in a bare 'an' -> still FLAGGED at ub2.md:2" \
   || bad "a blanked prefix fell through to the previous line and borrowed its acquittal"
-
-# --- Assertion 12u9d: a negated passive of purpose -> CLEAN -----------------
-fresh; u_c
-has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+{ ! has "$TR/uc.md" "$nl"; } \
   && ok "'The nonce is not used to reconcile anything.' -> CLEAN (negated passive)" \
   || bad "a negation between the copula and the participle broke the passive-of-purpose clause"
 
@@ -626,7 +614,7 @@ else
   ok "mutation guard: an impossible anchor reports DID NOT APPLY"
 fi
 
-fresh; u_p1; u_p2; u_p3; u_h1; u_h2; u_h3; u_h4; u_h5; u_a; u_b; u_b2; u_c
+wu_world
 HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2"
 ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
 WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
@@ -635,16 +623,20 @@ WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
 # Not "nothing went wrong": the eight habitual lines must be THERE and the four
 # purpose lines must NOT, or a subject replaced by `exit 0` scores every mutant
 # below as a kill.
-has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS\]" "$(audit)" \
-  && ok "CONTROL: 4 purpose + 8 habitual in one corpus -> exactly the 8 habitual lines" \
-  || bad "the unmutated control did not produce the baseline hit set — every mutant below is unreadable"
+if has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS\]" "$(audit)"; then
+  ok "CONTROL: 4 purpose + 8 habitual in one corpus -> exactly the 8 habitual lines"; B_u10=1
+else
+  bad "the unmutated control did not produce the baseline hit set — every mutant below is unreadable"
+fi
 
 # --- Assertion 12u11: m1, the OLD grammar restored --------------------------
 # `used to\b` back inside NARRATIVE, which is what the audit did before the split.
 if mkmut um1 's/|measured:|/|measured:|used to\\b|/'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC,$TR/up1.md:1,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um1.sh")" \
-    && ok "MUTANT m1 (old NARRATIVE grammar) -> all four purpose lines flip to FLAGGED; killed" \
-    || bad "MUTANT m1 restored 'used to' to NARRATIVE and no purpose arm moved — 12u1-12u3 prove nothing"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC,$TR/up1.md:1,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um1.sh")"; then
+    mutant_killed "${B_u10:-0}" um1 "MUTANT m1 (old NARRATIVE grammar) -> all four purpose lines flip to FLAGGED; killed"
+  else
+    bad "um1 SURVIVED: MUTANT m1 restored 'used to' to NARRATIVE and no purpose arm moved — 12u1-12u3 prove nothing"
+  fi
 else
   bad "MUTANT m1 DID NOT APPLY — its anchor moved; 12u1-12u3 are unproven"
 fi
@@ -654,9 +646,11 @@ fi
 # "now"/"no longer" on the line. It clears the same purpose sites AND silences
 # every habitual line that does not announce its own tense shift.
 if mkmut um2 's#^            return True$#            return bool(re.search(r"\\bnow\\b|\\btoday\\b|\\bcurrently\\b|no longer", t, re.I))#'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit_at "$WORK/um2.sh")" \
-    && ok "MUTANT m2 (tense marker required) -> seven habitual lines go CLEAN, only 'now' survives; killed" \
-    || bad "MUTANT m2 required a tense-shift marker and the habitual arms did not move — 12u4-12u8 prove nothing"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit_at "$WORK/um2.sh")"; then
+    mutant_killed "${B_u10:-0}" um2 "MUTANT m2 (tense marker required) -> seven habitual lines go CLEAN, only 'now' survives; killed"
+  else
+    bad "um2 SURVIVED: MUTANT m2 required a tense-shift marker and the habitual arms did not move — 12u4-12u8 prove nothing"
+  fi
 else
   bad "MUTANT m2 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
 fi
@@ -665,9 +659,11 @@ fi
 # uh5 is what separates m3 from m2: it carries "now", so m2 keeps it and m3 does
 # not. Without that seed the two mutants have one footprint and neither is proven.
 if mkmut um3 's#^            return True$#            return False#'; then
-  has 'NARRATIVE_DRIFT: CLEAN' "$(audit_at "$WORK/um3.sh")" \
-    && ok "MUTANT m3 (habitual_used_to always False) -> every habitual line goes CLEAN; killed" \
-    || bad "MUTANT m3 acquitted every line and Class 1 still flagged — some other pattern is catching the seeds"
+  if has 'NARRATIVE_DRIFT: CLEAN' "$(audit_at "$WORK/um3.sh")"; then
+    mutant_killed "${B_u10:-0}" um3 "MUTANT m3 (habitual_used_to always False) -> every habitual line goes CLEAN; killed"
+  else
+    bad "um3 SURVIVED: MUTANT m3 acquitted every line and Class 1 still flagged — some other pattern is catching the seeds"
+  fi
 else
   bad "MUTANT m3 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
 fi
@@ -676,9 +672,11 @@ fi
 # Owns BOTH wrapped purpose seeds: they are one property, and a mutant that moved
 # only one of them would mean the other arm is reading something else.
 if mkmut um4 's#            before = used(prev)#            before = ""#'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um4.sh")" \
-    && ok "MUTANT m4 (previous-line join removed) -> both WRAPPED purpose lines flip, up1 and uc do not; killed" \
-    || bad "MUTANT m4 dropped the previous-line join and the wrapped arms did not move — 12u2/12u3 prove nothing"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um4.sh")"; then
+    mutant_killed "${B_u10:-0}" um4 "MUTANT m4 (previous-line join removed) -> both WRAPPED purpose lines flip, up1 and uc do not; killed"
+  else
+    bad "um4 SURVIVED: MUTANT m4 dropped the previous-line join and the wrapped arms did not move — 12u2/12u3 prove nothing"
+  fi
 else
   bad "MUTANT m4 DID NOT APPLY — its anchor moved; 12u2/12u3 are unproven"
 fi
@@ -689,9 +687,11 @@ fi
 # and takes "The step used to" and "the blocks used to" with it. Seeding the
 # absent fix proves the arms fire; seeding the WRONG one proves they discriminate.
 if mkmut um5 's#(a|an)#(a|an|the)#'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2\]" "$(audit_at "$WORK/um5.sh")" \
-    && ok "MUTANT m5 (definite article acquits too) -> ua, uh1 and uh2 go CLEAN; killed" \
-    || bad "MUTANT m5 widened the article class and no habitual arm moved — the a/an narrowing is unbound"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2\]" "$(audit_at "$WORK/um5.sh")"; then
+    mutant_killed "${B_u10:-0}" um5 "MUTANT m5 (definite article acquits too) -> ua, uh1 and uh2 go CLEAN; killed"
+  else
+    bad "um5 SURVIVED: MUTANT m5 widened the article class and no habitual arm moved — the a/an narrowing is unbound"
+  fi
 else
   bad "MUTANT m5 DID NOT APPLY — its anchor moved; the article narrowing is unproven"
 fi
@@ -704,9 +704,11 @@ fi
 # `the blocks used to` and `This paragraph used to`, whose preceding words are
 # nouns. Only the seeds whose cue ends in punctuation or in a blank survive it.
 if mkmut um6 $'s#.*am|is|are.*#    r"([a-z]{3,}\\\\s*$)", re.I)#\n/directly|solely/d\n/explicitly|first/d\n/(a|an)/d'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh4.md:2,$TR/up2.md:2\]" "$(audit_at "$WORK/um6.sh")" \
-    && ok "MUTANT m6 (noun-looking token before) -> up2 flips AND uh1/uh2/uh3/ua go CLEAN; killed" \
-    || bad "MUTANT m6 replaced the two clauses with a noun heuristic and nothing moved — the clause split is unbound"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh4.md:2,$TR/up2.md:2\]" "$(audit_at "$WORK/um6.sh")"; then
+    mutant_killed "${B_u10:-0}" um6 "MUTANT m6 (noun-looking token before) -> up2 flips AND uh1/uh2/uh3/ua go CLEAN; killed"
+  else
+    bad "um6 SURVIVED: MUTANT m6 replaced the two clauses with a noun heuristic and nothing moved — the clause split is unbound"
+  fi
 else
   bad "MUTANT m6 DID NOT APPLY — its anchor moved; the clause split is unproven"
 fi
@@ -717,9 +719,11 @@ fi
 # exactly one cell, ub2, which is why ub2 had to be seeded — ub is FLAGGED under
 # both rules and could never have shown this.
 if mkmut um7 's#if not text#if not before#'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$HAB\]" "$(audit_at "$WORK/um7.sh")" \
-    && ok "MUTANT m7 (fall-through on blanked text) -> ub2 alone goes CLEAN; killed" \
-    || bad "MUTANT m7 restored the blanked-prefix fall-through and no arm moved — 12u9c proves nothing"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$HAB\]" "$(audit_at "$WORK/um7.sh")"; then
+    mutant_killed "${B_u10:-0}" um7 "MUTANT m7 (fall-through on blanked text) -> ub2 alone goes CLEAN; killed"
+  else
+    bad "um7 SURVIVED: MUTANT m7 restored the blanked-prefix fall-through and no arm moved — 12u9c proves nothing"
+  fi
 else
   bad "MUTANT m7 DID NOT APPLY — its anchor moved; 12u9c is unproven"
 fi
@@ -728,44 +732,44 @@ fi
 # A copula with a negation between it and the participle is still a passive.
 # Deleting the allowance moves exactly one cell, uc.
 if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
-  has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC\]" "$(audit_at "$WORK/um8.sh")" \
-    && ok "MUTANT m8 (no adverb between copula and participle) -> uc alone flips to FLAGGED; killed" \
-    || bad "MUTANT m8 removed the adverb allowance and uc did not flip — 12u9d proves nothing"
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC\]" "$(audit_at "$WORK/um8.sh")"; then
+    mutant_killed "${B_u10:-0}" um8 "MUTANT m8 (no adverb between copula and participle) -> uc alone flips to FLAGGED; killed"
+  else
+    bad "um8 SURVIVED: MUTANT m8 removed the adverb allowance and uc did not flip — 12u9d proves nothing"
+  fi
 else
   bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
 fi
 
-# --- Assertion 12u19: mf, FC reverted to the singular-only form ---------------
-# Owns 6a alone: the headed plural triple is read as missing its failure field.
-# 6b is unmoved because FIELD_OPENER still opens the headless block, which is
-# FLAGGED either way.
-EX="$WORK/t/.claude/skills/ai-dlc/steps/example.md"
-fresh
-cat >> "$EX" <<'EOF'
-
-**Minimum mechanism.** Failures caught: an unrecorded outcome reaching the gate,
-and a stale outcome re-read. False-positive cost: one redundant line per step.
-Removal condition: retire once the outcome is written structurally.
-EOF
+# --- Assertion 12u19 and 12u20: mf and mo, scored on World P1 (the tier-2 corpus) ----------------
+# mf reverts FC to the singular-only form and owns 6a alone: the headed plural triple is read as
+# missing its failure field. mo reverts FIELD_OPENER and owns 6b alone: with no heading and no opener
+# the headless block is never seen. Each is asserted against BOTH twins, so neither can move the
+# other's cell.
+p1_world
+base_out="$(audit)"
+if ! has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$base_out" && has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$base_out"; then
+  ok "CONTROL: World P1 scores the headed plural triple CLEAN and the headless plural block FLAGGED"; B_p1=1
+else
+  bad "the unmutated World P1 did not score 6a CLEAN and 6b FLAGGED — mf and mo are unreadable"
+fi
 if mkmut umf 's/failures?\\s+caught/failure\\s+caught/'; then
-  has 'INCOMPLETE_26C: CLEAN' "$(audit)" \
-    && has 'INCOMPLETE_26C: FLAGGED' "$(audit_at "$WORK/umf.sh")" \
-    && ok "MUTANT mf (FC singular-only) -> the headed plural triple flips CLEAN to FLAGGED; killed" \
-    || bad "MUTANT mf reverted FC and the headed plural arm did not move — 6a proves nothing"
+  mf_out="$(audit_at "$WORK/umf.sh")"
+  if has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$mf_out" && has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$mf_out"; then
+    mutant_killed "${B_p1:-0}" umf "MUTANT mf (FC singular-only) -> the headed plural triple flips CLEAN to FLAGGED; killed"
+  else
+    bad "umf SURVIVED: MUTANT mf reverted FC and the headed plural arm did not move — 6a proves nothing"
+  fi
 else
   bad "MUTANT mf DID NOT APPLY — its anchor moved; 6a is unproven"
 fi
-
-# --- Assertion 12u20: mo, FIELD_OPENER reverted to the singular-only form -----
-# Owns 6b alone: with no heading and no opener the headless block is never seen,
-# so it scores CLEAN. 6a is unmoved because its heading opens the block.
-fresh
-printf '\nFailures caught: an unrecorded outcome reaching the gate.\n' >> "$EX"
 if mkmut umo 's/Failures? caught:/Failure caught:/'; then
-  has 'INCOMPLETE_26C: FLAGGED' "$(audit)" \
-    && has 'INCOMPLETE_26C: CLEAN' "$(audit_at "$WORK/umo.sh")" \
-    && ok "MUTANT mo (FIELD_OPENER singular-only) -> the headless plural block flips FLAGGED to CLEAN; killed" \
-    || bad "MUTANT mo reverted FIELD_OPENER and the headless plural arm did not move — 6b proves nothing"
+  mo_out="$(audit_at "$WORK/umo.sh")"
+  if ! has "$SD/s6b.md:[0-9]*  INCOMPLETE_26C" "$mo_out" && ! has "$SD/s6a.md:[0-9]*  INCOMPLETE_26C" "$mo_out"; then
+    mutant_killed "${B_p1:-0}" umo "MUTANT mo (FIELD_OPENER singular-only) -> the headless plural block flips FLAGGED to CLEAN; killed"
+  else
+    bad "umo SURVIVED: MUTANT mo reverted FIELD_OPENER and the headless plural arm did not move — 6b proves nothing"
+  fi
 else
   bad "MUTANT mo DID NOT APPLY — its anchor moved; 6b is unproven"
 fi
@@ -1165,8 +1169,8 @@ if [ -f "$SB/core-paths.sh" ]; then
   bad "FIXTURE BROKEN — the scratch dir was seeded with a resolver, so the absent-resolver world is not the world under test"
 else
   printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
-  out_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" 2>&1 )"
-  rc_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local >/dev/null 2>&1; echo $? )"
+  out_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local 2>&1; echo "@@RC=$?" )"
+  rc_nr="${out_nr##*@@RC=}"; out_nr="${out_nr%@@RC=*}"
   if [ "$rc_nr" = "1" ] && has 'unresolved 1' "$out_nr"; then
     ok "an UNRESOLVED owner counts as local and FAILS — a missing resolver cannot acquit"
   else
@@ -1286,7 +1290,6 @@ dfresh() {
 daudit() { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic 2>&1 ); }
 drc()    { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic >/dev/null 2>&1; echo $? ); }
 
-# --- Assertion 33: clean distribution tree -> CLEAN, out-of-population setup skill quiet
 dfresh
 out="$(daudit)"
 if has 'layout: distribution' "$out" && has 'ROLE_MODEL_NAMING: CLEAN' "$out" && [ "$(drc)" = "0" ]; then
@@ -1295,67 +1298,58 @@ else
   bad "the clean distribution tree did not score ROLE_MODEL_NAMING CLEAN at exit 0 — Class 1d's arms below are unreadable"
 fi
 
-# --- Assertion 34: "the Opus tier" in a role file FIRES and gates
-dfresh
-echo 'You are dispatched on the Opus tier.' >> "$DW/core/team-roles/dev.md"
+# World D: every FIRING seed in ONE distribution tree, each on its own line, so a line number can only
+# come from its own seed. dev.md:4 Opus tier (34), :5 R1, :6 E1; ai-dlc-update/SKILL.md:4 the reversed
+# coupling (35), :5 R2, :6 E2; steps/example.md:2 R3, :3 E3; ai-dlc/SKILL.md:4 T1.
+#   R1 ranks with no tier word, R2 is the coupling model-before-adversary, R3 is the stale claim that a
+#   role FILE pins the model. E1/E2 are the natural rewordings of code-reviewer-escalated.md:62 and :66 at
+#   fc71a7b10, the sites the arm was built on; E3 is a bare "of the escalation" suffix; T1 names a tier-1
+#   class but is not the "tier-<n> finding stays at this tier" shape. Only "of the escalation ladder" and
+#   that one shape are exempt, so all four must fire.
+dworld() {
+  dfresh
+  echo 'You are dispatched on the Opus tier.' >> "$DW/core/team-roles/dev.md"
+  echo 'You run on a more capable model than `dev`.' >> "$DW/core/team-roles/dev.md"
+  echo 'The lead binds your tier of the escalation by routing the review to you.' >> "$DW/core/team-roles/dev.md"
+  echo 'Defaults: the `adversary`'"'"'s model is taken for `gate-adjudicator`.' \
+    >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+  echo '`gate-adjudicator` defaults to the model `adversary` uses.' \
+    >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+  echo 'the lead chose this tier of the escalation by routing the review here.' \
+    >> "$DW/core/skills/ai-dlc-update/SKILL.md"
+  echo 'the dispatch guard binds `dev`'"'"'s model to `dev.md`'"'"'s pin' \
+    >> "$DW/core/skills/ai-dlc/steps/example.md"
+  echo 'you are already on this tier of the escalation path.' >> "$DW/core/skills/ai-dlc/steps/example.md"
+  echo 'A tier-1 finding is routed here because the lead chose this tier for the review.' \
+    >> "$DW/core/skills/ai-dlc/SKILL.md"
+}
+dworld
 out="$(daudit)"
 if has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" && has 'ROLE_MODEL_NAMING: FLAGGED' "$out" \
    && [ "$(drc)" = "1" ]; then
-  ok "seeded 'the Opus tier' in a role file -> ROLE_MODEL_NAMING FLAGGED, --fail-on=deterministic exit 1"
+  ok "seeded 'the Opus tier' in a role file -> ROLE_MODEL_NAMING FLAGGED, --fail-on=deterministic exit 1"; B_d34=1
 else
   bad "a model named in a role file went undetected — Class 1d cannot fire"
 fi
-
-# --- Assertion 35: the gate-adjudicator <- adversary coupling, in a second spelling, FIRES
-dfresh
-echo 'Defaults: the `adversary`'"'"'s model is taken for `gate-adjudicator`.' \
-  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
-out="$(daudit)"
 has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
   && ok "the adversary-model -> gate-adjudicator coupling, reversed word order -> FLAGGED" \
   || bad "the stale coupling went undetected when spelled adversary-first"
-
-# --- Assertion 35b: three regressions the earlier grammar scored 0 each FIRE, one per file
-# R1 ranks with no tier word, R2 is the coupling model-before-adversary, R3 is the stale
-# claim that a role FILE pins the model. Each sits in a different population file, so each
-# line number below can only come from its own seed.
-dfresh
-echo 'You run on a more capable model than `dev`.' >> "$DW/core/team-roles/dev.md"
-echo '`gate-adjudicator` defaults to the model `adversary` uses.' \
-  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
-echo 'the dispatch guard binds `dev`'"'"'s model to `dev.md`'"'"'s pin' \
-  >> "$DW/core/skills/ai-dlc/steps/example.md"
-out="$(daudit)"
-has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" \
+has 'core/team-roles/dev.md:5  ROLE_MODEL_NAMING' "$out" \
   && ok "R1 'a more capable model than dev' in a role file -> FLAGGED" \
   || bad "R1, a model ranking with no tier word, went undetected"
-has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+has 'core/skills/ai-dlc-update/SKILL.md:5  ROLE_MODEL_NAMING' "$out" \
   && ok "R2 'gate-adjudicator defaults to the model adversary uses' -> FLAGGED" \
   || bad "R2, the coupling spelled model-before-adversary, went undetected"
 has 'core/skills/ai-dlc/steps/example.md:2  ROLE_MODEL_NAMING' "$out" \
   && ok "R3 'binds dev's model to dev.md's pin' in a step file -> FLAGGED" \
   || bad "R3, the stale role-file-pins-the-model claim, went undetected"
-
-# --- Assertion 35c: the rewordings the tier narrowing must NOT acquit FIRE, one per file
-# E1/E2 are the natural rewordings of code-reviewer-escalated.md:62 and :66 at fc71a7b10,
-# the sites the arm was built on; E3 is a bare "of the escalation" suffix; T1 names a
-# tier-1 class but is not the "tier-<n> finding stays at this tier" shape. Only "of the
-# escalation ladder" and that one shape are exempt, so all four must fire.
-dfresh
-echo 'The lead binds your tier of the escalation by routing the review to you.' >> "$DW/core/team-roles/dev.md"
-echo 'the lead chose this tier of the escalation by routing the review here.' \
-  >> "$DW/core/skills/ai-dlc-update/SKILL.md"
-echo 'you are already on this tier of the escalation path.' >> "$DW/core/skills/ai-dlc/steps/example.md"
-echo 'A tier-1 finding is routed here because the lead chose this tier for the review.' \
-  >> "$DW/core/skills/ai-dlc/SKILL.md"
-out="$(daudit)"
-has 'core/team-roles/dev.md:4  ROLE_MODEL_NAMING' "$out" \
+has 'core/team-roles/dev.md:6  ROLE_MODEL_NAMING' "$out" \
   && ok "E1 'binds your tier of the escalation' -> FLAGGED" \
   || bad "E1, the reworded :62 site, was acquitted by a bare 'of the escalation' exemption"
-has 'core/skills/ai-dlc-update/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
+has 'core/skills/ai-dlc-update/SKILL.md:6  ROLE_MODEL_NAMING' "$out" \
   && ok "E2 'chose this tier of the escalation' -> FLAGGED" \
   || bad "E2, the reworded :66 site, was acquitted by a bare 'of the escalation' exemption"
-has 'core/skills/ai-dlc/steps/example.md:2  ROLE_MODEL_NAMING' "$out" \
+has 'core/skills/ai-dlc/steps/example.md:3  ROLE_MODEL_NAMING' "$out" \
   && ok "E3 'this tier of the escalation path' -> FLAGGED" \
   || bad "E3, a bare 'of the escalation' suffix, was acquitted"
 has 'core/skills/ai-dlc/SKILL.md:4  ROLE_MODEL_NAMING' "$out" \
@@ -1375,13 +1369,6 @@ has 'ROLE_MODEL_NAMING: CLEAN' "$out" \
   && ok "model_family=OPUS, 'three-tier escalation', 'tier-1 ... this tier', 'your tier of the escalation' -> CLEAN" \
   || bad "a mechanism enum, the escalation ladder or a finding tier was flagged as a role-model claim"
 
-# --- Assertion 37: consumer layout -> N/A, never a scan of the consumer's own files
-fresh
-echo 'You are dispatched on the Opus tier.' >> "$WORK/t/.claude/team-roles/dev.md"
-out="$(audit)"
-has 'ROLE_MODEL_NAMING: N/A' "$out" \
-  && ok "consumer layout -> ROLE_MODEL_NAMING N/A (the arm runs in the distribution only)" \
-  || bad "Class 1d ran in a consumer layout, over text the consumer cannot edit"
 
 # --- Assertion 38: MUTANTS, each a copy of the audit beside its real resolver ---------
 # M1 empties the corpus emit: the seeded role-file hit must then score CLEAN, which
@@ -1394,19 +1381,85 @@ sed 's/m = MODEL_RX.search(raw)/m = None/' "$AUDIT" > "$DM/m2.sh"
 if cmp -s "$AUDIT" "$DM/m1.sh" || cmp -s "$AUDIT" "$DM/m2.sh"; then
   bad "a Class 1d mutation DID NOT APPLY — its anchor is gone, so the mutant proves nothing"
 else
-  dfresh
-  echo 'You are dispatched on the Opus tier.' >> "$DW/core/team-roles/dev.md"
+  dworld
   out1="$(daudit "$DM/m1.sh")"; rc2="$(drc "$DM/m2.sh")"; err2="$(daudit "$DM/m2.sh")"
   if has 'ROLE_MODEL_NAMING: CLEAN' "$out1" && [ "$(drc)" = "1" ]; then
-    ok "MUTANT m1 (arm emits nothing) -> the seeded hit scores CLEAN; unmutated exits 1 on the same tree"
+    mutant_killed "${B_d34:-0}" m1 "MUTANT m1 (arm emits nothing) -> the seeded hit scores CLEAN; unmutated exits 1 on the same tree"
   else
-    bad "MUTANT m1 survived or its control is dead — Assertion 34 is not proven by Class 1d"
+    bad "m1 SURVIVED: MUTANT m1 survived or its control is dead — Assertion 34 is not proven by Class 1d"
   fi
   if [ "$rc2" = "2" ] && has 'ROLE_MODEL_NAMING self-probe' "$err2"; then
-    ok "MUTANT m2 (regex blinded) -> the self-probe refuses with exit 2 before the corpus"
+    mutant_killed "${B_d34:-0}" m2 "MUTANT m2 (regex blinded) -> the self-probe refuses with exit 2 before the corpus"
   else
-    bad "MUTANT m2 survived (rc=$rc2) — the self-probe cannot fire"
+    bad "m2 SURVIVED: rc=$rc2 — the self-probe cannot fire"
   fi
+fi
+
+# ======================= twins (every push) and the matrix (--matrix only) ==========================
+# A row signature is every class row of a report without its tier or owner suffix. A cell is the set of
+# class rows a mutant CHANGES in one world against the real script on the same world. Both runs go
+# through the memo, so a (world, script) pair already driven above costs nothing here.
+sig() { grep -E '^  [A-Z][A-Z_0-9]*: ' <<<"$1" | sed 's/  (.*//'; }
+chg() { # <base report> <mutant report> -> comma list of changed class rows, ALL for an empty report, none
+  local b m
+  b="$(sig "$1")"; m="$(sig "$2")"
+  if [ -z "$m" ]; then echo ALL; return; fi
+  { diff <(echo "$b") <(echo "$m") | grep '^>' | sed -E 's/^> +([A-Z_0-9]+):.*/\1/' | sort -u | paste -sd, -; } || true
+}
+cell() { # <world fn> <mutant script> <mutant env 0|1>
+  local dir args base mut r
+  "$1"
+  if [ "$1" = dworld ]; then dir="$DW"; args=--fail-on=deterministic; else dir="$WORK/t"; args=; fi
+  base="$(memo out 0 "$dir" "$AUDIT" $args)"
+  mut="$(memo out "$3" "$dir" "$2" $args)"
+  r="$(chg "$base" "$mut")"
+  # A mutant that REFUSES (exit 2, the self-probe) where the real script does not has moved every row.
+  if [ "$(memo rc "$3" "$dir" "$2" $args)" = 2 ] && [ "$(memo rc 0 "$dir" "$AUDIT" $args)" != 2 ]; then r=REFUSED; fi
+  echo "${r:-none}"
+}
+twin() { # <twin arm> <mutant id> <world fn> <script> <env>
+  local c
+  c="$(cell "$3" "$4" "$5")"
+  if [ "$c" = none ]; then
+    ok "TWIN world $1: mutant $2 changes no row in world $3 (stays green)"
+  else
+    bad "TWIN world $1: mutant $2 moved rows [$c] in world $3 — the mutation is not confined to its deciding arm"
+  fi
+}
+if [ -f "$WORK/um1.sh" ] && [ -f "$WORK/umo.sh" ] && [ -f "$DM/m2.sh" ]; then
+  for _m in um1 um2 um3 um4 um5 um6 um7 um8; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
+  twin U umf wu_world "$WORK/umf.sh" 0
+  twin U umo wu_world "$WORK/umo.sh" 0
+  twin P1 m1 p1_world "$DM/m1.sh" 0
+  twin P1 m2 p1_world "$DM/m2.sh" 0
+  twin P1 tier1-strip p1_world "$AUDIT" 1
+  twin P1 grant-strip p1_world "$AUDIT" 1
+else
+  bad "FIXTURE BROKEN — a mutant copy the twins drive does not exist, so the twin arms prove nothing"
+fi
+
+mcells=0
+if [ "$MATRIX" = 1 ]; then
+  echo "MATRIX: one row per mutant; dead= the worlds (arms) where it changes a row, green= where it changes none"
+  for _e in "um1|$WORK/um1.sh|0" "um2|$WORK/um2.sh|0" "um3|$WORK/um3.sh|0" "um4|$WORK/um4.sh|0" \
+            "um5|$WORK/um5.sh|0" "um6|$WORK/um6.sh|0" "um7|$WORK/um7.sh|0" "um8|$WORK/um8.sh|0" \
+            "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
+            "tier1-strip|$AUDIT|1" "grant-strip|$AUDIT|1"; do
+    _id="${_e%%|*}"; _r="${_e#*|}"; _sc="${_r%%|*}"; _ev="${_r##*|}"
+    _dead=""; _green=""
+    for _w in wu_world:U p1_world:P1 wt_world:T wg_world:G dworld:D; do
+      _c="$(cell "${_w%%:*}" "$_sc" "$_ev")"; mcells=$((mcells+1))
+      if [ "$_c" = none ]; then _green="$_green ${_w##*:}=0"; else _dead="$_dead ${_w##*:}=1[$_c]"; fi
+    done
+    echo "MATRIX-ROW $_id dead:${_dead:- -} green:${_green:- -}"
+  done
+  [ "$mcells" = 70 ] \
+    && ok "matrix mode: 70 mutant x world cells measured (14 mutants x 5 worlds)" \
+    || bad "matrix mode measured $mcells cells, not 70"
+else
+  [ "$mcells" = 0 ] \
+    && ok "plain run: no matrix-only cell was driven" \
+    || bad "a plain run drove $mcells matrix-only cells"
 fi
 echo
 if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi

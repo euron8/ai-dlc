@@ -25,8 +25,6 @@ core_manifest:
   - core/fixtures/adversarial-citation/**
   - core/fixtures/apply-drift-after-write/**
   - core/fixtures/apply-drift-refile/**
-  - core/fixtures/apply-drift-refile-b/**
-  - core/fixtures/apply-drift-refile-c/**
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-restamp-worklist/**
@@ -145,9 +143,6 @@ core_manifest:
   - core/fixtures/layer-debt-ledger/**
   - core/fixtures/layer-readopt-gate/**
   - core/fixtures/ledger-reverify/**
-  - core/fixtures/ledger-reverify-b/**
-  - core/fixtures/ledger-reverify-c/**
-  - core/fixtures/ledger-reverify-d/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
   - core/fixtures/ledger-reverify-dist-only-reach/**
   - core/fixtures/fixture-drivability/**

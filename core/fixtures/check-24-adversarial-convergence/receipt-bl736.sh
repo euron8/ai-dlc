@@ -50,8 +50,29 @@ $REL
 EOF
 if [ "$r_mi" -ge 1 ] 2>/dev/null; then PRED="${r_ma}.$((r_mi - 1)).${r_pa}"; else PRED="$((r_ma - 1)).999.${r_pa}"; fi
 
-B="$(mktemp -d "${TMPDIR:-/tmp}/bl736-receipt-XXXXXX")" || exit 9
+# RCPT_WORLD_DIR (optional): build the worlds ONCE under <dir>/rel-<REL> and reuse them on every later
+# call stamped at the same release (the validator only reads a world). Absent: mktemp per call, as before.
+if [ -n "${RCPT_WORLD_DIR:-}" ]; then
+  B="$RCPT_WORLD_DIR/rel-$REL"
+  [ ! -d "$B" ] || [ -f "$B/.built" ] || { echo "receipt: $B holds a partial world set" >&2; exit 9; }
+  mkdir -p "$B" || exit 9
+else
+  B="$(mktemp -d "${TMPDIR:-/tmp}/bl736-receipt-XXXXXX")" || exit 9
+fi
 B="$(cd "$B" && pwd -P)"
+# RCPT_WORLDS (optional): judge only the named worlds; a name this receipt does not judge is exit 9. A world
+# left out never runs the subject, reads rc=99, and is dropped from the verdict.
+want() { [ -z "${RCPT_WORLDS:-}" ] && { RAN="$RAN $1 "; return 0; }; case " $RCPT_WORLDS " in *" $1 "*) RAN="$RAN $1 "; return 0 ;; esac; return 1; }
+RAN=""
+rcpt_filter() {
+  [ -n "${RCPT_WORLDS:-}" ] || return 0
+  local x kept=""
+  for x in $RCPT_WORLDS; do
+    case "$RAN" in *" $x "*) ;; *) echo "receipt: RCPT_WORLDS names '$x', which this receipt does not judge" >&2; exit 9 ;; esac
+  done
+  for x in $bad; do case "$x" in *"(rc=99)") ;; *) kept="$kept $x" ;; esac; done
+  bad="$kept"
+}
 TS=_bmad-output/planning-artifacts/s1/test-strategy.md
 D=_bmad-output/planning-artifacts/s1
 lg() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=r -c user.email=r@example.invalid \
@@ -107,6 +128,7 @@ world() { # name before after commit-before(yes|no) [invoked_at] [nostamp|<stamp
   link "$1" "$b" "$a"
   printf '%s %s\n' "$b" "$a" > "$w/.shas"
 }
+if [ ! -f "$B/.built" ]; then
 { world reword v1 reword yes && world split v1 split yes && world merge lsplit merge yes \
     && world reopen v1 split yes && world unreach v1 split no && world norows v1 norows yes \
     && world legacy v1 split yes 2026-09-29T09:45:00Z && world nostamp v1 split yes 2026-09-29T11:00:00Z nostamp \
@@ -118,6 +140,8 @@ printf '# Divergence resolution\n\n<!-- ADVERSARIAL_RESOLUTION v1\nresolves: tes
   "$TS" "$rb" "$ra" > "$B/reopen/$D/test-strategy-resolution-p1.md"
 pass reopen 2 2026-09-29T12:00:00Z "$ra" test-strategy-resolution-p1.md
 printf '%s\n' '{"type":"user","timestamp":"2026-09-29T11:30:00Z","message":{"content":"Yes: re-open the test strategy for the 2.3 split."}}' > "$B/transcript.jsonl"
+: > "$B/.built"
+fi
 # THE WORLDS ARE WHAT THEY CLAIM: merge's two sides carry the same whole-file id set, and unreach's v1 is
 # in no commit while split's is.
 ids_all() { grep -oE '[0-9]+\.[0-9]+[a-z]?' "$1" | sort -u | tr '\n' ' '; }
@@ -130,6 +154,7 @@ strat lsplit > "$B/m-before"; [ "$(ids_all "$B/m-before")" = "$(ids_all "$B/merg
   || { echo "receipt: nostamp/pred stamp shape wrong" >&2; exit 9; }
 
 run() { # world -> RC, OUT
+  want "$1" || { OUT="__RCPT_SKIPPED__"; RC=99; return 0; }
   OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" \
          --transcript "$B/transcript.jsonl" 2>&1)"; RC=$?
 }
@@ -143,6 +168,8 @@ run norows;  [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ 
 run legacy;  [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"Legacy series."* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad legacy(rc=$RC)"
 run nostamp; [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad nostamp(rc=$RC)"
 run pred;    [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad pred(rc=$RC)"
+rcpt_filter
+[ -z "${RCPT_REPORT:-}" ] || echo "receipt worlds judged:$(echo $RAN)" >&2
 if [ -n "$bad" ]; then echo "receipt BL-736: NOT FIXED --$bad"; exit 1; fi
 echo "receipt BL-736: fixed (reword silent, split and merge FAIL by story column, reopen silent, unreachable PENDING, legacy, unstamped and predecessor-stamped PENDING by era)"
 exit 0

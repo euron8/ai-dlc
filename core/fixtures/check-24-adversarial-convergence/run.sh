@@ -66,9 +66,23 @@ UNITS_b="hook k2 elic j3"
 UNITS_c="arms_ij pass1 j2h"
 UNITS_d="k3"
 GROUP=a
-if [ "${1:-}" = "--group" ]; then
-  GROUP="${2:-}"
-  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+# --matrix: run every mutant against every arm (the mutant-matrix measurement). Taken as an ARGUMENT, never
+# from the environment: hermetic-run.sh runs a fixture under `env -i`, so an env-var mode would silently
+# never arrive and the run would read green on the per-push subset.
+MATRIX_ARG=0; GROUP_SET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --group) GROUP="${2:-}"; GROUP_SET=1; [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }; shift 2 ;;
+    --matrix) MATRIX_ARG=1; shift ;;
+    *) echo "FIXTURE ERROR: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+# `--matrix` with no `--group` measures EVERY shard, one after another, so the one re-measure command covers
+# the whole battery. Each shard is its own process and prints its own `MATRIX MODE: on` line.
+if [ "$MATRIX_ARG" = 1 ] && [ "$GROUP_SET" = 0 ]; then
+  mx_rc=0
+  for mx_g in $SHARDS; do bash "$0" --group "$mx_g" --matrix || mx_rc=1; done
+  exit "$mx_rc"
 fi
 case " $SHARDS " in
   *" $GROUP "*) ;;
@@ -126,12 +140,91 @@ TRANSCRIPT="$ROOT/operator-transcript.jsonl"
 FAILURES=0
 ASSERTIONS=0
 
+# ------------------------------------------------------------------------------ vrun ----
+# THE PER-RUN MEMO. Most arms in a unit ask the SAME (program, series, flags) question and read a
+# different property of the one answer: `expect` reads the exit, `expect_says` the message,
+# `expect_silent` re-asks a control another arm already asked. The program is deterministic over a
+# seeded tree that nothing rewrites, so each distinct question is executed ONCE and every arm reads
+# exit and output off that one execution.
+#
+# THE KEY IS WHAT STOPS A MUTANT READING THE ORIGINAL'S ANSWER (fixture-mutants.md: a cached subject
+# scores every mutant SURVIVED, and the key will not say so). It hashes the stream mode, the script's
+# RESOLVED PATH (a copy in a directory missing a sibling is a different program from the shipped one
+# even when its bytes are equal), TMPDIR, every argument, and the script's full CONTENT. A mutant has
+# different bytes, so it can never share an entry with its control; a control copy has a different
+# path, so it never shares one with the shipped validator either. vrun takes no environment
+# overrides: a call that needs one (GIT_CEILING_DIRECTORIES, TMPDIR=) stays a direct `bash`.
+#
+# THE MODE IS PART OF THE ANSWER. `both` is `2>&1`, `out` is `2>/dev/null`, `split` keeps stdout in
+# VR_OUT and stderr in VR_ERR -- exactly the shapes the arms used before. An interleaved stream cannot
+# be rebuilt from two separate captures, so no mode is ever derived from another.
+#
+# THE KEY DOES NOT COVER THE TREE. A series is named by path, so an arm that EDITS a world and asks the
+# same path again (the hook unit's live-series arm removes its decoy and re-asks) must call `bash`
+# directly. vrun is for trees nothing rewrites after the first question -- the seeded $ROOT, and any
+# world a unit builds once and then only reads.
+#
+# Usage: vrun <both|out|split> <script> <args...>  -> sets VR_OUT (as `$(...)` would), VR_ERR, VR_RC.
+# The validator's siblings: copied beside every mutant by rcpt_mut, and hashed into every memo key.
+RCPT_SIBS="validate-steering-budget.sh partition-document.sh partition-subject.sh merge-adversarial-shards.sh validate-artifact-budget.sh validate-provenance-block.sh"
+VMEMO_DIR="$ROOT/.vmemo"
+mkdir -p "$VMEMO_DIR" || broken "cannot create the memo directory under $ROOT"
+vrun() {
+  local mode="$1" script="$2" key f
+  shift 2
+  case "$mode" in both|out|split) ;; *) broken "vrun: unknown mode '$mode'" ;; esac
+  [ -f "$script" ] || broken "vrun: no script at $script"
+  # The SIBLINGS are hashed too: a mutant of partition-document.sh or of the steering predicate leaves
+  # the validator's bytes alone and changes only the file beside it, so a key on the script alone would
+  # hand that mutant its control's answer.
+  local sd s
+  sd="$(cd "$(dirname "$script")" && pwd -P)" || broken "vrun: cannot resolve $script"
+  key="$( { printf '%s\0' "$mode" "$sd/${script##*/}" "${TMPDIR:-}" "$@"; cat "$script"
+            for s in $RCPT_SIBS; do printf '\0%s\0' "$s"; [ -f "$sd/$s" ] && cat "$sd/$s"; done; } | shasum -a 256)" \
+    || broken "vrun: could not key $script"
+  f="$VMEMO_DIR/${key%% *}"
+  if [ ! -f "$f.rc" ]; then
+    case "$mode" in
+      both)  bash "$script" "$@" > "$f.out" 2>&1 ;;
+      out)   bash "$script" "$@" > "$f.out" 2>/dev/null ;;
+      split) bash "$script" "$@" > "$f.out" 2> "$f.err" ;;
+    esac
+    printf '%s\n' "$?" > "$f.rc"
+  fi
+  VR_OUT="$(cat "$f.out")"
+  VR_ERR=""; [ "$mode" = split ] && VR_ERR="$(cat "$f.err")"
+  VR_RC="$(cat "$f.rc")"
+}
+# THE MEMO PROVES IT CAN SEPARATE TWO PROGRAMS before any arm reads it: two scripts that differ in one
+# byte at the same path, asked the same question, must answer differently; asked twice, the same
+# script must execute once. A key that dropped the content would pass the second and fail the first.
+# A THIRD arm proves a SIBLING-only change is a different program: the probe reads a sibling named in
+# RCPT_SIBS, and rewriting only that sibling must re-execute.
+mkdir -p "$ROOT/.vmemo-probe" || broken "cannot create the memo probe directory"
+VMEMO_PROBE="$ROOT/.vmemo-probe/p.sh"
+VMEMO_SIB="$ROOT/.vmemo-probe/${RCPT_SIBS%% *}"
+# Builtins only: the sandbox PATH holds the declared tools and nothing else.
+printf '#!/usr/bin/env bash\nn=0; [ -f "%s" ] && read -r n < "%s"; echo "$((n + 1))" > "%s"; read -r s < "%s"; echo "A$s"\n' \
+  "$ROOT/.vmemo-probe.n" "$ROOT/.vmemo-probe.n" "$ROOT/.vmemo-probe.n" "$VMEMO_SIB" > "$VMEMO_PROBE"
+echo 1 > "$VMEMO_SIB"
+vrun both "$VMEMO_PROBE" q; vp1="$VR_OUT"
+vrun both "$VMEMO_PROBE" q; vp2="$VR_OUT"
+vp_n="$(cat "$ROOT/.vmemo-probe.n" 2>/dev/null)"
+echo 2 > "$VMEMO_SIB"
+vrun both "$VMEMO_PROBE" q; vp4="$VR_OUT"
+printf '#!/usr/bin/env bash\necho B\n' > "$VMEMO_PROBE"
+vrun both "$VMEMO_PROBE" q; vp3="$VR_OUT"
+if [ "$vp1" != A1 ] || [ "$vp2" != A1 ] || [ "$vp_n" != 1 ] || [ "$vp4" != A2 ] || [ "$vp3" != B ]; then
+  broken "the memo self-probe did not discriminate (first '$vp1', repeat '$vp2', executions '$vp_n', sibling changed '$vp4', script changed '$vp3' want A1 A1 1 A2 B)"
+fi
+echo "  [M0] memo: one execution per (mode, resolved path, TMPDIR, args, content, sibling content); a one-byte change is a different program"
+
 # $1 case-dir  $2 expected exit (0|1)  $3 why  $4 (optional) series prefix
 expect() {
   local case_dir="$1" want="$2" why="$3" prefix="${4:-s1-adversarial-pass}" got out
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
-  got=$?
+  vrun both "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  out="$VR_OUT"; got="$VR_RC"
   if [ "$got" -eq "$want" ]; then
     printf '  ok    %-28s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
   else
@@ -147,7 +240,8 @@ expect_says() {
   local case_dir="$1" prefix="$2" label="$3"; shift 3
   local out missing=""
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  vrun both "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  out="$VR_OUT"
   for want in "$@"; do
     grep -qF -- "$want" <<<"$out" || missing="$missing
             missing: \"$want\""
@@ -164,8 +258,8 @@ expect_says() {
 expect_state() {
   local case_dir="$1" prefix="$2" want_state="$3" want_rc="$4" why="$5" out state rc
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null)"
-  rc=$?
+  vrun out "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  out="$VR_OUT"; rc="$VR_RC"
   state="$(printf '%s' "$out" | cut -f1)"
   if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ]; then
     printf '  ok    %-28s %s/%s  (%s)\n' "$case_dir" "$state" "$rc" "$why"
@@ -192,10 +286,11 @@ D_GENERIC="Do not pass the gate by overriding the field in prose."
 # stopped emitting the token at all passes every negative arm below.
 expect_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
   local out ctl
-  out="$(bash "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" \
-          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
-  ctl="$(bash "$VALIDATOR" --series "$ROOT/$3/s1-adversarial-p" \
-          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  # The control is usually a series another arm already asked; the memo answers it from that run.
+  vrun both "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  out="$VR_OUT"
+  vrun both "$VALIDATOR" --series "$ROOT/$3/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  ctl="$VR_OUT"
   ASSERTIONS=$((ASSERTIONS + 1))
   if grep -qF -- "$2" <<<"$out"; then
     FAILURES=$((FAILURES + 1))
@@ -219,16 +314,238 @@ fi
 # worlds and drives the validator it is handed, so the arm is the receipt against the shipped
 # validator, an UNMUTATED COPY (presence-shaped: it must print `fixed`), and each mutant, built in a
 # copy of the validator's whole directory so its siblings resolve. Worlds land under $ROOT.
-RCPT_SIBS="validate-steering-budget.sh partition-document.sh partition-subject.sh merge-adversarial-shards.sh validate-artifact-budget.sh validate-provenance-block.sh"
+# RCPT_SIBS is defined beside the memo above, which hashes the same set.
+#
+# THE RECEIPT MUTANT MATRIX (mutant-battery rule). A receipt judges N worlds; a mutant's DECIDING ARM is
+# the set of worlds its exact NOT FIXED line names, and its TWIN is ONE further world it could plausibly
+# co-trip and does NOT -- the near-miss beside its subject. The matrix (every mutant against every
+# world) was measured once, and every mutant's twin was GREEN in it; the twin column below is that
+# measurement, and the exact-line match in rcpt_cell is what proves the twin stayed green on each push.
+#
+# PER PUSH (the default): the shipped validator and the unmutated control judge EVERY world -- that is
+# the receipt's own verdict and the copy-tree control. Each mutant judges only its deciding worlds plus
+# its twin (RCPT_WORLDS), against worlds built ONCE per receipt and release (RCPT_WORLD_DIR), never once
+# per mutant. A mutant that crashes the validator flips its twin too, so the exact line still refuses it.
+#
+# RE-MEASURE THE MATRIX whenever an arm, a world or a mutant is added or changed, from the repo root, by
+# invoking run.sh DIRECTLY (hermetic-run.sh runs a fixture under `env -i` and forwards no argument, so a
+# matrix run through it would silently be a per-push run):
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/check-24-adversarial-convergence/run.sh --matrix
+# With no --group it runs every shard in turn; the log must carry `MATRIX MODE: on` once per shard. Every
+# mutant then scores every cell and every receipt world; each row must still equal its want row, which is
+# the proof every twin stayed green. A run WITHOUT --matrix scores no matrix-only cell: arm MX0 counts the
+# cells each mutant skipped and refuses a per-push run that skipped none.
+# MUTANT-MATRIX-BEGIN -- the matrix, measured by the MUTANT-MATRIX-REMEASURE command above: every shard printed
+# `MATRIX MODE: on`, every mutant row equalled its want row, 0 FAIL. A row is `<mutant> decides=<arm>.<cell>
+# twins=<arm>.<cell>`: the arm is the mutant's own `ok` label (slugged: any character outside [A-Za-z0-9_-]
+# becomes `-`), the deciding cells are the cells (1-based in the row) or receipt worlds whose verdict the
+# mutant flips, and each twin is a cell of the same arm, beside the subject, GREEN in the matrix and run on
+# every push. Re-measure whenever an arm, a world or a mutant is added or changed.
+# MUTANT-MATRIX MUTATION-chrono-raw-string decides=MUTATION-chrono-raw-string.cell1,MUTATION-chrono-raw-string.cell2 twins=MUTATION-chrono-raw-string.cell3
+# MUTANT-MATRIX MUTATION-chrono-strip-z decides=MUTATION-chrono-strip-z.cell3 twins=MUTATION-chrono-strip-z.cell2
+# MUTANT-MATRIX MUTATION-chrono-arm-g-off decides=MUTATION-chrono-arm-g-off.cell2 twins=MUTATION-chrono-arm-g-off.cell1
+# MUTANT-MATRIX MUTATION-over-broad decides=MUTATION-over-broad.cell3,MUTATION-over-broad.cell4,MUTATION-over-broad.cell5 twins=MUTATION-over-broad.cell2
+# MUTANT-MATRIX MUTATION-disabled decides=MUTATION-disabled.cell2 twins=MUTATION-disabled.cell1
+# MUTANT-MATRIX MUTATION-token-on-both decides=MUTATION-token-on-both.cell3,MUTATION-token-on-both.cell4 twins=MUTATION-token-on-both.cell2
+# MUTANT-MATRIX MUTATION-since-acquitted decides=MUTATION-since-acquitted.cell5 twins=MUTATION-since-acquitted.cell4
+# MUTANT-MATRIX MUTATION-k2-stamp-gate decides=MUTATION-k2-stamp-gate.cell2 twins=MUTATION-k2-stamp-gate.cell1
+# MUTANT-MATRIX MUTATION-k2-serial-check decides=MUTATION-k2-serial-check.cell3 twins=MUTATION-k2-serial-check.cell2
+# MUTANT-MATRIX MUTATION-k2-sha-gate decides=MUTATION-k2-sha-gate.cell5 twins=MUTATION-k2-sha-gate.cell4
+# MUTANT-MATRIX MUTATION-k2-current-map-revert decides=MUTATION-k2-current-map-revert.cell1,MUTATION-k2-current-map-revert.cell2,MUTATION-k2-current-map-revert.cell4,MUTATION-k2-current-map-revert.cell5,MUTATION-k2-current-map-revert.cell6 twins=MUTATION-k2-current-map-revert.cell3
+# MUTANT-MATRIX MUTATION-k2-fallback-unmarked decides=MUTATION-k2-fallback-unmarked.cell4 twins=MUTATION-k2-fallback-unmarked.cell3
+# MUTANT-MATRIX MUTATION-k2-first-pass-time decides=MUTATION-k2-first-pass-time.cell3 twins=MUTATION-k2-first-pass-time.cell2
+# MUTANT-MATRIX MUTATION-k2-added-commit-dropped decides=MUTATION-k2-added-commit-dropped.cell5,MUTATION-k2-added-commit-dropped.cell6 twins=MUTATION-k2-added-commit-dropped.cell4
+# MUTANT-MATRIX J3-1-keyed-on-blocking decides=J3-1-keyed-on-blocking.underonly twins=J3-1-keyed-on-blocking.undeferred
+# MUTANT-MATRIX J3-2-bare-finding-id decides=J3-2-bare-finding-id.undeferred,J3-2-bare-finding-id.stalepass,J3-2-bare-finding-id.twof1,J3-2-bare-finding-id.ident,J3-2-bare-finding-id.partlink,J3-2-bare-finding-id.seriallink,J3-2-bare-finding-id.dupid twins=J3-2-bare-finding-id.deferred
+# MUTANT-MATRIX J3-3-any-deferred-to decides=J3-3-any-deferred-to.wrongstep,J3-3-any-deferred-to.nosucc twins=J3-3-any-deferred-to.deferred
+# MUTANT-MATRIX J3-4-era-on-presence decides=J3-4-era-on-presence.legacy twins=J3-4-era-on-presence.undeferred
+# MUTANT-MATRIX J3-5-any-pass-s-record decides=J3-5-any-pass-s-record.stalepass twins=J3-5-any-pass-s-record.repaired
+# MUTANT-MATRIX J3-6-dispatch-narrowed-to-one-digit decides=J3-6-dispatch-narrowed-to-one-digit.p12 twins=J3-6-dispatch-narrowed-to-one-digit.undeferred
+# MUTANT-MATRIX J3-7-dispatch-widened-digits-guard-gone decides=J3-7-dispatch-widened-digits-guard-gone.pxp2 twins=J3-7-dispatch-widened-digits-guard-gone.ptxt
+# MUTANT-MATRIX J3-8-successor-substring decides=J3-8-successor-substring.substr twins=J3-8-successor-substring.subok
+# MUTANT-MATRIX J3-9-identity-triple-links decides=J3-9-identity-triple-links.ident twins=J3-9-identity-triple-links.repaired
+# MUTANT-MATRIX J3-10-one-link-closes-all decides=J3-10-one-link-closes-all.partlink,J3-10-one-link-closes-all.seriallink twins=J3-10-one-link-closes-all.unlinked
+# MUTANT-MATRIX J3-11-heading-id-read-raw decides=J3-11-heading-id-read-raw.dupid,J3-11-heading-id-read-raw.idpunct twins=J3-11-heading-id-read-raw.deferbold
+# MUTANT-MATRIX J3-12-keys-counted-with-repeats decides=J3-12-keys-counted-with-repeats.dupid twins=J3-12-keys-counted-with-repeats.unkeyed
+# MUTANT-MATRIX J3-13-remedy-says-write decides=J3-13-remedy-says-write.undeferred twins=J3-13-remedy-says-write.wrongstep
+# MUTANT-MATRIX LX1-map-staged-on-nothing decides=LX1-map-staged-on-nothing.cell1,LX1-map-staged-on-nothing.cell2,LX1-map-staged-on-nothing.cell4,LX1-map-staged-on-nothing.cell5,LX1-map-staged-on-nothing.cell6,LX1-map-staged-on-nothing.cell7,LX1-map-staged-on-nothing.cell8,LX1-map-staged-on-nothing.cell9 twins=LX1-map-staged-on-nothing.cell3
+# MUTANT-MATRIX LX2-ordinals-not-de-padded decides=LX2-ordinals-not-de-padded.cell1 twins=LX2-ordinals-not-de-padded.cell2
+# MUTANT-MATRIX LX3-recorded-K-ignored decides=LX3-recorded-K-ignored.cell3,LX3-recorded-K-ignored.cell4 twins=LX3-recorded-K-ignored.cell2
+# MUTANT-MATRIX LX4-recorded-K-acquits-all decides=LX4-recorded-K-acquits-all.cell4 twins=LX4-recorded-K-acquits-all.cell3
+# MUTANT-MATRIX LX5-smaller-recorded-K-honoured decides=LX5-smaller-recorded-K-honoured.cell5 twins=LX5-smaller-recorded-K-honoured.cell4
+# MUTANT-MATRIX LX6-subject-cover-dropped decides=LX6-subject-cover-dropped.cell6,LX6-subject-cover-dropped.cell9 twins=LX6-subject-cover-dropped.cell5
+# MUTANT-MATRIX LX7-equality-honoured decides=LX7-equality-honoured.cell7,LX7-equality-honoured.cell8 twins=LX7-equality-honoured.cell6
+# MUTANT-MATRIX LX8-sprint-scope-dropped decides=LX8-sprint-scope-dropped.cell9 twins=LX8-sprint-scope-dropped.cell8
+# MUTANT-MATRIX LM1-lone-cross-refused decides=LM1-lone-cross-refused.cell1 twins=LM1-lone-cross-refused.cell2
+# MUTANT-MATRIX LM2-any-cross-subset-accepted decides=LM2-any-cross-subset-accepted.cell3 twins=LM2-any-cross-subset-accepted.cell2
+# MUTANT-MATRIX LM3-delta-owes-no-cross decides=LM3-delta-owes-no-cross.cell5 twins=LM3-delta-owes-no-cross.cell4
+# MUTANT-MATRIX LD1-owed-groups-by-index-diff decides=LD1-owed-groups-by-index-diff.nodelta,LD1-owed-groups-by-index-diff.fullg,LD1-owed-groups-by-index-diff.nocross,LD1-owed-groups-by-index-diff.xnamed twins=LD1-owed-groups-by-index-diff.full
+# MUTANT-MATRIX LD2-cross-names-acquit-ordinals decides=LD2-cross-names-acquit-ordinals.xnamed twins=LD2-cross-names-acquit-ordinals.nodelta
+# MUTANT-MATRIX MUTATION-kind decides=MUTATION-kind.cell2 twins=MUTATION-kind.cell1
+# MUTANT-MATRIX MUTATION-count decides=MUTATION-count.cell3 twins=MUTATION-count.cell2
+# MUTANT-MATRIX MUTATION-counter decides=MUTATION-counter.cell1 twins=MUTATION-counter.cell2
+# MUTANT-MATRIX MUTATION-scope-grew-unguarded decides=MUTATION-scope-grew-unguarded.cell1,MUTATION-scope-grew-unguarded.cell4 twins=MUTATION-scope-grew-unguarded.cell2
+# MUTANT-MATRIX MUTATION-scope-grew-wrong-var decides=MUTATION-scope-grew-wrong-var.cell2,MUTATION-scope-grew-wrong-var.cell3 twins=MUTATION-scope-grew-wrong-var.cell1
+# MUTANT-MATRIX MUTATION-scope-grew-prior-zero decides=MUTATION-scope-grew-prior-zero.cell3 twins=MUTATION-scope-grew-prior-zero.cell2
+# MUTANT-MATRIX MUTATION-scope-grew-pass-number decides=MUTATION-scope-grew-pass-number.cell4 twins=MUTATION-scope-grew-pass-number.cell3
+# MUTANT-MATRIX MUTATION-j2-chain-walk decides=MUTATION-j2-chain-walk.cell3,MUTATION-j2-chain-walk.cell4 twins=MUTATION-j2-chain-walk.cell2
+# MUTANT-MATRIX MUTATION-j2-fork-check decides=MUTATION-j2-fork-check.cell5 twins=MUTATION-j2-fork-check.cell4
+# MUTANT-MATRIX MUTATION-j2-subject decides=MUTATION-j2-subject.cell6 twins=MUTATION-j2-subject.cell5
+# MUTANT-MATRIX MUTATION-j2-stamp-rebind decides=MUTATION-j2-stamp-rebind.cell2 twins=MUTATION-j2-stamp-rebind.cell1
+# MUTANT-MATRIX J2T1-whole-file-id-scan decides=J2T1-whole-file-id-scan.split,J2T1-whole-file-id-scan.merge,J2T1-whole-file-id-scan.norows twins=J2T1-whole-file-id-scan.reword
+# MUTANT-MATRIX J2T2-unreachable-read-unchanged decides=J2T2-unreachable-read-unchanged.unreach twins=J2T2-unreachable-read-unchanged.split
+# MUTANT-MATRIX J2T3-empty-extraction-judged decides=J2T3-empty-extraction-judged.norows twins=J2T3-empty-extraction-judged.reword
+# MUTANT-MATRIX J2T4-J2T_RELEASE-lowered decides=J2T4-J2T_RELEASE-lowered.pred twins=J2T4-J2T_RELEASE-lowered.nostamp
+# MUTANT-MATRIX J2T5-J2T_RELEASE-raised decides=J2T5-J2T_RELEASE-raised.split,J2T5-J2T_RELEASE-raised.merge,J2T5-J2T_RELEASE-raised.legacy twins=J2T5-J2T_RELEASE-raised.reword
+# MUTANT-MATRIX MUTATION-j-citation decides=MUTATION-j-citation.cell2,MUTATION-j-citation.cell3 twins=MUTATION-j-citation.cell1
+# MUTANT-MATRIX MUTATION-f5-reopen-spec decides=MUTATION-f5-reopen-spec.cell3 twins=MUTATION-f5-reopen-spec.cell2
+# MUTANT-MATRIX MUTATION-h-stamp-gate decides=MUTATION-h-stamp-gate.cell3,MUTATION-h-stamp-gate.cell4 twins=MUTATION-h-stamp-gate.cell2
+# MUTANT-MATRIX MUTATION-h-glob-restored decides=MUTATION-h-glob-restored.cell2,MUTATION-h-glob-restored.cell3,MUTATION-h-glob-restored.cell4 twins=MUTATION-h-glob-restored.cell1
+# MUTANT-MATRIX MUTATION-h-stamp-rebind decides=MUTATION-h-stamp-rebind.cell4 twins=MUTATION-h-stamp-rebind.cell3
+# MUTANT-MATRIX MUTATION-h-stem-unstripped decides=MUTATION-h-stem-unstripped.cell1 twins=MUTATION-h-stem-unstripped.cell2
+# MUTANT-MATRIX K3X1-count-not-identity decides=K3X1-count-not-identity.cell3 twins=K3X1-count-not-identity.cell2
+# MUTANT-MATRIX K3X2-stamp-gate-deleted decides=K3X2-stamp-gate-deleted.cell4 twins=K3X2-stamp-gate-deleted.cell3
+# MUTANT-MATRIX K3WX1-widened-case-arm-gone decides=K3WX1-widened-case-arm-gone.cell1,K3WX1-widened-case-arm-gone.cell2,K3WX1-widened-case-arm-gone.cell3,K3WX1-widened-case-arm-gone.cell6,K3WX1-widened-case-arm-gone.cell7 twins=K3WX1-widened-case-arm-gone.cell4
+# MUTANT-MATRIX K3WX2-artifact-test-skipped decides=K3WX2-artifact-test-skipped.cell5 twins=K3WX2-artifact-test-skipped.cell4
+# MUTANT-MATRIX K3WX3-widened-stamp-not-rebound decides=K3WX3-widened-stamp-not-rebound.cell3 twins=K3WX3-widened-stamp-not-rebound.cell2
+# MUTANT-MATRIX K3WX4-K3B_RELEASE-lowered decides=K3WX4-K3B_RELEASE-lowered.cell3 twins=K3WX4-K3B_RELEASE-lowered.cell2
+# MUTANT-MATRIX K3WX5-manifest-root-not-walked decides=K3WX5-manifest-root-not-walked.cell1,K3WX5-manifest-root-not-walked.cell2,K3WX5-manifest-root-not-walked.cell3,K3WX5-manifest-root-not-walked.cell6,K3WX5-manifest-root-not-walked.cell7 twins=K3WX5-manifest-root-not-walked.cell4
+# MUTANT-MATRIX J2SX1-per-stem-branch-gone decides=J2SX1-per-stem-branch-gone.cell1,J2SX1-per-stem-branch-gone.cell5,J2SX1-per-stem-branch-gone.cell6 twins=J2SX1-per-stem-branch-gone.cell2
+# MUTANT-MATRIX J2SX2-identity-links-kept decides=J2SX2-identity-links-kept.cell3 twins=J2SX2-identity-links-kept.cell2
+# MUTANT-MATRIX J2SX3-record-glob-narrowed decides=J2SX3-record-glob-narrowed.cell2 twins=J2SX3-record-glob-narrowed.cell1
+# MUTANT-MATRIX J2SX4-first-entry-only decides=J2SX4-first-entry-only.cell2,J2SX4-first-entry-only.cell3 twins=J2SX4-first-entry-only.cell1
+# MUTANT-MATRIX J2SX5-cumulative-stem-judged decides=J2SX5-cumulative-stem-judged.cell4 twins=J2SX5-cumulative-stem-judged.cell3
+# MUTANT-MATRIX J2SX6-stamp-gate-deleted decides=J2SX6-stamp-gate-deleted.cell5 twins=J2SX6-stamp-gate-deleted.cell4
+# MUTANT-MATRIX J2SX7-J2S_RELEASE-lowered decides=J2SX7-J2S_RELEASE-lowered.cell6 twins=J2SX7-J2S_RELEASE-lowered.cell5
+# MUTANT-MATRIX K3CX1-want-set-left-cross decides=K3CX1-want-set-left-cross.cell1,K3CX1-want-set-left-cross.cell2,K3CX1-want-set-left-cross.cell3,K3CX1-want-set-left-cross.cell4 twins=K3CX1-want-set-left-cross.cell5
+# MUTANT-MATRIX K3CX2-pin-capability-ignored decides=K3CX2-pin-capability-ignored.cell5 twins=K3CX2-pin-capability-ignored.cell4
+# MUTANT-MATRIX K3CX3-control-K3C-raised decides=K3CX3-control-K3C-raised.cell2 twins=K3CX3-control-K3C-raised.cell1
+# MUTANT-MATRIX K3CX4-K3C-stamp-not-rebound decides=K3CX4-K3C-stamp-not-rebound.cell4 twins=K3CX4-K3C-stamp-not-rebound.cell3
+# MUTANT-MATRIX m-k2only-K3D-acquittal-off decides=m-k2only-K3D-acquittal-off.cell1 twins=m-k2only-K3D-acquittal-off.cell2
+# MUTANT-MATRIX K3DX2-K3D-raised-to-99-0-0 decides=K3DX2-K3D-raised-to-99-0-0.cell1 twins=K3DX2-K3D-raised-to-99-0-0.cell2
+# MUTANT-MATRIX K3DX3-date-rule-dropped decides=K3DX3-date-rule-dropped.cell2,K3DX3-date-rule-dropped.cell3 twins=K3DX3-date-rule-dropped.cell1
+# MUTANT-MATRIX MUTATION-stall-resolution decides=MUTATION-stall-resolution.stalled-resolved twins=MUTATION-stall-resolution.stalled,MUTATION-stall-resolution.stalled-record-invalid
+# MUTANT-MATRIX MUTATION-cdiv-terminal decides=MUTATION-cdiv-terminal.cdiv-terminal-resolved twins=MUTATION-cdiv-terminal.cdiv-terminal,MUTATION-cdiv-terminal.cdiv-record-invalid
+# MUTANT-MATRIX MUTATION-cdiv-never-resolves decides=MUTATION-cdiv-never-resolves.cdiv-verified,MUTATION-cdiv-never-resolves.gate twins=MUTATION-cdiv-never-resolves.cdiv-verified-unresolved,MUTATION-cdiv-never-resolves.cdiv-verified-invalid
+# MUTANT-MATRIX MUTATION-cdiv-always-resolves decides=MUTATION-cdiv-always-resolves.cdiv-verified-invalid twins=MUTATION-cdiv-always-resolves.cdiv-verified,MUTATION-cdiv-always-resolves.cdiv-verified-unresolved
+# MUTANT-MATRIX MUTATION-cdiv-terminal-silent decides=MUTATION-cdiv-terminal-silent.cdiv-terminal-resolved twins=MUTATION-cdiv-terminal-silent.cdiv-verified-unresolved
+# MUTANT-MATRIX MUTATION-sha-key decides=MUTATION-sha-key.sharded-revert-reordered twins=MUTATION-sha-key.sharded-revert-partial
+# MUTANT-MATRIX MUTATION-ts-bmad-restored decides=MUTATION-ts-bmad-restored.cell2 twins=MUTATION-ts-bmad-restored.cell1,MUTATION-ts-bmad-restored.cell3
+# MUTANT-MATRIX MUTATION-ts-gate-prefix-dropped decides=MUTATION-ts-gate-prefix-dropped.cell1 twins=MUTATION-ts-gate-prefix-dropped.cell2,MUTATION-ts-gate-prefix-dropped.cell3
+# MUTANT-MATRIX MUTATION-ts-precondition-deleted decides=MUTATION-ts-precondition-deleted.cell3 twins=MUTATION-ts-precondition-deleted.cell1,MUTATION-ts-precondition-deleted.cell2
+# MUTANT-MATRIX K3WX6-b-K3B-conjunct-dropped decides=K3WX6-b-K3B-conjunct-dropped.k3w-subj twins=K3WX6-applied-discriminates.kept-binding
+# MUTANT-MATRIX live-series-unfiltered decides=live-series-unfiltered.decoy-world twins=live-series-control-unfiltered.no-decoy-world
+# MUTANT-MATRIX live-series-unscoped decides=live-series-unscoped.two-sprint-world twins=live-series-control-unscoped.one-sprint-world
+# The twelve rows above are measured row-whole: each row is 2-3 cells, its deciding cell plus its twins ARE
+# the row, and the whole row runs on every push, so the per-push match IS the matrix measurement.
+# MUTANT-MATRIX-CONTROL CONTROL-chrono-copy why=the unmutated copy beside the arm-G mutants must reproduce the shipped row
+# MUTANT-MATRIX-CONTROL CONTROL-third-state-copy why=the unmutated copy in the third-state mutants' directory must reproduce the shipped row
+# MUTANT-MATRIX-CONTROL CONTROL-unmutated-copy why=the unmutated copy beside the arm-I mutants must reproduce the four ceiling verdicts
+# MUTANT-MATRIX-CONTROL CONTROL-k2-copy why=the unmutated copy in the K2 mutants' directory must reproduce the shipped row
+# MUTANT-MATRIX-CONTROL K2-in-force-copy why=the shipped validator in the K2 history worlds must reproduce the row before any mutant is copied in
+# MUTANT-MATRIX-CONTROL CONTROL-scope-grew-copy why=the unmutated copy beside the scope-grew mutants must reproduce the shipped row
+# MUTANT-MATRIX-CONTROL CONTROL-j2-copy why=the unmutated copy in the J2 mutants' directory must reproduce the shipped row
+# MUTANT-MATRIX-CONTROL CONTROL-j-door-copy why=the same copy must reproduce the J-door row
+# MUTANT-MATRIX-CONTROL H-series-named-record why=the shipped validator must reproduce the H row the mutants are read against
+# MUTANT-MATRIX-CONTROL CONTROL-h-copy why=the unmutated copy in the J2 mutants' directory must reproduce the H row
+# MUTANT-MATRIX-CONTROL MUTATION-cdiv-control why=the unmutated copy beside the cdiv mutants must pass the verified series
+# MUTANT-MATRIX-CONTROL CONTROL-ts-unmutated why=the shipped documents must score ok on all three test-strategy cells
+# MUTANT-MATRIX-CONTROL MUTATION-g-anchor why=the arm-G anchor is unique against an impossible-anchor control, or every G mutant proves nothing
+# MUTANT-MATRIX-CONTROL MUTATION-sg-anchor why=the scope-grew anchor is unique against an impossible-anchor control
+# MUTANT-MATRIX-CONTROL MUTATION-ts-anchor why=the test-strategy step-2 anchor is unique against an impossible-anchor control
+# MUTANT-MATRIX-CONTROL J3-shipped-validator why=the receipt's own verdict on the shipped validator, every world judged
+# MUTANT-MATRIX-CONTROL J3-0-control-unmutated why=the unmutated copy beside the J3 mutants, every world judged, so a partial copy tree cannot pass
+# MUTANT-MATRIX-CONTROL J2T-shipped-validator why=the receipt's own verdict on the shipped validator, every world judged
+# MUTANT-MATRIX-CONTROL J2T0-control-unmutated why=the unmutated copy beside the J2T mutants, every world judged
+# MUTANT-MATRIX-CONTROL LD-shipped-validator why=the receipt's own verdict on the shipped validator, every world judged
+# MUTANT-MATRIX-CONTROL LD0-control-unmutated why=the unmutated copy beside the LD mutants, every world judged
+# MUTANT-MATRIX-CONTROL LX0-control-unmutated why=the unmutated copy must reproduce the nine-world arm-L row
+# MUTANT-MATRIX-CONTROL LM0-control-unmutated why=the unmutated copy must reproduce the five-world arm-L merge row
+# MUTANT-MATRIX-CONTROL K3X0-control-unmutated why=the unmutated copy must reproduce the four-world K3 row
+# MUTANT-MATRIX-CONTROL K3WX0-control-unmutated why=the unmutated copy must reproduce the seven-world K3-widened row
+# MUTANT-MATRIX-CONTROL K3WX6c-k3w-subj-control why=the unmutated copy must read k3w-subj PENDING before the K3B conjunct mutant is read
+# MUTANT-MATRIX-CONTROL J2SX0-control-unmutated why=the unmutated copy must reproduce the six-world J2-per-stem row
+# MUTANT-MATRIX-CONTROL K3CX0-control-unmutated why=the unmutated copy must reproduce the five-world K3 cross-group row
+# MUTANT-MATRIX-CONTROL K3DX0-control-unmutated why=the unmutated copy must reproduce the four-world K3 lone-cross row
+# MUTANT-MATRIX-CONTROL live-series-control-shipped why=the shipped derivation on the no-decoy world, the baseline both live-series mutants are read against
+# MUTANT-MATRIX-DYNAMIC rcpt_mut why=the receipt battery passes each mutant label and its exact NOT FIXED line as arguments; every label it produces has its own row above
+# MUTANT-MATRIX-DYNAMIC _sp-loop why=the adjudication-unlocked-<spelling> loop passes six spellings as a variable; these are seeded cases, not mutants, so it produces no mutant row
+# MUTANT-MATRIX-END
+MATRIX="$MATRIX_ARG"
+if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
+else echo "MATRIX MODE: off -- per push, each mutant scores its deciding cells plus one green twin (shard $GROUP)"; fi
+RCPT_WD="$ROOT/rcpt-worlds"
+# THE ROW BATTERIES use the same rule over CELLS. A row mutant is scored over N cases; its DECIDING
+# cells are the ones whose expected verdict differs from the unmutated control row, and its TWIN is the
+# nearest cell (in row order) whose verdict it must leave unchanged -- the case beside its subject. Per
+# push only those cells run; the rest print `.` in both the got and the want row. A row whose want equals
+# the control's (every control) runs in full. MATRIX=1 runs every cell of every mutant, which is the
+# matrix measurement: a full-row match there is the proof each twin stayed green.
+#   rsel <want row> <control row>  -> RSEL (1-based cells to run, empty = all) and RTWIN
+#   ron <i>                        -> 0 when cell i runs
+#   rmask <row>                    -> the row with every cell that does not run replaced by `.`
+rsel() {
+  # `w`, `r` and `x` are LOCAL arrays: the callers use a scalar `w` for a world name.
+  local -a w r x
+  local i=0 d="" t="" best=999999 dist first="" y
+  RSEL=""; RTWIN=""
+  set -f; w=($1); r=($2); set +f
+  [ "${#w[@]}" -eq "${#r[@]}" ] || broken "rsel: want row [$1] and control row [$2] differ in length"
+  for y in "${w[@]}"; do i=$((i + 1)); [ "$y" = "${r[$((i - 1))]}" ] || { d="$d $i"; [ -n "$first" ] || first="$i"; }; done
+  MX_ROWS=$((MX_ROWS + 1))
+  [ -n "$d" ] || return 0
+  i=0
+  for y in "${w[@]}"; do i=$((i + 1))
+    case " $d " in *" $i "*) continue ;; esac
+    dist=$((i - first)); [ "$dist" -lt 0 ] && dist=$((0 - dist))
+    if [ "$dist" -lt "$best" ]; then best="$dist"; t="$i"; fi
+  done
+  RTWIN="$t"
+  if [ "$MATRIX" = 1 ]; then
+    printf '  matrix-cells deciding {%s} twin {%s} of [%s] (every cell scored)\n' "${d# }" "$t" "$1"
+  else
+    RSEL="${d# }${t:+ $t}"
+    set -f; x=($RSEL); set +f
+    MX_SKIPPED=$((MX_SKIPPED + ${#w[@]} - ${#x[@]}))
+    printf '  per-push cells deciding {%s} twin {%s} of [%s]\n' "${d# }" "$t" "$1"
+  fi
+}
+MX_ROWS=0; MX_SKIPPED=0
+# MX0, read once at the end of the shard: a per-push run must have SKIPPED matrix-only cells (else the
+# subset never applied and the cut is fiction), and a --matrix run must have skipped NONE.
+mx_arm() {
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$MX_ROWS" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s no mutant row was scored in this shard -- the arm reads nothing\n' "MX0 matrix mode"
+  elif [ "$MATRIX" = 1 ] && [ "$MX_SKIPPED" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s --matrix skipped %s cell(s) over %s rows\n' "MX0 matrix mode" "$MX_SKIPPED" "$MX_ROWS"
+  elif [ "$MATRIX" != 1 ] && [ "$MX_SKIPPED" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s a per-push run scored every cell of %s rows -- the subset never applied\n' "MX0 matrix mode" "$MX_ROWS"
+  else
+    printf '  ok    %-28s %s rows; matrix=%s; cells skipped=%s\n' "MX0 matrix mode" "$MX_ROWS" "$MATRIX" "$MX_SKIPPED"
+  fi
+}
+ron() { [ -z "${RSEL:-}" ] && return 0; case " $RSEL " in *" $1 "*) return 0 ;; esac; return 1; }
+rmask() { local x i=0 o=""; set -f; for x in $1; do i=$((i + 1)); if ron "$i"; then o="$o $x"; else o="$o ."; fi; done; set +f; printf '%s' "${o# }"; }
 rcpt_cell() { # <label> <receipt> <validator> <want rc 0|1> [<the exact NOT FIXED line>]
   # The fifth argument names WHICH worlds flipped: a mutant that crashes the validator (rc 2 in every
-  # world) also prints NOT FIXED and would otherwise read as a kill.
-  local out rc want_say="fixed ("
+  # world) also prints NOT FIXED and would otherwise read as a kill. RM_TWIN (set by the caller) names the
+  # mutant's green twin; with it and MATRIX=0 only the flipped worlds and the twin are judged.
+  local out rc want_say="fixed (" worlds="" t
   [ "$4" -eq 0 ] || want_say="NOT FIXED"
   [ -z "${5:-}" ] || want_say="$5"
+  [ -z "${RM_TWIN:-}" ] || [ -n "${5:-}" ] || broken "$1: RM_TWIN is set but no exact NOT FIXED line names the deciding worlds"
+  if [ "$MATRIX" != 1 ] && [ -n "${RM_TWIN:-}" ] && [ -n "${5:-}" ]; then
+    for t in ${5#*--}; do worlds="$worlds ${t%%(*}"; done
+    case " $worlds " in *" $RM_TWIN "*) broken "$1: the twin $RM_TWIN is one of its own deciding worlds" ;; esac
+    worlds="${worlds# } $RM_TWIN"
+  fi
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(TMPDIR="$ROOT" bash "$2" "$3" 2>&1)"; rc=$?
-  if [ "$rc" -eq "$4" ] && { if [ -n "${5:-}" ]; then grep -qxF -- "$want_say" <<<"$out"; else grep -qF -- "$want_say" <<<"$out"; fi; }; then
+  out="$(TMPDIR="$ROOT" RCPT_WORLD_DIR="$RCPT_WD/${2##*/}" RCPT_WORLDS="$worlds" RCPT_REPORT="$([ "$MATRIX" = 1 ] && echo 1)" \
+         bash "$2" "$3" 2>&1)"; rc=$?
+  [ "$MATRIX" != 1 ] || printf '  matrix %-27s %s\n' "$1" "$(grep -m1 '^receipt worlds judged:' <<<"$out")"
+  [ -z "$worlds" ] || printf '  per-push %-25s judged {%s} (deciding + twin %s)\n' "$1" "$worlds" "$RM_TWIN"
+  if [ "$rc" -eq "$4" ] && { if [ -n "${5:-}" ]; then grep -qxF -- "$want_say" <<<"$out"; else grep -qF -- "$want_say" <<<"$out" && ! grep -q '^receipt: ' <<<"$out"; fi; }; then
     printf '  ok    %-28s exit=%s %s\n' "$1" "$rc" "$(printf '%s' "$out" | tail -1 | cut -c1-110)"
   else
     FAILURES=$((FAILURES + 1))
@@ -302,8 +619,8 @@ expect_says stalled s1-adversarial-p "E-remedy" \
 # it to APPEAR: without it, an arm D that stopped emitting the remedy passes both arms here.
 # D_GENERIC is defined once in the shared prelude above: units in different shards read it.
 ASSERTIONS=$((ASSERTIONS + 1))
-if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1 \
-   | grep -qF -- "$D_GENERIC"; then
+vrun both "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p"
+if grep -qF -- "$D_GENERIC" <<<"$VR_OUT"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s a STALLED series still got Check D generic advice. E must pre-empt D.\n' "stall-preempts-d"
 else
@@ -424,8 +741,10 @@ g_fired() {  # $1 script  $2 case -> G or -
 g_score() {  # $1 label  $2 script  $3 expected row
   local got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
-  for c in $G_CASES; do got="$got $(g_fired "$2" "$c")"; done
-  if [ "$(echo $got)" = "$3" ]; then
+  local i=0 wm; rsel "$3" "- G -"; wm="$(rmask "$3")"
+  for c in $G_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(g_fired "$2" "$c")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$wm" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -736,8 +1055,9 @@ MUT_OLD='    err "C -- DIVERGENCE" "${P_CDIV_MSG[$ci]}"
 # record stops counting and the stall re-deadlocks. Add the DIRECTORY the transcripts
 # actually live in and the same record verifies. Same tree, same record, same citation.
 cs_state() {  # cs_state <extra-args...> -> prints the state
-  bash "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
-    --transcript "$TRANSCRIPT" "$@" 2>/dev/null | cut -f1
+  vrun out "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
+    --transcript "$TRANSCRIPT" "$@"
+  printf '%s' "$VR_OUT" | cut -f1
 }
 ASSERTIONS=$((ASSERTIONS + 2))
 got_nodir="$(cs_state)"
@@ -804,12 +1124,12 @@ touch -t 200001010000 "$CORP/since-excluded/session-a.jsonl"
 corp_state() {
   local label="$1" cdir="$2" want_state="$3" want_rc="$4" want_err="$5" why="$6" out rc state err
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
-         --transcript-dir "$cdir" 2>"$ROOT/corp.err")"
-  rc=$?
+  vrun split "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
+         --transcript-dir "$cdir"
+  out="$VR_OUT"; rc="$VR_RC"
   state="$(printf '%s' "$out" | cut -f1)"
   err="quiet"
-  grep -qF 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$ROOT/corp.err" && err="UNVERIFIABLE"
+  grep -qF 'ADVERSARIAL_CITATION_UNVERIFIABLE' <<<"$VR_ERR" && err="UNVERIFIABLE"
   if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ] && [ "$err" = "$want_err" ]; then
     printf '  ok    %-28s %s/%s %s  (%s)\n' "$label" "$state" "$rc" "$err" "$why"
   else
@@ -875,9 +1195,8 @@ fi
 gate_corp() { # $1 label  $2 corpus  $3 want rc  $4 why
   local label="$1" cdir="$2" want="$3" why="$4" got
   ASSERTIONS=$((ASSERTIONS + 1))
-  bash "$VALIDATOR" --series "$ROOT/divergent-resolved/s1-adversarial-p" \
-    --transcript-dir "$cdir" >/dev/null 2>&1
-  got=$?
+  vrun out "$VALIDATOR" --series "$ROOT/divergent-resolved/s1-adversarial-p" --transcript-dir "$cdir"
+  got="$VR_RC"
   if [ "$got" -eq "$want" ]; then
     printf '  ok    %-28s exit=%s  (%s)\n' "$label" "$got" "$why"
   else
@@ -918,9 +1237,9 @@ ts_probe() {
 TS_CORPORA="$ROOT $CORP/no-records $CORP/assistant $CORP/operator-no-quote $CORP/since-excluded"
 TS_REAL="RESOLVED/0/quiet RESOLVED/0/UNVERIFIABLE STALLED/3/quiet STALLED/3/quiet STALLED/3/quiet"
 
-ts_row() { # ts_row <convergence-script> -> the four verdicts, space separated
-  local v="$1" c row=""
-  for c in $TS_CORPORA; do row="$row $(ts_probe "$v" "$c")"; done
+ts_row() { # ts_row <convergence-script> -> the five verdicts, space separated (`.` for a cell RSEL skips)
+  local v="$1" c row="" i=0
+  for c in $TS_CORPORA; do i=$((i + 1)); if ron "$i"; then row="$row $(ts_probe "$v" "$c")"; else row="$row ."; fi; done
   echo $row
 }
 
@@ -966,9 +1285,11 @@ ts_mutate() {
     printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $label"
     return
   fi
-  local got
+  local got wm
+  rsel "$want" "$TS_REAL"; wm="$(rmask "$want")"
   got="$(ts_row "$mdir/validate-adversarial-convergence.sh")"
-  if [ "$got" = "$(echo $want)" ]; then
+  RSEL=""
+  if [ "$got" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]  (%s)\n' "MUTATION $label" "$got" "$why"
   else
     FAILURES=$((FAILURES + 1))
@@ -1067,9 +1388,9 @@ expect_says ceiling-unanchored s1-adversarial-p "I-remedy" \
 # I must PRE-EMPT D, for the same reason E does: a series told to "run another pass to a
 # clean verdict" has been handed the advice that produced the passes.
 ASSERTIONS=$((ASSERTIONS + 1))
-if bash "$VALIDATOR" --series "$ROOT/ceiling-unanchored/s1-adversarial-p" \
-     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 \
-   | grep -qF -- "$D_GENERIC"; then
+# The same question `expect ceiling-unanchored` asked: the memo answers it from that run.
+vrun both "$VALIDATOR" --series "$ROOT/ceiling-unanchored/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+if grep -qF -- "$D_GENERIC" <<<"$VR_OUT"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s a CEILING series still got Check D generic advice. I must pre-empt D.\n' "ceiling-preempts-d"
 else
@@ -1132,8 +1453,10 @@ mutate_ceiling() {
     printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $label"
     return
   fi
-  for c in $CEIL_CASES; do got="$got $(mstate "$mut" "$c")"; done
-  if [ "$(echo $got)" = "$(echo $want)" ]; then
+  local i=0 wm; rsel "$want" "$CEIL_REAL"; wm="$(rmask "$want")"
+  for c in $CEIL_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(mstate "$mut" "$c")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "MUTATION $label" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -1584,8 +1907,10 @@ k2_cell() {  # $1 script  $2 case -> FAIL | PENDING | SILENT
 k2_score() {  # $1 label  $2 script  $3 expected row
   local got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
-  for c in $K2_CASES; do got="$got $(k2_cell "$2" "$c")"; done
-  if [ "$(echo $got)" = "$(echo $3)" ]; then
+  local i=0 wm; rsel "$3" "$K2_REAL"; wm="$(rmask "$3")"
+  for c in $K2_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(k2_cell "$2" "$c")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -1821,8 +2146,10 @@ k2h_cell() {  # $1 script basename  $2 world
 k2h_score() {  # $1 label  $2 script basename  $3 expected row
   local got="" w
   ASSERTIONS=$((ASSERTIONS + 1))
-  for w in $K2H_WORLDS; do got="$got $(k2h_cell "$2" "$w")"; done
-  if [ "$(echo $got)" = "$(echo $3)" ]; then
+  local i=0 wm; rsel "$3" "$K2H_REAL"; wm="$(rmask "$3")"
+  for w in $K2H_WORLDS; do i=$((i + 1)); if ron "$i"; then got="$got $(k2h_cell "$2" "$w")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -1994,8 +2321,10 @@ sg_remedy() {  # $1 script  $2 case-dir -> which of arm D's two remedies it emit
 sg_score() {  # $1 label  $2 script  $3 expected pair
   local label="$1" script="$2" want="$3" got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
-  for c in $SG_CASES; do got="$got $(sg_remedy "$script" "$c")"; done
-  if [ "$(echo $got)" = "$(echo $want)" ]; then
+  local i=0 wm; rsel "$want" "$SG_REAL"; wm="$(rmask "$want")"
+  for c in $SG_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(sg_remedy "$script" "$c")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$label" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -2135,8 +2464,10 @@ j2_cell() {  # $1 script  $2 case -> FAIL | PENDING | SILENT
 j2_score() {  # $1 label  $2 script  $3 expected row
   local got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
-  for c in $J2_CASES; do got="$got $(j2_cell "$2" "$c")"; done
-  if [ "$(echo $got)" = "$(echo $3)" ]; then
+  local i=0 wm; rsel "$3" "$J2_REAL"; wm="$(rmask "$3")"
+  for c in $J2_CASES; do i=$((i + 1)); if ron "$i"; then got="$got $(j2_cell "$2" "$c")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -2197,13 +2528,13 @@ R736="$DIR/receipt-bl736.sh"
 [ -f "$R736" ] || broken "receipt-bl736.sh is not beside run.sh"
 rcpt_cell "J2T shipped validator"     "$R736" "$VALIDATOR" 0
 rcpt_mut  "J2T0 control (unmutated)"  "$R736" 0
-rcpt_mut  "J2T1 whole-file id scan"   "$R736" 1 \
+RM_TWIN=reword rcpt_mut  "J2T1 whole-file id scan"   "$R736" "1|receipt BL-736: NOT FIXED -- split(rc=1) merge(rc=0) norows(rc=1)" \
   $'  awk \'/^\\|[ \\t]*ST[0-9]+-[^|]*\\|[ \\t]*[0-9]+\\.[0-9]+[a-z]?[ \\t]*\\|/ {\n         v = $0; sub(/^\\|[^|]*\\|[ \\t]*/, "", v); sub(/[ \\t]*\\|.*$/, "", v); print v }\' "$1" | sort -u' \
   $'  grep -oE \'[0-9]+\\.[0-9]+[a-z]?\' "$1" | sort -u' \
   '        if [ "$j2tp" != "2.3a 2.3b " ]; then' '        if false; then'
-rcpt_mut  "J2T2 unreachable read unchanged" "$R736" 1 \
+RM_TWIN=split rcpt_mut  "J2T2 unreachable read unchanged" "$R736" "1|receipt BL-736: NOT FIXED -- unreach(rc=0)" \
   '          j2t_why="no committed version of ${j2_file##*/} hashes to the notarized ${j2_sha}, so its story-id set cannot be read"' '          :'
-rcpt_mut  "J2T3 empty extraction judged" "$R736" 1 \
+RM_TWIN=reword rcpt_mut  "J2T3 empty extraction judged" "$R736" "1|receipt BL-736: NOT FIXED -- norows(rc=1)" \
   '          if [ -z "$j2t_b" ] || [ -z "$j2t_a" ]; then' '          if false; then'
 # The era constant moved (J2SX7's shape): the worlds stay stamped at the SHIPPED J2T_RELEASE
 # (RCPT_STAMP_FROM), so lowered, the predecessor-stamped world FAILs; raised, split and merge read
@@ -2216,9 +2547,9 @@ if [ -z "$J2T_REL" ] || ! [ "$j2t_mi" -ge 1 ] 2>/dev/null; then
   ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s FIXTURE STALE -- no J2T_RELEASE="x.y.z" line (minor >= 1) in the validator\n' "J2T4/J2T5"
 else
-  RCPT_STAMP_FROM="$VALIDATOR" rcpt_mut "J2T4 J2T_RELEASE lowered" "$R736" 1 \
+  RCPT_STAMP_FROM="$VALIDATOR" RM_TWIN=nostamp rcpt_mut "J2T4 J2T_RELEASE lowered" "$R736" "1|receipt BL-736: NOT FIXED -- pred(rc=1)" \
     "J2T_RELEASE=\"$J2T_REL\"" "J2T_RELEASE=\"${j2t_ma}.$((j2t_mi - 1)).${j2t_pa}\""
-  RCPT_STAMP_FROM="$VALIDATOR" rcpt_mut "J2T5 J2T_RELEASE raised" "$R736" 1 \
+  RCPT_STAMP_FROM="$VALIDATOR" RM_TWIN=reword rcpt_mut "J2T5 J2T_RELEASE raised" "$R736" "1|receipt BL-736: NOT FIXED -- split(rc=0) merge(rc=0) legacy(rc=0)" \
     "J2T_RELEASE=\"$J2T_REL\"" "J2T_RELEASE=\"${j2t_ma}.$((j2t_mi + 1)).${j2t_pa}\""
 fi
 
@@ -2228,10 +2559,12 @@ JD_REAL="CONVERGED REOPENED REOPENED CONVERGED"
 jd_score() {  # $1 label  $2 script  $3 expected row
   local got="" c
   ASSERTIONS=$((ASSERTIONS + 1))
-  for c in $JD_CASES; do
-    got="$got $(bash "$2" --series "$ROOT/$c/s1-adversarial-p" --cycle-state --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
+  local i=0 wm; rsel "$3" "$JD_REAL"; wm="$(rmask "$3")"
+  for c in $JD_CASES; do i=$((i + 1))
+    if ron "$i"; then got="$got $(bash "$2" --series "$ROOT/$c/s1-adversarial-p" --cycle-state --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"; else got="$got ."; fi
   done
-  if [ "$(echo $got)" = "$(echo $3)" ]; then
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -2349,8 +2682,10 @@ h_cell() {  # $1 script  $2 world -> <class>/<exit>
 h_score() {  # $1 label  $2 script  $3 expected row
   local got="" w
   ASSERTIONS=$((ASSERTIONS + 1))
-  for w in $H_WORLDS; do got="$got $(h_cell "$2" "$w")"; done
-  if [ "$(echo $got)" = "$(echo $3)" ]; then
+  local i=0 wm; rsel "$3" "$H_REAL"; wm="$(rmask "$3")"
+  for w in $H_WORLDS; do i=$((i + 1)); if ron "$i"; then got="$got $(h_cell "$2" "$w")"; else got="$got ."; fi; done
+  RSEL=""
+  if [ "$(echo $got)" = "$(echo $wm)" ]; then
     printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
   else
     FAILURES=$((FAILURES + 1))
@@ -2438,48 +2773,48 @@ R814="$DIR/receipt-bl814.sh"
 J3NF="receipt BL-814: NOT FIXED --"
 rcpt_cell "J3 shipped validator"     "$R814" "$VALIDATOR" 0
 rcpt_mut  "J3-0 control (unmutated)" "$R814" 0
-rcpt_mut  "J3-1 keyed on blocking"   "$R814" "1|$J3NF underonly(rc=0)" \
+RM_TWIN=undeferred rcpt_mut  "J3-1 keyed on blocking"   "$R814" "1|$J3NF underonly(rc=0)" \
   '  && [ "${LAST_MAJOR:-0}" -gt 0 ] 2>/dev/null && J3_OPEN=1' \
   '  && [ "$(( ${LAST_MAJOR:-0} - $(block_field "$LAST_FILE" findings_major_underived | tr -cd 0-9) ))" -gt 0 ] 2>/dev/null && J3_OPEN=1'
-rcpt_mut  "J3-2 bare finding id"     "$R814" "1|$J3NF undeferred(rc=1) stalepass(rc=1) twof1(rc=0) ident(rc=1) partlink(rc=0) seriallink(rc=0) dupid(rc=0)" \
+RM_TWIN=deferred rcpt_mut  "J3-2 bare finding id"     "$R814" "1|$J3NF undeferred(rc=1) stalepass(rc=1) twof1(rc=0) ident(rc=1) partlink(rc=0) seriallink(rc=0) dupid(rc=0)" \
   '        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" '        if (t ~ /[0-9]/) print t } }'"' \"\$1\"" \
   '    FILENAME == ARGV[2] { r[norm($1)] = 1; next }' '    FILENAME == ARGV[2] { x = norm($1); sub(/^.*#/, "", x); r[x] = 1; next }' \
   '    FILENAME == ARGV[3] { d[norm($1)] = $2; next }' '    FILENAME == ARGV[3] { x = norm($1); sub(/^.*#/, "", x); d[x] = $2; next }' \
   '  if [ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ] || [ "$j3p2" != "j3u-adversarial-p1.md#M1 " ] \' '  if [ "$j3p1" != "F-1 F-1 " ] || [ "$j3p2" != "M1 " ] \'
-rcpt_mut  "J3-3 any deferred-to"     "$R814" "1|$J3NF wrongstep(rc=0) nosucc(rc=0)" \
+RM_TWIN=deferred rcpt_mut  "J3-3 any deferred-to"     "$R814" "1|$J3NF wrongstep(rc=0) nosucc(rc=0)" \
   '            if (x in d) { if (succ != "" && d[x] == succ) continue' '            if (x in d) { continue'
-rcpt_mut  "J3-4 era on presence"     "$R814" "1|$J3NF legacy(rc=1)" \
+RM_TWIN=undeferred rcpt_mut  "J3-4 era on presence"     "$R814" "1|$J3NF legacy(rc=1)" \
   '  if [[ "$at" < "$J3_STAMP" ]]; then' '  if false; then'
-rcpt_mut  "J3-5 any pass's record"   "$R814" "1|$J3NF stalepass(rc=0)" \
+RM_TWIN=repaired rcpt_mut  "J3-5 any pass's record"   "$R814" "1|$J3NF stalepass(rc=0)" \
   '  for j3_rec in "$j3_dir/${j3_stem}-repair-p${j3_m}.md" "$j3_dir/${j3_stem}-serial-repair-p${j3_m}.md"; do' \
   '  for j3_rec in "$j3_dir/${j3_stem}"-*repair-p*.md; do'
-rcpt_mut  "J3-6 dispatch narrowed to one digit" "$R814" "1|$J3NF p12(rc=0)" \
+RM_TWIN=undeferred rcpt_mut  "J3-6 dispatch narrowed to one digit" "$R814" "1|$J3NF p12(rc=0)" \
   '  *-adversarial-p[0-9]*".md")' '  *-adversarial-p[0-9]".md")'
 # Widening the outer pattern alone is an EQUIVALENT mutant (the inner digits-only case still rejects pX and a bare p),
 # so J3-7 widens it and drops the inner guard together: the near-miss world pxp2 is then judged and FAILs.
-rcpt_mut  "J3-7 dispatch widened, digits guard gone" "$R814" "1|$J3NF pxp2(rc=1)" \
+RM_TWIN=ptxt rcpt_mut  "J3-7 dispatch widened, digits guard gone" "$R814" "1|$J3NF pxp2(rc=1)" \
   '  *-adversarial-p[0-9]*".md")' '  *-adversarial-p*".md")' \
   '    case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;' '    J3_ARM=1 ;;'
-rcpt_mut  "J3-8 successor substring" "$R814" "1|$J3NF substr(rc=0)" \
+RM_TWIN=subok rcpt_mut  "J3-8 successor substring" "$R814" "1|$J3NF substr(rc=0)" \
   '          if ((p == 1 || pre !~ pc) && (post == "" || post !~ nc)) { hit = 1; break }' '          if (1) { hit = 1; break }'
-rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=1)" \
+RM_TWIN=repaired rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=1)" \
   '      $1 == "T" && $3 != $4 { m = split' '      $1 == "T" { m = split'
-rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink(rc=0) seriallink(rc=0)" \
+RM_TWIN=unlinked rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink(rc=0) seriallink(rc=0)" \
   '      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }'"'" \
   '      END { for (i = 1; i <= ns; i++) print sk[i]; for (x in lk) { print "#LINKED"; break } }'"'" \
   '  done
   j3_succ "$j3_stem"' '  done
   grep -qx '"'#LINKED'"' "$AC_T/j3-tok" || : > "$AC_T/j3-tok"
   j3_succ "$j3_stem"'
-rcpt_mut  "J3-11 heading id read raw" "$R814" "1|$J3NF dupid(rc=0) idpunct(rc=1)" \
+RM_TWIN=deferbold rcpt_mut  "J3-11 heading id read raw" "$R814" "1|$J3NF dupid(rc=0) idpunct(rc=1)" \
   '    /^### / && fnd && sev($0) == "MAJOR" { s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s)
       sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
       if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
         if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" \
   '    /^### / && fnd && sev($0) == "MAJOR" { print (sh == "" ? base : sh) "#" $2 }'"' \"\$1\""
-rcpt_mut  "J3-12 keys counted with repeats" "$R814" "1|$J3NF dupid(rc=0)" \
+RM_TWIN=unkeyed rcpt_mut  "J3-12 keys counted with repeats" "$R814" "1|$J3NF dupid(rc=0)" \
   'if (!seen[k]++) print k } } }'"' \"\$1\"" 'print k } } }'"' \"\$1\""
-rcpt_mut  "J3-13 remedy says write"  "$R814" "1|$J3NF undeferred(rc=1)" \
+RM_TWIN=wrongstep rcpt_mut  "J3-13 remedy says write"  "$R814" "1|$J3NF undeferred(rc=1)" \
   'DEFER    dispatch a remediator to write $j3_dir' 'DEFER    write $j3_dir'
 
 # THE DEFERRAL MAP IS BOUND TO THE STEP FILES. Each J3_SUCCESSORS row `<stem>:<step>:<succ>:<ctx>` names
@@ -2865,8 +3200,8 @@ else
   k3_cell k3-armh     "$VALIDATOR" "$K3W/k3-armh"     1 "no repair" -
   # MUTATION: count-not-identity, and the stamp gate deleted. A copy of the validator's directory
   # with its siblings, and an unmutated control from the same directory scoring all four cells.
-  k3_mut_row() { # <validator> -> "<subject> <document> <wrongset> <pre>" rc's
-    local r="" c; for c in k3-subject k3-document k3-wrongset k3-pre; do k3_run "$1" "$K3W/$c"; r="$r $K3_RC"; done; printf '%s' "${r# }"; }
+  k3_mut_row() { # <validator> -> "<subject> <document> <wrongset> <pre>" rc's (`.` for a cell RSEL skips)
+    local r="" c i=0; for c in k3-subject k3-document k3-wrongset k3-pre; do i=$((i + 1)); if ron "$i"; then k3_run "$1" "$K3W/$c"; r="$r $K3_RC"; else r="$r ."; fi; done; printf '%s' "${r# }"; }
   k3_mut() { # <label> <expected row> <old> <new>
     local d; d="$(mktemp -d "$K3W/mut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
     ASSERTIONS=$((ASSERTIONS + 1))
@@ -2879,8 +3214,9 @@ open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
 PY
       cmp -s "$VALIDATOR" "$d/validate-adversarial-convergence.sh" && { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- byte-identical copy\n' "$1"; return; }
     fi
-    got="$(k3_mut_row "$d/validate-adversarial-convergence.sh")"
-    if [ "$got" = "$2" ]; then printf '  ok    %-28s row [%s]\n' "$1" "$got"
+    local wm; rsel "$2" "0 1 1 0"; wm="$(rmask "$2")"
+    got="$(k3_mut_row "$d/validate-adversarial-convergence.sh")"; RSEL=""
+    if [ "$got" = "$wm" ]; then printf '  ok    %-28s row [%s]\n' "$1" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$1" "$got" "$2"; fi
   }
   k3_mut "K3X0 control (unmutated)" "0 1 1 0" "" ""
@@ -2939,16 +3275,18 @@ else
     elif grep -qF "PENDING ($4" "$K3_OUT"; then printf 'PENDING'
     else printf 'SILENT'; fi
   }
+  rcell() { local i="$1"; shift; if ron "$i"; then "$@"; else printf '.'; fi; }
   k3w_row() { # <validator> -> the seven K3-widened cells
     # Each world's series is the only one run, so any K3 line in its output is about that series.
-    printf '%s %s %s %s %s %s %s' "$(k3w_class "$1" k3w-post prd 'K3 -- SUBJECT')" \
-      "$(k3w_class "$1" k3w-pre prd 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-pred prd 'K3 -- SUBJECT')" \
-      "$(k3w_class "$1" k3w-nomf prd 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-other test-strategy 'K3 -- SUBJECT')" \
-      "$(k3w_class "$1" k3w-brief product-brief 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-arch architecture-impact 'K3 -- SUBJECT')"
+    printf '%s %s %s %s %s %s %s' "$(rcell 1 k3w_class "$1" k3w-post prd 'K3 -- SUBJECT')" \
+      "$(rcell 2 k3w_class "$1" k3w-pre prd 'K3 -- SUBJECT')" "$(rcell 3 k3w_class "$1" k3w-pred prd 'K3 -- SUBJECT')" \
+      "$(rcell 4 k3w_class "$1" k3w-nomf prd 'K3 -- SUBJECT')" "$(rcell 5 k3w_class "$1" k3w-other test-strategy 'K3 -- SUBJECT')" \
+      "$(rcell 6 k3w_class "$1" k3w-brief product-brief 'K3 -- SUBJECT')" "$(rcell 7 k3w_class "$1" k3w-arch architecture-impact 'K3 -- SUBJECT')"
   }
   j2s_row() { # <validator> -> the six J2-per-stem cells
     local c r=""
-    for c in j2s-nochain j2s-chain j2s-subjlink j2s-prd j2s-pre j2s-pred; do r="$r $(k3w_class "$1" "$c" requirements 'J2 -- DRIFT')"; done
+    local i=0
+    for c in j2s-nochain j2s-chain j2s-subjlink j2s-prd j2s-pre j2s-pred; do i=$((i + 1)); r="$r $(rcell "$i" k3w_class "$1" "$c" requirements 'J2 -- DRIFT')"; done
     printf '%s' "${r# }"
   }
   rowmut() { # <label> <row fn> <expected row> [<old> <new>]...
@@ -2972,8 +3310,11 @@ PY
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
       fi
     fi
-    got="$("$fn" "$d/validate-adversarial-convergence.sh")"; ROWMUT_GOT="$got"
-    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    local real wm
+    case "$fn" in k3w_row) real="$K3W_REAL" ;; j2s_row) real="$J2S_REAL" ;; *) real="$want" ;; esac
+    rsel "$want" "$real"; wm="$(rmask "$want")"
+    got="$("$fn" "$d/validate-adversarial-convergence.sh")"; ROWMUT_GOT="$got"; RSEL=""
+    if [ "$got" = "$wm" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
   #                       post    pre     pred    nomf   other  brief  arch
@@ -3126,8 +3467,8 @@ else
     else printf 'SILENT'; fi
   }
   k3c_row() { # <validator> <pin-validator> -> grouped old oldpre oldpred pinold
-    printf '%s %s %s %s %s' "$(k3c_class "$1" k3-subject)" "$(k3c_class "$1" k3c-old)" "$(k3c_class "$1" k3c-oldpre)" \
-      "$(k3c_class "$1" k3c-oldpred)" "$(k3c_class "$2" k3c-pinold)"
+    printf '%s %s %s %s %s' "$(rcell 1 k3c_class "$1" k3-subject)" "$(rcell 2 k3c_class "$1" k3c-old)" "$(rcell 3 k3c_class "$1" k3c-oldpre)" \
+      "$(rcell 4 k3c_class "$1" k3c-oldpred)" "$(rcell 5 k3c_class "$2" k3c-pinold)"
   }
   # k3c_mut <label> <expected row> [<old> <new>]... -- a copy of the scripts dir with the edits applied
   # to the validator, and the SAME copy dropped over k3c-pinold's working validator (its pin is git).
@@ -3151,9 +3492,10 @@ PY
     fi
     pv="$K3W/k3c-pinold/scripts/ai-dlc/validate-adversarial-convergence.sh"
     cp "$d/validate-adversarial-convergence.sh" "$pv"
-    got="$(k3c_row "$d/validate-adversarial-convergence.sh" "$pv")"
+    local wm; rsel "$want" "SILENT FAIL PENDING PENDING SILENT"; wm="$(rmask "$want")"
+    got="$(k3c_row "$d/validate-adversarial-convergence.sh" "$pv")"; RSEL=""
     cp "$K3_REAL/validate-adversarial-convergence.sh" "$pv"
-    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    if [ "$got" = "$wm" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
   #                    grouped old    oldpre  oldpred pinold
@@ -3229,7 +3571,7 @@ else
   k3_cell k3d-lonepred  "$VALIDATOR" "$K3W/k3d-lonepred" 1 "is not the subject map's ordinals plus cross groups" -
   k3_cell k3d-lonepre   "$VALIDATOR" "$K3W/k3d-lonepre"  0 "Legacy series." "FAIL (K3"
   k3d_row() { # <validator> -> lone lonepred lonepre grouped
-    printf '%s %s %s %s' "$(k3c_class "$1" k3d-lone)" "$(k3c_class "$1" k3d-lonepred)" "$(k3c_class "$1" k3d-lonepre)" "$(k3c_class "$1" k3-subject)"
+    printf '%s %s %s %s' "$(rcell 1 k3c_class "$1" k3d-lone)" "$(rcell 2 k3c_class "$1" k3d-lonepred)" "$(rcell 3 k3c_class "$1" k3d-lonepre)" "$(rcell 4 k3c_class "$1" k3-subject)"
   }
   k3d_mut() { # <label> <expected row> [<old> <new>]...
     local label="$1" want="$2" d got; shift 2
@@ -3249,8 +3591,9 @@ PY
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
       fi
     fi
-    got="$(k3d_row "$d/validate-adversarial-convergence.sh")"
-    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    local wm; rsel "$want" "SILENT FAIL PENDING SILENT"; wm="$(rmask "$want")"
+    got="$(k3d_row "$d/validate-adversarial-convergence.sh")"; RSEL=""
+    if [ "$got" = "$wm" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
   #                                   lone   lonepred lonepre grouped
@@ -3605,12 +3948,14 @@ PY
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- the mutation DID NOT APPLY or is not valid shell\n' "$label"; return
       fi
     fi
-    got=""; for c in $L_MW; do got="$got $(l_class "$d/validate-adversarial-convergence.sh" "$c")"; done
-    got="${got# }"
-    if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
+    local i=0 wm; rsel "$want" "$L_REAL"; wm="$(rmask "$want")"
+    got=""; for c in $L_MW; do i=$((i + 1)); if ron "$i"; then got="$got $(l_class "$d/validate-adversarial-convergence.sh" "$c")"; else got="$got ."; fi; done
+    got="${got# }"; RSEL=""
+    if [ "$got" = "$wm" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
   L_MW="l-pass l-legacy l-moved l-under l-grow l-replace l-eqshort l-match l-foreign"
+  L_REAL="OK OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
   #                                       pass legacy moved   under  grow replace eqshort match foreign
   l_mut "LX0 control (unmutated)"        "OK OK PENDING FAIL+K FAIL FAIL FAIL OK FAIL"
   # The staging symlink pointed at an empty dir: --map reads no stories and every judged world stops
@@ -3658,6 +4003,7 @@ PY
   # BL-811, ONE cross shard: its own worlds. LM1 and LM2 also silence the self-probe's verdict, whose
   # lone-cross and partial-set rows refuse each of them (exit 2) before the live arm is reached.
   L_MW="l-legacy l-full7 l-part7 l-dx l-dxno"
+  L_REAL="OK OK FAIL OK FAIL"
   #                                         legacy full7 part7 dx dxno
   l_mut "LM0 control (unmutated)"          "OK OK FAIL OK FAIL"
   # The old rule: a lone cross.md never stands in for cross-1..G, so l-legacy FAILs (c).
@@ -3683,13 +4029,13 @@ R733="$DIR/receipt-bl733.sh"
 [ -f "$R733" ] || broken "receipt-bl733.sh is not beside run.sh"
 rcpt_cell "LD shipped validator"      "$R733" "$VALIDATOR" 0
 rcpt_mut  "LD0 control (unmutated)"   "$R733" 0
-rcpt_mut  "LD1 owed groups by index diff" "$R733" 1 \
+RM_TWIN=full rcpt_mut  "LD1 owed groups by index diff" "$R733" "1|receipt BL-733: NOT FIXED -- nodelta(rc=1) fullg(rc=1) nocross(rc=1) xnamed(rc=1)" \
   '    END { for (i = 1; i <= r; i++) if (own[i]) printf "G %s\n", (r == 1 ? "cross" : "cross-" i) }'"'"' "$3" "$4")" \' \
   '    END { }'"'"' "$3" "$4")" \' \
   '  while read -r l_dt l_dv; do' \
   '  for l_g in $(awk -F"\t" "FNR == NR { o[\$1] = \$2; next } o[\$1] != \$2 { print \$1 }" "$AC_T/l-dbgroups" "$4"); do L_DG="$L_DG cross-$l_g"; done
   while read -r l_dt l_dv; do'
-rcpt_mut  "LD2 cross names acquit ordinals" "$R733" 1 \
+RM_TWIN=nodelta rcpt_mut  "LD2 cross names acquit ordinals" "$R733" "1|receipt BL-733: NOT FIXED -- xnamed(rc=1)" \
   $'  l_onames "$1" "$2"\n  # A base whose' \
   $'  l_cover "$1" "$AC_T/no-such-stories" "$2"; L_ONAMES="$l_cn"\n  # A base whose'
 
@@ -3726,9 +4072,9 @@ for _d in "$ROOT"/*/; do
     break
   done
   [ -n "$_pfx" ] || continue
-  bash "$VALIDATOR" --series "$_pfx" --cycle-state --transcript "$TRANSCRIPT" \
-    --transcript-dir "$ROOT" >/dev/null 2>&1
-  [ $? -eq 3 ] || continue
+  # The exit code does not depend on where stderr goes, so this shares expect_state's `out` runs.
+  vrun out "$VALIDATOR" --series "$_pfx" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+  [ "$VR_RC" -eq 3 ] || continue
   grep -qE "^expect_state[[:space:]]+${_c}([[:space:]]|\$)" "$DIR/run.sh" \
     || PAIR_MISSING="$PAIR_MISSING $_c"
 done
@@ -3957,6 +4303,7 @@ if ts_mut ts-precondition-deleted \
 fi
 fi
 
+mx_arm
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

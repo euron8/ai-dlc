@@ -54,12 +54,25 @@
 # Exit:  0 = written / in sync, 1 = drift or a totality failure, 2 = usage or environment.
 set -uo pipefail
 
+#        render-vocabulary-index.sh [--check] --skip-selfprobe
+#                                      TEST SEAM, NEVER A VERDICT: skips the self-probes (the section
+#                                      between "SELF-PROBES, BEFORE THE CORPUS" and "THE CORPUS") and runs
+#                                      every other function unchanged. Stdout line 1 is a not-a-verdict
+#                                      banner. The probes read only their own seeds under PROBE_DIR, never
+#                                      the corpus, so a fixture that varies the corpus and pays one full
+#                                      run per distinct outcome has no need to re-run them per world. No
+#                                      shipped caller passes the flag; the fixture
+#                                      core/fixtures/vocabulary-index/ is the only one.
 MODE=write
-case "${1:-}" in
-  "")       MODE=write ;;
-  --check)  MODE=check ;;
-  *) echo "usage: $(basename "$0") [--check]" >&2; exit 2 ;;
-esac
+SKIP_SELFPROBE=0
+for _a in "$@"; do
+  case "$_a" in
+    --check)           MODE=check ;;
+    --skip-selfprobe)  SKIP_SELFPROBE=1 ;;
+    *) echo "usage: $(basename "$0") [--check] [--skip-selfprobe]" >&2; exit 2 ;;
+  esac
+done
+[ "$SKIP_SELFPROBE" -eq 0 ] || echo "NOT-A-VERDICT: --skip-selfprobe skips this renderer's self-probes; a run with this flag proves nothing about the renderer's own predicates."
 
 # ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
 # from the repo root, from a subdirectory, and from a fixture sandbox that copies it.
@@ -591,6 +604,7 @@ schema_rows() { python3 -c "$SCHEMA_PY" "$1"; }
 # SELF-PROBES, BEFORE THE CORPUS. An index that reports "seven vocabularies" without first
 # proving it can report the wrong thing has established that it ran, not that it is right.
 # =========================================================================================
+if [ "$SKIP_SELFPROBE" -eq 0 ]; then
 
 # --- probe 1: the marker reader, positive --------------------------------------------
 cat > "$PROBE_DIR/markers.sh" <<'PROBE'
@@ -1096,6 +1110,8 @@ case "$k_near" in
 esac
 [ "$(grep -c . <<<"$k_near")" -eq 2 ] || \
   probe_fail "the repeated-key near-miss walked to '$k_near'; its two enums must both render."
+
+fi  # SKIP_SELFPROBE
 
 # =========================================================================================
 # THE CORPUS.

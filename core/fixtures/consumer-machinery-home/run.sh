@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 # consumer-machinery-home — assert I43 and I44 cannot go quiet.
 #
+# MUTANT-MATRIX a1-reader-rename decides=I43 twins=I44
+# MUTANT-MATRIX a2-guard-unroutes decides=I43 twins=I44
+# MUTANT-MATRIX a3-declarations-diverge decides=I43 twins=I44
+# MUTANT-MATRIX a4-declaration-absent decides=I43 twins=I44
+# MUTANT-MATRIX a5-installs-into-home decides=I44 twins=I43
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/consumer-machinery-home/run.sh --matrix
+#
+# Per push each mutant runs `validate-enforcement-map.sh --arms I43,I44` (I44 declares
+# `requires-arms: I43`, so those two units are the whole run): the deciding arm's own message
+# is asserted. `--matrix` runs every world through the WHOLE validator and prints one MATRIX row
+# per world naming every arm that reported FAIL. The matrix is re-measured whenever an arm or a
+# mutant is added or changed. Measured (every world through the whole validator): each mutant
+# trips exactly its deciding arm and nothing else, so each twin is green for it. The per-push
+# run asserts the twin stays green; a change in co-tripping fails that mutant.
+# a1 mutates the READER because renaming the home in the GUARD fires two arms at once.
+#
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
 #
@@ -81,6 +97,12 @@ if [ ! -f "$HERE/../../../scripts/validate-enforcement-map.sh" ]; then
 fi
 
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+
+# MATRIX MODE: `bash core/fixtures/consumer-machinery-home/run.sh --matrix` runs every world
+# through the WHOLE validator (no --arms) and prints one `MATRIX` row per world naming every
+# arm id that reported FAIL, so the header's mutant x arm table is measured and not asserted.
+MATRIX=""
+case "${1:-}" in "") : ;; --matrix) MATRIX=1 ;; *) echo "usage: run.sh [--matrix]" >&2; exit 2 ;; esac
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -171,30 +193,29 @@ reg fires a5-installs-into-home "$INSTALL_REL" \
 mkdir -p "$PROJECT_ROOT/scripts/ai-dlc-local/lib"#' \
     "core writes or claims path(s) under the consumer machinery home"
 
-# --- Assertion 6: UNMUTATED CONTROL -------------------------------------------
-# A SECOND pristine seed, never mutated, run independently of assertion 0. With one tree per
-# assertion it is no longer catching a failed restore — there is nothing to restore — but it
-# still answers the question that makes every kill above interpretable: does a freshly seeded
-# copy of this tree come out clean, reproducibly, and not just the first time? A seed that
-# passed once and not again would otherwise show up as whichever mutant happened to run on
-# the bad copy.
-reg control a6-control '' '' ''
+# --- Assertion 6 (the second unmutated seed) IS FOLDED INTO ASSERTION 0 ----------------
+# seed.sh is a pure `cp -R` of four directories of the same distribution tree, so a second
+# pristine seed is byte-identical in input to the first, and the validator is the only thing
+# that could differ between the two runs. Assertion 0 is itself the unmutated control: it
+# asserts rc=0 on a fresh seed, and each of the five mutants above is presence-shaped, so a
+# harness that died would fail them by construction. A second identical run proves nothing
+# the first did not.
 
 # ==================== PHASE 2: seed, mutate and validate, in a pool ====================
 # The zero guard: a registration grammar that stopped filling yields an empty list, and an
 # empty list passes every assertion it never made.
 N_RUNS="$(grep -c . "$RUNS" || true)"
-if [ "$N_RUNS" -lt 7 ]; then
+if [ "$N_RUNS" -lt 6 ]; then
   echo "FIXTURE ERROR: registered only $N_RUNS run(s) — the registry did not fill, so nothing below is evidence" >&2
   exit 2
 fi
 
-# SEVEN, and fixed rather than tunable for the reason the sibling pools state in place: this
+# SIX, and fixed rather than tunable for the reason the sibling pools state in place: this
 # pool nests inside the pre-push suite's own, so a knob here multiplies against the knob
-# there and the PRODUCT is what lands on the machine. Seven is the run count; a wider pool
+# there and the PRODUCT is what lands on the machine. Six is the run count; a wider pool
 # than there is work is pure contention for the sibling fixtures.
-CMH_JOBS=7
-CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS="$RUNS" \
+CMH_JOBS=6
+CMH_MATRIX="$MATRIX" CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS="$RUNS" \
   xargs -P "$CMH_JOBS" -I{} bash -c '
     l="$1"
     f="$(awk -F"\t" -v k="$l" "\$2==k{print \$3}" "$CMH_RUNS")"
@@ -208,11 +229,22 @@ CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS="$RUNS" \
       fi
       mv "$root/$f.mut" "$root/$f"
     fi
-    bash "$root/scripts/validate-enforcement-map.sh" > "$CMH_OUT/$l.out" 2>&1
+    if [ -n "$CMH_MATRIX" ]; then _arms=""; else _arms="--arms I43,I44"; fi
+    printf %s "$_arms" > "$CMH_OUT/$l.arms"
+    bash "$root/scripts/validate-enforcement-map.sh" $_arms > "$CMH_OUT/$l.out" 2>&1
     printf %s $? > "$CMH_OUT/$l.rc"
     printf done  > "$CMH_OUT/$l.done"
     rm -rf "$root"
   ' _ {} < <(cut -f2 "$RUNS")
+
+if [ -n "$MATRIX" ]; then
+  while IFS=$'\t' read -r _k _l _f _w; do
+    [ -n "$_l" ] || continue
+    _ids="$(grep -o '^FAIL: I[0-9]*[a-c]*' "$OUTD/$_l.out" 2>/dev/null | sed 's/^FAIL: //' | sort -u | tr '\n' ' ')"
+    _n="$(grep -c '^FAIL:' "$OUTD/$_l.out" 2>/dev/null)" || _n=0
+    echo "MATRIX $_l rc=$(cat "$OUTD/$_l.rc" 2>/dev/null) fail_lines=$_n tripped=[${_ids}]"
+  done < "$RUNS"
+fi
 
 # ================= PHASE 3: evaluate, serially, in DECLARATION order =================
 while IFS=$'\t' read -r kind label file want; do
@@ -243,17 +275,10 @@ while IFS=$'\t' read -r kind label file want; do
   case "$kind" in
     sanity)
       if [ "$rc" = "0" ]; then
-        ok "pristine distribution tree passes (the negatives below mean something)"
+        ok "pristine distribution tree passes (the negatives below mean something) — also the unmutated control: the harness itself is not what failed"
       else
         bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."
         echo; echo "consumer-machinery-home: $fails assertion(s) FAILED" >&2; exit 2
-      fi ;;
-
-    control)
-      if [ "$rc" = "0" ]; then
-        ok "an unmutated control copy still passes (the harness itself is not what failed)"
-      else
-        bad "CONTROL FAILED — an unmutated copy of the tree does not pass. The assertions above tested the fixture's own machinery, not the invariants."
       fi ;;
 
     # Non-zero alone is not evidence: it is what a broken validator does. The message must
@@ -267,8 +292,11 @@ while IFS=$'\t' read -r kind label file want; do
         a5-installs-into-home)   lbl="an installer target under the home FAILS — the never-writes promise is now asserted, not just stated" ;;
         *)                       lbl="$label" ;;
       esac
+      case "$label" in a5-installs-into-home) twin=I43 ;; *) twin=I44 ;; esac
       if [ "$rc" = "0" ]; then
         bad "$lbl — the validator still EXITED 0 on the mutated tree"
+      elif grep -q "^FAIL: $twin" <<<"$out"; then
+        bad "$lbl — twin arm $twin also tripped; the recorded matrix has it green for this mutant"
       elif grep -qF "$want" <<<"$out"; then
         ok "$lbl"
       else
@@ -276,6 +304,22 @@ while IFS=$'\t' read -r kind label file want; do
       fi ;;
   esac
 done < "$RUNS"
+
+# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. Matrix mode runs the whole validator; a plain run
+# must have run every world on the two-arm selection only. Each worker records the selector it
+# actually used, so a plain run that fell through to the whole validator is a failure here.
+if [ -z "$MATRIX" ]; then
+  _full=0
+  while IFS=$'\t' read -r _k _l _f _w; do
+    [ -n "$_l" ] || continue
+    [ "$(cat "$OUTD/$_l.arms" 2>/dev/null)" = "--arms I43,I44" ] || _full=$((_full+1))
+  done < "$RUNS"
+  if [ "$_full" -eq 0 ]; then
+    ok "a plain run executes no matrix-only cell — every world ran on --arms I43,I44 alone"
+  else
+    bad "a plain run executed $_full world(s) outside --arms I43,I44 — the matrix-only whole-validator path leaked into the per-push run"
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

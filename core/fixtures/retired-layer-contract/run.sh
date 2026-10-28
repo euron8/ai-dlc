@@ -9,6 +9,22 @@
 # layer is what the teammate actually reads. Measured on the reference consumer: two
 # layer files spoke a retired role-file line shape and nothing said so.
 set -uo pipefail
+# MUTANT BATTERY MATRIX (cell = which arm a mutant trips). A mutant's `decides` arm(s) must trip; each
+# `twins` arm must stay GREEN under it, which proves the kill is confined to the deciding arm. Per push
+# only decides+twins are driven; `--matrix` drives every arm on every mutant and prints the arms that also trip.
+# MUTANT-MATRIX m1-exit-on-shapes-only decides=a7 twins=shape
+# MUTANT-MATRIX m2-no-subtraction decides=a7e twins=a7
+# MUTANT-MATRIX m3-regex-not-literal decides=a7dd twins=a7r
+# MUTANT-MATRIX m4-local-one-liner decides=a7same twins=shape
+# MUTANT-MATRIX m5-bare-filename-spelling decides=a7f twins=a7r
+# MUTANT-MATRIX f-tree-status decides=f1 twins=f2
+# MUTANT-MATRIX f-show-status decides=f2 twins=f1
+# MUTANT-MATRIX f-reads-all decides=f1,f2 twins=shape
+# MUTANT-MATRIX u2-status-dropped decides=u2 twins=u1
+# MUTANT-MATRIX u1-sites-unread decides=u1 twins=shape
+# MUTANT-MATRIX s1-shapeless-exit decides=s1 twins=a7
+# MUTANT-MATRIX-DYNAMIC mm_score why=the name is the mutant argument of each literal mm_score call and reaches mutant_killed as "$m", so each name above is one literal call site
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/retired-layer-contract/run.sh --matrix
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -16,9 +32,13 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh" >&2; exit 2; }
 
 detect() { bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null; }
 
@@ -37,9 +57,11 @@ else
 fi
 
 # --- Assertion 1: a LIVE retired line in an override is flagged ----------------
-grep -q 'overrides/team-roles__tea__consumer.md.*Personal:/model' <<<"$OUT" \
-  && ok "an override carrying the retired shape on a live line is flagged" \
-  || bad "the live retired line in the tea override was NOT flagged — the detector misses the plainest case"
+if grep -q 'overrides/team-roles__tea__consumer.md.*Personal:/model' <<<"$OUT"; then
+  ok "an override carrying the retired shape on a live line is flagged"; B_shape=1
+else
+  bad "the live retired line in the tea override was NOT flagged — the detector misses the plainest case"
+fi
 
 grep -q 'overrides/team-roles__tea__consumer.md.*Bedrock:/model' <<<"$OUT" \
   && ok "both retired labels are reported, not just the first" \
@@ -75,7 +97,10 @@ grep -q 'retro-domain.md' <<<"$OUT" \
 # arm asserted empty stdout, got it from the wrong branch, and read as a pass for nine
 # releases. `BASE BASE` gives a ref whose rulebook HAS shapes and whose retired set is
 # genuinely empty, which is the case this arm names.
-NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
+# ONE RUN OF THE NOTHING-RETIRED WORLD, stdout and stderr captured together: assertions 5, 5b and 9
+# all read this single invocation (they used to run the detector four times for the same state).
+NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>"$WORK/noop.err")"
+NOOPERR="$(cat "$WORK/noop.err")"
 [ -z "$NOOP" ] && ok "a release that retires nothing reports no finding" \
   || bad "the detector reported a finding when base and theirs are identical — it is not deriving the retired set"
 
@@ -85,7 +110,6 @@ NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
 # -- output byte-identical to a full scan that matched nothing. Measured on the reference
 # consumer's 0.356.0 -> 0.357.0 pull: the retired set was empty, this branch was taken, and
 # the clean read was taken as evidence about layer files the run never read.
-NOOPERR="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>&1 >/dev/null)"
 # Control: this must be the empty-retired-set branch, NOT a refusal. `refusing to report
 # clean` is the phrase every unreadable-rulebook refusal carries. Without this the arm could
 # pass on the wrong exit.
@@ -106,13 +130,13 @@ EMPTYC="$WORK/empty-consumer"
 mkdir -p "$EMPTYC/.claude/skills/ai-dlc/overrides" "$EMPTYC/.claude/skills/ai-dlc/extensions"
 printf '# nothing here speaks any core contract shape\n' \
   > "$EMPTYC/.claude/skills/ai-dlc/overrides/inert.md"
-DENOM="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>&1 >/dev/null)"
+DENOMOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>"$WORK/denom.err")"
+DENOM="$(cat "$WORK/denom.err")"
 grep -qE 'retired shape\(s\) checked against [1-9][0-9]* layer file\(s\)' <<<"$DENOM" \
   && ok "a scanned-but-no-match run reports its denominator, so the zero has a control" \
   || bad "a scanned-but-no-match run reported no denominator — the zero cannot be told from one that opened nothing"
 # Control on the arm above: the same run must still emit NO finding rows, or the
 # denominator is being read off a run that actually matched something.
-DENOMOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>/dev/null)"
 [ -z "$DENOMOUT" ] \
   && ok "  and that run emits no finding row, so the denominator describes a genuine zero" \
   || bad "  the empty-consumer run emitted a finding — the denominator arm is not measuring a zero"
@@ -148,9 +172,10 @@ pcount() { printf '%s\n' "$1" | awk -F'\t' -v f="$2" '$2 ~ f && $3 ~ /^path:/' |
 # --- Assertion 7: the arm fires on a release that retired ONLY a path --------
 # The discriminating world. A detector whose early exit still keys on `RETIRED` alone
 # returns before reaching the path arm here and emits nothing at all.
-PONLY="$(bash "$SCRIPT" "$DIST" "$BASE" "$PATH_ONLY" "$CONSUMER" 2>/dev/null)"
+PONLY="$(bash "$SCRIPT" "$DIST" "$BASE" "$PATH_ONLY" "$CONSUMER" 2>"$WORK/ponly.err")"
+PONLYERR="$(cat "$WORK/ponly.err")"
 if [ -n "$PONLY" ]; then
-  ok "a release retiring a rulebook PATH and no shape produces output at all"
+  ok "a release retiring a rulebook PATH and no shape produces output at all"; B_a7=1; B_a7same=1
 else
   bad "a release that retired a rulebook path and NO contract shape produced NOTHING. The empty-retired-set exit is still keyed on the shape subtraction alone, so it returns before the path arm and every assertion below is unreadable — this is the exact state the arm exists to end"
 fi
@@ -161,6 +186,7 @@ fi
 for _sp in path-entry-spelling path-consumer-spelling path-dist-spelling; do
   if [ "$(pcount "$PONLY" "$_sp\.md")" -ge 1 ]; then
     ok "  a layer file citing the retired path in the ${_sp#path-} form is flagged"
+    [ "$_sp" = path-entry-spelling ] && B_entry=1
   else
     bad "  a layer file citing the retired path in the ${_sp#path-} form was NOT flagged. An entry writes its hooks in one spelling and its prose in another; matching only the form this script holds the path in scores 1 of 22 citable files on the reference consumer and reads as coverage"
   fi
@@ -203,7 +229,7 @@ fi
 if [ "$(pcount "$PONLY" 'path-dot-near-miss\.md')" -ne 0 ]; then
   bad "  a layer file citing steps/route-md.bak was flagged for the retired steps/route.md — the path is being matched as a REGEX, so its '.' matches any character. This is the dynamic-string hazard grep -F is here to prevent, and it widens the arm into every dash- or underscore-spelled neighbour of a retired file"
 else
-  ok "  a single-character near-miss (route-md.bak) is NOT flagged — the match is literal, not a built regex"
+  ok "  a single-character near-miss (route-md.bak) is NOT flagged — the match is literal, not a built regex"; B_a7dd=1
 fi
 
 # 7e. NEGATIVE: a SURVIVING rulebook path. Without this the arm is satisfied by a detector
@@ -212,11 +238,11 @@ fi
 if [ "$(pcount "$PONLY" 'path-survivor\.md')" -ne 0 ]; then
   bad "  a layer file citing a rulebook path this release did NOT retire was flagged. The arm is reporting citations rather than retirements, and its output is then every hooks: line on the consumer"
 else
-  ok "  a layer file citing a SURVIVING rulebook path is NOT flagged"
+  ok "  a layer file citing a SURVIVING rulebook path is NOT flagged"; B_a7e=1
 fi
 # The non-vacuity conjunct for 7e: that file must have been SCANNED. A layer file the run
 # never opened is silent on every arm, and its silence would satisfy 7e for free.
-_pscan="$(bash "$SCRIPT" "$DIST" "$BASE" "$PATH_ONLY" "$CONSUMER" 2>&1 >/dev/null)"
+_pscan="$PONLYERR"
 if grep -q 'retired rulebook path' <<<"$_pscan" || [ -n "$PONLY" ]; then
   ok "  and the run opened layer files (it emitted rows), so 7d/7e are real zeros"
 else
@@ -237,13 +263,14 @@ fi
 if [ "$(pcount "$PONLY" 'path-bare-filename\.md')" -ne 0 ]; then
   bad "  a layer file that merely MENTIONS 'escalations.md' in prose was flagged for the retired core/skills/ai-dlc/escalations.md. The third spelling has degenerated to a bare filename and grep -F is unanchored, so this arm reports every entry whose prose names the word"
 else
-  ok "  a layer file naming a root-level rulebook file in PROSE only is NOT flagged (the bare-filename spelling is withheld)"
+  ok "  a layer file naming a root-level rulebook file in PROSE only is NOT flagged (the bare-filename spelling is withheld)"; B_a7f=1
 fi
 # 7f' THE POSITIVE HALF, and without it 7f is satisfied by a detector that stopped reporting
 #     that file entirely — a fix by deletion, which reads green forever. The same retired file
 #     cited at the CONSUMER grain is a true finding and must still appear.
 if [ "$(pcount "$PONLY" 'path-root-level-true\.md')" -ge 1 ]; then
   ok "  and a REAL citation of the same root-level file at consumer grain IS still flagged"
+  [ "${B_entry:-0}" = 1 ] && B_a7r=1
 else
   # NO BACKTICKS IN AN ASSERTION STRING. Inside double quotes they run the text as a COMMAND
   # and the message prints with a hole where the path should be. This one did, and it printed
@@ -255,11 +282,8 @@ fi
 # --- Assertion 8: the quiet path names BOTH denominators ---------------------
 # A run that retired 4 shapes and 0 paths and one that retired 0 shapes and 4 paths are
 # different results and printed the same line before the arm existed.
-EMPTYC2="$WORK/empty-consumer-2"
-mkdir -p "$EMPTYC2/.claude/skills/ai-dlc/overrides" "$EMPTYC2/.claude/skills/ai-dlc/extensions"
-printf '# nothing here speaks any core contract shape or cites any core path\n' \
-  > "$EMPTYC2/.claude/skills/ai-dlc/overrides/inert.md"
-DENOM2="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC2" 2>&1 >/dev/null)"
+# The SAME run as 5c: one empty consumer and one invocation answer both denominators.
+DENOM2="$DENOM"
 grep -qE 'retired rulebook path\(s\) over the same corpus' <<<"$DENOM2" \
   && ok "a scanned-but-no-match run reports the PATH denominator beside the shape one" \
   || bad "a scanned-but-no-match run reports no path denominator — a release that retired shapes and no paths prints the same line as one that retired paths and no shapes"
@@ -273,13 +297,13 @@ grep -qE 'retired shape\(s\) checked against [0-9]+ layer file\(s\)' <<<"$DENOM2
 # --- Assertion 9: nothing retired AT ALL still says it opened no file --------
 # With the exit now conditional on BOTH subtractions, the quiet path must still be reachable
 # and must still refuse to read as coverage. `BASE BASE` retires neither.
-NOOP2="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>&1 >/dev/null)"
+NOOP2="$NOOPERR"
 grep -q 'NO rulebook path' <<<"$NOOP2" \
   && ok "a release retiring neither a shape nor a path says so on BOTH counts" \
   || bad "the nothing-retired note does not mention the path subtraction — an operator reads that zero as covering a class the run never subtracted"
 # CONTROL on assertion 9: the same invocation must emit no rows. A note read off a run that
 # actually matched something is not a statement about a zero.
-NOOP2OUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
+NOOP2OUT="$NOOP"
 [ -z "$NOOP2OUT" ] \
   && ok "  and that run emits no row, so the note describes a genuine zero" \
   || bad "  the nothing-retired run emitted a finding — assertion 9 is not measuring a zero"
@@ -311,7 +335,7 @@ grep -q 'outside the rulebook globs' <<<"$NOOP2" \
 # this fixture would go FIXTURE STALE on a commit that changed no behaviour.
 # =============================================================================
 echo
-echo "  --- path-arm mutants ---"
+echo "  --- mutant harness (the battery itself runs below, from the header table) ---"
 
 RLC_SRC="$(cd "$(dirname "$SCRIPT")" && pwd)"
 RLC_MUT=""
@@ -339,132 +363,6 @@ rlcmut() { # rlcmut <name> <sed-arg>... -> sets RLC_MUT, or "" and a FAIL
   RLC_MUT="$d/mutant-rlc.sh"
   return 0
 }
-rlcrun() { bash "$1" "$DIST" "$BASE" "$PATH_ONLY" "$CONSUMER" 2>/dev/null; }
-# THE CONTROL IS PRESENCE-SHAPED. A copy that died sourcing lib.sh emits nothing, which is
-# exactly what an absence-shaped control would score as healthy. This one demands a row the
-# mutation does not touch: the SHAPE arm against THEIRS, which every mutant below leaves
-# alone.
-rlcctl() { # rlcctl <name> <mutant-path>
-  local c; c="$(bash "$2" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
-  if grep -q 'team-roles__tea__consumer.md.*Personal:/model' <<<"$c"; then
-    ok "  control [$1]: the copy still emits the untouched SHAPE row — it loaded lib.sh and ran"
-  else
-    bad "MUTANT HARNESS BROKEN [$1]: the copy emits no shape row either, so it is not running and every verdict beside it is a property of the copy rather than of the mutation"
-  fi
-}
-
-# M1 — THE EARLY EXIT GOES BACK TO KEYING ON `RETIRED` ALONE. This is the defect in full:
-#      the path arm is built behind a branch that returns before reaching it. Killed by
-#      assertion 7, which is the only world where the two subtractions disagree.
-#      ANCHORED ON THE CONJUNCTION, which IS the property under test.
-if rlcmut m1-exit-on-shapes-only -e 's@^if \[ -z "\$RETIRED" \] && \[ -z "\$RETIRED_PATHS" \]; then$@if [ -z "$RETIRED" ]; then@'; then
-  M1_OUT="$(rlcrun "$RLC_MUT")"
-  if [ -z "$M1_OUT" ]; then
-    ok "  mutant [m1] KILLED by assertion 7: with the exit keyed on the shape subtraction alone, a path-only release emits NOTHING"
-  else
-    bad "MUTANT SURVIVED [m1]: re-keying the early exit on RETIRED alone still produced output on a path-only release, so assertion 7 does not depend on the exit's second conjunct and the arm could be sitting behind a branch that returns before it"
-  fi
-  rlcctl m1 "$RLC_MUT"
-  RLCN=$((RLCN+1))
-fi
-
-# M2 — THE PATH SUBTRACTION IS INVERTED: report every rulebook path at base rather than the
-#      retired ones. Killed by 7e — the surviving path starts being reported, which is the
-#      arm that separates "reports a retirement" from "reports a citation".
-if rlcmut m2-no-subtraction -e 's@^  RETIRED_PATHS="\$(cat "\$RLC_T/rb-retired")"$@  RETIRED_PATHS="$RB_BASE"@'; then
-  M2_OUT="$(rlcrun "$RLC_MUT")"
-  if [ -n "$(awk -F'\t' '$2 ~ /path-survivor\.md/ && $3 ~ /^path:/' <<<"$M2_OUT")" ]; then
-    ok "  mutant [m2] KILLED by 7e: without the subtraction, a SURVIVING rulebook path is reported"
-  else
-    bad "MUTANT SURVIVED [m2]: replacing the retired-path subtraction with the whole base set changed nothing about path-survivor.md, so 7e is not load-bearing and the arm's retirement half is unasserted"
-  fi
-  rlcctl m2 "$RLC_MUT"
-  RLCN=$((RLCN+1))
-fi
-
-# M3 — THE LITERAL MATCH BECOMES A REGEX BUILT FROM THE PATH. Killed by 7d', and 7d ALONE
-#      COULD NOT KILL IT. Measured before 7d' was seeded: this mutant SURVIVED, because
-#      `steps/route.md` as a regex needs ONE character between `route` and `md` and the
-#      only near miss had eleven. The zero was consistent with both matches, so the arm was
-#      about to read as proof that the literal match is not load-bearing — which is the
-#      direction that deletes a correct guard. The corpus lacked the discriminating input;
-#      the repair was a new seed, not a relaxed assertion.
-#      ANCHORED ON THE `case` SUBSTRING TEST, which replaced the `grep -qF` here-string when
-#      the path arm stopped staging its inputs to temp files. The observable is unchanged: a
-#      regex match of `_sp` must flag route-md.bak. The replacement is an `if`, not `&&`,
-#      because an `&` in a sed replacement re-inserts the whole match.
-if rlcmut m3-regex-not-literal -e 's@^        case "\$body" in \*"\$_sp"\*) _hit=yes; break ;; esac$@        if grep -qE -- "$_sp" <<< "$body"; then _hit=yes; break; fi@'; then
-  M3_OUT="$(rlcrun "$RLC_MUT")"
-  if [ -n "$(awk -F'\t' '$2 ~ /path-dot-near-miss\.md/ && $3 ~ /^path:/' <<<"$M3_OUT")" ]; then
-    ok "  mutant [m3] KILLED by 7d': matched as a regex, the retired path's '.' matches any character and route-md.bak is reported"
-  else
-    bad "MUTANT SURVIVED [m3]: switching the literal match to a regex changed nothing about the single-character near miss, so 7d' is not load-bearing. Check the seed still puts exactly ONE character where the retired path's '.' sits — a longer stem there acquits the regex and the arm cannot see which match is running"
-  fi
-  # THE SAME MUTANT MUST STILL FIND THE REAL CITATIONS. A regex that failed to compile
-  # matches nothing, which would fail 7d''s check for the wrong reason and read as a kill.
-  if [ -n "$(awk -F'\t' '$2 ~ /path-entry-spelling\.md/ && $3 ~ /^path:/' <<<"$M3_OUT")" ]; then
-    ok "    and it still flags the real entry-spelling citation, so the kill is the widening and not a broken pattern"
-  else
-    bad "MUTANT HARNESS BROKEN [m3]: the regex mutant flags NEITHER file — the pattern does not compile, so the kill above would be an outage rather than a widening"
-  fi
-  rlcctl m3 "$RLC_MUT"
-  RLCN=$((RLCN+1))
-fi
-
-# M4 — THE `local` ONE-LINER THE FIX'S OWN PROBE CAUGHT. Under bash 3.2 --- this repo's
-#      floor --- `local p="$1" e="${p#core/}"` expands `p` from the OUTER scope while
-#      assigning the local one, so `e` comes back as whatever an outer `p` held. The fix
-#      split it into two `local` statements for exactly this reason, and nothing was
-#      watching the split. Verified in this shell before the mutant was written: with an
-#      outer `p=OUTER` bound, the one-liner assigns `OUTER` to `e` and the two-statement
-#      form assigns the stripped path.
-#
-#      THE KILL IS ONE-DIRECTIONAL BY CONSTRUCTION and that is why it is asserted as a
-#      DIFFERENCE rather than as a specific row. What the broken `e` renders to depends on
-#      whatever `p` is bound to in the caller's scope, so pinning the mutant to one expected
-#      spelling would be pinning it to an implementation detail of the enclosing loop.
-if rlcmut m4-local-one-liner -e 's@^  local p="\$1"$@  local p="$1" e="${p#core/}"@' -e 's@^  local e="\${p#core/}"$@  :@'; then
-  M4_OUT="$(rlcrun "$RLC_MUT")"
-  if [ "$M4_OUT" != "$PONLY" ]; then
-    ok "  mutant [m4] KILLED: the bash 3.2 one-liner \`local\` form changes the arm's output, so the two-statement split is load-bearing"
-  else
-    bad "MUTANT SURVIVED [m4]: collapsing the two \`local\` statements into the bash 3.2 one-liner form produced byte-identical output. Either this shell is not 3.2 or no arm reads a spelling the broken \$e can reach — and the fix's own probe recorded the one-liner rendering the consumer spelling as a bare directory prefix that grep -F then matched inside every layer file mentioning the skill directory"
-  fi
-  rlcctl m4 "$RLC_MUT"
-  RLCN=$((RLCN+1))
-fi
-
-# A MUTANT THAT KILLED NOTHING READS EXACTLY LIKE AN ARM THAT CANNOT FIRE, and `cmp -s`
-# proves the edit applied, never that the run loaded the edited file. Assert the count.
-# M5 — THE BARE-FILENAME GUARD IS REMOVED: the third spelling is emitted whether or not it
-#      retains a directory component. Killed by 7f, and by nothing else — 7d and 7d' probe
-#      the MATCH, this probes the SPELLING, and a root-level rulebook file is the only input
-#      that separates them. ANCHORED ON THE INNER `case`, which IS the guard.
-if rlcmut m5-bare-filename-spelling \
-     -e 's@^      case "\$_e3" in$@      case x in@' \
-     -e 's@^        \*/\*) printf .%s\\n. "\$_e3" ;;$@        x) printf "%s\\n" "$_e3" ;;@'; then
-  M5_OUT="$(rlcrun "$RLC_MUT")"
-  if [ -n "$(awk -F'\t' '$2 ~ /path-bare-filename\.md/ && $3 ~ /^path:/' <<<"$M5_OUT")" ]; then
-    ok "  mutant [m5] KILLED by 7f: without the directory-component guard a bare filename is matched as an unanchored substring, and prose that merely names the file is reported"
-  else
-    bad "MUTANT SURVIVED [m5]: emitting the bare-filename spelling changed nothing, so 7f is not load-bearing. Check the seed still declares a rulebook glob at the SKILL ROOT and retires a file there — without one the guard has no subject in this tree and its arm passes by having nothing to be wrong about"
-  fi
-  # The same mutant must still flag the true root-level citation, or the kill is an outage.
-  if [ -n "$(awk -F'\t' '$2 ~ /path-root-level-true\.md/ && $3 ~ /^path:/' <<<"$M5_OUT")" ]; then
-    ok "    and it still flags the true consumer-grain citation, so the kill is the widening and not a dead arm"
-  else
-    bad "MUTANT HARNESS BROKEN [m5]: the mutant flags NEITHER file — the spelling emitter is broken rather than widened"
-  fi
-  rlcctl m5 "$RLC_MUT"
-  RLCN=$((RLCN+1))
-fi
-
-if [ "$RLCN" -eq 5 ]; then
-  ok "  all 5 path-arm mutants were built, applied (cmp -s) and scored"
-else
-  bad "only $RLCN of 5 path-arm mutants were scored — a mutation that never became a mutant leaves its arm unproven and this fixture would report PASS over it"
-fi
-
 # =============================================================================
 # A FAILED RULEBOOK READ REFUSES, exit 2, AND PRINTS NO ROW
 #
@@ -520,9 +418,9 @@ if [ "$(fx_fired "$FX_STUB")" -eq 0 ] && [ "$FX_RC" -eq 0 ] && [ "$FX_MISS_OUT" 
 else
   bad "  stub self-probe: the never-issued stub fired $(fx_fired "$FX_STUB") time(s), rc=$FX_RC, output-changed=$([ "$FX_MISS_OUT" = "$OUT" ] && echo no || echo yes) -- the stub harness is changing the run by itself"
 fi
-if fx_f1 "$SCRIPT"; then ok "F1 a failed THEIRS rulebook listing refuses: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"
+if fx_f1 "$SCRIPT"; then ok "F1 a failed THEIRS rulebook listing refuses: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"; B_f1=1
 else bad "F1 a failed THEIRS rulebook listing did not refuse: rc=$FX_RC fired=$(fx_fired "$FX_STUB") rows=$(grep -c . "$FX/out") -- $(tail -1 "$FX/err" | cut -c1-140)"; fi
-if fx_f2 "$SCRIPT"; then ok "F2 failed BASE rulebook blob reads refuse: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"
+if fx_f2 "$SCRIPT"; then ok "F2 failed BASE rulebook blob reads refuse: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"; B_f2=1
 else bad "F2 failed BASE rulebook blob reads did not refuse: rc=$FX_RC fired=$(fx_fired "$FX_STUB") -- $(tail -1 "$FX/err" | cut -c1-140)"; fi
 
 # THE PRE-FIX COPY, staged beside lib.sh, must FAIL both arms, and under F1's stub it must print the
@@ -547,9 +445,11 @@ else
     if fx_f2 "$FXP/retired-layer-contract.sh"; then bad "  pre-fix differential: F2 PASSED against the pre-fix copy"
     else ok "  pre-fix differential: F2 FAILS against the pre-fix copy (rc=$FX_RC, fired=$(fx_fired "$FX_STUB"))"; fi
     # HEALTHY stdout is byte-identical to the pre-fix copy on all three worlds this fixture drives.
+    # The live side is the stdout already captured above for each world (OUT, PONLY, NOOP); only
+    # the pre-fix copy is run here.
     fx_same=1
     for _t in "$THEIRS" "$PATH_ONLY" "$BASE"; do
-      _a="$(bash "$SCRIPT" "$DIST" "$BASE" "$_t" "$CONSUMER" 2>/dev/null)"
+      case "$_t" in "$THEIRS") _a="$OUT" ;; "$PATH_ONLY") _a="$PONLY" ;; *) _a="$NOOP" ;; esac
       _b="$(bash "$FXP/retired-layer-contract.sh" "$DIST" "$BASE" "$_t" "$CONSUMER" 2>/dev/null)"
       [ "$_a" = "$_b" ] || fx_same=0
     done
@@ -559,23 +459,6 @@ else
     bad "  pre-fix differential: could not stage a DIFFERING pre-fix copy beside lib.sh"
   fi
 fi
-
-# THE MUTANTS: the listing's status dropped, the blob read's status dropped, and both. Anchored on
-# the status test each layer added; the control is the rlcctl shape row, which no mutant touches.
-fx_mut() {  # <name> <want-f1:0|1> <want-f2:0|1> <sed-arg>...
-  local name="$1" w1="$2" w2="$3" g1=0 g2=0
-  shift 3
-  rlcmut "$name" "$@" || return 0
-  fx_f1 "$RLC_MUT" && g1=1
-  fx_f2 "$RLC_MUT" && g2=1
-  if [ "$g1" = "$w1" ] && [ "$g2" = "$w2" ]; then ok "  mutant [$name] KILLED as designed: F1=$g1 F2=$g2"
-  else bad "MUTANT SURVIVED or entangled [$name]: F1=$g1 F2=$g2, wanted F1=$w1 F2=$w2"; fi
-  rlcctl "$name" "$RLC_MUT"
-}
-fx_mut f-tree-status 0 1 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@'
-fx_mut f-show-status 1 0 -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
-fx_mut f-reads-all   0 0 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@' \
-                         -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
 
 # =============================================================================
 # AN UNREADABLE setup-sites.md REFUSES, exit 2, AND PRINTS NO ROW
@@ -616,61 +499,21 @@ rlc_unreadable() { # rlc_unreadable <script-in-a-dir-copy> <dir|mode000> -> 0 wh
 RLC_ROOT=0; [ "$(id -u)" -eq 0 ] && RLC_ROOT=1
 UNR="$WORK/unreadable-sites"; mkdir -p "$UNR"
 if cp -R "$RLC_SRC"/. "$UNR"/ 2>/dev/null && [ -f "$UNR/lib.sh" ]; then
-  rlcctl unreadable-sites "$UNR/retired-layer-contract.sh"
   if rlc_unreadable "$UNR/retired-layer-contract.sh" dir; then
-    ok "U1 a setup-sites.md that is a DIRECTORY (awk reads it empty, exit 0) refuses as an EMPTY list: exit 2, no row ($RLC_UWHY)"
+    ok "U1 a setup-sites.md that is a DIRECTORY (awk reads it empty, exit 0) refuses as an EMPTY list: exit 2, no row ($RLC_UWHY)"; B_u1=1
   else
     bad "U1 a setup-sites.md that is a directory did not refuse with exit 2, no row and the empty-list message ($RLC_UWHY) -- emit-report.sh renders exit 0 with no row as 'none'"
   fi
   if [ "$RLC_ROOT" -eq 1 ]; then
     echo "  SKIP  U2 -- running as root, which reads a mode-000 file, so the unreadable-list world is not expressible (this is not a pass)"
   elif rlc_unreadable "$UNR/retired-layer-contract.sh" mode000; then
-    ok "U2 a mode-000 setup-sites.md (awk exits 2) refuses on the STATUS read: exit 2, no row ($RLC_UWHY)"
+    ok "U2 a mode-000 setup-sites.md (awk exits 2) refuses on the STATUS read: exit 2, no row ($RLC_UWHY)"; B_u2=1
   else
     bad "U2 a mode-000 setup-sites.md did not refuse with exit 2, no row and the unreadable-list message ($RLC_UWHY)"
   fi
 else
   bad "MUTANT HARNESS BROKEN [unreadable-sites]: could not copy the reconcile directory"
 fi
-# THE STATUS READ ALONE DELETED: the awk's exit 2 is dropped, and the empty-list guard beneath it
-# then refuses with the OTHER message. U2 greps the unreadable-list words, so it kills this; U1's
-# directory never reached that line and must still pass.
-if [ "$RLC_ROOT" -eq 1 ]; then
-  echo "  SKIP  mutant [u2-status-dropped] -- running as root, which reads a mode-000 file, so U2 cannot kill it (this is not a pass)"
-elif rlcmut u2-status-dropped -e '/^\[ "\$_rlc_rc" -eq 0 \] || rlc_refuse "reading the rulebook list from /d'; then
-  rlcctl u2-status-dropped "$RLC_MUT"
-  if rlc_unreadable "$RLC_MUT" mode000; then
-    bad "MUTANT SURVIVED [u2-status-dropped]: with the status read deleted, U2 still passed ($RLC_UWHY)"
-  else
-    ok "  mutant [u2-status-dropped] KILLED by U2: the dropped status fell through to the empty-list refusal ($RLC_UWHY)"
-  fi
-  if rlc_unreadable "$RLC_MUT" dir; then
-    ok "  mutant [u2-status-dropped]: U1 still passes on it, so U1 and U2 hold different lines ($RLC_UWHY)"
-  else
-    bad "mutant [u2-status-dropped] also failed U1 ($RLC_UWHY) -- the two cells are entangled"
-  fi
-fi
-# THE MUTANT RESTORES THE BASE READ IN FULL: the cached, status-read list is deleted and
-# `rulebook_globs` goes back to reading the file itself with `2>/dev/null`. `rlc_refuse` is NOT
-# touched -- F1, F2 and the fx_mut series share it, and a mutant there would fail three arms.
-RLC_SITES_SED="$WORK/m-sites.sed"
-cat > "$RLC_SITES_SED" <<'SED_EOF'
-/^RLC_GLOBS="\$(awk /,/^\[ -n "\$RLC_GLOBS" \] || rlc_refuse /d
-s@^  printf '%s\\n' "\$RLC_GLOBS"$@  awk '/^rulebook:/{on=1;next} on \&\& /^[a-z_]+:/{exit} on \&\& /^  - /{sub(/^  - /,"");print}' "$SITES" 2>/dev/null@
-SED_EOF
-if rlcmut u1-sites-unread -f "$RLC_SITES_SED"; then
-  if grep -q 'RLC_GLOBS' "$RLC_MUT"; then
-    bad "FIXTURE STALE [u1-sites-unread]: the mutant still carries RLC_GLOBS, so only part of the read was reverted"
-  else
-    rlcctl u1-sites-unread "$RLC_MUT"
-    if rlc_unreadable "$RLC_MUT" dir; then
-      bad "MUTANT SURVIVED [u1-sites-unread]: with the base read restored, U1 still passed ($RLC_UWHY)"
-    else
-      ok "  mutant [u1-sites-unread] KILLED by U1: with the base read restored, an unreadable list reads as a clean run ($RLC_UWHY)"
-    fi
-  fi
-fi
-
 # =============================================================================
 # S1  A SHAPELESS BASE RULEBOOK STILL REACHES THE PATH ARM
 #
@@ -725,29 +568,162 @@ s1() {
 }
 if [ "$S_RUN" = 1 ]; then
   if s1 "$SCRIPT"; then
-    ok "S1 a shapeless base rulebook plus a retired rulebook path yields the path row, by value, and no shape row ($S1_WHY)"
+    ok "S1 a shapeless base rulebook plus a retired rulebook path yields the path row, by value, and no shape row ($S1_WHY)"; B_s1=1
   else
     bad "S1 a shapeless base rulebook swallowed the retired-path row ($S1_WHY) -- a base carrying no contract shape is a result, not a refusal, and the path subtraction still has a subject"
   fi
-  # THE MUTANT RESTORES THE EXIT: a shapeless base ends the run with exit 0 before the path arm.
-  # Inserted before `count_of`, which is where it sat. It must fail S1 alone: assertion 7 (the
-  # shaped PATH_ONLY world) and the shape control must still hold on it.
-  S_MUT_SED="$WORK/m-shapeless.sed"
-  printf '%s\n' '/^count_of() {/i\' \
-    '[ -n "$BASE_SET" ] || { echo "retired-layer-contract: mutant shapeless-base exit" >&2; exit 0; }' > "$S_MUT_SED"
-  if rlcmut s1-shapeless-exit -f "$S_MUT_SED"; then
-    if s1 "$RLC_MUT"; then
-      bad "MUTANT SURVIVED [s1-shapeless-exit]: with the shapeless-base exit restored, S1 still passed ($S1_WHY)"
-    else
-      ok "  mutant [s1-shapeless-exit] KILLED by S1: the restored exit swallows the path row ($S1_WHY)"
-    fi
-    if [ -n "$(rlcrun "$RLC_MUT")" ]; then
-      ok "  mutant [s1-shapeless-exit]: assertion 7's shaped path-only world still emits, so the kill is S1's alone"
-    else
-      bad "mutant [s1-shapeless-exit] also silenced assertion 7's shaped world -- the mutation is not confined to a shapeless base"
-    fi
-    rlcctl s1-shapeless-exit "$RLC_MUT"
+fi
+
+# =============================================================================
+# THE MUTANT BATTERY — ONE TABLE, DRIVEN BY THE HEADER
+#
+# Every mutant is a copy of the whole reconcile directory (rlcmut), scored by the ARMS named on
+# its `# MUTANT-MATRIX` header line: it must trip every `decides` arm, and each `twins` arm must
+# stay GREEN under it (a twin that trips means the mutation leaks past its deciding arm). The
+# header is the single source: mm_score reads it from this very file, so the table in the header
+# and the arms driven cannot disagree.
+#
+# ARMS (a drive of an arm is one detector run, or one stubbed/unreadable-world run, on the copy):
+#   a7      the PATH_ONLY world emits any output           a7e   a SURVIVING rulebook path is flagged
+#   a7dd    the single-character near miss is flagged      a7f   the bare-filename prose file is flagged
+#   a7r     the entry-spelling or root-level true citation is missing
+#   a7same  the PATH_ONLY output differs from the unmutated copy's
+#   shape   the THEIRS world no longer emits the untouched SHAPE row (a copy that never ran)
+#   f1/f2   a failed THEIRS listing / BASE blob read no longer refuses (exit 2, no row)
+#   s1      a shapeless base swallows the retired-path row
+#   u1/u2   an unreadable setup-sites.md (directory / mode 000) no longer refuses
+# Per push only decides+twins are driven. `--matrix` drives every arm on every mutant, and the
+# drives outside decides+twins are the matrix-only cells; a plain run asserts it ran none.
+# =============================================================================
+echo
+echo "  --- mutant battery ($([ "$MATRIX" = 1 ] && echo FULL || echo PUSH)) ---"
+MM_ARMS="a7 a7e a7dd a7f a7r a7same shape f1 f2 s1 u1 u2"
+
+RLC_SITES_SED="$WORK/m-sites.sed"
+cat > "$RLC_SITES_SED" <<'SED_EOF'
+/^RLC_GLOBS="\$(awk /,/^\[ -n "\$RLC_GLOBS" \] || rlc_refuse /d
+s@^  printf '%s\\n' "\$RLC_GLOBS"$@  awk '/^rulebook:/{on=1;next} on \&\& /^[a-z_]+:/{exit} on \&\& /^  - /{sub(/^  - /,"");print}' "$SITES" 2>/dev/null@
+SED_EOF
+S_MUT_SED="$WORK/m-shapeless.sed"
+printf '%s\n' '/^count_of() {/i\' \
+  '[ -n "$BASE_SET" ] || { echo "retired-layer-contract: mutant shapeless-base exit" >&2; exit 0; }' > "$S_MUT_SED"
+
+mm_hdr() { # mm_hdr <mutant> decides|twins -> the space-separated arm list from this file's header
+  awk -v m="$1" -v k="$2" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == m { for (i = 4; i <= NF; i++) { split($i, a, "="); if (a[1] == k) print a[2] } }' "$HERE/run.sh" | tr ',' ' '
+}
+mm_in() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }  # mm_in <word> <list>
+mm_row() { awk -F'\t' -v f="$2" 'index($2, f) && $3 ~ /^path:/ { n++ } END { exit !n }' <<<"$1"; }  # 0 when a path: row names file $2
+
+mm_build() { # mm_build <mutant> -> sets RLC_MUT, or returns 1 after a FAIL (rlcmut reports)
+  case "$1" in
+    m1-exit-on-shapes-only) rlcmut "$1" -e 's@^if \[ -z "\$RETIRED" \] && \[ -z "\$RETIRED_PATHS" \]; then$@if [ -z "$RETIRED" ]; then@' ;;
+    m2-no-subtraction) rlcmut "$1" -e 's@^  RETIRED_PATHS="\$(cat "\$RLC_T/rb-retired")"$@  RETIRED_PATHS="$RB_BASE"@' ;;
+    m3-regex-not-literal) rlcmut "$1" -e 's@^        case "\$body" in \*"\$_sp"\*) _hit=yes; break ;; esac$@        if grep -qE -- "$_sp" <<< "$body"; then _hit=yes; break; fi@' ;;
+    m4-local-one-liner) rlcmut "$1" -e 's@^  local p="\$1"$@  local p="$1" e="${p#core/}"@' -e 's@^  local e="\${p#core/}"$@  :@' ;;
+    m5-bare-filename-spelling) rlcmut "$1" -e 's@^      case "\$_e3" in$@      case x in@' -e 's@^        \*/\*) printf .%s\\n. "\$_e3" ;;$@        x) printf "%s\\n" "$_e3" ;;@' ;;
+    f-tree-status) rlcmut "$1" -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@' ;;
+    f-show-status) rlcmut "$1" -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@' ;;
+    f-reads-all) rlcmut "$1" -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@' \
+                             -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@' ;;
+    u2-status-dropped) rlcmut "$1" -e '/^\[ "\$_rlc_rc" -eq 0 \] || rlc_refuse "reading the rulebook list from /d' ;;
+    u1-sites-unread)
+      rlcmut "$1" -f "$RLC_SITES_SED" || return 1
+      if grep -q 'RLC_GLOBS' "$RLC_MUT"; then bad "FIXTURE STALE [$1]: the mutant still carries RLC_GLOBS, so only part of the read was reverted"; return 1; fi ;;
+    s1-shapeless-exit) rlcmut "$1" -f "$S_MUT_SED" ;;
+    *) bad "FIXTURE BROKEN: no mutation is defined for $1"; return 1 ;;
+  esac
+}
+
+MM_PO_S=""; MM_PO_OUT=""
+mm_arm() { # mm_arm <arm> <script> -> 0 green, 1 tripped, 2 not expressible here (skipped)
+  local arm="$1" s="$2" c
+  case "$arm" in
+    a7|a7e|a7dd|a7f|a7r|a7same)
+      if [ "$MM_PO_S" != "$s" ]; then MM_PO_OUT="$(bash "$s" "$DIST" "$BASE" "$PATH_ONLY" "$CONSUMER" 2>/dev/null)"; MM_PO_S="$s"; fi ;;
+  esac
+  case "$arm" in
+    a7)     [ -n "$MM_PO_OUT" ] && return 0; return 1 ;;
+    a7e)    mm_row "$MM_PO_OUT" path-survivor.md && return 1; return 0 ;;
+    a7dd)   mm_row "$MM_PO_OUT" path-dot-near-miss.md && return 1; return 0 ;;
+    a7f)    mm_row "$MM_PO_OUT" path-bare-filename.md && return 1; return 0 ;;
+    a7r)    mm_row "$MM_PO_OUT" path-entry-spelling.md && mm_row "$MM_PO_OUT" path-root-level-true.md && return 0; return 1 ;;
+    a7same) [ "$MM_PO_OUT" = "$PONLY" ] && return 0; return 1 ;;
+    shape)  c="$(bash "$s" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+            grep -q 'team-roles__tea__consumer.md.*Personal:/model' <<<"$c" && return 0; return 1 ;;
+    f1)     fx_f1 "$s" && return 0; return 1 ;;
+    f2)     fx_f2 "$s" && return 0; return 1 ;;
+    s1)     [ "$S_RUN" = 1 ] || return 2; s1 "$s" && return 0; return 1 ;;
+    u1)     rlc_unreadable "$s" dir && return 0; return 1 ;;
+    u2)     [ "$RLC_ROOT" -eq 0 ] || return 2; rlc_unreadable "$s" mode000 && return 0; return 1 ;;
+  esac
+  return 2
+}
+
+MM_SCORED=0; MM_EXPECT=0; MM_MATONLY=0
+# mm_score <mutant> <base-pass-flag> <message>. EVERY CALLER PASSES A B_ FLAG SET BY THE UNMUTATED ARM
+# IT GUARDS (or a conjunction of them), so mutant_killed refuses a kill read off a seed that never worked.
+mm_score() {
+  local m="$1" dec tw a rc trip="" green="" dead=1 drive row
+  MM_EXPECT=$((MM_EXPECT+1))
+  dec="$(mm_hdr "$m" decides)"; tw="$(mm_hdr "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "MUTANT-MATRIX line missing or incomplete for $m in the header"; return 0; fi
+  mm_build "$m" || return 0
+  if [ "$MATRIX" = 1 ]; then drive="$MM_ARMS"; else drive="$dec $tw"; fi
+  for a in $MM_ARMS; do
+    mm_in "$a" "$drive" || continue
+    mm_in "$a" "$dec $tw" || MM_MATONLY=$((MM_MATONLY+1))
+    rc=0; mm_arm "$a" "$RLC_MUT" || rc=$?
+    case "$rc" in 0) green="$green $a" ;; 1) trip="$trip $a" ;; esac
+  done
+  for a in $dec; do mm_in "$a" "$trip" || dead=0; done
+  if [ "$dead" = 1 ]; then mutant_killed "$2" "$m" "  mutant [$m] KILLED by $dec: $3"
+  else bad "MUTANT SURVIVED [$m]: deciding arm(s) $dec did not trip (tripped:${trip:- none}) -- $3"; fi
+  for a in $tw; do
+    if mm_in "$a" "$trip"; then bad "CO-TRIP [$m]: twin arm $a tripped, so the mutation leaks past its deciding arm"
+    else ok "    twin [$m]: $a stays green"; fi
+  done
+  row="  MATRIX-ROW $m decides=$(echo $dec | tr ' ' ',')"
+  for a in $MM_ARMS; do
+    mm_in "$a" "$trip" && row="$row $a=1"
+    mm_in "$a" "$green" && row="$row $a=0"
+  done
+  echo "$row"
+  if [ "$MATRIX" = 1 ]; then
+    # Arms outside decides that ALSO trip are measured data, not failures: the matrix shows several real
+    # overlaps (a byte-compare arm trips on any output-changing mutant), so no "co-trips nothing" claim is made.
+    # What a push enforces is decides-trip and twins-green.
+    for a in $trip; do mm_in "$a" "$dec" || echo "    ALSO-TRIPS [$m]: $a (outside decides=$dec)"; done
   fi
+  MM_SCORED=$((MM_SCORED+1))
+}
+
+mm_score m1-exit-on-shapes-only "${B_a7:-0}" "with the early exit keyed on the shape subtraction alone, a path-only release emits NOTHING"
+mm_score m2-no-subtraction "${B_a7e:-0}" "without the subtraction, a SURVIVING rulebook path is reported"
+mm_score m3-regex-not-literal "${B_a7dd:-0}" "matched as a regex, the retired path's dot matches any character and route-md.bak is reported"
+mm_score m4-local-one-liner "${B_a7same:-0}" "the bash 3.2 one-liner local form changes the arm's output, so the two-statement split is load-bearing"
+mm_score m5-bare-filename-spelling "${B_a7f:-0}" "without the directory-component guard a bare filename is matched as an unanchored substring"
+mm_score f-tree-status "${B_f1:-0}" "a dropped tree-listing status no longer refuses"
+mm_score f-show-status "${B_f2:-0}" "a dropped blob-read status no longer refuses"
+mm_score f-reads-all "$(( ${B_f1:-0} && ${B_f2:-0} ))" "with both statuses dropped neither read refuses"
+if [ "$RLC_ROOT" -eq 1 ]; then
+  echo "  SKIP  mutant [u2-status-dropped] -- running as root, which reads a mode-000 file, so U2 cannot decide it (this is not a pass)"
+else
+  mm_score u2-status-dropped "${B_u2:-0}" "the dropped status falls through to the empty-list refusal"
+fi
+mm_score u1-sites-unread "${B_u1:-0}" "with the base read restored, an unreadable list reads as a clean run"
+if [ "$S_RUN" = 1 ]; then
+  mm_score s1-shapeless-exit "${B_s1:-0}" "the restored shapeless-base exit swallows the path row"
+fi
+
+# A MUTANT THAT NEVER BECAME A MUTANT LEAVES ITS ARM UNPROVEN: every table row asked for must be scored.
+if [ "$MM_SCORED" -eq "$MM_EXPECT" ]; then ok "  all $MM_EXPECT table mutants were built, applied (cmp -s) and scored"
+else bad "only $MM_SCORED of $MM_EXPECT table mutants were scored — a mutation that never became a mutant leaves its arm unproven"; fi
+if [ "$MATRIX" = 1 ]; then
+  if [ "$MM_MATONLY" -gt 0 ]; then ok "  matrix mode drove $MM_MATONLY matrix-only cells (MODE FULL)"
+  else bad "matrix mode drove no matrix-only cell, so it measured nothing beyond a plain run"; fi
+else
+  if [ "$MM_MATONLY" -eq 0 ]; then ok "  a plain run executed no matrix-only cell (MODE PUSH)"
+  else bad "a plain run executed $MM_MATONLY matrix-only cell(s) — the per-push run is not confined to decides+twins"; fi
 fi
 
 echo

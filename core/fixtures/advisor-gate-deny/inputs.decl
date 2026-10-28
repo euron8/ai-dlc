@@ -3,3 +3,4 @@
 # core/fixtures are walk-up probes.
 !core/hooks/ai-dlc-advisor-gate.sh
 !core/hooks/ai-dlc-context-provenance.sh
+core/fixtures/lib/

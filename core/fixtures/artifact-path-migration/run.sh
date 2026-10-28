@@ -23,6 +23,21 @@
 # THE VERDICT IS NEVER TRUSTED. Every assertion below reads the TREE -- what exists, what does
 # not, and whether the bytes survived -- rather than the script's own summary line. A migration
 # that printed "2670 verified" while moving nothing would pass a report-reading fixture.
+#
+# Per push each mutant runs its deciding arm and one twin; the measured matrix replaces an
+# exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
+# column names `--matrix` prints (T-* read the tree after --apply, R-* read the report).
+# MUTANT-MATRIX whole-path-scan decides=T-wholepath twins=T-conform
+# MUTANT-MATRIX ambiguity-allowed decides=T-ambig twins=T-conform
+# MUTANT-MATRIX stories-half-migrated decides=T-storybeta twins=T-storyalpha
+# MUTANT-MATRIX story-slot-blind decides=T-conform twins=T-storyalpha
+# MUTANT-MATRIX hdr-over-name-off decides=T-hdr twins=T-storyalpha
+# MUTANT-MATRIX consumer-areas decides=R-areas twins=T-conform
+# MUTANT-MATRIX remedy-root-mig decides=R-remedy-mig twins=T-conform
+# MUTANT-MATRIX remedy-root-val decides=R-remedy-val twins=T-conform
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-migration/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 set -uo pipefail
 
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10). The migration calls
@@ -63,12 +78,29 @@ bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; 
 has() { [ -f "$1/$2" ]; }
 
 echo "artifact-path-migration:"
+MATRIX=0; MROWS=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/artifact-path-migration/matrix.sh"
+
+# ONE seeded world, cloned per question. seed.sh is a pure function of the grammar (two git commits
+# and ~45 files), and every arm below wants a PRISTINE copy of exactly that world, so it is built
+# once and `cp -R`'d; seeding it nine times answered the same question nine times. The clone is a
+# whole git work tree, so each arm still mutates its own.
+TPL="$(bash "$HERE/seed.sh" "$GRAMMAR")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+clone_world() {
+  local d; d="$(mktemp -d "${TMPDIR:-/tmp}/apmig-cl-XXXXXX")" || return 1
+  cp -R "$TPL/." "$d" || return 1
+  printf '%s\n' "$d"
+}
 
 # =============================================================================
 # 1. DRY RUN WRITES NOTHING. The default must be safe, or the first run of a
 #    2600-file mover on a real tree is an experiment.
 # =============================================================================
-W="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+W="$(clone_world)"
 BEFORE="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
 OUT="$(bash "$MIG" --root "$W" 2>&1)"; RC=$?
 AFTER="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
@@ -385,98 +417,6 @@ bash "$MIG" --root "$W" >/dev/null 2>&1; RC=$?
                 || bad "a second run exited $RC, expected 3; the first run left work behind"
 rm -rf "$W"
 
-# =============================================================================
-# 6. MUTANTS. Each removes ONE mechanism and must flip exactly its own arm.
-# =============================================================================
-MUT="$(mktemp -d "${TMPDIR:-/tmp}/apmig-mut-XXXXXX")"
-# $1 tag  $2 sed program  $3 shell test over $w that must be TRUE on the mutant  $4 claim
-# Each mutant is a guarded COPY, and a sed that matches nothing is a failure rather than a
-# silent pass. Each asserts a property of the TREE the mutant produced, not of its report.
-mutate() {
-  # Split, not one `local`: `local a="$1" d="$MUT/$a"` expands $a while it is still being
-  # declared, which under `set -u` aborts the fixture with "unbound variable" — a harness
-  # failure that reads like a mutant result.
-  local tag="$1" prog="$2" test_expr="$3" claim="$4"
-  local d="$MUT/$tag" w
-  asserts=$((asserts+1))
-  lay_pair "$d"
-  sed -E "$prog" "$MIG" > "$d/m.sh"
-  if cmp -s "$MIG" "$d/m.sh"; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$tag"; return
-  fi
-  w="$(bash "$HERE/seed.sh" "$GRAMMAR")"
-  bash "$d/m.sh" --root "$w" --apply >/dev/null 2>&1
-  if eval "$test_expr"; then printf '  ok    MUTANT %-18s %s\n' "$tag" "$claim"
-  else fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip: %s\n' "$tag" "$claim"; fi
-  rm -rf "$w"
-}
-
-# Scan the whole path with the component regex instead of splitting on `/`. Every token a `/`
-# precedes goes invisible, so `docs/retro/sprint-301.md` is never even seen.
-mutate 'whole-path-scan' \
-  "s@[|] tr '/' '.n' [|]@|@" \
-  '[ -f "$w/docs/retro/sprint-301.md" ]' \
-  'scanning the whole path leaves docs/retro/sprint-301.md unmigrated — the 668-vs-2551 defect'
-
-# Disarm the ambiguity refusal. The file naming TWO sprints is then filed under one of them,
-# which is the silently-wrong outcome, not a loud one.
-mutate 'ambiguity-allowed' \
-  's@^  if \[ "\$nhits" -gt 1 \]; then@  hits="$(printf "%s" "$hits" | head -1)"; nhits=1\n  if [ "$nhits" -gt 1 ]; then@' \
-  '[ ! -f "$w/_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" ]' \
-  'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
-
-# Stop normalising the bare leading number. The corpus then SPLITS — exactly the half-migration
-# the whole-corpus deferral existed to prevent: the capital-S file moves, its bare-number sibling
-# stays behind under a different convention.
-# The anchor is the `s` in the REPLACEMENT half of the normalising expression — one occurrence in
-# the whole file, checked. Removing it makes the rewrite an identity, which is precisely "the bare
-# number is no longer read as a sprint" and nothing else.
-# RE-ANCHORED, NOT RELAXED. This mutant's subject is the SPLIT -- two spellings of one sprint's
-# stories reaching two different shapes -- and it used to observe that split as "beta never moves".
-# It does move now: with normalisation broken the path yields no sprint, and the recovery reads the
-# leading number off the basename and places it. The defect is unchanged and still visible one step
-# later, in the DESTINATION BASENAME: alpha comes out as `story-1-alpha.md` with its sprint lifted
-# into the slot, beta keeps `story-297-1-` beside a `s297/` that now says the same thing twice.
-# Asserting the two shapes DISAGREE is strictly stronger than asserting beta stood still, and it is
-# the claim this mutant's own text makes.
-mutate 'stories-half-migrated' \
-  's@/story-s@/story-@' \
-  '[ -f "$w/_bmad-output/planning-artifacts/s301/stories/story-1-alpha.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s297/stories/story-297-1-beta.md" ]' \
-  'without the bare-number normalisation one sprint\x27s stories split across two conventions'
-
-# Break the POSITIONAL test, so a story already under `s<N>/` is treated as legacy. Its INDEX is
-# then read as a sprint and a conforming file is moved to a slot named after its own index.
-mutate 'story-slot-blind' \
-  's@^  local head=@  return 0\n  local head=@' \
-  '[ ! -f "$w/_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" ]' \
-  'a conforming story is re-migrated once the s<N>/-above-it test stops firing'
-
-# BL-214: disarm the header-over-name override. The item number is then read as the sprint and
-# the consumer's story lands under s102 -- while bug-124 (header, path-silent channel) still lands
-# s72, so the mutant moves only its own arm.
-mutate 'hdr-over-name-off' \
-  's@^      if \[ -n "\$hd_n" \] && \[ -n "\$nm_n" \] && \[ "\$hd_n" != "\$nm_n" \]; then@      if false; then@' \
-  '[ -f "$w/_bmad-output/planning-artifacts/s102/stories/story-1-effective-spread-500.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s230/stories/story-1-three-digit.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s72/stories/bug-124-deployed-range.md" ]' \
-  'without the override the item number is read as the sprint (s102, s230); the path-silent header channel is untouched (s72)'
-
-# UNMUTATED CONTROL, from the same directory: the harness itself must not be what fails. A lone
-# copy that dies sourcing something emits nothing, and "no output" otherwise scores as a kill.
-asserts=$((asserts+1))
-lay_pair "$MUT/control"
-wc="$(bash "$HERE/seed.sh" "$GRAMMAR")"
-# HERE-STRING, NOT A PIPE, and this arm is where that was learned the hard way: as a pipe it
-# reported the control BROKEN precisely when the control was working. `... | grep -q` under
-# `pipefail` returns NON-ZERO on a MATCH -- grep leaves at its first hit, the writer takes
-# SIGPIPE, and pipefail answers with the writer. It is a SIZE threshold, not a race, so the
-# small greps above survived it and the one reading a whole migration report did not. I54/I54b
-# bind the idiom across every shipped shell file.
-ctl_out="$(bash "$MUT/control/m.sh" --root "$wc" 2>&1)"
-if grep -q "outside the slot: 0" <<<"$ctl_out"; then
-  ok "CONTROL: an unmutated copy in the mutant directory still passes its own self-check"
-else
-  bad "CONTROL: an unmutated copy FAILED — the mutant harness is what is broken, not the mutants"
-fi
-rm -rf "$wc" "$MUT"
 
 # =============================================================================
 # AREAS INFERRED — the remedy names the CONSUMER's file, and declaring an area
@@ -493,7 +433,7 @@ rm -rf "$wc" "$MUT"
 # same areas would be inferred again, with a corrected sentence in front of an inert mechanism.
 # The pair below is what proves the join is live.
 # =============================================================================
-wi="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+wi="$(clone_world)"
 
 # ARM A — nothing declared, which is the state the reference consumer was in.
 a_out="$(bash "$MIG" --root "$wi" 2>&1)"
@@ -575,25 +515,6 @@ areas:
   _bmad-output/brainstorming
 EOF
 
-# MUTATION — stop reading the consumer's file. ARM B must regress and ARM A must not move.
-# THE SUBJECT IS THE RESOLVER, not the migration: the consumer-area join moved into
-# artifact-path-config.sh so the conformance validator could not grow a second copy of it. The
-# mutant therefore replaces the RESOLVER beside an unmutated migration, which is also the arm
-# that proves the migration really goes through it rather than carrying a private fallback.
-MUTI="$wi-mut"; rm -rf "$MUTI"; lay_pair "$MUTI"
-sed 's@^  CONSUMER_AREAS="\$(areas_of "\$CONSUMER_AREAS_REL")"@  CONSUMER_AREAS=""@' \
-  "$CONFIG" > "$MUTI/artifact-path-config.sh"
-if cmp -s "$CONFIG" "$MUTI/artifact-path-config.sh"; then
-  bad "FIXTURE ERROR: the consumer-areas mutation matched nothing, so ARM B proves nothing"
-else
-  m_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$MUTI/m.sh" --root "$wi" 2>&1)")"
-  if grep -q "_bmad-output/brainstorming" <<<"$m_inf"; then
-    ok "MUTATION — without the consumer read, a declared area is inferred again: the join is load-bearing"
-  else
-    bad "MUTATION — the declared area stayed out even without reading the consumer's file, so ARM B is vacuous"
-  fi
-fi
-rm -rf "$wi" "$MUTI"
 
 # =============================================================================
 # THE REMEDY NAMES THE --root TREE's FILE, NOT THE RESOLVER's OWN TREE's.
@@ -610,8 +531,8 @@ rm -rf "$wi" "$MUTI"
 VAL="$(pick "$HERE/../../scripts/validate-artifact-paths.sh" \
             "$HERE/../../../scripts/ai-dlc/validate-artifact-paths.sh" \
             "$HERE/../../core/scripts/validate-artifact-paths.sh")"
-ra="$(bash "$HERE/seed.sh" "$GRAMMAR")"
-rb="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+ra="$(clone_world)"
+rb="$(clone_world)"
 sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-A-FILE.md@' \
   "$ra/.claude/skills/ai-dlc/layer-contract.yaml" > "$ra/lc.tmp" && mv "$ra/lc.tmp" "$ra/.claude/skills/ai-dlc/layer-contract.yaml"
 sed 's@^consumer_artifact_paths_file:.*@consumer_artifact_paths_file: TREE-B-FILE.md@' \
@@ -652,27 +573,117 @@ if [ -n "$VAL" ]; then
 else
   bad "FIXTURE ERROR: cannot locate validate-artifact-paths.sh, so its NO-AREA remedy is unchecked"
 fi
-# MUTANTS — drop `--root` from each remedy lookup, in a copy carrying its resolver sibling. Each
-# must then name TREE B, a PRESENCE the mutant has to produce: a copy that never ran emits nothing
-# and fails this rather than scoring a kill.
-MUTR="$ra-mut"; rm -rf "$MUTR"; lay_pair "$MUTR"
-[ -n "$VAL" ] && cp "$VAL" "$MUTR/v.sh"
-# $1 tag  $2 subject  $3 copy  $4 runner producing the remedy text
-remedy_mutant() {
-  asserts=$((asserts+1))
-  sed 's@--consumer-file --root "\$ROOT_ABS"@--consumer-file@' "$2" > "$3.tmp" && mv "$3.tmp" "$3"
-  if cmp -s "$2" "$3"; then
-    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$1"; return
-  fi
-  if grep -q 'TREE-B-FILE\.md' <<<"$($4)"; then printf '  ok    MUTANT %-18s %s\n' "$1" "without --root the remedy names tree B's file: the argument is load-bearing"
-  else fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip: the remedy-root arm cannot see a dropped --root\n' "$1"; fi
-}
-run_mig_mut() { (cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MUTR/m.sh" --root "$ra" 2>&1); }
-run_val_mut() { sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MUTR/v.sh" --root "$ra" 2>&1)"; }
-remedy_mutant 'remedy-root-mig' "$MIG" "$MUTR/m.sh" run_mig_mut
-[ -n "$VAL" ] && remedy_mutant 'remedy-root-val' "$VAL" "$MUTR/v.sh" run_val_mut
-rm -rf "$ra" "$rb" "$MUTR"
 
+# =============================================================================
+# 6. MUTANTS. Each removes ONE mechanism. An ARM is a named predicate over what a copy of the program
+#    produced: T-* read the TREE after --apply, R-* read the report. Every mutant is a guarded COPY
+#    (a sed that matches nothing is a failure) laid down beside its resolver sibling, so a copy that
+#    cannot run is not scored as a kill; the unmutated control below runs the same layout.
+#    Per push: the deciding arm must stop holding and the twin must keep holding. `--matrix` runs
+#    every arm against every mutant and prints one row per cell.
+# =============================================================================
+MUT="$(mktemp -d "${TMPDIR:-/tmp}/apmig-mut-XXXXXX")"
+RW="$(clone_world)"
+mkdir -p "$RW/.claude/skills/ai-dlc"
+printf '# consumer artifact paths\n\nareas:\n  _bmad-output/brainstorming\n' > "$RW/.claude/skills/ai-dlc/artifact-paths.md"
+ARMS="T-wholepath T-ambig T-storyalpha T-storybeta T-conform T-hdr R-areas R-remedy-mig R-remedy-val"
+lay_dir() { lay_pair "$1"; [ -z "$VAL" ] || cp "$VAL" "$1/v.sh"; }
+names_a() { grep -q 'TREE-A-FILE\.md' <<<"$1" && ! grep -q 'TREE-B-FILE\.md' <<<"$1" \
+              && ! grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$1"; }
+# arm_hold <arm> <dir> -> returns 0 when the arm's expectation holds for the copy laid down in <dir>
+arm_hold() {
+  local a="$1" d="$2" w o
+  case "$a" in
+    T-*)
+      if [ ! -f "$d/treepath" ]; then
+        w="$(clone_world)" || return 2
+        bash "$d/m.sh" --root "$w" --apply >/dev/null 2>&1
+        printf '%s' "$w" > "$d/treepath"
+      fi
+      w="$(cat "$d/treepath")" ;;
+  esac
+  case "$a" in
+    T-wholepath)  [ ! -f "$w/docs/retro/sprint-301.md" ] && [ -f "$w/docs/retro/s301/retro.md" ] ;;
+    T-ambig)      [ -f "$w/_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" ] ;;
+    T-storyalpha) [ -f "$w/_bmad-output/planning-artifacts/s301/stories/story-1-alpha.md" ] ;;
+    T-storybeta)  [ -f "$w/_bmad-output/planning-artifacts/s297/stories/story-1-beta.md" ] ;;
+    T-conform)    [ -f "$w/_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" ] \
+                    && [ ! -f "$w/_bmad-output/planning-artifacts/s299/stories/story-3-gamma.md" ] ;;
+    T-hdr)        [ -f "$w/_bmad-output/planning-artifacts/s53/stories/story-1-effective-spread-500.md" ] \
+                    && [ -f "$w/_bmad-output/planning-artifacts/s185/stories/story-1-three-digit.md" ] \
+                    && [ -f "$w/_bmad-output/planning-artifacts/s72/stories/bug-124-deployed-range.md" ] ;;
+    R-areas)      o="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$d/m.sh" --root "$RW" 2>&1)")"
+                  ! grep -q "_bmad-output/brainstorming" <<<"$o" && grep -q "party-verdicts-retro" <<<"$o" ;;
+    R-remedy-mig) names_a "$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$d/m.sh" --root "$ra" 2>&1)" ;;
+    R-remedy-val) [ -f "$d/v.sh" ] && names_a "$(sed -n '/NO-AREA/,/move it under one/p' <<<"$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$d/v.sh" --root "$ra" 2>&1)")" ;;
+  esac
+}
+SHIPD="$MUT/ship"; lay_dir "$SHIPD"
+# mutant_score <name> <m|c|v: which file the sed edits> <sed flag> <sed program> <deciding arm> <twin arm> <claim>
+mutant_score() {
+  local n="$1" which="$2" flag="$3" prog="$4" dec="$5" tw="$6" claim="$7" d="$MUT/$1" src dst a base
+  lay_dir "$d"
+  case "$which" in m) src="$MIG"; dst="$d/m.sh" ;; c) src="$CONFIG"; dst="$d/artifact-path-config.sh" ;; v) src="$VAL"; dst="$d/v.sh" ;; esac
+  sed $flag "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
+  if cmp -s "$src" "$dst"; then bad "MUTANT $n sed matched NOTHING -- the mutant IS the original"; return; fi
+  if [ "$MATRIX" = 1 ]; then
+    for a in $ARMS; do
+      if arm_hold "$a" "$d"; then w=GREEN; else w=TRIPPED; fi
+      if arm_hold "$a" "$SHIPD"; then sw=GREEN; else sw=TRIPPED; fi
+      if [ "$w" = "$sw" ]; then kd=no; else kd=yes; fi
+      matrix_row "$n" "$a" 0 "$w" "$kd"; MROWS=$((MROWS + 1))
+    done
+    ok "MATRIX $n measured against $(printf '%s\n' $ARMS | grep -c .) arms"
+    return 0
+  fi
+  if arm_hold "$dec" "$SHIPD"; then base=1; else base=0; fi
+  if arm_hold "$dec" "$d"; then bad "MUTANT $n SURVIVED on $dec -- $claim"
+  else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+  if arm_hold "$tw" "$d"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
+  else bad "T-$n twin $tw TRIPPED under mutant $n -- the matrix row for this mutant moved"; fi
+}
+
+# UNMUTATED CONTROL, from the same directory layout: every arm must hold on a copy the way it does on
+# the shipped file, so a harness that cannot run a copy reports itself broken instead of scoring kills.
+# HERE-STRING, NOT A PIPE: `... | grep -q` under pipefail answers with the writer's SIGPIPE on a match.
+lay_dir "$MUT/control"
+ctl_held=0; ctl_n=0
+for a in $ARMS; do ctl_n=$((ctl_n + 1)); arm_hold "$a" "$MUT/control" && ctl_held=$((ctl_held + 1)); done
+ctl_out="$(bash "$MUT/control/m.sh" --root "$(clone_world)" 2>&1)"
+if [ "$ctl_held" -eq "$ctl_n" ] && grep -q "outside the slot: 0" <<<"$ctl_out"; then
+  ok "CONTROL: an unmutated copy in the mutant directory holds all $ctl_n arms and passes its own self-check"
+else
+  bad "CONTROL: an unmutated copy held $ctl_held of $ctl_n arms (or failed its self-check) -- the mutant harness is what is broken, not the mutants"
+fi
+
+mutant_score whole-path-scan m -E "s@[|] tr '/' '.n' [|]@|@" T-wholepath T-conform \
+  'scanning the whole path leaves docs/retro/sprint-301.md unmigrated -- the 668-vs-2551 defect'
+mutant_score ambiguity-allowed m -E 's@^  if \[ "\$nhits" -gt 1 \]; then@  hits="$(printf "%s" "$hits" | head -1)"; nhits=1\n  if [ "$nhits" -gt 1 ]; then@' T-ambig T-conform \
+  'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
+mutant_score stories-half-migrated m -E 's@/story-s@/story-@' T-storybeta T-storyalpha \
+  'without the bare-number normalisation one sprint stories split across two conventions (beta keeps its number)'
+mutant_score story-slot-blind m -E 's@^  local head=@  return 0\n  local head=@' T-conform T-storyalpha \
+  'a conforming story is re-migrated once the s<N>/-above-it test stops firing'
+mutant_score hdr-over-name-off m -E 's@^      if \[ -n "\$hd_n" \] && \[ -n "\$nm_n" \] && \[ "\$hd_n" != "\$nm_n" \]; then@      if false; then@' T-hdr T-storyalpha \
+  'without the override the item number is read as the sprint (s102, s230)'
+mutant_score consumer-areas c "" 's@^  CONSUMER_AREAS="\$(areas_of "\$CONSUMER_AREAS_REL")"@  CONSUMER_AREAS=""@' R-areas T-conform \
+  'without the consumer read, a declared area is inferred again: the join is load-bearing'
+mutant_score remedy-root-mig m "" 's@--consumer-file --root "\$ROOT_ABS"@--consumer-file@' R-remedy-mig T-conform \
+  'without --root the migration remedy names tree B file'
+mutant_score remedy-root-val v "" 's@--consumer-file --root "\$ROOT_ABS"@--consumer-file@' R-remedy-val T-conform \
+  'without --root the validator remedy names tree B file'
+
+# A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
+  else bad "MX plain run executed $MROWS matrix-only rows"; fi
+else
+  _nx=$(( 8 * $(printf '%s\n' $ARMS | grep -c .) ))
+  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (8 mutants)"
+  else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
+fi
+rm -rf "$ra" "$rb" "$RW" "$MUT"
+rm -rf "$TPL"
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
 echo "artifact-path-migration: $fails of $asserts assertion(s) FAILED" >&2

@@ -3,6 +3,7 @@ bash
 cat
 cmp
 cp
+cut
 dirname
 git
 grep

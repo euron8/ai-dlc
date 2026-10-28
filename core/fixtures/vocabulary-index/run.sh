@@ -84,6 +84,41 @@
 #
 # A mutant must fail ONLY its own assertion, so each verdict asserts the expected message
 # rather than merely a non-zero exit -- "it failed" is satisfied by a broken harness too.
+# THE MUTANT BATTERY IS SCORED ON ONE ARM PER MUTANT. Each mutant's deciding arm is the set of output
+# conditions its own world must satisfy (the refusal text its kill_check names, plus the absences);
+# the per-push run asserts the deciding arm holds on the mutant's own world and that ONE named twin,
+# a different mutant's arm, stays green on that same output. The full mutant x arm matrix is MEASURED
+# by the --matrix argv mode (every mutant's captured output scored against every arm) and is
+# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# replaces the exact-vector assertion that each mutant fails only its own assertion.
+# MUTANT-MATRIX m1 decides=m1 twins=m2
+# MUTANT-MATRIX m2 decides=m2 twins=m3
+# MUTANT-MATRIX m3 decides=m3 twins=m4
+# MUTANT-MATRIX m4 decides=m4 twins=m5
+# MUTANT-MATRIX m5 decides=m5 twins=m6
+# MUTANT-MATRIX m6 decides=m6 twins=m7
+# MUTANT-MATRIX m7 decides=m7 twins=m8
+# MUTANT-MATRIX m8 decides=m8 twins=m9
+# MUTANT-MATRIX m9 decides=m9 twins=m10
+# MUTANT-MATRIX m10 decides=m10 twins=m11
+# MUTANT-MATRIX m11 decides=m11 twins=m12
+# MUTANT-MATRIX m12 decides=m12 twins=m13
+# MUTANT-MATRIX m13 decides=m13 twins=m14
+# MUTANT-MATRIX m14 decides=m14 twins=m15
+# MUTANT-MATRIX m15 decides=m15 twins=m16
+# MUTANT-MATRIX m16 decides=m16 twins=m17
+# MUTANT-MATRIX m17 decides=m17 twins=m18
+# MUTANT-MATRIX m18 decides=m18 twins=m19
+# MUTANT-MATRIX m19 decides=m19 twins=m20
+# MUTANT-MATRIX m20 decides=m20 twins=m21
+# MUTANT-MATRIX m21 decides=m21 twins=m22
+# MUTANT-MATRIX m22 decides=m22 twins=m23
+# MUTANT-MATRIX m23 decides=m23 twins=m24
+# MUTANT-MATRIX m24 decides=m24 twins=m23
+# MUTANT-MATRIX-CONTROL n1 why=a near-miss that must render: two adjacent marker blocks, one field each, asserted by its exit 0 and its index rows
+# MUTANT-MATRIX-CONTROL n2 why=a near-miss that must render: two vocabulary names sharing a prefix, asserted by its exit 0 and both index rows
+# MUTANT-MATRIX-CONTROL n3 why=a near-miss that must render: enum and enum2 in one object plus enum in a sibling, asserted by its exit 0 and both index rows
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/vocabulary-index/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -108,6 +143,21 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; fi
+MROWS=0
+ok()  { note "ok    $1"; }
+bad() { note "FAIL  $1"; rc=1; }
+MUT_LIB="$DIR/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
+. "$DIR/../lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+# B_BASE is set only in the passing branch of controlB, the unmutated seed every mutant world is built from.
+B_BASE=0
 
 # ---------------------------------------------------------------------------------------
 # The synthetic seed: a whole miniature repo the renderer can answer about.
@@ -327,8 +377,14 @@ EOF
 EOF
 }
 
-render_in() { ( cd "$1" && bash scripts/render-vocabulary-index.sh 2>&1 ); }
-check_in()  { ( cd "$1" && bash scripts/render-vocabulary-index.sh --check 2>&1 ); }
+# VI_FAST=1 drives the renderer with its --skip-selfprobe test seam. The self-probes read only their
+# own seeds under the renderer's PROBE_DIR, never the corpus, so every world below that varies the
+# CORPUS gets the same probe verdict as controlB. They are paid in full by controlA, controlB, the seam
+# arm, m1 (the one kill end to end) and n1 (the one green end to end): one per distinct outcome.
+# Everything after the probes is the same code, called unchanged.
+VI_FAST=0
+render_in() { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh 2>&1; fi ); }
+check_in()  { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --check --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh --check 2>&1; fi ); }
 
 # --- controlA: the real repo -------------------------------------------------
 if outA="$( cd "$REPO" && bash scripts/render-vocabulary-index.sh --check 2>&1 )" \
@@ -432,25 +488,117 @@ if grep -qE 'decoy-before|decoy-after' "$TMP/controlB/docs/vocabulary-index.md";
 fi
 if outB2="$(check_in "$TMP/controlB")" && grep -q "in sync" <<<"$outB2"; then
   note "ok    controlB -- seed renders every extractor, the derived columns, the consumer-owned row, and round-trips"
+  B_BASE=1
 else
   note "FIXTURE BROKEN: a freshly rendered index did not survive its own --check."
   printf '%s\n' "$outB2" | sed 's/^/      /' | head -6
   exit 1
 fi
 
+# --- the seam: banner, same index, and no shipped caller ---------------------------
+# A fast render of the same seed must print the not-a-verdict banner as stdout line 1 and write a
+# byte-identical index (the same functions run after the probes). A seam that rendered something
+# else would turn every fast world below into a different subject.
+seed "$TMP/seam"
+VI_FAST=1; outS="$(render_in "$TMP/seam")"; VI_FAST=0
+if [ "$(printf '%s\n' "$outS" | sed -n 1p | cut -c1-14)" = "NOT-A-VERDICT:" ] \
+   && cmp -s "$TMP/seam/docs/vocabulary-index.md" "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "ok    seam -- --skip-selfprobe prints the not-a-verdict banner first and renders the byte-identical index"
+else
+  note "FAIL  seam -- the fast render lacks the banner on line 1 or differs from the full render"; rc=1
+fi
+# No shipped caller passes the flag. Control in the same invocation: the same scan for the flag every
+# shipped caller DOES pass (--check) must find the pre-push hook, or the scan looked at nothing.
+seam_hits="$(grep -rlF -e '--skip-selfprobe' "$REPO/.githooks" "$REPO/core/scripts" "$REPO/core/git-hooks" "$REPO/core/skills" "$REPO/scripts" "$REPO/templates" 2>/dev/null | grep -v '/scripts/render-vocabulary-index.sh$')" || seam_hits=""
+seam_ctl="$(grep -rlF -e 'render-vocabulary-index.sh --check' "$REPO/.githooks" "$REPO/scripts" 2>/dev/null | grep -c .)" || seam_ctl=0
+if [ -z "$seam_hits" ] && [ "$seam_ctl" -ge 1 ]; then
+  note "ok    seam-callers -- no shipped caller passes --skip-selfprobe (control: $seam_ctl file(s) pass --check)"
+else
+  note "FAIL  seam-callers -- a shipped file passes --skip-selfprobe ('$seam_hits') or the control found $seam_ctl callers"; rc=1
+fi
+# The seam reads one variable, SKIP_SELFPROBE, and the renderer initialises it to 0 before it reads
+# argv. An inherited SKIP_SELFPROBE=1 with no flag must therefore NOT skip the probes: no banner, and
+# the output equals the plain render of the same seed.
+seed "$TMP/seamenv"
+outE="$( cd "$TMP/seamenv" && env SKIP_SELFPROBE=1 bash scripts/render-vocabulary-index.sh 2>&1 )"
+if [ "$(printf '%s\n' "$outE" | sed -n 1p | cut -c1-14)" != "NOT-A-VERDICT:" ] && [ "$outE" = "$outB" ]; then
+  note "ok    seam-env -- an inherited SKIP_SELFPROBE=1 with no flag does not skip the probes: no banner, output equals the plain render"
+else
+  note "FAIL  seam-env -- SKIP_SELFPROBE in the environment changed the render: line 1 is '$(printf '%s\n' "$outE" | sed -n 1p)'"; rc=1
+fi
+
 # --- mutant driver ----------------------------------------------------------
+# A mutant's DECIDING ARM is stored as files under $AR: <id>.pats (one condition per line, a leading !
+# means the text must be ABSENT), <id>.out (the captured output) and <id>.rc. Every arm can then be
+# scored against every captured output without another render, which is what --matrix does.
+AR="$TMP/arms"; mkdir -p "$AR"
+MUT_IDS=""
+twin_of() {
+  case "$1" in
+    m1) echo m2 ;;
+    m2) echo m3 ;;
+    m3) echo m4 ;;
+    m4) echo m5 ;;
+    m5) echo m6 ;;
+    m6) echo m7 ;;
+    m7) echo m8 ;;
+    m8) echo m9 ;;
+    m9) echo m10 ;;
+    m10) echo m11 ;;
+    m11) echo m12 ;;
+    m12) echo m13 ;;
+    m13) echo m14 ;;
+    m14) echo m15 ;;
+    m15) echo m16 ;;
+    m16) echo m17 ;;
+    m17) echo m18 ;;
+    m18) echo m19 ;;
+    m19) echo m20 ;;
+    m20) echo m21 ;;
+    m21) echo m22 ;;
+    m22) echo m23 ;;
+    m23) echo m24 ;;
+    m24) echo m23 ;;
+  esac
+}
+record_arm() { # record_arm <id> <rc> <out> <pattern>...
+  local id="$1" r="$2" o="$3"; shift 3
+  printf '%s\n' "$o" > "$AR/$id.out"; printf '%s\n' "$r" > "$AR/$id.rc"
+  printf '%s\n' "$@" > "$AR/$id.pats"
+  MUT_IDS="$MUT_IDS $id"
+}
+arm_holds() { # arm_holds <arm-id> <out-file> <rc of the run that produced it> -> 0 when the arm TRIPS on it
+  local a="$1" f="$2" r="$3" p
+  [ "$r" -ne 0 ] || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in
+      '!'*) if grep -qF -- "${p#\!}" "$f"; then return 1; fi ;;
+      *)    grep -qF -- "$p" "$f" || return 1 ;;
+    esac
+  done < "$AR/$a.pats"
+  return 0
+}
+judge() { # judge <name> <id> <rc> <out> [<message>]
+  local n="$1" id="$2" r="$3" o="$4" msg="${5:-}"
+  [ -n "$msg" ] || msg="$n -- scored on its own arm"
+  if [ "$r" -eq 0 ]; then
+    note "FAIL  $n -- mutant SURVIVED (renderer exited 0)"; rc=1; return
+  fi
+  if arm_holds "$id" "$AR/$id.out" "$r"; then
+    mutant_killed "$B_BASE" "$id" "$msg"
+  else
+    note "FAIL  $n -- renderer failed, but not on its own assertion"
+    printf '%s\n' "$o" | sed 's/^/      /' | head -5; rc=1
+  fi
+}
+
 kill_check() { # kill_check <name> <dir> <expected-substring> [check|render]
   local n="$1" d="$2" pat="$3" mode="${4:-check}" out rc_v
   if [ "$mode" = render ]; then out="$(render_in "$d")"; else out="$(check_in "$d")"; fi
   rc_v=$?
-  if [ "$rc_v" -eq 0 ]; then
-    note "FAIL  $n -- mutant SURVIVED (renderer exited 0)"; rc=1; return
-  fi
-  if ! grep -qF "$pat" <<<"$out"; then
-    note "FAIL  $n -- renderer failed, but not on its own assertion (wanted: $pat)"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
-  fi
-  note "ok    $n -- killed by its own arm"
+  record_arm "${n%% *}" "$rc_v" "$out" "$pat"
+  judge "$n" "${n%% *}" "$rc_v" "$out"
 }
 
 kill_check_all() { # kill_check_all <name> <dir> <check|render> <substring>... ; !<substring> = must be ABSENT
@@ -463,23 +611,11 @@ kill_check_all() { # kill_check_all <name> <dir> <check|render> <substring>... ;
   # satisfies "exited non-zero AND the refusal is in the output" and is not the subject. The
   # absence half never runs alone: the presence patterns in the same call are its control.
   local n="$1" d="$2" mode="$3"; shift 3
-  local out rc_v p miss=""
+  local out rc_v
   if [ "$mode" = render ]; then out="$(render_in "$d")"; else out="$(check_in "$d")"; fi
   rc_v=$?
-  if [ "$rc_v" -eq 0 ]; then
-    note "FAIL  $n -- mutant SURVIVED (renderer exited 0)"; rc=1; return
-  fi
-  for p in "$@"; do
-    case "$p" in
-      '!'*) grep -qF "${p#\!}" <<<"$out" && miss="$miss [must-be-absent: ${p#\!}]" ;;
-      *)    grep -qF "$p" <<<"$out" || miss="$miss [$p]" ;;
-    esac
-  done
-  if [ -n "$miss" ]; then
-    note "FAIL  $n -- renderer failed, but its message omits:$miss"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
-  fi
-  note "ok    $n -- killed by its own arm"
+  record_arm "${n%% *}" "$rc_v" "$out" "$@"
+  judge "$n" "${n%% *}" "$rc_v" "$out"
 }
 
 green_check() { # green_check <name> <dir> <expected-output-substring> <expected-index-row>...
@@ -504,7 +640,7 @@ green_check() { # green_check <name> <dir> <expected-output-substring> <expected
   if [ -n "$miss" ]; then
     note "FAIL  $n -- rendered, but the index is missing row(s):$miss"; rc=1; return
   fi
-  note "ok    $n -- rendered, both blocks intact"
+  note "ok    CONTROL $n -- survives as a render: exit 0, the report line and all $# expected index row(s) present"
 }
 
 mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a mutation
@@ -521,6 +657,7 @@ MAP='scripts/validate-enforcement-map.sh'
 seed "$TMP/m1"; render_in "$TMP/m1" >/dev/null
 printf '| ghost | `x` | `y` | I801 | `z` |\n' >> "$TMP/m1/docs/vocabulary-index.md"
 kill_check "m1  drift          stale index" "$TMP/m1" "docs/vocabulary-index.md is STALE"
+VI_FAST=1
 
 # m2 -- no index at all
 seed "$TMP/m2"; render_in "$TMP/m2" >/dev/null
@@ -654,6 +791,7 @@ fi
 # see that second shape: every block in it is bounded by an arm header, so the two
 # implementations render it identically.
 seed "$TMP/n1"
+VI_FAST=0
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
     "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
@@ -661,6 +799,7 @@ else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
+VI_FAST=1
 # m15 -- one field declared twice in one block, with CONTRADICTORY values.
 #
 # Both readers exist, so under a renderer that overwrites silently the mutant renders and
@@ -802,20 +941,8 @@ if [ -r "$TMP/m21/$MAP" ]; then
 else
   out21="$(render_in "$TMP/m21")"; rc21=$?
   chmod 644 "$TMP/m21/$MAP"
-  if [ "$rc21" -eq 0 ]; then
-    note "FAIL  m21 unreadable-src  an unreadable corpus -- mutant SURVIVED (renderer exited 0)"; rc=1
-  elif ! grep -qF 'cannot READ' <<<"$out21"; then
-    note "FAIL  m21 unreadable-src  renderer exited $rc21 but did not name the READ fault"
-    printf '%s\n' "$out21" | sed 's/^/      /' | head -5; rc=1
-  elif ! grep -qF "$MAP" <<<"$out21"; then
-    note "FAIL  m21 unreadable-src  the READ fault does not name $MAP"
-    printf '%s\n' "$out21" | sed 's/^/      /' | head -5; rc=1
-  elif grep -qF 'parsed ZERO vocabulary markers' <<<"$out21"; then
-    note "FAIL  m21 unreadable-src  a READ fault was MISATTRIBUTED to the marker grammar"
-    printf '%s\n' "$out21" | sed 's/^/      /' | head -5; rc=1
-  else
-    note "ok    m21 unreadable-src  unreadable corpus named as a READ fault, not a grammar change"
-  fi
+  record_arm m21 "$rc21" "$out21" 'cannot READ' "$MAP" '!parsed ZERO vocabulary markers'
+  judge "m21 unreadable-src" m21 "$rc21" "$out21" "m21 unreadable-src  unreadable corpus named as a READ fault, not a grammar change"
 fi
 
 # m22 -- one field declared twice in one block, with the two declarations SEPARATED.
@@ -909,7 +1036,31 @@ green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$T
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
+# --- twins, and the matrix -------------------------------------------------------
+for a in $MUT_IDS; do
+  tw="$(twin_of "$a")"
+  if arm_holds "$tw" "$AR/$a.out" "$(cat "$AR/$a.rc")"; then
+    bad "[twin] $a -- the twin arm $tw TRIPPED on $a's output, so the kill is not confined to $a's own arm"
+  else
+    ok "[twin] $a -- twin $tw stays green on $a's output: the failure is confined to $a's own arm"
+  fi
+done
+if [ "$MATRIX" = 1 ]; then
+  for m in $MUT_IDS; do
+    mrc="$(cat "$AR/$m.rc")"
+    for a in $MUT_IDS; do
+      if arm_holds "$a" "$AR/$m.out" "$mrc"; then matrix_row "$m" "$a" "$mrc" TRIPPED yes
+      else matrix_row "$m" "$a" "$mrc" GREEN no; fi
+      MROWS=$((MROWS + 1))
+    done
+  done
+  n_ids="$(printf '%s\n' $MUT_IDS | grep -c .)"
+  if [ "$MROWS" -eq $((n_ids * n_ids)) ] && [ "$n_ids" -eq 24 ]; then ok "[MX] the matrix run measured $MROWS cells for $n_ids mutants"; else bad "[MX] matrix rows=$MROWS for $n_ids mutants, 576 for 24 expected"; fi
+else
+  if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
+fi
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls + 4 near-miss green, 24/24 mutants killed by their own arm"
+  note "PASS  vocabulary-index -- 2 controls + 4 near-miss green, 24/24 mutants scored on their own arm with the twin green"
 fi
 exit "$rc"

@@ -36,7 +36,7 @@
 #   s-pathlen EQUAL: prints the lengths of TMPDIR and HOME, which differ between the runs unless the plain
 #             side's paths are as long as the sandbox's (path-length world only).
 #   s-marker  writes `.claude` into the census's scratch base during its own run (end-walk world only).
-#   s-killed  on the plain side kills its own census worker (its parent, checked to be a `--pair` process),
+#   s-selfkill  on the plain side kills its own census worker (its parent, checked to be a `--pair` process),
 #             so the run is incomplete and the pair's physical root is left (incomplete-run world only).
 # WORLD B: s-dirty writes into the plain root -> REFUSED gitstate:status, and s-after behind it -> NOT-RUN.
 # SCRATCH: every census call takes --scratch under a /private/tmp/chcfx.* base the fixture checks is marker-free.
@@ -46,7 +46,7 @@
 #   end walk s-marker plants one mid-run; the census exits 2 naming it.
 #   probe leak FI, a copy whose self-probe pair link resolves wrong, exits 2 and leaves no chc.* root (M22 drops that
 #            cleanup and leaves one).
-#   incomplete s-killed leaves its root; the summary names it by path and counts it, and it is on disk.
+#   incomplete s-selfkill leaves its root; the summary names it by path and counts it, and it is on disk.
 # STORE: the census leaves $HOME/.cache/ai-dlc/verdicts empty while its per-pair stores hold entries;
 #   control: hermetic-run run directly with no AI_DLC_VERDICT_STORE writes under that HOME.
 # MUTANTS, each a copy of the census, guarded by an exact replacement count and `cmp -s`:
@@ -65,8 +65,8 @@
 #   M12 no multiplicity guard                   -> self-probe names E4; probe removed, s-repeat reads EQUIVALENT
 #   M13 no token required to move               -> self-probe names E3; probe removed, s-mixed reads EQUIVALENT
 #   M14 fixture-rc-2 folded into REFUSED        -> summary reads REFUSED=2 fixture-rc-2=0 (control: 1/1)
-#   M15 EQUIVALENT fails the exit test          -> s-quiet + s-volatile exits 1 (control: 0)
-#   M16 BOTH-FAIL passes the exit test          -> s-quiet + s-bothfail exits 0 (control: 1)
+#   M15 EQUIVALENT fails the exit test          -> s-volatile alone exits 1 (control: 0, read off the cleanup run)
+#   M16 BOTH-FAIL passes the exit test          -> s-bothfail alone exits 0 (control: 1)
 #   M17 only the pair link removed              -> physical chc.* roots leak under a non-keep run
 #   M18 pair dir built in the work tree         -> the pair dir is a plain dir, not a link
 #   M19 no preflight marker walk                -> s-low reaches the runner, whose escape guard refuses it
@@ -75,6 +75,52 @@
 #   M22 the probe's failure path keeps its root -> a self-probe resolve failure leaves one chc.* root
 #   M23 short plain HOME/TMPDIR (`$T/phome`,    -> s-pathlen MISMATCH DIFFER (control: EQUAL)
 #       `$T/ptmp`), not the sandbox's length
+#
+# MUTANT MATRIX. "Each mutant flips ONLY its own cell" is a test-quality property, not a per-push one. Per push
+# each mutant runs its deciding cell (must flip) and a twin cell (measured GREEN under that mutant, must hold).
+# `--matrix` censuses every world-A fixture under each mutant that allows it and prints one MATRIX row per arm.
+# A mutant whose census refuses before any fixture runs, or whose observable is a scratch layout or a marker
+# walk, is measured on its own observable only. Re-measure whenever a mutant or a world fixture is added or
+# changed.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/census-hermetic-coverage/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC probe_dies why=passes M1 M2 M7 M8 M9 M10 M11 M12 M13 M21 and their -np twins as one variable
+# MUTANT-MATRIX-DYNAMIC world_dies why=passes M3 M4 M5 M6 as one variable
+# MUTANT-MATRIX M1 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M1-np decides=s-skip twins=s-quiet
+# MUTANT-MATRIX M2 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M2-np decides=s-silent twins=s-quiet
+# MUTANT-MATRIX M7 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M7-np decides=s-absent twins=s-quiet
+# MUTANT-MATRIX M8 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M8-np decides=s-digit twins=s-quiet
+# MUTANT-MATRIX M9 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M9-np decides=s-bothfail twins=s-quiet
+# MUTANT-MATRIX M10 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M10-np decides=s-rc2 twins=s-quiet
+# MUTANT-MATRIX M11 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M11-np decides=s-mixed twins=s-quiet
+# MUTANT-MATRIX M12 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M12-np decides=s-repeat twins=s-quiet
+# MUTANT-MATRIX M13 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M13-np decides=s-mixed twins=s-quiet
+# MUTANT-MATRIX M21 decides=selfprobe twins=-  why=the census refuses before any fixture runs, so no sibling cell exists
+# MUTANT-MATRIX M21-np decides=s-flicker twins=s-quiet
+# MUTANT-MATRIX M3 decides=s-skip twins=s-quiet
+# MUTANT-MATRIX M4 decides=s-quiet twins=s-digit
+# MUTANT-MATRIX M5 decides=s-quiet twins=s-skip
+# MUTANT-MATRIX M6 decides=s-quiet twins=s-skip
+# MUTANT-MATRIX M23 decides=s-pathlen twins=s-quiet
+# MUTANT-MATRIX M14 decides=summary twins=s-rc2
+# MUTANT-MATRIX M15 decides=exit twins=s-volatile
+# MUTANT-MATRIX M16 decides=exit twins=s-bothfail
+# MUTANT-MATRIX M17 decides=leaked-roots twins=s-quiet
+# MUTANT-MATRIX M18 decides=pair-dir-link twins=s-quiet
+# MUTANT-MATRIX M19 decides=s-low twins=-  why=a one-fixture census, so no sibling cell exists
+# MUTANT-MATRIX M20 decides=exit twins=s-low
+# MUTANT-MATRIX M22 decides=leaked-probe-root twins=-  why=the census refuses at its self-probe before any fixture runs
+# MUTANT-MATRIX-CONTROL unmutated-copy why=an unmutated copy of the census, driven from outside the world like every mutant, must read the shipped verdicts
+# MUTANT-MATRIX-CONTROL M0 why=removing the self-probe call alone must change no cell; the correct outcome is survival
+# MUTANT-MATRIX-CONTROL FI why=an injected resolve failure that is the baseline M22 drops a cleanup from; it must be refused and leak nothing
 #
 # M11 and M13 are re-anchored on the three-rep rule: M11 acquits a line that moves as a whole, M13 checks no
 # token at all.
@@ -124,6 +170,21 @@ done
 FAILS=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
+MWIDE=0; MROWS=0
+. "$HERE/../lib/matrix.sh"
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# mcell <mutant> <arm> <result 0 green|1 tripped>: one matrix row, printed by the sourced matrix_row, and only
+# under --matrix (a plain run prints none and counts none).
+mcell() {
+  [ "$MATRIX" = 1 ] || return 0
+  MROWS=$((MROWS + 1))
+  if [ "$3" = 1 ]; then matrix_row "$1" "$2" 1 TRIPPED yes; else matrix_row "$1" "$2" 0 GREEN no; fi
+}
+B_ctl=0
 echo "census-hermetic-coverage:"
 
 # --- worlds -------------------------------------------------------------------------------------
@@ -210,7 +271,7 @@ exit 0" cat
 cnt() { printf 'c="%s"; n=0; [ -f "$c" ] && n="$(cat "$c")"; n=$((n + 1)); echo "$n" > "$c"' "$1"; }
 fx "$WA" s-flicker 'data/a.txt' "$(cnt "$WORK/flicker.count")
 [ -e .git ] && k=13 || k=\$((11 + (n / 2) % 2))
-echo \"ok \$k mutants killed\"
+echo \"ok \$k mutants scored\"
 echo \"ok b\"; echo \"ok c\"
 exit 0" cat
 fx "$WA" s-overlap 'data/a.txt' "$(cnt "$WORK/overlap.count")
@@ -225,9 +286,9 @@ exit 0'
 fx "$WA" s-marker 'data/a.txt' 'b="${TMPDIR%%/chc.*}"; [ "$b" != "$TMPDIR" ] && mkdir -p "$b/.claude"
 echo "ok a"; echo "ok b"; echo "ok c"
 exit 0' mkdir
-# s-killed kills its parent only when that parent is a census worker (`--pair` in its argv), and only on the
+# s-selfkill kills its parent only when that parent is a census worker (`--pair` in its argv), and only on the
 # plain side; a pid it cannot confirm is left alone, and the incomplete-run arm then fails presence-shaped.
-fx "$WA" s-killed 'data/a.txt' 'echo "ok a"; echo "ok b"; echo "ok c"
+fx "$WA" s-selfkill 'data/a.txt' 'echo "ok a"; echo "ok b"; echo "ok c"
 if [ -e .git ]; then
   case "$(/bin/ps -o command= -p "$PPID" 2>/dev/null)" in *census-hermetic-coverage*--pair*) kill -9 "$PPID" ;; esac
 fi
@@ -252,23 +313,42 @@ census() {
   C_ERR="$(cd "$2" && HOME="$WORK/home$C_N" bash "$1" --root "$2" --list "$3" --jobs "$4" --work "$WORK/cw$C_N" --scratch "$C_SCR" $C_KEEP --out "$C_TSV" 2>&1 >/dev/null)"; C_RC=$?
   [ -f "$C_TSV" ] || : > "$C_TSV"
 }
+# mcensus <script> <world> <list> <jobs> <mutant>: a mutant's census. Under --matrix it is widened to every
+# world-A fixture and one row per fixture, plus selfprobe and exit, is printed against the control's verdicts.
+ALLA="s-quiet s-skip s-digit s-silent s-low s-absent s-flaky s-bothfail s-rc2 s-volatile s-mixed s-repeat s-flicker s-overlap s-pathlen"
+mcensus() {
+  if [ "$MATRIX" = 1 ] && [ "$2" = "$WA" ]; then
+    MWIDE=$((MWIDE + 1)); census "$1" "$2" "$ALLA" 3
+    local f v t=0
+    grep -qF "$PROBE_OK" <<<"$C_ERR" || t=1
+    mcell "$5" selfprobe "$t"
+    t=0; [ "$C_RC" = 1 ] || t=1
+    mcell "$5" exit "$t"
+    for f in $ALLA; do v="CTL_${f//-/_}"; t=0; [ "$(vd "$f")" = "${!v}" ] || t=1; mcell "$5" "$f" "$t"; done
+    mcell "$5" summary "$(grep -qF 'fixture-rc-2=1' <<<"$C_ERR" && echo 0 || echo 1)"
+  else census "$1" "$2" "$3" "$4"; fi
+}
 chc_count() { find "$1" -mindepth 1 -maxdepth 1 -name 'chc.??????' | wc -l | tr -d ' '; } # <scratch base>
 cell() { awk -F'\t' -v f="$1" -v c="$2" '$1 == f { print $c; exit }' "$C_TSV"; } # <fixture> <column>
 vd() { printf '%s %s' "$(cell "$1" 2)" "$(cell "$1" 3)"; }                   # verdict + direction
 eq()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1 (absent: $3)"; fi; }
+# kill_eq/kill_has <flag> <mutant> <msg> <got> <want>: a mutant's deciding assertion, emitted only through mutant_killed.
+kill_eq() { if [ "$4" = "$5" ]; then mutant_killed "$1" "$2" "$3"; else bad "$3 (got '$4', want '$5')"; fi; }
+kill_has() { if grep -qF -- "$5" <<<"$4"; then mutant_killed "$1" "$2" "$3"; else bad "$3 (absent: $5)"; fi; }
 
 # --- control: the unmutated census over world A ---------------------------------------------------
 rm -f "$WORK/flaky.count"
 PROBE_OK='self-probe: ok (21 cases)'
-census "$CENSUS" "$WA" "s-quiet s-skip s-digit s-silent s-low s-absent s-flaky s-bothfail s-rc2 s-volatile s-mixed s-repeat s-flicker s-overlap" 3
+census "$CENSUS" "$WA" "s-quiet s-skip s-digit s-silent s-low s-absent s-flaky s-bothfail s-rc2 s-volatile s-mixed s-repeat s-flicker s-overlap s-pathlen" 3
 if ! grep -qF "$PROBE_OK" <<<"$C_ERR" || [ "$(cell s-quiet 2)" != EQUAL ]; then
   echo "FIXTURE BROKEN: the unmutated census did not run cleanly over world A (rc=$C_RC); no mutant verdict below would mean anything" >&2
   printf '%s\n' "$C_ERR" | head -20 >&2; cat "$C_TSV" >&2
   exit 2
 fi
-eq "c: unmutated census exits 1 on a world holding a mismatch" "$C_RC" 1
-has "c: summary line counts every verdict" "$C_ERR" "fixtures=14 EQUAL=1 EQUIVALENT=2 LOW-RES=1 MISMATCH=5 BOTH-FAIL=1 FLAKY=1 UNCOUNTABLE=1 REFUSED=1 fixture-rc-2=1 NOT-RUN=0 plain-more=1 no-git-decl=1"
+if [ "$C_RC" = 1 ] && [ "$(vd s-quiet)" = "EQUAL -" ]; then ok "c: unmutated census exits 1 on a world holding a mismatch"; B_ctl=1; else bad "c: unmutated census exits 1 on a world holding a mismatch (got '$C_RC')"; fi
+for _f in $ALLA; do printf -v "CTL_${_f//-/_}" '%s' "$(vd "$_f")"; done
+has "c: summary line counts every verdict" "$C_ERR" "fixtures=15 EQUAL=2 EQUIVALENT=2 LOW-RES=1 MISMATCH=5 BOTH-FAIL=1 FLAKY=1 UNCOUNTABLE=1 REFUSED=1 fixture-rc-2=1 NOT-RUN=0 plain-more=1 no-git-decl=1"
 eq "c: s-quiet (cwd read, farm tool, stderr line, root and scratch paths) reads EQUAL" "$(vd s-quiet)" "EQUAL -"
 eq "c: s-quiet carries no diff" "$(cell s-quiet 13)" "-"
 eq "c: s-quiet counted 5 ok lines on each side" "$(cell s-quiet 8)/$(cell s-quiet 9)" "5/5"
@@ -298,6 +378,10 @@ eq "c: s-flicker (13 stable plain, 11/12 moving hermetic) reads MISMATCH" "$(vd 
 has "c: s-flicker's note names the disjoint count" "$(cell s-flicker 12)" "MISMATCH disjoint count 13,13,13/"
 eq "c: s-overlap (3335/3337 plain, 3336 hermetic) reads EQUIVALENT" "$(vd s-overlap)" "EQUIVALENT DIFFER"
 has "c: s-overlap's note is judged over three reps" "$(cell s-overlap 12)" "each passing its rule over three reps"
+# Path length: the plain HOME and TMPDIR are as long as the sandbox's, so a fixture printing their lengths
+# reads EQUAL (read from the control census; M23 restores the short spelling and the same fixture splits).
+eq "pathlen: s-pathlen (prints the lengths of TMPDIR and HOME) reads EQUAL" "$(vd s-pathlen)" "EQUAL -"
+eq "pathlen: s-pathlen counted 3 ok lines on each side" "$(cell s-pathlen 8)/$(cell s-pathlen 9)" "3/3"
 
 # --- the short physical scratch root -------------------------------------------------------------
 pl="$(find "$WORK/cw1" -path '*/p.0001/1' | head -1)"
@@ -346,113 +430,127 @@ NP_O='census_selfprobe || exit 2'; NP_N=': census_selfprobe skipped'
 # M0: the probe removed alone changes no cell, and its line vanishes.
 if P="$(mut M0 1 "$NP_O" "$NP_N")"; then
   census "$P" "$WA" "s-quiet s-skip" 2
-  if grep -qF 'self-probe: ok' <<<"$C_ERR"; then bad "M0: the self-probe line survived its own removal"; else ok "M0: no self-probe line once the call is removed"; fi
-  eq "M0: s-quiet still EQUAL" "$(vd s-quiet)" "EQUAL -"
-  eq "M0: s-skip still MISMATCH PLAIN-MORE" "$(vd s-skip)" "MISMATCH PLAIN-MORE"
+  if grep -qF 'self-probe: ok' <<<"$C_ERR"; then bad "CONTROL M0: the self-probe line survived its own removal"; else ok "CONTROL M0: no self-probe line once the call is removed; the only absent row"; fi
+  eq "CONTROL M0: s-quiet still EQUAL, the survival" "$(vd s-quiet)" "EQUAL -"
+  eq "CONTROL M0: s-skip still MISMATCH PLAIN-MORE, the survival" "$(vd s-skip)" "MISMATCH PLAIN-MORE"
 else bad "M0: DID NOT APPLY"; fi
 
+# The unmutated copy: the mutant harness (a copy of the census outside the world) driving the shipped behaviour green.
+if P="$WORK/mut/ctl.sh" && cp "$CENSUS" "$P" && cmp -s "$CENSUS" "$P"; then
+  census "$P" "$WA" "s-quiet s-skip" 2
+  has "CONTROL unmutated-copy: the self-probe passes in an unmutated copy" "$C_ERR" "$PROBE_OK"
+  eq "CONTROL unmutated-copy: s-quiet reads EQUAL, the shipped verdict" "$(vd s-quiet)" "EQUAL -"
+  eq "CONTROL unmutated-copy: s-skip reads MISMATCH PLAIN-MORE, the shipped verdict" "$(vd s-skip)" "MISMATCH PLAIN-MORE"
+else bad "CONTROL unmutated-copy: the copy was not made"; fi
+
 # probe-killed mutants: as-is the self-probe refuses naming its case; with the probe removed a world cell flips.
-probe_killed() { # <id> <probe case> <fixture> <want verdict+direction> <count> <old> <new>
+probe_dies() { # <id> <probe case> <fixture> <want verdict+direction> <count> <old> <new>
   local id="$1" pc="$2" f="$3" want="$4" P; shift 4
   if P="$(mut "$id" "$@")"; then
     census "$P" "$WA" "s-quiet" 1
-    eq "$id: the census refuses (exit 2)" "$C_RC" 2
+    mcell "$id" selfprobe "$(grep -qF "self-probe FAILED: case $pc" <<<"$C_ERR" && echo 1 || echo 0)"
+    kill_eq "$B_ctl" "$id" "$id: the census refuses (exit 2)" "$C_RC" 2
     has "$id: the self-probe names case $pc" "$C_ERR" "self-probe FAILED: case $pc"
   else bad "$id: DID NOT APPLY"; fi
   if P="$(mut "$id-np" "$@" 1 "$NP_O" "$NP_N")"; then
-    census "$P" "$WA" "s-quiet $f" 2
-    eq "$id (probe removed): s-quiet still EQUAL, so the mutant ran" "$(vd s-quiet)" "EQUAL -"
-    eq "$id (probe removed): $f reads $want" "$(vd "$f")" "$want"
+    mcensus "$P" "$WA" "s-quiet $f" 2 "$id-np"
+    eq "$id (probe removed): twin s-quiet still EQUAL, so the mutant ran and flipped only $f" "$(vd s-quiet)" "EQUAL -"
+    kill_eq "$B_ctl" "$id-np" "$id (probe removed): $f reads $want" "$(vd "$f")" "$want"
   else bad "$id-np: DID NOT APPLY"; fi
 }
-probe_killed M1 P2 s-skip "EQUAL -" \
+probe_dies M1 P2 s-skip "EQUAL -" \
   1 'elif [ "$2" = "$3" ] && [ "$po" -eq 0 ] && [ "$ho" -eq 0 ]; then' 'elif [ "$2" = "$3" ]; then'
-probe_killed M2 P3 s-silent "LOW-RES -" \
+probe_dies M2 P3 s-silent "LOW-RES -" \
   1 'elif [ "$pn" -eq 0 ]; then v=UNCOUNTABLE' 'elif false; then v=UNCOUNTABLE'
-probe_killed M7 P4 s-absent "MISMATCH PLAIN-MORE" \
+probe_dies M7 P4 s-absent "MISMATCH PLAIN-MORE" \
   1 'if [ "$1" = 2 ]; then v=REFUSED' 'if false; then v=REFUSED'
 # M8 folds digits AFTER the path swaps, so the paths still normalise and s-quiet stays its control.
-probe_killed M8 P5 s-digit "EQUAL -" \
+probe_dies M8 P5 s-digit "EQUAL -" \
   1 '      print s' '      gsub(/[0-9]+/, "N", s); print s'
 
 # world-killed mutants: the self-probe passes, and a world cell names the reason.
-world_killed() { # <id> <fixture> <want verdict+direction> <diff needle or -> <count> <old> <new>...
+world_dies() { # <id> <fixture> <want verdict+direction> <diff needle or -> <count> <old> <new>...
   local id="$1" f="$2" want="$3" needle="$4" P; shift 4
   if P="$(mut "$id" "$@")"; then
-    census "$P" "$WA" "s-quiet s-skip" 2
+    mcensus "$P" "$WA" "s-quiet s-skip s-digit" 3 "$id"
     has "$id: the self-probe still passes" "$C_ERR" "$PROBE_OK"
-    eq "$id: $f reads $want" "$(vd "$f")" "$want"
+    kill_eq "$B_ctl" "$id" "$id: $f reads $want" "$(vd "$f")" "$want"
+    # the twin: the other control fixture keeps its unmutated verdict unless the mutant is the one flipping it
+    case "$id" in
+      M3) eq "$id: twin s-quiet still EQUAL" "$(vd s-quiet)" "EQUAL -" ;;
+      M4) eq "$id: twin s-digit still MISMATCH DIFFER" "$(vd s-digit)" "MISMATCH DIFFER" ;;
+      *)  eq "$id: twin s-skip still MISMATCH PLAIN-MORE" "$(vd s-skip)" "MISMATCH PLAIN-MORE" ;;
+    esac
     [ "$needle" = - ] || has "$id: the diff names the line" "$(cell "$f" 13)" "$needle"
   else bad "$id: DID NOT APPLY"; fi
 }
-world_killed M3 s-skip "EQUAL -" - 1 'PLAIN_ROOT="$CENSUS_ROOT"' 'PLAIN_ROOT="$SB"'
-world_killed M4 s-quiet "MISMATCH HERMETIC-MORE" "H: ok cwd-read data/a.txt" \
+world_dies M3 s-skip "EQUAL -" - 1 'PLAIN_ROOT="$CENSUS_ROOT"' 'PLAIN_ROOT="$SB"'
+world_dies M4 s-quiet "MISMATCH HERMETIC-MORE" "H: ok cwd-read data/a.txt" \
   1 '( cd "$PLAIN_ROOT" && exec' '( cd "$PLAIN_ROOT/$CENSUS_FXREL/$fx" && exec' \
   1 'bash "$CENSUS_FXREL/$fx/run.sh" )' 'bash run.sh )'
-world_killed M5 s-quiet "MISMATCH HERMETIC-MORE" "H: ok farm-tool farm-ran" 1 'PATH="$CENSUS_TOOLDIRS:$B"' 'PATH="$CENSUS_TOOLDIRS"'
-world_killed M6 s-quiet "MISMATCH HERMETIC-MORE" "H: ok stderr-line" 1 '"$T/p.raw" 2>&1' '"$T/p.raw" 2>/dev/null'
+world_dies M5 s-quiet "MISMATCH HERMETIC-MORE" "H: ok farm-tool farm-ran" 1 'PATH="$CENSUS_TOOLDIRS:$B"' 'PATH="$CENSUS_TOOLDIRS"'
+world_dies M6 s-quiet "MISMATCH HERMETIC-MORE" "H: ok stderr-line" 1 '"$T/p.raw" 2>&1' '"$T/p.raw" 2>/dev/null'
 
 # Path length: the plain HOME and TMPDIR are as long as the sandbox's, so a fixture printing their lengths
 # reads EQUAL; M23 restores the short `$T/phome` / `$T/ptmp` spelling and the same fixture splits.
-census "$CENSUS" "$WA" "s-quiet s-pathlen" 2
-eq "pathlen: s-pathlen (prints the lengths of TMPDIR and HOME) reads EQUAL" "$(vd s-pathlen)" "EQUAL -"
-eq "pathlen: s-pathlen counted 3 ok lines on each side" "$(cell s-pathlen 8)/$(cell s-pathlen 9)" "3/3"
 if P="$(mut M23 1 'mkdir -p "$T/htmp" "$T/vs" "$T/ptmp" || return 2' 'mkdir -p "$T/htmp" "$T/vs" "$T/phome" "$T/ptmp" || return 2' \
     1 'HOME="$PW/home" TMPDIR="$PW/tmp"' 'HOME="$T/phome" TMPDIR="$T/ptmp"')"; then
-  census "$P" "$WA" "s-quiet s-pathlen" 2
+  mcensus "$P" "$WA" "s-pathlen s-quiet" 2 M23
   has "M23: the self-probe still passes" "$C_ERR" "$PROBE_OK"
-  eq "M23: s-quiet still EQUAL, so the mutant ran" "$(vd s-quiet)" "EQUAL -"
-  eq "M23 (short plain HOME/TMPDIR): s-pathlen reads MISMATCH DIFFER" "$(vd s-pathlen)" "MISMATCH DIFFER"
+  eq "M23: twin s-quiet still EQUAL" "$(vd s-quiet)" "EQUAL -"
+  kill_eq "$B_ctl" M23 "M23 (short plain HOME/TMPDIR): s-pathlen reads MISMATCH DIFFER" "$(vd s-pathlen)" "MISMATCH DIFFER"
   has "M23: the note names the disjoint length" "$(cell s-pathlen 12)" "MISMATCH disjoint count"
 else bad "M23: DID NOT APPLY"; fi
 
 # --- BOTH-FAIL, the fixture-rc-2 split, and the token-level equivalence -----------------------------
-probe_killed M9 P11 s-bothfail "EQUAL -" \
+probe_dies M9 P11 s-bothfail "EQUAL -" \
   1 'if [ "$2" = "$3" ] && [ "$3" != 0 ]; then v=BOTH-FAIL' 'if false; then v=BOTH-FAIL'
 # M10 keys BOTH-FAIL on the hermetic rc alone, so a sandbox-only exit 2 is swallowed as a shared failure.
-probe_killed M10 P12 s-rc2 "BOTH-FAIL -" \
+probe_dies M10 P12 s-rc2 "BOTH-FAIL -" \
   1 'if [ "$2" = "$3" ] && [ "$3" != 0 ]; then v=BOTH-FAIL' 'if [ "$2" != - ] && [ "$2" != 0 ]; then v=BOTH-FAIL'
 # The token rule's two branches, as mutation anchors: NUM opens the count (range) branch, STB the
 # non-numeric "stable on both sides" branch.
 NUM_O='if ((a[i] c[i] g[i] b[i] e[i] h[i]) ~ /^[0-9]+$/) {'
 STB_O='} else if (a[i] == c[i] && a[i] == g[i] && b[i] == e[i] && b[i] == h[i]) {'
 # M11 the line-level rule: a differing line is acquitted when the line as a whole moves across reps.
-probe_killed M11 E2 s-mixed "EQUIVALENT DIFFER" \
+probe_dies M11 E2 s-mixed "EQUIVALENT DIFFER" \
   1 "$NUM_O" 'if (0) {' \
   1 "$STB_O" '} else if (tk[1, k] == tk[3, k] && tk[1, k] == tk[5, k] && tk[2, k] == tk[4, k] && tk[2, k] == tk[6, k]) {'
 # M12 no multiplicity guard: a repeated differing key pairs whichever of its lines sorts last.
-probe_killed M12 E4 s-repeat "EQUIVALENT DIFFER" \
+probe_dies M12 E4 s-repeat "EQUIVALENT DIFFER" \
   1 'if (cnt[1, k] != 1 || cnt[2, k] != 1 || cnt[3, k] != 1 || cnt[4, k] != 1 || cnt[5, k] != 1 || cnt[6, k] != 1) {' 'if (0) {'
 # M13 any masked match is acquitted: no token is ever required to move or to overlap.
-probe_killed M13 E3 s-mixed "EQUIVALENT DIFFER" \
+probe_dies M13 E3 s-mixed "EQUIVALENT DIFFER" \
   1 "$NUM_O" 'if (0) {' 1 "$STB_O" '} else if (0) {'
 # M21 the reverted reading: a count is judged like a sha, EQUIVALENT when it moves on at least one side.
 # E3 and E2 still pass under it (their counts hold still on both sides), so FA1 is what names it.
-probe_killed M21 FA1 s-flicker "EQUIVALENT DIFFER" \
+probe_dies M21 FA1 s-flicker "EQUIVALENT DIFFER" \
   1 "$NUM_O" 'if (0) {'
 
 # M14 the summary folds fixture-rc-2 back into REFUSED.
 if P="$(mut M14 1 'if ($2 == "REFUSED" && $12 ~ /^fixture-rc-/) frc++' '')"; then
-  census "$P" "$WA" "s-quiet s-rc2 s-absent" 2
+  mcensus "$P" "$WA" "s-rc2 s-absent" 2 M14
   has "M14: the self-probe still passes" "$C_ERR" "$PROBE_OK"
   eq "M14: s-rc2 still reads REFUSED" "$(vd s-rc2)" "REFUSED -"
-  has "M14: the summary no longer splits fixture-rc-2" "$C_ERR" "REFUSED=2 fixture-rc-2=0"
+  kill_has "$B_ctl" M14 "M14: the summary no longer splits fixture-rc-2" "$C_ERR" "REFUSED=2 fixture-rc-2=0"
 else bad "M14: DID NOT APPLY"; fi
-census "$CENSUS" "$WA" "s-quiet s-rc2 s-absent" 2
+census "$CENSUS" "$WA" "s-rc2 s-absent" 2
 has "split control: the unmutated summary splits fixture-rc-2 from a runner refusal" "$C_ERR" "REFUSED=1 fixture-rc-2=1"
 
 # Exit test: EQUIVALENT passes the census, BOTH-FAIL fails it. Each control is one verdict apart from EQUAL.
-census "$CENSUS" "$WA" "s-quiet s-volatile" 2
-eq "exit: a census whose only non-EQUAL row is EQUIVALENT exits 0" "$C_RC/$(cell s-volatile 2)" "0/EQUIVALENT"
-census "$CENSUS" "$WA" "s-quiet s-bothfail" 2
+census "$CENSUS" "$WA" "s-bothfail" 1
 eq "exit: a census holding a BOTH-FAIL row exits 1" "$C_RC/$(cell s-bothfail 2)" "1/BOTH-FAIL"
 if P="$(mut M15 1 '$2 != "LOW-RES" && $2 != "EQUIVALENT" { f = 1 }' '$2 != "LOW-RES" { f = 1 }')"; then
-  census "$P" "$WA" "s-quiet s-volatile" 2
-  eq "M15 (EQUIVALENT fails the exit test): the census exits 1" "$C_RC/$(cell s-volatile 2)" "1/EQUIVALENT"
+  census "$P" "$WA" "s-volatile" 1
+  mcell M15 exit "$([ "$C_RC" = 1 ] && echo 1 || echo 0)"; mcell M15 s-volatile "$([ "$(vd s-volatile)" = "EQUIVALENT DIFFER" ] && echo 0 || echo 1)"
+  eq "M15: twin s-volatile still reads EQUIVALENT DIFFER" "$(vd s-volatile)" "EQUIVALENT DIFFER"
+  kill_eq "$B_ctl" M15 "M15 (EQUIVALENT fails the exit test): the census exits 1" "$C_RC/$(cell s-volatile 2)" "1/EQUIVALENT"
 else bad "M15: DID NOT APPLY"; fi
 if P="$(mut M16 1 '$2 != "LOW-RES" && $2 != "EQUIVALENT" { f = 1 }' '$2 != "LOW-RES" && $2 != "EQUIVALENT" && $2 != "BOTH-FAIL" { f = 1 }')"; then
-  census "$P" "$WA" "s-quiet s-bothfail" 2
-  eq "M16 (BOTH-FAIL passes the exit test): the census exits 0" "$C_RC/$(cell s-bothfail 2)" "0/BOTH-FAIL"
+  census "$P" "$WA" "s-bothfail" 1
+  mcell M16 exit "$([ "$C_RC" = 0 ] && echo 1 || echo 0)"; mcell M16 s-bothfail "$([ "$(vd s-bothfail)" = "BOTH-FAIL -" ] && echo 0 || echo 1)"
+  eq "M16: twin s-bothfail still reads BOTH-FAIL" "$(vd s-bothfail)" "BOTH-FAIL -"
+  kill_eq "$B_ctl" M16 "M16 (BOTH-FAIL passes the exit test): the census exits 0" "$C_RC/$(cell s-bothfail 2)" "0/BOTH-FAIL"
 else bad "M16: DID NOT APPLY"; fi
 
 # --- the scratch root: links, cleanup, and the marker walk ------------------------------------------
@@ -460,12 +558,15 @@ else bad "M16: DID NOT APPLY"; fi
 C_KEEP=""; C_SCR="$SCR/nokeep"
 census "$CENSUS" "$WA" "s-quiet s-volatile" 2
 eq "cleanup: a non-keep run exits 0 and leaves no chc.* root under the scratch base" "$C_RC/$(chc_count "$SCR/nokeep")" "0/0"
+eq "exit: a census whose only non-EQUAL row is EQUIVALENT exits 0" "$C_RC/$(cell s-volatile 2)" "0/EQUIVALENT"
 n="$(chc_count "$SCR/keep")"
 if [ "$n" -ge 12 ]; then ok "cleanup control: the --keep runs left their chc.* roots ($n)"; else bad "cleanup control: the --keep runs left $n chc.* roots, want at least 12, so a zero above proves nothing"; fi
 if P="$(mut M17 1 'case "$ph" in "$CENSUS_SCRATCH"/chc.??????) rm -rf "$ph" ;; esac' ': physical root left')"; then
   census "$P" "$WA" "s-quiet s-volatile" 2
   n="$(chc_count "$SCR/nokeep")"
-  if [ "$C_RC" = 0 ] && [ "$n" -ge 3 ]; then ok "M17 (only the pair link removed): the physical roots leak ($n)"; else bad "M17: rc=$C_RC with $n chc.* roots left, want rc 0 and at least 3"; fi
+  mcell M17 leaked-roots "$([ "$C_RC" = 0 ] && [ "$n" -ge 3 ] && echo 1 || echo 0)"; mcell M17 s-quiet "$([ "$(vd s-quiet)" = "EQUAL -" ] && echo 0 || echo 1)"
+  eq "M17: twin s-quiet still EQUAL" "$(vd s-quiet)" "EQUAL -"
+  if [ "$C_RC" = 0 ] && [ "$n" -ge 3 ]; then mutant_killed "$B_ctl" M17 "M17 (only the pair link removed): the physical roots leak ($n)"; else bad "M17: rc=$C_RC with $n chc.* roots left, want rc 0 and at least 3"; fi
 else bad "M17: DID NOT APPLY"; fi
 C_KEEP=--keep
 
@@ -475,7 +576,8 @@ if P="$(mut M18 1 '    ln -s "$T" "$2" || return 2' '    mkdir -p "$2" || return
   census "$P" "$WA" "s-quiet" 1
   eq "M18: s-quiet still EQUAL, so the mutant ran" "$(vd s-quiet)" "EQUAL -"
   pl="$(find "$WORK/cw$C_N" -path '*/p.0001/1' | head -1)"
-  if [ -n "$pl" ] && [ ! -L "$pl" ] && [ -d "$pl" ]; then ok "M18: the pair dir is a plain dir, not a link to a chc.* root"; else bad "M18: the pair dir '$pl' is still a link"; fi
+  mcell M18 pair-dir-link "$([ -n "$pl" ] && [ ! -L "$pl" ] && [ -d "$pl" ] && echo 1 || echo 0)"; mcell M18 s-quiet "$([ "$(vd s-quiet)" = "EQUAL -" ] && echo 0 || echo 1)"
+  if [ -n "$pl" ] && [ ! -L "$pl" ] && [ -d "$pl" ]; then mutant_killed "$B_ctl" M18 "M18: the pair dir is a plain dir, not a link to a chc.* root"; else bad "M18: the pair dir '$pl' is still a link"; fi
 else bad "M18: DID NOT APPLY"; fi
 
 # Preflight: a marker above the scratch base refuses the census before any fixture runs.
@@ -489,7 +591,8 @@ if P="$(mut M19 1 'if hit="$(census_marker_walk "$CENSUS_SCRATCH")"; then' 'if f
   census "$P" "$WA" "s-low" 1
   # Without the census's own walk the pair reaches hermetic-run.sh, whose escape guard refuses it: a row exists
   # (the unmutated census leaves none) and its note is the runner's refusal.
-  eq "M19 (no preflight walk): s-low reaches the runner and reads REFUSED" "$(vd s-low)" "REFUSED -"
+  mcell M19 s-low "$([ "$(vd s-low)" = "REFUSED -" ] && echo 1 || echo 0)"
+  kill_eq "$B_ctl" M19 "M19 (no preflight walk): s-low reaches the runner and reads REFUSED" "$(vd s-low)" "REFUSED -"
   has "M19: the runner's escape guard is what refused it" "$(cell s-low 12)" "sandbox escape"
 else bad "M19: DID NOT APPLY"; fi
 
@@ -502,7 +605,9 @@ eq "walk: the rows still read (s-marker EQUAL)" "$(vd s-marker)" "EQUAL -"
 mkdir -p "$SCR/mark2" || exit 2; C_SCR="$SCR/mark2"
 if P="$(mut M20 1 'if end_hit="$(census_marker_walk "$CENSUS_SCRATCH")"; then' 'if false; then')"; then
   census "$P" "$WA" "s-low s-marker" 1
-  if [ -e "$SCR/mark2/.claude" ] && [ "$C_RC" = 0 ]; then ok "M20 (no end walk): the marker appeared and the census exits 0"
+  mcell M20 exit "$([ -e "$SCR/mark2/.claude" ] && [ "$C_RC" = 0 ] && echo 1 || echo 0)"; mcell M20 s-low "$([ "$(vd s-low)" = "LOW-RES -" ] && echo 0 || echo 1)"
+  eq "M20: twin s-low still LOW-RES" "$(vd s-low)" "LOW-RES -"
+  if [ -e "$SCR/mark2/.claude" ] && [ "$C_RC" = 0 ]; then mutant_killed "$B_ctl" M20 "M20 (no end walk): the marker appeared and the census exits 0"
   else bad "M20: rc=$C_RC, marker $( [ -e "$SCR/mark2/.claude" ] && echo present || echo absent), want rc 0 with the marker present"; fi
 else bad "M20: DID NOT APPLY"; fi
 
@@ -515,28 +620,36 @@ mkdir -p "$SCR/pl1" "$SCR/pl2" || exit 2
 C_SCR="$SCR/pl1"
 if P="$(mut FI 1 "$PRB_O" "$PRB_N")"; then
   census "$P" "$WA" "s-low" 1
-  eq "probe leak: the injected resolve failure refuses the census" "$C_RC" 2
-  has "probe leak: the refusal is the self-probe's resolve check" "$C_ERR" "self-probe FAILED: the pair link resolved to $SCR/pl1/chc."
-  eq "probe leak: the failing self-probe left no chc.* root" "$(chc_count "$SCR/pl1")" 0
+  eq "CONTROL FI: the injected resolve failure refuses the census, the baseline outcome" "$C_RC" 2
+  has "CONTROL FI: the refusal is the self-probe's resolve check" "$C_ERR" "self-probe FAILED: the pair link resolved to $SCR/pl1/chc."
+  eq "CONTROL FI: the failing self-probe left no chc.* root, the surviving state" "$(chc_count "$SCR/pl1")" 0
 else bad "FI: DID NOT APPLY"; fi
 C_SCR="$SCR/pl2"
 if P="$(mut M22 1 "$PRB_O" "$PRB_N" 1 'not a chc.* root under $CENSUS_SCRATCH"; probe_px_rm; return 2 ;; esac' 'not a chc.* root under $CENSUS_SCRATCH"; return 2 ;; esac')"; then
   census "$P" "$WA" "s-low" 1
   has "M22 (the failure path keeps its root): the census still refuses on the resolve check" "$C_ERR" "self-probe FAILED: the pair link resolved to"
-  eq "M22: the failing self-probe leaks its chc.* root" "$(chc_count "$SCR/pl2")" 1
+  mcell M22 leaked-probe-root "$([ "$(chc_count "$SCR/pl2")" = 1 ] && echo 1 || echo 0)"
+  kill_eq "$B_ctl" M22 "M22: the failing self-probe leaks its chc.* root" "$(chc_count "$SCR/pl2")" 1
 else bad "M22: DID NOT APPLY"; fi
 
-# Incomplete run: s-killed kills its own worker on the plain side, so no row is written and the worker's
+# Incomplete run: s-selfkill kills its own worker on the plain side, so no row is written and the worker's
 # cleanup never runs. The summary must name the physical root it left, by path, and count it.
 mkdir -p "$SCR/inc" || exit 2; C_SCR="$SCR/inc"
-census "$CENSUS" "$WA" "s-killed" 1
-has "incomplete: the run reports itself incomplete, naming s-killed" "$C_ERR" "the run is incomplete"
-has "incomplete: no row for s-killed" "$C_ERR" "no row for: s-killed"
+census "$CENSUS" "$WA" "s-selfkill" 1
+has "incomplete: the run reports itself incomplete, naming s-selfkill" "$C_ERR" "the run is incomplete"
+has "incomplete: no row for s-selfkill" "$C_ERR" "no row for: s-selfkill"
 eq "incomplete: one chc.* root is left on disk" "$(chc_count "$SCR/inc")" 1
 left="$(find "$SCR/inc" -mindepth 1 -maxdepth 1 -name 'chc.??????' | head -1)"
 has "incomplete: the summary names that root by its path" "$C_ERR" "left scratch root: ${left:-<none on disk>}"
 has "incomplete: the summary counts it" "$C_ERR" "1 physical scratch root(s) left under $SCR/inc"
 C_KEEP=--keep
+
+# Plain-run arm: a plain run executes no matrix-only cell, and a --matrix run executes some.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MWIDE" -eq 0 ] && [ "$MROWS" -eq 0 ]; then ok "plain run: no matrix-only cell ran and no matrix row was printed"; else bad "plain run: matrix-only cells ran (wide=$MWIDE rows=$MROWS)"; fi
+else
+  if [ "$MWIDE" -gt 0 ] && [ "$MROWS" -gt 0 ]; then ok "matrix run: $MWIDE mutant censuses widened to every fixture ($MROWS rows)"; else bad "matrix run: no rows were printed (wide=$MWIDE rows=$MROWS)"; fi
+fi
 
 echo
 if [ "$FAILS" -eq 0 ]; then echo "census-hermetic-coverage: PASS"; exit 0; fi

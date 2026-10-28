@@ -39,6 +39,16 @@
 #   m-strict            an absent Class is refused         -> C1a
 #   m-nodocstring       the docstring filter removed       -> A4
 #   m-pyext             a cited .py leaves the code class  -> R6
+# Each mutant co-trips no arm outside its decides list, measured at authoring (m-classonly's two deciding
+# arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured whenever an arm
+# or mutant is added or changed, by the REMEASURE command below.
+# MUTANT-MATRIX m-classonly decides=R1,R6 twins=R5
+# MUTANT-MATRIX m-failopen-missing decides=C1b twins=R2
+# MUTANT-MATRIX m-strict decides=C1a twins=C3
+# MUTANT-MATRIX m-pyext decides=R6 twins=R1
+# MUTANT-MATRIX m-nodocstring decides=A4 twins=A3
+# MUTANT-MATRIX-DYNAMIC score why=the name is the fifth argument of each literal score call and reaches mutant_killed as "$name", so each m- name above is one literal call site
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/review-reroute/run.sh --matrix
 # The unmutated copy must pass every arm first (CTL), so a copy that cannot run is FIXTURE BROKEN.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -70,6 +80,7 @@ echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-carried-findings.sh"
 echo "review-reroute: subject dir = $SD"
+if [ "${1:-}" = "--matrix" ]; then echo "review-reroute: mode FULL (--matrix)"; else echo "review-reroute: mode PUSH"; fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/review-reroute.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
@@ -85,6 +96,11 @@ done
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+MATRIX=0; [ "${1:-}" = "--matrix" ] && MATRIX=1
 TAB="$(printf '\t')"
 # Each arm takes the script directory under test and returns 0 when its assertion holds.
 route() { OUT="$(bash "$1/partition-review-diff.sh" --route "$R" "$2" "$(rr_ref "$W" "$3")" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
@@ -127,9 +143,9 @@ arm_A5() { rerun "$1" NEWTEST;    [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*ad
 arm_A6() { rerun "$1" ASSIGNED;   [ "$RC" -eq 0 ] && grep -q '^GATE1-RERUN: .*rebalancer/engine.py' <<<"$OUT"; }
 arm_A7() { rerun "$1" JSCOMMENT;  [ "$RC" -eq 0 ] && grep -q '^GATE1-SKIP: .*(1 code path' <<<"$OUT"; }
 ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7"
-for a in $ARMS; do
-  if "arm_$a" "$SD"; then ok "$a"; else bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
-done
+# The arms that reach each mutated script. A mutant sweeps only these: every other arm never invokes the
+# mutated file, so it cannot move. partition-review-diff.sh is reached by --route and --gate1-rerun (and
+# --route shells validate-carried-findings.sh --classes); merge-review-shards.sh only by --check-serial.
 # S1: the step text routes by both modes, on their invocation lines; the role file states the rule.
 if grep -qF 'partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha>' "$STEP" \
    && grep -qF 'partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha>' "$STEP" \
@@ -155,21 +171,57 @@ mut() {
   if cmp -s "$SD/$2" "$dst/$2"; then echo ""; else echo "$dst"; fi
 }
 CTL="$(mkcopy ctl)"
-died=""; for a in $ARMS; do "arm_$a" "$CTL" || died="$died $a"; done
-if [ -n "$CTL" ] && [ -z "$died" ]; then ok "CTL: the unmutated copy of $SD passes every arm"
-else bad "CTL: FIXTURE BROKEN -- the unmutated copy failed:${died:- (no copy)}; no mutant verdict below is evidence"; fi
-score() { # <mutant dir> <the arm that must die> <description>
-  local md="$1" want="$2" a died=""
-  [ -n "$md" ] || { bad "MUTANT $3: the mutation did not apply"; return; }
-  for a in $ARMS; do "arm_$a" "$md" || died="$died $a"; done
-  if [ "$died" = " $want" ]; then ok "MUTANT $3: killed by $want alone"
-  else bad "MUTANT $3: arms that died:${died:- none} (want exactly $want)"; fi
+# The copy is byte-identical to the subject, so one sweep of it is the live sweep: it is the control a
+# mutant is judged against AND the verdict on the subject itself.
+same=1; for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh; do
+  [ -n "$CTL" ] && cmp -s "$SD/$f" "$CTL/$f" || same=0
+done
+[ "$same" -eq 1 ] || { echo "FIXTURE BROKEN: the control copy differs from $SD or did not build" >&2; exit 2; }
+died=""
+for a in $ARMS; do
+  if "arm_$a" "$CTL"; then
+    ok "$a"
+    case "$a" in
+      C1a) B_C1a=1 ;; C1b) B_C1b=1 ;; C2) B_C2=1 ;; C3) B_C3=1 ;; CL) B_CL=1 ;;
+      R1) B_R1=1 ;; R2) B_R2=1 ;; R3) B_R3=1 ;; R4) B_R4=1 ;; R5) B_R5=1 ;; R6) B_R6=1 ;;
+      A1) B_A1=1 ;; A2) B_A2=1 ;; A3) B_A3=1 ;; A4) B_A4=1 ;; A5) B_A5=1 ;; A6) B_A6=1 ;; A7) B_A7=1 ;;
+    esac
+  else died="$died $a"; bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
+done
+if [ -z "$died" ]; then ok "CTL: the unmutated copy of $SD passes every arm"
+else bad "CTL: FIXTURE BROKEN -- the unmutated copy failed:$died; no mutant verdict below is evidence"; fi
+# score <base-pass flag> <mutant dir> "<deciding arms>" "<twin arms>" <mutant name>
+# Per push a mutant DRIVES only its deciding arm(s) and its twin(s). A twin is an arm that stays GREEN under
+# the mutant, so a tripped twin, or a deciding arm that stays green, fails the fixture. `run.sh --matrix`
+# drives EVERY arm on EVERY mutant and prints one row per mutant: each arm with its cell (1 = the arm died,
+# 0 = it stayed green) and the dead set by arm name.
+CELLS=0; MCELLS=0
+score() {
+  local flag="$1" md="$2" decides="$3" twin="$4" name="$5" a dead="" want="" row=""
+  [ -n "$md" ] || { bad "MUTANT $name: the mutation did not apply"; return; }
+  if [ "$MATRIX" = 1 ]; then
+    for a in $ARMS; do
+      MCELLS=$((MCELLS + 1))
+      if "arm_$a" "$md"; then row="$row $a=0"; else row="$row $a=1"; dead="$dead $a"; fi
+    done
+    echo "MATRIX $name:$row | dead:${dead:- none} | decides: $decides | twins: $twin"
+    return
+  fi
+  for a in $decides $twin; do CELLS=$((CELLS + 1)); "arm_$a" "$md" || dead="$dead $a"; done
+  for a in $decides; do want="$want $a"; done
+  if [ "$dead" = "$want" ]; then
+    mutant_killed "$flag" "$name" "MUTANT $name: killed by$want; twin $twin stays green"
+  else bad "MUTANT $name SURVIVED or co-tripped: dead among [$decides $twin]:${dead:- none} (want exactly$want)"; fi
 }
-score "$(mut classonly partition-review-diff.sh '  [ "$ncode" -eq 0 ] || full "the delta' '  : || full "the delta')" "R1 R6" "m-classonly, the delta guard removed"
-score "$(mut failopen partition-review-diff.sh "-) full \"the prior finding '\$rd_' carries no Class line\" ;;" '-) ;;')" C1b "m-failopen-missing, a finding with no Class routes"
-score "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" C1a "m-strict, an absent Class is refused"
-score "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" R6 "m-pyext, a cited .py leaves the code class"
-score "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" A4 "m-nodocstring, the docstring filter removed"
+score "$(( ${B_R1:-0} && ${B_R6:-0} && ${B_R5:-0} ))" "$(mut classonly partition-review-diff.sh '  [ "$ncode" -eq 0 ] || full "the delta' '  : || full "the delta')" "R1 R6" R5 "m-classonly, the delta guard removed"
+score "$(( ${B_C1b:-0} && ${B_R2:-0} ))" "$(mut failopen partition-review-diff.sh "-) full \"the prior finding '\$rd_' carries no Class line\" ;;" '-) ;;')" "C1b" "R2" "m-failopen-missing, a finding with no Class routes"
+score "$(( ${B_C1a:-0} && ${B_C3:-0} ))" "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" "C1a" "C3" "m-strict, an absent Class is refused"
+score "$(( ${B_R6:-0} && ${B_R1:-0} ))" "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" "R6" "R1" "m-pyext, a cited .py leaves the code class"
+score "$(( ${B_A4:-0} && ${B_A3:-0} ))" "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" "A4" "A3" "m-nodocstring, the docstring filter removed"
 
+if [ "$MATRIX" = 1 ]; then echo "review-reroute: MATRIX measured, $MCELLS cells (mode FULL)"; [ "$fails" -eq 0 ] && exit 0; exit 1; fi
+# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 11 named by the MUTANT-MATRIX header (deciding arms plus twins).
+if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 11 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
+else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 11)"; fi
 if [ "$fails" -eq 0 ]; then echo "review-reroute: PASS"; exit 0; fi
 echo "review-reroute: $fails FAILED"; exit 1

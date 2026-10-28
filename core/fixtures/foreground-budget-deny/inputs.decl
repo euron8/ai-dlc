@@ -1,3 +1,4 @@
 # Both inputs are read from the sandbox root: seed.sh copies the detector into three projects and run.sh drives the hook.
 !core/hooks/ai-dlc-foreground-budget.sh
 !core/scripts/validate-steering-budget.sh
+core/fixtures/lib/mutant.sh

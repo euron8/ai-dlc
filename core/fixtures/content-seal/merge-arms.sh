@@ -258,8 +258,17 @@ else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: 
 
 # ---- BL-750: THE MARKER ADMISSION (content-seal.sh header "THE MARKER ADMISSION"). A bare marker in the
 # sealed set merges only while the world's installed adversary role file is LEGACY; every world from
-# clean_world carries the legacy file (adversarial-shard-merge/lib.sh legacy_roles), and each arm below
+# clean_world carries the legacy file (adversarial-shard-merge/lib.sh legacy_roles), and each world below
 # re-seeds it. The CURRENT state is the shipped role file itself, never a hand-written one.
+#
+# ONE WORLD PER DISTINCT STATE. The admission arms (CS-A1..A6) ask about six states and one extra, and every
+# driver of a state -- the shipped merge, the two admission mutants, the stubbed awk, the belt mutants --
+# runs against the SAME world, ordered so that a driver which WRITES the merged output goes last (or has the
+# output removed before the next driver). The states:
+#   dA  CURRENT role, bare markers, unsealed      dN  NO role file, bare markers, unsealed
+#   dL  LEGACY role, bare markers, unsealed       dD  CURRENT role, bare markers, then every shard sealed
+#   dE  CURRENT role, sealed set closed with --mark   dF  CURRENT role, --mark set, one body changed through Bash
+#   dLs LEGACY role, bare markers, then every shard sealed
 ROLE_CUR=""; _d="$CS_HERE"
 while [ -n "$_d" ] && [ "$_d" != "/" ]; do
   for _c in "$_d/core/team-roles/adversary.md" "$_d/.claude/team-roles/adversary.md"; do
@@ -281,69 +290,9 @@ role_state() { # <shard dir> <legacy|current|none> -- the world's installed adve
   local r; r="$(world_root "$1")"; rm -f "$r/.claude/team-roles/adversary.md"
   case "$2" in current) cp "$ROLE_CUR" "$r/.claude/team-roles/adversary.md" ;; legacy) legacy_roles "$r" ;; esac
 }
-ADM="is not admitted\|legacy window is closed"
-p_admit() { # <merge> -> AD_CASE names the first case that did not hold
-  local m="$1" d
-  # (a) CURRENT role file, bare markers, no seal rows: REFUSED naming the closed window.
-  AD_CASE=a; d="$(clean_world)"; role_state "$d" current; bare_marks "$d"; run_merge "$m" "$d"
-  refused_clean "the legacy window is closed" "$d" || return 1
-  # (b) NO role file at all: REFUSED -- a missing role file never acquits.
-  AD_CASE=b; d="$(clean_world)"; role_state "$d" none; bare_marks "$d"; run_merge "$m" "$d"
-  refused_clean "no readable role file for seat 'adversary'" "$d" || return 1
-  # (c) the ALLOW twin of (a)/(b): the LEGACY role file, same bare markers -> MERGED.
-  AD_CASE=c; d="$(clean_world)"; role_state "$d" legacy; bare_marks "$d"; run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  # (d) the BL-738 fallback shape: a bare line appended and then SEALED as an Edit, so --check cannot
-  # see it (the seal-check probe merges this world), under the CURRENT role file -> REFUSED.
-  AD_CASE=d; d="$(clean_world)"; role_state "$d" current; bare_marks "$d"; seal_all "$d"
-  bash "$SEAL" --check "$(hr_state "$d/1.md")" "$d"/*.md >/dev/null 2>&1 || return 1
-  run_merge "$m" "$d"
-  refused_clean "the legacy window is closed" "$d" || return 1
-  # (e) a SEALED --mark set under the CURRENT role file -> MERGED: the admission bounds bare markers only.
-  AD_CASE=e; d="$(clean_world)"; role_state "$d" current; seal_all "$d"
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  # (f) a sha= marker whose body was changed through Bash on a shard with NO seal row: --check has
-  # nothing to compare, the digest does -> REFUSED.
-  AD_CASE=f; d="$(clean_world)"; role_state "$d" current
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$d/1.md"
-  run_merge "$m" "$d"
-  refused_clean "is not the body above it" "$d" || return 1
-  AD_CASE=""
+mark_all() { # <shard dir> -> 0 when every shard was closed with --mark
+  local f; for f in "$1"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
 }
-if p_admit "$MERGE"; then
-  ok "CS-A1: bare markers under the CURRENT role file -> REFUSED; under NO role file -> REFUSED; under the LEGACY file -> MERGED; a bare line then sealed by Edit under CURRENT -> REFUSED; a --mark set under CURRENT -> MERGED; a sha= digest broken with no seal row -> REFUSED"
-else bad "CS-A1: case ($AD_CASE) did not hold (rc=$RC): $(head -3 "$MO")"; fi
-
-# CS-A2: the beat. --status --complete over an in-set shard under each role state, and over an
-# OUTSIDE-set epics part (graph s319's `epics/part-<n>.md` shape) with no role file at all: the in-set
-# CURRENT and NONE files are UNFINISHED naming the admission, the LEGACY one and the epics part are
-# UNSETTLED (the settle path, unchanged), and the epics world carries no role file anywhere.
-a2_status() { # <world root> <target> -> the --status line for it
-  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
-}
-dA="$(clean_world)"; role_state "$dA" current; bare_marks "$dA"; rA="$(world_root "$dA")"
-dN="$(clean_world)"; role_state "$dN" none; bare_marks "$dN"; rN="$(world_root "$dN")"
-dL="$(clean_world)"; role_state "$dL" legacy; bare_marks "$dL"; rL="$(world_root "$dL")"
-eP="$rN/_bmad-output/planning-artifacts/s1/epics"; mkdir -p "$eP"
-printf '# Epic 1\n\nBody.\n\nseat-complete: stories-epic-1 pm none findings=0\n' > "$eP/part-1.md"
-in_set "planning-artifacts/s1/epics/part-1.md" && eset=yes || eset=no
-sA="$(a2_status "$rA" "${dA#"$rA"/}/1.md")"; sN="$(a2_status "$rN" "${dN#"$rN"/}/1.md")"
-sL="$(a2_status "$rL" "${dL#"$rL"/}/1.md")"; sE="$(a2_status "$rN" "_bmad-output/planning-artifacts/s1/epics/part-1.md")"
-nrole="$(find "$rN" -path '*/team-roles/*' -type f | grep -c .)" || nrole=0
-case "$sA" in "UNFINISHED "*"is not admitted"*"legacy window is closed"*) a2a=1 ;; *) a2a=0 ;; esac
-case "$sN" in "UNFINISHED "*"is not admitted"*"no readable role file"*) a2n=1 ;; *) a2n=0 ;; esac
-case "$sL" in "UNSETTLED "*) a2l=1 ;; *) a2l=0 ;; esac
-case "$sE" in "UNSETTLED "*) a2e=1 ;; *) a2e=0 ;; esac
-if [ "$a2a$a2n$a2l$a2e" = 1111 ] && [ "$eset" = no ] && [ "$nrole" = 0 ]; then
-  ok "CS-A2: --status: in-set CURRENT and NONE -> UNFINISHED naming the admission; LEGACY -> UNSETTLED; an outside-set epics part with no role file anywhere -> UNSETTLED"
-else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set: $eset, role files in that world: $nrole)"; fi
-
-# CS-A3/CS-A4: MUTANTS of the admission, each in a copy of the merge's WHOLE script directory, only
-# content-seal.sh edited, the anchor applied exactly once. A3 lets a missing role file acquit; A4 stops
-# reading the fallback sentence, so a LEGACY role file reads as CURRENT. Each must fail ONLY its own case.
 mut_seal() { # <id> <old> <new> -> prints the mutated merge path; empty when the anchor is not there once
   local md="$WORK/mut-$1" n
   [ ! -e "$md" ] && cp -R "$SRCDIR" "$md" || return 0
@@ -354,70 +303,6 @@ mut_seal() { # <id> <old> <new> -> prints the mutated merge path; empty when the
     && cat "$md/content-seal.sh.mut" > "$md/content-seal.sh" && rm -f "$md/content-seal.sh.mut" || return 0
   [ -f "$md/merge-adversarial-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] || return 0
   printf '%s' "$md/merge-adversarial-shards.sh"
-}
-n0="$(OLD='NO-SUCH-ANCHOR-BL750-ADMIT' awk 'BEGIN { o = ENVIRON["OLD"] } { if (index($0, o)) n++ } END { print n + 0 }' "$SEAL")"
-mA3="$(mut_seal A3 'if [ -z "$rf" ] || [ ! -r "$rf" ]; then' 'if false; then')"
-mA4="$(mut_seal A4 "grep -qF -- 'unknown arg: --mark' \"\$rf\" && continue" ':')"
-if [ "$n0" != 0 ]; then bad "CS-A3/A4: FIXTURE BROKEN -- the impossible anchor control matched $n0 line(s)"
-else
-  if [ -z "$mA3" ]; then bad "CS-A3: DID NOT APPLY -- the missing-role refusal anchor is not in content-seal.sh exactly once"
-  elif p_admit "$mA3"; then bad "CS-A3: SURVIVED -- a missing role file acquitting passed CS-A1"
-  elif [ "$AD_CASE" = b ] && [ "$RC" -eq 0 ]; then ok "CS-A3: killed -- a missing role file acquitting fails CS-A1 at case (b) only (the merge took it)"
-  else bad "CS-A3: died at case ($AD_CASE), not (b) (rc=$RC): $(head -2 "$MO")"; fi
-  if [ -z "$mA4" ]; then bad "CS-A4: DID NOT APPLY -- the fallback-sentence anchor is not in content-seal.sh exactly once"
-  elif p_admit "$mA4"; then bad "CS-A4: SURVIVED -- ignoring the fallback sentence passed CS-A1"
-  elif [ "$AD_CASE" = c ] && [ "$RC" -eq 2 ] && has "$MO" "legacy window is closed"; then ok "CS-A4: killed -- a LEGACY role file read as CURRENT fails CS-A1 at case (c) only"
-  else bad "CS-A4: died at case ($AD_CASE), not (c) (rc=$RC): $(head -2 "$MO")"; fi
-fi
-
-# CS-A5: the admission's path list is built with every producer's status checked. A SEALED --mark set under
-# the CURRENT role file merges (case (e) of CS-A1); the same world with an awk that fails on the per-shard
-# path lookup (`-v k=`) must be REFUSED naming the lookup, never merged. The stub exits 3 on `k=` and passes
-# everything else through; both are probed first so a stub that did not apply is FIXTURE BROKEN.
-a5bin="$WORK/a5bin"; mkdir -p "$a5bin"
-a5real="$(command -v awk)"
-# It fails only a `k=` lookup whose input file sits beside an admit-keys file, i.e. the admission's own lookup.
-printf '#!/bin/sh\nfor a in "$@"; do last="$a"; case "$a" in k=*) kk=1 ;; esac; done\nif [ -n "$kk" ] && [ -f "$(dirname "$last")/admit-keys" ]; then exit 3; fi\nexec "%s" "$@"\n' "$a5real" > "$a5bin/awk"; chmod +x "$a5bin/awk"
-a5_probe="$WORK/a5probe"; mkdir -p "$a5_probe"; : > "$a5_probe/admit-keys"; : > "$a5_probe/shards"
-a5_stub_rc=0; PATH="$a5bin:$PATH" awk -v k=x 'BEGIN { exit 0 }' "$a5_probe/shards" || a5_stub_rc=$?
-a5_pass_rc=0; PATH="$a5bin:$PATH" awk 'BEGIN { exit 0 }' || a5_pass_rc=$?
-a5() { # <merge> -- the unstubbed twin MERGES, the stubbed run is REFUSED naming the lookup
-  local d f; d="$(clean_world)"; role_state "$d" current; seal_all "$d"
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  run_merge "$1" "$d"; [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  d="$(clean_world)"; role_state "$d" current; seal_all "$d"
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  PATH="$a5bin:$PATH" run_merge "$1" "$d"
-  refused_clean "cannot resolve the path of shard" "$d"
-}
-if [ "$a5_stub_rc" != 3 ] || [ "$a5_pass_rc" != 0 ]; then bad "CS-A5: FIXTURE BROKEN -- the awk stub did not apply (k= rc=$a5_stub_rc, pass-through rc=$a5_pass_rc)"
-elif a5 "$MERGE"; then ok "CS-A5: a failed per-shard path lookup under the marker admission -> REFUSED naming it, while the unstubbed twin MERGES"
-else bad "CS-A5: a failed admission input build was not refused (rc=$RC): $(head -3 "$MO")"; fi
-
-# CS-A6: THE MERGE BELT, end to end -- the REAL merge over a REAL sealed set, no stub, three cases, plus the
-# count join. (a) a sealed set with a LEGACY role file and bare markers MERGES; (b) the same set under the
-# CURRENT role file is REFUSED with the admission's own line; (c) a sha= marker with a correct digest
-# under the CURRENT role file MERGES; (d) the same set with ONE shard's body changed through Bash is REFUSED
-# naming the digest. The mutant drops the admission's count check AND forces one key (shard 1) to miss the
-# path lookup; the admission then judges a list one shorter and (d) MERGES. The unmutated merge with the
-# same forced miss must refuse on the count, naming both numbers.
-p_belt() { # <merge> -> AD_CASE names the first case that did not hold
-  local m="$1" d f
-  AD_CASE=a; d="$(clean_world)"; role_state "$d" legacy; bare_marks "$d"; seal_all "$d"; run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  AD_CASE=b; d="$(clean_world)"; role_state "$d" current; bare_marks "$d"; seal_all "$d"; run_merge "$m" "$d"
-  refused_clean "the legacy window is closed" "$d" || return 1
-  AD_CASE=c; d="$(clean_world)"; role_state "$d" current; seal_all "$d"
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  grep -q '^seat-complete: stories adversary 1 sha=' "$d/1.md" || return 1
-  run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  AD_CASE=d; d="$(clean_world)"; role_state "$d" current
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || return 1; done
-  perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$d/1.md"
-  run_merge "$m" "$d"
-  refused_clean "is not the body above it" "$d" || return 1
-  AD_CASE=""
 }
 mut_belt() { # <id> <old> <new> ... -> the mutated merge path; empty unless every anchor is in the merge script exactly once
   local md="$WORK/mut-$1" f="$WORK/mut-$1/merge-adversarial-shards.sh" n o w; shift
@@ -431,26 +316,180 @@ mut_belt() { # <id> <old> <new> ... -> the mutated merge path; empty unless ever
   done
   printf '%s' "$f"
 }
+n0="$(OLD='NO-SUCH-ANCHOR-BL750-ADMIT' awk 'BEGIN { o = ENVIRON["OLD"] } { if (index($0, o)) n++ } END { print n + 0 }' "$SEAL")"
+mA3="$(mut_seal A3 'if [ -z "$rf" ] || [ ! -r "$rf" ]; then' 'if false; then')"
+mA4="$(mut_seal A4 "grep -qF -- 'unknown arg: --mark' \"\$rf\" && continue" ':')"
 A6MISS=''\''$1 == k { print $2; exit }'\'' "$T/shards" >> "$T/admit-in"'
 A6MISSW=''\''$1 == k && $2 !~ /\/1\.md$/ { print $2; exit }'\'' "$T/shards" >> "$T/admit-in"'
 A6CHK='[ "$_nk" = "$_ni" ] ||'
 mA6miss="$(mut_belt A6miss "$A6MISS" "$A6MISSW")"
 mA6="$(mut_belt A6 "$A6MISS" "$A6MISSW" "$A6CHK" 'true ||')"
-if p_belt "$MERGE"; then ok "CS-A6a-d: the real merge over a sealed set -> legacy role + bare markers MERGED; current role + bare markers REFUSED; a correct sha= digest under the current role MERGED; a broken one REFUSED"
-else bad "CS-A6a-d: case ($AD_CASE) did not hold on the shipped merge (rc=$RC): $(head -3 "$MO")"; fi
-if [ -z "$mA6miss" ] || [ -z "$mA6" ]; then bad "CS-A6: DID NOT APPLY -- the path-lookup or count-check anchor is not in merge-adversarial-shards.sh exactly once"
-else
-  d="$(clean_world)"; role_state "$d" current
-  for f in "$d"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || break; done
-  perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$d/1.md"
-  run_merge "$mA6miss" "$d"
-  if refused_clean "the marker admission input holds" "$d" && has "$MO" "path(s) for" && has "$MO" "marked shard(s)"; then
-    ok "CS-A6e: a forced key miss under the intact count check -> REFUSED naming both counts"
-  else bad "CS-A6e: a missing admission path was not refused on the count (rc=$RC): $(head -3 "$MO")"; fi
-  if p_belt "$mA6"; then bad "CS-A6: SURVIVED -- dropping the count check with one key forced to miss passed the belt"
-  elif [ "$AD_CASE" = d ] && [ "$RC" -eq 0 ]; then ok "CS-A6: killed -- without the count check and with one key missing, case (d) MERGES a broken digest"
-  else bad "CS-A6: died at case ($AD_CASE), not (d) (rc=$RC): $(head -2 "$MO")"; fi
+
+# The six worlds. dA, dN, dL also serve CS-A2 and are read by it BEFORE any merge touches them.
+dA="$(clean_world)"; role_state "$dA" current; bare_marks "$dA"; rA="$(world_root "$dA")"
+dN="$(clean_world)"; role_state "$dN" none; bare_marks "$dN"; rN="$(world_root "$dN")"
+dL="$(clean_world)"; role_state "$dL" legacy; bare_marks "$dL"; rL="$(world_root "$dL")"
+dD="$(clean_world)"; role_state "$dD" current; bare_marks "$dD"; seal_all "$dD"
+dLs="$(clean_world)"; role_state "$dLs" legacy; bare_marks "$dLs"; seal_all "$dLs"
+dE="$(clean_world)"; role_state "$dE" current; seal_all "$dE"; mark_all "$dE"; e_mrc=$MRC
+dF="$(clean_world)"; role_state "$dF" current; mark_all "$dF"; f_mrc=$MRC
+perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$dF/1.md"
+
+# CS-A2: the beat. --status --complete over an in-set shard under each role state, and over an
+# OUTSIDE-set epics part (graph s319's `epics/part-<n>.md` shape) with no role file at all: the in-set
+# CURRENT and NONE files are UNFINISHED naming the admission, the LEGACY one and the epics part are
+# UNSETTLED (the settle path, unchanged), and the epics world carries no role file anywhere.
+a2_status() { # <world root> <target> -> the --status line for it
+  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
+}
+eP="$rN/_bmad-output/planning-artifacts/s1/epics"; mkdir -p "$eP"
+printf '# Epic 1\n\nBody.\n\nseat-complete: stories-epic-1 pm none findings=0\n' > "$eP/part-1.md"
+in_set "planning-artifacts/s1/epics/part-1.md" && eset=yes || eset=no
+sA="$(a2_status "$rA" "${dA#"$rA"/}/1.md")"; sN="$(a2_status "$rN" "${dN#"$rN"/}/1.md")"
+sL="$(a2_status "$rL" "${dL#"$rL"/}/1.md")"; sE="$(a2_status "$rN" "_bmad-output/planning-artifacts/s1/epics/part-1.md")"
+nrole="$(find "$rN" -path '*/team-roles/*' -type f | grep -c .)" || nrole=0
+rm -f "$eP/part-1.md"; rmdir "$eP" # the epics part belongs to this arm only; dN is merged below
+case "$sA" in "UNFINISHED "*"is not admitted"*"legacy window is closed"*) a2a=1 ;; *) a2a=0 ;; esac
+case "$sN" in "UNFINISHED "*"is not admitted"*"no readable role file"*) a2n=1 ;; *) a2n=0 ;; esac
+case "$sL" in "UNSETTLED "*) a2l=1 ;; *) a2l=0 ;; esac
+case "$sE" in "UNSETTLED "*) a2e=1 ;; *) a2e=0 ;; esac
+if [ "$a2a$a2n$a2l$a2e" = 1111 ] && [ "$eset" = no ] && [ "$nrole" = 0 ]; then
+  ok "CS-A2: --status: in-set CURRENT and NONE -> UNFINISHED naming the admission; LEGACY -> UNSETTLED; an outside-set epics part with no role file anywhere -> UNSETTLED"
+else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set: $eset, role files in that world: $nrole)"; fi
+
+# ---- THE SHIPPED merge over every world, FIRST. These verdicts are the base every mutant cell below is
+# compared against (rule: a cell is `killed=yes` when the mutant's verdict diverges from the shipped verdict on
+# the SAME world). Order: refusals (they write nothing), then the merging runs, each followed by removing the
+# merged output so the next driver of that world reads it clean.
+. "$CS_HERE/../lib/mutant.sh"
+MX=0; [ "${1:-}" = --matrix ] && MX=1
+mx_pp=0; mx_only=0
+vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; the merged output is removed afterwards
+  run_merge "$1" "$2"
+  if [ "$RC" -eq 0 ]; then VRD=MERGED; RSN=-
+  else VRD=REFUSED; RSN="$(grep -m1 -o 'legacy window is closed\|no readable role file\|is not the body above it\|marker admission input holds\|cannot resolve the path' "$MO")" || RSN=other; fi
+  rm -f "$(out_of "$2")"
+}
+sv() { # <world name> -- record the verdict of the run_merge just made as the shipped one
+  if [ "$RC" -eq 0 ]; then eval "SV_$1=MERGED"; else eval "SV_$1=REFUSED"; fi
+}
+run_merge "$MERGE" "$dA"; sv dA; if refused_clean "the legacy window is closed" "$dA"; then s_a=1; else s_a=0; fi; m_a="$(head -3 "$MO")"
+run_merge "$MERGE" "$dN"; sv dN; if refused_clean "no readable role file for seat 'adversary'" "$dN"; then s_b=1; else s_b=0; fi; m_b="$(head -3 "$MO")"
+# (d) the BL-738 fallback shape: a bare line appended and then SEALED as an Edit, so --check cannot see it
+# (the seal-check probe merges this world), under the CURRENT role file -> REFUSED.
+bash "$SEAL" --check "$(hr_state "$dD/1.md")" "$dD"/*.md >/dev/null 2>&1; d_chk=$?
+run_merge "$MERGE" "$dD"; sv dD; if refused_clean "the legacy window is closed" "$dD"; then s_d=1; else s_d=0; fi; m_d="$(head -3 "$MO")"
+# (f) a sha= marker whose body was changed through Bash on a shard with NO seal row: --check has nothing
+# to compare, the digest does -> REFUSED.
+run_merge "$MERGE" "$dF"; sv dF; if refused_clean "is not the body above it" "$dF"; then s_f=1; else s_f=0; fi; m_f="$(head -3 "$MO")"
+# (c) LEGACY + bare -> MERGED; the belt's (a) legacy + bare + sealed -> MERGED.
+run_merge "$MERGE" "$dL"; sv dL; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then s_c=1; else s_c=0; fi; m_c="$(head -3 "$MO")"; rm -f "$(out_of "$dL")"
+run_merge "$MERGE" "$dLs"; sv dLs; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then s_6a=1; else s_6a=0; fi; m_6a="$(head -3 "$MO")"; rm -f "$(out_of "$dLs")"
+
+# CS-A5: the admission's path list is built with every producer's status checked. A SEALED --mark set under
+# the CURRENT role file merges (case (e) of CS-A1); the same world with an awk that fails on the per-shard
+# path lookup (`-v k=`) must be REFUSED naming the lookup, never merged. The stub exits 3 on `k=` and passes
+# everything else through; both are probed first so a stub that did not apply is FIXTURE BROKEN.
+a5bin="$WORK/a5bin"; mkdir -p "$a5bin"
+a5real="$(command -v awk)"
+# It fails only a `k=` lookup whose input file sits beside an admit-keys file, i.e. the admission's own lookup.
+printf '#!/bin/sh\nfor a in "$@"; do last="$a"; case "$a" in k=*) kk=1 ;; esac; done\nif [ -n "$kk" ] && [ -f "$(dirname "$last")/admit-keys" ]; then exit 3; fi\nexec "%s" "$@"\n' "$a5real" > "$a5bin/awk"; chmod +x "$a5bin/awk"
+a5_probe="$WORK/a5probe"; mkdir -p "$a5_probe"; : > "$a5_probe/admit-keys"; : > "$a5_probe/shards"
+a5_stub_rc=0; PATH="$a5bin:$PATH" awk -v k=x 'BEGIN { exit 0 }' "$a5_probe/shards" || a5_stub_rc=$?
+a5_pass_rc=0; PATH="$a5bin:$PATH" awk 'BEGIN { exit 0 }' || a5_pass_rc=$?
+PATH="$a5bin:$PATH" run_merge "$MERGE" "$dE"; if refused_clean "cannot resolve the path of shard" "$dE"; then s_5=1; else s_5=0; fi; m_5="$(head -3 "$MO")"
+run_merge "$MERGE" "$dE"; sv dE; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$e_mrc" = 0 ]; then s_e=1; else s_e=0; fi; m_e="$(head -3 "$MO")"
+grep -q '^seat-complete: stories adversary 1 sha=' "$dE/1.md" && s_6c_sha=1 || s_6c_sha=0
+rm -f "$(out_of "$dE")"
+
+# ---- THE MUTANT x CASE MATRIX. A cell is one mutant's merge over one world; it prints `killed=yes` when its
+# verdict diverges from the shipped one on the same world. `--matrix` (argv, never the environment) runs EVERY
+# cell and prints one MATRIX row each, then stops; a plain run executes only the deciding and twin cells below.
+mx_cell() { # <mutant name> <merge path> <world name> -> VRD, RSN, KILL (matrix-only when MX=1)
+  local wd sh; eval "wd=\$$3"; eval "sh=\$SV_$3"
+  vrd "$2" "$wd"
+  if [ "$VRD" != "$sh" ]; then KILL=yes; else KILL=no; fi
+}
+if [ "$MX" = 1 ]; then
+  for _mm in A3 A4 A6 A6miss; do
+    case "$_mm" in A3) _mp="$mA3" ;; A4) _mp="$mA4" ;; A6) _mp="$mA6" ;; A6miss) _mp="$mA6miss" ;; esac
+    [ -n "$_mp" ] || { echo "MATRIX $_mm DID-NOT-APPLY"; exit 2; }
+    _trip=""
+    for _mw in dA dN dL dD dLs dE dF; do
+      mx_cell "$_mm" "$_mp" "$_mw"; mx_only=$((mx_only + 1)); eval "_sh=\$SV_$_mw"
+      echo "MATRIX $_mm $_mw shipped=$_sh mutant=$VRD reason=$RSN killed=$KILL"
+      [ "$KILL" = yes ] && _trip="$_trip $_mw"
+    done
+    echo "MATRIX-ROW $_mm tripped=[${_trip# }]"
+  done
+  exit 0
 fi
+
+# CS-A3/CS-A4: MUTANTS of the admission, each in a copy of the merge's WHOLE script directory, only
+# content-seal.sh edited, the anchor applied exactly once. A3 lets a missing role file acquit; A4 stops
+# reading the fallback sentence, so a LEGACY role file reads as CURRENT. Per push each mutant runs on its
+# DECIDING world and ONE TWIN world the measured matrix shows green for it (run.sh header MUTANT-MATRIX).
+if [ "$n0" != 0 ]; then bad "CS-A3/A4: FIXTURE BROKEN -- the impossible anchor control matched $n0 line(s)"
+else
+  if [ -z "$mA4" ]; then bad "CS-A4: DID NOT APPLY -- the fallback-sentence anchor is not in content-seal.sh exactly once"
+  else
+    mx_cell A4 "$mA4" dL; mx_pp=$((mx_pp + 1)); d_k=$KILL; d_v=$VRD; d_r=$RSN
+    mx_cell A4 "$mA4" dA; mx_pp=$((mx_pp + 1)); t_k=$KILL
+    if [ "$d_k" = yes ] && [ "$d_v" = REFUSED ] && [ "$d_r" = "legacy window is closed" ] && [ "$t_k" = no ]; then
+      mutant_killed "$([ "$s_a" = 1 ] && [ "$s_c" = 1 ] && echo 1)" A4 "CS-A4: killed -- a LEGACY role file read as CURRENT fails CS-A1 at case (c) (dL); twin (a) (dA) stays green"
+    else bad "CS-A4: the fallback-sentence mutant did not die at (c) with (a) green: (c) killed=$d_k $d_v [$d_r], (a) killed=$t_k"; fi
+  fi
+  if [ -z "$mA3" ]; then bad "CS-A3: DID NOT APPLY -- the missing-role refusal anchor is not in content-seal.sh exactly once"
+  else
+    mx_cell A3 "$mA3" dN; mx_pp=$((mx_pp + 1)); d_k=$KILL; d_v=$VRD
+    mx_cell A3 "$mA3" dA; mx_pp=$((mx_pp + 1)); t_k=$KILL
+    if [ "$d_k" = yes ] && [ "$d_v" = MERGED ] && [ "$t_k" = no ]; then
+      mutant_killed "$([ "$s_a" = 1 ] && [ "$s_b" = 1 ] && echo 1)" A3 "CS-A3: killed -- a missing role file acquitting fails CS-A1 at case (b) (dN, the merge took it); twin (a) (dA) stays green"
+    else bad "CS-A3: the missing-role mutant did not die at (b) with (a) green: (b) killed=$d_k $d_v, (a) killed=$t_k"; fi
+  fi
+fi
+
+# ---- the belt's mutants. The belt mutant drops the admission's count check AND forces one key (shard 1) to
+# miss the path lookup, so the admission judges a list one shorter and (d) MERGES.
+if [ -z "$mA6miss" ] || [ -z "$mA6" ]; then
+  bad "CS-A6: DID NOT APPLY -- the path-lookup or count-check anchor is not in merge-adversarial-shards.sh exactly once"
+else
+  mx_cell A6miss "$mA6miss" dE; mx_pp=$((mx_pp + 1)); d_k=$KILL; d_v=$VRD; d_r=$RSN; d_m="$(head -3 "$MO")"
+  d_names=0; { has "$MO" "path(s) for" && has "$MO" "marked shard(s)"; } && d_names=1
+  mx_cell A6miss "$mA6miss" dF; mx_pp=$((mx_pp + 1)); t_k=$KILL; t_r=$RSN
+  s_6e=0; [ "$d_k" = yes ] && [ "$d_v" = REFUSED ] && [ "$d_r" = "marker admission input holds" ] && [ "$d_names" = 1 ] && [ "$t_k" = no ] && [ "$t_r" = "marker admission input holds" ] && s_6e=1
+  mx_cell A6 "$mA6" dF; mx_pp=$((mx_pp + 1)); a_k=$KILL; a_v=$VRD; a_m="$(head -2 "$MO")"
+  mx_cell A6 "$mA6" dE; mx_pp=$((mx_pp + 1)); b_k=$KILL
+fi
+
+if [ "$s_a" = 1 ] && [ "$s_b" = 1 ] && [ "$s_c" = 1 ] && [ "$d_chk" = 0 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$f_mrc" = 0 ] && [ "$s_f" = 1 ]; then
+  ok "CS-A1: bare markers under the CURRENT role file -> REFUSED; under NO role file -> REFUSED; under the LEGACY file -> MERGED; a bare line then sealed by Edit under CURRENT -> REFUSED; a --mark set under CURRENT -> MERGED; a sha= digest broken with no seal row -> REFUSED"
+else bad "CS-A1: cases a=$s_a b=$s_b c=$s_c d=$s_d (--check rc=$d_chk) e=$s_e (mark rc=$e_mrc) f=$s_f (mark rc=$f_mrc) did not all hold: a[$m_a] b[$m_b] c[$m_c] d[$m_d] e[$m_e] f[$m_f]"; fi
+
+if [ "$a5_stub_rc" != 3 ] || [ "$a5_pass_rc" != 0 ]; then bad "CS-A5: FIXTURE BROKEN -- the awk stub did not apply (k= rc=$a5_stub_rc, pass-through rc=$a5_pass_rc)"
+elif [ "$s_5" = 1 ] && [ "$s_e" = 1 ]; then ok "CS-A5: a failed per-shard path lookup under the marker admission -> REFUSED naming it, while the unstubbed twin MERGES"
+else bad "CS-A5: a failed admission input build was not refused (stubbed refused=$s_5, unstubbed twin merged=$s_e): $m_5 | $m_e"; fi
+
+# CS-A6: THE MERGE BELT, end to end -- the REAL merge over a REAL sealed set, no stub, plus the count join.
+# (a) a sealed set with a LEGACY role file and bare markers MERGES; (b) the same set under the CURRENT role
+# file is REFUSED with the admission's own line; (c) a sha= marker with a correct digest under the CURRENT
+# role file MERGES; (d) the same set with ONE shard's body changed through Bash is REFUSED naming the digest.
+# (b), (c), (d) are the worlds dD, dE, dF that CS-A1 (d), (e), (f) already drove: the same state, one world.
+if [ "$s_6a" = 1 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$s_6c_sha" = 1 ] && [ "$s_f" = 1 ]; then
+  ok "CS-A6a-d: the real merge over a sealed set -> legacy role + bare markers MERGED; current role + bare markers REFUSED; a correct sha= digest under the current role MERGED; a broken one REFUSED"
+else bad "CS-A6a-d: a=$s_6a b=$s_d c=$s_e (sha line $s_6c_sha) d=$s_f did not all hold on the shipped merge: a[$m_6a] b[$m_d] c[$m_e] d[$m_f]"; fi
+if [ -n "${mA6miss:-}" ] && [ -n "${mA6:-}" ]; then
+  # The mutant with the same forced miss under the INTACT count check must refuse on the count, naming both numbers.
+  if [ "$s_6e" = 1 ]; then mutant_killed "$([ "$s_e" = 1 ] && [ "$s_f" = 1 ] && echo 1)" A6miss "CS-A6e: a forced key miss under the intact count check -> REFUSED naming both counts (dE decides; dF twin stays refused on the same line)"
+  else bad "CS-A6e: a missing admission path was not refused on the count: killed=$d_k $d_v [$d_r], twin killed=$t_k [$t_r]: $d_m"; fi
+  if [ "$a_k" = yes ] && [ "$a_v" = MERGED ] && [ "$b_k" = no ]; then
+    mutant_killed "$([ "$s_f" = 1 ] && [ "$s_e" = 1 ] && echo 1)" A6 "CS-A6: killed -- without the count check and with one key missing, case (d) (dF) MERGES a broken digest; twin (c) (dE) stays green"
+  else bad "CS-A6: the belt mutant did not die at (d) with (c) green: (d) killed=$a_k $a_v, (c) killed=$b_k: $a_m"; fi
+fi
+
+# CS-MX: a PLAIN run executes no matrix-only cell, and exactly the per-push cells (4 mutants: A4 2, A3 2, A6miss 2, A6 2).
+if [ "$MX" = 0 ] && [ "$mx_only" = 0 ] && [ "$mx_pp" = 8 ]; then ok "CS-MX: a plain run executed $mx_pp deciding/twin cells and 0 matrix-only cells"
+else bad "CS-MX: a plain run executed $mx_pp deciding/twin cells (want 8) and $mx_only matrix-only cells (want 0)"; fi
 
 # CS-R1: the remedy for an adversary shard is the re-dispatch + --rerun one; a non-shard sealed path and
 # a remediator part keep the generic text.

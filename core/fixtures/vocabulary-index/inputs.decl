@@ -8,5 +8,8 @@ templates/
 core/
 +docs/invariant-index.md
 +docs/vocabulary-index.md
-# copy-only: core/fixtures/vocabulary-index/run.sh:96 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/vocabulary-index/run.sh:131 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
+# The mutation helpers run.sh sources.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

@@ -24,11 +24,25 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # whether its path is in the set (seal-lib.sh `in_set`), so a widened or narrowed declaration moves
 # the arm's subject rather than silently invalidating it.
 #
+# THE MUTANT MATRIX. The four admission mutants live in merge-arms.sh. Each is run per push on its DECIDING
+# world plus a TWIN world that stays green for it; the full mutant x world matrix is measured by `--matrix`
+# (an argv flag, forwarded to merge-arms.sh), which prints one MATRIX row per cell with killed=yes|no and one
+# MATRIX-ROW per mutant with tripped=[...], then stops. The matrix is re-measured whenever an arm or a mutant
+# is added or changed. The recorded matrix plus the twin replaces a per-push exact-vector assertion.
+# MUTANT-MATRIX A3 decides=dN twins=dA
+# MUTANT-MATRIX A4 decides=dL twins=dA
+# MUTANT-MATRIX A6miss decides=dE twins=dF
+# MUTANT-MATRIX A6 decides=dF twins=dE
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/content-seal/run.sh --matrix
+#
 # Exit: 0 every arm passed, 1 an arm failed, 2 the fixture could not run.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 for f in seal-lib.sh merge-arms.sh join-arms.sh gate-arms.sh; do
   [ -f "$HERE/$f" ] || { echo "FIXTURE BROKEN: $HERE/$f is absent; nothing was asserted" >&2; exit 2; }
 done
+if [ "${1:-}" = --matrix ]; then
+  bash "$HERE/merge-arms.sh" --matrix; exit $?
+fi
 echo "content-seal:"
 rc=0; broken=0
 tally() { # <exit> <arm file>

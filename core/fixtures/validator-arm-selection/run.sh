@@ -34,9 +34,44 @@
 # arm below therefore groups ids by their OWN output first and compares GROUPS, and it carries
 # a floor on the group count so that a selector which stopped selecting collapses to one group
 # and fails rather than satisfying disjointness vacuously.
+#
+# THE MUTANT MATRIX. Each mutant below is named as its `ok` line prints it. Its row names the
+# cell that KILLS it (decides=) and the cells it could plausibly co-trip but must not (twins=).
+# A cell is a predicate over the mutated run's output, single-sourced in `mx_sig`; the kill the
+# plain run asserts and the matrix score both read the deciding cell there, and the deciding
+# cell is read back out of the row itself (`mx_row`). The i66-* mutants run `--arms I66` on a
+# PARTIAL tree that holds only the files I66 reads, so a full validator run of it would fail
+# every other arm by construction and the matrix skips that run for them: their twins are the
+# in-unit sibling cells. m2 and m3 mutate a whole seeded tree, so the matrix adds ONE full
+# validator run of each and diffs its sorted FAIL set against the unmutated seeded tree's
+# (m1 is skipped: it deletes an assignment the validator reads, so its full run crashes by
+# construction and the diff would measure the crash). The two twins on the m1 row are the
+# other two crash shapes arm 4 matches: a broken slice could plausibly surface as any of the
+# three, and only the unbound variable is the one this mutant must produce.
+# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
+# command, run from the repository root; hermetic-run.sh forwards no argument, so it does not
+# reach that mode and the per-push run never executes a matrix-only cell (the ledger arm at
+# the end of a plain run asserts it).
+# MUTANT-MATRIX i66-widen decides=i66-fork twins=i66-keyrows-unsound
+# MUTANT-MATRIX i66-kx decides=i66-fork twins=i66-keyrows-unsound
+# MUTANT-MATRIX i66-ks decides=i66-keyrows-unsound twins=i66-fork
+# MUTANT-MATRIX i66-lc decides=i66-lock-fork twins=i66-lock-unsound
+# MUTANT-MATRIX i66-ls decides=i66-lock-unsound,i66-lock-fork twins=i66-fork
+# MUTANT-MATRIX i66-ld decides=i66-deriver twins=i66-lock-unsound
+# MUTANT-MATRIX m1 decides=m1-unbound twins=m1-notfound,m1-syntax
+# MUTANT-MATRIX m2 decides=m2-collapse twins=m2-union
+# MUTANT-MATRIX m3 decides=m3-silent-arm twins=m3-unknown-id
+# MUTANT-MATRIX-DYNAMIC i66_one why=the helper composes each mutant name as i66-<tag> from its first argument; the four names it produces (i66-kx, i66-ks, i66-lc, i66-ls) each keep their own row above
+# MUTANT-MATRIX-CONTROL i66-control why=the unmutated copy must read OK at rc 0 under --arms I66, so nothing is mutated and there is no deciding cell
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/validator-arm-selection/run.sh --matrix
 set -u
 
 NAME="validator-arm-selection"
+# MATRIX MODE is entered by this positional argument only (never an AI_DLC_* name, which the
+# fixture scrubs elsewhere in this family). It deals BOTH shards' phases to this one process and
+# adds the cross-cell scoring; a plain run, with no argument, never executes a matrix-only cell.
+MX_MODE=""
+if [ "${1:-}" = "--matrix" ]; then MX_MODE=matrix; fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE --------------------
@@ -79,6 +114,10 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # the SEEDED tree, and its control is the `N_SEEDED < 3` guard below: a validator that had
 # stopped running produces no findings on that tree and the shard reports FIXTURE BROKEN
 # rather than a clean sweep. Neither shard can report green having run nothing.
+# KEPT AFTER THE m2 TRIM: the pole is the whole suite's single longest directory, shard b still
+# pays the seeded plain run plus the 135-id attribution sweep (two near-full serial units) in
+# its own directory, and merging it back into 'a' would stack that behind a's baseline, all-ids
+# and clean-sweep runs on one critical path.
 SHARDS="a b"
 PHASES_a="width unknown-id grammar i66-onehook all-ids sweep"
 PHASES_b="attrib union partition m1 m2 m3"
@@ -125,6 +164,9 @@ case " $SHARDS " in
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
 esac
 eval "MINE=\"\${PHASES_$GROUP:-}\""
+# Matrix mode deals the MUTANT phases of both shards to this one process; the other phases carry
+# no mutant to score. A plain run keeps the shard's own phase list.
+[ "$MX_MODE" = matrix ] && MINE="i66-onehook m1 m2 m3"
 # AN EMPTY SHARD PASSES EVERY ASSERTION IT NEVER MADE. A name in SHARDS with no PHASES_ list
 # would run the prologue, print a clean banner and exit 0.
 if [ -z "$MINE" ]; then
@@ -213,6 +255,134 @@ broke() { printf '  FIXTURE BROKEN  %s\n' "$1"; exit 2; }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/${NAME}.XXXXXX")" || { echo "  FIXTURE BROKEN  mktemp failed"; exit 2; }
 trap 'rm -rf "$TMP"' EXIT
+
+# --- THE MUTANT MATRIX: per-push twins, and the --matrix measurement ------------------------
+# MXL is a ledger. Every MATRIX-ONLY cell (a cross-cell score, the full validator run of a mutated
+# tree) appends an `mx-` line to it before it does anything else; every per-push mutant check
+# appends a `plain-cells` line. The rule-9 arm at the end of a plain run asserts no `mx-` line
+# exists while the `plain-cells` control is non-empty, so an empty count cannot come from a ledger
+# nothing writes.
+MXL="$TMP/mx.ledger"; : > "$MXL"
+MX_BROKEN=0
+# The crash shapes a matrix score refuses on: a crashed arm prints no FAIL and would read green.
+MX_CRASH='unbound variable|command not found|syntax error'
+MX_I66="i66-fork i66-keyrows-unsound i66-lock-fork i66-lock-unsound i66-deriver"
+
+# mx_family <cell> -> every cell scored over that cell's drive (one mutated run's output).
+mx_family() {
+  case "$1" in
+    i66-*) printf '%s\n' $MX_I66 ;;
+    m1-*)  printf '%s\n' m1-unbound m1-notfound m1-syntax ;;
+    m2-*)  printf '%s\n' m2-collapse m2-union ;;
+    m3-*)  printf '%s\n' m3-silent-arm m3-unknown-id ;;
+    *)     broke "mx_family: no family for cell '$1'" ;;
+  esac
+}
+
+# mx_red <cell> <output> -> 0 when <cell> is RED (its kill condition holds) on <output>. A drive
+# with an exit code appends it as a final `__rc=<n>` line. Each cell is single-sourced HERE.
+mx_red() {
+  local c="$1" o="$2" rc g k
+  rc="$(sed -n 's/^__rc=//p' <<<"$o")"
+  case "$c" in
+    i66-fork)            [ "${rc:-0}" -ne 0 ] && grep -qF -- 'I66 the two pre-push fixture-suite runners have forked' <<<"$o" ;;
+    i66-keyrows-unsound) [ "${rc:-0}" -ne 0 ] && grep -qF -- 'I66 the READSET_KEYROWS span of .githooks/pre-push is unsound' <<<"$o" ;;
+    i66-lock-fork)       [ "${rc:-0}" -ne 0 ] && grep -qF -- "I66 the two pre-push hooks' READSET_LOCK spans have forked" <<<"$o" ;;
+    i66-lock-unsound)    [ "${rc:-0}" -ne 0 ] && grep -qF -- 'I66 the READSET_LOCK span of .githooks/pre-push is unsound' <<<"$o" ;;
+    i66-deriver)         [ "${rc:-0}" -ne 0 ] && grep -qF -- "no longer extracts the span with the literal sentinels '# READSET_LOCK_BEGIN'" <<<"$o" ;;
+    m1-unbound)          grep -qF -- 'TEMPLATE: unbound variable' <<<"$o" ;;
+    m1-notfound)         grep -qF -- 'command not found' <<<"$o" ;;
+    m1-syntax)           grep -qF -- 'syntax error' <<<"$o" ;;
+    m2-collapse)         g="$(sed -n 's/^groups=\([0-9]*\) .*/\1/p' <<<"$o")"; k="$(sed -n 's/.* k=\([0-9]*\) .*/\1/p' <<<"$o")"; [ -n "$g" ] && [ -n "$k" ] && [ "$g" -lt "$k" ] ;;
+    m2-union)            grep -q -- ' union=ne$' <<<"$o" ;;
+    m3-silent-arm)       [ "${rc:-0}" -eq 2 ] && grep -qF -- 'no err/warn/fail call' <<<"$o" ;;
+    m3-unknown-id)       grep -qF -- 'no arm declares' <<<"$o" ;;
+    *) broke "mx_red: no cell named '$c'" ;;
+  esac
+}
+
+# mx_row <mutant> <field> -> the field of <mutant>'s one MUTANT-MATRIX header row; empty unless
+# exactly one row names it. The header IS the cell list: nothing else in this file restates it.
+mx_row() {
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$0"
+}
+
+# mx_score <mutant> <output> <decides> <twins> <scan> <tree-validator> -- MATRIX-ONLY. Scores the
+# mutant against every cell of its drive and, where the mutant is a whole seeded tree, against every
+# arm outside the selected unit by ONE full validator run of the same mutated tree, whose sorted FAIL
+# set is diffed against the unmutated seeded tree's. scan: strict = crash shapes and rc in {0,1};
+# shapes = crash shapes only; none = the mutant IS a crash (m1). An empty tree-validator skips the
+# full run. Prints one MATRIX line.
+mx_score() {
+  local m="$1" o="$2" dec="$3" tw="$4" scan="$5" tv_="$6" c rcv crash=0 g=0 t=0 uex="" tws="" decs outside frc extra
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  case "$scan" in strict|shapes) if grep -qE -- "$MX_CRASH" <<<"$o"; then crash=1; fi ;; esac
+  if [ "$scan" = strict ]; then
+    rcv="$(sed -n 's/^__rc=//p' <<<"$o")"
+    case "$rcv" in 0|1) ;; *) crash=1 ;; esac
+  fi
+  if [ -z "$tv_" ]; then
+    outside=SKIPPED
+  else
+    printf 'mx-full %s\n' "$m" >> "$MXL"
+    bash "$tv_" >/dev/null 2>"$TMP/mx.full.err"; frc=$?
+    if { [ "$frc" -ne 0 ] && [ "$frc" -ne 1 ]; } || grep -qE -- "$MX_CRASH" "$TMP/mx.full.err"; then crash=1; fi
+    extra="$(comm -3 <(LC_ALL=C sort -u "$TMP/seeded.fails") <(grep '^FAIL:' "$TMP/mx.full.err" | LC_ALL=C sort -u) | grep -c . || true)"
+    if [ "${extra:-0}" -eq 0 ]; then outside=EQUAL; else outside="DIFF-${extra}"; fi
+  fi
+  if [ "$crash" -ne 0 ]; then
+    printf 'MATRIX BROKEN %s\n' "$m"
+    MX_BROKEN=1
+    return
+  fi
+  decs=""
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if mx_red "$c" "$o"; then decs="$decs,$c:RED"; else decs="$decs,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  decs="${decs#,}"
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if mx_red "$c" "$o"; then tws="$tws,$c:RED"; uex="$uex $c:RED"; else tws="$tws,$c:GREEN"; fi
+  done
+  tws="${tws#,}"
+  for c in $(mx_family "${dec%%,*}"); do
+    case ",$dec," in *",$c,"*) continue ;; esac
+    case ",$tw," in *",$c,"*) continue ;; esac
+    t=$((t + 1)); mx_red "$c" "$o" || g=$((g + 1))
+  done
+  if [ "$outside" != EQUAL ] && [ "$outside" != SKIPPED ]; then uex="$uex outside:$outside"; fi
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s UNEXPECTED=%s\n' "$m" "$decs" "$tws" "$g" "$t" "$outside" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    bad "MATRIX $m does not match its header row:$uex"
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d outside=%s\n' "$m" "$decs" "$tws" "$g" "$t" "$outside"
+  fi
+}
+
+# mx_kill <mutant> <output> <scan> [<tree-validator>] -> 0 when the DECIDING cell is RED. Plain
+# mode also asserts every twin stays GREEN on the same output (no extra run); matrix mode scores
+# the whole drive instead.
+mx_kill() {
+  local m="$1" o="$2" scan="$3" tv_="${4:-}" dec tw c kill
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then broke "mutant '$m' has no single MUTANT-MATRIX row naming its deciding cell and twins"; fi
+  printf 'plain-cells %s\n' "$m" >> "$MXL"
+  kill=0
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do mx_red "$c" "$o" || kill=1; done
+  if [ "$MX_MODE" = matrix ]; then
+    mx_score "$m" "$o" "$dec" "$tw" "$scan" "$tv_"
+  else
+    for c in $(printf '%s' "$tw" | tr ',' ' '); do
+      if mx_red "$c" "$o"; then
+        bad "MUTANT $m: its twin $c also fired on this mutant's output -- the kill is not confined to $dec"
+      fi
+    done
+  fi
+  return "$kill"
+}
 # THE INNER POOL WIDTH IS DELIBERATELY NARROW. This unit runs inside the suite's 16-way pool,
 # and a knob here multiplies against a knob there; six is chosen so the two selected-run sweeps
 # (94 ids each, ~0.6 CPU-seconds apiece) do not sit on the critical path while the unit still
@@ -452,21 +622,21 @@ cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$TMP/i66m/core/git-hooks/pre-push" \
 i66c_out="$(bash "$TMP/i66c/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; i66c_rc=$?
 i66m_out="$(bash "$TMP/i66m/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; i66m_rc=$?
 if [ "$i66c_rc" -eq 0 ] && grep -q '^OK: enforcement-map.yaml in sync' <<< "$i66c_out"; then
-  ok "I66 CONTROL: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"
+  ok "CONTROL i66-control: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"
 else
-  bad "I66 CONTROL: the unmutated copy did not read OK at rc 0 under --arms I66 (rc $i66c_rc): $(printf '%s' "$i66c_out" | head -3 | tr '\n' ' ' | cut -c1-200)"
+  bad "CONTROL i66-control: the unmutated copy did not read OK at rc 0 under --arms I66 (rc $i66c_rc): $(printf '%s' "$i66c_out" | head -3 | tr '\n' ' ' | cut -c1-200)"
 fi
-if [ "$i66m_rc" -ne 0 ] && grep -q 'I66 the two pre-push fixture-suite runners have forked' <<< "$i66m_out"; then
-  ok "MUTANT: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
+if mx_kill i66-widen "$i66m_out"$'\n'"__rc=$i66m_rc" strict; then
+  ok "MUTANT i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
 else
-  bad "MUTANT SURVIVED: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
+  bad "MUTANT SURVIVED i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
 fi
 # THE READSET_KEYROWS SPAN (the READSET_LOCK span follows it), edited in ONE hook. The runner sources the declared-fixture composer out of whichever hook
 # it finds, so a span that differs between the two keys a consumer's fixtures differently from this repo's. Two
 # mutants, each on a fresh copy of the control tree with the consumer hook left byte-identical: an EXECUTABLE line of
 # the span (readset_decl_tool_hashes' filter, which the comment-stripped pool compare must see) and the BEGIN SENTINEL
 # renamed (a comment, so only the span-sentinel check can see it). Each anchor must match exactly once.
-i66_one() { # <tag> <from> <to> <want message> <what>
+i66_one() { # <tag> <from> <to> <want message> <what> -- scored as mutant i66-<tag> by its header row
   local d="$TMP/i66$1" n out rc
   mkdir -p "$d" && cp -Rp "$TMP/i66c/." "$d/" || broke "could not copy the I66 control tree for $1"
   # A sentinel anchor is matched as a WHOLE LINE: readset_vs_ident's extraction regex carries the same text.
@@ -480,8 +650,8 @@ i66_one() { # <tag> <from> <to> <want message> <what>
   fi
   cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$d/core/git-hooks/pre-push" || broke "the KEYROWS mutant $1 touched the consumer hook too"
   out="$(bash "$d/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -qF -- "$4" <<< "$out"; then ok "MUTANT: $5 in .githooks/pre-push alone makes --arms I66 exit $rc with '$4'"
-  else bad "MUTANT SURVIVED: $5 in .githooks/pre-push alone left --arms I66 at rc $rc without '$4': $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
+  if mx_kill "i66-$1" "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-$1: $5 in .githooks/pre-push alone makes --arms I66 exit $rc with '$4'"
+  else bad "MUTANT SURVIVED i66-$1: $5 in .githooks/pre-push alone left --arms I66 at rc $rc without '$4': $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
 }
 i66_one kx '$2 == "T" && !($3 in have) { have[$3] = 1; print $3 }' '$2 == "T" { have[$3] = 1; print $3 }' \
   'I66 the two pre-push fixture-suite runners have forked' 'an executable READSET_KEYROWS line edited'
@@ -506,8 +676,8 @@ i66_dv() { # the deriver's extraction literal renamed in a fresh copy of the con
     broke "the READSET_LOCK deriver mutant ld DID NOT APPLY: the anchor matched ${n:-?} line(s) of $f, not 1"
   fi
   out="$(bash "$d/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -qF -- 'no longer extracts the span with the literal sentinels '"'"'# READSET_LOCK_BEGIN'"'" <<< "$out"; then ok "MUTANT: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
-  else bad "MUTANT SURVIVED: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh left --arms I66 at rc $rc without the sentinel message: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
+  if mx_kill i66-ld "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
+  else bad "MUTANT SURVIVED i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh left --arms I66 at rc $rc without the sentinel message: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
 }
 i66_dv
 fi
@@ -536,6 +706,12 @@ fi
 if want sweep; then
 RAN="$RAN sweep"
 mkdir -p "$TMP/sw"
+# EACH ID IS RUN ALONE, one call per id (131 rows carry 135 ids; only 3 rows share ids, so one
+# per row would save 4 runs and sample nothing). Batching ids into one call is rejected because
+# m1 proves a slice can break ONLY when its id runs alone: un-hoisting TEMPLATE kills
+# `--arms I14` alone while the same call with I13 beside it passes. This sweep runs against
+# the clean real tree ($VAL); the attribution sweep runs against the seeded tree, a different
+# state, so the two cannot share outputs.
 tr '\n' '\0' < "$IDS" \
   | xargs -0 -n1 -P "$JOBS" bash "$0" --sweep-one "$VAL" "$TMP/full.out" "$TMP/full.err" "$TMP/sw" \
   > "$TMP/sweep.txt" 2>"$TMP/sweep.err"
@@ -620,6 +796,9 @@ groups() {
 # return 0 over a sweep that died. Every guard and every assignment runs HERE, in the parent,
 # after both waits -- a `broke` inside a background job would end the job, not the fixture.
 if want_any attrib union partition m2; then
+# This attribution sweep runs against the SEEDED tree ($TV), a different state from arm 4's
+# clean-tree sweep, so the two cannot share outputs. Attribution is by asking the selector per
+# id, never by reading message text, so it cannot be batched into one call.
 bash "$TV" > /dev/null 2>"$TMP/seeded.err" &
 seeded_pid=$!
 attrib "$TV" sel "$IDS" &
@@ -708,10 +887,10 @@ if cmp -s "$TV" "$TM1/scripts/validate-enforcement-map.sh.mut"; then
 fi
 mv "$TM1/scripts/validate-enforcement-map.sh.mut" "$TM1/scripts/validate-enforcement-map.sh"
 bash "$TM1/scripts/validate-enforcement-map.sh" --arms I14 >/dev/null 2>"$TMP/m1.err"
-if grep -q 'TEMPLATE: unbound variable' "$TMP/m1.err"; then
-  ok "MUTANT: un-hoisting TEMPLATE makes --arms I14 report 'TEMPLATE: unbound variable', so arm 4's predicate can fire"
+if mx_kill m1 "$(cat "$TMP/m1.err")" none; then
+  ok "MUTANT m1: un-hoisting TEMPLATE makes --arms I14 report 'TEMPLATE: unbound variable', so arm 4's predicate can fire"
 else
-  bad "MUTANT SURVIVED: un-hoisting TEMPLATE did NOT make --arms I14 emit an unbound-variable error. Arm 4 above cannot distinguish a sound slice from a broken one and its clean report means nothing. stderr: $(head -1 "$TMP/m1.err" | cut -c1-120)"
+  bad "MUTANT SURVIVED m1: un-hoisting TEMPLATE did NOT make --arms I14 emit an unbound-variable error. Arm 4 above cannot distinguish a sound slice from a broken one and its clean report means nothing. stderr: $(head -1 "$TMP/m1.err" | cut -c1-120)"
 fi
 fi
 
@@ -721,12 +900,12 @@ fi
 # this, "the findings partition" is satisfied by a selector that works and equally by a fixture
 # that compared nothing.
 #
-# THE MUTANT IS RUN ONLY OVER THE GROUP REPRESENTATIVES, and that is a cost decision with a
+# THE MUTANT IS RUN ONLY OVER THREE GROUP REPRESENTATIVES, and that is a cost decision with a
 # correctness argument attached rather than a shortcut. A neutered selector runs the WHOLE
-# file on every call, so sweeping all 94 ids here would cost ~1800 CPU-seconds -- more than
-# this fixture is meant to save. The representatives are exactly the ids the arm above found
-# to differ from each other, so if the mutant fails to collapse them it fails to collapse
-# anything, and the floor is the same one arm 6 is judged by.
+# file on every call, so sweeping all ids (or even every representative) would cost far more
+# than this fixture is meant to save. The representatives are ids the arm above found to
+# differ from each other, so if the mutant fails to collapse three of them it fails to
+# collapse anything (see the K=3 reasoning at the call).
 if want m2; then
 RAN="$RAN m2"
 TM2="$TMP/m2"
@@ -737,12 +916,30 @@ if cmp -s "$TV" "$TM2/scripts/validate-enforcement-map.sh.mut"; then
   broke "the arm-7 mutant changed nothing — the emission line in ARMS_SELECT_AWK was not found, so this control tests an unmutated selector"
 fi
 mv "$TM2/scripts/validate-enforcement-map.sh.mut" "$TM2/scripts/validate-enforcement-map.sh"
-attrib "$TM2/scripts/validate-enforcement-map.sh" m2 "$TMP/sel.reps"
+# ONLY THE FIRST K=3 REPRESENTATIVES ARE DRIVEN, and 3 is enough. Arm 6's floor (N_GROUPS >= 3)
+# guarantees sel.reps holds at least 3 ids, and `groups` keeps ONE id per DISTINCT output
+# checksum, so any 3 of them print 3 distinct finding sets under the unmutated selector (the
+# very files arm 6 just checksummed) -- this arm would therefore read 3 groups, and be green,
+# on a working selector. Under a keep-everything selector every call prints the whole finding
+# set, so the 3 collapse to 1 group. Fewer than 3 is the kill. Every call here is full cost, so
+# each rep dropped saves a near-full validator run.
+M2_K=3
+head -n "$M2_K" "$TMP/sel.reps" > "$TMP/m2.reps.in"
+if [ "$(grep -c . "$TMP/m2.reps.in" || true)" -ne "$M2_K" ]; then
+  broke "sel.reps holds fewer than $M2_K representatives although arm 6's floor requires $N_GROUPS >= 3"
+fi
+attrib "$TM2/scripts/validate-enforcement-map.sh" m2 "$TMP/m2.reps.in"
 M2_GROUPS="$(groups m2)"
-if [ "${M2_GROUPS:-0}" -lt "$N_GROUPS" ]; then
-  ok "MUTANT: a selector that keeps every unit collapses the $N_GROUPS group representative(s) into ${M2_GROUPS:-0} output group(s), so arm 6's partition predicate can fire"
+# The neutered selector keeps every unit, so each id prints the WHOLE finding set and the union of
+# the per-id findings still equals the full run's: arm 6's union check stays green (the m2-union twin).
+: > "$TMP/m2.union"
+while IFS= read -r id; do [ -n "$id" ] && cat "$TMP/m2.$id" >> "$TMP/m2.union"; done < "$TMP/m2.ids"
+sort -u "$TMP/m2.union" -o "$TMP/m2.union"
+if cmp -s "$TMP/m2.union" "$TMP/seeded.fails"; then M2_U=eq; else M2_U=ne; fi
+if mx_kill m2 "groups=${M2_GROUPS:-0} k=$M2_K union=$M2_U" none "$TM2/scripts/validate-enforcement-map.sh"; then
+  ok "MUTANT m2: a selector that keeps every unit collapses $M2_K group representative(s) into ${M2_GROUPS:-0} output group(s), so arm 6's partition predicate can fire"
 else
-  bad "MUTANT SURVIVED: a selector stripped of its keep-range test still produced ${M2_GROUPS:-0} distinct output groups out of $N_GROUPS representatives. Arm 6's partition check cannot fire and its clean report means nothing"
+  bad "MUTANT SURVIVED m2: a selector stripped of its keep-range test still produced ${M2_GROUPS:-0} distinct output groups out of $M2_K representatives. Arm 6's partition check cannot fire and its clean report means nothing"
 fi
 fi
 
@@ -759,14 +956,31 @@ cp -R "$T" "$TM3"
 { cat "$TV"; printf '\n# --- I998: a declared arm with no emitter ------------------------------------\n:\n'; } \
   > "$TM3/scripts/validate-enforcement-map.sh"
 bash "$TM3/scripts/validate-enforcement-map.sh" --arms I998 >/dev/null 2>"$TMP/m3.err"; m3_rc=$?
-if [ "$m3_rc" -eq 2 ] && grep -q 'no err/warn/fail call' "$TMP/m3.err"; then
-  ok "MUTANT: an arm declared with no emitter makes --arms exit 2 naming the silent arm, so a fixture cannot select an arm that could never fire"
+if mx_kill m3 "$(cat "$TMP/m3.err")"$'\n'"__rc=$m3_rc" shapes "$TM3/scripts/validate-enforcement-map.sh"; then
+  ok "MUTANT m3: an arm declared with no emitter makes --arms exit 2 naming the silent arm, so a fixture cannot select an arm that could never fire"
 else
-  bad "MUTANT SURVIVED: adding a declared arm with no err/warn/fail call left --arms exiting $m3_rc. A battery could select an invariant that cannot emit, and that fixture would pass forever. stderr: $(head -1 "$TMP/m3.err" | cut -c1-120)"
+  bad "MUTANT SURVIVED m3: adding a declared arm with no err/warn/fail call left --arms exiting $m3_rc. A battery could select an invariant that cannot emit, and that fixture would pass forever. stderr: $(head -1 "$TMP/m3.err" | cut -c1-120)"
 fi
 fi
 
 [ -n "$T" ] && rm -rf "$T"
+
+# --- RULE 9: a plain run executes NO matrix-only cell ---------------------------------------
+# Every matrix-only cell appends an `mx-` line to the ledger before it does anything else, so a
+# plain run that reached one leaves a line here. The `plain-cells` lines are the CONTROL: each
+# per-push mutant check writes one to the same ledger, so a zero below cannot come from a ledger
+# nothing writes. Plain mode only; the matrix run is the thing being kept out.
+if [ "$MX_MODE" != matrix ] && want_any i66-onehook m1 m2 m3; then
+mx_leak="$(grep -c '^mx-' "$MXL" || true)"
+mx_ctl="$(grep -c '^plain-cells ' "$MXL" || true)"
+if [ "${mx_ctl:-0}" -eq 0 ]; then
+  bad "RULE 9: the matrix ledger control is EMPTY: no per-push mutant check wrote to it, so a zero count of matrix-only cells below would mean nothing"
+elif [ "${mx_leak:-0}" -ne 0 ]; then
+  bad "RULE 9: a plain run executed ${mx_leak} matrix-only cell(s) ($(grep '^mx-' "$MXL" | head -3 | tr '\n' ' ')) -- the --matrix measurement leaked into the per-push run"
+else
+  ok "RULE 9: a plain run executed no matrix-only cell, while its ${mx_ctl} per-push mutant check(s) wrote to the same ledger"
+fi
+fi
 
 # EVERY PHASE THIS SHARD WAS DEALT MUST HAVE RUN. A `want` that stopped matching -- a renamed
 # phase, a typo in a PHASES_ list, a guard edited out -- silently drops assertions, and a
@@ -779,6 +993,10 @@ if [ "${ran_n:-0}" -ne "${mine_n:-0}" ]; then
 fi
 
 echo
+if [ "$MX_BROKEN" -ne 0 ]; then
+  echo "MATRIX BROKEN: a mutated run crashed or printed a crash shape, so no cell verdict on it means anything"
+  exit 2
+fi
 if [ "$fails" -eq 0 ]; then
   echo "$NAME: PASS"
   exit 0

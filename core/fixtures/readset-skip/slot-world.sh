@@ -43,6 +43,17 @@
 #   rebreak    a dead holder's pid file in an unwritable dir: it breaks again every poll, so the breaks are
 #              bounded (-> "was broken 5 times ...") and a sleep separates each one from the next
 #   oldempty   CONTROL: an old EMPTY slot dir with no pid file is broken once and acquired, as before
+# THE WORLD'S OWN PROCESSES ARE REAPED BY PROCESS GROUP, NEVER BY PID OR PATTERN. Every deriver A starts in
+# a group of its own (job control around its launch), and that group is recorded. A kill takes the whole
+# group: the deriver, its stub stream and that stream's `tail -f`, the fixture, and any deriver B the fixture
+# started. Killed by pid alone, the deriver dies and its stream stub, whose TERM trap never runs, keeps a
+# `tail -f` alive under init forever -- measured: slot-world's own `stub/logstream` processes found live up
+# to 15 hours after the run that started them.
+#   hold       SEED: fa holds inside its stream until the world kills it, so a live stream is killed -- the
+#              state that leaked. PASS means the stream and the fixture were both up when the kill landed.
+#   reaped     NOT A SCENARIO: printed after every run, over every group the run recorded. PASS requires at
+#              least one recorded group (a world that started nothing cannot read clean) and no live member
+#              of any of them.
 set -uo pipefail
 
 [ $# -ge 2 ] || { echo "usage: slot-world.sh <deriver> <hook> [scenario ...]" >&2; exit 9; }
@@ -50,12 +61,20 @@ DV_IN="$1"; HK_IN="$2"; shift 2
 [ -f "$DV_IN" ] && [ -f "$HK_IN" ] || { echo "slot-world: cannot read $DV_IN or $HK_IN" >&2; exit 9; }
 DV_IN="$(cd "$(dirname "$DV_IN")" && pwd -P)/$(basename "$DV_IN")"
 HK_IN="$(cd "$(dirname "$HK_IN")" && pwd -P)/$(basename "$HK_IN")"
-SCEN="$*"; [ -n "$SCEN" ] || SCEN="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty"
+SCEN="$*"; [ -n "$SCEN" ] || SCEN="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty hold"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/slot-world.XXXXXX")" || exit 9
 W="$(cd "$W" && pwd -P)"
 LIVE=""
-cleanup() { [ -n "$LIVE" ] && kill "$LIVE" 2>/dev/null; [ -n "${SW_KEEP:-}" ] || rm -rf "$W"; }
+# kill_tree <pgid>: the whole group, then its leader by pid (a leader that left its group is still ours).
+kill_tree() { kill -KILL -- "-$1" 2>/dev/null; kill -KILL "$1" 2>/dev/null; return 0; }
+# Every group this world started, so the exit path can reap them however the run ended.
+cleanup() {
+  local g
+  [ -n "$LIVE" ] && kill "$LIVE" 2>/dev/null
+  [ -f "$W/pgids" ] && while IFS= read -r g; do kill -KILL -- "-$g" 2>/dev/null; done < "$W/pgids"
+  [ -n "${SW_KEEP:-}" ] || rm -rf "$W"
+}
 trap cleanup EXIT
 
 # THE STUBS. sandbox-exec strips `-D FXTAG=<tag>` and `-f <profile>`, appends one tagged report line per
@@ -137,6 +156,10 @@ cmp -s "$R/core/scripts/derive-fixture-readsets.sh" "$W/deriver.beat.sh" \
 cat > "$R/core/fixtures/fa/run.sh" <<'FX'
 #!/bin/bash
 O="$SW_ORDER"; echo a-in >> "$O"
+if [ -n "${SW_HOLD:-}" ]; then
+  echo a-hold >> "$O"
+  i=0; while [ "$i" -lt 600 ]; do /bin/sleep 1; i=$((i + 1)); done
+fi
 if [ -n "${SW_B_MODE:-}" ]; then
   case "$SW_B_MODE" in
     sibling)   m="" ;;
@@ -179,7 +202,7 @@ wait_for() {
 reap() {
   local i=0
   while kill -0 "$1" 2>/dev/null && [ "$i" -lt 600 ]; do /bin/sleep 0.1; i=$((i + 1)); done
-  kill -0 "$1" 2>/dev/null && kill -KILL "$1" 2>/dev/null
+  kill -0 "$1" 2>/dev/null && kill_tree "$1"
   wait "$1" 2>/dev/null
   return 0
 }
@@ -194,14 +217,18 @@ run_a() {
   mkdir -p "$d" || exit 9
   : > "$d/order"; : > "$d/feedA"; : > "$d/feedB"; : > "$d/bout"; : > "$d/sleeps"
   cp "$dv" "$R/core/scripts/derive-fixture-readsets.sh" || exit 9
-  local P="$ST:$PATH" M=""
-  case "$s" in beat) P="$W/beatbin:$P" ;; rebreak) P="$W/beatbin:$P"; M=1 ;; esac
+  local P="$ST:$PATH" M="" H=""
+  case "$s" in beat) P="$W/beatbin:$P" ;; rebreak) P="$W/beatbin:$P"; M=1 ;; hold) H=1 ;; esac
+  # JOB CONTROL FOR THIS ONE LAUNCH: the deriver leads a process group of its own, whose id is its pid.
+  set -m
   ( cd "$R" && exec env -u READSET_SLOT_HOLDER PATH="$P" STUB_FEED="$d/feedA" \
       AI_DLC_READSET_TRACE_ROOT="$d/trA" SW_ORDER="$d/order" SW_B_MODE="$bm" SW_R="$R" SW_FEEDB="$d/feedB" \
       SW_TRB="$d/trB" SW_IPB="$d/ipB" SW_BOUT="$d/bout" SW_BPID="$d/bpid" SW_DEADPID="$DEAD" SW_LIVEPID="$LIVE" \
-      SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
+      SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" SW_HOLD="$H" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
       bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
+  set +m
+  echo "$APID" >> "$W/pgids"
 }
 order_of() { tr '\n' ' ' < "$1/order" | sed 's/ $//'; }
 pair() { # <scenario> <B mode> <expected order>
@@ -231,7 +258,7 @@ failopen() {
     [ "$n" -ge 20 ] && break
     /bin/sleep 0.1; i=$((i + 1))
   done
-  grep -q 'slot: UNSLOTTED' "$d/aout" || kill -KILL "$APID" 2>/dev/null
+  grep -q 'slot: UNSLOTTED' "$d/aout" || kill_tree "$APID"
   reap "$APID"
   if [ "$(grep -c 'slot: UNSLOTTED' "$d/aout")" = 1 ] && grep -qF "slot: UNSLOTTED -- $sl $why" "$d/aout" \
      && ! grep -q 'slot: waiting' "$d/aout" && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ]; then
@@ -277,7 +304,7 @@ for s in $SCEN; do
       mkdir -p "$d/slot" && touch -t 202001010000 "$d/slot" || exit 9
       run_a oldempty "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
       wait_for "$APID" "$d/aout" 'slot: (waiting|UNSLOTTED)|^  fa ' >/dev/null
-      grep -Eq 'slot: (waiting|UNSLOTTED)' "$d/aout" && kill -KILL "$APID" 2>/dev/null
+      grep -Eq 'slot: (waiting|UNSLOTTED)' "$d/aout" && kill_tree "$APID"
       reap "$APID"
       if [ "$(grep -c 'slot: broke a stale slot' "$d/aout")" = 1 ] && ! grep -Eq 'slot: (waiting|UNSLOTTED)' "$d/aout" \
          && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ] && [ ! -e "$d/slot" ]; then pass oldempty
@@ -286,7 +313,7 @@ for s in $SCEN; do
       mkdir -p "$d/slot" && printf '%s %s\n' "$DEAD" "$(date +%s)" > "$d/slot/pid" || exit 9
       run_a stale "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
       wait_for "$APID" "$d/aout" 'slot: (waiting|broke)' >/dev/null
-      grep -q 'slot: waiting' "$d/aout" && kill -KILL "$APID" 2>/dev/null
+      grep -q 'slot: waiting' "$d/aout" && kill_tree "$APID"
       reap "$APID"
       if grep -q "slot: broke a stale slot .* (holder pid $DEAD)" "$d/aout" && ! grep -q 'slot: waiting' "$d/aout" \
          && [ "$(order_of "$d")" = 'a-stream-up a-in a-out a-stream-down' ]; then pass stale
@@ -302,18 +329,44 @@ for s in $SCEN; do
           /bin/sleep 0.1; i=$((i + 1))
         done
       fi
-      kill -KILL "$APID" 2>/dev/null; reap "$APID"
+      kill_tree "$APID"; reap "$APID"
       if grep -q 'slot: waiting' "$d/aout" && grep -q 'slot: heartbeat, still waiting' "$d/aout" && ! grep -qx a-in "$d/order"; then pass beat
       else fail beat "a waiter behind live pid $LIVE printed no heartbeat over 3 polls (or never waited, or ran fa): $(grep 'slot:' "$d/aout" | head -2 | tr '\n' ' ' | cut -c1-160)"; fi ;;
     plain)
       mkdir -p "$d/slot" && printf '%s %s\n' "$LIVE" "$(date +%s)" > "$d/slot/pid" || exit 9
       run_a plain "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox
       wait_for "$APID" "$d/aout" 'slot: waiting|^  fa ' >/dev/null
-      grep -q 'slot: waiting' "$d/aout" && kill -KILL "$APID" 2>/dev/null
+      grep -q 'slot: waiting' "$d/aout" && kill_tree "$APID"
       reap "$APID"
       if ! grep -q 'slot:' "$d/aout" && [ "$(order_of "$d")" = 'p-stream-up a-in a-out p-stream-down' ] && [ -d "$d/slot" ]; then pass plain
       else fail plain "a plain --list run touched the slot held by live pid $LIVE: order '$(order_of "$d")', $(grep -m1 'slot:' "$d/aout" | cut -c1-100)"; fi ;;
+    hold)
+      # A LIVE STREAM KILLED MID-WINDOW: fa holds after a-in, the world kills deriver A while its stream stub
+      # and that stub's `tail -f` are up. The reaped line below then reads whether that tree survived.
+      run_a hold "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
+      wait_for "$APID" "$d/order" '^a-hold$' >/dev/null
+      if grep -qx a-hold "$d/order" && grep -qx a-stream-up "$d/order" && kill -0 "$APID" 2>/dev/null; then
+        kill_tree "$APID"; reap "$APID"; pass hold
+      else
+        kill_tree "$APID"; reap "$APID"
+        fail hold "the stream and the holding fixture were not both up for the kill: order '$(order_of "$d")', $(grep -m1 'ERROR' "$d/aout" | cut -c1-160)"
+      fi ;;
     *) echo "slot-world: unknown scenario '$s'" >&2; exit 9 ;;
   esac
 done
+# REAPED: no member of any group this world recorded is alive. A kill is asynchronous, so a member gets a
+# bounded number of polls to go; a member still there after them leaked. At least one group must have been
+# recorded, or this line reads clean over a world that started nothing.
+ng=0; live=""
+if [ -f "$W/pgids" ]; then
+  while IFS= read -r g; do
+    ng=$((ng + 1)); i=0
+    while [ "$i" -lt 50 ] && pgrep -g "$g" >/dev/null 2>&1; do /bin/sleep 0.1; i=$((i + 1)); done
+    m="$(pgrep -g "$g" 2>/dev/null | tr '\n' ',')"
+    [ -z "$m" ] || live="$live group $g: ${m%,};"
+  done < "$W/pgids"
+fi
+if [ "$ng" -gt 0 ] && [ -z "$live" ]; then echo "PASS reaped ($ng group(s), none alive)"
+elif [ "$ng" -eq 0 ]; then fail reaped "no process group was recorded, so a leak could not be seen"
+else fail reaped "a recorded group outlived the world:$live"; fi
 exit "$rc"

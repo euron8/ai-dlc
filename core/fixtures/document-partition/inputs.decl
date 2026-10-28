@@ -1,1 +1,2 @@
 core/scripts/partition-document.sh
+core/fixtures/lib/mutant.sh
