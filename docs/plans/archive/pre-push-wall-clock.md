@@ -579,7 +579,7 @@ LCC, register a throwaway arm naming a label absent from `$RUNS`.
 > 4.2s and 0.16s — taken at load average 62 with three agents running, i.e. inflated about an
 > order of magnitude. Directionally they agree; neither set is comparable with the other, and
 > that is the loaded-versus-solo hazard this plan warns about, walked into while writing it.
-> **Re-derive on an idle box before any number here is quoted.**
+> **Re-derive any number here from the counts the gate records before it is quoted.**
 >
 > **A shipped defect found by attempting the parallelisation**, confirmed independently with
 > controls in both directions on bash 3.2.57: in `seed.sh:57`,
