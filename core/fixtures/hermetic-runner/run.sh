@@ -2,8 +2,51 @@
 # hermetic-runner — drive the REAL hermetic-run.sh against a probe project and assert what the
 # sandbox holds, what it refuses, and what its key rows say.
 #
-# Usage: run.sh
+# Usage: run.sh [--matrix]
 # Exit:  0 = every assertion holds, 1 = the runner regressed, 2 = fixture broken.
+#
+# THE MUTANT MATRIX (mutant-battery rule). Per push each M mutant runs its DECIDING arm(s) and the TWIN arm(s) named
+# below, the arm list its run_mutant / run_hook_mutant call carries; a DC mutant runs the declared copy, whose arms
+# are A and L. With --matrix every M mutant runs against EVERY arm and one `MATRIX <mutant> <arm> DEAD|GREEN` row is
+# printed per cell; a plain run executes no matrix-only cell. RE-MEASURE whenever an arm or a mutant is added or
+# changed. hermetic-run.sh forwards no argument, so the matrix is run directly, from the repo root.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-runner/run.sh --matrix
+# MUTANT-MATRIX-BEGIN
+# MUTANT-MATRIX M1 decides=B twins=D
+# MUTANT-MATRIX M2 decides=A,C,D,L twins=B
+# MUTANT-MATRIX M3 decides=F twins=B
+# MUTANT-MATRIX M4 decides=L twins=A
+# MUTANT-MATRIX M5 decides=K twins=A
+# MUTANT-MATRIX M6 decides=F twins=B
+# MUTANT-MATRIX M7 decides=P twins=Q
+# MUTANT-MATRIX M8 decides=Q,W twins=R
+# MUTANT-MATRIX M9 decides=R,W twins=Q
+# MUTANT-MATRIX M10 decides=T twins=G
+# MUTANT-MATRIX M11 decides=U twins=G
+# MUTANT-MATRIX M12 decides=X twins=A
+# MUTANT-MATRIX M13 decides=X twins=A
+# MUTANT-MATRIX M14 decides=X twins=A
+# MUTANT-MATRIX M15 decides=X twins=A
+# MUTANT-MATRIX M16 decides=X twins=A
+# MUTANT-MATRIX M17 decides=V twins=A
+# MUTANT-MATRIX M18 decides=V twins=A
+# MUTANT-MATRIX M19 decides=L twins=A
+# MUTANT-MATRIX M20 decides=Y,Y3 twins=Y2,A
+# MUTANT-MATRIX M21 decides=Y3 twins=Y,Y2,A
+# MUTANT-MATRIX M22 decides=Y2 twins=Y,Y3,A
+# MUTANT-MATRIX M23 decides=Z1,Z2 twins=A
+# MUTANT-MATRIX M24 decides=Z1 twins=Z2,A
+# MUTANT-MATRIX M25 decides=Z3 twins=Z1,A
+# MUTANT-MATRIX M26 decides=Z4 twins=Z3
+# MUTANT-MATRIX M27 decides=XR twins=A
+# MUTANT-MATRIX DC1 decides=DC.DC1 twins=- why=the copy cannot find its runner and exits 2 before any arm
+# MUTANT-MATRIX DC2 decides=L twins=A
+# MUTANT-MATRIX DC3 decides=DC.DC3 twins=- why=the copy cannot source its preamble and exits 2 before any arm
+# MUTANT-MATRIX DC4 decides=DC.DC4 twins=- why=the copy has no distribution hook and exits 2 before any arm
+# MUTANT-MATRIX-CONTROL DC0 why=the unmutated declared copy must pass arms A and L so a DC verdict is attributable
+# MUTANT-MATRIX-END
+# Only M27 routes its kill through mutant_killed (lib/mutant.sh), behind B_XR, the same-run pass of arm XR; the
+# others are scored by an exact failed-arm-set `eq`, which emits no kill token.
 #
 # THE SUBJECT is `hermetic-run.sh`: it runs one fixture inside a sandbox holding ONLY the inputs
 # that fixture declared. A runner that leaks the project root into the sandbox makes every
@@ -41,6 +84,11 @@
 #   X  git.decl: `seed` makes the sandbox a work tree with a HEAD; `pin` imports a commit whose blob
 #      differs from the tree's (control: no git.decl -> no repository); a required pin the project
 #      lacks is exit 2; `pin?` absent prints and continues; an abbreviated pin and an unknown line are exit 2
+#   XR git.decl `range <ref-expr> <path>...`: the range is packed with its boundary, so a path-limited rev-list
+#      between the handed-in refs answers the project's count across a merge; the key's fold row moves on a commit
+#      touching a declared range path and the whole key is byte-equal on one touching only other paths; the
+#      literal form keys what the @file derivation keys; unresolvable, empty, path-less, absolute, `..` and a
+#      missing @file are exit 2 naming the line
 #   Y  a declaration carrying bare `core/` copies the fixture's own directory once, never a nested
 #      `<fx>/<fx>/` (control: the own run.sh is listed; the count is exact)
 #   Z1 a project marker in the work dir's own parent (TMPDIR holds .claude/) is exit 2 naming it
@@ -70,6 +118,13 @@
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
+MATRIX=0
+for _a in "$@"; do
+  case "$_a" in
+    --matrix) MATRIX=1 ;;
+    *) echo "FIXTURE ERROR: unknown argument '$_a' (only --matrix)" >&2; exit 2 ;;
+  esac
+done
 NESTED="${HERMETIC_FX_NESTED:-0}"
 unset HERMETIC_FX_NESTED
 
@@ -118,6 +173,7 @@ no() {
   if grep -qF -- "$3" <<<"$2"; then bad "$CUR: $1 ('$3' present)"; else ok "$CUR: $1"; fi
 }
 rowhas() { if grep -qxF -- "$3" <<<"$2"; then ok "$CUR: $1"; else bad "$CUR: $1 (row absent: $3)"; fi; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 
 # --- stubs: the fake fixture's run.sh bodies --------------------------------------------------
 stub_read_all()  { cat <<'EOF'
@@ -1080,7 +1136,80 @@ arm_X() {
   mk_git_probe "$WK/X8" 'clone everything'
   run_hr "$WK/X8"
   eq "unknown git.decl line: exit 2" "$RC" 2
-  yes "unknown git.decl line: message" "$OUT" "neither seed, pin <sha> nor pin? <sha>"
+  yes "unknown git.decl line: message" "$OUT" "neither seed, pin <sha>, pin? <sha> nor range <ref-expr> <path>..."
+}
+# --- XR: git.decl `range` -- a derived commit range packed whole and folded into the key ----------------------
+# The probe's history is: c0 (mk_probe), B = rb (touches hist/), then a side commit Q off c0 (touches hist/), a
+# main commit M1 on an UNDECLARED path, and a merge of Q. Q is in rb..HEAD and its parent c0 is NOT (c0 is reachable
+# from rb) and is not an end, so a pack of the ends and the range commits alone cannot answer a path-limited
+# rev-list there: the boundary is what the sandbox cell discriminates, and the arm asserts that boundary exists.
+# The declared range path (hist) is deliberately NOT in inputs.decl, so the only key row a hist commit can move is
+# the fold itself (M27 drops it and must fail here, and only here).
+stub_range()     { cat <<'EOF'
+cat data/a.txt >/dev/null || exit 1
+echo "HERMETIC-CONSUMED data/a.txt"
+b="$(git rev-parse -q --verify refs/hermetic/range-1/base)" || { echo "RANGE-NOREF"; exit 1; }
+t="$(git rev-parse -q --verify refs/hermetic/range-1/theirs)" || { echo "RANGE-NOREF"; exit 1; }
+l="$(git rev-list "$b..$t" -- hist 2>&1)" || { echo "RANGE-REVLIST-FAILED $l"; exit 1; }
+printf 'RANGE-COUNT=%s\n' "$(printf '%s\n' "$l" | wc -l | tr -d ' ')"
+EOF
+}
+# mk_range_probe <dir>: the history above, git.decl `range @range.sh hist`, range.sh printing `rb..HEAD`.
+mk_range_probe() {
+  local p="$1"
+  mk_probe "$p" stub_range 'data/a.txt' $'git\nwc\ntr'
+  ( cd "$p" || exit 1
+    g() { git -c user.name=t -c user.email=t@t "$@"; }
+    c0="$(git rev-parse HEAD)" && br="$(git symbolic-ref --short HEAD)" || exit 1
+    printf 'echo rb..HEAD\n' > "$FXR/probe/range.sh" && printf 'range @range.sh hist\n' > "$FXR/probe/git.decl" || exit 1
+    mkdir -p hist && printf '1\n' > hist/h.txt && g add -A && g commit -qm base && g tag rb || exit 1
+    g checkout -q -b side "$c0" && mkdir -p hist && printf 'q\n' > hist/q.txt && g add -A && g commit -qm side || exit 1
+    g checkout -q "$br" && printf 'x2\n' > lib/x.txt && g add -A && g commit -qm m1 && g merge -q --no-edit side || exit 1
+  ) >/dev/null 2>&1 || { echo "FIXTURE ERROR: could not build the range probe history in $p" >&2; exit 2; }
+}
+arm_XR() {
+  CUR=XR
+  local P="$WK/XR1" Q="$WK/XR2" c0 want k0 k1 k2 r0 r2 cell
+  mk_range_probe "$P"
+  c0="$(cd "$P" && git rev-list --max-parents=0 HEAD)"
+  # The seed can express the defect: a boundary commit that is neither end.
+  yes "control: rb..HEAD has a boundary commit that is not an end (the merge seed)" "$(cd "$P" && git rev-list --boundary rb..HEAD)" "-$c0"
+  want="$(cd "$P" && git rev-list rb..HEAD -- hist | wc -l | tr -d ' ')"
+  [ "${want:-0}" -gt 0 ] && ok "$CUR: control: the project-side range lists $want hist commit(s)" || bad "$CUR: control: the project-side range lists no hist commit"
+  run_hr "$P"
+  eq "sandbox: exit 0" "$RC" 0
+  yes "sandbox: a path-limited rev-list between the handed-in refs answers the project-side count" "$OUT" "RANGE-COUNT=$want"
+  run_hr "$P" --key-only; k0="$OUT"
+  eq "key-only: exit 0" "$RC" 0
+  r0="$(grep '^git-range:1	' <<<"$k0")"
+  [ -n "$r0" ] && ok "$CUR: key-only: the fold row git-range:1 is present" || bad "$CUR: key-only: no git-range:1 row"
+  ( cd "$P" && printf 'y2\n' > lib/y.txt && git add -A && git -c user.name=t -c user.email=t@t commit -qm undeclared ) >/dev/null 2>&1 || bad "$CUR: could not commit the undeclared change"
+  run_hr "$P" --key-only; k1="$OUT"
+  eq "a commit on an undeclared path (THEIRS moved): the key is byte-equal" "$k1" "$k0"
+  ( cd "$P" && printf '2\n' > hist/h.txt && git add -A && git -c user.name=t -c user.email=t@t commit -qm declared ) >/dev/null 2>&1 || bad "$CUR: could not commit the declared change"
+  run_hr "$P" --key-only; k2="$OUT"
+  r2="$(grep '^git-range:1	' <<<"$k2")"
+  [ "$k2" != "$k0" ] && ok "$CUR: a commit on the declared path: the key moved" || bad "$CUR: a commit on the declared path left the key unchanged"
+  [ -n "$r2" ] && [ "$r2" != "$r0" ] && ok "$CUR: a commit on the declared path: the fold row itself moved" || bad "$CUR: the fold row did not move ('$r0' -> '$r2')"
+  # Refusals, each exit 2 naming its line, beside the literal-form ALLOW twin (one property apart: a valid line).
+  mk_range_probe "$Q"
+  printf 'range rb..HEAD hist\n' > "$Q/$FXR/probe/git.decl"
+  run_hr "$Q" --key-only
+  eq "literal rb..HEAD form: exit 0" "$RC" 0
+  eq "literal form keys the same fold as the @range.sh derivation" "$(grep '^git-range:1	' <<<"$OUT")" "$r0"
+  while IFS='|' read -r cell msg; do
+    printf '%s\n' "$cell" > "$Q/$FXR/probe/git.decl"
+    run_hr "$Q" --key-only
+    eq "refused [$cell]: exit 2" "$RC" 2
+    yes "refused [$cell]: the message names the line" "$OUT" "$msg: $cell"
+  done <<'EOF'
+range nosuchref..HEAD hist|ref-expr does not resolve to <commit>..<commit>
+range rb..HEAD nothere|has no commit touching a declared path, so its key fold could never move
+range rb..HEAD|names no path
+range rb..HEAD /etc|must be repo-relative with no .. and no leading -
+range rb..HEAD ../hist|must be repo-relative with no .. and no leading -
+range @nope.sh hist|@file is not a bare file of the fixture dir, or it failed or printed nothing
+EOF
 }
 # Y: a fixture whose declaration carries bare `core/` has its own directory copied in TWICE -- once by
 # that population, once by the own-directory copy. The second must land on the first, never inside it.
@@ -1262,9 +1391,9 @@ mkdir -p "$WORK/par"
 stray_check
 # Under a stray marker the runner refuses every probe run before it builds a sandbox, so only the Z arms'
 # DENY cells can say anything: every other arm SKIPs, naming the marker, rather than reading as a regression.
-ARMS="A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3 Z1 Z2 Z3 Z4"
+ARMS="A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3 Z1 Z2 Z3 Z4"
 if [ -n "$STRAY" ]; then
-  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X Y Y2 Y3, mutants M1-M22 and cwd: each needs a probe run the stray marker refuses"
+  echo "  SKIP  arms A B C D E F H I K L N G J P Q R S T U V W X XR Y Y2 Y3, mutants M1-M22, M27 and cwd: each needs a probe run the stray marker refuses"
   ARMS="Z1 Z2 Z3 Z4"
 fi
 # A DC copy runs only the arms its marker names: the control's positive conjunct (A) and the arm that reads the
@@ -1298,8 +1427,10 @@ run_mutant() {
   local m="$WORK/mutdir-$1/hermetic-run.sh"
   mkdir -p "$WORK/mutdir-$1" && cp "$(dirname "$RUN_ORIG")/core-paths.sh" "$WORK/mutdir-$1/core-paths.sh" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
   mutate "$m" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
+  ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $(mx_arms "$2"); do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
 }
+# mx_arms <per-push arm list>: that list, or under --matrix every arm this run could run (the matrix cells).
+mx_arms() { if [ "$MATRIX" = 1 ]; then printf '%s\n' "$ARMS"; else printf '%s\n' "$1"; fi; }
 # run_hook_mutant <name> <arms> <old> <new>: the same, but the mutation is applied to a copy of the HOOK
 # every probe copies (HOOK_SRC, the file the runner under test sources its READSET_KEYROWS span from), and
 # the runner is the unmutated one. The declaration parse lives in that span, so a mutant of the parse the
@@ -1308,7 +1439,7 @@ run_hook_mutant() {
   local h="$WORK/hmutdir-$1/pre-push"
   mkdir -p "$WORK/hmutdir-$1" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
   mutate_file "$HOOK_SRC" "$h" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
+  ( HOOK_SRC="$h"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $(mx_arms "$2"); do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
 }
 
 # --- DC: this fixture's own declaration is complete (BL-584 item 1) ------------------------------------
@@ -1435,6 +1566,9 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
   run_mutant M25 "Z3 Z1 A" '[ "$hr_honours" = 1 ]; }; then' 'true; }; then' &
   # M26: the $HOME message advises moving TMPDIR, which cannot move a bare mktemp -d where this branch is reachable.
   run_mutant M26 "Z4 Z3" 'TMPDIR cannot move a bare mktemp -d here; do not remove the marker. Run under an account whose system temp dir is outside $HOME.' 'Point TMPDIR outside $HOME; do not remove the marker.' &
+  # M27: the composer ignores the span's G row, in the hook the runner sources: the range fold leaves the key, so a
+  # commit on a declared range path no longer moves it. The parse, the pack and the refs are untouched.
+  run_hook_mutant M27 "XR A" 'else if (a[2] == "G") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4] }' '}' &
   # DC: the declaration-completeness mutants (definitions and the uncovered lines above dc_run).
   dc_run DC0 "" &
   dc_run DC1 "core/scripts/hermetic-run.sh" &
@@ -1452,8 +1586,22 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then
       echo "FIXTURE ERROR: mutant $mname did not apply to $RUN_ORIG (the target line moved)" >&2; exit 2
     fi
+    # Under --matrix every mutant ran every arm, so its failed set is the matrix row, printed below, not this cell.
+    [ "$MATRIX" = 1 ] && continue
     eq "$mname fails exactly its own arms [$want]" "$got" "$want"
   done
+  B_XR=0; case " $(failed_set "$MAIN_FAILED") " in *" XR "*) ;; *) B_XR=1 ;; esac
+  got="$(cat "$WORK/mut-M27.res" 2>/dev/null)"
+  [ "$got" != BROKEN ] || { echo "FIXTURE ERROR: mutant M27 did not apply to $HOOK_SRC (the G-row line of readset_decl_keys moved)" >&2; exit 2; }
+  if [ "$MATRIX" = 1 ]; then :
+  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$B_XR" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
+  else bad "M: M27 should fail exactly arm XR (got '$got')"; fi
+  if [ "$MATRIX" = 1 ]; then
+    for mname in M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21 M22 M23 M24 M25 M26 M27; do
+      got=" $(cat "$WORK/mut-$mname.res" 2>/dev/null) "
+      for _a in $ARMS; do case "$got" in *" $_a "*) echo "MATRIX $mname $_a DEAD" ;; *) echo "MATRIX $mname $_a GREEN" ;; esac; done
+    done
+  fi
   CUR=DC
   [ "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" != BROKEN ] || { echo "FIXTURE ERROR: DC0, the unmutated declared copy, could not be built" >&2; exit 2; }
   eq "DC0 the unmutated declared copy passes: exit" "$(cat "$WORK/dc-DC0.rc" 2>/dev/null)" 0

@@ -1607,6 +1607,7 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
       if [ "${#dp}" -eq 64 ]; then printf '%s\tP\t%s\t%s\n' "$fx" "$p" "$dp"; else printf '%s\tX\tplushash\t%s\n' "$fx" "$p"; fi
     done < "$w.pf"
   fi
+  [ ! -f "$fd/git.decl" ] || readset_decl_ranges "$fx" "$fd" "$w"
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
     case "$t" in ''|'#'*) continue ;; esac
@@ -1627,6 +1628,43 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
   done < "$fd/tools.decl"
   return 0
 }
+# readset_decl_ranges: each `range` line of a fixture's git.decl -> one G row, or one X row carrying the line.
+#   range <ref-expr> <path>...   <ref-expr> is `<rev>..<rev>`, or `@<file>`: a bare file name in the fixture's own
+#   directory, run with bash from the root (the cwd), whose first stdout line is that `<rev>..<rev>`. The fixture runs
+#   the same file outside a sandbox, so the range has ONE derivation. Both ends resolve to commits HERE, and the row's
+#   value is the sha256 of `git rev-list <base>..<theirs> -- <path>...` under literal pathspecs: a commit touching a
+#   declared path moves the key, and a commit touching only other paths does not, even when it moves THEIRS.
+#   G <key> <sha256> <base sha> <theirs sha>   the key is `git-range:<n>`, n the line's ordinal among range lines.
+#   Refusals: rnopath (no path), rabs (a path absolute, with a .. component, or opening with -), rderive (the @file
+#   is not a bare name, is absent, fails or prints nothing), rref (not `<rev>..<rev>`, or an end that is no commit),
+#   rempty (no commit of the range touches a declared path: a fold over nothing could never move, so it is refused).
+#   Every command here reads /dev/null, never the git.decl the loop is reading.
+readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix>
+  local fx="$1" fd="$2" w="$3" line kw ex rest out p b t n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in range|'range '*) ;; *) continue ;; esac
+    n=$((n + 1)); kw=""; ex=""; rest=""
+    read -r kw ex rest <<<"$line"
+    [ -n "$rest" ] || { printf '%s\tX\trnopath\t%s\n' "$fx" "$line"; continue; }
+    printf '%s\n' "$rest" | tr -s ' \t' '\n\n' > "$w.gp"
+    if awk '/^\// || /(^|\/)\.\.(\/|$)/ || /^-/ { f = 1 } END { exit f ? 0 : 1 }' "$w.gp"; then printf '%s\tX\trabs\t%s\n' "$fx" "$line"; continue; fi
+    case "$ex" in
+      @*) p="${ex#@}"; out=""
+          case "$p" in ''|*/*|.*) printf '%s\tX\trderive\t%s\n' "$fx" "$line"; continue ;; esac
+          [ -f "$fd/$p" ] && out="$(bash "$fd/$p" < /dev/null 2>/dev/null)" && IFS= read -r ex <<<"$out" && [ -n "$ex" ] \
+            || { printf '%s\tX\trderive\t%s\n' "$fx" "$line"; continue; } ;;
+    esac
+    case "$ex" in *...*|-*|*..-*) printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue ;; ?*..?*) ;; *) printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue ;; esac
+    b="${ex%%..*}"; t="${ex#*..}"
+    b="$(git rev-parse -q --verify "${b}^{commit}" < /dev/null 2>/dev/null)" && t="$(git rev-parse -q --verify "${t}^{commit}" < /dev/null 2>/dev/null)" \
+      || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
+    set --; while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done < "$w.gp"
+    GIT_LITERAL_PATHSPECS=1 git rev-list "${b}..${t}" -- "$@" < /dev/null > "$w.gl" 2>/dev/null || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
+    [ -s "$w.gl" ] || { printf '%s\tX\trempty\t%s\n' "$fx" "$line"; continue; }
+    p="$(shasum -a 256 < "$w.gl" | cut -d' ' -f1)"
+    printf '%s\tG\tgit-range:%s\t%s\t%s\t%s\n' "$fx" "$n" "$p" "$b" "$t"
+  done < "$fd/git.decl"
+}
 readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
   awk -F'\t' -v h="$2" 'BEGIN { while ((getline l < h) > 0) { t = index(l, "\t"); have[substr(l, 1, t - 1)] = 1 } }
     $2 == "T" && !($3 in have) { have[$3] = 1; print $3 }' "$1" > "$2.want"
@@ -1643,7 +1681,8 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
         else if (a[2] == "F") FF[a[3]] = FF[a[3]] "\n" a[1]
         else if (a[2] == "D") DD[a[3]] = DD[a[3]] "\n" a[1]
         else if (a[2] == "T") TL[a[1]] = TL[a[1]] "\n" a[3]
-        else if (a[2] == "P") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4] }
+        else if (a[2] == "P") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4]
+        else if (a[2] == "G") PL[a[1]] = PL[a[1]] "\n" a[3] "\t" a[4] }
       while ((getline l < ENVIRON["RK_L"]) > 0) { t = index(l, "\t"); LS[substr(l, 1, t - 1)] = substr(l, t + 1) }
       while ((getline l < ENVIRON["RK_T"]) > 0) { t = index(l, "\t"); TH[substr(l, 1, t - 1)] = substr(l, t + 1) }
       for (f in FX) { n = split(TL[f], a, "\n"); for (j = 2; j <= n; j++) out(f, a[j], (a[j] in TH) ? TH[a[j]] : "-")
@@ -1712,6 +1751,7 @@ readset_declared() { # <list> <out>
     $3 == "plusdir" { print $1 "\t+ marks a directory, and only a file may be keyed outside the universe: " $4; next }
     $3 == "plusbang" { print $1 "\t+ and ! on one inputs.decl line (a line carries one marker): " $4; next }
     $3 == "plushash" { print $1 "\t+ file could not be hashed " $4; next }
+    $3 == "rnopath" || $3 == "rabs" || $3 == "rderive" || $3 == "rref" || $3 == "rempty" { print $1 "\tgit.decl range refused (" $3 "): " $4; next }
     { print $1 "\t" $4 }' "$out/.dparse" > "$out/.dunres"
   # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
