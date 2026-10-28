@@ -832,6 +832,12 @@ st_mrun() {                    # st_mrun <tag> <hook> <stubs...> : the stub worl
   st_world "$t" "$h" "$@"
   mkfx "$t" alpha 0
   csp_load "$t" "$(st_drive "$t" "$t.out")" "$t.out"
+  # UNCONDITIONAL REAP, and the live counts the st-c / st-d cells read. st_alive counts each recorded
+  # pid still alive and SIGKILLs it, so no matrix or per-push path can leave a stub's tree running.
+  # Before this line the helper never reaped: st-c leaves (h)'s grandchild sleep alive by design and
+  # it outlived the run; and C_LH / C_LGH stayed empty, which differs from the base "0" for ANY
+  # mutant and so made the live_h / live_gh trips vacuous.
+  C_LH="$(st_alive "$t" h)"; C_LGH="$(st_alive "$t" gh)"
 }
 
 # MUTANTS of the refusal, each a copy of the RESOLVED hook, applied by exact-string replacement and
