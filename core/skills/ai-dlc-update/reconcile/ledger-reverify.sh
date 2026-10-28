@@ -166,7 +166,10 @@ set -f
 
 # ledger_entry_shape() — THE entry-boundary rule, from lib.sh. See that file for why it is not
 # copied here: rotate's copy of this block drifted within one release.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "ledger-reverify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-reverify: cannot source $SELF/lib.sh" >&2; exit 1; }

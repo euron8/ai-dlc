@@ -183,7 +183,7 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
 # STATE AND NOT ANY PROJECT'S. It is gitignored under `.claude/*`, it appears in whatever
 # number of concurrent sessions happen to be running, and this repo's own code names it only
 # to record that `git ls-files` correctly drops it
-# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1205`). Copying it made this
+# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1992`). Copying it made this
 # fixture's cost a function of ambient harness activity: measured on one tree, 34 agent
 # checkouts, 871M of a 1.0G copy, 15x the file count, 8 copies per run -- ~10s each against
 # ~0s with it excluded, three interleaved reps, sides asserted to differ first.

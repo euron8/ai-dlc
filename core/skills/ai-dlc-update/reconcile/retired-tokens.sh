@@ -96,7 +96,10 @@ THEIRS="${3:?}"
 CONSUMER="${4:?}"
 ONLY="${5:-}"
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "retired-tokens: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # Live `$VAR/path` tokens on stdin, comments stripped, sorted unique.

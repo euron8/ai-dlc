@@ -64,11 +64,14 @@ CONSUMER="${4:?}"
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered -- and MANIFEST keeps that unresolved spelling.
+case "$0" in */*) _pd_d0="${0%/*}"; _pd_d0="${_pd_d0:-/}" ;; *) _pd_d0=. ;; esac
+SELF="$(cd "$_pd_d0" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "predicate-differential: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 SELF_SRC="$0"
-MANIFEST="$(dirname "$SELF_SRC")/predicate-sites.md"
+MANIFEST="$_pd_d0/predicate-sites.md"
 
 if [ ! -f "$MANIFEST" ]; then
   emit PREDICATE-UNDECIDABLE "predicate-sites.md" "the site manifest is absent beside this script, so the set of adjudication predicates is unknown. A detector that cannot read its own population must not report clean."
@@ -152,7 +155,7 @@ fi
 
 while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_VERDICT P_ROOT P_PASS; do
   [ -n "${P_READS:-}" ] || continue
-  p_name="$(basename "$P_ENTRY")"
+  p_name="${P_ENTRY##*/}"
   case "$P_ROOT" in
     '!bad:'*)
       emit PREDICATE-UNDECIDABLE "$p_name" "the site's corpus-root: value is refused (${P_ROOT#!bad:}). It must be a directory relative to the consumer root, with no '..' component, no leading '/', and no whitespace; anything else could read outside the consumer or split this row. Nothing was compared."
@@ -176,16 +179,30 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
   side_missing=0; side_absent_at_base=0
   for side in base theirs; do
     [ "$side" = base ] && ref="$BASE" || ref="$THEIRS"
+    # THE rm STAYS PER SITE: the two roots are reused by every site, and `diff -r` below compares
+    # them WHOLE, so a previous site's materialized files left in place would read as this site's
+    # read-set moving. The line is kept whole: predicate-reclassification/run.sh mutant m-marker
+    # anchors on it.
     rm -rf "$TMP/root-$side"; mkdir -p "$TMP/root-$side"
     # Both lists are split under the run's `set -f`: a member is a git pathspec `ls-files` matches,
     # and the listing is dist paths, so neither is ever pathname-expanded by the shell.
-    for member in $P_READS; do
-      # quotePath=false: a non-ASCII member is otherwise listed C-quoted, `git show` is handed a
-      # path that names nothing, and the side reads as unmaterializable.
-      for f in $(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$ref" -- "$member" 2>/dev/null); do
-        mkdir -p "$TMP/root-$side/$(dirname "$f")"
-        git -C "$DIST" show "${ref}:${f}" > "$TMP/root-$side/$f" 2>/dev/null || side_missing=1
-      done
+    # ONE `ls-files` PER SIDE over every member, not one per member: the listing is the union of the
+    # per-member listings, and each file is written to its own path, so the order is immaterial.
+    # quotePath=false: a non-ASCII member is otherwise listed C-quoted, `git show` is handed a
+    # path that names nothing, and the side reads as unmaterializable.
+    # shellcheck disable=SC2086 -- P_READS is a member LIST, deliberately split.
+    pd_files="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$ref" -- $P_READS 2>/dev/null)"
+    # Every directory the files need below the root, made by ONE `mkdir -p`. `${f%/*}` stands in
+    # for `dirname`; a slashless path lives in the root, which is what `dirname`'s `.` named.
+    pd_dirs=""
+    for f in $pd_files; do
+      case "$f" in */*) pd_dirs="$pd_dirs
+$TMP/root-$side/${f%/*}" ;; esac
+    done
+    [ -z "$pd_dirs" ] || ( IFS='
+'; mkdir -p $pd_dirs )
+    for f in $pd_files; do
+      git -C "$DIST" show "${ref}:${f}" > "$TMP/root-$side/$f" 2>/dev/null || side_missing=1
     done
     [ -f "$TMP/root-$side/$P_ENTRY" ] || { [ "$side" = base ] && side_absent_at_base=1 || side_missing=1; }
   done

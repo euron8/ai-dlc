@@ -160,7 +160,10 @@ THEIRS="${4:-}"
 # found or failed to cache, and every git_show/git_tree call
 # below falls back to a direct `git` call when the memo helpers are unavailable, so an
 # unsourceable lib.sh degrades this to its pre-cache behavior.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "unregistered-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
 # git_show <ref> <path> -- this file's own spelling of the shared memo, so every existing
@@ -385,7 +388,7 @@ ud_stage_blob() {
 # setup-sites.md is this script's SIBLING — ai-dlc-update is self-contained and never reads
 # pipeline files, so the drift check reads the SAME setup-site manifest gate-validation.md's
 # immutability check reads. That is the point: the two must agree on what is operator config.
-SITES_FILE="$(cd "$(dirname "$0")" && pwd)/setup-sites.md"
+SITES_FILE="$SELF/setup-sites.md"
 
 # exempt_ranges <full-core-path> -> "S-E,S-E,..." (empty if none)
 #
@@ -451,7 +454,7 @@ exempt_ranges() {
 #
 # A second private table also cannot hold I8's `scripts/ai-dlc/` and `.githooks/` prefixes,
 # so it is wrong the moment the scan set moves past `.claude/`.
-eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$(cd "$(dirname "$0")" && pwd)/preclassify.sh" 2>/dev/null)"
+eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)"
 if ! command -v map_consumer >/dev/null 2>&1; then
   emit HARD-DRIFT-SCAN-UNAVAILABLE "reconcile/preclassify.sh" \
     "could not load map_consumer() — nothing was scanned. Refusing to fall back to a private path table: it would map some subtrees, skip the rest, and print an empty result that reads as no drift."
@@ -478,7 +481,7 @@ consumer_path() { # <core-stripped rel> -> consumer-ROOT-RELATIVE path (consumer
 # prints ZERO rows, and `apply.sh` reads zero rows as "no drift" with no diagnostic anywhere.
 # The join is written to `$CARRY_JOIN` as `<core-path><TAB><bucket>` and read with `grep`, so
 # the failure mode of every step is a missing line rather than a missing scan.
-PRECLASSIFY_SRC="$(cd "$(dirname "$0")" && pwd)/preclassify.sh"
+PRECLASSIFY_SRC="$SELF/preclassify.sh"
 CARRY_STATE=cold
 CARRY_JOIN=""
 CARRY_TMP=""

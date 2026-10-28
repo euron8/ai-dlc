@@ -5477,7 +5477,7 @@ else
   if [ -z "$syn_dist" ] || [ -z "$syn_cons" ]; then
     err "I30 parsed ZERO globs out of the syntax_all() block in $( [ -z "$syn_dist" ] && echo '.githooks/pre-push' || echo 'core/git-hooks/pre-push' ). The SYNTAX_GLOB_BEGIN/END sentinels or the \`for f in\` shape changed. An empty set compares equal to an empty set, so this invariant fails closed rather than reporting agreement it never checked."
   else
-    # map_consumer(), same rules as reconcile/preclassify.sh:66-75.
+    # map_consumer(), same rules as reconcile/preclassify.sh:154-163.
     syn_expect="$(printf '%s\n' "$syn_dist" | sed -E '
       s@^core/scripts/@scripts/ai-dlc/@;
       s@^core/fixtures/@tests/fixtures/@;

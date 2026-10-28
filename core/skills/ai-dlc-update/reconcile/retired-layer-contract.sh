@@ -133,7 +133,10 @@ CONSUMER="${4:?}"
 # The rulebook files whose constructs a layer file can legitimately shadow or
 # restate. Derived from setup-sites.md's own `rulebook:` list rather than restated,
 # so a rulebook file added upstream is covered without editing this script.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 # Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 . "$SELF/consumer-read.sh" || { echo "retired-layer-contract: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
@@ -181,19 +184,29 @@ rulebook_globs() {
 # EACH HARVESTING GREP'S STATUS IS READ ALONE: 0 or 1 is healthy (1 is a body with no shape, an
 # empty set), anything above it is returned. It used to be `{ grep … || true; }`, so a grep that
 # DIED read as a layer file carrying no retired shape -- the row this detector exists to print.
+#
+# NEITHER FUNCTION SORTS, AND NEITHER FORKS PAST ITS GREP. Both callers -- `collect` and the layer
+# loop's `mine` -- take the union of the two sets through their own `sort -u`, under the same
+# inherited locale, so a sort here was repeated there. The label rewrite is parameter expansion: a
+# grep hit is always `- <Label>: [\]\`/<directive>`, the label holds no `:` or space, and the
+# rewrite is `<Label>:/<directive>`, exactly what the `sed -E` it replaces printed for that grammar.
 shapes_of() {   # shapes_of <body>
-  local _h _rc=0
+  local _h _rc=0 _l _lab _r IFS='
+'
   _h="$(printf '%s\n' "$1" | grep -oE -- '- [A-Z][A-Za-z-]*: \\?`/[a-z][a-z-]*')" || _rc=$?
   [ "$_rc" -le 1 ] || return "$_rc"
   [ -n "$_h" ] || return 0
-  printf '%s\n' "$_h" | sed -E 's/^- ([A-Za-z-]*): \\?`\/(.*)$/\1:\/\2/' | sort -u
+  for _l in $_h; do
+    _l="${_l#- }"; _lab="${_l%%: *}"; _r="${_l#*: }"; _r="${_r#\\}"; _r="${_r#\`/}"
+    printf '%s:/%s\n' "$_lab" "$_r"
+  done
 }
 tokens_of() {
   local _h _rc=0
   _h="$(printf '%s\n' "$1" | grep -oE '\{[a-z][a-z_]*\}')" || _rc=$?
   [ "$_rc" -le 1 ] || return "$_rc"
   [ -n "$_h" ] || return 0
-  printf '%s\n' "$_h" | sort -u
+  printf '%s\n' "$_h"
 }
 
 # THE TREE LISTING AND EVERY BLOB READ BELOW RETURN THEIR STATUS, AND THE CALLER REFUSES. `collect`
@@ -225,12 +238,20 @@ rlc_glob_files() {   # rlc_glob_files <tree-file> <glob> <out> -- the tree lines
 rulebook_set() {   # rulebook_set <ref> <out>
   local ref="$1" glob out="" rc=0
   rlc_tree "$ref" "$RLC_T/rbset-tree" || { rc=$?; return "$rc"; }
+  local _hits
   for glob in $(rulebook_globs); do
     rlc_glob_files "$RLC_T/rbset-tree" "$glob" "$RLC_T/rbset-hits" || { rc=$?; return "$rc"; }
-    out="$out$(cat "$RLC_T/rbset-hits")
+    # `$(<f)`, not `$(cat f)`: rlc_glob_files just created the file in this shell's own staging
+    # directory. A glob with no hit appends nothing, so the set carries no blank line to delete.
+    _hits="$(<"$RLC_T/rbset-hits")"
+    [ -z "$_hits" ] || out="$out$_hits
 "
   done
-  printf '%s\n' "$out" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the rulebook file set at $ref"; return "$rc"; }
+  if [ -z "$out" ]; then
+    : > "$2" || { rc=$?; RLC_WHY="staging the rulebook file set at $ref"; return "$rc"; }
+  else
+    printf '%s' "$out" | sort -u > "$2" || { rc=$?; RLC_WHY="staging the rulebook file set at $ref"; return "$rc"; }
+  fi
 }
 
 # Every spelling a layer file may cite a rulebook path in. An entry's `hooks:`/`extends:`
@@ -304,31 +325,37 @@ collect() {     # collect <ref> <out> -> every shape+token across the rulebook a
   for glob in $(rulebook_globs); do
     # The glob is matched against the tree listing at <ref>, never against the cwd.
     rlc_glob_files "$RLC_T/collect-tree" "$glob" "$RLC_T/collect-hits" || { rc=$?; return "$rc"; }
-    for f in $(cat "$RLC_T/collect-hits"); do
+    for f in $(<"$RLC_T/collect-hits"); do
       # Every f came from the listing at this ref, so it EXISTS there: any failed read is a
       # refusal, never an absent file. An empty blob still reads as empty and is skipped.
       rc=0
       if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$ref" "$f" > "$RLC_T/collect-body" || rc=$?
       else git -C "$DIST" show "${ref}:${f}" > "$RLC_T/collect-body" 2>/dev/null || rc=$?; fi
       [ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"; return "$rc"; }
-      body="$(cat "$RLC_T/collect-body")" || { rc=$?; RLC_WHY="reading the staged body of $f at $ref"; return "$rc"; }
+      body="$(<"$RLC_T/collect-body")" || { rc=$?; RLC_WHY="reading the staged body of $f at $ref"; return "$rc"; }
       [ -n "$body" ] || continue
       # The same status read the layer-file site below applies: 0 is a set, possibly empty.
       _sh="$(shapes_of "$body")" || { rc=$?; RLC_WHY="the shape scan of $f at $ref"; return "$rc"; }
       _tk="$(tokens_of "$body")" || { rc=$?; RLC_WHY="the token scan of $f at $ref"; return "$rc"; }
-      all="$all$_sh
-$_tk
+      # An empty set appends nothing, so `all` never carries a blank line for a `sed` to delete.
+      [ -z "$_sh" ] || all="$all$_sh
+"
+      [ -z "$_tk" ] || all="$all$_tk
 "
     done
   done
-  printf '%s\n' "$all" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the shape set at $ref"; return "$rc"; }
+  if [ -z "$all" ]; then
+    : > "$2" || { rc=$?; RLC_WHY="staging the shape set at $ref"; return "$rc"; }
+  else
+    printf '%s' "$all" | sort -u > "$2" || { rc=$?; RLC_WHY="staging the shape set at $ref"; return "$rc"; }
+  fi
 }
 
 # In the MAIN shell, never inside `$( )`, so the refusal ends the run rather than a subshell.
 collect "$BASE" "$RLC_T/collect-base" || rlc_refuse "$RLC_WHY" "$?"
 collect "$THEIRS" "$RLC_T/collect-theirs" || rlc_refuse "$RLC_WHY" "$?"
-BASE_SET="$(cat "$RLC_T/collect-base")" || rlc_refuse "reading the staged base shape set" "$?"
-THEIRS_SET="$(cat "$RLC_T/collect-theirs")" || rlc_refuse "reading the staged theirs shape set" "$?"
+BASE_SET="$(<"$RLC_T/collect-base")" || rlc_refuse "reading the staged base shape set" "$?"
+THEIRS_SET="$(<"$RLC_T/collect-theirs")" || rlc_refuse "reading the staged theirs shape set" "$?"
 
 # A BASE RULEBOOK WITH NO CONTRACT SHAPE IS A RESULT, NOT A REFUSAL, AND IT DOES NOT END THE RUN.
 # Every way the base rulebook can fail to be READ already refuses with exit 2 above: an unreadable
@@ -361,15 +388,15 @@ printf '%s\n' "$THEIRS_SET" > "$RLC_T/shapes-theirs" || _rlc_rc=$?
 [ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the theirs shape set" "$_rlc_rc"
 comm -23 "$RLC_T/shapes-base" "$RLC_T/shapes-theirs" > "$RLC_T/shapes-retired" || _rlc_rc=$?
 [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-shape subtraction" "$_rlc_rc"
-RETIRED="$(cat "$RLC_T/shapes-retired")"
+RETIRED="$(<"$RLC_T/shapes-retired")"
 
 # THE PATH ARM'S SUBTRACTION, over the rulebook FILE SET rather than the shapes inside it.
 # Same two refs, same globs, same derivation — a release that retires no rulebook file
 # produces an empty set here and no row, with no list to maintain.
 rulebook_set "$BASE" "$RLC_T/rbset-base" || rlc_refuse "$RLC_WHY" "$?"
 rulebook_set "$THEIRS" "$RLC_T/rbset-theirs" || rlc_refuse "$RLC_WHY" "$?"
-RB_BASE="$(cat "$RLC_T/rbset-base")" || rlc_refuse "reading the staged base rulebook file set" "$?"
-RB_THEIRS="$(cat "$RLC_T/rbset-theirs")" || rlc_refuse "reading the staged theirs rulebook file set" "$?"
+RB_BASE="$(<"$RLC_T/rbset-base")" || rlc_refuse "reading the staged base rulebook file set" "$?"
+RB_THEIRS="$(<"$RLC_T/rbset-theirs")" || rlc_refuse "reading the staged theirs rulebook file set" "$?"
 RETIRED_PATHS=""
 if [ -n "$RB_BASE" ]; then
   _rlc_rc=0
@@ -379,6 +406,8 @@ if [ -n "$RB_BASE" ]; then
   [ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the theirs rulebook file set" "$_rlc_rc"
   comm -23 "$RLC_T/rb-base" "$RLC_T/rb-theirs" > "$RLC_T/rb-retired" || _rlc_rc=$?
   [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-path subtraction" "$_rlc_rc"
+  # `$(cat f)` KEPT HERE, not `$(<f)`: retired-layer-contract/run.sh mutant m2-no-subtraction
+  # anchors on this exact line.
   RETIRED_PATHS="$(cat "$RLC_T/rb-retired")"
 else
   # A base whose globs resolve no rulebook file and a rulebook that retired nothing produce
@@ -455,7 +484,11 @@ for dir in overrides extensions; do
     [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the shape scan of ${f}" "$_rlc_rc"
     _tk="$(tokens_of "$body")" || _rlc_rc=$?
     [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the token scan of ${f}" "$_rlc_rc"
-    mine="$(printf '%s\n%s\n' "$_sh" "$_tk" | sed '/^$/d' | sort -u)"
+    # The union with no blank line, built without the `sed '/^$/d'` it used to pass through: an
+    # empty half is left out, and an empty union is the empty string that pipeline produced.
+    if [ -n "$_sh" ] && [ -n "$_tk" ]; then mine="$(printf '%s\n%s\n' "$_sh" "$_tk" | sort -u)"
+    elif [ -n "$_sh$_tk" ]; then mine="$(printf '%s\n' "$_sh$_tk" | sort -u)"
+    else mine=""; fi
     printf '%s\n' "$mine" > "$RLC_T/mine" || rlc_refuse "staging the shape set of ${f}" "$?"
     _rlc_rc=0
     comm -12 "$RLC_T/retired-shapes" "$RLC_T/mine" > "$RLC_T/mine-retired" || _rlc_rc=$?

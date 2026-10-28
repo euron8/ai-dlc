@@ -115,7 +115,10 @@ BASE="${2:?}"
 THEIRS="${3:?}"
 CONSUMER="${4:?}"
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 # shellcheck source=lib.sh
 # NOT `|| exit 1`: every call site below falls back to a direct `git` call when the memo
 # helpers are unavailable (see files_at/show_at), matching this script's own contract.

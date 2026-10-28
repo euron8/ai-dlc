@@ -38,7 +38,10 @@ set -uo pipefail
 # expansion that did would resolve against the caller's cwd, never the consumer.
 set -f
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 # Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 . "$SELF/consumer-read.sh" || { echo "relabel-extension-checks: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
