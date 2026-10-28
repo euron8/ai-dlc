@@ -684,6 +684,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
   if [ "$RSM_MATRIX" = 1 ]; then
     : > "$WORK/mx-log"; matrix_score
+    reuse_proof
     if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 48 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
