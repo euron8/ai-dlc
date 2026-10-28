@@ -120,7 +120,7 @@
 # MUTANT-MATRIX hk-mut-curhook decides=adds,reads twins=absent
 # MUTANT-MATRIX hk-mut-adds decides=absent twins=adds
 # MUTANT-MATRIX hk-mut-carried decides=deleted twins=same
-# MUTANT-MATRIX-DYNAMIC mp_killed why=scores the ss/mp/hk/av/c3 signature mutants by literal name, and every name it reports has its own row above
+# MUTANT-MATRIX-DYNAMIC mp_score why=scores the ss/mp/hk/av/c3 signature mutants by literal name, and every name it reports has its own row above
 # MUTANT-MATRIX-DYNAMIC cells_kill why=scores the ss/sc/pp/stg cell mutants by literal name, and every name it reports has its own row above
 # MUTANT-MATRIX-DYNAMIC ac_kill why=scores the armc carry-set mutants by literal name, and every name it reports has its own row above
 # MUTANT-MATRIX-DYNAMIC ac_kill_pre why=scores the armc preclassify mutants by literal name, and every name it reports has its own row above
@@ -459,9 +459,9 @@ vr_mut() { # vr_mut <name> <awk-program> -> path to the mutated gate, siblings b
   awk "$2" "$GATE" > "$d/self-update-gate.sh" 2>/dev/null
   printf '%s\n' "$d/self-update-gate.sh"
 }
-# mp_killed <flag> <label> <got> <want> <why> -- the one scoring site of every signature mutant. A mutant whose engine
+# mp_score <flag> <label> <got> <want> <why> -- the one scoring site of every signature mutant. A mutant whose engine
 # could not be built is a FAIL. <flag> is the same-run base-pass flag (B_<arm>) of the unmutated arm it guards.
-mp_killed() {
+mp_score() {
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$3" = "$4" ]; then mutant_killed "$1" "$2" "$(printf '%-16s KILLED (%s)' "$2" "$5")"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$2" "$3" "$4"; fi
@@ -5279,7 +5279,7 @@ hu2_kill() {
   if [ "$MATRIX" = 1 ]; then ws="$HU_WORLDS"; else ws="$5 $6"; fi
   if [ -z "$g" ]; then got="DID-NOT-APPLY"; else got="$(hu2_cells "$g" $ws)"; fi
   [ "$MATRIX" = 1 ] && [ "$got" != DID-NOT-APPLY ] && mx_row "$label" "$HU_SIG_FIX" "$got"
-  mp_killed "${B_hu2:-0}" "$label" "$got" "$(hu2_pick "$want" $ws)" "$why"
+  mp_score "${B_hu2:-0}" "$label" "$got" "$(hu2_pick "$want" $ws)" "$why"
 }
 hu2_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
   "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
