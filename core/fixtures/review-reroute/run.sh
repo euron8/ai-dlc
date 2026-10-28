@@ -197,20 +197,20 @@ else bad "CTL: FIXTURE BROKEN -- the unmutated copy failed:$died; no mutant verd
 # 0 = it stayed green) and the dead set by arm name.
 CELLS=0; MCELLS=0
 score() {
-  local flag="$1" md="$2" decides="$3" twin="$4" name="$5" a dead="" want="" row=""
+  local flag="$1" md="$2" decides="$3" twin="$4" name="$5" a dead="" want="" row="" id="${5%%,*}"
   [ -n "$md" ] || { bad "MUTANT $name: the mutation did not apply"; return; }
   if [ "$MATRIX" = 1 ]; then
     for a in $ARMS; do
       MCELLS=$((MCELLS + 1))
       if "arm_$a" "$md"; then row="$row $a=0"; else row="$row $a=1"; dead="$dead $a"; fi
     done
-    echo "MATRIX $name:$row | dead:${dead:- none} | decides: $decides | twins: $twin"
+    echo "MATRIX $id:$row | dead:${dead:- none} | decides: $decides | twins: $twin"
     return
   fi
   for a in $decides $twin; do CELLS=$((CELLS + 1)); "arm_$a" "$md" || dead="$dead $a"; done
   for a in $decides; do want="$want $a"; done
   if [ "$dead" = "$want" ]; then
-    mutant_killed "$flag" "$name" "MUTANT $name: killed by$want; twin $twin stays green"
+    mutant_killed "$flag" "$id" "MUTANT $name: killed by$want; twin $twin stays green"
   else bad "MUTANT $name SURVIVED or co-tripped: dead among [$decides $twin]:${dead:- none} (want exactly$want)"; fi
 }
 score "$(( ${B_R1:-0} && ${B_R6:-0} && ${B_R5:-0} ))" "$(mut classonly partition-review-diff.sh '  [ "$ncode" -eq 0 ] || full "the delta' '  : || full "the delta')" "R1 R6" R5 "m-classonly, the delta guard removed"
