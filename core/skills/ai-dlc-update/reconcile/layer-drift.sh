@@ -189,7 +189,10 @@ set -f
 # EVERY CONSUMER READ GOES THROUGH consumer-read.sh (its header owns the contract), so a path with a
 # `..` component or a leading `/` is refused, never read. Sourced before the first consumer path
 # is resolved, which is the argument parse below.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+# `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
+# `/x.sh` is `/`, which is what `dirname` answered.
+case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "layer-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
 # MODES
