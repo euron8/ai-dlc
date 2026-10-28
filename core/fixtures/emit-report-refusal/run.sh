@@ -72,7 +72,7 @@
 # MUTANT-MATRIX m-rlp decides=A1-retired-layer-passage.sh twins=A2
 # MUTANT-MATRIX h1-unstable decides=H1 twins=A8
 # MUTANT-MATRIX a8-stable-filter decides=A8 twins=A9
-# MUTANT-MATRIX a9-counts-in-projection decides=A9 twins=A8
+# MUTANT-MATRIX a9-counts-in-projection decides=A9 twins=H1
 # MUTANT-MATRIX r6-approve-noretry decides=R6APPR twins=R6SCORE
 # MUTANT-MATRIX r6-approve-noguard decides=R6APPR twins=R6SCORE
 # MUTANT-MATRIX r6-baseline-empty decides=R6APPR twins=R6SCORE
@@ -667,7 +667,7 @@ m-rlc|m-rlc|A1-retired-layer-contract.sh|A2
 m-rlp|m-rlp|A1-retired-layer-passage.sh|A2
 h1-unstable|h1-unstable|H1|A8
 a8-stable-filter|a8-stable-filter|A8|A9
-a9-counts-in-projection|a9-counts-in-projection|A9|A8
+a9-counts-in-projection|a9-counts-in-projection|A9|H1
 r6-approve-noretry|r6-approve-noretry|R6APPR|R6SCORE
 r6-approve-noguard|r6-approve-noguard|R6APPR|R6SCORE
 r6-baseline-empty|r6-baseline-empty|R6APPR|R6SCORE
