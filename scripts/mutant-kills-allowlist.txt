@@ -51,11 +51,9 @@ scope-confirmation
 self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shadowed-local-validators
-shell-portability
 snapshot-section-schema
 snapshot-update-stamps
 span-of-containment
-spec-join-integrity
 story-provenance
 suite-content-key
 suite-pole-info

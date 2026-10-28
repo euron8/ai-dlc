@@ -103,14 +103,12 @@ settings-merge-unparseable-template	no MUTANT-MATRIX block; floor: S1 mutant(),S
 setup-config-drift	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 setup-site-drift	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 shadowed-local-validators	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-shell-portability	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 shipped-rule-version-floor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-conservation	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-section-schema	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 snapshot-supersession-marker	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-update-stamps	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 span-of-containment	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
-spec-join-integrity	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 story-evidence-scaffold	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKC mutant_killed caller
 story-fields-derive	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 story-provenance	no MUTANT-MATRIX block; floor: S1 mut_writer(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
