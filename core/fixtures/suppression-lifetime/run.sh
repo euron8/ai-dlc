@@ -40,9 +40,9 @@
 # c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
 # MUTANT-MATRIX k_ts_dropped decides=t18a,t18b,t18d twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
-# MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=s4
+# MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
 # MUTANT-MATRIX b_catalog_join_dropped decides=s6 twins=s2
-# MUTANT-MATRIX c_ifs_delimiter decides=s4m twins=s1
+# MUTANT-MATRIX c_ifs_delimiter decides=s4m twins=sen_F
 # MUTANT-MATRIX d_identity_lines_deleted decides=ident,cand twins=s1
 # MUTANT-MATRIX e_identity_nonce decides=ident,cand twins=s1
 # MUTANT-MATRIX f_attempt_demoted decides=att17a,att17b,att17c,att20 twins=s2
@@ -714,11 +714,11 @@ defm k_ts_dropped t18a,t18b,t18d t18c
 # L: the ts printed is the LAST matching row read, not the newest. Only t18d can see it.
 defm l_last_ts t18d t18a
 # A: the metrics extractor stops tolerating whitespace.
-defm a_whitespace_tolerance_dropped s2,s7,s13a,s14,s15,s16,s17,s18,t18a,t18b,t18c,t18d,cwA_gates,cwA_root,sen_E,sr_Fg,w1b s4
+defm a_whitespace_tolerance_dropped s2 cwA_inf
 # B: the catalog join is dropped.
 defm b_catalog_join_dropped s6 s2
 # C: the record delimiter reverts to an IFS-whitespace character.
-defm c_ifs_delimiter s4m,s2,s4,s8,s12,s13a,s14,s15,s17,s18,t18a,t18b,t18c,t18d,att18,sen_E,sr_Fg,w1,w1b,w2,w3,w4 s1
+defm c_ifs_delimiter s4m sen_F
 # D: the identity lines deleted -- assertion ident AND cand go red, no verdict moves.
 defm d_identity_lines_deleted ident,cand s1
 # E: identity replaced by a per-run NONCE.
