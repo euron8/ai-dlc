@@ -431,7 +431,7 @@ blind_check() { # blind_check <name> <dir> <sed-expr> <arm> <which-cell>
   post="$(run_v "$d")"
   if grep -q "^validate-shell-portability: PASS" <<<"$post"; then
     mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "${nfail:-0}" -eq 1 ] && [ "${nhits:-0}" -ge 1 ] && echo 1)" "$n" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
+    mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "${nfail:-0}" -eq 1 ] && [ "${nhits:-0}" -ge 1 ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
   else
     note "FAIL  $n -- $cell: the mutated validator did NOT go quiet, so it is not what found this seed"
     printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
@@ -465,7 +465,7 @@ kill_check() { # kill_check <name> <dir> <arm-id>
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$B_CTL" "$n" "$n -- killed by its own arm, and only its own"
+  mutant_killed "$B_CTL" "${n%% *}" "$n -- killed by its own arm, and only its own"
 }
 
 # kill_check with the COUNT asserted. `kill_check` is satisfied by one hit line, so a pattern
@@ -493,7 +493,7 @@ count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
     printf '%s\n' "$out" | sed 's/^/      /' | head -10; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$B_CTL" "$n" "$n -- killed by its own arm, and only its own, on all $want seeded line(s)"
+  mutant_killed "$B_CTL" "${n%% *}" "$n -- killed by its own arm, and only its own, on all $want seeded line(s)"
 }
 
 # The x5 shape: a mutation that must NOT silence the arm, only SHRINK it. `blind_check` asserts
@@ -521,7 +521,7 @@ count_shrink_check() { # count_shrink_check <name> <dir> <sed-expr> <arm> <pre-n
     printf '%s\n' "$post" | sed 's/^/      /' | head -10; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "$npre" -eq "$want_pre" ] && echo 1)" "$n" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
+  mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "$npre" -eq "$want_pre" ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
 }
 
 # The inverse of `blind_check`: the seed is a measured FALSE POSITIVE the shipped arm is
@@ -548,7 +548,7 @@ appear_check() { # appear_check <name> <dir> <sed-expr> <arm> <cell>
     printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "$n" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
+  mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
 }
 
 seed "$TMP/m1" "sed -i 's/x/y/' f"                            ; kill_check "m1 S1 sed -i bare"        "$TMP/m1" S1
@@ -621,7 +621,7 @@ empty_check() { # empty_check <name> <dir> <what-was-emptied> <corpus-name-in-th
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
   else
     mx_score "${n%% *}" "$(corpus_arm "$which")" "$CONTROL_OUT" "$out" "$(mx_rc "$d")" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$B_CTL" "$n" "$n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
+    mutant_killed "$B_CTL" "${n%% *}" "$n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
   fi
 }
 
@@ -719,7 +719,7 @@ corpus_cell_check() { # corpus_cell_check <name> <dir> <sed-expr> <corpus-name> 
     printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
   else
     mx_score "${n%% *}" "$(corpus_arm "$which")" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(refused_for "$pre" "$which" && echo 1)" "$n" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
+    mutant_killed "$(refused_for "$pre" "$which" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
   fi
 }
 
@@ -802,7 +802,7 @@ X7EOF
       printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
     else
       if mx_score x7 S10 "$pre" "$post" "$post_rc"; then
-        mutant_killed "$(grep -q "^FAIL: S10:" <<<"$pre" && echo 1)" "x7 LC_ALL=C" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
+        mutant_killed "$(grep -q "^FAIL: S10:" <<<"$pre" && echo 1)" "x7" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
         note "               stripped of the export it REFUSES (rc=$post_rc, S10's probe cannot fire) rather than passing"
       else
         note "FAIL  x7 LC_ALL=C -- $MX_ERR"; rc=1
@@ -1171,7 +1171,7 @@ probe_owned_appear() { # probe_owned_appear <name> <dir> <sed-expr> <arm> <file:
   if grep -q "${arm}'s own probe misfired" <<<"$post" && grep -q "^FAIL: ${arm}:" <<<"$post" \
      && grep -qF "$tag" <<<"$post" && [ "$other" -eq 0 ]; then
     mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "$n" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
+    mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
   else
     note "FAIL  $n -- $cell: the mutant did not report both the seeded line ($tag) and ${arm}'s probe, and nothing else"
     printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
