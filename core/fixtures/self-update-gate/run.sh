@@ -36,12 +36,12 @@
 # MUTANT-MATRIX su-mut-order decides=core_session-driver_modeflip.sh twins=core_session-driver_modeneed.sh
 # MUTANT-MATRIX su-mut-unresolvable decides=core_fixtures_fx-add_run.sh,core_fixtures_fx-mod_run.sh,core_rules_added.md,core_rules_carried.md twins=core_rules_edited.md
 # MUTANT-MATRIX su-mut-index decides=core_rules_indexed.md twins=core_rules_edited.md
-# MUTANT-MATRIX su-mut-machfn decides=obs twins=- why=a one-cell drive, dead in its only cell, scored on the setup-sites.md UNDECIDED row and the empty carry set together
+# MUTANT-MATRIX su-mut-machfn decides=obs twins=- why=the drive has one observable cell, obs (the setup-sites.md UNDECIDED row with the empty carry set), and it reads 1
 # MUTANT-MATRIX pp-enclosed-mut decides=enclosed twins=green
 # MUTANT-MATRIX pp-case-mut decides=miscased twins=canonical
-# MUTANT-MATRIX pp-mut-gatehook decides=enc twins=- why=a one-cell drive, dead in its only cell: the sentinel the restored hook call writes
-# MUTANT-MATRIX pp-mut-recinplace decides=seen twins=- why=a one-cell drive, dead in its only cell: the record file count a consumer process sees mid-run
-# MUTANT-MATRIX stage-mut-status decides=scan twins=- why=a one-cell drive, dead in its only cell: the staging status read
+# MUTANT-MATRIX pp-mut-gatehook decides=enc twins=- why=the drive has one observable cell, enc (the sentinel the restored hook call writes), and it reads 1
+# MUTANT-MATRIX pp-mut-recinplace decides=seen twins=- why=the drive has one observable cell, seen (the record file count a consumer process sees mid-run), and it reads 1
+# MUTANT-MATRIX stage-mut-status decides=scan twins=- why=the drive has one observable cell, scan (the staging status read), and it reads 1
 # MUTANT-MATRIX-CONTROL su-mut-layers why=the sentinel alone must stop the index read once both upper layers are stripped, so the correct outcome is that the mutation survives
 # MUTANT-MATRIX-CONTROL su-mut-eqbase why=the equality guard is inert by construction because the base_h arm already claims every state it could reach
 # MUTANT-MATRIX rec-skc-mutant decides=skc twins=v
@@ -73,8 +73,8 @@
 # MUTANT-MATRIX sh-mut-true decides=true twins=assign
 # MUTANT-MATRIX sh-mut-step decides=step,steptrue twins=assign
 # MUTANT-MATRIX sh-mut-steptrue decides=steptrue twins=assign
-# MUTANT-MATRIX pu-mut-probename decides=cmp twins=- why=the scenario summary has exactly one cell and the mutant moves it
-# MUTANT-MATRIX pu-mut-fetchargv decides=cmp twins=- why=the scenario summary has exactly one cell and the mutant moves it
+# MUTANT-MATRIX pu-mut-probename decides=cmp twins=- why=the drive has one observable cell, cmp (the scenario summary compared whole), and it reads 1
+# MUTANT-MATRIX pu-mut-fetchargv decides=cmp twins=- why=the drive has one observable cell, cmp (the scenario summary compared whole), and it reads 1
 # MUTANT-MATRIX pu-mut-lsfetch decides=cmp twins=rc
 # MUTANT-MATRIX pu-mut-shortcut decides=rc,n,stdin,cmp,run twins=real
 # MUTANT-MATRIX pu-mut-notrap decides=rc,ref twins=n
@@ -115,7 +115,7 @@
 # MUTANT-MATRIX av-mut-sibling decides=paths twins=render
 # MUTANT-MATRIX av-mut-stdin decides=anchors twins=render
 # MUTANT-MATRIX av-mut-dollar decides=rooted twins=render
-# MUTANT-MATRIX av-mut-eqund decides=render twins=- why=scored on the drifted world's single render cell, no other cell is read
+# MUTANT-MATRIX av-mut-eqund decides=render twins=- why=the drive has one observable cell, render (the drifted world render row), and it reads 1
 # MUTANT-MATRIX c3-mut-nowrite decides=worklist,installed,check twins=pure-apply
 # MUTANT-MATRIX hk-mut-curhook decides=adds,reads twins=absent
 # MUTANT-MATRIX hk-mut-adds decides=absent twins=adds
