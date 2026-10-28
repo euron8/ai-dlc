@@ -45,15 +45,65 @@ the general form.
 
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
-`.githooks/pre-push` is the runner. It dispatches through a worker pool
-(`xargs -P "$FIXTURE_JOBS"`, default 12), orders units by their own recorded costs so
-the longest starts first, content-keys the skip, and asserts that every dispatched
+`.githooks/pre-push` is the runner. It dispatches through a worker pool,
+content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
-across both pre-push hooks. Reach for it — `git push` is the cheapest way to run it —
-rather than writing `for d in core/fixtures/*/`.
+across both pre-push hooks. Before a release push, seed the verdict store
+(`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
+(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip, then the exact release commit,
+to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
+(`docs/plans/hermetic-pole.md`). A mktemp-store run caches nothing, and a green push's
+`verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
+failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
-**A hand-rolled loop is not merely slower, it FABRICATES FAILURES, and that is the
-reason this is a rule.** Measured on one branch, same tree, same fixtures, both ways:
+**The shared verdict store is cleared by EXACT LISTING before a gate, never by glob or `rm -rf`.** A
+peer's gate can add entries between the listing and the gate.
+
+**The pool width is `AI_DLC_FIXTURE_JOBS`, default 12**, read at the top of the hook's pool block
+(the variable the hook reads is `AI_DLC_FIXTURE_JOBS`, not `FIXTURE_JOBS`). It was measured on one
+machine; on a smaller box re-measure rather than inherit it. A nested pool (depth 1 or more) is capped
+at two workers whatever the variable says.
+
+**Two state files under `.git/` decide what a push skips, and they mean different things.**
+`.git/ai-dlc-fixture-verified` (with its `.format` sidecar, which must read `v2`) is the per-file
+verified-state record: the hook writes it only after a fully green run, as a copy of that run's
+file-content manifest, and the read-set skip reads it to decide which fixtures' inputs moved. A red
+run never writes it, and an unstamped record is read as "run everything". To an operator it says
+"every fixture's verdict was known good at these file contents"; deleting it forces a full run.
+`.git/ai-dlc-suite-key` is the whole-suite content key: when the key and the fixture count both match
+the last green, the push prints `SKIPPED -- this exact tree already passed the whole suite` and runs
+no fixtures. Each decision appends one line to `.git/ai-dlc-suite-key.log`
+(`<utc stamp> HIT|MISS|FORCED|UNAVAILABLE <key>`); count them with
+`awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
+
+**A push is judged on the PUSHING worktree's working tree, never on the sha the push names.**
+`core.hooksPath` is an absolute path to the main checkout's `.githooks`, so every worktree's push runs the
+main checkout's hook, and that hook begins `cd "$(git rev-parse --show-toplevel)"` and never reads the
+`<local sha>` lines git hands it on stdin. Push from a clean worktree detached at the exact sha, with
+`git rev-parse HEAD` equal to it; pushing a merge sha from another checkout judges that checkout's tree.
+
+**`scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict**, as the
+names between its `# EXCLUDE_BEGIN` and `# EXCLUDE_END` markers. Both skips in `.githooks/pre-push`
+read it: the whole-suite key hashes everything except that set, and the per-fixture read-set skip
+resolves the same set in `readset_excluded_re`. A wrong edit there silently widens or narrows what a
+push skips, so every added line needs the two-tree mutation measurement its header describes.
+
+**`core/scripts/derive-fixture-readsets.sh --reconcile` traces every stale, changed and unmapped
+fixture, with no sudo**, and the hook prints that command when it finds stale fixtures. Its traces
+are recorded in `.git/ai-dlc-fixture-readsets.local`, the local map the hook passes as `--local-map`;
+the hook reads it beside the committed map `.ai-dlc-fixture-readsets.tsv`, and never writes the
+committed one. `AI_DLC_READSET_LIVE_TRACE=0` turns off the detached trace the hook starts after a
+green suite.
+
+**`scripts/census-hermetic-coverage.sh` is the one-time census of what the sandbox hides.** It runs
+each declared fixture twice, once inside `hermetic-run.sh`'s sandbox and once plainly against the real
+tree, and reports every fixture whose sandboxed run asserted something different. It is a census, not
+a gate. Options: `--root R`, `--list "<names>"`, `--jobs N` (default 4), `--out PATH`, `--work DIR`,
+`--scratch BASE` and `--keep`. Exit 0 means every row read EQUAL, EQUIVALENT or LOW-RES, 1 means a
+MISMATCH, BOTH-FAIL, FLAKY, UNCOUNTABLE or REFUSED row, and 2 means it could not run. It needs a clean
+root and never writes to the real verdict store or the durations record.
+
+**A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, one tree, both ways:
 
 ```
 for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
@@ -65,15 +115,11 @@ the fixture dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`,
 exactly like a regression in the change under test. The serial loop was roughly ten times the
 pool's wall clock, and wrong.
 
-**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE, AND THE PASSAGE FORBIDDING THEM WAS ITSELF
-CARRYING TWO UNTIL THEY WERE CUT.** A total decays silently and reads exactly like a fresh one, and dating
-it is not available either — a date in resident rule prose is a tier-1 `audit-rule-files.sh`
-finding. **Derive the count, never quote one** —
-`ls core/fixtures/*/run.sh | wc -l` — and read the CHANGELOG for when a
-figure was taken. The suite is
+**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE.** **Derive the count, never quote one** —
+`ls core/fixtures/*/run.sh | wc -l`. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded
-there is a LOADED cost, measured under the pool; the same unit run alone gives a completely
+there is a LOADED cost, measured under the pool; the same unit run alone gives a
 different number — one shard, 442s loaded against 112s solo — and the two must never be
 compared.**
 
@@ -81,15 +127,13 @@ compared.**
 invariant added to `validate-enforcement-map.sh` as a nested loop over (subtree × fixture file)
 moved that validator from 13.0s to 18.1s — 39% — which the sharded mutation batteries multiply by
 roughly thirty, and the pole rose by a third. Reshaped to one recursive grep per subtree it is
-back to 13.2s. **Time the validator before and
-after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and exits in
-5ms, which reads as an enormous speed-up and is a broken measurement.
+back to 13.2s. **Count the validator's execs and invocations before and
+after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and counts
+almost nothing, which reads as an enormous reduction and is a broken measurement.
 
-The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
-carries it: a fixture that is green only from the repo root may be asserting nothing,
+The inverse hazard (`core/fixtures/check-3b-locked-anchor/run.sh:125`): a fixture that is green only from the repo root may be asserting nothing,
 because that is a cwd where its decoy files do not exist. A fixture that must hold from
-any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
-the suite is driven.
+any cwd asserts cwd-invariance in its own arms.
 
 ## Some authoring rules live in `.claude/rules/`, and load only on a Read
 

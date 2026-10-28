@@ -6,7 +6,6 @@
 # never typed: 127 at origin/main 7c8a88fd7, less check-22-spawn-ledger, migrated in the change
 # that shipped the arm.
 apply-drift-after-write
-apply-restamp-worklist
 ci-gates-resolution
 claude-rules-joins
 context-mode-protect
@@ -46,16 +45,13 @@ procsub-staged-refusal-boot
 requirements-step
 retired-layer-passage
 review-carry-over-clauses
-review-shard-merge
 scope-confirmation
 self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shadowed-local-validators
-shell-portability
 snapshot-section-schema
 snapshot-update-stamps
 span-of-containment
-spec-join-integrity
 story-provenance
 suite-content-key
 suite-pole-info

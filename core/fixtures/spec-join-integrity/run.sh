@@ -20,7 +20,95 @@
 #   - qualified + an uncited LR         FAILS (1)   -- the widened entries FEED join (1)
 #   - qualified NON-capability tags     DISARMS (2) -- the widening is not vacuous
 #   - `(capability-review by <who>)`    DISARMS (2) -- and is not over-wide either
+#
+# MUTANT MATRIX. An ARM is one distinct subject invocation (an argument list, named by `arm_name`:
+# each `--flag value` pair becomes `flag.value` with the $R prefix stripped (an empty value is `empty`), pairs joined by `+`).
+# Every `want`/`says` asserts over one arm, and the subject's (rc, output) for an arm is CAPTURED
+# the first time it is run and read back by every later assertion over the same arm, so the subject
+# is run once per distinct arm and not once per assertion. A mutant is a perl-built copy of the
+# subject; its DECIDING arm is the invocation its own assertion drives. A cell is TRIPPED iff the
+# mutant's (rc, output) on that arm differs from the unmutated subject's. Per push each mutant runs
+# ONCE on its deciding arm (the assertion it always made) and ONCE on its named TWIN, an arm the
+# measured matrix shows green. `--matrix` runs every mutant against every arm. The matrix is
+# re-measured whenever an arm or a mutant changes.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC mut-helpers why=mut, mut_says, mut2 and mut2_says pass the mutant id as a variable; every id they produce has its own row above
+# MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass
+# MUTANT-MATRIX-FULL fold-hang worlds=fold-heavy-real,fold-heavy-hang why=the kill is read from the awk shim log (start/end/152), not from any arm verdict; no single argument list decides it
+# MUTANT-MATRIX-FULL lr-sibling-unchecked worlds=lr-no-anchor-mutant why=the mutant lives in a sibling-less directory, so no capture-keyed arm can drive it; one run names the misdiagnosis
+# MUTANT-MATRIX lr-off decides=spec.orphan-lr+prd.prd-ok.md twins=spec.orphan-lr+prd.prd-ok.md+baseline.nonexistent-baseline.txt
+# MUTANT-MATRIX cap-off decides=spec.ok+prd.prd-missing-cap.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX story-off decides=spec.ok+prd.prd-ok.md+story.story-dangling.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX tri-collapse decides=spec.ok+prd.prd-ok.md+story.story-empty.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX tri-rationale-off decides=spec.ok+prd.prd-ok.md+story.story-empty-declared.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX baseline-forever decides=spec.orphan-lr+prd.prd-ok.md+baseline.baseline-stale.txt twins=spec.orphan-lr+prd.prd-ok.md
+# MUTANT-MATRIX qual-narrow decides=spec.real-qualified+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX qual-typeless decides=spec.real-qualified-noncap+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX qual-hyphen decides=spec.real-hyphen-type+prd.prd-real.md+story.story-real.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX grammar-narrow decides=spec.real-suffixed+prd.prd-suffixed.md+story.story-suffixed.md+spine.spine-suffixed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX grammar-narrow-silent decides=spec.real-suffixed+prd.prd-suffixed-nocap1a.md+story.story-suffixed-no1a.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX decl-malformed-off-emph decides=spec.cap-emph-underscore+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX cap-boundary-loose decides=spec.real-suffixed+prd.prd-suffixed-only1a.md+story.story-suffixed.md twins=spec.real-suffixed+prd.prd-suffixed.md+story.story-suffixed.md+spine.spine-suffixed.md
+# MUTANT-MATRIX story-cap-coarse-key decides=spec.ok+prd.prd-ok.md+story.story-dangling.md+baseline.baseline-story-coarse.txt twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX story-cap-unrouted decides=spec.ok+prd.prd-ok.md+story.story-dangling.md+baseline.baseline-story-cap.txt twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX binds-fold-off decides=spec.ok+prd.prd-ok.md+spine.spine-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX binds-widen decides=spec.ok+prd.prd-ok.md+spine.spine-neighbour.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-reason-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-emptyreason.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-malformed-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-malformed-bound.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-idsegment-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-reasonmention.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-marker-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-prose.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-fold-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX disp-off decides=spec.disp-ok+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-unknown-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-unknown.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-contradiction-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-stale.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-bindsall-blind decides=spec.ok+prd.prd-ok.md+spine.spine-noad-bindsall.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX decl-malformed-off-underscore decides=spec.cap-residue-underscore+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX fenced-strip-off decides=spec.cap-fenced+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX mentions-none-collapse decides=spec.cap-mentions-none+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX binds-all-folded decides=spec.ok+prd.prd-ok.md+spine.spine-binds-all-prose.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-placeholder-loose decides=spec.ok+prd.prd-ok.md+spine.spine-noad-placeholder.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX bound-wins-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-stale.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX disp-placeholder-loose decides=spec.disp-placeholder+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX disp-anchor-loose decides=spec.disp-notsubject+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX disp-noreason-loose decides=spec.disp-noreason+prd.prd-ok.md+story.story-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-segment-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-mixedseg.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX noad-eaten-off decides=spec.ok+prd.prd-ok.md+spine.spine-noad-eaten.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX twoid-def-off-undefined decides=spec.cap-twoid-undefined+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX twoid-def-off decides=spec.cap-twoid+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX reason-strip-off decides=spec.ok+prd.prd-ok.md+spine.reason-reject-3.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX reason-wordlist-off decides=spec.ok+prd.prd-ok.md+spine.reason-reject-4.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX decl-malformed-off decides=spec.decl-table+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX unclosed-off decides=spec.unclosed-bold+prd.prd-unclosed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX fold-off decides=spec.b31-wrapped+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX membership-gate-off decides=spec.mem-none-known+prd.prd-mixed.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX unindent-spine decides=spec.ok+prd.prd-ok.md+spine.spine-noad-wrapped.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX unindent-kernel decides=spec.b31-wrapped+prd.prd-ok.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX cont-reorder-quote decides=spec.ok+prd.prd-ok.md+spine.spine-cont-quote.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX cont-reorder-table decides=spec.ok+prd.prd-ok.md+spine.spine-cont-table.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX cont-reorder-thematic decides=spec.ok+prd.prd-ok.md+spine.spine-cont-thematic.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX cont-predicate-off decides=spec.ok+prd.prd-ok.md+spine.spine-cont-sibling.md twins=spec.ok+prd.prd-ok.md+story.story-ok.md
+# MUTANT-MATRIX lr-local-regex decides=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-end-sprint.md twins=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-below-marker.md
+# MUTANT-MATRIX lr-local-regex-eof decides=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-unclosed.md twins=spec.lr-decl-addenda+prd.prd-ok.md+locked-requirements.lr-below-marker.md
+# MUTANT-MATRIX lr-anchor-wide decides=spec.lr-decl-prior+prd.prd-ok.md+locked-requirements.lr-prose-mention.md twins=spec.lr-decl-prior+prd.prd-ok.md
+# MUTANT-MATRIX lr-anchor-bold decides=spec.lr-decl-orphan+prd.prd-ok.md+locked-requirements.lr-decl.md twins=spec.lr-decl-orphan+prd.prd-ok.md
+# MUTANT-MATRIX lr-flag-inert decides=spec.lr-decl-orphan+prd.prd-ok.md+locked-requirements.lr-decl.md twins=spec.lr-decl-orphan+prd.prd-ok.md
+# MUTANT-MATRIX lr-grammar-moved-collapsed decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-mentions-only.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-emptyblock-silent decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-nomarkers.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-unreadable-tolerated decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-no-such-file.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-note-fails decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl-never.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-note-silent decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl-never.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-formfeed-unsplit decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-twoblocks.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX lr-vacuity-tolerated decides=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-wrong-sprint.md twins=spec.lr-decl+prd.prd-ok.md+locked-requirements.lr-decl.md
+# MUTANT-MATRIX ident-drop decides=identity twins=spec.ok+prd.prd-missing-cap.md
+# MUTANT-MATRIX ident-nonce decides=identity twins=spec.ok+prd.prd-missing-cap.md
 set -u
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 V=""
@@ -39,11 +127,51 @@ trap 'rm -rf "$R"' EXIT
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
+[ -f "$LIBDIR/mutant.sh" ] && [ -f "$LIBDIR/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found beside $DIR" >&2; exit 2; }
+. "$LIBDIR/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$LIBDIR/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+B_BASE=0
+
+# --- capture: the subject is run ONCE per distinct (program, argument list) --------------------
+# Every seed under $R is written by seed.sh before the first call and never changed afterwards, so
+# an argument list names one state. The key joins the program and each argument with a unit
+# separator and TERMINATES each one, so an empty argument (`--locked-requirements ""`) is a part.
+US=$'\037'
+CAP_KEY=("-"); CAP_RC=("0"); CAP_OUT=(""); CAP_ARM=("0"); CAP_N=0
+CAP_RUNS=0; CAP_SERVED=0
+cap() { # cap <program> <args...> -> CAPRC, CAPOUT (stdout+stderr), from the capture when this arm was run before
+  local prog="$1" k="" a i
+  for a in "$@"; do k="$k$a$US"; done
+  i=1
+  while [ "$i" -le "$CAP_N" ]; do
+    if [ "${CAP_KEY[$i]}" = "$k" ]; then CAPRC="${CAP_RC[$i]}"; CAPOUT="${CAP_OUT[$i]}"; CAP_SERVED=$((CAP_SERVED + 1)); return 0; fi
+    i=$((i + 1))
+  done
+  shift
+  CAPOUT="$(bash "$prog" "$@" 2>&1)"; CAPRC=$?
+  CAP_RUNS=$((CAP_RUNS + 1))
+  CAP_N=$((CAP_N + 1))
+  CAP_KEY[$CAP_N]="$k"; CAP_RC[$CAP_N]="$CAPRC"; CAP_OUT[$CAP_N]="$CAPOUT"
+  if [ "$prog" = "$V" ]; then CAP_ARM[$CAP_N]=1; else CAP_ARM[$CAP_N]=0; fi
+}
+arm_name() { # arm_name <args...> -> a header-safe name for this argument list
+  local o="" a v
+  for a in "$@"; do
+    case "$a" in
+      --*) o="$o+${a#--}" ;;
+      *) v="${a#"$R"/}"; [ -n "$v" ] || v=empty; o="$o.$v" ;;
+    esac
+  done
+  printf '%s' "${o#+}"
+}
 # Run, then read $?. Never `out=$(...)` for a verdict.
 want() { # <expected-rc> <label> <args...>
   local exp="$1" lab="$2"; shift 2
-  bash "$V" "$@" >/dev/null 2>&1
-  local g=$?
+  cap "$V" "$@"
+  local g=$CAPRC
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
 }
 # Run, then assert the subject's OUTPUT contains a sentence. Defined here, before the first
@@ -51,7 +179,8 @@ want() { # <expected-rc> <label> <args...>
 # untouched, and reads exactly like a passing arm.
 says() { # <label> <must-contain> <args...>
   local lab="$1" want_s="$2"; shift 2
-  local out; out="$(bash "$V" "$@" 2>&1)"
+  cap "$V" "$@"
+  local out="$CAPOUT"
   if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
   else bad "$lab (message missing: \"$want_s\")"; fi
 }
@@ -65,6 +194,34 @@ echo "spec-join-integrity: resolved subject = $(cd "$(dirname "$V")" && pwd)/$(b
 
 want 0 "OVER-FIRE CONTROL: a healthy spec set passes every join" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# THE BASE PASS every mutant verdict below is gated on: the healthy set exited 0 AND printed its
+# PASS line (rc 0 alone is also what a subject replaced by `exit 0` produces). Read from the capture.
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+if [ "$CAPRC" -eq 0 ] && grep -qF ": PASS (" <<<"$CAPOUT"; then B_BASE=1; fi
+# Mutant registry: each mutant's script is kept under $R/mx so the matrix and the twin run can
+# drive it after a later mutant has reused its working name. The anchor sibling sits beside them.
+mkdir -p "$R/mx"
+cp "$(cd "$(dirname "$V")" && pwd)/validate-locked-anchor.sh" "$R/mx/" 2>/dev/null || true
+cp "$V" "$R/mx/_control.sh"
+MX_N=0; MX_ID=("-"); MX_SCRIPT=("-"); MX_DEC=("-"); MX_ARGS=("-"); MX_BESPOKE=("-")
+mx_reg() { # mx_reg <id> <script> <deciding-arm-name|-> <args...>   (a bespoke deciding arm passes args "")
+  local id="$1" sc="$2" dec="$3" a k="" i
+  shift 3
+  i=1
+  while [ "$i" -le "$MX_N" ]; do
+    if [ "${MX_ID[$i]}" = "$id" ]; then
+      cmp -s "${MX_SCRIPT[$i]}" "$sc" || bad "FIXTURE ERROR: mutant name '$id' is used for two DIFFERENT mutated scripts; each mutant needs its own name in the matrix"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  MX_N=$((MX_N + 1))
+  cp "$sc" "$R/mx/$id.sh"
+  for a in "$@"; do k="$k$a$US"; done
+  MX_ID[$MX_N]="$id"; MX_SCRIPT[$MX_N]="$R/mx/$id.sh"; MX_ARGS[$MX_N]="$k"
+  if [ "$dec" = "-" ]; then MX_DEC[$MX_N]="$(arm_name "$@")"; MX_BESPOKE[$MX_N]=0
+  else MX_DEC[$MX_N]="$dec"; MX_BESPOKE[$MX_N]=1; fi
+}
 
 want 1 "join (1): a locked requirement citing no capability FAILS" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
@@ -247,7 +404,8 @@ mut() { # <name> <literal-from> <literal-to> <expect-rc> <label> <args...>
   fi
   bash "$m" "$@" >/dev/null 2>&1
   local g=$?
-  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — the guard under test is not what produced the FAIL)"
+  if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+  else bad "$lab (mutant exited $g, expected $exp — the guard under test is not what produced the FAIL)"; fi
 }
 
 mut lr-off 'grep -qE "$CAP_GRAMMAR"' "true" \
@@ -280,7 +438,7 @@ mut_says() { # <name> <literal-from> <literal-to> <must-contain> <label> <args..
     bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return
   fi
   local out; out="$(bash "$m" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
   else bad "$lab (mutant did not produce: \"$want_s\")"; fi
 }
 
@@ -553,7 +711,7 @@ run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 it neither
   wait "$pid" 2>/dev/null
   return 0
 }
-meter_read() { # <log> -> "<awk starts>|<ended 0>|<killed by SIGXCPU>"
+meter_read() { # <log> -> "<awk starts>|<ended 0>|<SIGXCPU-terminated>"
   local s z k
   s="$(grep -c '^start ' "$1")" || s=0
   z="$(grep -c '^end [0-9]* 0$' "$1")" || z=0
@@ -572,7 +730,7 @@ mut2_says() { # <name> <from1> <to1> <from2> <to2> <must-contain> <label> <args.
   if cmp -s "$m.layer1" "$m"; then bad "FIXTURE ERROR: mutation '$n' LAYER 2 matched nothing"; return; fi
   if ! bash -n "$m" 2>/dev/null; then bad "FIXTURE ERROR: mutant '$n' is not a valid shell script"; return; fi
   local out; out="$(bash "$m" "$@" 2>&1)"
-  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
   else bad "$lab (mutant did not produce: \"$want_s\")"; fi
 }
 
@@ -594,7 +752,8 @@ mut2() { # <name> <from1> <to1> <from2> <to2> <expect-rc> <label> <args...>
   fi
   bash "$m" "$@" >/dev/null 2>&1
   local g=$?
-  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"
+  if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+  else bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"; fi
 }
 
 NEW_ARMS=0
@@ -1440,6 +1599,7 @@ n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a descrip
 # terminating is "the subject exited, every awk it started logged `end ... 0`, and none was
 # killed for its CPU budget" -- three binary facts, none of them a wall time.
 NEW_ARMS=$((NEW_ARMS+1))
+B_TERM=0
 run_metered "$R/meter.real" "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" \
   || broken "validate-spec-join.sh neither exited nor advanced its awk log or its CPU time over $SJ_STALL_TICKS ticks"
 SJ_M="$(meter_read "$R/meter.real")"
@@ -1448,11 +1608,12 @@ case "$SJ_M" in
 esac
 SJ_MZ="${SJ_M#*|}"; SJ_MZ="${SJ_MZ%%|*}"
 if [ "${SJ_M%%|*}" != "$SJ_MZ" ] || [ "${SJ_M##*|}" != 0 ]; then
-  bad "TERMINATION: on a fold-heavy kernel an awk did not end cleanly (starts|ended 0|killed by SIGXCPU = '$SJ_M') — an accumulator that never returns"
+  bad "TERMINATION: on a fold-heavy kernel an awk did not end cleanly (starts|ended 0|SIGXCPU-terminated = '$SJ_M') — an accumulator that never returns"
 elif ! grep -qF "PASS (2 locked requirement(s), 2 capability(ies)" "$R/meter.real.out"; then
   bad "TERMINATION: it completed but produced no verdict — completing is what a subject that emits nothing also does"
 else
   ok "TERMINATION: the fold exits on a 600-line fold-heavy kernel, every awk it started ended 0 inside its ${SJ_CPU_BUDGET}s CPU budget, AND it reports its verdict"
+  B_TERM=1
 fi
 # THE ARM NEEDS A SUBJECT. A non-terminating fold must be killed by the CPU budget, and the
 # kill must be READ from the shim log, or this assertion is one that cannot fire — the exact
@@ -1472,8 +1633,8 @@ else
   SJ_MH="$(meter_read "$R/meter.hang")"
   case "$SJ_MH" in
     0\|*) broken "the awk shim recorded no invocation on the fold-hang mutant ('$SJ_MH') -- the meter is not on its PATH" ;;
-    *\|0) bad "MUTATION: a non-terminating fold logged no SIGXCPU kill (starts|ended 0|killed = '$SJ_MH') — the termination arm cannot fire" ;;
-    *) ok "MUTATION: a non-terminating fold is killed by its CPU budget and its awk logs exit 152 (SIGXCPU), so the arm above has a subject" ;;
+    *\|0) bad "MUTATION: a non-terminating fold logged no SIGXCPU termination (starts|ended 0|SIGXCPU-terminated = '$SJ_MH') — the termination arm cannot fire" ;;
+    *) mutant_killed "$B_TERM" fold-hang "MUTATION: a non-terminating fold is killed by its CPU budget and its awk logs exit 152 (SIGXCPU), so the arm above has a subject" ;;
   esac
 fi
 
@@ -1821,11 +1982,13 @@ fi
 # asserted here, not merely the exit code.
 cp "$V" "$R/control-lr-unmutated.sh"
 LRJ_ARMS=$((LRJ_ARMS+1))
+B_LRC=0
 LRJ_CTL="$(bash "$R/control-lr-unmutated.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
 if ! grep -qF "join (1) reads 3 locked requirement(s) from" <<<"$LRJ_CTL"; then
   bad "CONTROL: an unmutated copy in \$R does not read the declared population — every mutation below is vacuous"
 else
   ok "CONTROL: an unmutated copy in \$R reads all 3 declared requirements"
+  B_LRC=1
 fi
 
 # --- (1) THE DEFECT, AND THE DISARM THAT LOOKS LIKE ITS REMEDY -----------------
@@ -2002,6 +2165,7 @@ cp "$V" "$R/lr-no-anchor/validate-spec-join.sh"
 p_want() { # <prog> <expected-rc> <label> <args...>
   local prog="$1" exp="$2" lab="$3"; shift 3
   LRJ_ARMS=$((LRJ_ARMS+1))
+  # NOT captured: the sibling is restored beside $prog between calls, so one argument list is two states.
   bash "$prog" "$@" >/dev/null 2>&1
   local g=$?
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
@@ -2072,11 +2236,24 @@ j_mut lr-local-regex-eof \
 # kills it did not earn. Against the BARE closer the local matcher is correct, and it must
 # stay green there — otherwise the three arms above are attributing a general breakage to a
 # specific closer spelling.
-j_mut lr-local-regex-baseform \
-  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
-  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
-  0 "MUTATION SCOPE: the same local matcher is still GREEN on the BARE closer — it dies by the sprint-closer arm, not by everything" \
-  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md"
+# A CONTROL, NOT A MUTANT: its correct outcome is to SURVIVE, so it is not routed through mutant_killed.
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_BF="$R/mutant-lr-local-regex-baseform.sh"
+cp "$V" "$LRJ_BF"
+FROM='bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  TO="awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_BF"
+if cmp -s "$V" "$LRJ_BF"; then
+  bad "FIXTURE ERROR: the lr-local-regex-baseform copy matched nothing -- its control proves nothing"
+else
+  bash "$LRJ_BF" --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md" >/dev/null 2>&1
+  LRJ_BFG=$?
+  if [ "$LRJ_BFG" -eq 0 ] && [ "$B_LRC" = 1 ]; then
+    ok "CONTROL lr-local-regex-baseform: the same local matcher stays GREEN (rc 0) on the BARE closer in lr-below-marker.md -- the survivor; it dies by the sprint-closer arm, not by everything"
+  else
+    bad "CONTROL lr-local-regex-baseform: expected the survivor rc 0 behind a passing control, got rc=$LRJ_BFG (control flag $B_LRC)"
+  fi
+fi
 
 # THE DECLARATION ANCHOR WIDENED TO A WHOLE-BLOCK SCAN. Its subject is the prose mention,
 # which no other guard here can see.
@@ -2163,7 +2340,8 @@ else
   elif grep -qF "LR-S303-7 is declared in" <<<"$LRJ_NS"; then
     bad "MUTATION: silencing the note echo changed nothing — the note text is emitted from somewhere else, so the arm asserting it is not keyed on this line"
   else
-    ok "MUTATION: silencing the note echo makes the requirement vanish from the output while the tally still counts it — the note line is load-bearing"
+    mx_reg lr-note-silent "$LRJ_M" - --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
+    mutant_killed "$B_LRC" lr-note-silent "MUTATION: silencing the note echo makes the requirement vanish from the output while the tally still counts it — the note line is load-bearing"
   fi
 fi
 
@@ -2184,7 +2362,7 @@ elif ! bash -n "$LRJ_MS/validate-spec-join.sh" 2>/dev/null; then
 else
   LRJ_SB="$(bash "$LRJ_MS/validate-spec-join.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
   if grep -qF "could not extract LOCKED_REQUIREMENTS blocks from" <<<"$LRJ_SB"; then
-    ok "MUTATION: without the sibling-presence guard a MISSING OWNER is misreported as a failure to parse the declarations file"
+    mutant_killed "$B_LRC" lr-sibling-unchecked "MUTATION: without the sibling-presence guard a MISSING OWNER is misreported as a failure to parse the declarations file"
   else
     bad "MUTATION: dropping the sibling-presence guard produced neither diagnosis — the arm asserting it is not keyed on that check"
   fi
@@ -2413,7 +2591,8 @@ if [ "$SJ_CTL_OK" = "1" ]; then
       if sj_ident_holds "$SJ_MD"; then
         bad "MUTATION 'ident-drop' SURVIVED — a validator naming no corpus still satisfies the IDENTITY arm, so that arm is not testing the identity lines"
       else
-        ok "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($SJ_IDENT_WHY) — the IDENTITY arm has teeth"
+        mx_reg ident-drop "$SJ_MD" identity
+        mutant_killed "$SJ_CTL_OK" ident-drop "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($SJ_IDENT_WHY) — the IDENTITY arm has teeth"
       fi
       # The lines are additive. Every verdict arm above must survive their removal, or the
       # IDENTITY arm is entangled with the joins that carry this check.
@@ -2449,10 +2628,88 @@ if [ "$SJ_CTL_OK" = "1" ]; then
     if sj_ident_holds "$SJ_MN"; then
       bad "MUTATION 'ident-nonce' SURVIVED — a per-run nonce naming no corpus satisfies the IDENTITY arm, so that arm is a differ-check and not a naming check"
     else
-      ok "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($SJ_IDENT_WHY) — the arm demands the corpus be NAMED"
+      mx_reg ident-nonce "$SJ_MN" identity
+      mutant_killed "$SJ_CTL_OK" ident-nonce "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($SJ_IDENT_WHY) — the arm demands the corpus be NAMED"
     fi
   fi
 fi
+
+# --- twins (per push) and the full matrix (--matrix) -----------------------------------------------
+mx_header() { # mx_header decides|twins <mutant> -- the value on this file's own header row
+  awk -v n="$2" -v f="$1" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n { for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) { print substr($i, length(f) + 2); exit } }' "$0"
+}
+arm_args() { # arm_args <armname> -> ARM_ARGV array, from the capture; returns 1 if no such base arm
+  local i=1 rest a
+  while [ "$i" -le "$CAP_N" ]; do
+    if [ "${CAP_ARM[$i]}" = 1 ]; then
+      rest="${CAP_KEY[$i]#*$US}"
+      ARM_ARGV=()
+      while [ -n "$rest" ]; do a="${rest%%$US*}"; rest="${rest#*$US}"; ARM_ARGV[${#ARM_ARGV[@]}]="$a"; done
+      if [ "$(arm_name "${ARM_ARGV[@]}")" = "$1" ]; then ARM_I=$i; return 0; fi
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+mx_split() { # mx_split <US-terminated string> -> ARM_ARGV
+  local rest="$1" a
+  ARM_ARGV=()
+  while [ -n "$rest" ]; do a="${rest%%$US*}"; rest="${rest#*$US}"; ARM_ARGV[${#ARM_ARGV[@]}]="$a"; done
+}
+MX_ROWS=0; MX_CELLS=0
+if [ "$MATRIX" -eq 0 ]; then
+  i=1
+  while [ "$i" -le "$MX_N" ]; do
+    id="${MX_ID[$i]}"; hd="$(mx_header decides "$id")"; tw="$(mx_header twins "$id")"
+    if [ -z "$hd" ] || [ -z "$tw" ]; then bad "TWIN $id: no '# MUTANT-MATRIX $id decides=.. twins=..' row in this header; re-measure with --matrix"
+    elif [ "$hd" != "${MX_DEC[$i]}" ]; then bad "TWIN $id: the header says decides=$hd but the assertion drives ${MX_DEC[$i]}"
+    elif [ "$tw" = "-" ]; then ok "TWIN $id: no twin recorded (twins=-), deciding arm ${MX_DEC[$i]} only"
+    else
+      for t in ${tw//,/ }; do
+        if ! arm_args "$t"; then bad "TWIN $id: twin '$t' names no arm run by this fixture"; continue; fi
+        ti="$ARM_I"
+        CAPOUT="$(bash "${MX_SCRIPT[$i]}" "${ARM_ARGV[@]}" 2>&1)"; CAPRC=$?
+        if [ "$CAPRC" = "${CAP_RC[$ti]}" ] && [ "$CAPOUT" = "${CAP_OUT[$ti]}" ]; then ok "TWIN $id: arm $t stays GREEN under the mutant (the kill is confined to ${MX_DEC[$i]})"
+        else bad "TWIN $id: arm $t TRIPPED under the mutant -- the kill spread past the recorded matrix; re-measure with --matrix"; fi
+      done
+    fi
+    i=$((i + 1))
+  done
+else
+  # every mutant (and the unmutated copy MX0) against every arm. A bespoke deciding arm is scored by
+  # its own kill assertion, which already passed to reach the registry.
+  mxrun() { # mxrun <id> <script> <decides> <bespoke>
+    local id="$1" sc="$2" dec="$3" be="$4" j=1 an trip="" v k ao arc
+    while [ "$j" -le "$CAP_N" ]; do
+      if [ "${CAP_ARM[$j]}" = 1 ]; then
+        mx_split "${CAP_KEY[$j]#*$US}"
+        an="$(arm_name "${ARM_ARGV[@]}")"
+        ao="$(bash "$sc" "${ARM_ARGV[@]}" 2>&1)"; arc=$?
+        if [ "$arc" != "${CAP_RC[$j]}" ] || [ "$ao" != "${CAP_OUT[$j]}" ]; then v=TRIPPED; k=yes; trip="$trip $an"; else v=GREEN; k=no; fi
+        matrix_row "$id" "$an" "$arc" "$v" "$k"; MX_ROWS=$((MX_ROWS + 1))
+      fi
+      j=$((j + 1))
+    done
+    if [ "$be" = 1 ]; then matrix_row "$id" "$dec" 0 TRIPPED yes; MX_ROWS=$((MX_ROWS + 1)); trip="$trip $dec"; fi
+    trip="${trip# }"
+    echo "  MATRIX-SUMMARY $id decides=$dec tripped=[$trip]"
+    MX_TRIP="$trip"
+  }
+  mxrun MX0 "$R/mx/_control.sh" - 0
+  if [ -z "$MX_TRIP" ]; then ok "CONTROL MX0 (unmutated copy): no arm tripped on it, tripped=[] (matrix)"
+  else bad "MX0 control (unmutated copy) tripped [$MX_TRIP]; every mutant verdict is about a broken harness"; fi
+  i=1
+  while [ "$i" -le "$MX_N" ]; do
+    mxrun "${MX_ID[$i]}" "${MX_SCRIPT[$i]}" "${MX_DEC[$i]}" "${MX_BESPOKE[$i]}"
+    case " $MX_TRIP " in *" ${MX_DEC[$i]} "*) ok "MATRIX ${MX_ID[$i]}: deciding arm ${MX_DEC[$i]} is among the tripped cells" ;; *) bad "MATRIX ${MX_ID[$i]}: deciding arm ${MX_DEC[$i]} did not trip (tripped [$MX_TRIP])" ;; esac
+    i=$((i + 1))
+  done
+fi
+if [ "$MATRIX" -eq 0 ]; then
+  if [ "$MX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full mutant x arm matrix is measured only under --matrix"
+  else bad "PLAIN-RUN: a plain run printed $MX_ROWS MATRIX row(s); the matrix-only path ran per push"; fi
+fi
+ok "CAPTURE: the subject ran $CAP_RUNS time(s) for $CAP_N distinct argument list(s); $CAP_SERVED assertion read(s) were served from a capture"
 
 echo
 if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi
