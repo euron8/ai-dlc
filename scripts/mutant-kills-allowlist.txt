@@ -55,7 +55,6 @@ self-update-reinvoke-liveness
 settings-merge-unparseable-template
 shell-portability
 snapshot-section-schema
-snapshot-update-stamps
 spec-join-integrity
 story-provenance
 suite-content-key

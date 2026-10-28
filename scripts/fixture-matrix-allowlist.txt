@@ -110,7 +110,6 @@ shipped-rule-version-floor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-conservation	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 snapshot-section-schema	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 snapshot-supersession-marker	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-snapshot-update-stamps	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 spec-join-integrity	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 sprint-status-lifecycle	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant
 story-corpus-sprint-slot	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant
