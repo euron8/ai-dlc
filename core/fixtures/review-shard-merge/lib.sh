@@ -418,6 +418,26 @@ run_merge() { # <script-dir> <shard-dir> -> RC, $MO
   AI_DLC_PROJECT_ROOT="$PROJ" bash "$1/merge-review-shards.sh" "$2" --gate code-review --out "$(out_of "$2")" \
     > "$MO" 2>&1 < /dev/null; RC=$?
 }
+# NAMED HAND-OFFS (no key, no memo). Where two top-level arms merge the SAME state -- the same shard bytes, shard-directory
+# name, files in the directory, --out name and project root -- the later arm reads the earlier arm's saved output instead
+# of merging again. Each hand-off is one explicit name, written by the earlier arm and read by the later one, and only for
+# the source script directory ($1 = SRCDIR): a mutant drive (any other script directory) always runs its own merge.
+# hand_keep <script-dir> <name> [out file] [shard dir]: save the last merge's output and exit code under <name>.
+hand_keep() {
+  [ "$1" = "$SRCDIR" ] || return 0
+  cp "$MO" "$WORK/hand.$2.mo" && printf '%s' "$RC" > "$WORK/hand.$2.rc"
+  [ -z "${3:-}" ] || printf '%s' "$3" > "$WORK/hand.$2.o"
+  [ -z "${4:-}" ] || printf '%s' "$4" > "$WORK/hand.$2.d"
+  return 0
+}
+# hand_use <script-dir> <name>: restore RC and $MO from <name>; 1 when no earlier arm saved it (the caller then merges).
+hand_use() {
+  [ "$1" = "$SRCDIR" ] && [ -f "$WORK/hand.$2.mo" ] || return 1
+  cp "$WORK/hand.$2.mo" "$MO" && RC="$(cat "$WORK/hand.$2.rc")"
+  return 0
+}
+hand_o() { cat "$WORK/hand.$1.o"; }
+hand_d() { cat "$WORK/hand.$1.d"; }
 refused_clean() { # <token> <shard-dir>: exit 2, REFUSED:, the token, no file at --out, no temp
   local o; o="$(out_of "$2")"
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ] \
@@ -529,21 +549,25 @@ p_worst() { # three worlds where count/cross/last disagree with worst-of, and th
     set -- $w; want="$5"
     d="$(world4 "$sd" "$1" "$2" "$3" "$4")" || return 1
     o="$(out_of "$d")"; run_merge "$sd" "$d"
+    [ "$w" != "APPROVED APPROVED APPROVED APPROVED APPROVED" ] || hand_keep "$sd" worst3 "$o" "$d"
     [ "$RC" -eq 0 ] && has "$MO" "verdict=$want " && [ -f "$o" ] && [ "$(check1_value "$o")" = "$want" ] || return 1
   done
 }
 p_c1() { # Check 1's pattern matches the merged file EXACTLY once, and reads NEEDS_REWORK
   local sd="$1" d o
   d="$(world4 "$sd" NEEDS_REWORK APPROVED NEEDS_REWORK NEEDS_REWORK)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  o="$(out_of "$d")"; run_merge "$sd" "$d"; hand_keep "$sd" c1 "$o" "$d"
   [ "$RC" -eq 0 ] && [ -f "$o" ] && [ "$(check1_count "$o")" = "1" ] && [ "$(check1_value "$o")" = "NEEDS_REWORK" ]
 }
 p_fence_nested() { # a ```` fence holding a ``` block, then a '#### ' finding citing part 2, then the ```` closer,
   # under shard 2's ## Findings: the finding is inside the fence, so the merge counts exactly the base
   # world's findings. A closer without the length rule ends the fence at the inner bare ``` and counts it.
   local sd="$1" d n0
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
+  if ! hand_use "$sd" worst3; then   # V1's all-APPROVED merge is the base world's findings count
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+    run_merge "$sd" "$d"
+  fi
+  [ "$RC" -eq 0 ] || return 1
   n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; [ -n "$n0" ] || return 1
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
   awk '{ print } /^### Important/ && !x { x = 1; print ""; print "````md"; print "```text"; print "quoted"; print "```"
@@ -554,19 +578,22 @@ p_fence_nested() { # a ```` fence holding a ``` block, then a '#### ' finding ci
 }
 p_conserve() { # a unique token from every part and from cross appears in the output
   local sd="$1" d o k
-  d="$(world4 "$sd" NEEDS_REWORK APPROVED NEEDS_REWORK NEEDS_REWORK)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  if hand_use "$sd" c1; then o="$(hand_o c1)"   # C1 merged this exact state
+  else
+    d="$(world4 "$sd" NEEDS_REWORK APPROVED NEEDS_REWORK NEEDS_REWORK)" || return 1
+    o="$(out_of "$d")"; run_merge "$sd" "$d"
+  fi
   [ "$RC" -eq 0 ] && [ -f "$o" ] || return 1
   for k in 1 2 3 cross-1 cross-2 cross-3; do has "$o" "CONSERVE-$k-7f3a" && has "$o" "#### F-$k-1 " || return 1; done
 }
 p_miss_ord() { local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  rm -f "$d/2.md"; run_merge "$1" "$d"; refused_clean "shard 2 is missing from" "$d"; }
+  rm -f "$d/2.md"; run_merge "$1" "$d"; hand_keep "$1" own_miss; refused_clean "shard 2 is missing from" "$d"; }
 p_miss_cross() { # a cross shard that is not the first one missing
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   [ -f "$d/cross-2.md" ] || return 1
   rm -f "$d/cross-2.md"; run_merge "$1" "$d"; refused_clean "shard cross-2 is missing from" "$d"; }
 p_dup() { local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  cp "$d/1.md" "$d/01.md"; run_merge "$1" "$d"; refused_clean "was delivered more than once" "$d"; }
+  cp "$d/1.md" "$d/01.md"; run_merge "$1" "$d"; hand_keep "$1" own_dup; refused_clean "was delivered more than once" "$d"; }
 p_part_cite() { local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   shard "$d" 2 APPROVED 3; run_check "$1" "$d" code-review "$d/2.md"
   chk_refused "a part shard reports only findings citing its own part alone"; }
@@ -597,7 +624,7 @@ p_moved() { # the manifest was written, then the worktree's scan roots moved und
 }
 p_a3() { # a shard body carrying `## Verdict` -> two Check-1 matches -> refused
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$1" "$d"
+  shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$1" "$d"; hand_keep "$1" own_a3
   refused_clean "matches Check 1's verdict pattern 2 time(s)" "$d"
 }
 # A partition refusal: exit 2, ONE stderr line `partition-review-diff: REFUSED — ...` carrying the
@@ -619,8 +646,11 @@ raw_shard() { # <dir> <key> <body...>: the two shard lines, then the body lines 
 }
 p_rerun() { # MC: an identical re-merge is UNCHANGED; after a shard changed, refused, file untouched
   local sd="$1" d o
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  if hand_use "$sd" worst3; then d="$(hand_d worst3)"; o="$(hand_o worst3)"   # V1's all-APPROVED merge is this first merge
+  else
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+    o="$(out_of "$d")"; run_merge "$sd" "$d"
+  fi
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
   cp "$o" "$RERUN_KEEP" || return 1
   run_merge "$sd" "$d"
@@ -773,24 +803,34 @@ p_q_worst() { # Q1: worst-of over {PASS, NEEDS_REWORK}; the one-part-NR world is
     set -- $w; want="$5"
     d="$(qworld "$sd" "$1" "$2" "$3" "$4")" || return 1
     o="$(qout "$d")"; q_merge "$sd" "$d"
+    [ "$w" != "PASS PASS PASS PASS PASS" ] || hand_keep "$sd" qw1 "$o" "$d"
     [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "verdict=$want " && [ -f "$o" ] \
       && [ "$(check1_value "$o")" = "$want" ] || return 1
   done
 }
 p_q_table() { # Q2 (A6): a cross shard carrying a '| AC | Verdict |' table merges, Check 1 matching ONCE
   local sd="$1" d o k
-  d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
-  o="$(qout "$d")"; q_merge "$sd" "$d"
+  if hand_use "$sd" qw1; then d="$(hand_d qw1)"; o="$(hand_o qw1)"   # Q1's all-PASS merge is this state
+  else
+    d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
+    o="$(qout "$d")"; q_merge "$sd" "$d"
+  fi
   [ "$RC" -eq 0 ] && [ -f "$o" ] && has "$o" "| AC | Verdict | Evidence |" && [ "$(check1_count "$o")" = "1" ] || return 1
   for k in 1 2 3 cross-1 cross-2 cross-3; do has "$o" "QCONSERVE-$k-91c2" && has "$o" "#### Q-$k-1 " || return 1; done
 }
 p_q_title() { # Q3: the merged title names the gate -- `# Code Review:` for gate 1, `# QA Validation:` for gate 2
   local sd="$1" d o
-  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  if hand_use "$sd" worst3; then o="$(hand_o worst3)"   # V1's all-APPROVED merge
+  else
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+    o="$(out_of "$d")"; run_merge "$sd" "$d"
+  fi
   [ "$RC" -eq 0 ] && [ "$(sed -n 1p "$o")" = "# Code Review: 1 (merged from 6 shards)" ] || return 1
-  d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
-  o="$(qout "$d")"; q_merge "$sd" "$d"
+  if hand_use "$sd" qw1; then o="$(hand_o qw1)"   # Q1's all-PASS merge
+  else
+    d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1
+    o="$(qout "$d")"; q_merge "$sd" "$d"
+  fi
   [ "$RC" -eq 0 ] && [ "$(sed -n 1p "$o")" = "# QA Validation: 1 (merged from 6 shards)" ]
 }
 p_q_fenced() { # Q4 near-miss: a part shard quoting '## Acceptance Criteria' and '## Deferred ACs' inside a fence merges
@@ -864,7 +904,7 @@ p_q_pm() { # A4, both gates: dir and --out pass markers agree -> merge; either o
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
   o="$(qout "$d" code-review)"; run_mg "$sd" "$d" code-review "$o"; refused_at "$QT_PASS" "$o" || return 1
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; refused_at "$QT_PASS" "$o"
+  o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; hand_keep "$sd" own_qpm_set; refused_at "$QT_PASS" "$o"
 }
 p_q_suffix() { # a gate-1 shard dir merged as --gate qa, and a qa shard dir merged as --gate code-review
   local sd="$1" d o
@@ -1126,10 +1166,12 @@ p_q_hc_cross() { local d o; d="$(qworld "$1" PASS PASS PASS PASS)" || return 1
   qshard "$d" cross-2 PASS "1, 3" "handovers: 0"
   q_chk "$1" "$d" cross-2; chk_refused "$QT_HC_CROSS"; }
 p_q_hc_none() { # the ALLOW twin: every part `handovers: 0`, no hand-over anywhere, merges PASS
-  local d o k; d="$(qworld "$1" PASS PASS PASS PASS)" || return 1
+  local d o k
+  if hand_use "$1" qw1; then d="$(hand_d qw1)"; o="$(hand_o qw1)"   # Q1's all-PASS merge is this state
+  else d="$(qworld "$1" PASS PASS PASS PASS)" || return 1; o=""; fi
   for k in 1 2 3; do grep -qx 'handovers: 0' "$d/$k.md" || return 1; done
   for k in cross-1 cross-2 cross-3; do [ -f "$d/$k.md" ] && ! grep -q '^handovers:' "$d/$k.md" || return 1; done
-  o="$(qout "$d")"; q_merge "$1" "$d"
+  if [ -z "$o" ]; then o="$(qout "$d")"; q_merge "$1" "$d"; fi
   [ "$RC" -eq 0 ] && has "$MO" "verdict=PASS " && [ "$(check1_value "$o")" = "PASS" ]; }
 # THE WIDENED MALFORMED-LINE PATTERN, each form under `handovers: 0` so the count agrees and only
 # the malformed-line refusal can refuse it: separators that are not ` - ` (em dash, en dash, `=`,
@@ -1168,7 +1210,7 @@ p_x_k8() { # X1: K=8 -> eight parts and cross-1..6 merge; the title counts 14 sh
   [ "$(nparts "$d")" = 8 ] || return 1
   for g in 1 2 3 4 5 6; do [ -f "$d/cross-$g.md" ] || return 1; done
   [ ! -e "$d/cross-7.md" ] && [ ! -e "$d/cross.md" ] || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  o="$(out_of "$d")"; run_merge "$sd" "$d"; hand_keep "$sd" xk8
   # The shard COUNT only: the title's gate wording is Q3's.
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qF '(merged from 14 shards)' <<<"$(sed -n 1p "$o")" \
     && has "$o" "## Shard: cross-1 (1,2,3,4)" && has "$o" "## Shard: cross-6 (5,6,7,8)" && has "$o" "#### F-cross-6-1 "
@@ -1240,15 +1282,15 @@ p_x_owner() { # X5: K=8; a finding citing 1, 2 (inside groups 1, 2 and 3; owned 
   d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
   grep -q '^parts: 1, 2$' "$d/cross-3.md" && return 1   # the seed must not already carry it
   xfinding "$d/cross-3.md" F-dup "1, 2" || return 1; xfinding "$d/cross-1.md" F-own "1, 2" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"; refused_clean "$QT_X_OWNER" "$d" || return 1
+  o="$(out_of "$d")"; run_merge "$sd" "$d"; hand_keep "$sd" x_owner_dup; refused_clean "$QT_X_OWNER" "$d" || return 1
   d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
+  o="$(out_of "$d")"; hand_use "$sd" xk8 || run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1   # X1 merged this K=8 world
   n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; rm -f "$o"
   xfinding "$d/cross-3.md" F-tri "1, 2, 7" || return 1
   run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "findings=$((n0 + 1)) " && has "$o" "#### F-tri " || return 1
   d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
-  o="$(out_of "$d")"; run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
+  o="$(out_of "$d")"; hand_use "$sd" xk8 || run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1   # X1 merged this K=8 world
   n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; rm -f "$o"
   xfinding "$d/cross-1.md" F-dup "1, 2" || return 1
   run_merge "$sd" "$d"
@@ -1419,13 +1461,13 @@ p_cr_ho_block() { # G2: every shard BLOCKED (every wrong rule agrees), an unmet 
 }
 p_cr_ho_unm() { # G3: part 2's hand-over run by no shard -> REFUSED, nothing written
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$1" "$d"; refused_clean "$QT_HO_UNM" "$d"; }
+  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$1" "$d"; hand_keep "$1" own_cr_ho_unm; refused_clean "$QT_HO_UNM" "$d"; }
 p_cr_ho_runtwice() { # G4: one hand-over replayed twice by cross-1, in two findings -> REFUSED
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
   crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
   [ "$(grep -c '^handover-run: 2 AC7 RED$' "$d/cross-1.md")" = 2 ] || return 1
-  run_merge "$1" "$d"; refused_clean "$QT_HO_RUN2" "$d"; }
+  run_merge "$1" "$d"; hand_keep "$1" own_cr_ho_runtwice; refused_clean "$QT_HO_RUN2" "$d"; }
 p_cr_hc_missing() { # G5: a code-review part shard without its declared count -> REFUSED
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   crs "$d" 2 APPROVED 2 OMIT; ! grep -q '^handovers:' "$d/2.md" || return 1
@@ -1569,6 +1611,7 @@ cs_run() { # <script-dir> <gate> <seeder> <clean copy>
   "$3"
   if [ -n "$CS_T" ] && [ -f "$CSD/$CS_T.md" ]; then
     cs_same "$1" "$CSD" "$2" "$CSD/$CS_T.md" || WHY="$WHY ${3}{$CS_LAST}"
+    hand_keep "$1" "cs_$3"
   else WHY="$WHY ${3}{the seed did not apply}"; fi
   cs_reset "$CSD" "$4"
 }
@@ -1636,11 +1679,14 @@ p_owner() {
   WHY=""
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
-  if cell per-shard; then shard "$d" 2 APPROVED 3; run_merge "$sd" "$d"; own_case per-shard 2; cs_reset "$d" "$c"; fi
-  if cell missing; then rm -f "$d/2.md"; run_merge "$sd" "$d"; own_case missing 2; cs_reset "$d" "$c"; fi
+  # per-shard, missing, dup-key, handover-unrun, run-twice, check1-multi, set-level and dup-merge each ask the owner tail of
+  # a refusal an earlier top-level arm already drew from the identical state (CS1's partcite world, R1, R3, G3, G4, R9, Q12
+  # and X5); they read that arm's saved output. bad-name has no earlier arm and keeps its own merge.
+  if cell per-shard; then hand_use "$sd" cs_csc_partcite || { shard "$d" 2 APPROVED 3; run_merge "$sd" "$d"; }; own_case per-shard 2; cs_reset "$d" "$c"; fi
+  if cell missing; then hand_use "$sd" own_miss || { rm -f "$d/2.md"; run_merge "$sd" "$d"; }; own_case missing 2; cs_reset "$d" "$c"; fi
   if cell unfinished; then lmark_all "$d"; shard "$d" 2 APPROVED 2; run_merge "$sd" "$d"; own_case unfinished 2; cs_reset "$d" "$c"; fi
-  if cell dup-key; then cp "$d/1.md" "$d/01.md"; run_merge "$sd" "$d"; own_case dup-key "01.md 1.md"; cs_reset "$d" "$c"; fi
-  if cell handover-unrun; then crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$sd" "$d"; own_case handover-unrun "2 cross-1"; cs_reset "$d" "$c"; fi
+  if cell dup-key; then cp "$d/1.md" "$d/01.md"; hand_use "$sd" own_dup || run_merge "$sd" "$d"; own_case dup-key "01.md 1.md"; cs_reset "$d" "$c"; fi
+  if cell handover-unrun; then crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; hand_use "$sd" own_cr_ho_unm || run_merge "$sd" "$d"; own_case handover-unrun "2 cross-1"; cs_reset "$d" "$c"; fi
   if cell run-orphan; then crs "$d" cross-1 APPROVED "1, 2" - "$(crrun 2 '2 AC7 RED')"; run_merge "$sd" "$d"; own_case run-orphan "2 cross-1"; cs_reset "$d" "$c"; fi
   if cell handover-twice; then
     crs "$d" 2 APPROVED 2 2 "$(printf '%s\n\n%s' "$(crho 2 AC7)" "$(crho 2 AC7 | sed 's/F-2-H/F-2-H2/')")"
@@ -1649,11 +1695,11 @@ p_owner() {
   if cell run-twice; then
     crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
     crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
-    run_merge "$sd" "$d"; own_case run-twice cross-1; cs_reset "$d" "$c"
+    hand_use "$sd" own_cr_ho_runtwice || run_merge "$sd" "$d"; own_case run-twice cross-1; cs_reset "$d" "$c"
   fi
-  if cell check1-multi; then shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$sd" "$d"; own_case check1-multi 2; cs_reset "$d" "$c"; fi
+  if cell check1-multi; then shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; hand_use "$sd" own_a3 || run_merge "$sd" "$d"; own_case check1-multi 2; cs_reset "$d" "$c"; fi
   if cell bad-name; then printf 'x\n' > "$d/notes.txt"; run_merge "$sd" "$d"; own_case bad-name lead; cs_reset "$d" "$c"; fi
-  if cell set-level; then o="$(qout "$d" code-review -p2)"; run_mg "$sd" "$d" code-review "$o"; own_case set-level lead; fi
+  if cell set-level; then o="$(qout "$d" code-review -p2)"; hand_use "$sd" own_qpm_set || run_mg "$sd" "$d" code-review "$o"; own_case set-level lead; fi
   # The owner duplicate, K=8: cross-3 and its owner cross-1 report the identical set -> the NON-owner.
   # Under --check-shard the owner is read only once it is finished and sealed: unmarked, cross-3 passes.
   # The two --check-shard cells read the state the cell before them left, so selecting one runs its
@@ -1662,7 +1708,7 @@ p_owner() {
     SHARD_SHA="$E_SHA"
     d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
     xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
-    if cell dup-merge; then run_merge "$sd" "$d"; own_case dup-merge cross-3; fi
+    if cell dup-merge; then hand_use "$sd" x_owner_dup || run_merge "$sd" "$d"; own_case dup-merge cross-3; fi
     if cell dup-check-owner-unsealed; then
       run_check "$sd" "$d" code-review "$d/cross-3.md"
       [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
@@ -1683,6 +1729,7 @@ p_key() {
   d="$(seal_world "$sd" code-review)" || { WHY="the sealed world was not built: $(head -2 "$MKO")"; return 1; }
   o="$(out_of "$d")"; run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY:" || { WHY="the seat-sealed set did not merge: $(head -2 "$MO")"; return 1; }
+  hand_keep "$sd" key_ctl
   for f in "$d"/*.md; do k="$(basename "$f" .md)"
     grep -qE "^seat-complete: implementation code-reviewer $k key=$k sha=[0-9a-f]{64} findings=1\$" "$f" \
       || { WHY="$f does not end in a marker keyed $k: $(tail -1 "$f")"; return 1; }
@@ -1753,8 +1800,11 @@ p_session() {
   local sd="$1" d o
   WHY=""
   d="$(seal_world "$sd" code-review)" || { WHY="the sealed world was not built: $(head -2 "$MKO")"; return 1; }
-  o="$(out_of "$d")"; run_merge "$sd" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || { WHY="control: the seat-sealed set did not merge: $(head -2 "$MO")"; return 1; }
+  o="$(out_of "$d")"
+  if ! hand_use "$sd" key_ctl; then   # KY1 merged this exact sealed set; its answer is the control
+    run_merge "$sd" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || { WHY="control: the seat-sealed set did not merge: $(head -2 "$MO")"; return 1; }
+  fi
   rm -f "$o"
   fire "$d/2.md" session Edit || { WHY="the recorder wrote no session row"; return 1; }
   run_merge "$sd" "$d"
@@ -2058,7 +2108,7 @@ p_vb_cr() {
   if cell cr-blocked-crit; then vb_c "$d" 2 BLOCKED 2 crit; vb_pass "$sd" "$d" code-review 2 cr-blocked-crit; cs_reset "$d" "$c"; fi
   if cell cr-blocked-sug; then vb_c "$d" 2 BLOCKED 2 sug; vb_refuse "$sd" "$d" code-review 2 cr-blocked-sug "$VB_CR_BL" "$VB_STEM"; cs_reset "$d" "$c"; fi
   if cell cr-approved-crit; then vb_c "$d" 2 APPROVED 2 crit; vb_refuse "$sd" "$d" code-review 2 cr-approved-crit "$VB_CR_AP"; cs_reset "$d" "$c"; fi
-  if cell cr-approved-imp; then vb_c "$d" 2 APPROVED 2 imp; VB_E2E=1 vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"; fi
+  if cell cr-approved-imp; then vb_c "$d" 2 APPROVED 2 imp; vb_pass "$sd" "$d" code-review 2 cr-approved-imp; cs_reset "$d" "$c"; fi
   [ -z "$WHY" ]
 }
 # qf <container first word|none> -> one finding of shard 2, under that container (none: no `### `).
@@ -2267,7 +2317,7 @@ p_fr_graph() {
   fr_refused "$sd" "$d" fr-graph-pre-f2 "$FR_ORPH AC4"
   ! has "$MO" "$FR_VERD" || WHY="$WHY fr-graph-pre-f2-wrong-rule{$(reline "$MO")}"
   d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="$WHY the frozen-QL post-F2 world was not built"; return 1; }
-  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK
+  fr_merged "$sd" "$d" fr-graph-post-f2 NEEDS_REWORK; hand_keep "$sd" frg_post
   has "$MO" "LEGACY: $d/cross-2.md $FR_BLEG $QL_SHA's .claude/team-roles/qa.md" || WHY="$WHY fr-graph-post-f2-legacy-line{$(head -2 "$MO" | tr '\n' ' ')}"
   [ -z "$WHY" ]
 }
@@ -2279,8 +2329,12 @@ p_fr_bound() {
   local sd="$1" d o SHARD_SHA
   WHY=""
   if cell frb-legacy; then
-    d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
-    fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+    if hand_use "$sd" frg_post; then   # FR4's post-F2 world is this world
+      [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK " || WHY="$WHY frb-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else
+      d="$(fr_g_world "$sd" "$REPO_QL" "$QL_BASE" "$QL_SHA" 1)" || { WHY="the frozen-QL world was not built"; return 1; }
+      fr_merged "$sd" "$d" frb-legacy NEEDS_REWORK
+    fi
     has "$MO" "$FR_BLEG" || WHY="$WHY frb-legacy-line{$(head -1 "$MO")}"
   fi
   if cell frb-severity; then
@@ -2757,10 +2811,14 @@ p_canon_merge() {
   WHY=""
   crm_strip() { grep -v '^Canonical r' "$1/cross-1.md" > "$1/x.tmp" && mv "$1/x.tmp" "$1/cross-1.md"; }
   if cell crm-ok; then
-    d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
-    o="$(qout "$d")"; q_merge "$sd" "$d"
+    crm_sh_=0
+    if hand_use "$sd" qw1; then crm_sh_=1   # Q1's all-PASS merge, unmodified
+    else
+      d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+      o="$(qout "$d")"; q_merge "$sd" "$d"
+    fi
     [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$CR_LEG" || WHY="$WHY crm-ok{rc=$RC $(head -1 "$MO")}"
-    rm -f "$o"
+    [ "$crm_sh_" = 1 ] || rm -f "$o"
   fi
   if cell crm-norun; then
     d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="$WHY the qa world was not built"; return 1; }
