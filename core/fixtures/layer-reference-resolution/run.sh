@@ -40,9 +40,52 @@
 #   core/scripts/…              not root-relative          -> resolved against the wrong root otherwise
 #   extensions/README.md        not a layer entry          -> layer_files() drops it by name
 #
-# Usage: run.sh [path-to-validate-layer-entries.sh]
+# Usage: run.sh [--matrix] [path-to-validate-layer-entries.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
+#
+# MUTANT BATTERY, NARROWED TO ONE DECIDER AND ONE TWIN PER MUTANT. The live pass over the
+# shipped linter keeps every world and every cell (Parts 1-4). Each mutant used to be scored on
+# the full 35-cell vector, which forks the linter twice per mutant. Per push a mutant now runs
+# only its DECIDING cell and its TWIN: the decider must move to the mutant's measured value and
+# the twin must hold at the pristine value. "Each mutant moves only its own cells" is a
+# test-quality property established by `--matrix`, which scores every mutant on the full vector
+# and prints one `MATRIX<TAB><mutant><TAB><cell><TAB><FAIL|ok>` line per cell. The matrix is
+# re-measured whenever an arm or a mutant is added or changed. The rows below are read back by
+# this script at run time (mk_mutant), so a mutant without a row, or a row without a mutant,
+# is a FIXTURE ERROR rather than a drift.
+#
+# MUTANT-MATRIX hardcoded-dot decides=apform twins=dotform
+# MUTANT-MATRIX no-crosswalk-bare decides=c34 twins=c12
+# MUTANT-MATRIX no-crosswalk-namespaced decides=c12 twins=c34
+# MUTANT-MATRIX alphabetic-grammar decides=alpha twins=c7
+# MUTANT-MATRIX no-anchor-resolve decides=c7 twins=alpha
+# MUTANT-MATRIX no-hook-resolve decides=hk61 twins=hk62
+# MUTANT-MATRIX hook-resolve-any decides=hk62 twins=hk61
+# MUTANT-MATRIX hook-resolve-mention decides=hk64 twins=hk65
+# MUTANT-MATRIX w9-no-fence-skip decides=w9fence twins=w9ok
+# MUTANT-MATRIX w9-no-dotslash decides=w9dot twins=w9miss
+# MUTANT-MATRIX w9-no-root-anchor decides=w9dist twins=w9rdme
+# MUTANT-MATRIX w9-extensions-only decides=w9ovr twins=w9miss
+# MUTANT-MATRIX w12-title-off decides=w12t26 twins=w12g24
+# MUTANT-MATRIX w12-tag-off decides=w12g24 twins=w12t26
+# MUTANT-MATRIX w12-token-loose decides=w12p20 twins=w12q17
+# MUTANT-MATRIX w12-stem-quiet decides=w12stem twins=w12x26amb
+# MUTANT-MATRIX w12-core-gate-off decides=w12w19b twins=w12n8
+# MUTANT-MATRIX w12-crosswalk-off decides=w12amb twins=w12stem
+# MUTANT-MATRIX w12-crosswalk-unconditional decides=w12t26 twins=w12g24
+# MUTANT-MATRIX w12-note-uncaveated decides=w12note twins=w12self
+# MUTANT-MATRIX w12-shadow-off decides=w12shadow5 twins=w12wrap21
+# MUTANT-MATRIX w12-self-off decides=w12self twins=w12note
+# MUTANT-MATRIX w12-window-one-line decides=w12wrap21 twins=w12shadow5
+# MUTANT-MATRIX w12-section-rebuttal-off decides=w12sect23 twins=w12wrap21
+# MUTANT-MATRIX-DYNAMIC collector-loop why=Part 5b hands each worker verdict to mutant_killed by label, one row above per label
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-reference-resolution/run.sh --matrix
 set -uo pipefail
+
+# --matrix is parsed and shifted before any other positional argument. It scores every mutant on
+# the full vector and prints the matrix; a plain run never executes that path.
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
 
 # SCRUB AMBIENT AI_DLC_* BEFORE ANYTHING READS IT. This fixture seeds files under
 # `.claude/hooks/` for W7's hook namespace, so an operator's own `AI_DLC_*` tunables would be
@@ -78,6 +121,11 @@ fails=0
 made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_pristine=0
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost a whole mutant to a missing
 # space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"` read that as a
@@ -86,7 +134,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
 # + 1 W12 premise + 12 W12 mutants + 3 HOOK-namespace mutants + 1 pool-accounting arm + 3 collector self-probes
-EXPECTED_ASSERTIONS=42
+# + 1 matrix-mode arm (matrix run: MATRIX lines emitted; plain run: no matrix-only cell executed).
+EXPECTED_ASSERTIONS=43
 
 echo "layer-reference-resolution:"
 
@@ -140,7 +189,7 @@ WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W 
 # --- Part 1: the pristine vector ---------------------------------------------------------
 got="$(vector "$LINTER" "$CONS")"
 [ "$got" = "$WANT" ] \
-  && ok "pristine vector: $WANT" \
+  && { ok "pristine vector: $WANT"; B_pristine=1; } \
   || bad "pristine vector: got [$got] want [$WANT]"
 
 # --- Part 2: applicability, stated as its own arm and in both directions ------------------
@@ -221,6 +270,7 @@ rm -f "$DOMAIN.bak" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md.bak"
 MUT_DIR="$ROOT/mutants"
 mkdir -p "$MUT_DIR"
 MUT_JOBS="6"
+printf '%s' "$WANT" > "$MUT_DIR/pristine"
 # THE RUN-SCOPED NONCE THAT MAKES AN IN-FLIGHT MARKER PROVABLE. Every worker writes it into
 # its own marker and counts only markers carrying it, so the concurrency arm below counts
 # peers of THIS dispatch rather than any live process that happens to have a file named for
@@ -236,6 +286,14 @@ mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
   printf '%s' "$expr" > "$MUT_DIR/$label.expr"
   printf '%s' "$want" > "$MUT_DIR/$label.want"
   printf '%s\n' "$label" >> "$ROOT/mutant-list"
+  # The deciding cell and its twin come from this file's own MUTANT-MATRIX header row, so the
+  # recorded matrix and the cells actually driven cannot drift apart.
+  local row dec twin
+  row="$(grep -E "^# MUTANT-MATRIX $label decides=" "$HERE/run.sh")"
+  dec="$(sed -n 's/.* decides=\([A-Za-z0-9_.-]*\) .*/\1/p' <<<"$row")"
+  twin="$(sed -n 's/.* twins=\([A-Za-z0-9_.-]*\).*/\1/p' <<<"$row")"
+  if [ -z "$dec" ] || [ -z "$twin" ]; then echo "FIXTURE ERROR: no MUTANT-MATRIX row for $label" >&2; exit 2; fi
+  if [ "$MATRIX" = 1 ]; then printf 'ALL' > "$MUT_DIR/$label.cells"; else printf '%s %s' "$dec" "$twin" > "$MUT_DIR/$label.cells"; fi
 }
 
 # M1 — put the hardcoded dot back. Only the em-dash subject's applicability moves.
@@ -511,7 +569,7 @@ if [ "$dispatched" -eq 0 ]; then
 else
   # I54: no `printf | xargs`. The list is a file; feed the pool from the file.
   xargs -P "$MUT_JOBS" -I{} bash "$HERE/worker.sh" \
-      {} "$MUT_DIR/{}.expr" "$MUT_DIR/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$MUT_DIR" \
+      {} "$MUT_DIR/{}.expr" "$MUT_DIR/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$MUT_DIR" "$MUT_DIR/{}.cells" \
       < "$ROOT/mutant-list"
 
   # THE SAME WALK THE PROBE JUST EXERCISED. `collect_into` decides what is present and what
@@ -529,7 +587,7 @@ else
     # below reads, and `cat` would fold it into the reported vector.
     verdict="$(head -1 "$MUT_DIR/$label")"
     case "$verdict" in
-      KILL*)     ok  "mutant $label killed — vector [${verdict#KILL }]" ;;
+      KILL*)     mutant_killed "$B_pristine" "$label" "$label: killed — cells [${verdict#KILL }]" ;;
       SURVIVED*) bad "mutant $label SURVIVED or misfired — ${verdict#SURVIVED }" ;;
       *)         bad "mutant $label: ${verdict}" ;;
     esac
@@ -566,6 +624,22 @@ else
   else
     ok "pool accounting: all $dispatched dispatched mutants produced a verdict"
   fi
+fi
+
+# THE MATRIX. Matrix mode prints one line per (mutant, cell); a plain run must have executed no
+# matrix-only cell, which is read from the worker verdict files rather than from the flag.
+if [ "$MATRIX" = 1 ]; then
+  while IFS= read -r label; do
+    [ -n "$label" ] || continue
+    awk -v m="$label" '$1 == "cell" && ($3 == "FAIL" || $3 == "ok") { printf "MATRIX\t%s\t%s\t%s\n", m, $2, $3 }' "$MUT_DIR/$label"
+  done < "$ROOT/mutant-list"
+  ok "matrix mode: MATRIX cells emitted for every mutant"
+else
+  ncell="$(cat "$MUT_DIR"/*.cells | grep -c ALL)" || ncell=0
+  nrows="$(grep -l '^cell ' "$MUT_DIR"/* 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$ncell" -eq 0 ] && [ "$nrows" -eq 0 ] \
+    && ok "plain run: no matrix-only cell was executed (no ALL cells file, no cell verdict rows)" \
+    || bad "plain run executed matrix-only cells ($ncell ALL, $nrows cell-row files)"
 fi
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a

@@ -65,7 +65,6 @@ layer-debt-due-and-discharge
 layer-entry-unreadable
 layer-extends-grain
 layer-qualifier-grain
-layer-reference-resolution
 layer-retired-id-crosswalk
 layer-title-join
 ledger-reverify-dist-only-reach
