@@ -128,7 +128,7 @@ FILES=()
 #   ABSENT, `ac_on` answers yes for every arm and the run is byte-identical to one without the option.
 #   It exists so check-24 can ask one arm a question without paying for the arms that do not answer it;
 #   it is not a consumer interface. An unknown arm name is exit 1, never a silent full run.
-AC_ARMS=""
+AC_ARMS=""; AC_ARMS_SEEN=""
 ac_on() { [ -z "$AC_ARMS" ] && return 0; case ",$AC_ARMS," in *",$1,"*) return 0 ;; esac; return 1; }
 
 while [ $# -gt 0 ]; do
@@ -138,8 +138,11 @@ while [ $# -gt 0 ]; do
     --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
     --transcript-dir) TRANSCRIPT_DIR="${2:-}"; shift 2 ;;
     --arms)
+      [ -z "${AC_ARMS_SEEN:-}" ] || { echo "--arms given twice: pass one comma list of K,K2,K3,L,H,J2,J3" >&2; exit 1; }
+      AC_ARMS_SEEN=1
       AC_ARMS="${2:-}"
       case ",${AC_ARMS}," in ,,) echo "--arms needs a list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac
+      case "$AC_ARMS" in *[!A-Z0-9,]*|,*|*,|*,,*) echo "--arms: '$AC_ARMS' is not a comma list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac
       for _ac_a in ${AC_ARMS//,/ }; do
         case "$_ac_a" in K|K2|K3|L|H|J2|J3) ;; *) echo "--arms: unknown arm '$_ac_a' (known: K,K2,K3,L,H,J2,J3)" >&2; exit 1 ;; esac
       done
@@ -149,6 +152,7 @@ while [ $# -gt 0 ]; do
     *) FILES+=("$1"); shift ;;
   esac
 done
+[ -z "$AC_ARMS" ] || echo "SUBSET RUN (--arms $AC_ARMS): gate-only arms not named were skipped; not a gate verdict" >&2
 
 # The sibling steering-budget validator owns THE genuine-operator predicate (Check B
 # and its --cite mode). Resolve it relative to $0 so this works in both the

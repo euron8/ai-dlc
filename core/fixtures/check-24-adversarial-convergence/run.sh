@@ -480,6 +480,8 @@ fi
 # MUTANT-MATRIX-CONTROL SEAM-GUARD-J2T-receipt why=the unmutated copy through the J2 seam must make the BL-736 receipt say fixed over every world
 # MUTANT-MATRIX-CONTROL SEAM-GUARD-LD-receipt why=the unmutated copy through the L seam must make the BL-733 receipt say fixed over every world
 # MUTANT-MATRIX MUTATION-seam-reused-row decides=MUTATION-seam-reused-row.seamed-row twins=MUTATION-seam-reused-row.other-path-row
+# MUTANT-MATRIX MUTATION-arms-guard-removed decides=MUTATION-arms-guard-removed.cell1,MUTATION-arms-guard-removed.cell2,MUTATION-arms-guard-removed.cell3,MUTATION-arms-guard-removed.cell4 twins=MUTATION-arms-guard-removed.cell5
+# MUTANT-MATRIX-CONTROL ARMS-GUARD why=the shipped validator must refuse each malformed --arms value and a second --arms, and run J3 and J2,J3 as a subset at rc 0
 # MUTANT-MATRIX-END
 MATRIX="$MATRIX_ARG"
 if [ "$MATRIX" = 1 ]; then echo "MATRIX MODE: on -- every mutant scores every cell and every receipt world (shard $GROUP)"
@@ -2497,6 +2499,63 @@ if [ "$es_rc" -eq 1 ] && grep -qF -- "matched nothing" <<<"$es_out"; then
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s exit=%s -- a --series over an empty sprint dir must exit 1 naming the empty match\n' "drift-empty-sprint" "$es_rc"
+fi
+
+# --- ARMS-GUARD: an --arms value that is not a clean comma list is refused, never a silent subset ----------
+# The seam once split the value with an unquoted word split, so " J3", "J2, J3", "," and a glob like 'J?'
+# (with a file named J3 in the cwd) selected fewer arms than named, or none, and exited 0 with PASS.
+# Presence-shaped both ways: each bad value must exit 1 AND print its refusal; J3 and J2,J3 on a world whose
+# full verdict is 0 must exit 0 AND print the SUBSET RUN line on stderr. A second --arms is refused too.
+# MUTANT arms-guard-removed: the shape guard deleted in a copy; the bad-value cells must then fail.
+ag_cell() { # <validator> <cwd> <args...> -> "<rc>|<refusal or SUBSET or none>"
+  local v="$1" cwd="$2" err rc; shift 2
+  err="$( cd "$cwd" && bash "$v" --series "$ROOT/drift-repair-linked/$J2P" --transcript-dir "$ROOT" "$@" 2>&1 >/dev/null )"; rc=$?
+  case "$err" in
+    *"is not a comma list of K,K2,K3,L,H,J2,J3"*) printf '%s|shape' "$rc" ;;
+    *"--arms needs a list of"*)                   printf '%s|empty' "$rc" ;;
+    *"--arms given twice"*)                       printf '%s|twice' "$rc" ;;
+    *"SUBSET RUN (--arms "*"not a gate verdict"*) printf '%s|subset' "$rc" ;;
+    *)                                            printf '%s|none' "$rc" ;;
+  esac
+}
+AG_CWD="$(mktemp -d "$ROOT/arms-guard-cwd.XXXXXX")" || broken "cannot create the arms-guard cwd under $ROOT"
+: > "$AG_CWD/J3"
+ag_row() { # <validator> -> the eight cells, space separated
+  printf '%s %s %s %s %s %s %s %s' "$(ag_cell "$1" "$ROOT" --arms ' J3')" "$(ag_cell "$1" "$ROOT" --arms 'J2, J3')" \
+    "$(ag_cell "$1" "$ROOT" --arms ',')" "$(ag_cell "$1" "$AG_CWD" --arms 'J?')" "$(ag_cell "$1" "$ROOT" --arms '')" \
+    "$(ag_cell "$1" "$ROOT" --arms J2 --arms J3)" "$(ag_cell "$1" "$ROOT" --arms J3)" "$(ag_cell "$1" "$ROOT" --arms J2,J3)"
+}
+AG_WANT="1|shape 1|shape 1|shape 1|shape 1|empty 1|twice 0|subset 0|subset"
+ASSERTIONS=$((ASSERTIONS + 1))
+ag_got="$(ag_row "$VALIDATOR")"
+if [ "$ag_got" = "$AG_WANT" ]; then
+  printf '  ok    %-28s [%s]\n' "ARMS-GUARD" "$ag_got"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s got [%s] want [%s]\n' "ARMS-GUARD" "$ag_got" "$AG_WANT"
+fi
+AG_DIR="$(mktemp -d "$ROOT/arms-guard-mut.XXXXXX")" || broken "cannot create the arms-guard mutant dir under $ROOT"
+for s in $RCPT_SIBS; do cp "$(dirname "$VALIDATOR")/$s" "$AG_DIR/" 2>/dev/null; done
+AG_MUT="$AG_DIR/validate-adversarial-convergence.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ ! -f "$AG_DIR/partition-document.sh" ] || ! python3 - "$VALIDATOR" "$AG_MUT" <<'PY' || cmp -s "$VALIDATOR" "$AG_MUT" || ! bash -n "$AG_MUT" 2>/dev/null
+import sys
+s = open(sys.argv[1]).read()
+a = '      case "$AC_ARMS" in *[!A-Z0-9,]*|,*|*,|*,,*) echo "--arms: \'$AC_ARMS\' is not a comma list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac\n'
+if s.count(a) != 1: sys.exit(1)
+open(sys.argv[2], "w").write(s.replace(a, ""))
+PY
+then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s the shape-guard anchor is not in the validator exactly once -- FIXTURE STALE\n' "MUTATION arms-guard-removed"
+else
+  ag_mut="$(ag_row "$AG_MUT")"
+  # Deciding cells 1-4 must leave the refusal; the twins (cells 5-8) must keep theirs.
+  set -f; ag_m=($ag_mut); ag_w=($AG_WANT); set +f
+  if [ "${ag_m[0]}${ag_m[1]}${ag_m[2]}${ag_m[3]}" != "1|shape1|shape1|shape1|shape" ] && [ "${ag_m[0]%|*}" = 0 ] \
+     && [ "${ag_m[4]} ${ag_m[5]} ${ag_m[6]} ${ag_m[7]}" = "${ag_w[4]} ${ag_w[5]} ${ag_w[6]} ${ag_w[7]}" ]; then
+    printf '  ok    %-28s ARMS-GUARD fails on it: [%s]\n' "MUTATION arms-guard-removed" "$ag_mut"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s [%s] -- ARMS-GUARD would pass without the shape guard\n' "MUTATION arms-guard-removed" "$ag_mut"
+  fi
 fi
 
 # --- MUTATION: J2's walk, fork check, subject, stamp rebinding; J's door ------------------
