@@ -29,9 +29,47 @@
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
+#
+# THE MUTANT MATRIX. A cell is one arm's STRICT expectation of a rotator copy on one seed world, GREEN when the copy
+# meets it and RED when it does not; strict means keyed on the sentence the arm's own guard emits, because the word
+# REFUSING cannot tell the arms apart (see the section on which arm refused). A mutant's row names the cell that
+# kills it (decides) and a cell it could plausibly co-trip but must leave GREEN (twins). A plain run scores each
+# mutant on its deciding arm and its twin only, running just the seed world the twin lives in. The matrix is
+# re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo
+# root. It runs every seed world on every mutant copy and on the unmutated copy, and prints one MATRIX line each.
+# No validator unit is selected here, so there is no outside-unit diff. Two deciding cells (m12) mean the kill needs
+# both of them to move.
+# MUTANT-MATRIX m1-guard-off decides=fires-heading twins=near-miss
+# MUTANT-MATRIX m2-shape-only decides=near-miss twins=healthy
+# MUTANT-MATRIX m3-heading-only decides=fires-bullet twins=fires-tilde
+# MUTANT-MATRIX m4-backtick-only decides=fires-tilde twins=fires-bullet
+# MUTANT-MATRIX m5-drop-a-line decides=conservation twins=fires-heading
+# MUTANT-MATRIX m6-unmasked-pass1 decides=quotes-two twins=fires-unterm
+# MUTANT-MATRIX m7-closer-ignores-info-string decides=quotes-two-unterm twins=unterm-quotes-once
+# MUTANT-MATRIX m8-mark-before-the-closer decides=unterm-quotes-once twins=quotes-two-names
+# MUTANT-MATRIX m9-no-position-finding decides=delim-indent twins=delim-blockquote
+# MUTANT-MATRIX m10-loose-label decides=phantom-bullet twins=healthy
+# MUTANT-MATRIX m11-heading-only-label decides=phantom-bullet twins=healthy
+# MUTANT-MATRIX m12-section-span decides=section-mid,section-eof twins=subhead-in-entry
+# MUTANT-MATRIX m13-any-heading decides=subhead-in-entry twins=section-mid
+# MUTANT-MATRIX m14-outcome-off decides=outcome-refused twins=outcome-carried
+# MUTANT-MATRIX m15-any-bl-id decides=section-reopened twins=section-mid
+# MUTANT-MATRIX m16-one-spelling decides=outcome-eff-form-comma twins=outcome-refused
+# MUTANT-MATRIX-CONTROL mutant-control why=an unmutated copy in a sandbox root must refuse exactly as the real rotator does so a mutant verdict reads a subject that ran; nothing is mutated and there is no deciding cell
+# MUTANT-MATRIX-CONTROL mutant-twin-m2a why=the guard widened with lib.sh intact must stay quiet on near-miss, which shows m2 needed both layers; its correct outcome is that it survives
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-rotate-fence-guard/run.sh --matrix
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Any other
+# argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "backlog-rotate-fence-guard: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 
 # WALK UP FOR THE VERSION MARKER, NEVER COUNT `..` HOPS. A hop count answers differently from
 # the repo root, from a subdirectory, and from a sandbox that copied this file.
@@ -65,8 +103,14 @@ echo "backlog-rotate-fence-guard fixture"
 echo "  subject: $RT"
 echo
 
-ok()  { printf '  ok    %-21s %s\n' "$1" "$2"; }
-bad() { printf '  FAIL  %-21s %s\n' "$1" "$2"; FAIL=1; }
+ok()  { printf '  ok    %-21s %s\n' "$1" "${2-}"; }
+bad() { printf '  FAIL  %-21s %s\n' "$1" "${2-}"; FAIL=1; }
+# A kill is emitted only through mutant_killed, behind a same-run base-pass flag (B_*). Each kill message opens with
+# the mutant's header name, so a by-name grep of the log finds it.
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 # ---------------------------------------------------------------------------------------
 # Case construction. Every case gets a PRE-EXISTING archive carrying a sentinel, so the
@@ -556,7 +600,7 @@ if [ "$A_RC" -eq 0 ]; then
 elif ! has "REFUSING" "$A_OUT"; then
   bad "fires-heading" "exit $A_RC but no refusal reached the operator: $A_OUT"
 else
-  ok "fires-heading" "refused with exit $A_RC"
+  ok "fires-heading" "refused with exit $A_RC"; B_fires_heading=1
 fi
 
 # NAMES THEM ALL, AND NAMES THE RIGHT ONES. Both fenced lines must be reported, and the real
@@ -604,8 +648,8 @@ else
   ok "no-write" "ledger and pre-existing archive byte-identical after the refused --apply"
 fi
 
-expect_refusal "fires-bullet" "$B" --apply
-expect_refusal "fires-tilde"  "$C" --apply
+if expect_refusal "fires-bullet" "$B" --apply; then B_fires_bullet=1; fi
+if expect_refusal "fires-tilde"  "$C" --apply; then B_fires_tilde=1; fi
 expect_refusal "fires-phantom" "$D" --apply
 expect_refusal "fires-unterm" "$E" --apply
 
@@ -620,11 +664,11 @@ if [ -z "$EXP_Q1" ] || [ -z "$EXP_Q2" ] || [ -z "$REAL_Q" ]; then
   echo "FIXTURE BROKEN: could not derive the seeded line numbers from $Q/pristine.ledger" >&2
   exit 2
 fi
-expect_refusal "quotes-two" "$Q" --apply
+if expect_refusal "quotes-two" "$Q" --apply; then B_quotes_two=1; fi
 Q_OUT="$LAST_OUT"
 Q_GOT="$(offender_lines "$Q_OUT")"
 if [ "$Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
-  ok "quotes-two-names" "exactly the two quoted headings ($EXP_Q1, $EXP_Q2) are named; the real entry at $REAL_Q is not"
+  ok "quotes-two-names" "exactly the two quoted headings ($EXP_Q1, $EXP_Q2) are named; the real entry at $REAL_Q is not"; B_quotes_two_names=1
 elif has " $REAL_Q " " $Q_GOT "; then
   bad "quotes-two-names" "the REAL entry at line $REAL_Q is named as fenced, so the remedy tells the author to strip a live entry's marker; got [$Q_GOT], expected [$EXP_Q1 $EXP_Q2]"
 else
@@ -633,7 +677,7 @@ fi
 if unterm_finding "$Q_OUT"; then
   bad "quotes-two-unterm" "an unterminated fence was reported on a ledger whose every fence closes — the delimiter between the two quotations was read as a closer"
 else
-  ok "quotes-two-unterm" "no unterminated-fence finding: the info-string delimiter inside the fence is content, not a closer"
+  ok "quotes-two-unterm" "no unterminated-fence finding: the info-string delimiter inside the fence is content, not a closer"; B_quotes_two_unterm=1
 fi
 
 # AN UNTERMINATED FENCE IS REPORTED ONCE, AND NAMES NO LINE. Whole-file pairing makes every line
@@ -647,7 +691,7 @@ if ! unterm_finding "$UQ_OUT"; then
 elif [ -n "$UQ_GOT" ]; then
   bad "unterm-quotes-once" "a fence that never closes produced per-line findings [$UQ_GOT]; the entry after it is a real entry and the remedy names it"
 else
-  ok "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"
+  ok "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"; B_unterm_quotes_once=1
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -667,20 +711,20 @@ expect_delim_refusal() { # <arm> <dir> <regex matching the seed's own delimiter 
   run_rt "$RT" "$dd" --apply
   got="$(offender_lines "$LAST_OUT")"
   if [ "$LAST_RC" -eq 0 ]; then
-    bad "$arm" "exited 0 on a ledger whose delimiter positions the two readers disagree about"
+    bad "$arm" "exited 0 on a ledger whose delimiter positions the two readers disagree about"; return 1
   elif ! has "$DELIM_SAYS" "$LAST_OUT"; then
-    bad "$arm" "refused, but not by the position finding — the operator is handed the wrong remedy: $LAST_OUT"
+    bad "$arm" "refused, but not by the position finding — the operator is handed the wrong remedy: $LAST_OUT"; return 1
   elif [ "$got" != "$exp" ]; then
-    bad "$arm" "expected exactly the seeded delimiter lines [$exp]; got [$got]"
+    bad "$arm" "expected exactly the seeded delimiter lines [$exp]; got [$got]"; return 1
   elif ! cmp -s "$dd/backlog.md" "$dd/pristine.ledger" || ! cmp -s "$dd/backlog.archive.md" "$dd/pristine.archive"; then
-    bad "$arm" "the refused --apply wrote to disk"
+    bad "$arm" "the refused --apply wrote to disk"; return 1
   else
-    ok "$arm" "refused by position, naming exactly [$got], and wrote nothing"
+    ok "$arm" "refused by position, naming exactly [$got], and wrote nothing"; return 0
   fi
 }
-expect_delim_refusal "delim-indent"     "$DI" '^        ```'
+if expect_delim_refusal "delim-indent"     "$DI" '^        ```'; then B_delim_indent=1; fi
 expect_delim_refusal "delim-tab"        "$DT" "$(printf '^\t```')"
-expect_delim_refusal "delim-blockquote" "$DB" '^> ```'
+if expect_delim_refusal "delim-blockquote" "$DB" '^> ```'; then B_delim_blockquote=1; fi
 expect_delim_refusal "delim-crlf"       "$DC" '^```'
 
 # REPORT MODE MUST REFUSE TOO. A report that says "1 closed entry would move" and exits 0 is an
@@ -700,7 +744,7 @@ elif ! has "SENTINEL-ARCHIVE-LINE" "$(cat "$NM/backlog.archive.md")"; then
 elif ! has "NEAR-MISS-TAIL" "$(cat "$NM/backlog.archive.md")"; then
   bad "near-miss" "rotation succeeded but the entry's tail did not reach the archive"
 else
-  ok "near-miss" "eight near-miss shapes in a fence do not block a normal rotation"
+  ok "near-miss" "eight near-miss shapes in a fence do not block a normal rotation"; B_near_miss=1
 fi
 
 # THE ALLOW TWIN OF THE TWO-QUOTATION SEED, ONE PROPERTY APART: the fenced heading carries no id.
@@ -778,7 +822,7 @@ fi
 
 # CONSERVATION. A multiset, not a count — a count is satisfied by two lines swapping files.
 if conserved "$H"; then
-  ok "conservation" "every input line is in exactly one output file"
+  ok "conservation" "every input line is in exactly one output file"; B_conservation=1
 else
   bad "conservation" "$(diff "$H/exp.sorted" "$H/got.sorted" | head -6 | tr '\n' '|')"
 fi
@@ -797,6 +841,226 @@ fi
 # standing false-positive battery is the `near-miss` and `nested-fence` arms above, which is
 # where a new shape should be added when one is found.
 # ---------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------
+# THE MATRIX CELLS, single-sourced. A cell is one arm's STRICT expectation of a rotator copy on one seed world:
+# GREEN when the copy meets it, RED when it does not. Strict means keyed on the sentence the arm's own guard emits
+# (FENCE_SAYS, DELIM_SAYS, OUTCOME_SAYS), because the word REFUSING cannot tell the arms apart (see above). A world
+# is run once per rotator copy and every cell on it is read off that one run, so a twin costs one seed run, not one
+# per cell. mx_world <tag> <rotator> <world> runs a world; cell_red <tag> <cell> reads the result.
+# ---------------------------------------------------------------------------------------
+MXL="$WORK/mx.ledger"; : > "$MXL"
+MXR="$WORK/mx.reg"; : > "$MXR"
+MXC="$WORK/mxc"; mkdir -p "$MXC"
+BROKEN=0; MX_FAILS=0; MX_TAG=""
+MX_CELLS='fires-heading names-all no-write fires-report fires-bullet fires-tilde fires-phantom fires-unterm quotes-two quotes-two-names quotes-two-unterm unterm-quotes unterm-quotes-once delim-indent delim-tab delim-blockquote delim-crlf near-miss prose-fence delim-three-space nested-fence healthy fence-balance conservation phantom-bullet section-mid section-eof section-reopened subhead-in-entry outcome-refused outcome-carried outcome-eff-form-comma outcome-eff-form-note outcome-eff-form-rank outcome-nearmiss'
+MX_WORLDS='A AR B C D E Q UQ DI DT DB DC NM PF D3 N H PH SM SE SR SI EO EY EF1 EF2 EF3 EFN'
+cw() { # cw <cell> -> the world that carries it; non-zero for a name no world carries
+  case "$1" in
+    fires-heading|names-all|no-write) echo A ;;
+    fires-report) echo AR ;;
+    fires-bullet) echo B ;;
+    fires-tilde) echo C ;;
+    fires-phantom) echo D ;;
+    fires-unterm) echo E ;;
+    quotes-two|quotes-two-names|quotes-two-unterm) echo Q ;;
+    unterm-quotes|unterm-quotes-once) echo UQ ;;
+    delim-indent) echo DI ;;
+    delim-tab) echo DT ;;
+    delim-blockquote) echo DB ;;
+    delim-crlf) echo DC ;;
+    near-miss) echo NM ;;
+    prose-fence) echo PF ;;
+    delim-three-space) echo D3 ;;
+    nested-fence) echo N ;;
+    healthy|fence-balance|conservation) echo H ;;
+    phantom-bullet) echo PH ;;
+    section-mid) echo SM ;;
+    section-eof) echo SE ;;
+    section-reopened) echo SR ;;
+    subhead-in-entry) echo SI ;;
+    outcome-refused) echo EO ;;
+    outcome-carried) echo EY ;;
+    outcome-eff-form-comma) echo EF1 ;;
+    outcome-eff-form-note) echo EF2 ;;
+    outcome-eff-form-rank) echo EF3 ;;
+    outcome-nearmiss) echo EFN ;;
+    *) return 1 ;;
+  esac
+}
+setc() { printf '%s' "$2" > "$MXC/$MX_TAG.$1"; }   # 1 = GREEN (the expectation holds), 0 = RED
+# A crashed rotator prints no FAIL and would read as a refusal, so a rc above 2 or a crash word in its output marks
+# the whole copy BROKEN rather than letting the cell read as RED or GREEN.
+mrun() {
+  run_rt "$@"
+  if [ "$LAST_RC" -gt 2 ] || grep -qE 'unbound variable|command not found|syntax error' <<<"$LAST_OUT"; then
+    : > "$MXC/$MX_TAG.broken"
+  fi
+}
+mx_delim() { # mx_delim <rotator> <cell> <dir> <regex matching the seed's own delimiter lines>
+  local rot="$1" cell="$2" dd="$3" sig="$4" exp got g=0
+  exp="$(LC_ALL=C grep -n -- "$sig" "$dd/pristine.ledger" | cut -d: -f1 | tr '\n' ' ')"
+  reseed "$dd"; mrun "$rot" "$dd" --apply; got="$(offender_lines "$LAST_OUT")"
+  if [ "$LAST_RC" -ne 0 ] && has "$DELIM_SAYS" "$LAST_OUT" && [ "$got" = "$exp" ] \
+     && cmp -s "$dd/backlog.md" "$dd/pristine.ledger" && cmp -s "$dd/backlog.archive.md" "$dd/pristine.archive"; then g=1; fi
+  setc "$cell" "$g"
+}
+mx_eff() { # mx_eff <rotator> <cell> <dir>
+  local rot="$1" cell="$2" dd="$3" g=0
+  reseed "$dd"; mrun "$rot" "$dd" --apply
+  if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-603" "$LAST_OUT" \
+     && cmp -s "$dd/backlog.md" "$dd/pristine.ledger" && cmp -s "$dd/backlog.archive.md" "$dd/pristine.archive"; then g=1; fi
+  setc "$cell" "$g"
+}
+mx_world() { # mx_world <tag> <rotator> <world> -- idempotent per (tag, world)
+  local rot="$2" w="$3" g h_arch h_live hf_in hf_live hf_arch
+  MX_TAG="$1"
+  [ -e "$MXC/$1.w.$w" ] && return 0
+  : > "$MXC/$1.w.$w"
+  case "$w" in
+    A) reseed "$A"; mrun "$rot" "$A" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then g=1; fi; setc fires-heading "$g"
+       g=0; if [ "$(offender_lines "$LAST_OUT")" = "$EXP_H $EXP_B " ]; then g=1; fi; setc names-all "$g"
+       g=0; if cmp -s "$A/backlog.md" "$A/pristine.ledger" && cmp -s "$A/backlog.archive.md" "$A/pristine.archive"; then g=1; fi; setc no-write "$g" ;;
+    AR) reseed "$A"; mrun "$rot" "$A"
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "REFUSING" "$LAST_OUT"; then g=1; fi; setc fires-report "$g" ;;
+    B) reseed "$B"; mrun "$rot" "$B" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then g=1; fi; setc fires-bullet "$g" ;;
+    C) reseed "$C"; mrun "$rot" "$C" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then g=1; fi; setc fires-tilde "$g" ;;
+    D) reseed "$D"; mrun "$rot" "$D" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "REFUSING" "$LAST_OUT"; then g=1; fi; setc fires-phantom "$g" ;;
+    E) reseed "$E"; mrun "$rot" "$E" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "REFUSING" "$LAST_OUT"; then g=1; fi; setc fires-unterm "$g" ;;
+    Q) reseed "$Q"; mrun "$rot" "$Q" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then g=1; fi; setc quotes-two "$g"
+       g=0; if [ "$(offender_lines "$LAST_OUT")" = "$EXP_Q1 $EXP_Q2 " ]; then g=1; fi; setc quotes-two-names "$g"
+       g=0; if ! unterm_finding "$LAST_OUT"; then g=1; fi; setc quotes-two-unterm "$g" ;;
+    UQ) reseed "$UQ"; mrun "$rot" "$UQ" --apply
+       g=0; if [ "$LAST_RC" -ne 0 ] && has "REFUSING" "$LAST_OUT"; then g=1; fi; setc unterm-quotes "$g"
+       g=0; if unterm_finding "$LAST_OUT" && [ -z "$(offender_lines "$LAST_OUT")" ]; then g=1; fi; setc unterm-quotes-once "$g" ;;
+    DI) mx_delim "$rot" delim-indent "$DI" '^        ```' ;;
+    DT) mx_delim "$rot" delim-tab "$DT" "$(printf '^\t```')" ;;
+    DB) mx_delim "$rot" delim-blockquote "$DB" '^> ```' ;;
+    DC) mx_delim "$rot" delim-crlf "$DC" '^```' ;;
+    NM) cp "$NM/pristine.ledger" "$NM/backlog.md"; printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
+       mrun "$rot" "$NM" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && ! has "REFUSING" "$LAST_OUT" \
+          && has "SENTINEL-ARCHIVE-LINE" "$(cat "$NM/backlog.archive.md")" && has "NEAR-MISS-TAIL" "$(cat "$NM/backlog.archive.md")"; then g=1; fi
+       setc near-miss "$g" ;;
+    PF) reseed "$PF"; mrun "$rot" "$PF" --apply
+       g=0; if has "PROSE-FENCE-TAIL" "$(cat "$PF/backlog.archive.md")" && ! has "BL-402" "$(cat "$PF/backlog.md")" \
+          && has "BL-403" "$(cat "$PF/backlog.md")" && ! has "BL-403" "$(cat "$PF/backlog.archive.md")"; then g=1; fi
+       setc prose-fence "$g" ;;
+    D3) reseed "$D3"; mrun "$rot" "$D3" --apply
+       g=0; if has "DELIM-3SP-TAIL" "$(cat "$D3/backlog.archive.md")" && ! has "BL-402" "$(cat "$D3/backlog.md")"; then g=1; fi
+       setc delim-three-space "$g" ;;
+    N) reseed "$N"; mrun "$rot" "$N" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && ! has "REFUSING" "$LAST_OUT" && has "NESTED-TAIL" "$(cat "$N/backlog.archive.md")"; then g=1; fi
+       setc nested-fence "$g" ;;
+    H) reseed "$H"; mrun "$rot" "$H" --apply
+       h_arch="$(cat "$H/backlog.archive.md")"; h_live="$(cat "$H/backlog.md")"
+       g=0; if [ "$LAST_RC" -eq 0 ] && has "HEALTHY-TAIL" "$h_arch" && ! has "BL-402" "$h_live" \
+          && has "BL-401" "$h_live" && has "must never move" "$h_live"; then g=1; fi; setc healthy "$g"
+       hf_in="$(fences "$H/pristine.ledger")"; hf_live="$(fences "$H/backlog.md")"; hf_arch="$(fences "$H/backlog.archive.md")"
+       g=0; if [ $((hf_live % 2)) -eq 0 ] && [ $((hf_arch % 2)) -eq 0 ] && [ "$((hf_live + hf_arch))" -eq "$hf_in" ]; then g=1; fi; setc fence-balance "$g"
+       g=0; if [ "$LAST_RC" -eq 0 ] && conserved "$H"; then g=1; fi; setc conservation "$g" ;;
+    PH) reseed "$PH"; mrun "$rot" "$PH" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && ph_split_ok && conserved "$PH"; then g=1; fi; setc phantom-bullet "$g" ;;
+    SM) reseed "$SM"; mrun "$rot" "$SM" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && sec_mid_ok && conserved "$SM"; then g=1; fi; setc section-mid "$g" ;;
+    SE) reseed "$SE"; mrun "$rot" "$SE" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && sec_eof_ok && conserved "$SE"; then g=1; fi; setc section-eof "$g" ;;
+    SR) reseed "$SR"; mrun "$rot" "$SR" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && sec_reopened_ok && conserved "$SR"; then g=1; fi; setc section-reopened "$g" ;;
+    SI) reseed "$SI"; mrun "$rot" "$SI" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && sub_in_ok && conserved "$SI"; then g=1; fi; setc subhead-in-entry "$g" ;;
+    EO) reseed "$EO"; mrun "$rot" "$EO" --apply
+       g=0; if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-601" "$LAST_OUT" \
+          && cmp -s "$EO/backlog.md" "$EO/pristine.ledger" && cmp -s "$EO/backlog.archive.md" "$EO/pristine.archive"; then g=1; fi
+       setc outcome-refused "$g" ;;
+    EY) reseed "$EY"; mrun "$rot" "$EY" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-601 ' "$EY/backlog.archive.md" && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then g=1; fi
+       setc outcome-carried "$g" ;;
+    EF1) mx_eff "$rot" outcome-eff-form-comma "$EF1" ;;
+    EF2) mx_eff "$rot" outcome-eff-form-note "$EF2" ;;
+    EF3) mx_eff "$rot" outcome-eff-form-rank "$EF3" ;;
+    EFN) reseed "$EFN"; mrun "$rot" "$EFN" --apply
+       g=0; if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-605 ' "$EFN/backlog.archive.md" && grep -q '^## BL-606 ' "$EFN/backlog.archive.md" \
+          && ! has "$OUTCOME_SAYS" "$LAST_OUT"; then g=1; fi
+       setc outcome-nearmiss "$g" ;;
+    *) : > "$MXC/$1.broken" ;;
+  esac
+}
+cell_red() { # cell_red <tag> <cell> -> 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN)
+  local v
+  [ -f "$MXC/$1.$2" ] || return 2
+  v="$(cat "$MXC/$1.$2")"
+  [ "$v" = 0 ]
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+mx_reg() { printf '%s\t%s\n' "$1" "$2" >> "$MXR"; }
+# mx_twins <mutant> <rotator>: per-push, every twin cell must stay GREEN under the mutant. It runs only the worlds
+# the twins live in.
+mx_twins() {
+  local m="$1" rot="$2" tw t w r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    if ! w="$(cw "$t")"; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"; continue; fi
+    mx_world "$m" "$rot" "$w"
+    cell_red "$m" "$t"; r=$?
+    if [ "$r" -eq 0 ]; then bad "mutant:$m" "its twin $t also went RED on this mutant, so the kill is not confined to its own cell"; fi
+  done
+  if [ -e "$MXC/$m.broken" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: a twin world crashed the rotator copy\n' "$m"; fi
+}
+# mx_score <mutant> <rotator>: MATRIX-ONLY. Scores the copy on EVERY cell. It records itself in the ledger first
+# (rule 9).
+mx_score() {
+  local m="$1" rot="$2" dec tw c w dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  for w in $MX_WORLDS; do mx_world "$m" "$rot" "$w"; done
+  if [ -e "$MXC/$m.broken" ]; then BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return; fi
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$m" "$c"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$m" "$c"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$m" "$c" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+# MATRIX-ONLY CONTROL: the unmutated copy must be GREEN on every cell, so a RED above is the mutation's and a cell
+# that cannot go GREEN is a cell nobody can read.
+mx_control() {
+  local w c red=""
+  printf 'mx-score control\n' >> "$MXL"
+  for w in $MX_WORLDS; do mx_world control "$CTRL/scripts/backlog-rotate.sh" "$w"; done
+  if [ -e "$MXC/control.broken" ]; then BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN control\n'; return; fi
+  for c in $MX_CELLS; do cell_red control "$c" && red="$red $c"; done
+  if [ -n "$red" ]; then
+    printf 'MATRIX control cells RED on the unmutated copy:%s\n' "$red"; MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX control all %d cells GREEN on the unmutated copy\n' "$(printf '%s\n' $MX_CELLS | grep -c .)"
+  fi
+}
 
 # ---------------------------------------------------------------------------------------
 # MUTANTS. Every arm above is shaped as "the guard fired" or "the guard stayed quiet", and both
@@ -865,7 +1129,6 @@ mutate() { # mutate <name> <sed-args...> -> echoes the mutated script path, empt
   : > "$r/.mutant-built"
   printf '%s' "$m"
 }
-killed() { KILLS=$((KILLS + 1)); ok "$1" "$2"; }
 
 # CONTROL, UNMUTATED, FIRST. A sandbox root that cannot source lib.sh emits an error and exits 2,
 # and "exit 2 with a complaint" is indistinguishable from a guard firing. If this arm fails,
@@ -958,14 +1221,15 @@ fi
 # this fixture exists for: the mutant must both exit 0 and leave an odd fence count behind.
 M1="$(mutate m1-guard-off -e 's/^if \[ -n "\$FENCE_FINDINGS" \]; then$/if false; then/')"
 if [ -n "$M1" ]; then
+  mx_twins m1-guard-off "$M1"; mx_reg m1-guard-off "$M1"
   reseed "$A"
   run_rt "$M1" "$A" --apply
   M1_LIVE="$(fences "$A/backlog.md")"; M1_ARCH="$(fences "$A/backlog.archive.md")"
   if [ "$LAST_RC" -eq 0 ] && ! has "$FENCE_SAYS" "$LAST_OUT" \
      && { [ $((M1_LIVE % 2)) -ne 0 ] || [ $((M1_ARCH % 2)) -ne 0 ]; }; then
-    killed m1-guard-off "fires-heading would FAIL: exit 0, and the split left live=$M1_LIVE archive=$M1_ARCH fence delimiters"
+    mutant_killed "${B_fires_heading:-0}" m1-guard-off "m1-guard-off: fires-heading would FAIL: exit 0, and the split left live=$M1_LIVE archive=$M1_ARCH fence delimiters" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m1-guard-off" "guard removed and the arm still passed — fires-heading cannot fire (exit $LAST_RC, live=$M1_LIVE archive=$M1_ARCH)"
+    bad "mutant:m1-guard-off" "SURVIVED: guard removed and the arm still passed — fires-heading cannot fire (exit $LAST_RC, live=$M1_LIVE archive=$M1_ARCH)"
   fi
 fi
 
@@ -995,13 +1259,14 @@ if [ -n "$M2" ]; then
     bad "mutant:m2-shape-only" "the lib.sh layer's sed matched nothing — the in-fence branch of ledger_entry_shape() has moved, so this mutant would revert one layer of two"
   else
     mv "$M2_LIB.new" "$M2_LIB"
+    mx_twins m2-shape-only "$M2"; mx_reg m2-shape-only "$M2"
     cp "$NM/pristine.ledger" "$NM/backlog.md"
     printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
     run_rt "$M2" "$NM" --apply
     if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then
-      killed m2-shape-only "near-miss would FAIL: guard widened to any heading AND lib.sh fence-blind, the FENCE arm refuses a fenced '## Some prose heading' (exit $LAST_RC)"
+      mutant_killed "${B_near_miss:-0}" m2-shape-only "m2-shape-only: near-miss would FAIL: guard widened to any heading AND lib.sh fence-blind, the FENCE arm refuses a fenced '## Some prose heading' (exit $LAST_RC)" && KILLS=$((KILLS + 1))
     else
-      bad "mutant:m2-shape-only" "the guard widened to any heading with lib.sh fence-blind and near-miss still passed — it cannot discriminate (exit $LAST_RC)"
+      bad "mutant:m2-shape-only" "SURVIVED: the guard widened to any heading with lib.sh fence-blind and near-miss still passed — it cannot discriminate (exit $LAST_RC)"
     fi
   fi
 fi
@@ -1014,9 +1279,9 @@ if [ -n "$M2A" ]; then
   printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
   run_rt "$M2A" "$NM" --apply
   if [ "$LAST_RC" -eq 0 ] && ! has "$FENCE_SAYS" "$LAST_OUT"; then
-    ok "mutant-twin:m2a" "guard widened with lib.sh intact stays QUIET on near-miss — lib.sh's fence-aware shape rule carries the property, so m2's kill needed both layers"
+    ok "mutant-twin-m2a" "guard widened with lib.sh intact stays QUIET on near-miss — lib.sh's fence-aware shape rule carries the property, so m2's kill needed both layers"
   else
-    bad "mutant-twin:m2a" "guard widened with lib.sh INTACT still refused the near-miss (exit $LAST_RC) — lib.sh is not ignoring the fenced prose heading, so m2's kill is attributable to the guard alone"
+    bad "mutant-twin-m2a" "guard widened with lib.sh INTACT still refused the near-miss (exit $LAST_RC) — lib.sh is not ignoring the fenced prose heading, so m2's kill is attributable to the guard alone"
   fi
 fi
 
@@ -1024,6 +1289,7 @@ fi
 # `fires-heading` alone; a mutant that fails two arms means one of them is vacuous.
 M3="$(mutate_either m3-heading-only -e 's/^  if (shape == "") return ""$/  if (shape != "heading") return ""/')"
 if [ -n "$M3" ]; then
+  mx_twins m3-heading-only "$M3"; mx_reg m3-heading-only "$M3"
   reseed "$B"; run_rt "$M3" "$B" --apply; M3_B_OUT="$LAST_OUT"
   reseed "$C"; run_rt "$M3" "$C" --apply; M3_C_OUT="$LAST_OUT"
   # NOT the exit code. Blinding the label reader to the bullet shape also makes the moved
@@ -1031,9 +1297,9 @@ if [ -n "$M3" ]; then
   # this mutant as surviving. What the mutant actually did is silence the FENCE arm on the
   # bullet offender, and the tilde offender is the control that says the silence is specific.
   if ! has "$FENCE_SAYS" "$M3_B_OUT" && has "$FENCE_SAYS" "$M3_C_OUT"; then
-    killed m3-heading-only "fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one"
+    mutant_killed "${B_fires_bullet:-0}" m3-heading-only "m3-heading-only: fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m3-heading-only" "bullet blinding did not silence the FENCE arm on the bullet offender alone (bullet fence-arm=$(has "$FENCE_SAYS" "$M3_B_OUT" && echo fired || echo silent), tilde fence-arm=$(has "$FENCE_SAYS" "$M3_C_OUT" && echo fired || echo silent))"
+    bad "mutant:m3-heading-only" "SURVIVED: bullet blinding did not silence the FENCE arm on the bullet offender alone (bullet fence-arm=$(has "$FENCE_SAYS" "$M3_B_OUT" && echo fired || echo silent), tilde fence-arm=$(has "$FENCE_SAYS" "$M3_C_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -1047,12 +1313,13 @@ fi
 # up rather than silently dropped.
 M4="$(mutate_either m4-backtick-only -e 's@ || match(t, /^~~~+/)@@')"
 if [ -n "$M4" ]; then
+  mx_twins m4-backtick-only "$M4"; mx_reg m4-backtick-only "$M4"
   reseed "$C"; run_rt "$M4" "$C" --apply; M4_C_OUT="$LAST_OUT"
   reseed "$B"; run_rt "$M4" "$B" --apply; M4_B_OUT="$LAST_OUT"
   if ! has "$FENCE_SAYS" "$M4_C_OUT" && has "$FENCE_SAYS" "$M4_B_OUT"; then
-    killed m4-backtick-only "fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one"
+    mutant_killed "${B_fires_tilde:-0}" m4-backtick-only "m4-backtick-only: fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m4-backtick-only" "dropping '~~~' did not silence the FENCE arm on the tilde offender alone (tilde fence-arm=$(has "$FENCE_SAYS" "$M4_C_OUT" && echo fired || echo silent), bullet fence-arm=$(has "$FENCE_SAYS" "$M4_B_OUT" && echo fired || echo silent))"
+    bad "mutant:m4-backtick-only" "SURVIVED: dropping '~~~' did not silence the FENCE arm on the tilde offender alone (tilde fence-arm=$(has "$FENCE_SAYS" "$M4_C_OUT" && echo fired || echo silent), bullet fence-arm=$(has "$FENCE_SAYS" "$M4_B_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -1072,12 +1339,13 @@ M5="$(mutate m5-drop-a-line \
 M5A="$(mutate m5a-drop-a-line-conservation-intact \
   -e 's/for (i = 1; i <= n; i++) print buf\[i\] > MOVED/for (i = 2; i <= n; i++) print buf[i] > MOVED/')"
 if [ -n "$M5" ] && [ -n "$M5A" ]; then
+  mx_twins m5-drop-a-line "$M5"; mx_reg m5-drop-a-line "$M5"
   reseed "$H"; run_rt "$M5"  "$H" --apply; M5_OUT="$LAST_OUT"
   reseed "$H"; run_rt "$M5A" "$H" --apply; M5A_OUT="$LAST_OUT"
   if ! has "$CONSERVE_SAYS" "$M5_OUT" && has "$CONSERVE_SAYS" "$M5A_OUT"; then
-    killed m5-drop-a-line "conservation would FAIL: with the arm disabled the dropped line goes unreported, while the same drop with the arm intact IS reported"
+    mutant_killed "${B_conservation:-0}" m5-drop-a-line "m5-drop-a-line: conservation would FAIL: with the arm disabled the dropped line goes unreported, while the same drop with the arm intact IS reported" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m5-drop-a-line" "disabling the conservation arm did not silence it on a dropped line (both-layers=$(has "$CONSERVE_SAYS" "$M5_OUT" && echo fired || echo silent), drop-only=$(has "$CONSERVE_SAYS" "$M5A_OUT" && echo fired || echo silent))"
+    bad "mutant:m5-drop-a-line" "SURVIVED: disabling the conservation arm did not silence it on a dropped line (both-layers=$(has "$CONSERVE_SAYS" "$M5_OUT" && echo fired || echo silent), drop-only=$(has "$CONSERVE_SAYS" "$M5A_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -1090,12 +1358,13 @@ fi
 # fire, so the mutant still speaks there and the silence on Q is specific rather than total.
 M6="$(mutate m6-unmasked-pass1 -e 's/ledger_entry_shape(" " \$0)/ledger_entry_shape($0)/')"
 if [ -n "$M6" ]; then
+  mx_twins m6-unmasked-pass1 "$M6"; mx_reg m6-unmasked-pass1 "$M6"
   reseed "$Q"; run_rt "$M6" "$Q" --apply; M6_Q_OUT="$LAST_OUT"
   reseed "$E"; run_rt "$M6" "$E" --apply; M6_E_OUT="$LAST_OUT"
   if ! has "$FENCE_SAYS" "$M6_Q_OUT" && has "$FENCE_SAYS" "$M6_E_OUT"; then
-    killed m6-unmasked-pass1 "quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one"
+    mutant_killed "${B_quotes_two:-0}" m6-unmasked-pass1 "m6-unmasked-pass1: quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m6-unmasked-pass1" "unmasking pass 1 did not silence the FENCE arm on the two-quotation seed alone (quotes-two fence-arm=$(has "$FENCE_SAYS" "$M6_Q_OUT" && echo fired || echo silent), unterminated fence-arm=$(has "$FENCE_SAYS" "$M6_E_OUT" && echo fired || echo silent))"
+    bad "mutant:m6-unmasked-pass1" "SURVIVED: unmasking pass 1 did not silence the FENCE arm on the two-quotation seed alone (quotes-two fence-arm=$(has "$FENCE_SAYS" "$M6_Q_OUT" && echo fired || echo silent), unterminated fence-arm=$(has "$FENCE_SAYS" "$M6_E_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -1108,12 +1377,13 @@ fi
 # misreading rather than a dead guard.
 M7="$(mutate_either m7-closer-ignores-info-string -e 's@(match(t, /^```+\[ \\t\]\*\$/) || match(t, /^~~~+\[ \\t\]\*\$/))@(match(t, /^```+/) || match(t, /^~~~+/))@')"
 if [ -n "$M7" ]; then
+  mx_twins m7-closer-ignores-info-string "$M7"; mx_reg m7-closer-ignores-info-string "$M7"
   reseed "$Q"; run_rt "$M7" "$Q" --apply; M7_Q_OUT="$LAST_OUT"
   M7_GOT="$(offender_lines "$M7_Q_OUT")"
   if unterm_finding "$M7_Q_OUT" && has " $EXP_Q1 " " $M7_GOT "; then
-    killed m7-closer-ignores-info-string "quotes-two-unterm would FAIL: an info-string delimiter read as a closer produces a phantom unterminated fence on a ledger whose fences all close (named [$M7_GOT])"
+    mutant_killed "${B_quotes_two_unterm:-0}" m7-closer-ignores-info-string "m7-closer-ignores-info-string: quotes-two-unterm would FAIL: an info-string delimiter read as a closer produces a phantom unterminated fence on a ledger whose fences all close (named [$M7_GOT])" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m7-closer-ignores-info-string" "widening the closer did not produce the phantom unterminated fence beside a still-named first quotation (unterm=$(unterm_finding "$M7_Q_OUT" && echo present || echo absent), named=[$M7_GOT])"
+    bad "mutant:m7-closer-ignores-info-string" "SURVIVED: widening the closer did not produce the phantom unterminated fence beside a still-named first quotation (unterm=$(unterm_finding "$M7_Q_OUT" && echo present || echo absent), named=[$M7_GOT])"
   fi
 fi
 
@@ -1125,14 +1395,15 @@ fi
 # changing the whole guard rather than the containment.
 M8="$(mutate m8-mark-before-the-closer -e 's/buf\[++nb\] = FNR/fenced[FNR] = fence_at/')"
 if [ -n "$M8" ]; then
+  mx_twins m8-mark-before-the-closer "$M8"; mx_reg m8-mark-before-the-closer "$M8"
   reseed "$UQ"; run_rt "$M8" "$UQ" --apply; M8_U_OUT="$LAST_OUT"
   reseed "$Q";  run_rt "$M8" "$Q"  --apply; M8_Q_OUT="$LAST_OUT"
   M8_U_GOT="$(offender_lines "$M8_U_OUT")"
   M8_Q_GOT="$(offender_lines "$M8_Q_OUT")"
   if [ -n "$M8_U_GOT" ] && [ "$M8_Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
-    killed m8-mark-before-the-closer "unterm-quotes-once would FAIL: an unterminated fence names the lines it swallows ([$M8_U_GOT]) while the closed-fence seed is untouched ([$M8_Q_GOT])"
+    mutant_killed "${B_unterm_quotes_once:-0}" m8-mark-before-the-closer "m8-mark-before-the-closer: unterm-quotes-once would FAIL: an unterminated fence names the lines it swallows ([$M8_U_GOT]) while the closed-fence seed is untouched ([$M8_Q_GOT])" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m8-mark-before-the-closer" "marking fenced lines before the closer did not make the unterminated seed name lines while leaving the closed-fence seed alone (unterminated=[$M8_U_GOT], closed=[$M8_Q_GOT])"
+    bad "mutant:m8-mark-before-the-closer" "SURVIVED: marking fenced lines before the closer did not make the unterminated seed name lines while leaving the closed-fence seed alone (unterminated=[$M8_U_GOT], closed=[$M8_Q_GOT])"
   fi
 fi
 
@@ -1145,15 +1416,16 @@ fi
 # whole guard rather than the one test it names.
 M9="$(mutate m9-no-position-finding -e 's@if (dl ~ /^```+/ || dl ~ /^~~~+/) {@if (0) {@')"
 if [ -n "$M9" ]; then
+  mx_twins m9-no-position-finding "$M9"; mx_reg m9-no-position-finding "$M9"
   reseed "$DI"; run_rt "$M9" "$DI" --apply; M9_OUT="$LAST_OUT"; M9_RC="$LAST_RC"
   M9_LIVE="$(fences "$DI/backlog.md")"; M9_ARCH="$(fences "$DI/backlog.archive.md")"
   reseed "$DB"; run_rt "$M9" "$DB" --apply; M9_B_OUT="$LAST_OUT"
   if [ "$M9_RC" -eq 0 ] && ! has "$DELIM_SAYS" "$M9_OUT" \
      && { [ $((M9_LIVE % 2)) -ne 0 ] || [ $((M9_ARCH % 2)) -ne 0 ]; } \
      && has "$DELIM_SAYS" "$M9_B_OUT"; then
-    killed m9-no-position-finding "delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires"
+    mutant_killed "${B_delim_indent:-0}" m9-no-position-finding "m9-no-position-finding: delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m9-no-position-finding" "removing the indent test did not let the attack ledger through with an odd honoured-delimiter count while leaving the blockquote branch alive (exit $M9_RC, live=$M9_LIVE, archive=$M9_ARCH, blockquote=$(has "$DELIM_SAYS" "$M9_B_OUT" && echo fired || echo silent))"
+    bad "mutant:m9-no-position-finding" "SURVIVED: removing the indent test did not let the attack ledger through with an odd honoured-delimiter count while leaving the blockquote branch alive (exit $M9_RC, live=$M9_LIVE, archive=$M9_ARCH, blockquote=$(has "$DELIM_SAYS" "$M9_B_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -1194,7 +1466,7 @@ ph_split_ok() { # the phantom moved with its host, the open list entry stayed li
 }
 reseed "$PH"; run_rt "$RT" "$PH" --apply
 if [ "$LAST_RC" -eq 0 ] && ph_split_ok && conserved "$PH"; then
-  ok "phantom-bullet" "a closed entry carrying a '- **BL-632 is LANDED**' lead-in moves whole, and the open list entry BL-404 stays live"
+  ok "phantom-bullet" "a closed entry carrying a '- **BL-632 is LANDED**' lead-in moves whole, and the open list entry BL-404 stays live"; B_phantom_bullet=1
 else
   bad "phantom-bullet" "exit $LAST_RC; the host, its lead-in and the open list entry did not split as one closed entry and one live: $(printf '%s' "$LAST_OUT" | grep -E 'REFUSING|BL-' | head -3 | tr '\n' '|')"
 fi
@@ -1202,23 +1474,25 @@ fi
 # mutate_either falls through to the library.
 M10="$(mutate_either m10-loose-label -e '/if (line !~ \/^BL-/d')"
 if [ -n "$M10" ]; then
+  mx_twins m10-loose-label "$M10"; mx_reg m10-loose-label "$M10"
   reseed "$PH"; run_rt "$M10" "$PH" --apply
   if [ "$LAST_RC" -ne 0 ] && has "$EVIDENCE_SAYS" "$LAST_OUT" && has "BL-402" "$LAST_OUT" && cmp -s "$PH/backlog.md" "$PH/pristine.ledger"; then
-    killed m10-loose-label "phantom-bullet would FAIL: the loose label rule opens a phantom BL-632 that takes BL-402's receipt, and the evidence arm refuses BL-402 (exit $LAST_RC)"
+    mutant_killed "${B_phantom_bullet:-0}" m10-loose-label "m10-loose-label: phantom-bullet would FAIL: the loose label rule opens a phantom BL-632 that takes BL-402's receipt, and the evidence arm refuses BL-402 (exit $LAST_RC)" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m10-loose-label" "the loose label rule did not refuse BL-402 on the evidence arm (exit $LAST_RC): $(printf '%s' "$LAST_OUT" | grep REFUSING | head -1)"
+    bad "mutant:m10-loose-label" "SURVIVED: the loose label rule did not refuse BL-402 on the evidence arm (exit $LAST_RC): $(printf '%s' "$LAST_OUT" | grep REFUSING | head -1)"
   fi
 fi
 # M11 — m-heading-only: a bullet never takes a label. The list entry BL-404 is then body text of
 # the closed BL-402 above it and is archived with it — an open entry swept, at exit 0.
 M11="$(mutate_either m11-heading-only-label -e 's/if (line !~ /if (1 || line !~ /')"
 if [ -n "$M11" ]; then
+  mx_twins m11-heading-only-label "$M11"; mx_reg m11-heading-only-label "$M11"
   reseed "$PH"; run_rt "$M11" "$PH" --apply
   if [ "$LAST_RC" -eq 0 ] && grep -qxF -- '- **BL-404** — open list entry' "$PH/backlog.archive.md" \
      && ! grep -qF 'BL-404' "$PH/backlog.md"; then
-    killed m11-heading-only-label "phantom-bullet would FAIL: with bullets never labelled the open list entry BL-404 is archived with the closed entry above it (exit 0)"
+    mutant_killed "${B_phantom_bullet:-0}" m11-heading-only-label "m11-heading-only-label: phantom-bullet would FAIL: with bullets never labelled the open list entry BL-404 is archived with the closed entry above it (exit 0)" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m11-heading-only-label" "bullets unlabelled and BL-404 was not swept (exit $LAST_RC)"
+    bad "mutant:m11-heading-only-label" "SURVIVED: bullets unlabelled and BL-404 was not swept (exit $LAST_RC)"
   fi
 fi
 
@@ -1323,25 +1597,25 @@ sub_in_ok() {
 }
 reseed "$SM"; run_rt "$RT" "$SM" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_mid_ok && conserved "$SM"; then
-  ok "section-mid" "a section between a closed and a live entry stays live; the closed entry alone is archived"
+  ok "section-mid" "a section between a closed and a live entry stays live; the closed entry alone is archived"; B_section_mid=1
 else
   bad "section-mid" "exit $LAST_RC; the section between BL-501 and BL-502 did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SE"; run_rt "$RT" "$SE" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_eof_ok && conserved "$SE"; then
-  ok "section-eof" "a section after the last closed entry, at EOF, stays live"
+  ok "section-eof" "a section after the last closed entry, at EOF, stays live"; B_section_eof=1
 else
   bad "section-eof" "exit $LAST_RC; the trailing section was archived with BL-504: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SR"; run_rt "$RT" "$SR" --apply
 if [ "$LAST_RC" -eq 0 ] && sec_reopened_ok && conserved "$SR"; then
-  ok "section-reopened" "a section whose heading names a BL- id after its first token stays live"
+  ok "section-reopened" "a section whose heading names a BL- id after its first token stays live"; B_section_reopened=1
 else
   bad "section-reopened" "exit $LAST_RC; the Reopened-by-BL-817 section did not stay live: $(printf '%s' "$LAST_OUT" | head -2 | tr '\n' '|')"
 fi
 reseed "$SI"; run_rt "$RT" "$SI" --apply
 if [ "$LAST_RC" -eq 0 ] && sub_in_ok && conserved "$SI"; then
-  ok "subhead-in-entry" "a ### subheading inside a closed entry moves with it"
+  ok "subhead-in-entry" "a ### subheading inside a closed entry moves with it"; B_subhead_in_entry=1
 else
   bad "subhead-in-entry" "exit $LAST_RC; the ### subheading did not move with BL-505"
 fi
@@ -1349,14 +1623,15 @@ fi
 # the one line the fix added, which nothing else in the rotator carries.
 M12="$(mutate m12-section-span -e 's/^  if (label != "" .. ledger_entry_shape(.0) == "heading" .. .0 ~ .^##.*) {$/  if (0) {/')"
 if [ -n "$M12" ]; then
+  mx_twins m12-section-span "$M12"; mx_reg m12-section-span "$M12"
   reseed "$SM"; run_rt "$M12" "$SM" --apply
   m12_mid=1; sec_mid_ok || m12_mid=0
   reseed "$SE"; run_rt "$M12" "$SE" --apply
   m12_eof=1; sec_eof_ok || m12_eof=0
   if [ "$m12_mid" -eq 0 ] && [ "$m12_eof" -eq 0 ] && grep -q 'SECTION-EOF-SENTINEL' "$SE/backlog.archive.md"; then
-    killed m12-section-span "section-mid and section-eof would FAIL: with the fix reverted the section is archived with the closed entry above it"
+    mutant_killed "$(( ${B_section_mid:-0} && ${B_section_eof:-0} ))" m12-section-span "m12-section-span: section-mid and section-eof would FAIL: with the fix reverted the section is archived with the closed entry above it" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m12-section-span" "fix reverted and a section still stayed live (mid=$m12_mid eof=$m12_eof)"
+    bad "mutant:m12-section-span" "SURVIVED: fix reverted and a section still stayed live (mid=$m12_mid eof=$m12_eof)"
   fi
 fi
 # M15 — the first-token exclusion widened back to ANY BL- id on the heading line. The Reopened
@@ -1366,14 +1641,15 @@ fi
 # refuses a sed that changed nothing.
 M15="$(mutate m15-any-bl-id -e 's|/^##\[ \\t\]+.*BL-\[0-9\]/) {$|/BL-[0-9]/) {|')"
 if [ -n "$M15" ]; then
+  mx_twins m15-any-bl-id "$M15"; mx_reg m15-any-bl-id "$M15"
   if ! grep -qF '$0 !~ /BL-[0-9]/) {' "$M15"; then
     bad "mutant:m15-any-bl-id" "the mutation DID NOT APPLY: the widened exclusion is not in the mutant"
   else
     reseed "$SR"; run_rt "$M15" "$SR" --apply
     if ! sec_reopened_ok && grep -q 'SECTION-REOPENED-SENTINEL' "$SR/backlog.archive.md"; then
-      killed m15-any-bl-id "section-reopened would FAIL: an exclusion keyed on any BL- id archives the Reopened section with BL-507"
+      mutant_killed "${B_section_reopened:-0}" m15-any-bl-id "m15-any-bl-id: section-reopened would FAIL: an exclusion keyed on any BL- id archives the Reopened section with BL-507" && KILLS=$((KILLS + 1))
     else
-      bad "mutant:m15-any-bl-id" "the exclusion widened to any BL- id and the Reopened section still stayed live (exit $LAST_RC)"
+      bad "mutant:m15-any-bl-id" "SURVIVED: the exclusion widened to any BL- id and the Reopened section still stayed live (exit $LAST_RC)"
     fi
   fi
 fi
@@ -1381,11 +1657,12 @@ fi
 # line by dropping its level test, so it is the fix one property wider; only SUB-IN can see it.
 M13="$(mutate m13-any-heading -e 's/^  if (label != "" .. ledger_entry_shape(.0) == "heading" .. .0 ~ .^##.*) {$/  if (label != "" \&\& ledger_entry_shape($0) == "heading") {/')"
 if [ -n "$M13" ]; then
+  mx_twins m13-any-heading "$M13"; mx_reg m13-any-heading "$M13"
   reseed "$SI"; run_rt "$M13" "$SI" --apply
   if ! sub_in_ok && grep -q 'SUBHEAD-SENTINEL' "$SI/backlog.md"; then
-    killed m13-any-heading "subhead-in-entry would FAIL: a span ending at any heading strands the ### subheading and its body in the live file"
+    mutant_killed "${B_subhead_in_entry:-0}" m13-any-heading "m13-any-heading: subhead-in-entry would FAIL: a span ending at any heading strands the ### subheading and its body in the live file" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m13-any-heading" "a span ending at any heading still moved the ### subheading with its entry (exit $LAST_RC)"
+    bad "mutant:m13-any-heading" "SURVIVED: a span ending at any heading still moved the ### subheading with its entry (exit $LAST_RC)"
   fi
 fi
 
@@ -1430,7 +1707,7 @@ EOM
 reseed "$EO"; run_rt "$RT" "$EO" --apply
 if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-601" "$LAST_OUT" \
    && cmp -s "$EO/backlog.md" "$EO/pristine.ledger" && cmp -s "$EO/backlog.archive.md" "$EO/pristine.archive"; then
-  ok "outcome-refused" "a tagged efficiency close with no Outcome measured: line is refused by name and nothing is written"
+  ok "outcome-refused" "a tagged efficiency close with no Outcome measured: line is refused by name and nothing is written"; B_outcome_refused=1
 else
   bad "outcome-refused" "exit $LAST_RC; the tagged close without an outcome line was not refused by the outcome arm"
 fi
@@ -1443,11 +1720,12 @@ fi
 # M14 — the outcome guard switched off.
 M14="$(mutate m14-outcome-off -e 's/^if \[ -s "\$AWKF.nooutcome" \]; then$/if false; then/')"
 if [ -n "$M14" ]; then
+  mx_twins m14-outcome-off "$M14"; mx_reg m14-outcome-off "$M14"
   reseed "$EO"; run_rt "$M14" "$EO" --apply
   if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-601 ' "$EO/backlog.archive.md"; then
-    killed m14-outcome-off "outcome-refused would FAIL: with the guard off the tagged close with no outcome is archived at exit 0"
+    mutant_killed "${B_outcome_refused:-0}" m14-outcome-off "m14-outcome-off: outcome-refused would FAIL: with the guard off the tagged close with no outcome is archived at exit 0" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m14-outcome-off" "guard off and the close was still not archived (exit $LAST_RC)"
+    bad "mutant:m14-outcome-off" "SURVIVED: guard off and the close was still not archived (exit $LAST_RC)"
   fi
 fi
 
@@ -1480,6 +1758,9 @@ for EFW in "$EF1" "$EF2" "$EF3"; do
   if [ "$LAST_RC" -eq 2 ] && has "$OUTCOME_SAYS" "$LAST_OUT" && has "BL-603" "$LAST_OUT" \
      && cmp -s "$EFW/backlog.md" "$EFW/pristine.ledger" && cmp -s "$EFW/backlog.archive.md" "$EFW/pristine.archive"; then
     ok "outcome-${EFW##*/}" "that tag spelling, closed with no outcome line, is refused and nothing is written"
+    case "${EFW##*/}" in
+      eff-form-comma) B_outcome_eff_form_comma=1 ;;
+    esac
   else
     bad "outcome-${EFW##*/}" "exit $LAST_RC; a close in that tag spelling with no outcome line was not refused"
   fi
@@ -1518,13 +1799,40 @@ fi
 # M16 — the single-spelling predicate restored: rotate keys on `**DEFECT (efficiency).**` again.
 M16="$(mutate m16-one-spelling -e 's/if (backlog_efficiency_tagged(\$0)) tagged = 1/if (index($0, "**DEFECT (efficiency).**") > 0) tagged = 1/')"
 if [ -n "$M16" ]; then
+  mx_twins m16-one-spelling "$M16"; mx_reg m16-one-spelling "$M16"
   reseed "$EF1"; run_rt "$M16" "$EF1" --apply
   if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-603 ' "$EF1/backlog.archive.md"; then
-    killed m16-one-spelling "outcome-eff-form-comma would FAIL: the single-spelling guard archives a **DEFECT, efficiency.** close with no outcome at exit 0"
+    mutant_killed "${B_outcome_eff_form_comma:-0}" m16-one-spelling "m16-one-spelling: outcome-eff-form-comma would FAIL: the single-spelling guard archives a **DEFECT, efficiency.** close with no outcome at exit 0" && KILLS=$((KILLS + 1))
   else
-    bad "mutant:m16-one-spelling" "the single-spelling guard still did not archive the **DEFECT, efficiency.** close (exit $LAST_RC)"
+    bad "mutant:m16-one-spelling" "SURVIVED: the single-spelling guard still did not archive the **DEFECT, efficiency.** close (exit $LAST_RC)"
   fi
 fi
+
+# MATRIX-ONLY: every registered mutant copy is scored on every cell, after every seed world exists.
+if [ "$MODE" = matrix ]; then
+  while IFS=$'\t' read -r -u 3 _mm _me; do
+    mx_score "$_mm" "$_me"
+  done 3< "$MXR"
+  mx_control
+fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL: it
+# must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9" "the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9" "a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9" "a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  mx_regd="$(cut -f1 "$MXR" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "$mx_regd" ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows [$mx_hdr] and the registered mutants [$mx_regd] disagree"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  [ "$MX_FAILS" -eq 0 ] || FAIL=1
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "backlog-rotate-fence-guard: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
@@ -1534,9 +1842,9 @@ MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | 
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
 if [ "${MUT_ATTEMPTED:-0}" -eq 18 ] && [ "$KILLS" -eq 16 ]; then
-  ok "mutants" "18 mutants built (16 targets + m2's and m5's single-layer twins) and all 16 targets killed the arm they name"
+  ok "mutants" "18 mutants built (16 targets + m2's and m5's single-layer twins) and all 16 targets were scored by the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 18 mutants built, $KILLS of 16 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 18 mutants built, $KILLS of 16 scored — an unscored mutant means an arm cannot fire"
 fi
 
 echo

@@ -17,7 +17,6 @@ artifact-derivations
 backlog-ledger
 backlog-real-ledger
 backlog-receipt-binding
-backlog-rotate-fence-guard
 backlog-size-ceiling
 budget-summary-verdict
 carried-findings
