@@ -119,6 +119,17 @@ CYCLE_STATE=0
 TRANSCRIPT=""
 TRANSCRIPT_DIR=""
 FILES=()
+# THE FIXTURE SEAM (--arms). CONTRACT:
+#   --arms <csv>, a subset of K,K2,K3,L,H,J2,J3 (the gate-only arms), runs everything a full run runs --
+#   argument parsing, ordering, arms A to J, --cycle-state, the terminal arm D and the exit -- and, of the
+#   gate-only arms, ONLY the ones named. A named arm runs this file's own code, not a copy: the seam is a
+#   guard on each arm's top-level entry (`ac_on <arm>`), nothing else. Its lines are the lines a full run
+#   prints for that arm; ERRORS and the exit count only the arms that ran.
+#   ABSENT, `ac_on` answers yes for every arm and the run is byte-identical to one without the option.
+#   It exists so check-24 can ask one arm a question without paying for the arms that do not answer it;
+#   it is not a consumer interface. An unknown arm name is exit 1, never a silent full run.
+AC_ARMS=""
+ac_on() { [ -z "$AC_ARMS" ] && return 0; case ",$AC_ARMS," in *",$1,"*) return 0 ;; esac; return 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -126,6 +137,13 @@ while [ $# -gt 0 ]; do
     --cycle-state) CYCLE_STATE=1; shift ;;
     --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
     --transcript-dir) TRANSCRIPT_DIR="${2:-}"; shift 2 ;;
+    --arms)
+      AC_ARMS="${2:-}"
+      case ",${AC_ARMS}," in ,,) echo "--arms needs a list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac
+      for _ac_a in ${AC_ARMS//,/ }; do
+        case "$_ac_a" in K|K2|K3|L|H|J2|J3) ;; *) echo "--arms: unknown arm '$_ac_a' (known: K,K2,K3,L,H,J2,J3)" >&2; exit 1 ;; esac
+      done
+      shift 2 ;;
     -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
     -*) echo "unknown argument: $1" >&2; exit 1 ;;
     *) FILES+=("$1"); shift ;;
@@ -1877,7 +1895,7 @@ k_stamp_parse() {  # git log -p text on stdin -> earliest UTC ISO commit stampin
 
 # THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free for the three predicates.
 # The stamp parser is probed immediately before it reads the real history, below.
-if [ "$N" -gt 0 ]; then
+if ac_on K && [ "$N" -gt 0 ]; then
   : > "$AC_T/k-one.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
   k_count_md "$AC_T"; kp1="$K_COUNT"
   : > "$AC_T/k-two.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
@@ -1908,7 +1926,7 @@ if [ "$N" -gt 0 ]; then
 fi
 
 K_CAND=""
-if [ "$N" -gt 0 ]; then
+if ac_on K && [ "$N" -gt 0 ]; then
   # ONE awk over the TERMINAL pass file: `<file>\t<artifact>\t<shard_tool_use_ids>`. Not every
   # pass -- see `subject` above; an earlier whole-subject pass is superseded, not a finding.
   k_rows="$(awk '
@@ -2194,7 +2212,7 @@ k2_sha() {  # $1 file -> sha256 hex on stdout; the merge's own spelling
 
 # THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free: a FILE resolves by
 # walking up, a DIRECTORY of the same shape does not, and a trailing `/` never names a file.
-if [ "$N" -gt 0 ]; then
+if ac_on K2 && [ "$N" -gt 0 ]; then
   mkdir -p "$AC_T/k2-dir" && : > "$AC_T/k2-doc.md" || {
     echo "validate-adversarial-convergence.sh: arm K2 self-probe could not stage; no verdict" >&2; exit 2; }
   k2_resolve_file "$AC_T/deep/er/p.md" "k2-doc.md"; k2p1="$K2_FILE"
@@ -2207,7 +2225,7 @@ if [ "$N" -gt 0 ]; then
 fi
 
 K2_CAND=""
-if [ "$N" -gt 0 ]; then
+if ac_on K2 && [ "$N" -gt 0 ]; then
   # ONE awk over the TERMINAL pass: `<artifact>\t<artifact_sha>\t<shard_tool_use_ids>`. The sha is
   # read here rather than from P_SHA, whose hex filter would fold a files-mode `stem=sha` list
   # into one run of hex -- a merged pass never reaches the sha step, but this arm owns its read.
@@ -2463,6 +2481,7 @@ case "${LAST_FILE##*/}" in
     fi ;;
   *) k3_go=0 ;;
 esac
+ac_on K3 || k3_go=0
 if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ] && [ "$k3_wide" -eq 1 ]; then
   # A widened candidate is judged only when its terminal artifact is the manifest or a file the
   # manifest names; any other series in the sprint reviews its own artifact and drops out here.
@@ -3120,6 +3139,7 @@ case "${LAST_FILE##*/}" in
 esac
 l_n="${l_sd##*/}"; l_n="${l_n#s}"
 case "${l_sd##*/}" in s[0-9]*) case "$l_n" in *[!0-9]*) l_sd="" ;; esac ;; *) l_sd="" ;; esac
+ac_on L || l_sd=""
 K_COUNT=0
 [ -z "$l_sd" ] || k_count_md "$l_sd/stories"
 if [ -n "$l_sd" ] && [ "$K_COUNT" -ge 1 ]; then
@@ -3611,7 +3631,7 @@ H_STEM_RE='^(.*)(pass|p)[0-9]+'
 # wins over an earlier one, `pass<N>` is not read as `s<N>`, a suffix after the token is
 # dropped, `-adversarial` is dropped once and only at the end, and a name with no number has
 # no stem.
-if [ "$N" -gt 1 ]; then
+if ac_on H && [ "$N" -gt 1 ]; then
   h_stem "d/prd-adversarial-p13.md"; hp1="$H_STEM"
   h_stem "s289-rr-adversarial-pass4-verification.md"; hp2="$H_STEM"
   h_stem "x-p1-adversarial-pass2.md"; hp3="$H_STEM"
@@ -3667,7 +3687,8 @@ EOF
   fi
 }
 
-for ((h = 0; h + 1 < N; h++)); do
+h_n="$N"; ac_on H || h_n=0
+for ((h = 0; h + 1 < h_n; h++)); do
   # A verification pass after a RESOLUTION is arm F's business, not a repair pass.
   [ -n "${P_RESOLVES[$((h + 1))]:-}" ] && continue
   # A divergent pass is owned by arms C/D/F: its "repair" is the injected defect, and
@@ -3971,7 +3992,7 @@ j2s_links() {  # $1 stem  $2 rows file
   awk -F'\t' -v s="$1" '$1 == s && $2 != $3 && !seen[$2 FS $3]++ { print $2 "\t" $3 "\t" $4 }' "$2"
 }
 
-if [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
+if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
   j2_art="$(block_field "$LAST_FILE" 'artifact')"
   j2_sha="$(block_field "$LAST_FILE" 'artifact_sha' | tr 'A-F' 'a-f')"
   j2_sha="${j2_sha%"${j2_sha##*[![:space:]]}"}"
@@ -4460,6 +4481,7 @@ case "$j3_b" in
     j3_m="${j3_b##*-adversarial-p}"; j3_m="${j3_m%.md}"; j3_stem="${j3_b%-adversarial-p*}"
     case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;
 esac
+ac_on J3 || J3_ARM=0
 j3_dir="$(dirname "${LAST_FILE:-.}")"
 J3_OPEN=0
 [ "$N" -gt 0 ] && [ "$J3_ARM" -eq 1 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ] \
