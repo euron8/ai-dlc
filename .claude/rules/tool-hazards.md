@@ -39,8 +39,7 @@ loops by ITERATION COUNT — the artifact is the quantity being read.** Measured
 enforcement-map validator: the trace put 37s of a 47s run on two fork-free loops, 9498 and 2071
 iterations, and an ablation differential in CPU-seconds over 4 interleaved reps refuted both —
 base 29.75-30.30, the two ablations 29.30-30.34 and 28.97-30.39, every range overlapping. Use
-that PS4 to COUNT invocations, never to time them; for cost, drive `scripts/fork-profile.sh
---stable` or ablate the block and difference CPU-seconds in worktrees at the SAME path.
+that PS4 to COUNT invocations
 
 ## The Bash tool's OUTPUT is rewritten before you read it
 

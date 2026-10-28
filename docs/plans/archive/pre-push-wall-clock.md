@@ -579,7 +579,7 @@ LCC, register a throwaway arm naming a label absent from `$RUNS`.
 > 4.2s and 0.16s — taken at load average 62 with three agents running, i.e. inflated about an
 > order of magnitude. Directionally they agree; neither set is comparable with the other, and
 > that is the loaded-versus-solo hazard this plan warns about, walked into while writing it.
-> **Re-derive on an idle box before any number here is quoted.**
+> **Re-derive any number here from the counts the gate records before it is quoted.**
 >
 > **A shipped defect found by attempting the parallelisation**, confirmed independently with
 > controls in both directions on bash 3.2.57: in `seed.sh:57`,
@@ -597,10 +597,10 @@ three `git clone --no-hardlinks` against a 20 MB `.git`, two full `scripts/insta
 and a history-wide pickaxe. **Do not shard it until the serial prefix is measured.**
 
 ```
-/usr/bin/time -l bash core/fixtures/self-update-join-gate/seed.sh    # solo, idle, 5 reps
+# count seed.sh's execs solo: git clones, install.sh runs, pickaxe runs
 ```
 
-Let `S` = median seed wall, `T` = 163.9s (measured). If `S/T > ~0.4` a 2-way shard costs
+Let `S` = seed.sh's exec count, `T` = the fixture's total exec count. If `S/T > ~0.4` a 2-way shard costs
 `S + (T-S)/2` per shard and roughly doubles this fixture's aggregate CPU — not worth it. If
 `S/T < ~0.15` it pays.
 
@@ -954,11 +954,10 @@ is 3⁹ and is not an experiment.
 Hold constant: `AI_DLC_FIXTURE_NO_SKIP=1` on every cell (without it the dispatched set varies
 run to run and the makespans are not comparable); same commit, clean tree; **reset
 `.git/ai-dlc-fixture-durations` from one golden copy before every run**, or cell *N* is a
-function of cell *N-1*; idle box; fixed cooldown against thermal drift.
+function of cell *N-1*.
 
-≥4 repetitions per cell, **interleaved against the incumbent** (16 / 1×), never blocked. Call a
-difference real only when the two cells' reading ranges do not overlap — the standard already
-applied at `.githooks/pre-push:439-441`.
+Each cell is read from the counts the gate records (units dispatched, execs, forks) against the
+incumbent (16 / 1×). Call a difference real only when the counts differ.
 
 Controls that make it a measurement rather than a ritual: `JOBS=1` must give a makespan equal
 to the sum of the durations record, or the harness is not measuring the pool; `JOBS=64` must

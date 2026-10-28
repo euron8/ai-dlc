@@ -127,7 +127,7 @@ leg B owes; the rehearsal reproduced all four and found a fifth. **No ledger ent
    - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement.
    - SHORTEST GATE FIRST. Among ready releases, a docs-only release gates first.
    - NO IDLE SESSIONS. Every unassigned item goes to an idle session at once.
-   - NO TIMING RUNS. No timing run unless a named fix cannot be chosen without the figure, and the lead approves it.
+   - NO TIMING RUNS. None is taken; cost evidence is the counts the gate records.
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner's release commit text is written by a hand before its gate opens.
 
 1. **Confirm the operator has authorized leg B, and that the distribution has no `core/` change after the 0.901.0

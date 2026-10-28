@@ -109,11 +109,10 @@ for a reason NEITHER owns is non-discriminating and its null reads as agreement.
 series, 16 identical `1 -> 1` pairs, 0 findings — the subject fails CLOSED without a flag the probe
 cannot pass. The signal was the ARM each side NAMED, not its status.
 
-## Time both sides the same way, and interleave the reps
+## Count both sides the same way
 
-A `mktemp` extraction timed against the live repo compares two TREES, not two revisions.
-Measured: that shape read +1.9s and nearly bought an optimisation pass against a regression
-that does not exist. Extracted alike and interleaved, five reps: 17.29s vs 17.10s.
+A `mktemp` extraction counted against the live repo compares two TREES, not two revisions.
+Extract both sides alike before comparing counts.
 
 **A COUNT OVER A DERIVED CORPUS IS A FUNCTION OF WHAT IS ON DISK, AND IT GOES WRONG IN BOTH
 DIRECTIONS.** Arms that walk the shipped-`.sh` set — and one that walks the whole tree — count
