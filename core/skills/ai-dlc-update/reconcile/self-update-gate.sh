@@ -54,6 +54,9 @@
 # MODES
 #   self-update-gate.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
 #       classify. The only mode step 2 runs. (arg order matches layer-drift.sh)
+#   self-update-gate.sh --no-safe-stop-advice <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#       classify WITHOUT the SAFE-STOP walk. A fixture seam: it prints NOT-A-VERDICT on stderr, and no
+#       shipped caller passes it.
 #   self-update-gate.sh --safe-stop <dist-repo> <base-sha> <theirs-ref> <consumer-root>
 #       print the FURTHEST release ref in base..theirs that still self-updates cleanly, or
 #       nothing (rc 1) if even the first one defers. See below for why this exists.
@@ -153,6 +156,23 @@ gate_load_preclassify() { # gate_load_preclassify <preclassify.sh> -> defines ma
   eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$1" 2>/dev/null)"
   eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$1" 2>/dev/null)"
 }
+
+# `--no-safe-stop-advice` IS A TEST SEAM, AND IT IS AN ARGUMENT SO NOTHING INHERITED CAN SET IT. It skips
+# `advise_safe_stop` and nothing else: the record, the layout arm and every verdict arm still run. The variable
+# is assigned unconditionally first, so an exported GATE_NO_SS_ADVICE in a consumer's environment is overwritten,
+# and it is never exported, so the nested classify runs never see it. No shipped caller passes it
+# (self-update-join-gate asserts that); a run that does prints NOT-A-VERDICT on stderr, because a DEFER without
+# its SAFE-STOP row is not the answer step 2 is contracted to read.
+GATE_NO_SS_ADVICE=""
+if [ "${1:-}" = "--no-safe-stop-advice" ]; then
+  shift
+  GATE_NO_SS_ADVICE=1
+  if [ "${1:-}" = "--safe-stop" ]; then
+    printf 'self-update-gate: --no-safe-stop-advice applies to a classify run only, never to --safe-stop\n' >&2
+    exit 2
+  fi
+  printf 'self-update-gate: NOT-A-VERDICT -- --no-safe-stop-advice skipped advise_safe_stop; this output is a test reading, never an answer for step 2\n' >&2
+fi
 
 if [ "${1:-}" = "--safe-stop" ]; then
   shift
@@ -810,6 +830,7 @@ fi
 # (an intermediate machinery ref that is neither `commit` nor `theirs`).
 advise_safe_stop() {
   [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
+  [ -n "$GATE_NO_SS_ADVICE" ] && return 0
   # SET HERE, not only inside the guard that fills it. This file runs under `set -u`, the message
   # below interpolates `$_sk`, and the only assignment used to live in `machinery_at_or_past` — so
   # any path that reached the message without running the guard died on an unbound variable and
