@@ -70,7 +70,7 @@ between "GATE OPEN" and "GATE CLOSED" nothing heavy starts.
 None are taken. Cost evidence is the counts the gate records: invocations.decl, exec, fork and
 render counts. Reading a duration off a pre-push log stays allowed.
 
-## Zero tests depend on load
+## Zero tests depend on load (BL-868)
 
 "There should be ZERO tests that depend on load. If they exist, they are defects." A test whose
 verdict or count moves with load is fixed in the test, never tolerated with a ± row, a widened

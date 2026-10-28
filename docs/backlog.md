@@ -1161,7 +1161,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c to f2, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c now ride BL-868 under ai-dlc-0d, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
 
 ### reconcile-emit-report (q5)
 
@@ -1846,3 +1846,20 @@ verify: manual
 A third durable change: `CLAUDE.md`, in the section on running the fixture suite, now states that the shared verdict store is seeded before a release push and that a re-run in a mktemp store caches nothing, citing `docs/plans/hermetic-pole.md`; the sentence also names the `verdict store: N fixture(s) skipped` line as the evidence the seed worked, and the owner rules in `docs/plans/graph-ledger-full-drain.md` carry the per-unit throwaway-ref verification push and the validators-only integrator rule. The `CLAUDE.md` sentence cites `docs/plans/hermetic-pole.md` only for the longest-first ordering, and names the hook's state files: `$AI_DLC_VERDICT_STORE` (default `~/.cache/ai-dlc/verdicts`), `.git/ai-dlc-fixture-keys/<fx>.key` and `.git/ai-dlc-fixture-failures`. A fourth carrier: `.claude/rules/operator-rulings.md` section "Zero tests depend on load" holds the ruling that a test whose verdict or count moves with load is a defect fixed in the test (BL-868).
 
 verify: manual
+
+## BL-868 — no fixture verdict or invocation count may depend on load: the `±` rows, the polls and the watchdogs go
+
+**DEFECT (efficiency).** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
+
+**Known instances, each with its owner session and state.**
+
+1. `readset-skip`, `readset-skip-b` and `readset-skip-c` `±` rows. These are the deriver's sentinel-settle and end-flush polls, and `-b`'s REAL CANARY bounded retries. Owner: ai-dlc-0d (p1). In progress.
+2. `snapshot-archive-rotate` `±` row: the kill-point sweep workers and their stop file. Owner: ai-dlc-a2.
+3. `wait-beat-liveness` `±` rows: the beat poll loop (one `--check-header` per poll) and the gated sleep stub. Owner: ai-dlc-a1.
+4. `readset-skip` CK MUTANT fileentries. Under load, the pre-push pool's no-progress watchdog REFUSED a 0-second unit in world (c) push 1, which moved the vector. Seen in the 0.963.0 warm run at load about 119. Owner: ai-dlc-0d. In progress.
+5. BL-867: counted scripts piped into early-exit readers (`awk` exit, `head`, `grep -m`, `grep -q`). SIGPIPE makes the number of bash starts scheduling-dependent. Owner: ai-dlc-0d. `self-update-gate` was fixed by ai-dlc-e2 in 0.963.0.
+6. Removal of the provisional `±` judge form, after items 1 to 3 land. Owner: ai-dlc-0d.
+
+Close condition: every item above is closed, and the receipt below returns 0 matches. Its non-zero control is the same `git grep -c '±'` run at the PARENT of the commit that removes the last `±` row, which must be non-zero; it holds once the tip moves, where a control at today's tip would not. The receipt is a bare `! git grep -qF`, so it also reads closed if no `invocations.decl` is tracked at all; 255 are tracked today.
+
+verify: sh ! git grep -qF '±' -- 'core/fixtures/*/invocations.decl'
