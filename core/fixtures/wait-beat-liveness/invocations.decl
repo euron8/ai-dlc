@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-446 *
-28 core/scripts/merge-adversarial-shards.sh
+# Both rows are PROVISIONAL: two counting sweeps on one tree read 446/441 and 28/25, the difference three
+# merge-adversarial-shards.sh starts and two gated-sleep-stub starts. n is sweep 1, k = max(2, 3 x the spread). Owed: a
+# deterministic loop (BL-850, a1).
+446±15 * why=the-beat-poll-loop-in-wait-for-deliverable.sh-(one-merge-adversarial-shards.sh---check-header-per-poll)-and-the-gstub-sleep-stub's-bounded-gate-wait provisional
+28±9 core/scripts/merge-adversarial-shards.sh why=the-beat-poll-loop-in-wait-for-deliverable.sh-(one---check-header-per-poll) provisional

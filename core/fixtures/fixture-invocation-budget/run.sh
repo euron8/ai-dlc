@@ -238,7 +238,7 @@ verdict() {
     A5) rcis "$t" 1 && has "$t" 'probe: FAIL (J2)' && has "$t" '  3 *' && has "$t" '  2 core/scripts/sub.sh' ;;
     A7) rcis "$t" 0 && has "$t" 'held: J5 EXEMPT, not judged: held is a row of scripts/fixture-matrix-allowlist.txt' \
           && has "$t" 'held: verdict recorded in' && ! has "$t" '(J5): mutant_killed reported' ;;
-    SP) rcis "$t" 0 && has "$t" 'self-probe: 42 cells, all green' ;;
+    SP) rcis "$t" 0 && has "$t" 'self-probe: 53 cells, all green' ;;
     A8) rcis "$t" 0 && has "$t" 'A8 CHECK-OK call:' && has "$t" 'A8 CHECK-OK a-armed:' && has "$t" 'A8 CHECK-OK b-judge-absent:' \
           && has "$t" 'A8 CHECK-OK c-nested:' && ! has "$t" 'A8 CHECK-BAD' ;;
     *) return 1 ;;

@@ -46,6 +46,14 @@
 #                          fixture whose start count is a function of a corpus. Allowed on a <path> row too. <glob> is
 #                          root-relative, has no `..` and no blank, and is expanded by bash 3.2 pathname expansion:
 #                          `*` never crosses a `/` (there is no globstar), so a nested corpus spells one glob per level.
+#   <n>±<k> <path> why=<the loop that retries or polls> provisional
+#                          THE TOLERANCE ROW, `*` allowed as the path: passes iff |measured - n| <= k. Its reason: count
+#                          drift from a timing-dependent loop (a retry or a poll whose iteration count follows load),
+#                          MEASURED as two counting sweeps disagreeing on the same tree, and PROVISIONAL until that loop
+#                          is made deterministic, when the row returns to exact. No `why=`, no trailing `provisional`,
+#                          k < 2, or a malformed n or k is a J4 FAIL. Every accepted measurement prints
+#                          `provisional: <fx> <path> n=<n> k=<k> measured=<m>`, so the population of tolerance rows shows
+#                          on every run; nothing here lists the fixtures that carry one. Every other row stays exact.
 # THE ARMS.
 #   J1  the start log absent or empty -> BROKEN. run.sh is itself a start, so a counted run logs at least one row; an
 #       empty log means the counter never loaded and nothing below would be a measurement.
@@ -231,6 +239,12 @@ fxc_judge() {
     # J4: one normalised row per line: `<c>\t<k>\t<glob or ->\t<target>\t<raw>`, or `ERR\t<raw>`.
     awk '{ sub(/\r$/, "") } $0 ~ /^[[:blank:]]*$/ || $0 ~ /^[[:blank:]]*#/ { next }
       { raw = $0
+        if ($1 ~ /±/) {
+          # The tolerance row: `<n>±<k> <target> why=<the loop> provisional`. Every clause is required.
+          if (NF < 4 || $3 !~ /^why=./ || $NF != "provisional") { print "ERR\t" raw; next }
+          p = index($1, "±"); n = substr($1, 1, p - 1); kk = substr($1, p + length("±"))
+          if (n !~ /^(0|[1-9][0-9]*)$/ || kk !~ /^[1-9][0-9]*$/ || kk + 0 < 2) { print "ERR\t" raw; next }
+          print n "\t" kk "\t±\t" $2 "\t" raw; next }
         if (NF != 2) { print "ERR\t" raw; next }
         cnt = $1; t = $2
         # A count with a leading zero (`09`, `1+08x…`) is refused here: bash arithmetic reads it as octal and dies.
@@ -244,7 +258,7 @@ fxc_judge() {
         print "ERR\t" raw }' "$decl" > "$w/rows"
     while IFS="$(printf '\t')" read -r kind raw; do
       [ "$kind" = ERR ] || continue
-      printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>` or `<c>+<k>x<glob> <target>`)\n' "$fx" "$raw"; rc=1
+      printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>`, `<c>+<k>x<glob> <target>` or `<n>±<k> <target> why=<loop> provisional` with k >= 2)\n' "$fx" "$raw"; rc=1
     done < "$w/rows"
     awk -F'\t' '$1 != "ERR" { print $4 }' "$w/rows" > "$w/tgts"
     n="$(grep -cxF '*' "$w/tgts")" || n=0
@@ -267,6 +281,15 @@ EOF
         m="$tot"
       fi
       dcl="$c"
+      if [ "$g" = "±" ]; then
+        if [ "$m" -ge $((c - k)) ] && [ "$m" -le $((c + k)) ]; then
+          printf 'provisional: %s %s n=%s k=%s measured=%s\n' "$fx" "$tgt" "$c" "$k" "$m"
+        else
+          printf '%s: FAIL (J3): row "%s": measured %s, outside the provisional bound %s±%s -- %s\n' "$fx" "$raw" "$m" "$c" "$k" "$FXC_REMEDY_TAIL"
+          rc=1
+        fi
+        continue
+      fi
       if [ "$g" != - ]; then
         n="$(fxc_glob_n "$root" "$g")" || { printf '%s: FIXTURE BROKEN (J4): cannot expand %s under %s\n' "$fx" "$g" "$root"; rm -rf "$w"; return 2; }
         dcl=$((c + k * n))
@@ -301,6 +324,9 @@ EOF
     done <<EOF
 $(LC_ALL=C sort -u "$log.mutants")
 EOF
+    [ "$rc" = 0 ] && printf 'ok J5: %s: %s name(s) joined\n' "$fx" "$(LC_ALL=C sort -u "$log.mutants" | awk 'END { print NR }')"
+  else
+    printf 'ok J5: %s: 0 name(s) (no mutant_killed emission)\n' "$fx"
   fi
   rm -rf "$w"
   [ "$rc" = 0 ] && printf '%s: invocation budget ok: %s start(s)\n' "$fx" "$tot"
@@ -370,6 +396,21 @@ fxc_self_probe() {
   mkdir -p "$SPR/core/x+05" && printf ':\n' > "$SPR/core/x+05/a.sh"
   mkdir -p "$SPR/j4z"; cp "$fd/inputs.decl" "$SPR/j4z/"; printf '0+6xcore/x+05/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j4z/invocations.decl"
   sp_cell "J4 a 0+k base, and a glob carrying +05, pass (a leading zero is refused only in a count)" 0 j4z "$SPR/log" "ok"
+  # The tolerance row, both directions. The log measures 6 starts and 2 of sub.sh.
+  for spec in "in:5±2 * why=poll provisional|2 core/scripts/sub.sh:0:provisional: p * n=5 k=2 measured=6" \
+              "edge:8±2 * why=poll provisional|2 core/scripts/sub.sh:0:provisional: p * n=8 k=2 measured=6" \
+              "out:9±2 * why=poll provisional|2 core/scripts/sub.sh:1:outside the provisional bound 9±2" \
+              "path:6 *|4±2 core/scripts/sub.sh why=retry provisional:0:provisional: p core/scripts/sub.sh n=4 k=2 measured=2" \
+              "nowhy:6±2 * because=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
+              "noprov:6±2 * why=poll|2 core/scripts/sub.sh:1:(J4)" \
+              "k1:6±1 * why=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
+              "badn:6x±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
+              "exact:5 *|2 core/scripts/sub.sh:1:measured 6, declared 5"; do
+    SPN="tol${spec%%:*}"; r="${spec#*:}"; want="${r#*:}"; want="${want#*:}"; wrc="${r#*:}"; wrc="${wrc%%:*}"; r="${r%%:*}"
+    mkdir -p "$SPR/$SPN"; cp "$fd/inputs.decl" "$SPR/$SPN/"
+    printf '%s\n' "$r" | tr '|' '\n' > "$SPR/$SPN/invocations.decl"
+    sp_cell "J3/J4 tolerance ${spec%%:*}" "$wrc" "$SPN" "$SPR/log" "$want"
+  done
   # J5 both directions, a header, a shard stub, a control
   mkdir -p "$SPR/j5" "$SPR/j5s" "$SPR/j5c"
   for d in j5 j5s j5c; do cp "$fd/inputs.decl" "$SPR/$d/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/$d/invocations.decl"; done
@@ -382,6 +423,11 @@ fxc_self_probe() {
   sp_cell "J5 a shard stub joins its IMPL's rows" 0 j5s "$SPR/logm" "ok"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX-CONTROL Mb why=x\n' > "$SPR/j5c/run.sh"
   sp_cell "J5 a reported name with a CONTROL row FAILs" 1 j5c "$SPR/logm" "MUTANT-MATRIX-CONTROL row"
+  # J5 on a pass prints its count of distinct names (logm reports Ma, Mb, Ma); no emission prints 0.
+  mkdir -p "$SPR/j5ok"; cp "$fd/inputs.decl" "$SPR/j5ok/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5ok/invocations.decl"
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5ok/run.sh"
+  sp_cell "J5 a pass with 2 rowed names prints its ok line with the count" 0 j5ok "$SPR/logm" "ok J5: p: 2 name(s) joined"
+  sp_cell "J5 a run with no mutant_killed emission prints the 0 line" 0 j5ok "$SPR/log" "ok J5: p: 0 name(s) (no mutant_killed emission)"
   # A row inside a heredoc body is a seed, not the header: Mb rowed only there FAILs (its twin, rowed in code, passed above).
   mkdir -p "$SPR/j5h"; cp "$fd/inputs.decl" "$SPR/j5h/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5h/invocations.decl"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\n# MUTANT-MATRIX Mb decides=A twins=B\nEOF\n' > "$SPR/j5h/run.sh"
@@ -456,7 +502,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 42 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 42
+  [ "$SP_N" -eq 53 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 53
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2

@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-449 *
-73 core/scripts/derive-fixture-readsets.sh
+# Both rows are PROVISIONAL: two counting sweeps on one tree read 449/450 and 73/74, the difference one deriver start. n is
+# sweep 1, k = max(2, 3 x the spread). Owed: a deterministic loop (BL-850, f2).
+449±3 * why=the-REAL-CANARY-bounded-retries-in-unit-loc-(while-_a/_s/_m-lt-3)-re-running-derive-fixture-readsets.sh-until-a-forced-loss-or-clean-trace provisional
+73±3 core/scripts/derive-fixture-readsets.sh why=the-REAL-CANARY-bounded-retries-in-unit-loc-(while-_a/_s/_m-lt-3) provisional
