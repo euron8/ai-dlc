@@ -7,11 +7,9 @@
 # that shipped the arm.
 adversarial-shard-merge
 apply-drift-after-write
-apply-restamp-theirs
 apply-restamp-worklist
 architecture-index-cell-escaping
 backlog-receipt-binding
-backlog-rotate-fence-guard
 ci-gates-resolution
 claude-rules-joins
 context-mode-protect
@@ -38,7 +36,6 @@ layer-entry-unreadable
 layer-extends-grain
 layer-retired-id-crosswalk
 layer-title-join
-ledger-reverify-dist-only-reach
 ledger-rotate
 mutation-red-replay
 pause-hook-origin
@@ -50,7 +47,6 @@ preclassify-rename-row
 process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
-provenance-flagless-default
 requirements-step
 retired-layer-passage
 review-carry-over-clauses

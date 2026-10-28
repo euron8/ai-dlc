@@ -2,5 +2,7 @@
 # REQUIRED: run.sh reports every arm as SKIP and exits 0 when either is absent.
 !core/scripts/validate-provenance-block.sh
 !core/schemas/provenance-block.json
+# run.sh sources the mutant-kill helper; a kill is emitted only through it.
+core/fixtures/lib/mutant.sh
 # The f-ctl seed control lifts its block from the sibling fixture's seed.sh.
 core/fixtures/check-17-bypass/seed.sh
