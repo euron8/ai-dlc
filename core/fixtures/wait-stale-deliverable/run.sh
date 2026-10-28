@@ -24,29 +24,41 @@
 # non-delivery on a complete artifact. `since-clamp` is that scenario; it passes
 # only because the subject clamps --since to `now`.
 #
-# MUTANT MATRIX. Each mutant is killed by its deciding case; the twin is a different case that stays
-# green under it (C21 asserts the flagless exhausted path for every mutant). The matrix is re-measured
-# whenever an arm or a mutant is added or changed.
-# MUTANT-MATRIX grant-cap decides=C15 twins=C21
-# MUTANT-MATRIX unprune-wait-beats decides=C16 twins=C21
-# MUTANT-MATRIX unexclude-beat-inflight decides=C17 twins=C21
-# MUTANT-MATRIX state-dir-guard decides=C18 twins=C21
-# MUTANT-MATRIX path-exists-check decides=C19 twins=C21
-# MUTANT-MATRIX progress-sampling decides=C20 twins=C21
-# MUTANT-MATRIX resample-gate decides=C27 twins=C21
-# MUTANT-MATRIX restamp-ungated decides=C28 twins=C21
-# MUTANT-MATRIX no-restamp decides=C29 twins=C21
-# MUTANT-MATRIX grant-unconditional decides=C30 twins=C21
-# MUTANT-MATRIX grant-no-counter-rewrite decides=C32 twins=C21
-# MUTANT-MATRIX lease-trap-unconditional decides=C34 twins=C21
-# MUTANT-MATRIX lease-no-heir decides=C35 twins=C21
-# MUTANT-MATRIX lease-always-put decides=C37 twins=C21
-# MUTANT-MATRIX lease-no-early decides=C39 twins=C21
-# MUTANT-MATRIX no-join-memo decides=C41 twins=C21
-# MUTANT-MATRIX since-kept-on-delivery decides=C43 twins=C21
-# MUTANT-MATRIX preupgrade-taken decides=C45 twins=C21
-# MUTANT-MATRIX lease-end-time decides=C47 twins=C21
-# MUTANT-MATRIX-REMEASURE bash core/scripts/hermetic-run.sh core/fixtures/wait-stale-deliverable/run.sh
+# MUTANT MATRIX. A mutant is a copy of the subject with ONE mechanism removed; an ARM is a positive case
+# (C<nn>_*) that asserts the subject behaves correctly, run with that copy as the subject. A mutant is
+# dead on an arm iff the arm TRIPS (exits 1 having printed a FAIL line) under it. PER PUSH each mutant
+# runs its DECIDING arm, which must trip, and its TWIN, a different arm the measured matrix shows GREEN
+# for it, which must stay green: the kill is confined to the deciding arm. The kill is emitted through
+# mutant_killed (lib/mutant.sh) behind the same-run pass of the unmutated deciding arm, of the twin, and
+# of the unmutated copy MX0. `--matrix` runs every mutant (and MX0) on EVERY arm and prints one MATRIX
+# row per cell, polarity explicit, from the sourced lib/matrix.sh. These header lines ARE the table the
+# driver reads, so there is no second copy to drift. The matrix is re-measured whenever an arm or a
+# mutant is added or changed, from the repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir;
+# it is not run through hermetic-run.sh, which runs under env -i and forwards no argument.
+# C31 is not an arm: it re-launches C23 from / and takes no subject.
+#
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/wait-stale-deliverable/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC table-loop why=the driver reads the MUTANT-MATRIX rows below back from this file and passes each name to mutant_killed as a variable, so every name the loop produces has its own row
+# MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy must trip no arm; it is the base pass every kill is gated on
+# MUTANT-MATRIX grant-cap decides=C12_progress_bounded twins=C11_progress_extends
+# MUTANT-MATRIX unprune-wait-beats decides=C13_progress_ignores_own_state twins=C11_progress_extends
+# MUTANT-MATRIX unexclude-beat-inflight decides=C13_progress_ignores_own_state twins=C11_progress_extends
+# MUTANT-MATRIX state-dir-guard decides=C14_progress_guards twins=C13_progress_ignores_own_state
+# MUTANT-MATRIX path-exists-check decides=C14_progress_guards twins=C13_progress_ignores_own_state
+# MUTANT-MATRIX progress-sampling decides=C11_progress_extends twins=C13_progress_ignores_own_state
+# MUTANT-MATRIX resample-gate decides=C22_chained_progress twins=C23_chained_noprogress
+# MUTANT-MATRIX restamp-ungated decides=C24_chained_window twins=C25_sleeping_restamp
+# MUTANT-MATRIX no-restamp decides=C25_sleeping_restamp twins=C24_chained_window
+# MUTANT-MATRIX grant-unconditional decides=C23_chained_noprogress twins=C22_chained_progress
+# MUTANT-MATRIX grant-no-counter-rewrite decides=C22_chained_progress twins=C23_chained_noprogress
+# MUTANT-MATRIX lease-trap-unconditional decides=C33_lease_handoff twins=C38_lease_early
+# MUTANT-MATRIX lease-no-heir decides=C33_lease_handoff twins=C38_lease_early
+# MUTANT-MATRIX lease-always-put decides=C36_lease_noclobber twins=C38_lease_early
+# MUTANT-MATRIX lease-no-early decides=C38_lease_early twins=C44_bare_epoch
+# MUTANT-MATRIX no-join-memo decides=C40_two_beats_one_path twins=C42_memo_single
+# MUTANT-MATRIX since-kept-on-delivery decides=C42_memo_single twins=C44_bare_epoch
+# MUTANT-MATRIX preupgrade-taken decides=C44_bare_epoch twins=C38_lease_early
+# MUTANT-MATRIX lease-end-time decides=C10_marker_goes_stale twins=C44_bare_epoch
 #
 set -uo pipefail
 
@@ -68,6 +80,15 @@ fails=0
 broken=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# PRECONDITIONS ARE NOT TARGETS. A precondition (the beats ran in their own shells, A was asleep when the
+# marker was read, the kill came early enough, ...) is a fact about the HARNESS. pre_bad counts one, and a
+# --run-one worker that saw any exits 2 (FIXTURE BROKEN), never 1 (an assertion regressed), so a mutant
+# cell whose precondition failed can never be read as a kill. pre_ok also records its text in PRE_FILE (the
+# driver's per-cell side channel) so the driver can re-print it under the mutant's name and compare its count
+# against the same arm's count on the real subject.
+PRE_FILE=""; pre_fails=0
+pre_ok()  { ok "$1"; if [ -n "$PRE_FILE" ]; then printf '%s\n' "$1" >> "$PRE_FILE"; fi; }
+pre_bad() { bad "$1"; pre_fails=$((pre_fails+1)); }
 
 # A short beat keeps the suite fast. AI_DLC_WAIT_MARGIN_SECS is load-bearing and
 # easy to miss: MARGIN defaults to 10, and RESERVE = max(MARGIN, POLL), so with the
@@ -682,8 +703,8 @@ run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
 }
 stale_preconditions() { # <label>
   if [ "$MS_DISCRIM" -eq 1 ]; then
-    ok "$1: CONTROL — the kill came early enough that an END-time lease would lie above the per-poll bound"
-  else bad "$1: the kill came $(( MS_KILL_T - MS_T0 ))s after the start, so an END-time lease also fits under the bound — this run cannot tell the two apart (refused, not scored)"; fi
+    pre_ok "$1: CONTROL — the kill came early enough that an END-time lease would lie above the per-poll bound"
+  else pre_bad "$1: the kill came $(( MS_KILL_T - MS_T0 ))s after the start, so an END-time lease also fits under the bound — this run cannot tell the two apart (refused, not scored)"; fi
 }
 C10_marker_goes_stale() {
 run_stale "$SUBJ"
@@ -699,22 +720,6 @@ case "$MS_LEASE" in
 esac
 rm -rf "$W"
 }
-# The END-time marker must be what this bound catches. Presence-shaped: the lease must be a number
-# AND lie above the bound, so a mutant that wrote no marker cannot score the kill.
-C47_mut_lease_end_time() {
-mutant lease-end-time
-run_stale "$MUT"
-stale_preconditions "MUTANT lease-end-time"
-case "$MS_LEASE" in
-  ''|*[!0-9]*) bad "MUTANT lease-end-time: no numeric marker after SIGKILL — the mutant did not write the lease it was built to write" ;;
-  *)
-    if [ "$MS_LEASE" -gt $(( MS_KILL_T + 3 * MS_POLL )) ]; then
-      ok "MUTANT lease-end-time: an END-time lease ($MS_LEASE) lies past the kill ($MS_KILL_T) + 3 polls and is caught"
-    else bad "MUTANT lease-end-time: END-time lease $MS_LEASE fits under the per-poll bound; the bound is not what separates them"; fi ;;
-esac
-rm -rf "$W"
-}
-
 # --- 10. an exhausted sequence with evidence of work is EXTENDED, not declared ---
 # The clock says the teammate is dead; the filesystem says it wrote a file during
 # the last beat. Both prior fixes for this failure only moved the clock, and S298
@@ -818,99 +823,6 @@ rm -rf "$W"
 # mark deliberately. See the seed file -- without that, `progressed_since` has
 # nothing to compare against on its first call and every mutant looks equally dead.
 
-C15_mut_grant_cap() {
-mutant grant-cap
-M="$MUT"
-W="$( bash "$SEED" progress-bounded )"
-beat_with "$M" "$W" --progress-path wt
-if [ "$RC" -eq 0 ]; then
-  ok "MUTANT grant-cap: without the cap a spent-grant join keeps extending — an unbounded wait"
-else bad "MUTANT grant-cap: still rc $RC with the cap removed; the cap is not what bounds the extension"; fi
-rm -rf "$W"
-}
-
-# Two prunes, mutated separately. Lumping them proves only that ONE of the two is
-# load-bearing, and the seed ticks both `.wait-beats/<key>` and `.beat-inflight`.
-C16_mut_unprune_wait_beats() {
-mutant unprune-wait-beats
-M="$MUT"
-W="$( bash "$SEED" progress-ignores-own-state )"
-beat_with "$M" "$W" --progress-path wt
-if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
-  ok "MUTANT unprune-wait-beats: a teammate's own beat counters then read as work"
-else bad "MUTANT unprune-wait-beats: rc $RC without the .wait-beats prune; the prune is not what excludes them"; fi
-rm -rf "$W"
-}
-
-C17_mut_unexclude_beat_inflight() {
-mutant unexclude-beat-inflight
-M="$MUT"
-W="$( bash "$SEED" progress-ignores-own-state )"
-beat_with "$M" "$W" --progress-path wt
-if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
-  ok "MUTANT unexclude-beat-inflight: a heartbeat marker then reads as work"
-else bad "MUTANT unexclude-beat-inflight: rc $RC without the exclusion; it is not what excludes the marker"; fi
-rm -rf "$W"
-}
-
-# Neutering SD_ABS rather than the comparison: the guard reads `[ -n "$SD_ABS" ]`,
-# so an unresolvable state dir disables it wholesale. One line, unambiguously aimed.
-C18_mut_state_dir_guard() {
-mutant state-dir-guard
-M="$MUT"
-W="$( bash "$SEED" progress-guards )"
-beat_with "$M" "$W" --progress-path _bmad-output
-# `-eq 0`, not `-ne 64`: a mutant that failed to build exits 127, and `-ne 64`
-# would read that as proof. The assertion has to name the outcome it expects.
-if [ "$RC" -eq 0 ]; then
-  ok "MUTANT state-dir-guard: _bmad-output is then accepted — progress becomes permanently true"
-else bad "MUTANT state-dir-guard: rc $RC, expected a normal beat; the guard is not what rejects it"; fi
-rm -rf "$W"
-}
-
-C19_mut_path_exists_check() {
-mutant path-exists-check
-M="$MUT"
-W="$( bash "$SEED" progress-guards )"
-beat_with "$M" "$W" --progress-path no-such-dir
-if [ "$RC" -eq 0 ]; then
-  ok "MUTANT path-exists-check: a typo'd path is then accepted and grants nothing, forever"
-else bad "MUTANT path-exists-check: rc $RC, expected a normal beat; the check is not what rejects it"; fi
-rm -rf "$W"
-}
-
-C20_mut_progress_sampling() {
-mutant progress-sampling
-M="$MUT"
-W="$( bash "$SEED" progress-extends )"
-beat_with "$M" "$W" --progress-path wt
-if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
-  ok "MUTANT progress-sampling: a demonstrably working teammate is declared non-delivered"
-else bad "MUTANT progress-sampling: rc $RC without sampling; the grant is reachable by some other route"; fi
-rm -rf "$W"
-}
-
-# The other half of the claim: none of the six changes the FLAGLESS path. Asserted
-# rather than described, because "strictly additive" is exactly the sort of promise
-# that quietly stops being true. `exhausted` is the case with the most to lose --
-# it is the one state that still exits nonzero.
-C21_mut_flagless_path() {
-for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
-             path-exists-check progress-sampling \
-             resample-gate restamp-ungated no-restamp grant-unconditional \
-             grant-no-counter-rewrite \
-             lease-trap-unconditional lease-no-heir lease-always-put lease-no-early \
-             no-join-memo since-kept-on-delivery preupgrade-taken lease-end-time; do
-  mutant "$mname"
-  W="$( bash "$SEED" exhausted )"
-  beat_with "$MUT" "$W"
-  if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
-    ok "MUTANT $mname: the flagless path is untouched (exhausted still rc 1)"
-  else bad "MUTANT $mname: rc $RC on a flagless join — this mutant reaches code the default path uses"; fi
-  rm -rf "$W"
-done
-}
-
 # --- 15. A CHAINED SIBLING MUST NOT REPORT A WORKING TEAMMATE AS NON-DELIVERY ----
 # Cases 10-13 all run with MAY_SLEEP=1, and that is why the defect below shipped
 # under a green fixture. The subject gated BOTH the progress SAMPLE and the mark
@@ -932,8 +844,8 @@ sibling_witness() { # <work> <label> -- a HARNESS control, not a claim about the
   local n
   n="$(find "$1/_bmad-output/.wait-beats" -maxdepth 1 -name '.shell-*' | grep -c . || true)"
   if [ "$n" = "1" ]; then
-    ok "$2: CONTROL — one sibling marker, so the seeding shell IS the subject's parent"
-  else bad "$2: $n sibling markers — the seeded marker is not the one the subject keyed on, so this case did not run with MAY_SLEEP=0"; fi
+    pre_ok "$2: CONTROL — one sibling marker, so the seeding shell IS the subject's parent"
+  else pre_bad "$2: $n sibling markers — the seeded marker is not the one the subject keyed on, so this case did not run with MAY_SLEEP=0"; fi
 }
 
 C22_chained_progress() {
@@ -1092,79 +1004,6 @@ rm -rf "$W"
 # Reverting them together would produce a mutant that proves whichever half was left
 # in place -- and it comes out green.
 
-# THE DEFECT ITSELF, reinstated. This is the pre-fix subject at the one line that
-# changed, so this mutant is the measurement that case 15 was worth writing.
-C27_mut_resample_gate() {
-mutant resample-gate
-M="$MUT"
-W="$( bash "$SEED" chained-progress )"
-chained_beat "$M" "$W" --progress-path wt
-if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
-  ok "MUTANT resample-gate: gating the SAMPLE on MAY_SLEEP declares a demonstrably working teammate non-delivered"
-else bad "MUTANT resample-gate: rc $RC with the sample re-gated; the ungated sample is not what reaches the grant"; fi
-rm -rf "$W"
-}
-
-# The opposite over-correction: a fix that simply deleted the gate. The grant works,
-# and the window it depends on is destroyed by every non-sleeping sibling.
-C28_mut_restamp_ungated() {
-KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
-W="$( bash "$SEED" chained-window )"
-MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
-M0="$( fx_mtime "$MARK" )"
-mutant restamp-ungated
-M="$MUT"
-chained_beat "$M" "$W" --progress-path wt
-if [ "$( fx_mtime "$MARK" )" != "$M0" ]; then
-  ok "MUTANT restamp-ungated: without the re-stamp gate a non-sleeping sibling shrinks the window"
-else bad "MUTANT restamp-ungated: the mark is unchanged with the gate removed; the gate is not what protects the window"; fi
-rm -rf "$W"
-}
-
-# And the subtraction the other two would both tolerate: no re-stamp at all. It
-# passes cases 15, 16, 17 and 19 -- only case 18 sees it.
-C29_mut_no_restamp() {
-KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
-W="$( bash "$SEED" sleeping-restamp )"
-MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
-M0="$( fx_mtime "$MARK" )"
-mutant no-restamp
-M="$MUT"
-beat_with "$M" "$W" --progress-path wt
-if [ "$( fx_mtime "$MARK" )" = "$M0" ]; then
-  ok "MUTANT no-restamp: with the re-stamp deleted a sleeping beat never closes the window"
-else bad "MUTANT no-restamp: the mark still moved; the deleted line is not what re-stamps it"; fi
-rm -rf "$W"
-}
-
-# Case 16's mutant. Without it, case 16 establishes that the arm is quiet on a tree
-# with no progress -- but not that anything in the subject is doing the discriminating.
-C30_mut_grant_unconditional() {
-mutant grant-unconditional
-M="$MUT"
-W="$( bash "$SEED" chained-noprogress )"
-chained_beat "$M" "$W" --progress-path wt
-if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
-  ok "MUTANT grant-unconditional: a subject that grants without evidence extends the wait forever"
-else bad "MUTANT grant-unconditional: rc $RC with PROGRESSED forced to 1; the sample is not what gates the grant"; fi
-rm -rf "$W"
-}
-
-# Case 15's counter assertion, proven load-bearing. Without the rewrite the grant arm
-# stays reachable, so a SECOND sibling in the same Bash call grants again -- and the
-# grant budget empties in one turn while the beat budget is untouched.
-C32_mut_grant_no_counter_rewrite() {
-KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
-mutant grant-no-counter-rewrite
-M="$MUT"
-W="$( bash "$SEED" chained-progress )"
-chained_beat "$M" "$W" --progress-path wt
-if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}" 2>/dev/null)" = "6" ]; then
-  ok "MUTANT grant-no-counter-rewrite: the counter stays at the bound, so the next sibling in this call grants again"
-else bad "MUTANT grant-no-counter-rewrite: counter is not at the bound with the rewrite removed; something else is holding it down"; fi
-rm -rf "$W"
-}
-
 # ===========================================================================
 # CONCURRENT BEATS: THE LEASE, AND THE PER-PROCESS JOIN MEMO (cases 33-45)
 # ===========================================================================
@@ -1281,8 +1120,8 @@ separate_shells() { # <work> <beats started> <out>... -> sets SHELLS_OK
   for f in "$@"; do grep -q 'a sibling beat already ran' "$f" && SHELLS_OK=0; done
 }
 say_shells() { # <label>
-  if [ "$SHELLS_OK" -eq 1 ]; then ok "$1: CONTROL — each beat ran in its own parent shell (one .shell marker per beat, no sibling NOTE)"
-  else bad "$1: beats shared a parent shell or took the chained-sibling return — this case did not test concurrent sleeping beats"; fi
+  if [ "$SHELLS_OK" -eq 1 ]; then pre_ok "$1: CONTROL — each beat ran in its own parent shell (one .shell marker per beat, no sibling NOTE)"
+  else pre_bad "$1: beats shared a parent shell or took the chained-sibling return — this case did not test concurrent sleeping beats"; fi
 }
 
 # --- the lease handoff --------------------------------------------------------------------
@@ -1307,10 +1146,18 @@ say_shells() { # <label>
 HO_POLL=600
 run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   W="$( bash "$SEED" lease-handoff )"
-  local pb pa sp
+  local pb pa sp bs_path bs_log
+  # B GETS A's CONSTRUCTION, NOT A CLOCK. B once ran POLL 1, so its lease was `now + 3` and a beat
+  # stalled for 3s on a loaded box let that lease LAPSE; A's pre-loop write then legitimately took the
+  # expired marker (`B=.. A=.. holder=A`). Freezing B cannot repair that, a stopped beat re-stamps
+  # nothing. So B is parked the way A is: POLL 600 under its OWN recording sleep stub (a separate dir, so
+  # A's record, HO_SLEEPS, still counts only A's sleeps), a lease of 3 x POLL that no load can reach, and
+  # A is not started until B's stub has RECORDED B's first poll sleep, which is after both of B's
+  # pre-loop lease writes. The order is a file, not a delay. B is woken on purpose below, as A is.
+  sleep_stub "$W/.stubB"; bs_path="$STUB_PATH"; bs_log="$STUB_LOG"
   sleep_stub "$W/.stub"
-  bg_beat "$1" "$W" "$W/b.out" 20 1 b.md; pb=$BG
-  until_true 100 test -s "$W/_bmad-output/.beat-inflight" || true
+  BG_PATH="$bs_path"; bg_beat "$1" "$W" "$W/b.out" "$(( 2 * HO_POLL ))" "$HO_POLL" b.md; pb=$BG; BG_PATH=""
+  HO_B_ASLEEP=0; until_true 600 test -s "$bs_log" && HO_B_ASLEEP=1
   HO_B="$(marker_pid "$W")"
   BG_PATH="$STUB_PATH"; bg_beat "$1" "$W" "$W/a.out" "$(( 2 * HO_POLL ))" "$HO_POLL" a.md; pa=$BG; BG_PATH=""
   until_true 100 leases_are "$W" 2 || true
@@ -1332,6 +1179,10 @@ run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   HO_SLEEPS="$(stub_lines)"
   HO_UNWOKEN=0; [ "$HO_SLEEPS" = "1" ] && tree_has_sleep "$pa" && HO_UNWOKEN=1
   printf 'the answer B was waiting for\n' > "$W/b.md"
+  # WAKE B ON PURPOSE: end its stub sleep. B's loop re-stamps, finds b.md and delivers, so its exit (the
+  # event under test) happens now and the passing path never waits out B's long POLL. A is still frozen.
+  tree_kill_sleep "$pb"
+  until_true 1200 eval '! kill -0 "$pb" 2>/dev/null' || reap_tree "$pb"
   wait "$pb" 2>/dev/null || true
   HO_AFTER="$(marker_of "$W")"
   HO_NOW="$(date +%s)"
@@ -1352,15 +1203,15 @@ run_handoff() { # <subject> -> HO_* ; leaves W for the caller
 }
 handoff_preconditions() { # <label> -- the harness facts both the case and its mutants rest on
   say_shells "$1"
-  if [ -n "$HO_B" ] && [ "$HO_HOLDER0" = "$HO_B" ] && [ -n "$HO_A" ] && [ "$HO_A" != "$HO_B" ]; then
-    ok "$1: CONTROL — B held the marker and A was registered before B's target landed"
-  else bad "$1: B=$HO_B A=$HO_A holder=$HO_HOLDER0 — B was not the holder, so its exit cannot exercise the handoff"; fi
-  if [ "$HO_A_ALIVE" -eq 1 ]; then ok "$1: CONTROL — A was still asleep when the marker was read"
-  else bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
-  if [ "$HO_A_ASLEEP" -eq 1 ]; then ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
-  else bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
-  if [ "$HO_UNWOKEN" -eq 1 ]; then ok "$1: CONTROL — at the freeze A had entered exactly one poll sleep and was still in it, so no wake of A's re-took the marker before the read"
-  else bad "$1: at the freeze A had recorded $HO_SLEEPS poll sleep(s), or its sleep had already returned — A may have re-stamped before the read, so this read cannot see B's exit (void)"; fi
+  if [ "$HO_B_ASLEEP" -eq 1 ] && [ -n "$HO_B" ] && [ "$HO_HOLDER0" = "$HO_B" ] && [ -n "$HO_A" ] && [ "$HO_A" != "$HO_B" ]; then
+    pre_ok "$1: CONTROL — B held the marker and A was registered before B's target landed"
+  else pre_bad "$1: B=$HO_B A=$HO_A holder=$HO_HOLDER0 — B was not the holder, so its exit cannot exercise the handoff"; fi
+  if [ "$HO_A_ALIVE" -eq 1 ]; then pre_ok "$1: CONTROL — A was still asleep when the marker was read"
+  else pre_bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
+  if [ "$HO_A_ASLEEP" -eq 1 ]; then pre_ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
+  else pre_bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
+  if [ "$HO_UNWOKEN" -eq 1 ]; then pre_ok "$1: CONTROL — at the freeze A had entered exactly one poll sleep and was still in it, so no wake of A's re-took the marker before the read"
+  else pre_bad "$1: at the freeze A had recorded $HO_SLEEPS poll sleep(s), or its sleep had already returned — A may have re-stamped before the read, so this read cannot see B's exit (void)"; fi
 }
 C33_lease_handoff() {
 run_handoff "$SUBJ"
@@ -1377,25 +1228,6 @@ if grep -q '^DELIVERED a.md' "$W/a.out" && [ "$HO_GONE" -eq 1 ]; then
 else bad "lease-handoff: the marker survived the last beat (or A never delivered) — a dead join would authorize a silent stall"; fi
 rm -rf "$W"
 }
-C34_mut_lease_trap_unconditional() {
-mutant lease-trap-unconditional
-run_handoff "$MUT"
-handoff_preconditions "MUTANT lease-trap-unconditional"
-if [ -z "$HO_AFTER" ]; then
-  ok "MUTANT lease-trap-unconditional: an unconditional EXIT trap deletes the marker while A sleeps"
-else bad "MUTANT lease-trap-unconditional: marker '$HO_AFTER' survived B's exit with the old trap; the trap is not what the arm measures"; fi
-rm -rf "$W"
-}
-C35_mut_lease_no_heir() {
-mutant lease-no-heir
-run_handoff "$MUT"
-handoff_preconditions "MUTANT lease-no-heir"
-if [ -z "$HO_AFTER" ]; then
-  ok "MUTANT lease-no-heir: a holder that releases without an heir leaves A unleased until its next poll"
-else bad "MUTANT lease-no-heir: marker '$HO_AFTER' survived B's exit with no handoff; the read is outside A's poll window"; fi
-rm -rf "$W"
-}
-
 # --- no clobber ---------------------------------------------------------------------------
 # An after-exit byte comparison cannot see a beat that takes a live holder's marker: on exit it
 # holds it, hands it to the heir, and writes A's own epoch and pid back -- byte-identical. So the
@@ -1467,14 +1299,14 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
 noclobber_preconditions() { # <label>
   say_shells "$1"
   if [ "$NC_DELIV" = "30" ] && [ "$NC_A_ALIVE" -eq 1 ]; then
-    ok "$1: CONTROL — the second beat delivered all 30 targets while A ($NC_A) stayed alive"
-  else bad "$1: delivered $NC_DELIV of 30, A alive=$NC_A_ALIVE — the window under test never ran"; fi
+    pre_ok "$1: CONTROL — the second beat delivered all 30 targets while A ($NC_A) stayed alive"
+  else pre_bad "$1: delivered $NC_DELIV of 30, A alive=$NC_A_ALIVE — the window under test never ran"; fi
   if [ "$NC_A_ASLEEP" -eq 1 ] && [ "$NC_A_STOPPED" -eq 1 ]; then
-    ok "$1: CONTROL — A was in its poll sleep when frozen and still frozen at the window's end, so no marker write in the window is A's"
-  else bad "$1: A asleep=$NC_A_ASLEEP stopped=$NC_A_STOPPED — A could write the marker inside the window, so a change there is not attributable to the second beat"; fi
+    pre_ok "$1: CONTROL — A was in its poll sleep when frozen and still frozen at the window's end, so no marker write in the window is A's"
+  else pre_bad "$1: A asleep=$NC_A_ASLEEP stopped=$NC_A_STOPPED — A could write the marker inside the window, so a change there is not attributable to the second beat"; fi
   if [ "$NC_A_LEASED" -eq 1 ]; then
-    ok "$1: CONTROL — A's registration was still in the future at the window's end; no beat could take the marker legitimately"
-  else bad "$1: A's .lease-$NC_A was expired or absent at the window's end — a correct beat may take a dead holder's marker, so a change there is not a clobber"; fi
+    pre_ok "$1: CONTROL — A's registration was still in the future at the window's end; no beat could take the marker legitimately"
+  else pre_bad "$1: A's .lease-$NC_A was expired or absent at the window's end — a correct beat may take a dead holder's marker, so a change there is not a clobber"; fi
 }
 # What a sampled change MEANS, once the controls above hold. A is frozen, so A wrote nothing in
 # the window: a marker naming another pid is the second beat holding it, and a marker naming A's
@@ -1502,16 +1334,6 @@ if [ "$NC_AFTER" = "$NC_M0" ]; then ok "lease-noclobber: CONTROL — A's marker 
 else bad "lease-noclobber: marker '$NC_AFTER' after the instant beat, expected A's '$NC_M0'"; fi
 rm -rf "$W"
 }
-C37_mut_lease_always_put() {
-mutant lease-always-put
-run_noclobber "$MUT"
-noclobber_preconditions "MUTANT lease-always-put"
-if [ -n "$NC_FOREIGN" ]; then
-  ok "MUTANT lease-always-put: a beat that always takes the marker names itself over a live holder mid-beat ('$NC_FOREIGN')"
-else bad "MUTANT lease-always-put: no mid-beat sample named a pid other than A's; the guard is not what keeps the marker"; fi
-rm -rf "$W"
-}
-
 # --- the lease is written before the sweep --------------------------------------------------
 # The subject writes the marker strictly before it writes any `.since`, and never deletes it
 # mid-run, so the predicate is deterministic in both directions: AT THE FIRST OBSERVATION of a
@@ -1542,8 +1364,8 @@ run_early() { # <subject> -> EA_* ; leaves W
 }
 early_preconditions() { # <label>
   if [ "$EA_SEEN" -eq 1 ] && [ "$EA_CNT" -lt "$EARLY_N" ]; then
-    ok "$1: CONTROL — the first sidecar was observed mid-sweep ($EA_CNT of $EARLY_N)"
-  else bad "$1: observed=$EA_SEEN at $EA_CNT of $EARLY_N sidecars — the observation was not inside the sweep"; fi
+    pre_ok "$1: CONTROL — the first sidecar was observed mid-sweep ($EA_CNT of $EARLY_N)"
+  else pre_bad "$1: observed=$EA_SEEN at $EA_CNT of $EARLY_N sidecars — the observation was not inside the sweep"; fi
 }
 C38_lease_early() {
 run_early "$SUBJ"
@@ -1552,15 +1374,6 @@ if [ "$EA_MARK" -eq 1 ]; then ok "lease-early: .beat-inflight exists before the 
 else bad "lease-early: no marker when the first sidecar appeared — a large wave leaves the hook seeing no beat while it sweeps"; fi
 rm -rf "$W"
 }
-C39_mut_lease_no_early() {
-mutant lease-no-early
-run_early "$MUT"
-early_preconditions "MUTANT lease-no-early"
-if [ "$EA_MARK" -eq 0 ]; then ok "MUTANT lease-no-early: without the early lease the sweep runs with no marker"
-else bad "MUTANT lease-no-early: the marker existed mid-sweep with the early call deleted; something else writes it first"; fi
-rm -rf "$W"
-}
-
 # --- two beats, one path --------------------------------------------------------------------
 # Both armed over a seat file before it exists, each from its own shell. The memo matters only
 # when the second beat's NEXT `.since` read comes AFTER the first beat delivered and deleted it;
@@ -1611,8 +1424,8 @@ run_two_beats() { # <subject> -> TB_* ; leaves W
   separate_shells "$W" 2 "$W/1.out" "$W/2.out"
 }
 say_ordered() { # <label>
-  if [ "$TB_ORDERED" -eq 1 ]; then ok "$1: CONTROL — beat 2 was frozen in its poll sleep until beat 1 delivered, .since was gone and the seal's second had passed"
-  else bad "$1: the order was not imposed (beat 2 never frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
+  if [ "$TB_ORDERED" -eq 1 ]; then pre_ok "$1: CONTROL — beat 2 was frozen in its poll sleep until beat 1 delivered, .since was gone and the seal's second had passed"
+  else pre_bad "$1: the order was not imposed (beat 2 never frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
 }
 C40_two_beats_one_path() {
 run_two_beats "$SUBJ"
@@ -1622,16 +1435,6 @@ if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed
 else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
 rm -rf "$W"
 }
-C41_mut_no_join_memo() {
-mutant no-join-memo
-run_two_beats "$MUT"
-say_shells "MUTANT no-join-memo"
-say_ordered "MUTANT no-join-memo"
-if [ "$TB_N" -eq 1 ]; then ok "MUTANT no-join-memo: without the memo one beat reports a sealed file WAITING"
-else bad "MUTANT no-join-memo: $TB_N of 2 delivered with the memo removed; the memo is not what carries the second beat"; fi
-rm -rf "$W"
-}
-
 # --- ...and a LATER beat still reads a delivered file as pre-existing (Rule 28) -------------
 # The memo lives in one process and never re-creates a sidecar, so a NEW beat without --since
 # arms at `now` and does not accept the file. It is armed two whole seconds after the write:
@@ -1662,16 +1465,6 @@ if [ "$MS_RC" -eq 0 ] && ! grep -q '^DELIVERED' "$W/2.out" && grep -q 'already h
 else bad "memo-single: rc $MS_RC — a later beat accepted a file delivered to an earlier join, or gave no NOTE"; fi
 rm -rf "$W"
 }
-C43_mut_since_kept_on_delivery() {
-mutant since-kept-on-delivery
-run_memo_single "$MUT"
-say_shells "MUTANT since-kept-on-delivery"
-if grep -q '^DELIVERED x.md' "$W/2.out"; then
-  ok "MUTANT since-kept-on-delivery: keeping .since on delivery makes a later beat accept the earlier join's file"
-else bad "MUTANT since-kept-on-delivery: the later beat did not deliver with .since kept; the arm cannot tell this fix from the memo"; fi
-rm -rf "$W"
-}
-
 # --- a live pre-upgrade lease is left alone -------------------------------------------------
 run_bare_epoch() { # <subject> -> BE_* ; leaves W
   W="$( bash "$SEED" bare-epoch )"
@@ -1702,15 +1495,6 @@ if [ "$BE_RC" -eq 0 ] && grep -q '^WAITING' "$W/o.out"; then ok "bare-epoch: the
 else bad "bare-epoch: rc $BE_RC and no WAITING line — the beat did not run normally beside an old lease"; fi
 rm -rf "$W"
 }
-C45_mut_preupgrade_taken() {
-mutant preupgrade-taken
-run_bare_epoch "$MUT"
-say_shells "MUTANT preupgrade-taken"
-if [ -n "$BE_SEEN" ]; then ok "MUTANT preupgrade-taken: without the guard the beat takes the old lease (read '$BE_SEEN')"
-else bad "MUTANT preupgrade-taken: the marker never changed with the guard deleted; the guard is not what leaves it alone"; fi
-rm -rf "$W"
-}
-
 # --- 22. every exit code the beat can return is named in Rule 29's exit list ---
 # The lead decides what to do from Rule 29's list, not from the script. A code the script returns
 # and the list does not name is read by its nearest neighbour: a refused call (64) was read as
@@ -1815,9 +1599,17 @@ if [ "${1:-}" = "--run-one" ]; then
     echo "FIXTURE ERROR: --run-one needs a case function name; '$FN' is not one" >&2
     exit 2
   }
+  # An optional third word names the SUBJECT this one arm runs against: a mutant copy, or the unmutated
+  # copy. Absent, the arm runs on the real subject. Every arm reads $SUBJ, so one arm and one subject are one cell.
+  PRE_FILE="${4:-}"
+  if [ -n "${3:-}" ] && [ "${3:-}" != "-" ]; then
+    [ -f "$3" ] || { echo "FIXTURE ERROR: --run-one subject '$3' is not a file" >&2; exit 2; }
+    SUBJ="$3"
+  fi
   setup_tmp
   echo "wait-stale-deliverable:"   >/dev/null   # the header belongs to the parent, not here
   "$FN"
+  [ "$pre_fails" -eq 0 ] || exit 2
   [ "$fails" -eq 0 ] || exit 1
   exit 0
 fi
@@ -1825,57 +1617,204 @@ fi
 # THE CASE LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order, with a zero
 # guard. A hand-written list would be the defect this fixture's own subject is about: a case
 # dropped from it runs nothing, prints nothing, and 20 greens read exactly like 21.
+MATRIX=0
+case "${1:-}" in
+  "") ;;
+  --matrix) MATRIX=1 ;;
+  *) echo "FIXTURE ERROR: unknown argument '${1:-}' (usage: run.sh [--matrix])" >&2; exit 2 ;;
+esac
 NAMES="$(grep -oE '^C[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
 N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
 if [ "$N_LISTED" -lt 10 ]; then
   echo "FIXTURE ERROR: derived $N_LISTED case(s) from this file — the C<nn>_ naming grammar moved" >&2
   exit 2
 fi
+# C31 re-launches C23 from / and takes no subject, so no mutant can reach it: a base arm only.
+ARMS="$(printf '%s\n' "$NAMES" | grep -v '^C31_')"
+N_ARMS="$(printf '%s\n' "$ARMS" | grep -c . || true)"
+# A here-string read, never a pipe into grep -q: has_arm <name> is 0 when <name> is one of the arms.
+has_arm() { grep -qx "$1" <<<"$ARMS"; }
+
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+MX_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/matrix.sh"
+[ -f "$MUT_LIB" ] && [ -f "$MX_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+. "$MX_LIB"
 
 echo "wait-stale-deliverable:"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
 SELF="$HERE/$(basename "$0")"
+MUTDIR="$OUT/mutants"
+mkdir "$MUTDIR" || { echo "FIXTURE ERROR: cannot create the mutant dir" >&2; exit 2; }
+
+# THE MUTANT TABLE IS THIS FILE'S OWN HEADER, read back: one `# MUTANT-MATRIX <m> decides=<arm>
+# twins=<arm>` line per mutant. The driver and the header cannot disagree because they are one text.
+grep -E '^# MUTANT-MATRIX [A-Za-z0-9_-]+ decides=[A-Za-z0-9_]+ twins=[A-Za-z0-9_]+$' "$0" \
+  | sed -e 's/^# MUTANT-MATRIX //' -e 's/ decides=/ /' -e 's/ twins=/ /' > "$OUT/table"
+N_MUT="$(grep -c . "$OUT/table" || true)"
+if [ "$N_MUT" -lt 10 ]; then echo "FIXTURE ERROR: read only $N_MUT mutant row(s) from the header" >&2; exit 2; fi
+while read -r m d t; do
+  has_arm "$d" && has_arm "$t" || { echo "FIXTURE ERROR: header row '$m' names an arm that does not exist ($d / $t)" >&2; exit 2; }
+  [ "$d" != "$t" ] || { echo "FIXTURE ERROR: header row '$m' has twin equal to deciding ($d)" >&2; exit 2; }
+  mutant "$m"
+done < "$OUT/table"
+# THE UNMUTATED COPY (MX0), built the way a mutant is: a copy in the mutant directory.
+cp "$SUBJ" "$MUTDIR/MX0.sh" || { echo "FIXTURE ERROR: cannot copy the subject for MX0" >&2; exit 2; }
+MX0_SAME=0; cmp -s "$SUBJ" "$MUTDIR/MX0.sh" && MX0_SAME=1
+
+# JOBS. Every worker is `--run-one <arm> [<subject>]`: one arm, one process, one subject. Base arms
+# run on the real subject. PER PUSH a mutant's cells are its DECIDING arm and its TWIN; under
+# --matrix they are EVERY arm. One cell, run once, serves the verdict and the matrix row.
+: > "$OUT/jobs"
+while read -r m d t; do
+  if [ "$MATRIX" -eq 1 ]; then cells="$ARMS"; else cells="$d
+$t"; fi
+  for a in $cells; do printf 'x.%s.%s|%s|%s\n' "$m" "$a" "$a" "$MUTDIR/$m.sh" >> "$OUT/jobs"; done
+done < "$OUT/table"
+if [ "$MATRIX" -eq 1 ]; then mx0_cells="$ARMS"; else mx0_cells="C06_regression_guards"; fi
+for a in $mx0_cells; do printf 'x.MX0.%s|%s|%s\n' "$a" "$a" "$MUTDIR/MX0.sh" >> "$OUT/jobs"; done
+for a in $NAMES; do printf 'b.%s|%s|-\n' "$a" "$a" >> "$OUT/jobs"; done
 
 # EIGHT. This pool nests inside the pre-push suite's, so a knob here would multiply against a
 # knob there; the cases sleep rather than compute, so eight of them cost about one core.
 JOBS=8
-printf '%s\n' "$NAMES" > "$OUT/list"
 AI_DLC_WS_SELF="$SELF" AI_DLC_WS_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
-    n="$1"
-    bash "$AI_DLC_WS_SELF" --run-one "$n" > "$AI_DLC_WS_OUT/$n" 2> "$AI_DLC_WS_OUT/$n.err"
-    printf %s $? > "$AI_DLC_WS_OUT/$n.rc"
-  ' _ {} < "$OUT/list"
+    IFS="|" read -r tag arm subj <<< "$1"
+    bash "$AI_DLC_WS_SELF" --run-one "$arm" "$subj" "$AI_DLC_WS_OUT/$tag.pre" > "$AI_DLC_WS_OUT/$tag" 2> "$AI_DLC_WS_OUT/$tag.err"
+    printf %s $? > "$AI_DLC_WS_OUT/$tag.rc"
+  ' _ {} < "$OUT/jobs"
 
-# Rendered in SOURCE order, never completion order, so the output is byte-comparable against
+# BASE ARMS, rendered in SOURCE order, never completion order, so the output is byte-comparable against
 # the serial version. A MISSING VERDICT IS A FAILURE: serially a case that never ran could not
 # print an `ok`, because the loop and the report were the same thing. With a pool they are not,
 # and a case that exits nonzero having printed nothing would add zero to the count -- which is
-# what a clean case adds.
+# what a clean case adds. An arm that passed sets B_<arm>=1, the same-run flag that gates the
+# mutant verdicts below.
 while IFS= read -r n; do
   [ -n "$n" ] || continue
-  if [ ! -f "$OUT/$n.rc" ]; then
+  if [ ! -f "$OUT/b.$n.rc" ]; then
     printf '  FAIL  %s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one\n' "$n"
     fails=$((fails + 1))
     continue
   fi
-  cat "$OUT/$n"
-  [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
-  wrc="$(cat "$OUT/$n.rc")"
+  cat "$OUT/b.$n"
+  [ -s "$OUT/b.$n.err" ] && cat "$OUT/b.$n.err" >&2
+  wrc="$(cat "$OUT/b.$n.rc")"
   # 2 IS NOT 1. `FIXTURE BROKEN` and `an assertion regressed` are different answers, and this
   # file's helpers have always used exit 2 for the first. Running a case in a worker would
   # otherwise collapse them: the parent would see a nonzero rc, charge one assertion, and exit
   # 1 — reporting a regression where the truth is that nothing was tested.
   if [ "$wrc" = "2" ]; then broken=1; fi
+  if [ "$wrc" = "0" ]; then eval "B_$n=1"; fi
   if [ "$wrc" != "0" ]; then
-    c="$(grep -c '^  FAIL' "$OUT/$n" || true)"
+    c="$(grep -c '^  FAIL' "$OUT/b.$n" || true)"
     [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the case did not run to a verdict\n' "$n"; c=1; }
     fails=$((fails + c))
   fi
-done < "$OUT/list"
+done <<EOF_NAMES
+$NAMES
+EOF_NAMES
+
+# A CELL is one arm run under one subject. cell_state sets CELL_RC and CELL_FAILS, and CELL_OK=0 when
+# the cell produced no verdict at all (the pool dropped it).
+CELL_RC=""; CELL_FAILS=0; CELL_OK=0
+cell_state() { # <mutant> <arm>
+  CELL_OK=0; CELL_RC=""; CELL_FAILS=0
+  [ -f "$OUT/x.$1.$2.rc" ] || return 0
+  CELL_OK=1
+  CELL_RC="$(cat "$OUT/x.$1.$2.rc")"
+  CELL_FAILS="$(grep -c '^  FAIL' "$OUT/x.$1.$2" || true)"
+}
+# TRIPPED means the arm exited 1 having printed at least one FAIL line. Exit 2 is FIXTURE BROKEN and
+# an exit 1 with no FAIL line printed nothing: neither is an arm tripping on the mutation.
+cell_tripped() { [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "1" ] && [ "$CELL_FAILS" -gt 0 ]; }
+cell_green() { [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "0" ]; }
+
+# THE UNMUTATED COPY, driven through the same harness as a mutant. It must be byte-identical to the
+# subject and its arm must pass, or every verdict below would be a verdict about the harness.
+cell_state MX0 C06_regression_guards
+B_MX0=0
+if [ "$MX0_SAME" -eq 1 ] && cell_green && grep -q '^  ok' "$OUT/x.MX0.C06_regression_guards"; then
+  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the subject, and the exhausted and absent arm passes under it"; B_MX0=1
+else bad "CONTROL MX0: the unmutated copy (identical=$MX0_SAME, rc ${CELL_RC:-none}) did not pass the arm — the mutant harness is not running the shipped behaviour"; fi
+
+# PER-MUTANT VERDICTS. The DECIDING arm must trip and the TWIN must stay green, so the kill is confined to
+# the one arm. Both unmutated arms and MX0 must have PASSED in this run first (mutant_killed refuses
+# otherwise): a deciding arm that already failed on the real subject would score every mutant dead.
+n_dead=0
+count_lines() { if [ -f "$1" ]; then grep -c . "$1" || true; else echo 0; fi; }
+while read -r m d t; do
+  bv="B_$d"; bt="B_$t"
+  cell_state "$m" "$d"
+  # A PRECONDITION FAILURE INSIDE A MUTANT CELL IS A FIXTURE ERROR, NEVER A KILL: the worker exits 2.
+  if [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "2" ]; then
+    bad "FIXTURE BROKEN: MUTANT $m on $d exited 2 — a precondition failed inside the mutant cell, so a trip there would not be earned"; broken=1; continue
+  fi
+  if cell_tripped; then dec_ok=1; else dec_ok=0; fi
+  # The preconditions must have RUN under the mutant: as many control lines as the same arm printed on
+  # the real subject. An arm that tripped before reaching them would otherwise score a kill unchecked.
+  n_pre_m="$(count_lines "$OUT/x.$m.$d.pre")"; n_pre_b="$(count_lines "$OUT/b.$d.pre")"
+  cell_state "$m" "$t"
+  if [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "2" ]; then
+    bad "FIXTURE BROKEN: MUTANT $m twin $t exited 2 — a precondition failed inside the mutant cell"; broken=1; continue
+  fi
+  if cell_green; then twin_ok=1; else twin_ok=0; fi
+  if [ "$dec_ok" -eq 0 ]; then
+    bad "MUTANT $m: deciding arm $d did not trip under the mutant — the mechanism is not what that arm measures"
+  elif [ "$n_pre_m" != "$n_pre_b" ]; then
+    bad "FIXTURE BROKEN: MUTANT $m on $d ran $n_pre_m precondition control(s) against $n_pre_b on the real subject — the kill is not earned"; broken=1
+  elif [ "$twin_ok" -eq 0 ]; then
+    bad "MUTANT $m: twin $t tripped (or gave no verdict) beside the deciding arm $d — the co-tripping changed; re-measure the matrix"
+  else
+    n_dead=$((n_dead + 1))
+    # The same controls the arm printed under its own name, re-printed under the mutant's, so the kill's
+    # preconditions are named per mutant.
+    if [ -f "$OUT/x.$m.$d.pre" ]; then
+      while IFS= read -r pl; do ok "MUTANT $m: ${pl#*: }"; done < "$OUT/x.$m.$d.pre"
+    fi
+    mutant_killed "$(( ${!bv:-0} && ${!bt:-0} && B_MX0 ))" "$m" "MUTANT $m: arm $d trips under the mutant while twin $t stays green"
+  fi
+done < "$OUT/table"
+
+# THE MATRIX, printed only under --matrix: every (mutant | MX0) x arm cell, with that cell's OWN
+# polarity. The tripped column is the arm's verdict under that subject, never the mutant's overall one.
+MROWS=0
+if [ "$MATRIX" -eq 1 ]; then
+  { cat "$OUT/table"; echo "MX0 - -"; } > "$OUT/table.all"
+  mx_bad=0; mx_pre=0
+  while read -r m d t; do
+    for a in $ARMS; do
+      cell_state "$m" "$a"
+      if [ "$CELL_OK" -ne 1 ]; then mx_bad=$((mx_bad + 1)); continue; fi
+      # rc 2 is a precondition failing inside the cell: the arm never reached its target, so the cell is neither
+      # green nor an arm tripping, and it is printed as such (killed=no). Only a DECIDING or TWIN cell at rc 2
+      # is fatal, and the verdict loop above already refuses that.
+      if [ "$CELL_RC" = "0" ]; then matrix_row "$m" "$a" "$CELL_RC" GREEN no
+      elif [ "$CELL_RC" = "2" ]; then mx_pre=$((mx_pre + 1)); matrix_row "$m" "$a" "$CELL_RC" PRECONDITION no
+      else matrix_row "$m" "$a" "$CELL_RC" TRIPPED yes; fi
+      MROWS=$((MROWS + 1))
+    done
+  done < "$OUT/table.all"
+  want_rows=$(( (N_MUT + 1) * N_ARMS ))
+  if [ "$MROWS" -eq "$want_rows" ] && [ "$mx_bad" -eq 0 ]; then ok "MATRIX: $MROWS cells printed, one per mutant-or-MX0 and arm"
+  else bad "MATRIX: $MROWS of $want_rows cells printed ($mx_bad produced no verdict)"; fi
+  ok "MATRIX: $mx_pre non-deciding cell(s) failed a precondition and are printed PRECONDITION, not TRIPPED"
+  # MX0 must be GREEN on every arm: a tripped MX0 cell is the harness, not a mutant.
+  mx0_tripped=0
+  for a in $ARMS; do cell_state MX0 "$a"; cell_green || mx0_tripped=$((mx0_tripped + 1)); done
+  if [ "$mx0_tripped" -eq 0 ]; then ok "CONTROL MX0: the unmutated copy trips none of the $N_ARMS arms"
+  else bad "CONTROL MX0: the unmutated copy tripped $mx0_tripped arm(s) — the harness is not neutral"; fi
+else
+  # A PLAIN run carries no matrix-only cell: the whole matrix block above is behind the flag.
+  if [ "$MROWS" -eq 0 ] && ! grep -q '^  MATRIX ' "$OUT/b.C06_regression_guards"; then ok "PLAIN-RUN: no matrix row printed and no matrix-only cell scheduled (jobs: $(grep -c '^x\.' "$OUT/jobs") mutant cells)"
+  else bad "PLAIN-RUN: a matrix row was printed by a plain run"; fi
+fi
 
 if [ "$broken" -ne 0 ]; then
   echo "wait-stale-deliverable: FIXTURE BROKEN — a case could not run to a verdict" >&2
