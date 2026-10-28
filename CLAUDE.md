@@ -45,17 +45,18 @@ the general form.
 
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
-`.githooks/pre-push` is the runner. It dispatches through a worker pool
-(`xargs -P "$FIXTURE_JOBS"`, default 12), orders units by their own recorded costs so
-the longest starts first, content-keys the skip, and asserts that every dispatched
+`.githooks/pre-push` is the runner. It dispatches through a worker pool, orders units by
+their own recorded costs, content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
-across both pre-push hooks. Before a release push, seed the shared verdict store by pushing each unit's tip and then
-the exact release commit to a throwaway ref, longest-first (`docs/plans/hermetic-pole.md`); a run
-in a mktemp store caches nothing, and a green push's `verdict store: N fixture(s) skipped` line is the
-evidence the seed worked.
+across both pre-push hooks. Before a release push, seed the verdict store
+(`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
+(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip, then the exact release commit,
+to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
+(`docs/plans/hermetic-pole.md`). A mktemp-store run caches nothing, and a green push's
+`verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
+failing set is in `.git/ai-dlc-fixture-failures`; re-push to re-run only those, never hand-loop them.
 
-**A hand-rolled loop is not merely slower, it FABRICATES FAILURES, and that is the
-reason this is a rule.** Measured on one branch, same tree, same fixtures, both ways:
+**A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, same tree, both ways:
 
 ```
 for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
@@ -67,8 +68,7 @@ the fixture dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`,
 exactly like a regression in the change under test. The serial loop was roughly ten times the
 pool's wall clock, and wrong.
 
-**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE.** A total decays silently and reads exactly like a fresh one.
-**Derive the count, never quote one** —
+**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE.** **Derive the count, never quote one** —
 `ls core/fixtures/*/run.sh | wc -l`. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded
@@ -84,11 +84,10 @@ back to 13.2s. **Count the validator's execs and invocations before and
 after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and counts
 almost nothing, which reads as an enormous reduction and is a broken measurement.
 
-The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
+The inverse hazard: `core/fixtures/check-3b-locked-anchor/run.sh:125`
 carries it: a fixture that is green only from the repo root may be asserting nothing,
 because that is a cwd where its decoy files do not exist. A fixture that must hold from
-any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
-the suite is driven.
+any cwd asserts cwd-invariance in its own arms.
 
 ## Some authoring rules live in `.claude/rules/`, and load only on a Read
 
