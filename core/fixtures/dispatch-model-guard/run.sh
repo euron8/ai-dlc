@@ -13,6 +13,81 @@
 # assertion reads empty and FAILS — the check cannot pass vacuously. The already-correct and
 # fail-open cases must emit NOTHING (no forced approval, no injection), or the guard would be
 # rewriting inputs it has no pin for, or force-approving dispatches another hook may need to deny.
+#
+# MUTANT MATRIX. Every mutant is judged on named cells of ITS OWN drive against the base values the
+# unmutated guard gave in the same run. Per push a mutant runs its DECIDING cells (which must trip) and
+# its TWIN cells (which the measured matrix shows stay green, so the kill is confined to the deciding
+# cells). `--matrix` evaluates every cell of the drive and prints MATRIX rows (from matrix.sh) under the
+# cell names below. This recorded matrix plus the twin replaces the earlier exact-vector assertions, and
+# it is re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/dispatch-model-guard/run.sh --matrix
+# MUTANT-MATRIX effort-trigger decides=emit twins=- why=its drive has one cell (does the already-correct dispatch emit), and the mutation flips it
+# MUTANT-MATRIX prompt-append decides=pverb,pprose twins=- why=both cells of its drive (byte identity, effort prose) trip together by construction
+# MUTANT-MATRIX skippersona decides=sm twins=tea,dev
+# MUTANT-MATRIX body-ignored decides=c,d twins=a
+# MUTANT-MATRIX line2-key decides=d twins=c
+# MUTANT-MATRIX prompt-only decides=a twins=b
+# MUTANT-MATRIX whole-line decides=sd twins=ac
+# MUTANT-MATRIX repeat-resets decides=two twins=inv
+# MUTANT-MATRIX no-casefold decides=upper,title twins=wrap
+# MUTANT-MATRIX no-unwrap decides=wrap twins=upper
+# MUTANT-MATRIX deny-dropped decides=rinv,qinv,pinv twins=ninv
+# MUTANT-MATRIX scoping-dropped decides=ninv twins=rinv
+# MUTANT-MATRIX remediator-only decides=qinv,pinv twins=rinv
+# MUTANT-MATRIX backtick-only decides=s319,prose twins=good
+# MUTANT-MATRIX digits-strict decides=ph twins=red
+# MUTANT-MATRIX always-field decides=none twins=good
+# MUTANT-MATRIX trig-field decides=nofind twins=fgood
+# MUTANT-MATRIX any-good decides=mixed twins=fgood
+# MUTANT-MATRIX first-only decides=samelinegb,sameline-deny twins=nosep
+# MUTANT-MATRIX no-bound decides=nosep twins=sameline-deny
+# MUTANT-MATRIX dot-accept decides=dot twins=nodot
+# MUTANT-MATRIX index-bound decides=engtok-log,engtok-prose,engtok-deny,engtok-path twins=nosep
+# MUTANT-MATRIX failclosed decides=foshim twins=foctl
+# MUTANT-MATRIX keepname decides=name twins=type
+# MUTANT-MATRIX notype decides=type twins=name
+# MUTANT-MATRIX nomarker decides=unm twins=type
+# MUTANT-MATRIX nostale decides=stale twins=type
+# MUTANT-MATRIX ledgerfirst decides=rows twins=dec
+# MUTANT-MATRIX earlyexit decides=mate twins=lead
+# MUTANT-MATRIX noparent decides=mate twins=lead
+# MUTANT-MATRIX leadnull decides=lead twins=mate
+# MUTANT-MATRIX roleexit decides=exm,ntm twins=exl
+# MUTANT-MATRIX leadrow decides=exl twins=exm
+# MUTANT-MATRIX anytool decides=d twins=a
+# MUTANT-MATRIX nodesc decides=e twins=a
+# MUTANT-MATRIX nolead decides=f twins=a
+# MUTANT-MATRIX nolaunch decides=b twins=a
+# MUTANT-MATRIX nonote decides=c twins=a
+# MUTANT-MATRIX noenqueue decides=c3 twins=a
+# MUTANT-MATRIX notailgate decides=padlim twins=a
+# MUTANT-MATRIX samebatch decides=sb twins=a
+# MUTANT-MATRIX errorreleases decides=he twins=a
+# MUTANT-MATRIX regexonly decides=w3 twins=w1
+# MUTANT-MATRIX rolename decides=w1 twins=w3
+# MUTANT-MATRIX nosprint decides=w4 twins=w1
+# MUTANT-MATRIX noinvalid decides=w5 twins=w1
+# MUTANT-MATRIX anyexc decides=wgen2 twins=w1
+# MUTANT-MATRIX noshardable decides=w7 twins=w1
+# MUTANT-MATRIX lazyset decides=w5 twins=w1
+# MUTANT-MATRIX nokok decides=w12 twins=w1
+# MUTANT-MATRIX substr decides=w9 twins=w1
+# MUTANT-MATRIX h3split decides=w10 twins=w1
+# MUTANT-MATRIX nosharded decides=w8 twins=w1
+# MUTANT-MATRIX anyfield decides=w8o twins=w1
+# MUTANT-MATRIX nonegation decides=w8n twins=w1
+# MUTANT-MATRIX noimplscope decides=w1sr twins=w1
+# MUTANT-MATRIX xsentence decides=wxs twins=w1
+# MUTANT-MATRIX nojoin decides=wrp twins=w1
+# MUTANT-MATRIX perline decides=wrn twins=w1
+# MUTANT-MATRIX unscoped decides=wsn twins=w1
+# MUTANT-MATRIX noapos decides=wap twins=w1
+# MUTANT-MATRIX nocurly decides=wcu twins=w1
+# MUTANT-MATRIX excnoneg decides=wen twins=w1
+# MUTANT-MATRIX firstnonce decides=w1cite twins=w1
+# MUTANT-MATRIX boundary decides=w1glued twins=w1
+# MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
+# MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
 
 # The pre-push gate exports every AI_DLC_* tunable a consumer set in settings.json into this
@@ -28,6 +103,51 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+mfails=0
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); case "$1" in *"MUTANT CONTROL"*) ;; *MUTANT*) mfails=$((mfails+1)) ;; esac; }
+# bfl -> 1 only while every arm that is not a mutant verdict has passed in THIS run. It is the same-run
+# base-pass flag mutant_killed demands for the mutants that have no vector of their own to compare.
+bfl() { if [ $((fails - mfails)) -eq 0 ]; then echo 1; else echo 0; fi; }
+
+# `--matrix` (argv only) makes every mutant evaluate EVERY cell of its own drive and print one MATRIX
+# row per cell; a plain run evaluates only each mutant's deciding and twin cells.
+MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/matrix.sh"
+echo "HERMETIC-CONSUMED core/fixtures/dispatch-model-guard/matrix.sh"
+
+# fam_dt <family> <mutant> -> "<deciding cells>|<twin cells>", the rows of the MUTANT-MATRIX header.
+fam_dt() {
+  case "$1:$2" in
+    CC:body-ignored) echo "c,d|a" ;;
+    CC:line2-key) echo "d|c" ;;
+    CC:prompt-only) echo "a|b" ;;
+    SH:whole-line) echo "sd|ac" ;;
+    SH:repeat-resets) echo "two|inv" ;;
+    SH:no-casefold) echo "upper,title|wrap" ;;
+    SH:no-unwrap) echo "wrap|upper" ;;
+    DV:deny-dropped) echo "rinv,qinv,pinv|ninv" ;;
+    DV:scoping-dropped) echo "ninv|rinv" ;;
+    DV:remediator-only) echo "qinv,pinv|rinv" ;;
+    ML:backtick-only) echo "s319,prose|good" ;;
+    ML:digits-strict) echo "ph|red" ;;
+    ML:always-field) echo "none|good" ;;
+    SL:first-only) echo "samelinegb,sameline-deny|nosep" ;;
+    SL:no-bound) echo "nosep|sameline-deny" ;;
+    SL:dot-accept) echo "dot|nodot" ;;
+    SL:index-bound) echo "engtok-log,engtok-prose,engtok-deny,engtok-path|nosep" ;;
+    PA:earlyexit) echo "mate|lead" ;;
+    PA:noparent) echo "mate|lead" ;;
+    PA:leadnull) echo "lead|mate" ;;
+    RL:roleexit) echo "exm,ntm|exl" ;;
+    RL:leadrow) echo "exl|exm" ;;
+    *) echo "|" ;;
+  esac
+}
 
 # raw <project_dir> <json> -> hook stdout (decision JSON on a set, empty on a plain allow).
 raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
@@ -358,9 +478,8 @@ elif ! bash -n "$MTRIG" 2>/dev/null; then
   bad "MUTANT effort-trigger DID NOT APPLY as valid shell — a mutant that cannot parse is silent for a reason that is not the mutation"
 else
   mtrig_out="$(printf '%s' "$(mkjson Agent gate-adjudicator opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MTRIG" 2>/dev/null)"
-  [ -n "$mtrig_out" ] \
-    && ok "MUTANT effort-trigger: with a configured effort back in the trigger set, a dispatch the guard has nothing to correct starts emitting — sections 4/6 are what catch it" \
-    || bad "MUTANT effort-trigger survived: the already-correct dispatch stayed silent with effort restored as a trigger, so the untouched arms assert nothing about the trigger set"
+  mx_kill "$(bfl)" effort-trigger emit - "emit=$([ -n "$mtrig_out" ] && echo yes || echo no)" "emit=no" \
+    "MUTANT effort-trigger scores a kill: with a configured effort back in the trigger set, a dispatch the guard has nothing to correct starts emitting — sections 4/6 are what catch it" "emit=yes"
 fi
 
 # MUTANT B — THE PROMPT IS REWRITTEN AGAIN, on the one emitting path that is definitionally
@@ -377,12 +496,12 @@ else
   mapp_prompt="$(printf '%s' "$EFFJ_DEF" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MAPP" 2>/dev/null \
                  | jq -r '.hookSpecificOutput.updatedInput.prompt // "<unset>"' 2>/dev/null)"
   mapp_sent="$(printf '%s' "$EFFJ_DEF" | jq -r '.tool_input.prompt')"
-  [ "$mapp_prompt" != "$mapp_sent" ] \
-    && ok "MUTANT prompt-append: the returned prompt stops being byte-identical to the dispatched one — expect_prompt_verbatim is what catches it" \
-    || bad "MUTANT prompt-append survived the verbatim arm: the prompt came back identical with an append reinstated, so that arm cannot fire"
-  [ -n "$(printf '%s' "$mapp_prompt" | grep -oiE '(reasoning )?effort[^.]{0,40}(low|medium|high|xhigh|max)' | head -1)" ] \
-    && ok "  and the effort-prose grammar sees it too — the second reading of the same property is live, not a restatement of the first" \
-    || bad "  the effort-prose grammar scored its own subject as a non-instance: a reinstated directive was invisible to it, so its zero is a floor of unknown depth"
+  mx_kill "$(bfl)" prompt-append pverb,pprose - \
+    "pverb=$([ "$mapp_prompt" = "$mapp_sent" ] && echo same || echo changed)
+pprose=$([ -n "$(printf '%s' "$mapp_prompt" | grep -oiE '(reasoning )?effort[^.]{0,40}(low|medium|high|xhigh|max)' | head -1)" ] && echo found || echo none)" \
+    $'pverb=same\npprose=none' \
+    "MUTANT prompt-append scores a kill: the returned prompt stops being byte-identical to the dispatched one (expect_prompt_verbatim catches it) and the effort-prose grammar sees the reinstated directive too" \
+    $'pverb=changed\npprose=found'
 fi
 
 # --- 13c-MUT2. PERSONA MUTANT: the old reading as code -- personas are never bound -----
@@ -399,11 +518,13 @@ else
   mp_sm="$(printf '%s' "$(mkjson Agent sm opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
   mp_tea="$(printf '%s' "$(mkjson Agent tea)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null)"
   mp_dev="$(printf '%s' "$(mkjson Agent dev opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MP" 2>/dev/null | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
-  if [ "$mp_sm" != "sonnet" ] && [ -z "$mp_tea" ] && [ "$mp_dev" = "sonnet" ]; then
-    ok "MUTANT skippersona killed: a guard that never binds a persona leaves sm's opus request uncorrected (section 6b catches it), while tea stays untouched and dev is still corrected — the kill is about the persona special case"
-  else
-    bad "MUTANT skippersona: sm='$mp_sm' (want not sonnet), tea='${mp_tea:-<nothing>}' (want nothing), dev='$mp_dev' (want sonnet)"
-  fi
+  mx_kill "$(bfl)" skippersona sm tea,dev \
+    "sm=${mp_sm:-<none>}
+tea=${mp_tea:-none}
+dev=${mp_dev:-<none>}" \
+    $'sm=sonnet\ntea=none\ndev=sonnet' \
+    "MUTANT skippersona scores a kill: a guard that never binds a persona leaves sm's opus request uncorrected (section 6b catches it), while tea stays untouched and dev is still corrected — the kill is about the persona special case" \
+    $'tea=none\ndev=sonnet'
 fi
 
 # --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------
@@ -597,44 +718,41 @@ TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
 # case; d is proven load-bearing by (ii), which moves d alone. Mutant (iii) also moves world
 # f, which is not in the scored vector: f records behaviour and owns no mutant.
 HOOKS_SRC="$(dirname "$HOOK")"
-mk_hooks_copy() { # mk_hooks_copy <tag> -> path of the guard inside a fresh copy of the hooks dir
-  local d; d="$(mktemp -d "$WORK/hooks-$1.XXXXXX")" || return 1
-  cp -R "$HOOKS_SRC/." "$d/" || return 1
-  printf '%s/%s' "$d" "$(basename "$HOOK")"
+# ONE copy of the hooks directory serves every mutant: the guard resolves exactly one sibling
+# (ai-dlc-context-provenance.sh, by `dirname "${BASH_SOURCE[0]}"`), and every mutant below is a
+# differently NAMED guard file inside that one directory, so each still finds its sibling beside
+# itself. The directory used to be copied once per mutant, which paid a whole-directory `cp -R` for
+# a sibling that is read, never written. Built at top level, not lazily: a lazy build inside the
+# `$( )` that calls mk_hooks_copy would be discarded with that subshell.
+HOOKS_SHARED="$(mktemp -d "$WORK/hooks-shared.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp -R "$HOOKS_SRC/." "$HOOKS_SHARED/" || { echo "FIXTURE ERROR: hooks copy failed" >&2; exit 2; }
+mk_hooks_copy() { # mk_hooks_copy <tag> -> path of a byte-identical guard copy beside the shared sibling
+  local g="$HOOKS_SHARED/$(basename "$HOOK").$1"
+  cp "$HOOKS_SHARED/$(basename "$HOOK")" "$g" || return 1
+  printf '%s' "$g"
 }
 CC_WANT="a=true/definition b=true/prompt c=false/null d=false/null e=false/null"
 
+B_CC=$([ "$TIP_A $TIP_B $TIP_C $TIP_D $TIP_E" = "true/definition true/prompt false/null false/null false/null" ] && echo 1 || echo 0)
+cc_cell() { # cc_cell <guard> <cell> -> that cell's "cited/via" value
+  case "$2" in
+    a) ccell "$1" "$CW_A" defok ;;
+    b) ccell "$1" "$CW_B" defok ;;
+    c) ccell "$1" "$CW_C" defnoline ;;
+    d) ccell "$1" "$CW_D" defwrongrole ;;
+    e) ccell "$1" "$CW_E" remediator ;;
+  esac
+}
+ALL_CC=a,b,c,d,e; SEP_CC=" "; CELLFN_CC=cc_cell; BASE_CC="$(want_lines ' ' "$CC_WANT")"
 CC_CTL="$(mk_hooks_copy control)"
-if [ -z "$CC_CTL" ] || [ ! -r "$(dirname "$CC_CTL")/ai-dlc-context-provenance.sh" ]; then
+if [ -z "$CC_CTL" ] || [ ! -r "$HOOKS_SHARED/ai-dlc-context-provenance.sh" ]; then
   bad "CARRIER MUTANT CONTROL: the hooks copy is missing the guard or its provenance sibling — every verdict below would be about a copy that cannot run"
 else
-  CC_CTL_VEC="$(cvec "$CC_CTL")"
-  [ "$CC_CTL_VEC" = "$CC_WANT" ] \
-    && ok "CARRIER MUTANT CONTROL: an unmutated hooks copy records a=true/definition (positive) and the full expected vector" \
-    || bad "CARRIER MUTANT CONTROL is dead: vector '$CC_CTL_VEC', expected '$CC_WANT'"
+  fam_control CC "$CC_CTL" a "CARRIER MUTANT CONTROL: an unmutated hooks copy records a=true/definition (positive), the cell the carrier mutants are judged against (every cell under --matrix)"
 fi
-
-# cc_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
-cc_mut() {
-  local g n vec
-  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
-  if [ "$n" != 1 ]; then
-    bad "CARRIER MUTANT $1 anchor matched $n lines in the guard, expected exactly 1 — the mutation is lost or ambiguous"
-    return
-  fi
-  g="$(mk_hooks_copy "$1")"
-  if [ -z "$g" ]; then bad "CARRIER MUTANT $1: could not build the hooks copy"; return; fi
-  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
-  if cmp -s "$HOOK" "$g"; then
-    bad "CARRIER MUTANT $1 DID NOT APPLY (cmp -s) — its arm proves nothing"; return
-  fi
-  if ! bash -n "$g" 2>/dev/null; then
-    bad "CARRIER MUTANT $1 DID NOT APPLY as valid shell"; return
-  fi
-  vec="$(cvec "$g")"
-  [ "$vec" = "$4" ] \
-    && ok "CARRIER MUTANT $1 killed: $5" \
-    || bad "CARRIER MUTANT $1: vector '$vec', expected '$4' — $5 is not what the arms see"
+cc_mut() { # cc_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  local dt; dt="$(fam_dt CC "$1")"
+  fam_mut CC "$1" "$2" "$3" "${dt%%|*}" "${dt##*|}" "$B_CC" "$4" "CARRIER MUTANT $1 scores a kill: $5"
 }
 
 # (i) the citation is DEFINITION_BOUND, the body is never read.
@@ -745,25 +863,25 @@ esac
 
 # MUTANTS on the shard parse, each a copy of the whole hooks dir, exact-line anchored, scored
 # on the EXACT nine-cell vector so a mutant that moves a cell it does not own is visible.
+B_SH=$([ "$SV_TIP" = "$SV_WANT" ] && echo 1 || echo 0)
+sh_cell() { # sh_cell <guard> <cell> -> that cell's "shard|shard_raw" value
+  local j
+  case "$2" in
+    inv) j="$SH_INV" ;; ac) j="$SH_AC" ;; sd) j="$SH_SD" ;; dash) j="$SH_DASH" ;; two) j="$SH_TWO" ;;
+    ord) j="$SH_ORD" ;; upper) j="$SH_UPPER" ;; wrap) j="$SH_WRAP" ;; title) j="$SH_TITLE" ;;
+  esac
+  scell "$1" "$j"
+}
+ALL_SH=inv,ac,sd,dash,two,ord,upper,wrap,title; SEP_SH=";"; CELLFN_SH=sh_cell; BASE_SH="$(want_lines ';' "$SV_WANT")"
 SV_CTL_G="$(mk_hooks_copy shard-control)"
-if [ -n "$SV_CTL_G" ] && [ "$(svec "$SV_CTL_G")" = "$SV_WANT" ]; then
-  ok "SHARD MUTANT CONTROL: an unmutated hooks copy records the full expected nine-cell vector, invalid-exception included (positive)"
+if [ -n "$SV_CTL_G" ]; then
+  fam_control SH "$SV_CTL_G" inv "SHARD MUTANT CONTROL: an unmutated hooks copy records the invalid-exception cell inv (positive; every cell under --matrix)"
 else
-  bad "SHARD MUTANT CONTROL is dead: an unmutated copy recorded '$(svec "$SV_CTL_G")'"
+  bad "SHARD MUTANT CONTROL is dead: no hooks copy"
 fi
-# sh_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
-sh_mut() {
-  local g n vec
-  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
-  if [ "$n" != 1 ]; then bad "SHARD MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
-  g="$(mk_hooks_copy "$1")"
-  if [ -z "$g" ]; then bad "SHARD MUTANT $1: could not build the hooks copy"; return; fi
-  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
-  if cmp -s "$HOOK" "$g"; then bad "SHARD MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
-  if ! bash -n "$g" 2>/dev/null; then bad "SHARD MUTANT $1 DID NOT APPLY as valid shell"; return; fi
-  vec="$(svec "$g")"
-  [ "$vec" = "$4" ] && ok "SHARD MUTANT $1 killed: $5" \
-    || bad "SHARD MUTANT $1: vector '$vec', expected '$4' — $5 is not what the arms see"
+sh_mut() { # sh_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  local dt; dt="$(fam_dt SH "$1")"
+  fam_mut SH "$1" "$2" "$3" "${dt%%|*}" "${dt##*|}" "$B_SH" "$4" "SHARD MUTANT $1 scores a kill: $5"
 }
 # (b) the parse anchored on the WHOLE line, as before this release: trailing prose after a
 # valid exception is rejected, so the real consumer `none (serial-document). Files...` line
@@ -892,24 +1010,27 @@ else
 fi
 
 # MUTANTS on the deny, scored on the EXACT eleven-cell vector, so each moves only the cells it owns.
+B_DV=$([ "$DV_TIP" = "$DV_WANT" ] && echo 1 || echo 0)
+dv_cell() { # dv_cell <guard> <cell> -> that cell's "decision:rows:shard" value
+  case "$2" in
+    rinv) dcell "$1" remediator "$DINV" ;; qinv) dcell "$1" qa "$DINV" ;; pinv) dcell "$1" seatx "$DINV" ;;
+    ninv) dcell "$1" dev-escalated "$DINV" ;; rac) dcell "$1" remediator 'shard: none (authoring-chain)' ;;
+    r3) dcell "$1" remediator 'shard: none (3)' ;; r11) dcell "$1" remediator 'shard: 1/1 x' ;;
+    romit) dcell "$1" remediator ;;
+    rsd) dcell "$1" remediator 'shard: none (serial-document). Files you may edit: docs/a.md' ;;
+    rtitle) dcell "$1" remediator 'Shard: None (4)' ;; rord) dcell "$1" remediator 'shard: 3/7 x' ;;
+  esac
+}
+ALL_DV=rinv,qinv,pinv,ninv,rac,r3,r11,romit,rsd,rtitle,rord; SEP_DV=";"; CELLFN_DV=dv_cell; BASE_DV="$(want_lines ';' "$DV_WANT")"
 DV_CTL_G="$(mk_hooks_copy deny-control)"
-if [ -n "$DV_CTL_G" ] && [ "$(dvec "$DV_CTL_G")" = "$DV_WANT" ]; then
-  ok "SHARD DENY MUTANT CONTROL: an unmutated hooks copy scores the full eleven-cell vector, the three denies and the near-miss row included (positive)"
+if [ -n "$DV_CTL_G" ]; then
+  fam_control DV "$DV_CTL_G" rinv "SHARD DENY MUTANT CONTROL: an unmutated hooks copy scores the deny cell rinv (positive; every cell under --matrix)"
 else
-  bad "SHARD DENY MUTANT CONTROL is dead: an unmutated copy scored '$(dvec "$DV_CTL_G")'"
+  bad "SHARD DENY MUTANT CONTROL is dead: no hooks copy"
 fi
 dv_mut() { # dv_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
-  local g n vec
-  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
-  if [ "$n" != 1 ]; then bad "SHARD DENY MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
-  g="$(mk_hooks_copy "$1")"
-  if [ -z "$g" ]; then bad "SHARD DENY MUTANT $1: could not build the hooks copy"; return; fi
-  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
-  if cmp -s "$HOOK" "$g"; then bad "SHARD DENY MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
-  if ! bash -n "$g" 2>/dev/null; then bad "SHARD DENY MUTANT $1 DID NOT APPLY as valid shell"; return; fi
-  vec="$(dvec "$g")"
-  [ "$vec" = "$4" ] && ok "SHARD DENY MUTANT $1 killed: $5" \
-    || bad "SHARD DENY MUTANT $1: vector '$vec', expected '$4' — $5 is not what the arms see"
+  local dt; dt="$(fam_dt DV "$1")"
+  fam_mut DV "$1" "$2" "$3" "${dt%%|*}" "${dt##*|}" "$B_DV" "$4" "SHARD DENY MUTANT $1 scores a kill: $5"
 }
 # (i) the deny dropped: the invented line is recorded on every shardable role, as before this
 # release. Cells rinv, qinv and pinv move. qa and seatx have no aiDlcRoles entry here, so an
@@ -988,24 +1109,27 @@ case "$_mrs" in
     ok "MARK LINE reason: the engine refusal naming rows=34, then the rendered line to copy" ;;
   *) bad "MARK LINE reason lacks the refusal or the rendered line: '$(printf '%s' "$_mrs" | cut -c1-300)'" ;;
 esac
-# MUTANTS, each scored on the EXACT vector and each killed by the cell named in its label.
+B_ML=$([ "$MV_TIP" = "$MV_WANT" ] && echo 1 || echo 0)
+ml_cell() { # ml_cell <guard> <cell> -> that cell's "decision:rows:mark" value
+  local j
+  case "$2" in
+    rows) j="$ML_ROWS" ;; chain) j="$ML_CHAIN" ;; ph) j="$ML_PH" ;; red) j="$ML_RED" ;;
+    prose) j="$ML_PROSE" ;; s319) j="$ML_S319" ;; none) j="$ML_NONE" ;; good) j="$ML_GOOD" ;;
+  esac
+  mcell "$1" "$j"; printf '%s' "$MCELL"
+}
+ALL_ML=rows,chain,ph,red,prose,s319,none,good; SEP_ML=";"; CELLFN_ML=ml_cell; BASE_ML="$(want_lines ';' "$MV_WANT")"
+# MUTANTS, each judged on its deciding cells and measured-green twins (matrix.sh).
 ml_mut() { # ml_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
-  local g n vec
-  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
-  if [ "$n" != 1 ]; then bad "MARK LINE MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
-  g="$(mk_hooks_copy "ml-$1")"
-  if [ -z "$g" ]; then bad "MARK LINE MUTANT $1: could not build the hooks copy"; return; fi
-  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
-  if cmp -s "$HOOK" "$g"; then bad "MARK LINE MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
-  if ! bash -n "$g" 2>/dev/null; then bad "MARK LINE MUTANT $1 DID NOT APPLY as valid shell"; return; fi
-  vec="$(mvec "$g")"
-  [ "$vec" = "$4" ] && ok "MARK LINE MUTANT $1 killed: $5" \
-    || bad "MARK LINE MUTANT $1: vector '$vec', expected '$4' -- $5 is not what the arms see"
+  local dt; dt="$(fam_dt ML "$1")"
+  fam_mut ML "$1" "$2" "$3" "${dt%%|*}" "${dt##*|}" "$B_ML" "$4" "MARK LINE MUTANT $1 scores a kill: $5"
 }
 _mlc="$(mk_hooks_copy ml-control)"
-[ -n "$_mlc" ] && [ "$(mvec "$_mlc")" = "$MV_WANT" ] \
-  && ok "MARK LINE MUTANT CONTROL: an unmutated hooks copy scores the full eight-cell vector" \
-  || bad "MARK LINE MUTANT CONTROL is dead: an unmutated copy scored '$(mvec "$_mlc")'"
+if [ -n "$_mlc" ]; then
+  fam_control ML "$_mlc" good "MARK LINE MUTANT CONTROL: an unmutated hooks copy scores the rendered-line cell good (positive; every cell under --matrix)"
+else
+  bad "MARK LINE MUTANT CONTROL is dead: no hooks copy"
+fi
 # (m1) the cut at a period before a capital dropped: only the backtick cut remains, and the s319
 # sentence after `rows=<n>.` supplies the last field, which carries no `=`.
 ml_mut backtick-only \
@@ -1063,43 +1187,27 @@ for _c in $MF_WANT; do
   esac
 done
 IFS="$_old_ifs"
-# (m4) the old END restored: any trigger writes the field. Scored on the exact field vector; the
-# findings-less cell nofind is the first to see it (every cell but fgood flips to rendered).
+# (m4) the old END restored: any trigger writes the field. The findings-less cell nofind is the first
+# to see it (every cell but fgood flips to rendered).
+B_MF=$([ "$MF_TIP" = "$MF_WANT" ] && echo 1 || echo 0)
+mf_cell() { # mf_cell <guard> <cell> -> that cell's "decision:rows:mark" value
+  local j
+  case "$2" in
+    nofind) j="$MF_NOFIND" ;; zero) j="$MF_ZERO" ;; bare) j="$MF_BARE" ;; fprose) j="$MF_PROSE" ;;
+    short) j="$MF_SHORT" ;; paren) j="$MF_PAREN" ;; mixed) j="$MF_MIXED" ;; fgood) j="$ML_GOOD" ;;
+  esac
+  mcell "$1" "$j"; printf '%s' "$MCELL"
+}
+ALL_MF=nofind,zero,bare,fprose,short,paren,mixed,fgood; SEP_MF=";"; CELLFN_MF=mf_cell; BASE_MF="$(want_lines ';' "$MF_WANT")"
 _mf_a="    END { if (!den && good > 0 && good == trig) print \"rendered\" }'"
 _mf_r="    END { if (!den && trig > 0) print \"rendered\" }'"
-_mf_n="$(grep -cxF -- "$_mf_a" "$HOOK")" || _mf_n=0
-if [ "$_mf_n" != 1 ]; then bad "MARK FIELD MUTANT trig-field anchor matched $_mf_n lines in the guard, expected exactly 1"
-else
-  _mf_g="$(mk_hooks_copy "mf-trig")"
-  if [ -z "$_mf_g" ]; then bad "MARK FIELD MUTANT trig-field: could not build the hooks copy"
-  else
-    A="$_mf_a" R="$_mf_r" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_mf_g"
-    if cmp -s "$HOOK" "$_mf_g"; then bad "MARK FIELD MUTANT trig-field DID NOT APPLY (cmp -s)"
-    elif ! bash -n "$_mf_g" 2>/dev/null; then bad "MARK FIELD MUTANT trig-field DID NOT APPLY as valid shell"
-    else
-      _mf_v="$(mfvec "$_mf_g")"
-      [ "$_mf_v" = 'nofind=allow:1:rendered;zero=allow:1:rendered;bare=allow:1:rendered;fprose=allow:1:rendered;short=allow:1:rendered;paren=allow:1:rendered;mixed=allow:1:rendered;fgood=allow:1:rendered' ] \
-        && ok "MARK FIELD MUTANT trig-field killed: a field on any trigger arms --complete on a line the engine refuses -- cell nofind catches it" \
-        || bad "MARK FIELD MUTANT trig-field: vector '$_mf_v' -- cell nofind is not what the arms see"
-    fi
-  fi
-fi
+fam_mut MF trig-field "$_mf_a" "$_mf_r" nofind fgood "$B_MF" 'nofind=allow:1:rendered;fgood=allow:1:rendered' \
+  "MARK FIELD MUTANT trig-field scores a kill: a field on any trigger arms --complete on a line the engine refuses -- cell nofind catches it"
 # (m5) any-good: one well-formed line suffices, so a brief carrying a refused line beside it still
 # writes the field. Only cell mixed sees it.
 _mf_r2="    END { if (!den && good > 0) print \"rendered\" }'"
-_mf_g2="$(mk_hooks_copy "mf-anygood")"
-if [ -z "$_mf_g2" ] || [ "$_mf_n" != 1 ]; then bad "MARK FIELD MUTANT any-good: could not build the hooks copy or the anchor is not unique"
-else
-  A="$_mf_a" R="$_mf_r2" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_mf_g2"
-  if cmp -s "$HOOK" "$_mf_g2"; then bad "MARK FIELD MUTANT any-good DID NOT APPLY (cmp -s)"
-  elif ! bash -n "$_mf_g2" 2>/dev/null; then bad "MARK FIELD MUTANT any-good DID NOT APPLY as valid shell"
-  else
-    _mf_v2="$(mfvec "$_mf_g2")"
-    [ "$_mf_v2" = 'nofind=allow:1:null;zero=allow:1:null;bare=allow:1:null;fprose=allow:1:null;short=allow:1:null;paren=allow:1:null;mixed=allow:1:rendered;fgood=allow:1:rendered' ] \
-      && ok "MARK FIELD MUTANT any-good killed: one well-formed line beside a refused one arms --complete on the refused file -- cell mixed alone catches it" \
-      || bad "MARK FIELD MUTANT any-good: vector '$_mf_v2' -- cell mixed is not what the arms see"
-  fi
-fi
+fam_mut MF any-good "$_mf_a" "$_mf_r2" mixed fgood "$B_MF" 'mixed=allow:1:rendered;fgood=allow:1:rendered' \
+  "MARK FIELD MUTANT any-good scores a kill: one well-formed line beside a refused one arms --complete on the refused file -- cell mixed alone catches it"
 
 # THE SAME LINE: every invocation on a line is scanned, not only the first. A refused invocation
 # after a good one on the same line withholds the field (or denies, for a `name=` last field), and an
@@ -1156,18 +1264,21 @@ case "$_sls" in
     ok "MARK LINE sameline-deny reason: names rows=34 and renders the second invocation's line" ;;
   *) bad "MARK LINE sameline-deny reason does not render the second invocation: '$(printf '%s' "$_sls" | cut -c1-300)'" ;;
 esac
+B_SL=$([ "$SL_TIP" = "$SL_WANT" ] && echo 1 || echo 0)
+sl_cell() { # sl_cell <guard> <cell> -> that cell's "decision:rows:mark" value
+  local j
+  case "$2" in
+    samelinegb) j="$SL_GB" ;; samelinebg) j="$SL_BG" ;; samelinegg) j="$SL_GG" ;; sameline-deny) j="$SL_DENY" ;;
+    nosep) j="$SL_NOSEP" ;; dot) j="$SL_DOT" ;; nodot) j="$SL_NODOT" ;; engtok-log) j="$SL_ETLOG" ;;
+    engtok-prose) j="$SL_ETPROSE" ;; engtok-deny) j="$SL_ETDENY" ;; engtok-path) j="$SL_ETPATH" ;;
+  esac
+  mcell "$1" "$j"; printf '%s' "$MCELL"
+}
+ALL_SL=samelinegb,samelinebg,samelinegg,sameline-deny,nosep,dot,nodot,engtok-log,engtok-prose,engtok-deny,engtok-path
+SEP_SL=";"; CELLFN_SL=sl_cell; BASE_SL="$(want_lines ';' "$SL_WANT")"
 sl_mut() { # sl_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
-  local g n vec
-  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
-  if [ "$n" != 1 ]; then bad "SAME LINE MUTANT $1 anchor matched $n lines in the guard, expected exactly 1"; return; fi
-  g="$(mk_hooks_copy "sl-$1")"
-  if [ -z "$g" ]; then bad "SAME LINE MUTANT $1: could not build the hooks copy"; return; fi
-  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
-  if cmp -s "$HOOK" "$g"; then bad "SAME LINE MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
-  if ! bash -n "$g" 2>/dev/null; then bad "SAME LINE MUTANT $1 DID NOT APPLY as valid shell"; return; fi
-  vec="$(slvec "$g")"
-  [ "$vec" = "$4" ] && ok "SAME LINE MUTANT $1 killed: $5" \
-    || bad "SAME LINE MUTANT $1: vector '$vec', expected '$4' -- $5 is not what the arms see"
+  local dt; dt="$(fam_dt SL "$1")"
+  fam_mut SL "$1" "$2" "$3" "${dt%%|*}" "${dt##*|}" "$B_SL" "$4" "SAME LINE MUTANT $1 scores a kill: $5"
 }
 # (m6) first-invocation-only: nothing is left to scan after one pass.
 sl_mut first-only \
@@ -1238,9 +1349,13 @@ else
     awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$_fo_g"
   if cmp -s "$HOOK" "$_fo_g" || ! bash -n "$_fo_g" 2>/dev/null; then bad "MARK LINE MUTANT fail-closed DID NOT APPLY"
   else
-    _fo_m="$(fo_cell "$_fo_g" "$ML_SHIM:"):$(fo_cell "$_fo_g" "")"
-    [ "$_fo_m" = "deny:0:-:deny:0:-" ] && ok "MARK LINE MUTANT fail-closed killed: a failed scan denies the dispatch -- cell fail-open alone catches it (fo-ctl unchanged)" \
-      || bad "MARK LINE MUTANT fail-closed: got '$_fo_m', expected 'deny:0:-:deny:0:-'"
+    mx_kill "$(bfl)" failclosed foshim foctl \
+      "foshim=$(fo_cell "$_fo_g" "$ML_SHIM:")
+foctl=$(fo_cell "$_fo_g" "")" \
+      "foshim=$_fo_got
+foctl=$_fo_ctl" \
+      "MARK LINE MUTANT failclosed scores a kill: a failed scan denies the dispatch -- cell fail-open alone catches it (fo-ctl unchanged)" \
+      $'foshim=deny:0:-\nfoctl=deny:0:-'
   fi
 fi
 
@@ -1457,62 +1572,34 @@ DEFCTL="$WORK/guard-def-control.sh"; cp "$HOOK" "$DEFCTL"
   && ok "MUTANT CONTROL: an unmutated copy still rewrites the type (a mutant's silence is the mutation, not the copy)" \
   || bad "MUTANT CONTROL is dead — a copy of the guard behaves differently from the original, so the kills below are unearned"
 
+# The four wrong fixes, each judged on cells of the rewrite it breaks. BASE cells come from the
+# UNMUTATED copy (DEFCTL) in this run; a mutant must trip its deciding cell and leave its twin alone.
+def_cell() { # def_cell <guard> <cell> -> that cell's value
+  case "$2" in
+    type)  mut_drive "$1" "$DEFJ" | jq -r '.subagent_type // "<unset>"' ;;
+    name)  mut_drive "$1" "$DEFJ" | jq -r '.name // "<unset>"' ;;
+    unm)   mut_drive "$1" "$(mkjson Agent defunmarked)" | jq -r '.subagent_type // "<unset>"' ;;
+    stale) mut_drive "$1" "$(mkjson Agent defstaleeffort)" | jq -r '.subagent_type // "<unset>"' ;;
+  esac
+}
+ALL_DEF=type,name,unm,stale; SEP_DEF=nl; CELLFN_DEF=def_cell
+BASE_DEF="$(for _c in type name unm stale; do printf '%s=%s\n' "$_c" "$(def_cell "$DEFCTL" "$_c")"; done)"
+
 # WRONG FIX 1: rewrite the type, keep the name. Passes the type arm; the spawn still goes
 # to the teammate runner and the effort is still dropped.
-M1="$WORK/guard-keepname.sh"
-sed "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'. + {subagent_type: \$t} | del(.model)'@" "$HOOK" > "$M1"
-if cmp -s "$HOOK" "$M1"; then
-  bad "MUTANT keepname matched nothing (cmp -s guard) — the name-deletion arm proves nothing"
-else
-  if [ "$(mut_drive "$M1" "$DEFJ" | jq -r '.name // "<unset>"')" != "<unset>" ] \
-     && [ "$(mut_drive "$M1" "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "defok" ]; then
-    ok "MUTANT keepname: rewriting the type WITHOUT deleting the name leaves the spawn on the teammate runner — the name arm is what catches it, and the type arm cannot"
-  else
-    bad "MUTANT keepname survived: the name arm is not load-bearing"
-  fi
-fi
-
+fam_sedmut DEF keepname "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'. + {subagent_type: \$t} | del(.model)'@" name type "$(bfl)" "" \
+  "MUTANT keepname scores a kill: rewriting the type WITHOUT deleting the name leaves the spawn on the teammate runner — the name arm is what catches it, and the type arm cannot"
 # WRONG FIX 2: delete the name, never rewrite the type. Passes the name arm; the harness
 # selects no definition at all, so nothing binds the effort.
-M2="$WORK/guard-notype.sh"
-sed "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'del(.name) | del(.model)'@" "$HOOK" > "$M2"
-if cmp -s "$HOOK" "$M2"; then
-  bad "MUTANT notype matched nothing (cmp -s guard) — the type-rewrite arm proves nothing"
-else
-  if [ "$(mut_drive "$M2" "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "<unset>" ] \
-     && [ "$(mut_drive "$M2" "$DEFJ" | jq -r '.name // "<unset>"')" = "<unset>" ]; then
-    ok "MUTANT notype: deleting the name WITHOUT rewriting the type selects no definition — the type arm is what catches it, and the name arm cannot"
-  else
-    bad "MUTANT notype survived: the type arm is not load-bearing"
-  fi
-fi
-
+fam_sedmut DEF notype "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'del(.name) | del(.model)'@" type name "$(bfl)" "" \
+  "MUTANT notype scores a kill: deleting the name WITHOUT rewriting the type selects no definition — the type arm is what catches it, and the name arm cannot"
 # WRONG FIX 3: rewrite whenever the file exists, marker and agreement unread. This is the
 # dangerous one: it selects a consumer's hand-written agent AND a drifted render, and it
 # passes every arm in 13e.
-M3="$WORK/guard-noagree.sh"
-sed 's/^if \[ -r "\$DEF_FILE" \] && grep -qF "\$DEF_MARKER" "\$DEF_FILE" 2>\/dev\/null; then$/if [ -r "$DEF_FILE" ]; then/' "$HOOK" > "$M3"
-if cmp -s "$HOOK" "$M3"; then
-  bad "MUTANT nomarker matched nothing (cmp -s guard) — the marker arm proves nothing"
-else
-  if [ "$(mut_drive "$M3" "$(mkjson Agent defunmarked)" | jq -r '.subagent_type // "<unset>"')" = "defunmarked" ]; then
-    ok "MUTANT nomarker: without the marker test the guard binds a teammate to a file this distribution never rendered — 13g is what catches it"
-  else
-    bad "MUTANT nomarker survived: the unmarked file stayed unselected without the marker test, so 13g asserts nothing"
-  fi
-fi
-
-M4="$WORK/guard-nostale.sh"
-sed 's/^  if \[ "\$DEF_MODEL" = "\$EXPECT" \] \&\& \[ "\$DEF_EFFORT" = "\$PIN_EFFORT" \]; then$/  if true; then/' "$HOOK" > "$M4"
-if cmp -s "$HOOK" "$M4"; then
-  bad "MUTANT nostale matched nothing (cmp -s guard) — the staleness arm proves nothing"
-else
-  if [ "$(mut_drive "$M4" "$(mkjson Agent defstaleeffort)" | jq -r '.subagent_type // "<unset>"')" = "defstaleeffort" ]; then
-    ok "MUTANT nostale: without the agreement test a DRIFTED render is selected and the teammate runs at a level nothing declared — 13f is what catches it"
-  else
-    bad "MUTANT nostale survived: the stale definition stayed unselected without the agreement test, so 13f asserts nothing"
-  fi
-fi
+fam_sedmut DEF nomarker 's/^if \[ -r "\$DEF_FILE" \] && grep -qF "\$DEF_MARKER" "\$DEF_FILE" 2>\/dev\/null; then$/if [ -r "$DEF_FILE" ]; then/' unm type "$(bfl)" "" \
+  "MUTANT nomarker scores a kill: without the marker test the guard binds a teammate to a file this distribution never rendered — 13g is what catches it"
+fam_sedmut DEF nostale 's/^  if \[ "\$DEF_MODEL" = "\$EXPECT" \] \&\& \[ "\$DEF_EFFORT" = "\$PIN_EFFORT" \]; then$/  if true; then/' stale type "$(bfl)" "" \
+  "MUTANT nostale scores a kill: without the agreement test a DRIFTED render is selected and the teammate runs at a level nothing declared — 13f is what catches it"
 
 # The ledger must never be able to block a spawn.
 rm -rf "$CONSUMER/_bmad-output"
@@ -1582,18 +1669,27 @@ expect_deny() { # expect_deny <out> <label>
 expect_quiet() { # expect_quiet <out> <label>
   [ -z "$1" ] && ok "$2 -> allowed (no decision)" || bad "$2 -> expected NO decision, got '$(printf '%s' "$1" | cut -c1-200)'"
 }
-CAP_A="$(capout "$CAPDIR/a.jsonl" "Party seat 7")"
+# BASE CACHE. A plain arm below drives the UNMUTATED guard on exactly the input a matrix base cell
+# needs, so it records its decision here and queue_run reuses it instead of driving the world again.
+# bc_put <CAP|ADJ> <cell> <hook stdout> : stores deny|allow under that family and cell.
+bc_put() {
+  local d
+  d="$(printf '%s' "$3" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  [ -n "$d" ] || d=allow
+  printf -v "BC_$1_$2" '%s' "$d"
+}
+CAP_A="$(capout "$CAPDIR/a.jsonl" "Party seat 7")"; bc_put CAP a "$CAP_A"
 expect_deny "$CAP_A" "14a a re-send of a cap-rejected description with nothing released since"
 grep -qF 'an agent of this session has exited since the rejection' <<<"$CAP_A" \
   && ok "  and the remedy quotes Rule 28's held-set paragraph" \
   || bad "  the deny does not quote Rule 28's held-set release condition"
-expect_quiet "$(capout "$CAPDIR/b.jsonl" "Party seat 7")" "14b the same, after a non-rejected Agent result (the cap admitted a spawn)"
-expect_quiet "$(capout "$CAPDIR/c.jsonl" "Party seat 7")" "14c the same, after an agent task-notification (an agent exited)"
-expect_quiet "$(capout "$CAPDIR/c3.jsonl" "Party seat 7")" "14c'' the same, after an agent exit recorded only as the queue enqueue"
-expect_deny "$(capout "$CAPDIR/c2.jsonl" "Party seat 7")" "14c' the same, after only a BACKGROUND-COMMAND notification"
-expect_quiet "$(capout "$CAPDIR/d.jsonl" "Party seat 7")" "14d the cap text only inside a Bash command and its result"
-expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 9")" "14e a different description"
-expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 7" "" a1234567890abcdef)" "14f a subagent's call (agent_id set)"
+BCX="$(capout "$CAPDIR/b.jsonl" "Party seat 7")"; bc_put CAP b "$BCX"; expect_quiet "$BCX" "14b the same, after a non-rejected Agent result (the cap admitted a spawn)"
+BCX="$(capout "$CAPDIR/c.jsonl" "Party seat 7")"; bc_put CAP c "$BCX"; expect_quiet "$BCX" "14c the same, after an agent task-notification (an agent exited)"
+BCX="$(capout "$CAPDIR/c3.jsonl" "Party seat 7")"; bc_put CAP c3 "$BCX"; expect_quiet "$BCX" "14c'' the same, after an agent exit recorded only as the queue enqueue"
+BCX="$(capout "$CAPDIR/c2.jsonl" "Party seat 7")"; bc_put CAP c2 "$BCX"; expect_deny "$BCX" "14c' the same, after only a BACKGROUND-COMMAND notification"
+BCX="$(capout "$CAPDIR/d.jsonl" "Party seat 7")"; bc_put CAP d "$BCX"; expect_quiet "$BCX" "14d the cap text only inside a Bash command and its result"
+BCX="$(capout "$CAPDIR/a.jsonl" "Party seat 9")"; bc_put CAP e "$BCX"; expect_quiet "$BCX" "14e a different description"
+BCX="$(capout "$CAPDIR/a.jsonl" "Party seat 7" "" a1234567890abcdef)"; bc_put CAP f "$BCX"; expect_quiet "$BCX" "14f a subagent's call (agent_id set)"
 expect_quiet "$(capout "$CAPDIR/a.jsonl" "Party seat 7" "$NOSTAMP")" "14g a non-layered tree"
 
 # MUTANTS. Each is a copy of the guard, guarded by `cmp -s`, and must fail ONLY its own case.
@@ -1605,13 +1701,9 @@ cap_mut() { # cap_mut <script> <transcript> <description> [agent_id] -> decision
 [ "$(cap_mut "$CAPCTL" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ] \
   && ok "CAP MUTANT CONTROL: an unmutated copy denies 14a" \
   || bad "CAP MUTANT CONTROL is dead -- the kills below are unearned"
-cap_kill() { # cap_kill <name> <sed-expr> <transcript> <description> <agent_id> <label>
-  local m="$WORK/guard-cap-$1.sh"
-  sed "$2" "$HOOK" > "$m" || { bad "CAP MUTANT $1: sed DID NOT APPLY"; return; }
-  if cmp -s "$HOOK" "$m"; then bad "CAP MUTANT $1 matched nothing (cmp -s guard)"; return; fi
-  [ "$(cap_mut "$m" "$3" "$4" "$5")" = deny ] \
-    && ok "CAP MUTANT $1 killed: $6" || bad "CAP MUTANT $1 SURVIVED: $6"
-}
+# cap_kill <name> <sed-expr> ... : REGISTERS a cap mutant; the loop at the end of the file builds, drives and
+# judges every registered mutant on its named world cells (deciding world plus measured-green twin).
+cap_kill() { printf '%s\t%s\n' "$1" "$2" >> "$WORK/capq"; }
 cap_kill anytool 's/and (.name == "Agent" or .name == "Task")))/))/' \
   "$CAPDIR/d.jsonl" "Party seat 7" "" "reading every tool's results holds a Bash call's quoted text (14d)"
 cap_kill nodesc 's/(if .ids\[\$t.tool_use_id\] == \$d then .held = true | .hmid = .mid\[\$t.tool_use_id\] else . end)/(.held = true | .hmid = .mid[$t.tool_use_id])/' \
@@ -1652,18 +1744,10 @@ fi
   && ok "14w CONTROL: under the same limit an unmutated copy still denies 14a (its tail fits), so the limit disturbs nothing else" \
   || bad "14w CONTROL is dead -- the limit itself changes the guard's answer, so 14w's allow is unearned"
 expect_deny "$(capout "$CAPPAD" "Party seat 7")" "14w' the padded transcript, written whole, HOLDS"
-_cl="$(cap_lim "$HOOK" "$CAPPAD" "Party seat 7")"
+_cl="$(cap_lim "$HOOK" "$CAPPAD" "Party seat 7")"; BC_CAP_padlim="${_cl:-allow}"
 [ -z "$_cl" ] && ok "14w the same transcript, its tail write failing part-way -> allowed (fail open)" \
   || bad "14w a failed tail write -> expected NO decision, got '$_cl'"
-_m="$WORK/guard-cap-notailgate.sh"
-if sed 's/^    if tail -c \(.*\) 2>\/dev\/null \\$/    tail -c \1 2>\/dev\/null; if true \\/' "$HOOK" > "$_m" \
-   && ! cmp -s "$HOOK" "$_m" && bash -n "$_m" 2>/dev/null; then
-  [ "$(cap_lim "$_m" "$CAPPAD" "Party seat 7")" = deny ] \
-    && ok "CAP MUTANT notailgate killed: a grep after a failed tail write holds on the partial file (14w)" \
-    || bad "CAP MUTANT notailgate SURVIVED: dropping the write's && binding still fails open (14w)"
-else
-  bad "CAP MUTANT notailgate DID NOT APPLY (sed failed, matched nothing, or did not parse)"
-fi
+cap_kill notailgate 's/^    if tail -c \(.*\) 2>\/dev\/null \\$/    tail -c \1 2>\/dev\/null; if true \\/'
 
 # 14h. `--hold-status [<description>] --transcript <path>` answers from the SAME computation the
 # PreToolUse arm uses (dg_hold_compute): 0 no hold, 1 a hold is live, 2 cannot tell. Cells differ from
@@ -1744,7 +1828,7 @@ adj() { raw "$1" "$(adjj "${2-}")"; }
 ADJ_REM="**Remediation:** outputs verified against the role contract."
 
 W1="$(mkworld unnamed 317)"; cat "$WAIVER_SRC" >> "$W1/docs/escalations/pending.md"
-W1_OUT="$(adj "$W1")"
+W1_OUT="$(adj "$W1")"; bc_put ADJ w1 "$W1_OUT"
 expect_deny "$W1_OUT" "15a the real s317 tier-pin waiver (names 82 dev and 42 code-reviewer rows, no spawn)"
 grep -qF 'names no spawn' <<<"$W1_OUT" && ok "  and the reason names the unnamed-waiver clause" \
   || bad "  the deny does not say the waiver names no spawn"
@@ -1758,10 +1842,10 @@ expect_quiet "$(adj "$W2")" "15b a Check 22 waiver naming a ledger tool_use_id"
 W3="$(mkworld nameonly 317)"
 entry "$W3/docs/escalations/pending.md" "## [S317-CHECK22-WAIVER] lead - 2026-10-10" \
   "**Context:** Check 22 tier mismatch on the dispatch s317-w8." "$ADJ_REM"
-expect_quiet "$(adj "$W3")" "15c a Check 22 waiver naming a ledger dispatch name only"
+BCX="$(adj "$W3")"; bc_put ADJ w3 "$BCX"; expect_quiet "$BCX" "15c a Check 22 waiver naming a ledger dispatch name only"
 
 W4="$(mkworld prior 318)"; cat "$WAIVER_SRC" >> "$W4/docs/escalations/pending.md"
-expect_quiet "$(adj "$W4")" "15d the same unnamed waiver, from a PRIOR sprint"
+BCX="$(adj "$W4")"; bc_put ADJ w4 "$BCX"; expect_quiet "$BCX" "15d the same unnamed waiver, from a PRIOR sprint"
 
 # THE INVALID-EXCEPTION CLAUSE. One remediator row recorded `invalid-exception` in S317.
 inv_world() { # inv_world <name> <entry-body-line> -> project dir
@@ -1772,7 +1856,7 @@ inv_world() { # inv_world <name> <entry-body-line> -> project dir
   printf '%s\n' "$p"
 }
 W5="$(inv_world uncovered "**Remediation:** no Rule 28 exception applies, and none is invented here.")"
-W5_OUT="$(adj "$W5")"
+W5_OUT="$(adj "$W5")"; bc_put ADJ w5 "$W5_OUT"
 expect_deny "$W5_OUT" "15e an invalid-exception row named by a waiver that cites no exception"
 grep -qF 'toolu_01REMINV000000000000001' <<<"$W5_OUT" && ok "  and the reason names the uncovered row" \
   || bad "  the deny does not name the uncovered invalid-exception row"
@@ -1782,7 +1866,7 @@ expect_quiet "$(adj "$(inv_world covered "**Remediation:** the exception that ap
   "15f the same row, covered by an entry citing exception (4)"
 W7="$(mkworld nonshard 317)"
 ledrow 317 dev-escalated dev-escalated toolu_01DEVESCINV00000000001 invalid-exception >> "$W7/_bmad-output/spawn-ledger.jsonl"
-expect_quiet "$(adj "$W7")" "15g an invalid-exception row on a NON-shardable role (Check 22 arm S3 does not judge it)"
+BCX="$(adj "$W7")"; bc_put ADJ w7 "$BCX"; expect_quiet "$BCX" "15g an invalid-exception row on a NON-shardable role (Check 22 arm S3 does not judge it)"
 
 # MUTANTS for arm 2, each a copy guarded by `cmp -s`, each killed by its own world only.
 ADJCTL="$WORK/guard-adj-control.sh"; cp "$HOOK" "$ADJCTL"
@@ -1790,13 +1874,8 @@ adj_mut() { printf '%s' "$(adjj "${3-}")" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>
   | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }
 [ "$(adj_mut "$ADJCTL" "$W1")" = deny ] && ok "ADJ MUTANT CONTROL: an unmutated copy denies 15a" \
   || bad "ADJ MUTANT CONTROL is dead -- the kills below are unearned"
-adj_kill() { # adj_kill <name> <sed-expr> <world> <want: deny|allow> <label> [nonce]
-  local m="$WORK/guard-adj-$1.sh" got
-  sed "$2" "$HOOK" > "$m" || { bad "ADJ MUTANT $1: sed DID NOT APPLY"; return; }
-  if cmp -s "$HOOK" "$m"; then bad "ADJ MUTANT $1 matched nothing (cmp -s guard)"; return; fi
-  got="$(adj_mut "$m" "$3" "${6-}")"; [ -n "$got" ] || got=allow
-  [ "$got" = "$4" ] && ok "ADJ MUTANT $1 killed: $5" || bad "ADJ MUTANT $1 SURVIVED: $5"
-}
+# adj_kill <name> <sed-expr> ... : REGISTERS an adjudicator mutant; the end-of-file loop judges it on named worlds.
+adj_kill() { printf '%s\t%s\n' "$1" "$2" >> "$WORK/adjq"; }
 adj_kill regexonly 's/          if (t in key) named = 1$/          if (t ~ \/^(toolu_|a[0-9a-f]{16}$)\/) named = 1/' \
   "$W3" deny "a shape-regex join cannot see a waiver that names a spawn by dispatch name (15c)"
 adj_kill rolename 's/          (if (.name \/\/ "") != "" and .name != .role then "K\\t" + .name else empty end),$/          (if (.name \/\/ "") != "" then "K\\t" + .name else empty end),/' \
@@ -1806,7 +1885,7 @@ adj_kill nosprint 's/^        if (hdr !~ ("\[Ss\]" sprint "(\[^0-9\]|\$)")) retu
 adj_kill noinvalid 's/^        if (!dead) for (i = 1; i <= ni; i++) if (!(i in cov)) print "X\\t".*$/        if (0) print/' \
   "$W5" allow "dropping the invalid-exception clause misses an uncovered S3 row (15e)"
 adj_kill anyexc 's/^        EXC = ".*"$/        EXC = "exception"/' \
-  "$(inv_world generic2 "**Remediation:** one of Rule 28's four serial exceptions applied.")" allow \
+  "-" allow \
   "a bare-word exception match accepts \"the four\" as a citation (15e')"
 adj_kill noshardable 's/^\(          (if .shard == "invalid-exception"\) and (\$sh | contains(" " + \$role + " "))$/\1/' \
   "$W7" deny "dropping the shardable-role filter refuses over a dev-escalated row Check 22 arm S3 does not judge (15g)"
@@ -1816,9 +1895,7 @@ adj_kill noshardable 's/^\(          (if .shard == "invalid-exception"\) and (\$
 # than aborting (which would also read as allow); 15a's deny on the same copy proves it ran.
 adj_kill lazyset '/clause 2 would never fire\.$/{n;s/^  dg_shardable_set$/  _dg_shardable=" "; case "${SPAWN_SHARD:-}" in invalid-exception) dg_shardable_set ;; esac/;}' \
   "$W5" allow "a shardable set built only for an invalid current line leaves the waiver arm an empty set (15e)"
-[ "$(adj_mut "$WORK/guard-adj-lazyset.sh" "$W1")" = deny ] \
-  && ok "  and the lazyset copy still denies 15a, so it ran (clause 1 is untouched)" \
-  || bad "  the lazyset copy does not deny 15a -- it did not run, and its kill is unearned"
+
 
 # 15w. A FAILED KEY PRODUCER FAILS OPEN. 15a's world plus one ledger row whose tool_use_id is a
 # NUMBER: the guard's `"K\t" + .tool_use_id` cannot add a string and a number. It is the LAST row
@@ -1858,13 +1935,13 @@ else bad "15w FIXTURE BROKEN: the mutant world's numeric row is not the ledger's
 # `re-dispatch` and `shard` in the entry and must still deny: an UNCHOSEN option (the s317 form),
 # a negated remediation, and one that never says sharded.
 W8="$(inv_world sharded "**Remediation:** the work was re-dispatched sharded as rem-p1a and rem-p1b; output verified.")"
-expect_quiet "$(adj "$W8")" "15h an invalid-exception row covered by a Remediation stating a sharded re-dispatch"
+BCX="$(adj "$W8")"; bc_put ADJ w8 "$BCX"; expect_quiet "$BCX" "15h an invalid-exception row covered by a Remediation stating a sharded re-dispatch"
 W8I="$(inv_world shardinline "Remediation: the work was re-dispatched sharded as rem-p1a and rem-p1b; output verified.")"
 expect_quiet "$(adj "$W8I")" "15h' the same, written as an inline Remediation: (the adversary's s9 form)"
 W8O="$(inv_world shardoption "**Options:** (a) OVERRIDDEN [chosen]; (b) re-dispatch the nine as sharded spawns.")"
-expect_deny "$(adj "$W8O")" "15h'' a sharded re-dispatch only as an UNCHOSEN option (the s317 124524Z entry's form)"
+BCX="$(adj "$W8O")"; bc_put ADJ w8o "$BCX"; expect_deny "$BCX" "15h'' a sharded re-dispatch only as an UNCHOSEN option (the s317 124524Z entry's form)"
 W8N="$(inv_world shardneg "**Remediation:** No spawn is re-dispatched sharded; outputs verified.")"
-expect_deny "$(adj "$W8N")" "15h''' a negated sharded re-dispatch in the Remediation"
+BCX="$(adj "$W8N")"; bc_put ADJ w8n "$BCX"; expect_deny "$BCX" "15h''' a negated sharded re-dispatch in the Remediation"
 W8U="$(inv_world shardnone "**Remediation:** the work was re-dispatched serially; output verified.")"
 expect_deny "$(adj "$W8U")" "15h'''' a re-dispatch that is not sharded"
 
@@ -1875,7 +1952,7 @@ W9="$(mkworld substr 317)"
 entry "$W9/docs/escalations/pending.md" "## [S317-Z] lead - 2026-10-10" \
   "**Blocker type:** Check 30 spec join ruling; unrelated to the Rule 19(b) binding." \
   "**Resolution:** disposition by the Check-22 pattern, by analogy."
-expect_quiet "$(adj "$W9")" "15i an OVERRIDDEN Check 30 entry mentioning Rule 19(b) and Check-22 only in passing"
+BCX="$(adj "$W9")"; bc_put ADJ w9 "$BCX"; expect_quiet "$BCX" "15i an OVERRIDDEN Check 30 entry mentioning Rule 19(b) and Check-22 only in passing"
 W9P="$(mkworld substrpos 317)"
 entry "$W9P/docs/escalations/pending.md" "## [S317-Z] lead - 2026-10-10" \
   "**Blocker type:** Check 30 spec join ruling; unrelated to the Rule 19(b) binding." \
@@ -1890,18 +1967,18 @@ expect_deny "$(adj "$W9C")" "15i'' Check 22 on a wrapped continuation line of th
 W10="$(mkworld h3 317)"
 entry "$W10/docs/escalations/pending.md" "## [S317-Y] lead - 2026-10-10" \
   "**Context:** Check 22 tier mismatch waived." "$ADJ_REM" "### Spawns waived" "toolu_01DEVROW000000000000001"
-expect_quiet "$(adj "$W10")" "15j a Check 22 waiver whose spawn list sits under a ### subheading"
+BCX="$(adj "$W10")"; bc_put ADJ w10 "$BCX"; expect_quiet "$BCX" "15j a Check 22 waiver whose spawn list sits under a ### subheading"
 
 # ONLY AN IMPLEMENTATION GATE, read from the brief's OWN nonce: the first after its `gate_nonce`
 # key, else the first anywhere; case-insensitive; a hyphenated prefix glued on still counts.
 # `adjj` writes " gate_nonce: <arg>", so the arg's first nonce is the brief's own.
-expect_quiet "$(adj "$W1" sprint-review-20261011T101010Z)" "15k the 15a world, a SPRINT-REVIEW adjudicator"
+BCX="$(adj "$W1" sprint-review-20261011T101010Z)"; bc_put ADJ w1sr "$BCX"; expect_quiet "$BCX" "15k the 15a world, a SPRINT-REVIEW adjudicator"
 expect_quiet "$(raw "$W1" "$(mkjson Agent gate-adjudicator opus | jq -c '.tool_input.prompt += " cites implementation-20261010T230257Z. gate_nonce: sprint-review-20261011T101010Z"')")" \
   "15k' the 15a world, a sprint-review brief that CITES an earlier implementation nonce"
 expect_quiet "$(raw "$W1" "$(mkjson Agent gate-adjudicator opus)")" "15k'' the 15a world, a brief naming no nonce"
 expect_deny "$(adj "$W1" "implementation-20261010T230257Z; story verdict story-20261009T101010Z")" \
   "15k''' the 15a world, an implementation brief that also cites a story nonce (judged)"
-expect_deny "$(adj "$W1" gate-adjudicator-implementation-20261010T230257Z)" \
+BCX="$(adj "$W1" gate-adjudicator-implementation-20261010T230257Z)"; bc_put ADJ w1glued "$BCX"; expect_deny "$BCX" \
   "15k'''' the 15a world, an implementation nonce glued to a hyphenated prefix (judged)"
 expect_deny "$(adj "$W1" IMPLEMENTATION-20261010T230257Z)" "15k''''' the 15a world, an upper-case implementation nonce (judged)"
 
@@ -1932,11 +2009,11 @@ adj_kill noimplscope 's/^\[ "\$_dg_gt" = implementation \] \&\& DG_IMPL_GATE=tru
 # The reference consumer wraps its fields (62 continuation lines inside OVERRIDDEN entries). Every
 # world below is the 15e row named by an entry whose Remediation is the given text.
 WRP="$(inv_world wrappos "$(printf '%s\n%s' '**Remediation:** the work was re-dispatched' 'sharded as rem-p1a and rem-p1b; output verified.')")"
-expect_quiet "$(adj "$WRP")" "15m a sharded Remediation wrapped across two lines (re-dispatched / sharded)"
+BCX="$(adj "$WRP")"; bc_put ADJ wrp "$BCX"; expect_quiet "$BCX" "15m a sharded Remediation wrapped across two lines (re-dispatched / sharded)"
 WRN="$(inv_world wrapneg "$(printf '%s\n%s' '**Remediation:** the work was not' 're-dispatched sharded; outputs verified.')")"
-expect_deny "$(adj "$WRN")" "15m' its negated twin, the negator on the line BEFORE the claim (not / re-dispatched sharded)"
+BCX="$(adj "$WRN")"; bc_put ADJ wrn "$BCX"; expect_deny "$BCX" "15m' its negated twin, the negator on the line BEFORE the claim (not / re-dispatched sharded)"
 WSN="$(inv_world notserial "**Remediation:** the work was re-dispatched sharded, not serially, as rem-p1a and rem-p1b.")"
-expect_quiet "$(adj "$WSN")" "15n a negation AFTER the claim (\"re-dispatched sharded, not serially\")"
+BCX="$(adj "$WSN")"; bc_put ADJ wsn "$BCX"; expect_quiet "$BCX" "15n a negation AFTER the claim (\"re-dispatched sharded, not serially\")"
 expect_quiet "$(adj "$(inv_world soexc "**Remediation:** re-dispatched sharded as rem-p1a and rem-p1b, so no Rule 28 exception is claimed.")")" \
   "15n' a negated trailing clause (\"..., so no Rule 28 exception is claimed\")"
 expect_quiet "$(adj "$(inv_world emdash "$(printf '**Remediation:** the work was re-dispatched sharded as rem-p1a and rem-p1b \342\200\224 none of the four exceptions applied.')")")" \
@@ -1944,17 +2021,17 @@ expect_quiet "$(adj "$(inv_world emdash "$(printf '**Remediation:** the work was
 expect_quiet "$(adj "$(inv_world runt "**Remediation:** the work was re-dispatched sharded as s317-rem-run-t1 and s317-rem-run-t2.")")" \
   "15n''' a shard name the old n.t stand-in read as a negator (s317-rem-run-t1)"
 WAP="$(inv_world apos "**Remediation:** the work wasn't re-dispatched sharded; outputs verified.")"
-expect_deny "$(adj "$WAP")" "15o a straight-apostrophe negator before the claim (wasn't re-dispatched sharded)"
+BCX="$(adj "$WAP")"; bc_put ADJ wap "$BCX"; expect_deny "$BCX" "15o a straight-apostrophe negator before the claim (wasn't re-dispatched sharded)"
 WCU="$(inv_world curly "$(printf '**Remediation:** the work wasn\342\200\231t re-dispatched sharded; outputs verified.')")"
-expect_deny "$(adj "$WCU")" "15o' a curly-apostrophe negator before the claim"
+BCX="$(adj "$WCU")"; bc_put ADJ wcu "$BCX"; expect_deny "$BCX" "15o' a curly-apostrophe negator before the claim"
 WEN="$(inv_world excneg "**Remediation:** Rule 28 exception (3) does not apply; outputs verified.")"
-expect_deny "$(adj "$WEN")" "15p a negated exception citation (\"exception (3) does not apply\")"
+BCX="$(adj "$WEN")"; bc_put ADJ wen "$BCX"; expect_deny "$BCX" "15p a negated exception citation (\"exception (3) does not apply\")"
 expect_deny "$(adj "$(inv_world excneg2 "**Remediation:** no exception (3) applies; outputs verified.")")" \
   "15p' a negator before the citation (\"no exception (3) applies\")"
 expect_quiet "$(adj "$(inv_world excpos "**Remediation:** exception (3) applied, and no other was considered.")")" \
   "15p'' its twin: a cited exception with a negation in a LATER clause"
 WXS="$(inv_world excprior "**Remediation:** The four were not invented. Exception (3) applied to toolu_01REMINV000000000000001.")"
-expect_quiet "$(adj "$WXS")" "15p''' a cited exception with a negator in the PRIOR sentence"
+BCX="$(adj "$WXS")"; bc_put ADJ wxs "$BCX"; expect_quiet "$BCX" "15p''' a cited exception with a negator in the PRIOR sentence"
 adj_kill xsentence 's/^        n = split(norm(t), Q, \/\[.;\](\[\[:space:\]\]|\$)\/)$/        n = split(norm(t), Q, \/\\001\/)/' \
   "$WXS" deny "judging the whole field as one sentence lets a prior sentence's negator void a citation (15p''')"
 adj_kill nojoin 's/^      !op \&\& inrem { rem = rem " " \$0 }$/      !op \&\& inrem { }/' \
@@ -1978,14 +2055,14 @@ adj_kill boundary 's#grep -oE "$_dg_nre"#grep -oE "(^|[^a-z0-9-])$_dg_nre" | sed
 # The ledger placement, mutated: a row appended BEFORE the deny arms.
 LM="$WORK/guard-adj-ledgerfirst.sh"
 sed 's/^# --- THE TWO DENY ARMS/mkdir -p "$SPAWN_STATE_DIR"; printf "{}\\n" >> "$SPAWN_LEDGER"; &/' "$HOOK" > "$LM"
-if cmp -s "$HOOK" "$LM"; then bad "ADJ MUTANT ledgerfirst matched nothing (cmp -s guard)"
+if cmp -s "$HOOK" "$LM"; then bad "MUTANT ledgerfirst matched nothing (cmp -s guard)"
 else
   LA="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
   LD="$(adj_mut "$LM" "$W1")"
   LB="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
-  [ "$LD" = deny ] && [ "$LB" != "$LA" ] \
-    && ok "ADJ MUTANT ledgerfirst killed: a row written before the arms survives a refused dispatch (15l)" \
-    || bad "ADJ MUTANT ledgerfirst SURVIVED (decision '$LD', rows $LA -> $LB)"
+  mx_kill "$(bfl)" ledgerfirst rows dec "dec=${LD:-allow}
+rows=$([ "$LB" != "$LA" ] && echo changed || echo same)" $'dec=deny\nrows=same' \
+    "ADJ MUTANT ledgerfirst scores a kill: a row written before the arms survives a refused dispatch (15l)" $'dec=deny'
 fi
 
 # BL-515 SAME-BATCH ORDER. Claude Code writes each tool_use of one assistant message as its own
@@ -1998,25 +2075,15 @@ t_usem() { # t_usem <message-id> <id> <description>
   t_res v1 "$CAPTXT" true; t_res v2 "Async agent launched successfully." false; } > "$CAPDIR/sb.jsonl"
 { t_usem msg_B1 v1 "Party seat 7"; t_res v1 "$CAPTXT" true
   t_usem msg_B2 v2 "Party seat 8"; t_res v2 "Async agent launched successfully." false; } > "$CAPDIR/sb2.jsonl"
-expect_deny "$(capout "$CAPDIR/sb.jsonl" "Party seat 7")" "14h a re-send whose only later launch was a sibling in the rejection's own batch"
-expect_quiet "$(capout "$CAPDIR/sb2.jsonl" "Party seat 7")" "14h' its twin: the same launch from a LATER message releases"
-SBM="$WORK/guard-cap-samebatch.sh"
-sed 's/^                   elif .held and .hmid != "" and .mid\[\$t.tool_use_id\] == .hmid then .$/                   elif false then ./' "$HOOK" > "$SBM"
-if cmp -s "$HOOK" "$SBM"; then bad "CAP MUTANT samebatch matched nothing (cmp -s guard)"
-elif [ -z "$(cap_mut "$SBM" "$CAPDIR/sb.jsonl" "Party seat 7")" ] && [ "$(cap_mut "$SBM" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ]; then
-  ok "CAP MUTANT samebatch killed: releasing on a same-batch sibling allows 14h (and still denies 14a)"
-else bad "CAP MUTANT samebatch SURVIVED: 14h still denied, or the mutant stopped denying 14a"; fi
+BCX="$(capout "$CAPDIR/sb.jsonl" "Party seat 7")"; bc_put CAP sb "$BCX"; expect_deny "$BCX" "14h a re-send whose only later launch was a sibling in the rejection's own batch"
+BCX="$(capout "$CAPDIR/sb2.jsonl" "Party seat 7")"; bc_put CAP sb2 "$BCX"; expect_quiet "$BCX" "14h' its twin: the same launch from a LATER message releases"
+cap_kill samebatch 's/^                   elif .held and .hmid != "" and .mid\[\$t.tool_use_id\] == .hmid then .$/                   elif false then ./'
 
 # BL-515 AN ERROR RESULT RELEASES NOTHING. A later Agent call that a HOOK refused (this guard's own
 # deny among them) is an is_error tool_result that launched no agent, so no slot freed.
 { cat "$CAPDIR/a.jsonl"; t_use u5 Agent "Party seat 8"; t_res u5 "PreToolUse:Agent hook error: refused" true; } > "$CAPDIR/he.jsonl"
-expect_deny "$(capout "$CAPDIR/he.jsonl" "Party seat 7")" "14i a re-send after only a HOOK-REFUSED Agent result (is_error, not the cap)"
-ERM="$WORK/guard-cap-errorreleases.sh"
-sed 's/^                   elif \$t.is_error == true then .$/                   elif false then ./' "$HOOK" > "$ERM"
-if cmp -s "$HOOK" "$ERM"; then bad "CAP MUTANT errorreleases matched nothing (cmp -s guard)"
-elif [ -z "$(cap_mut "$ERM" "$CAPDIR/he.jsonl" "Party seat 7")" ] && [ "$(cap_mut "$ERM" "$CAPDIR/a.jsonl" "Party seat 7")" = deny ]; then
-  ok "CAP MUTANT errorreleases killed: releasing on any non-cap error result allows 14i (and still denies 14a)"
-else bad "CAP MUTANT errorreleases SURVIVED: 14i still denied, or the mutant stopped denying 14a"; fi
+BCX="$(capout "$CAPDIR/he.jsonl" "Party seat 7")"; bc_put CAP he "$BCX"; expect_deny "$BCX" "14i a re-send after only a HOOK-REFUSED Agent result (is_error, not the cap)"
+cap_kill errorreleases 's/^                   elif \$t.is_error == true then .$/                   elif false then ./'
 
 # --- 16. WHO ISSUED THE SPAWN: parent_agent_id --------------------------------------------------
 # A spawn made from inside a teammate carries the payload `agent_id`; the lead's carries none. The
@@ -2053,14 +2120,14 @@ case "$PA_M" in 1\|none\|*) ok "16a a teammate-issued general-purpose spawn writ
   || bad "16c the lead row produced '$PA_L', expected '1|none|\"\"'"
 # Each mutant is scored on the EXACT two-cell vector, so one that moves a cell it does not own shows.
 # pa_mut <tag> <sed-expr> <expected-vector> <label>
-pa_mut() {
-  local m="$WORK/guard-pa-$1.sh" got
-  sed "$2" "$HOOK" > "$m"
-  if cmp -s "$HOOK" "$m"; then bad "PA MUTANT $1 matched nothing (cmp -s guard)"; return; fi
-  bash -n "$m" 2>/dev/null || { bad "PA MUTANT $1 does not parse -- its silence would not be the mutation"; return; }
-  got="$(pa_vec "$m")"
-  if [ "$got" = "$3" ]; then ok "PA MUTANT $1 killed: $4"
-  else bad "PA MUTANT $1 scored '$got', expected '$3' ($4)"; fi
+pa_c() { case "$2" in mate) pa_cell "$1" "$PA_MATE" ;; lead) pa_cell "$1" "$PA_LEAD" ;; esac; }
+ALL_PA=mate,lead; SEP_PA=nl; CELLFN_PA=pa_c
+BASE_PA="mate=$PA_M
+lead=$PA_L"
+B_PA=$([ "$PA_GOT" = "$PA_WANT" ] && echo 1 || echo 0)
+pa_mut() { # pa_mut <tag> <sed-expr> <expected positional vector> <label>
+  local dt; dt="$(fam_dt PA "$1")"
+  fam_sedmut PA "$1" "$2" "${dt%%|*}" "${dt##*|}" "$B_PA" "mate=${3%% *}"$'\n'"lead=${3#* }" "PA MUTANT $1 scores a kill: $4"
 }
 # 16a: the guard returns before the append for a call made from inside a subagent.
 pa_mut earlyexit 's/^mkdir -p "\$SPAWN_STATE_DIR" 2>\/dev\/null || true$/[ -n "$DG_AGENT_ID" ] \&\& exit 0; &/' \
@@ -2096,14 +2163,15 @@ case "$RL_GOT" in "1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" "*)
 [ "${RL_GOT##* }" = "0|none|NOROW" ] && ok "16e the lead's Explore spawn writes no row and gets no decision" \
   || bad "16e the lead's Explore spawn produced '${RL_GOT##* }', expected '0|none|NOROW'"
 # rl_mut <tag> <sed-expr> <expected-vector> <label>
-rl_mut() {
-  local m="$WORK/guard-rl-$1.sh" got
-  sed "$2" "$HOOK" > "$m"
-  if cmp -s "$HOOK" "$m"; then bad "RL MUTANT $1 matched nothing (cmp -s guard)"; return; fi
-  bash -n "$m" 2>/dev/null || { bad "RL MUTANT $1 does not parse"; return; }
-  got="$(rl_vec "$m")"
-  if [ "$got" = "$3" ]; then ok "RL MUTANT $1 killed: $4"
-  else bad "RL MUTANT $1 scored '$got', expected '$3' ($4)"; fi
+rl_c() { case "$2" in exm) rl_cell "$1" "$RL_EXM" ;; ntm) rl_cell "$1" "$RL_NTM" ;; exl) rl_cell "$1" "$RL_EXL" ;; esac; }
+ALL_RL=exm,ntm,exl; SEP_RL=nl; CELLFN_RL=rl_c
+BASE_RL="exm=${RL_GOT%% *}
+ntm=$(printf '%s' "$RL_GOT" | awk '{print $2}')
+exl=${RL_GOT##* }"
+B_RL=$([ "$RL_GOT" = "$RL_WANT" ] && echo 1 || echo 0)
+rl_mut() { # rl_mut <tag> <sed-expr> <expected positional vector> <label>
+  local dt a b c; dt="$(fam_dt RL "$1")"; read -r a b c <<<"$3"
+  fam_sedmut RL "$1" "$2" "${dt%%|*}" "${dt##*|}" "$B_RL" "exm=$a"$'\n'"ntm=$b"$'\n'"exl=$c" "RL MUTANT $1 scores a kill: $4"
 }
 # 16d: the pre-fix exit -- every role-less dispatch leaves, the teammate's too.
 rl_mut roleexit "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/ empty' 2>\/dev\/null || true)\" \] || exit 0$/  exit 0/" \
@@ -2113,6 +2181,117 @@ rl_mut leadrow "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/ 
   "1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"\"" "recording every role-less dispatch writes rows for the lead's utility agents"
 [ "$RL_GOT" = "$RL_WANT" ] || bad "16d/e FIXTURE BROKEN: unmutated vector '$RL_GOT' is not '$RL_WANT'"
 [ "$PA_GOT" = "$PA_WANT" ] || bad "16 FIXTURE BROKEN: the unmutated vector '$PA_GOT' is not '$PA_WANT', so every PA mutant above was scored against the wrong baseline"
+
+
+# ===== CAP AND ADJUDICATOR MUTANTS, scored together once every world above exists. Each is judged on
+# named WORLD cells: a cell's value is the guard's decision in that world, and a mutant must trip its
+# deciding cell while its twin cells stay at the unmutated value. The mutants were registered where
+# they used to run (cap_kill / adj_kill queue them); the worlds they need are all built by now.
+WGEN2="$(inv_world generic2tail "**Remediation:** one of Rule 28's four serial exceptions applied.")"
+cap_cell() { # cap_cell <guard> <cell> -> deny|allow
+  local d
+  case "$2" in
+    a)  d="$(cap_mut "$1" "$CAPDIR/a.jsonl" "Party seat 7")" ;;
+    b)  d="$(cap_mut "$1" "$CAPDIR/b.jsonl" "Party seat 7")" ;;
+    c)  d="$(cap_mut "$1" "$CAPDIR/c.jsonl" "Party seat 7")" ;;
+    c3) d="$(cap_mut "$1" "$CAPDIR/c3.jsonl" "Party seat 7")" ;;
+    c2) d="$(cap_mut "$1" "$CAPDIR/c2.jsonl" "Party seat 7")" ;;
+    d)  d="$(cap_mut "$1" "$CAPDIR/d.jsonl" "Party seat 7")" ;;
+    e)  d="$(cap_mut "$1" "$CAPDIR/a.jsonl" "Party seat 9")" ;;
+    f)  d="$(cap_mut "$1" "$CAPDIR/a.jsonl" "Party seat 7" a1234567890abcdef)" ;;
+    sb) d="$(cap_mut "$1" "$CAPDIR/sb.jsonl" "Party seat 7")" ;;
+    sb2) d="$(cap_mut "$1" "$CAPDIR/sb2.jsonl" "Party seat 7")" ;;
+    he) d="$(cap_mut "$1" "$CAPDIR/he.jsonl" "Party seat 7")" ;;
+    padlim) d="$(cap_lim "$1" "$CAPPAD" "Party seat 7")" ;;
+  esac
+  printf '%s' "${d:-allow}"
+}
+adj_cell() { # adj_cell <guard> <cell> -> deny|allow
+  local d="" w
+  case "$2" in
+    w1) d="$(adj_mut "$1" "$W1")" ;;
+    w3) d="$(adj_mut "$1" "$W3")" ;;
+    w4) d="$(adj_mut "$1" "$W4")" ;;
+    w5) d="$(adj_mut "$1" "$W5")" ;;
+    w7) d="$(adj_mut "$1" "$W7")" ;;
+    w8) d="$(adj_mut "$1" "$W8")" ;;
+    w8o) d="$(adj_mut "$1" "$W8O")" ;;
+    w8n) d="$(adj_mut "$1" "$W8N")" ;;
+    w9) d="$(adj_mut "$1" "$W9")" ;;
+    w10) d="$(adj_mut "$1" "$W10")" ;;
+    wgen2) d="$(adj_mut "$1" "$WGEN2")" ;;
+    wrp) d="$(adj_mut "$1" "$WRP")" ;;
+    wrn) d="$(adj_mut "$1" "$WRN")" ;;
+    wsn) d="$(adj_mut "$1" "$WSN")" ;;
+    wap) d="$(adj_mut "$1" "$WAP")" ;;
+    wcu) d="$(adj_mut "$1" "$WCU")" ;;
+    wen) d="$(adj_mut "$1" "$WEN")" ;;
+    wxs) d="$(adj_mut "$1" "$WXS")" ;;
+    w1sr) d="$(adj_mut "$1" "$W1" sprint-review-20261011T101010Z)" ;;
+    w1cite) d="$(adj_mut "$1" "$W1" "cites implementation-20261010T230257Z. gate_nonce: sprint-review-20261011T101010Z")" ;;
+    w1glued) d="$(adj_mut "$1" "$W1" gate-adjudicator-implementation-20261010T230257Z)" ;;
+    w12) w="$(numid_world numid-cell)"; if numid_last "$w"; then d="$(adj_mut "$1" "$w")"; else d=BROKEN; fi ;;
+  esac
+  printf '%s' "${d:-allow}"
+}
+ALL_CAP=a,b,c,c3,c2,d,e,f,sb,sb2,he,padlim; SEP_CAP=nl; CELLFN_CAP=cap_cell
+ALL_ADJ=w1,w3,w4,w5,w7,w8,w8o,w8n,w9,w10,wgen2,wrp,wrn,wsn,wap,wcu,wen,wxs,w1sr,w1cite,w1glued,w12; SEP_ADJ=nl; CELLFN_ADJ=adj_cell
+cap_dt() { # deciding|twins, the rows of the MUTANT-MATRIX header
+  case "$1" in
+    anytool) echo "d|a" ;; nodesc) echo "e|a" ;; nolead) echo "f|a" ;; nolaunch) echo "b|a" ;;
+    nonote) echo "c|a" ;; noenqueue) echo "c3|a" ;; notailgate) echo "padlim|a" ;;
+    samebatch) echo "sb|a" ;; errorreleases) echo "he|a" ;;
+    *) echo "|" ;;
+  esac
+}
+adj_dt() {
+  case "$1" in
+    regexonly) echo "w3|w1" ;; rolename) echo "w1|w3" ;; nosprint) echo "w4|w1" ;; noinvalid) echo "w5|w1" ;;
+    anyexc) echo "wgen2|w1" ;; noshardable) echo "w7|w1" ;; lazyset) echo "w5|w1" ;; nokok) echo "w12|w1" ;;
+    substr) echo "w9|w1" ;; h3split) echo "w10|w1" ;; nosharded) echo "w8|w1" ;; anyfield) echo "w8o|w1" ;;
+    nonegation) echo "w8n|w1" ;; noimplscope) echo "w1sr|w1" ;; xsentence) echo "wxs|w1" ;; nojoin) echo "wrp|w1" ;;
+    perline) echo "wrn|w1" ;; unscoped) echo "wsn|w1" ;; noapos) echo "wap|w1" ;; nocurly) echo "wcu|w1" ;;
+    excnoneg) echo "wen|w1" ;; firstnonce) echo "w1cite|w1" ;; boundary) echo "w1glued|w1" ;; ledgerfirst) echo "w1|w3" ;;
+    *) echo "|" ;;
+  esac
+}
+queue_run() { # queue_run <CAP|ADJ> <queue file> <base guard> <script prefix>
+  local fam="$1" q="$2" bg="$3" pre="$4" n s m dt c cells="" av="ALL_$1" fv="CELLFN_$1" dtf bv="BASE_$1"
+  [ "$fam" = CAP ] && dtf=cap_dt || dtf=adj_dt
+  if [ ! -s "$q" ]; then bad "MUTANT $fam queue is empty -- the $fam mutants never registered, so nothing below was scored"; return; fi
+  if [ "$MATRIX" = 1 ]; then cells="${!av}"; cells="${cells//,/ }"
+  else
+    while IFS=$'\t' read -r n s; do dt="$($dtf "$n")"; cells="$cells ${dt%%|*} ${dt##*|}"; done < "$q"
+    cells="$(printf '%s\n' $cells | sort -u | tr '\n' ' ')"
+  fi
+  # base cells: reuse the decision a plain arm already recorded (bc_put) for the same world and input;
+  # only a cell no plain arm drives (wgen2, w12) is driven here.
+  printf -v "$bv" '%s' "$(for c in $cells; do
+      cv="BC_${fam}_${c}"
+      if [ -n "${!cv-}" ]; then printf '%s=%s\n' "$c" "${!cv}"; else printf '%s=%s\n' "$c" "$("${!fv}" "$bg" "$c")"; fi
+    done)"
+  while IFS=$'\t' read -r n s; do
+    m="$WORK/guard-$pre-$n.sh"
+    sed "$s" "$HOOK" > "$m" || { bad "MUTANT $n: sed DID NOT APPLY"; continue; }
+    if cmp -s "$HOOK" "$m"; then bad "MUTANT $n matched nothing (cmp -s guard)"; continue; fi
+    dt="$($dtf "$n")"
+    fam_score "$fam" "$n" "$m" "${dt%%|*}" "${dt##*|}" "$(bfl)" "" "$fam MUTANT $n scores a kill: its deciding world ${dt%%|*} flips while its twin ${dt##*|} stays at the unmutated decision"
+  done < "$q"
+}
+queue_run CAP "$WORK/capq" "$HOOK" cap
+queue_run ADJ "$WORK/adjq" "$ADJCTL" adj
+
+# ===== the matrix machinery itself, and the plain-run arm ===================================
+mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \
+         || bad "matrix machinery probe FAILED: the judge cannot tell a kill from a survivor, so no mutant verdict above is believable"
+# A PLAIN run executes no matrix-only cell: only a --matrix run evaluates cells beyond decides+twins.
+if [ "$MATRIX" = 1 ]; then
+  [ "$MX_EXTRA" -gt 0 ] && ok "matrix mode evaluated $MX_EXTRA cells beyond the deciding and twin cells" \
+                        || bad "matrix mode evaluated no extra cell -- the matrix flag is not reaching the judge"
+else
+  [ "$MX_EXTRA" = 0 ] && ok "a plain run executes no matrix-only cell (0 cells beyond decides+twins) -- only --matrix measures the full matrix" \
+                      || bad "a plain run evaluated $MX_EXTRA matrix-only cells -- the matrix is running on every push"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi

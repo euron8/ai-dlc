@@ -14,14 +14,12 @@ backlog-receipt-binding
 backlog-rotate-fence-guard
 ci-gates-resolution
 claude-rules-joins
-consumer-suite-pool
 context-mode-protect
 core-paths-audit-diff
 decl-reasons
 deploy-validate-smoke-classification
 derivation-capture
 derivation-capture-worktree-root
-dispatch-model-guard
 dist-clone
 divergence-hard-block
 emit-report-refusal
