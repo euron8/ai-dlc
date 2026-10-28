@@ -2018,7 +2018,7 @@ vb_q() {
 VB_O=""
 vb_refuse() { # <script-dir> <shard-dir> <gate> <target key> <case> <token> [second token]
   CS_TOK="$6"
-  if [ "${VB_E2E:-0}" = 1 ]; then
+  if [ "${VB_E2E:-0}" = 1 ] && [ "$1" = "$SRCDIR" ]; then
     VB_O="$MO"
     if cs_same "$1" "$2" "$3" "$2/$4.md" && { [ -z "${7:-}" ] || has "$CO" "$7"; }; then :
     else WHY="$WHY $5{$CS_LAST}"; fi
@@ -2032,7 +2032,7 @@ vb_refuse() { # <script-dir> <shard-dir> <gate> <target key> <case> <token> [sec
 }
 vb_pass() { # <script-dir> <shard-dir> <gate> <target key> <case>
   local o
-  if [ "${VB_E2E:-0}" = 1 ]; then
+  if [ "${VB_E2E:-0}" = 1 ] && [ "$1" = "$SRCDIR" ]; then
     VB_O="$MO"
     if [ "$3" = qa ]; then o="$(qout "$2")"; else o="$(out_of "$2")"; fi
     run_mg "$1" "$2" "$3" "$o"
@@ -2132,13 +2132,13 @@ p_vb_r3() {
   [ -f "$d/cross-1.md" ] || { WHY="FIXTURE BROKEN: the qa world has no cross-1"; return 1; }
   vb_q "$d" cross-1 NEEDS_REWORK "$VB_R3_BODY"
   VB_E2E=1 vb_refuse "$sd" "$d" qa cross-1 r3-graph-cross1 "$VB_Q_SEV_NR" "$VB_STEM"
-  has "$MO" "$VB_R3_FILE" || WHY="$WHY r3-file-exit{$(reline "$MO")}"
-  has "$MO" "$VB_R3_SET" || WHY="$WHY r3-set-pass-exit{$(reline "$MO")}"
-  has "$MO" "$VB_R3_LEAD" || WHY="$WHY r3-owner-first{$(reline "$MO")}"
+  has "$VB_O" "$VB_R3_FILE" || WHY="$WHY r3-file-exit{$(reline "$VB_O")}"
+  has "$VB_O" "$VB_R3_SET" || WHY="$WHY r3-set-pass-exit{$(reline "$VB_O")}"
+  has "$VB_O" "$VB_R3_LEAD" || WHY="$WHY r3-owner-first{$(reline "$VB_O")}"
   local mo_txt_
-  mo_txt_="$(reline "$MO")"
+  mo_txt_="$(reline "$VB_O")"
   case "$mo_txt_" in *"$VB_R3_LEAD"*"$VB_R3_FILE"*) ;; *) WHY="$WHY r3-owner-first-order{${mo_txt_}}" ;; esac
-  has "$MO" "$VB_R3_OWN" && owner_in "$MO" cross-1 || WHY="$WHY r3-owner{$(reline "$MO")}"
+  has "$VB_O" "$VB_R3_OWN" && owner_in "$VB_O" cross-1 || WHY="$WHY r3-owner{$(reline "$VB_O")}"
   [ -z "$WHY" ]
 }
 # ---- VB4 (--mark): findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the
@@ -2532,7 +2532,8 @@ ad_out() { if [ "$2" = qa ]; then qout "$1"; else out_of "$1"; fi; }
 ad_ok() { # <script-dir> <gate> <case> <variant> [LEGACY line, by value]: merges, the LEGACY line exactly when named
   local o; o="$(ad_out "$AD_D" "$2")"
   ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
-  if [ "${AD_E2E:-0}" != 1 ]; then
+  if [ "${AD_E2E:-0}" != 1 ] || [ "$1" != "$SRCDIR" ]; then
+    # (a mutant drive, script dir != SRCDIR, always takes this path: the mutants sit in check_shard/adv_gate, which --check-shard reaches)
     # one shard's gate (adv_gate, the function the merge calls per shard): --check-shard on shard 1, the first shard read
     run_check "$1" "$AD_D" "$2" "$AD_D/1.md"
     if [ -n "${5:-}" ]; then
@@ -2555,7 +2556,7 @@ ad_ok() { # <script-dir> <gate> <case> <variant> [LEGACY line, by value]: merges
 ad_no() { # <script-dir> <gate> <case> <variant> <token> [second token]: REFUSED [owner: 1], the first shard read
   local o; o="$(ad_out "$AD_D" "$2")"
   ad_var "$AD_D" "$AD_C" "$4" || { WHY="$WHY $3{the variant did not apply}"; return; }
-  if [ "${AD_E2E:-0}" != 1 ]; then
+  if [ "${AD_E2E:-0}" != 1 ] || [ "$1" != "$SRCDIR" ]; then
     run_check "$1" "$AD_D" "$2" "$AD_D/1.md"
     chk_refused "$5" "${6:-}" && owner_in "$CO" 1 && ! has "$CO" "LEGACY: advisor:" || WHY="$WHY $3{rc=$CRC $(reline "$CO")}"
     return
