@@ -1649,6 +1649,24 @@ DC4|2|FIXTURE ERROR: a distribution tree (core/scripts/ present) with no .githoo
     eq "$dcid one declared line removed: exit" "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" "$dcrc"
     yes "$dcid fails for its own line" "$(cat "$WORK/dc-$dcid.out" 2>/dev/null)" "$dcmsg"
   done <<<"$dc_pairs"
+  # Under --matrix the DC copies are scored in the same row format. The cell DC.<id> is DEAD when the copy fails with its
+  # exit code AND its own message (the per-push assertion above); arms A and L are scored only where the copy printed
+  # that arm's verdict line (a copy that exits 2 before any arm runs none), DEAD on a FAIL line and GREEN on an ok line.
+  # DC0, the unmutated copy, prints no DC.<id> cell: it is the control, and A and L must be GREEN on it.
+  if [ "$MATRIX" = 1 ]; then
+    for _dc in DC0 DC1 DC2 DC3 DC4; do
+      [ -f "$WORK/dc-$_dc.out" ] || continue
+      _dcout="$(cat "$WORK/dc-$_dc.out")"
+      for _a in A L; do
+        if grep -q "^  FAIL  $_a:" <<<"$_dcout"; then echo "MATRIX $_dc $_a DEAD"
+        elif grep -q "^  ok    $_a:" <<<"$_dcout"; then echo "MATRIX $_dc $_a GREEN"; fi
+      done
+    done
+    while IFS='|' read -r dcid dcrc dcmsg; do
+      if [ "$(cat "$WORK/dc-$dcid.rc" 2>/dev/null)" = "$dcrc" ] && grep -qF -- "$dcmsg" "$WORK/dc-$dcid.out"; then echo "MATRIX $dcid DC.$dcid DEAD"
+      else echo "MATRIX $dcid DC.$dcid GREEN"; fi
+    done <<<"$dc_pairs"
+  fi
   CUR=cwd
   eq "from the root: exit 0" "$(cat "$WORK/cwd1.rc" 2>/dev/null)" 0
   eq "from the runner's dir: exit 0" "$(cat "$WORK/cwd2.rc" 2>/dev/null)" 0
