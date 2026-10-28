@@ -22,7 +22,7 @@
 # Usage: run.sh [path-to-self-update-fixtures.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 #
-# MUTANT-MATRIX BATTERY. Measured with `--matrix` (every mutant driven against EVERY cell, every cell printed as
+# Mutant-matrix battery. Measured with `--matrix` (every mutant driven against EVERY cell, every cell printed as
 # a MATRIX-ROW); a plain run drives each mutant's deciding cells plus the named twin only. Each mutant co-trips no
 # other arm, measured at authoring. The matrix is re-measured whenever an arm or a mutant is added or changed.
 # Cells: J mutants score the verdict cells DEFER/OK/UNDECIDED/STRANDED (1 = the reader reports that verdict
