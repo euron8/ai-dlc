@@ -69,6 +69,11 @@
 # MUTANT-MATRIX wC-push decides=nopush twins=refuse
 # MUTANT-MATRIX wG-nosentence decides=nopush twins=refuse
 # MUTANT-MATRIX wD-negate decides=refuse twins=nopush
+# The pre-BL-391 copy of the subject exists because the distribution's SKILL.md postdates BL-391, so without it
+# wD-negate-pre could never fire here: its anchor line is the step-6 clause as it read before step 2 became a second
+# source of the UN-SYNCED marking. The copy is the distribution text with that one clause reverted, built in both
+# modes; only wD-negate-pre runs on it, with the BL-391 conjunct of the refuse arm off, and an unmutated control on
+# the same copy gates the kill.
 # MUTANT-MATRIX wD-negate-pre decides=refuse twins=nopush
 # MUTANT-MATRIX wF-para decides=para twins=step2
 # MUTANT-MATRIX wE-step2 decides=step2 twins=para
@@ -431,6 +436,7 @@ if [ "$_dr" -eq 4 ] && [ "$ISDIST" = 0 ]; then
   B391=0
   printf '  SKIP  BL-391 arms 7-9 -- the installed SKILL.md predates the step-2 discard paragraph; they land with the pull that carries it\n'
 fi
+LAYOUT_B391="$B391"   # the installed layout, before any single row lowers B391 for itself
 V_SUBJ="$(vector "$SUBJ")"
 arm() { # arm <digit> <ok text> <fail text> <arm name>
   case "$1" in
@@ -531,7 +537,29 @@ post|wV-stampmoves|     \`skill_version\`/\`skill_commit\` stay where they were,
 mut_ok=1
 kills=0
 _n=0
-_want_n=26; [ "$B391" = 1 ] || _want_n=12
+_want_n=27; [ "$B391" = 1 ] || _want_n=12
+
+# THE PRE-BL-391 COPY, built in BOTH modes. In the distribution it is the subject with the step-6 clause reverted to
+# its pre-BL-391 spelling (the wY mutation's own line pair); in a consumer whose installed text predates BL-391 the
+# subject already is that text. Its unmutated control must pass with the BL-391 conjunct off, or the copy is not sound.
+PRE="$WORK/pre-bl391.md"
+PRE_OLD='     upstream-less — or step 1 or step 2 left it UN-SYNCED on this invocation, **STOP'
+PRE_NEW='     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP'
+if [ "$B391" = 1 ]; then
+  if ! mutate "$SUBJ" "$PRE" "$PRE_OLD" "$PRE_NEW" || cmp -s "$SUBJ" "$PRE"; then
+    bad "FIXTURE STALE: the pre-BL-391 copy did not build -- its anchor line is not in $SUBJ exactly once"
+  fi
+else
+  cp "$SUBJ" "$PRE" || broken "could not copy the subject as the pre-BL-391 copy"
+fi
+_k391="$B391"; B391=0
+cell_rc refuse "$PRE"; _pr1=$?; cell_rc nopush "$PRE"; _pr2=$?
+B391="$_k391"
+if [ -s "$PRE" ] && [ "$_pr1" -eq 0 ] && [ "$_pr2" -eq 0 ]; then
+  ok "control: the unmutated pre-BL-391 copy passes the refuse and no-push arms with the BL-391 conjunct off"; B_refpre=1
+else
+  bad "control: the unmutated pre-BL-391 copy did not pass refuse/no-push (rc $_pr1/$_pr2) -- wD-negate-pre proves nothing"
+fi
 
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding arm and twin. ----
 # MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
@@ -579,7 +607,7 @@ score_row() {
     for a in $ARMS; do
       k=$((k + 1))
       if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
-      if [ "$B391" != 1 ] && [ "$k" -gt 6 ]; then continue; fi
+      if [ "$LAYOUT_B391" != 1 ] && [ "$k" -gt 6 ]; then continue; fi
       printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
       tot=$((tot + 1)); cell_rc "$a" "$f"; r=$?
       if [ "$r" -eq 0 ]; then g=$((g + 1)); elif [ "$r" -ne 1 ]; then echo "MATRIX BROKEN $m"; exit 2; fi
@@ -591,11 +619,12 @@ score_row() {
 }
 while IFS='|' read -r mscope mname mold mnew mwant; do
   [ -n "$mname" ] || continue
-  case "$mscope:$B391" in all:*|post:1|pre:0) ;; *) continue ;; esac
+  case "$mscope:$B391" in all:*|post:1|pre:*) ;; *) continue ;; esac
   _n=$((_n+1))
   mf="$WORK/mut-$mname.md"
-  if ! mutate "$SUBJ" "$mf" "$mold" "$mnew" || cmp -s "$SUBJ" "$mf"; then
-    bad "mutant $mname DID NOT APPLY — its anchor line is not in $SUBJ exactly once"; mut_ok=0; continue
+  msrc="$SUBJ"; if [ "$mscope" = pre ]; then msrc="$PRE"; fi
+  if ! mutate "$msrc" "$mf" "$mold" "$mnew" || cmp -s "$msrc" "$mf"; then
+    bad "mutant $mname DID NOT APPLY — its anchor line is not in $msrc exactly once"; mut_ok=0; continue
   fi
   # The table's one `1` digit names the deciding arm; the header row must agree, so the two cannot drift apart.
   mdec=""; mi=0
@@ -607,18 +636,21 @@ while IFS='|' read -r mscope mname mold mnew mwant; do
   if [ -z "$hdec" ] || [ -z "$htw" ] || [ "$hdec" != "$mdec" ]; then
     bad "FIXTURE BROKEN: mutant $mname has no single MUTANT-MATRIX row, or its decides=${hdec:-?} disagrees with the table's deciding arm ${mdec:-?}"; continue
   fi
-  case "$hdec" in
-    noup)    score_row "${B_noup:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    ahead)   score_row "${B_ahead:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    nopush)  score_row "${B_nopush:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    refuse)  score_row "${B_refuse:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    para)    score_row "${B_para:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    step2)   score_row "${B_step2:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    detect)  score_row "${B_detect:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    cycle)   score_row "${B_cycle:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    discard) score_row "${B_discard:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+  _k391="$B391"; if [ "$mscope" = pre ]; then B391=0; fi
+  case "$mscope:$hdec" in
+    pre:refuse) score_row "${B_refpre:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:noup)    score_row "${B_noup:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:ahead)   score_row "${B_ahead:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:nopush)  score_row "${B_nopush:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:refuse)  score_row "${B_refuse:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:para)    score_row "${B_para:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:step2)   score_row "${B_step2:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:detect)  score_row "${B_detect:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:cycle)   score_row "${B_cycle:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:discard) score_row "${B_discard:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
     *) bad "FIXTURE BROKEN: mutant $mname names an arm $hdec that is not one of the nine" ;;
   esac
+  B391="$_k391"
 done <<<"$MUTANTS"
 [ "$_n" -eq "$_want_n" ] || bad "the mutant table parsed $_n rows in scope, not $_want_n"
 
