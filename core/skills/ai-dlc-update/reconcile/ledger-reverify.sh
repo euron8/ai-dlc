@@ -196,8 +196,8 @@ ELC_AWK="$(ledger_entry_line_close_awk)" || exit 2
 
 # `--receipt-tokens`: print `SUBJECT<TAB><path>` for every consumer-relative path every OPEN entry's
 # `verify: sh` receipt names, PRESENT OR NOT, by the same split `receipt_absent_subjects` applies,
-# then exit 0. Decides nothing and runs no receipt. emit-report.sh's recorded-PASS key reads it to
-# refuse a receipt naming a `.git/` path (its R4), so that refusal has no grammar of its own.
+# then exit 0. Decides nothing and runs no receipt. Its one shipped reader, emit-report.sh's retired
+# verify cache, is gone; the reconcile-emit-report fixture still drives it.
 LR_TOKENS_MODE=""
 if [ "${1:-}" = "--receipt-tokens" ]; then LR_TOKENS_MODE=1; shift; fi
 
@@ -276,8 +276,7 @@ LEDGER_DEFAULT="$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
 LEDGER="${5:-$LEDGER_DEFAULT}"
 # THE LEDGER IS READ THROUGH consumer-read.sh AS A (root, relative path) PAIR. Under the consumer
 # root it is relative to it; an arg-5 path elsewhere is read from `/` (absolute) or the cwd
-# (relative), which consumer-read.sh logs as a root that is not the consumer's, so a recorded PASS
-# refuses rather than keying a read it cannot re-take.
+# (relative), and consumer-read.sh still refuses a `..` or absolute relative part either way.
 case "$LEDGER" in
   "$CONSUMER"/*) LEDGER_R="$CONSUMER"; LEDGER_P="${LEDGER#"$CONSUMER"/}" ;;
   /*)            LEDGER_R=/; LEDGER_P="${LEDGER#/}" ;;
@@ -1439,7 +1438,7 @@ receipt_absent_subjects() {
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
     # A second argument (`--receipt-tokens` mode, and the logging pass before a receipt runs) keeps
     # every candidate, present or not. EVERY token is tested through consumer-read.sh either way, so
-    # the recorded-PASS log carries each subject. A token consumer-read.sh REFUSES (rc 2: a `..`
+    # each subject passes the path refusal. A token consumer-read.sh REFUSES (rc 2: a `..`
     # component) is KEPT as a candidate, the conservative reading: in the gone-check it turns a close
     # into NEEDS-REVIEW (its existence could not be read through the consumer root, which is never
     # "it exists"), and it can never create a close, since a kept subject only withholds one.
@@ -2413,9 +2412,8 @@ lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per recei
   END { flush() }
 ' "$1"
 }
-# THE LEDGER IS PARSED IN PLACE, AND ITS BYTES ARE LOGGED THROUGH consumer-read.sh. The `-f` test at
-# the top of the run logged the ledger's blob, and the recorded-PASS key re-takes that entry after the
-# render, so a ledger edited mid-run never records. It is NOT copied into the staging directory
+# THE LEDGER IS PARSED IN PLACE, READ THROUGH consumer-read.sh by the `-f` test at the top of the
+# run. It is NOT copied into the staging directory
 # first: a whole-ledger copy is the largest write this run makes, and under a file-size limit it
 # failed BEFORE the entries staging below, replacing that write's named refusal with a generic one.
 lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger could not be read"
@@ -2894,17 +2892,6 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # guards below -- never an evaluation at the caller's cwd.
       sh_prog="{ $rest
 }"
-      # EVERY SUBJECT THE RECEIPT NAMES IS TESTED THROUGH consumer-read.sh BEFORE THE RECEIPT RUNS,
-      # present or not, so the recorded-PASS log carries each one. The answer is discarded here; a
-      # failed split is NOT refused here: the verdict sites below make their own named refusals
-      # (receipt_absent_subjects / receipt_named_subjects returned N), and a refusal here would
-      # pre-empt them with an anonymous one. A split that failed here logged nothing, and only when
-      # the cache is armed does that matter: then it writes a `!` entry, which refuses the record.
-      if [ -n "${CR_LOG:-}" ]; then
-        lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the paths $label's sh receipt names could not be logged"
-        receipt_absent_subjects "$rest" all >/dev/null \
-          || printf '!\treceipt-split\t-\n' >> "$CR_LOG"
-      fi
       if ! bash -n -c "$sh_prog" >/dev/null 2>&1; then
         emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
         continue

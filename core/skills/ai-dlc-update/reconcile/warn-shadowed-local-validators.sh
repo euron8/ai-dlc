@@ -83,8 +83,8 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # EVERY INPUT IS A (root, root-relative path) PAIR, read through consumer-read.sh. The defaults sit
 # under ROOT; an override under ROOT is re-expressed relative to it, and one elsewhere is read from
-# `/` (an absolute override) or the cwd (a relative one), which consumer-read.sh logs as a root that
-# is not the consumer's -- a recorded PASS then refuses rather than keying a read it cannot re-take.
+# `/` (an absolute override) or the cwd (a relative one); consumer-read.sh refuses a `..` or
+# absolute relative part either way.
 ws_split() { # ws_split <path> -> sets WS_R (root) and WS_P (relative path)
   case "$1" in
     "$ROOT"/*) WS_R="$ROOT"; WS_P="${1#"$ROOT"/}" ;;

@@ -134,7 +134,7 @@ CONSUMER="${4:?}"
 # restate. Derived from setup-sites.md's own `rulebook:` list rather than restated,
 # so a rulebook file added upstream is covered without editing this script.
 SELF="$(cd "$(dirname "$0")" && pwd)"
-# Every consumer read goes through consumer-read.sh, so emit-report.sh's recorded PASS keys it.
+# Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 . "$SELF/consumer-read.sh" || { echo "retired-layer-contract: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" 2>/dev/null || true

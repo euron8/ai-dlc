@@ -296,6 +296,10 @@ verify: manual
 
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 
+**LANDED (v0.962.0, verified 8fd3bb945).** RETIRED with BL-679's cache, not fixed: the recorded `--verify` PASS is deleted from `emit-report.sh`, because it never formed on graph's shared dist (this entry's own finding), it shipped off by default, graph never set `EMIT_REPORT_VERIFY_CACHE`, and under the operator's step-value ruling a step with no measured value goes. `dist-clone.sh` stays as the ref-stable, main-only dist every reconcile reader takes; only its cache reason is retired.
+
+Outcome measured: no graph pipeline step; the cost lives in core/skills/ai-dlc-update/reconcile/emit-report.sh, whose cache never formed on a shared dist, so it removed nothing to measure.
+
 **DEFECT, efficiency.** Found by ai-dlc-77 [e29316] in batch 236 while building BL-679.
 Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), cited per BL-817.
 - **The cause.** BL-679's key field `distrefs` hashes the dist's `for-each-ref`, HEAD and shallow flag. On a dist
@@ -434,7 +438,8 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
   - Reflog reads: 0 hits.
   - gettext/locale: unrun, and it cannot fire on this host. NOTE at most.
 - **Round 9 verdict (key review, under the lead's ruling):** one DEFECT (D-r9b-1), no BLOCKER, so the flip is not held by the review, and D-r9b-1 is a precondition for the flip, built by a later batch.
-verify: manual
+
+verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$e" ] && [ -f "$a" ] || exit 9; ! grep -qF "EMIT_REPORT_VERIFY_CACHE" "$e" "$a"
 
 ## BL-706 — no reconcile step runs the derivation differential on every pull, so a consumer whose pulls never hit a derivation never gets an owed-derivations record
 
@@ -1156,7 +1161,15 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them reconcile-emit-report (render once), check-24-adversarial-convergence's seam, layer-reference-resolution, and the prevention mechanism that refuses regrowth.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam, layer-reference-resolution, and the prevention mechanism that refuses regrowth.
+
+### reconcile-emit-report (q5)
+
+The fixture renders the full mechanical region about 200 times across its shards, and each render runs every reconcile detector. Owed: render once per distinct render input (normally once in total) and compare every report variant against that render through `emit-report.sh --verify --region-from <file>`. The variants include missing, stale, edited, alias path, blockers resolved, re-rendered since approval, and the hand-edit/UNDECIDED cases. That seam skips the render and calls `er_compare`, the same single function plain `--verify` runs after its own render. It prints `emit-report: --region-from: region supplied by caller; nothing was rendered` on every run and never writes the approved-region record. Keep ONE end-to-end plain `--verify` so render-plus-compare stays wired. A setup whose repository state changes the render stays a separate render, with a comment saying why. The cache-only phases go with the retirement of BL-679's recorded `--verify` PASS (BL-679 and BL-685, RETIRED in the same release). apply.sh and the update skill never pass the flag.
+
+Renders per push (counter spliced into `render()`, one shard per run): before (011853d19) shard a 694, b 171, c 280, d 25, total 1170; after shard a 15, b 22, c 29, total 66 (shard d is deleted). Per tag, read off each render's program and consumer in the after logs: base-world a 2, b 3, c 2 (7); conflicting-state a 8, b 17, c 12 (37); mutant-deciding a 5, b 2, c 15 (22). Per-shard floor (base-world renders each shard pays): a 2 (the seed render and the one plain `--verify`), b 3 (the seed render, V-R's real approval and the ctl-V control), c 2 (the seed render and the ctl-SB control). Narrowing: each mutant runs its deciding arm and its named twins, and the matrix is re-measured by `bash core/fixtures/reconcile-emit-report/run.sh --matrix`.
+
+**Progress (0.962.0, batch b245).** reconcile-emit-report renders once per distinct render input: 1170 renders per push become 66 (base-world 7, conflicting-state 37, mutant-deciding 22), with 0 coverage losses (161 assertions retired with the BL-679 cache, 40 folded into their mutant kill lines). Solo hermetic runs at 66623ceb4: shard a 97s, b 71s, c 56s. The entry stays PARTIAL.
 
 verify: manual
 
@@ -1694,7 +1707,7 @@ verify: manual
 
 ## BL-679 — one consumer pull re-runs `emit-report.sh --verify` three or four times, each a full detector re-render, and no caller accepts an earlier PASS
 
-Closed in 0.834.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+**LANDED (v0.962.0, verified 8fd3bb945).** RETIRED, not fixed: the recorded `--verify` PASS cache (its key, read log, `ai-dlc-verify-pass` record, refusals and opt-in) is deleted and `--verify` always re-renders, because the cache never formed on graph's shared dist (BL-685), it shipped off by default, graph never set it, and under the operator's step-value ruling a step with no measured value goes. The re-render cost itself moves to the fixture side under BL-850. Closed in 0.834.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 Closed in 0.834.0 (verified d4281b59) on a tree receipt, reopened by BL-817. `emit-report.sh --verify` records an exit-0 PASS in the consumer's git-dir, and accepts a matching one only with `EMIT_REPORT_VERIFY_CACHE=1`. It ships off by default, and with that unset every `--verify` is byte-identical to the previous release. Exit 1 and exit 3 are never recorded. The default turns on only after a key review finds no BLOCKER (BL-685). Tests: reconcile-emit-report PC-V0..V26 and mutants M-region, M-direxcl and M-exit3; receipt below.
 
@@ -1715,7 +1728,9 @@ Former receipt (the mechanism, not the outcome): sh f="$(mktemp)" || exit 9; bas
 
 Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, the ai-dlc-update bucket (consumer pulls): before (s319 pooled, 20 stories) 1.59 h gap-inclusive, token-equivalent $8.6 (API $8.6), 22.1M tokens; after s320 (13 stories) 0.56 h gap-inclusive (gap 0.43 h), token-equivalent $2.1 (API $2.1), 4.9M tokens. Lead-seat local-model share of calls in this step group: s319 1%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall. The bucket's figure fell in s320, a partial sprint with one pull; the entry's own subject (`emit-report.sh --verify` re-runs per pull) was not counted by this re-audit, so the fall is not attributed to it.
 
-verify: manual
+Outcome measured: no graph pipeline step; the cost lives in core/skills/ai-dlc-update/reconcile/emit-report.sh, whose opt-in cache graph never set, so retiring it moves no pull's cost.
+
+verify: sh f=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$f" ] || exit 9; ! grep -qF "ai-dlc-verify-pass" "$f"
 
 ## BL-716 — after a parallel repair fan-out, every SERIAL-REQUIRED item goes to one serial remediator, so a 19-shard round that finishes in 8 minutes waits an hour on one agent
 

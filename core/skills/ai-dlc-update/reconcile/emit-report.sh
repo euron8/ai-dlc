@@ -69,13 +69,12 @@
 #            FAILED-sha256sum: that tool exists and exited non-zero or printed no 64-hex digest).
 #            The `re-approval:` digest takes the same three forms.
 #
-# THE APPROVED-REGION RECORD. A plain `--verify` that exits 0 (rendered, or a recorded PASS accepted)
-# writes `<consumer --absolute-git-dir>/ai-dlc-approved-region`: a version line, `key <base commit>
+# THE APPROVED-REGION RECORD. A plain `--verify` that exits 0 writes `<consumer --absolute-git-dir>/ai-dlc-approved-region`: a version line, `key <base commit>
 # <theirs commit>` resolved in <dist>, then the report's region as `norm_dist` leaves it. FIRST-WINS: a
 # record with the same key is never rewritten; a different key replaces it. Written through mktemp
 # in the git-dir and mv, silently, so plain `--verify`'s stdout, stderr and exit are unchanged. A
-# consumer that is not a git top level gets none. Exit 1, 2 and 3, print mode and apply mode never
-# write it. It sits outside the work tree, so it moves neither the recorded-PASS key nor the region.
+# consumer that is not a git top level gets none. Exit 1, 2 and 3, print mode, apply mode and the
+# `--region-from` seam never write it. It sits outside the work tree, so writing it moves no render input.
 # APPLY MODE (`--for-apply`, the union gate's call) never writes it and prints `approved-region:
 # first=<digest of the recorded region>`, or `first=NONE` when no readable record carries this key.
 # With a record, the RECORD's region is the approved side of every comparison in place of the
@@ -88,200 +87,28 @@
 # carries the limits (deletion, stale record, two dry runs, no prior bare run).
 # THE REPORT IS STILL COMPARED, FOR HAND EDITS: in apply mode with a record, a report region equal to
 # neither the record's region nor the fresh render was edited after the first verify, and exits 1 with
-# cause UNDECIDED before any other comparison; with such a report the recorded PASS is not accepted.
+# cause UNDECIDED before any other comparison.
 #
-# A RECORDED PASS CAN BE ACCEPTED INSTEAD OF A RE-RENDER, ON A KEY COVERING THE INPUTS LISTED BELOW.
-# It does NOT pin every render input: the inputs it cannot key are either REFUSED (a miss) or named
-# in THE LIMITS, and an input in neither list is a defect in the key.
-# One pull ran `--verify` three or four times on one tree (step 5, step 7 clause (1), step 7 after
-# resolving, `apply.sh`'s own gate), each a full detector re-render at 3-14 minutes: about 35 of a
-# 116-minute pull, measured from a graph pull transcript (BL-679). So an exit-0 `--verify` writes a
-# record, and a later `--verify` whose key matches it prints the same exit-0 line plus a line naming
-# the record and the opt-out, and exits 0 without rendering.
+# `--verify` ALWAYS RENDERS. No earlier verdict is ever accepted in place of a fresh render (an opt-in
+# cache of exit-0 verdicts was retired: it never formed on a shared dist, it was off by default, and
+# no consumer set it).
 #
-# THE RECORD lives at `<consumer git-dir>/ai-dlc-verify-pass`, OUTSIDE the work tree, so writing it
-# moves no input it keys on. Overwritten, never appended; written through `mktemp` in the same dir and
-# `mv`; a failed write is silent and is never a pass by itself. A consumer that is not the top level
-# of a git work tree never reads or writes one. Exit 1, exit 3, a refusal and a print render never
-# write one. The key is computed BEFORE the render and AGAIN AFTER it, and the record is written only
-# when the two agree: a render whose own detectors wrote under the consumer passed on inputs that no
-# longer stand.
+# THE COMPARISON SEAM, FOR FIXTURES ONLY:
+#   emit-report.sh [--for-apply] --verify --region-from <file> <report.md> <dist> <base> <consumer> <theirs>
+# skips the render and takes <file>'s bytes, through the same dist-path normalisation, as the fresh
+# region; a print-mode render redirected to a file is exactly that input. Everything after the render
+# is the ONE function `er_compare`, which plain `--verify` calls on its own render, so every exit code
+# and message is that function's, never a copy's. Every run with the flag prints, on stdout and before
+# anything else, `emit-report: --region-from: region supplied by caller; nothing was rendered`, so a
+# seam result cannot be mistaken for a gate result. An unreadable <file> exits 2. THE SEAM IS
+# READ-ONLY: it never writes the approved-region record, whatever it exits, because that record is
+# what apply mode trusts as the region the operator approved and the seam's region was never rendered.
+# Every exit code and message is unchanged by that. The union gate and the update skill never pass
+# the flag; a fixture that does passes it on purpose.
 #
-# THE KEY -- every field required; any field that cannot be computed is a miss, never a hit:
-#   engine       every file under this directory, by relative name and content hash (not path, not
-#                mtime), so a record from any other engine is refused in both directions;
-#   base/theirs  each one AS TYPED (the region prints it so), then its commit object AND its `:core`
-#                tree resolved in <dist> (a symbolic `origin/main` moves under one spelling);
-#   distrefs     <dist>'s refs (`for-each-ref`, which lists refs/replace/* too), its HEAD, every
-#                linked worktree and its HEAD (`worktree list --porcelain`), whether it
-#                is shallow, its EFFECTIVE `config --list` (global and system through $HOME), the
-#                bytes (or `absent`) of its `info/attributes`, `info/grafts`, `objects/info/alternates`
-#                and of the global attributes file `git var GIT_ATTR_GLOBAL` names, and the
-#                auto-abbrev length of theirs -- every rendered `%h` comes from <dist>;
-#   consroot     `pwd -P` of <consumer> and <consumer> as typed: the region prints both forms;
-#   consindex    `ls-files -s` (mode, blob, path: the exec bit and tracked-ness), and, when a
-#                `text`/`eol`/`filter`/`ident`
-#                attribute, `core.autocrlf` or `core.eol` can normalise content, the RAW bytes of
-#                every tracked file;
-#   conswork     `status --porcelain=v2 --untracked-files=all` plus the bytes of every modified or
-#                untracked path, EXCLUDING ONLY the report file itself (never its directory: the
-#                adjudication register and the push-candidate ledger live beside it and are inputs);
-#   consignored  name, bytes and exec bit of every IGNORED file under the engine's read roots:
-#                `.claude/` (not `.claude/worktrees/`), `_bmad-output/`, every `corpus-root:` in
-#                predicate-sites.md, the other consumer paths the detectors name, and every
-#                destination preclassify.sh's map_consumer writes; then every EMPTY directory under
-#                those roots, which no git listing names;
-#   consobjects  <consumer>'s `for-each-ref`, its HEAD (`rev-parse -q --verify HEAD` or `unborn`, and
-#                `symbolic-ref -q HEAD` or `detached`), its EFFECTIVE `config --list`, the same four
-#                git-dir and attributes files as distrefs, and the bytes (or `absent`) of its `shallow`;
-#   consresolve  each override `base_sha` and the stamp's `commit:` / `skill_commit:`, resolved as a
-#                commit through the OBJECT STORE of <dist> and of <consumer> (not through refs: a
-#                prune of an unreferenced commit moves the region with no ref moving), or `unresolved`;
-#   env          LANG, LC_ALL, LC_COLLATE, LC_CTYPE and `AI_DLC_KNOWN_SKILLS_EXT`, each set and unset
-#                distinguished, and the file the last one names; every `GIT_*` variable by name and
-#                value; the bytes (or `absent`) of the system attributes file `git var
-#                GIT_ATTR_SYSTEM` names; `git --version` and `--exec-path`; and the resolved path and
-#                binary `cksum` of awk, sed and sort; then a DERIVED set of `AI_DLC_*` and `CLAUDE_*`
-#                names, each by name and value, set and unset distinguished: every such token on a
-#                non-comment line of the engine closure, of the predicate-sites.md `entry:` files at
-#                THEIRS and BASE (read from <dist>), and of validate-hook-registration.sh at THEIRS,
-#                a trailing `_` read as a prefix, minus what the engine sets itself, lib.sh's
-#                unexported AI_DLC_MEMO_* and the cache's own control (er_env_names). LIMIT: a text
-#                grep cannot see a reader that builds the name (`${!name}`, `env | grep`);
-#   region       the report region's hash after the dist-path normalisation below, which must equal
-#                the region of the render that passed -- an edit OUTSIDE the region still hits, one
-#                byte inside it misses;
-#   reads        THE CONSUMER-PATH AUTHORITY. Every closure script reads the consumer only through
-#                consumer-read.sh (cr_test, cr_read, cr_hash, cr_walk, cr_git, cr_run), which logs
-#                each access as the path the detector ASKED FOR plus the OS's answer now: presence
-#                and kind, exec and read bits and raw blob for a file, a hash over the whole typed
-#                listing for a walk. The record stores the render's log; a lookup re-takes every
-#                entry (cr_retake) and misses on any difference. So a path a detector resolved on
-#                its own -- a `hooks:` or `fixtures:` value, a bare `scripts/` path, a receipt
-#                subject, a case variant of a directory -- is keyed exactly as it was read, with no
-#                hand-listed root deciding. ledger-reverify.sh logs every `sh` receipt's subject
-#                tokens through cr_test before the receipt runs. THEIRS' validate-hook-registration.sh
-#                RECORDS its own reads (cr_run_reads): each stat, open and listing it made under the
-#                root is logged as it recorded it, and a list that is missing, unsentinelled, empty
-#                or names a subprocess is `!`. consignored and its roots remain as a BELT for the
-#                programs run through cr_run (predicate validators, `sh` receipts), whose own reads
-#                no log can see.
-# The `!` entries consumer-read.sh writes, a symlink on any logged path or under any walk, and a path
-# read twice with two answers are REFUSED (er_log_entries). With the cache armed, a refusal found at
-# record time is named on stderr too (`recorded PASS not recorded: <cause>`).
-# REFUSED, a miss for both the hit and the record, because no field could see the input:
-#   - a directory under <consumer> (pruning `.git` and `.claude/worktrees`) that the user cannot read
-#     and search: git lists nothing beneath it;
-#   - any `assume-unchanged` or `skip-worktree` flag in `ls-files -v`, or `core.ignoreStat=true`:
-#     status hides an edit to the flagged file, and keying the flag cannot help, since it is set
-#     before the record and both sides match;
-#   - `core.checkStat` set to anything but `default` (any case), or `core.trustctime` a git false
-#     boolean: a `cr_run` predicate runs plain git under the consumer's config, so it trusts a stat
-#     entry a same-size, mtime-kept rewrite left looking current; a value git cannot parse for either
-#     key, or for `core.ignoreStat`, is refused too (`could not read <key>`), never read as unset;
-#   - `core.fsmonitor` set to anything but a git false boolean (`true`, or a hook path), or a
-#     non-empty `GIT_TEST_FSMONITOR` (which enables it with the config unset): git then
-#     trusts the monitor's report instead of the files, and forcing it off in er_cgit would not reach
-#     a `cr_run` predicate's plain git;
-#   - a NESTED REPOSITORY, untracked (`dir/` in the listing) or tracked (a gitlink): git lists none of
-#     its files;
-#   - an untracked SYMLINK, ignored or not, that fails B7's acceptance (the R2 bullet below names
-#     each refused case); one whose chain ends at an existing file or directory inside <consumer>
-#     is keyed, never refused;
-#   - a path component named `.git` anywhere below the consumer root (other than its own top-level
-#     `.git` and `.claude/worktrees`): git lists nothing beneath it, repository or not;
-#   - an INHERITED `AI_DLC_RECONCILE_MEMO`: a memo directory another process filled;
-#   - a render that ran the CONSUMER'S OWN validate-hook-registration.sh (THEIRS predates it, before
-#     v0.357.0): arbitrary consumer code whose reads nothing records, so it logs `!`;
-#   - a render whose THEIRS validate-hook-registration.sh wrote no well-formed read list (one that
-#     predates the recorder, or one that ran a subprocess): `!`, never an unkeyed record;
-#   - R1 a <dist> that is NOT A BARE REPOSITORY: its work tree's `.gitattributes` and checkout are
-#     read by nothing the key lists, and the update skill's dist (dist-clone.sh) is always bare;
-#   - R2 a SYMLINK IN THE CONSUMER'S INPUT SET: any tracked symlink (mode 120000); a symlink at or
-#     above any read root (`er_read_roots`, the set consignored lists), walked component by
-#     component from the consumer root. B7: an UNTRACKED symlink anywhere else (ignored or not, under
-#     a root or not) that a git listing names is refused BY NAME (`B7 the symlink '<p>' ...`) when its
-#     chain leaves the root, dangles or exceeds 40 hops, when its target is or contains the link or a
-#     read root, or when it lies under `_bmad-output`, `.claude/hooks` or a `corpus-root:` (walked
-#     unlogged). Otherwise a FILE target's bytes are keyed and a DIRECTORY target's IDENTITY (kind,
-#     each readlink string, resolved path) is keyed, never its content. The read log's `L` refusal
-#     below, not R2, is what keeps a read THROUGH a link out of the key. LIMIT: a ledger `sh` receipt
-#     can read through any link unlogged, as it already could;
-#   - R3 a SYMLINK INSIDE THIS ENGINE DIRECTORY: the engine field lists regular files only. No walk
-#     above it: every engine read goes through the same logical `$SELF` the field hashes;
-#   - a LISTED PATH THAT IS A DIRECTORY (an entry ending `/` in a git listing): a nested work tree
-#     or a non-ignored worktree under `.claude/worktrees/`, whose files git lists nowhere. Named
-#     `a listed path is a directory (a nested work tree or an unignored worktree): <path>`;
-#   - N1 a SYMLINK AT `.claude/worktrees` itself, which consignored and the find guards prune;
-#   - any consumer path a detector asked for with a `..` component or a leading `/` (consumer-read.sh
-#     refuses the read itself and logs `!`), a read through any root other than the consumer's, a
-#     symlink on any logged path or under any logged walk (R2, now over the read log), and a path
-#     whose two reads during one render disagreed. The receipts field and its lexical label are
-#     GONE: a receipt subject is an ordinary logged read, so `docs/a/../d` is refused, not collapsed;
-#   - an ABSENT `cksum`, checked before any field: the env field checksums awk, sed and sort with it;
-#   - a FIELD THAT COULD NOT BE COMPUTED (`the <f> field could not be computed`), unless its own body
-#     named a cause first, and a field whose material could not be HASHED, named by the sha256 tool:
-#     absent (neither `shasum` nor `sha256sum`) or giving no 64-hex digest. The region field is
-#     exempt: it fails only when the report has no region. Not every miss is named: a failure in the
-#     guards' own listings before the field loop still misses silently.
-# Every refusal names its cause on stderr when the cache is armed (`recorded PASS refused,
-# re-rendering: <cause>`), leaves the record untouched, and renders exactly as an unarmed run.
-# On a hit the preclassify-refusal check is not re-run: it ran on the render the record came from.
-#
-# OFF BY DEFAULT. A recorded PASS is ACCEPTED only when `EMIT_REPORT_VERIFY_CACHE=1` is set (exactly
-# `1`; no `AI_DLC_` prefix, because fixtures scrub those) and `AI_DLC_VERIFY_NO_CACHE` is empty. The
-# record is WRITTEN regardless, so turning the cache on later finds records in place. With the
-# opt-in unset, every path's stdout, stderr and exit are what they were before the cache existed.
-# The default turns ON only in a later release, after an adversary round on the key finds no BLOCKER.
-#
-# THE LIMITS, STATED RATHER THAN HIDDEN. (1) The record is a CACHE, NOT AN ATTESTATION: anyone who
-# can write the git-dir can forge one, and `AI_DLC_VERIFY_NO_CACHE=1` (any non-empty value) forces a
-# fresh render for an operator who wants the detectors' own word. (2) What each program run at the
-# consumer root now is: THEIRS' hook-registration validator is KEYED by the read list it records
-# itself; the consumer's own copy is REFUSED; consumer HEAD (commit, symbolic ref or detached, unborn)
-# and `shallow` are KEYED (consobjects); the AI_DLC_*/CLAUDE_* variables those programs and the
-# closure name are KEYED by a derived name set (env), with the text-grep LIMIT stated there; every
-# other variable, and a path outside the consumer root, is a LIMIT (below); the pruned zones (`.git`,
-# `.claude/worktrees`) are read by no detector and keyed by nothing. `predicate-differential.sh`
-# runs validators with the consumer as cwd (cr_run), so their read set is OPEN: the corpus records
-# and the paths in their `invoke:` arguments are logged, but an IGNORED file outside the consignored
-# roots that one of them opens on its own is not keyed, and its change can leave a stale PASS; nor is
-# a file OUTSIDE the consumer root, or an environment variable outside the derived set.
-# The same holds for the consumer's ledger `sh` receipts, which run with $DIST exported and can read
-# the dist's reflog or any other git state outside the key; `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
-# More widely, a ledger `verify: sh` receipt (ledger-reverify.sh runs it as `bash -c` at the consumer
-# root) is arbitrary code: it can read ignored files anywhere, PATH, the network or the clock, and
-# none of that is keyed. `AI_DLC_VERIFY_NO_CACHE=1` re-renders.
-# (3) Tool AVAILABILITY (`jq`, `python3`, PATH) is not keyed: a render that passed with a tool
-# present is accepted after the tool is gone. Only git, awk, sed and sort are keyed by identity
-# (env field); jq, python3, shasum and every other tool the detectors call are keyed by nothing,
-# so a version change in one of them is not seen either. The opt-out re-renders in every case.
-# Two absences are the exception, because the key itself needs the tool: an absent `cksum` and an
-# absent sha256 tool (neither `shasum` nor `sha256sum`) are refused by name, never keyed.
-# (4) What a fourth review found unkeyed is now keyed or refused: index flags and core.ignoreStat,
-# a relaxed core.checkStat, core.trustctime=false, an enabled core.fsmonitor (config or a non-empty
-# GIT_TEST_FSMONITOR), nested repositories, out-of-tree symlinks and an inherited memo are REFUSED
-# (above); the repo-local, global and system attributes files, info/grafts, alternates, every GIT_*
-# variable and the git/awk/sed/sort identities are KEYED; and the detectors' content diffs pass
-# `--text --no-ext-diff --no-textconv`, so an attribute or GIT_EXTERNAL_DIFF no longer moves them
-# at all.
-# Still unkeyed: untracked-cache STATE (its config value is keyed; an enabled fsmonitor is
-# refused), the filesystem's case sensitivity and mount type, and, on git before 2.42 (no `git var
-# GIT_ATTR_SYSTEM`), a system attributes file away from the exec-path-derived guess. The cache
-# ships OFF until a review of this key finds no BLOCKER.
-# (5) A dist that shares its ref store with active branches (a developer checkout, or any worktree
-# of one) moves refs between two verifies and never records, which is why the update skill reads
-# `<dist>` from the private main-only clone `dist-clone.sh` builds.
-# (6) A file CHANGED AND RESTORED DURING the render (A to B and back to A between the key taken
-# before it and the key taken after) records a PASS for bytes the detectors read as B: both keys see
-# A. Nothing here can observe a state that existed only between the two key computations.
-# (7) A REPORT FILE READ BY ANY CARRIER -- placed at a detector input (the push-candidate ledger,
-# say), or opened by a program run at the root (a `sh` receipt, a predicate validator) -- is excluded
-# from the work-tree fields as the report, so an edit to it outside the region still hits while that
-# reader sees the edited file. The report belongs at its own path; the opt-out re-renders.
 set -uo pipefail
 # NO PATHNAME EXPANSION ANYWHERE IN THE CLOSURE: an unquoted expansion that globbed against the cwd
-# read consumer (or caller) paths no key entry named. consumer-read.sh carries the reasoning.
+# read consumer (or caller) paths no detector asked for. consumer-read.sh carries the reasoning.
 set -f
 
 MODE=print
@@ -294,8 +121,16 @@ if [ "${1:-}" = "--for-apply" ]; then
   shift
   [ "${1:-}" = "--verify" ] || { echo "usage: emit-report.sh --for-apply --verify <report.md> <dist> <base> <consumer> <theirs>" >&2; exit 2; }
 fi
+# `--region-from <file>` is the comparison seam (the header's THE COMPARISON SEAM block): it may follow
+# `--verify` only, and it is announced on stdout before anything else can exit.
+REGION_FROM=""
 if [ "${1:-}" = "--verify" ]; then
   MODE=verify
+  if [ "${2:-}" = "--region-from" ]; then
+    echo "emit-report: --region-from: region supplied by caller; nothing was rendered"
+    REGION_FROM="${3:?usage: emit-report.sh [--for-apply] --verify --region-from <file> <report.md> <dist> <base> <consumer> <theirs>}"
+    shift 2
+  fi
   REPORT="${2:?usage: emit-report.sh --verify <report.md> <dist> <base> <consumer> <theirs>}"
   shift 2
 fi
@@ -305,8 +140,7 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
-# Every consumer path this file reads goes through consumer-read.sh's door, which logs it for the
-# recorded-PASS key below.
+# Every consumer path this file reads goes through consumer-read.sh's door.
 . "$SELF/consumer-read.sh" || { echo "emit-report: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # The shared library is deliberately NOT dot-sourced here: this file calls none of its
 # functions directly, only sets up the shared cache directory below and hands it to the
@@ -343,9 +177,6 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # (`AI_DLC_MEMO_OWNED`, not `AI_DLC_MEMO_DIR`) — the same non-negotiable rule
 # `core_map_cleanup` states for `ledger-reverify.sh`'s own temporaries: `rm -rf` must never act on
 # a directory this process merely borrowed from a caller who intends to clean it up itself.
-# An INHERITED memo directory is recorded before it is adopted: its contents are answers some other
-# process cached, which no key field can see, so the recorded-PASS block below treats it as a miss.
-_er_memo_in="${AI_DLC_RECONCILE_MEMO:-}"
 export AI_DLC_RECONCILE_MEMO
 if [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]; then
   AI_DLC_RECONCILE_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null || true)"
@@ -856,17 +687,10 @@ render() {
   # TMPDIR symlink or trailing slash), so the rewrite keys on the copy's BASENAME at the end of
   # the `bash` word, never on `$hrv`.
   sub "Hook registration (every shipped ai-dlc hook is wired in .claude/settings.json — a present-but-unregistered hook never fires):"
-  local hrv hro hrr
+  local hrv hro
   hrv="$(mktemp)"
-  # THE VALIDATOR RECORDS ITS OWN CONSUMER READS (cr_run_reads): every stat, open and listing its
-  # body makes under --root, written to the list HOOKREG_READS_OUT names, from the SAME run that
-  # printed the section. That list is logged entry by entry, so the key covers exactly what this run
-  # read and no hand-written restatement of the validator's read set exists to drift. A THEIRS that
-  # predates the recorder writes no list, and the record refuses. The list is a fresh empty file, so
-  # a stale one cannot stand in for this run's.
-  hrr="$(mktemp)"
   if git -C "$DIST" show "$THEIRS:core/scripts/validate-hook-registration.sh" > "$hrv" 2>/dev/null && [ -s "$hrv" ]; then
-    hro="$(cr_run_reads "$CONSUMER" "$hrr" bash "$hrv" --root "$CONSUMER" 2>&1)"
+    hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)"
     # A rewrite that FAILED keeps the validator's own text: an unstable path line fails
     # `--verify` loudly, while an empty section would read as "nothing unregistered".
     local hrs
@@ -875,18 +699,14 @@ render() {
                n = length(ENVIRON["HRB"]); if (length(w) > n && substr(w, length(w) - n) == "/" ENVIRON["HRB"]) $0 = substr($0, 1, i + 4) ENVIRON["HRI"] (s ? substr(r, s) : "") }
              print }')" && [ -n "$hrs" ] && hro="$hrs"
   elif cr_test "$CONSUMER" -x scripts/ai-dlc/validate-hook-registration.sh; then
-    # The consumer's OWN copy runs: its bytes are logged by the test above, its reads by nothing.
-    # It is arbitrary consumer code, so its read set is unknowable here: the `!` refuses the record
-    # by name, and no PASS is ever recorded from a render that ran it. The branch runs only when
-    # THEIRS predates the validator (before v0.357.0).
+    # The consumer's OWN copy runs, only when THEIRS predates the validator (before v0.357.0).
     # Run by its root-relative name from the root: `cd scripts/ai-dlc && pwd` inside it resolves to
     # the same logical directory the absolute spelling did, so the printed self path is unchanged.
     hro="$(cr_run "$CONSUMER" bash scripts/ai-dlc/validate-hook-registration.sh --root "$CONSUMER" 2>&1)"
-    [ -z "${CR_LOG:-}" ] || printf '!\tconsumer-validator\t-\n' >> "$CR_LOG"
   else
     hro="  validator absent at ${THEIRS}:core/scripts/validate-hook-registration.sh and on the consumer — NOT CHECKED (this is not a pass)"
   fi
-  rm -f "$hrv" "$hrr"
+  rm -f "$hrv"
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
   # EACH DETECTOR RUNS ONCE PER RENDER, AND THE WRAPPER IS HANDED THE ROWS.
@@ -1152,6 +972,10 @@ fi
 
 # --- verify ---
 [ -f "$REPORT" ] || { echo "emit-report: report not found: $REPORT" >&2; exit 2; }
+if [ -n "$REGION_FROM" ] && { [ ! -f "$REGION_FROM" ] || [ ! -r "$REGION_FROM" ]; }; then
+  echo "emit-report: --region-from: cannot read the supplied region file: $REGION_FROM" >&2
+  exit 2
+fi
 # The rendered region carries ONE machine-specific value: the absolute distribution path in
 # each `full: diff <(git -C <dist> show …)` reproduction command. The path is deliberately
 # concrete there — a command the operator must edit before running is a path out they cannot
@@ -1197,8 +1021,9 @@ ar_digest() {
   [ "${#d}" -eq 64 ] || rc=1
   if [ "$rc" -eq 0 ]; then printf '%s\n' "$d"; else printf 'FAILED-%s\n' "$t"; fi
 }
-# The git-dir resolution is this record's OWN, with the same toplevel test as the recorded-PASS block
-# below and none of its state: it never depends on the staging dir, the cache's git-dir, or the opt-in.
+# The git-dir resolution is this record's OWN, and it never depends on the staging dir: the TOP LEVEL
+# only, so a consumer that is a subdirectory of some other repository (a fixture world under a
+# checkout) records into no git-dir that is not its own.
 # `--absolute-git-dir`, never the common dir: linked worktrees share the common dir, and one tree's dry
 # run must not anchor another tree's apply.
 _ar_root="$(cr_run "$CONSUMER" pwd -P 2>/dev/null)" || _ar_root=""
@@ -1228,7 +1053,9 @@ ar_read() {
 # every outcome: plain --verify's stdout and stderr are what they were before this record existed.
 ar_record() {
   local t
-  [ "$AR_APPLY" = 0 ] && [ -n "$_ar_key" ] && [ -n "$got" ] || return 0
+  # Never on the `--region-from` seam: the region there is a caller's file, not a render, and this
+  # record is what apply mode trusts as the approved side. The seam is read-only.
+  [ "$AR_APPLY" = 0 ] && [ -z "$REGION_FROM" ] && [ -n "$_ar_key" ] && [ -n "$got" ] || return 0
   ar_read && return 0
   # A region whose digest FAILED (a sha256 tool exists and broke) is not recorded: apply mode would
   # then only be able to refuse on it. No tool at all (UNAVAILABLE) still records -- the region is
@@ -1248,8 +1075,8 @@ ar_record() {
 # record's region is the APPROVED side of every comparison below, so a region spliced into the report
 # after the first verify is not what is compared against.
 if [ "$AR_APPLY" = 1 ]; then
-  # A report with NO region keeps `got` empty, so it still fails as missing (and the recorded-PASS key,
-  # which needs a region, misses) rather than being verified on the record's region alone.
+  # A report with NO region keeps `got` empty, so it still fails as missing rather than being verified
+  # on the record's region alone.
   if ar_read; then
     _ar_first_dg="$(printf '%s\n' "$_ar_first" | ar_digest)"
     [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }
@@ -1257,997 +1084,12 @@ if [ "$AR_APPLY" = 1 ]; then
   echo "approved-region: first=${_ar_first_dg}" >&2
 fi
 
-# --- THE RECORDED PASS (the header's "A RECORDED PASS" block owns the key and its limits) ---------
-# Every helper returns non-zero on any failure, and every caller reads that as a MISS.
-_er_root=""; _er_gd=""; _er_rel=""; _er_ex=""; _er_rec=""; _er_key0=""
-if [ -n "$_er_tmp" ] && _er_root="$(cr_run "$CONSUMER" pwd -P 2>/dev/null)" && [ -n "$_er_root" ]; then
-  _er_top="$(cr_git "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || _er_top=""
-  # The TOP LEVEL only: a consumer that is a subdirectory of some other repository (a fixture world
-  # under a checkout) would key on part of a tree and record into a git-dir that is not its own.
-  if [ -n "$_er_top" ] && [ "$(cr_run "$_er_top" pwd -P 2>/dev/null)" = "$_er_root" ]; then
-    _er_gd="$(cr_git "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _er_gd=""
-  fi
-  if [ -n "$_er_gd" ] && [ -d "$_er_gd" ]; then
-    _er_rec="$_er_gd/ai-dlc-verify-pass"
-    # The report's path relative to the consumer root, when it lies inside it: the ONE path the
-    # work-tree fields exclude, so writing the report does not invalidate its own PASS.
-    _er_rabs="$(cd "$(dirname "$REPORT")" 2>/dev/null && pwd -P)/$(basename "$REPORT")"
-    case "$_er_rabs" in "$_er_root"/*) _er_rel="${_er_rabs#"$_er_root"/}" ;; esac
-    _er_ex="$_er_rel"
-  fi
-fi
-# er_cgit <git-args...> -- a consumer git command over the whole tree minus the report file. Never an
-# empty `:(exclude)`: that excludes the WHOLE tree and reads as an empty one.
-# `core.fileMode=true` because the render reads the exec bit (the consumer's validator runs only if
-# `-x`; preclassify tests `-x`), and a consumer set to `false` would hide a chmod from status.
-# A relaxed stat config (`core.checkStat` other than default, `core.trustctime=false`) is not forced
-# here: er_key refuses it, because `cr_run` predicates run plain git under the consumer's config.
-er_cgit() {
-  if [ -n "$_er_ex" ]; then cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- . ":(exclude,literal)$_er_ex"
-  else cr_git "$CONSUMER" -c core.quotePath=false -c core.fileMode=true "$@" -- .; fi
-}
-# er_link_inside <abs-path> -- 0 when the symlink chain at <abs-path> ends at an existing path, EVERY
-# hop's directory resolving INSIDE the consumer root (physically, by `pwd -P`). The key hashes a
-# link's own blob, while the detectors read its target: a target outside the root (measured: a
-# tracked adjudication register linked to an outside file, cached 0 where a fresh render gave 3) or a
-# dangling or looping chain is a MISS. On success it sets _er_lt (the physical target), _er_lrel (its
-# root-relative path, `.` for the root itself), _er_lkind (d or f) and _er_lchain (every readlink
-# string, each as `<length>:<string>`); on failure _er_lwhy names the cause for er_link_target's refusal.
-# Forks: one readlink and one `pwd -P` subshell per hop, and one more for a directory target.
-er_link_inside() {
-  local p="$1" t d n=0 hd
-  _er_lt=""; _er_lrel=""; _er_lkind=""; _er_lchain=""; _er_lwhy=""
-  while [ -L "$p" ]; do
-    n=$((n + 1)); [ "$n" -le 40 ] || { _er_lwhy="has a chain longer than 40 hops (a loop)"; return 1; }
-    t="$(readlink "$p")" || { _er_lwhy="could not be read (readlink, hop $n)"; return 1; }
-    # Length-prefixed, since a shell string cannot hold the NUL that would otherwise separate hops.
-    _er_lchain="$_er_lchain${#t}:$t"
-    # A trailing `/` would leave no last component to split off.
-    while :; do case "$t" in ?*/) t="${t%/}" ;; *) break ;; esac; done
-    case "$t" in /*) p="$t" ;; *) p="${p%/*}/$t" ;; esac
-    hd="${p%/*}"; [ -n "$hd" ] || hd=/
-    d="$(cd "$hd" 2>/dev/null && pwd -P)" || { _er_lwhy="is dangling (hop $n, '$t', names no directory)"; return 1; }
-    case "$d/" in "$_er_root"/*) ;; *) _er_lwhy="resolves outside the consumer root (hop $n, '$t')"; return 1 ;; esac
-    p="${d%/}/${p##*/}"
-  done
-  if [ -d "$p" ]; then
-    d="$(cd "$p" 2>/dev/null && pwd -P)" || { _er_lwhy="ends at a directory that cannot be entered"; return 1; }
-    _er_lkind=d
-  else
-    [ -f "$p" ] || { _er_lwhy="ends at neither a regular file nor a directory"; return 1; }
-    d="$p"; _er_lkind=f
-  fi
-  case "$d/" in "$_er_root"/*) ;; *) _er_lwhy="resolves outside the consumer root"; return 1 ;; esac
-  _er_lt="$d"; _er_lrel="${d#"$_er_root"}"; _er_lrel="${_er_lrel#/}"; [ -n "$_er_lrel" ] || _er_lrel=.
-  return 0
-}
-# er_link_target <abs-link> <rel-link> -- B7 a listed symlink is accepted only when ALL of these hold,
-# each failure a NAMED refusal (er_refuse); it is tracked-free already (R2 refuses mode 120000 before
-# any field), and an untracked unignored link reaches here through conswork's `ls-files -o` exactly as
-# an ignored one does through consignored's `ls-files -o -i`:
-#   (b)(c) every hop of its chain stays inside the consumer root and the chain ends at an existing
-#     file or directory (er_link_inside, up to 40 hops);
-#   (d) the resolved target neither equals nor contains the link itself or any read root, so a link
-#     to `.`, `..` or `.claude` cannot hand a walk a second spelling of a keyed tree;
-#   (e) the link does not lie under a root some cr_run program walks UNLOGGED -- every `corpus-root:`,
-#     the default `_bmad-output`, and `.claude/hooks` (validate-gate-adjudication.sh walks it with
-#     os.walk, which opens file links) -- where a read through it would reach no log.
-# Then it prints the link's KEYED MATERIAL. A FILE target: the RAW bytes of the file it ends at, as
-# before -- the link's own blob is not what the detectors read (measured: a tracked link to an IGNORED
-# in-tree file outside every consignored root, cached 0 where a fresh render gave 1).
-# A DIRECTORY target: the link's IDENTITY ONLY -- the kind `d`, every readlink string in the chain and
-# the resolved root-relative path (er_hash_list already wrote its path) -- and not the content
-# beneath it, which is keyed by git. THE RULE: a directory link is accepted only when the target's
-# files on disk equal git's tracked list (er_dirlinks_keyed refuses every other target by name), so
-# every file it reaches is a tracked one, keyed by consindex and conswork's status. Two things stand
-# behind the identity key: no LOGGED read can cross the link (consumer-read.sh's cr__links turns any
-# logged path or walk through a symlink into an `L` value, and er_log_entries refuses every `L`
-# entry), and an UNLOGGED read through it -- a ledger `sh` receipt runs arbitrary consumer code --
-# reaches only content git keys (measured: an ignored target, a target typed in another case than
-# the ignored directory on disk, a target under .git, and a non-repository `sub/.git/f.md` under an
-# ignored `sub/` in a tracked target were each ACCEPTED STALE through an unignored `notes` link
-# before the disk became the oracle). THE ONE REMAINING GAP: an EMPTY directory has no content to
-# key, link or not, so one appearing or vanishing beneath an accepted target moves nothing. THE
-# GOVERNING LIMIT is the header's (`verify: sh` is arbitrary code, :244-246): a receipt can read an
-# ignored file by its own path with no link at all (the no-link control NOLNKIG is accepted stale
-# exactly so), and B7 closes the link spellings, not that limit.
-er_link_target() {
-  local rel="$2" r u
-  er_link_inside "$1" || { er_refuse "B7 the symlink '$rel' $_er_lwhy"; return 1; }
-  if [ "$_er_lrel" = . ]; then er_refuse "B7 the symlink '$rel' resolves to the consumer root itself, which contains every read root"; return 1; fi
-  if [ "$_er_lrel" = "$rel" ]; then er_refuse "B7 the symlink '$rel' resolves to itself"; return 1; fi
-  case "$rel/" in "$_er_lrel/"*) er_refuse "B7 the symlink '$rel' resolves to '$_er_lrel', which contains the link itself"; return 1 ;; esac
-  while IFS= read -r r; do
-    [ -n "$r" ] || continue
-    if [ "$_er_lrel" = "$r" ]; then er_refuse "B7 the symlink '$rel' resolves to the read root '$r'"; return 1; fi
-    case "$r/" in "$_er_lrel/"*) er_refuse "B7 the symlink '$rel' resolves to '$_er_lrel', which contains the read root '$r'"; return 1 ;; esac
-  done < "$_er_tmp/key.r2roots"
-  # Builtins only: the two fixed roots, then key.croots (er_read_roots wrote it) read in this shell.
-  for u in _bmad-output .claude/hooks; do
-    case "$rel/" in "$u/"*) er_refuse "B7 the symlink '$rel' lies under '$u', a root a consumer program walks without logging its reads"; return 1 ;; esac
-  done
-  [ -f "$_er_tmp/key.croots" ] || { er_refuse "B7 the corpus roots were not derived before the symlink '$rel' was checked"; return 1; }
-  while IFS= read -r u; do
-    u="${u%"${u##*[![:space:]]}"}"; u="${u%/}"
-    [ -n "$u" ] || continue
-    case "$rel/" in "$u/"*) er_refuse "B7 the symlink '$rel' lies under '$u', a root a consumer program walks without logging its reads"; return 1 ;; esac
-  done < "$_er_tmp/key.croots"
-  if [ "$_er_lkind" = d ]; then
-    printf 'd\0%s\0%s\0' "$_er_lchain" "$_er_lrel"
-  else
-    git hash-object --no-filters -- "$_er_lt" || return 1
-  fi
-}
-# er_hash_list <NUL-listfile> -- for each listed consumer path that exists: its exec bit and name,
-# NUL-terminated, then the content hashes in the same order. An entry ending `/` is a NESTED
-# REPOSITORY, whose contents git lists nowhere, so it is a MISS (measured: an edit inside one read
-# cached 0 where a fresh render gave 1); so is a listed symlink resolving outside the consumer root
-# (er_link_inside). The directory case is a NAMED refusal (er_refuse): it was a silent miss on every
-# --verify, measured on a non-ignored `.claude/worktrees/agent-x/` holding its own `.git`, which
-# conswork's `ls-files -o` lists with the trailing `/`. THE LIST IS NUL-SEPARATED
-# because git C-quotes a name carrying `"`, `\`, a tab or a newline in line output, the quoted form
-# names no file, and the old `[ -e ] || continue` dropped its bytes from the key without a sound
-# (measured: a cached 0 where a fresh render gave 3). A name carrying a newline cannot go through
-# `--stdin-paths`, which is line-based, so it is hashed on its own.
-er_hash_list() {
-  local p h
-  : > "$_er_tmp/key.exist" || return 1
-  : > "$_er_tmp/key.nl" || return 1
-  while IFS= read -r -d '' p; do
-    # B5: a GITLINK is skipped (in-shell membership, no fork). `ls-files -m` lists one whose checkout
-    # differs from the staged commit, and hash-object would be handed a directory; status keys it.
-    case "$_er_glset" in *"$_er_nl$p$_er_nl"*) continue ;; esac
-    case "$p" in */) er_refuse "a listed path is a directory (a nested work tree or an unignored worktree): $p"; return 1 ;; esac
-    if cr_test "$CONSUMER" -L "$p"; then
-      printf 'L %s\0' "$p"; er_link_target "$_er_root/$p" "$p" || return 1
-      # B7 a directory link is keyed by identity alone (er_link_target); hash-object cannot read one.
-      # Its pair is kept for er_dirlinks_keyed, which er_key runs once after every field.
-      if [ "$_er_lkind" = d ]; then printf '%s\0%s\0' "$p" "$_er_lrel" >> "$_er_tmp/key.dirlinks" || return 1; fi
-      [ "$_er_lkind" != d ] || continue
-    fi
-    { cr_test "$CONSUMER" -e "$p" || cr_test "$CONSUMER" -L "$p"; } || continue
-    if cr_test "$CONSUMER" -x "$p"; then printf 'x %s\0' "$p"; else printf -- '- %s\0' "$p"; fi
-    case "$p" in
-      *"$_er_nl"*) printf '%s\0' "$p" >> "$_er_tmp/key.nl" || return 1 ;;
-      *)           printf '%s\n' "$p" >> "$_er_tmp/key.exist" || return 1 ;;
-    esac
-  done < "$1"
-  er_hash_paths "$_er_root" "$_er_tmp/key.exist" || return 1
-  while IFS= read -r -d '' p; do
-    h="$(cr_hash "$_er_root" "$p")" || return 1
-    printf '%s\n' "$h"
-  done < "$_er_tmp/key.nl"
-}
-# er_dirlinks_keyed -- B7 0 when, for every accepted directory link, the files ON DISK under its
-# resolved target equal the files git TRACKS there, both made relative to the target. THE DISK IS THE
-# ORACLE: anything on disk git does not list refuses -- ignored, untracked, under a `.git` component,
-# in a nested repository, or reached by a case spelling git does not share -- and so does a tracked
-# file missing from disk. An ignored listing used to decide alone, an ABSENCE test that read zero
-# whenever git could not see the content (measured: `notes -> ARCHIVE/RETRO` over an ignored dir on a
-# case-insensitive volume, `notes -> .git/zz`, and a non-repository `kept/retro/sub/.git/f.md` under
-# an ignored `sub/` in a tracked target were each ACCEPTED STALE); equality subsumes it and it is gone.
-# A target under which git lists no tracked file keeps its own named refusal. er_hash_list wrote each
-# accepted link and its target to key.dirlinks as NUL pairs; one `ls-files` over every target as a
-# `:(literal)` pathspec lists B for all of them, attributed by path prefix in this shell. FORKS: that
-# one git call per key take when at least one directory link was accepted, none otherwise; and per
-# accepted link four more -- find, two sorts, cmp. The prefix strips and the naming walk are builtins.
-er_dirlinks_keyed() {
-  local l t e k c s
-  local -a ps=()
-  [ -s "$_er_tmp/key.dirlinks" ] || return 0
-  while IFS= read -r -d '' l && IFS= read -r -d '' t; do ps+=( ":(literal)$t" ); done < "$_er_tmp/key.dirlinks"
-  cr_git "$CONSUMER" ls-files -z -- "${ps[@]}" > "$_er_tmp/key.dltrk" 2>/dev/null \
-    || { er_refuse "B7 git ls-files could not list the tracked files beneath the accepted directory links' targets"; return 1; }
-  while IFS= read -r -d '' l && IFS= read -r -d '' t; do
-    # B: git's tracked list under the target, made relative to it. k: 1 once one is listed, 2 on a
-    # failed write, which refuses by name and is never read as an empty or an equal set.
-    k=0
-    : > "$_er_tmp/key.dlb" && : > "$_er_tmp/key.dla" \
-      || { er_refuse "B7 the lists under '$t' could not be staged"; return 1; }
-    while IFS= read -r -d '' e; do
-      case "$e" in "$t"/*) printf '%s\0' "${e#"$t"/}" || { k=2; break; }; k=1 ;; esac
-    done < "$_er_tmp/key.dltrk" > "$_er_tmp/key.dlb"
-    [ "$k" -ne 2 ] || { er_refuse "B7 the tracked list under '$t' could not be staged"; return 1; }
-    [ "$k" -eq 1 ] || { er_refuse "B7 the symlink '$l' resolves to '$t', under which git lists no tracked file"; return 1; }
-    # A: everything on disk under the target that is not a directory -- a regular file, a symlink
-    # (to a file or a directory, never followed: find runs without -L), a fifo -- by absolute path
-    # through /usr/bin/find, made relative to the target. A link under the target is "on disk" and
-    # git lists it only as a tracked 120000 entry, which R2 refuses anyway, so any link there makes
-    # A and B differ and the link refuses: the fail-closed direction.
-    /usr/bin/find "$_er_root/$t" ! -type d -print0 > "$_er_tmp/key.dlfind" 2>/dev/null \
-      || { er_refuse "B7 find could not walk '$t', the target of the symlink '$l'"; return 1; }
-    c=0
-    while IFS= read -r -d '' e; do printf '%s\0' "${e#"$_er_root/$t"/}" || { c=2; break; }; done < "$_er_tmp/key.dlfind" > "$_er_tmp/key.dla"
-    [ "$c" -eq 0 ] || { er_refuse "B7 the on-disk list under '$t' could not be staged"; return 1; }
-    LC_ALL=C sort -z "$_er_tmp/key.dla" > "$_er_tmp/key.dla.s" 2>/dev/null \
-      && LC_ALL=C sort -z "$_er_tmp/key.dlb" > "$_er_tmp/key.dlb.s" 2>/dev/null \
-      || { er_refuse "B7 the on-disk and tracked lists under '$t' could not be sorted"; return 1; }
-    cmp -s "$_er_tmp/key.dla.s" "$_er_tmp/key.dlb.s"; c=$?
-    [ "$c" -ne 0 ] || continue
-    [ "$c" -eq 1 ] || { er_refuse "B7 cmp could not compare the on-disk and tracked lists under '$t'"; return 1; }
-    # They differ. Name the first entry on disk that git does not list; failing that, the first git
-    # lists that is not on disk. The NAME is a message only; the refusal was decided by cmp above.
-    s="$_er_nl"
-    while IFS= read -r -d '' e; do s="$s$e$_er_nl"; done < "$_er_tmp/key.dlb.s"
-    while IFS= read -r -d '' e; do
-      case "$s" in *"$_er_nl$e$_er_nl"*) ;; *) er_refuse "B7 the symlink '$l' resolves to '$t', under which '$e' exists on disk but git does not list it"; return 1 ;; esac
-    done < "$_er_tmp/key.dla.s"
-    s="$_er_nl"
-    while IFS= read -r -d '' e; do s="$s$e$_er_nl"; done < "$_er_tmp/key.dla.s"
-    while IFS= read -r -d '' e; do
-      case "$s" in *"$_er_nl$e$_er_nl"*) ;; *) er_refuse "B7 the symlink '$l' resolves to '$t', under which git lists '$e' but it is not on disk"; return 1 ;; esac
-    done < "$_er_tmp/key.dlb.s"
-    er_refuse "B7 the symlink '$l' resolves to '$t', whose files on disk differ from git's tracked list"; return 1
-  done < "$_er_tmp/key.dirlinks"
-}
-_er_nl='
-'
-# The B5 gitlink set, newline-delimited with a leading and trailing newline (er_key fills it); and
-# the matching find prune operands.
-_er_glset="$_er_nl"; _er_glprune=()
-# er_hash_paths <abs-dir> <listfile> -- content hash of each listed path, by ABSOLUTE path. MEASURED:
-# `git hash-object --stdin-paths` resolves a relative path against the repository TOP, not the cwd,
-# so run from the engine directory inside a checkout it failed every file and the key never formed.
-er_hash_paths() {
-  local p
-  : > "$_er_tmp/key.abs" || return 1
-  while IFS= read -r p; do printf '%s/%s\n' "$1" "${p#./}" >> "$_er_tmp/key.abs" || return 1; done < "$2"
-  [ -s "$_er_tmp/key.abs" ] || return 0
-  git hash-object --no-filters --stdin-paths < "$_er_tmp/key.abs"
-}
-# er_sha256 <file> -- the file's sha256 hex, from whichever of the two common tools exists. Neither
-# present, or a non-hex answer, is a failure (and so a MISS), never an empty field.
-er_sha256() {
-  local h
-  if command -v shasum >/dev/null 2>&1; then h="$(shasum -a 256 < "$1")" || return 1
-  elif command -v sha256sum >/dev/null 2>&1; then h="$(sha256sum < "$1")" || return 1
-  else return 1; fi
-  h="${h%% *}"
-  case "$h" in ""|*[!0-9a-f]*) return 1 ;; esac
-  [ "${#h}" -eq 64 ] || return 1
-  printf '%s\n' "$h"
-}
-# THE FIELD READERS, one per key field, each writing that field's raw material to stdout and
-# returning non-zero on any failure. The order below is the pinned order; er_key hashes each.
-er_kf_engine() {
-  ( cd "$SELF" && find . -type f | LC_ALL=C sort ) > "$_er_tmp/key.engine-list" || return 1
-  [ -s "$_er_tmp/key.engine-list" ] || return 1
-  cat "$_er_tmp/key.engine-list" || return 1
-  er_hash_paths "$SELF" "$_er_tmp/key.engine-list" || return 1
-}
-# The ref AS TYPED leads, because the region prints it as typed: two spellings of one commit render
-# different regions and must not share a PASS.
-er_kf_ref() {
-  printf '%s\0' "$1"
-  git -C "$DIST" rev-parse -q --verify "${1}^{commit}" || return 1
-  git -C "$DIST" rev-parse -q --verify "${1}:core" || return 1
-}
-er_kf_base()   { er_kf_ref "$BASE"; }
-er_kf_theirs() { er_kf_ref "$THEIRS"; }
-er_kf_distrefs() {
-  git -C "$DIST" for-each-ref || return 1
-  # HEAD is not a ref for-each-ref lists, and retired-fixtures.sh's `git log --all` walks it: a
-  # detached HEAD on unreferenced commits moved the region with every listed ref unchanged.
-  git -C "$DIST" rev-parse HEAD || return 1
-  # `log --all` walks every LINKED WORKTREE's HEAD as well, and none of them is a ref: a worktree
-  # detached at an unreferenced commit moved retired-fixtures.sh's rows with every ref and the main
-  # HEAD unchanged. `worktree list --porcelain` is git's own enumeration of that set, each HEAD
-  # already resolved (a symbolic one too), so this keys what `--all` reads. Its `locked` and
-  # `prunable` annotations move the field as well, which is the safe direction (a miss).
-  echo "worktrees"
-  git -C "$DIST" worktree list --porcelain || return 1
-  git -C "$DIST" rev-parse --is-shallow-repository || return 1
-  # The EFFECTIVE config (local, global through $HOME, system) and the auto-abbrev length: every
-  # `%h` the region renders comes from <dist> (ledger-reverify.sh, retired-fixtures.sh), and its
-  # length moves with core.abbrev or with the object count, with no ref moving.
-  echo "config"
-  git -C "$DIST" config --list || return 1
-  er_repo_files "$DIST" || return 1
-  local _ab
-  _ab="$(git -C "$DIST" rev-parse --short "$THEIRS")" || return 1
-  echo "abbrev ${#_ab}"
-}
-# Resolved AND as typed: the region's `full: diff` lines print <consumer> as the caller spelled it.
-er_kf_consroot()  { printf '%s\0%s\0' "$_er_root" "$CONSUMER"; }
-# A tracked GITLINK (160000, a submodule) is KEYED by its index line, which carries the staged
-# commit; its checkout is read by no detector (B5: er_key refuses one at, under or containing a read
-# root) and one that differs from the staged commit moves conswork's status line. A tracked SYMLINK
-# (120000) never reaches here: er_key's R2 refuses it first. The index is er_key's one read of it.
-er_kf_consindex() {
-  cat "$_er_tmp/key.r2idx" || return 1
-  # Under a NORMALISING attribute or config, `git add` of a CRLF save stores the same LF blob, so the
-  # index and status read clean while the detectors `cmp` the raw CRLF bytes (measured: cached 0
-  # where a fresh render gave 1). Then every tracked file's RAW bytes are keyed, never refused:
-  # `* text=auto` is the common consumer state.
-  if er_normalises; then
-    echo "raw"
-    er_cgit ls-files -z > "$_er_tmp/key.raw" || return 1
-    er_hash_list "$_er_tmp/key.raw" || return 1
-  fi
-}
-# er_normalises -- 0 when git may rewrite a tracked file's bytes between the work tree and the index:
-# `core.autocrlf` other than false, `core.eol` set, or any `text`, `eol`, `filter` or `ident`
-# attribute that applies to a tracked path (`check-attr`, so `.gitattributes`, `info/attributes` and
-# the global and system files all count). Any failure, or a listing a newline in a name could
-# misalign, answers 0: keying more is the safe direction.
-er_normalises() {
-  local v nl
-  v="$(cr_git "$CONSUMER" config --get core.autocrlf 2>/dev/null)" || v=""
-  case "$v" in ""|false) ;; *) return 0 ;; esac
-  cr_git "$CONSUMER" config --get core.eol >/dev/null 2>&1 && return 0
-  cr_git "$CONSUMER" ls-files -z > "$_er_tmp/key.trk" 2>/dev/null || return 0
-  [ -s "$_er_tmp/key.trk" ] || return 1
-  cr_git "$CONSUMER" check-attr -z --stdin text eol filter ident < "$_er_tmp/key.trk" > "$_er_tmp/key.ca" 2>/dev/null \
-    || return 0
-  nl="$(LC_ALL=C tr -cd '\n' < "$_er_tmp/key.ca" | wc -c)" || return 0
-  [ "$nl" -eq 0 ] || return 0
-  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.ca" > "$_er_tmp/key.ca-lines" || return 0
-  awk 'NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { f = 1 } END { exit !f }' "$_er_tmp/key.ca-lines"
-}
-# The status names every modified and untracked path; their BYTES are hashed after it. An untracked
-# entry ending in `/` is a nested repository, which er_hash_list refuses by name.
-er_kf_conswork() {
-  er_cgit --no-optional-locks status --porcelain=v2 -z --untracked-files=all || return 1
-  er_cgit ls-files -z -m -o --exclude-standard > "$_er_tmp/key.work" || return 1
-  er_hash_list "$_er_tmp/key.work" || return 1
-}
-# IGNORED files are invisible to every git field above, and the detectors read some anyway. The read
-# roots are the consumer paths the render's detectors name (`.claude/` minus `.claude/worktrees/`,
-# `_bmad-output/`, the installed and local script trees, the workflows dir, the fixture tree, the
-# four generated files template-sites.md names, the alternate known-skills location) plus every
-# `corpus-root:` in predicate-sites.md, re-validated with predicate-differential.sh's own refusals:
-# one this cannot use is a MISS, never a narrower key.
-#
-# The roots a pull WRITES are derived from preclassify.sh's own map_consumer, evaluated on one path
-# per `core/<dir>/*` case, so a destination added there is a root here without an edit: the
-# hand-written list omitted `.githooks` (measured: an ignored .githooks/pre-push edit cached 0 where a
-# fresh render moved a bucket). The non-mapped roots stay listed by hand.
-er_mapped_roots() {
-  local fn
-  fn="$(awk '/^map_consumer\(\) *\{/ { f = 1 } f { print } f && /^}/ { exit }' "$SELF/preclassify.sh")" || return 1
-  [ -n "$fn" ] || return 1
-  (
-    eval "$fn" || exit 1
-    printf '%s\n' "$fn" | sed -n 's/^[[:space:]]*\(core\/[^*)[:space:]]*\)\*).*/\1/p' > "$_er_tmp/key.mpat" || exit 1
-    n=0
-    while IFS= read -r p; do
-      d="$(map_consumer "${p}x")" || exit 1
-      case "$d" in *x) d="${d%x}" ;; *) exit 1 ;; esac
-      d="${d%/}"
-      case "$d" in ""|/*|core|core/*) exit 1 ;; esac
-      printf '%s\n' "$d"; n=$((n + 1))
-    done < "$_er_tmp/key.mpat"
-    [ "$n" -ge 2 ] || exit 1
-  )
-}
-# er_read_roots -- the consumer read roots, one per line: the hand-listed ones, er_mapped_roots, and
-# every validated `corpus-root:`. ONE derivation, read by consignored and by the R2 symlink refusal.
-er_read_roots() {
-  local r
-  printf '%s\n' .claude _bmad-output scripts/ai-dlc scripts/ai-dlc-local .github/workflows tests \
-    skills/ai-dlc/extensions CLAUDE.md QUICKSTART.md docs/coding-conventions.md || return 1
-  er_mapped_roots || return 1
-  sed -n 's/^corpus-root:[[:space:]]*//p' "$SELF/predicate-sites.md" > "$_er_tmp/key.croots" || return 1
-  while IFS= read -r r; do
-    r="${r%"${r##*[![:space:]]}"}"
-    case "$r" in ""|/*|*[[:space:]]*|..|../*|*/..|*/../*) return 1 ;; esac
-    printf '%s\n' "$r" || return 1
-  done < "$_er_tmp/key.croots"
-}
-# er_is_worktrees_dir <rel> -- 0 when <rel>'s first two components name the SAME directory as
-# `.claude/worktrees` (one inode, by `-ef`), whatever their case; a case variant that is a different
-# directory, or a consumer with no worktrees directory, answers 1 and stays keyed.
-er_is_worktrees_dir() {
-  local two rest
-  case "$1" in */*/*) ;; *) return 1 ;; esac
-  # Parameter expansion only: this runs once per ignored entry, so no fork.
-  rest="${1#*/}"; two="${1%%/*}/${rest%%/*}"
-  cr_test "$_er_root" -d .claude/worktrees || return 1
-  cr_test "$_er_root" -d "$two" || return 1
-  [ "$_er_root/$two" -ef "$_er_root/.claude/worktrees" ]
-}
-er_kf_consignored() {
-  local r
-  er_read_roots > "$_er_tmp/key.roots" || return 1
-  : > "$_er_tmp/key.ign" || return 1
-  while IFS= read -r r; do
-    if [ -n "$_er_ex" ]; then
-      cr_git "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
-        ':(exclude).claude/worktrees' ":(exclude,literal)$_er_ex" >> "$_er_tmp/key.ign" || return 1
-    else
-      cr_git "$CONSUMER" -c core.quotePath=false ls-files -z -o -i --exclude-standard -- "$r" \
-        ':(exclude).claude/worktrees' >> "$_er_tmp/key.ign" || return 1
-    fi
-  done < "$_er_tmp/key.roots"
-  # THE `:(exclude).claude/worktrees` PATHSPEC ABOVE DOES NOT PRUNE A NESTED REPOSITORY. Measured on
-  # git 2.54.0: an IGNORED linked worktree at `.claude/worktrees/agent-x/` (check-ignore confirms it)
-  # is listed by `ls-files -o -i -- .claude` as ONE directory entry, `.claude/worktrees/agent-x/`, and
-  # every exclude form tried leaves it in -- `:(exclude).claude/worktrees`, with a trailing `/`, with
-  # `/*`, `:(exclude,glob).claude/worktrees/**`, and the entry's own path. er_hash_list then refused
-  # it as a listed directory on every --verify, in the common case (ai-dlc's own tree carries dozens).
-  # So every entry under `.claude/worktrees/` is dropped here, over the NUL records, before hashing.
-  # The match is an ANCHORED PATH PREFIX, `.claude/worktrees/` with its trailing slash, never a
-  # substring: `.claude/worktreesX/f` and `.claude/notworktrees/f` stay keyed. This list is the IGNORED
-  # one only; conswork's untracked listing is not filtered, so D3's subject still refuses there.
-  # The pathspec stays: it still prunes the plain files git does list one by one. An UNIGNORED
-  # worktree is untouched by this: conswork's `ls-files -o` lists it, and er_hash_list refuses it
-  # by name there.
-  # B4: the prune is NOT keyed on the spelling `.claude/worktrees/` alone. On a case-insensitive volume
-  # `.claude/WORKTREES/x` names the same directory, and git lists it under whatever spelling the entry
-  # carries on disk, so a case variant is dropped only when it IS the worktrees directory (same inode
-  # pair as `.claude/worktrees`); one that is a different directory stays keyed.
-  : > "$_er_tmp/key.ign-pruned" || return 1
-  while IFS= read -r -d '' r; do
-    case "$r" in .claude/worktrees/*) continue ;; esac
-    if er_is_worktrees_dir "$r"; then continue; fi
-    printf '%s\0' "$r" >> "$_er_tmp/key.ign-pruned" || return 1
-  done < "$_er_tmp/key.ign"
-  # Roots can nest, so one file can be listed twice; NUL-separated sort, and a failure is a miss.
-  LC_ALL=C sort -z -u "$_er_tmp/key.ign-pruned" > "$_er_tmp/key.ign-sorted" || return 1
-  # er_hash_list emits each name with its exec bit before the bytes: a chmod alone moves this field.
-  er_hash_list "$_er_tmp/key.ign-sorted" || return 1
-  # EMPTY DIRECTORIES under the roots: git lists none, and detectors decide on `[ -d ]` alone
-  # (measured: removing an empty tests/fixtures/<name> cached 0 where a fresh render added a row).
-  echo "empty-dirs"
-  : > "$_er_tmp/key.edirs" || return 1
-  while IFS= read -r r; do
-    cr_test "$CONSUMER" -d "$r" || continue
-    cr_walk "$_er_root" "$r" \( -name .git -o -path "$_er_root/.claude/worktrees" \) -prune -o -type d -empty -print0 \
-      >> "$_er_tmp/key.edirs" || return 1
-  done < "$_er_tmp/key.roots"
-  LC_ALL=C sort -z -u "$_er_tmp/key.edirs" || return 1
-}
-# The consumer's refs, then its EFFECTIVE config (local, global through $HOME, system): config moves
-# what git prints, and an override's `log -1 --format=%s` runs here.
-#
-# Then the consumer's HEAD, which for-each-ref does not list: its commit (or `unborn`, a fresh repo,
-# where a plain `rev-parse HEAD` exits 128 and the field would never compute) and what it points at
-# (or `detached`), the mirror of distrefs' HEAD line. A program run at the root reads HEAD (a `log -1`
-# in a validator moved the region with every ref unchanged). Then the git-dir's `shallow` file, whose
-# grafts move every history walk with no ref moving.
-er_kf_consobjects() {
-  local gd
-  cr_git "$CONSUMER" for-each-ref || return 1
-  echo "head"
-  cr_git "$CONSUMER" rev-parse -q --verify HEAD || echo unborn
-  cr_git "$CONSUMER" symbolic-ref -q HEAD || echo detached
-  echo "config"
-  cr_git "$CONSUMER" config --list || return 1
-  er_repo_files "$CONSUMER" || return 1
-  gd="$(cr_git "$CONSUMER" rev-parse --path-format=absolute --git-common-dir)" || return 1
-  er_file_or_absent shallow "$gd/shallow" || return 1
-}
-# er_file_or_absent <label> <path> -- the label, then the path's content hash or `absent`.
-er_file_or_absent() {
-  printf '%s %s\0' "$1" "$2"
-  if [ -e "$2" ]; then git hash-object --no-filters -- "$2" || return 1; else echo absent; fi
-}
-# er_repo_files <repo> -- git-dir files that move what git prints and that `config --list` does not
-# show: `info/attributes` (a `-diff` there hid a deleted rulebook line from retired-layer-passage.sh,
-# measured), `info/grafts` (honoured by `log --all`), and `objects/info/alternates` (objects reached
-# only through an alternate can vanish with no ref moving); then the GLOBAL attributes file as THIS
-# repo's config resolves it (`core.attributesFile`, else XDG, else $HOME), asked of git itself.
-er_repo_files() {
-  local cd g
-  # cr_git for both repos: logging is off inside er_key, so a dist root logs nothing.
-  cd="$(cr_git "$1" rev-parse --path-format=absolute --git-common-dir)" || return 1
-  er_file_or_absent info/attributes "$cd/info/attributes" || return 1
-  er_file_or_absent info/grafts "$cd/info/grafts" || return 1
-  er_file_or_absent alternates "$cd/objects/info/alternates" || return 1
-  # git before 2.42 has no `git var GIT_ATTR_GLOBAL`: its documented order is used instead.
-  g="$(cr_git "$1" var GIT_ATTR_GLOBAL 2>/dev/null)" || g=""
-  if [ -z "$g" ]; then
-    g="$(cr_git "$1" config --path core.attributesFile 2>/dev/null)" || g=""
-    [ -n "$g" ] || g="${XDG_CONFIG_HOME:-${HOME:-}/.config}/git/attributes"
-  fi
-  er_file_or_absent global-attributes "$g" || return 1
-}
-# OBJECT-STORE RESOLUTION, NOT REFS. An override's `base_sha` (layer-drift.sh decides DIST, then
-# CONSUMER, then neither) and the stamp's `commit:` / `skill_commit:` resolve through each repo's
-# object store, so a `git prune` that drops an unreferenced commit moves the region with every ref
-# unchanged (measured both ways). Each value is resolved in both repos, the answer or `unresolved`.
-er_kf_consresolve() {
-  local f v
-  : > "$_er_tmp/key.rv" || return 1
-  if cr_test "$CONSUMER" -f .claude/.ai-dlc-version; then
-    cr_read "$CONSUMER" .claude/.ai-dlc-version | sed -n 's/^\(skill_\)\{0,1\}commit:[[:space:]]*\([^[:space:]]*\).*/\2/p' \
-      >> "$_er_tmp/key.rv" || return 1
-  fi
-  if cr_test "$CONSUMER" -d .claude/skills/ai-dlc/overrides; then
-    cr_walk "$CONSUMER" .claude/skills/ai-dlc/overrides -type f -name '*.md' > "$_er_tmp/key.ovr" || return 1
-    while IFS= read -r f; do
-      cr_read "$CONSUMER" "$f" | awk 'NR==1 && $0=="---" { inf=1; next } inf && $0=="---" { exit }
-           inf && index($0, "base_sha:")==1 { sub("^base_sha:[[:space:]]*", ""); print; exit }' \
-        >> "$_er_tmp/key.rv" || return 1
-    done < "$_er_tmp/key.ovr"
-  fi
-  LC_ALL=C sort -u "$_er_tmp/key.rv" > "$_er_tmp/key.rv-sorted" || return 1
-  while IFS= read -r v; do
-    [ -n "$v" ] || continue
-    printf '%s\0' "$v"
-    git -C "$DIST" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
-    cr_git "$CONSUMER" rev-parse -q --verify "${v}^{commit}" 2>/dev/null || echo unresolved
-  done < "$_er_tmp/key.rv-sorted"
-}
-er_kf_env() {
-  # The locale moves `sort`, `[[:space:]]` and every awk the detectors run: keyed, set vs unset.
-  local _lv
-  for _lv in LANG LC_ALL LC_COLLATE LC_CTYPE; do
-    if eval "[ -n \"\${$_lv+x}\" ]"; then eval "printf '%s=set %s\n' \"\$_lv\" \"\$$_lv\""
-    else printf '%s=unset\n' "$_lv"; fi
-  done
-  if [ -n "${AI_DLC_KNOWN_SKILLS_EXT+x}" ]; then
-    printf 'set %s\n' "$AI_DLC_KNOWN_SKILLS_EXT"
-    if [ -f "$AI_DLC_KNOWN_SKILLS_EXT" ]; then git hash-object --no-filters "$AI_DLC_KNOWN_SKILLS_EXT" || return 1; fi
-  else
-    echo "unset"
-  fi
-  # EVERY `GIT_*` variable, by name and value (GIT_EXTERNAL_DIFF=true emptied a content diff the
-  # render parses, measured; GIT_DIFF_OPTS, GIT_ATTR_NOSYSTEM, GIT_NO_REPLACE_OBJECTS and
-  # GIT_ALTERNATE_OBJECT_DIRECTORIES move what git prints the same way). An unset one is absent from
-  # the listing, so set and unset differ.
-  echo "git-env"
-  env | LC_ALL=C grep '^GIT_' | LC_ALL=C sort
-  # The SYSTEM attributes file, by git's own answer, its bytes or `absent`. `git var` fails when
-  # GIT_ATTR_NOSYSTEM is set (keyed above) and on git before 2.42, where the path is derived from the
-  # exec path's prefix -- a guess that is wrong on a relocated build (Apple's reads /etc), which is
-  # why git's own answer comes first.
-  local _sa
-  _sa="$(git var GIT_ATTR_SYSTEM 2>/dev/null)" || _sa=""
-  if [ -n "$_sa" ]; then er_file_or_absent system-attributes "$_sa" || return 1
-  elif [ -n "${GIT_ATTR_NOSYSTEM:-}" ]; then echo "system-attributes nosystem"
-  else er_file_or_absent system-attributes-derived "$(git --exec-path)/../../etc/gitattributes" || return 1; fi
-  # TOOL IDENTITY: git's version and exec path, and the resolved path and binary checksum of awk, sed
-  # and sort (BSD sed prints no version, so the binary is the identity). A tool upgrade between the
-  # record and the hit moves `%h`, diff output or a sort order with no other field moving.
-  git --version || return 1
-  git --exec-path || return 1
-  local _tl _tp
-  for _tl in awk sed sort; do
-    _tp="$(command -v "$_tl")" || return 1
-    printf '%s %s ' "$_tl" "$_tp"
-    if [ -f "$_tp" ]; then cksum < "$_tp" || return 1; else echo "not-a-file"; fi
-  done
-  # THE AI_DLC_* AND CLAUDE_* VARIABLES THE RENDER CAN READ, by name and value, set and unset
-  # distinguished. The name set is DERIVED at key time, never hand-listed (er_env_names); keying every
-  # such variable instead would never hit (this process exports a fresh AI_DLC_RECONCILE_MEMO before
-  # the key) and would write secrets such as a CLAUDE_CODE_* token into the field. LIMIT: the
-  # derivation is a text grep, so a reader that builds a name (`${!name}`, `env | grep`) is invisible
-  # to it, and an entry's own sourced siblings are not scanned. The NAME set is memoized per process in
-  # key.envnames.memo, written only after er_env_names succeeds, while the values below are re-read on
-  # every call; a dist blob that turns unreadable between the two keys therefore now records, which is
-  # harmless because the next lookup is a fresh process with a fresh $_er_tmp.
-  echo "named-env"
-  local _en _em
-  if [ -s "$_er_tmp/key.envnames.memo" ]; then
-    cp "$_er_tmp/key.envnames.memo" "$_er_tmp/key.envnames" || return 1
-  else
-    er_env_names > "$_er_tmp/key.envnames" || return 1
-    if _em="$(mktemp "$_er_tmp/key.envnames.memo.XXXXXX")" && cp "$_er_tmp/key.envnames" "$_em"; then
-      mv -f "$_em" "$_er_tmp/key.envnames.memo" || :
-    fi
-  fi
-  while IFS= read -r _en; do
-    if eval "[ -n \"\${$_en+x}\" ]"; then eval "printf '%s=set %s\0' \"\$_en\" \"\$$_en\""
-    else printf '%s=unset\0' "$_en"; fi
-  done < "$_er_tmp/key.envnames"
-}
-# er_env_names -- the AI_DLC_*/CLAUDE_* names the render can read, one per line, sorted: every
-# `(AI_DLC|CLAUDE)_[A-Z0-9_]+` token on a non-comment line of the engine closure (emit-report.sh and
-# every `$SELF/<x>.sh` it names, transitively, the derivation validate-consumer-reads.sh uses), of each
-# predicate-sites.md `entry:` file at THEIRS and at BASE as <dist> holds it, and of
-# validate-hook-registration.sh at THEIRS. A token ending `_` is a PREFIX: it stands for every
-# exported variable carrying it. Subtracted: what this engine sets for its children
-# (AI_DLC_PROJECT_ROOT and AI_DLC_KNOWN_SKILLS_EXT at predicate-differential.sh's validator runs, the
-# latter keyed above with its file; AI_DLC_RECONCILE_MEMO, whose inheritance is refused), lib.sh's
-# unexported AI_DLC_MEMO_* state, and the cache's own control AI_DLC_VERIFY_NO_CACHE. A dist file that
-# is absent at a ref adds nothing; one that is present and cannot be read fails the field. It runs at
-# most once per process (er_kf_env memoizes it), which is sound because the parent shell exports no
-# AI_DLC_*/CLAUDE_* name between the key before the render and er_cache_record's, and the render runs in $( ).
-er_env_names() {
-  local todo="emit-report.sh" seen=" " f g ref e
-  : > "$_er_tmp/key.envsrc" || return 1
-  while [ -n "$todo" ]; do
-    f="${todo%% *}"; case "$todo" in *" "*) todo="${todo#* }" ;; *) todo="" ;; esac
-    case "$seen" in *" $f "*) continue ;; esac
-    seen="$seen$f "
-    # A named file that is absent is skipped, as validate-consumer-reads.sh's closure skips it: the
-    # engine field already keys which files exist here.
-    [ -f "$SELF/$f" ] || continue
-    { LC_ALL=C grep -v '^[[:space:]]*#' "$SELF/$f" || [ "$?" -eq 1 ]; } > "$_er_tmp/key.envfile" || return 1
-    cat "$_er_tmp/key.envfile" >> "$_er_tmp/key.envsrc" || return 1
-    # grep's 1 (a file naming no sibling) is not a failure; pipefail would read it as one.
-    { LC_ALL=C grep -oE '\$\{?SELF\}?/[A-Za-z0-9_.-]+\.sh' "$_er_tmp/key.envfile" || [ "$?" -eq 1 ]; } \
-      | sed -E 's,.*/,,' | LC_ALL=C sort -u > "$_er_tmp/key.envnext" || return 1
-    while IFS= read -r g; do todo="${todo:+$todo }$g"; done < "$_er_tmp/key.envnext"
-  done
-  sed -n 's/^entry:[[:space:]]*//p' "$SELF/predicate-sites.md" | sed 's/[[:space:]]*$//' | LC_ALL=C sort -u \
-    > "$_er_tmp/key.enventries" || return 1
-  echo core/scripts/validate-hook-registration.sh >> "$_er_tmp/key.enventries" || return 1
-  for ref in "$THEIRS" "$BASE"; do
-    while IFS= read -r e; do
-      [ -n "$e" ] || continue
-      if [ "$e" = core/scripts/validate-hook-registration.sh ] && [ "$ref" != "$THEIRS" ]; then continue; fi
-      git -C "$DIST" cat-file -e "${ref}:${e}" 2>/dev/null || continue
-      git -C "$DIST" show "${ref}:${e}" > "$_er_tmp/key.envfile" 2>/dev/null || return 1
-      LC_ALL=C grep -v '^[[:space:]]*#' "$_er_tmp/key.envfile" >> "$_er_tmp/key.envsrc"
-    done < "$_er_tmp/key.enventries"
-  done
-  # The whole identifier is matched, then kept only when it STARTS with the prefix: a bare
-  # `(AI_DLC|CLAUDE)_` match would cut `AI_DLC_LIB_LEVEL` out of lib.sh's `_AI_DLC_LIB_LEVEL`.
-  { LC_ALL=C grep -oE '[A-Za-z0-9_]*(AI_DLC|CLAUDE)_[A-Z0-9_]+' "$_er_tmp/key.envsrc" || [ "$?" -eq 1 ]; } \
-    | { LC_ALL=C grep -E '^(AI_DLC|CLAUDE)_' || [ "$?" -eq 1 ]; } | LC_ALL=C sort -u > "$_er_tmp/key.envtok" || return 1
-  compgen -e > "$_er_tmp/key.envexp" || return 1
-  while IFS= read -r e; do
-    case "$e" in
-      *_) while IFS= read -r g; do case "$g" in "$e"*) printf '%s\n' "$g" ;; esac; done < "$_er_tmp/key.envexp" ;;
-      *) printf '%s\n' "$e" ;;
-    esac
-  done < "$_er_tmp/key.envtok" | LC_ALL=C sort -u | {
-    while IFS= read -r e; do
-      case "$e" in
-        AI_DLC_PROJECT_ROOT|AI_DLC_KNOWN_SKILLS_EXT|AI_DLC_RECONCILE_MEMO|AI_DLC_VERIFY_NO_CACHE|AI_DLC_MEMO_*) ;;
-        *) printf '%s\n' "$e" ;;
-      esac
-    done
-  }
-}
-# The REPORT's region, never the render's: the key is taken before any render, and an exit-0 run
-# records only when the render equalled this region byte for byte, so the recorded value IS the
-# passing render's.
-er_kf_region() { [ -n "$got" ] || return 1; printf '%s\n' "$got"; }
-# er_refuse <cause> -- names why er_key refused, in a file the caller prints. er_key runs inside a
-# command substitution with stderr discarded, so the cause travels through $_er_tmp.
-er_refuse() { printf '%s\n' "$1" > "$_er_tmp/key.refused" 2>/dev/null; return 1; }
-# er_cfg_read <key> [--bool] -- read one consumer config key as git itself resolves it (`--get` is
-# last-wins, as git is). Sets _er_cfg_rc to git's exit and _er_cfg_v to the value, lowercased (git
-# accepts any case). `--bool` takes git's own boolean parse, so a value-less key reads `true`, an
-# empty one `false`, and a non-zero integer `true`. Exit 0 compares and exit 1 (unset) allows; any
-# other exit is a value git cannot parse, refused by name rather than read as unset.
-er_cfg_read() {
-  _er_cfg_v=""; _er_cfg_rc=0
-  _er_cfg_v="$(cr_git "$CONSUMER" config ${2:+"$2"} --get "$1" 2>/dev/null)" || _er_cfg_rc=$?
-  case "$_er_cfg_rc" in
-    0) _er_cfg_v="$(printf '%s' "$_er_cfg_v" | LC_ALL=C tr '[:upper:]' '[:lower:]')" ;;
-    1) _er_cfg_v="" ;;
-    *) er_refuse "could not read $1 (git config exit $_er_cfg_rc)"; return 1 ;;
-  esac
-}
-# er_key -- prints the key: sha256 over the `name=value` lines, one per field, each value the sha256 of that
-# field's material. Non-zero, and nothing usable, when any field could not be computed.
-er_key() {
-  # The key's OWN consumer reads are never logged: they are fields, and the log is the render's.
-  local f v r p e rest CR_LOG=""
-  [ -n "$_er_rec" ] || return 1
-  : > "$_er_tmp/key.refused" || return 1
-  # AN ABSENT `cksum` IS A NAMED MISS. The env field checksums the awk, sed and sort binaries with it,
-  # so without it no key exists; refused here, before any field work, so the cause names the tool
-  # rather than surfacing as a failed env field.
-  command -v cksum >/dev/null 2>&1 \
-    || { er_refuse "cksum is not on PATH, so the env field cannot checksum the awk, sed and sort binaries it keys"; return 1; }
-  # R1 A NON-BARE DIST IS A MISS. Its work tree carries a `.gitattributes` and a checkout no field
-  # keys, and a detector that hashes a consumer file through `git -C "$DIST"` reads that work
-  # tree's attributes. The update skill's dist is the bare clone dist-clone.sh builds.
-  [ "$(git -C "$DIST" rev-parse --is-bare-repository 2>/dev/null)" = true ] \
-    || { er_refuse "R1 the dist is not a bare repository (git rev-parse --is-bare-repository), so its work-tree attributes and checkout are inputs no field keys"; return 1; }
-  # R3 A SYMLINK INSIDE THE ENGINE DIRECTORY IS A MISS. er_kf_engine lists `find . -type f`, which
-  # skips a link, while every detector is read as "$SELF/<file>" through it (measured: lib.sh as a
-  # link to an outside file, edited after the record, cached 0 where a fresh render gave 1). No walk
-  # ABOVE $SELF: $SELF is the logical `cd "$(dirname "$0")" && pwd`, every engine read goes through
-  # that same path, and er_kf_engine hashes the bytes reached by it, so a link above it cannot make
-  # the key and the run read different files.
-  ( cd "$SELF" && find . -type l ) > "$_er_tmp/key.englinks" 2>/dev/null \
-    || { er_refuse "R3 the engine directory could not be searched for symlinks"; return 1; }
-  [ ! -s "$_er_tmp/key.englinks" ] \
-    || { er_refuse "R3 the engine directory contains a symlink ($(sed -n 1p "$_er_tmp/key.englinks")), whose target the engine field does not hash"; return 1; }
-  # THE INDEX AND THE READ ROOTS, each taken ONCE here and reused by every guard below and by R2.
-  cr_git "$CONSUMER" ls-files -s -z > "$_er_tmp/key.r2idx" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
-  er_read_roots > "$_er_tmp/key.r2roots" || { er_refuse "R2 the read roots could not be derived"; return 1; }
-  # B5 GITLINKS (mode 160000, a submodule). The index lists the gitlink and none of its files, so its
-  # checkout is read by no field; it is pruned from the find guards below (with every nested
-  # submodule under it), the staged commit is keyed by consindex's index line, and a checkout that
-  # differs from it is keyed by conswork's status line. Derived in this shell, no fork per entry.
-  # Each path becomes a find `-path` operand, so a glob character in it is refused by name: it would
-  # match, and prune, paths that are not the gitlink.
-  _er_glset="$_er_nl"; _er_glprune=()
-  while IFS= read -r -d '' e; do
-    case "$e" in 160000\ *) ;; *) continue ;; esac
-    p="${e#*	}"
-    case "$p" in
-      *'*'*|*'?'*|*'['*|*'\'*)
-        er_refuse "B5 a gitlink path carries a find glob character (*, ?, [ or a backslash), so it cannot be pruned by -path: $p"; return 1 ;;
-      *"$_er_nl"*)
-        er_refuse "B5 a gitlink path carries a newline, which the gitlink set cannot hold: $p"; return 1 ;;
-    esac
-    _er_glset="$_er_glset$p$_er_nl"
-    _er_glprune+=( -o -path "$_er_root/./$p" )
-  done < "$_er_tmp/key.r2idx"
-  # A GITLINK AT, UNDER OR CONTAINING A READ ROOT IS A MISS: the detectors read beneath the root and
-  # no field keys the submodule's files. Bash prefix compares, no fork.
-  if [ "$_er_glset" != "$_er_nl" ]; then
-    while IFS= read -r r; do
-      [ -n "$r" ] || continue
-      rest="${_er_glset#"$_er_nl"}"
-      while [ -n "$rest" ]; do
-        p="${rest%%"$_er_nl"*}"; rest="${rest#*"$_er_nl"}"
-        if [ "$p" = "$r" ]; then er_refuse "B5 the gitlink '$p' is the read root '$r', whose files no field keys"; return 1; fi
-        case "$p/" in "$r/"*) er_refuse "B5 the gitlink '$p' lies under the read root '$r', whose files no field keys"; return 1 ;; esac
-        case "$r/" in "$p/"*) er_refuse "B5 the gitlink '$p' contains the read root '$r', whose files no field keys"; return 1 ;; esac
-      done
-    done < "$_er_tmp/key.r2roots"
-  fi
-  # `submodule.recurse=true` makes a consumer `git grep` (ledger-reverify.sh) read INSIDE every
-  # submodule, whose files no field keys: a stale PASS. One read of the effective value per run.
-  case "$(cr_git "$CONSUMER" config --bool submodule.recurse 2>/dev/null)" in
-    true) er_refuse "B5 submodule.recurse=true makes a consumer git grep read inside submodules, whose files no field keys"; return 1 ;;
-  esac
-  # AN UNREADABLE DIRECTORY IS A MISS. Git lists nothing under a directory it cannot open, so a
-  # chmod 000 hides its whole subtree from every field above while the detectors render it as
-  # absent (measured: cached 0, fresh 1). Any such directory refuses both the hit and the record.
-  # The prune list (.git, .claude/worktrees, every gitlink) is the set the key does not read.
-  _er_unread="$(cr_walk "$_er_root" . \( -name .git -o -path "$_er_root/./.claude/worktrees" ${_er_glprune[@]+"${_er_glprune[@]}"} \) \
-    -prune -o -type d ! -perm -u+rx -print 2>/dev/null)" || return 1
-  [ -z "$_er_unread" ] || { er_refuse "a directory under the consumer is unreadable, so git lists nothing beneath it"; return 1; }
-  # A PATH COMPONENT NAMED `.git` BELOW THE ROOT IS A MISS unless B6 below accepts it. Every git
-  # listing skips it, repository or not, while a detector's `find` reads beneath it (measured: a
-  # non-repo overrides/.git/o.md cached 0 where a fresh render added HARD-OVERRIDE-BASE-UNRESOLVABLE;
-  # B6's outside-every-read-root condition is what still refuses that case, `overrides/` lying under
-  # the `.claude` root). The consumer's own top-level `.git`, `.claude/worktrees` and every gitlink are
-  # pruned, as above, and each `.git` found is pruned too, so find never descends into a nested
-  # repository's object store.
-  _er_dotgit="$(cr_walk "$_er_root" . \( -path "$_er_root/./.git" -o -path "$_er_root/./.claude/worktrees" ${_er_glprune[@]+"${_er_glprune[@]}"} \) \
-    -prune -o -name .git -prune -print 2>/dev/null)" || return 1
-  # B6 AN IGNORED NESTED REPOSITORY OUTSIDE EVERY READ ROOT IS ACCEPTED. A `.git` found above is
-  # acceptable only when its WORK-TREE DIRECTORY (the parent of the `.git`, never the `.git` path
-  # itself: with `.git` in .gitignore that path is ignored while its directory is not) is BOTH
-  # `git check-ignore`d in the consumer, decided PER PATH from one batched call's output set, AND not
-  # at, under or containing any read root (bash prefix compares, no fork). Either failing keeps the
-  # refusal, naming which.
-  # NO KEYED FACT IS ADDED for an accepted repository. The predicate is re-evaluated on every key take,
-  # lookup included, so a repo moved into a root refuses there; and UN-IGNORING one makes conswork's
-  # `ls-files -o` list `<dir>/`, which er_hash_list refuses by name. Accepted, it lies where no field
-  # and no detector reads.
-  if [ -n "$_er_dotgit" ]; then
-    : > "$_er_tmp/key.nested" || return 1
-    # The `.git` list is STAGED and the loop reads the file (BL-360, `er_stage`): a failed write
-    # is a named refusal, never an empty list that accepts every nested repository.
-    er_stage key.dotgit "$_er_dotgit" 2>/dev/null \
-      || { er_refuse "B6 the nested-repository list could not be staged, so no nested repository was classified"; return 1; }
-    while IFS= read -r p; do
-      p="${p#./}"; p="${p%/.git}"
-      while IFS= read -r r; do
-        [ -n "$r" ] || continue
-        if [ "$p" = "$r" ]; then er_refuse "B6 the nested repository '$p' is the read root '$r', which every git listing skips"; return 1; fi
-        case "$p/" in "$r/"*) er_refuse "B6 the nested repository '$p' lies under the read root '$r', which every git listing skips"; return 1 ;; esac
-        case "$r/" in "$p/"*) er_refuse "B6 the nested repository '$p' contains the read root '$r', which every git listing skips"; return 1 ;; esac
-      done < "$_er_tmp/key.r2roots"
-      printf '%s/\0' "$p" >> "$_er_tmp/key.nested" || return 1
-    done < "$_er_tmp/key.dotgit"
-    # The exit code decides NOTHING about which path is ignored: `--stdin` exits 0 when ANY input
-    # matched and 1 when none did. Only a status other than those (128, an error) is read, as a named
-    # refusal, never as "none ignored" or "all ignored". That arm has no probe: no consumer state
-    # makes check-ignore fail on a readable repository without failing the earlier git reads first.
-    # Each input carries its trailing `/`, so a directory-only pattern (`dir/`) matches it.
-    cr_git "$CONSUMER" -c core.quotePath=false check-ignore -z --stdin < "$_er_tmp/key.nested" > "$_er_tmp/key.nested-ign" 2>/dev/null
-    case "$?" in 0|1) ;; *) er_refuse "B6 git check-ignore could not classify the nested repositories below the consumer root"; return 1 ;; esac
-    v="$_er_nl"
-    while IFS= read -r -d '' p; do v="$v$p$_er_nl"; done < "$_er_tmp/key.nested-ign"
-    while IFS= read -r -d '' p; do
-      case "$v" in *"$_er_nl$p$_er_nl"*) ;; *)
-        er_refuse "B6 the nested repository '${p%/}' is not ignored by the consumer, so its files are untracked input every git listing skips"; return 1 ;;
-      esac
-    done < "$_er_tmp/key.nested"
-  fi
-  # AN INDEX THAT HIDES WORK-TREE EDITS IS A MISS. `assume-unchanged` (an `h` tag, or any lower-case
-  # one) and `skip-worktree` (`S`, or `s` with both) make status and `ls-files -m` skip a modified
-  # tracked file the detectors still read (measured: cached 0, fresh 3), and `core.ignoreStat=true`
-  # sets the first flag on every file git adds. Keying the flags cannot help: they are set before the
-  # record, so both sides would match. Refused instead, read from the NUL-separated listing.
-  cr_git "$CONSUMER" ls-files -v -z > "$_er_tmp/key.tags" || return 1
-  # Staged to a file before the grep: `grep -q` at the end of a pipe under pipefail can report the
-  # writer's EPIPE, which would read a flagged index as clean.
-  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.tags" | LC_ALL=C cut -c1 > "$_er_tmp/key.tag1" || return 1
-  LC_ALL=C grep -q '[a-zS]' "$_er_tmp/key.tag1" && { er_refuse "an assume-unchanged or skip-worktree flag hides work-tree edits from status"; return 1; }
-  # A RELAXED STAT CONFIG IS A MISS. `cr_run` predicates run plain git under the consumer's config, so
-  # er_cgit forcing defaults cannot reach them; a same-size rewrite that keeps its mtime then reads as
-  # current to the predicate while the key's fields saw nothing either. Each key is read by
-  # er_cfg_read, whose exit is captured: unset allows, an unreadable value refuses by name.
-  er_cfg_read core.ignoreStat --bool || return 1
-  [ "$_er_cfg_rc" -ne 0 ] || [ "$_er_cfg_v" != true ] || { er_refuse "core.ignoreStat=true hides work-tree edits from status"; return 1; }
-  er_cfg_read core.checkStat || return 1
-  if [ "$_er_cfg_rc" -eq 0 ] && [ "$_er_cfg_v" != default ]; then
-    er_refuse "core.checkStat=$_er_cfg_v lets a predicate's plain git trust a stat entry a same-size rewrite left looking current"; return 1
-  fi
-  er_cfg_read core.trustctime --bool || return 1
-  [ "$_er_cfg_rc" -ne 0 ] || [ "$_er_cfg_v" != false ] || { er_refuse "core.trustctime=false lets a predicate's plain git trust a stat entry a same-size rewrite left looking current"; return 1; }
-  # Not `--bool`: a hook path is a valid value that `--bool` cannot parse. A git false boolean allows;
-  # `true` or a hook path refuses, for the same reason: forcing it off here would reach only er_cgit.
-  er_cfg_read core.fsmonitor || return 1
-  if [ "$_er_cfg_rc" -eq 0 ]; then
-    case "$_er_cfg_v" in
-      false|no|off|0) ;;
-      *) er_refuse "core.fsmonitor lets git trust a monitor's report instead of the files, so status and a predicate's plain git can miss an edit"; return 1 ;;
-    esac
-  fi
-  [ -z "${GIT_TEST_FSMONITOR:-}" ] || { er_refuse "GIT_TEST_FSMONITOR turns on a monitor git trusts instead of the files, so status and a predicate's plain git can miss an edit"; return 1; }
-  # AN INHERITED MEMO IS A MISS: a reconcile memo directory handed in by a caller holds answers no
-  # field here can see, and a stale one feeds the render.
-  [ -z "$_er_memo_in" ] || { er_refuse "an inherited AI_DLC_RECONCILE_MEMO holds answers another process cached"; return 1; }
-  # R2 A SYMLINK IN THE CONSUMER'S INPUT SET IS A MISS. The key hashes what git lists and the
-  # detectors read through a link: a tracked link (mode 120000) keys its blob and not its target's
-  # exec bit (measured: chmod +x on a tracked link's target cached 0 where a fresh render gave 1);
-  # a link AT OR ABOVE a read root makes `ls-files -o -i -- <root>` list nothing beneath it
-  # (measured: scripts -> an outside dir, an edit there cached 0 where a fresh render gave 1); and
-  # a link UNDER a root was refused here too, by a find walk of each root, until B7.
-  # B7 A LINK UNDER A ROOT IS NO LONGER REFUSED HERE. An untracked link reaches er_hash_list through
-  # a git listing (consignored's `ls-files -o -i` when ignored, conswork's `ls-files -o` when not),
-  # and er_link_target accepts or refuses it BY NAME there; a tracked one is refused just below. R2
-  # was never what kept a READ-THROUGH out of the key: the read log's `L` refusal (er_log_entries) is,
-  # because cr__links turns every logged path or walk that crosses a link into an `L` value. A ledger
-  # `sh` receipt runs arbitrary consumer code, which reads through a link UNLOGGED, so a directory
-  # link is accepted only when its target's files on disk equal git's tracked list
-  # (er_dirlinks_keyed): what the link reaches is then content git keys. The roots are er_read_roots.
-  # key.r2idx and key.r2roots were taken once, above the B5 gitlink derivation.
-  LC_ALL=C tr '\0' '\n' < "$_er_tmp/key.r2idx" > "$_er_tmp/key.r2lines" || { er_refuse "R2 the consumer's index could not be listed"; return 1; }
-  if LC_ALL=C grep -q '^120000 ' "$_er_tmp/key.r2lines"; then
-    er_refuse "R2 the consumer tracks a symlink (mode 120000), whose target the key does not follow"; return 1
-  fi
-  while IFS= read -r r; do
-    p=""; rest="$r"
-    while [ -n "$rest" ]; do
-      p="${p:+$p/}${rest%%/*}"
-      case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
-      if cr_test "$_er_root" -L "$p"; then er_refuse "R2 the read root '$r' is reached through a symlink ($p)"; return 1; fi
-      cr_test "$_er_root" -e "$p" || break
-    done
-  done < "$_er_tmp/key.r2roots"
-  # N1 A SYMLINK AT `.claude/worktrees` IS A MISS. consignored drops every ignored entry under that
-  # prefix by name and the find-based guards prune it by path, so a link there would carry whatever
-  # it points at past every field; a worktree directory is never a link.
-  if cr_test "$_er_root" -L .claude/worktrees; then
-    er_refuse "R2 .claude/worktrees is a symlink, which every pruned listing would follow nowhere"; return 1
-  fi
-  : > "$_er_tmp/key.block" || return 1
-  : > "$_er_tmp/key.dirlinks" || return 1
-  for f in engine base theirs distrefs consroot consindex conswork consignored consobjects consresolve env region; do
-    # A FAILED FIELD IS A NAMED MISS, two sites with two causes. A cause the field's own body already
-    # wrote is kept, never overwritten. The region field is exempt and stays silent: it fails only
-    # when the report has no region, which is not a refusal of a recorded PASS.
-    if ! "er_kf_$f" > "$_er_tmp/key.f.$f" 2>/dev/null; then
-      [ "$f" = region ] || [ -s "$_er_tmp/key.refused" ] || er_refuse "the $f field could not be computed"
-      return 1
-    fi
-    if ! v="$(er_sha256 "$_er_tmp/key.f.$f")"; then
-      if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then
-        er_refuse "the sha256 tool (shasum or sha256sum) gave no 64-hex digest for the $f field"
-      else
-        er_refuse "neither shasum nor sha256sum is on PATH, so no field can be hashed"
-      fi
-      return 1
-    fi
-    printf '%s=%s\n' "$f" "$v" >> "$_er_tmp/key.block" || return 1
-  done
-  # B7 every directory link the fields accepted: its target's files on disk must equal git's tracked
-  # list there, one ls-files for all of them.
-  er_dirlinks_keyed || return 1
-  er_sha256 "$_er_tmp/key.block"
-}
-# THE READ LOG IS THE KEY'S CONSUMER-PATH AUTHORITY. Every closure script reads the consumer through
-# consumer-read.sh, which appends `<kind> TAB <rel> TAB <value>` to $CR_LOG for each test, read, hash,
-# walk and git command (its header defines the values). The render runs with CR_LOG exported, so the
-# log names exactly the consumer paths THIS render resolved -- whatever spelling a detector built,
-# whatever root it walked -- and the record stores those entries. A lookup re-takes every stored
-# entry through the OS (cr_retake) and misses on any difference. The hand-listed read roots are no
-# longer what decides which consumer paths are keyed; they survive only as consignored's belt below.
-#
-# er_log_entries <log> -- the log's entries, sorted and unique, on stdout; non-zero (a refusal named
-# through er_refuse) when the log holds an entry the key cannot re-take: `!` (a refused `..` or
-# absolute path, a root other than the consumer, a name with a tab or newline), any `L` value (a
-# symlink on a logged path or under a walk, R2's subject now that the read set is the log), or one
-# path logged with two different values (it moved during the render).
-er_log_entries() {
-  [ -f "$1" ] || { er_refuse "the consumer read log was not written"; return 1; }
-  LC_ALL=C sort -u "$1" > "$_er_tmp/key.log-sorted" || return 1
-  if LC_ALL=C grep -q '^!' "$_er_tmp/key.log-sorted"; then
-    er_refuse "a detector asked for a consumer path the read log cannot re-take ($(LC_ALL=C grep -m1 '^!' "$_er_tmp/key.log-sorted" | tr '\t' ' '))"; return 1
-  fi
-  # B7 A FLAG, never `{ exit 0 } END { exit 1 }`: an `exit` in a rule still runs END, whose own
-  # `exit 1` then wins, so that form answered "no L entry" on every log (measured: a record written
-  # holding three `L` reads of a linked extensions directory).
-  if LC_ALL=C awk -F'\t' '$3 ~ /^L / { f = 1; exit } END { exit !f }' "$_er_tmp/key.log-sorted"; then
-    er_refuse "R2 a symlink lies on a consumer path a detector read ($(LC_ALL=C awk -F'\t' '$3 ~ /^L / { print $2; exit }' "$_er_tmp/key.log-sorted"))"; return 1
-  fi
-  if ! LC_ALL=C awk -F'\t' '{ k = $1 FS $2; if (k in v && v[k] != $3) exit 1; v[k] = $3 }' "$_er_tmp/key.log-sorted"; then
-    er_refuse "a consumer path read twice during the render gave two different answers"; return 1
-  fi
-  cat "$_er_tmp/key.log-sorted"
-}
-# er_log_retake <entries-file> -- 0 when every entry re-takes to the same value now. Logging OFF: a
-# re-take must not append to the log it is checking.
-er_log_retake() {
-  ( CR_LOG=""; cr_retake "$_er_root" "$1" ) > "$_er_tmp/key.retake" 2>/dev/null || return 1
-  # Compared in this shell with builtins, never by `cmp`: a fixture farm need not declare it, and a
-  # fork here would turn a missing tool into a miss nobody could name. Line logs, compared line by line.
-  local _a _b _ra _rb
-  exec 8< "$1" 9< "$_er_tmp/key.retake" || return 1
-  while :; do
-    IFS= read -r _a <&8; _ra=$?
-    IFS= read -r _b <&9; _rb=$?
-    [ "$_ra" -eq "$_rb" ] && [ "$_a" = "$_b" ] || { exec 8<&- 9<&-; return 1; }
-    [ "$_ra" -eq 0 ] || break
-  done
-  exec 8<&- 9<&-
-  return 0
-}
-# er_cache_record -- called ONLY on the exit-0 path, after the render. Writes only when the fixed key
-# taken AFTER the render equals the one taken before it AND every logged read re-takes to the value it
-# had when the detector made it. The record carries the fixed key and the log's entries. Silent on
-# every failure.
-# WITH THE CACHE ARMED, A RECORD-TIME REFUSAL IS NAMED on stderr (`recorded PASS not recorded: <cause>`,
-# er_rec_why): a `!` in the log, a moved read or a moved key was silent, so a render that can never
-# record read exactly like one that did. Unarmed, stderr is unchanged. The line never begins `cause:`
-# or `approved-region:`, which apply.sh parses from this stderr.
-er_rec_why() {
-  [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] || return 0
-  echo "emit-report: recorded PASS not recorded: $1" >&2
-}
-er_cache_record() {
-  local k1 t
-  [ -n "$_er_key0" ] || return 0
-  [ -n "${CR_LOG:-}" ] || return 0
-  : > "$_er_tmp/key.refused" 2>/dev/null
-  if ! k1="$(er_key 2>/dev/null)"; then
-    er_rec_why "the key could not be re-taken after the render ($(sed -n 1p "$_er_tmp/key.refused" 2>/dev/null))"; return 0
-  fi
-  [ "$k1" = "$_er_key0" ] || { er_rec_why "the key taken after the render differs from the one taken before it"; return 0; }
-  if ! er_log_entries "$CR_LOG" > "$_er_tmp/key.log-entries" 2>/dev/null; then
-    er_rec_why "$(sed -n 1p "$_er_tmp/key.refused" 2>/dev/null)"; return 0
-  fi
-  er_log_retake "$_er_tmp/key.log-entries" || { er_rec_why "a consumer path the render read no longer reads the same"; return 0; }
-  t="$(mktemp "$_er_gd/ai-dlc-verify-pass.XXXXXX" 2>/dev/null)" || return 0
-  if { printf 'ai-dlc-verify-pass 2\nkey %s\n' "$k1" && sed 's/^/read	/' "$_er_tmp/key.log-entries"; } > "$t" 2>/dev/null; then
-    mv -f "$t" "$_er_rec" 2>/dev/null || rm -f "$t"
-  else
-    rm -f "$t"
-  fi
-  return 0
-}
-_er_key0="$(er_key 2>/dev/null)" || _er_key0=""
-# A REFUSAL NAMES ITS CAUSE, on stderr, only when the cache is armed: unarmed, stderr stays what it
-# was before the cache existed. Never a `cause:` line, which apply.sh parses from this stderr.
-if [ -z "$_er_key0" ] && [ -n "$_er_tmp" ] && [ -s "$_er_tmp/key.refused" ] \
-   && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ]; then
-  echo "emit-report: recorded PASS refused, re-rendering: $(sed -n 1p "$_er_tmp/key.refused")" >&2
-fi
-# `_ar_report_got = got` is always true outside apply mode. In apply mode with a record, `got` is the
-# record's region and the key's region field reads it, while the report file itself is excluded from the
-# work-tree fields -- so a report hand-edited after the first verify would hit. It re-renders instead,
-# and the hand-edit check below decides.
-if [ -n "$_er_key0" ] && [ "${EMIT_REPORT_VERIFY_CACHE:-}" = 1 ] && [ -z "${AI_DLC_VERIFY_NO_CACHE:-}" ] \
-   && [ -f "$_er_rec" ] && [ "$_ar_report_got" = "$got" ]; then
-  _er_rk="$(sed -n 's/^key //p' "$_er_rec" 2>/dev/null | head -1)"
-  # A version-1 record (no read log) is a MISS: its first line no longer matches. The stored reads
-  # are re-taken only after the fixed key matched; a record carrying no read at all is a miss too,
-  # because every render reads the consumer.
-  if [ -n "$_er_rk" ] && [ "$_er_rk" = "$_er_key0" ] \
-     && [ "$(sed -n 1p "$_er_rec" 2>/dev/null)" = "ai-dlc-verify-pass 2" ] \
-     && sed -n 's/^read	//p' "$_er_rec" > "$_er_tmp/key.rec-reads" 2>/dev/null \
-     && [ -s "$_er_tmp/key.rec-reads" ] \
-     && er_log_retake "$_er_tmp/key.rec-reads"; then
-    echo "emit-report: the report's mechanical region is present, current, and complete."
-    echo "emit-report: accepted a recorded PASS (${_er_rec}); nothing was re-rendered. Set AI_DLC_VERIFY_NO_CACHE=1 to re-render."
-    ar_record
-    exit 0
-  fi
-fi
-
-# THE RENDER LOGS ITS CONSUMER READS whenever a record could be written from it, and only then: the
-# log costs one hash per read. Exported, so every detector process the render runs appends to it.
-if [ -n "$_er_key0" ]; then
-  CR_LOG="$_er_tmp/reads.log"; CR_ROOT="$_er_root"
-  if : > "$CR_LOG"; then export CR_LOG CR_ROOT; else CR_LOG=""; fi
-fi
-want="$(render | norm_dist)"
+# er_compare -- EVERYTHING `--verify` decides after the fresh region exists, as ONE function: the
+# missing-region refusal, the preclassify refusal, the hand-edit check, the byte-compare and its
+# exit-0 record, and the cause decision with its exit 1 or 3. It reads `want` (the fresh region, under
+# norm_dist) and `got`, and it always exits. Plain `--verify` calls it on its own render; the
+# `--region-from` seam calls it on the caller's file. There is no second copy of any of it.
+er_compare() {
 if [ -z "$_ar_report_got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2
   echo "  (buckets, deletions, blocking-layer, drift, relabel) must be RENDERED by emit-report.sh," >&2
@@ -2303,7 +1145,6 @@ if [ "$_ar_sub" = 1 ] && [ "$_ar_report_got" != "$got" ] && [ "$_ar_report_got" 
   exit 1
 fi
 if [ "$want" = "$got" ]; then
-  er_cache_record
   ar_record
   echo "emit-report: the report's mechanical region is present, current, and complete."
   exit 0
@@ -2504,3 +1345,13 @@ fi
 [ "$cause" = BLOCKERS-RESOLVED ] && exit 3
 [ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 3
 exit 1
+}
+
+# THE FRESH REGION: rendered here, or (the seam) read from the caller's file through the same
+# normalisation. Either way the one er_compare below decides.
+if [ -n "$REGION_FROM" ]; then
+  want="$(norm_dist < "$REGION_FROM")"
+else
+  want="$(render | norm_dist)"
+fi
+er_compare
