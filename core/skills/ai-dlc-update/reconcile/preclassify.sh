@@ -432,8 +432,8 @@ machinery_paths() { # -> one core-relative machinery path per line, resolved at 
   [ -f "$_mm" ] || return 4
   _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")" || return 4
   # THE SPLIT RUNS IN `_mp_lists`, A FUNCTION WHOSE BODY IS A SUBSHELL, so its `set -f` cannot
-  # leak into the caller and nothing has to restore it (a save-and-`set +f` restore is what the
-  # consumer-reads validator refuses). Its lines keep the pre-0.888 spelling: `set -f` alone at
+  # leak into the caller and nothing has to restore it (a save-and-`set +f` restore could leave
+  # globbing on in the caller). Its lines keep the pre-0.888 spelling: `set -f` alone at
   # two-space indent and each `ls-files` on its own line, which self-update-gate's armc mutants
   # anchor on (one deletes `set -f`, one deletes the `--with-tree="$BASE"` line). It is called by
   # a ONE-LINE `$( )`: bash 3.2 ends a multi-line one early at a case pattern or a comment carrying

@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.962.0] - 2026-10-28
+
+Batch b245, a release of one unit: the reconcile engine change and the reconcile-emit-report fixture that measures it. It retires BL-679 and BL-685 and records progress on BL-850, which stays PARTIAL. The other units collected on b245-fx2 are not in this release and ship in a later one. NET: entries closed 2 (BL-679, BL-685, both retired), filed 0, progress 1 (BL-850).
+
+Bootstrapping: the engine change is `core/skills/ai-dlc-update/reconcile/emit-report.sh` and `apply.sh`, live from step 3 of the pull that delivers it. No exit code or message a consumer step reads changes: with the cache off by default, every `--verify` already re-rendered.
+
+### BL-679 — retired: the recorded `--verify` PASS cache is deleted
+
+- Deleted from `emit-report.sh`: the key and every `er_kf_*` field reader, the consumer read log, the `ai-dlc-verify-pass` record (write and read), its refusals, the opt-in and opt-out environment handling and its allowlist entry, and the header sections describing them. `--verify` always re-renders. The renderer, `--verify`, `--for-apply` and the approved-region record are unchanged.
+- The cache's read-logging layer goes with it. `consumer-read.sh` drops its read log (`cr__log`, `cr__val`, `cr_retake`) and `cr_run_reads`; every read helper stays, with its stdout and exit unchanged, and its path refusal. `ledger-reverify.sh` and `predicate-differential.sh` drop their log-only pre-logging blocks. `validate-hook-registration.sh` drops its `HOOKREG_READS_OUT` read recorder, which installed nothing when the variable was unset, so its output and exit are unchanged; `emit-report.sh` runs it directly. `scripts/validate-consumer-reads.sh` and its pre-push step are retired.
+- `apply.sh`: the union gate's "recorded --verify PASS was accepted" NOTE branch is deleted, with the stdout capture that existed only to feed it. `SKILL.md` drops the cache clauses at its three sites.
+- Why retired, not fixed: it never formed on graph's shared dist (BL-685), it shipped off by default, graph never set it, and under the step-value ruling a step with no measured value goes.
+- Consumer boundary: `<consumer git-dir>/ai-dlc-verify-pass` is no longer written, and an old copy is ignored. The stderr lines that printed only with the cache armed are gone. Deleting the cache-only shard `reconcile-emit-report-d` arrives on a consumer as gated UPSTREAM-DELETED rows; declining them leaves the old driver, which then fails loudly with `unknown shard 'd'`, exit 2.
+- Receipt: `verify: sh`, which exits 0 when `emit-report.sh` no longer carries the record token.
+
+### BL-685 — retired with BL-679
+
+- The key that could not form on a shared ref store no longer exists. `dist-clone.sh` stays, and its header now states what it does: a ref-stable, main-only `<dist>` for every reconcile reader, `retired-fixtures.sh`'s `git log --all` included. Its original cache reason is retired.
+- Receipt: `verify: sh`, which exits 0 when neither `emit-report.sh` nor `apply.sh` carries the opt-in variable.
+
+### BL-850 — fixture optimization
+
+#### reconcile-emit-report (q5)
+
+- New seam: `emit-report.sh [--for-apply] --verify --region-from <file> ...` skips the render, takes the file's bytes (dist-path normalised) as the fresh region, and calls `er_compare`, the single function plain `--verify` now calls after its own render. Every run with the flag prints `emit-report: --region-from: region supplied by caller; nothing was rendered` first on stdout. An unreadable file exits 2. The seam never writes the approved-region record. apply.sh and the update skill never pass it.
+- Renders per push, counted by a counter spliced into `render()` of `emit-report.sh`, one shard per invocation: before (011853d19) shard a 694, b 171, c 280, d 25, total 1170; after shard a 15, b 22, c 29, total 66 (shard d is deleted). Per tag, read off each render's program and consumer in the after logs: base-world a 2, b 3, c 2 (7); conflicting-state a 8, b 17, c 12 (37); mutant-deciding a 5, b 2, c 15 (22). Per-shard floor (base-world renders each shard pays): a 2 (the seed render and the one plain `--verify`), b 3 (the seed render, V-R's real approval and the ctl-V control), c 2 (the seed render and the ctl-SB control). Every compare-side question reads a prior render through `--region-from`, the shadowed-validator state is built by `seed.sh` instead of a second render, and each render-side mutant renders once. Solo hermetic runs at 66623ceb4, which are not comparable with loaded costs: shard a 97s, b 71s, c 56s. The loaded cost after is the one the dress records.
+
 ## [0.961.0] - 2026-10-28
 
 Batch b245, release b245-fx, part one of a split. Fixture-only optimisation across 54 fixtures, plus five shipped-script changes that serve them. It files one entry, BL-850, as PARTIAL, and records progress on BL-828, which stays open. No entry is closed and no `PC-` id is closed. NET: entries closed 0, filed 1 (BL-850), progress 1 (BL-828).

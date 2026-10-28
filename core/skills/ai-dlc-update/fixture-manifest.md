@@ -177,7 +177,6 @@ core_manifest:
   - core/fixtures/reconcile-emit-report/**
   - core/fixtures/reconcile-emit-report-b/**
   - core/fixtures/reconcile-emit-report-c/**
-  - core/fixtures/reconcile-emit-report-d/**
   - core/fixtures/emit-report-refusal/**
   - core/fixtures/relabel-theirs-collision/**
   - core/fixtures/relocation-preclassify/**

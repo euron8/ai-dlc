@@ -7,9 +7,9 @@
 #
 # THE SUBJECT. reconcile/dist-clone.sh builds `<dist>` in the consumer's git common dir from the
 # stamp's `upstream:`, carries `main` and only the refs a pull names, prints the path and the
-# resolved full theirs sha, and STOPs -- never falls back -- on every failure. emit-report.sh's
-# recorded `--verify` PASS keys on the dist's refs, so a dist that shares its ref store with live
-# branches never records; DC8 drives that end to end.
+# resolved full theirs sha, and STOPs -- never falls back -- on every failure. Its ref set is main
+# plus the refs a pull names (DC3), so a reader that walks every ref (`git log --all`) sees the same
+# refs on every run.
 #
 # ARMS (each PRESENCE-shaped: an ok needs a specific path, sha or message to APPEAR):
 #   DC1  first run: a bare clone at <common-dir>/ai-dlc-dist, path printed absolute
@@ -30,15 +30,13 @@
 #   DC12 a sha only on an upstream branch resolves while it exists, and a fresh clone STOPs once
 #        upstream deleted the branch and pruned (gc --prune=now)
 #   DC9  the clone that fetched that sha still reads it, and passes fsck, after the upstream prune
-#   DC8  emit-report --verify with dist = the clone records and HITS across upstream branch churn,
-#        while the same churn on a shared dist never hits (the same-run control)
 #   DCP  SKILL.md carries the R3 theirs-default sentence and the full-sha re-invoke sentence
-# MUTANTS run the arm suite (all but DC8 and DCP) against a COPY of dist-clone.sh with one line
+# MUTANTS run the arm suite (all but DCP) against a COPY of dist-clone.sh with one line
 # edited, and each must fail EXACTLY its expected kill set, written beside it.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-unset GIT_CONFIG_COUNT EMIT_REPORT_VERIFY_CACHE
+unset GIT_CONFIG_COUNT
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$HERE"; RECON=""; SKILL=""
@@ -50,7 +48,6 @@ while [ "$ROOT" != "/" ]; do
 done
 [ -n "$RECON" ] && [ -f "$SKILL" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-update/reconcile in either layout" >&2; exit 2; }
 SUBJ="$RECON/dist-clone.sh"
-LATSEED="$HERE/../layer-adjudication-tier/seed.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/dist-clone.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md"
 if [ ! -f "$SUBJ" ]; then
@@ -60,11 +57,12 @@ fi
 
 W="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 W="$(cd "$W" && pwd -P)"
-LATROOT=""
-trap 'chmod -R u+w "$W" 2>/dev/null; rm -rf "$W"; [ -n "$LATROOT" ] && rm -rf "$LATROOT"' EXIT
+trap 'chmod -R u+w "$W" 2>/dev/null; rm -rf "$W"' EXIT
 FAILS=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; FAILS=$((FAILS+1)); }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
 G() { git -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false "$@"; }
 REALGIT="$(command -v git)"
 
@@ -232,32 +230,6 @@ done
 n="$(grep -cF -- 'ZZ-NEVER-IN-SKILL-ZZ' "$SKILL")" || n=0
 [ "$n" -eq 0 ] && ok "DCP control: an impossible phrase is absent from SKILL.md" || bad "DCP control matched $n"
 
-# ---- DC8: end to end through emit-report --verify -------------------------------------------------
-dc8() {
-  local E="$RECON/emit-report.sh" T="$W/dc8" U C D B TH REP
-  if ! grep -qF 'accepted a recorded PASS' "$E"; then echo "SKIP DC8: this emit-report.sh has no recorded PASS"; return 0; fi
-  [ -f "$LATSEED" ] || { bad "DC8 FIXTURE BROKEN: layer-adjudication-tier/seed.sh is absent"; return 0; }
-  mkdir -p "$T"; LATROOT="$(TMPDIR="$T" bash "$LATSEED" 2>/dev/null)" && [ -d "$LATROOT/consumer/.git" ] \
-    || { bad "DC8 FIXTURE BROKEN: the seed built no world"; return 0; }
-  U="$LATROOT/dist"; C="$LATROOT/consumer"; git -C "$U" branch -m main 2>/dev/null
-  B="$(git -C "$U" rev-parse HEAD~1)"
-  OUT="$(bash "$SUBJ" "$C" "$U" "$B" 2>"$T/dc.err")" || { bad "DC8 dist-clone refused: $(tail -1 "$T/dc.err")"; return 0; }
-  D="$(printf '%s\n' "$OUT" | sed -n 1p)"; TH="$(printf '%s\n' "$OUT" | sed -n 2p | cut -d' ' -f2)"
-  REP="$C/_bmad-output/ai-dlc-update/reconcile-report.md"; mkdir -p "$(dirname "$REP")"
-  vr() { env EMIT_REPORT_VERIFY_CACHE=1 bash "$E" --verify "$REP" "$1" "$B" "$C" "$TH" > "$T/v.out" 2>"$T/v.err"; VRC=$?; VHIT=0; grep -qF 'accepted a recorded PASS' "$T/v.out" && VHIT=1; }
-  { echo "# r"; echo; bash "$E" "$U" "$B" "$C" "$TH"; } > "$REP"
-  vr "$U"; local s1="$VRC/$VHIT"; git -C "$U" branch churn-a; vr "$U"; local s2="$VRC/$VHIT"
-  { echo "# r"; echo; bash "$E" "$D" "$B" "$C" "$TH"; } > "$REP"
-  vr "$D"; local c1="$VRC/$VHIT"
-  git -C "$U" branch churn-b; git -C "$U" branch churn-c
-  bash "$SUBJ" "$C" "$U" "$B" >/dev/null 2>&1 || { bad "DC8 the refresh after churn refused"; return 0; }
-  vr "$D"; local c2="$VRC/$VHIT"
-  if [ "$s1" = 0/0 ] && [ "$s2" = 0/0 ] && [ "$c1" = 0/0 ] && [ "$c2" = 0/1 ]; then
-    ok "DC8 with dist = the clone, --verify recorded and then HIT across upstream branch churn; the shared dist never hit (control)"
-  else bad "DC8 rc/hit: shared [$s1 then $s2] want [0/0 0/0]; clone [$c1 then $c2] want [0/0 0/1]"; fi
-}
-dc8
-
 # ---- mutants -------------------------------------------------------------------------------------
 # mut <name> <literal anchor> <replacement line> -- a copy of dist-clone.sh with the ONE line holding
 # the anchor replaced. dist-clone.sh resolves no sibling, so a lone copy runs as the original does;
@@ -277,7 +249,7 @@ score() { # score <name> <expected kill set, space separated>
   grep -q '^ok DC1 ' "$d/run/verdicts" || { bad "$1 BROKEN: the mutant copy failed DC1, so it did not run as a dist clone"; return; }
   got="$(awk '$1=="FAIL"{print $2}' "$d/run/verdicts" | sort | tr '\n' ' ')"
   want="$(printf '%s\n' $2 | sort | tr '\n' ' ')"
-  [ "$got" = "$want" ] && ok "$1 KILLED by exactly [$got]" || bad "$1 killed [$got], expected exactly [$want]"
+  if [ "$got" = "$want" ]; then mutant_killed 1 "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
 }
 CLONE_ANCHOR='git clone --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c"'
 mut M-shared "$CLONE_ANCHOR" '  git clone --shared --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c" 2>"$ERR" >/dev/null \' \

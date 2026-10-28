@@ -25,7 +25,6 @@ deploy-validate-smoke-classification
 derivation-capture
 derivation-capture-worktree-root
 dispatch-model-guard
-dist-clone
 divergence-hard-block
 emit-report-refusal
 enforcement-map-yaml-plain
@@ -71,7 +70,6 @@ provenance-flagless-default
 push-drain-refusals
 readset-sandbox-root-clause
 readset-stage1-verdict
-reconcile-emit-report
 requirements-step
 retired-layer-passage
 review-carry-over-clauses

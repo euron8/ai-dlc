@@ -777,8 +777,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   3309 (STABLE 2, spread 3309-3309), tip 3313 (STABLE 2, spread 3312-3314), so +4. The arm that
 #   moved is I8, fixture packaging, 85 -> 89: it walks `core/fixtures/*/` against the install and
 #   uninstall loops, and 0.757.0 adds `readset-skip-{b,c,d}` and `reconcile-emit-report-{b,c}` as
-#   shipping directories (the six `.dist-only` shards cost it nothing); `reconcile-emit-report-d`,
-#   a later shipping shard, is walked by I8 the same way. I82 14 -> 15 and I93
+#   shipping directories (the six `.dist-only` shards cost it nothing). I82 14 -> 15 and I93
 #   32 -> 31 are the instrument's usual one-fork jitter. The gate itself read 3314 against 3310.
 #   HIGH reading 3314 plus the usual 6.
 #

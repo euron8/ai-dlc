@@ -156,8 +156,26 @@ verify: theirs_maybe core/schemas/thing.json "rule"
 ## PC-FIXTURE-EMIT-VACUOUS — theirs_lacks a substring both refs already carry
 
 verify: theirs_lacks core/schemas/thing.json "rule"
+
+## PC-CLOSED-SHADOW — validate-shadowprobe.sh: divergence
+Prose about core/scripts/validate-shadowprobe.sh.
+ADOPTED UPSTREAM (v0.130.0, verified 2026-07-22)
+
+## PC-OPEN-KEEP — validate-keepprobe.sh: divergence
+Prose about core/scripts/validate-keepprobe.sh — still diverging.
 LEDGER
 fi
+
+# THE SHADOWED-LOCAL-VALIDATOR STATE LIVES IN THE SEED, so the seed render is the ONE render of it.
+# It used to be written into the consumer by run.sh after the first assertions, which forced a second
+# render of the same consumer ("the post-shadow region") in every shard that read it. The two ledger
+# entries above (one CLOSED with a line-leading `ADOPTED UPSTREAM (...)`, one still open) and these four
+# forks are the producer's shape: a fork under scripts/ai-dlc-local and its core twin under scripts/ai-dlc.
+mkdir -p "$CONSUMER/scripts/ai-dlc-local" "$CONSUMER/scripts/ai-dlc"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc-local/validate-shadowprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-shadowprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc-local/validate-keepprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-keepprobe.sh"
 
 # The driver's rendered region — ground truth.
 #

@@ -849,13 +849,10 @@ fi
 # "$CONSUMER/$1"` resolving a relative consumer path inside the dist; layer-drift.sh no longer reads
 # any consumer path that way (every read goes through consumer-read.sh, resolved from the consumer
 # root), so with the absolutization gone the relative form keeps working and the mutant could not die.
-# Its property now has two holders:
-#   1. the arm above: a RELATIVE and an ABSOLUTE consumer root give the same digests and the same
-#      HARD- row count, which still fails if the relative form degrades for any reason;
-#   2. scripts/validate-consumer-reads.sh CR1, which fails the push on any consumer-path read in the
-#      reconcile closure that does not go through consumer-read.sh -- including a multi-line
-#      `( cd <x>` subshell whose body touches a consumer root, the shape that would resolve a
-#      relative consumer path against the wrong directory again.
+# Its property is held by the arm above: a RELATIVE and an ABSOLUTE consumer root give the same
+# digests and the same HARD- row count, which still fails if the relative form degrades for any
+# reason. (A second holder, a push-time scan of the reconcile closure's consumer reads, was retired
+# with the recorded `--verify` PASS it guarded.)
 
 # --- Part 8: a DEGENERATE RANGE disarms every ADJUDICATED arm, and must say so --------------
 #

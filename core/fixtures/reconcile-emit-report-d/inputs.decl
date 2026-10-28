@@ -1,8 +1,0 @@
-# reconcile-emit-report-d is a shard driver: it execs the sibling reconcile-emit-report/run.sh --group d, which reads the reconcile directory whole (the seed, the engine the cache arms verify), the shared preamble, the sibling's seed.sh, and layer-adjudication-tier/seed.sh (each V17..V25 world). The other shard drivers are read by the sibling's J0 join.
-!core/skills/ai-dlc-update/reconcile/emit-report.sh
-core/skills/ai-dlc-update/reconcile/
-core/fixtures/lib/
-core/fixtures/reconcile-emit-report/
-core/fixtures/reconcile-emit-report-b/run.sh
-core/fixtures/reconcile-emit-report-c/run.sh
-core/fixtures/layer-adjudication-tier/seed.sh

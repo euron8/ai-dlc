@@ -7,7 +7,3 @@ core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/
 core/fixtures/reconcile-emit-report-b/run.sh
 core/fixtures/reconcile-emit-report-c/run.sh
-core/fixtures/reconcile-emit-report-d/run.sh
-core/fixtures/layer-adjudication-tier/seed.sh
-# THEIRS validator for the round-9 arms (V59..V62): the tree's own copy is committed into a seeded THEIRS.
-core/scripts/validate-hook-registration.sh

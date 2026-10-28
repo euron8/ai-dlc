@@ -79,14 +79,12 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/predicate-differential-XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 # pd_records <out> -- the site's corpus, `find <consumer>/<corpus-root> -type f -name <corpus>`,
-# sorted, ABSOLUTE, in <out>; the root-relative names in <out>.rel. Walked through cr_walk, so the
-# listing is logged. Returns 2 when consumer-read.sh refuses the root; a failed find (an absent
+# sorted, ABSOLUTE, in <out>. Walked through cr_walk, consumer-read.sh's door. Returns 2 when consumer-read.sh refuses the root; a failed find (an absent
 # root) is otherwise ignored, exactly as the `find … 2>/dev/null | sort` it replaces ignored it.
 pd_records() {
   local _rc=0 _r
   cr_walk "$CONSUMER" "$P_ROOT" -type f -name "$P_CORPUS" > "$1.walk" 2>/dev/null || _rc=$?
   [ "$_rc" -ne 2 ] || return 2
-  sort "$1.walk" > "$1.rel"
   while IFS= read -r _r; do printf '%s/%s\n' "$CONSUMER" "$_r"; done < "$1.walk" | sort > "$1"
   return 0
 }
@@ -230,11 +228,6 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     emit PREDICATE-UNDECIDABLE "$p_name" "the corpus root [${P_ROOT}] is not a path the consumer reader may resolve (a '..' component, a leading '/' or a leading '-'), so no corpus was walked. ${p_pop}; nothing compared."
     continue
   fi
-  # The predicates read every record themselves, through cr_run where nothing is logged, so each
-  # walked record's bytes are logged here when a log is armed.
-  if [ -n "${CR_LOG:-}" ]; then
-    while IFS= read -r _pdr; do cr_test "$CONSUMER" -f "$_pdr" >/dev/null 2>&1; done < "$TMP/records.rel"
-  fi
   fp_before="$(wc -c < "$TMP/records" | tr -d ' ')"
 
   if [ ! -s "$TMP/records" ]; then
@@ -260,14 +253,7 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     # over the walk. Consumer data the probe root cannot hold is passed by path (PD_EXT above).
     # The predicate runs AT the consumer root (cr_run), as the `( cd … )` it replaces did. `$inv`
     # is split into words under the run's `set -f` and never pathname-expanded: an argument such
-    # as `--root .` or a gate-metrics path is the predicate's to resolve. Every word that could
-    # name a consumer path is logged first, when a log is armed, so its bytes are keyed.
-    if [ -n "${CR_LOG:-}" ]; then
-      for _pdw_word in $inv; do
-        case "$_pdw_word" in -*|/*|*..*) continue ;; esac
-        cr_test "$CONSUMER" -e "$_pdw_word" >/dev/null 2>&1
-      done
-    fi
+    # as `--root .` or a gate-metrics path is the predicate's to resolve.
     # PREFIX ASSIGNMENTS, NEVER `env`: bash exports them to cr_run's command, and an `env` binary is
     # a fork of a tool the hermetic farm does not declare (it exited 127 in ledger-reverify).
     AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-base/$P_ENTRY"   $inv > "$TMP/out-base" 2>&1

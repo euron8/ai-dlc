@@ -183,11 +183,11 @@
 set -uo pipefail
 # GLOBBING OFF FOR THE WHOLE RUN. An unquoted expansion here word-splits on purpose (a `fixtures:`
 # list, the manifest's rulebook globs) and must never be pathname-expanded against the caller's
-# cwd, which no recorded-PASS key field holds: `fixtures: x*` once tested whatever the cwd matched.
+# cwd, which is not a render input: `fixtures: x*` once tested whatever the cwd matched.
 set -f
 
-# EVERY CONSUMER READ GOES THROUGH consumer-read.sh (its header owns the contract), so the
-# recorded-PASS key can re-take exactly what this run read. Sourced before the first consumer path
+# EVERY CONSUMER READ GOES THROUGH consumer-read.sh (its header owns the contract), so a path with a
+# `..` component or a leading `/` is refused, never read. Sourced before the first consumer path
 # is resolved, which is the argument parse below.
 SELF="$(cd "$(dirname "$0")" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "layer-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
@@ -575,7 +575,7 @@ fm() { # fm <file> <key>
 }
 
 # layer_files <consumer-relative dir> -- the layer entries under it, ROOT-RELATIVE, through cr_walk so
-# the listing itself is logged and an added or removed entry moves the recorded-PASS key. Each name
+# the listing goes through the same door as every other consumer read. Each name
 # is read through cr_read by the loop that consumes it. The argument is a fixed literal, so cr_test's
 # refusal (2) cannot arise here.
 # THE WALK IS STAGED TO A FILE, NEVER PIPED FROM THE FUNCTION: a shell function in a pipeline stage
@@ -2429,12 +2429,11 @@ while IFS= read -r f; do
   # is a state of the consumer tree, so a pull that changes nothing here must still report it.
   #
   # A VALUE THAT ESCAPES tests/fixtures/ IS REFUSED, NOT TESTED: a `..` component or a leading `/`.
-  # `tests/fixtures/../../docs/x` would test a directory outside every path emit-report.sh's
-  # recorded-PASS key reads, so its removal moved this row with the key unmoved (measured: cached 0
-  # where a fresh render gave 1). H1 binds a fixture by its directory under tests/fixtures/, so an
+  # `tests/fixtures/../../docs/x` would test a directory outside the consumer's fixture tree. H1
+  # binds a fixture by its directory under tests/fixtures/, so an
   # escaping value binds nothing whether or not the path exists: it renders as UNBOUND, naming the
-  # escape, and the filesystem is not consulted. This is the ONE reader of the value; the key relies
-  # on it and keeps no copy of the rule.
+  # escape, and the filesystem is not consulted. This is the ONE reader of the value, and no other
+  # file keeps a copy of the rule.
   # THE LIST IS WORD-SPLIT, NEVER GLOBBED: `set -f` (preamble) keeps `fixtures: x*` a literal word.
   # Unglobbed, a value expanded against the caller's cwd tested a directory list no key field held.
   for fx in $(fm "$f" fixtures | tr ',' ' '); do
