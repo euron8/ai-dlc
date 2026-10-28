@@ -15,7 +15,6 @@ apply-restamp-worklist
 apply-worklist-rows
 architecture-index-cell-escaping
 artifact-derivations
-artifact-section-heading-level
 backlog-ledger
 backlog-real-ledger
 backlog-receipt-binding
