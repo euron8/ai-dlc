@@ -1045,6 +1045,28 @@ if mutx st-r 'wx="$tr/w/$b.log"' 'wx="$tr/w"'; then
 fi
 unset CSP_PIDS CSP_FIFO CSP_STALL
 
+# NO STALL WORLD LEAVES A PROCESS BEHIND. Every pid a stub recorded under a stall world's pids/ file, and
+# every pid the extracted-worker (orphan) and trace worlds recorded, must be dead by now: `kill -0` fails
+# for each. A mutant that keeps a unit's grandchild alive by design (st-c, st-g) is reaped by its own
+# arm, so a leak here means a world was left running, which used to pass silently and burn a core.
+# The `.pgid.*` files hold process-group numbers, not pids to reap, so they are not read.
+_lk_n=0; _lk_live=""
+for _lk_f in "$WORK"/*/pids/* "$WORK"/orph.*/pids "$WORK"/trace.*/pids; do
+  [ -f "$_lk_f" ] || continue
+  case "$_lk_f" in *.pgid.*) continue ;; esac
+  while read -r _lk_p; do
+    case "$_lk_p" in ''|*[!0-9]*) continue ;; esac
+    _lk_n=$((_lk_n + 1))
+    kill -0 "$_lk_p" 2>/dev/null && _lk_live="$_lk_live $_lk_p"
+  done < "$_lk_f"
+done
+if [ "$_lk_n" -gt 0 ] && [ -z "$_lk_live" ]; then
+  ok "no stall world leaked a process: all $_lk_n recorded pids are dead (kill -0 fails for each)"
+else
+  bad "stall worlds left ${_lk_live:-nothing} alive, or recorded no pid at all (read $_lk_n) -- a leaked unit tree burns a core after the fixture reports"
+  for _lk_p in $_lk_live; do kill -KILL "$_lk_p" 2>/dev/null; done
+fi
+
 # ------------------------------------------------------- the matrix machinery itself ---
 mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \
          || bad "matrix machinery probe FAILED: the judge cannot tell a kill from a survivor, so no mutant verdict above is believable"
@@ -1063,7 +1085,7 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=52
+EXPECTED_ASSERTIONS=53
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
