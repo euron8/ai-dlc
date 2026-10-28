@@ -1,0 +1,6 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-fixture-hygiene.sh (and the shard-stub resolver it calls,
+scripts/validate-fixture-invocations.sh), which live in the repo-root scripts/ and are never installed. The
+validator is a pre-suite step of the distribution's .githooks/pre-push only; on a consumer neither program exists,
+so this fixture could resolve no subject there.

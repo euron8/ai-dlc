@@ -75,7 +75,8 @@ GATE="$D_ROOT/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
 # consumer lacks is the distribution's GIT HISTORY: this fixture derives BASE and THEIRS from
 # the commit that adds a CHECK_LOADED anchor and installs two consumer trees from those refs.
 # A skip whose stated reason is wrong is worse than no skip — it sends the next reader after
-# a file that is sitting right there.
+# a file that is sitting right there. The history test asks git, never `-d .git`: in a linked
+# worktree `.git` is a FILE, so a directory test skipped this fixture green in normal use.
 if [ ! -f "$GATE" ] || ! git -C "$D_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "self-update-join-gate: SKIP — distribution-only (needs the distribution's git history to derive a check-adding range)"
   exit 0

@@ -18,7 +18,6 @@
 #   S4  a manifest row naming a template absent at BOTH refs
 # M3's transposed-argument refusal renders at rc=2, which is S2's shape, so it is counted there and
 # not as a fifth. The per-shape roster is beside the battery, at the "STEP 3b" banner below.
-# MUTANT-MATRIX-BEGIN
 # MUTANT-MATRIX M-SHA decides=A-SHA twins=A-HARD,S-AP
 # MUTANT-MATRIX M-AP decides=S-AP twins=S-APC,S-GOOD
 # MUTANT-MATRIX M-SRO decides=S-RO twins=S-GOOD,S-MK
@@ -67,7 +66,6 @@
 # MUTANT-MATRIX-DYNAMIC rer_mm_score-loop why=mutant_killed receives the mutant name from the row it just read, and every name has its own row above
 # MUTANT-MATRIX-DYNAMIC sb_kill why=the SB kill helper passes the W name it was called with, and W1 to W9 each have a row above
 # MUTANT-MATRIX-DYNAMIC wg_score why=the world-guard scorer passes the wm name it was called with, and wm1 to wm6 each have a row above
-# MUTANT-MATRIX-END
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/reconcile-emit-report/run.sh --matrix
 #
 set -uo pipefail

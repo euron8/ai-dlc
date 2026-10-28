@@ -14,7 +14,7 @@
 # this fixture (consumer-boundary.md) — seed.sh resolves them to "" rather than dying, and
 # every arm below reports SKIP (HARD FAIL only in this distribution, where they exist).
 #
-# MUTANT-MATRIX: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
+# Mutant matrix: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
 # runs only its deciding arm plus its twins; `--matrix` measures every cell once and prints a
 # `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell (the b457 mutants over all seven arms).
 # Re-measured whenever an arm or a mutant is added or changed.
@@ -35,6 +35,7 @@
 # MUTANT-MATRIX b457-f decides=NC twins=S2
 # MUTANT-MATRIX b457-g decides=WC twins=S2
 # MUTANT-MATRIX b457-h decides=WC twins=S2
+# MUTANT-MATRIX-DYNAMIC b457-tag why=b457_score() passes "b457-$tag" to mutant_killed, built from its first argument; each b457_score call (a, b, ...) yields a b457-<tag> name that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-resume/run.sh --matrix
 #
 set -uo pipefail

@@ -118,6 +118,7 @@
 # MUTANT-MATRIX-CONTROL n1 why=a near-miss that must render: two adjacent marker blocks, one field each, asserted by its exit 0 and its index rows
 # MUTANT-MATRIX-CONTROL n2 why=a near-miss that must render: two vocabulary names sharing a prefix, asserted by its exit 0 and both index rows
 # MUTANT-MATRIX-CONTROL n3 why=a near-miss that must render: enum and enum2 in one object plus enum in a sibling, asserted by its exit 0 and both index rows
+# MUTANT-MATRIX-DYNAMIC judge-id why=judge() passes its id argument "$id" to mutant_killed, which its callers derive as the first word of the mutant label; every such id carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/vocabulary-index/run.sh --matrix
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"

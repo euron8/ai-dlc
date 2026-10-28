@@ -32,6 +32,7 @@
 # MUTANT-MATRIX token-re-dead decides=V-probe-nonconform twins=V-empty
 # MUTANT-MATRIX gate-token-re-dead decides=G-token twins=G-slot
 # MUTANT-MATRIX gate-slot-re-everything decides=G-slot twins=G-token
+# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (declared-areas-only, slot-not-exempt, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-conformance/run.sh --matrix
 #
 # Usage: run.sh [--matrix]

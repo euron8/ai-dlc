@@ -35,6 +35,7 @@
 # MUTANT-MATRIX consumer-areas decides=R-areas twins=T-conform
 # MUTANT-MATRIX remedy-root-mig decides=R-remedy-mig twins=T-conform
 # MUTANT-MATRIX remedy-root-val decides=R-remedy-val twins=T-conform
+# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (whole-path-scan, ambiguity-allowed, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-migration/run.sh --matrix
 #
 # Usage: run.sh [--matrix]

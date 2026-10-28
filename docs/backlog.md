@@ -1126,7 +1126,7 @@ verify: manual
 
 **DEFECT.** An umbrella entry for fixture optimisation: a fixture whose wall clock exceeds what its checks need. Typical causes are a subject run once per assertion, mutant or world instead of once per distinct question, and a full mutant × arm matrix re-scored on every push. Each fixture gets its section in the release that changes it.
 
-**PARTIAL (0.961.0, batch b245 part one).** 54 fixtures are narrowed. Each measures its mutant × arm matrix once by `bash core/fixtures/<fx>/run.sh --matrix`, records it in the header, and on each push runs each mutant's deciding arm plus one green twin. Counts below are before → after per push, from the owners' instrumented runs; "not recorded" means no count was taken. Loaded costs come from the dress.
+**PARTIAL (0.961.0, batch b245 part one).** 54 fixtures are narrowed. Each measures its mutant × arm matrix once by `bash core/fixtures/<fx>/run.sh --matrix`, records it in the header, and on each push runs each mutant's deciding arm plus one green twin. Counts below are before → after per push, from the owners' instrumented runs; "not recorded" means no count was taken. Loaded costs come from the dress. The prevention mechanisms are filed as BL-851, which carries their receipt.
 
 - check-24-adversarial-convergence: validator executions 1357 → 747; receipt world builds 474 → 43. NOT FINAL: its validator seam follows.
 - readset-skip: hook drives 740 → 221; direct apply calls 228 → 148; deriver runs 339 → 170; git inits 449 → 63; world builds 943 → 348.
@@ -1161,7 +1161,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam, layer-reference-resolution, and the prevention mechanism that refuses regrowth.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution.
 
 ### reconcile-emit-report (q5)
 
@@ -1171,7 +1171,31 @@ Renders per push (counter spliced into `render()`, one shard per run): before (0
 
 **Progress (0.962.0, batch b245).** reconcile-emit-report renders once per distinct render input: 1170 renders per push become 66 (base-world 7, conflicting-state 37, mutant-deciding 22), with 0 coverage losses (161 assertions retired with the BL-679 cache, 40 folded into their mutant kill lines). Solo hermetic runs at 66623ceb4: shard a 97s, b 71s, c 56s. The entry stays PARTIAL.
 
+Three mechanisms, each with a self-probe in both directions:
+
+- **Invocation budget.** `scripts/validate-fixture-invocations.sh` judges each fixture's `invocations.decl` against the bash starts counted inside `core/scripts/hermetic-run.sh`, armed once per push in `.githooks/pre-push` at pool depth 0. `measured == declared`, binary. Its header states the blind routes and the arms J1 to J5; the list is not restated here.
+- **Static hygiene.** `scripts/validate-fixture-hygiene.sh`, a standalone pre-suite step: H1 linked-worktree false skip, H2 declared-tool false skip, H3 a script started under `sh`, H5 the mutant matrix block, joined to a derived down-only allowlist `scripts/fixture-matrix-allowlist.txt`.
+- **Runtime name join.** `mutant_killed` in `core/fixtures/lib/mutant.sh` records each name it reports, and J5 joins every one to a block row.
+
+False-positive sets, measured over the b245-p1 tree: H1 judged 46 `-d …/.git` lines, 1 offender (fixed), 0 false positives. H2 judged 209 declared-tool `command -v` sites (the validator's printed count of sites judged after masking; its header records 215 raw non-comment lines), 6 offenders, 0 false positives. H3 judged 15 raw `sh <word>` lines (9 under a stricter command-position grep that already excludes the awk `sh ==` forms) plus 8 raw stdin starts (`| sh` then end of line or `;)&|<>`; 7 of them masked as quoted regexes) and 0 raw `env … sh` / `command sh` lines: 6 offenders (readset-skip:1331, :1827, :2177, readset-stage1-verdict:900, self-update-gate:3401 and :5025), 0 false positives; an `sh` start inside a `bash -c "…"` string is a stated limit. The arming itself is held by fixture-invocation-budget's arm A8, which extracts `fxcount_arm` from `.githooks/pre-push`, drives it under a stub `step` and asserts the three FXCOUNT variables and the `counted-<12 hex>` store reach a child `env` when armed and nothing does with the judge absent or at depth 1, with mutant MARM (one `export` dropped) killed. H5 population is 214 fixtures, of which 3 carry a block and 211 are the derived allowlist, which is the enumerated false-positive set because membership is a floor claim, not a defect claim. H5's name join is keyed on the emission site alone: every literal name in the 2nd argument of `mutant_killed` needs a MATRIX or FULL row, a non-literal one needs a MUTANT-MATRIX-DYNAMIC line, and no argument of a mutation helper is read as a name (readset-skip's `ck_mut` and `vs_hmut` take a world letter first). A name that never reaches `mutant_killed` statically is covered only by J5 at runtime, and a battery still on `scripts/mutant-kills-allowlist.txt` gets block presence and row shape only, until BL-828 migrates it to `mutant_killed`. The budget's own false-positive set comes from the counting passes on the integrated tip and is recorded in the LANDED line.
+
+H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-into-file lines, 400 bare statements, and 200 joined to a `cmp -s` on the same pair across 78 fixtures. Whether one is an offender depends on what the mutant's kill asserts, which a line grammar cannot see, so the set is not enumerable and the arm is not shipped.
+
+Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
+
+Found while building it (lead filing, DEFECT, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
+
+Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
+
 verify: manual
+
+## BL-851 — fixture prevention mechanisms: invocation budget, hygiene arms, H5
+
+**DEFECT (efficiency).** Nothing refused the regrowth of fixture cost: this entry files the three prevention mechanisms, the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the H5 mutant-matrix name join. BL-850 carries their detail. The decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
+
+verify: sh bash scripts/validate-fixture-invocations.sh --self-probe && bash scripts/validate-fixture-hygiene.sh --derive
 
 ## Reopened by BL-817's re-audit (batch 243)
 

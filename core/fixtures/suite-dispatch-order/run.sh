@@ -41,6 +41,7 @@
 # MUTANT-MATRIX m5 decides=red twins=badrec
 # MUTANT-MATRIX m6 decides=prune twins=badrec
 # MUTANT-MATRIX m7 decides=prune twins=badrec
+# MUTANT-MATRIX-DYNAMIC mutants-loop why=the loop for _m in $MUTANTS calls score_mutant, which passes "$m" to mutant_killed; every MUTANTS member carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-dispatch-order/run.sh --matrix
 set -uo pipefail
 

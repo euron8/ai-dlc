@@ -55,6 +55,7 @@
 # MUTANT-MATRIX exitzero decides=pairzero twins=pairsilent
 # MUTANT-MATRIX-CONTROL impossible why=an anchor that is present zero times; mkmut and mkmutcp must refuse it, so a no-op cannot pass as a mutation
 # MUTANT-MATRIX-CONTROL control why=an anchor present exactly once; mkmutcp must accept it, proving the refusal above is the anchor and not the helper
+# MUTANT-MATRIX-DYNAMIC mutants-loop why=the loop for _m in $MUTANTS calls score_mutant, which passes "$m" to mutant_killed; every MUTANTS member carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/upstream-routing/run.sh --matrix
 set -uo pipefail
 

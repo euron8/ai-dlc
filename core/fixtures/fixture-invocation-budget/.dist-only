@@ -1,0 +1,6 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-fixture-invocations.sh, the invocation-budget judge, which lives in the
+repo-root scripts/ and is never installed, together with the arming of hermetic-run.sh that only the
+distribution's .githooks/pre-push performs. On a consumer the judge does not exist and nothing sets the
+three FXCOUNT_* variables, so this fixture could resolve no subject there.
