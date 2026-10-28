@@ -30,8 +30,12 @@
 # the subject never ran), and under `trap '' XFSZ` failed and left the row in the printf buffer, flushed onto the
 # subject's own stdout by its next builtin print. Measured on postcompact-rulebook-recovery's s_killed arm: the killed
 # gate write never happened, so its M9-inplace and M-unlink flips vanished armed only. So the trap ignores XFSZ for the
-# append, drops the stale buffer with an `echo` to /dev/null, and on a refused append records the start as a SYMLINK
-# `<log>.lim.<random>` whose target is the row: a symlink is not a regular-file write and no file-size limit binds it.
+# append, drops the stale buffer with an `echo` to /dev/null, and on a refused append to a WRITABLE log (the size-limit
+# case; an empty, missing or read-only log still writes nothing) records the start as a SYMLINK `<log>.lim.<random>`
+# whose target is the row: a symlink is not a regular-file write and no file-size limit binds it. KNOWN ROUTE, unreached
+# on every declared fixture measured: under `ulimit -f N`, N > 0, an append straddling the limit lands partially, then
+# fails, so the start leaves a partial row AND a marker -- one start counted twice if no later append follows, or the
+# next row's path garbled if one does. Measured 0 markers on all 9 declared fixtures that set `ulimit -f`.
 # It then restores the default XFSZ action (a disposition ignored on entry stays ignored; bash cannot reset it). The
 # judge reads the log plus one row per marker. The markers are not truncated by hermetic-run.sh with the log, so a
 # start log is judged once per FXCOUNT_DIR: the hook makes a fresh `mktemp -d` run dir per push. Still unseen there: a
@@ -121,7 +125,7 @@ FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per 
 fxc_gen_rc() { # <dir>: write <dir>/fxcount.rc, print its path
   mkdir -p "$1" || return 2
   cat > "$1/fxcount.rc" <<'RC' || return 2
-{ trap '{ trap - DEBUG; trap "" XFSZ; printf "%s\t%s\n" "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}" "$$" >> "$FXCOUNT_LOG" || { echo > /dev/null; /bin/ln -s "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}	$$" "$(/usr/bin/mktemp -u "$FXCOUNT_LOG.lim.XXXXXXXX")"; }; trap - XFSZ; } 2>/dev/null' DEBUG; } 2>/dev/null
+{ trap '{ trap - DEBUG; trap "" XFSZ; printf "%s\t%s\n" "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}" "$$" >> "$FXCOUNT_LOG" || { echo > /dev/null; [ -w "$FXCOUNT_LOG" ] && /bin/ln -s "${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}	$$" "$(/usr/bin/mktemp -u "$FXCOUNT_LOG.lim.XXXXXXXX")"; }; trap - XFSZ; } 2>/dev/null' DEBUG; } 2>/dev/null
 RC
   printf '%s\n' "$1/fxcount.rc"
 }
@@ -488,6 +492,14 @@ fxc_self_probe() {
   mkdir -p "$SPR/lim"; cp "$fd/inputs.decl" "$SPR/lim/"; printf '1 *\n' > "$SPR/lim/invocations.decl"
   sp_cell "E2E a start under ulimit -f 0, default XFSZ, is counted (1 start)" 0 lim "$S/lim-dfl.log" "1 start(s)"
   sp_cell "E2E a start under ulimit -f 0, XFSZ ignored, is counted (1 start)" 0 lim "$S/lim-ign.log" "1 start(s)"
+  # Near-miss: under the same limit a READ-ONLY log, and an EMPTY FXCOUNT_LOG, leave no marker anywhere.
+  mkdir -p "$S/ro" "$S/cwd"; : > "$S/ro/log"; chmod a-w "$S/ro/log"
+  ( trap '' XFSZ; ulimit -f 0; cd "$S/cwd" && env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/ro/log" "$bash_bin" "$S/lim.sh" "$S/ro.t" ) >/dev/null 2>&1 | cat
+  ( trap '' XFSZ; ulimit -f 0; cd "$S/cwd" && env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="" "$bash_bin" "$S/lim.sh" "$S/em.t" ) >/dev/null 2>&1 | cat
+  chmod u+w "$S/ro/log"
+  if [ -z "$(ls -A "$S/cwd")" ] && [ "$(ls "$S/ro" | grep -c '\.lim\.')" = 0 ]; then
+    sp_ok "E2E under ulimit -f 0 a read-only log and an empty FXCOUNT_LOG leave no marker beside the log or in the cwd"
+  else sp_bad "E2E a read-only or empty log left a marker: cwd [$(ls -A "$S/cwd" | tr '\n' ' ')] ro [$(ls "$S/ro" | tr '\n' ' ')]"; fi
   # The seeded loop through the REAL mutant.sh: an unrowed name FAILs J5, the same loop rowed passes.
   local mlib="${FXC_SELF%/scripts/*}/core/fixtures/lib/mutant.sh"
   if [ ! -f "$mlib" ]; then sp_bad "E2E the real core/fixtures/lib/mutant.sh is absent beside this script ($mlib)"
@@ -502,7 +514,7 @@ fxc_self_probe() {
   fi
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
-  [ "$SP_N" -eq 53 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 53
+  [ "$SP_N" -eq 54 ] || { SP_FAIL=1; SP_OUT="$SP_OUT  FAIL  self-probe ran $SP_N cells, want 54
 "; }
   [ "$SP_FAIL" = 0 ] && return 0
   return 2
