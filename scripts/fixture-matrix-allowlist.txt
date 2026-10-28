@@ -114,7 +114,6 @@ story-provenance	no MUTANT-MATRIX block; floor: S1 mut_writer(),S2 cmp -s + muta
 stray-party-mode-provenance	no MUTANT-MATRIX block; floor: S1 mutate_py(),S2 cmp -s + mutant
 subagent-probe	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant
 suppression-lifetime	no MUTANT-MATRIX block; floor: S1 sl_mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-trunk-audit-gate	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 trunk-push-bound	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 update-preflight-push	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 validator-fork-budget	no MUTANT-MATRIX block; floor: S1 asg_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
