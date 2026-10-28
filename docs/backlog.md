@@ -1161,7 +1161,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c to f2, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
 
 ### reconcile-emit-report (q5)
 
