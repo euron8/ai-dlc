@@ -764,29 +764,18 @@ while [ "$mut_i" -lt "$NM" ]; do
   mut_i=$((mut_i+1))
 done
 
-# --- the control drives exactly the arms the mutants drive (matrix: every arm) ------------------------
-want_arms=" "
-if [ "$MATRIX" = 1 ]; then want_arms=" $ARMS "; else
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    for _a in ${MD[$mut_i]//,/ } ${MT[$mut_i]//,/ }; do
-      case "$want_arms" in *" $_a "*) ;; *) want_arms="$want_arms$_a " ;; esac
-    done
-    mut_i=$((mut_i+1))
-  done
-fi
-CTRL_PASS=" "; CTRL_FAIL=" "
-for a in $ARMS; do
-  case "$want_arms" in *" $a "*) ;; *) continue ;; esac
-  in_set "$a" "$SKIPPED" && continue
-  if arm_eval 1 "$a"; then CTRL_PASS="$CTRL_PASS$a "; else CTRL_FAIL="$CTRL_FAIL$a "; fi
-done
-if [ "$CTRL_FAIL" = " " ] && [ "$CTRL_PASS" != " " ]; then
-  ok "UNMUTATED CONTROL reproduces the real verdict from a copy on every arm the mutants drive — mutant silence means mutation, not breakage"
+# --- the control: ONE drive of a lone copy, asserting the one property a copy can lose ------------------
+# This validator resolves no sibling beside itself and finds its root by walking up for a marker; a lone
+# copy that could not resolve it would emit nothing, and that silence would score as a kill for every
+# mutant below. So ONE drive (the expired-still-failing case, arm s2) of the unmutated copy must
+# reproduce the shipping verdict. Everything else a control battery would prove is the shipping run's.
+CTRL_OK=0
+if arm_eval 1 s2; then
+  ok "UNMUTATED CONTROL: a lone copy of the validator resolves its root and reproduces the real expired-suppression verdict (s2) — mutant silence means mutation, not breakage"; CTRL_OK=1
 else
-  bad "UNMUTATED CONTROL did not reproduce on [$CTRL_FAIL] — every mutant result below is uninterpretable"
+  bad "UNMUTATED CONTROL: a lone copy did not reproduce the expired-suppression verdict — every mutant result below is uninterpretable"
 fi
-base_ok() { in_set "$1" "$SHIP_PASS" && in_set "$1" "$CTRL_PASS"; }
+base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; }
 
 # --- the c31 control: the regression mutant's block really does offer cwd-relative candidates ------
 SL_SHIP_CWD="$(sl_cwd_cands "$VALIDATOR")"

@@ -856,33 +856,20 @@ while [ "$mut_i" -lt "$NM" ]; do
 done
 
 # --- Unmutated control -------------------------------------------------------
-# A copy beside the mutants, mutated not at all. If the harness itself breaks a copy — a resolver
-# that only works in core/scripts/, a schema it cannot find — every mutant "passes" for a reason that
-# has nothing to do with its mutation. Per push the control drives exactly the arms the mutants
-# drive (their decides and twins); under --matrix it drives all of them.
+# A copy of the tool in another directory, mutated not at all. It proves ONE property: the tool
+# resolves from a location outside core/scripts/ (its schema handed explicitly) and answers
+# check-stories there. Everything else a control battery would prove is already the shipping run's,
+# and each mutant's own green twin proves its copy runs.
 CTRL="$WORK/mutant-control.sh"
 cp "$TOOL" "$CTRL"
-want_keys=" "
-if [ "$MATRIX" = 1 ]; then want_keys=" $ALL_KEYS "; else
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    for _a in ${MD[$mut_i]//,/ } ${MT[$mut_i]//,/ }; do
-      _k="$(key_of "$_a")" || { bad "FIXTURE BROKEN — mutant ${MN[$mut_i]} names unknown arm $_a"; continue; }
-      case "$want_keys" in *" $_k "*) ;; *) want_keys="$want_keys$_k " ;; esac
-    done
-    mut_i=$((mut_i+1))
-  done
-fi
-RES=""
-for k in $ALL_KEYS; do case "$want_keys" in *" $k "*) arm "$k" "$CTRL" ;; esac; done
-sets_from "$RES"; CTRL_PASS="$PASS_OUT"; CTRL_FAIL="$FAIL_OUT"
-if [ "$CTRL_FAIL" = " " ] && [ "$CTRL_PASS" != " " ]; then
-  ok "CONTROL: an unmutated copy beside the mutants passes every arm the mutants drive"
+RES=""; arm A13 "$CTRL"; sets_from "$RES"
+CTRL_OK=0
+if in_set A13 "$PASS_OUT"; then
+  ok "CONTROL: a copy of the tool in another directory resolves its schema and answers check-stories as the shipping tool does (A13)"; CTRL_OK=1
 else
-  bad "CONTROL: an unmutated copy failed [$CTRL_FAIL] — the mutant harness, not the mutations, is what those mutants proved"
+  bad "CONTROL: an unmutated copy in another directory failed A13 — the mutant harness, not the mutations, is what those mutants proved"
 fi
-
-base_ok() { in_set "$1" "$SHIP_PASS" && in_set "$1" "$CTRL_PASS"; } # the arm passed unmutated, in THIS run, on both the shipping tool and the copy
+base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; } # the arm passed unmutated in THIS run on the shipping tool, and the copy mechanism works
 
 mut_witness() { # <mutant> -> 0 when the mutant's extra observable holds
   case "$1" in

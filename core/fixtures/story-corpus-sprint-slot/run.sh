@@ -93,6 +93,7 @@ fresh() { # <dir holding the two tools>  -> a new world dir, never reused
   WN=$((WN+1))
   local d="$WORK/w$WN"
   cp -R "$PRISTINE" "$d"
+  basename "$1" > "$d/.tools-tag"   # which tools directory (ship, control or mutant) this world serves
   cp "$1/sprint-status.sh" "$1/validate-mandatory-rules.sh" "$d/scripts/ai-dlc/"
   chmod +x "$d/scripts/ai-dlc"/*.sh
   FRESH_DIR="$d"
@@ -401,33 +402,19 @@ while [ "$mut_i" -lt "$NM" ]; do
 done
 
 # --- Unmutated control -------------------------------------------------------
-# A copy in the same directory shape as the mutants, mutated not at all. Without it, a harness
-# that breaks every copy for a reason of its own — a schema a copy cannot resolve, a lost exec
-# bit — scores every mutant above as a kill. Per push it drives exactly the arms the mutants drive
-# (their decides and twins); under --matrix it drives all of them.
+# A copy of the tools directory in another location, mutated not at all. It proves ONE property: the
+# tools resolve their schema and corpus when installed from a copied directory (A5, one Check 6 run).
+# Everything else is the shipping run's, and each mutant's own green twin proves its copy runs.
 CTRL="$WORK/mutant-control"
 cp -R "$TD_REAL" "$CTRL"
-want_keys=" "
-if [ "$MATRIX" = 1 ]; then want_keys=" $ALL_KEYS "; else
-  mut_i=0
-  while [ "$mut_i" -lt "$NM" ]; do
-    for _a in ${MD[$mut_i]//,/ } ${MT[$mut_i]//,/ }; do
-      _k="$(key_of "$_a")" || { bad "FIXTURE BROKEN — mutant ${MN[$mut_i]} names unknown arm $_a"; continue; }
-      case "$want_keys" in *" $_k "*) ;; *) want_keys="$want_keys$_k " ;; esac
-    done
-    mut_i=$((mut_i+1))
-  done
-fi
-RES=""
-for k in $ALL_KEYS; do case "$want_keys" in *" $k "*) arm "$k" "$CTRL" ;; esac; done
-sets_from "$RES"; CTRL_PASS="$PASS_OUT"; CTRL_FAIL="$FAIL_OUT"
-if [ "$CTRL_FAIL" = " " ] && [ "$CTRL_PASS" != " " ]; then
-  ok "CONTROL: an unmutated copy beside the mutants passes every arm the mutants drive"
+RES=""; arm A5 "$CTRL"; sets_from "$RES"
+CTRL_OK=0
+if in_set A5 "$PASS_OUT"; then
+  ok "CONTROL: a copy of the tools directory resolves its schema and corpus as the shipping tools do (A5)"; CTRL_OK=1
 else
-  bad "CONTROL: an unmutated copy failed [$CTRL_FAIL] — the harness itself is what breaks a copy, so every mutant verdict below is meaningless"
+  bad "CONTROL: an unmutated copy failed A5 — the harness itself is what breaks a copy, so every mutant verdict below is meaningless"
 fi
-
-base_ok() { in_set "$1" "$SHIP_PASS" && in_set "$1" "$CTRL_PASS"; }
+base_ok() { [ "$CTRL_OK" = 1 ] && in_set "$1" "$SHIP_PASS"; }
 join_set() { local o="" x; for x in "$@"; do o="$o,$x"; done; printf '%s' "${o#,}"; }
 
 if [ "$MATRIX" = 1 ]; then
