@@ -55,6 +55,7 @@
 # The matrix is re-measured whenever an arm or a mutant is added or changed, from the repo root, by the
 # command on the MUTANT-MATRIX-REMEASURE line, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is
 # not run through hermetic-run.sh, which forwards no argument.
+# also trips beyond decides= (measured, --matrix at the committed tip): m-diff-rc A6; m-samp-rc A4b; a8-stable-filter A0; a9-counts-in-projection A0 A8
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/emit-report-refusal/run.sh --matrix
 # MUTANT-MATRIX-CONTROL MX0 why=the unmutated copy of the reconcile engine must trip no arm; it is the base pass every kill is gated on
 # MUTANT-MATRIX m-diff-rc decides=A3 twins=A4a
