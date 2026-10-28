@@ -122,6 +122,7 @@
 # m14 (the S13 bash-3.2 oracle agreement) and n1-n9 (negative seeds that must stay silent) mutate
 # nothing and are not mutants, so they carry no row.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/shell-portability/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC helpers why=kill_check, count_check, count_shrink_check, appear_check, blind_check, probe_owned_appear, corpus_cell_check and empty_check pass the mutant id as a variable; every id they produce has its own row above
 # MUTANT-MATRIX m1 decides=S1 twins=S2
 # MUTANT-MATRIX m2 decides=S2 twins=S1
 # MUTANT-MATRIX m3 decides=S3 twins=S4

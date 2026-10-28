@@ -32,6 +32,7 @@
 # measured matrix shows green. `--matrix` runs every mutant against every arm. The matrix is
 # re-measured whenever an arm or a mutant changes.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
+# MUTANT-MATRIX-DYNAMIC mut-helpers why=mut, mut_says, mut2 and mut2_says pass the mutant id as a variable; every id they produce has its own row above
 # MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass
 # MUTANT-MATRIX-FULL fold-hang worlds=fold-heavy-real,fold-heavy-hang why=the kill is read from the awk shim log (start/end/152), not from any arm verdict; no single argument list decides it
 # MUTANT-MATRIX-FULL lr-sibling-unchecked worlds=lr-no-anchor-mutant why=the mutant lives in a sibling-less directory, so no capture-keyed arm can drive it; one run names the misdiagnosis
