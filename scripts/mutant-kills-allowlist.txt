@@ -60,15 +60,12 @@ postcompact-rulebook-recovery
 preclassify-mode-bucket
 preclassify-rename-row
 predicate-reclassification
-pregate-self-check
-prepush-ssh-keepalive
 prepush-worktree-env-scrub
 process-rule-pins
 procsub-staged-refusal
 procsub-staged-refusal-boot
 provenance-flagless-default
 push-drain-refusals
-readset-sandbox-root-clause
 readset-stage1-verdict
 reconcile-emit-report
 requirements-step

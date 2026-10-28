@@ -27,12 +27,32 @@
 # exits 0 everywhere; one whose stall rung fires on everything exits 1 everywhere. An
 # exit-code-only fixture scores the first as a pass on every silent case and the second as a
 # pass on every firing case.
+#
+# THE MUTANT MATRIX. A cell is one waiver case (W1 waived-x3, W2 waived-then-fail, W3 unresolved-x3), GREEN
+# on a validator when it gives the unmutated verdict for that case and RED when it does not. A mutant's row
+# names the cell that kills it (decides) and the cell it could plausibly co-trip but must leave GREEN (twins).
+# A plain run drives each mutant on its deciding cell and its twin only. W-MK also moves W2 (the run would
+# start at pass 1, not pass 4); W2 is a second arm that kills it, so it is not a twin and is measured only
+# by the REMEASURE command. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
+# command below, run from the repo root. It drives every mutant on every cell and prints one MATRIX line each.
+# MUTANT-MATRIX W-MK decides=W1 twins=W3
+# MUTANT-MATRIX W-MA decides=W3 twins=W1
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-series-rung/run.sh --matrix
 set -u
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Anything else
+# as an argument is a usage error, never a silent plain run.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "gate-series-rung: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 # Scrub ambient AI_DLC_* — the validator reads AI_DLC_VERDICT_SCHEMA and AI_DLC_STATE_DIR,
 # and a consumer that tunes either in settings.json would otherwise fail this against
 # correct code.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$DIR/${0##*/}"
 
 VALIDATOR=""
 for cand in \
@@ -174,6 +194,67 @@ if ! w_p3 "$VALIDATOR"; then W_BASE=0
   FAIL_WAIVED whose waiver does not resolve continues the run as FAIL.
   validator said: $(head -3 <<<"$OUT")"; fi
 
+# --- the matrix cells. cell_green <cell> <validator>: 0 when the validator gives the UNMUTATED verdict for the
+# waiver case (GREEN), 1 when it does not (RED), 2 for an UNKNOWN CELL (an unknown name must never read as GREEN).
+cell_green() {
+  case "$1" in W1) w_p1 "$2" ;; W2) w_p2 "$2" ;; W3) w_p3 "$2" ;; *) return 2 ;; esac
+}
+MX_CELLS='W1 W2 W3'
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$ROOT/.mx.ledger"; : > "$MXL"
+MX_FAILS=0
+# mx_twins <mutant> <validator>: per-push, every twin cell must stay GREEN on the mutated validator. W-MA's twin (W1)
+# is already driven by its kill chain, so W-MA does not call this.
+mx_twins() {
+  local m="$1" v="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then note_fail "$m: no single MUTANT-MATRIX row names its twins"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_green "$t" "$v"; r=$?
+    if [ "$r" -eq 2 ]; then note_fail "$m: twin $t names no cell"
+    elif [ "$r" -ne 0 ]; then note_fail "$m: its twin $t also changed on this mutant, so the kill is not confined to its own cell"; fi
+  done
+}
+# mx_score <mutant> <validator>: MATRIX-ONLY. Drives the mutated validator on EVERY cell. It records itself in the
+# ledger first (rule 9).
+mx_score() {
+  local m="$1" v="$2" dec tw c r uex="" dl="" tl="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    cell_green "$c" "$v"; r=$?
+    if [ "$r" -ne 0 ]; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+    case "$RC" in 0|1) ;; *) echo "MATRIX BROKEN $m"; exit 2 ;; esac
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_green "$c" "$v"; r=$?
+    if [ "$r" -ne 0 ]; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+    case "$RC" in 0|1) ;; *) echo "MATRIX BROKEN $m"; exit 2 ;; esac
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    cell_green "$c" "$v"; r=$?
+    case "$RC" in 0|1) ;; *) echo "MATRIX BROKEN $m"; exit 2 ;; esac
+    tot=$((tot + 1)); [ "$r" -eq 0 ] && g=$((g + 1))
+  done
+  # Not-decides, not-twin cells are reported as the count that stayed GREEN; W-MK is expected to move W2 (see header).
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
+
 # W-MK: the waiver kept in the run (the pre-fix predicate). Built in a copy beside the sibling the
 # repair arm resolves, schema and map passed explicitly, and an unmutated control from the same
 # directory scored first. Gated on W_BASE: the arms passed unmutated in this run.
@@ -233,6 +314,8 @@ PY
       else
         mutant_killed "$W_BASE" W-MK "W-MK (FAIL_WAIVED kept in the stall run) KILLED by W1 — waived-x3 reports STALLED on check 7"
       fi
+      mx_twins W-MK "$WM/mk/validate-gate-adjudication.sh"
+      if [ "$MODE" = matrix ]; then mx_score W-MK "$WM/mk/validate-gate-adjudication.sh"; fi
       ASSERTIONS=$((ASSERTIONS + 1))
       if w_p3 "$WM/ma/validate-gate-adjudication.sh"; then
         note_fail "W-MA SURVIVED: with ANY FAIL_WAIVED breaking the run, unresolved-x3 still stalled — W3 watches nothing"
@@ -243,6 +326,9 @@ PY
       else
         mutant_killed "$W_BASE" W-MA "W-MA (ANY FAIL_WAIVED breaks the run) KILLED by W3 — unresolved-x3 goes silent, W1 unchanged"
       fi
+      # W-MA's twin W1 was driven on this mutant in the chain above; it is not re-run here.
+      printf 'plain-twins W-MA\n' >> "$MXL"
+      if [ "$MODE" = matrix ]; then mx_score W-MA "$WM/ma/validate-gate-adjudication.sh"; fi
     fi
     unset AI_DLC_VERDICT_SCHEMA AI_DLC_ENFORCEMENT_MAP
   fi
@@ -287,6 +373,22 @@ expect legacy-interleaved 1 'falls at or after' \
   If the fail-open covered this case, the mechanism would ship its own opt-out."
 
 # --------------------------------------------------------------------------
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$mx_ctl" -eq 0 ]; then note_fail "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then note_fail "rule-9: a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else echo "ok: rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "W-MA W-MK " ] || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  FAILURES=$((FAILURES + MX_FAILS))
+fi
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "ok: gate-series-rung — $ASSERTIONS assertion(s); the stall rung, the boundary arm,"
