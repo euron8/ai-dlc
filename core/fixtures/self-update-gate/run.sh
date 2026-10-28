@@ -1630,8 +1630,8 @@ ss_assert "carry-safe-stop" \
 # the repo root; the arms above therefore only ever see one CWD, and the pathspec-expansion
 # defect the `set -f` mutant models is CWD-dependent by nature. Same gate, same tree, a
 # directory built to make the expansion bite.
-ss_assert "carry-cwd-invariant" "$(ac_carry "$GATE" "$AC/cons" "$AC/cwd")" "$AC_ALL" \
-  "the shipped gate answers identically from a CWD whose own core/ would swallow every globbed entry"
+if ss_assert_b "carry-cwd-invariant" "$(ac_carry "$GATE" "$AC/cons" "$AC/cwd")" "$AC_ALL" \
+  "the shipped gate answers identically from a CWD whose own core/ would swallow every globbed entry"; then B_acc=1; fi
 
 # --- MUTANTS on arm C -----------------------------------------------------------------
 #
@@ -1681,11 +1681,8 @@ ac_kill() { # ac_kill <label> <sed-expr> <want-carry-set> <why>
 # It does NOT go through ac_kill: that helper refuses a sed matching nothing, which is the
 # right refusal for a mutant and the wrong one for a control that must not be mutated at all.
 # A control faked with a no-op substitution would trip exactly that guard.
-rm -rf "$AC/m-control"; mkdir -p "$AC/m-control"
-cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$AC/m-control"/ 2>/dev/null
-if ss_assert_b "armc-control" "$(ac_carry "$AC/m-control/self-update-gate.sh" "$AC/cons" "$AC/cwd")" \
-  "$AC_ALL" \
-  "an unmutated copy reproduces the FULL carry set from the decoy CWD, so a mutant's shortfall is the mutation"; then B_acc=1; fi
+# (The unmutated copy that stood here drove ac_carry with the SAME consumer ($AC/cons) and decoy CWD ($AC/cwd) as
+# carry-cwd-invariant above, which is its base capture and sets B_acc; the copy layout is proved once, by ss-partial-control.)
 
 ac_kill "armc-mut-bucket" \
   "s@^          \\*'->CLASSIFY'\\*|\\*consumer-edited\\*) ;;\$@          *'BOTH-CHANGED'*) ;;@" \
@@ -2071,8 +2068,8 @@ ss_assert "su-seed-fx-scope" \
 # deliberate absence, the bytes near-miss and the membership near-miss are all in this one cell
 # comparison.
 su_stamp "$SU_MID"
-ss_assert "su-carried" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_LIVE" \
-  "M and A both suppress a copy identical to the distribution at the stamp's skill_commit, while a real edit, a non-machinery path and a deleted path in the same tree all still reach ->CLASSIFY"
+if ss_assert_b "su-carried" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_LIVE" \
+  "M and A both suppress a copy identical to the distribution at the stamp's skill_commit, while a real edit, a non-machinery path and a deleted path in the same tree all still reach ->CLASSIFY"; then B_su=1; fi
 
 # THE THREE GUARDS ON THE STAMP READ, EACH WITH ITS OWN SUBJECT. In every one of them the arms must
 # be unreachable and every OTHER bucket unchanged -- which is why the whole set is asserted rather
@@ -2177,11 +2174,8 @@ s>0 { s--; next }
 # THE UNMUTATED CONTROL, and it is PRESENCE-shaped: a copy that cannot resolve its siblings, or
 # one replaced by `exit 0`, emits the EMPTY set and fails this outright. An arm asserting "nothing
 # went wrong" would pass for both.
-rm -rf "$SU/m-control"; mkdir -p "$SU/m-control"
-cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$SU/m-control"/ 2>/dev/null
-su_stamp "$SU_MID"
-if ss_assert_b "su-mut-control" "$(su_buckets "$SU/m-control/preclassify.sh" "$SU/cons")" "$SU_LIVE" \
-  "an unmutated copy beside its siblings reproduces the FULL live set, so a mutant's shift is the mutation"; then B_su=1; fi
+# (The unmutated copy that stood here ran su_buckets at the SAME stamp ($SU_MID) on the SAME consumer ($SU/cons) as su-carried
+# above, which is its base capture and sets B_su; the copy layout is proved once, by ss-partial-control.)
 
 su_kill "su-mut-noarm-m" "$SU_M_NOARM_M" "$SU_MID" "$SU_NO_M" \
   "deleting the M-branch arm sends the carried path back to the semantic-merge obligation that was filed, and touches the added path not at all"
@@ -3600,10 +3594,10 @@ rm -f "$PP/sent/sentinel"
 # must be absent. The control is that hook run by hand: it writes the sentinel, so its absence is
 # the gate, not a hook that cannot write.
 pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
-ss_assert "pp-gate-runs-no-hook" \
+if ss_assert_b "pp-gate-runs-no-hook" \
   "$(pp_scan "$GATE" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
   "pp=none sum=1 ss=1 und=1|absent" \
-  "a consumer that is its own repository, with a remote and an executable armed hook: the gate runs to its verdict and the hook never runs"
+  "a consumer that is its own repository, with a remote and an executable armed hook: the gate runs to its verdict and the hook never runs"; then B_pph=1; fi
 rm -f "$PP/sent/sentinel"
 ss_assert "pp-enclosed-control" \
   "$( ( pp_enter "$PP_ENC_REAL" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); [ -e "$PP/sent/sentinel" ] && echo written || echo absent )" \
@@ -3612,11 +3606,8 @@ rm -f "$PP/sent/sentinel"
 # MUTANT: a hook call restored to the gate, after the enclosed-layout block, as the removed arm sat.
 # The rows must survive (the copy ran to its verdict) AND the sentinel must appear.
 PP_MH="$(vr_mut pphook 'index($0, "# Core scripts this pull changes, by basename.") == 1 && !d { print "( cd \"$CONSUMER\" && h=\"$(git rev-parse --git-path hooks/pre-push)\" && [ -x \"$h\" ] && \"$h\" origin x </dev/null >/dev/null 2>&1 ) || :"; d = 1 } { print }')"
-PP_MC="$(vr_mut pphookctl '{ print }')"
-if ss_assert_b "pp-hook-mut-control" \
-  "$(cmp -s "$GATE" "$PP_MC" && echo identical || echo differ)|$(pp_scan "$PP_MC" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
-  "identical|pp=none sum=1 ss=1 und=1|absent" \
-  "an unmutated copy beside its siblings reaches the verdict and runs no hook, so the kill below is the inserted call"; then B_pph=1; fi
+# (The unmutated copy that stood here ran pp_scan on the SAME world ($PP_ENC_REAL) with the SAME argv as pp-gate-runs-no-hook
+# above, which is its base capture and sets B_pph; the copy layout is proved once, by ss-partial-control.)
 pph_cell() { # <gate> <enc>
   rm -f "$PP/sent/sentinel"
   DRV_OUT="$(pp_scan "$1" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
@@ -3670,7 +3661,7 @@ if ss_assert_b "pp-record-out-of-tree" \
 pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG.ctl"
 ( cd "$PP_LSREC" && bash scripts/ai-dlc/gate-pass.sh )
 if ss_assert_b "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
-  "...and the same script with a record-shaped file present logs 1, so it really can see that directory"; then B_pprec2=1; fi
+  "...and the same script with a record-shaped file present logs 1, so it really can see that directory (kept: it differs from every base drive, because the observer script is run BY HAND in the consumer root and the gate is not run at all)"; then B_pprec2=1; fi
 ppr_cell() { # <gate> <seen>
   local c
   c="$(vr_cons pplsrecm)"; pp_lsrec_obs "$c" "$PP_LSREC_LOG.m"; : > "$PP_LSREC_LOG.m"
@@ -4189,14 +4180,14 @@ sg_scan() {
     "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "gate-defer.sh"' | grep -c .)" \
     "$(grep -c . "$SG/fired" 2>/dev/null || echo 0)"
 }
-ss_assert "stage-gating-refused" "$(sg_scan "$GATE" yes)" "und=1 defer=0 fired=1" \
-  "a gating-script set that cannot be staged is UNDECIDED, and the stub that broke it is shown to fire"
+if ss_assert_b "stage-gating-refused" "$(sg_scan "$GATE" yes)" "und=1 defer=0 fired=1" \
+  "a gating-script set that cannot be staged is UNDECIDED, and the stub that broke it is shown to fire"; then B_stg=1; fi
 ss_assert "stage-gating-healthy" "$(sg_scan "$GATE" no)" "und=0 defer=1 fired=0" \
   "the same seed unstubbed reaches the differential and defers on gate-defer.sh, so the refusal is the staging write"
 rm -rf "$SG/m"; mkdir -p "$SG/m"
 cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SG/m"/ 2>/dev/null
-if ss_assert_b "stage-mut-control" "$(sg_scan "$SG/m/self-update-gate.sh" yes)" "und=1 defer=0 fired=1" \
-  "an unmutated copy beside its siblings refuses the same way, so the kill below is the mutation"; then B_stg=1; fi
+# (The unmutated copy that stood here ran sg_scan with the SAME argument as stage-gating-refused above, which is its base
+# capture and sets B_stg; the copy layout is proved once, by ss-partial-control.)
 stg_cell() { DRV_OUT="$(sg_scan "$1" yes)"; }
 awk 'index($0,"  [ \"$_rc\" = 0 ] && return 0") == 1 { print "  return 0"; next } { print }' \
   "$GATE" > "$SG/m/self-update-gate.sh"
