@@ -414,36 +414,9 @@ bind_scratch() { # <dir> -> MO, PO, PE, RERUN_KEEP, CO, MKO under <dir>
   MO="$1/merge.out"; PO="$1/part.out"; PE="$1/part.err"; RERUN_KEEP="$1/rerun.keep"; CO="$1/check.out"; MKO="$1/mark.out"
 }
 bind_scratch "$WORK"
-# THE MERGE MEMO. A top-level arm (script dir = SRCDIR) merging a state an earlier arm already merged gets that run's
-# answer replayed: the key is every input the merge reads -- the shard bytes, the manifest, the gate, the project root,
-# the --out name and its CURRENT bytes (so a re-merge over a written review is a different state, which is what R10
-# asks), the shard-directory listing and the seal ledger. Paths of the first run are rewritten to the new world's. A
-# mutant's script dir is never SRCDIR, so a mutant always runs the subject.
-MEMO="$WORK/memo"; mkdir -p "$MEMO"; MEMO_HITS=0
-memo_key() { # <script-dir> <shard-dir> <gate> <out> <root> -> key, or nothing when the call is not memoisable
-  [ "$1" = "$SRCDIR" ] || return 0
-  { cat "$2"/*.md "$2"/.manifest 2>/dev/null; printf '%s %s %s %s\n' "$3" "$5" "$(basename "$4")" "$(basename "$2")"
-    find "$5" -type f \( -name '*.md' -o -name '*.sh' \) -exec cksum {} + 2>/dev/null | sort
-    cat "$(awk -F'\t' '$1 == "worktree" { print $2 }' "$2/.manifest" 2>/dev/null)"/.claude/team-roles/*.md 2>/dev/null
-    [ -f "$4" ] && cat "$4"; cksum < "$LEDGER" 2>/dev/null; ls "$2" | tr '\n' ' '; } | shasum | cut -c1-20
-}
-merge_memo() { # <script-dir> <shard-dir> <gate> <out> <root> -> RC, $MO
-  local k od; k="$(memo_key "$1" "$2" "$3" "$4" "$5")"
-  if [ -n "$k" ] && [ -f "$MEMO/$k.rc" ]; then
-    od="$(cat "$MEMO/$k.dir")"
-    sed -e "s|$od|$(dirname "$2")|g" "$MEMO/$k.out" > "$MO"; RC="$(cat "$MEMO/$k.rc")"
-    if [ -f "$MEMO/$k.md" ]; then cp "$MEMO/$k.md" "$4"; fi
-    MEMO_HITS=$((MEMO_HITS + 1)); return 0
-  fi
-  AI_DLC_PROJECT_ROOT="$5" bash "$1/merge-review-shards.sh" "$2" --gate "$3" --out "$4" > "$MO" 2>&1 < /dev/null; RC=$?
-  if [ -n "$k" ]; then
-    cp "$MO" "$MEMO/$k.out"; printf '%s' "$RC" > "$MEMO/$k.rc"; dirname "$2" > "$MEMO/$k.dir"
-    if [ -f "$4" ]; then cp "$4" "$MEMO/$k.md"; fi
-  fi
-  return 0
-}
 run_merge() { # <script-dir> <shard-dir> -> RC, $MO
-  merge_memo "$1" "$2" code-review "$(out_of "$2")" "$PROJ"
+  AI_DLC_PROJECT_ROOT="$PROJ" bash "$1/merge-review-shards.sh" "$2" --gate code-review --out "$(out_of "$2")" \
+    > "$MO" 2>&1 < /dev/null; RC=$?
 }
 refused_clean() { # <token> <shard-dir>: exit 2, REFUSED:, the token, no file at --out, no temp
   local o; o="$(out_of "$2")"
@@ -754,7 +727,8 @@ QT_RANK="shard-verdict 'APPROVED' is not one of PASS NEEDS_REWORK"
 QA_SFX="qa-validation"
 qout() { printf '%s/1-%s%s.md' "$(dirname "$1")" "${2:-$QA_SFX}" "${3:-}"; } # <dir> [sfx] [pass marker]
 run_mg() { # <script-dir> <shard-dir> <gate> <out> [project-root] -> RC, $MO
-  merge_memo "$1" "$2" "$3" "$4" "${5:-${VB_PROJ:-$PROJ}}"
+  AI_DLC_PROJECT_ROOT="${5:-${VB_PROJ:-$PROJ}}" bash "$1/merge-review-shards.sh" "$2" --gate "$3" --out "$4" \
+    > "$MO" 2>&1 < /dev/null; RC=$?
 }
 refused_at() { # <token> <out>
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$2" ] \
