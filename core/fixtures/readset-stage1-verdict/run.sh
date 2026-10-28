@@ -463,7 +463,7 @@ world_hit() {
 mx_judge() {
   local d k
   d="$(printf '%s\n' ${2//,/ } | LC_ALL=C sort | tr '\n' ',')"; k="$(printf '%s\n' ${3//,/ } | LC_ALL=C sort | tr '\n' ',')"
-  if [ "$d" = "$k" ]; then ok "MATRIX $1: the killed cells are exactly the deciding set ($2)"; else bad "MATRIX $1: killed cells [$3] differ from the deciding set [$2]"; fi
+  if [ "$d" = "$k" ]; then ok "MATRIX $1: the tripped cells are exactly the deciding set ($2)"; else bad "MATRIX $1: tripped cells [$3] differ from the deciding set [$2]"; fi
 }
 # matrix_row <name> <script> <decides csv>: every world scored against the mutant, one row, matrix mode only.
 matrix_row() {
