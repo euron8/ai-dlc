@@ -3396,6 +3396,22 @@ else
   # --- K3 widened, J2 per stem: the cells ---------------------------------------------------
   # k3w_run <validator> <world> <series stem> -- the series is named by its own stem, as the
   # post-planning sweep names every `*-adversarial-p*` series in the sprint.
+  # k3w_classify <arm token> -> FAIL | PENDING | SILENT, read off the output file the last run wrote (K3_OUT).
+  k3w_classify() {
+    if grep -qF "FAIL ($1" "$K3_OUT"; then printf 'FAIL'
+    elif grep -qF "PENDING ($1" "$K3_OUT"; then printf 'PENDING'
+    else printf 'SILENT'; fi
+  }
+  # k3w_base <slot> <arm token> <k3w_cell args...> -- a baseline cell that ALSO records its guard class and the
+  # provenance of the run that produced it. The cell runs the full entry (no --arms), so the recorded class is
+  # exactly what k3w_class would compute for the same series with SEAM_ARMS unset; the guards reuse it instead
+  # of running that world a second time.
+  k3w_base() {
+    local slot="$1" tok="$2"; shift 2
+    k3w_cell "$@"
+    printf -v "KBC_$slot" '%s' "$(k3w_classify "$tok")"
+    printf -v "KBP_$slot" '%s' "$(row_prov "$2")"
+  }
   k3w_cell() { # <label> <validator> <world> <stem> <want rc> <must-say | -> <must-not-say | ->
     ASSERTIONS=$((ASSERTIONS + 1))
     bash "$2" --series "$3/$K3PA/s9/$4-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
@@ -3407,32 +3423,30 @@ else
       sed 's/^/          | /' "$K3_OUT"
     fi
   }
-  k3w_cell k3w-post  "$VALIDATOR" "$K3W/k3w-post"  prd 1 "FAIL (K3 -- SUBJECT): prd-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
-  k3w_cell k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
-  k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
-  k3w_cell k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
-  k3w_cell k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
+  k3w_base k3_post 'K3 -- SUBJECT' k3w-post  "$VALIDATOR" "$K3W/k3w-post"  prd 1 "FAIL (K3 -- SUBJECT): prd-adversarial-p1.md: it reviews" -
+  k3w_base k3_brief 'K3 -- SUBJECT' k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
+  k3w_base k3_arch 'K3 -- SUBJECT' k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
+  k3w_base k3_pre 'K3 -- SUBJECT' k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
+  k3w_base k3_pred 'K3 -- SUBJECT' k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
+  k3w_base k3_nomf 'K3 -- SUBJECT' k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
+  k3w_base k3_other 'K3 -- SUBJECT' k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
   k3w_cell k3w-subj  "$VALIDATOR" "$K3W/k3w-subj"  prd 0 "at ${K3W_B} or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-subj-b "$VALIDATOR" "$K3W/k3w-subj" prd 0 "is not the subject map's ordinals plus cross groups" "FAIL (K3"
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
-  k3w_cell j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
+  k3w_base j2_nochain 'J2 -- DRIFT' j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
   k3w_cell j2s-nochain-j2 "$VALIDATOR" "$K3W/j2s-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"
-  k3w_cell j2s-chain    "$VALIDATOR" "$K3W/j2s-chain"    requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-subjlink "$VALIDATOR" "$K3W/j2s-subjlink" requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
-  k3w_cell j2s-pre      "$VALIDATOR" "$K3W/j2s-pre"      requirements 0 "architecture-impact (_bmad-output/planning-artifacts/s9/architecture-impact.md): notarized" "FAIL (J2"
+  k3w_base j2_chain 'J2 -- DRIFT' j2s-chain    "$VALIDATOR" "$K3W/j2s-chain"    requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_subjlink 'J2 -- DRIFT' j2s-subjlink "$VALIDATOR" "$K3W/j2s-subjlink" requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_prd 'J2 -- DRIFT' j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
+  k3w_base j2_pre 'J2 -- DRIFT' j2s-pre      "$VALIDATOR" "$K3W/j2s-pre"      requirements 0 "architecture-impact (_bmad-output/planning-artifacts/s9/architecture-impact.md): notarized" "FAIL (J2"
   k3w_cell j2s-pre-legacy "$VALIDATOR" "$K3W/j2s-pre"    requirements 0 "Legacy series." "FAIL ("
-  k3w_cell j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.738.0 or later -- not owed yet." "FAIL (J2"
+  k3w_base j2_pred 'J2 -- DRIFT' j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.738.0 or later -- not owed yet." "FAIL (J2"
 
   # --- the mutants: one row per battery, each cell FAIL | PENDING | SILENT, a copy of the validator's
   # directory (partition-subject.sh beside it, or K3 itself reads no map), an unmutated control first.
   k3w_class() { # <validator> <world> <stem> <arm token> -> FAIL | PENDING | SILENT
     bash "$1" --series "$K3W/$2/$K3PA/s9/$3-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" ${SEAM_ARMS:+--arms "$SEAM_ARMS"} > "$K3_OUT" 2>&1
-    if grep -qF "FAIL ($4" "$K3_OUT"; then printf 'FAIL'
-    elif grep -qF "PENDING ($4" "$K3_OUT"; then printf 'PENDING'
-    else printf 'SILENT'; fi
+    k3w_classify "$4"
   }
   rcell() { local i="$1"; shift; if ron "$i"; then "$@"; else printf '.'; fi; }
   k3w_row() { # <validator> -> the seven K3-widened cells
@@ -3479,7 +3493,25 @@ PY
   #                       post    pre     pred    nomf   other  brief  arch
   K3W_REAL="FAIL PENDING PENDING SILENT SILENT FAIL FAIL"
   rowmut "K3WX0 control (unmutated)" k3w_row "$K3W_REAL"
-  seam_guard "SEAM-GUARD K3" "K3,J2" k3w_row "$ROWMUT_D/validate-adversarial-convergence.sh"
+  # The guards compare the seam against the BASELINE cells' own class row (full entry, no --arms, $VALIDATOR),
+  # not against a second full run and not against the rowmut control's copy (which only happened to be byte-equal).
+  KBR_K3="$KBC_k3_post $KBC_k3_pre $KBC_k3_pred $KBC_k3_nomf $KBC_k3_other $KBC_k3_brief $KBC_k3_arch"
+  KBR_K3_PROV="$KBP_k3_post"
+  for kbp in "$KBP_k3_pre" "$KBP_k3_pred" "$KBP_k3_nomf" "$KBP_k3_other" "$KBP_k3_brief" "$KBP_k3_arch"; do
+    [ "$kbp" = "$KBR_K3_PROV" ] || KBR_K3_PROV="mixed baseline provenance [$kbp] vs [$KBR_K3_PROV]"
+  done
+  seam_guard "SEAM-GUARD K3" "K3,J2" k3w_row "$VALIDATOR" "$KBR_K3" "$KBR_K3_PROV"
+  # MUTANT: the same guard handed a baseline row that was itself computed WITH --arms K3,J2. The reuse assertion
+  # must REFUSE it before the seam runs (a seamed row on both sides would agree whatever the seam dropped).
+  ASSERTIONS=$((ASSERTIONS + 1))
+  kb_row="$(SEAM_ARMS="K3,J2"; k3w_row "$VALIDATOR")"; kb_prov="$(SEAM_ARMS="K3,J2"; row_prov "$VALIDATOR")"
+  seam_guard_eval "K3,J2" k3w_row "$VALIDATOR" "$kb_row" "$kb_prov"
+  if [ "$SG_VERDICT" = refused ] && [ "$kb_prov" != "$KBR_K3_PROV" ]; then
+    printf '  ok    %-28s reuse refuses a baseline row computed with --arms K3,J2 (%s)\n' "SEAM-GUARD K3 seamed-baseline" "${kb_prov%%|*}"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s want refused, got %s [%s]\n' "SEAM-GUARD K3 seamed-baseline" "$SG_VERDICT" "$SG_MSG"
+  fi
   # The widened case arm matching nothing: every widened series escapes K3 by its name again.
   rowmut "K3WX1 widened case arm gone" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \
     '  *-adversarial-p[0-9]*.md)' '  *-adversarial-pNEVER.md)'
@@ -3522,7 +3554,12 @@ PY
   #                       nochain chain   subjlink prd    pre     pred
   J2S_REAL="FAIL SILENT SILENT SILENT PENDING PENDING"
   rowmut "J2SX0 control (unmutated)" j2s_row "$J2S_REAL"
-  seam_guard "SEAM-GUARD J2S" "K3,J2" j2s_row "$ROWMUT_D/validate-adversarial-convergence.sh"
+  KBR_J2="$KBC_j2_nochain $KBC_j2_chain $KBC_j2_subjlink $KBC_j2_prd $KBC_j2_pre $KBC_j2_pred"
+  KBR_J2_PROV="$KBP_j2_nochain"
+  for kbp in "$KBP_j2_chain" "$KBP_j2_subjlink" "$KBP_j2_prd" "$KBP_j2_pre" "$KBP_j2_pred"; do
+    [ "$kbp" = "$KBR_J2_PROV" ] || KBR_J2_PROV="mixed baseline provenance [$kbp] vs [$KBR_J2_PROV]"
+  done
+  seam_guard "SEAM-GUARD J2S" "K3,J2" j2s_row "$VALIDATOR" "$KBR_J2" "$KBR_J2_PROV"
   # The per-stem branch gone: the subject manifest's terminal pass is judged by nothing (BL-460).
   rowmut "J2SX1 per-stem branch gone" j2s_row "SILENT SILENT SILENT SILENT SILENT SILENT" \
     '  elif [ -n "$j2_file" ] && [ "${j2_file##*/}" = "requirements-subject.md" ]; then' '  elif false; then'
