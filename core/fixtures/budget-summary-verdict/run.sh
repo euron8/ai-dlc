@@ -134,10 +134,9 @@ QUALIFIER='      Measured is not everything: this run also reported read-path ar
 # unknown status, in-place markers) and an arm about the BREACH channel must not be
 # satisfied by one of those firing instead.
 # -----------------------------------------------------------------------------------
-arm_dir() { # arm_dir <name> -> prints a fresh sandbox path
+arm_dir() { # arm_dir <name> -> prints the sandbox path, built once per name; every caller re-seeds what it reads
   d="$WORK/$1"
-  rm -rf "$d"
-  mkdir -p "$d/_bmad-output" "$d/.claude" || exit 2
+  if [ ! -d "$d/_bmad-output" ]; then mkdir -p "$d/_bmad-output" "$d/.claude" || exit 2; fi
   printf '%s\n' "$d"
 }
 seed_breach()  { head -c 200000 /dev/zero | tr '\0' 'x' > "$1/_bmad-output/gate-log.md"; }
@@ -287,65 +286,66 @@ MUTS="$WORK/muts"; mkdir -p "$MUTS" || exit 2
 MREG=""
 AXC=0
 ARMS="a1warn a3noflag a4clean a5cov a6schema a10struck a11marker f_five f_range f_history f_spaced f_dash f_past f8 f9 p_basename p_noitem lg vs vt_more vt_under l1b l0eq le_skip la_amb ls_same lh_clear"
-axw() { AXD="$(mktemp -d "$WORK/aw.XXXXXX")"; mkdir -p "$AXD/_bmad-output" "$AXD/.claude" || exit 2; }
+axw() { AXD="$(arm_dir "$1")"; }   # axw <world name> -- the SAME world the inline blocks use for that state
 axl() { AXC=$((AXC + 1)); AXL="$1.$AXC"; }
 vtool() { printf '%s/validate-artifact-budget.sh' "$1"; }
 
 # --- the arms (each: $1 = validator dir, $2 = verdict wrapper) --------------------------
-arm_a1warn() { axw; seed_breach "$AXD"; axl a1warn; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
+arm_a1warn() { axw warnonly-unhardened; seed_breach "$AXD"; axl a1warn; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN  this run reported over-budget artifact(s) and is NOT a clean result.' \
     && has '      Exit status is 0 because --warn-only was passed and no reported artifact was' && ! has "$PASS_LINE"; }
-arm_a3noflag() { axw; seed_breach "$AXD"; axl a3noflag; drive "$AXL" "$(vtool "$1")" "$AXD"
+arm_a3noflag() { axw warnonly-unhardened; seed_breach "$AXD"; axl a3noflag; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 1 ] && has 'FAIL: 1 artifact(s) over the Rule 25(d) budget.'; }
-arm_a4clean() { axw; seed_clean "$AXD"; axl a4clean; drive "$AXL" "$(vtool "$1")" "$AXD"
+arm_a4clean() { axw clean; seed_clean "$AXD"; axl a4clean; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && ! grep -q '^WARN' "$OUT" || return 1
   axl a4warn; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && ! grep -q '^WARN' "$OUT"; }
-arm_a5cov() { axw; seed_clean "$AXD"; seed_ungoverned "$AXD"; axl a5cov; drive "$AXL" "$(vtool "$1")" "$AXD"
+arm_a5cov() { axw coverage; seed_clean "$AXD"; seed_ungoverned "$AXD"; axl a5cov; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && has "$QUALIFIER" && hasl 'WARN: read-path artifact(s) over 2000 tok that NO budget governs.' || return 1
   rm -f "$AXD/_bmad-output/coverage-probe.md"; axl a5ctl; drive "$AXL" "$(vtool "$1")" "$AXD"
   [ "$(status_of "$AXL")" = 0 ] && has "$PASS_LINE" && ! has "$QUALIFIER"; }
-arm_a6schema() { axw; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_CLEAN"
+arm_a6schema() { axw schema; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_CLEAN"
   printf '\n## Invented Section\n- lead invention\n' >> "$AXD/_bmad-output/pipeline-snapshot.md"
   axl a6schema; drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN  this run reported off-schema section(s) and is NOT a clean result.'; }
-arm_a10struck() { axw; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_STRUCK"; axl a10struck
+arm_a10struck() { axw struck; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_STRUCK"; axl a10struck
   # shellcheck disable=SC2086
   drive "$AXL" "$(vtool "$1")" "$AXD" $RETRO_FLAGS
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN: In-Flight Teammates carries struck-through row(s).' \
     && has 'WARN  this run reported struck-through In-Flight row(s) and is NOT a clean result.' && ! has "$PASS_LINE"; }
-arm_a11marker() { axw; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_CLEAN"; seed_marker "$AXD"; axl a11marker
+arm_a11marker() { axw marker; seed_clean "$AXD"; seed_snapshot "$AXD" "$INFLIGHT_CLEAN"; seed_marker "$AXD"; axl a11marker
   drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only
   [ "$(status_of "$AXL")" = 0 ] && has 'WARN: pipeline-snapshot.md marks superseded content in place.' \
     && has 'WARN  this run reported superseded content marked in place and is NOT a clean result.' && ! has "$PASS_LINE"; }
 # the stamp arms: one snapshot line, driven with now pinned. farm_ok = accepted (rc 0, no FUTURE row).
-farm_ok() { axw; seed_clean "$AXD"; seed_stamped "$AXD" "$2" "$IF_HDR"; axl "$3"
+farm_ok() { axw future; rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; seed_clean "$AXD"; seed_stamped "$AXD" "$2" "$IF_HDR"; axl "$3"
   drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
   [ "$(status_of "$AXL")" = 0 ] && ! grep -q '^FUTURE ' "$OUT"; }
 arm_f_five() { farm_ok "$1" '- 2026-10-14T11:05Z five minutes ahead' f_five; }
 arm_f_range() { farm_ok "$1" '- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned' f_range; }
 arm_f_spaced() { farm_ok "$1" '- 2026-10-14T12:00Z - 12:45Z, 2026-10-14T12:00Z to 12:45Z, 2026-10-14T12:00Z → 12:45Z, 2026-10-14T12:00Z – 12:45Z planned' f_spaced; }
 arm_f_past() { farm_ok "$1" '- 2026-10-14T10:59Z just now' f_past; }
-arm_f_dash() { axw; seed_clean "$AXD"; seed_stamped "$AXD" '- 2026-10-14T12:00Z - DEPLOY DONE' "$IF_HDR"; axl f_dash
+arm_f_dash() { axw future; rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; seed_clean "$AXD"; seed_stamped "$AXD" '- 2026-10-14T12:00Z - DEPLOY DONE' "$IF_HDR"; axl f_dash
   drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
   [ "$(status_of "$AXL")" = 1 ] && grep -q '^FUTURE .*2026-10-14T12:00Z' "$OUT"; }
-arm_f_history() { axw; seed_clean "$AXD"; seed_stamped "$AXD" '- nothing notable' "$IF_HDR"
+arm_f_history() { axw future; seed_clean "$AXD"; seed_stamped "$AXD" '- nothing notable' "$IF_HDR"
   printf '## Recent Activity\n- 2026-12-01T00:00Z archived future line\n' > "$AXD/_bmad-output/pipeline-snapshot-history.md"
   axl f_history; drive_now "$AXL" "$(vtool "$1")" "$AXD" --only pipeline-snapshot.md
-  [ "$(status_of "$AXL")" = 0 ]; }
-arm_f8() { axw; AW="$AXD"; seed_breach "$AW"
+  local _r=0; [ "$(status_of "$AXL")" = 0 ] || _r=1
+  rm -f "$AXD/_bmad-output/pipeline-snapshot-history.md"; return "$_r"; }
+arm_f8() { axw wrapper; AW="$AXD"; seed_breach "$AW"
   seed_stamped "$AW" '- 2026-10-14T12:00Z DEPLOY DONE
 - 2026-10-14T12:05Z MERGED
 - 2026-10-14T12:10Z HANDOFF
 - 2026-10-14T12:15Z DISPATCHED dev
 - 2026-10-14T12:20Z GATE PASS' "$IF_HDR"
   axl f8; wdrive "$AXL" "$2" "$1"; wcheck "$AXL"; }
-arm_f9() { axw; AB="$AXD"; seed_clean "$AB"
+arm_f9() { axw backdated; AB="$AXD"; seed_clean "$AB"
   seed_stamped "$AB" '- 2026-10-14T12:00Z DEPLOY DONE' "$IF_HDR
 fold | pm-escalated | d1 | 2026-10-14T10:15:40Z | in-flight"
   printf '{"ts":"2026-10-14T10:17:32Z","name":"pm-escalated","role":"pm"}\n' > "$AB/_bmad-output/spawn-ledger.jsonl"
   axl f9; BDIR="$1"; bdrive "$AXL" "$2"; BDIR=""; bcheck "$AXL"; }
-pool_world() { axw; seed_clean "$AXD"; mkdir -p "$AXD/_bmad-output/planning-artifacts" || exit 2
+pool_world() { axw pool; seed_clean "$AXD"; mkdir -p "$AXD/_bmad-output/planning-artifacts" || exit 2
   head -c 300000 /dev/zero | tr '\0' 'x' > "$AXD/_bmad-output/planning-artifacts/prd.md"
   printf '# Carry-over backlog\n### CO-S1-OTHER\n**Status:** OPEN\nunrelated\n### CO-S1-WHOLE-READ-POOL-OLD\n**Status:** CLOSED\nold breach\n' \
     > "$AXD/_bmad-output/planning-artifacts/carry-over-backlog.md"; }
@@ -356,7 +356,7 @@ arm_p_noitem() { pool_world; axl p_noitem
   AI_DLC_READER_WINDOW_TOKENS=200000 drive "$AXL" "$(vtool "$1")" "$AXD" --warn-only --fail-on whole-read-pool
   [ "$(status_of "$AXL")" = 1 ] && grep -q 'no OPEN carry-over item cites it' "$OUT"; }
 # the LATE arms
-arm_l1b() { late_world "lx$AXC" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
+arm_l1b() { late_world late-off "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
 $DECO | remediator | r2 | 2026-10-14T10:01:00Z | in-flight
 a1111111111111111 | dev | d1 | 2026-10-14T10:30Z | in-flight
 a1111111111111111 | dev | d2 | 2026-10-14T10:27:45Z | in-flight
@@ -365,12 +365,12 @@ toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:01:00Z | in-fligh
   [ "$(status_of "$AXL")" = 1 ] && grep -qF "$LATE_HEAD" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 5 ] \
     && haslate "$AXL" 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z \
     && haslate "$AXL" 17 a1111111111111111 2026-10-14T10:27:45Z 2026-10-14T10:27:46Z && ! grep -q '^BACKDATED ' "$(lout "$AXL")"; }
-arm_l0eq() { late_world "lx$AXC" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight
+arm_l0eq() { late_world late-eq "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight
 $DECO | remediator | r2 | 2026-10-14T10:00:03Z | in-flight
 toolu_01LateSubjectBBBBBBBBB | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
   axl l0eq; ldrive "$AXL" "$(vtool "$1")" "$LW"
   [ "$(status_of "$AXL")" = 0 ] && [ "$(nlate "$AXL")" = 0 ] && grep -qxF "$PASS_LINE" "$(lout "$AXL")" && ! grep -q 'not judged for LATE' "$(lout "$AXL")"; }
-arm_le_skip() { late_world "lx$AXC" "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight
+arm_le_skip() { late_world late-skip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight
 afffffffffffffff0 | qa | q1 | 2026-10-14T10:00:03Z | in-flight
 fix (commit 1a2b3c4d) | qa | q2 | 2026-10-14T10:00:03Z | in-flight
 a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:09:00Z | delivered-reachable
@@ -378,32 +378,33 @@ a7ffc8dcd555207b8 | remediator | r2 | 2026-10-14T10:09:00Z | stopped
 a7ffc8dcd555207b8 | remediator | r3 | 2026-10-14T10:00:03Z | in-flight"
   axl le_skip; ldrive "$AXL" "$(vtool "$1")" "$LW"
   [ "$(status_of "$AXL")" = 0 ] && grep -qxF "$LSKIP" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 0 ]; }
-arm_la_amb() { late_world "lx$AXC" "remediator (a7ffc8dcd555207b8 then a1111111111111111) | remediator | r1 | 2026-10-14T10:27:46Z | in-flight"
+arm_la_amb() { late_world late-amb "remediator (a7ffc8dcd555207b8 then a1111111111111111) | remediator | r1 | 2026-10-14T10:27:46Z | in-flight"
   axl la_amb; ldrive "$AXL" "$(vtool "$1")" "$LW"
   [ "$(status_of "$AXL")" = 0 ] && grep -qxF "$LAMB" "$(lout "$AXL")" && [ "$(nlate "$AXL")" = 0 ]; }
-arm_ls_same() { late_world "lx$AXC" "$LSCELL | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
+arm_ls_same() { late_world late-same "$LSCELL | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
   axl ls_same; ldrive "$AXL" "$(vtool "$1")" "$LW"
   [ "$(status_of "$AXL")" = 1 ] && [ "$(nlate "$AXL")" = 1 ] \
     && haslate "$AXL" 14 a7ffc8dcd555207b8 2026-10-14T10:01:00Z 2026-10-14T10:00:03Z && ! grep -q 'ambiguous agent cell' "$(lout "$AXL")"; }
-arm_lh_clear() { AXC=$((AXC + 1)); late_clear "lc$AXC" "$(vtool "$1")"
+arm_lh_clear() { AXC=$((AXC + 1)); late_clear "lc$AXC" "$(vtool "$1")" late-clear
   [ "$LH_FIRST" = 2 ] && [ "$(status_of "lc$AXC-1")" = 1 ] && [ "$LH_CHANGED" = 1 ] && [ "$LH_SECOND" = 0 ] \
     && [ "$(status_of "lc$AXC-2")" = 0 ] && ! grep -qF "$LATE_HEAD" "$(lout "lc$AXC-2")"; }
-arm_lg() { late_world "lx$AXC" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
+arm_lg() { late_world late-wrap "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
   LGW="$LW"; axl lg; gdrive "$AXL" "$2"; gcheck "$AXL"; }
-arm_vs() { late_world "lx$AXC" "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight"
+arm_vs() { late_world vskip "fold-x | pm | p1 | 2026-10-14T10:00:03Z | in-flight"
   axl vs; vdrive "$AXL" "$2" "$LW"
   [ "$(status_of "$AXL")" = 0 ] && grep -qxF 'PASS  validate-artifact-budget.sh' "$WORK/runs/$AXL.out" && vline "$AXL" "$VSKIP" && ! vmore "$AXL"; }
 vt_rows() { local n="$1" i=1 rows=""
   while [ "$i" -le "$n" ]; do rows="${rows}${rows:+
 }a7ffc8dcd555207b8 | remediator | r$i | 2026-10-14T10:0$i:00Z | in-flight"; i=$((i + 1)); done
   printf '%s' "$rows"; }
-arm_vt_more() { late_world "lx$AXC" "$(vt_rows 8)"; local vw="$LW" d v n
-  axl vtd; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"; n=$(( $(vmatched "$d") - 6 ))
+arm_vt_more() { late_world vtmore "$(vt_rows 8)"; local vw="$LW" d v n
+  if [ "$1" = "$VD" ] && [ -n "${VTM_D:-}" ]; then d="$VTM_D"; else axl vtd; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"; [ "$1" != "$VD" ] || VTM_D="$d"; fi
+  n=$(( $(vmatched "$d") - 6 ))
   axl vtm; v="$AXL"; vdrive "$v" "$2" "$vw"
   [ "$(nlate "$d")" = 8 ] && [ "$n" -gt 0 ] && [ "$(status_of "$v")" = 1 ] && [ "$(vshown "$v")" = 6 ] \
     && grep -qxF "      … $n more matching line(s); run scripts/ai-dlc/validate-artifact-budget.sh directly for all" "$WORK/runs/$v.out"; }
-arm_vt_under() { late_world "lx$AXC" "$(vt_rows 5)"; local vw="$LW" d v
-  axl vud; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"
+arm_vt_under() { late_world vtunder "$(vt_rows 5)"; local vw="$LW" d v
+  if [ "$1" = "$VD" ] && [ -n "${VTU_D:-}" ]; then d="$VTU_D"; else axl vud; d="$AXL"; ldrive "$d" "$(vtool "$1")" "$vw"; [ "$1" != "$VD" ] || VTU_D="$d"; fi
   axl vuu; v="$AXL"; vdrive "$v" "$2" "$vw"
   [ "$(vmatched "$d")" = 6 ] && [ "$(status_of "$v")" = 1 ] && [ "$(vshown "$v")" = 6 ] && ! vmore "$v"; }
 
@@ -869,8 +870,8 @@ fi
 # row's dispatched-at is then rewritten with EXACTLY the ts its LATE line printed, parsed from this
 # run's output and never from the seed. The re-run must read 0 LATE and pass the LATE verdict. A
 # printed remedy that does not clear is a wedge.
-late_clear() { # late_clear <label> <validator> -> LH_FIRST, LH_SECOND (LATE counts), LH_CHANGED
-  late_world "$1" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
+late_clear() { # late_clear <label> <validator> [<world>] -> LH_FIRST, LH_SECOND (LATE counts), LH_CHANGED
+  late_world "${3:-$1}" "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight
 a1111111111111111 | dev | d1 | 2026-10-14T10:29:00Z | in-flight"
   _hw="$LW"; _snap="$_hw/_bmad-output/pipeline-snapshot.md"
   ldrive "$1-1" "$2" "$_hw"; LH_FIRST="$(nlate "$1-1")"
@@ -973,6 +974,7 @@ done
 late_world vtmore "$VT_ROWS"
 VTW="$LW"
 ldrive vtmore-direct "$V" "$VTW"
+VTM_D=vtmore-direct
 VT_N=$(( $(vmatched vtmore-direct) - 6 ))
 vdrive vtmore "$VW" "$VTW"
 if [ "$(nlate vtmore-direct)" = "$VT_SEED" ] && [ "$VT_N" -gt 0 ] && [ "$(status_of vtmore)" = 1 ] \
@@ -988,7 +990,7 @@ fi
 VT_ROWS="$(printf '%s\n' "$VT_ROWS" | sed -n '1,5p')"
 late_world vtunder "$VT_ROWS"
 VUW="$LW"
-ldrive vtunder-direct "$V" "$VUW"
+ldrive vtunder-direct "$V" "$VUW"; VTU_D=vtunder-direct
 vdrive vtunder "$VW" "$VUW"
 if [ "$(vmatched vtunder-direct)" = 6 ] && [ "$(status_of vtunder)" = 1 ] && [ "$(vshown vtunder)" = 6 ] && ! vmore vtunder \
    && [ "$(vmatched vskip-direct)" -le 6 ] && ! vmore vs; then
@@ -1121,14 +1123,14 @@ cp "$MV.n" "$MV" && rm -f "$MV.n"
 if score_mut M1 "$MDIR" "$VW" a1warn a3noflag; then
   # Arm 9 asserts an ABSENCE: its own predicate must return this run's label, or it cannot fire.
   if [ "$(join_violations "$DLBL")" = "$DLBL" ]; then
-    mutant_killed "${B_a1warn:-0}" M1 "MUTANT M1 (summary re-gated on RC): the breach run reappears as a join violation -- arms 1 and 9 can fire"
+    mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M1 "MUTANT M1 (summary re-gated on RC): the breach run reappears as a join violation -- arms 1 and 9 can fire"
   else bad "MUTANT M1: the deciding arm tripped but join_violations returned '$(join_violations "$DLBL")' -- arm 9 cannot fire"; fi
 else bad "MUTANT M1 SURVIVED: the re-gated summary still withheld the PASS line on a breach run"; fi
 
 # --- M2. REVERT ONE FLAG: SAW_BREACH is never raised -----------------------------------
 mutdir M2; mut_sed 's/^  SAW_BREACH=1$/  SAW_BREACH=0/'
 if score_mut M2 "$MDIR" "$VW" a1warn a6schema; then
-  mutant_killed "${B_a1warn:-0}" M2 "MUTANT M2 (SAW_BREACH never raised): the breach run prints PASS while the schema run is untouched"
+  mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M2 "MUTANT M2 (SAW_BREACH never raised): the breach run prints PASS while the schema run is untouched"
 else bad "MUTANT M2 SURVIVED: the breach run still withheld the PASS line with SAW_BREACH pinned to 0"; fi
 
 # --- M3. REVERT THE COVERAGE QUALIFIER ONLY ---------------------------------------------
@@ -1141,7 +1143,7 @@ if [ "$(( $(wc -l < "$V") - $(wc -l < "$MV.n") ))" -ne 2 ]; then
 fi
 cp "$MV.n" "$MV" && rm -f "$MV.n"
 if score_mut M3 "$MDIR" "$VW" a5cov a4clean; then
-  mutant_killed "${B_a5cov:-0}" M3 "MUTANT M3 (qualifier deleted): the coverage run prints a bare PASS -- assertion 5 measures the qualifier"
+  mutant_killed "$(( ${B_a5cov:-0} && ${B_ctrl:-0} ))" M3 "MUTANT M3 (qualifier deleted): the coverage run prints a bare PASS -- assertion 5 measures the qualifier"
 else bad "MUTANT M3 SURVIVED: the qualifier still appeared with its say lines deleted"; fi
 
 # --- M4 / M5. REVERT ONE NEW FLAG EACH (BL-020) -----------------------------------------
