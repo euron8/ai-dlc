@@ -51,7 +51,6 @@ gate-remediation-deny	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant
 gate-repair-record	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 gate-verdict-grep-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 h2-attest-scripts-dir	no MUTANT-MATRIX block; floor: S1 mut_sub(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-handoff-completion-assertion	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 handoff-resume-guard	no MUTANT-MATRIX block; floor: S1 hook_mut(),S2 cmp -s + mutant,MKC mutant_killed caller
 hermetic-consumption	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant
 hook-registration-join	no MUTANT-MATRIX block; floor: S1 apply_mut(),S2 cmp -s + mutant
