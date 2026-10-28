@@ -47,11 +47,9 @@
 # fixture has no inputs.decl (its range is derived live from the distribution's git history, which a declaration
 # cannot express), so run.sh is invoked directly from the repo root of a `git clone` of the branch.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-join-gate/run.sh --matrix
-# MUTANT-MATRIX-BEGIN
 # MUTANT-MATRIX A decides=a2,a3 twins=a1
 # MUTANT-MATRIX B decides=a2,a3 twins=a1
 # MUTANT-MATRIX C decides=rc11 twins=rc22
-# MUTANT-MATRIX-END
 # A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
 # base-pass flag of the cell's own arm. The mutant names reach mutant_killed as literals at their kill sites and
 # as a variable in mx_cell.

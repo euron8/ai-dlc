@@ -45,7 +45,6 @@
 # RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/invariant-index/run.sh --matrix
-# MUTANT-MATRIX-BEGIN
 # MUTANT-MATRIX m1 decides=drift twins=missing
 # MUTANT-MATRIX m2 decides=missing twins=drift
 # MUTANT-MATRIX m3 decides=orphan twins=silent
@@ -53,7 +52,6 @@
 # MUTANT-MATRIX m5 decides=collision twins=zero-arms
 # MUTANT-MATRIX m6 decides=zero-arms twins=orphan
 # MUTANT-MATRIX m7 decides=collision twins=zero-arms
-# MUTANT-MATRIX-END
 # A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
 # same base-pass flag as the original. The mutant name reaches mutant_killed as a variable:
 # MUTANT-MATRIX-DYNAMIC mx_cell why=reads the mutant names m1 to m7 as a variable and every name keeps its own row

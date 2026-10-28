@@ -30,10 +30,8 @@
 # RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-delivery/run.sh --matrix
-# MUTANT-MATRIX-BEGIN
 # MUTANT-MATRIX typestrict decides=stringsuccess twins=nullsuccess
 # MUTANT-MATRIX toolgate decides=othertool twins=offender
-# MUTANT-MATRIX-END
 # A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
 # base-pass flag of the cell's own arm. Mutant names reach mutant_killed as variables in two helpers:
 # MUTANT-MATRIX-DYNAMIC run_mutant why=passes each of the two mutant names typestrict and toolgate as a variable and every name keeps its own row
