@@ -447,13 +447,11 @@ mx_twins() {
   done
 }
 # mx_score <mutant> <mutant-dir>: MATRIX-ONLY. Scores the mutant on EVERY cell. It records itself in the ledger first
-# (rule 9). The only drive that can crash visibly is the extractor, which prints " aborted"; that reads BROKEN.
+# (rule 9). The extractor prints " aborted" on the shim mutant by design (that abort is the kill), so no drive here
+# has a crash signature to separate from a RED reading; the readings are the exact strings each cell compares.
 mx_score() {
   local m="$1" d="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
   printf 'mx-score %s\n' "$m" >> "$MXL"
-  case "$(ss_old_extract "$d")" in
-    *aborted*) BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return ;;
-  esac
   dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
   for c in $(printf '%s' "$dec" | tr ',' ' '); do
     if cell_red "$c" "$d"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
