@@ -830,7 +830,7 @@ fi
 # (an intermediate machinery ref that is neither `commit` nor `theirs`).
 advise_safe_stop() {
   [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
-  [ -n "$GATE_NO_SS_ADVICE" ] && return 0
+  [ -n "${GATE_NO_SS_ADVICE:-}" ] && return 0
   # SET HERE, not only inside the guard that fills it. This file runs under `set -u`, the message
   # below interpolates `$_sk`, and the only assignment used to live in `machinery_at_or_past` — so
   # any path that reached the message without running the guard died on an unbound variable and
