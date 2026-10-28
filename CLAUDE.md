@@ -45,8 +45,8 @@ the general form.
 
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
-`.githooks/pre-push` is the runner. It dispatches through a worker pool, orders units by
-their own recorded costs, content-keys the skip, and asserts that every dispatched
+`.githooks/pre-push` is the runner. It dispatches through a worker pool,
+content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
 across both pre-push hooks. Before a release push, seed the verdict store
 (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
@@ -54,9 +54,9 @@ across both pre-push hooks. Before a release push, seed the verdict store
 to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
 (`docs/plans/hermetic-pole.md`). A mktemp-store run caches nothing, and a green push's
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
-failing set is in `.git/ai-dlc-fixture-failures`; re-push to re-run only those, never hand-loop them.
+failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
-**A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, same tree, both ways:
+**A hand-rolled loop is not merely slower, it FABRICATES FAILURES.** Measured, one tree, both ways:
 
 ```
 for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
@@ -84,8 +84,7 @@ back to 13.2s. **Count the validator's execs and invocations before and
 after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and counts
 almost nothing, which reads as an enormous reduction and is a broken measurement.
 
-The inverse hazard: `core/fixtures/check-3b-locked-anchor/run.sh:125`
-carries it: a fixture that is green only from the repo root may be asserting nothing,
+The inverse hazard (`core/fixtures/check-3b-locked-anchor/run.sh:125`): a fixture that is green only from the repo root may be asserting nothing,
 because that is a cwd where its decoy files do not exist. A fixture that must hold from
 any cwd asserts cwd-invariance in its own arms.
 
