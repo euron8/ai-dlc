@@ -2845,7 +2845,7 @@ RM_TWIN=ptxt rcpt_mut  "J3-7 dispatch widened, digits guard gone" "$R814" "1|$J3
   '    case "$j3_m" in ""|*[!0-9]*) ;; *) [ -n "$j3_stem" ] && J3_ARM=1 ;; esac ;;' '    J3_ARM=1 ;;'
 RM_TWIN=subok rcpt_mut  "J3-8 successor substring" "$R814" "1|$J3NF substr(rc=0)" \
   '          if ((p == 1 || pre !~ pc) && (post == "" || post !~ nc)) { hit = 1; break }' '          if (1) { hit = 1; break }'
-RM_TWIN=repaired rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=1)" \
+RM_TWIN=repaired rcpt_mut  "J3-9 identity triple links" "$R814" "1|$J3NF ident(rc=0)" \
   '      $1 == "T" && $3 != $4 { m = split' '      $1 == "T" { m = split'
 RM_TWIN=unlinked rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink(rc=0) seriallink(rc=0)" \
   '      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }'"'" \
