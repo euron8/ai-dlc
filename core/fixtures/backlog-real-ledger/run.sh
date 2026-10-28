@@ -34,6 +34,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # SCRUB THE REPOSITORY ENVIRONMENT: j1 runs `git init` in mktemp trees, and an inherited GIT_DIR
 # makes `git init` succeed without creating a repository.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# The receipts validator's re-entry sentinel: inherited, every run below would score nothing.
+unset BR_RECEIPTS_RUNNING
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." 2>/dev/null && pwd || true)"
@@ -48,9 +50,12 @@ SIZE="$(find_one "$DIR/../../scripts/validate-backlog-size.sh" "$DIR/../../../sc
 REVERIFY="$(find_one "$DIR/../../scripts/backlog-reverify.sh" "$DIR/../../../scripts/backlog-reverify.sh")" || REVERIFY=""
 LIBSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/lib.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/lib.sh")" || LIBSRC=""
 REVSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/ledger-reverify.sh")" || REVSRC=""
+EXTRACT="$(find_one "$DIR/../../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py" "$DIR/../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py")" || EXTRACT=""
+# The could-not-measure rule both the classifier and the receipts validator source from beside them.
+RLIB="$(find_one "$DIR/../../scripts/backlog-receipt-lib.sh" "$DIR/../../../scripts/backlog-receipt-lib.sh")" || RLIB=""
 REAL_LEDGER=""
 [ -n "$ROOT" ] && [ -f "$ROOT/docs/backlog.md" ] && REAL_LEDGER="$ROOT/docs/backlog.md"
-for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC REAL_LEDGER; do
+for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC EXTRACT RLIB REAL_LEDGER; do
   eval "_v=\${$_p}"
   [ -n "$_v" ] || { echo "FIXTURE BROKEN: backlog-real-ledger could not resolve $_p" >&2; exit 2; }
 done
@@ -80,6 +85,11 @@ seed_r() { # seed_r <dir>
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
   cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  # The receipts validator reads its F-STEP vocabulary from the extractor and the step basenames.
+  mkdir -p "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts" "$d/core/skills/ai-dlc/steps"
+  cp "$EXTRACT" "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
+  : > "$d/core/skills/ai-dlc/steps/implementation.md"
+  cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
   printf 'alpha\nbeta\n' > "$d/probe/subject.txt"
   printf 'delta\n' > "$d/probe/guarded.txt"
   printf '# Probe backlog\n' > "$d/docs/backlog.md"
@@ -104,6 +114,7 @@ seed_s() { # seed_s <dir>
   cp "$SIZE" "$d/scripts/validate-backlog-size.sh"
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
 }
 # shellcheck disable=SC2086
 run_s() { # run_s <env-string-or-empty> <dir> [<extra-args>...]

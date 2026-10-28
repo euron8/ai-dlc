@@ -46,10 +46,12 @@ done
 RT="$REPO_ROOT/scripts/backlog-rotate.sh"
 RV="$REPO_ROOT/scripts/backlog-reverify.sh"
 LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+# The reverifier sources its could-not-measure rule from beside itself, so each root carries it.
+RLIB="$REPO_ROOT/scripts/backlog-receipt-lib.sh"
 # A MISSING SUBJECT IS NOT A PASS. Several arms below read a tool's output, and a run that
 # cannot invoke the tool produces empty output that would score green on anything phrased as an
 # absence.
-for f in "$RT" "$RV" "$LIB"; do
+for f in "$RT" "$RV" "$LIB" "$RLIB"; do
   [ -f "$f" ] || { echo "FIXTURE ERROR: cannot locate $f" >&2; exit 2; }
 done
 echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
@@ -817,6 +819,7 @@ mkroot() { # mkroot <name> -> echoes the root path
   printf '0.0.0-fixture-sandbox\n' > "$r/VERSION"
   cp "$LIB" "$r/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$RV" "$r/scripts/backlog-reverify.sh"
+  cp "$RLIB" "$r/scripts/backlog-receipt-lib.sh"
   printf '%s' "$r"
 }
 # THE BUILT COUNT IS A FILE, NOT A VARIABLE, AND THE FIRST VERSION OF THIS FIXTURE GOT IT WRONG.

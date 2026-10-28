@@ -58,6 +58,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # adds worktrees to the caller's repository rather than to the probe's, which is the same
 # defect with a larger blast radius.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# The validator's re-entry sentinel. Inherited from a receipt that runs this fixture, it would
+# make every probe run below skip its corpus and score nothing.
+unset BR_RECEIPTS_RUNNING
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -97,12 +100,31 @@ if [ -z "$REVSRC" ]; then
   echo "FIXTURE BROKEN: could not locate reconcile/ledger-reverify.sh" >&2; exit 2
 fi
 
+# The extractor whose STEP_RE the subject reads its F-STEP vocabulary from (BL-817 item 2). A probe
+# tree without it makes the subject refuse with exit 2 before any arm runs.
+EXTRACT=""
+for cand in \
+  "$DIR/../../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py" \
+  "$DIR/../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"; do
+  [ -f "$cand" ] && EXTRACT="$cand" && break
+done
+if [ -z "$EXTRACT" ]; then
+  echo "FIXTURE BROKEN: could not locate pipeline-efficiency-s317-s320/scripts/extract.py" >&2; exit 2
+fi
+
 # The shipping classifier: R2's declared-empty exemption asks it, so every seed carries it, and m8d
 # reads its marker.
 REVERIFY=""
 for cand in "$DIR/../../../scripts/backlog-reverify.sh" "$DIR/../../scripts/backlog-reverify.sh"; do
   [ -f "$cand" ] && REVERIFY="$cand" && break
 done
+RLIB=""
+for cand in "$DIR/../../../scripts/backlog-receipt-lib.sh" "$DIR/../../scripts/backlog-receipt-lib.sh"; do
+  [ -f "$cand" ] && RLIB="$cand" && break
+done
+if [ -z "$RLIB" ]; then
+  echo "FIXTURE BROKEN: could not locate scripts/backlog-receipt-lib.sh" >&2; exit 2
+fi
 
 TMP="$(mktemp -d)"
 # A PROBE REPOSITORY REGISTERS ITS OWN WORKTREES, and the subject removes them; this catches
@@ -155,9 +177,18 @@ seed() { # seed <dir>
   cp "$VALIDATOR" "$d/scripts/validate-backlog-receipts.sh"
   cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+  # The F-STEP vocabulary: the real extractor, and three step basenames (a main step, the gate,
+  # and a SUBPROC sub-procedure the vocabulary must drop).
+  mkdir -p "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts" "$d/core/skills/ai-dlc/steps"
+  cp "$EXTRACT" "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
+  : > "$d/core/skills/ai-dlc/steps/implementation.md"
+  : > "$d/core/skills/ai-dlc/steps/gate-validation.md"
+  : > "$d/core/skills/ai-dlc/steps/_gate-procedures.md"
   # R2's declared-empty exemption asks the classifier, so every seed carries it; a seed without it
   # turns every zero-entry probe into an environment exit 2.
   [ -n "$REVERIFY" ] && cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  # The could-not-measure rule both programs source from beside themselves.
+  cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
   printf 'alpha\nbeta\n' > "$d/probe/subject.txt"
   printf 'gamma\n' > "$d/probe/driven.txt"
   printf 'delta\n' > "$d/probe/guarded.txt"
@@ -198,9 +229,12 @@ bl_seed_ledger() { # bl_seed_ledger <file>
 # The subject takes a whitespace-separated env list because some probes pin a ceiling. The
 # split is the point of the function, not an oversight.
 # shellcheck disable=SC2086
+# `--max-cannot-measure 99` FIRST, so any probe's own argv can still pin it lower (the last flag
+# wins). Every seed here carries `|| exit 9` receipts on purpose, and R7 (BL-836) ships at 0; the
+# arms above R7's own (c5-*, which drive the subject without run_v) are about other ceilings.
 run_v() { # run_v <env-string-or-empty> <dir> [<extra-args>...]
   local e="$1" d="$2"; shift 2
-  ( cd "$d" && env $e bash scripts/validate-backlog-receipts.sh "$@" 2>&1 )
+  ( cd "$d" && env $e bash scripts/validate-backlog-receipts.sh --max-cannot-measure 99 "$@" 2>&1 )
 }
 
 # The default arguments every probe uses unless it is pinning something. The seeded ledger has
@@ -1271,6 +1305,10 @@ seed_memo() { # seed_memo <dir>
   printf '\nLIBPROBE_EXPORTED=1\nexport LIBPROBE_EXPORTED\n' >> "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
   cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
   [ -n "$REVERIFY" ] && cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
+  mkdir -p "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts" "$d/core/skills/ai-dlc/steps"
+  cp "$EXTRACT" "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
+  : > "$d/core/skills/ai-dlc/steps/implementation.md"
+  cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
   printf 'alpha\n' > "$d/probe/subject.txt"
   printf 'memo\n' > "$d/probe/memo.txt"
   printf 'probe\n' > "$d/probe/probe.txt"
@@ -1367,11 +1405,13 @@ memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|B
 # untagged-citing refusal. Each must turn exactly its own world red; E0 is part of the subject, so
 # a mutant the self-probe catches exits 2 -- which is a kill BY THE SELF-PROBE, asserted as such.
 EF_RUL='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
-EF_SHP='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive, lead active 0.4 h, subagent $5'
+EF_SEAT='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive, lead active 0.4 h, subagent $5'
+EF_SHP="$EF_SEAT, measured by docs/analysis/m.py, before 2.0 h and after 1.0 h"
 ef_seed() { # ef_seed <dir> <ledger-body>
   seed "$1"
   mkdir -p "$1/docs/analysis"
   printf '| row | EFROW phrase |\n**M.** Failure caught: EFFC phrase\n' > "$1/docs/analysis/v.md"
+  : > "$1/docs/analysis/m.py"
   printf '%s' "$2" > "$1/docs/backlog.md"
 }
 ef_rows() { printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: E" { print $3 " " $2 }' | LC_ALL=C sort | tr '\n' '|'; }
@@ -1537,6 +1577,95 @@ ef_mut m-nofiling 's/^      \[ "\$_a" = "1" \] .. \[ "\$_t" != "1" \] .. \[ "\$_
 Filed from docs/analysis/x.md with no tag.
 "
 
+# ===== BL-817 ITEM 1 REMAINDER AND ITEM 2: the measuring script, the before/after pair, and the
+# filing shape. Each offender world has a quiet twin one property apart:
+#   ef-noscript  a sprint line naming only an unresolved script and a RESOLVING `.sh:NN` value
+#                citation                                                    -> NO-SCRIPT
+#   ef-dirbase   the same line naming a resolving directory plus a bare basename under it -> OK
+#   ef-nofigs    `before` alone and the sprint pair `s319 to s320`           -> NO-FIGURES
+#   ef-topair    `$2.23 to 1.24` and no before/after word                    -> OK
+#   ef-filing    origin/main at a commit whose ledger holds BL-985 (tagged, no filing fields);
+#                the working ledger adds BL-986 (no fields) and BL-987 (all three)
+#                                       -> F-BASELINE, F-STEP, F-MOVEMENT for BL-986 only
+#   ef-filing-noref  the same ledger with no origin/main                     -> OK, "origin/main is absent"
+EF_SL_HEAD="# probe
+
+## BL-981
+
+**DEFECT (efficiency).** x. $EF_RUL
+
+**LANDED (v0.1.0, verified abc1234).**
+
+Outcome measured: graph s321, $EF_SEAT,"
+ef_world ef-noscript "$TMP/efnsc" "$EF_SL_HEAD measured by docs/analysis/gone.py from \`scripts/validate-backlog-receipts.sh:12\`, before 2.0 h and after 1.0 h; fell.
+" "NO-SCRIPT BL-981|" 1
+ef_world ef-dirbase "$TMP/efdb" "$EF_SL_HEAD \`docs/analysis/\` (m.py), before 2.0 h and after 1.0 h; fell.
+" "" 0
+EF_NOFIGS="$EF_SL_HEAD graph s319 to s320, measured by docs/analysis/m.py, 2.0 h before; fell.
+"
+ef_world ef-nofigs "$TMP/efnf" "$EF_NOFIGS" "NO-FIGURES BL-981|" 1
+ef_world ef-topair "$TMP/eftp" "$EF_SL_HEAD measured by docs/analysis/m.py, \$/shard \$2.23 to 1.24; fell.
+" "" 0
+EF_FBASE="# probe
+
+## BL-985
+
+**DEFECT (efficiency).** filed before the arm. $EF_RUL
+"
+EF_FADDED="$EF_FBASE
+## BL-986
+
+**DEFECT (efficiency).** added, no fields. $EF_RUL
+
+## BL-987
+
+**DEFECT (efficiency).** added, every field. $EF_RUL
+
+Baseline: s320
+Step: \`gate-validation[implementation]\`
+Expected movement: lead dollars per story fall.
+"
+ef_filing() { # ef_filing <name> <dir> <with-origin 0|1> <want-rows> <want-rc> <want-scope-text>
+  local out rc_v got
+  ef_seed "$2" "$EF_FBASE"
+  ( cd "$2" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m base >/dev/null 2>&1 )
+  [ "$3" = 1 ] && git -C "$2" update-ref refs/remotes/origin/main HEAD
+  printf '%s' "$EF_FADDED" > "$2/docs/backlog.md"
+  out="$( (cd "$2" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  got="$(ef_rows "$out")"
+  if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && grep -qF -- "$6" <<<"$out"; then
+    note "ok    $1 -- rc $rc_v, rows [${got}], scope [$6]"
+  else
+    note "FAIL  $1 -- rc $rc_v (want $5), rows [${got}] (want [$4]), scope text [$6] $(grep -qF -- "$6" <<<"$out" && echo present || echo ABSENT)"
+    printf '%s\n' "$out" | grep -v '^FAIL: E' | sed 's/^/      /' | head -4; rc=1
+  fi
+}
+ef_filing ef-filing "$TMP/effl" 1 "F-BASELINE BL-986|F-MOVEMENT BL-986|F-STEP BL-986|" 1 "FAIL: E: 3 efficiency finding(s)"
+ef_filing ef-filing-noref "$TMP/efflnr" 0 "" 0 "filing shape: 0 added entr(y/ies) judged, not evaluated -- origin/main is absent"
+# One mutant per new predicate, each made ALWAYS TRUE (the fixture-mutants convention: the guard
+# matches nothing). The kill is REQUIRED to be the subject's own E0 refusing (exit 2): a world
+# without origin/main reads rc 0 on the shipped subject too, so ef_mut's "turned green" branch would
+# score a survivor of a filing mutant as a kill. The unmutated controls are ef-noscript, ef-nofigs
+# and ef-filing above, which pass E0 on the same seed builder.
+ef_mut0() { # ef_mut0 <name> <sed> <ledger>
+  local d="$TMP/$1" out rc_v
+  ef_seed "$d" "$3"
+  mut "$d" "$2" || return
+  out="$( (cd "$d" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF 'SELF-PROBE FAILED -- E0' <<<"$out"; then
+    note "ok    $1 -- killed by the subject's own E0 self-probe before the corpus"
+  else
+    note "FAIL  $1 -- SURVIVED: rc $rc_v, E0 did not refuse"; rc=1
+  fi
+}
+ef_mut0 m-noscript 's/^eff_script_ok() {$/eff_script_ok() { return 0;/' "$EF_SL_HEAD measured by docs/analysis/gone.py, before 2.0 h and after 1.0 h; fell.
+"
+ef_mut0 m-nofigs 's/^eff_figs_ok() {$/eff_figs_ok() { return 0;/' "$EF_NOFIGS"
+ef_mut0 m-nostep 's/^eff_step_ok() {$/eff_step_ok() { return 0;/' "$EF_FADDED"
+ef_mut0 m-nobaseline 's/f != "@NONE@" \&\& f ~ \/^`?s3\[0-9\]\[0-9\](\[^0-9\]|\$)\/) bas = 1/1) bas = 1/' "$EF_FADDED"
+ef_mut0 m-nomovement 's/f != "@NONE@" \&\& f ~ \/\[A-Za-z0-9\]\/) mv = 1/1) mv = 1/' "$EF_FADDED"
+ef_mut0 m-noscope 's/ \&\& \[ -n "\${4:-}" \] \&\& grep -qxF -- "\$_l" "\$4"; then$/; then/' "$EF_FADDED"
+
 # ===== THE RECEIPT / FIXTURE-ARM JOIN (BL-278). ==============================================
 # A closed entry's receipt and the fixture arms covering the same subject divide the work: the
 # receipt establishes the fix is present, the arms establish what the receipt cannot express. That
@@ -1664,6 +1793,232 @@ elif grep -qE '^(UNCOVERED|UNREPRODUCED) ' <<<"$rj_out"; then
 else
   note "ok    rj-join -- $rj_b of $rj_n seeded shapes are receipt-blind, and every one carries a gate-verdict-grep-shape row its own oracle reproduces"
 fi
+
+# ===== BL-836. OPEN receipts that CANNOT MEASURE (R7), and closes on the branch whose receipts
+# do not exit 0 (R8). =============================================================================
+# One probe repository with a base commit and a branch commit, driven through the shipped script
+# with --root (the subject ignores a probe tree otherwise: it resolves its root from the ledger)
+# and --base at the base sha (a probe repository has no origin/main).
+#   BL-861  stamped LANDED on the branch; its receipt greps a symbol the branch RENAMED -> R8 (d)
+#   BL-862  OPEN; its receipt exits 9                                                 -> R7 (b)
+#   BL-863  OPEN; its receipt exits 2, a reproduction code                            -> neither (a)
+# Control: the unmutated subject FAILS naming exactly A under R8 and B under R7, and C nowhere.
+# Mutants: c5-m1 the closed-on-branch population dropped (R8 must go silent on A); c5-m2 the
+# cannot-measure ceiling back at 1 (R7 must go silent on B); c5-m3 exit 9 out of the FAIL set
+# (the subject's self-probe refuses). Each is killed by its own row and only that row.
+# BL-801 rides along unchanged from the main seed: it is the one SCORED receipt, so R2's zero-scored
+# refusal does not pre-empt the two rows this arm reads.
+c5_ledger() { # c5_ledger <stamp 0|1>
+  printf '# Probe backlog\n\n'
+  printf '## BL-801\n\nBody.\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK801'"
+  printf '## BL-861\n\n'; [ "$1" = 1 ] && printf '**LANDED (v0.0.1, verified probe).**\n\n'
+  printf 'verify: sh grep -q %s probe/bg.sh\n\n' "'bg1_killed'"
+  printf '## BL-862\n\nverify: sh exit 9\n\n'
+  printf '## BL-863\n\nverify: sh exit 2\n\n'
+}
+c5_seed() { # c5_seed <dir>
+  local d="$1"
+  seed "$d"
+  printf 'bg1_killed() { :; }\n' > "$d/probe/bg.sh"
+  c5_ledger 0 > "$d/docs/backlog.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5base >/dev/null 2>&1 )
+  git -C "$d" rev-parse HEAD > "$d/.c5base"
+  printf 'bg1_convicts() { :; }\n' > "$d/probe/bg.sh"
+  c5_ledger 1 > "$d/docs/backlog.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5branch >/dev/null 2>&1 )
+  [ -s "$d/.c5base" ] || { echo "FIXTURE BROKEN: c5 probe has no base sha" >&2; exit 2; }
+}
+C5_ARGS="--max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --min-sh-receipts 0 --min-entries 0"
+c5_run() { # c5_run <dir> -> output with rc on the last line
+  local d="$1"
+  ( cd "$TMP" && bash "$d/scripts/validate-backlog-receipts.sh" "$d/docs/backlog.md" --root "$d" --base "$(cat "$d/.c5base")" $C5_ARGS 2>&1; echo "rc=$?" )
+}
+c5_rows() { # c5_rows <output> -> "R8:<ids> R7:<ids>"
+  printf 'R8:%s R7:%s' \
+    "$(printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: R8" { printf "%s,", $2 }')" \
+    "$(printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: R7" { printf "%s,", $2 }')"
+}
+c5_seed "$TMP/c5ctl"
+c5_out="$(c5_run "$TMP/c5ctl")"
+c5_got="$(c5_rows "$c5_out")"
+if ! grep -qx 'rc=1' <<<"$c5_out"; then
+  note "FAIL  c5-control -- the subject exited $(tail -1 <<<"$c5_out") over a branch closing BL-861 on a renamed symbol and carrying an exit-9 open receipt; it must exit 1"
+  printf '%s\n' "$c5_out" | grep -E '^FAIL|SELF-PROBE|validate-backlog-receipts:' | sed 's/^/      /' | head -5; rc=1
+elif [ "$c5_got" != "R8:BL-861, R7:BL-862," ]; then
+  note "FAIL  c5-control -- rows read '$c5_got', want 'R8:BL-861, R7:BL-862,' (BL-863 exits 2, a reproduction, and must be in neither)"; rc=1
+elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base ' <<<"$c5_out"; then
+  note "FAIL  c5-control -- no CLOSED-POPULATION line naming 1 receipt run"; rc=1
+else
+  note "ok    c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither"
+  C5_BASE_OK=1
+fi
+c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-probe refusal must name>]
+  local n="$1" d="$TMP/$1"
+  c5_seed "$d"
+  mut "$d" "$2" || return
+  local o g
+  o="$(c5_run "$d")"; g="$(c5_rows "$o")"
+  if [ "${C5_BASE_OK:-0}" != 1 ]; then note "FAIL  $n -- the unmutated control did not pass, so this verdict is void"; rc=1
+  elif [ -n "${5:-}" ] && grep -q 'SELF-PROBE FAILED' <<<"$o"; then
+    # A self-probe kill counts only when the refusal names THIS mutant's target seed, so a refusal
+    # from an unrelated arm cannot score it.
+    if grep -F 'SELF-PROBE FAILED' <<<"$o" | grep -qF "seed $5:"; then note "ok    $n -- killed by the subject's own self-probe on its target $5 before the corpus: $4"
+    else note "FAIL  $n -- the self-probe refused, but not on its target $5: $(grep -F 'SELF-PROBE FAILED' <<<"$o" | sed -n '1p' | cut -c1-200)"; rc=1; fi
+  elif grep -q 'SELF-PROBE FAILED' <<<"$o"; then note "ok    $n -- killed by the subject's own self-probe before the corpus: $4"
+  elif [ "$g" = "$3" ]; then note "ok    $n -- killed: rows now read '$g' -- $4"
+  else note "FAIL  $n -- SURVIVED or entangled: rows read '$g', want '$3' or a self-probe refusal"; printf '%s\n' "$o" | grep -E '^FAIL' | head -3 | sed 's/^/      /'; rc=1
+  fi
+}
+# Both mutants sit where the self-probe cannot see them -- the corpus call and the shipped ceiling --
+# so the CORPUS row is what scores each. c5-m3 empties the FAIL set itself, which the self-probe's
+# seed (b) refuses before the corpus, and is asserted as that.
+c5_mut c5-m1 's#^CLOSED_OUT="\$(score_closed "\$LEDGER" "\$SUBJECT_ROOT" "\$BASE_REF")" || exit 2$#CLOSED_OUT=""#' \
+  "R8: R7:BL-862," "with the closed-on-branch population dropped, the renamed-symbol close is never run"
+c5_mut c5-m2 's|^DEFAULT_MAX_CM=0$|DEFAULT_MAX_CM=1|' \
+  "R8:BL-861, R7:" "with the cannot-measure ceiling back at 1, the exit-9 open receipt passes"
+c5_mut c5-m3 's|^      9) printf .exit-9. ;;$|      9) : ;;|' \
+  "R8:BL-861, R7:" "with exit 9 out of the FAIL set, seed (b) no longer reads cannot-measure" BL-972
+
+# ===== BL-836, RE-ENTRY (BR_RECEIPTS_RUNNING). A receipt that invokes pre-push re-enters this
+# validator from inside the run executing it, through R8 (closed) or through the open scorer (R7). The probe repository carries a `.githooks/pre-push` holding the receipts step's own
+# invocation, and BL-864, stamped LANDED on the branch, runs that hook and asserts the inner run
+# printed `CLOSED-POPULATION: SKIPPED`. The seed BOUNDS ITSELF: the receipt counts its depth in
+# C5R_DEPTH and exits 7 at depth 2, so a validator ignoring the sentinel stops after three runs
+# instead of hanging. Every receipt run appends one line to C5R_LOG.
+#   control  rc 0, no R8 row, BL-864 run once (log 1 line), the inner skip line seen by the receipt
+#   c5-m4    the sentinel ignored on entry: BL-864 FAILs under R8, the log holds 3 lines (bounded)
+# The OPEN half (BL-865): the same receipt on an OPEN entry, asserting `OPEN-POPULATION: SKIPPED`.
+# The scorer runs an open receipt more than once (base, re-read, seed), so its run count is not 1;
+# the control's count is recorded and the mutant must exceed it, with the receipt's base exit
+# flipping from 0 to non-zero because the inner run no longer says SKIPPED.
+#   c5r-open-control  rc 0, BL-865's row reads ALREADY-PASSING (base exit 0), the inner skip line seen
+#   c5-m4 (open)      the sentinel ignored on entry: BL-865 no longer ALREADY-PASSING, more runs
+c5r_seed() { # c5r_seed <dir> <closed|open> [<sed>] -- a mutant is applied BEFORE the base commit, so
+  # the checkout every receipt runs in, and the validator the hook re-enters, are the mutated copy.
+  local d="$1" mode="$2"
+  seed "$d"
+  if [ -n "${3:-}" ]; then mut "$d" "$3" || return 1; fi
+  mkdir -p "$d/.githooks"
+  printf '#!/usr/bin/env bash\nexec bash scripts/validate-backlog-receipts.sh docs/backlog.md --base HEAD~1 %s\n' "$C5_ARGS" > "$d/.githooks/pre-push"
+  c5r_ledger() { # c5r_ledger <stamp 0|1> <closed|open>
+    local id=BL-864 pop=CLOSED
+    [ "$2" = open ] && { id=BL-865; pop=OPEN; }
+    printf '# Probe backlog\n\n'
+    printf '## BL-801\n\nBody.\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK801'"
+    printf '## %s\n\n' "$id"; [ "$1" = 1 ] && [ "$2" = closed ] && printf '**LANDED (v0.0.1, verified probe).**\n\n'
+    printf 'verify: sh echo run >> "${C5R_LOG:-/dev/null}"; dp="${C5R_DEPTH:-0}"; [ "$dp" -lt 2 ] || exit 7; o="$(C5R_DEPTH=$(( dp + 1 )) bash .githooks/pre-push 2>&1)"; grep -q "^%s-POPULATION: SKIPPED " <<<"$o"\n\n' "$pop"
+  }
+  c5r_ledger 0 "$mode" > "$d/docs/backlog.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5rbase >/dev/null 2>&1 )
+  git -C "$d" rev-parse HEAD > "$d/.c5base"
+  c5r_ledger 1 "$mode" > "$d/docs/backlog.md"
+  printf 'branch\n' > "$d/probe/branch.txt"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5rbranch >/dev/null 2>&1 )
+  [ -s "$d/.c5base" ] || { echo "FIXTURE BROKEN: c5r probe has no base sha" >&2; exit 2; }
+}
+# THE TIMEOUT GUARD. The depth cap above bounds the recursion; the watchdog bounds everything else,
+# so a regression that hangs this arm turns into a FAIL instead of a wedged suite. It kills only
+# the pid it started.
+C5R_TIMEOUT=600
+c5r_case() { # c5r_case <name> <closed|open> <sed-or-empty> -> sets C5R_OUT, C5R_RUNS
+  local d="$TMP/$1" p w
+  c5r_seed "$d" "$2" "$3" || return 1
+  : > "$TMP/$1.log"
+  ( export C5R_LOG="$TMP/$1.log"; c5_run "$d" > "$TMP/$1.out" ) & p=$!
+  ( sleep "$C5R_TIMEOUT" & s=$!; trap 'kill -TERM "$s" 2>/dev/null; exit 0' TERM; wait "$s"; kill -TERM "$p" 2>/dev/null ) >/dev/null 2>&1 & w=$!
+  wait "$p"
+  kill -TERM "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  C5R_OUT="$(cat "$TMP/$1.out")"
+  grep -q '^rc=' <<<"$C5R_OUT" || C5R_OUT="$C5R_OUT
+rc=timeout"
+  C5R_RUNS="$(grep -c . "$TMP/$1.log")" || C5R_RUNS=0
+  return 0
+}
+c5r_row() { printf '%s\n' "$C5R_OUT" | awk -F'\t' -v id="$1" '$2 == id { print $1 "|" $3 }'; }
+# c5-m4: the sentinel ignored on entry -- the run-level decision is never "re-entry". It edits the
+# CALL, not re_entry_of, so the self-probe (which drives re_entry_of directly) still passes and the
+# corpus arm below is what kills it.
+C5R_M4='s|^RE_ENTRY="\$(re_entry_of "\${BR_RECEIPTS_RUNNING:-}" "\$LEDGER_KEY")"$|RE_ENTRY=""|'
+if c5r_case c5r-ctl closed ""; then
+  c5r_rows="$(c5_rows "$C5R_OUT")"
+  if ! grep -qx 'rc=0' <<<"$C5R_OUT"; then
+    note "FAIL  c5r-control -- a closed receipt re-entering the validator through pre-push exited $(tail -1 <<<"$C5R_OUT"), rows '$c5r_rows', receipt runs $C5R_RUNS; it must exit 0 with BL-864 run once"
+    printf '%s\n' "$C5R_OUT" | grep -E '^FAIL|SELF-PROBE|CLOSED-POPULATION' | sed 's/^/      /' | head -5; rc=1
+  elif [ "$C5R_RUNS" != 1 ]; then
+    note "FAIL  c5r-control -- BL-864's receipt ran $C5R_RUNS times, want exactly 1 (R8 once, the inner run skipping it)"; rc=1
+  elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base .*, 0 not exiting 0\.$' <<<"$C5R_OUT"; then
+    note "FAIL  c5r-control -- no CLOSED-POPULATION line naming 1 receipt run and 0 failing"; rc=1
+  else
+    note "ok    c5r-control -- BL-864 re-entered the validator through pre-push, the inner run printed SKIPPED, R8 ran it once and it exited 0"
+    C5R_BASE_OK=1
+  fi
+fi
+if c5r_case c5-m4 closed "$C5R_M4"; then
+  c5r_rows="$(c5_rows "$C5R_OUT")"
+  if [ "${C5R_BASE_OK:-0}" != 1 ]; then note "FAIL  c5-m4 -- the unmutated control did not pass, so this verdict is void"; rc=1
+  elif [ "$c5r_rows" = "R8:BL-864, R7:" ] && [ "$C5R_RUNS" = 3 ]; then
+    note "ok    c5-m4 -- killed: with the sentinel ignored R8 re-ran inside itself, BL-864 FAILs and the bounded seed stopped at 3 runs"
+  else
+    note "FAIL  c5-m4 -- SURVIVED or entangled: rows '$c5r_rows', receipt runs $C5R_RUNS, want 'R8:BL-864, R7:' and 3"; rc=1
+  fi
+fi
+C5R_OPEN_RUNS=""
+if c5r_case c5r-open-ctl open ""; then
+  c5r_r="$(c5r_row BL-865)"
+  if ! grep -qx 'rc=0' <<<"$C5R_OUT"; then
+    note "FAIL  c5r-open-control -- an OPEN receipt re-entering the validator through pre-push exited $(tail -1 <<<"$C5R_OUT"), row '$c5r_r', receipt runs $C5R_RUNS; it must exit 0"
+    printf '%s\n' "$C5R_OUT" | grep -E '^FAIL|SELF-PROBE|POPULATION' | sed 's/^/      /' | head -5; rc=1
+  else
+    # The corpus row prints STATUS and paths only; ALREADY-PASSING is the status of a base exit 0.
+    case "$c5r_r" in
+      "ALREADY-PASSING|"*) note "ok    c5r-open-control -- BL-865 (OPEN) re-entered the validator through pre-push, the inner run printed OPEN-POPULATION: SKIPPED, row ALREADY-PASSING (base exit 0), $C5R_RUNS receipt run(s)"; C5R_OPEN_RUNS="$C5R_RUNS" ;;
+      *) note "FAIL  c5r-open-control -- BL-865's row read '$c5r_r', want ALREADY-PASSING (base exit 0: the inner run must say OPEN-POPULATION: SKIPPED)"; rc=1 ;;
+    esac
+  fi
+fi
+if c5r_case c5-m4-open open "$C5R_M4"; then
+  c5r_r="$(c5r_row BL-865)"
+  if [ -z "$C5R_OPEN_RUNS" ]; then note "FAIL  c5-m4-open -- the unmutated open control did not pass, so this verdict is void"; rc=1
+  else
+    # KILLED means: the bounded seed ran more often than under the control (the open scorer re-ran
+    # inside itself) and BL-865 is no longer ALREADY-PASSING, because the inner run stopped saying
+    # SKIPPED. The gate's exit is NOT the signal on this path: a base exit of 1 is in-population
+    # for the open scorer, so the mutant's gate exits 0 and terminates only by the seed's depth cap.
+    # A self-probe refusal would be a different kill, from a mutant this one is not.
+    c5r_rc="$(tail -1 <<<"$C5R_OUT")"
+    if grep -q 'SELF-PROBE FAILED' <<<"$C5R_OUT"; then
+      note "FAIL  c5-m4-open -- entangled: the self-probe refused, so the corpus path this mutant targets was never reached"; rc=1
+    elif [ "$C5R_RUNS" -gt "$C5R_OPEN_RUNS" ] && case "$c5r_r" in "ALREADY-PASSING|"*) false ;; *) true ;; esac; then
+      note "ok    c5-m4-open -- killed: with the sentinel ignored the open scorer re-ran inside itself, the bounded seed ran $C5R_RUNS times against the control's $C5R_OPEN_RUNS and BL-865 is no longer ALREADY-PASSING (row '${c5r_r:-not printed}', $c5r_rc)"
+    else
+      note "FAIL  c5-m4-open -- SURVIVED: row '${c5r_r:-none}', $c5r_rc, receipt runs $C5R_RUNS against the control's $C5R_OPEN_RUNS"; rc=1
+    fi
+  fi
+fi
+# The two exports, each dropped: the self-probe's BL-976 (open) and BL-987 (closed) refuse first.
+c5_mut c5-m5 's|BR_RECEIPTS_RUNNING="\$_sl_key" xargs|xargs|' \
+  "unreachable" "with the sentinel no longer exported to OPEN receipts, seed BL-976 fails" BL-976
+c5_mut c5-m6 's|BR_RECEIPTS_RUNNING="\$_sc_key" xargs|xargs|' \
+  "unreachable" "with the sentinel no longer exported to CLOSED receipts, seed BL-987 fails" BL-987
+# The FAIL set's 126 arm and its >= 128 branch, each removed: seeds BL-977 and BL-978 refuse.
+c5_mut c5-m7 "/^      126) printf 'exit-126' ;;\$/d" \
+  "unreachable" "with the 126 arm deleted, seed BL-977 no longer reads cannot-measure=exit-126" BL-977
+c5_mut c5-m8 's|^      \*) if \[ "\$1" -ge 128 \]; then|      *) if [ "$1" -ge 999 ]; then|' \
+  "unreachable" "with the signal branch moved to >= 999, seed BL-978 no longer reads cannot-measure=exit-130" BL-978
+# A rotation without its new-to-the-archive condition: the retitled archive heading BL-988 is run.
+c5_mut c5-m9 '/^    grep -qxF -- "\$_l" <<<"\$_sc_archwas" \&\& continue$/d' \
+  "unreachable" "with the new-to-the-archive condition dropped, the retitled archive heading BL-988 is run as a rotation" BL-988
+# The rejected spelling of that condition -- removed from the live ledger -- drops a release's own
+# close (BL-989: filed and rotated on the branch, live at neither end).
+c5_mut c5-m10 's|^    grep -qxF -- "\$_l" <<<"\$_sc_archwas" \&\& continue$|    git -C "$_sc_root" show "${_sc_mb}:${_sc_rel}" 2>/dev/null \| grep -qF -- "## $_l" \|\| continue|' \
+  "unreachable" "with the condition spelled removed-from-live, the filed-and-rotated close BL-989 is not run" BL-989
+# The re-entry decision keyed on PRESENCE only, the shape before the key: a validator a receipt
+# starts over a ledger of its own seeding reads as a re-entry (BL-227's archived receipt).
+c5_mut c5-m11 "s|^  \\[ -n \"\\\$1\" \\] \\&\\& \\[ \"\\\$1\" = \"\\\$2\" \\] \\&\\& printf '1'\$|  [ -n \"\$1\" ] \\&\\& printf '1'|" \
+  "unreachable" "with the skip keyed on presence only, a foreign-ledger run reads as a re-entry and would score nothing" BL-979
+# The key without its repository half: two repositories with a ledger at one relative path share it.
+c5_mut c5-m12 "s/^  printf '%s|%s' \"\\\$_lk_cd\" \"\\\$_lk_led\"\$/  printf '%s' \"\$_lk_led\"/" \
+  "unreachable" "with the common dir dropped from the key, two repositories' docs/backlog.md share one key" BL-979
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-receipt-binding -- control green, every mutant killed by its own assertion"

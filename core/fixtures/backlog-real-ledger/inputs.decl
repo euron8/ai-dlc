@@ -9,3 +9,5 @@ core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 +docs/backlog.md
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
++docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py
+scripts/backlog-receipt-lib.sh

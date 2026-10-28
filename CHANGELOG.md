@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.960.0] - 2026-10-28
+
+Batch b245, cluster c5. It files and closes one entry, BL-848, and records progress on two, BL-836 and BL-817, both of which stay PARTIAL with `verify: manual`. No `PC-` id is closed. NET: entries closed 1 minus filed 1 = 0.
+
+### BL-848 — the 26(c) Class 1b scan reads a complete triple written with the plural "Failures caught:" as missing its failure field
+
+- The defect. `core/scripts/audit-rule-files.sh` accepted only the singular at `:711` (`FIELD_OPENER`) and `:712` (`FC`). On a headed block `FC` alone decides, so a complete triple written `Failures caught:` read as missing its failure field and graph's s320 rule-file audit flagged `core/skills/ai-dlc/steps/retro.md:102`. On a headless block `FIELD_OPENER` decides whether a block opens at all, so an incomplete headless plural block read CLEAN.
+- The fix. Both regexes accept the plural, and `retro.md` uses the singular `Failure caught:` that `core/skills/ai-dlc/rule-authoring.md:99` names as the contract's field.
+- Fixture. `core/fixtures/retro-audit-scans/run.sh` gains a headed complete plural triple asserting `INCOMPLETE_26C: CLEAN` and a headless plural `Failures caught:` with no other two fields asserting FLAGGED. Two mutants: `FC` reverted kills the first arm, `FIELD_OPENER` reverted kills the second.
+- BL-848 is filed and closed in this release, with a `verify: sh` receipt seeding both shapes.
+
+### BL-836 — progress: the receipt step also executes closed-on-branch receipts
+
+- The existing bare receipt step at pre-push extends rather than gaining a mode. Its population widens to entries stamped `**LANDED` or rotated on the branch, expected exit exactly 0. Open entries FAIL on exit 9, the `cant_measure` own-shell route, 126 and 128 or more, and not on bare 127 or 2 through 8.
+- The could-not-measure rule moves into a new helper, `scripts/backlog-receipt-lib.sh`, which both `scripts/backlog-reverify.sh` and the validator source. R7's ceiling is 0, and mutants c5-m1, c5-m2, c5-m3, c5-m7 and c5-m8 (the last two removing the 126 arm and the 128-and-above branch) are each killed. A rotation counts only when the heading is added in the archive diff and the id was not archived at the merge-base, so a retitled archived entry is not run and an entry filed and rotated in the same release still is (mutants c5-m9 and c5-m10 killed).
+- Neither receipt executor can recurse. The open scorer and `score_closed` export `BR_RECEIPTS_RUNNING` to every receipt, and its value is the ledger's identity: the repository's git common dir plus the ledger's path relative to the root. Only a nested run over the same ledger skips, executing no corpus receipt and printing `OPEN-POPULATION: SKIPPED` and `CLOSED-POPULATION: SKIPPED`. A receipt that runs the validator on a ledger of its own seeding is still scored (BL-227's archived receipt exits 0 with the variable set to another ledger). Mutant c5-m11 restores the presence-only key and is killed. `backlog-receipt-binding` arm c5r drives one closed and one open such receipt. Mutant c5-m4 (sentinel ignored) is killed on both paths by depth-bounded seeds, and c5-m5 and c5-m6 (each export dropped) are killed by the self-probe.
+- The open-entry population is empty today (0 live `verify: sh` entries) and prints as a counted empty line. An open entry's rename under `grep -q` exits 1 and cannot be told from STILL-LIVE, so that shape cannot fire and the entry stays PARTIAL, `verify: manual`.
+
+### BL-817 — progress: an efficiency outcome names its script and a before/after pair; a new efficiency filing states baseline, step and expected movement
+
+- `scripts/validate-backlog-receipts.sh`: a sprint-branch `Outcome measured:` line must name the script that measured it (NO-SCRIPT), either a resolving `.py`/`.sh` path or a resolving directory token plus a bare basename under it. A `path:line` value citation does not count. The line must also give a before and an after figure (NO-FIGURES): the words `before` and `after`, or a `<num> to <num>` pair, where a sprint pair such as `s319 to s320` is not a figure pair. No-step lines are exempt from both.
+- On the live ledger only, never under `--archive`, a tagged efficiency entry added since the merge-base with `origin/main` must carry `Baseline: s3NN` (F-BASELINE), `Step: <token>` (F-STEP) and a non-empty `Expected movement:` (F-MOVEMENT), unless it says there is no graph pipeline step. The step vocabulary is read at run time from `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` (its `STEP_RE` matches less `SUBPROC`, plus `pre-step` and `gate-validation[<step>]`). A missing extractor is refused with exit 2, and an absent `origin/main` skips the filing-shape arm and says so.
+
 ## [0.959.0] - 2026-10-27
 
 Batch b245, cluster c1. It carries BL-685 D-r9b-1, which stays PARTIAL with `verify: manual`. No `PC-` id is closed. NET: entries closed 0 minus filed 0 = 0.

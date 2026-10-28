@@ -99,7 +99,7 @@ Step 7a. If the fast-forward refuses because local `main` holds commits
 `origin/main` lacks, STOP and resolve that before branching. Step 5c's
 Check 7 fails a retro branch that is behind `origin/main`.
 
-**Minimum mechanism (Rule 26(c)).** Failures caught: a retro PR that carries
+**Minimum mechanism (Rule 26(c)).** Failure caught: a retro PR that carries
 the sprint's diff a second time and cannot merge; and a retro branch that lacks
 every sprint commit made after the sprint PR squash-merged, so the retro reads
 incomplete files and Step 7a-post rotates a gate log missing its deploy-validate

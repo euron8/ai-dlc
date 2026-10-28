@@ -704,12 +704,12 @@ emit("NARRATIVE_DRIFT", hits, 2)
 # there made the emptiest blocks the only ones the scan could not see.
 print("--- Class 1b: Incomplete Rule 26(c) Triple (tier 2) ---")
 HEAD_OPENER = re.compile(r"(\*\*|#+\s*)Minimum mechanism\b", re.I)
-# `Failure caught:` opens a block only when none is open. A block whose heading is
+# `Failure caught:` (or the plural) opens a block only when none is open. A block whose heading is
 # on one line and whose first field is on the next is ONE block; treating the field
 # as a second opener left the heading alone in a block of its own and reported a
 # complete triple as supplying nothing.
-FIELD_OPENER = re.compile(r"Failure caught:", re.I)
-FC = re.compile(r"failure\s+caught|\bcatches:", re.I)
+FIELD_OPENER = re.compile(r"Failures? caught:", re.I)
+FC = re.compile(r"failures?\s+caught|\bcatches:", re.I)
 FP = re.compile(r"false[-\s]*positive", re.I)
 RM = re.compile(r"removal\s+condition|retired?s?\s+when|removed?\s+when|drop\s+this\s+gate\s+once", re.I)
 hits = []

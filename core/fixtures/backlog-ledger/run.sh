@@ -39,6 +39,10 @@ RT="$(pick "$HERE/../../../scripts/backlog-rotate.sh"   "$HERE/../../scripts/bac
 # invoke one produces empty output and would score green on anything phrased as an absence.
 [ -n "$RV" ] || { echo "FIXTURE ERROR: cannot locate scripts/backlog-reverify.sh" >&2; exit 2; }
 [ -n "$RT" ] || { echo "FIXTURE ERROR: cannot locate scripts/backlog-rotate.sh" >&2; exit 2; }
+# The could-not-measure rule the engine sources from beside itself. Every root below that carries a
+# copy of the engine carries this too, or the copy refuses INPUT-UNRESOLVED and emits no row.
+RLIB="$(dirname "$RV")/backlog-receipt-lib.sh"
+[ -f "$RLIB" ] || { echo "FIXTURE ERROR: cannot locate scripts/backlog-receipt-lib.sh beside $RV" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$RV")" && pwd)/${RV##*/}"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$RT")" && pwd)/${RT##*/}"
 
@@ -201,6 +205,7 @@ mkdir -p "$MROOT/scripts" "$MROOT/core/skills/ai-dlc-update/reconcile"
 printf '0.0.0\n' > "$MROOT/VERSION"
 cp "$(dirname "$RV")/../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" 2>/dev/null \
   || cp "$(dirname "$RV")/../../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+cp "$RLIB" "$MROOT/scripts/backlog-receipt-lib.sh"
 MUT="$MROOT/scripts/backlog-reverify.sh"
 # The guard line is the anchor for both; assert it is unique so a sed cannot edit a second copy.
 GN="$(grep -c '^ *if ! bash -n -c "\$SH_PROG" >/dev/null 2>&1; then$' "$RV")" || GN=0
@@ -618,12 +623,16 @@ else
   fi
 fi
 # THE OWN-PREFIX DROPPED: the three strings matched on any stderr line. The near-misses must die.
-PFN="$(grep -c '^      "\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$' "$RV")" || PFN=0
-if [ "$PFN" -eq 1 ]; then ok "prefix-anchor" "the own-interpreter prefix line is unique in the engine"
+# The prefix rule lives in scripts/backlog-receipt-lib.sh, which the engine sources from beside
+# itself, so the mutation edits the mutant root's COPY of that helper and drives an unmutated engine.
+PFN="$(grep -c '^      "\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$' "$RLIB")" || PFN=0
+if [ "$PFN" -eq 1 ]; then ok "prefix-anchor" "the own-interpreter prefix line is unique in the helper"
 else bad "prefix-anchor" "the own-interpreter prefix line appears $PFN times; the mutation below needs exactly one"; fi
-if ! sed 's/^\(      \)"\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$/\1*) ;;/' "$RV" > "$MUT"; then
+cp "$RV" "$MUT"
+MLIB="$MROOT/scripts/backlog-receipt-lib.sh"
+if ! sed 's/^\(      \)"\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$/\1*) ;;/' "$RLIB" > "$MLIB"; then
   bad "mutation-no-prefix" "DID NOT APPLY: sed failed"
-elif cmp -s "$RV" "$MUT"; then
+elif cmp -s "$RLIB" "$MLIB"; then
   bad "mutation-no-prefix" "DID NOT APPLY: the mutation matched nothing"
 else
   MOUT="$(bash "$MUT" "$LF" 2>&1)"
@@ -635,6 +644,8 @@ else
     ok "mutation-no-prefix" "killed: any stderr line counted — $why"
   fi
 fi
+# Restore the mutant root's helper: every later drive through this root must use the clean rule.
+cp "$RLIB" "$MLIB"
 
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
@@ -798,6 +809,7 @@ RR="$WORK/rot-root"
 mkdir -p "$RR/scripts" "$RR/core/skills/ai-dlc-update/reconcile"
 printf '0.0.0\n' > "$RR/VERSION"
 cp "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" "$RR/core/skills/ai-dlc-update/reconcile/lib.sh"
+cp "$RLIB" "$RR/scripts/backlog-receipt-lib.sh"
 cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
 cat > "$RR/scripts/backlog-reverify.sh" <<'EOW'
 #!/usr/bin/env bash
@@ -1017,6 +1029,7 @@ p_mut() { # p_mut <name> <sed-expr> -> echoes the mutated engine path, empty whe
   mkdir -p "$r/scripts" "$r/core/skills/ai-dlc-update/reconcile"
   printf '0.0.0\n' > "$r/VERSION"
   cp "$RV" "$r/scripts/backlog-reverify.sh"
+  cp "$RLIB" "$r/scripts/backlog-receipt-lib.sh"
   sed "$2" "$LIBP" > "$r/core/skills/ai-dlc-update/reconcile/lib.sh" || return 1
   cmp -s "$LIBP" "$r/core/skills/ai-dlc-update/reconcile/lib.sh" && return 1
   printf '%s' "$r/scripts/backlog-reverify.sh"

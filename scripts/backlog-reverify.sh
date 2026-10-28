@@ -258,51 +258,20 @@ fi
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
-# A RECEIPT THAT EXITS NON-ZERO HAVING MEASURED NOTHING IS NOT A REPRODUCTION (BL-089, second
-# subject). The eval's stderr used to go to /dev/null, so `receipt_path_tokens: command not
-# found` (BL-081's receipt, after its helper moved one line above a `sed` range) and a fragment
-# that dies at eval time (BL-066's) read STILL-LIVE in the same words as a live defect.
-#
-# cant_measure <rc>, stderr on stdin: prints why the receipt could not measure, or nothing.
-# ONLY THE RECEIPT'S OWN INTERPRETER COUNTS. `eval` runs inside this script, so bash prefixes
-# its own diagnostics with `$0: line N:` or `$0: eval: line N:`; a subject's diagnostics carry
-# ITS name (`cat:`, `bash:`, `./x.sh: line N:`). That prefix is what separates "the receipt's
-# shell could not run it" from "the subject failed, which may be the defect". Matched as a
-# quoted `case` literal, never a regex: `$0` is a path and carries metacharacters.
-#
-# THE NARROWING, MEASURED BEFORE THIS SHIPPED. Candidates were exit 127 on any stderr, and exit
-# 1/2/127 with `command not found`, `syntax error` or `No such file or directory` anywhere. The
-# census ran every live receipt through this engine (36) and the archived ones through
-# `--closed-receipts` (300 of 309; the 11 that run the whole pre-push suite were excluded),
-# logging rc and every stderr line carrying a candidate string. Own-prefix matches: ZERO, so
-# the routed set moves no real row. Unprefixed: ONE, a subject's `cat: ...: No such file` in a
-# receipt that exits 0. The census hook was proven able to fire first: a probe ledger scored an
-# own-prefix `command not found`, a subject-side `No such file` and an `unbound variable`.
-# Unprefixed matching is refused anyway: a subject that prints `No such file` and exits 1 is exactly
-# how several receipts OBSERVE their defect, so that route would hide live entries. Exit 127
-# alone is refused for the same reason from the other side -- `bash "$subject"` returns 127
-# when the SUBJECT calls a helper it does not ship, which is a defect a receipt may be
-# asserting. `unbound variable` is not routed: the engine's `set -u` reaches receipts, and
-# widening to it is a separate decision.
+# cant_measure <rc>, stderr on stdin: prints why the receipt could not measure, or nothing (BL-089,
+# second subject). It is SHARED with scripts/validate-backlog-receipts.sh, which runs the same
+# receipts at pre-push, so it lives in scripts/backlog-receipt-lib.sh -- whose header carries the
+# grammar, the own-interpreter prefix rule and the narrowing that measured its false-positive set --
+# and is sourced here, at the position the in-file definition held, so it is NOT among LIB_FNS and
+# stays visible inside each receipt's subshell exactly as before. SELF_NAME is the `$0` this
+# script's receipts are `eval`led under, which is what the prefix rule keys on.
 SELF_NAME="$0"
-cant_measure() {
-  local rc="$1" line msg
-  case "$rc" in 1|2|127) ;; *) return 0 ;; esac
-  while IFS= read -r line; do
-    case "$line" in
-      "$SELF_NAME: line "*|"$SELF_NAME: eval: line "*) ;;
-      *) continue ;;
-    esac
-    case "$line" in
-      *": command not found"|*"syntax error"*|*": No such file or directory")
-        msg="${line#"$SELF_NAME: "}"
-        msg="${msg//	/ }"
-        printf "its own shell reported '%s'" "$(printf '%s' "$msg" | cut -c1-200)"
-        return 0 ;;
-    esac
-  done
-  return 0
-}
+RECEIPT_LIB="$REPO_ROOT/scripts/backlog-receipt-lib.sh"
+if [ ! -f "$RECEIPT_LIB" ]; then
+  unresolved "$RECEIPT_LIB" "unresolved: scripts/backlog-receipt-lib.sh is missing, so a receipt that could not run could not be told from one that reproduced. Refusing to fall back to a private copy of the could-not-measure rule. Nothing was re-verified."
+fi
+# shellcheck source=backlog-receipt-lib.sh
+. "$RECEIPT_LIB" || unresolved "$RECEIPT_LIB" "unresolved: scripts/backlog-receipt-lib.sh could not be sourced. Nothing was re-verified."
 
 ERRF="$(mktemp)" || { printf 'INPUT-UNRESOLVED\t-\tunresolved: mktemp failed, so a receipt that could not run could not be told from one that reproduced. Nothing was re-verified.\n'; exit 0; }
 trap 'rm -f "$ERRF"' EXIT
