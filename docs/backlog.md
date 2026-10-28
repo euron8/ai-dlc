@@ -1197,6 +1197,30 @@ Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push
 
 verify: sh bash scripts/validate-fixture-invocations.sh --self-probe && bash scripts/validate-fixture-hygiene.sh --derive
 
+## BL-867 — a counted script piped into an early-exit reader makes the invocation count depend on scheduling
+
+**DEFECT.** A fixture that pipes a counted script's output into a reader that exits at its first match (`awk '… {…; exit}'`, `head`, `grep -m`, `grep -q`) kills the writer with SIGPIPE at its next write after the reader leaves. How far the writer gets before that write depends on scheduling. When the writer can still start processes after its first matching line, the starts it makes before dying vary from run to run, and so does the fixture's armed `invocations.decl` count. Measured in batch b245 on self-update-gate, whose fixture was unchanged across both runs: eight armed runs counted 416 starts, and the 0.963.0 warm run at load 119 counted 428. A per-path join of the two counted start logs put the 12 extra starts on the `--safe-stop` walk's nested `self-update-gate.sh` starts (+7), the unmutated control copy (+1) and its `gate-defer.sh`/`gate-pass.sh` differential starts (+4). All of them sit behind `bash <gate> … 2>&1 | awk '… {print; exit}'`.
+
+The fix is to capture the writer's whole output, then read it from a here-string (`o="$(bash … 2>&1)"; x="$(awk … <<< "$o")"`). The subject then always runs to completion, and the count is the same at any load. `.claude/rules/tool-hazards.md` already forbids feeding `grep -q` from a pipe because of the false NOT-FOUND under `pipefail`; this is the same shape's second consequence.
+
+A site is a defect only if its writer can still start processes after its first matching line. A writer that prints only after all its work is done is unaffected, so each candidate below needs its writer read before it counts as a defect.
+
+Census, at a26bea400, fixtures only. `git grep -P` over `core/fixtures/*/run.sh` and `core/fixtures/*/*.sh` for a pipe into awk-with-exit, `head`, `grep -m` or `grep -q`, fed by a script start. The control was the six known self-update-gate sites, and all six were found. A first pass under `git grep -E` was discarded, because `\b` silently matched nothing there.
+- 32 candidate sites in 15 fixtures. 20 have a direct writer (`bash`/`sh <script>` or a `"$VAR"` script) and 12 have a fixture function whose body starts a script.
+- Direct: adversarial-shard-merge/lib.sh:360,373; bmad-invocation-resolve/run.sh:89,156; check-3b-locked-anchor/run.sh:385,961,962; layer-adjudication-tier/run.sh:1940; ledger-reverify-unfalsifiable/run.sh:274; ledger-reverify/run.sh:6578; self-update-gate/run.sh:745,775,792,846; setup-config-drift/run.sh:141,148; spec-adoption-floor/run.sh:55,71,79; spec-join-integrity/run.sh:289.
+- Function writer: artifact-derivations/run.sh:1072; layer-adjudication-tier/run.sh:262,321,949,2127; ledger-reverify/run.sh:2229,2234,3544,3587; readset-skip/run.sh:1440; self-update-gate/run.sh:1035,1046.
+- Unresolved: 25 call sites whose writer is a function defined outside its file (a lib or receipt helper) are NOT classified.
+- Out of scope: shipped `core/scripts/` and `.githooks/`.
+
+Progress: self-update-gate is fixed on branch b245-a1-self-update-gate-det at core/fixtures/self-update-gate/run.sh:745,775,778,792,808,846,1035,1046 (nine pipes on eight lines; 778 and 808 were not in the census list). self-update-gate-b, -c, -d and self-update-fixture-log have no site of this shape.
+
+Owed:
+- Read each remaining candidate's writer and fix every real defect with capture-then-here-string.
+- Resolve and classify the 25 lib-defined writers.
+- A mechanism that refuses the shape in a fixture, with its false-positive set measured first.
+
+verify: manual
+
 ## Reopened by BL-817's re-audit (batch 243)
 
 Each entry below closed on a tree receipt and is reopened because its own step's per-story cost did not fall over the graph sprints after its fix, measured with the s317-s320 extractor (token-equivalent dollars with API dollars beside, gap-inclusive hours). Each owes an `Outcome measured:` line on a later graph sprint, or a value citation, before it closes again.
