@@ -25,14 +25,33 @@
 # consumer corpus returned a clean, plausible ZERO because the probe cannot pass the predicate's
 # mandatory `--transcript` and both sides therefore failed closed and identically.
 #
+# THE MUTANT MATRIX. A cell is one expectation about the part-11 drive's output (11a the schema-only change is a
+# reclassification, 11c the extension series moves [] -> [B], ran the toy predicate appears at all), RED on a
+# mutant when the mutated engine's output no longer meets it. A mutant's row names the cell that kills it (decides)
+# and the cell it could plausibly co-trip but must leave GREEN (twins). A plain run scores each mutant on its
+# deciding cell and its twin only, off the one drive it already makes. The matrix is re-measured whenever an arm or
+# a mutant is added or changed, by the REMEASURE command below, run from the repo root. It scores every mutant on
+# every cell and prints one MATRIX line each. No validator unit is selected here, so there is no outside-unit diff.
+# MUTANT-MATRIX m-noroot decides=11a twins=ran
+# MUTANT-MATRIX m-marker decides=11c twins=11a
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/predicate-reclassification/run.sh --matrix
+#
 # Exit: 0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 set -uo pipefail
+# MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed below. Any other first
+# argument is still the optional SUBJECT PATH (picked below), exactly as before.
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix; shift ;;
+esac
 
 # HERMETIC (I87): the subject passes AI_DLC_KNOWN_SKILLS_EXT through when the caller set it, so an
 # operator's tuning would otherwise decide part 11's extension cell.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SELF_FILE="$HERE/${0##*/}"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 SUBJ="$(pick "${1:-}" \
@@ -78,6 +97,15 @@ nk() { # negative: $2 must NOT appear
     printf 'ok   %s\n' "$1"
   fi
 }
+
+# ok/bad for lib/mutant.sh: a kill is emitted only through mutant_killed, behind a same-run base-pass flag. `bad`
+# increments the counter this file exits on. lib/ sits beside this directory (preamble.sh came from it).
+ok()  { printf 'ok   %s\n' "${1-}"; }
+bad() { printf 'FAIL %s\n' "${1-}"; fails=$((fails + 1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: no lib/mutant.sh beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 # The detector reads its manifest from beside itself, so each case gets its own copy of the
 # script with its own manifest. It has no other sibling dependency.
@@ -225,13 +253,21 @@ pd() { env -u CLAUDE_PROJECT_DIR -u AI_DLC_PROJECT_ROOT -u AI_DLC_KNOWN_SKILLS_E
 row_of() { grep -F "$1" <<<"$2" | grep -v '^PREDICATE-[A-Z]*	toy' | head -1; }
 R11="$(mkrecon "$ROOT_SITE")"
 out11="$(pd "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
-ck "11a a schema-only change to a ROOT-resolving predicate is a reclassification" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"
+if grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$out11"; then
+  printf 'ok   %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification"; B_11a=1
+else
+  printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"; fails=$((fails + 1))
+fi
 ck "11b and the crossing series moves [] -> [B]" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of crossing-adversarial-pass "$out11")"
 # THE EXTENSION CELL. The series names a skill only the CONSUMER's known-skills file lists. A side
 # whose root is pinned to its probe root and is not handed that file searches the probe root, finds
 # nothing, and fails it as unknown on BOTH sides -- [U] -> [B,U]. Only an explicit per-side value
 # keeps it [] -> [B]. A walk-up marker alone cannot pass this cell.
-ck "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"
+if grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$out11")"; then
+  printf 'ok   %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"; B_11c=1
+else
+  printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"; fails=$((fails + 1))
+fi
 # AN INHERITED ROOT MUST NOT WIN. The pull may run with AI_DLC_PROJECT_ROOT naming the consumer;
 # a root found by a walk-up marker loses to that variable, so only a per-side pin survives it.
 out11i="$(env -u CLAUDE_PROJECT_DIR AI_DLC_PROJECT_ROOT="$CONS" bash "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS" 2>&1)"
@@ -259,6 +295,68 @@ mut11() { # mut11 <name> <anchor> <want-hits> <sed-args...> -> prints the mutant
 PIN='AI_DLC_PROJECT_ROOT="\$TMP/root-[a-z]*" '
 EXTP='AI_DLC_KNOWN_SKILLS_EXT="\$PD_EXT" '
 MK='rm -rf "\$TMP/root-\$side"; mkdir -p "\$TMP/root-\$side"$'
+# --- THE MATRIX CELLS, single-sourced. A cell is one expectation about a part-11 drive's output; cell_red <cell> <out>
+# returns 0 RED (the expectation is NOT met), 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
+#   11a  the schema-only change is reported as a reclassification of the root toy
+#   11c  the extension series moves [] -> [B] under the root toy
+#   ran  the root toy appears in the output at all (a mutant that never ran proves nothing)
+MX_CELLS='11a 11c ran'
+cell_red() {
+  case "$1" in
+    11a) ! grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$2" ;;
+    11c) ! grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$2")" ;;
+    ran) ! grep -qF 'toy-root-predicate.sh' <<<"$2" ;;
+    *) return 2 ;;
+  esac
+}
+# The header IS the decides/twins list: nothing else in this file restates it.
+mx_row() { # mx_row <mutant> <decides|twins>
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$SELF_FILE"
+}
+MXL="$ROOT/mx.ledger"; : > "$MXL"
+BROKEN=0; MX_FAILS=0
+# mx_twins <mutant> <output>: per-push, every twin cell must stay GREEN on the SAME drive output the kill read.
+mx_twins() {
+  local m="$1" o="$2" tw t r
+  tw="$(mx_row "$m" twins)"
+  if [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row names its twins\n' "$m"; return; fi
+  printf 'plain-twins %s\n' "$m" >> "$MXL"
+  for t in $(printf '%s' "$tw" | tr ',' ' '); do
+    cell_red "$t" "$o"; r=$?
+    if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
+    elif [ "$r" -eq 0 ]; then bad "$m: its twin $t also went RED on this mutant's output, so the kill is not confined to its own cell"; fi
+  done
+}
+# mx_score <mutant> <output>: MATRIX-ONLY. Scores the mutant's drive output against EVERY cell. It records itself in
+# the ledger first (rule 9).
+mx_score() {
+  local m="$1" o="$2" dec tw c dl="" tl="" uex="" g=0 tot=0
+  printf 'mx-score %s\n' "$m" >> "$MXL"
+  if grep -qE 'unbound variable|command not found|syntax error' <<<"$o"; then
+    BROKEN=$((BROKEN + 1)); printf 'MATRIX BROKEN %s\n' "$m"; return
+  fi
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    if cell_red "$c" "$o"; then dl="$dl,$c:RED"; else dl="$dl,$c:GREEN"; uex="$uex $c:GREEN"; fi
+  done
+  for c in $(printf '%s' "$tw" | tr ',' ' '); do
+    if cell_red "$c" "$o"; then tl="$tl,$c:RED"; uex="$uex $c:RED"; else tl="$tl,$c:GREEN"; fi
+  done
+  for c in $MX_CELLS; do
+    case ",$dec,$tw," in *",$c,"*) continue ;; esac
+    tot=$((tot + 1)); cell_red "$c" "$o" || g=$((g + 1))
+  done
+  if [ -n "$uex" ]; then
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d UNEXPECTED=%s\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot" "$(printf '%s' "${uex# }" | tr ' ' ',')"
+    MX_FAILS=$((MX_FAILS + 1))
+  else
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d\n' "$m" "${dl#,}" "${tl#,}" "$g" "$tot"
+  fi
+}
 m_noroot="$(mut11 m-noroot "$PIN" 2 -e "s|$PIN||")"
 m_marker="$(mut11 m-marker "$MK" 1 -e "s|$PIN||" -e "s|$EXTP||" -e "s|$MK|&; mkdir -p \"\$TMP/root-\$side/.claude\"|")"
 if [ -z "$m_noroot" ] || [ -z "$m_marker" ]; then
@@ -267,17 +365,22 @@ else
   mo="$(pd "$m_noroot/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
   mm="$(pd "$m_marker/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
   # Each mutant must fail its OWN cell and must have run (a positive row from the same run).
-  if grep -qF 'toy-root-predicate.sh' <<<"$mo" && ! grep -qF 'PREDICATE-RECLASSIFIES	toy-root-predicate.sh' <<<"$mo"; then
-    printf 'ok   11f mutant [m-noroot] KILLED: without the per-side root pin the schema-only change reads %s\n' "$(cut -f1 <<<"$mo" | head -1)"
+  if cell_red ran "$mo"; then
+    printf 'FAIL 11f mutant [m-noroot] never ran: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
+  elif cell_red 11a "$mo"; then
+    mutant_killed "${B_11a:-0}" m-noroot "11f mutant [m-noroot] killed: without the per-side root pin the schema-only change reads $(cut -f1 <<<"$mo" | head -1)"
   else
-    printf 'FAIL 11f mutant [m-noroot] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
+    printf 'FAIL 11f mutant [m-noroot] SURVIVED: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
   fi
-  if grep -qF 'PREDICATE-RECLASSIFIES	toy-root-predicate.sh' <<<"$mm" \
-     && ! grep -qF 'verdict tokens [] -> [B,] under toy-root-predicate.sh' <<<"$(row_of ext-adversarial-pass "$mm")"; then
-    printf 'ok   11g mutant [m-marker] KILLED: a walk-up marker finds the schema but loses the extension (%s)\n' "$(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40)"
+  mx_twins m-noroot "$mo"
+  if [ "$MODE" = matrix ]; then mx_score m-noroot "$mo"; fi
+  if ! cell_red 11a "$mm" && cell_red 11c "$mm"; then
+    mutant_killed "${B_11c:-0}" m-marker "11g mutant [m-marker] killed: a walk-up marker finds the schema but loses the extension ($(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40))"
   else
     printf 'FAIL 11g mutant [m-marker] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mm")"; fails=$((fails + 1))
   fi
+  mx_twins m-marker "$mm"
+  if [ "$MODE" = matrix ]; then mx_score m-marker "$mm"; fi
 fi
 
 # ---- PART 12: A STORED SUBJECT OUTSIDE _bmad-output/ IS REACHABLE BY `corpus-root:` -----------
@@ -346,6 +449,23 @@ R15n="$(mkrecon "$(sed 's|^corpus-root: .*|corpus-root: docs/..x|' <<<"$ESC_SITE
 o15n="$(pd "$R15n/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
 nk "15d near-miss 'docs/..x' is not refused"                 "corpus-root: value is refused" "$o15n"
 ck "15e and it reaches the corpus search"                    "matched NO stored artifact under $CONS/docs/..x." "$o15n"
+
+# RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
+# anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
+# it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
+mx_only="$(grep -c '^mx-score ' "$MXL")" || mx_only=0
+mx_ctl="$(grep -c '^plain-twins ' "$MXL")" || mx_ctl=0
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9 the matrix ledger control is EMPTY, so a zero count of matrix-only cells would mean nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9 a plain run executed $mx_only matrix-only cell(s), so the --matrix measurement leaked into the per-push run"
+  else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
+else
+  mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$mx_hdr" = "m-marker m-noroot " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
+  fails=$((fails + MX_FAILS))
+fi
+if [ "$BROKEN" -ne 0 ]; then echo "predicate-reclassification: FIXTURE BROKEN: $BROKEN mutant arm(s) could not be scored" >&2; exit 2; fi
 
 if [ "$fails" -ne 0 ]; then
   printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1
