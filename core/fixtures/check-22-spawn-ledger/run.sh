@@ -2340,8 +2340,8 @@ if [ "$RGOT" = "$R_EXPECTED" ]; then
 else
   bad "R1-R17: expected [$R_EXPECTED], got [$RGOT] (differing: $(rmoved "$RGOT"))"
 fi
-RCTL="$(rvec "$WORK/mut/control.sh")"
-[ "$RCTL" = "$R_EXPECTED" ] && ok "R CONTROL: the unmutated copy in the mutant directory reproduces all seventeen R cells" \
+RCTL="$(rvec "$WORK/mut/control.sh" "rem-cite")"
+[ "$RCTL" = "$R_EXPECTED" ] && ok "R CONTROL: the unmutated copy in the mutant directory answers the rem-cite cell (a positive REMEDIATED row, so a copy that never ran cannot pass); the other sixteen cells are the main run, already scored" \
   || bad "R CONTROL copy did not reproduce the R cells: expected [$R_EXPECTED], got [$RCTL]"
 # rmut <name> <sed-expression> <expected-moved-cells> <description>
 rmut() {
