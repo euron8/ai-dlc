@@ -1,3 +1,5 @@
 # The subject: pole_info_step is extracted verbatim from the distribution hook. REQUIRED, printed
 # where the fixture resolves it.
 !.githooks/pre-push
+# The same-run kill helper, sourced by run.sh.
+core/fixtures/lib/mutant.sh

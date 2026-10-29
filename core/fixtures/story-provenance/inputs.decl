@@ -3,3 +3,4 @@
 !core/scripts/stamp-story-provenance.sh
 !core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
+core/fixtures/lib/mutant.sh

@@ -6,3 +6,4 @@
 !core/scripts/validate-draft-stamps.sh
 core/skills/ai-dlc/steps/
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

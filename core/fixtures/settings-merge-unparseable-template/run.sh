@@ -45,8 +45,33 @@
 # both. Arm 1 asserts the correct template still reaches `model_window_needed=yes` and the `ask:`
 # lines step 5 prints, so a fix that closes the check by breaking it is rejected here. Mutant D
 # exists to prove arm 1 can fire.
+#
+# THE MUTANT MATRIX. A CELL is one arm. PER PUSH a mutant is scored on its DECIDING arm(s) (which must fail on
+# it) and its named TWIN (a different arm it could plausibly co-trip but must leave GREEN); `run.sh --matrix`
+# scores it against all three arms and prints one MATRIX line per mutant. The matrix is re-measured whenever an
+# arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. Twins: each
+# single-layer revert is confined to the arm its layer owns, so its twin is the OTHER absence-shaped arm of
+# the pair that the layer must leave closed; the composite reverts both layers and its twin is the positive
+# control arm 1, which neither layer touches; the wrong fix leaves the cheap absence-shaped arm 2 satisfied.
+# decides list on both-layers-reverted: the composite reverts BOTH layers, the case guard owning arm2 and the fallback owning arm3,
+# so each listed arm is aimed by one of its two faults; every other mutant here targets one arm.
+# MUTANT-MATRIX fallback-restored decides=arm3 twins=arm2
+# MUTANT-MATRIX case-guard-widened decides=arm2 twins=arm3
+# MUTANT-MATRIX both-layers-reverted decides=arm2,arm3 twins=arm1
+# MUTANT-MATRIX answers-no-to-everything decides=arm1 twins=arm2
+# MUTANT-MATRIX-CONTROL unmutated-control why=a byte-identical copy must pass all three arms so a mutant verdict is attributable to the mutation
+# One helper scores all four mutants and receives the mutant name as a positional parameter:
+# MUTANT-MATRIX-DYNAMIC mutant why=reads the four mutant names from its callers as a variable and every name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/settings-merge-unparseable-template/run.sh --matrix
 
 set -u
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "settings-merge-unparseable-template: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 NAME="settings-merge-unparseable-template"
 
@@ -105,7 +130,11 @@ trap 'rm -rf "$WORK"' EXIT
 FAILURES=0
 ASSERTIONS=0
 ok()  { ASSERTIONS=$((ASSERTIONS + 1)); printf '  ok    %s\n' "$1"; }
-bad() { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+bad()  { ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { printf 'FIXTURE BROKEN: lib/mutant.sh not found beside %s\n' "$HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # --- seeds ------------------------------------------------------------------------------------
 CONSUMER="$WORK/settings.json"
@@ -187,21 +216,25 @@ score() { # score <script> -> prints the failing arm names, space-separated, or 
 }
 
 # --- 1..3: the arms against the RESOLVED subject -----------------------------------------------
+SHIPPED_FAIL=""
 if arm1 "$SUBJECT"; then
-  ok "arm1 POSITIVE CONTROL: the producer template reaches sensor_wired=true, model_window_needed=yes and the ask: block"
+  ok "arm1 POSITIVE CONTROL: the producer template reaches sensor_wired=true, model_window_needed=yes and the ask: block"; B_arm1=1
 else
+  SHIPPED_FAIL="$SHIPPED_FAIL arm1"
   bad "arm1 POSITIVE CONTROL FAILED (rc=$RC): the correct template no longer reaches model_window_needed=yes, so step 5 never raises the provisioning question. A guard that closes the check by refusing everything lands here. Output: $(head -1 <<<"$OUT")"
 fi
 
 if arm2 "$SUBJECT"; then
-  ok "arm2: a 0-byte template is REFUSED with a FAIL: diagnostic and produces no model_window_needed verdict"
+  ok "arm2: a 0-byte template is REFUSED with a FAIL: diagnostic and produces no model_window_needed verdict"; B_arm2=1
 else
+  SHIPPED_FAIL="$SHIPPED_FAIL arm2"
   bad "arm2 FAILED (rc=$RC): a 0-byte template still reaches a verdict. jq exits 0 and prints nothing on it, so SENSOR_WIRED is the empty string and the gate collapses it to model_window_needed=no at exit 0. Output: $(head -1 <<<"$OUT")"
 fi
 
 if arm3 "$SUBJECT"; then
-  ok "arm3: non-JSON, a bare JSON scalar and {\"hooks\":5} are each REFUSED with a FAIL: diagnostic and no verdict"
+  ok "arm3: non-JSON, a bare JSON scalar and {\"hooks\":5} are each REFUSED with a FAIL: diagnostic and no verdict"; B_arm3=1
 else
+  SHIPPED_FAIL="$SHIPPED_FAIL arm3"
   bad "arm3 FAILED (rc=$RC): a template jq cannot evaluate still reaches a verdict. Two of these three are VALID JSON, so validating the template as JSON does not close this. Output: $(head -1 <<<"$OUT")"
 fi
 
@@ -230,27 +263,76 @@ fi
 # The expectation is the FULL matrix, not merely "killed". Each single-layer revert must fail
 # EXACTLY the arm its layer owns; a mutant that fails two means the arms are entangled and one of
 # them is vacuous.
-mutant() { # mutant <name> <expected-failing-arms> <sed-expr> <why>
-  local mname="$1" expect="$2" expr="$3" why="$4"
-  local mf="$WORK/$mname.sh"
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding arms and twin. ----
+MXL="$WORK/mx.ledger"; : > "$MXL"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$HERE/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
+}
+mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
+# arm_red <arm> <script> -> 0 when the arm FAILS on that script (RED), 1 when it holds (GREEN). A crashed
+# arm is BROKEN, never GREEN: it prints no FAIL and would otherwise read as holding.
+arm_red() {
+  case "$1" in arm1|arm2|arm3) ;; *) echo "MATRIX BROKEN unknown arm $1"; exit 2 ;; esac
+  OUT=""
+  if "$1" "$2"; then
+    case "$OUT" in *"unbound variable"*|*"command not found"*|*"syntax error"*) echo "MATRIX BROKEN $1"; exit 2 ;; esac
+    return 1
+  fi
+  case "$OUT" in *"unbound variable"*|*"command not found"*|*"syntax error"*) echo "MATRIX BROKEN $1"; exit 2 ;; esac
+  return 0
+}
+
+# mutant <name> <sed-expr> <why> <base-pass flag>
+# The flag is a positional parameter; every caller passes a conjunction of the shipped arms' B_ flags.
+mutant() {
+  local mname="$1" expr="$2" why="$3" mflag="$4"
+  local mf="$WORK/$mname.sh" dec tw a g=0 tot=0 dtxt="" ttxt="" u="" all_dec=1 twin_red=0
   sed "$expr" "$SUBJECT" > "$mf" 2>/dev/null
   if cmp -s "$SUBJECT" "$mf"; then
-    bad "MUTANT $mname NOT APPLIED: the sed matched nothing, so the copy is byte-identical to the subject. An unmutated copy passes every arm and reads exactly like a killed mutant. ($why)"
+    bad "MUTANT $mname NOT APPLIED: the sed matched nothing, so the copy is byte-identical to the subject. An unmutated copy passes every arm and reads exactly like a scored mutant. ($why)"
     return
   fi
   if ! bash -n "$mf" 2>/dev/null; then
     bad "MUTANT $mname is not valid bash. A mutant that dies at parse time emits nothing, and no output scores as a kill it did not earn. ($why)"
     return
   fi
-  local got
-  got="$(score "$mf")"
-  if [ "$got" = "$expect" ]; then
-    ok "MUTANT $mname KILLED by exactly [$expect] -- $why"
-    KILLS=$((KILLS + 1))
-  elif [ -z "$got" ]; then
-    bad "MUTANT $mname SURVIVED: expected [$expect] to fail and every arm passed. The arm meant to catch this layer cannot fire. ($why)"
+  dec="$(mx_row "$mname" decides)"; tw="$(mx_row "$mname" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then
+    bad "MUTANT $mname has no single MUTANT-MATRIX row naming its deciding arms and twin"; return
+  fi
+  for a in ${dec//,/ }; do
+    printf 'dec %s %s\n' "$mname" "$a" >> "$MXL"
+    if arm_red "$a" "$mf"; then dtxt="$dtxt,$a:RED"; else dtxt="$dtxt,$a:GREEN"; all_dec=0; u="$u $a:GREEN"; fi
+  done
+  for a in ${tw//,/ }; do
+    printf 'dec %s %s\n' "$mname" "$a" >> "$MXL"
+    if arm_red "$a" "$mf"; then ttxt="$ttxt,$a:RED"; twin_red=1; u="$u $a:RED"; else ttxt="$ttxt,$a:GREEN"; fi
+  done
+  if [ "$all_dec" -eq 1 ]; then
+    mutant_killed "$mflag" "$mname" "MUTANT $mname scored by exactly [${dec//,/ }] with its twin [$tw] GREEN -- $why" && KILLS=$((KILLS + 1))
   else
-    bad "MUTANT $mname killed by [$got], expected exactly [$expect]. A mismatch means the arms are entangled -- one of them is asserting the other's subject. ($why)"
+    bad "MUTANT $mname SURVIVED: expected [${dec//,/ }] to fail and an arm passed. The arm meant to catch this layer cannot fire. ($why)"
+  fi
+  if [ "$twin_red" -eq 1 ]; then
+    bad "MUTANT $mname also tripped its twin [$tw]. A mismatch means the arms are entangled -- one of them is asserting the other's subject. ($why)"
+  fi
+  if [ "$MODE" = matrix ]; then # mx-all-arms
+    rd=""
+    for a in arm1 arm2 arm3; do
+      case ",$dec,$tw," in *",$a,"*) continue ;; esac
+      printf 'mx %s %s\n' "$mname" "$a" >> "$MXL"
+      tot=$((tot + 1)); if arm_red "$a" "$mf"; then rd="$rd,$a"; else g=$((g + 1)); fi
+    done
+    if [ -n "$u" ]; then u=" UNEXPECTED=${u# }"; fi
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d%s%s\n' "$mname" "${dtxt#,}" "${ttxt#,}" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 
@@ -261,29 +343,33 @@ KILLS=0
 # indistinguishable from a template that genuinely does not wire the sensor. The 0-byte case is
 # NOT reopened, because jq succeeds there and the fallback never fires -- which is exactly why a
 # battery reverting only this layer would come out green on arm 2 and prove nothing about it.
-mutant fallback-restored 'arm3' \
+mutant fallback-restored \
   's@2>/dev/null)"; then@2>/dev/null || echo false)"; then@' \
-  'the `|| echo false` fallback makes a jq ERROR and a genuine verdict the same string'
+  'the `|| echo false` fallback makes a jq ERROR and a genuine verdict the same string' \
+  "$(( ${B_arm3:-0} && ${B_arm2:-0} ))"
 
 # B: revert LAYER 2 only -- widen the verdict case to match everything, leaving jq's exit status
 # read. The three jq-error templates are still refused; the empty string from the 0-byte template
 # walks straight through to the gate and collapses to `no`.
-mutant case-guard-widened 'arm2' \
+mutant case-guard-widened \
   's@^  true|false) ;;@  *) ;;@' \
-  'the verdict case no longer requires a literal true|false, so the empty string reaches the gate'
+  'the verdict case no longer requires a literal true|false, so the empty string reaches the gate' \
+  "$(( ${B_arm2:-0} && ${B_arm3:-0} ))"
 
 # C: revert BOTH layers -- the pre-fix shape. Both absence-shaped arms must go red together; a
-# composite that killed only one would mean the surviving arm is asserting the other layer.
-mutant both-layers-reverted 'arm2 arm3' \
+# composite that scored only one would mean the surviving arm is asserting the other layer.
+mutant both-layers-reverted \
   's@2>/dev/null)"; then@2>/dev/null || echo false)"; then@; s@^  true|false) ;;@  *) ;;@' \
-  'the pre-fix shape: neither jq exit status nor a literal verdict is required'
+  'the pre-fix shape: neither jq exit status nor a literal verdict is required' \
+  "$(( ${B_arm2:-0} && ${B_arm3:-0} && ${B_arm1:-0} ))"
 
 # D: the WRONG FIX -- close the check by BREAKING it, so the correct template also answers `no`.
 # Arms 2 and 3 are absence-shaped and this mutant satisfies both. Only arm 1 can see it, which is
 # what makes arm 1 non-vacuous rather than decorative.
-mutant answers-no-to-everything 'arm1' \
+mutant answers-no-to-everything \
   's@^if \[ "$SENSOR_WIRED" = "true" \] && \[ -z "$DECLARED_FAMILIES" \]; then@if false; then@' \
-  'the verdict gate never fires, so every template answers model_window_needed=no -- the shape a fix that closes the check by breaking it takes'
+  'the verdict gate never fires, so every template answers model_window_needed=no -- the shape a fix that closes the check by breaking it takes' \
+  "$(( ${B_arm1:-0} && ${B_arm2:-0} ))"
 
 # --- 9: the battery must have KILLED something --------------------------------------------------
 # A mutation applied to a file the run never loaded reads exactly like an arm that cannot fire,
@@ -298,12 +384,25 @@ fi
 # The suite drives run.sh from the repo root. Every path above is absolute, resolved off the
 # VERSION marker before any cd, so the verdicts must not move with the process working directory.
 # A fixture green only from the repo root may be asserting nothing from anywhere else.
+# The process-cwd side is the failing set arms 1-3 ALREADY computed against the resolved subject at this same cwd,
+# so it is taken from them and not re-run; only the $WORK side needs a fresh score, because its cwd differs.
 elsewhere="$( cd "$WORK" && score "$SUBJECT" )"
-here_now="$(score "$SUBJECT")"
+here_now="${SHIPPED_FAIL# }"
 if [ "$elsewhere" = "$here_now" ]; then
   ok "cwd-invariant: the arm set scores identically from \$WORK and from the process cwd ('${here_now:-all pass}')"
 else
   bad "cwd-DEPENDENT: from \$WORK the failing set is [${elsewhere:-none}], from the process cwd it is [${here_now:-none}]. A verdict that moves with the caller's directory is not a verdict."
+fi
+
+# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
+# an empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
 fi
 
 printf '\n'

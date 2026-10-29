@@ -54,10 +54,62 @@
 # pattern runs, so an anchor or a forbidden phrase split by a line wrap is still seen.
 # `nearmiss.md` wraps all eight unit anchors, and probe direction 4 asserts it really is wrapped.
 #
-# Usage: run.sh
+# THE MUTANT MATRIX. A CELL is one of the nine ARMS, each a text predicate over one file: noup (step 1 no-upstream
+# AUTO-PUSH), ahead (step 1 ahead-only AUTO-PUSH), nopush (step 6 carries the no-push sentence), refuse (step 6
+# refuses apply on an UN-SYNCED branch), para (step 1's UN-SYNCED paragraph), step2 (step 2's UN-SYNCED paragraph),
+# detect (step 1's detect paragraph), cycle (step 2's cycle bullet) and discard (step 2's discard paragraph).
+# PER PUSH a mutant is scored on its DECIDING arm, which must find it, and its named TWIN, a different arm it could
+# plausibly co-trip but must leave compliant: two predicate runs over the mutant copy where the nine-arm vector took
+# nine. `run.sh --matrix` scores each mutant on all nine arms and prints one MATRIX line per mutant. The four
+# BL-391 rows decide arms 7-9, which a consumer predating BL-391 skips. The matrix is re-measured whenever an arm
+# or a mutant is added or changed, by the REMEASURE command below, run from the repo root.
+# MUTANT-MATRIX wrong1 decides=ahead twins=noup
+# MUTANT-MATRIX wA-halt decides=ahead twins=noup
+# MUTANT-MATRIX wrong2 decides=nopush twins=refuse
+# MUTANT-MATRIX wC-push decides=nopush twins=refuse
+# MUTANT-MATRIX wG-nosentence decides=nopush twins=refuse
+# MUTANT-MATRIX wD-negate decides=refuse twins=nopush
+# The pre-BL-391 copy of the subject exists because the distribution's SKILL.md postdates BL-391, so without it
+# wD-negate-pre could never fire here: its anchor line is the step-6 clause as it read before step 2 became a second
+# source of the UN-SYNCED marking. The copy is the distribution text with that one clause reverted, built in both
+# modes; only wD-negate-pre runs on it, with the BL-391 conjunct of the refuse arm off, and an unmutated control on
+# the same copy gates the kill.
+# MUTANT-MATRIX wD-negate-pre decides=refuse twins=nopush
+# MUTANT-MATRIX wF-para decides=para twins=step2
+# MUTANT-MATRIX wE-step2 decides=step2 twins=para
+# MUTANT-MATRIX wH-nocontinue decides=noup twins=ahead
+# MUTANT-MATRIX wI-nononfatal decides=noup twins=ahead
+# MUTANT-MATRIX wJ-nodryrun decides=para twins=step2
+# MUTANT-MATRIX wK-nodefer decides=step2 twins=para
+# MUTANT-MATRIX wY-nostep2 decides=refuse twins=nopush
+# MUTANT-MATRIX wL-cleanclaim decides=detect twins=cycle
+# MUTANT-MATRIX wM-nocheckline decides=detect twins=cycle
+# MUTANT-MATRIX wN-failcommit decides=cycle twins=detect
+# MUTANT-MATRIX wO-nofailcase decides=cycle twins=detect
+# MUTANT-MATRIX wW-nopathspec decides=discard twins=cycle
+# MUTANT-MATRIX wX-keepcommit decides=discard twins=cycle
+# MUTANT-MATRIX wP-nocheckout decides=discard twins=cycle
+# MUTANT-MATRIX wQ-nofilelist decides=discard twins=cycle
+# MUTANT-MATRIX wR-uncondelete decides=discard twins=cycle
+# MUTANT-MATRIX wS-nostop decides=discard twins=cycle
+# MUTANT-MATRIX wT-nodefer decides=discard twins=cycle
+# MUTANT-MATRIX wU-nounsynced decides=discard twins=cycle
+# MUTANT-MATRIX wV-stampmoves decides=discard twins=cycle
+# Every row of the mutant table reaches mutant_killed through one helper, as a variable:
+# MUTANT-MATRIX-DYNAMIC score_row why=passes the mutant name of every table row as a variable and every name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/update-preflight-push/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 # Exit:  0 = every assertion holds (or the subject is absent: SKIP), 1 = the subject regressed,
 #        2 = fixture broken.
 set -uo pipefail
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "update-preflight-push: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="update-preflight-push"
@@ -96,6 +148,11 @@ B391=1   # every probe runs the full BL-391 predicate; the corpus may lower it, 
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FAIL  FIXTURE BROKEN — %s\n' "$1"; echo; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "lib/mutant.sh not found beside $HERE"
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "$NAME:"
 
@@ -379,42 +436,47 @@ if [ "$_dr" -eq 4 ] && [ "$ISDIST" = 0 ]; then
   B391=0
   printf '  SKIP  BL-391 arms 7-9 -- the installed SKILL.md predates the step-2 discard paragraph; they land with the pull that carries it\n'
 fi
+LAYOUT_B391="$B391"   # the installed layout, before any single row lowers B391 for itself
 V_SUBJ="$(vector "$SUBJ")"
-arm() { # arm <digit> <ok text> <fail text>
+arm() { # arm <digit> <ok text> <fail text> <arm name>
   case "$1" in
-    0) ok "$2" ;;
+    0) ok "$2"
+       case "$4" in
+         noup) B_noup=1 ;; ahead) B_ahead=1 ;; nopush) B_nopush=1 ;; refuse) B_refuse=1 ;; para) B_para=1 ;;
+         step2) B_step2=1 ;; detect) B_detect=1 ;; cycle) B_cycle=1 ;; discard) B_discard=1 ;;
+       esac ;;
     3) bad "FIXTURE STALE: an anchor did not select exactly one unit in $SUBJ — the text moved or was renamed" ;;
     *) bad "$3" ;;
   esac
 }
 arm "$(printf '%s' "$V_SUBJ" | cut -c1)" \
   "step 1 no-upstream AUTO-PUSH: a failed push is non-fatal, continues, and marks the branch UN-SYNCED" \
-  "step 1 no-upstream AUTO-PUSH: the push-failure path is fatal, or no longer says non-fatal + continue + UN-SYNCED"
+  "step 1 no-upstream AUTO-PUSH: the push-failure path is fatal, or no longer says non-fatal + continue + UN-SYNCED" "noup"
 arm "$(printf '%s' "$V_SUBJ" | cut -c2)" \
   "step 1 ahead-only AUTO-PUSH: a rejected or failed push is non-fatal, continues, and marks the branch UN-SYNCED" \
-  "step 1 ahead-only AUTO-PUSH: the push-failure path is fatal, or no longer says non-fatal + continue + UN-SYNCED"
+  "step 1 ahead-only AUTO-PUSH: the push-failure path is fatal, or no longer says non-fatal + continue + UN-SYNCED" "ahead"
 arm "$(printf '%s' "$V_SUBJ" | cut -c3)" \
   "step 6 re-confirm: carries the no-push sentence and no push instruction" \
-  "step 6 re-confirm: instructs a push, or lost its no-push sentence — a write to origin from inside the isolation step"
+  "step 6 re-confirm: instructs a push, or lost its no-push sentence — a write to origin from inside the isolation step" "nopush"
 arm "$(printf '%s' "$V_SUBJ" | cut -c4)" \
   "step 6 re-confirm: stops apply on an UN-SYNCED branch" \
-  "step 6 re-confirm: no longer refuses apply on an UN-SYNCED branch"
+  "step 6 re-confirm: no longer refuses apply on an UN-SYNCED branch" "refuse"
 arm "$(printf '%s' "$V_SUBJ" | cut -c5)" \
   "step 1 UN-SYNCED paragraph: proceeds to the dry-run, names step 2's defer, does not end the run" \
-  "step 1 UN-SYNCED paragraph: absent, ends the run, or no longer sends the branch to the dry-run with step 2 deferred"
+  "step 1 UN-SYNCED paragraph: absent, ends the run, or no longer sends the branch to the dry-run with step 2 deferred" "para"
 arm "$(printf '%s' "$V_SUBJ" | cut -c6)" \
   "step 2 UN-SYNCED paragraph: step 2 defers, and nothing in it pushes or commits locally" \
-  "step 2 UN-SYNCED paragraph: absent, does not defer, or pushes / commits locally — the orphaned self-update branch"
+  "step 2 UN-SYNCED paragraph: absent, does not defer, or pushes / commits locally — the orphaned self-update branch" "step2"
 if [ "$B391" = 1 ]; then
 arm "$(printf '%s' "$V_SUBJ" | cut -c7)" \
   "step 1 detect paragraph: claims no clean-tree check, says step 1 does not check the working tree, names step 6" \
-  "step 1 detect paragraph: claims a clean tree step 1 never checks, or no longer says where a dirty tree is refused"
+  "step 1 detect paragraph: claims a clean tree step 1 never checks, or no longer says where a dirty tree is refused" "detect"
 arm "$(printf '%s' "$V_SUBJ" | cut -c8)" \
   "step 2 cycle bullet: names the push-failure case and pairs no failed push with a local commit" \
-  "step 2 cycle bullet: a failed push commits locally, or the push-failure case vanished from the bullet"
+  "step 2 cycle bullet: a failed push commits locally, or the push-failure case vanished from the bullet" "cycle"
 arm "$(printf '%s' "$V_SUBJ" | cut -c9)" \
   "step 2 discard paragraph: pathspec staging, checkout original, file-list check gating the delete, STOP naming the branch, DEFER, UN-SYNCED, stamp unmoved" \
-  "step 2 discard paragraph: absent, keeps a local commit, or lost a conjunct of the discard procedure"
+  "step 2 discard paragraph: absent, keeps a local commit, or lost a conjunct of the discard procedure" "discard"
 fi
 
 # --- MUTANTS, EACH MUST FAIL ONLY ITS OWN ARM ---------------------------------------------
@@ -475,24 +537,119 @@ post|wV-stampmoves|     \`skill_version\`/\`skill_commit\` stay where they were,
 mut_ok=1
 kills=0
 _n=0
-_want_n=26; [ "$B391" = 1 ] || _want_n=12
+_want_n=27; [ "$B391" = 1 ] || _want_n=12
+
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding arm and twin. ----
+# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
+MXL="$WORK/mx.ledger"; : > "$MXL"
+ARMS="noup ahead nopush refuse para step2 detect cycle discard"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  awk -v n="$1" -v f="$2" '
+    $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
+      c++; for (i = 4; i <= NF; i++) if (index($i, f "=") == 1) v = substr($i, length(f) + 2)
+    }
+    END { if (c == 1) print v }' "$HERE/run.sh"
+}
+mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
+# cell_rc <arm> <file> -> that one arm's predicate: 0 compliant (GREEN), 1 finding (RED), 3 unit not located.
+cell_rc() {
+  case "$1" in
+    noup)    push_fail_ok "$2" "$A_NOUP" ;;
+    ahead)   push_fail_ok "$2" "$A_AHEAD" ;;
+    nopush)  reconf_nopush_ok "$2" ;;
+    refuse)  reconf_refuse_ok "$2" ;;
+    para)    para_ok "$2" ;;
+    step2)   step2_ok "$2" ;;
+    detect)  detect_ok "$2" ;;
+    cycle)   cycle_ok "$2" ;;
+    discard) discard_ok "$2" ;;
+    *) return 9 ;;
+  esac
+}
+# score_row <base-pass flag> <mutant> <deciding arm> <twin arm> <want vector> <mutant file> -- the deciding arm and
+# the twin per push, every other arm under --matrix.
+score_row() {
+  local fl="$1" m="$2" dec="$3" tw="$4" want="$5" f="$6" r a g=0 tot=0 u="" d t
+  printf 'dec %s %s\ndec %s %s\n' "$m" "$dec" "$m" "$tw" >> "$MXL"
+  cell_rc "$dec" "$f"; r=$?; d=GREEN
+  if [ "$r" -eq 3 ]; then bad "FIXTURE STALE: an anchor of arm $dec did not select exactly one unit in the mutant $m"
+  elif [ "$r" -eq 1 ]; then
+    d=RED
+    if mutant_killed "$fl" "$m" "mutant $m scored by its deciding arm $dec"; then kills=$((kills+1)); fi
+  else bad "mutant $m SURVIVED: its deciding arm $dec still passed"; fi
+  cell_rc "$tw" "$f"; r=$?; t=GREEN
+  if [ "$r" -eq 1 ]; then t=RED; bad "mutant $m is entangled: its twin arm $tw also failed"
+  elif [ "$r" -ne 0 ]; then bad "FIXTURE STALE: an anchor of twin arm $tw did not select exactly one unit in the mutant $m"; fi
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    local k=0
+    for a in $ARMS; do
+      k=$((k + 1))
+      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
+      if [ "$LAYOUT_B391" != 1 ] && [ "$k" -gt 6 ]; then continue; fi
+      printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
+      tot=$((tot + 1)); cell_rc "$a" "$f"; r=$?
+      if [ "$r" -eq 0 ]; then g=$((g + 1)); elif [ "$r" -ne 1 ]; then echo "MATRIX BROKEN $m"; exit 2; fi
+    done
+    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
+    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "$u"
+  fi
+}
+# THE PRE-BL-391 COPY, built in BOTH modes. In the distribution it is the subject with the step-6 clause reverted to
+# its pre-BL-391 spelling (the wY mutation's own line pair); in a consumer whose installed text predates BL-391 the
+# subject already is that text. Its unmutated control must pass with the BL-391 conjunct off, or the copy is not sound.
+PRE="$WORK/pre-bl391.md"
+PRE_OLD='     upstream-less — or step 1 or step 2 left it UN-SYNCED on this invocation, **STOP'
+PRE_NEW='     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP'
+if [ "$B391" = 1 ]; then
+  if ! mutate "$SUBJ" "$PRE" "$PRE_OLD" "$PRE_NEW" || cmp -s "$SUBJ" "$PRE"; then
+    bad "FIXTURE STALE: the pre-BL-391 copy did not build -- its anchor line is not in $SUBJ exactly once"
+  fi
+else
+  cp "$SUBJ" "$PRE" || broken "could not copy the subject as the pre-BL-391 copy"
+fi
+_k391="$B391"; B391=0
+cell_rc refuse "$PRE"; _pr1=$?; cell_rc nopush "$PRE"; _pr2=$?
+B391="$_k391"
+if [ -s "$PRE" ] && [ "$_pr1" -eq 0 ] && [ "$_pr2" -eq 0 ]; then
+  ok "control: the unmutated pre-BL-391 copy passes the refuse and no-push arms with the BL-391 conjunct off"; B_refpre=1
+else
+  bad "control: the unmutated pre-BL-391 copy did not pass refuse/no-push (rc $_pr1/$_pr2) -- wD-negate-pre proves nothing"
+fi
 while IFS='|' read -r mscope mname mold mnew mwant; do
   [ -n "$mname" ] || continue
-  case "$mscope:$B391" in all:*|post:1|pre:0) ;; *) continue ;; esac
-  # Pre-BL-391 consumer text has no arms 7-9: compare the six older digits only.
-  [ "$B391" = 1 ] || mwant="$(printf '%s' "$mwant" | cut -c1-6)000"
+  case "$mscope:$B391" in all:*|post:1|pre:*) ;; *) continue ;; esac
   _n=$((_n+1))
   mf="$WORK/mut-$mname.md"
-  if ! mutate "$SUBJ" "$mf" "$mold" "$mnew" || cmp -s "$SUBJ" "$mf"; then
-    bad "mutant $mname DID NOT APPLY — its anchor line is not in $SUBJ exactly once"; mut_ok=0; continue
+  msrc="$SUBJ"; if [ "$mscope" = pre ]; then msrc="$PRE"; fi
+  if ! mutate "$msrc" "$mf" "$mold" "$mnew" || cmp -s "$msrc" "$mf"; then
+    bad "mutant $mname DID NOT APPLY — its anchor line is not in $msrc exactly once"; mut_ok=0; continue
   fi
-  mv_="$(vector "$mf")"
-  [ "$B391" = 1 ] || mv_="$(printf '%s' "$mv_" | cut -c1-6)000"
-  if [ "$mv_" = "$mwant" ]; then
-    ok "mutant $mname killed by its own arm alone ($mv_)"; kills=$((kills+1))
-  else
-    bad "mutant $mname scored $mv_, want $mwant — survived, or killed by an entangled arm"
+  # The table's one `1` digit names the deciding arm; the header row must agree, so the two cannot drift apart.
+  mdec=""; mi=0
+  for _a in $ARMS; do
+    mi=$((mi+1))
+    if [ "$(printf '%s' "$mwant" | cut -c"$mi")" = 1 ]; then mdec="$_a"; fi
+  done
+  hdec="$(mx_row "$mname" decides)"; htw="$(mx_row "$mname" twins)"
+  if [ -z "$hdec" ] || [ -z "$htw" ] || [ "$hdec" != "$mdec" ]; then
+    bad "FIXTURE BROKEN: mutant $mname has no single MUTANT-MATRIX row, or its decides=${hdec:-?} disagrees with the table's deciding arm ${mdec:-?}"; continue
   fi
+  _k391="$B391"; if [ "$mscope" = pre ]; then B391=0; fi
+  case "$mscope:$hdec" in
+    pre:refuse) score_row "${B_refpre:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:noup)    score_row "${B_noup:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:ahead)   score_row "${B_ahead:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:nopush)  score_row "${B_nopush:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:refuse)  score_row "${B_refuse:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:para)    score_row "${B_para:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:step2)   score_row "${B_step2:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:detect)  score_row "${B_detect:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:cycle)   score_row "${B_cycle:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:discard) score_row "${B_discard:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *) bad "FIXTURE BROKEN: mutant $mname names an arm $hdec that is not one of the nine" ;;
+  esac
+  B391="$_k391"
 done <<<"$MUTANTS"
 [ "$_n" -eq "$_want_n" ] || bad "the mutant table parsed $_n rows in scope, not $_want_n"
 
@@ -506,9 +663,9 @@ fi
 V0="$(vector "$M0")"
 [ "$B391" = 1 ] || V0="$(printf '%s' "$V0" | cut -c1-6)000"
 if [ "$V0" = 000000000 ] && [ "$kills" -eq "$_n" ]; then
-  ok "control: the unmutated copy scores 000000000 through the mutant harness, and $kills of $_n mutants were killed"
+  ok "control: the unmutated copy scores 000000000 through the mutant harness, and $kills of $_n mutants were scored"
 else
-  bad "control: the unmutated copy scored $V0 with $kills of $_n kills — the mutant verdicts above mean nothing"
+  bad "control: the unmutated copy scored $V0 with $kills of $_n scored mutants — the mutant verdicts above mean nothing"
 fi
 
 # --- CWD INVARIANCE -----------------------------------------------------------------------
@@ -520,6 +677,17 @@ if [ -n "$V_CWD" ] && [ "$V_CWD" = "$V_SUBJ" ] && [ "$V_CWD_OFF" = "$V_OFF" ]; t
   ok "the subject ($V_CWD) and offender ($V_CWD_OFF) vectors are identical with the cwd at /"
 else
   bad "the verdict moved with the cwd (subject $V_SUBJ vs $V_CWD, offender $V_OFF vs $V_CWD_OFF)"
+fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
+# empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
 fi
 
 echo

@@ -19,6 +19,46 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.965.0] - 2026-10-28
+
+Batch b245, fixture optimisation part four. It ships three fixture units under BL-850: snapshot-archive-rotate, emit-report-refusal and the m1-ii matrix-only fixtures. BL-850 stays PARTIAL. M5 (the BL-828 arm), q0b (BL-849), ltj and mrr, c3 and c4, BL-842 and the wait-stale-deliverable load dependence are not in this release.
+
+Bootstrapping: nothing ships under `core/` outside `core/fixtures/` (`git diff --name-only 1afa9b0a0 fc3fe11d7 -- core ':(exclude)core/fixtures'` lists 0 files), so no consumer-visible engine, hook or script change ships. The changes are fixtures, two allowlists and the backlog.
+
+### BL-850 — snapshot-archive-rotate
+
+`*` rows are bash starts per push, `1afa9b0a0` against `fc3fe11d7`.
+
+- snapshot-archive-rotate: the kill-point sweep now runs in rounds of KPAR with the stop file read only between rounds, so every worker sees the same point set. The `±` and `provisional` markers are removed from its declaration, which becomes an exact count. `*` 1364±18 -> 1319.
+
+### BL-850 — emit-report-refusal
+
+- emit-report-refusal: every mutant is gated through `mutant_killed` on its deciding arm plus a twin, a `--matrix` mode is added, and both of its allowlist rows are deleted. `*` 2687 -> 2133.
+
+### BL-850 — m1-ii matrix-only fixtures
+
+Fifteen fixtures gain a matrix block, a `--matrix` mode and a rule-9 arm, and route their kills through `mutant_killed`.
+
+- requirements-step: `*` 1 -> 1, unchanged.
+- retired-layer-passage: `*` 73 -> 71.
+- review-carry-over-clauses: `*` 2 -> 2, unchanged.
+- self-update-reinvoke-liveness: `*` 56 -> 56, unchanged.
+- settings-merge-unparseable-template: `*` 37 -> 27.
+- shadowed-local-validators: `*` 10 -> 9.
+- snapshot-section-schema: `*` 31 -> 31, unchanged.
+- snapshot-update-stamps: `*` 37 -> 36.
+- span-of-containment: `*` 1 -> 1, unchanged.
+- story-provenance: `*` 134 -> 122; its matrix row lookup uses shell builtins, so no awk is added to its tools declaration.
+- suite-content-key: `*` 23 -> 25, a RISE; the declaration was re-measured at the m1-ii tip and the unit states no cause for the increase.
+- suite-pole-info: `*` 1 -> 1, unchanged.
+- trunk-audit-gate: `*` 67 -> 94, a RISE; the declaration was re-measured at the m1-ii tip and the unit states no cause for the increase. A `set -u` fix makes `score_mut` read `LAST` with a default, so a surviving mutant prints its SURVIVED line instead of aborting with "LAST: unbound variable".
+- update-preflight-push: `*` 1 -> 1, unchanged; the wD-negate-pre mutant now scores on every push against a pre-BL-391 copy of the subject.
+- validator-fork-budget: `*` 86 -> 86, unchanged; the Mpipe mutant reads only the profiler's self-probe refusal.
+
+### BL-828 — allowlists
+
+`scripts/fixture-matrix-allowlist.txt` goes from 117 rows to 101, and `scripts/mutant-kills-allowlist.txt` from 54 rows to 38. Each loses 16 rows.
+
 ## [0.964.0] - 2026-10-28
 
 Batch b245, fixture optimisation part three. It ships BL-866 (timing runs retired), BL-867 (an early-exit reader making an invocation count depend on scheduling), the BL-868 entry and its receipt, and five fixture units under BL-850: layer-adjudication-tier, wait-stale-deliverable, review-shard-merge, readset-skip and backlog-real-ledger. BL-850 stays PARTIAL, and BL-868 stays OPEN. The m1-ii matrix-only fixtures and M5, the BL-828 arm, are not in this release and ride a later one. BL-828 records progress only.
