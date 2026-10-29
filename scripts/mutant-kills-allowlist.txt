@@ -15,7 +15,6 @@ deploy-validate-smoke-classification
 derivation-capture
 derivation-capture-worktree-root
 divergence-hard-block
-emit-report-refusal
 enforcement-map-yaml-plain
 escalation-status-vocabulary
 fanout-payload-channel

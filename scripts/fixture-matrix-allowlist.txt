@@ -36,7 +36,6 @@ derivation-capture	no MUTANT-MATRIX block; floor: S1 sup_mut(),S2 cmp -s + mutan
 derivation-capture-worktree-root	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 dist-clone	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKC mutant_killed caller
 divergence-hard-block	no MUTANT-MATRIX block; floor: S1 pend_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-emit-report-refusal	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 enforcement-map-yaml-plain	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant,MKA mutant-kills allowlist row
 escalation-citation	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant
 escalation-status-vocabulary	no MUTANT-MATRIX block; floor: S1 mut_prog(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
