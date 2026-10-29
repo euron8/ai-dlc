@@ -460,10 +460,10 @@ checks:
           brief omitting a section (arm S4), S3 and S4 decided before exit 3 --
           turns on arm 4 (the entry states a remediation and names its
           artifact), and because story routing needs the sprint's story
-          files, which the ledger does not name. Three classes (REMEDIABLE_CLASSES:
-          cite, shard, cover) ALSO clear without the operator, decided by the
-          validator itself: a later same-sprint, same-role row carrying
-          `remediates: <V tool_use_id>`, joined to subagent-context.jsonl (it RAN)
+          files, which the ledger does not name. Three classes (the REMEDIABLE_CLASSES
+          set, cite and shard and cover) ALSO clear without the operator, decided by the
+          validator itself, so a later same-sprint, same-role row carrying
+          a `remediates` field naming V's tool_use_id, joined to subagent-context.jsonl (it RAN)
           and clean on V's class, suppresses that class on V only, printed as
           REMEDIATED and counted as remediated= on COUNTS. That clear attests a
           re-dispatch RAN, is clean on V's class and was declared by the lead as
