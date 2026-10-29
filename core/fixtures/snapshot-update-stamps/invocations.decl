@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-37 *
+# Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows replaced: * 37->36).
+36 *
 10 core/scripts/snapshot-update.sh
 7 core/scripts/validate-artifact-budget.sh

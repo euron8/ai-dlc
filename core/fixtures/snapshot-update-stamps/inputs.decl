@@ -2,3 +2,5 @@
 # sibling; every mutant copies both into one directory. Its own directory is copied by the runner.
 !core/scripts/snapshot-update.sh
 !core/scripts/validate-artifact-budget.sh
+# The same-run kill helper, sourced by run.sh.
+core/fixtures/lib/mutant.sh

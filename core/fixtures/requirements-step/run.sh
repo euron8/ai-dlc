@@ -39,10 +39,36 @@
 #       region; requirements.md's series-naming bullet carries the B4 refusal sentence
 #       for a --document merge of a subject file.
 #
-# Usage: run.sh
+# THE MUTANT MATRIX. A CELL is one corpus predicate: h (the disposition vocabulary agrees across a steps dir),
+# i-axis and i-mandate (requirements.md section 5 and 4(c)), j-check and j-sweep (the two Check 24 sites of
+# gate-validation.md) and j-refuse (the B4 refusal bullet of requirements.md). PER PUSH a mutant is scored on
+# its DECIDING cell, which must fail on it, and its named TWIN, a different cell it could plausibly co-trip but
+# must leave GREEN. `run.sh --matrix` scores each mutant against all six cells and prints one MATRIX line per
+# mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command
+# below, run from the repo root. The (i) and (j) mutants carry an i- or j- prefix because the bare names are
+# prefixes of drop-from-one and drop-from-all.
+# MUTANT-MATRIX drop-from-one decides=h twins=i-axis
+# MUTANT-MATRIX drop-from-all decides=h twins=i-axis
+# MUTANT-MATRIX i-restore decides=i-axis twins=i-mandate
+# MUTANT-MATRIX i-drop decides=i-mandate twins=i-axis
+# MUTANT-MATRIX j-check decides=j-check twins=j-sweep
+# MUTANT-MATRIX j-sweep decides=j-sweep twins=j-check
+# MUTANT-MATRIX j-refuse decides=j-refuse twins=i-axis
+# Each of the three mutant loops passes its mutant name to mutant_killed as a variable, via one helper:
+# MUTANT-MATRIX-DYNAMIC rs_score why=reads every mutant name of the (h), (i) and (j) loops as a variable and every name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/requirements-step/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
 #        2 = fixture broken (a probe could not be proven in either direction).
 set -uo pipefail
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "requirements-step: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -503,6 +529,10 @@ done
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "requirements-step: running arms against the corpus"
 echo
@@ -625,12 +655,81 @@ fi
 
 # --- (h) the disposition vocabulary agrees across every derived carrier ---
 if dispositions_agree "$STEPS"; then
-  ok "(h) every step file carrying the prior-decision disposition vocabulary agrees on the four members, and carries the deferred-unfiled filing mandate"
+  ok "(h) every step file carrying the prior-decision disposition vocabulary agrees on the four members, and carries the deferred-unfiled filing mandate"; B_h=1
 else
   bad "(h) prior-decision disposition vocabulary: $DISPO_WHY"
 fi
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cell and twin. ----
+MXL="$(mktemp)"; : > "$MXL"
+RS_CELLS="h i-axis i-mandate j-check j-sweep j-refuse"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$HERE/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
+}
+mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
+# rs_red <cell> <requirements.md> <gate-validation.md> <steps dir> -> 0 when the predicate FAILS (RED), 1 when it holds (GREEN).
+rs_red() {
+  case "$1" in
+    h) ! dispositions_agree "$4" ;;
+    i-axis) ! subject_axis_ok "$2" ;;
+    i-mandate) ! mandate_ok "$2" ;;
+    j-check) ! j_check_ok "$3" ;;
+    j-sweep) ! j_sweep_ok "$3" ;;
+    j-refuse) ! j_refuse_ok "$2" ;;
+    *) echo "MATRIX BROKEN unknown cell $1"; exit 2 ;;
+  esac
+}
+# rs_cell <cell> <req> <gv> <steps> -> RED|GREEN; a crashed predicate is BROKEN, never GREEN.
+RS_WHY=""
+rs_cell() {
+  local r e="$MXL.err"
+  # Each predicate sets only its own reason variable, so all three are cleared first: a stale reason from the
+  # previous cell must not be read as this cell's.
+  DISPO_WHY=""; I_WHY=""; J_WHY=""
+  { rs_red "$1" "$2" "$3" "$4"; r=$?; } 2>"$e"
+  case "$1" in h) RS_WHY="$DISPO_WHY" ;; i-*) RS_WHY="$I_WHY" ;; *) RS_WHY="$J_WHY" ;; esac
+  case "$(cat "$e")" in
+    *"unbound variable"*|*"command not found"*|*"syntax error"*)
+      if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $1"; exit 2; fi
+      bad "FIXTURE BROKEN: cell $1 crashed, which reads as GREEN" ;;
+  esac
+  if [ "$r" -eq 0 ]; then RS_COLOR=RED; else RS_COLOR=GREEN; fi
+}
+# rs_score <mutant> <base-pass flag> <message> <req> <gv> <steps> -- the deciding cell and the twin per push, every cell under --matrix.
+rs_score() {
+  local m="$1" fl="$2" msg="$3" req="$4" gv="$5" st="$6" dec tw d t why a g=0 tot=0 u="" rd=""
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "MUTANT $m has no single MUTANT-MATRIX row naming its deciding cell and twin"; return; fi
+  printf 'dec %s %s\n' "$m" "$dec" >> "$MXL"; printf 'dec %s %s\n' "$m" "$tw" >> "$MXL"
+  rs_cell "$dec" "$req" "$gv" "$st"; d="$RS_COLOR"; why="$RS_WHY"
+  rs_cell "$tw" "$req" "$gv" "$st"; t="$RS_COLOR"
+  if [ "$d" = RED ]; then
+    mutant_killed "$fl" "$m" "$msg$why"
+  else
+    bad "MUTANT $m SURVIVED: the $dec predicate passed on the mutated copy"
+  fi
+  if [ "$t" = RED ]; then bad "MUTANT $m is entangled: its twin $tw also failed"; fi
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    for a in $RS_CELLS; do
+      if [ "$a" = "$dec" ] || [ "$a" = "$tw" ]; then continue; fi
+      printf 'mx %s %s\n' "$m" "$a" >> "$MXL"
+      tot=$((tot + 1)); rs_cell "$a" "$req" "$gv" "$st"; if [ "$RS_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
+    done
+    if [ "$d" = GREEN ]; then u=" UNEXPECTED=$dec:GREEN"; fi
+    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$d" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
+  fi
+}
+
 # Mutants, each on a COPY of the steps dir, each guarded by cmp -s so a sed that
-# matched nothing reads DID NOT APPLY rather than as a kill.
+# matched nothing reads DID NOT APPLY rather than as a scored mutant.
 DISPO_CARRIERS=""
 for f in "$STEPS"/*.md; do [ -n "$(disposition_set "$f")" ] && DISPO_CARRIERS="$DISPO_CARRIERS $(basename "$f")"; done
 set -- $DISPO_CARRIERS
@@ -649,10 +748,8 @@ else
     done
     if [ "$applied" -eq 0 ]; then
       bad "(h) MUTANT drop-from-$which DID NOT APPLY"
-    elif dispositions_agree "$MS"; then
-      bad "(h) MUTANT drop-from-$which SURVIVED: the arm passed with deferred-unfiled removed"
     else
-      ok "(h) MUTANT drop-from-$which killed: $DISPO_WHY"
+      rs_score "drop-from-$which" "${B_h:-0}" "(h) MUTANT drop-from-$which scored by h: " "$REQMD" "$GVMD" "$MS"
     fi
   done
   rm -rf "$MUT"
@@ -660,12 +757,12 @@ fi
 
 # --- (i) subject axis in section 5; `###` mandate in 4(c) ---
 if subject_axis_ok "$REQMD"; then
-  ok "(i) requirements.md section 5 names $SUBJ_TOOL and no longer says it '$OLD_SENT'"
+  ok "(i) requirements.md section 5 names $SUBJ_TOOL and no longer says it '$OLD_SENT'"; B_axis=1
 else
   bad "(i) requirements.md: $I_WHY"
 fi
 if mandate_ok "$REQMD"; then
-  ok "(i) requirements.md 4(c) carries the \`###\` subheading mandate"
+  ok "(i) requirements.md 4(c) carries the \`###\` subheading mandate"; B_mand=1
 else
   bad "(i) requirements.md: $I_WHY"
 fi
@@ -678,27 +775,20 @@ awk -v s="  Rule 28 \"Split dispatch\" $OLD_SENT, so the round keeps one agent p
 # drop-mandate: delete every line carrying the mandate sentence.
 awk -v m="$MANDATE" '!index($0, m)' "$REQMD" > "$IMUT/drop.md"
 for m in restore drop; do
-  if cmp -s "$REQMD" "$IMUT/$m.md"; then bad "(i) MUTANT $m DID NOT APPLY"; continue; fi
-  if [ "$m" = restore ]; then own=subject_axis_ok; other=mandate_ok; else own=mandate_ok; other=subject_axis_ok; fi
-  if "$own" "$IMUT/$m.md"; then
-    bad "(i) MUTANT $m SURVIVED: $own passed on the mutated copy"
-  elif ! "$other" "$IMUT/$m.md"; then
-    bad "(i) MUTANT $m is entangled: $other also failed ($I_WHY)"
-  else
-    "$own" "$IMUT/$m.md"
-    ok "(i) MUTANT $m killed by $own alone: $I_WHY"
-  fi
+  if cmp -s "$REQMD" "$IMUT/$m.md"; then bad "(i) MUTANT i-$m DID NOT APPLY"; continue; fi
+  if [ "$m" = restore ]; then fl="${B_axis:-0}"; else fl="${B_mand:-0}"; fi
+  rs_score "i-$m" "$fl" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
 done
 rm -rf "$IMUT"
 
 # --- (j) the requirements series named at both Check 24 sites; B4's refusal in requirements.md ---
 if [ -f "$GVMD" ]; then
-  j_check_ok "$GVMD" && ok "(j) gate-validation.md's Check 24 invocation paragraph names $J_TOK" || bad "(j) gate-validation.md: $J_WHY"
-  j_sweep_ok "$GVMD" && ok "(j) gate-validation.md's post-planning sweep paragraph names $J_TOK" || bad "(j) gate-validation.md: $J_WHY"
+  if j_check_ok "$GVMD"; then ok "(j) gate-validation.md's Check 24 invocation paragraph names $J_TOK"; B_jcheck=1; else bad "(j) gate-validation.md: $J_WHY"; fi
+  if j_sweep_ok "$GVMD"; then ok "(j) gate-validation.md's post-planning sweep paragraph names $J_TOK"; B_jsweep=1; else bad "(j) gate-validation.md: $J_WHY"; fi
 else
   bad "(j) gate-validation.md not found at $GVMD"
 fi
-j_refuse_ok "$REQMD" && ok "(j) requirements.md's series bullet says B4 refuses a --document merge of a subject file" || bad "(j) requirements.md: $J_WHY"
+if j_refuse_ok "$REQMD"; then ok "(j) requirements.md's series bullet says B4 refuses a --document merge of a subject file"; B_jrefuse=1; else bad "(j) requirements.md: $J_WHY"; fi
 # Mutants on COPIES, cmp -s guarded, each keyed on its own predicate's REGION (every occurrence of
 # the token inside it removed, so a third mention a later release adds cannot leave it vacuous),
 # and each must fail ONLY its own predicate.
@@ -715,17 +805,25 @@ j_strip "$GVMD" "$J_SWEEP_A" "$J_SWEEP_Z" "$J_TOK" > "$JMUT/sweep.md"
 j_strip "$REQMD" "$J_REQ_A" "$J_REQ_Z" "$J_REFUSE_2" > "$JMUT/refuse.md"
 for m in check sweep refuse; do
   case "$m" in
-    check)  src="$GVMD";  own=j_check_ok;  others="j_sweep_ok" ;;
-    sweep)  src="$GVMD";  own=j_sweep_ok;  others="j_check_ok" ;;
-    refuse) src="$REQMD"; own=j_refuse_ok; others="" ;;
+    check)  src="$GVMD";  fl="${B_jcheck:-0}";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
+    sweep)  src="$GVMD";  fl="${B_jsweep:-0}";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
+    refuse) src="$REQMD"; fl="${B_jrefuse:-0}"; rq="$JMUT/$m.md";    gv="$GVMD" ;;
   esac
-  if cmp -s "$src" "$JMUT/$m.md"; then bad "(j) MUTANT $m DID NOT APPLY"; continue; fi
-  if "$own" "$JMUT/$m.md"; then bad "(j) MUTANT $m SURVIVED: $own passed on the mutated copy"; continue; fi
-  ent=""; for o in $others; do "$o" "$JMUT/$m.md" || ent="$ent $o"; done
-  if [ -n "$ent" ]; then bad "(j) MUTANT $m is entangled:$ent also failed"
-  else "$own" "$JMUT/$m.md"; ok "(j) MUTANT $m killed by $own alone: $J_WHY"; fi
+  if cmp -s "$src" "$JMUT/$m.md"; then bad "(j) MUTANT j-$m DID NOT APPLY"; continue; fi
+  rs_score "j-$m" "$fl" "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS"
 done
 rm -rf "$JMUT"
+
+# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
+# an empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

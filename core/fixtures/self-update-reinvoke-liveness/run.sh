@@ -22,7 +22,28 @@
 #   "carrying the operator's original arguments IN FULL"
 #   "The fresh invocation loads the updated logic and runs the reconcile on it."
 #   "On `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`: **do NOT cut the branch and do NOT push.**"
+#
+# THE MUTANT MATRIX. A CELL is one base-case assertion read off a flow's key=value output: engine (the real
+# machinery list puts the reconcile engine in the slice), step1 (the step-1 probe is in it), rulebook (a
+# rulebook file is not), size (exactly two paths), inv1step1 (invocation 1 ran the pre-update step-1 probe),
+# tree2 (step 2 merged the slice), inv2step3 (the re-invoke runs the NEW engine), inv2step1 (the fresh step 1 is
+# the new probe) and sliceleft (the second invocation's slice is empty by content). Each mutant is a flow whose
+# output is read through its DECIDING cells and its named TWIN, which it must leave GREEN. No cell costs a
+# flow: they read the output the mutant's flow already wrote. `run.sh --matrix` reads every cell and prints one
+# MATRIX line per mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
+# REMEASURE command below, run from the repo root.
+# also trips: M1 -> inv2step1
+# also trips: M2 -> inv2step3,size,tree2 (inv2step3 follows from the missing engine: the re-invoke then runs the old engine)
+# MUTANT-MATRIX M1 decides=inv2step3 twins=tree2
+# MUTANT-MATRIX M2 decides=engine twins=step1
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-reinvoke-liveness/run.sh --matrix
 set -uo pipefail
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "self-update-reinvoke-liveness: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
@@ -47,6 +68,10 @@ FAILS=0
 ok()   { echo "ok   $1"; }
 bad()  { echo "FAIL $1"; FAILS=$((FAILS+1)); }
 eq()   { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: got [$2] want [$3]"; fi; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 G()    { git -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false "$@"; }
 
 # ---- the text being modelled still says what the model assumes ------------------------------------
@@ -174,15 +199,74 @@ flow() {
 }
 val() { grep -m1 "^$2=" "$W/$1.out" | cut -d= -f2-; }
 
+# ---- matrix plumbing. A cell is one base-case expectation, read off a flow's output. ----
+cell_ok() { # <flow> <cell> -> 0 when the base expectation of that cell holds on that flow's output
+  case "$2" in
+    engine)    [ "$(val "$1" slice.has_engine)" = 1 ] ;;
+    step1)     [ "$(val "$1" slice.has_step1)" = 1 ] ;;
+    rulebook)  [ "$(val "$1" slice.has_rulebook)" = 0 ] ;;
+    size)      [ "$(val "$1" slice.n)" = 2 ] ;;
+    inv1step1) [ "$(val "$1" inv1.step1)" = "STEP1-MARKER A" ] ;;
+    tree2)     [ "$(val "$1" tree_after_step2.engine)" = "ENGINE-MARKER B" ] ;;
+    inv2step3) [ "$(val "$1" inv2.step3)" = "ENGINE-MARKER B" ] ;;
+    inv2step1) [ "$(val "$1" inv2.step1)" = "STEP1-MARKER B" ] ;;
+    sliceleft) [ "$(val "$1" inv2.slice_left)" = 0 ] ;;
+    *) echo "MATRIX BROKEN unknown cell $2"; exit 2 ;;
+  esac
+}
+CELLS="engine step1 rulebook size inv1step1 tree2 inv2step3 inv2step1 sliceleft"
+MXL="$W/mx.ledger"; : > "$MXL"
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$HERE/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
+}
+mx_count() { local k="$1" l n=0; while IFS= read -r l; do case "$l" in "$k "*) n=$((n + 1)) ;; esac; done < "$MXL"; printf '%s' "$n"; }
+# mx_pair <mutant> <flow> -> sets MX_D (RED when every deciding cell fails on the flow) and MX_T (RED when a twin fails).
+mx_pair() {
+  local m="$1" fl="$2" dec tw c g=0 tot=0 dtxt="" ttxt="" u="" rd=""
+  if [ ! -s "$W/$fl.out" ]; then echo "MATRIX BROKEN $m"; exit 2; fi
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: no single MUTANT-MATRIX row names the deciding cells and twin of $m"; MX_D=GREEN; MX_T=RED; return; fi
+  MX_D=RED; MX_T=GREEN
+  for c in ${dec//,/ }; do
+    printf 'dec %s %s\n' "$m" "$c" >> "$MXL"
+    if cell_ok "$fl" "$c"; then MX_D=GREEN; dtxt="$dtxt,$c:GREEN"; u="$u $c:GREEN"; else dtxt="$dtxt,$c:RED"; fi
+  done
+  for c in ${tw//,/ }; do
+    printf 'dec %s %s\n' "$m" "$c" >> "$MXL"
+    if cell_ok "$fl" "$c"; then ttxt="$ttxt,$c:GREEN"; else MX_T=RED; ttxt="$ttxt,$c:RED"; u="$u $c:RED"; fi
+  done
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    for c in $CELLS; do
+      case ",$dec,$tw," in *",$c,"*) continue ;; esac
+      printf 'mx %s %s\n' "$m" "$c" >> "$MXL"
+      tot=$((tot + 1)); if cell_ok "$fl" "$c"; then g=$((g + 1)); else rd="$rd,$c"; fi
+    done
+    if [ -n "$u" ]; then u=" UNEXPECTED=$(printf '%s' "${u# }" | tr ' ' ',')"; fi
+    printf 'MATRIX %s decides=%s twins=%s others=%d/%d%s%s\n' "$m" "${dtxt#,}" "${ttxt#,}" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
+  fi
+}
+
 # ---- the cases ------------------------------------------------------------------------------------
 flow base "$RECON/setup-sites.md" 0 live
-eq "slice derived from the real machinery list: reconcile engine is in it"        "$(val base slice.has_engine)" "1"
-eq "slice derived from the real machinery list: core/scripts step-1 probe is in it" "$(val base slice.has_step1)" "1"
+if [ "$(val base slice.has_engine)" = "1" ]; then ok "slice derived from the real machinery list: reconcile engine is in it"; B_engine=1
+else bad "slice derived from the real machinery list: reconcile engine is in it: got [$(val base slice.has_engine)] want [1]"; fi
+if [ "$(val base slice.has_step1)" = "1" ]; then ok "slice derived from the real machinery list: core/scripts step-1 probe is in it"; B_step1=1
+else bad "slice derived from the real machinery list: core/scripts step-1 probe is in it: got [$(val base slice.has_step1)] want [1]"; fi
 eq "slice control: a rulebook file that changed A->B is NOT in the slice"          "$(val base slice.has_rulebook)" "0"
 eq "slice size: exactly the two machinery paths"                                   "$(val base slice.n)" "2"
 eq "invocation 1 step 1 ran the PRE-update probe (control: not live in the first pass)" "$(val base inv1.step1)" "STEP1-MARKER A"
-eq "step 2 wrote and merged the slice into the consumer tree"                       "$(val base tree_after_step2.engine)" "ENGINE-MARKER B"
-eq "re-invoke: step 3 runs the NEW reconcile engine on the delivering pull"          "$(val base inv2.step3)" "ENGINE-MARKER B"
+if [ "$(val base tree_after_step2.engine)" = "ENGINE-MARKER B" ]; then ok "step 2 wrote and merged the slice into the consumer tree"; B_tree2=1
+else bad "step 2 wrote and merged the slice into the consumer tree: got [$(val base tree_after_step2.engine)] want [ENGINE-MARKER B]"; fi
+if [ "$(val base inv2.step3)" = "ENGINE-MARKER B" ]; then ok "re-invoke: step 3 runs the NEW reconcile engine on the delivering pull"; B_inv2step3=1
+else bad "re-invoke: step 3 runs the NEW reconcile engine on the delivering pull: got [$(val base inv2.step3)] want [ENGINE-MARKER B]"; fi
 eq "re-invoke: the fresh invocation's own step 1 is the new probe"                   "$(val base inv2.step1)" "STEP1-MARKER B"
 eq "second invocation's slice is empty by CONTENT (the cycle terminates)"            "$(val base inv2.slice_left)" "0"
 
@@ -211,8 +295,12 @@ eq "UN-SYNCED vs DEFER: same step 3 value, but only DEFER lands at step 7" "$(va
 flow m1 "$RECON/setup-sites.md" 0 pre
 eq "M1 applies: the re-invoke snapshot differs from the merged tree" \
    "$( [ "$(val m1 tree_after_step2.engine)" != "$(val m1 inv2.step3)" ] && echo differs || echo same )" "differs"
-eq "M1 killed: the base case's inv2.step3 assertion fails on it" \
-   "$( [ "$(val m1 inv2.step3)" = "$(val base inv2.step3)" ] && echo survived || echo killed )" "killed"
+mx_pair M1 m1
+if [ "$MX_D" = RED ]; then
+  mutant_killed "${B_inv2step3:-0}" M1 "M1 scored: the base case's inv2.step3 assertion fails on it, with its twin tree2 GREEN"
+else
+  bad "M1 SURVIVED: the base case's inv2.step3 assertion still holds on it"
+fi
 eq "M1 control: its step-2 write still happened (only the re-invoke source is mutated)" "$(val m1 tree_after_step2.engine)" "ENGINE-MARKER B"
 
 # M2: the slice excludes reconcile/* (the ai-dlc-update subtree line removed from the machinery: list).
@@ -226,13 +314,33 @@ eq "M2 anchor is unique in the machinery: block (control: an impossible anchor r
 awk '/^machinery:/{f=1} f&&$0=="  - core/skills/ai-dlc-update/**"{next} f&&!/^machinery:/&&!/^  - /{f=0} {print}' "$RECON/setup-sites.md" > "$SS2"
 if cmp -s "$RECON/setup-sites.md" "$SS2"; then bad "M2 DID NOT APPLY"; else ok "M2 applies: mutated list differs from the real one"; fi
 flow m2 "$SS2" 0 live
-eq "M2 killed: the slice no longer holds the reconcile engine"                     "$(val m2 slice.has_engine)" "0"
-eq "M2 killed: step 3 after the re-invoke still runs the OLD engine"                "$(val m2 inv2.step3)" "ENGINE-MARKER A"
+mx_pair M2 m2
+if ! cell_ok m2 engine; then
+  mutant_killed "${B_engine:-0}" M2 "M2 scored: the slice no longer holds the reconcile engine"
+else
+  bad "M2 SURVIVED: the slice still holds the reconcile engine"
+fi
+if ! cell_ok m2 inv2step3; then
+  mutant_killed "${B_inv2step3:-0}" M2 "M2 scored: step 3 after the re-invoke still runs the OLD engine"
+else
+  bad "M2 SURVIVED: step 3 after the re-invoke runs the NEW engine"
+fi
 eq "M2 control: the step-1 probe is still in the slice (only the engine entry was removed)" "$(val m2 slice.has_step1)" "1"
 
 # ---- self-probe: the harness distinguishes A from B in the same invocation -------------------------
 eq "self-probe: re-invoke step 3 (B) and DEFER step 3 (A) are different values" \
    "$( [ "$(val base inv2.step3)" != "$(val defer inv1.step3)" ] && echo differ || echo same )" "differ"
+
+# RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
+# an empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+fi
 
 if [ "$FAILS" -eq 0 ]; then echo "PASS self-update-reinvoke-liveness"; exit 0; fi
 echo "FAILED $FAILS"; exit 1
