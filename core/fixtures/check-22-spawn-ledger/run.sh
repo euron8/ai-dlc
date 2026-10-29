@@ -2295,26 +2295,38 @@ rmd2() {
     || { printf 'd2:nopair'; return; }
   printf 'D2'
 }
-rvec() { # script -> one cell per world, in RM_NAMES order
-  local S="$1"
-  printf '%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s' \
-    "$(rmrem "$S" rem-cite  toolu_V1 toolu_R1 cite)" \
-    "$(rmrem "$S" rem-shard toolu_V2 toolu_R2 shard)" \
-    "$(rmrem "$S" rem-cover toolu_V3 toolu_R3 cover)" \
-    "$(rmref "$S" nm-role        r-v1 toolu_V1)" \
-    "$(rmref "$S" nm-sprint      r-v1 toolu_V1)" \
-    "$(rmref "$S" nm-order       r-v1 toolu_V1)" \
-    "$(rmref "$S" nm-tier        r-vt toolu_VT 'Rule 19(a) tier' 'Rule 19(a) tier')" \
-    "$(rmref "$S" nm-dirty-cite  r-v1 toolu_V1)" \
-    "$(rmref "$S" nm-dirty-shard r-v2 toolu_V2)" \
-    "$(rmref "$S" nm-dirty-cover r-v3 toolu_V3)" \
-    "$(rmref "$S" nm-pending     r-v1 toolu_V1 'pending-remedy=1')" \
-    "$(rmref "$S" nm-invalid     r-v1 toolu_V1 "$RM_INVALID")" \
-    "$(rmref "$S" nm-namekey     r-v1 toolu_V1 'pending-remedy=0')" \
-    "$(rmref "$S" nm-ambig       r-dup toolu_VD1 "$RM_AMBIG")" \
-    "$(rmref "$S" nm-none3       r-v2 toolu_V2)" \
-    "$(rmref "$S" nm-launder     r-v1 toolu_V1)" \
-    "$(rmd2 "$S")"
+rvec() { # script [cells] -> one cell per world, in RM_NAMES order
+  # With a second argument only those named cells RUN the validator; every other cell is written
+  # as its expected value. A mutant is scored on the worlds where its arm decides plus its named
+  # twins (fixture-mutants.md, One run per distinct state, clause 2), never on all seventeen.
+  local S="$1" ONLY="${2:-}" n e c out="" i=1
+  for n in $R_NAMES; do
+    e="$(printf '%s' "$R_EXPECTED" | cut -d' ' -f$i)"; i=$((i+1))
+    c="$e"
+    if [ -z "$ONLY" ] || { case " $ONLY " in *" $n "*) true ;; *) false ;; esac; }; then
+      case "$n" in
+        rem-cite)        c="$(rmrem "$S" rem-cite  toolu_V1 toolu_R1 cite)" ;;
+        rem-shard)       c="$(rmrem "$S" rem-shard toolu_V2 toolu_R2 shard)" ;;
+        rem-cover)       c="$(rmrem "$S" rem-cover toolu_V3 toolu_R3 cover)" ;;
+        nm-role)         c="$(rmref "$S" nm-role        r-v1 toolu_V1)" ;;
+        nm-sprint)       c="$(rmref "$S" nm-sprint      r-v1 toolu_V1)" ;;
+        nm-order)        c="$(rmref "$S" nm-order       r-v1 toolu_V1)" ;;
+        nm-tier)         c="$(rmref "$S" nm-tier        r-vt toolu_VT 'Rule 19(a) tier' 'Rule 19(a) tier')" ;;
+        nm-dirty-cite)   c="$(rmref "$S" nm-dirty-cite  r-v1 toolu_V1)" ;;
+        nm-dirty-shard)  c="$(rmref "$S" nm-dirty-shard r-v2 toolu_V2)" ;;
+        nm-dirty-cover)  c="$(rmref "$S" nm-dirty-cover r-v3 toolu_V3)" ;;
+        nm-pending)      c="$(rmref "$S" nm-pending     r-v1 toolu_V1 'pending-remedy=1')" ;;
+        nm-invalid)      c="$(rmref "$S" nm-invalid     r-v1 toolu_V1 "$RM_INVALID")" ;;
+        nm-namekey)      c="$(rmref "$S" nm-namekey     r-v1 toolu_V1 'pending-remedy=0')" ;;
+        nm-ambig)        c="$(rmref "$S" nm-ambig       r-dup toolu_VD1 "$RM_AMBIG")" ;;
+        nm-none3)        c="$(rmref "$S" nm-none3       r-v2 toolu_V2)" ;;
+        nm-launder)      c="$(rmref "$S" nm-launder     r-v1 toolu_V1)" ;;
+        d2)              c="$(rmd2 "$S")" ;;
+      esac
+    fi
+    out="$out $c"
+  done
+  printf '%s' "${out# }"
 }
 R_EXPECTED="REM REM REM REF REF REF REF REF REF REF REF REF REF REF REF REF D2"
 R_NAMES="rem-cite rem-shard rem-cover nm-role nm-sprint nm-order nm-tier nm-dirty-cite nm-dirty-shard nm-dirty-cover nm-pending nm-invalid nm-namekey nm-ambig nm-none3 nm-launder d2"
@@ -2341,7 +2353,7 @@ rmut() {
   if [ -f "${RNP:-}" ] && cmp -s "$RNP" "$M"; then bad "FIXTURE BROKEN: R mutation '$n' changed only the self-probe call -- its predicate edit matched nothing"; return; fi
   bash -n "$M" 2>/dev/null || { bad "FIXTURE BROKEN: R mutant '$n' does not parse"; return; }
   need_base "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" || return
-  mv="$(rmoved "$(rvec "$M")")"
+  mv="$(rmoved "$(rvec "$M" "$3")")"
   [ "$mv" = "$3" ] && mutant_killed "$([ "$RGOT" = "$R_EXPECTED" ] && [ "$RCTL" = "$R_EXPECTED" ] && echo 1)" "r-$n" "MUTANT r-$n killed: $4 -- moves only [$3]" \
     || bad "MUTANT r-$n: moved [$mv], expected only [$3]"
 }
@@ -2371,8 +2383,8 @@ sed "$RM_NOPROBE" "$WORK/mut/control.sh" > "$RNP"
 if cmp -s "$WORK/mut/control.sh" "$RNP"; then
   bad "FIXTURE BROKEN: the self-probe call site matched nothing, so r-cover, r-m3 and r-m4 would be scored by the probe's exit 2"
 else
-  RNPGOT="$(rvec "$RNP")"
-  [ "$RNPGOT" = "$R_EXPECTED" ] && ok "R NOPROBE CONTROL: the validator with only its shard self-probe call disabled reproduces all seventeen R cells, so a mutant that also disables it is scored by its own edit" \
+  RNPGOT="$(rvec "$RNP" "nm-dirty-cover nm-ambig nm-launder nm-pending")"
+  [ "$RNPGOT" = "$R_EXPECTED" ] && ok "R NOPROBE CONTROL: the validator with only its shard self-probe call disabled reproduces the four cells the three probe-disabling mutants are scored on, so a mutant that also disables it is scored by its own edit" \
     || bad "R NOPROBE CONTROL: disabling the self-probe call alone moved [$(rmoved "$RNPGOT")]"
 fi
 # r-cover: R's cleanliness dropped for arm S4.
