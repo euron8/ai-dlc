@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.969.0] - 2026-10-29
+
+Batch b245. It ships the `wait-beat-liveness` fixture on an injected clock, the fix for the fixture hang that held the unit out of 0.968.0, and the removal of the last two `±` rows in the tree (BL-868 item 3, BL-850 progress). BL-850 stays open where its line in `docs/backlog.md` says so.
+
+Rulebook and engine changes. None: no file under `core/` outside `core/fixtures/`, no `CLAUDE.md` and no template changes in this release.
+
+### wait-beat-liveness on an injected clock (BL-868, BL-850)
+
+- The fixture runs its subject with `date` and `sleep` shims first on `PATH`, one virtual clock per world, and no edit to the subject. The churn writers and the revised-edit writer became poll hooks. Worlds that need live concurrency or a real process start time (heir, FIFO ledger, custom state dir, cross-heir and the S22, S22b and S22c aged-shell chain) keep the real clock with the shims off `PATH`. Both S13g worlds run on the injected clock.
+- `blocked_lease` ends the beat's whole process tree at its bound, so a ledger-reading child can no longer hold the final wait.
+- Mutants go through `mutant_killed` behind literal base-pass flags, with a `flags` arm comparing the defined and armed sets. A 63-row MUTANT-MATRIX block and a `--matrix` mode ship with it, and a plain run asserts that it ran no matrix cell. The fixture left `scripts/fixture-matrix-allowlist.txt` and `scripts/mutant-kills-allowlist.txt`, which move from 94 to 93 and from 31 to 30 rows. `scripts/mutant-sites-allowlist.txt` stays at 254.
+- BL-868 item 3 is closed, and no `±` row remains in the tree. BL-850 stays open with progress recorded.
+
+### Fixture costs
+
+The `*` row of each `invocations.decl`, read at `origin/main` 909249c28 and at this release's tree.
+
+- `wait-beat-liveness` moves from a provisional 446±15 to an exact 6533, a rise. Every virtual `date` and `sleep` is a counted bash start (5626 `date` and 364 `sleep`), and they replace polls that waited in real time.
+- Its `core/scripts/merge-adversarial-shards.sh` row moves from a provisional 28±9 to an exact 26.
+
 ## [0.968.0] - 2026-10-29
 
 Batch b245, final release. It ships the M5 mutant-kill arms (BL-828), deterministic readset-skip and consumer-suite-pool fixtures (BL-868), the BL-849 decl-reasons receipt, the hermetic-runner XR fix, held-story tracking and the run-window refusal (BL-839, BL-840), the Gate-2 handoff and review-shard changes (BL-843 through BL-847, BL-510), the a3 fixture stack and further fixture re-measurement (BL-850), and `seed-verdict-store.sh`. BL-850, BL-828 and BL-868 stay open where their lines in `docs/backlog.md` say so. Consumer-visible engine changes ship in this release.

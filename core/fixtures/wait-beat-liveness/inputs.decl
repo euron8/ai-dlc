@@ -9,3 +9,5 @@
 !core/scripts/validate-adversarial-convergence.sh
 # Section 26 sources the start-time helper beside the subject and copies it beside every argv-record subject.
 !core/scripts/wfd-start-of.sh
+# The shared mutant-kill helper: every kill is emitted through its mutant_killed.
+!core/fixtures/lib/mutant.sh
