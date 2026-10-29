@@ -793,7 +793,7 @@ TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
 # f, which is not in the scored vector: f records behaviour and owns no mutant.
 CC_WANT="a=allow:1:true/definition b=allow:1:true/prompt c=deny:0:- d=deny:0:- e=deny:0:-"
 
-B_CC=$([ "$TIP_A $TIP_B $TIP_C $TIP_D $TIP_E" = "true/definition true/prompt false/null false/null false/null" ] && echo 1 || echo 0)
+B_CC=$([ "$TIP_A $TIP_B $TIP_C $TIP_D $TIP_E" = "allow:1:true/definition allow:1:true/prompt deny:0:- deny:0:- deny:0:-" ] && echo 1 || echo 0)
 cc_cell() { # cc_cell <guard> <cell> -> that cell's "cited/via" value
   case "$2" in
     a) ccell "$1" "$CW_A" defok ;;
