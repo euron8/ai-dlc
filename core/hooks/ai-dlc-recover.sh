@@ -506,7 +506,7 @@ not reconstruct a rule, and do not ask the operator to re-invoke \`/ai-dlc\`.
 
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates
-state below, and the current git branch and last commit. Then proceed to the next
+state below, \`held:\`, and the current git branch and last commit. Then proceed to the next
 pipeline action in the same response. Do not pause for user confirmation.
 
 ## Your teammates did NOT die -- you lost their handles

@@ -25,4 +25,12 @@
 # `core/hooks/`, so the cost is one more hook file and no new loop. Keeping the count flat would have
 # meant an inline copy of the def in both hooks, which is the drift the library exists to remove. The
 # budget is the high reading plus the same +4 margin both previous raises took.
-FORK_BUDGET=3465
+#
+# Raised 3465 -> 3472 for `core/scripts/validate-held-stories.sh` (BL-839). Measured with
+# `scripts/fork-profile.sh --section total`, each run from inside its own clean detached worktree: base
+# ffe83b0de read 3455 across 260 fixture dirs, the q1 tip de0bf2664 read 3468 across 261. By line, base
+# to tip: I75 +10 (i75_norm :6386-6388 +2 each, i75_chain/failsclosed :6397-6398 +1 each, the hash
+# :6414 +2), I84 +2 (:9182, :9188), I83 +1 (:9079). The new script resolves its root through the
+# AI_DLC_PROJECT_ROOT chain, so it is one more I75 subject and one more file the I83/I84 per-file greps
+# read; no loop and no validator code changed. The budget is the high reading plus the same +4 margin.
+FORK_BUDGET=3472

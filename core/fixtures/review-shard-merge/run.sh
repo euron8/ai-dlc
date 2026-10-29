@@ -115,6 +115,8 @@
 # MUTANT-MATRIX M44 decides=xc_merge.xc-merge twins=xc_flip.xc-flip
 # MUTANT-MATRIX M45 decides=xc_count.xc-count twins=xc_flip.xc-flip
 # MUTANT-MATRIX M46 decides=xc_one.xc-one twins=xc_flip.xc-flip
+# MUTANT-MATRIX M47 decides=qclass.qc-foo twins=qclass.qc-evidence
+# MUTANT-MATRIX M48 decides=qclass.qc-none twins=qclass.qc-foo
 # MUTANT-MATRIX m-k2only decides=x_lone.x-lone-k8 twins=x_lone.x-partial
 # MUTANT-MATRIX m-nomix decides=x_mix.x-mix twins=cs.partcite
 # MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed or under --matrix
@@ -381,6 +383,8 @@ elif p_serial_role "$WORK/sr-qa-nostep.md" "$ROLE_MD" || p_serial_role "$QA_MD" 
 else
   ok "SR2: qa.md and code-reviewer.md each tell the serial seat to run merge-review-shards.sh --check-serial before returning; with the step removed from either, refused"
 fi
+arm2 qclass "QC1: --gate qa, the Class line lifted from qa.md -- a part shard's 'Class: FOO' REFUSED byte-equal under --check-shard naming qa.md's set, 'Class: EVIDENCE' merges and is SHARD-OK, and over a qa.md declaring no Class template the FOO shard merges and is SHARD-OK (nothing checked)" \
+             "QC1: the qa merge did not hold the Class line to qa.md's template, or checked one with no template"
 arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Findings saying the gap is another group's) REFUSED byte-equal under --check-shard, naming the set 'shard-verdict: PASS' exit first, then the file-here exit, and [owner: cross-1]" \
            "VB3: the cross-1 refusal does not name both exits and its owner"
 arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
@@ -697,23 +701,29 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     x_lone "owed only at K=2" "the K=2-only lone-cross rule restored"
   CS_ONLY=x-mix mut_run m-nomix merge-review-shards.sh '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \' \
     x_mix "x-mix{" "the mixed cross.md + cross-<g>.md refusal dropped"
+  # BL-844. M47 the Class lift restored to code review only, so a qa shard's FOO merges. M48 the empty-set
+  # guard dropped, so a qa.md with no template refuses every Class value (the legacy fail-open lost).
+  CS_ONLY=qc-foo mut_run M47 merge-review-shards.sh 'CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD"' 'CLASS_SET=""; [ "$GATE" != code-review ] || CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD"' \
+    qclass "qc-foo{" "the Class lift restored to --gate code-review only"
+  CS_ONLY=qc-none mut_run M48 merge-review-shards.sh '  [ -n "$CLASS_SET" ] || return 0' '  :' \
+    qclass "qc-none{" "the empty-set guard dropped, so a role file with no template checks every Class value"
   # The matrix, or the twins. A plain run scores no matrix cell and runs at least one twin per mutant; a
   # --matrix run scores the matrix and runs no twin. Either way the count below is the mode's own.
   _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
   if [ "$RSM_MATRIX" = 1 ]; then
     : > "$WORK/mx-log"; matrix_score
     reuse_proof
-    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 48 ]; then
+    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 50 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
-    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 48 ]; then
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 50 ]; then
       ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
-    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 48"; fi
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 50"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 48 ]; then ok "VBCTL: CONTROL -- each of M1-M46, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 48): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 48 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 50 ]; then ok "VBCTL: CONTROL -- each of M1-M48, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 50): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 50 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

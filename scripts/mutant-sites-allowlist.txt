@@ -1,0 +1,254 @@
+adversarial-shard-merge	mut	1	else n_kill=$((n_kill + 1)); mutant_killed "$fl" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+advisor-gate-deny	-	1	mutant_killed "$_base" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
+agent-definition-render	hmut	1	mutant_killed "$B_hook" "$label" "HOOK MUTANT $label killed by world $dw, while twin world $tw stays green: $claim" && kills=$((kills+1))
+agent-definition-render	hmut	1	mutant_killed "$B_hook" "$label" "HOOK MUTANT $label killed, full vector [$want]: $claim" && kills=$((kills+1))
+apply-legacy-script-path	x_mut	1	if [ "$v" = "$4" ]; then mutant_killed "$([ "$XCV" = "$X_WANT" ] && echo 1 || echo 0)" "$1" "$1 ($5): tripped=[$tv] -- killed exactly its arms"
+apply-restamp-worklist	-	1	"$THEIRS_VER|GONE|"*) mutant_killed "$(( ${B_C1:-0} && ${B_mctl:-0} ))" m1 "m1 (guard on mech_fail alone): C1 goes red — the WORKLIST run stamps $THEIRS_VER and clears the marker, which is the shipped defect" ;;
+apply-restamp-worklist	-	1	"$THEIRS_VER|GONE|"*) mutant_killed "$(( ${B_C1:-0} && ${B_mctl:-0} ))" m5 "m5 (hand-back term compared -lt 0): C1 goes red — the term is present and unsatisfiable" ;;
+apply-restamp-worklist	-	1	"0|$THEIRS_VER|GONE|"*) mutant_killed "$(( ${B_U5:-0} && ${B_mctl:-0} ))" A2 "A2 (exit 3 treated as a pass): U5's REFUSAL half goes red — the apply writes and stamps $THEIRS_VER over a region nobody re-approved, which is what the carve-out costs" ;;
+apply-restamp-worklist	-	1	"1.0.0|GONE|WITHHELD|"*) mutant_killed "$(( ${B_C1:-0} && ${B_mctl:-0} ))" m2 "m2 (marker cleared outside the read-back): C1's marker half goes red while its stamp half stays green — the half a row-count assertion cannot see" ;;
+apply-restamp-worklist	-	1	"1|1.0.0|GONE|CAUSE|-|FWD") mutant_killed "$(( ${B_U5:-0} && ${B_mctl:-0} ))" A1 "A1 (the exit-3 branch disarmed): U5's DIAGNOSIS half goes red while the refusal AND the forwarded stderr stand — the remedy that closes the state the consumer filed is the one thing gone" ;;
+apply-restamp-worklist	-	1	"1|1.0.0|GONE|CAUSE|REMEDY|-") mutant_killed "$(( ${B_U5:-0} && ${B_mctl:-0} ))" A3 "A3 (--verify's stderr not forwarded): U5's FORWARD half goes red alone — the refusal, the named cause and the remedy all still print, and the diff the last sentence sends the operator to is gone" ;;
+apply-restamp-worklist	ar_score	1	mutant_killed "$bf" "$1" "$1 ($5): $3 goes red while $4 holds [$2]"
+apply-restamp-worklist	hr_mscore	1	mutant_killed "$bf" "$lab" "$1 ($what): cells {$cs} over worlds {$ws} = $v — killed exactly the arms it owns, for the reason it removes"
+apply-restamp-worklist	vf_score	1	mutant_killed "$bf" "$lab" "$lab ($what): killed {$dec} and left {$tw} holding —$got"
+apply-worklist-rows	mk_repo	1	*"--stamp retire"*) mutant_killed "$(bflag A3)" M3 "MUTANT 3 (retire_anchor= unparsed): the multi-anchor row reverts to a retire stamp — the token is what redirects the action" ;;
+apply-worklist-rows	mk_repo	1	*) mutant_killed "$(bflag A8)" M7 "MUTANT 7 (adjudication prefix not stripped): the env-less multi-anchor row loses its narrowing — the strip is what keeps the positional parse reachable" ;;
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag A1)" M2 "MUTANT 2 (unterminated key stream): the count assertion goes red — the write-the-key step is the one that disappears"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag A2)" M1 "MUTANT 1 (say drops the 4th field): the detail assertion goes red — it is what holds the instruction in the row"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag A4)" M4 "MUTANT 4 (env_key read without its prefix): the env-less row renders an ATOMIC sequence naming a key that does not exist"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag A5)" M5 "MUTANT 5 (the keep branch never taken): the KEEP verdict is handed retire steps — assertion 5 is testing the suppression, not the presence of a NOTE"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag A6)" M6 "MUTANT 6 (suppress on the token's PRESENCE, verdict names spelled in the text): the act-direction arms go red although apply.sh now names every verdict — they are keyed on the rows"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag S10)" M9 "MUTANT 9 (retire suppressed for a marked readopt): the retire sequence disappears — arm 10 is what catches a remedy that deletes the work instead of marking the readopt"
+apply-worklist-rows	mk_repo	1	mutant_killed "$(bflag S13)" M8 "MUTANT 8 (subsumption guard widened to every supersession): the anchor-only entry is wrongly marked subsumed — arm 13 is what catches a guard that would strand live work"
+artifact-derivations	bmut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+artifact-derivations	bmut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want_set] (matrix); deciding [$dec], twin [$twin] green"
+artifact-path-conformance	mutant_score	1	else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+artifact-path-migration	mutant_score	1	else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+askuserquestion-citation	mutant_score	1	if [ "$o" != "$SHIPV" ] && ! arm_holds "$d" "$o"; then mutant_killed "$base" "$n" "mutant $n: $4 ($d)"
+audit-anchors-schema	-	1	mutant_killed "$_base" no-enum-check "MUTANT no-enum-check (E): removing the entry-loop enum read lets a hand-written 'paused' validate"
+backlog-real-ledger	-	1	mutant_killed "$B_P1" m-loose "m-loose [p1-count]: with the loose label rule the lead-in counts too ($b16_arm -> $p1m_arm)"
+backlog-receipt-binding	score	1	if "arm_$a" "$m"; then mutant_killed "$f" "$m" "$3"
+backlog-rotate-fence-guard	-	1	mutant_killed "${B_delim_indent:-0}" m9-no-position-finding "m9-no-position-finding: delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires" && KILLS=$((KILLS + 1))
+backlog-rotate-fence-guard	-	1	mutant_killed "${B_fires_bullet:-0}" m3-heading-only "m3-heading-only: fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one" && KILLS=$((KILLS + 1))
+backlog-rotate-fence-guard	-	1	mutant_killed "${B_fires_tilde:-0}" m4-backtick-only "m4-backtick-only: fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one" && KILLS=$((KILLS + 1))
+backlog-rotate-fence-guard	-	1	mutant_killed "${B_quotes_two:-0}" m6-unmasked-pass1 "m6-unmasked-pass1: quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one" && KILLS=$((KILLS + 1))
+backlog-size-ceiling	score	1	if arm_trips "$1" "$1"; then mutant_killed "$2" "$1" "$3"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M1 "MUTANT M1 (summary re-gated on RC): the breach run reappears as a join violation -- arms 1 and 9 can fire"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "$(( ${B_a1warn:-0} && ${B_ctrl:-0} ))" M2 "MUTANT M2 (SAW_BREACH never raised): the breach run prints PASS while the schema run is untouched"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "$(( ${B_a5cov:-0} && ${B_ctrl:-0} ))" M3 "MUTANT M3 (qualifier deleted): the coverage run prints a bare PASS -- assertion 5 measures the qualifier"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "${B_a10struck:-0}" M4 "MUTANT M4 (SAW_INFLIGHT never raised): the struck-row run prints a bare PASS while the marker run is untouched"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "${B_a11marker:-0}" M5 "MUTANT M5 (SAW_MARKER never raised): the marker run prints a bare PASS while the struck-row run is untouched"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "${B_f_five:-0}" MF1 "MUTANT MF1 (slack 0) killed: the 5-min stamp is refused"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "${B_f_range:-0}" MF2 "MUTANT MF2 (range not skipped) killed"
+budget-summary-verdict	arm_vt_more	1	mutant_killed "${B_f_spaced:-0}" MF4 "MUTANT MF4 (spaced-range skip deleted) killed"
+check-15-bypass	want_of	1	mutant_killed "$bflag" "$label" "MUTANT $label ${MUT_WHY[$i]}"
+check-25-steering-conduct	mut_twin	1	mutant_killed "$bflag" "$n" "MUTANT $n: deciding cell $d reads '$got', not the shipped '$(cell_want "$d")'" && KILLS=$((KILLS + 1))
+check-31-ac-falsifiability	mut_twins	1	mutant_killed "$bflag" "$m" "MUTANT $m: deciding arm $d fails ($got) -- the guard under test is what produced the verdict"
+consumer-suite-pool	csp_score	1	mutant_killed "$2" "$1" "$8"
+derived-fence-binding	-	1	*"I121's probe scored 1 "*) mutant_killed "${B_W7:-0}" W7 "A32b W7 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
+derived-fence-binding	-	1	*"I121's probe scored 1000000001010 "*) mutant_killed "${B_W6:-0}" W6 "A31b W6 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK, and 1000000000000, no validator path left to resolve" ;;
+derived-fence-binding	-	1	*"I121's probe scored 1101010 "*) mutant_killed "${B_W8:-0}" W8 "A33b W8 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10, the no-blank-line seed counted an OK copy, and 1000, the glued seed counted a fork" ;;
+derived-fence-binding	-	1	*"I122's probe scored 1 "*) mutant_killed "${B_W10:-0}" W10 "A44b W10 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
+derived-fence-binding	-	1	*"I122's probe scored 1010 "*) mutant_killed "${B_W9:-0}" W9 "A43b W9 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK" ;;
+derived-fence-binding	-	1	*"I122's probe scored 1101010 "*) mutant_killed "${B_W11:-0}" W11 "A45b W11 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10 and 1000" ;;
+derived-fence-binding	-	1	mutant_killed "${B_W1:-0}" W1 "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe on BOTH body bits — 100, two passages differing by one word, and 10000000, two differing only in the leading blanks of their fence" ;;
+derived-fence-binding	-	1	mutant_killed "${B_W2:-0}" W2 "A09b W2 (an arm binding FOUR of the five) goes blind to the drift and is KILLED by half B, which reports the unbound copy" ;;
+derived-fence-binding	-	1	mutant_killed "${B_W3:-0}" W3 "A10b W3 (half C keyed on the FENCE OPENER, the token that drifts) is KILLED by the probe, which requires the population to take a file anchored on the record field alone" ;;
+derived-fence-binding	-	1	mutant_killed "${B_W4:-0}" W4 "A12b W4 (a comparison that STRIPS LEADING BLANKS) is KILLED — it goes green on a copy whose fence is indented where the others are not" ;;
+derived-fence-binding	-	1	mutant_killed "${B_W5:-0}" W5 "A14b W5 (the reader's two streams MERGED with 2>&1) is KILLED by the probe, whose stderr channel reads empty when the merge takes it" ;;
+dist-clone	score	1	if [ "$got" = "$want" ]; then mutant_killed 1 "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
+document-partition	mutant	1	mutant_killed "$6" "$mt_id" "$mt_lab: KILLED by [$mt_dec]; twin [$mt_twin] holds"
+document-partition	mutant	1	mutant_killed "$6" "$mt_id" "$mt_lab: KILLED by [$mt_want] and nothing else (matrix)"
+emit-report-refusal	-	1	mutant_killed "$(( B_MX0 && $([ "$(armv ctl "$dec")" = 0 ] && echo 1 || echo 0) && $([ "$(armv ctl "$twin")" = 0 ] && echo 1 || echo 0) ))" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
+enforcement-map-derivations	mutant_case	1	mutant_killed "$base" "$name" "$label"
+enforcement-map-derivations	mutant_case	1	need_base "$base" "$name" || return 0
+enforcement-map-sites	-	1	mutant_killed "${B_base:-0}" A31-m3 "A31-m3: a SECOND definition of a bound function FAILS I56, naming the count (the later one shadows the earlier and the fork arm would compare two spans against one)"
+enforcement-map-sites	A01_i17_sitetable_completeness	1	mutant_killed "${B_base:-0}" A01-m1 "A01-m1: a new core/ subtree with no site row FAILS (the catch-all can no longer swallow one silently)"
+enforcement-map-sites	A02_i17_sitetable_agreement	1	mutant_killed "${B_base:-0}" A02-m1 "A02-m1: map_consumer() losing its git-hooks case FAILS (the v0.53.0 regression cannot return)"
+enforcement-map-sites	A03_i17_sitetable_installer_binding	1	mutant_killed "${B_base:-0}" A03-m1 "A03-m1: a site row whose destination install.sh abandoned FAILS (the table is bound to the installer, not to itself)"
+enforcement-map-sites	A04_i12_scan_match	1	mutant_killed "${B_base:-0}" A04-m1 "A04-m1: unregistered-drift.sh dropping core/schemas from its scan FAILS I12 (the scan set is bound, not hand-listed)"
+enforcement-map-sites	A05_i12_completeness	1	mutant_killed "${B_base:-0}" A05-m1 "A05-m1: a new core/ subtree with no I12 policy row FAILS (a new dir must be classified scan/exempt before it can ship)"
+enforcement-map-sites	A06_i15_grammar_fork	1	mutant_killed "${B_base:-0}" A06-m1 "A06-m1: narrowing relabel's ANCHOR_RE FAILS I15 (the reporter and the fixer cannot drift apart)"
+enforcement-map-sites	A07_i15_non_vacuity	1	mutant_killed "${B_base:-0}" A07-m1 "A07-m1: deleting an ANCHOR_RE definition FAILS I15 loudly (it cannot pass by comparing nothing)"
+enforcement-map-sites	A08_i17_the_writer	1	mutant_killed "${B_base:-0}" A08-m1 "A08-m1: apply.sh regrowing a private path table FAILS I17 (the pull's WRITER is bound to the installer, not just the classifier)"
+enforcement-map-sites	A09_i16_dead_prose_path	1	mutant_killed "${B_base:-0}" A09-m1 "A09-m1: a core/-prefixed prose path in a runtime step file FAILS I16 (installed core cannot ship a dead citation)"
+enforcement-map-sites	A11_i21_fourth_copy	1	mutant_killed "${B_base:-0}" A11-m1 "A11-m1: a fourth inline section_of() FAILS I21 (the resolver cannot fork a third time)"
+enforcement-map-sites	A12_i21_unsourced_call	1	mutant_killed "${B_base:-0}" A12-m1 "A12-m1: a classifier that drops its lib.sh source FAILS I21 (a call that resolves to nothing cannot ship)"
+enforcement-map-sites	A13_i21_non_vacuity	1	mutant_killed "${B_base:-0}" A13-m1 "A13-m1: lib.sh losing its definitions FAILS I21 loudly (it cannot pass by binding an empty helper set)"
+enforcement-map-sites	A14_i31_disposition	1	mutant_killed "${B_base:-0}" A14-m1 "A14-m1: removing register-drift's no-grain refusal FAILS I31 (a scan-marked subtree cannot reach an unnamed refusal)"
+enforcement-map-sites	A15_i31_non_vacuity	1	mutant_killed "${B_base:-0}" A15-m1 "A15-m1: an unparseable case block FAILS I31 loudly (it cannot pass by comparing against nothing)"
+enforcement-map-sites	A16_i32_pin_vs_invocation	1	mutant_killed "${B_base:-0}" A16-m1 "A16-m1: an arm pinning a skill its step file never invokes FAILS I32 (a pin and an invocation are one fact in two files)"
+enforcement-map-sites	A17_i32_non_vacuity	1	mutant_killed "${B_base:-0}" A17-m1 "A17-m1: an unparseable arm grammar FAILS I32 loudly ('nothing to compare' never reads as 'the pins agree')"
+enforcement-map-sites	A18_i33_fixture_path_walk	1	mutant_killed "${B_base:-0}" A18-m1 "A18-m1: a fixture walking up from a resolved script into another core subtree FAILS I33"
+enforcement-map-sites	A19_i33_non_vacuity	1	mutant_killed "${B_base:-0}" A19-m1 "A19-m1: an empty fixture tree FAILS I33 loudly (a scan over nothing never reads as clean)"
+enforcement-map-sites	A20_i26_derived_core_set	1	mutant_killed "${B_base:-0}" A20-m1 "A20-m1: a line naming three manifest entries FAILS I26 (the derived set cannot be quietly replaced by a list)"
+enforcement-map-sites	A21_i40_anchor_reading	1	mutant_killed "${B_base:-0}" A21-m1 "A21-m1: a one-copy change to the anchor arm FAILS I40 (the linter and the pull classifier cannot disagree)"
+enforcement-map-sites	A21_i40_anchor_reading	1	mutant_killed "${B_base:-0}" A21-m2 "A21-m2: a MISSING bound function FAILS I40 loudly (finding nothing never reads as agreement)"
+enforcement-map-sites	A22_i45_reserved_band	1	mutant_killed "${B_base:-0}" A22-m1 "A22-m1: a core rule numbered 900 FAILS I45 (core cannot allocate from the range E15 tells consumers to move into)"
+enforcement-map-sites	A22_i45_reserved_band	1	mutant_killed "${B_base:-0}" A22-m2 "A22-m2: a core check id 'XAP' FAILS I45 (the alphabetic half of the partition has a mechanism, not just a paragraph)"
+enforcement-map-sites	A22_i45_reserved_band	1	mutant_killed "${B_base:-0}" A22-m3 "A22-m3: an unreadable BAND_ALPHA_PREFIX FAILS I45 loudly (a prefix it cannot read would make every core alphabetic id conforming)"
+enforcement-map-sites	A22_i45_reserved_band	1	mutant_killed "${B_base:-0}" A22-m4 "A22-m4: an unreadable BAND_FLOOR FAILS I45 loudly (a floor it cannot read would make every core number conforming)"
+enforcement-map-sites	A22_i45_reserved_band	1	mutant_killed "${B_base:-0}" A22-m5 "A22-m5: a renamed catalog extractor FAILS I45 loudly (an empty catalog never reads as a conforming one)"
+enforcement-map-sites	A23_i47_check_heading	1	mutant_killed "${B_base:-0}" A23-m1 "A23-m1: a narrowed CHECK_HEAD_RE in the resolver FAILS I47 (a definition one tool sees and the other cannot)"
+enforcement-map-sites	A23_i47_check_heading	1	mutant_killed "${B_base:-0}" A23-m2 "A23-m2: a renamed CHECK_HEAD_RE FAILS I47 loudly (a join that cannot locate a side never passes by comparing nothing)"
+enforcement-map-sites	A23_i47_check_heading	1	mutant_killed "${B_base:-0}" A23-m3 "A23-m3: narrowing BOTH detectors in step FAILS I47 (a heading the rewriter relabels that no detector reports — green under every pair-check)"
+enforcement-map-sites	A24_i49_resolver_modes	1	mutant_killed "${B_base:-0}" A24-m1 "A24-m1: a rule file naming a core-paths.sh mode the dispatch rejects FAILS I49 (the call would exit 2, which the caller reads as 'cannot determine')"
+enforcement-map-sites	A24_i49_resolver_modes	1	mutant_killed "${B_base:-0}" A24-m2 "A24-m2: a dispatched mode missing from usage() FAILS I49 (a mode no operator can discover)"
+enforcement-map-sites	A24_i49_resolver_modes	1	mutant_killed "${B_base:-0}" A24-m3 "A24-m3: a renamed dispatch sentinel FAILS I49 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+enforcement-map-sites	A25_i50_shipped_validators	1	mutant_killed "$(( ${B_base:-0} && ${B_a25m3:-0} ))" A25-m4 "A25-m4: mutant (I50 ASCII class) killed: the restored class cannot spell the non-ASCII ghost and I50 goes silent"
+enforcement-map-sites	A25_i50_shipped_validators	1	mutant_killed "${B_base:-0}" A25-m1 "A25-m1: a role file naming a validator core does not ship FAILS I50 (the command does not exist in any consumer tree)"
+enforcement-map-sites	A25_i50_shipped_validators	1	mutant_killed "${B_base:-0}" A25-m2 "A25-m2: a consumer-installed template naming a validator core does not ship FAILS I50 (templates/ is inside the corpus)"
+enforcement-map-sites	A25_i50_shipped_validators	1	mutant_killed "${B_base:-0}" A25-m3 "A25-m3: a role file naming a NON-ASCII validator core does not ship FAILS I50 (the class spells it)" && B_a25m3=1
+enforcement-map-sites	A25_i50_shipped_validators	1	mutant_killed "${B_base:-0}" A25-m5 "A25-m5: an empty shipped-validator set FAILS I50 loudly (an empty set contains nothing, so every citation would be a ghost and the join must refuse)"
+enforcement-map-sites	A26_i51_licensed_commit	1	mutant_killed "${B_base:-0}" A26-m1 "A26-m1: a Step 5b template the schema regex rejects FAILS I51 (a lead following the step file would write an unlandable commit)"
+enforcement-map-sites	A26_i51_licensed_commit	1	mutant_killed "${B_base:-0}" A26-m2 "A26-m2: an example its own pattern rejects FAILS I51 (the rejection message would hand the consumer a subject the same run refuses)"
+enforcement-map-sites	A26_i51_licensed_commit	1	mutant_killed "${B_base:-0}" A26-m3 "A26-m3: a retro.md with no subject template FAILS I51 loudly (nothing to compare must not read as the two agreeing)"
+enforcement-map-sites	A27_i52_exemption_marker	1	mutant_killed "${B_base:-0}" A27-m1 "A27-m1: a reworded marker in the shipped validator FAILS I52 (core's two driverless fixtures would fail every consumer's push)"
+enforcement-map-sites	A27_i52_exemption_marker	1	mutant_killed "${B_base:-0}" A27-m2 "A27-m2: an unreadable marker in the shipped validator FAILS I52 loudly (two empty strings compare equal, and that is not agreement)"
+enforcement-map-sites	A28_i53_escalation_modes	1	mutant_killed "${B_base:-0}" A28-m1 "A28-m1: one core script invoking a mode the other does not dispatch FAILS I53 (the call exits 2, and the citation arm reads that as 'no operator citation')"
+enforcement-map-sites	A28_i53_escalation_modes	1	mutant_killed "${B_base:-0}" A28-m2 "A28-m2: a dispatched escalation mode missing from the USAGE block FAILS I53 (a mode no operator can discover)"
+enforcement-map-sites	A28_i53_escalation_modes	1	mutant_killed "${B_base:-0}" A28-m3 "A28-m3: a renamed dispatch sentinel FAILS I53 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+enforcement-map-sites	A29_i54_early_exit_reader	1	mutant_killed "${B_base:-0}" A29-m1 "A29-m1: a variable written into a first-match reader FAILS I54, naming the file (under pipefail that test answers 'not found' on input that contains the pattern)"
+enforcement-map-sites	A29_i54_early_exit_reader	1	mutant_killed "${B_base:-0}" A29-m2 "A29-m2: a grammar that stops matching its own probe FAILS I54 loudly (a scan that matches nothing reads exactly like a clean tree)"
+enforcement-map-sites	A29_i54_early_exit_reader	1	mutant_killed "${B_base:-0}" A29-m3 "A29-m3: a grammar that starts matching the permitted shape FAILS I54 loudly (a check nobody can leave on enforces nothing)"
+enforcement-map-sites	A30_i55_suite_content_key	1	mutant_killed "${B_base:-0}" A30-m1 "A30-m1: an exclusion carrying a slash is REPORTED (it matches no top-level entry and silently excludes nothing)"
+enforcement-map-sites	A30_i55_suite_content_key	1	mutant_killed "${B_base:-0}" A30-m2 "A30-m2: including .git in the key is REPORTED (it moves every commit, so the skip could never fire again)"
+enforcement-map-sites	A30_i55_suite_content_key	1	mutant_killed "${B_base:-0}" A30-m3 "A30-m3: a fixture reading an excluded path at the distribution root is REPORTED (its input could change with the suite never re-running)"
+enforcement-map-sites	A30_i55_suite_content_key	1	mutant_killed "${B_base:-0}" A30-m4 "A30-m4: moving ALL $i55_declared cross-run records inside the tree they are hashed by is REPORTED, and the report names every one — the subject set is derived from the hook, not from a name this fixture knows"
+enforcement-map-sites	A31_i56_model_pin_binding	1	mutant_killed "${B_base:-0}" A31-m1 "A31-m1: a one-copy change to the match tolerance FAILS I56 (the gate cannot classify a binding differently from the hook that made it)"
+enforcement-map-sites	A31_i56_model_pin_binding	1	mutant_killed "${B_base:-0}" A31-m2 "A31-m2: a MISSING bound function FAILS I56 loudly, naming the count it found (a rename never retires the binding in silence)"
+enforcement-map-sites	A32_i57_predicate_binding	1	mutant_killed "${B_base:-0}" A32-m1 "A32-m1: an unbound validator whose exit code the check's own body requires FAILS I57, named with its check (the v0.211.0 state of Check 17, replayed)"
+enforcement-map-sites	A32_i57_predicate_binding	1	mutant_killed "${B_base:-0}" A32-m2 "A32-m2: a validator cited through the verdict.sh DISPATCHER and bound on a non_catalog_units call site is resolved both ways by I57 (repointing the site alone reports it)"
+enforcement-map-sites	A32_i57_predicate_binding	1	mutant_killed "${B_base:-0}" A32-m3 "A32-m3: adding an exit-code posture to an On-FAIL REMEDY — same citation, same map — moves it into I57's subject set (the discriminator reads the sentence, not the mention)"
+enforcement-map-sites	A32_i57_predicate_binding	1	mutant_killed "${B_base:-0}" A32-m4 "A32-m4: a posture grammar that can no longer match FAILS I57 against its own probe (an empty subject set never again reads as a clean tree)"
+enforcement-map-sites	A32_i57_predicate_binding	1	mutant_killed "${B_base:-0}" A32-m5 "A32-m5: widening the posture to accept an exit-code LEGEND FAILS I57's negative probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+enforcement-map-sites	A33_i59_documented_modes	1	mutant_killed "${B_base:-0}" A33-m1 "A33-m1: a dispatched mode named in neither the usage header nor the usage string FAILS I59, named with its file (the v0.213.1 defect, replayed)"
+enforcement-map-sites	A33_i59_documented_modes	1	mutant_killed "${B_base:-0}" A33-m2 "A33-m2: a case-arm grammar that can no longer match FAILS I59 against its own probe (an extraction that finds nothing never again reads as a documented tree)"
+enforcement-map-sites	A33_i59_documented_modes	1	mutant_killed "${B_base:-0}" A33-m3 "A33-m3: losing the --help carve-out FAILS I59 on its own probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+enforcement-map-sites	A33_i59_documented_modes	1	mutant_killed "${B_base:-0}" A33-m4 "A33-m4: a corpus derivation that returns nothing FAILS I59 loudly (scanning zero files is not the same answer as finding zero findings)"
+enforcement-map-sites	A34_i60_cited_modes	1	mutant_killed "${B_base:-0}" A34-m1 "A34-m1: a shipped file naming a core-paths.sh mode the dispatch rejects FAILS I60, named with its mode (the call would exit 2, and both hand-listed call sites misread that 2)"
+enforcement-map-sites	A34_i60_cited_modes	1	mutant_killed "${B_base:-0}" A34-m2 "A34-m2: a dispatch side that no longer reads \`[ \"\$1\" = \"--x\" ]\` FAILS I60 on its own probe (the empty false-positive set is held by a mechanism, not by a paragraph)"
+enforcement-map-sites	A34_i60_cited_modes	1	mutant_killed "${B_base:-0}" A34-m3 "A34-m3: a citation grammar that can no longer match FAILS I60 against its own probe (an extraction that finds nothing never again reads as a tree with no ghost citation)"
+enforcement-map-sites	A34_i60_cited_modes	1	mutant_killed "${B_base:-0}" A34-m4 "A34-m4: a citation corpus that collapses to nothing FAILS I60 loudly (scanning zero files is not the same answer as finding zero ghosts)"
+enforcement-map-sites	A35_i93_reverse_join	1	mutant_killed "$(( ${B_base:-0} && ${B_a35m1:-0} ))" A35-m4 "A35-m4: neutering arm D's reporter makes the SAME seeded emitter go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm D, and the seed trips no other arm)"
+enforcement-map-sites	A35_i93_reverse_join	1	mutant_killed "${B_base:-0}" A35-m1 "A35-m1: a core/scripts/ file emitting the declared token while the map declares it nowhere FAILS I93 (a validator cannot join this vocabulary without registering)" && B_a35m1=1
+enforcement-map-sites	A35_i93_reverse_join	1	mutant_killed "${B_base:-0}" A35-m2 "A35-m2: an undeclared emitter under scripts/ FAILS I93 too (the distribution-only half of arm D's population is swept, not just core/scripts/)"
+enforcement-map-sites	A35_i93_reverse_join	1	mutant_killed "${B_base:-0}" A35-m3 "A35-m3: an undeclared emitter that is NOT a .sh FAILS I93 (arm D's population is the directory, not an extension, and a JS validator can join this vocabulary too)"
+enforcement-map-sites	A36_i93_exemption_arms	1	mutant_killed "${B_base:-0}" A36-m1 "A36-m1: an arm D exemption for a file that no longer exists FAILS I93 (a hole aimed at nothing is a hole nobody can audit)"
+enforcement-map-sites	A36_i93_exemption_arms	1	mutant_killed "${B_base:-0}" A36-m2 "A36-m2: an exempt file that stopped emitting FAILS I93 (arm D's positive control fires in the same invocation as the zero it licenses)"
+enforcement-map-sites	A36_i93_exemption_arms	1	mutant_killed "${B_base:-0}" A36-m3 "A36-m3: a path that is both declared in the map and exempted from arm D FAILS I93 (the two are opposite claims and nothing downstream can resolve them)"
+enforcement-map-sites	A36_i93_exemption_arms	1	mutant_killed "${B_base:-0}" A36-m4 "A36-m4: an arm D exemption with no reason after the path FAILS I93 (a bare path reads exactly like a declaration somebody forgot)"
+enforcement-map-sites	A37_i93_probe_arm_d_bits	1	mutant_killed "${B_base:-0}" A37-m1 "A37-m1: a reverse join that reports nothing is caught by I93's own probe BEFORE the corpus is read (arm D's +1000000 and +1000000000 bits are reachable)"
+enforcement-map-sites	A37_i93_probe_arm_d_bits	1	mutant_killed "${B_base:-0}" A37-m2 "A37-m2: a reverse join that reports DECLARED and EXEMPT files too is caught by the same probe (the suppression bits score separately from the fires-at-all bit)"
+enforcement-map-sites	A38_i93_scan_status	1	mutant_killed "${B_base:-0}" A38-m1 "A38-m1: a path arm D cannot open is reported BY THE SCAN-STATUS ARM and by that arm alone (the exemption control stands down, so one cause yields one finding and it names the right question)"
+enforcement-map-sites	A38_i93_scan_status	1	mutant_killed "${B_base:-0}" A38-m2 "A38-m2: the exemption control still fires on its OWN case when the sweep COMPLETED, and on that case ALONE (the stand-down narrowed it to the aborted-scan case rather than switching it off, and the seed trips nothing else)"
+enforcement-map-sites	A39_i93_novel_spelling	1	mutant_killed "$(( ${B_base:-0} && ${B_a39m1:-0} ))" A39-m4 "A39-m4: neutering arm E's reporter makes the SAME seeded novel spelling go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm E, and the seed trips no other arm)"
+enforcement-map-sites	A39_i93_novel_spelling	1	mutant_killed "${B_base:-0}" A39-m1 "A39-m1: a core/scripts/ validator stating the empty-subject verdict in a FOURTH spelling FAILS I93, reported by LINE (arm C's enumeration cannot reach a spelling nobody has written yet)" && B_a39m1=1
+enforcement-map-sites	A39_i93_novel_spelling	1	mutant_killed "${B_base:-0}" A39-m2 "A39-m2: the same novel spelling under scripts/ FAILS I93 too (arm E sweeps the distribution-only half, not just core/scripts/)"
+enforcement-map-sites	A39_i93_novel_spelling	1	mutant_killed "${B_base:-0}" A39-m3 "A39-m3: an exempt file that swaps the declared token for a NOVEL spelling is reported by arm D's exemption control, not by arm E (the skip hands the case to the arm whose remedy is legal, and does not swallow it)"
+enforcement-map-sites	A39_i93_novel_spelling	1	mutant_killed "${B_base:-0}" A39-m5 "A39-m5: an arm E whose verdict-phrase test is removed REDS the clean tree (the phrase grammar is load-bearing, not decoration on a scan that flags every emission)"
+enforcement-map-sites	cwd_mutant	1	mutant_killed "$(( ${B_base:-0} && ${B_cw:-0} ))" "$CW_ID-$tag" "$CW_ID-$tag: $CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
+fixture-git-env-seam	mut_msg	1	mutant_killed "$([ "$_sd" = INTACT ] && [ "$SV_U" = INTACT ] && echo 1)" "$_m" "$(mut_msg "$_m" "$_dd")"
+fixture-hygiene	-	1	if has MH5N "$WL_ROW"; then mutant_killed "$(flag D5)" MH5N "MH5N: arm D5 fails by the self-probe refusal naming H5, on the world-letter JOIN row m5m:5"
+fixture-hygiene	-	1	score MH1 D1 H1 && mutant_killed "$(flag D1)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
+fixture-hygiene	-	1	score MH2 D2 H2 && mutant_killed "$(flag D2)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
+fixture-hygiene	-	1	score MH3 D3 H3 && mutant_killed "$(flag D3)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"
+fixture-hygiene	-	1	score MH5 D5 H5 && mutant_killed "$(flag D5)" MH5 "MH5: arm D5 fails by the self-probe refusal naming H5"
+fixture-invocation-budget	score	1	mutant_killed "$flag" "$m" "$m: arm $2 fails for its reason, twin $3 holds"
+fold-architect-ledger-join	-	1	mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
+fold-architect-ledger-join	-	1	mutant_killed "$B_SEAM" SEAM-INVERTED "[SEAM-mutant] a gate that skips its self-probe WITHOUT the flag is caught: its end-to-end run carries the banner, the real one does not"
+foreground-budget-deny	mut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+foreground-budget-deny	mut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want] (matrix); deciding [$dec], twin [$twin] green"
+gate-remediation-deny	mx_kill	1	if [ "$4" = 1 ]; then mutant_killed "$1" "$2" "$5"; else bad "$2 SURVIVED: $5"; fi
+gate-resume	-	1	mutant_killed "$([ "$B_F2B$B_F2C$B_F2E" = 111 ] && echo 1 || echo 0)" m9 "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
+gate-resume	-	1	mutant_killed "$([ -z "$_m5real" ] && echo 1 || echo 0)" m5 "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
+gate-resume	b457_score	1	mutant_killed "$B457_FLAG" "b457-$tag" "BL-457 mutant b457-$tag ($tag) $what -- killed by ${dec}, twin(s) [${twins}] hold"
+handoff-completion-assertion	mscore	1	mutant_killed "$flag" "$m" "$m: killed by arm $dec (FAIL under it), twin(s)${tl} hold"
+hermetic-runner	-	1	elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$B_XR" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
+layer-adjudication-tier	mx_score	1	mutant_killed "$2" "$1" "$1: $7"
+layer-qualifier-grain	score	1	mutant_killed "$6" "$1" "$1: killed on arm $4 — $7"
+owed-derivations	mut_score	1	mutant_killed "$mut_flag" "$1" "$1 killed: deciding arm $2 failed, twin(s) ${tw:-none} held (failed:$LW_FAILED)"
+party-wave-barrier	score	1	mutant_killed "$flag" "$id" "$id killed: arm(s) $dec FAIL under it and twin(s) ${tw:--} hold"
+path-mapping-render	kill_check	1	mutant_killed "$1" "$id" "$n -- killed by its own arm"
+predicate-reclassification	-	1	mutant_killed "${B_11a:-0}" m-noroot "11f mutant [m-noroot] killed: without the per-side root pin the schema-only change reads $(cut -f1 <<<"$mo" | head -1)"
+predicate-reclassification	-	1	mutant_killed "${B_11c:-0}" m-marker "11g mutant [m-marker] killed: a walk-up marker finds the schema but loses the extension ($(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40))"
+pregate-self-check	-	1	if cell_red differs m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: output differs from the control"; else bad "m2 mutant SURVIVED: output equals the control"; fi
+pregate-self-check	-	1	if cell_red exit1 m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: receipt exit 1 (killed)"; else bad "m2 mutant SURVIVED: receipt exit $m2, expected 1"; fi
+pregate-self-check	-	1	if cell_red m2-names m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: world A names the early-death refusal and the unbound variable"; else bad "m2 mutant SURVIVED: world A's output lacks the early-death refusal or the unbound variable"; fi
+pregate-self-check	-	1	if cell_red m2-refused m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: every world refused with exit 2"; else bad "m2 mutant SURVIVED: expected the line '$M2_WANT' (got: $(tail -1 "$WORK/m2.out"))"; fi
+prepush-pool-depth	finish_mutant	1	if [ "$3" = 1 ]; then mutant_killed "$1" "$2" "$4"; else bad "$5"; fi
+prepush-ssh-keepalive	-	1	if fired "$WORK/m1"; then bad "M1 invocation deleted: SURVIVED (A1's input still warned)"; else mutant_killed "${B_a1:-0}" M1 "M1 invocation deleted: KILLED (A1's input goes silent)" && kills=$((kills+1)); fi
+prepush-ssh-keepalive	-	1	if fired "$WORK/m3"; then mutant_killed "${B_n1:-0}" M3 "M3 interval test deleted: KILLED (N1's configured alias now warns)" && kills=$((kills+1)); else bad "M3 interval test deleted: SURVIVED"; fi
+prepush-ssh-keepalive	-	1	if fired "$WORK/m4"; then mutant_killed "${B_n5:-0}" M4 "M4 ssh-basename guard deleted: KILLED (N5's wrapper is now handed -G)" && kills=$((kills+1)); else bad "M4 ssh-basename guard deleted: SURVIVED"; fi
+prepush-ssh-keepalive	-	1	if grep -q 'pre-push: WARNING' "$WORK/m2"; then mutant_killed "${B_n3:-0}" M2 "M2 non-ssh URL gate deleted: KILLED (N3's shape now warns)" && kills=$((kills+1)); else bad "M2 non-ssh URL gate deleted: SURVIVED"; fi
+push-drain-refusals	-	1	A10) mutant_killed "${B_A10:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A12) mutant_killed "${B_A12:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A19) mutant_killed "${B_A19:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A2) mutant_killed "${B_A2:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A3) mutant_killed "${B_A3:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A3b) mutant_killed "${B_A3b:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A4) mutant_killed "${B_A4:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A5) mutant_killed "${B_A5:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A6) mutant_killed "${B_A6:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+push-drain-refusals	-	1	A7) mutant_killed "${B_A7:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+readset-skip	-	1	"0|0|no|1|"*) if lm_twin "$_fm" "$FGM"; then mutant_killed "${B_foreign:-0}" "$_fm" "FOREIGN MUTANT $_fm: keyed on the bare marker name the run is cut or flushed at the foreign marker and fxl is discarded — the arm above depends on the full path"; fi ;;
+readset-skip	-	1	*1*) if f2c_twin "$_pm" "d/<real> (bit 5)" "$_tw"; then mutant_killed "$_pf" "$_pm" "PSEUDO MUTANT $_pm: the set reads '$_ps', not 00111110001 — the pseudo arm refuses it"; fi ;;
+readset-skip	-	1	elif grep -q '^ *ok *alpha' <<< "$R"; then mutant_killed "$B_LOC_r7" noreport "MUTANT noreport is KILLED by (r7): the suite ran and no report preceded it"
+readset-skip	-	1	mutant_killed "$(( ${B_ipclean:-0} && ${B_ipcanary:-0} ))" ipnocanary "IN-POOL MUTANT nocanary is KILLED by the canary arm alone: the lossy fixture is no longer discarded ('$IPW_C'), and every other arm's result is byte-identical"
+readset-skip	ck_mut	1	if [ -z "$moved" ] && [ "$mv" != "$(ck_want "$w")" ]; then mutant_killed "$cb" "$name" "CK MUTANT $name is KILLED by ($w), twin ($tw) at want: $mv"
+readset-skip	ct_mut	1	$2) mutant_killed "$B_LOC_t1" "$1" "CEILING MUTANT $1 is KILLED by (t1): '$r'" ;;
+readset-skip	hr_mut	1	if [ "$r" = "$4" ]; then mutant_killed "$([ "$B_HR_h1" = 1 ] && [ "$B_HR_h2" = 1 ] && echo 1 || echo 0)" "$1" "MUTANT $1 is KILLED, on exactly its own cell: $r"
+readset-skip	lm_mut	1	$g) if lm_twin "$n" "$r"; then mutant_killed "$fl" "$n" "LOCAL MUTANT $n is KILLED by $arm: '$r'"; fi ;;
+readset-skip	pj_mut	1	if [ "$PJ_FLIP" = "$4" ]; then mutant_killed "$bf" "$1" "BL-463 MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
+readset-skip	pm_l	1	*) mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+readset-skip	pm_lw	1	else mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
+readset-skip	pm_rf	1	*) mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+readset-skip	pt_kill	1	if [ "$flips" = "$w" ]; then mutant_killed "$bf" "$m" "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
+readset-skip	rp_mut	1	if [ "$m" = "$2" ]; then mutant_killed "$B_LOC_r1" "$1" "MUTANT $1 is KILLED by (r1), on exactly [$2]"
+readset-stage1-verdict	smut	1	if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi
+reconcile-emit-report	rer_mm_score	1	mutant_killed "$ok1" "$m" "mutant $m KILLED by [$d], twins [$tw] green"
+requirements-step	rs_score	1	mutant_killed "$fl" "$m" "$msg$why"
+self-update-gate	ac_kill	1	mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
+self-update-gate	ac_kill_pre	1	mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
+self-update-gate	cells_kill	1	if [ "$okc" = 1 ]; then mutant_killed "$flag" "$name" "$(printf '%-16s KILLED (%s)' "$name" "$why")"
+self-update-gate	pl_kill	1	mutant_killed "${B_pl:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
+self-update-gate	pu_kill	1	mutant_killed "$flag" "$label" "$(printf '%-16s KILLED (%s)' "$label" "$6")"
+self-update-gate	sc_none	1	mutant_killed "${B_acc:-0}" armc-mut-safestop "$(printf '%-16s KILLED (%s)' armc-mut-safestop \
+self-update-gate	sd_score	1	mutant_killed "$1" "$2" "$(printf '%-16s KILLED (%s)' "$2" "$8")"
+self-update-gate	sig_judge	1	if [ "$gp" = "$wp" ]; then mutant_killed "$2" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$6")"
+self-update-gate	sig_pick	1	mutant_killed "${B_pw:-0}" "prewritten-mut" "$(printf '%-16s KILLED (%s)' "prewritten-mut" \
+self-update-gate	sig_pick	1	mutant_killed "${B_pw:-0}" "prewritten-mut-conj" "$(printf '%-16s KILLED (%s)' "prewritten-mut-conj" \
+self-update-gate	sig_pick	1	mutant_killed "${B_range:-0}" "range-mut-refs" "$(printf '%-16s KILLED (%s)' "range-mut-refs" \
+self-update-gate	sig_pick	1	mutant_killed "${B_range:-0}" "range-mut-repo" "$(printf '%-16s KILLED (%s)' "range-mut-repo" \
+self-update-gate	sig_pick	1	mutant_killed "${B_skc:-0}" "rec-skc-mutant" "$(printf '%-16s KILLED (%s)' "rec-skc-mutant" "a reader keyed on commit: records the wrong field, and the arm says so")"
+self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-corepath" "$(printf '%-16s KILLED (%s)' "rec-mut-corepath" \
+self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-digest" "$(printf '%-16s KILLED (%s)' "rec-mut-digest" \
+self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-nested" "$(printf '%-16s KILLED (%s recorded verdicts; %s)' "rec-mut-nested" "$vr_m4_got" \
+self-update-gate	su_kill	1	mutant_killed "${B_su:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$5")"
+shell-portability	-	1	mutant_killed "$(grep -q "^FAIL: S10:" <<<"$pre" && echo 1)" "x7" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
+shell-portability	-	1	mutant_killed "$x26_ok" "x26" "x26 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0); the uncounted mutant PASSES the same tree"
+shell-portability	appear_check	1	mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
+shell-portability	blind_check	1	mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "${nfail:-0}" -eq 1 ] && [ "${nhits:-0}" -ge 1 ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
+shell-portability	corpus_cell_check	1	mutant_killed "$(refused_for "$pre" "$which" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
+shell-portability	count_shrink_check	1	mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "$npre" -eq "$want_pre" ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
+shell-portability	probe_owned_appear	1	mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
+spec-join-integrity	mut	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+spec-join-integrity	mut2	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+spec-join-integrity	mut2_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+spec-join-integrity	mut_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
+sprint-status-lifecycle	badmsg	1	if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
+sprint-status-lifecycle	badmsg	1	mutant_killed "$flag" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+story-corpus-sprint-slot	-	1	if [ "$flag" = 1 ]; then bad "MUTANT $n failed wrongly [$wrong ], expected decides=[${MD[$mut_i]}] with twin [${MT[$mut_i]}] green — entangled assertions, or the mutation is not reached"; else need_base "$flag" "$n" || true; fi
+story-corpus-sprint-slot	-	1	mutant_killed "$flag" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+story-provenance	mx_score	1	if [ "$allred" = 1 ]; then mutant_killed "$fl" "$m" "mutant $m scored by its deciding cell(s)$dshown"
+subject-partition	score	1	if "p_$twin" "$s"; then mutant_killed "$B_live" "${label%% *}" "$label: KILLED by [$decide], twin [$twin] stays green"
+suite-dispatch-order	score_mutant	1	mutant_killed "$B_ALL" "$m" "KILL $m: the deciding arm $dec fails under the mutant ($(mutant_what "$m"))"
+suppression-lifetime	ar_sen_F	1	if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] flipped and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
+suppression-lifetime	ar_sen_F	1	mutant_killed "$flag" "$n" "MUTANT $n killed on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+transient-ignore-block	mutate	1	mutant_killed "$flag" "$label" "MUTANT $label killed by $want, and by that arm alone" && kills=$((kills+1))
+update-preflight-push	score_row	1	if mutant_killed "$fl" "$m" "mutant $m scored by its deciding arm $dec"; then kills=$((kills+1)); fi
+upstream-routing	score_mutant	1	mutant_killed "$B_ALL" "$m" "MUTANT $m: arm $dec fails under the mutant ($(what_of "$m"))"
+validator-fork-budget	mx_score	1	if [ "$allred" = 1 ]; then mutant_killed "$fl" "$m" "$msg -- scored by its own arm alone, cell(s)$shown"
+vocabulary-index	judge	1	mutant_killed "$B_BASE" "$id" "$msg"
+wait-stale-deliverable	C14_progress_guards	1	mutant_killed "$(( ${!bv:-0} && ${!bt:-0} && B_MX0 ))" "$m" "MUTANT $m: arm $d trips under the mutant while twin $t stays green"

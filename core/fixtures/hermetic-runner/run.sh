@@ -1168,7 +1168,12 @@ mk_range_probe() {
 }
 arm_XR() {
   CUR=XR
-  local P="$WK/XR1" Q="$WK/XR2" c0 want k0 k1 k2 r0 r2 cell
+  local P="$WK/XR1" Q="$WK/XR2" c0 want k0 k1 k2 r0 r2 cell FXR_SAVE="$FXR"
+  # The probe lives under the hook's own fixture root, as in arm J: XR3-XR5 drive the copied hook,
+  # and a consumer hook keys tests/fixtures/, so a probe under core/fixtures/ is undeclared to it
+  # and every decision reads `skip ok`.
+  FXR="$(hook_fxroot)"
+  [ -n "$FXR" ] || { bad "$CUR: cannot read FXROOT from $HOOK_SRC"; FXR="$FXR_SAVE"; return; }
   mk_range_probe "$P"
   c0="$(cd "$P" && git rev-list --max-parents=0 HEAD)"
   # The seed can express the defect: a boundary commit that is neither end.
@@ -1242,6 +1247,7 @@ EOF
   rowhas "a refused range: the decision names the range refusal as its cause" "$(cat "$WK/XR5.o/.kdec" 2>/dev/null)" \
     "probe${T}run${T}git.decl range refused (rref): range rb..tipx later${T}k${T}ok"
   no "a refused range: the decision is not 'tool unresolved'" "$(cat "$WK/XR5.o/.kdec" 2>/dev/null)" "tool unresolved" "git.decl range refused"
+  FXR="$FXR_SAVE"
 }
 # Y: a fixture whose declaration carries bare `core/` has its own directory copied in TWICE -- once by
 # that population, once by the own-directory copy. The second must land on the first, never inside it.

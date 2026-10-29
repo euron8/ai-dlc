@@ -41,6 +41,9 @@
 #      persist, 521d4c32f)                                             -> PASS, read by label
 #   G1/G2 the program gitignored in the checkout (no commit adds it)   -> binds, with a NOTE
 #   H1 a depth-1 clone of the S1 world -> REFUSED (exit 2); H2 a full clone -> PASS
+#   QL/QF/QP gate 2: a QA p1/p2 pair (qa.md's Findings Template), keyed on qa.md's
+#      `## Carried Findings` at the p2's reviewed-sha: absent there, p2 answering nothing -> LEGACY,
+#      exit 0; present, p2 missing one -> FAIL; present, p2 answering both -> PASS
 # THE FORM ARMS (S4, S5, S7) take a post-rule heading prior with lead-in prose before its first
 # `#### `: prose is a NOTE (S4), a bullet (S5) or a bold finding-id line (S7) there FAILS.
 # THE WRAPPED-LABEL ARMS (WR1-WR3) take graph s308 1-code-review.md:67's Critical, a bold
@@ -50,6 +53,12 @@
 # THE MATCHING ARMS (K1-K5): a label prior carried by id alone, I11 never answering I1, trailing
 # punctuation dropped, a span that is exactly an id, an id two labels share answering neither.
 # LIST: `--list` prints exactly the carry strings on stdout, NOTEs on stderr.
+# THE TOP-LEVEL ARMS (TA, TQ, TB, TC) take graph s319 1-2-qa-validation.md's shape, `#### ` directly
+# under `## Findings` with no `### `: --list and --classes read both findings (TA), a gate-2 p2
+# missing one carry FAILS (TQ); a `#### ` outside `## Findings` (TB) or under `### Notes` (TC) is
+# uncounted. False-positive set at gate 1: 0 such headings in graph's 322 tracked
+# `*-code-review*.md` files at main 91a665334; control, 37 of its `*-qa-validation.md` p1 files
+# carry the shape.
 #
 # THE FALSE-POSITIVE SET, measured over graph's 58 tracked consecutive gate-1 pass pairs
 # (s308-s318, shard files excluded) on a file:// clone at graph 2026-10-14. graph tracks
@@ -129,6 +138,14 @@
 # MUTANT-MATRIX nopunct decides=K3 twins=K1
 # MUTANT-MATRIX dupid decides=K5 twins=K2
 # MUTANT-MATRIX listnone decides=LIST twins=K1
+# MUTANT-MATRIX nokey decides=QL twins=F1
+# MUTANT-MATRIX qaacquit decides=QU1 twins=QU3
+# MUTANT-MATRIX noline decides=V1 twins=V4
+# MUTANT-MATRIX twoval decides=V3 twins=V2
+# MUTANT-MATRIX prefix decides=V5 twins=V1
+# MUTANT-MATRIX subonly decides=TA twins=TB
+# MUTANT-MATRIX topany decides=TB twins=TA
+# MUTANT-MATRIX topnotes decides=TC twins=TA
 # MUTANT-MATRIX-DYNAMIC role-loop why=the template-mutation loop passes role-bullet and role-nosha as one variable
 # MUTANT-MATRIX-CONTROL unmutated-copy why=an unmutated copy of the validator, installed like every mutant, must pass the arms the mutants are scored on
 # MUTANT-MATRIX role-bullet decides=T twins=C
@@ -314,6 +331,17 @@ tpl_of() { awk '/^## Review Document Template/ { on = 1; next } on && /^```markd
 tpl_of "$ROLE" > "$S/template.md"
 [ -s "$S/template.md" ] || { echo "FIXTURE ERROR: no fenced template under '## Review Document Template' in $ROLE" >&2; exit 2; }
 p2 "$S/template-p2.md" APPROVED "$(c_res '<finding title>')"
+# TOP-LEVEL findings: graph s319 1-2-qa-validation.md's shape, `#### ` directly under `## Findings`
+# with no `### ` container. T1 carries a Class, T2 none (so --classes prints `-`). The near-misses
+# each carry one Important-container finding I0 beside a decoy `#### ` that must stay uncounted:
+# under a `## ` section other than Findings (TB), and under `### Notes` inside Findings (TC).
+T1='Vitest full-run failure in RebalancerPage.test.jsx did not reproduce'
+T2='AC1 Decimal path has no committed RED capture'
+I0='The capture names no head'
+printf '# Gate-2 QA validation: S319-1.2\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e8d80\n\n## Derived tree facts\n\nfacts\n\n## Findings\n\n#### %s\n\nClass: EVIDENCE\nbody\n\n#### %s\n\nbody\n\n## Checklist items not applicable to this story\n\nNone.\n' "$T1" "$T2" > "$S/top.md"
+printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e8d80\n\n## Derived tree facts\n\n#### a heading directly under another section is not a finding\n\nbody\n\n## Findings\n\n### Important\n\n#### %s\n\nbody\n' "$I0" > "$S/top-out.md"
+printf '# QA Validation: 1\n\nreviewed-sha: 9d8f14d171cfd4629858bc1315901d89d12e8d80\n\n## Findings\n\n### Notes\n\n#### a heading under Notes is not a finding\n\nbody\n\n### Important\n\n#### %s\n\nbody\n' "$I0" > "$S/top-notes.md"
+p2 "$S/top-i0-p2.md" APPROVED "$(c_res "$I0")"
 
 run() { out="$(bash "$1" "$2" "$3" 2>&1)"; rc=$?; }
 
@@ -395,8 +423,86 @@ G clone -q --depth 1 --branch span "file://$R" "$WORK/shallow" || exit 2
 G clone -q --branch span "file://$R" "$WORK/full" || exit 2
 [ "$(G -C "$WORK/shallow" rev-parse --is-shallow-repository)" = "true" ] || { echo "FIXTURE BROKEN: the depth-1 clone is not shallow" >&2; exit 2; }
 VH="$WORK/shallow/scripts/ai-dlc/validate-carried-findings.sh"; VF="$WORK/full/scripts/ai-dlc/validate-carried-findings.sh"
+# Q: gate 2. A consumer that committed the program and qa.md (QA) WITHOUT `## Carried Findings`,
+# then qa.md WITH it (QB), then a QA p1 and three p2 files, each p2's reviewed-sha naming the qa.md
+# it ran against. The QA files take qa.md's Findings Template containers.
+RQ="$WORK/qa"; mkdir -p "$RQ/scripts/ai-dlc" "$RQ/.claude/team-roles" "$RQ/docs/reviews/s6" || exit 2
+G init -q "$RQ" || exit 2
+cp "$V" "$RQ/scripts/ai-dlc/validate-carried-findings.sh"
+printf '# QA\n\n## Finding Class\n\nClass: CODE | TEST | EVIDENCE | BOOKKEEPING\n\n## Validation Checklist\n' > "$RQ/.claude/team-roles/qa.md"
+G -C "$RQ" add -A && G -C "$RQ" commit -qm "pull: qa.md without the section" || exit 2
+QA="$(G -C "$RQ" rev-parse HEAD)" || exit 2
+printf '\n## Carried Findings\n\nA re-validation pass answers every prior finding with a carried: line.\n' >> "$RQ/.claude/team-roles/qa.md"
+G -C "$RQ" add -A && G -C "$RQ" commit -qm "pull: qa.md with the section" || exit 2
+QB="$(G -C "$RQ" rev-parse HEAD)" || exit 2
+Q1='The full-collection capture names no head'; Q2='The Dev Agent Record cites a stale count'
+{ printf '# QA Validation: 6\n\nreviewed-sha: %s\nadvisor: called\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n' "$QA"
+  printf '### Critical (must fix before PASS)\n\n#### %s\nClass: EVIDENCE\nbody\n\n' "$Q1"
+  printf '### Important (should fix, can be follow-up)\n\n#### %s\nClass: BOOKKEEPING\nbody\n\n### Suggestions (optional improvements)\n\nNone.\n' "$Q2"
+} > "$RQ/docs/reviews/s6/6-qa-validation.md"
+qp2() { # <file> <reviewed-sha> <carried lines...>   (the `## Verdict` heading form, PASS)
+  local f="$1" s="$2"; shift 2
+  { printf '# QA Validation: 6 (pass 2)\n\nreviewed-sha: %s\nadvisor: called\n\n## Summary\nRe-validation.\n\n' "$s"
+    for l in "$@"; do printf '%s\n' "$l"; done
+    printf '\n## Verdict\nPASS\n\n## Findings\n\n### Critical (must fix before PASS)\n\nNone.\n\n### Important (should fix, can be follow-up)\n\nNone.\n'; } > "$f"
+}
+# qp2l: the second seed, qa.md's one-line form (`Verdict: <VALUE>` at column 0, qa.md ## Verdict).
+qp2l() { # <file> <reviewed-sha> <verdict value> <carried lines...>
+  local f="$1" s="$2" v="$3"; shift 3
+  { printf '# QA Validation: 6 (pass 2)\n\nreviewed-sha: %s\nadvisor: called\n\nVerdict: %s\n\n## Summary\nRe-validation.\n\n' "$s" "$v"
+    for l in "$@"; do printf '%s\n' "$l"; done
+    printf '\n## Findings\n\n### Critical (must fix before PASS)\n\nNone.\n\n### Important (should fix, can be follow-up)\n\nNone.\n'; } > "$f"
+}
+mkdir -p "$RQ/docs/reviews/s7" "$RQ/docs/reviews/s8" || exit 2
+cp "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/s7/6-qa-validation.md"
+cp "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/s8/6-qa-validation.md"
+qp2 "$RQ/docs/reviews/s6/6-qa-validation-p2.md" "$QA"
+qp2 "$RQ/docs/reviews/s7/6-qa-validation-p2.md" "$QB" "$(c_res "$Q1")"
+qp2 "$RQ/docs/reviews/s8/6-qa-validation-p2.md" "$QB" "$(c_res "$Q1")" "$(c_res "$Q2")"
+# s9: the top-level QA prior at gate 2 with the key present; the p2 answers T1 and not T2.
+mkdir -p "$RQ/docs/reviews/s9" || exit 2
+cp "$S/top.md" "$RQ/docs/reviews/s9/1-2-qa-validation.md"
+qp2 "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md" "$QB" "$(c_res "$T1")"
+# s10: a p2 whose reviewed-sha names no commit, so the ON-DISK qa.md (the section present) decides;
+# the p2 drops Q2. BADSHA is hex and 40 long, so only the commit lookup can reject it.
+BADSHA=0123456789abcdef0123456789abcdef01234567
+G -C "$RQ" rev-parse -q --verify "${BADSHA}^{commit}" >/dev/null 2>&1 && { echo "FIXTURE BROKEN: $BADSHA names a commit" >&2; exit 2; }
+# s11-s15: the one-line verdict form. s11 NEEDS_REWORK with an open carry; s12 PASS with an open
+# carry; s13 two different values (heading NEEDS_REWORK, line PASS); s14 the same value twice;
+# s15 a suffixed value, which is its whole token, not its prefix.
+for d_ in s10 s11 s12 s13 s14 s15; do
+  mkdir -p "$RQ/docs/reviews/$d_" && cp "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/$d_/6-qa-validation.md" || exit 2
+done
+qp2 "$RQ/docs/reviews/s10/6-qa-validation-p2.md" "$BADSHA" "$(c_res "$Q1")"
+qp2l "$RQ/docs/reviews/s11/6-qa-validation-p2.md" "$QB" NEEDS_REWORK "$(c_res "$Q1")" "$(c_open "$Q2")"
+qp2l "$RQ/docs/reviews/s12/6-qa-validation-p2.md" "$QB" PASS "$(c_res "$Q1")" "$(c_open "$Q2")"
+qp2l "$RQ/docs/reviews/s13/6-qa-validation-p2.md" "$QB" PASS "$(c_res "$Q1")" "$(c_open "$Q2")"
+printf '\n## Verdict\nNEEDS_REWORK\n' >> "$RQ/docs/reviews/s13/6-qa-validation-p2.md"
+qp2l "$RQ/docs/reviews/s14/6-qa-validation-p2.md" "$QB" NEEDS_REWORK "$(c_res "$Q1")" "$(c_open "$Q2")"
+printf '\n## Verdict\nNEEDS_REWORK\n' >> "$RQ/docs/reviews/s14/6-qa-validation-p2.md"
+qp2l "$RQ/docs/reviews/s15/6-qa-validation-p2.md" "$QB" NEEDS_REWORK-pending "$(c_res "$Q1")" "$(c_open "$Q2")"
+G -C "$RQ" add -A && G -C "$RQ" commit -qm "QA passes" || exit 2
+# N: gate 2 with no qa.md in either layout (tracked or on disk); O: qa.md on disk WITHOUT the
+# section. Both carry the s10 pair (unresolvable reviewed-sha, Q2 dropped).
+for w_ in noqa oldqa; do
+  mkdir -p "$WORK/$w_/scripts/ai-dlc" "$WORK/$w_/docs/reviews/s1" || exit 2
+  G init -q "$WORK/$w_" || exit 2
+  cp "$V" "$WORK/$w_/scripts/ai-dlc/validate-carried-findings.sh" || exit 2
+  cp "$RQ/docs/reviews/s10/6-qa-validation.md" "$RQ/docs/reviews/s10/6-qa-validation-p2.md" "$WORK/$w_/docs/reviews/s1/" || exit 2
+done
+mkdir -p "$WORK/oldqa/.claude/team-roles" || exit 2
+G -C "$RQ" show "${QA}:.claude/team-roles/qa.md" > "$WORK/oldqa/.claude/team-roles/qa.md" || exit 2
+for w_ in noqa oldqa; do G -C "$WORK/$w_" add -A && G -C "$WORK/$w_" commit -qm "program and QA passes" || exit 2; done
+[ ! -e "$WORK/noqa/.claude/team-roles/qa.md" ] && [ ! -e "$WORK/noqa/core/team-roles/qa.md" ] && [ -s "$WORK/oldqa/.claude/team-roles/qa.md" ] &&
+  ! grep -q '^## Carried Findings' "$WORK/oldqa/.claude/team-roles/qa.md" && grep -q '^## Carried Findings' "$RQ/.claude/team-roles/qa.md" ||
+  { echo "FIXTURE BROKEN: the noqa/oldqa/qa worlds do not hold the qa.md each arm names" >&2; exit 2; }
+VN="$WORK/noqa/scripts/ai-dlc/validate-carried-findings.sh"; VO="$WORK/oldqa/scripts/ai-dlc/validate-carried-findings.sh"
+QA_OLD="$(G -C "$RQ" show "${QA}:.claude/team-roles/qa.md")" || exit 2
+grep -q '^## Carried Findings' "$RQ/.claude/team-roles/qa.md" && [ -n "$QA_OLD" ] && ! grep -q '^## Carried Findings' <<<"$QA_OLD" \
+  || { echo "FIXTURE BROKEN: qa.md at $QA carries the section, or the tip lacks it" >&2; exit 2; }
+VQ="$RQ/scripts/ai-dlc/validate-carried-findings.sh"
 # install <validator>: every topology arm runs the copy that sits in its checkout.
-install() { mkdir -p "$RI/scripts/ai-dlc" && cp "$1" "$VR" && cp "$1" "$VS" && cp "$1" "$VD" && cp "$1" "$VI" && cp "$1" "$VH" && cp "$1" "$VF" ||
+install() { mkdir -p "$RI/scripts/ai-dlc" && cp "$1" "$VR" && cp "$1" "$VS" && cp "$1" "$VD" && cp "$1" "$VI" && cp "$1" "$VH" && cp "$1" "$VF" && cp "$1" "$VQ" && cp "$1" "$VN" && cp "$1" "$VO" ||
   { echo "FIXTURE ERROR: install failed" >&2; exit 2; }; }
 
 # ---- arms ------------------------------------------------------------------------------------
@@ -467,6 +573,15 @@ arm_H1() { run "$VH" "$WORK/shallow/docs/reviews/s4/1-code-review.md" "$WORK/sha
            [ "$rc" -eq 2 ] && grep -q '^REFUSED: .* is a shallow repository' <<<"$out"; }
 arm_H2() { run "$VF" "$WORK/full/docs/reviews/s4/1-code-review.md" "$WORK/full/docs/reviews/s4/1-code-review-p2.md"
            [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out"; }
+# Q: gate 2, keyed on qa.md's `## Carried Findings` at the pass's reviewed-sha. QL the section absent
+# there and p2 answering nothing -> LEGACY, exit 0; QF present, p2 missing one -> 1; QP present, p2
+# answering every finding -> PASS. The tip's qa.md carries the section in all three.
+arm_QL() { run "$VQ" "$RQ/docs/reviews/s6/6-qa-validation.md" "$RQ/docs/reviews/s6/6-qa-validation-p2.md"
+           [ "$rc" -eq 0 ] && grep -q '^LEGACY: .*carries no "## Carried Findings" section' <<<"$out"; }
+arm_QF() { run "$VQ" "$RQ/docs/reviews/s7/6-qa-validation.md" "$RQ/docs/reviews/s7/6-qa-validation-p2.md"
+           [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s7/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
+arm_QP() { run "$VQ" "$RQ/docs/reviews/s8/6-qa-validation.md" "$RQ/docs/reviews/s8/6-qa-validation-p2.md"
+           [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior' <<<"$out"; }
 # LIST: --list prints exactly the carry strings on stdout, in file order, and NOTEs on stderr.
 arm_LIST() { local a b
              a="$(bash "$1" --list "$S/merged.md" 2>/dev/null)" || return 1
@@ -476,14 +591,50 @@ arm_LIST() { local a b
              [ "$(bash "$1" --list "$S/span-prior.md" 2>&1 >/dev/null | grep -c '^NOTE:')" -eq 2 ]; }
 NLF='
 '
+# TA: top-level findings are carried. --list prints both, --classes their Class or `-`, in order.
+arm_TA() { local a b
+           a="$(bash "$1" --list "$S/top.md" 2>/dev/null)" || return 1
+           [ "$a" = "$T1$NLF$T2" ] || return 1
+           b="$(bash "$1" --classes "$S/top.md" 2>/dev/null)" || return 1
+           [ "$b" = "EVIDENCE$TAB_$T1$NLF-$TAB_$T2" ]; }
+# TQ: the same prior at gate 2, the qa.md key present, a p2 with no carried: line for T2 -> 1.
+arm_TQ() { run "$VQ" "$RQ/docs/reviews/s9/1-2-qa-validation.md" "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md"
+           [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s9/1-2-qa-validation-p2.md: $T2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
+# TB/TC: the decoy stays uncounted, so the p2 answering I0 alone passes with exactly 1 prior.
+arm_TB() { run "$1" "$S/top-out.md" "$S/top-i0-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out"; }
+arm_TC() { run "$1" "$S/top-notes.md" "$S/top-i0-p2.md"; [ "$rc" -eq 0 ] && grep -q '^PASS: 1 prior' <<<"$out"; }
+TAB_="$(printf '\t')"
+# QU1/QU2/QU3: gate 2 with qa.md unreadable at the pass's reviewed-sha (it names no commit). QU1 the
+# on-disk qa.md carries the section -> checked, Q2 dropped -> 1. QU2 no qa.md in either layout ->
+# checked (an unreadable role file never acquits) -> 1. QU3 the near-miss: on-disk qa.md without
+# the section -> LEGACY, 0, naming the on-disk copy.
+arm_QU1() { run "$VQ" "$RQ/docs/reviews/s10/6-qa-validation.md" "$RQ/docs/reviews/s10/6-qa-validation-p2.md"
+            [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s10/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
+arm_QU2() { run "$VN" "$WORK/noqa/docs/reviews/s1/6-qa-validation.md" "$WORK/noqa/docs/reviews/s1/6-qa-validation-p2.md"
+            [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $WORK/noqa/docs/reviews/s1/6-qa-validation-p2.md: $Q2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
+arm_QU3() { run "$VO" "$WORK/oldqa/docs/reviews/s1/6-qa-validation.md" "$WORK/oldqa/docs/reviews/s1/6-qa-validation-p2.md"
+            [ "$rc" -eq 0 ] && grep -qF "LEGACY: $WORK/oldqa/docs/reviews/s1/6-qa-validation-p2.md is a gate-2 re-validation run against " <<<"$out"; }
+# V1-V5: the verdict reader with an open carry. V1 the one-line `Verdict: NEEDS_REWORK` -> 0;
+# V2 one-line `Verdict: PASS` -> 1, as the heading form; V3 the heading and the line disagree ->
+# refused; V4 they agree -> 0; V5 `NEEDS_REWORK-pending` is its whole token -> 1.
+arm_V1() { run "$VQ" "$RQ/docs/reviews/s11/6-qa-validation.md" "$RQ/docs/reviews/s11/6-qa-validation-p2.md"
+           [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior.*1 open, verdict NEEDS_REWORK' <<<"$out"; }
+arm_V2() { run "$VQ" "$RQ/docs/reviews/s12/6-qa-validation.md" "$RQ/docs/reviews/s12/6-qa-validation-p2.md"
+           [ "$rc" -eq 1 ] && grep -q 'open carried finding(s) under verdict PASS;' <<<"$out"; }
+arm_V3() { run "$VQ" "$RQ/docs/reviews/s13/6-qa-validation.md" "$RQ/docs/reviews/s13/6-qa-validation-p2.md"
+           [ "$rc" -eq 2 ] && grep -q '^REFUSED: .*more than one verdict value' <<<"$out"; }
+arm_V4() { run "$VQ" "$RQ/docs/reviews/s14/6-qa-validation.md" "$RQ/docs/reviews/s14/6-qa-validation-p2.md"
+           [ "$rc" -eq 0 ] && grep -q '^PASS: 2 prior.*1 open, verdict NEEDS_REWORK' <<<"$out"; }
+arm_V5() { run "$VQ" "$RQ/docs/reviews/s15/6-qa-validation.md" "$RQ/docs/reviews/s15/6-qa-validation-p2.md"
+           [ "$rc" -eq 1 ] && grep -q 'under verdict NEEDS_REWORK-pending;' <<<"$out"; }
 
-ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 WR1 WR2 WR3 K1 K2 K3 K4 K5 G1 G2 H1 H2 LIST"
+ARMS="C F1 F2 N2 F3 N3 F4 F5 F6 T P1 P2 P3 W1 W2 D1 S1 S3 L1 S4 S5 S6 S7 WR1 WR2 WR3 K1 K2 K3 K4 K5 G1 G2 H1 H2 QL QF QP LIST TA TQ TB TC QU1 QU2 QU3 V1 V2 V3 V4 V5"
 install "$V"
-B_all=0; f_base=$fails
+B_all=0; arms_bad=0
 for a in $ARMS; do
-  if "arm_$a" "$V"; then ok "$a"; else bad "$a: rc=$rc out=$(head -2 <<<"$out" | tr '\n' ' ')"; fi
+  if "arm_$a" "$V"; then ok "$a"; else arms_bad=$((arms_bad + 1)); bad "$a: rc=$rc out=$(head -2 <<<"$out" | tr '\n' ' ')"; fi
 done
-if [ "$fails" -eq "$f_base" ]; then B_all=1; fi
+if [ "$arms_bad" -eq 0 ]; then ok "every arm green on the unmutated validator"; B_all=1; fi
 
 # ---- mutants: each removes one rule and must flip exactly the arms it names --------------------
 M="$WORK/mut"; mkdir -p "$M" || exit 2
@@ -523,9 +674,19 @@ score() { # <mutant path> "<arms that trip>" <description> <twin arm> <mutant na
   else bad "MUTANT $name ($desc): $why"; fi
 }
 # Every arm whose verdict IS a missing carry dies: F1, the id near-misses K2/K5, the ignored G1.
-score "$(mut nocarry '/has no carried: line in/{n;s/fails=\$((fails + 1))/:/;}')" "F1 K2 K5 G1" "a missing carry is not counted" F2 nocarry
+score "$(mut nocarry '/has no carried: line in/{n;s/fails=\$((fails + 1))/:/;}')" "F1 K2 K5 G1 QF TQ QU1 QU2" "a missing carry is not counted" F2 nocarry
+# Gate 2: the qa.md key removed, so a pass run against a qa.md without the section is checked.
+score "$(mut nokey 's/\*-qa-validation-p\[0-9\]\*\.md) G2=1 ;;/*-qa-validation-p[0-9]*.md) G2=0 ;;/')" "QL QU3" "the gate-2 qa.md key removed" F1 nokey
+# Gate 2 fail-closed: qa.md unreadable at the reviewed-sha acquits (the on-disk read and the
+# no-qa.md bind both pre-empted). QU1 and QU2 die; the QU3 near-miss is LEGACY either way.
+score "$(mut qaacquit 's/^  QA_SRC=""; QA_SEC=""; QWHY=""$/  QA_SRC="none"; QA_SEC=0; QWHY=""/')" "QU1 QU2" "an unreadable qa.md acquits a gate-2 pass" QU3 qaacquit
 score "$(mut appr 's/NEEDS_REWORK|BLOCKED) ;;/NEEDS_REWORK|BLOCKED|APPROVED) ;;/')" F2 "an open carried finding under APPROVED is accepted" N2 appr
-score "$(mut anyopen 's/^    NEEDS_REWORK|BLOCKED) ;;/    __NEVER__) ;;/')" N2 "an open carried finding fails under every verdict" F2 anyopen
+score "$(mut anyopen 's/^    NEEDS_REWORK|BLOCKED) ;;/    __NEVER__) ;;/')" "N2 V1 V4" "an open carried finding fails under every verdict" F2 anyopen
+# The verdict reader: the one-line qa.md form dropped (V1 dies: refused, no verdict read); two
+# different values not refused; a suffixed value read as its prefix.
+score "$(mut noline 's/^    \/\^Verdict:\/ { rec(val(substr(t, 9))) }/    0 { rec(val(substr(t, 9))) }/')" "V1 V2 V3 V5" "the one-line Verdict: form is not read" V4 noline
+score "$(mut twoval 's/^    \*"\$NL"\*) refuse "\$CUR carries \$n_open open carried finding(s) and more than one/    __never__) refuse "\$CUR carries \$n_open open carried finding(s) and more than one/')" V3 "two different verdict values are not refused" V2 twoval
+score "$(mut prefix 's/if (c == "" || c ~ \/\[ .,()\*\]\/) return r }/return r }/')" V5 "a suffixed verdict reads as its prefix" V1 prefix
 # The UNPARSED rule binds a dropped finding in a post-rule prior: a bullet outside a repository
 # (F3), a bullet after the pull (S3), a bullet in a lead-in (S5), a bold id line in a lead-in (S7).
 score "$(mut unparsed 's/lab != "") print "UNPARSED\\t" sev/lab != "") print "LEADIN\\t" sev/')" "F3 S3 S5 S7" "a dropped finding in a post-rule prior is read as lead-in prose" S4 unparsed
@@ -540,14 +701,19 @@ score "$(mut nonebul 's/^    if (l ~ \/\^none(\[\^a-z\]|\$)\/) next/    if (0) n
 score "$(mut sep 's/if (st == "" || h == "") print "BAD/if (0) print "BAD/')" F4 "a malformed carried line is silently ignored" F1 sep
 # The fence rule in the CARRIED reader only: the second fence line of the file is that reader's.
 score "$(mut cfence '/^carried="/,/^                else print/{/fence != "" {/s/fence != "" {/0 {/;}')" F5 "a fenced carried line counts as an answer" F4 cfence
-score "$(mut sect 's/if (fs && sev != "") { d = norm/if (sev != "") { d = norm/')" F6 "a heading outside ## Findings is a prior finding" C sect
+score "$(mut sect 's/if ((fs && sev != "") || top) { d = norm/if (sev != "" || top) { d = norm/')" F6 "a heading outside ## Findings is a prior finding" C sect
+# Top-level findings: the subsection-only read restored (TA, TQ die); a top level opened by every
+# `## ` (TB dies); a `### Notes` that keeps the top level open (TC dies).
+score "$(mut subonly 's/if ((fs && sev != "") || top) { d = norm/if (fs \&\& sev != "") { d = norm/')" "TA TQ" "a #### directly under ## Findings is not a finding (subsection-only read)" TB subonly
+score "$(mut topany 's/sev = ""; top = fs; next }/sev = ""; top = 1; next }/')" TB "a #### directly under any ## section is a finding" TA topany
+score "$(mut topnotes 's/sub(\/\^\\\*\*\/, "", h); top = 0$/sub(\/^\\**\/, "", h); top = (h ~ \/^notes\/ ? top : 0)/')" TC "a #### under ### Notes keeps the top level open" TA topnotes
 # Pre-migration, one mutant per branch of the rule.
 score "$(mut vaddbinds 's/adds validate-carried-findings.sh'"'"' "\$TOP"; return 0; }/adds validate-carried-findings.sh'"'"' "$TOP"; return 1; }/')" W1 "a branch that never received the program binds" W2 vaddbinds
 score "$(mut descends 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  return 1/')" P1 "a review committed before the pull binds" P2 descends
 score "$(mut untracked 's/^  \[ -n "\$r" \] || return 1/  [ -n "$r" ] || return 0/')" P3 "an untracked review is exempt" P2 untracked
 # Exempt every committed review: the ancestry test is the one line every bound, committed arm
 # reads, so this mutant names all of them.
-score "$(mut pmalways 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  :/')" "P2 W2 D1 S1 S3 L1 S6 H2" "every committed review is exempt" P1 pmalways
+score "$(mut pmalways 's/^  git -C "\$TOP" merge-base --is-ancestor "\$VADD" "\$r" 2>\/dev\/null && return 1/  :/')" "P2 W2 D1 S1 S3 L1 S6 H2 QL QF QP TQ QU1 QU2 QU3 V1 V2 V3 V4 V5" "every committed review is exempt" P1 pmalways
 score "$(mut recent 's/log --diff-filter=A --reverse --format=%H HEAD/log --diff-filter=A --format=%H HEAD/')" D1 "the MOST RECENT add is the epoch (revert and re-add acquits)" P2 recent
 score "$(mut_after selfloc '  TOP="$(cd "$TOP" && pwd -P)" || return 1' '  case "$(cd "$(dirname "$0")" && pwd -P)/" in "$TOP"/*) ;; *) return 1 ;; esac')" W1 "the running copy must sit inside the review's checkout" W2 selfloc
 # The ignored program binds; the mutant reads it as pre-migration.
@@ -566,7 +732,7 @@ score "$(mut exactspan 's/uid="\$id"; fi$/uid=""; fi/')" K1 "a label prior is ca
 score "$(mut idprefix 's/(ENVIRON\["CF_I"\] != "" && \$3 == ENVIRON\["CF_I"\])/(ENVIRON["CF_I"] != "" \&\& index($3, ENVIRON["CF_I"]) == 1)/')" K2 "an id answers any carried string it prefixes" K1 idprefix
 score "$(mut nopunct 's/function key(s) { s = norm(s); sub(\/\[.:;, \\t\]+\$\/, "", s); return s }/function key(s) { return norm(s) }/')" K3 "trailing punctuation is significant" K1 nopunct
 score "$(mut dupid 's/if (n\[i\] == 1) print i/print i/')" K5 "an id two labels share answers both" K2 dupid
-score "$(mut listnone 's/printf .%s\\n. "\$disp"/:/')" LIST "--list prints no carry strings" K1 listnone
+score "$(mut listnone 's/printf .%s\\n. "\$disp"/:/')" "LIST TA" "--list prints no carry strings" K1 listnone
 # The unmutated copy: the mutant harness (install of a byte-identical copy) running the shipped behaviour green.
 cp "$V" "$M/ctl.sh" && cmp -s "$V" "$M/ctl.sh" && install "$M/ctl.sh" && arm_C "$M/ctl.sh" && arm_F1 "$M/ctl.sh" && arm_K2 "$M/ctl.sh" \
   && ok "CONTROL unmutated-copy: arms C, F1 and K2 pass against a byte-identical installed copy" \

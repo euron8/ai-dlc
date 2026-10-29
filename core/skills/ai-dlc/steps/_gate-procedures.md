@@ -37,6 +37,17 @@ When a step file says "run sub-step snapshot update", execute:
    `docs/escalations/pending.md` and any open triage items. Keep any
    `fan-out round <subject> since <epoch>` line until that round's join has
    completed (Rule 28, "Split dispatch").
+
+   A story the lead holds is one Open Items line, written with
+   `snapshot-update.sh --open-item 'held: <story-id> until <unblock action> since <epoch>'`
+   and removed on dispatch with `snapshot-update.sh --close-item 'held: <story-id> '`
+   (keep the trailing space inside the quotes). The grammar is:
+
+       - held: <story-id> until <unblock action> since <epoch>
+
+   Run `scripts/ai-dlc/validate-held-stories.sh`. On exit 1, dispatch or hold
+   each UNACCOUNTED story before the next wave, re-act on each AGED-HOLD, and
+   close each STALE-HOLD.
 3. Reconcile **In-Flight Teammates**: add a row for every teammate
    dispatched since the last update (`agent name | role | deliverable
    path | dispatched-at | status`, `status: in-flight`) — the deliverable
@@ -46,6 +57,8 @@ When a step file says "run sub-step snapshot update", execute:
    timestamp of the dispatch's spawn-ledger row), never a clock reading.
    When a deliverable is consumed, set that row's `status` to `delivered-reachable` if the teammate is still alive and
    you may message it again, and **DELETE** the row outright once you will not.
+   This step does not delete a story's last In-Flight row while that story is
+   still `ready-for-dev`.
    The one exception is a teammate STOPPED before it delivered: `steps/handoff.md`
    step 1 sets its `status` to `stopped` and KEEPS the row, because a successor
    session cannot tell a deleted row from a teammate that never existed. Do not

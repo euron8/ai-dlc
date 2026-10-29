@@ -268,7 +268,6 @@ mx_holds() {
     nav) grep -q 'NOT-A-VERDICT' <<<"$2" ;;
   esac
 }
-mx_flag() { case "$1" in a1) echo "${B_a1:-0}" ;; a2) echo "${B_a2:-0}" ;; a3) echo "${B_a3:-0}" ;; a4) echo "${B_a4:-0}" ;; rc22) echo "${B_rc22:-0}" ;; rc11) echo "${B_rc11:-0}" ;; lay) echo "${B_lay:-0}" ;; rec) echo "${B_rec:-0}" ;; nav) echo "${B_nav:-0}" ;; esac; }
 # mx_cell <mutant> <arm> <the output the arm reads>
 mx_cell() {
   local m="$1" t="$2" role
@@ -285,7 +284,19 @@ mx_cell() {
     ok "MATRIX $m $t GREEN"
     if [ "$MATRIX" != 1 ] && [ "$role" = D ]; then bad "mutant $m SURVIVED its deciding arm $t"; fi
   else
-    mutant_killed "$(( $(mx_flag "$t") && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED"
+    # one literal call per arm, so each kill's flag is a bound B_<arm> in the call itself
+    case "$t" in
+      a1)   mutant_killed "$(( ${B_a1:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      a2)   mutant_killed "$(( ${B_a2:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      a3)   mutant_killed "$(( ${B_a3:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      a4)   mutant_killed "$(( ${B_a4:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      rc22) mutant_killed "$(( ${B_rc22:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      rc11) mutant_killed "$(( ${B_rc11:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      lay)  mutant_killed "$(( ${B_lay:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      rec)  mutant_killed "$(( ${B_rec:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      nav)  mutant_killed "$(( ${B_nav:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      *)    bad "mx_cell: arm $t has no flag binding" ;;
+    esac
     if [ "$MATRIX" != 1 ] && [ "$role" = T ]; then bad "mutant $m tripped arm $t, which the header names as its twin"; fi
   fi
 }

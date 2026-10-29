@@ -4,6 +4,7 @@
 !core/scripts/merge-review-shards.sh
 !core/scripts/validate-carried-findings.sh
 core/scripts/artifact-path-config.sh
+core/scripts/record-only-diff.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 core/skills/ai-dlc/steps/implementation.md
 core/skills/ai-dlc/steps/gate-validation.md

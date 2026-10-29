@@ -320,6 +320,8 @@ project that replaces that section does not replace this one.
   handoff otherwise. It reads the line as a run only when it carries a
   backticked invocation, a `$ ` line or a count; any other value (`N/A`, `TBD`,
   `see dev report`, empty) is a no-run claim, held to the record-path rule.
+  The counts may be the line the capture-heads block renders (below), cited as
+  the capture's path plus `counts: capture-heads block`.
 - **The dependency setup that run needs, recorded beside it.** A fresh
   detached worktree carries none of the project's gitignored dependencies, so
   record in the Dev Agent Record, beside the full-collection run, the canonical
@@ -351,7 +353,11 @@ project that replaces that section does not replace this one.
   rather than retyping its command or adding your own `$ ` or `head:` lines.
   Every mutation-RED capture you cite is committed (`git add -f` when the
   directory is gitignored), and every capture is cited by its own path,
-  never by a glob or `{a,b}` brace. The lead runs
+  never by a glob or `{a,b}` brace. Cite each capture by path only, and
+  never retype its head, command or counts into the Dev Agent Record: run
+  `scripts/ai-dlc/validate-handoff-evidence.sh --render-dar <story-file> HEAD`
+  and paste its stdout verbatim under `## Dev Agent Record`, re-running it
+  after every re-capture. The lead runs
   `scripts/ai-dlc/validate-handoff-evidence.sh` before gate 1 and refuses
   the handoff on any of these.
 

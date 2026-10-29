@@ -101,7 +101,60 @@ JS
   { printf '# Code Review: 1\n\nreviewed-sha: %s\n\nadvisor: called\n\n## Summary\nClean.\n\n## Verdict\nAPPROVED\n\n## Findings\n\n' "$B0"
     printf '### Critical (must fix before merge)\n\nNone.\n\n### Important (should fix, can be follow-up)\n\nNone.\n\n### Suggestions (optional improvements)\n\n#### A rename\nnot carried.\n'
   } > "$W/prior-zero.md"
+  # The gate-2 priors: a QA validation file (qa.md's Findings Template, reviewed-sha = the go-signal
+  # sha), the same B0 every delta starts from. A merged QA file is one file here too.
+  rr_qprior "$W/qprior-evidence.md" 'Class: EVIDENCE' 'Class: BOOKKEEPING' ''
+  rr_qprior "$W/qprior-code.md" 'Class: EVIDENCE' 'Class: CODE' ''
+  # A part shard's hand-over finding (merge-review-shards.sh HAND-OVERS) carries no Class line: it is
+  # resolved inside the pass by the cross shard's handover-run:, so --classes skips it.
+  rr_qprior "$W/qprior-handover.md" 'Class: EVIDENCE' 'Class: BOOKKEEPING' \
+    "$(printf '#### AC3 replay handed to the cross shard\nparts: 2\nhandover: AC3\nThe RED replay for AC3 found no GREEN baseline in the part worktree.\n')"
+  # Its near-miss: the same unclassed finding carrying only the cross shard's handover-run: line, which
+  # is a record of a replay and not a hand-over, so the finding is unclassed and the pass goes full.
+  rr_qprior "$W/qprior-horun.md" 'Class: EVIDENCE' 'Class: BOOKKEEPING' \
+    "$(printf '#### AC3 replay result\nparts: 2\nhandover-run: 2 AC3 RED\nThe handed-over replay went RED.\n')"
+  # A CLASSED cross finding carrying the replay result: RED routes; GREEN-SURVIVED or NO-BASELINE is a
+  # failed hard gate and goes full whatever the class.
+  local hr
+  for hr in RED GREEN-SURVIVED NO-BASELINE; do
+    rr_qprior "$W/qprior-hr-$hr.md" 'Class: EVIDENCE' 'Class: BOOKKEEPING' \
+      "$(printf '#### AC3 replay result\nClass: EVIDENCE\nparts: 1\nhandover-run: 1 AC3 %s\nThe handed-over replay result is recorded.\n' "$hr")"
+  done
   return 0
+}
+rr_qprior() { # <file> <class line of finding 1> <class line of finding 2> <a third Important finding, verbatim, or empty>
+  { printf '# QA Validation: 1\n\nreviewed-sha: %s\nadvisor: called\n\n## Summary\nRework owed.\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n' "$(sed -n 's/^B0=//p' "$W/refs")"
+    printf '### Critical (must fix before PASS)\n\n#### The full-collection capture names no head\n%s\nThe capture test-results/cap1.txt names no commit.\n\n' "$2"
+    printf '### Important (should fix, can be follow-up)\n\n#### The Dev Agent Record cites a stale count\n%s\nThe record says 811 passed.\n\n' "$3"
+    [ -z "$4" ] || printf '%s\n\n' "$4"
+    printf '### Suggestions (optional improvements)\n\nNone.\n'
+  } > "$1"
+}
+# rr_qroot <dir> <gate-validation.md> <code-reviewer.md> <qa.md> -> a project root the merge reads, with
+# two qa.md states: <dir>/tpl (qa.md plus the `Class:` template line code-reviewer.md declares, in a
+# `## Finding Class` section) and <dir>/none (qa.md with every column-0 `Class:` line removed). The
+# real qa.md is never what decides an arm here: before qa.md carries the template the two would agree.
+rr_qroot() {
+  local d s
+  for s in tpl none; do
+    mkdir -p "$1/$s/core/skills/ai-dlc/steps" "$1/$s/core/team-roles" || return 1
+    cp "$2" "$1/$s/core/skills/ai-dlc/steps/gate-validation.md" && cp "$3" "$1/$s/core/team-roles/code-reviewer.md" || return 1
+    grep -v '^Class:' "$4" > "$1/$s/core/team-roles/qa.md"
+  done
+  d="$(awk '/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { print; exit }' "$3")"
+  [ -n "$d" ] || return 1
+  printf '\n## Finding Class\n\nEvery Critical and Important finding carries one column-0 line:\n\n%s\n' "$d" >> "$1/tpl/core/team-roles/qa.md"
+}
+# rr_qserial <file> <class value> -> a ROUTED gate-2 serial QA file (shard: 1/1, briefed route: record-only):
+# the canonical honest-green run and its counted result, an all-PASS per-AC table, one carried finding
+# answered, and NO mutation or null-impl replay line and no handover-run: line.
+rr_qserial() {
+  { printf '# QA Validation: 1\n\nshard: 1/1 1\nroute: record-only\nreviewed-sha: %s\nadvisor: called\n\n## Summary\nRouted re-validation.\n\n' "$(sed -n 's/^B0=//p' "$W/refs")"
+    printf 'Canonical run: `python3 -m pytest -q` from the frozen worktree root\nCanonical result: 812 passed, 3 skipped, 0 failed\n\n'
+    printf 'carried: The full-collection capture names no head — resolved\n\n## Verdict\nPASS\n\n## Findings\n\n### Critical (must fix before PASS)\n\nNone.\n\n'
+    printf '### Important (should fix, can be follow-up)\n\n#### The capture block is stale\nClass: %s\nThe rendered block lags one capture.\n\n### Suggestions (optional improvements)\n\nNone.\n\n' "$2"
+    printf '## Acceptance Criteria\n\n| AC | Result | Expected | Got |\n|---|---|---|---|\n| AC1 | PASS | x | x |\n'
+  } > "$1"
 }
 rr_prior() { # <file> <reviewed-sha> <class line of finding 1 or empty> <class line of finding 2 or empty>
   { printf '# Code Review: 1\n\nreviewed-sha: %s\n\nadvisor: called\n\n## Summary\nRework owed.\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n' "$2"

@@ -187,7 +187,12 @@ output). Before the first dispatch the lead MUST emit, as a written
 planning output, a **story dependency-DAG + wave plan**: for each
 story, the files it owns and the stories it genuinely depends on, with
 wave grouping derived from it (independent stories → same wave /
-parallel; shared-file or by-content chains → serialized land-order). A
+parallel; shared-file or by-content chains → serialized land-order).
+Every story not in wave 1 gets a `held:` line when the plan is written, its
+unblock action naming its predecessor story or wave. The plan states the
+sprint's earliest close, copied from the `EARLIEST-CLOSE` line of
+`scripts/ai-dlc/validate-ac-falsifiability.sh --stories-dir <stories dir>`,
+never computed by hand. A
 default-to-serial dispatch the operator must challenge to parallelize,
 or a missing / after-the-fact wave-DAG, is a lead-conduct retro
 finding.

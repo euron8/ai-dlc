@@ -25,9 +25,29 @@
 # never fire on it. A worked example that satisfies the clause it illustrates is a check that
 # cannot fire, and assertion 9 is what keeps core's files at zero.
 #
-# Usage: run.sh [path-to-validate-layer-entries.sh]
+# MUTANTS. Each is a copy of the subject, scored per push on its DECIDING arm (which must FAIL under it)
+# and its TWIN arm(s) (which must HOLD); the live pass over the shipped subject keeps every world. The
+# four linter arms are the four worlds S0 (no row anywhere), S1 (row in the declared file), S2 (row in
+# the retired location) and REFUSE (declaration removed); PSCAF and PPRES are the pull-side scaffold and
+# preserve arms. `bash core/fixtures/layer-crosswalk-home/run.sh --matrix` measures every mutant against
+# every arm of its subject and prints one MATRIX line per cell. A twin is an arm the matrix shows green
+# under the mutant. Re-measured whenever an arm or a mutant is added or changed.
+# MUTANT-MATRIX fence decides=S0 twins=S2
+# MUTANT-MATRIX warn decides=S2 twins=S0
+# MUTANT-MATRIX refuse decides=REFUSE twins=S0
+# MUTANT-MATRIX union decides=S2 twins=S1
+# MUTANT-MATRIX apply-scaffold decides=PSCAF twins=PPRES
+# MUTANT-MATRIX-DYNAMIC mscore why=every mutant is passed to mutant_killed by name from the one mscore() driver, and each name keeps its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-crosswalk-home/run.sh --matrix
+#
+# Usage: run.sh [--matrix] [path-to-validate-layer-entries.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
 set -uo pipefail
+
+RAW_ARGV=" $* "
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
+MATRIX_CELLS=0
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -52,6 +72,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 fails=0
 made=0
+B_S0=0; B_S1=0; B_S2=0; B_REFUSE=0; B_PSCAF=0; B_PPRES=0; MUT_APPLY_READY=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 
@@ -62,11 +83,16 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
 # + 2 core-yields-zero (claim + control)
 # + 4 pull-side (scaffold, preserve, refusal, mutant)
-# + 1 unmutated control + 4 mutants.
+# + 1 unmutated control + 5 mutants (4 linter + the pull scaffold) + 1 plain-run arm.
 # The 2 installer arms (scaffold + preserve) moved to schema-install-fallback, which declares
 # scripts/install.sh; this fixture ships and cannot.
-EXPECTED_ASSERTIONS=19
+EXPECTED_ASSERTIONS=20
 
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
+
+# shellcheck disable=SC1090
+. "$MUT_LIB"
 echo "layer-crosswalk-home:"
 
 # ---------------------------------------------------------------------------
@@ -123,7 +149,7 @@ R0="$(fresh)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 V0="$(vector "$LINTER" "$R0")"
 [ "$V0" = "e16=1 w8=0 rc=1" ] \
-  && ok "premise: a consumer with a retired id and NO row anywhere reports E16 and is silent on W8 ($V0)" \
+  && { B_S0=1; ok "premise: a consumer with a retired id and NO row anywhere reports E16 and is silent on W8 ($V0)"; } \
   || bad "premise: expected 'e16=1 w8=0 rc=1' on the pristine seed, got '$V0'"
 
 # The seed's retired id must really be retired, or every cell below is measuring nothing.
@@ -138,16 +164,16 @@ fi
 # ---------------------------------------------------------------------------
 # the four states
 # ---------------------------------------------------------------------------
-R1="$(fresh)"; write_new_home "$R1"
+R1="$WORK/w1"; cp -R "$R0" "$R1"; write_new_home "$R1"
 V1="$(vector "$LINTER" "$R1")"
 [ "$V1" = "e16=0 w8=0 rc=0" ] \
-  && ok "the row in the DECLARED crosswalk file clears E16, says nothing about the retired location, exits 0" \
+  && { B_S1=1; ok "the row in the DECLARED crosswalk file clears E16, says nothing about the retired location, exits 0"; } \
   || bad "row in the declared crosswalk file: expected 'e16=0 w8=0 rc=0', got '$V1'"
 
-R2="$(fresh)"; write_legacy "$R2"
+R2="$WORK/w2"; cp -R "$R0" "$R2"; write_legacy "$R2"
 V2="$(vector "$LINTER" "$R2")"
 [ "$V2" = "e16=0 w8=1 rc=0" ] \
-  && ok "the SAME row in the retired location still RESOLVES — no wedge — and is reported once by W8" \
+  && { B_S2=1; ok "the SAME row in the retired location still RESOLVES — no wedge — and is reported once by W8"; } \
   || bad "row in the retired location: expected 'e16=0 w8=1 rc=0', got '$V2'"
 
 # W8 must name what it found, or an operator cannot act on it without diffing two files.
@@ -172,7 +198,7 @@ O2="$(bash "$LINTER" "$R2/consumer" 2>&1)"
 # ---------------------------------------------------------------------------
 # Move the declared path to a filename nothing in the tree hard-codes, put the row there, and
 # it must still clear. A reader carrying the literal passes assertion 3 and fails this one.
-R3="$(fresh)"
+R3="$WORK/w3"; cp -R "$R0" "$R3"
 ALT='.claude/skills/ai-dlc/crosswalk-elsewhere.md'
 sed "s#^consumer_crosswalk_file:.*#consumer_crosswalk_file: $ALT#" \
   "$R3/consumer/.claude/skills/ai-dlc/layer-contract.yaml" > "$R3/lc.new" \
@@ -189,12 +215,12 @@ V3="$(vector "$LINTER" "$R3")"
 # An unreadable declaration and a consumer with no rows are the same empty set otherwise, and
 # that set is what E16 and W7 clear themselves against — so a missing key that fell back to
 # anything would turn two clauses into unconditional passes.
-R4="$(fresh)"; write_new_home "$R4"
+R4="$WORK/w4"; cp -R "$R0" "$R4"; write_new_home "$R4"
 grep -v '^consumer_crosswalk_file:' "$R4/consumer/.claude/skills/ai-dlc/layer-contract.yaml" > "$R4/lc.new" \
   && mv "$R4/lc.new" "$R4/consumer/.claude/skills/ai-dlc/layer-contract.yaml"
 O4="$(bash "$LINTER" "$R4/consumer" 2>&1)"
 if grep -q "could not read 'consumer_crosswalk_file:'" <<<"$O4"; then
-  ok "an UNDECLARED crosswalk path is REFUSED by name, not silently treated as an empty table"
+  B_REFUSE=1; ok "an UNDECLARED crosswalk path is REFUSED by name, not silently treated as an empty table"
 else
   bad "removing the declaration did not produce a refusal — E16 and W7 would clear against a set nothing read"
 fi
@@ -299,7 +325,7 @@ else
   bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
   if [ -f "$SC/$CW_REL" ] \
      && cmp -s "$SC/$CW_REL" "$SD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then
-    ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
+    B_PSCAF=1; ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
   else
     bad "apply left '$CW_REL' absent or unlike the template — this is the defect the 0.227.0 pull shipped: a declared path nothing creates"
   fi
@@ -309,7 +335,7 @@ else
   SUM="$(cksum < "$SC/$CW_REL")"
   bash "$APPLY" "$SD" "$SB" "$SC" "$ST" >/dev/null 2>&1
   [ "$(cksum < "$SC/$CW_REL")" = "$SUM" ] \
-    && ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's" \
+    && { B_PPRES=1; ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's"; } \
     || bad "a second pull overwrote the populated crosswalk file, which is the whole ownership claim"
 
   # --- an undeclared path is REFUSED, and the refusal withholds the stamp ----------------
@@ -348,11 +374,7 @@ else
   elif ! bash -n "$MUTDIR/apply.sh" 2>/dev/null || ! grep -q 'crosswalk-scaffold' "$MUTDIR/apply.sh"; then
     bad "MUTANT apply-scaffold produced a script that does not parse or lost the block it was meant to reach — the copy is damaged rather than mutated, so anything it fails to do is unattributable"
   else
-    read -r MD MB MC MT <<<"$(synth yes)"
-    bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
-    [ ! -f "$MC/$CW_REL" ] \
-      && ok "MUTANT killed: with the scaffold removed the pull completes and the declared path stays EMPTY — which is exactly what shipped" \
-      || bad "MUTANT apply-scaffold: the file appeared anyway, so the arm above is not what creates it and its verdict is unattributable"
+    MUT_APPLY_READY=1
   fi
 fi
 
@@ -364,66 +386,110 @@ fi
 # positively and distinctly for each.
 MUT="$WORK/mut"; mkdir -p "$MUT"
 
-# full_vector <linter> -> the four states as one string
-full_vector() { # full_vector <linter>
-  local a b c d ra rb rc rd
-  ra="$(fresh)"
-  rb="$(fresh)"; write_new_home "$rb"
-  rc="$(fresh)"; write_legacy "$rc"
-  rd="$(fresh)"; write_new_home "$rd"
-  grep -v '^consumer_crosswalk_file:' "$rd/consumer/.claude/skills/ai-dlc/layer-contract.yaml" > "$rd/lc.new" \
-    && mv "$rd/lc.new" "$rd/consumer/.claude/skills/ai-dlc/layer-contract.yaml"
-  a="$(vector "$1" "$ra")"; b="$(vector "$1" "$rb")"; c="$(vector "$1" "$rc")"
-  d="$(bash "$1" "$rd/consumer" 2>&1 | grep -c "could not read 'consumer_crosswalk_file:'")"
-  printf 'S0[%s] S1[%s] S2[%s] REFUSE[%s]' "$a" "$b" "$c" "$d"
+# One arm = one world, built ONCE above and only read by the linter. armv <arm> <linter> prints 1
+# when the arm's expected outcome holds under that linter copy.
+armv() { # armv <arm> <linter>
+  case "$1" in
+    S0)     [ "$(vector "$2" "$R0")" = "e16=1 w8=0 rc=1" ] && echo 1 || echo 0 ;;
+    S1)     [ "$(vector "$2" "$R1")" = "e16=0 w8=0 rc=0" ] && echo 1 || echo 0 ;;
+    S2)     [ "$(vector "$2" "$R2")" = "e16=0 w8=1 rc=0" ] && echo 1 || echo 0 ;;
+    REFUSE) [ "$(bash "$2" "$R4/consumer" 2>&1 | grep -c "could not read 'consumer_crosswalk_file:'")" = 1 ] && echo 1 || echo 0 ;;
+  esac
+}
+armb() { eval "printf '%s' \"\$B_$1\""; } # armb <arm> -> the live base-pass flag of that arm
+
+# mscore <mutant> <description> <linter-copy> <deciding-arm> <twin>... : the deciding arm must FAIL under
+# the copy and every twin must HOLD. --matrix runs every linter arm and prints one MATRIX line per cell.
+ARMS_LINTER="S0 S1 S2 REFUSE"
+armsall() { local t; for t in "$@"; do [ "$(armb "$t")" = 1 ] || { echo 0; return; }; done; echo 1; } # 1 iff every named arm's base flag is live
+mscore() {
+  local m="$1" desc="$2" lin="$3" dec="$4" t a v dv held=1 flag=0; shift 4
+  if [ "$(armsall "$dec" "$@")" = 1 ]; then flag=1; else bad "MUTANT $m: an arm it drives ($dec $*) did not pass unmutated in this run, so its kill cannot score"; fi
+  if [ "$MATRIX" = 1 ]; then
+    for a in $ARMS_LINTER; do
+      v="$(armv "$a" "$lin")"; eval "CELL_$a=\$v"
+      printf 'MATRIX\t%s\t%s\t%s\n' "$m" "$a" "$([ "$v" = 1 ] && echo ok || echo FAIL)"
+      MATRIX_CELLS=$((MATRIX_CELLS + 1))
+    done
+  else
+    for a in "$dec" "$@"; do v="$(armv "$a" "$lin")"; eval "CELL_$a=\$v"; done
+  fi
+  eval "dv=\$CELL_$dec"
+  for t in "$@"; do eval "v=\$CELL_$t"; [ "$v" = 1 ] || held=0; done
+  if [ "$dv" != 1 ] && [ "$held" = 1 ]; then
+    mutant_killed "$flag" "$m" "MUTANT killed: $desc"
+  else
+    bad "MUTANT $m: deciding arm $dec failed=$([ "$dv" != 1 ] && echo yes || echo no), twins held=$held — $desc"
+  fi
 }
 
 # THE UNMUTATED CONTROL, FIRST AND SERIAL. A lone copy that dies for an unrelated reason emits
 # nothing, and "no output" otherwise scores as a kill on every mutant below it.
 cp "$LINTER" "$MUT/control.sh"
-BASE_VECTOR="$(full_vector "$MUT/control.sh")"
-EXPECT='S0[e16=1 w8=0 rc=1] S1[e16=0 w8=0 rc=0] S2[e16=0 w8=1 rc=0] REFUSE[1]'
-[ "$BASE_VECTOR" = "$EXPECT" ] \
-  && ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)" \
-  || bad "CONTROL: unmutated copy gave '$BASE_VECTOR', expected '$EXPECT' — every mutant verdict below is meaningless"
+CTRL=""; for a in $ARMS_LINTER; do CTRL="$CTRL $a=$(armv "$a" "$MUT/control.sh")"; done
+[ "$CTRL" = " S0=1 S1=1 S2=1 REFUSE=1" ] \
+  && ok "CONTROL: an unmutated copy holds all four linter arms (the mutants below run against a live linter)" \
+  || bad "CONTROL: unmutated copy gave '$CTRL', expected all four arms to hold — every mutant verdict below is meaningless"
 
-mutant() { # mutant <name> <sed-expr> <expected-vector> <description>
-  local n="$1" e="$2" want="$3" desc="$4" got
-  sed "$e" "$LINTER" > "$MUT/$n.sh"
-  if cmp -s "$LINTER" "$MUT/$n.sh"; then
-    bad "MUTANT $n did not apply (sed matched nothing) — a mutation that changes nothing scores a kill it has not earned"
-    return
+mkmut() { # mkmut <name> <sed-expr> -> 0 when the copy differs
+  sed "$2" "$LINTER" > "$MUT/$1.sh"
+  if cmp -s "$LINTER" "$MUT/$1.sh"; then
+    bad "MUTANT $1 did not apply (sed matched nothing) — a mutation that changes nothing scores a kill it has not earned"
+    return 1
   fi
-  got="$(full_vector "$MUT/$n.sh")"
-  [ "$got" = "$want" ] \
-    && ok "MUTANT killed: $desc" \
-    || bad "MUTANT $n: expected '$want', got '$got' — $desc"
 }
 
 # M1 — the fence skip. Without it the seed's FENCED worked example contributes its id, so an
 # unmigrated tree reports rows it does not have, which is exactly how core shipped `24`
-# pre-resolved to every consumer.
-mutant fence '/fence = !fence/d' \
-  'S0[e16=1 w8=1 rc=1] S1[e16=0 w8=1 rc=0] S2[e16=0 w8=1 rc=0] REFUSE[1]' \
-  'dropping the fenced-block skip makes a WORKED EXAMPLE count as a crosswalk row'
+# pre-resolved to every consumer. Other cells it trips: S1.
+mkmut fence '/fence = !fence/d' && mscore fence \
+  'dropping the fenced-block skip makes a WORKED EXAMPLE count as a crosswalk row' "$MUT/fence.sh" S0 S2
 
 # M2 — W8 itself. The rows still resolve, so nothing errors; the only thing lost is the
 # consumer ever being told, which is the silent dual-read the spec forbids.
-mutant warn '/^  warn W8 /d' \
-  'S0[e16=1 w8=0 rc=1] S1[e16=0 w8=0 rc=0] S2[e16=0 w8=0 rc=0] REFUSE[1]' \
-  'deleting W8 makes a migrated and an unmigrated consumer print the same thing'
+mkmut warn '/^  warn W8 /d' && mscore warn \
+  'deleting W8 makes a migrated and an unmigrated consumer print the same thing' "$MUT/warn.sh" S2 S0
 
 # M3 — the refusal. A missing declaration falling through to an empty set is two ERROR/WARN
 # clauses becoming unconditional passes with nothing to say so.
-mutant refuse "/could not read 'consumer_crosswalk_file:'/d" \
-  'S0[e16=1 w8=0 rc=1] S1[e16=0 w8=0 rc=0] S2[e16=0 w8=1 rc=0] REFUSE[0]' \
-  'deleting the refusal lets an UNDECLARED path read as an empty table'
+mkmut refuse "/could not read 'consumer_crosswalk_file:'/d" && mscore refuse \
+  'deleting the refusal lets an UNDECLARED path read as an empty table' "$MUT/refuse.sh" REFUSE S0
 
 # M4 — the legacy union. Dropping it wedges every consumer that has not migrated yet, which is
 # the state this release found the reference consumer in.
-mutant union 's#"\$CROSSWALK_IDS" "\$CROSSWALK_LEGACY_IDS"#"$CROSSWALK_IDS" ""#' \
-  'S0[e16=1 w8=0 rc=1] S1[e16=0 w8=0 rc=0] S2[e16=1 w8=1 rc=1] REFUSE[1]' \
-  'dropping the retired location from the resolvable set WEDGES an unmigrated consumer'
+mkmut union 's#"\$CROSSWALK_IDS" "\$CROSSWALK_LEGACY_IDS"#"$CROSSWALK_IDS" ""#' && mscore union \
+  'dropping the retired location from the resolvable set WEDGES an unmigrated consumer' "$MUT/union.sh" S2 S1
+
+# M5 — the pull scaffold: one synthetic world; the mutated apply runs once for the scaffold arm and a
+# second time for the preserve arm, whose twin holds because the consumer's appended row survives.
+if [ "$MUT_APPLY_READY" = 1 ]; then
+  read -r MD MB MC MT <<<"$(synth yes)"
+  bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
+  m_sc=0; if [ -f "$MC/$CW_REL" ] && cmp -s "$MC/$CW_REL" "$MD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then m_sc=1; fi
+  mkdir -p "$(dirname "$MC/$CW_REL")"; printf '%s\n' "$ROW" >> "$MC/$CW_REL"; MSUM="$(cksum < "$MC/$CW_REL")"
+  bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
+  m_pp=0; [ "$(cksum < "$MC/$CW_REL")" = "$MSUM" ] && m_pp=1
+  if [ "$MATRIX" = 1 ]; then
+    printf 'MATRIX\tapply-scaffold\tPSCAF\t%s\nMATRIX\tapply-scaffold\tPPRES\t%s\n' \
+      "$([ "$m_sc" = 1 ] && echo ok || echo FAIL)" "$([ "$m_pp" = 1 ] && echo ok || echo FAIL)"
+    MATRIX_CELLS=$((MATRIX_CELLS + 2))
+  fi
+  if [ "$m_sc" = 0 ] && [ "$m_pp" = 1 ]; then
+    mutant_killed "$(( ${B_PSCAF:-0} && ${B_PPRES:-0} ))" apply-scaffold "MUTANT killed: with the scaffold removed the pull completes and the declared path stays EMPTY — which is exactly what shipped"
+  else
+    bad "MUTANT apply-scaffold: scaffold arm failed=$([ "$m_sc" = 0 ] && echo yes || echo no), preserve twin held=$m_pp — the file appeared anyway or the arms are entangled"
+  fi
+fi
+
+# THE PLAIN-RUN ARM: keyed on the RAW argument vector, not on the parsed flag, so a guard broken open
+# (MATRIX forced on) cannot hide itself. A plain run must have executed no matrix-only cell.
+case "$RAW_ARGV" in
+  *" --matrix "*)
+    if [ "$MATRIX_CELLS" -gt 0 ]; then ok "matrix mode measured $MATRIX_CELLS cells"; else bad "matrix mode measured no cell"; fi ;;
+  *)
+    if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executed no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cells — the matrix guard is open"; fi ;;
+esac
+[ "$MATRIX" = 1 ] && echo "MATRIX cells=$MATRIX_CELLS"
 
 # ---------------------------------------------------------------------------
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

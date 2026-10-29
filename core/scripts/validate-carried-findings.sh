@@ -22,6 +22,12 @@
 #       --list's. The carry string is never extended with the class: --list's lines are pasted
 #       verbatim into `carried:` lines and matched by Check 1. Its reader is
 #       partition-review-diff.sh --route, which routes on these classes and fails closed on `-`/`?`.
+#       A `#### ` finding carrying a column-0 `handover: <AC-id>` line outside fences (a part
+#       shard handing a replay to the cross shard, at either gate: merge-review-shards.sh
+#       HAND-OVERS) is NOT printed: it is shard-internal routing, resolved inside the same pass by
+#       its paired `handover-run:` line, never a finding the rework answers. `handover-run:` and an
+#       indented or bulleted `handover:` do not skip. --list is unchanged by the skip: a hand-over
+#       finding still carries.
 #
 # THE SUBJECT. A delta re-review (implementation.md, the `**Gate-1 dispatch` paragraph) reads only the fix delta,
 # so a prior finding the delta never touched is silently dropped unless something carries it.
@@ -42,7 +48,16 @@
 #
 # THE PRIOR FINDING SET. A finding is a `#### ` heading at column 0, outside ``` / ~~~ fences,
 # under a `### ` heading whose text begins (case-insensitively, after any `*`) with `Critical` or
-#   `Important`, inside a `## ` section whose text begins with `Findings`. A `# ` or `## ` heading
+#   `Important`, inside a `## ` section whose text begins with `Findings`. A `#### ` that sits
+#   DIRECTLY under `## Findings`, before any `### ` heading of that section, is a finding too, and
+#   it is carried as Critical/Important (fail closed: an unsorted finding is never presumed minor),
+#   so --list lists it, --classes reads its Class (`-` when it has none, which --route reads as
+#   FULL), and the carried check requires its `carried:` line. graph s319 1-2-qa-validation.md and
+#   2-3a-qa-validation.md write 8 and 6 such findings, one of them `Finding 1 (Blocking, HARD
+#   GATE)`. Any `### ` ends that top level: a `#### ` under `### Notes` or `### Suggestions` stays
+#   uncounted, as does a `#### ` outside `## Findings`. Lead-in lines before the first `#### ` of
+#   the top level are not policed. --list, --classes and the carried check all read the ONE
+#   priors reader below. A `# ` or `## ` heading
 #   closes the section, so each shard body of a merged review is read as its own section -- the
 #   merge writes `## Shard: <k>`, the shard's `# ` title, then its own `## Findings`. Headings are
 #   compared with surrounding whitespace trimmed and internal runs of blanks collapsed to one.
@@ -51,9 +66,13 @@
 #   elsewhere; the containers read `### Critical`, `### Important`, and the template's
 #   `### Critical (must fix before merge)` / `### Important (should fix, ...)` forms.
 #
-# THE VERDICT is read only when an `open` line exists, by the role file's own template grammar
-#   (code-reviewer.md: the value alone on the line after `## Verdict`, or `## Verdict: <VALUE>`),
-#   `*` and blanks stripped, the leading run of capitals and underscores taken. That is narrower
+# THE VERDICT is read only when an `open` line exists, by the role files' own template grammar
+#   (code-reviewer.md: the value alone on the line after `## Verdict`, or `## Verdict: <VALUE>`;
+#   qa.md: the one line `Verdict: <VALUE>` at column 0), outside fences, and the value is read the
+#   way gate-validation.md Check 1 reads it: `*` and blanks skipped, the run of capitals and
+#   underscores taken when the character after it ends the line or is a space, `.`, `,`, `(`, `)`
+#   or `*`, and otherwise the whole blank-delimited token (outside both sets, so it fails). Every
+#   such line is read, and two different values are refused, as Check 1 refuses them. That is narrower
 #   than Check 1's grep ON PURPOSE and it cannot wedge a gate: the value matters only to tell
 #   APPROVED from the two failing values, and Check 1 already fails NEEDS_REWORK and BLOCKED, so a
 #   refusal here changes no outcome except an approval with an open finding, which must fail.
@@ -75,6 +94,16 @@
 #       consumer has the rule; reading it as PENDING would exempt every review forever.
 #   A SHALLOW repository is refused (exit 2): its root is a graft, so VADD would resolve to
 #   whatever commit the clone happened to start at and the test would answer silently wrong.
+#
+# GATE 2 (a pass M file whose basename ends `-qa-validation-p<M>.md`), after the PRE-MIGRATION test.
+#   The duty is keyed on qa.md's `## Carried Findings` section in the role file the pass ran
+#   against: `.claude/team-roles/qa.md`, then `core/team-roles/qa.md`, read at the pass's single
+#   column-0 `reviewed-sha:` value (outside fences) in the review's repository. When that sha is
+#   absent, ambiguous, names no commit, or tracks qa.md in neither layout, the installed copy on
+#   disk in the review's checkout decides, the way merge-review-shards.sh reads an untracked role
+#   file. The section absent from the deciding copy: `LEGACY:`, exit 0, nothing checked. Present:
+#   the pair is checked exactly as at gate 1. No qa.md readable at all: the pair is checked (an
+#   unreadable role file never acquits). Gate 1 (every other basename) is unchanged.
 #
 # THE PRIOR'S FORM. A prior is POST-RULE when it carries the current template's column-0
 #   `reviewed-sha:` line (outside fences) AND it was not committed on a commit that fails to
@@ -179,6 +208,48 @@ fi
 say() { if [ "$LIST" -eq 1 ]; then printf '%s\n' "$*" >&2; else printf '%s\n' "$*"; fi; }
 [ -z "$UNC" ] || say "NOTE: $TOP/$UNCPATH is $UNC in $TOP, so no commit on HEAD adds it and there is no epoch; the rule binds"
 
+# ---- gate 2: the duty is keyed on qa.md at the pass's reviewed-sha (header: GATE 2) --------------------
+G2=0
+case "$(basename "$CUR")" in *-qa-validation-p[0-9]*.md) G2=1 ;; esac
+if [ "$LIST" -eq 0 ] && [ "$G2" -eq 1 ]; then
+  QSHA="$(awk '
+    { t = $0; sub(/^[ \t]+/, "", t) }
+    fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
+    substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~" { fence = substr(t, 1, 3); next }
+    /^reviewed-sha:/ { v = $0; sub(/^reviewed-sha:[ \t]*/, "", v); gsub(/[`\r \t]/, "", v); if (!(v in s)) { s[v] = 1; print v } }' "$CUR")"
+  QA_SRC=""; QA_SEC=""; QWHY=""
+  case "$QSHA" in
+    "") QWHY="it carries no column-0 reviewed-sha: line" ;;
+    *"$NL"*) QWHY="it carries more than one distinct reviewed-sha: value" ;;
+    *[!0-9a-f]*) QWHY="its reviewed-sha: value '$QSHA' is not a hex object name" ;;
+  esac
+  if [ -z "$QWHY" ] && [ -n "$TOP" ]; then
+    if git -C "$TOP" rev-parse -q --verify "${QSHA}^{commit}" >/dev/null 2>&1; then
+      for qp_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+        git -C "$TOP" cat-file -e "${QSHA}:${qp_}" 2>/dev/null || continue
+        qtxt_="$(git -C "$TOP" show "${QSHA}:${qp_}" 2>/dev/null)" || break
+        QA_SRC="${qp_} at ${QSHA}"
+        if grep -q '^## Carried Findings' <<<"$qtxt_"; then QA_SEC=1; else QA_SEC=0; fi
+        break
+      done
+      [ -n "$QA_SRC" ] || QWHY="qa.md is tracked at ${QSHA} in neither layout"
+    else QWHY="its reviewed-sha ${QSHA} names no commit in $TOP"; fi
+  elif [ -z "$QWHY" ]; then QWHY="it is in no git repository"; fi
+  # Not readable at the pass's sha: the installed copy in the review's checkout decides.
+  if [ -z "$QA_SRC" ] && [ -n "$TOP" ]; then
+    for qp_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+      [ -r "$TOP/$qp_" ] || continue
+      QA_SRC="$TOP/$qp_ (on disk: $QWHY)"
+      if grep -q '^## Carried Findings' "$TOP/$qp_"; then QA_SEC=1; else QA_SEC=0; fi
+      break
+    done
+  fi
+  if [ "$QA_SEC" = 0 ]; then
+    printf 'LEGACY: %s is a gate-2 re-validation run against %s, which carries no "## Carried Findings" section; carried: lines are not checked\n' "$CUR" "$QA_SRC"
+    exit 0
+  fi
+fi
+
 # ---- is the prior held to the heading form? ------------------------------------------------------
 # POST-RULE = the prior carries the current template's column-0 reviewed-sha: line outside a fence
 # AND it was not committed on a commit that fails to descend from VADD. A review written before the
@@ -202,17 +273,24 @@ POST=0
 #    or: NOTE TAB <sev> TAB <line no>: <line>   (a pre-rule line, or post-rule lead-in prose)
 #    or: LEADIN TAB <sev> TAB <line no>: <line>
 #    or: UNPARSED TAB <sev> TAB <line no>: <line>
+#    or: CLS TAB <class>   (after each `#### ` heading row, once its body is read: --classes)
+# A `#### ` directly under `## Findings`, before any `### `, is carried as `Critical/Important`
+# (header: THE PRIOR FINDING SET); `top` is set by `## Findings` and cleared by any `### `.
 priors="$(CF_POST="$POST" awk '
   function norm(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
   function key(s) { s = norm(s); sub(/[.:;, \t]+$/, "", s); return s }
+  function flush() { if (inf) print "CLS\t" (ho ? "HANDOVER SKIP" : (nc == 1 ? cv : (nc == 0 ? "-" : "?"))); inf = 0; nc = 0; cv = ""; ho = 0 }
   BEGIN { post = (ENVIRON["CF_POST"] == "1") }
   { t = $0; sub(/^[ \t]+/, "", t) }
   fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
   substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~" { fence = substr(t, 1, 3); next }
-  /^# / || /^## / { fs = (substr($0, 1, 3) == "## " && tolower(norm(substr($0, 4))) ~ /^findings/); sev = ""; next }
-  /^### / { h = tolower(norm(substr($0, 5))); sub(/^\**/, "", h)
+  /^# / || /^## / { flush(); fs = (substr($0, 1, 3) == "## " && tolower(norm(substr($0, 4))) ~ /^findings/); sev = ""; top = fs; next }
+  /^### / { flush(); h = tolower(norm(substr($0, 5))); sub(/^\**/, "", h); top = 0
             sev = (h ~ /^critical/ ? "Critical" : (h ~ /^important/ ? "Important" : "")); seen = 0; labd = 0; next }
-  /^#### / { if (fs && sev != "") { d = norm(substr($0, 6)); print sev "\t" d "\t" key(d) "\t"; seen = 1 }; next }
+  /^#### / { flush(); if ((fs && sev != "") || top) { d = norm(substr($0, 6)); print (sev != "" ? sev : "Critical/Important") "\t" d "\t" key(d) "\t"; seen = 1; inf = 1 }; next }
+  inf && /^Class:/ { nc++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); if (v == "" || v ~ /[ \t]/) v = "?"; cv = v }
+  inf && /^handover:/ { ho = 1 }
+  END { flush() }
   # A line in a container before its first #### heading. Only a "None" line is silent.
   fs && sev != "" && !seen && t != "" {
     l = tolower(t); sub(/^[-*][ \t]+/, "", l); sub(/^[*_(]+/, "", l)
@@ -246,34 +324,25 @@ fails=0
 n_prior=0; n_res=0; n_open=0
 # ---- --list: the carry strings, and nothing else on stdout ----------------------------------------
 if [ "$LIST" -eq 1 ]; then
-  # --classes: the Class of every `#### ` heading finding, in the order the priors reader above emits
-  # them -- the SAME fence, `## Findings` and container grammar, so the n-th heading row there is the
-  # n-th line here. A label prior (id non-empty) is never a heading and is printed unclassed.
-  hcls=""
-  if [ "$CLASSES" -eq 1 ]; then
-    hcls="$(awk '
-      function norm(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
-      function flush() { if (inf) print (nc == 1 ? cv : (nc == 0 ? "-" : "?")); inf = 0; nc = 0; cv = "" }
-      { t = $0; sub(/^[ \t]+/, "", t) }
-      fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
-      substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~" { fence = substr(t, 1, 3); next }
-      /^# / || /^## / { flush(); fs = (substr($0, 1, 3) == "## " && tolower(norm(substr($0, 4))) ~ /^findings/); sev = ""; next }
-      /^### / { flush(); h = tolower(norm(substr($0, 5))); sub(/^\**/, "", h)
-                sev = (h ~ /^critical/ ? "Critical" : (h ~ /^important/ ? "Important" : "")); next }
-      /^#### / { flush(); if (fs && sev != "") inf = 1; next }
-      inf && /^Class:/ { nc++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); if (v == "" || v ~ /[ \t]/) v = "?"; cv = v }
-      END { flush() }' "$PRIOR")"
-  fi
-  hn=0
+  # --classes: the Class of every `#### ` heading finding comes from the priors reader itself -- its
+  # CLS row follows that heading's row, so --list, --classes and the carried check read ONE reader.
+  # A heading row is held until its CLS row arrives. A label prior (id non-empty) is never a heading
+  # and is printed unclassed. A hand-over finding's CLS value is the token `HANDOVER SKIP` (a class
+  # value never carries a blank, so no `Class:` line can spell it) and is not printed.
+  hold=""
   while IFS="$TAB" read -r sev disp k id; do
     [ -n "$disp" ] || continue
+    if [ "$sev" = "CLS" ]; then
+      [ "$CLASSES" -eq 1 ] && [ -n "$hold" ] && [ "$disp" != "HANDOVER SKIP" ] && printf '%s\t%s\n' "$disp" "$hold"
+      hold=""; continue
+    fi
     case "$sev" in
       NOTE)     say "NOTE: $PRIOR:$k is a $disp line of a prior not held to the heading form, neither a \"#### \" heading nor a bold label; not carried" ;;
       LEADIN)   say "NOTE: $PRIOR:$k is lead-in prose in a $disp container before its first \"#### \" heading; not a finding" ;;
       UNPARSED) say "FAIL: $PRIOR:$k carries a $disp finding that is not a \"#### \" heading, so it cannot be carried"; fails=$((fails + 1)) ;;
       *)        if [ "$CLASSES" -eq 0 ]; then printf '%s\n' "$disp"
                 elif [ -n "$id" ]; then printf '%s\t%s\n' "-" "$disp"
-                else hn=$((hn + 1)); c="$(sed -n "${hn}p" <<<"$hcls")"; printf '%s\t%s\n' "${c:--}" "$disp"; fi ;;
+                else hold="$disp"; fi ;;
     esac
   done <<EOF
 $priors
@@ -323,6 +392,7 @@ EOF
 while IFS="$TAB" read -r sev disp k id; do
   [ -n "$disp" ] || continue
   case "$sev" in
+    CLS)    continue ;;
     NOTE)   say "NOTE: $PRIOR:$k is a $disp line of a prior not held to the heading form, neither a \"#### \" heading nor a bold label; not carried"; continue ;;
     LEADIN) say "NOTE: $PRIOR:$k is lead-in prose in a $disp container before its first \"#### \" heading; not a finding"; continue ;;
     UNPARSED)
@@ -346,20 +416,28 @@ EOF
 
 VERDICT="-"
 if [ "$n_open" -gt 0 ]; then
+  # Every verdict line outside fences is read and each distinct value printed once: two different
+  # values are refused below, as gate-validation.md Check 1 refuses them.
   VERDICT="$(awk '
+    function val(v,   r, c) { sub(/^[ \t*]+/, "", v); sub(/\r$/, "", v)
+      if (match(v, /^[A-Z_]+/)) { r = substr(v, 1, RLENGTH); c = substr(v, RLENGTH + 1, 1)
+        if (c == "" || c ~ /[ .,()*]/) return r }
+      sub(/[ \t].*$/, "", v); return v }
+    function rec(x) { if (x != "" && !(x in seen)) { seen[x] = 1; print x } }
     { t = $0 }
     fence != "" { s = t; sub(/^[ \t]+/, "", s); if (substr(s, 1, 3) == fence) fence = ""; next }
     { s = t; sub(/^[ \t]+/, "", s) }
     substr(s, 1, 3) == "```" || substr(s, 1, 3) == "~~~" { fence = substr(s, 1, 3); next }
-    want && /[^ \t]/ { v = t; want = 0; got = 1; exit }
+    want && /[^ \t]/ { want = 0; rec(val(t)) }
     /^## Verdict[ \t]*$/ { want = 1; next }
-    /^## Verdict:/ { v = substr(t, 12); got = 1; exit }
-    END { if (!got) exit 1
-          sub(/^[ \t*]+/, "", v)
-          if (match(v, /^[A-Z_]+/)) print substr(v, 1, RLENGTH); else exit 1 }' "$CUR")" || VERDICT=""
+    /^## Verdict:/ { rec(val(substr(t, 12))); next }
+    /^Verdict:/ { rec(val(substr(t, 9))) }' "$CUR")" || VERDICT=""
+  case "$VERDICT" in
+    *"$NL"*) refuse "$CUR carries $n_open open carried finding(s) and more than one verdict value: $(printf '%s' "$VERDICT" | tr '\n' ' ')" ;;
+  esac
   case "$VERDICT" in
     NEEDS_REWORK|BLOCKED) ;;
-    "") refuse "$CUR carries $n_open open carried finding(s) and no verdict this program can read (\`## Verdict\` and the value on the next line, or \`## Verdict: <VALUE>\`)" ;;
+    "") refuse "$CUR carries $n_open open carried finding(s) and no verdict this program can read (\`## Verdict\` and the value on the next line, \`## Verdict: <VALUE>\`, or a column-0 \`Verdict: <VALUE>\`)" ;;
     *) printf 'FAIL: %s carries %s open carried finding(s) under verdict %s; an open prior Critical/Important finding requires NEEDS_REWORK or BLOCKED\n' "$CUR" "$n_open" "$VERDICT"
        fails=$((fails + 1)) ;;
   esac

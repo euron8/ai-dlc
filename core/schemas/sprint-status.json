@@ -162,7 +162,8 @@
     "sprint": { "required": true, "pattern": "^[0-9]+$", "desc": "integer sprint number -- the pipeline's sprint identity" },
     "status": { "required": true, "pattern": "^\\S+$", "desc": "sprint envelope status; `done` means closed (route.md Step 6 reads this to derive N+1). Any other value means in-flight." },
     "name": { "required": false, "desc": "sprint title (documentary; free-form)" },
-    "variant": { "required": false, "desc": "pipeline variant this sprint was routed as (documentary)" }
+    "variant": { "required": false, "desc": "pipeline variant this sprint was routed as (documentary)" },
+    "planned_close": { "required": false, "desc": "the sprint's planned close, `YYYY-MM-DDTHH:MM:SSZ` (UTC), a col-0 scalar in the sprint block. Written by the lead at sprint planning (stories-test-strategy.md section 3). Read by validate-ac-falsifiability.sh clause (c): an AC whose `run_not_before:` is later than it and that names no `defers_to:` is REFUSED run-window-after-close; with the spec-adoption floor in force and an AC carrying `run_not_before:`, its absence is REFUSED planned-close-missing. Optional here, and deliberately carries no `pattern`: this schema is not where its format is judged, and a sprint whose stories carry no window never needs it." }
   },
 
   "$housekeeping_comment": [

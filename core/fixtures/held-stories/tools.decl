@@ -1,0 +1,18 @@
+# External tools run.sh, validate-held-stories.sh and sprint-status.sh invoke. python3 is the
+# sprint-status.sh list-stories reader.
+awk
+bash
+cat
+cmp
+cp
+date
+dirname
+env
+grep
+head
+mkdir
+mktemp
+python3
+rm
+sed
+tr

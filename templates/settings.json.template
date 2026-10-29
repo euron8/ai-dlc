@@ -29,12 +29,12 @@
       "effort": "high"
     },
     "dev": {
-      "model": "haiku",
+      "model": "sonnet",
       "effort": "medium"
     },
     "dev-escalated": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "high"
     },
     "gate-adjudicator": {
       "model": "sonnet",

@@ -34,6 +34,12 @@
 # stay green). The recorded matrix plus the twin replaces a per-push exact-vector assertion.
 # Measured: term-off also trips bad-continuation (same term check); every other mutant trips
 # only its deciding arm. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# Clause (c), the run window: its four mutants are scored by rw_expect_kill on their deciding arms
+# plus the twin below; --matrix drives each against all ten rw arms and prints its MATRIX row.
+# MUTANT-MATRIX defer-ignored decides=w2 twins=w1
+# MUTANT-MATRIX cmp-inverted decides=w1,w3 twins=w2
+# MUTANT-MATRIX floor-ignored decides=w4 twins=w4b
+# MUTANT-MATRIX earliest-counts-deferred decides=w6 twins=w6n
 # MUTANT-MATRIX term-off decides=bad-unbounded twins=dangling-evidence
 # MUTANT-MATRIX evidence-off decides=dangling-evidence twins=dangling-anchor
 # MUTANT-MATRIX ident-drop decides=identity twins=good-bounded
@@ -335,6 +341,142 @@ if [ "$AC_CTL_OK" = "1" ]; then
 else
   bad "IDENTITY CONTROL FAILED -- the mutants below are uninterpretable"
 fi
+
+# --- CLAUSE (c): RUN WINDOW INSIDE THE PLANNED CLOSE ---------------------------------
+# Three project roots, each a canonical sprint-status.yaml plus Check 28's spec-adoption
+# declaration, driven through AI_DLC_PROJECT_ROOT. The floor is validate-spec-adoption.sh, the
+# validator's SIBLING, so every mutant below is built in a directory holding a copy of both.
+#   IN  -- s320, floor s300 (in force), planned_close 2026-10-28T21:00:00Z
+#   AT  -- s299, floor s299 (equal is IN-FORCE: --verdict refuses only below), no planned_close
+#   BLW -- s298, floor s299 (below), no planned_close
+rw_world() { # <name> <sprint> <floor> [planned_close]
+  local w="$WORK/rw-$1"
+  mkdir -p "$w/_bmad-output/implementation-artifacts" "$w/_bmad-output/planning-artifacts" || return 1
+  { printf 'sprint: %s\nname: "rw-probe"\nstatus: in_progress\n' "$2"
+    [ -n "${4:-}" ] && printf 'planned_close: %s   # written at planning\n' "$4"
+    printf 'stories:\n  story-%s-1:\n    status: ready-for-dev\n' "$2"
+  } > "$w/_bmad-output/implementation-artifacts/sprint-status.yaml" || return 1
+  printf '<!-- SPEC_ADOPTION v1 -->\nadopted_from_sprint: %s\ndeclared_at_sha: abc1234\nrationale: probe floor\n' "$3" \
+    > "$w/_bmad-output/planning-artifacts/spec-adoption.md" || return 1
+  printf '%s\n' "$w"
+}
+RW_IN="$(rw_world in 320 300 2026-10-28T21:00:00Z)"; RW_AT="$(rw_world at 299 299)"; RW_BLW="$(rw_world blw 298 299)"
+[ -n "$RW_IN" ] && [ -n "$RW_AT" ] && [ -n "$RW_BLW" ] || { echo "FIXTURE BROKEN: a clause (c) world could not be built" >&2; exit 2; }
+# The --stories-dir worlds are BUILT here from flat seeds, never shipped as subdirectories:
+# install.sh copies a fixture with a non-recursive `cp <fixture>/*`, so a seed subdirectory
+# would not reach a consumer and w6/w6n would DISARM there while passing here.
+RW_WAVE="$WORK/rw-wave"; RW_NOWIN="$WORK/rw-nowin"
+mkdir -p "$RW_WAVE" "$RW_NOWIN" || { echo "FIXTURE BROKEN: could not build the --stories-dir worlds" >&2; exit 2; }
+for _s in a-early b-max c-deferred-later d-mid; do
+  cp "$DIR/rw-wave-$_s.md" "$RW_WAVE/$_s.md" || { echo "FIXTURE BROKEN: seed rw-wave-$_s.md missing" >&2; exit 2; }
+done
+cp "$DIR/rw-none.md" "$RW_NOWIN/a-none.md" || { echo "FIXTURE BROKEN: seed rw-none.md missing" >&2; exit 2; }
+RW_SIB="$(dirname "$V")/validate-spec-adoption.sh"
+[ -f "$RW_SIB" ] || { echo "FIXTURE BROKEN: validate-spec-adoption.sh is not beside $V; clause (c) has no floor to read" >&2; exit 2; }
+
+RW_OUT="$WORK/rw.out"; RW_ERR="$WORK/rw.err"
+rw_run() { # <validator> <root> <args...> -> rc; stdout/stderr in RW_OUT/RW_ERR
+  local v="$1" r="$2"; shift 2
+  ( cd "$WORK" && AI_DLC_PROJECT_ROOT="$r" bash "$v" --lexicon-from "$LEX" "$@" ) > "$RW_OUT" 2> "$RW_ERR"
+}
+# Each arm is PRESENCE-shaped: it demands a specific line, so a subject replaced by `exit 0`
+# fails every one of them.
+rw_w1()  { rw_run "$1" "$RW_IN" "$DIR/rw-after.md"; [ $? -eq 1 ] && grep -q "^REFUSED run-window-after-close $DIR/rw-after.md AC2 " "$RW_ERR"; }
+rw_w2()  { rw_run "$1" "$RW_IN" "$DIR/rw-deferred.md"; [ $? -eq 0 ] && grep -q ': PASS (' "$RW_OUT" && ! grep -q REFUSED "$RW_ERR"; }
+rw_w3()  { rw_run "$1" "$RW_IN" "$DIR/rw-before.md"; [ $? -eq 0 ] && grep -q ': PASS (' "$RW_OUT"; }
+rw_w4()  { rw_run "$1" "$RW_BLW" "$DIR/rw-after.md"; [ $? -eq 0 ] && grep -q '^SKIP RUN-WINDOW (below floor) s298' "$RW_OUT" && grep -q ': PASS (' "$RW_OUT"; }
+rw_w4b() { rw_run "$1" "$RW_AT" "$DIR/rw-after.md"; [ $? -eq 1 ] && grep -q "^REFUSED planned-close-missing $DIR/rw-after.md " "$RW_ERR"; }
+rw_w4n() { rw_run "$1" "$RW_AT" "$DIR/rw-none.md"; [ $? -eq 0 ] && grep -q ': PASS (' "$RW_OUT" && ! grep -q 'planned-close' "$RW_ERR"; }
+rw_w5()  { rw_run "$1" "$RW_IN" "$DIR/rw-malformed.md"; [ $? -eq 1 ] && grep -q "^REFUSED run-window-malformed $DIR/rw-malformed.md AC2 .*2026-10-29 09:36" "$RW_ERR"; }
+rw_w5d() { rw_run "$1" "$RW_IN" "$DIR/rw-bad-defer.md"; [ $? -eq 1 ] && grep -q "^REFUSED defers-to-malformed $DIR/rw-bad-defer.md AC2 .*next sprint" "$RW_ERR"; }
+# w6 reads the EARLIEST-CLOSE line and NOT the exit: that line is independent of the clause (c)
+# verdict by contract, and asserting rc=0 here would let the w2 and w1/w3 mutants kill w6 too.
+rw_w6()  { rw_run "$1" "$RW_IN" --stories-dir "$RW_WAVE"; [ "$(grep -c '^EARLIEST-CLOSE ' "$RW_OUT")" = 1 ] && grep -qx 'EARLIEST-CLOSE 2026-10-28T12:00:00Z' "$RW_OUT"; }
+rw_w6n() { rw_run "$1" "$RW_IN" --stories-dir "$RW_NOWIN"; [ $? -eq 0 ] && grep -qx 'EARLIEST-CLOSE none' "$RW_OUT"; }
+RW_ARMS="w1 w2 w3 w4 w4b w4n w5 w5d w6 w6n"
+rw_label() {
+  case "$1" in
+    w1)  echo "(w1) s320 1.3 AC4 shape: a window after planned_close with no defers_to is REFUSED run-window-after-close" ;;
+    w2)  echo "(w2) the same window with defers_to: CO-S320-... is accepted" ;;
+    w3)  echo "(w3) a window before planned_close is accepted" ;;
+    w4)  echo "(w4) below the floor with no planned_close prints SKIP RUN-WINDOW (below floor), exit unchanged" ;;
+    w4b) echo "(w4b) at the floor, no planned_close, a window present: REFUSED planned-close-missing" ;;
+    w4n) echo "(w4n) NEAR-MISS: at the floor, no planned_close, no window: accepted, nothing about planned_close" ;;
+    w5)  echo "(w5) a malformed run_not_before is REFUSED, naming the text" ;;
+    w5d) echo "(w5d) a defers_to that is not a CO-S<N>-<descriptor> id is REFUSED, naming the text" ;;
+    w6)  echo "(w6) --stories-dir EARLIEST-CLOSE is the max non-deferred window; a later deferred one does not count" ;;
+    w6n) echo "(w6n) --stories-dir with no window prints EARLIEST-CLOSE none" ;;
+  esac
+}
+rw_failset() { # <validator> -> space-separated arms that FAIL against it
+  local a s=""
+  for a in $RW_ARMS; do "rw_$a" "$1" || s="$s $a"; done
+  printf '%s' "${s# }"
+}
+
+# RW_BASE records, per arm, that it PASSED against the unmutated subject in this run. A mutant is
+# scored only when every arm it is declared to fail did so; otherwise its "kill" would be the
+# seed failing (lib/mutant.sh, need_base).
+RW_BASE=" "
+for a in $RW_ARMS; do
+  if "rw_$a" "$V"; then ok "$(rw_label "$a")"; RW_BASE="$RW_BASE$a "
+  else bad "$(rw_label "$a") — rc/out: $(head -2 "$RW_ERR" | cut -c1-160)"; fi
+done
+rw_base_flag() { # <space-separated arms> -> 1 iff every one passed unmutated in this run
+  local a
+  for a in $1; do case "$RW_BASE" in *" $a "*) ;; *) echo 0; return ;; esac; done
+  echo 1
+}
+
+# MUTANTS. Each is a copy of the validator in its own directory beside a copy of its floor
+# sibling, built by an anchor that occurs ONCE. Per push a mutant runs its DECIDING arms (each
+# must fail) and its TWINS (each must stay green), the cells the header's MUTANT-MATRIX rows
+# record; --matrix drives it against every rw arm and prints the measured row instead. The
+# unmutated copy in the same shape must fail NOTHING, so a copy that cannot run is not read as
+# a kill.
+rw_mut() { # <name> <anchor> <replacement> -> prints the mutant path, or nothing
+  local d="$WORK/rwm-$1" n
+  mkdir -p "$d" && cp "$V" "$d/validate-ac-falsifiability.sh" && cp "$RW_SIB" "$d/validate-spec-adoption.sh" || return 1
+  [ -z "$2" ] && { printf '%s\n' "$d/validate-ac-falsifiability.sh"; return 0; }
+  n="$(grep -cF -- "$2" "$V")" || n=0
+  [ "$n" = 1 ] || { echo "FIXTURE ERROR: mutation '$1' anchor occurs $n times, expected 1" >&2; return 1; }
+  awk -v A="$2" -v B="$3" '{ i = index($0, A); if (i) $0 = substr($0, 1, i-1) B substr($0, i+length(A)); print }' \
+    "$V" > "$d/validate-ac-falsifiability.sh" || return 1
+  cmp -s "$V" "$d/validate-ac-falsifiability.sh" && { echo "FIXTURE ERROR: mutation '$1' matched nothing" >&2; return 1; }
+  bash -n "$d/validate-ac-falsifiability.sh" || { echo "FIXTURE ERROR: mutant '$1' is not valid shell" >&2; return 1; }
+  printf '%s\n' "$d/validate-ac-falsifiability.sh"
+}
+rw_expect_kill() { # <name> <deciding arms> <twin arms> <anchor> <replacement> <what>
+  local m a bf tr="" gr="" wrong=""
+  m="$(rw_mut "$1" "$4" "$5")"
+  [ -n "$m" ] || { bad "MUTATION '$1' could not be built — $6 is unproved"; return; }
+  if [ "$MATRIX" = "1" ]; then
+    for a in $RW_ARMS; do
+      MX_FULL_RUNS=$((MX_FULL_RUNS + 1))
+      if "rw_$a" "$m"; then gr="$gr,$a"; else tr="$tr,$a"; fi
+    done
+    a=yes; for d in $2; do case ",$tr," in *",$d,"*) ;; *) a=no ;; esac; done
+    mx_row "$1" "$(printf '%s' "$2" | tr ' ' ',')" "$a" "${tr#,}" "${gr#,}"
+    return
+  fi
+  for a in $2; do "rw_$a" "$m" && wrong="$wrong $a-did-not-flip"; done
+  for a in $3; do "rw_$a" "$m" || wrong="$wrong $a-twin-not-green"; done
+  bf="$(rw_base_flag "$2 $3")"
+  if [ -z "$wrong" ]; then mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "MUTATION '$1' ($6) fails $2; twin $3 stays green"
+  else bad "MUTATION '$1' ($6) scored [${wrong# }], wanted $2 failing and twin $3 green — re-measure with --matrix"; fi
+}
+# The unmutated copy, built the same way, must fail NO arm. It is not a kill, so it is not
+# emitted through mutant_killed; it is what makes a silent mutant copy uninterpretable.
+RW_CTL="$(rw_mut control "" "")"
+if [ -n "$RW_CTL" ] && [ -z "$(rw_failset "$RW_CTL")" ]; then
+  ok "CONTROL: an unmutated copy beside its floor sibling passes every clause (c) arm"
+else
+  bad "CONTROL: an unmutated copy beside its floor sibling failed arms '$( [ -n "$RW_CTL" ] && rw_failset "$RW_CTL")' — the mutant verdicts below are uninterpretable"
+fi
+rw_expect_kill defer-ignored "w2" "w1"  '[ "$w_def" = 1 ] && continue'           ':'                   "the defers_to exemption ignored"
+rw_expect_kill cmp-inverted "w1 w3" "w2" '[[ "$w_rnb" > "$RW_CLOSE_RAW" ]]'       '[[ "$w_rnb" < "$RW_CLOSE_RAW" ]]' "the comparison inverted"
+rw_expect_kill floor-ignored "w4" "w4b" 'if [ "$RW_STATE" != in-force ]; then'   'if false; then'      "the floor ignored"
+rw_expect_kill earliest-counts-deferred "w6" "w6n" '[ "$w_def" = 0 ] || continue' ':'                   "the deferred window counted in EARLIEST-CLOSE"
 
 if [ "$MATRIX" = "0" ]; then
   if [ "$MX_FULL_RUNS" -eq 0 ]; then ok "a plain run executed no matrix-only cell (MX_FULL_RUNS=0)"

@@ -185,6 +185,58 @@ if [ -n "$TMPL" ]; then
   fi
 fi
 
+# --- Assertion 6: the SHIPPED template's seat tiers (BL-838) -----------------
+# Every other fixture seeds its own aiDlcRoles values, so nothing read what the distribution
+# ships. This arm reads the template itself and asserts the four values the operator ruled:
+# dev sonnet/medium, dev-escalated sonnet/high. It lives here, not in dispatch-model-guard,
+# because that fixture ships to consumers and a consumer has no templates/ tree. An unreadable
+# template is a FAIL, never a skip.
+# tpl_tiers <file> -> "devmodel/deveffort devescmodel/devesceffort", or nothing if unreadable.
+tpl_tiers() {
+  jq -r '.aiDlcRoles | "\(.dev.model)/\(.dev.effort) \(.["dev-escalated"].model)/\(.["dev-escalated"].effort)"' "$1" 2>/dev/null
+}
+TPL_WANT="sonnet/medium sonnet/high"
+# Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
+# arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_TPL=0
+if [ -z "$TMPL" ] || [ ! -r "$TMPL" ]; then
+  bad "6 FIXTURE BROKEN: the shipped template is not readable — the seat-tier arm asserts nothing"
+else
+  TPL_GOT="$(tpl_tiers "$TMPL")"
+  if [ "$TPL_GOT" = "$TPL_WANT" ]; then
+    B_TPL=1; ok "6 the shipped template pins dev sonnet/medium and dev-escalated sonnet/high"
+  else
+    bad "6 the shipped template pins '$TPL_GOT', expected '$TPL_WANT' (dev, dev-escalated)"
+  fi
+  # A second correct spelling (key order, whitespace) reads the same, so the arm keys on values.
+  TPL_RESPELL="$WORK/tpl-respelled.json"
+  jq -c '.aiDlcRoles |= (to_entries | reverse | from_entries)' "$TMPL" > "$TPL_RESPELL" 2>/dev/null
+  if cmp -s "$TMPL" "$TPL_RESPELL" || [ ! -s "$TPL_RESPELL" ]; then
+    bad "6 re-spelling control DID NOT APPLY: the respelled copy is identical to, or empty against, the template"
+  else
+    [ "$(tpl_tiers "$TPL_RESPELL")" = "$TPL_WANT" ] \
+      && ok "6 a re-ordered, re-spaced spelling of the same values reads identically (the arm keys on values)" \
+      || bad "6 a correct re-spelling of the template read '$(tpl_tiers "$TPL_RESPELL")', expected '$TPL_WANT'"
+  fi
+  # tpl_mut <tag> <jq filter> <expected reading> <label>
+  tpl_mut() {
+    local m="$WORK/tpl-mut-$1.json" got
+    jq "$2" "$TMPL" > "$m" 2>/dev/null
+    if cmp -s "$TMPL" "$m" || [ ! -s "$m" ]; then bad "6 MUTANT $1 DID NOT APPLY (cmp -s / empty)"; return; fi
+    got="$(tpl_tiers "$m")"
+    if [ "$got" = "$3" ] && [ "$got" != "$TPL_WANT" ]; then mutant_killed "$B_TPL" "$1" "6 MUTANT $1 killed: $4"
+    else bad "6 MUTANT $1 read '$got', expected '$3' (and not '$TPL_WANT') — $4"; fi
+  }
+  tpl_mut dev-haiku '.aiDlcRoles.dev.model = "haiku"' "haiku/medium sonnet/high" \
+    "dev reverted to haiku moves the reading off the ruled value"
+  tpl_mut esc-medium '.aiDlcRoles["dev-escalated"].effort = "medium"' "sonnet/medium sonnet/medium" \
+    "dev-escalated effort reverted to medium moves the reading off the ruled value"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "settings-merge-documented-form: PASS"; exit 0; fi
 echo "settings-merge-documented-form: $fails assertion(s) FAILED" >&2

@@ -253,9 +253,11 @@ else bad "A8b GIT_DIR exported, worktree edit: expected rc 0 and no output, got 
 # that died, so a mutation that matched nothing cannot score a kill.
 mkmut() {
   local m="$WORK/mut-$1.sh"
-  sed "$2" "$HOOK" > "$m" 2>/dev/null || { bad "mutant $1 DID NOT APPLY (sed failed)"; return 1; }
-  if cmp -s "$HOOK" "$m"; then bad "mutant $1 DID NOT APPLY (no change)"; return 1; fi
-  bash -n "$m" 2>/dev/null || { bad "mutant $1 does not parse"; return 1; }
+  # Runs inside $( ): it must NOT call bad (the count dies with the subshell). Each caller counts
+  # the failure at top level in its else-arm.
+  sed "$2" "$HOOK" > "$m" 2>/dev/null || { printf '  mutant %s DID NOT APPLY (sed failed)\n' "$1" >&2; return 1; }
+  if cmp -s "$HOOK" "$m"; then printf '  mutant %s DID NOT APPLY (no change)\n' "$1" >&2; return 1; fi
+  bash -n "$m" 2>/dev/null || { printf '  mutant %s does not parse\n' "$1" >&2; return 1; }
   printf '%s' "$m"
 }
 
@@ -279,6 +281,7 @@ if M1="$(mkmut revert 's/"\$DERIV_ROOT"/"$PROJECT_DIR"/g')"; then
   fire "$WORK/mut-revert-b.sh" "$MAIN_B" "$WT_IN/notes/one.md"
   if refused && grep -qF 'one.md:6' "$ERR"; then ok "M1 revert-to-PROJECT_DIR killed by A3 (the inside-worktree fence is refused)"
   else bad "M1 revert-to-PROJECT_DIR SURVIVED A3: rc $RC"; fi
+else bad "M1: mutant revert: did not apply -- see stderr"
 fi
 
 # M2: the common-dir check deleted — show-toplevel alone. A4 must redden (the nested repo's root
@@ -290,6 +293,7 @@ if M2="$(mkmut nocommon '/\[ -n "\$fc" \] && \[ "\$fc" = "\$pc" \] || exit 1/d')
   fire "$M2" "$MAIN" "$WT_OUT/notes/one.md"
   if silent_pass; then ok "M2 control: the same mutant still accepts the worktree fence (A1 green), so it fails only A4"
   else bad "M2 control: the mutant also broke A1 (rc $RC) — the mutation is not confined to the common-dir check"; fi
+else bad "M2: mutant nocommon: did not apply -- see stderr"
 fi
 
 # M3: the worktree's TOPLEVEL returned instead of its copy of the project dir (the 0.773.0 shape).
@@ -302,6 +306,7 @@ if M3="$(mkmut toplevel 's/^    printf .%s. "\${ft}\${pp#"\$pt"}"$/    printf "%
   fire "$M3" "$MAIN" "$WT_OUT/notes/one.md"
   if silent_pass; then ok "M3 control: the same mutant still accepts the A1 worktree fence, so it fails only A7"
   else bad "M3 control: the mutant also broke A1 (rc $RC)"; fi
+else bad "M3: mutant toplevel: did not apply -- see stderr"
 fi
 
 # M4: the repository environment left set inside deriv_file_root. A8 must redden; A6 (clean env)
@@ -313,6 +318,25 @@ if M4="$(mkmut gitenv '/^    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMM
   fire "$M4" "$MAIN" "$MAIN/notes/m.md"
   if silent_pass; then ok "M4 control: the same mutant still accepts the main-tree fence with a clean env (A6 green)"
   else bad "M4 control: the mutant also broke A6 (rc $RC)"; fi
+else bad "M4: mutant gitenv: did not apply -- see stderr"
+fi
+
+# BL-849: a mutant that does not apply must reach the TOP-LEVEL exit counter. The anchor below is
+# verified absent from the subject first, so the helper really fails; the real caller shape is then
+# driven and the counter must move by exactly 1. The probe's own count is restored afterwards.
+ZANCHOR='ZZQX_NEVER_ANCHOR_849'
+if grep -qF -- "$ZANCHOR" "$HOOK"; then
+  bad "BL-849: the impossible anchor $ZANCHOR is present in the hook, so the control proves nothing"
+else
+  _f0=$fails
+  if MZ="$(mkmut zz-never "s/$ZANCHOR//" 2>/dev/null)"; then
+    bad "BL-849: a mutant with an absent anchor was reported as applied"
+  else bad "mutant zz-never: did not apply (BL-849 probe, expected)" >/dev/null
+  fi
+  if [ "$fails" -eq $((_f0 + 1)) ]; then
+    fails=$_f0; ok "BL-849: a mutant that does not apply reaches the exit counter"
+  else bad "BL-849: a DID-NOT-APPLY mutant did not reach the exit counter (moved $((fails - _f0)), want 1)"
+  fi
 fi
 
 echo

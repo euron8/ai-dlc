@@ -24,7 +24,69 @@
 # __pycache__ clear). Reproducing a reused .pyc needs a mutation whose size and mtime
 # match the original by construction, which is a timing race, not a fixture. The guard is
 # carried on the reference consumer's measurement, and this file does not claim it.
+#
+# THE MUTANT BATTERY IS SCORED PER PUSH ON A SUBSET. Every mutant is a copy of the validator with
+# one fault. Each arm below is a function of the validator it is handed: it holds (returns 0) or it
+# fails and sets $why. The live pass drives every arm against the SHIPPED validator, so the base
+# coverage is whole. Per push a mutant then runs only its DECIDING arm (which must FAIL on the copy)
+# and its TWIN (an arm that PASSES on the copy, one property apart, so the deciding arm is shown to
+# read the fault and not to fail everything). The rows below are read BY THIS FILE at run time
+# (score_mutant parses its own header), so the header and the scoring cannot drift apart, and a
+# mutant with no row is a FIXTURE BROKEN, never a silent skip.
+#
+# --matrix (argv) prints one `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` line per mutant x arm
+# cell: FAIL = the arm fails on the mutant's copy, ok = it holds. Cells that FAIL beyond the
+# decides= arm are listed in the comment above the rows, not in decides=.
+# Cells that FAIL beyond the decides= arm (measured, listed here and not in decides=): m2 also rt_H; m4 also marker_refused;
+# m7 and m8 also py_return and py_marker; m9 also s9; m10 also later_pytest_word; m12 also py_marker; m15 also rt_T, rt_X, rt_D;
+# m16 also rt_Q, rt_control, rt_U, rt_T, rt_X, rt_D; m18 also rt_H; m20 also rt_X; sk1 and sk9 also stub_note, s1-s4, s7-s9b and s11
+# (sk9 also parser_dead is its decider); sk3 none; sk4 also pytest_exit5, pytest_exit2, pytest_stub_kill, dash_m_pytest, stub_note,
+# parser_dead, s9b; sk7 also s3.
+# MUTANT-MATRIX m1 decides=a2_noop twins=a3_eof
+# MUTANT-MATRIX m2 decides=a7_hard twins=a4_red
+# MUTANT-MATRIX m3 decides=amp twins=a5_special
+# MUTANT-MATRIX m4 decides=a8_syntax twins=a9_syntaxkill
+# MUTANT-MATRIX m5 decides=py_return twins=py_syntax
+# MUTANT-MATRIX m6 decides=py_badbase twins=py_syntax
+# MUTANT-MATRIX m7 decides=py_syntax twins=py_badbase
+# MUTANT-MATRIX m8 decides=py_syntax twins=py_badbase
+# MUTANT-MATRIX m9 decides=pytest_green twins=pytest_collect
+# MUTANT-MATRIX m10 decides=nonpytest_exit2 twins=pytest_exit5
+# MUTANT-MATRIX m11 decides=pytest_exit5 twins=pytest_exit2
+# MUTANT-MATRIX m12 decides=marker_refused twins=marker_control
+# MUTANT-MATRIX m13 decides=later_pytest_word twins=pytest_stub_kill
+# MUTANT-MATRIX m14 decides=ws_syntax_check twins=marker_control
+# MUTANT-MATRIX m15 decides=rt_A twins=rt_Q
+# MUTANT-MATRIX m16 decides=rt_A twins=rt_R
+# MUTANT-MATRIX m17 decides=rt_A twins=rt_Q
+# MUTANT-MATRIX m18 decides=rt_R twins=rt_A
+# MUTANT-MATRIX m19 decides=rt_H twins=rt_R
+# MUTANT-MATRIX m20 decides=rt_T twins=rt_A
+# MUTANT-MATRIX m21 decides=rt_X twins=rt_T
+# MUTANT-MATRIX m22 decides=rt_D twins=rt_X
+# MUTANT-MATRIX m23 decides=rt_E twins=rt_A
+# MUTANT-MATRIX sk1 decides=s1 twins=s5
+# MUTANT-MATRIX sk2 decides=s5 twins=s1
+# MUTANT-MATRIX sk3 decides=s7 twins=s1
+# MUTANT-MATRIX sk4 decides=s9 twins=s1
+# MUTANT-MATRIX sk5 decides=s6 twins=s1
+# MUTANT-MATRIX sk6 decides=s4 twins=s1
+# MUTANT-MATRIX sk7 decides=s2 twins=s1
+# MUTANT-MATRIX sk8 decides=s11 twins=s1
+# MUTANT-MATRIX sk9 decides=parser_dead twins=pytest_stub_kill
+# MUTANT-MATRIX-DYNAMIC score-mutant why=score_mutant passes its first argument "$m" to mutant_killed; the loop over MUTS names only literal mutants m1-m23 and sk1-sk9, each carrying its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/mutation-red-replay/run.sh --matrix
+# The matrix is re-measured whenever an arm or a mutant is added or changed.
+#
+# NOT COVERED, deliberately: the stale-bytecode guard (PYTHONDONTWRITEBYTECODE plus the
+# __pycache__ clear). Reproducing a reused .pyc needs a mutation whose size and mtime
+# match the original by construction, which is a timing race, not a fixture. The guard is
+# carried on the reference consumer's measurement, and this file does not claim it.
 set -uo pipefail
+
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
+MATRIX_CELLS=0
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -32,14 +94,22 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 echo "HERMETIC-CONSUMED $VALIDATOR"
+[ "$MATRIX" -eq 0 ] || echo "MATRIX-MODE on"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+skip() { printf '  SKIP  %s\n' "$1"; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# shellcheck source=/dev/null
+. "$MUT_LIB"
 
 MUTATED="value() { printf '99\n'; }"   # a real change to line 2's value
 SUT="$WORK/sut.sh"
 BEFORE="$(cksum < "$SUT")"
+cp "$SUT" "$WORK/sut.orig"
 
 # replay <validator> <line> <replacement> <test> -> sets $rc and $out
 replay() {
@@ -47,150 +117,6 @@ replay() {
   out="$(bash "$v" "$SUT" "$line" "$repl" bash "$test" 2>&1)"
   rc=$?
 }
-
-echo "mutation-red-replay:"
-
-# --- Assertion 0: SANITY — a genuine kill is PROVEN ---------------------------
-# Every negative below would score a false pass against a script that is simply broken
-# and refusing everything.
-replay "$VALIDATOR" 2 "$MUTATED" "$WORK/disc.sh"
-if [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"; then
-  ok "a real mutation that kills the named test exits 0 (the negatives below mean something)"
-else
-  bad "FIXTURE BROKEN — a genuine mutation kill did not report PROVEN (exit $rc). Every assertion below would be a false pass."
-  echo; echo "mutation-red-replay: $fails assertion(s) FAILED" >&2; exit 2
-fi
-
-# --- Assertion 1: the coverage-only degenerate is UNPROVEN, exit 1 ------------
-# The test executes the mutated line and never asserts on its value. This is the one
-# outcome that IS a finding about the test.
-replay "$VALIDATOR" 2 "$MUTATED" "$WORK/nondisc.sh"
-[ "$rc" -eq 1 ] && grep -q 'stayed GREEN under a real mutation' <<<"$out" \
-  && ok "a test that runs the mutated line without asserting on its value exits 1 (UNPROVEN)" \
-  || bad "the coverage-only degenerate did not report UNPROVEN at exit 1 (exit $rc) — the one verdict that is a finding about the test"
-
-# --- Assertion 2: a no-op replacement is UNEVALUABLE, exit 2 — NOT 1 ---------
-# The absorbed defect. The line and the replacement are the same bytes, so the run below
-# grades an unmutated file, and its GREEN says nothing about the claim.
-replay "$VALIDATOR" 2 "value() { printf '42\n'; }" "$WORK/disc.sh"
-[ "$rc" -eq 2 ] && ok "a replacement identical to the line it replaces exits 2, not 1 (nothing was mutated, so nothing was disproved)" \
-  || bad "a no-op replacement exited $rc — an unmutated file was graded as a claim about a test"
-
-# --- Assertion 3: a line past the end of the file is UNEVALUABLE, exit 2 -----
-replay "$VALIDATOR" 99 "$MUTATED" "$WORK/disc.sh"
-[ "$rc" -eq 2 ] && grep -q 'cannot be mutated' <<<"$out" \
-  && ok "a line-number past the end of the file exits 2 (the rewrite had nothing to reach)" \
-  || bad "a line-number past EOF exited $rc — a file the script never touched was graded"
-
-# --- Assertion 4: a baseline that is already RED is UNEVALUABLE, exit 2 ------
-replay "$VALIDATOR" 2 "$MUTATED" "$WORK/red.sh"
-[ "$rc" -eq 2 ] && grep -q 'not GREEN before the mutation' <<<"$out" \
-  && ok "a named test that is RED before the mutation exits 2 (there is no GREEN -> RED transition to read)" \
-  || bad "a RED baseline exited $rc — a transition was reported off a run that never started GREEN"
-
-# --- Assertion 5: replacement text that is live to a rewriter still lands ----
-# `@` is the delimiter the absorbed implementation used and `&` is its back-reference;
-# both are ordinary characters in a line of source. Each must produce a REAL mutation.
-special_bad=0
-for special in 'value() { printf "9@9\n"; }' 'value() { printf "9&9\n"; }' 'value() { printf "9\\19\n"; }'; do
-  replay "$VALIDATOR" 2 "$special" "$WORK/disc.sh"
-  [ "$rc" -eq 0 ] || { bad "a replacement containing rewriter-special text did not mutate (exit $rc): $special"; special_bad=1; }
-done
-[ "$special_bad" -eq 0 ] \
-  && ok "replacements containing @, & and a backslash escape all mutate and kill (the replacement is data, not a rewrite program)"
-
-# --- Assertion 6: the file comes back byte-identical from every path above ---
-[ "$(cksum < "$SUT")" = "$BEFORE" ] \
-  && ok "the target is byte-identical after six replays (PROVEN, UNPROVEN and four refusals)" \
-  || bad "the target did not come back byte-identical — the replay left mutated source on disk"
-
-# --- Assertion 7: a restore that does not verify is HARD, exit 3 -------------
-# The named test destroys the target's directory on its second run, so the restore has
-# nowhere to write. The verdict the run was heading for (the test exits 0, so UNPROVEN)
-# must NOT be printed: a tree that is still mutated outranks a claim about a test.
-out="$(bash "$VALIDATOR" "$WORK/hard/sut.sh" 2 "$MUTATED" bash "$WORK/hard-test.sh" 2>&1)"
-rc=$?
-if [ "$rc" -eq 3 ]; then
-  bkp="$(printf '%s\n' "$out" | sed -n 's@.*pre-mutation bytes are at: @@p')"
-  if [ -n "$bkp" ] && [ -f "$bkp" ] && [ "$(cksum < "$bkp")" = "$BEFORE" ]; then
-    ok "a restore that does not verify exits 3 and leaves the pre-mutation bytes on disk at the path it prints"
-  else
-    bad "exit 3 was reported but the backup path it printed does not hold the pre-mutation bytes — the operator has no way back"
-  fi
-else
-  bad "a target that could not be restored exited $rc — a mutated tree was reported as a completed replay"
-fi
-
-# =============================================================================
-# MUTANTS. Each is a COPY, guarded by cmp -s so a substitution that matched nothing
-# cannot pass as a mutation, and each asserts a POSITIVE outcome of its own.
-# =============================================================================
-MUT="$WORK/mutants"
-mkdir -p "$MUT"
-
-# --- CONTROL: an unmutated copy in the same directory ------------------------
-# A copy that cannot run at all fails every mutant assertion at once and scores as three
-# kills. This is what tells the two apart.
-cp "$VALIDATOR" "$MUT/control.sh"
-replay "$MUT/control.sh" 2 "$MUTATED" "$WORK/disc.sh"
-[ "$rc" -eq 0 ] && ok "CONTROL: an unmutated copy still reports PROVEN (the mutants below fail for their own reasons)" \
-  || bad "FIXTURE BROKEN — an unmutated copy of the validator does not work from \$MUT (exit $rc); every mutant below is a false kill"
-
-# --- MUTANT 1: both no-op guards removed -------------------------------------
-# REVERT EVERY LAYER. The identity check and the cmp check are two guards over one
-# defect: strip either alone and the other still exits 2, and the mutant comes out green
-# proving the layer left in place.
-sed -e 's@^if \[ "\$CURRENT" = "\$REPL" \]; then@if false; then@' \
-    -e 's@^if cmp -s "\$BACKUP" "\$TARGET"; then@if false; then@' \
-    "$VALIDATOR" > "$MUT/m1.sh"
-n="$(grep -c '^if false; then' "$MUT/m1.sh")"
-if cmp -s "$VALIDATOR" "$MUT/m1.sh" || [ "$n" -ne 2 ]; then
-  bad "FIXTURE BROKEN: mutant 1 disabled $n of 2 no-op guards, so this assertion is unproven"
-else
-  replay "$MUT/m1.sh" 2 "value() { printf '42\n'; }" "$WORK/disc.sh"
-  [ "$rc" -eq 1 ] && ok "MUTANT 1: with both no-op guards gone, a replacement identical to its own line reports UNPROVEN — the absorbed defect, reproduced" \
-    || bad "MUTANT 1 exited $rc: the no-op guards are not what keeps an unmutated file out of the UNPROVEN arm"
-fi
-
-# --- MUTANT 2: the restore verification removed ------------------------------
-sed 's@^if ! cmp -s "\$BACKUP" "\$TARGET"; then@if false; then@' "$VALIDATOR" > "$MUT/m2.sh"
-if cmp -s "$VALIDATOR" "$MUT/m2.sh"; then
-  bad "FIXTURE BROKEN: mutant 2 matched nothing, so this assertion is unproven"
-else
-  rm -rf "$WORK/hard"; mkdir -p "$WORK/hard"; cp "$SUT" "$WORK/hard/sut.sh"; printf '0\n' > "$WORK/hard-count"
-  out="$(bash "$MUT/m2.sh" "$WORK/hard/sut.sh" 2 "$MUTATED" bash "$WORK/hard-test.sh" 2>&1)"
-  rc=$?
-  [ "$rc" -eq 1 ] && ok "MUTANT 2: with the restore verification gone, a tree left mutated reports a verdict about the test instead (exit 1)" \
-    || bad "MUTANT 2 exited $rc: the restore verification is not what turns an unrestored tree into a refusal"
-fi
-
-# --- MUTANT 3: the rewrite done by sed, as the absorbed script did it --------
-# `&` is one character of source to the shipped rewrite and the whole matched line to
-# sed's. Under sed the line is silently replaced by itself, so the replay grades a file
-# it believes it mutated — caught here only because the cmp guard survives this mutant.
-# The delimiter here is `|`, because the line being written IS a sed program full of `@`.
-sed 's|^REPL="\$REPL" awk .*> "\$MUTANT"$|sed "${LINE}s@.*@${REPL}@" "$BACKUP" > "$MUTANT"|' "$VALIDATOR" > "$MUT/m3.sh"
-if cmp -s "$VALIDATOR" "$MUT/m3.sh"; then
-  bad "FIXTURE BROKEN: mutant 3 matched nothing, so this assertion is unproven"
-else
-  replay "$MUT/m3.sh" 2 '&' "$WORK/disc.sh"
-  m3rc="$rc"
-  replay "$VALIDATOR" 2 '&' "$WORK/disc.sh"
-  if [ "$rc" -eq 0 ] && [ "$m3rc" -eq 2 ]; then
-    ok "MUTANT 3: a replacement of '&' is a literal to the shipped rewrite (exit 0) and a back-reference to sed's, which rewrites the line to itself (exit 2)"
-  else
-    bad "MUTANT 3: shipped exited $rc and the sed rewrite exited $m3rc — the replacement is not being treated as data"
-  fi
-fi
-
-# =============================================================================
-# THE MUTATION THAT BREAKS THE FILE INSTEAD OF THE TEST. A replacement that does not parse
-# makes the runner exit non-zero before any test body runs, and a bare `mut_rc != 0` grades
-# that as PROVEN. Every refusal arm below is PRESENCE-shaped: it requires the arm's own
-# `UNEVALUABLE (<arm>)` message, because a validator that refuses the flag as an unknown
-# target also exits 2 and must not score as one that ran the check.
-# =============================================================================
-
 # vrun <validator> <args...> -> sets $rc and $out (stdout and stderr together)
 vrun() {
   local v="$1"; shift
@@ -200,28 +126,6 @@ vrun() {
 SH_BROKEN='value() {'                       # does not parse: bash -n fails, the run fails
 SH_KILL="value() { printf '9\n'; }"         # parses, and kills disc.sh
 
-# --- Assertion 8: --syntax-check refuses a non-parsing mutant, no python needed --------
-# Without the flag the same mutation is PROVEN (the run dies on a parse error, which is
-# RED): that is the residue the header states, and the control that the flag is the cause.
-vrun "$VALIDATOR" "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
-sh_noflag_rc="$rc"
-vrun "$VALIDATOR" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
-if [ "$sh_noflag_rc" -eq 0 ] && [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (syntax-check)' <<<"$out" \
-   && grep -q '^  restore:    byte-identical$' <<<"$out"; then
-  ok "--syntax-check 'bash -n' turns a non-parsing mutation (PROVEN without the flag) into exit 2, after a verified restore"
-else
-  bad "--syntax-check 'bash -n' on a non-parsing mutation exited $rc (without the flag: $sh_noflag_rc) — a broken file was graded as a claim about the test"
-fi
-
-# --- Assertion 9: the same flag leaves a parsing kill PROVEN ----------------------------
-vrun "$VALIDATOR" --syntax-check 'bash -n' -- "$SUT" 2 "$SH_KILL" bash "$WORK/disc.sh"
-[ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" \
-  && ok "--syntax-check 'bash -n' with a mutation that parses and kills still exits 0 (PROVEN), with the -- terminator" \
-  || bad "--syntax-check refused a parsing kill (exit $rc) — the check is not differential on the mutant"
-
-# --- Arms 10-14 need no python: each is a shell runner or a stub named pytest. Each is a
-# function of the validator so the mutants further down drive the same arm. Each returns 0
-# when it holds, else sets $why and returns 1.
 lines_of() { [ -f "$1" ] && awk 'END { print NR }' "$1" || echo 0; }
 
 arm_nonpytest_exit2() {  # a NON-pytest runner exiting 2 on a real kill -> 0, PROVEN
@@ -273,33 +177,65 @@ arm_ws_syntax_check() {  # --syntax-check of only whitespace -> 2 as usage, targ
   [ "$rc" -eq 2 ] && grep -q 'needs a command' <<<"$out" && [ "$(cksum < "$SUT")" = "$BEFORE" ]
 }
 
-arm_nonpytest_exit2 "$VALIDATOR" \
-  && ok "a non-pytest runner whose real kill exits 2 exits 0 (PROVEN): the pytest-exit arm reads pytest only" \
-  || bad "a non-pytest runner exiting 2 on a real kill was not PROVEN ($why) — the pytest-exit arm is applied to every runner"
-arm_pytest_exit5 "$VALIDATOR" \
-  && ok "a stub named pytest exiting 5 exits 2 (pytest exit), after a verified restore" \
-  || bad "a pytest exit 5 was not refused ($why) — the pytest-exit arm refuses only some of 2-5"
-arm_pytest_exit2 "$VALIDATOR" \
-  && ok "the same stub exiting 2 exits 2 (pytest exit)" \
-  || bad "a stub pytest exit 2 was not refused ($why)"
-arm_pytest_stub_kill "$VALIDATOR" \
-  && ok "the same stub exiting 1 exits 0 (PROVEN), so the stub is read as pytest and a test failure is a kill" \
-  || bad "a stub pytest exit 1 was not PROVEN ($why)"
-arm_later_pytest_word "$VALIDATOR" \
-  && ok "a make-style argv with pytest as a LATER word, real kill exiting 2, exits 0 (detection is anchored)" \
-  || bad "a later argv word 'pytest' was read as a pytest runner ($why) — a real kill was refused"
-arm_dash_m_pytest "$VALIDATOR" \
-  && ok "the same runner with a '-m pytest' pair exits 2 (the anchored detector still reads -m pytest)" \
-  || bad "a '-m pytest' argv was not read as pytest ($why)"
-arm_marker_refused "$VALIDATOR" \
-  && ok "a mutant refused by --syntax-check never runs the suite: the marker shows the baseline run only" \
-  || bad "a refused mutant ran the suite ($why)"
-arm_marker_control "$VALIDATOR" \
-  && ok "CONTROL: the marker counts the mutated run (a parsing kill leaves 2 runs)" \
-  || bad "FIXTURE BROKEN — the marked test did not record two runs on a parsing kill ($why); the marker arm is vacuous"
-arm_ws_syntax_check "$VALIDATOR" \
-  && ok "--syntax-check of only whitespace exits 2 as usage, target untouched" \
-  || bad "--syntax-check ' ' did not refuse as usage ($why) — bash 3.2 expands an empty SC_ARGV under set -u"
+# --- the arms of assertions 1-5, 7-9 and the replacement-is-data mutant, as functions ---------
+arm_a1_unproven() {  # the coverage-only degenerate: exit 1
+  replay "$1" 2 "$MUTATED" "$WORK/nondisc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 1 ] && grep -q 'stayed GREEN under a real mutation' <<<"$out"
+}
+arm_a2_noop() {      # a replacement identical to its line: exit 2, not 1
+  replay "$1" 2 "value() { printf '42\n'; }" "$WORK/disc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 2 ]
+}
+arm_a3_eof() {       # a line past the end of the file: exit 2
+  replay "$1" 99 "$MUTATED" "$WORK/disc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'cannot be mutated' <<<"$out"
+}
+arm_a4_red() {       # a baseline that is already RED: exit 2
+  replay "$1" 2 "$MUTATED" "$WORK/red.sh"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'not GREEN before the mutation' <<<"$out"
+}
+arm_a5_special() {   # @, & and a backslash in the replacement all mutate and kill
+  local special bad_n=0
+  for special in 'value() { printf "9@9\n"; }' 'value() { printf "9&9\n"; }' 'value() { printf "9\\19\n"; }'; do
+    replay "$1" 2 "$special" "$WORK/disc.sh"
+    [ "$rc" -eq 0 ] || bad_n=1
+  done
+  why="a rewriter-special replacement did not mutate (last exit $rc)"
+  [ "$bad_n" -eq 0 ]
+}
+arm_a7_hard() {      # a restore that does not verify: exit 3, backup path printed and intact
+  local bkp
+  rm -rf "$WORK/hard"; mkdir -p "$WORK/hard"; cp "$SUT" "$WORK/hard/sut.sh"; printf '0\n' > "$WORK/hard-count"
+  vrun "$1" "$WORK/hard/sut.sh" 2 "$MUTATED" bash "$WORK/hard-test.sh"
+  why="exit $rc"
+  [ "$rc" -eq 3 ] || return 1
+  bkp="$(printf '%s\n' "$out" | sed -n 's@.*pre-mutation bytes are at: @@p')"
+  why="exit 3 but the printed backup path does not hold the pre-mutation bytes"
+  [ -n "$bkp" ] && [ -f "$bkp" ] && [ "$(cksum < "$bkp")" = "$BEFORE" ]
+}
+arm_a8_syntax() {    # --syntax-check refuses a non-parsing mutant (PROVEN without the flag)
+  local noflag
+  vrun "$1" "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
+  noflag="$rc"
+  vrun "$1" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
+  why="exit $rc (without the flag: $noflag)"
+  [ "$noflag" -eq 0 ] && [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (syntax-check)' <<<"$out" \
+    && grep -q '^  restore:    byte-identical$' <<<"$out"
+}
+arm_a9_syntaxkill() { # the same flag leaves a parsing kill PROVEN
+  vrun "$1" --syntax-check 'bash -n' -- "$SUT" 2 "$SH_KILL" bash "$WORK/disc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_amp() {          # a replacement of '&' is a literal to the shipped rewrite: exit 0
+  replay "$1" 2 '&' "$WORK/disc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 0 ]
+}
 
 # --- Python worlds. Built here, not in seed.sh, so the shell arms above need nothing. ---
 # pyworld <name> <m.py body> -> echoes a dir holding m.py, a plain runner t.py and a
@@ -361,170 +297,13 @@ arm_pytest_kill() {     # an assertion failure under pytest (exit 1) -> 0, PROVE
   [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
 }
 
-if [ "$HAVE_PY" -eq 1 ]; then
-  arm_py_syntax "$VALIDATOR" tip \
-    && ok "a .py syntax-error mutation exits 2 (parse) and the target restores byte-identical" \
-    || bad "a .py syntax-error mutation was not refused by the parse arm ($why) — a SyntaxError was graded as a kill"
-  arm_py_return "$VALIDATOR" tip \
-    && ok "a module-level 'return 1' under a plain python runner exits 2 (compile() rejects what ast.parse accepts)" \
-    || bad "a module-level 'return 1' was not refused by the parse arm ($why)"
-  arm_py_badbase "$VALIDATOR" tip \
-    && ok "a baseline that does not compile leaves the parse arm off: a killing mutation still exits 0" \
-    || bad "a non-compiling baseline with a killing mutation did not exit 0 with 'parse: not checked (baseline does not compile)' ($why) — the parse check is not differential"
-  # A parse refusal never runs the suite either: the runner appends to a marker, so the
-  # refused run leaves the baseline's one line.
-  pmd="$(pyworld marker 'def f():\n    return 2\n')"; rm -f "$WORK/pmarker"
-  vrun "$VALIDATOR" "$pmd/m.py" 1 'def f(:' bash -c 'printf "run\n" >> "$1"; python3 "$2"' marker "$WORK/pmarker" "$pmd/t.py"
-  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (parse)' <<<"$out" && [ "$(lines_of "$WORK/pmarker")" -eq 1 ] \
-    && ok "a mutant refused by the parse arm never runs the suite: the marker shows the baseline run only" \
-    || bad "a parse-refused mutant ran the suite (exit $rc, $(lines_of "$WORK/pmarker") run(s))"
-else
-  skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline, parse marker) did NOT run"
-fi
-if [ "$HAVE_PYTEST" -eq 1 ]; then
-  arm_pytest_collect "$VALIDATOR" tip \
-    && ok "a pytest collection error on a mutant that compiles exits 2 (pytest exit 2 is not a test failure)" \
-    || bad "a pytest collection error was graded as a kill ($why)"
-  arm_pytest_green "$VALIDATOR" tip \
-    && ok "a pytest run that stays GREEN under mutation still exits 1 (UNPROVEN outranks the pytest-exit arm)" \
-    || bad "a GREEN pytest mutated run did not exit 1 ($why)"
-  arm_pytest_kill "$VALIDATOR" tip \
-    && ok "a pytest assertion failure (exit 1) under mutation still exits 0 (PROVEN)" \
-    || bad "a pytest assertion failure was not PROVEN ($why) — the pytest-exit arm refuses exit 1"
-else
-  skip "pytest not importable by python3 — the pytest-exit arms did NOT run"
-fi
-
-# --- MUTANTS of the parse, syntax-check and pytest-exit arms ----------------------------
-# mkmut <name> <producer-rc> -- checks the copy already written to $MUT/<name>.sh. Called
-# in THIS shell, never as a pipeline stage, so its `bad` reaches $fails: a lost anchor must
-# turn the fixture red, not print FIXTURE BROKEN beside a PASS. Refuses a producer that
-# failed (a dying sed, an anchor matched other than once), an empty copy, and a copy
-# identical to the validator (matched nothing).
-mkmut() {
-  if [ "$2" -ne 0 ] || [ ! -s "$MUT/$1.sh" ] || cmp -s "$VALIDATOR" "$MUT/$1.sh"; then
-    bad "FIXTURE BROKEN: mutant $1 DID NOT APPLY (producer exit $2), so its assertion is unproven"
-    return 1
-  fi
-}
-# insert_after <anchor> <line> [<source>]: print <line> after the one line starting with
-# <anchor> in <source> (default the validator); exits 1 unless the anchor matched exactly once.
-insert_after() {
-  A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
+arm_py_marker() {   # a parse refusal never runs the suite: the marker shows the baseline run only
+  local pmd; pmd="$(pyworld "marker-$2" 'def f():\n    return 2\n')"; rm -f "$WORK/pmarker"
+  vrun "$1" "$pmd/m.py" 1 'def f(:' bash -c 'printf "run\n" >> "$1"; python3 "$2"' marker "$WORK/pmarker" "$pmd/t.py"
+  why="exit $rc, $(lines_of "$WORK/pmarker") run(s)"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (parse)' <<<"$out" && [ "$(lines_of "$WORK/pmarker")" -eq 1 ]
 }
 
-# M4: syntax-check refusal exits 2 BEFORE the restore. The EXIT trap still restores the
-# file, so rc and the bytes on disk are both right; only the printed verified restore is
-# missing, and that line is what the arm requires.
-insert_after '  REFUSED="syntax-check"' '  exit 2' > "$MUT/m4.sh"; prc=$?
-if mkmut m4 "$prc"; then
-  vrun "$MUT/m4.sh" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
-  [ "$rc" -eq 2 ] && [ "$(cksum < "$SUT")" = "$BEFORE" ] && ! grep -q '^  restore:    byte-identical$' <<<"$out" \
-    && ok "MUTANT 4: a syntax-check refusal exiting before the restore prints no verified restore (assertion 8 kills it)" \
-    || bad "MUTANT 4 (exit 2 before restore, syntax-check) exited $rc with a verified-restore line — assertion 8 cannot see the ordering"
-fi
-
-if [ "$HAVE_PY" -eq 1 ]; then
-  # M5: ast.parse instead of compile().
-  # Each mutant: the KILL arm runs first and its $why is captured before the near-miss arm
-  # (which must still hold) overwrites it.
-  sed 's@compile(open(sys.argv\[1\], "rb").read(), sys.argv\[1\], "exec")@__import__("ast").parse(open(sys.argv[1], "rb").read(), sys.argv[1])@' \
-    "$VALIDATOR" > "$MUT/m5.sh"; prc=$?
-  if mkmut m5 "$prc"; then
-    if ! arm_py_return "$MUT/m5.sh" m5; then kwhy="$why"
-      if arm_py_syntax "$MUT/m5.sh" m5; then
-        ok "MUTANT 5: ast.parse in place of compile() passes the syntax-error arm and is killed by the module-level return arm ($kwhy)"
-      else bad "MUTANT 5 (ast.parse) also failed the syntax-error arm ($why) — the kill is entangled"; fi
-    else bad "MUTANT 5 (ast.parse) survived the module-level return arm"; fi
-  fi
-  # M6: non-differential — the baseline gate removed, the arm always on for *.py.
-  sed 's@^    elif py_compiles "\$TARGET" baseline; then$@    elif true; then@' \
-    "$VALIDATOR" > "$MUT/m6.sh"; prc=$?
-  if mkmut m6 "$prc"; then
-    if ! arm_py_badbase "$MUT/m6.sh" m6; then kwhy="$why"
-      if arm_py_syntax "$MUT/m6.sh" m6; then
-        ok "MUTANT 6: a non-differential parse check refuses a killing mutation over a non-compiling baseline ($kwhy) and is killed"
-      else bad "MUTANT 6 (no baseline gate) also failed the syntax-error arm ($why) — the kill is entangled"; fi
-    else bad "MUTANT 6 (no baseline gate) survived the non-compiling-baseline arm"; fi
-  fi
-  # M7: the mutant check reads the BACKUP, which always compiles when the baseline did.
-  sed 's@! py_compiles "\$TARGET" mutant; then@! py_compiles "$BACKUP" mutant; then@' \
-    "$VALIDATOR" > "$MUT/m7.sh"; prc=$?
-  if mkmut m7 "$prc"; then
-    if ! arm_py_syntax "$MUT/m7.sh" m7; then kwhy="$why"
-      if arm_py_badbase "$MUT/m7.sh" m7; then
-        ok "MUTANT 7: checking the backup instead of the mutant lets a syntax error through ($kwhy) and is killed"
-      else bad "MUTANT 7 (backup checked) also failed the non-compiling-baseline arm ($why) — the kill is entangled"; fi
-    else bad "MUTANT 7 (backup checked) survived the syntax-error arm"; fi
-  fi
-  # M8: parse refusal exits 2 BEFORE the restore. The EXIT trap still puts the bytes back
-  # and the exit is still 2, so the printed verified restore is the only thing that kills it.
-  insert_after '  REFUSED="parse"' '  exit 2' > "$MUT/m8.sh"; prc=$?
-  if mkmut m8 "$prc"; then
-    m8d="$(pyworld m8 'def f():\n    return 2\n')"; m8before="$(cksum < "$m8d/m.py")"
-    vrun "$MUT/m8.sh" "$m8d/m.py" 1 'def f(:' python3 "$m8d/t.py"
-    if [ "$rc" -eq 2 ] && [ "$(cksum < "$m8d/m.py")" = "$m8before" ] \
-       && ! grep -q '^  restore:    byte-identical$' <<<"$out" && ! arm_py_syntax "$MUT/m8.sh" m8b; then
-      ok "MUTANT 8: a parse refusal exiting before the restore keeps exit 2 and the bytes, prints no verified restore, and is killed"
-    else
-      bad "MUTANT 8 (exit 2 before restore, parse) exited $rc — the syntax-error arm's restore conjunct cannot see the ordering"
-    fi
-  fi
-else
-  skip "python3 not found — mutants 5-8 of the parse arm did NOT run"
-fi
-if [ "$HAVE_PYTEST" -eq 1 ]; then
-  # M9: the pytest arm takes precedence over exit 0, so a GREEN pytest run reads UNEVALUABLE.
-  sed 's@^if \[ "\$mut_rc" -eq 0 \]; then$@if [ "$mut_rc" -eq 0 ] \&\& [ "$IS_PYTEST" -eq 0 ]; then@' \
-    "$VALIDATOR" > "$MUT/m9.sh"; prc=$?
-  if mkmut m9 "$prc"; then
-    if ! arm_pytest_green "$MUT/m9.sh" m9; then kwhy="$why"
-      if arm_pytest_collect "$MUT/m9.sh" m9; then
-        ok "MUTANT 9: a pytest arm treating exit 0 as UNEVALUABLE is killed by the GREEN-under-pytest arm ($kwhy)"
-      else bad "MUTANT 9 (pytest exit 0 refused) also failed the collection-error arm ($why) — the kill is entangled"; fi
-    else bad "MUTANT 9 (pytest exit 0 refused) survived the GREEN-under-pytest arm"; fi
-  fi
-else
-  skip "pytest not importable by python3 — mutant 9 of the pytest-exit arm did NOT run"
-fi
-
-# --- MUTANTS 10-14: the tip adversary's wrong fixes. No python needed. -------------------
-# mutant_pair <name> <kill-arm> <near-miss-arm> <label>: the kill arm must FAIL on the
-# mutant, and the near-miss arm (one property apart) must still HOLD on it.
-mutant_pair() {
-  if ! "$2" "$MUT/$1.sh"; then kwhy="$why"
-    if "$3" "$MUT/$1.sh"; then ok "MUTANT ${1#m}: $4 is killed by $2 ($kwhy); $3 still holds"
-    else bad "MUTANT ${1#m} ($4) also failed $3 ($why) — the kill is entangled"; fi
-  else bad "MUTANT ${1#m} ($4) survived $2"; fi
-}
-# M10 (z5): the pytest-exit arm applied to every runner.
-sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$mut_rc" -ne 1 ]; then@' \
-  "$VALIDATOR" > "$MUT/m10.sh"; prc=$?
-mkmut m10 "$prc" && mutant_pair m10 arm_nonpytest_exit2 arm_pytest_exit5 "the pytest-exit arm applied to every runner"
-# M11 (z3): only pytest exit 2 refused.
-sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$IS_PYTEST" -eq 1 ] \&\& [ "$mut_rc" -eq 2 ]; then@' \
-  "$VALIDATOR" > "$MUT/m11.sh"; prc=$?
-mkmut m11 "$prc" && mutant_pair m11 arm_pytest_exit5 arm_pytest_exit2 "refusing only pytest exit 2"
-# M12 (z4): the suite still runs on a refused mutant (the verdict is unchanged).
-sed 's@^if \[ -z "\$REFUSED" \]; then$@if true; then@' "$VALIDATOR" > "$MUT/m12.sh"; prc=$?
-mkmut m12 "$prc" && mutant_pair m12 arm_marker_refused arm_marker_control "running the suite on a refused mutant"
-# M13: unanchored detection, here keyed on the LAST word instead of the first.
-sed 's|^case "\${TEST_CMD\[0\]##\*/}" in$|case "${TEST_CMD[${#TEST_CMD[@]}-1]##*/}" in|' \
-  "$VALIDATOR" > "$MUT/m13.sh"; prc=$?
-mkmut m13 "$prc" && mutant_pair m13 arm_later_pytest_word arm_pytest_stub_kill "pytest detected on a word other than the first"
-# M14: the whitespace-only --syntax-check guard removed.
-sed 's|^  if \[ "\${#SC_ARGV\[@\]}" -eq 0 \]; then$|  if false; then|' "$VALIDATOR" > "$MUT/m14.sh"; prc=$?
-mkmut m14 "$prc" && mutant_pair m14 arm_ws_syntax_check arm_marker_control "no guard on a whitespace-only --syntax-check"
-
-# =============================================================================
-# THE RUN THAT EXITS 0 AND RAN NOTHING. pytest exits 0 when every selected test is
-# skipped, so an exit code reads an all-skipped baseline as GREEN and the all-skipped
-# mutated run as UNPROVEN. The validator reads pytest's summary line (last match, ANSI
-# stripped, count words against a whitelist) and refuses such a run with exit 2. Seeds
-# s1-s10 run REAL pytest, one world each; mutants sk1-sk7 are the wrong fixes. The stub
-# pytest arms above print no summary line at all, so they are the fail-open control: the
-# check must stand down on them, and the fail-closed mutant sk4 is killed by them.
-# =============================================================================
 PYTEST_QQ=(python3 -m pytest -qq -p no:cacheprovider)
 SKIP_NOTE_LINE='^  skip-check: not applied (no pytest summary line)$'
 
@@ -632,131 +411,6 @@ arm_parser_dead() {
   arm_pytest_stub_kill "$1" && grep -q "$SKIP_NOTE_LINE" <<<"$out"
 }
 
-arm_stub_note "$VALIDATOR" \
-  && ok "a pytest with no summary line (the stub) is not refused: PROVEN, with the skip-check note (fail open)" \
-  || bad "the stub pytest with no summary line was refused or carried no skip-check note ($why) — the skip check fails closed"
-
-if [ "$HAVE_PYTEST" -eq 1 ]; then
-  arm_s1 "$VALIDATOR" tip && ok "s1 -> 2/2: an all-skipped baseline exits 2 (no test ran) before mutating, target byte-identical" \
-    || bad "s1 -> 2/$rc: an all-skipped baseline was graded ($why) — exit 0 read as GREEN over a run that ran nothing"
-  arm_s2 "$VALIDATOR" tip && ok "s2 -> 2/2: '1 skipped, 1 deselected' (-k keeps only the skipped test) exits 2" \
-    || bad "s2 -> 2/$rc: a skipped+deselected run was graded ($why)"
-  arm_s3 "$VALIDATOR" tip && ok "s3 -> 2/2: '1 skipped, 1 warning' exits 2 (a warning is not a test)" \
-    || bad "s3 -> 2/$rc: a skipped+warning run was graded ($why)"
-  arm_s4 "$VALIDATOR" tip && ok "s4 -> 2/2: PY_COLORS=1 all-skipped exits 2 (ANSI stripped before parsing)" \
-    || bad "s4 -> 2/$rc: a coloured all-skipped run was graded ($why)"
-  arm_s5 "$VALIDATOR" tip && ok "s5 -> 0/0: one skipped plus one passing test with a real kill exits 0 (a test ran)" \
-    || bad "s5 -> 0/$rc: a mixed skip+pass run was not PROVEN ($why) — the check refuses runs that ran a test"
-  arm_s6 "$VALIDATOR" tip && ok "s6 -> 0/0: a -s test printing a fake '1 skipped' line is read by the LAST summary line and exits 0" \
-    || bad "s6 -> 0/$rc: a printed fake summary line decided the verdict ($why)"
-  arm_s7 "$VALIDATOR" tip && ok "s7 -> 2/2: a mutation flipping a skipif to skip-all exits 2 after a verified restore" \
-    || bad "s7 -> 2/$rc: an all-skipped MUTATED run was graded ($why)"
-  arm_s8 "$VALIDATOR" tip && ok "s8 -> 2/2: a skip-gated test (skipped at baseline, un-skipped and failing under mutation) exits 2" \
-    || bad "s8 -> 2/$rc: a skip-gated test was PROVEN off a baseline that ran nothing ($why)"
-  arm_s9 "$VALIDATOR" tip && ok "s9 -> 1/1: -qq all-skipped is not refused (no summary line): exit 1 with the skip-check note on stdout" \
-    || bad "s9 -> 1/$rc: -qq all-skipped did not fail open with the note ($why)"
-  arm_s9b "$VALIDATOR" tip && ok "s9b -> 0/0: -qq with a real kill is PROVEN and still prints the skip-check note" \
-    || bad "s9b -> 0/$rc: the skip-check note is not printed on PROVEN ($why)"
-  arm_s10 "$VALIDATOR" tip && ok "s10 -> 0/0: a strict xfail turned XPASS by the mutation exits 0 (xfailed counts as ran)" \
-    || bad "s10 -> 0/$rc: a strict-xfail kill was not PROVEN ($why)"
-  if [ -n "$U8" ]; then
-    arm_s11 "$VALIDATOR" tip && ok "s11 -> 2/2: an all-skipped run whose log carries \\xff exits 2 under LC_ALL=$U8 (the parser reads bytes)" \
-      || bad "s11 -> 2/$rc: a non-UTF-8 byte in the log defeated the skip check under LC_ALL=$U8 ($why)"
-  else
-    skip "no UTF-8 locale in 'locale -a' — s11 (non-UTF-8 byte in the log) did NOT run"
-  fi
-else
-  skip "pytest not importable by python3 — the skip-check seeds s1-s10 did NOT run"
-fi
-
-# --- MUTANTS sk1-sk7 of the skip check ---------------------------------------------------
-# sk1: both checks removed (every layer: the baseline and the mutated read).
-sed -e 's@^  case "\$(pytest_summary "\$BASE_LOG")" in$@  case "ran" in@' \
-    -e 's@^  case "\$(pytest_summary "\$MUT_LOG")" in$@  case "ran" in@' "$VALIDATOR" > "$MUT/sk1.sh"; prc=$?
-[ "$(grep -c '^  case "ran" in$' "$MUT/sk1.sh")" -eq 2 ] || prc=9
-mkmut sk1 "$prc" || true
-# sk2: refuse whenever any skipped/deselected word is present (ignores the words that ran).
-sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print (idle == 1 ? "norun" : "ran")@' \
-  "$VALIDATOR" > "$MUT/sk2.sh"; prc=$?
-mkmut sk2 "$prc" || true
-# sk3: the check applied to the baseline only.
-sed 's@^if \[ -z "\$REFUSED" \] && \[ "\$IS_PYTEST" -eq 1 \]; then$@if false; then@' \
-  "$VALIDATOR" > "$MUT/sk3.sh"; prc=$?
-mkmut sk3 "$prc" || true
-# sk4: fail CLOSED on a missing summary line at baseline.
-sed 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    *) echo "validate-mutation-red: UNEVALUABLE (no test ran) — no pytest summary line" >\&2; exit 2 ;;@' \
-  "$VALIDATOR" > "$MUT/sk4.sh"; prc=$?
-mkmut sk4 "$prc" || true
-# sk5: FIRST matching summary line instead of the last.
-sed 's@^        last = line$@        if (last == "") last = line@' "$VALIDATOR" > "$MUT/sk5.sh"; prc=$?
-mkmut sk5 "$prc" || true
-# sk6: no ANSI strip.
-sed 's@^      gsub(esc "\\\\\[\[0-9;\]\*m", "", line)$@      line = line@' "$VALIDATOR" > "$MUT/sk6.sh"; prc=$?
-mkmut sk6 "$prc" || true
-# sk7: refuse only a bare `N skipped` line.
-sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print ((n == 1 \&\& last ~ /^[0-9]+ skipped$/) ? "norun" : "ran")@' \
-  "$VALIDATOR" > "$MUT/sk7.sh"; prc=$?
-mkmut sk7 "$prc" || true
-
-# sk8: the parse runs in the caller's locale (LC_ALL=C dropped).
-sed 's@^  LC_ALL=C awk '"'"'$@  awk '"'"'@' "$VALIDATOR" > "$MUT/sk8.sh"; prc=$?
-mkmut sk8 "$prc" || true
-# The `*)` probe: a copy whose parser prints NOTHING (awk replaced by `true`, which takes
-# the program and the log as ignored arguments). sk9 is that copy with both `*)` arms
-# narrowed to `none)`, so an empty parse neither refuses nor notes.
-sed 's@^  LC_ALL=C awk '"'"'$@  LC_ALL=C true '"'"'@' "$VALIDATOR" > "$MUT/pdead.sh"; prc=$?
-mkmut pdead "$prc" || true
-sed -e 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none) SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
-    -e 's@^    \*)     SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none)  SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
-    "$MUT/pdead.sh" > "$MUT/sk9.sh"; prc=$?
-[ "$(grep -c 'SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$' "$MUT/sk9.sh")" -eq 2 ] \
-  && [ "$(grep -c '^    \*) *SKIP_NOTE=' "$MUT/sk9.sh")" -eq 0 ] && ! cmp -s "$MUT/pdead.sh" "$MUT/sk9.sh" || prc=9
-mkmut sk9 "$prc" || true
-if [ -s "$MUT/pdead.sh" ] && [ -s "$MUT/sk9.sh" ] && [ "$prc" -eq 0 ]; then
-  if arm_parser_dead "$MUT/pdead.sh"; then
-    ok "a parser that prints nothing fails OPEN through the \`*)\` arm: PROVEN with the skip-check note"
-    if ! arm_parser_dead "$MUT/sk9.sh"; then
-      ok "SKIP MUTANT sk9: the \`*)\` arms narrowed to none) is killed by arm_parser_dead ($why: no note on an empty parse)"
-    else bad "SKIP MUTANT sk9 (no \`*)\` arm) survived arm_parser_dead"; fi
-  else bad "a parser that prints nothing did not fail open with the note ($why) — the \`*)\` arm is missing"; fi
-fi
-
-# sk4 needs no python: the stub arms are its kill.
-[ -s "$MUT/sk4.sh" ] && ! cmp -s "$VALIDATOR" "$MUT/sk4.sh" \
-  && mutant_pair sk4 arm_pytest_stub_kill arm_nonpytest_exit2 "failing closed on a missing pytest summary line"
-if [ "$HAVE_PYTEST" -eq 1 ]; then
-  # skpair <name> <kill-arm> <near-miss-arm> <label>, each arm driven with a fresh world tag.
-  skpair() {
-    if ! "$2" "$MUT/$1.sh" "$1k"; then kwhy="$why"
-      if "$3" "$MUT/$1.sh" "$1n"; then ok "SKIP MUTANT $1: $4 is killed by $2 ($kwhy); $3 still holds"
-      else bad "SKIP MUTANT $1 ($4) also failed $3 ($why) — the kill is entangled"; fi
-    else bad "SKIP MUTANT $1 ($4) survived $2"; fi
-  }
-  skpair sk1 arm_s1 arm_s5  "the skip check removed"
-  skpair sk2 arm_s5 arm_s1  "refusing on any skipped word"
-  skpair sk3 arm_s7 arm_s1  "the skip check on the baseline only"
-  skpair sk4 arm_s9 arm_s1  "failing closed on a missing summary line"
-  skpair sk5 arm_s6 arm_s1  "the first summary line instead of the last"
-  skpair sk6 arm_s4 arm_s1  "no ANSI strip"
-  skpair sk7 arm_s2 arm_s1  "refusing only a bare 'N skipped' line"
-  if [ -n "$U8" ]; then
-    skpair sk8 arm_s11 arm_s1 "the summary parse in the caller's locale (no LC_ALL=C)"
-  else
-    skip "no UTF-8 locale — skip-check mutant sk8 did NOT run"
-  fi
-else
-  skip "pytest not importable by python3 — skip-check mutants sk1-sk3 and sk5-sk8 did NOT run"
-fi
-
-# =============================================================================
-# THE CAPTURE THAT DOES NOT REPLAY. The capture is committed as gate-1 evidence, and a reader
-# re-runs what it says. Its first stdout line is a `$ ` line rendered with %q from the
-# ORIGINAL argv, and its `test:` line renders the test argv the same way. A line joined with
-# spaces reads correctly for single-token arguments and silently re-splits a multi-word one
-# (`-k 'a or b'`); a line rebuilt from the parsed values drops `--syntax-check` and `--`.
-# Each line is handed to `set --` in a child bash and compared, word for word, against the
-# argv the arm passed. It is parsed, never run as a command.
-# =============================================================================
 # rt_split <rendered words> -> each word a bash reader gets back, \037-terminated.
 rt_split() { bash -c "set -- $1; printf '%s\037' \"\$@\"" 2>/dev/null; }
 rt_join()  { printf '%s\037' "$@"; }
@@ -849,44 +503,215 @@ rt_case_e() { # <validator> -> sets $rt_why
   rt_why="${rt_why# }"
   [ -z "$rt_why" ]
 }
-[ -n "$U8" ] || skip "no UTF-8 locale — case E of arm_argv_roundtrip and mutant m23 did NOT run"
-arm_argv_roundtrip() {
-  local a q c r h u hw t x dq e=""
-  RT_TEST=(bash "$WORK/disc.sh" -k 'a or b' one)
-  rt_case 0 "$1" --syntax-check 'bash -n' -- "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; a="$rt_why"
-  RT_TEST=(bash "$WORK/disc.sh")
-  rt_case 0 "$1" "$SUT" 2 "$RT_QUOTE_REPL" "${RT_TEST[@]}"; q="$rt_why"
-  RT_TEST=(bash "$WORK/disc.sh" -k one)
-  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; c="$rt_why"
-  rt_refusal 2 "$1" "$SUT" 2 "$MUTATED" bash "$WORK/red.sh"; r="$rt_why"
+
+# The eleven cases of the capture round-trip, each an arm of its own so a mutant is driven on the
+# one case that decides it. Each sets $why and returns 0 when its case holds.
+arm_rt_A() { RT_TEST=(bash "$WORK/disc.sh" -k 'a or b' one)
+  rt_case 0 "$1" --syntax-check 'bash -n' -- "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="A:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_Q() { RT_TEST=(bash "$WORK/disc.sh")
+  rt_case 0 "$1" "$SUT" 2 "$RT_QUOTE_REPL" "${RT_TEST[@]}"; why="Q:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_control() { RT_TEST=(bash "$WORK/disc.sh" -k one)
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="control:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_R() {
+  rt_refusal 2 "$1" "$SUT" 2 "$MUTATED" bash "$WORK/red.sh"; why="R:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_H() { local hw h
   hw="$(hardworld)" || hw=""
   if [ -n "$hw" ] && [ -f "$hw/hard/sut.sh" ] && [ -f "$hw/test.sh" ]; then
     h="$(export TMPDIR="$hw/tmp"; rt_refusal 3 "$1" "$hw/hard/sut.sh" 2 "$MUTATED" bash "$hw/test.sh"; printf '%s' "$rt_why")"
   else h="no-hard-world"; fi
-  RT_TEST=(bash "$WORK/nondisc.sh")
-  rt_case 1 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; u="$rt_why"
-  RT_TEST=(bash "$WORK/disc.sh" '~root' 'a~root' '~+')
-  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; t="$rt_why"
-  RT_TEST=(bash "$WORK/disc.sh" 'x=~root' 'FOO=a:~/b')
-  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; x="$rt_why"
-  RT_TEST=(bash "$WORK/disc.sh" $'~root\tz')
-  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; dq="$rt_why"
-  if [ -n "$U8" ]; then rt_case_e "$1"; e="$rt_why"; fi
-  why="A:[$a] Q:[$q] control:[$c] R:[$r] H:[$h] U:[$u] T:[$t] X:[$x] D:[$dq] E:[$e]"
-  [ -z "$e" ] && [ -z "$a" ] && [ -z "$q" ] && [ -z "$c" ] && [ -z "$r" ] && [ -z "$h" ] && [ -z "$u" ] \
-    && [ -z "$t" ] && [ -z "$x" ] && [ -z "$dq" ]
-}
-arm_argv_roundtrip "$VALIDATOR" \
-  && ok "arm_argv_roundtrip: the \`\$ \` line and the \`test:\` line replay, through bash, to the exact argv (flags, --, a multi-word -k, a quoted replacement, the single-token control, an UNPROVEN exit 1, and the tilde words ~root, a~root, ~+, x=~root, FOO=a:~/b and a \$'...'-quoted ~root<TAB>z), a RED-baseline refusal exits 2 and a HARD refusal exits 3, each with no \`\$ \` line" \
-  || bad "arm_argv_roundtrip: the capture does not replay to its own argv, or a refusal printed one ($why) — a committed capture is a command that does not run"
-arm_argv_roundtrip "$MUT/control.sh" \
-  && ok "CONTROL: arm_argv_roundtrip holds on an unmutated copy in \$MUT, \`\$ \` naming the copy's path as invoked" \
-  || bad "FIXTURE BROKEN — arm_argv_roundtrip fails on an unmutated copy ($why); mutants 15-19 below would be false kills"
+  why="H:[$h]"; [ -z "$h" ]; }
+arm_rt_U() { RT_TEST=(bash "$WORK/nondisc.sh")
+  rt_case 1 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="U:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_T() { RT_TEST=(bash "$WORK/disc.sh" '~root' 'a~root' '~+')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="T:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_X() { RT_TEST=(bash "$WORK/disc.sh" 'x=~root' 'FOO=a:~/b')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="X:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_D() { RT_TEST=(bash "$WORK/disc.sh" $'~root\tz')
+  rt_case 0 "$1" "$SUT" 2 "$MUTATED" "${RT_TEST[@]}"; why="D:[$rt_why]"; [ -z "$rt_why" ]; }
+arm_rt_E() { rt_case_e "$1"; why="E:[$rt_why]"; [ -z "$rt_why" ]; }
+RT_ARMS="rt_A rt_Q rt_control rt_R rt_H rt_U rt_T rt_X rt_D rt_E"
 
-# --- MUTANTS 15-19 of the capture lines --------------------------------------------------
-# replace_line <exact line> <new line> [<source>]: replace the one line equal to <exact line>
-# in <source> (default the validator; an empty <new line> deletes it); exits 1 unless it
-# matched exactly once.
+# =============================================================================
+# THE ARM REGISTRY. Every arm id is a function arm_<id>; a registered id with no function is a
+# FIXTURE BROKEN before anything runs (a refused undefined helper, never a skipped arm).
+# =============================================================================
+ARMS="a1_unproven a2_noop a3_eof a4_red a5_special a7_hard a8_syntax a9_syntaxkill amp"
+ARMS="$ARMS nonpytest_exit2 pytest_exit5 pytest_exit2 pytest_stub_kill later_pytest_word dash_m_pytest"
+ARMS="$ARMS marker_refused marker_control ws_syntax_check stub_note parser_dead"
+ARMS="$ARMS py_syntax py_return py_badbase py_marker pytest_collect pytest_green pytest_kill"
+ARMS="$ARMS s1 s2 s3 s4 s5 s6 s7 s8 s9 s9b s10 s11 $RT_ARMS"
+for _a in $ARMS; do
+  declare -F "arm_$_a" >/dev/null 2>&1 || { echo "FIXTURE BROKEN: arm $_a is registered but arm_$_a is not defined" >&2; exit 2; }
+done
+HAVE_PY=0; command -v python3 >/dev/null 2>&1 && HAVE_PY=1
+HAVE_PYTEST=0
+[ "$HAVE_PY" -eq 1 ] && python3 -c 'import pytest' >/dev/null 2>&1 && HAVE_PYTEST=1
+NEEDS_PY=" py_syntax py_return py_badbase py_marker "
+NEEDS_PYTEST=" pytest_collect pytest_green pytest_kill s1 s2 s3 s4 s5 s6 s7 s8 s9 s9b s10 s11 "
+NEEDS_U8=" s11 rt_E "
+# arm_avail <arm> -> 0 when the tools it needs are present
+arm_avail() {
+  case "$NEEDS_PY" in *" $1 "*) [ "$HAVE_PY" -eq 1 ] || return 1 ;; esac
+  case "$NEEDS_PYTEST" in *" $1 "*) [ "$HAVE_PYTEST" -eq 1 ] || return 1 ;; esac
+  case "$NEEDS_U8" in *" $1 "*) [ -n "$U8" ] || return 1 ;; esac
+  return 0
+}
+# armrun <arm> <validator> <world tag> -> the arm's own status, $why set
+armrun() { "arm_$1" "$2" "$3"; }
+BASE_OK=" "
+# flagof <arm> -> 1 when the arm HELD against the shipped validator in THIS run, else 0
+flagof() { case "$BASE_OK" in *" $1 "*) echo 1 ;; *) echo 0 ;; esac; }
+# live <arm> <ok text> <failure text>: drive the arm on the shipped validator; a hold records its base flag.
+live() {
+  if armrun "$1" "$VALIDATOR" tip; then ok "$2"; BASE_OK="$BASE_OK$1 "
+  else bad "$3 ($why)"; fi
+}
+
+echo "mutation-red-replay:"
+
+# --- Assertion 0: SANITY — a genuine kill is PROVEN ---------------------------
+# Every negative below would score a false pass against a script that is simply broken
+# and refusing everything.
+replay "$VALIDATOR" 2 "$MUTATED" "$WORK/disc.sh"
+if [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"; then
+  ok "a real mutation that kills the named test exits 0 (the negatives below mean something)"
+else
+  bad "FIXTURE BROKEN — a genuine mutation kill did not report PROVEN (exit $rc). Every assertion below would be a false pass."
+  echo; echo "mutation-red-replay: $fails assertion(s) FAILED" >&2; exit 2
+fi
+
+# --- THE LIVE PASS: every arm against the SHIPPED validator, whole -----------------------
+live a1_unproven "a test that runs the mutated line without asserting on its value exits 1 (UNPROVEN)" \
+  "the coverage-only degenerate did not report UNPROVEN at exit 1 — the one verdict that is a finding about the test"
+live a2_noop "a replacement identical to the line it replaces exits 2, not 1 (nothing was mutated, so nothing was disproved)" \
+  "a no-op replacement did not exit 2 — an unmutated file was graded as a claim about a test"
+live a3_eof "a line-number past the end of the file exits 2 (the rewrite had nothing to reach)" \
+  "a line-number past EOF did not exit 2 — a file the script never touched was graded"
+live a4_red "a named test that is RED before the mutation exits 2 (there is no GREEN -> RED transition to read)" \
+  "a RED baseline did not exit 2 — a transition was reported off a run that never started GREEN"
+live a5_special "replacements containing @, & and a backslash escape all mutate and kill (the replacement is data, not a rewrite program)" \
+  "a replacement containing rewriter-special text did not mutate"
+live amp "a replacement of '&' is a literal to the shipped rewrite (exit 0), the shipped half of mutant m3" \
+  "a replacement of '&' did not exit 0 — the replacement is not being treated as data"
+[ "$(cksum < "$SUT")" = "$BEFORE" ] \
+  && ok "the target is byte-identical after the replays (PROVEN, UNPROVEN and the refusals)" \
+  || bad "the target did not come back byte-identical — the replay left mutated source on disk"
+live a7_hard "a restore that does not verify exits 3 and leaves the pre-mutation bytes on disk at the path it prints" \
+  "a target that could not be restored did not exit 3 with an intact backup — a mutated tree was reported as a completed replay"
+
+MUT="$WORK/mutants"
+mkdir -p "$MUT"
+# --- CONTROL: an unmutated copy in the same directory ------------------------
+# A copy that cannot run at all fails every mutant assertion at once and scores as kills. This is
+# what tells the two apart.
+cp "$VALIDATOR" "$MUT/control.sh"
+replay "$MUT/control.sh" 2 "$MUTATED" "$WORK/disc.sh"
+[ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" && ok "CONTROL: an unmutated copy still reports PROVEN (the mutants below fail for their own reasons)" \
+  || bad "FIXTURE BROKEN — an unmutated copy of the validator does not work from \$MUT (exit $rc); every mutant below is a false kill"
+
+live a8_syntax "--syntax-check 'bash -n' turns a non-parsing mutation (PROVEN without the flag) into exit 2, after a verified restore" \
+  "--syntax-check 'bash -n' on a non-parsing mutation was not refused — a broken file was graded as a claim about the test"
+live a9_syntaxkill "--syntax-check 'bash -n' with a mutation that parses and kills still exits 0 (PROVEN), with the -- terminator" \
+  "--syntax-check refused a parsing kill — the check is not differential on the mutant"
+live nonpytest_exit2 "a non-pytest runner whose real kill exits 2 exits 0 (PROVEN): the pytest-exit arm reads pytest only" \
+  "a non-pytest runner exiting 2 on a real kill was not PROVEN — the pytest-exit arm is applied to every runner"
+live pytest_exit5 "a stub named pytest exiting 5 exits 2 (pytest exit), after a verified restore" \
+  "a pytest exit 5 was not refused — the pytest-exit arm refuses only some of 2-5"
+live pytest_exit2 "the same stub exiting 2 exits 2 (pytest exit)" "a stub pytest exit 2 was not refused"
+live pytest_stub_kill "the same stub exiting 1 exits 0 (PROVEN), so the stub is read as pytest and a test failure is a kill" \
+  "a stub pytest exit 1 was not PROVEN"
+live later_pytest_word "a make-style argv with pytest as a LATER word, real kill exiting 2, exits 0 (detection is anchored)" \
+  "a later argv word 'pytest' was read as a pytest runner — a real kill was refused"
+live dash_m_pytest "the same runner with a '-m pytest' pair exits 2 (the anchored detector still reads -m pytest)" \
+  "a '-m pytest' argv was not read as pytest"
+live marker_refused "a mutant refused by --syntax-check never runs the suite: the marker shows the baseline run only" \
+  "a refused mutant ran the suite"
+live marker_control "CONTROL: the marker counts the mutated run (a parsing kill leaves 2 runs)" \
+  "FIXTURE BROKEN — the marked test did not record two runs on a parsing kill; the marker arm is vacuous"
+live ws_syntax_check "--syntax-check of only whitespace exits 2 as usage, target untouched" \
+  "--syntax-check ' ' did not refuse as usage — bash 3.2 expands an empty SC_ARGV under set -u"
+live stub_note "a pytest with no summary line (the stub) is not refused: PROVEN, with the skip-check note (fail open)" \
+  "the stub pytest with no summary line was refused or carried no skip-check note — the skip check fails closed"
+
+if [ "$HAVE_PY" -eq 1 ]; then
+  live py_syntax "a .py syntax-error mutation exits 2 (parse) and the target restores byte-identical" \
+    "a .py syntax-error mutation was not refused by the parse arm — a SyntaxError was graded as a kill"
+  live py_return "a module-level 'return 1' under a plain python runner exits 2 (compile() rejects what ast.parse accepts)" \
+    "a module-level 'return 1' was not refused by the parse arm"
+  live py_badbase "a baseline that does not compile leaves the parse arm off: a killing mutation still exits 0" \
+    "a non-compiling baseline with a killing mutation did not exit 0 with 'parse: not checked (baseline does not compile)'"
+  live py_marker "a mutant refused by the parse arm never runs the suite: the marker shows the baseline run only" \
+    "a parse-refused mutant ran the suite"
+else
+  skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline, parse marker) did NOT run"
+fi
+if [ "$HAVE_PYTEST" -eq 1 ]; then
+  live pytest_collect "a pytest collection error on a mutant that compiles exits 2 (pytest exit 2 is not a test failure)" \
+    "a pytest collection error was graded as a kill"
+  live pytest_green "a pytest run that stays GREEN under mutation still exits 1 (UNPROVEN outranks the pytest-exit arm)" \
+    "a GREEN pytest mutated run did not exit 1"
+  live pytest_kill "a pytest assertion failure (exit 1) under mutation still exits 0 (PROVEN)" \
+    "a pytest assertion failure was not PROVEN — the pytest-exit arm refuses exit 1"
+  live s1 "s1 -> 2/2: an all-skipped baseline exits 2 (no test ran) before mutating, target byte-identical" "s1: an all-skipped baseline was graded"
+  live s2 "s2 -> 2/2: '1 skipped, 1 deselected' (-k keeps only the skipped test) exits 2" "s2: a skipped+deselected run was graded"
+  live s3 "s3 -> 2/2: '1 skipped, 1 warning' exits 2 (a warning is not a test)" "s3: a skipped+warning run was graded"
+  live s4 "s4 -> 2/2: PY_COLORS=1 all-skipped exits 2 (ANSI stripped before parsing)" "s4: a coloured all-skipped run was graded"
+  live s5 "s5 -> 0/0: one skipped plus one passing test with a real kill exits 0 (a test ran)" "s5: a mixed skip+pass run was not PROVEN"
+  live s6 "s6 -> 0/0: a -s test printing a fake '1 skipped' line is read by the LAST summary line and exits 0" "s6: a printed fake summary line decided the verdict"
+  live s7 "s7 -> 2/2: a mutation flipping a skipif to skip-all exits 2 after a verified restore" "s7: an all-skipped MUTATED run was graded"
+  live s8 "s8 -> 2/2: a skip-gated test (skipped at baseline, un-skipped and failing under mutation) exits 2" "s8: a skip-gated test was PROVEN off a baseline that ran nothing"
+  live s9 "s9 -> 1/1: -qq all-skipped is not refused (no summary line): exit 1 with the skip-check note on stdout" "s9: -qq all-skipped did not fail open with the note"
+  live s9b "s9b -> 0/0: -qq with a real kill is PROVEN and still prints the skip-check note" "s9b: the skip-check note is not printed on PROVEN"
+  live s10 "s10 -> 0/0: a strict xfail turned XPASS by the mutation exits 0 (xfailed counts as ran)" "s10: a strict-xfail kill was not PROVEN"
+  if [ -n "$U8" ]; then
+    live s11 "s11 -> 2/2: an all-skipped run whose log carries \\xff exits 2 under LC_ALL=$U8 (the parser reads bytes)" \
+      "s11: a non-UTF-8 byte in the log defeated the skip check under LC_ALL=$U8"
+  else
+    skip "no UTF-8 locale in 'locale -a' — s11 (non-UTF-8 byte in the log) did NOT run"
+  fi
+else
+  skip "pytest not importable by python3 — the pytest-exit arms and the skip-check seeds s1-s11 did NOT run"
+fi
+[ -n "$U8" ] || skip "no UTF-8 locale — case E of the capture round-trip and mutant m23 did NOT run"
+
+# arm_argv_roundtrip <validator> <live>: the ten capture cases (flags, --, a multi-word -k, a
+# quoted replacement, the single-token control, a RED refusal exiting 2, a HARD refusal exiting 3,
+# an UNPROVEN exit 1, the tilde words, a multibyte replacement), each an arm of its own. The
+# single-token control is part of it: it must round-trip too, which is what proves the test-argv
+# conjunct discriminates only on a multi-word argument.
+arm_argv_roundtrip() {
+  local r all="" bad_n=0
+  for r in $RT_ARMS; do
+    arm_avail "$r" || continue
+    if armrun "$r" "$1" tip; then [ "$2" != live ] || BASE_OK="$BASE_OK$r "
+    else bad_n=1; all="$all $why"; fi
+  done
+  why="$all"
+  [ "$bad_n" -eq 0 ]
+}
+arm_argv_roundtrip "$VALIDATOR" live \
+  && ok "arm_argv_roundtrip: the \`\$ \` line and the \`test:\` line replay, through bash, to the exact argv (flags, --, a multi-word -k, a quoted replacement, the single-token control, an UNPROVEN exit 1, the tilde words and a multibyte replacement), a RED-baseline refusal exits 2 and a HARD refusal exits 3, each with no \`\$ \` line" \
+  || bad "arm_argv_roundtrip: the capture does not replay to its own argv, or a refusal printed one ($why) — a committed capture is a command that does not run"
+arm_argv_roundtrip "$MUT/control.sh" copy \
+  && ok "CONTROL: arm_argv_roundtrip holds on an unmutated copy in \$MUT, \`\$ \` naming the copy's path as invoked" \
+  || bad "FIXTURE BROKEN — arm_argv_roundtrip fails on an unmutated copy ($why); the capture mutants below would be false kills"
+
+# =============================================================================
+# MUTANTS. Each is a COPY, guarded so a substitution that matched nothing cannot pass as a
+# mutation. Built here, scored below. mkmut refuses a producer that failed, an empty copy and a
+# copy identical to the validator; it is called in THIS shell so its `bad` reaches $fails.
+# =============================================================================
+mkmut() {
+  if [ "$2" -ne 0 ] || [ ! -s "$MUT/$1.sh" ] || cmp -s "$VALIDATOR" "$MUT/$1.sh"; then
+    bad "FIXTURE BROKEN: mutant $1 DID NOT APPLY (producer exit $2), so its assertion is unproven"
+    return 1
+  fi
+}
+# insert_after <anchor> <line> [<source>]: print <line> after the one line starting with
+# <anchor> in <source> (default the validator); exits 1 unless the anchor matched exactly once.
+insert_after() {
+  A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
+}
 replace_line() {
   A="$1" L="$2" awk 'BEGIN { n = 0 } $0 == ENVIRON["A"] { n++; if (ENVIRON["L"] != "") print ENVIRON["L"]; next } { print } END { if (n != 1) exit 1 }' "${3:-$VALIDATOR}"
 }
@@ -894,59 +719,193 @@ RT_DOLLAR_LINE="printf '\$'; replay_words \"\$0\" \${ORIG_ARGV[@]+\"\${ORIG_ARGV
 RT_TEST_LINE="printf '  test:      '; replay_words \"\${TEST_CMD[@]}\"; printf '\\n'"
 RT_TILDE_LINE="          [ \"\$c\" = '~' ] && c='\\~'"
 RT_DQ_LINE="      \"\\\$'\"*) ;;"
-# rt_mutant <name> <producer-rc> <expected why> <label>: the copy must fail arm_argv_roundtrip
-# with exactly <expected why>, so each kill is read on the conjunct that names it.
-rt_mutant() {
-  mkmut "$1" "$2" || { echo "mutation-red-replay: FIXTURE BROKEN — mutant $1 could not be built" >&2; exit 2; }
-  if ! arm_argv_roundtrip "$MUT/$1.sh"; then
-    if [ "$why" = "$3" ]; then ok "MUTANT ${1#m}: $4 is killed by arm_argv_roundtrip on $3"
-    else bad "MUTANT ${1#m} ($4) failed arm_argv_roundtrip as $why, not $3 — the kill is entangled or misattributed"; fi
-  else bad "MUTANT ${1#m} ($4) survived arm_argv_roundtrip"; fi
-}
-# M15 (M-a): the `test:` line joined with spaces, as before the fix. Case A's multi-word -k
-# re-splits; case Q and the single-token control still round-trip.
+
+BUILT=" "
+mk() { if mkmut "$1" "$2"; then BUILT="$BUILT$1 "; fi; }
+# m1: both no-op guards removed. REVERT EVERY LAYER: strip either guard alone and the other still exits 2.
+sed -e 's@^if \[ "\$CURRENT" = "\$REPL" \]; then@if false; then@' \
+    -e 's@^if cmp -s "\$BACKUP" "\$TARGET"; then@if false; then@' \
+    "$VALIDATOR" > "$MUT/m1.sh"; prc=$?
+n="$(grep -c '^if false; then' "$MUT/m1.sh")" || n=0
+[ "$n" -eq 2 ] || prc=9
+mk m1 "$prc"
+# m2: the restore verification removed.
+sed 's@^if ! cmp -s "\$BACKUP" "\$TARGET"; then@if false; then@' "$VALIDATOR" > "$MUT/m2.sh"; prc=$?
+mk m2 "$prc"
+# m3: the rewrite done by sed, as the absorbed script did it. `&` is one character of source to the
+# shipped rewrite and the whole matched line to sed's. The delimiter here is `|`, because the line
+# being written IS a sed program full of `@`.
+sed 's|^REPL="\$REPL" awk .*> "\$MUTANT"$|sed "${LINE}s@.*@${REPL}@" "$BACKUP" > "$MUTANT"|' "$VALIDATOR" > "$MUT/m3.sh"; prc=$?
+mk m3 "$prc"
+# m4: syntax-check refusal exits 2 BEFORE the restore. The EXIT trap still restores the file, so rc
+# and the bytes on disk are both right; only the printed verified restore is missing.
+insert_after '  REFUSED="syntax-check"' '  exit 2' > "$MUT/m4.sh"; prc=$?
+mk m4 "$prc"
+# m5: ast.parse instead of compile().
+sed 's@compile(open(sys.argv\[1\], "rb").read(), sys.argv\[1\], "exec")@__import__("ast").parse(open(sys.argv[1], "rb").read(), sys.argv[1])@' \
+  "$VALIDATOR" > "$MUT/m5.sh"; prc=$?
+mk m5 "$prc"
+# m6: non-differential — the baseline gate removed, the arm always on for *.py.
+sed 's@^    elif py_compiles "\$TARGET" baseline; then$@    elif true; then@' "$VALIDATOR" > "$MUT/m6.sh"; prc=$?
+mk m6 "$prc"
+# m7: the mutant check reads the BACKUP, which always compiles when the baseline did.
+sed 's@! py_compiles "\$TARGET" mutant; then@! py_compiles "$BACKUP" mutant; then@' "$VALIDATOR" > "$MUT/m7.sh"; prc=$?
+mk m7 "$prc"
+# m8: parse refusal exits 2 BEFORE the restore. The EXIT trap still puts the bytes back and the exit
+# is still 2, so the printed verified restore is the only thing that separates it.
+insert_after '  REFUSED="parse"' '  exit 2' > "$MUT/m8.sh"; prc=$?
+mk m8 "$prc"
+# m9: the pytest arm takes precedence over exit 0, so a GREEN pytest run reads UNEVALUABLE.
+sed 's@^if \[ "\$mut_rc" -eq 0 \]; then$@if [ "$mut_rc" -eq 0 ] \&\& [ "$IS_PYTEST" -eq 0 ]; then@' "$VALIDATOR" > "$MUT/m9.sh"; prc=$?
+mk m9 "$prc"
+# m10: the pytest-exit arm applied to every runner.
+sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$mut_rc" -ne 1 ]; then@' "$VALIDATOR" > "$MUT/m10.sh"; prc=$?
+mk m10 "$prc"
+# m11: only pytest exit 2 refused.
+sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$IS_PYTEST" -eq 1 ] \&\& [ "$mut_rc" -eq 2 ]; then@' "$VALIDATOR" > "$MUT/m11.sh"; prc=$?
+mk m11 "$prc"
+# m12: the suite still runs on a refused mutant (the verdict is unchanged).
+sed 's@^if \[ -z "\$REFUSED" \]; then$@if true; then@' "$VALIDATOR" > "$MUT/m12.sh"; prc=$?
+mk m12 "$prc"
+# m13: unanchored detection, here keyed on the LAST word instead of the first.
+sed 's|^case "\${TEST_CMD\[0\]##\*/}" in$|case "${TEST_CMD[${#TEST_CMD[@]}-1]##*/}" in|' "$VALIDATOR" > "$MUT/m13.sh"; prc=$?
+mk m13 "$prc"
+# m14: the whitespace-only --syntax-check guard removed.
+sed 's|^  if \[ "\${#SC_ARGV\[@\]}" -eq 0 \]; then$|  if false; then|' "$VALIDATOR" > "$MUT/m14.sh"; prc=$?
+mk m14 "$prc"
+# m15: the `test:` line joined with spaces, as before the fix.
 replace_line "$RT_TEST_LINE" "printf '  test:       %s\\n' \"\${TEST_CMD[*]}\"" > "$MUT/m15.sh"; prc=$?
-rt_mutant m15 "$prc" "A:[test-argv] Q:[] control:[] R:[] H:[] U:[] T:[test-argv] X:[test-argv] D:[test-argv] E:[]" "a \`test:\` line joined with spaces"
-# M16 (M-b): no `$ ` line at all. A refusal still prints nothing; U's line 1 is the banner.
+mk m15 "$prc"
+# m16: no `$ ` line at all.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m16.sh"; prc=$?
-rt_mutant m16 "$prc" "A:[no-dollar-line] Q:[no-dollar-line] control:[no-dollar-line] R:[] H:[] U:[no-dollar-line] T:[no-dollar-line] X:[no-dollar-line] D:[no-dollar-line] E:[]" "a capture with no \`\$ \` line"
-# M17 (M-c): the `$ ` line rebuilt from the parsed values, through the same replay_words, so
-# the tilde words still round-trip. Case A loses --syntax-check and --; every other case
-# carries no flags, so it still round-trips.
+mk m16 "$prc"
+# m17: the `$ ` line rebuilt from the parsed values, through the same replay_words.
 replace_line "$RT_DOLLAR_LINE" "printf '\$'; replay_words \"\$0\" \"\$TARGET\" \"\$LINE\" \"\$REPL\" \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m17.sh"; prc=$?
-rt_mutant m17 "$prc" "A:[dollar-argv] Q:[] control:[] R:[] H:[] U:[] T:[] X:[] D:[] E:[]" "a \`\$ \` line rebuilt from the parsed values"
-# M18: the `$ ` printf hoisted to just after `ORIG_ARGV=("$@")`. It still prints first and
-# from the same argv, so A, Q, the control and U all round-trip; only the two refusals, which
-# now print a `$ ` line, kill it. Delete first, then insert into the copy: inserting first
-# would leave two lines for replace_line to match.
+mk m17 "$prc"
+# m18: the `$ ` printf hoisted to just after `ORIG_ARGV=("$@")`. Delete first, then insert into the
+# copy: inserting first would leave two lines for replace_line to match.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m18-del.sh"; prc=$?
 [ "$prc" -ne 0 ] || { insert_after 'ORIG_ARGV=("$@")' "$RT_DOLLAR_LINE" "$MUT/m18-del.sh" > "$MUT/m18.sh"; prc=$?; }
-rt_mutant m18 "$prc" "A:[] Q:[] control:[] R:[dollar-on-refusal] H:[dollar-on-refusal] U:[] T:[] X:[] D:[] E:[]" "the \`\$ \` printf hoisted above the refusals"
-# M19: the `$ ` printf moved to just after the restore's `cp`, before the verification that
-# exits 3. It sits below the baseline run, so R refuses before reaching it, and nothing reaches
-# stdout between there and its own line, so A, Q, the control and U all round-trip; only the
-# HARD refusal, which now prints a `$ ` line, kills it. Delete first, then insert.
+mk m18 "$prc"
+# m19: the `$ ` printf moved to just after the restore's `cp`, before the verification that exits 3.
 replace_line "$RT_DOLLAR_LINE" "" > "$MUT/m19-del.sh"; prc=$?
 [ "$prc" -ne 0 ] || { insert_after 'cp "$BACKUP" "$TARGET" 2>/dev/null' "$RT_DOLLAR_LINE" "$MUT/m19-del.sh" > "$MUT/m19.sh"; prc=$?; }
-rt_mutant m19 "$prc" "A:[] Q:[] control:[] R:[] H:[dollar-on-refusal] U:[] T:[] X:[] D:[] E:[]" "the \`\$ \` printf placed after the baseline run, above the restore verification"
-# M20: the tilde escape applied to the `$ ` line only; the `test:` line back to bare %q. The
-# `$ ` line still round-trips everywhere, and T and X fail on the `test:` line alone; D's
-# word is in $'...' form, which needs no escape.
+mk m19 "$prc"
+# m20: the tilde escape applied to the `$ ` line only; the `test:` line back to bare %q.
 replace_line "$RT_TEST_LINE" "printf '  test:      '; printf ' %q' \"\${TEST_CMD[@]}\"; printf '\\n'" > "$MUT/m20.sh"; prc=$?
-rt_mutant m20 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[test-argv] X:[test-argv] D:[] E:[]" "the tilde escape applied to the \`\$ \` line and not the \`test:\` line"
-# M21: only a word-LEADING `~` escaped. T's words lead with their tilde and round-trip; X's
-# sit after `=` and `:` and expand, on both lines.
+mk m20 "$prc"
+# m21: only a word-LEADING `~` escaped.
 replace_line "$RT_TILDE_LINE" "          [ \"\$c\" = '~' ] && [ \"\$i\" -eq 0 ] && c='\\~'" > "$MUT/m21.sh"; prc=$?
-rt_mutant m21 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[] X:[dollar-argv test-argv] D:[] E:[]" "only a word-leading \`~\` escaped"
-# M22: the escape applied to a \$'...' word too, so every `~` everywhere is backslashed. Inside
-# \$'...' the `\~` stays two bytes, so D's word gains a backslash, on both lines.
+mk m21 "$prc"
+# m22: the escape applied to a $'...' word too.
 replace_line "$RT_DQ_LINE" "      \"\\\$'\"*) q=\"\${q//\\~/\\\\~}\" ;;" > "$MUT/m22.sh"; prc=$?
-rt_mutant m22 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[] X:[] D:[dollar-argv test-argv] E:[]" "the tilde escape applied inside a \$'...' word"
-# M23: replay_words without its scoped LC_ALL=C, as before the fix. Only case E, which runs
-# under a UTF-8 locale, reads it: its `$ ` and `test:` lines gain non-ASCII bytes.
-if [ -n "$U8" ]; then
-  replace_line "  local w q out c i LC_ALL=C" "  local w q out c i" > "$MUT/m23.sh"; prc=$?
-  rt_mutant m23 "$prc" "A:[] Q:[] control:[] R:[] H:[] U:[] T:[] X:[] D:[] E:[non-ascii]" "replay_words without its scoped LC_ALL=C"
+mk m22 "$prc"
+# m23: replay_words without its scoped LC_ALL=C, as before the fix.
+replace_line "  local w q out c i LC_ALL=C" "  local w q out c i" > "$MUT/m23.sh"; prc=$?
+mk m23 "$prc"
+# sk1: both skip checks removed (every layer: the baseline and the mutated read).
+sed -e 's@^  case "\$(pytest_summary "\$BASE_LOG")" in$@  case "ran" in@' \
+    -e 's@^  case "\$(pytest_summary "\$MUT_LOG")" in$@  case "ran" in@' "$VALIDATOR" > "$MUT/sk1.sh"; prc=$?
+n="$(grep -c '^  case "ran" in$' "$MUT/sk1.sh")" || n=0
+[ "$n" -eq 2 ] || prc=9
+mk sk1 "$prc"
+# sk2: refuse whenever any skipped/deselected word is present (ignores the words that ran).
+sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print (idle == 1 ? "norun" : "ran")@' "$VALIDATOR" > "$MUT/sk2.sh"; prc=$?
+mk sk2 "$prc"
+# sk3: the check applied to the baseline only.
+sed 's@^if \[ -z "\$REFUSED" \] && \[ "\$IS_PYTEST" -eq 1 \]; then$@if false; then@' "$VALIDATOR" > "$MUT/sk3.sh"; prc=$?
+mk sk3 "$prc"
+# sk4: fail CLOSED on a missing summary line at baseline.
+sed 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    *) echo "validate-mutation-red: UNEVALUABLE (no test ran) — no pytest summary line" >\&2; exit 2 ;;@' "$VALIDATOR" > "$MUT/sk4.sh"; prc=$?
+mk sk4 "$prc"
+# sk5: FIRST matching summary line instead of the last.
+sed 's@^        last = line$@        if (last == "") last = line@' "$VALIDATOR" > "$MUT/sk5.sh"; prc=$?
+mk sk5 "$prc"
+# sk6: no ANSI strip.
+sed 's@^      gsub(esc "\\\\\[\[0-9;\]\*m", "", line)$@      line = line@' "$VALIDATOR" > "$MUT/sk6.sh"; prc=$?
+mk sk6 "$prc"
+# sk7: refuse only a bare `N skipped` line.
+sed 's@^      print ((ran == 0 \&\& idle == 1) ? "norun" : "ran")$@      print ((n == 1 \&\& last ~ /^[0-9]+ skipped$/) ? "norun" : "ran")@' "$VALIDATOR" > "$MUT/sk7.sh"; prc=$?
+mk sk7 "$prc"
+# sk8: the parse runs in the caller's locale (LC_ALL=C dropped).
+sed 's@^  LC_ALL=C awk '"'"'$@  awk '"'"'@' "$VALIDATOR" > "$MUT/sk8.sh"; prc=$?
+mk sk8 "$prc"
+# The `*)` probe: a copy whose parser prints NOTHING (awk replaced by `true`). sk9 is that copy with
+# both `*)` arms narrowed to `none)`, so an empty parse neither refuses nor notes.
+sed 's@^  LC_ALL=C awk '"'"'$@  LC_ALL=C true '"'"'@' "$VALIDATOR" > "$MUT/pdead.sh"; prc=$?
+mkmut pdead "$prc" || true
+sed -e 's@^    \*) SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none) SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
+    -e 's@^    \*)     SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$@    none)  SKIP_NOTE="$SKIP_NOTE_TEXT" ;;@' \
+    "$MUT/pdead.sh" > "$MUT/sk9.sh"; prc=$?
+n1="$(grep -c 'SKIP_NOTE="\$SKIP_NOTE_TEXT" ;;$' "$MUT/sk9.sh")" || n1=0
+n2="$(grep -c '^    \*) *SKIP_NOTE=' "$MUT/sk9.sh")" || n2=0
+{ [ "$n1" -eq 2 ] && [ "$n2" -eq 0 ] && ! cmp -s "$MUT/pdead.sh" "$MUT/sk9.sh"; } || prc=9
+mk sk9 "$prc"
+# The parser-dead probe: the unmutated-shape copy must fail OPEN through the `*)` arm.
+if [ -s "$MUT/pdead.sh" ] && arm_avail parser_dead; then
+  live_pd() { if armrun parser_dead "$MUT/pdead.sh" pd; then ok "a parser that prints nothing fails OPEN through the \`*)\` arm: PROVEN with the skip-check note"; BASE_OK="$BASE_OK""parser_dead "
+              else bad "a parser that prints nothing did not fail open with the note ($why) — the \`*)\` arm is missing"; fi; }
+  live_pd
+fi
+
+MUTS="m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 sk1 sk2 sk3 sk4 sk5 sk6 sk7 sk8 sk9"
+
+# score_mutant <name>: the deciding arm(s) of the header row must FAIL on the copy, each twin must
+# HOLD on it, and the kill is emitted through mutant_killed behind the base flags of every arm it
+# drove (decides and twins) against the SHIPPED validator in THIS run.
+score_mutant() {
+  local m="$1" row dec twn a flag=0 nb="" kwhy=""
+  case "$BUILT" in *" $m "*) ;; *) return 0 ;; esac
+  row="$(awk -v m="$m" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == m { print; exit }' "$HERE/run.sh")"
+  if [ -z "$row" ]; then bad "FIXTURE BROKEN: mutant $m carries no # MUTANT-MATRIX row in the header, so it has no deciding arm"; return 0; fi
+  dec="$(sed -n 's/.* decides=\([^ ]*\).*/\1/p' <<<"$row")"; dec="${dec//,/ }"
+  twn="$(sed -n 's/.* twins=\([^ ]*\).*/\1/p' <<<"$row")"; twn="${twn//,/ }"
+  if [ -z "$dec" ] || [ -z "$twn" ] || [ "$twn" = "-" ]; then bad "FIXTURE BROKEN: mutant $m header row has no decides= or twins= arm"; return 0; fi
+  for a in $dec $twn; do
+    declare -F "arm_$a" >/dev/null 2>&1 || { bad "FIXTURE BROKEN: mutant $m names arm $a, which is not defined"; return 0; }
+    arm_avail "$a" || { skip "mutant $m needs the tools of arm $a, which are absent — it did NOT run"; return 0; }
+    [ "$(flagof "$a")" = 1 ] || nb="$nb $a"
+  done
+  if [ -z "$nb" ]; then flag=1; else bad "MUTANT $m: arm(s)$nb did not pass unmutated in this run, so its kill cannot score"; fi
+  for a in $dec; do
+    if armrun "$a" "$MUT/$m.sh" "$m"; then bad "MUTANT $m survived its deciding arm $a"; return 0; fi
+    kwhy="$kwhy $a:$why"
+  done
+  for a in $twn; do
+    if ! armrun "$a" "$MUT/$m.sh" "$m"; then bad "MUTANT $m also failed its twin $a ($why) — the deciding arm is entangled"; return 0; fi
+  done
+  mutant_killed "$flag" "$m" "MUTANT $m is killed by$kwhy; twin(s) $twn still hold"
+}
+
+# matrix_all: every built mutant against every arm. FAIL = the arm fails on the copy.
+matrix_cell() { MATRIX_CELLS=$((MATRIX_CELLS+1)); printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
+matrix_all() {
+  local m a r
+  for a in $ARMS; do
+    arm_avail "$a" || { echo "FIXTURE BROKEN: --matrix needs the tools of arm $a" >&2; exit 2; }
+  done
+  for m in $MUTS; do
+    case "$BUILT" in *" $m "*) ;; *) continue ;; esac
+    for a in $ARMS; do
+      if armrun "$a" "$MUT/$m.sh" "$m"; then r=ok; else r=FAIL; fi
+      cp "$WORK/sut.orig" "$SUT"
+      matrix_cell "$m" "$a" "$r"
+    done
+  done
+}
+
+if [ "$MATRIX" -eq 1 ]; then
+  matrix_all
+else
+  for m in $MUTS; do score_mutant "$m"; done
+fi
+
+# A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. The counter is bumped by the one function that prints a
+# MATRIX cell; under --matrix it must be non-zero, which proves the counter can fire.
+if [ "$MATRIX" -eq 1 ]; then
+  if [ "$MATRIX_CELLS" -gt 0 ]; then ok "--matrix executed $MATRIX_CELLS matrix cell(s) (the counter fires)"; else bad "--matrix executed no matrix cell: the counter cannot fire"; fi
+else
+  if [ "$MATRIX_CELLS" -eq 0 ]; then ok "a plain run executes no matrix-only cell"; else bad "a plain run executed $MATRIX_CELLS matrix-only cell(s)"; fi
 fi
 
 echo

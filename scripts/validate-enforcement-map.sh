@@ -14827,18 +14827,20 @@ SHARD_ROLES in core/scripts/validate-spawn-ledger.sh decides which rows arm S3 f
   fi
 fi
 
-# --- I129: the finding-class set is ONE set across code-reviewer.md, the merge's grammar and the record-only route ---
+# --- I129: the finding-class set is ONE set across code-reviewer.md, qa.md, the merge's grammar (both gates) and the record-only route ---
 # vocabulary: finding classes
 # vocabulary-invariant: I129
 # vocabulary-owner: core/team-roles/code-reviewer.md
 # vocabulary-extract: finding-classes
-# vocabulary-readers: core/scripts/merge-review-shards.sh, core/scripts/partition-review-diff.sh
+# vocabulary-readers: core/scripts/merge-review-shards.sh, core/scripts/partition-review-diff.sh, core/team-roles/qa.md
 #
 # WHAT IT BINDS. code-reviewer.md's review template declares the finding classes ONCE, as the
 # column-0 `Class: CODE | TEST | EVIDENCE | BOOKKEEPING` line under each Critical/Important finding
-# heading. merge-review-shards.sh lifts that set with CLASS_SET_AWK and refuses a finding whose
-# `Class:` value is outside it; partition-review-diff.sh --route routes a re-review record-only only
-# when every prior class is in ROUTE_CLASSES. Three findings, each with its own subject:
+# heading; qa.md's `## Finding Class` section declares the SAME set in the same line shape for gate
+# 2. merge-review-shards.sh lifts the set from the gate's own role file (ROLE_MD) with CLASS_SET_AWK
+# and refuses a finding whose `Class:` value is outside it; partition-review-diff.sh --route routes
+# a re-review or re-validation record-only only when every prior class is in ROUTE_CLASSES. Five
+# findings, each with its own subject:
 #   1. CLASS_SET_AWK in the merge is not byte-identical to the renderer's (or either is missing or
 #      doubled): the set the merge refuses against and the set the index renders would be two
 #      grammars that agree today.
@@ -14846,53 +14848,161 @@ fi
 #      merge would check nothing, and this arm would compare nothing.
 #   3. a ROUTE_CLASSES member the owner does not declare: the route would key on a class no
 #      reviewer can write, which reads as a route that never fires.
+#   4. qa.md's set (sorted) is not the owner's (sorted), qa.md declaring NONE included: gate 2 would
+#      refuse a class gate 1 accepts, or -- with no template -- check nothing at all and route on
+#      unchecked spellings. FAIL-CLOSED on purpose: a qa.md with no template is a finding here,
+#      though the merge itself fails OPEN on one (a consumer's legacy qa.md must not wedge).
+#   5. THE PER-GATE ACTIVATION: the merge does not carry exactly one column-0 unconditional lift
+#      `CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD"`, or a non-comment line of it names both `GATE`
+#      and `CLASS_SET` (a lift or a class_gate guard keyed on the gate, which is how B1 shipped
+#      broken: code review only). Either way the set qa.md declares would be read by nothing.
 # THE ROUTE IS FAIL-CLOSED ON ITS OWN, so a CODE member in ROUTE_CLASSES is not this arm's subject:
 # the route's delta guard and its fixture own the safety property; this arm owns the spelling.
-# FALSE-POSITIVE SET: EMPTY on the tree this shipped on -- one CLASS_SET_AWK line in each file,
-# byte-identical; four owner members; ROUTE_CLASSES EVIDENCE BOOKKEEPING, both members. Graph's
-# three prose `Class: a ...` lines (s315 reviews) are lower case and do not match the owner grammar.
-# ONE GREP PER FILE, ONE AWK OVER THE OWNER, NO LOOP OVER FILES.
-i129_check() { # i129_check <renderer> <merge> <owner> <partition> -> one finding per line, nothing on agreement
-  local r m o p set rc nl='
-'
-  for p in "$1" "$2" "$3" "$4"; do [ -r "$p" ] || { printf 'UNREAD %s\n' "$p"; return; }; done
-  r="$(grep -E "^CLASS_SET_AWK='" "$1")" || r=''
-  m="$(grep -E "^CLASS_SET_AWK='" "$2")" || m=''
-  case "$r" in '') printf 'MISSING CLASS_SET_AWK in %s\n' "$1"; return ;; *"$nl"*) printf 'MULTI CLASS_SET_AWK in %s\n' "$1"; return ;; esac
-  case "$m" in '') printf 'MISSING CLASS_SET_AWK in %s\n' "$2"; return ;; *"$nl"*) printf 'MULTI CLASS_SET_AWK in %s\n' "$2"; return ;; esac
-  [ "$r" = "$m" ] || { printf 'FORK CLASS_SET_AWK differs between %s and %s\n' "$1" "$2"; return; }
-  r="${r#CLASS_SET_AWK=\'}"; r="${r%\'}"
-  set="$(awk "$r" "$3" | tr '\n' ' ')"
-  case "$set" in *" "*" "*) ;; *) printf 'OWNER %s declares [%s]; the template line carries at least two members\n' "$3" "${set% }"; return ;; esac
-  rc="$(grep -E '^ROUTE_CLASSES="[A-Z_ ]*"$' "$4")" || rc=''
-  case "$rc" in '') printf 'MISSING ROUTE_CLASSES in %s\n' "$4"; return ;; *"$nl"*) printf 'MULTI ROUTE_CLASSES in %s\n' "$4"; return ;; esac
-  rc="${rc#ROUTE_CLASSES=\"}"; rc="${rc%\"}"
-  for m in $rc; do case " $set" in *" $m "*) ;; *) printf 'ROUTE %s routes on %s, which %s does not declare\n' "$4" "$m" "$3" ;; esac; done
+# FALSE-POSITIVE SET: EMPTY on the tree finding 1-3 shipped on -- one CLASS_SET_AWK line in each
+# file, byte-identical; four owner members; ROUTE_CLASSES EVIDENCE BOOKKEEPING, both members.
+# Graph's three prose `Class: a ...` lines (s315 reviews) are lower case and do not match the owner
+# grammar. Finding 5's FP set on the merge after B1: one lift line, and 0 non-comment lines naming
+# GATE and CLASS_SET together (the two that did were the defect). Finding 4 fires on every tree
+# whose qa.md does not yet carry the template, which is the state it exists to refuse.
+# ONE PASS PER CHECK, AND ONE CHECK FOR EVERY SEED. i129_check takes any number of tuples, and ONE
+# awk (I129_AWK) reads each renderer, merge and partition once (cached by path, so eight seeds naming
+# one merge read it once) and emits every finding, the set normalisation and comparison included --
+# no sort or tr pipeline. The owner and qa.md sets are the ONE thing it cannot compute itself: the
+# arm EXECUTES the renderer's CLASS_SET_AWK, the program the merge runs, rather than carry a second
+# parser of the `Class:` grammar. That costs one `awk "$prog" <file>` per distinct (renderer, file)
+# pair, its output framed into the stream on stdin. Corpus: 4 forks; probe: 9 for all eight seeds.
+# The c3 shape (one call per seed, sort/tr substitutions) measured I129 at 92 forks against 23 before
+# it, TOTAL 3494 over FORK_BUDGET=3465.
+I129_AWK='
+function out(lb, s) { print (lb == "" ? "" : lb " ") s }
+function rd(f,   l) {
+  if (f in seen) return
+  seen[f] = 1
+  while ((getline l < f) > 0) {
+    if (l ~ /^CLASS_SET_AWK=\047/) { if (!nR[f]++) R1[f] = l; continue }
+    if (l ~ /^ROUTE_CLASSES="[A-Z_ ]*"$/) { if (!nC[f]++) C1[f] = l }
+    if (l ~ /^[ \t]*#/) continue
+    if (index(l, "CLASS_SET=\"$(awk \"$CLASS_SET_AWK\" \"$ROLE_MD\"") == 1) nL[f]++
+    if (index(l, "GATE") && index(l, "CLASS_SET")) nG[f]++
+  }
+  close(f)
 }
-# THE PROBE, BEFORE THE CORPUS, IN BOTH DIRECTIONS: agreement is quiet; a forked grammar, an
-# owner with no template line, and an undeclared route class are each reported.
+function srt(a, n,   i, j, t) {
+  for (i = 2; i <= n; i++) { t = a[i]; for (j = i - 1; j >= 1 && (a[j] "") > (t ""); j--) a[j + 1] = a[j]; a[j + 1] = t }
+}
+function jn(a, n,   i, s) { s = ""; for (i = 1; i <= n; i++) s = s a[i] " "; return s }
+function t1(s) { return substr(s, length(s)) == " " ? substr(s, 1, length(s) - 1) : s }
+function chk(i,   lb, rn, mg, ow, pt, qa, k, n, j, set, tmp, q, o, no, nt, rc) {
+  lb = L[i]; rn = TR[i]; mg = TM[i]; ow = TO[i]; pt = TP[i]; qa = TQ[i]
+  rd(rn); rd(mg); rd(pt)
+  if (!nR[rn]) { out(lb, "MISSING CLASS_SET_AWK in " rn); return }
+  if (nR[rn] > 1) { out(lb, "MULTI CLASS_SET_AWK in " rn); return }
+  if (!nR[mg]) { out(lb, "MISSING CLASS_SET_AWK in " mg); return }
+  if (nR[mg] > 1) { out(lb, "MULTI CLASS_SET_AWK in " mg); return }
+  if ((R1[rn] "") != (R1[mg] "")) { out(lb, "FORK CLASS_SET_AWK differs between " rn " and " mg); return }
+  if (!(nL[mg] == 1 && nG[mg] == 0))
+    out(lb, "GATE " mg " does not lift CLASS_SET from ROLE_MD for both gates (" (nL[mg] + 0) " unconditional lift line(s), want 1; " (nG[mg] + 0) " non-comment line(s) naming GATE and CLASS_SET, want 0)")
+  k = rn SUBSEP ow; n = SN[k]; set = ""
+  for (j = 1; j <= n; j++) set = set SL[k, j] " "
+  tmp = set
+  if (gsub(/ /, " ", tmp) < 2) { out(lb, "OWNER " ow " declares [" t1(set) "]; the template line carries at least two members"); return }
+  split("", Q); k = rn SUBSEP qa; n = SN[k]
+  for (j = 1; j <= n; j++) Q[j] = SL[k, j]
+  srt(Q, n); q = jn(Q, n)
+  split("", A); split("", O); no = 0; nt = split(set, A, / /)
+  for (j = 1; j <= nt; j++) if (A[j] != "") O[++no] = A[j]
+  srt(O, no); o = jn(O, no)
+  if ((q "") != (o "")) out(lb, "QA " qa " declares [" t1(q) "], not " ow "\047s [" t1(o) "]; qa.md carries the same column-0 `Class:` template line")
+  if (!nC[pt]) { out(lb, "MISSING ROUTE_CLASSES in " pt); return }
+  if (nC[pt] > 1) { out(lb, "MULTI ROUTE_CLASSES in " pt); return }
+  rc = C1[pt]; sub(/^ROUTE_CLASSES="/, "", rc); sub(/"$/, "", rc)
+  split("", A); nt = split(rc, A, / /)
+  for (j = 1; j <= nt; j++) if (A[j] != "" && !index(" " set, " " A[j] " ")) out(lb, "ROUTE " pt " routes on " A[j] ", which " ow " does not declare")
+}
+BEGIN { FS = "\t" }
+index($0, "\001U\t") == 1 { nI++; U[nI] = 1; L[nI] = $2; UP[nI] = $3; next }
+index($0, "\001T\t") == 1 { nI++; L[nI] = $2; TR[nI] = $3; TM[nI] = $4; TO[nI] = $5; TP[nI] = $6; TQ[nI] = $7; next }
+index($0, "\001B\t") == 1 { cur = $2 SUBSEP $3; SN[cur] = 0; inb = 1; next }
+$0 == "\001E" { inb = 0; next }
+inb { SL[cur, ++SN[cur]] = $0 }
+END { for (i = 1; i <= nI; i++) if (U[i]) out(L[i], "UNREAD " UP[i]); else chk(i) }'
+i129_check() { # i129_check {<label> <renderer> <merge> <owner> <partition> <qa.md>}... -> "<label> <finding>" per line (bare finding for an empty label), nothing on agreement
+  local ok p f r prog ren='' pairs='' nl='
+'
+  {
+    while [ "$#" -ge 6 ]; do
+      ok=1
+      for p in "$2" "$3" "$4" "$5" "$6"; do [ -r "$p" ] || { printf '\001U\t%s\t%s\n' "$1" "$p"; ok=0; break; }; done
+      if [ "$ok" = 1 ]; then
+        printf '\001T\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6"
+        if [ "$2" != "$ren" ]; then ren="$2"; r="$(grep -E "^CLASS_SET_AWK='" "$2")" || r=''; fi
+        case "$r" in ''|*"$nl"*) ;; *)
+          prog="${r#CLASS_SET_AWK=\'}"; prog="${prog%\'}"
+          for f in "$4" "$6"; do
+            case "$nl$pairs" in *"$nl$ren|$f$nl"*) continue ;; esac
+            pairs="$pairs$ren|$f$nl"
+            printf '\001B\t%s\t%s\n' "$ren" "$f"; awk "$prog" "$f"; printf '\001E\n'
+          done ;;
+        esac
+      fi
+      shift 6
+    done
+  } | LC_ALL=C awk "$I129_AWK"
+}
+# THE PROBE, BEFORE THE CORPUS, IN BOTH DIRECTIONS: agreement is quiet (a qa.md listing the owner's
+# members in ANOTHER order included); a forked grammar, an owner with no template line, an undeclared
+# route class, a qa.md set differing or absent, and a merge lift gated on GATE are each reported.
 i129_pd="$(mktemp -d "${TMPDIR:-/tmp}/i129-XXXXXX")"
 i129_g="CLASS_SET_AWK='/^Class: [A-Z_]+( \\| [A-Z_]+)+\$/ { n = split(substr(\$0, 8), m, /[[:blank:]]*\\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'"
-printf '%s\n' "$i129_g" > "$i129_pd/r.sh"; printf '%s\n' "$i129_g" > "$i129_pd/m.sh"
-printf '%s\n' "${i129_g/exit/next}" > "$i129_pd/m-fork.sh"
+i129_lift='CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u)"'
+printf '%s\n' "$i129_g" > "$i129_pd/r.sh"; printf '%s\n' "$i129_g" "$i129_lift" '  [ -n "$CLASS_SET" ] || return 0' > "$i129_pd/m.sh"
+printf '%s\n' "${i129_g/exit/next}" "$i129_lift" > "$i129_pd/m-fork.sh"
+printf '%s\n' "$i129_g" "[ \"\$GATE\" != code-review ] || $i129_lift" > "$i129_pd/m-gated.sh"
+printf '%s\n' "$i129_g" "$i129_lift" '  [ "$GATE" = code-review ] && [ -n "$CLASS_SET" ] || return 0' > "$i129_pd/m-guard.sh"
 printf '%s\n' '#### t' 'Class: PA | PB | PC' > "$i129_pd/o.md"
 printf '%s\n' '#### t' 'Class: PA' > "$i129_pd/o-none.md"
+printf '%s\n' '## Finding Class' 'Class: PC | PA | PB' > "$i129_pd/q.md"
+printf '%s\n' '## Finding Class' 'Class: PA | PB' > "$i129_pd/q-diff.md"
+printf '%s\n' '## Findings Template' '#### t' 'Class: PA' > "$i129_pd/q-none.md"
 printf '%s\n' 'ROUTE_CLASSES="PB PC"' > "$i129_pd/p.sh"
 printf '%s\n' 'ROUTE_CLASSES="PB PZ"' > "$i129_pd/p-bad.sh"
 i129_bad=''
-[ -z "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o.md" "$i129_pd/p.sh")" ] || i129_bad="$i129_bad match-not-quiet"
-case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m-fork.sh" "$i129_pd/o.md" "$i129_pd/p.sh")" in FORK*) ;; *) i129_bad="$i129_bad fork-not-reported" ;; esac
-case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o-none.md" "$i129_pd/p.sh")" in OWNER*) ;; *) i129_bad="$i129_bad owner-not-reported" ;; esac
-case "$(i129_check "$i129_pd/r.sh" "$i129_pd/m.sh" "$i129_pd/o.md" "$i129_pd/p-bad.sh")" in ROUTE*PZ*) ;; *) i129_bad="$i129_bad route-not-reported" ;; esac
+# ALL EIGHT SEEDS IN ONE i129_check CALL -- the corpus call below is the same function with one tuple.
+i129_d="$i129_pd"
+i129_po="$(i129_check \
+  match  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
+  fork   "$i129_d/r.sh" "$i129_d/m-fork.sh"  "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
+  owner  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o-none.md" "$i129_d/p.sh"     "$i129_d/q.md" \
+  route  "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p-bad.sh" "$i129_d/q.md" \
+  qadiff "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q-diff.md" \
+  qanone "$i129_d/r.sh" "$i129_d/m.sh"       "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q-none.md" \
+  gated  "$i129_d/r.sh" "$i129_d/m-gated.sh" "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md" \
+  guard  "$i129_d/r.sh" "$i129_d/m-guard.sh" "$i129_d/o.md"      "$i129_d/p.sh"     "$i129_d/q.md")"
+i129_s() { # i129_s <seed> -> i129_v holds that seed's findings, one per line
+  local l nl='
+'
+  i129_v=''
+  while IFS= read -r l; do case "$l" in "$1 "*) i129_v="$i129_v${i129_v:+$nl}${l#"$1 "}" ;; esac; done <<EOF
+$i129_po
+EOF
+}
+i129_s match;  [ -z "$i129_v" ] || i129_bad="$i129_bad match-not-quiet"
+i129_s fork;   case "$i129_v" in FORK*) ;; *) i129_bad="$i129_bad fork-not-reported" ;; esac
+i129_s owner;  case "$i129_v" in OWNER*) ;; *) i129_bad="$i129_bad owner-not-reported" ;; esac
+i129_s route;  case "$i129_v" in ROUTE*PZ*) ;; *) i129_bad="$i129_bad route-not-reported" ;; esac
+i129_s qadiff; case "$i129_v" in "QA "*"[PA PB]"*) ;; *) i129_bad="$i129_bad qa-diff-not-reported" ;; esac
+i129_s qanone; case "$i129_v" in "QA "*"[]"*) ;; *) i129_bad="$i129_bad qa-none-not-reported" ;; esac
+i129_s gated;  case "$i129_v" in "GATE "*"0 unconditional"*"1 non-comment"*) ;; *) i129_bad="$i129_bad gated-lift-not-reported" ;; esac
+i129_s guard;  case "$i129_v" in "GATE "*"1 unconditional"*"1 non-comment"*) ;; *) i129_bad="$i129_bad gated-guard-not-reported" ;; esac
 rm -rf "$i129_pd"
 if [ -n "$i129_bad" ]; then
   err "I129's probe failed on seed(s):$i129_bad, so the corpus below was not read. Each names a direction the arm must report or stay quiet in; a probe that did not fire means the corpus result would read as agreement for the reason a broken grammar does."
 else
-  i129_out="$(i129_check "$REPO_ROOT/scripts/render-vocabulary-index.sh" "$REPO_ROOT/core/scripts/merge-review-shards.sh" "$REPO_ROOT/core/team-roles/code-reviewer.md" "$REPO_ROOT/core/scripts/partition-review-diff.sh")"
+  i129_out="$(i129_check '' "$REPO_ROOT/scripts/render-vocabulary-index.sh" "$REPO_ROOT/core/scripts/merge-review-shards.sh" "$REPO_ROOT/core/team-roles/code-reviewer.md" "$REPO_ROOT/core/scripts/partition-review-diff.sh" "$REPO_ROOT/core/team-roles/qa.md")"
   if [ -n "$i129_out" ]; then
     err "I129: the finding-class set is not one set:
 $i129_out
-code-reviewer.md's template \`Class:\` line declares it; merge-review-shards.sh refuses a finding's value outside it with a CLASS_SET_AWK line byte-identical to scripts/render-vocabulary-index.sh's; partition-review-diff.sh's ROUTE_CLASSES must name only declared members. Change the owner, then make the two CLASS_SET_AWK lines equal and ROUTE_CLASSES a subset."
+code-reviewer.md's template \`Class:\` line declares it and qa.md's \`## Finding Class\` section carries the same line; merge-review-shards.sh lifts it from the gate's role file for BOTH gates (one unconditional CLASS_SET line, no gate condition on the lift or on class_gate) with a CLASS_SET_AWK line byte-identical to scripts/render-vocabulary-index.sh's; partition-review-diff.sh's ROUTE_CLASSES must name only declared members. Change the owner, then make qa.md's set equal, the two CLASS_SET_AWK lines equal and ROUTE_CLASSES a subset."
   fi
 fi
 

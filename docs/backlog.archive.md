@@ -38663,7 +38663,7 @@ verify: sh a=core/skills/ai-dlc/steps/_gate-procedures.md; b=core/team-roles/adv
 
 ## BL-848 — the 26(c) Class 1b scan reads a complete triple written with the plural "Failures caught:" as missing its failure field
 
-**LANDED (v0.960.0, verified 390f6b70c).** **DEFECT**, tier 2, not a push blocker. Filed in batch 245 from graph s320's rule-file audit tier-2 list, which flagged `core/skills/ai-dlc/steps/retro.md:102`. That line carries a complete Rule 26(c) triple whose first field is written `Failures caught:`. In `core/scripts/audit-rule-files.sh`, `:711` `FIELD_OPENER` and `:712` `FC` accept only the singular. On a headed block `FC` alone decides, so the plural reads as a missing failure field. On a headless block `FIELD_OPENER` decides whether a block opens at all, so an incomplete headless block written with the plural read CLEAN and was never examined. The contract's field is singular (`core/skills/ai-dlc/rule-authoring.md:99`, `Failure caught:`).
+**LANDED (v0.960.0, verified 011853d19).** **DEFECT**, tier 2, not a push blocker. Filed in batch 245 from graph s320's rule-file audit tier-2 list, which flagged `core/skills/ai-dlc/steps/retro.md:102`. That line carries a complete Rule 26(c) triple whose first field is written `Failures caught:`. In `core/scripts/audit-rule-files.sh`, `:711` `FIELD_OPENER` and `:712` `FC` accept only the singular. On a headed block `FC` alone decides, so the plural reads as a missing failure field. On a headless block `FIELD_OPENER` decides whether a block opens at all, so an incomplete headless block written with the plural read CLEAN and was never examined. The contract's field is singular (`core/skills/ai-dlc/rule-authoring.md:99`, `Failure caught:`).
 
 Fix: both regexes accept the plural (`failures?\s+caught` and `Failures? caught:`), and `retro.md` uses the singular. `core/fixtures/retro-audit-scans/run.sh` gains two arms: a headed complete plural triple asserting `INCOMPLETE_26C: CLEAN`, and a headless plural `Failures caught:` with no other two fields asserting FLAGGED. The existing singular arms are unchanged. Two mutants: `FC` reverted to the singular kills the first arm, and `FIELD_OPENER` reverted to the singular kills the second.
 
@@ -38818,7 +38818,7 @@ verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; a=core/skills/a
 
 ## BL-837 — the remediation guard skips dispatch binding when a verdict carries any plain FAIL, so a forged unbound verdict acquits through an in-force SUPPRESSED entry
 
-**LANDED (v0.966.0, verified d104576d6).** **DEFECT.** Filed at the batch-244 close, from the c6 second delta adversary (owner ai-dlc-c5). The defect is already on `main` and independent of `FAIL_WAIVED`. In `core/hooks/ai-dlc-gate-remediation-guard.sh`, arm 7a's dispatch binding runs only when `LIVE_CLEAN=1` (`:1070-1080`, `:1209`). A verdict carrying any plain FAIL leaves `LIVE_CLEAN=0`, so binding never runs.
+**LANDED (v0.966.0, verified be4736a50).** **DEFECT.** Filed at the batch-244 close, from the c6 second delta adversary (owner ai-dlc-c5). The defect is already on `main` and independent of `FAIL_WAIVED`. In `core/hooks/ai-dlc-gate-remediation-guard.sh`, arm 7a's dispatch binding runs only when `LIVE_CLEAN=1` (`:1070-1080`, `:1209`). A verdict carrying any plain FAIL leaves `LIVE_CLEAN=0`, so binding never runs.
 
 Forged input: a newer UNBOUND verdict whose only plain FAIL is a check that an in-force, genuinely cited SUPPRESSED entry covers. Arm 7b covers that check, so the real bound pass's uncovered FAIL is never read. The guard returns ALLOW, both at the pre-c6 guard (0.957.0, `619d7acd9`) and at 0.958.0, with no `GATE_VERDICT_UNBOUND` logged. Expected: DENY with `GATE_VERDICT_UNBOUND`, because an unbound verdict may convict but never acquit. Controls in the same probe: a forged all-PASS verdict and a forged `FAIL_WAIVED`-only verdict both DENY. Check 26 is outside this path.
 
@@ -38908,3 +38908,25 @@ A third durable change: `CLAUDE.md`, in the section on running the fixture suite
 
 verify: manual
 
+## BL-849 — a fixture failure recorded inside a `$( )` subshell, or under a shadowed local counter, never reaches the fixture's exit, so the fixture prints FAIL and still exits 0
+
+**LANDED (v0.968.0, verified 77683ebb8).**
+
+**DEFECT.** Filed in batch 245. Found by the b245 census over `core/fixtures/*/run.sh`. In four fixtures a helper that records a failure with `bad` runs where the increment cannot reach the parent's `fails` counter, so the exit gate reads zero and the pool scores the fixture ok. Sites at 011853d19:
+
+- `core/fixtures/decl-reasons/run.sh:76`, `mut()`. It calls `bad` on DID NOT APPLY, but every caller is `if M="$(mut …)"; then` (:85, :104, :109, :117, :122). The increment happens in the `$( )` subshell and the FAIL line goes into `M`, so neither survives and the `if` silently skips the arm.
+- `core/fixtures/derivation-capture-worktree-root/run.sh:254`, `mkmut()`. Same shape; callers at :267, :286, :298 and :309, and the `bash -n` failure path.
+- `core/fixtures/layer-adjudication-tier/run.sh:56`, `need_digest()`. Callers 4a (:692) and 4b (:705) are `if DIG="$(need_digest …)"; then` with no else-arm; Part 6 (:749) and Part 13 (:1852) use `|| DIG=""` and `|| P13D=""`. `p13_vec` (:1839) returns `nodigest`, which is already surfaced at :1980-1982 and is not part of the defect.
+- `core/fixtures/story-evidence-scaffold/run.sh:622`, `cn_mutant`, and :650, `b9_mutant`. `local m o rc` shadows the counter that `bad()` (:69) writes as `rc=1`, so the failure is lost on return. `mutant_killed` inside those functions is covered by the same rename.
+
+Already caught, and not part of the defect: `core/fixtures/layer-extends-grain/run.sh` `mk_mutant`, through `EXPECTED_ASSERTIONS` (:86, :324); and `core/fixtures/backlog-rotate-fence-guard/run.sh` `mutate`, through the `.mutant-built` count (:1531-1536). Both have the `$( )` shape and a count gate at the exit.
+
+Census and its limits. Only a helper named `bad` was measured. A helper named `fail`, `note_fail` or `broken`, `bad` inside a `| while` loop, and `bad` inside `<( )` were not measured, so the four sites are a floor.
+
+Fix, per site. decl-reasons and derivation-capture-worktree-root: the helper writes its reason to stderr and returns 1 without calling `bad`, and every caller gains a top-level `else bad "<helper> <name>: DID NOT APPLY …"`. layer-adjudication-tier: `need_digest` writes to stderr only, and 4a, 4b and the Part 13 block gain a top-level `else bad`; Part 6's `|| DIG=""` becomes a top-level `bad` worded as a consequence, not an independent finding. story-evidence-scaffold: rename the shadowing local. Each failure is then counted once, at top level.
+
+The BL-849 arm, per fixture. Each of decl-reasons, derivation-capture-worktree-root and layer-adjudication-tier gains one in-file arm that drives the real caller shape with a helper call guaranteed to fail and asserts the top-level counter moved by exactly 1 (decl-reasons `run.sh:145-150`, derivation-capture-worktree-root `run.sh:333-338`, story-evidence-scaffold `run.sh:635-637` and `670-672`; layer-adjudication-tier's arm follows Part 4a and drives it through the shared drift memo's `need_digest`, and ships on the branch that carries that fixture's rewrite). The arm dies if the else-arm is removed or calls `ok`. story-evidence-scaffold's fix renames the shadowing local to `mrc` in `cn_mutant` and `b9_mutant`, and its arm drives each helper with an anchor that matches nothing.
+
+Receipt: `core/fixtures/decl-reasons/receipt-bl849.sh` copies the fixture and its subject into a `mktemp` tree, respaces `self_probe || exit 2` in the copied subject so the M1 mutant's sed matches nothing, and exits 0 only if the forced run exits non-zero and prints `DID NOT APPLY` while an unforced copy exits 0 with its PASS line. At 011853d19 it exits 1: the forced copy exits 1 through unrelated arms and prints no `DID NOT APPLY` text.
+
+verify: sh bash core/fixtures/decl-reasons/receipt-bl849.sh

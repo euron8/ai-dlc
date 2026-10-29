@@ -1,0 +1,10 @@
+# held-stories drives the validator under test and the sprint-status.sh reader it calls as a
+# sibling, which resolves the sprint-status schema; every mutant copies all three. Its own directory
+# is copied by the runner, and lib/ carries the mutant-kill helper it sources. The S-arms read the
+# two prose carriers: implementation.md section 7 and the recover hook's verification turn.
+!core/scripts/validate-held-stories.sh
+!core/scripts/sprint-status.sh
+!core/schemas/sprint-status.json
+core/skills/ai-dlc/steps/implementation.md
+core/hooks/ai-dlc-recover.sh
+core/fixtures/lib/

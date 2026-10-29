@@ -37,6 +37,17 @@
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
+#   sprint-status.sh list-stories [--root <dir>]
+#                                              # one line per IMPLEMENTATION-view entry, in yaml
+#                                              # order: `<key>\t<status>\t<file>`, `-` for an
+#                                              # absent field. The working tree, never a ref; the
+#                                              # same root and canonical path check-stories reads,
+#                                              # through the same entry parser. The planning view
+#                                              # is never read. Exit 0 printed (empty allowed: no
+#                                              # `stories:` key, or roll's empty block), 2 with ONE
+#                                              # stderr line when unevaluable — no canonical on
+#                                              # disk, unreadable, or a `stories:` block that
+#                                              # yields no entry key (the LIST form).
 #
 # DERIVE-STORIES, AND WHY THE FIELD SET IS DECLARED RATHER THAN CONSTANT. `check-stories` reads
 # the entry-to-story-file join and reports drift; nothing in core could write the derived value
@@ -183,7 +194,8 @@ case "${1:-}" in
   check-stories) MODE="check-stories"; shift ;;
   derive-stories) MODE="derive-stories"; shift ;;
   story-status) MODE="story-status"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2 ;;
+  list-stories) MODE="list-stories"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | list-stories | story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
@@ -1561,6 +1573,43 @@ def story_status_at_ref():
     return 0
 
 
+def list_stories():
+    """`list-stories`: the IMPLEMENTATION view's entries as `<key>\\t<status>\\t<file>`, yaml order.
+
+    A mode here rather than a parse in each caller: this file owns the envelope grammar, and a
+    second reader of the `stories:` mapping is the drift I48 exists for. Only the PRIMARY view is
+    read — the planning view lags the implementation view (see story_status_at_ref).
+
+    Exit 0 when printed, empty output included: no `stories:` key and roll's empty block are real
+    states with nothing to list. Exit 2 with ONE stderr line when the answer cannot be given: no
+    canonical on disk, an unreadable one, or a `stories:` block with content and no entry key.
+    Never an empty stdout with exit 0 for those — a caller would read it as a sprint with no
+    stories."""
+    lp = VIEWS[PRIMARY]
+    rel = os.path.relpath(str(lp), str(root))
+    if not lp.is_file():
+        sys.stderr.write("sprint-status: list-stories UNEVALUABLE — no %s canonical at %s\n"
+                         % (PRIMARY, rel))
+        return 2
+    try:
+        text = lp.read_text(errors="replace")
+    except OSError as e:
+        sys.stderr.write("sprint-status: list-stories UNEVALUABLE — cannot read %s: %s\n" % (rel, e))
+        return 2
+    state, entries = parse_story_entries(text)
+    if state == "no-entries":
+        sys.stderr.write("sprint-status: list-stories UNEVALUABLE — %s `stories:` block yields no "
+                         "entry key (a LIST form, or misindented)\n" % rel)
+        return 2
+
+    def cell(v):
+        return "-" if v is None or v == "" else v.replace("\t", " ")
+
+    for key, fields, _ in entries:
+        print("%s\t%s\t%s" % (key, cell(fields.get("status")), cell(fields.get("file"))))
+    return 0
+
+
 if mode == "render":
     print(render_header())
     sys.exit(0)
@@ -1579,6 +1628,8 @@ elif mode == "derive-stories":
     sys.exit(derive_stories())
 elif mode == "story-status":
     sys.exit(story_status_at_ref())
+elif mode == "list-stories":
+    sys.exit(list_stories())
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY

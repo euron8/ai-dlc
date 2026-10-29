@@ -124,14 +124,19 @@ digest() { run | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' \
 # empty key and reported a second failure for the first mutant's defect. Two failures from one
 # mutation mean the assertions are entangled and one of them is measuring the other.
 fresh_digest() { rm -f "$REG"; digest; }
-need_digest() { # $1 part label -> echoes a 40-hex digest or records the failure
+# need_digest is only ever called inside `$( )`, so a `bad` in it would count in the SUBSHELL and
+# print into the caller's variable: the failure would reach neither stdout nor the exit (BL-849).
+# It writes its reason to stderr and returns 1; every CALLER reports it with nd_bad at top level,
+# exactly once. The BL-849 arm after Part 4a forces the failure and asserts the counter moved.
+need_digest() { # $1 part label -> echoes a 40-hex digest, or a reason on stderr and returns 1
   local d; d="$(fresh_digest)"
   if [ ${#d} -ne 40 ]; then
-    bad "$1 could not obtain a subject digest from a cleared register, so its own assertion below would measure the wrong thing. Read the earlier parts first: this is a consequence, not an independent finding"
+    printf 'need_digest: %s: got %s chars from a cleared register, want 40\n' "$1" "${#d}" >&2
     return 1
   fi
   printf '%s' "$d"
 }
+nd_bad() { bad "$1 could not obtain a subject digest from a cleared register, so its own assertion below would measure the wrong thing. Read the earlier parts first: this is a consequence, not an independent finding"; }
 
 # EVERY CLEARING RECORD CARRIES `read`, because a verdict clears only with a line of the entry and
 # a line of its clause's core text (Part 13). Both are the literal lines seed.sh wrote: the entry's
@@ -747,6 +752,8 @@ fi
 rm -rf "$M3CDIR" "$TMCONS"
 
 # --- Part 4a: a verdict OUTSIDE the schema's enum does not discharge it -------
+# A function so the BL-849 arm below drives THIS caller, not a copy of its shape.
+part_4a() {
 if DIG="$(need_digest 'Part 4a')"; then
 record "$DIG" looks-fine-to-me > "$REG"
 if [ "$(blocks)" -eq 1 ]; then
@@ -754,7 +761,32 @@ if [ "$(blocks)" -eq 1 ]; then
 else
   bad "the string 'looks-fine-to-me' cleared a blocking row. Any value would, and the adjudication is then a formality a typo passes"
 fi
+else
+  nd_bad 'Part 4a'
 fi
+}
+part_4a
+
+# --- BL-849: a need_digest failure reaches the exit counter -------------------
+# Force need_digest to fail by making fresh_digest print nothing, drive Part 4a's real caller, and
+# require the top-level counter to move by EXACTLY one with the FAIL line printed. Removing 4a's
+# else-arm, or making it call ok, leaves the counter where it was. need_digest calls fresh_digest
+# directly, not through the dcf memo, so a cached digest cannot bypass the override.
+# The override and the counter are restored before the verdict; the forced path writes no $REG.
+# This is not a mutant of the subject, so it does not go through mutant_killed.
+bl849_sv="$(declare -f fresh_digest)"; bl849_f0=$fails
+fresh_digest() { :; }
+part_4a > "$ROOT/bl849.out" 2>&1
+bl849_f1=$fails; fails=$bl849_f0
+eval "$bl849_sv"
+if [ "$(declare -f fresh_digest)" != "$bl849_sv" ]; then
+  bad "BL-849: fresh_digest was not restored after the forced need_digest failure, so every later Part would measure the override"
+elif [ "$bl849_f1" -eq $((bl849_f0 + 1)) ] && grep -q '^  FAIL  Part 4a could not obtain a subject digest' "$ROOT/bl849.out"; then
+  ok "BL-849: a forced need_digest failure in Part 4a printed its FAIL line and moved the exit counter by exactly 1"
+else
+  bad "BL-849: a forced need_digest failure in Part 4a moved the exit counter by $((bl849_f1 - bl849_f0)), want 1 with its FAIL line printed — a failed digest would be swallowed and the fixture would still exit 0"
+fi
+rm -f "$ROOT/bl849.out"
 
 # --- Part 4b: the vocabulary is READ from the schema, not restated ------------
 # Mutate the schema's enum in the seeded distribution and re-commit: a verdict that WAS valid
@@ -777,6 +809,8 @@ else
   fi
   git -C "$DIST" reset -q --hard HEAD~1
 fi
+else
+  nd_bad 'Part 4b'
 fi
 
 # --- Part 5: THE LEVEL IS WHAT DECIDES ---------------------------------------
@@ -805,7 +839,7 @@ fi
 # --- Part 6: LC-A2, the contradiction arm ------------------------------------
 # The contradiction is a property of the REGISTER, so this part needs a well-formed key but does
 # not depend on whether any earlier part cleared its row.
-DIG="$(need_digest 'Part 6')" || DIG=""
+DIG="$(need_digest 'Part 6')" || { nd_bad 'Part 6'; DIG=""; }
 { record "$DIG" still-additive; record "$DIG" retire; } > "$REG"
 if [ "$(run | grep -c '^HARD-REGISTER-CONTRADICTION')" -ge 1 ]; then
   ok "two verdicts under one key with no supersedes: HARD-REGISTER-CONTRADICTION — a lookup would otherwise answer with whichever record was read last"
@@ -1955,6 +1989,8 @@ if [ -n "$P13D" ]; then
   esac
   git -C "$CONS" checkout -q -- "$ENTRY"
   rm -f "$REG"
+else
+  nd_bad 'Part 13'
 fi
 
 # R5 — its own world: LC-O15 and LC-E19 on a target UNCHANGED in BASE..THEIRS. Seeded here rather
