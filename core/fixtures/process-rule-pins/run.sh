@@ -149,6 +149,13 @@
 # comment, and (for line-start pins) on the line indented — all on mktemp copies, before the
 # real corpus is read.
 #
+# TWO MODES THAT ARE NOT PRESENCE-IN-PROSE PINS. `fenced` counts a hit INSIDE a fenced block as
+# well as outside (a template whose lines live in a fence), still bounded by the span; every
+# other mode treats fenced lines as invisible. `absent` takes the token in the LEAD field, ignores
+# the span fields and the fence and comment rules, and requires 0 hits anywhere in the file: it
+# pins that a definition lives in one file only. `absent` catches a verbatim copy, not a
+# paraphrase. It is a tripwire, not a guarantee. Both are keyed on the row's mode field alone.
+#
 # LAYOUTS. The subject exists on a consumer too, so this fixture ships. The root is found by
 # walking up from this script for the skill directory — core/skills/ai-dlc in the
 # distribution, .claude/skills/ai-dlc in an installed consumer — never by counting hops, and
@@ -214,12 +221,14 @@ pin_scan() {
           if (s == "") { state = 1; sl = 1 } else { state = 0; sl = 0 } }
   {
     line = $0
+    if (m == "absent") { if (index(line, l) > 0) { whole++; if (fl == 0) fl = NR }; next }
     if (com) { if (index(line, "-->")) com = 0; if (m == "para") flush(); next }
     t = line; sub(/^[ \t]+/, "", t)
     if (fence == "") {
       if (substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~") { fence = substr(t, 1, 3); if (m == "para") flush(); next }
     } else {
       if (substr(t, 1, 3) == fence) fence = ""
+      else if (m == "fenced" && index(line, l) > 0) { whole++; if (fl == 0) fl = NR; if (state == 1) ins++ }
       next
     }
     if (substr(t, 1, 4) == "<!--") { if (index(substr(t, 5), "-->") == 0) com = 1; if (m == "para") flush(); next }
@@ -233,7 +242,7 @@ pin_scan() {
       if (p == "") { p = line; pl = NR; pst = state } else p = p " " line
       next
     }
-    if (m == "contains") hit = (index(line, l) > 0); else hit = (index(line, l) == 1)
+    if (m == "contains" || m == "fenced") hit = (index(line, l) > 0); else hit = (index(line, l) == 1)
     if (hit) { whole++; if (fl == 0) fl = NR }
     if (state == 0) { if (index(line, s) == 1) { state = 1; sl = NR }; next }
     if (state == 1) {
@@ -241,7 +250,8 @@ pin_scan() {
       if (hit) ins++
     }
   }
-  END { if (m == "para") flush()
+  END { if (m == "absent") { print whole, whole, 1, 1, fl; exit 0 }
+        if (m == "para") flush()
         if (fence != "" || com) { print "UNBALANCED"; exit 2 }
         print ins, whole, sl, el, fl }' "$1"
 }
@@ -407,6 +417,8 @@ rem-revised-seats|R|remediator.md|## Contract|## The evidence contract|**A brief
 elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|Elicitation is sharded per|contains
+gp-held-validator|S|steps/_gate-procedures.md|## Sub-step snapshot update|## Bounded-join beat|Run `scripts/ai-dlc/validate-held-stories.sh`. On exit 1,|para|dispatch or hold each UNACCOUNTED story before the next wave
+dp-wave-held|S|steps/_dispatch-protocol.md|A blocking (`run_in_background: false`|**Minimum mechanism (Rule 26(c))|**Bounded-join ≠ serial execution.**|para|Every story not in wave 1 gets a `held:` line when the plan is written
 impl-rr-delta|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|run the partition with `<prior-sha>` in place of `<base>`
 impl-rr-prior|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|column-0 `reviewed-sha:` of the pass M-1 review file
 impl-rr-fanout|S|steps/implementation.md|**Pre-gate commit-presence check.**|**DAR-fold preflight before gate-2 dispatch.**|**Gate-1 dispatch: the review partitions by changed-file group.**|para|dispatches through this same fan-out
@@ -444,6 +456,8 @@ arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architectur
 arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
 qa-verdict-exclusive|R|qa.md|## Verdict|## As a Shard|The two forms are EXCLUSIVE.|contains
 qa-verdict-union|R|qa.md|## Verdict|## As a Shard|A `## Verdict` heading followed by `Verdict: PASS` fails Check 1 in `gate-validation.md`, which reads the heading's next non-blank line and gets `Verdict:`, not a member.|contains
+qa-carried-sentence|R|qa.md|## Carried Findings|## Validation Checklist|`PASS`. Gate 2 runs `validate-carried-findings.sh` on the two validation files|contains
+qa-carried-line|R|qa.md|## Carried Findings|## Validation Checklist|with one column-0 line outside a fence, `carried: <that string, verbatim> —|contains
 qa-lrdiv-lead|R|qa.md|## Validation Checklist|## Communication|- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**|prefix
 qa-lrdiv-never-pass|R|qa.md|## Validation Checklist|## Communication|An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.|contains
 qa-lrdiv-empty|R|qa.md|## Validation Checklist|## Communication|A precondition under which the required action has nothing to act on (an empty balance, an empty set)|contains
@@ -452,10 +466,23 @@ qa-lrdiv-outcome|R|qa.md|## Validation Checklist|## Communication|If the operato
 qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition (cite that entry), or|contains
 qa-lrdiv-exempt3|R|qa.md|## Validation Checklist|## Communication|(3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.|contains
 qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of another blocker type, or one that names no LR, does not exempt.|contains
+qa-sweep-class|R|qa.md|## Class Sweep (HARD GATE)|## Verdict|sweeps for that class, and lists EVERY instance it found on an `Instances:` line|contains
+qa-sweep-shard|R|qa.md|## As a Shard|## Escalation Protocol|the first cross shard sweeps the captures it runs and replays|contains
+qa-sweep-template|R|qa.md|## Findings Template|## As a Shard|The `Instances:` line is the `## Class Sweep (HARD GATE)` result|contains
+gv-smoke-surface-def|S|steps/gate-validation.md|### 11. Smoke test coverage|### 11a.|**Smoke surface.**|para|one git pathspec per line
+qa-sweep-template-lines|R|qa.md|## Findings Template|## As a Shard|Instances: <every instance of this finding's defect class, or `none` for a Suggestion>|fenced
+qa-sweep-template-lines2|R|qa.md|## Findings Template|## As a Shard|Instances: <every instance of this finding's defect class>|fenced
+smoke-def-absent-qa|R|qa.md|||one git pathspec per line|absent
+smoke-def-absent-stories|S|steps/stories-test-strategy.md|||one git pathspec per line|absent
+impl-rework-instances|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|The dev rework brief carries each finding's `Instances:` list verbatim.|contains
+sts-smoke-cite|S|steps/stories-test-strategy.md|### Story-Authoring Pre-Flight Checklist|### Story-AC Out-of-Scope Declaration Rule|Its surface is `gate-validation.md` Check 11, **Smoke surface.**|contains
+sts-hardgate-map|S|steps/stories-test-strategy.md|### 2b.|### 3. Sprint Planning|an unmapped triggered item blocks story authoring.|contains
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
 r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|INCLUDING the value it leaves in force
 r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
 r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|apply both to every question you put to the operator
+r11a-four-things|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|four things to it
+r11a-lanes-dispatch|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|Dispatch ready actions on free lanes, arm their joins, and name the lanes held
 r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|gives every option with its effect and the consequence of choosing it
 r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|says so in its own text, with the reason,
 r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
@@ -699,7 +726,10 @@ corpus_report() {
     out="$(pin_scan "$f" "$s" "$e" "$lead" "$mode" "$tok")"; rc=$?
     [ "$rc" -eq 0 ] || { bad "$id: ${f#"$ROOT/"} has an unbalanced fence or comment"; continue; }
     read -r ins whole sl el fl <<<"$out"
-    if [ "$sl" -eq 0 ] || [ "$el" -eq 0 ]; then
+    if [ "$mode" = "absent" ]; then
+      [ "$whole" -eq 0 ] && ok "$id: absent from ${f#"$ROOT/"}" \
+                         || bad "$id: token present in ${f#"$ROOT/"} at line $fl ($whole hit(s)) — the definition must live once"
+    elif [ "$sl" -eq 0 ] || [ "$el" -eq 0 ]; then
       bad "$id: span [${s:-<top>} .. $e] not found in ${f#"$ROOT/"} (start=$sl end=$el)"
     elif [ "$ins" -ge 1 ]; then
       ok "$id: pinned inside [${s:-<top>} .. $e] of ${f#"$ROOT/"}"
@@ -817,6 +847,34 @@ printf '## A\n```\n**LEAD.** fenced\n```\n## B\n' > "$P/fence.md"
 probe "a fenced lead is not found" 0 "$P/fence.md" "## A" "## B" "**LEAD.**" prefix
 printf '## A\n<!--\n**LEAD.** commented\n-->\n<!-- **LEAD.** one-line -->\n## B\n' > "$P/com.md"
 probe "a commented lead is not found" 0 "$P/com.md" "## A" "## B" "**LEAD.**" prefix
+# Mode probes, both directions, before any corpus row. fenced: a fenced hit inside the span passes,
+# the deleted file and a fenced hit outside the span fire. absent: a seeded copy (fenced or not)
+# fires, a near-miss one word short stays quiet.
+printf '## A\n```\nT: fenced token\n```\n## B\n' > "$P/fd-in.md"
+probe "fenced mode: a fenced token inside the span is found" 1 "$P/fd-in.md" "## A" "## B" "T: fenced" fenced
+printf '## A\nprose\n## B\n```\nT: fenced token\n```\n' > "$P/fd-out.md"
+probe "fenced mode: a fenced token outside the span is not found" 0 "$P/fd-out.md" "## A" "## B" "T: fenced" fenced
+printf '## A\n```\nsomething else\n```\n## B\n' > "$P/fd-del.md"
+probe "fenced mode: the deleted token is not found" 0 "$P/fd-del.md" "## A" "## B" "T: fenced" fenced
+printf '## A\n```\nT: fenced token\n```\n## B\n' > "$P/fd-prefix.md"
+probe "prefix mode still ignores a fenced token (fenced mode changed no other mode)" 0 "$P/fd-prefix.md" "## A" "## B" "T: fenced" prefix
+# fenced mode with two fenced lines, each pinned by its own row on a token distinct to it: the
+# intact file passes both, and deleting EACH line alone fires exactly that line's row.
+printf '## A\n```\nT: one <x>\nT: two <y>\n```\n## B\n' > "$P/fd2-both.md"
+printf '## A\n```\nT: two <y>\n```\n## B\n' > "$P/fd2-no1.md"
+printf '## A\n```\nT: one <x>\n```\n## B\n' > "$P/fd2-no2.md"
+probe "two fenced lines: the intact file finds line 1" 1 "$P/fd2-both.md" "## A" "## B" "T: one <x>" fenced
+probe "two fenced lines: the intact file finds line 2" 1 "$P/fd2-both.md" "## A" "## B" "T: two <y>" fenced
+probe "two fenced lines: deleting line 1 alone fires its row" 0 "$P/fd2-no1.md" "## A" "## B" "T: one <x>" fenced
+probe "two fenced lines: deleting line 1 alone leaves line 2 found" 1 "$P/fd2-no1.md" "## A" "## B" "T: two <y>" fenced
+probe "two fenced lines: deleting line 2 alone fires its row" 0 "$P/fd2-no2.md" "## A" "## B" "T: two <y>" fenced
+probe "two fenced lines: deleting line 2 alone leaves line 1 found" 1 "$P/fd2-no2.md" "## A" "## B" "T: one <x>" fenced
+printf 'one git pathspec per line here\n' > "$P/ab-copy.md"
+probe "absent mode: a seeded verbatim copy fires" 1 "$P/ab-copy.md" "" "" "one git pathspec per line" absent
+printf 'a\n```\none git pathspec per line\n```\n' > "$P/ab-fence.md"
+probe "absent mode: a seeded copy inside a fence fires" 1 "$P/ab-fence.md" "" "" "one git pathspec per line" absent
+printf 'one git pathspec per\nline of text\n' > "$P/ab-near.md"
+probe "absent mode: a near-miss (wrapped, one word short) stays quiet" 0 "$P/ab-near.md" "" "" "one git pathspec per line" absent
 printf '## A\n  **LEAD.** indented\nsee **LEAD.** mid-line\n## B\n' > "$P/indent.md"
 probe "an indented or mid-line lead is not a line-start pin" 0 "$P/indent.md" "## A" "## B" "**LEAD.**" prefix
 probe "a mid-line token IS found in contains mode" 2 "$P/indent.md" "## A" "## B" "**LEAD.**" contains
@@ -949,6 +1007,26 @@ M="$WORK/mut"; mkdir -p "$M" || exit 2
 while IFS='|' read -r id base rel s e lead mode tok; do
   f="$(pin_path "$base" "$rel")"
   [ -f "$f" ] || { bad "$id: subject ${f#"$ROOT/"} absent — no near-miss or mutant can be built"; continue; }
+  if [ "$mode" = "absent" ]; then
+    # MUTANT: the token copied into the file (inside a fence, to prove fences are not an exemption) must fire.
+    dst="$M/$id.copy.md"; { cat "$f"; printf '\n```\n%s\n```\n' "$lead"; } > "$dst"
+    o0="$(pin_scan "$f" "" "" "$lead" absent)"; o1="$(pin_scan "$dst" "" "" "$lead" absent)"
+    if [ "${o0%% *}" = "0" ] && [ "${o1%% *}" -ge 1 ]; then
+      ok "$id/copy: the token copied into the file fires (original 0, mutant ${o1%% *}) — killed"
+    else bad "$id/copy: original='${o0%% *}' mutant='${o1%% *}' (wanted 0 and >=1)"; fi
+    continue
+  fi
+  if [ "$mode" = "fenced" ]; then
+    # MUTANT: every line carrying the token deleted must score 0 in-span and 0 whole-file.
+    o0="$(pin_scan "$f" "$s" "$e" "$lead" fenced)"
+    dst="$M/$id.delete.md"; mutate delete "$f" "$dst" "$lead" contains
+    if cmp -s "$f" "$dst"; then bad "$id/delete: mutation did not apply"; continue; fi
+    o1="$(pin_scan "$dst" "$s" "$e" "$lead" fenced)"; read -r ins whole sl el fl <<<"$o1"
+    if [ "${o0%% *}" -ge 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
+      ok "$id/delete: every fenced line deleted fires (original in-span ${o0%% *}, mutant $ins) — killed"
+    else bad "$id/delete: original in-span='${o0%% *}' mutant in-span=$ins whole=$whole"; fi
+    continue
+  fi
   raw="$(grep -cF -- "$lead" "$f")" || raw=0
   [ "$raw" -ge 1 ] || { bad "$id: lead absent from ${f#"$ROOT/"} — mutants have no subject"; continue; }
   if [ "$mode" = "para" ]; then
@@ -1042,6 +1120,26 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
 [ "$n_named" -eq 8 ] || bad "named: $n_named named mutant(s) read, wanted 8"
+
+# --- 4a1. the qa class-sweep pin survives the consumer's Validation Checklist shadow ---------
+# graph shadows `team-roles/qa.md#Validation Checklist`, so a rule that lives there is replaced on
+# that consumer. Control: stubbing that section body leaves the shipped sibling section pinned (1).
+# MUTANT: the sentence moved INTO the checklist (where the shadow would delete it) must score 0 in
+# its own span while the line is still in the file (whole >= 1).
+CSL='sweeps for that class, and lists EVERY instance it found on an `Instances:` line'
+CSF="$ROLES_DIR/qa.md"; CSS="$WORK/qa-csweep-shadowed.md"; CSM="$WORK/qa-csweep-moved.md"
+awk '$0 == "## Validation Checklist" {print; print "(shadowed by a consumer override)"; on=1; next}
+     on && /^## /{on=0} !on{print}' "$CSF" > "$CSS"
+CSL="$CSL" awk 'BEGIN{l=ENVIRON["CSL"]} index($0,l){held=$0; next} {a[++n]=$0}
+  END{for(i=1;i<=n;i++){print a[i]; if(a[i]=="## Validation Checklist"){print ""; print held}}}' "$CSF" > "$CSM"
+cs_real="$(pin_scan "$CSF" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
+cs_shad="$(pin_scan "$CSS" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
+cs_move="$(pin_scan "$CSM" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
+read -r cs_mi cs_mw _ <<<"$cs_move"
+if cmp -s "$CSF" "$CSM"; then bad "MUTANT qa-sweep/move-into-checklist: DID NOT APPLY"
+elif [ "${cs_real%% *}" = 1 ] && [ "${cs_shad%% *}" = 1 ] && [ "$cs_mi" = 0 ] && [ "$cs_mw" -ge 1 ]; then
+  ok "qa-sweep: pinned in its own section past the Validation Checklist shadow (real=1, shadowed=1); the sentence moved into the checklist reads 0 in span though still in the file — killed"
+else bad "qa-sweep/move-into-checklist: real='$cs_real' shadowed='$cs_shad' moved='$cs_move' (wanted 1 / 1 / 0 with whole>=1)"; fi
 
 # --- 4a2. the serial remediator is never told --mark-repair replays for it ----------
 # The rem-serial-replay pin proves the replacement sentence is present; this arm proves the

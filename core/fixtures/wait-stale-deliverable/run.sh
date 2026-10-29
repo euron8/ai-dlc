@@ -1390,20 +1390,27 @@ rm -rf "$W"
 # continued. Its next check is therefore after the deletion, every run, whatever the load; it must
 # still deliver from its memoised epoch. TB_ORDERED records that the order was imposed, so a
 # forcing that silently failed cannot read as a kill.
+beat2_resolved() { ! kill -0 "$1" 2>/dev/null || [ -e "$2" ]; }   # <pid> <since file>
 run_two_beats() { # <subject> -> TB_* ; leaves W
   W="$( bash "$SEED" two-beats-one-path )"
-  local p1 p2 mt frozen=0 tries=0
+  local p1 p2 mt
   bg_beat "$1" "$W" "$W/1.out" 12 1 --complete x.md; p1=$BG
-  bg_beat "$1" "$W" "$W/2.out" 12 1 --complete x.md; p2=$BG
+  # BEAT 2 CANNOT EXPIRE WHILE FROZEN. Its quantum is 600s against a POLL of 1, so no freeze this
+  # harness can hold uses it up (at 12s a long freeze under load spent it: beat 2 woke past its
+  # deadline, exited WAITING, and the subject was blamed for a beat it never dropped). It wakes on its
+  # own 1s poll once continued, so the passing path stays fast and nothing is killed or stubbed.
+  bg_beat "$1" "$W" "$W/2.out" 600 1 --complete x.md; p2=$BG
   # Both past the sweep: each sleeping beat charges the one shared counter.
   until_true 100 counter_is "$W" x.md 2 || true
-  # Freeze beat 2 inside its poll sleep. A sleep still present AFTER the stop proves the beat
-  # was parked in it, not mid-check; otherwise continue it and try again at its next sleep.
-  while [ "$frozen" -eq 0 ] && [ "$tries" -lt 10 ]; do
+  # Freeze beat 2 inside its poll sleep. A sleep still present AFTER the stop proves the beat was
+  # parked in it, not mid-check; otherwise continue it and try again at its next sleep. This loop
+  # decides no verdict: TB_ORDERED below is what a void case scores on.
+  TB_FROZEN=0; tries=0
+  while [ "$TB_FROZEN" -eq 0 ] && [ "$tries" -lt 10 ]; do
     tries=$((tries + 1))
     until_true 30 tree_has_sleep "$p2" || continue
     tree_signal "$p2" STOP
-    if tree_has_sleep "$p2"; then frozen=1; else tree_signal "$p2" CONT; fi
+    if tree_has_sleep "$p2"; then TB_FROZEN=1; else tree_signal "$p2" CONT; fi
   done
   printf 'a finding\nseat-complete: s 1 findings=1\n' > "$W/x.md"
   wait "$p1" 2>/dev/null || true
@@ -1412,11 +1419,23 @@ run_two_beats() { # <subject> -> TB_* ; leaves W
   # only once the clock has left it, and make that part of the control.
   mt="$(fx_mtime "$W/x.md")"
   until_true 30 now_at_least "$(( mt + 1 ))" || true
+  # THE PROPERTY TB_N NEEDS: beat 2 is ALIVE and STOPPED in a sleep (its quantum unspent, its next
+  # check still ahead of it) when beat 1 has delivered and deleted .since. A beat that had expired
+  # or exited reads here as a void case (rc 2), never as a kill or a failure.
+  TB_ALIVE=0; kill -0 "$p2" 2>/dev/null && case "$(ps -o stat= -p "$p2" 2>/dev/null)" in *T*) TB_ALIVE=1 ;; esac
   TB_ORDERED=0
-  [ "$frozen" -eq 1 ] && grep -q '^DELIVERED x.md' "$W/1.out" \
+  [ "$TB_FROZEN" -eq 1 ] && [ "$TB_ALIVE" -eq 1 ] && grep -q '^DELIVERED x.md' "$W/1.out" \
     && [ ! -e "$W/_bmad-output/.wait-beats/$(fx_key x.md).since" ] \
     && now_at_least "$(( mt + 1 ))" && TB_ORDERED=1
   tree_signal "$p2" CONT
+  # Beat 2 now resolves by an EVENT, never a clock: it exits (delivered, from its memo), or it
+  # re-creates .since after the seal -- the re-arm a memo-less beat performs, after which it can never
+  # deliver and would otherwise poll out its 600s quantum. The 6000-tenth cap is only a backstop, and a
+  # hit on it is a void case (TB_RESOLVED=0, rc 2 below), never a count: reaping a beat that had not
+  # resolved reads TB_N as 1 and would score a harness timeout as a regression of the subject.
+  TB_RESOLVED=1
+  until_true 6000 beat2_resolved "$p2" "$W/_bmad-output/.wait-beats/$(fx_key x.md).since" || TB_RESOLVED=0
+  reap_tree "$p2"
   wait "$p2" 2>/dev/null || true
   TB_N=0
   grep -q '^DELIVERED x.md' "$W/1.out" && TB_N=$((TB_N + 1))
@@ -1424,14 +1443,15 @@ run_two_beats() { # <subject> -> TB_* ; leaves W
   separate_shells "$W" 2 "$W/1.out" "$W/2.out"
 }
 say_ordered() { # <label>
-  if [ "$TB_ORDERED" -eq 1 ]; then pre_ok "$1: CONTROL — beat 2 was frozen in its poll sleep until beat 1 delivered, .since was gone and the seal's second had passed"
-  else pre_bad "$1: the order was not imposed (beat 2 never frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
+  if [ "$TB_ORDERED" -eq 1 ]; then pre_ok "$1: CONTROL — beat 2 was alive and frozen in its poll sleep, quantum unspent, until beat 1 delivered, .since was gone and the seal's second had passed"
+  else pre_bad "$1: the order was not imposed (beat 2 not alive and frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
 }
 C40_two_beats_one_path() {
 run_two_beats "$SUBJ"
 say_shells "two-beats-one-path"
 say_ordered "two-beats-one-path"
-if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
+if [ "$TB_RESOLVED" -eq 0 ]; then pre_bad "two-beats-one-path: beat 2 never resolved within the backstop (it neither exited nor re-created .since) — this case is void and decides no verdict"
+elif [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
 else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
 rm -rf "$W"
 }

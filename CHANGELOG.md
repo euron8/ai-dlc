@@ -19,6 +19,72 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.968.0] - 2026-10-29
+
+Batch b245, final release. It ships the M5 mutant-kill arms (BL-828), deterministic readset-skip and consumer-suite-pool fixtures (BL-868), the BL-849 decl-reasons receipt, the hermetic-runner XR fix, held-story tracking and the run-window refusal (BL-839, BL-840), the Gate-2 handoff and review-shard changes (BL-843 through BL-847, BL-510), the a3 fixture stack and further fixture re-measurement (BL-850), and `seed-verdict-store.sh`. BL-850, BL-828 and BL-868 stay open where their lines in `docs/backlog.md` say so. Consumer-visible engine changes ship in this release.
+
+Rulebook and engine changes. Hook: `core/hooks/ai-dlc-recover.sh`. Schema: `core/schemas/sprint-status.json`. Scripts: `core/scripts/merge-review-shards.sh`, `core/scripts/partition-review-diff.sh`, `core/scripts/sprint-status.sh`, `core/scripts/validate-ac-falsifiability.sh`, `core/scripts/validate-carried-findings.sh`, `core/scripts/validate-handoff-evidence.sh` and `core/scripts/validate-held-stories.sh`. Skill and steps: `core/skills/ai-dlc/SKILL.md`, `core/skills/ai-dlc/core-manifest.md`, `core/skills/ai-dlc/steps/_dispatch-protocol.md`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/steps/implementation.md` and `core/skills/ai-dlc/steps/stories-test-strategy.md`. Update skill: `core/skills/ai-dlc-update/fixture-manifest.md`. Roles: `core/team-roles/dev.md` and `core/team-roles/qa.md`. Template: `templates/settings.json.template`. Rulebook: `CLAUDE.md`. Also new in `scripts/`: `scripts/mutant-sites-allowlist.txt` and `scripts/seed-verdict-store.sh`.
+
+### M5 — mutant kills must be bound (BL-828)
+
+- `scripts/validate-mutant-kills.sh` gains arms M5 through M7. M5 refuses any `mutant_killed` or `need_base` site whose flag argument is not bound, meaning a flag set to 1 only in a passing branch, a conjunction of such flags, a same-run test over a captured value, or a helper positional every caller fills with one of those. M6 and M7 hold the refused sites on a derived, down-only site allowlist.
+- `scripts/mutant-sites-allowlist.txt` first ships with 254 rows. The fixtures that bound their flags (preclassify-rename-row, procsub-staged-refusal, held-stories, check-31-ac-falsifiability, layer-conforms-to and self-update-join-gate) left the other allowlists. BL-828 stays open for the remaining sites.
+
+### Deterministic readset-skip and consumer-suite-pool (BL-868)
+
+- `readset-skip`, `readset-skip-b` and `readset-skip-c` end every stub-world poll on its first iteration, and the stop-at-first drives run a fixed number of launches. The three `±` rows are gone, and the real-stream arms of `readset-skip-c` are deleted with its real-kernel loss shape recorded as assumed.
+- `consumer-suite-pool` runs every paced world and the orphan arms in lockstep with the watcher's polls, and the dropped-worker world blocks until its neighbour has started, so reaping order no longer moves the count. BL-868 stays open.
+
+### BL-849 — a mutant that does not apply reaches the exit counter
+
+- `decl-reasons`, `derivation-capture-worktree-root`, `story-evidence-scaffold` and `layer-adjudication-tier` route a mutant that does not apply to the exit counter, and the decl-reasons receipt requires a counted FAIL line for the unapplied mutant. BL-849 is landed and rotated.
+
+### Hermetic runner XR arm
+
+- `hermetic-runner` arm XR builds its probe under the hook's own fixture root, which closes graph PC-S320-HERMETIC-RUNNER-XR-ARM-FAILS-AGAINST-THE-SHIPPED-CONSUMER-HOOK.
+
+### wait-stale-deliverable two-beats
+
+- The two-beats backstop orders beat 2 by sentinel instead of a quantum that frozen time can spend, and a backstop hit is a void case with rc 2, never a 1-of-2 verdict. Beat 2 runs on the shipped 600s default.
+
+### preclassify-rename-row
+
+- The fixture groups its cells by world, drives each mutant on its deciding cells plus one twin, binds each flag through `mutant_killed` and drops both allowlist rows. Its start count falls from 1609 to 43.
+
+### Held stories and the run window (BL-839, BL-840)
+
+- `core/scripts/validate-held-stories.sh` checks that every ready-for-dev story is held or in flight and that every hold is fresh, `sprint-status.sh list-stories` lists the implementation view's entries, and the recover hook's verification turn carries a short `held:` directive. `core/scripts/validate-ac-falsifiability.sh` refuses an AC run window after the planned close unless its deferral is stated, with `run_not_before` and `defers_to` authoring lines and a `planned_close` producer.
+- `held-stories` and `check-31-ac-falsifiability` bind their mutant flags to M5.
+
+### The a3 stack (BL-850, BL-828)
+
+- `layer-title-join`, `layer-crosswalk-home`, `ledger-rotate` and `mutation-red-replay` run one apply per state or score each mutant on its deciding arm plus one twin, behind matrix blocks, route every kill through `mutant_killed` and leave both allowlists.
+
+### Gate-2 handoff and review changes (c3 and c4)
+
+- `validate-carried-findings.sh` lifts the finding Class, the record-only gate-2 route and the rendered capture heads (`validate-handoff-evidence.sh --render-dar`) are in, the Gate-2 preflight skips status arm (h) with `--gate2`, and three smoke arms (`smoke-listed-absent`, `smoke-not-updated`, `smoke-surface-edited`) run at every handoff. `qa.md` gains a Finding Class section and a class sweep with an `Instances:` line, `implementation.md` carries each finding's `Instances:` list into the rework brief, the stories step maps triggered QA HARD GATE items, and the `SKILL.md` operator-question rule dispatches every ready lane. The dev seat is pinned to sonnet/medium and `dev-escalated` to sonnet/high in `templates/settings.json.template`.
+- `scripts/seed-verdict-store.sh` seeds the counted verdict store a push reads, and `CLAUDE.md` points pre-seeding at it.
+
+### Fixture costs
+
+The `*` row of each `invocations.decl`, read at `origin/main` 9159a2064 and at this release's tree.
+
+- `carried-findings` moves 147 to 196; the unit states no cause.
+- `check-31-ac-falsifiability` moves 32 to 83; the unit states no cause.
+- `consumer-suite-pool` moves 191 to 362, the exact count once the paced and drop worlds run in lockstep with the watcher.
+- `held-stories` is new at 52.
+- `layer-crosswalk-home` moves 81 to 55, `layer-title-join` 74 to 47, `ledger-rotate` 275 to 141 and `mutation-red-replay` 845 to 447.
+- `preclassify-rename-row` moves 1609 to 43.
+- `procsub-staged-refusal` moves 285 to 466 because work was re-dealt by subject family: it took the validate-layer-entries, retired-tokens, preclassify and self-update-gate mutants from `-c`, and the earlier counts also missed work in `#!/bin/sh` stubs, which the counter cannot see. `procsub-staged-refusal-b` moves 338 to 294 and `procsub-staged-refusal-c` 424 to 280. The family sum falls from 1047 to 1040.
+- `readset-skip` moves 1137±54 to 979, `readset-skip-b` 449±3 to 484 and `readset-skip-c` 878±48 to 805. The rows are exact and the rise in `-b` follows the fixed launch count of its stop-at-first drives.
+- `review-reroute` moves 75 to 149; the unit states no cause.
+- `review-shard-merge` moves 3686 to 3718; the unit states no cause.
+- `sprint-status-lifecycle` moves 188 to 200; the unit states no cause.
+- `story-evidence-scaffold` moves 4344 to 5456; the unit states no cause.
+- `validator-path-resolution` moves 335 to 340 because its `core/scripts/*.sh` loop counts the new `validate-held-stories.sh`.
+
+Allowlist rows, non-comment, at `origin/main` and at this release: `scripts/fixture-matrix-allowlist.txt` 100 to 94, `scripts/mutant-kills-allowlist.txt` 37 to 31 and `scripts/mutant-sites-allowlist.txt` 0 to 254.
+
 ## [0.967.0] - 2026-10-28
 
 Batch b245. It ships BL-842, which stays PARTIAL because its close waits on BL-817's `Outcome measured:` line from a graph sprint. Consumer-visible engine changes ship in this release.

@@ -112,7 +112,7 @@ want='test-results/cn-abs.txt test-results/cn-al.txt test-results/cn-ctl.txt tes
 [ "$lc" = "$want" ] || { echo "FAIL lc: want [$want] got [$lc]"; fails=$((fails + 1)); }
 # xr: both readers over ONE story and ONE `./` token, each asserted as an exact value.
 xl="$(bash "$HE" -C "$W" --list-captures stories/story-3.md "$T" 2>/dev/null | tr '\n' ' ')"
-xh="$(bash "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '$1 == "REFUSED" || $1 == "WARN"' | cut -d: -f1 | tr '\n' ' ')"
+xh="$(bash "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '($1 == "REFUSED" || $1 == "WARN") && $2 !~ /^dar-heads-/' | cut -d: -f1 | tr '\n' ' ')"
 [ "$xl|$xh" = "test-results/cn-x.txt |REFUSED no-command test-results/cn-x.txt " ] \
   || { echo "FAIL xr: the readers disagree on ./test-results/cn-x.txt: list-captures [$xl] handoff [$xh]"; fails=$((fails + 1)); }
 # gu: a git shim refusing only the exemption reader's ls-tree spelling; every other git call passes through.

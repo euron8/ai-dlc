@@ -152,6 +152,20 @@ check() {
   { has "$fl" '`status-not-review`' && has "$fl" '`status-yaml-mismatch`' && has "$fl" '`heading-demoted`' \
     && has "$fl" 'A `SKIP STATUS (<reason>)` line'; } \
     || echo "WIRE-BK: implementation.md's pre-gate paragraph does not name the status, row and heading refusals and the SKIP STATUS line"
+  # BL-845: the smoke surface is defined once, in Check 11's bold paragraph, and the gate-2 go-signal
+  # runs --smoke before QA is dispatched.
+  b="$(h3 "$gv" '^### 11\. ')"
+  fl="$(flat <<<"$b")"
+  { grep -q '^\*\*Smoke surface\.\*\* ' <<<"$b" && has "$fl" 'tracked `docs/smoke-surface.txt`, one git pathspec per line' \
+    && has "$fl" 'a lone `none` declaring' && has "$fl" "It is read at the story's base"; } \
+    || echo "C11SURF: Check 11 does not define the smoke surface in its **Smoke surface.** paragraph"
+  has "$fl" 'are enforced by `validate-handoff-evidence.sh` at every gate-1 handoff and at the gate-2 go-signal (`--smoke`)' \
+    || echo "C11MECH: Check 11 does not say its two mechanical sub-clauses are enforced by validate-handoff-evidence.sh"
+  b="$(awk '/^\*\*Gate-2 dispatch: the validation partitions/{on=1} on && /^$/{exit} on{print}' "$imp")"
+  fl="$(flat <<<"$b")"
+  { has "$fl" 'before any QA is dispatched, run `validate-handoff-evidence.sh -C <worktree> --smoke <story-file> <base> <go-signal-sha>`' \
+    && has "$fl" 'Exit 1 refuses the go-signal'; } \
+    || echo "WIRE-SMOKE: implementation.md's gate-2 dispatch does not run --smoke before QA is dispatched"
   b="$(h3 "$sr" '^### 4\. Gate Validation and Proceed$')"
   fl="$(flat <<<"$b")"
   has "$fl" 'validate-handoff-evidence.sh --strategy HEAD <every story file of this sprint>' \
@@ -280,6 +294,12 @@ mutant imp-unwired IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^
 mutant imp-bk-moved IMP '/^Test IDs cell, `status-not-review`/{print ""} {print}' \
   "WIRE-BK:" "the bookkeeping kinds moved out of the pre-gate paragraph's first block is caught" \
   '`status-yaml-mismatch`'
+mutant c11-no-surface GV '{ gsub(/^\*\*Smoke surface\.\*\* /, "Smoke surface. "); print }' \
+  "C11SURF:" "the smoke-surface definition losing its bold opening is caught"
+mutant c11-no-mech GV '{ gsub(/are enforced by$/, "are read by"); print }' \
+  "C11MECH:" "Check 11 no longer naming the mechanical enforcement is caught"
+mutant imp-no-smoke IMP '{ gsub(/ --smoke <story-file>/, " <story-file>"); print }' \
+  "WIRE-SMOKE:" "the gate-2 dispatch not running --smoke is caught"
 mutant sr-unwired SR '{ gsub(/validate-handoff-evidence\.sh --strategy HEAD/, "a re-read of"); print }' \
   "WIRE-SR:" "sprint-review §4 not running the strategy mode is caught"
 
@@ -305,6 +325,25 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   else
     bad "IN PLACE: the shipped validator did not reach its sibling -- want [1:status-yaml-mismatch,:W 0::W:S] got [$got]"
   fi
+  # --gate2 (arm h skipped at a gate-2 go-signal sha). The seeded offender is world-yamlmis, which arm (h)
+  # refuses. g2_vec prints, for a script: the flagged run's "<rc>:<refusals>:<SKIP STATUS (--gate2 line seen y/n)>"
+  # then the unflagged control's. A mutant that ignores the flag leaves the flagged run refused.
+  g2_vec() { # <script> [unflagged] -> the flagged run's "<rc>:<refusals>:<SKIP STATUS (--gate2 line seen y/n)>"; with a 2nd arg, the unflagged control's
+    local s="$1" w="$WORK/world-yamlmis" o rc
+    if [ -n "${2:-}" ]; then o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
+    else o="$(bash "$s" -C "$w" --gate2 "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?; fi
+    printf '%s:%s:%s' "$rc" "$(awk '/^REFUSED /{print $2}' <<<"$o" | tr '\n' ',')" "$(grep -qF 'SKIP STATUS (--gate2' <<<"$o" && echo y || echo n)"
+  }
+  # The unflagged control is read once, on the control validator: the gate2-ignored mutant edits only the flagged branch.
+  G2WANT='0::y'; G2CTL='1:status-yaml-mismatch,:n'
+  got="$(g2_vec "$HECTL") $(g2_vec "$HECTL" unflagged)"
+  if [ "$got" = "$G2WANT $G2CTL" ]; then ok "GATE2: with --gate2 the row-mismatch story prints SKIP STATUS (--gate2 ...) and is not refused for (h); without it the same story is still refused status-yaml-mismatch"; B_g2=1
+  else bad "GATE2: want [$G2WANT $G2CTL] got [$got]"; fi
+  if m="$(mkmut gate2-ignored he 'if [ "$GATE2" -eq 1 ]; then' 'if [ "$GATE2" -eq 99 ]; then')" && [ -n "$m" ]; then
+    got="$(g2_vec "$m")"
+    if [ "$got" = "$G2WANT" ]; then bad "MUTATION 'gate2-ignored' SURVIVED -- a validator ignoring --gate2 still skips arm (h)"
+    else mutant_killed "${B_g2:-0}" gate2-ignored "MUTATION 'gate2-ignored' killed: a validator ignoring --gate2 refuses the story for (h) with the flag set [$got]"; fi
+  else bad "FIXTURE ERROR: gate2 mutation 'gate2-ignored' matched nothing"; fi
   # The range warning: base == frozen and a base that is not an ancestor of frozen each WARN
   # (exit 0, never a refusal); the normal range carries neither. Each mutant silences one.
   range_vec() { # <script> -> "<eq rc>:<eq kinds> <rev rc>:<rev kinds> <normal kinds>"
@@ -620,14 +659,21 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   if [ "$cn_rc" -eq 0 ]; then ok "CAPTURE NORMALISATION: inner ../, absolute and aliased spellings of a tracked capture are judged (no-command), a leading ../ is outside the repository (WARN, or red-untracked when RED), untracked and outside citations WARN capture-unresolved with their reasons, a frozen-.gitignore'd one prints nothing, the exit is unchanged, --list-captures lists the toplevel spellings, and both readers agree on one ./ token"; B_cn=1
   else bad "CAPTURE NORMALISATION: receipt-bl815.sh exited $cn_rc on the shipped validator: $(tr '\n' ' ' <<<"$cn_out")"; fi
   cn_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
-    local m o rc
+    local m o mrc
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
-    o="$(cn_run "$m")"; rc=$?
-    if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    o="$(cn_run "$m")"; mrc=$?
+    if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the toplevel control cell -- $5"
-    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_cn:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
-    else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
+    elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_cn:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$mrc, cell $4 did not fail) -- $5"; fi
   }
+  # BL-849: the helper records its failures with bad(), which writes the fixture-level rc. A local of the
+  # same name shadowed it and lost every failure on return. This arm drives the real helper with an anchor
+  # that matches nothing and asserts the exit counter moved by exactly one; it dies if the local returns.
+  _r849=$rc; rc=0
+  cn_mutant b849-never-applies ZZQX_NEVER_ANCHOR_849 x inner "BL-849 probe" 2>/dev/null
+  if [ "$rc" -eq 1 ]; then rc=$_r849; ok "BL-849: a cn_mutant mutant that does not apply reaches the exit counter"
+  else rc=1; bad "BL-849: a DID-NOT-APPLY cn_mutant mutant did not reach the exit counter"; fi
   cn_mutant cn-n1-no-normaliser '    cap_norm "$t" || CN=""' '    CN="$t"' inner "N1: the normaliser removed, an a/../b capture is not judged"
   cn_mutant cn-n2-no-warn '[ -z "$ureason" ] || warn "capture-unresolved' '[ -z "$ureason" ] || : "capture-unresolved' un "N2: the capture-unresolved WARN removed, an untracked citation is silent"
   cn_mutant cn-n3-dotdot-from-story '    *) p="$t" ;;' '    ./*|../*) p="${STORY%/*}/$t" ;; *) p="$t" ;;' dd "N3: ./ and ../ resolved against the story's directory, not the toplevel"
@@ -648,25 +694,169 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"; B_b9=1
   else bad "BL-809 ARMS: receipt-bl809.sh exited $b9_rc on the shipped validator: $(tr '\n' ' ' <<<"$b9_out")"; fi
   b9_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
-    local m o rc
+    local m o mrc
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
-    o="$(b9_run "$m")"; rc=$?
-    if [ "$rc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    o="$(b9_run "$m")"; mrc=$?
+    if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the no-command control cell -- $5"
-    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_b9:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
-    else bad "MUTATION '$1' SURVIVED (rc=$rc, cell $4 did not fail) -- $5"; fi
+    elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_b9:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$mrc, cell $4 did not fail) -- $5"; fi
   }
+  # BL-849: the helper records its failures with bad(), which writes the fixture-level rc. A local of the
+  # same name shadowed it and lost every failure on return. This arm drives the real helper with an anchor
+  # that matches nothing and asserts the exit counter moved by exactly one; it dies if the local returns.
+  _r849=$rc; rc=0
+  b9_mutant b849-never-applies ZZQX_NEVER_ANCHOR_849 x inner "BL-849 probe" 2>/dev/null
+  if [ "$rc" -eq 1 ]; then rc=$_r849; ok "BL-849: a b9_mutant mutant that does not apply reaches the exit counter"
+  else rc=1; bad "BL-849: a DID-NOT-APPLY b9_mutant mutant did not reach the exit counter"; fi
   b9_mutant b9-m1-no-kunq 'if [ -n "$kl" ]; then' 'if false; then' kunq "M1: arm (m) removed, an unquoted multi-word -k passes"
   b9_mutant b9-m2-quoted $'[^[:space:]"\'"\'"\']+[[:space:]]+(or' '[^[:space:]]+[[:space:]]+(or' kq "M2: arm (m) accepts a quoted expression as unquoted"
   b9_mutant b9-m3-no-exempt 'if (p != "<redacted>" && p != "<base-worktree>") print' 'print' red "M3: arm (n)'s <redacted>/<base-worktree> exemptions removed"
   b9_mutant b9-m4-refusal 'warn "placeholder' 'refuse "placeholder' rc "M4: arm (n) made a refusal, so a placeholder moves the exit"
   # --- end BL-809 ARMS ------------------------------------------------------------------------------
 
+  # --- BL-845 SMOKE ARMS (sm_*) -----------------------------------------------------------------------
+  # The mechanical half of Check 11: smoke_arms, run by --smoke and by handoff mode. receipt-bl845.sh owns
+  # the worlds and the cells (its header lists them): m1 smoke-listed-absent (an untracked listed path, a
+  # directory), the removal clause, each rejected token form (`/api/...`, `KEY=http://...`, a glob) and
+  # each stripped suffix (`:352`, `::Class::test`), m2 smoke-not-updated on the LITERAL s320 4.2 body and
+  # its empty-body non-surface near-miss, the four surface states (absent: SKIP undeclared and NO
+  # `SMOKE OK`; `none`; empty; globs), smoke-surface-edited with the surface read at <base>, the heading,
+  # fence and CRLF grammar, and the handoff-mode call. Every mutant is written beside record-only-diff.sh
+  # in the control tree and must FAIL its own named cell and leave the clean cell standing.
+  # The worlds are seeded ONCE, into $SMW, by the first call; every mutant call reuses them (a mutant edits
+  # the validator, never a world). A copy taken right after seeding is compared with `diff -r` after the
+  # last mutant, so a call that wrote into a world fails the arm instead of skewing the later cells.
+  SMW="$WORK/sm-worlds"
+  sm_run() { bash "$DIR/receipt-bl845.sh" "$1" "$SMW" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus clean)
+  sm_out="$(sm_run "$HECTL")"; sm_rc=$?
+  [ -f "$SMW/.seeded" ] && cp -R "$SMW" "$WORK/sm-worlds.snap" || { sm_rc=9; sm_out="$sm_out (the worlds were not seeded once into $SMW)"; }
+  if [ "$sm_rc" -eq 0 ]; then ok "BL-845 SMOKE ARMS: an untracked listed test file is REFUSED smoke-listed-absent and a removed one is not; directory, trailing-slash and extensionless tokens are ignored by m1; /api, KEY=URL and glob tokens are not paths, :line and ::node suffixes are stripped; the s320 4.2 body over a UI diff is REFUSED smoke-not-updated, an empty body over a non-UI diff is quiet, and an :(exclude) or :! surface line removes a generated file from the surface; an absent surface prints SKIP undeclared and no SMOKE OK, none prints NO-SURFACE, an empty one SKIP empty, a capitalised None NO-SURFACE, a surface line git rejects and a surface matching nothing at base (none., a backticked none, a typo) REFUSED smoke-surface-unevaluable with exit 1 while a matching glob the range misses is quiet and a surface directory the story creates is not refused, a corrupt base tree under the surface is UNEVALUABLE (exit 2) and not a rejected pathspec, an unevaluable range diff with nothing refused exits 2, a refusal outranks a later unevaluable diff (exit 1, never 2) in both modes, an :(exclude,glob) line drops a top-level test file that :(exclude) keeps, and -C <subdirectory> refuses as -C <toplevel> does; an edited surface is REFUSED and read at base; fences, CRLF and the next heading bound the section; handoff mode runs the same arms"; B_sm=1
+  else bad "BL-845 SMOKE ARMS: receipt-bl845.sh exited $sm_rc on the shipped validator: $(tr '\n' ' ' <<<"$sm_out")"; fi
+  sm_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
+    local m o mrc
+    if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
+    o="$(sm_run "$m" "$4")"; mrc=$?
+    if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    elif grep -q '^FAIL clean:' <<<"$o"; then bad "MUTATION '$1' moved the clean control cell -- $5"
+    elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_sm:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$mrc, cell $4 did not fail) -- $5"; fi
+  }
+  sm_mutant sm-m1-off 'refuse "smoke-listed-absent $st: \`$tok\` in ## Smoke Test Updates is not tracked' ': "smoke-listed-absent $st: \`$tok\` in ## Smoke Test Updates is not tracked' m1 "m1 removed, an untracked listed smoke test passes"
+  # The candidate rule has two guards, each with a subject the other cannot reach: `web/tests`, `web/`,
+  # `test-results/` and `tests/e2e` carry no `.` in their last segment (only the extension rule acquits
+  # them), and `web/tests/e2e.d` is a dotted TREE (only the tree rule acquits it).
+  sm_mutant sm-m1-no-ext 'case "${tok##*/}" in *.*) ;; *) continue ;; esac' ':' e2e "an extensionless or directory prose token refused as a listed test"
+  sm_mutant sm-m1-tree '[ "$ty" = tree ] && continue' ':' dotdir "a dotted directory token refused as a listed test"
+  sm_mutant sm-m1-no-removal '[ "$rmv" = 1 ] && continue' ':' rm "the removal clause dropped, a removed listed test is refused"
+  sm_mutant sm-tok-slash ' || t ~ /^\// || ' ' || ' api "a token starting with / read as a path"
+  sm_mutant sm-tok-chars ' || t ~ /=|:\/\/|[*?[]/) continue' ') continue' kv "KEY=URL and glob tokens read as paths"
+  sm_mutant sm-tok-line 'sub(/:[0-9]+$/, "", t)' 'sub(/^NEVER$/, "", t)' line "the :<line> suffix not stripped"
+  sm_mutant sm-tok-node 'sub(/::.*$/, "", t);' 'sub(/^NEVER$/, "", t);' node "the ::node suffix not stripped"
+  sm_mutant sm-fence 'if (sfc == "" && m != "") { sfc = m; next }' 'if (0) { sfc = m; next }' grammar "fenced lines read as section text"
+  sm_mutant sm-section-end '    /^##?[ \t]/ { on = 0 }' '    /^NEVER/ { on = 0 }' grammar "the section runs on past the next heading"
+  sm_mutant sm-m2-off 'refuse "smoke-not-updated' ': "smoke-not-updated' s320 "m2 removed, the s320 4.2 body over a UI diff passes"
+  sm_mutant sm-m2-any-token 'if grep -qxF -- "$tok" <<<"$chg"; then hit="$tok"' 'if true; then hit="$tok"' s320 "any backticked path acquits m2 (the S1 predicate), so s320 4.2 passes"
+  sm_mutant sm-surface-inverted 'if [ -z "$hits" ]; then' 'if [ -n "$hits" ]; then' s320 "the surface match inverted"
+  # Every surface line must reach git as its own pathspec: passing only the first drops the exclude.
+  sm_mutant sm-surface-first-line '"$sb" "$sf" -- $globs 2>/dev/null)"' '"$sb" "$sf" -- $(head -n 1 <<<"$globs") 2>/dev/null)"' excl "only the first surface line reaches git, so an exclude pathspec is lost"
+  sm_mutant sm-surface-at-frozen 'local srev="$sb"' 'local srev="$sf"' edited "the surface read at <frozen>, so the story moves its own gate"
+  sm_mutant sm-no-edited 'refuse "smoke-surface-edited' ': "smoke-surface-edited' edited "an edited surface file not refused"
+  sm_mutant sm-l1-ok-not-skip "printf 'SKIP SMOKE-SURFACE (undeclared: no %s at %s)" "printf 'SMOKE OK (undeclared: no %s at %s)" absent "L1: an absent surface prints SMOKE OK instead of SKIP"
+  sm_mutant sm-no-none 'if [ "$lglobs" = none ]; then' 'if false; then' none "a declared none read as a pathspec"
+  sm_mutant sm-none-case 'lglobs="$(tr '"'"'[:upper:]'"'"' '"'"'[:lower:]'"'"' <<<"$globs")"' 'lglobs="$globs"' cnone "a capitalised None left uncased reaches the matches-nothing guard and refuses smoke-surface-unevaluable"
+  # The two unevaluable guards each have a subject the other cannot reach: a rejected line still lists
+  # nothing, so with the rc guard off magic refuses through the matches-nothing guard WITHOUT the R flag;
+  # `none.` passes git and lists nothing, so only the matches-nothing guard refuses it.
+  sm_mutant sm-pathspec-rc 'if [ "$lrc" -ne 0 ]; then' 'if false; then' magic "a surface line git rejects not refused as a rejected pathspec"
+  sm_mutant sm-surface-matches-nothing 'if [ -z "$lst$flst" ]; then' 'if false; then' nonedot "a surface matching no path at base or frozen (none.) read as no surface change, so SMOKE OK"
+  # The matches-nothing guard lists <frozen> too: without that listing a surface naming a directory the story
+  # creates (green: web/app/**) refuses. typo (matches nothing at either sha) is the near-miss that still refuses.
+  sm_mutant sm-surface-base-only ''"'"'; SD "$et" "$sf" -- $globs 2>/dev/null)"; frc=$?' ''"'"'; :)"; frc=$?' green "the matches-nothing guard lists only <base>, so a greenfield surface the story creates refuses"
+  # A listing failure whose pathspecs parse over <empty tree>..<empty tree> failed on an object: UNEVALUABLE, not a rejected pathspec.
+  sm_mutant sm-listing-any-fail-rejected ''"'"'; SD "$et" "$et" -- $globs >/dev/null 2>&1); then' ''"'"'; false); then' corrupt "a corrupt base tree reported as a rejected surface pathspec"
+  # Nothing refused and the range diff fails: --smoke exits 2 (brk0 is the broken world without the m1 token).
+  sm_mutant sm-smoke-uneval-swallowed '|| exit 2 # smoke mode' '|| : # smoke mode' brk0 "--smoke: an unevaluable range diff with nothing refused falls through to smoke OK"
+  sm_mutant sm-uneval-exit2 '(exit $lrc); correct the line outside the story'"'"'s range"; return 0' '(exit $lrc); correct the line outside the story'"'"'s range"; refused=0; return 2' magic "a rejected surface line exits 2 unrefused, which every caller reads as nothing checked"
+  sm_mutant sm-smoke-uneval-outranks 'smoke_arms "$BASE" "$FROZEN" "$STORY" || [ "$refused" -eq 1 ] || exit 2 # smoke mode' 'smoke_arms "$BASE" "$FROZEN" "$STORY" || exit 2 # smoke mode' broken "--smoke: an unevaluable range diff after an m1 refusal exits 2, so the refusal does not block"
+  sm_mutant sm-hand-uneval-outranks 'smoke_arms "$BASE" "$FROZEN" "$STORY" || [ "$refused" -eq 1 ] || exit 2 # handoff mode' 'smoke_arms "$BASE" "$FROZEN" "$STORY" || exit 2 # handoff mode' handbrk "handoff: an unevaluable smoke arm after a refusal exits 2, so the refusal does not block dispatch"
+  sm_mutant sm-diff-cwd 'SD() { git -C "$TOP" diff' 'SD() { git -C "$REPO" diff' sub "-C <subdirectory> re-roots the smoke pathspecs, so the range is acquitted"
+  sm_mutant sm-no-empty "if [ -z \"\$globs\" ]; then printf 'SKIP SMOKE-SURFACE (empty" "if false; then printf 'SKIP SMOKE-SURFACE (empty" empty "an empty surface read as the whole diff"
+  sm_mutant sm-handoff-unwired 'smoke_arms "$BASE" "$FROZEN" "$STORY" || [ "$refused" -eq 1 ] || exit 2 # handoff mode' ': # handoff mode' hand "handoff mode does not run the smoke arms"
+  sm_mutant sm-exclglob-lost '"$sb" "$sf" -- $globs 2>/dev/null)"' '"$sb" "$sf" -- $(grep -v '"'"'^:(exclude,glob)'"'"' <<<"$globs") 2>/dev/null)"' exclglob "a glob-magic exclude line dropped from the (m2) diff, so a top-level test-only change refuses"
+  if [ -d "$WORK/sm-worlds.snap/cnone/.git" ] && [ -d "$WORK/sm-worlds.snap/magic/.git" ] && [ -d "$WORK/sm-worlds.snap/edited/web" ] \
+    && [ -d "$WORK/sm-worlds.snap/broken/.git" ] && [ -d "$WORK/sm-worlds.snap/nonedot/.git" ] \
+    && [ -d "$WORK/sm-worlds.snap/brk0/.git" ] && [ -d "$WORK/sm-worlds.snap/green/web/app" ] && [ -d "$WORK/sm-worlds.snap/corrupt/.git" ] \
+    && diff -r "$WORK/sm-worlds.snap" "$SMW" >/dev/null 2>&1; then
+    ok "BL-845 SMOKE WORLDS: seeded once (the cnone, magic, edited/web, broken, nonedot, brk0, green/web/app and corrupt worlds among them) and byte-identical after every mutant call (diff -r against the post-seed copy)"
+  else
+    bad "BL-845 SMOKE WORLDS: the worlds changed across the mutant calls or were never snapshotted -- the reuse is unsafe and every cell above is suspect"
+  fi
+  # --- end BL-845 SMOKE ARMS --------------------------------------------------------------------------
+
   # --- BL-833 RED LINE (rv_*) -----------------------------------------------------------------------
   # One world, one validator call per program, read per cell by token: rv_block in world.sh, whose header
   # carries the cells, the mutants and the BL-834 invocation count.
   rv_block
   # --- end BL-833 RED LINE --------------------------------------------------------------------------
+
+  # --- BL-843 CAPTURE-HEADS BLOCK (b43_*) -----------------------------------------------------------
+  # --render-dar, --check and the (o) fold. receipt-bl843.sh owns the worlds and the cells (its header
+  # lists them: ctl r1-r9, esc, cmd, d3, cnt and its near-misses cntnb/cntpl, rp, trim, und). Every mutant is
+  # written beside record-only-diff.sh in the control tree and must FAIL its own named cell and leave
+  # the ctl cell (a story citing nothing renders the two markers, --check 0) standing.
+  b43_run() { bash "$DIR/receipt-bl843.sh" "$1" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus ctl)
+  b43_out="$(b43_run "$HECTL")"; b43_rc=$?
+  if [ "$b43_rc" -eq 0 ]; then ok "CAPTURE-HEADS: --render-dar renders each capture's head (+dirty kept, the replay block's own), its (a)-arm command (a backtick in a double-backtick span) and the full-collection capture's last count only; --check accepts the pasted block, refuses one retyped head stale, a missing block (post-epoch) and two blocks; a pre-epoch or undecidable story WARNs; the block's own paths are never citations; counts: capture-heads block is a run only with a fresh counted block"; B_b43=1
+  else bad "CAPTURE-HEADS: receipt-bl843.sh exited $b43_rc on the shipped validator: $(tr '\n' ' ' <<<"$b43_out")"; fi
+  b43_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
+    local m o mrc
+    if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
+    o="$(b43_run "$m" "$4")"; mrc=$?
+    if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
+    elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the no-capture control cell -- $5"
+    elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_b43:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
+    else bad "MUTATION '$1' SURVIVED (rc=$mrc, cell $4 did not fail) -- $5"; fi
+  }
+  b43_mutant b43-path-only 'if (a != r) {' 'if (substr(a, 1, index(a, " — ")) != substr(r, 1, index(r, " — "))) {' r2 "--check compares only the path column, so a retyped head passes"
+  b43_mutant b43-legacy-any '    if [ "$DL" = bind ]; then refuse "$DAR_MSG"' '    if false; then refuse "$DAR_MSG"' r3 "the legacy exemption accepts any story with no block"
+  b43_mutant b43-und-binds '  DL=undecidable; DL_WHY=""' '  DL=bind; DL_WHY=""' und "an undecidable epoch refuses instead of warning"
+  b43_mutant b43-never-ok '  DAR_STATE=ok' '  DAR_STATE=stale; DAR_MSG="dar-heads-stale $STORY: forced"' r1 "a byte-identical block refused stale"
+  b43_mutant b43-dup-3 'if [ "${nb:-0}" -ge 2 ]; then' 'if [ "${nb:-0}" -ge 3 ]; then' r5 "two blocks are not a duplicate"
+  b43_mutant b43-no-strip 'dar_strip() { LC_ALL=C awk "$DAR_STRIP_AWK"; }' 'dar_strip() { cat; }' r8 "the block region is not stripped before cap_tokens, so its own paths are citations"
+  b43_mutant b43-no-dirty '  case "$h" in *"(+dirty)") CH_DIRTY=1 ;; esac' '  case "$h" in NEVER-DIRTY) CH_DIRTY=1 ;; esac' r9 "a (+dirty) head renders as clean"
+  b43_mutant b43-no-escape "  case \"\$1\" in *'\`'*) printf" '  case "$1" in NEVER-A-BACKTICK) printf' esc "a command holding a backtick renders in a single-backtick span"
+  b43_mutant b43-first-dollar 'cmd="$(LC_ALL=C grep -E "$CMD_RE"' "cmd=\"\$(LC_ALL=C grep -E '^\\\$ '" cmd "the rendered command is the first \$ line, not the (a)-arm reader's"
+  b43_mutant b43-count-all '      if [ -n "$fcp" ] && grep -qxF -- "$p" <<<"$fcp"; then' '      if true; then' r9 "every capture renders a count, so the uncited dirty capture's 1 passed renders"
+  b43_mutant b43-first-count "(passed|failed)([^A-Za-z]|\$)' | tail -n 1)\"" "(passed|failed)([^A-Za-z]|\$)' | head -n 1)\"" d3 "the first count line renders, not the last"
+  b43_mutant b43-no-counts '    dar_counts_ok "$fc" || ev_none' '    false || ev_none' cnt "counts: capture-heads block with a fresh counted block is refused full-collection-none"
+  b43_mutant b43-counts-stale '  [ "$DAR_STATE" = ok ] && [ "$DAR_NCOUNT" -gt 0 ]' '  true' cntnb "counts: capture-heads block is accepted with no block"
+  b43_mutant b43-replay-count '        [ -z "$rl" ] || cnt=""' '        :' rp "a replay capture cited on Full-collection run: renders its count, so its 1 failed is accepted as the run"
+  b43_mutant b43-no-cmd-trim '      cmd="${cmd%"${cmd##*[![:space:]]}"}"' '      :' trim "the rendered command keeps its trailing blanks"
+  b43_mutant b43-counts-nophrase '  case "$1" in *"counts: capture-heads block"*) ;; *) return 1 ;; esac' '  :' cntpl "a bare capture path is accepted as a run whenever a fresh block exists"
+  # --- end BL-843 CAPTURE-HEADS BLOCK -----------------------------------------------------------------
+fi
+
+# --- B3: the gate-2 handoff preflight is wired -----------------------------------------------------
+# implementation.md must carry, on some line, the EXACT go-signal invocation of handoff mode, which
+# Rule A's GATE1-SKIP sentence and the preflight before every gate-2 dispatch run. Substring match on
+# the line (the prose backticks it). The gate-1 line `... <base> <frozen-sha>` is a near-miss that must
+# NOT satisfy it: asserted present and distinct. Absent, this arm FAILS (never green on absence).
+B3_LINE='scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>'
+B3_NEAR='scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>'
+b3_has() { grep -qF -- "$B3_LINE" "$1"; }
+if ! grep -qF -- "$B3_NEAR" "$IMP"; then
+  bad "B3: FIXTURE BROKEN -- the gate-1 near-miss line is absent from implementation.md, so the arm cannot show it discriminates"
+elif b3_has "$IMP"; then
+  ok "B3: implementation.md runs handoff mode at the go-signal sha before gate 2 ($B3_LINE); the gate-1 <frozen-sha> line alone does not satisfy it"; B_b3=1
+else
+  bad "B3: implementation.md carries no line naming '$B3_LINE' (the GATE1-SKIP and gate-2 preflight handoff call); the gate-1 <frozen-sha> line does not count"
+fi
+if [ "${B_b3:-0}" = 1 ]; then
+  awk -v s="$B3_LINE" '{ while ((p = index($0, s))) $0 = substr($0, 1, p - 1) "validate-handoff-evidence.sh <story-file>" substr($0, p + length(s)); print }' "$IMP" > "$WORK/imp-no-b3.md"
+  if cmp -s "$IMP" "$WORK/imp-no-b3.md"; then bad "FIXTURE ERROR: mutation 'b3-unwired' matched nothing"
+  elif b3_has "$WORK/imp-no-b3.md"; then bad "MUTATION 'b3-unwired' SURVIVED -- implementation.md without the go-signal handoff line"
+  else mutant_killed "${B_b3:-0}" b3-unwired "MUTATION 'b3-unwired' killed: implementation.md without the go-signal handoff line fails B3"; fi
 fi
 
 # --- BL-808: --list-captures ------------------------------------------------------

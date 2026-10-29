@@ -957,6 +957,20 @@ _q_v="$(grep -c '^PASS | NEEDS_REWORK$' "$PROJ_QLEG/core/team-roles/qa.md")" || 
 _q_2=$(( $(wc -l < "$PROJ/core/team-roles/qa.md") - $(wc -l < "$PROJ_Q2/core/team-roles/qa.md") ))
 [ "$_q_t" = 1 ] && [ "$_q_l" = 0 ] && [ "$_q_v" = 1 ] && [ "$_q_2" = 1 ] \
   || { echo "FIXTURE STALE: the qa.md roots cannot express the container states (template $_q_t, legacy containers $_q_l, legacy verdict line $_q_v, two-container diff $_q_2)" >&2; exit 2; }
+# BL-844: two qa.md Class states, each derived from the subject's qa.md with every column-0 `Class:` line
+# removed first, so neither depends on whether the shipped qa.md carries the template yet. QCLS appends
+# code-reviewer.md's own template line (the set I129 holds equal); QNOCLS is the stripped copy alone.
+PROJ_QCLS="$WORK/proj-qcls"; PROJ_QNOCLS="$WORK/proj-qnocls"
+for _r in "$PROJ_QCLS" "$PROJ_QNOCLS"; do
+  mkdir -p "$_r/core/skills/ai-dlc/steps" "$_r/core/team-roles"
+  cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$_r/core/skills/ai-dlc/steps/"
+  cp "$PROJ/core/team-roles/code-reviewer.md" "$_r/core/team-roles/"
+  grep -v '^Class:' "$PROJ/core/team-roles/qa.md" > "$_r/core/team-roles/qa.md"
+done
+_q_c="$(awk '/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { print; exit }' "$PROJ/core/team-roles/code-reviewer.md")"
+printf '\n## Finding Class\n\n%s\n' "$_q_c" >> "$PROJ_QCLS/core/team-roles/qa.md"
+[ -n "$_q_c" ] && [ "$(grep -c '^Class: ' "$PROJ_QCLS/core/team-roles/qa.md")" = 1 ] && ! grep -q '^Class:' "$PROJ_QNOCLS/core/team-roles/qa.md" \
+  || { echo "FIXTURE STALE: the qa.md Class roots cannot express the two states (code-reviewer.md template '$_q_c')" >&2; exit 2; }
 # THE SEVERITY BOUNDARY's two frozen trees (BL-746). B's six files over a base that INSTALLS qa.md at the
 # consumer path .claude/team-roles/qa.md -- QL the container-less one (PROJ_QLEG's, graph's installed
 # shape), QS the subject's own. The installed copy sits in the BASE commit, so the map is B's (K=3).
@@ -2176,6 +2190,24 @@ p_vb_qleg() {
     raw_shard "$d" 2 '## Findings' '' '#### F-2-9 uncontained' 'parts: 2' '' 'Body.'
     vb_refuse "$sd" "$d" code-review 2 cr-unclassed "$VB_UNC"
   fi
+  VB_PROJ=""
+  [ -z "$WHY" ]
+}
+# ---- QC1 (qa, BL-844): THE CLASS LINE under --gate qa, the set lifted from qa.md. A part shard's
+# Important finding carrying `Class: FOO` is REFUSED by the merge and --check-shard byte-equal, naming
+# qa.md's set; `Class: EVIDENCE` merges and is SHARD-OK; over a qa.md declaring no template line the
+# same FOO shard merges (no set, nothing checked) -- presence-shaped: MERGED: and SHARD-OK must appear.
+QC_BAD="'Class: FOO' is not one of BOOKKEEPING CODE EVIDENCE TEST (qa.md's template)"
+qc_body() { printf '### Important (seeded)\n\n#### Q-2-9 a stale capture block\nparts: 2\nClass: %s\n\nBody.' "$1"; }
+p_qclass() {
+  local sd="$1" d c
+  WHY=""
+  d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  VB_PROJ="$PROJ_QCLS"
+  if cell qc-foo; then vb_q "$d" 2 NEEDS_REWORK "$(qc_body FOO)"; vb_refuse "$sd" "$d" qa 2 qc-foo "$QC_BAD"; cs_reset "$d" "$c"; fi
+  if cell qc-evidence; then vb_q "$d" 2 NEEDS_REWORK "$(qc_body EVIDENCE)"; vb_pass "$sd" "$d" qa 2 qc-evidence; cs_reset "$d" "$c"; fi
+  if cell qc-none; then VB_PROJ="$PROJ_QNOCLS"; vb_q "$d" 2 NEEDS_REWORK "$(qc_body FOO)"; vb_pass "$sd" "$d" qa 2 qc-none; cs_reset "$d" "$c"; fi
   VB_PROJ=""
   [ -z "$WHY" ]
 }

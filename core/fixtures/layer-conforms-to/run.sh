@@ -267,11 +267,6 @@ mx_holds() {
     onemsg)     ! { grep -Fq "got '<none>'" <<<"$2" || grep -Fq 'read ZERO clauses' <<<"$2" || grep -Fq "could not read 'consumer_crosswalk_file:'" <<<"$2"; } ;;
   esac
 }
-mx_flag() { case "$1" in
-    undeclared) echo "${B_undeclared:-0}" ;; abovecv) echo "${B_abovecv:-0}" ;; band) echo "${B_band:-0}" ;;
-    nolc) echo "${B_nolc:-0}" ;; nolcfooter) echo "${B_nolcfooter:-0}" ;; entries) echo "${B_entries:-0}" ;;
-    atcur) echo "${B_atcur:-0}" ;; sealed) echo "${B_sealed:-0}" ;; onemsg) echo "${B_onemsg:-0}" ;;
-  esac; }
 # mx_cell <mutant> <arm> <output> <rc>. The matrix cells are not counted in the assertion floor below.
 mx_cell() {
   local m="$1" t="$2" role a0="$ASSERTIONS"
@@ -288,7 +283,19 @@ mx_cell() {
     ok "MATRIX $m $t GREEN"
     if [ "$MATRIX" != 1 ] && [ "$role" = D ]; then bad "mutant $m SURVIVED its deciding arm $t"; fi
   else
-    mutant_killed "$(( $(mx_flag "$t") && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED"
+    # one literal call per arm, so each kill's flag is a bound B_<arm> in the call itself
+    case "$t" in
+      undeclared) mutant_killed "$(( ${B_undeclared:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      abovecv)    mutant_killed "$(( ${B_abovecv:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      band)       mutant_killed "$(( ${B_band:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      nolc)       mutant_killed "$(( ${B_nolc:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      nolcfooter) mutant_killed "$(( ${B_nolcfooter:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      entries)    mutant_killed "$(( ${B_entries:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      atcur)      mutant_killed "$(( ${B_atcur:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      sealed)     mutant_killed "$(( ${B_sealed:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      onemsg)     mutant_killed "$(( ${B_onemsg:-0} && ${B_ctl:-0} ))" "$m" "MATRIX $m $t KILLED" ;;
+      *)          bad "mx_cell: arm $t has no flag binding" ;;
+    esac
     if [ "$MATRIX" != 1 ] && [ "$role" = T ]; then bad "mutant $m tripped arm $t, which the header names as its twin"; fi
   fi
   ASSERTIONS="$a0"

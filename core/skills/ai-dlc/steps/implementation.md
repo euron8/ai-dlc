@@ -274,7 +274,7 @@ Monitor task progress:
   (simplification/removal findings included, per Rule 7 and Rule 26(d))
 - When QA sends failures → ensure dev fixes and QA re-validates; gate 1
   re-runs on that rework first unless Rule A answers `GATE1-SKIP`
-  (**Gate 1 after a QA rework**, below)
+  (**Gate 1 after a QA rework**, below). The dev rework brief carries each finding's `Instances:` list verbatim.
 - When a QA `NEEDS_REWORK` names a `requirement divergence` HARD_BLOCK
   (`qa.md` Validation Checklist), ask the operator by `AskUserQuestion`
   under Rule 3(a), with no flag, before dispatching any dev rework.
@@ -320,8 +320,11 @@ written only below or above `## `, `full-collection-missing` and
 or `Dependency setup:` line, `full-collection-none` for a `none` whose
 `<base>..<frozen-sha>` diff is not record-only, printing the changed-path count
 and the first non-record path, and `dependency-setup-none` for a `none` with no
-reason) and do not dispatch code review while either
-exits 1. A `SKIP STATUS (<reason>)` line means a status check could not decide
+reason, and `dar-heads-stale`, `dar-heads-missing` or `dar-heads-duplicate` for a
+capture-heads block in the Dev Agent Record that differs from the render, is
+absent while captures are cited, or appears twice) and do not dispatch code review while either
+exits 1. A `WARN dar-heads-missing` is a story authored before the block existed, or a
+history that cannot be decided (shallow, or the engine not committed); it does not refuse. A `SKIP STATUS (<reason>)` line means a status check could not decide
 (no yaml, no row); it does not refuse, and the lead records it in the gate log.
 A SKIP whose reason names the story's or the yaml's own content goes back to the
 dev; only a structural SKIP (the sibling script missing, no envelope yet)
@@ -461,12 +464,35 @@ or changes a code or test file on a line that is not blank, a comment or a
 docstring. Captures and records never trigger it. Run
 `scripts/ai-dlc/partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha> --exclude-captures <captures file>`,
 `<go-signal-sha>` being the sha QA validated. `GATE1-SKIP:` dispatches QA's
-re-validation directly; `GATE1-RERUN:`, or any refusal, runs gate 1 as a
+re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or any refusal, runs gate 1 as a
 re-review pass first.
+
+**Handoff preflight before every gate-2 dispatch.** Before every gate-2
+dispatch, including one that follows `GATE1-SKIP:`, run in the frozen dev worktree
+`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>`
+Exit 1 refuses the dispatch: send the dev its `REFUSED` lines.
+
+**The record-only route of a QA re-validation.** Before partitioning a QA
+re-validation, pass M >= 2, run
+`scripts/ai-dlc/partition-review-diff.sh --route <worktree> <QA pass M-1 file> <go-signal-sha> --exclude-captures <captures file>`.
+On `ROUTE:` (exit 0) every Critical and Important finding of pass M-1 carries
+`Class: EVIDENCE` or `Class: BOOKKEEPING` and the delta from its `reviewed-sha:` carries no
+code or test path. The pass is then the handoff validator plus ONE serial QA: run
+`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>`
+as at the preflight above, and dispatch one QA, `shard: 1/1 <story-index>`, briefed
+`route: record-only`, carrying every `validate-carried-findings.sh --list` line and the
+validator's output. Any other answer (`FULL:`, any exit but 0) is the full fan-out below.
+Never route on the classes alone.
 
 **Gate-2 dispatch: the validation partitions by changed-file group too.**
 After the DAR-fold preflight, with the go-signal SHA recorded (it may differ
-from gate 1's frozen SHA after a rework pass), run in the frozen dev worktree
+from gate 1's frozen SHA after a rework pass), and before any QA is dispatched, run
+`validate-handoff-evidence.sh -C <worktree> --smoke <story-file> <base> <go-signal-sha>`
+(the mechanical half of `gate-validation.md` Check 11, **Smoke surface.**). Exit 1
+refuses the go-signal: no QA is dispatched, and the story returns to the dev with the
+`REFUSED` lines verbatim. A `SKIP SMOKE-SURFACE (<reason>)` or `SMOKE NO-SURFACE`
+line is recorded in the story's gate log and does not refuse; exit 2 is recorded
+there too. Then run in the frozen dev worktree
 `partition-review-diff.sh --map <worktree> <base> <go-signal-sha> --exclude-captures <captures file> --shard-dir <root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`,
 fresh on that SHA, `<captures file>` written by `--list-captures` at `<go-signal-sha>` as at gate 1
 (on its exit 2, without the flag, the line recorded in the gate log), where `<root>` is the absolute path of the frozen worktree,
@@ -481,7 +507,10 @@ dispatch one QA with `shard: 1/1 <story-index>` and record the refusal line
 verbatim in the story's gate log. Otherwise dispatch one QA per line the map
 prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
 its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
-("Split dispatch": files axis). ONE cross QA, briefed
+("Split dispatch": files axis). On a pass M >= 2, paste each line of
+`scripts/ai-dlc/validate-carried-findings.sh --list <QA pass M-1 file>`
+verbatim into the brief of the shard that carries that finding (a part holding a cited
+file, else the first cross QA), as at gate 1. ONE cross QA, briefed
 `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K
 comma-joined without padding) with the whole map and the whole diff to read,
 writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in
@@ -617,4 +646,5 @@ story past gate 3 that is still `review`, or `done` with no `deferred_acs` field
 in a view: dispatch the closing writer now (section 3, item 4) and route only after
 the closing writer's closing commit lands. The lead does NOT make these writes
 itself.
+Run `scripts/ai-dlc/validate-held-stories.sh`; a STALE-HOLD blocks the exit.
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md`

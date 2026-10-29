@@ -32,7 +32,48 @@
 # produced no matter what the code under test did, and the assertion would have stayed green
 # through any rewrite of the invariant it existed to guard. The PC-S900 trio in seed.sh is what
 # gives it one.
+#
+# Mutant matrix: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
+# runs only its deciding arm plus its twins; `--matrix` measures every cell once and prints a
+# `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell. It is re-measured whenever an arm or a
+# mutant is added or changed. echo0-fallback also trips noop-stderr-clean and noop-archive-absent;
+# q-bold's decides set is the two arms its one property moves.
+#
+# MUTANT-MATRIX sweep-anchor decides=sw-rowset-stable twins=sw-closed-archived
+# MUTANT-MATRIX hist-count-crossing decides=xc-rowset-stable twins=xc-survivor-classified
+# MUTANT-MATRIX echo0-fallback decides=noop-message twins=noop-rc0
+# MUTANT-MATRIX q-anchor decides=q2-quote-archive twins=q1-genuine-moves
+# MUTANT-MATRIX q-bold decides=q6-narrated-live,q5-nobold-stuck twins=q2-quote-archive
+# MUTANT-MATRIX msg-entry-id decides=msg-entry-id-exit twins=msg-annotation-remedy
+# MUTANT-MATRIX refusal-deleted decides=splitter-refused twins=rotator-runs
+# MUTANT-MATRIX bullet-arm decides=bm-bullet-archived twins=bm-heading-archived
+# MUTANT-MATRIX fence-blind decides=fm-whole-entry twins=fm-open-live
+# MUTANT-MATRIX hist-count-nohist decides=pc-ambiguous-stable twins=pc-survivor-classified
+# MUTANT-MATRIX boundary-flags decides=bl-onboundary,bl-nobold twins=bl-body
+# MUTANT-MATRIX c71-strip-both-branches decides=colon-btbold twins=colon-closed
+# MUTANT-MATRIX c71-strip-also-removes-bold decides=fp-legacy twins=splitter
+# MUTANT-MATRIX c71-balanced-only decides=nocolon-odd twins=nocolon
+# MUTANT-MATRIX c71-no-double-span decides=nocolon-dbl twins=nocolon
+# MUTANT-MATRIX c71-drop-single-span-gsub decides=close-after-span twins=fp-versionless
+# MUTANT-MATRIX c71-greedy-single-gsub decides=close-between-spans twins=close-after-span
+# MUTANT-MATRIX c71-strip-off decides=nocolon twins=colon-mention
+# MUTANT-MATRIX c71-colon-revert decides=colon-mention twins=splitter
+# MUTANT-MATRIX c71-boundary-unstripped decides=title-nocolon twins=nocolon
+# MUTANT-MATRIX c6-no-warn decides=over-dry twins=at-quiet
+# MUTANT-MATRIX c6-ge decides=at-quiet twins=over-dry
+# MUTANT-MATRIX c6-refuse decides=over-apply twins=at-quiet
+# MUTANT-MATRIX c6-headings decides=over-dry twins=at-quiet
+# MUTANT-MATRIX-DYNAMIC c71 why=c71_mut passes "c71-$1" to mutant_killed, built from its first argument; each c71_mut call yields a c71-<name> that carries its own row in this block
+# MUTANT-MATRIX-DYNAMIC c6 why=c6_mut passes "c6-$1" to mutant_killed, built from its first argument; each c6_mut call yields a c6-<name> that carries its own row in this block
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-rotate/run.sh --matrix
 set -uo pipefail
+
+# --matrix is the ONLY way into matrix mode (see the MUTANT-MATRIX block in the header): parsed
+# before anything else. A plain run executes no matrix-only cell, and the last arm asserts it.
+MATRIX=0
+if [ "${1:-}" = --matrix ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
+MX_RAN=0
+mx() { [ "$MATRIX" = 1 ]; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh" | tail -1)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -58,6 +99,30 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 entries() { grep -cE '^(## |- \*\*)' "$1" 2>/dev/null || echo 0; }
 
+# need_base / mutant_killed (core/fixtures/lib/mutant.sh): every kill below goes through
+# mutant_killed, gated on a B_* flag that the UNMUTATED arm set in THIS run beside its own ok.
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_SW=0; B_XC=0; B_E0=0; B_QA=0; B_Q6=0; B_Q5=0; B_MSG=0; B_RF=0; B_BM=0; B_FM=0; B_BLON=0; B_BLNB=0; B_PCH=0; B_C71=0; B_C71C=0; B_C6=0; B_C6C=0
+has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }     # has <text> <needle>
+lacks() { case "$1" in *"$2"*) return 1 ;; esac; return 0; }   # lacks <text> <needle>
+lacksf() { ! grep -q "$1" "$2" 2>/dev/null; }                  # lacksf <needle> <file>
+# mcell <mutant> <arm> <cmd...> -- one `MATRIX<TAB>mutant<TAB>arm<TAB>ok|FAIL` line per cell, the
+# command's status being whether that arm HOLDS under the mutant. Matrix mode only; the command is
+# never evaluated on a plain run, and every cell it does evaluate is counted in MX_RAN.
+mcell() {
+  local m="$1" a="$2"; shift 2
+  mx || return 0
+  MX_RAN=$((MX_RAN + 1))
+  if "$@"; then printf 'MATRIX\t%s\t%s\tok\n' "$m" "$a"; else printf 'MATRIX\t%s\t%s\tFAIL\n' "$m" "$a"; fi
+}
+# A HELPER USED BELOW BUT NOT DEFINED ABOVE IS A FIXTURE ERROR, never a silent no-op arm.
+_HELPERS='ok bad need_base mx mcell has lacks lacksf'
+for _h in $_HELPERS; do
+  declare -F "$_h" >/dev/null 2>&1 || { echo "FIXTURE ERROR: helper $_h is undefined" >&2; exit 2; }
+done
 # THE CLOSE VOCABULARY, DERIVED FROM ITS SINGLE HOME AND NEVER SPELLED HERE.
 #
 # A FIXTURE THAT HAND-LISTS THE TOKEN SET IS THE SUBJECT'S OWN DEFECT, ONE LEVEL UP. The thing
@@ -146,6 +211,7 @@ else
 fi
 if grep -q 'PC-CLOSED-BULLET' "$ARCH" 2>/dev/null; then
   ok "closed BULLET entry present in the archive — the bullet arm of ledger_entry_shape() is live"
+  B_BM=1
 else
   bad "the closed BULLET entry is not in the archive: rotation LOST it, or the bullet arm stopped opening entries"
 fi
@@ -168,6 +234,7 @@ fences() { local n; n="$(grep -cE '^[[:space:]]*```' "$1" 2>/dev/null)" || n=0; 
 if grep -q 'PC-CLOSED-FENCED' "$ARCH" 2>/dev/null && grep -q 'FENCED-EVENT' "$ARCH" 2>/dev/null \
    && ! grep -q 'PC-CLOSED-FENCED' "$LEDGER" && ! grep -q 'FENCED-EVENT' "$LEDGER"; then
   ok "a closed entry whose fence records a heading-shaped line moved WHOLE: heading and fenced line both in the archive, neither left live"
+  B_FM=1
 else
   bad "the fenced closed entry was SPLIT: archive has heading=$(grep -c 'PC-CLOSED-FENCED' "$ARCH" 2>/dev/null) fenced-line=$(grep -c 'FENCED-EVENT' "$ARCH" 2>/dev/null); live has heading=$(grep -c 'PC-CLOSED-FENCED' "$LEDGER") fenced-line=$(grep -c 'FENCED-EVENT' "$LEDGER")"
 fi
@@ -351,14 +418,17 @@ else
     bad "FIXTURE BROKEN — the UNMUTATED rotator in the sandbox already changes the row set on this seed, so the mutant's verdict below is not attributable to the mutation"
   else
     ok "  CONTROL: the unmutated rotator in the sandbox archives the closed entry and leaves the row set alone"
+    B_SW=1
   fi
+  mcell sweep-anchor sw-rowset-stable [ "$mut_b" = "$mut_a" ]
+  mcell sweep-anchor sw-closed-archived grep -q PC-SW-CLOSED "$SW/mut/push-candidate-ledger.archive.md"
 
   if [ "$mut_b" = "$mut_a" ]; then
     bad "  MUTATION: a rotator that archived a LIVE entry produced the SAME row set — the reshaped acceptance test cannot see a sweep, which is the one thing it exists to see"
   elif grep -q 'PC-SW-OPEN' <<<"$mut_a"; then
     bad "  MUTATION: the row set changed but the swept entry is still present, so the difference is not the sweep and this arm is measuring something else"
   else
-    ok "  MUTATION: without the line-leading anchor the rotator archives the quoting LIVE entry, its row disappears, and the ROW-SET comparison FAILS — the reshaped test is not laxer about a sweep"
+    mutant_killed "$B_SW" sweep-anchor "  MUTATION: without the line-leading anchor the rotator archives the quoting LIVE entry, its row disappears, and the ROW-SET comparison FAILS — the reshaped test is not laxer about a sweep"
   fi
 fi
 
@@ -540,7 +610,10 @@ else
     bad "  FIXTURE BROKEN — the UNMUTATED copy in the sandbox does not reproduce the shipping run's row sets, so the mutant's difference below is not attributable to the mutation"
   else
     ok "  CONTROL: an unmutated reverify copy in the sandbox emits the AMBIGUOUS row and reproduces the shipping run's row sets at both compared states"
+    B_XC=1
   fi
+  mcell hist-count-crossing xc-rowset-stable [ "$xc_mr2" = "$xc_mr3" ]
+  mcell hist-count-crossing xc-survivor-classified has "$xc_m3" "STILL-LIVE${TAB}PC-S910-ALPHA${TAB}"
 
   if [ "$xc_mr2" = "$xc_c2" ]; then
     bad "  MUTATION DID NOT BITE — gating the prefix row on an open-UNION-archive count changed no verdict at state 2, so the count the mutant inserts never reached the row and the arm above is unproven"
@@ -550,7 +623,7 @@ else
     bad "  MUTATION: with the row gated on history the row set STILL matched across the rotation, so the arm above is not measuring what keeps it stable"
   elif ! grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S910${TAB}" <<<"$xc_m2" \
     && grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S910${TAB}" <<<"$xc_m3"; then
-    ok "  MUTATION: with the prefix row gated on an open-UNION-archive count the PC-S910 row is ABSENT while the sibling sits annotated and RETURNS once --apply archives it, and the arm above fires — it is bound to the row reading no history"
+    mutant_killed "$B_XC" hist-count-crossing "  MUTATION: with the prefix row gated on an open-UNION-archive count the PC-S910 row is ABSENT while the sibling sits annotated and RETURNS once --apply archives it, and the arm above fires — it is bound to the row reading no history"
   else
     bad "  MUTATION: the row set changed but not into the reported flip, so this arm is measuring some other difference"
   fi
@@ -582,18 +655,26 @@ mkdir -p "$WORK/noop"
 printf '# Push-candidate ledger\n\n## PC-OPEN-ONLY — nothing in this file is closed\n\nBody.\n' \
   > "$WORK/noop/push-candidate-ledger.md"
 
-noop_guard_holds() { # <rotate-script> -> 0 iff the no-op guard fired cleanly
+# noop_facts runs the rotator ONCE on the nothing-to-rotate ledger and sets four facts, each 1 when
+# the guard's property HOLDS: NF_RC (exit 0), NF_MSG (early-exit line), NF_ERR (clean stderr), NF_ARCH
+# (no archive created). noop_guard_holds is their conjunction, and the matrix reads them as cells.
+noop_facts() { # <rotate-script>
   local rot="$1" dir out rc
   dir="$WORK/noop-run"
   rm -rf "$dir"; mkdir -p "$dir"
   cp "$WORK/noop/push-candidate-ledger.md" "$dir/push-candidate-ledger.md"
   out="$(bash "$rot" "$dir/push-candidate-ledger.md" --apply 2>"$dir/stderr")"
   rc=$?
-  [ "$rc" -eq 0 ] || return 1
-  grep -q 'nothing to rotate' <<<"$out" || return 1
-  grep -q 'integer expression expected' "$dir/stderr" && return 1
-  [ -f "$dir/push-candidate-ledger.archive.md" ] && return 1
+  NF_RC=0; NF_MSG=0; NF_ERR=1; NF_ARCH=1
+  [ "$rc" -eq 0 ] && NF_RC=1
+  grep -q 'nothing to rotate' <<<"$out" && NF_MSG=1
+  grep -q 'integer expression expected' "$dir/stderr" && NF_ERR=0
+  [ -f "$dir/push-candidate-ledger.archive.md" ] && NF_ARCH=0
   return 0
+}
+noop_guard_holds() { # <rotate-script> -> 0 iff the no-op guard fired cleanly
+  noop_facts "$1"
+  [ "$NF_RC$NF_MSG$NF_ERR$NF_ARCH" = 1111 ]
 }
 
 if noop_guard_holds "$ROT"; then
@@ -622,14 +703,25 @@ cp "$ROT" "$MUTD/control.sh"
 sed 's@n_move="$(grep -c . "$TMPD/moved-names")"@n_move="$(grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0)"@' \
   "$ROT" > "$MUTD/mutant.sh"
 
-if ! noop_guard_holds "$MUTD/control.sh"; then
-  bad "FIXTURE BROKEN — an UNMUTATED copy in the mutant directory already fails the guard, so assertion 8 would score a false pass"
-elif cmp -s "$ROT" "$MUTD/mutant.sh"; then
-  bad "FIXTURE BROKEN — the mutation matched nothing, so assertion 7 is unproven"
-elif noop_guard_holds "$MUTD/mutant.sh"; then
-  bad "the guard still 'fires' with the fallback restored — assertion 7 is vacuous"
+if noop_guard_holds "$MUTD/control.sh"; then
+  ok "CONTROL: an UNMUTATED copy in the mutant directory holds the no-op guard (assertion 8 scores against a working copy)"
+  B_E0=1
 else
-  ok "mutation: restoring '|| echo 0' kills the no-op guard (assertion 7 is load-bearing)"
+  bad "FIXTURE BROKEN — an UNMUTATED copy in the mutant directory already fails the guard, so assertion 8 would score a false pass"
+fi
+if cmp -s "$ROT" "$MUTD/mutant.sh"; then
+  bad "FIXTURE BROKEN — the mutation matched nothing, so assertion 7 is unproven"
+else
+  noop_guard_holds "$MUTD/mutant.sh"; nm_rc=$?
+  mcell echo0-fallback noop-rc0 [ "$NF_RC" = 1 ]
+  mcell echo0-fallback noop-message [ "$NF_MSG" = 1 ]
+  mcell echo0-fallback noop-stderr-clean [ "$NF_ERR" = 1 ]
+  mcell echo0-fallback noop-archive-absent [ "$NF_ARCH" = 1 ]
+  if [ "$nm_rc" -eq 0 ]; then
+    bad "the guard still 'fires' with the fallback restored — assertion 7 is vacuous"
+  else
+    mutant_killed "$B_E0" echo0-fallback "mutation: restoring '|| echo 0' kills the no-op guard (assertion 7 is load-bearing)"
+  fi
 fi
 
 # --- THE ENTRIES NEITHER RULE TAKES ---------------------------------------------------
@@ -781,6 +873,7 @@ fi
 q_stuck="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$q_out")"
 if grep -q 'PC-Q5' <<<"$q_stuck"; then
   ok "a close written with NO BOLD SPAN is reported as stuck — the one class the two grammars still separate, and the remedy the banner offers can actually be satisfied"
+  B_Q5=1
 else
   bad "the no-bold close was neither archived nor reported — that is the invisible state the stuck list exists to end, surviving in the only shape that can still reach it"
 fi
@@ -805,6 +898,7 @@ if grep -q 'PC-Q6' <<<"$q_moved"; then
   bad "an OPEN entry whose body NARRATES a close token at the start of a line was archived — that is live work deleted from the file the pull reads, and the bold span is the only thing that separates the two"
 else
   ok "an OPEN entry that NARRATES a close token line-leading is NOT archived — line position is not the discriminator, the annotation's bold span is"
+  B_Q6=1
 fi
 
 # --- A TOKEN REVERIFY HONOURS THAT ROTATE CANNOT ARCHIVE MUST BE IMPOSSIBLE ------------------
@@ -856,11 +950,14 @@ else
     bad "  FIXTURE BROKEN: the UNMUTATED copy in a sandbox does not reproduce the shipped verdict (Q1 moves, Q2 does not), so the mutant's verdict is not attributable to the mutation"
   else
     ok "  mutation control: an unmutated copy in its own sandbox archives PC-Q1 and leaves PC-Q2 alone"
+    B_QA=1
   fi
+  mcell q-anchor q2-quote-archive lacks "$m_moved" PC-Q2
+  mcell q-anchor q1-genuine-moves has "$m_moved" PC-Q1
   if ! grep -q 'PC-Q1' <<<"$m_moved"; then
     bad "  MUTATION: the unmutated-control entry stopped moving under the mutant, so the copy is broken and its verdict is not attributable"
   elif grep -q 'PC-Q2' <<<"$m_moved"; then
-    ok "  MUTATION: without the line-leading anchor the quoting entry is archived again — the anchor is what stands between a live entry and the archive"
+    mutant_killed "$B_QA" q-anchor "  MUTATION: without the line-leading anchor the quoting entry is archived again — the anchor is what stands between a live entry and the archive"
   else
     bad "  MUTATION: removing the line anchor did NOT re-archive the quoting entry, so these assertions are not measuring the anchor"
   fi
@@ -881,19 +978,19 @@ if cmp -s "$LIB" "$MUTB/lib.sh"; then
 else
   b_out="$(bash "$MUTB/ledger-rotate.sh" "$Q" --archive "$WORK/mutb-archive.md" 2>&1)"
   b_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$b_out")"
+  mcell q-bold q6-narrated-live lacks "$b_moved" PC-Q6
+  mcell q-bold q5-nobold-stuck lacks "$b_moved" PC-Q5
+  mcell q-bold q2-quote-archive lacks "$b_moved" PC-Q2
   if ! grep -q 'PC-Q1' <<<"$b_moved"; then
     bad "  MUTATION bold-span: the unmutated-control entry stopped moving, so the copy is broken and its verdict is not attributable"
   elif ! grep -q 'PC-Q6' <<<"$b_moved"; then
     bad "  MUTATION bold-span: with the span optional again the NARRATED token was still not archived, so the narrative arm above is not measuring the span"
   elif grep -q 'PC-Q2' <<<"$b_moved"; then
     bad "  MUTATION bold-span: it also archived the MID-LINE quotation, so it is not a clean mutation of the span alone and it overlaps the anchor mutant"
-  else
-    ok "  MUTATION bold-span: with the span optional the line-leading NARRATIVE is archived as live work, and the mid-line quotation is not — one property, its own subject"
-  fi
-  if grep -q 'PC-Q5' <<<"$b_moved"; then
-    ok "  MUTATION bold-span: and the no-bold CLOSE leaves the stuck list by being archived — the span is what puts it there"
-  else
+  elif ! grep -q 'PC-Q5' <<<"$b_moved"; then
     bad "  MUTATION bold-span: the no-bold close still did not archive, so the stuck arm above is not keyed on the span either"
+  else
+    mutant_killed "$(( ${B_Q6:-0} && ${B_Q5:-0} ))" q-bold "  MUTATION bold-span: with the span optional the line-leading NARRATIVE is archived as live work and the no-bold CLOSE leaves the stuck list by being archived, while the mid-line quotation is not — one property, its own subject"
   fi
 fi
 
@@ -953,6 +1050,7 @@ fi
 
 if rg_refused splitter; then
   ok "REFUSES a ledger whose boundary rule would split a closed entry, rather than stranding its receipt"
+  B_RF=1
 else
   bad "rotated a ledger that splits a closed entry — the head goes to the archive and the receipt is stranded in the live file under no heading, which is irreversible"
 fi
@@ -1262,6 +1360,7 @@ if [ "$rg_msg_rc" -eq 2 ]; then
   bad "FIXTURE BROKEN — the refusal banner did not carry its annotation remedy at all, so this arm asserts nothing about the message"
 elif [ "$rg_msg_rc" -eq 0 ]; then
   ok "  the refusal names BOTH exits — re-indent the annotation, or give a real entry its own id"
+  B_MSG=1
 else
   bad "SUBJECT DEFECT — the refusal names only the annotation remedy. When the line is a real entry that advice destroys it, and the exit the arm above proves works is not offered"
 fi
@@ -1279,10 +1378,12 @@ if cmp -s "$ROT" "$MUTM/ledger-rotate.sh"; then
 else
   mm_out="$(bash "$MUTM/ledger-rotate.sh" "$RG/fp-open.md" 2>&1)"
   rg_msg_check "$mm_out"; mm_rc=$?
+  mcell msg-entry-id msg-entry-id-exit [ "$mm_rc" -eq 0 ]
+  mcell msg-entry-id msg-annotation-remedy [ "$mm_rc" -ne 2 ]
   if [ "$mm_rc" -eq 2 ]; then
     bad "  MUTATION: the mutant lost the annotation remedy too, so it is not a clean removal of the entry-id exit alone"
   elif [ "$mm_rc" -eq 1 ]; then
-    ok "  MUTATION: with the entry-id exit deleted the arm above fires — it is bound to the remedy, not to the banner existing"
+    mutant_killed "$B_MSG" msg-entry-id "  MUTATION: with the entry-id exit deleted the arm above fires — it is bound to the remedy, not to the banner existing"
   else
     bad "  MUTATION: deleting the entry-id exit did NOT trip the arm above, so that arm is satisfied by any wording"
   fi
@@ -1301,6 +1402,8 @@ if cmp -s "$ROT" "$MUTR/ledger-rotate.sh"; then
   bad "FIXTURE BROKEN — the refusal mutation matched nothing, so every 'is NOT refused' assertion above is unproven"
 else
   m_out="$(bash "$MUTR/ledger-rotate.sh" "$RG/splitter.md" 2>&1)"; m_rc=$?
+  mcell refusal-deleted splitter-refused has "$m_out" 'REFUSING to rotate'
+  mcell refusal-deleted rotator-runs [ "$m_rc" -eq 0 ]
   # THE CONTROL: the mutant must still be a working rotator. A copy that dies sourcing lib.sh
   # also stops refusing, and "no refusal" would then score as a kill of a guard that never ran.
   if [ "$m_rc" -ne 0 ] || ! grep -q 'closed entries would move' <<<"$m_out"; then
@@ -1308,7 +1411,7 @@ else
   elif grep -q 'REFUSING to rotate' <<<"$m_out"; then
     bad "  MUTATION: the guard still refused with SPLIT_FINDINGS emptied — the refusal assertion is measuring something else"
   else
-    ok "  MUTATION: with the refusal removed the splitter rotates again, so the arms above are load-bearing"
+    mutant_killed "$B_RF" refusal-deleted "  MUTATION: with the refusal removed the splitter rotates again, so the arms above are load-bearing"
   fi
 fi
 
@@ -1381,12 +1484,19 @@ if cmp -s "$(dirname "$ROT")/lib.sh" "$BM/lib.sh"; then
   bad "FIXTURE BROKEN — the bullet-arm mutation matched nothing in lib.sh, so the shape arms above are unproven"
 elif ! bm_archived "$BMC" PC-BM-CLOSED-BULLET || ! bm_archived "$BMC" PC-BM-CLOSED-HEADING; then
   bad "FIXTURE BROKEN — an UNMUTATED copy did not archive both shapes, so the mutant's verdict is not attributable"
-elif bm_archived "$BM" PC-BM-CLOSED-BULLET; then
-  bad "  MUTATION: the closed BULLET entry still reached the archive with the bullet arm deleted — the shape arm above is vacuous"
-elif ! bm_archived "$BM" PC-BM-CLOSED-HEADING; then
-  bad "  MUTATION: the closed HEADING entry ALSO stopped being archived, so the mutant broke the parser outright and the kill is not attributable to the bullet arm"
 else
-  ok "  MUTATION: deleting the bullet arm strands the closed BULLET entry in the live file while the HEADING entry still archives — one assertion, one shape"
+  bm_mb=0; bm_mh=0
+  bm_archived "$BM" PC-BM-CLOSED-BULLET && bm_mb=1
+  bm_archived "$BM" PC-BM-CLOSED-HEADING && bm_mh=1
+  mcell bullet-arm bm-bullet-archived [ "$bm_mb" = 1 ]
+  mcell bullet-arm bm-heading-archived [ "$bm_mh" = 1 ]
+  if [ "$bm_mb" = 1 ]; then
+    bad "  MUTATION: the closed BULLET entry still reached the archive with the bullet arm deleted — the shape arm above is vacuous"
+  elif [ "$bm_mh" != 1 ]; then
+    bad "  MUTATION: the closed HEADING entry ALSO stopped being archived, so the mutant broke the parser outright and the kill is not attributable to the bullet arm"
+  else
+    mutant_killed "$B_BM" bullet-arm "  MUTATION: deleting the bullet arm strands the closed BULLET entry in the live file while the HEADING entry still archives — one assertion, one shape"
+  fi
 fi
 
 # --- MUTATION: MAKE THE BOUNDARY RULE FENCE-BLIND AGAIN ---------------------------------------
@@ -1428,6 +1538,8 @@ fm_run() { # <dir> -> rotates a fresh copy of the seed with that dir's rotator
 }
 fm_run "$FMC"; fm_run "$FM"
 
+mcell fence-blind fm-whole-entry lacksf PC-FM-CLOSED-FENCED "$FM/run.md"
+mcell fence-blind fm-open-live grep -q PC-FM-OPEN "$FM/run.md"
 if cmp -s "$(dirname "$ROT")/lib.sh" "$FM/lib.sh"; then
   bad "FIXTURE BROKEN — the fence-blind mutation matched nothing in lib.sh, so the fenced-entry arm above is unproven"
 elif ! grep -q 'PC-FM-CLOSED-FENCED' "$FMC/arc.md" 2>/dev/null || grep -q 'FM-EVENT' "$FMC/run.md" || ! grep -q 'PC-FM-OPEN' "$FMC/run.md"; then
@@ -1437,7 +1549,7 @@ elif ! grep -q 'PC-FM-CLOSED-FENCED' "$FM/run.md"; then
 elif ! grep -q 'PC-FM-OPEN' "$FM/run.md"; then
   bad "  MUTATION: the open control was ALSO rotated out, so the mutant broke the parser outright and the kill is not attributable to fence tracking"
 else
-  ok "  MUTATION: fence-blind, the closed entry's head is stranded live with an unterminated fence while its tail archives under the timestamp label, and the open control survives — the fence-aware boundary is load-bearing"
+  mutant_killed "$B_FM" fence-blind "  MUTATION: fence-blind, the closed entry's head is stranded live with an unterminated fence while its tail archives under the timestamp label, and the open control survives — the fence-aware boundary is load-bearing"
 fi
 
 # --- THE PREFIX ROW IS THE SAME WITH THE ROTATION ARCHIVE DELETED ---------------------------
@@ -1501,6 +1613,7 @@ else
     bad "FIXTURE BROKEN — the shipping reverify emits no NAMED-UPSTREAM-AMBIGUOUS PC-S901 row (or no verdict for the survivor) with the archive present, so the twin below compares silences"
   elif [ "$pc_hist" = "$pc_nohist" ]; then
     ok "the shipping reverify prints BYTE-IDENTICAL output with the rotation archive present and deleted, including the unattributed NAMED-UPSTREAM-AMBIGUOUS PC-S901 row — no row depends on sprint history"
+    B_PCH=1
   else
     bad "ledger-reverify's output CHANGED when the rotation archive was deleted — a row depends on sprint history, which the operator ruled out"
     diff <(printf '%s\n' "$pc_hist") <(printf '%s\n' "$pc_nohist") | sed 's/^/      /' | head -6
@@ -1514,13 +1627,15 @@ else
   fi
   # THE MUTANT: the prefix row gated on open-UNION-archive. With history it emits the row (1 open
   # + 1 archived), without it it does not — the flip the rule forbids.
+  mcell hist-count-nohist pc-ambiguous-stable [ "$pc_mhist" = "$pc_mnohist" ]
+  mcell hist-count-nohist pc-survivor-classified has "$pc_mnohist" "STILL-LIVE${TAB}PC-S901-ALPHA${TAB}"
   if ! grep -q "^STILL-LIVE${TAB}PC-S901-ALPHA${TAB}" <<<"$pc_mnohist"; then
     bad "  MUTATION: the history mutant emits no verdict for the survivor, so it is a broken classifier and its difference is not a kill"
   elif [ "$pc_mhist" = "$pc_mnohist" ]; then
     bad "  MUTATION: a reverify whose prefix row reads the archive printed the SAME output with the archive deleted, so the twin above cannot see a history-dependent row"
   elif grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S901${TAB}" <<<"$pc_mhist" \
     && ! grep -q "^NAMED-UPSTREAM-AMBIGUOUS${TAB}PC-S901${TAB}" <<<"$pc_mnohist"; then
-    ok "  MUTATION: with the prefix row gated on an open-UNION-archive count, deleting the archive deletes the AMBIGUOUS row — the twin above fires on a history-reading row"
+    mutant_killed "$B_PCH" hist-count-nohist "  MUTATION: with the prefix row gated on an open-UNION-archive count, deleting the archive deletes the AMBIGUOUS row — the twin above fires on a history-reading row"
   else
     bad "  MUTATION: the two outputs differ but not by the AMBIGUOUS row, so this arm is measuring some other difference"
   fi
@@ -1657,6 +1772,7 @@ bl_in="$(bl_moves "$BLW/inbody.md")"
 
 if [ "$bl_on" -eq 1 ]; then
   ok "a strict close on the entry's own boundary line is archivable"
+  B_BLON=1
 else
   bad "a correctly spelled close on the boundary line was NOT seen — the entry is archived by nothing and reported by nothing, which is invisible in both directions"
 fi
@@ -1695,6 +1811,7 @@ bl_stuck="$(grep -c 'NOT archivable' <<<"$bl_nb_out")" || bl_stuck=0
 bl_nb_moved="$(grep -c 'would move' <<<"$bl_nb_out")" || bl_nb_moved=0
 if [ "$bl_stuck" -eq 1 ] && [ "$bl_nb_moved" -eq 0 ]; then
   ok "a close with NO BOLD SPAN is reported as stuck rather than vanishing (stuck=$bl_stuck moved=$bl_nb_moved) — the loose test still fires where the archive test does not"
+  B_BLNB=1
 else
   bad "a no-bold close was neither archived nor reported (stuck=$bl_stuck moved=$bl_nb_moved) — the loose half of the boundary fix is missing, so the quiet case is still invisible"
 fi
@@ -1790,20 +1907,17 @@ else
   m_on="$(bash "$BLM/ledger-rotate.sh" "$BLW/onboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
   m_in="$(bash "$BLM/ledger-rotate.sh" "$BLW/inbody.md"     --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
   m_ls="$(bash "$BLM/ledger-rotate.sh" "$BLW/nobold.md"     --archive "$BLM/arch.md" 2>&1 | grep -c 'NOT archivable')"
-  if [ "$m_on" -eq 0 ]; then
-    ok "  mutation boundary-flags: without them the boundary-line close goes unseen again (the arm can fire)"
-  else
+  mcell boundary-flags bl-onboundary [ "$m_on" -ne 0 ]
+  mcell boundary-flags bl-nobold [ "$m_ls" -ne 0 ]
+  mcell boundary-flags bl-body [ "$m_in" -eq 1 ]
+  if [ "$m_on" -ne 0 ]; then
     bad "  mutation boundary-flags: the mutant still archived the boundary-line close, so the arm above proves nothing"
-  fi
-  if [ "$m_ls" -eq 0 ]; then
-    ok "  mutation boundary-flags: and the NO-BOLD boundary close stops being reported — the loose half is load-bearing too"
-  else
+  elif [ "$m_ls" -ne 0 ]; then
     bad "  mutation boundary-flags: the no-bold case was still reported under the mutant, so the loose half proves nothing"
-  fi
-  if [ "$m_in" -eq 1 ]; then
-    ok "  mutation boundary-flags: and the BODY case survives the mutant — the two paths are not entangled"
+  elif [ "$m_in" -ne 1 ]; then
+    bad "  mutation boundary-flags: the mutant also tripped the body case, so it is testing whether the script RUNS, not the boundary rule"
   else
-    bad "  mutation boundary-flags: the mutant also killed the body case, so it is testing whether the script RUNS, not the boundary rule"
+    mutant_killed "$(( ${B_BLON:-0} && ${B_BLNB:-0} ))" boundary-flags "  mutation boundary-flags: without them the boundary-line close goes unseen again and the NO-BOLD boundary close stops being reported, while the BODY case survives the mutant — the two paths are not entangled"
   fi
 fi
 rm -rf "$BLM" "$BLW"
@@ -1900,18 +2014,25 @@ if [ "$C71_RUN" = 1 ]; then
 '"$C71_V"
   C71_SEEDS="splitter colon-mention nocolon nocolon-odd nocolon-twoline nocolon-dbl fp-quotes colon-closed fp-legacy fp-versionless realclose-afterquote colon-btbold title-nocolon title-colon close-after-span close-between-spans"
   C71_WANT=RRRRRRRSSSSRRRSS
-  c71_cells() { # <rotator> -> one letter per seed in C71_SEEDS order (R refused, S rotates, E died)
-    local r="" f out rc
+  c71_one() { # <rotator> <seed> -> one letter (R refused, S rotates, E died)
+    local out rc
+    out="$(bash "$1" "$RG/$2.md" 2>&1)"; rc=$?
+    if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then printf R
+    elif [ "$rc" -eq 0 ]; then printf S
+    else printf E; fi
+  }
+  c71_cells() { # <rotator> -> one letter per seed in C71_SEEDS order
+    local r="" f
     set -f
-    for f in $C71_SEEDS; do
-      out="$(bash "$1" "$RG/$f.md" 2>&1)"; rc=$?
-      if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then r="${r}R"
-      elif [ "$rc" -eq 0 ]; then r="${r}S"
-      else r="${r}E"; fi
-    done
+    for f in $C71_SEEDS; do r="${r}$(c71_one "$1" "$f")"; done
     set +f
     printf '%s\n' "$r"
   }
+  c71_want() { # <seed> -> the ruled letter for that seed
+    local i=0 f
+    for f in $C71_SEEDS; do i=$((i + 1)); [ "$f" = "$1" ] && { printf '%s' "$C71_WANT" | cut -c"$i"; return; }; done
+  }
+  c71_holds() { [ "$(c71_one "$1" "$2")" = "$(c71_want "$2")" ]; }   # <rotator> <seed> -> 0 iff the cell reads as ruled
   c71_ship="$(c71_cells "$ROT")"
   c71_i=0
   set -f
@@ -1927,6 +2048,7 @@ if [ "$C71_RUN" = 1 ]; then
     fi
   done
   set +f
+  if [ "$c71_ship" = "$C71_WANT" ]; then B_C71=1; else bad "BL-071: the unmutated reconciler did not read every cell as ruled (cells $c71_ship, want $C71_WANT), so no BL-071 mutant kill can score"; fi
 
   # MUTANTS. Each is a copy of the whole reconcile dir with ONE literal replaced exactly once,
   # by index rather than by sed, because most of the anchors carry backticks, stars and an
@@ -1938,14 +2060,19 @@ if [ "$C71_RUN" = 1 ]; then
       { i = index($0, o); if (i > 0) { c++; $0 = substr($0, 1, i - 1) n substr($0, i + length(o)) } print }
       END { exit (c == 1 ? 0 : 3) }' "$ROT" > "$1/ledger-rotate.sh"
   }
-  c71_mut() { # <name> <old literal> <new literal> <expected cells>
-    local d="$WORK/c71-mut-$1" got
+  # c71_mut <name> <old literal> <new literal> <deciding seed> <twin seed>: the mutant is driven on
+  # its DECIDING seed (which must stop reading as ruled) and its TWIN seed (which must keep reading
+  # as ruled); --matrix drives every seed (the MUTANT-MATRIX block). The kill is the decider moving
+  # with the twin holding, gated on the unmutated cells having read as ruled in this run.
+  c71_mut() {
+    local d="$WORK/c71-mut-$1" s
     if ! c71_mkmut "$d" "$2" "$3"; then bad "  FIXTURE BROKEN — BL-071 mutation $1 did not replace its anchor exactly once"; return; fi
     if cmp -s "$ROT" "$d/ledger-rotate.sh"; then bad "  FIXTURE BROKEN — BL-071 mutation $1 changed nothing"; return; fi
     if [ ! -f "$d/lib.sh" ]; then bad "  FIXTURE BROKEN — BL-071 mutation $1 has no lib.sh beside it"; return; fi
-    got="$(c71_cells "$d/ledger-rotate.sh")"
-    if [ "$got" = "$4" ] && [ "$got" != "$c71_ship" ]; then ok "  MUTATION BL-071 $1: cells $c71_ship -> $got, only its own seeds move"
-    else bad "  MUTATION BL-071 $1: expected cells $4 and read $got"; fi
+    for s in $C71_SEEDS; do mcell "c71-$1" "$s" c71_holds "$d/ledger-rotate.sh" "$s"; done
+    if c71_holds "$d/ledger-rotate.sh" "$4"; then bad "  MUTATION BL-071 $1: deciding seed $4 still reads as ruled under the mutant"
+    elif ! c71_holds "$d/ledger-rotate.sh" "$5"; then bad "  MUTATION BL-071 $1: twin seed $5 also moved, so the mutant is entangled"
+    else mutant_killed "$(( ${B_C71:-0} && ${B_C71C:-0} ))" "c71-$1" "  MUTATION BL-071 $1: seed $4 moves and twin $5 holds"; fi
   }
   # THE CONTROL: an unmutated copy in a sibling dir, and a mkmut on an anchor that exists nowhere
   # must REFUSE -- so a replacement count is genuinely read. Positive conjunct: the control reads
@@ -1958,32 +2085,33 @@ if [ "$C71_RUN" = 1 ]; then
   c71_ctl="$WORK/c71-ctl"; rm -rf "$c71_ctl"; mkdir -p "$c71_ctl"; cp "$(dirname "$ROT")"/*.sh "$c71_ctl"/ 2>/dev/null
   if [ "$(c71_cells "$c71_ctl/ledger-rotate.sh")" = "$C71_WANT" ]; then
     ok "  unmutated control copy reads $C71_WANT (the mutant harness runs a working rotator)"
+    B_C71C=1
   else
     bad "  FIXTURE BROKEN — the unmutated BL-071 copy does not read $C71_WANT, so no mutant verdict below is attributable"
   fi
   # strip the colon branch too: colon-btbold archives on a stripped name
   c71_mut strip-both-branches 'susp_colon ? ledger_body_archives($0) :' \
-    'susp_colon ? ledger_body_archives(ledger_strip_inline_code($0)) :' RRRRRRRSSSSSRRSS
+    'susp_colon ? ledger_body_archives(ledger_strip_inline_code($0)) :' colon-btbold colon-closed
   # strip bold as well as code: every real bolded close is deleted, on the boundary line too
   c71_mut strip-also-removes-bold '    sub(/`.*$/, "", l)' \
-    '    sub(/`.*$/, "", l); gsub(/\*\*[^*]*\*\*/, "", l)' RRRRRRRSRRRRRRSS
+    '    sub(/`.*$/, "", l); gsub(/\*\*[^*]*\*\*/, "", l)' fp-legacy splitter
   # balanced spans only: a lone or wrapped backtick leaves the token in place
-  c71_mut balanced-only '    sub(/`.*$/, "", l)' '    l = l' RRRSSRRSSSSRRRSS
+  c71_mut balanced-only '    sub(/`.*$/, "", l)' '    l = l' nocolon-odd nocolon
   # single spans only: a double-backtick span pairs wrongly and its token survives
-  c71_mut no-double-span '    gsub(/``([^`]|`[^`])*``/, "", l)' '    l = l' RRRRRSRSSSSRRRSS
+  c71_mut no-double-span '    gsub(/``([^`]|`[^`])*``/, "", l)' '    l = l' nocolon-dbl nocolon
   # no balanced single-span removal: the lone-backtick rule eats a real close after a name
-  c71_mut drop-single-span-gsub '    gsub(/`[^`]*`/, "", l)' '    l = l' RRRRRRRSRSSRRRRR
+  c71_mut drop-single-span-gsub '    gsub(/`[^`]*`/, "", l)' '    l = l' close-after-span fp-versionless
   # one greedy span: a real close between two spans is swallowed
-  c71_mut greedy-single-gsub '    gsub(/`[^`]*`/, "", l)' '    gsub(/`.*`/, "", l)' RRRRRRRSSSSRRRSR
+  c71_mut greedy-single-gsub '    gsub(/`[^`]*`/, "", l)' '    gsub(/`.*`/, "", l)' close-between-spans close-after-span
   # no strip in the loose body branch: the colon-less half of the mention class is silenced again
   c71_mut strip-off ': ledger_entry_line_closes(ledger_strip_inline_code($0))' \
-    ': ledger_entry_line_closes($0)' RRSSSSSSSSSRRRSS
+    ': ledger_entry_line_closes($0)' nocolon colon-mention
   # the pre-colon rule for every suspect: the colon lead-in is silenced too
   c71_mut colon-revert 'susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes(ledger_strip_inline_code($0))' \
-    'ledger_entry_line_closes($0)' RSSSSSSSSSSSRRSS
+    'ledger_entry_line_closes($0)' colon-mention splitter
   # the boundary line read unstripped: a quotation on the suspect line silences both shapes
   c71_mut boundary-unstripped 'if (ledger_entry_line_closes(ledger_strip_inline_code($0))) susp_closed = 1' \
-    'if (ledger_entry_line_closes($0)) susp_closed = 1' RRRRRRRSSSSRSSSS
+    'if (ledger_entry_line_closes($0)) susp_closed = 1' title-nocolon nocolon
 fi
 
 # --- BL-006: AN ENTRY-COUNT CEILING THAT WARNS AND STILL ROTATES -----------------------------
@@ -2048,6 +2176,7 @@ if [ "$C6_RUN" = 1 ]; then
     printf '%s\n' "$r"
   }
   c6_ship="$(c6_cells "$ROT")"
+  if [ "$c6_ship" = PPPP ]; then B_C6=1; else bad "BL-006: the unmutated reconciler did not hold all four ceiling cells (cells $c6_ship), so no BL-006 mutant kill can score"; fi
   case "$c6_ship" in P???) ok "BL-006: a ledger with $((C6_MAX + 1)) open entries WARNS on a dry run, exits 0, and still reports the closed entries it would move" ;;
     *) bad "BL-006: the over-ceiling dry run did not WARN-and-rotate (cells $c6_ship)" ;; esac
   case "$c6_ship" in ?P??) ok "  and under --apply it WARNS, exits 0, and the closed entries MOVE — the ceiling never refuses the one lever that shrinks the ledger" ;;
@@ -2058,30 +2187,53 @@ if [ "$C6_RUN" = 1 ]; then
     *) bad "  a ledger exactly at the ceiling warned or failed (cells $c6_ship) — the comparison is off by one" ;; esac
 
   # MUTANTS, one per arm, each built in a copy of the whole reconcile dir with an unmutated control.
-  c6_mut() { # <name> <sed expr> <expected cells>
-    local d="$WORK/c6-mut-$1" got
+  # c6_mut <name> <sed expr> <deciding arm> <twin arm>: arms are the four c6 cells (over-dry
+  # over-apply over-zero at-quiet). The mutant is driven on its decider (must break) and twin (must
+  # hold); --matrix drives all four.
+  c6_cell() { # <rotator> <arm> -> 0 iff that arm holds
+    case "$2" in
+      over-dry)   c6_check "$1" "$C6/over.md" dry ;;
+      over-apply) c6_check "$1" "$C6/over.md" apply ;;
+      over-zero)  c6_check "$1" "$C6/over0.md" none ;;
+      at-quiet)   c6_quiet "$1" "$C6/at.md" ;;
+    esac
+  }
+  c6_mut() {
+    local d="$WORK/c6-mut-$1" a
     rm -rf "$d"; mkdir -p "$d"; cp "$(dirname "$ROT")"/*.sh "$d"/ 2>/dev/null
     if ! sed "$2" "$ROT" > "$d/ledger-rotate.sh"; then bad "  MUTATION BL-006 $1: sed DID NOT APPLY"; return; fi
     if cmp -s "$ROT" "$d/ledger-rotate.sh"; then bad "  FIXTURE BROKEN — BL-006 mutation $1 matched nothing"; return; fi
-    got="$(c6_cells "$d/ledger-rotate.sh")"
-    if [ "$got" = "$3" ]; then ok "  MUTATION BL-006 $1: cells $c6_ship -> $got, only its own arm moves"
-    else bad "  MUTATION BL-006 $1: expected cells $3 and read $got"; fi
+    for a in over-dry over-apply over-zero at-quiet; do mcell "c6-$1" "$a" c6_cell "$d/ledger-rotate.sh" "$a"; done
+    if c6_cell "$d/ledger-rotate.sh" "$3"; then bad "  MUTATION BL-006 $1: deciding arm $3 still holds under the mutant"
+    elif ! c6_cell "$d/ledger-rotate.sh" "$4"; then bad "  MUTATION BL-006 $1: twin arm $4 also broke, so the mutant is entangled"
+    else mutant_killed "$(( ${B_C6:-0} && ${B_C6C:-0} ))" "c6-$1" "  MUTATION BL-006 $1: arm $3 breaks and twin $4 holds"; fi
   }
   c6_ctl="$WORK/c6-ctl"; rm -rf "$c6_ctl"; mkdir -p "$c6_ctl"; cp "$(dirname "$ROT")"/*.sh "$c6_ctl"/ 2>/dev/null
   if [ "$(c6_cells "$c6_ctl/ledger-rotate.sh")" = PPPP ]; then
     ok "  unmutated control copy in a sibling dir reads PPPP (the mutant harness runs a working rotator)"
+    B_C6C=1
   else
     bad "  FIXTURE BROKEN — the unmutated copy does not read PPPP, so no mutant verdict below is attributable"
   fi
   # delete the warning: the three over arms go F, the at arm is still quiet
-  c6_mut no-warn  's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if false; then@' FFFP
+  c6_mut no-warn  's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if false; then@' over-dry at-quiet
   # off by one: only the at-ceiling arm moves
-  c6_mut ge       's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if [ "$n_kept_entries" -ge "$LEDGER_MAX_OPEN_ENTRIES" ]; then@' PPPF
+  c6_mut ge       's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if [ "$n_kept_entries" -ge "$LEDGER_MAX_OPEN_ENTRIES" ]; then@' at-quiet over-dry
   # refuse instead of warn: every over arm exits non-zero
-  c6_mut refuse   's@^  echo "  is done (bold annotation), then rotate again. This is a warning: the rotation still runs."@&; exit 1@' FFFP
+  c6_mut refuse   's@^  echo "  is done (bold annotation), then rotate again. This is a warning: the rotation still runs."@&; exit 1@' over-apply at-quiet
   # count headings instead of the rotator walk: bullet seeds read 0, no warning anywhere
-  c6_mut headings 's@^n_kept_entries="\$(wc -l < "\$TMPD/kept-entries" | tr -d .*@n_kept_entries="$(grep -c "^## " "$LEDGER")"@' FFFP
+  c6_mut headings 's@^n_kept_entries="\$(wc -l < "\$TMPD/kept-entries" | tr -d .*@n_kept_entries="$(grep -c "^## " "$LEDGER")"@' over-dry at-quiet
   rm -rf "$C6"
+fi
+
+# --- PLAIN-RUN ARM: a plain (non --matrix) run executes NO matrix-only cell ----------------------
+# mcell counts every cell it evaluates in MX_RAN, and evaluates none unless --matrix was given.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MX_RAN" -eq 0 ]; then
+    ok "PLAIN RUN executed 0 matrix-only cells (MX_RAN=$MX_RAN)"
+  else
+    bad "PLAIN RUN executed $MX_RAN matrix-only cell(s) -- the --matrix guard leaked into the per-push run"
+  fi
 fi
 
 echo

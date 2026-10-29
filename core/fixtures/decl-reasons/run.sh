@@ -72,11 +72,13 @@ drive "$V" "$W_EMPTY"
   || bad "empty corpus: rc=$RC, want 2 'EXAMINED NOTHING': $OUT"
 
 # --- mutants: copies, each guarded by cmp -s so a sed that matched nothing cannot score ---------
-# mut <name> <sed program> -> path of the mutated copy, or empty with a DID NOT APPLY failure.
+# mut <name> <sed program> -> path of the mutated copy, or return 1 with the reason on stderr.
+# It runs inside $( ), so it must NOT call bad: the count would die with the subshell. Every caller
+# counts the failure at top level in its else-arm.
 mut() {
   local m="$T/mut-$1.sh"
-  if ! sed "$2" "$V" > "$m"; then bad "mutant $1: DID NOT APPLY (sed failed)"; return 1; fi
-  if cmp -s "$V" "$m"; then bad "mutant $1: DID NOT APPLY (no bytes changed)"; return 1; fi
+  if ! sed "$2" "$V" > "$m"; then printf '  mutant %s: DID NOT APPLY (sed failed)\n' "$1" >&2; return 1; fi
+  if cmp -s "$V" "$m"; then printf '  mutant %s: DID NOT APPLY (no bytes changed)\n' "$1" >&2; return 1; fi
   printf '%s' "$m"
 }
 
@@ -90,6 +92,7 @@ if M="$(mut no-probe 's/^self_probe || exit 2$/: self-probe dropped/')"; then
   else
     bad "M1: the mutated copy did not run to PASS on the clean world (rc=$RC), so its kill is unproven: $OUT"
   fi
+else bad "M1: mutant no-probe: did not apply -- see stderr"
 fi
 
 # M2 and M3 edit the PATTERN, which the self-probe and the corpus scan both read. Two guards on one
@@ -105,12 +108,14 @@ if M="$(mut no-bang "$BANG")"; then
   drive "$M" "$W_REQ"
   [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED" && ok "M2 (!? dropped) killed by the self-probe (rc 2, SELF-PROBE FAILED)" \
     || bad "M2 (!? dropped) was not refused by the self-probe: rc=$RC: $OUT"
+else bad "M2: mutant no-bang: did not apply -- see stderr"
 fi
 if M="$(mut no-bang-no-probe "$BANG; $NOPROBE")"; then
   drive "$M" "$W_REQ"
   [ "$RC" -eq 0 ] && has "PASS -- 2 inputs.decl scanned" \
     && ok "M2b (!? dropped, probe dropped) acquits the !core/scripts/ world the original flags -- the corpus arm keys on the prefix" \
     || bad "M2b: with the probe gone the !core/scripts/ world should read PASS under the mutant; rc=$RC: $OUT"
+else bad "M2b: mutant no-bang-no-probe: did not apply -- see stderr"
 fi
 
 # M3: the whole-line anchor widened, so core/scripts/x.sh reads as a whole directory.
@@ -118,12 +123,32 @@ if M="$(mut widen "$WIDEN")"; then
   drive "$M" "$W_NEAR"
   [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED" && ok "M3 (anchor widened) killed by the self-probe (rc 2, SELF-PROBE FAILED)" \
     || bad "M3 (anchor widened) was not refused by the self-probe: rc=$RC: $OUT"
+else bad "M3: mutant widen: did not apply -- see stderr"
 fi
 if M="$(mut widen-no-probe "$WIDEN; $NOPROBE")"; then
   drive "$M" "$W_NEAR"
   [ "$RC" -eq 1 ] && has "$SUBJ" \
     && ok "M3b (anchor widened, probe dropped) flags the near-miss the original passes -- the corpus arm keys on the anchor" \
     || bad "M3b: with the probe gone the near-miss should be flagged under the mutant; rc=$RC: $OUT"
+else bad "M3b: mutant widen-no-probe: did not apply -- see stderr"
+fi
+
+# BL-849: a mutant that does not apply must reach the TOP-LEVEL exit counter. The anchor below is
+# verified absent from the subject first, so the helper really fails; the real caller shape is then
+# driven and the counter must move by exactly 1. The probe's own count is restored afterwards.
+ZANCHOR='ZZQX_NEVER_ANCHOR_849'
+if grep -qF -- "$ZANCHOR" "$V"; then
+  bad "BL-849: the impossible anchor $ZANCHOR is present in the subject, so the control proves nothing"
+else
+  _f0=$fails
+  if M="$(mut zz-never "s/$ZANCHOR//" 2>/dev/null)"; then
+    bad "BL-849: a mutant with an absent anchor was reported as applied"
+  else bad "mutant zz-never: did not apply (BL-849 probe, expected)" >/dev/null
+  fi
+  if [ "$fails" -eq $((_f0 + 1)) ]; then
+    fails=$_f0; ok "BL-849: a mutant that does not apply reaches the exit counter"
+  else bad "BL-849: a DID-NOT-APPLY mutant did not reach the exit counter (moved $((fails - _f0)), want 1)"
+  fi
 fi
 
 if [ "$fails" -eq 0 ]; then echo "decl-reasons: PASS"; exit 0; fi

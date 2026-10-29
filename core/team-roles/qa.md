@@ -82,7 +82,9 @@ replaces that section does not replace this one. REJECT without validating
 further when any of these is absent:
 
 - the dev's full-collection run: exact invocation, working directory, and
-  collected / passed / failed / deselected / skipped / xfailed counts, or
+  collected / passed / failed / deselected / skipped / xfailed counts (the
+  line the story's capture-heads block renders for the cited capture is those
+  counts), or
   `Full-collection run: none, <reason>` ONLY when the story's diff is
   record-only (every changed path is the story file, a sprint-status yaml, or
   under `docs/reviews/`, `test-results/` or `docs/escalations/`);
@@ -94,6 +96,10 @@ further when any of these is absent:
   `## Strategy Test IDs`;
 - a `Kind` and a `Resolves to` on every `## Strategy Test IDs` row. For
   each `test` row, confirm the node id collects at the go-signal SHA.
+
+Do not compare Dev Agent Record prose to capture headers — the capture-heads
+block is rendered and validator-checked; a capture header that is wrong about
+its own tree is still a finding.
 
 **Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
 claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
@@ -127,6 +133,31 @@ file is written once, write it once and complete, and chunk nothing. Where it sa
 to an existing record, append, and never `Write` over it. If an `advisor` tool is available to
 you, also call it before the first chunk and before the final rewrite, in addition to the calls
 the paragraph above names.
+
+## Finding Class
+
+**Every Critical and Important finding carries one column-0 `Class:` line**
+directly under its heading, the ONE member of the template's set that names
+what its fix changes: `CODE` (production code), `TEST` (test code),
+`EVIDENCE` (a capture, a `$` line, a RED record) or `BOOKKEEPING` (the story
+record, a citation, a count). TEST is code-class. A finding whose fix admits
+ANY code or test change is `CODE` or `TEST`, never `EVIDENCE` or
+`BOOKKEEPING`, however small the change. The next gate-2 pass is routed by
+these lines (`implementation.md`, the gate-2 record-only route). The SHARD
+GRAMMAR section of `merge-review-shards.sh` refuses a value outside the set.
+A hand-over finding carries no `Class:` line: its `handover:` line excludes it
+from the route.
+
+## Carried Findings
+
+**A re-validation answers every carried finding.** On pass M >= 2 your brief
+carries the Critical and Important findings of pass M-1 assigned to you, each
+as the carry string `validate-carried-findings.sh --list` printed. Answer each
+with one column-0 line outside a fence, `carried: <that string, verbatim> —
+resolved` or `carried: <that string, verbatim> — open` (an em dash), and re-emit
+an open one as a `#### ` finding of this pass. An open carried finding forbids
+`PASS`. Gate 2 runs `validate-carried-findings.sh` on the two validation files
+and fails the pass otherwise.
 
 ## Validation Checklist
 
@@ -414,6 +445,14 @@ For each completed task, verify:
   `s312/s312-1-qa-validation.md` is refused by the same rule and denied at the keystroke by
   the write-time guard. Write `s312/1-qa-validation.md`.
 
+## Class Sweep (HARD GATE)
+
+Every Critical or Important finding names its defect class, sweeps for that class, and lists EVERY instance it found on an `Instances:` line, never one exemplar and never "e.g.". A finding that names one capture, file or stamp of a class that a second one also carries sends the story through a second rework pass for the same defect.
+
+The sweep covers the whole evidence set you validate: every capture, the Dev Agent Record, and every evidence section of the story file. A part QA sweeps its own part's evidence; the first cross QA, which runs the captures and replays, sweeps the captures. Smoke-surface findings use the definition in `gate-validation.md` Check 11, **Smoke surface.**
+
+A finding with no `Instances:` line, or one that lists a single instance after the sweep found more, is an unmet HARD GATE.
+
 ## Verdict
 
 The QA verdict set. `gate-validation.md` Check 1 reads a gate-2 file's verdict against this
@@ -439,15 +478,23 @@ nothing in it says `None.`
 ### Critical (must fix before PASS)
 
 #### <finding title>
+Class: CODE | TEST | EVIDENCE | BOOKKEEPING
+
+Instances: <every instance of this finding's defect class, or `none` for a Suggestion>
 
 ### Important (should fix, can be follow-up)
 
 #### <finding title>
+Class: CODE | TEST | EVIDENCE | BOOKKEEPING
+
+Instances: <every instance of this finding's defect class>
 
 ### Suggestions (optional improvements)
 
 #### <finding title>
 ```
+
+The `Instances:` line is the `## Class Sweep (HARD GATE)` result: the defect class swept across the evidence set, every instance listed.
 
 In a SHARD, `NEEDS_REWORK` needs at least one finding under `### Critical` or `### Important`,
 and `PASS` carries none under `### Critical`: the merge refuses the shard otherwise. The VERDICT
@@ -481,6 +528,8 @@ refuses a count that disagrees. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
 go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
 worktree.
+
+**As a shard you run the class sweep over your own evidence** (`## Class Sweep (HARD GATE)`): a part shard sweeps its part's evidence for each finding's defect class, the first cross shard sweeps the captures it runs and replays, and each finding lists every instance on its `Instances:` line.
 
 **As a part shard** you read only your part's files and score only the
 part-local checklist items, which are the items whose REJECT can be decided from
@@ -576,7 +625,10 @@ shard and the cross shard make no closing write; the closing writer makes those,
 after gate 3. Dispatched `shard: 1/1 <story-index>`, you are the whole
 validation: run every item above yourself, and write the validation file at the
 path above in the normal way, carrying the same one column-0 `advisor:` line a
-shard carries. Before you return, run
+shard carries and one column-0 `reviewed-sha: <full go-signal sha>` line.
+When your brief carries `route: record-only`, you are a routed seat: run the
+canonical honest-green run, read the validator output and every open carried
+finding, and skip the mutation and null-impl replays. Before you return, run
 `<lead engine>/merge-review-shards.sh --check-serial <validation file> --gate qa`
 from the lead checkout's `scripts/ai-dlc` path your brief carries, adding
 `--story <story file> --range <base> <go-signal sha>` (the base gate 1 used, on

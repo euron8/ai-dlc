@@ -33,7 +33,9 @@
 #         (b) the delta <prior reviewed-sha>..<frozen-sha> carries no CODE path (THE CODE CLASS).
 #       Every other outcome is `FULL: <reason>`, exit 1, and the pass is a full re-review: zero
 #       findings, a finding with no Class line (old-engine findings carry none), an unknown or
-#       repeated Class, any finding outside ROUTE_CLASSES, a classes read that failed, a prior with
+#       repeated Class, any finding outside ROUTE_CLASSES, a prior carrying a column-0
+#       `handover-run:` line outside fences whose result is not `RED` (`GREEN-SURVIVED`,
+#       `NO-BASELINE`, anything else: a failed hard-gate replay), a classes read that failed, a prior with
 #       no single full `reviewed-sha:` value, a sha that names no commit or is not an ancestor of
 #       <frozen-sha>, an empty or unreadable delta, an unreadable captures file, a bad argument.
 #       This mode never exits 2: no refusal in it can read as anything but FULL. WHY (b) EXISTS:
@@ -235,6 +237,13 @@ route_mode() {
          esac ;;
     esac
   done < "$T/classes"
+  # A replay that did not go RED is a failed hard gate, whatever the findings' classes.
+  hrun="$(awk '
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { f = 0; next }
+    !f && /^[ \t]*(```|~~~)/ { f = 1; next }
+    f { next }
+    /^handover-run:/ { v = $0; sub(/[ \t\r]+$/, "", v); n = split(v, a, /[ \t]+/); if (n < 4 || a[4] != "RED") { print v; exit } }' "$RP")"
+  [ -z "$hrun" ] || full "$RP carries '$hrun', a hand-over replay whose result is not RED; a failed replay is re-validated in full"
   # (b) the delta guard.
   shas="$(awk '
     f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { f = 0; next }

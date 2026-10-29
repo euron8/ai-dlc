@@ -339,17 +339,19 @@
 #   the sentinel, LEGACY; with it, the absence is REFUSED naming the fallback (`untracked at <sha>, read
 #   on disk`) and its remedy, commit `.claude/team-roles/`, because the on-disk copy may postdate the
 #   shards. --check-serial keys on the INSTALLED role file, as its canonical-run branch does.
-#   THE CLASS LINE, --gate code-review ONLY (never --gate qa). A `#### ` finding under a Critical or
-#   Important container in `## Findings` carries at most one column-0 line outside fences
-#       Class: <one member of the set code-reviewer.md's template declares>
-#   The set is LIFTED from the installed code-reviewer.md by CLASS_SET_AWK, byte-identical to the
-#   renderer's (I129), never retyped. REFUSED: a present value outside that set, and two `Class:`
-#   lines in one finding. A finding with NO `Class:` line is ACCEPTED: old-engine findings carry
-#   none, and an unclassed finding is fail-closed downstream (partition-review-diff.sh --route sends
-#   the next pass to a full re-review), so an omission costs a pass and never a miss. An installed
-#   code-reviewer.md declaring no `Class:` line (a consumer between the engine pull and the
-#   reconcile merge) declares no set, and no `Class:` line is checked. Checked per shard by the merge
-#   and --check-shard, and on the one file by --check-serial.
+#   THE CLASS LINE, BOTH GATES. A `#### ` finding under a Critical or Important container in
+#   `## Findings` carries at most one column-0 line outside fences
+#       Class: <one member of the set the gate's role file's template declares>
+#   The set is LIFTED from the gate's installed role file (code-reviewer.md under --gate
+#   code-review, qa.md under --gate qa: ROLE_MD) by CLASS_SET_AWK, byte-identical to the
+#   renderer's, never retyped; I129 holds qa.md's set equal to code-reviewer.md's and both gates
+#   to this one lift. REFUSED: a present value outside that set, and two `Class:` lines in one
+#   finding. A finding with NO `Class:` line is ACCEPTED: old-engine findings carry none, and an
+#   unclassed finding is fail-closed downstream (partition-review-diff.sh --route sends the next
+#   pass to a full re-review or re-validation), so an omission costs a pass and never a miss. An
+#   installed role file declaring no `Class:` template line (a consumer between the engine pull
+#   and the reconcile merge, at either gate) declares no set, and no `Class:` line is checked.
+#   Checked per shard by the merge and --check-shard, and on the one file by --check-serial.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -523,10 +525,10 @@ VSET="$(awk '/^## Verdict$/ { on = 1; next }
 [ "$VSET" = "$WANT_VSET" ] \
   || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
 # THE FINDING-CLASS SET (header: SHARD GRAMMAR, THE CLASS LINE). Byte-identical to CLASS_SET_AWK in
-# scripts/render-vocabulary-index.sh (I129). Empty when the installed role file declares none.
+# scripts/render-vocabulary-index.sh (I129). Lifted for BOTH gates from the gate's own role file;
+# empty when the installed role file declares none.
 CLASS_SET_AWK='/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { n = split(substr($0, 8), m, /[[:blank:]]*\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'
-CLASS_SET=""
-[ "$GATE" != code-review ] || CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u | tr '\n' ' ')"
+CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u | tr '\n' ' ')"
 # THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (the role file's
 # `## Findings` block after its first `## Verdict`, to the next `## `), never retyped: the first word
 # of each `### ` heading, in order -- the first is the Critical class, the second the Important
@@ -741,9 +743,9 @@ adv_gate() {
   fi
 }
 # ---- THE CLASS LINE (header: SHARD GRAMMAR, THE CLASS LINE). class_gate <file>: one function for the
-# per-shard check and --check-serial, code review only. Fences are read as adv_gate reads them.
+# per-shard check and --check-serial, both gates. Fences are read as adv_gate reads them.
 class_gate() {
-  [ "$GATE" = code-review ] && [ -n "$CLASS_SET" ] || return 0
+  [ -n "$CLASS_SET" ] || return 0
   cg_o_="$(CG_SET=" $CLASS_SET" awk '
     function close_f() { if (inf && ncls == 0) print "ABSENT\t" fl; inf = 0; ncls = 0 }
     f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }

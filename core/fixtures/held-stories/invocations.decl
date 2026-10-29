@@ -1,0 +1,4 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
+52 *
+15 core/scripts/validate-held-stories.sh
+14 core/scripts/sprint-status.sh

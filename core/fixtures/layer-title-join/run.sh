@@ -20,9 +20,26 @@
 # it never degrades into the stronger status — a fixture that only checked "something fired"
 # would score a data-loss suggestion as a pass.
 #
-# Usage: run.sh [path-to-layer-drift.sh]
+# Measured matrix: mutant -> deciding arm and twin (cells 8a-8d are the Part 8 assertions
+# re-evaluated on the mutant's output; ap-match and ap-fresh are the apply-level cells). Other
+# tripped cells, from the matrix run, are listed here in plain text, not in decides=:
+# me1 also trips 8c (the naive guard accuses the h5-only entry too).
+# MUTANT-MATRIX me1-naive-ext-titles-guard decides=8b twins=8a
+# MUTANT-MATRIX me2-narrow-to-joins-grammar decides=8c twins=8a
+# MUTANT-MATRIX lookup-continue-dropped decides=ap-match twins=ap-fresh
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-title-join/run.sh --matrix
+# The matrix is re-measured whenever an arm or a mutant is added or changed.
+#
+# Usage: run.sh [--matrix] [path-to-layer-drift.sh]
 # Exit:  0 = every assertion holds, 1 = an arm regressed, 2 = the fixture could not run.
 set -uo pipefail
+
+# --matrix: measure the full mutant x arm matrix (header block). Parsed and shifted before any
+# other positional argument. A plain run executes no matrix-only cell (the PLAIN-RUN arm at the end).
+MATRIX=0
+if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; echo "MATRIX-MODE on"; fi
+MXN=0
+mxline() { printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -43,6 +60,7 @@ DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
 
 echo "layer-title-join:"
 
@@ -402,6 +420,7 @@ if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'NUMONLY\.md$')"; then
   bad "an entry built entirely out of NUMBERED headings was reported as having no heading — the guard is keyed on the empty ext_titles rather than on the absence of a heading, which accuses 10 of the reference consumer's 40 entries of being unreachable while the numbered join is reading them"
 else
   ok "  an entry whose every heading is NUMBERED is NOT reported (its ext_titles is empty too, and the numbered arm reads it)"
+  B_8b=1
 fi
 # THE NON-VACUITY CONJUNCT for 8b. Its silence on this status is evidence only if the entry
 # reached the classifier at all; an entry that produced no row whatsoever would satisfy 8b
@@ -419,6 +438,7 @@ if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'H5ONLY\.md$')"; then
   bad "an entry whose only heading is an h5 was reported as having NO heading — the predicate has narrowed to the joins' own #{2,4} and the row now makes a claim that is false of its subject"
 else
   ok "  an entry whose only heading is an h5 is NOT reported (it has a heading; its invisibility to the joins is a different gap)"
+  B_8c=1
 fi
 
 # 8d. THE ROW IS ADDITIVE, NOT A REPLACEMENT. A heading-less entry still gets its drift row;
@@ -469,6 +489,7 @@ mkdir -p "$(dirname "$REG")"
 rerun() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
 tm_rows() { printf '%s\n' "$1" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE"' | grep -c . ; }
 
+CTL_OUT=""
 BASE_ROWS="$(tm_rows "$OUT")"
 DIG="$(detail 'MATCH\.md$' EXTENSION-TITLE-MATCHES-CORE | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
 
@@ -507,7 +528,7 @@ else
   # 6d. CONTROL: a register holding a verdict for a DIFFERENT digest silences nothing.
   printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"unrelated"}\n' \
     "0000000000000000000000000000000000000000" > "$REG"
-  CTL="$(rerun)"; C_ROWS="$(tm_rows "$CTL")"
+  CTL="$(rerun)"; C_ROWS="$(tm_rows "$CTL")"; CTL_OUT="$CTL"
   if [ "$C_ROWS" -eq "$BASE_ROWS" ]; then
     ok "CONTROL: a verdict for an unrelated digest silences nothing — the match is on the digest, not on the register being non-empty"
   else
@@ -523,16 +544,21 @@ else
     bad "FIXTURE BROKEN: apply.sh is not beside layer-drift.sh, so the apply-level arm has no subject"
   else
     : > "$REG"
-    DIG3="$(rerun | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
+    # 6d's rerun is this exact state (entry edited at 6c, register not matching): reused, not re-driven.
+    DIG3="$(printf '%s\n' "$CTL_OUT" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
     ap_n=0
-    ap_rows() { # <apply.sh> <entry-regex> -> count of WORKLIST extension-title-match rows
-      # A FRESH DIRECTORY PER CALL: this runs inside $( ), so a counter would not survive it, and
-      # `cp -R` into an existing directory nests the tree and leaves the stale register behind.
-      local c; c="$(mktemp -d "$ROOT/ap.XXXXXX")" || return 2
-      cp -R "$CONS/." "$c/" || return 2
+    AP_OUT=/dev/null
+    ap_run() { # <apply.sh> -> sets AP_OUT; ONE apply run serves every count taken of that state
+      # A FRESH DIRECTORY PER CALL: `cp -R` into an existing directory nests the tree and leaves the
+      # stale register behind.
+      local c; c="$(mktemp -d "$ROOT/ap.XXXXXX")" || { bad "FIXTURE BROKEN: cannot make an apply scratch dir"; return 2; }
+      cp -R "$CONS/." "$c/" || { bad "FIXTURE BROKEN: cannot copy the consumer for apply"; return 2; }
       mkdir -p "$c/.claude" && printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$c/.claude/.ai-dlc-version"
       bash "$1" "$DIST" "$BASE" "$c" "$THEIRS" > "$c.out" 2>/dev/null
-      awk -F'\t' -v e="$2" '$1=="WORKLIST" && $2=="extension-title-match" && $3 ~ e' "$c.out" | grep -c . || true
+      AP_OUT="$c.out"
+    }
+    ap_count() { # <entry-regex> -> count of WORKLIST extension-title-match rows in AP_OUT
+      awk -F'\t' -v e="$1" '$1=="WORKLIST" && $2=="extension-title-match" && $3 ~ e' "$AP_OUT" | grep -c . || true
     }
     verdict() { # <digest>
       printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments",%s}\n' "$1" "$READ_MATCH" > "$REG"
@@ -541,21 +567,22 @@ else
       bad "FIXTURE BROKEN: no keyed title-match row to record the apply-level verdict against"
     else
       : > "$REG"
-      E0="$(ap_rows "$APPLY" 'MATCH\.md$')"; F0="$(ap_rows "$APPLY" 'FRESH\.md$')"
+      ap_run "$APPLY"; E0="$(ap_count 'MATCH\.md$')"; F0="$(ap_count 'FRESH\.md$')"
       if [ "$E0" -eq 1 ] && [ "$F0" -ge 1 ]; then
         ok "apply-level PRECONDITION: with an empty register apply.sh emits the WORKLIST row for MATCH ($E0) and for the control FRESH ($F0)"
       else
         bad "apply-level PRECONDITION: empty register gave MATCH=$E0 FRESH=$F0 WORKLIST extension-title-match row(s), expected 1 and >=1"
       fi
       verdict "$DIG3"
-      E1="$(ap_rows "$APPLY" 'MATCH\.md$')"; F1="$(ap_rows "$APPLY" 'FRESH\.md$')"
+      ap_run "$APPLY"; E1="$(ap_count 'MATCH\.md$')"; F1="$(ap_count 'FRESH\.md$')"
       if [ "$E1" -eq 0 ] && [ "$F1" -eq "$F0" ]; then
         ok "apply-level: a TITLE-clause verdict removes the WORKLIST extension-title-match row for MATCH (1 -> 0) and leaves the undisposed control FRESH ($F1)"
+        B_ap=1
       else
         bad "apply-level: with MATCH's verdict recorded apply.sh emitted MATCH=$E1 FRESH=$F1 row(s), expected 0 and $F0"
       fi
       verdict "0000000000000000000000000000000000000000"
-      E2="$(ap_rows "$APPLY" 'MATCH\.md$')"
+      ap_run "$APPLY"; E2="$(ap_count 'MATCH\.md$')"
       if [ "$E2" -eq 1 ]; then
         ok "apply-level CONTROL: a verdict whose digest does not match (a spent verdict) re-emits the row"
       else
@@ -569,12 +596,14 @@ else
         bad "apply-level MUTANT lookup-continue-dropped: the awk matched nothing, so the arm above is unproven"
       else
         mv -f "$MUTD/layer-drift.sh.new" "$MUTD/layer-drift.sh"
-        EM="$(ap_rows "$MUTD/apply.sh" 'MATCH\.md$')"
-        EC="$(ap_rows "$MUTD/apply.sh" 'FRESH\.md$')"
-        if [ "$EM" -eq 1 ] && [ "$EC" -ge 1 ]; then
-          ok "apply-level MUTANT lookup-continue-dropped brings MATCH's row back ($EM) with the register unchanged — the suppression arm is falsifiable"
+        ap_run "$MUTD/apply.sh"; EM="$(ap_count 'MATCH\.md$')"; EC="$(ap_count 'FRESH\.md$')"
+        if [ "$EM" -eq 1 ]; then ap_m=FAIL; else ap_m=ok; fi   # cell ap-match: the verdict removes MATCH's row
+        if [ "$EC" -ge "$F0" ]; then ap_f=ok; else ap_f=FAIL; fi   # cell ap-fresh: the undisposed control keeps its rows
+        if [ "$MATRIX" = 1 ]; then mxline lookup-continue-dropped ap-match "$ap_m"; mxline lookup-continue-dropped ap-fresh "$ap_f"; fi
+        if [ "$ap_m" = FAIL ] && [ "$ap_f" = ok ] && [ "$EC" -ge 1 ]; then
+          mutant_killed "${B_ap:-0}" lookup-continue-dropped "apply-level MUTANT lookup-continue-dropped brings MATCH's row back ($EM) with the register unchanged — the suppression arm is falsifiable"
         else
-          bad "apply-level MUTANT lookup-continue-dropped gave MATCH=$EM FRESH=$EC; the arm would pass without the lookup"
+          bad "apply-level MUTANT lookup-continue-dropped SURVIVED: gave MATCH=$EM FRESH=$EC; the arm would pass without the lookup"
         fi
       fi
     fi
@@ -614,7 +643,8 @@ else
 fi
 
 : > "$REG"
-FRESH="$(rerun)"
+FRESH="$CTL_OUT"   # same dist/consumer state as 6d, register not matching: rows identical, so no fresh run
+[ -n "$FRESH" ] || FRESH="$(rerun)"
 DIG2="$(printf '%s\n' "$FRESH" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' \
         | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
 listing() { bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
@@ -704,6 +734,28 @@ e20mut() { # e20mut <name> <sed-arg>... -> sets E20_MUT to the mutant's path, or
 # absence-shaped control would score as healthy.
 e20run() { printf '%s\n' "$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; }
 e20st() { printf '%s\n' "$1" | awk -F'\t' -v e="$2" '$2 ~ e {print $1}'; }
+e20_cell() { # e20_cell <cell> <output> -> sets CELLR to ok|FAIL: would base arm <cell> pass on this output
+  CELLR=FAIL
+  case "$1" in
+    8a) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'NOHEAD\.md$')" && CELLR=ok ;;
+    8b) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'NUMONLY\.md$')" || CELLR=ok ;;
+    8c) grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$2" 'H5ONLY\.md$')" || CELLR=ok ;;
+    8d) [ "$(e20st "$2" 'NOHEAD\.md$' | sort -u)" = "$e20_want" ] && CELLR=ok ;;
+    *) echo "FIXTURE ERROR: unknown e20 cell $1" >&2; exit 2 ;;
+  esac
+}
+# e20_matrix <mutant> <output> <per-push cell>... : matrix mode prints every cell; a cell outside
+# the per-push set is a matrix-only cell and is counted in MXN.
+e20_matrix() {
+  [ "$MATRIX" = 1 ] || return 0
+  local m="$1" o="$2" c x; shift 2
+  for c in 8a 8b 8c 8d; do
+    e20_cell "$c" "$o"
+    mxline "$m" "$c" "$CELLR"
+    for x in "$@"; do [ "$x" = "$c" ] && continue 2; done
+    MXN=$((MXN+1))
+  done
+}
 e20ctl() { # e20ctl <name> <output>
   if [ "$(printf '%s\n' "$2" | grep -c 'CONTROL\.md')" -ge 1 ]; then
     ok "  control [$1]: the copy still classifies the untouched CONTROL entry — it loaded lib.sh and ran"
@@ -740,18 +792,20 @@ e20ctl() { # e20ctl <name> <output>
 #       the property under test, and it survives any rewording of the row's text.
 if e20mut me1-naive-ext-titles-guard -e 's@^  if \[ -z "\$ext_titles" \] && ! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"; then$@  if [ -z "$ext_titles" ]; then@'; then
   ME1_OUT="$(e20run "$E20_MUT")"
-  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME1_OUT" 'NUMONLY\.md$')"; then
-    ok "  mutant [me1] KILLED by 8b: keyed on the empty ext_titles alone, the guard accuses a fully-checked numbered-only entry"
+  e20_cell 8b "$ME1_OUT"; me1_d="$CELLR"; e20_cell 8a "$ME1_OUT"; me1_t="$CELLR"
+  if [ "$me1_d" = FAIL ]; then
+    mutant_killed "${B_8b:-0}" me1-naive-ext-titles-guard "  mutant [me1] KILLED by 8b: keyed on the empty ext_titles alone, the guard accuses a fully-checked numbered-only entry"
   else
     bad "MUTANT SURVIVED [me1]: the naive ext_titles-only guard did NOT report NUMONLY, so 8b does not depend on the heading half of the conjunction and the false-positive set it exists to bound is untested"
   fi
-  # THE SAME MUTANT MUST STILL REPORT NOHEAD. Without this conjunct a mutant that disabled
-  # the whole block would fail 8b's check for the wrong reason and read as a kill.
-  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME1_OUT" 'NOHEAD\.md$')"; then
+  # THE TWIN 8a: the same mutant must STILL REPORT NOHEAD, or a mutant that disabled the whole
+  # block would fail 8b's check for the wrong reason and read as a kill.
+  if [ "$me1_t" = ok ]; then
     ok "    and it still reports NOHEAD, so the kill above is the widening and not a dead block"
   else
     bad "MUTANT HARNESS BROKEN [me1]: the mutant reports NEITHER entry — the block is disabled rather than widened, and the kill above would be an outage"
   fi
+  e20_matrix me1-naive-ext-titles-guard "$ME1_OUT" 8b 8a
   e20ctl me1 "$ME1_OUT"
   E20N=$((E20N+1))
 fi
@@ -761,16 +815,18 @@ fi
 #       false of its subject. This is the arm that holds the predicate WIDER than the joins.
 if e20mut me2-narrow-to-joins-grammar -e 's@! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"@! grep -qE '"'"'^#{2,4}[[:space:]]+'"'"' "$f"@'; then
   ME2_OUT="$(e20run "$E20_MUT")"
-  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME2_OUT" 'H5ONLY\.md$')"; then
-    ok "  mutant [me2] KILLED by 8c: narrowed to #{2,4}, the guard reports an entry that HAS a heading"
+  e20_cell 8c "$ME2_OUT"; me2_d="$CELLR"; e20_cell 8a "$ME2_OUT"; me2_t="$CELLR"
+  if [ "$me2_d" = FAIL ]; then
+    mutant_killed "${B_8c:-0}" me2-narrow-to-joins-grammar "  mutant [me2] KILLED by 8c: narrowed to #{2,4}, the guard reports an entry that HAS a heading"
   else
     bad "MUTANT SURVIVED [me2]: narrowing the predicate to the joins' own #{2,4} changed nothing about H5ONLY, so 8c is not load-bearing and the row's width is unasserted"
   fi
-  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME2_OUT" 'NOHEAD\.md$')"; then
+  if [ "$me2_t" = ok ]; then
     ok "    and it still reports NOHEAD, so the kill is the narrowing and not a dead block"
   else
     bad "MUTANT HARNESS BROKEN [me2]: the mutant reports neither entry — the block is disabled rather than narrowed"
   fi
+  e20_matrix me2-narrow-to-joins-grammar "$ME2_OUT" 8c 8a
   e20ctl me2 "$ME2_OUT"
   E20N=$((E20N+1))
 fi
@@ -794,11 +850,13 @@ fi
 # each added a FALSE row on `## Shared Skeleton`. The verdict schema lost emptied the vocabulary the
 # same way. Each cell warms a memo, damages ONE key, and demands exit 1 with the memo named.
 # =======================================================================================
-ltj_memo_warm() { local m; m="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || return 1
-  AI_DLC_RECONCILE_MEMO="$m" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$m.ctl" 2>/dev/null; printf '%s' "$m"; }
-LM="$(ltj_memo_warm)"
+LM0="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || { echo "FIXTURE ERROR: cannot make the memo dir" >&2; exit 2; }
+AI_DLC_RECONCILE_MEMO="$LM0" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$LM0.ctl" 2>/dev/null   # the ONE fill
+# each damaged-key cell starts from a copy of the warm memo (cp -Rp keeps modes), not a fresh fill
+ltj_memo_copy() { local m; m="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || return 1; cp -Rp "$LM0/." "$m/" || return 1; printf '%s' "$m"; }
+LM="$LM0"
 AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2>/dev/null; lm_rc=$?
-if [ "$lm_rc" = 0 ] && [ -s "$ROOT/lm.out" ] && cmp -s "$ROOT/lm.out" "$LM.ctl"; then
+if [ "$lm_rc" = 0 ] && [ -s "$ROOT/lm.out" ] && cmp -s "$ROOT/lm.out" "$LM0.ctl"; then
   ok "Part 9 control: a warm memo HIT with nothing damaged reproduces the fill's rows at rc 0"
 else
   bad "FIXTURE BROKEN — Part 9's warm memo hit did not reproduce its fill (rc=$lm_rc), so the damaged-key cells compare against nothing"
@@ -811,7 +869,7 @@ for lm_cell in \
   IFS=: read -r lm_id lm_cls lm_ref lm_path lm_mode lm_what <<EOF
 $lm_cell
 EOF
-  LM="$(ltj_memo_warm)"
+  LM="$(ltj_memo_copy)" || { bad "FIXTURE BROKEN — Part 9 cell $lm_id could not copy the warm memo"; continue; }
   lm_n=0
   if [ "$lm_cls" = t ]; then set -- "$LM"/"t "*" ${lm_ref}"*.s; else set -- "$LM"/"s "*" ${lm_ref}"*":${lm_path}.s"; fi
   for lm_f in "$@"; do
@@ -832,6 +890,13 @@ EOF
     bad "Part 9 $lm_id: $lm_what the memo cannot serve gave rc=$lm_rc, $(grep -c . "$ROOT/lm.out") row(s), $(grep -c 'shared skeleton' "$ROOT/lm.out") skeleton row(s) — a lost cached object moved the rows"
   fi
 done
+
+# PLAIN-RUN ARM: a plain run executes no matrix-only cell.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MXN" -eq 0 ]; then ok "PLAIN-RUN: a plain run executed 0 matrix-only cells"
+  else bad "PLAIN-RUN: a plain run executed $MXN matrix-only cell(s)"; fi
+elif [ "$MXN" -gt 0 ]; then ok "MATRIX mode executed $MXN matrix-only cell(s)"
+else bad "MATRIX mode executed no matrix-only cell, so --matrix measured nothing beyond the per-push cells"; fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-title-join: PASS"; exit 0; fi

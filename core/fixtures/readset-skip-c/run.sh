@@ -8,6 +8,8 @@
 # shard runs that join, the seed and the sandbox probe, so no shard passes without them and a shard
 # declared with no driver directory fails the join in all four.
 #
+# LIMIT: the real-kernel loss shape is assumed, not tested.
+#
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
 # Usage: run.sh

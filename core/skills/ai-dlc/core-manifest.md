@@ -179,6 +179,7 @@ core_manifest:
   - fixtures/snapshot-archive-rotate/**
   - fixtures/snapshot-conservation/**
   - fixtures/snapshot-update-stamps/**
+  - fixtures/held-stories/**
   - fixtures/trunk-audit-gate/**
   - fixtures/suppression-lifetime/**
   - fixtures/self-update-fixture-log/**

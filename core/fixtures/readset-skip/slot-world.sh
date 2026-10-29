@@ -77,15 +77,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# THE STUBS. sandbox-exec strips `-D FXTAG=<tag>` and `-f <profile>`, appends one tagged report line per
-# absolute-path argument (the sentinel and end-marker reads), and execs the command.
+# THE STUB STREAM'S DELIVERY is the STUB_STREAM span of readset-skip/run.sh (its comment says why each poll
+# then ends on its first iteration). run.sh exports STUB_STREAM_LIB; run standalone, this world extracts the
+# span from its sibling run.sh itself.
+if [ -z "${STUB_STREAM_LIB:-}" ] || [ ! -r "$STUB_STREAM_LIB" ]; then
+  STUB_STREAM_LIB="$W/stub-stream.sh"
+  sed -n '/^# STUB_STREAM_BEGIN$/,/^# STUB_STREAM_END$/p' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run.sh" > "$STUB_STREAM_LIB" 2>/dev/null
+fi
+export STUB_STREAM_LIB
+grep -q '^ss_wait() ' "$STUB_STREAM_LIB" 2>/dev/null || { echo "slot-world: no STUB_STREAM span in $STUB_STREAM_LIB" >&2; exit 9; }
+
+# THE STUBS. sandbox-exec strips `-D FXTAG=<tag>` and `-f <profile>`, delivers one tagged report line per
+# absolute-path argument (the sentinel and end-marker reads) through the STUB_STREAM span, and execs the command.
 ST="$W/stub"; mkdir -p "$ST" "$W/beatbin" || exit 9
 cat > "$ST/sandbox-exec" <<'STUB'
 #!/bin/bash
+. "$STUB_STREAM_LIB"
 tag=""
 [ "${1:-}" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
 [ "${1:-}" = -f ] && shift 2
-for a in "$@"; do case "$a" in /*) printf 'x Sandbox: cat(1) allow file-read-data %s\nFXTAG=%s;\n' "$a" "$tag" >> "$STUB_FEED" ;; esac; done
+for a in "$@"; do case "$a" in /*) ss_wait "$a"; ss_emit "$(printf 'x Sandbox: cat(1) allow file-read-data %s\nFXTAG=%s;' "$a" "$tag")" ;; esac; done
 # NOT `exec`: the deriver's profile probe runs `true`, and under hermetic-run's PATH there is no `true`
 # binary for exec to find -- run as a command, bash takes its builtin.
 "$@"
@@ -102,13 +113,15 @@ cat > "$ST/logstream" <<'STUB'
 #!/bin/bash
 t=""
 for a in "$@"; do case "$a" in *FXTAG=*) t="${a#*FXTAG=}"; t="${t%%;*}" ;; esac; done
+. "$STUB_STREAM_LIB"
 case "$t" in
-  __liveness__) exec tail -n 0 -f "$STUB_FEED" ;;
+  __liveness__) ss_register live; exec tail -f /dev/null ;;
   '') t=p ;;
   f*) t="${t#f}" ;;
 esac
 echo "$t-stream-up" >> "$SW_ORDER"
-tail -n 0 -f "$STUB_FEED" &
+ss_register live
+tail -f /dev/null &
 tp=$!
 down() {
   if [ -n "${SW_B_MODE:-}" ] && [ "$t" = a ] && grep -qx b-waited "$SW_ORDER"; then
@@ -133,10 +146,22 @@ STUB
 # The beat scenario's sleep counts its calls, so the world can wait for N wait-loop polls without a clock.
 # With SW_SLEEP_MARK set it also writes `SW-SLEEP` to stderr, which is the deriver's output, so the rebreak
 # scenario can read off that output whether a sleep separates two consecutive stale breaks.
+# With SW_SLEEP_CAP set, the call that brings the count to the cap BLOCKS until the world kills it, so the
+# waiter makes exactly that many polls whatever the load, and the world reads the count, not a clock.
 cat > "$W/beatbin/sleep" <<'STUB'
 #!/bin/bash
 echo x >> "$SW_SLEEPS"
 [ -n "${SW_SLEEP_MARK:-}" ] && echo SW-SLEEP >&2
+if [ -n "${SW_SLEEP_CAP:-}" ]; then
+  n="$(grep -c . "$SW_SLEEPS")" || n=0
+  [ "$n" -ge "$SW_SLEEP_CAP" ] && exec tail -f /dev/null
+fi
+# With SW_SLEEP_MARK set (rebreak) a sleep taken once the deriver has printed `slot: waiting` BLOCKS: the world
+# kills a waiter on that line, and how many wait polls slept before the kill landed followed scheduling.
+if [ -n "${SW_SLEEP_MARK:-}" ] && [ -n "${SW_AOUT:-}" ] && grep -q 'slot: waiting' "$SW_AOUT" 2>/dev/null; then
+  : > "$SW_AOUT.blocked"
+  exec tail -f /dev/null
+fi
 exec /bin/sleep "$@"
 STUB
 chmod +x "$ST/sandbox-exec" "$ST/logstream" "$W/beatbin/sleep" || exit 9
@@ -217,14 +242,14 @@ run_a() {
   mkdir -p "$d" || exit 9
   : > "$d/order"; : > "$d/feedA"; : > "$d/feedB"; : > "$d/bout"; : > "$d/sleeps"
   cp "$dv" "$R/core/scripts/derive-fixture-readsets.sh" || exit 9
-  local P="$ST:$PATH" M="" H=""
-  case "$s" in beat) P="$W/beatbin:$P" ;; rebreak) P="$W/beatbin:$P"; M=1 ;; hold) H=1 ;; esac
+  local P="$ST:$PATH" M="" H="" C=""
+  case "$s" in beat) P="$W/beatbin:$P"; C=3 ;; rebreak) P="$W/beatbin:$P"; M=1 ;; hold) H=1 ;; esac
   # JOB CONTROL FOR THIS ONE LAUNCH: the deriver leads a process group of its own, whose id is its pid.
   set -m
   ( cd "$R" && exec env -u READSET_SLOT_HOLDER PATH="$P" STUB_FEED="$d/feedA" \
       AI_DLC_READSET_TRACE_ROOT="$d/trA" SW_ORDER="$d/order" SW_B_MODE="$bm" SW_R="$R" SW_FEEDB="$d/feedB" \
       SW_TRB="$d/trB" SW_IPB="$d/ipB" SW_BOUT="$d/bout" SW_BPID="$d/bpid" SW_DEADPID="$DEAD" SW_LIVEPID="$LIVE" \
-      SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" SW_HOLD="$H" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
+      SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" SW_SLEEP_CAP="$C" SW_AOUT="$d/aout" SW_HOLD="$H" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
       bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
   set +m
@@ -258,6 +283,11 @@ failopen() {
     [ "$n" -ge 20 ] && break
     /bin/sleep 0.1; i=$((i + 1))
   done
+  # A rebreak waiter (a mutant that never breaks) is killed only once its first wait sleep has BLOCKED, so the
+  # number of sleeps it took is one whatever the load. Bounded; the bound reads as the waiter's own exit.
+  if [ "$s" = rebreak ] && grep -q 'slot: waiting' "$d/aout"; then
+    i=0; while [ ! -e "$d/aout.blocked" ] && [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; i=$((i + 1)); done
+  fi
   grep -q 'slot: UNSLOTTED' "$d/aout" || kill_tree "$APID"
   reap "$APID"
   if [ "$(grep -c 'slot: UNSLOTTED' "$d/aout")" = 1 ] && grep -qF "slot: UNSLOTTED -- $sl $why" "$d/aout" \
@@ -321,11 +351,11 @@ for s in $SCEN; do
     beat)
       mkdir -p "$d/slot" && printf '%s %s\n' "$LIVE" "$(date +%s)" > "$d/slot/pid" || exit 9
       run_a beat "$d" "$W/deriver.beat.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
+      # The beat sleep blocks at its third call (SW_SLEEP_CAP=3), so A makes exactly three wait polls.
       if wait_for "$APID" "$d/aout" 'slot: waiting'; then
-        n0="$(grep -c . "$d/sleeps")" || n0=0
         i=0; while [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do
           n="$(grep -c . "$d/sleeps")" || n=0
-          [ "$n" -ge $((n0 + 3)) ] && break
+          [ "$n" -ge 3 ] && break
           /bin/sleep 0.1; i=$((i + 1))
         done
       fi

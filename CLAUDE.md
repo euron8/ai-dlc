@@ -45,17 +45,9 @@ the general form.
 
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
-`.githooks/pre-push` is the runner. It dispatches through a worker pool,
-content-keys the skip, and asserts that every dispatched
-fixture produced a verdict. Invariant **I66** binds that runner to be one program
-across both pre-push hooks. A unit's push is its gate: a green push delivers that exact sha,
-merged as pushed, and it fills the verdict store (`$AI_DLC_VERDICT_STORE`, default
-`~/.cache/ai-dlc/verdicts`) and the key records (`.git/ai-dlc-fixture-keys/<fx>.key`); never push
-to a throwaway ref. The unit commit carries its own backlog edit (its LANDED line at the version the
-integrator assigns, and the rotation); the release commit adds only `VERSION` and the heading. Every push sets `AI_DLC_PRESUITE_SKIP=1`; one heavy run (a push, a
-`--matrix`, an armed count) runs at a time. A mktemp-store run caches nothing, and a green push's
-`verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
-failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
+`.githooks/pre-push` is the runner: a worker pool, a content-keyed skip, and a check that every dispatched fixture gave a verdict. Invariant **I66** binds that runner to be one program
+across both pre-push hooks. A unit's push is its gate: a green push delivers that exact sha, merged as pushed, and fills the verdict store (`$AI_DLC_VERDICT_STORE`, default
+`~/.cache/ai-dlc/verdicts`) and the key records (`.git/ai-dlc-fixture-keys/<fx>.key`); never push to a throwaway ref. The unit commit carries its own backlog edit (its LANDED line at the version the integrator assigns, and the rotation); the release commit adds only `VERSION` and the heading. Every push sets `AI_DLC_PRESUITE_SKIP=1`; pushes run one at a time, every other run in parallel. Pre-seed a push with `scripts/seed-verdict-store.sh`: a push reads only `counted-<vk>`, so a plain or mktemp-store run seeds nothing; the `verdict store: N fixture(s) skipped` line is the proof. After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any whose key moved; never hand-loop them.
 
 **The shared verdict store is cleared by EXACT LISTING before a gate, never by glob or `rm -rf`.** A
 peer's gate can add entries between the listing and the gate.

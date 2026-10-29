@@ -121,8 +121,7 @@
 # MUTANT-MATRIX rsync decides=copy-population twins=copy-exec-bit
 # MUTANT-MATRIX nogitlink decides=drop-submodule twins=drop-tracked-row
 # MUTANT-MATRIX quotename decides=drop-quotename twins=drop-tracked-row
-# MUTANT-MATRIX width decides=width-sandbox twins=width-burst-ok
-# MUTANT-MATRIX realcanary decides=real-canary twins=real-canary-count
+# MUTANT-MATRIX width decides=width-sandbox twins=width-fxa-ok
 # MUTANT-MATRIX gitprefix decides=both-compare twins=both-compare-miss-row
 # MUTANT-MATRIX noignore decides=both-compare twins=both-compare-miss-row
 # MUTANT-MATRIX direction decides=both-compare twins=both-compare-counts
@@ -355,7 +354,9 @@ export AI_DLC_READSET_SLOT="$WORK/window-slot"
 # reader or helper that reads the start of `$$` instead of the lock's pid reads the right answer for
 # the wrong reason and survives. Its fds are closed so it cannot hold the runner's output pipe open.
 # It is killed by its literal recorded pid on exit, never found through the process table.
-sleep 600 </dev/null >/dev/null 2>&1 &
+# `tail -f /dev/null`, NOT `sleep 600`: it lives until the exit trap kills it, so a run longer than any
+# fixed bound (a loaded box, or --matrix running every unit in one process) cannot outlive its lock pid.
+tail -f /dev/null </dev/null >/dev/null 2>&1 &
 LOCKPID=$!
 # disowned so the exit trap's kill does not print a job-termination line over the verdict line.
 disown "$LOCKPID" 2>/dev/null || :
@@ -425,18 +426,100 @@ aw_gate() { # refuse, in the fixture's own shell, on any no-progress net that fi
   broken "$(head -1 "$AW_STALL_LOG") ($(grep -c '' "$AW_STALL_LOG") no-progress refusal(s) in $AW_STALL_LOG)"
 }
 
-# INSIDE A SANDBOX: ONE DETECTOR, READ IN TWO PLACES. The read-set deriver's `--tracer sandbox` runs
-# this fixture under `sandbox-exec`, and two things are refused there: `log stream` answers "Cannot
-# run while sandboxed", and the setuid `/bin/ps` is not exec'd at all. The first is the POSITIVE
-# detection; it is probed once, here, and read by the start-time worlds (ps_sandbox_skip) and by the
-# sandbox-tracer loss arm further down, which reuses this probe's exit and stderr.
+# STUB_STREAM_BEGIN
+# THE STUB STREAM'S DELIVERY, sourced by every stub `log stream` and stub `sandbox-exec` this fixture and
+# slot-world.sh write. A stream stub REGISTERS (ss_register) the file its stdout is -- the deriver's raw
+# capture -- under <STUB_FEED>.streams/<its pid>, and then blocks. A stub sandbox-exec writes each report
+# line STRAIGHT INTO every live registered capture (ss_emit) before it returns, and a read of a deriver's
+# start or end marker first waits (ss_wait) until a stream of THAT deriver's trace root is registered. So
+# the line the deriver's liveness, settle and flush polls look for is in the capture when the `sandboxed
+# cat` returns, and each of those polls ends on its FIRST iteration at any load. A `tail -f` of the feed
+# delivered it asynchronously, and the iteration count -- one sandbox-exec start each -- followed load.
+# Delivery is otherwise what the tail gave: every live stream gets every line written after it registered.
+# A `deaf` registration satisfies the wait and receives nothing: a stream that never delivers.
+# THE WAIT IS ON A CONDITION, AND ITS SAFETY BOUND IS NO VERDICT: 3000 polls with no registered stream of
+# that root appends a refusal naming the stub to AW_STALL_LOG, which fails the run FIXTURE BROKEN at
+# aw_gate (stderr when slot-world runs standalone); the read then returns with nothing delivered.
+ss_register() { # <live|deaf>: record this stream ($$) and the file its stdout is
+  local d="$STUB_FEED.streams" out="" f m p
+  mkdir -p "$d" 2>/dev/null || return 1
+  { out="$(python3 -c 'import fcntl;b=fcntl.fcntl(3,fcntl.F_GETPATH,bytes(1024));print(b.split(b"\0")[0].decode())' 2>/dev/null)"; } 3>&1
+  [ -n "$out" ] || return 1
+  for f in "$d"/[0-9]*; do
+    [ -f "$f" ] || continue
+    m=""; p=""; { read -r m p; } < "$f" 2>/dev/null
+    [ "$p" = "$out" ] && rm -f "$f"
+  done
+  printf '%s %s\n' "$1" "$out" > "$d/.$$" && mv -f "$d/.$$" "$d/$$"
+}
+ss_emit() { # <text>: appended to the feed and to every live stream's capture, before this returns
+  local d="$STUB_FEED.streams" f m p
+  printf '%s\n' "$1" >> "$STUB_FEED"
+  for f in "$d"/[0-9]*; do
+    [ -f "$f" ] || continue
+    kill -0 "${f##*/}" 2>/dev/null || continue
+    m=""; p=""; { read -r m p; } < "$f" 2>/dev/null
+    [ "$m" = live ] && [ -n "$p" ] && printf '%s\n' "$1" >> "$p"
+  done
+  return 0
+}
+ss_wait() { # <path read through the profile>: a marker read waits for its own window's stream
+  local a="$1" root d="$STUB_FEED.streams" f m p i=0 got="" c="" want
+  case "$a" in */m/.readset-sentinel|*/m/.readset-end) root="${a%/m/.readset-*}" ;; *) return 0 ;; esac
+  # KEYED ON THE EXACT CAPTURE: the deriver writes `sentinel-<fx>`, `end-<fx>` or `liveness` into the marker
+  # before it reads it, and that window's capture is <root>/w/<fx>.raw (liveness.raw). A registration of any
+  # other window -- a stale one of this root, or one whose pid was reused -- never satisfies the wait.
+  { read -r c; } < "$a" 2>/dev/null
+  case "$c" in sentinel-?*) c="${c#sentinel-}" ;; end-?*) c="${c#end-}" ;; liveness) ;; *) c="" ;; esac
+  want="$root/w/$c.raw"
+  while [ "$i" -lt 3000 ]; do
+    for f in "$d"/[0-9]*; do
+      [ -f "$f" ] || continue
+      kill -0 "${f##*/}" 2>/dev/null || continue
+      m=""; p=""; { read -r m p; } < "$f" 2>/dev/null
+      if [ -n "$c" ]; then [ "$p" = "$want" ] && { got="$m $p"; break; }
+      else case "$p" in "$root"/w/*) got="$m $p"; break ;; esac; fi
+    done
+    [ -n "$got" ] && break
+    /bin/sleep 0.1; i=$((i + 1))
+  done
+  if [ -z "$got" ]; then
+    printf 'stub sandbox-exec %s: no live stream of %s registered in 3000 polls\n' "$0" "$root" >> "${AW_STALL_LOG:-/dev/stderr}"
+    return 1
+  fi
+  # `--tracer both` (the stub world that sets STUB_FS) settles on the fs_usage capture as well: a sentinel
+  # read waits for the stub fs_usage's sentinel line there, so that half of the settle also holds on the
+  # first iteration. Keyed on STUB_FS, not on the capture existing, which its pipeline may not have opened yet.
+  case "$a:$got" in
+    */.readset-sentinel:"live "*)
+      p="${got#live }"; i=0
+      if [ -n "${STUB_FS:-}" ]; then
+        until grep -q readset-sentinel "$p.fsu" 2>/dev/null; do
+          if [ "$i" -ge 3000 ]; then
+            printf 'stub sandbox-exec %s: no sentinel in %s.fsu in 3000 polls\n' "$0" "$p" >> "${AW_STALL_LOG:-/dev/stderr}"
+            return 1
+          fi
+          /bin/sleep 0.1; i=$((i + 1))
+        done
+      fi ;;
+  esac
+  return 0
+}
+# STUB_STREAM_END
+STUB_STREAM_LIB="$WORK/stub-stream.sh"; export STUB_STREAM_LIB
+sed -n '/^# STUB_STREAM_BEGIN$/,/^# STUB_STREAM_END$/p' "$SELF" > "$STUB_STREAM_LIB"
+grep -q '^ss_wait() ' "$STUB_STREAM_LIB" || broken "no STUB_STREAM span extracted from $SELF into $STUB_STREAM_LIB"
+
+# INSIDE A SANDBOX: ONE DETECTOR. The read-set deriver's `--tracer sandbox` runs this fixture under
+# `sandbox-exec`, and two things are refused there: `log stream` answers "Cannot run while sandboxed",
+# and the setuid `/bin/ps` is not exec'd at all. The first is the POSITIVE detection; it is probed
+# once, here, and read by the start-time worlds (ps_sandbox_skip).
 # A `ps` that merely FAILS is never a reason to skip: outside a sandbox it is still `broken`, and
 # inside one ps_sandbox_skip refuses unless `ps` really fails there, so a detector that claims a
 # sandbox where `ps` works cannot hide the worlds it gates.
-IN_SANDBOX=0; LS_PROBE_RC=127
+IN_SANDBOX=0
 if [ -x /usr/bin/log ]; then
   /usr/bin/log stream --style compact --timeout 1s --predicate 'sender == "readset-skip-probe"' >/dev/null 2>"$WORK/ls.err"
-  LS_PROBE_RC=$?
   grep -q 'Cannot run while sandboxed' "$WORK/ls.err" && IN_SANDBOX=1
 fi
 ps_sandbox_skip() { # <group>: 0 (skip it, SKIP printed) inside a sandbox where ps is refused; 1 otherwise
@@ -837,7 +920,7 @@ REAL_GIT="$(command -v git)" || broken "no git on PATH"
 SHIM="$WORK/shim"; mkdir -p "$SHIM" || broken "could not make the check-ignore shim dir"
 # The shim lives under $WORK, outside every seeded tree: inside one it would be an untracked
 # file and an orphan. It scans argv because `-c core.quotePath=false` precedes the subcommand.
-{ printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = check-ignore ] && exit 128; done\n'
+{ printf '#!/bin/bash\nfor a in "$@"; do [ "$a" = check-ignore ] && exit 128; done\n'
   printf 'exec "%s" "$@"\n' "$REAL_GIT"; } > "$SHIM/git" && chmod +x "$SHIM/git" \
   || broken "could not write the check-ignore shim"
 seed_ign() { # <t> <none|ign|forced>
@@ -1593,6 +1676,7 @@ else
       export STUB_ARGS="$o/args" AI_DLC_READSET_LIVE_TRACE=1 STUB_GO_OWNER="$(exec bash -c 'printf %s "$PPID"')"
       eval "$3"
       . "$p" 2>/dev/null
+      printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
       run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc"
       if [ -d "$GITDIR/ai-dlc-fixture-readsets.local.lock" ]; then echo yes > "$o/held"; else echo no > "$o/held"; fi
       [ -n "${STUB_GO:-}" ] && : > "$STUB_GO"
@@ -1891,16 +1975,32 @@ FX
     mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
     ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fast ) >/dev/null 2>&1
   }
+  # (t4)'s deriver exits once the WATCHDOG'S SLEEP EXISTS, never before: it waits on that `sleep` in its
+  # parent's process group (the trace subshell leads that group). Exiting at once, the stop could land before
+  # the watchdog had forked its sleep, so that launch had nothing to leak and nosweep's stop-at-first-leak drive
+  # ran a load-dependent number of launches. Ordered on the sleep, every launch leaves one to sweep: nosweep
+  # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait is bounded; its bound is a
+  # refusal in AW_STALL_LOG (FIXTURE BROKEN at aw_gate), never a verdict. (t4w) keeps the at-once deriver,
+  # because its forced window needs the stop to race the watchdog's fork.
+  seed_fxw() { # <t>: seed() plus a TRACKED deriver stub that exits once the watchdog's sleep is up
+    f2b_world seed "$1" || return 1
+    mkdir -p "$1/core/scripts" && printf '%s\n' '#!/bin/bash' \
+      'i=0; until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
+      '  [ "$i" -ge 3000 ] && { printf "(t4) the stub deriver saw no watchdog sleep in group %s in 3000 polls\n" "$PPID" >> "$AW_STALL_LOG"; exit 0; }' \
+      '  /bin/sleep 0.01; i=$((i + 1))' \
+      'done' 'exit 0' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+    ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fastw ) >/dev/null 2>&1
+  }
   fx_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
     local t="$WORK/fx.$2" o="$WORK/fxo.$2"
-    f2b_world seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
+    f2b_world seed_fxw "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
     bash "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
     cat "$o/res" 2>/dev/null
   }
   RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
   case "$RT4" in
-    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits at once, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)"; B_LOC_t4=1 ;;
+    "alive|$FX_REPS|$FX_REPS|$FX_REPS|0") ok "(t4) $FX_REPS fast traces (deriver exits once the watchdog's sleep is up, ceiling 777s): every one finished exit 0 and its process group was empty once its pid was gone -- the watchdog's sleep was never left behind (control: a live group read alive)"; B_LOC_t4=1 ;;
     *) bad "(t4) a fast trace left its watchdog's sleep alive, or the drive did not run: control|reps|started|exit0|leaks = '$RT4'" ;;
   esac
   # (t4w) THE FORK-TO-EXEC WINDOW, FORCED. The forked child of the watchdog's `sleep "$cl" &` carries
@@ -2096,7 +2196,7 @@ _a="$(LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo ps -o lstart= -p "$LOCKPID")"; _b="$(LC_A
   || broken "unpinned ps reads the same start under the two split environments ('$_a' / '$_b') -- the split world cannot discriminate"
 ( export LANG=de_DE.UTF-8 LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo; . "$PJ_SEEDLIB"; pj_write_lock "$LOCKPID" "$PJW/j.split.lock" )
 [ "$(sed -n 2p "$PJW/j.split.lock/pid")" = "$PJ_LIVE" ] || broken "the writer under de_DE/Tokyo did not record the pinned start '$PJ_LIVE'"
-mkdir -p "$PJW/psbin/both" && printf '#!/bin/sh\nexit 1\n' > "$PJW/psbin/ps" && chmod +x "$PJW/psbin/ps" || broken "could not build the failing ps stub"
+mkdir -p "$PJW/psbin/both" && printf '#!/bin/bash\nexit 1\n' > "$PJW/psbin/ps" && chmod +x "$PJW/psbin/ps" || broken "could not build the failing ps stub"
 cp "$PJW/psbin/ps" "$PJW/psbin/both/ps" && cp "$PJW/psbin/ps" "$PJW/psbin/both/perl" || broken "could not build the failing ps+perl stubs"
 # The psfail world's positive answer comes from the fallback, so it must be able to give one HERE:
 # a fixture on a host where the perl read is empty would score the fallback's absence as its presence.
@@ -2123,7 +2223,7 @@ fi
 # holding `date` and a `ps` that prints nothing and exits 0, so neither source can read the start.
 # The writer must NOT record an empty start line: it writes the two-field lock and announces on
 # stderr, and the reader judges that lock HELD on a live pid. Scored as `<lines>|<empty line 2?>|<ann>|<rc>`.
-mkdir -p "$PJW/noperl" && printf '#!/bin/sh\nexit 0\n' > "$PJW/noperl/ps" && chmod +x "$PJW/noperl/ps" \
+mkdir -p "$PJW/noperl" && printf '#!/bin/bash\nexit 0\n' > "$PJW/noperl/ps" && chmod +x "$PJW/noperl/ps" \
   && ln -sf "$(command -v date)" "$PJW/noperl/date" || broken "could not build the no-perl PATH"
 [ -z "$(PATH="$PJW/noperl" command -v perl)" ] || broken "the no-perl PATH still finds perl"
 pw_drive() { # <pool copy> <tag> -> the writer's outcome, then the reader's rc on that lock
@@ -2442,7 +2542,7 @@ esac
 # ceiling (r10), and stays quiet for a live trace inside its ceiling (r11) and for a deriver group that
 # is already gone (r12). The live group is a `sleep` this fixture started under `set -m` and kills by
 # its recorded group on exit; the dead pid is a child that has already been reaped.
-set -m; sleep 600 </dev/null >/dev/null 2>&1 & SDG=$!; set +m
+set -m; tail -f /dev/null </dev/null >/dev/null 2>&1 & SDG=$!; set +m
 trap 'kill '"$LOCKPID"' 2>/dev/null; kill -- -'"$SDG"' 2>/dev/null; rm -rf "$WORK"' EXIT
 bash -c 'exit 0' & SDEAD=$!; wait "$SDEAD"
 kill -0 -- "-$SDG" 2>/dev/null || broken "the stop-line worlds' live group -$SDG is not alive"
@@ -2482,17 +2582,19 @@ if PM_FN=readset_trace_report pm_copy nostop 1 '[ -n "$why" ] && printf' '[ -n "
   esac
 fi
 # THE CALL SITE: run_fixtures prints the report on a push that runs the suite, before the suite runs.
-rp_run() { # <pool> <name>; prints the run's output
-  local p="$1" t="$WORK/rpr.$2"
+rp_run() { # <pool> <name>; prints the run's output, also kept with its POOL_STALL in $WORK/rpo.<name>/
+  local p="$1" t="$WORK/rpr.$2" o="$WORK/rpo.$2"
   f2b_world seed_lt "$t" || { printf 'SEED FAILED'; return 1; }
   if [ "$FXROOT" != core/fixtures ]; then
     mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
       && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
       || { printf 'SEED FAILED'; return 1; }
   fi
+  mkdir -p "$o"
   ( cd "$t" || exit 1; export AI_DLC_READSET_LIVE_TRACE=0
     # shellcheck disable=SC1090
-    . "$p" 2>/dev/null; run_fixtures ) 2>&1
+    . "$p" 2>/dev/null; printf '%s\n' "${POOL_STALL:-}" > "$o/stall"; run_fixtures ) > "$o/out" 2>&1
+  cat "$o/out"
 }
 rp_called() { awk '/trace-report last trace:/ { r = NR } /^  *ok  *(alpha|beta|gamma)/ && !f { f = NR } END { exit !(r && f && r < f) }' <<< "$1"; }
 RP_RUN="$(rp_run "$POOL" call)"; lt_arm
@@ -2544,10 +2646,12 @@ if [ "$LT_CAN" = 1 ]; then
   # a TERM handler restored on the watchdog, which the child still between fork and exec inherits, so the
   # sweep's TERM is handled and lost there. Measured with the window forced: 10 of 10 leaked.
   if PM_FN=readset_live_trace pm_copy sleeptrap 1 '      sleep "$cl" & s=$!; wait "$s"' "      trap 'exit 0' TERM; sleep \"\$cl\" & s=\$!; wait \"\$s\""; then
-    lt_arm; R="$(fw_drive "$PM" pm.sleeptrap "$FW_REPS" 1)"
+    # ALL FW_REPS LAUNCHES, NEVER STOP-AT-FIRST-LEAK: which launch first loses its TERM in the fork-to-exec window
+    # follows scheduling, so stopping there made the number of launches -- one deriver start each -- follow load.
+    lt_arm; R="$(fw_drive "$PM" pm.sleeptrap "$FW_REPS" 0)"
     case "$R" in
       alive\|*\|*\|*\|0) bad "CEILING MUTANT sleeptrap SURVIVED (t4w) over $FW_REPS forced-window traces: '$R'" ;;
-      # The record holds the index of the first leaking launch, which varies by run: it stays off the ok line.
+      # The record holds the number of leaking launches, which varies by run: it stays off the ok line.
       alive\|*) mutant_killed "$B_LOC_t4w" sleeptrap "CEILING MUTANT sleeptrap (a TERM handler on the watchdog) is KILLED by (t4w): a sleep signalled in its fork-to-exec window survived"
         printf '        (drive: %s)\n' "$R" ;;
       *) bad "CEILING MUTANT sleeptrap: the control did not read alive -- NO VERDICT: '$R'" ;;
@@ -2620,6 +2724,9 @@ stub_reap() {
     while read -r p; do [ -n "$p" ] && kill "$p" 2>/dev/null; done < "$d/pids.last"
     while [ "$i" -lt 30 ]; do live="$(stub_live "$d/pids.last")"; [ "$live" = 0 ] && break; sleep 0.1; i=$((i+1)); done
   fi
+  # A reaped stream's STUB_STREAM registration goes with it, so a later reuse of its pid cannot pass for a live
+  # stream. The stub of one world may have registered under another world's feed (sbx_run uses $SB's stubs on $SX's feed).
+  while read -r p; do [ -n "$p" ] && rm -f "$WORK"/*/feed.streams/"$p"; done < "$d/pids.last"
   live="$(stub_live "$d/pids.last")"; n="$(grep -c . "$d/pids.last")" || n=0
   printf '%s %s\n' "$n" "$live" >> "$d/reap.log"
 }
@@ -3710,219 +3817,6 @@ MUT
     fi
   fi
 
-  # ------------------------------------------ the sandbox tracer refuses a LOSSY window ----
-  # `log stream` drops reports when it cannot keep up and prints `=== Messages dropped during
-  # live streaming`. The reports it dropped are gone, so the set that remains is short by an
-  # unknown amount -- the silent-skip direction. The deriver must OMIT such a fixture.
-  #
-  # LOSS IS FORCED, NOT AWAITED: an UNSCOPED profile reports every operation the fixture makes
-  # anywhere, and a burst of it overflows the stream. It is still probabilistic -- measured, 4
-  # of 5 unscoped bursts dropped -- so the arm checks an INVARIANT on every attempt, in both
-  # directions: a window WITH a drop notice is omitted naming the drop, and a window without one
-  # is mapped. It needs at least one lossy window to count as proven; with none in three
-  # attempts it SKIPS, naming why. It never passes on attempts that forced nothing.
-  #
-  # IT SKIPS where the stream cannot run: no sandbox-exec, no /usr/bin/log, running as root (the
-  # sandbox tracer refuses root), or INSIDE a sandbox -- `log stream` answers "Cannot run while
-  # sandboxed", which is exactly this fixture's state while `--tracer sandbox` traces it. That
-  # probe is the one taken at the top (IN_SANDBOX, LS_PROBE_RC), not a second one.
-  LS_WHY=""
-  if ! command -v sandbox-exec >/dev/null 2>&1; then LS_WHY="no sandbox-exec (not macOS)"
-  elif [ ! -x /usr/bin/log ]; then LS_WHY="no /usr/bin/log"
-  elif [ "$(id -u)" = 0 ]; then LS_WHY="running as root, which --tracer sandbox refuses"
-  elif [ "$IN_SANDBOX" = 1 ]; then LS_WHY="inside a sandbox: $(head -1 "$WORK/ls.err")"
-  elif [ "$LS_PROBE_RC" != 0 ]; then LS_WHY="log stream unavailable here: $(head -1 "$WORK/ls.err")"
-  fi
-  if [ -n "$LS_WHY" ]; then
-    printf '  SKIP  sandbox-tracer loss arm and deriver width arm: %s\n' "$LS_WHY"
-  else
-    PR="$WORK/lossprobe"
-    mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
-    # THE BURST IS 8 CONCURRENT READERS OVER 1500 FILES. The deriver's stream runs at the default
-    # level (BL-481), and there the old single-reader burst over 400 files plus `ls -lR /usr/share`
-    # never dropped: 0 notices in 3 of 3, against 130-197 at `--level debug`. 8 readers over 1500
-    # files dropped 41 and 42 notices at the default level, load 44-47.
-    _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
-    printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$PR/.githooks/pre-push"
-    # The probe fixture also ECHOES the width knob, which the width arm below reads from its log.
-    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
-    # The width mutant's repo is the same seed with the deriver's env injection removed from both
-    # launch lines. It is seeded BEFORE the original's `git init`, so it copies no `.git`.
-    PRM="$WORK/widthmut"
-    mkdir -p "$PRM" || broken "mkdir failed"
-    cp -R "$PR/." "$PRM/" || broken "could not copy the probe repo for the width mutant"
-    cp "$DERIVER" "$PR/core/scripts/derive-fixture-readsets.sh"
-    sed 's| env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
-    ( cd "$PR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
-      || broken "could not seed the loss probe repo"
-    ( cd "$PRM" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
-      || broken "could not seed the width mutant repo"
-    printf '(version 3)\n(allow default (with report))\n' > "$WORK/unscoped.sb"
-    L_FORCED=0; L_CLEAN=0; L_BAD=""; _a=0
-    while [ "$_a" -lt 3 ] && [ "$L_FORCED" -eq 0 ]; do
-      _a=$((_a+1)); _tr="$WORK/losstr.$_a"
-      # The exit status is NOT read: a one-fixture run can never pass the discrimination control
-      # (arm (c) above), so the deriver dies after the per-fixture line. That line is the verdict.
-      # `env -u` so the width arm below reads what the DERIVER set, never a value inherited from
-      # whatever ran this fixture -- under the deriver itself the knob is already 1 out here.
-      ( cd "$PR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_tr" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/unscoped.sb" \
-          bash core/scripts/derive-fixture-readsets.sh --list burst --tracer sandbox ) > "$WORK/loss.$_a.out" 2>&1
-      _line="$(grep -E '^  burst ' "$WORK/loss.$_a.out")"
-      _win="$(find "$_tr" -name burst.win 2>/dev/null | head -1)"
-      _d=0; [ -n "$_win" ] && { _d="$(grep -c 'dropped during' "$_win")" || _d=0; }
-      case "$_d:$_line" in
-        0:*" paths"*) L_CLEAN=$((L_CLEAN+1)) ;;
-        0:*"dropped reports"*) L_BAD="$L_BAD attempt $_a omitted for a drop its window does not carry;" ;;
-        0:*) : ;;   # omitted for another reason (settle/flush) -- neither direction observed
-        *:*"dropped reports"*) L_FORCED=$((L_FORCED+1)) ;;
-        *) L_BAD="$L_BAD attempt $_a had $_d drop notice(s) in its window and was not omitted for it: '$_line';" ;;
-      esac
-    done
-    if [ -n "$L_BAD" ]; then
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      bad "the sandbox tracer's loss refusal is wrong:$L_BAD"
-    elif [ "$L_FORCED" -eq 0 ]; then
-      printf '  SKIP  sandbox-tracer loss arm: no attempt of %s forced a drop notice into the window (%s clean), so the refusal was not exercised\n' "$_a" "$L_CLEAN"
-    else
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      ok "the sandbox tracer OMITS a fixture whose window carries a 'dropped during' notice ($L_FORCED forced, $L_CLEAN clean window(s) mapped, over $_a attempt(s)) — a lossy trace never becomes a smaller read-set"
-    fi
-
-    # ------------------------------ the deriver runs a traced fixture at inner pool width 1 ----
-    # BL-375: validator-arm-selection's 6-way inner pool outruns `log stream` and its trace drops
-    # reports, so the deriver launches every fixture as `... env VAS_INNER_POOL_WIDTH=1 bash`.
-    # There are TWO EMITTING LINES, one per launch path, and each is bound by running it. This arm
-    # binds the `sandboxed` line under `--tracer sandbox`: the probe fixture echoes the knob, and the
-    # log the deriver captured for attempt 1 above must read `width=1`. The same `sandboxed` line
-    # under `--tracer both` goes through sudo and is bound in the stub world further down. The
-    # `fs_usage` line runs only as root, so no unprivileged fixture can drive it; it stays covered
-    # only by the operator's own `sudo` run. Two controls here, each presence-shaped
-    # (`burst ok` must appear, so a run that never reached the fixture cannot score):
-    #   * the same probe run OUTSIDE the deriver reads `width=unset`, so the 1 came from the deriver
-    #     and not from the probe or the environment;
-    #   * a deriver copy with the injection removed from both launch lines yields `width=unset`, so
-    #     the arm fails when the injection is gone.
-    W_LOG="$WORK/losstr.1/w/burst.log"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if grep -qx 'burst ok' "$W_LOG" 2>/dev/null && grep -qx 'width=1' "$W_LOG" && grep -qx 'ems=1' "$W_LOG"; then
-      ok "WIDTH: the deriver ran the traced probe fixture with VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 (its captured log reads width=1, ems=1)"
-      B_width=1
-    else
-      bad "WIDTH: the deriver's traced run of the probe fixture did not see VAS_INNER_POOL_WIDTH=1 — log reads '$(grep -m1 '^width=' "$W_LOG" 2>/dev/null)', burst ok present: $(grep -cx 'burst ok' "$W_LOG" 2>/dev/null || :). validator-arm-selection would trace at full width and drop reports"
-    fi
-    W_OUT="$( cd "$PR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH bash core/fixtures/burst/run.sh 2>/dev/null )"
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    case "$W_OUT" in
-      *"width=unset"*"ems=unset"*"burst ok"*) ok "WIDTH CONTROL: the same probe run outside the deriver reads width=unset, so the 1 above is the deriver's" ;;
-      *) bad "WIDTH CONTROL: the probe run outside the deriver did not read width=unset: '$(printf '%s' "$W_OUT" | tr '\n' ' ')'" ;;
-    esac
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if cmp -s "$DERIVER" "$PRM/core/scripts/derive-fixture-readsets.sh"; then
-      bad "WIDTH MUTANT did not apply: removing the env injection changed nothing in the deriver copy, so this control would test an unmutated deriver"
-    else
-      _trm="$WORK/widthmut.tr"
-      ( cd "$PRM" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_trm" \
-          bash core/scripts/derive-fixture-readsets.sh --list burst --tracer sandbox ) > "$WORK/widthmut.out" 2>&1
-      WM_LOG="$_trm/w/burst.log"
-      # TWIN: `burst ok`, the probe fixture completing under the mutant exactly as under the shipped deriver.
-      _tw=0; grep -qx 'burst ok' "$WM_LOG" 2>/dev/null && _tw=1
-      [ "$F2C_MATRIX" = 1 ] && f2c_mx width "$(tr '\n' ' ' < "$WM_LOG" 2>/dev/null | cut -c1-120)"
-      if grep -qx 'width=unset' "$WM_LOG" 2>/dev/null && grep -qx 'ems=unset' "$WM_LOG" && f2c_twin width "burst ok" "$_tw"; then
-        mutant_killed "${B_width:-0}" width "WIDTH MUTANT: with the env injection removed from both launch lines the traced probe reads width=unset — the arm above depends on that line"
-      elif grep -qx 'width=unset' "$WM_LOG" 2>/dev/null && grep -qx 'ems=unset' "$WM_LOG"; then :
-      else
-        bad "WIDTH MUTANT: the injection-free deriver's traced run did not read width=unset with 'burst ok' present: '$(tr '\n' ' ' < "$WM_LOG" 2>/dev/null | cut -c1-120)' — $(tail -2 "$WORK/widthmut.out" | tr '\n' ' ')"
-      fi
-    fi
-
-    # ------------------------------- the LOSS CANARY against a REAL stream that loses reads ----
-    # 1500 files read by 8 concurrent readers. Under an UNSCOPED profile the stream loses reads,
-    # and the canary must name them in the OMITTED line. The SCOPED side traces its OWN small
-    # burst, 1 reader over 100 files: the 8x1500 burst lost reads under the scoped profile too, in
-    # every attempt measured (0 of 8 clean at 1-minute load 8.3-26.8, and 4 of 4 SKIPs at load 2-8),
-    # so a scoped side on the big burst could never be exercised and the arm always skipped.
-    # Probabilistic in both directions, so each side gets up to three attempts
-    # and the arm SKIPS, naming why, when no attempt exercised that side -- it never passes on
-    # attempts that forced nothing. The deterministic proof is the stub-world canary arm, which runs
-    # wherever this fixture runs unprivileged; this one is the real-kernel confirmation.
-    #   unscoped: forced = an attempt whose fxa.canary is non-empty; that attempt must be OMITTED
-    #             with `LOSS CANARY: <n>` where n is the canary file's line count.
-    #   scoped:   clean  = an attempt with 0 drop notices and an empty canary; it must be MAPPED.
-    #   mutant:   the guard deleted, unscoped: a forced attempt's line must NOT carry the token.
-    CP="$WORK/canaryprobe"
-    mkdir -p "$CP/core/fixtures/burst8" "$CP/core/fixtures/small1" "$CP/core/scripts" "$CP/.githooks" "$CP/d" "$CP/s" || broken "mkdir failed"
-    _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$CP/d/f$_i"; done
-    _i=0; while [ "$_i" -lt 100 ]; do _i=$((_i+1)); echo "$_i" > "$CP/s/f$_i"; done
-    printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$CP/.githooks/pre-push"
-    printf '#!/bin/bash\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst8 ok\n' > "$CP/core/fixtures/burst8/run.sh"
-    printf '#!/bin/bash\ncat s/f* >/dev/null\necho small1 ok\n' > "$CP/core/fixtures/small1/run.sh"
-    cp "$DERIVER" "$CP/core/scripts/derive-fixture-readsets.sh"
-    sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$DERIVER" > "$WORK/deriver.nocanary.real.sh"
-    ( cd "$CP" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
-      || broken "could not seed the canary probe repo"
-    canary_try() { # $1 tag  $2 profile ("" = the deriver's scoped one)  $3 fixture (default burst8); prints "<line>|<canary n>|<drops>"
-      local tr="$WORK/cantr.$1" c d f="${3:-burst8}"
-      ( cd "$CP" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$tr" \
-          ${2:+AI_DLC_READSET_SANDBOX_PROFILE="$2"} bash core/scripts/derive-fixture-readsets.sh --list "$f" --tracer sandbox ) > "$WORK/can.$1.out" 2>&1
-      c="$(grep -c . "$tr/w/$f.canary" 2>/dev/null)" || c=0
-      d="$(grep -c 'dropped during' "$tr/w/$f.win" 2>/dev/null)" || d=0
-      printf '%s|%s|%s' "$(grep -m1 -E "^  $f " "$WORK/can.$1.out" | tr -s ' ')" "$c" "$d"
-    }
-    C_FORCED=0; C_BAD=""; _a=0
-    while [ "$_a" -lt 3 ] && [ "$C_FORCED" -eq 0 ]; do
-      _a=$((_a+1)); _r="$(canary_try "u$_a" "$WORK/unscoped.sb")"
-      _l="${_r%%|*}"; _c="${_r#*|}"; _c="${_c%%|*}"
-      if [ "$_c" -gt 0 ]; then
-        case "$_l" in
-          *"OMITTED ("*"LOSS CANARY: $_c path(s)"*) C_FORCED=$((C_FORCED+1)) ;;
-          *) C_BAD="$C_BAD unscoped attempt $_a lost $_c read(s) and its line does not name them: '$_l';" ;;
-        esac
-      fi
-    done
-    S_CLEAN=0; _s=0
-    while [ "$_s" -lt 3 ] && [ "$S_CLEAN" -eq 0 ]; do
-      _s=$((_s+1)); _r="$(canary_try "s$_s" "" small1)"
-      _l="${_r%%|*}"; _rest="${_r#*|}"; _c="${_rest%%|*}"; _d="${_rest#*|}"
-      if [ "$_c" -eq 0 ] && [ "$_d" -eq 0 ]; then
-        case "$_l" in
-          *" paths") S_CLEAN=$((S_CLEAN+1)) ;;
-          *"LOSS CANARY"*) C_BAD="$C_BAD scoped attempt $_s had an empty canary and was omitted for it: '$_l';" ;;
-          *) : ;;   # omitted for another reason (settle/flush) -- neither direction observed
-        esac
-      fi
-    done
-    TRACE_ARMS=$((TRACE_ARMS+1))
-    if [ -n "$C_BAD" ]; then
-      bad "REAL CANARY:$C_BAD"
-    elif [ "$C_FORCED" -eq 0 ] || [ "$S_CLEAN" -eq 0 ]; then
-      printf '  SKIP  real-stream canary arm: %s of %s unscoped attempt(s) lost a read, %s of %s scoped attempt(s) traced clean -- a side was not exercised (the stub-world canary arm is the deterministic proof)\n' "$C_FORCED" "$_a" "$S_CLEAN" "$_s"
-      TRACE_ARMS=$((TRACE_ARMS-1))
-    else
-      ok "REAL CANARY: an unscoped 8-reader burst over 1500 files that lost reads is OMITTED naming the LOSS CANARY count (attempt $_a), and the scoped profile maps a 1-reader burst over 100 files (attempt $_s)"
-      B_realcan=1
-      cp "$WORK/deriver.nocanary.real.sh" "$CP/core/scripts/derive-fixture-readsets.sh"
-      TRACE_ARMS=$((TRACE_ARMS+1))
-      if cmp -s "$DERIVER" "$WORK/deriver.nocanary.real.sh"; then
-        bad "REAL CANARY MUTANT did not apply: deleting the canary guard changed nothing"
-      else
-        _m=0; _mv=""
-        while [ "$_m" -lt 3 ] && [ -z "$_mv" ]; do
-          _m=$((_m+1)); _r="$(canary_try "m$_m" "$WORK/unscoped.sb")"
-          _l="${_r%%|*}"; _c="${_r#*|}"; _c="${_c%%|*}"
-          [ "$_c" -gt 0 ] || continue
-          case "$_l" in *"LOSS CANARY"*) _mv="named" ;; *) _mv="silent" ;; esac
-        done
-        [ "$F2C_MATRIX" = 1 ] && f2c_mx realcanary "$_mv: $_l"
-        # TWIN: the attempt still lost reads (canary count > 0), so the silence is the guard's absence.
-        _tw=0; [ "${_c:-0}" -gt 0 ] 2>/dev/null && _tw=1
-        case "$_mv" in
-          silent) if f2c_twin realcanary "canary count > 0" "$_tw"; then mutant_killed "${B_realcan:-0}" realcanary "REAL CANARY MUTANT: with the guard deleted an unscoped attempt that lost reads carries no LOSS CANARY in its line — the arm depends on that line"; fi ;;
-          named)  bad "REAL CANARY MUTANT: with the guard deleted the line still names the LOSS CANARY: '$_l'" ;;
-          *)      printf '  SKIP  real-stream canary mutant: no unscoped attempt of %s lost a read\n' "$_m"; TRACE_ARMS=$((TRACE_ARMS-1)) ;;
-        esac
-      fi
-    fi
-  fi
 
   # ------------------------------------------------- `--tracer both`: the comparison mode ----
   # The operator runs `sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` to
@@ -4128,13 +4022,15 @@ exec env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH "$@"
 STUB
     cat > "$SB/sandbox-exec" <<'STUB'
 #!/bin/bash
-[ "$1" = -f ] && shift 2
+. "$STUB_STREAM_LIB"
+# STUB_PROFILES, when set, collects the CONTENT of every profile handed to `-f` (the profile-override arm reads it).
+[ "$1" = -f ] && { [ -z "${STUB_PROFILES:-}" ] || cat "$2" >> "$STUB_PROFILES"; shift 2; }
 # The deriver launches a fixture as `env VAS_INNER_POOL_WIDTH=1 bash <run.sh>`; look past that.
 _c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
 if [ "${!_c}" = bash ]; then
-  while IFS= read -r p; do [ -n "$p" ] && printf 'x Sandbox: bash(1) allow file-read-data %s/%s\n' "$PWD" "$p"; done < "$STUB_SB" >> "$STUB_FEED"
+  while IFS= read -r p; do [ -n "$p" ] && ss_emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"; done < "$STUB_SB"
 else
-  for a in "$@"; do case "$a" in /*) printf 'x Sandbox: cat(1) allow file-read-data %s\n' "$a" >> "$STUB_FEED" ;; esac; done
+  for a in "$@"; do case "$a" in /*) ss_wait "$a"; ss_emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
 fi
 exec "$@"
 STUB
@@ -4148,10 +4044,13 @@ emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.readset-sentinel  0.000010  c
 while IFS= read -r p; do [ -n "$p" ] && emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/t/$p  0.000010  bash.2"; done < "$STUB_FS"
 n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
 STUB
+    # The stream stub registers its capture (the STUB_STREAM span) and blocks until the deriver stops it.
     cat > "$SB/logstream" <<'STUB'
 #!/bin/bash
 echo $$ >> "${0%/*}/pids"   # the world reaps this pid by number (stub_reap); exec keeps it
-exec tail -n 0 -f "$STUB_FEED"
+. "$STUB_STREAM_LIB"
+ss_register live
+exec tail -f /dev/null
 STUB
     chmod +x "$SB/id" "$SB/sudo" "$SB/sandbox-exec" "$SB/fs_usage" "$SB/logstream"
     : > "$SB/feed"
@@ -4399,9 +4298,10 @@ d/-p'
       *) bad "NOWRITE MUTANT: the map did not move with the exit deleted, so the no-write arm proves nothing about it: '$S3' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
 
-    # THE LOSS CANARY, DETERMINISTICALLY, UNDER `--tracer sandbox`. The real-stream probe further
-    # down needs `log stream` and skips where it cannot run; this arm needs neither, so the canary
-    # is proven on every non-root run of this fixture and is never a check that cannot fire. The
+    # THE LOSS CANARY, DETERMINISTICALLY, UNDER `--tracer sandbox`. This arm needs no real `log stream`,
+    # so the canary is proven on every non-root run of this fixture and is never a check that cannot
+    # fire. LIMIT: the real-kernel loss shape is assumed, not tested -- that an overloaded real stream
+    # loses reads as a drop notice or an atime-only path is what this arm and the drop arms model. The
     # stub sandbox-exec reports ONLY the paths in the list it is handed, while fxa really reads
     # run.sh and src/a.sh, so the atime leg sees both:
     #   lossy list  run.sh alone      -> fxa OMITTED naming `LOSS CANARY: 1 path(s)`, 0 drop notices;
@@ -4428,6 +4328,7 @@ d/-p'
     sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$SB/deriver.sh" > "$SX/deriver.nocanary.sh"
     CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
     CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
+    cp "$SX_TR/w/fxa.log" "$WORK/width.log" 2>/dev/null || : > "$WORK/width.log"
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$CL" in
       " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'"; B_canary=1 ;;
@@ -4451,6 +4352,83 @@ d/-p'
         *) bad "CANARY MUTANT: with the guard deleted the lossy window did not map fxa: '$CM' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
       esac
     fi
+
+    # ------------------------------ the deriver runs a traced fixture at inner pool width 1 ----
+    # BL-375: validator-arm-selection's 6-way inner pool outruns `log stream` and its trace drops
+    # reports, so the deriver launches every fixture as `... env VAS_INNER_POOL_WIDTH=1 bash`. This arm
+    # binds the `sandboxed` line under `--tracer sandbox`, in the stub world: fxa echoes both knobs, and
+    # the log the deriver captured for the CANARY CONTROL run above must read `width=1` and `ems=1`. The
+    # same line under `--tracer both` goes through sudo and is bound by the --tracer both width arm. The
+    # `fs_usage` line runs only as root and stays covered only by the operator's own `sudo` run. Two
+    # controls, each presence-shaped (`fxa ok` must appear, so a run that never reached fxa cannot score):
+    #   * fxa run OUTSIDE the deriver reads `width=unset`, so the 1 came from the deriver;
+    #   * a deriver copy with the injection removed from the launch line yields `width=unset`.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if grep -qx 'fxa ok' "$WORK/width.log" && grep -qx 'width=1' "$WORK/width.log" && grep -qx 'ems=1' "$WORK/width.log"; then
+      ok "WIDTH: the deriver ran the traced fxa with VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 (its captured log reads width=1, ems=1)"
+      B_width=1
+    else
+      bad "WIDTH: the deriver's traced run of fxa did not see VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 with 'fxa ok' present: '$(tr '\n' ' ' < "$WORK/width.log" | cut -c1-120)'. validator-arm-selection would trace at full width and drop reports"
+    fi
+    W_OUT="$( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH bash core/fixtures/fxa/run.sh 2>/dev/null )"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    case "$W_OUT" in
+      *"width=unset"*"ems=unset"*"fxa ok"*) ok "WIDTH CONTROL: fxa run outside the deriver reads width=unset and ems=unset, so the 1 above is the deriver's" ;;
+      *) bad "WIDTH CONTROL: fxa run outside the deriver did not read width=unset and ems=unset: '$(printf '%s' "$W_OUT" | tr '\n' ' ')'" ;;
+    esac
+    sed 's| env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" READSET_SLOT_HOLDER="$RS_SLOT_MARK" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$SB/deriver.sh" > "$SX/deriver.nowidth.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.nowidth.sh"; then
+      bad "WIDTH MUTANT did not apply: removing the env injection changed nothing in the deriver copy, so this control would test an unmutated deriver"
+    else
+      sbx_run "$SX/deriver.nowidth.sh" "$SX/whole.list" > /dev/null
+      cp "$SX_TR/w/fxa.log" "$WORK/widthmut.log" 2>/dev/null || : > "$WORK/widthmut.log"
+      # TWIN: `fxa ok`, fxa completing under the mutant exactly as under the shipped deriver.
+      _tw=0; grep -qx 'fxa ok' "$WORK/widthmut.log" && _tw=1
+      [ "$F2C_MATRIX" = 1 ] && f2c_mx width "$(tr '\n' ' ' < "$WORK/widthmut.log" | cut -c1-120)"
+      if grep -qx 'width=unset' "$WORK/widthmut.log" && grep -qx 'ems=unset' "$WORK/widthmut.log" && f2c_twin width "fxa ok" "$_tw"; then
+        mutant_killed "${B_width:-0}" width "WIDTH MUTANT: with the env injection removed from the launch line the traced fxa reads width=unset — the arm above depends on that line"
+      elif grep -qx 'width=unset' "$WORK/widthmut.log" && grep -qx 'ems=unset' "$WORK/widthmut.log"; then :
+      else
+        bad "WIDTH MUTANT: the injection-free deriver's traced fxa did not read width=unset with 'fxa ok' present: '$(tr '\n' ' ' < "$WORK/widthmut.log" | cut -c1-120)' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')"
+      fi
+    fi
+
+    # ----------------------- the deriver loads AI_DLC_READSET_SANDBOX_PROFILE when it is set ----
+    # The override replaces the deriver's own profile: its @TREE@ is substituted with the trace tree and
+    # the result is what every `sandboxed` call hands to `-f`. The stub sandbox-exec appends the CONTENT
+    # of each profile it is handed to STUB_PROFILES, so the arm reads what `sandboxed` used, not what the
+    # deriver wrote. Presence-shaped both ways: with the override every profile carries its token line with
+    # @TREE@ substituted and none carries the default rule; the TWIN, the same run without the override,
+    # carries the default rule and no token. fxa must map in both, so a run that never traced cannot score.
+    printf '(version 3)\n; readset-skip-profile-token @TREE@\n(allow default)\n' > "$SX/override.sb"
+    pf_run() { # [override profile]; prints "<profiles with the token>|<token lines with @TREE@ substituted>|<default-rule lines>|<fxa line>"
+      local p="$WORK/pf.profiles" t s d
+      : > "$p"
+      cp "$SB/deriver.sh" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+          STUB_PROFILES="$p" ${1:+AI_DLC_READSET_SANDBOX_PROFILE="$1"} AI_DLC_READSET_TRACE_ROOT="$SX_TR" \
+          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/pf.out" 2>&1 </dev/null
+      stub_reap "${SB:-}"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      t="$(grep -c 'readset-skip-profile-token' "$p")" || t=0
+      s="$(grep -cxF "; readset-skip-profile-token $SX_TR/t" "$p")" || s=0
+      d="$(grep -cF '(allow file* process-exec* (subpath' "$p")" || d=0
+      printf '%s|%s|%s|%s' "$t" "$s" "$d" "$(grep -m1 -E '^  fxa ' "$WORK/pf.out" | tr -s ' ')"
+    }
+    PF_O="$(pf_run "$SX/override.sb")"; PF_T="$(pf_run "")"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    _pt="${PF_O%%|*}"; _pr="${PF_O#*|}"; _ps="${_pr%%|*}"; _pr="${_pr#*|}"; _pd="${_pr%%|*}"
+    if [ "$_pt" -gt 0 ] && [ "$_ps" = "$_pt" ] && [ "$_pd" = 0 ] && case "$PF_O" in *" fxa "*" paths") true ;; *) false ;; esac; then
+      ok "PROFILE: with AI_DLC_READSET_SANDBOX_PROFILE set, all $_pt profile(s) sandbox-exec was handed carry the override's token with @TREE@ substituted, and none the default rule"
+    else
+      bad "PROFILE: the override was not what sandbox-exec ran under: token|substituted|default|fxa = '$PF_O'"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    case "$PF_T" in
+      0\|0\|[1-9]*" fxa "*" paths") ok "PROFILE TWIN: the same run without the override hands sandbox-exec the deriver's default rule and no token" ;;
+      *) bad "PROFILE TWIN: without the override expected no token and the default rule with fxa mapped: '$PF_T'" ;;
+    esac
 
     # THE CANARY'S UNREADABLE BRANCH, driven from its sentinels. No real trace produces an
     # unreadable stream set on demand, so the shipped readset_loss_canary is called on a missing
@@ -4688,25 +4666,31 @@ d/-p'
     SL="$WORK/lmstub"; mkdir -p "$SL" || broken "mkdir failed"
     cat > "$SL/sandbox-exec" <<'STUB'
 #!/bin/bash
+. "$STUB_STREAM_LIB"
 tag=""
 [ "$1" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
 [ "$1" = -f ] && shift 2
-emit() { printf '%s\n' "$1" >> "$STUB_FEED"; [ -z "$tag" ] || printf 'FXTAG=%s;\n' "$tag" >> "$STUB_FEED"; }
+emit() { ss_emit "$1"; [ -z "$tag" ] || ss_emit "FXTAG=$tag;"; }
 _c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
 if [ "${!_c}" = bash ]; then
   while IFS= read -r p; do [ -n "$p" ] && emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"; done < "$STUB_SB"
-  [ -z "${STUB_TRIP:-}" ] || printf 'x Sandbox: bash(1) allow process-exec* /usr/bin/sudo\nFXTAG=%s;TRIP\n' "$tag" >> "$STUB_FEED"
-  [ -z "${STUB_DROP:-}" ] || printf '=== Messages dropped during live streaming\n' >> "$STUB_FEED"
+  [ -z "${STUB_TRIP:-}" ] || { ss_emit 'x Sandbox: bash(1) allow process-exec* /usr/bin/sudo'; ss_emit "FXTAG=$tag;TRIP"; }
+  [ -z "${STUB_DROP:-}" ] || ss_emit '=== Messages dropped during live streaming'
 else
-  for a in "$@"; do case "$a" in /*) emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
+  for a in "$@"; do case "$a" in /*) ss_wait "$a"; emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
 fi
 exec "$@"
 STUB
+    # STUB_DEADLIVE: the liveness probe's stream registers DEAF and stays up until the deriver kills it, so
+    # the probe runs its whole bound and refuses -- a stream that is attached and never delivers.
     cat > "$SL/logstream" <<'STUB'
 #!/bin/bash
 echo $$ >> "${0%/*}/pids"   # the world reaps this pid by number (stub_reap); exec keeps it
-case "$*" in *FXTAG=__liveness__\;*) [ -z "${STUB_DEADLIVE:-}" ] || exec sleep 30 ;; esac
-exec tail -n 0 -f "$STUB_FEED"
+. "$STUB_STREAM_LIB"
+m=live
+case "$*" in *FXTAG=__liveness__\;*) [ -z "${STUB_DEADLIVE:-}" ] || m=deaf ;; esac
+ss_register "$m"
+exec tail -f /dev/null
 STUB
     chmod +x "$SL/sandbox-exec" "$SL/logstream"
     : > "$SL/feed"
@@ -4798,10 +4782,11 @@ STUB
     SG="$WORK/fgstub"; mkdir -p "$SG" || broken "mkdir failed"
     cat > "$SG/sandbox-exec" <<'STUB'
 #!/bin/bash
+. "$STUB_STREAM_LIB"
 tag=""
 [ "$1" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
 [ "$1" = -f ] && shift 2
-emit() { printf '%s\n' "$1" >> "$STUB_FEED"; [ -z "$tag" ] || printf 'FXTAG=%s;\n' "$tag" >> "$STUB_FEED"; }
+emit() { ss_emit "$1"; [ -z "$tag" ] || ss_emit "FXTAG=$tag;"; }
 FM=/private/tmp/ai-dlc-foreign-deriver/m
 _c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
 if [ "${!_c}" = bash ]; then
@@ -4816,7 +4801,7 @@ if [ "${!_c}" = bash ]; then
     fi
   done < "$STUB_SB"
 else
-  for a in "$@"; do case "$a" in
+  for a in "$@"; do ss_wait "$a"; case "$a" in
     */.readset-end)
       emit "x Sandbox: cat(1) allow file-read-data $FM/.readset-end"
       k=0; [ -f "$FG_COUNT" ] && k="$(cat "$FG_COUNT")"
@@ -7438,15 +7423,16 @@ fi
 # (no-refusal) NO CK OR TK PUSH WAS DECIDED BY THE WATCHDOG (the pin is at the scrub, at the top of this file). Every
 # push directory this shard wrote must have recorded the pinned window, and no push may have rendered a REFUSED verdict
 # line. Presence-shaped: a shard that drove pushes must find at least one, and the scan is self-probed both ways first.
-ck_norefuse() { # <dir>: "<pushes>|<pushes whose block did not take the pin>|<REFUSED verdict lines>"
+nr_scan() { # <out file>...: "<pushes>|<pushes whose block did not take the pin>|<REFUSED verdict lines>"
   local f n=0 np=0 nr=0 c
-  for f in "$1"/*.o.*/out; do
+  for f in "$@"; do
     [ -f "$f" ] || continue
     n=$((n+1)); [ "$(cat "${f%/out}/stall" 2>/dev/null)" = 99999 ] || np=$((np+1))
     c="$(grep -c '^   REFUSED  ' "$f")" || c=0; nr=$((nr+c))
   done
   printf '%s|%s|%s' "$n" "$np" "$nr"
 }
+ck_norefuse() { nr_scan "$1"/*.o.*/out; } # <dir>: every ck/tk push directory under it
 NR_P="$(mktemp -d "$WORK/nr.XXXXXX")" || broken "mktemp failed for the no-refusal self-probe"
 mkdir -p "$NR_P/r/w.o.1" "$NR_P/c/w.o.1" "$NR_P/u/w.o.1"
 printf '   done 3/3  REFUSED delta\n   REFUSED  delta  (no progress for 600 polls; a refusal costs a re-run, never a verdict)\n' > "$NR_P/r/w.o.1/out"
@@ -7461,6 +7447,16 @@ if [ "${_nr%%|*}" -gt 0 ]; then
   else bad "(no-refusal) ck/tk pushes|unpinned|REFUSED verdict lines = $_nr; a push decided by the load-bound watchdog is no verdict on the subject"; fi
 elif sg ckw || sg ckm1 || sg ckm2 || sg ckm3 || sg tk; then
   CK_ARMS=$((CK_ARMS+1)); bad "(no-refusal) this shard runs ck/tk worlds and the scan found no push directory under $CK_W"
+fi
+# (no-refusal, loc) THE SAME FOR THE loc UNIT'S run_fixtures DRIVES: rf_drive's $WORK/rfo.<name>/ and rp_run's
+# $WORK/rpo.<name>/ record the POOL_STALL their block computed beside the run's output. Same scan, same
+# self-probe; presence-shaped: a shard running loc must find at least one. (`&& true`: not a unit guard, so the
+# coverage join does not read it as loc declared twice.)
+if sg loc && true; then
+  LT_ARMS=$((LT_ARMS+1))
+  _nl="$(nr_scan "$WORK"/rfo.*/out "$WORK"/rpo.*/out)"
+  if [ "${_nl%%|*}" -gt 0 ] && [ "${_nl#*|}" = '0|0' ]; then ok "(no-refusal, loc) all ${_nl%%|*} rf/rp run_fixtures drive(s) ran under the pinned window 99999 and none was REFUSED by the pool watchdog"
+  else bad "(no-refusal, loc) rf/rp drives|unpinned|REFUSED verdict lines = $_nl; a drive decided by the load-bound watchdog, or none found, is no verdict on the subject"; fi
 fi
 
 # A NO-PROGRESS NET THAT FIRED ANYWHERE IS A REFUSAL, NOT A VERDICT: the run is FIXTURE BROKEN, exit 2.

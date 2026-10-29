@@ -190,6 +190,10 @@ An AC whose set cannot be enumerated at authoring time carries
 enumerated>` on its own line inside that AC. Check 31 prints every
 waiver it reads; a waiver suppresses the FAIL, never the report.
 
+An AC with a dated earliest run time carries `run_not_before: <ISO-8601 UTC>`
+on its own line inside that AC, and an AC planned for deferral carries
+`defers_to: CO-S<N>-<descriptor>` on its own line.
+
 Run `scripts/ai-dlc/validate-ac-falsifiability.sh <story-file>` at
 authoring time — it is the same enforcer Check 31 runs, and a term
 rewritten here costs one word where the same term costs a story gate.
@@ -259,7 +263,9 @@ the dev fills it:
 
 - `## Production Integrity Tests` — read by gate-validation Check 6.
 - `## Smoke Test Updates` — read by gate-validation Check 11's smoke clause
-  and by QA's Validation Checklist.
+  and by QA's Validation Checklist. Its surface is `gate-validation.md` Check 11, **Smoke surface.**
+  The section is derived from the story's diff against the consumer's `docs/smoke-surface.txt`, never by grepping one smoke script,
+  and it lists each smoke test file the story adds, modifies or removes as a backticked repo-relative path.
 - `## Rename Verification` — for a story that renames or RE-POINTS an
   identifier, constant or path. It carries `git grep -n <old name>` and
   `git grep -n <new name>` over the whole repository, every hit with a
@@ -495,6 +501,8 @@ architecture doc (`dev.md`/`qa.md` Context Loading), per Rule 25.
 - Stories touching cross-cutting NFRs may list the current-state head anchor
   plus the specific NFR section(s).
 
+**Gate-2 HARD GATE mapping.** Before authoring a story, grep the HARD GATE item lines, not whole files, from the installed `team-roles/qa.md` and from every consumer `extensions/roles/qa-*.md` and `overrides/team-roles__qa__*.md`, and map each HARD GATE item that the story's diff class triggers to an AC or a strategy row; an unmapped triggered item blocks story authoring.
+
 ### 3. Sprint Planning
 
 **Intensity gate for carry-over-single.** When
@@ -504,6 +512,9 @@ already scoped and ≤2 stories are trivially plannable; the sprint-planning
 sub-skill adds overhead without value. Proceed to Story Validation Cycle.
 
 Invoke `/bmad-sprint-planning` — select stories for the sprint.
+
+The lead writes `planned_close: <ISO-8601 UTC>` into the canonical
+sprint-status yaml's sprint block.
 
 **Multi-sprint phasing check (Rule 14):** If the total story count exceeds
 what can be delivered in a single sprint (typically 3-5 stories), or if

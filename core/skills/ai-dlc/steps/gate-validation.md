@@ -257,14 +257,18 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   `artifact-path-grammar.md` rule 5 requires — never by mtime and never by
   listing order — so `-p2` outranks the unsuffixed file and `-p10` outranks
   `-p9`.
-- **A gate-1 re-review answers the pass before it.** When the gate-1 file read
-  is a `-p<M>` file with M >= 2, run
+- **A gate-1 or gate-2 re-review answers the pass before it.** When the gate-1
+  file read, or a gate-2 `-qa-validation-p<M>` file, is a `-p<M>` file with M >= 2, run
   `scripts/ai-dlc/validate-carried-findings.sh <pass M-1 file> <pass M file>`
   (pass M-1 is `-p<M-1>`, or the unsuffixed file when M is 2) and record its
   output line in the gate log. Exit 1 or 2 FAILS this check: a prior Critical
   or Important finding with no `carried:` line, an `open` carried finding under
   a verdict other than `NEEDS_REWORK` or `BLOCKED`, or a pair it cannot read. A
   merged review and a serial one are each one file and are read the same way.
+  At gate 2 the duty holds only when the installed `qa.md` the pass ran
+  against, read at the pass's `reviewed-sha:`, carries `## Carried Findings`;
+  otherwise the program prints
+  `LEGACY:` (exit 0) and the pass passes this check.
   `PENDING:` (exit 0) is a review whose own branch does not carry the program,
   or one committed before the program reached that branch, and it passes. A
   `NOTE:` line names a prior line it did not carry, or a program the branch
@@ -782,6 +786,32 @@ when any story adds fields to API queries or schema.
 <!-- CHECK_LOADED: 11 -->
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.
+
+**Smoke surface.** A story is user-facing for this check, and for QA's smoke
+HARD GATE, when its diff touches a path in the project's smoke surface: the
+consumer's tracked `docs/smoke-surface.txt`, one git pathspec per line, `#`
+lines and blank lines ignored, a lone `none` declaring that the project has no
+smoke surface (read in any case, so `None` declares it too). An exclude pathspec (`:(exclude)<path>` or
+`:!<path>`) is allowed, and removes a generated file under a surface path from
+it; an exclude line needs a positive pathspec line beside it, because a surface
+of exclude lines alone matches every path the excludes do not name. Test files
+are not part of the smoke surface, so a glob that covers them carries an
+exclude for them, e.g. `:(exclude,glob)web/src/**/*.test.*` (without `glob`
+magic a `**/` needs a directory, so `web/src/a.test.js` stays in), or it refuses a range
+that changes only tests. It is read at the story's base, so a story cannot move the gate's
+own input. A surface whose lines, taken as one set, match no tracked path at the story's
+base and none at its frozen sha is refused as unevaluable; a surface naming a directory the
+story itself creates matches at the frozen sha and is not refused. The check applies to the
+line set, not to each line: a typo line beside a valid line is not refused, and the typo
+covers nothing. Each surface needs its own kind of smoke test: a UI path a browser
+test (e.g., Playwright), an API path an HTTP endpoint test, a computation path
+a live verification test.
+
+The two mechanical sub-clauses below, "the section exists and lists files"
+and "the referenced test files exist", are enforced by
+`validate-handoff-evidence.sh` at every gate-1 handoff and at the gate-2
+go-signal (`--smoke`). The correspondence and test-type sub-clauses stay
+judgment, read here.
 
 - For every story in the sprint that introduces, modifies, or removes
   user-facing functionality, verify smoke test updates exist AND are

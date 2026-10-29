@@ -58,6 +58,10 @@
 # MUTANT-MATRIX d10-d11-misindent-dropped-again decides=D10,D11 twins=D9
 # MUTANT-MATRIX d10-only-tab-caught decides=D10 twins=D11
 # MUTANT-MATRIX d11-only-deeper-spaces-caught decides=D11 twins=D10
+# MUTANT-MATRIX l4-planning-view-read decides=L4 twins=L1
+# MUTANT-MATRIX l2-absent-printed-empty decides=L2 twins=L1
+# MUTANT-MATRIX l3-no-canonical-exits-0 decides=L3 twins=L1
+# MUTANT-MATRIX l1-sorted-not-yaml-order decides=L1 twins=L2
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/sprint-status-lifecycle/run.sh --matrix
 set -uo pipefail
@@ -652,8 +656,96 @@ d_misindent() { # <tool> <D10|D11>
 a_D10() { d_misindent "$1" D10; }
 a_D11() { d_misindent "$1" D11; }
 
+# ===== PART 4 — `list-stories`: the implementation view's entries, one tab-separated line each ====
+# The mode exists so a validator never parses the yaml itself. Every arm is PRESENCE-shaped on
+# stdout or on the exit code, so a subject that prints nothing fails L1, L2 and L4 by construction.
+# L1 and L2 seed BOTH views identically, so the planning-view mutant cannot reach them; L4 is the
+# near-miss where the views differ, and only it may die when the wrong view is read.
+ls_run() {
+  LS_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$1" list-stories --root "$CS" 2>"$CS.err")"
+  LS_RC=$?
+  LS_ERR="$(cat "$CS.err")"
+}
+TAB="$(printf '\t')"
+# L1 — three entries, three lines, key/status/file in yaml order (not sorted: 3 before 1).
+a_L1() {
+  cs_reset
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-3:
+    file: stories/story-3.md
+    status: review
+  story-291-1:
+    file: stories/story-1.md
+    status: done
+  story-291-2:
+    status: in-progress
+    file: stories/story-2.md'
+  cp "$CIMPL/sprint-status.yaml" "$CPLAN/sprint-status.yaml"
+  ls_run "$1"
+  local want="story-291-3${TAB}review${TAB}stories/story-3.md
+story-291-1${TAB}done${TAB}stories/story-1.md
+story-291-2${TAB}in-progress${TAB}stories/story-2.md"
+  if [ "$LS_RC" -eq 0 ] && [ "$LS_OUT" = "$want" ]; then res L1 PASS; else res L1 FAIL; fi
+}
+# L2 — an entry with no `file:` prints `-` in that column, and its sibling keeps its file.
+a_L2() {
+  cs_reset
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    status: done
+  story-291-2:
+    file: stories/story-2.md
+    status: review'
+  cp "$CIMPL/sprint-status.yaml" "$CPLAN/sprint-status.yaml"
+  ls_run "$1"
+  local want="story-291-1${TAB}done${TAB}-
+story-291-2${TAB}review${TAB}stories/story-2.md"
+  if [ "$LS_RC" -eq 0 ] && [ "$LS_OUT" = "$want" ]; then res L2 PASS; else res L2 FAIL; fi
+}
+# L3 — no yaml at all: exit 2, ONE stderr line, nothing on stdout. Never a silent empty 0.
+a_L3() {
+  cs_reset
+  ls_run "$1"
+  if [ "$LS_RC" -eq 2 ] && [ -z "$LS_OUT" ] && [ -n "$LS_ERR" ] && [ "${LS_ERR%%$'\n'*}" = "$LS_ERR" ]; then
+    res L3 PASS; else res L3 FAIL; fi
+}
+# L4 — the near-miss: the PLANNING view carries an entry, and a status, the implementation view
+# does not. Only the implementation view's two lines may appear.
+a_L4() {
+  cs_reset
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    file: stories/story-1.md
+    status: review
+  story-291-2:
+    file: stories/story-2.md
+    status: in-progress'
+  put "$CPLAN/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    file: stories/story-1.md
+    status: ready-for-dev
+  story-291-2:
+    file: stories/story-2.md
+    status: ready-for-dev
+  story-291-9:
+    file: stories/story-9.md
+    status: backlog'
+  ls_run "$1"
+  local want="story-291-1${TAB}review${TAB}stories/story-1.md
+story-291-2${TAB}in-progress${TAB}stories/story-2.md"
+  if [ "$LS_RC" -eq 0 ] && [ "$LS_OUT" = "$want" ]; then res L4 PASS; else res L4 FAIL; fi
+}
+
 # ===== registry: keys (one function each) and the ids they print =================================
-ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11"
+ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 L1 L2 L3 L4"
 ids_of() { case "$1" in roll) echo "R6a R6b R6c R6d R7" ;; legacy) echo "R7a1 R7a2 R7a3" ;; divergent) echo "R7ac" ;; greenroll) echo "R7b1 R7b2" ;; *) echo "$1" ;; esac; }
 ALL_IDS=""; ID_KEY=" "
 for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; ID_KEY="$ID_KEY$_i:$_k "; done; done
@@ -697,6 +789,7 @@ okmsg() { case "$1" in
   R11) echo "fail-closed on an unreadable schema (never guesses the grammar)" ;;
   A*) echo "$1 consistent-status battery" ;;
   D*) echo "$1 deferred_acs battery" ;;
+  L*) echo "$1 list-stories battery" ;;
 esac; }
 badmsg() { case "$1" in
   P0) echo "--render is empty or non-deterministic" ;;
@@ -746,6 +839,8 @@ if [ -z "$cs_bad" ]; then ok "check-stories: all 12 assertions pass on the shipp
 if in_set A24 "$SHIP_PASS"; then ok "check-stories: A24 reported PASS on the shipping tool"; else bad "check-stories: A24 printed no PASS line on the shipping tool"; fi
 ds_bad=""; for i in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11; do in_set "$i" "$SHIP_PASS" || ds_bad="$ds_bad $i"; done
 if [ -z "$ds_bad" ]; then ok "deferred_acs: all 11 assertions pass on the shipping tool"; else bad "deferred_acs battery failed on the SHIPPING tool:$ds_bad"; fi
+ls_bad=""; for i in L1 L2 L3 L4; do in_set "$i" "$SHIP_PASS" || ls_bad="$ls_bad $i"; done
+if [ -z "$ls_bad" ]; then ok "list-stories: all 4 assertions pass on the shipping tool"; else bad "list-stories battery failed on the SHIPPING tool:$ls_bad"; fi
 
 # ===== mutants ====================================================================================
 # Each is a COPY (never an in-place edit), guarded by `cmp -s` so a sed that matched nothing cannot
@@ -819,6 +914,14 @@ defm d9-close-refuses-on-empty D9 D7 's/^            elif state == "ok" and ids:
 defm d10-d11-misindent-dropped-again D10,D11 D9 "s/^${DMI}/            if False:/"
 defm d10-only-tab-caught D10 D11 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" in dm.group(1):/"
 defm d11-only-deeper-spaces-caught D11 D10 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" not in dm.group(1):/"
+# L4: the planning view read in place of the implementation view.
+defm l4-planning-view-read L4 L1 's/^    lp = VIEWS\[PRIMARY\]$/    lp = VIEWS["planning"]/'
+# L2: an absent field printed as an empty cell rather than `-`.
+defm l2-absent-printed-empty L2 L1 's/^        return "-" if v is None or v == "" else/        return "" if v is None or v == "" else/'
+# L3: no canonical folded into an empty success.
+defm l3-no-canonical-exits-0 L3 L1 '/list-stories UNEVALUABLE — no %s canonical/,/^        return 2$/s/^        return 2$/        return 0/'
+# L1: the entries printed sorted by key instead of in yaml order.
+defm l1-sorted-not-yaml-order L1 L2 's/^    for key, fields, _ in entries:$/    for key, fields, _ in sorted(entries):/'
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 mk_4d() { # the PRE-CHANGE behaviour: the degenerate branch returns max frozen archive + 1, else 1

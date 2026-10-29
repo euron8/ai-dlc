@@ -344,7 +344,7 @@ take, and the decision is never taken. The tool holds the turn open, so
 the Stop hook never runs and a flag set here is a pause nobody clears --
 the same reason Rule 3 gives for (d).
 
-**Before any question reaches the operator, do three things to it.**
+**Before any question reaches the operator, do four things to it.**
 (1) Search for a prior answer in the sprint's `LOCKED_REQUIREMENTS`
 block, `_bmad-output/operator-requests-history.md` (the operator's typed
 words, the initial prompt included) and
@@ -358,7 +358,8 @@ value, that veto question goes out UNBADGED, as above. (3) Gloss every project-i
 term in the question text itself: a check number, a band, a gap or
 evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
-artifact behind it.
+artifact behind it. (4) Dispatch ready actions on free lanes, arm their joins, and
+name the lanes held.
 
 **One shape for every operator decision, and no re-ask of an attested act** -- stated in full under Rule 12's two `#### Operator decisions` subsections; apply both to every question you put to the operator.
 

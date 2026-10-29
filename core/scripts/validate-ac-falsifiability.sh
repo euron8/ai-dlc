@@ -3,6 +3,7 @@
 #
 # Usage: ./scripts/ai-dlc/validate-ac-falsifiability.sh <story-file> [<story-file>...]
 #        ./scripts/ai-dlc/validate-ac-falsifiability.sh --lexicon-from <path> <story-file>
+#        ./scripts/ai-dlc/validate-ac-falsifiability.sh --stories-dir <dir> [<story-file>...]
 #
 # Gate-validation Check 31 enforcer (story gates).
 #
@@ -29,6 +30,79 @@
 #       whether the cited file is the one that produced the number. Do not read
 #       more into a pass than that.
 #
+#   (c) RUN WINDOW INSIDE THE PLANNED CLOSE. An AC whose earliest permitted run
+#       time falls after the sprint's planned close cannot be discharged inside
+#       the sprint, so the sprint either closes over an undischarged AC or waits
+#       on it. Measured: s320 story 1.3 AC4 could not run before
+#       2026-10-29T09:36:22Z, and nothing in the story or the envelope said the
+#       sprint would close first. Two per-AC lines, inside the AC block, in the
+#       same shape as `falsifiability_waiver:`:
+#
+#         run_not_before: <YYYY-MM-DDTHH:MM:SSZ>   earliest permitted run, UTC
+#         defers_to: CO-S<N>-<descriptor>          the AC is planned for deferral;
+#                                                  id grammar from
+#                                                  carry-over-evaluation.md
+#
+#       and one sprint-level key, `planned_close: <YYYY-MM-DDTHH:MM:SSZ>`, in the
+#       sprint block of the canonical sprint-status yaml, written by the lead at
+#       sprint planning (stories-test-strategy.md §3).
+#
+#       REFUSED run-window-after-close <story> <AC>
+#           run_not_before is later than planned_close and the AC has no
+#           defers_to. Equal is inside the window.
+#       REFUSED planned-close-missing <story>
+#           the floor is in force, some AC in the story carries run_not_before,
+#           and no canonical carries planned_close.
+#       REFUSED run-window-malformed / planned-close-malformed / defers-to-malformed
+#           the offending text is named. A malformed timestamp compared as a
+#           string is a silent wrong verdict, and a free-text defers_to would be
+#           an exemption anyone can write, so neither is read past.
+#
+#       THE NARROWING, AND WHY. A story with NO run_not_before line is never
+#       refused for a missing planned_close. The refusal guards a comparison;
+#       with no window there is nothing to compare, and refusing anyway would
+#       fail every story gate of a sprint planned before this release, over a
+#       key nothing in that sprint needs.
+#
+#       NOTHING IS RESOLVED UNTIL A WINDOW EXISTS. The canonical yaml, the floor
+#       and the floor's script are read only when some AC in the run carries
+#       run_not_before. A consumer whose stories carry no window runs exactly as
+#       before this clause existed.
+#
+#       NOT OPT-IN: THE CANONICAL IS READ FROM THE PROJECT ROOT, NOT FROM AN
+#       ARGUMENT. Check 31 invokes this script with story paths and nothing else,
+#       so a `--status <yaml>` flag would be a check nobody's gate passes. The
+#       canonicals are the two sprint-status.sh writes:
+#       _bmad-output/implementation-artifacts/sprint-status.yaml, then
+#       _bmad-output/planning-artifacts/sprint-status.yaml. `sprint:` is read from
+#       the first that exists; `planned_close:` from the first that carries a
+#       non-empty one, because the producer names "the sprint-status yaml"
+#       without naming a view. Both are col-0 scalar lines read with one sed in
+#       the shape of the schema's `keys.sprint_re`; sprint-status.sh has no mode
+#       printing a top-level scalar (`sprint-id` applies done -> N+1, which is the
+#       wrong number here). AI_DLC_PROJECT_ROOT overrides the root.
+#
+#       THE FLOOR IS CHECK 28'S, THE SAME ONE CHECKS 29/30/31 USE:
+#       `validate-spec-adoption.sh --verdict <sprint>`, the sibling of this script
+#       in both layouts. The sprint passed is the canonical's own `sprint:`, the
+#       sprint whose planned_close is being compared. No mechanical
+#       creation-sprint source exists; Checks 30/31 name the creation sprint in
+#       prose only.
+#         SKIPPED-PRE-ADOPTION -> `SKIP RUN-WINDOW (below floor)`, exit unchanged
+#         IN-FORCE             -> clause (c) is judged
+#         PENDING / malformed  -> `SKIP RUN-WINDOW (floor undeclared|malformed)`,
+#                                 exit unchanged. A DECISION, and the one branch
+#                                 shaped like a fail-open: Check 28 already FAILS
+#                                 every planning gate on both states, so refusing
+#                                 here too would double-report one defect.
+#         the script absent    -> DISARMED, exit 2.
+#
+#       --stories-dir <dir> runs every *.md in <dir> and prints ONE line,
+#       `EARLIEST-CLOSE <iso>`: the max over the well-formed run_not_before values
+#       of ACs that carry no well-formed defers_to, or `EARLIEST-CLOSE none`. The
+#       wave plan copies that line; it never computes one. Printed on every run in
+#       that mode, refusals included, and independent of the floor.
+#
 # BLOCK SCOPE, NOT LINE SCOPE. A line-scoped predicate is evaded by pressing
 # Enter: a forbidden term on an AC's second line is the same defect as one on its
 # first. Segmentation is per AC block.
@@ -47,27 +121,43 @@
 #
 # EXIT CODES
 #   0  -- every AC block clean (waivers printed, not fatal)
-#   1  -- a forbidden term on an unwaived AC, or an unresolvable prior_evidence
+#   1  -- a forbidden term on an unwaived AC, an unresolvable prior_evidence, or a
+#         clause (c) refusal
 #   2  -- DISARMED or usage error. The lexicon could not be read, or parsed to
 #         zero terms, or a read of a story did not run. An empty term list scans every story clean and prints the
 #         same shape of output as a real pass, so it must not be able to exit 0.
+#         Also: a window exists and no canonical, no `sprint:`, or no floor script
+#         could be read; or --stories-dir holds no *.md.
 
 set -u
 
 PROG="validate-ac-falsifiability.sh"
 LEXICON=""
+STORIES_DIR=""
 FILES=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --lexicon-from) LEXICON="${2:-}"; shift 2 || { echo "$PROG: --lexicon-from needs a path" >&2; exit 2; } ;;
-    -h|--help) echo "usage: $PROG [--lexicon-from PATH] <story-file>..." >&2; exit 2 ;;
+    --stories-dir) STORIES_DIR="${2:-}"; shift 2 || { echo "$PROG: --stories-dir needs a directory" >&2; exit 2; } ;;
+    -h|--help) echo "usage: $PROG [--lexicon-from PATH] [--stories-dir DIR] <story-file>..." >&2; exit 2 ;;
     -*) echo "$PROG: unknown option $1" >&2; exit 2 ;;
     *) FILES+=("$1"); shift ;;
   esac
 done
 
-[ "${#FILES[@]}" -gt 0 ] || { echo "usage: $PROG [--lexicon-from PATH] <story-file>..." >&2; exit 2; }
+if [ -n "$STORIES_DIR" ]; then
+  [ -d "$STORIES_DIR" ] || { echo "$PROG: DISARMED — --stories-dir $STORIES_DIR is not a directory" >&2; exit 2; }
+  _sd_n=0
+  for _sd_f in "$STORIES_DIR"/*.md; do
+    [ -f "$_sd_f" ] || continue
+    FILES+=("$_sd_f"); _sd_n=$((_sd_n+1))
+  done
+  # A glob that matched nothing must not read as a directory with no windows.
+  [ "$_sd_n" -gt 0 ] || { echo "$PROG: DISARMED — --stories-dir $STORIES_DIR holds no *.md story file; EARLIEST-CLOSE none would read as a sprint with no windows" >&2; exit 2; }
+fi
+
+[ "${#FILES[@]}" -gt 0 ] || { echo "usage: $PROG [--lexicon-from PATH] [--stories-dir DIR] <story-file>..." >&2; exit 2; }
 
 # Locate the step file that owns the term list, FROM THE PROJECT ROOT, never from
 # $0. This script installs at core/scripts/ in the distribution and scripts/ai-dlc/
@@ -151,6 +241,37 @@ trap 'rm -rf "$ACF_T"' EXIT
 acf_refuse() { # acf_refuse <what> <status>
   echo "$PROG: DISARMED — $1 did not run (exit $2). Exiting 2 rather than 0: a story this script could not read is not a story that passed." >&2
   exit 2
+}
+
+# --- clause (c) helpers. Pure bash: no fork per value. ---------------------------
+rw_clean() { # <raw> -> the value without a trailing `# comment`, surrounding blanks, or one layer of quotes
+  local v="$1"
+  v="${v%%[[:space:]]#*}"
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  case "$v" in
+    \"*\"|\'*\'|\`*\`) v="${v#?}"; v="${v%?}" ;;
+  esac
+  printf '%s' "$v"
+}
+rw_iso_ok() { # <text> -> 0 iff YYYY-MM-DDTHH:MM:SSZ with in-range fields. Only then is string order time order.
+  case "$1" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    *) return 1 ;;
+  esac
+  local mo=$((10#${1:5:2})) dd=$((10#${1:8:2})) hh=$((10#${1:11:2})) mi=$((10#${1:14:2})) ss=$((10#${1:17:2}))
+  [ "$mo" -ge 1 ] && [ "$mo" -le 12 ] && [ "$dd" -ge 1 ] && [ "$dd" -le 31 ] \
+    && [ "$hh" -le 23 ] && [ "$mi" -le 59 ] && [ "$ss" -le 59 ]
+}
+rw_co_ok() { # <text> -> 0 iff a carry-over id, CO-S<sprint>-<descriptor> (carry-over-evaluation.md)
+  case "$1" in
+    CO-S[0-9]*-[A-Za-z0-9]*) ;;
+    *) return 1 ;;
+  esac
+  local n="${1#CO-S}"; n="${n%%-*}"
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  case "${1#CO-S"$n"-}" in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  return 0
 }
 
 for story in "${FILES[@]}"; do
@@ -267,8 +388,113 @@ for story in "${FILES[@]}"; do
         rc=1
       fi
     done < "$ACF_T/ac-cites"
+
+    # Clause (c), collection only. Judged after every story is read, so the canonical and
+    # the floor are resolved once and only when a window exists.
+    _acf_rc=0
+    sed -n 's/^[[:space:]]*run_not_before:[[:space:]]*//p' "$ACF_T/ac-body" > "$ACF_T/ac-rnb" || _acf_rc=$?
+    [ "$_acf_rc" -eq 0 ] || acf_refuse "reading the run_not_before line of $story $ac_id" "$_acf_rc"
+    sed -n 's/^[[:space:]]*defers_to:[[:space:]]*//p' "$ACF_T/ac-body" > "$ACF_T/ac-dto" || _acf_rc=$?
+    [ "$_acf_rc" -eq 0 ] || acf_refuse "reading the defers_to line of $story $ac_id" "$_acf_rc"
+    rnb_raw=""; IFS= read -r rnb_raw < "$ACF_T/ac-rnb"
+    dto_raw=""; IFS= read -r dto_raw < "$ACF_T/ac-dto"
+    deferred=0
+    if [ -s "$ACF_T/ac-dto" ]; then
+      dto="$(rw_clean "$dto_raw")"
+      if rw_co_ok "$dto"; then
+        deferred=1
+      else
+        echo "REFUSED defers-to-malformed $story $ac_id — 'defers_to: $dto_raw' is not a carry-over id CO-S<sprint>-<descriptor> (carry-over-evaluation.md). A free-text deferral is an exemption anyone can write." >&2
+        rc=1
+      fi
+    fi
+    if [ -s "$ACF_T/ac-rnb" ]; then
+      rnb="$(rw_clean "$rnb_raw")"
+      if rw_iso_ok "$rnb"; then
+        printf '%s|%s|%s|%s\n' "$story" "$ac_id" "$rnb" "$deferred" >> "$ACF_T/windows" \
+          || acf_refuse "staging the run window of $story $ac_id" "$?"
+      else
+        echo "REFUSED run-window-malformed $story $ac_id — 'run_not_before: $rnb_raw' is not YYYY-MM-DDTHH:MM:SSZ (UTC, Z suffix, in-range fields)." >&2
+        rc=1
+      fi
+    fi
   done
 done
+
+# --- clause (c), judged ---------------------------------------------------------------
+if [ -s "$ACF_T/windows" ]; then
+  RW_YAML=""
+  for _c in "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/sprint-status.yaml" \
+            "$AI_DLC_ROOT/_bmad-output/planning-artifacts/sprint-status.yaml"; do
+    [ -f "$_c" ] && { RW_YAML="$_c"; break; }
+  done
+  [ -n "$RW_YAML" ] || { echo "$PROG: DISARMED — an AC carries run_not_before and no canonical sprint-status.yaml exists under $AI_DLC_ROOT/_bmad-output/{implementation,planning}-artifacts/; the window has nothing to be compared against. Set AI_DLC_PROJECT_ROOT to the project root." >&2; exit 2; }
+  RW_SPRINT="$(sed -n 's/^sprint:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*\(#.*\)\{0,1\}$/\1/p' "$RW_YAML" | head -1)"
+  [ -n "$RW_SPRINT" ] || { echo "$PROG: DISARMED — $RW_YAML has no top-level integer 'sprint:' line, so the spec-adoption floor cannot be asked about this sprint." >&2; exit 2; }
+  RW_FLOOR_SH="$AI_DLC_SELF_DIR/validate-spec-adoption.sh"
+  [ -f "$RW_FLOOR_SH" ] || { echo "$PROG: DISARMED — an AC carries run_not_before and $RW_FLOOR_SH, the Check 28 floor every spec check reads, is not beside this script." >&2; exit 2; }
+  RW_VERDICT="$(bash "$RW_FLOOR_SH" --verdict "$RW_SPRINT" "$AI_DLC_ROOT" 2>/dev/null)"; RW_VRC=$?
+  RW_STATE=""
+  case "$RW_VRC" in
+    0) case "$RW_VERDICT" in
+         IN-FORCE*) RW_STATE=in-force ;;
+         SKIPPED-PRE-ADOPTION*) RW_STATE="below floor" ;;
+       esac ;;
+    2) RW_STATE="floor undeclared" ;;
+    1) RW_STATE="floor malformed" ;;
+  esac
+  [ -n "$RW_STATE" ] || { echo "$PROG: DISARMED — validate-spec-adoption.sh --verdict $RW_SPRINT answered rc=$RW_VRC '$RW_VERDICT', which is none of its four states." >&2; exit 2; }
+  if [ "$RW_STATE" != in-force ]; then
+    echo "SKIP RUN-WINDOW ($RW_STATE) s$RW_SPRINT — clause (c) not judged"
+  else
+    RW_CLOSE_RAW=""; RW_CLOSE_SRC=""
+    for _c in "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/sprint-status.yaml" \
+              "$AI_DLC_ROOT/_bmad-output/planning-artifacts/sprint-status.yaml"; do
+      [ -f "$_c" ] || continue
+      _v="$(sed -n 's/^planned_close:[[:space:]]*//p' "$_c" | head -1)"
+      _v="$(rw_clean "$_v")"
+      [ -n "$_v" ] && { RW_CLOSE_RAW="$_v"; RW_CLOSE_SRC="$_c"; break; }
+    done
+    RW_CLOSE_OK=0
+    if [ -n "$RW_CLOSE_RAW" ]; then
+      if rw_iso_ok "$RW_CLOSE_RAW"; then
+        RW_CLOSE_OK=1
+      else
+        echo "REFUSED planned-close-malformed — 'planned_close: $RW_CLOSE_RAW' in $RW_CLOSE_SRC is not YYYY-MM-DDTHH:MM:SSZ (UTC, Z suffix, in-range fields)." >&2
+        rc=1
+      fi
+    fi
+    _rw_last_missing=""
+    while IFS='|' read -r w_story w_ac w_rnb w_def; do
+      [ -n "$w_story" ] || continue
+      if [ -z "$RW_CLOSE_RAW" ]; then
+        # Once per story: the refusal is about the story's window, not each AC.
+        if [ "$w_story" != "$_rw_last_missing" ]; then
+          echo "REFUSED planned-close-missing $w_story — $w_ac carries run_not_before: $w_rnb and no canonical sprint-status.yaml carries planned_close for s$RW_SPRINT (floor in force). The lead writes planned_close at sprint planning." >&2
+          rc=1; _rw_last_missing="$w_story"
+        fi
+        continue
+      fi
+      [ "$RW_CLOSE_OK" -eq 1 ] || continue
+      [ "$w_def" = 1 ] && continue
+      if [[ "$w_rnb" > "$RW_CLOSE_RAW" ]]; then
+        echo "REFUSED run-window-after-close $w_story $w_ac — run_not_before $w_rnb is later than planned_close $RW_CLOSE_RAW and the AC names no defers_to. Move the window, move the close, or add 'defers_to: CO-S<N>-<descriptor>' inside the AC." >&2
+        rc=1
+      fi
+    done < "$ACF_T/windows"
+  fi
+fi
+
+if [ -n "$STORIES_DIR" ]; then
+  RW_EARLIEST=""
+  if [ -s "$ACF_T/windows" ]; then
+    while IFS='|' read -r w_story w_ac w_rnb w_def; do
+      [ "$w_def" = 0 ] || continue
+      if [ -z "$RW_EARLIEST" ] || [[ "$w_rnb" > "$RW_EARLIEST" ]]; then RW_EARLIEST="$w_rnb"; fi
+    done < "$ACF_T/windows"
+  fi
+  echo "EARLIEST-CLOSE ${RW_EARLIEST:-none}"
+fi
 
 if [ "$rc" -eq 0 ]; then
   echo "$PROG: PASS (${#FILES[@]} story file(s), $checked AC block(s), $TERM_COUNT term(s) loaded, $waivers waiver(s))"

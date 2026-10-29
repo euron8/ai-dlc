@@ -42,6 +42,7 @@ core_manifest:
   - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
   - core/fixtures/snapshot-update-stamps/**
+  - core/fixtures/held-stories/**
   - core/fixtures/trunk-audit-gate/**
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-fixture-log/**
