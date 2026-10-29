@@ -1064,7 +1064,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c now ride BL-868 under ai-dlc-0d, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c now ride BL-868 under ai-dlc-0d and snapshot-archive-rotate to a2.
 
 ### reconcile-emit-report (q5)
 
@@ -1099,6 +1099,8 @@ H4, a discarded-status mutation `sed`, is DROPPED. The grammar matched 857 sed-i
 Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; the allowlist only shrinks.
 
 Found while building it (lead filing, DEFECT, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
+
+**Progress (v0.969.0, batch b245).** wait-beat-liveness runs its subject on an injected clock instead of real sleeps: `date` and `sleep` shims first on PATH keep one virtual clock per world, the churn writers and the revised-edit writer are poll hooks the subject's own sleep triggers, and the worlds that need real concurrency (heir, FIFO ledger, custom state dir, cross-heir, the aged-shell chain) keep the real clock with the shims off PATH. Its 63 mutants route through `mutant_killed` behind literal `B_<arm>` flags (58 S arms, one case arm each, equality checked by a `flags:` arm), carry a 63-row matrix block measured once by `bash core/fixtures/wait-beat-liveness/run.sh --matrix`, and leave both allowlists; per push each mutant drives its deciding arm plus one green twin (63 twin drives). Exact `invocations.decl`: `*` 446 `±` -> 6533, `core/scripts/merge-adversarial-shards.sh` 28 `±` -> 26, identical in two armed counts under load. The rise in counted starts is the shims: each virtual `date`/`sleep` is a counted bash start (5626 date and 364 sleep starts of 6533), and the poll loops no longer wait in real time. Deterministic-loop fixes behind the exact count: S13g's two worlds were on the real clock (42 vs 46 starts between runs), the no-perl PATH linked the shims instead of the real binaries, and `blocked_lease` now ends the beat's whole process tree (a matrix cell hung on a ledger-reading `sed`). Item 3 of the BL-868 list is closed for this fixture.
 
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
@@ -1721,7 +1723,7 @@ verify: manual
 
 1. `readset-skip`, `readset-skip-b` and `readset-skip-c` `±` rows. These are the deriver's sentinel-settle and end-flush polls, and `-b`'s REAL CANARY bounded retries. Owner: ai-dlc-0d (p1). In progress.
 2. `snapshot-archive-rotate` `±` row: the kill-point sweep workers and their stop file. Owner: ai-dlc-a2.
-3. `wait-beat-liveness` `±` rows: the beat poll loop (one `--check-header` per poll) and the gated sleep stub. Owner: ai-dlc-a1.
+3. `wait-beat-liveness` `±` rows: the beat poll loop (one `--check-header` per poll) and the gated sleep stub. Owner: ai-dlc-a1. CLOSED (v0.969.0, batch b245): its `invocations.decl` carries no `±` row.
 4. `readset-skip` CK MUTANT fileentries. Under load, the pre-push pool's no-progress watchdog REFUSED a 0-second unit in world (c) push 1, which moved the vector. Seen in the 0.963.0 warm run at load about 119. Owner: ai-dlc-0d. In progress.
 5. BL-867: counted scripts piped into early-exit readers (`awk` exit, `head`, `grep -m`, `grep -q`). SIGPIPE makes the number of bash starts scheduling-dependent. Owner: ai-dlc-0d. `self-update-gate` was fixed by ai-dlc-e2 in 0.963.0.
 6. Removal of the provisional `±` judge form, after items 1 to 3 land. Owner: ai-dlc-0d.

@@ -35,4 +35,3 @@ preclassify-mode-bucket
 process-rule-pins
 procsub-staged-refusal-boot
 scope-confirmation
-wait-beat-liveness
