@@ -67,58 +67,25 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 244 IS CLOSED: SIX RELEASES, `v0.953.0` THROUGH `v0.958.0`. THE NEXT SESSION STARTS BATCH 245.**
-This block replaces the batch-243 record. Lead was ai-dlc-45. Owners: ai-dlc-d7 (c1, c4), ai-dlc-f0 (c2), ai-dlc-c5 (c3, c5,
-c6). No `graph-*` session was messaged. No graph watch ran.
-- **Landed** (squash, PR, closes, NET as each release message derives it):
-  - `v0.953.0` `897fd3345` #1320: BL-833 filed and closed, and PC-S320-HANDOFF-EVIDENCE-RED-TOKEN-MATCHES-HYPHEN-BOUNDED-RED-IN-A-BACKLOG-ID
-    closed. NET 0.
-  - `v0.954.0` `7c8a88fd7` #1321: BL-699, BL-785 and BL-832 closed; BL-812 advanced and still PARTIAL. NET −3.
-  - `v0.955.0` `ea44b9bde` #1322: BL-831 closed (skill and role prose names no model; Class 1d audit arm). NET −1.
-  - `v0.956.0` `9d0bca846` #1323: BL-513 and BL-694 closed; BL-817 item 1 now requires lead and subagent seat figures. NET −2.
-  - `v0.957.0` `619d7acd9` #1324: BL-823, BL-827, BL-829 and BL-830 closed; BL-834 and BL-835 filed and closed; BL-828
-    PARTIAL (`scripts/validate-mutant-kills.sh`, a new `.githooks/pre-push` step, with a down-only allowlist). NET −4.
-  - `v0.958.0` `3a7c743cd` #1325: BL-825 closed (a waived gate verdict is recorded `FAIL_WAIVED`, never PASS) and BL-594's
-    p1 carve-out reverted on its own measurement. NET −2.
-  Batch NET −12. Every batch-244 LANDED line in the archive is re-anchored on its squash.
-- **Operator rulings this batch** (2026-10-27).
-  - BL-699: "Close without (d)".
-  - BL-785: "Close as unbuildable".
-  - "I want the two newest BL items releases prioritized in this batch", read as BL-831 and BL-832. Both shipped.
-- **Lead rulings that bind a subject if it is picked.**
-  - BL-804's premise is the opt-out prose at `core/team-roles/remediator.md`, not the join-before-mark order, which is
-    by design.
-  - A `FAIL_WAIVED` waiver binds only when its entry header carries the verdict's sprint as `S<N>`.
-  - BL-837 needs its own contract and adversary, because its fix changes arm 7a for every gate.
-- **Backlog.** Filed at this close: BL-836 (nothing at pre-push asserts an OPEN entry's `verify: sh` receipt still runs)
-  and BL-837 (the remediation guard's binding is skipped when a verdict carries a plain FAIL, so a forged unbound verdict
-  acquits through an in-force SUPPRESSED entry; already on `main`). Live at close: 33; archive 789. **The next free id is
-  BL-838.** Incidental closes (action 5, diffed by ID, base `fc71a7b10` against `3a7c743cd`): none. The exit-0 set was
-  empty at both ends.
-- **NOTEs** (no entry):
-  - c4's tip adversary found that an old `wait-for-deliverable.sh` meeting a new `join-remediator-shards.sh` in a
-    SELF-UPDATE-CARRY window fails closed; it is stated in the 0.957.0 release text.
-  - `check-24` carries 0 mutant kills.
-  - BL-685's round-9 flip precondition is recorded in its body.
-  - `enforcement-map-derivations` arm A41 selected "the first walker row" and broke on an unrelated enum addition;
-    0.958.0 fixed the selector.
-  - 0.957.0's dress pole read 1758s loaded under load 25-38, a figure not comparable across loads.
-  - `audit-rule-files.sh` reports a local-tier NARRATIVE_DRIFT at `core/skills/ai-dlc/steps/discovery.md:166`.
-- **Not built, with reasons**, each as its entry says: BL-538, BL-583, BL-584, BL-616 and BL-706 (NO TIMING RUNS), BL-685,
-  BL-804, BL-828's 124 remaining allowlisted fixtures, BL-836 and BL-837 (filed at this close), and the reopened
-  entries, which each owe a measured graph sprint on the release that carries their fix.
-- **Graph at close**: installed 0.952.0 on the checked-out branch `ai-dlc/carry-over/s319-closeout-smoke-green` (6 releases behind, WIDE)
-  and 0.924.0 on `main` (34 behind, WIDE). Shipped 0.958.0. Derive block at `3a7c743cd`: worklist 0 rows; live 2, archive 382;
-  PENDING 1 (`PC-S319-CHECK-17-…`, still UNNAMED, consumer-only BL-791); untouched 1 (`PC-S320-HANDOFF-…`, named in
-  0.953.0's release message). No `preclassify.sh`, `apply.sh` or `ledger-reverify.sh` in
-  either range; the checked-out range changes `core/skills/ai-dlc-update/SKILL.md` and `reconcile/lib.sh`; mode-only 0 in
-  both. Action 7's differential on a `file://` clone at graph's sprint tip `5b04bbf01`, `cmp -s` asserting the binaries
-  differ: `audit-rule-files.sh` agrees on its finding set (38, tier-1 1, both exit 1; the distribution adds a Class 1d
-  section reading N/A in a consumer layout), and `validate-artifact-derivations.sh --list --all` is identical. BANK IT.
-  Not covered, though available with seeded inputs: the six other changed engines (`validate-gate-adjudication`,
-  `validate-handoff-evidence`, `validate-suppression-lifetime`, `join-remediator-shards`, `rotate-gate-adjudication`,
-  `wait-for-deliverable`), which need a gate type, shards, a story or an escalations file; the reconcile changes act only
-  in an apply. The pull is not preapproved; no runbook.
+**BATCH 245 IS CLOSED: ELEVEN RELEASES, `v0.959.0` THROUGH `v0.969.0`. THE NEXT SESSION STARTS BATCH 246.**
+This block replaces the batch-244 record. Lead was ai-dlc-8e; integrator was ai-dlc-8a. No `graph-*` session was messaged. No graph watch ran.
+- **Landed** (squash, PR, closes, NET as each release message or CHANGELOG derives it):
+  - `v0.959.0` `6ce240470`: BL-685 D-r9b-1 progress, still PARTIAL. NET 0.
+  - `v0.960.0` `011853d19`: BL-848 filed and closed; BL-836 and BL-817 progress, both PARTIAL. NET 0.
+  - `v0.961.0` `0325bab9a` #1330: BL-850 filed PARTIAL, BL-828 progress. NET +1.
+  - `v0.962.0` `7deec27d9` #1331: BL-679 and BL-685 retired (the recorded `--verify` PASS cache is deleted). NET −2.
+  - `v0.963.0` `233794d68` #1332: BL-851 closed (prevention mechanisms); BL-850 progress.
+  - `v0.964.0` `70490c80e` #1334: BL-866 and BL-867 closed; BL-868 filed; BL-850 progress.
+  - `v0.965.0` `5f949d6f2` #1338: BL-850 progress.
+  - `v0.966.0` `be4736a50` #1339: BL-837 closed. NET −1.
+  - `v0.967.0` `9159a2064` #1341: BL-842 PARTIAL (its close waits on BL-817's `Outcome measured:` line).
+  - `v0.968.0` `909249c28` #1342: BL-849 closed; BL-828 M5 shipped; BL-868 and BL-850 progress; its CHANGELOG text closes PC-S320-HERMETIC-RUNNER-XR-ARM-FAILS-AGAINST-THE-SHIPPED-CONSUMER-HOOK, but no commit message names it (git log -F --grep returns 0).
+  - `v0.969.0` `42badbf66` #1343: BL-868 item 3 closed; BL-850 progress.
+  Every batch-245 LANDED line in the archive is re-anchored on its squash and each is an ancestor of `origin/main`.
+- **Operator rulings this batch.** The durable ones live in `.claude/rules/operator-rulings.md` (pushes take the lead's slot one at a time, every other run in parallel; no timing runs; zero load-dependent tests) and in `CLAUDE.md` (a unit's push is its gate). BL-850's worklist was dropped from this batch by ruling and is recorded in that entry. BL-868 B1 sh-stub: "File for next batch".
+- **Backlog.** Filed at this close: BL-869 (no pre-push arm refuses an unseeded release push), BL-870 (pre-suite not content-keyed), BL-871 (shipped-rule-version-floor read-set), BL-872 (backlog-real-ledger count follows the live ledger), BL-873 (six unexplained count rises), BL-874 (pre-squash LANDED shas), BL-875 (readset-skip `logstream` processes). Live at close: 49; archive 797. **The next free id is BL-876.** Incidental closes (action 5, diffed by ID, base `cb1486eac` against the close tip): none. The exit-0 set was empty at base and `BL-868` only at the tip, which is its own subject's receipt.
+- **Not built, with reasons**, each as its entry says: BL-850's dropped worklist, BL-868 items 6 and 7, BL-828's 52 owed sites, BL-843's c3+c4 cut, and BL-869 through BL-875 (filed at this close).
+- **Graph at close**: installed 0.964.0 on the checked-out branch `ai-dlc-update/self-update-0.966.0-20261029T102405Z` (5 releases behind) and 0.924.0 on `main` (45 behind, WIDE). Shipped 0.969.0. Derive block at `42badbf66`: live 5, archive 382; PENDING 1 (`PC-S319-CHECK-17-…`, UNNAMED, consumer-only BL-791) plus 3 live ids with no release naming them (`PC-S320-APPLY-SH-…`, `PC-S320-SUPPRESSION-LIFETIME-…`, `PC-S320-HERMETIC-RUNNER-XR-…`, each 0 commit-message hits) and `PC-S320-HANDOFF-…` named in 0.953.0. No `preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or `ai-dlc-update/SKILL.md` in the range `70490c80e..origin/main`; mode-only 0 of 157 raw rows. Action 7's differential on a `file://` clone at graph's HEAD, `cmp -s` asserting the binaries differ: `validate-spawn-ledger.sh` and `validate-carried-findings.sh` agree on their usage refusal (exit 2), `validate-ac-falsifiability.sh` differs only in its usage line (the new `--stories-dir`), and on 40 story files both exit 2 with identical one-line output, so that run did not reach a finding set. Not covered: the other changed engines, which need seeded inputs. The pull is not preapproved; no runbook.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1019,7 +986,9 @@ candidate's surviving half is upstream's to file and build, never a question for
       ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
       --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
       origin/main`, VERSION, parent). Send <lead> the squash sha; your push turn ends there.
-   9. Cleanup only after <lead> verifies, one action per turn. Action 1 is worktree removal plus a
+   9. Cleanup only after <lead> verifies, one action per turn. A blob-equality "did it land" check takes a synthetic
+      control, `git commit-tree -p <old base> origin/main^{tree}` (must read EQUAL) beside an unlanded sha as the
+      negative, never a landed branch, which reads DIFF once main edits a shared file. Action 1 is worktree removal plus a
       `git for-each-ref` list of every `<batch>-<cluster>*` and `worktree-agent-*` branch you
       created, each tip shown reachable from the kept `-dev` ref or `origin/main` (by ancestry,
       else by patch-id, else by every added line present), sent to <lead> BEFORE any

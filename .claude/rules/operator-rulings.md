@@ -62,8 +62,7 @@ probe, the one unit it edited. The gate runs everything else; a hand re-running 
 ## The lead orchestrates the box's load
 
 Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
-control. No fixture, mutant battery or corpus sweep runs without the lead's slot; slotted runs are serial;
-between "GATE OPEN" and "GATE CLOSED" nothing heavy starts.
+control. Pushes take the lead's slot one at a time; every other run goes in parallel.
 
 ## No timing runs
 

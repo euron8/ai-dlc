@@ -91,6 +91,8 @@ fired; those are two separate claims and both need establishing. When a search r
 nothing, the control must be a token you already know is present in the same corpus, in the
 same invocation.
 
+**A landed branch is no positive control for a blob-equality "did it land" check**: later main edits to shared files make it read DIFF (two 0.968.0 branches did, on `docs/backlog.md` and the allowlists). The control is synthetic, `git commit-tree -p <old base> origin/main^{tree}`, which must read EQUAL, paired with an unlanded sha as the negative. The check keeps landed work that touched shared files and never deletes unlanded work.
+
 ## A differential must prove its two sides differ
 
 Both runs reading the same tree establishes nothing. Measured: a `sed` making a probe's root
