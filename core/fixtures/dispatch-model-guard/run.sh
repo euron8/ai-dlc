@@ -614,9 +614,12 @@ raw "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" >/dev/null
 # with no row (the false/null record is observable only on the fail-open world below).
 rm -f "$LEDGER"
 JC="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Your operating contract is `.claude/team-roles/remediator.md`. Read it first. Do the work."}}')"
-[ "$(setmodel "$CONSUMER" "$JC")" = "opus" ] \
+JC_OUT="$(raw "$CONSUMER" "$JC")"
+JC_MODEL="$(jq -r '.hookSpecificOutput.updatedInput.model // empty' <<<"$JC_OUT" 2>/dev/null)"
+JC_DEC="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$JC_OUT" 2>/dev/null)"
+[ "$JC_MODEL" = "opus" ] \
   && ok "subagent_type-only dispatch is bound (was a silent no-op before v0.158.0)" \
-  || bad "subagent_type-only dispatch injected '$(setmodel "$CONSUMER" "$JC")', expected opus"
+  || bad "subagent_type-only dispatch injected '$JC_MODEL', expected opus"
 rm -f "$LEDGER"
 J="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Do the work."}}')"
 J_OUT="$(raw "$CONSUMER" "$J")"
@@ -644,7 +647,7 @@ FO_R="$(jq -r '"\(.role)/\(.role_contract_cited | tostring)/\(.contract_via | to
   || bad "CITATION DENY fail-open: decision '$FO_D', row '$FO_R'; expected not-deny and remediator/false/null"
 CD_ANCHOR='  if [ -n "$DECLARED_ROLES" ] && row_in_scope "$ROLE" "$ROLE_CONTRACT_CITED"; then'
 cd_dec() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null; }
-CD_BASE="$(printf 'gp=%s\ncited=%s\n' "$(cd_dec "$HOOK" "$GPJ")" "$(cd_dec "$HOOK" "$JC")")"
+CD_BASE="$(printf 'gp=%s\ncited=%s\n' "$GP_D" "$JC_DEC")"
 _cdn="$(grep -cxF -- "$CD_ANCHOR" "$HOOK")" || _cdn=0
 CD_M="$(mk_hooks_copy citescope)"
 if [ "$_cdn" = 1 ] && [ -n "$CD_M" ] \
@@ -1121,13 +1124,16 @@ rm -f "$CONSUMER/.claude/team-roles/seatx.md"
 # missing ordinals. Cells reuse dcell's `<decision>:<rows added after the epoch>:<row-2 shard>`.
 # gap/full are ONE property apart (ordinal 3); the G>1 per-group cross covers a subset by design
 # and is untouched; zpad is the zero-padded full list partition-document.sh emits at K>=10.
-xvec() {
+xvec() { # xvec <guard> <gap cell, already scored by the caller outside any $( )>
   printf 'gap=%s;full=%s;group=%s;zpad=%s' \
-    "$(dcell "$1" remediator 'shard: cross/3 g1/1 1,2')" "$(dcell "$1" remediator 'shard: cross/3 g1/1 1,2,3')" \
+    "$2" "$(dcell "$1" remediator 'shard: cross/3 g1/1 1,2,3')" \
     "$(dcell "$1" remediator 'shard: cross/3 g1/2 1,2')" "$(dcell "$1" remediator 'shard: cross/3 g1/1 01,02,03')"
 }
 XV_WANT='gap=deny:0:-;full=allow:1:cross/3 g1/1 1,2,3;group=allow:1:cross/3 g1/2 1,2;zpad=allow:1:cross/3 g1/1 01,02,03'
-XV_TIP="$(xvec "$HOOK")"
+# The gap cell runs ONCE, unwrapped, so its DOUT survives for the reason check below; the vector reuses its value.
+dcell "$HOOK" remediator 'shard: cross/3 g1/1 1,2' >/dev/null
+_xgap="$DCELL"; _xrs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)"
+XV_TIP="$(xvec "$HOOK" "$_xgap")"
 _old_ifs="$IFS"; IFS=';'
 for _c in $XV_WANT; do
   case ";$XV_TIP;" in
@@ -1136,8 +1142,6 @@ for _c in $XV_WANT; do
   esac
 done
 IFS="$_old_ifs"
-dcell "$HOOK" remediator 'shard: cross/3 g1/1 1,2' >/dev/null
-_xrs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)"
 case "$_xrs" in *"omits part(s) 3 of 1..3"*) ok "COVER DENY reason names the missing ordinal: 'omits part(s) 3 of 1..3'" ;;
   *) bad "COVER DENY reason does not name ordinal 3: '$(printf '%s' "$_xrs" | cut -c1-200)'" ;; esac
 # FAIL OPEN: the predicate erroring allows, with the row (Check 22 arm S4 still judges it).
