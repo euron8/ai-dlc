@@ -396,7 +396,7 @@ LEDGER
     install_sibling; metrics "$METRICS" 2
     rm -f "$W/docs/escalations/pending.md"
     ;;
-  waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two)
+  waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two|waived-forged-dup-bound|waived-forged-two-only)
     # ARM 7a OVER A FAIL_WAIVED-ONLY PASS. `forged-clean`'s shape: a bound failing pass at
     # 19:30:44Z, then a round-nonce 21:00:00Z verdict recording check 7 FAIL_WAIVED under the
     # REAL waiver below. The one gate-adjudicator dispatch is 16s after the older nonce, so that
@@ -421,7 +421,7 @@ EOF
 {"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}
 {"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}
 LEDGER
-    [ "$CASE" = waived-forged-bound ] && printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"agate-adjudicator-s302-x-0123456789abcdef","session":"t","tool":"Write"}' \
+    case "$CASE" in waived-forged-bound|waived-forged-dup-bound) true ;; *) false ;; esac && printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"agate-adjudicator-s302-x-0123456789abcdef","session":"t","tool":"Write"}' \
       > "$W/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
     install_sibling; metrics "$METRICS" 2
     cat > "$W/docs/escalations/pending.md" <<'EOF'
@@ -442,9 +442,13 @@ EOF
     #   -two     a SECOND forged FAIL_WAIVED-only pass at 20:00:00Z, and the ledger's one
     #            gate-adjudicator row moved BEFORE every nonce, so nothing binds and the fallback
     #            picks that second forgery as the substitute. A substitute may only convict.
+    #   -dup-bound  `-dup` with the newer pass BOUND by its write row: its waiver applies, so
+    #            the waived 7 is lifted and the plain 7 beside it must still stand.
+    #   -two-only   `-two` with the real failing pass removed: the ONLY recorded FAILs are the
+    #            two forgeries' FAIL_WAIVED rows, which an unbound set reads as plain FAILs.
     _wf="$W/_bmad-output/gate-adjudication/story-20260811T210000Z.verdict.json"
     case "$CASE" in
-      waived-forged-dup|waived-forged-nullid)
+      waived-forged-dup|waived-forged-nullid|waived-forged-dup-bound)
         _wid_v='"7"'; [ "$CASE" = waived-forged-nullid ] && _wid_v='null'
         python3 - "$_wf" "$_wid_v" <<'PY'
 import json, sys
@@ -454,11 +458,12 @@ d["verdicts"].append({"check_id": cid, "verdict": "FAIL", "evidence": "plain FAI
 open(p, "w").write(json.dumps(d, indent=2) + "\n")
 PY
         ;;
-      waived-forged-two)
+      waived-forged-two|waived-forged-two-only)
         printf '%s\n' '{"v":1,"ts":"2026-08-11T10:00:00Z","sprint":302,"name":"gate-adjudicator-s302-old","role":"gate-adjudicator"}' \
           > "$W/_bmad-output/spawn-ledger.jsonl"
         sed -e 's/story-20260811T210000Z/story-20260811T200000Z/g' -e 's/2026-08-11T21:00:00Z/2026-08-11T20:00:00Z/' \
           "$_wf" > "$W/_bmad-output/gate-adjudication/story-20260811T200000Z.verdict.json"
+        [ "$CASE" = waived-forged-two-only ] && rm -f "$W/_bmad-output/gate-adjudication/story-20260811T193044Z.verdict.json"
         ;;
     esac
     ;;
@@ -510,6 +515,112 @@ open(p, "w").write(json.dumps(d, indent=2) + "\n")
 PY
     fi
     ;;
+  # --- arm 7a AT ACQUITTAL: an unbound live pass that would acquit by arm 7b or arm 8 -----
+  # The live pass records a FAIL, so LIVE_CLEAN is 0 and the early binding never asks. Every
+  # world below has a live pass at the round nonce 21:00:00Z that NO dispatch follows. The
+  # DENY worlds carry a pass the forger cannot suppress; each ALLOW twin is one property apart.
+  #   suppressed-forged-unbound        N1 bound FAIL 7+3a, N2 live FAIL 7 (covered)      DENY on 3a
+  #   suppressed-forged-bound          the same, N2 bound by its write row                ALLOW
+  #   suppressed-unbound-substitute-covered  N1 bound FAIL 7 only: every FAIL covered     ALLOW
+  #   subst-convict-own                N1 bound FAIL 7, N2 live FAIL 3a (uncovered)       DENY on 3a
+  #   subst-newer-unbound-fail         bound CLEAN, newer unbound FAIL 3a, live CLEAN     DENY on 3a
+  #   subst-nobound-older-fail         nothing bound, older FAIL 3a, live FAIL 7 covered  DENY on 3a
+  #   subst-two-forged                 2F: nothing bound, FAIL 3a, two forged FAIL 7      DENY on 3a
+  #   subst-crossgate                  L3: planning s301 bound CLEAN, story s302 unbound
+  #                                    FAIL 3a, implementation s303 live FAIL 7 covered   DENY on 3a
+  #   subst-percatalog                 bound CLEAN core, newer unbound + live ext-catalog
+  #                                    FAIL 7, `[ext-catalog] 7` in force                ALLOW
+  #   subst-repair-unbound             N1 bound FAIL 3a, live FAIL 9 with a repair record
+  #                                    keyed on the UNBOUND live nonce                    DENY
+  #   subst-repair-both                the same plus N1's own repair record naming 3a     ALLOW
+  suppressed-forged-unbound|suppressed-forged-bound|suppressed-unbound-substitute-covered|subst-convict-own|subst-newer-unbound-fail|subst-nobound-older-fail|subst-two-forged|subst-crossgate|subst-percatalog|subst-repair-unbound|subst-repair-both)
+    _gd="$W/_bmad-output/gate-adjudication"
+    vt() { # <stem> <gate_type> <series> <verdicts-json> [catalog]
+      cat > "$_gd/$1.verdict.json" <<EOF
+{
+  "schema_id": "GATE_ADJUDICATION_VERDICT v1",
+  "gate_type": "$2",
+  "gate_series_id": "$3",
+  "gate_nonce": "$1",
+  "generated_at": "2026-08-11T19:30:44Z",
+  "adjudicator_agent_id": "gate-adjudicator@session-seed",
+  "catalog": "${5:-core}",
+  "verdicts": $4
+}
+EOF
+    }
+    F3A='[{"check_id":"3a","verdict":"FAIL","evidence":"story AC not traced"},
+          {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+    F9='[{"check_id":"9","verdict":"FAIL","evidence":"seeded"},
+         {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+    # The bound ledger: one gate-adjudicator dispatch 16s after 19:30:44Z, nothing after 21:00:00Z.
+    _led_bound='{"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}'
+    # The nothing-bound ledger: the one gate-adjudicator dispatch predates every nonce.
+    _led_none='{"v":1,"ts":"2026-08-11T19:00:00Z","sprint":302,"name":"gate-adjudicator-s302-story-early","role":"gate-adjudicator"}'
+    _led_rem='{"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}'
+    _led="$_led_bound"
+    case "$CASE" in subst-nobound-older-fail|subst-two-forged) _led="$_led_none" ;; esac
+    printf '%s\n%s\n' "$_led" "$_led_rem" > "$W/_bmad-output/spawn-ledger.jsonl"
+    case "$CASE" in subst-repair-*) ;; *) install_sibling; metrics "$METRICS" 2 ;; esac
+    case "$CASE" in
+      suppressed-forged-unbound|suppressed-forged-bound)
+        vt story-20260811T193044Z story story-s302-a "$FAILING"
+        vt story-20260811T210000Z story story-s302-b "$FAILING1"
+        suppression "[core] 7" 3
+        [ "$CASE" = suppressed-forged-bound ] && printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"agate-adjudicator-s302-x-0123456789abcdef","session":"t","tool":"Write"}' \
+          > "$_gd/.verdict-writes.jsonl"
+        ;;
+      suppressed-unbound-substitute-covered)
+        vt story-20260811T193044Z story story-s302-a "$FAILING1"
+        vt story-20260811T210000Z story story-s302-b "$FAILING1"
+        suppression "[core] 7" 3
+        ;;
+      subst-convict-own)
+        vt story-20260811T193044Z story story-s302-a "$FAILING1"
+        vt story-20260811T210000Z story story-s302-b "$F3A"
+        suppression "[core] 7" 3
+        ;;
+      subst-newer-unbound-fail)
+        vt story-20260811T193044Z story story-s302-a "$CLEAN"
+        vt story-20260811T200000Z story story-s302-b "$F3A"
+        vt story-20260811T210000Z story story-s302-c "$CLEAN"
+        suppression "[core] 7" 3
+        ;;
+      subst-nobound-older-fail)
+        vt story-20260811T193044Z story story-s302-a "$F3A"
+        vt story-20260811T210000Z story story-s302-b "$FAILING1"
+        suppression "[core] 7" 3
+        ;;
+      subst-two-forged)
+        vt story-20260811T193044Z story story-s302-a "$F3A"
+        vt story-20260811T200000Z story story-s302-b "$FAILING1"
+        vt story-20260811T210000Z story story-s302-c "$FAILING1"
+        suppression "[core] 7" 3
+        ;;
+      subst-crossgate)
+        # Three gate types, three sprints. The forged live pass claims a type and a sprint no
+        # bound pass carries, so a selection keyed on either would find nothing to convict on.
+        vt planning-20260811T193044Z planning planning-s301-20260811T193044Z "$CLEAN"
+        vt story-20260811T200000Z story story-s302-20260811T200000Z "$F3A"
+        vt implementation-20260811T210000Z implementation implementation-s303-20260811T210000Z "$FAILING1"
+        suppression "[core] 7" 3
+        ;;
+      subst-percatalog)
+        vt story-20260811T193044Z story story-s302-a "$CLEAN"
+        vt story-20260811T200000Z story story-s302-b "$FAILING1" ext-catalog
+        vt story-20260811T210000Z story story-s302-c "$FAILING1" ext-catalog
+        suppression "[ext-catalog] 7" 3
+        ;;
+      subst-repair-unbound|subst-repair-both)
+        vt story-20260811T193044Z story story-s302-a "$F3A"
+        vt story-20260811T210000Z story story-s302-b "$F9"
+        mkdir -p "$W/sessions-jsonl"
+        printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"name":"remediator-s302-1"}}]}}\n' > "$W/sessions-jsonl/current.jsonl"
+        printf 'nonce: story-20260811T210000Z\nremediator_agent_id: remediator-s302-1\nrepaired_checks: 9\n' > "$_gd/story-20260811T210000Z.repair.md"
+        [ "$CASE" = subst-repair-both ] && printf 'nonce: story-20260811T193044Z\nremediator_agent_id: remediator-s302-1\nrepaired_checks: 3a\n' > "$_gd/story-20260811T193044Z.repair.md"
+        ;;
+    esac
+    ;;
   suppressed-oldsibling)
     # A CONSUMER RUNS ITS OWN INSTALLED ENGINE, and this hook can arrive one pull ahead of a
     # sibling that dispatches the mode it asks for. Measured on the reference consumer while
@@ -558,7 +669,7 @@ fi
 # reason: if the base seed ever starts shipping those files, those two arms would be
 # measuring `ok` and reporting the fail-closed path.
 case "$CASE" in
-  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling|suppressed-forged|suppressed-superset|suppressed-subset|suppressed-yes-padded|suppressed-yes-blank|suppressed-yes-whole)
+  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling|suppressed-forged|suppressed-superset|suppressed-subset|suppressed-yes-padded|suppressed-yes-blank|suppressed-yes-whole|suppressed-forged-unbound|suppressed-forged-bound|suppressed-unbound-substitute-covered|subst-convict-own|subst-newer-unbound-fail|subst-nobound-older-fail|subst-two-forged|subst-crossgate|subst-percatalog)
     for _need in "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" \
                  "$W/.claude/skills/ai-dlc/enforcement-map.yaml" \
                  "$W/docs/escalations/pending.md" \
@@ -574,7 +685,7 @@ case "$CASE" in
     ls "$W"/sessions-jsonl/*.jsonl >/dev/null 2>&1 \
       || { echo "seed.sh: case '$CASE' seeded no transcript corpus; no citation could ever verify" >&2; rm -rf "$W"; exit 2; }
     ;;
-  waived-real|waived-fabricated|waived-noverifier|waived-tab|waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two)
+  waived-real|waived-fabricated|waived-noverifier|waived-tab|waived-forged-unbound|waived-forged-bound|waived-forged-dup|waived-forged-nullid|waived-forged-two|waived-forged-dup-bound|waived-forged-two-only)
     # The waiver cases' inputs, both directions: the sibling and an OVERRIDDEN entry are there,
     # no SUPPRESSED entry is (or the in-force join could lift check 7 by itself), and only
     # `-noverifier` lacks the verifier.
