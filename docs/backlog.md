@@ -925,6 +925,8 @@ The residual. The clear does not attest that the output was verified. It attests
 
 B1. graph's S320 Check 22 waivers, including the 10-27 incidents this entry cites, are all arm S4, not class (i) or (ii). The census on a copy of graph's ledger gave S320 0 (i), 0 (ii) and 4 S4 of 989 rows. Under the first ruling alone this change would not have addressed those questions. The 2026-10-28 rulings bring S4 into scope, both as a repair and as a dispatch-time deny, so the outcome count can now move on S320, which has 4 S4 rows. The close still waits on BL-817's `Outcome measured:` line from a graph sprint.
 
+**Progress (v0.967.0, batch b245).** The remediation path, the two dispatch-time denies and their fixtures ship. The `<pending>` arms and mutants in the mechanism paragraph are now named in dispatch-model-guard and check-22-spawn-ledger. The close still waits on BL-817's `Outcome measured:` line.
+
 NOTE, recorded and not fixed: `rule-19.md:27,75` say Check 22 fires "at retro", but it is an implementation-gate check.
 
 The entry stays PARTIAL, with `verify: manual`.

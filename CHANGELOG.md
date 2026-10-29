@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.967.0] - 2026-10-28
+
+Batch b245. It ships BL-842, which stays PARTIAL because its close waits on BL-817's `Outcome measured:` line from a graph sprint. Consumer-visible engine changes ship in this release.
+
+Rulebook and engine changes. Hook: `core/hooks/ai-dlc-dispatch-guard.sh`. Validator: `core/scripts/validate-spawn-ledger.sh`. Enforcement map: `core/skills/ai-dlc/enforcement-map.yaml`. Step: `core/skills/ai-dlc/steps/gate-validation.md`. Fixtures: `core/fixtures/dispatch-model-guard`, `core/fixtures/check-22-spawn-ledger` and `core/fixtures/gate-repair-record`. Backlog: the BL-842 entry in `docs/backlog.md`.
+
+### BL-842 — Check 22 remediation and dispatch-time denies
+
+- Remediation. A Check 22 failure of class (i), a missing Rule 19(b) citation, class (ii), an invalid serial exception (arm S3), or arm S4, a coverage gap, clears when a later re-dispatch of the violating row's role carries `remediates: <tool_use_id>` and the validator finds it clean on that class, without an operator question. Every other class keeps the four-arm OVERRIDDEN path.
+- Validator. `validate-spawn-ledger.sh` decides the remediation and exposes the cleared rows through its `--remediated-keys` mode.
+- Dispatch guard. ARM 2 counts a validator-remediated row as covered. The COVER DENY denies an uncovered G=1 cross dispatch before any ledger row is written, and the CITATION DENY denies a dispatch whose role contract is not cited.
+- Steps. `gate-validation.md` names all three repair classes and records the verdict PASS with the validator's `REMEDIATED:` and `COUNTS:` lines and the `--series` resolution record.
+- Fixtures. `dispatch-model-guard` and `check-22-spawn-ledger` carry the new arms and mutants, and `gate-repair-record` carries the first Check 22 series with a FAIL to PASS pair and its resolution record.
+
+### Fixture costs
+
+The `*` row of each `invocations.decl`, read at `245bb61e7` and at this release's parent.
+
+- `dispatch-model-guard` moves 420 to 495. BL-842's arms 15q-15t, the REM tree, the CITATION and COVER DENY vectors, and the nomissing, predfail, nocover and scope-dropped mutants add starts. Ten pre-existing deny arms each start the validator's `--remediated-keys` once, which is the guard's new behaviour. Four re-runs of covered states were cut.
+- `check-22-spawn-ledger` moves 366 to 395. It gains 17 new remediation worlds R1-R17, one R control, four NOPROBE controls, and the R mutants each on its own deciding cells. The 16-cell re-runs per mutant were cut.
+- `gate-repair-record` moves 19 to 22. It gains the first Check 22 series with a FAIL to PASS pair and resolution record, its no-record twin, and one `repair_field` read in `validate-gate-adjudication.sh`.
+
+### Correction to 0.965.0
+
+The 0.965.0 entry says the unit states no cause for the `trunk-audit-gate` (67 to 94) and `suite-content-key` (23 to 25) rises; the cause is the twin cells matrix rule 7 requires, one measured-green twin drive per mutant on the mutated subject (11 drives for `trunk-audit-gate`, whose subject starts three sibling validators, and 2 for `suite-content-key`).
+
 ## [0.966.0] - 2026-10-28
 
 Batch b245, cluster c2. It closes one entry, BL-837, filed before this release. No `PC-` id is closed. NET: entries closed 1 minus filed 0 = 1.
