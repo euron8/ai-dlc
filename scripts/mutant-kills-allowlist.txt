@@ -19,7 +19,6 @@ enforcement-map-yaml-plain
 escalation-status-vocabulary
 fanout-payload-channel
 gate-adjudication
-gate-remediation-deny
 h2-attest-scripts-dir
 inflight-row-shape
 layer-absorption-retire

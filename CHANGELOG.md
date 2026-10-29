@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.966.0] - 2026-10-28
+
+Batch b245, cluster c2. It closes one entry, BL-837, filed before this release. No `PC-` id is closed. NET: entries closed 1 minus filed 0 = 1.
+
+Rulebook and engine changes. Hook: `core/hooks/ai-dlc-gate-remediation-guard.sh`, which is `machinery:` in `reconcile/setup-sites.md` and live from step 3 of the pull that delivers it. Fixture: `core/fixtures/gate-remediation-deny`. Backlog: the BL-837 entry in `docs/backlog.md`.
+
+### BL-837 — an unbound gate verdict may convict but never acquit
+
+- The value. A verdict with no dispatch binding is a verdict the lead could have written itself. The guard now treats such a verdict as evidence against the lead and never as evidence for it: an unbound live pass contributes its own FAILs to the convict set, and it cannot clear the lead through any exit.
+- Every acquittal exit. The binding is asked once whenever the live pass is not clean and the path is guarded, before any exit that would allow. That covers arm 5 (the empty uncovered set), arm 7b, arm 8 (the repair record) and arm 9 (the authorization). When the live pass is unbound, the convict set is its own FAILs plus the substitute set, and each pass is partitioned against the in-force suppressions under its own catalog.
+- The `:1228` substitute hole. A forged verdict whose substitute read only bound passes allowed silently, with no flow-log event. The substitute set is now every conforming pass newer than the newest bound pass, plus that bound pass itself. With nothing bound, it is every conforming pass. `exempt` and `nocorpus` still read as bound, so no state that is clean today newly convicts on that account.
+- The two-forged-pass hole. Two forged passes, each fully covered and neither bound, used to allow. They no longer do: each is re-partitioned and neither can clear the other.
+- Catalogs are partitioned per pass. A check covered under one pass's catalog is not covered for another pass that carries a different catalog. The raw-convict spelling, which convicts every FAIL on every substitute pass, is wrong and is refused: a substitute whose FAILs are all covered still allows.
+- Repair records bind per contributing pass. The deny names, for each contributing pass, its nonce and its uncovered FAILs. Arm 8 lifts only when every contributing pass's uncovered FAILs are named by a repair record bound to that pass's own nonce, and arm 9 lifts per pass the same way. An honest remediation cycle already writes one record per repaired pass, so a genuinely repaired older pass carries its own.
+- Logging. `GATE_VERDICT_UNBOUND` is logged whenever the live pass is unbound and substitution was considered, on every exit reached after that point, allow or deny.
+- Cost. The added jq runs on every guarded edit while the newest pass records a FAIL, plus one more when that pass is unbound. The fixture's `invocations.decl` moves 759 to 827, measured by two counted runs through `hermetic-run.sh` that agreed exactly. The new arms under per-push full mutant scoring measured 1106, and the mutant-matrix subsetting removed 279 of those.
+- Waivers. On an unbound live pass no waiver applies, so the deny can name a waived check, and the verdict is unchanged.
+- Residual. When no pass in the directory records a FAIL, there is nothing to convict on and the guard allows. That limit is named in the guard's comment beside the pick. It is the only residual.
+- Fixtures. `gate-remediation-deny` gains 141 passing assertions (262 to 403 in a plain counted run, 0 FAIL in both) and its header now carries 62 `MUTANT-MATRIX` rows against 42 mutants built through `mut()` at the prior release. The arms cover a forged unbound pass over a bound substitute that carries an uncovered FAIL, its bound twin, a substitute whose FAILs are all covered, an unbound pass with an uncovered plain FAIL of its own, a cross-type pair, an older unbound pass recording the only FAIL, two forged covered passes, and a repair record keyed on an unbound nonce. The mutants restore the old single-exit condition, bind and log without substituting, convict raw, and read only bound passes at the substitute step.
+- Mutant matrix. The fixture routes every kill through `mutant_killed` behind a same-run base-pass flag, carries a `MUTANT-MATRIX` header with a `--matrix` mode, and runs each mutant on its deciding cell plus its named twin or twins per push. Arm `MX` fails a plain run that executes a matrix-only cell. Its rows leave `scripts/mutant-kills-allowlist.txt` and `scripts/fixture-matrix-allowlist.txt`, and the fixture now declares `core/fixtures/lib/` in `inputs.decl`.
+- False refusals. Over the reference consumer's 250 committed gate verdicts, the change newly denies 2 historical states. Both predate the write ledger and were not adjudicated as genuine or forged. No newly denied state carries a FAIL that a committed repair record shows was repaired.
+- BL-837's manual receipt is replaced by a `verify: sh` receipt that seeds both the forged-unbound world and the `:1228` world and requires the guard to deny each.
+
+Notes.
+
+- NOTE: Selection of the substitute never keys on the forged verdict's own `gate_type`, series or sprint, because the forger writes those fields.
+- NOTE: A bound clean pass of another gate cannot acquit a forged live pass; no gate identity independent of the forger exists for the guard to compare against.
+
 ## [0.965.0] - 2026-10-28
 
 Batch b245, fixture optimisation part four. It ships three fixture units under BL-850: snapshot-archive-rotate, emit-report-refusal and the m1-ii matrix-only fixtures. BL-850 stays PARTIAL. M5 (the BL-828 arm), q0b (BL-849), ltj and mrr, c3 and c4, BL-842 and the wait-stale-deliverable load dependence are not in this release.

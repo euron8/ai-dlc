@@ -14,3 +14,5 @@ core/scripts/validate-suppression-lifetime.sh
 # arm MD: every sections manifest the recorder's manifest arm reads is written by the real splitter.
 core/scripts/partition-document.sh
 core/skills/ai-dlc/enforcement-map.yaml
+# lib/ carries preamble.sh and mutant.sh (mutant_killed), sourced by run.sh.
+core/fixtures/lib/

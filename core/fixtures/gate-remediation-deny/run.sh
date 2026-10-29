@@ -31,6 +31,88 @@
 # A guard with only the first family is indistinguishable from a hook that denies
 # everything; a guard with only the second is indistinguishable from one that
 # denies nothing. The third is the one this change exists for.
+#
+# THE MUTANT MATRIX. Every mutant below is scored on its DECIDING cell plus one named TWIN on a plain run (what the hook
+# and hermetic-run.sh run); `--matrix` also drives every other cell a mutant has and prints one `MATRIX <mutant> <cell>`
+# row each. The rows were measured from ONE `--matrix` run of this file from the repo root, and the fixture arm
+# `MX:` fails a plain run that executed any matrix-only cell. Re-measure whenever an arm or a mutant is added or changed,
+# and re-measure invocations.decl beside it. Several mutants also move cells outside their decides set (a wrong fix that
+# is seen by more than one arm): m11 moves forged-clean-leadwrite; wms moves W7; m-fallback-live-alone moves AD-IW-UNPARSE;
+# m-unsafe-live-alone moves AD-UNREADABLE, AD-IW-SPACE, AD-IW-NEWLINE and AD-IW-DASH; m-unsafe-dropped moves AD-IW-NEWLINE
+# and AD-IW-DASH; m-stems-wordsplit moves AD-NEWLINE, AD-A-SPACE, AD-B-SPACE and AD-W4-SPACE; m-multidoc-drops moves
+# AD-A-MULTIDOC and AD-B-MULTIDOC; m-stream-bleed moves AD-TRAIL-LIVE; m1b-role-nothing moves 1b-E2, 1b-E3 and 1b-E4;
+# m1b-path-widened moves 1b-A10, 1b-A11 and 1b-A12; m1b-inner-widened moves 1b-A11 and 1b-A12; m1b-absent-denies moves
+# 1b-A7; m1b-key-order moves 1b-A8; md-basename moves MD5 and MD9; md-suffix moves MD9. A cell id is the seed case the
+# cell drives, or the named arm. Every cell of a mutant that a plain run does not drive is matrix-only.
+# MUTANT-MATRIX m-existence-only decides=arm9 twins=arm7
+# MUTANT-MATRIX m-no-probe-root decides=probe-ledger twins=spawn-ledger
+# MUTANT-MATRIX M10 decides=S13a twins=S13-std
+# MUTANT-MATRIX FLOOR-m-both-layers decides=7b-padded twins=7b-whole
+# MUTANT-MATRIX m1-no-subtract decides=suppressed twins=suppressed-partial
+# MUTANT-MATRIX m5-any-suppression-lifts decides=suppressed-partial twins=suppressed
+# MUTANT-MATRIX m6b-key-drops-verifier decides=changed-verifier twins=suppressed
+# MUTANT-MATRIX m6-key-drops-escalations decides=emptied-escalations twins=suppressed
+# MUTANT-MATRIX m8-no-cite-verification decides=suppressed-forged twins=suppressed
+# MUTANT-MATRIX m9-substring-join decides=suppressed-superset twins=suppressed
+# MUTANT-MATRIX m2-no-catalog-join decides=suppressed-wrongcat twins=suppressed
+# MUTANT-MATRIX m3-bare-is-wildcard decides=suppressed-bare twins=suppressed
+# MUTANT-MATRIX m4-absence-is-coverage decides=suppressed-nosibling twins=suppressed
+# MUTANT-MATRIX m7-ignore-sibling-rc decides=status twins=verdict,suppressed
+# MUTANT-MATRIX wmp-no-kind-partition decides=W10 twins=W9
+# MUTANT-MATRIX wme-string-equality decides=W10 twins=W9
+# MUTANT-MATRIX wms-substitute-waives decides=W11 twins=W9
+# MUTANT-MATRIX wmj-no-waiver-join decides=W2 twins=W1
+# MUTANT-MATRIX m11-window-ignores-order decides=forged-clean twins=stale-then-clean
+# MUTANT-MATRIX m12-records-every-writer decides=forged-clean-leadwrite twins=stale-then-clean
+# MUTANT-MATRIX m13-arm-unreachable decides=fast-path twins=stale-then-clean
+# MUTANT-MATRIX m14-write-never-binds decides=forged-clean-bound twins=stale-then-clean
+# MUTANT-MATRIX m15-window-unbounded decides=forged-clean-latewindow twins=stale-then-clean
+# MUTANT-MATRIX m16-nobound-acquits decides=forged-clean-nobound twins=stale-then-clean
+# MUTANT-MATRIX m-fallback-live-alone decides=AD-UNPARSEABLE twins=suppressed-forged-bound
+# MUTANT-MATRIX m-unsafe-live-alone decides=AD-DASH twins=suppressed-forged-bound
+# MUTANT-MATRIX m-unsafe-dropped decides=AD-IW-SPACE twins=suppressed-forged-bound
+# MUTANT-MATRIX m-stems-wordsplit decides=AD-SPACE twins=suppressed-forged-bound
+# MUTANT-MATRIX m-multidoc-drops decides=AD-CONVICT-MULTIDOC twins=suppressed-forged-bound
+# MUTANT-MATRIX m-nonobj-acquits decides=AD-IW-NONOBJ twins=suppressed-forged-bound
+# MUTANT-MATRIX m-empty-doc-acquits decides=AD-IW-ZERO twins=suppressed-forged-bound
+# MUTANT-MATRIX m-stream-bleed decides=AD-TRAIL-BOUND twins=suppressed-forged-bound
+# MUTANT-MATRIX m-join-drops decides=AD-IW-UNPARSE twins=suppressed-forged-bound
+# MUTANT-MATRIX m-livecl-only decides=suppressed-forged-unbound twins=subst-newer-unbound-fail
+# MUTANT-MATRIX m-subst-no-failset decides=suppressed-forged-unbound twins=subst-convict-own
+# MUTANT-MATRIX m-subst-bound-only decides=subst-crossgate twins=suppressed-forged-unbound
+# MUTANT-MATRIX m-subst-boundcat decides=subst-percatalog twins=suppressed-forged-unbound
+# MUTANT-MATRIX m-dguard-nostrip decides=name-strip twins=- why=a static binding probe with one cell, which its mutation always trips
+# MUTANT-MATRIX m1b-key-order-bind decides=1b-bind twins=- why=a static binding probe with one cell, which its mutation always trips
+# MUTANT-MATRIX m-3b-drift decides=3b-bind twins=- why=a static binding probe with one cell, which its mutation always trips
+# MUTANT-MATRIX m1b-role-nothing decides=1b-E1 twins=1b-A1
+# MUTANT-MATRIX m1b-path-widened decides=1b-A4 twins=1b-A1
+# MUTANT-MATRIX m1b-inner-widened decides=1b-A10 twins=1b-A4
+# MUTANT-MATRIX m1b-absent-denies decides=1b-A5 twins=1b-A1
+# MUTANT-MATRIX m1b-unparseable-denies decides=1b-A6 twins=1b-A1
+# MUTANT-MATRIX m1b-key-order decides=1b-E4 twins=1b-A1
+# MUTANT-MATRIX mr-no-part-case decides=R-present twins=R-verdict
+# MUTANT-MATRIX mr-no-kind decides=R-kind twins=R-present
+# MUTANT-MATRIX mr-root-fallback decides=R-root twins=R-kind
+# MUTANT-MATRIX md-raw-root decides=MD7 twins=MD1
+# MUTANT-MATRIX md-basename decides=MD4 twins=MD1
+# MUTANT-MATRIX md-suffix decides=MD5 twins=MD4
+# MUTANT-MATRIX md-no-state-spelling decides=MD8 twins=MD6
+# MUTANT-MATRIX md-cd-logical decides=MD9 twins=MD9C
+# MUTANT-MATRIX m3b-no-iv decides=3b-app.py twins=3b-sib-x.md
+# MUTANT-MATRIX m3b-no-worktree decides=3b-sib-app.py twins=3b-app.py
+# MUTANT-MATRIX m3b-anchor-anywhere decides=3b-notes.md twins=3b-app.py
+# MUTANT-MATRIX m3b-no-iii decides=3b-conflict.py twins=3b-app.py
+# MUTANT-MATRIX m3b-after-gate-exit decides=3b-app.py twins=3b-sib-x.md
+# MUTANT-MATRIX m3b-no-scanroots decides=3b-r.md twins=3b-app.py
+# MUTANT-MATRIX m3b-no-claude-md decides=3b-CLAUDE.md twins=3b-.gitignore
+# MUTANT-MATRIX m3b-no-lex decides=3b-nx-app.py twins=3b-app.py
+# MUTANT-MATRIX-CONTROL m-crash-control why=a mutant that dies under set -u must be reported BROKEN (rc 2), never decided, so survival of the harness guard is the pass
+# MUTANT-MATRIX-CONTROL m-silent-control why=a mutant that exits 0 and logs no event must be reported BROKEN (rc 2), so the event half of the harness guard is what is asserted
+# MUTANT-MATRIX-CONTROL m-silent-allow-control why=a silent exit 0 where an allow was expected must be reported BROKEN, so the allow-event guard is what is asserted
+# MUTANT-MATRIX-CONTROL m-caller-raw why=the caller still refuses on the normalised length before the predicate is asked, so no verdict moves and survival is the pass
+# MUTANT-MATRIX-CONTROL m-predicate-floor-off why=the caller intact refuses first, so the predicate floor removed alone moves no verdict and survival is the pass
+# MUTANT-MATRIX-DYNAMIC mx_kill why=every kill goes through the one mx_kill helper whose second argument is the mutant name, each carrying its own row above
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-remediation-deny/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking any hook (I10 / I87).
@@ -53,7 +135,33 @@ echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+bad() { printf '  FAIL  %s\\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# MODES. A plain run (what hermetic-run.sh and the hook run) drives each mutant ONLY in its deciding cell(s) plus its
+# named twin; `--matrix` also drives every other cell of the mutant's panel and prints one MATRIX row per cell. A cell
+# has a ROLE: c = the unmutated control, d = deciding (a kill, routed through mutant_killed), t = a named twin (must
+# hold), x = matrix-only and observation-only (never runs on a plain invocation). mx_run is the gate; mx_count is a
+# SEPARATE counter the cell's own driver bumps after the gate let it through, so a broken gate cannot hide from the
+# arm at the end of this file that fails a plain run which reached an x cell.
+MATRIX=0
+[ "${1:-}" = "--matrix" ] && MATRIX=1
+MX_RAN=0
+mx_run() { case "$1" in x) [ "$MATRIX" = 1 ] || return 1 ;; esac; return 0; }
+mx_count() { case "$1" in x) MX_RAN=$((MX_RAN + 1)) ;; esac; return 0; }
+mx_obs() { # <mutant> <cell> <role> <1 when the cell moved off the unmutated verdict, else 0>
+  [ "$MATRIX" = 1 ] || return 0
+  printf '  MATRIX %s %s role=%s verdict=%s\n' "$1" "$2" "$3" "$([ "$4" = 1 ] && echo TRIPPED || echo GREEN)"
+}
+mx_kill() { # <base-pass flag> <mutant> <cell> <hit 0|1> <label> -- the ONE kill emission of this file
+  if [ "$4" = 1 ]; then mutant_killed "$1" "$2" "$5"; else bad "$2 SURVIVED: $5"; fi
+  mx_obs "$2" "$3" d "$4"
+}
+mx_hold() { # <role t|x> <mutant> <cell> <hit 0|1: the cell held> <label>
+  if [ "$1" = t ]; then if [ "$4" = 1 ]; then ok "$5"; else bad "$5"; fi; fi
+  mx_obs "$2" "$3" "$1" "$((1 - $4))"
+}
 
 # Drive the PreToolUse hook. `agent` empty => the LEAD (the harness omits agent_id
 # on the main thread; `ai-dlc-context-sensor.sh:160` reads exactly that field).
@@ -91,6 +199,7 @@ denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":
 # pass than one that never fires at all. Assign to a global so `exit` runs in the shell
 # that has to stop.
 seed() { # <case> -> sets W, or aborts the whole run
+  SEED_CASE="$1"
   W="$(bash "$HERE/seed.sh" "$1")" || { echo "FIXTURE ERROR: seed.sh '$1' exited non-zero" >&2; exit 2; }
   [ -n "$W" ] && [ -d "$W" ] && [ -s "$W/_bmad-output/pipeline-snapshot.md" ] \
     || { echo "FIXTURE ERROR: seed '$1' produced no usable workspace ('${W}'); every arm would score the guard as denying nothing" >&2; exit 2; }
@@ -357,7 +466,7 @@ EOF
 #    readable at all denies under both.
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log")"
 if denied "$OUT"; then bad "LIFT/EMPTY-CORPUS: a readable transcript in a directory with no *.jsonl did NOT lift — the empty corpus outranked the file that holds the words"
-else ok "LIFT/EMPTY-CORPUS: an empty corpus falls through to the readable transcript, which verifies"; fi
+else ok "LIFT/EMPTY-CORPUS: an empty corpus falls through to the readable transcript, which verifies"; B_arm9=1; fi
 
 # --- the mutant --------------------------------------------------------------------------
 # Arms 7 and 9 are ABSENCE-shaped: "not denied". A hook replaced by `exit 0` emits nothing,
@@ -376,17 +485,17 @@ elif ! bash -n "$MWORK/m-existence-only.sh"; then
 else
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log" "$MWORK/control.sh")"
   if denied "$OUT"; then bad "CONTROL: an unmutated copy of the hook DENIES arm 9 — every verdict below is about the copy, not the mutation"
-  else ok "CONTROL: an unmutated copy of the hook reproduces arm 9's lift"; fi
+  else ok "CONTROL: an unmutated copy of the hook reproduces arm 9's lift"; B_ctl9=1; fi
 
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log" "$MWORK/m-existence-only.sh")"
-  if denied "$OUT"; then ok "MUTANT: the pre-fix existence-only predicate DENIES arm 9 — the arm can fire"
-  else bad "MUTANT: the pre-fix predicate still lifted arm 9 — the arm asserts nothing"; fi
+  mx_kill "$(( ${B_arm9:-0} && ${B_ctl9:-0} ))" m-existence-only arm9 "$(denied "$OUT" && echo 1 || echo 0)" \
+    "MUTANT: the pre-fix existence-only predicate DENIES arm 9 — the arm can fire"
 
   # ...and nothing else moves. A mutant failing more than its own assertion means the arms
   # are entangled and one of them is vacuous.
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-jsonl/friday.jsonl" "$MWORK/m-existence-only.sh")"
-  if denied "$OUT"; then bad "MUTANT: arm 7 also went red — the corpus arm and the fallthrough arm are entangled"
-  else ok "MUTANT: arm 7 (the corpus branch) is UNCHANGED — the mutant kills only its own arm"; fi
+  mx_hold t m-existence-only arm7 "$(denied "$OUT" && echo 0 || echo 1)" \
+    "MUTANT: arm 7 (the corpus branch) is UNCHANGED — the mutant moves only its own arm"
 fi
 rm -rf "$MWORK"
 rm -rf "$W"
@@ -440,7 +549,7 @@ rm -rf "$W"
 # has broken ordering rather than added a binding; if both allow, the arm is not firing.
 seed forged-clean
 OUT="$(drive "$W" Edit "$W/$ART")"
-if denied "$OUT"; then ok "7a: a clean pass at a nonce no dispatch follows does NOT clear a live FAIL"
+if denied "$OUT"; then ok "7a: a clean pass at a nonce no dispatch follows does NOT clear a live FAIL"; B_7a=1
 else bad "7a: the forged clean pass cleared the deny — a nonce the lead chooses is still the whole freshness anchor"; fi
 case "$OUT" in
   *"NOT THIS PASS"*) ok "7a: ...and the deny NAMES the unbound file rather than denying anonymously" ;;
@@ -473,7 +582,7 @@ rm -rf "$W"
 # recorder records every writer instead of only dispatched ones.
 seed forged-clean-leadwrite
 OUT="$(drive "$W" Edit "$W/$ART")"
-if denied "$OUT"; then ok "7a: a write row with an EMPTY agent_id does not bind — the lead's own write is not a dispatch"
+if denied "$OUT"; then ok "7a: a write row with an EMPTY agent_id does not bind — the lead's own write is not a dispatch"; B_7alw=1
 else bad "7a: a write row bound the pass without the harness attributing it to any agent"; fi
 rm -rf "$W"
 
@@ -483,7 +592,7 @@ rm -rf "$W"
 seed forged-clean-bound
 OUT="$(drive "$W" Edit "$W/$ART")"
 if denied "$OUT"; then bad "7a: a pass bound by a dispatched agent's own write was still refused — the arm denies every honest pass too"
-else ok "7a: a clean pass BOUND by a dispatched agent's write clears the deny (the arm is not a blanket refusal)"; fi
+else ok "7a: a clean pass BOUND by a dispatched agent's write clears the deny (the arm is not a blanket refusal)"; B_7abound=1; fi
 rm -rf "$W"
 
 # NOTHING BOUND. The failing pass is unbound too, so there is no bound pass to fall back to.
@@ -492,7 +601,7 @@ rm -rf "$W"
 # newest FAILING pass whatever its binding, and the substitution is logged.
 seed forged-clean-nobound
 OUT="$(drive "$W" Edit "$W/$ART")"
-if denied "$OUT"; then ok "7a: with NO pass in the directory bound, the forged clean pass still does not clear the unbound FAILING one"
+if denied "$OUT"; then ok "7a: with NO pass in the directory bound, the forged clean pass still does not clear the unbound FAILING one"; B_7anb=1
 else bad "7a: with nothing bound the guard fell through to ALLOW — a forged clean pass acquitted a live FAIL because the arm found no bound pass to fall back to"; fi
 if grep -q 'itself unbound' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
   ok "7a: ...and the flow log says the fallback pass is itself unbound"
@@ -514,7 +623,7 @@ rm -rf "$W"
 # this pair existed: the window widened to 10^9 passed every arm and the receipt.
 seed forged-clean-latewindow
 OUT="$(drive "$W" Edit "$W/$ART")"
-if denied "$OUT"; then ok "7a: a gate-adjudicator dispatched 901s AFTER the forged nonce does not bind it — the window has an upper bound"
+if denied "$OUT"; then ok "7a: a gate-adjudicator dispatched 901s AFTER the forged nonce does not bind it — the window has an upper bound"; B_7alate=1
 else bad "7a: a dispatch outside the ${DISPATCH_WINDOW_S:-900}s window bound the forged pass — the window is unbounded above"; fi
 rm -rf "$W"
 seed forged-clean-inwindow
@@ -545,7 +654,7 @@ rm -rf "$W"
 seed open-fail
 PROBE_LEDGER="$W/_bmad-output/subagent-context.jsonl"
 OUT="$(drive "$W" Write "$PROBE_LEDGER")"
-if denied "$OUT"; then ok "7a: a denied LEAD may not Write subagent-context.jsonl — the probe ledger a shard merge joins through is under the guard"
+if denied "$OUT"; then ok "7a: a denied LEAD may not Write subagent-context.jsonl — the probe ledger a shard merge joins through is under the guard"; B_probe=1
 else bad "7a: the lead Wrote subagent-context.jsonl while denied — one row maps a remediator's shard onto an adversary dispatch"; fi
 OUT="$(drive "$W" Edit "$PROBE_LEDGER")"
 if denied "$OUT"; then ok "7a: ...and may not Edit it either"
@@ -580,16 +689,16 @@ elif ! bash -n "$MWORK/m-no-probe-root.sh"; then
 else
   seed open-fail
   OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/control.sh")"
-  if denied "$OUT"; then ok "CONTROL: an unmutated copy of the hook DENIES the lead's probe-ledger Write"
+  if denied "$OUT"; then ok "CONTROL: an unmutated copy of the hook DENIES the lead's probe-ledger Write"; B_ctlp=1
   else bad "CONTROL: an unmutated copy did not deny the probe-ledger Write — every verdict below is about the copy"; fi
   rm -rf "$W"
   seed open-fail
   OUT="$(drive "$W" Write "$W/_bmad-output/subagent-context.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
-  if denied "$OUT"; then bad "MUTANT: with the probe-ledger root removed the lead's Write is still denied — the cell does not key on that line"
-  else ok "MUTANT: the probe-ledger root removed ALLOWS the lead's Write — the new cell is killed by its own line"; fi
+  mx_kill "$(( ${B_probe:-0} && ${B_ctlp:-0} ))" m-no-probe-root probe-ledger "$(denied "$OUT" && echo 0 || echo 1)" \
+    "MUTANT: the probe-ledger root removed ALLOWS the lead's Write — the new cell is decided by its own line"
   OUT="$(drive "$W" Edit "$W/_bmad-output/spawn-ledger.jsonl" "" "" "$MWORK/m-no-probe-root.sh")"
-  if denied "$OUT"; then ok "MUTANT: the spawn-ledger cell is UNCHANGED — the mutant kills only its own arm"
-  else bad "MUTANT: the spawn-ledger cell also went green — the two ledger roots are entangled"; fi
+  mx_hold t m-no-probe-root spawn-ledger "$(denied "$OUT" && echo 1 || echo 0)" \
+    "MUTANT: the spawn-ledger cell is UNCHANGED — the mutant moves only its own arm"
   rm -rf "$W"
 fi
 rm -rf "$MWORK"
@@ -630,7 +739,7 @@ TRC="sessions-jsonl/current.jsonl"
 seed suppressed
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then bad "S1: a FAIL under an in-force SUPPRESSED entry still DENIED the lead — the gate passes and the lead stays locked out, which is the whole defect"
-else ok "S1: every live FAIL under an in-force suppression -> the edit is ALLOWED"; fi
+else ok "S1: every live FAIL under an in-force suppression -> the edit is ALLOWED"; B_S1=1; fi
 if grep -q 'GATE_REMEDIATION_SUPPRESSED' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
   ok "S1: ...and the allow is LOUD (GATE_REMEDIATION_SUPPRESSED in the flow log)"
 else
@@ -657,7 +766,7 @@ if [ -f "$CACHEF" ]; then
   # count and the arm below would then score a DENY that the poison never caused.
   printf '%s\nnot-this-catalog\t7\t3\t0\t2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"\tseeded cache poison\n' "$CK" > "$CACHEF"
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-  if denied "$OUT"; then ok "S1-cache: the cached rows are what the join reads (a poisoned cache changes the verdict)"
+  if denied "$OUT"; then ok "S1-cache: the cached rows are what the join reads (a poisoned cache changes the verdict)"; B_scache=1
   else bad "S1-cache: the cache file is written and never read — it costs a write and saves nothing"; fi
   # ...and the key invalidates. Rewriting the escalations file changes its size and mtime.
   # THE EQUAL-SIZE, SAME-SECOND REWRITE — the one a size+mtime key cannot see. `[core] 7`
@@ -681,7 +790,7 @@ if [ -f "$CACHEF" ]; then
   printf '\n<!-- key-invalidation touch -->\n' >> "$W/docs/escalations/pending.md"
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
   if denied "$OUT"; then bad "S1-cache: a changed escalations file did NOT invalidate the key — a stale suppression set decides the lock-out forever"
-  else ok "S1-cache: a changed escalations file invalidates the key and the sibling re-answers"; fi
+  else ok "S1-cache: a changed escalations file invalidates the key and the sibling re-answers"; B_sinv=1; fi
 
   # --- WHAT THE CACHED ROWS ARE WORTH IS A PROPERTY OF THE VERIFIER, and no arm could see it --
   # The rows this cache holds are the ones that PASSED the citation verifier, so a cache written
@@ -717,7 +826,7 @@ if [ -f "$CACHEF" ]; then
     elif denied "$OUT"; then
       bad "S1-verifier-key: the poisoned row was reused although the key moved — the guard is not comparing the key it computes"
     else
-      ok "S1-verifier-key: editing the citation verifier invalidates the key and the sibling re-answers — a cache written under one predicate cannot decide a lift under another"
+      ok "S1-verifier-key: editing the citation verifier invalidates the key and the sibling re-answers — a cache written under one predicate cannot decide a lift under another"; B_vkey=1
     fi
   fi
 fi
@@ -734,7 +843,7 @@ rm -rf "$W"
 # SUPPRESSED entry is a record the lead CAN author. Its quote is the whole claim.
 seed suppressed-forged
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S10: a well-formed, in-force suppression whose quote NO operator said does NOT lift the deny"
+if denied "$OUT"; then ok "S10: a well-formed, in-force suppression whose quote NO operator said does NOT lift the deny"; B_S10=1
 else bad "S10: the lead cleared its own lock-out by writing its own suppression — the hook's 'no lead-authored record reaches this' is false"; fi
 case "$OUT" in *"unverified-citation"*) ok "S10: ...and the deny says the citation is the thing that failed, not the coverage" ;;
   *) bad "S10: the deny gives no account of the forged citation, so the lead reads it as an uncovered FAIL" ;; esac
@@ -754,7 +863,7 @@ rm -rf "$W"
 # --- S11. THE ID GRAIN. `3` and `3a` are different checks in the same catalog.
 seed suppressed-superset
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S11: a suppression naming 3a does not cover a live FAIL on 3"
+if denied "$OUT"; then ok "S11: a suppression naming 3a does not cover a live FAIL on 3"; B_S11=1
 else bad "S11: a substring join acquitted check 3 under a suppression for 3a"; fi
 rm -rf "$W"
 seed suppressed-subset
@@ -775,14 +884,14 @@ rm -rf "$W"
 # --- S3. The entry names a DIFFERENT catalog -> DENY. The join is (catalog, check_id).
 seed suppressed-wrongcat
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S3: an in-force entry in ANOTHER catalog does not cover this verdict's check"
+if denied "$OUT"; then ok "S3: an in-force entry in ANOTHER catalog does not cover this verdict's check"; B_S3=1
 else bad "S3: the join dropped the catalog — check 7 of any extension now suppresses core's check 7"; fi
 rm -rf "$W"
 
 # --- S4. A BARE id counts as core and nothing else -> DENY against an extension verdict.
 seed suppressed-bare
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S4: a bare (bracketless) **Suppresses:** id covers core only, not an extension catalog"
+if denied "$OUT"; then ok "S4: a bare (bracketless) **Suppresses:** id covers core only, not an extension catalog"; B_S4=1
 else bad "S4: a bare id was treated as a wildcard — an author error buys wider coverage than writing it correctly"; fi
 rm -rf "$W"
 
@@ -796,7 +905,7 @@ rm -rf "$W"
 # --- S5. Two FAILs, one covered -> DENY, naming both halves.
 seed suppressed-partial
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S5: one covered FAIL beside an uncovered one still DENIES"
+if denied "$OUT"; then ok "S5: one covered FAIL beside an uncovered one still DENIES"; B_S5=1
 else bad "S5: any suppression at all lifted the deny — a real failing check is now unguarded"; fi
 if denied "$OUT"; then
   case "$OUT" in *'check(s) `3a`'*) ok "S5: the deny names ONLY the remaining FAIL (3a), so the dispatch brief is right" ;;
@@ -809,7 +918,7 @@ rm -rf "$W"
 # --- S6/S7. FAIL CLOSED on every absence, and the status is IN the deny.
 seed suppressed-nosibling
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S6: no sibling -> no carve-out, and the deny stands"
+if denied "$OUT"; then ok "S6: no sibling -> no carve-out, and the deny stands"; B_S6=1
 else bad "S6: an absent sibling was read as 'everything is covered' — the guard fails OPEN on its own missing dependency"; fi
 case "$OUT" in *"no-sibling"*) ok "S6: ...and the deny carries the status, so the lead can tell this from a real FAIL set" ;;
   *) bad "S6: the deny does not say WHY no carve-out was applied" ;; esac
@@ -827,7 +936,7 @@ rm -rf "$W"
 # installed engine, so this hook can arrive one pull ahead of the sibling it asks.
 seed suppressed-oldsibling
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
-if denied "$OUT"; then ok "S9: a sibling that refuses --in-force -> no carve-out, and the deny stands"
+if denied "$OUT"; then ok "S9: a sibling that refuses --in-force -> no carve-out, and the deny stands"; B_S9=1
 else bad "S9: a sibling REFUSAL was read as coverage — the pull that delivers this hook ahead of the mode would unlock the corpus"; fi
 case "$OUT" in *"refused:"*) ok "S9: ...and the deny carries 'refused', which is a different repair from a missing file" ;;
   *) bad "S9: a refusal is indistinguishable from a clean read in the deny" ;; esac
@@ -992,12 +1101,13 @@ else
 fi
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then bad "S13a: a consumer keeping its timeline at the flat <root>/_bmad-output/gate-metrics.jsonl gets NO carve-out — its in-force suppressions do not exist as far as this guard is concerned"
-else ok "S13a: the carve-out lifts with the timeline at the flat fallback"; fi
+else ok "S13a: the carve-out lifts with the timeline at the flat fallback"; B_s13a=1; fi
 rm -rf "$W"
+# EVERY M10 DRIVE (S13a, S13b, the standard layout) IS A FRESH WORKSPACE, in the plain run and in --matrix alike.
 if [ "$M10_OK" = "1" ] && grd_world suppressed "$GRD_FLAT"; then
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
-  if denied "$OUT"; then ok "M10 killed by S13a — a guard that names ONE path denies every consumer on the flat layout"
-  else bad "M10 SURVIVED S13a — naming one explicit path costs the flat layout nothing here, so this world is not testing the wrong fix"; fi
+  mx_kill "${B_s13a:-0}" M10 S13a "$(denied "$OUT" && echo 1 || echo 0)" \
+    "M10 decided by S13a — a guard that names ONE path denies every consumer on the flat layout"
   rm -rf "$W"
 fi
 # THE TWIN, one property apart: the same flat layout, the same entry, past its expiry.
@@ -1019,12 +1129,13 @@ else
 fi
 OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then bad "S13b: a consumer keeping its timeline under docs/_bmad-output/ gets NO carve-out"
-else ok "S13b: the carve-out lifts with the timeline under the docs fallback"; fi
+else ok "S13b: the carve-out lifts with the timeline under the docs fallback"; B_s13b=1; fi
 rm -rf "$W"
-if [ "$M10_OK" = "1" ] && grd_world suppressed "$GRD_DOCS"; then
+if [ "$M10_OK" = "1" ] && mx_run x && grd_world suppressed "$GRD_DOCS"; then
+  mx_count x
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
-  if denied "$OUT"; then ok "M10 killed by S13b — the same one-path guess denies every consumer on the docs layout too"
-  else bad "M10 SURVIVED S13b — this world does not separate 'the sibling resolves' from 'the guard guesses'"; fi
+  mx_hold x M10 S13b "$(denied "$OUT" && echo 1 || echo 0)" \
+    "M10 also moves S13b — the same one-path guess denies every consumer on the docs layout too"
   rm -rf "$W"
 fi
 if grd_world suppressed-expired "$GRD_DOCS"; then
@@ -1042,8 +1153,8 @@ rm -rf "$W"
 if [ "$M10_OK" = "1" ]; then
   seed suppressed
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
-  if denied "$OUT"; then bad "M10: the mutant also DENIES the standard layout — either it broke the hook outright, so its kills at S13a/S13b are unearned, or the sibling is still resolving from the process cwd"
-  else ok "M10: INVISIBLE in the standard layout — which is why the wrong fix passes every other arm in this file and needs S13a/S13b"; fi
+  mx_hold t M10 S13-std "$(denied "$OUT" && echo 0 || echo 1)" \
+    "M10: INVISIBLE in the standard layout — which is why the wrong fix passes every other arm in this file and needs S13a/S13b"
   rm -rf "$W"
 fi
 rm -rf "$MW13"
@@ -1107,9 +1218,9 @@ EOF
   fi
 }
 FL_CELLS=""
-fl_cells() {  # <hook> <predicate-floor-off 0|1> -> FL_CELLS, or "BROKEN:<why>"
-  local h="$1" off="$2" c="" k n o lg
-  for k in 7b:padded 7b:blank 7b:whole 9:padded 9:blank 9:whole; do
+fl_cells() {  # <hook> <predicate-floor-off 0|1> [<keys>] -> FL_CELLS, or "BROKEN:<why>"
+  local h="$1" off="$2" keys="${3:-7b:padded 7b:blank 7b:whole 9:padded 9:blank 9:whole}" c="" k o lg
+  for k in $keys; do
     if ! fl_world "${k%%:*}" "${k#*:}" "$off"; then FL_CELLS="BROKEN:$FL_WHY"; rm -rf "$W"; return; fi
     o="$(drive "$W" Edit "$W/$ART" "" "$FL_TR" "$h")"
     lg="$(cat "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)"
@@ -1126,6 +1237,10 @@ fl_report() {  # <label> <want> <hook> <predicate-floor-off>
   if [ "$FL_CELLS" = "$2" ]; then ok "$1: $2 -> $FL_CELLS"
   else bad "$1: scored $FL_CELLS, wanted $2"; fi
 }
+fl_pick() {  # <keys> <key> -> the letter FL_CELLS holds for <key>
+  local i=0 k
+  for k in $1; do [ "$k" = "$2" ] && { printf '%s' "${FL_CELLS:$i:1}"; return; }; i=$((i + 1)); done
+}
 # THE INCIDENT IS NOT THE MEMBER THE READER OPENS FIRST, in either corpus. Asked of the reader's
 # own call, because shell glob order and readdirSync order are two different claims.
 fl_first() { node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$1" 2>/dev/null; }
@@ -1136,24 +1251,43 @@ case "$FL_PROBE" in
   *incident*|" "*|*" ") bad "FLOOR-pre: FIXTURE BROKEN — the reader's first members are '$FL_PROBE'; the incident must not be first" ;;
   *) ok "FLOOR-pre: the reader opens '$FL_PROBE' first; the incident turn is in a later member of each corpus" ;;
 esac
+_fl0="$fails"
 fl_report "FLOOR (7b padded/blank/whole, arm 9 padded/blank/whole)" DDSDDL "$HOOK" 0
 fl_report "FLOOR-CONTROL: an unmutated copy of the hook" DDSDDL "$FL_MW/control.sh" 0
+[ "$fails" = "$_fl0" ] && B_floor=1
 # THE CALLER MEASURES RAW BYTES AGAIN, at both sites. The predicate still refuses the short needle
 # (NOMATCH-SHORT), so no verdict moves -- the defence in depth, asserted rather than assumed.
 FL_C7='  [ "$(cite_nlen "$nq")" -ge 12 ] || return 1'
 FL_C9='  if [ "$(cite_nlen "$AUTH_NQUOTE")" -ge 12 ]; then'
 if fl_sub "$HOOK" "$FL_MW/m-caller-raw.sh" "$FL_C7" '  [ "${#q}" -ge 12 ] || return 1' \
      "$FL_C9" '  if [ "${#AUTH_QUOTE}" -ge 12 ]; then'; then
-  fl_report "FLOOR m-caller-raw: the predicate still refuses, nothing moves" DDSDDL "$FL_MW/m-caller-raw.sh" 0
+  # A KNOCK-OUT CONTROL: its correct outcome is that nothing moves.
+  fl_report "CONTROL m-caller-raw: the predicate still refuses, nothing moves" DDSDDL "$FL_MW/m-caller-raw.sh" 0
   # EVERY LAYER REVERTED -- the shipped defect. Padded and blank now LIFT at both arms; the whole
-  # quote is unmoved. This is the mutant that proves the four deny cells can fire.
-  fl_report "FLOOR m-both-layers: padded and blank LIFT at 7b and arm 9" SSSLLL "$FL_MW/m-caller-raw.sh" 1
+  # quote is unmoved. Decided by 7b-padded, twin 7b-whole; --matrix drives all six cells.
+  _flk="7b:padded 7b:whole"
+  [ "$MATRIX" = 1 ] && _flk="7b:padded 7b:blank 7b:whole 9:padded 9:blank 9:whole"
+  fl_cells "$FL_MW/m-caller-raw.sh" 1 "$_flk"
+  case "$FL_CELLS" in
+    BROKEN:*) bad "FLOOR-m-both-layers: FIXTURE BROKEN — ${FL_CELLS#BROKEN:}" ;;
+    *)
+      mx_kill "${B_floor:-0}" FLOOR-m-both-layers 7b-padded "$([ "$(fl_pick "$_flk" 7b:padded)" = S ] && echo 1 || echo 0)" \
+        "FLOOR m-both-layers: a padded quote LIFTS at 7b (every layer reverted)"
+      mx_hold t FLOOR-m-both-layers 7b-whole "$([ "$(fl_pick "$_flk" 7b:whole)" = S ] && echo 1 || echo 0)" \
+        "FLOOR m-both-layers: the whole quote is unmoved at 7b"
+      if [ "$MATRIX" = 1 ]; then
+        mx_count x; mx_hold x FLOOR-m-both-layers 7b-blank "$([ "$(fl_pick "$_flk" 7b:blank)" = S ] && echo 1 || echo 0)" "FLOOR m-both-layers: a blank quote LIFTS at 7b"
+        mx_count x; mx_hold x FLOOR-m-both-layers 9-padded "$([ "$(fl_pick "$_flk" 9:padded)" = L ] && echo 1 || echo 0)" "FLOOR m-both-layers: a padded quote LIFTS at arm 9"
+        mx_count x; mx_hold x FLOOR-m-both-layers 9-blank "$([ "$(fl_pick "$_flk" 9:blank)" = L ] && echo 1 || echo 0)" "FLOOR m-both-layers: a blank quote LIFTS at arm 9"
+        mx_count x; mx_hold x FLOOR-m-both-layers 9-whole "$([ "$(fl_pick "$_flk" 9:whole)" = L ] && echo 1 || echo 0)" "FLOOR m-both-layers: the whole quote is unmoved at arm 9"
+      fi ;;
+  esac
 else
   bad "FLOOR m-caller-raw: DID NOT APPLY: $FL_WHY"
 fi
 # THE PREDICATE'S FLOOR REMOVED, the caller intact: the caller refuses on the normalised length
 # before asking, so nothing moves here either.
-fl_report "FLOOR m-predicate-floor-off: the caller still refuses, nothing moves" DDSDDL "$FL_MW/control.sh" 1
+fl_report "CONTROL m-predicate-floor-off: the caller still refuses, nothing moves" DDSDDL "$FL_MW/control.sh" 1
 rm -rf "$FL_MW"
 
 # --- THE MUTANTS ------------------------------------------------------------------------
@@ -1188,57 +1322,130 @@ mut() { # <name> <sed-expr> -> 0 if a real, parseable mutant landed at $MW/<name
   if ! bash -n "$MW/$1.sh" 2>/dev/null; then
     bad "MUTANT $1: the copy does not parse; a hook that dies emits nothing, which reads as allowed"; return 1
   fi
+  MOK="${MOK}$1 "
   return 0
 }
-kill_arm() { # <name> <expect deny|allow> <workspace> <label> [gate-metrics]
+MOK=" "
+mok() { case "$MOK" in *" $1 "*) return 0 ;; esac; return 1; }
+km_run() { # <name> <workspace> [gate-metrics] -> KM_OUT, KM_RC, KM_EV (the flow-log events it wrote)
+  KM_OUT="$(drive "$2" Edit "$2/$ART" "" "$2/$TRC" "$MW/$1.sh" "${3:-}")"; KM_RC=$?
+  KM_EV="$(grep -o 'GATE_VERDICT_UNBOUND\|GATE_REMEDIATION_SUPPRESSED\|GATE_REMEDIATION_DENIED\|GATE_REMEDIATION_LIFTED' "$2/_bmad-output/pipeline-continuation-log.md" 2>/dev/null | tr '\n' ' ')"
+}
+# A MUTANT THAT CRASHES SCORES EXACTLY LIKE ONE THAT ALLOWS: no output reads as allowed. Measured:
+# three mutants referenced a variable the fix had removed, died under the hook's `set -u` with rc=1
+# and no output, and every one scored its kills that way. The hook exits 0 on every allow and every
+# deny, so a non-zero rc is a crash, on any world -- FIXTURE BROKEN, never a kill. KM_NEED_EV=1 also
+# demands a flow-log event: every unbound world logs one before any exit it can reach.
+KM_NEED_EV=0
+# AN ALLOW-EXPECTING KILL ALSO DEMANDS ITS EVENT, because a silent `exit 0` is an allow too: every
+# allow that clears a FAIL logs GATE_REMEDIATION_SUPPRESSED, GATE_REMEDIATION_LIFTED, or (the
+# unbound residual) GATE_VERDICT_UNBOUND. The one
+# allow that legitimately writes nothing is the clean fast path (a bound or no-corpus clean live
+# pass exits before any log), and arm 7a's mutants are scored on exactly that; their block sets
+# KM_ALLOW_SILENT=1 and says so. m-silent-allow-control below proves this half can fire.
+KM_ALLOW_SILENT=0
+arm_eval() { # <name> <expect deny|allow> <workspace> <label> [gate-metrics] -> ARM_HIT 1 when the verdict is <expect>; rc 2 when BROKEN
   local nm="$1" want="$2" w="$3" label="$4" gm="${5:-}"
-  local o; o="$(drive "$w" Edit "$w/$ART" "" "$w/$TRC" "$MW/$nm.sh" "$gm")"
-  if [ "$want" = deny ]; then
-    if denied "$o"; then ok "$label"; else bad "$label"; fi
-  else
-    if denied "$o"; then bad "$label"; else ok "$label"; fi
+  km_run "$nm" "$w" "$gm"; local o="$KM_OUT"
+  if [ "$KM_RC" -ne 0 ]; then bad "$label — FIXTURE BROKEN: the mutant $nm exited rc=$KM_RC (a crash, not a verdict)"; return 2; fi
+  if [ "$KM_NEED_EV" -eq 1 ] && [ -z "$KM_EV" ]; then bad "$label — FIXTURE BROKEN: the mutant $nm wrote no flow-log event, so it never reached a decision"; return 2; fi
+  if [ "$want" = allow ] && [ "$KM_ALLOW_SILENT" -eq 0 ] && ! denied "$o"; then
+    # GATE_VERDICT_UNBOUND counts too: the convict set's residual exit ("nothing to convict on:
+    # ALLOWED") is a decision and logs only that event.
+    case "$KM_EV" in *GATE_REMEDIATION_SUPPRESSED*|*GATE_REMEDIATION_LIFTED*|*GATE_VERDICT_UNBOUND*) ;;
+      *) bad "$label — FIXTURE BROKEN: $nm allowed with no SUPPRESSED/LIFTED/UNBOUND event (events [${KM_EV% }]); a silent exit 0 is not an allow"; return 2 ;; esac
   fi
+  ARM_HIT=0
+  if [ "$want" = deny ]; then denied "$o" && ARM_HIT=1; else denied "$o" || ARM_HIT=1; fi
+  return 0
+}
+# kill_arm <base-pass flag> <mutant> <mutated verdict deny|allow> <workspace> <label> [gate-metrics] -- the DECIDING cell
+kill_arm() {
+  arm_eval "$2" "$3" "$4" "$5" "${6:-}" || return 2
+  mx_kill "$1" "$2" "$SEED_CASE" "$ARM_HIT" "$5"
+}
+# hold_arm <role c|t|x> <name> <verdict deny|allow> <workspace> <label> [gate-metrics] -- a cell that must HOLD
+# (c = the unmutated control, t = a named twin, x = matrix-only). Returns 0 when it held.
+hold_arm() {
+  mx_run "$1" || return 0
+  mx_count "$1"
+  arm_eval "$2" "$3" "$4" "$5" "${6:-}" || return 2
+  case "$1" in
+    c) if [ "$ARM_HIT" = 1 ]; then ok "$5"; else bad "$5"; fi ;;
+    *) mx_hold "$1" "$2" "$SEED_CASE" "$ARM_HIT" "$5" ;;
+  esac
+  [ "$ARM_HIT" = 1 ]
 }
 
-# M1 / M5 / M4 are scored on the seeds they are wrong about; each also gets one seed it must
-# NOT move, so a mutant that simply breaks the hook cannot score a kill.
+# EVERY DECISION MUTANT IS BUILT HERE, ONCE, BEFORE ITS CELLS ARE DRIVEN, so the S1 world below can carry the named
+# twin of each (S1 is green under every one of them) and a plain run drives each mutant in its deciding cell plus that
+# one twin. M1 / M5 / M4 are scored on the seeds they are wrong about; each also gets one seed it must NOT move, so a
+# mutant that simply breaks the hook cannot score a kill.
+mut m8-no-cite-verification 's@if cite_verifies "\${_rauth:-}"; then@if true; then@' || :
+mut m9-substring-join 's@if grep -qxF "\$_c" <<<"\$COVERED"; then@if grep -qF "$_c" <<<"$COVERED"; then@' || :
+mut m2-no-catalog-join 's@if (c == want) print \$2@print $2@' || :
+mut m3-bare-is-wildcard 's@if (c == want) print \$2@if (c == want || $1 == "") print $2@' || :
+mut m4-absence-is-coverage 's@elif \[ -z "\$SUPP_DIR" \]; then@elif [ -z "$SUPP_DIR" ]; then FAILED_CHECKS="";@' || :
+mut m7-ignore-sibling-rc 's@if \[ "\$SUPP_RC" -eq 0 \]; then@if true; then@' || :
+mut m1-no-subtract '/^  FAILED_CHECKS="\$REMAINING"$/d' || :
+mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SUPPRESSED_CHECKS" ]; then@' || :
+mut m6b-key-drops-verifier 's@|\$(ckey "\$STEER_SCRIPT")@@' || :
+mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@' || :
 seed suppressed
-kill_arm control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces S1's allow"
-if mut m1-no-subtract '/^  FAILED_CHECKS="\$REMAINING"$/d'; then
-  kill_arm m1-no-subtract deny "$W" "M1: computing the subtraction and never applying it DENIES S1 — the arm can fire"
+if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces S1's allow"; then B_ctlS1=1; fi
+if mok m1-no-subtract; then
+  kill_arm "$(( ${B_S1:-0} && ${B_ctlS1:-0} ))" m1-no-subtract deny "$W" "M1: computing the subtraction and never applying it DENIES S1 — the arm can fire"
 fi
-if mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SUPPRESSED_CHECKS" ]; then@'; then
-  kill_arm m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' is INVISIBLE on S1 — which is why S5 exists"
+if mok m5-any-suppression-lifts; then
+  hold_arm t m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' is INVISIBLE on S1 — which is why S5 exists"
 fi
-if mut m6b-key-drops-verifier 's@|\$(ckey "\$STEER_SCRIPT")@@'; then
-  kill_arm m6b-key-drops-verifier allow "$W" "M6b: dropping the VERIFIER term from the cache key does not move S1 itself"
+if mok m6b-key-drops-verifier; then
+  hold_arm t m6b-key-drops-verifier allow "$W" "M6b: dropping the VERIFIER term from the cache key does not move S1 itself"
 fi
-if mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@'; then
-  kill_arm m6-key-drops-escalations allow "$W" "M6: dropping the escalations term from the cache key does not move S1 itself"
+if mok m6-key-drops-escalations; then
+  hold_arm t m6-key-drops-escalations allow "$W" "M6: dropping the escalations term from the cache key does not move S1 itself"
+fi
+if mok m9-substring-join; then
+  hold_arm t m9-substring-join allow "$W" "M9: ...and S1 is UNCHANGED under it (the mutant moves only its own arm)"
+fi
+if mok m2-no-catalog-join; then
+  hold_arm t m2-no-catalog-join allow "$W" "M2: ...and S1 is UNCHANGED under it (the mutant moves only its own arm)"
+fi
+if mok m3-bare-is-wildcard; then
+  hold_arm t m3-bare-is-wildcard allow "$W" "M3: ...and S1 is UNCHANGED under it (the mutant moves only its own arm)"
 fi
 rm -rf "$W"
+# THE S1 TWINS OF M8, M4 AND M7 EACH GET A FRESH WORKSPACE. Their mutated lines sit upstream of the cache write and the
+# cache key omits the hook, so a twin driven in the control's already-warmed workspace reads the control's cached rows
+# and never reaches its own mutation.
+for _s1t in m8-no-cite-verification:M8 m4-absence-is-coverage:M4 m7-ignore-sibling-rc:M7; do
+  mok "${_s1t%%:*}" || continue
+  seed suppressed
+  hold_arm t "${_s1t%%:*}" allow "$W" "${_s1t##*:}: ...and S1 is UNCHANGED under it (the mutant moves only its own arm)"
+  rm -rf "$W"
+done
 
 seed suppressed-partial
-if [ -f "$MW/m5-any-suppression-lifts.sh" ]; then
-  kill_arm m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' ALLOWS S5 — the arm can fire on the fail-open wrong fix"
+if mok m5-any-suppression-lifts; then
+  kill_arm "$(( ${B_S5:-0} && ${B_ctlS1:-0} ))" m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' ALLOWS S5 — the arm can fire on the fail-open wrong fix"
 fi
-if [ -f "$MW/m1-no-subtract.sh" ]; then
-  kill_arm m1-no-subtract deny "$W" "M1: ...and S5 is UNCHANGED under M1 (the mutants kill only their own arms)"
+if mok m1-no-subtract; then
+  hold_arm t m1-no-subtract deny "$W" "M1: ...and S5 is UNCHANGED under M1 (the mutants move only their own arms)"
 fi
 rm -rf "$W"
 
 # M8 is the whole BLOCKER as a mutation: drop the citation verification and every covering row
 # is taken on trust, which is the state this fixture's own subject shipped in.
 seed suppressed-forged
-if mut m8-no-cite-verification 's@if cite_verifies "\${_rauth:-}"; then@if true; then@'; then
-  kill_arm m8-no-cite-verification allow "$W" "M8: dropping the citation check ALLOWS a lead-authored suppression — the verification is what keeps arm 7b out of the lead's reach"
+if mok m8-no-cite-verification; then
+  kill_arm "$(( ${B_S10:-0} && ${B_ctlS1:-0} ))" m8-no-cite-verification allow "$W" "M8: dropping the citation check ALLOWS a lead-authored suppression — the verification is what keeps arm 7b out of the lead's reach"
 fi
 rm -rf "$W"
 
 # M9: the id grain. `-qxF` -> `-qF` is one character and acquits a FAIL on 3 under 3a.
 seed suppressed-superset
-if mut m9-substring-join 's@if grep -qxF "\$_c" <<<"\$COVERED"; then@if grep -qF "$_c" <<<"$COVERED"; then@'; then
-  kill_arm m9-substring-join allow "$W" "M9: a substring covered-set join ALLOWS S11 — the whole-token match is load-bearing"
+if mok m9-substring-join; then
+  kill_arm "$(( ${B_S11:-0} && ${B_ctlS1:-0} ))" m9-substring-join allow "$W" "M9: a substring covered-set join ALLOWS S11 — the whole-token match is load-bearing"
 fi
 rm -rf "$W"
 
@@ -1252,17 +1459,13 @@ w_drive() { # <case> [hook] -> 0 when the lead's edit is ALLOWED
 w_p1() { w_drive waived-real "${1:-}" && grep -q 'FAIL_WAIVED under a verified waiver (7)' "$WLOG" 2>/dev/null; local r=$?; rm -rf "$W"; return $r; }
 w_p2() { ! w_drive waived-fabricated "${1:-}" && case "$W_OUT" in *'check(s) `7`'*) true ;; *) false ;; esac; local r=$?; rm -rf "$W"; return $r; }
 w_p3() { ! w_drive waived-noverifier "${1:-}" && case "$W_OUT" in *'check(s) `7`'*) true ;; *) false ;; esac; local r=$?; rm -rf "$W"; return $r; }
-W_BASE=1
-if w_p1; then ok "W1: FAIL_WAIVED under a real, verified OVERRIDDEN waiver -> ALLOWED, and logged as waived"
-else bad "W1: a FAIL_WAIVED whose waiver_id names a verified OVERRIDDEN entry stayed LOCKED (or allowed silently)"; W_BASE=0; fi
-if w_p2; then ok "W2: FAIL_WAIVED naming a fabricated waiver_id -> DENIED, check 7 named"
-else bad "W2: a FAIL_WAIVED under a waiver_id no escalation entry carries ESCAPED the lock"; W_BASE=0; fi
-if w_p3; then ok "W3: FAIL_WAIVED whose waiver cannot be verified (no citation verifier) -> DENIED"
-else bad "W3: the waiver was taken without its citation being verifiable — the lock failed open"; W_BASE=0; fi
+if w_p1; then ok "W1: FAIL_WAIVED under a real, verified OVERRIDDEN waiver -> ALLOWED, and logged as waived"; B_W1=1
+else bad "W1: a FAIL_WAIVED whose waiver_id names a verified OVERRIDDEN entry stayed LOCKED (or allowed silently)"; fi
+if w_p2; then ok "W2: FAIL_WAIVED naming a fabricated waiver_id -> DENIED, check 7 named"; B_W2=1
+else bad "W2: a FAIL_WAIVED under a waiver_id no escalation entry carries ESCAPED the lock"; fi
+if w_p3; then ok "W3: FAIL_WAIVED whose waiver cannot be verified (no citation verifier) -> DENIED"; B_W3=1
+else bad "W3: the waiver was taken without its citation being verifiable — the lock failed open"; fi
 
-# W-MJ: the waiver_id join dropped — any verified waiving entry lifts any FAIL_WAIVED. Killed by W2
-# alone (W1 holds: the id is real; W3 holds: nothing verifies, so no entry exists to lift it).
-# Scored only when W1-W3 passed unmutated in this run.
 # W4/W5: arm 7a over a FAIL_WAIVED-only pass, one property apart. The newer verdict records
 # check 7 FAIL_WAIVED under the REAL waiver, so arm 7b alone would ALLOW it; only the dispatch
 # binding separates the two. Unbound -> it may not acquit: DENY, logged GATE_VERDICT_UNBOUND,
@@ -1290,102 +1493,109 @@ wn_locked() { # <case> <hook|""> <the check(s) the deny must name, exactly> -> 0
 # W6: the plain FAIL on 7 stays; the waived 7 row is lifted, so `7` is the one left standing.
 w_p6() { wn_locked waived-forged-dup "${1:-}" 7; }
 # W7: the null-id plain FAIL stays failing under the token `null`, never as a word that vanishes.
-w_p7() { wn_locked waived-forged-nullid "${1:-}" null; }
+# The pass is UNBOUND, so no waiver applies to it and its FAIL_WAIVED 7 reads as a plain FAIL too:
+# the deny names `null 7`, and the older bound pass's 7 under OTHER PASSES.
+w_p7() { wn_locked waived-forged-nullid "${1:-}" "null 7"; }
 w_p8() { seed waived-forged-two; local o; o="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${1:-$HOOK}")"
   denied "$o" && grep -q 'Adjudicating on story-20260811T200000Z' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null
   local r=$?; rm -rf "$W"; return $r; }
 w_p9() { w_drive waived-tab "${1:-}" && grep -q 'FAIL_WAIVED under a verified waiver (7)' "$WLOG" 2>/dev/null; local r=$?; rm -rf "$W"; return $r; }
-WN_BASE=1
-if w_p6; then ok "W6: an unbound FAIL_WAIVED verdict carrying a PLAIN FAIL on the same check 7 -> DENIED; a waiver never lifts a plain FAIL row"
-else bad "W6: a plain FAIL sharing the waived check's id was lifted by the waiver"; WN_BASE=0; fi
-if w_p7; then ok "W7: the same verdict with a plain FAIL whose check_id is null -> DENIED"
-else bad "W7: a null-id plain FAIL vanished and the waiver opened the lock"; WN_BASE=0; fi
-if w_p8; then ok "W8: two forged FAIL_WAIVED-only passes, nothing bound -> DENIED, the second forgery adjudicated as a CONVICT-ONLY substitute"
-else bad "W8: the unbound substitute was acquitted by its own waiver"; WN_BASE=0; fi
-if w_p9; then ok "W9: the real waiver_id with a trailing TAB -> ALLOWED, as Check 26's rstrip() reads it"
-else bad "W9: a tab-trailing waiver_id the gate accepts stayed LOCKED — the guard and Check 26 disagree about one entry"; WN_BASE=0; fi
-wn_score() { # <mutant> <expected dead ids> <label>
-  local d=""; w_p6 "$MW/$1.sh" || d="$d 6"; w_p7 "$MW/$1.sh" || d="$d 7"; w_p8 "$MW/$1.sh" || d="$d 8"; w_p9 "$MW/$1.sh" || d="$d 9"
-  d="${d# }"
-  if [ "$d" = "$2" ]; then ok "$3: KILLED by W[$2] and nothing else"; else bad "$3: failed W[$d], expected exactly W[$2]"; fi
+# W10: W6 with the newer pass BOUND. An unbound pass takes no waiver at all, so W6 can no longer
+# see a waiver lifting a plain FAIL by id; a bound one takes its waiver, and the plain 7 stays.
+w_p10() { wn_locked waived-forged-dup-bound "${1:-}" 7; }
+# W11: W8 with the real failing pass removed. The only FAILs recorded are the two forgeries'
+# FAIL_WAIVED rows, so only the convict-only reading of a waiver stands between them and an allow.
+w_p11() { wn_locked waived-forged-two-only "${1:-}" 7; }
+if w_p6; then ok "W6: an unbound FAIL_WAIVED verdict carrying a PLAIN FAIL on the same check 7 -> DENIED; a waiver never lifts a plain FAIL row"; B_W6=1
+else bad "W6: a plain FAIL sharing the waived check's id was lifted by the waiver"; fi
+if w_p7; then ok "W7: the same verdict with a plain FAIL whose check_id is null -> DENIED"; B_W7=1
+else bad "W7: a null-id plain FAIL vanished and the waiver opened the lock"; fi
+if w_p8; then ok "W8: two forged FAIL_WAIVED-only passes, nothing bound -> DENIED, the second forgery adjudicated as a CONVICT-ONLY substitute"; B_W8=1
+else bad "W8: the unbound substitute was acquitted by its own waiver"; fi
+if w_p9; then ok "W9: the real waiver_id with a trailing TAB -> ALLOWED, as Check 26's rstrip() reads it"; B_W9=1
+else bad "W9: a tab-trailing waiver_id the gate accepts stayed LOCKED — the guard and Check 26 disagree about one entry"; fi
+if w_p10; then ok "W10: a BOUND verdict carrying a PLAIN FAIL beside its waived check 7 -> DENIED on 7; the waiver lifts only the waived row"; B_W10=1
+else bad "W10: on a bound pass the waiver lifted the plain FAIL sharing its check id"; fi
+if w_p11; then ok "W11: two forged FAIL_WAIVED-only passes and nothing else -> DENIED on 7; an unbound set takes no waiver"; B_W11=1
+else bad "W11: two unbound FAIL_WAIVED-only passes acquitted themselves through their own waiver"; fi
+wn_score() { # <mutant> <deciding id> <base-pass flag> <twin id> <label> [matrix-only ids...]
+  local m="$1" did="$2" tid="$4" xid hit=0
+  "w_p$did" "$MW/$m.sh" || hit=1
+  mx_kill "$3" "$m" "W$did" "$hit" "$5"
+  hit=0; "w_p$tid" "$MW/$m.sh" && hit=1
+  mx_hold t "$m" "W$tid" "$hit" "$m: ...and W$tid is UNCHANGED under it (the mutant moves only its own arm)"
+  for xid in "${@:6}"; do
+    mx_run x || continue
+    mx_count x
+    hit=0; "w_p$xid" "$MW/$m.sh" && hit=1
+    mx_hold x "$m" "W$xid" "$hit" "-"
+  done
 }
-if [ "$WN_BASE" -ne 1 ]; then
-  bad "W-MP/W-MS not scored: W6-W9 did not pass unmutated in this run, so a mutant verdict would not be about its mutation"
-else
-  # W-MP: the partition by KIND removed — plain FAIL ids go through the waiver set by id.
-  if mut wmp-no-kind-partition 's@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
-    wn_score wmp-no-kind-partition 6 "W-MP (a waiver lifts a plain FAIL by its check id)"
-  fi
-  # W-ME: the B1 fix reverted WHOLE -- LIVE_CLEAN by string equality of the two id lists AND the
-  # waiver lifting by check id. Both layers, because on the new fail_sets the string test alone is
-  # EQUIVALENT to the count (FAILED_CHECKS is built PLAIN then WAIVED, so the lists are equal
-  # exactly when no plain FAIL exists) and a one-layer revert would kill nothing.
-  if mut wme-string-equality 's@^  case "\$PLAIN_N" in \[1-9\]|\[1-9\]\[0-9\]\*) ;; \*) LIVE_CLEAN=1 ;; esac$@  [ "$FAILED_CHECKS" != "$WAIVED_CANDIDATES" ] || LIVE_CLEAN=1@;s@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
-    wn_score wme-string-equality 6 "W-ME (B1 reverted: string-equality LIVE_CLEAN and the id-keyed lift)"
-  fi
-  # W-MS: the unbound substitute keeps its FAIL_WAIVED rows and takes the waiver join.
-  if mut wms-substitute-waives '/^  PLAIN_FAILS="\$FAILED_CHECKS"; WAIVED_CANDIDATES=""$/d'; then
-    wn_score wms-substitute-waives 8 "W-MS (the unbound substitute is acquitted by its own waiver)"
-  fi
+# W-MP: the partition by KIND removed — plain FAIL ids go through the waiver set by id. Decided by W10; W9 is the twin.
+if mut wmp-no-kind-partition 's@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
+  wn_score wmp-no-kind-partition 10 "${B_W10:-0}" 9 "W-MP (a waiver lifts a plain FAIL by its check id)" 6 7 8 11
+fi
+# W-ME: the B1 fix reverted WHOLE -- LIVE_CLEAN by string equality of the two id lists AND the
+# waiver lifting by check id. Both layers, because on the new fail_sets the string test alone is
+# EQUIVALENT to the count (FAILED_CHECKS is built PLAIN then WAIVED, so the lists are equal
+# exactly when no plain FAIL exists) and a one-layer revert would change nothing.
+if mut wme-string-equality 's@^  case "\$PLAIN_N" in \[1-9\]|\[1-9\]\[0-9\]\*) ;; \*) LIVE_CLEAN=1 ;; esac$@  [ "$FAILED_CHECKS" != "$WAIVED_CANDIDATES" ] || LIVE_CLEAN=1@;s@^  for _c in \$PLAIN_FAILS; do$@  for _c in ""; do@;s@^  for _c in \$WAIVED_CANDIDATES; do$@  for _c in $FAILED_CHECKS; do@'; then
+  wn_score wme-string-equality 10 "${B_W10:-0}" 9 "W-ME (B1 reverted: string-equality LIVE_CLEAN and the id-keyed lift)" 6 7 8 11
+fi
+# W-MS: an unbound convict set keeps its FAIL_WAIVED rows and takes the waiver join. The reset
+# sits in the convict-set builder, before arm 7b's fetch, so `--waivers` is asked again under it.
+# W8 cannot see it any more (the older plain FAIL denies either way); W11 can, and W9 must hold.
+# W7 moves too, and that is the same property rather than an entanglement: W7's pass is unbound,
+# so its expected text `null 7` carries the waived 7 read as a plain FAIL, and under the mutant
+# the waiver lifts it and the deny names `null` alone. W11 owns the verdict flip; W7 owns the text.
+if mut wms-substitute-waives '/^  WAIVED_CANDIDATES=""$/d'; then
+  wn_score wms-substitute-waives 11 "${B_W11:-0}" 9 "W-MS (the unbound substitute is acquitted by its own waiver)" 6 7 8 10
 fi
 
-if [ "$W_BASE" -ne 1 ]; then
-  bad "W-MJ not scored: W1-W3 did not pass unmutated in this run, so a mutant verdict would not be about its mutation"
-elif mut wmj-no-waiver-join 's@{c: \$c, ok: (\$w != null and \$n != null@{c: $c, ok: (true or $w != null and $n != null@'; then
-  _wd=""
-  w_p1 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 1"
-  w_p2 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 2"
-  w_p3 "$MW/wmj-no-waiver-join.sh" || _wd="$_wd 3"
-  if [ "$_wd" = " 2" ]; then ok "W-MJ: dropping the waiver_id join is KILLED by W2 (fabricated id) and nothing else"
-  else bad "W-MJ: dropping the waiver_id join failed W[${_wd# }], expected exactly W[2]"; fi
+# W-MJ: the waiver_id join dropped — any verified waiving entry lifts any FAIL_WAIVED. Decided by W2
+# alone (W1 holds: the id is real; W3 holds: nothing verifies, so no entry exists to lift it).
+if mut wmj-no-waiver-join 's@{c: \$c, ok: (\$w != null and \$n != null@{c: $c, ok: (true or $w != null and $n != null@'; then
+  wn_score wmj-no-waiver-join 2 "${B_W2:-0}" 1 "W-MJ (dropping the waiver_id join lifts a FABRICATED waiver id)" 3
 fi
-seed suppressed
-if [ -f "$MW/m9-substring-join.sh" ]; then
-  kill_arm m9-substring-join allow "$W" "M9: ...and S1 is UNCHANGED under it (the mutant kills only its own arm)"
-fi
-rm -rf "$W"
+
 
 seed suppressed-wrongcat
-if mut m2-no-catalog-join 's@if (c == want) print \$2@print $2@'; then
-  kill_arm m2-no-catalog-join allow "$W" "M2: dropping the catalog from the join ALLOWS S3 — the catalog half of the key is load-bearing"
+if mok m2-no-catalog-join; then
+  kill_arm "$(( ${B_S3:-0} && ${B_ctlS1:-0} ))" m2-no-catalog-join allow "$W" "M2: dropping the catalog from the join ALLOWS S3 — the catalog half of the key is load-bearing"
 fi
 rm -rf "$W"
 
 seed suppressed-bare
-if mut m3-bare-is-wildcard 's@if (c == want) print \$2@if (c == want || $1 == "") print $2@'; then
-  kill_arm m3-bare-is-wildcard allow "$W" "M3: treating a bare bracket as a wildcard ALLOWS S4 — the bare-means-core rule is load-bearing"
+if mok m3-bare-is-wildcard; then
+  kill_arm "$(( ${B_S4:-0} && ${B_ctlS1:-0} ))" m3-bare-is-wildcard allow "$W" "M3: treating a bare bracket as a wildcard ALLOWS S4 — the bare-means-core rule is load-bearing"
 fi
-if [ -f "$MW/m2-no-catalog-join.sh" ]; then
-  : # S4 stands down for M2: the catalog join OWNS that case, and M2 reaches S4 too.
-fi
+# S4 stands down for M2: the catalog join OWNS that case, and M2 reaches S4 too.
 rm -rf "$W"
 
 seed suppressed-nosibling
-if mut m4-absence-is-coverage 's@elif \[ -z "\$SUPP_DIR" \]; then@elif [ -z "$SUPP_DIR" ]; then FAILED_CHECKS="";@'; then
-  kill_arm m4-absence-is-coverage allow "$W" "M4: reading an ABSENT sibling as 'everything is covered' ALLOWS S6 — the fail-closed posture is load-bearing"
+if mok m4-absence-is-coverage; then
+  kill_arm "$(( ${B_S6:-0} && ${B_ctlS1:-0} ))" m4-absence-is-coverage allow "$W" "M4: reading an ABSENT sibling as 'everything is covered' ALLOWS S6 — the fail-closed posture is load-bearing"
 fi
 rm -rf "$W"
 
 # M7 flips no verdict, so it is scored on the status string S9 asserts, not on deny/allow.
 seed suppressed-oldsibling
-if mut m7-ignore-sibling-rc 's@if \[ "\$SUPP_RC" -eq 0 \]; then@if true; then@'; then
+if mok m7-ignore-sibling-rc; then
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m7-ignore-sibling-rc.sh")"
-  if denied "$OUT"; then ok "M7: ignoring the sibling's return code still DENIES (this check moves no verdict, as declared)"
-  else bad "M7: ignoring the return code changed the VERDICT — then the declaration above is wrong and this needs a verdict arm"; fi
-  case "$OUT" in *"refused:"*) bad "M7: the mutant still reported 'refused' — S9's status arm cannot see the return-code check at all" ;;
-    *) ok "M7: ...and it reports the refusal as a clean read, which is exactly what S9's status arm catches" ;; esac
+  mx_hold t m7-ignore-sibling-rc verdict "$(denied "$OUT" && echo 1 || echo 0)" "M7: ignoring the sibling's return code still DENIES (this check moves no verdict, as declared)"
+  case "$OUT" in *"refused:"*) mx_kill "${B_S9:-0}" m7-ignore-sibling-rc status 0 "M7: the mutant still reported 'refused' — S9's status arm cannot see the return-code check at all" ;;
+    *) mx_kill "${B_S9:-0}" m7-ignore-sibling-rc status 1 "M7: ...and it reports the refusal as a clean read, which is exactly what S9's status arm catches" ;; esac
 fi
 rm -rf "$W"
 
 # M6 needs the two-call shape S1's cache arm uses: answer once, change the escalations file,
 # answer again. With the escalations term gone from the key the second answer is the stale one.
 seed suppressed
-if [ -f "$MW/m6-key-drops-escalations.sh" ]; then
+if mok m6-key-drops-escalations; then
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6-key-drops-escalations.sh")"
   : > "$W/docs/escalations/pending.md"
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6-key-drops-escalations.sh")"
-  if denied "$OUT"; then bad "M6: emptying the escalations file still DENIED under the mutant — the cache-invalidation arm asserts nothing"
-  else ok "M6: with the escalations term dropped from the key, an EMPTIED escalations file still lifts — the key term is load-bearing"; fi
+  mx_kill "${B_sinv:-0}" m6-key-drops-escalations emptied-escalations "$(denied "$OUT" && echo 0 || echo 1)" "M6: with the escalations term dropped from the key, an EMPTIED escalations file still lifts — the key term is load-bearing"
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/control.sh")"
   if denied "$OUT"; then ok "M6: ...and the unmutated copy DENIES on the same emptied file (the two sides differ)"
   else bad "M6: the unmutated copy also lifted on an emptied escalations file — the differential's two sides do not differ, so M6's kill is unearned"; fi
@@ -1398,7 +1608,7 @@ rm -rf "$W"
 # verdict is not in -- decides the lift and the edit is DENIED. The unmutated copy must ALLOW
 # on the same world, or the two sides do not differ and this kill is unearned.
 seed suppressed
-if [ -f "$MW/m6b-key-drops-verifier.sh" ]; then
+if mok m6b-key-drops-verifier; then
   M6B_STEER="$W/scripts/ai-dlc/validate-steering-budget.sh"
   [ -f "$M6B_STEER" ] || M6B_STEER="$W/core/scripts/validate-steering-budget.sh"
   if [ ! -f "$M6B_STEER" ]; then
@@ -1412,8 +1622,7 @@ if [ -f "$MW/m6b-key-drops-verifier.sh" ]; then
       printf '%s\nnot-this-catalog\t7\t3\t0\t2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"\tseeded cache poison\n' "$(head -1 "$M6B_CACHE")" > "$M6B_CACHE"
       printf '\n# fixture: the verifier changed under a warm cache\n' >> "$M6B_STEER"
       OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6b-key-drops-verifier.sh")"
-      if denied "$OUT"; then ok "M6b: with the verifier term dropped, a row cached under the OLD predicate is reused after the predicate changed — S1-verifier-key's term is load-bearing"
-      else bad "M6b DID NOT FAIL: the mutant still re-answered after the verifier changed, so S1-verifier-key is not testing that term"; fi
+      mx_kill "${B_vkey:-0}" m6b-key-drops-verifier changed-verifier "$(denied "$OUT" && echo 1 || echo 0)" "M6b: with the verifier term dropped, a row cached under the OLD predicate is reused after the predicate changed — S1-verifier-key's term is load-bearing"
       OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/control.sh")"
       if denied "$OUT"; then bad "M6b: the unmutated copy ALSO reused the stale row — the differential's two sides do not differ, so M6b's kill is unearned"
       else ok "M6b: ...and the unmutated copy re-answers on the same world (the two sides differ)"; fi
@@ -1423,6 +1632,9 @@ fi
 rm -rf "$W"
 
 # --- arm 7a's mutants -------------------------------------------------------------------
+# Their allow-kills are the CLEAN FAST PATH (a bound or no-ledger clean live pass exits before any
+# flow-log write), so the allow-event demand stands down for this block only; the rc guard holds.
+KM_ALLOW_SILENT=1
 # THE TWO WRONG FIXES FOR THIS ARM, written down before the arms were built:
 #   (W3) bind to a dispatch and ignore ORDER — "some gate-adjudicator ran near this nonce" is
 #        the obvious reading of "bind the verdict to a dispatch", and it is the one that fails
@@ -1435,22 +1647,23 @@ rm -rf "$W"
 # arm above is satisfied by a binding that never binds anything.
 seed forged-clean
 if mut m11-window-ignores-order 's@\. >= \$N and @@'; then
-  kill_arm m11-window-ignores-order allow "$W" "M11: a dispatch window that ignores ORDER binds the forged pass — 'a dispatch near this nonce' is not 'a dispatch after it'"
+  kill_arm "${B_7a:-0}" m11-window-ignores-order allow "$W" "M11: a dispatch window that ignores ORDER binds the forged pass — 'a dispatch near this nonce' is not 'a dispatch after it'"
 fi
-if mut m13-arm-unreachable '/^\[ -n "\$FAILED_CHECKS" \] || LIVE_CLEAN=1$/d'; then
-  kill_arm m13-arm-unreachable allow "$W" "M13: with LIVE_CLEAN never set, arm 7a never runs and the forgery clears — the arm is reachable"
-fi
+# M13 FLIPS NO VERDICT SINCE THE BINDING IS ASKED OF EVERY NEWEST PASS: without LIVE_CLEAN a
+# forged clean pass is still unbound and still convicts. What the line still gates is the clean
+# fast path, so M13 is scored on `forged-clean-bound` below by its flow log, not here.
+mut m13-arm-unreachable '/^\[ -n "\$FAILED_CHECKS" \] || LIVE_CLEAN=1$/d' || true
 if mut m14-write-never-binds 's@then "bound-write"@then "unbound"@'; then
-  kill_arm m14-write-never-binds deny "$W" "M14: ...and a B1 that never binds leaves this world UNCHANGED (the mutant kills only its own arm)"
+  hold_arm x m14-write-never-binds deny "$W" "M14: ...and a B1 that never binds leaves this world UNCHANGED (the mutant moves only its own arm)"
 fi
 rm -rf "$W"
 
 seed forged-clean-leadwrite
 if mut m12-records-every-writer 's@select((\.agent_id // "") != "")@select(true)@'; then
-  kill_arm m12-records-every-writer allow "$W" "M12: a write ledger that does not require the harness's agent_id lets a LEAD write bind its own verdict"
+  kill_arm "${B_7alw:-0}" m12-records-every-writer allow "$W" "M12: a write ledger that does not require the harness's agent_id lets a LEAD write bind its own verdict"
 fi
-if [ -f "$MW/m11-window-ignores-order.sh" ]; then
-  kill_arm m11-window-ignores-order allow "$W" "M11: ...and W3 acquits this world too — both wrong fixes fail open, in different places"
+if mok m11-window-ignores-order; then
+  hold_arm x m11-window-ignores-order deny "$W" "M11: ...and W3 acquits this world too — both wrong fixes fail open, in different places"
 fi
 rm -rf "$W"
 
@@ -1458,14 +1671,32 @@ rm -rf "$W"
 # only ever denies would pass every assertion above. M14 makes B1 unable to bind and this
 # world must go red — that is what proves the allow is a measurement and not a default.
 seed forged-clean-bound
-kill_arm control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"
-if [ -f "$MW/m14-write-never-binds.sh" ]; then
-  kill_arm m14-write-never-binds deny "$W" "M14: a B1 arm that never returns bound-write DENIES a legitimately bound pass — the acquitting arm can fire"
+if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"; then B_ctl7a=1; fi
+if mok m14-write-never-binds; then
+  kill_arm "$(( ${B_7abound:-0} && ${B_ctl7a:-0} ))" m14-write-never-binds deny "$W" "M14: a B1 arm that never returns bound-write DENIES a legitimately bound pass — the acquitting arm can fire"
 fi
-if [ -f "$MW/m12-records-every-writer.sh" ]; then
-  kill_arm m12-records-every-writer allow "$W" "M12: ...and W4 leaves the honest world UNCHANGED, which is why it needs its own"
+if mok m12-records-every-writer; then
+  hold_arm x m12-records-every-writer allow "$W" "M12: ...and W4 leaves the honest world UNCHANGED, which is why it needs its own"
 fi
 rm -rf "$W"
+# M13 on its observable. A bound clean pass leaves the guard at the clean fast path, which writes
+# NOTHING to the flow log; with LIVE_CLEAN never set it goes on through arm 7b and logs an empty
+# partition as GATE_REMEDIATION_SUPPRESSED. Both allow, so the arm is the log, with the unmutated
+# copy as the side that must differ.
+if mok m13-arm-unreachable; then
+  for _m13 in control m13-arm-unreachable; do
+    seed forged-clean-bound
+    OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/$_m13.sh")"
+    _m13log="$(grep -c 'GATE_REMEDIATION_SUPPRESSED' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)" || _m13log=0
+    if denied "$OUT"; then bad "M13 ($_m13): the bound clean pass was DENIED — the observable below is about the wrong outcome"
+    elif [ "$_m13" = control ]; then
+      if [ "$_m13log" -eq 0 ]; then ok "M13: the unmutated copy clears a bound clean pass at the fast path, logging no GATE_REMEDIATION_SUPPRESSED"; B_m13ctl=1
+      else bad "M13: the unmutated copy logged GATE_REMEDIATION_SUPPRESSED on a bound clean pass — the fast path is gone, and M13 has no subject"; fi
+    elif [ "$_m13log" -gt 0 ]; then mx_kill "${B_m13ctl:-0}" m13-arm-unreachable fast-path 1 "M13: with LIVE_CLEAN never set, the bound clean pass falls through to arm 7b and logs GATE_REMEDIATION_SUPPRESSED — the line gates the fast path"
+    else mx_kill "${B_m13ctl:-0}" m13-arm-unreachable fast-path 0 "M13: deleting the LIVE_CLEAN line changed nothing observable — the line is not load-bearing"; fi
+    rm -rf "$W"
+  done
+fi
 
 # THE WINDOW'S UPPER BOUND UNDER MUTATION. M15 widens the window to 10^9, which is the fifth
 # wrong implementation the batch-63 adversary built: every clause and every anchor above
@@ -1474,12 +1705,12 @@ rm -rf "$W"
 # came from the bound and not from the arm going dark.
 seed forged-clean-latewindow
 if mut m15-window-unbounded 's@ and \. <= (\$N + \$win)@ and . <= (\$N + 1000000000)@'; then
-  kill_arm m15-window-unbounded allow "$W" "M15: a window with no upper bound binds the forged pass to a dispatch 901s later — the size of the window is a property this fixture holds"
+  kill_arm "${B_7alate:-0}" m15-window-unbounded allow "$W" "M15: a window with no upper bound binds the forged pass to a dispatch 901s later — the size of the window is a property this fixture holds"
 fi
 rm -rf "$W"
 seed forged-clean
-if [ -f "$MW/m15-window-unbounded.sh" ]; then
-  kill_arm m15-window-unbounded deny "$W" "M15: ...and with no dispatch after the forged nonce at all, the unbounded window still DENIES (the kill above came from the bound)"
+if mok m15-window-unbounded; then
+  hold_arm x m15-window-unbounded deny "$W" "M15: ...and with no dispatch after the forged nonce at all, the unbounded window still DENIES (the verdict flip above came from the bound)"
 fi
 rm -rf "$W"
 
@@ -1488,12 +1719,12 @@ rm -rf "$W"
 # `forged-clean` (which HAS a bound failing pass) must keep denying under it.
 seed forged-clean-nobound
 if mut m16-nobound-acquits 's@  if \[ -z "\$BOUND_STEM" \]; then$@  if [ -z "$BOUND_STEM" ]; then exit 0;@'; then
-  kill_arm m16-nobound-acquits allow "$W" "M16: falling through to ALLOW when nothing is bound acquits a forged clean pass beside an unbound FAIL — the fallback convicts on the newest failing pass"
+  kill_arm "${B_7anb:-0}" m16-nobound-acquits allow "$W" "M16: falling through to ALLOW when nothing is bound acquits a forged clean pass beside an unbound FAIL — the fallback convicts on the newest failing pass"
 fi
 rm -rf "$W"
 seed forged-clean
-if [ -f "$MW/m16-nobound-acquits.sh" ]; then
-  kill_arm m16-nobound-acquits deny "$W" "M16: ...and where a BOUND failing pass exists the fall-through never runs, so this world still DENIES"
+if mok m16-nobound-acquits; then
+  hold_arm x m16-nobound-acquits deny "$W" "M16: ...and where a BOUND failing pass exists the fall-through never runs, so this world still DENIES"
 fi
 rm -rf "$W"
 
@@ -1502,10 +1733,435 @@ rm -rf "$W"
 # nonce ordering rather than added a binding, and the two are indistinguishable from the
 # forged world alone.
 seed stale-then-clean
-for _m7a in m11-window-ignores-order m12-records-every-writer m14-write-never-binds m15-window-unbounded m16-nobound-acquits; do
-  [ -f "$MW/$_m7a.sh" ] || continue
-  kill_arm "$_m7a" allow "$W" "7a: ${_m7a} leaves the NO-LEDGER world allowing — the arm's subject is the ledger, not the second verdict"
+for _m7a in m11-window-ignores-order m12-records-every-writer m13-arm-unreachable m14-write-never-binds m15-window-unbounded m16-nobound-acquits; do
+  mok "$_m7a" || continue
+  hold_arm t "$_m7a" allow "$W" "7a: ${_m7a} leaves the NO-LEDGER world allowing — the arm's subject is the ledger, not the second verdict"
 done
+KM_ALLOW_SILENT=0
+rm -rf "$W"
+
+# =============================================================================
+# ARM 7a AT ACQUITTAL. An UNBOUND live pass that records a FAIL never reached the early binding
+# (that runs only when the live pass is clean), so a forged round-nonce pass recording only
+# COVERED FAILs was acquitted by arm 7b -- or by a repair record keyed on its own nonce -- and
+# the bound pass's uncovered FAIL beneath it was never read. Every world below ALLOWED on the
+# base hook except the convict control; the seeds are listed in `seed.sh` beside their cases.
+# An unbound pass may CONVICT and may never ACQUIT: each DENY world asserts the deny, the
+# `GATE_VERDICT_UNBOUND` flow event, and that the deny names the check the forger could not
+# cover. Each ALLOW twin is one property apart, so a guard that denies every unbound pass, or
+# every covered one, fails a twin.
+# =============================================================================
+aq_drive() { # <case> [hook] -> AQ_OUT, AQ_LOG; leaves the workspace at W
+  seed "$1"
+  AQ_OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${2:-$HOOK}")"
+  AQ_LOG="$(cat "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)"
+}
+aq_kill() { # <base-pass flag> <mutant> <case> <expect deny|allow> <label> -- the DECIDING cell, a fresh workspace per drive
+  seed "$3"; kill_arm "$1" "$2" "$4" "$W" "$5"; rm -rf "$W"; }
+aq_hold() { # <role t|x> <mutant> <case> <expect deny|allow> <label> -- a cell that must hold
+  mx_run "$1" || return 0
+  seed "$3"; hold_arm "$1" "$2" "$4" "$W" "$5"; rm -rf "$W"; }
+aq_names() { # <ids> -> 0 when the deny names exactly that uncovered set, for the pass it leads
+  # with or for another pass still owed (the `OTHER PASSES ... \`<stem>\` (<ids>)` clause)
+  case "$AQ_OUT" in *"check(s) \`$1\`"*|*"OTHER PASSES STILL OWED A REPAIR"*"\` ($1)"*) return 0 ;; esac; return 1; }
+aq_unbound() { case "$AQ_LOG" in *GATE_VERDICT_UNBOUND*) return 0 ;; esac; return 1; }
+aq_deny() { # <case> <ids the deny must name> <label> -- AQ_OK=1 when all three assertions held
+  local _aq0="$fails"
+  aq_drive "$1"
+  if denied "$AQ_OUT"; then ok "$3 -> DENIED"
+  else bad "$3 -> ALLOWED: an unbound pass acquitted the gate"; fi
+  if aq_unbound; then ok "$3: ...GATE_VERDICT_UNBOUND is in the flow log"
+  else bad "$3: ...no GATE_VERDICT_UNBOUND in the flow log — the substitution is invisible"; fi
+  if denied "$AQ_OUT" && aq_names "$2"; then ok "$3: ...and the deny names the uncovered check \`$2\`"
+  else bad "$3: ...the deny does not name the uncovered check \`$2\`"; fi
+  rm -rf "$W"
+  AQ_OK=0; [ "$fails" = "$_aq0" ] && AQ_OK=1
+}
+aq_allow() { # <case> <flow event that must be logged> <label> -- AQ_OK=1 when both assertions held
+  local _aq0="$fails"
+  aq_drive "$1"
+  if denied "$AQ_OUT"; then bad "$3 -> DENIED: the twin one property apart was refused"
+  else ok "$3 -> ALLOWED"; fi
+  case "$AQ_LOG" in *"$2"*) ok "$3: ...and $2 is logged" ;; *) bad "$3: ...$2 is not in the flow log" ;; esac
+  rm -rf "$W"
+  AQ_OK=0; [ "$fails" = "$_aq0" ] && AQ_OK=1
+}
+
+aq_deny suppressed-forged-unbound 3a "AQ-A (L2): a bound pass FAILing 3a+7, then an UNBOUND pass FAILing only the suppressed 7"
+if [ "$AQ_OK" = 1 ]; then B_AQ_A=1; fi
+aq_allow suppressed-forged-bound GATE_REMEDIATION_SUPPRESSED "AQ-A twin: the same newer pass BOUND by its write row"
+aq_allow suppressed-unbound-substitute-covered GATE_REMEDIATION_SUPPRESSED "AQ-A twin: every FAIL in the convict set is covered"
+aq_drive suppressed-unbound-substitute-covered
+if aq_unbound; then ok "AQ-A twin: ...GATE_VERDICT_UNBOUND is still logged on the covered allow (the substitute was re-partitioned, not skipped)"
+else bad "AQ-A twin: the covered allow logged no GATE_VERDICT_UNBOUND — the binding was never asked on this exit"; fi
+rm -rf "$W"
+aq_deny subst-newer-unbound-fail 3a "AQ-B: a bound CLEAN pass, a NEWER unbound pass FAILing 3a, a forged clean live pass"
+if [ "$AQ_OK" = 1 ]; then B_AQ_B=1; fi
+aq_deny subst-nobound-older-fail 3a "AQ-L1: nothing bound, an OLDER unbound pass FAILing 3a, a live pass FAILing only the suppressed 7"
+aq_deny subst-two-forged 3a "AQ-2F: nothing bound, a real FAIL on 3a under TWO forged passes FAILing only the suppressed 7"
+# With nothing bound, the flow log must say the set it convicted on is itself unbound.
+for _aq in subst-nobound-older-fail subst-two-forged; do
+  aq_drive "$_aq"
+  case "$AQ_LOG" in *"itself unbound"*) ok "AQ ($_aq): ...the flow log says the convict set is itself unbound" ;;
+    *) bad "AQ ($_aq): the nothing-bound convict set is not flagged 'itself unbound' in the flow log" ;; esac
+  rm -rf "$W"
+done
+aq_deny subst-crossgate 3a "AQ-L3: planning s301 bound CLEAN, story s302 unbound FAIL 3a, forged implementation s303 FAIL 7 covered"
+if [ "$AQ_OK" = 1 ]; then B_AQ_L3=1; fi
+aq_allow subst-percatalog GATE_REMEDIATION_SUPPRESSED "AQ-CAT: ext-catalog passes FAILing 7 over a bound core CLEAN pass, \`[ext-catalog] 7\` in force"
+if [ "$AQ_OK" = 1 ]; then B_AQ_CAT=1; fi
+aq_drive subst-percatalog
+if aq_unbound; then ok "AQ-CAT: ...GATE_VERDICT_UNBOUND is logged before the suppressed allow"
+else bad "AQ-CAT: no GATE_VERDICT_UNBOUND on the per-catalog allow"; fi
+rm -rf "$W"
+aq_deny subst-repair-unbound 3a "AQ-R8: a repair record keyed on the UNBOUND live nonce, over a bound pass FAILing 3a"
+aq_allow subst-repair-both GATE_REMEDIATION_LIFTED "AQ-R8 twin: each contributing pass carries its own repair record"
+# THE CONVICT CONTROL. The live pass is unbound and its OWN FAIL on 3a is uncovered; that was a
+# deny on the base hook and stays one, on the live pass's own check.
+aq_drive subst-convict-own
+if denied "$AQ_OUT" && aq_names 3a; then ok "AQ-CONVICT: an unbound live pass with an uncovered FAIL on 3a -> DENIED on its own check"; B_AQ_CONVICT=1
+else bad "AQ-CONVICT: an unbound live pass's own uncovered FAIL no longer convicts on 3a"; fi
+case "$AQ_OUT" in *'Gate pass `story-20260811T210000Z` recorded FAIL on check(s) `3a`'*) ok "AQ-CONVICT: ...and the deny leads with the live nonce" ;;
+  *) bad "AQ-CONVICT: the deny does not lead with the live pass that owns 3a" ;; esac
+rm -rf "$W"
+# AQ-R8, the lead clause: the live pass's own 9 is named first, and the older bound pass's 3a is
+# owed by ITS nonce -- a record keyed on the live nonce lifts the live pass and nothing else.
+aq_drive subst-repair-unbound
+case "$AQ_OUT" in *'OTHER PASSES STILL OWED A REPAIR, newest first: `story-20260811T193044Z` (3a)'*) ok "AQ-R8: ...the deny says the bound pass's 3a is owed a record bound to story-20260811T193044Z" ;;
+  *) bad "AQ-R8: the deny does not name the bound pass still owed a repair by its own nonce" ;; esac
+rm -rf "$W"
+
+# --- MALFORMED INPUT IN THE GATE DIRECTORY. The convict set reads every pass in one query, so one
+# file the query cannot take -- a stem the shell splits (a space, a newline), a stem jq reads as an
+# option (`--`), a file nobody can open, a verdict that is two JSON documents -- must not make the
+# whole set fall back to the live pass alone. Each world is a shipped seed plus ONE such file or
+# edit; every one ALLOWED on the first cut of the fix and must DENY with GATE_VERDICT_UNBOUND.
+# A decoy is `{"verdicts":[]}`: it records no FAIL, so its only effect is on how the set is read.
+ad_mut() { # <mutator> -- applied to the workspace at W
+  local gd="$W/_bmad-output/gate-adjudication"
+  case "$1" in
+    space)  printf '{"verdicts":[]}\n' > "$gd/old decoy-20200101T000000Z.verdict.json" ;;
+    nl)     printf '{"verdicts":[]}\n' > "$gd/x
+old-20200101T000000Z.verdict.json" ;;
+    dash)   printf '{"verdicts":[]}\n' > "$gd/--seq-20260811T205900Z.verdict.json" ;;
+    unread) printf '{"verdicts":[]}\n' > "$gd/decoy-20260811T205900Z.verdict.json"
+            chmod 000 "$gd/decoy-20260811T205900Z.verdict.json" ;;
+    md-live)  printf '{}\n' >> "$gd/story-20260811T210000Z.verdict.json" ;;
+    md-bound) printf '{}\n' >> "$gd/story-20260811T193044Z.verdict.json" ;;
+    md-mid)   printf '{}\n' >> "$gd/story-20260811T200000Z.verdict.json" ;;
+    unparse)  printf '{not json\n' > "$gd/decoy-20260811T205900Z.verdict.json" ;;
+    # IN-WINDOW twins of the unsafe-stem shapes: dated between the bound pass (19:30:44Z) and the
+    # live one (21:00:00Z), so the window keeps them and only the unsafe-stem check can act. A
+    # 2020 decoy is older than the bound pass and the window drops it before that check runs.
+    iw-space) printf '{"verdicts":[]}\n' > "$gd/x y-20260811T200000Z.verdict.json" ;;
+    iw-nl)    printf '{"verdicts":[]}\n' > "$gd/x
+y-20260811T200000Z.verdict.json" ;;
+    iw-dash)  printf '{"verdicts":[]}\n' > "$gd/--seq-20260811T200000Z.verdict.json" ;;
+    # A safe stem jq prints NOTHING for, by two different paths. Zero bytes: jq reads no input
+    # from it and the one-query read SUCCEEDS without a row. Unparseable: the one-query read
+    # FAILS, the per-file re-read fails on this file again, and it still has no row. Both reach
+    # the join as a candidate with no row, which is the case the join must convict.
+    iw-zero)    : > "$gd/story-20260811T200000Z.verdict.json" ;;
+    # A forged in-window file ending in a bare scalar and NO newline: in jq's input stream the
+    # scalar runs straight into the NEXT file. `planning-` globs before the bound `story-` pass;
+    # `story-…T200000Z` globs before the live `story-…T210000Z` one. The honest neighbour must not
+    # be the record blamed, and must keep its own FAILs.
+    trail-bound) printf '{"catalog":"core","verdicts":[]}\n1' > "$gd/planning-20260811T200000Z.verdict.json" ;;
+    trail-live)  printf '{"catalog":"core","verdicts":[]}\n1' > "$gd/story-20260811T200000Z.verdict.json" ;;
+    # The same forged file on the all-covered world: there it is the ONLY thing that can deny,
+    # through its non-object document.
+    iw-nonobj)   printf '{"catalog":"core","verdicts":[]}\n1' > "$gd/story-20260811T200000Z.verdict.json" ;;
+    iw-unparse) printf '{not json\n' > "$gd/story-20260811T200000Z.verdict.json" ;;
+    none) ;;
+  esac
+}
+ad_drive() { # <case> <mutator> [hook] -> AQ_OUT, AQ_LOG; the workspace stays at W
+  seed "$1"; ad_mut "$2"
+  AQ_OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "${3:-$HOOK}")"
+  AQ_LOG="$(cat "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)"
+}
+ad_clean() { chmod -R u+rw "$W" 2>/dev/null; rm -rf "$W"; }
+# THE MALFORMED-INPUT WORLDS, one line each: <label>|<case>|<mutator>|<file the deny must name>.
+# Every arm and the mutants below iterate this one list, so a world added here is scored by both.
+# The name is the deny's own rendering: every byte outside [A-Za-z0-9._-] shown as `?`. The 2020
+# decoys carry none -- the window drops them, so on the fix they are never read at all and only
+# the old word-split read could trip on them. The IW worlds are on `suppressed-unbound-substitute-
+# covered`, which ALLOWS without its decoy (AD-IW-CONTROL), so the decoy is the only thing there
+# that can deny.
+AD_WORLDS='AD-SPACE|forged-clean|space|
+AD-NEWLINE|forged-clean|nl|
+AD-UNREADABLE|forged-clean|unread|`decoy-20260811T205900Z.verdict.json`
+AD-UNPARSEABLE|forged-clean|unparse|`decoy-20260811T205900Z.verdict.json`
+AD-DASH|forged-clean|dash|`--seq-20260811T205900Z.verdict.json`
+AD-A-SPACE|suppressed-forged-unbound|space|
+AD-B-SPACE|subst-newer-unbound-fail|space|
+AD-W4-SPACE|waived-forged-unbound|space|
+AD-CONVICT-MULTIDOC|subst-convict-own|md-live|
+AD-A-MULTIDOC|suppressed-forged-unbound|md-bound|
+AD-B-MULTIDOC|subst-newer-unbound-fail|md-mid|
+AD-IW-SPACE|suppressed-unbound-substitute-covered|iw-space|`x?y-20260811T200000Z.verdict.json`
+AD-IW-NEWLINE|suppressed-unbound-substitute-covered|iw-nl|`x?y-20260811T200000Z.verdict.json`
+AD-IW-DASH|suppressed-unbound-substitute-covered|iw-dash|`--seq-20260811T200000Z.verdict.json`
+AD-IW-ZERO|suppressed-unbound-substitute-covered|iw-zero|`story-20260811T200000Z.verdict.json`
+AD-IW-UNPARSE|suppressed-unbound-substitute-covered|iw-unparse|`story-20260811T200000Z.verdict.json`
+AD-IW-NONOBJ|suppressed-unbound-substitute-covered|iw-nonobj|`story-20260811T200000Z.verdict.json`
+AD-TRAIL-BOUND|suppressed-forged-unbound|trail-bound|
+AD-TRAIL-LIVE|subst-convict-own|trail-live|'
+# The newline world needs a filesystem that takes a newline in a name; say so if this one does not.
+_nlprobe="$(mktemp -d)"
+if printf 'x' > "$_nlprobe/a
+b" 2>/dev/null && [ -f "$_nlprobe/a
+b" ]; then AD_NL=1; else AD_NL=0; bad "AD-NEWLINE: FIXTURE BROKEN — this filesystem refuses a newline in a file name, so the newline world cannot be built"; fi
+rm -rf "$_nlprobe"
+ad_skip() { # <mutator> -> 0 when this world cannot be built here
+  case "$1" in nl|iw-nl) [ "$AD_NL" -eq 1 ] && return 1; return 0 ;; esac; return 1; }
+# AD-IW-CONTROL: the IW worlds' seed, no decoy. It must ALLOW, or the IW denials are not the decoy's.
+ad_drive suppressed-unbound-substitute-covered none
+if denied "$AQ_OUT"; then bad "AD-IW-CONTROL: the in-window worlds' seed DENIES with no decoy — the IW arms cannot attribute their deny to the decoy"
+else ok "AD-IW-CONTROL: the in-window worlds' seed with NO decoy -> ALLOWED (so each IW deny is the decoy's)"; fi
+ad_clean
+while IFS='|' read -r _al _ac _am _an; do
+  [ -n "$_al" ] || continue
+  ! ad_skip "$_am" || continue
+  _adf0="$fails"
+  ad_drive "$_ac" "$_am"
+  # chmod 000 does not stop a reader that bypasses permissions (root, some sandboxes); then the
+  # decoy is just a readable clean pass and this world asserts nothing about an unreadable one.
+  if [ "$_am" = unread ] && [ -r "$W/_bmad-output/gate-adjudication/decoy-20260811T205900Z.verdict.json" ]; then
+    bad "$_al: FIXTURE BROKEN — the chmod-000 decoy is still readable here, so the unreadable world was not built"
+    ad_clean; continue
+  fi
+  if denied "$AQ_OUT"; then ok "$_al ($_ac + $_am): DENIED"
+  else bad "$_al ($_ac + $_am): ALLOWED — one malformed file made the convict set fall back to the live pass alone"; fi
+  if aq_unbound; then ok "$_al: ...GATE_VERDICT_UNBOUND is in the flow log"
+  else bad "$_al: ...no GATE_VERDICT_UNBOUND in the flow log"; fi
+  if [ -n "$_an" ]; then
+    case "$AQ_OUT" in *"UNREADABLE GATE RECORDS: "*"$_an"*) ok "$_al: ...and the deny names $_an as an unreadable record" ;;
+      *) bad "$_al: the deny does not name $_an under UNREADABLE GATE RECORDS" ;; esac
+  fi
+  # THE TRAILING-SCALAR WORLDS: the deny names the honest pass's own 3a, and never blames that
+  # honest file as an unreadable record (the forged neighbour may be named; it is the bad one).
+  case "$_al" in
+    AD-TRAIL-BOUND|AD-TRAIL-LIVE)
+      _honest=story-20260811T193044Z; [ "$_al" = AD-TRAIL-LIVE ] && _honest=story-20260811T210000Z
+      if denied "$AQ_OUT" && aq_names 3a; then ok "$_al: ...and the deny names the honest pass's uncovered 3a"
+      else bad "$_al: the deny does not name 3a — the honest pass lost its FAIL to the forged neighbour"; fi
+      # The WHOLE record list, never its first entry: the forged neighbour is usually listed
+      # first, and a capture that stops at the first `.verdict.json` never reaches the honest one.
+      _ur="$(printf '%s' "$AQ_OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null \
+        | grep '^UNREADABLE GATE RECORDS:' | sed 's/ in `.*//' | head -1)"
+      case "$_ur" in *"$_honest"*) bad "$_al: UNREADABLE GATE RECORDS blames the HONEST file $_honest ($_ur)" ;;
+        *) ok "$_al: ...and no UNREADABLE GATE RECORDS line names the honest file $_honest" ;; esac ;;
+  esac
+  if [ "$_al" = AD-W4-SPACE ]; then
+    case "$AQ_LOG" in *"under a verified waiver"*) bad "AD-W4-SPACE: the flow log records the unbound pass's waiver as verified — its FAIL_WAIVED was lifted" ;;
+      *) ok "AD-W4-SPACE: ...and no waiver of the unbound pass was taken (no 'under a verified waiver' in the flow log)" ;; esac
+  fi
+  if [ "$fails" = "$_adf0" ]; then
+    case "$_al" in
+      AD-UNPARSEABLE) B_ad_unparseable=1 ;;
+      AD-DASH) B_ad_dash=1 ;;
+      AD-IW-SPACE) B_ad_iwspace=1 ;;
+      AD-SPACE) B_ad_space=1 ;;
+      AD-CONVICT-MULTIDOC) B_ad_multidoc=1 ;;
+      AD-IW-NONOBJ) B_ad_nonobj=1 ;;
+      AD-IW-ZERO) B_ad_zero=1 ;;
+      AD-IW-UNPARSE) B_ad_iwunparse=1 ;;
+      AD-TRAIL-BOUND) B_ad_trailbound=1 ;;
+    esac
+  fi
+  ad_clean
+done <<ADEOF
+$AD_WORLDS
+ADEOF
+
+# --- the malformed-input mutants. Each restores one way the set fell back to, or silently lost a
+# pass. A mutant is scored with one kill per world it owns, and on the bound twin, which must
+# still ALLOW, plus the convict control, which must still DENY (a dead copy ALLOWS everywhere).
+# `_LA` is base's live-only adjudication: drop the set, give the live pass back its own waivers,
+# allow a clean live pass, and otherwise send the live pass alone on to arm 7b.
+#   m-fallback-live-alone  a pass jq refuses adjudicates the live pass alone instead of convicting
+#                          as `(unreadable)`. Owns: AD-UNPARSEABLE, AD-IW-UNPARSE.
+#   (`_LA` once restored the live pass's waivers from `_lw`, a variable the fix removed; every
+#   `_LA` mutant then died under `set -u` and scored its kills by crashing. It re-reads them now.)
+#   m-unsafe-live-alone    an unsafe stem or an unreadable file adjudicates the live pass alone.
+#                          Owns: AD-UNREADABLE, AD-DASH, AD-IW-SPACE, AD-IW-NEWLINE, AD-IW-DASH.
+#   m-unsafe-dropped       an unsafe stem is DROPPED rather than convicted. Owns the IW worlds
+#                          only: the 2020 decoys never reach that check, and AD-DASH sits on
+#                          forged-clean, whose bound pass FAILs and denies with the decoy gone.
+#   m-stems-wordsplit      the candidates come from the word-split CONFORMING_STEMS with no
+#                          timestamp filter, and a word naming no file falls back to the live pass
+#                          alone -- the 2a9b768f7 read. Owns: AD-SPACE, AD-NEWLINE, AD-A-SPACE,
+#                          AD-B-SPACE, AD-W4-SPACE.
+#   m-multidoc-drops       a file carrying a second document drops out of the set (the multi-
+#                          document read alone). Owns the three MULTIDOC. The convict set is the
+#                          only read of the live pass's FAILs here (no union with arm 5's read),
+#                          so dropping the live file drops its own 3a too.
+#   m-join-drops           a pass whose per-file read printed nothing is DROPPED instead of
+#                          convicted. Owns AD-IW-UNPARSE (a zero-byte file never reaches this line:
+#                          jq's own empty check convicts it, which m-empty-doc-acquits owns).
+# Only names the hook defines: an `_LA` naming a removed variable dies under the hook's `set -u`.
+# Faithful to base's live-only path in all three of its parts: it LOGGED GATE_VERDICT_UNBOUND
+# first, it re-read the live pass's own fail sets (so its FAIL_WAIVED rows reach the waiver join
+# again), and it exited 0 on a clean live pass. `fail_sets` / `read_fail_sets` are the hook's own.
+_LA='log_event GATE_VERDICT_UNBOUND "fixture mutant: the live pass is adjudicated alone."; CONVICT=""; read_fail_sets "$(fail_sets "$LIVE_VERDICT")"; if [ -z "$FAILED_CHECKS" ]; then exit 0; fi; return 0'
+ad_kill() { # <mutant> <case> <mutator> -> 0 decided, 1 survived, 2 BROKEN; AD_EV the events
+  seed "$2"; ad_mut "$3"; km_run "$1" "$W"; AD_EV="$KM_EV"; local r
+  # Every AD world is unbound, so a mutant that reached a decision logged GATE_VERDICT_UNBOUND.
+  if [ "$KM_RC" -ne 0 ] || [ -z "$KM_EV" ]; then r=2
+  elif denied "$KM_OUT"; then r=1; else r=0; fi
+  AD_RC="$KM_RC"; ad_clean; return $r
+}
+ad_score() { # <mutant> <base-pass flag> <deciding world> [other owned worlds, matrix-only...]
+  local m="$1" others=" ${*:4} " al ac am an r hit role
+  while IFS='|' read -r al ac am an; do
+    [ -n "$al" ] || continue
+    if [ "$al" = "$3" ]; then role=d
+    else case "$others" in *" $al "*) role=x ;; *) continue ;; esac; fi
+    mx_run "$role" || continue
+    mx_count "$role"
+    ad_skip "$am" && continue
+    ad_kill "$m" "$ac" "$am"; r=$?
+    case "$r" in
+      0) hit=1 ;;
+      1) hit=0 ;;
+      *) bad "$m: $al — FIXTURE BROKEN: rc=$AD_RC, events [${AD_EV% }]; a dead mutant is not a kill"; continue ;;
+    esac
+    if [ "$role" = d ]; then mx_kill "$2" "$m" "$al" "$hit" "$m: decided by $al ($ac + $am) — events: ${AD_EV% }"
+    else mx_obs "$m" "$al" x "$hit"; fi
+  done <<ADEOF2
+$AD_WORLDS
+ADEOF2
+  KM_NEED_EV=1
+  aq_hold t "$m" suppressed-forged-bound allow "$m: ...and the bound twin is unchanged (still ALLOW)"
+  aq_hold x "$m" subst-convict-own deny "$m: ...and the convict control is unchanged (still DENY)"
+  KM_NEED_EV=0
+}
+# THE CRASH GUARD'S SEEDED CONTROL. The `_LA` that shipped crashed: it named `_lw`, which the fix
+# removed. Kept here once, on purpose, so the guard above is shown to fire: it must come back
+# BROKEN (2), never killed (0).
+# THE PER-FILE READ LINE every jq-failure mutant below anchors on, captured in two halves so no
+# replacement has to retype its `&&` (an `&` in a sed replacement is the whole match).
+_RD='^\(    \[ -r "\$_f" \] && { _n="\$(jq -rn "\$CONVICT_PROG" "\$_f" 2>/dev/null)"\) || _n=""; }$'
+if mut m-crash-control "s@${_RD}@\\1 || { CONVICT=\"\"; WAIVED_CANDIDATES=\"\$_lw\"; return 0; }; }@"; then
+  ad_kill m-crash-control suppressed-unbound-substitute-covered iw-unparse; _cr=$?
+  if [ "$_cr" -eq 2 ]; then ok "CONTROL m-crash-control: a mutant dying on an unbound variable (rc=$AD_RC) is reported BROKEN, not scored as a kill"
+  else bad "CRASH GUARD: a mutant that dies under set -u scored $_cr (0=decided, 1=survived) — a dead mutant can pass again"; fi
+fi
+# ...and the guard's OTHER half: a mutant that exits 0 having decided nothing. `exit 0` in place
+# of the convict set allows with rc=0 and writes no event; it must come back BROKEN too.
+if mut m-silent-control 's@^  unbound|unbound-malformed) unbound_convict_set ;;$@  unbound|unbound-malformed) exit 0 ;;@'; then
+  ad_kill m-silent-control suppressed-unbound-substitute-covered iw-unparse; _cr=$?
+  if [ "$_cr" -eq 2 ] && [ "$AD_RC" -eq 0 ]; then ok "CONTROL m-silent-control: a mutant that exits 0 and logs no event is reported BROKEN, not scored as a kill"
+  else bad "CRASH GUARD: a silent rc=0 mutant scored $_cr (rc=$AD_RC) — the event half of the guard cannot fire"; fi
+fi
+if mut m-fallback-live-alone "s@${_RD}@\\1 || { ${_LA}; }; }@"; then
+  ad_score m-fallback-live-alone "${B_ad_unparseable:-0}" AD-UNPARSEABLE AD-IW-UNPARSE
+fi
+if mut m-unsafe-live-alone "s@^        continue ;;\$@        ${_LA} ;;@;s@^    \\[ -r \"\\\$_f\" \\] && {@    [ -r \"\$_f\" ] || { ${_LA}; }; [ -r \"\$_f\" ] \\&\\& {@"; then
+  ad_score m-unsafe-live-alone "${B_ad_dash:-0}" AD-DASH AD-UNREADABLE AD-IW-SPACE AD-IW-NEWLINE AD-IW-DASH
+fi
+if mut m-unsafe-dropped 's@^        _bad="\$(printf .*$@        continue@'; then
+  ad_score m-unsafe-dropped "${B_ad_iwspace:-0}" AD-IW-SPACE AD-IW-NEWLINE AD-IW-DASH
+fi
+if mut m-stems-wordsplit 's@^  for _f in "\$GATE_DIR"/\*\.verdict\.json; do$@  for _f in $(printf "%s" "$CONFORMING_STEMS" | sed "s|^|$GATE_DIR/|;s|$|.verdict.json|"); do@;s@^    \[ -f "\$_f" \] || continue$@    if [ ! -f "$_f" ]; then '"$_LA"'; fi@;s@^      \*) continue ;;$@      *) ;;@'; then
+  ad_score m-stems-wordsplit "${B_ad_space:-0}" AD-SPACE AD-NEWLINE AD-A-SPACE AD-B-SPACE AD-W4-SPACE
+fi
+if mut m-multidoc-drops 's@^\[inputs\] as \$docs$@([inputs] | if length > 1 then [{}] else . end) as $docs@'; then
+  ad_score m-multidoc-drops "${B_ad_multidoc:-0}" AD-CONVICT-MULTIDOC AD-A-MULTIDOC AD-B-MULTIDOC
+fi
+#   m-nonobj-acquits       a file with a non-object document reads as a pass with NO FAILs rather
+#                          than `(unreadable)`. Owns AD-IW-NONOBJ. It cannot see the TRAIL worlds:
+#                          each file is read alone, so a forger's unterminated scalar stays in the
+#                          forger's own file and never reaches the honest one either way.
+if mut m-nonobj-acquits 's@^  then \["(unreadable)", "(unreadable)", "(unreadable)", ""\]$@  then ["", "", "", ""]@'; then
+  ad_score m-nonobj-acquits "${B_ad_nonobj:-0}" AD-IW-NONOBJ
+fi
+#   m-empty-doc-acquits    a file holding NO document reads as a pass with no FAILs. Owns
+#                          AD-IW-ZERO (jq's own empty check, not the join, is what catches it now).
+if mut m-empty-doc-acquits 's@(\$docs | length) == 0 or @@'; then
+  ad_score m-empty-doc-acquits "${B_ad_zero:-0}" AD-IW-ZERO
+fi
+#   m-stream-bleed         the cross-file read the fix removed: each file is piped to jq after the
+#                          one before it, so a forger's unterminated scalar is completed by the
+#                          honest neighbour's bytes. The deny still stands, so this is scored on
+#                          what it NAMES: the honest pass's 3a lost, or the honest file blamed as
+#                          an unreadable record. Owns AD-TRAIL-BOUND and AD-TRAIL-LIVE.
+if mut m-stream-bleed "s@^\\(    \\[ -r \"\\\$_f\" \\] && { _n=\"\\\$(\\)jq -rn \"\\\$CONVICT_PROG\" \"\\\$_f\"\\( 2>/dev/null)\" || _n=\"\"; }\\)\$@\\1cat \${_pv:+\"\$_pv\"} \"\$_f\" | jq -rn \"\$CONVICT_PROG\"\\2; _pv=\"\$_f\"@"; then
+  while IFS='|' read -r _al _ac _am _an; do
+    case "$_al" in AD-TRAIL-BOUND) _sbrole=d ;; AD-TRAIL-LIVE) _sbrole=x ;; *) continue ;; esac
+    mx_run "$_sbrole" || continue
+    mx_count "$_sbrole"
+    _honest=story-20260811T193044Z; [ "$_al" = AD-TRAIL-LIVE ] && _honest=story-20260811T210000Z
+    seed "$_ac"; ad_mut "$_am"; km_run m-stream-bleed "$W"; AQ_OUT="$KM_OUT"
+    _ur="$(printf '%s' "$KM_OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null | grep '^UNREADABLE GATE RECORDS:' | sed 's/ in `.*//' | head -1)"
+    _sbhit=0
+    if [ "$KM_RC" -ne 0 ] || [ -z "$KM_EV" ]; then bad "m-stream-bleed: $_al — FIXTURE BROKEN: rc=$KM_RC, events [${KM_EV% }]"; ad_clean; continue
+    elif ! aq_names 3a; then _sbhit=1; _sbwhy="the honest pass's 3a is no longer named (events: ${KM_EV% })"
+    else case "$_ur" in *"$_honest"*) _sbhit=1; _sbwhy="the honest file $_honest is blamed as unreadable (events: ${KM_EV% })" ;; *) _sbwhy="$_al names 3a and does not blame $_honest under the mutant — the arm does not see the bleed" ;; esac
+    fi
+    if [ "$_sbrole" = d ]; then mx_kill "${B_ad_trailbound:-0}" m-stream-bleed "$_al" "$_sbhit" "m-stream-bleed: decided by $_al — $_sbwhy"
+    else mx_obs m-stream-bleed "$_al" x "$_sbhit"; fi
+    ad_clean
+  done <<ADEOF3
+$AD_WORLDS
+ADEOF3
+  KM_NEED_EV=1
+  aq_hold t m-stream-bleed suppressed-forged-bound allow "m-stream-bleed: ...and the bound twin is unchanged (still ALLOW)"
+  aq_hold x m-stream-bleed subst-convict-own deny "m-stream-bleed: ...and the convict control is unchanged (still DENY)"
+  KM_NEED_EV=0
+fi
+# THE ALLOW-EVENT GUARD'S SEEDED CONTROL: a silent `exit 0` where an allow was expected. On S1
+# (`suppressed`, a bound pass whose FAIL is covered) the real allow logs SUPPRESSED; this one logs
+# nothing and must be reported BROKEN, not scored as the allow it imitates.
+if mut m-silent-allow-control 's@^if \[ -z "\$FAILED_CHECKS" \]; then$@if true; then exit 0; fi; if [ -z "$FAILED_CHECKS" ]; then@'; then
+  seed suppressed
+  _sab="$fails"; hold_arm c m-silent-allow-control allow "$W" "m-silent-allow-control (must be reported BROKEN)" >/dev/null
+  if [ "$fails" -gt "$_sab" ]; then fails="$_sab"; ok "CONTROL m-silent-allow-control: a mutant that allows by a silent exit 0 is reported BROKEN, not scored as an allow"
+  else bad "ALLOW-EVENT GUARD: a silent exit 0 scored as the expected allow — the guard cannot fire"; fi
+  rm -rf "$W"
+fi
+if mut m-join-drops 's@^    \[ -n "\$_n" \] || _n="(unreadable).*$@    [ -n "$_n" ] || continue@'; then
+  ad_score m-join-drops "${B_ad_iwunparse:-0}" AD-IW-UNPARSE
+fi
+
+# --- arm 7a at acquittal, under mutation. Each mutant is scored on the seed it owns and on one
+# twin it must NOT move; every anchor is a line the at-acquittal fix introduced.
+#   m-livecl-only       the binding asked only of a CLEAN pass again (BL-837 itself): the forged
+#                       covered pass is acquitted by 7b. Twin: world B, whose live pass is clean.
+#   m-subst-no-failset  the convict set built and logged, and only the LIVE pass partitioned: the
+#                       other passes' FAILs are never read. Twin: the convict control (DENY).
+#   m-subst-bound-only  the set narrowed to the bound pass and the live one (the :1228 read): an
+#                       unbound FAIL newer than a clean bound pass is skipped. Owns L3 and world B.
+#                       Twin: world A, whose bound pass itself fails.
+#   m-subst-boundcat    every pass partitioned under the BOUND pass's catalog. Owns the per-catalog
+#                       allow. Twin: world A, all one catalog.
+# Each drive is a fresh workspace: arm 7b caches its rows, and these edits sit below that read.
+if mut m-livecl-only 's@^  unbound|unbound-malformed) unbound_convict_set ;;$@  unbound|unbound-malformed) [ "$LIVE_CLEAN" -eq 1 ] \&\& unbound_convict_set ;;@'; then
+  aq_kill "${B_AQ_A:-0}" m-livecl-only suppressed-forged-unbound allow "m-livecl-only: asking the binding of a clean pass only ALLOWS world A — the at-acquittal question is load-bearing"
+  aq_hold t m-livecl-only subst-newer-unbound-fail deny "m-livecl-only: ...and world B, a clean live pass, still DENIES under it"
+fi
+if mut m-subst-no-failset 's@^    partition_pass "\$_pc" "\${GATE_DIR}/\${_ps}.verdict.json"$@    [ "$_ps" = "$LIVE_STEM" ] || continue; partition_pass "$_pc" "${GATE_DIR}/${_ps}.verdict.json"@'; then
+  aq_kill "${B_AQ_A:-0}" m-subst-no-failset suppressed-forged-unbound allow "m-subst-no-failset: substituting without reading the set's other FAILs ALLOWS world A (L2)"
+  # The twin is a DENY: an allow twin cannot move under a mutant that never runs (a dead copy
+  # allows on both sides). The convict control denies on the live pass's own 3a, which this
+  # mutant still partitions.
+  aq_hold t m-subst-no-failset subst-convict-own deny "m-subst-no-failset: ...and the convict control is unchanged (still DENY on the live pass's own FAIL)"
+fi
+if mut m-subst-bound-only 's@^    \[ "\${_s##\*-}" \\< "\$_b" \] && continue$@    [ -z "$_b" ] || [ "$_s" = "$BOUND_STEM" ] || [ "$_s" = "$LIVE_NONCE" ] || continue@'; then
+  aq_kill "${B_AQ_L3:-0}" m-subst-bound-only subst-crossgate allow "m-subst-bound-only: reading only the bound pass ALLOWS L3 — the unbound story FAIL above a clean bound planning pass goes unread"
+  aq_hold x m-subst-bound-only subst-newer-unbound-fail allow "m-subst-bound-only: ...and ALLOWS world B (the :1228 hole)"
+  aq_hold t m-subst-bound-only suppressed-forged-unbound deny "m-subst-bound-only: ...and world A, whose bound pass fails 3a itself, still DENIES"
+fi
+if mut m-subst-boundcat 's@^    partition_pass "\$_pc" "\${GATE_DIR}/\${_ps}.verdict.json"$@    partition_pass "$(jq -r ".catalog // \\"\\"" "${GATE_DIR}/${BOUND_STEM:-$LIVE_STEM}.verdict.json" 2>/dev/null)" "${GATE_DIR}/${_ps}.verdict.json"@'; then
+  aq_kill "${B_AQ_CAT:-0}" m-subst-boundcat subst-percatalog deny "m-subst-boundcat: partitioning under the bound pass's catalog DENIES the per-catalog allow — each pass's own catalog is load-bearing"
+  aq_hold t m-subst-boundcat suppressed-forged-unbound deny "m-subst-boundcat: ...and world A, one catalog throughout, is unchanged (still DENY)"
+fi
+# ...and the no-FAIL-anywhere residual stays an ALLOW: an unbound pass may convict, but only on
+# something recorded.
+aq_drive forged-clean-nobound-allclean
+if denied "$AQ_OUT"; then bad "AQ-RESIDUAL: no pass records a FAIL and the guard still denied"
+else ok "AQ-RESIDUAL: no pass anywhere records a FAIL -> ALLOWED (the named limit)"; fi
 rm -rf "$W"
 
 # =============================================================================
@@ -1583,7 +2239,9 @@ e1_drive_all() { # [hook] -> one ok/bad per cell
 $E1_CELLS
 E1EOF
 }
+_e10="$fails"
 e1_drive_all "$HOOK"
+[ "$fails" = "$_e10" ] && B_e1=1
 # The deny's TEXT, guarded on the deny existing.
 OUT="$(drive "$W" Edit "$E1_PEND" z9rem "$E1_TR")"
 if denied "$OUT"; then
@@ -1613,7 +2271,7 @@ E1_EXPR=""
 case "$E1_EXPR" in
   *customAgentType*agentType*)
     _e1c="$(grep -cF -- "jq -r '$E1_EXPR'" "$HOOK")" || _e1c=0
-    if [ "$_e1c" = 1 ]; then ok "1b-bind: the probe's role expression ($E1_EXPR) occurs exactly once in the guard"
+    if [ "$_e1c" = 1 ]; then ok "1b-bind: the probe's role expression ($E1_EXPR) occurs exactly once in the guard"; B_e1bind=1
     else bad "1b-bind: the probe's role expression occurs $_e1c time(s) in the guard (want 1) — the two reads have FORKED"; fi ;;
   *) bad "1b-bind: no role expression extracted from the subagent probe ('$E1_EXPR') — the binding is vacuous" ;;
 esac
@@ -1634,7 +2292,7 @@ else
   _e1s="$(e1_strip_count "$DGUARD" "$E1_STRIP")"
   _e1z="$(e1_strip_count "$DGUARD" "$E1_NONE")"
   if [ "$_e1s" = 1 ] && [ "$_e1z" = 0 ]; then
-    ok "1b-name-strip: the dispatch guard's role-bound rewrite deletes \`name\` (emission count 1; impossible-anchor control 0)"
+    ok "1b-name-strip: the dispatch guard's role-bound rewrite deletes \`name\` (emission count 1; impossible-anchor control 0)"; B_nstrip=1
   else
     bad "1b-name-strip: the dispatch guard's \`del(.name)\` emission count is $_e1s (want 1; control $_e1z, want 0) — a named remediator's meta then carries its spawn name in agentType, and arm 1b ALLOWS it"
   fi
@@ -1647,49 +2305,66 @@ else
     bad "MUTANT dguard-nostrip: the copy does not parse"
   else
     _e1m="$(e1_strip_count "$MW/dguard-nostrip.sh" "$E1_STRIP")"
-    if [ "$_e1m" = 0 ]; then ok "1b-name-strip: a dispatch guard with \`del(.name)\` removed is reported (emission count 0) — the binding can fire"
-    else bad "1b-name-strip: the stripped copy still carries the emission ($_e1m) — the binding cannot fire"; fi
+    mx_kill "${B_nstrip:-0}" m-dguard-nostrip name-strip "$([ "$_e1m" = 0 ] && echo 1 || echo 0)" "1b-name-strip: a dispatch guard with \`del(.name)\` removed is reported (emission count 0) — the binding can fire"
   fi
 fi
 
 # --- arm 1b's mutants. Each moves only its own cells; every other cell must hold.
-e1_mut_score() { # <mutant> <space-separated ids that must FLIP> <label>
-  local m="$1" flips=" $2 " got="" o w
+e1_cell_hit() { # <hook> <id> -> prints 1 when the cell's verdict differs from the unmutated verdict
+  local o w
   while IFS='|' read -r _id _want _tool _fp _ag _tr _lab; do
-    [ -n "$_id" ] || continue
+    [ "$_id" = "$2" ] || continue
     [ "$_tr" = "-" ] && _tr=""
-    o="$(drive "$W" "$_tool" "$_fp" "$_ag" "$_tr" "$MW/$m.sh")"
+    o="$(drive "$W" "$_tool" "$_fp" "$_ag" "$_tr" "$1")"
     if denied "$o"; then w=deny; else w=allow; fi
-    [ "$w" != "$_want" ] && got="${got}${_id} "
+    [ "$w" != "$_want" ] && printf 1 || printf 0
+    return
   done <<E1EOF
 $E1_CELLS
 E1EOF
-  if [ " $got" = "$flips" ]; then ok "$3 (flipped: ${got% })"
-  else bad "$3: flipped '${got% }', wanted '${2}'"; fi
+  printf ERR
 }
+e1_mut() { # <mutant> <ids that FLIP, matrix-checked> <deciding id> <twin id> <label>
+  local m="$1" flips=" $2 " did="$3" tid="$4" h x ids=""
+  h="$(e1_cell_hit "$MW/$m.sh" "$did")"; mx_kill "${B_e1:-0}" "$m" "1b-$did" "$([ "$h" = 1 ] && echo 1 || echo 0)" "$5"
+  h="$(e1_cell_hit "$MW/$m.sh" "$tid")"; mx_hold t "$m" "1b-$tid" "$([ "$h" = 0 ] && echo 1 || echo 0)" "$m: ...and the twin cell $tid is UNCHANGED"
+  if mx_run x; then
+    mx_count x
+    while IFS='|' read -r x _r; do
+      [ -n "$x" ] || continue
+      h="$(e1_cell_hit "$MW/$m.sh" "$x")"
+      [ "$x" = "$did" ] || [ "$x" = "$tid" ] || mx_obs "$m" "1b-$x" x "$([ "$h" = 1 ] && echo 1 || echo 0)"
+      [ "$h" = 1 ] && ids="$ids$x "
+    done <<E1EOF
+$E1_CELLS
+E1EOF
+    if [ " $ids" = "$flips" ]; then ok "$m: the full cell vector flipped exactly '${ids% }' (matrix)"
+    else bad "$m: the full cell vector flipped '${ids% }', wanted '${2}'"; fi
+  fi
+}
+
 if mut m1b-role-nothing 's@^                remediator)$@                remediator-matches-nothing)@'; then
-  e1_mut_score m1b-role-nothing "E1 E2 E3 E4" "M1b-role: a role test that matches nothing ALLOWS every deny cell and moves no allow cell"
+  e1_mut m1b-role-nothing "E1 E2 E3 E4" E1 A1 "M1b-role: a role test that matches nothing ALLOWS the remediator's deny cell"
 fi
 if mut m1b-path-widened 's@^        \*pending\.md\*)$@        *)@;s@^            \*/docs/escalations/pending\.md)$@            *)@'; then
-  e1_mut_score m1b-path-widened "A4 A10 A11 A12" "M1b-path: both path tests widened to every path DENY the remediator's other-docs Edit and every near-miss, and move nothing else"
+  e1_mut m1b-path-widened "A4 A10 A11 A12" A4 A1 "M1b-path: both path tests widened to every path DENY the remediator's other-docs Edit"
 fi
 # THE INNER EXACT TEST ALONE. A4 fails the `*pending.md*` prefilter, so only A10-A12 -- which pass
 # it -- can see a widening of the exact test. Anchored on the 12-space indent the inner line has
 # and the prefilter's 8-space line does not; A4 staying put is what separates it from m1b-path.
 if mut m1b-inner-widened 's@^            \*/docs/escalations/pending\.md)$@            *)@'; then
-  e1_mut_score m1b-inner-widened "A10 A11 A12" "M1b-inner: the exact test widened alone DENIES every pending.md past the prefilter and moves nothing else"
+  e1_mut m1b-inner-widened "A10 A11 A12" A10 A4 "M1b-inner: the exact test widened alone DENIES a pending.md past the prefilter"
 fi
 if mut m1b-absent-denies 's@^              DEFINITION=""$@              DEFINITION="remediator"@'; then
-  e1_mut_score m1b-absent-denies "A5 A7" "M1b-open: reading an UNREADABLE meta as remediator DENIES both no-meta cells — fail-open is asserted"
+  e1_mut m1b-absent-denies "A5 A7" A5 A1 "M1b-open: reading an UNREADABLE meta as remediator DENIES the no-meta cell — fail-open is asserted"
 fi
 if mut m1b-unparseable-denies 's@"\$META" 2>/dev/null || true)"@"$META" 2>/dev/null || echo remediator)"@'; then
-  e1_mut_score m1b-unparseable-denies "A6" "M1b-parse: reading an UNPARSEABLE meta as remediator DENIES only the unparseable cell"
+  e1_mut m1b-unparseable-denies "A6" A6 A1 "M1b-parse: reading an UNPARSEABLE meta as remediator DENIES the unparseable cell"
 fi
 if mut m1b-key-order "s@jq -r '.customAgentType // .agentType // empty' \"\\\$META\"@jq -r '.agentType // .customAgentType // empty' \"\$META\"@"; then
-  e1_mut_score m1b-key-order "E4 A8" "M1b-order: agentType read first ALLOWS the named remediator and DENIES the dev-defined one"
+  e1_mut m1b-key-order "E4 A8" E4 A1 "M1b-order: agentType read first ALLOWS the named remediator"
   _e1c="$(grep -cF -- "jq -r '$E1_EXPR'" "$MW/m1b-key-order.sh")" || _e1c=0
-  if [ -n "$E1_EXPR" ] && [ "$_e1c" = 0 ]; then ok "1b-bind: the key-order drift in a copy is reported (expression count 0) — the binding can fire"
-  else bad "1b-bind: the drifted copy still carries the probe's expression ($_e1c) — the binding cannot fire"; fi
+  mx_kill "${B_e1bind:-0}" m1b-key-order-bind 1b-bind "$([ -n "$E1_EXPR" ] && [ "$_e1c" = 0 ] && echo 1 || echo 0)" "1b-bind: the key-order drift in a copy is reported (expression count 0) — the binding can fire"
 fi
 rm -rf "$W"
 
@@ -1736,42 +2411,39 @@ r_world
 R_V0="$(r_count "$R_VL" "true")"
 [ "$R_V0" = 2 ] || bad "R-pre: FIXTURE BROKEN — the verdict-ledger baseline is $R_V0, not 2"
 r_drive "$HOOK"; r_score
-[ "$R_PRESENT" = 3 ] && ok "R: all three spellings of the part file record one artifact-write row each, under ONE normalised path (3)" \
-  || bad "R: $R_PRESENT row(s) for $R_REL (want 3: LOG_DIR, relative and foreign-absolute spellings)"
+if [ "$R_PRESENT" = 3 ]; then ok "R: all three spellings of the part file record one artifact-write row each, under ONE normalised path (3)"; B_Rpresent=1
+else bad "R: $R_PRESENT row(s) for $R_REL (want 3: LOG_DIR, relative and foreign-absolute spellings)"; fi
 if [ "$R_PRESENT" != 0 ]; then
-  [ "$R_KIND" = "$R_PRESENT" ] && ok "R: every part-file row carries kind artifact-write ($R_KIND/$R_PRESENT)" \
-    || bad "R: $R_KIND of $R_PRESENT part-file rows carry kind artifact-write — every reader filters on kind"
+  if [ "$R_KIND" = "$R_PRESENT" ]; then ok "R: every part-file row carries kind artifact-write ($R_KIND/$R_PRESENT)"; B_Rkind=1
+  else bad "R: $R_KIND of $R_PRESENT part-file rows carry kind artifact-write — every reader filters on kind"; fi
   [ "$R_AGENT" = "$R_PRESENT" ] && ok "R: every part-file row names the adjudicator's agent_id g7adj" \
     || bad "R: $R_AGENT of $R_PRESENT part-file rows name g7adj"
-  [ "$R_RH" = 2 ] && [ "$R_RE" = 1 ] && ok "R: root names the tree each write landed in: 2 rows this workspace, 1 /elsewhere (BL-596)" \
-    || bad "R: root rows this workspace=$R_RH /elsewhere=$R_RE (want 2, 1)"
+  if [ "$R_RH" = 2 ] && [ "$R_RE" = 1 ]; then ok "R: root names the tree each write landed in: 2 rows this workspace, 1 /elsewhere (BL-596)"; B_Rroot=1
+  else bad "R: root rows this workspace=$R_RH /elsewhere=$R_RE (want 2, 1)"; fi
 fi
 [ "$R_TWIN" = 0 ] && ok "R: the same adjudicator's Write to <nonce>.repair.md (not a part file) records NO artifact row" \
   || bad "R: a non-part gate-adjudication write recorded $R_TWIN artifact row(s)"
-[ "$R_VN" = "$R_V0" ] && ok "R: the verdict ledger still holds exactly $R_V0 rows — no part row entered it" \
-  || bad "R: the verdict ledger went from $R_V0 to $R_VN rows"
+if [ "$R_VN" = "$R_V0" ]; then ok "R: the verdict ledger still holds exactly $R_V0 rows — no part row entered it"
+else bad "R: the verdict ledger went from $R_V0 to $R_VN rows"; fi
 # Mutants: (i) the three part-file lines deleted; (ii) the kind dropped from the row. Each owns one
 # assertion: (i) the row-present count, (ii) the kind count. The kind and agent arms stand down
 # when no row is present, so (i) fails exactly one.
 if mut mr-no-part-case '/gate-adjudication\/\*\.part-\*\.jsonl) _raw_rel=/d'; then
   r_world; r_drive "$MW/mr-no-part-case.sh"; r_score
-  [ "$R_PRESENT" = 0 ] && [ "$R_TWIN" = 0 ] && [ "$R_VN" = "$R_V0" ] \
-    && ok "MR-case: without the part-file lines no row is recorded (0), and the twin and verdict-ledger arms hold" \
-    || bad "MR-case: present=$R_PRESENT twin=$R_TWIN verdict=$R_VN (want 0, 0, $R_V0)"
+  mx_kill "${B_Rpresent:-0}" mr-no-part-case R-present "$([ "$R_PRESENT" = 0 ] && echo 1 || echo 0)" "MR-case: without the part-file lines no row is recorded (0)"
+  mx_hold t mr-no-part-case R-verdict "$([ "$R_TWIN" = 0 ] && [ "$R_VN" = "$R_V0" ] && echo 1 || echo 0)" "MR-case: ...and the twin and verdict-ledger arms hold"
 fi
 if mut mr-no-kind 's@{v: 1, kind: "artifact-write", ts: \$ts, path: \$path@{v: 1, ts: $ts, path: $path@'; then
   r_world; r_drive "$MW/mr-no-kind.sh"; r_score
-  [ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 0 ] && [ "$R_AGENT" = 3 ] && [ "$R_VN" = "$R_V0" ] \
-    && ok "MR-kind: rows without kind are present (3) and the kind arm alone reads 0" \
-    || bad "MR-kind: present=$R_PRESENT kind=$R_KIND agent=$R_AGENT verdict=$R_VN (want 3, 0, 3, $R_V0)"
+  mx_kill "${B_Rkind:-0}" mr-no-kind R-kind "$([ "$R_KIND" = 0 ] && echo 1 || echo 0)" "MR-kind: rows without kind are present and the kind arm reads 0"
+  mx_hold t mr-no-kind R-present "$([ "$R_PRESENT" = 3 ] && [ "$R_AGENT" = 3 ] && [ "$R_VN" = "$R_V0" ] && echo 1 || echo 0)" "MR-kind: ...and the present, agent and verdict-ledger arms hold"
 fi
 # (iii) the fallback spelling's root dropped, so a foreign-absolute write takes this tree's root: the
 # root arm alone moves, 3 rows this workspace and none /elsewhere.
 if mut mr-root-fallback 's@; _raw_root="\${1%%/\${STATE_DIR_NAME}/\*}" ;;@ ;;@g'; then
   r_world; r_drive "$MW/mr-root-fallback.sh"; r_score
-  [ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 3 ] && [ "$R_RH" = 3 ] && [ "$R_RE" = 0 ] \
-    && ok "MR-root: without the fallback's root every row names this workspace (3) and none /elsewhere" \
-    || bad "MR-root: present=$R_PRESENT kind=$R_KIND here=$R_RH elsewhere=$R_RE (want 3, 3, 3, 0)"
+  mx_kill "${B_Rroot:-0}" mr-root-fallback R-root "$([ "$R_RH" = 3 ] && [ "$R_RE" = 0 ] && echo 1 || echo 0)" "MR-root: without the fallback's root every row names this workspace (3) and none /elsewhere"
+  mx_hold t mr-root-fallback R-kind "$([ "$R_PRESENT" = 3 ] && [ "$R_KIND" = 3 ] && echo 1 || echo 0)" "MR-root: ...and the present and kind arms hold"
 fi
 rm -rf "$W"
 
@@ -1824,29 +2496,53 @@ md_cell() { # <ledger> <agent> -> "<rows>:<paths, space-joined>"
   printf '%s:%s' "$(jq -n --arg a "$2" '[inputs | select(.kind == "artifact-write" and .agent_id == $a)] | length' "$1" 2>/dev/null || printf ERR)" \
     "$(jq -r --arg a "$2" 'select(.kind == "artifact-write" and .agent_id == $a) | .path' "$1" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
 }
-md_run() { # [hook] -> MD1..MD8, MD_NMAN_D, MD_NMAN_N; two fresh worlds per run, so no hook variant reads another's rows
+md_run() { # <hook> [cells...] -> the requested MD cells (default all); a world is built only when one of its cells is requested
   local h="${1:-$HOOK}" L
-  md_world _bmad-output; MD_NMAN_D="$MD_NMAN"
-  L="$MD_W/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
-  drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md1abs "" "$h" >/dev/null
-  drive "$MD_W" Edit "docs/design-notes.md" md2rel "" "$h" "" "$MD_W" >/dev/null
-  drive "$MD_W" Edit "$MD_W/lnk/design-notes.md" md3lnk "" "$h" >/dev/null
-  drive "$MD_W" Edit "$MD_W/other/design-notes.md" md4near "" "$h" >/dev/null
-  drive "$MD_W" Edit "$MD_W/wt/docs/design-notes.md" md5tree "" "$h" >/dev/null
-  drive "$MD_W" Write "$MD_W/_bmad-output/notes/handoff.md" md6gap "" "$h" >/dev/null
-  drive "$MD_W" Edit "$MD_W/lnkup/../docs/design-notes.md" md9up "" "$h" >/dev/null
-  drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md9ctl "" "$h" >/dev/null
-  MD1="$(md_cell "$L" md1abs)"; MD2="$(md_cell "$L" md2rel)"; MD3="$(md_cell "$L" md3lnk)"
-  MD4="$(md_cell "$L" md4near)"; MD5="$(md_cell "$L" md5tree)"; MD6="$(md_cell "$L" md6gap)"
-  MD9="$(md_cell "$L" md9up)"; MD9C="$(md_cell "$L" md9ctl)"; MD_UP_D="$MD_UP"; MD_ELSE_D="$MD_ELSE"; MD_PROJ_D="$MD_PROJ"
-  rm -rf "$MD_W"
-  md_world x/_bmad-output; MD_NMAN_N="$MD_NMAN"
-  L="$MD_W/x/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
-  AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" Edit "$MD_W/x/docs/design-notes.md" md7nest "" "$h" >/dev/null
-  AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" MultiEdit "$MD_W/x/_bmad-output/notes/handoff.md" md8gapn "" "$h" >/dev/null
-  MD7="$(md_cell "$L" md7nest)"; MD8="$(md_cell "$L" md8gapn)"
-  rm -rf "$MD_W"
+  MD_WANT=" ${*:2} "; [ "$#" -ge 2 ] || MD_WANT=" MD1 MD2 MD3 MD4 MD5 MD6 MD9 MD9C MD7 MD8 "
+  MD1=""; MD2=""; MD3=""; MD4=""; MD5=""; MD6=""; MD7=""; MD8=""; MD9=""; MD9C=""
+  case "$MD_WANT" in *" MD1 "*|*" MD2 "*|*" MD3 "*|*" MD4 "*|*" MD5 "*|*" MD6 "*|*" MD9 "*|*" MD9C "*)
+    md_world _bmad-output; MD_NMAN_D="$MD_NMAN"
+    L="$MD_W/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+    case "$MD_WANT" in *" MD1 "*) drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md1abs "" "$h" >/dev/null; MD1="$(md_cell "$L" md1abs)" ;; esac
+    case "$MD_WANT" in *" MD2 "*) drive "$MD_W" Edit "docs/design-notes.md" md2rel "" "$h" "" "$MD_W" >/dev/null; MD2="$(md_cell "$L" md2rel)" ;; esac
+    case "$MD_WANT" in *" MD3 "*) drive "$MD_W" Edit "$MD_W/lnk/design-notes.md" md3lnk "" "$h" >/dev/null; MD3="$(md_cell "$L" md3lnk)" ;; esac
+    case "$MD_WANT" in *" MD4 "*) drive "$MD_W" Edit "$MD_W/other/design-notes.md" md4near "" "$h" >/dev/null; MD4="$(md_cell "$L" md4near)" ;; esac
+    case "$MD_WANT" in *" MD5 "*) drive "$MD_W" Edit "$MD_W/wt/docs/design-notes.md" md5tree "" "$h" >/dev/null; MD5="$(md_cell "$L" md5tree)" ;; esac
+    case "$MD_WANT" in *" MD6 "*) drive "$MD_W" Write "$MD_W/_bmad-output/notes/handoff.md" md6gap "" "$h" >/dev/null; MD6="$(md_cell "$L" md6gap)" ;; esac
+    case "$MD_WANT" in *" MD9 "*) drive "$MD_W" Edit "$MD_W/lnkup/../docs/design-notes.md" md9up "" "$h" >/dev/null; MD9="$(md_cell "$L" md9up)" ;; esac
+    case "$MD_WANT" in *" MD9C "*) drive "$MD_W" Edit "$MD_W/docs/design-notes.md" md9ctl "" "$h" >/dev/null; MD9C="$(md_cell "$L" md9ctl)" ;; esac
+    MD_UP_D="$MD_UP"; MD_ELSE_D="$MD_ELSE"; MD_PROJ_D="$MD_PROJ"
+    rm -rf "$MD_W" ;;
+  esac
+  case "$MD_WANT" in *" MD7 "*|*" MD8 "*)
+    md_world x/_bmad-output; MD_NMAN_N="$MD_NMAN"
+    L="$MD_W/x/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+    case "$MD_WANT" in *" MD7 "*) AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" Edit "$MD_W/x/docs/design-notes.md" md7nest "" "$h" >/dev/null; MD7="$(md_cell "$L" md7nest)" ;; esac
+    case "$MD_WANT" in *" MD8 "*) AI_DLC_STATE_DIR=x/_bmad-output drive "$MD_W" MultiEdit "$MD_W/x/_bmad-output/notes/handoff.md" md8gapn "" "$h" >/dev/null; MD8="$(md_cell "$L" md8gapn)" ;; esac
+    rm -rf "$MD_W" ;;
+  esac
 }
+md_moved() { # <cell> -> 1 when the cell's recorded value differs from its unmutated value
+  case "$1" in
+    MD1) [ "$MD1" != "$MD1_W" ] ;; MD2) [ "$MD2" != "$MD1_W" ] ;; MD3) [ "$MD3" != "$MD1_W" ] ;;
+    MD4) [ "$MD4" != "$MD4_W" ] ;; MD5) [ "$MD5" != "$MD5_W" ] ;; MD6) [ "$MD6" != "$MD6_W" ] ;;
+    MD7) [ "$MD7" != "$MD7_W" ] ;; MD8) [ "$MD8" != "$MD8_W" ] ;; MD9) [ "$MD9" != "$MD9_W" ] ;;
+    MD9C) [ "$MD9C" != "$MD1_W" ] ;;
+  esac && printf 1 || printf 0
+}
+md_mut() { # <mutant> <deciding cell> <base-pass flag> <twin cell> <label> -- one world pair, the deciding and twin cells only; --matrix drives all ten
+  local m="$1" x
+  if [ "$MATRIX" = 1 ]; then md_run "$MW/$m.sh"; else md_run "$MW/$m.sh" "$2" "$4"; fi
+  mx_kill "$3" "$m" "$2" "$(md_moved "$2")" "$5"
+  mx_hold t "$m" "$4" "$([ "$(md_moved "$4")" = 0 ] && echo 1 || echo 0)" "$m: ...and $4 is UNCHANGED"
+  if mx_run x; then
+    mx_count x
+    for x in MD1 MD2 MD3 MD4 MD5 MD6 MD7 MD8 MD9 MD9C; do
+      [ "$x" = "$2" ] || [ "$x" = "$4" ] || mx_obs "$m" "$x" x "$(md_moved "$x")"
+    done
+  fi
+}
+
 MD1_W="1:docs/design-notes.md"; MD4_W="0:"; MD5_W="0:"; MD6_W="1:_bmad-output/notes/handoff.md"
 MD7_W="1:x/docs/design-notes.md"; MD8_W="1:_bmad-output/notes/handoff.md"; MD9_W="0:"
 md_run "$HOOK"
@@ -1856,57 +2552,47 @@ md_run "$HOOK"
 [ -n "$MD_UP_D" ] && [ "$MD_UP_D" = "$MD_ELSE_D" ] && [ "$MD_UP_D" != "$MD_PROJ_D" ] \
   && ok "MD9-pre: the kernel resolves lnkup/.. to the decoy's parent ($MD_UP_D), not the project root" \
   || bad "MD9-pre: FIXTURE BROKEN — lnkup/.. resolved to '$MD_UP_D' (want '$MD_ELSE_D', not '$MD_PROJ_D'); MD9 cannot discriminate"
-[ "$MD1" = "$MD1_W" ] && ok "MD1: one absolute write to a document TWO split manifests name -> exactly ONE row, project-relative ($MD1)" \
-  || bad "MD1: the sections document recorded '$MD1' (want '$MD1_W')"
+if [ "$MD1" = "$MD1_W" ]; then ok "MD1: one absolute write to a document TWO split manifests name -> exactly ONE row, project-relative ($MD1)"; B_MD1=1
+else bad "MD1: the sections document recorded '$MD1' (want '$MD1_W')"; fi
 [ "$MD2" = "$MD1_W" ] && ok "MD2: the same document by a RELATIVE payload path -> ONE row, the same spelling" \
   || bad "MD2: the relative spelling recorded '$MD2' (want '$MD1_W')"
 [ "$MD3" = "$MD1_W" ] && ok "MD3: the same document through a directory symlink -> ONE row, the same spelling (the directory is resolved physically)" \
   || bad "MD3: the symlinked spelling recorded '$MD3' (want '$MD1_W')"
-[ "$MD4" = "$MD4_W" ] && ok "MD4: the same BASENAME in another directory, named by no manifest -> NO row (MD1 is its twin)" \
-  || bad "MD4: a same-basename near-miss recorded '$MD4'"
-[ "$MD5" = "$MD5_W" ] && ok "MD5: the same RELATIVE path in another tree inside the project (BL-596) -> NO row" \
-  || bad "MD5: the other-tree near-miss recorded '$MD5'"
-[ "$MD6" = "$MD6_W" ] && ok "MD6: a manifest's document INSIDE the state dir outside planning-artifacts/ -> ONE row in the state spelling ($MD6)" \
-  || bad "MD6: the in-state document recorded '$MD6' (want '$MD6_W')"
-[ "$MD7" = "$MD7_W" ] && ok "MD7: AI_DLC_STATE_DIR=x/_bmad-output, the document at x/docs/ -> ONE row, project-relative ($MD7), never relative to the state dir's parent" \
-  || bad "MD7: the nested-layout document recorded '$MD7' (want '$MD7_W')"
-[ "$MD8" = "$MD8_W" ] && ok "MD8: nested, a document inside the state dir outside planning-artifacts/ -> the state-spelling branch: '$MD8', not x/_bmad-output/..." \
-  || bad "MD8: the nested in-state document recorded '$MD8' (want '$MD8_W')"
-[ "$MD9" = "$MD9_W" ] && ok "MD9: a payload <project>/lnkup/../docs/design-notes.md, which the kernel writes to else/docs/, -> NO row" \
-  || bad "MD9: the lnkup/.. payload recorded '$MD9' (the kernel writes the decoy else/docs/design-notes.md)"
-[ "$MD9C" = "$MD1_W" ] && ok "MD9-ctl: the same run's direct <project>/docs/design-notes.md write -> ONE row ($MD9C)" \
-  || bad "MD9-ctl: the direct write recorded '$MD9C' (want '$MD1_W')"
+if [ "$MD4" = "$MD4_W" ]; then ok "MD4: the same BASENAME in another directory, named by no manifest -> NO row (MD1 is its twin)"; B_MD4=1
+else bad "MD4: a same-basename near-miss recorded '$MD4'"; fi
+if [ "$MD5" = "$MD5_W" ]; then ok "MD5: the same RELATIVE path in another tree inside the project (BL-596) -> NO row"; B_MD5=1
+else bad "MD5: the other-tree near-miss recorded '$MD5'"; fi
+if [ "$MD6" = "$MD6_W" ]; then ok "MD6: a manifest's document INSIDE the state dir outside planning-artifacts/ -> ONE row in the state spelling ($MD6)"; B_MD6=1
+else bad "MD6: the in-state document recorded '$MD6' (want '$MD6_W')"; fi
+if [ "$MD7" = "$MD7_W" ]; then ok "MD7: AI_DLC_STATE_DIR=x/_bmad-output, the document at x/docs/ -> ONE row, project-relative ($MD7), never relative to the state dir's parent"; B_MD7=1
+else bad "MD7: the nested-layout document recorded '$MD7' (want '$MD7_W')"; fi
+if [ "$MD8" = "$MD8_W" ]; then ok "MD8: nested, a document inside the state dir outside planning-artifacts/ -> the state-spelling branch: '$MD8', not x/_bmad-output/..."; B_MD8=1
+else bad "MD8: the nested in-state document recorded '$MD8' (want '$MD8_W')"; fi
+if [ "$MD9" = "$MD9_W" ]; then ok "MD9: a payload <project>/lnkup/../docs/design-notes.md, which the kernel writes to else/docs/, -> NO row"; B_MD9=1
+else bad "MD9: the lnkup/.. payload recorded '$MD9' (the kernel writes the decoy else/docs/design-notes.md)"; fi
+if [ "$MD9C" = "$MD1_W" ]; then ok "MD9-ctl: the same run's direct <project>/docs/design-notes.md write -> ONE row ($MD9C)"; B_MD9C=1
+else bad "MD9-ctl: the direct write recorded '$MD9C' (want '$MD1_W')"; fi
 # MD's mutants, each a copy guarded by cmp -s and bash -n in mut(), each killing its own cell while a named
 # control cell holds. md-raw-root: the project dir replaced by the state dir's parent (`_raw_root`), which is the
 # project dir in the default layout, so only MD7 separates them. md-basename: the full comparison dropped, so a
 # basename hit records. md-suffix: the comparison on the last two path components, which MD4 cannot see and MD5
 # can. md-no-state-spelling: the state-dir case deleted, which in the default layout spells the same string.
 if mut md-raw-root 's@_mdr_pp="\$(cd -P "\$PROJECT_DIR" @_mdr_pp="$(cd -P "${LOG_DIR%/*}" @'; then
-  md_run "$MW/md-raw-root.sh"
-  [ "$MD7" != "$MD7_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m2 spelled relative to _raw_root: KILLED by [MD7] (recorded '$MD7'), and MD1 is UNCHANGED" \
-    || bad "MD-m2: MD7='$MD7' MD1='$MD1' (want MD7 moved off '$MD7_W', MD1 '$MD1_W')"
+  md_mut md-raw-root MD7 "${B_MD7:-0}" MD1 "MD-m2 spelled relative to _raw_root: decided by MD7"
 fi
 if mut md-basename 's@\[ "\$_mdr_l" = "\$_mdr_abs" \] && _mdr_hit=1@_mdr_hit=1@'; then
-  md_run "$MW/md-basename.sh"
-  [ "$MD4" != "$MD4_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m3 basename-only match: KILLED by [MD4] (recorded '$MD4'), and MD1 is UNCHANGED" \
-    || bad "MD-m3: MD4='$MD4' MD1='$MD1' (want MD4 a row, MD1 '$MD1_W')"
+  md_mut md-basename MD4 "${B_MD4:-0}" MD1 "MD-m3 basename-only match: decided by MD4"
 fi
 if mut md-suffix 's@\[ "\$_mdr_l" = "\$_mdr_abs" \] && _mdr_hit=1@[ "${_mdr_l#"${_mdr_l%/*/*}"/}" = "${_mdr_abs#"${_mdr_abs%/*/*}"/}" ] \&\& _mdr_hit=1@'; then
-  md_run "$MW/md-suffix.sh"
-  [ "$MD5" != "$MD5_W" ] && [ "$MD4" = "$MD4_W" ] && [ "$MD1" = "$MD1_W" ] && ok "MD-m3b dir/basename suffix match: KILLED by [MD5] (recorded '$MD5'), and MD4 and MD1 are UNCHANGED" \
-    || bad "MD-m3b: MD5='$MD5' MD4='$MD4' MD1='$MD1' (want MD5 a row, MD4 none, MD1 '$MD1_W')"
+  md_mut md-suffix MD5 "${B_MD5:-0}" MD4 "MD-m3b dir/basename suffix match: decided by MD5"
 fi
 if mut md-no-state-spelling '/^    "\$_mdr_sp"\/\*) _mdr_rel=/d'; then
-  md_run "$MW/md-no-state-spelling.sh"
-  [ "$MD8" != "$MD8_W" ] && [ "$MD6" = "$MD6_W" ] && ok "MD-mgap the state-spelling case deleted: KILLED by [MD8] (recorded '$MD8'), and MD6 is UNCHANGED" \
-    || bad "MD-mgap: MD8='$MD8' MD6='$MD6' (want MD8 moved off '$MD8_W', MD6 '$MD6_W')"
+  md_mut md-no-state-spelling MD8 "${B_MD8:-0}" MD6 "MD-mgap the state-spelling case deleted: decided by MD8"
 fi
 # md-cd-logical: the written file's directory resolved by a logical `cd`, which folds lnkup/.. textually
 # into the project root, so the decoy write records the manifest's document. Only manifest_doc_rel's line.
 if mut md-cd-logical 's@_mdr_d="\$(cd -P @_mdr_d="$(cd @'; then
-  md_run "$MW/md-cd-logical.sh"
-  [ "$MD9" != "$MD9_W" ] && [ "$MD9C" = "$MD1_W" ] && ok "MD-mcd logical cd: KILLED by [MD9] (recorded '$MD9'), and MD9-ctl is UNCHANGED" \
-    || bad "MD-mcd: MD9='$MD9' MD9C='$MD9C' (want MD9 a row, MD9C '$MD1_W')"
+  md_mut md-cd-logical MD9 "${B_MD9:-0}" MD9C "MD-mcd logical cd: decided by MD9"
 fi
 
 # =============================================================================
@@ -1925,11 +2611,27 @@ TA="$W/sessions-jsonl/aidlc.jsonl"; TP="$W/sessions-jsonl/plain.jsonl"; TU="$W/s
 lpe() { # <expect deny|allow> <label> <file_path> [transcript] [agent] [hook]
   local o; o="$(drive "$W" Edit "$3" "${5:-}" "${4:-}" "${6:-$HOOK}")"
   if [ "$1" = deny ]; then
-    if denied "$o"; then ok "$2"; else bad "$2"; fi
+    if denied "$o"; then ok "$2"; B_lpe=1; else bad "$2"; fi
   else
-    if denied "$o"; then bad "$2"; else ok "$2"; fi
+    if denied "$o"; then bad "$2"; else ok "$2"; B_lpe=1; fi
   fi
 }
+lpe_hit() { # <expect deny|allow> <file_path> <transcript> <hook> -> prints 1 when the verdict is <expect>
+  local o; o="$(drive "$W" Edit "$2" "" "$3" "$4")"
+  if [ "$1" = deny ]; then denied "$o" && printf 1 || printf 0; else denied "$o" && printf 0 || printf 1; fi
+}
+lpe_lbl() { # <path> -> a cell id unique across the 3b cells: the basename, qualified by the sibling worktree or the nx traversal
+  local l="${1##*/}"
+  case "$1" in "$SIB"/*) l="sib-$l" ;; esac
+  case "$1" in */nx/*) l="nx-$l" ;; esac
+  printf '3b-%s' "$l"
+}
+lpe_mut() { # <mutant> <flag> <deciding expect> <deciding path> <deciding tx> <twin expect> <twin path> <twin tx> <label>
+  local m="$1" h
+  h="$(lpe_hit "$3" "$4" "$5" "$MW/$m.sh")"; mx_kill "$2" "$m" "$(lpe_lbl "$4")" "$h" "$9"
+  h="$(lpe_hit "$6" "$7" "$8" "$MW/$m.sh")"; mx_hold t "$m" "$(lpe_lbl "$7")" "$h" "$m: ...and the twin cell is UNCHANGED"
+}
+
 OUT="$(drive "$W" Edit "$W/src/app.py" "" "$TA")"
 if denied "$OUT"; then
   ok "3b: a lead Edit to src/app.py in an /ai-dlc session with NO gate directory is DENIED"
@@ -2009,54 +2711,60 @@ else
   B_ACK="$(skill_block "$ACK")"; B_HOOK="$(skill_block "$HOOK")"
   if [ -z "$B_ACK" ] || [ "$(printf '%s\n' "$B_ACK" | wc -l | tr -d ' ')" -lt 7 ]; then
     bad "3b-bind: no 7-line LAST_SKILL block extracted from ai-dlc-acknowledge.sh — the binding is vacuous"
-  elif [ "$B_ACK" = "$B_HOOK" ]; then ok "3b-bind: the session-class scan is byte-identical in both hooks"
+  elif [ "$B_ACK" = "$B_HOOK" ]; then ok "3b-bind: the session-class scan is byte-identical in both hooks"; B_3bbind=1
   else bad "3b-bind: the session-class scan has FORKED between ai-dlc-acknowledge.sh and this hook"; fi
   cp "$HOOK" "$MW/drift.sh"
   sed -i.bak '/^  LAST_SKILL=/s/| tail -1)$/| tail -n 1)/' "$MW/drift.sh"; rm -f "$MW/drift.sh.bak"
   if cmp -s "$HOOK" "$MW/drift.sh"; then bad "3b-bind: the drift seed changed no bytes"
-  elif [ "$(skill_block "$MW/drift.sh")" = "$B_ACK" ]; then bad "3b-bind: a drifted copy still compares equal — the binding cannot fire"
-  else ok "3b-bind: a one-token drift in the copy is reported (the binding can fire)"; fi
+  else mx_kill "${B_3bbind:-0}" m-3b-drift 3b-bind "$([ "$(skill_block "$MW/drift.sh")" = "$B_ACK" ] && echo 0 || echo 1)" "3b-bind: a one-token drift in the copy is reported (the binding can fire)"; fi
 fi
 
-# --- arm 3b's mutants. Each kills its own cell; each leaves P1 (or, for M3b-gate, the
+# --- arm 3b's mutants. Each moves its own cell; each leaves P1 (or, for M3b-gate, the
 # sibling-_bmad-output allow) unchanged so a mutant that breaks the hook cannot score.
+B_3b=0
+_3b0="$fails"
+lpe deny "3b base: P1 (a lead product Edit with an /ai-dlc transcript) is DENIED" "$W/src/app.py" "$TA"
+lpe allow "3b base: the sibling worktree's _bmad-output/ path is ALLOWED" "$SIB/_bmad-output/planning-artifacts/x.md" "$TA"
+[ "$fails" = "$_3b0" ] && B_3b=1
 if mut m3b-no-iv 's@^    if \[ "\$AIDLC_SESSION" -eq 1 \]; then$@    if true; then@'; then
-  lpe deny  "M3b-iv: dropping (iv) DENIES the non-pipeline session's product edit — (iv) is load-bearing" "$W/src/app.py" "$TP" "" "$MW/m3b-no-iv.sh"
-  lpe allow "M3b-iv: ...and the sibling _bmad-output/ allow is UNCHANGED"                    "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "" "$MW/m3b-no-iv.sh"
+  lpe_mut m3b-no-iv "${B_3b:-0}" deny "$W/src/app.py" "$TP" allow "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "M3b-iv: dropping (iv) DENIES the non-pipeline session's product edit — (iv) is load-bearing"
 fi
 if mut m3b-no-worktree 's@_lpe_wts="\$(git -C "\$LPE_PROJ" worktree list --porcelain 2>/dev/null | sed -n .s/^worktree //p.)"@_lpe_wts=""@'; then
-  lpe allow "M3b-wt: without worktree anchoring the sibling worktree's src/app.py is ALLOWED — anchoring is load-bearing" "$SIB/src/app.py" "$TA" "" "$MW/m3b-no-worktree.sh"
-  lpe deny  "M3b-wt: ...and P1 is UNCHANGED"                                                 "$W/src/app.py" "$TA" "" "$MW/m3b-no-worktree.sh"
+  lpe_mut m3b-no-worktree "${B_3b:-0}" allow "$SIB/src/app.py" "$TA" deny "$W/src/app.py" "$TA" "M3b-wt: without worktree anchoring the sibling worktree's src/app.py is ALLOWED — anchoring is load-bearing"
 fi
 if mut m3b-anchor-anywhere 's@^if \[ -n "\$LPE_ROOT" \]; then$@[ -n "$LPE_ROOT" ] || LPE_ROOT="${LPE_TARGET%/*}"; if true; then@'; then
-  lpe deny  "M3b-anchor: treating any directory as a tree DENIES the scratchpad path — (i) is load-bearing" "$W.scratch/notes.md" "$TA" "" "$MW/m3b-anchor-anywhere.sh"
-  lpe deny  "M3b-anchor: ...and P1 is UNCHANGED"                                             "$W/src/app.py" "$TA" "" "$MW/m3b-anchor-anywhere.sh"
+  lpe_mut m3b-anchor-anywhere "${B_3b:-0}" deny "$W.scratch/notes.md" "$TA" deny "$W/src/app.py" "$TA" "M3b-anchor: treating any directory as a tree DENIES the scratchpad path — (i) is load-bearing"
 fi
 if mut m3b-no-iii "s@grep -q '^<<<<<<< ' \"\$LPE_TARGET\" 2>/dev/null@false@"; then
-  lpe deny  "M3b-iii: dropping (iii) DENIES the conflict-marked file — (iii) is load-bearing" "$W/src/conflict.py" "$TA" "" "$MW/m3b-no-iii.sh"
-  lpe deny  "M3b-iii: ...and P1 is UNCHANGED"                                                "$W/src/app.py" "$TA" "" "$MW/m3b-no-iii.sh"
+  lpe_mut m3b-no-iii "${B_3b:-0}" deny "$W/src/conflict.py" "$TA" deny "$W/src/app.py" "$TA" "M3b-iii: dropping (iii) DENIES the conflict-marked file — (iii) is load-bearing"
 fi
 if mut m3b-after-gate-exit 's@^case "\$FP" in /\*) LPE_ABS=@[ -d "$GATE_DIR" ] || exit 0; case "$FP" in /*) LPE_ABS=@'; then
-  lpe allow "M3b-gate: the arm placed after the GATE_DIR exit ALLOWS P1 with no gate directory — the placement is load-bearing" "$W/src/app.py" "$TA" "" "$MW/m3b-after-gate-exit.sh"
-  lpe allow "M3b-gate: ...and the sibling _bmad-output/ allow is UNCHANGED"                   "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "" "$MW/m3b-after-gate-exit.sh"
+  lpe_mut m3b-after-gate-exit "${B_3b:-0}" allow "$W/src/app.py" "$TA" allow "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "M3b-gate: the arm placed after the GATE_DIR exit ALLOWS P1 with no gate directory — the placement is load-bearing"
 fi
 if mut m3b-no-scanroots 's@case "\$LPE_REL" in "\$_lpe_sr"/\*|"\$_lpe_sr") LPE_PRODUCT=0 ;; esac@:@'; then
-  lpe deny  "M3b-roots: ignoring the grammar's scan roots DENIES reports/r.md — the resolver read is load-bearing" "$W/reports/r.md" "$TA" "" "$MW/m3b-no-scanroots.sh"
-  lpe deny  "M3b-roots: ...and P1 is UNCHANGED"                                              "$W/src/app.py" "$TA" "" "$MW/m3b-no-scanroots.sh"
+  lpe_mut m3b-no-scanroots "${B_3b:-0}" deny "$W/reports/r.md" "$TA" deny "$W/src/app.py" "$TA" "M3b-roots: ignoring the grammar's scan roots DENIES reports/r.md — the resolver read is load-bearing"
 fi
 if mut m3b-no-claude-md 's@^    CLAUDE.md|CLAUDE.local.md|AGENTS.md) LPE_PRODUCT=0 ;;$@    CLAUDE.md|CLAUDE.local.md|AGENTS.md) ;;@'; then
-  lpe deny  "M3b-claude: without the allowance repo-root CLAUDE.md is DENIED — the allowance is load-bearing" "$W/CLAUDE.md" "$TA" "" "$MW/m3b-no-claude-md.sh"
-  lpe allow "M3b-claude: ...and the .gitignore allow is UNCHANGED"                            "$W/.gitignore" "$TA" "" "$MW/m3b-no-claude-md.sh"
+  lpe_mut m3b-no-claude-md "${B_3b:-0}" deny "$W/CLAUDE.md" "$TA" allow "$W/.gitignore" "$TA" "M3b-claude: without the allowance repo-root CLAUDE.md is DENIED — the allowance is load-bearing"
 fi
 if mut m3b-no-lex 's@^LPE_ABS="\$(lpe_lex "\$LPE_ABS")"$@:@'; then
-  lpe allow "M3b-lex: without the lexical collapse docs/nx/../../src/app.py is ALLOWED — the collapse is load-bearing" "$W/docs/nx/../../src/app.py" "$TA" "" "$MW/m3b-no-lex.sh"
-  lpe deny  "M3b-lex: ...and P1 is UNCHANGED"                                                 "$W/src/app.py" "$TA" "" "$MW/m3b-no-lex.sh"
+  lpe_mut m3b-no-lex "${B_3b:-0}" allow "$W/docs/nx/../../src/app.py" "$TA" deny "$W/src/app.py" "$TA" "M3b-lex: without the lexical collapse docs/nx/../../src/app.py is ALLOWED — the collapse is load-bearing"
 fi
 git -C "$W" worktree remove --force "$SIB" >/dev/null 2>&1
 rm -rf "$W" "$SIB" "$W.hang"
 
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"
+
+# MX -- a plain run executes NO matrix-only cell, and --matrix executes at least one. MX_RAN is bumped by every
+# matrix-only driver AFTER its mx_run gate let it through, so it is a count of what RAN, not of what was selected.
+if [ "$MATRIX" = 0 ]; then
+  if [ "$MX_RAN" -eq 0 ]; then ok "MX: a plain run executed no matrix-only cell (matrix-only cells run: 0)"
+  else bad "MX: a plain run executed $MX_RAN matrix-only cell(s)"; fi
+else
+  if [ "$MX_RAN" -gt 0 ]; then ok "MX: the matrix run executed $MX_RAN matrix-only cell(s)"
+  else bad "MX: --matrix executed no matrix-only cell"; fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-remediation-deny: PASS"; exit 0; fi
