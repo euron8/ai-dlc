@@ -1022,8 +1022,11 @@ arm_atomic() {
 #              one per limit lands ON the `mv`, and at least one kill leaves a history or temp file
 #              of exactly 1024 bytes -- a partial write, which the seed is asserted large enough to
 #              produce (both the pre-run and the new history over 1 KiB). A stray temp may be left.
-#              KPAR workers run the jobs, job i on worker i mod KPAR, from N = T down, no barrier.
-#              A failing point drops a stop file and every worker stops before its next job.
+#              The jobs run from N = T down in ROUNDS of KPAR: round r is jobs r*KPAR+1 .. (r+1)*KPAR,
+#              one background worker per job, every job of a round always runs, and the stop file is read
+#              ONLY between rounds. A failing point drops the stop file; the round it is in finishes and
+#              no later round starts. Whether a point fails is a property of the point, so the set of
+#              points that run is the same on every run (the invocation counter reads it as a fixed count).
 #              WHAT IT CANNOT REACH. The kill lands only BETWEEN simple commands of the rotator's
 #              own shell or of a child bash it starts plainly (BASH_ENV is inherited, so `bash -c`
 #              and a bash helper script are traced too, and so is every command in an EXIT or ERR
@@ -1097,25 +1100,31 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
   echo "KILL $N $rc1 $rc2 $miss $heq $post $(wc -l < "$d/want" | tr -d ' ') ${hb:-absent} $pb ${at:-unrecorded}" > "$d/r.$N.$L"
   [ "$rc2" -eq 0 ] && [ "$miss" -eq 0 ] && [ "$heq" = yes ] || : > "$d/stop"
 }
-sweep_worker() {  # <job list file> <dir>: each "N L" line in turn, until a stop file.
-  local N L
-  while read -r N L; do
-    [ -e "$2/stop" ] && return
-    sweep_one "$N" "$L" "$2"
-  done < "$1"
-}
-sweep_pass() {  # <dir> <job list>: KPAR workers, job i to worker (i mod KPAR), no barrier between jobs.
-  local j=0
-  while [ "$j" -lt "$KPAR" ]; do
-    awk -v w="$j" -v k="$KPAR" '(NR - 1) % k == w' "$2" > "$2.$j"
-    sweep_worker "$2.$j" "$1" & KPIDS="$KPIDS $!"; j=$((j + 1))
+sweep_pass() {  # <dir> <job list>: rounds of KPAR jobs, a barrier between rounds; the stop file is read only at a barrier.
+  # DETERMINISTIC BY CONSTRUCTION. The stop file used to be read by each worker before ITS next job, so
+  # which later points ran depended on which worker looked first; the counted re-run of those points
+  # (and so the invocation count) moved by a few starts between identical runs. Now a point runs iff
+  # no earlier ROUND contained a failing point, and a point's verdict does not depend on scheduling.
+  local nj r=0 lo hi i N L
+  nj="$(wc -l < "$2" | tr -d ' ')"
+  while [ $(( r * KPAR )) -lt "$nj" ]; do
+    [ -e "$1/stop" ] && break
+    lo=$(( r * KPAR + 1 )); hi=$(( lo + KPAR - 1 ))
+    KPIDS=""; i="$lo"
+    while [ "$i" -le "$hi" ] && [ "$i" -le "$nj" ]; do
+      read -r N L <<EOF
+$(sed -n "${i}p" "$2")
+EOF
+      sweep_one "$N" "$L" "$1" & KPIDS="$KPIDS $!"; i=$((i + 1))
+    done
+    # The worker pids are recorded (KPIDS) so an interrupt can reap their trees; see the EXIT handler.
+    # SNAPROT_SWEEP_STARTED names a file written once the first round's workers are running, so a probe
+    # that interrupts this fixture mid-sweep waits on a condition rather than on a process table.
+    [ "$r" -eq 0 ] && [ -n "${SNAPROT_SWEEP_STARTED:-}" ] && echo "$KPIDS" > "$SNAPROT_SWEEP_STARTED"
+    wait
+    KPIDS=""
+    r=$((r + 1))
   done
-  # The worker pids are recorded (KPIDS) so an interrupt can reap their trees; see the EXIT handler.
-  # SNAPROT_SWEEP_STARTED names a file written once every worker is running, so a probe that
-  # interrupts this fixture mid-sweep waits on a condition rather than on a process table.
-  [ -n "${SNAPROT_SWEEP_STARTED:-}" ] && echo "$KPIDS" > "$SNAPROT_SWEEP_STARTED"
-  wait
-  KPIDS=""
 }
 arm_sweep() {
   local heq ok_all=1 d T N j k L bad nk npost nmiss nmv npart first swept stop bh be tk tl W0 n0 n1 wpost

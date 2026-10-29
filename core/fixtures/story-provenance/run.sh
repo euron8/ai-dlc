@@ -11,8 +11,55 @@
 # WHERE EXIT CODES COINCIDE, ASSERT ON THE MESSAGE (this repo's own rule — a check that cannot
 # fire reads exactly like one that passed). The refuse-placeholder and refuse-unconverged cases
 # both exit 1, as does the drift case; each asserts the DISTINGUISHING message.
+#
+# THE MUTANT MATRIX. A CELL is one arm's predicate, read off ONE run of a (possibly mutated) program. The cells are
+# in six families, each read on the mutant of its own family only, because an arm drives the writer or the reader
+# its family mutates and no other family's arm touches that copy:
+#   sv    V (an unconverged pass is refused under the schema), P1 (the schema copy is the one loaded)
+#   mixed E (the bind refuses an unnamed story), C (a bug story fails the series arm), D (a convergence story fails
+#         the bug arm), R (the bind resolves the artifact through the project root)
+#   inst  CI (writer resolves the install schema), CR (reader passes the writer's stamp), NI and NR (the same two
+#         with a foreign root that carries its own schema)
+#   guard Gw and Gr (the writer's and the reader's trace never stats the filesystem-root schema path)
+#   b302  DP (the writer's --print-schema is the override root's copy), DS (the reader accepts the writer's stamp),
+#         DC (the control refuses a placeholder without the override)
+#   b729  S1, S2, S3 (--series resolves p10 under each of the three prefix spellings)
+# PER PUSH a mutant is scored on its DECIDING cells, which must detect it, and its named TWIN, a cell of the same
+# family it could plausibly co-trip but must leave GREEN. `run.sh --matrix` scores each mutant on every cell of its
+# family and prints one MATRIX line per mutant. The matrix is re-measured whenever an arm or a mutant is added or
+# changed, by the REMEASURE command below, run from the repo root.
+# MC decides two cells because its one fault, a content check that compares nothing, is aimed at both comparisons.
+# B729-b decides S1 and S2 because its one fault, the exclusion list removed, is aimed at both short spellings.
+# B729-c decides all three spellings because the last-in-glob-order resolver is wrong under every spelling.
+# also trips: WR -> DS
+# MUTANT-MATRIX SV decides=V twins=P1
+# MUTANT-MATRIX MB decides=E twins=C
+# MUTANT-MATRIX MC decides=C,D twins=E
+# MUTANT-MATRIX MR decides=R twins=E
+# MUTANT-MATRIX IA decides=CI twins=NI
+# MUTANT-MATRIX IB decides=NI twins=CI
+# MUTANT-MATRIX IC decides=CR twins=NR
+# MUTANT-MATRIX IB2 decides=NR twins=CR
+# MUTANT-MATRIX ID decides=Gw twins=Gr
+# MUTANT-MATRIX ID2 decides=Gr twins=Gw
+# MUTANT-MATRIX WR decides=DP twins=DC
+# MUTANT-MATRIX B729-a decides=S3 twins=S1
+# MUTANT-MATRIX B729-b decides=S1,S2 twins=S3
+# MUTANT-MATRIX B729-c decides=S1,S2,S3 twins=- why=the last-in-glob-order resolver picks the wrong pass under all three spellings, so every cell is red
+# Every mutant reaches mutant_killed through one helper, as a variable:
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all fourteen mutants and every name keeps its own row
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/story-provenance/run.sh --matrix
+#
+# Usage: run.sh [--matrix]
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
+
+MODE=plain
+case "${1:-}" in
+  "") ;;
+  --matrix) MODE=matrix ;;
+  *) echo "story-provenance: usage: run.sh [--matrix]" >&2; exit 2 ;;
+esac
 
 WRITER=""
 for cand in \
@@ -34,6 +81,16 @@ trap 'rm -rf "$ROOT" ${NM_EXTRA:+"$NM_EXTRA"}' EXIT
 REAL_TID="toolu_FIXTUREaaaaaaaa"
 FAILURES=0
 ASSERTIONS=0
+ok()  { printf '  ok    %-46s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s\n' "$1"; }
+MUT_LIB="$DIR/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+EXPECT_OK=0
+MXD="$ROOT/mx"; mkdir -p "$MXD"
+# MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
+MXL="$MXD/ledger"; : > "$MXL"
 
 # $1 label  $2 want-exit  $3 want-substring (or "")  then command...
 expect() {
@@ -44,12 +101,162 @@ expect() {
   local ok=1
   [ "$got" -eq "$want" ] || ok=0
   if [ -n "$needle" ] && ! grep -qF "$needle" <<<"$out"; then ok=0; fi
+  EXPECT_OK="$ok"
   if [ "$ok" -eq 1 ]; then
     printf '  ok    %-46s exit=%s\n' "$label" "$got"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-46s exit=%s want=%s needle=%q\n' "$label" "$got" "$want" "$needle"
     printf '        out: %s\n' "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+  fi
+}
+
+# ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
+mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
+  local n="$1" f="$2" l w c=0 v=""
+  while IFS= read -r l; do
+    case "$l" in
+      "# MUTANT-MATRIX $n "*)
+        c=$((c + 1))
+        for w in ${l#"# MUTANT-MATRIX $n "}; do case "$w" in "$f="*) v="${w#"$f="}" ;; esac; done ;;
+    esac
+  done < "$DIR/run.sh"
+  [ "$c" -eq 1 ] && printf '%s' "$v"
+}
+mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
+mx_fam() { # <mutant> -> its cell family
+  case "$1" in
+    SV) echo sv ;; MB|MC|MR) echo mixed ;; IA|IB|IC|IB2) echo inst ;; ID|ID2) echo guard ;; WR) echo b302 ;; B729-*) echo b729 ;;
+  esac
+}
+mx_cells() { # <family> -> its cells
+  case "$1" in
+    sv) echo "V P1" ;; mixed) echo "E C D R" ;; inst) echo "CI CR NI NR" ;; guard) echo "Gw Gr" ;; b302) echo "DP DS DC" ;; b729) echo "S1 S2 S3" ;;
+  esac
+}
+mx_role() { case "$1" in IA|IB|ID) echo writer ;; *) echo reader ;; esac; }
+# mx_need <mutant> <cell> -> the POSITIVE row the mutant's deciding cell must print (never mere absence of the refusal)
+mx_need() {
+  case "$1:$2" in
+    MB:E|MC:C|MC:D) printf '%s' "OK (1 story file(s) current)" ;;
+    MR:R) printf '%s' "which is not the story being stamped: ${S1B#s1/}" ;;
+    SV:V) printf '%s' "stamped 1 of 1" ;;
+  esac
+}
+mx_register() { # <mutant> <mutant path or DID NOT APPLY...> -> 0 when it applied
+  ASSERTIONS=$((ASSERTIONS + 1))
+  case "$2" in "DID NOT APPLY"*) bad "mutant $1 $2"; return 1 ;; esac
+  printf '%s' "$2" > "$MXD/$1.path"
+}
+# One cell, one verdict: 0 RED (the arm detects the mutant), 1 GREEN (the arm still holds), 2 BROKEN. MX_OUT is its evidence.
+cell_sv() {
+  case "$1" in
+    V) MX_OUT="$(mut_run)"; grep -qF "stamped 1 of 1" <<<"$MX_OUT" && ! grep -qF "not EXIT_CONDITION_MET" <<<"$MX_OUT" && return 0; return 1 ;;
+    P1) MX_OUT="$(mut_writer --print-schema 2>&1)"; [ -n "$MX_OUT" ] && [ "$MX_OUT" -ef "$MUTROOT/schemas/provenance-block.json" ] && return 1; return 0 ;;
+  esac
+  return 2
+}
+cell_mixed() { # <cell> <mutant writer>
+  local c="$1" mp="$2" w
+  case "$c" in
+    R) w="$(mixed_world)" || return 2
+       MX_OUT="$(cd "$w/s1" && AI_DLC_PROJECT_ROOT="$w" bash "$mp" --terminal "${ONESHOT#s1/}" --profile "$BUGP" "${S1B#s1/}" 2>&1)"
+       grep -qF "stamped 1 of 1" <<<"$MX_OUT" && return 1; return 0 ;;
+    E|C|D)
+       w="$(mixed_world)" || return 2
+       in_world "$w" "$WRITER" --series s1/stories-adversarial "$S1C" "$S1U" >/dev/null 2>&1
+       in_world "$w" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1B" >/dev/null 2>&1
+       forge_unfolded_bug_block "$w" "$WRITER"
+       case "$c" in
+         E) MX_OUT="$(cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$mp" --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U" 2>&1)"; MX_NEEDLE="which is not the story being checked: $S1U" ;;
+         C) MX_OUT="$(cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$mp" --series s1/stories-adversarial --check "$S1B" 2>&1)"; MX_NEEDLE="$S1B: block does not match" ;;
+         D) MX_OUT="$(cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$mp" --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C" 2>&1)"; MX_NEEDLE="$S1C: block does not match" ;;
+       esac
+       grep -qF -- "$MX_NEEDLE" <<<"$MX_OUT" && return 1; return 0 ;;
+  esac
+  return 2
+}
+cell_inst() { # <cell> <mutant> <mutant path>
+  local wb=stamp-story-provenance.sh rb=validate-provenance-block.sh r
+  if [ "$(mx_role "$2")" = writer ]; then wb="$(basename "$3")"; else rb="$(basename "$3")"; fi
+  MX_OUT=""
+  case "$1" in
+    CI) arm_ci "$wb" "$3" 2>/dev/null; r=$? ;; CR) arm_cr "$rb" "$3" 2>/dev/null; r=$? ;;
+    NI) arm_ni "$wb" "$3" 2>/dev/null; r=$? ;; NR) arm_nr "$rb" "$3" 2>/dev/null; r=$? ;;
+    *) return 2 ;;
+  esac
+  case "$r" in 0) return 1 ;; 1) return 0 ;; *) return 2 ;; esac
+}
+cell_guard() { # <cell> <mutant> <mutant path>
+  local sc args tr
+  if [ "$1" = Gw ]; then sc=stamp-story-provenance.sh; args="--print-schema"; [ "$(mx_role "$2")" = writer ] && sc="$(basename "$3")"
+  else sc=validate-provenance-block.sh; args="$NM/probe.md --allow-missing"; [ "$(mx_role "$2")" = reader ] && sc="$(basename "$3")"; fi
+  [ -n "$NM" ] || return 2
+  if [ "$sc" = "$(basename "$3")" ]; then cp "$3" "$NM/scripts/ai-dlc/$sc" || return 2; fi
+  # shellcheck disable=SC2086
+  tr="$(trace_of "$sc" $args)"; MX_OUT="$tr"
+  grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$tr" && grep -qF "$SCH not found" <<<"$tr" || return 2
+  grep -qF -- "$ROOTSTAT" <<<"$tr" && return 0; return 1
+}
+cell_b302() { # <cell> <mutant> <mutant path>
+  local v i
+  if [ ! -f "$MXD/$2.v" ]; then b302_vector "$3" > "$MXD/$2.v"; fi
+  v="$(cat "$MXD/$2.v")"; MX_OUT="$v"
+  case "$1" in DP) i=1 ;; DS) i=2 ;; DC) i=3 ;; *) return 2 ;; esac
+  case "$(printf '%s' "$v" | cut -c"$i")" in 1) return 0 ;; 0) return 1 ;; *) return 2 ;; esac
+}
+cell_b729() { # <cell> <mutant path>
+  local sp
+  case "$1" in S1) sp=s-adversarial ;; S2) sp=s-adversarial- ;; S3) sp=s-adversarial-p ;; *) return 2 ;; esac
+  MX_OUT=""
+  if ( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" bash "$2" --series "$sp" --check story.md >/dev/null 2>&1 ); then return 1; fi
+  return 0
+}
+# mx_cell <mutant> <cell> <role dec|mx> -> MX_COLOR RED|GREEN, ledgered; a cell that crashes is BROKEN, never GREEN.
+mx_cell() {
+  local m="$1" c="$2" r="$3" f mp rc
+  f="$(mx_fam "$m")"; mp="$(cat "$MXD/$m.path" 2>/dev/null)"
+  printf '%s %s %s\n' "$r" "$m" "$c" >> "$MXL"
+  case "$f" in
+    sv) cell_sv "$c" ;; mixed) cell_mixed "$c" "$mp" ;; inst) cell_inst "$c" "$m" "$mp" ;;
+    guard) cell_guard "$c" "$m" "$mp" ;; b302) cell_b302 "$c" "$m" "$mp" ;; b729) cell_b729 "$c" "$mp" ;;
+    *) false ;;
+  esac
+  rc=$?
+  case "$rc" in
+    0) MX_COLOR=RED ;; 1) MX_COLOR=GREEN ;;
+    *) if [ "$MODE" = matrix ]; then echo "MATRIX BROKEN $m"; exit 2; fi
+       bad "FIXTURE BROKEN: cell $c of mutant $m could not run, which reads as neither red nor green"; MX_COLOR=GREEN ;;
+  esac
+}
+# mx_score <mutant> <base-pass flag> -- every deciding cell must be RED and print the mutant's positive row, the
+# twin must stay GREEN; under --matrix every other cell of the family is read too.
+mx_score() {
+  local m="$1" fl="$2" dec tw d t a g=0 tot=0 u="" rd="" allred=1 c need dshown="" fam
+  dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"; fam="$(mx_fam "$m")"
+  if [ -z "$dec" ] || [ -z "$tw" ]; then bad "FIXTURE BROKEN: mutant $m has no single MUTANT-MATRIX row naming its deciding cells and twin"; return; fi
+  for c in $(printf '%s' "$dec" | tr ',' ' '); do
+    mx_cell "$m" "$c" dec
+    if [ "$MX_COLOR" != RED ]; then allred=0; dshown="$dshown $c:GREEN"; continue; fi
+    need="$(mx_need "$m" "$c")"
+    if [ -n "$need" ] && ! grep -qF -- "$need" <<<"$MX_OUT"; then allred=0; dshown="$dshown $c:RED-without-its-positive-row"; continue; fi
+    dshown="$dshown $c:RED"
+  done
+  if [ "$allred" = 1 ]; then mutant_killed "$fl" "$m" "mutant $m scored by its deciding cell(s)$dshown"
+  else bad "mutant $m SURVIVED:$dshown"; fi
+  t=-
+  if [ "$tw" != - ]; then
+    mx_cell "$m" "$tw" dec; t="$MX_COLOR"
+    if [ "$t" = RED ]; then bad "mutant $m is entangled: its twin $tw also failed"; fi
+  fi
+  if [ "$MODE" = matrix ]; then # mx-all-cells
+    for a in $(mx_cells "$fam"); do
+      case ",$dec,$tw," in *",$a,"*) continue ;; esac
+      tot=$((tot + 1)); mx_cell "$m" "$a" mx; if [ "$MX_COLOR" = GREEN ]; then g=$((g + 1)); else rd="$rd,$a"; fi
+    done
+    case "$dshown" in *GREEN*|*without*) u=" UNEXPECTED=$dec:GREEN" ;; esac
+    if [ "$t" = RED ]; then u="$u UNEXPECTED=$tw:RED"; fi
+    printf 'MATRIX %s decides=%s:%s twins=%s:%s others=%d/%d%s%s\n' "$m" "$dec" "$(if [ "$allred" = 1 ]; then echo RED; else echo GREEN; fi)" "$tw" "$t" "$g" "$tot" "${rd:+ red=${rd#,}}" "$u"
   fi
 }
 
@@ -251,10 +458,17 @@ else
 fi
 if [ -f "$SCHEMA_SRC" ] && [ "$PRE_OK" -eq 1 ]; then
   ASSERTIONS=$((ASSERTIONS + 1))
-  # CONTROL — the same writer, the same tree, the UNMUTATED schema. It must still refuse, or the
+  # CONTROL -- the same writer, the same tree, the UNMUTATED schema. It must still refuse, or the
   # harness itself is what kills the guard and the mutant below proves nothing.
   ctl="$(mut_run)"
-  # MUTANT — drop `verdict` from the CONVERGENCE profile's batch_invariant and nothing else.
+  if grep -qF "not EXIT_CONDITION_MET" <<<"$ctl"; then
+    ok "mutation control: the unmutated schema refuses an unconverged pass"; B_v=1
+  else
+    bad "FIXTURE BROKEN: control run does not refuse"
+    printf '        out: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-160)"
+  fi
+  # MUTANT SV -- drop `verdict` from the CONVERGENCE profile's batch_invariant and nothing else. The kill is
+  # the guard letting an UNCONVERGED pass through to a real stamp, never merely the absence of the refusal.
   python3 - "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json" <<'PY'
 import json, sys
 s = json.load(open(sys.argv[1]))
@@ -262,24 +476,7 @@ p = s["profiles"]["story-provenance"]
 p["batch_invariant"] = [f for f in p["batch_invariant"] if f != "verdict"]
 json.dump(s, open(sys.argv[2], "w"), indent=2)
 PY
-  mut="$(mut_run)"
-
-  if ! grep -qF "not EXIT_CONDITION_MET" <<<"$ctl"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: control run does not refuse"
-    printf '        out: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-160)"
-  elif grep -qF "not EXIT_CONDITION_MET" <<<"$mut"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-46s\n' "mutation: schema mutant had no effect"
-  elif ! grep -qF "stamped 1 of 1" <<<"$mut"; then
-    # Absence of the refusal is not a kill on its own — the run could have died for an unrelated
-    # reason. The kill is the guard letting an UNCONVERGED pass through to a real stamp.
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-46s\n' "mutation: mutant neither refused nor stamped"
-    printf '        out: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-160)"
-  else
-    printf '  ok    %-46s\n' "mutation: dropping verdict from the profile disarms the guard"
-  fi
+  mx_score SV "${B_v:-0}"
 fi
 
 # --- MIXED SPRINT. One planning slot holding a convergence-validated story and a FOLDED bug-fix
@@ -331,6 +528,7 @@ else
   #     reported against some OTHER file cannot satisfy it. Its ALLOW twin is the arm above.
   expect "mixed: bug story FAILS --series arm" 1 "$S1B: block does not match" \
     in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1B"
+  if [ "$EXPECT_OK" = 1 ]; then B_c=1; fi
   # D — the convergence story FAILS the bug arm, on its BLOCK and not on the bind: the legacy
   #     one-shot names story-1, so the bind is satisfied and only the profile can refuse it.
   #     This is also the legacy near-miss: Check 17 reads no declaration from the legacy name at
@@ -338,6 +536,7 @@ else
   #     what would happen to it if the legacy name DID route it.
   expect "mixed: convergence story FAILS bug arm (legacy)" 1 "$S1C: block does not match" \
     in_world "$MW" "$WRITER" --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C"
+  if [ "$EXPECT_OK" = 1 ]; then B_d=1; fi
   expect "mixed: legacy one-shot leaves story-1 on its arm" 0 "OK (1 story file(s) current)" \
     in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1C"
   # E — THE BIND. An unfolded story carrying a well-formed bug block, checked through a one-shot
@@ -348,6 +547,7 @@ else
     in_world "$MW" "$WRITER" --terminal s1/scratch-oneshot-for-3.md --profile "$BUGP" --check "$S1U"
   expect "mixed: bind refuses --check of an unnamed story" 1 "which is not the story being checked: $S1U" \
     in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U"
+  if [ "$EXPECT_OK" = 1 ]; then B_e=1; fi
   expect "mixed: bind refuses stamping an unnamed story" 1 "which is not the story being stamped: $S1U" \
     in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1U"
   expect "mixed: bind refuses an artifact naming no file" 1 "which is not the story being checked: $S1B" \
@@ -368,6 +568,7 @@ else
   expect "mixed: bind resolves artifact via project root" 0 "stamped 1 of 1" \
     env AI_DLC_PROJECT_ROOT="$RW" bash -c 'cd "$1/s1" && bash "$2" --terminal "$3" --profile "$4" "$5"' _ \
       "$RW" "$WRITER" "${ONESHOT#s1/}" "$BUGP" "${S1B#s1/}"
+  if [ "$EXPECT_OK" = 1 ]; then B_r=1; fi
 fi
 
 # --- MUTANTS OF THE MIXED ARMS. Each is a copy of the writer in a scripts/ + schemas/ layout
@@ -427,46 +628,13 @@ else
   printf '  FAIL  %-46s\n' "FIXTURE BROKEN: mutant copy does not resolve its schema sibling"
 fi
 
-# $1 label  $2 mutant path-or-DID-NOT-APPLY  $3 ctl-needle  $4 mut-needle  then writer args
-score_mutant() {
-  local label="$1" mp="$2" cn="$3" mn="$4"; shift 4
-  local w1 w2 ctl mut
-  ASSERTIONS=$((ASSERTIONS + 1))
-  case "$mp" in "DID NOT APPLY"*)
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
-  esac
-  w1="$(mixed_world)"; w2="$(mixed_world)"
-  for wx in "$w1" "$w2"; do
-    in_world "$wx" "$WRITER" --series s1/stories-adversarial "$S1C" "$S1U" >/dev/null 2>&1
-    in_world "$wx" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1B" >/dev/null 2>&1
-    forge_unfolded_bug_block "$wx" "$WRITER"
-  done
-  ctl="$(cd "$w1" && AI_DLC_PROJECT_ROOT="$w1" bash "$MUTX/scripts/ctl.sh" "$@" 2>&1)"
-  mut="$(cd "$w2" && AI_DLC_PROJECT_ROOT="$w2" bash "$mp" "$@" 2>&1)"
-  if ! grep -qF -- "$cn" <<<"$ctl"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: control lacks its row"
-    printf '        ctl: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-200)"
-  elif [ "$ctl" = "$mut" ]; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: mutant output identical to control"
-  elif ! grep -qF -- "$mn" <<<"$mut"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: mutant lacks the opposite row"
-    printf '        mut: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-200)"
-  else
-    printf '  ok    %-46s\n' "$label"
-  fi
-}
-
+# The mixed mutants are scored by the matrix helpers (mx_score), one fresh stamped world per mutant, never the
+# old ctl-plus-mut pair of worlds per cell: the real writer's own arms above are the control, and a mutant copy
+# that did not run prints neither row and reads BROKEN.
 MB="$(mk_mutx mb "$MB_PROG")"
-score_mutant "mutant MB (bind deleted) killed by bind arm" "$MB" \
-  "which is not the story being checked: $S1U" "OK (1 story file(s) current)" \
-  --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U"
+if mx_register MB "$MB"; then mx_score MB "${B_e:-0}"; fi
 MC="$(mk_mutx mc "$MC_PROG")"
-score_mutant "mutant MC (content blind) killed by arm C" "$MC" \
-  "$S1B: block does not match" "OK (1 story file(s) current)" \
-  --series s1/stories-adversarial --check "$S1B"
-score_mutant "mutant MC (content blind) killed by arm D" "$MC" \
-  "$S1C: block does not match" "OK (1 story file(s) current)" \
-  --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C"
+if mx_register MC "$MC"; then mx_score MC "$(( ${B_c:-0} && ${B_d:-0} ))"; fi
 
 # MR — the bind loses its project-root base: inside the predicate the one-shot guard calls, the
 # one statement appending the root to the candidate bases becomes a no-op. Arm R owns it: run
@@ -489,29 +657,7 @@ new_body = re.sub(r"(?m)^( +)bases\.append\([^\n]*\)\n", r"\1pass\n", body, coun
 open(sys.argv[2], "w").write(src[:m.start(1)] + new_body + src[m.end(1):])
 '
 MR="$(mk_mutx mr "$MR_PROG")"
-ASSERTIONS=$((ASSERTIONS + 1))
-case "$MR" in
-  "DID NOT APPLY"*)
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "$MR" ;;
-  *)
-    r1="$(mixed_world)"; r2="$(mixed_world)"
-    run_r() { # $1 world  $2 writer
-      ( cd "$1/s1" && AI_DLC_PROJECT_ROOT="$1" bash "$2" --terminal "${ONESHOT#s1/}" \
-          --profile "$BUGP" "${S1B#s1/}" 2>&1 )
-    }
-    ctl="$(run_r "$r1" "$MUTX/scripts/ctl.sh")"; mut="$(run_r "$r2" "$MR")"
-    if ! grep -qF "stamped 1 of 1" <<<"$ctl"; then
-      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "FIXTURE BROKEN: control did not stamp"
-      printf '        ctl: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-200)"
-    elif [ "$ctl" = "$mut" ]; then
-      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "SURVIVED: mutant output identical to control"
-    elif ! grep -qF "which is not the story being stamped: ${S1B#s1/}" <<<"$mut"; then
-      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "SURVIVED: mutant did not refuse on the bind"
-      printf '        mut: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-200)"
-    else
-      printf '  ok    %-46s\n' "mutant MR (root base dropped) killed by arm R"
-    fi ;;
-esac
+if mx_register MR "$MR"; then mx_score MR "${B_r:-0}"; fi
 
 # --- THE INSTALL'S SCHEMA. In a consumer the writer and reader sit at <root>/scripts/ai-dlc/ and
 # the schema at <root>/.claude/schemas/, so an AI_DLC_PROJECT_ROOT naming a root with no schema of
@@ -614,7 +760,9 @@ for lbl in "consumer: writer resolves the install schema (CI)" \
            "near-miss: reader resolves foreign schema (NR)"; do
   i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
   c="$(printf '%s' "$BASEV" | cut -c"$i")"
-  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"
+  if [ "$c" = 0 ]; then
+    printf '  ok    %-46s\n' "$lbl"
+    case "$i" in 1) B_ci=1 ;; 2) B_cr=1 ;; 3) B_ni=1 ;; 4) B_nr=1 ;; esac
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
 done
 
@@ -678,32 +826,11 @@ if python3 -c "$DROP_PROG" "$MUTI/decoy.sh" "$MUTI/decoy.out" 2>/dev/null; then
 else
   printf '  ok    %-46s\n' "install mutants: anchor refuses a decoy"
 fi
-# $1 label  $2 mutant path-or-DID-NOT-APPLY  $3 "writer"|"reader"  $4 expected vector
-score_imut() {
-  local label="$1" mp="$2" role="$3" want="$4" got
-  ASSERTIONS=$((ASSERTIONS + 1))
-  case "$mp" in "DID NOT APPLY"*)
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
-  esac
-  if [ "$BASEV" != 0000 ]; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: unmutated vector is $BASEV"; return
-  fi
-  if [ "$role" = writer ]; then
-    got="$(cons_vector "$(basename "$mp")" validate-provenance-block.sh "$mp" 2>/dev/null)"
-  else
-    got="$(cons_vector stamp-story-provenance.sh "$(basename "$mp")" "$mp" 2>/dev/null)"
-  fi
-  if [ "$got" = "$want" ]; then printf '  ok    %-46s\n' "$label"
-  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "vector $got, want $want (CI CR NI NR)"; fi
-}
-score_imut "mutant IA (writer: install cand removed) by CI" \
-  "$(mk_imut "$WRITER" ma-writer.sh "$DROP_PROG")" writer 1000
-score_imut "mutant IB (writer: install cand first) by NI" \
-  "$(mk_imut "$WRITER" mb-writer.sh "$FIRST_PROG")" writer 0010
-score_imut "mutant IC (reader: install cand removed) by CR" \
-  "$(mk_imut "$READER" mc-reader.sh "$DROP_PROG")" reader 0100
-score_imut "mutant IB2 (reader: install cand first) by NR" \
-  "$(mk_imut "$READER" mb2-reader.sh "$FIRST_PROG")" reader 0001
+# Each install mutant is scored by mx_score on the cells CI, CR, NI and NR; the unmutated vector is the base-pass flags above.
+mx_register IA "$(mk_imut "$WRITER" ma-writer.sh "$DROP_PROG")" && mx_score IA "${B_ci:-0}"
+mx_register IB "$(mk_imut "$WRITER" mb-writer.sh "$FIRST_PROG")" && mx_score IB "${B_ni:-0}"
+mx_register IC "$(mk_imut "$READER" mc-reader.sh "$DROP_PROG")" && mx_score IC "${B_cr:-0}"
+mx_register IB2 "$(mk_imut "$READER" mb2-reader.sh "$FIRST_PROG")" && mx_score IB2 "${B_nr:-0}"
 
 # ID — THE EMPTY-WALK GUARD. Without it an install walk that finds no marker makes the candidate
 # /.claude/schemas/provenance-block.json, at the filesystem root. No sandbox can plant a file
@@ -735,31 +862,24 @@ trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xt
   local s="$1"; shift
   ( cd "$NM" && AI_DLC_PROJECT_ROOT="$NM/f" PS4='+ ' bash -x "$NM/scripts/ai-dlc/$s" "$@" 2>&1 )
 }
-# $1 label  $2 guarded script  $3 mutant path-or-DID-NOT-APPLY  then script args
-score_guard() {
-  local label="$1" real="$2" mp="$3" ctl mut; shift 3
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ -z "$NM" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: no sandbox"; return; fi
-  case "$mp" in "DID NOT APPLY"*)
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
-  esac
-  cp "$mp" "$NM/scripts/ai-dlc/$(basename "$mp")"
-  ctl="$(trace_of "$real" "$@")"; mut="$(trace_of "$(basename "$mp")" "$@")"
-  if ! grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$ctl" || ! grep -qF "$SCH not found" <<<"$ctl"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: control trace lacks the override candidate"
-  elif grep -qF -- "$ROOTSTAT" <<<"$ctl"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "guarded script stats /.claude/schemas/ at the filesystem root"
-  elif ! grep -qF -- "$ROOTSTAT" <<<"$mut"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: unguarded copy never stats the filesystem root"
-  else
-    printf '  ok    %-46s\n' "$label"
-  fi
-}
 [ -z "$NM" ] || printf '# probe\n' > "$NM/probe.md"
-score_guard "mutant ID (writer: walk guard removed) by G" stamp-story-provenance.sh \
-  "$(mk_imut "$WRITER" md-writer.sh "$UNGUARD_PROG")" --print-schema
-score_guard "mutant ID2 (reader: walk guard removed) by G" validate-provenance-block.sh \
-  "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" "$NM/probe.md" --allow-missing
+# The two guarded scripts, unmutated: the trace names the override candidate and never stats the filesystem root.
+# These are the base-pass flags the two guard mutants are scored behind.
+g_ctl() { # <label> <flag name> <script> args...
+  local lbl="$1" fn="$2" sc="$3" tr; shift 3
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$NM" ]; then bad "FIXTURE BROKEN: no sandbox ($lbl)"; return; fi
+  tr="$(trace_of "$sc" "$@")"
+  if ! grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$tr" || ! grep -qF "$SCH not found" <<<"$tr"; then
+    bad "$lbl: FIXTURE BROKEN: control trace lacks the override candidate"
+  elif grep -qF -- "$ROOTSTAT" <<<"$tr"; then
+    bad "$lbl: the guarded script stats /.claude/schemas/ at the filesystem root"
+  else ok "$lbl"; eval "$fn=1"; fi
+}
+g_ctl "arm G: the guarded writer never stats the filesystem-root schema" B_gw stamp-story-provenance.sh --print-schema
+g_ctl "arm G: the guarded reader never stats the filesystem-root schema" B_gr validate-provenance-block.sh "$NM/probe.md" --allow-missing
+mx_register ID "$(mk_imut "$WRITER" md-writer.sh "$UNGUARD_PROG")" && mx_score ID "${B_gw:-0}"
+mx_register ID2 "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" && mx_score ID2 "${B_gr:-0}"
 
 # --- BL-302: THE WRITER AND THE READER LOAD ONE SCHEMA IN THE DISTRIBUTION LAYOUT TOO. The arms
 # above run in the consumer layout, where the script-relative candidate (`scripts/schemas/`) never
@@ -824,7 +944,7 @@ for lbl in "BL-302 dist: writer resolves the root's schema (DP)" \
            "BL-302 dist: control refuses without it (DC)"; do
   i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
   c="$(printf '%s' "$B302V" | cut -c"$i")"
-  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"
+  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"; case "$i" in 1) B_dp=1 ;; esac
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
 done
 # WR: the script-relative candidate moved back to the head of the writer's loop. Anchored on that
@@ -840,19 +960,10 @@ if src.index(h) + len(h) == src.index(c):
     sys.exit("anchor: the script-relative candidate is already first")
 open(sys.argv[2], "w").write(src.replace(c, "").replace(h, h + c))
 '
-ASSERTIONS=$((ASSERTIONS + 1))
 WR_MUT="$(mk_imut "$WRITER" wr-writer.sh "$WR_PROG")"
-case "$WR_MUT" in
-  "DID NOT APPLY"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "$WR_MUT" ;;
-  *)
-    if [ "$B302V" != 000 ]; then
-      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "FIXTURE BROKEN: unmutated vector is $B302V"
-    else
-      got="$(b302_vector "$WR_MUT")"
-      if [ "$got" = 110 ]; then printf '  ok    %-46s\n' "mutant WR (writer reorder reverted) by DP+DS"
-      else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "vector $got, want 110 (DP DS DC)"; fi
-    fi ;;
-esac
+# WR is scored behind the unmutated vector holding on all three cells (DP, DS and DC), so one flag needs all of them.
+if [ "$B302V" = 000 ]; then B_wr=1; fi
+if mx_register WR "$WR_MUT"; then mx_score WR "${B_wr:-0}"; fi
 
 # --- BL-729: --series resolves every spelling of the prefix to the highest REAL pass.
 # Check 24 takes `<stem>-adversarial-p` and excludes repair/resolution files by name; the writer
@@ -881,7 +992,7 @@ B729_CTL="$(b729_vector "$MUTX/scripts/b729-ctl.sh")"
 ASSERTIONS=$((ASSERTIONS + 1))
 # Positive conjunct: the seeded story really carries p10 tool_use_id (every other pass carries another), and all three spellings pass.
 if [ "$B729_CTL" = 000 ] && grep -qF "tool_use_id: toolu_FIXTUREdddddddd" "$B729/story.md"; then
-  printf '  ok    %-46s\n' "BL-729: three prefix spellings resolve p10 (--check 0)"
+  printf '  ok    %-46s\n' "BL-729: three prefix spellings resolve p10 (--check 0)"; B_s=1
 else
   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s vector %s, want 000\n' "BL-729: three prefix spellings resolve p10" "$B729_CTL"
 fi
@@ -916,25 +1027,23 @@ a = "if (( n > best_n )); then best_n=\x22$n\x22; TERMINAL=\x22$f\x22; fi"
 if src.count(a) != 1: sys.exit("anchor: highest-N compare %d" % src.count(a))
 open(sys.argv[2], "w").write(src.replace(a, "best_n=\x22$n\x22; TERMINAL=\x22$f\x22"))
 '
-b729_score() { # $1 label  $2 name  $3 program  $4 want-vector
-  local mp got
-  ASSERTIONS=$((ASSERTIONS + 1))
-  mp="$(b729_mut "b729-$2" "$3")"
-  case "$mp" in
-    "DID NOT APPLY"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$1" "$mp" ;;
-    *)
-      if [ "$B729_CTL" != 000 ]; then
-        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s FIXTURE BROKEN: control vector %s\n' "$1" "$B729_CTL"
-      else
-        got="$(b729_vector "$mp")"
-        if [ "$got" = "$4" ]; then printf '  ok    %-46s\n' "$1 killed by the BL-729 arm"
-        else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s SURVIVED: vector %s, want %s\n' "$1" "$got" "$4"; fi
-      fi ;;
-  esac
+b729_apply() { # $1 mutant  $2 name  $3 program -> registers the mutant copy
+  mx_register "$1" "$(b729_mut "b729-$2" "$3")"
 }
-b729_score "mutant B729-a (glob reverted)" glob "$B729_GLOB" 001
-b729_score "mutant B729-b (exclusion removed)" excl "$B729_EXCL" 110
-b729_score "mutant B729-c (last in glob order wins)" last "$B729_LAST" 111
+if b729_apply B729-a glob "$B729_GLOB"; then mx_score B729-a "${B_s:-0}"; fi
+if b729_apply B729-b excl "$B729_EXCL"; then mx_score B729-b "${B_s:-0}"; fi
+if b729_apply B729-c last "$B729_LAST"; then mx_score B729-c "${B_s:-0}"; fi
+
+# RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
+# empty matrix count cannot come from a ledger nothing writes.
+mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
+if [ "$MODE" = plain ]; then
+  if [ "$mx_ctl" -eq 0 ]; then bad "rule-9: the matrix ledger control is EMPTY, so a zero count of matrix-only cells means nothing"
+  elif [ "$mx_only" -ne 0 ]; then bad "rule-9: a plain run executed $mx_only matrix-only cell(s) -- the --matrix measurement leaked into the per-push run"
+  else ok "rule-9: a plain run executed no matrix-only cell, while $mx_ctl deciding or twin cell(s) wrote the same ledger"; fi
+else
+  echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran"
+fi
 
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]

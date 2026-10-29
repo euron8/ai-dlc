@@ -50,9 +50,10 @@ content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
 across both pre-push hooks. Before a release push, seed the verdict store
 (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
-(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip, then the exact release commit,
+(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip
 to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
-(`docs/plans/hermetic-pole.md`). A mktemp-store run caches nothing, and a green push's
+(`docs/plans/hermetic-pole.md`). The release's own push is the gate and the run that fills the
+cache; the release sha gets no separate warm push. A mktemp-store run caches nothing, and a green push's
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
 failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 

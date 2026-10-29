@@ -1191,6 +1191,8 @@ Renders per push (counter spliced into `render()`, one shard per run): before (0
 
 **Progress (0.964.0, batch b245).** Part three narrows layer-adjudication-tier (`*` 117, unchanged), review-shard-merge (5140 -> 3686) and wait-stale-deliverable (282 -> 350, a RISE: each mutant now runs its deciding arm plus a measured-green twin, and the C33 lease handoff is ordered by file, not delay). readset-skip pins `POOL_STALL` at 99999 with a self-probed no-refusal arm, and backlog-real-ledger's count follows the live ledger (340, unchanged). The `±` rows remain owed under BL-868. The entry stays PARTIAL.
 
+**Progress (0.965.0, batch b245).** Part four ships snapshot-archive-rotate, emit-report-refusal and the 15 m1-ii matrix-only fixtures. snapshot-archive-rotate's kill-point sweep now runs in rounds with the stop file read only between rounds, so its `*` row is an exact 1319 and the `±` and `provisional` markers are gone. emit-report-refusal routes every mutant through `mutant_killed` (`*` 2687 -> 2133), and the m1-ii fixtures gain a matrix block and leave the allowlists, with trunk-audit-gate gaining a `set -u` fix. The entry stays PARTIAL.
+
 Three mechanisms, each with a self-probe in both directions:
 
 - **Invocation budget.** `scripts/validate-fixture-invocations.sh` judges each fixture's `invocations.decl` against the bash starts counted inside `core/scripts/hermetic-run.sh`, armed once per push in `.githooks/pre-push` at pool depth 0. `measured == declared`, binary. Its header states the blind routes and the arms J1 to J5; the list is not restated here.
