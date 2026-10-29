@@ -2,3 +2,6 @@
 !core/scripts/wait-for-deliverable.sh
 # C46 reads Rule 29's exit list and requires it to name every code the subject can return.
 !core/skills/ai-dlc/rule-bodies/rule-29.md
+# The mutant helper and the matrix-row printer run.sh sources (REQUIRED: each prints its HERMETIC-CONSUMED line).
+!core/fixtures/lib/mutant.sh
+!core/fixtures/lib/matrix.sh
