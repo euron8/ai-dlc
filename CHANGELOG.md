@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.964.0] - 2026-10-28
+
+Batch b245, fixture optimisation part three. It ships BL-866 (timing runs retired), BL-867 (an early-exit reader making an invocation count depend on scheduling), the BL-868 entry and its receipt, and five fixture units under BL-850: layer-adjudication-tier, wait-stale-deliverable, review-shard-merge, readset-skip and backlog-real-ledger. BL-850 stays PARTIAL, and BL-868 stays OPEN. The m1-ii matrix-only fixtures and M5, the BL-828 arm, are not in this release and ride a later one. BL-828 records progress only.
+
+Bootstrapping: nothing ships under `core/` outside `core/fixtures/` (`git diff --name-only 092750234 e59d070d5 -- core ':(exclude)core/fixtures'` lists 0 files, against the 18 files the whole range changes), so no consumer-visible engine, hook or script change ships. The changes are fixtures, two receipt scripts under `scripts/`, two allowlists, one rulebook citation and the backlog.
+
+### BL-866 — timing runs retired
+
+- The rules, `CLAUDE.md` and plans carrying the ruling landed in the docs PR #1333. What ships here is the BL-866 backlog entry and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`.
+- The durable channel is 73051 of 73300 bytes; the ceiling was raised to 73300 in #1333.
+
+### BL-867 — an early-exit reader made a count depend on scheduling
+
+- `ledger-reverify-unfalsifiable` now captures the writer's whole output before its `awk`, so the subject always runs to completion. Its `invocations.decl` `*` row goes 118 -> 128, a RISE, because the subject no longer dies early.
+- New receipt: `scripts/check-sp-o-here-string-reader.sh`. The hygiene arm that was considered is not shipped: its candidate grammar found 35 hits and none was a count defect.
+
+### BL-868 — no fixture verdict or invocation count may depend on load
+
+- The entry, its receipt `scripts/check-no-provisional-invocations.sh`, and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`.
+- BL-868 stays OPEN. Its receipt still finds 5 provisional `±` declarations (readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate and wait-beat-liveness).
+
+### BL-850 — fixture units in part three
+
+`*` rows are bash starts per push, `1a408b46e` against `e59d070d5`.
+
+- layer-adjudication-tier (31852d97a): shares one drift run per state, scores each mutant on its deciding arm plus a twin, and routes kills through `mutant_killed`. `*` 117 -> 117, unchanged.
+- wait-stale-deliverable (ba3b69d1b): runs each mutant on its deciding arm plus one measured-green twin and adds `--matrix`; the C33 lease handoff is ordered by file, not by delay. `*` 282 -> 350, a RISE.
+- review-shard-merge (6ccda5834): matrix tokens are `<group>.<case>` and the fixture leaves the matrix allowlist. `*` 5140 -> 3686.
+- readset-skip (e898bc264): `POOL_STALL` is pinned at 99999 so no ck or tk world is decided by the pool watchdog, with a self-probed no-refusal arm. Its row is `1137±54`, as shipped in 0.963.0 (1143 at `1a408b46e`); the `±` form stays owed under BL-868.
+- backlog-real-ledger: its count follows the live ledger, so its row is not set by this change. `*` 340, unchanged.
+
+### BL-828 — progress
+
+M5 is not in this release. The sites owed, by owner: e2 23, f3 13, fb 9, 19 1, a total of 46.
+
 ## [0.963.0] - 2026-10-28
 
 Batch b245, fixture optimisation part two. It lands the prevention mechanisms (BL-851) and a second set of narrowed fixtures under BL-850, which stays PARTIAL. The wait-stale-deliverable and review-shard-merge narrowings, the m1-ii matrix-only fixtures and BL-866 are not in this release and ride 0.964.0.

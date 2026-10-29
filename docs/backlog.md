@@ -959,6 +959,8 @@ Owed: migrate the remaining allowlisted fixtures, removing each row in the chang
 
 **Progress (0.961.0, batch b245).** 33 more fixtures route their kills through `mutant_killed` behind a same-run base-pass flag, and each change deletes its own row, so `scripts/mutant-kills-allowlist.txt` falls from 124 rows to 91. The remaining 91 stay owed, and the entry stays open.
 
+**Progress (0.964.0, batch b245).** M5 is not in 0.964.0. The M5 sites owed, by owner: e2 23, f3 13, fb 9, 19 1, a total of 46.
+
 verify: manual
 
 ## BL-836 — nothing at pre-push asserts that an OPEN entry's `verify: sh` receipt still runs, so a rename inside a release breaks it silently
@@ -1161,7 +1163,7 @@ verify: manual
 - agent-definition-render: seeds about 196 → 14; hook-world builds 20 → 1.
 - Narrowed to deciding arm plus twin, count not recorded: adversarial-citation, apply-legacy-script-path, apply-setup-sited-merge, apply-worklist-rows, backlog-ledger, backlog-size-ceiling, check-15-bypass, check-25-steering-conduct, check-31-ac-falsifiability, consumer-machinery-home, content-seal, crosswalk-home-declaration, derived-fence-binding, fixture-git-env-seam, fold-architect-ledger-join, owed-derivations, release-version-triple, retired-layer-contract, retro-audit-scans, retro-branch-behind-main, review-reroute, schema-install-fallback, subject-partition.
 
-Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c to f2, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
+Owed: the remaining fixtures in the b245-fx2 part, among them check-24-adversarial-convergence's seam and layer-reference-resolution. Also owed, the deterministic-loop rewrites that each remove a provisional `±` invocations.decl row: readset-skip, readset-skip-b and readset-skip-c now ride BL-868 under ai-dlc-0d, snapshot-archive-rotate to a2, and wait-beat-liveness to a1.
 
 ### reconcile-emit-report (q5)
 
@@ -1172,6 +1174,8 @@ Renders per push (counter spliced into `render()`, one shard per run): before (0
 **Progress (0.962.0, batch b245).** reconcile-emit-report renders once per distinct render input: 1170 renders per push become 66 (base-world 7, conflicting-state 37, mutant-deciding 22), with 0 coverage losses (161 assertions retired with the BL-679 cache, 40 folded into their mutant kill lines). Solo hermetic runs at 66623ceb4: shard a 97s, b 71s, c 56s. The entry stays PARTIAL.
 
 **Progress (0.963.0, batch b245).** Part two narrows 25 declared fixtures, counter-measured in bash starts per push, slot to tip. Falls: apply-restamp-worklist 1883 -> 953 and its `-c` 1314 -> 436, sprint-status-lifecycle 626 -> 188, story-corpus-sprint-slot 178 -> 51, content-seal 861 -> 811 (a fall of 50, a side effect of the adversarial-shard-merge `shard() --map` memo in the `lib.sh` it sources), and the self-update-gate shards 462 -> 428 (the stable count: its early-exit pipe readers no longer let SIGPIPE cut the gate short), 847 -> 638, 430 -> 223, 455 -> 375. Rises: apply-restamp-worklist `-b` 1422 -> 2092 (the shards were rebalanced; like-for-like the old tree with the same split measures 2258, so the change is 166 starts cheaper), handoff-completion-assertion 363 -> 519 (each mutant now runs its deciding arm plus its twins), and postcompact-rulebook-recovery 1859 -> 1869 (the corrected counter now sees 10 gate starts under `ulimit -f` that it could not count before). Fifteen earlier fixture units merged on the batch branch ship in the same release. The entry stays PARTIAL. a1's self-update-gate W3 base repeats (a24, b3, d5) are owed.
+
+**Progress (0.964.0, batch b245).** Part three narrows layer-adjudication-tier (`*` 117, unchanged), review-shard-merge (5140 -> 3686) and wait-stale-deliverable (282 -> 350, a RISE: each mutant now runs its deciding arm plus a measured-green twin, and the C33 lease handoff is ordered by file, not delay). readset-skip pins `POOL_STALL` at 99999 with a self-probed no-refusal arm, and backlog-real-ledger's count follows the live ledger (340, unchanged). The `±` rows remain owed under BL-868. The entry stays PARTIAL.
 
 Three mechanisms, each with a self-probe in both directions:
 
@@ -1200,6 +1204,35 @@ verify: manual
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
 verify: sh bash scripts/validate-fixture-invocations.sh --self-probe && bash scripts/validate-fixture-hygiene.sh --derive
+
+## BL-867 — a counted script piped into an early-exit reader makes the invocation count depend on scheduling
+
+**DEFECT.** A fixture that pipes a counted script's output into a reader that exits at its first match (`awk '… {…; exit}'`, `head`, `grep -m`, `grep -q`) kills the writer with SIGPIPE at its next write after the reader leaves. How far the writer gets before that write depends on scheduling. When the writer can still start processes after its first matching line, the starts it makes before dying vary from run to run, and so does the fixture's armed `invocations.decl` count. Measured in batch b245 on self-update-gate, whose fixture was unchanged across both runs: eight armed runs counted 416 starts, and the 0.963.0 warm run at load 119 counted 428. A per-path join of the two counted start logs put the 12 extra starts on the `--safe-stop` walk's nested `self-update-gate.sh` starts (+7), the unmutated control copy (+1) and its `gate-defer.sh`/`gate-pass.sh` differential starts (+4). All of them sit behind `bash <gate> … 2>&1 | awk '… {print; exit}'`.
+
+The fix is to capture the writer's whole output, then read it from a here-string (`o="$(bash … 2>&1)"; x="$(awk … <<< "$o")"`). The subject then always runs to completion, and the count is the same at any load. `.claude/rules/tool-hazards.md` already forbids feeding `grep -q` from a pipe because of the false NOT-FOUND under `pipefail`; this is the same shape's second consequence.
+
+A site is a defect only if its writer can still start processes after its first matching line. A writer that prints only after all its work is done is unaffected, so each candidate below needs its writer read before it counts as a defect.
+
+Census, at a26bea400, fixtures only. `git grep -P` over `core/fixtures/*/run.sh` and `core/fixtures/*/*.sh` for a pipe into awk-with-exit, `head`, `grep -m` or `grep -q`, fed by a script start. The control was the six known self-update-gate sites, and all six were found. A first pass under `git grep -E` was discarded, because `\b` silently matched nothing there.
+- 32 candidate sites in 15 fixtures. 20 have a direct writer (`bash`/`sh <script>` or a `"$VAR"` script) and 12 have a fixture function whose body starts a script.
+- Direct: adversarial-shard-merge/lib.sh:360,373; bmad-invocation-resolve/run.sh:89,156; check-3b-locked-anchor/run.sh:385,961,962; layer-adjudication-tier/run.sh:1940; ledger-reverify-unfalsifiable/run.sh:274; ledger-reverify/run.sh:6578; self-update-gate/run.sh:745,775,792,846; setup-config-drift/run.sh:141,148; spec-adoption-floor/run.sh:55,71,79; spec-join-integrity/run.sh:289.
+- Function writer: artifact-derivations/run.sh:1072; layer-adjudication-tier/run.sh:262,321,949,2127; ledger-reverify/run.sh:2229,2234,3544,3587; readset-skip/run.sh:1440; self-update-gate/run.sh:1035,1046.
+- Unresolved: 25 call sites whose writer is a function defined outside its file (a lib or receipt helper) are NOT classified.
+- Out of scope: shipped `core/scripts/` and `.githooks/`.
+
+Progress: self-update-gate is fixed on branch b245-a1-self-update-gate-det at core/fixtures/self-update-gate/run.sh:745,775,778,792,808,846,1035,1046 (nine pipes on eight lines; 778 and 808 were not in the census list). self-update-gate-b, -c, -d and self-update-fixture-log have no site of this shape.
+
+**Fixed in ae242a1a7, rides 0.964.0; the LANDED annotation is written when it lands.** One site was a count defect, and the hygiene arm is not shipped.
+
+**LANDED (v0.964.0, verified e59d070d5).** `ledger-reverify-unfalsifiable` captures the writer's output before its `awk` (its `invocations.decl` `*` row 118 -> 128), and `scripts/check-sp-o-here-string-reader.sh` is the receipt.
+
+Outcome, criterion. A site moves the invocation count only if its writer can start a new `bash` (one that reads `BASH_ENV`) after its first matched line. The judge does not count subshells, `sed`, `awk` or `head` (judge header B6 and B7). Under that rule, of the 26 census sites outside self-update-gate, 1 was a count defect, 19 were SAFE-FOR-COUNT and 6 were NOT-A-SITE. The defect was `core/fixtures/ledger-reverify-unfalsifiable/run.sh:274`: `ledger-reverify.sh` starts `bash -c` per `sh` receipt (`:2942`), after the PC-BAD row. It is fixed in ae242a1a7, and its decl moves from 118 to 128, exact, with two armed readings agreeing. The 25 lib-defined writers were classified by the same reading.
+
+Outcome, hygiene arm. Not shipped. A candidate grammar found 35 hits at the fixed tree, and 0 of them were count defects: 19 SAFE-FOR-COUNT and 16 NOT-A-SITE. That is the enumerated false-positive set. Its control at a26bea400 found 45, including `:274` and the nine self-update-gate pipes. No line grammar can see this class, because whether a site is a defect depends on what the writer does after the match, and that is not on the line. The mechanism that catches it is the exact invocation count: J3 refuses the shortened start set, and BL-868's "no ±" end state keeps it exact.
+
+Outcome, blind route B1. `core/fixtures/layer-adjudication-tier/run.sh:256` seeds a git textconv driver `sh -c`, which git forks during the `:262` run. It is `sh` and reads no `BASH_ENV`, so the counter cannot see it. That is the judge header's B1, and it is not a load dependence.
+
+verify: sh bash scripts/check-sp-o-here-string-reader.sh
 
 ## Reopened by BL-817's re-audit (batch 243)
 
@@ -1834,3 +1867,36 @@ Owed: the step's per-story cost on a measured graph sprint, or the step-value ev
 
 verify: manual
 
+
+## BL-866 — timing runs are retired; cost evidence is the counts the gate records
+
+**NOTE.** Operator ruling, 2026-10-28 17:16 EDT: "Timing runs are pointless and unwarranted. I don't want them, they add unnecessary ceremony to collect data that will never be used and become irrelevant quickly." A ruling at 17:15 stands beside it: no work needs a quiet box. Cost evidence is the counts the gate records (invocations.decl, exec, fork and render counts), and reading a duration off a pre-push log stays allowed.
+
+**Changed (batch b245).** The durable rules carry it: `.claude/rules/operator-rulings.md` gains the section "No timing runs" and drops the "Measure `uptime` before a gate" clause; `CLAUDE.md` restates the validator rule as counting execs and invocations before and after; `.claude/rules/verification-discipline.md` recasts "Time both sides the same way" as "Count both sides the same way" and keeps the trees-versus-revisions hazard; `.claude/rules/tool-hazards.md` ends the PS4 paragraph at counting invocations. The live timing instructions in `docs/plans` are recast as counts or deleted: `graph-ledger-full-drain.md` (archive), `pre-push-wall-clock.md` (archive), `hermetic-fixtures-poc.md`, `graph-s305-triage.md` and `graph-pull-0891-to-0901.md`. Historical quotes and recorded wall clocks are untouched.
+
+**LANDED (v0.964.0, verified e59d070d5).** The durable rules and plans carry the ruling (landed in the docs PR #1333), and this release ships this entry and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`. The durable channel is 73051 of 73300 bytes.
+
+**Second claim: the pole-baseline calibration depended on timing runs.** Its header required three serial forced full runs and the MAX. The mechanism is already gone and nothing needs a counts-based replacement: `docs/suite-pole-baseline.tsv`, `scripts/validate-suite-pole.sh` and the `suite-pole-guard` fixture were deleted at 0.807.0 (CHANGELOG.md:5311), and the pre-push hook now prints the pole as information and never fails on it. `git ls-files` lists no baseline file, and no script, hook, fixture or validator reads one. The remaining readers are prose only: `docs/plans/pre-push-wall-clock.md:127`, `:547`, `:562`, `:579` and `:585` (the section marked SUPERSEDED at :547, whose `grep -v '^#' docs/suite-pole-baseline.tsv` command at :585 describes the removed guard), `docs/plans/archive/graph-ledger-full-drain.md:13382` and `:16571`, `docs/poc/hermetic-census/02-census.tsv:227`, and history in CHANGELOG.md and docs/backlog.archive.md. The quiet-box calibration instruction at `docs/plans/pre-push-wall-clock.md:564` is recast to say the row is no longer re-calibrated by timing runs.
+
+A third durable change: `CLAUDE.md`, in the section on running the fixture suite, now states that the shared verdict store is seeded before a release push and that a re-run in a mktemp store caches nothing, citing `docs/plans/hermetic-pole.md`; the sentence also names the `verdict store: N fixture(s) skipped` line as the evidence the seed worked, and the owner rules in `docs/plans/graph-ledger-full-drain.md` carry the per-unit throwaway-ref verification push and the validators-only integrator rule. The `CLAUDE.md` sentence cites `docs/plans/hermetic-pole.md` only for the longest-first ordering, and names the hook's state files: `$AI_DLC_VERDICT_STORE` (default `~/.cache/ai-dlc/verdicts`), `.git/ai-dlc-fixture-keys/<fx>.key` and `.git/ai-dlc-fixture-failures`. A fourth carrier: `.claude/rules/operator-rulings.md` section "Zero tests depend on load" holds the ruling that a test whose verdict or count moves with load is a defect fixed in the test (BL-868).
+
+verify: manual
+
+## BL-868 — no fixture verdict or invocation count may depend on load: the `±` rows, the polls and the watchdogs go
+
+**DEFECT.** Operator ruling, 2026-10-28 18:34 EDT: "There should be ZERO tests that depend on load. If they exist, they are defects." The umbrella: a fixture whose verdict or invocation count depends on scheduling or load is a defect. The end state has three parts. First, no `invocations.decl` carries a `±` row. Second, the judge (`scripts/validate-fixture-invocations.sh`) refuses the `±` form at J3, with a self-probe that fires on a seeded `±` row. Removing the `±` form also deletes its `why=<the loop that retries or polls> provisional` grammar from the judge; `scripts/validate-fixture-hygiene.sh` (H5) parses `why=` only on its `MUTANT-MATRIX` rows, so it carries no `±` grammar to delete. Third, no fixture verdict is decided by a wall-clock or elapsed-poll watchdog.
+
+**Known instances, each with its owner session and state.**
+
+1. `readset-skip`, `readset-skip-b` and `readset-skip-c` `±` rows. These are the deriver's sentinel-settle and end-flush polls, and `-b`'s REAL CANARY bounded retries. Owner: ai-dlc-0d (p1). In progress.
+2. `snapshot-archive-rotate` `±` row: the kill-point sweep workers and their stop file. Owner: ai-dlc-a2.
+3. `wait-beat-liveness` `±` rows: the beat poll loop (one `--check-header` per poll) and the gated sleep stub. Owner: ai-dlc-a1.
+4. `readset-skip` CK MUTANT fileentries. Under load, the pre-push pool's no-progress watchdog REFUSED a 0-second unit in world (c) push 1, which moved the vector. Seen in the 0.963.0 warm run at load about 119. Owner: ai-dlc-0d. In progress.
+5. BL-867: counted scripts piped into early-exit readers (`awk` exit, `head`, `grep -m`, `grep -q`). SIGPIPE makes the number of bash starts scheduling-dependent. Owner: ai-dlc-0d. `self-update-gate` was fixed by ai-dlc-e2 in 0.963.0.
+6. Removal of the provisional `±` judge form, after items 1 to 3 land. Owner: ai-dlc-0d.
+
+Close condition: every item above is closed, and the receipt below returns 0 matches. Its non-zero control is the same `git grep -c '±'` run at the PARENT of the commit that removes the last `±` row, which must be non-zero; it holds once the tip moves, where a control at today's tip would not. The receipt is a bare `! git grep -qF`, so it also reads closed if no `invocations.decl` is tracked at all; 255 are tracked today.
+
+**Progress (0.964.0, batch b245).** The receipt `scripts/check-no-provisional-invocations.sh` ships with the entry and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`. The entry stays OPEN: the receipt still finds 5 provisional `±` declarations (readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate, wait-beat-liveness).
+
+verify: sh bash scripts/check-no-provisional-invocations.sh
