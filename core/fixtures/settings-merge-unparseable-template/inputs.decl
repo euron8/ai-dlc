@@ -1,6 +1,8 @@
 # Reads: the subject (settings-merge.sh, run on the producer template and mutated copies) and the
 # producer template it merges. VERSION is the marker run.sh walks up for; it is plain, not required.
-# copy-only: core/fixtures/settings-merge-unparseable-template/run.sh:61 run.sh walks up for the marker; nothing reads its content
+# copy-only: core/fixtures/settings-merge-unparseable-template/run.sh:86 run.sh walks up for the marker; nothing reads its content
 VERSION
 !core/skills/ai-dlc-update/reconcile/settings-merge.sh
 templates/settings.json.template
+# The same-run kill helper, sourced by run.sh.
+core/fixtures/lib/mutant.sh
