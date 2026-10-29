@@ -854,7 +854,14 @@ fi
 # PUSH MACHINERY'S OPERATING PROCEDURES, WHICH LIVED ONLY IN A DISCHARGED PLAN. A6 WAS OBSERVED FAILING AT
 # 73027 AGAINST 72800 (AND AT 72521 AGAINST 71900, AND AT 71628 AGAINST 69584, BEFORE THAT) BEFORE THE
 # CEILING MOVED. 73300 is the measured total rounded up to 73100, plus 200.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-73300}"
+#
+# RAISED A TWENTY-SECOND TIME, 73300 -> 73900, ON AN OPERATOR RULING, BATCH 245, 2026-10-29
+# ("raise the arbitrary ceiling and add it."), TO CARRY ONE RULE: `verification-discipline.md` gained
+# the landed-branch control (a landed branch is no positive control for a blob-equality "did it land"
+# check; the control is synthetic, `git commit-tree -p <old base> origin/main^{tree}`). A6 WAS OBSERVED
+# FAILING AT 73611 AGAINST 73300 BEFORE THE CEILING MOVED. 73900 is the measured total rounded up to
+# 73700, plus 200.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-73900}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

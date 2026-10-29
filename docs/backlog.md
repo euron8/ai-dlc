@@ -816,6 +816,8 @@ Owed: migrate the remaining allowlisted fixtures, removing each row in the chang
 
 **Progress (v0.968.0, batch b245).** M5 ships: scripts/validate-mutant-kills.sh arm M5 refuses any `mutant_killed`/`need_base` site whose flag argument is not BOUND, that is, not a flag set to 1 only in a passing branch (one that calls `ok` and not `bad`), a `$(( ))` conjunction of such flags, a same-run test over a captured value, or a helper positional every caller fills with one of those; M6 refuses an allowlist row whose site is no longer refused (bound now, or gone) and a duplicate row; M7 refuses a row added against origin/main. The refused sites are listed in the derived, down-only `scripts/mutant-sites-allowlist.txt`, 258 rows on main be4736a50. The sites owed, by owner: e2 23, f3 14, fb 9, 19 1, f6 4, a total of 51, which replaces the 0.964.0 figure of 46.
 
+**Progress (batch b245 close).** The owed count is 52 sites; the +1 is gate-remediation-deny `mx_kill`, from v0.966.0. f6's owed-derivations rewrite f27af70a2 sits on local branch `b245-f6-h2` (worktree `.claude/worktrees/agent-a2db8126dba6b278a`). It was never delivered, and it has 32 MM rows against main's 28. The branch is kept.
+
 verify: manual
 
 ## BL-836 — nothing at pre-push asserts that an OPEN entry's `verify: sh` receipt still runs, so a rename inside a release breaks it silently
@@ -974,6 +976,8 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 
 **Progress (v0.968.0, batch b245).** Shipped: `validate-handoff-evidence.sh --render-dar <story-file> <frozen>` prints one generated `capture-heads` block, one line per capture in the `--list-captures` order (path, head as written with any `(+dirty)`, the command line from the command-line reader), with a count only for the capture cited on the `Full-collection run:` line. `--render-dar ... --check` refuses `dar-heads-stale`, `dar-heads-missing` and `dar-heads-duplicate`, and handoff mode runs the same check, so the existing pre-gate call refuses a stale block. A story older than the commit that added the mode gets `WARN dar-heads-missing` instead of a refusal. The block is stripped before capture citations are read, so rendered paths never create captures. `dev.md` tells the dev to cite captures by path only and paste the rendered block; `qa.md` stops comparing Dev Agent Record prose to capture headers; `implementation.md` runs the handoff call before every gate-2 dispatch, including the GATE1-SKIP path. Fixture arms in `story-evidence-scaffold`: r1 (rendered block, check 0), r2 (retyped head, `dar-heads-stale`), r3 (no block, retyped head, `dar-heads-missing`), r4 (legacy story, WARN only), r5 (two blocks, duplicate), r6 (replay capture with two `head:` lines renders the replay's own), r7 (a rendered command naming a second tracked `.log` pastes clean), r8 (a capture cited only inside the block drops out of `--list-captures`) and r9 (the `(+dirty)` suffix renders). Receipt scores under `set -uo pipefail`: fix 0, `reg1-legacy-any` 1, `reg2-no-strip` 1, second spelling (rev-list ancestry) 0. `qa.md` gains a sibling `## Carried Findings` section, so a gate-2 re-validation answers each carried finding of pass M-1 with a `carried:` line, and the gate-2 fan-out briefs carry the `validate-carried-findings.sh --list` lines. A replay capture renders no count (D-2). This entry stays `verify: manual` and closes only on an `Outcome measured:` line from a graph sprint (gate-2 passes per story, the BL-838 column); no LANDED line is written.
 
+**Progress (batch b245 close).** The c3+c4 candidate cut is owed. This entry's receipt rebuilds its world on every mutant call, about 3600 of 8800 starts. Seed it once, as BL-845 does.
+
 verify: manual
 
 ## BL-844 — a record-only gate-2 rework re-runs the full QA fan-out, and a gate-3 rework re-runs gates 1 and 2
@@ -1101,6 +1105,8 @@ Owed: the 211 allowlisted batteries each gain a block and leave the allowlist; t
 Found while building it (lead filing, DEFECT, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
 
 **Progress (v0.969.0, batch b245).** wait-beat-liveness runs its subject on an injected clock instead of real sleeps: `date` and `sleep` shims first on PATH keep one virtual clock per world, the churn writers and the revised-edit writer are poll hooks the subject's own sleep triggers, and the worlds that need real concurrency (heir, FIFO ledger, custom state dir, cross-heir, the aged-shell chain) keep the real clock with the shims off PATH. Its 63 mutants route through `mutant_killed` behind literal `B_<arm>` flags (58 S arms, one case arm each, equality checked by a `flags:` arm), carry a 63-row matrix block measured once by `bash core/fixtures/wait-beat-liveness/run.sh --matrix`, and leave both allowlists; per push each mutant drives its deciding arm plus one green twin (63 twin drives). Exact `invocations.decl`: `*` 446 `±` -> 6533, `core/scripts/merge-adversarial-shards.sh` 28 `±` -> 26, identical in two armed counts under load. The rise in counted starts is the shims: each virtual `date`/`sleep` is a counted bash start (5626 date and 364 sleep starts of 6533), and the poll loops no longer wait in real time. Deterministic-loop fixes behind the exact count: S13g's two worlds were on the real clock (42 vs 46 starts between runs), the no-perl PATH linked the shims instead of the real binaries, and `blocked_lease` now ends the beat's whole process tree (a matrix cell hung on a ledger-reading `sed`). Item 3 of the BL-868 list is closed for this fixture.
+
+**Progress (batch b245 close, dropped worklist).** Operator ruling 2026-10-29: "I don't want to take on that work in this batch any longer." Owed to a future batch, e2's 35: reconcile-blocking-list, retired-contract-token, scope-confirmation, postcompact-rulebook-recovery, process-rule-pins, gate-adjudication, gate-adjudication-rotate, dist-clone, consumer-machinery-inventory, escalation-citation, escalation-status-vocabulary, check5-anchor-base, derivation-differential, derivation-capture, derivation-capture-worktree-root, divergence-hard-block, deploy-validate-smoke-classification, context-sensor, context-mode-protect, claude-rules-joins, ci-gates-resolution, extension-check-adoption, fanout-payload-channel, fanout-untracked-corpus, core-paths-audit-diff, core-write-guard, core-script-boundary, command-args-citation, escalation-delivery, gate-repair-record, preclassify-mode-bucket, gate-remediation-deny, and procsub-staged-refusal-boot, -b and -c. And 19's 15: h2-attest-scripts-dir, layer-absorption-retire, layer-extends-grain, layer-entry-unreadable, post-write-gates, pause-hook-origin, layer-catalog-collision, inflight-row-shape, layer-retired-id-crosswalk, plan-rotate, layer-debt-due-and-discharge, handoff-resume-guard, implementation-join-yield, layer-debt-ledger, hook-registration-join. Cost note: wait-beat-liveness `*` rose from 446 `±` to 6533 exact in v0.969.0, because each shimmed `date` or `sleep` is a counted bash start (5626 + 364). Bringing the count down is owed, and putting the injected clock in-process is the candidate.
 
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
@@ -1737,5 +1743,48 @@ Close condition: every item above is closed, and the receipt below returns 0 mat
 - `readset-skip`, `readset-skip-b`, `readset-skip-c` (items 1 and 4): every stub-world poll ends on its first iteration, and the stop-at-first drives run every launch. Exact rows: readset-skip 979, -b 484 (deriver 82), -c 805 (deriver 81). -c's real-stream arms are deleted; the real-kernel loss shape is assumed, not tested. Item 4's pool-stall pin shipped in v0.964.0 (e898bc264).
 - `consumer-suite-pool`: every paced world (s, w, t, p, g, r) and the orphan arms run in lockstep with the watcher's polls, and the dropped-worker world blocks until charlie has started, so xargs reaping order no longer moves the count. Decl 362 exact.
 
+**Progress (batch b245 close).** Item 6, removing the provisional `±` judge form, is still owed. New item 7, B1 sh-stub (operator ruling: "File for next batch"): 39 fixtures execute `#!/bin/sh` stubs, which the counter does not count, so their `invocations.decl` rows under-count. The fix is per fixture: change the shebang to bash and re-count the decl; then add an H3 extension refusing an executed sh stub. Source census: H-b1 at fx2 1eb08f8b2, 71 stubs across 40 fixtures; `readset-skip`'s 3 are already fixed.
+
 verify: sh bash scripts/check-no-provisional-invocations.sh
 
+## BL-869 — the verdict-cache seeding is a script and one CLAUDE.md sentence, and nothing at pre-push refuses an unseeded release push
+
+**PARTIAL.** `scripts/seed-verdict-store.sh` and its CLAUDE.md sentence landed in v0.968.0. Owed: a pre-push arm refusing a release-commit push whose exact tree has no seeded passes. Operator, on prose-only carriers: "One clause in CLAUDE.md, that is it?" Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-870 — the pre-suite phase is not content-keyed, so its 24 checks re-run in full on every push
+
+**PARTIAL.** Part A, docs, landed in 749d8a452. Part B is owed: the 24 checks re-run in full on every push, 9m10s read off the 90bb730da log. Measured consequence of the workaround: `AI_DLC_PRESUITE_SKIP=1` on unit pushes left fixture hygiene unchecked. Procsub a86819d78 shipped an H5 FAIL (`core/fixtures/procsub-staged-refusal/run.sh:2100`), caught only by the integrator's fx2 validators and fixed in 9ba3e06a2. Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-871 — shipped-rule-version-floor declares `core/fixtures/lib/` only, but its install.sh run copies every shipping fixture
+
+**DEFECT.** `core/fixtures/shipped-rule-version-floor/inputs.decl` declares `core/fixtures/lib/` among its core subtrees, while its `scripts/install.sh` run copies every shipping fixture (`scripts/install.sh:661-669`). The local read-set map traced reads of `preclassify-rename-row/run.sh`, yet the preclassify push did not select this fixture. Open question: whether a copied fixture's bytes are verdict-relevant. Owed: answer it by a seeded mutation of a copied fixture, then declare or exclude. Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-872 — backlog-real-ledger's invocation count follows the live docs/backlog.md, so every backlog edit re-keys or reds it
+
+**NOTE.** `core/fixtures/backlog-real-ledger/inputs.decl` declares `+docs/backlog.md`, which keys the live ledger even under an excluded top, and its `invocations.decl` counts validator runs over that content. Verified in the tree at 42badbf66 (the `+docs/backlog.md` line at `inputs.decl:10`). Owed: decide whether the count may be decoupled from ledger size. Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-873 — six fixtures' invocation counts rose in v0.968.0 with no stated cause
+
+**NOTE.** carried-findings, check-31-ac-falsifiability, review-reroute, review-shard-merge, sprint-status-lifecycle and story-evidence-scaffold each changed their `invocations.decl` in 909249c28 with no cause stated in the release text. Owed: state the cause per fixture. Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-874 — LANDED lines are written before the squash and name an unreachable pre-squash sha
+
+**DEFECT.** It happened 6 times in batch b245 (BL-685, BL-679, BL-851, BL-867, BL-866, BL-849), each re-anchored by hand at the close. Owed: re-anchor mechanically in the rotator or the close, and assert every `LANDED (..., verified <sha>)` sha is an ancestor of origin/main, with a pre-squash sha as the negative control. Provenance: batch b245 close filing.
+
+verify: manual
+
+## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
+
+**NOTE.** Observed at the batch b245 close: `stub/logstream stream` processes from readset-skip's slot worlds survive their run. Not yet measured: count and cause. Owed: a measured census and a teardown. The related pre-push pool TERM defect is already filed (the entry carrying "a TERM to .githooks/pre-push does not tear down its fixture pool"). Provenance: batch b245 close filing.
+
+verify: manual

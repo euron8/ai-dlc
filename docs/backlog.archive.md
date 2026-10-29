@@ -38671,7 +38671,7 @@ verify: sh R=$PWD; d=$(mktemp -d) && for t in i ii; do mkdir -p $d/$t/.claude/sk
 
 ## BL-685 — BL-679's recorded `--verify` PASS never forms when the dist shares its ref store with active worktrees
 
-**LANDED (v0.962.0, verified 8fd3bb945).** RETIRED with BL-679's cache, not fixed: the recorded `--verify` PASS is deleted from `emit-report.sh`, because it never formed on graph's shared dist (this entry's own finding), it shipped off by default, graph never set `EMIT_REPORT_VERIFY_CACHE`, and under the operator's step-value ruling a step with no measured value goes. `dist-clone.sh` stays as the ref-stable, main-only dist every reconcile reader takes; only its cache reason is retired.
+**LANDED (v0.962.0, verified 7deec27d9).** RETIRED with BL-679's cache, not fixed: the recorded `--verify` PASS is deleted from `emit-report.sh`, because it never formed on graph's shared dist (this entry's own finding), it shipped off by default, graph never set `EMIT_REPORT_VERIFY_CACHE`, and under the operator's step-value ruling a step with no measured value goes. `dist-clone.sh` stays as the ref-stable, main-only dist every reconcile reader takes; only its cache reason is retired.
 
 Outcome measured: no graph pipeline step; the cost lives in core/skills/ai-dlc-update/reconcile/emit-report.sh, whose cache never formed on a shared dist, so it removed nothing to measure.
 
@@ -38832,7 +38832,7 @@ verify: sh bash scripts/receipt-bl837-unbound-acquittal.sh
 
 **DEFECT (efficiency).** Nothing refused the regrowth of fixture cost: this entry files the three prevention mechanisms, the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the H5 mutant-matrix name join. BL-850 carries their detail. The decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
-**LANDED (v0.963.0, verified f39d361c7).** The three mechanisms ship: the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the runtime name join J5. `invocations.decl` rows exist for every counted fixture, and five provisional rows (readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate, wait-beat-liveness) are owed deterministic rewrites under BL-850.
+**LANDED (v0.963.0, verified 233794d68).** The three mechanisms ship: the invocation budget (`scripts/validate-fixture-invocations.sh`), the static hygiene arms (`scripts/validate-fixture-hygiene.sh`) and the runtime name join J5. `invocations.decl` rows exist for every counted fixture, and five provisional rows (readset-skip, readset-skip-b, readset-skip-c, snapshot-archive-rotate, wait-beat-liveness) are owed deterministic rewrites under BL-850.
 
 Outcome measured: no graph pipeline step; the cost lives in this repo's pre-push fixture suite (subject runs per fixture, counted by scripts/validate-fixture-invocations.sh; the before and after counts are recorded in the LANDED line).
 
@@ -38857,7 +38857,7 @@ Progress: self-update-gate is fixed on branch b245-a1-self-update-gate-det at co
 
 **Fixed in ae242a1a7, rides 0.964.0; the LANDED annotation is written when it lands.** One site was a count defect, and the hygiene arm is not shipped.
 
-**LANDED (v0.964.0, verified e59d070d5).** `ledger-reverify-unfalsifiable` captures the writer's output before its `awk` (its `invocations.decl` `*` row 118 -> 128), and `scripts/check-sp-o-here-string-reader.sh` is the receipt.
+**LANDED (v0.964.0, verified 70490c80e).** `ledger-reverify-unfalsifiable` captures the writer's output before its `awk` (its `invocations.decl` `*` row 118 -> 128), and `scripts/check-sp-o-here-string-reader.sh` is the receipt.
 
 Outcome, criterion. A site moves the invocation count only if its writer can start a new `bash` (one that reads `BASH_ENV`) after its first matched line. The judge does not count subshells, `sed`, `awk` or `head` (judge header B6 and B7). Under that rule, of the 26 census sites outside self-update-gate, 1 was a count defect, 19 were SAFE-FOR-COUNT and 6 were NOT-A-SITE. The defect was `core/fixtures/ledger-reverify-unfalsifiable/run.sh:274`: `ledger-reverify.sh` starts `bash -c` per `sh` receipt (`:2942`), after the PC-BAD row. It is fixed in ae242a1a7, and its decl moves from 118 to 128, exact, with two armed readings agreeing. The 25 lib-defined writers were classified by the same reading.
 
@@ -38869,7 +38869,7 @@ verify: sh bash scripts/check-sp-o-here-string-reader.sh
 
 ## BL-679 — one consumer pull re-runs `emit-report.sh --verify` three or four times, each a full detector re-render, and no caller accepts an earlier PASS
 
-**LANDED (v0.962.0, verified 8fd3bb945).** RETIRED, not fixed: the recorded `--verify` PASS cache (its key, read log, `ai-dlc-verify-pass` record, refusals and opt-in) is deleted and `--verify` always re-renders, because the cache never formed on graph's shared dist (BL-685), it shipped off by default, graph never set it, and under the operator's step-value ruling a step with no measured value goes. The re-render cost itself moves to the fixture side under BL-850. Closed in 0.834.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+**LANDED (v0.962.0, verified 7deec27d9).** RETIRED, not fixed: the recorded `--verify` PASS cache (its key, read log, `ai-dlc-verify-pass` record, refusals and opt-in) is deleted and `--verify` always re-renders, because the cache never formed on graph's shared dist (BL-685), it shipped off by default, graph never set it, and under the operator's step-value ruling a step with no measured value goes. The re-render cost itself moves to the fixture side under BL-850. Closed in 0.834.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
 
 Closed in 0.834.0 (verified d4281b59) on a tree receipt, reopened by BL-817. `emit-report.sh --verify` records an exit-0 PASS in the consumer's git-dir, and accepts a matching one only with `EMIT_REPORT_VERIFY_CACHE=1`. It ships off by default, and with that unset every `--verify` is byte-identical to the previous release. Exit 1 and exit 3 are never recorded. The default turns on only after a key review finds no BLOCKER (BL-685). Tests: reconcile-emit-report PC-V0..V26 and mutants M-region, M-direxcl and M-exit3; receipt below.
 
@@ -38900,7 +38900,7 @@ verify: sh f=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$f" ] || 
 
 **Changed (batch b245).** The durable rules carry it: `.claude/rules/operator-rulings.md` gains the section "No timing runs" and drops the "Measure `uptime` before a gate" clause; `CLAUDE.md` restates the validator rule as counting execs and invocations before and after; `.claude/rules/verification-discipline.md` recasts "Time both sides the same way" as "Count both sides the same way" and keeps the trees-versus-revisions hazard; `.claude/rules/tool-hazards.md` ends the PS4 paragraph at counting invocations. The live timing instructions in `docs/plans` are recast as counts or deleted: `graph-ledger-full-drain.md` (archive), `pre-push-wall-clock.md` (archive), `hermetic-fixtures-poc.md`, `graph-s305-triage.md` and `graph-pull-0891-to-0901.md`. Historical quotes and recorded wall clocks are untouched.
 
-**LANDED (v0.964.0, verified e59d070d5).** The durable rules and plans carry the ruling (landed in the docs PR #1333), and this release ships this entry and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`. The durable channel is 73051 of 73300 bytes.
+**LANDED (v0.964.0, verified 70490c80e).** The durable rules and plans carry the ruling (landed in the docs PR #1333), and this release ships this entry and the `(BL-868)` citation in `.claude/rules/operator-rulings.md`. The durable channel is 73051 of 73300 bytes.
 
 **Second claim: the pole-baseline calibration depended on timing runs.** Its header required three serial forced full runs and the MAX. The mechanism is already gone and nothing needs a counts-based replacement: `docs/suite-pole-baseline.tsv`, `scripts/validate-suite-pole.sh` and the `suite-pole-guard` fixture were deleted at 0.807.0 (CHANGELOG.md:5311), and the pre-push hook now prints the pole as information and never fails on it. `git ls-files` lists no baseline file, and no script, hook, fixture or validator reads one. The remaining readers are prose only: `docs/plans/pre-push-wall-clock.md:127`, `:547`, `:562`, `:579` and `:585` (the section marked SUPERSEDED at :547, whose `grep -v '^#' docs/suite-pole-baseline.tsv` command at :585 describes the removed guard), `docs/plans/archive/graph-ledger-full-drain.md:13382` and `:16571`, `docs/poc/hermetic-census/02-census.tsv:227`, and history in CHANGELOG.md and docs/backlog.archive.md. The quiet-box calibration instruction at `docs/plans/pre-push-wall-clock.md:564` is recast to say the row is no longer re-calibrated by timing runs.
 
@@ -38910,7 +38910,7 @@ verify: manual
 
 ## BL-849 — a fixture failure recorded inside a `$( )` subshell, or under a shadowed local counter, never reaches the fixture's exit, so the fixture prints FAIL and still exits 0
 
-**LANDED (v0.968.0, verified 77683ebb8).**
+**LANDED (v0.968.0, verified 909249c28).**
 
 **DEFECT.** Filed in batch 245. Found by the b245 census over `core/fixtures/*/run.sh`. In four fixtures a helper that records a failure with `bad` runs where the increment cannot reach the parent's `fails` counter, so the exit gate reads zero and the pool scores the fixture ok. Sites at 011853d19:
 
