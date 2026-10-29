@@ -33,3 +33,5 @@ tail
 # arm MD: partition-document.sh hashes the document it splits, and the symlinked-directory cell links one.
 shasum
 ln
+# arm AD: the unreadable-pass world makes one verdict file mode 000.
+chmod

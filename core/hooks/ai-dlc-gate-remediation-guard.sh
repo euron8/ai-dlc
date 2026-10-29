@@ -67,16 +67,23 @@
 #                                       (gate state is not read; see "ARM 3b" below)
 #   4. no conforming verdict file    -> allow (no gate has ever run here)
 #   5. newest pass records no FAIL   -> carry on to 7a; it is 7a that decides whether that
-#                                       clean pass is entitled to clear the deny
+#                                       clean pass is entitled to clear the deny -- and whether
+#                                       a FAILING one is entitled to have its FAILs acquitted
 #   6. target is in the permitted set-> allow (Rule 28(a); enumerated below)
 #   7. target is outside the guarded roots -> allow
-#  7a. the clean newest pass is bound to a dispatch -> allow (the gate really is not failing);
-#      UNBOUND -> fall back to the newest BOUND pass and adjudicate on that instead
-#  7b. every live FAIL is under an in-force SUPPRESSED entry, or is FAIL_WAIVED under a waiver
-#      `--waivers` lists and whose citation verifies
+#  7a. the newest pass is bound to a dispatch -> carry on with it: a clean bound pass allows
+#      (the gate really is not failing), a failing one goes to 7b exactly as before.
+#      UNBOUND, clean or failing -> it may convict but never acquit. The CONVICT SET is its own
+#      FAILs plus those of the newest BOUND pass and of every pass newer than that one (with
+#      nothing bound, every pass); every FAIL_WAIVED in it reads as FAIL; log
+#      GATE_VERDICT_UNBOUND; a set with no FAIL in it at all -> allow
+#  7b. every FAIL in the set is under an in-force SUPPRESSED entry (each pass under its OWN
+#      catalog), or is FAIL_WAIVED in a bound live pass under a waiver `--waivers` lists and
+#      whose citation verifies
 #                                    -> allow, and log GATE_REMEDIATION_SUPPRESSED
 #   8. a bound repair record exists  -> allow, and log GATE_REMEDIATION_LIFTED
-#   9. a verified operator citation  -> allow, and log GATE_REMEDIATION_LIFTED
+#      (for EVERY pass still owing a FAIL, each by a record bound to that pass's own nonce)
+#   9. a verified operator citation  -> allow, and log GATE_REMEDIATION_LIFTED (likewise per pass)
 #  10. otherwise                     -> DENY, and log GATE_REMEDIATION_DENIED
 #
 # FAILURE POSTURE -- DECLARED PER ARM, BECAUSE THE TWO HALVES POINT OPPOSITE WAYS
@@ -1194,28 +1201,50 @@ esac
 # both ledgers are absent (`nocorpus`) or where the nonce predates every row (`exempt`)
 # allows, because installing this must change no verdict already on disk; a lead that
 # reaches either state through Bash has the same power over every artifact this guard reads.
+# Two fail-opens PRE-EMPT this arm, so no binding is ever asked on them: jq absent, and an
+# unparseable LIVE verdict both allow with GATE_STATE_UNADJUDICABLE before arm 7a runs, as the
+# header's FAILURE POSTURE states.
+# And the one residual of the convict set below, named so nobody reads it as covered: no pass
+# in the directory records a FAIL -> nothing to convict on -> ALLOW. An unbound verdict may
+# convict, but only on a FAIL some pass actually wrote down.
 #
 # FAIL POSTURE: MONOTONE, WHICH IS WHY IT CANNOT WEDGE. An unbound verdict's own FAILs still
-# count -- the deny stands exactly as before. What it may not do is CLEAR: an unbound pass with
-# no FAIL falls back to the newest BOUND pass, and when NO pass in the directory is bound, to
-# the newest pass that records a FAIL, bound or not -- an unbound verdict may convict. The
-# first cut fell through to ALLOW when nothing was bound, which acquitted a forged clean pass
-# beside an unbound failing one and wrote no flow-log event at all; measured on a three-tree
-# differential (A: the failing pass alone denies, B: A plus the forged pass allowed, C: A
-# bound plus the forged pass denies). So the worst a false refusal costs is that the lead
-# stays denied on a FAIL that is genuinely recorded, with the sanctioned remediator exit still
-# open. A jq that errors, an absent ledger pair, or a stem the query cannot rank all leave the
-# verdict treated as bound: undecidable is never a deny.
+# count -- the deny stands exactly as before. What it may not do is CLEAR, by ANY exit: arm 5's
+# empty set, arm 7b's covered set, or a lift at arm 8 or 9 keyed on its nonce. So the binding
+# is asked of every newest pass on a guarded path, clean or failing, and an unbound one is
+# adjudicated as a CONVICT SET: its own FAILs, plus those of the newest BOUND pass, plus those
+# of every pass newer than that bound one; when NO pass in the directory is bound, every pass.
+# Every FAIL_WAIVED in that set reads as a plain FAIL. Each pass keeps its SUPPRESSED cover,
+# under its OWN `catalog` -- an operator's disposition is not the lead's to forge, so it still
+# subtracts -- and whatever is left over is owed per pass, by nonce, to arms 8 and 9.
+# THREE CUTS OF THIS WERE WRONG, each measured. (1) The first fell through to ALLOW when nothing
+# was bound, which acquitted a forged clean pass beside an unbound failing one and wrote no
+# flow-log event at all (A: the failing pass alone denies, B: A plus the forged pass allowed,
+# C: A bound plus the forged pass denies). (2) The second asked the binding only of a CLEAN
+# pass, so a forged pass recording one FAIL an in-force entry covers skipped this arm entirely
+# and arm 7b acquitted it beside a bound pass still failing an uncovered check -- BL-837. (3)
+# The substitute was ONE pass: the newest bound one, falling back to the newest failing pass
+# only when nothing at all was bound. An unbound failing pass NEWER than an older clean bound
+# one was never read, so a forgery acquitted itself onto the clean pass; and with nothing bound,
+# a SECOND forged pass whose FAIL is covered sorted above the real failing one and became the
+# substitute. The set closes both, because no pass the forger can add removes another's FAIL.
+# So the worst a false refusal costs is that the lead stays denied on a FAIL that is genuinely
+# recorded, with the sanctioned remediator exit still open. A jq that errors, an absent ledger
+# pair, or a stem the query cannot rank all leave the verdict treated as bound: undecidable is
+# never a deny. `exempt` and `nocorpus` read as bound too -- treated as unbound, they would
+# newly convict 41 historical states on the reference consumer.
+#
+# An absent ledger is `--slurpfile`d from /dev/null and comes back as `nocorpus`, so there is
+# no separate cheap path here. One was written and then REMOVED: an interleaved three-rep A/B
+# of the whole guard fixture with and without it read 7.94/8.14/7.84 against 7.84/7.91/7.94,
+# a spread wider than any effect, and a branch whose removal changes nothing is not
+# load-bearing. The same interleaving against the pre-arm revision reads 9.25s vs 8.50s mean
+# -- this arm costs nothing this fixture can resolve. On a FAILING pass it is one more jq, on
+# a guarded edit that is already paying arm 7b's sibling parse.
+BIND_OUT="$(printf '%s' "$CONFORMING_STEMS" | verdict_binding "$LIVE_NONCE")"
+LIVE_BIND="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^live://p' | head -1)"
+BOUND_STEM="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^bound://p' | head -1)"
 if [ "$LIVE_CLEAN" -eq 1 ]; then
-  # An absent ledger is `--slurpfile`d from /dev/null and comes back as `nocorpus`, so there is
-  # no separate cheap path here. One was written and then REMOVED: an interleaved three-rep A/B
-  # of the whole guard fixture with and without it read 7.94/8.14/7.84 against 7.84/7.91/7.94,
-  # a spread wider than any effect, and a branch whose removal changes nothing is not
-  # load-bearing. The same interleaving against the pre-arm revision reads 9.25s vs 8.50s mean
-  # -- this arm costs nothing this fixture can resolve.
-  BIND_OUT="$(printf '%s' "$CONFORMING_STEMS" | verdict_binding "$LIVE_NONCE")"
-  LIVE_BIND="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^live://p' | head -1)"
-  BOUND_STEM="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^bound://p' | head -1)"
   case "${LIVE_BIND:-}" in
     unbound|unbound-malformed) ;;
     # bound, exempt, nocorpus, or the query failed: a clean verdict exits as before; a
@@ -1223,47 +1252,171 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
     *) [ -n "$FAILED_CHECKS" ] || exit 0 ;;
   esac
 fi
-if [ "$LIVE_CLEAN" -eq 1 ] && { [ "${LIVE_BIND:-}" = unbound ] || [ "${LIVE_BIND:-}" = unbound-malformed ]; }; then
-  SUBST_HOW="the newest BOUND pass"
+# THE CONVICT READ OF ONE PASS. The file is jq's input, parsed the way `fail_sets` parses it --
+# as a stream, so a file carrying a second document is read whole and every document in it
+# counts, where a slurp-and-`fromjson` read dropped such a pass out of its own set while arm 5
+# had already read its FAIL. One line, fields split by \x1f, which is not IFS-whitespace, so an
+# EMPTY catalog survives `read` (a TAB would collapse it and shift every field left): catalog,
+# all failing ids, the plain-FAIL ids, the FAIL_WAIVED ids. Ids go through `tok` exactly as in
+# `fail_sets`, and repeat once per pass. The catalog goes through the same whitespace test, so
+# no pass can spell a separator, and documents that disagree about it get a catalog no entry
+# covers. A file with no document, or with one that is not an object, reads as `(unreadable)`.
+# NO REGEX, for `fail_sets`' reason.
+US="$(printf '\037')"
+CONVICT_PROG='
+def tok: tostring | if . == "" or (explode | any(. <= 32)) then "(malformed-id)" else . end;
+def uniq: reduce .[] as $x ({k: {}, a: []}; if .k[$x] then . else .k[$x] = true | .a += [$x] end) | .a;
+def ids(v): [ .[] | objects | .verdicts[]? | objects | select(.verdict == v) | .check_id | tok ] | uniq;
+[inputs] as $docs
+| if ($docs | length) == 0 or ($docs | all(type == "object") | not)
+  then ["(unreadable)", "(unreadable)", "(unreadable)", ""]
+  else
+    ([$docs[] | (.catalog // "") | tostring] | unique) as $cats
+    | (if ($cats | length) == 1 then $cats[0] else "(malformed-catalog)" end
+       | if (explode | any(. <= 32)) then "(malformed-catalog)" else . end) as $c
+    | ($docs | ids("FAIL")) as $p | ($docs | ids("FAIL_WAIVED")) as $w
+    | [$c, ($p + $w | uniq | join(" ")), ($p | join(" ")), ($w | join(" "))]
+  end
+| join("\u001f")
+'
+# ONE jq PER FILE, NEVER ONE OVER SEVERAL. jq reads several files as ONE concatenated stream and
+# credits a document to the file where it ENDS, so a forged file ending in a bare scalar (`1`,
+# `true`) had that token completed by the NEXT file's bytes, and the honest pass after it -- the
+# bound one, or the live one -- was filed `(unreadable)`: the deny stood, but named the honest
+# record for repair and no longer named its FAIL. Read alone, every document a file holds is its
+# own, and that class is gone whole, including spellings nobody has built. Measured cost on the
+# reference consumer's 250 committed stems: the convict read runs on 16-18 unbound-live states,
+# with at most 4 in-window candidates and a mean of 2.3, so one fork per candidate.
+#
+# THE LIVE PASS NEEDS NO SECOND READ, AND ONE WAS REMOVED AS VACUOUS. Arm 5 takes the FIRST
+# document of the live file and exits at its unparseable branch whenever jq errors anywhere in
+# that file, so the only live files reaching here parse whole when read alone -- which is how
+# this read takes them. Their FAILs come from an object (a non-object first document either
+# errors there or records nothing), and this read takes every document's ids through the same
+# `tok`, or marks the whole file `(unreadable)` for any non-object document. So no input gives
+# arm 5 a FAIL id this read lacks. Measured over 17 live-file shapes -- multi-document either
+# order, trailing scalar, non-object entries, null, BOM, duplicate key, null and numeric ids,
+# empty file: 0 disagree in the acquitting direction, against a control read that drops the
+# first document, which disagrees on the first shape.
+#
+# Every set here is KEYED, never a scan of the list built so far: a forged pass with N
+# distinct ids would otherwise cost O(N^2), and a hook killed by its timeout lets the edit by.
+# THE SUBSTITUTION, in one place. Called once, below, for any unbound newest pass, clean or
+# failing; the LIVE_CLEAN=1 bound path has already exited above and the bound failing path never
+# comes here. Sets CONVICT (the lines above) and UNBOUND_NOTE, and logs GATE_VERDICT_UNBOUND
+# BEFORE any exit it can reach -- so every later exit, allow or deny, has that line above it in
+# the flow log. A substitution nobody can see reads exactly like the pick working.
+unbound_convict_set() {
+  local _b _how _f _s _ts _own _bits _bad _n
+  CONVICT=""; LIVE_STEM="$LIVE_NONCE"; UNREADABLE_PASSES=""
+  # AN UNBOUND SET CONVICTS ONLY, AND THIS LINE IS WHAT MAKES IT SO -- set FIRST, so no return
+  # path below can leave a waiver standing. With no candidate at the fetch, `--waivers` is never
+  # asked and the cache key's `w` term is empty, so no `waiver:` row exists for this invocation.
+  # Every FAIL_WAIVED a pass in the set carries then meets the waiver join with nothing to join
+  # to, and is held exactly as a plain FAIL -- subtracted by SUPPRESSED cover or by nothing.
+  # Without this a forged FAIL_WAIVED-only pass becomes a member of the set and its own waiver
+  # acquits it; a return that skipped it let the live pass's own waiver acquit it.
+  WAIVED_CANDIDATES=""
+  # THE BOUND PASS AND EVERYTHING NEWER, never the bound pass alone. The one-pass read let an
+  # unbound FAILING pass newer than a CLEAN bound one go unread, and a forgery then acquitted
+  # itself onto the clean pass. A pass sharing the bound one's timestamp is IN: a tie is the
+  # convicting direction.
+  _b="${BOUND_STEM##*-}"
+  _how="the newest BOUND pass, ${BOUND_STEM}, and every pass newer than it"
+  # NOTHING IN THE DIRECTORY IS BOUND: every pass. Not the newest failing one -- a second forged
+  # pass whose FAIL is covered would sort above the real failing pass and be the only one read.
+  # Falling through to ALLOW here was the first cut's defect, and it was silent.
   if [ -z "$BOUND_STEM" ]; then
-    # NOTHING IN THE DIRECTORY IS BOUND. An unbound verdict may still convict, so the fallback
-    # is the newest pass, by nonce, that records a FAIL -- excluding the live one, which
-    # records none. Falling through to ALLOW here was the first cut's defect: it acquitted a
-    # forged clean pass beside an unbound failing one, silently.
-    for _cs in $(printf '%s' "$CONFORMING_STEMS" | sort -r); do
-      [ "$_cs" != "$LIVE_NONCE" ] || continue
-      _cf="$(fail_sets "${GATE_DIR}/${_cs}.verdict.json")" || _cf=""
-      # Any failing row, plain or FAIL_WAIVED: the substitute only ever CONVICTS (its waivers are
-      # never consulted, below), so a FAIL_WAIVED-only pass is a pass with something to convict on.
-      read_fail_sets "$_cf"
-      [ -n "$FAILED_CHECKS" ] || continue
-      BOUND_STEM="$_cs"; SUBST_HOW="the newest FAILING pass, itself unbound"
-      break
-    done
+    _b=""; _how="every pass in the directory, since NONE is bound -- each one itself unbound"
   fi
-  [ -n "$BOUND_STEM" ] || exit 0
-  SUBST_VERDICT="${GATE_DIR}/${BOUND_STEM}.verdict.json"
-  [ -f "$SUBST_VERDICT" ] || exit 0
-  FAIL_SETS="$(fail_sets "$SUBST_VERDICT")" || FAIL_SETS=""
-  read_fail_sets "$FAIL_SETS"
-  # AN UNBOUND SUBSTITUTE CONVICTS ONLY. Every FAIL_WAIVED in it reads as a plain FAIL, so it
-  # never reaches the waiver join -- and with no candidates left, `--waivers` is not asked either.
-  # Without this a second forged FAIL_WAIVED-only pass becomes the substitute and its own waiver
-  # acquits it.
-  PLAIN_FAILS="$FAILED_CHECKS"; WAIVED_CANDIDATES=""
-  [ -n "$FAILED_CHECKS" ] || exit 0
+  # THE CANDIDATES COME FROM THE GLOB, file by file, exactly as the pick at arm 4 walks it --
+  # never from the newline-joined CONFORMING_STEMS, where a stem carrying a newline is two words
+  # and one carrying a space was two more, each a pass that then went unread. A pass whose name
+  # cannot be carried safely -- anything outside [A-Za-z0-9._-], a newline included -- and a pass
+  # this hook cannot read are not handed to jq at all: each CONVICTS as `(unreadable)`, under a
+  # display name with every unsafe byte shown as `?`. No pass the forger can add to the
+  # directory takes another pass's FAIL out of the set: an unparseable, unreadable, empty,
+  # multi-document or strangely named file adds a convicting row of its own and removes nothing.
+  #
+  # WHAT MAKES A PASS UNREADABLE IN NORMAL OPERATION, MEASURED SO AN HONEST LEAD IS NOT STRANDED
+  # HERE. Over the reference consumer's 252 committed verdict files (control: all 252 carry
+  # `"verdicts"`, an impossible token 0): 0 unreadable, 0 unparseable, 0 multi-document,
+  # 0 non-object, 0 with an unsafe stem. The adjudicator writes with the Write tool -- 20 Write
+  # calls on a verdict path in that consumer's transcripts, 0 `python3` `open(..., "w")` and
+  # 0 temp-then-rename in the adjudicator's own commands -- and the files are created by the
+  # harness in the user's own umask, so a permission fault on one is not a state the pipeline
+  # produces. NOT MEASURED: whether the Write tool itself replaces the file atomically (its
+  # bundle carries `renameSync` and `.tmp.` helpers, but which path Write takes was not traced).
+  # If it does not, a write in flight leaves a truncated file for as long as the write takes,
+  # and a guarded edit landing in that window convicts on it. That costs one denied edit, which
+  # the deny explains, and the next edit after the write completes reads it normally.
+  for _f in "$GATE_DIR"/*.verdict.json; do
+    [ -f "$_f" ] || continue
+    _s="$(basename "$_f" .verdict.json)"
+    _ts="${_s##*-}"
+    case "$_ts" in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+      *) continue ;;
+    esac
+    [ "${_s##*-}" \< "$_b" ] && continue
+    # The class is SPELLED OUT, never a range: a shell `case` takes the locale the hook inherits,
+    # and under en_US.UTF-8 `[!A-Za-z0-9._-]` called `xé` safe -- a range is a collation span,
+    # and `é` collates inside `a-z`. Measured, both classes, both locales: the range form `safe`
+    # under UTF-8 and `unsafe` under C; this form `unsafe` under both, `story-...` `safe` under
+    # both. Spelling it out makes "anything outside [A-Za-z0-9._-]" hold in every locale without
+    # assigning LC_ALL in the hook, which would change the locale of every tool it runs after.
+    case "$_s" in
+      *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]*|-*)
+        _bad="$(printf '%s' "$_s" | LC_ALL=C tr -c 'A-Za-z0-9._-' '?')"
+        CONVICT="${CONVICT}${CONVICT:+
+}${_ts}${US}${_bad}${US}(unreadable)${US}(unreadable)${US}(unreadable)${US}"
+        continue ;;
+    esac
+    # Read ALONE. A file this hook cannot read, one jq refuses, and one that prints no row (an
+    # empty file) all convict as `(unreadable)`: a pass is never silently dropped, and a failure
+    # never falls back to the live pass alone.
+    _n=""
+    [ -r "$_f" ] && { _n="$(jq -rn "$CONVICT_PROG" "$_f" 2>/dev/null)" || _n=""; }
+    [ -n "$_n" ] || _n="(unreadable)${US}(unreadable)${US}(unreadable)${US}"
+    CONVICT="${CONVICT}${CONVICT:+
+}${_ts}${US}${_s}${US}${_n}"
+  done
+  # Newest first, the timestamp key dropped, and a pass recording no FAIL at all dropped: it has
+  # nothing to convict on, and `(unreadable)` is a FAIL for this purpose.
+  CONVICT="$(printf '%s\n' "$CONVICT" | LC_ALL=C sort -r | LC_ALL=C awk -F"$US" -v OFS="$US" '
+    $4 != "" { print $2, $3, $4, $5, $6 }')"
+  # The passes the deny must name as unreadable, for the lead to repair or remove.
+  UNREADABLE_PASSES="$(printf '%s\n' "$CONVICT" | LC_ALL=C awk -F"$US" '
+    $2 == "(unreadable)" { s = s (s == "" ? "" : ", ") "`" $1 ".verdict.json`" } END { print s }')"
   UNBOUND_NOTE="$(basename "$LIVE_VERDICT") is the newest pass by nonce and NO dispatch record binds it"
+  if [ "$LIVE_CLEAN" -eq 1 ]; then
+    _own="It records no plain FAIL, so it would have cleared the Rule 28 deny; it may not."
+  else
+    _own="Its own FAILs still convict; what it may not do is ACQUIT -- not by SUPPRESSED cover alone, not by its own waivers, not by a lift keyed on its nonce."
+  fi
+  if [ -z "$CONVICT" ]; then
+    # THE RESIDUAL, named in arm 7a's header: nothing to convict on.
+    log_event GATE_VERDICT_UNBOUND "$UNBOUND_NOTE." "$_own" \
+      "No pass in ${_how} records a FAIL, so there is nothing to convict on: ALLOWED."
+    exit 0
+  fi
+  _bits="$(printf '%s\n' "$CONVICT" | LC_ALL=C awk -F"$(printf '\037')" -v live="$LIVE_STEM" '
+    $1 != live { s = s (s == "" ? "" : ", ") $1 }
+    { f = f (f == "" ? "" : "; ") $1 ": " $3 }
+    END { print (s == "" ? "no other pass" : s); print f }')"
   log_event GATE_VERDICT_UNBOUND \
     "$UNBOUND_NOTE." \
-    "It records no plain FAIL, so it would have cleared the Rule 28 deny; it may not." \
-    "Adjudicating on ${BOUND_STEM} instead (${SUBST_HOW}), whose FAILs are: ${FAILED_CHECKS}." \
+    "$_own" \
+    "Adjudicating on $(printf '%s\n' "$_bits" | sed -n 1p) (${_how}), together with the live pass's own FAILs." \
+    "FAILs recorded, newest first, each pass under its own catalog's SUPPRESSED cover and no waiver: $(printf '%s\n' "$_bits" | sed -n 2p)." \
     "A verdict binds by a .verdict-writes.jsonl row for its own stem, or by a gate-adjudicator" \
     "dispatch within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work has neither."
-  LIVE_VERDICT="$SUBST_VERDICT"
-  LIVE_NONCE="$BOUND_STEM"
-else
-  UNBOUND_NOTE=""
-fi
+  return 0
+}
+UNBOUND_NOTE=""; CONVICT=""; LIVE_STEM="$LIVE_NONCE"; UNREADABLE_PASSES=""
+case "${LIVE_BIND:-}" in
+  unbound|unbound-malformed) unbound_convict_set ;;
+esac
 
 # -----------------------------------------------------------------------------
 # 7b. THE SUPPRESSED CARVE-OUT -- a FAIL the operator has dispositioned is a FAIL
@@ -1551,14 +1704,20 @@ VROWEOF
   fi
 fi
 
-if [ -n "$IN_FORCE_ROWS" ]; then
+# THE PARTITION OF ONE PASS. Reads PLAIN_FAILS and WAIVED_CANDIDATES, appends to
+# SUPPRESSED_CHECKS and WAIVER_LIFTED, and leaves what is still owed in FAILED_CHECKS. $1 is
+# that pass's OWN catalog and $2 its verdict file (the waiver join reads it): a convict set can
+# mix catalogs, and one pass's cover joined against another's catalog either acquits a FAIL no
+# entry names or keeps one an entry does. No in-force row at all -> no subtraction.
+partition_pass() { # <catalog> <verdict file>
+  [ -n "$IN_FORCE_ROWS" ] || return 0
+  VERDICT_CATALOG="$1"
   # `awk -F'\t'` and not `IFS`+`read`: TAB is IFS-whitespace, so a shell read COLLAPSES the
   # empty leading field a bare-catalog row carries and shifts the check id into the catalog.
   #
   # `NF >= 6` is the SAME field count validate-gate-adjudication.sh's parse requires. The two
   # readers of this row must narrow together or one of them starts accepting a shape the other
   # rejects, and the disagreement surfaces as a gate that blocks beside a guard that allows.
-  VERDICT_CATALOG="$(jq -r '.catalog // ""' "$LIVE_VERDICT" 2>/dev/null)"
   # Every row reaching here has already had its citation verified, cold or from the cache.
   # `waiver:` rows are excluded by name: they cover only through the waiver join below.
   COVERED="$(printf '%s\n' "$IN_FORCE_ROWS" | LC_ALL=C awk -F'\t' -v want="$VERDICT_CATALOG" '
@@ -1593,7 +1752,7 @@ if [ -n "$IN_FORCE_ROWS" ]; then
           | {c: $c, ok: ($w != null and $n != null and ($wid | test("[Ss]" + $n + "(?![0-9])"))
                          and ($w.st == "OVERRIDDEN" or ($w.st == "SUPPRESSED" and $w.cat == $cat and $w.cid == $c)))}]
       | group_by(.c)[] | select(all(.ok)) | .[0].c
-      ' "$LIVE_VERDICT" 2>/dev/null)" || WAIVED_CHECKS=""
+      ' "$2" 2>/dev/null)" || WAIVED_CHECKS=""
   fi
   # THE PARTITION, kept by KIND. A plain FAIL can be covered by an in-force SUPPRESSED entry and by
   # nothing else; a FAIL_WAIVED by its resolved waiver first, then the same SUPPRESSED cover.
@@ -1618,11 +1777,33 @@ if [ -n "$IN_FORCE_ROWS" ]; then
     fi
   done
   FAILED_CHECKS="$REMAINING"
+}
+
+# OWED: one line per pass still owed a repair, `<stem>\x1f<uncovered FAILs>`, newest first. A
+# bound live pass is the only line; an unbound one's convict set is partitioned pass by pass.
+OWED=""
+if [ -z "$CONVICT" ]; then
+  partition_pass "$(jq -r '.catalog // ""' "$LIVE_VERDICT" 2>/dev/null)" "$LIVE_VERDICT"
+  [ -z "$FAILED_CHECKS" ] || OWED="${LIVE_NONCE}${US}${FAILED_CHECKS}"
+else
+  _ALL=""
+  while IFS="$US" read -r _ps _pc FAILED_CHECKS PLAIN_FAILS WAIVED_CANDIDATES; do
+    [ -n "$_ps" ] || continue
+    partition_pass "$_pc" "${GATE_DIR}/${_ps}.verdict.json"
+    [ -n "$FAILED_CHECKS" ] || continue
+    OWED="${OWED}${OWED:+
+}${_ps}${US}${FAILED_CHECKS}"
+    _ALL="${_ALL:+$_ALL }$FAILED_CHECKS"
+  done <<CONVEOF
+$CONVICT
+CONVEOF
+  FAILED_CHECKS="$_ALL"
 fi
 
 # THE SET IS PARTITIONED, NOT DISCARDED: this exit is reached only when EVERY live FAIL is
-# covered, and it is LOUD because retro's Rule 25(c) audit has to be able to tell an edit that
-# passed under an operator's disposition from one no gate was watching.
+# covered -- and on an unbound pass, every FAIL in its convict set -- and it is LOUD because
+# retro's Rule 25(c) audit has to be able to tell an edit that passed under an operator's
+# disposition from one no gate was watching.
 if [ -z "$FAILED_CHECKS" ]; then
   log_event GATE_REMEDIATION_SUPPRESSED \
     "Tool: ${TOOL_NAME} on ${FP}" \
@@ -1631,6 +1812,14 @@ if [ -z "$FAILED_CHECKS" ]; then
     "Carve-out source: ${IN_FORCE_STATUS}"
   exit 0
 fi
+
+# FROM HERE ON `LIVE_NONCE` IS THE NEWEST PASS STILL OWED A REPAIR and `FAILED_CHECKS` its
+# uncovered FAILs: the pass the deny names first and the repair-record path it prints. On a
+# bound live pass that is the live pass itself, unchanged. Every OTHER pass still owed one is
+# listed in OWED_OTHERS, and arms 8 and 9 must lift each of them by its own nonce.
+LIVE_NONCE="${OWED%%"$US"*}"
+FAILED_CHECKS="$(printf '%s\n' "$OWED" | head -1)"; FAILED_CHECKS="${FAILED_CHECKS#*"$US"}"
+OWED_OTHERS="$(printf '%s\n' "$OWED" | sed -n '2,$p' | LC_ALL=C awk -F"$US" '{ printf "%s`%s` (%s)", (NR > 1 ? ", " : ""), $1, $2 }')"
 
 # THE STATUS IS DOWNGRADED ONLY ONCE THE DENY STANDS. An unverifiable entry beside a genuine
 # one that covers the whole live FAIL set changes no outcome, and saying "unverified" on an
@@ -1698,11 +1887,41 @@ repair_record_lifts() { # -> 0 lifts, 1 does not; sets LIFT_REC / LIFT_WHY
   return 1
 }
 
-if repair_record_lifts; then
+# EVERY PASS STILL OWED A REPAIR, EACH BY ITS OWN NONCE. `$1` is a lift function reading
+# LIVE_NONCE and FAILED_CHECKS; it runs once per OWED line and the arm lifts only when it lifts
+# every one. A bound live pass is a one-line loop, so that path is the arm as it always was. On
+# an unbound pass this is what stops a record keyed on the FORGED nonce -- the one the lead
+# chose -- from lifting a FAIL some other pass recorded: an honest remediation cycle already
+# writes one record per repaired pass, so a genuinely repaired older pass carries its own.
+# Leaves LIVE_NONCE / FAILED_CHECKS on the first pass that did NOT lift, so the deny names it,
+# and LIFT_HOW listing the passes and what lifted each.
+lift_every_pass() { # <lift function> -> 0 when every owed pass lifts
+  local _n _f _first_n _first_f _miss_n="" _miss_f="" _miss_why=""
+  LIFT_HOW=""
+  _first_n="$LIVE_NONCE"; _first_f="$FAILED_CHECKS"
+  while IFS="$US" read -r _n _f; do
+    [ -n "$_n" ] || continue
+    LIVE_NONCE="$_n"; FAILED_CHECKS="$_f"
+    if "$1"; then
+      LIFT_HOW="${LIFT_HOW:+$LIFT_HOW; }${_n} (${_f}): ${LIFT_REC:-$AUTH_FILE}"
+    elif [ -z "$_miss_n" ]; then
+      _miss_n="$_n"; _miss_f="$_f"; _miss_why="${LIFT_WHY:-}"
+    fi
+  done <<OWEDEOF
+$OWED
+OWEDEOF
+  if [ -n "$_miss_n" ]; then
+    LIVE_NONCE="$_miss_n"; FAILED_CHECKS="$_miss_f"; LIFT_WHY="$_miss_why"; return 1
+  fi
+  LIVE_NONCE="$_first_n"; FAILED_CHECKS="$_first_f"
+  return 0
+}
+
+if lift_every_pass repair_record_lifts; then
   log_event GATE_REMEDIATION_LIFTED \
     "Tool: ${TOOL_NAME} on ${FP}" \
     "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
-    "Lifted by repair record: ${LIFT_REC}"
+    "Lifted by repair record: ${LIFT_HOW}"
   exit 0
 fi
 
@@ -1711,8 +1930,14 @@ fi
 # -----------------------------------------------------------------------------
 # FAIL CLOSED throughout. The citation is the whole claim; there is no second
 # piece of evidence, and this is the arm a lead could otherwise author for itself.
-AUTH_FILE="$GATE_DIR/${LIVE_NONCE}.authorization.md"
-if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
+# Asked per owed pass by `lift_every_pass`, like arm 8: each pass's authorization is the file
+# named by ITS nonce. Sets AUTH_FILE, and AUTH_UNBOUNDED=1 when any lift it granted was verified
+# with no timestamp bound (see below).
+AUTH_UNBOUNDED=0
+auth_lifts() { # -> 0 when THIS pass's authorization verifies
+  LIFT_REC=""
+  AUTH_FILE="$GATE_DIR/${LIVE_NONCE}.authorization.md"
+  [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ] || return 1
   AUTH="$(sed -n 's/^[[:space:]]*operator_authorization:[[:space:]]*//p' "$AUTH_FILE" 2>/dev/null | head -1)"
   AUTH_QUOTE="$(cite_quote "$AUTH")"
   # BOUND THE SCAN TO WHEN THE RECORD SAYS THE OPERATOR SPOKE. This is the arm a lead could
@@ -1744,32 +1969,51 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
         # malformed, while THIS field is read straight out of a file the denied lead writes.
         # It is not refused -- a record whose timestamp will not parse may still cite a real
         # operator turn -- but the lift says which kind it was, in the flow log the retro reads.
-        if [ -z "$AUTH_TS" ]; then
-          log_event GATE_REMEDIATION_LIFTED \
-            "Tool: ${TOOL_NAME} on ${FP}" \
-            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
-            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
-            "unbounded-citation: 1 -- operator_authorization carries no parseable ISO-8601 timestamp, so the quote was verified against the WHOLE transcript corpus rather than the moment this record claims. Write it as <YYYY-MM-DD>T<HH:MM:SS>Z."
-        else
-          log_event GATE_REMEDIATION_LIFTED \
-            "Tool: ${TOOL_NAME} on ${FP}" \
-            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
-            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
-            "unbounded-citation: 0 -- verified within the window around ${AUTH_TS}"
-        fi
-        exit 0
+        [ -n "$AUTH_TS" ] || AUTH_UNBOUNDED=1
+        LAST_AUTH_TS="$AUTH_TS"
+        return 0
       fi
     fi
   fi
+  return 1
+}
+if lift_every_pass auth_lifts; then
+  if [ "$AUTH_UNBOUNDED" -eq 1 ]; then
+    log_event GATE_REMEDIATION_LIFTED \
+      "Tool: ${TOOL_NAME} on ${FP}" \
+      "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+      "Lifted by VERIFIED operator authorization: ${LIFT_HOW}" \
+      "unbounded-citation: 1 -- operator_authorization carries no parseable ISO-8601 timestamp, so the quote was verified against the WHOLE transcript corpus rather than the moment this record claims. Write it as <YYYY-MM-DD>T<HH:MM:SS>Z."
+  else
+    log_event GATE_REMEDIATION_LIFTED \
+      "Tool: ${TOOL_NAME} on ${FP}" \
+      "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+      "Lifted by VERIFIED operator authorization: ${LIFT_HOW}" \
+      "unbounded-citation: 0 -- verified within the window around ${LAST_AUTH_TS}"
+  fi
+  exit 0
 fi
+# The pass the deny names: the newest still owed, whichever pass the lift loops stopped on.
+LIVE_NONCE="${OWED%%"$US"*}"
+FAILED_CHECKS="$(printf '%s\n' "$OWED" | head -1)"; FAILED_CHECKS="${FAILED_CHECKS#*"$US"}"
 
 # -----------------------------------------------------------------------------
 # DENY. The gate is failing and you are the lead.
 # -----------------------------------------------------------------------------
 UNBOUND_CLAUSE=""
+# Which heading depends on whether the pass named above IS the unbound newest one: when its own
+# uncovered FAILs convict, saying "not this pass" sends the lead looking for a different file.
+UNBOUND_HEAD="THE NEWEST FILE IN THE GATE DIRECTORY IS NOT THIS PASS."
+[ "$LIVE_NONCE" != "$LIVE_STEM" ] || UNBOUND_HEAD="THIS PASS IS UNBOUND, SO NOTHING IN THE CONVICT SET COULD BE ACQUITTED."
 [ -n "${UNBOUND_NOTE:-}" ] && UNBOUND_CLAUSE="
 
-THE NEWEST FILE IN THE GATE DIRECTORY IS NOT THIS PASS. ${UNBOUND_NOTE}, so it was not allowed to clear this deny -- a verdict binds by a \`.verdict-writes.jsonl\` row for its own stem written when a dispatched agent wrote it, or by a \`gate-adjudicator\` dispatch recorded within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work it reports has neither. If that file is a real pass, re-run the gate: mint the nonce at gate ENTRY, then dispatch."
+${UNBOUND_HEAD} ${UNBOUND_NOTE}, so it was not allowed to clear this deny -- a verdict binds by a \`.verdict-writes.jsonl\` row for its own stem written when a dispatched agent wrote it, or by a \`gate-adjudicator\` dispatch recorded within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work it reports has neither. If that file is a real pass, re-run the gate: mint the nonce at gate ENTRY, then dispatch."
+[ -z "$UNREADABLE_PASSES" ] || UNBOUND_CLAUSE="${UNBOUND_CLAUSE}
+
+UNREADABLE GATE RECORDS: ${UNREADABLE_PASSES} in \`${STATE_DIR_NAME}/gate-adjudication/\` could not be read, parsed as verdict objects, or named safely (an unsafe byte is shown as \`?\`), so each counts as an outstanding FAIL (\`(unreadable)\`) -- an unbound newest pass may not be acquitted past a record nobody can check. If a gate-adjudicator is still writing one, wait for it to finish and retry the edit. Otherwise repair it: re-run the gate that produced it, or remove the malformed file."
+[ -z "$OWED_OTHERS" ] || UNBOUND_CLAUSE="${UNBOUND_CLAUSE}
+
+OTHER PASSES STILL OWED A REPAIR, newest first: ${OWED_OTHERS}. Each is lifted only by a repair record (or a verified operator authorization) bound to ITS OWN nonce, at \`${STATE_DIR_NAME}/gate-adjudication/<that nonce>.repair.md\`; a record for \`${LIVE_NONCE}\` alone does not lift them."
 REASON="AI/DLC Rule 28: GATE REMEDIATION IS DELEGATED. Gate pass \`${LIVE_NONCE}\` recorded FAIL on check(s) \`${FAILED_CHECKS}\` and no repair has been dispatched, so \`${TOOL_NAME}\` on \`${FP}\` is DENIED.${SUPP_NOTE}${UNBOUND_CLAUSE}
 
 You are the lead. You own PASS/FAIL, the disposition and the escalation. You do not own the edit.
@@ -1796,7 +2040,7 @@ IF THE REPAIR IS GENUINELY NOT A REMEDIATOR'S CALL -- a provenance re-stamp, a g
 log_event GATE_REMEDIATION_DENIED \
   "Tool denied: ${TOOL_NAME}" \
   "Target: ${FP}" \
-  "Live gate pass: ${LIVE_NONCE}; FAILed check(s) still owed a repair: ${FAILED_CHECKS}" \
+  "Live gate pass: ${LIVE_NONCE}; FAILed check(s) still owed a repair: ${FAILED_CHECKS}${OWED_OTHERS:+; other passes still owed: ${OWED_OTHERS}}" \
   "SUPPRESSED carve-out: ${IN_FORCE_STATUS}${SUPPRESSED_CHECKS:+; covered: ${SUPPRESSED_CHECKS}}" \
   "No bound remediator repair record and no verified operator authorization${LIFT_WHY:+ (${LIFT_WHY})}"
 
