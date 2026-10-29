@@ -86,6 +86,10 @@
 # MUTANT-MATRIX excnoneg decides=wen twins=w1
 # MUTANT-MATRIX firstnonce decides=w1cite twins=w1
 # MUTANT-MATRIX boundary decides=w1glued twins=w1
+# MUTANT-MATRIX scope-dropped decides=gp twins=cited
+# MUTANT-MATRIX nomissing decides=gap twins=full,group,zpad
+# MUTANT-MATRIX predfail decides=gap twins=full,group,zpad
+# MUTANT-MATRIX nocover decides=r15r twins=- why=its drive has one cell (is 15r denied though the predicate ran), and deleting the ledger-coverage path flips it
 # MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
@@ -177,6 +181,30 @@ expect_untouched() {
   local out; out="$(raw "$1" "$2")"
   [ -z "$out" ] && ok "$3 → untouched (exit 0, no decision)" \
     || bad "$3 → hook emitted '$out', expected NOTHING (it must not inject or force-approve here)"
+}
+
+expect_deny() { # expect_deny <out> <label>
+  if [ "$(printf '%s' "$1" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)" = deny ] \
+     && printf '%s' "$1" | jq -e '.hookSpecificOutput | has("updatedInput") | not' >/dev/null 2>&1; then
+    ok "$2 -> DENIED, with no updatedInput"
+  else bad "$2 -> expected a deny with no updatedInput, got '$(printf '%s' "$1" | cut -c1-200)'"; fi
+}
+expect_quiet() { # expect_quiet <out> <label>
+  [ -z "$1" ] && ok "$2 -> allowed (no decision)" || bad "$2 -> expected NO decision, got '$(printf '%s' "$1" | cut -c1-200)'"
+}
+
+# ONE copy of the hooks directory serves every mutant: the guard resolves exactly one sibling
+# (ai-dlc-context-provenance.sh, by `dirname "${BASH_SOURCE[0]}"`), and every mutant is a
+# differently NAMED guard file inside that one directory, so each still finds its sibling beside
+# itself. Built at top level, not lazily: a lazy build inside the `$( )` that calls mk_hooks_copy
+# would be discarded with that subshell.
+HOOKS_SRC="$(dirname "$HOOK")"
+HOOKS_SHARED="$(mktemp -d "$WORK/hooks-shared.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp -R "$HOOKS_SRC/." "$HOOKS_SHARED/" || { echo "FIXTURE ERROR: hooks copy failed" >&2; exit 2; }
+mk_hooks_copy() { # mk_hooks_copy <tag> -> path of a byte-identical guard copy beside the shared sibling
+  local g="$HOOKS_SHARED/$(basename "$HOOK").$1"
+  cp "$HOOKS_SHARED/$(basename "$HOOK")" "$g" || return 1
+  printf '%s' "$g"
 }
 
 # The prompt the guard hands back, for the prompt-integrity assertions.
@@ -580,18 +608,55 @@ raw "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" >/dev/null
 # reference consumer while the guard sat installed and green.
 #
 # THIS IS THE NO-DEFINITION WORLD. `remediator` has no rendered `.claude/agents/` file in
-# the seed, so neither carrier delivers the Rule 19(b) line and false stays the right
-# record. A subagent_type-only dispatch whose role HAS a bound definition is a different
-# world with a different answer; the CONTRACT CARRIER block below owns it.
+# the seed. The model-binding subject is the CITED twin (the brief names the role file), so
+# the injection is asserted where the dispatch is allowed; the uncited twin is THE CITATION
+# DENY's: neither carrier delivers the Rule 19(b) line to a declared role, so it is refused
+# with no row (the false/null record is observable only on the fail-open world below).
+rm -f "$LEDGER"
+JC="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Your operating contract is `.claude/team-roles/remediator.md`. Read it first. Do the work."}}')"
+JC_OUT="$(raw "$CONSUMER" "$JC")"
+JC_MODEL="$(jq -r '.hookSpecificOutput.updatedInput.model // empty' <<<"$JC_OUT" 2>/dev/null)"
+JC_DEC="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$JC_OUT" 2>/dev/null)"
+[ "$JC_MODEL" = "opus" ] \
+  && ok "subagent_type-only dispatch is bound (was a silent no-op before v0.158.0)" \
+  || bad "subagent_type-only dispatch injected '$JC_MODEL', expected opus"
 rm -f "$LEDGER"
 J="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Do the work."}}')"
-[ "$(setmodel "$CONSUMER" "$J")" = "opus" ] \
-  && ok "subagent_type-only dispatch is bound (was a silent no-op before v0.158.0)" \
-  || bad "subagent_type-only dispatch injected '$(setmodel "$CONSUMER" "$J")', expected opus"
-raw "$CONSUMER" "$J" >/dev/null
-[ "$(lfield .role_contract_cited)" = "false" ] && [ "$(lfield .contract_via)" = "null" ] \
-  && ok "  and records role_contract_cited=false, contract_via=null — with no definition the Rule 19(b) omission stays visible" \
-  || bad "  role_contract_cited='$(lfield .role_contract_cited)' contract_via='$(lfield .contract_via)', expected false/null"
+J_OUT="$(raw "$CONSUMER" "$J")"
+expect_deny "$J_OUT" "CITATION DENY: the same dispatch with no Rule 19(b) line (a declared role, no definition)"
+[ ! -s "$LEDGER" ] && ok "  and writes no ledger row" || bad "  the denied uncited dispatch wrote a row: $(lrow)"
+grep -qF 'refused a `remediator` dispatch, because the Rule 19(b) role-contract line' <<<"$J_OUT" \
+  && ok "  and the reason names the role" || bad "  the citation deny does not name \`remediator\`"
+# OUT OF SCOPE: an undeclared agent type with no line is the measured false-positive class.
+GPJ="$(jq -nc '{tool_name:"Agent",tool_input:{description:"walk",subagent_type:"general-purpose",prompt:"Walk the rubric."}}')"
+GP_D="$(raw "$CONSUMER" "$GPJ" | jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null)"
+[ "$GP_D" != deny ] && ok "CITATION DENY: general-purpose with no line is NOT denied (decision '$GP_D')" \
+  || bad "CITATION DENY: general-purpose with no line was DENIED -- the deny is not scoped to declared roles"
+# FAIL OPEN: settings.json unparseable, so no declared set can be read. The dispatch is allowed
+# and the row is still written with the uncited record Check 22 reads on this path.
+FO="$WORK/citefailopen"
+mkdir -p "$FO/.claude" "$FO/_bmad-output"
+cp -R "$CONSUMER/.claude/team-roles" "$FO/.claude/"
+cp "$CONSUMER/.claude/.ai-dlc-version" "$FO/.claude/"
+printf '{ not json\n' > "$FO/.claude/settings.json"
+printf -- '- sprint_id: 291\n' > "$FO/_bmad-output/pipeline-snapshot.md"
+FO_D="$(raw "$FO" "$J" | jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null)"
+FO_R="$(jq -r '"\(.role)/\(.role_contract_cited | tostring)/\(.contract_via | tostring)"' "$FO/_bmad-output/spawn-ledger.jsonl" 2>/dev/null | tail -1)"
+[ "$FO_D" != deny ] && [ "$FO_R" = "remediator/false/null" ] \
+  && ok "CITATION DENY fail-open: unparseable settings -> not denied, row records remediator/false/null" \
+  || bad "CITATION DENY fail-open: decision '$FO_D', row '$FO_R'; expected not-deny and remediator/false/null"
+CD_ANCHOR='  if [ -n "$DECLARED_ROLES" ] && row_in_scope "$ROLE" "$ROLE_CONTRACT_CITED"; then'
+cd_dec() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // "none"' 2>/dev/null; }
+CD_BASE="$(printf 'gp=%s\ncited=%s\n' "$GP_D" "$JC_DEC")"
+_cdn="$(grep -cxF -- "$CD_ANCHOR" "$HOOK")" || _cdn=0
+CD_M="$(mk_hooks_copy citescope)"
+if [ "$_cdn" = 1 ] && [ -n "$CD_M" ] \
+   && A="$CD_ANCHOR" R='  if true; then' awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$CD_M" \
+   && ! cmp -s "$HOOK" "$CD_M" && bash -n "$CD_M" 2>/dev/null; then
+  CD_GOT="$(printf 'gp=%s\ncited=%s\n' "$(cd_dec "$CD_M" "$GPJ")" "$(cd_dec "$CD_M" "$JC")")"
+  mx_kill "$(bfl)" scope-dropped gp cited "$CD_GOT" "$CD_BASE" \
+    "CITATION MUTANT scope-dropped scores a kill: keying on the raw field denies general-purpose (and still allows the cited twin)" "gp=deny"
+else bad "CITATION MUTANT scope-dropped DID NOT APPLY (anchor matched $_cdn line(s), or the copy failed or did not parse)"; fi
 
 # Fail-closed: a role file that does not resolve is a Rule 19 violation, and it
 # must be RECORDED. Exiting before the write would make it look like no dispatch.
@@ -616,13 +681,18 @@ raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
 # `role_contract_cited` is true when either delivered it. A record of delivery-as-selected at
 # PreToolUse, never of the read.
 #
-# THE WORLDS, each keyed to one property:
-#   a  defok, subagent_type only, no prompt citation      -> true/definition
-#   b  defok, prompt cites the role AND definition bound  -> true/prompt   (prompt wins)
-#   c  defnoline, bound, body carries neither line         -> false/null
-#   d  defwrongrole, bound, body carries defok line 1 + 2  -> false/null
-#   e  remediator, no definition at all                    -> false/null
+# THE WORLDS, each keyed to one property, scored `<decision>:<rows added>:<cited/via>`:
+#   a  defok, subagent_type only, no prompt citation      -> allow:1:true/definition
+#   b  defok, prompt cites the role AND definition bound  -> allow:1:true/prompt   (prompt wins)
+#   c  defnoline, bound, body carries neither line         -> deny:0:-
+#   d  defwrongrole, bound, body carries defok line 1 + 2  -> deny:0:-
+#   e  remediator, no definition at all                    -> deny:0:-
 #   f  defok, a two-document input the emit cannot amend  -> see its own comment
+# THE CARRIER'S `false` IS NOW A DECISION, NOT A ROW. The carrier runs only on a BOUND definition,
+# which needs the role's pin, so the role is a declared aiDlcRoles key -- and THE CITATION DENY
+# refuses every uncited declared role before the append. c, d and e therefore read deny with no
+# row; a carrier mutant crediting the line flips its cell to allow:1:true/definition. The uncited
+# false/null ROW survives only where the deny cannot decide (the fail-open world above).
 # c and d are MARKED and AGREE with settings, so the guard binds them exactly as it binds
 # defok; only the body differs, which is the property under test. The definition_bound
 # controls below say so in this run, or a false there would be a false for the wrong reason.
@@ -632,16 +702,19 @@ raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
 # row 2 and must carry its own role, or the cell reports the row it did read. The epoch row is
 # prompt-cited (true/prompt), so a subject that wrote nothing cannot pass a false/null arm on it.
 EPOCHJ="$(mkjson Agent gate-adjudicator opus)"
-# ccell <guard> <json> <subject-role> -> "cited/via" of the subject row, or a diagnostic.
+# ccell <guard> <json> <subject-role> -> "<decision>:<rows added after the epoch>:<cited/via>"
+# of the subject (`-` when it wrote no row). The decision is read literally, `none` when the hook
+# printed nothing, so a crashed hook cannot pass for an allowed or a denied one.
 ccell() {
-  local n
+  local n d o c=-
   rm -f "$LEDGER"
   printf '%s' "$EPOCHJ" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
-  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
-  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
-  [ "$n" = 2 ] || { printf 'ROWS=%s' "${n:-0}"; return; }
-  tail -1 "$LEDGER" | jq -r --arg r "$3" \
-    'if .role == $r then "\(.role_contract_cited | tostring)/\(.contract_via | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
+  o="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  [ "$n" = 2 ] && c="$(tail -1 "$LEDGER" | jq -r --arg r "$3" \
+    'if .role == $r then "\(.role_contract_cited | tostring)/\(.contract_via | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null)"
+  printf '%s:%s:%s' "$d" "$((n - 1))" "$c"
 }
 CW_A="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-a",subagent_type:"defok",prompt:"Do the work."}}')"
 CW_B="$(mkjson Agent defok)"
@@ -656,38 +729,42 @@ cvec() {
     "$(ccell "$1" "$CW_E" remediator)"
 }
 
-# CONTROLS: c and d are bound (so the body is what decides), e is not.
-for _cw in "a:$CW_A" "c:$CW_C" "d:$CW_D"; do
-  rm -f "$LEDGER"; raw "$CONSUMER" "${_cw#*:}" >/dev/null
+# CONTROLS: c and d are bound (so the body is what decides), e is not. Their uncited dispatch is
+# denied with no row, so binding is read off the PROMPT-CITED twin of the same role and world:
+# definition binding is decided before the citation is, and does not read the prompt's line.
+cited_twin() { printf '%s' "$1" | jq -c --arg r "$2" '.tool_input.prompt = ("Your operating contract is `.claude/team-roles/" + $r + ".md`. Read it first. " + .tool_input.prompt)'; }
+for _cw in "a:defok:$CW_A" "c:defnoline:$CW_C" "d:defwrongrole:$CW_D"; do
+  _cr="${_cw#*:}"; _cj="${_cr#*:}"; _cr="${_cr%%:*}"
+  rm -f "$LEDGER"; raw "$CONSUMER" "$(cited_twin "$_cj" "$_cr")" >/dev/null
   [ "$(lfield .definition_bound)" = "true" ] \
-    && ok "CONTROL world ${_cw%%:*}: the definition is BOUND, so the contract cell below is decided by the body" \
-    || bad "CONTROL world ${_cw%%:*}: definition_bound='$(lfield .definition_bound)', expected true — the world is not the one its arm claims"
+    && ok "CONTROL world ${_cw%%:*}: the definition is BOUND (read on its cited twin), so the cell below is decided by the body" \
+    || bad "CONTROL world ${_cw%%:*}: definition_bound='$(lfield .definition_bound)' on the cited twin, expected true — the world is not the one its arm claims"
 done
-rm -f "$LEDGER"; raw "$CONSUMER" "$CW_E" >/dev/null
+rm -f "$LEDGER"; raw "$CONSUMER" "$(cited_twin "$CW_E" remediator)" >/dev/null
 [ "$(lfield .definition_bound)" = "false" ] \
-  && ok "CONTROL world e: remediator has no definition (definition_bound=false)" \
+  && ok "CONTROL world e: remediator has no definition (definition_bound=false, on its cited twin)" \
   || bad "CONTROL world e: definition_bound='$(lfield .definition_bound)', expected false"
 
 TIP_A="$(ccell "$HOOK" "$CW_A" defok)"
-[ "$TIP_A" = "true/definition" ] \
-  && ok "(a) definition-bound, subagent_type-only, no prompt citation -> cited=true contract_via=definition" \
-  || bad "(a) recorded '$TIP_A', expected 'true/definition' — the selected definition body carries the role line and the row says it was not delivered"
+[ "$TIP_A" = "allow:1:true/definition" ] \
+  && ok "(a) definition-bound, subagent_type-only, no prompt citation -> allowed, cited=true contract_via=definition" \
+  || bad "(a) scored '$TIP_A', expected 'allow:1:true/definition' — the selected definition body carries the role line and the guard says it was not delivered"
 TIP_B="$(ccell "$HOOK" "$CW_B" defok)"
-[ "$TIP_B" = "true/prompt" ] \
-  && ok "(b) prompt citation with a definition ALSO bound -> contract_via=prompt (the prompt wins)" \
-  || bad "(b) recorded '$TIP_B', expected 'true/prompt'"
+[ "$TIP_B" = "allow:1:true/prompt" ] \
+  && ok "(b) prompt citation with a definition ALSO bound -> allowed, contract_via=prompt (the prompt wins)" \
+  || bad "(b) scored '$TIP_B', expected 'allow:1:true/prompt'"
 TIP_C="$(ccell "$HOOK" "$CW_C" defnoline)"
-[ "$TIP_C" = "false/null" ] \
-  && ok "(c) marked, agreeing definition whose body lacks the line -> false/null (the frontmatter is not the carrier)" \
-  || bad "(c) recorded '$TIP_C', expected 'false/null' — a bound definition was credited without its body being read"
+[ "$TIP_C" = "deny:0:-" ] \
+  && ok "(c) marked, agreeing definition whose body lacks the line -> DENIED, no row (the frontmatter is not the carrier)" \
+  || bad "(c) scored '$TIP_C', expected 'deny:0:-' — a bound definition was credited without its body being read"
 TIP_D="$(ccell "$HOOK" "$CW_D" defwrongrole)"
-[ "$TIP_D" = "false/null" ] \
-  && ok "(d) role R definition carrying role S line 1 and the shared line 2 -> false/null (the match is role-specific)" \
-  || bad "(d) recorded '$TIP_D', expected 'false/null' — another role's contract line was credited to this role"
+[ "$TIP_D" = "deny:0:-" ] \
+  && ok "(d) role R definition carrying role S line 1 and the shared line 2 -> DENIED, no row (the match is role-specific)" \
+  || bad "(d) scored '$TIP_D', expected 'deny:0:-' — another role's contract line was credited to this role"
 TIP_E="$(ccell "$HOOK" "$CW_E" remediator)"
-[ "$TIP_E" = "false/null" ] \
-  && ok "(e) no definition file, no prompt citation -> false/null" \
-  || bad "(e) recorded '$TIP_E', expected 'false/null'"
+[ "$TIP_E" = "deny:0:-" ] \
+  && ok "(e) no definition file, no prompt citation -> DENIED, no row" \
+  || bad "(e) scored '$TIP_E', expected 'deny:0:-'"
 
 # (f) THE INPUT THE EMIT CANNOT AMEND. Two JSON documents on stdin: every read takes the first,
 # so the role resolves and the definition binds, but the final decision build receives two
@@ -703,7 +780,7 @@ F_OUT="$(printf '%s' "$CW_F" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/de
   && ok "(f) CONTROL: the two-document input takes the fail-open path (no decision emitted)" \
   || bad "(f) CONTROL: the guard emitted on the two-document input, so this world is not the fail-open path: '$F_OUT'"
 TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
-[ "$TIP_F" = "true/definition" ] \
+[ "$TIP_F" = "none:1:true/definition" ] \
   && ok "(f) fail-open emit: the row still records true/definition — a record of the selection, not of a rewrite that reached the harness" \
   || bad "(f) fail-open emit recorded '$TIP_F', expected 'true/definition' (the recorded behaviour changed; decide whether that is intended)"
 
@@ -717,23 +794,9 @@ TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
 # definitions whose body lacks this role line 1 and (i) never reads the body. c OWNS that
 # case; d is proven load-bearing by (ii), which moves d alone. Mutant (iii) also moves world
 # f, which is not in the scored vector: f records behaviour and owns no mutant.
-HOOKS_SRC="$(dirname "$HOOK")"
-# ONE copy of the hooks directory serves every mutant: the guard resolves exactly one sibling
-# (ai-dlc-context-provenance.sh, by `dirname "${BASH_SOURCE[0]}"`), and every mutant below is a
-# differently NAMED guard file inside that one directory, so each still finds its sibling beside
-# itself. The directory used to be copied once per mutant, which paid a whole-directory `cp -R` for
-# a sibling that is read, never written. Built at top level, not lazily: a lazy build inside the
-# `$( )` that calls mk_hooks_copy would be discarded with that subshell.
-HOOKS_SHARED="$(mktemp -d "$WORK/hooks-shared.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-cp -R "$HOOKS_SRC/." "$HOOKS_SHARED/" || { echo "FIXTURE ERROR: hooks copy failed" >&2; exit 2; }
-mk_hooks_copy() { # mk_hooks_copy <tag> -> path of a byte-identical guard copy beside the shared sibling
-  local g="$HOOKS_SHARED/$(basename "$HOOK").$1"
-  cp "$HOOKS_SHARED/$(basename "$HOOK")" "$g" || return 1
-  printf '%s' "$g"
-}
-CC_WANT="a=true/definition b=true/prompt c=false/null d=false/null e=false/null"
+CC_WANT="a=allow:1:true/definition b=allow:1:true/prompt c=deny:0:- d=deny:0:- e=deny:0:-"
 
-B_CC=$([ "$TIP_A $TIP_B $TIP_C $TIP_D $TIP_E" = "true/definition true/prompt false/null false/null false/null" ] && echo 1 || echo 0)
+B_CC=$([ "$TIP_A $TIP_B $TIP_C $TIP_D $TIP_E" = "allow:1:true/definition allow:1:true/prompt deny:0:- deny:0:- deny:0:-" ] && echo 1 || echo 0)
 cc_cell() { # cc_cell <guard> <cell> -> that cell's "cited/via" value
   case "$2" in
     a) ccell "$1" "$CW_A" defok ;;
@@ -748,7 +811,7 @@ CC_CTL="$(mk_hooks_copy control)"
 if [ -z "$CC_CTL" ] || [ ! -r "$HOOKS_SHARED/ai-dlc-context-provenance.sh" ]; then
   bad "CARRIER MUTANT CONTROL: the hooks copy is missing the guard or its provenance sibling — every verdict below would be about a copy that cannot run"
 else
-  fam_control CC "$CC_CTL" a "CARRIER MUTANT CONTROL: an unmutated hooks copy records a=true/definition (positive), the cell the carrier mutants are judged against (every cell under --matrix)"
+  fam_control CC "$CC_CTL" a "CARRIER MUTANT CONTROL: an unmutated hooks copy scores a=allow:1:true/definition (positive), the cell the carrier mutants are judged against (every cell under --matrix)"
 fi
 cc_mut() { # cc_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
   local dt; dt="$(fam_dt CC "$1")"
@@ -759,20 +822,20 @@ cc_mut() { # cc_mut <tag> <exact-anchor-line> <replacement-line> <expected-vecto
 cc_mut body-ignored \
   '  if [ -n "$_dg_body" ] && grep -qxF -- "$_dg_line" <<<"$_dg_body" 2>/dev/null; then' \
   '  if true; then' \
-  "a=true/definition b=true/prompt c=true/definition d=true/definition e=false/null" \
-  "citing on definition_bound alone credits the line-less body — arm (c) owns it (d moves too, stated above)"
+  "a=allow:1:true/definition b=allow:1:true/prompt c=allow:1:true/definition d=allow:1:true/definition e=deny:0:-" \
+  "citing on definition_bound alone credits the line-less body, so the deny lets it through — arm (c) owns it (d moves too, stated above)"
 # (ii) the match keyed on line 2, which every role body carries.
 cc_mut line2-key \
   '  _dg_line="$(printf '"'"'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your'"'"' "$ROLE")"' \
   '  _dg_line="FIRST action before any other work."' \
-  "a=true/definition b=true/prompt c=false/null d=true/definition e=false/null" \
-  "keying on the shared line 2 credits another role line — arm (d) alone catches it"
+  "a=allow:1:true/definition b=allow:1:true/prompt c=deny:0:- d=allow:1:true/definition e=deny:0:-" \
+  "keying on the shared line 2 credits another role line, so the deny lets it through — arm (d) alone catches it"
 # (iii) revert to prompt-only: the definition carrier is never consulted.
 cc_mut prompt-only \
   'if [ "$ROLE_CONTRACT_CITED" = false ] && [ "$DEFINITION_BOUND" = true ]; then' \
   'if false; then' \
-  "a=false/null b=true/prompt c=false/null d=false/null e=false/null" \
-  "a prompt-only guard records the definition-bound dispatch as uncited — arm (a) alone catches it"
+  "a=deny:0:- b=allow:1:true/prompt c=deny:0:- d=deny:0:- e=deny:0:-" \
+  "a prompt-only guard reads the definition-bound dispatch as uncited and refuses it — arm (a) alone catches it"
 
 # --- THE SHARD LINE: AN INVENTED SERIAL EXCEPTION IS RECORDED, NEVER LAUNDERED TO NULL --------
 # Rule 28 names four serial exceptions. A `none` naming anything else records
@@ -1055,6 +1118,55 @@ dv_mut remediator-only \
   "$DV_RINV;qinv=none:1:invalid-exception;pinv=none:1:invalid-exception;$DV_NINV;$DV_REST" \
   "a deny keyed on the word remediator records the invented line on qa and on a party seat — cells qinv and pinv alone catch it"
 rm -f "$CONSUMER/.claude/team-roles/seatx.md"
+
+# --- THE COVER DENY: THE ONE CROSS AGENT (G=1) WHOSE ORDINALS OMIT A PART OF 1..K -----------
+# Arm S4 fails such a row at the gate, so the guard refuses it before the append, naming the
+# missing ordinals. Cells reuse dcell's `<decision>:<rows added after the epoch>:<row-2 shard>`.
+# gap/full are ONE property apart (ordinal 3); the G>1 per-group cross covers a subset by design
+# and is untouched; zpad is the zero-padded full list partition-document.sh emits at K>=10.
+xvec() { # xvec <guard> <gap cell, already scored by the caller outside any $( )>
+  printf 'gap=%s;full=%s;group=%s;zpad=%s' \
+    "$2" "$(dcell "$1" remediator 'shard: cross/3 g1/1 1,2,3')" \
+    "$(dcell "$1" remediator 'shard: cross/3 g1/2 1,2')" "$(dcell "$1" remediator 'shard: cross/3 g1/1 01,02,03')"
+}
+XV_WANT='gap=deny:0:-;full=allow:1:cross/3 g1/1 1,2,3;group=allow:1:cross/3 g1/2 1,2;zpad=allow:1:cross/3 g1/1 01,02,03'
+# The gap cell runs ONCE, unwrapped, so its DOUT survives for the reason check below; the vector reuses its value.
+dcell "$HOOK" remediator 'shard: cross/3 g1/1 1,2' >/dev/null
+_xgap="$DCELL"; _xrs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)"
+XV_TIP="$(xvec "$HOOK" "$_xgap")"
+_old_ifs="$IFS"; IFS=';'
+for _c in $XV_WANT; do
+  case ";$XV_TIP;" in
+    *";$_c;"*) ok "COVER DENY ${_c%%=*}: '${_c#*=}' (decision:rows added:shard)" ;;
+    *) bad "COVER DENY ${_c%%=*}: expected '${_c#*=}', got vector '$XV_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+case "$_xrs" in *"omits part(s) 3 of 1..3"*) ok "COVER DENY reason names the missing ordinal: 'omits part(s) 3 of 1..3'" ;;
+  *) bad "COVER DENY reason does not name ordinal 3: '$(printf '%s' "$_xrs" | cut -c1-200)'" ;; esac
+# FAIL OPEN: the predicate erroring allows, with the row (Check 22 arm S4 still judges it).
+XV_CTL="$(mk_hooks_copy cover-control)"
+xv_cell() { # xv_cell <guard> <cell> -> that cell's "decision:rows:shard" value
+  case "$2" in
+    gap) dcell "$1" remediator 'shard: cross/3 g1/1 1,2' ;; full) dcell "$1" remediator 'shard: cross/3 g1/1 1,2,3' ;;
+    group) dcell "$1" remediator 'shard: cross/3 g1/2 1,2' ;; zpad) dcell "$1" remediator 'shard: cross/3 g1/1 01,02,03' ;;
+  esac
+}
+ALL_XV=gap,full,group,zpad; SEP_XV=";"; CELLFN_XV=xv_cell; BASE_XV="$(want_lines ';' "$XV_WANT")"
+B_XV=$([ "$XV_TIP" = "$XV_WANT" ] && echo 1 || echo 0)
+if [ -n "$XV_CTL" ]; then
+  fam_control XV "$XV_CTL" gap "COVER MUTANT CONTROL: an unmutated hooks copy scores the deny cell gap (positive; every cell under --matrix)"
+else bad "COVER MUTANT CONTROL is dead: no hooks copy"; fi
+xv_mut() { # xv_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+  fam_mut XV "$1" "$2" "$3" gap full,group,zpad "$B_XV" "$4" "COVER MUTANT $1 scores a kill: $5"
+}
+XV_GAP_ALLOWED='gap=allow:1:cross/3 g1/1 1,2;full=allow:1:cross/3 g1/1 1,2,3;group=allow:1:cross/3 g1/2 1,2;zpad=allow:1:cross/3 g1/1 01,02,03'
+# (i) the shared predicate reports nothing missing: the gap is recorded, which S4 fails. Gap alone moves.
+xv_mut nomissing '  return cv_out' '  return ""' "$XV_GAP_ALLOWED" \
+  "a missing-ordinals predicate that reports nothing lets the gap through -- cell gap alone catches it"
+# (ii) the predicate failing (nonzero rc, no output) FAILS OPEN: the gap is allowed with its row.
+xv_mut predfail '  return cv_out' '  exit 3' "$XV_GAP_ALLOWED" \
+  "a predicate that cannot run allows (fail open), never denies a full cover -- cell gap alone moves"
 
 # --- THE MARK LINE: A BRIEF WHOSE `--mark` THE ENGINE WILL REFUSE IS DENIED; A RENDERED ONE IS RECORDED ---
 # dg_mark_scan is the one predicate. Each cell is `<decision>:<rows written>:<mark field>`, the
@@ -1660,15 +1772,6 @@ capj() { # capj <transcript> <description> [agent_id]
     '.transcript_path = $t | .tool_input.description = $d | if $a != "" then .agent_id = $a else . end'
 }
 capout() { raw "${3:-$CONSUMER}" "$(capj "$1" "$2" "${4-}")"; }
-expect_deny() { # expect_deny <out> <label>
-  if [ "$(printf '%s' "$1" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)" = deny ] \
-     && printf '%s' "$1" | jq -e '.hookSpecificOutput | has("updatedInput") | not' >/dev/null 2>&1; then
-    ok "$2 -> DENIED, with no updatedInput"
-  else bad "$2 -> expected a deny with no updatedInput, got '$(printf '%s' "$1" | cut -c1-200)'"; fi
-}
-expect_quiet() { # expect_quiet <out> <label>
-  [ -z "$1" ] && ok "$2 -> allowed (no decision)" || bad "$2 -> expected NO decision, got '$(printf '%s' "$1" | cut -c1-200)'"
-}
 # BASE CACHE. A plain arm below drives the UNMUTATED guard on exactly the input a matrix base cell
 # needs, so it records its decision here and queue_run reuses it instead of driving the world again.
 # bc_put <CAP|ADJ> <cell> <hook stdout> : stores deny|allow under that family and cell.
@@ -2046,6 +2149,197 @@ adj_kill nocurly 's/^        gsub(\/\\342\\200\\231\/, AP, t)$/        t = t/' \
   "$WCU" allow "dropping the curly-apostrophe fold accepts a curly \"wasn't\" (15o')"
 adj_kill excnoneg 's/^            if (!negwin(lastclause(pre), -4) \&\& !negwin(firstclause(rest), 2)) return 1$/            return 1/' \
   "$WEN" allow "an unscoped exception match accepts \"exception (3) does not apply\" (15p)"
+
+# 15q. THE OPERATOR-FREE REMEDY (BL-842). An invalid-exception row V is covered with NO pending.md
+# entry when a LATER row R of its sprint and role, that RAN (joined in subagent-context.jsonl) and
+# carries a real `i/N` shard, names V on a `remediates:` brief line. The guard does not decide that:
+# it asks validate-spawn-ledger.sh --remediated-keys, located by walking up from the hook's own
+# directory, and reads any failure of that call as an EMPTY set (deny stands, one could-not-run line).
+# R is written by the REAL guard from a real brief, never hand-seeded; V is hand-seeded because a
+# current guard refuses an invented exception (THE SHARD DENY) and never writes one.
+REM_ROOT="$(cd "$(dirname "$HOOK")/../.." && pwd)"
+VSL=""; for _c in "$REM_ROOT/core/scripts/validate-spawn-ledger.sh" "$REM_ROOT/scripts/ai-dlc/validate-spawn-ledger.sh"; do
+  [ -f "$_c" ] && { VSL="$_c"; break; }; done
+VGA=""; for _c in "$REM_ROOT/core/scripts/validate-gate-adjudication.sh" "$REM_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh"; do
+  [ -f "$_c" ] && { VGA="$_c"; break; }; done
+[ -n "$VSL" ] && echo "HERMETIC-CONSUMED $VSL" || bad "15q FIXTURE BROKEN: validate-spawn-ledger.sh not found beside $HOOK"
+[ -n "$VGA" ] && echo "HERMETIC-CONSUMED $VGA" || bad "15q FIXTURE BROKEN: validate-gate-adjudication.sh not found beside $HOOK"
+REM_V=toolu_01REMINV000000000000001
+REM_R=toolu_01REMR00000000000000001
+# remdisp <role> <tool_use_id> <brief line>... -> an Agent dispatch of <role> carrying the lines,
+# with the PreToolUse tool_use_id the guard records (and the probe joins on).
+remdisp() {
+  local r="$1" t="$2" p; shift 2
+  p="Your operating contract is \`.claude/team-roles/$r.md\`. Read it first."
+  for _l in "$@"; do p="$p"$'\n'"$_l"; done
+  jq -nc --arg p "$p"$'\n'"Do the work." --arg t "$t" --arg n "s317-$r-${t#toolu_01}" \
+    '{tool_name:"Agent",tool_use_id:$t,tool_input:{name:$n,prompt:$p}}'
+}
+# ran <project> <tool_use_id> <role> -> one subagent-context.jsonl row, the shape SubagentStop writes.
+ran() {
+  local m; m="$(jq -r --arg r "$3" '.aiDlcModels[.aiDlcRoles[$r].model // ""] // ""' "$1/.claude/settings.json")"
+  jq -nc --arg t "$2" --arg r "$3" --arg m "$m" \
+    '{v:3,ts:"2026-10-10T23:00:00Z",sprint:317,agent_id:("a" + $t),model:$m,role:$r,tool_use_id:$t}' \
+    >> "$1/_bmad-output/subagent-context.jsonl"
+}
+# rem_world <name> <key R names> [ran: 1|0] -> project dir: the 15e row V, then the real guard's R.
+rem_world() {
+  local p; p="$(mkworld "$1" 317)"
+  ledrow 317 remediator remediator "$REM_V" invalid-exception >> "$p/_bmad-output/spawn-ledger.jsonl"
+  raw "$p" "$(remdisp remediator "$REM_R" 'shard: 1/2 rem-fix-a' "remediates: $2")" >/dev/null
+  [ "${3:-1}" = 1 ] && ran "$p" "$REM_R" remediator
+  printf '%s\n' "$p"
+}
+last_field() { tail -1 "$1/_bmad-output/spawn-ledger.jsonl" | jq -r "$2 | tostring" 2>/dev/null; }
+
+# THE GUARD WRITES THE FIELD FROM THE BRIEF. One line -> `remediates`; two -> `remediates_invalid`.
+WRA="$(rem_world allow "$REM_V")"
+[ "$(last_field "$WRA" .tool_use_id):$(last_field "$WRA" .remediates):$(last_field "$WRA" .shard)" = "$REM_R:$REM_V:1/2 rem-fix-a" ] \
+  && ok "15q the guard writes R's row: tool_use_id $REM_R, remediates $REM_V, shard 1/2 rem-fix-a" \
+  || bad "15q R's row is '$(tail -1 "$WRA/_bmad-output/spawn-ledger.jsonl" | cut -c1-300)'; expected remediates=$REM_V (the R dispatch may have been denied)"
+WR2="$(mkworld remtwo 317)"
+raw "$WR2" "$(remdisp remediator toolu_01REMTWO000000000000001 'shard: 1/2 rem-fix-a' "remediates: $REM_V" 'remediates: toolu_01DEVROW000000000000001')" >/dev/null
+[ "$(last_field "$WR2" .tool_use_id):$(last_field "$WR2" .remediates_invalid):$(last_field "$WR2" 'has("remediates")')" = "toolu_01REMTWO000000000000001:multiple:false" ] \
+  && ok "15q' two remediates: lines -> remediates_invalid=multiple and NO remediates field" \
+  || bad "15q' two remediates: lines wrote '$(tail -1 "$WR2/_bmad-output/spawn-ledger.jsonl" | cut -c1-300)'"
+
+# ALLOW / DENY TWINS, one property apart: the key R names.
+expect_quiet "$(adj "$WRA")" "15r an invalid-exception row remediated by a later run R naming it, pending.md EMPTY"
+[ ! -s "$WRA/docs/escalations/pending.md" ] && ok "  and pending.md holds no entry (0 bytes)" || bad "  15r's pending.md is not empty"
+WRD="$(rem_world deny toolu_01NOTTHEROW00000000000001)"
+WRD_OUT="$(adj "$WRD")"
+expect_deny "$WRD_OUT" "15r' its twin: R names a DIFFERENT id"
+grep -qF "$REM_V" <<<"$WRD_OUT" && ok "  and the reason names V ($REM_V)" || bad "  15r' deny does not name V"
+grep -qF 'could not run' <<<"$WRD_OUT" && bad "  15r' says the predicate could not run -- it must have run and found nothing" \
+  || ok "  and the predicate ran (no could-not-run line)"
+WRP2="$(rem_world pending "$REM_V" 0)"
+expect_deny "$(adj "$WRP2")" "15r'' R names V but never RAN (no subagent-context row)"
+# THE NAME KEY: V carries a tool_use_id AND a dispatch name distinct from its role; R names it by
+# the NAME. The guard keys the uncovered row by tool_use_id, so this allows only when the
+# validator's REMEDIATED line reports V by that same tool_use_id.
+WRN2="$(mkworld remname 317)"
+ledrow 317 s317-rem-inv remediator "$REM_V" invalid-exception >> "$WRN2/_bmad-output/spawn-ledger.jsonl"
+raw "$WRN2" "$(remdisp remediator "$REM_R" 'shard: 1/2 rem-fix-a' 'remediates: s317-rem-inv')" >/dev/null
+ran "$WRN2" "$REM_R" remediator
+expect_quiet "$(adj "$WRN2")" "15r''' V named by its distinct dispatch NAME on R's remediates: line"
+
+# THE PREDICATE CANNOT RUN -> DENY, never skip. Guard copies sit in a tree where the walk-up finds a
+# validator we place: the real one (control, must ALLOW 15r) or a stub exiting 2.
+rem_tree() { # rem_tree <tag> <validator source> -> path of a guard copy whose walk-up finds <source>
+  local d; d="$(mktemp -d "$WORK/remtree-$1.XXXXXX")" || return 1
+  mkdir -p "$d/core/hooks" "$d/core/scripts" && cp -R "$HOOKS_SRC/." "$d/core/hooks/" \
+    && cp "$2" "$d/core/scripts/validate-spawn-ledger.sh" || return 1
+  printf '%s/core/hooks/%s' "$d" "$(basename "$HOOK")"
+}
+REM_CTL="$(rem_tree control "$VSL")"
+[ -n "$REM_CTL" ] && [ -z "$(adj_mut "$REM_CTL" "$WRA")" ] && [ "$(adj_mut "$REM_CTL" "$WRD")" = deny ] \
+  && ok "REM MUTANT CONTROL: an unmutated tree copy ALLOWS 15r and denies 15r' (its walk-up found the validator)" \
+  || bad "REM MUTANT CONTROL is dead: the tree copy does not allow 15r, so every REM verdict below is unearned"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$WORK/q0-vsl-exit2.sh"
+REM_X2="$(rem_tree exit2 "$WORK/q0-vsl-exit2.sh")"
+X2_OUT="$(printf '%s' "$(adjj)" | CLAUDE_PROJECT_DIR="$WRA" bash "$REM_X2" 2>/dev/null)"
+expect_deny "$X2_OUT" "15s the 15r world, the validator exiting 2"
+grep -qF 'The remediation predicate could not run, so no row was counted remediated: validate-spawn-ledger.sh --remediated-keys exited rc 2' <<<"$X2_OUT" \
+  && grep -qF "$REM_V" <<<"$X2_OUT" \
+  && ok "  and the reason carries the could-not-run line (rc 2) and names V" \
+  || bad "  15s deny lacks the could-not-run line or V: '$(printf '%s' "$X2_OUT" | cut -c1-300)'"
+# MUTANT: the coverage path deleted (no class matches), the call still made. Built in a tree copy so
+# the walk-up still finds the real validator; a kill with the could-not-run line would be unearned.
+REM_M="$(rem_tree nocover "$VSL")"
+_ra_n="$(grep -cF "| sed -n 's/^REMEDIATED" "$HOOK")" || _ra_n=0
+_ra="$(grep -F "| sed -n 's/^REMEDIATED" "$HOOK")"
+_rr="${_ra/$'\t'shard$'\t'/$'\t'NOSUCH$'\t'}"
+if [ -n "$REM_M" ] && [ "$_ra_n" = 1 ] && [ "$_rr" != "$_ra" ] \
+   && A="$_ra" R="$_rr" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$REM_M" \
+   && ! cmp -s "$HOOK" "$REM_M" && bash -n "$REM_M" 2>/dev/null; then
+  RM_OUT="$(printf '%s' "$(adjj)" | CLAUDE_PROJECT_DIR="$WRA" bash "$REM_M" 2>/dev/null)"
+  RM_D="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$RM_OUT" 2>/dev/null)"
+  if grep -qF 'could not run' <<<"$RM_OUT"; then
+    bad "REM MUTANT nocover was denied only because the predicate could not run: '$(printf '%s' "$RM_OUT" | cut -c1-200)'"
+  else
+    mx_kill "$(bfl)" nocover r15r - "r15r=$RM_D" "r15r=none" \
+      "REM MUTANT nocover scores a kill: with the ledger-coverage path deleted, 15r is DENIED though the predicate ran" "r15r=deny"
+  fi
+else bad "REM MUTANT nocover DID NOT APPLY (sed failed, matched nothing, or did not parse)"; fi
+
+# 15t. NO PATH REQUIRES AN OPERATOR ENTRY (BL-842's owed item, realised structurally). One world
+# whose ONLY Check 22 violations are three remediated rows, one per remediable class (cite: Rule
+# 19(b) uncited; shard: S3 invented exception; cover: S4 one-cross gap), and whose pending.md is
+# EMPTY. In it the guard allows the implementation adjudicator, validate-spawn-ledger.sh exits 0
+# printing a REMEDIATED line per pair and remediated=3, and validate-gate-adjudication.sh --series
+# exits 0 over a 22 FAIL -> PASS series carrying the lead's resolution record. Every row is written
+# by the REAL guard from a real brief, the epoch row in an earlier sprint FIRST; each V is then
+# edited in place to its violation (a current guard refuses all three at dispatch, so none can be
+# produced there), keeping every other field the guard wrote.
+NOP="$WORK/waiver-nooperator"
+mkdir -p "$NOP/.claude" "$NOP/_bmad-output/gate-adjudication" "$NOP/_bmad-output/planning-artifacts/s317" "$NOP/docs/escalations"
+cp -R "$CONSUMER/.claude/team-roles" "$NOP/.claude/"
+cp "$CONSUMER/.claude/.ai-dlc-version" "$CONSUMER/.claude/settings.json" "$NOP/.claude/"
+: > "$NOP/docs/escalations/pending.md"
+printf -- '- sprint_id: 316\n' > "$NOP/_bmad-output/pipeline-snapshot.md"
+raw "$NOP" "$(remdisp dev toolu_01NOPEPOCH00000000000001)" >/dev/null
+printf -- '- sprint_id: 317\n' > "$NOP/_bmad-output/pipeline-snapshot.md"
+NV_S=toolu_01REMINV000000000000001; NR_S=toolu_01REMR00000000000000001
+NV_C=toolu_01CITV000000000000000001; NR_C=toolu_01CITR000000000000000001
+NV_X=toolu_01COVV000000000000000001; NR_X=toolu_01COVR000000000000000001
+raw "$NOP" "$(remdisp remediator "$NV_S" 'shard: 1/2 rem-fix-a')" >/dev/null
+raw "$NOP" "$(remdisp analyst "$NV_C" 'shard: 1/1 analysis')" >/dev/null
+raw "$NOP" "$(remdisp analyst "$NV_X" 'shard: cross/3 g1/1 1,2,3')" >/dev/null
+raw "$NOP" "$(remdisp remediator "$NR_S" 'shard: 1/2 rem-fix-a' "remediates: $NV_S")" >/dev/null
+raw "$NOP" "$(remdisp analyst "$NR_C" 'shard: 1/1 analysis' "remediates: $NV_C")" >/dev/null
+raw "$NOP" "$(remdisp analyst "$NR_X" 'shard: cross/3 g1/1 1,2,3' "remediates: $NV_X")" >/dev/null
+NOP_L="$NOP/_bmad-output/spawn-ledger.jsonl"
+jq -c --arg s "$NV_S" --arg c "$NV_C" --arg x "$NV_X" '
+  if .tool_use_id == $s then .shard = "invalid-exception" | .shard_raw = "none (serial cross-section remediator)"
+  elif .tool_use_id == $c then .role_contract_cited = false | .contract_via = null
+  elif .tool_use_id == $x then .shard = "cross/3 g1/1 1,2"
+  else . end' "$NOP_L" > "$NOP_L.new" && mv "$NOP_L.new" "$NOP_L"
+for _t in toolu_01NOPEPOCH00000000000001:dev "$NV_S:remediator" "$NV_C:analyst" "$NV_X:analyst" \
+          "$NR_S:remediator" "$NR_C:analyst" "$NR_X:analyst"; do ran "$NOP" "${_t%%:*}" "${_t#*:}"; done
+[ "$(jq -sr 'map(.tool_use_id) | join(" ")' "$NOP_L" 2>/dev/null)" = "toolu_01NOPEPOCH00000000000001 $NV_S $NV_C $NV_X $NR_S $NR_C $NR_X" ] \
+  && ok "15t world: seven guard-written rows in ledger order (epoch, three V, three R)" \
+  || bad "15t FIXTURE BROKEN: the ledger is '$(jq -sr 'map(.tool_use_id // "?") | join(" ")' "$NOP_L" 2>/dev/null)' -- a dispatch was denied or misordered"
+expect_quiet "$(adj "$NOP")" "15t the guard: an implementation adjudicator over a sprint whose only violations are remediated"
+NOP_VO="$(bash "$VSL" --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
+  --probe "$NOP/_bmad-output/subagent-context.jsonl" --context "$NOP/_bmad-output/subagent-context.jsonl" 2>&1)"; NOP_VR=$?
+[ "$NOP_VR" = 0 ] && grep -qF "REMEDIATED: $NV_S by $NR_S (shard)" <<<"$NOP_VO" \
+  && grep -qF "REMEDIATED: $NV_C by $NR_C (cite)" <<<"$NOP_VO" && grep -qF "REMEDIATED: $NV_X by $NR_X (cover)" <<<"$NOP_VO" \
+  && grep -qE '^COUNTS:' <<<"$NOP_VO" && grep -qE 'remediation \(classes: cite shard cover\): remediated=3 pending-remedy=0' <<<"$NOP_VO" \
+  && ok "15t the validator: exit 0, one REMEDIATED line per class, remediated=3" \
+  || bad "15t the validator exited $NOP_VR: '$(printf '%s' "$NOP_VO" | tr '\n' ' ' | cut -c1-600)'"
+# THE SAME LEDGER WITHOUT R's RUN: every V is still a violation, so exit 1 -- the 15t exit 0 is
+# the remedies' doing, not a validator that judges nothing.
+grep -vF "$NR_S" "$NOP/_bmad-output/subagent-context.jsonl" | grep -vF "$NR_C" | grep -vF "$NR_X" > "$WORK/q0-nop-norun.jsonl"
+bash "$VSL" --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
+  --probe "$WORK/q0-nop-norun.jsonl" --context "$WORK/q0-nop-norun.jsonl" >/dev/null 2>&1; _nr=$?
+[ "$_nr" = 1 ] && ok "  its control: the same ledger with no R joined exits 1" || bad "  15t control: no R joined exited $_nr, expected 1"
+cat > "$NOP/_bmad-output/planning-artifacts/s317/gate-implementation-resolution-p1.md" <<NOPEOF
+# Gate resolution record — implementation gate, pass 1
+
+## Check 22 — spawn ledger
+
+- disposition: remediated (classes shard, cite, cover); no escalation entry
+- edit: _bmad-output/spawn-ledger.jsonl — $NR_S remediates: $NV_S; $NR_C remediates: $NV_C; $NR_X remediates: $NV_X
+- derivation:
+  \`\`\`
+$(printf '%s\n' "$NOP_VO" | grep -E '^(REMEDIATED|COUNTS):|remediation \(classes:' | sed 's/^/  /')
+  \`\`\`
+NOPEOF
+for _p in "implementation-20261010T230257Z FAIL 2026-10-10T23:02:57Z" "implementation-20261010T234500Z PASS 2026-10-10T23:45:00Z"; do
+  set -- $_p
+  jq -n --arg n "$1" --arg v "$2" --arg g "$3" '{schema_id:"GATE_ADJUDICATION_VERDICT v1",gate_type:"implementation",
+    gate_series_id:"implementation-gate-20261010T2300Z",gate_nonce:$n,generated_at:$g,adjudicator_agent_id:("agent-" + $n),
+    catalog:"core",verdicts:[{check_id:"22",verdict:$v,evidence:"validate-spawn-ledger.sh --sprint 317"}]}' \
+    > "$NOP/_bmad-output/gate-adjudication/$1.verdict.json"
+done
+set --
+bash "$VGA" --series "$NOP/_bmad-output/gate-adjudication" >/dev/null 2>&1; _sr=$?
+[ "$_sr" = 0 ] && ok "15t --series: 22 FAIL -> PASS with the resolution record exits 0" || bad "15t --series exited $_sr, expected 0"
+mv "$NOP/_bmad-output/planning-artifacts/s317/gate-implementation-resolution-p1.md" "$WORK/q0-nop-record.md"
+bash "$VGA" --series "$NOP/_bmad-output/gate-adjudication" >/dev/null 2>&1; _sr=$?
+[ "$_sr" = 1 ] && ok "  its control: the same series without the record exits 1" || bad "  15t --series without the record exited $_sr, expected 1"
+[ ! -s "$NOP/docs/escalations/pending.md" ] && ok "15t pending.md is EMPTY throughout: no path above required an operator entry" \
+  || bad "15t pending.md was written"
 adj_kill firstnonce 's/^_dg_nl="\$(sed -n .*$/_dg_nl=""/' \
   "$W1" deny "ignoring the gate_nonce key reads a sprint-review brief's cited implementation nonce as its own (15k')" \
   "cites implementation-20261010T230257Z. gate_nonce: sprint-review-20261011T101010Z"

@@ -34,15 +34,28 @@
 #
 # WHAT THIS DOES NOT DECIDE, deliberately. Check 22 stays `adjudication: llm`:
 #
-#   * EVERY recorded violation this script FAILS on has the SAME CLEARING PATH with
-#     four arms -- a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract
-#     citation, an unreadable role file, and an effort mismatch, which are four routes
-#     into one exit code and not four dispositions -- and a fifth, an invalid Rule 28 serial
-#     exception (arm S3), clears the same way. Arm 4 -- the escalation entry states
-#     the remediation and names its artifact -- is a judgement about content. Arm 3 is
-#     `validate-escalation-resolution.sh`, which this script does not invoke: the two
-#     answer different questions about different files and the gate runs both. This
-#     script reports the violation; the adjudicator decides whether it is cleared.
+#   * EVERY recorded violation this script FAILS on CAN clear through Check 22's four-arm
+#     disposition -- a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract
+#     citation, an unreadable role file, an effort mismatch, an invalid Rule 28 serial
+#     exception (arm S3) and a one-cross brief omitting a section (arm S4). Arm 4 -- the
+#     escalation entry states the remediation and names its artifact -- is a judgement about
+#     content. Arm 3 is `validate-escalation-resolution.sh`, which this script does not
+#     invoke: the two answer different questions about different files and the gate runs
+#     both. This script reports the violation; the adjudicator decides whether it is cleared.
+#   * THREE CLASSES ALSO CLEAR WITHOUT THE OPERATOR, BY REPAIR (operator rulings, BL-842): a
+#     missing 19(b) citation (`cite`), an S3 invalid serial exception (`shard`) and an S4
+#     one-cross coverage gap (`cover`) -- the single list is REMEDIABLE_CLASSES below. Such a
+#     violation V is REMEDIATED, and its class no longer counts toward exit 1, when a LATER row
+#     R (ledger line order, never `ts`) of the same sprint and role carries a `remediates`
+#     field naming V, a `tool_use_id` joined to a row of the subagent context (`--probe`, which
+#     SubagentStop writes: R RAN), and is itself clean on V's class. An unjoined R is
+#     PENDING-REMEDY and remediates nothing. Only that class's increment is suppressed: any
+#     other violation on V's row still fails. Each pair prints as `REMEDIATED: <V> by <R>
+#     (<class>)` and `COUNTS:` carries `remediated=` and `pending-remedy=`.
+#     THE RESIDUAL, STATED PLAINLY: the clear attests that a re-dispatch of V's role RAN, is
+#     clean on V's class, and was declared by the lead as V's remedy. It does NOT attest that
+#     the re-dispatch's output was verified. The `remediates` field is the guard's record of
+#     the lead's INTENT; R's cleanliness and the context join are what make it a remedy.
 #   * STORY ROUTING (a `protected_path_editor: true` story serviced by a
 #     `protected-path-editor` spawn) is mechanical in form but its subject set is the
 #     sprint's story files, which this script is not given and cannot derive -- the
@@ -109,9 +122,21 @@
 #      model joins), the pin in settings today for a row without it
 #   1  at least one row does not, or its effort_bound disagrees with its own transcript
 #      (a Rule 19 violation on any of those four routes), or a shardable row declared a
-#      serial exception outside Rule 28's four (arm S3, decided even where exit 3 would
-#      otherwise apply) -- clearable only per Check 22's four-arm disposition, which covers
-#      every one of these five
+#      serial exception outside Rule 28's four (arm S3), or a one-cross brief omits a section
+#      (arm S4) -- S3 and S4 decided even where exit 3 would otherwise apply. Clearable per
+#      Check 22's four-arm disposition, which covers every class; a `cite`, `shard` or `cover`
+#      violation also clears by a remediating re-dispatch (above), after which it is not counted
+#
+# MODE --remediated-keys (the dispatch guard's ARM 2 calls this; one predicate, not two copies)
+#   validate-spawn-ledger.sh --remediated-keys --sprint <N> --ledger <spawn-ledger.jsonl>
+#                            --context <subagent-context.jsonl> [--settings <settings.json>]
+#   stdout: one `REMEDIATED<TAB><V tool_use_id or name><TAB><class><TAB><R tool_use_id>` line per
+#   remediated (V, class) pair, class one of REMEDIABLE_CLASSES. Exit 0 when the predicate ran
+#   (no lines is a valid answer); any other exit means it could not run, and a caller treats that
+#   as an EMPTY set. `--context` is required, readable and parseable (an unjoinable R is never a
+#   remedy, so there is nothing to answer without it). Without `--settings` no role is declared
+#   and no party seat is derived, so `cite` and party-seat rows remediate nothing (fails closed).
+#   `--context` is also accepted in the gate mode as a synonym of `--probe`.
 #   2  bad arguments, an unreadable settings.json or ledger, or no jq -- nothing was compared
 #   3  NOTHING WAS COMPARED. Either PRE-LEDGER (the ledger names no row for this sprint)
 #      or every row it does name is outside Rule 19 scope. Not a pass either way.
@@ -159,7 +184,12 @@ LEDGER=""
 SPRINT=""
 SETTINGS=""
 PROBE=""
+CONTEXT=""
 MODE="check22"
+# THE CLASSES THAT CLEAR BY REPAIR, ONE LIST (operator rulings, BL-842). Every remediation decision
+# reads it; each class needs a v_elig and an r_clean line in shard_scan, or the run exits 2.
+REMEDIABLE_CLASSES="cite shard cover"
+SS_DECLARED=""
 FA_RES=""
 FA_ONE=""
 FA_VARIANT=""
@@ -210,6 +240,12 @@ while [ $# -gt 0 ]; do
     --probe)
       [ $# -ge 2 ] || { echo "FAIL: --probe takes the path of subagent-context.jsonl" >&2; exit 2; }
       PROBE="$2"; shift 2 ;;
+    --remediated-keys) MODE="remkeys"; shift ;;
+    # The subagent context that proves a remedy RAN. In the gate mode it also stands in for --probe
+    # when --probe is not passed: both name the one file SubagentStop writes.
+    --context)
+      [ $# -ge 2 ] || { echo "FAIL: --context takes the path of subagent-context.jsonl" >&2; exit 2; }
+      CONTEXT="$2"; shift 2 ;;
     -h|--help)  sed -n '2,62p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -882,6 +918,12 @@ fi
 # fault exits 2, so a caller reading 1 as "a spawn violated Rule 19" cannot be
 # reading a typo, and a caller reading 3 as PRE-LEDGER cannot be reading a path
 # that was never passed.
+if [ "$MODE" = "remkeys" ]; then
+  [ -n "$CONTEXT" ] || { echo "FAIL: --remediated-keys needs --context <subagent-context.jsonl>; without it no remedy can be shown to have run" >&2; exit 2; }
+  # --settings is optional here: with none, no role is declared and no party seat is derived.
+  [ -n "$SETTINGS" ] || SETTINGS=/dev/null
+fi
+[ -n "$CONTEXT" ] && [ -z "$PROBE" ] && [ "$MODE" = "check22" ] && PROBE="$CONTEXT"
 if [ -z "$LEDGER" ] || [ -z "$SPRINT" ] || [ -z "$SETTINGS" ]; then
   echo "FAIL: --ledger <spawn-ledger.jsonl>, --sprint <N> and --settings <settings.json> are all required" >&2
   exit 2
@@ -990,7 +1032,8 @@ matches_pin() {
 # verdict, and the deny is unconstructible for the same reason. An exception OUTSIDE the four
 # is not a judgment the lead is entitled to make: Rule 28 names a closed set, so a reason the
 # set does not hold is a violation on its face. It FAILS, and clears through the same
-# four-arm disposition as every other Check 22 route.
+# four-arm disposition as every other Check 22 route -- or, with S4, by a remediating
+# re-dispatch (header, THREE CLASSES ALSO CLEAR), the operator-free path the rulings opened.
 #
 # S3's FALSE-POSITIVE SET, and how it reached zero. Keyed on a value only a guard at or after
 # this release writes, so every row already on any ledger is null or valid and S3 reads 0 on
@@ -1056,10 +1099,20 @@ party_seats() {
 #   U <name> <role>   S1 offender         P <name>   PENDING (pre-field row)
 #   S <name> <value>  shard recorded      N <pass> <id>   S2 offender     J <id>   joined
 #   E <pass>          a pass file listed and not openable (awk getline -1), never read as clean
-# ONE jq and ONE awk, whatever the row count. rc 2 when the ledger could not be read.
+#   Q <class> <V row index> <V key> <R tool_use_id> <V role>   a remediated (V, class) pair
+#   Y <V key> <R tool_use_id> <R name>   PENDING-REMEDY: R names an eligible V and has not RUN
+#   W <R row index> <reason> <R name> <R tool_use_id> <named key>   a `remediates` that remediates nothing
+#   Z <class>         a class in REMEDIABLE_CLASSES with no cleanliness test (the caller exits 2)
+# The X and C lines carry the row's ledger index as a trailing field: that is the key a Q joins on.
+# ONE jq and ONE awk, whatever the row count. rc 2 when the ledger could not be read. The fifth
+# argument is subagent-context.jsonl (or /dev/null); a row of it is the proof that a remedy RAN.
 shard_scan() {
-  ss_rows="$(jq -rs --argjson s "$2" '
-      [ .[] | select(type == "object") ] as $all
+  ss_rows="$(jq -rs --argjson s "$2" --slurpfile ctx "$5" '
+      def nz: if . == "" then "__NONE__" else . end;
+      . as $raw
+      | [ range(0; $raw | length) as $i | $raw[$i] | select(type == "object") | . + {"__i": $i} ] as $all
+      | ( [ $ctx[] | select(type == "object") | (.tool_use_id // "") | tostring | select(. != "") ]
+          | map({(.): true}) | add // {} ) as $ran
       | ( $all[] | select((.v | type) == "number") | select((.sprint // null) == $s)
           | "R\t" + ((.name // "<unnamed>") | tostring) + "\t" + ((.role // "") | tostring) + "\t"
             + (if has("shard") | not then "__NOKEY__"
@@ -1068,17 +1121,81 @@ shard_scan() {
             + "\t" + ((.shard_raw // "") | tostring | gsub("[\t\n]"; " ")
                       | if . == "" then "__NONE__" else . end)
             + "\t" + ((.tool_use_id // "") | tostring | if . == "" then "__NONE__" else . end)
-            + "\t" + ((.parent_agent_id // "") | tostring | if . == "" then "__NONE__" else . end) ),
+            + "\t" + ((.parent_agent_id // "") | tostring | if . == "" then "__NONE__" else . end)
+            + "\t" + (.__i | tostring) ),
         ( $all[] | select((.v | type) == "number") | select((.tool_use_id // "") != "")
-          | "I\t" + (.tool_use_id | tostring) )
+          | "I\t" + (.tool_use_id | tostring) ),
+        # THE REMEDIATION RECORD, one per guard-written row of EVERY sprint, so the sprint key is
+        # judged below rather than assumed by this filter. `remediates` is a string the guard wrote
+        # from the brief; anything else is malformed and lands in the invalid column.
+        ( $all[] | select((.v | type) == "number")
+          | "M\t" + (.__i | tostring) + "\t" + (if (.sprint | type) == "number" then (.sprint | tostring) else "__NONE__" end)
+            + "\t" + ((.name // "") | tostring | gsub("[\t\n]"; " ") | nz)
+            + "\t" + ((.role // "") | tostring | nz)
+            + "\t" + ((.tool_use_id // "") | tostring | nz)
+            + "\t" + (if .role_contract_cited == true then "true" else "false" end)
+            + "\t" + (if .role_file_readable == false then "false" else "true" end)
+            + "\t" + ((.shard // "") | tostring | gsub("[\t\n]"; " ") | nz)
+            + "\t" + (if (.remediates | type) == "string" then (.remediates | gsub("[\t\n]"; " ") | nz)
+                      else "__NONE__" end)
+            + "\t" + (if has("remediates_invalid") then ((.remediates_invalid // "invalid") | tostring | gsub("[\t\n]"; " ") | nz)
+                      elif has("remediates") and ((.remediates | type) != "string") then "not-a-string"
+                      else "__NONE__" end)
+            + "\t" + (((.tool_use_id // "") | tostring) as $t
+                      | if $t != "" and ($ran | has($t)) then "1" else "0" end) )
     ' "$1" 2>/dev/null)" || return 2
+  ss_sp="$(( $2 + 0 ))"
   set --  "$3" "$4"
   ss_files=""
   for ss_f in "$2"/*-adversarial-p*.md; do
     [ -f "$ss_f" ] && ss_files="${ss_files}F	${ss_f}${NL}"
   done
   # The pass-file list rides on stdin as `F` records: BSD awk refuses a newline in `-v`.
-  printf '%s\n%s' "$ss_rows" "$ss_files" | awk -F'\t' -v roles="$1" '
+  printf '%s\n%s' "$ss_rows" "$ss_files" | awk -F'\t' -v roles="$1" -v sprint="$ss_sp" -v classes="$REMEDIABLE_CLASSES" \
+      -v declared=" ${SS_DECLARED} " '
+# --- SHARED WITH core/hooks/ai-dlc-dispatch-guard.sh, byte-identical (I56) ------
+# Arm S4: the ordinals of 1..K a one-cross (G=1) shard value fails to name, comma-joined. Every
+# ordinal is missing when any token is malformed; empty when coverage is complete or the value
+# is not a `cross/<K> g1/1 <ordinals>` line, which is outside the arm.
+function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok, cv_out) {
+  if (cv_v !~ /^cross\/[0-9]+ g1\/1 /) return ""
+  cv_k = cv_v; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
+  cv_l = cv_v; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
+  cv_ok = 1; cv_s = ","
+  cv_n = split(cv_l, cv_p, ",")
+  for (cv_i = 1; cv_i <= cv_n; cv_i++) {
+    cv_t = cv_p[cv_i]; gsub(/^[ \t]+|[ \t]+$/, "", cv_t); sub(/^0+/, "", cv_t)
+    if (cv_t !~ /^[0-9]+$/) { cv_ok = 0; break }
+    cv_s = cv_s cv_t ","
+  }
+  cv_out = ""
+  for (cv_i = 1; cv_i <= cv_k; cv_i++)
+    if (!cv_ok || index(cv_s, "," cv_i ",") == 0) cv_out = cv_out (cv_out == "" ? "" : ",") cv_i
+  return cv_out
+}
+# --- end shared ----------------------------------------------------------------
+    # V ELIGIBILITY, one line per class: the row would FAIL that class. Same predicates as the arms.
+    function v_elig(c, i) {
+      if (c == "cite") return (mct[i] != "true" && mrl[i] != "__NONE__" && index(declared, " " mrl[i] " ") > 0)
+      if (c == "shard") return (index(roles, " " mrl[i] " ") > 0 && mrl[i] != "__NONE__" && msh[i] == "invalid-exception")
+      if (c == "cover") return (index(roles, " " mrl[i] " ") > 0 && mrl[i] != "__NONE__" && cover_missing(msh[i]) != "")
+      return 0
+    }
+    # R CLEANLINESS, one line per class, keyed on the same names as REMEDIABLE_CLASSES. A class
+    # with no line here answers -1 and the caller refuses the run: a widened list fails CLOSED.
+    function r_clean(c, j) {
+      if (c == "cite") return (mct[j] == "true" && mrd[j] != "false")
+      if (c == "shard") return (msh[j] ~ /^([0-9]+\/[0-9]+|cross\/[0-9]+) / && cover_missing(msh[j]) == "")
+      if (c == "cover") return (msh[j] ~ /^cross\/[0-9]+ g1\/1 / && cover_missing(msh[j]) == "")
+      return -1
+    }
+    function v_any(i,    q) { for (q = 1; q <= ncl; q++) if (v_elig(cl[q], i)) return 1; return 0 }
+    function warn(j, why) { print "W\t" j "\t" why "\t" mnm[j] "\t" mtu[j] "\t" mre[j] }
+    BEGIN { ncl = split(classes, cl, " "); for (q = 1; q <= ncl; q++) if (r_clean(cl[q], "") == -1) print "Z\t" cl[q] }
+    $1 == "M" { mi = $2; mord[++nm] = mi; msp[mi] = $3; mnm[mi] = $4; mrl[mi] = $5; mtu[mi] = $6
+                mct[mi] = $7; mrd[mi] = $8; msh[mi] = $9; mre[mi] = $10; mri[mi] = $11; mjn[mi] = $12
+                if ($6 != "__NONE__") bytui[$6] = mi
+                next }
     $1 == "I" { id[$2] = 1; next }
     $1 == "F" { fl[++nf] = $2; next }
     $1 == "R" {
@@ -1089,31 +1206,43 @@ shard_scan() {
       if (index(roles, " " $3 " ") == 0) next
       if ($4 == "__NOKEY__") print "P\t" $2
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
-      else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5 "\t" $6
-      else if ($4 ~ /^cross\/[0-9]+ g1\/1 /) {
-        # S4: the ONE cross agent of a dispatch (G=1) must name every section ordinal 1..K.
-        # Only the trailing ordinal list is read, so a change to the `g<g>/<G>` token does not
-        # move it. Legacy per-group crosses (G>1) each cover a subset by design and never reach here.
-        cv_k = $4; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
-        cv_l = $4; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
-        # Each ordinal is NORMALISED before the comparison: blanks around it and leading zeros are
-        # stripped, because `partition-document.sh --map` zero-pads at K>=10 and not every emitter
-        # file says "without padding". One bad token (empty, a lone 0, non-digit) refuses the brief.
-        cv_miss = 0; cv_ok = 1; cv_s = ","
-        cv_n = split(cv_l, cv_p, ",")
-        for (cv_i = 1; cv_i <= cv_n; cv_i++) {
-          cv_t = cv_p[cv_i]; gsub(/^[ \t]+|[ \t]+$/, "", cv_t); sub(/^0+/, "", cv_t)
-          if (cv_t !~ /^[0-9]+$/) { cv_ok = 0; break }
-          cv_s = cv_s cv_t ","
-        }
-        if (!cv_ok) cv_miss = cv_k
-        else { for (cv_i = 1; cv_i <= cv_k; cv_i++) if (index(cv_s, "," cv_i ",") == 0) cv_miss++ }
-        if (cv_k >= 1 && cv_miss > 0) print "C\t" $2 "\t" $3 "\t" $4 "\t" $6
-        else print "S\t" $2 "\t" $4
-      }
+      else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5 "\t" $6 "\t" $8
+      # S4: the ONE cross agent of a dispatch (G=1) must name every section ordinal 1..K. The
+      # predicate is cover_missing above, shared with the dispatch guard. Each ordinal is
+      # NORMALISED (blanks and leading zeros stripped: `partition-document.sh --map` zero-pads at
+      # K>=10), and one bad token (empty, a lone 0, non-digit) refuses the brief. Legacy
+      # per-group crosses (G>1) cover a subset by design and answer empty.
+      else if (cover_missing($4) != "") print "C\t" $2 "\t" $3 "\t" $4 "\t" $6 "\t" $8
       else print "S\t" $2 "\t" $4
     }
     END {
+      # THE REMEDIATION JOIN (header, THREE CLASSES ALSO CLEAR). R is walked in LEDGER LINE ORDER.
+      for (o = 1; o <= nm; o++) {
+        j = mord[o]
+        if (mre[j] == "__NONE__" && mri[j] == "__NONE__") continue
+        if (msp[j] != sprint) continue
+        if (mri[j] != "__NONE__") { warn(j, "invalid:" mri[j]); continue }
+        if (mtu[j] == "__NONE__") { warn(j, "no-tool-use-id"); continue }
+        # V by its tool_use_id; else by name, accepted only when it resolves to ONE eligible row.
+        v = ""
+        if ((mre[j] in bytui) && msp[bytui[mre[j]]] == sprint) v = bytui[mre[j]]
+        else {
+          nv = 0
+          for (p = 1; p <= nm; p++) { i = mord[p]; if (msp[i] == sprint && mnm[i] == mre[j] && v_any(i)) { nv++; v = i } }
+          if (nv > 1) { warn(j, "ambiguous-name"); continue }
+        }
+        if (v == "" || !v_any(v)) { warn(j, "not-eligible"); continue }
+        if (mrl[v] != mrl[j]) { warn(j, "role-differs"); continue }
+        if ((v + 0) >= (j + 0)) { warn(j, "not-later"); continue }
+        vk = (mtu[v] != "__NONE__") ? mtu[v] : mnm[v]
+        qs = ""
+        for (q = 1; q <= ncl; q++) if (v_elig(cl[q], v) && r_clean(cl[q], j) == 1) qs = qs " " cl[q]
+        if (qs == "") { warn(j, "dirty"); continue }
+        # R MUST HAVE RUN: its tool_use_id joins a row SubagentStop wrote. Unjoined is PENDING.
+        if (mjn[j] != "1") { print "Y\t" vk "\t" mtu[j] "\t" mnm[j]; continue }
+        nq = split(substr(qs, 2), qa, " ")
+        for (q = 1; q <= nq; q++) print "Q\t" qa[q] "\t" v "\t" vk "\t" mtu[j] "\t" mrl[v]
+      }
       for (k = 1; k <= nf; k++) {
         f = fl[k]; if (f == "") continue
         inblk = 0
@@ -1156,7 +1285,11 @@ shard_self_probe() {
     '{"sprint":7,"name":"hand","role":"adversary","tool_use_id":"toolu_F","shard":null}' \
     '{"v":1,"sprint":null,"name":"adv-x","role":"adversary","tool_use_id":"toolu_X","shard":"2/2 02"}' \
     '{"v":1,"sprint":7,"name":"Explore","role":"","tool_use_id":"toolu_L","parent_agent_id":"a0123456789abcdef","shard":null}' \
+    '{"v":1,"sprint":7,"name":"adv-fix","role":"adversary","tool_use_id":"toolu_R","shard":"1/1 k","remediates":"toolu_I"}' \
+    '{"v":1,"sprint":7,"name":"adv-pend","role":"adversary","tool_use_id":"toolu_RP","shard":"cross/4 g1/1 1,2,3,4","remediates":"toolu_CM"}' \
+    '{"v":1,"sprint":7,"name":"adv-dirty","role":"adversary","tool_use_id":"toolu_RD","shard":"cross/4 g1/1 1,2","remediates":"toolu_CM"}' \
     > "$sp_d/l.jsonl" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' '{"tool_use_id":"toolu_R"}' '{"tool_use_id":"toolu_RD"}' > "$sp_d/ctx.jsonl" || { rm -rf "$sp_d"; return 1; }
   printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
     'shard_tool_use_ids: 01=toolu_B 02=toolu_X 03=toolu_F cross=toolu_GONE' \
     'SKILL_INVOCATION_PROVENANCE_END -->' 'shard_tool_use_ids: 09=toolu_OUTSIDE' \
@@ -1175,7 +1308,7 @@ shard_self_probe() {
   printf '%s\n' '# Role: dev' '' 'You implement stories.' > "$sp_d/tr/dev.md" || { rm -rf "$sp_d"; return 1; }
   sp_seats="$(party_seats "$sp_d/tr")"
   sp_absent="$(party_seats "$sp_d/no-such-dir")"
-  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary ${sp_seats} " "$sp_d/pl")" || { rm -rf "$sp_d"; return 1; }
+  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary ${sp_seats} " "$sp_d/pl" "$sp_d/ctx.jsonl")" || { rm -rf "$sp_d"; return 1; }
   rm -rf "$sp_d"
   sp_bad=0
   [ "$sp_seats" = "tea" ] || { echo "FAIL: shard self-probe: party_seats derived '${sp_seats}', expected exactly 'tea' (a line-opening persona sentence, not a mid-line mention)." >&2; sp_bad=1; }
@@ -1187,9 +1320,13 @@ shard_self_probe() {
   sp_want "U${TAB}seat${TAB}tea" "a party seat with shard:null to WARN"
   sp_want "P${TAB}adv-c" "a row with no shard KEY to read as PENDING"
   sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
-  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)${TAB}toolu_I" "an invalid-exception row to FAIL under S3 with its raw text and tool_use_id"
+  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)${TAB}toolu_I${TAB}2" "an invalid-exception row to FAIL under S3 with its raw text, tool_use_id and ledger index"
+  sp_want "Q${TAB}shard${TAB}2${TAB}toolu_I${TAB}toolu_R${TAB}adversary" "a later, run, clean same-role row naming the S3 row to REMEDIATE it"
+  sp_want "Y${TAB}toolu_CM${TAB}toolu_RP${TAB}adv-pend" "a clean remedy with no subagent-context row to be PENDING"
+  sp_want "W${TAB}15${TAB}dirty${TAB}adv-dirty${TAB}toolu_RD${TAB}toolu_CM" "a remedy itself dirty on S4 to WARN and remediate nothing"
+  sp_not "Q${TAB}cover" "an S4 row was remediated by a pending or dirty remedy"
   sp_want "S${TAB}adv-ok3${TAB}none (3)" "a valid serial exception to read as a carried shard line"
-  sp_want "C${TAB}cov-miss${TAB}adversary${TAB}cross/4 g1/1 1,2,3${TAB}toolu_CM" "a one-cross dispatch whose brief omits section 4 to be REFUSED under S4"
+  sp_want "C${TAB}cov-miss${TAB}adversary${TAB}cross/4 g1/1 1,2,3${TAB}toolu_CM${TAB}4" "a one-cross dispatch whose brief omits section 4 to be REFUSED under S4"
   sp_want "S${TAB}cov-ok${TAB}cross/4 g1/1 1,2,3,4" "a one-cross dispatch naming every section to read as a carried shard line"
   sp_want "S${TAB}cov-legacy${TAB}cross/6 g2/6 1,2,5" "a legacy per-group cross (G>1, a subset by design) to read as a carried shard line"
   sp_not "C${TAB}cov-ok" "a one-cross dispatch naming every section was refused"
@@ -1207,6 +1344,7 @@ shard_self_probe() {
   sp_not "dev-a" "a non-shardable role was judged"
   sp_not "hand" "a row the guard did not write was judged"
   sp_not "toolu_OUTSIDE" "an id outside the provenance block was joined"
+  sp_not "Z${TAB}" "a class in REMEDIABLE_CLASSES has no cleanliness test"
   [ "$sp_bad" -eq 0 ]
 }
 
@@ -1215,6 +1353,23 @@ shard_self_probe || {
   echo "      establish only that it ran. Exit 2, no verdict." >&2
   exit 2
 }
+
+# --remediated-keys: the remediation predicate alone, for the dispatch guard's ARM 2. stdout carries
+# ONLY `REMEDIATED<TAB>V<TAB>class<TAB>R` lines; every diagnostic goes to stderr. An ABSENT context
+# file is "no remedy has run yet" (exit 0, no lines); an unreadable or unparseable one is exit 2.
+if [ "$MODE" = "remkeys" ]; then
+  [ -r "$LEDGER" ] || { echo "FAIL: cannot read the ledger $LEDGER" >&2; exit 2; }
+  if [ ! -e "$CONTEXT" ]; then rk_ctx=/dev/null
+  elif [ -r "$CONTEXT" ] && jq -s 'length' "$CONTEXT" >/dev/null 2>&1; then rk_ctx="$CONTEXT"
+  else echo "FAIL: $CONTEXT exists and is not readable JSONL" >&2; exit 2; fi
+  SS_DECLARED="$(jq -r '.aiDlcRoles // {} | keys[]' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
+  rk_seats="$(party_seats "$(dirname "$SETTINGS")/team-roles")"
+  rk_out="$(shard_scan "$LEDGER" "$SPRINT_NUM" " ${SHARD_ROLES} ${rk_seats} " "$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}" "$rk_ctx")" \
+    || { echo "FAIL: the remediation predicate could not read $LEDGER" >&2; exit 2; }
+  case "${NL}${rk_out}" in *"${NL}Z	"*) echo "FAIL: a class in REMEDIABLE_CLASSES has no cleanliness test" >&2; exit 2 ;; esac
+  printf '%s\n' "$rk_out" | awk -F'\t' '$1 == "Q" { print "REMEDIATED\t" $4 "\t" $2 "\t" $5 }'
+  exit 0
+fi
 
 # An absent ledger and a ledger holding only other sprints' rows are ONE state, and
 # Check 22 says so: a consumer that pulls the guard mid-sprint gets a file whose first
@@ -1264,8 +1419,9 @@ if [ -f "$LEDGER" ]; then
       # tool_use_id -> model, LAST probe row per id winning, as in probe_effort.
       ( reduce ($probe[] | select(type == "object") | select((.tool_use_id // "") != ""))
           as $r ({}; .[$r.tool_use_id | tostring] = $r.model) ) as $pm
-      | .[]
+      | range(0; length) as $ix | .[$ix]
       | select(type == "object")
+      | . + {"__ix": $ix}
       | select((.sprint // null) == $s)
       | [ (.name | tok),
           (.role | tok),
@@ -1306,7 +1462,9 @@ if [ -f "$LEDGER" ]; then
           # THE RESOLVED MODEL STRING the guard bound for that pin key at dispatch. A pin KEY
           # need not be a substring of the model it names (a consumer key `fast` naming
           # `claude-sonnet-5-5`), so the tier arm also accepts a transcript model matching this.
-          (.model_pinned | tok) ]
+          (.model_pinned | tok),
+          # THE ROW INDEX IN LEDGER LINE ORDER, the key a REMEDIATED pair from shard_scan joins on.
+          (.__ix | tostring) ]
       | @tsv
     ' "$LEDGER" 2>/dev/null || true)"
 fi
@@ -1496,7 +1654,32 @@ probe_effort() {  # tool_use_id
 # in ten minutes, where the base validator takes 29s. The projection carries the joined model
 # as the record's last column (`tiermodel`), LAST probe row per id winning as in `probe_effort`.
 
-while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin; do
+# THE SHARD ARM AND THE REMEDIATION JOIN RUN BEFORE THE LOOP, so the loop can suppress a remediated
+# class. Its lines are reported after COUNTS, as before; an unreadable ledger exits 2 there.
+SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
+SHARD_SEATS_DIR="$(dirname "$SETTINGS")/team-roles"
+SHARD_SEATS="$(party_seats "$SHARD_SEATS_DIR")"
+SHARD_SET=" ${SHARD_ROLES} ${SHARD_SEATS} "
+SS_DECLARED="$(printf '%s' "$DECLARED_ROLES" | tr '\n' ' ')"
+SH_OUT=""
+SH_RC=0
+SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR" "$TIER_PROBE")" || SH_RC=$?
+case "${NL}${SH_OUT}" in *"${NL}Z	"*)
+  echo "FAIL: a class in REMEDIABLE_CLASSES (${REMEDIABLE_CLASSES}) has no cleanliness test in shard_scan; nothing was decided. Exit 2." >&2
+  exit 2 ;; esac
+# `<class>:<ledger index>` per remediated (V, class) pair, newline-framed.
+REM_SET="${NL}$(printf '%s\n' "$SH_OUT" | awk -F'\t' '$1 == "Q" { print $2 ":" $3 }')${NL}"
+# remediated <class> <ledger index> -> 0 when that class of that row is remediated. Read at the
+# increment of every remediable class; only that class is suppressed, never the row.
+remediated() {
+  case " ${REMEDIABLE_CLASSES} " in *" $1 "*) ;; *) return 1 ;; esac
+  case "$REM_SET" in *"${NL}$1:$2${NL}"*) return 0 ;; esac
+  return 1
+}
+REMEDIATED_N=0
+PENDING_REMEDY=0
+
+while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin rix; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
@@ -1566,7 +1749,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      role file, so this teammate ran with no contract at all (Rule 19, fail-closed)." >&2
     echo "      It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
-    VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1))
+    remediated unread "$rix" || { VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1)); }
   fi
 
   # Rule 19(b): the dispatch guard recorded that the contract line reached the teammate by
@@ -1576,11 +1759,17 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   # where that body carried the line, and it is NOT re-read: the row is a past record, and
   # it clears through the four-arm disposition like any other.
   if [ "$cited" != "true" ]; then
-    echo "FAIL: [$name] role_contract_cited=false -- the dispatch of role '${role:-<none>}' carried the" >&2
+    if remediated cite "$rix"; then :
+    else
+    echo "FAIL: [$name] (tool_use_id ${tui:-<none recorded>}) role_contract_cited=false -- the dispatch of role '${role:-<none>}' carried the" >&2
     echo "      Rule 19(b) line in neither its prompt nor the definition it selected." >&2
     echo "      It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
+    echo "      Remediation path, no operator needed: re-dispatch role '${role:-<none>}' with a brief carrying the" >&2
+    echo "      Rule 19(b) line and 'remediates: ${tui:-${name}}', and re-run this gate once it has run." >&2
+    [ -n "$tui" ] || echo "      This row has no tool_use_id, so it can be named only by its dispatch name, and only if unique." >&2
     VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1))
+    fi
   fi
 
   # Rule 19(a), FOR A ROW THAT RECORDED THE PIN IN FORCE AT ITS DISPATCH (`tier_pinned` present).
@@ -1645,7 +1834,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
         echo "      recorded Rule 19(a) tier mismatch against the pin in force when it ran, not the" >&2
         echo "      pin in ${SETTINGS} today. It is a fact about the past: clear it only through Check 22's" >&2
         echo "      four-arm disposition, never by re-running the gate." >&2
-        VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1))
+        remediated tier "$rix" || { VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1)); }
       fi
     fi
   else
@@ -1666,7 +1855,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      aiDlcRoles.${role}.model='${EXPECT}'. This is a recorded Rule 19(a) tier" >&2
     echo "      mismatch. It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
-    VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1))
+    remediated tier "$rix" || { VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1)); }
   elif [ -n "$requested" ] && ! matches_pin "$requested"; then
     # Reported, NOT failed. Check 22 is explicit: the guard caught the slip before the
     # work ran and the teammate ran on the key its role names.
@@ -1737,7 +1926,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
       echo "      runner that drops effort." >&2
       echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
       echo "      Check 22's four-arm disposition, never by re-running the gate." >&2
-      VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1))
+      remediated effort "$rix" || { VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1)); }
     fi
   fi
 done <<EOF
@@ -1783,13 +1972,7 @@ echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (role
 # SHARD_VIOL, which is decided below on its own, BEFORE the exit-3 branch, because the
 # shardable set is not Rule 19 scope and a sprint whose rows are all out of that scope can
 # still carry an invented serial exception.
-SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
-SHARD_SEATS_DIR="$(dirname "$SETTINGS")/team-roles"
-SHARD_SEATS="$(party_seats "$SHARD_SEATS_DIR")"
-SHARD_SET=" ${SHARD_ROLES} ${SHARD_SEATS} "
-SH_OUT=""
-SH_RC=0
-SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR")" || SH_RC=$?
+# (The scan itself ran above the main loop, so the loop could suppress a remediated class.)
 SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0; SHARD_VIOL=0; SHARD_COV=0
 if [ "$SH_RC" -ne 0 ]; then
   # EXIT 2, NOT A WARNING. Since S3 can FAIL, an unreadable ledger here is an arm that did not
@@ -1798,11 +1981,24 @@ if [ "$SH_RC" -ne 0 ]; then
   echo "      dispatch, and arm S3 can fail, so this is exit 2 and not a pass." >&2
   exit 2
 else
-  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c sh_d; do
+  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c sh_d sh_e; do
     case "$sh_k" in
+      Q) REMEDIATED_N=$((REMEDIATED_N + 1))
+         echo "REMEDIATED: ${sh_c} by ${sh_d} (${sh_a})" ;;
+      Y) PENDING_REMEDY=$((PENDING_REMEDY + 1))
+         echo "PENDING-REMEDY: [${sh_c}] (tool_use_id ${sh_b}) names ${sh_a} as its remedy target and has no row in the"
+         echo "      subagent context (${PROBE_NOTE}): it has not been shown to have RUN, so it remediates nothing yet." ;;
+      W) case "$sh_b" in
+           ambiguous-name) echo "WARN: [${sh_c}] (tool_use_id ${sh_d}) remediates '${sh_e}', a name that resolves to more than one eligible row: it remediates nothing -- use the tool_use_id." ;;
+           invalid:*) echo "WARN: [${sh_c}] (tool_use_id ${sh_d}) carries remediates_invalid (${sh_b#invalid:}): one remedy names exactly one violating row, so it remediates nothing." ;;
+           no-tool-use-id) echo "WARN: [${sh_c}] names '${sh_e}' as its remedy target and records no tool_use_id, so it cannot be shown to have run: it remediates nothing." ;;
+           dirty) echo "WARN: [${sh_c}] (tool_use_id ${sh_d}) remediates '${sh_e}' and is itself not clean on that row's class: it remediates nothing." ;;
+           *) echo "WARN: [${sh_c}] (tool_use_id ${sh_d}) remediates '${sh_e}', which is not an earlier remediable violation of the same sprint and role (${sh_b}): it remediates nothing." ;;
+         esac ;;
       # The tool_use_id prints BESIDE the name: clearing arm 1 keys on the name, and names
       # repeat across a sprint, so the id is what tells two same-named rows apart.
       X) SHARD_VIOL=$((SHARD_VIOL + 1))
+         if remediated shard "$sh_e"; then SHARD_VIOL=$((SHARD_VIOL - 1)); continue; fi
          [ "$sh_c" = "__NONE__" ] && sh_c="<no shard_raw recorded>"
          [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
          echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
@@ -1810,15 +2006,22 @@ else
          echo "      'shard: none (<1-4>)' names data-dependency, pass-repair-pass, authoring-chain or" >&2
          echo "      serial-document; any other reason is an invented exception (grammar: ai-dlc-dispatch-guard.sh," >&2
          echo "      THE SHARD LINE). A single-voice or unsharded dispatch is 'shard: 1/1 <key>', which the" >&2
-         echo "      grammar accepts (N may be 1). Re-dispatch sharded, or name the exception and verify the output." >&2
-         echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
+         echo "      grammar accepts (N may be 1)." >&2
+         echo "      Remediation path, no operator needed: re-dispatch role '${sh_b}' sharded -- a real 'shard: i/N' or" >&2
+         echo "      'shard: cross/...' line, never 'none (<n>)' -- with 'remediates: ${sh_d}' in its brief, and re-run" >&2
+         echo "      this gate once it has run." >&2
+         echo "      Otherwise the spawn that already ran is a fact about the past: clear it only through" >&2
          echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
       C) SHARD_COV=$((SHARD_COV + 1))
+         if remediated cover "$sh_e"; then SHARD_COV=$((SHARD_COV - 1)); continue; fi
          [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
          echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' is the ONE cross agent of its dispatch (G=1) and its brief does not name every section:" >&2
          echo "      shard: ${sh_c}" >&2
          echo "      A single cross agent stands in for every cross group only if its brief covers ordinals 1..K of the" >&2
-         echo "      partition. Re-dispatch it briefed with every section (arm S4; it binds the BRIEF, not the agent's reads)." >&2 ;;
+         echo "      partition (arm S4; it binds the BRIEF, not the agent's reads)." >&2
+         echo "      Remediation path, no operator needed: re-dispatch role '${sh_b}' as the one cross agent with a" >&2
+         echo "      'shard: cross/<K> g1/1 <ordinals>' line naming every ordinal 1..K and 'remediates: ${sh_d}' in its" >&2
+         echo "      brief, and re-run this gate once it has run. Otherwise clear it through Check 22's four-arm disposition." >&2 ;;
       U) SH_WARN=$((SH_WARN + 1))
          echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
          case "$sh_b" in
@@ -1857,6 +2060,7 @@ echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SHARD_VIOL} FAILE
 echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); merged-pass ids: ${SH_JOINED} joined,"
 echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
 echo "  cover (S4): ${SHARD_COV} one-cross dispatch(es) (G=1) whose brief omits a section."
+echo "  remediation (classes: ${REMEDIABLE_CLASSES}): remediated=${REMEDIATED_N} pending-remedy=${PENDING_REMEDY}"
 # THE SEAT SET PRINTS ON EVERY RUN, because an empty one changes no verdict on its own: it only
 # removes rows from S1 and S3. WARN rather than exit 2 -- a consumer always has the directory
 # (the dispatch guard is inert without it), so an empty derivation is a moved or renamed

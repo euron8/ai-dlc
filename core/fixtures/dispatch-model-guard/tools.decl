@@ -23,4 +23,6 @@ kill
 sh
 fold
 chmod
+python3
+mv
 sort

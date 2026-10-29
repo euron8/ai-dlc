@@ -1864,20 +1864,21 @@ still deny it) and neither proves the teammate read its role file. Do not read
 the teammate's context. Rows written before the guard recorded `contract_via`
 carry `false` for definition-bound dispatches whose definition did deliver the
 line. The validator does not re-read them, and they clear only through the
-four-arm disposition below. **The
+repair or four-arm disposition below. **The
 pin rule is the script's, not this paragraph's** — it shares `pin_key()` and
 `matches_pin()` with the dispatch guard byte-identically, and `validate-enforcement-map.sh`
 I56 binds them, so the gate cannot classify a binding differently from the hook
 that made it.
 
-**Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
-below — which covers every class of recorded violation that reaches this exit
+**Exit 0 = clean. Exit 1 FAILS**, clearable only by the disposition
+below — repair for a missing Rule 19(b) citation, an invalid serial exception or an S4 cover miss,
+the four-arm path for every class — which covers every class of recorded violation that reaches this exit
 code: a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract citation,
 an unreadable role file, an effort mismatch, and an **invalid serial
 exception** (arm S3: a shardable row whose `shard:` line named a Rule 28
 exception outside the four, recorded as `invalid-exception`; the script prints
 the brief's own text from `shard_raw`; the dispatch guard refuses such a
-dispatch before writing a row, so S3 meets such a row only from a guard older than that deny). S3 is decided before exit 3, so it
+dispatch before writing a row, so S3 meets such a row only from a guard older than that deny; the guard likewise denies, before it writes a row, a G=1 cross dispatch whose brief omits a section ordinal (the S4 subject), so the repair path below is for old rows and for the guard's fail-open cases). S3 is decided before exit 3, so it
 fails a sprint whose rows are all outside Rule 19 scope too. **Exit 2 FAILS** — a fumbled
 invocation, an unreadable settings.json or ledger, or
 no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either
@@ -1908,9 +1909,45 @@ self-reported it, and four gate attempts failed with nothing anyone could do —
 the operator could not clear it either, because this check did not read the
 escalation where an authorization would live.)
 
-These four arms clear EVERY class of recorded violation the script fails
-on, and the classes are its five FAIL routes into that one exit code, not five
-dispositions: a Rule 19(a) **tier mismatch**; a **missing Rule 19(b)
+**Three classes clear by REPAIR, with no escalation entry and no operator line:**
+a **missing Rule 19(b) citation** (class (i), `role_contract_cited=false`), an **invalid serial exception** (class (ii), arm S3) and a **one-cross coverage gap** (class (iii), arm S4: a G=1 cross agent
+whose brief omits a section ordinal of 1..K). Repair means the lead
+re-dispatches V's role with a brief carrying a line-anchored
+`remediates: <V tool_use_id>`. For class (ii) that brief also carries a real
+`i/N` or `cross/...` shard line; `none (<n>)` does not count, because a cited
+exception is a self-declaration and stays on the four-arm path. For class (iii)
+that brief carries a parseable cross shard line naming every ordinal 1..K, so R is
+not itself flagged by arm S4. The re-dispatched
+teammate (R) must RUN: R counts only when its `tool_use_id` joins a row in
+`subagent-context.jsonl`, and an unjoined R is printed as PENDING
+(`pending-remedy=<n>`) and remediates nothing. R must be of V's role, in the same
+sprint, LATER than V in ledger order, itself clean on V's class, and name exactly
+one V with one `remediates:` line. When the validator then exits 0 it prints
+`REMEDIATED: <V> by <R> (<class>)` for each pair and `remediated=<n>` on
+`COUNTS:`. Remediation suppresses only the class (i), (ii) or S4 cover increment on V; any
+other violation on the same row still fails.
+
+The lead then writes the resolution record the series validator requires for a
+FAIL→PASS check, `gate-implementation-resolution-p<M>.md`, where M is the pass
+that recorded the FAIL. It carries the three fields `validate-gate-adjudication.sh
+--series` reads, each opening its own line with the colon immediately after:
+`disposition:` (repaired by re-dispatch), `edit:` (each R, its `remediates:`
+target V, and the re-dispatch it was), and `derivation:` (the validator command,
+its exit 0, the `REMEDIATED:` lines and the `COUNTS:` line). The verdict is
+recorded **PASS**, with no `waiver_id`, and its reason cites the `REMEDIATED:`
+lines and `COUNTS:` so a repaired sprint is distinguishable from a clean one.
+
+**The residual, stated plainly:** this clear attests that a re-dispatch of V's
+role RAN, is clean on V's class, and was declared by the lead as V's remedy. It
+does NOT attest that the output was verified. A V that carries neither a
+`tool_use_id` nor a distinct dispatch `name` cannot be remediated this way, and
+the validator's FAIL text says so.
+
+The four arms below are the alternative for those three classes and the ONLY path
+for every other class (tier mismatch, unreadable role file, effort mismatch). They clear EVERY class of recorded violation the script fails
+on, and the classes are its FAIL routes into that one exit code (the five named here plus arm S4,
+a one-cross dispatch whose brief omits a section, whose remediation is a re-dispatch briefed with every section), not
+separate dispositions: a Rule 19(a) **tier mismatch**; a **missing Rule 19(b)
 role-contract citation** (`role_contract_cited=false`: the line reached the
 teammate neither in the prompt nor in the definition the dispatch selected); an **unreadable role
 file** (`role_file_readable=false`, Rule 19's fail-closed case); an **effort
@@ -1924,7 +1961,9 @@ published above does not pass, so it is probe-only today and a gate running that
 command reaches the other four routes alone.
 
 A recorded tier mismatch is CLEARED when **all four** hold, and so is a recorded
-violation of any of the other four:
+violation of any of the other four (a tier mismatch, an unreadable role file or an
+effort mismatch have no repair path; a missing citation, an invalid serial
+exception or an S4 cross-coverage violation may take either):
 
 1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
    NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
@@ -1959,7 +1998,9 @@ violation of any of the other four:
    **effort mismatch**: the work was redone at the pinned effort, or the output
    was independently verified. For an **invalid serial exception**: the work was
    re-dispatched sharded, or the exception that actually applied (one of Rule
-   28's four) is named and the output verified. An `OVERRIDDEN` carrying no remediation is a
+   28's four) is named and the output verified. For an **S4 cross-coverage
+violation**: the work was re-dispatched with a brief naming every section
+ordinal 1..K, or the output was verified against the sections the brief omitted. An `OVERRIDDEN` carrying no remediation is a
    content-free waiver — writable without anyone having looked at the output,
    which is the forgeable-evidence shape Check 26 exists to reject.
 
@@ -1967,7 +2008,8 @@ A violation cleared by a verified `OVERRIDDEN` entry is recorded `FAIL_WAIVED`, 
 
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
 it is the lead dispositioning its own recorded violation, whether under Rule 19
-or Rule 28. A self-report is the
+or Rule 28. A repair is not that: it is a teammate that ran, joined by the
+validator from another event's record. A self-report is the
 right conduct and is not a clearing path. Missing any of the four arms → the
 violation still FAILS, whichever class it belongs to.
 
