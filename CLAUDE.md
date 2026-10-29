@@ -48,12 +48,12 @@ the general form.
 `.githooks/pre-push` is the runner. It dispatches through a worker pool,
 content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
-across both pre-push hooks. Before a release push, seed the verdict store
-(`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`) and the key records
-(`.git/ai-dlc-fixture-keys/<fx>.key`) by pushing each unit's tip
-to a throwaway ref, ordered longest-first from `.git/ai-dlc-fixture-durations`
-(`docs/plans/hermetic-pole.md`). The release's own push is the gate and the run that fills the
-cache; the release sha gets no separate warm push. A mktemp-store run caches nothing, and a green push's
+across both pre-push hooks. A unit's push is its gate: a green push delivers that exact sha,
+merged as pushed, and it fills the verdict store (`$AI_DLC_VERDICT_STORE`, default
+`~/.cache/ai-dlc/verdicts`) and the key records (`.git/ai-dlc-fixture-keys/<fx>.key`); never push
+to a throwaway ref. The unit commit carries its own backlog edit (its LANDED line at the version the
+integrator assigns, and the rotation); the release commit adds only `VERSION` and the heading. Every push sets `AI_DLC_PRESUITE_SKIP=1`; one heavy run (a push, a
+`--matrix`, an armed count) runs at a time. A mktemp-store run caches nothing, and a green push's
 `verdict store: N fixture(s) skipped` line is the evidence the seed worked. After a red push the
 failing set is in `.git/ai-dlc-fixture-failures`; re-push: it re-runs those plus any whose key moved and skips every unchanged pass; never hand-loop them.
 
