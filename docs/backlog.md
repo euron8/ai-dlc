@@ -1835,6 +1835,61 @@ A probe is the join's guard against its own grammar breaking, and its removal re
 
 verify: manual
 
+## BL-878 — every fixture is converted to in-process unit cells, and no session de-scopes a conversion
+
+**DEFECT.** Operator ruling, 2026-10-30: "those entries would not allow for future sessions to descope the conversions. We would move forward on everything, full stop." Every fixture under `core/fixtures/*/run.sh` is converted. No fixture is dropped, deferred or judged not worth converting; the scope changes only by an operator ruling.
+
+**Population, derived.** The fixtures still to convert are the rows of `scripts/fixture-inprocess-allowlist.txt`, which BL-879 seeds once from the tree and which only shrinks. Never hand-list them here; read the allowlist.
+
+**Batches.** Group the allowlisted fixtures by shared subject script: build the graph whose edges join a fixture to every script it runs, taken from its `invocations.decl` subject rows and from its calls into `core/scripts/`, `core/hooks/`, `core/skills/` and `scripts/`. A batch is one connected component of that graph, so two sessions never change the same script in parallel. One session owns a component until every fixture in it is converted. Order the components by the summed loaded seconds of their fixtures in `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations`, costliest first. The durations decide ORDER only, never membership.
+
+**Done, per fixture.**
+
+1. Every cell runs in process. The only command-line runs left are one per distinct CLI outcome of the subject, each with an equivalence cell proving the in-process answer is byte-identical to the command-line answer (stdout, stderr and exit code) on a refusing input and on a passing input that differ.
+2. The subject is made loadable by a PURE MOVE behind `[ "${BASH_SOURCE[0]}" = "$0" ] || return 0`, verified by a sorted line-multiset diff showing only the guard and its comment, and by `bash -n`. Where a pure move cannot reach a decision, the larger change is made: embedded code ported to a module, a new shipped file packaged (`install.sh`, both manifests, `uninstall.sh`, per `.claude/rules/consumer-boundary.md`), a self path read from `BASH_SOURCE`. Each of these carries the same equivalence proof as item 1.
+3. Mutant cells and the `--matrix` scoring are converted. Each mutant's scratch copy is sourced once, and only its owning cell or cells run against it. Every mutant is killed by the cell that owns its property, never only collaterally. A fixture with no `MUTANT-MATRIX` block gets a kill harness and a matrix written from it, and leaves `scripts/fixture-matrix-allowlist.txt` in the same change.
+4. Seeded worlds are built once and copied per cell (clause 4 of `.claude/rules/fixture-mutants.md`).
+5. A fixture that sleeps or polls gets the injected clock as part of its conversion; the sites and the lever are BL-868 item 8, which stays the owning entry.
+6. `invocations.decl` is re-measured by a counted hermetic run, and the read set is re-traced with the sandbox tracer.
+7. A cell stays end to end ONLY where a mechanism the subject relies on cannot exist in a subshell (example: `reconcile/lib.sh` exports its memo only at `BASH_SUBSHELL` 0). The reason is written next to the cell, in the grammar BL-879 reads.
+8. The fixture's row is deleted from `scripts/fixture-inprocess-allowlist.txt` in the same change, and BL-879's check passes on it.
+
+No timing runs and no per-fixture before/after measurement are taken (operator ruling, 2026-10-30).
+
+**The reference set**, converted on `exp/fixture-unit-tests` (some still landing): content-seal, remediator-shard-join, story-evidence-scaffold, ledger-reverify, backlog-receipt-binding, push-drain-refusals, postcompact-rulebook-recovery, the readset family (readset-sandbox-root-clause, readset-skip, readset-skip-b, readset-skip-c, readset-skip-d, readset-stage1-verdict), adversarial-shard-merge, review-shard-merge, wait-beat-liveness and artifact-derivations. `content-seal/unit-arms.sh` and `remediator-shard-join/unit-parts.sh` are the in-process cell files to copy from; BL-850 carries the two pilots' measurements.
+
+**Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. Today the checker does not exist, and the receipt exits 127 (STILL-LIVE).
+
+verify: sh bash scripts/validate-fixture-inprocess.sh --complete
+
+## BL-879 — nothing fails the push when a fixture runs its subject as a separate program
+
+**DEFECT.** The carrier of BL-878's "no de-scoping". Owed: `scripts/validate-fixture-inprocess.sh`, run at pre-push, which FAILS THE PUSH when a fixture runs one of its subject scripts as a separate program anywhere other than its declared equivalence cells or a declared, reasoned end-to-end cell.
+
+**Armed on every fixture, minus a down-only allowlist.** The check runs on every `core/fixtures/*/run.sh` except the rows of `scripts/fixture-inprocess-allowlist.txt`, the fixtures not yet converted. It is not armed by a per-fixture "converted" marker, because a new fixture would carry no marker and never be checked. With the allowlist, a new fixture is checked from its first push.
+
+- **Seeded once, derived.** The first release writes the allowlist from the tree: every fixture the check refuses at that commit, one `<fixture><TAB><reason>` row each, regenerated by a `--derive` mode and never typed. That release is the one seeding window: `m4()` SKIPs while `origin/main` carries no allowlist file.
+- **Adding a row fails the push.** Reuse `m4()` in `scripts/validate-fixture-hygiene.sh`, which refuses any `scripts/fixture-matrix-allowlist.txt` row not present at `origin/main`, together with its self-probe cases (`added`, `swap`, `shrink`, `reworded`, `nofile`, `noorigin`, at `scripts/validate-fixture-hygiene.sh:814-823`). Generalise `m4()` to take the allowlist path as an argument, so both lists run one function; do not copy it.
+- **A stale row fails the push.** A listed fixture the check would now pass is refused as stale, as the matrix allowlist's header does for its own rows, so each conversion deletes its fixture's row in the same change.
+
+**What it reads.** The emission site, not text about the program: the counted subject rows in each fixture's `invocations.decl`, which `scripts/validate-fixture-invocations.sh` already holds exact. For each subject row, the count must equal the number of runs the fixture declares, in a per-fixture declaration file with two row kinds: `cli <subject> <cell-id>` for an equivalence cell, and `e2e <subject> <cell-id> <reason>` for a cell that stays end to end, the reason non-empty. A start the subject makes of another counted script (for example `core/scripts/validate-handoff-evidence.sh` running `core/scripts/record-only-diff.sh` once per question) counts too: it is removed by sourcing in the shipped caller, or declared `e2e` with its reason. A source grep for `bash core/scripts/...` call sites is not the predicate; it is satisfied by a comment and blind to a path built from a variable.
+
+**Modes.** The gate mode exits 0 when every non-allowlisted fixture passes and the allowlist is down-only and not stale. `--complete` additionally exits non-zero while any allowlist row remains, or when it scanned zero fixtures; BL-878's receipt runs it. The scanned count is compared against the listed `run.sh` count and a mismatch refuses (`.claude/rules/tool-hazards.md`, awk `getline`).
+
+**Self-probe, both directions, before the corpus**, in a `mktemp` tree (`.claude/rules/verification-discipline.md`): a seeded non-allowlisted fixture whose subject row exceeds its declared runs FIRES; the same fixture with the extra run declared `e2e` with a reason, and an allowlisted fixture with the same row, stay QUIET; an `e2e` row with an empty reason FIRES; the six `m4()` cases; a stale row FIRES; `--complete` on a non-empty allowlist exits non-zero. Measure the false-positive set over the reference fixtures before the check ships, and record how it reached zero beside the arm.
+
+**The carrier for new fixtures.** The push failure's remedy text names the pattern: `.claude/rules/fixture-mutants.md`, the reference fixtures listed in BL-878, and the declaration grammar above. The path-scoped rule does not load when a fixture directory is created, so the remedy text is what reaches the author. `.claude/rules/fixture-ship-decl.md`, which CLAUDE.md tells a session to read before creating a fixture, carries one sentence pointing at this check.
+
+verify: manual
+
+## BL-880 — the validators the pre-suite runs on every push re-run their own self-probes and setup on every invocation
+
+**PERFORMANCE.** Operator, on the pre-push pre-suite: "Add it to the scope." The skip half, every pre-suite step skipping on a recorded pass when its inputs are unchanged by reusing the fixture key machinery, is BL-870 part B, being built on `exp/fut-presuite`; this entry does not restate it.
+
+Owed here: the validators the pre-suite runs are made faster themselves, whether or not their step skips. The shape is BL-877's, self-probes re-run on every invocation. `scripts/validate-backlog-receipts.sh` is one instance: on every invocation it re-runs all of its self-probes, and starts a worker plus a `git worktree add --detach` checkout per receipt. For each pre-suite validator, the probe work and per-item setup are reduced without removing a probe or adding a switch that skips one: every arm self-probes by rule, and a skip switch is an opt-out. Each change keeps its validator's self-probe firing in both directions, proven by the validator's own fixture.
+
+verify: manual
+
 ## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
 
 **NOTE.** Observed at the batch b245 close: `stub/logstream stream` processes from readset-skip's slot worlds survive their run. Not yet measured: count and cause. Owed: a measured census and a teardown. The related pre-push pool TERM defect is already filed (the entry carrying "a TERM to .githooks/pre-push does not tear down its fixture pool"). Provenance: batch b245 close filing.

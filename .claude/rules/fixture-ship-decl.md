@@ -36,6 +36,8 @@ tracer, which needs no root — `bash core/scripts/derive-fixture-readsets.sh --
 same is owed when a change makes an existing undeclared fixture READ a new file — the runner
 cannot see that case at all.
 
+A new fixture is built in-process from the start, as the reference fixtures in BL-878 are, and BL-879's check is owed to refuse one that runs its subject as a separate program outside a declared cell.
+
 **Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
 DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot
 derive and must not glob the consumer's `tests/fixtures/` — that would delete fixtures the
