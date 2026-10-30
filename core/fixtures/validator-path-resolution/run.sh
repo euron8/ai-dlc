@@ -119,6 +119,13 @@ for f in "$SRC"/*.sh; do
 done
 [ "$n_installed" -ge 10 ] || {
   echo "FIXTURE ERROR: only $n_installed core scripts found in $SRC" >&2; exit 2; }
+# A script may run a python module shipped beside it (validate-gate-adjudication.sh runs
+# gate_adjudication.py); install.sh copies those too, so both layouts carry them. Only the .sh
+# files are driven below.
+for f in "$SRC"/*.py; do
+  [ -f "$f" ] || continue
+  cp "$f" "$WORK/scripts/" && cp "$f" "$WORK/scripts/ai-dlc/" || exit 2
+done
 echo "HERMETIC-CONSUMED core/scripts/"
 
 # --- invocation table ----------------------------------------------------------
