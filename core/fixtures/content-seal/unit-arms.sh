@@ -198,7 +198,7 @@ for e in stories-elicitation; do
   chk "$ed/01.md"; r1="$RC"; says "$ed/01.md $TOKEN" || r1="$r1-no-token"
   chk "$ed/02.md"; [ "$r1|$RC" = "1|0" ] || m6="$m6 $e[rewritten=$r1 twin=$RC]"
 done
-if [ -z "$m6" ]; then ok "CS-U-M6: stories-elicitation/: a sealed shard rewritten by sed -i is reported; its untouched twin passes"
+if [ -z "$m6" ]; then ok "CS-U-M6: stories-elicitation/: a sealed shard rewritten by an in-place sed is reported; its untouched twin passes"
 else bad "CS-U-M6:$m6"; fi
 
 # CS-U-K5: a shard whose newest row is the --mark program row, amended through Bash -> reported, naming the
