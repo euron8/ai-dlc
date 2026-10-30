@@ -1,6 +1,6 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-2022 *
-227 core/scripts/join-remediator-shards.sh
-781 core/hooks/ai-dlc-gate-remediation-guard.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-record.sh and unit-parts.sh, which ask the entry contract's answers in process.
+1905 *
+179 core/scripts/join-remediator-shards.sh
+743 core/hooks/ai-dlc-gate-remediation-guard.sh
 3 core/hooks/ai-dlc-derivation-capture.sh
 30 core/scripts/serial-remediation-worklist.sh
