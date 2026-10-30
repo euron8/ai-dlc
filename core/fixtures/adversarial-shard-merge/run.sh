@@ -86,6 +86,8 @@ done
 # Every arm asks the merge IN PROCESS (lib.sh mx: the merge sourced, merge_main called in a subshell); the
 # CLI is driven once per distinct outcome by the EQ arms below, each byte-compared with its in-process twin.
 ASM_RUN=mx
+# Each world shape is built once and copied per use (lib.sh wc_get); WC0 below holds a copy to a fresh build.
+ASM_WCACHE=1
 . "$HERE/lib.sh"
 for _l in matrix.sh mutant.sh; do
   [ -f "$HERE/../lib/$_l" ] || { echo "FIXTURE ERROR: $HERE/../lib/$_l is absent; nothing was asserted" >&2; exit 2; }
@@ -153,6 +155,17 @@ eqw="$(HR_BOUND=0 b3_world)"; HR_BOUND=0 shard "$eqw" 1 2 EXIT_CONDITION_MET 1 "
 eq_arm EQ9 0 "LEGACY" "a LEGACY WARN on stderr beside a MERGED line" "$eqw" @D
 eq_arm EQ10 2 "usage: " "a usage refusal" - --document
 eq_arm EQ11 0 "USAGE" "--help" - --help
+# WC0: a COPIED world is the world a fresh build makes. eqd above was the first b3 build (the template); a copy
+# and a fresh build each merge, and the two pass files and MERGED lines (the root aside) must be byte-identical,
+# and the copy's ledger must name no other world's root.
+wcc="$(b3_world)"; wcf="$(b3_world_build)"
+mx "$MERGE" "$wcc" > "$WORK/wc.c" 2>&1; wcrc=$?; mx "$MERGE" "$wcf" > "$WORK/wc.f" 2>&1; wfrc=$?
+wcr="$(dirname "$(hr_state "$wcc/1.md")")"; wce="$(dirname "$(hr_state "$eqd/1.md")")"
+if [ "$wcc" != "$eqd" ] && [ "$wcrc" = 0 ] && [ "$wfrc" = 0 ] && cmp -s "$(out_of "$wcc")" "$(out_of "$wcf")" \
+   && ! grep -qF "/${wce##*/}" "$wcr/_bmad-output/planning-artifacts/.artifact-writes.jsonl" \
+   && grep -qF "/${wcr##*/}\"" "$wcr/_bmad-output/planning-artifacts/.artifact-writes.jsonl"; then
+  ok "WC0: a copied B3 world merges to the pass file a fresh build merges to, byte for byte, and its ledger names its own root only"
+else bad "WC0: the copied world (rc=$wcrc) and a fresh build (rc=$wfrc) differ, or its ledger names the template's root: $(head -1 "$WORK/wc.c")"; fi
 eqx=1
 for _p in "EQ1 EQ2" "EQ3 EQ4" "EQ4 EQ5" "EQ7 EQ8" "EQ1 EQ9"; do
   set -- $_p

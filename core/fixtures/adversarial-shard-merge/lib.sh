@@ -224,9 +224,42 @@ shard() {
   harness_record "$d/$k.md"
 }
 
+# ---------------------------------------------------------------- one build per world shape
+# wc_get <key> <builder> [args] -> the shard dir of a fresh world of that shape. With ASM_WCACHE=1 (run.sh sets
+# it) the builder runs ONCE per key; every later call copies the pristine copy kept under $WORK/wcache to a new
+# mktemp dir of the same prefix and rewrites the one thing that names the old root: the absolute path the hook
+# recorded in the write ledger (root, transcript_path), logical and physical spellings alike, both ending in the
+# world dir's own name. Identity (hr_ids) is a function of the shard dir and file name alone, so every id, sha and
+# golden byte is the one a fresh build writes. A call under any harness-record knob (HR_*, SELF_ID) builds afresh.
+WC_KNOBS="HR_OFF HR_ROLE HR_AGENT_O HR_DID_O HR_NOMETA HR_NOSPAWN HR_PRE HR_NOPROBE HR_PROBE HR_SESSION SELF_ID HR_IDFORM HR_SPAWN_TS HR_BOUND HR_BOUND_V HR_FP_O"
+wc_get() {
+  local key="$1" t d rel old nr f v; shift
+  if [ "${ASM_WCACHE:-0}" != 1 ]; then "$@"; return; fi
+  for v in $WC_KNOBS; do [ -z "${!v:-}" ] || { "$@"; return; }; done
+  t="$WORK/wcache/$key"
+  if [ ! -f "$t.rel" ]; then
+    mkdir -p "$WORK/wcache" || return 1
+    d="$("$@")" || return 1
+    case "$d" in "$WORK"/*/*) ;; *) return 1 ;; esac
+    rel="${d#"$WORK"/}"; old="${rel%%/*}"
+    cp -Rp "$WORK/$old" "$t.tpl" || return 1
+    printf '%s' "$old" > "$t.old"; printf '%s' "${rel#*/}" > "$t.rel"
+    printf '%s' "$d"; return 0
+  fi
+  old="$(cat "$t.old")"; rel="$(cat "$t.rel")"
+  nr="$(mktemp -d "$WORK/${old%.*}.XXXXXX")" || return 1
+  cp -Rp "$t.tpl/." "$nr/" || return 1
+  for f in $(grep -rlF -- "/$old" "$nr" 2>/dev/null); do
+    O="/$old" N="/${nr##*/}" perl -pi -e 's/\Q$ENV{O}\E/$ENV{N}/g' "$f" || return 1
+  done
+  printf '%s' "$nr/$rel"
+}
+
 # The B3 input: three ordinal shards, 2 MAJOR each, each stamped MET; clean cross shards, one per
 # group of `--cross-groups 3` (cross-1..3).
-b3_world() {
+b3_world() { wc_get b3 b3_world_build; }
+clean_world() { wc_get clean clean_world_build; }
+b3_world_build() {
   local d x; d="$(new_world)"
   shard "$d" 1 2 EXIT_CONDITION_MET 1
   shard "$d" 2 2 EXIT_CONDITION_MET 2
@@ -236,7 +269,7 @@ b3_world() {
 }
 # The clean set: 1 MAJOR per ordinal shard (sum 3, AT the ceiling), clean cross shards -- and
 # every shard stamped NOT_MET, the mirror of B3.
-clean_world() {
+clean_world_build() {
   local d x; d="$(new_world)"
   shard "$d" 1 1 EXIT_CONDITION_NOT_MET 1
   shard "$d" 2 1 EXIT_CONDITION_NOT_MET 2
@@ -593,7 +626,8 @@ dshard() {
 }
 # The section-mode B3: three part shards of 2 MAJOR each, each stamped MET, and clean cross
 # shards cross-1..3.
-doc_b3_world() {
+doc_b3_world() { wc_get docb3 doc_b3_world_build; }
+doc_b3_world_build() {
   local d x; d="$(new_doc_world)"
   dshard "$d" 1 2 EXIT_CONDITION_MET 1
   dshard "$d" 2 2 EXIT_CONDITION_MET 2
@@ -659,7 +693,8 @@ p_files_golden() { # files mode is byte-identical to the merge before section mo
 SG() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
 slorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
 SUBJ_PA=_bmad-output/planning-artifacts
-new_subj_world() { # -> prints the shard dir s9/shards/requirements-p1 of a fresh subject world
+new_subj_world() { wc_get subj new_subj_world_build; }
+new_subj_world_build() { # -> prints the shard dir s9/shards/requirements-p1 of a fresh subject world
   local w pa; w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1; pa="$w/$SUBJ_PA"
   mkdir -p "$pa/s9/shards/requirements-p1" "$w/_bmad-output/specs/s9/kernel" || return 1
   { SG "$w" init -q . && SG "$w" checkout -q -b main
@@ -697,7 +732,8 @@ sshard() {
   harness_record "$d/$k.md"
 }
 subj_xkeys() { xkeys "$(grep -c . "$(subj_root "$1")/subject.map")"; } # <shard dir> -> its cross keys
-subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; clean cross shards
+subj_b3_world() { wc_get subjb3 subj_b3_world_build; }
+subj_b3_world_build() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; clean cross shards
   local d o; d="$(new_subj_world)" || return 1
   for o in $(cut -f1 "$(subj_root "$d")/subject.map"); do sshard "$d" "$o" 1 "$o"; done
   for o in $(subj_xkeys "$d"); do sshard "$d" "$o" 0 "1, 2"; done
@@ -886,7 +922,8 @@ p_stem_files() { # files mode and --map, shards/stories-adversarial-p1/ -> both 
 # Every world below is the B3 world with shard 2 (and only shard 2) written under the knob the cell
 # varies; shards 1, 3 and cross-1..3 are written normally, so each refusal is that shard's alone.
 # The ALLOW twin of each refusal sits in the same predicate wherever one property separates them.
-tw() { # -> a B3 shard dir with every shard but 2 written and recorded
+tw() { wc_get tw tw_build; }
+tw_build() { # -> a B3 shard dir with every shard but 2 written and recorded
   local d x; d="$(new_world)"
   shard "$d" 1 2 EXIT_CONDITION_MET 1
   shard "$d" 3 2 EXIT_CONDITION_MET 3

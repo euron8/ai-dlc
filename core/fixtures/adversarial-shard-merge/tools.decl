@@ -1,4 +1,4 @@
-# Tools run.sh, lib.sh and the scripts they drive invoke; python3 is the provenance validator and the PM1 schema mutation.
+# Tools run.sh, lib.sh and the scripts they drive invoke; python3 is the provenance validator and the PM1 schema mutation; perl rewrites a copied world's recorded root (lib.sh wc_get).
 bash
 dirname
 mktemp
@@ -32,3 +32,4 @@ uniq
 ln
 ls
 rmdir
+perl
