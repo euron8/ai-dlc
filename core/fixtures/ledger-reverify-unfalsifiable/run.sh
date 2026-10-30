@@ -19,10 +19,62 @@ echo "HERMETIC-CONSUMED $RV"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-verdict() { bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
-              awk -F'\t' -v l="$1" '$2 ~ l {print $1; exit}'; }
+
+# --- THE SUBJECT IS ASKED IN PROCESS --------------------------------------------------------
+# ledger-reverify.sh is loadable: sourcing it defines functions and runs nothing (its source guard
+# stops before `lr_main`). It is sourced ONCE here, and every cell below asks `lr_main` in a subshell
+# that looks like a fresh `bash ledger-reverify.sh` (core/fixtures/lib/inproc.sh says exactly what
+# that means). One run per distinct STATE (.claude/rules/fixture-mutants.md clause 1): every cell about
+# the pristine world reads the one output `$CUR` holds, and a new state gets one new run. A mutant is a
+# copy of the whole reconcile/ directory, sourced inside its own run's subshell.
+#
+# EQ0 below is the one end-to-end CLI run kept per distinct outcome (clauses 5-6): the pristine world
+# (rc 0, rows) and a refusal (rc 2), each run both ways, byte-compared.
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$RV" || { echo "FIXTURE BROKEN: sourcing $RV defined nothing" >&2; exit 2; }
+declare -F lr_main >/dev/null || { echo "FIXTURE BROKEN: $RV defined no lr_main when sourced" >&2; exit 2; }
+
+# THE SECOND WORLD IS A COPY, TAKEN BEFORE ANY CELL MUTATES THE FIRST. Assertion 3 rewrites a consumer
+# file and assertion 4 removes the consumer's .git; assertions 6 onward need the pristine state, which
+# used to cost a second seed (two `git init`s and their commits). `cp -R` of both repos preserves every
+# object, so BASE and THEIRS are the same shas in the copy.
+W2="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed for the second world" >&2; exit 2; }
+trap 'rm -rf "$WORK" "$W2"' EXIT
+cp -R "$WORK/dist" "$WORK/consumer" "$W2/" || { echo "FIXTURE ERROR: could not copy the seeded world" >&2; exit 2; }
+sed -e "s#^WORK=.*#WORK=\"$W2\"#" -e "s#^DIST=.*#DIST=\"$W2/dist\"#" -e "s#^CONSUMER=.*#CONSUMER=\"$W2/consumer\"#" \
+  "$WORK/env.sh" > "$W2/env.sh"
+
+# ONE BLOB MEMO PER DISTRIBUTION, shared by every run against it, as emit-report.sh shares one across a
+# render (AI_DLC_RECONCILE_MEMO). The distribution repos are never written below, so a cached blob is
+# always the blob. The PC-BIG stability runs deliberately take NO memo: they must each read the blob.
+mkdir -p "$WORK/memo" "$W2/memo"
+lr() { # <dist> <base> <consumer> <theirs> [ledger] -> the subject's stdout, in process, stderr dropped
+  AI_DLC_RECONCILE_MEMO="${1%/dist}/memo" inproc_run "$RV" lr_main "$@" 2>/dev/null
+}
+verdict() { awk -F'\t' -v l="$1" '$2 ~ l {print $1; exit}' <<<"$CUR"; }
 
 echo "ledger-reverify-unfalsifiable:"
+
+CUR="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
+OUT0="$CUR"
+
+# --- EQ0: the in-process answer IS the CLI's ------------------------------------------------
+# Byte-for-byte, stdout and stderr and status, on a passing run and on a refusing one (no writable
+# TMPDIR: the staging directory cannot be made, rc 2), and the two must differ -- or one input proves
+# nothing about the other.
+eq_ok=1
+cli_o="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>"$WORK/cli.err")"; cli_rc=$?
+in_o="$(AI_DLC_RECONCILE_MEMO="$WORK/memo" inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>"$WORK/in.err")"; in_rc=$?
+[ "$cli_o" = "$in_o" ] && [ "$cli_rc" = "$in_rc" ] && cmp -s "$WORK/cli.err" "$WORK/in.err" && [ "$in_o" = "$OUT0" ] || eq_ok=0
+rcli_o="$(TMPDIR="$WORK/no-such-dir" bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; rcli_rc=$?
+rin_o="$(TMPDIR="$WORK/no-such-dir" AI_DLC_RECONCILE_MEMO="$WORK/memo" inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; rin_rc=$?
+[ "$rcli_o" = "$rin_o" ] && [ "$rcli_rc" = "$rin_rc" ] || eq_ok=0
+if [ "$eq_ok" = 1 ] && [ "$cli_rc" = 0 ] && [ "$rcli_rc" = 2 ] && [ -n "$cli_o" ] && [ "$cli_o" != "$rcli_o" ]; then
+  ok "EQ0: in process equals the CLI byte for byte on the seeded world (rc 0, $(grep -c . <<<"$cli_o") rows) and on a refusal (rc 2), and the two differ"
+else
+  bad "EQ0: the in-process run differs from the CLI, or the two inputs do not differ (pass rc=$cli_rc/$in_rc refuse rc=$rcli_rc/$rin_rc)"
+fi
 
 # --- Assertion 0: SANITY — neither substring is at base OR theirs --------------------
 # Without this the two entries are not the same case and nothing below is attributable.
@@ -55,8 +107,7 @@ fi
 # new arm exists or not — it would be the vacuous shape this fixture's header warns about.
 # What separates them is WHICH cause the row names, and that the mis-anchored row names the
 # spelling that would have closed.
-detail() { bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
-             awk -F'\t' -v l="$1" '$2 ~ l {print $3; exit}'; }
+detail() { awk -F'\t' -v l="$1" '$2 ~ l {print $3; exit}' <<<"$CUR"; }
 
 # SANITY, because every arm below is unattributable without it: upstream really did move,
 # under the HYPHEN spelling, and the receipt's UNDERSCORE spelling is absent at both refs.
@@ -180,8 +231,7 @@ fi
 # GUESSED spelling into the set an operator auto-closes — retiring a live entry on a guess,
 # which is the false-close this engine exists to refuse. Asserting the detail alone cannot see
 # it: the detail text is identical under both verdicts.
-_nmv="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
-          awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1; exit}')"
+_nmv="$(verdict PC-NEARMISS)"
 [ "$_nmv" = "NEEDS-REVIEW" ] \
   && ok "PC-NEARMISS verdict is NEEDS-REVIEW, not CLOSE-CANDIDATE (a guessed spelling never enters the auto-close set)" \
   || bad "PC-NEARMISS verdict is '$_nmv' — step 8 auto-closes CLOSE-CANDIDATE rows, so a guessed spelling would retire a live entry"
@@ -192,6 +242,7 @@ _nmv="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
 sed -i.bak 's/--strict-provenance/--other-flag/' "$CONSUMER/scripts/thing.sh" && rm -f "$CONSUMER/scripts/thing.sh.bak"
 git -C "$CONSUMER" -c user.email=f@f -c user.name=f add -A >/dev/null 2>&1
 git -C "$CONSUMER" -c user.email=f@f -c user.name=f commit -qm mutate >/dev/null 2>&1
+CUR="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
 [ "$(verdict PC-GOOD)" = "NEEDS-REVIEW" ] \
   && ok "mutation: anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
   || bad "mutation: PC-GOOD → $(verdict PC-GOOD), expected NEEDS-REVIEW — verdict is not driven by the anchor"
@@ -199,7 +250,7 @@ git -C "$CONSUMER" -c user.email=f@f -c user.name=f commit -qm mutate >/dev/null
 # --- Assertion 4: UNDECIDABLE — no scan set must not manufacture an accusation -------
 # A missing input is not evidence of a bad predicate. It must say so, not accuse.
 rm -rf "$CONSUMER/.git"
-out="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+out="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
 if grep -q "STILL-LIVE.*PC-BAD" <<<"$out" && grep -q "NOT checked" <<<"$out"; then
   ok "no tracked file list → STILL-LIVE + 'reachability NOT checked' (undecidable says so)"
 else
@@ -212,7 +263,10 @@ fi
 # Measured before the fix: four consecutive runs of one unchanged entry returned STILL-LIVE,
 # NEEDS-REVIEW, STILL-LIVE, CLOSE-CANDIDATE. Assert the verdict AND its stability — a single
 # run passes half the time by luck, which is worse than no assertion at all.
-big="$(verdict PC-BIG)"
+# Each of these seven is its OWN run with NO memo: stability is the property, so every run must read the
+# blob itself (a cached answer would be one read seven times). In process, on the world as it stands.
+big_v() { inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$2 ~ /PC-BIG/ {print $1; exit}'; }
+big="$(big_v)"
 if [ "$big" = "STILL-LIVE" ]; then
   ok "PC-BIG (needle in a >64KB file) → STILL-LIVE"
 else
@@ -220,7 +274,7 @@ else
 fi
 stable=1
 for _ in 1 2 3 4 5 6; do
-  [ "$(verdict PC-BIG)" = "$big" ] || stable=0
+  [ "$(big_v)" = "$big" ] || stable=0
 done
 [ "$stable" -eq 1 ] \
   && ok "PC-BIG verdict identical across 7 runs (no pipe-buffer nondeterminism)" \
@@ -239,8 +293,7 @@ done
 # this point the tree is deliberately unscannable and every reachability verdict degrades to
 # "NOT checked". Reusing it here would have scored these assertions against a consumer that
 # cannot be scanned at all — which is how a check comes to pass for a reason it is not testing.
-W2="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK" "$W2"' EXIT
+# The copy taken at the top, before assertion 3 touched anything.
 # shellcheck source=/dev/null
 . "$W2/env.sh"    # re-points CONSUMER/DIST/BASE/THEIRS at the pristine copy
 
@@ -249,10 +302,12 @@ OUT_COPY="$W2/outside-the-tree-ledger.md"
 cp "$LED" "$OUT_COPY"
 
 shape_sig() { # <consumer-arg> [ledger-arg] -> the whole verdict multiset, order-insensitive
-  bash "$RV" "$DIST" "$BASE" "$1" "$THEIRS" ${2:+"$2"} 2>/dev/null \
+  lr "$DIST" "$BASE" "$1" "$THEIRS" ${2:+"$2"} \
     | awk -F'\t' '{print $1"\t"$2}' | sort
 }
-base_sig="$(shape_sig "$CONSUMER")"
+# The pristine copy's one run: the base shape below AND every `sh`-arm cell at the foot read it.
+CUR="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
+base_sig="$(awk -F'\t' '{print $1"\t"$2}' <<<"$CUR" | sort)"
 shapes_agree=1; disagreed=""
 for spec in "$CONSUMER/|" "$CONSUMER|$LED" "$CONSUMER|$CONSUMER/./_bmad-output/ai-dlc-update/push-candidate-ledger.md" "$CONSUMER|$OUT_COPY"; do
   c="${spec%%|*}"; l="${spec#*|}"
@@ -271,7 +326,7 @@ done
 bad_everywhere=1
 for spec in "$CONSUMER|" "$CONSUMER|$OUT_COPY"; do
   c="${spec%%|*}"; l="${spec#*|}"
-  sp_o="$(bash "$RV" "$DIST" "$BASE" "$c" "$THEIRS" ${l:+"$l"} 2>/dev/null)"
+  sp_o="$(lr "$DIST" "$BASE" "$c" "$THEIRS" ${l:+"$l"})"
   v="$(awk -F'\t' '$2 ~ /PC-BAD/ {print $1; exit}' <<< "$sp_o")"
   [ "$v" = "NEEDS-REVIEW" ] || bad_everywhere=0
 done
@@ -314,7 +369,7 @@ m_guard="$(grep -c 'if \[ -n "\$LEDGER_TOP" \]; then' "$MUT")"
 if [ "$m_strip" -ne 1 ] || [ "$m_fall" -ne 0 ] || [ "$m_guard" -ne 0 ]; then
   bad "FIXTURE BROKEN — partial mutation (strip=$m_strip want 1, fallback=$m_fall want 0, guard=$m_guard want 0); a half-reverted fix repairs itself and scores green"
 fi
-pcgood() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ${2:+"$2"} 2>/dev/null \
+pcgood() { AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ${2:+"$2"} 2>/dev/null \
              | awk -F'\t' '$2 ~ /PC-GOOD/ {print $1; exit}'; }
 
 if [ "$(pcgood "$CTL")" != "STILL-LIVE" ] || [ "$(pcgood "$CTL" "$OUT_COPY")" != "STILL-LIVE" ]; then
@@ -352,7 +407,7 @@ awk '
   inblk { next }
   { print }
 ' "$CTL2" > "$MUT2"
-nm_detail() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
+nm_detail() { AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
                 awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1"\t"$3; exit}'; }
 if cmp -s "$CTL2" "$MUT2"; then
   bad "FIXTURE BROKEN — the near-miss mutation matched nothing, so assertion 2b is unproven"
@@ -415,10 +470,8 @@ fi
 # Bucket 2 must be DISTINGUISHABLE from bucket 1, not merely un-accused. Both are STILL-LIVE,
 # so the verdict alone cannot tell an operator that no pull will ever settle this entry. Without
 # this the whole consumer-owned branch could be a no-op and every arm above would still pass.
-_co="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-       | awk -F"\t" '$2 ~ /PC-SH-CONSUMER-OWNED/ {print $3}')"
-_up="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-       | awk -F"\t" '$2 ~ /PC-SH-UPSTREAM/ {print $3}')"
+_co="$(awk -F"\t" '$2 ~ /PC-SH-CONSUMER-OWNED/ {print $3}' <<<"$CUR")"
+_up="$(awk -F"\t" '$2 ~ /PC-SH-UPSTREAM/ {print $3}' <<<"$CUR")"
 if [ -n "$_co" ] && [ "$_co" != "$_up" ]; then
   ok "bucket 2 detail differs from bucket 1's — an operator can tell 'no pull can settle this' from an ordinary still-live"
 else
@@ -446,8 +499,7 @@ _wd="$(verdict PC-SH-WATCHDOG)"
 # `grep -q` is fed a HERE-STRING, never a pipe: it exits at the first match while the writer
 # is still pushing, and under pipefail the pipeline then answers with the writer's EPIPE and
 # reports NOT-FOUND on input that contains the pattern. It is a size threshold, not a race.
-_sh_detail="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-              | awk -F'\t' '$2 ~ /PC-SH-INSTALLED/ {print $3}')"
+_sh_detail="$(awk -F'\t' '$2 ~ /PC-SH-INSTALLED/ {print $3}' <<<"$CUR")"
 if grep -qF 'unfalsifiable predicate:' <<<"$_sh_detail"; then
   ok "PC-SH-INSTALLED detail carries 'unfalsifiable predicate:' (same vocabulary as the theirs_* arms)"
 else
