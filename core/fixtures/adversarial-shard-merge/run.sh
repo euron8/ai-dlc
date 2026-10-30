@@ -83,6 +83,9 @@ for _a in "$@"; do
     *) echo "FIXTURE ERROR: unknown argument '$_a' (usage: run.sh [--matrix])" >&2; exit 2 ;;
   esac
 done
+# Every arm asks the merge IN PROCESS (lib.sh mx: the merge sourced, merge_main called in a subshell); the
+# CLI is driven once per distinct outcome by the EQ arms below, each byte-compared with its in-process twin.
+ASM_RUN=mx
 . "$HERE/lib.sh"
 for _l in matrix.sh mutant.sh; do
   [ -f "$HERE/../lib/$_l" ] || { echo "FIXTURE ERROR: $HERE/../lib/$_l is absent; nothing was asserted" >&2; exit 2; }
@@ -101,13 +104,62 @@ echo "$NAME:"
 
 # M0: the ordinal map covers every *.md, whatever its name, in C order.
 d="$(new_world)"
-map="$(bash "$MERGE" --map "$d")"
+map="$($ASM_RUN "$MERGE" --map "$d")"
 want="$(printf '1\t192-ff-A-token-decimal-resolution.md\n2\tbug-192-il-accuracy.md\n3\tstory-1-rebalancer-il-accuracy.md')"
 if [ "$map" = "$want" ]; then
   ok "M0: --map keys all three real files by ordinal, the two NON-story- names (192-ff-, bug-) included, in LC_ALL=C order"
 else
   bad "M0: --map printed [$map], not the three ordinals over the real listing"
 fi
+
+# EQ: THE SEAM. Every arm below asks the merge in process (mx). Here each DISTINCT CLI OUTCOME runs once end to
+# end and once in process on the SAME world, and stdout, stderr, the exit code and the pass file it writes must
+# be byte-identical; the kept end-to-end run per outcome is the CLI half. The output is moved aside between the
+# two halves, so both write it afresh. EQ0 then asserts the outcomes differ from each other.
+eq_pair() { # <label> <shard dir or -> <args...> (@D is replaced by the shard dir) -> EQ_SAME, EQ_RC, $WORK/eq.<label>.*
+  local lab="$1" d="$2" a o=""; shift 2
+  local args=(); for a in "$@"; do args[${#args[@]}]="${a//@D/$d}"; done
+  [ "$d" = - ] || o="$(out_of "$d")"
+  bash "$MERGE" "${args[@]}" > "$WORK/eq.$lab.c.out" 2> "$WORK/eq.$lab.c.err"; echo $? > "$WORK/eq.$lab.c.rc"
+  [ -n "$o" ] && [ -f "$o" ] && mv "$o" "$WORK/eq.$lab.c.pass"
+  mx "$MERGE" "${args[@]}" > "$WORK/eq.$lab.i.out" 2> "$WORK/eq.$lab.i.err"; echo $? > "$WORK/eq.$lab.i.rc"
+  [ -n "$o" ] && [ -f "$o" ] && mv "$o" "$WORK/eq.$lab.i.pass"
+  EQ_SAME=1; for a in out err rc; do cmp -s "$WORK/eq.$lab.c.$a" "$WORK/eq.$lab.i.$a" || EQ_SAME=0; done
+  if [ -f "$WORK/eq.$lab.c.pass" ] || [ -f "$WORK/eq.$lab.i.pass" ]; then cmp -s "$WORK/eq.$lab.c.pass" "$WORK/eq.$lab.i.pass" || EQ_SAME=0; fi
+  EQ_RC="$(cat "$WORK/eq.$lab.c.rc")"
+}
+eq_arm() { # <label> <want rc> <token in stdout or stderr> <describe> <shard dir or -> <args...>
+  local lab="$1" want="$2" tok="$3" what="$4"; shift 4
+  eq_pair "$lab" "$@"
+  if [ "$EQ_SAME" = 1 ] && [ "$EQ_RC" = "$want" ] && cat "$WORK/eq.$lab.c.out" "$WORK/eq.$lab.c.err" | grep -qF -- "$tok"; then
+    ok "$lab: $what -- the CLI and merge_main in process answer byte-identically (stdout, stderr, rc $want, pass file)"
+  else bad "$lab: $what -- same=$EQ_SAME rc=$EQ_RC (want $want, '$tok'): $(head -2 "$WORK/eq.$lab.c.out") | $(head -2 "$WORK/eq.$lab.i.out")"; fi
+}
+eqd="$(b3_world)"
+eq_arm EQ1 0 "verdict=EXIT_CONDITION_NOT_MET shards=6" "files mode MERGED (B3)" "$eqd" @D
+[ -f "$WORK/eq.EQ1.c.pass" ] || bad "EQ1: FIXTURE BROKEN -- the CLI merge wrote no pass file, so the pass-file comparison compared nothing"
+eqr="$(b3_world)"; rm -f "$eqr/1.md"
+eq_arm EQ2 2 "REFUSED: " "files mode REFUSED (ordinal 1 missing)" "$eqr" @D
+eq_arm EQ3 0 "192-ff-A-token-decimal-resolution.md" "--map" "$eqd" --map @D
+eq_arm EQ4 0 "DRY-RUN: clean" "--dry-run clean" "$eqd" --dry-run @D
+eq_arm EQ5 2 "REFUSED: " "--dry-run refusing" "$eqr" --dry-run @D
+eq_arm EQ6 0 "@" "--pair-sep" - --pair-sep
+sed '/^verdict:/d' "$eqd/1.md" > "$WORK/eq-nov.md"
+eq_arm EQ7 1 "REFUSED: " "--check-header refusing" - --check-header "$WORK/eq-nov.md" --axis convergence
+eq_pair EQ8 - --check-header "$eqd/1.md" --axis convergence
+if [ "$EQ_SAME" = 1 ] && [ "$EQ_RC" = 0 ] && [ ! -s "$WORK/eq.EQ8.c.out" ]; then ok "EQ8: --check-header passing -- byte-identical, rc 0, nothing printed"
+else bad "EQ8: --check-header passing: same=$EQ_SAME rc=$EQ_RC"; fi
+eqw="$(HR_BOUND=0 b3_world)"; HR_BOUND=0 shard "$eqw" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T13:00:00Z
+eq_arm EQ9 0 "LEGACY" "a LEGACY WARN on stderr beside a MERGED line" "$eqw" @D
+eq_arm EQ10 2 "usage: " "a usage refusal" - --document
+eq_arm EQ11 0 "USAGE" "--help" - --help
+eqx=1
+for _p in "EQ1 EQ2" "EQ3 EQ4" "EQ4 EQ5" "EQ7 EQ8" "EQ1 EQ9"; do
+  set -- $_p
+  cmp -s "$WORK/eq.$1.c.out" "$WORK/eq.$2.c.out" && cmp -s "$WORK/eq.$1.c.err" "$WORK/eq.$2.c.err" && eqx=0
+done
+[ "$eqx" = 1 ] && ok "EQ0: each refusing outcome differs from its passing twin (EQ1/EQ2, EQ4/EQ5, EQ7/EQ8), and the mode outcomes from each other" \
+  || bad "EQ0: two outcomes the EQ arms call distinct printed identical bytes; the equivalence pairs prove nothing"
 
 # The worlds must differ from each other where the arms say they do, or the pair proves nothing.
 d1="$(b3_world)"; d2="$(clean_world)"
@@ -335,7 +387,7 @@ if p_sum_divergent_oracle "$MERGE"; then ok "SD2: on five seeded series (a -pass
 else bad "SD2: the merge's stamp (${OR_ST:-?}) disagrees with arm C on the unstamped twin (${OR_C:-?}): $(grep -m2 'FAIL\|pass artifact' "$CO" 2>/dev/null)"; fi
 
 # CH1-CH8: --check-header on one file. The base is a real B3 shard, which passes; each cell varies ONE field.
-ch() { bash "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
+ch() { $ASM_RUN "$MERGE" --check-header "$1" --axis "$2" > "$MO" 2>&1; RC=$?; } # <shard file> <axis>
 chv() { sed "$2" "$1" > "$3"; } # <src> <sed script> <dst>
 d="$(b3_world)"; c="$WORK/ch"; mkdir -p "$c"
 ch "$d/1.md" convergence
@@ -555,7 +607,7 @@ k_dir() { [ "$1" = inst ] && printf 'scripts/ai-dlc' || printf 'core/scripts'; }
 # k_ps <world> <layout> [override root] -> the answer, as `@`, `=`, or `BAD(<rc>,<bytes>)`
 k_ps() {
   local o="$WORK/kps.out" r n
-  AI_DLC_PROJECT_ROOT="${3:-$1}" bash "$1/$(k_dir "$2")/merge-adversarial-shards.sh" --pair-sep > "$o" 2>/dev/null; r=$?
+  AI_DLC_PROJECT_ROOT="${3:-$1}" $ASM_RUN "$1/$(k_dir "$2")/merge-adversarial-shards.sh" --pair-sep > "$o" 2>/dev/null; r=$?
   n="$(wc -c < "$o" | tr -d ' ')"
   if [ "$r" -eq 0 ] && [ "$n" = 1 ] && { [ "$(cat "$o")" = "@" ] || [ "$(cat "$o")" = "=" ]; }; then cat "$o"
   else printf 'BAD(%s,%s)' "$r" "$n"; fi
@@ -585,7 +637,7 @@ k_mut "$KMC" '--accepts-at-pair >/dev/null' || k_broken="$k_broken mutant-c(did-
 # --pair-sep stay three-keyed -- so every K1/K2/KM arm, which reads --pair-sep, passes it.
 KM593="$WORK/merge.mut-593.sh"
 K593_LINE="$(cat <<'EOF'
-PAIR_OUT='='; grep -qxF "PAIR_SEP='[=@]'" "$(dirname "$0")/validate-adversarial-convergence.sh" && PAIR_OUT=@
+PAIR_OUT='='; grep -qxF "PAIR_SEP='[=@]'" "$(dirname "$MERGE_SELF")/validate-adversarial-convergence.sh" && PAIR_OUT=@
 EOF
 )"
 k593_n0="$(grep -c "^PAIR_OUT='='; " "$MERGE")" || k593_n0=0
@@ -631,7 +683,7 @@ else
   # k_drive <world> <merge in that world> -> `@` or `=` when every pair carries that one separator, else BAD(...)
   k_drive() {
     local o lst tok s seps="" n=0 r
-    AI_DLC_PROJECT_ROOT="$1" bash "$2" --subject 9 "$KE_SD" > "$WORK/ke.out" 2>&1; r=$?
+    AI_DLC_PROJECT_ROOT="$1" $ASM_RUN "$2" --subject 9 "$KE_SD" > "$WORK/ke.out" 2>&1; r=$?
     o="$(subj_out_of "$KE_SD")"
     { [ "$r" -eq 0 ] && [ -f "$o" ]; } || { printf 'BAD(rc=%s:%s)' "$r" "$(head -1 "$WORK/ke.out")"; return 0; }
     lst="$(sed -n 's/^artifact_sha://p' "$o" | head -1)"

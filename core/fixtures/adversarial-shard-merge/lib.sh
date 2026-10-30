@@ -199,7 +199,7 @@ shard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
   if ! is_cross "$k" && [ -z "$sha" ]; then
     # ONE --map per world, not one per shard: a world's stories never change once its first shard is written.
-    if [ "${OMAP_D:-}" != "$d" ]; then OMAP_V="$(bash "$MERGE" --map "$d")"; OMAP_D="$d"; fi
+    if [ "${OMAP_D:-}" != "$d" ]; then OMAP_V="$($ASM_RUN "$MERGE" --map "$d")"; OMAP_D="$d"; fi
     b="$(printf '%s\n' "$OMAP_V" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
     sha="$(sha_of "$(stories_of "$d")/$b")"
   fi
@@ -302,9 +302,9 @@ xfind() {
 }
 xmerge() { # <merge> <mode> <shard dir> -> RC, $MO
   case "$2" in
-    files) bash "$1" "$3" > "$MO" 2>&1; RC=$? ;;
-    document) bash "$1" --document "$(doc_of "$3")" "$3" > "$MO" 2>&1; RC=$? ;;
-    elicit) bash "$1" --subject 9 --elicitation "$3" > "$MO" 2>&1; RC=$? ;;
+    files) $ASM_RUN "$1" "$3" > "$MO" 2>&1; RC=$? ;;
+    document) $ASM_RUN "$1" --document "$(doc_of "$3")" "$3" > "$MO" 2>&1; RC=$? ;;
+    elicit) $ASM_RUN "$1" --subject 9 --elicitation "$3" > "$MO" 2>&1; RC=$? ;;
   esac
 }
 xworld() { # <mode> <K: 8|2> -> a fresh shard dir with no shards; K=2 only for files/document
@@ -323,7 +323,7 @@ xworld() { # <mode> <K: 8|2> -> a fresh shard dir with no shards; K=2 only for f
 }
 xk_of() { # <mode> <shard dir> -> the unit count the merge will read
   case "$1" in
-    files) bash "$MERGE" --map "$2" | grep -c . ;;
+    files) $ASM_RUN "$MERGE" --map "$2" | grep -c . ;;
     document) bash "$PARTITION" --map "$(doc_of "$2")" | grep -c . ;;
     elicit) grep -c . "$(subj_root "$(dirname "$2")/requirements-p1")/subject.map" ;;
   esac
@@ -427,8 +427,34 @@ bind_scratch() { # <dir> -> MO, CO under <dir>
   MO="$1/merge.out"; CO="$1/conv.out"
 }
 bind_scratch "$WORK"
+# mx <merge file> <args...> -- the merge asked IN PROCESS: in one subshell, every fixture function and every
+# unexported fixture variable is dropped (a caller's local would otherwise fill one of the merge's own reads),
+# pipefail goes back off as the CLI runs it, the merge file is sourced (its BASH_SOURCE guard stops before
+# merge_main) and merge_main is called with the arguments the CLI takes. Its `exit` ends the subshell, and the
+# EXIT trap it sets is the subshell's own. Exported variables and prefix assignments (AI_DLC_PROJECT_ROOT=,
+# PATH=) reach it as they reach the CLI; redirections stay at the call site. Every arm drives the merge
+# through ASM_RUN, `bash` (the CLI, the default and content-seal/merge-arms.sh's) or `mx` (run.sh sets it).
+ASM_RUN="${ASM_RUN:-bash}"
+mx() {
+  ( set +o pipefail +u
+    _mx_keep='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_mx_.*)$'
+    _mx_exp=" $(compgen -e | tr '\n' ' ') "
+    for _mx_i in 1 2 3 4 5 6 7 8; do # a caller's local, unset, uncovers the caller's caller's binding: repeat
+      _mx_n=0
+      for _mx_v in $(compgen -v); do
+        [[ $_mx_v =~ $_mx_keep ]] && continue
+        case "$_mx_exp" in *" $_mx_v "*) continue ;; esac
+        unset "$_mx_v" 2>/dev/null && _mx_n=$((_mx_n + 1))
+      done
+      [ "$_mx_n" -eq 0 ] && break
+    done
+    for _mx_v in $(compgen -A function); do [ "$_mx_v" = mx ] || unset -f "$_mx_v"; done
+    unset _mx_keep _mx_exp _mx_i _mx_n _mx_v
+    . "$1" || exit 90
+    shift; merge_main "$@" )
+}
 run_merge() { # <merge-script> <shard-dir> -> RC, $MO
-  bash "$1" "$2" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" "$2" > "$MO" 2>&1; RC=$?
 }
 refused_clean() { # <shard-dir> <token> -- exit 2, the token, nothing written, no temp left behind
   local o; o="$(out_of "$2")"
@@ -533,7 +559,7 @@ new_doc_world() { # [seed] -> prints the shard dir of a fresh document world
 doc_of() { printf '%s' "$(dirname "$(dirname "$1")")/test-strategy.md"; }
 doc_out_of() { printf '%s' "$(dirname "$(dirname "$1")")/test-strategy-adversarial-p1.md"; }
 run_doc_merge() { # <merge-script> <shard-dir> -> RC, $MO
-  bash "$1" --document "$(doc_of "$2")" "$2" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --document "$(doc_of "$2")" "$2" > "$MO" 2>&1; RC=$?
 }
 doc_refused_clean() { # <token> <shard-dir>
   local o; o="$(doc_out_of "$2")"
@@ -677,7 +703,7 @@ subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceilin
   for o in $(subj_xkeys "$d"); do sshard "$d" "$o" 0 "1, 2"; done
   printf '%s' "$d"
 }
-run_subj_merge() { bash "$1" --subject 9 "${@:3}" "$2" > "$MO" 2>&1; RC=$?; }
+run_subj_merge() { $ASM_RUN "$1" --subject 9 "${@:3}" "$2" > "$MO" 2>&1; RC=$?; }
 subj_refused_clean() { # <token> <shard-dir>
   local o; o="$(subj_out_of "$2")"
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ]
@@ -742,19 +768,19 @@ p_subj_elicit() { # elicitation: no verdict anywhere, skill required, own output
   for k in $(cut -f1 "$w/subject.map"); do sshard "$e" "$k" 1 "$k" "" bmad-advanced-elicitation -; done
   for k in $(xkeys "$(grep -c . "$w/subject.map")"); do sshard "$e" "$k" 0 "1, 2" "" bmad-advanced-elicitation -; done
   # Shards notarize via a path walk from the shard dir; subj_shas reads from the shard dir's world.
-  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^verdict:' "$o" && ! grep -q 'verdict=' "$MO" && has "$o" "skill: bmad-advanced-elicitation" || return 1
   [ ! -e "$w/$SUBJ_PA/s9/requirements-adversarial-p1.md" ] || return 1
   rm -f "$o"; sshard "$e" 1 1 1 "" bmad-advanced-elicitation EXIT_CONDITION_MET
-  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "an elicitation shard carries none" && [ ! -e "$o" ] || return 1
   sshard "$e" 1 1 1 "" ai-dlc-adversary-review -
-  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "an elicitation shard runs bmad-advanced-elicitation" && [ ! -e "$o" ]
 }
 p_subj_b4() { # --document into requirements-p<M> refused before any shard is read
   local d w; d="$(subj_b3_world)" || return 1; w="$(subj_root "$d")"
-  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --document "$w/$SUBJ_PA/prd.md" "$d" > "$MO" 2>&1; RC=$?
   subj_refused_clean "merge it with --subject" "$d"
 }
 # B4 BY DOCUMENT (BL-461): a --document merge of a file the sprint's subject manifest NAMES is
@@ -782,7 +808,7 @@ b4_world() { # <with manifest: 1|0> -> the world root
 p_b4doc() {
   local w o; w="$(b4_world 1)" || return 1; o="$w/$SUBJ_PA/s9/prd-adversarial-p1.md"
   b4_doc_shards "$w" "$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" || return 1
-  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "is the 'prd' file of the requirements subject" \
     && has "$MO" "merge the subject with --subject 9" && [ ! -e "$o" ]
 }
@@ -790,7 +816,7 @@ p_b4doc_nomf() {
   local w o; w="$(b4_world 0)" || return 1; o="$w/$SUBJ_PA/s9/prd-adversarial-p1.md"
   [ ! -e "$w/$SUBJ_PA/s9/requirements-subject.md" ] || return 1
   b4_doc_shards "$w" "$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" || return 1
-  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && grep -qx "artifact: $SUBJ_PA/prd.md" "$o"
 }
 p_b4doc_other() {
@@ -798,7 +824,7 @@ p_b4doc_other() {
   [ -f "$w/$SUBJ_PA/s9/requirements-subject.md" ] || return 1
   doc="$SUBJ_PA/s9/test-strategy.md"; cp "$SEED_DIR/seed.doc-test-strategy.md" "$w/$doc" || return 1
   b4_doc_shards "$w" "$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" || return 1
-  bash "$1" --document "$w/$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --document "$w/$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
 }
 # ------------------------------------------------------- the series stem is not the artifact
@@ -820,7 +846,7 @@ stem_world() { # <shard-dir basename> -> prints the shard dir of a fresh s9 docu
   printf '%s' "$d"
 }
 stem_s9() { printf '%s' "$(dirname "$(dirname "$1")")"; }
-stem_merge() { bash "$1" --document "$(stem_s9 "$2")/test-strategy.md" "$2" > "$MO" 2>&1; RC=$?; }
+stem_merge() { $ASM_RUN "$1" --document "$(stem_s9 "$2")/test-strategy.md" "$2" > "$MO" 2>&1; RC=$?; }
 stem_none() { # <s9 dir> -> 0 when no *adversarial* file and no merge temp sits in it
   [ -z "$(find "$1" -maxdepth 1 -type f \( -name '*adversarial*' -o -name '*.merge-tmp.*' \) 2>/dev/null)" ]
 }
@@ -849,9 +875,9 @@ p_stem_files() { # files mode and --map, shards/stories-adversarial-p1/ -> both 
   # prints its ordinal map (exit 0) and files mode reads on: only the refusal stops either.
   mkdir -p "$s9/stories-adversarial" && printf 'a\n' > "$s9/stories-adversarial/a.md" \
     && printf 'b\n' > "$s9/stories-adversarial/b.md" || return 1
-  bash "$1" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory stories-adversarial-p1 names the series" || return 1
-  bash "$1" --map "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --map "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED: shard directory stories-adversarial-p1 names the series" \
     && ! grep -q "$(printf '\t')a.md" "$MO" && stem_none "$s9"
 }
@@ -997,7 +1023,7 @@ p_rerun_join() { # a stalled adversary wrote 2.md and its draft before S; the re
   HR_NOPROBE=1 HR_AGENT_O=a0000000000stall HR_DID_O=toolu_01StalledAdversary000002 hr_at 2026-10-15T20:01:00Z s2 "$d" || return 1
   HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
   hr_ids "$d/2.md"; o="$(out_of "$d")"
-  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$o" \
     && grep -qx "rerun: 2.md since $RR_S; superseded: a0000000000stall (2 rows, 2026-10-15T20:00:00Z..2026-10-15T20:01:00Z)" "$o"
 }
@@ -1008,7 +1034,7 @@ p_rerun_other() { # graph s318 requirements-p1/cross-2's shape: cross-1's OWN ad
   hr_ids "$d/cross-1.md"; c1a="$HR_AGENT"; c1d="$HR_DID"
   HR_AGENT_O="$c1a" HR_DID_O="$c1d" hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
   HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
-  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $c1a is a superseded writer of 2.md and also wrote" "$d" && has "$MO" "cross-1.md at"
 }
 p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody else does -> REFUSED: the
@@ -1017,7 +1043,7 @@ p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody e
   hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
   HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
   hr_ids "$d/2.md"
-  bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
 }
 # ---------------------------------------------------------------- BL-536 D1, D2, D4
@@ -1034,7 +1060,7 @@ p_rerun_role() { # D1: a REMEDIATOR among the writers --rerun supersedes -> REFU
     HR_NOPROBE=1 HR_ROLE="$role" HR_AGENT_O=a000000000zremed HR_DID_O=toolu_01SupersededWriter0000r1 hr_at 2026-10-15T20:05:00Z s2 "$d" || return 1
     HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
-    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$role" = remediator ]; then
       refused_clean "carries rows --rerun would supersede from agent a000000000zremed, dispatch toolu_01SupersededWriter0000r1, dispatched as role remediator" "$d" \
         && has "$MO" "a non-adversary write on a shard is a role violation, not a stale dispatch" || return 1
@@ -1071,7 +1097,7 @@ p_xdir() { # D2: shard 2's sole writer also wrote under ANOTHER shards/<x>-p<M>/
     [ "$o" = merge ] || { HR_AGENT_O="$XP_A" HR_DID_O="$XP_D" hr_at 2026-10-15T20:01:00Z harness_record "$sh/stories-p2/1.md" || return 1; }
     HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
-    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$o" = refuse ]; then
       refused_clean "agent $XP_A wrote in _bmad-output/planning-artifacts/s1/shards/stories-p1/ and also wrote _bmad-output/planning-artifacts/s1/shards/stories-p2/1.md at 2026-10-15T20:01:00Z, under another shard dir" "$d" || return 1
     else
@@ -1114,7 +1140,7 @@ p_rerun_residual() { # THE STATED KNOWN GAP (merge header RE-DISPATCH, "RESIDUAL
     forge_meta "$d/2.md" a000000000zremed "$REAL_OTHER"
     HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
     hr_ids "$d/2.md"
-    bash "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+    $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
     if [ "$probe" = 0 ]; then
       [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
     else
@@ -1164,7 +1190,7 @@ p_draft() { # BL-554: `<valid shard name>.draft` beside its shard is skipped wit
             # merged; `notes.md` and a draft of a name that is no shard still REFUSE
   local m="$1" d o
   d="$(b3_world)"; o="$(out_of "$d")"; printf 'UNFINISHED-DRAFT-BODY\n' > "$d/2.md.draft"
-  bash "$m" "$d" > "$MO" 2> "$MO.err"; RC=$?
+  $ASM_RUN "$m" "$d" > "$MO" 2> "$MO.err"; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO.err" "NOTE: ignored draft 2.md.draft" \
     && [ -f "$o" ] && ! has "$o" "UNFINISHED-DRAFT-BODY" || return 1
   d="$(b3_world)"; printf 'x\n' > "$d/notes.md"; run_merge "$m" "$d"
@@ -1175,7 +1201,7 @@ p_draft() { # BL-554: `<valid shard name>.draft` beside its shard is skipped wit
   refused_clean "cross-9.md.draft is a draft of cross-9, which is no shard of this set" "$d"
 }
 dry_merge() { # <merge> <shard dir> -> RC, $MO (stdout and stderr)
-  bash "$1" --dry-run "$2" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --dry-run "$2" > "$MO" 2>&1; RC=$?
 }
 p_dry() { # BL-548: --dry-run prints every refusal of the first failing phase, writes nothing. Two shards each
           # cite another story (4 findings, 4 refusals): all four printed, exit 2, no output file. The clean
@@ -1206,7 +1232,7 @@ p_dry_barrier() { # BL-548: the phases are barriers. Shard 1 missing (phase 2) b
   d="$(b3_world)"; cp "$pz" "$d/1.md"; harness_record "$d/1.md"; run_merge "$m" "$d"
   [ "$RC" -eq 2 ] && has "$MO" "declares verdict '$tok'" || return 1
   d="$(b3_world)"; rm -f "$d/1.md"; shard "$d" 2 2 EXIT_CONDITION_MET 1
-  bash "$m" --dry-run "$d" > "$MO" 2>&1 < "$pz"; RC=$?
+  $ASM_RUN "$m" --dry-run "$d" > "$MO" 2>&1 < "$pz"; RC=$?
   [ "$RC" -eq 2 ] && [ "$(grep -c . "$MO")" -eq 1 ] && has "$MO" "REFUSED: shard 1 is missing from" && ! has "$MO" "cites" && ! has "$MO" "$tok"
 }
 
@@ -1253,10 +1279,10 @@ p_rerun_bind() { # BL-598: the re-run start binds to the credited dispatch's rec
                  # recorded time -> MERGED, superseded: none (a tolerance, never exact equality)
   local d
   d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d" "$RR_S"
-  bash "$1" --rerun "2.md@1999-01-01T00:00:00Z" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --rerun "2.md@1999-01-01T00:00:00Z" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "past BACKDATE_TOL_S=60" "$d" && has "$MO" "never a typed time" || return 1
   d="$(tw)"; HR_SPAWN_TS="$RR_S" s2 "$d" "$RR_S"
-  bash "$1" --rerun "2.md@2026-10-15T20:30:45Z" "$d" > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$1" --rerun "2.md@2026-10-15T20:30:45Z" "$d" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qx "rerun: 2.md since 2026-10-15T20:30:45Z; superseded: none" "$(out_of "$d")"
 }
 
@@ -1355,16 +1381,16 @@ p_hdr_comment() { # (a) --check-header on a convergence shard whose every value 
   cp "$d/1.md" "$c/conv.md"; hc_comment "$c/conv.md"
   grep -qx 'findings_major: 2 # copied with the template comment' "$c/conv.md" \
     && grep -qx 'verdict: EXIT_CONDITION_MET # copied with the template comment' "$c/conv.md" || return 1
-  bash "$m" --check-header "$c/conv.md" --axis convergence > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --check-header "$c/conv.md" --axis convergence > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
   sed 's/^skill: .*/skill: bmad-advanced-elicitation/;/^verdict:/d' "$d/1.md" > "$c/elic.md"; hc_comment "$c/elic.md"
   grep -qx 'skill: bmad-advanced-elicitation # copied with the template comment' "$c/elic.md" || return 1
-  bash "$m" --check-header "$c/elic.md" --axis elicitation > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --check-header "$c/elic.md" --axis elicitation > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
   hc_comment "$d/1.md"; run_merge "$m" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && cmp -s "$o" "$SEED_DIR/seed.files-b3-merged.expected" || return 1
   sed 's/^findings_major: .*/findings_major: 2#x/' "$c/conv.md" > "$c/tight.md"
-  bash "$m" --check-header "$c/tight.md" --axis convergence > "$MO" 2>&1; RC=$?
+  $ASM_RUN "$m" --check-header "$c/tight.md" --axis convergence > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 1 ] && has "$MO" "does not declare integer findings_critical and findings_major"
 }
 
@@ -1471,7 +1497,7 @@ p_sum_divergent_oracle() {
 # on the spawn rows unless HR_BOUND=0 prefixes the call. bl726_<world> <merge> -> RC, $MO, $MO.err,
 # BL_D (the shard dir). The write-ledger rows of shard 2 are re-stamped with hr_at, so its LAST row
 # is the one the LATE arm compares; the fixture never touches an mtime.
-bl726_run() { bash "$1" "$BL_D" > "$MO" 2> "$MO.err"; RC=$?; }
+bl726_run() { $ASM_RUN "$1" "$BL_D" > "$MO" 2> "$MO.err"; RC=$?; }
 bl726_clean() { BL_D="$(b3_world)"; bl726_run "$1"; }
 bl726_early() { BL_D="$(b3_world)"; shard "$BL_D" 1 2 EXIT_CONDITION_MET 1 "" 2026-08-24T13:00:00Z; bl726_run "$1"; }
 bl726_late() { BL_D="$(tw)"; WORLD_SHARD="$BL_D/2.md"; hr_at 2026-08-24T14:00:00Z s2 "$BL_D" || return 1; bl726_run "$1"; }
@@ -1515,7 +1541,7 @@ p_rs1() {
   refused_clean "$RESERVED" "$d" && has "$MO" "move it under its own \`## \` section, or demote it to \`#### \`" && has "$MO" "2.md:5 is"
 }
 # CH2: the merge's own refusal of a verdict-less shard, and --check-header's, say the same thing.
-chm() { bash "$1" --check-header "$2" --axis "$3" > "$MO" 2>&1; RC=$?; } # <merge> <shard file> <axis>
+chm() { $ASM_RUN "$1" --check-header "$2" --axis "$3" > "$MO" 2>&1; RC=$?; } # <merge> <shard file> <axis>
 p_chv() {
   local m="$1" d dm c ch_out ch_rc m_line ch_tail m_tail
   d="$(b3_world)" || return 1; c="$(mktemp -d "$WORK/chv.XXXXXX")" || return 1
