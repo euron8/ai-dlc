@@ -64,6 +64,7 @@ done
 [ -n "$VALIDATOR" ] || { echo "FIXTURE BROKEN: cannot locate validate-gate-adjudication.sh from $DIR"; exit 2; }
 # The REQUIRED input of inputs.decl: every case below drives this file.
 echo "HERMETIC-CONSUMED core/scripts/validate-gate-adjudication.sh"
+[ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED core/scripts/gate_adjudication.py"
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 [ -n "$ROOT" ] && [ -d "$ROOT" ] || { echo "FIXTURE BROKEN: seed.sh produced no root"; exit 2; }
