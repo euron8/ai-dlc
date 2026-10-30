@@ -96,7 +96,9 @@
 # walked -- each a refusal and never a verdict. A caller treats 1 as a repair to make and 2
 # as a run to repeat; reading 2 as either a verdict or a clean is the defect run_pair's
 # comparison comment records.
+vad_shell() {
 set -uo pipefail
+}
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
@@ -122,7 +124,10 @@ ai_dlc_resolve_root() {
   done
   return 1
 }
+vad_selfdir() {
 AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+}
+vad_root() {
 AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
@@ -132,10 +137,12 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
   echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
   exit 2
 }
+}
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
 # The read-only allowlist. A command whose FIRST WORD is not here does not run.
 # `git` is admitted only for its read-only subcommands, checked separately below.
+vad_tables() {
 ALLOWED_CMDS="grep rg awk sed wc comm sort uniq cut head tail nl find ls cat diff shasum sha256sum basename dirname printf echo test git"
 ALLOWED_GIT_SUB="grep log show diff ls-files rev-parse cat-file describe status"
 
@@ -1374,7 +1381,9 @@ if [ -n "$never_hits" ]; then
   printf 'REFUSED: the option table admits a NEVER-set option (%s ), which writes a file or runs a program; no verdict until the row is removed.\n' "$never_hits" >&2
   exit 2
 fi
+}
 
+vad_args() {
 LIST_ONLY=0; WALK_ALL=0; EXPLAIN=0
 USAGE="usage: $0 [--list] [--all] <file-or-dir>...
        $0 --explain-cmd '<command>' | --explain-cmd -   (stdin: one '<id><TAB><command>' per line)"
@@ -1402,6 +1411,8 @@ if [ -n "$SUP_FROM" ]; then
 fi
 
 fails=0; checked=0; blocks=0; files_seen=0; unrun=0
+VAD_ARGV=("$@")
+}
 
 fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 
@@ -1748,16 +1759,20 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
 #   OFF git -- its operands are revisions, pathspecs and `<rev>:<path>` words, `git grep` included.
 #   OFF rg -- not installed on the machine the table was built on; its rows come from the man text
 #       alone, so its arity is unmeasured.
+vad_cdlist() {
 CD_LIST="cat wc head cut nl comm sha256sum"
 for cd_w in $CD_LIST; do
   case " $ALLOWED_CMDS " in *" $cd_w "*) ;; *)
     printf 'REFUSED: CD_LIST names %s, which is not on ALLOWED_CMDS; no verdict.\n' "$cd_w" >&2; exit 2 ;;
   esac
 done
+}
 cd_listed() { # $1 cmd  $2 sub -> 0 when the cd prefix may be applied to this command's operands
   case " $CD_LIST " in *" $1 "*) [ -z "$2" ] ;; *) return 1 ;; esac
 }
+vad_explain_cdp() {
 EXPLAIN_CDP=""
+}
 cd_norm() { # $1 a relative path -> CDN (lexically normalised, "" = the root); 1 when it climbs above it
   local r="$1" s out=""
   while [ -n "$r" ]; do
@@ -1861,7 +1876,9 @@ refusal_text() { # $1 kind  $2 what -> REFUSED
 
 # SEG_KIND/SEG_WHY hold a segment's FIRST refusal. seg_refuse returns 1 (stop) except under
 # --explain-cmd, where the walk goes on so every word is classified.
+vad_explain_id() {
 EXPLAIN_ID="-"
+}
 seg_refuse() { # $1 kind  $2 what
   [ -n "$SEG_KIND" ] || { SEG_KIND="$1"; SEG_WHY="$2"; }
   [ "$EXPLAIN" = 1 ]
@@ -1942,9 +1959,11 @@ opt_take() { # $1 option token  $2 its value -- a sed `-e` value is a script the
 # caught as any `@word`, because `print "user@host"` is a plain string; the trailing class (not
 # `\b`, which POSIX ERE lacks and arm S12 of validate-shell-portability.sh refuses) keeps
 # `@includes` a near-miss.
+vad_awk_re() {
 AWK_SYS_RE='system[[:space:]]*\('
 AWK_AT_RE='@[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\('
 AWK_DIR_RE='@(include|load|namespace)([^A-Za-z0-9_]|$)'
+}
 awk_prog_refusal() { # $1 an awk program -> AWK_WHY (empty = admitted)
   AWK_WHY=""
   if [[ "$1" =~ $AWK_SYS_RE ]]; then AWK_WHY="awk system()"
@@ -1956,6 +1975,7 @@ awk_prog_refusal() { # $1 an awk program -> AWK_WHY (empty = admitted)
 # helper seg_check calls, so a regex that stops matching stops every run (exit 2) instead of
 # admitting silently. It matches strings; nothing is loaded or run. Each row is
 # `<expected refusal or ->|<program>`; `-` is a near-miss that must be admitted.
+vad_awk_probe() {
 awk_probe_bad=""
 while IFS='|' read -r ap_want ap_prog; do
   [ -n "$ap_want" ] || continue
@@ -1977,6 +1997,7 @@ if [ -n "$awk_probe_bad" ]; then
   printf 'REFUSED: the awk program check failed its own self-probe (%s ), so it would admit a program it exists to refuse; no verdict.\n' "$awk_probe_bad" >&2
   exit 2
 fi
+}
 
 seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_WHY)
   local seg="$1" w n=0 i=1 first="" sub="" gdir groot gres gcom_root gcom_dir pend="" endop=0 nops=0
@@ -2212,6 +2233,7 @@ seg_check() { # $1 one pipeline segment -> 0 allowed | 1 refused (SEG_KIND, SEG_
 
 # The sed script grammar, as awk functions. Scripts reach it through the ENVIRONMENT, one
 # variable each, so no byte of a script is re-tokenised or escape-processed on the way in.
+vad_sed_awk() {
 SED_AWK='
 function consume_bracket(s, i,   ch, j, k) {
   i++
@@ -2320,6 +2342,7 @@ function script_verb(s,   i, n, ch, c, delim, j, flag) {
   }
   return ""
 }'
+}
 sed_scripts_verdict() { # SCR[0..NSCR) -> the first refusal reason on stdout, or nothing
   local k=0 a=()
   [ "$NSCR" -gt 0 ] || return 0
@@ -2335,15 +2358,18 @@ sed_scripts_verdict() { # SCR[0..NSCR) -> the first refusal reason on stdout, or
       } }'
 }
 
+vad_tmp() {
 TMP_ARGV="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
 TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"; TMP_EV="$(mktemp)"; TMP_SF="$(mktemp)"
 trap 'rm -f "$TMP_ARGV" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST" "$TMP_LIST.keep" "$TMP_EV" "$TMP_EV.sup" "$TMP_SF"' EXIT
+}
 
 # THE RECORD GRAMMAR, ONCE. The directory walk skips a record and check_file lets a record's
 # later copy supersede an earlier one; both call this one awk function, so the two cannot
 # disagree about what a record is. A record is a file whose parent directory is `s<digits>` and
 # whose basename is one core writes as a review or repair record -- the walk's comment says why
 # the grammar is exactly these names.
+vad_rec_awk() {
 REC_AWK='
 function is_record(parent, base) {
   if (parent !~ /^s[0-9]+$/) return 0
@@ -2351,9 +2377,12 @@ function is_record(parent, base) {
           base == "requirements-party-repair.md" || base == "requirements-elicitation-repair.md" ||
           base == "requirements-elicitation.md")
 }'
+}
 # The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
+vad_sentinel() {
 STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
 printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
+}
 
 # Compare on TRIMMED lines: trailing whitespace in a fenced block is invisible to the
 # author and is never the defect being hunted. Everything else compares byte-for-byte.
@@ -2703,6 +2732,7 @@ explain_one() { # $1 id  $2 command
     printf '%s\tVERDICT\tREFUSED\t%s\n' "$1" "$(printf '%s\n' "$REFUSED" | head -1)"
   fi
 }
+vad_run() {
 if [ "$EXPLAIN" = 1 ]; then
   if [ "$EXPLAIN_ARG" = "-" ]; then
     while IFS= read -r ex_line || [ -n "$ex_line" ]; do
@@ -2836,3 +2866,67 @@ fi
 printf 'OK: %s derivation(s) in %s block(s) across %s file(s) reproduce at HEAD.\n' \
   "$checked" "$blocks" "$files_seen"
 exit 0
+}
+
+# --- THE LOADABLE SHAPE ---------------------------------------------------------
+# Every top-level section above is a function of its own, and nothing runs while the file is
+# read. Run as a program, the source guard below falls through and vad_cli calls those sections
+# in their original order, so `bash validate-artifact-derivations.sh <args>` does exactly what it
+# did when they were top-level code. A caller that SOURCES the file gets the definitions and
+# nothing else (no option set, no trap, no temp file), and has three entries:
+#   vad_cli <args>     the whole program, as above. Run it in a subshell: it ends in `exit`.
+#   vad_load           the half that does not depend on the arguments or the environment: the
+#                      option tables, the NEVER intersection and the startup self-probes. Once
+#                      per shell. It sets no shell option; a self-probe refusal exits 2 exactly
+#                      as the program does, so load a file you have not vetted in a subshell.
+#                      Its last act records the file it was defined from in VAD_LOADED.
+#   vad_invoke <args>  the other half, after vad_load ran in the same shell: the shell state a
+#                      new process starts with, the root, the arguments, the temp files and the
+#                      run. In a subshell, once per call.
+# `( vad_invoke <args> )` prints and exits as `bash validate-artifact-derivations.sh <args>`
+# does; core/fixtures/artifact-derivations pins the two byte for byte.
+vad_reset() {
+  set +e +f
+  IFS=$' \t\n'
+}
+vad_cli() {
+  vad_reset
+  vad_shell
+  vad_selfdir
+  vad_root
+  vad_tables
+  vad_args "$@"
+  vad_cdlist
+  vad_explain_cdp
+  vad_explain_id
+  vad_awk_re
+  vad_awk_probe
+  vad_sed_awk
+  vad_tmp
+  vad_rec_awk
+  vad_sentinel
+  vad_run ${VAD_ARGV[@]+"${VAD_ARGV[@]}"}
+}
+vad_load() {
+  vad_selfdir
+  vad_tables
+  vad_cdlist
+  vad_explain_cdp
+  vad_explain_id
+  vad_awk_re
+  vad_awk_probe
+  vad_sed_awk
+  vad_rec_awk
+  VAD_LOADED="${BASH_SOURCE[0]}"
+}
+vad_invoke() {
+  vad_reset
+  vad_shell
+  vad_root
+  vad_args "$@"
+  vad_tmp
+  vad_sentinel
+  vad_run ${VAD_ARGV[@]+"${VAD_ARGV[@]}"}
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vad_cli "$@"

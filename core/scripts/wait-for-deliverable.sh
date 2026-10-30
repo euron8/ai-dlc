@@ -832,10 +832,33 @@ $MK_OUT
       if [ -n "${MK_NRL# }" ] || [ -n "$MK_RPL" ]; then
         MK_VO="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" && MK_VE="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" \
           || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+        # IN PROCESS ONLY WHEN THE CALLER LOADED THIS VERY VALIDATOR. A caller that sourced
+        # validate-artifact-derivations.sh and ran its vad_load (a fixture driving --mark in process)
+        # gets the same run as `bash "$MK_VAL"` from `( vad_invoke ... )`, its documented in-process
+        # equal. Taken only when VAD_LOADED and the files vad_invoke, vad_load and vad_run were
+        # DEFINED from (extdebug) are all $MK_VAL itself, so a function imported from the environment,
+        # which names no file, never stands in for the validator. Otherwise the lines below run as
+        # they always have.
+        mk_vin_=0
+        if [ -n "${VAD_LOADED:-}" ] && [ "$VAD_LOADED" -ef "$MK_VAL" ] && declare -F vad_invoke > /dev/null 2>&1; then
+          mk_vin_=1
+          while IFS= read -r mk_vdl_; do
+            mk_vdl_="${mk_vdl_#* }"; mk_vdl_="${mk_vdl_#* }"
+            [ -n "$mk_vdl_" ] && [ "$mk_vdl_" != "(null)" ] && [ "$mk_vdl_" -ef "$MK_VAL" ] || mk_vin_=0
+          done <<< "$(shopt -s extdebug; declare -F vad_invoke vad_load vad_run 2>/dev/null || echo 'x 0 ')"
+        fi
+        if [ "$mk_vin_" = 1 ]; then
+          if [ -n "$MK_STATE" ]; then
+            ( AI_DLC_PROJECT_ROOT="$(dirname "$MK_STATE")" AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" vad_invoke "$MK_SRC" ) > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+          else
+            ( AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" vad_invoke "$MK_SRC" ) > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+          fi
+        else
         if [ -n "$MK_STATE" ]; then
           AI_DLC_PROJECT_ROOT="$(dirname "$MK_STATE")" AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
         else
           AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+        fi
         fi
         mk_vn_="$(sed -n 's/^OK: \([0-9][0-9]*\) derivation(s) .*/\1/p' "$MK_VO" | tail -1)"
         # BL-816: a block claiming `replayed <n>` is refused only on a FAIL whose `<copy>:<line>` lies in
