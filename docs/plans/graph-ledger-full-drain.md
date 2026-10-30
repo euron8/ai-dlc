@@ -85,7 +85,7 @@ This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner sh
 - **Backlog.** Live at close: 49. Archive: 798. **The next free id is BL-877.** Nothing was filed at this close.
 - **Graph at close.**
   - Installed 0.969.0 on its checked-out branch `ai-dlc/feature/per-chain-rebalancer-instances` and on `main`, so it is 1 release behind after 0.970.0.
-  - The derive block at `d48335d52` found: qualifying refs 1; live 9, archive 382; DISCHARGED 1 (`PC-S319-CHECK-17-…`, consumer-only BL-791); and 8 live ids no backlog entry cites. Those 8 are the 7 `PC-S320-…` ids plus this batch's PC-S321, which 0.970.0 now names.
+  - The derive block at `d48335d52` found: qualifying refs 1 (graph has since pushed that branch, so the fresh-resume derive at 17e89f526 reads 2: the local and `origin/` refs of `ai-dlc/feature/per-chain-rebalancer-instances`, one sha, live 9, adds 1 each); live 9, archive 382; DISCHARGED 1 (`PC-S319-CHECK-17-…`, consumer-only BL-791); and 8 live ids no backlog entry cites. Those 8 are the 7 `PC-S320-…` ids plus this batch's PC-S321, which 0.970.0 now names.
   - The seven S320 ids were out of scope by the operator's ruling and remain live.
   - The ledger's md5 was unchanged across the batch (`08be313c0f0b8d189c58c1a9d1a2de96`).
   - The pull is not preapproved, and no runbook was written.
