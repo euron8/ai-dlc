@@ -9,7 +9,6 @@ find
 head
 tail
 jq
-python3
 mkdir
 rm
 tr
