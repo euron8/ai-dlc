@@ -1,8 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run; the 811 and 49 rows follow the --map memo of 66ef3d8f1.
-811 *
-196 core/scripts/content-seal.sh
-166 core/hooks/ai-dlc-content-seal.sh
-49 core/scripts/merge-adversarial-shards.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-arms.sh, which asks the library's answers in process.
+613 *
+160 core/scripts/content-seal.sh
+119 core/hooks/ai-dlc-content-seal.sh
+34 core/scripts/merge-adversarial-shards.sh
 13 core/scripts/join-remediator-shards.sh
 9 core/scripts/validate-gate-adjudication.sh
-39 core/scripts/wait-for-deliverable.sh
+33 core/scripts/wait-for-deliverable.sh
