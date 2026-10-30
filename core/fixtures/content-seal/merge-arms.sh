@@ -35,7 +35,36 @@ else bad "CS-M0: the unsealed control world did not merge (rc=$RC): $(head -3 "$
 # CS-M1: every shard sealed and untouched -> MERGED, and the pass file is byte-identical to the
 # unsealed merge. Seal rows must exist, or this is the unsealed path again.
 d1="$(clean_world)"; seal_all "$d1"; n1="$(seal_count "$(ledger_of "$d1")")"; nsh="$(ls "$d1"/*.md | grep -c .)"
-run_merge "$MERGE" "$d1"
+# The sealed world is built once and kept pristine beside itself. A seal row records the PHYSICAL root it was
+# written under, so a copy at another path would be skipped by the seal check as another tree's; fresh_sealed
+# therefore puts the pristine copy back at the SAME path (the used one is moved aside, never deleted).
+r1="$(world_root "$d1")"; cp -Rp "$r1" "$r1.pristine" || { echo "FIXTURE BROKEN: cannot keep a pristine sealed world" >&2; exit 2; }
+fresh_sealed() { # -> FS_D: the sealed world's shard dir, restored to its sealed state at its original path
+  mv "$r1" "$r1.used.$RANDOM$RANDOM" && cp -Rp "$r1.pristine" "$r1" || { echo "FIXTURE BROKEN: cannot restore the sealed world" >&2; exit 2; }
+  FS_D="$d1"
+}
+# ip <merge file> <shard dir> -> RC, $MO: the merge's seal phase, marker-set check and marker admission asked IN
+# PROCESS, in one subshell (so `exit 2` from refuse ends it and every global resets). The merge file is sourced
+# (its BASH_SOURCE guard stops it before the argument parse) and the phase functions it defines are called in the
+# order its body calls them. The one thing the test supplies is $T/shards, the key<TAB>path rows the merge builds
+# from the shard directory. Nothing is written to the world, so a cell may ask the same world twice.
+ip_stage() { # <shard dir> -> $T/shards
+  local f b k sd; : > "$T/shards"; sd="$(cd "$1" && pwd)" # the merge's own spelling: cd && pwd
+  for f in "$sd"/*.md; do b="${f##*/}"; b="${b%.md}"
+    case "$b" in ""|*[!0-9]*) k="$b" ;; *) k=$((10#$b)) ;; esac
+    printf '%s\t%s\n' "$k" "$f" >> "$T/shards"; done
+}
+ip() {
+  ( . "$1" || exit 90
+    SUBJECT="${IP_SUBJECT:-}"; ELICIT="${IP_ELICIT:-0}" # set by the merge's argument parse, which sourcing stops short of
+    T="$(mktemp -d "$WORK/ip.XXXXXX")" || exit 91
+    ip_stage "$2"
+    merge_locate "$2"; merge_rec_paths; merge_seal_path "$1"
+    merge_seal_phase; merge_complete_scan; merge_admission_phase ) > "$MO" 2>&1; RC=$?
+}
+ipref() { [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1"; } # in-process refusal naming <token>
+ippass() { [ "$RC" -eq 0 ] && [ ! -s "$MO" ]; }                         # in-process: every phase passed, nothing printed
+run_merge "$MERGE" "$d1"; cp "$MO" "$WORK/m1.cli"; m1rc=$RC
 if [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n1" -ge "$nsh" ] && [ "$nsh" -ge 4 ] && cmp -s "$o0" "$(out_of "$d1")"; then
   ok "CS-M1: $nsh shards sealed ($n1 seal rows) and untouched: MERGED, pass file byte-identical to the unsealed merge"
 else bad "CS-M1: sealed untouched set: rc=$RC seals=$n1 shards=$nsh, identical=$(cmp -s "$o0" "$(out_of "$d1")" && echo yes || echo no): $(head -3 "$MO")"; fi
@@ -46,10 +75,11 @@ else bad "CS-M1b: no program:merge-adversarial-shards seal row after a sealed me
 
 # CS-M2: the motivating write -- a function-variable perl -0pi on a sealed shard -> REFUSED, naming
 # the shard, the sealed writer and the remedy; nothing written.
-d2="$(clean_world)"; seal_all "$d2"; hr_ids "$d2/2.md"; a2="$HR_AGENT"
+fresh_sealed; d2="$FS_D"; hr_ids "$d2/2.md"; a2="$HR_AGENT"
 patch_shard "$d2/2.md"
 grep -q 'toolu_01PatchedByLead' "$d2/2.md" || { echo "FIXTURE BROKEN: CS-M2's perl -0pi changed nothing" >&2; exit 2; }
-run_merge "$MERGE" "$d2"
+run_merge "$MERGE" "$d2"; cp "$MO" "$WORK/m2.cli"; m2rc=$RC
+ip "$MERGE" "$d2"; cp "$MO" "$WORK/m2.ip"; m2iprc=$RC
 if refused_clean "2.md $TOKEN" "$d2" && has "$MO" "agent $a2 (Write)" && has "$MO" "$REMEDY"; then
   ok "CS-M2: perl -0pi through a shell function's variable after the seal: REFUSED naming 2.md, agent $a2 and the remedy"
 else bad "CS-M2: the motivating perl -0pi was not refused by the seal (rc=$RC): $(head -3 "$MO")"; fi
@@ -68,17 +98,18 @@ ss_edit() { # <shard file> <agent id or ""> -- an Edit that moves the bytes, sea
   grep -q 'Nothing further, amended' "$1" || return 1
   seal_hook "$(world_root "$(dirname "$1")")" Edit "$1" "$2"
 }
-p_seal_session() { # the merge's reading of the last tool row, both directions: (a) adversary Write, session Edit
-                   # -> REFUSED naming the session and --rerun; (b) the same adversary's Edit -> MERGED.
-                   # SS_CASE names the first case that did not hold.
-  local m="$1" d
-  SS_CASE=a; d="$(clean_world)"; seal_all "$d"; ss_edit "$d/2.md" "" || return 1; run_merge "$m" "$d"
-  refused_clean "2.md $SS_TOKEN" "$d" && has "$MO" "(Edit at " && has "$MO" "merge with --rerun 2.md@" || return 1
-  SS_CASE=b; d="$(clean_world)"; seal_all "$d"; hr_ids "$d/2.md"; ss_edit "$d/2.md" "$HR_AGENT" || return 1; run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
-  SS_CASE=""
-}
-if p_seal_session "$MERGE"; then
+# CS-S1: (a) adversary Write, session Edit -> REFUSED naming the session and --rerun, asked in process and then once
+# end to end on the SAME world (the kept run for this outcome); (b) the same adversary's Edit -> passes, in process.
+# SS_CASE names the first case that did not hold.
+SS_CASE=a; fresh_sealed; d="$FS_D"; ss_edit "$d/2.md" ""; s1ok=0
+ip "$MERGE" "$d"; cp "$MO" "$WORK/s1.ip"
+if ipref "2.md $SS_TOKEN" && has "$MO" "(Edit at " && has "$MO" "merge with --rerun 2.md@"; then
+  run_merge "$MERGE" "$d"
+  if refused_clean "2.md $SS_TOKEN" "$d" && has "$MO" "(Edit at " && has "$MO" "merge with --rerun 2.md@" && cmp -s "$MO" "$WORK/s1.ip"; then
+    SS_CASE=b; fresh_sealed; d="$FS_D"; hr_ids "$d/2.md"; ss_edit "$d/2.md" "$HR_AGENT"; ip "$MERGE" "$d"; ippass && s1ok=1
+  fi
+fi
+if [ "$s1ok" = 1 ]; then
   ok "CS-S1: adversary Write then session Edit (bytes re-sealed) -> REFUSED naming the session and --rerun; the adversary's own Edit -> MERGED"
 else bad "CS-S1: case ($SS_CASE) did not hold (rc=$RC): $(head -3 "$MO")"; fi
 
@@ -93,33 +124,46 @@ for f in "$e6"/*.md; do hr_ids "$f"; seal_hook "$w6" Write "$f" "$HR_AGENT"; don
 in_set "planning-artifacts/s9/shards/requirements-elicitation/1.md" && e6set=yes || e6set=no
 sed -i.bak 's/^Body\.$/Body, amended by the lead./' "$e6/1.md" && rm -f "$e6/1.md.bak"
 grep -q 'amended by the lead' "$e6/1.md" || { echo "FIXTURE BROKEN: CS-M6's in-place sed changed nothing" >&2; exit 2; }
-bash "$MERGE" --subject 9 --elicitation "$e6" > "$MO" 2>&1; RC=$?
+IP_SUBJECT=9 IP_ELICIT=1 ip "$MERGE" "$e6"
 if [ "$RC" -eq 2 ] && has "$MO" "1.md $TOKEN" && [ ! -e "$w6/$SUBJ_PA/s9/requirements-elicitation.md" ]; then
   ok "CS-M6: a sealed suffix-less elicitation shard rewritten by sed -i: REFUSED (declared in set: $e6set)"
 else bad "CS-M6: a suffix-less elicitation shard rewritten by an in-place sed was not refused (declared in set: $e6set, rc=$RC): $(head -2 "$MO")"; fi
 
 # ---- --mark: THE ONE SANCTIONED BASH WRITE to a shard (wait-for-deliverable.sh, "THE CONTENT SEAL").
 mark_one() { # <engine> <shard file> -> MRC, $WORK/mark.out; marked with the shard's own finding count
+  # IN PROCESS: the engine is sourced in a subshell (its BASH_SOURCE guard returns before wfd_mark_main) and wfd_mark_main is
+  # called with the arguments the CLI takes; its `exit` ends the subshell. pipefail is off, as the CLI runs it.
   local n; n="$(grep -c '^### ' "$2")" || n=0
-  bash "$1" --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" > "$WORK/mark.out" 2>&1; MRC=$?
+  ( set +o pipefail; . "$1"; wfd_mark_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
 }
+sk() { ( . "$SEAL"; "$@" ); } # the library function a reader's mode calls, asked in a subshell: sk seal_check <state> <files>
 PROW='"actor":"program:wait-for-deliverable"'
+# ONE SEALED WORLD, BUILT ONCE, restored per cell. Seal rows record the world's physical root, so a copy at another
+# path would be foreign to the ledger; the dirty world is moved aside and the pristine copy put back at the SAME path.
+kw_build() { # -> KW (the shard dir), KWR (its root); a pristine copy sits beside it
+  KW="$(clean_world)"; seal_all "$KW"; KWR="$(world_root "$KW")"; KWN=0
+  cp -Rp "$KWR" "$KWR.pristine" || { echo "FIXTURE BROKEN: cannot copy the sealed world" >&2; exit 2; }
+}
+kw_restore() { # puts the pristine sealed world back at $KWR; the dirty one is moved aside, never removed
+  KWN=$((KWN + 1)); mv "$KWR" "$KWR.dirty$KWN" && cp -Rp "$KWR.pristine" "$KWR" || { echo "FIXTURE BROKEN: cannot restore the sealed world" >&2; exit 2; }
+}
 
 # CS-K1: every shard sealed by its writer, then closed with --mark -> each file's newest row is the
-# program's, --check passes on all of them, and the merge takes the marked set.
-dk1="$(clean_world)"; seal_all "$dk1"; stk1="$(hr_state "$dk1/1.md")"; mk1=0
+# program's, --check passes on all of them, and the marked set is admitted and was last written by its adversaries.
+kw_build; dk1="$KW"; stk1="$(hr_state "$dk1/1.md")"; mk1=0
 for f in "$dk1"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || mk1="$MRC"; done
-bash "$SEAL" --check "$stk1" "$dk1"/*.md > /dev/null 2>&1; ck1=$?
-rk1="$(bash "$SEAL" --row "$stk1" "$dk1/1.md" 2>/dev/null)"
-run_merge "$MERGE" "$dk1"
+sk seal_check "$stk1" "$dk1"/*.md > /dev/null 2>&1; ck1=$?
+rk1="$(sk seal_row "$stk1" "$dk1/1.md" 2>/dev/null)"
+sk seal_admit_marker "$dk1"/*.md > "$WORK/k1.adm" 2>&1; ak1=$?
+sk seal_last_tool_row "$stk1" "$dk1"/*.md > "$WORK/k1.ltr" 2>&1; lk1=$?
 if [ "$mk1" = 0 ] && [ "$ck1" = 0 ] && grep -qF "$PROW" <<<"$rk1" && grep -q '^seat-complete: stories adversary 1 sha=' "$dk1/1.md" \
-   && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
-  ok "CS-K1: sealed shards closed with --mark: the program re-seals each, --check passes, MERGED"
-else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newest row ${rk1:-none}, merge rc=$RC: $(head -2 "$MO")"; fi
+   && [ "$ak1" = 0 ] && [ "$lk1" = 0 ] && [ "$(grep -c . "$WORK/k1.ltr")" = "$(ls "$dk1"/*.md | grep -c .)" ] && ! grep -q "session" "$WORK/k1.ltr"; then
+  ok "CS-K1: sealed shards closed with --mark: the program re-seals each, --check passes, the marked set is admitted and last written by its adversaries"
+else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newest row ${rk1:-none}, admission rc=$ak1 [$(head -1 "$WORK/k1.adm")], last-tool-row rc=$lk1"; fi
 
 # CS-K2: a sealed shard amended through Bash (the motivating perl -0pi), then --mark -> refused (64),
 # the file untouched, and no row appended: --mark never launders amended bytes into a seal.
-dk2="$(clean_world)"; seal_all "$dk2"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
+kw_restore; dk2="$KW"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
 nb2="$(seal_count "$(ledger_of "$dk2")")"; mark_one "$WFD" "$dk2/2.md"; na2="$(seal_count "$(ledger_of "$dk2")")"
 if [ "$MRC" = 64 ] && cmp -s "$dk2/2.md" "$WORK/k2.before" && [ "$na2" = "$nb2" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
   ok "CS-K2: a Bash-amended sealed shard: --mark refuses (64), writes nothing, appends no row"
@@ -129,24 +173,24 @@ else bad "CS-K2: --mark over a Bash-amended sealed shard: rc=$MRC, rows $nb2 -> 
 # marks it and leaves it with no row: an unsealed file never becomes a sealed one.
 dk3="$(clean_world)"; seal_hook "$(world_root "$dk3")" Write "$dk3/2.md" ""; stk3="$(hr_state "$dk3/1.md")"
 nb3="$(seal_count "$(ledger_of "$dk3")")"; mark_one "$WFD" "$dk3/1.md"; na3="$(seal_count "$(ledger_of "$dk3")")"
-rk3="$(bash "$SEAL" --row "$stk3" "$dk3/1.md" 2>/dev/null)"
+rk3="$(sk seal_row "$stk3" "$dk3/1.md" 2>/dev/null)"
 if [ "$MRC" = 0 ] && [ "$rk3" = null ] && [ "$na3" = "$nb3" ] && [ "$nb3" -ge 1 ] && grep -q '^seat-complete: stories adversary 1 sha=' "$dk3/1.md"; then
   ok "CS-K3: a shard with no seal row is marked and stays with none (rows $nb3 -> $na3)"
 else bad "CS-K3: --mark on an unsealed shard: rc=$MRC, its row ${rk3:-none}, rows $nb3 -> $na3"; fi
 
 # CS-K4: a Bash write lands between --mark's move and its seal row (the stub sibling forces it) -> no
 # program row is recorded, --mark exits 64, and the merge refuses the shard on its writer's seal.
-dk4="$(clean_world)"; seal_all "$dk4"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
+kw_restore; dk4="$KW"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
 mark_one "$re4" "$dk4/2.md"
 # The race is forced only when the shard carries a seal row, so --mark reaches --record-expect and the
 # stub fires. Its absence is a verdict on this arm (a mutant that leaves no row), never a broken fixture.
 if grep -q 'written through Bash after the move' "$dk4/2.md"; then ok "CS-K4r: race forced: the shard carried a seal row and the stub wrote after --mark's move"
 else bad "CS-K4r: race not forced: no seal row, so --mark never reached --record-expect and the stub never wrote"; fi
-run_merge "$MERGE" "$dk4"
+sk seal_check "$(hr_state "$dk4/1.md")" "$dk4"/*.md > "$WORK/k4.chk" 2>&1; RC=$?
 if [ "$MRC" = 64 ] && has "$WORK/mark.out" "changed again before its content-seal row" && ! grep -qF "$PROW" "$(ledger_of "$dk4")" \
-   && [ "$RC" -eq 2 ] && has "$MO" "2.md $TOKEN"; then
+   && [ "$RC" -eq 1 ] && has "$WORK/k4.chk" "2.md $TOKEN"; then
   ok "CS-K4: a write between --mark's move and its row: no row recorded, --mark 64, the merge refuses 2.md"
-else bad "CS-K4: the write after --mark's move was sealed or not refused: mark rc=$MRC, merge rc=$RC: $(head -2 "$MO")"; fi
+else bad "CS-K4: the write after --mark's move was sealed or not refused: mark rc=$MRC, seal_check rc=$RC: $(head -2 "$WORK/k4.chk")"; fi
 
 # CS-K6: a SYMLINKED state dir. The recorder names a row by the state dir as spelled (`_bmad-output`),
 # so --mark must derive it the same way, never through `pwd -P` to the target's name, or it reads no
@@ -161,11 +205,26 @@ if [ -L "$r6/_bmad-output" ] && [ "$(cd "$r6/_bmad-output" && pwd -P)" != "$(cd 
 else bad "CS-K6s: symlink not set up: _bmad-output is not a link to a differently named dir, or the shard path does not pass through it ($dk6)"; fi
 seal_all "$dk6"; nb6="$(seal_count "$(ledger_of "$dk6")")"
 for f in "$dk6"/*.md; do mark_one "$WFD" "$f"; done
-bash "$SEAL" --check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
-run_merge "$MERGE" "$dk6"
-if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
+sk seal_check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
+sk seal_admit_marker "$dk6"/*.md > "$WORK/k6.adm" 2>&1; ak6=$?
+if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$ak6" -eq 0 ]; then
   ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
-else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, merge rc=$RC: $(head -2 "$MO")"; fi
+else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, admission rc=$ak6: $(head -2 "$WORK/k6.adm")"; fi
+
+# CS-K7: THE SEAM. The in-process wfd_mark_main answers byte-for-byte (stdout, stderr, exit code) what the CLI does, on a
+# REFUSING input (a marker call with a missing field) and a PASSING one (a file outside the sealed set, marked), and the
+# two answers differ. The passing file is restored between the two runs so both mark the same bytes at the same path.
+sm="$WORK/seam"; mkdir -p "$sm"; printf '# stories -- adversarial shard 1\n\n### M1 -- MAJOR -- a finding\n\nBody.\n' > "$sm/1.md"; cp "$sm/1.md" "$sm/1.orig"
+seam_cli() { bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
+seam_inp() { ( set +o pipefail; . "$WFD"; wfd_mark_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
+seam_same() { cmp -s "$sm/cli.out" "$sm/inp.out" && cmp -s "$sm/cli.err" "$sm/inp.err" && cmp -s "$sm/cli.rc" "$sm/inp.rc"; }
+seam_cli --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
+seam_inp --mark "$sm/1.md" stories adversary; sk1=0; seam_same && sk1=1; rr="$(cat "$sm/inp.rc")"; cp "$sm/inp.err" "$sm/refuse.err"
+seam_cli --mark "$sm/1.md" stories adversary 1 findings=1; cp "$sm/1.orig" "$sm/1.md"
+seam_inp --mark "$sm/1.md" stories adversary 1 findings=1; sk2=0; seam_same && sk2=1; rp="$(cat "$sm/inp.rc")"
+if [ "$sk1" = 1 ] && [ "$sk2" = 1 ] && [ "$rr" = 64 ] && [ "$rp" = 0 ] && grep -q '^FAIL: --mark: ' "$sm/refuse.err" && grep -q '^MARKED ' "$sm/inp.out" && ! cmp -s "$sm/ref.err" "$sm/inp.err"; then
+  ok "CS-K7: wfd_mark_main in process answers byte-for-byte what the CLI does on a refusing and a passing --mark (rc 64 / 0), and the two differ"
+else bad "CS-K7: in-process wfd_mark_main differs from the CLI: refuse same=$sk1 rc=$rr, pass same=$sk2 rc=$rp"; fi
 
 # ---- BL-750: THE MARKER ADMISSION (content-seal.sh header "THE MARKER ADMISSION"). A bare marker in the
 # sealed set merges only while the world's installed adversary role file is LEGACY; every world from
@@ -272,27 +331,38 @@ else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set
 . "$CS_HERE/../lib/mutant.sh"
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 mx_pp=0; mx_only=0
-vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; the merged output is removed afterwards
-  run_merge "$1" "$2"
+vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; asked IN PROCESS (ip), or end to end when MXE=1, whose merged output is removed afterwards
+  if [ "${MXE:-0}" = 1 ]; then run_merge "$1" "$2"; else ip "$1" "$2"; fi
   if [ "$RC" -eq 0 ]; then VRD=MERGED; RSN=-
   else VRD=REFUSED; RSN="$(grep -m1 -o 'legacy window is closed\|no readable role file\|is not the body above it\|marker admission input holds\|cannot resolve the path' "$MO")" || RSN=other; fi
-  rm -f "$(out_of "$2")"
+  [ "${MXE:-0}" = 1 ] && rm -f "$(out_of "$2")"
+  return 0
 }
 sv() { # <world name> -- record the verdict of the run_merge just made as the shipped one
   if [ "$RC" -eq 0 ]; then eval "SV_$1=MERGED"; else eval "SV_$1=REFUSED"; fi
 }
-run_merge "$MERGE" "$dA"; sv dA; if refused_clean "the legacy window is closed" "$dA"; then s_a=1; else s_a=0; fi; m_a="$(head -3 "$MO")"
-run_merge "$MERGE" "$dN"; sv dN; if refused_clean "no readable role file for seat 'adversary'" "$dN"; then s_b=1; else s_b=0; fi; m_b="$(head -3 "$MO")"
+# The shipped verdicts are asked IN PROCESS first (the seal phase, the marker-set check and the admission, on each
+# world, writing nothing); then ONE end-to-end run per distinct reader outcome re-asks the same worlds through the
+# CLI: dA (REFUSED, legacy window closed), dF (REFUSED, broken sha digest), dE (MERGED) and dE under the awk stub
+# (REFUSED, a lookup that failed). A refusal's text must be byte-identical between the two (CS-IP1).
+ipv() { # <world name> <token or ""> -> SV_<world>, and I_OK=1 when the in-process answer is the token's refusal (or a pass for "")
+  local wd; eval "wd=\$$1"; ip "$MERGE" "$wd"; sv "$1"; cp "$MO" "$WORK/ip.$1"
+  if [ -z "$2" ]; then if ippass; then I_OK=1; else I_OK=0; fi; else if ipref "$2"; then I_OK=1; else I_OK=0; fi; fi
+}
+ipv dA "the legacy window is closed"; s_a=$I_OK; m_a="$(head -3 "$MO")"
+ipv dN "no readable role file for seat 'adversary'"; s_b=$I_OK; m_b="$(head -3 "$MO")"
 # (d) the BL-738 fallback shape: a bare line appended and then SEALED as an Edit, so --check cannot see it
-# (the seal-check probe merges this world), under the CURRENT role file -> REFUSED.
-bash "$SEAL" --check "$(hr_state "$dD/1.md")" "$dD"/*.md >/dev/null 2>&1; d_chk=$?
-run_merge "$MERGE" "$dD"; sv dD; if refused_clean "the legacy window is closed" "$dD"; then s_d=1; else s_d=0; fi; m_d="$(head -3 "$MO")"
+# (the seal-check probe asks this world), under the CURRENT role file -> REFUSED.
+( . "$SEAL" && seal_check "$(hr_state "$dD/1.md")" "$dD"/*.md ) >/dev/null 2>&1; d_chk=$?
+ipv dD "the legacy window is closed"; s_d=$I_OK; m_d="$(head -3 "$MO")"
 # (f) a sha= marker whose body was changed through Bash on a shard with NO seal row: --check has nothing
 # to compare, the digest does -> REFUSED.
-run_merge "$MERGE" "$dF"; sv dF; if refused_clean "is not the body above it" "$dF"; then s_f=1; else s_f=0; fi; m_f="$(head -3 "$MO")"
+ipv dF "is not the body above it"; s_f=$I_OK; m_f="$(head -3 "$MO")"
 # (c) LEGACY + bare -> MERGED; the belt's (a) legacy + bare + sealed -> MERGED.
-run_merge "$MERGE" "$dL"; sv dL; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then s_c=1; else s_c=0; fi; m_c="$(head -3 "$MO")"; rm -f "$(out_of "$dL")"
-run_merge "$MERGE" "$dLs"; sv dLs; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then s_6a=1; else s_6a=0; fi; m_6a="$(head -3 "$MO")"; rm -f "$(out_of "$dLs")"
+ipv dL ""; s_c=$I_OK; m_c="$(head -3 "$MO")"
+ipv dLs ""; s_6a=$I_OK; m_6a="$(head -3 "$MO")"
+ipv dE ""; s_e=$I_OK; m_e="$(head -3 "$MO")"; [ "$e_mrc" = 0 ] || s_e=0
+grep -q '^seat-complete: stories adversary 1 sha=' "$dE/1.md" && s_6c_sha=1 || s_6c_sha=0
 
 # CS-A5: the admission's path list is built with every producer's status checked. A SEALED --mark set under
 # the CURRENT role file merges (case (e) of CS-A1); the same world with an awk that fails on the per-shard
@@ -305,9 +375,12 @@ printf '#!/bin/sh\nfor a in "$@"; do last="$a"; case "$a" in k=*) kk=1 ;; esac; 
 a5_probe="$WORK/a5probe"; mkdir -p "$a5_probe"; : > "$a5_probe/admit-keys"; : > "$a5_probe/shards"
 a5_stub_rc=0; PATH="$a5bin:$PATH" awk -v k=x 'BEGIN { exit 0 }' "$a5_probe/shards" || a5_stub_rc=$?
 a5_pass_rc=0; PATH="$a5bin:$PATH" awk 'BEGIN { exit 0 }' || a5_pass_rc=$?
-PATH="$a5bin:$PATH" run_merge "$MERGE" "$dE"; if refused_clean "cannot resolve the path of shard" "$dE"; then s_5=1; else s_5=0; fi; m_5="$(head -3 "$MO")"
-run_merge "$MERGE" "$dE"; sv dE; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$e_mrc" = 0 ]; then s_e=1; else s_e=0; fi; m_e="$(head -3 "$MO")"
-grep -q '^seat-complete: stories adversary 1 sha=' "$dE/1.md" && s_6c_sha=1 || s_6c_sha=0
+PATH="$a5bin:$PATH" ip "$MERGE" "$dE"; if ipref "cannot resolve the path of shard"; then s_5=1; else s_5=0; fi; m_5="$(head -3 "$MO")"; cp "$MO" "$WORK/ip.stub"
+# The end-to-end runs, one per outcome. dE merges LAST: a merge appends its own program seal row and output.
+run_merge "$MERGE" "$dA"; cp "$MO" "$WORK/cli.dA"; cli_a=$RC; if refused_clean "the legacy window is closed" "$dA"; then e_a=1; else e_a=0; fi
+run_merge "$MERGE" "$dF"; cp "$MO" "$WORK/cli.dF"; cli_f=$RC; if refused_clean "is not the body above it" "$dF"; then e_f=1; else e_f=0; fi
+PATH="$a5bin:$PATH" run_merge "$MERGE" "$dE"; cp "$MO" "$WORK/cli.stub"; cli_5=$RC; if refused_clean "cannot resolve the path of shard" "$dE"; then e_5=1; else e_5=0; fi
+run_merge "$MERGE" "$dE"; cp "$MO" "$WORK/cli.dE"; cli_e=$RC; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then e_e=1; else e_e=0; fi
 rm -f "$(out_of "$dE")"
 
 # ---- THE MUTANT x CASE MATRIX. A cell is one mutant's merge over one world; it prints `killed=yes` when its
@@ -349,13 +422,13 @@ else
   mx_cell A6 "$mA6" dE; mx_pp=$((mx_pp + 1)); b_k=$KILL
 fi
 
-if [ "$s_a" = 1 ] && [ "$s_b" = 1 ] && [ "$s_c" = 1 ] && [ "$d_chk" = 0 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$f_mrc" = 0 ] && [ "$s_f" = 1 ]; then
+if [ "$s_a" = 1 ] && [ "$s_b" = 1 ] && [ "$s_c" = 1 ] && [ "$d_chk" = 0 ] && [ "$s_d" = 1 ] && [ "$s_e" = 1 ] && [ "$f_mrc" = 0 ] && [ "$s_f" = 1 ] && [ "$e_a" = 1 ] && [ "$e_f" = 1 ] && [ "$e_e" = 1 ]; then
   ok "CS-A1: bare markers under the CURRENT role file -> REFUSED; under NO role file -> REFUSED; under the LEGACY file -> MERGED; a bare line then sealed by Edit under CURRENT -> REFUSED; a --mark set under CURRENT -> MERGED; a sha= digest broken with no seal row -> REFUSED"
 else bad "CS-A1: cases a=$s_a b=$s_b c=$s_c d=$s_d (--check rc=$d_chk) e=$s_e (mark rc=$e_mrc) f=$s_f (mark rc=$f_mrc) did not all hold: a[$m_a] b[$m_b] c[$m_c] d[$m_d] e[$m_e] f[$m_f]"; fi
 
 if [ "$a5_stub_rc" != 3 ] || [ "$a5_pass_rc" != 0 ]; then bad "CS-A5: FIXTURE BROKEN -- the awk stub did not apply (k= rc=$a5_stub_rc, pass-through rc=$a5_pass_rc)"
-elif [ "$s_5" = 1 ] && [ "$s_e" = 1 ]; then ok "CS-A5: a failed per-shard path lookup under the marker admission -> REFUSED naming it, while the unstubbed twin MERGES"
-else bad "CS-A5: a failed admission input build was not refused (stubbed refused=$s_5, unstubbed twin merged=$s_e): $m_5 | $m_e"; fi
+elif [ "$s_5" = 1 ] && [ "$e_5" = 1 ] && [ "$s_e" = 1 ] && [ "$e_e" = 1 ]; then ok "CS-A5: a failed per-shard path lookup under the marker admission -> REFUSED naming it, while the unstubbed twin MERGES"
+else bad "CS-A5: a failed admission input build was not refused (stubbed refused in process=$s_5 e2e=$e_5, unstubbed twin passed in process=$s_e e2e=$e_e): $m_5 | $m_e"; fi
 
 # CS-A6: THE MERGE BELT, end to end -- the REAL merge over a REAL sealed set, no stub, plus the count join.
 # (a) a sealed set with a LEGACY role file and bare markers MERGES; (b) the same set under the CURRENT role
@@ -373,6 +446,18 @@ if [ -n "${mA6miss:-}" ] && [ -n "${mA6:-}" ]; then
     mutant_killed "$([ "$s_f" = 1 ] && [ "$s_e" = 1 ] && echo 1)" A6 "CS-A6: killed -- without the count check and with one key missing, case (d) (dF) MERGES a broken digest; twin (c) (dE) stays green"
   else bad "CS-A6: the belt mutant did not die at (d) with (c) green: (d) killed=$a_k $a_v, (c) killed=$b_k: $a_m"; fi
 fi
+
+# CS-IP1: THE SEAM. The phases asked in process answer byte-for-byte as the CLI does. Refusing inputs: the seal
+# check (CS-M2's world), the admission (dA) and the lookup failure (dE under the stub); passing input: dE, where the
+# CLI goes on to merge and so adds its MERGED line, which the phases never print. The refusal and the pass differ.
+ipx=1
+cmp -s "$WORK/m2.cli" "$WORK/m2.ip" && [ "$m2rc" = 2 ] && [ "$m2iprc" = 2 ] || ipx=0
+cmp -s "$WORK/cli.dA" "$WORK/ip.dA" && [ "$cli_a" = 2 ] || ipx=0
+cmp -s "$WORK/cli.stub" "$WORK/ip.stub" && [ "$cli_5" = 2 ] || ipx=0
+[ "$cli_e" = 0 ] && [ ! -s "$WORK/ip.dE" ] && ! grep -q 'REFUSED' "$WORK/cli.dE" || ipx=0
+cmp -s "$WORK/ip.dA" "$WORK/ip.dE" && ipx=0
+if [ "$ipx" = 1 ]; then ok "CS-IP1: the in-process phases answer byte-identically to the CLI on three refusals (seal, admission, lookup) and a pass, and the refusal differs from the pass"
+else bad "CS-IP1: the in-process answer differs from the CLI's (seal ip rc=$m2iprc cli rc=$m2rc; admission cli rc=$cli_a; stub cli rc=$cli_5; pass cli rc=$cli_e)"; fi
 
 # CS-MX: a PLAIN run executes no matrix-only cell, and exactly the per-push cells (2 mutants: A6miss 2, A6 2).
 if [ "$MX" = 0 ] && [ "$mx_only" = 0 ] && [ "$mx_pp" = 4 ]; then ok "CS-MX: a plain run executed $mx_pp deciding/twin cells and 0 matrix-only cells"

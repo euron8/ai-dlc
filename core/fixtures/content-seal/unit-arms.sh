@@ -92,32 +92,52 @@ ss_edit() { # <file> <agent id or ""> -- an Edit that moves the bytes, sealed by
   rec "$UW" Edit "$1" "$2"
 }
 
+# WORLDS ARE BUILT ONCE AND COPIED. Two templates are built through uworld and the REAL recorder: TPL_U (four
+# unsealed shards) and TPL_S (the same, every shard sealed by its adversary). uclone copies one to a fresh root and
+# relocates the root every ledger row records (rows name the PHYSICAL root and the transcript path as spelled, and
+# --check skips a row whose root is another tree). The relocation is held by two controls below (CS-U-W0): a
+# relocated copy is compared against, and a copy left unrelocated stops comparing.
+uvars() { UST="$UW/_bmad-output"; UD="$UST/planning-artifacts/s1/shards/stories-p1"; UL="$UST/planning-artifacts/.artifact-writes.jsonl"; }
+uclone() { # <template root> [current|legacy|none] -> UW UST UD UL
+  local t="$1" op ol np nl
+  UW="$(mktemp -d "$WORK/u.XXXXXX")" || broken "cannot make a world"
+  cp -Rp "$t/." "$UW/" || broken "cannot copy $t"
+  uvars
+  if [ -f "$UL" ]; then
+    op="$(cd "$t" && pwd -P)"; np="$(cd "$UW" && pwd -P)"
+    sed -e "s|$op|$np|g" -e "s|$t|$UW|g" "$UL" > "$UL.new" && cat "$UL.new" > "$UL" && rm -f "$UL.new" || broken "cannot relocate $UL"
+  fi
+  rm -f "$UW/.claude/team-roles/adversary.md"
+  case "${2:-none}" in
+    current) cp "$ROLE_CUR" "$UW/.claude/team-roles/adversary.md" ;;
+    legacy) printf 'Close the shard with `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`.\nIf that call fails with `unknown arg: --mark`, append the bare line instead.\n' \
+              > "$UW/.claude/team-roles/adversary.md" ;;
+  esac
+}
+uworld; TPL_U="$UW"
+uworld; seal_all; TPL_S="$UW"
+
 echo "$NAME:"
 
-# CS-U-M1: four shards sealed by the real recorder and untouched -> --check passes, one row per shard.
-uworld; seal_all; nrows; chk "$UD"/*.md
-if [ "$RC" = 0 ] && [ "$NR_" = 4 ] && [ ! -s "$WORK/chk.out" ]; then ok "CS-U-M1: four shards sealed by the recorder (4 rows) and untouched: --check passes, nothing reported"
-else bad "CS-U-M1: a sealed untouched set: rc=$RC rows=$NR_: $(head -2 "$WORK/chk.out")"; fi
+# CS-U-W0: the copy is a sound stand-in for a freshly sealed world. A relocated copy of TPL_S passes --check and
+# reports a Bash amendment (rows still compared); the same copy WITHOUT the relocation compares nothing, so the
+# amendment goes unreported, which is exactly why the relocation is there. The two differ.
+uclone "$TPL_S"; printf '\nlate line\n' >> "$UD/1.md"; chk "$UD/1.md"; w_rel="$RC"; says "$UD/1.md $TOKEN" && w_tok=1 || w_tok=0
+UW="$(mktemp -d "$WORK/u.XXXXXX")"; cp -Rp "$TPL_S/." "$UW/"; uvars; printf '\nlate line\n' >> "$UD/1.md"; chk "$UD/1.md"; w_raw="$RC"
+if [ "$w_rel" = 1 ] && [ "$w_tok" = 1 ] && [ "$w_raw" = 0 ]; then ok "CS-U-W0: a relocated copy of the sealed template still compares its rows (Bash amendment reported); the unrelocated copy compares none"
+else bad "CS-U-W0: relocated copy rc=$w_rel (want 1, token=$w_tok), unrelocated copy rc=$w_raw (want 0)"; fi
 
-# CS-U-M2: the motivating write, perl -0pi on a sealed shard -> exactly that shard reported, naming its sealed
-# writer and the adversary-shard remedy.
-uworld; seal_all
-perl -0pi -e 's/tool_use_id: NOT_ACCESSIBLE/tool_use_id: toolu_01PatchedByLead00000000/' "$UD/2.md"
-grep -q 'toolu_01PatchedByLead' "$UD/2.md" || broken "CS-U-M2's perl -0pi changed nothing"
-chk "$UD"/*.md; n="$(grep -c . "$WORK/chk.out")" || n=0
-if [ "$RC" = 1 ] && [ "$n" = 1 ] && says "$UD/2.md $TOKEN" && says "agent a0000000000000012 (Write)" \
-   && says "re-dispatch the adversary for that shard" && says "$REMEDY"; then
-  ok "CS-U-M2: perl -0pi after the seal: --check reports 2.md alone, naming agent a0000000000000012 and the re-dispatch remedy"
-else bad "CS-U-M2: the motivating perl -0pi was not reported alone (rc=$RC, lines=$n): $(head -2 "$WORK/chk.out")"; fi
+# CS-U-M1 and CS-U-M2 (a sealed untouched set passes; perl -0pi after the seal is reported) are the library half of
+# merge-arms.sh CS-M1 and CS-M2, which drive the same worlds through the merge, so they are not asked twice here.
 
 # CS-U-M3: a top-level SESSION Write (no agent_id) then printf >> -> reported, naming the session. The session's
 # row carries an EMPTY agent_id: this is the cell a seal read filtering agent_id != "" would pass.
-uworld; rec "$UW" Write "$UD/3.md" ""; printf '\nlate line\n' >> "$UD/3.md"; chk "$UD"/*.md
+uclone "$TPL_U"; rec "$UW" Write "$UD/3.md" ""; printf '\nlate line\n' >> "$UD/3.md"; chk "$UD"/*.md
 if [ "$RC" = 1 ] && says "$UD/3.md $TOKEN" && says "the top-level session, which carries no agent_id (Write)"; then
   ok "CS-U-M3: a session Write then printf >>: reported, naming the top-level session as the sealed writer"
 else bad "CS-U-M3: a session Write then printf >> was not reported (rc=$RC): $(head -2 "$WORK/chk.out")"; fi
 # CS-U-M3b, its ALLOW twin one property apart: the same session seal, the adversary's Edit last, no append.
-uworld; rec "$UW" Write "$UD/3.md" ""; rec "$UW" Edit "$UD/3.md" a0000000000000013; chk "$UD"/*.md
+uclone "$TPL_U"; rec "$UW" Write "$UD/3.md" ""; rec "$UW" Edit "$UD/3.md" a0000000000000013; chk "$UD"/*.md
 if [ "$RC" = 0 ] && grep -q '"actor":"session"' "$UL"; then ok "CS-U-M3b: the same session seal, untouched, its adversary's Edit last: --check passes"
 else bad "CS-U-M3b: a session-sealed untouched shard did not pass (rc=$RC): $(head -2 "$WORK/chk.out")"; fi
 
@@ -126,20 +146,20 @@ else bad "CS-U-M3b: a session-sealed untouched shard did not pass (rc=$RC): $(he
 # (b) the adversary's own Edit -> agent; (c) session Edit then a program row -> still the session (program rows
 # skipped); (d) session Edit then the adversary's later Write -> agent.
 s1=""
-uworld; seal_all; ss_edit "$UD/2.md" ""; ltr "$UD/2.md"; chk "$UD/2.md"
+uclone "$TPL_S"; ss_edit "$UD/2.md" ""; ltr "$UD/2.md"; chk "$UD/2.md"
 [ "$LA|$LT" = "session|Edit" ] && [ "$RC" = 0 ] || s1="${s1}a[$LA|$LT rc=$RC] "
-uworld; seal_all; ss_edit "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
+uclone "$TPL_S"; ss_edit "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
 [ "$LA|$LAID|$LT" = "agent|a0000000000000012|Edit" ] || s1="${s1}b[$LA|$LAID|$LT] "
-uworld; seal_all; ss_edit "$UD/2.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/2.md"; ltr "$UD/2.md"
+uclone "$TPL_S"; ss_edit "$UD/2.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/2.md"; ltr "$UD/2.md"
 { grep -qF '"actor":"program:wait-for-deliverable"' "$UL" && [ "$LA" = session ]; } || s1="${s1}c[$LA] "
-uworld; seal_all; ss_edit "$UD/2.md" ""; rec "$UW" Write "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
+uclone "$TPL_S"; ss_edit "$UD/2.md" ""; rec "$UW" Write "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
 [ "$LA|$LT" = "agent|Write" ] || s1="${s1}d[$LA|$LT] "
 if [ -z "$s1" ]; then ok "CS-U-S1: last tool row: session Edit over an adversary Write -> session (bytes still pass --check); the adversary's own Edit -> agent; a later program row -> still session; the adversary's later Write -> agent"
 else bad "CS-U-S1: cases did not hold: $s1"; fi
 
 # CS-U-L1: --last-tool-row over several files. Agent Write, session Edit, program row -> the session's Edit;
 # a shard whose program row came last -> its agent Write; a tree with no seal row -> nothing.
-uworld; seal_all; ss_edit "$UD/1.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/1.md" "$UD/3.md"
+uclone "$TPL_S"; ss_edit "$UD/1.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/1.md" "$UD/3.md"
 seal_last_tool_row "$UST" "$UD/1.md" "$UD/3.md" > "$WORK/l1.out" 2>&1; cl=$?
 l1="$(awk -F "$US" -v f="$UD/1.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/l1.out")"
 l3="$(awk -F "$US" -v f="$UD/3.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/l1.out")"
@@ -150,7 +170,7 @@ if [ "$cl" = 0 ] && [ "$l1" = "session||Edit" ] && [ "$l3" = "agent|a00000000000
 else bad "CS-U-L1: rc=$cl, 1.md [$l1] (want session||Edit), 3.md [$l3] (want agent|a0000000000000013|Write), unsealed rc=$cn [$(head -1 "$WORK/ltrn.out")]"; fi
 
 # CS-U-M4: an Edit rewrite re-seals: the newest row is the Edit's and --check passes.
-uworld; seal_all
+uclone "$TPL_S"
 perl -0pi -e 's/Nothing further\./Nothing further, re-read after the first pass./' "$UD/1.md"
 rec "$UW" Edit "$UD/1.md" a0000000000000011
 seal_row "$UST" "$UD/1.md" > "$WORK/row.out" 2>&1; chk "$UD/1.md"
@@ -159,7 +179,7 @@ else bad "CS-U-M4: an Edit rewrite did not re-seal (rc=$RC, newest row: $(head -
 
 # CS-U-M5: a NEAR-MISS path chosen by asking the declaration (seal_sealed), never by restating it: a file
 # directly under shards/, which passes the recorder's `/shards/` pre-filter and sits in no shard directory.
-uworld; seal_all; nm="$UST/planning-artifacts/s1/shards/README.md"; printf '# shard index\n' > "$nm"
+uclone "$TPL_S"; nm="$UST/planning-artifacts/s1/shards/README.md"; printf '# shard index\n' > "$nm"
 if seal_sealed "planning-artifacts/s1/shards/README.md"; then bad "CS-U-M5: FIXTURE BROKEN -- the declaration now seals the near-miss; choose one it does not"
 else
   nrows; b5="$NR_"; rec "$UW" Write "$nm" ""; nrows; a5="$NR_"; printf 'amended by Bash\n' >> "$nm"; chk "$nm"
@@ -167,30 +187,30 @@ else
   else bad "CS-U-M5: near-miss: rows $b5 -> $a5 (want 4 -> 4), --check rc=$RC"; fi
 fi
 
-# CS-U-M6: both SUFFIX-LESS shard dirs (requirements-elicitation/, which the merge reads in --elicitation mode,
-# and stories-elicitation/): a sealed shard rewritten by sed -i is reported; its untouched twin passes.
+# CS-U-M6: the SUFFIX-LESS shard dir stories-elicitation/ (requirements-elicitation/ is merge-arms.sh CS-M6, end to end,
+# so it is not asked twice here): a sealed shard rewritten by sed -i is reported; its untouched twin passes.
 m6=""
-for e in requirements-elicitation stories-elicitation; do
-  uworld; ed="$UST/planning-artifacts/s9/shards/$e"; mkdir -p "$ed"
+for e in stories-elicitation; do
+  uclone "$TPL_U"; ed="$UST/planning-artifacts/s9/shards/$e"; mkdir -p "$ed"
   printf 'Body.\n' > "$ed/01.md"; printf 'Body.\n' > "$ed/02.md"
   rec "$UW" Write "$ed/01.md" a0000000000000061; rec "$UW" Write "$ed/02.md" a0000000000000062
   sed -i.bak 's/^Body\.$/Body, amended by the lead./' "$ed/01.md" && rm -f "$ed/01.md.bak"
   chk "$ed/01.md"; r1="$RC"; says "$ed/01.md $TOKEN" || r1="$r1-no-token"
   chk "$ed/02.md"; [ "$r1|$RC" = "1|0" ] || m6="$m6 $e[rewritten=$r1 twin=$RC]"
 done
-if [ -z "$m6" ]; then ok "CS-U-M6: requirements-elicitation/ and stories-elicitation/: a sealed shard rewritten by sed -i is reported; its untouched twin passes"
+if [ -z "$m6" ]; then ok "CS-U-M6: stories-elicitation/: a sealed shard rewritten by an in-place sed is reported; its untouched twin passes"
 else bad "CS-U-M6:$m6"; fi
 
 # CS-U-K5: a shard whose newest row is the --mark program row, amended through Bash -> reported, naming the
 # program and the restore-then-mark remedy (no second marker stacked).
-uworld; seal_all; seal_record "$UST" program:wait-for-deliverable "$UD/1.md"; printf 'a line after the mark\n' >> "$UD/1.md"; chk "$UD/1.md"
+uclone "$TPL_S"; seal_record "$UST" program:wait-for-deliverable "$UD/1.md"; printf 'a line after the mark\n' >> "$UD/1.md"; chk "$UD/1.md"
 if [ "$RC" = 1 ] && says "$UD/1.md $TOKEN" && says "program wait-for-deliverable" && says "restore the bytes with Edit, then re-run wait-for-deliverable.sh --mark"; then
   ok "CS-U-K5: a program-sealed shard amended through Bash: reported, naming program wait-for-deliverable and the restore-then-mark remedy"
 else bad "CS-U-K5: a program-sealed shard amended through Bash was not reported with the --mark remedy (rc=$RC): $(head -2 "$WORK/chk.out")"; fi
 
 # CS-U-K6: a SYMLINKED state dir. Rows are named by the state dir AS SPELLED; --record through the link and
 # --check through the link agree on that name.
-uworld; mv "$UST" "$UW/real-out" && ln -s real-out "$UST" || broken "CS-U-K6 cannot link the state dir"
+uclone "$TPL_U"; mv "$UST" "$UW/real-out" && ln -s real-out "$UST" || broken "CS-U-K6 cannot link the state dir"
 [ -L "$UST" ] && [ "$(cd "$UST" && pwd -P)" != "$(cd "$UST" && pwd)" ] || broken "CS-U-K6: $UST is not a link to a differently named dir"
 seal_all; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; chk "$UD"/*.md
 np="$(grep -c '"actor":"program:wait-for-deliverable".*"path":"_bmad-output/\|"path":"_bmad-output/[^"]*","actor":"program:wait-for-deliverable"' "$UL")" || np=0
@@ -210,13 +230,13 @@ sha_marks() { # the marker --mark appends: directly after the body, sha= the bod
     printf 'seat-complete: stories adversary %s findings=0 sha=%s\n' "$k" "$h" >> "$UD/$k.md"
   done
 }
-uworld current; bare_marks; dA="$UD"
-uworld none; bare_marks; dN="$UD"
-uworld legacy; bare_marks; dL="$UD"
-uworld current; bare_marks; seal_all; dD="$UD"; dDst="$UST"
-uworld legacy; bare_marks; seal_all; dLs="$UD"
-uworld current; seal_all; sha_marks; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; dE="$UD"
-uworld current; sha_marks; perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$UD/1.md"; dF="$UD"
+uclone "$TPL_U" current; bare_marks; dA="$UD"
+uclone "$TPL_U" none; bare_marks; dN="$UD"
+uclone "$TPL_U" legacy; bare_marks; dL="$UD"
+uclone "$TPL_U" current; bare_marks; seal_all; dD="$UD"; dDst="$UST"
+uclone "$TPL_U" legacy; bare_marks; seal_all; dLs="$UD"
+uclone "$TPL_S" current; sha_marks; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; dE="$UD"
+uclone "$TPL_U" current; sha_marks; perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$UD/1.md"; dF="$UD"
 adm() { # <shard dir> [mutated library] -> ARC, $WORK/adm.out: seal_admit_marker over every shard in it
   if [ -n "${2:-}" ]; then ( . "$2"; seal_admit_marker "$1"/*.md ) > "$WORK/adm.out" 2>&1
   else seal_admit_marker "$1"/*.md > "$WORK/adm.out" 2>&1; fi

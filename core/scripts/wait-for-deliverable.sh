@@ -670,6 +670,10 @@ seal_of() {
 #      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
+# wfd_mark_main holds the --mark / --mark-repair dispatch below, unchanged. It is a function so a
+# fixture can source this file (the guard after it) and run the writer in a subshell; run as a
+# program it is called at once, from the same place, with the script's own arguments.
+wfd_mark_main() {
 case "${1:-}" in
   --mark|--mark-repair)
     MK_MODE="$1"; shift
@@ -903,6 +907,9 @@ $MK_OUT
     echo "MARKED $MK_FILE -- $MK_LINE"
     exit 0 ;;
 esac
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+wfd_mark_main "$@"
 
 while [ $# -gt 0 ]; do
   case "$1" in
