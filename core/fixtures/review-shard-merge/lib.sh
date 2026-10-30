@@ -78,19 +78,24 @@ ip_run() {
     while [ "${1:-}" = -e ]; do _ip_x="$_ip_x$2"$'\n'; shift 2; done
     _ip_s="$1"; _ip_m="$2"; shift 2
     _ip_a=("$@"); _ip_l="${IP_LOADED:-}"; _ip_f="${IP_FNS:- }"
+    # The scrub forks nothing: each list is a builtin written to a scratch file beside $MO (rebound per scorer by
+    # bind_scratch) and read back with `read`, never through a command substitution.
+    _ip_t="$(dirname "$MO")/.ip-scrub"
     set +u +o pipefail
     _ip_keep="$IP_FRESH"
-    for _ip_v in $(compgen -e); do _ip_keep="$_ip_keep$_ip_v "; done
-    for _ip_v in $(compgen -A function); do
+    compgen -e > "$_ip_t"; while IFS= read -r _ip_v; do _ip_keep="$_ip_keep$_ip_v "; done < "$_ip_t"
+    compgen -A function > "$_ip_t"
+    while IFS= read -r _ip_v; do
       case "$_ip_v" in ip_run) continue ;; esac
       [ "$_ip_s" = "$_ip_l" ] && case "$_ip_f" in *" $_ip_v "*) continue ;; esac
       unset -f "$_ip_v"
-    done
-    for _ip_v in $(compgen -v); do
+    done < "$_ip_t"
+    compgen -v > "$_ip_t"
+    while IFS= read -r _ip_v; do
       case "$_ip_v" in _ip_*) continue ;; esac
       case "$_ip_keep" in *" $_ip_v "*) continue ;; esac
       unset "$_ip_v" 2> /dev/null
-    done
+    done < "$_ip_t"
     while IFS= read -r _ip_v; do [ -z "$_ip_v" ] || export "$_ip_v"; done <<< "$_ip_x"
     set --
     # shellcheck source=/dev/null
@@ -1630,13 +1635,35 @@ seal_mark() { # <script-dir> <file> <seat>: the seat's own close, `<shard>` the 
 # seal_world <script-dir> <code-review|qa> -> a shard dir whose every shard its seat wrote (one recorder
 # row each) and closed with the real --mark. Run under WROOT to build it in another tree.
 seal_world() {
-  local sd="$1" g="$2" d f seat=code-reviewer
+  local sd="$1" g="$2" d f seat=code-reviewer tk="" t w0 w1 n0 n1
+  # BUILT ONCE, COPIED AFTER (MAIN only, and only when every script the build reaches is SRCDIR's): the first
+  # build fires the recorder and runs the real --mark per shard, and records the world directory and the ledger
+  # rows it appended; a later build copies the directory into a fresh `wdir` and appends those rows with the
+  # world's path prefix rewritten to the copy's. SW0 (seed_controls) holds the copy to a fresh build.
+  [ -n "${WROOT:-}" ] || [ -z "${RSM_TPL:-}" ] \
+    || ! tpl_ok "$sd" merge-review-shards.sh wait-for-deliverable.sh content-seal.sh $WORLD_SCRIPTS \
+    || tk="$(tpl_key sw "$g")"
+  if tpl_has "$tk"; then
+    t="$RSM_TPL/$tk"; w1="$(wdir)" || return 1
+    cp -R "$t/w/." "$w1/" || return 1
+    w0="$(cat "$t/prefix")"; w1="${w1#"$MAIN"/}"; w1="${w1%/shards}"
+    sed "s|\"path\":\"$w0/|\"path\":\"$w1/|" "$t/rows" >> "$LEDGER" || return 1
+    tpl_hit "$tk"; printf '%s/%s' "$MAIN/$w1/shards" "$(cat "$t/name")"; return 0
+  fi
   if [ "$g" = qa ]; then d="$(qworld "$sd" PASS PASS PASS PASS)" || return 1; seat=qa
   else d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1; fi
+  n0="$(grep -c . "$LEDGER" 2>/dev/null)" || n0=0
   for f in "$d"/*.md; do
     fire "$f" agent || { echo "the recorder wrote no row for $f" > "$MKO"; return 1; }
     seal_mark "$sd" "$f" "$seat"; [ "$MRC" -eq 0 ] || return 1
   done
+  if [ -n "$tk" ] && [ ! -d "$RSM_TPL/$tk" ]; then
+    t="$RSM_TPL/$tk.part"; n1="$(grep -c . "$LEDGER")" || n1=0
+    w0="$(dirname "$(dirname "$d")")"; w0="${w0#"$MAIN"/}"
+    mkdir -p "$t/w" && cp -R "$(dirname "$d")/." "$t/w/" && tail -n "$((n1 - n0))" "$LEDGER" > "$t/rows" \
+      && printf '%s' "$w0" > "$t/prefix" && basename "$d" > "$t/name" && mv "$t" "$RSM_TPL/$tk" || return 1
+    tpl_build sw
+  fi
   printf '%s' "$d"
 }
 alias_of() { printf '%s' "$ALIAS${1#"$MAIN/docs"}"; }
@@ -3117,7 +3144,7 @@ p_xc_missing() { # a list file that does not exist -> REFUSED exit 2, nothing on
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.
-seed_controls() { # TPL0, W0, W1, W2, W3, W4
+seed_controls() { # TPL0, W0, W1, W2, W3, W4, SW0
 local A_NAMES A_REV na nn n1 c1 c0 nb ns nr0 nr1 pf tw1 tw2 tb0 th0 tb1 th1 tb2 th2 tp tpw
 # TPL0: the world cache. One tuple built twice: the first a real partition run (builds +1, hits +0),
 # the second a clone (builds +0, hits +1), byte-equal in map, map.err and manifest. And the bypass: a
@@ -3193,6 +3220,24 @@ if cmp -s "$SEAL_SRC" "$MAIN/scripts/ai-dlc/content-seal.sh" && cmp -s "$SEAL_SR
 else
   bad "W4: FIXTURE BROKEN -- the recorder hook did not write the review-shard row the seal arms read (rows $nr0 -> $nr1 on a non-shard path)"
 fi
+# SW0: the sealed-world cache. The first seal_world builds (builds +1) and the second copies (hits +1) with its
+# rows relocated: the copy merges, as a fresh build does. The control is the same copy with its relocated rows
+# removed from the ledger, which the merge refuses as carrying no content-seal row -- so the copy merges
+# BECAUSE of the relocated rows, not because seal checking found nothing to check.
+local sb0 sh0 sw1 sw2 swo swl
+sb0="$(tpl_n builds)"; sh0="$(tpl_n hits)"
+sw1="$(seal_world "$SRCDIR" code-review)"; sw2="$(seal_world "$SRCDIR" code-review)"
+run_merge "$SRCDIR" "$sw2"; swo="rc=$RC $(head -1 "$MO")"
+swl="${sw2#"$MAIN"/}"; grep -vF "\"path\":\"$swl/" "$LEDGER" > "$WORK/sw0.ledger"; cp "$LEDGER" "$WORK/sw0.keep"
+cat "$WORK/sw0.ledger" > "$LEDGER"; rm -f "$(out_of "$sw2")"; run_merge "$SRCDIR" "$sw2"; cat "$WORK/sw0.keep" > "$LEDGER"
+if [ -n "$sw1" ] && [ -n "$sw2" ] && [ "$sw1" != "$sw2" ] && [ $(( $(tpl_n builds) - sb0 )) -ge 1 ] && [ $(( $(tpl_n hits) - sh0 )) -ge 1 ] \
+   && case "$swo" in "rc=0 MERGED:"*) true ;; *) false ;; esac \
+   && refused_clean "carries no content-seal row" "$sw2"; then
+  ok "SW0: a sealed world is built once and copied after: the copy, its ledger rows relocated, merges; without those rows the same copy is REFUSED for carrying no content-seal row"
+else
+  bad "SW0: FIXTURE BROKEN -- the sealed-world copy did not merge, or merged without its relocated rows (copy: $swo; rows removed: rc=$RC $(head -1 "$MO"))"
+fi
+rm -f "$(out_of "$sw2")"
 }
 
 # ---- REUSE PROOF (--matrix only; a plain run never executes it). Every top-level arm that reads another arm's saved

@@ -207,6 +207,14 @@ eqp seal_ok 0 "$SEAL_SRC" seal_main --review-shard "$_eqm/2.md"
 sed -i.bak -e 's/^## Summary$/## Overview/' "$_eqm/2.md" && rm -f "$_eqm/2.md.bak"
 eqp seal_no 1 "$SEAL_SRC" seal_main --review-shard "$_eqm/2.md"
 eq_arm EQ7 "content-seal.sh --review-shard in process (seal_main) answers byte-for-byte what the CLI does: SEAL-OK on a sealed shard (rc 0), SEAL-REFUSED once a Bash rewrite moved it (rc 1)" seal_ok seal_no
+# EQ7b, --first-tool-ts (FT1's mode): a state dir with a gate-part row prints its ts (rc 0); one that does not
+# exist is refused (rc 2). The ledger row's ts is fixed so the answer names no clock.
+_eqf="$(mktemp -d "$WORK/eqf.XXXXXX")"; mkdir -p "$_eqf/_bmad-output/planning-artifacts"
+printf '{"v":1,"kind":"content-seal","ts":"2001-02-03T04:05:06Z","path":"gate-adjudication/g1.part-1.jsonl","actor":"agent","agent_id":"a0123456789abcdef","session":"s","tool":"Write","tool_use_id":"t","transcript_path":"/dev/null","root":"%s","sha256":"0"}\n' \
+  "$(cd "$_eqf" && pwd -P)" > "$_eqf/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+eqp fts_ok 0 "$SEAL_SRC" seal_main --first-tool-ts "$_eqf/_bmad-output"
+eqp fts_no 2 "$SEAL_SRC" seal_main --first-tool-ts "$_eqf/absent"
+eq_arm EQ7b "content-seal.sh --first-tool-ts in process (seal_main) answers byte-for-byte what the CLI does: the earliest tool row's ts (rc 0), and a missing state dir refused (rc 2)" fts_ok fts_no
 printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null","agent_id":"a0123456789abcdef","agent_type":"code-reviewer"}\n' "$_eqm/3.md" > "$WORK/eq-hook-row.json"
 printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null"}\n' "$WORK/eq-not-sealed.md" > "$WORK/eq-hook-none.json"
 EQ_IN="$WORK/eq-hook-row.json" EQ_FILES="$LEDGER" eqp hk_row 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" -
